@@ -11,6 +11,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,6 +28,9 @@ func makeKV(key string, wallTime int64) streampb.StreamEvent_KV {
 }
 
 func TestTransactions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	// Build a batch with three transactions of different sizes: 1 KV at
 	// ts=10, 3 KVs at ts=20, and 5 KVs at ts=30.
 	batch := []streampb.StreamEvent_KV{

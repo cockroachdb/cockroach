@@ -18,6 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
@@ -185,6 +187,9 @@ func generateMergeFeedInputs(
 }
 
 func TestMergeFeedRandomized(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	seed := time.Now().UnixNano()
 	t.Logf("seed: %d", seed)
 	rng := rand.New(rand.NewSource(seed))
@@ -270,6 +275,9 @@ func TestMergeFeedRandomized(t *testing.T) {
 }
 
 func TestMergeFeedEndTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	coveringSpan := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}
 
 	makeSubs := func() []streamclient.Subscription {
