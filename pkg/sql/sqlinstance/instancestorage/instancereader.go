@@ -67,14 +67,15 @@ func NewReader(
 func (r *Reader) Start(ctx context.Context, self sqlinstance.InstanceInfo) {
 	r.setCache(&singletonInstanceFeed{
 		instance: instancerow{
-			region:        self.Region,
-			instanceID:    self.InstanceID,
-			sqlAddr:       self.InstanceSQLAddr,
-			rpcAddr:       self.InstanceRPCAddr,
-			sessionID:     self.SessionID,
-			locality:      self.Locality,
-			binaryVersion: self.BinaryVersion,
-			timestamp:     hlc.Timestamp{}, // intentionally zero
+			region:            self.Region,
+			instanceID:        self.InstanceID,
+			sqlAddr:           self.InstanceSQLAddr,
+			rpcAddr:           self.InstanceRPCAddr,
+			sessionID:         self.SessionID,
+			locality:          self.Locality,
+			binaryVersion:     self.BinaryVersion,
+			localityAddresses: self.LocalityAddresses,
+			timestamp:         hlc.Timestamp{}, // intentionally zero
 		},
 	})
 	// Make sure that the reader shuts down gracefully.
@@ -124,14 +125,15 @@ func (r *Reader) setCache(feed instanceCache) {
 
 func makeInstanceInfo(row instancerow) sqlinstance.InstanceInfo {
 	return sqlinstance.InstanceInfo{
-		InstanceID:      row.instanceID,
-		InstanceRPCAddr: row.rpcAddr,
-		InstanceSQLAddr: row.sqlAddr,
-		SessionID:       row.sessionID,
-		Locality:        row.locality,
-		BinaryVersion:   row.binaryVersion,
-		Region:          row.region,
-		IsDraining:      row.isDraining,
+		InstanceID:        row.instanceID,
+		InstanceRPCAddr:   row.rpcAddr,
+		InstanceSQLAddr:   row.sqlAddr,
+		SessionID:         row.sessionID,
+		Locality:          row.locality,
+		BinaryVersion:     row.binaryVersion,
+		Region:            row.region,
+		IsDraining:        row.isDraining,
+		LocalityAddresses: row.localityAddresses,
 	}
 }
 
@@ -237,12 +239,13 @@ func (r *Reader) GetInstance(
 		return instance, nil
 	}
 	instanceInfo := sqlinstance.InstanceInfo{
-		InstanceID:      instanceRow.instanceID,
-		InstanceRPCAddr: instanceRow.rpcAddr,
-		InstanceSQLAddr: instanceRow.sqlAddr,
-		SessionID:       instanceRow.sessionID,
-		Locality:        instanceRow.locality,
-		BinaryVersion:   instanceRow.binaryVersion,
+		InstanceID:        instanceRow.instanceID,
+		InstanceRPCAddr:   instanceRow.rpcAddr,
+		InstanceSQLAddr:   instanceRow.sqlAddr,
+		SessionID:         instanceRow.sessionID,
+		Locality:          instanceRow.locality,
+		BinaryVersion:     instanceRow.binaryVersion,
+		LocalityAddresses: instanceRow.localityAddresses,
 	}
 	return instanceInfo, nil
 }

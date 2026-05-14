@@ -285,6 +285,10 @@ const (
 	// to fingerprint_id and drops the legacy id column.
 	V26_3_AlterStatementsTablePK
 
+	// V26_3_SQLInstancesAddLocalityAddresses is the migration to add the `locality_addresses`
+	// column to the system.sql_instances table.
+	V26_3_SQLInstancesAddLocalityAddresses
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -373,6 +377,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_3_AddAdvisoryLocksTable: {Major: 26, Minor: 2, Internal: 6},
 
 	V26_3_AlterStatementsTablePK: {Major: 26, Minor: 2, Internal: 8},
+
+	V26_3_SQLInstancesAddLocalityAddresses: {Major: 26, Minor: 2, Internal: 10},
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// *************************************************

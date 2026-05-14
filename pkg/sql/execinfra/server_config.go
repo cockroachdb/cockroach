@@ -69,6 +69,11 @@ type ServerConfig struct {
 	// Locality is the locality of the node on which this Server is running.
 	Locality roachpb.Locality
 
+	// LocalityAddresses are the locality-aware advertise addresses for this
+	// SQL server instance, used to route connections through locality-matched
+	// network paths.
+	LocalityAddresses []roachpb.LocalityAddress
+
 	// Codec is capable of encoding and decoding sql table keys.
 	Codec keys.SQLCodec
 
