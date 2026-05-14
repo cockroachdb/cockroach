@@ -626,8 +626,7 @@ func ShouldEnableDRPC(
 			// Benchmarks need deterministic behavior; skip random DRPC selection.
 			return base.TestDRPCDisabled
 		}
-		rng, _ := randutil.NewTestRand()
-		enableDRPC = rng.Intn(2) == 0
+		enableDRPC = true
 	case base.TestDRPCUnset:
 		return base.TestDRPCDisabled
 	}

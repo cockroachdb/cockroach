@@ -190,9 +190,10 @@ func newTestCluster(
 	}
 	tc := serverutils.StartCluster(b, nodes, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			Settings:  st,
-			CacheSize: cacheSize,
-			Knobs:     knobs,
+			Settings:          st,
+			DefaultDRPCOption: base.TestDRPCEnabled,
+			CacheSize:         cacheSize,
+			Knobs:             knobs,
 		}},
 	)
 	if nodes > 1 {
