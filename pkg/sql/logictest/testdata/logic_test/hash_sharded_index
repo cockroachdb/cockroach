@@ -1131,7 +1131,7 @@ SELECT table_name, table_id, index_name, start_key, end_key
   FROM [SHOW RANGES FROM DATABASE test WITH INDEXES]
  WHERE table_name = 't_hash_pre_split'
 ----
-t_hash_pre_split  134  t_hash_pre_split_pkey  /Table/82  /Max
+t_hash_pre_split  134  t_hash_pre_split_pkey  /Table/83  /Max
 
 statement ok
 CREATE INDEX t_hash_pre_split_idx_b ON t_hash_pre_split (b) USING HASH WITH (bucket_count=8);
@@ -1143,8 +1143,8 @@ SELECT table_name, table_id, index_name, start_key, end_key
  WHERE table_name = 't_hash_pre_split'
 ----
 table_name        table_id  index_name              start_key  end_key
-t_hash_pre_split  134       t_hash_pre_split_pkey   /Table/82  /Max
-t_hash_pre_split  134       t_hash_pre_split_idx_b  /Table/82  /Max
+t_hash_pre_split  134       t_hash_pre_split_pkey   /Table/83  /Max
+t_hash_pre_split  134       t_hash_pre_split_idx_b  /Table/83  /Max
 
 subtest test_default_bucket_count
 
