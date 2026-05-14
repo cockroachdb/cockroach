@@ -1,0 +1,829 @@
+# Copyright 2026 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+# This workflow builds, signs, and publishes CockroachDB release artifacts.
+# It replaces the TeamCity "Build and sign cockroach release" composite build.
+#
+# The dependency graph mirrors the TeamCity structure:
+#
+#   validate-skip-jobs (gates every job below; see skip_jobs input)
+#     |
+#     +-> build-linux (matrix: linux-amd64, linux-arm64, linux-amd64-fips, linux-s390x)
+#     +-> build-nonlinux (matrix: darwin-amd64, darwin-arm64, win-amd64)
+#     +-> build-per-platform-ibm (matrix: 4 linux platforms, no telemetry)
+#           |
+#           +---> build-docker (needs build-linux)
+#           +---> build-docker-ibm (needs IBM linux builds)
+#           |       |
+#           |       +---> publish-cloud-only (needs build-docker)
+#           |               |
+#           |               +---> cloud-rollout (needs publish-cloud-only)
+#           |
+#           +---> macos-signing (needs build-nonlinux)
+#           +---> ibm-signing (needs IBM linux builds)
+#           +---> sentry-panic (needs build-linux)
+#
+#   notify (always, needs all above)
+
+name: Release - Build and Sign
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (use dev buckets and repos)'
+        type: boolean
+        default: true
+      er_release:
+        description: 'Extraordinary release'
+        type: boolean
+        default: false
+      sha:
+        description: 'Git SHA to build (defaults to branch HEAD)'
+        type: string
+        default: ''
+      skip_jobs:
+        description: 'Comma-separated job IDs to skip (no spaces) when resuming after a partial failure. Validated by the validate-skip-jobs job. Valid IDs: build-linux, build-nonlinux, build-per-platform-ibm, build-docker, build-docker-ibm, macos-signing, ibm-signing, sentry-panic, publish-cloud-only, cloud-rollout.'
+        type: string
+        default: ''
+
+concurrency:
+  group: release-build-${{ github.ref_name }}-${{ inputs.sha || github.sha }}
+  cancel-in-progress: false
+
+# Minimal workflow-level permissions; jobs request what they need.
+permissions: {}
+
+# This workflow is intentionally NOT gated behind a GitHub `environment:`.
+# Build and sign produces release candidates that are staged for review but
+# not yet published to customers — if a run goes wrong, it can simply be
+# rebuilt. The customer-facing publish step lives in release-publish.yml,
+# which is gated by the `release-ops` environment (required reviewer +
+# deployment-branch policy). Per-job `if:` checks below restrict dispatch
+# to master / release-*-rc / staging-v* as defense in depth.
+
+env:
+  # DRY_RUN gates which GCS bucket / GCR repo / git tag the underlying
+  # shell scripts touch. Tied to USE_PROD_GCP (not IS_PRODUCTION_REPO):
+  # without prod GCP credentials we literally cannot write to prod
+  # buckets, so any non-prod-GCP run forces DRY_RUN=true regardless of
+  # the operator's dry_run input. On a prod-GCP repo, the input still
+  # works as a per-run toggle (prod creds + dryrun bucket).
+  DRY_RUN: ${{ (inputs.dry_run || vars.USE_PROD_GCP != 'true') && 'true' || '' }}
+  ER_RELEASE: ${{ inputs.er_release && 'true' || '' }}
+  # WIF / GCP configuration — defined once, used by all jobs.
+  #
+  # Gated on USE_PROD_GCP (separate from IS_PRODUCTION_REPO) so a
+  # staging-prod repo (e.g. crlint/cockroach-release) can exercise the
+  # prod control-flow paths via IS_PRODUCTION_REPO=true while still
+  # authenticating against the dev GCP project. Real prod cutover
+  # requires setting BOTH IS_PRODUCTION_REPO=true and USE_PROD_GCP=true
+  # in repo Variables. Dry-run forces dev GCP regardless, since it
+  # writes to dev GCS / Artifact Registry.
+  RELEASE_WIF_PROVIDER: ${{ (inputs.dry_run || vars.USE_PROD_GCP != 'true') && 'projects/65523152860/locations/global/workloadIdentityPools/gha-releases-oidc/providers/gha-releases-oidc' || 'projects/182391335559/locations/global/workloadIdentityPools/gha-releases-oidc/providers/gha-releases-oidc' }}
+  RELEASE_GCP_SERVICE_ACCOUNT: ${{ (inputs.dry_run || vars.USE_PROD_GCP != 'true') && 'gha-releases@releases-dev-356314.iam.gserviceaccount.com' || 'release-artifacts@releases-prod.iam.gserviceaccount.com' }}
+  RELEASE_SIGNING_SERVICE_ACCOUNT: ${{ (inputs.dry_run || vars.USE_PROD_GCP != 'true') && 'gha-releases@releases-dev-356314.iam.gserviceaccount.com' || 'release-signing@releases-prod.iam.gserviceaccount.com' }}
+  RELEASE_GCP_PROJECT: ${{ (inputs.dry_run || vars.USE_PROD_GCP != 'true') && 'releases-dev-356314' || 'releases-prod' }}
+
+jobs:
+  # --------------------------------------------------------------------------
+  # Stage 0: Validate skip_jobs input
+  # --------------------------------------------------------------------------
+  # Every skippable job depends on this validator and gates itself with
+  #   !contains(format(',{0},', inputs.skip_jobs), ',<job-id>,')
+  # The format/comma-wrap turns the user's input into ",a,b,c," so that
+  # the contains() check matches whole tokens — without the wrap,
+  # contains('build', 'build-linux') would false-match. Empty input
+  # produces ",," and matches nothing, so the default is "skip nothing".
+  #
+  # The validator catches typos in seconds; without it, an unknown ID
+  # silently runs every job (since no contains() check matches) and the
+  # operator only discovers the typo when the failed job runs again.
+  #
+  # NOTE on the (success || (skipped && in skip_jobs)) gate used by
+  # downstream jobs: GHA reports `'skipped'` for both user-skipped jobs
+  # and cascade-skipped ones (where an upstream `needs:` failed). To
+  # support resume without letting a cascade-failure also resume the
+  # whole pipeline, downstream jobs only treat `'skipped'` as
+  # success-equivalent when the upstream is explicitly in skip_jobs.
+  validate-skip-jobs:
+    name: Validate skip_jobs
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - name: Validate skip_jobs IDs
+        env:
+          SKIP_JOBS: ${{ inputs.skip_jobs }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$SKIP_JOBS" ]]; then
+            echo "skip_jobs is empty; nothing to validate."
+            exit 0
+          fi
+          # Keep this list in sync with the skippable jobs below and the
+          # input description in the workflow_dispatch block.
+          valid_ids=(
+            build-linux
+            build-nonlinux
+            build-per-platform-ibm
+            build-docker
+            build-docker-ibm
+            macos-signing
+            ibm-signing
+            sentry-panic
+            publish-cloud-only
+            cloud-rollout
+          )
+          IFS=',' read -ra requested <<< "$SKIP_JOBS"
+          invalid=()
+          for id in "${requested[@]}"; do
+            if [[ ! " ${valid_ids[*]} " == *" $id "* ]]; then
+              invalid+=("$id")
+            fi
+          done
+          if (( ${#invalid[@]} > 0 )); then
+            echo "::error::Unknown skip_jobs IDs: ${invalid[*]}"
+            echo "Valid IDs: ${valid_ids[*]}"
+            exit 1
+          fi
+          echo "skip_jobs validated: ${requested[*]}"
+
+  # --------------------------------------------------------------------------
+  # Stage 1a: Linux per-platform builds (needed by Docker, sentry)
+  # --------------------------------------------------------------------------
+  # BACKPORT NOTE: on release branches up to and including release-26.1, the
+  # per-platform build script (build-cockroach-release-per-platform.sh) does
+  # an in-job `docker build --platform=linux/<arch>` for the arm64 matrix
+  # entry. master moved that work to a separate build-docker job which
+  # already has docker/setup-qemu-action + docker/setup-buildx-action. If
+  # you backport changes to this job onto a release branch that still has
+  # the in-job docker build, you MUST keep the setup-qemu / setup-buildx
+  # steps on that branch — without QEMU binfmt handlers, the arm64 RUN
+  # steps abort with `exec /bin/sh: exec format error`. Same applies to
+  # build-nonlinux and build-per-platform-ibm below.
+  build-linux:
+    name: 'Build ${{ matrix.platform }}'
+    needs: validate-skip-jobs
+    if: >-
+      ${{ !contains(format(',{0},', inputs.skip_jobs), ',build-linux,') &&
+        (github.ref == 'refs/heads/master' ||
+         (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         startsWith(github.ref, 'refs/heads/staging-v'))
+      }}
+    runs-on: [self-hosted, ubuntu_big_2404]
+    timeout-minutes: 120
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - linux-amd64
+          - linux-arm64
+          - linux-amd64-fips
+          - linux-s390x
+    steps:
+      - name: Free disk space
+        # Best-effort: GitHub-hosted ubuntu-latest runners need this to fit
+        # the build artifacts on a 14 GB disk; self-hosted runners have
+        # plenty of headroom and may not grant the GHA service user sudo,
+        # so tolerate failures here rather than blocking the job.
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache || :
+          sudo docker image prune --all --force || :
+          df -h /
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+          submodules: true
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ env.RELEASE_WIF_PROVIDER }}
+          service_account: ${{ env.RELEASE_GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+
+      - name: Build and publish release artifacts
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          # TODO(gh-migration): remove TC_ compat vars once TeamCity is decommissioned.
+          TC_BUILD_BRANCH: ${{ github.ref_name }}
+          TC_BUILDTYPE_ID: release-build-${{ matrix.platform }}
+          BUILD_VCS_NUMBER: ${{ inputs.sha || github.sha }}
+        run: |
+          build/teamcity/internal/release/process/build-cockroach-release-per-platform.sh
+
+  # --------------------------------------------------------------------------
+  # Stage 1b: Non-Linux per-platform builds (needed by macOS signing)
+  # --------------------------------------------------------------------------
+  build-nonlinux:
+    name: 'Build ${{ matrix.platform }}'
+    needs: validate-skip-jobs
+    if: >-
+      ${{ !contains(format(',{0},', inputs.skip_jobs), ',build-nonlinux,') &&
+        (github.ref == 'refs/heads/master' ||
+         (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         startsWith(github.ref, 'refs/heads/staging-v'))
+      }}
+    runs-on: [self-hosted, ubuntu_big_2404]
+    timeout-minutes: 120
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - darwin-amd64
+          - darwin-arm64
+          - win-amd64
+    steps:
+      - name: Free disk space
+        # Best-effort: GitHub-hosted ubuntu-latest runners need this to fit
+        # the build artifacts on a 14 GB disk; self-hosted runners have
+        # plenty of headroom and may not grant the GHA service user sudo,
+        # so tolerate failures here rather than blocking the job.
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache || :
+          sudo docker image prune --all --force || :
+          df -h /
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+          submodules: true
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ env.RELEASE_WIF_PROVIDER }}
+          service_account: ${{ env.RELEASE_GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+
+      - name: Build and publish release artifacts
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          # TODO(gh-migration): remove TC_ compat vars once TeamCity is decommissioned.
+          TC_BUILD_BRANCH: ${{ github.ref_name }}
+          TC_BUILDTYPE_ID: release-build-${{ matrix.platform }}
+          BUILD_VCS_NUMBER: ${{ inputs.sha || github.sha }}
+        run: |
+          build/teamcity/internal/release/process/build-cockroach-release-per-platform.sh
+
+  # --------------------------------------------------------------------------
+  # Stage 1b: IBM per-platform builds (no telemetry, parallel with above)
+  # --------------------------------------------------------------------------
+  build-per-platform-ibm:
+    name: 'Build IBM ${{ matrix.platform }}'
+    needs: validate-skip-jobs
+    if: >-
+      ${{ !contains(format(',{0},', inputs.skip_jobs), ',build-per-platform-ibm,') &&
+        (github.ref == 'refs/heads/master' ||
+         (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         startsWith(github.ref, 'refs/heads/staging-v'))
+      }}
+    runs-on: [self-hosted, ubuntu_big_2404]
+    timeout-minutes: 120
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - linux-amd64
+          - linux-arm64
+          - linux-amd64-fips
+          - linux-s390x
+    steps:
+      - name: Free disk space
+        # Best-effort: GitHub-hosted ubuntu-latest runners need this to fit
+        # the build artifacts on a 14 GB disk; self-hosted runners have
+        # plenty of headroom and may not grant the GHA service user sudo,
+        # so tolerate failures here rather than blocking the job.
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache || :
+          sudo docker image prune --all --force || :
+          df -h /
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+          submodules: true
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ env.RELEASE_WIF_PROVIDER }}
+          service_account: ${{ env.RELEASE_GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+
+      - name: Build and publish release artifacts (no telemetry)
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          TELEMETRY_DISABLED: 'true'
+          COCKROACH_ARCHIVE_PREFIX: cockroach-ibm
+          # TODO(gh-migration): remove TC_ compat vars once TeamCity is decommissioned.
+          TC_BUILD_BRANCH: ${{ github.ref_name }}
+          TC_BUILDTYPE_ID: release-build-ibm-${{ matrix.platform }}
+          BUILD_VCS_NUMBER: ${{ inputs.sha || github.sha }}
+        run: |
+          build/teamcity/internal/release/process/build-cockroach-release-per-platform.sh
+
+  # --------------------------------------------------------------------------
+  # Stage 2: Docker images (needs Linux builds only)
+  # --------------------------------------------------------------------------
+  build-docker:
+    name: Build Docker images
+    needs: build-linux
+    # !cancelled() + (success || skipped) lets this job run when build-linux
+    # was skipped via skip_jobs (resume after partial failure where the
+    # linux artifacts are already in GCS from a prior run).
+    if: >-
+      ${{ !cancelled() &&
+        (needs.build-linux.result == 'success' ||
+         (needs.build-linux.result == 'skipped' && contains(format(',{0},', inputs.skip_jobs), ',build-linux,'))) &&
+        !contains(format(',{0},', inputs.skip_jobs), ',build-docker,') &&
+        (github.ref == 'refs/heads/master' ||
+         (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         startsWith(github.ref, 'refs/heads/staging-v'))
+      }}
+    runs-on: [self-hosted, ubuntu_big_2404]
+    timeout-minutes: 90
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ env.RELEASE_WIF_PROVIDER }}
+          service_account: ${{ env.RELEASE_GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+
+      - name: Set up QEMU for multi-arch builds
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
+        with:
+          # Disable the binfmt-installer cache: it warns "Path Validation
+          # Error" on every post-step because the action doesn't write to
+          # the cache path it later tries to save. The image is tiny — the
+          # cache wasn't buying us anything anyway.
+          cache-image: false
+
+      - name: Build and push Docker images
+        env:
+          # TODO(gh-migration): remove TC_ compat vars once TeamCity is decommissioned.
+          TC_BUILD_BRANCH: ${{ github.ref_name }}
+          BUILD_VCS_NUMBER: ${{ inputs.sha || github.sha }}
+        run: |
+          build/teamcity/internal/release/process/build-cockroach-release-docker.sh
+
+  build-docker-ibm:
+    name: Build Docker images (IBM, no telemetry)
+    needs: build-per-platform-ibm
+    if: >-
+      ${{ !cancelled() &&
+        (needs.build-per-platform-ibm.result == 'success' ||
+         (needs.build-per-platform-ibm.result == 'skipped' && contains(format(',{0},', inputs.skip_jobs), ',build-per-platform-ibm,'))) &&
+        !contains(format(',{0},', inputs.skip_jobs), ',build-docker-ibm,') &&
+        (github.ref == 'refs/heads/master' ||
+         (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         startsWith(github.ref, 'refs/heads/staging-v'))
+      }}
+    runs-on: [self-hosted, ubuntu_big_2404]
+    timeout-minutes: 90
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ env.RELEASE_WIF_PROVIDER }}
+          service_account: ${{ env.RELEASE_GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+
+      - name: Set up QEMU for multi-arch builds
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
+        with:
+          # Disable the binfmt-installer cache: it warns "Path Validation
+          # Error" on every post-step because the action doesn't write to
+          # the cache path it later tries to save. The image is tiny — the
+          # cache wasn't buying us anything anyway.
+          cache-image: false
+
+      - name: Build and push Docker images (no telemetry)
+        env:
+          TELEMETRY_DISABLED: 'true'
+          COCKROACH_ARCHIVE_PREFIX: cockroach-ibm
+          # TODO(gh-migration): remove TC_ compat vars once TeamCity is decommissioned.
+          TC_BUILD_BRANCH: ${{ github.ref_name }}
+          BUILD_VCS_NUMBER: ${{ inputs.sha || github.sha }}
+        run: |
+          build/teamcity/internal/release/process/build-cockroach-release-docker.sh
+
+  # --------------------------------------------------------------------------
+  # Stage 2b: macOS signing (needs darwin-arm64 build)
+  # --------------------------------------------------------------------------
+  macos-signing:
+    name: macOS code signing
+    needs: build-nonlinux
+    if: >-
+      ${{ !cancelled() &&
+        (needs.build-nonlinux.result == 'success' ||
+         (needs.build-nonlinux.result == 'skipped' && contains(format(',{0},', inputs.skip_jobs), ',build-nonlinux,'))) &&
+        !contains(format(',{0},', inputs.skip_jobs), ',macos-signing,') &&
+        (github.ref == 'refs/heads/master' ||
+         (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         startsWith(github.ref, 'refs/heads/staging-v'))
+      }}
+    runs-on: [self-hosted, ubuntu_2404]
+    timeout-minutes: 60
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ env.RELEASE_WIF_PROVIDER }}
+          service_account: ${{ env.RELEASE_SIGNING_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+
+      # rcodesign signs the customer-facing macOS binaries. Pin both the
+      # version and the upstream-published SHA-256 so the runner verifies
+      # the exact same artifact every time — stronger than `cargo install`
+      # @version (which has no source-package SHA check) and avoids needing
+      # a Rust toolchain on the runner. Bump RCODESIGN_SHA256 alongside
+      # RCODESIGN_VERSION; the published .sha256 file is at
+      # https://github.com/indygreg/apple-platform-rs/releases.
+      - name: Install rcodesign
+        env:
+          RCODESIGN_VERSION: '0.29.0'
+          RCODESIGN_SHA256: 'dbe85cedd8ee4217b64e9a0e4c2aef92ab8bcaaa41f20bde99781ff02e600002'
+        run: |
+          set -euo pipefail
+          url="https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F${RCODESIGN_VERSION}/apple-codesign-${RCODESIGN_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+          tmp="$(mktemp -d)"
+          curl -fsSL --retry 5 --retry-delay 2 "$url" -o "$tmp/rcodesign.tgz"
+          echo "${RCODESIGN_SHA256}  $tmp/rcodesign.tgz" | sha256sum -c -
+          tar -xzf "$tmp/rcodesign.tgz" -C "$tmp" --strip-components=1
+          # Install into a runner-writable directory and prepend it to
+          # PATH so the next step ("Sign macOS binaries") sees rcodesign
+          # without sudo or root-owned bin dirs.
+          mkdir -p "$RUNNER_TEMP/bin"
+          install -m 0755 "$tmp/rcodesign" "$RUNNER_TEMP/bin/rcodesign"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/bin/rcodesign" --version
+
+      - name: Sign macOS binaries
+        env:
+          # TODO(gh-migration): remove TC_ compat vars once TeamCity is decommissioned.
+          TC_BUILD_BRANCH: ${{ github.ref_name }}
+          BUILD_VCS_NUMBER: ${{ inputs.sha || github.sha }}
+        run: |
+          build/github/release-sign-macos.sh
+
+  # --------------------------------------------------------------------------
+  # Stage 2c: IBM/GPG signing (needs IBM linux builds)
+  # --------------------------------------------------------------------------
+  ibm-signing:
+    name: IBM GPG signing
+    needs: build-per-platform-ibm
+    if: >-
+      ${{ !cancelled() &&
+        (needs.build-per-platform-ibm.result == 'success' ||
+         (needs.build-per-platform-ibm.result == 'skipped' && contains(format(',{0},', inputs.skip_jobs), ',build-per-platform-ibm,'))) &&
+        !contains(format(',{0},', inputs.skip_jobs), ',ibm-signing,') &&
+        (github.ref == 'refs/heads/master' ||
+         (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         startsWith(github.ref, 'refs/heads/staging-v'))
+      }}
+    runs-on: [self-hosted, ubuntu_2404]
+    timeout-minutes: 30
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ env.RELEASE_WIF_PROVIDER }}
+          service_account: ${{ env.RELEASE_SIGNING_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+
+      - name: Sign IBM release artifacts (GPG)
+        env:
+          COCKROACH_ARCHIVE_PREFIX: cockroach-ibm
+          # TODO(gh-migration): remove TC_ compat vars once TeamCity is decommissioned.
+          TC_BUILD_BRANCH: ${{ github.ref_name }}
+          BUILD_VCS_NUMBER: ${{ inputs.sha || github.sha }}
+        run: |
+          build/github/release-sign-ibm.sh
+
+  # --------------------------------------------------------------------------
+  # Stage 2d: Sentry panic (needs linux-amd64 build)
+  # --------------------------------------------------------------------------
+  sentry-panic:
+    name: Generate Sentry panic
+    needs: build-linux
+    if: >-
+      ${{ !cancelled() &&
+        (needs.build-linux.result == 'success' ||
+         (needs.build-linux.result == 'skipped' && contains(format(',{0},', inputs.skip_jobs), ',build-linux,'))) &&
+        !contains(format(',{0},', inputs.skip_jobs), ',sentry-panic,') &&
+        (github.ref == 'refs/heads/master' ||
+         (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         startsWith(github.ref, 'refs/heads/staging-v'))
+      }}
+    runs-on: [self-hosted, ubuntu_2404]
+    timeout-minutes: 30
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Free disk space
+        # Best-effort: GitHub-hosted ubuntu-latest runners need this to fit
+        # the build artifacts on a 14 GB disk; self-hosted runners have
+        # plenty of headroom and may not grant the GHA service user sudo,
+        # so tolerate failures here rather than blocking the job.
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache || :
+          sudo docker image prune --all --force || :
+          df -h /
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+          submodules: true
+
+      - name: Authenticate to Google Cloud
+        if: env.DRY_RUN == ''
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ env.RELEASE_WIF_PROVIDER }}
+          service_account: ${{ env.RELEASE_GCP_SERVICE_ACCOUNT }}
+
+      # Fetch the Sentry auth token via the official Google action so it's
+      # auto-registered with ::add-mask:: and never has to flow through `echo`
+      # in our scripts. Skipped in dry-run since the script exits early.
+      - name: Fetch Sentry auth token
+        if: env.DRY_RUN == ''
+        id: secrets
+        uses: google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262 # v3
+        with:
+          secrets: |-
+            sentry_auth_token:${{ env.RELEASE_GCP_PROJECT }}/gha-releases-sentry-auth-token
+
+      - name: Trigger Sentry panic
+        env:
+          SENTRY_AUTH_TOKEN: ${{ steps.secrets.outputs.sentry_auth_token }}
+          # TODO(gh-migration): remove TC_ compat vars once TeamCity is decommissioned.
+          TC_BUILD_BRANCH: ${{ github.ref_name }}
+          BUILD_VCS_NUMBER: ${{ inputs.sha || github.sha }}
+        run: |
+          build/github/release-sentry-panic.sh
+
+  # --------------------------------------------------------------------------
+  # Stage 3: Publish cloud-only candidate (needs Docker images)
+  # --------------------------------------------------------------------------
+  publish-cloud-only:
+    name: Publish cloud-only candidate
+    needs: build-docker
+    if: >-
+      ${{ !cancelled() &&
+        (needs.build-docker.result == 'success' ||
+         (needs.build-docker.result == 'skipped' && contains(format(',{0},', inputs.skip_jobs), ',build-docker,'))) &&
+        !contains(format(',{0},', inputs.skip_jobs), ',publish-cloud-only,') &&
+        !inputs.dry_run && vars.IS_PRODUCTION_REPO == 'true' &&
+        (github.ref == 'refs/heads/master' ||
+         (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         startsWith(github.ref, 'refs/heads/staging-v'))
+      }}
+    runs-on: [self-hosted, ubuntu_2404]
+    timeout-minutes: 30
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ env.RELEASE_WIF_PROVIDER }}
+          service_account: ${{ env.RELEASE_GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+
+      # cloud-only.sh's verify_docker_image step iterates amd64/arm64/s390x
+      # and `docker run`s each platform variant of the cloud-only manifest.
+      # Without QEMU, the non-amd64 RUN aborts with "exec format error".
+      - name: Set up QEMU for cross-arch RUN steps
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
+        with:
+          cache-image: false
+
+      - name: Publish cloud-only candidate
+        env:
+          # TODO(gh-migration): remove TC_ compat vars once TeamCity is decommissioned.
+          TC_BUILD_BRANCH: ${{ github.ref_name }}
+          BUILD_VCS_NUMBER: ${{ inputs.sha || github.sha }}
+        run: |
+          build/github/release-cloud-only.sh
+
+      - name: Upload cloud-only metadata
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        with:
+          name: cloud-only-metadata
+          path: artifacts/metadata.json
+          retention-days: 7
+
+  # --------------------------------------------------------------------------
+  # Stage 4: Cloud rollout RAFA PRs (needs cloud-only candidate)
+  # --------------------------------------------------------------------------
+  cloud-rollout:
+    name: 'Cloud rollout: create RAFA PRs'
+    needs: publish-cloud-only
+    if: >-
+      ${{ !cancelled() &&
+        (needs.publish-cloud-only.result == 'success' ||
+         (needs.publish-cloud-only.result == 'skipped' && contains(format(',{0},', inputs.skip_jobs), ',publish-cloud-only,'))) &&
+        !contains(format(',{0},', inputs.skip_jobs), ',cloud-rollout,') &&
+        !inputs.dry_run && vars.IS_PRODUCTION_REPO == 'true' &&
+        (github.ref == 'refs/heads/master' ||
+         (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         startsWith(github.ref, 'refs/heads/staging-v'))
+      }}
+    runs-on: [self-hosted, ubuntu_2404]
+    timeout-minutes: 30
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ env.RELEASE_WIF_PROVIDER }}
+          service_account: ${{ env.RELEASE_GCP_SERVICE_ACCOUNT }}
+
+      - name: Download cloud-only metadata
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: cloud-only-metadata
+
+      # Fetch the GitHub PAT via the official Google action so it's
+      # auto-registered with ::add-mask:: and never has to flow through `echo`
+      # in our scripts.
+      - name: Fetch GitHub PAT
+        id: secrets
+        uses: google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262 # v3
+        with:
+          secrets: |-
+            github_pat:${{ env.RELEASE_GCP_PROJECT }}/gha-releases-release-github-pat
+
+      - name: Create cloud rollout PRs
+        env:
+          GH_TOKEN: ${{ steps.secrets.outputs.github_pat }}
+          # TODO(gh-migration): remove TC_ compat vars once TeamCity is decommissioned.
+          TC_BUILD_BRANCH: ${{ github.ref_name }}
+          BUILD_VCS_NUMBER: ${{ inputs.sha || github.sha }}
+        run: |
+          build/github/release-cloud-rollout.sh
+
+  # --------------------------------------------------------------------------
+  # Notification (always runs)
+  # --------------------------------------------------------------------------
+  notify:
+    name: Slack notification
+    if: >-
+      ${{ always() &&
+        (github.ref == 'refs/heads/master' ||
+         (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         startsWith(github.ref, 'refs/heads/staging-v'))
+      }}
+    needs:
+      - validate-skip-jobs
+      - build-linux
+      - build-nonlinux
+      - build-per-platform-ibm
+      - build-docker
+      - build-docker-ibm
+      - macos-signing
+      - ibm-signing
+      - sentry-panic
+      - publish-cloud-only
+      - cloud-rollout
+    runs-on: [self-hosted, ubuntu_2404]
+    timeout-minutes: 10
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Determine overall status
+        id: status
+        env:
+          HAS_FAILURE: ${{ contains(needs.*.result, 'failure') }}
+          HAS_CANCELLED: ${{ contains(needs.*.result, 'cancelled') }}
+        run: |
+          if [[ "$HAS_FAILURE" == "true" ]]; then
+            echo "result=failure" >> "$GITHUB_OUTPUT"
+            echo "color=#dc3545" >> "$GITHUB_OUTPUT"
+            echo "emoji=:x:" >> "$GITHUB_OUTPUT"
+          elif [[ "$HAS_CANCELLED" == "true" ]]; then
+            echo "result=cancelled" >> "$GITHUB_OUTPUT"
+            echo "color=#ffc107" >> "$GITHUB_OUTPUT"
+            echo "emoji=:warning:" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=success" >> "$GITHUB_OUTPUT"
+            echo "color=#28a745" >> "$GITHUB_OUTPUT"
+            echo "emoji=:white_check_mark:" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ env.RELEASE_WIF_PROVIDER }}
+          service_account: ${{ env.RELEASE_GCP_SERVICE_ACCOUNT }}
+
+      # Fetch the Slack token via the official Google action so it's
+      # auto-registered with ::add-mask:: and never has to flow through
+      # `echo` in our scripts.
+      - name: Fetch Slack token
+        id: secrets
+        uses: google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262 # v3
+        with:
+          secrets: |-
+            slack_bot_token:${{ env.RELEASE_GCP_PROJECT }}/gha-releases-release-slack-bot-token
+
+      - name: Post to #release-ops
+        env:
+          SLACK_TOKEN: ${{ steps.secrets.outputs.slack_bot_token }}
+          SLACK_PAYLOAD: >-
+            {
+              "channel": "C08H9FA1W3C",
+              "text": "${{ steps.status.outputs.emoji }} Release build *${{ steps.status.outputs.result }}* for `${{ github.ref_name }}` (<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View run>)",
+              "attachments": [
+                {
+                  "color": "${{ steps.status.outputs.color }}",
+                  "fields": [
+                    { "title": "Branch", "value": "`${{ github.ref_name }}`", "short": true },
+                    { "title": "Dry run", "value": "${{ env.DRY_RUN != '' }}", "short": true },
+                    { "title": "Triggered by", "value": "${{ github.actor }}", "short": true }
+                  ]
+                }
+              ]
+            }
+        run: |
+          curl -sf -X POST https://slack.com/api/chat.postMessage \
+            -H "Authorization: Bearer $SLACK_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$SLACK_PAYLOAD"
