@@ -1111,6 +1111,30 @@ FROM
 	return tree.Name(regionCol), nil
 }
 
+// sqlReferencesRegionColumn reports whether sql mentions any column
+// whose type is the crdb_internal_region enum.
+func (og *operationGenerator) sqlReferencesRegionColumn(
+	ctx context.Context, tx pgx.Tx, sql string,
+) (bool, error) {
+	regionCols, err := Collect(ctx, og, tx, pgx.RowTo[string], `
+SELECT DISTINCT a.attname
+  FROM pg_catalog.pg_attribute a
+  JOIN pg_catalog.pg_type t ON a.atttypid = t.oid
+ WHERE t.typname = 'crdb_internal_region'
+   AND a.attnum > 0
+   AND NOT a.attisdropped`,
+	)
+	if err != nil {
+		return false, err
+	}
+	for _, col := range regionCols {
+		if strings.Contains(sql, col) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // tableIsRegionalByRow checks whether the given table is a REGIONAL BY ROW table.
 func (og *operationGenerator) tableIsRegionalByRow(
 	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
