@@ -257,6 +257,28 @@ const (
 	PostValidationAll = PostValidationReplicaDivergence | PostValidationInvalidDescriptors | PostValidationNoDeadNodes | PostValidationInspect
 )
 
+// String returns a human-readable representation of the set bits, e.g.
+// "ReplicaDivergence|InvalidDescriptors". Returns "none" if no bits are set.
+func (p PostValidation) String() string {
+	if p == 0 {
+		return "none"
+	}
+	var parts []string
+	if p&PostValidationReplicaDivergence != 0 {
+		parts = append(parts, "ReplicaDivergence")
+	}
+	if p&PostValidationInvalidDescriptors != 0 {
+		parts = append(parts, "InvalidDescriptors")
+	}
+	if p&PostValidationNoDeadNodes != 0 {
+		parts = append(parts, "NoDeadNodes")
+	}
+	if p&PostValidationInspect != 0 {
+		parts = append(parts, "Inspect")
+	}
+	return strings.Join(parts, "|")
+}
+
 // PromSub replaces all non prometheus friendly chars with "_". Note,
 // before creating a metric, read up on prom metric naming conventions:
 // https://prometheus.io/docs/practices/naming/
