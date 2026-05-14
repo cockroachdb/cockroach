@@ -46,6 +46,13 @@ CREATE RESOURCE GROUP negative_weight WITH cpu_weight = -1
 statement error pq: unknown resource group option "bogus"
 CREATE RESOURCE GROUP unknown_opt WITH cpu_weight = 1, bogus = 1
 
+# Repeating an option is rejected (rather than silently last-writer-wins).
+statement error pq: cpu_weight specified multiple times
+CREATE RESOURCE GROUP dup_weight WITH cpu_weight = 10, cpu_weight = 20
+
+statement error pq: max_cpu specified multiple times
+CREATE RESOURCE GROUP dup_max_cpu WITH cpu_weight = 1, max_cpu = true, max_cpu = false
+
 # IDs < 16 are reserved; the sequence's first allocated id is 17.
 statement ok
 CREATE RESOURCE GROUP high WITH cpu_weight = 100, max_cpu = true
@@ -131,6 +138,10 @@ ALTER RESOURCE GROUP ghost WITH cpu_weight = 1
 
 statement ok
 ALTER RESOURCE GROUP IF EXISTS ghost WITH cpu_weight = 1
+
+# Repeating an option is rejected on ALTER as well.
+statement error pq: cpu_weight specified multiple times
+ALTER RESOURCE GROUP high WITH cpu_weight = 10, cpu_weight = 20
 
 subtest end
 

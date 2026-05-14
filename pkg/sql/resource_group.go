@@ -80,8 +80,13 @@ func applyResourceGroupOptions(
 		}
 		return eval.Expr(ctx, evalCtx, typedExpr)
 	}
+	seen := make(map[string]struct{}, len(opts))
 	for _, opt := range opts {
-		switch key := string(opt.Key); key {
+		key := string(opt.Key)
+		if _, dup := seen[key]; dup {
+			return pgerror.Newf(pgcode.Syntax, "%s specified multiple times", key)
+		}
+		switch key {
 		case resourceGroupOptCPUWeight:
 			datum, err := evalOpt(opt.Value)
 			if err != nil {
@@ -110,6 +115,7 @@ func applyResourceGroupOptions(
 			return pgerror.Newf(pgcode.InvalidParameterValue,
 				"unknown resource group option %q", key)
 		}
+		seen[key] = struct{}{}
 	}
 	return nil
 }
