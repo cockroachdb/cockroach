@@ -201,6 +201,8 @@ sql.contention.event_store.capacity	byte size	64 MiB	the in-memory storage capac
 sql.contention.event_store.duration_threshold	duration	0s	minimum contention duration to cause the contention events to be collected into crdb_internal.transaction_contention_events	application
 sql.contention.record_serialization_conflicts.enabled	boolean	true	enables recording 40001 errors with conflicting txn meta as SERIALIZATION_CONFLICTcontention events into crdb_internal.transaction_contention_events	application
 sql.contention.txn_id_cache.max_size	byte size	64 MiB	the maximum byte size TxnID cache will use (set to 0 to disable)	application
+sql.crdb_internal.tsdb_query.max_rows	integer	500000	maximum number of rows a single crdb_internal.tsdb_query call may return; queries that would return more error before any rows are surfaced. Set to 0 to disable the cap.	application
+sql.crdb_internal.tsdb_query.max_time_range	duration	168h0m0s	maximum effective time range that a single crdb_internal.tsdb_query call may cover; the requested end_time is first clamped to the current wall-clock time before this cap is checked	application
 sql.cross_db_fks.enabled	boolean	false	if true, creating foreign key references across databases is allowed	application
 sql.cross_db_sequence_owners.enabled	boolean	false	if true, creating sequences owned by tables from other databases is allowed	application
 sql.cross_db_sequence_references.enabled	boolean	false	if true, sequences referenced by tables from other databases are allowed	application
