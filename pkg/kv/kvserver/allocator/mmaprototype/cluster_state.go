@@ -719,13 +719,32 @@ type storeState struct {
 		// one resource dimension, that is the dimension chosen when picking the
 		// top-k.
 		//
+		// The key in this map is a local store-id; the value enumerates ranges
+		// for which (a) that local store is the leaseholder and (b) the storeState
+		// owning this entry has a replica.
+		//
+		// Lifecycle and staleness: topKRanges is rebuilt only by
+		// processStoreLeaseholderMsgInternal — a StoreLeaseholderMsg from local
+		// store L recomputes topKRanges[L] across every storeState from scratch.
+		// Pending mutations to rs.replicas and ss.adjusted.replicas (via
+		// applyReplicaChange / undoReplicaChange) and enactment / GC of pending
+		// changes do NOT update topK. So between consecutive msgs from L,
+		// topKRanges[L] entries can become stale in two ways:
+		//   - phantom entry: r is listed for store ss, but ss is no longer in
+		//     rs.replicas (replica removed via a pending change that has since
+		//     enacted); or
+		//   - leaseholder mismatch: r is listed under L, but rs.replicas[L] no
+		//     longer marks L as leaseholder (lease transferred away).
+		// Skip-on-pending in the rebalance loops masks the in-progress window;
+		// the post-enact window relies on readers (rebalanceLeasesFromLocalStoreID,
+		// rebalanceReplicas) tolerating mismatches by skipping affected entries.
+		// Self-corrects on L's next leaseholder msg.
+		//
 		// It includes ranges whose replicas are being removed via pending
 		// changes, or lease transfers. That is, it does not account for
 		// pending or enacted changes made since the last time top-k was
 		// computed. It does account for pending changes that were pending
 		// when the top-k was computed.
-		//
-		// The key in this map is a local store-id.
 		//
 		// NB: this only includes replicas that satisfy the isVoter() or
 		// isNonVoter() methods, i.e., {VOTER_FULL, VOTER_INCOMING, NON_VOTER,
@@ -733,9 +752,6 @@ type storeState struct {
 		// only replica types where the allocator wants to explicitly consider
 		// shedding, since the other states are transient states, that are
 		// either going away, or will soon transition to a full-fledged state.
-		//
-		// We may decide to keep this top-k up-to-date incrementally instead of
-		// recomputing it from scratch on each StoreLeaseholderMsg.
 		//
 		// Example:
 		// Assume the local node has two stores, s1 and s2.
@@ -1256,8 +1272,15 @@ func (rs *rangeState) removePendingChangeTracking(changeID changeID) {
 	}
 }
 
-// clearAnalyzedConstraints clears the analyzed constraints for the range state.
-// This should be used when rs is deleted or rs.constraints needs to be reset.
+// clearAnalyzedConstraints clears the cached analyzed constraints for the
+// range state.
+//
+// Invalidation contract: rs.constraints is a per-rangeState cache derived
+// from rs.replicas (the IsLeaseholder flags and the per-replica
+// StoreIDs/types). It is consulted in the rebalance loops both to choose
+// candidate stores and to assert internal invariants (see
+// rebalanceLeasesFromLocalStoreID and rebalanceReplicas). Any code path that
+// mutates rs.replicas must call this method to keep the cache consistent.
 func (rs *rangeState) clearAnalyzedConstraints() {
 	if rs.constraints == nil {
 		return
@@ -1874,8 +1897,10 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 	// transferring its replica for range r1 to remote store s2, then
 	// localss.adjusted.replicas will not have r1. This is fine in that s1
 	// should not be making more decisions about r1. If the change is undone
-	// later, we will again compute the top-k, which will consider r1, before
-	// computing new changes (due to REQUIREMENT(change-computation)).
+	// later, the top-k will be recomputed here on the next leaseholder msg
+	// from localss; rebalance passes that interleave between the undo and
+	// that next msg see a stale topK and tolerate it (see the topKRanges
+	// invariant on storeState).
 	for rangeID, state := range localss.adjusted.replicas {
 		if !state.IsLeaseholder {
 			// We may have transferred the lease away previously but still have a
@@ -1896,9 +1921,10 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		// transferred to another store s11, s10 will not see r1 below. We
 		// make this choice to avoid cluttering the top-k for s10 with
 		// replicas that are going away. If it is undone, r1 will not be in
-		// the top-k for s10, but due to REQUIREMENT(change-computation), a
-		// new authoritative state will be provided and the top-k recomputed,
-		// before computing any new changes.
+		// the top-k for s10 until the next leaseholder msg from msg.StoreID
+		// rebuilds it; rebalance passes that interleave between the undo and
+		// that msg see a stale topK and tolerate it (see the topKRanges
+		// invariant on storeState).
 		for _, replica := range rs.replicas {
 			typ := replica.ReplicaState.ReplicaType.ReplicaType
 			if isVoter(typ) || isNonVoter(typ) {
@@ -2082,6 +2108,9 @@ func (cs *clusterState) addPendingRangeChange(ctx context.Context, change Pendin
 			"addPendingRangeChange: change_id=%v, range_id=%v, change=%v",
 			cid, rangeID, pendingChange.ReplicaChange)
 	}
+	// applyReplicaChange above mutated rs.replicas; invalidate per the
+	// contract on clearAnalyzedConstraints.
+	cs.ranges[rangeID].clearAnalyzedConstraints()
 }
 
 // preCheckOnApplyReplicaChanges does some validation of the changes being

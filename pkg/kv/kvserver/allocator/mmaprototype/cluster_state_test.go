@@ -714,6 +714,33 @@ func TestClusterState(t *testing.T) {
 				case "get-pending-changes":
 					return printPendingChangesTest(testingGetPendingChanges(t, cs))
 
+				case "enact-pending-changes":
+					// Marks the listed pending changes as enacted (without going
+					// through processStoreLeaseholderMsg's slow path). Mirrors what
+					// AdjustPendingChangeDisposition(success=true) does in production
+					// when the leaseholder reports the change as observed.
+					changeIDsInt := dd.ScanArg[[]changeID](t, d, "change-ids")
+					for _, id := range changeIDsInt {
+						cs.pendingChangeEnacted(id, cs.ts.Now())
+					}
+					return printPendingChangesTest(testingGetPendingChanges(t, cs))
+
+				case "analyze-constraints":
+					// Forces population of rs.constraints for the given range.
+					// Useful for reproducing scenarios where a prior rebalance pass
+					// would have cached constraints, without setting up the
+					// overload pass that would normally trigger it.
+					rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
+					rs, ok := cs.ranges[rangeID]
+					if !ok {
+						return fmt.Sprintf("range r%v not found", rangeID)
+					}
+					cs.ensureAnalyzedConstraints(ctx, rs)
+					if rs.constraints == nil {
+						return "no constraints (analysis returned nil)"
+					}
+					return fmt.Sprintf("leaseholderID=s%v", rs.constraints.leaseholderID)
+
 				case "rebalance-stores":
 					storeID := dd.ScanArg[roachpb.StoreID](t, d, "store-id")
 					rng := rand.New(rand.NewSource(0))

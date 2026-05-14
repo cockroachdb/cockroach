@@ -599,12 +599,18 @@ func (re *rebalanceEnv) rebalanceReplicas(
 		}
 		isVoter, isNonVoter := rstate.constraints.replicaRole(store.StoreID)
 		if !isVoter && !isNonVoter {
-			// Due to REQUIREMENT(change-computation), the top-k is up to date, so
-			// this must never happen.
-			panic(errors.AssertionFailedf("internal state inconsistency: "+
-				"store=%v range_id=%v pending-changes=%v "+
-				"rstate_replicas=%v rstate_constraints=%v",
-				store.StoreID, rangeID, rstate.pendingChanges, rstate.replicas, rstate.constraints))
+			// Two staleness sources can land us here despite the
+			// skip-on-pending check above: a stale topK[localStoreID] entry
+			// pointing at a range where store.StoreID is no longer a replica
+			// (topK is rebuilt only on StoreLeaseholderMsg — see the topKRanges
+			// invariant in cluster_state.go), or a stale rs.constraints cache
+			// from before a pending change mutated rs.replicas. Both
+			// self-correct on the next leaseholder msg from the relevant local
+			// store, so skip the range and move on.
+			ml.logf(ctx, 1, "skipping r%d: stale topK[s%d] or stale constraints, "+
+				"s%d not in cached replica set", rangeID, store.StoreID, store.StoreID)
+			re.passObs.replicaShed(ctx, rangeTransient)
+			continue
 		}
 		// Get the constraint conjunction which will allow us to look up stores
 		// that could replace the shedding store.
@@ -795,30 +801,29 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 			re.passObs.leaseShed(ctx, rangeTransient)
 			continue
 		}
-		foundLocalReplica := false
-		for _, repl := range rstate.replicas {
-			if repl.StoreID != localStoreID { // NB: localStoreID == ss.StoreID == store.StoreID
-				continue
-			}
-			if !repl.IsLeaseholder {
-				// NB: due to REQUIREMENT(change-computation), the top-k
-				// ranges for ss reflect the latest adjusted state, including
-				// pending changes. Thus, this store must be a replica and the
-				// leaseholder, hence this assertion, and other assertions
-				// below. Additionally, the code above ignored the range if it
-				// has pending changes, which while not necessary for the
-				// is-leaseholder assertion, makes the case where we assert
-				// even narrower.
-				log.KvDistribution.Fatalf(ctx,
-					"internal state inconsistency: replica considered for lease shedding has no pending"+
-						" changes but is not leaseholder: %+v", rstate)
-			}
-			foundLocalReplica = true
-			break
+		// NB: localStoreID == ss.StoreID == store.StoreID. Use a distinct name
+		// from the outer loop counter `i` to avoid shadowing.
+		localIdx := slices.IndexFunc(rstate.replicas, func(r StoreIDAndReplicaState) bool {
+			return r.StoreID == localStoreID
+		})
+		if localIdx == -1 {
+			// Stale topK[localStoreID]: a removal pending change for the local
+			// store has enacted, but topK still lists r. Self-corrects on the
+			// next leaseholder msg from this store. See the topKRanges
+			// invariant in cluster_state.go.
+			ml.logf(ctx, 1, "skipping r%d: stale topK[s%d] entry, s%d no longer a replica",
+				rangeID, localStoreID, localStoreID)
+			re.passObs.leaseShed(ctx, rangeTransient)
+			continue
 		}
-		if !foundLocalReplica {
-			log.KvDistribution.Fatalf(
-				ctx, "internal state inconsistency: local store is not a replica: %+v", rstate)
+		if !rstate.replicas[localIdx].IsLeaseholder {
+			// Stale topK[localStoreID]: the local store transferred its lease
+			// away since the msg that built topK and the change has enacted.
+			// Self-corrects on the next msg from this store.
+			ml.logf(ctx, 1, "skipping r%d: stale topK[s%d] entry, s%d no longer leaseholder",
+				rangeID, localStoreID, localStoreID)
+			re.passObs.leaseShed(ctx, rangeTransient)
+			continue
 		}
 		if re.now.Sub(rstate.lastFailedChange) < re.lastFailedChangeDelayDuration {
 			ml.logf(ctx, 3, "skipping r%d: too soon after failed change", rangeID)
@@ -836,10 +841,18 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 			continue
 		}
 		if rstate.constraints.leaseholderID != store.StoreID {
-			// See the earlier comment about assertions.
-			panic(fmt.Sprintf("internal state inconsistency: "+
-				"store=%v range_id=%v should be leaseholder but isn't",
-				store.StoreID, rangeID))
+			// rs.constraints is a cached blob (see clearAnalyzedConstraints in
+			// cluster_state.go); leaseholderID reflects rs.replicas at cache
+			// time. The clearAnalyzedConstraints contract ensures this is
+			// invalidated whenever rs.replicas mutates, so this skip is a
+			// permanent parity-with-topK guard rather than a transitional
+			// safety net: any future replica-mutating code path that forgets
+			// to invalidate gets a benign skip rather than a node fatal.
+			ml.logf(ctx, 1, "skipping r%d: stale rs.constraints, "+
+				"cached leaseholderID=s%d but local store=s%d",
+				rangeID, rstate.constraints.leaseholderID, store.StoreID)
+			re.passObs.leaseShed(ctx, rangeTransient)
+			continue
 		}
 
 		// Get the stores from the replica set that are at least as good as the
