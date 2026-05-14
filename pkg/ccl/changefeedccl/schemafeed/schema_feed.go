@@ -557,6 +557,7 @@ func (tf *schemaFeed) pauseOrResumePolling(ctx context.Context, atOrBefore hlc.T
 			// version could not have changed.
 			heldLease := tf.mu.heldLeases[id]
 			if heldLease.leasedDescriptor == nil {
+				prevLatest := heldLease.latestVersion
 				// Otherwise, a new version was detected, so acquire it at advanceTo.
 				newLease, err := tf.leaseMgr.Acquire(ctx, lease.TimestampToReadTimestamp(advanceTo), id)
 				if err != nil {
@@ -566,8 +567,10 @@ func (tf *schemaFeed) pauseOrResumePolling(ctx context.Context, atOrBefore hlc.T
 				if newLease.Underlying().GetVersion() >= heldLease.latestVersion {
 					heldLease.latestVersion = newLease.Underlying().GetVersion()
 					tf.mu.heldLeases[id].leasedDescriptor = newLease
+					log.Changefeed.Infof(ctx, "DEBUG[lease-leak] pauseOrResumePolling id=%d acquired+stored lease version=%d (prevLatest=%d)", id, newLease.Underlying().GetVersion(), prevLatest)
 				} else {
 					// The latest observed version was not picked up yet.
+					log.Changefeed.Infof(ctx, "DEBUG[lease-leak] pauseOrResumePolling id=%d acquired+RELEASED lease version=%d (latestVersion=%d is newer)", id, newLease.Underlying().GetVersion(), heldLease.latestVersion)
 					newLease.Release(ctx)
 				}
 				// This new version could be schema_locked, but we don't know if multiple versions
@@ -1000,19 +1003,27 @@ func (tf *schemaFeed) OnNewVersion(
 ) {
 	tf.mu.Lock()
 	defer tf.mu.Unlock()
+	// DEBUG[lease-leak]: log every call so we can see which versions arrive
+	// and whether we take the no-op branch.
+	log.Changefeed.Infof(ctx, "DEBUG[lease-leak] OnNewVersion id=%d version=%d", id, version)
 	// Observer are buffered and can fire after unregister.
 	if tf.mu.heldLeases == nil {
+		log.Changefeed.Infof(ctx, "DEBUG[lease-leak] OnNewVersion id=%d version=%d -> noop (heldLeases nil, unregistered)", id, version)
 		return
 	}
 	ld, ok := tf.mu.heldLeases[id]
 	if !ok {
+		log.Changefeed.Infof(ctx, "DEBUG[lease-leak] OnNewVersion id=%d version=%d -> noop (id not in heldLeases)", id, version)
 		return
 	}
 	// Check if the new version is greater than the latest version we know
 	// about.
 	if ld.latestVersion >= version {
+		log.Changefeed.Infof(ctx, "DEBUG[lease-leak] OnNewVersion id=%d version=%d -> NOOP (latestVersion=%d >= version=%d) - lease NOT released, leasedDescriptor!=nil=%v", id, version, ld.latestVersion, version, ld.leasedDescriptor != nil)
 		return
 	}
+	hadLease := ld.leasedDescriptor != nil
+	prevLatest := ld.latestVersion
 	ld.latestVersion = version
 	tf.mu.staleLeases = true
 	tf.mu.pollingPaused = false
@@ -1021,6 +1032,7 @@ func (tf *schemaFeed) OnNewVersion(
 		ld.leasedDescriptor.Release(ctx)
 		ld.leasedDescriptor = nil
 	}
+	log.Changefeed.Infof(ctx, "DEBUG[lease-leak] OnNewVersion id=%d version=%d -> advanced latestVersion %d->%d, releasedLease=%v", id, version, prevLatest, version, hadLease)
 }
 
 type doNothingSchemaFeed struct{}
