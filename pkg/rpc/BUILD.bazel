@@ -14,6 +14,7 @@ go_library(
         "context.go",
         "context_testutils.go",
         "drpc.go",
+        "drpc_logger.go",
         "errors.go",
         "grpc.go",
         "heartbeat.go",
