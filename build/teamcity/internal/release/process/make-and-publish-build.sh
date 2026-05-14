@@ -52,7 +52,7 @@ if [[ -z "${DRY_RUN}" ]]; then
 else
   gcs_bucket="cockroach-builds-artifacts-dryrun"
   google_credentials="$GOOGLE_COCKROACH_RELEASE_CREDENTIALS"
-  gcr_repository="us.gcr.io/cockroach-release/cockroach-test"
+  gcr_repository="us-docker.pkg.dev/releases-dev-356314/cockroachdb-staged-releases/cockroach-test"
   build_name="${build_name}.dryrun"
   gcr_hostname="us.gcr.io"
   metadata_gcs_bucket="cockroach-release-qualification-test"
