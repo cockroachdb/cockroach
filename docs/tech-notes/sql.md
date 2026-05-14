@@ -151,7 +151,7 @@ There are overall five main component groups:
   with the state of the transaction in the KV layer.
 
 Note that these components are a fictional model: for efficiency and
-engineering reasons, the the front-end and middle-end are grouped
+engineering reasons, the front-end and middle-end are grouped
 together in the code; meanwhile the back-end is here considered as a
 single component but is effectively developed and maintained as
 multiple separate sub-components.
@@ -316,7 +316,7 @@ emerge as a side-effect of how the current source code is organized:
   client connections and the admin RPC, so it has global state
   independent of SQL and I count it as somewhat of a fringe component.
 
-- **the event logger**: this is is where the SQL layer saves details
+- **the event logger**: this is where the SQL layer saves details
   about important events like when a DB or table was created, etc.
 
 ## pgwire
@@ -621,7 +621,7 @@ transaction.
 
 ### Schema change manager
 
-This is is responsible for performing changes to the SQL schema.
+This is responsible for performing changes to the SQL schema.
 
 **Interface:**
 
