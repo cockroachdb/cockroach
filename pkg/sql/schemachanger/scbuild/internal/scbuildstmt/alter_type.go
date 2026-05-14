@@ -12,13 +12,10 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -319,68 +316,7 @@ func alterTypeSetSchema(
 func alterTypeOwner(
 	b BuildCtx, tn *tree.TypeName, enumType *scpb.EnumType, t *tree.AlterTypeOwner,
 ) {
-	newOwner, err := decodeusername.FromRoleSpec(
-		b.SessionData(), username.PurposeValidation, t.Owner,
-	)
-	if err != nil {
-		panic(err)
-	}
-
-	typeElts := b.QueryByID(enumType.TypeID)
-	oldOwner := typeElts.FilterOwner().MustGetOneElement()
-
-	if newOwner.Normalized() == oldOwner.Owner {
-		return
-	}
-
-	if !b.HasOwnership(enumType) {
-		panic(pgerror.Newf(pgcode.InsufficientPrivilege,
-			"must be owner of type %s", tn.Object()))
-	}
-
-	if err := b.CheckRoleExists(b, newOwner); err != nil {
-		panic(err)
-	}
-	if !b.CurrentUserHasAdminOrIsMemberOf(newOwner) {
-		panic(pgerror.Newf(pgcode.InsufficientPrivilege,
-			"must be member of role %q", newOwner))
-	}
-
-	schemaChild := typeElts.FilterSchemaChild().MustGetOneElement()
-	schemaElts := b.QueryByID(schemaChild.SchemaID)
-	schema := schemaElts.FilterSchema().MustGetOneElement()
-	if err := b.CheckPrivilegeForUser(schema, privilege.CREATE, newOwner); err != nil {
-		panic(err)
-	}
-
-	b.Replace(&scpb.Owner{
-		DescriptorID: enumType.TypeID,
-		Owner:        newOwner.Normalized(),
-	})
-
-	b.Replace(&scpb.Owner{
-		DescriptorID: enumType.ArrayTypeID,
-		Owner:        newOwner.Normalized(),
-	})
-
-	arrayElts := b.QueryByID(enumType.ArrayTypeID)
-	arrayNs := arrayElts.FilterNamespace().MustGetOneElement()
-	arrayTn := tree.MakeTypeNameWithPrefix(b.NamePrefix(enumType), arrayNs.Name)
-
-	b.LogEventForExistingPayload(&scpb.Owner{
-		DescriptorID: enumType.TypeID,
-		Owner:        newOwner.Normalized(),
-	}, &eventpb.AlterTypeOwner{
-		TypeName: tn.FQString(),
-		Owner:    newOwner.Normalized(),
-	})
-	b.LogEventForExistingPayload(&scpb.Owner{
-		DescriptorID: enumType.ArrayTypeID,
-		Owner:        newOwner.Normalized(),
-	}, &eventpb.AlterTypeOwner{
-		TypeName: arrayTn.FQString(),
-		Owner:    newOwner.Normalized(),
-	})
+	setOwnerForTypeDesc(b, tn, enumType, enumType.TypeID, enumType.ArrayTypeID, t.Owner)
 }
 
 func alterTypeDropValue(

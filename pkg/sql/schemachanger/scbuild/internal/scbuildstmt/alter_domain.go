@@ -133,7 +133,7 @@ func alterDomainDropNotNull(
 func alterDomainAddCheckConstraint(
 	b BuildCtx, tn *tree.TypeName, domainType *scpb.DomainType, t *tree.AlterDomainAddCheckConstraint,
 ) {
-	panic(pgerror.Newf(pgcode.FeatureNotSupported, "ALTER DOMAIN ADD CHECK CONSTRAINT is not supported"))
+	panic(pgerror.Newf(pgcode.FeatureNotSupported, "ALTER DOMAIN ADD CONSTRAINT ... CHECK is not supported"))
 }
 
 func alterDomainAddNotNullConstraint(
@@ -142,7 +142,11 @@ func alterDomainAddNotNullConstraint(
 	domainType *scpb.DomainType,
 	t *tree.AlterDomainAddNotNullConstraint,
 ) {
-	panic(pgerror.Newf(pgcode.FeatureNotSupported, "ALTER DOMAIN ADD NOT NULL CONSTRAINT is not supported"))
+	if t.ValidationBehavior == tree.ValidationSkip {
+		panic(pgerror.Newf(pgcode.FeatureNotSupported,
+			"NOT NULL constraints cannot be marked NOT VALID"))
+	}
+	panic(pgerror.Newf(pgcode.FeatureNotSupported, "ALTER DOMAIN ADD CONSTRAINT ... NOT NULL is not supported"))
 }
 
 func alterDomainDropConstraint(
@@ -166,7 +170,7 @@ func alterDomainValidateConstraint(
 func alterDomainOwner(
 	b BuildCtx, tn *tree.TypeName, domainType *scpb.DomainType, t *tree.AlterDomainOwner,
 ) {
-	panic(pgerror.Newf(pgcode.FeatureNotSupported, "ALTER DOMAIN OWNER TO is not supported"))
+	setOwnerForTypeDesc(b, tn, domainType, domainType.TypeID, domainType.ArrayTypeID, t.Owner)
 }
 
 func alterDomainRename(

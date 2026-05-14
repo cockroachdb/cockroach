@@ -1,8 +1,7 @@
 # LogicTest: local
 
-# Test ALTER DOMAIN syntax. All operations currently return unimplemented
-# errors, but the grammar should parse correctly and dispatch through the
-# declarative schema changer.
+# Test ALTER DOMAIN syntax. Tests are added as operations are implemented
+# through the declarative schema changer.
 
 statement ok
 CREATE DOMAIN d AS INT DEFAULT 0 NOT NULL CHECK (VALUE > 0)
@@ -40,20 +39,26 @@ subtest end
 
 subtest add_constraint
 
-statement error pgcode 0A000 ALTER DOMAIN ADD CHECK CONSTRAINT is not supported
+statement error pgcode 0A000 ALTER DOMAIN ADD CONSTRAINT \.\.\. CHECK is not supported
 ALTER DOMAIN d ADD CHECK (VALUE < 100)
 
-statement error pgcode 0A000 ALTER DOMAIN ADD CHECK CONSTRAINT is not supported
+statement error pgcode 0A000 ALTER DOMAIN ADD CONSTRAINT \.\.\. CHECK is not supported
 ALTER DOMAIN d ADD CONSTRAINT positive CHECK (VALUE > 0)
 
-statement error pgcode 0A000 ALTER DOMAIN ADD CHECK CONSTRAINT is not supported
+statement error pgcode 0A000 ALTER DOMAIN ADD CONSTRAINT \.\.\. CHECK is not supported
 ALTER DOMAIN d ADD CONSTRAINT bounded CHECK (VALUE < 100) NOT VALID
 
-statement error pgcode 0A000 ALTER DOMAIN ADD NOT NULL CONSTRAINT is not supported
+statement error pgcode 0A000 ALTER DOMAIN ADD CONSTRAINT \.\.\. NOT NULL is not supported
 ALTER DOMAIN d ADD NOT NULL
 
-statement error pgcode 0A000 ALTER DOMAIN ADD NOT NULL CONSTRAINT is not supported
+statement error pgcode 0A000 ALTER DOMAIN ADD CONSTRAINT \.\.\. NOT NULL is not supported
 ALTER DOMAIN d ADD CONSTRAINT nn NOT NULL
+
+statement error pgcode 0A000 NOT NULL constraints cannot be marked NOT VALID
+ALTER DOMAIN d ADD NOT NULL NOT VALID
+
+statement error pgcode 0A000 NOT NULL constraints cannot be marked NOT VALID
+ALTER DOMAIN d ADD CONSTRAINT nn NOT NULL NOT VALID
 
 subtest end
 
@@ -83,8 +88,130 @@ subtest end
 
 subtest owner_to
 
-statement error pgcode 0A000 ALTER DOMAIN OWNER TO is not supported
-ALTER DOMAIN d OWNER TO testuser
+statement ok
+CREATE SCHEMA s_owner;
+CREATE DOMAIN s_owner.d_owner AS INT;
+CREATE USER IF NOT EXISTS testuser2
+
+# Ensure user must exist for set owner.
+statement error pq: role/user "fake_user" does not exist
+ALTER DOMAIN s_owner.d_owner OWNER TO fake_user
+
+# Superusers can alter owner to any user which has CREATE privileges on the
+# parent schema.
+statement error pq: user testuser does not have CREATE privilege on schema s_owner
+ALTER DOMAIN s_owner.d_owner OWNER TO testuser
+
+statement ok
+GRANT CREATE, USAGE ON SCHEMA s_owner TO testuser, testuser2
+
+statement ok
+ALTER DOMAIN s_owner.d_owner OWNER TO testuser
+
+statement ok
+ALTER DOMAIN s_owner.d_owner OWNER TO root
+
+# Other users must be owner to alter the owner.
+user testuser
+
+statement error must be owner of type d_owner
+ALTER DOMAIN s_owner.d_owner OWNER TO testuser
+
+# Other users must be owner to alter the owner to the current owner again.
+statement error must be owner of type d_owner
+ALTER DOMAIN s_owner.d_owner OWNER TO root
+
+# Non-superusers also must be a member of the new owning role.
+user root
+
+statement ok
+ALTER DOMAIN s_owner.d_owner OWNER TO testuser
+
+# Setting the owner to the current owner is a no-op.
+statement ok
+REVOKE CREATE ON SCHEMA s_owner FROM testuser
+
+user testuser
+
+statement ok
+ALTER DOMAIN s_owner.d_owner OWNER TO testuser
+
+user root
+
+statement ok
+GRANT CREATE ON SCHEMA s_owner TO testuser
+
+user testuser
+
+statement error must be member of role "testuser2"
+ALTER DOMAIN s_owner.d_owner OWNER TO testuser2
+
+user root
+
+statement ok
+GRANT testuser2 TO testuser
+
+user testuser
+
+statement ok
+ALTER DOMAIN s_owner.d_owner OWNER TO testuser2
+
+# Ensure testuser2 is owner of both the domain and its array type.
+user root
+
+query TT
+SELECT typname, pg_get_userbyid(typowner) FROM pg_type WHERE typname IN ('d_owner', '_d_owner') ORDER BY typname;
+----
+_d_owner  testuser2
+d_owner   testuser2
+
+# Test CURRENT_USER and SESSION_USER forms.
+statement ok
+ALTER DOMAIN s_owner.d_owner OWNER TO root
+
+statement ok
+ALTER DOMAIN s_owner.d_owner OWNER TO CURRENT_USER
+
+query TT
+SELECT typname, pg_get_userbyid(typowner) FROM pg_type WHERE typname IN ('d_owner', '_d_owner') ORDER BY typname;
+----
+_d_owner  root
+d_owner   root
+
+statement ok
+ALTER DOMAIN s_owner.d_owner OWNER TO SESSION_USER
+
+query TT
+SELECT typname, pg_get_userbyid(typowner) FROM pg_type WHERE typname IN ('d_owner', '_d_owner') ORDER BY typname;
+----
+_d_owner  root
+d_owner   root
+
+# Ensure admins who don't have explicit CREATE privilege on a schema can
+# still become the owner.
+user root
+
+statement ok
+GRANT CREATE ON DATABASE test TO testuser
+
+user testuser
+
+statement ok
+CREATE SCHEMA s_owner2
+
+statement ok
+CREATE DOMAIN s_owner2.d_owner2 AS TEXT
+
+user root
+
+statement ok
+GRANT root TO testuser
+
+user testuser
+
+# This should succeed despite root not having explicit CREATE privilege on s_owner2.
+statement ok
+ALTER DOMAIN s_owner2.d_owner2 OWNER TO root
 
 subtest end
 

@@ -8,6 +8,8 @@ package scbuildstmt
 import (
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -104,6 +106,80 @@ func panicIfSchemaIsTemporaryOrVirtual(schemaName tree.Name) {
 		panic(pgerror.Newf(pgcode.FeatureNotSupported,
 			"cannot move objects into or out of temporary schemas"))
 	}
+}
+
+// setOwnerForTypeDesc implements OWNER TO for user-defined types that have an
+// associated array type (enums, composites, domains).
+func setOwnerForTypeDesc(
+	b BuildCtx,
+	tn *tree.TypeName,
+	typeElem scpb.Element,
+	typeID catid.DescID,
+	arrayTypeID catid.DescID,
+	owner tree.RoleSpec,
+) {
+	newOwner, err := decodeusername.FromRoleSpec(
+		b.SessionData(), username.PurposeValidation, owner,
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	typeElts := b.QueryByID(typeID)
+	oldOwner := typeElts.FilterOwner().MustGetOneElement()
+
+	if newOwner.Normalized() == oldOwner.Owner {
+		return
+	}
+
+	if !b.HasOwnership(typeElem) {
+		panic(pgerror.Newf(pgcode.InsufficientPrivilege,
+			"must be owner of type %s", tn.Object()))
+	}
+
+	if err := b.CheckRoleExists(b, newOwner); err != nil {
+		panic(err)
+	}
+	if !b.CurrentUserHasAdminOrIsMemberOf(newOwner) {
+		panic(pgerror.Newf(pgcode.InsufficientPrivilege,
+			"must be member of role %q", newOwner))
+	}
+
+	schemaChild := typeElts.FilterSchemaChild().MustGetOneElement()
+	schemaElts := b.QueryByID(schemaChild.SchemaID)
+	schema := schemaElts.FilterSchema().MustGetOneElement()
+	if err := b.CheckPrivilegeForUser(schema, privilege.CREATE, newOwner); err != nil {
+		panic(err)
+	}
+
+	b.Replace(&scpb.Owner{
+		DescriptorID: typeID,
+		Owner:        newOwner.Normalized(),
+	})
+
+	b.Replace(&scpb.Owner{
+		DescriptorID: arrayTypeID,
+		Owner:        newOwner.Normalized(),
+	})
+
+	arrayElts := b.QueryByID(arrayTypeID)
+	arrayNs := arrayElts.FilterNamespace().MustGetOneElement()
+	arrayTn := tree.MakeTypeNameWithPrefix(b.NamePrefix(typeElem), arrayNs.Name)
+
+	b.LogEventForExistingPayload(&scpb.Owner{
+		DescriptorID: typeID,
+		Owner:        newOwner.Normalized(),
+	}, &eventpb.AlterTypeOwner{
+		TypeName: tn.FQString(),
+		Owner:    newOwner.Normalized(),
+	})
+	b.LogEventForExistingPayload(&scpb.Owner{
+		DescriptorID: arrayTypeID,
+		Owner:        newOwner.Normalized(),
+	}, &eventpb.AlterTypeOwner{
+		TypeName: arrayTn.FQString(),
+		Owner:    newOwner.Normalized(),
+	})
 }
 
 // moveDescriptorToSchema drops the old Namespace and SchemaChild elements for
