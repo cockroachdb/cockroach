@@ -60,9 +60,8 @@ var coordinatorOutputTypes = []*types.T{
 // timestamp from the decode stage to the schedule stage. Exactly one of
 // transactions or checkpoint is set per batch.
 type decodedBatch struct {
-	transactions    []ldrdecoder.Transaction
-	rawTransactions [][]streampb.StreamEvent_KV
-	checkpoint      hlc.Timestamp
+	transactions []ldrdecoder.TxnEnvelope
+	checkpoint   hlc.Timestamp
 }
 
 type ldrCoordinatorProcessor struct {
@@ -238,8 +237,7 @@ func (p *ldrCoordinatorProcessor) runDecode(ctx context.Context) error {
 	ticker := time.NewTicker(maxInterval)
 	defer ticker.Stop()
 
-	var transactions []ldrdecoder.Transaction
-	var rawTransactions [][]streampb.StreamEvent_KV
+	var transactions []ldrdecoder.TxnEnvelope
 	rows := 0
 
 	flush := func() error {
@@ -249,12 +247,8 @@ func (p *ldrCoordinatorProcessor) runDecode(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case p.batches <- decodedBatch{
-			transactions:    transactions,
-			rawTransactions: rawTransactions,
-		}:
+		case p.batches <- decodedBatch{transactions: transactions}:
 			transactions = nil
-			rawTransactions = nil
 			rows = 0
 			ticker.Reset(maxInterval)
 			return nil
@@ -277,8 +271,10 @@ func (p *ldrCoordinatorProcessor) runDecode(ctx context.Context) error {
 					if err != nil {
 						return errors.Wrap(err, "decoding transaction")
 					}
-					transactions = append(transactions, decoded)
-					rawTransactions = append(rawTransactions, txnKVs)
+					transactions = append(transactions, ldrdecoder.TxnEnvelope{
+						Txn:    decoded,
+						RawKVs: txnKVs,
+					})
 					rows += len(decoded.WriteSet)
 				}
 				if batchRowCount <= rows {
@@ -344,19 +340,17 @@ func (p *ldrCoordinatorProcessor) runScheduleAndRoute(ctx context.Context) error
 			}
 
 			for i := range batch.transactions {
-				applierID := p.hydrateApplierID(ctx, batch.transactions[i])
-				batch.transactions[i].TxnID.ApplierID = applierID
+				envelope := batch.transactions[i]
+				applierID := p.hydrateApplierID(ctx, envelope.Txn)
+				envelope.Txn.TxnID.ApplierID = applierID
 
-				lockSet, err := p.lockSynthesizer.DeriveLocks(
-					ctx, batch.transactions[i].WriteSet,
-				)
+				lockSet, err := p.lockSynthesizer.DeriveLocks(ctx, envelope)
 				if err != nil {
 					return errors.Wrap(err, "deriving locks")
 				}
-				batch.transactions[i].WriteSet = lockSet.SortedRows
 
 				schedulerTxn := txnscheduler.Transaction{
-					TxnID: batch.transactions[i].TxnID,
+					TxnID: lockSet.SortedRows.Txn.TxnID,
 					Locks: lockSet.Locks,
 				}
 				dependencies, eventHorizon := p.scheduler.Schedule(
@@ -364,12 +358,12 @@ func (p *ldrCoordinatorProcessor) runScheduleAndRoute(ctx context.Context) error
 				)
 
 				scheduled := txnapply.ScheduledTransaction{
-					Transaction:  batch.transactions[i],
+					Transaction:  lockSet.SortedRows.Txn,
 					Dependencies: dependencies,
 					EventHorizon: eventHorizon,
 				}
 
-				row := p.encodeScheduledTxn(scheduled, applierID, batch.rawTransactions[i])
+				row := p.encodeScheduledTxn(scheduled, applierID, lockSet.SortedRows.RawKVs)
 				select {
 				case <-ctx.Done():
 					return ctx.Err()

@@ -1144,19 +1144,19 @@ func TestDeriveLocks(t *testing.T) {
 
 	decodeTxn := func(
 		t *testing.T, events []streampb.StreamEvent_KV,
-	) []ldrdecoder.DecodedRow {
+	) ldrdecoder.TxnEnvelope {
 		t.Helper()
 		txn, err := decoder.DecodeTxn(ctx, events)
 		require.NoError(t, err)
-		return txn.WriteSet
+		return ldrdecoder.TxnEnvelope{Txn: txn, RawKVs: events}
 	}
 
 	checkTxn := func(
 		t *testing.T, tc txnCase, label string,
 	) LockSet {
 		t.Helper()
-		rows := decodeTxn(t, tc.events)
-		result, err := ls.DeriveLocks(ctx, rows)
+		txnEnv := decodeTxn(t, tc.events)
+		result, err := ls.DeriveLocks(ctx, txnEnv)
 		if tc.err != nil {
 			require.ErrorIs(t, err, tc.err)
 			return LockSet{}
@@ -1173,7 +1173,7 @@ func TestDeriveLocks(t *testing.T) {
 		}
 		require.Equal(t, tc.writeLockCount, writeCount, "%s write lock count", label)
 		require.Equal(t, tc.readLockCount, readCount, "%s read lock count", label)
-		requireSortOrder(t, rows, result.SortedRows, tc.order, label)
+		requireSortOrder(t, txnEnv.Txn.WriteSet, result.SortedRows.Txn.WriteSet, tc.order, label)
 		return result
 	}
 

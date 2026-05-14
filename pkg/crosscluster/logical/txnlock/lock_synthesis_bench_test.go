@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -18,7 +19,7 @@ import (
 
 type benchSpec struct {
 	name                string
-	makeRows            func(n int) []ldrdecoder.DecodedRow
+	makeRows            func(n int) ([]ldrdecoder.DecodedRow, []streampb.StreamEvent_KV)
 	makeLockSynthesizer func(b *testing.B) *LockSynthesizer
 }
 
@@ -34,7 +35,7 @@ var benchSpecs = []benchSpec{
 // Each row is an update that forms a dependency chain via the unique constraint
 // on val: row i's new val equals row (i-1)'s old val. This produces n-1
 // dependency edges that the topological sort must resolve.
-func makeBasicBenchRows(n int) []ldrdecoder.DecodedRow {
+func makeBasicBenchRows(n int) ([]ldrdecoder.DecodedRow, []streampb.StreamEvent_KV) {
 	tableID := descpb.ID(100)
 	rows := make([]ldrdecoder.DecodedRow, n)
 	for i := range rows {
@@ -52,7 +53,9 @@ func makeBasicBenchRows(n int) []ldrdecoder.DecodedRow {
 			PrevRow: tree.Datums{id, oldVal},
 		}
 	}
-	return rows
+	// DeriveLocks doesn't read KV contents; pass zero-valued events of the
+	// right length to satisfy its parallel-slice contract.
+	return rows, make([]streampb.StreamEvent_KV, n)
 }
 
 func makeBasicLockSynthesizer(b *testing.B) *LockSynthesizer {
@@ -94,7 +97,7 @@ func makeBasicLockSynthesizer(b *testing.B) *LockSynthesizer {
 // update changes parent_id, producing outbound FK read locks on both old and
 // new values. The child's new parent_id references the corresponding parent's
 // new id, creating FK dependency edges for the topological sort.
-func makeFKBenchRows(n int) []ldrdecoder.DecodedRow {
+func makeFKBenchRows(n int) ([]ldrdecoder.DecodedRow, []streampb.StreamEvent_KV) {
 	parentTableID := descpb.ID(100)
 	childTableID := descpb.ID(200)
 	rows := make([]ldrdecoder.DecodedRow, 0, n)
@@ -111,7 +114,7 @@ func makeFKBenchRows(n int) []ldrdecoder.DecodedRow {
 			PrevRow: tree.Datums{tree.NewDInt(tree.DInt(n/2 + i + 1)), oldFK, tree.NewDInt(0)},
 		})
 	}
-	return rows
+	return rows, make([]streampb.StreamEvent_KV, len(rows))
 }
 
 func makeFKLockSynthesizer(b *testing.B) *LockSynthesizer {
@@ -164,11 +167,15 @@ func BenchmarkDeriveLocks(b *testing.B) {
 	for _, spec := range benchSpecs {
 		ls := spec.makeLockSynthesizer(b)
 		for _, n := range []int{2, 10, 50} {
-			rows := spec.makeRows(n)
+			rows, rawKVs := spec.makeRows(n)
+			txnEnv := ldrdecoder.TxnEnvelope{
+				Txn:    ldrdecoder.Transaction{WriteSet: rows},
+				RawKVs: rawKVs,
+			}
 			ctx := context.Background()
 			b.Run(fmt.Sprintf("rows=%d/%s", n, spec.name), func(b *testing.B) {
 				for i := 0; i < b.N; i++ {
-					if _, err := ls.DeriveLocks(ctx, rows); err != nil {
+					if _, err := ls.DeriveLocks(ctx, txnEnv); err != nil {
 						b.Fatal(err)
 					}
 				}
