@@ -11,6 +11,20 @@ This document is the entry point. It summarizes what we've learned,
 sketches two candidate paths forward, and points to the deeper
 artifacts for anyone who wants to follow the reasoning.
 
+> **Current status (2026-05-14):** the four-system prior-art survey is
+> complete (Postgres, MonetDB/X100, Clustrix, SQLite VDBE, TiDB/TiKV in
+> [`notes/`](notes/)). The bytecode-VM-vs-Volcano-with-caching tradeoff
+> is captured in [`discussions/`](discussions/). The two synthesis-style
+> top-level docs ([`RESEARCH.md`](RESEARCH.md),
+> [`daydream-doc.md`](daydream-doc.md)) were drafted by earlier
+> assistant sessions and have not been reviewed by the project owner —
+> they should be read as raw material, not as canonical positions. No
+> architectural decisions have been committed to.
+>
+> Likely next moves: (a) the project owner's review of the two
+> unreviewed synthesis docs, or (b) a scoped minimal VM prototype to
+> test specific design assumptions before broader investment.
+
 ---
 
 ## What the fast-path experiment measured
