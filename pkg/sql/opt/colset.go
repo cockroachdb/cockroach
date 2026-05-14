@@ -16,17 +16,30 @@ type ColSet struct {
 	set intsets.Fast
 }
 
-// We offset the ColumnIDs in the underlying Fast by 1, so that the
-// internal set fast-path can be used for ColumnIDs in the range [1, 64] instead
-// of [0, 63]. ColumnID 0 is reserved as an unknown ColumnID, and a ColSet
-// should never contain it, so this shift allows us to make use of the set
-// fast-path in a few more cases.
-const offset = 1
+const (
+	// offset is the delta between the logical ColumnIDs in the set and the
+	// physical integers in the underlying Fast set. ColumnID 0 is reserved as
+	// an unknown ColumnID and a ColSet should never contain it. By shifting
+	// values by 1 in the underlying set, e.g., ColumnID 1 is inserted into the
+	// Fast set as 0, the maximum ColumnID that fits in the small,
+	// allocation-free regime of the Fast set is increased by 1.
+	//
+	// This optimization is only enabled in non-test builds. In test builds, we
+	// use the 0 integer to mark a set as frozen.
+	offset = 1
+	// frozenInt is a special value that is added to the ColSet's underlying
+	// Fast set in test builds by the Freeze method. If it is present, methods
+	// that mutate the ColSet will panic.
+	frozenInt = 0
+)
 
 // setVal returns the value to store in the internal set for the given ColumnID.
 //
 //gcassert:inline
 func setVal(col ColumnID) int {
+	if buildutil.CrdbTestBuild {
+		return int(col)
+	}
 	return int(col - offset)
 }
 
@@ -35,6 +48,9 @@ func setVal(col ColumnID) int {
 //
 //gcassert:inline
 func retVal(i int) ColumnID {
+	if buildutil.CrdbTestBuild {
+		return ColumnID(i)
+	}
 	return ColumnID(i + offset)
 }
 
@@ -47,16 +63,34 @@ func MakeColSet(vals ...ColumnID) ColSet {
 	return res
 }
 
+// Freeze marks a set as immutable in test builds only. It is a no-op in
+// non-test builds. Methods that mutate a frozen set will panic.
+func (s *ColSet) Freeze() {
+	if buildutil.CrdbTestBuild {
+		s.set.Add(frozenInt)
+	}
+}
+
 // Add adds a column to the set. No-op if the column is already in the set.
 func (s *ColSet) Add(col ColumnID) {
-	if buildutil.CrdbTestBuild && col <= 0 {
-		panic(errors.AssertionFailedf("col must be greater than 0"))
+	if buildutil.CrdbTestBuild {
+		if col <= 0 {
+			panic(errors.AssertionFailedf("col must be greater than 0"))
+		}
+		if s.set.Contains(frozenInt) {
+			panic(errors.AssertionFailedf("frozen set cannot be mutated"))
+		}
 	}
 	s.set.Add(setVal(col))
 }
 
 // Remove removes a column from the set. No-op if the column is not in the set.
-func (s *ColSet) Remove(col ColumnID) { s.set.Remove(setVal(col)) }
+func (s *ColSet) Remove(col ColumnID) {
+	if buildutil.CrdbTestBuild && s.set.Contains(frozenInt) {
+		panic(errors.AssertionFailedf("frozen set cannot be mutated"))
+	}
+	s.set.Remove(setVal(col))
+}
 
 // Contains returns true if the set contains the column.
 func (s ColSet) Contains(col ColumnID) bool { return s.set.Contains(setVal(col)) }
@@ -78,22 +112,44 @@ func (s ColSet) Next(startVal ColumnID) (ColumnID, bool) {
 func (s ColSet) ForEach(f func(col ColumnID)) { s.set.ForEach(func(i int) { f(retVal(i)) }) }
 
 // Copy returns a copy of s which can be modified independently.
-func (s ColSet) Copy() ColSet { return ColSet{set: s.set.Copy()} }
+func (s ColSet) Copy() ColSet {
+	n := ColSet{set: s.set.Copy()}
+	if buildutil.CrdbTestBuild {
+		// Thaw the copy if it is frozen.
+		n.set.Remove(frozenInt)
+	}
+	return n
+}
 
 // UnionWith adds all the columns from rhs to this set.
-func (s *ColSet) UnionWith(rhs ColSet) { s.set.UnionWith(rhs.set) }
+func (s *ColSet) UnionWith(rhs ColSet) {
+	if buildutil.CrdbTestBuild && s.set.Contains(frozenInt) {
+		panic(errors.AssertionFailedf("frozen set cannot be mutated"))
+	}
+	s.set.UnionWith(rhs.set)
+}
 
 // Union returns the union of s and rhs as a new set.
 func (s ColSet) Union(rhs ColSet) ColSet { return ColSet{set: s.set.Union(rhs.set)} }
 
 // IntersectionWith removes any columns not in rhs from this set.
-func (s *ColSet) IntersectionWith(rhs ColSet) { s.set.IntersectionWith(rhs.set) }
+func (s *ColSet) IntersectionWith(rhs ColSet) {
+	if buildutil.CrdbTestBuild && s.set.Contains(frozenInt) {
+		panic(errors.AssertionFailedf("frozen set cannot be mutated"))
+	}
+	s.set.IntersectionWith(rhs.set)
+}
 
 // Intersection returns the intersection of s and rhs as a new set.
 func (s ColSet) Intersection(rhs ColSet) ColSet { return ColSet{set: s.set.Intersection(rhs.set)} }
 
 // DifferenceWith removes any elements in rhs from this set.
-func (s *ColSet) DifferenceWith(rhs ColSet) { s.set.DifferenceWith(rhs.set) }
+func (s *ColSet) DifferenceWith(rhs ColSet) {
+	if buildutil.CrdbTestBuild && s.set.Contains(frozenInt) {
+		panic(errors.AssertionFailedf("frozen set cannot be mutated"))
+	}
+	s.set.DifferenceWith(rhs.set)
+}
 
 // Difference returns the elements of s that are not in rhs as a new set.
 func (s ColSet) Difference(rhs ColSet) ColSet { return ColSet{set: s.set.Difference(rhs.set)} }
