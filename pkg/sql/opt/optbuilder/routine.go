@@ -451,25 +451,8 @@ func (b *Builder) buildRoutine(
 			panic(err)
 		}
 
-		var appendedNullForVoidReturn bool
-		// Add a VALUES (NULL) statement if the return type of the function is
-		// VOID. We cannot simply project NULL from the last statement because
-		// all columns would be pruned and the contents of last statement would
-		// not be executed.
-		// TODO(mgartner): This will add some planning overhead for every
-		// invocation of the function. Is there a more efficient way to do this?
-		if f.ResolvedType().Family() == types.VoidFamily {
-			stmts = append(stmts, statements.Statement[tree.Statement]{
-				AST: &tree.Select{
-					Select: &tree.ValuesClause{
-						Rows: []tree.Exprs{{tree.DNull}},
-					},
-				},
-			})
-			appendedNullForVoidReturn = true
-		}
 		body, bodyProps, bodyTags, bodyASTs = b.buildSQLRoutineBodyStmts(
-			stmts, bodyScope, f, inScope, isSetReturning, oldInsideDataSource, appendedNullForVoidReturn,
+			stmts, bodyScope, f, inScope, isSetReturning, oldInsideDataSource,
 		)
 
 		if b.verboseTracing {
@@ -562,13 +545,30 @@ func (b *Builder) buildSQLRoutineBodyStmts(
 	inScope *scope,
 	isSetReturning bool,
 	insideDataSource bool,
-	appendedNullForVoidReturn bool,
 ) (
 	body []memo.RelExpr,
 	bodyProps []*physical.Required,
 	bodyTags []string,
 	bodyASTs []tree.Statement,
 ) {
+	// Add a VALUES (NULL) statement if the return type of the function is
+	// VOID. We cannot simply project NULL from the last statement because
+	// all columns would be pruned and the contents of last statement would
+	// not be executed.
+	// TODO(mgartner): This will add some planning overhead for every
+	// invocation of the function. Is there a more efficient way to do this?
+	var appendedNullForVoidReturn bool
+	if f.ResolvedType().Family() == types.VoidFamily {
+		stmts = append(stmts, statements.Statement[tree.Statement]{
+			AST: &tree.Select{
+				Select: &tree.ValuesClause{
+					Rows: []tree.Exprs{{tree.DNull}},
+				},
+			},
+		})
+		appendedNullForVoidReturn = true
+	}
+
 	body = make([]memo.RelExpr, len(stmts))
 	bodyProps = make([]*physical.Required, len(stmts))
 	bodyTags = make([]string, len(stmts))
@@ -971,7 +971,7 @@ func (b *Builder) buildDo(do *tree.DoBlock, inScope *scope) *scope {
 type sqlRoutineBodyBuilder struct {
 	stmtASTs         []tree.Statement
 	paramTypes       []*types.T
-	paramNames       []string
+	paramNames       []tree.Name
 	rTyp             *types.T
 	isSetReturning   bool
 	insideDataSource bool
@@ -991,11 +991,11 @@ func (rb *sqlRoutineBodyBuilder) Build(
 	catalog cat.Catalog,
 	factoryI interface{},
 ) (body []memo.RelExpr, bodyProps []*physical.Required, params opt.ColList, retErr error) {
-	factory := factoryI.(*norm.Factory)
-	b := New(ctx, semaCtx, evalCtx, catalog, factory, nil /* stmt */)
-
 	// Enact panic handling similar to Builder.Build().
 	defer errorutil.MaybeCatchPanic(&retErr, nil /* errCallback */)
+
+	factory := factoryI.(*norm.Factory)
+	b := New(ctx, semaCtx, evalCtx, catalog, factory, nil /* stmt */)
 
 	// Initialize the statement tree from the captured init function.
 	if rb.stmtTreeInitFn != nil {
@@ -1023,11 +1023,11 @@ func (rb *sqlRoutineBodyBuilder) Build(
 	bodyScope := b.allocScope()
 	params = make(opt.ColList, len(rb.paramTypes))
 	for i := range rb.paramTypes {
-		name := ""
+		var name tree.Name
 		if i < len(rb.paramNames) {
 			name = rb.paramNames[i]
 		}
-		argColName := funcParamColName(tree.Name(name), i)
+		argColName := funcParamColName(name, i)
 		col := b.synthesizeColumn(
 			bodyScope, argColName, rb.paramTypes[i], nil /* expr */, nil, /* scalar */
 		)

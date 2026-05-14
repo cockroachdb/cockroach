@@ -734,7 +734,8 @@ type UDFDefinition struct {
 	Params opt.ColList
 
 	// Body contains a relational expression for each statement in the function
-	// body. It is unset during construction of a recursive UDF.
+	// body. It is nil during construction of a recursive UDF, and when body
+	// building is deferred to execution time (see BodyBuilder).
 	Body []RelExpr
 
 	// BodyProps contains the physical properties with which each body statement

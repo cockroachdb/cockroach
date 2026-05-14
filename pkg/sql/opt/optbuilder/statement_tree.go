@@ -61,6 +61,17 @@ import (
 // the initialized statement tree. Note that some care must be taken to ensure
 // that the statementTreeNode references remain valid and up-to-date (see the
 // stmts comment below).
+//
+// +--------------------+
+// | Deferred Routines  |
+// +--------------------+
+// Deferred routines are similar to AFTER triggers: their body statements are
+// not built into RelExprs at plan time but deferred to execution time (see
+// RoutineBodyBuilder). Like AFTER triggers, their mutation checks must also
+// be deferred. We use the same mechanism: GetInitFnForDeferredRoutine captures
+// references to the ancestor statementTreeNodes so that the deferred builder
+// can initialize a statement tree that includes all ancestor mutations at
+// build time.
 type statementTree struct {
 	// stmts is a stack of statement nodes, as described in the struct comment.
 	// It is a slice of pointers to ensure that slice appends don't invalidate

@@ -849,12 +849,48 @@ func TestStatementTree(t *testing.T) {
 				pop,
 			},
 		},
+		// 40.
+		// Two separate deferred routine invocations mutating the same table.
+		// The deferred routines are siblings, so they should not conflict.
+		// Original:
+		// Push
+		//     GetInitFnForDeferredRoutine()  -- routine 1
+		//     GetInitFnForDeferredRoutine()  -- routine 2
+		// Pop
+		//
+		// Deferred Routine 1:
+		// initFn()
+		// Push
+		//     CanMutateTable(t1, default)
+		// Pop
+		//
+		// Deferred Routine 2:
+		// initFn()
+		// Push
+		//     CanMutateTable(t1, default)
+		// Pop
+		{
+			cmds: []cmd{
+				push,
+				getInitDeferred,
+				getInitDeferred,
+				pop,
+				initDeferred,
+				push,
+				mut | t1,
+				pop,
+				initDeferred,
+				push,
+				mut | t1,
+				pop,
+			},
+		},
 	}
 
 	for i, tc := range testCases {
 		var mt statementTree
 		var pqTreeFn func() statementTree
-		var deferredTreeFn func() statementTree
+		var deferredTreeFns []func() statementTree
 		for j, c := range tc.cmds {
 			switch {
 			case c&push == push:
@@ -877,16 +913,19 @@ func TestStatementTree(t *testing.T) {
 				}
 
 			case c&getInitDeferred == getInitDeferred:
-				if deferredTreeFn != nil {
-					t.Fatalf("test case %d: GetInitFnForDeferredRoutine called twice", i)
-				}
-				deferredTreeFn = mt.GetInitFnForDeferredRoutine()
+				deferredTreeFns = append(deferredTreeFns, mt.GetInitFnForDeferredRoutine())
 
 			case c&initDeferred == initDeferred:
-				if deferredTreeFn == nil {
+				if len(deferredTreeFns) == 0 {
 					mt = statementTree{}
 				} else {
-					mt = deferredTreeFn()
+					fn := deferredTreeFns[0]
+					deferredTreeFns = deferredTreeFns[1:]
+					if fn == nil {
+						mt = statementTree{}
+					} else {
+						mt = fn()
+					}
 				}
 
 			case c&mut == mut:
