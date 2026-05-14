@@ -115,3 +115,44 @@ func TestTombstoneUpdaterSetsOriginID(t *testing.T) {
 		{"1", "42"},
 	})
 }
+
+// TestTombstoneUpdaterSecondaryIndex is a regression test for the panic
+// described in #159746. When a DELETE returns 0 rows (LWW loss or row already
+// deleted), the tombstone updater is called with only PK + 1 datums. Before the
+// fix, the Deleter would attempt to encode secondary index keys using ordinals
+// that exceed the length of the datums slice, causing an index-out-of-range
+// panic.
+func TestTombstoneUpdaterSecondaryIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	server, s, runners, dbNames := setupServerWithNumDBs(t, ctx, testClusterBaseClusterArgs, 1, 1)
+	defer server.Stopper().Stop(ctx)
+
+	runner := runners[0]
+	runner.Exec(t, `CREATE TABLE t (
+		pk INT PRIMARY KEY,
+		a INT,
+		b INT,
+		c INT,
+		INDEX idx_c (c)
+	)`)
+
+	desc := desctestutils.TestingGetMutableExistingTableDescriptor(
+		s.DB(), s.Codec(), dbNames[0], "t")
+	sd := sql.NewInternalSessionData(ctx, s.ClusterSettings(), "" /* opName */)
+	tu := newTombstoneUpdater(s.Codec(), s.DB(), s.LeaseManager().(*lease.Manager), desc.GetID(), sd, s.ClusterSettings())
+	defer tu.ReleaseLeases(ctx)
+
+	// Pass only PK + 1 datums, mimicking the real LWW delete path where the
+	// DELETE query only has PK columns in its WHERE clause plus an origin
+	// timestamp parameter.
+	datums := []any{
+		tree.NewDInt(tree.DInt(1)),
+		tree.NewDInt(tree.DInt(42)),
+	}
+
+	_, err := tu.updateTombstoneAny(ctx, nil, s.Clock().Now(), datums)
+	require.NoError(t, err)
+}
