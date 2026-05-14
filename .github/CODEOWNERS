@@ -381,7 +381,7 @@
 /docs/generated/http/        @cockroachdb/obs-prs @cockroachdb/server-prs
 /pkg/cmd/docgen/http.go      @cockroachdb/obs-prs @cockroachdb/server-prs
 
-/pkg/ccl/sqlproxyccl/        @cockroachdb/sqlproxy-prs
+/pkg/sqlproxy/               @cockroachdb/sqlproxy-prs
 
 /pkg/gen/                    @cockroachdb/dev-inf
 #!/pkg/gen/*.bzl               @cockroachdb/dev-inf-noreview

@@ -8,7 +8,7 @@ package cli
 import (
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl"
+	"github.com/cockroachdb/cockroach/pkg/sqlproxy"
 )
 
 func init() {
@@ -18,7 +18,7 @@ func init() {
 }
 
 // proxyContext captures the command-line parameters of the `mt start-proxy` command.
-var proxyContext sqlproxyccl.ProxyOptions
+var proxyContext sqlproxy.ProxyOptions
 
 func setProxyContextDefaults() {
 	proxyContext.Denylist = ""
