@@ -41,6 +41,8 @@ import (
 	"github.com/sasha-s/go-deadlock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"storj.io/drpc"
+	"storj.io/drpc/drpcclient"
 )
 
 type testRangefeedClient struct {
@@ -323,7 +325,8 @@ func TestMuxRangeFeedDoesNotStallOnError(t *testing.T) {
 	ctx := context.Background()
 
 	var (
-		rfMethod = "/cockroach.roachpb.Internal/MuxRangeFeed"
+		rfMethodGRPC = "/cockroach.roachpb.Internal/MuxRangeFeed"
+		rfMethodDRPC = "/cockroach.roachpb.RangeFeed/MuxRangeFeed"
 
 		maxErrors   = 10
 		shouldError atomic.Bool
@@ -335,7 +338,7 @@ func TestMuxRangeFeedDoesNotStallOnError(t *testing.T) {
 			ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn,
 			method string, streamer grpc.Streamer, opts ...grpc.CallOption,
 		) (grpc.ClientStream, error) {
-			if method == rfMethod {
+			if method == rfMethodGRPC {
 				if shouldError.Load() && errCount <= maxErrors {
 					errCount++
 					return nil, errors.Newf("test error %d", errCount)
@@ -344,6 +347,24 @@ func TestMuxRangeFeedDoesNotStallOnError(t *testing.T) {
 			return streamer(ctx, desc, cc, method, opts...)
 		}
 	}
+
+	streamInterceptorDRPC := func(
+		target string, class rpcbase.ConnectionClass,
+	) drpcclient.StreamClientInterceptor {
+		return func(
+			ctx context.Context, rpc string, enc drpc.Encoding,
+			cc *drpcclient.ClientConn, streamer drpcclient.Streamer,
+		) (drpc.Stream, error) {
+			if rpc == rfMethodDRPC {
+				if shouldError.Load() && errCount <= maxErrors {
+					errCount++
+					return nil, errors.Newf("test error %d", errCount)
+				}
+			}
+			return streamer(ctx, rpc, enc, cc)
+		}
+	}
+
 	const numServers int = 3
 	serverArgs := base.TestServerArgs{
 		RetryOptions: retry.Options{
@@ -353,7 +374,8 @@ func TestMuxRangeFeedDoesNotStallOnError(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				ContextTestingKnobs: rpc.ContextTestingKnobs{
-					StreamClientInterceptor: streamInterceptor,
+					StreamClientInterceptor:     streamInterceptor,
+					StreamClientInterceptorDRPC: streamInterceptorDRPC,
 				},
 			},
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),

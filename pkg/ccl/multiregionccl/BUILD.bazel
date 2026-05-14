@@ -121,6 +121,8 @@ go_test(
         "@com_github_jackc_pgx_v5//:pgx",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@io_storj_drpc//:drpc",
+        "@io_storj_drpc//drpcclient",
         "@org_golang_google_grpc//:grpc",
     ],
 )
