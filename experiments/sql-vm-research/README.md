@@ -200,8 +200,10 @@ In rough order of accessibility:
   - [`sqlite-vdbe.md`](notes/sqlite-vdbe.md) — the canonical
     small-bytecode-VM-for-SQL reference; opcode set, dispatch loop,
     PREPARE/EXECUTE wiring.
-- [`tidb_tikv_research.md`](tidb_tikv_research.md) — focused
-  TiDB/TiKV report on the ship-execution-to-storage question.
+  - [`tidb-tikv.md`](notes/tidb-tikv.md) — TiDB+TiKV: typed
+    protobuf operator DAG (not bytecode) shipped to a separately-
+    deployed Rust storage tier; per-Range scope; coprocessor cache
+    pattern; autoparameterized non-prepared plan cache.
 - [`RESEARCH.md`](RESEARCH.md) — earlier cross-system synthesis with
   concrete v1 design sketches. Pre-dates this README and treats some
   open questions as more decided than they are; read as raw material.
