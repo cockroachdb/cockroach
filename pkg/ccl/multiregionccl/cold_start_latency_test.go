@@ -38,6 +38,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"storj.io/drpc"
+	"storj.io/drpc/drpcclient"
 )
 
 // TestColdStartLatency attempts to capture the cold start latency for
@@ -109,6 +111,31 @@ func TestColdStartLatency(t *testing.T) {
 							)
 						}()
 						return invoker(ctx, method, req, reply, cc, opts...)
+					}
+				},
+				UnaryClientInterceptorDRPC: func(
+					target string, class rpcbase.ConnectionClass,
+				) drpcclient.UnaryClientInterceptor {
+					return func(
+						ctx context.Context, rpc string, enc drpc.Encoding,
+						in, out drpc.Message, cc *drpcclient.ClientConn,
+						invoker drpcclient.UnaryInvoker,
+					) error {
+						if !log.ExpensiveLogEnabled(ctx, 2) {
+							return invoker(ctx, rpc, enc, in, out, cc)
+						}
+						var nodeID int
+						if nodeIDPtr, ok := addrsToNodeIDs.Load(target); ok {
+							nodeID = *nodeIDPtr
+						}
+						start := timeutil.Now()
+						defer func() {
+							log.VEventf(ctx, 2, "%d->%d (%v->%v) %s %v %v took %v",
+								i, nodeID, localities[i], localities[nodeID],
+								rpc, in, out, timeutil.Since(start),
+							)
+						}()
+						return invoker(ctx, rpc, enc, in, out, cc)
 					}
 				},
 			},
@@ -250,6 +277,62 @@ COMMIT;`}
 							)
 						}()
 						return invoker(ctx, method, req, reply, cc, opts...)
+					}
+				},
+				StreamClientInterceptorDRPC: func(
+					target string, class rpcbase.ConnectionClass,
+				) drpcclient.StreamClientInterceptor {
+					return func(
+						ctx context.Context, rpc string, enc drpc.Encoding,
+						cc *drpcclient.ClientConn, streamer drpcclient.Streamer,
+					) (drpc.Stream, error) {
+						var nodeID int
+						if nodeIDPtr, ok := addrsToNodeIDs.Load(target); ok {
+							nodeID = *nodeIDPtr
+						}
+						start := timeutil.Now()
+						maybeWait(ctx, i, nodeID)
+						defer func() {
+							if !log.ExpensiveLogEnabled(ctx, 2) {
+								return
+							}
+							log.VEventf(
+								ctx, 2, "tenant%d->%d opening stream %v to %v (%v->%v)",
+								i, nodeID, rpc, target, localities[i], localities[nodeID],
+							)
+						}()
+						s, err := streamer(ctx, rpc, enc, cc)
+						if err != nil {
+							return nil, err
+						}
+						return wrappedDRPCStream{
+							start:  start,
+							Stream: s,
+						}, nil
+					}
+				},
+				UnaryClientInterceptorDRPC: func(
+					target string, class rpcbase.ConnectionClass,
+				) drpcclient.UnaryClientInterceptor {
+					var nodeID int
+					if nodeIDPtr, ok := addrsToNodeIDs.Load(target); ok {
+						nodeID = *nodeIDPtr
+					}
+					return func(
+						ctx context.Context, rpc string, enc drpc.Encoding,
+						in, out drpc.Message, cc *drpcclient.ClientConn,
+						invoker drpcclient.UnaryInvoker,
+					) error {
+						maybeWait(ctx, i, nodeID)
+						start := timeutil.Now()
+						defer func() {
+							log.VEventf(
+								ctx, 2, "tenant%d->%d %v->%v %s %v %v took %v",
+								i, nodeID, localities[i], localities[nodeID],
+								rpc, in, out, timeutil.Since(start),
+							)
+						}()
+						return invoker(ctx, rpc, enc, in, out, cc)
 					}
 				},
 			},
@@ -399,5 +482,18 @@ func (w wrappedStream) RecvMsg(m interface{}) error {
 		return err
 	}
 	log.VEventf(w.ClientStream.Context(), 2, "stream received %T %v %v", m, timeutil.Since(w.start), m)
+	return nil
+}
+
+type wrappedDRPCStream struct {
+	start time.Time
+	drpc.Stream
+}
+
+func (w wrappedDRPCStream) MsgRecv(msg drpc.Message, enc drpc.Encoding) error {
+	if err := w.Stream.MsgRecv(msg, enc); err != nil {
+		return err
+	}
+	log.VEventf(w.Stream.Context(), 2, "stream received %T %v %v", msg, timeutil.Since(w.start), msg)
 	return nil
 }

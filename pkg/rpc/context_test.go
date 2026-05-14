@@ -52,6 +52,8 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"storj.io/drpc"
+	"storj.io/drpc/drpcclient"
+	"storj.io/drpc/drpcmigrate"
 	"storj.io/drpc/drpcmux"
 	"storj.io/drpc/drpcserver"
 )
@@ -1690,6 +1692,11 @@ func TestTestingKnobs(t *testing.T) {
 		class  rpcbase.ConnectionClass
 		method string
 	}
+	type drpcStreamCall struct {
+		target string
+		class  rpcbase.ConnectionClass
+		rpc    string
+	}
 	seen := make(map[interface{}]int)
 	var seenMu syncutil.Mutex
 	recordCall := func(call interface{}) {
@@ -1718,6 +1725,25 @@ func TestTestingKnobs(t *testing.T) {
 				return cs, nil
 			}
 		},
+		StreamClientInterceptorDRPC: func(
+			target string, class rpcbase.ConnectionClass,
+		) drpcclient.StreamClientInterceptor {
+			return func(
+				ctx context.Context, rpc string, enc drpc.Encoding,
+				cc *drpcclient.ClientConn, streamer drpcclient.Streamer,
+			) (drpc.Stream, error) {
+				s, err := streamer(ctx, rpc, enc, cc)
+				if err != nil {
+					return nil, err
+				}
+				recordCall(drpcStreamCall{
+					target: target,
+					class:  class,
+					rpc:    rpc,
+				})
+				return s, nil
+			}
+		},
 	})
 
 	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
@@ -1740,18 +1766,90 @@ func TestTestingKnobs(t *testing.T) {
 		require.Nil(t, cs.CloseSend())
 	}
 
+	// Set up a DRPC server and verify the DRPC stream interceptor is called.
+	drpcMux := drpcmux.New()
+	drpcSrv := drpcserver.NewWithOptions(drpcMux, drpcserver.Options{})
+	drpcS := &drpcServer{Server: drpcSrv, Mux: drpcMux}
+	require.NoError(t, DRPCRegisterHeartbeat(drpcS, &HeartbeatService{
+		clock:              clock,
+		remoteClockMonitor: serverCtx.RemoteClocks,
+		clusterID:          serverCtx.StorageClusterID,
+		nodeID:             serverCtx.NodeID,
+		version:            serverCtx.Settings.Version,
+	}))
+	drpcLn, err := net.Listen("tcp", util.TestAddr.String())
+	require.NoError(t, err)
+	tlsConfig, err := serverCtx.GetServerTLSConfig()
+	require.NoError(t, err)
+	// Strip the DRPC header first (sent in plaintext), then wrap with TLS.
+	drpcStrippedLn := &drpcHeaderStrippingListener{Listener: drpcLn, tlsConfig: tlsConfig}
+	require.NoError(t, stopper.RunAsyncTask(ctx, "drpc-serve", func(ctx context.Context) {
+		netutil.FatalIfUnexpected(drpcSrv.Serve(ctx, drpcStrippedLn))
+	}))
+	require.NoError(t, stopper.RunAsyncTask(ctx, "drpc-quiesce", func(ctx context.Context) {
+		<-stopper.ShouldQuiesce()
+		netutil.FatalIfUnexpected(drpcLn.Close())
+	}))
+	drpcAddr := drpcLn.Addr().String()
+	drpcConn, err := clientCtx.DRPCDialNode(
+		drpcAddr, serverNodeID, roachpb.Locality{}, rpcbase.DefaultClass,
+	).Connect(ctx)
+	require.NoError(t, err)
+	const drpcStreamMethod = "/cockroach.rpc.Heartbeat/Ping"
+	const numDefDRPCStream = 4
+	drpcEnc := drpcEncoding_File_rpc_heartbeat_proto{}
+	for i := 0; i < numDefDRPCStream; i++ {
+		stream, err := drpcConn.NewStream(ctx, drpcStreamMethod, drpcEnc)
+		require.NoError(t, err)
+		require.NoError(t, stream.MsgSend(&PingRequest{
+			ServerVersion: clientCtx.Settings.Version.LatestVersion(),
+		}, drpcEnc))
+		require.NoError(t, stream.MsgRecv(&PingResponse{}, drpcEnc))
+		require.NoError(t, stream.Close())
+	}
+
+	seenMu.Lock()
+	defer seenMu.Unlock()
 	exp := map[interface{}]int{
 		streamCall{
 			target: remoteAddr,
 			class:  rpcbase.DefaultClass,
 			method: streamMethod,
 		}: numDefStream,
+		drpcStreamCall{
+			target: drpcAddr,
+			class:  rpcbase.DefaultClass,
+			rpc:    drpcStreamMethod,
+		}: numDefDRPCStream,
 	}
-	seenMu.Lock()
-	defer seenMu.Unlock()
 	for call, num := range exp {
 		require.Equal(t, num, seen[call])
 	}
+}
+
+// drpcHeaderStrippingListener wraps a net.Listener, strips the DRPC
+// migration header from each accepted connection, then upgrades to TLS
+// if tlsConfig is non-nil. The DRPC client sends the header in plaintext
+// before the TLS handshake.
+type drpcHeaderStrippingListener struct {
+	net.Listener
+	tlsConfig *tls.Config
+}
+
+func (ln *drpcHeaderStrippingListener) Accept() (net.Conn, error) {
+	conn, err := ln.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	buf := make([]byte, len(drpcmigrate.DRPCHeader))
+	if _, err := io.ReadFull(conn, buf); err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+	if ln.tlsConfig != nil {
+		conn = tls.Server(conn, ln.tlsConfig)
+	}
+	return conn, nil
 }
 
 func BenchmarkGRPCDial(b *testing.B) {

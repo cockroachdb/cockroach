@@ -186,6 +186,7 @@ go_test(
         "@io_storj_drpc//:drpc",
         "@io_storj_drpc//drpcclient",
         "@io_storj_drpc//drpcctx",
+        "@io_storj_drpc//drpcmigrate",
         "@io_storj_drpc//drpcmux",
         "@io_storj_drpc//drpcserver",
         "@org_golang_google_grpc//:grpc",

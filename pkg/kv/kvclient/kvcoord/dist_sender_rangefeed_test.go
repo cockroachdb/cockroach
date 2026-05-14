@@ -41,6 +41,8 @@ import (
 	"github.com/sasha-s/go-deadlock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"storj.io/drpc"
+	"storj.io/drpc/drpcclient"
 )
 
 type testRangefeedClient struct {
@@ -344,6 +346,20 @@ func TestMuxRangeFeedDoesNotStallOnError(t *testing.T) {
 			return streamer(ctx, desc, cc, method, opts...)
 		}
 	}
+	streamInterceptorDRPC := func(target string, class rpcbase.ConnectionClass) drpcclient.StreamClientInterceptor {
+		return func(
+			ctx context.Context, rpc string, enc drpc.Encoding, cc *drpcclient.ClientConn,
+			streamer drpcclient.Streamer,
+		) (drpc.Stream, error) {
+			if rpc == rfMethod {
+				if shouldError.Load() && errCount <= maxErrors {
+					errCount++
+					return nil, errors.Newf("test error %d", errCount)
+				}
+			}
+			return streamer(ctx, rpc, enc, cc)
+		}
+	}
 	const numServers int = 3
 	serverArgs := base.TestServerArgs{
 		RetryOptions: retry.Options{
@@ -353,7 +369,8 @@ func TestMuxRangeFeedDoesNotStallOnError(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				ContextTestingKnobs: rpc.ContextTestingKnobs{
-					StreamClientInterceptor: streamInterceptor,
+					StreamClientInterceptor:     streamInterceptor,
+					StreamClientInterceptorDRPC: streamInterceptorDRPC,
 				},
 			},
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
