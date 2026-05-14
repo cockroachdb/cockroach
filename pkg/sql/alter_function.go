@@ -8,6 +8,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -551,7 +552,15 @@ func getFuncRefsDisallowingAlter(
 		}
 		switch t := desc.(type) {
 		case catalog.TableDescriptor:
-			if !t.IsView() && len(dep.TriggerIDs) == 0 && len(dep.PolicyIDs) == 0 {
+			// Trigger and policy back-references only block renames/schema
+			// changes once the cluster version reaches V26_3_Start. During
+			// a rolling upgrade from v26.2, some nodes may not enforce this
+			// check, so we skip it until all nodes are guaranteed to agree.
+			checkTriggerPolicyDeps := params.p.ExecCfg().Settings.Version.IsActive(
+				params.ctx, clusterversion.V26_3_Start,
+			)
+			hasTriggerPolicyDeps := len(dep.TriggerIDs) > 0 || len(dep.PolicyIDs) > 0
+			if !t.IsView() && !(checkTriggerPolicyDeps && hasTriggerPolicyDeps) {
 				continue
 			}
 			fullyResolvedName, err := params.p.GetQualifiedTableNameByID(

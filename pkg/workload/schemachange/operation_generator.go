@@ -4834,11 +4834,10 @@ func (og *operationGenerator) alterFunctionRename(ctx context.Context, tx pgx.Tx
 		return nil, err
 	}
 
-	// The server only blocks ALTER FUNCTION RENAME on trigger/policy back-refs
-	// starting in v26.3. In a mixed-version cluster the rename succeeds against
-	// older servers, so don't classify those functions as "with deps" or the
-	// workload will incorrectly expect a feature_not_supported error.
-	skipTriggerPolicyDeps, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_3.Version())
+	// The server only blocks ALTER FUNCTION RENAME on trigger/policy
+	// back-refs when the cluster version reaches V26_3_Start. Mirror
+	// that gate here so the workload's error expectations match.
+	skipTriggerPolicyDeps, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_3_Start.Version())
 	if err != nil {
 		return nil, err
 	}
@@ -4956,11 +4955,9 @@ func (og *operationGenerator) alterFunctionSetSchema(
 	}
 
 	// The server only blocks ALTER FUNCTION SET SCHEMA on trigger/policy
-	// back-refs starting in v26.3. In a mixed-version cluster the statement
-	// succeeds against older servers, so don't classify those functions as
-	// "with deps" or the workload will incorrectly expect a
-	// feature_not_supported error.
-	skipTriggerPolicyDeps, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_3.Version())
+	// back-refs when the cluster version reaches V26_3_Start. Mirror
+	// that gate here so the workload's error expectations match.
+	skipTriggerPolicyDeps, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_3_Start.Version())
 	if err != nil {
 		return nil, err
 	}
@@ -5653,6 +5650,27 @@ func (og *operationGenerator) createTriggerFunction(
 		return nil, err
 	}
 
+	// On clusters older than V26_3_Start, a trigger function that
+	// references a region column (of type crdb_internal_region) will
+	// cause a validation failure on v26.2 nodes when the trigger is
+	// attached to a REGIONAL BY TABLE or GLOBAL table (see #170091).
+	// Clear the SELECT if it references any region column.
+	excludeRegion, err := isClusterVersionLessThan(
+		ctx, tx, clusterversion.V26_3_Start.Version(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	if excludeRegion {
+		refsRegionCol, err := og.sqlReferencesRegionColumn(ctx, tx, selectStmt.sql)
+		if err != nil {
+			return nil, err
+		}
+		if refsRegionCol {
+			selectStmt.sql = "SELECT 1"
+		}
+	}
+
 	// Sometimes include a sequence reference to exercise trigger-sequence
 	// dependency tracking.
 	seqSelectStmt := ""
@@ -5675,6 +5693,21 @@ func (og *operationGenerator) createTriggerFunction(
 		enumMembers, err := og.collectEnumMembers(ctx, tx)
 		if err != nil {
 			return nil, err
+		}
+		// On clusters older than V26_3_Start, exclude the
+		// crdb_internal_region enum to avoid creating a type dependency
+		// that causes validation failures on v26.2 nodes (see #170091).
+		excludeRegion, err := isClusterVersionLessThan(
+			ctx, tx, clusterversion.V26_3_Start.Version(),
+		)
+		if err != nil {
+			return nil, err
+		}
+		if excludeRegion {
+			enumMembers = slices.DeleteFunc(enumMembers, func(m map[string]any) bool {
+				name, _ := m["name"].(string)
+				return strings.Contains(name, "crdb_internal_region")
+			})
 		}
 		var publicEnumExprs []string
 		for _, member := range enumMembers {
