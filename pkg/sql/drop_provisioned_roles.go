@@ -129,11 +129,16 @@ func (n *DropProvisionedRolesNode) startExec(params runParams) error {
 	}
 	query, queryArgs := buildProvisionedRolesQuery(sourceVal, lastLoginVal, n.limitCount)
 
+	// Use NodeUserSessionDataOverride because the authorization check
+	// (CREATEROLE) already happened at plan time. A non-admin CREATEROLE
+	// user does not have SELECT on system.users, so the query must run
+	// with elevated privileges. The query is hardcoded with only
+	// parameterized filter values — no user-controlled SQL expressions.
 	rows, err := params.p.InternalSQLTxn().QueryBufferedEx(
 		params.ctx,
 		"drop-provisioned-roles-find",
 		params.p.txn,
-		sessiondata.InternalExecutorOverride{User: params.p.User()},
+		sessiondata.NodeUserSessionDataOverride,
 		query,
 		queryArgs...,
 	)
@@ -149,10 +154,11 @@ func (n *DropProvisionedRolesNode) startExec(params runParams) error {
 		return err
 	}
 
-	var numDropped, numSkipped int
-	var droppedNames []string
-	var numRoleSettingsRowsDeleted int
-
+	// First pass: filter candidates by checking permissions and
+	// dependencies. Accumulate eligible users into a separate slice
+	// so that the deletion loop is cleanly separated from the
+	// validation logic.
+	var usersToDrop []username.SQLUsername
 	for _, row := range rows {
 		normalizedUsername := username.MakeSQLUsernameFromPreNormalizedString(
 			string(tree.MustBeDString(row[0])),
@@ -179,7 +185,6 @@ func (n *DropProvisionedRolesNode) startExec(params runParams) error {
 					params.ctx,
 					pgnotice.Newf("skipping %q: must be superuser to drop superusers", normalizedUsername),
 				)
-				numSkipped++
 				continue
 			}
 		}
@@ -195,22 +200,26 @@ func (n *DropProvisionedRolesNode) startExec(params runParams) error {
 				params.ctx,
 				pgnotice.Newf("skipping %q: role has dependent objects", normalizedUsername),
 			)
-			numSkipped++
 			continue
 		}
 
-		// Delete the role from all system tables.
+		usersToDrop = append(usersToDrop, normalizedUsername)
+	}
+
+	// Second pass: delete all eligible users from system tables.
+	var droppedNames []string
+	var numRoleSettingsRowsDeleted int
+	for _, normalizedUsername := range usersToDrop {
 		deleted, err := n.deleteRole(params, normalizedUsername, opName)
 		if err != nil {
 			return err
 		}
 		numRoleSettingsRowsDeleted += deleted
-		numDropped++
 		droppedNames = append(droppedNames, normalizedUsername.Normalized())
 	}
 
 	// Bump table versions if anything was dropped.
-	if numDropped > 0 {
+	if len(droppedNames) > 0 {
 		if sessioninit.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) {
 			if err := params.p.bumpUsersTableVersion(params.ctx); err != nil {
 				return err
@@ -252,6 +261,10 @@ func (n *DropProvisionedRolesNode) evalFilterExprs(
 		if err != nil {
 			return nil, nil, err
 		}
+		if d == tree.DNull {
+			return nil, nil, pgerror.Newf(pgcode.InvalidParameterValue,
+				"SOURCE filter cannot be NULL")
+		}
 		s := string(tree.MustBeDString(d))
 		sourceVal = &s
 	}
@@ -259,6 +272,10 @@ func (n *DropProvisionedRolesNode) evalFilterExprs(
 		d, err := eval.Expr(params.ctx, params.EvalContext(), n.lastLoginBefore)
 		if err != nil {
 			return nil, nil, err
+		}
+		if d == tree.DNull {
+			return nil, nil, pgerror.Newf(pgcode.InvalidParameterValue,
+				"LAST LOGIN BEFORE filter cannot be NULL")
 		}
 		v := tree.MustBeDTimestampTZ(d)
 		lastLoginVal = &v

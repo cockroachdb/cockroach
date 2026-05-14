@@ -1,0 +1,972 @@
+# LogicTest: local
+# knob-opt: sync-event-log
+
+# Tests for DROP PROVISIONED ROLES statement.
+
+# ----------------------------------------------------------------------
+# Setup: create provisioned users with different sources and login times.
+# ----------------------------------------------------------------------
+
+statement ok
+CREATE USER ldap_user1 PROVISIONSRC 'ldap:ldap.example.com'
+
+statement ok
+CREATE USER ldap_user2 PROVISIONSRC 'ldap:ldap.example.com'
+
+statement ok
+CREATE USER ldap_user3 PROVISIONSRC 'ldap:ldap.example.com'
+
+statement ok
+CREATE USER oidc_user1 PROVISIONSRC 'oidc:okta.corp.com'
+
+statement ok
+CREATE USER oidc_user2 PROVISIONSRC 'oidc:okta.corp.com'
+
+statement ok
+CREATE USER regular_user
+
+# Set estimated_last_login_time for time-based filtering tests.
+statement ok
+UPDATE system.users SET estimated_last_login_time = '2024-01-15'::TIMESTAMPTZ
+WHERE username IN ('ldap_user1', 'ldap_user2')
+
+statement ok
+UPDATE system.users SET estimated_last_login_time = '2025-12-01'::TIMESTAMPTZ
+WHERE username IN ('ldap_user3', 'oidc_user1', 'oidc_user2')
+
+# Verify setup: all users exist.
+query T rowsort
+SELECT username FROM system.users
+WHERE username NOT IN ('root', 'admin', 'node')
+----
+ldap_user1
+ldap_user2
+ldap_user3
+oidc_user1
+oidc_user2
+regular_user
+testuser
+
+# ----------------------------------------------------------------------
+# Test 1: LIMIT is required.
+# ----------------------------------------------------------------------
+subtest limit_required
+
+statement error pq: LIMIT is required for DROP PROVISIONED ROLES
+DROP PROVISIONED ROLES
+
+statement error pq: LIMIT is required for DROP PROVISIONED ROLES
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com'
+
+subtest end
+
+# ----------------------------------------------------------------------
+# Test 2: LIMIT validation — zero, negative, and exceeding max.
+# ----------------------------------------------------------------------
+subtest limit_validation
+
+statement error pq: LIMIT must be between 1 and 1024
+DROP PROVISIONED ROLES LIMIT 0
+
+statement error pq: LIMIT must be between 1 and 1024
+DROP PROVISIONED ROLES LIMIT -1
+
+statement error pq: LIMIT must be between 1 and 1024
+DROP PROVISIONED ROLES LIMIT 1025
+
+statement error pq: LIMIT must be a constant integer expression
+DROP PROVISIONED ROLES LIMIT (SELECT 1)
+
+subtest end
+
+# ----------------------------------------------------------------------
+# Test 3: Provisioned users are dropped, non-provisioned remain.
+# This covers the core e2e: create provisioned + non-provisioned users,
+# run DROP PROVISIONED ROLES, verify provisioned are gone and
+# non-provisioned are untouched.
+# ----------------------------------------------------------------------
+subtest provisioned_dropped_non_provisioned_untouched
+
+statement ok
+DROP PROVISIONED ROLES LIMIT 100
+
+# All provisioned users should be dropped.
+query T
+SELECT username FROM system.users WHERE username LIKE 'ldap_%'
+----
+
+query T
+SELECT username FROM system.users WHERE username LIKE 'oidc_%'
+----
+
+# Non-provisioned regular_user must survive.
+query T
+SELECT username FROM system.users WHERE username = 'regular_user'
+----
+regular_user
+
+# Non-provisioned testuser must survive.
+query T
+SELECT username FROM system.users WHERE username = 'testuser'
+----
+testuser
+
+# root and admin must always survive.
+query T rowsort
+SELECT username FROM system.users WHERE username IN ('root', 'admin')
+----
+admin
+root
+
+subtest end
+
+# ----------------------------------------------------------------------
+# Recreate provisioned users for subsequent tests.
+# ----------------------------------------------------------------------
+
+statement ok
+CREATE USER ldap_user1 PROVISIONSRC 'ldap:ldap.example.com'
+
+statement ok
+CREATE USER ldap_user2 PROVISIONSRC 'ldap:ldap.example.com'
+
+statement ok
+CREATE USER ldap_user3 PROVISIONSRC 'ldap:ldap.example.com'
+
+statement ok
+CREATE USER oidc_user1 PROVISIONSRC 'oidc:okta.corp.com'
+
+statement ok
+CREATE USER oidc_user2 PROVISIONSRC 'oidc:okta.corp.com'
+
+statement ok
+UPDATE system.users SET estimated_last_login_time = '2024-01-15'::TIMESTAMPTZ
+WHERE username IN ('ldap_user1', 'ldap_user2')
+
+statement ok
+UPDATE system.users SET estimated_last_login_time = '2025-12-01'::TIMESTAMPTZ
+WHERE username IN ('ldap_user3', 'oidc_user1', 'oidc_user2')
+
+# ----------------------------------------------------------------------
+# Test 4: SOURCE filter drops only matching source.
+# ----------------------------------------------------------------------
+subtest source_filter
+
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = 'oidc:okta.corp.com' LIMIT 100
+
+# OIDC users should be gone.
+query T
+SELECT username FROM system.users WHERE username LIKE 'oidc_%'
+----
+
+# LDAP users should still exist.
+query T rowsort
+SELECT username FROM system.users WHERE username LIKE 'ldap_%'
+----
+ldap_user1
+ldap_user2
+ldap_user3
+
+subtest end
+
+# ----------------------------------------------------------------------
+# Test 5: LIMIT clause caps the number of dropped users.
+# ----------------------------------------------------------------------
+subtest limit_clause
+
+query I
+SELECT count(*) FROM system.users WHERE username LIKE 'ldap_%'
+----
+3
+
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 1
+
+# Exactly 1 user was dropped, so exactly 2 remain.
+query I
+SELECT count(*) FROM system.users WHERE username LIKE 'ldap_%'
+----
+2
+
+subtest end
+
+# Drop remaining LDAP users to clean up.
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 100
+
+query T
+SELECT username FROM system.users WHERE username LIKE 'ldap_%'
+----
+
+# ----------------------------------------------------------------------
+# Test 6: LAST LOGIN BEFORE filter.
+# ----------------------------------------------------------------------
+subtest time_filter
+
+# Recreate users with different login times.
+statement ok
+CREATE USER time_old PROVISIONSRC 'ldap:ldap.example.com'
+
+statement ok
+CREATE USER time_recent PROVISIONSRC 'ldap:ldap.example.com'
+
+statement ok
+UPDATE system.users SET estimated_last_login_time = '2024-01-15'::TIMESTAMPTZ
+WHERE username = 'time_old'
+
+statement ok
+UPDATE system.users SET estimated_last_login_time = '2026-03-01'::TIMESTAMPTZ
+WHERE username = 'time_recent'
+
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com',
+  LAST LOGIN BEFORE '2025-01-01' LIMIT 100
+
+# time_old should be dropped (login before 2025-01-01).
+query T
+SELECT username FROM system.users WHERE username = 'time_old'
+----
+
+# time_recent should survive (login after 2025-01-01).
+query T
+SELECT username FROM system.users WHERE username = 'time_recent'
+----
+time_recent
+
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 100
+
+subtest end
+
+# ----------------------------------------------------------------------
+# Test 7: Combined filters with LIMIT.
+# ----------------------------------------------------------------------
+subtest combined_filters
+
+statement ok
+CREATE USER combo1 PROVISIONSRC 'ldap:ldap.example.com'
+
+statement ok
+CREATE USER combo2 PROVISIONSRC 'ldap:ldap.example.com'
+
+statement ok
+CREATE USER combo3 PROVISIONSRC 'ldap:ldap.example.com'
+
+statement ok
+UPDATE system.users SET estimated_last_login_time = '2024-06-01'::TIMESTAMPTZ
+WHERE username IN ('combo1', 'combo2', 'combo3')
+
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com',
+  LAST LOGIN BEFORE '2025-01-01' LIMIT 2
+
+# Exactly 2 users were dropped, so exactly 1 remains.
+query I
+SELECT count(*) FROM system.users WHERE username LIKE 'combo%'
+----
+1
+
+# Clean up.
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 100
+
+subtest end
+
+# ----------------------------------------------------------------------
+# Test 8: Privilege check — non-CREATEROLE user cannot drop.
+# ----------------------------------------------------------------------
+subtest privilege_check
+
+statement ok
+CREATE USER priv_test_user PROVISIONSRC 'ldap:ldap.example.com'
+
+user testuser
+
+statement error pq: user testuser does not have CREATEROLE privilege
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 100
+
+user root
+
+# Verify user still exists.
+query T
+SELECT username FROM system.users WHERE username = 'priv_test_user'
+----
+priv_test_user
+
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 100
+
+subtest end
+
+# ----------------------------------------------------------------------
+# Test 9: Non-admin CREATEROLE caller skips admin provisioned users.
+#
+# A CREATEROLE user (without admin) should be able to run
+# DROP PROVISIONED ROLES. Admin-role members that happen to be
+# provisioned are silently skipped, while non-admin provisioned users
+# are dropped. This diverges from DROP ROLE which would error.
+# ----------------------------------------------------------------------
+subtest admin_skip_non_admin_caller
+
+# Create a provisioned user that is also an admin.
+statement ok
+CREATE USER admin_prov PROVISIONSRC 'ldap:ldap.example.com'
+
+statement ok
+GRANT admin TO admin_prov
+
+# Create a non-admin provisioned user.
+statement ok
+CREATE USER nonadmin_prov PROVISIONSRC 'ldap:ldap.example.com'
+
+# Give testuser CREATEROLE so it can run DROP PROVISIONED ROLES.
+statement ok
+ALTER ROLE testuser CREATEROLE
+
+user testuser
+
+# This should succeed — admin_prov is skipped, nonadmin_prov is dropped.
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 100
+
+user root
+
+# admin_prov must still exist (skipped because it has admin role).
+query T
+SELECT username FROM system.users WHERE username = 'admin_prov'
+----
+admin_prov
+
+# nonadmin_prov must be dropped.
+query T
+SELECT username FROM system.users WHERE username = 'nonadmin_prov'
+----
+
+# Contrast with DROP ROLE: a non-admin caller would error on admin
+# users rather than silently skipping them.
+user testuser
+
+statement error pq: must be superuser to drop superusers
+DROP ROLE admin_prov
+
+user root
+
+# Clean up: revoke admin, remove CREATEROLE from testuser, then drop.
+statement ok
+REVOKE admin FROM admin_prov
+
+statement ok
+DROP ROLE admin_prov
+
+statement ok
+ALTER ROLE testuser NOCREATEROLE
+
+subtest end
+
+# ----------------------------------------------------------------------
+# Test 10: Dependency skip — user owning objects is skipped with NOTICE.
+# ----------------------------------------------------------------------
+subtest dependency_skip
+
+statement ok
+CREATE TABLE dep_table (x INT)
+
+statement ok
+CREATE USER dep_user PROVISIONSRC 'ldap:ldap.example.com'
+
+statement ok
+GRANT ALL ON TABLE dep_table TO dep_user
+
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 100
+
+# dep_user should still exist because it has grants on dep_table.
+query T
+SELECT username FROM system.users WHERE username = 'dep_user'
+----
+dep_user
+
+# Clean up: revoke grants and drop.
+statement ok
+REVOKE ALL ON TABLE dep_table FROM dep_user
+
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 100
+
+query T
+SELECT username FROM system.users WHERE username = 'dep_user'
+----
+
+subtest end
+
+# ----------------------------------------------------------------------
+# Test 11: Ownership-based dependency skip — user who owns a table is
+# skipped even without explicit grants.
+# ----------------------------------------------------------------------
+subtest ownership_skip
+
+statement ok
+CREATE USER own_user PROVISIONSRC 'ldap:ldap.example.com'
+
+statement ok
+CREATE TABLE own_table (x INT)
+
+statement ok
+ALTER TABLE own_table OWNER TO own_user
+
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 100
+
+# own_user should still exist because it owns own_table.
+query T
+SELECT username FROM system.users WHERE username = 'own_user'
+----
+own_user
+
+# Transfer ownership back and drop.
+statement ok
+ALTER TABLE own_table OWNER TO root
+
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 100
+
+query T
+SELECT username FROM system.users WHERE username = 'own_user'
+----
+
+statement ok
+DROP TABLE own_table
+
+subtest end
+
+# ----------------------------------------------------------------------
+# Test 12: System privileges dependency skip — user with system
+# privileges (e.g. VIEWCLUSTERMETADATA) is skipped because dropping
+# would leave dangling entries in system.privileges.
+# ----------------------------------------------------------------------
+subtest system_privileges_skip
+
+statement ok
+CREATE USER syspriv_user PROVISIONSRC 'ldap:ldap.example.com'
+
+statement ok
+GRANT SYSTEM VIEWCLUSTERMETADATA TO syspriv_user
+
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 100
+
+# syspriv_user should still exist because it has system privileges.
+query T
+SELECT username FROM system.users WHERE username = 'syspriv_user'
+----
+syspriv_user
+
+# Revoke system privilege and drop.
+statement ok
+REVOKE SYSTEM VIEWCLUSTERMETADATA FROM syspriv_user
+
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 100
+
+query T
+SELECT username FROM system.users WHERE username = 'syspriv_user'
+----
+
+subtest end
+
+# ----------------------------------------------------------------------
+# Test 13: Default privileges (explicit role) dependency skip — user
+# who has ALTER DEFAULT PRIVILEGES ... FOR ROLE is skipped.
+# ----------------------------------------------------------------------
+subtest default_privileges_explicit_role_skip
+
+statement ok
+CREATE USER defpriv_user PROVISIONSRC 'ldap:ldap.example.com'
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE defpriv_user GRANT SELECT ON TABLES TO public
+
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 100
+
+# defpriv_user should still exist because it has default privileges.
+query T
+SELECT username FROM system.users WHERE username = 'defpriv_user'
+----
+defpriv_user
+
+# Remove default privileges and drop.
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE defpriv_user REVOKE SELECT ON TABLES FROM public
+
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 100
+
+query T
+SELECT username FROM system.users WHERE username = 'defpriv_user'
+----
+
+subtest end
+
+# ----------------------------------------------------------------------
+# Test 14: Default privileges (per-object grantee) dependency skip —
+# user who is a grantee in someone else's default privileges is skipped.
+# ----------------------------------------------------------------------
+subtest default_privileges_per_object_skip
+
+statement ok
+CREATE USER defgrantee_user PROVISIONSRC 'ldap:ldap.example.com'
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE root GRANT SELECT ON TABLES TO defgrantee_user
+
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 100
+
+# defgrantee_user should still exist because it appears as grantee
+# in root's default privileges.
+query T
+SELECT username FROM system.users WHERE username = 'defgrantee_user'
+----
+defgrantee_user
+
+# Remove default privilege grant and drop.
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE root REVOKE SELECT ON TABLES FROM defgrantee_user
+
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 100
+
+query T
+SELECT username FROM system.users WHERE username = 'defgrantee_user'
+----
+
+subtest end
+
+# ----------------------------------------------------------------------
+# Test 15: RLS policy dependency skip — user referenced in a row-level
+# security policy is skipped.
+# ----------------------------------------------------------------------
+subtest rls_policy_skip
+
+statement ok
+CREATE USER rls_user PROVISIONSRC 'ldap:ldap.example.com'
+
+statement ok
+CREATE TABLE rls_table (x INT)
+
+statement ok
+ALTER TABLE rls_table ENABLE ROW LEVEL SECURITY
+
+statement ok
+CREATE POLICY rls_pol ON rls_table TO rls_user USING (true)
+
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 100
+
+# rls_user should still exist because it is referenced in a policy.
+query T
+SELECT username FROM system.users WHERE username = 'rls_user'
+----
+rls_user
+
+# Remove the policy and drop.
+statement ok
+DROP POLICY rls_pol ON rls_table
+
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 100
+
+query T
+SELECT username FROM system.users WHERE username = 'rls_user'
+----
+
+statement ok
+DROP TABLE rls_table
+
+subtest end
+
+# ----------------------------------------------------------------------
+# Test 16: Scheduled jobs dependency skip — user who owns a scheduled
+# job is skipped.
+# ----------------------------------------------------------------------
+subtest scheduled_jobs_skip
+
+statement ok
+CREATE USER sched_user PROVISIONSRC 'ldap:ldap.example.com'
+
+# Insert a fake scheduled job owned by sched_user directly into the
+# system table. We cannot use `user sched_user` (no TLS cert) and
+# CREATE SCHEDULE requires privileges we don't want to grant.
+statement ok
+INSERT INTO system.scheduled_jobs (
+  schedule_id, schedule_name, owner, next_run, schedule_state,
+  schedule_expr, executor_type, execution_args
+) VALUES (
+  unique_rowid(), 'test-schedule', 'sched_user', now(), NULL,
+  '@daily', 'scheduled-backup', b'\x0a\x00'
+)
+
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 100
+
+# sched_user should still exist because it owns a scheduled job.
+query T
+SELECT username FROM system.users WHERE username = 'sched_user'
+----
+sched_user
+
+# Clean up: delete the schedule and drop the user.
+statement count 1
+DELETE FROM system.scheduled_jobs WHERE owner = 'sched_user'
+
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 100
+
+query T
+SELECT username FROM system.users WHERE username = 'sched_user'
+----
+
+subtest end
+
+# ----------------------------------------------------------------------
+# Test 17: Reserved users (root, admin) are never dropped even with
+# a broad unfiltered DROP PROVISIONED ROLES.
+# ----------------------------------------------------------------------
+subtest reserved_users
+
+# We can't set PROVISIONSRC on root/admin, but verify they survive a
+# broad DROP PROVISIONED ROLES alongside provisioned users.
+statement ok
+CREATE USER safe_check PROVISIONSRC 'ldap:ldap.example.com'
+
+statement ok
+DROP PROVISIONED ROLES LIMIT 100
+
+# safe_check (provisioned) should be gone.
+query T
+SELECT username FROM system.users WHERE username = 'safe_check'
+----
+
+# root and admin must survive.
+query T rowsort
+SELECT username FROM system.users WHERE username IN ('root', 'admin')
+----
+admin
+root
+
+subtest end
+
+# ----------------------------------------------------------------------
+# Test 18: Empty match — no error, 0 affected.
+# ----------------------------------------------------------------------
+subtest empty_match
+
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:nonexistent.example.com' LIMIT 100
+
+subtest end
+
+# ----------------------------------------------------------------------
+# Test 19: Multiple sources filtered correctly.
+# ----------------------------------------------------------------------
+subtest multiple_sources
+
+statement ok
+CREATE USER ms_ldap PROVISIONSRC 'ldap:ldap.example.com'
+
+statement ok
+CREATE USER ms_oidc PROVISIONSRC 'oidc:okta.corp.com'
+
+# Drop only LDAP users.
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 100
+
+# LDAP user gone.
+query T
+SELECT username FROM system.users WHERE username = 'ms_ldap'
+----
+
+# OIDC user remains.
+query T
+SELECT username FROM system.users WHERE username = 'ms_oidc'
+----
+ms_oidc
+
+# Clean up.
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = 'oidc:okta.corp.com' LIMIT 100
+
+subtest end
+
+# ----------------------------------------------------------------------
+# Test 20: Role memberships are cleaned up on drop.
+# ----------------------------------------------------------------------
+subtest membership_cleanup
+
+statement ok
+CREATE USER memb_user PROVISIONSRC 'ldap:ldap.example.com'
+
+statement ok
+CREATE ROLE memb_role
+
+statement ok
+GRANT memb_role TO memb_user
+
+query T
+SELECT member FROM system.role_members WHERE "role" = 'memb_role'
+----
+memb_user
+
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 100
+
+# Role membership should be cleaned up.
+query T
+SELECT member FROM system.role_members WHERE "role" = 'memb_role'
+----
+
+statement ok
+DROP ROLE memb_role
+
+subtest end
+
+# ----------------------------------------------------------------------
+# Test 21: EXPLAIN planning — verify the statement can be planned
+# with various filter combinations. Parse/format roundtrip is tested
+# in pkg/sql/parser/testdata/drop_user.
+# ----------------------------------------------------------------------
+subtest explain_planning
+
+# These should plan without errors.
+statement ok
+EXPLAIN (DISTSQL) DROP PROVISIONED ROLES LIMIT 10
+
+statement ok
+EXPLAIN (DISTSQL) DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 10
+
+statement ok
+EXPLAIN (DISTSQL) DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com',
+  LAST LOGIN BEFORE '2025-01-01' LIMIT 100
+
+subtest end
+
+# ----------------------------------------------------------------------
+# Test 22: Expression evaluation for SOURCE and LAST LOGIN BEFORE.
+#
+# The grammar accepts a_expr for both SOURCE = <expr> and
+# LAST LOGIN BEFORE <expr>. Expressions must be evaluated at execution
+# time (not stringified), so concatenation, function calls, and
+# interval arithmetic all work correctly.
+# ----------------------------------------------------------------------
+subtest expression_evaluation
+
+# Setup: create provisioned users with different sources and login times.
+statement ok
+CREATE USER expr_alice PROVISIONSRC 'ldap:foo'
+
+statement ok
+CREATE USER expr_bob PROVISIONSRC 'ldap:bar'
+
+statement ok
+UPDATE system.users SET estimated_last_login_time = '2025-01-01 00:00:00+00'::TIMESTAMPTZ
+WHERE username IN ('expr_alice', 'expr_bob')
+
+# Confirm both users exist.
+query T rowsort
+SELECT username FROM system.users WHERE username IN ('expr_alice', 'expr_bob')
+----
+expr_alice
+expr_bob
+
+# --- SOURCE = <concatenation expression> ---
+# ('ldap:' || 'foo') should evaluate to 'ldap:foo' and match expr_alice.
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = ('ldap:' || 'foo') LIMIT 100
+
+# expr_alice should be dropped (source matched via expression evaluation).
+query T rowsort
+SELECT username FROM system.users WHERE username IN ('expr_alice', 'expr_bob')
+----
+expr_bob
+
+# Recreate expr_alice for the next test.
+statement ok
+CREATE USER expr_alice PROVISIONSRC 'ldap:foo'
+
+statement ok
+UPDATE system.users SET estimated_last_login_time = '2025-01-01 00:00:00+00'::TIMESTAMPTZ
+WHERE username = 'expr_alice'
+
+# --- LAST LOGIN BEFORE <interval expression> ---
+# (now() - '1 day'::interval) should evaluate to a concrete timestamp.
+# Both users last logged in on 2025-01-01 which is well before yesterday,
+# so both should be dropped.
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:foo',
+  LAST LOGIN BEFORE (now() - '1 day'::INTERVAL) LIMIT 100
+
+# expr_alice should be dropped (last login well before yesterday).
+query T
+SELECT username FROM system.users WHERE username = 'expr_alice'
+----
+
+# expr_bob should survive (different source, not matched).
+query T
+SELECT username FROM system.users WHERE username = 'expr_bob'
+----
+expr_bob
+
+# --- LAST LOGIN BEFORE with expression that evaluates to future ---
+# Recreate expr_alice to test that a future timestamp drops the user.
+statement ok
+CREATE USER expr_alice PROVISIONSRC 'ldap:foo'
+
+statement ok
+UPDATE system.users SET estimated_last_login_time = '2025-01-01 00:00:00+00'::TIMESTAMPTZ
+WHERE username = 'expr_alice'
+
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:foo',
+  LAST LOGIN BEFORE (now() + '1 day'::INTERVAL) LIMIT 100
+
+# expr_alice should be dropped (login is before tomorrow).
+query T
+SELECT username FROM system.users WHERE username = 'expr_alice'
+----
+
+# Clean up.
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:bar' LIMIT 100
+
+subtest end
+
+# ----------------------------------------------------------------------
+# Test 23: NULL filter expressions — passing NULL as SOURCE or
+# LAST LOGIN BEFORE returns an error instead of panicking.
+#
+# Before the DNull guard was added, NULL expressions would reach
+# tree.MustBeDString / tree.MustBeDTimestampTZ and panic the node.
+# ----------------------------------------------------------------------
+subtest null_filter_expressions
+
+statement error pq: SOURCE filter cannot be NULL
+DROP PROVISIONED ROLES WITH SOURCE = NULL::STRING LIMIT 10
+
+statement error pq: LAST LOGIN BEFORE filter cannot be NULL
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com',
+  LAST LOGIN BEFORE NULL::TIMESTAMPTZ LIMIT 10
+
+# NULL LAST LOGIN BEFORE without a SOURCE filter.
+statement error pq: LAST LOGIN BEFORE filter cannot be NULL
+DROP PROVISIONED ROLES WITH LAST LOGIN BEFORE NULL::TIMESTAMPTZ LIMIT 10
+
+subtest end
+
+# ----------------------------------------------------------------------
+# Test 24: Negative — no dedicated audit event for DROP PROVISIONED ROLES.
+#
+# Currently DROP PROVISIONED ROLES emits generic 'drop_role' events
+# rather than a dedicated 'drop_provisioned_role' event type. This test
+# verifies that no 'drop_provisioned_role' event type exists yet.
+# TODO(#170033): when a dedicated event type is added, update this test
+# to assert the new event type IS present.
+# ----------------------------------------------------------------------
+subtest no_dedicated_audit_event
+
+statement ok
+CREATE USER audit_prov1 PROVISIONSRC 'ldap:ldap.example.com'
+
+statement ok
+CREATE USER audit_prov2 PROVISIONSRC 'ldap:ldap.example.com'
+
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 100
+
+# Verify users were actually dropped.
+query T
+SELECT username FROM system.users WHERE username LIKE 'audit_prov%'
+----
+
+# No 'drop_provisioned_role' events should exist — the current
+# implementation reuses the generic 'drop_role' event type.
+query I
+SELECT count(*) FROM system.eventlog
+WHERE "eventType" = 'drop_provisioned_role'
+----
+0
+
+# Verify that generic 'drop_role' events WERE emitted (current behavior).
+# Each dropped user gets its own event.
+query T rowsort
+SELECT info::JSONB->>'RoleName' FROM system.eventlog
+WHERE "eventType" = 'drop_role'
+  AND info::JSONB->>'RoleName' IN ('audit_prov1', 'audit_prov2')
+----
+audit_prov1
+audit_prov2
+
+subtest end
+
+# ----------------------------------------------------------------------
+# Test 25: Session revocation — web sessions for dropped provisioned
+# users are revoked.
+#
+# TODO(#170033): the role deletion logic (system.users, role_members,
+# role_options, database_role_settings, web_sessions) is duplicated
+# between drop_role.go (inline) and drop_provisioned_roles.go
+# (deleteRole helper). Refactor to a shared helper so cleanup steps
+# stay in sync.
+# ----------------------------------------------------------------------
+subtest session_revocation
+
+statement ok
+CREATE USER sess_user PROVISIONSRC 'ldap:ldap.example.com'
+
+# Insert a fake active web session for sess_user.
+statement ok
+INSERT INTO system.web_sessions (
+  "hashedSecret", username, "createdAt", "expiresAt", user_id
+) VALUES (
+  b'\xde\xad\xbe\xef', 'sess_user', now(), now() + '24 hours'::INTERVAL,
+  (SELECT user_id FROM system.users WHERE username = 'sess_user')
+)
+
+# Verify the session is active (revokedAt IS NULL).
+query I
+SELECT count(*) FROM system.web_sessions
+WHERE username = 'sess_user' AND "revokedAt" IS NULL
+----
+1
+
+statement ok
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 100
+
+# Verify the user was dropped.
+query T
+SELECT username FROM system.users WHERE username = 'sess_user'
+----
+
+# Verify the session was revoked (revokedAt IS NOT NULL).
+query I
+SELECT count(*) FROM system.web_sessions
+WHERE username = 'sess_user' AND "revokedAt" IS NOT NULL
+----
+1
+
+# No active sessions should remain.
+query I
+SELECT count(*) FROM system.web_sessions
+WHERE username = 'sess_user' AND "revokedAt" IS NULL
+----
+0
+
+subtest end
+
+# ----------------------------------------------------------------------
+# Cleanup.
+# ----------------------------------------------------------------------
+
+statement ok
+DROP TABLE IF EXISTS dep_table
