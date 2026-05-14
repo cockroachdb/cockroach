@@ -220,6 +220,14 @@ var upgrades = []upgradebase.Upgrade{
 			"restore for a cluster predating this table can leave it empty",
 		),
 	),
+
+	upgrade.NewTenantUpgrade(
+		"create vcpu_hours_audit table",
+		clusterversion.V26_3_AddVcpuHoursAuditTable.Version(),
+		upgrade.NoPrecondition,
+		createVcpuHoursAuditTable,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
+	),
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }

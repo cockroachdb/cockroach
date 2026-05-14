@@ -58,6 +58,7 @@ statements table full
 system database full
 ui table full
 users table full
+vcpu_hours_audit table full
 zones table full
 
 # Database backup.

@@ -1302,6 +1302,7 @@ var disabledSystemTables = map[string]struct{}{
 	"system.transaction_statistics":         {},
 	"system.ui":                             {},
 	"system.users":                          {},
+	"system.vcpu_hours_audit":               {},
 	"system.web_sessions":                   {},
 }
 

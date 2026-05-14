@@ -82,6 +82,7 @@ translate database=system
 /Table/8{0-1}                              database system (host)
 /Table/8{1-2}                              database system (host)
 /Table/8{2-3}                              database system (host)
+/Table/8{3-4}                              database system (host)
 
 # Alter zone config fields on the database to ensure the effects cascade.
 exec-sql
@@ -168,6 +169,7 @@ translate database=system
 /Table/8{0-1}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/8{1-2}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/8{2-3}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/8{3-4}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 
 # Alter a named range that maps to a pseudo table ID, ensuring that its effects
 # are independent.
@@ -261,3 +263,4 @@ full-translate
 /Table/8{0-1}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/8{1-2}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/8{2-3}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/8{3-4}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true

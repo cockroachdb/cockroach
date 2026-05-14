@@ -989,6 +989,9 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 		// Restore after system.resource_groups so we can read max(id).
 		restoreInOrder: 1,
 	},
+	systemschema.VcpuHoursAuditTable.GetName(): {
+		shouldIncludeInClusterBackup: optInToClusterBackup,
+	},
 }
 
 func resourceGroupIDSeqRestoreFunc(

@@ -1355,6 +1355,7 @@ indexrelid  indrelid  indnatts  indisunique  indnullsnotdistinct  indisprimary  
 1396653708  67        2         false        false                false         false           false         false           true        false         true        true       false           9 2                                                          0 0                        0 0            1 2            NULL      NULL                                                                                                                2
 1396653709  67        2         false        false                false         false           false         false           true        false         true        true       false           10 2                                                         0 0                        0 0            1 2            NULL      NULL                                                                                                                2
 1396653711  67        2         true         false                true          false           true          false           true        false         true        true       false           1 2                                                          0 0                        0 0            2 2            NULL      NULL                                                                                                                2
+1443049375  83        3         true         false                true          false           true          false           true        false         true        true       false           1 2 3                                                        3403232968 0 0             0 0 0          2 2 2          NULL      NULL                                                                                                                3
 1489445036  35        11        false        false                false         false           false         false           true        false         true        true       false           2 1 3 6 7 8 9 10 11 12 13                                    0 0                        0 0            2 2            NULL      NULL                                                                                                                2
 1489445039  35        1         true         false                true          false           true          false           true        false         true        true       false           1                                                            0                          0              2              NULL      NULL                                                                                                                1
 1535840703  51        1         true         false                true          false           true          false           true        false         true        true       false           1                                                            0                          0              2              NULL      NULL                                                                                                                1
@@ -1547,6 +1548,9 @@ indexrelid  operator_argument_type_oid  operator_argument_position
 1396653709  0                           2
 1396653711  0                           1
 1396653711  0                           2
+1443049375  0                           1
+1443049375  0                           2
+1443049375  0                           3
 1489445036  0                           1
 1489445036  0                           2
 1489445039  0                           1
@@ -2892,7 +2896,7 @@ __OID__  pg_proc  __OID__       __OID__   -1      false     c
 
 ## pg_catalog.pg_proc
 
-query TOTOOFFO colnames,rowsort
+query TOTOORRO colnames,rowsort
 SELECT proname, pronamespace, nspname, proowner, prolang, procost, prorows, provariadic
 FROM pg_catalog.pg_proc p
 JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace

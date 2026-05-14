@@ -724,6 +724,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 				{"tenant_settings"},
 				{"ui"},
 				{"users"},
+				{"vcpu_hours_audit"},
 				{"zones"},
 			},
 		)
@@ -822,6 +823,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 				{"tenant_settings"},
 				{"ui"},
 				{"users"},
+				{"vcpu_hours_audit"},
 				{"zones"},
 			},
 		)

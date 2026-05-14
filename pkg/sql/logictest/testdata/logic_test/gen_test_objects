@@ -179,17 +179,17 @@ query T
 SELECT table_name FROM [SHOW TABLES]
 ORDER BY table_name
 ----
+j%pob_status
+job_Info
+job_progress
 join_tokens
-locatio%f9ns
-replication_const͌raint_?stats
-span_configurations
-sqlliveness
+lease%p
+migrations
+role_id_.seq
+span_cou nt
 sta😣tement_statistics
-t"enant_settings
-table_statistics_😍locks
-tenants
-transaction_diagnostics
-users
+tenant  s
+use  rs
 
 # Again, the column names are randomized.
 query TTT
@@ -198,26 +198,26 @@ WHERE table_catalog = 'newdb2' AND table_schema = 'public'
 ORDER BY table_name, column_name
 LIMIT 20
 ----
-join_tokens                       expiration        timestamp with time zone
-join_tokens                       id                uuid
-join_tokens                       rowid             bigint
-join_tokens                       secret            bytea
-"locatio%f9ns"                    "latitude "       numeric
-"locatio%f9ns"                    "locali!tyValue"  text
-"locatio%f9ns"                    "localityKey"     text
-"locatio%f9ns"                    longitude         numeric
-"locatio%f9ns"                    rowid             bigint
-"replication_const͌raint_?stats"  "config"""        text
-"replication_const͌raint_?stats"  report_id         bigint
-"replication_const͌raint_?stats"  rowid             bigint
-"replication_const͌raint_?stats"  "suBzone_id"      bigint
-"replication_const͌raint_?stats"  "type"           text
-"replication_const͌raint_?stats"  violating_ranges  bigint
-"replication_const͌raint_?stats"  violation_start   timestamp with time zone
-"replication_const͌raint_?stats"  zone_id           bigint
-span_configurations               config🙃           bytea
-span_configurations               end_key           bytea
-span_configurations               rowid             bigint
+"j%pob_status"  "j*ob_id"        bigint
+"j%pob_status"  rowid            bigint
+"j%pob_status"  "st̉  atus"      text
+"j%pob_status"  written          timestamp with time zone
+"job_Info"      "Job_id"         bigint
+"job_Info"      "info_k%q\vey"   text
+"job_Info"      rowid            bigint
+"job_Info"      value            bytea
+"job_Info"      written          timestamp with time zone
+job_progress    """job_id"       bigint
+job_progress    fraction         double precision
+job_progress    resolved         numeric
+job_progress    rowid            bigint
+job_progress    "wrItten"        timestamp with time zone
+join_tokens     "Id"             uuid
+join_tokens     exp😺iration      timestamp with time zone
+join_tokens     rowid            bigint
+join_tokens     secret           bytea
+"lease%p"       "crdb_re/gion'"  bytea
+"lease%p"       desc_id          bigint
 
 subtest templates/different_templates_in_each_db
 
@@ -235,16 +235,15 @@ SELECT quote_ident(database_name), quote_ident(schema_name), quote_ident(name)
 FROM "".crdb_internal.tables WHERE database_name ILIKE '%d%b%t%'
 ORDER BY database_name, schema_name, name
 ----
-"d%qbt_1"  public  advisory_locks
-"d%qbt_1"  public  cluster_metrics
-"d%qbt_1"  public  "ta&sk_pa%yloads"
-"d%qbt_2"  public  "cOmmen%qts"
-"d%qbt_2"  public  "loc
-                   ations"
-"d%qbt_2"  public  "resource\\xfb_groups"
-dbt_3      public  "job_s'tatus"
-dbt_3      public  settings
-dbt_3      public  "tra\\xaansaction_activity"
+"d%qbt_1"  public  "ad̷visoRy_locks"
+"d%qbt_1"  public  job_progress
+"d%qbt_1"  public  zones
+"d%qbt_2"  public  "span_stats_saMples"
+"d%qbt_2"  public  "statement_""execution_insights"
+"d%qbt_2"  public  tenants
+dbt_3      public  _transaction_execution_insights
+dbt_3      public  "reports_/meta"
+dbt_3      public  tenant_settings
 
 
 statement ok

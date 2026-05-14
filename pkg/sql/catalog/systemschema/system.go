@@ -1438,6 +1438,24 @@ CREATE TABLE system.resource_groups (
 	// fall in the reserved range.
 	ResourceGroupIDSequenceSchema = `
 CREATE SEQUENCE system.resource_group_id_seq START 16 MINVALUE 16 MAXVALUE 9223372036854775807;`
+
+	// VcpuHoursAuditTableSchema defines the schema for the system.vcpu_hours_audit
+	// table, which stores per-node, per-hour vCPU consumption data for license
+	// auditing. This table has a 30-day retention policy.
+	//
+	// * license_id: the license ID under which vCPUs are consumed (NULL if no license installed).
+	// * hour_timestamp: the timestamp of the hour bucket for this measurement.
+	// * node_id: the ID of the node reporting vCPU usage.
+	// * num_vcpu: the number of vCPUs on the node during this hour.
+	VcpuHoursAuditTableSchema = `
+CREATE TABLE system.vcpu_hours_audit (
+    license_id     STRING,
+    hour_timestamp TIMESTAMPTZ NOT NULL,
+    node_id        INT8 NOT NULL,
+    num_vcpu       FLOAT NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (license_id, hour_timestamp, node_id),
+    FAMILY "primary" (license_id, hour_timestamp, node_id, num_vcpu)
+);`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -1482,7 +1500,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // release version).
 //
 // NB: Don't set this to clusterversion.Latest; use a specific version instead.
-var SystemDatabaseSchemaBootstrapVersion = clusterversion.V26_3_AddResourceGroupsTable.Version()
+var SystemDatabaseSchemaBootstrapVersion = clusterversion.V26_3_AddVcpuHoursAuditTable.Version()
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
@@ -1688,6 +1706,7 @@ func MakeSystemTables() []SystemTable {
 		StatementsTable,
 		ResourceGroupsTable,
 		ResourceGroupIDSequence,
+		VcpuHoursAuditTable,
 	}
 }
 
@@ -5677,6 +5696,37 @@ var (
 			tbl.NextConstraintID = 0
 			tbl.PrimaryIndex.ConstraintID = 0
 		},
+	)
+
+	VcpuHoursAuditTable = makeSystemTable(
+		VcpuHoursAuditTableSchema,
+		systemTable(
+			catconstants.VcpuHoursAuditTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "license_id", ID: 1, Type: types.String},
+				{Name: "hour_timestamp", ID: 2, Type: types.TimestampTZ},
+				{Name: "node_id", ID: 3, Type: types.Int},
+				{Name: "num_vcpu", ID: 4, Type: types.Float},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:            "primary",
+					ID:              0,
+					ColumnNames:     []string{"license_id", "hour_timestamp", "node_id", "num_vcpu"},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4},
+					DefaultColumnID: 4,
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  1,
+				Unique:              true,
+				KeyColumnNames:      []string{"license_id", "hour_timestamp", "node_id"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{1, 2, 3},
+			},
+		),
 	)
 )
 

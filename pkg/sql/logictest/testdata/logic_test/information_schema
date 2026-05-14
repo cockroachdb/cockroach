@@ -1677,6 +1677,10 @@ system              public             29_81_1_not_null                         
 system              public             29_81_2_not_null                                                                                                name IS NOT NULL
 system              public             29_81_3_not_null                                                                                                config IS NOT NULL
 system              public             29_82_1_not_null                                                                                                value IS NOT NULL
+system              public             29_83_1_not_null                                                                                                license_id IS NOT NULL
+system              public             29_83_2_not_null                                                                                                hour_timestamp IS NOT NULL
+system              public             29_83_3_not_null                                                                                                node_id IS NOT NULL
+system              public             29_83_4_not_null                                                                                                num_vcpu IS NOT NULL
 system              public             29_8_1_not_null                                                                                                 id IS NOT NULL
 system              public             29_9_1_not_null                                                                                                 crdb_region IS NOT NULL
 system              public             check_bounds                                                                                                    ((start_key < end_key))

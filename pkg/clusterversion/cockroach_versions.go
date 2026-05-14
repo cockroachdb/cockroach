@@ -289,6 +289,9 @@ const (
 	// the system.resource_group_id_seq sequence used by the resource manager
 	// to persist per-tenant resource group configurations.
 	V26_3_AddResourceGroupsTable
+	// V26_3_AddVcpuHoursAuditTable adds the system.vcpu_hours_audit table for
+	// tracking vCPU consumption per node per hour for license auditing.
+	V26_3_AddVcpuHoursAuditTable
 
 	// *************************************************
 	// Step (1) Add new versions above this comment.
@@ -380,6 +383,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_3_AlterStatementsTablePK: {Major: 26, Minor: 2, Internal: 8},
 
 	V26_3_AddResourceGroupsTable: {Major: 26, Minor: 2, Internal: 10},
+
+	V26_3_AddVcpuHoursAuditTable: {Major: 26, Minor: 2, Internal: 12},
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// *************************************************
