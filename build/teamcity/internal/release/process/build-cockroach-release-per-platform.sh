@@ -6,7 +6,7 @@
 # included in the /LICENSE file.
 
 
-set -euxo pipefail
+set -euo pipefail
 
 dir="$(dirname $(dirname $(dirname $(dirname $(dirname "${0}")))))"
 source "$dir/release/teamcity-support.sh"
@@ -35,16 +35,25 @@ fi
 
 if [[ -z "${DRY_RUN}" ]] ; then
   gcs_bucket="cockroach-release-artifacts-staged-prod"
-  gcr_credentials="$GCS_CREDENTIALS_PROD"
-  # export the variable to avoid shell escaping
-  export gcs_credentials="$GCS_CREDENTIALS_PROD"
   gcr_staged_repository="us-docker.pkg.dev/releases-prod/cockroachdb-staged-releases/${cockroach_archive_prefix}"
 else
   gcs_bucket="cockroach-release-artifacts-staged-dryrun"
-  gcr_credentials="$GCS_CREDENTIALS_DEV"
-  # export the variable to avoid shell escaping
-  export gcs_credentials="$GCS_CREDENTIALS_DEV"
   gcr_staged_repository="us-docker.pkg.dev/releases-dev-356314/cockroachdb-staged-releases/${cockroach_archive_prefix}"
+fi
+
+# With WIF (GitHub Actions), credentials are handled via mounted credential
+# files rather than JSON key env vars. gcs_credentials and gcr_credentials may be empty.
+if [[ -n "${GCS_CREDENTIALS_PROD:-}" || -n "${GCS_CREDENTIALS_DEV:-}" ]]; then
+  if [[ -z "${DRY_RUN}" ]] ; then
+    gcr_credentials="$GCS_CREDENTIALS_PROD"
+    export gcs_credentials="$GCS_CREDENTIALS_PROD"
+  else
+    gcr_credentials="$GCS_CREDENTIALS_DEV"
+    export gcs_credentials="$GCS_CREDENTIALS_DEV"
+  fi
+else
+  gcr_credentials=""
+  export gcs_credentials=""
 fi
 
 tc_end_block "Variable Setup"
@@ -57,7 +66,12 @@ BAZEL_BIN=$(bazel info bazel-bin)
 export google_credentials="$gcs_credentials"
 source "build/teamcity-support.sh"  # For log_into_gcloud
 log_into_gcloud
-export GOOGLE_APPLICATION_CREDENTIALS="$PWD/.google-credentials.json"
+# Under WIF (GitHub Actions), GOOGLE_APPLICATION_CREDENTIALS is already set to
+# the mounted credential file. Only override it for TeamCity (service-account
+# key written to .google-credentials.json by log_into_gcloud).
+if [[ -z "${CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE:-}" ]]; then
+  export GOOGLE_APPLICATION_CREDENTIALS="$PWD/.google-credentials.json"
+fi
 
 cat licenses/THIRD-PARTY-NOTICES.txt > /tmp/THIRD-PARTY-NOTICES.txt.tmp
 echo "================================================================================" >> /tmp/THIRD-PARTY-NOTICES.txt.tmp 

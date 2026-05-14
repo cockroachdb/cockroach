@@ -6,7 +6,7 @@
 # included in the /LICENSE file.
 
 
-set -euxo pipefail
+set -euo pipefail
 
 dir="$(dirname $(dirname $(dirname $(dirname $(dirname "${0}")))))"
 source "$dir/release/teamcity-support.sh"
@@ -21,11 +21,21 @@ fi
 
 version=$(grep -v "^#" "$dir/../pkg/build/version.txt" | head -n1)
 if [[ -z "${DRY_RUN}" ]] ; then
-  gcr_credentials="$GCS_CREDENTIALS_PROD"
   gcr_staged_repository="us-docker.pkg.dev/releases-prod/cockroachdb-staged-releases/${cockroach_archive_prefix}"
 else
-  gcr_credentials="$GCS_CREDENTIALS_DEV"
   gcr_staged_repository="us-docker.pkg.dev/releases-dev-356314/cockroachdb-staged-releases/${cockroach_archive_prefix}"
+fi
+
+# With WIF (GitHub Actions), credentials are handled via mounted credential
+# files rather than JSON key env vars. gcr_credentials may be empty.
+if [[ -n "${GCS_CREDENTIALS_PROD:-}" || -n "${GCS_CREDENTIALS_DEV:-}" ]]; then
+  if [[ -z "${DRY_RUN}" ]] ; then
+    gcr_credentials="$GCS_CREDENTIALS_PROD"
+  else
+    gcr_credentials="$GCS_CREDENTIALS_DEV"
+  fi
+else
+  gcr_credentials=""
 fi
 tc_end_block "Variable Setup"
 
