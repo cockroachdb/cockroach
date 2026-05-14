@@ -13,15 +13,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/errors"
 )
 
 // InstanceUnavailableError is returned when one or more SQL instances required
 // for the distributed merge are unavailable. It is marked as a permanent job
-// error because waitForRequiredInstances already retries with exponential
-// backoff before surfacing this error, so restarting the entire job would be
-// wasteful.
+// error because waitForViablePlan already retries with exponential backoff
+// before surfacing this error, so restarting the entire job would be wasteful.
 type InstanceUnavailableError struct {
 	UnavailableInstances []base.SQLInstanceID
 }
@@ -45,7 +43,7 @@ func (e *InstanceUnavailableError) Error() string {
 // or an InstanceUnavailableError (wrapped as a permanent job error) if any are
 // unavailable.
 func CheckRequiredInstancesAvailable(
-	ssts []execinfrapb.BulkMergeSpec_SST, availableInstances []sqlinstance.InstanceInfo,
+	ssts []execinfrapb.BulkMergeSpec_SST, availableInstances []base.SQLInstanceID,
 ) error {
 	if len(ssts) == 0 {
 		return nil
@@ -64,8 +62,8 @@ func CheckRequiredInstancesAvailable(
 
 	// Build a set of available instance IDs.
 	availableSet := make(map[base.SQLInstanceID]struct{}, len(availableInstances))
-	for _, inst := range availableInstances {
-		availableSet[inst.InstanceID] = struct{}{}
+	for _, id := range availableInstances {
+		availableSet[id] = struct{}{}
 	}
 
 	// Find unavailable instances.
