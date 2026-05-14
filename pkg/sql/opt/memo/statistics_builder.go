@@ -9,6 +9,7 @@ import (
 	"context"
 	"math"
 	"reflect"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -3170,14 +3171,40 @@ func (sb *statisticsBuilder) finalizeFromCardinality(relProps *props.Relational)
 	}
 }
 
+// distinctCountInvariantLogLimiter rate-limits the warning emitted when
+// the optimizer produces a column statistic that violates the
+// "distinct count > 0 if row count > 0" invariant. See the comment in
+// finalizeFromRowCountAndDistinctCounts.
+var distinctCountInvariantLogLimiter = log.Every(10 * time.Second)
+
 func (sb *statisticsBuilder) finalizeFromRowCountAndDistinctCounts(
 	colStat *props.ColumnStatistic, s *props.Statistics,
 ) {
 	rowCount := s.RowCount
 
-	// We should always have at least one distinct value if row count > 0.
+	// A column statistic with a non-zero row count must have a non-zero
+	// distinct count: every row contributes at least one observed value.
+	// Several optimizer paths enforce this directly (e.g., the outer-join
+	// guards in buildJoin and colStatJoin). When some other path produces
+	// inconsistent stats anyway (see #46230, #62289, #73106, #169804),
+	// fail loudly in test builds so the upstream bug surfaces, but recover
+	// in production so an internal estimation slip doesn't fail the user's
+	// query. Use the same heuristic colStatLeaf uses when no statistics
+	// are available; it's a more neutral guess than 1, which would assert
+	// that every row holds the same value and skew downstream selectivity
+	// estimates. Multi-column constraints below will tighten this if
+	// per-column statistics are present.
 	if rowCount > 0 && colStat.DistinctCount == 0 {
-		panic(errors.AssertionFailedf("estimated distinct count must be non-zero"))
+		if buildutil.CrdbTestBuild {
+			panic(errors.AssertionFailedf("estimated distinct count must be non-zero"))
+		}
+		if distinctCountInvariantLogLimiter.ShouldLog() {
+			log.Dev.Errorf(sb.ctx,
+				"estimated distinct count must be non-zero: cols=%s rowCount=%v nullCount=%v",
+				colStat.Cols, rowCount, colStat.NullCount,
+			)
+		}
+		colStat.DistinctCount = UnknownDistinctCountRatio * rowCount
 	}
 
 	// If this is a multi-column statistic, the distinct count should be no
