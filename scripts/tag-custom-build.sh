@@ -16,19 +16,26 @@
 #
 # How to use this script:
 #
+# The --repo flag is required and specifies the destination GitHub
+# repository to push the tag to, for example:
+#
+#   --repo=git@github.com:cockroachdb/cockroach.git
+#
 # 1) To tag the checked out SHA (the script is not available for releases
 #    v20.1.5, v19.2.10 and older; use option 2 for those releases) run it
 #    with no arguments from the root of the repo.
+#
+#      ./scripts/tag-custom-build.sh --repo=git@github.com:cockroachdb/cockroach.git
 #
 # 2) To tag a non-checked out SHA including any SHAs on releases (or branches)
 #    older than v20.1.5 and v19.2.10, run it from the root of the repo with
 #    the SHA that you want to tag as the single argument.
 #
-#      ./scripts/tag-custom-build.sh "$SHA"
+#      ./scripts/tag-custom-build.sh --repo=git@github.com:cockroachdb/cockroach.git "$SHA"
 #
 #    Use the --jj flag to get the current SHA from jj instead of git:
 #
-#      ./scripts/tag-custom-build.sh --jj
+#      ./scripts/tag-custom-build.sh --repo=git@github.com:cockroachdb/cockroach.git --jj
 #
 # Note the Tag Name and Build ID (printed at the end of the script output).
 #
@@ -45,6 +52,7 @@
 set -euo pipefail
 
 use_jj=false
+repo=""
 
 # Parse command line options
 while getopts ":j-:" opt; do
@@ -56,6 +64,13 @@ while getopts ":j-:" opt; do
       case "${OPTARG}" in
         jj)
           use_jj=true
+          ;;
+        repo=*)
+          repo="${OPTARG#repo=}"
+          ;;
+        repo)
+          repo="${!OPTIND}"
+          OPTIND=$((OPTIND+1))
           ;;
         *)
           echo "Invalid option: --${OPTARG}" >&2
@@ -72,6 +87,11 @@ done
 
 # Shift past the processed options
 shift $((OPTIND-1))
+
+if [ -z "$repo" ] ; then
+    echo "Error: --repo is required, for example: --repo=git@github.com:cockroachdb/cockroach.git" >&2
+    exit 1
+fi
 
 # Get SHA from positional parameter if provided
 SHA="${1-}"
@@ -90,7 +110,7 @@ git fetch -t
 ID="$(git describe --tags --match=v[0-9]* "$SHA")"
 TAG="custombuild-$ID"
 
-git push git@github.com:cockroachdb/cockroach.git "$SHA:refs/tags/$TAG"
+git push "$repo" "$SHA:refs/tags/$TAG"
 
 TAG_URL="https://github.com/cockroachdb/cockroach/releases/tag/${TAG}"
 TEAMCITY_URL="https://teamcity.cockroachdb.com/buildConfiguration/Internal_Cockroach_Release_Customized_MakeAndPublishCustomizedBuild?mode=builds&branch=${TAG}"
