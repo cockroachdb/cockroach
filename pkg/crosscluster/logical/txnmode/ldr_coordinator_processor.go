@@ -348,7 +348,7 @@ func (p *ldrCoordinatorProcessor) runScheduleAndRoute(ctx context.Context) error
 				batch.transactions[i].TxnID.ApplierID = applierID
 
 				lockSet, err := p.lockSynthesizer.DeriveLocks(
-					ctx, batch.transactions[i].WriteSet,
+					ctx, batch.transactions[i].WriteSet, batch.rawTransactions[i],
 				)
 				if err != nil {
 					return errors.Wrap(err, "deriving locks")
@@ -369,7 +369,7 @@ func (p *ldrCoordinatorProcessor) runScheduleAndRoute(ctx context.Context) error
 					EventHorizon: eventHorizon,
 				}
 
-				row := p.encodeScheduledTxn(scheduled, applierID, batch.rawTransactions[i])
+				row := p.encodeScheduledTxn(scheduled, applierID, lockSet.SortedRawKVs)
 				select {
 				case <-ctx.Done():
 					return ctx.Err()

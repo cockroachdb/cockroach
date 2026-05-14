@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -25,8 +26,9 @@ type Lock struct {
 }
 
 type LockSet struct {
-	Locks      []Lock
-	SortedRows []ldrdecoder.DecodedRow
+	Locks []Lock
+	SortedRows   []ldrdecoder.DecodedRow
+	SortedRawKVs []streampb.StreamEvent_KV
 }
 
 type LockSynthesizer struct {
@@ -77,8 +79,13 @@ type rowsWithLock struct {
 }
 
 func (ls *LockSynthesizer) DeriveLocks(
-	ctx context.Context, rows []ldrdecoder.DecodedRow,
+	ctx context.Context, rows []ldrdecoder.DecodedRow, rawKVs []streampb.StreamEvent_KV,
 ) (LockSet, error) {
+	if len(rows) != len(rawKVs) {
+		return LockSet{}, errors.AssertionFailedf(
+			"rows and rawKVs must have the same length: %d vs %d", len(rows), len(rawKVs))
+	}
+
 	// We build a table of locks for two reasons:
 	// 1. We use it to eliminate duplicate locks for the same row.
 	// 2. We need to topologically sort the rows to get an apply order and
@@ -104,14 +111,22 @@ func (ls *LockSynthesizer) DeriveLocks(
 		}
 	}
 
-	sorted, err := ls.sort(ctx, rows, rowLocks, locks)
+	order, err := ls.sort(ctx, rows, rowLocks, locks)
 	if err != nil {
 		return LockSet{}, err
 	}
 
+	sortedRows := make([]ldrdecoder.DecodedRow, len(order))
+	sortedRawKVs := make([]streampb.StreamEvent_KV, len(order))
+	for i, idx := range order {
+		sortedRows[i] = rows[idx]
+		sortedRawKVs[i] = rawKVs[idx]
+	}
+
 	lockSet := LockSet{
-		SortedRows: sorted,
-		Locks:      make([]Lock, 0, len(locks)),
+		SortedRows:   sortedRows,
+		SortedRawKVs: sortedRawKVs,
+		Locks:        make([]Lock, 0, len(locks)),
 	}
 
 	for hash, lr := range locks {

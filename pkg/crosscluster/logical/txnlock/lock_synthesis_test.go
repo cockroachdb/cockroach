@@ -1156,7 +1156,7 @@ func TestDeriveLocks(t *testing.T) {
 	) LockSet {
 		t.Helper()
 		rows := decodeTxn(t, tc.events)
-		result, err := ls.DeriveLocks(ctx, rows)
+		result, err := ls.DeriveLocks(ctx, rows, tc.events)
 		if tc.err != nil {
 			require.ErrorIs(t, err, tc.err)
 			return LockSet{}

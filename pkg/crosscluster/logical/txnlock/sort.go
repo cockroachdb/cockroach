@@ -23,25 +23,26 @@ const (
 	statusVisited  sortStatus = 2
 )
 
-// sort topologically sorts the write set by the order writes should be
+// sort topologically sorts the write set into the order writes should be
 // applied.
 func (ls *LockSynthesizer) sort(
 	ctx context.Context,
 	rows []ldrdecoder.DecodedRow,
 	rowLocks [][]Lock,
 	locks map[LockHash]rowsWithLock,
-) ([]ldrdecoder.DecodedRow, error) {
+) ([]int, error) {
 	status := make([]sortStatus, len(rows))
-	sorted := make([]ldrdecoder.DecodedRow, 0, len(rows))
+	order := make([]int, 0, len(rows))
 
 	for i := range rows {
-		err := ls.sortInner(ctx, i, rows, status, rowLocks, locks, &sorted)
+		rowOrder, err := ls.sortInner(ctx, i, rows, status, rowLocks, locks)
 		if err != nil {
 			return nil, err
 		}
+		order = append(order, rowOrder...)
 	}
 
-	return sorted, nil
+	return order, nil
 }
 
 func (ls *LockSynthesizer) sortInner(
@@ -51,17 +52,17 @@ func (ls *LockSynthesizer) sortInner(
 	status []sortStatus,
 	rowLocks [][]Lock,
 	locks map[LockHash]rowsWithLock,
-	output *[]ldrdecoder.DecodedRow,
-) error {
+) ([]int, error) {
 	if status[row] == statusVisited {
-		return nil
+		return nil, nil
 	}
 	if status[row] == statusVisiting {
-		return ErrApplyCycle
+		return nil, ErrApplyCycle
 	}
 
 	status[row] = statusVisiting
 
+	var rowOrder []int
 	// This is mostly a standard topological sort with one quirk. We are using
 	// the lock set to identify possible dependencies. So we need to additionally
 	// filter with dependsOn to ensure there is a real edge between the rows. If
@@ -79,18 +80,20 @@ func (ls *LockSynthesizer) sortInner(
 			}
 			dep, err := ls.dependsOn(ctx, rows[row], rows[dependentRow])
 			if err != nil {
-				return err
+				return nil, err
 			}
 			if !dep {
 				continue
 			}
-			if err := ls.sortInner(ctx, int(dependentRow), rows, status, rowLocks, locks, output); err != nil {
-				return err
+			innerRowOrder, err := ls.sortInner(ctx, int(dependentRow), rows, status, rowLocks, locks)
+			if err != nil {
+				return nil, err
 			}
+			rowOrder = append(rowOrder, innerRowOrder...)
 		}
 	}
 
 	status[row] = statusVisited
-	*output = append(*output, rows[row])
-	return nil
+	rowOrder = append(rowOrder, row)
+	return rowOrder, nil
 }
