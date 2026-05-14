@@ -88,13 +88,8 @@ func (ex *connExecutor) execPrepare(
 		statementHintsCache,
 		ex.sessionData().Database,
 	)
-	// Step the read sequence so that any KV reads during Prepare (e.g.
-	// descriptor resolution) use a sequence number past ignored ranges
-	// from a prior savepoint rollback.
-	if _, isOpen := ex.machine.CurState().(stateOpen); isOpen {
-		if err := ex.stepReadSequence(ctx); err != nil {
-			return retErr(err)
-		}
+	if err := ex.stepReadSequenceForExtendedProtocol(ctx); err != nil {
+		return retErr(err)
 	}
 	_, err := ex.addPreparedStmt(
 		ctx,
@@ -435,14 +430,8 @@ func (ex *connExecutor) execBind(
 
 	numQArgs := uint16(len(ps.InferredTypes))
 
-	// Step the read sequence so that any KV reads during Bind (e.g.
-	// ResolveTypeByOID for enum parameters, descriptor staleness checks)
-	// use a sequence number past ignored ranges from a prior savepoint
-	// rollback.
-	if _, isOpen := ex.machine.CurState().(stateOpen); isOpen {
-		if err := ex.stepReadSequence(ctx); err != nil {
-			return retErr(err)
-		}
+	if err := ex.stepReadSequenceForExtendedProtocol(ctx); err != nil {
+		return retErr(err)
 	}
 
 	// Decode the arguments, except for internal queries for which we just verify

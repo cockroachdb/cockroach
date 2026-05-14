@@ -2294,6 +2294,35 @@ func (ex *connExecutor) stepReadSequence(ctx context.Context) error {
 	return nil
 }
 
+// stepReadSequenceForExtendedProtocol advances the txn's read sequence past
+// any sequence numbers in the savepoint-rolled-back ignored range, so that KV
+// reads issued during pgwire Parse/Bind (e.g. descriptor resolution,
+// ResolveTypeByOID for enum parameters) observe a valid read snapshot.
+//
+// No-op when:
+//
+//   - the txn isn't open (no statement execution context to step on
+//     behalf of), or
+//   - this connExecutor is an internal executor running under an outer user
+//     txn. The outer connExecutor owns the txn's read sequence and has
+//     already stepped past any ignored range before invoking the internal
+//     executor; advancing it again from inside a sub-operation would leak
+//     out and corrupt the outer statement's read snapshot. Note that the
+//     save/restore dance in execStmtInOpenState does not save us here:
+//     PrepareStmt and BindStmt are sibling cases to ExecPortal in the
+//     command loop (see execCmd), so they run outside that defer scope —
+//     by the time ExecPortal's execStmtInOpenState captures prevSeqNum,
+//     a Step here has already become part of the txn's state.
+func (ex *connExecutor) stepReadSequenceForExtendedProtocol(ctx context.Context) error {
+	if _, isOpen := ex.machine.CurState().(stateOpen); !isOpen {
+		return nil
+	}
+	if ex.executorType == executorTypeInternal && ex.extraTxnState.underOuterTxn {
+		return nil
+	}
+	return ex.stepReadSequence(ctx)
+}
+
 // handleAOST gets the AsOfSystemTime clause from the statement, and sets
 // the timestamps of the transaction accordingly.
 func (ex *connExecutor) handleAOST(ctx context.Context, stmt tree.Statement) error {
