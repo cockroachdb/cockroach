@@ -129,11 +129,16 @@ func (n *DropProvisionedRolesNode) startExec(params runParams) error {
 	}
 	query, queryArgs := buildProvisionedRolesQuery(sourceVal, lastLoginVal, n.limitCount)
 
+	// Use NodeUserSessionDataOverride because the authorization check
+	// (CREATEROLE) already happened at plan time. A non-admin CREATEROLE
+	// user does not have SELECT on system.users, so the query must run
+	// with elevated privileges. The query is hardcoded with only
+	// parameterized filter values — no user-controlled SQL expressions.
 	rows, err := params.p.InternalSQLTxn().QueryBufferedEx(
 		params.ctx,
 		"drop-provisioned-roles-find",
 		params.p.txn,
-		sessiondata.InternalExecutorOverride{User: params.p.User()},
+		sessiondata.NodeUserSessionDataOverride,
 		query,
 		queryArgs...,
 	)
@@ -252,6 +257,10 @@ func (n *DropProvisionedRolesNode) evalFilterExprs(
 		if err != nil {
 			return nil, nil, err
 		}
+		if d == tree.DNull {
+			return nil, nil, pgerror.Newf(pgcode.InvalidParameterValue,
+				"SOURCE filter cannot be NULL")
+		}
 		s := string(tree.MustBeDString(d))
 		sourceVal = &s
 	}
@@ -259,6 +268,10 @@ func (n *DropProvisionedRolesNode) evalFilterExprs(
 		d, err := eval.Expr(params.ctx, params.EvalContext(), n.lastLoginBefore)
 		if err != nil {
 			return nil, nil, err
+		}
+		if d == tree.DNull {
+			return nil, nil, pgerror.Newf(pgcode.InvalidParameterValue,
+				"LAST LOGIN BEFORE filter cannot be NULL")
 		}
 		v := tree.MustBeDTimestampTZ(d)
 		lastLoginVal = &v
