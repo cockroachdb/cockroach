@@ -212,6 +212,12 @@ func (rd *Deleter) DeleteRow(
 		return err
 	}
 
+	if oth.PreviousWasDeleted {
+		// If we are updating a tombstone, then there are no secondary index entries
+		// that need to be deleted.
+		return nil
+	}
+
 	// Delete the row from any secondary indices.
 	for i, index := range rd.Helper.Indexes {
 		// If the index ID exists in the set of indexes to ignore, do not
