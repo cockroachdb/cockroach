@@ -220,3 +220,41 @@ EXECUTE q('cr.node.does_not_exist',
           '{"interval":"10s"}'::jsonb)
 ----
 timestamp  value  source
+
+subtest caps
+
+# Time-range cap: a window larger than max_time_range trips before any
+# TSDB I/O. The error message names the cluster setting so an operator
+# can find and tune it.
+statement ok
+SET CLUSTER SETTING sql.crdb_internal.tsdb_query.max_time_range = '1m'
+
+query error pq: crdb_internal\.tsdb_query effective window of .* exceeds the configured maximum of 1m0s
+SELECT * FROM crdb_internal.tsdb_query(
+  'cr.node.sql.query.count',
+  '2026-05-01 00:00:00+00'::timestamptz,
+  '2026-05-01 01:00:00+00'::timestamptz
+)
+
+statement ok
+RESET CLUSTER SETTING sql.crdb_internal.tsdb_query.max_time_range
+
+# Row-count cap: setting max_rows to 0 disables the cap entirely;
+# the call returns its full result set without any row-count check.
+# The cap-trip path on positive row counts is exercised in the e2e
+# test where a known datapoint can be staged deterministically;
+# logic tests run against an empty TSDB so they can't reliably force
+# a positive row count.
+statement ok
+SET CLUSTER SETTING sql.crdb_internal.tsdb_query.max_rows = 0
+
+query TFT
+SELECT * FROM crdb_internal.tsdb_query(
+  'cr.node.does_not_exist',
+  '2026-05-01 00:00:00+00'::timestamptz,
+  '2026-05-01 00:00:01+00'::timestamptz
+)
+----
+
+statement ok
+RESET CLUSTER SETTING sql.crdb_internal.tsdb_query.max_rows

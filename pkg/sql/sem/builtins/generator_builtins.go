@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/workloadindexrec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
@@ -238,6 +239,37 @@ func (g *aclexplodeGenerator) Values() (tree.Datums, error) {
 	row := g.items[g.nextIdx-1]
 	return tree.Datums{row.grantor, row.grantee, row.privilegeType, row.isGrantable}, nil
 }
+
+// tsdbQueryMaxTimeRange caps the size of a single
+// crdb_internal.tsdb_query window, measured against end_time clamped
+// to wall-clock now. The 30-day hard maximum is the largest window
+// the underlying TSDB resolutions can serve without turning the
+// default row-count cap into a guaranteed trip.
+var tsdbQueryMaxTimeRange = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"sql.crdb_internal.tsdb_query.max_time_range",
+	"maximum effective time range that a single crdb_internal.tsdb_query "+
+		"call may cover; the requested end_time is first clamped to the "+
+		"current wall-clock time before this cap is checked",
+	7*24*time.Hour,
+	settings.NonNegativeDurationWithMaximum(30*24*time.Hour),
+	settings.WithPublic,
+)
+
+// tsdbQueryMaxRows caps the number of rows a single
+// crdb_internal.tsdb_query call may return. Enforced after the bridge
+// materializes rows (no streaming today), so peak memory before the
+// trip is bounded by the cap.
+var tsdbQueryMaxRows = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.crdb_internal.tsdb_query.max_rows",
+	"maximum number of rows a single crdb_internal.tsdb_query call may "+
+		"return; queries that would return more error before any rows "+
+		"are surfaced. Set to 0 to disable the cap.",
+	500_000,
+	settings.IntInRange(0, 5_000_000),
+	settings.WithPublic,
+)
 
 // generators is a map from name to slice of Builtins for all built-in
 // generators.
@@ -2852,11 +2884,18 @@ var tsdbQueryGeneratorType = types.MakeLabeledTuple(
 // eval.TimeSeriesQuerier once during Start, materializes the rows,
 // and serves them out via Next/Values.
 type tsdbQueryGenerator struct {
-	query   eval.TimeSeriesQuery
-	querier eval.TimeSeriesQuerier
-	acc     mon.BoundAccount
-	rows    []eval.TimeSeriesRow
-	index   int
+	query    eval.TimeSeriesQuery
+	querier  eval.TimeSeriesQuerier
+	settings *cluster.Settings
+	// emptyResult is set by the factory when start_time lies at or
+	// after the clamped end (the window has collapsed). Start skips the
+	// bridge in that case, which also avoids calling UnixNano on a
+	// timestamp past year ~2262, where the int64 nanosecond
+	// representation overflows.
+	emptyResult bool
+	acc         mon.BoundAccount
+	rows        []eval.TimeSeriesRow
+	index       int
 	// buf avoids re-allocating the Datums slice on every Values call.
 	buf [3]tree.Datum
 }
@@ -2906,14 +2945,41 @@ func newTSDBQueryGenerator(
 			"crdb_internal.tsdb_query end_time (%s) must be greater than start_time (%s)",
 			endTS.Time, startTS.Time)
 	}
+	// The time-range cap is measured against the now-clamped end, so a
+	// window partially in the future is not charged for the
+	// unrealizable portion. The same clamped end is forwarded to the
+	// bridge so the cap-checked and dispatched ends match. The
+	// bridge's own start-clamp can stretch the dispatched window by up
+	// to one bucket; that's fine since this cap is a guardrail, not a
+	// hard QoS limit (the row-count cap is the operator backstop).
+	effectiveEnd := endTS.Time
+	if now := timeutil.Now(); effectiveEnd.After(now) {
+		effectiveEnd = now
+	}
+	// Short-circuit in time.Time space (not bridge-side) to avoid
+	// calling UnixNano on a startTS past year ~2262, which overflows
+	// the int64 nanosecond representation.
+	if !effectiveEnd.After(startTS.Time) {
+		return &tsdbQueryGenerator{emptyResult: true}, nil
+	}
+	effectiveSpan := effectiveEnd.Sub(startTS.Time)
+	if maxRange := tsdbQueryMaxTimeRange.Get(&evalCtx.Settings.SV); effectiveSpan > maxRange {
+		return nil, errors.WithHintf(
+			pgerror.Newf(pgcode.ProgramLimitExceeded,
+				"crdb_internal.tsdb_query effective window of %s exceeds the configured maximum of %s",
+				effectiveSpan, maxRange),
+			"raise the cluster setting %s, or shrink the requested window",
+			tsdbQueryMaxTimeRange.Name())
+	}
 	return &tsdbQueryGenerator{
 		query: eval.TimeSeriesQuery{
 			MetricName: name,
 			StartNanos: startTS.UnixNano(),
-			EndNanos:   endTS.UnixNano(),
+			EndNanos:   effectiveEnd.UnixNano(),
 		},
-		querier: querier,
-		acc:     evalCtx.Planner.ExecMon().MakeBoundAccount(),
+		querier:  querier,
+		settings: evalCtx.Settings,
+		acc:      evalCtx.Planner.ExecMon().MakeBoundAccount(),
 	}, nil
 }
 
@@ -2943,8 +3009,22 @@ func (*tsdbQueryGenerator) ResolvedType() *types.T { return tsdbQueryGeneratorTy
 
 // Start implements the eval.ValueGenerator interface.
 func (g *tsdbQueryGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+	if g.emptyResult {
+		g.index = -1
+		return nil
+	}
+	// The bridge enforces the cap (pre-check and post-check) and
+	// returns eval.ErrTooManyTimeSeriesRows on trip; we just attach
+	// the SQL-surface hint here.
+	g.query.MaxRows = tsdbQueryMaxRows.Get(&g.settings.SV)
 	rows, err := g.querier.QueryTimeSeries(ctx, g.query)
 	if err != nil {
+		if errors.Is(err, eval.ErrTooManyTimeSeriesRows) {
+			return errors.WithHintf(
+				pgerror.Wrapf(err, pgcode.ProgramLimitExceeded, "crdb_internal.tsdb_query"),
+				"raise the cluster setting %s, or shrink the requested window",
+				tsdbQueryMaxRows.Name())
+		}
 		return err
 	}
 	if err := g.acc.Grow(ctx, int64(len(rows))*tsdbQueryRowSize); err != nil {
