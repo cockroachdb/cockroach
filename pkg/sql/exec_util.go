@@ -3552,6 +3552,8 @@ var bufferableParamStatusUpdates = func() []bufferableParamStatusUpdate {
 		"IntervalStyle",
 		"is_superuser",
 		"TimeZone",
+		"default_transaction_read_only",
+		"search_path",
 	}
 	ret := make([]bufferableParamStatusUpdate, len(params))
 	for i, param := range params {

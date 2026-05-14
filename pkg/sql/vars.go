@@ -537,7 +537,13 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().DefaultTxnReadOnly), nil
 		},
+		GetFromSessionData: func(sd *sessiondata.SessionData) string {
+			return formatBoolAsPostgresSetting(sd.DefaultTxnReadOnly)
+		},
 		GlobalDefault: globalFalse,
+		Equal: func(a, b *sessiondata.SessionData) bool {
+			return a.DefaultTxnReadOnly == b.DefaultTxnReadOnly
+		},
 	},
 
 	// CockroachDB extension.
@@ -1589,8 +1595,14 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return evalCtx.SessionData().SearchPath.String(), nil
 		},
+		GetFromSessionData: func(sd *sessiondata.SessionData) string {
+			return sd.SearchPath.String()
+		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return sessiondata.DefaultSearchPath.String()
+		},
+		Equal: func(a, b *sessiondata.SessionData) bool {
+			return a.SearchPath.Equals(&b.SearchPath)
 		},
 	},
 
