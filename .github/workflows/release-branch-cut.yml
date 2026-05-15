@@ -38,6 +38,10 @@ env:
   # Scheduled runs default to non-dry-run; manual runs honor the input.
   DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || '' }}
   TEST_ISSUE_KEY: ${{ github.event_name == 'workflow_dispatch' && inputs.test_issue_key || '' }}
+  # Forwarded into the container so the release binary's isProductionRepo()
+  # check sees the same value the workflow's `if:` gate uses. Without this,
+  # the binary defaults to non-prod and routes Slack to #db-release-test.
+  IS_PRODUCTION_REPO: ${{ vars.IS_PRODUCTION_REPO }}
   # Gated on USE_PROD_GCP so a staging-prod repo (IS_PRODUCTION_REPO=true,
   # USE_PROD_GCP unset) can rehearse the branch-cut flow against the dev
   # Secret Manager. There is no inputs.dry_run term — branch-cut's
