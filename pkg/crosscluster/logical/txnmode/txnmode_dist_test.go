@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -330,6 +331,7 @@ func TestCheckpointHandler(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	registry := s.JobRegistry().(*jobs.Registry)
+	internalDB := s.InternalDB().(isql.DB)
 	db := sqlutils.MakeSQLRunner(s.ApplicationLayer().SQLConn(t))
 
 	createJob := func(t *testing.T) *jobs.Job {
@@ -362,7 +364,7 @@ func TestCheckpointHandler(t *testing.T) {
 		applierIDs := []base.SQLInstanceID{1, 2}
 
 		ch := newCheckpointHandler(
-			job, nil, frontierCh, applierIDs, hlc.Timestamp{}, hlc.MaxTimestamp,
+			job, internalDB, nil, frontierCh, applierIDs, hlc.Timestamp{}, hlc.MaxTimestamp,
 			func() {},
 		)
 
@@ -393,7 +395,7 @@ func TestCheckpointHandler(t *testing.T) {
 		resumeTS := mkts(10)
 
 		ch := newCheckpointHandler(
-			job, nil, frontierCh, applierIDs, resumeTS, hlc.MaxTimestamp,
+			job, internalDB, nil, frontierCh, applierIDs, resumeTS, hlc.MaxTimestamp,
 			func() {},
 		)
 
@@ -435,7 +437,7 @@ func TestCheckpointHandler(t *testing.T) {
 		var flowCanceled bool
 
 		ch := newCheckpointHandler(
-			job, nil, frontierCh, applierIDs, hlc.Timestamp{}, endTime,
+			job, internalDB, nil, frontierCh, applierIDs, hlc.Timestamp{}, endTime,
 			func() { flowCanceled = true },
 		)
 
