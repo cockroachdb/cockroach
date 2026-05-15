@@ -1458,12 +1458,7 @@ func (q *WorkQueue) SafeFormat(s redact.SafePrinter, _ rune) {
 	for k := range q.mu.groups {
 		keys = append(keys, k)
 	}
-	sort.Slice(keys, func(i, j int) bool {
-		if keys[i].tenantID != keys[j].tenantID {
-			return keys[i].tenantID < keys[j].tenantID
-		}
-		return keys[i].groupID < keys[j].groupID
-	})
+	slices.SortFunc(keys, groupKey.compare)
 	for _, k := range keys {
 		group := q.mu.groups[k]
 		s.Printf("\n group-id: %s used: %d, w: %d, fifo: %d", group.groupKey, group.used,

@@ -6,6 +6,7 @@
 package admission
 
 import (
+	"cmp"
 	"strconv"
 
 	"github.com/cockroachdb/redact"
@@ -33,6 +34,15 @@ func (k groupKey) SafeFormat(s redact.SafePrinter, _ rune) {
 // String implements fmt.Stringer via SafeFormat.
 func (k groupKey) String() string {
 	return redact.StringWithoutMarkers(k)
+}
+
+// compare orders groupKeys by tenantID, then groupID. Use as a
+// slices.SortFunc comparator via the method expression
+// `groupKey.compare`.
+func (k groupKey) compare(other groupKey) int {
+	return cmp.Or(
+		cmp.Compare(k.tenantID, other.tenantID),
+		cmp.Compare(k.groupID, other.groupID))
 }
 
 // tenantGroupKey returns the groupKey for a tenant container.

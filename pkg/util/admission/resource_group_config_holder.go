@@ -7,7 +7,7 @@ package admission
 
 import (
 	"math"
-	"sort"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -48,12 +48,7 @@ func (s ResourceGroupConfigSet) SafeFormat(w redact.SafePrinter, _ rune) {
 	for k := range s {
 		keys = append(keys, k)
 	}
-	sort.Slice(keys, func(i, j int) bool {
-		if keys[i].tenantID != keys[j].tenantID {
-			return keys[i].tenantID < keys[j].tenantID
-		}
-		return keys[i].groupID < keys[j].groupID
-	})
+	slices.SortFunc(keys, groupKey.compare)
 	for _, k := range keys {
 		cfg := s[k]
 		w.Printf("%s weight=%d burstFrac=%.2f maxCPU=%t\n",
