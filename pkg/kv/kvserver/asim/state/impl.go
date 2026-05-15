@@ -633,6 +633,21 @@ func (s *state) SetStoreCapacity(storeID StoreID, capacity int64) {
 	store.desc.Capacity.Capacity = capacity
 }
 
+// SetStoreAttrs sets the store-level attributes that the constraint matcher
+// sees as "+attr" tokens (alongside locality tiers). This is the asim
+// analogue of starting a real CRDB store with --store=attrs=…; without it,
+// asim stores have empty Attrs and constraints can only discriminate at the
+// node-locality granularity (region, zone, …).
+func (s *state) SetStoreAttrs(storeID StoreID, attrs []string) {
+	store, ok := s.stores[storeID]
+	if !ok {
+		panic(fmt.Sprintf("programming error: store with ID %d doesn't exist", storeID))
+	}
+	// Clone to avoid aliasing the caller's slice (the event author may
+	// retain it).
+	store.desc.Attrs = roachpb.Attributes{Attrs: slices.Clone(attrs)}
+}
+
 // AddReplica modifies the state to include one additional range for the
 // Range with ID RangeID, placed on the Store with ID StoreID. This fails
 // if a Replica for the Range already exists the Store.
