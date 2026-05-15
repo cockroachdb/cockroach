@@ -30,7 +30,7 @@ func registerRoachmart(r registry.Registry) {
 			zone string
 		}{
 			{1, "us-central1-b"},
-			{4, "us-west1-b"},
+			{4, "us-west1-c"},
 			{7, "europe-west2-b"},
 		}
 
@@ -71,7 +71,7 @@ func registerRoachmart(r registry.Registry) {
 		r.Add(registry.TestSpec{
 			Name:                       fmt.Sprintf("roachmart/partition=%v", v),
 			Owner:                      registry.OwnerKV,
-			Cluster:                    r.MakeClusterSpec(9, spec.Geo(), spec.GCEZones("us-central1-b,us-west1-b,europe-west2-b")),
+			Cluster:                    r.MakeClusterSpec(9, spec.Geo(), spec.GCEZones("us-central1-b,us-west1-c,europe-west2-b")),
 			CompatibleClouds:           registry.OnlyGCE,
 			Suites:                     registry.Suites(registry.Nightly),
 			Leases:                     registry.MetamorphicLeases,

@@ -1142,7 +1142,7 @@ func registerTPCC(r registry.Registry) {
 			zones  string
 		}{
 			{region: "us-east1", zones: "us-east1-b"},
-			{region: "us-west1", zones: "us-west1-b"},
+			{region: "us-west1", zones: "us-west1-c"},
 			{region: "europe-west2", zones: "europe-west2-b"},
 		}
 		zs := []string{}
@@ -1924,7 +1924,7 @@ func (d tpccBenchDistribution) zones() []string {
 		// https://github.com/cockroachdb/cockroach/issues/66184
 		return []string{"us-central1-f", "us-central1-b", "us-central1-c"}
 	case multiRegion:
-		return []string{"us-east1-b", "us-west1-b", "europe-west2-b"}
+		return []string{"us-east1-b", "us-west1-c", "europe-west2-b"}
 	default:
 		panic("unexpected")
 	}

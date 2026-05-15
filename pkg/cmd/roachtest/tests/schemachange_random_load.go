@@ -34,7 +34,7 @@ func registerSchemaChangeRandomLoad(r registry.Registry) {
 		Cluster: r.MakeClusterSpec(
 			3,
 			spec.Geo(),
-			spec.GCEZones("us-east1-b,us-west1-b,europe-west2-b"),
+			spec.GCEZones("us-east1-b,us-west1-c,europe-west2-b"),
 			spec.AWSZones("us-east-2b,us-west-1a,eu-west-1a"),
 		),
 		// TODO(radu): enable this test on AWS.
