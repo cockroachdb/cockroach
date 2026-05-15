@@ -262,6 +262,11 @@ type cpuTimeTokenAllocator struct {
 	// refillRates stores the number of CPU time tokens to add to each bucket
 	// per interval (1s).
 	refillRates rates
+	// snap is the ConfigSnapshot captured at the most recent
+	// resetInterval. Every operation in the interval reads from this
+	// snap rather than re-querying the holder, so per-tick work stays
+	// coherent with the configuration that produced refillRates.
+	snap ConfigSnapshot
 	// allocated stores the number of tokens added to each bucket in the current
 	// cpuTimeTokenAllocator. No mutex, since only a single goroutine will call
 	// the allocator.
@@ -288,12 +293,14 @@ func computeTargets(snap ConfigSnapshot) targetUtilizations {
 //
 // The 100%-CPU rate is recovered by dividing the canBurst allocation
 // (or refill rate) by canBurstTarget, which is valid because
-// cpuTimeTokenLinearModel is linear in target.
+// cpuTimeTokenLinearModel is linear in target. snap must be the same
+// snapshot used to compute allocations/refillRates this tick;
+// otherwise the recovered rate100 can drift if cluster settings
+// change between calls.
 func (a *cpuTimeTokenAllocator) groupBurstRates(
-	allocations tokenCounts, refillRates rates,
+	snap ConfigSnapshot, allocations tokenCounts, refillRates rates,
 ) [numResourceTiers][2]float64 {
 	var out [numResourceTiers][2]float64
-	snap := a.configHolder.Snapshot()
 	canBurstTarget := snap.MaxFraction()[0]
 	if canBurstTarget == 0 {
 		return out
@@ -450,7 +457,7 @@ func (a *cpuTimeTokenAllocator) allocateTokens(expectedRemainingTicksInInterval 
 	// for more). With defaultTenantGroupConfig.BurstFrac = 0.20, an
 	// application tenant can burst if it is using roughly less than 20%
 	// of the CPU on a CRDB node.
-	burstRates := a.groupBurstRates(allocations, a.refillRates)
+	burstRates := a.groupBurstRates(a.snap, allocations, a.refillRates)
 	for tier, q := range a.queues {
 		q.refillGroupBurstBuckets(burstRates[tier][0], burstRates[tier][1])
 	}
@@ -470,8 +477,13 @@ func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) cpuTimeTokenM
 		a.lastMode = newMode
 	}
 
-	snap := a.configHolder.Snapshot()
-	targets := computeTargets(snap)
+	// Refresh the cached snapshot for this interval. Everything that
+	// runs until the next resetInterval — model.fit, the refillRates
+	// it produces, and the per-tick groupBurstRates calls in
+	// allocateTokens — reads from this snap so the interval is
+	// coherent with one view of the holder.
+	a.snap = a.configHolder.Snapshot()
+	targets := computeTargets(a.snap)
 	newRefillRates := a.model.fit(ctx, targets)
 
 	// deltaRefillRates is the difference in tokens to add per interval (1s)
@@ -501,7 +513,7 @@ func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) cpuTimeTokenM
 		bucketCapacities, bucketMinimums, true /* updateMetrics */)
 	a.refillRates = newRefillRates
 	// Apply the delta to the per-group burst buckets also.
-	burstRates := a.groupBurstRates(deltaRefillRates, a.refillRates)
+	burstRates := a.groupBurstRates(a.snap, deltaRefillRates, a.refillRates)
 	for tier, q := range a.queues {
 		q.refillGroupBurstBuckets(burstRates[tier][0], burstRates[tier][1])
 	}

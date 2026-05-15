@@ -575,7 +575,7 @@ func TestGroupBurstRates(t *testing.T) {
 	tokens[0][canBurst] = 1000
 	var rr rates
 	rr[0][canBurst] = 4000
-	out := allocator.groupBurstRates(tokens, rr)
+	out := allocator.groupBurstRates(allocator.configHolder.Snapshot(), tokens, rr)
 	require.Equal(t, [2]float64{1000, 4000}, out[0])
 	require.Equal(t, [2]float64{1000, 4000}, out[1])
 
@@ -583,7 +583,7 @@ func TestGroupBurstRates(t *testing.T) {
 	KVCPUTimeAppUtilGoal.Override(ctx, &st.SV, 0.5)
 	KVCPUTimeSystemUtilGoal.Override(ctx, &st.SV, 0.5)
 	KVCPUTimeUtilBurstDelta.Override(ctx, &st.SV, 0.01)
-	out = allocator.groupBurstRates(tokens, rr)
+	out = allocator.groupBurstRates(allocator.configHolder.Snapshot(), tokens, rr)
 	require.InDelta(t, 1000.0/0.51, out[0][0], 0.01)
 	require.InDelta(t, 4000.0/0.51, out[0][1], 0.01)
 	require.Equal(t, out[0], out[1])
@@ -595,7 +595,7 @@ func TestGroupBurstRates(t *testing.T) {
 	KVCPUTimeUtilBurstDelta.Override(ctx, &st.SV, 0.5)
 	tokens[0][canBurst] = -500
 	rr[0][canBurst] = 4000
-	out = allocator.groupBurstRates(tokens, rr)
+	out = allocator.groupBurstRates(allocator.configHolder.Snapshot(), tokens, rr)
 	require.Equal(t, [2]float64{-500, 4000}, out[0])
 	require.Equal(t, [2]float64{-500, 4000}, out[1])
 }
