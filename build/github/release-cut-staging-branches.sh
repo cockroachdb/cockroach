@@ -36,5 +36,5 @@ source "$dir/build/teamcity-bazel-support.sh"  # for run_bazel
 # helper to pick which GitHub repo holds the staging branches; without
 # it the binary falls back to cockroachdb/cockroach and looks for the
 # staging branch in the wrong place.
-BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e DRY_RUN -e TEST_ISSUE_KEY -e JIRA_API_TOKEN -e JIRA_EMAIL -e GITHUB_TOKEN -e SLACK_BOT_TOKEN -e GITHUB_REPOSITORY" \
+BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e DRY_RUN -e TEST_ISSUE_KEY -e JIRA_API_TOKEN -e JIRA_EMAIL -e GITHUB_TOKEN -e SLACK_BOT_TOKEN -e GITHUB_REPOSITORY -e IS_PRODUCTION_REPO" \
   run_bazel build/github/release-cut-staging-branches-impl.sh
