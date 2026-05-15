@@ -310,6 +310,16 @@ type WorkQueue struct {
 	usesAsyncAdmit bool
 	settings       *cluster.Settings
 
+	// hadWaitingRequests is set whenever Admit enqueues work, and cleared by
+	// hadRecentWaitingRequests via Swap. It exists so that consumers polling at
+	// a coarse cadence (the elastic CPU controller runs at ~1Hz) can observe
+	// enqueues that happened between polls even when the queue has already
+	// drained to empty by the time of the poll. The instantaneous
+	// hasWaitingRequests signal is unreliable for this purpose because the
+	// elastic CPU granter's tryGrant loop drains the queue as soon as tokens
+	// refill.
+	hadWaitingRequests atomic.Bool
+
 	onAdmittedReplicatedWork onAdmittedReplicatedWork
 
 	mu struct {
@@ -1040,6 +1050,10 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 	q.mu.Unlock()
 
 	q.metrics.recordStartWait(info.Priority)
+	// Record that work was queued so the elastic CPU controller can observe
+	// this enqueue at its next tick even if the queue drains in the meantime.
+	// See WorkQueue.hadWaitingRequests.
+	q.hadWaitingRequests.Store(true)
 	if info.ReplicatedWorkInfo.Enabled {
 		if log.V(1) {
 			q.mu.Lock()
@@ -1259,6 +1273,15 @@ func (q *WorkQueue) hasWaitingRequests() (bool, burstQualification) {
 		return false, noBurst /*arbitrary*/
 	}
 	return true, q.mu.groupHeap[0].cpuTimeBurstBucket.burstQualification()
+}
+
+// hadRecentWaitingRequests returns whether Admit has enqueued any work since
+// the last call to this method, atomically clearing the underlying flag. The
+// intended caller is the elastic CPU scheduler-latency listener, which polls
+// at a coarse cadence (~1Hz) and would otherwise miss enqueues that drain
+// between polls.
+func (q *WorkQueue) hadRecentWaitingRequests() bool {
+	return q.hadWaitingRequests.Swap(false)
 }
 
 func (q *WorkQueue) granted(grantChainID grantChainID) int64 {

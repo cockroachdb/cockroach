@@ -100,7 +100,7 @@ func (e *schedulerLatencyListener) SchedulerLatency(p99, period time.Duration) {
 
 	e.metrics.P99SchedulerLatency.Update(p99.Nanoseconds())
 
-	hasWaitingRequests := e.elasticCPULimiter.hasWaitingRequests()
+	hasWaitingRequests := e.elasticCPULimiter.hasOrHadRecentWaitingRequests()
 	oldUtilizationLimit := e.elasticCPULimiter.getUtilizationLimit()
 	newUtilizationLimit := oldUtilizationLimit
 
