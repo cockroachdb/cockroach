@@ -97,7 +97,10 @@ func (a *avroFormat) NewWriter(
 		return nil, fmt.Errorf("creating avro codec for %s: %w", table.Name, err)
 	}
 
-	ocfPath := filepath.Join(outputDir, fmt.Sprintf("%s.%d.ocf", table.Name, shardIdx))
+	// Output filenames follow the <table>.<ext>.<shard> convention so that the
+	// import roachtests can derive URLs from a single template, identical to
+	// the Parquet writer output.
+	ocfPath := filepath.Join(outputDir, fmt.Sprintf("%s.ocf.%d", table.Name, shardIdx))
 	ocfFile, err := os.Create(ocfPath)
 	if err != nil {
 		return nil, fmt.Errorf("creating %s: %w", ocfPath, err)
@@ -113,7 +116,7 @@ func (a *avroFormat) NewWriter(
 		return nil, fmt.Errorf("creating OCF writer for %s: %w", table.Name, err)
 	}
 
-	binPath := filepath.Join(outputDir, fmt.Sprintf("%s.%d.bin", table.Name, shardIdx))
+	binPath := filepath.Join(outputDir, fmt.Sprintf("%s.bin.%d", table.Name, shardIdx))
 	binFile, err := os.Create(binPath)
 	if err != nil {
 		ocfFile.Close()
