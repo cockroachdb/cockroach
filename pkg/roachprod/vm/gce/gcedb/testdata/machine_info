@@ -5,6 +5,7 @@ CPUCores: 32
 MemoryGiB: 128
 Architecture: amd64
 AllowedLocalSSDCount: {4, 8, 16, 24}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-standard, pd-balanced, pd-ssd, pd-extreme, hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (Intel Cascade Lake, Intel Ice Lake)
 
@@ -14,6 +15,7 @@ CPUCores: 8
 MemoryGiB: 64
 Architecture: amd64
 AllowedLocalSSDCount: {1, 2, 4, 8, 16, 24}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-standard, pd-balanced, pd-ssd, pd-extreme, hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (Intel Cascade Lake, Intel Ice Lake)
 
@@ -23,6 +25,7 @@ CPUCores: 16
 MemoryGiB: 32
 Architecture: amd64
 AllowedLocalSSDCount: {2, 4, 8, 16, 24}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-standard, pd-balanced, pd-ssd, pd-extreme, hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (Intel Cascade Lake, Intel Ice Lake)
 
@@ -33,6 +36,7 @@ CPUCores: 8
 MemoryGiB: 30
 Architecture: amd64
 AllowedLocalSSDCount: {1, 2, 3, 4, 5, 6, 7, 8, 16, 24}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-standard, pd-balanced, pd-ssd)
 CPUPlatforms: (Intel Sandy Bridge, Intel Ivy Bridge, Intel Haswell, Intel Broadwell, Intel Skylake)
 
@@ -42,6 +46,7 @@ CPUCores: 16
 MemoryGiB: 104
 Architecture: amd64
 AllowedLocalSSDCount: {1, 2, 3, 4, 5, 6, 7, 8, 16, 24}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-standard, pd-balanced, pd-ssd)
 CPUPlatforms: (Intel Sandy Bridge, Intel Ivy Bridge, Intel Haswell, Intel Broadwell, Intel Skylake)
 
@@ -51,6 +56,7 @@ CPUCores: 32
 MemoryGiB: 28
 Architecture: amd64
 AllowedLocalSSDCount: {1, 2, 3, 4, 5, 6, 7, 8, 16, 24}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-standard, pd-balanced, pd-ssd)
 CPUPlatforms: (Intel Sandy Bridge, Intel Ivy Bridge, Intel Haswell, Intel Broadwell, Intel Skylake)
 
@@ -61,6 +67,7 @@ CPUCores: 8
 MemoryGiB: 32
 Architecture: amd64
 AllowedLocalSSDCount: {}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-standard, pd-balanced, pd-ssd)
 CPUPlatforms: ()
 
@@ -71,6 +78,7 @@ CPUCores: 1
 MemoryGiB: 1
 Architecture: amd64
 AllowedLocalSSDCount: {}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-standard, pd-balanced, pd-ssd)
 CPUPlatforms: ()
 
@@ -80,6 +88,7 @@ CPUCores: 1
 MemoryGiB: 2
 Architecture: amd64
 AllowedLocalSSDCount: {}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-standard, pd-balanced, pd-ssd)
 CPUPlatforms: ()
 
@@ -89,6 +98,7 @@ CPUCores: 1
 MemoryGiB: 4
 Architecture: amd64
 AllowedLocalSSDCount: {}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-standard, pd-balanced, pd-ssd)
 CPUPlatforms: ()
 
@@ -98,6 +108,7 @@ CPUCores: 1
 MemoryGiB: 1
 Architecture: amd64
 AllowedLocalSSDCount: {}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-standard, pd-balanced, pd-ssd)
 CPUPlatforms: (Intel Sandy Bridge, Intel Ivy Bridge, Intel Haswell, Intel Broadwell, Intel Skylake)
 
@@ -107,6 +118,7 @@ CPUCores: 1
 MemoryGiB: 1
 Architecture: amd64
 AllowedLocalSSDCount: {}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-standard, pd-balanced, pd-ssd)
 CPUPlatforms: (Intel Sandy Bridge, Intel Ivy Bridge, Intel Haswell, Intel Broadwell, Intel Skylake)
 
@@ -117,6 +129,7 @@ CPUCores: 16
 MemoryGiB: 32
 Architecture: amd64
 AllowedLocalSSDCount: {2, 4, 8, 16, 24}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-standard, pd-balanced, pd-ssd, pd-extreme, hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (Intel Cascade Lake, Intel Ice Lake)
 
@@ -127,6 +140,7 @@ CPUCores: 88
 MemoryGiB: 352
 Architecture: amd64
 AllowedLocalSSDCount: {}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
 CPUPlatforms: (Intel Sapphire Rapids)
 
@@ -137,6 +151,7 @@ CPUCores: 88
 MemoryGiB: 352
 Architecture: amd64
 AllowedLocalSSDCount: {}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-balanced, hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (Intel Sapphire Rapids)
 
@@ -147,6 +162,7 @@ CPUCores: 96
 MemoryGiB: 1434
 Architecture: amd64
 AllowedLocalSSDCount: {1, 2, 3, 4, 5, 6, 7, 8}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-standard, pd-balanced, pd-ssd, pd-extreme)
 CPUPlatforms: (Intel Broadwell, Intel Skylake)
 
@@ -156,6 +172,7 @@ CPUCores: 160
 MemoryGiB: 3844
 Architecture: amd64
 AllowedLocalSSDCount: {1, 2, 3, 4, 5, 6, 7, 8}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-standard, pd-balanced, pd-ssd, pd-extreme)
 CPUPlatforms: (Intel Broadwell, Intel Skylake)
 
@@ -165,6 +182,7 @@ CPUCores: 64
 MemoryGiB: 976
 Architecture: amd64
 AllowedLocalSSDCount: {4, 8}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
 CPUPlatforms: (Intel Ice Lake)
 
@@ -174,6 +192,7 @@ CPUCores: 128
 MemoryGiB: 3904
 Architecture: amd64
 AllowedLocalSSDCount: {8}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
 CPUPlatforms: (Intel Ice Lake)
 
@@ -184,6 +203,7 @@ CPUCores: 8
 MemoryGiB: 32
 Architecture: amd64
 AllowedLocalSSDCount: {}
+LocalSSDAutoAttached: false
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (Intel Emerald Rapids)
 
@@ -193,6 +213,7 @@ CPUCores: 16
 MemoryGiB: 128
 Architecture: amd64
 AllowedLocalSSDCount: {}
+LocalSSDAutoAttached: false
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (Intel Emerald Rapids)
 
@@ -202,6 +223,7 @@ CPUCores: 32
 MemoryGiB: 64
 Architecture: amd64
 AllowedLocalSSDCount: {}
+LocalSSDAutoAttached: false
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (Intel Emerald Rapids)
 
@@ -212,6 +234,7 @@ CPUCores: 8
 MemoryGiB: 32
 Architecture: amd64
 AllowedLocalSSDCount: {}
+LocalSSDAutoAttached: false
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (AMD Turin)
 
@@ -221,6 +244,7 @@ CPUCores: 16
 MemoryGiB: 128
 Architecture: amd64
 AllowedLocalSSDCount: {}
+LocalSSDAutoAttached: false
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (AMD Turin)
 
@@ -230,6 +254,7 @@ CPUCores: 32
 MemoryGiB: 64
 Architecture: amd64
 AllowedLocalSSDCount: {}
+LocalSSDAutoAttached: false
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (AMD Turin)
 
@@ -239,6 +264,7 @@ CPUCores: 96
 MemoryGiB: 384
 Architecture: amd64
 AllowedLocalSSDCount: {}
+LocalSSDAutoAttached: false
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (AMD Turin)
 
@@ -249,6 +275,7 @@ CPUCores: 8
 MemoryGiB: 32
 Architecture: arm64
 AllowedLocalSSDCount: {}
+LocalSSDAutoAttached: false
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (Google Axion)
 
@@ -258,6 +285,7 @@ CPUCores: 16
 MemoryGiB: 128
 Architecture: arm64
 AllowedLocalSSDCount: {}
+LocalSSDAutoAttached: false
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (Google Axion)
 
@@ -267,6 +295,7 @@ CPUCores: 32
 MemoryGiB: 64
 Architecture: arm64
 AllowedLocalSSDCount: {}
+LocalSSDAutoAttached: false
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (Google Axion)
 
@@ -276,6 +305,7 @@ CPUCores: 64
 MemoryGiB: 256
 Architecture: arm64
 AllowedLocalSSDCount: {}
+LocalSSDAutoAttached: false
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (Google Axion)
 
@@ -286,6 +316,7 @@ CPUCores: 16
 MemoryGiB: 64
 Architecture: arm64
 AllowedLocalSSDCount: {}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-standard, pd-balanced, pd-ssd)
 CPUPlatforms: (Ampere Altra)
 
@@ -295,6 +326,7 @@ CPUCores: 4
 MemoryGiB: 16
 Architecture: amd64
 AllowedLocalSSDCount: {1}
+LocalSSDAutoAttached: true
 StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
 CPUPlatforms: (Intel Sapphire Rapids)
 
@@ -304,6 +336,7 @@ CPUCores: 8
 MemoryGiB: 32
 Architecture: amd64
 AllowedLocalSSDCount: {2}
+LocalSSDAutoAttached: true
 StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
 CPUPlatforms: (Intel Sapphire Rapids)
 
@@ -313,6 +346,7 @@ CPUCores: 22
 MemoryGiB: 88
 Architecture: amd64
 AllowedLocalSSDCount: {4}
+LocalSSDAutoAttached: true
 StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
 CPUPlatforms: (Intel Sapphire Rapids)
 
@@ -322,6 +356,7 @@ CPUCores: 44
 MemoryGiB: 176
 Architecture: amd64
 AllowedLocalSSDCount: {8}
+LocalSSDAutoAttached: true
 StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
 CPUPlatforms: (Intel Sapphire Rapids)
 
@@ -331,6 +366,7 @@ CPUCores: 88
 MemoryGiB: 352
 Architecture: amd64
 AllowedLocalSSDCount: {16}
+LocalSSDAutoAttached: true
 StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
 CPUPlatforms: (Intel Sapphire Rapids)
 
@@ -340,6 +376,27 @@ CPUCores: 176
 MemoryGiB: 704
 Architecture: amd64
 AllowedLocalSSDCount: {32}
+LocalSSDAutoAttached: true
+StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
+CPUPlatforms: (Intel Sapphire Rapids)
+
+c3-highmem-44-lssd
+----
+CPUCores: 44
+MemoryGiB: 352
+Architecture: amd64
+AllowedLocalSSDCount: {}
+LocalSSDAutoAttached: false
+StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
+CPUPlatforms: (Intel Sapphire Rapids)
+
+c3-highcpu-44-lssd
+----
+CPUCores: 44
+MemoryGiB: 88
+Architecture: amd64
+AllowedLocalSSDCount: {}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
 CPUPlatforms: (Intel Sapphire Rapids)
 
@@ -349,6 +406,7 @@ CPUCores: 8
 MemoryGiB: 32
 Architecture: amd64
 AllowedLocalSSDCount: {1}
+LocalSSDAutoAttached: true
 StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
 CPUPlatforms: (AMD Genoa)
 
@@ -358,6 +416,7 @@ CPUCores: 16
 MemoryGiB: 64
 Architecture: amd64
 AllowedLocalSSDCount: {1}
+LocalSSDAutoAttached: true
 StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
 CPUPlatforms: (AMD Genoa)
 
@@ -367,6 +426,7 @@ CPUCores: 30
 MemoryGiB: 120
 Architecture: amd64
 AllowedLocalSSDCount: {2}
+LocalSSDAutoAttached: true
 StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
 CPUPlatforms: (AMD Genoa)
 
@@ -376,6 +436,7 @@ CPUCores: 60
 MemoryGiB: 240
 Architecture: amd64
 AllowedLocalSSDCount: {4}
+LocalSSDAutoAttached: true
 StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
 CPUPlatforms: (AMD Genoa)
 
@@ -385,6 +446,7 @@ CPUCores: 90
 MemoryGiB: 360
 Architecture: amd64
 AllowedLocalSSDCount: {8}
+LocalSSDAutoAttached: true
 StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
 CPUPlatforms: (AMD Genoa)
 
@@ -394,6 +456,7 @@ CPUCores: 180
 MemoryGiB: 720
 Architecture: amd64
 AllowedLocalSSDCount: {16}
+LocalSSDAutoAttached: true
 StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
 CPUPlatforms: (AMD Genoa)
 
@@ -403,6 +466,17 @@ CPUCores: 360
 MemoryGiB: 1440
 Architecture: amd64
 AllowedLocalSSDCount: {32}
+LocalSSDAutoAttached: true
+StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
+CPUPlatforms: (AMD Genoa)
+
+c3d-highcpu-60-lssd
+----
+CPUCores: 60
+MemoryGiB: 120
+Architecture: amd64
+AllowedLocalSSDCount: {}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
 CPUPlatforms: (AMD Genoa)
 
@@ -412,6 +486,7 @@ CPUCores: 4
 MemoryGiB: 15
 Architecture: amd64
 AllowedLocalSSDCount: {1}
+LocalSSDAutoAttached: true
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (Intel Emerald Rapids, Intel Granite Rapids)
 
@@ -421,6 +496,7 @@ CPUCores: 8
 MemoryGiB: 30
 Architecture: amd64
 AllowedLocalSSDCount: {1}
+LocalSSDAutoAttached: true
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (Intel Emerald Rapids, Intel Granite Rapids)
 
@@ -430,6 +506,7 @@ CPUCores: 16
 MemoryGiB: 60
 Architecture: amd64
 AllowedLocalSSDCount: {2}
+LocalSSDAutoAttached: true
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (Intel Emerald Rapids, Intel Granite Rapids)
 
@@ -439,6 +516,7 @@ CPUCores: 48
 MemoryGiB: 180
 Architecture: amd64
 AllowedLocalSSDCount: {8}
+LocalSSDAutoAttached: true
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (Intel Emerald Rapids, Intel Granite Rapids)
 
@@ -448,6 +526,7 @@ CPUCores: 96
 MemoryGiB: 360
 Architecture: amd64
 AllowedLocalSSDCount: {16}
+LocalSSDAutoAttached: true
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (Intel Emerald Rapids, Intel Granite Rapids)
 
@@ -457,6 +536,7 @@ CPUCores: 192
 MemoryGiB: 720
 Architecture: amd64
 AllowedLocalSSDCount: {32}
+LocalSSDAutoAttached: true
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (Intel Emerald Rapids, Intel Granite Rapids)
 
@@ -466,6 +546,17 @@ CPUCores: 288
 MemoryGiB: 1080
 Architecture: amd64
 AllowedLocalSSDCount: {48}
+LocalSSDAutoAttached: true
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Intel Emerald Rapids, Intel Granite Rapids)
+
+c4-highcpu-48-lssd
+----
+CPUCores: 48
+MemoryGiB: 96
+Architecture: amd64
+AllowedLocalSSDCount: {}
+LocalSSDAutoAttached: false
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (Intel Emerald Rapids, Intel Granite Rapids)
 
@@ -475,6 +566,7 @@ CPUCores: 4
 MemoryGiB: 16
 Architecture: arm64
 AllowedLocalSSDCount: {}
+LocalSSDAutoAttached: false
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (Google Axion)
 
@@ -484,6 +576,7 @@ CPUCores: 4
 MemoryGiB: 16
 Architecture: arm64
 AllowedLocalSSDCount: {1}
+LocalSSDAutoAttached: true
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (Google Axion)
 
@@ -493,6 +586,7 @@ CPUCores: 8
 MemoryGiB: 32
 Architecture: arm64
 AllowedLocalSSDCount: {}
+LocalSSDAutoAttached: false
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (Google Axion)
 
@@ -502,6 +596,7 @@ CPUCores: 8
 MemoryGiB: 32
 Architecture: arm64
 AllowedLocalSSDCount: {2}
+LocalSSDAutoAttached: true
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (Google Axion)
 
@@ -511,6 +606,7 @@ CPUCores: 16
 MemoryGiB: 64
 Architecture: arm64
 AllowedLocalSSDCount: {4}
+LocalSSDAutoAttached: true
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (Google Axion)
 
@@ -520,6 +616,7 @@ CPUCores: 32
 MemoryGiB: 128
 Architecture: arm64
 AllowedLocalSSDCount: {6}
+LocalSSDAutoAttached: true
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (Google Axion)
 
@@ -529,6 +626,7 @@ CPUCores: 48
 MemoryGiB: 192
 Architecture: arm64
 AllowedLocalSSDCount: {10}
+LocalSSDAutoAttached: true
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (Google Axion)
 
@@ -538,6 +636,27 @@ CPUCores: 72
 MemoryGiB: 288
 Architecture: arm64
 AllowedLocalSSDCount: {16}
+LocalSSDAutoAttached: true
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Google Axion)
+
+c4a-highmem-32-lssd
+----
+CPUCores: 32
+MemoryGiB: 256
+Architecture: arm64
+AllowedLocalSSDCount: {6}
+LocalSSDAutoAttached: true
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Google Axion)
+
+c4a-highcpu-32-lssd
+----
+CPUCores: 32
+MemoryGiB: 64
+Architecture: arm64
+AllowedLocalSSDCount: {}
+LocalSSDAutoAttached: false
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (Google Axion)
 
@@ -547,6 +666,7 @@ CPUCores: 8
 MemoryGiB: 24
 Architecture: amd64
 AllowedLocalSSDCount: {1}
+LocalSSDAutoAttached: true
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (AMD Turin)
 
@@ -556,6 +676,7 @@ CPUCores: 32
 MemoryGiB: 99
 Architecture: amd64
 AllowedLocalSSDCount: {2}
+LocalSSDAutoAttached: true
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (AMD Turin)
 
@@ -565,6 +686,7 @@ CPUCores: 48
 MemoryGiB: 148
 Architecture: amd64
 AllowedLocalSSDCount: {4}
+LocalSSDAutoAttached: true
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (AMD Turin)
 
@@ -574,6 +696,7 @@ CPUCores: 96
 MemoryGiB: 297
 Architecture: amd64
 AllowedLocalSSDCount: {8}
+LocalSSDAutoAttached: true
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (AMD Turin)
 
@@ -583,6 +706,7 @@ CPUCores: 192
 MemoryGiB: 595
 Architecture: amd64
 AllowedLocalSSDCount: {16}
+LocalSSDAutoAttached: true
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (AMD Turin)
 
@@ -592,6 +716,17 @@ CPUCores: 384
 MemoryGiB: 1190
 Architecture: amd64
 AllowedLocalSSDCount: {32}
+LocalSSDAutoAttached: true
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (AMD Turin)
+
+c4d-highcpu-48-lssd
+----
+CPUCores: 48
+MemoryGiB: 91
+Architecture: amd64
+AllowedLocalSSDCount: {}
+LocalSSDAutoAttached: false
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (AMD Turin)
 
@@ -601,6 +736,7 @@ CPUCores: 8
 MemoryGiB: 32
 Architecture: amd64
 AllowedLocalSSDCount: {1, 2, 4, 8}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-standard, pd-balanced, pd-ssd, pd-extreme)
 CPUPlatforms: (AMD Milan)
 
@@ -610,6 +746,7 @@ CPUCores: 16
 MemoryGiB: 64
 Architecture: amd64
 AllowedLocalSSDCount: {1, 2, 4, 8}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-standard, pd-balanced, pd-ssd, pd-extreme)
 CPUPlatforms: (AMD Milan)
 
@@ -619,6 +756,7 @@ CPUCores: 32
 MemoryGiB: 128
 Architecture: amd64
 AllowedLocalSSDCount: {2, 4, 8}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-standard, pd-balanced, pd-ssd, pd-extreme)
 CPUPlatforms: (AMD Milan)
 
@@ -628,6 +766,7 @@ CPUCores: 56
 MemoryGiB: 224
 Architecture: amd64
 AllowedLocalSSDCount: {4, 8}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-standard, pd-balanced, pd-ssd, pd-extreme)
 CPUPlatforms: (AMD Milan)
 
@@ -637,6 +776,7 @@ CPUCores: 112
 MemoryGiB: 448
 Architecture: amd64
 AllowedLocalSSDCount: {8}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-standard, pd-balanced, pd-ssd, pd-extreme)
 CPUPlatforms: (AMD Milan)
 
@@ -646,6 +786,7 @@ CPUCores: 40
 MemoryGiB: 597
 Architecture: amd64
 AllowedLocalSSDCount: {1, 2, 3, 4, 5}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-standard, pd-balanced, pd-ssd, pd-extreme)
 CPUPlatforms: (Intel Broadwell, Intel Skylake)
 
@@ -655,6 +796,7 @@ CPUCores: 80
 MemoryGiB: 1922
 Architecture: amd64
 AllowedLocalSSDCount: {1, 2, 3, 4, 5, 6, 7, 8}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-standard, pd-balanced, pd-ssd, pd-extreme)
 CPUPlatforms: (Intel Broadwell, Intel Skylake)
 
@@ -664,6 +806,7 @@ CPUCores: 32
 MemoryGiB: 488
 Architecture: amd64
 AllowedLocalSSDCount: {4, 8}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
 CPUPlatforms: (Intel Ice Lake)
 
@@ -673,6 +816,7 @@ CPUCores: 4
 MemoryGiB: 16
 Architecture: amd64
 AllowedLocalSSDCount: {1}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-ml, hyperdisk-throughput)
 CPUPlatforms: (Intel Cascade Lake)
 
@@ -682,6 +826,7 @@ CPUCores: 24
 MemoryGiB: 96
 Architecture: amd64
 AllowedLocalSSDCount: {2}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-ml, hyperdisk-throughput)
 CPUPlatforms: (Intel Cascade Lake)
 
@@ -691,6 +836,7 @@ CPUCores: 48
 MemoryGiB: 192
 Architecture: amd64
 AllowedLocalSSDCount: {4}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-ml, hyperdisk-throughput)
 CPUPlatforms: (Intel Cascade Lake)
 
@@ -700,6 +846,7 @@ CPUCores: 96
 MemoryGiB: 384
 Architecture: amd64
 AllowedLocalSSDCount: {8}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-ml, hyperdisk-throughput)
 CPUPlatforms: (Intel Cascade Lake)
 
@@ -710,6 +857,7 @@ CPUCores: 8
 MemoryGiB: 32
 Architecture: amd64
 AllowedLocalSSDCount: {1, 2, 4, 8}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-standard, pd-balanced, pd-ssd, pd-extreme)
 CPUPlatforms: (Intel Cascade Lake)
 
@@ -719,6 +867,7 @@ CPUCores: 30
 MemoryGiB: 120
 Architecture: amd64
 AllowedLocalSSDCount: {4, 8}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-standard, pd-balanced, pd-ssd, pd-extreme)
 CPUPlatforms: (Intel Cascade Lake)
 
@@ -728,6 +877,7 @@ CPUCores: 60
 MemoryGiB: 240
 Architecture: amd64
 AllowedLocalSSDCount: {8}
+LocalSSDAutoAttached: false
 StorageTypes: (pd-standard, pd-balanced, pd-ssd, pd-extreme)
 CPUPlatforms: (Intel Cascade Lake)
 
