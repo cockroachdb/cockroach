@@ -64,6 +64,9 @@ type MachineInfo struct {
 	// Allowed number of local SSDs, in ascending order; empty if local SSD not
 	// supported.
 	AllowedLocalSSDCount []int
+	// LocalSSDAutoAttached is true when the machine type includes local SSDs
+	// automatically and callers must not request scratch disks separately.
+	LocalSSDAutoAttached bool
 	// List of allowed storage types, e.g. "pd-ssd", "hyperdisk-balanced".
 	StorageTypes []string
 	// CPU platforms supported by this machine type, in oldest-to-newest order.
@@ -73,9 +76,10 @@ type MachineInfo struct {
 
 // String returns a human-readable representation of MachineInfo.
 func (m MachineInfo) String() string {
-	return fmt.Sprintf("CPUCores: %d\nMemoryGiB: %d\nArchitecture: %s\nAllowedLocalSSDCount: %s\nStorageTypes: %s\nCPUPlatforms: %s",
+	return fmt.Sprintf("CPUCores: %d\nMemoryGiB: %d\nArchitecture: %s\nAllowedLocalSSDCount: %s\nLocalSSDAutoAttached: %t\nStorageTypes: %s\nCPUPlatforms: %s",
 		m.CPUCores, m.MemoryGiB, m.Architecture,
 		formatIntSlice(m.AllowedLocalSSDCount),
+		m.LocalSSDAutoAttached,
 		formatStringSlice(m.StorageTypes),
 		formatStringSlice(m.CPUPlatforms))
 }
@@ -419,6 +423,12 @@ func getPredefinedMachineInfo(
 	// Note: hasMetal currently doesn't change the returned info, but is parsed
 	// for completeness. Bare metal instances have the same specs as regular VMs.
 	info := MachineInfo{CPUCores: vcpus}
+	setAutoAttachedLocalSSD := func(count int) {
+		if count > 0 {
+			info.AllowedLocalSSDCount = []int{count}
+			info.LocalSSDAutoAttached = true
+		}
+	}
 
 	switch family {
 	case "n1":
@@ -499,8 +509,9 @@ func getPredefinedMachineInfo(
 		info.Architecture = ArchAMD64
 		info.StorageTypes = storageC3
 		info.CPUPlatforms = platformsC3
-		if hasLSSD {
-			info.AllowedLocalSSDCount = []int{lssdCountC3(vcpus)}
+		// C3 -lssd is only available for the standard variant.
+		if hasLSSD && variant == "standard" {
+			setAutoAttachedLocalSSD(lssdCountC3(vcpus))
 		}
 
 	case "c3d":
@@ -508,8 +519,8 @@ func getPredefinedMachineInfo(
 		info.Architecture = ArchAMD64
 		info.StorageTypes = storageC3
 		info.CPUPlatforms = platformsC3D
-		if hasLSSD {
-			info.AllowedLocalSSDCount = []int{lssdCountC3D(vcpus)}
+		if hasLSSD && (variant == "standard" || variant == "highmem") {
+			setAutoAttachedLocalSSD(lssdCountC3D(vcpus))
 		}
 
 	case "c4":
@@ -517,8 +528,8 @@ func getPredefinedMachineInfo(
 		info.Architecture = ArchAMD64
 		info.StorageTypes = storageHyperdiskOnly
 		info.CPUPlatforms = platformsC4
-		if hasLSSD {
-			info.AllowedLocalSSDCount = []int{lssdCountC4(vcpus)}
+		if hasLSSD && (variant == "standard" || variant == "highmem") {
+			setAutoAttachedLocalSSD(lssdCountC4(vcpus))
 		}
 
 	case "c4a":
@@ -527,8 +538,8 @@ func getPredefinedMachineInfo(
 		info.Architecture = ArchARM64
 		info.StorageTypes = storageHyperdiskOnly
 		info.CPUPlatforms = platformsC4A
-		if hasLSSD {
-			info.AllowedLocalSSDCount = []int{lssdCountC4A(vcpus)}
+		if hasLSSD && (variant == "standard" || variant == "highmem") {
+			setAutoAttachedLocalSSD(lssdCountC4A(vcpus))
 		}
 
 	case "c4d":
@@ -536,8 +547,8 @@ func getPredefinedMachineInfo(
 		info.Architecture = ArchAMD64
 		info.StorageTypes = storageHyperdiskOnly
 		info.CPUPlatforms = platformsC4D
-		if hasLSSD {
-			info.AllowedLocalSSDCount = []int{lssdCountC4D(vcpus)}
+		if hasLSSD && (variant == "standard" || variant == "highmem") {
+			setAutoAttachedLocalSSD(lssdCountC4D(vcpus))
 		}
 
 	case "h3":

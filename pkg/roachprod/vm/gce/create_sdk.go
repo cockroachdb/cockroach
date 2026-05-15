@@ -59,8 +59,12 @@ func (p *Provider) buildInstanceProperties(
 	// Add additional disks (SSDs or persistent disks).
 	if !providerOpts.BootDiskOnly {
 		if opts.SSDOpts.UseLocalSSD {
+			attachCount, err := localSSDAttachCount(l, providerOpts)
+			if err != nil {
+				return nil, err
+			}
 			// Local SSDs are physically attached to the host machine.
-			for i := 0; i < providerOpts.SSDCount; i++ {
+			for i := 0; i < attachCount; i++ {
 				disks = append(disks, &computepb.AttachedDisk{
 					AutoDelete: proto.Bool(true),
 					Type:       proto.String(computepb.AttachedDisk_SCRATCH.String()),
