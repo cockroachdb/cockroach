@@ -44,6 +44,7 @@ type Counter struct {
 // metadata is automatically registered so that the cmreader can
 // materialize this metric from the rangefeed.
 func NewCounter(metadata metric.Metadata) *Counter {
+	metadata.MetricType = prometheusgo.MetricType_COUNTER
 	ensureClusterMetricRegistered(metadata.Name, metadata)
 	return &Counter{
 		Counter: metric.NewCounter(metadata),
@@ -123,6 +124,7 @@ type Gauge struct {
 // metadata is automatically registered so that the cmreader can
 // materialize this metric from the rangefeed.
 func NewGauge(metadata metric.Metadata) *Gauge {
+	metadata.MetricType = prometheusgo.MetricType_GAUGE
 	ensureClusterMetricRegistered(metadata.Name, metadata)
 	return &Gauge{
 		Gauge: metric.NewGauge(metadata),
@@ -223,6 +225,7 @@ type WriteStopwatch struct {
 // metadata and time source. The metadata is automatically registered
 // so that the cmreader can materialize this metric from the rangefeed.
 func NewWriteStopwatch(metadata metric.Metadata, timeSource timeutil.TimeSource) *WriteStopwatch {
+	metadata.MetricType = prometheusgo.MetricType_GAUGE
 	ensureClusterMetricRegistered(metadata.Name, metadata)
 	return &WriteStopwatch{
 		Gauge:      metric.NewGauge(metadata),

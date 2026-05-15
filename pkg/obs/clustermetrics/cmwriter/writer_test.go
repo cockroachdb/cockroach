@@ -391,6 +391,95 @@ func TestWriter_Flush(t *testing.T) {
 	})
 }
 
+type walkTestLeaf struct {
+	Count *cmmetrics.Counter
+}
+
+func (*walkTestLeaf) MetricStruct() {}
+
+// TestWriter_StructWalk verifies AddMetricStruct recurses into arrays,
+// slices, and maps and skips nil entries.
+func TestWriter_StructWalk(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer cmmetrics.TestingAllowNonInitConstruction()()
+
+	newLeaf := func(name string) (*walkTestLeaf, *cmmetrics.Counter) {
+		c := cmmetrics.NewCounter(metric.Metadata{Name: name})
+		return &walkTestLeaf{Count: c}, c
+	}
+
+	t.Run("sparse array", func(t *testing.T) {
+		env := newTestEnv()
+		l1, c1 := newLeaf("arr.c1")
+		l2, c2 := newLeaf("arr.c2")
+		// Slots 0 and 2 are nil.
+		container := struct {
+			Specific [4]metric.Struct
+		}{}
+		container.Specific[1] = l1
+		container.Specific[3] = l2
+		env.writer.AddMetricStruct(&container)
+
+		c1.Inc(11)
+		c2.Inc(22)
+		env.writer.Flush(env.ctx)
+
+		stored, ok := env.store.get("arr.c1")
+		require.True(t, ok)
+		require.Equal(t, int64(11), stored.StoredValue)
+		stored, ok = env.store.get("arr.c2")
+		require.True(t, ok)
+		require.Equal(t, int64(22), stored.StoredValue)
+	})
+
+	t.Run("slice", func(t *testing.T) {
+		env := newTestEnv()
+		l1, c1 := newLeaf("slc.c1")
+		l2, c2 := newLeaf("slc.c2")
+		container := struct {
+			Items []metric.Struct
+		}{
+			Items: []metric.Struct{l1, nil, l2},
+		}
+		env.writer.AddMetricStruct(&container)
+
+		c1.Inc(3)
+		c2.Inc(7)
+		env.writer.Flush(env.ctx)
+
+		stored, ok := env.store.get("slc.c1")
+		require.True(t, ok)
+		require.Equal(t, int64(3), stored.StoredValue)
+		stored, ok = env.store.get("slc.c2")
+		require.True(t, ok)
+		require.Equal(t, int64(7), stored.StoredValue)
+	})
+
+	t.Run("map", func(t *testing.T) {
+		env := newTestEnv()
+		l1, c1 := newLeaf("map.c1")
+		l2, c2 := newLeaf("map.c2")
+		container := struct {
+			ByName map[string]metric.Struct
+		}{
+			ByName: map[string]metric.Struct{"first": l1, "second": l2},
+		}
+		env.writer.AddMetricStruct(&container)
+
+		c1.Inc(5)
+		c2.Inc(8)
+		env.writer.Flush(env.ctx)
+
+		stored, ok := env.store.get("map.c1")
+		require.True(t, ok)
+		require.Equal(t, int64(5), stored.StoredValue)
+		stored, ok = env.store.get("map.c2")
+		require.True(t, ok)
+		require.Equal(t, int64(8), stored.StoredValue)
+	})
+}
+
 func TestWriter_OperationalMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
