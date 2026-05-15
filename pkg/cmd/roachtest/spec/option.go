@@ -183,8 +183,14 @@ func ReuseTagged(tag string) Option {
 	}
 }
 
-// PreferLocalSSD specifies that we use instance-local SSDs whenever possible
-// (depending on other constraints on machine type).
+// PreferLocalSSD specifies that we prefer instance-local SSDs whenever possible
+// (depending on other constraints on machine type). It is stronger than the
+// global --local-ssd default because it is a test-level preference, but it is
+// still not the same as VolumeType("local-ssd"): on GCE ARM64, non-benchmark
+// tests may keep C4A and fall back to a compatible remote disk when the selected
+// C4A shape has no compatible -lssd variant. Benchmarks preserve local SSD by
+// falling back to AMD64 in that case, whether local SSD came from this option or
+// from the global --local-ssd default.
 //
 // By default, a test cluster may or may not use a local SSD depending on
 // --local-ssd flag and machine type.
@@ -207,10 +213,14 @@ func DisableLocalSSD() Option {
 // RandomizeVolumeType is an Option which randomly picks the volume type
 // to be used. Unless SSD is forced, the volume type is picked randomly
 // between the available types for a provider:
-// - GCE: pd-ssd, local-ssd
-// - AWS: gp3, io2, local-ssd
-// - Azure: premium-ssd, premium-ssd-v2, ultra-disk, local-ssd
-// - IBM: 10iops-tier
+//   - GCE: local-ssd, plus one machine-compatible remote disk type. When both
+//     pd-ssd and hyperdisk are available, keep only pd-ssd for now to avoid
+//     splitting roachperf benchmark history; reevaluate once those runs can
+//     compare storage types explicitly.
+//   - AWS: gp3, io2, local-ssd
+//   - Azure: premium-ssd, premium-ssd-v2, ultra-disk, local-ssd
+//   - IBM: 10iops-tier
+//
 // Note: this option has no effect if VolumeType is explicitly set
 // or PreferLocalSSD/DisableLocalSSD is used.
 func RandomizeVolumeType() Option {
