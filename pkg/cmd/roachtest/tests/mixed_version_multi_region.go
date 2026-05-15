@@ -24,9 +24,9 @@ import (
 func registerMultiRegionMixedVersion(r registry.Registry) {
 	regionToZones := map[string][]string{
 		"us-east1":        {"us-east1-b"},
-		"us-west1":        {"us-west1-b"},
+		"us-west1":        {"us-west1-c"},
 		"europe-west2":    {"europe-west2-b"},
-		"europe-central2": {"europe-central2-b"},
+		"europe-central2": {"europe-central2-a"},
 	}
 
 	regions := maps.Keys(regionToZones)

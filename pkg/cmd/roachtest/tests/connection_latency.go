@@ -28,7 +28,7 @@ import (
 const (
 	regionUsEast    = "us-east1-b"
 	regionUsCentral = "us-central1-b"
-	regionUsWest    = "us-west1-b"
+	regionUsWest    = "us-west1-c"
 	regionEuWest    = "europe-west2-b"
 
 	ldapTestUserName     = "jdoe"
