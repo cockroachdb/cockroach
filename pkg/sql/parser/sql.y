@@ -5101,6 +5101,14 @@ comment_stmt:
   {
     $$.val = &tree.CommentOnTable{Table: $4.unresolvedObjectName(), Comment: $6.strPtr()}
   }
+| COMMENT ON VIEW view_name IS comment_text
+  {
+    $$.val = &tree.CommentOnView{View: $4.unresolvedObjectName(), Comment: $6.strPtr()}
+  }
+| COMMENT ON SEQUENCE sequence_name IS comment_text
+  {
+    $$.val = &tree.CommentOnSequence{Sequence: $4.unresolvedObjectName(), Comment: $6.strPtr()}
+  }
 | COMMENT ON COLUMN column_path IS comment_text
   {
     varName, err := $4.unresolvedName().NormalizeVarName()

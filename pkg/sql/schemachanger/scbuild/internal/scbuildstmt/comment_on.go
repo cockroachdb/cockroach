@@ -68,6 +68,46 @@ func CommentOnTable(b BuildCtx, statement *tree.CommentOnTable) {
 	}
 }
 
+// CommentOnView implements COMMENT ON VIEW xxx IS xxx statement. Views are
+// stored with the same TableCommentType as tables, so we reuse the
+// scpb.TableComment element keyed by the view's descriptor ID.
+func CommentOnView(b BuildCtx, statement *tree.CommentOnView) {
+	viewElements := b.ResolveView(statement.View, commentResolveParams)
+	view := viewElements.FilterView().MustGetOneElement()
+	name := statement.View.ToTableName()
+	name.ObjectNamePrefix = b.NamePrefix(view)
+	statement.View = name.ToUnresolvedObjectName()
+
+	if statement.Comment == nil {
+		if existing := viewElements.FilterTableComment().MustGetZeroOrOneElement(); existing != nil {
+			b.Drop(existing)
+			b.LogEventForExistingTarget(existing)
+		}
+		return
+	}
+	addComment(b, viewElements, &scpb.TableComment{TableID: view.ViewID, Comment: *statement.Comment})
+}
+
+// CommentOnSequence implements COMMENT ON SEQUENCE xxx IS xxx statement.
+// Sequences are stored with the same TableCommentType as tables, so we reuse
+// the scpb.TableComment element keyed by the sequence's descriptor ID.
+func CommentOnSequence(b BuildCtx, statement *tree.CommentOnSequence) {
+	seqElements := b.ResolveSequence(statement.Sequence, commentResolveParams)
+	seq := seqElements.FilterSequence().MustGetOneElement()
+	name := statement.Sequence.ToTableName()
+	name.ObjectNamePrefix = b.NamePrefix(seq)
+	statement.Sequence = name.ToUnresolvedObjectName()
+
+	if statement.Comment == nil {
+		if existing := seqElements.FilterTableComment().MustGetZeroOrOneElement(); existing != nil {
+			b.Drop(existing)
+			b.LogEventForExistingTarget(existing)
+		}
+		return
+	}
+	addComment(b, seqElements, &scpb.TableComment{TableID: seq.SequenceID, Comment: *statement.Comment})
+}
+
 // CommentOnType implements COMMENT ON TYPE xxx IS xxx statement.
 func CommentOnType(b BuildCtx, statement *tree.CommentOnType) {
 	typeElements := b.ResolveUserDefinedTypeType(statement.Name, commentResolveParams)

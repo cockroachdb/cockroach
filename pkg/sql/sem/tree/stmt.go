@@ -107,8 +107,10 @@ const (
 	CommentOnDatabaseTag   = "COMMENT ON DATABASE"
 	CommentOnIndexTag      = "COMMENT ON INDEX"
 	CommentOnSchemaTag     = "COMMENT ON SCHEMA"
+	CommentOnSequenceTag   = "COMMENT ON SEQUENCE"
 	CommentOnTableTag      = "COMMENT ON TABLE"
 	CommentOnTypeTag       = "COMMENT ON TYPE"
+	CommentOnViewTag       = "COMMENT ON VIEW"
 	DropDatabaseTag        = "DROP DATABASE"
 	DropFunctionTag        = "DROP FUNCTION"
 	DropPolicyTag          = "DROP POLICY"
@@ -962,6 +964,24 @@ func (*CommentOnType) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*CommentOnType) StatementTag() string { return CommentOnTypeTag }
+
+// StatementReturnType implements the Statement interface.
+func (*CommentOnView) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*CommentOnView) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CommentOnView) StatementTag() string { return CommentOnViewTag }
+
+// StatementReturnType implements the Statement interface.
+func (*CommentOnSequence) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*CommentOnSequence) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CommentOnSequence) StatementTag() string { return CommentOnSequenceTag }
 
 // StatementReturnType implements the Statement interface.
 func (*CommitPrepared) StatementReturnType() StatementReturnType { return Ack }
@@ -2762,8 +2782,10 @@ func (n *CommentOnConstraint) String() string                 { return AsString(
 func (n *CommentOnDatabase) String() string                   { return AsString(n) }
 func (n *CommentOnSchema) String() string                     { return AsString(n) }
 func (n *CommentOnIndex) String() string                      { return AsString(n) }
+func (n *CommentOnSequence) String() string                   { return AsString(n) }
 func (n *CommentOnTable) String() string                      { return AsString(n) }
 func (n *CommentOnType) String() string                       { return AsString(n) }
+func (n *CommentOnView) String() string                       { return AsString(n) }
 func (n *CommitPrepared) String() string                      { return AsString(n) }
 func (n *CommitTransaction) String() string                   { return AsString(n) }
 func (n *CopyFrom) String() string                            { return AsString(n) }

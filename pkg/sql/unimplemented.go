@@ -24,8 +24,18 @@ func (p *planner) AlterPolicy(ctx context.Context, n *tree.AlterPolicy) (planNod
 	return nil, makeUnimplementedLegacyError("ALTER POLICY")
 }
 
+func (p *planner) CommentOnSequence(
+	ctx context.Context, n *tree.CommentOnSequence,
+) (planNode, error) {
+	return nil, makeUnimplementedLegacyError("COMMENT ON SEQUENCE")
+}
+
 func (p *planner) CommentOnType(ctx context.Context, n *tree.CommentOnType) (planNode, error) {
 	return nil, makeUnimplementedLegacyError("COMMENT ON TYPE")
+}
+
+func (p *planner) CommentOnView(ctx context.Context, n *tree.CommentOnView) (planNode, error) {
+	return nil, makeUnimplementedLegacyError("COMMENT ON VIEW")
 }
 
 func (p *planner) CreatePolicy(ctx context.Context, n *tree.CreatePolicy) (planNode, error) {
