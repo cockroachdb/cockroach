@@ -423,7 +423,7 @@ func runCPUTimeTokenWorkQueueTest(t *testing.T, path string) {
 					tokensUsed:     cpuMetrics.TokensUsedPerTenant[systemTenant],
 					tokensReturned: cpuMetrics.TokensReturnedPerTenant[systemTenant],
 				}
-				opts.configHolder = newResourceGroupConfigHolder(nil)
+				opts.configHolder = newResourceGroupConfigHolder(&st.SV)
 				q = makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
 					workKind, tg, st, metrics, opts).(*WorkQueue)
 				q.knobs.DisableCPUTimeTokenEstimation = true
@@ -793,7 +793,7 @@ func makeCPUTimeTokenWorkQueue(
 	opts.timeSource = timeutil.NewManualTime(initialTime)
 	opts.disableEpochClosingGoroutine = true
 	opts.disableGCGroupsAndResetUsed = true
-	opts.configHolder = newResourceGroupConfigHolder(nil)
+	opts.configHolder = newResourceGroupConfigHolder(&st.SV)
 
 	q = makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
 		KVWork, tg, st, metrics, opts).(*WorkQueue)

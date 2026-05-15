@@ -10,15 +10,24 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/stretchr/testify/require"
 )
+
+// testHolder constructs a holder backed by a fresh test cluster
+// settings.Values. The holder requires non-nil settings for the
+// snapshot's mode and utilization-target reads.
+func testHolder() *ResourceGroupConfigHolder {
+	st := cluster.MakeTestingClusterSettings()
+	return newResourceGroupConfigHolder(&st.SV)
+}
 
 // TestResourceGroupConfigHolder covers the constructor seed and the
 // unknown-key fallback. The behavioral cases for Set and Snapshot live in
 // adjacent TestResourceGroupConfigHolder* functions.
 func TestResourceGroupConfigHolder(t *testing.T) {
 	t.Run("constructor_seed", func(t *testing.T) {
-		h := newResourceGroupConfigHolder(nil)
+		h := testHolder()
 		snap := h.Snapshot()
 		// All built-in configs are present.
 		require.Equal(t, systemTenantGroupConfig, snap.Groups[tenantGroupKey(1)])
@@ -32,19 +41,19 @@ func TestResourceGroupConfigHolder(t *testing.T) {
 	})
 
 	t.Run("get_or_default_unknown_rg", func(t *testing.T) {
-		h := newResourceGroupConfigHolder(nil)
+		h := testHolder()
 		require.Equal(t, defaultRGGroupConfig,
 			h.Snapshot().Groups.GetOrDefault(rgGroupKey(9999)))
 	})
 
 	t.Run("get_or_default_unknown_tenant", func(t *testing.T) {
-		h := newResourceGroupConfigHolder(nil)
+		h := testHolder()
 		require.Equal(t, defaultTenantGroupConfig,
 			h.Snapshot().Groups.GetOrDefault(tenantGroupKey(9999)))
 	})
 
 	t.Run("default_configs_have_burst_frac", func(t *testing.T) {
-		h := newResourceGroupConfigHolder(nil)
+		h := testHolder()
 		snap := h.Snapshot()
 		highCfg := snap.Groups.GetOrDefault(rgGroupKey(highResourceGroupID))
 		require.Equal(t, float64(0.8), highCfg.BurstFrac)
@@ -59,7 +68,7 @@ func TestResourceGroupConfigHolder(t *testing.T) {
 // input-aliasing contracts.
 func TestResourceGroupConfigHolderSet(t *testing.T) {
 	t.Run("replaces_wholesale", func(t *testing.T) {
-		h := newResourceGroupConfigHolder(nil)
+		h := testHolder()
 		h.Set(ResourceGroupConfigSet{
 			rgGroupKey(42): {Weight: 100, MaxCPU: false},
 		})
@@ -73,7 +82,7 @@ func TestResourceGroupConfigHolderSet(t *testing.T) {
 	})
 
 	t.Run("input_aliasing_safe", func(t *testing.T) {
-		h := newResourceGroupConfigHolder(nil)
+		h := testHolder()
 		input := ResourceGroupConfigSet{
 			rgGroupKey(7): {Weight: 100, MaxCPU: false},
 		}
@@ -100,7 +109,7 @@ func TestResourceGroupConfigHolderSet(t *testing.T) {
 
 // TestResourceGroupConfigHolderGet covers GetOrDefault for a configured key.
 func TestResourceGroupConfigHolderGet(t *testing.T) {
-	h := newResourceGroupConfigHolder(nil)
+	h := testHolder()
 	h.Set(ResourceGroupConfigSet{
 		rgGroupKey(42): {Weight: 75, MaxCPU: true},
 	})
@@ -114,7 +123,7 @@ func TestResourceGroupConfigHolderGet(t *testing.T) {
 // and a subsequent Set installs a fresh map without mutating the
 // previously-returned snapshot.
 func TestResourceGroupConfigHolderSnapshot(t *testing.T) {
-	h := newResourceGroupConfigHolder(nil)
+	h := testHolder()
 	snap1 := h.Snapshot()
 
 	// Snapshot aliases the internal map (no copy on read). This is
@@ -156,7 +165,7 @@ func TestSystemTenantGroupConfig(t *testing.T) {
 // config appears in the holder's snapshot immediately after
 // construction, without any explicit Set call beyond the seed.
 func TestBuiltinGroupConfigInSnapshot(t *testing.T) {
-	h := newResourceGroupConfigHolder(nil)
+	h := testHolder()
 	groups := h.Snapshot().Groups
 	cfg, ok := groups[tenantGroupKey(1)]
 	require.True(t, ok, "system tenant (ID 1) must be present in snapshot")
@@ -166,7 +175,7 @@ func TestBuiltinGroupConfigInSnapshot(t *testing.T) {
 // TestSetPanicsOnBuiltinOverwrite verifies that Set panics if the
 // caller tries to overwrite any built-in key.
 func TestSetPanicsOnBuiltinOverwrite(t *testing.T) {
-	h := newResourceGroupConfigHolder(nil)
+	h := testHolder()
 	for k := range builtinGroupConfigs {
 		require.Panics(t, func() {
 			h.Set(ResourceGroupConfigSet{
@@ -177,9 +186,10 @@ func TestSetPanicsOnBuiltinOverwrite(t *testing.T) {
 }
 
 // TestConfigSnapshotDefaults verifies the default utilization targets
-// returned when the holder is constructed with a nil settings.Values.
+// surfaced through Snapshot when the underlying cluster settings are
+// at their registered defaults.
 func TestConfigSnapshotDefaults(t *testing.T) {
-	h := newResourceGroupConfigHolder(nil)
+	h := testHolder()
 	snap := h.Snapshot()
 	require.Equal(t, 0.8, snap.AppNoBurstFrac)
 	require.Equal(t, 0.95, snap.SystemNoBurstFrac)

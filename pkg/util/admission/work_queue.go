@@ -474,7 +474,7 @@ func initWorkQueue(
 	q.stopCh = stopCh
 	q.configHolder = opts.configHolder
 	if q.configHolder == nil {
-		q.configHolder = newResourceGroupConfigHolder(nil)
+		q.configHolder = newResourceGroupConfigHolder(&settings.SV)
 	}
 	q.perGroupAggMetrics = opts.perGroupAggMetrics
 	q.timeSource = timeSource

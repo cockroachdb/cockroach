@@ -176,7 +176,7 @@ func (s ConfigSnapshot) MaxFraction() [numResourceTiers]float64 {
 // writes (config changes only).
 type ResourceGroupConfigHolder struct {
 	// sv provides access to cluster settings for the snapshot's
-	// utilization targets. Nil in test paths.
+	// mode and utilization targets. Required.
 	sv *settings.Values
 
 	mu struct {
@@ -186,10 +186,12 @@ type ResourceGroupConfigHolder struct {
 }
 
 // newResourceGroupConfigHolder constructs a holder seeded with
-// builtinGroupConfigs. sv provides access to cluster settings for
-// utilization targets; nil is accepted for test paths (defaults are
-// used).
+// builtinGroupConfigs. sv must be non-nil; the holder reads cluster
+// settings on every Snapshot.
 func newResourceGroupConfigHolder(sv *settings.Values) *ResourceGroupConfigHolder {
+	if sv == nil {
+		panic(errors.AssertionFailedf("newResourceGroupConfigHolder: sv must be non-nil"))
+	}
 	h := &ResourceGroupConfigHolder{sv: sv}
 	h.Set(nil)
 	return h
@@ -226,15 +228,6 @@ func (h *ResourceGroupConfigHolder) Snapshot() ConfigSnapshot {
 	h.mu.RLock()
 	groups := h.mu.config
 	h.mu.RUnlock()
-	if h.sv == nil {
-		return ConfigSnapshot{
-			Groups:            groups,
-			Mode:              serverlessMode,
-			AppNoBurstFrac:    0.8,
-			SystemNoBurstFrac: 0.95,
-			BurstDelta:        0.05,
-		}
-	}
 	snap := ConfigSnapshot{
 		Groups:     groups,
 		Mode:       cpuTimeTokenACMode.Get(h.sv),
