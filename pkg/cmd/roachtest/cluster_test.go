@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
@@ -259,12 +260,18 @@ func TestClusterMachineType(t *testing.T) {
 		{"n2-highmem-8", 8},
 		{"n2-highcpu-16-2048", 16},
 		{"n2-custom-32-65536", 32},
-		{"t2a-standard-2", 2},
-		{"t2a-standard-4", 4},
-		{"t2a-standard-8", 8},
-		{"t2a-standard-16", 16},
-		{"t2a-standard-32", 32},
-		{"t2a-standard-48", 48},
+		{"c4a-standard-2", 2},
+		{"c4a-standard-4", 4},
+		{"c4a-standard-8", 8},
+		{"c4a-standard-16", 16},
+		{"c4a-standard-32", 32},
+		{"c4a-standard-48", 48},
+		{"c4a-standard-64", 64},
+		{"c4a-standard-72", 72},
+		{"c4a-highmem-8", 8},
+		{"c4a-highmem-32", 32},
+		{"c4a-highcpu-4", 4},
+		{"c4a-highcpu-16", 16},
 	}
 	// Azure machine types
 	for i := 2; i <= 96; i *= 2 {
@@ -490,6 +497,8 @@ func TestGCEMachineType(t *testing.T) {
 	addARM := func(mem spec.MemPerCPU) {
 		fallback := false
 		var series string
+		armSeries := "c4a"
+		maxArmCPUs := 72
 
 		switch mem {
 		case spec.Auto:
@@ -497,9 +506,9 @@ func TestGCEMachineType(t *testing.T) {
 		case spec.Standard:
 			series = "standard"
 		case spec.High:
-			fallback = true
 			series = "highmem"
 		case spec.Low:
+			// Low always falls back to n2 (C4A highcpu is 2 GB/vCPU, not 1 GB).
 			fallback = true
 			series = "highcpu"
 		}
@@ -509,10 +518,14 @@ func TestGCEMachineType(t *testing.T) {
 				fmt.Sprintf("n2-%s-%d", series, 2), vm.ArchAMD64})
 		} else {
 			testCases = append(testCases, machineTypeTestCase{1, mem, false, vm.ArchARM64,
-				fmt.Sprintf("t2a-%s-%d", series, 1), vm.ArchARM64})
+				fmt.Sprintf("%s-%s-%d", armSeries, series, 1), vm.ArchARM64})
 		}
-		for _, i := range []int{2, 4, 8, 16, 32, 64, 96, 128} {
-			fallback = fallback || i > 48 || (i > 16 && mem == spec.Auto)
+		for _, i := range []int{2, 4, 8, 16, 32, 48, 64, 72, 96, 128} {
+			expectedArmSeries := series
+			if mem == spec.Auto && i > 16 && i <= maxArmCPUs {
+				expectedArmSeries = "highcpu"
+			}
+			fallback = fallback || i > maxArmCPUs
 
 			if fallback {
 				expectedMachineType := fmt.Sprintf("n2-%s-%d", series, i)
@@ -524,12 +537,12 @@ func TestGCEMachineType(t *testing.T) {
 						expectedMachineType = fmt.Sprintf("n2-custom-%d-%d", i, i*2048)
 					}
 				}
-				// Expect fallback to AMD64.
+				// Expect fallback to AMD64
 				testCases = append(testCases, machineTypeTestCase{i, mem, false, vm.ArchARM64,
 					expectedMachineType, vm.ArchAMD64})
 			} else {
 				testCases = append(testCases, machineTypeTestCase{i, mem, false, vm.ArchARM64,
-					fmt.Sprintf("t2a-%s-%d", series, i), vm.ArchARM64})
+					fmt.Sprintf("%s-%s-%d", armSeries, expectedArmSeries, i), vm.ArchARM64})
 			}
 		}
 	}
@@ -842,6 +855,212 @@ func TestMachineTypes(t *testing.T) {
 			return out.String()
 		})
 	})
+}
+
+func TestGCEBenchmarkStorageArchGuards(t *testing.T) {
+	origPreferLocalSSD := roachtestflags.PreferLocalSSD
+	defer func() {
+		roachtestflags.PreferLocalSSD = origPreferLocalSSD
+	}()
+
+	tests := []struct {
+		name           string
+		testSpec       registry.TestSpec
+		preferLocalSSD bool
+		expectedKind   spec.GCEStorageKind
+	}{
+		{
+			name: "benchmark default prefers local SSD",
+			testSpec: registry.TestSpec{
+				Benchmark: true,
+				Cluster:   spec.MakeClusterSpec(4),
+			},
+			preferLocalSSD: true,
+			expectedKind:   spec.GCEStorageLocalSSD,
+		},
+		{
+			name: "benchmark default with local SSD flag disabled preserves pd-ssd",
+			testSpec: registry.TestSpec{
+				Benchmark: true,
+				Cluster:   spec.MakeClusterSpec(4),
+			},
+			expectedKind: spec.GCEStoragePDSSD,
+		},
+		{
+			name: "benchmark disabling local SSD preserves pd-ssd",
+			testSpec: registry.TestSpec{
+				Benchmark: true,
+				Cluster:   spec.MakeClusterSpec(4, spec.DisableLocalSSD()),
+			},
+			preferLocalSSD: true,
+			expectedKind:   spec.GCEStoragePDSSD,
+		},
+		{
+			name: "benchmark volume size preserves pd-ssd",
+			testSpec: registry.TestSpec{
+				Benchmark: true,
+				Cluster:   spec.MakeClusterSpec(4, spec.VolumeSize(500)),
+			},
+			preferLocalSSD: true,
+			expectedKind:   spec.GCEStoragePDSSD,
+		},
+		{
+			name: "explicit pd-ssd always requires pd-ssd-compatible machine",
+			testSpec: registry.TestSpec{
+				Cluster: spec.MakeClusterSpec(4, spec.VolumeType("pd-ssd")),
+			},
+			preferLocalSSD: true,
+			expectedKind:   spec.GCEStoragePDSSD,
+		},
+		{
+			name: "explicit local SSD needs local SSD even when default flag disabled",
+			testSpec: registry.TestSpec{
+				Benchmark: true,
+				Cluster:   spec.MakeClusterSpec(4, spec.VolumeType("local-ssd")),
+			},
+			expectedKind: spec.GCEStorageLocalSSD,
+		},
+		{
+			name: "randomized storage does not trigger benchmark continuity guard",
+			testSpec: registry.TestSpec{
+				Benchmark: true,
+				Cluster:   spec.MakeClusterSpec(4, spec.RandomizeVolumeType()),
+			},
+			preferLocalSSD: true,
+			expectedKind:   spec.GCEStorageRandomized,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			roachtestflags.PreferLocalSSD = tc.preferLocalSSD
+			decision := tc.testSpec.Cluster.GCEStorageDecision(
+				tc.testSpec.Benchmark, roachtestflags.PreferLocalSSD,
+			)
+			require.Equal(t, tc.expectedKind, decision.Kind)
+		})
+	}
+}
+
+func TestArchForTestFallsBackForUnsupportedExplicitC4AZone(t *testing.T) {
+	origCloud := roachtestflags.Cloud
+	origARM64Probability := roachtestflags.ARM64Probability
+	origFIPSProbability := roachtestflags.FIPSProbability
+	origPreferLocalSSD := roachtestflags.PreferLocalSSD
+	origInstanceType := roachtestflags.InstanceType
+	origZones := roachtestflags.Zones
+	origPRNG := prng
+	defer func() {
+		roachtestflags.Cloud = origCloud
+		roachtestflags.ARM64Probability = origARM64Probability
+		roachtestflags.FIPSProbability = origFIPSProbability
+		roachtestflags.PreferLocalSSD = origPreferLocalSSD
+		roachtestflags.InstanceType = origInstanceType
+		roachtestflags.Zones = origZones
+		prng = origPRNG
+	}()
+
+	roachtestflags.Cloud = spec.GCE
+	roachtestflags.ARM64Probability = 1
+	roachtestflags.FIPSProbability = 0
+	roachtestflags.PreferLocalSSD = true
+	roachtestflags.InstanceType = ""
+	roachtestflags.Zones = ""
+	prng = rand.New(rand.NewSource(1))
+
+	testSpec := registry.TestSpec{
+		Name:      "test/c4a-explicit-zone-fallback",
+		Benchmark: true,
+		Cluster: spec.MakeClusterSpec(
+			4,
+			spec.Geo(),
+			spec.GCEZones("us-east1-b,us-west1-b"),
+		),
+	}
+	require.Equal(t, vm.ArchAMD64, archForTest(context.Background(), nilLogger(), testSpec))
+}
+
+func TestArchForTestHonorsExplicitGCEMachineType(t *testing.T) {
+	origCloud := roachtestflags.Cloud
+	origARM64Probability := roachtestflags.ARM64Probability
+	origFIPSProbability := roachtestflags.FIPSProbability
+	origPreferLocalSSD := roachtestflags.PreferLocalSSD
+	origInstanceType := roachtestflags.InstanceType
+	origZones := roachtestflags.Zones
+	origPRNG := prng
+	defer func() {
+		roachtestflags.Cloud = origCloud
+		roachtestflags.ARM64Probability = origARM64Probability
+		roachtestflags.FIPSProbability = origFIPSProbability
+		roachtestflags.PreferLocalSSD = origPreferLocalSSD
+		roachtestflags.InstanceType = origInstanceType
+		roachtestflags.Zones = origZones
+		prng = origPRNG
+	}()
+
+	testCases := []struct {
+		name             string
+		machineType      string
+		flagInstanceType string
+		compatibleArchs  spec.ArchSet
+		armProbability   float64
+		fipsProbability  float64
+		expectedArch     vm.CPUArch
+	}{
+		{
+			name:            "explicit n2 excludes arm64",
+			machineType:     "n2-standard-8",
+			compatibleArchs: spec.AllExceptFIPS,
+			armProbability:  1,
+			expectedArch:    vm.ArchAMD64,
+		},
+		{
+			name:             "flag n2 excludes arm64",
+			flagInstanceType: "n2-standard-8",
+			compatibleArchs:  spec.AllExceptFIPS,
+			armProbability:   1,
+			expectedArch:     vm.ArchAMD64,
+		},
+		{
+			name:            "explicit n2 still allows fips",
+			machineType:     "n2-standard-8",
+			armProbability:  0,
+			fipsProbability: 1,
+			expectedArch:    vm.ArchFIPS,
+		},
+		{
+			name:            "explicit c4a forces arm64",
+			machineType:     "c4a-standard-8",
+			compatibleArchs: spec.AllExceptFIPS,
+			armProbability:  0,
+			expectedArch:    vm.ArchARM64,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			roachtestflags.Cloud = spec.GCE
+			roachtestflags.ARM64Probability = tc.armProbability
+			roachtestflags.FIPSProbability = tc.fipsProbability
+			roachtestflags.PreferLocalSSD = true
+			roachtestflags.InstanceType = tc.flagInstanceType
+			roachtestflags.Zones = ""
+			prng = rand.New(rand.NewSource(1))
+
+			opts := []spec.Option{spec.CPU(8)}
+			if tc.machineType != "" {
+				opts = append(opts, spec.GCEMachineType(tc.machineType))
+			}
+			if !tc.compatibleArchs.IsEmpty() {
+				opts = append(opts, spec.Arch(tc.compatibleArchs))
+			}
+			testSpec := registry.TestSpec{
+				Name:    tc.name,
+				Cluster: spec.MakeClusterSpec(1, opts...),
+			}
+			require.Equal(t, tc.expectedArch, archForTest(context.Background(), nilLogger(), testSpec))
+		})
+	}
 }
 
 func TestVerifyLibraries(t *testing.T) {

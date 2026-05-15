@@ -5,7 +5,7 @@ select-machine-type mem-per-cpu=Auto cpu-arch=ARM64
 ----
 cpus | 1,2,4,8,16 | 32,64 | 96,128
 ----
-GCE | t2a-standard-1, t2a-standard-2, t2a-standard-4, t2a-standard-8, t2a-standard-16 | n2-custom-32-65536 (amd64), n2-custom-64-131072 (amd64) | n2d-custom-96-196608 (amd64), n2d-custom-128-262144 (amd64)
+GCE | c4a-standard-1, c4a-standard-2, c4a-standard-4, c4a-standard-8, c4a-standard-16 | c4a-highcpu-32, c4a-highcpu-64 | n2d-custom-96-196608 (amd64), n2d-custom-128-262144 (amd64)
 AWS | m7g.large, m7g.large, m7g.xlarge, m7g.2xlarge, m7g.4xlarge | c7g.8xlarge, c7g.16xlarge | c6a.24xlarge (amd64), c6a.24xlarge (amd64)
 Azure | Standard_D2pds_v5, Standard_D2pds_v5, Standard_D4pds_v5, Standard_D8pds_v5, Standard_D16pds_v5 | Standard_D32plds_v5,Standard_D64plds_v5 | Standard_D96lds_v5 (amd64), Standard_D128lds_v5 (amd64)
 
@@ -21,7 +21,7 @@ select-machine-type mem-per-cpu=Standard cpu-arch=ARM64
 ----
 cpus | 1,2,4,8,16 | 32,64 | 96,128
 ----
-GCE | t2a-standard-1, t2a-standard-2, t2a-standard-4, t2a-standard-8, t2a-standard-16 | t2a-standard-32, n2-standard-64 (amd64) | n2-standard-96 (amd64), n2-standard-128 (amd64)
+GCE | c4a-standard-1, c4a-standard-2, c4a-standard-4, c4a-standard-8, c4a-standard-16 | c4a-standard-32, c4a-standard-64 | n2-standard-96 (amd64), n2-standard-128 (amd64)
 AWS | m7g.large, m7g.large, m7g.xlarge, m7g.2xlarge, m7g.4xlarge | m7g.8xlarge, m7g.16xlarge | m6i.24xlarge (amd64), m6i.24xlarge (amd64)
 Azure | Standard_D2pds_v5, Standard_D2pds_v5, Standard_D4pds_v5, Standard_D8pds_v5, Standard_D16pds_v5 | Standard_D32pds_v5,Standard_D64pds_v5 | Standard_D96ds_v5 (amd64), Standard_D128ds_v5 (amd64)
 
@@ -37,7 +37,7 @@ select-machine-type mem-per-cpu=High cpu-arch=ARM64
 ----
 cpus | 1,2,4,8,16 | 32,64 | 96,128
 ----
-GCE | n2-highmem-2 (amd64), n2-highmem-2 (amd64), n2-highmem-4 (amd64), n2-highmem-8 (amd64), n2-highmem-16 (amd64) | n2-highmem-32 (amd64), n2-highmem-64 (amd64) | n2-highmem-96 (amd64), n2-highmem-128 (amd64)
+GCE | c4a-highmem-1, c4a-highmem-2, c4a-highmem-4, c4a-highmem-8, c4a-highmem-16 | c4a-highmem-32, c4a-highmem-64 | n2-highmem-96 (amd64), n2-highmem-128 (amd64)
 AWS | r6i.large (amd64), r6i.large (amd64), r6i.xlarge (amd64), r6i.2xlarge (amd64), r6i.4xlarge (amd64) | r6i.8xlarge (amd64), r6i.16xlarge (amd64) | r6i.24xlarge (amd64), r6i.24xlarge (amd64)
 Azure | Standard_E2pds_v5, Standard_E2pds_v5, Standard_E4pds_v5, Standard_E8pds_v5, Standard_E16pds_v5 | Standard_E32pds_v5,Standard_E64ds_v5 (amd64) | Standard_E96ds_v5 (amd64), Standard_E128ds_v5 (amd64)
 

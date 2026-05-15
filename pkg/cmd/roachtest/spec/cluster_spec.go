@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce/gcedb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/ibm"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -431,6 +433,51 @@ func getGCEOpts(
 	return opts
 }
 
+func defaultGCERemoteVolumeType(machineType string) string {
+	if info, err := gcedb.GetMachineInfo(machineType); err == nil {
+		if slices.Contains(info.StorageTypes, "pd-ssd") {
+			return "pd-ssd"
+		}
+		if slices.Contains(info.StorageTypes, "hyperdisk-balanced") {
+			return "hyperdisk-balanced"
+		}
+		if len(info.StorageTypes) > 0 {
+			return info.StorageTypes[0]
+		}
+	}
+	return ""
+}
+
+func gceMachineTypeSupportsLocalSSD(machineType string, requestedCount int) bool {
+	info, err := gcedb.GetMachineInfo(machineType)
+	if err != nil {
+		return false
+	}
+	return slices.ContainsFunc(info.AllowedLocalSSDCount, func(count int) bool {
+		return count > 0 && (requestedCount == 0 || count == requestedCount)
+	})
+}
+
+// GCEMachineTypeWithLocalSSD returns a machine type that can use local SSDs
+// while preserving any explicit disk count. This distinction matters for C4A:
+// its local-SSD-capable shapes are encoded as -lssd machine types with fixed
+// local SSD counts. A C4A shape with 4 fixed local SSDs must not satisfy a
+// benchmark that explicitly asked for 16 stores, because that would preserve
+// ARM64 while silently changing the benchmark's storage shape.
+//
+// requestedCount == 0 means the spec did not ask for a particular count; in
+// that case any positive local SSD count is acceptable.
+func GCEMachineTypeWithLocalSSD(machineType string, requestedCount int) (string, bool) {
+	if gceMachineTypeSupportsLocalSSD(machineType, requestedCount) {
+		return machineType, true
+	}
+	lssdMachineType := machineType + "-lssd"
+	if gceMachineTypeSupportsLocalSSD(lssdMachineType, requestedCount) {
+		return lssdMachineType, true
+	}
+	return machineType, false
+}
+
 func getAzureOpts(
 	machineType string,
 	volumeSize int,
@@ -507,6 +554,13 @@ type RoachprodClusterConfig struct {
 	// (depending on cloud and on other requirements on machine type).
 	PreferredArch vm.CPUArch
 
+	// Benchmark indicates that the test is a performance benchmark. This is not a
+	// generic machine-family selector: GCE ARM64 still defaults to C4A. The GCE
+	// storage resolution below uses this bit only when an ARM64 benchmark has
+	// explicitly or effectively chosen remote storage without naming a volume
+	// type; in that case we preserve the pre-C4A T2A + pd-ssd storage history.
+	Benchmark bool
+
 	// Defaults contains configuration values that are used when the ClusterSpec
 	// does not specify the corresponding option.
 	Defaults struct {
@@ -529,10 +583,12 @@ type RoachprodClusterConfig struct {
 }
 
 // RoachprodOpts returns the opts to use when calling `roachprod.Create()`
-// in order to create the cluster described in the spec.
+// in order to create the cluster described in the spec. It also returns the
+// selected CRDB node machine type and arch after applying defaults and
+// compatibility fallbacks.
 func (s *ClusterSpec) RoachprodOpts(
 	params RoachprodClusterConfig,
-) (vm.CreateOpts, vm.ProviderOpts, vm.ProviderOpts, vm.CPUArch, error) {
+) (vm.CreateOpts, vm.ProviderOpts, vm.ProviderOpts, string, vm.CPUArch, error) {
 	useIOBarrier := params.UseIOBarrierOnLocalSSD
 	requestedArch := params.PreferredArch
 
@@ -555,11 +611,11 @@ func (s *ClusterSpec) RoachprodOpts(
 	case Local:
 		createVMOpts.VMProviders = []string{cloud.String()}
 		// remaining opts are not applicable to local clusters
-		return createVMOpts, nil, nil, requestedArch, nil
+		return createVMOpts, nil, nil, "", requestedArch, nil
 	case AWS, GCE, Azure, IBM:
 		createVMOpts.VMProviders = []string{cloud.String()}
 	default:
-		return vm.CreateOpts{}, nil, nil, "", errors.Errorf("unsupported cloud %v", cloud)
+		return vm.CreateOpts{}, nil, nil, "", "", errors.Errorf("unsupported cloud %v", cloud)
 	}
 	createVMOpts.GeoDistributed = s.Geo
 	createVMOpts.Arch = string(requestedArch)
@@ -581,6 +637,7 @@ func (s *ClusterSpec) RoachprodOpts(
 	}
 	// Assume selected machine type has the same arch as requested unless SelectXXXMachineType says otherwise.
 	selectedArch := requestedArch
+	machineTypeAutoSelected := machineType == ""
 
 	if s.CPUs != 0 {
 		// Default to the user-supplied machine type, if any.
@@ -596,7 +653,9 @@ func (s *ClusterSpec) RoachprodOpts(
 					s.CPUs, s.Mem, s.mayUseLocalSSD(params.Defaults.PreferLocalSSD), requestedArch,
 				)
 			case GCE:
-				machineType, selectedArch = SelectGCEMachineType(s.CPUs, s.Mem, requestedArch)
+				machineType, selectedArch = SelectGCEMachineType(
+					s.CPUs, s.Mem, requestedArch,
+				)
 			case Azure:
 				machineType, selectedArch, err = SelectAzureMachineType(s.CPUs, s.Mem, requestedArch)
 			case IBM:
@@ -604,7 +663,7 @@ func (s *ClusterSpec) RoachprodOpts(
 			}
 
 			if err != nil {
-				return vm.CreateOpts{}, nil, nil, "", err
+				return vm.CreateOpts{}, nil, nil, "", "", err
 			}
 			if requestedArch != "" && selectedArch != requestedArch {
 				// TODO(srosenberg): we need a better way to monitor the rate of this mismatch, i.e.,
@@ -612,6 +671,26 @@ func (s *ClusterSpec) RoachprodOpts(
 				fmt.Printf("WARN: requested arch %s for machineType %s, but selected %s\n", requestedArch, machineType, selectedArch)
 				createVMOpts.Arch = string(selectedArch)
 			}
+		}
+	}
+
+	selectGCEPDSSDMachineType := func(reason string) {
+		if cloud != GCE || selectedArch != vm.ArchARM64 || !machineTypeAutoSelected || s.CPUs == 0 {
+			return
+		}
+		prevMachineType := machineType
+		machineType, selectedArch = SelectGCEMachineTypeForPDSSD(s.CPUs, s.Mem, vm.ArchARM64)
+		createVMOpts.Arch = string(selectedArch)
+		if selectedArch == vm.ArchARM64 {
+			fmt.Printf(
+				"INFO: using %s instead of %s because %s; C4A cannot attach pd-ssd, and T2A is the ARM64 family that preserves pd-ssd\n",
+				machineType, prevMachineType, reason,
+			)
+		} else {
+			fmt.Printf(
+				"INFO: falling back from %s to %s (%s) because %s; C4A cannot attach pd-ssd, and T2A cannot represent this CPU/memory shape without changing the requested configuration\n",
+				prevMachineType, machineType, selectedArch, reason,
+			)
 		}
 	}
 
@@ -642,31 +721,10 @@ func (s *ClusterSpec) RoachprodOpts(
 	case Btrfs:
 		createVMOpts.SSDOpts.FileSystem = vm.Btrfs
 	default:
-		return vm.CreateOpts{}, nil, nil, "", errors.Errorf("unknown file system type: %v", s.FileSystem)
+		return vm.CreateOpts{}, nil, nil, "", "", errors.Errorf("unknown file system type: %v", s.FileSystem)
 	}
 
-	// Determine which storage type to use based on the following priority order:
-	// 1. Explicit volume type: If the user explicitly set s.VolumeType, use it.
-	// 2. Forced local SSD: If LocalSSDPreferOn is set, always use local SSD if available.
-	// 3. Randomized storage: If RandomizeVolumeType is enabled, randomly select
-	//    from available storage types (cloud-specific volumes + optionally local SSD).
-	//    Local SSD is excluded from randomization if LocalSSDDisable is set.
-	// 4. Default behavior: If params.Defaults.PreferLocalSSD is true AND the user
-	//    did not explicitly disable local SSD, prefer local SSD.
-	//
-	// The selected storage type is then validated against availability constraints
-	// (e.g., volume size, machine type, architecture) before being applied.
-	selectedVolumeType := ""
-	switch {
-	case s.VolumeType != "":
-		// User explicitly set a volume type, use it directly.
-		selectedVolumeType = s.VolumeType
-
-	case s.LocalSSD == LocalSSDPreferOn:
-		// User forced local SSD preference.
-		selectedVolumeType = "local-ssd"
-
-	case s.RandomizeVolumeType:
+	selectRandomizedVolumeType := func() string {
 		// If the user selected RandomizeVolumeType, randomly pick a volume type
 		// from the available volume types.
 		availableVolumeTypes := []string{}
@@ -682,7 +740,13 @@ func (s *ClusterSpec) RoachprodOpts(
 		case AWS:
 			availableVolumeTypes = append(availableVolumeTypes, "gp3", "io2")
 		case GCE:
-			availableVolumeTypes = append(availableVolumeTypes, "pd-ssd")
+			// Keep remote-disk randomization to one machine-compatible type for
+			// now. Adding both pd-ssd and hyperdisk on families that support both
+			// would split roachperf benchmark history; reevaluate once those runs
+			// can compare storage types explicitly.
+			if volumeType := defaultGCERemoteVolumeType(machineType); volumeType != "" {
+				availableVolumeTypes = append(availableVolumeTypes, volumeType)
+			}
 		case Azure:
 			availableVolumeTypes = append(availableVolumeTypes, "premium-ssd", "premium-ssd-v2", "ultra-disk")
 		case IBM:
@@ -691,31 +755,118 @@ func (s *ClusterSpec) RoachprodOpts(
 
 		if len(availableVolumeTypes) > 0 {
 			rng, _ := randutil.NewPseudoRand()
-			selectedVolumeType = availableVolumeTypes[rng.Intn(len(availableVolumeTypes))]
+			selectedVolumeType := availableVolumeTypes[rng.Intn(len(availableVolumeTypes))]
 
 			s.ExposedMetamorphicInfo[MetamorphicVolumeType] = selectedVolumeType
+			return selectedVolumeType
 		}
+		return ""
+	}
 
-	case s.LocalSSD != LocalSSDDisable && params.Defaults.PreferLocalSSD:
-		// No forced preference, no randomization, but default is to use local SSD
-		// if available.
-		selectedVolumeType = "local-ssd"
+	// Determine which storage type to use. GCE has a dedicated decision helper
+	// because C4A, T2A, benchmark continuity, and pd-ssd support interact in a
+	// way that is hard to follow when derived inline. Other clouds retain the
+	// existing simple priority order.
+	selectedVolumeType := ""
+	gceStorageDecision := GCEStorageDecision{}
+	if cloud == GCE {
+		gceStorageDecision = s.GCEStorageDecision(params.Benchmark, params.Defaults.PreferLocalSSD)
+		switch gceStorageDecision.Kind {
+		case GCEStorageLocalSSD, GCEStoragePDSSD, GCEStorageExplicitRemote:
+			selectedVolumeType = gceStorageDecision.VolumeType
+		case GCEStorageRandomized:
+			selectedVolumeType = selectRandomizedVolumeType()
+		case GCEStorageDefaultRemote:
+			// The default remote type depends on the selected machine family and
+			// is filled in below after any C4A -> T2A switch has been applied.
+		}
+	} else {
+		switch {
+		case s.VolumeType != "":
+			// User explicitly set a volume type, use it directly.
+			selectedVolumeType = s.VolumeType
+
+		case s.LocalSSD == LocalSSDPreferOn:
+			// User forced local SSD preference.
+			selectedVolumeType = "local-ssd"
+
+		case s.RandomizeVolumeType:
+			selectedVolumeType = selectRandomizedVolumeType()
+
+		case s.LocalSSD != LocalSSDDisable && params.Defaults.PreferLocalSSD:
+			// No forced preference, no randomization, but default is to use local SSD
+			// if available.
+			selectedVolumeType = "local-ssd"
+		}
+	}
+
+	if cloud == GCE && selectedArch == vm.ArchARM64 && gceStorageDecision.RequiresPDSSD() {
+		// The storage decision has selected pd-ssd. C4A is still the default
+		// ARM64 family, but C4A cannot attach pd-ssd. Use T2A when the requested
+		// shape fits, and otherwise fall back to AMD64, so the run does not
+		// quietly become a hyperdisk run.
+		selectGCEPDSSDMachineType(gceStorageDecision.Reason)
+		selectedVolumeType = "pd-ssd"
+	}
+
+	if cloud == GCE && selectedArch == vm.ArchARM64 && machineTypeAutoSelected && s.CPUs != 0 &&
+		strings.HasPrefix(strings.ToLower(machineType), "c4a-") {
+		zones := splitZones(s.zonesStrForCloud(cloud, params.Defaults.Zones), s.Geo)
+		if len(zones) > 0 && !gce.IsSupportedC4AZone(zones) {
+			prevMachineType := machineType
+			machineType, selectedArch = SelectGCEMachineType(s.CPUs, s.Mem, vm.ArchAMD64)
+			createVMOpts.Arch = string(selectedArch)
+			fmt.Printf(
+				"INFO: falling back from %s to %s (%s) because the configured zones %q are not supported by C4A\n",
+				prevMachineType, machineType, selectedArch, strings.Join(zones, ","),
+			)
+		}
+	}
+
+	// Ensure we pick a volume type compatible with the machine type. Some
+	// machine families (e.g., C4A) only support hyperdisk and cannot use
+	// pd-ssd, which is the default in roachprod.
+	if selectedVolumeType == "" && cloud == GCE {
+		selectedVolumeType = defaultGCERemoteVolumeType(machineType)
 	}
 
 	// Local SSD will be used if selected (either by preference or randomly), and
 	// - if no particular volume size is requested, and,
 	// - on AWS, if the machine type supports it.
-	// - on GCE, if the machine type is not ARM64.
+	// - on GCE, if the machine type or its -lssd variant supports it.
 	// - on non-GCE clouds, only if DiskCount <= 1 (only GCE supports multiple local SSDs).
 	if selectedVolumeType == "local-ssd" {
+		if cloud == GCE {
+			if localSSDMachineType, ok := GCEMachineTypeWithLocalSSD(machineType, s.DiskCount); ok {
+				machineType = localSSDMachineType
+			} else if params.Benchmark && selectedArch == vm.ArchARM64 && machineTypeAutoSelected {
+				prevMachineType := machineType
+				machineType, selectedArch = SelectGCEMachineType(s.CPUs, s.Mem, vm.ArchAMD64)
+				createVMOpts.Arch = string(selectedArch)
+				fmt.Printf(
+					"INFO: falling back from %s to %s (%s) because this benchmark selected local SSDs, but C4A cannot satisfy the requested local SSD count; preserving local SSD/store-count semantics is more important than preserving ARM64\n",
+					prevMachineType, machineType, selectedArch,
+				)
+			}
+		}
 		if err := s.isLocalSSDAvailable(cloud, machineType, selectedArch); err != nil {
 			// Local SSD was selected but is not available; fall back to default volume type.
-			fmt.Printf(
-				"WARN: local SSD selected but not available (%s);"+
-					"falling back to default volume type\n",
-				err.Error(),
-			)
 			createVMOpts.SSDOpts.UseLocalSSD = false
+			if cloud == GCE {
+				selectedVolumeType = defaultGCERemoteVolumeType(machineType)
+				s.VolumeType = selectedVolumeType
+			}
+			if selectedVolumeType != "" && selectedVolumeType != "local-ssd" {
+				fmt.Printf(
+					"INFO: local SSD selected but not available (%s); using %s\n",
+					err.Error(), selectedVolumeType,
+				)
+			} else {
+				fmt.Printf(
+					"WARN: local SSD selected but not available (%s); falling back to default volume type\n",
+					err.Error(),
+				)
+			}
 		} else {
 			createVMOpts.SSDOpts.UseLocalSSD = true
 
@@ -741,17 +892,22 @@ func (s *ClusterSpec) RoachprodOpts(
 		workloadMachineType, _, err = SelectAWSMachineType(s.WorkloadNodeCPUs, s.Mem, false, selectedArch)
 	case GCE:
 		workloadMachineType, _ = SelectGCEMachineType(s.WorkloadNodeCPUs, s.Mem, selectedArch)
+		if createVMOpts.SSDOpts.UseLocalSSD && s.WorkloadRequiresDisk {
+			if localSSDMachineType, ok := GCEMachineTypeWithLocalSSD(workloadMachineType, s.DiskCount); ok {
+				workloadMachineType = localSSDMachineType
+			}
+		}
 	case Azure:
 		workloadMachineType, _, err = SelectAzureMachineType(s.WorkloadNodeCPUs, s.Mem, selectedArch)
 	case IBM:
 		workloadMachineType, _, err = SelectIBMMachineType(s.WorkloadNodeCPUs, s.Mem, selectedArch)
 	}
 	if err != nil {
-		return vm.CreateOpts{}, nil, nil, "", err
+		return vm.CreateOpts{}, nil, nil, "", "", err
 	}
 
 	if createVMOpts.Arch == string(vm.ArchFIPS) && !(cloud == GCE || cloud == AWS) {
-		return vm.CreateOpts{}, nil, nil, "", errors.Errorf(
+		return vm.CreateOpts{}, nil, nil, "", "", errors.Errorf(
 			"FIPS not yet supported on %s", cloud,
 		)
 	}
@@ -764,6 +920,17 @@ func (s *ClusterSpec) RoachprodOpts(
 		workloadProviderOpts = getAWSOpts(workloadMachineType, s.VolumeSize, s.DiskCount, s.AWS.VolumeThroughput, s.VolumeType, s.AWS.VolumeIOPS,
 			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.UseSpotVMs, !s.WorkloadRequiresDisk)
 	case GCE:
+		workloadVolumeType := s.VolumeType
+		if !createVMOpts.SSDOpts.UseLocalSSD {
+			// Workload nodes are auxiliary. Even when CRDB nodes require a
+			// specific remote disk type, such as pd-ssd for benchmark continuity,
+			// keep workload nodes on their machine-compatible default remote disk.
+			// This lets ARM64 workload nodes remain on C4A while CRDB nodes use
+			// T2A to preserve pd-ssd.
+			if volumeType := defaultGCERemoteVolumeType(workloadMachineType); volumeType != "" {
+				workloadVolumeType = volumeType
+			}
+		}
 		providerOpts = getGCEOpts(machineType, s.VolumeSize, s.DiskCount,
 			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration,
 			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch), s.VolumeType,
@@ -771,7 +938,7 @@ func (s *ClusterSpec) RoachprodOpts(
 		)
 		workloadProviderOpts = getGCEOpts(workloadMachineType, s.VolumeSize, s.DiskCount,
 			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration,
-			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch), s.VolumeType,
+			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch), workloadVolumeType,
 			s.UseSpotVMs, !s.WorkloadRequiresDisk,
 		)
 	case Azure:
@@ -790,7 +957,7 @@ func (s *ClusterSpec) RoachprodOpts(
 		)
 	}
 
-	return createVMOpts, providerOpts, workloadProviderOpts, selectedArch, nil
+	return createVMOpts, providerOpts, workloadProviderOpts, machineType, selectedArch, nil
 }
 
 // mayUseLocalSSD returns whether this spec could end up using local SSDs.
@@ -814,6 +981,40 @@ func (s *ClusterSpec) mayUseLocalSSD(defaultPreferLocalSSD bool) bool {
 		defaultPreferLocalSSD
 }
 
+func (s *ClusterSpec) zonesStrForCloud(cloud Cloud, defaultZones string) string {
+	zonesStr := defaultZones
+	switch cloud {
+	case AWS:
+		if s.AWS.Zones != "" {
+			zonesStr = s.AWS.Zones
+		}
+	case GCE:
+		if s.GCE.Zones != "" {
+			zonesStr = s.GCE.Zones
+		}
+	case Azure:
+		if s.Azure.Zones != "" {
+			zonesStr = s.Azure.Zones
+		}
+	case IBM:
+		if s.IBM.Zones != "" {
+			zonesStr = s.IBM.Zones
+		}
+	}
+	return zonesStr
+}
+
+func splitZones(zonesStr string, geo bool) []string {
+	if zonesStr == "" {
+		return nil
+	}
+	zones := strings.Split(zonesStr, ",")
+	if !geo {
+		zones = zones[:1]
+	}
+	return zones
+}
+
 func (s *ClusterSpec) isLocalSSDAvailable(
 	cloud Cloud, machineType string, selectedArch vm.CPUArch,
 ) error {
@@ -824,9 +1025,11 @@ func (s *ClusterSpec) isLocalSSDAvailable(
 			return fmt.Errorf("local SSDs not supported on AWS machine type %s", machineType)
 		}
 	case GCE:
-		// On GCE, local SSDs are not supported on ARM64 machine types.
-		if selectedArch == vm.ArchARM64 {
-			return errors.New("local SSDs not supported on GCE ARM64 machine types")
+		if _, ok := GCEMachineTypeWithLocalSSD(machineType, s.DiskCount); !ok {
+			if s.DiskCount > 0 {
+				return fmt.Errorf("local SSDs not supported on GCE machine type %s with disk count %d", machineType, s.DiskCount)
+			}
+			return fmt.Errorf("local SSDs not supported on GCE machine type %s", machineType)
 		}
 	case IBM:
 		// On IBM, local SSDs are not supported.
@@ -850,18 +1053,12 @@ func (s *ClusterSpec) isLocalSSDAvailable(
 
 // RoachprodCreateZones returns the zones to use for a roachprod create attempt.
 func (s *ClusterSpec) RoachprodCreateZones(
-	params RoachprodClusterConfig, arch vm.CPUArch,
+	params RoachprodClusterConfig, arch vm.CPUArch, machineType string,
 ) []string {
 	cloud := params.Cloud
-	var zones []string
-	if zonesStr, _ := s.roachprodOptsZonesString(params); zonesStr != "" {
-		zones = strings.Split(zonesStr, ",")
-	}
-	if !s.Geo && len(zones) > 1 {
-		zones = zones[:1]
-	}
+	zones := splitZones(s.zonesStrForCloud(cloud, params.Defaults.Zones), s.Geo)
 	if len(zones) == 0 {
-		zones = DefaultZones(cloud, arch, s.Geo)
+		zones = DefaultZonesForMachineType(cloud, arch, s.Geo, machineType)
 	}
 	return append([]string(nil), zones...)
 }
@@ -890,10 +1087,25 @@ func (s *ClusterSpec) SetRoachprodOptsZones(
 
 // DefaultZones returns the package-level roachprod default zones for the cloud.
 func DefaultZones(cloud Cloud, arch vm.CPUArch, geoDistributed bool) []string {
+	return DefaultZonesForMachineType(cloud, arch, geoDistributed, "")
+}
+
+// DefaultZonesForMachineType returns package-level roachprod default zones for
+// the cloud, using machine-family-specific GCE defaults where needed.
+func DefaultZonesForMachineType(
+	cloud Cloud, arch vm.CPUArch, geoDistributed bool, machineType string,
+) []string {
 	switch cloud {
 	case AWS:
 		return aws.DefaultZones(geoDistributed)
 	case GCE:
+		machineType = strings.ToLower(machineType)
+		if strings.HasPrefix(machineType, "t2a-") {
+			return gce.DefaultT2AZones(geoDistributed)
+		}
+		if strings.HasPrefix(machineType, "c4a-") {
+			return gce.DefaultC4AZones(geoDistributed)
+		}
 		return gce.DefaultZones(string(arch), geoDistributed)
 	case Azure:
 		return azure.DefaultZones(geoDistributed)
@@ -907,12 +1119,12 @@ func DefaultZones(cloud Cloud, arch vm.CPUArch, geoDistributed bool) []string {
 // DefaultRetryZoneCandidates returns the provider's default non-geo zone pool.
 // Roachtest uses this to choose a different zone after provider capacity
 // failures.
-func DefaultRetryZoneCandidates(cloud Cloud, arch vm.CPUArch) []string {
+func DefaultRetryZoneCandidates(cloud Cloud, machineType string) []string {
 	switch cloud {
 	case AWS:
 		return aws.DefaultRetryZoneCandidates()
 	case GCE:
-		return gce.DefaultRetryZoneCandidates(string(arch))
+		return gce.DefaultRetryZoneCandidates(machineType)
 	case Azure:
 		return azure.DefaultRetryZoneCandidates()
 	default:

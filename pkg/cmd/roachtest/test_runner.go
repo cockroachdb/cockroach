@@ -720,6 +720,7 @@ func (r *testRunner) allocateOrAttachToCluster(
 		localCluster: clustersOpt.typ == localCluster,
 		arch:         arch,
 		os:           clusterOS,
+		benchmark:    t.Benchmark,
 	}
 	return clusterFactory.newCluster(ctx, cfg, wStatus.SetStatus)
 }

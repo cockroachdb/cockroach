@@ -140,16 +140,22 @@ func SelectGCEMachineType(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.
 		selectedArch = vm.ArchFIPS
 	} else if arch == vm.ArchARM64 {
 		selectedArch = vm.ArchARM64
-		series = "t2a" // Ampere Altra
+		series = "c4a" // C4A (Google Axion): broadly available and supports local SSD via -lssd.
 	}
 	var kind string
 	switch mem {
 	case Auto:
 		if cpus > 16 {
-			// We'll use 2GB RAM per CPU for custom machines.
-			kind = "custom"
-			if arch == vm.ArchARM64 {
-				// T2A doesn't support custom, fall back to n2.
+			if arch == vm.ArchARM64 && cpus <= 72 {
+				// C4A highcpu provides 2 GB/vCPU, matching the Auto memory
+				// behavior for machines with more than 16 vCPUs.
+				kind = "highcpu"
+			} else {
+				// We'll use 2GB RAM per CPU for custom machines.
+				kind = "custom"
+			}
+			if arch == vm.ArchARM64 && kind == "custom" {
+				// C4A doesn't support custom, fall back to n2.
 				series = "n2"
 				selectedArch = vm.ArchAMD64
 			}
@@ -160,23 +166,20 @@ func SelectGCEMachineType(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.
 		kind = "standard" // 4 GB RAM per CPU
 	case High:
 		kind = "highmem" // 8 GB RAM per CPU
-		if arch == vm.ArchARM64 {
-			// T2A doesn't support highmem, fall back to n2.
-			series = "n2"
-			selectedArch = vm.ArchAMD64
-		}
 	case Low:
 		kind = "highcpu" // 1 GB RAM per CPU
 		if arch == vm.ArchARM64 {
-			// T2A doesn't support highcpu, fall back to n2.
+			// C4A highcpu provides 2 GB/vCPU, not the 1 GB/vCPU that Low intends.
+			// Fall back to n2-highcpu so Low keeps its memory shape.
 			series = "n2"
 			selectedArch = vm.ArchAMD64
 		}
 	}
-	// T2A doesn't support cpus > 48, fall back to n2.
-	if selectedArch == vm.ArchARM64 && cpus > 48 {
-		series = "n2"
-		selectedArch = vm.ArchAMD64
+	if selectedArch == vm.ArchARM64 {
+		if cpus > 72 {
+			series = "n2"
+			selectedArch = vm.ArchAMD64
+		}
 	}
 	// N.B. n2 does not support single CPU machines.
 	if series == "n2" && cpus == 1 {
@@ -192,6 +195,31 @@ func SelectGCEMachineType(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.
 		return fmt.Sprintf("%s-custom-%d-%d", series, cpus, 2048*cpus), selectedArch
 	}
 	return fmt.Sprintf("%s-%s-%d", series, kind, cpus), selectedArch
+}
+
+// SelectGCEMachineTypeForPDSSD selects a GCE machine type for cases where the
+// storage decision has already established that the cluster must use pd-ssd.
+// C4A is the normal ARM64 default, but C4A cannot attach pd-ssd disks. T2A can,
+// and was the pre-C4A ARM64 family, so use T2A only for the shapes it can
+// represent exactly. If the requested CPU/memory shape is not available on T2A,
+// fall back to AMD64 rather than silently changing memory ratios or storage.
+func SelectGCEMachineTypeForPDSSD(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArch) {
+	if arch != vm.ArchARM64 {
+		return SelectGCEMachineType(cpus, mem, arch)
+	}
+
+	switch mem {
+	case Auto:
+		if cpus <= 16 {
+			return fmt.Sprintf("t2a-standard-%d", cpus), vm.ArchARM64
+		}
+	case Standard:
+		if cpus <= 48 {
+			return fmt.Sprintf("t2a-standard-%d", cpus), vm.ArchARM64
+		}
+	}
+
+	return SelectGCEMachineType(cpus, mem, vm.ArchAMD64)
 }
 
 // SelectAzureMachineType selects a machine type given the desired number of CPUs,

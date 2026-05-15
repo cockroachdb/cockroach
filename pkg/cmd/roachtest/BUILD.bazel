@@ -61,6 +61,7 @@ go_library(
         "//pkg/roachprod/promhelperclient",
         "//pkg/roachprod/vm",
         "//pkg/roachprod/vm/gce",
+        "//pkg/roachprod/vm/gce/gcedb",
         "//pkg/testutils/skip",
         "//pkg/util/allstacks",
         "//pkg/util/debugutil",

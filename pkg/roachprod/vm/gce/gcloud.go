@@ -1178,7 +1178,7 @@ type ProjectsVal struct {
 // T2A and C4A machine types use DefaultT2AZones and DefaultC4AZones
 // respectively because they are not available in all zones.
 func DefaultZones(arch string, geoDistributed bool) []string {
-	zones := DefaultRetryZoneCandidates(arch)
+	zones := defaultRetryZoneCandidates()
 	rand.Shuffle(len(zones), func(i, j int) { zones[i], zones[j] = zones[j], zones[i] })
 
 	if geoDistributed {
@@ -1198,16 +1198,25 @@ func DefaultZones(arch string, geoDistributed bool) []string {
 	return []string{zones[0]}
 }
 
-// DefaultRetryZoneCandidates returns the default non-geo GCE zone pool.
-// DefaultZones chooses from this pool for ordinary creates, and roachtest uses
-// it to choose a different zone after provider capacity failures.
-func DefaultRetryZoneCandidates(arch string) []string {
-	zones := []string{"us-east1-b", "us-east1-c", "us-east1-d"}
-	if vm.ParseArch(arch) == vm.ArchARM64 {
-		// T2A instances are only available in us-central1 in NA.
-		zones = []string{"us-central1-a", "us-central1-b", "us-central1-f"}
+func defaultRetryZoneCandidates() []string {
+	return []string{"us-east1-b", "us-east1-c", "us-east1-d"}
+}
+
+// DefaultRetryZoneCandidates returns the default non-geo GCE zone pool for the
+// selected machine type. Roachtest uses it to choose a different zone after
+// provider capacity failures.
+func DefaultRetryZoneCandidates(machineType string) []string {
+	machineType = strings.ToLower(machineType)
+	switch {
+	case strings.HasPrefix(machineType, "t2a-"):
+		return []string{"us-central1-a", "us-central1-b", "us-central1-f"}
+	case strings.HasPrefix(machineType, "c4a-"):
+		return slices.DeleteFunc(defaultRetryZoneCandidates(), func(z string) bool {
+			return !IsSupportedC4AZone([]string{z})
+		})
+	default:
+		return defaultRetryZoneCandidates()
 	}
-	return zones
 }
 
 // DefaultC4AZones returns default zones for C4A machine types. C4A is
