@@ -42,7 +42,7 @@ type Cluster interface {
 	Get(ctx context.Context, l *logger.Logger, src, dest string, opts ...option.Option) error
 	Put(ctx context.Context, src, dest string, opts ...option.Option)
 	PutE(ctx context.Context, l *logger.Logger, src, dest string, opts ...option.Option) error
-	PutLibraries(ctx context.Context, libraryDir string, libraries []string) error
+	PutLibraries(ctx context.Context, l *logger.Logger, libraryDir string, libraries []string) error
 	Stage(
 		ctx context.Context, l *logger.Logger, application, versionOrSHA, dir string, opts ...option.Option,
 	) error
