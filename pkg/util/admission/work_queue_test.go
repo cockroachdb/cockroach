@@ -423,7 +423,7 @@ func runCPUTimeTokenWorkQueueTest(t *testing.T, path string) {
 					tokensUsed:     cpuMetrics.TokensUsedPerTenant[systemTenant],
 					tokensReturned: cpuMetrics.TokensReturnedPerTenant[systemTenant],
 				}
-				opts.configHolder = newResourceGroupConfigHolder()
+				opts.configHolder = newResourceGroupConfigHolder(&st.SV)
 				q = makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
 					workKind, tg, st, metrics, opts).(*WorkQueue)
 				q.knobs.DisableCPUTimeTokenEstimation = true
@@ -556,21 +556,27 @@ func runCPUTimeTokenWorkQueueTest(t *testing.T, path string) {
 				var v bool
 				d.ScanArgs(t, "group", &group)
 				d.ScanArgs(t, "v", &v)
-				// Mutate the holder's current config in place: take the
-				// snapshot (seed + prior Sets), flip the requested
-				// group, write back. Force an apply so maxCPU flips
-				// land on existing groups immediately.
-				cfg := q.configHolder.Snapshot()
+				// Copy the entire config (including builtins), flip
+				// the requested group, and install directly. We bypass
+				// Set's builtin protection because the test needs to
+				// toggle maxCPU on built-in RM groups.
+				groups := q.configHolder.Snapshot().Groups
+				fresh := make(ResourceGroupConfigSet, len(groups))
+				for gk, gc := range groups {
+					fresh[gk] = gc
+				}
 				k := rgGroupKey(uint64(group))
-				cur := cfg[k]
+				cur := fresh[k]
 				cur.MaxCPU = v
 				if cur.Weight == 0 {
 					cur.Weight = 1
 				}
-				cfg[k] = cur
-				q.configHolder.Set(cfg)
+				fresh[k] = cur
+				q.configHolder.mu.Lock()
+				q.configHolder.mu.config = fresh
+				q.configHolder.mu.Unlock()
 				q.mu.Lock()
-				q.applyConfigLocked(q.configHolder.Snapshot())
+				q.applyConfigLocked(q.configHolder.Snapshot().Groups)
 				q.mu.Unlock()
 				return ""
 
@@ -580,7 +586,7 @@ func runCPUTimeTokenWorkQueueTest(t *testing.T, path string) {
 				if v {
 					cpuTimeTokenACMode.Override(context.Background(), &st.SV, resourceManagerMode)
 					q.mu.Lock()
-					q.applyConfigLocked(q.configHolder.Snapshot())
+					q.applyConfigLocked(q.configHolder.Snapshot().Groups)
 					q.mu.Unlock()
 				} else {
 					cpuTimeTokenACMode.Override(context.Background(), &st.SV, serverlessMode)
@@ -659,9 +665,10 @@ func TestCPUTimeTokenEstimation(t *testing.T) {
 
 	// At init time, the estimators haven't seen any requests yet. They are
 	// hard-coded to return a single nanosecond token as an estimate in this
-	// case.
+	// case. Use a non-built-in tenant ID so the per-tenant estimator is
+	// eligible for GC at the bottom of the test.
 	info1 := WorkInfo{
-		TenantID: roachpb.MustMakeTenantID(1),
+		TenantID: roachpb.MustMakeTenantID(4),
 	}
 	resp1, err := q.Admit(ctx, info1)
 	require.NoError(t, err)
@@ -786,7 +793,7 @@ func makeCPUTimeTokenWorkQueue(
 	opts.timeSource = timeutil.NewManualTime(initialTime)
 	opts.disableEpochClosingGoroutine = true
 	opts.disableGCGroupsAndResetUsed = true
-	opts.configHolder = newResourceGroupConfigHolder()
+	opts.configHolder = newResourceGroupConfigHolder(&st.SV)
 
 	q = makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
 		KVWork, tg, st, metrics, opts).(*WorkQueue)
@@ -1299,7 +1306,7 @@ func withGroupLocked(q *WorkQueue, fn func()) {
 
 // TestApplyConfigLockedMaterializesGroups verifies that
 // applyConfigLocked materializes the holder's snapshot into
-// q.mu.groups: the seeded high/low rg containers must exist on the
+// q.mu.groups: the built-in high/low rg containers must exist on the
 // queue immediately after, with the configured weight/maxCPU. Without
 // this, lazy-create would still reach the right state on first admit,
 // but operator-facing observers (metrics, debug print) would not see
@@ -1311,12 +1318,6 @@ func TestApplyConfigLockedMaterializesGroups(t *testing.T) {
 	q, _, st, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 
-	// Custom config replaces the default seed.
-	q.configHolder.Set(ResourceGroupConfigSet{
-		rgGroupKey(highResourceGroupID): {Weight: 60, MaxCPU: true},
-		rgGroupKey(lowResourceGroupID):  {Weight: 40, MaxCPU: false},
-	})
-
 	// Pre-condition: no rg containers exist yet (we're in serverless mode).
 	require.Nil(t, getGroupLocked(q, rgGroupKey(highResourceGroupID)))
 	require.Nil(t, getGroupLocked(q, rgGroupKey(lowResourceGroupID)))
@@ -1326,15 +1327,15 @@ func TestApplyConfigLockedMaterializesGroups(t *testing.T) {
 	cpuTimeTokenACMode.Override(ctx, &st.SV, resourceManagerMode)
 	q.refreshResourceGroupConfig()
 
-	// Post-condition: both rg containers pre-created with the
-	// configured weight/maxCPU.
+	// Post-condition: both built-in rg containers pre-created with
+	// their configured weight/maxCPU.
 	high := getGroupLocked(q, rgGroupKey(highResourceGroupID))
 	require.NotNil(t, high, "high rg container should be pre-created by apply")
-	require.Equal(t, uint32(60), high.weight)
+	require.Equal(t, uint32(80), high.weight)
 	require.True(t, high.cpuTimeBurstBucket.maxCPU)
 	low := getGroupLocked(q, rgGroupKey(lowResourceGroupID))
 	require.NotNil(t, low, "low rg container should be pre-created by apply")
-	require.Equal(t, uint32(40), low.weight)
+	require.Equal(t, uint32(20), low.weight)
 	require.False(t, low.cpuTimeBurstBucket.maxCPU)
 }
 
@@ -1352,18 +1353,43 @@ func TestRefreshResourceGroupConfigInServerlessIsNoOp(t *testing.T) {
 	// Stay in serverless mode (default).
 
 	q.configHolder.Set(ResourceGroupConfigSet{
-		rgGroupKey(highResourceGroupID): {Weight: 60, MaxCPU: true},
+		rgGroupKey(42): {Weight: 60, MaxCPU: true},
 	})
 	q.refreshResourceGroupConfig()
 
 	// rg containers must NOT have been pre-created.
-	require.Nil(t, getGroupLocked(q, rgGroupKey(highResourceGroupID)),
+	require.Nil(t, getGroupLocked(q, rgGroupKey(42)),
 		"refresh in serverless mode must not pre-create rg containers")
 
 	// But the holder DID record the change (it's caller-side state).
-	cfg := q.configHolder.Snapshot().GetOrDefault(rgGroupKey(highResourceGroupID))
+	cfg := q.configHolder.Snapshot().Groups.GetOrDefault(rgGroupKey(42))
 	require.Equal(t, uint32(60), cfg.Weight)
 	require.True(t, cfg.MaxCPU)
+}
+
+// TestGCExemptsBuiltins verifies that gcGroupsResetUsedAndUpdateEstimators
+// keeps built-in groups installed even when they have no recent
+// activity. Built-ins are always present in ResourceGroupConfigHolder,
+// so dropping and recreating them per interval would be wasted churn.
+func TestGCExemptsBuiltins(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	q, _, st, cleanup := makeCPUTimeTokenWorkQueue(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	cpuTimeTokenACMode.Override(ctx, &st.SV, resourceManagerMode)
+	q.refreshResourceGroupConfig()
+
+	high := getGroupLocked(q, rgGroupKey(highResourceGroupID))
+	require.NotNil(t, high)
+	require.True(t, rgGroupKey(highResourceGroupID).isBuiltin())
+	withGroupLocked(q, func() { high.used = 0 })
+	q.gcGroupsResetUsedAndUpdateEstimators()
+
+	require.NotNil(t, getGroupLocked(q, rgGroupKey(highResourceGroupID)),
+		"built-in group must survive GC")
 }
 
 // TestGCThenLazyRecreateRecoversFromHolder verifies the design's
@@ -1371,45 +1397,50 @@ func TestRefreshResourceGroupConfigInServerlessIsNoOp(t *testing.T) {
 // admit recreates it via the holder with the correct weight/maxCPU.
 // Without this property, GC could silently downgrade a configured
 // group's effective weight to defaultGroupConfig values until the
-// next refresh.
+// next refresh. Uses a non-built-in tenant key so the GC step is
+// actually exercised (built-ins are exempt; see TestGCExemptsBuiltins).
 func TestGCThenLazyRecreateRecoversFromHolder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	q, _, st, cleanup := makeCPUTimeTokenWorkQueue(t)
+	q, _, _, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 
+	const tenantID = 42
+	key := tenantGroupKey(tenantID)
+	require.False(t, key.isBuiltin())
 	q.configHolder.Set(ResourceGroupConfigSet{
-		rgGroupKey(highResourceGroupID): {Weight: 70, MaxCPU: true},
-		rgGroupKey(lowResourceGroupID):  {Weight: 30, MaxCPU: false},
+		key: {Weight: 99, BurstFrac: 0.5, MaxCPU: true},
 	})
-	ctx := context.Background()
-	cpuTimeTokenACMode.Override(ctx, &st.SV, resourceManagerMode)
-	q.refreshResourceGroupConfig()
 
-	// Sanity: the high rg container exists with the configured state.
-	high := getGroupLocked(q, rgGroupKey(highResourceGroupID))
-	require.NotNil(t, high)
-	require.Equal(t, uint32(70), high.weight)
-	require.True(t, high.cpuTimeBurstBucket.maxCPU)
-	// Force GC eligibility: drive used to 0.
-	withGroupLocked(q, func() { high.used = 0 })
-	q.gcGroupsResetUsedAndUpdateEstimators()
-
-	require.Nil(t, getGroupLocked(q, rgGroupKey(highResourceGroupID)),
-		"idle configured group should be GC'd")
-
-	// Next admit recreates the container via the holder.
+	// Lazy-create via Admit so the queue's groupInfo picks up the
+	// holder config.
 	_, err := q.Admit(context.Background(), WorkInfo{
-		TenantID: roachpb.MustMakeTenantID(1),
+		TenantID: roachpb.MustMakeTenantID(tenantID),
 		Priority: admissionpb.NormalPri,
 	})
 	require.NoError(t, err)
+	g := getGroupLocked(q, key)
+	require.NotNil(t, g)
+	require.Equal(t, uint32(99), g.weight)
+	require.True(t, g.cpuTimeBurstBucket.maxCPU)
 
-	high2 := getGroupLocked(q, rgGroupKey(highResourceGroupID))
-	require.NotNil(t, high2, "next admit should recreate the GC'd group")
-	require.Equal(t, uint32(70), high2.weight,
+	// Force GC eligibility: drive used to 0.
+	withGroupLocked(q, func() { g.used = 0 })
+	q.gcGroupsResetUsedAndUpdateEstimators()
+	require.Nil(t, getGroupLocked(q, key),
+		"idle non-built-in group should be GC'd")
+
+	// Next admit recreates the container via the holder.
+	_, err = q.Admit(context.Background(), WorkInfo{
+		TenantID: roachpb.MustMakeTenantID(tenantID),
+		Priority: admissionpb.NormalPri,
+	})
+	require.NoError(t, err)
+	g2 := getGroupLocked(q, key)
+	require.NotNil(t, g2, "next admit should recreate the GC'd group")
+	require.Equal(t, uint32(99), g2.weight,
 		"recreated group should pick up configured weight, not default")
-	require.True(t, high2.cpuTimeBurstBucket.maxCPU,
+	require.True(t, g2.cpuTimeBurstBucket.maxCPU,
 		"recreated group should pick up configured maxCPU, not default")
 }

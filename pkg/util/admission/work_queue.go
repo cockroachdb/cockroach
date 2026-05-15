@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"slices"
 	"sort"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -321,9 +320,8 @@ type WorkQueue struct {
 		// used/weight.
 		groupHeap groupHeap
 		// All groups, including those without waiting work. Keyed by
-		// composite groupKey (id + kind) so the same uint64 ID
-		// representing different semantic kinds (e.g., system tenant
-		// 1 vs rg 1) does not collide on a single container.
+		// groupKey (tenantID, groupID) so that, e.g., system tenant
+		// (t1g0) and rg 1 (t0g1) occupy distinct containers.
 		// Periodically GC'd by gcGroupsResetUsedAndUpdateEstimators.
 		groups map[groupKey]*groupInfo
 
@@ -476,7 +474,7 @@ func initWorkQueue(
 	q.stopCh = stopCh
 	q.configHolder = opts.configHolder
 	if q.configHolder == nil {
-		q.configHolder = newResourceGroupConfigHolder()
+		q.configHolder = newResourceGroupConfigHolder(&settings.SV)
 	}
 	q.perGroupAggMetrics = opts.perGroupAggMetrics
 	q.timeSource = timeSource
@@ -666,8 +664,8 @@ func (q *WorkQueue) tryCloseEpoch(timeNow time.Time) {
 			// group. However, currently we share metrics across WorkQueues --
 			// specifically all the store WorkQueues share the same metric. We
 			// should eliminate that sharing and make those per store metrics.
-			log.Dev.Infof(q.ambientCtx, "%s: FIFO threshold for group %d %s %d",
-				q.workKind, group.groupKey.id, logVerb, group.fifoPriorityThreshold)
+			log.Dev.Infof(q.ambientCtx, "%s: FIFO threshold for group %s %s %d",
+				q.workKind, group.groupKey, logVerb, group.fifoPriorityThreshold)
 		}
 		// Note that we are ignoring the new priority threshold and only
 		// dequeueing the ones that are in the closed epoch. It is possible to
@@ -692,15 +690,11 @@ func (q *WorkQueue) tryCloseEpoch(timeNow time.Time) {
 type AdmitResponse struct {
 	// If true, admission control is enabled.
 	Enabled bool
-	// groupKey identifies the groupInfo entry in q.mu.groups under which this
-	// work was admitted. Used by AdmittedWorkDone to look up the correct
-	// groupInfo entry. The underlying ID represents a tenant in Serverless mode
-	// and a resource group in Resource Manager mode; the kind discriminator
-	// distinguishes the two namespaces (system tenant 1 vs. rg 1). Captured at
-	// Admit time so AdmittedWorkDone resolves the same entry even if the queue's
-	// mode (and therefore groupKeyForWorkLocked's output) flipped between the two
-	// calls. AdmittedWorkDone must tolerate lookup misses: the entry may have
-	// been GC'd after a mode switch left it idle.
+	// groupKey identifies the groupInfo entry in q.mu.groups under which
+	// this work was admitted. Captured at Admit time so AdmittedWorkDone
+	// resolves the same entry even if the queue's mode flipped between
+	// the two calls. AdmittedWorkDone must tolerate lookup misses: the
+	// entry may have been GC'd after a mode switch left it idle.
 	groupKey groupKey
 	// requestedCount is the number of slots or tokens taken at Admit time.
 	// It is useful to return, so that in AdmittedWorkDone, we can adjust
@@ -729,10 +723,9 @@ func priorityToResourceGroupKey(pri admissionpb.WorkPriority) groupKey {
 	return rgGroupKey(lowResourceGroupID)
 }
 
-// groupKeyForWorkLocked returns the composite groupKey for the given
-// WorkInfo. In RM mode (cpuTimeTokenACMode == resourceManagerMode), the
-// key is derived from WorkInfo.Priority with kind=rgKind; otherwise it
-// is the TenantID with kind=tenantKind.
+// groupKeyForWorkLocked returns the groupKey for the given WorkInfo.
+// In RM mode the key is derived from WorkInfo.Priority (groupID only);
+// otherwise it is from TenantID (tenantID only).
 //
 // REQUIRES: q.mu is held.
 func (q *WorkQueue) groupKeyForWorkLocked(info WorkInfo) groupKey {
@@ -900,8 +893,8 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 				// fast path, or swapping this entry from the top-most one in
 				// the waiting heap (and fixing the heap).
 				if log.V(1) {
-					log.Dev.Infof(ctx, "fast-path: admitting t%d pri=%s r%s log-position=%s ingested=%t",
-						gKey.id, info.Priority,
+					log.Dev.Infof(ctx, "fast-path: admitting %s pri=%s r%s log-position=%s ingested=%t",
+						gKey, info.Priority,
 						info.ReplicatedWorkInfo.RangeID,
 						info.ReplicatedWorkInfo.LogPosition.String(),
 						info.ReplicatedWorkInfo.Ingested,
@@ -911,7 +904,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 				// (StoreWorkQueue runs in usesTokens mode), so gKey is
 				// always tenant-keyed.
 				q.onAdmittedReplicatedWork.admittedReplicatedWork(
-					roachpb.MustMakeTenantID(gKey.id),
+					roachpb.MustMakeTenantID(gKey.tenantID),
 					info.Priority,
 					info.ReplicatedWorkInfo,
 					info.RequestedCount,
@@ -1005,8 +998,8 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 			queueLen := group.waitingWorkHeap.Len()
 			q.mu.Unlock()
 
-			log.Dev.Infof(ctx, "async-path: len(waiting-work)=%d: enqueued t%d pri=%s r%s log-position=%s ingested=%t",
-				queueLen, gKey.id, info.Priority,
+			log.Dev.Infof(ctx, "async-path: len(waiting-work)=%d: enqueued %s pri=%s r%s log-position=%s ingested=%t",
+				queueLen, gKey, info.Priority,
 				info.ReplicatedWorkInfo.RangeID,
 				info.ReplicatedWorkInfo.LogPosition,
 				info.ReplicatedWorkInfo.Ingested,
@@ -1269,8 +1262,8 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 			queueLen := group.waitingWorkHeap.Len()
 			q.mu.Unlock()
 
-			log.Dev.Infof(q.ambientCtx, "async-path: len(waiting-work)=%d dequeued t%d pri=%s r%s log-position=%s ingested=%t",
-				queueLen, gKey.id, item.priority,
+			log.Dev.Infof(q.ambientCtx, "async-path: len(waiting-work)=%d dequeued %s pri=%s r%s log-position=%s ingested=%t",
+				queueLen, gKey, item.priority,
 				item.replicated.RangeID,
 				item.replicated.LogPosition,
 				item.replicated.Ingested,
@@ -1280,7 +1273,7 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 		// Replicated work is a Serverless-mode-only path; same caveat
 		// as the fast-path admit site above.
 		q.onAdmittedReplicatedWork.admittedReplicatedWork(
-			roachpb.MustMakeTenantID(gKey.id),
+			roachpb.MustMakeTenantID(gKey.tenantID),
 			item.priority,
 			item.replicated,
 			item.requestedCount,
@@ -1304,7 +1297,13 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 //     intervals that are sized at the frequency with which this
 //     function is called (as of 1/9/26, every 1s).
 //  2. It GCs groupInfo entries, if a group has seen no workload over
-//     the interval.
+//     the interval. Built-in groups (builtinGroupConfigs) are exempt:
+//     they are always installed in the holder, so dropping and
+//     recreating them each interval is wasted churn through
+//     groupInfoPool. The cost is that built-ins not routed to in the
+//     current mode (e.g. the system tenant key in RM mode) keep
+//     publishing per-group metric series with values that stay at
+//     zero.
 //  3. It updates CPU time token estimators. The estimators are only used
 //     if mode == usesCPUTimeTokens.
 func (q *WorkQueue) gcGroupsResetUsedAndUpdateEstimators() {
@@ -1315,15 +1314,15 @@ func (q *WorkQueue) gcGroupsResetUsedAndUpdateEstimators() {
 	// longer than desired. We could break this iteration into smaller parts if
 	// needed.
 	for gKey, info := range q.mu.groups {
-		if info.used == 0 && !isInGroupHeap(info) {
+		if !gKey.isBuiltin() && info.used == 0 && !isInGroupHeap(info) {
 			delete(q.mu.groups, gKey)
 			releaseGroupInfo(info)
-		} else {
-			info.cpuTimeTokenEstimator.update()
-			info.used = 0
-			// All the heap members will reset used=0, so no need to change heap
-			// ordering.
+			continue
 		}
+		info.cpuTimeTokenEstimator.update()
+		info.used = 0
+		// All the heap members will reset used=0, so no need to change heap
+		// ordering.
 	}
 }
 
@@ -1411,7 +1410,7 @@ func (q *WorkQueue) refillGroupBurstBuckets(rate, cap float64) {
 	}
 }
 
-// refillBurstBucketForGroup refills a single rgKind group's burst
+// refillBurstBucketForGroup refills a single resource group's burst
 // bucket. Test-only: production refills go through
 // refillGroupBurstBuckets, which iterates all groups under one q.mu
 // critical section. This entry point exists for datadriven tests that
@@ -1453,21 +1452,16 @@ func (q *WorkQueue) SafeFormat(s redact.SafePrinter, _ rune) {
 	s.Printf("closed epoch: %d ", q.mu.closedEpochThreshold)
 	s.Printf("groupHeap len: %d", len(q.mu.groupHeap))
 	if len(q.mu.groupHeap) > 0 {
-		s.Printf(" top group: %d", q.mu.groupHeap[0].groupKey.id)
+		s.Printf(" top group: %s", q.mu.groupHeap[0].groupKey)
 	}
 	var keys []groupKey
 	for k := range q.mu.groups {
 		keys = append(keys, k)
 	}
-	sort.Slice(keys, func(i, j int) bool {
-		if keys[i].kind != keys[j].kind {
-			return keys[i].kind < keys[j].kind
-		}
-		return keys[i].id < keys[j].id
-	})
+	slices.SortFunc(keys, groupKey.compare)
 	for _, k := range keys {
 		group := q.mu.groups[k]
-		s.Printf("\n group-id: %d used: %d, w: %d, fifo: %d", group.groupKey.id, group.used,
+		s.Printf("\n group-id: %s used: %d, w: %d, fifo: %d", group.groupKey, group.used,
 			group.weight, group.fifoPriorityThreshold)
 		if len(group.waitingWorkHeap) > 0 {
 			// Sort items within waitingWorkHeap
@@ -1518,12 +1512,12 @@ func (q *WorkQueue) SafeFormat(s redact.SafePrinter, _ rune) {
 const defaultGroupWeight = 1
 
 // getGroupConfigLocked returns the config for gKey from the
-// configHolder, which falls back to a kind-appropriate default for
-// unconfigured keys. q.mu must be held.
+// configHolder, which falls back to a default for unconfigured keys.
+// q.mu must be held.
 func (q *WorkQueue) getGroupConfigLocked(
 	gKey groupKey,
 ) (weight uint32, burstFrac float64, maxCPU bool) {
-	cfg := q.configHolder.Snapshot().GetOrDefault(gKey)
+	cfg := q.configHolder.Snapshot().Groups.GetOrDefault(gKey)
 	return cfg.Weight, cfg.BurstFrac, cfg.MaxCPU
 }
 
@@ -1543,14 +1537,14 @@ func (q *WorkQueue) refreshResourceGroupConfig() {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if cpuTimeTokenACMode.Get(&q.settings.SV) == resourceManagerMode {
-		q.applyConfigLocked(q.configHolder.Snapshot())
+		q.applyConfigLocked(q.configHolder.Snapshot().Groups)
 	}
 }
 
 // applyConfigLocked upserts each entry in the holder snapshot into
 // q.mu.groups: existing groups have their weight and maxCPU updated
 // (with a heap fix if either changes the heap order), and missing
-// rgKind groups are pre-created so the very first Admit for the ID
+// resource groups are pre-created so the very first Admit for the ID
 // hits the fast path with the configured values already in place.
 // Entries absent from the snapshot are left in q.mu.groups and drain
 // via the GC path.
@@ -1748,10 +1742,10 @@ func (ps *priorityStates) getFIFOPriorityThresholdAndReset(
 }
 
 // groupInfo is the per-group information in the groupHeap. In Serverless mode,
-// the resource group ID is the tenant ID. In RM mode, the resource group ID is
-// derived from the work's priority (see priorityToResourceGroupKey).
+// the group is keyed by tenant ID. In RM mode, the group is keyed by resource
+// group ID derived from the work's priority (see priorityToResourceGroupKey).
 type groupInfo struct {
-	// groupKey is the composite (id, kind) under which this groupInfo
+	// groupKey is the (tenantID, groupID) under which this groupInfo
 	// is stored in WorkQueue.mu.groups.
 	groupKey groupKey
 	// The weight assigned to the resource group. Must be > 0. For
@@ -1874,8 +1868,7 @@ func newGroupInfo(
 	if aggMetrics != nil {
 		// AddChild takes the label values in the same order as
 		// aggmetric.MakeBuilder declared them: ("kind", "tenant_id").
-		kindStr := gKey.kind.String()
-		idStr := strconv.FormatUint(gKey.id, 10)
+		kindStr, idStr := gKey.metricLabels()
 		ti.perGroupMetrics.admittedCount = aggMetrics.admittedCount.AddChild(kindStr, idStr)
 		ti.perGroupMetrics.waitTimeNanos = aggMetrics.waitTimeNanos.AddChild(kindStr, idStr)
 		ti.perGroupMetrics.tokensUsed = aggMetrics.tokensUsed.AddChild(kindStr, idStr)
@@ -1949,7 +1942,11 @@ func (th *groupHeap) Less(i, j int) bool {
 	// burstQualification method, so we must call it here.
 	if (*th)[i].used*uint64((*th)[j].weight) == (*th)[j].used*uint64((*th)[i].weight) {
 		if (*th)[i].weight == (*th)[j].weight {
-			return (*th)[i].groupKey.id < (*th)[j].groupKey.id
+			ki, kj := (*th)[i].groupKey, (*th)[j].groupKey
+			if ki.tenantID != kj.tenantID {
+				return ki.tenantID < kj.tenantID
+			}
+			return ki.groupID < kj.groupID
 		}
 		return (*th)[i].weight > (*th)[j].weight
 	}

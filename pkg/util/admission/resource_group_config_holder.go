@@ -6,8 +6,10 @@
 package admission
 
 import (
-	"sort"
+	"math"
+	"slices"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -36,16 +38,17 @@ type ResourceGroupConfig struct {
 // Once installed in the holder, callers must treat the map as read-only.
 type ResourceGroupConfigSet map[groupKey]ResourceGroupConfig
 
-// SafeFormat renders one entry per line, sorted by id, e.g.:
+// SafeFormat renders one entry per line, sorted by tenantID then
+// groupID, e.g.:
 //
-//	rg1 weight=80 maxCPU=true
-//	rg2 weight=20 maxCPU=false
+//	t0g1 weight=80 burstFrac=0.80 maxCPU=true
+//	t0g2 weight=20 burstFrac=0.20 maxCPU=false
 func (s ResourceGroupConfigSet) SafeFormat(w redact.SafePrinter, _ rune) {
 	keys := make([]groupKey, 0, len(s))
 	for k := range s {
 		keys = append(keys, k)
 	}
-	sort.Slice(keys, func(i, j int) bool { return keys[i].id < keys[j].id })
+	slices.SortFunc(keys, groupKey.compare)
 	for _, k := range keys {
 		cfg := s[k]
 		w.Printf("%s weight=%d burstFrac=%.2f maxCPU=%t\n",
@@ -58,62 +61,119 @@ func (s ResourceGroupConfigSet) String() string {
 	return redact.StringWithoutMarkers(s)
 }
 
-// GetOrDefault returns the config for k if installed, otherwise the
-// kind-appropriate fallback (rgKind: defaultRGGroupConfig; tenantKind:
-// defaultTenantGroupConfig). Used by WorkQueue's lazy group creation: an
-// Admit for a key without a corresponding groupInfo consults the set to
-// populate weight and maxCPU on the new groupInfo (burstFrac is computed
-// inline as Weight/100).
+// GetOrDefault returns the config for k if installed, otherwise a
+// fallback: resource groups (tenantID==0) get defaultRGGroupConfig;
+// tenant groups (groupID==0) get defaultTenantGroupConfig. Used by
+// WorkQueue's lazy group creation: an Admit for a key without a
+// corresponding groupInfo consults the set to populate weight and
+// maxCPU on the new groupInfo.
 //
-// TODO(wenyihu6): collapse to a single per-kind-agnostic fallback once we can
-// align the rg and tenant defaults. The kind switch here is a transitional
-// shape; ideally GetOrDefault returns one default that works for any key.
+// TODO(wenyihu6): collapse to a single fallback once we can align the
+// rg and tenant defaults.
 func (s ResourceGroupConfigSet) GetOrDefault(k groupKey) ResourceGroupConfig {
 	if cfg, ok := s[k]; ok {
 		return cfg
 	}
-	switch k.kind {
-	case rgKind:
-		return defaultRGGroupConfig
-	case tenantKind:
+	if k.groupID == 0 {
+		// Tenant group (tenantID is set, groupID is zero).
 		return defaultTenantGroupConfig
-	default:
-		panic(errors.AssertionFailedf("ResourceGroupConfigSet.GetOrDefault: invalid kind %s", k.kind))
 	}
+	// Resource group (groupID is set).
+	return defaultRGGroupConfig
 }
 
-// defaultRMResourceGroupConfig seeds the holder until an explicit Set
-// replaces it. The two ids match priorityToResourceGroupKey (high/low).
+// defaultRGGroupConfig is the safety fallback returned by GetOrDefault
+// for resource group keys (groupID != 0) not in the installed
+// configuration. In steady state this is unreachable: the built-in
+// configs cover high/low. It exists to keep Admit's lazy-create path
+// total — if a caller installs a config that omits a known group ID,
+// Admit gets a usable weight rather than a zero-weight group.
+// Weight=20 mirrors the low default; MaxCPU=false keeps an
+// unconfigured group from bypassing the burst-fullness gate.
 //
-// TODO(wenyihu6): revisit weights once we have signal from real workloads.
-var defaultRMResourceGroupConfig = ResourceGroupConfigSet{
+// TODO(wenyihu6): once SQL DDL (CREATE/ALTER RESOURCE GROUP) is wired
+// through, decide whether unknown group IDs should be a hard error.
+var defaultRGGroupConfig = ResourceGroupConfig{Weight: 20, BurstFrac: 0.2, MaxCPU: false}
+
+// defaultTenantGroupConfig is the fallback for tenant group keys
+// (groupID == 0): every tenant gets defaultGroupWeight, since
+// per-tenant weights are no longer configurable. MaxCPU=false because
+// tenants don't carry burst flags.
+var defaultTenantGroupConfig = ResourceGroupConfig{
+	Weight: defaultGroupWeight, BurstFrac: 0.20, MaxCPU: false,
+}
+
+// systemTenantGroupConfig is the built-in config for the system tenant
+// (ID 1). It has maximum weight to ensure system work is never starved,
+// BurstFrac=1.0 so the full burst budget is available, and MaxCPU=true
+// to bypass the burst-fullness gate.
+var systemTenantGroupConfig = ResourceGroupConfig{
+	Weight: math.MaxUint32, BurstFrac: 1.0, MaxCPU: true,
+}
+
+// builtinGroupConfigs are configs that are always present in the
+// holder. Set seeds from this list first; callers cannot overwrite
+// built-in keys.
+var builtinGroupConfigs = ResourceGroupConfigSet{
+	tenantGroupKey(1):               systemTenantGroupConfig,
 	rgGroupKey(highResourceGroupID): {Weight: 80, BurstFrac: 0.8, MaxCPU: true},
 	rgGroupKey(lowResourceGroupID):  {Weight: 20, BurstFrac: 0.2, MaxCPU: false},
 }
 
-// defaultRGGroupConfig is the safety fallback returned by GetOrDefault for
-// rgKind keys not in the installed configuration. In steady state this is
-// unreachable: the seed (defaultRMResourceGroupConfig) covers high/low. It
-// exists to keep Admit's lazy-create path total — if a caller installs a
-// config that omits a known rg ID, Admit gets a usable weight rather than a
-// zero-weight group. Weight=20 mirrors the low default; MaxCPU=false keeps
-// an unconfigured group from bypassing the burst-fullness gate.
-//
-// TODO(wenyihu6): once SQL DDL (CREATE/ALTER RESOURCE GROUP) is wired
-// through, decide whether unknown rgKind IDs should be a hard error.
-var defaultRGGroupConfig = ResourceGroupConfig{Weight: 20, BurstFrac: 0.2, MaxCPU: false}
+// ConfigSnapshot is the immutable snapshot returned by
+// ResourceGroupConfigHolder.Snapshot. It bundles the per-group config
+// set with the utilization targets derived from cluster settings, plus
+// the cpuTimeTokenACMode value those targets were derived under.
+type ConfigSnapshot struct {
+	// Groups is the per-group config set (built-ins + caller-provided).
+	Groups ResourceGroupConfigSet
+	// Mode is the cpuTimeTokenACMode value read alongside the
+	// utilization targets. Carried so consumers that need both stay
+	// coherent without a second setting read.
+	Mode cpuTimeTokenMode
+	// AppNoBurstFrac is the non-burstable CPU utilization target for
+	// the app tenant tier (e.g. 0.8 for 80% of CPU capacity).
+	AppNoBurstFrac float64
+	// SystemNoBurstFrac is the non-burstable CPU utilization target
+	// for the system tenant tier.
+	//
+	// TODO(ssd): SystemNoBurstFrac will be removed when settings are
+	// consolidated; both tiers will use AppNoBurstFrac.
+	SystemNoBurstFrac float64
+	// BurstDelta is the delta added to the non-burstable fraction to
+	// produce the burstable utilization ceiling.
+	BurstDelta float64
+}
 
-// defaultTenantGroupConfig is the fallback for tenantKind keys: every tenant
-// gets defaultGroupWeight, since per-tenant weights are no longer
-// configurable. MaxCPU=false because tenants don't carry burst flags.
-var defaultTenantGroupConfig = ResourceGroupConfig{
-	Weight: defaultGroupWeight, BurstFrac: 0.25, MaxCPU: false,
+// MaxNonBurstableFraction returns the non-burstable CPU utilization
+// target per tier.
+//
+// TODO(ssd): Returns per-tier values for now; will collapse to a
+// scalar when tiers are removed.
+func (s ConfigSnapshot) MaxNonBurstableFraction() [numResourceTiers]float64 {
+	return [numResourceTiers]float64{s.SystemNoBurstFrac, s.AppNoBurstFrac}
+}
+
+// MaxFraction returns the burstable CPU utilization ceiling
+// (noBurstFrac + BurstDelta) per tier.
+//
+// TODO(ssd): Returns per-tier values for now; will collapse to a
+// scalar when tiers are removed.
+func (s ConfigSnapshot) MaxFraction() [numResourceTiers]float64 {
+	return [numResourceTiers]float64{
+		s.SystemNoBurstFrac + s.BurstDelta,
+		s.AppNoBurstFrac + s.BurstDelta,
+	}
 }
 
 // ResourceGroupConfigHolder owns the source-of-truth config set for RM mode.
 // It is pure storage behind an RWMutex; reads (every Admit) vastly outnumber
 // writes (config changes only).
 type ResourceGroupConfigHolder struct {
+	// sv provides access to cluster settings for the snapshot's
+	// mode and utilization targets. Required.
+	sv *settings.Values
+
 	mu struct {
 		syncutil.RWMutex
 		config ResourceGroupConfigSet
@@ -121,21 +181,32 @@ type ResourceGroupConfigHolder struct {
 }
 
 // newResourceGroupConfigHolder constructs a holder seeded with
-// defaultRMResourceGroupConfig, so a fresh Snapshot returns the high/low
-// hardcoded groups that WorkQueue applies on first RM-mode activation.
-func newResourceGroupConfigHolder() *ResourceGroupConfigHolder {
-	h := &ResourceGroupConfigHolder{}
-	h.Set(defaultRMResourceGroupConfig)
+// builtinGroupConfigs. sv must be non-nil; the holder reads cluster
+// settings on every Snapshot.
+func newResourceGroupConfigHolder(sv *settings.Values) *ResourceGroupConfigHolder {
+	if sv == nil {
+		panic(errors.AssertionFailedf("newResourceGroupConfigHolder: sv must be non-nil"))
+	}
+	h := &ResourceGroupConfigHolder{sv: sv}
+	h.Set(nil)
 	return h
 }
 
 // Set replaces the stored config wholesale. Keys absent from config are
-// dropped.
+// dropped. Built-in configs (builtinGroupConfigs) are always present;
+// callers cannot overwrite them.
 //
 // NB: caller may mutate config after Set returns; the input is copied.
 func (h *ResourceGroupConfigHolder) Set(config ResourceGroupConfigSet) {
-	cp := make(ResourceGroupConfigSet, len(config))
+	cp := make(ResourceGroupConfigSet, len(builtinGroupConfigs)+len(config))
+	for k, v := range builtinGroupConfigs {
+		cp[k] = v
+	}
 	for k, v := range config {
+		if _, ok := builtinGroupConfigs[k]; ok {
+			panic(errors.AssertionFailedf(
+				"ResourceGroupConfigHolder.Set: key %s is a built-in and cannot be overwritten", k))
+		}
 		cp[k] = v
 	}
 	h.mu.Lock()
@@ -143,11 +214,32 @@ func (h *ResourceGroupConfigHolder) Set(config ResourceGroupConfigSet) {
 	h.mu.config = cp
 }
 
-// Snapshot returns the installed config map directly (no copy). The map is
-// immutable post-install: a subsequent Set installs a fresh map rather than
-// mutating in place, so prior snapshots remain stable.
-func (h *ResourceGroupConfigHolder) Snapshot() ResourceGroupConfigSet {
+// Snapshot returns the installed config bundled with utilization
+// targets from cluster settings. The Groups map is returned directly
+// (no copy); it is immutable post-install because Set installs a
+// fresh map rather than mutating in place, so prior snapshots remain
+// stable.
+func (h *ResourceGroupConfigHolder) Snapshot() ConfigSnapshot {
 	h.mu.RLock()
-	defer h.mu.RUnlock()
-	return h.mu.config
+	groups := h.mu.config
+	h.mu.RUnlock()
+	snap := ConfigSnapshot{
+		Groups:     groups,
+		Mode:       cpuTimeTokenACMode.Get(h.sv),
+		BurstDelta: KVCPUTimeUtilBurstDelta.Get(h.sv),
+	}
+	// TODO(ssd): The mode switch will be removed when settings are
+	// consolidated into a single target_util setting.
+	switch snap.Mode {
+	case resourceManagerMode:
+		target := KVCPUTimeUtilTarget.Get(h.sv)
+		snap.AppNoBurstFrac = target
+		snap.SystemNoBurstFrac = target
+	default:
+		// offMode and serverlessMode both use the per-tier settings.
+		// The old constructor mapped offMode → serverlessMode.
+		snap.AppNoBurstFrac = KVCPUTimeAppUtilGoal.Get(h.sv)
+		snap.SystemNoBurstFrac = KVCPUTimeSystemUtilGoal.Get(h.sv)
+	}
+	return snap
 }

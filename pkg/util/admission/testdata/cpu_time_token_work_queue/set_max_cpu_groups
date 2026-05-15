@@ -40,9 +40,10 @@ refill-burst-buckets to-add=51 capacity=100
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 1, w: 80, fifo: -128
- group-id: 2 used: 1, w: 20, fifo: -128
-burst-buckets: rg1=fullness=50.0% tokens=50 capacity=100 maxCPU=true qual=can_burst rg2=fullness=50.0% tokens=50 capacity=100 qual=no_burst
+ group-id: t0g1 used: 1, w: 80, fifo: -128
+ group-id: t0g2 used: 1, w: 20, fifo: -128
+ group-id: t1g0 used: 0, w: 4294967295, fifo: -128
+burst-buckets: t0g1=fullness=50.0% tokens=50 capacity=100 maxCPU=true qual=can_burst t0g2=fullness=50.0% tokens=50 capacity=100 qual=no_burst t1g0=fullness=51.0% tokens=51 capacity=100 maxCPU=true qual=can_burst
 
 # Set rg 1 to maxCPU=true via SetMaxCPUGroups. rg 1 should now be
 # can_burst despite being at only 50% fullness.
@@ -52,9 +53,10 @@ set-max-cpu-groups group=1 v=true
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 1, w: 80, fifo: -128
- group-id: 2 used: 1, w: 20, fifo: -128
-burst-buckets: rg1=fullness=50.0% tokens=50 capacity=100 maxCPU=true qual=can_burst rg2=fullness=50.0% tokens=50 capacity=100 qual=no_burst
+ group-id: t0g1 used: 1, w: 80, fifo: -128
+ group-id: t0g2 used: 1, w: 20, fifo: -128
+ group-id: t1g0 used: 0, w: 4294967295, fifo: -128
+burst-buckets: t0g1=fullness=50.0% tokens=50 capacity=100 maxCPU=true qual=can_burst t0g2=fullness=50.0% tokens=50 capacity=100 qual=no_burst t1g0=fullness=51.0% tokens=51 capacity=100 maxCPU=true qual=can_burst
 
 # Queue work for both groups.
 set-try-get-return-value v=false
@@ -98,9 +100,10 @@ set-max-cpu-groups group=1 v=false
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 1, w: 80, fifo: -128
- group-id: 2 used: 1, w: 20, fifo: -128
-burst-buckets: rg1=fullness=49.0% tokens=49 capacity=100 qual=no_burst rg2=fullness=49.0% tokens=49 capacity=100 qual=no_burst
+ group-id: t0g1 used: 1, w: 80, fifo: -128
+ group-id: t0g2 used: 1, w: 20, fifo: -128
+ group-id: t1g0 used: 0, w: 4294967295, fifo: -128
+burst-buckets: t0g1=fullness=49.0% tokens=49 capacity=100 qual=no_burst t0g2=fullness=49.0% tokens=49 capacity=100 qual=no_burst t1g0=fullness=51.0% tokens=51 capacity=100 maxCPU=true qual=can_burst
 
 # Both groups are now no_burst. New work should report no_burst.
 admit id=5 tenant=10 priority=0 requested-count=1
@@ -135,10 +138,11 @@ set-max-cpu-groups group=1 v=true
 
 print
 ----
-closed epoch: 0 groupHeap len: 2 top group: 1
- group-id: 1 used: 0, w: 80, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
- group-id: 2 used: 0, w: 20, fifo: -128 waiting work heap: [0: pri: bulk-normal-pri, ct: 1, epoch: 0, qt: 100]
-burst-buckets: rg1=fullness=48.0% tokens=48 capacity=100 maxCPU=true qual=can_burst rg2=fullness=49.0% tokens=49 capacity=100 qual=no_burst
+closed epoch: 0 groupHeap len: 2 top group: t0g1
+ group-id: t0g1 used: 0, w: 80, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ group-id: t0g2 used: 0, w: 20, fifo: -128 waiting work heap: [0: pri: bulk-normal-pri, ct: 1, epoch: 0, qt: 100]
+ group-id: t1g0 used: 0, w: 4294967295, fifo: -128
+burst-buckets: t0g1=fullness=48.0% tokens=48 capacity=100 maxCPU=true qual=can_burst t0g2=fullness=49.0% tokens=49 capacity=100 qual=no_burst t1g0=fullness=51.0% tokens=51 capacity=100 maxCPU=true qual=can_burst
 
 # rg 1 (can_burst via maxCPU) should be granted before rg 2.
 granted chain-id=1
@@ -161,13 +165,12 @@ set-max-cpu-groups group=1 v=false
 ----
 
 ###
-# Set maxCPU on a group that doesn't exist yet. The flag should be
-# picked up when the group is first created via Admit. We exercise
-# this by GC'ing rg 1 (used=0, no waiting work) and then setting
-# maxCPU on rg 1 before re-admitting.
+# Run gc-groups-and-reset-used twice to drive groups to used=0
+# without dropping anything observable here: rg 1 / rg 2 / system
+# tenant are built-ins and exempt from GC. Then re-set maxCPU on rg
+# 1 so the next admit hits can_burst.
 ###
 
-# Drain rg 1's used count so it can be GC'd.
 gc-groups-and-reset-used
 ----
 
@@ -177,6 +180,10 @@ gc-groups-and-reset-used
 print
 ----
 closed epoch: 0 groupHeap len: 0
+ group-id: t0g1 used: 0, w: 80, fifo: -128
+ group-id: t0g2 used: 0, w: 20, fifo: -128
+ group-id: t1g0 used: 0, w: 4294967295, fifo: -128
+burst-buckets: t0g1=fullness=47.0% tokens=47 capacity=100 qual=no_burst t0g2=fullness=48.0% tokens=48 capacity=100 qual=no_burst t1g0=fullness=51.0% tokens=51 capacity=100 maxCPU=true qual=can_burst
 
 set-max-cpu-groups group=1 v=true
 ----
@@ -189,6 +196,7 @@ id 8: admit succeeded
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 1, w: 80, fifo: -128
- group-id: 2 used: 0, w: 20, fifo: -128
-burst-buckets: rg1=fullness=99.0% tokens=99 capacity=100 maxCPU=true qual=can_burst rg2=fullness=100.0% tokens=100 capacity=100 qual=can_burst
+ group-id: t0g1 used: 1, w: 80, fifo: -128
+ group-id: t0g2 used: 0, w: 20, fifo: -128
+ group-id: t1g0 used: 0, w: 4294967295, fifo: -128
+burst-buckets: t0g1=fullness=46.0% tokens=46 capacity=100 maxCPU=true qual=can_burst t0g2=fullness=48.0% tokens=48 capacity=100 qual=no_burst t1g0=fullness=51.0% tokens=51 capacity=100 maxCPU=true qual=can_burst

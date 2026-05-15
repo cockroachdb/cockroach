@@ -23,9 +23,9 @@ id 2: admit succeeded
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 53 used: 3, w: 1, fifo: -128
- group-id: 54 used: 8, w: 1, fifo: -128
-burst-buckets: t53=fullness=0.0% tokens=-3 capacity=0 qual=no_burst t54=fullness=0.0% tokens=-8 capacity=0 qual=no_burst
+ group-id: t53g0 used: 3, w: 1, fifo: -128
+ group-id: t54g0 used: 8, w: 1, fifo: -128
+burst-buckets: t53g0=fullness=0.0% tokens=-3 capacity=0 qual=no_burst t54g0=fullness=0.0% tokens=-8 capacity=0 qual=no_burst
 
 # requested-count at admit time was 3. cpu-time below is 1. This
 # simulates a situation where at admit time, the predicted CPU usage
@@ -43,9 +43,9 @@ returnGrant 2
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 53 used: 1, w: 1, fifo: -128
- group-id: 54 used: 8, w: 1, fifo: -128
-burst-buckets: t53=fullness=0.0% tokens=-1 capacity=0 qual=no_burst t54=fullness=0.0% tokens=-8 capacity=0 qual=no_burst
+ group-id: t53g0 used: 1, w: 1, fifo: -128
+ group-id: t54g0 used: 8, w: 1, fifo: -128
+burst-buckets: t53g0=fullness=0.0% tokens=-1 capacity=0 qual=no_burst t54g0=fullness=0.0% tokens=-8 capacity=0 qual=no_burst
 
 # In this case, measured CPU usage was more than predicted CPU usage.
 # So, we should take additional tokens from the granter this time.
@@ -57,9 +57,9 @@ tookWithoutPermission 7
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 53 used: 1, w: 1, fifo: -128
- group-id: 54 used: 15, w: 1, fifo: -128
-burst-buckets: t53=fullness=0.0% tokens=-1 capacity=0 qual=no_burst t54=fullness=0.0% tokens=-15 capacity=0 qual=no_burst
+ group-id: t53g0 used: 1, w: 1, fifo: -128
+ group-id: t54g0 used: 15, w: 1, fifo: -128
+burst-buckets: t53g0=fullness=0.0% tokens=-1 capacity=0 qual=no_burst t54g0=fullness=0.0% tokens=-15 capacity=0 qual=no_burst
 
 ###
 # This test is of the integration of burstQualification with the tenant
@@ -97,9 +97,9 @@ id 1000: admit succeeded
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 53 used: 1, w: 1, fifo: -128
- group-id: 54 used: 101, w: 1, fifo: -128
-burst-buckets: t53=fullness=99.0% tokens=99 capacity=100 qual=can_burst t54=fullness=-1.0% tokens=-1 capacity=100 qual=no_burst
+ group-id: t53g0 used: 1, w: 1, fifo: -128
+ group-id: t54g0 used: 101, w: 1, fifo: -128
+burst-buckets: t53g0=fullness=99.0% tokens=99 capacity=100 qual=can_burst t54g0=fullness=-1.0% tokens=-1 capacity=100 qual=no_burst
 
 set-try-get-return-value v=false
 ----
@@ -179,7 +179,7 @@ set-try-get-return-value v=true
 # state for long.
 admit id=1 tenant=1 requested-count=1
 ----
-tryGet: input no_burst, returning true
+tryGet: input can_burst, returning true
 id 1: admit succeeded
 
 # Fill tenant 1's burst bucket to the top with 100 tokens.
@@ -202,9 +202,9 @@ refill-burst-buckets to-add=100 capacity=100
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 1, w: 1, fifo: -128
- group-id: 2 used: 1, w: 1, fifo: -128
-burst-buckets: t1=fullness=100.0% tokens=100 capacity=100 qual=can_burst t2=fullness=100.0% tokens=100 capacity=100 qual=can_burst
+ group-id: t1g0 used: 1, w: 4294967295, fifo: -128
+ group-id: t2g0 used: 1, w: 1, fifo: -128
+burst-buckets: t1g0=fullness=100.0% tokens=100 capacity=100 maxCPU=true qual=can_burst t2g0=fullness=100.0% tokens=100 capacity=100 qual=can_burst
 
 # Since both burst buckets are full, both tenants can burst.
 admit id=3 tenant=1 requested-count=1
@@ -215,9 +215,9 @@ id 3: admit succeeded
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 2, w: 1, fifo: -128
- group-id: 2 used: 1, w: 1, fifo: -128
-burst-buckets: t1=fullness=99.0% tokens=99 capacity=100 qual=can_burst t2=fullness=100.0% tokens=100 capacity=100 qual=can_burst
+ group-id: t1g0 used: 2, w: 4294967295, fifo: -128
+ group-id: t2g0 used: 1, w: 1, fifo: -128
+burst-buckets: t1g0=fullness=99.0% tokens=99 capacity=100 maxCPU=true qual=can_burst t2g0=fullness=100.0% tokens=100 capacity=100 qual=can_burst
 
 admit id=4 tenant=2 requested-count=1
 ----
@@ -227,9 +227,9 @@ id 4: admit succeeded
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 2, w: 1, fifo: -128
- group-id: 2 used: 2, w: 1, fifo: -128
-burst-buckets: t1=fullness=99.0% tokens=99 capacity=100 qual=can_burst t2=fullness=99.0% tokens=99 capacity=100 qual=can_burst
+ group-id: t1g0 used: 2, w: 4294967295, fifo: -128
+ group-id: t2g0 used: 2, w: 1, fifo: -128
+burst-buckets: t1g0=fullness=99.0% tokens=99 capacity=100 maxCPU=true qual=can_burst t2g0=fullness=99.0% tokens=99 capacity=100 qual=can_burst
 
 # Bucket started at 100 tokens. First call to Admit removed 1 token.
 # This call to Admit removes 7 tokens. 100-1-7 = 92 tokens in bucket.
@@ -242,9 +242,9 @@ id 5: admit succeeded
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 9, w: 1, fifo: -128
- group-id: 2 used: 2, w: 1, fifo: -128
-burst-buckets: t1=fullness=92.0% tokens=92 capacity=100 qual=can_burst t2=fullness=99.0% tokens=99 capacity=100 qual=can_burst
+ group-id: t1g0 used: 9, w: 4294967295, fifo: -128
+ group-id: t2g0 used: 2, w: 1, fifo: -128
+burst-buckets: t1g0=fullness=92.0% tokens=92 capacity=100 maxCPU=true qual=can_burst t2g0=fullness=99.0% tokens=99 capacity=100 qual=can_burst
 
 # Bucket started at 100 tokens. First call to Admit removed 1 token.
 # This call to Admit removes 10 tokens. 100-1-10 = 89 tokens in bucket.
@@ -258,9 +258,9 @@ id 6: admit succeeded
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 9, w: 1, fifo: -128
- group-id: 2 used: 12, w: 1, fifo: -128
-burst-buckets: t1=fullness=92.0% tokens=92 capacity=100 qual=can_burst t2=fullness=89.0% tokens=89 capacity=100 qual=no_burst
+ group-id: t1g0 used: 9, w: 4294967295, fifo: -128
+ group-id: t2g0 used: 12, w: 1, fifo: -128
+burst-buckets: t1g0=fullness=92.0% tokens=92 capacity=100 maxCPU=true qual=can_burst t2g0=fullness=89.0% tokens=89 capacity=100 qual=no_burst
 
 # 100-1-7-1 = 91 tokens in the bucket. So tenant 1 can burst still.
 admit id=7 tenant=1 requested-count=1
@@ -271,9 +271,9 @@ id 7: admit succeeded
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 10, w: 1, fifo: -128
- group-id: 2 used: 12, w: 1, fifo: -128
-burst-buckets: t1=fullness=91.0% tokens=91 capacity=100 qual=can_burst t2=fullness=89.0% tokens=89 capacity=100 qual=no_burst
+ group-id: t1g0 used: 10, w: 4294967295, fifo: -128
+ group-id: t2g0 used: 12, w: 1, fifo: -128
+burst-buckets: t1g0=fullness=91.0% tokens=91 capacity=100 maxCPU=true qual=can_burst t2g0=fullness=89.0% tokens=89 capacity=100 qual=no_burst
 
 # 100-1-10-1 = 88. Tenant 2 cannot burst this time.
 admit id=8 tenant=2 requested-count=1
@@ -284,9 +284,9 @@ id 8: admit succeeded
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 10, w: 1, fifo: -128
- group-id: 2 used: 13, w: 1, fifo: -128
-burst-buckets: t1=fullness=91.0% tokens=91 capacity=100 qual=can_burst t2=fullness=88.0% tokens=88 capacity=100 qual=no_burst
+ group-id: t1g0 used: 10, w: 4294967295, fifo: -128
+ group-id: t2g0 used: 13, w: 1, fifo: -128
+burst-buckets: t1g0=fullness=91.0% tokens=91 capacity=100 maxCPU=true qual=can_burst t2g0=fullness=88.0% tokens=88 capacity=100 qual=no_burst
 
 # 100-1-7-1-1 = 90. So this call to Admit, tenant 1 can burst, but
 # the next call, tenant 1 cannot burst.
@@ -298,21 +298,21 @@ id 9: admit succeeded
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 11, w: 1, fifo: -128
- group-id: 2 used: 13, w: 1, fifo: -128
-burst-buckets: t1=fullness=90.0% tokens=90 capacity=100 qual=no_burst t2=fullness=88.0% tokens=88 capacity=100 qual=no_burst
+ group-id: t1g0 used: 11, w: 4294967295, fifo: -128
+ group-id: t2g0 used: 13, w: 1, fifo: -128
+burst-buckets: t1g0=fullness=90.0% tokens=90 capacity=100 maxCPU=true qual=can_burst t2g0=fullness=88.0% tokens=88 capacity=100 qual=no_burst
 
 admit id=10 tenant=1 requested-count=1
 ----
-tryGet: input no_burst, returning true
+tryGet: input can_burst, returning true
 id 10: admit succeeded
 
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 12, w: 1, fifo: -128
- group-id: 2 used: 13, w: 1, fifo: -128
-burst-buckets: t1=fullness=89.0% tokens=89 capacity=100 qual=no_burst t2=fullness=88.0% tokens=88 capacity=100 qual=no_burst
+ group-id: t1g0 used: 12, w: 4294967295, fifo: -128
+ group-id: t2g0 used: 13, w: 1, fifo: -128
+burst-buckets: t1g0=fullness=89.0% tokens=89 capacity=100 maxCPU=true qual=can_burst t2g0=fullness=88.0% tokens=88 capacity=100 qual=no_burst
 
 # Fill to full again. Both tenants thus can burst.
 refill-burst-buckets to-add=100 capacity=100
@@ -345,9 +345,9 @@ refill-burst-buckets to-add=10 capacity=100
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 100000013, w: 1, fifo: -128
- group-id: 2 used: 14, w: 1, fifo: -128
-burst-buckets: t1=fullness=-25.0% tokens=-25 capacity=100 qual=no_burst t2=fullness=100.0% tokens=100 capacity=100 qual=can_burst
+ group-id: t1g0 used: 100000013, w: 4294967295, fifo: -128
+ group-id: t2g0 used: 14, w: 1, fifo: -128
+burst-buckets: t1g0=fullness=-25.0% tokens=-25 capacity=100 maxCPU=true qual=can_burst t2g0=fullness=100.0% tokens=100 capacity=100 qual=can_burst
 
 refill-burst-buckets to-add=116 capacity=100
 ----
@@ -355,9 +355,9 @@ refill-burst-buckets to-add=116 capacity=100
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 100000013, w: 1, fifo: -128
- group-id: 2 used: 14, w: 1, fifo: -128
-burst-buckets: t1=fullness=91.0% tokens=91 capacity=100 qual=can_burst t2=fullness=100.0% tokens=100 capacity=100 qual=can_burst
+ group-id: t1g0 used: 100000013, w: 4294967295, fifo: -128
+ group-id: t2g0 used: 14, w: 1, fifo: -128
+burst-buckets: t1g0=fullness=91.0% tokens=91 capacity=100 maxCPU=true qual=can_burst t2g0=fullness=100.0% tokens=100 capacity=100 qual=can_burst
 
 admit id=14 tenant=1 requested-count=1
 ----
@@ -368,7 +368,7 @@ id 14: admit succeeded
 # Admit, it is below 90% full. No burst.
 admit id=15 tenant=1 requested-count=1
 ----
-tryGet: input no_burst, returning true
+tryGet: input can_burst, returning true
 id 15: admit succeeded
 
 # In production, requestedCount is a prediction of the CPU time
@@ -392,9 +392,9 @@ id 16: admit succeeded
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 101000015, w: 1, fifo: -128
- group-id: 2 used: 14, w: 1, fifo: -128
-burst-buckets: t1=fullness=-999900.0% tokens=-999900 capacity=100 qual=no_burst t2=fullness=100.0% tokens=100 capacity=100 qual=can_burst
+ group-id: t1g0 used: 101000015, w: 4294967295, fifo: -128
+ group-id: t2g0 used: 14, w: 1, fifo: -128
+burst-buckets: t1g0=fullness=-999900.0% tokens=-999900 capacity=100 maxCPU=true qual=can_burst t2g0=fullness=100.0% tokens=100 capacity=100 qual=can_burst
 
 work-done id=16 cpu-time=1
 ----
@@ -403,9 +403,9 @@ returnGrant 999999
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 100000016, w: 1, fifo: -128
- group-id: 2 used: 14, w: 1, fifo: -128
-burst-buckets: t1=fullness=99.0% tokens=99 capacity=100 qual=can_burst t2=fullness=100.0% tokens=100 capacity=100 qual=can_burst
+ group-id: t1g0 used: 100000016, w: 4294967295, fifo: -128
+ group-id: t2g0 used: 14, w: 1, fifo: -128
+burst-buckets: t1g0=fullness=99.0% tokens=99 capacity=100 maxCPU=true qual=can_burst t2g0=fullness=100.0% tokens=100 capacity=100 qual=can_burst
 
 admit id=17 tenant=1 requested-count=10
 ----
@@ -414,7 +414,7 @@ id 17: admit succeeded
 
 admit id=18 tenant=1 requested-count=1
 ----
-tryGet: input no_burst, returning true
+tryGet: input can_burst, returning true
 id 18: admit succeeded
 
 # Test a bucket capacity change. On first call to Admit, bucket is
@@ -425,9 +425,9 @@ refill-burst-buckets to-add=20 capacity=20
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 100000027, w: 1, fifo: -128
- group-id: 2 used: 14, w: 1, fifo: -128
-burst-buckets: t1=fullness=100.0% tokens=20 capacity=20 qual=can_burst t2=fullness=100.0% tokens=20 capacity=20 qual=can_burst
+ group-id: t1g0 used: 100000027, w: 4294967295, fifo: -128
+ group-id: t2g0 used: 14, w: 1, fifo: -128
+burst-buckets: t1g0=fullness=100.0% tokens=20 capacity=20 maxCPU=true qual=can_burst t2g0=fullness=100.0% tokens=20 capacity=20 qual=can_burst
 
 admit id=19 tenant=1 requested-count=2
 ----
@@ -436,7 +436,7 @@ id 19: admit succeeded
 
 admit id=20 tenant=1 requested-count=1
 ----
-tryGet: input no_burst, returning true
+tryGet: input can_burst, returning true
 id 20: admit succeeded
 
 ###
@@ -473,8 +473,8 @@ refill-burst-buckets to-add=100 capacity=100
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 53 used: 1, w: 1, fifo: -128
-burst-buckets: t53=fullness=99.0% tokens=99 capacity=100 qual=can_burst
+ group-id: t53g0 used: 1, w: 1, fifo: -128
+burst-buckets: t53g0=fullness=99.0% tokens=99 capacity=100 qual=can_burst
 
 admit id=2 tenant=53 requested-count=5
 ----
@@ -484,8 +484,8 @@ id 2: admit succeeded
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 53 used: 6, w: 1, fifo: -128
-burst-buckets: t53=fullness=94.0% tokens=94 capacity=100 qual=can_burst
+ group-id: t53g0 used: 6, w: 1, fifo: -128
+burst-buckets: t53g0=fullness=94.0% tokens=94 capacity=100 qual=can_burst
 
 set-try-get-return-value v=false
 ----
@@ -496,9 +496,9 @@ tryGet: input can_burst, returning false
 
 print
 ----
-closed epoch: 0 groupHeap len: 1 top group: 53
- group-id: 53 used: 6, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
-burst-buckets: t53=fullness=94.0% tokens=94 capacity=100 qual=can_burst
+closed epoch: 0 groupHeap len: 1 top group: t53g0
+ group-id: t53g0 used: 6, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+burst-buckets: t53g0=fullness=94.0% tokens=94 capacity=100 qual=can_burst
 
 granted chain-id=1
 ----
@@ -509,8 +509,8 @@ granted: returned 1
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 53 used: 7, w: 1, fifo: -128
-burst-buckets: t53=fullness=93.0% tokens=93 capacity=100 qual=can_burst
+ group-id: t53g0 used: 7, w: 1, fifo: -128
+burst-buckets: t53g0=fullness=93.0% tokens=93 capacity=100 qual=can_burst
 
 work-done id=1 cpu-time=2
 ----
@@ -519,8 +519,8 @@ tookWithoutPermission 1
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 53 used: 8, w: 1, fifo: -128
-burst-buckets: t53=fullness=92.0% tokens=92 capacity=100 qual=can_burst
+ group-id: t53g0 used: 8, w: 1, fifo: -128
+burst-buckets: t53g0=fullness=92.0% tokens=92 capacity=100 qual=can_burst
 
 work-done id=2 cpu-time=3
 ----
@@ -529,8 +529,8 @@ returnGrant 2
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 53 used: 6, w: 1, fifo: -128
-burst-buckets: t53=fullness=94.0% tokens=94 capacity=100 qual=can_burst
+ group-id: t53g0 used: 6, w: 1, fifo: -128
+burst-buckets: t53g0=fullness=94.0% tokens=94 capacity=100 qual=can_burst
 
 admit id=4 tenant=53 requested-count=1 bypass
 ----
@@ -540,8 +540,8 @@ id 4: admit succeeded
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 53 used: 7, w: 1, fifo: -128
-burst-buckets: t53=fullness=93.0% tokens=93 capacity=100 qual=can_burst
+ group-id: t53g0 used: 7, w: 1, fifo: -128
+burst-buckets: t53g0=fullness=93.0% tokens=93 capacity=100 qual=can_burst
 
 set-try-get-return-value v=false
 ----
@@ -557,8 +557,8 @@ id 5: admit failed
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 53 used: 7, w: 1, fifo: -128
-burst-buckets: t53=fullness=93.0% tokens=93 capacity=100 qual=can_burst
+ group-id: t53g0 used: 7, w: 1, fifo: -128
+burst-buckets: t53g0=fullness=93.0% tokens=93 capacity=100 qual=can_burst
 
 # Check the transition to no burst.
 set-try-get-return-value v=true
@@ -577,5 +577,5 @@ id 7: admit succeeded
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 53 used: 13, w: 1, fifo: -128
-burst-buckets: t53=fullness=87.0% tokens=87 capacity=100 qual=no_burst
+ group-id: t53g0 used: 13, w: 1, fifo: -128
+burst-buckets: t53g0=fullness=87.0% tokens=87 capacity=100 qual=no_burst
