@@ -42,10 +42,12 @@ import (
 )
 
 const (
-	ProviderName       = "gce"
-	DefaultMachineType = "n2-standard-4"
-	DefaultImage       = "ubuntu-2204-jammy-v20260414"
-	ARM64Image         = "ubuntu-2204-jammy-arm64-v20260414"
+	ProviderName                = "gce"
+	DefaultMachineType          = "n2-standard-4"
+	DefaultARM64MachineType     = "c4a-standard-4"
+	DefaultARM64LSSDMachineType = "c4a-standard-4-lssd"
+	DefaultImage                = "ubuntu-2204-jammy-v20260414"
+	ARM64Image                  = "ubuntu-2204-jammy-arm64-v20260414"
 	// TODO(DarrylWong): Upgrade FIPS to Ubuntu 22 when it is available.
 	FIPSImage           = "ubuntu-pro-fips-2004-focal-v20230811"
 	defaultImageProject = "ubuntu-os-cloud"
@@ -1169,12 +1171,12 @@ type ProjectsVal struct {
 // https://cloud.google.com/compute/docs/regions-zones#available
 //
 // Note that the default zone (the first zone returned by this
-// function) is always in the us-east1 region (or us-central1 for
-// ARM64 builds), but we randomize the specific zone. This is to avoid
-// "zone exhausted" errors in one particular zone, especially during
-// nightly roachtest runs.
-// TODO(manojpillai): use same defaults for ARM64, given c4a wide availability.
-// But review roachtest impact before changing.
+// function) is always in the us-east1 region, but we randomize the
+// specific zone. This is to avoid "zone exhausted" errors in one
+// particular zone, especially during nightly roachtest runs.
+//
+// T2A and C4A machine types use DefaultT2AZones and DefaultC4AZones
+// respectively because they are not available in all zones.
 func DefaultZones(arch string, geoDistributed bool) []string {
 	zones := DefaultRetryZoneCandidates(arch)
 	rand.Shuffle(len(zones), func(i, j int) { zones[i], zones[j] = zones[j], zones[i] })
@@ -1206,6 +1208,43 @@ func DefaultRetryZoneCandidates(arch string) []string {
 		zones = []string{"us-central1-a", "us-central1-b", "us-central1-f"}
 	}
 	return zones
+}
+
+// DefaultC4AZones returns default zones for C4A machine types. C4A is
+// broadly available but not in all zones, so geo clusters drop unsupported
+// zones. The round-robin node placement handles uneven zone counts.
+func DefaultC4AZones(geoDistributed bool) []string {
+	zones := DefaultZones("", geoDistributed)
+	return slices.DeleteFunc(zones, func(z string) bool {
+		return !IsSupportedC4AZone([]string{z})
+	})
+}
+
+// DefaultT2AZones returns default zones for T2A machine types.
+func DefaultT2AZones(geoDistributed bool) []string {
+	usCentral := []string{"us-central1-a", "us-central1-b", "us-central1-f"}
+	rand.Shuffle(len(usCentral), func(i, j int) {
+		usCentral[i], usCentral[j] = usCentral[j], usCentral[i]
+	})
+	if !geoDistributed {
+		return []string{usCentral[0]}
+	}
+
+	europe := []string{"europe-west4-a", "europe-west4-b", "europe-west4-c"}
+	asia := []string{"asia-southeast1-b", "asia-southeast1-c"}
+	rand.Shuffle(len(europe), func(i, j int) { europe[i], europe[j] = europe[j], europe[i] })
+	rand.Shuffle(len(asia), func(i, j int) { asia[i], asia[j] = asia[j], asia[i] })
+
+	return []string{
+		usCentral[0],
+		europe[0],
+		asia[0],
+		usCentral[1],
+		europe[1],
+		asia[1],
+		usCentral[2],
+		europe[2],
+	}
 }
 
 // Set is part of the pflag.Value interface.
@@ -1401,12 +1440,13 @@ func (o *ProviderOpts) useArmAMI() bool {
 }
 
 func (o *ProviderOpts) machineTypeSupportsLocalSSD() bool {
-	info, err := gcedb.GetMachineInfo(o.MachineType)
-	return err == nil && len(info.AllowedLocalSSDCount) > 0
+	_, err := AllowedLocalSSDCount(o.MachineType)
+	return err == nil
 }
 
 // autoStorageType returns "pd-ssd" if the machine type supports it, otherwise
-// returns "hyperdisk-balanced".
+// "hyperdisk-balanced" if available. Unknown machine types preserve the legacy
+// pd-ssd default.
 func autoStorageType(machineType string) string {
 	info, err := gcedb.GetMachineInfo(machineType)
 	switch {
@@ -1417,10 +1457,12 @@ func autoStorageType(machineType string) string {
 		return "pd-ssd"
 	case slices.Contains(info.StorageTypes, "hyperdisk-balanced"):
 		return "hyperdisk-balanced"
-	default:
+	case len(info.StorageTypes) > 0:
 		// All known machine support either "pd-ssd" or "hyperdisk-balanced",
 		// but leave a fallback in case that changes.
 		return info.StorageTypes[0]
+	default:
+		return "pd-ssd"
 	}
 }
 
@@ -1585,18 +1627,29 @@ func computeZones(opts vm.CreateOpts, providerOpts *ProviderOpts) ([]string, err
 	if err != nil {
 		return nil, err
 	}
-	if len(zones) == 0 {
+	machineTypeLower := strings.ToLower(providerOpts.MachineType)
+	if strings.HasPrefix(machineTypeLower, "t2a-") {
+		if len(zones) == 0 {
+			zones = DefaultT2AZones(opts.GeoDistributed)
+		}
+		if !IsSupportedT2AZone(zones) {
+			return nil, errors.Newf(
+				"T2A instances are not supported outside of [%s]",
+				strings.Join(SupportedT2AZones, ","),
+			)
+		}
+	} else if strings.HasPrefix(machineTypeLower, "c4a-") {
+		if len(zones) == 0 {
+			zones = DefaultC4AZones(opts.GeoDistributed)
+		}
+		if !IsSupportedC4AZone(zones) {
+			return nil, errors.Newf(
+				"C4A instances are not supported in [%s]",
+				strings.Join(UnsupportedC4AZones, ","),
+			)
+		}
+	} else if len(zones) == 0 {
 		zones = DefaultZones(opts.Arch, opts.GeoDistributed)
-	}
-	if providerOpts.useArmAMI() {
-		if len(providerOpts.Zones) == 0 {
-			zones = []string{"us-central1-a"}
-		}
-
-		if strings.HasPrefix(strings.ToLower(providerOpts.MachineType), "t2a-") &&
-			!IsSupportedT2AZone(providerOpts.Zones) {
-			return nil, errors.Newf("T2A instances are not supported outside of [%s]", strings.Join(SupportedT2AZones, ","))
-		}
 	}
 	return zones, nil
 }
@@ -1622,7 +1675,7 @@ func (p *Provider) computeInstanceArgs(
 	if providerOpts.useArmAMI() && (opts.Arch != "" && opts.Arch != string(vm.ArchARM64)) {
 		return nil, cleanUpFn, errors.Errorf("machine type %s is arm64, but requested arch is %s", providerOpts.MachineType, opts.Arch)
 	}
-	if opts.SSDOpts.UseLocalSSD && !providerOpts.machineTypeSupportsLocalSSD() {
+	if opts.SSDOpts.UseLocalSSD && !providerOpts.BootDiskOnly && !providerOpts.machineTypeSupportsLocalSSD() {
 		return nil, cleanUpFn, errors.Errorf("local SSDs are not supported with %s instance types, use --local-ssd=false", providerOpts.MachineType)
 	}
 	if providerOpts.useArmAMI() {
@@ -1701,6 +1754,7 @@ func (p *Provider) computeInstanceArgs(
 						providerOpts.MachineType,
 						counts[0],
 					)
+					providerOpts.SSDCount = counts[0]
 				}
 			} else {
 				// Make sure the minimum number of local SSDs is met.
@@ -2701,10 +2755,14 @@ func AllowedLocalSSDCount(machineType string) ([]int, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(info.AllowedLocalSSDCount) == 0 {
+	counts := slices.Clone(info.AllowedLocalSSDCount)
+	counts = slices.DeleteFunc(counts, func(count int) bool {
+		return count <= 0
+	})
+	if len(counts) == 0 {
 		return nil, fmt.Errorf("machine type %q does not support local SSD", machineType)
 	}
-	return info.AllowedLocalSSDCount, nil
+	return counts, nil
 }
 
 // N.B. neither boot disk nor additional persistent disks are assigned VM labels by default.

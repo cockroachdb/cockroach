@@ -170,6 +170,7 @@ func TestParseArch(t *testing.T) {
 		{"aarch64", ArchARM64},
 		{"Intel Cascade Lake", ArchAMD64},
 		{"Ampere Altra", ArchARM64},
+		{"Google Axion", ArchARM64},
 		// E.g., GCE returns this when VM is still being provisioned.
 		{"Unknown CPU Platform", ArchUnknown},
 	}

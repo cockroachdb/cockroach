@@ -499,7 +499,8 @@ func getPredefinedMachineInfo(
 		info.Architecture = ArchAMD64
 		info.StorageTypes = storageC3
 		info.CPUPlatforms = platformsC3
-		if hasLSSD {
+		// C3 -lssd is only available for the standard variant.
+		if hasLSSD && variant == "standard" {
 			info.AllowedLocalSSDCount = []int{lssdCountC3(vcpus)}
 		}
 
@@ -508,7 +509,7 @@ func getPredefinedMachineInfo(
 		info.Architecture = ArchAMD64
 		info.StorageTypes = storageC3
 		info.CPUPlatforms = platformsC3D
-		if hasLSSD {
+		if hasLSSD && (variant == "standard" || variant == "highmem") {
 			info.AllowedLocalSSDCount = []int{lssdCountC3D(vcpus)}
 		}
 
@@ -517,7 +518,7 @@ func getPredefinedMachineInfo(
 		info.Architecture = ArchAMD64
 		info.StorageTypes = storageHyperdiskOnly
 		info.CPUPlatforms = platformsC4
-		if hasLSSD {
+		if hasLSSD && (variant == "standard" || variant == "highmem") {
 			info.AllowedLocalSSDCount = []int{lssdCountC4(vcpus)}
 		}
 
@@ -527,7 +528,7 @@ func getPredefinedMachineInfo(
 		info.Architecture = ArchARM64
 		info.StorageTypes = storageHyperdiskOnly
 		info.CPUPlatforms = platformsC4A
-		if hasLSSD {
+		if hasLSSD && (variant == "standard" || variant == "highmem") {
 			info.AllowedLocalSSDCount = []int{lssdCountC4A(vcpus)}
 		}
 
@@ -536,7 +537,7 @@ func getPredefinedMachineInfo(
 		info.Architecture = ArchAMD64
 		info.StorageTypes = storageHyperdiskOnly
 		info.CPUPlatforms = platformsC4D
-		if hasLSSD {
+		if hasLSSD && (variant == "standard" || variant == "highmem") {
 			info.AllowedLocalSSDCount = []int{lssdCountC4D(vcpus)}
 		}
 

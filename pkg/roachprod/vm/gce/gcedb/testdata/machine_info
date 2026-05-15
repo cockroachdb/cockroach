@@ -343,6 +343,24 @@ AllowedLocalSSDCount: {32}
 StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
 CPUPlatforms: (Intel Sapphire Rapids)
 
+c3-highmem-44-lssd
+----
+CPUCores: 44
+MemoryGiB: 352
+Architecture: amd64
+AllowedLocalSSDCount: {}
+StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
+CPUPlatforms: (Intel Sapphire Rapids)
+
+c3-highcpu-44-lssd
+----
+CPUCores: 44
+MemoryGiB: 88
+Architecture: amd64
+AllowedLocalSSDCount: {}
+StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
+CPUPlatforms: (Intel Sapphire Rapids)
+
 c3d-standard-8-lssd
 ----
 CPUCores: 8
@@ -406,6 +424,15 @@ AllowedLocalSSDCount: {32}
 StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
 CPUPlatforms: (AMD Genoa)
 
+c3d-highcpu-60-lssd
+----
+CPUCores: 60
+MemoryGiB: 120
+Architecture: amd64
+AllowedLocalSSDCount: {}
+StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
+CPUPlatforms: (AMD Genoa)
+
 c4-standard-4-lssd
 ----
 CPUCores: 4
@@ -466,6 +493,15 @@ CPUCores: 288
 MemoryGiB: 1080
 Architecture: amd64
 AllowedLocalSSDCount: {48}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Intel Emerald Rapids, Intel Granite Rapids)
+
+c4-highcpu-48-lssd
+----
+CPUCores: 48
+MemoryGiB: 96
+Architecture: amd64
+AllowedLocalSSDCount: {}
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (Intel Emerald Rapids, Intel Granite Rapids)
 
@@ -541,6 +577,24 @@ AllowedLocalSSDCount: {16}
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (Google Axion)
 
+c4a-highmem-32-lssd
+----
+CPUCores: 32
+MemoryGiB: 256
+Architecture: arm64
+AllowedLocalSSDCount: {6}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Google Axion)
+
+c4a-highcpu-32-lssd
+----
+CPUCores: 32
+MemoryGiB: 64
+Architecture: arm64
+AllowedLocalSSDCount: {}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Google Axion)
+
 c4d-standard-8-lssd
 ----
 CPUCores: 8
@@ -592,6 +646,15 @@ CPUCores: 384
 MemoryGiB: 1190
 Architecture: amd64
 AllowedLocalSSDCount: {32}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (AMD Turin)
+
+c4d-highcpu-48-lssd
+----
+CPUCores: 48
+MemoryGiB: 91
+Architecture: amd64
+AllowedLocalSSDCount: {}
 StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
 CPUPlatforms: (AMD Turin)
 
