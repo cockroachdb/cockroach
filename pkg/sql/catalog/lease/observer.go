@@ -12,8 +12,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
-// Observer is an interface that allows observers to be notified of new
-// versions of descriptors.
+// Observer is notified of new descriptor versions. Implementations must be
+// idempotent: the same (id, version) may be delivered more than once, and
+// versions may be delivered out of order on registration (see
+// Manager.RegisterLeaseObserver, which replays the most recently broadcast
+// version of every known descriptor to a freshly registered Observer).
 type Observer interface {
 	// OnNewVersion Invoked when a new version of a descriptor becomes available.
 	OnNewVersion(ctx context.Context, descID descpb.ID, newVersion descpb.DescriptorVersion, modificationTime hlc.Timestamp)
@@ -22,20 +25,54 @@ type Observer interface {
 // RegisterLeaseObserver registers an observer. An unregisterFn is returned
 // to remove this observer. Note: Observers are buffered, pending events may
 // still fire after unregistering.
-func (m *Manager) RegisterLeaseObserver(observer Observer) (unregisterFn func()) {
-	// Writers will need mutual exclusion to avoid clobbering.
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	// We will always allocate a new array, so readers can keep
-	// using existing pointers.
-	oldObservers := m.mu.observers.Load()
-	var newObservers []Observer
-	if oldObservers != nil {
-		newObservers = make([]Observer, len(*oldObservers), len(*oldObservers)+1)
-		copy(newObservers, *oldObservers)
+//
+// After registration, the observer is delivered a synthetic OnNewVersion
+// for the latest known version of each descriptor. Without this, an
+// observer registered after a broadcast permanently misses it, because
+// maybeAddObserverEvent's per-descriptor dedup suppresses replays. See
+// #169820 for the lease-hang this caused in CDC.
+func (m *Manager) RegisterLeaseObserver(
+	ctx context.Context, observer Observer,
+) (unregisterFn func()) {
+	type observedDescriptorVersion struct {
+		id      descpb.ID
+		version descpb.DescriptorVersion
+		modTime hlc.Timestamp
 	}
-	newObservers = append(newObservers, observer)
-	m.mu.observers.Store(&newObservers)
+	// Collected under m.mu and replayed outside it: OnNewVersion may take
+	// the observer's own locks, so we don't want to hold m.mu across it.
+	var observedVersions []observedDescriptorVersion
+	func() {
+		// Writers will need mutual exclusion to avoid clobbering.
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		// We will always allocate a new array, so readers can keep
+		// using existing pointers.
+		oldObservers := m.mu.observers.Load()
+		var newObservers []Observer
+		if oldObservers != nil {
+			newObservers = make([]Observer, len(*oldObservers), len(*oldObservers)+1)
+			copy(newObservers, *oldObservers)
+		}
+		newObservers = append(newObservers, observer)
+		m.mu.observers.Store(&newObservers)
+		for id, t := range m.mu.descriptors {
+			t.mu.Lock()
+			nv := t.mu.notifiedVersion
+			t.mu.Unlock()
+			if nv.version > 0 {
+				observedVersions = append(observedVersions, observedDescriptorVersion{
+					id: id, version: nv.version, modTime: nv.modTime,
+				})
+			}
+		}
+	}()
+	for _, ov := range observedVersions {
+		if ctx.Err() != nil {
+			break
+		}
+		observer.OnNewVersion(ctx, ov.id, ov.version, ov.modTime)
+	}
 	return func() {
 		m.unregisterLeaseObserver(observer)
 	}

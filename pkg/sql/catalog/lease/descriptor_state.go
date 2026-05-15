@@ -55,9 +55,17 @@ type descriptorState struct {
 		// of a descriptor.
 		maxVersionSeen descpb.DescriptorVersion
 
-		// maxVersionNotified is the maximum version of the descriptor for
-		// which observers have been notified.
-		maxVersionNotified descpb.DescriptorVersion
+		// notifiedVersion records the most recent descriptor version
+		// broadcast to observers and that version's modificationTime.
+		// Both fields are zero before the first broadcast. After that,
+		// they are updated together under t.mu in maybeAddObserverEvent
+		// and read under t.mu by Manager.RegisterLeaseObserver to replay
+		// the most recently broadcast version to a freshly registered
+		// Observer with its original timestamp.
+		notifiedVersion struct {
+			version descpb.DescriptorVersion
+			modTime hlc.Timestamp
+		}
 
 		// acquisitionsInProgress indicates that at least one caller is currently
 		// in the process of performing an acquisition. This tracking is critical

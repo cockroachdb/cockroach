@@ -64,7 +64,7 @@ type leaseAcquirer interface {
 	AcquireFreshestFromStore(ctx context.Context, id descpb.ID) error
 	// TODO(yang): Investigate whether the codec can be stored in the schema feed itself.
 	Codec() keys.SQLCodec
-	RegisterLeaseObserver(observer lease.Observer) (unregisterFn func())
+	RegisterLeaseObserver(ctx context.Context, observer lease.Observer) (unregisterFn func())
 }
 
 // SchemaFeed is a stream of events corresponding the relevant set of
@@ -282,7 +282,7 @@ func (tf *schemaFeed) Run(ctx context.Context) error {
 		return err
 	}
 
-	unregisterFn := tf.leaseMgr.RegisterLeaseObserver(tf)
+	unregisterFn := tf.leaseMgr.RegisterLeaseObserver(ctx, tf)
 	// Make sure the observer unregisters before trying to release leases.
 	defer func() {
 		tf.mu.Lock()
@@ -557,6 +557,7 @@ func (tf *schemaFeed) pauseOrResumePolling(ctx context.Context, atOrBefore hlc.T
 			// version could not have changed.
 			heldLease := tf.mu.heldLeases[id]
 			if heldLease.leasedDescriptor == nil {
+				prevLatest := heldLease.latestVersion // captured before mutation below for V(2) log
 				// Otherwise, a new version was detected, so acquire it at advanceTo.
 				newLease, err := tf.leaseMgr.Acquire(ctx, lease.TimestampToReadTimestamp(advanceTo), id)
 				if err != nil {
@@ -566,8 +567,12 @@ func (tf *schemaFeed) pauseOrResumePolling(ctx context.Context, atOrBefore hlc.T
 				if newLease.Underlying().GetVersion() >= heldLease.latestVersion {
 					heldLease.latestVersion = newLease.Underlying().GetVersion()
 					tf.mu.heldLeases[id].leasedDescriptor = newLease
+					log.VEventf(ctx, 2, "schemafeed pauseOrResumePolling id=%d: acquired and stored lease version=%d (prevLatest=%d)",
+						id, newLease.Underlying().GetVersion(), prevLatest)
 				} else {
 					// The latest observed version was not picked up yet.
+					log.VEventf(ctx, 2, "schemafeed pauseOrResumePolling id=%d: acquired version=%d but latestVersion=%d is newer; releasing",
+						id, newLease.Underlying().GetVersion(), heldLease.latestVersion)
 					newLease.Release(ctx)
 				}
 				// This new version could be schema_locked, but we don't know if multiple versions
@@ -1009,10 +1014,16 @@ func (tf *schemaFeed) OnNewVersion(
 		return
 	}
 	// Check if the new version is greater than the latest version we know
-	// about.
+	// about. If we've already seen this version (e.g. because we acquired it
+	// via pauseOrResumePolling before the observer event arrived) there is
+	// nothing to release here.
 	if ld.latestVersion >= version {
+		log.VEventf(ctx, 2, "schemafeed OnNewVersion id=%d version=%d: already at latestVersion=%d, no-op",
+			id, version, ld.latestVersion)
 		return
 	}
+	prevVersion := ld.latestVersion
+	hadLease := ld.leasedDescriptor != nil
 	ld.latestVersion = version
 	tf.mu.staleLeases = true
 	tf.mu.pollingPaused = false
@@ -1021,6 +1032,8 @@ func (tf *schemaFeed) OnNewVersion(
 		ld.leasedDescriptor.Release(ctx)
 		ld.leasedDescriptor = nil
 	}
+	log.VEventf(ctx, 2, "schemafeed OnNewVersion id=%d version=%d: advanced latestVersion %d->%d, releasedLease=%v",
+		id, version, prevVersion, version, hadLease)
 }
 
 type doNothingSchemaFeed struct{}

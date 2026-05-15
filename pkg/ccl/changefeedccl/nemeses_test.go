@@ -26,6 +26,7 @@ func TestChangefeedNemeses(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "takes >1 min under race")
+	testutils.SetVModule(t, "schema_feed=2") // helps #169820 if it comes up again
 
 	testutils.RunValues(t, "nemeses_options=", cdctest.NemesesOptions, func(t *testing.T, nop cdctest.NemesesOption) {
 		testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
