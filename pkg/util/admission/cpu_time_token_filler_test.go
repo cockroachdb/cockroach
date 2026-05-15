@@ -517,7 +517,8 @@ func TestComputeTargets(t *testing.T) {
 }
 
 // TestResetIntervalReturnsMode verifies that resetInterval returns
-// the current lastMode and skips mode update when the cluster
+// the current lastMode, picking up the mode setting on every tick
+// and pinning lastMode at the previous non-off value when the
 // setting is offMode.
 func TestResetIntervalReturnsMode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -530,8 +531,6 @@ func TestResetIntervalReturnsMode(t *testing.T) {
 		testTier0: burstMgrs[testTier0],
 		testTier1: burstMgrs[testTier1],
 	}
-	// Use default settings where cpuTimeTokenACMode is offMode.
-	// resetInterval should not attempt to update lastMode.
 	st := cluster.MakeClusterSettings()
 	require.Equal(t, offMode, cpuTimeTokenACMode.Get(&st.SV))
 	allocator := cpuTimeTokenAllocator{
@@ -545,8 +544,22 @@ func TestResetIntervalReturnsMode(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	mode := allocator.resetInterval(ctx)
-	require.Equal(t, serverlessMode, mode)
+
+	// Setting is offMode at construction; resetInterval keeps lastMode
+	// at its prior value (serverless from the constructor).
+	require.Equal(t, serverlessMode, allocator.resetInterval(ctx))
+
+	// Flip to resourceManagerMode; lastMode follows.
+	cpuTimeTokenACMode.Override(ctx, &st.SV, resourceManagerMode)
+	require.Equal(t, resourceManagerMode, allocator.resetInterval(ctx))
+
+	// Flip back to serverlessMode; lastMode follows again.
+	cpuTimeTokenACMode.Override(ctx, &st.SV, serverlessMode)
+	require.Equal(t, serverlessMode, allocator.resetInterval(ctx))
+
+	// Flip to offMode; lastMode pins at the previous serverless value.
+	cpuTimeTokenACMode.Override(ctx, &st.SV, offMode)
+	require.Equal(t, serverlessMode, allocator.resetInterval(ctx))
 }
 
 // TestGroupBurstRates verifies the allocator's groupBurstRates method,

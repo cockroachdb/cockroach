@@ -127,10 +127,15 @@ var builtinGroupConfigs = ResourceGroupConfigSet{
 
 // ConfigSnapshot is the immutable snapshot returned by
 // ResourceGroupConfigHolder.Snapshot. It bundles the per-group config
-// set with the utilization targets derived from cluster settings.
+// set with the utilization targets derived from cluster settings, plus
+// the cpuTimeTokenACMode value those targets were derived under.
 type ConfigSnapshot struct {
 	// Groups is the per-group config set (built-ins + caller-provided).
 	Groups ResourceGroupConfigSet
+	// Mode is the cpuTimeTokenACMode value read alongside the
+	// utilization targets. Carried so consumers that need both stay
+	// coherent without a second setting read.
+	Mode cpuTimeTokenMode
 	// AppNoBurstFrac is the non-burstable CPU utilization target for
 	// the app tenant tier (e.g. 0.8 for 80% of CPU capacity).
 	AppNoBurstFrac float64
@@ -224,6 +229,7 @@ func (h *ResourceGroupConfigHolder) Snapshot() ConfigSnapshot {
 	if h.sv == nil {
 		return ConfigSnapshot{
 			Groups:            groups,
+			Mode:              serverlessMode,
 			AppNoBurstFrac:    0.8,
 			SystemNoBurstFrac: 0.95,
 			BurstDelta:        0.05,
@@ -231,12 +237,12 @@ func (h *ResourceGroupConfigHolder) Snapshot() ConfigSnapshot {
 	}
 	snap := ConfigSnapshot{
 		Groups:     groups,
+		Mode:       cpuTimeTokenACMode.Get(h.sv),
 		BurstDelta: KVCPUTimeUtilBurstDelta.Get(h.sv),
 	}
 	// TODO(ssd): The mode switch will be removed when settings are
 	// consolidated into a single target_util setting.
-	mode := cpuTimeTokenACMode.Get(h.sv)
-	switch mode {
+	switch snap.Mode {
 	case resourceManagerMode:
 		target := KVCPUTimeUtilTarget.Get(h.sv)
 		snap.AppNoBurstFrac = target

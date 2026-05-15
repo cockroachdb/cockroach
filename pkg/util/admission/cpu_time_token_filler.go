@@ -464,25 +464,22 @@ func (a *cpuTimeTokenAllocator) allocateTokens(expectedRemainingTicksInInterval 
 }
 
 // resetInterval recomputes refill rates and applies the delta to the
-// granter and burst buckets. If the mode cluster setting has changed,
-// lastMode is updated before computing targets.
+// granter and burst buckets. The snapshot's Mode is folded into
+// lastMode so the filler's activeMode tracks the same value the
+// targets were derived under. offMode is skipped: it is not a real
+// mode for routing purposes — the constructor defaults offMode to
+// serverlessMode, and GetKVWorkQueue handles the off case before
+// reaching activeMode routing.
 func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) cpuTimeTokenMode {
-	// lastMode is only accessed by the filler goroutine, so we can
-	// update it immediately. offMode is skipped because it is not a
-	// real mode - the constructor defaults offMode to serverlessMode,
-	// and GetKVWorkQueue handles the off case before reaching
-	// activeMode routing.
-	newMode := cpuTimeTokenACMode.Get(&a.settings.SV)
-	if newMode != offMode && newMode != a.lastMode {
-		a.lastMode = newMode
-	}
-
 	// Refresh the cached snapshot for this interval. Everything that
 	// runs until the next resetInterval — model.fit, the refillRates
 	// it produces, and the per-tick groupBurstRates calls in
 	// allocateTokens — reads from this snap so the interval is
 	// coherent with one view of the holder.
 	a.snap = a.configHolder.Snapshot()
+	if a.snap.Mode != offMode {
+		a.lastMode = a.snap.Mode
+	}
 	targets := computeTargets(a.snap)
 	newRefillRates := a.model.fit(ctx, targets)
 
