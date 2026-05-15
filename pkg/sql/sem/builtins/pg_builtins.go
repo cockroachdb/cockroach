@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -2566,6 +2567,46 @@ FROM defaults_parsed
 			Volatility: volatility.Stable,
 		}),
 
+	"pg_size_pretty": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "size", Typ: types.Int}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDString(pgSizePrettyInt(int64(tree.MustBeDInt(args[0])))), nil
+			},
+			Info:       "Converts a size in bytes into a human-readable string with units (e.g. '1024 bytes', '10 MB').",
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "size", Typ: types.Decimal}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				dd := tree.MustBeDDecimal(args[0])
+				s, err := pgSizePrettyDecimal(&dd.Decimal)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(s), nil
+			},
+			Info:       "Converts a size in bytes into a human-readable string with units (e.g. '1024 bytes', '10 MB').",
+			Volatility: volatility.Immutable,
+		}),
+
+	"pg_size_bytes": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "size", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				v, err := pgSizeBytes(string(tree.MustBeDString(args[0])))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt(v)), nil
+			},
+			Info:       "Parses a human-readable size string (e.g. '1.5 MB') and returns the size in bytes.",
+			Volatility: volatility.Immutable,
+		}),
+
 	// NOTE: these two builtins could be defined as user-defined functions, like
 	// they are in Postgres:
 	// https://github.com/postgres/postgres/blob/master/src/backend/catalog/information_schema.sql
@@ -3324,4 +3365,262 @@ func isAdminOfRole(
 		return eval.HasPrivilege, nil
 	}
 	return eval.HasNoPrivilege, nil
+}
+
+// sizePrettyUnit describes one unit in the pg_size_pretty / pg_size_bytes unit
+// table. The implementation mirrors PostgreSQL's algorithm in
+// src/backend/utils/adt/dbsize.c so that output strings match exactly.
+type sizePrettyUnit struct {
+	name     string
+	limit    int64 // upper limit, prior to half rounding after converting to this unit
+	round    bool  // do half rounding for this unit
+	unitBits uint  // (1 << unitBits) bytes to make 1 of this unit
+}
+
+// sizePrettyUnits is the unit table for pg_size_pretty and pg_size_bytes.
+// It mirrors PostgreSQL's size_pretty_units. All units are powers of two.
+var sizePrettyUnits = []sizePrettyUnit{
+	{"bytes", 10 * 1024, false, 0},
+	{"kB", 20*1024 - 1, true, 10},
+	{"MB", 20*1024 - 1, true, 20},
+	{"GB", 20*1024 - 1, true, 30},
+	{"TB", 20*1024 - 1, true, 40},
+	{"PB", 20*1024 - 1, true, 50},
+}
+
+// sizeBytesAlias is a unit alias accepted by pg_size_bytes but not produced by
+// pg_size_pretty.
+type sizeBytesAlias struct {
+	alias     string
+	unitIndex int
+}
+
+var sizeBytesAliases = []sizeBytesAlias{
+	{"B", 0},
+}
+
+// pgSizePrettyInt formats a byte count as a human-readable string with units,
+// matching the output of PostgreSQL's pg_size_pretty(bigint).
+func pgSizePrettyInt(size int64) string {
+	for i := range sizePrettyUnits {
+		unit := &sizePrettyUnits[i]
+		// Compute the absolute size as a uint64 to handle math.MinInt64 correctly.
+		var absSize uint64
+		if size < 0 {
+			absSize = uint64(-(size + 1)) + 1
+		} else {
+			absSize = uint64(size)
+		}
+
+		// Use this unit if there are no more units or the absolute size is
+		// below the limit for the current unit.
+		if i == len(sizePrettyUnits)-1 || absSize < uint64(unit.limit) {
+			if unit.round {
+				size = halfRoundedInt64(size)
+			}
+			return fmt.Sprintf("%d %s", size, unit.name)
+		}
+
+		// Determine the number of bits to use to build the divisor. We may
+		// need to use 1 bit less than the difference between this and the
+		// next unit if the next unit uses half rounding. Or we may need to
+		// shift an extra bit if this unit uses half rounding and the next one
+		// does not.
+		next := &sizePrettyUnits[i+1]
+		bits := next.unitBits - unit.unitBits - boolToUint(next.round) + boolToUint(unit.round)
+		size /= int64(1) << bits
+	}
+	// Unreachable: the loop always returns when reaching the last unit.
+	return ""
+}
+
+// pgSizePrettyDecimal is the apd.Decimal-based equivalent of pgSizePrettyInt,
+// matching PostgreSQL's pg_size_pretty(numeric).
+func pgSizePrettyDecimal(size *apd.Decimal) (string, error) {
+	d := new(apd.Decimal).Set(size)
+	for i := range sizePrettyUnits {
+		unit := &sizePrettyUnits[i]
+		abs := new(apd.Decimal).Abs(d)
+		limit := apd.New(unit.limit, 0)
+		if i == len(sizePrettyUnits)-1 || abs.Cmp(limit) < 0 {
+			if unit.round {
+				if err := halfRoundedDecimal(d); err != nil {
+					return "", err
+				}
+			}
+			return fmt.Sprintf("%s %s", d.Text('f'), unit.name), nil
+		}
+
+		next := &sizePrettyUnits[i+1]
+		bits := next.unitBits - unit.unitBits - boolToUint(next.round) + boolToUint(unit.round)
+		divisor := apd.New(int64(1)<<bits, 0)
+		if _, err := tree.HighPrecisionCtx.QuoInteger(d, d, divisor); err != nil {
+			return "", err
+		}
+	}
+	return "", nil
+}
+
+// halfRoundedInt64 rounds size by adding (or subtracting, for negatives) one
+// half of the next unit's worth and truncating. PostgreSQL achieves the same
+// result via integer division of (size ± 1) by 2.
+func halfRoundedInt64(size int64) int64 {
+	if size >= 0 {
+		return (size + 1) / 2
+	}
+	return (size - 1) / 2
+}
+
+// halfRoundedDecimal applies the same half-rounding as halfRoundedInt64 to a
+// decimal, in place.
+func halfRoundedDecimal(d *apd.Decimal) error {
+	one := apd.New(1, 0)
+	two := apd.New(2, 0)
+	zero := apd.New(0, 0)
+	if d.Cmp(zero) >= 0 {
+		if _, err := tree.HighPrecisionCtx.Add(d, d, one); err != nil {
+			return err
+		}
+	} else {
+		if _, err := tree.HighPrecisionCtx.Sub(d, d, one); err != nil {
+			return err
+		}
+	}
+	_, err := tree.HighPrecisionCtx.QuoInteger(d, d, two)
+	return err
+}
+
+func boolToUint(b bool) uint {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// pgSizeBytes parses a human-readable byte count (e.g. "1.5 MB") and returns
+// the equivalent number of bytes, matching PostgreSQL's pg_size_bytes.
+func pgSizeBytes(input string) (int64, error) {
+	str := input
+	// Skip leading whitespace.
+	i := 0
+	for i < len(str) && isASCIISpace(str[i]) {
+		i++
+	}
+	numStart := i
+
+	// Parse an optional sign.
+	if i < len(str) && (str[i] == '+' || str[i] == '-') {
+		i++
+	}
+
+	// Parse the integer part.
+	haveDigits := false
+	for i < len(str) && isASCIIDigit(str[i]) {
+		i++
+		haveDigits = true
+	}
+
+	// Parse an optional fractional part.
+	if i < len(str) && str[i] == '.' {
+		i++
+		for i < len(str) && isASCIIDigit(str[i]) {
+			i++
+			haveDigits = true
+		}
+	}
+
+	if !haveDigits {
+		return 0, pgerror.Newf(pgcode.InvalidParameterValue, "invalid size: %q", input)
+	}
+
+	// Parse an optional exponent. We only consume the 'e'/'E' if it is followed
+	// by a valid integer; otherwise it is treated as the start of the unit.
+	if i < len(str) && (str[i] == 'e' || str[i] == 'E') {
+		j := i + 1
+		if j < len(str) && (str[j] == '+' || str[j] == '-') {
+			j++
+		}
+		if j < len(str) && isASCIIDigit(str[j]) {
+			for j < len(str) && isASCIIDigit(str[j]) {
+				j++
+			}
+			i = j
+		}
+	}
+
+	numStr := str[numStart:i]
+
+	// Skip whitespace between the number and the unit.
+	for i < len(str) && isASCIISpace(str[i]) {
+		i++
+	}
+
+	// Parse the optional unit, trimming trailing whitespace.
+	unitStr := strings.TrimRightFunc(str[i:], func(r rune) bool {
+		return r == ' ' || r == '\t' || r == '\n' || r == '\r' || r == '\v' || r == '\f'
+	})
+
+	num, _, err := apd.NewFromString(numStr)
+	if err != nil {
+		return 0, pgerror.Newf(pgcode.InvalidParameterValue, "invalid size: %q", input)
+	}
+
+	if unitStr != "" {
+		unitBits, ok := lookupSizeUnit(unitStr)
+		if !ok {
+			return 0, errors.WithHint(
+				errors.WithDetail(
+					pgerror.Newf(pgcode.InvalidParameterValue, "invalid size: %q", input),
+					fmt.Sprintf("Invalid size unit: %q.", unitStr),
+				),
+				`Valid units are "bytes", "B", "kB", "MB", "GB", "TB", and "PB".`,
+			)
+		}
+		if unitBits > 0 {
+			multiplier := apd.New(int64(1)<<unitBits, 0)
+			if _, err := tree.HighPrecisionCtx.Mul(num, num, multiplier); err != nil {
+				return 0, err
+			}
+		}
+	}
+
+	// Round to the nearest integer using PG's "round half away from zero" rule
+	// to match numeric_int8.
+	rounded := new(apd.Decimal)
+	if _, err := tree.HighPrecisionCtx.RoundToIntegralValue(rounded, num); err != nil {
+		return 0, err
+	}
+	result, err := rounded.Int64()
+	if err != nil {
+		return 0, pgerror.Newf(pgcode.NumericValueOutOfRange, "bigint out of range")
+	}
+	return result, nil
+}
+
+// lookupSizeUnit returns the unit-bits value for a unit name (case-insensitive),
+// or false if the name is not recognized.
+func lookupSizeUnit(name string) (uint, bool) {
+	for i := range sizePrettyUnits {
+		if strings.EqualFold(name, sizePrettyUnits[i].name) {
+			return sizePrettyUnits[i].unitBits, true
+		}
+	}
+	for _, a := range sizeBytesAliases {
+		if strings.EqualFold(name, a.alias) {
+			return sizePrettyUnits[a.unitIndex].unitBits, true
+		}
+	}
+	return 0, false
+}
+
+func isASCIISpace(b byte) bool {
+	switch b {
+	case ' ', '\t', '\n', '\r', '\v', '\f':
+		return true
+	}
+	return false
+}
+
+func isASCIIDigit(b byte) bool {
+	return b >= '0' && b <= '9'
 }

@@ -2950,6 +2950,9 @@ var builtinOidsArray = []string{
 	2995: `st_3dshortestline(geometry_a: geometry, geometry_b: geometry) -> geometry`,
 	2996: `st_3dperimeter(geometry: geometry) -> float`,
 	2997: `pg_get_function_sqlbody(func_oid: oid) -> string`,
+	2998: `pg_size_pretty(size: int) -> string`,
+	2999: `pg_size_pretty(size: decimal) -> string`,
+	3000: `pg_size_bytes(size: string) -> int`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
