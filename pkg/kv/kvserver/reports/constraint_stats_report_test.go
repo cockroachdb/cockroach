@@ -404,6 +404,106 @@ func TestConformanceReport(t *testing.T) {
 	}
 }
 
+// TestConformanceReportSubzoneVoterConstraints verifies that the constraint
+// conformance report correctly attributes voter constraint violations to
+// partition subzones that define voterConstraints but inherit constraints from
+// the database. This is a regression test for the case where visitNewZone skips
+// a subzone because zone.Constraints is nil, even though VoterConstraints is
+// set, causing violations to be misattributed to the database zone.
+func TestConformanceReportSubzoneVoterConstraints(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tc := conformanceConstraintTestCase{
+		name: "partition with voter constraints only",
+		baseReportTestCase: baseReportTestCase{
+			defaultZone: zone{voters: 3},
+			schema: []database{
+				{
+					name: "db1",
+					zone: &zone{
+						voters:           2,
+						nonVoters:        1,
+						constraints:      `{"+region=us":1,"+region=eu":1}`,
+						voterConstraints: `{"+region=us":1}`,
+					},
+					tables: []table{{
+						name: "t1",
+						// Partition p1 sets its own voterConstraints but
+						// inherits constraints from the database.
+						partitions: []partition{{
+							name:  "p1",
+							start: []int{100},
+							end:   []int{200},
+							zone: &zone{
+								voters:           2,
+								nonVoters:        1,
+								voterConstraints: `{"+region=eu":1}`,
+							},
+						}},
+					}},
+				},
+			},
+			splits: []split{
+				// Range outside the partition — governed by the database zone.
+				{key: "/Table/t1", stores: "1 2 3"},
+				// Range inside partition p1 — should use p1's voterConstraints.
+				{key: "/Table/t1/pk/100", stores: "4 5 6"},
+			},
+			nodes: []node{
+				// Stores 1-3: region=us — satisfies the DB voter constraint.
+				{id: 1, locality: "region=us", stores: []store{{id: 1}}},
+				{id: 2, locality: "region=us", stores: []store{{id: 2}}},
+				{id: 3, locality: "region=us", stores: []store{{id: 3}}},
+				// Stores 4-6: region=eu — satisfies partition p1's voter constraint,
+				// but violates the DB's voter constraint (+region=us:1).
+				{id: 4, locality: "region=eu", stores: []store{{id: 4}}},
+				{id: 5, locality: "region=eu", stores: []store{{id: 5}}},
+				{id: 6, locality: "region=eu", stores: []store{{id: 6}}},
+			},
+		},
+		exp: []constraintEntry{
+			// DB-level constraints — only the range outside the partition is
+			// checked against these under the DB key.
+			{
+				object:         "db1",
+				constraint:     "+region=eu:1",
+				constraintType: Constraint,
+				numRanges:      1,
+			},
+			{
+				object:         "db1",
+				constraint:     "+region=us:1",
+				constraintType: Constraint,
+				numRanges:      0,
+			},
+			{
+				object:         "db1",
+				constraint:     "+region=us:1",
+				constraintType: VoterConstraint,
+				numRanges:      0,
+			},
+			// Partition p1: the partition range inherits Constraints from the
+			// DB, so constraint violations are reported under the partition
+			// key. All replicas are in region=eu, so +region=us:1 is violated.
+			{
+				object:         "t1.p1",
+				constraint:     "+region=us:1",
+				constraintType: Constraint,
+				numRanges:      1,
+			},
+			// Partition p1 voter constraint — the partition range should be
+			// counted here, not at the DB level.
+			{
+				object:         "t1.p1",
+				constraint:     "+region=eu:1",
+				constraintType: VoterConstraint,
+				numRanges:      0,
+			},
+		},
+	}
+	runConformanceReportTest(t, tc)
+}
+
 // runConformanceReportTest runs one test case. It processes the input schema,
 // runs the reports, and verifies that the report looks as expected.
 func runConformanceReportTest(t *testing.T, tc conformanceConstraintTestCase) {

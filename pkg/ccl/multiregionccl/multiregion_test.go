@@ -704,6 +704,115 @@ func TestSuperRegionConstraintConformanceZoneSurvival(t *testing.T) {
 	})
 }
 
+// TestRBRConstraintStatsAttribution verifies that the constraint stats reporter
+// attributes voter constraint entries to RBR partition subzones rather than the
+// database zone. This is a regression test for a bug where visitNewZone only
+// checked zone.Constraints (not zone.VoterConstraints) to decide whether a
+// subzone's config applies, causing it to skip partition subzones that define
+// voterConstraints but inherit constraints from the database, and misattribute
+// all violations to the database zone.
+func TestRBRConstraintStatsAttribution(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderShort(t)
+	skip.UnderDuress(t)
+
+	regionNames := []string{
+		"us-west-1",  // primary
+		"us-east-1",  // secondary
+		"eu-west-1",
+	}
+	tc, sqlDB, cleanup :=
+		multiregionccltestutils.TestingCreateMultiRegionClusterWithRegionList(
+			t,
+			regionNames,
+			2, /* serversPerRegion */
+			base.TestingKnobs{},
+		)
+	defer cleanup()
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+
+	tdb.Exec(t, "SET CLUSTER SETTING kv.replication_reports.interval = '1ms'")
+	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'")
+	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms'")
+	tdb.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10ms'")
+
+	tdb.Exec(t, `CREATE DATABASE testdb PRIMARY REGION "us-west-1"
+		REGIONS "us-east-1", "eu-west-1"`)
+	tdb.Exec(t, `ALTER DATABASE testdb SET SECONDARY REGION "us-east-1"`)
+
+	tdb.Exec(t, `CREATE TABLE testdb.rbr(k INT PRIMARY KEY, v INT)
+		LOCALITY REGIONAL BY ROW`)
+	tdb.Exec(t, `INSERT INTO testdb.rbr(crdb_region, k, v) VALUES
+		('us-west-1', 1, 10), ('us-east-1', 2, 20), ('eu-west-1', 3, 30)`)
+
+	var dbZoneID int
+	tdb.QueryRow(t,
+		"SELECT zone_id FROM crdb_internal.zones WHERE database_name = 'testdb' AND table_name IS NULL",
+	).Scan(&dbZoneID)
+
+	var tblZoneID int
+	tdb.QueryRow(t,
+		"SELECT zone_id FROM crdb_internal.zones WHERE table_name = 'rbr'",
+	).Scan(&tblZoneID)
+
+	forceProcess := func() error {
+		for i := 0; i < tc.NumServers(); i++ {
+			if err := tc.Server(i).GetStores().(*kvserver.Stores).VisitStores(
+				func(s *kvserver.Store) error {
+					return s.ForceReplicationScanAndProcess()
+				},
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// Wait for constraint stats to be generated for both the table's
+	// subzones and the database zone.
+	testutils.SucceedsSoon(t, func() error {
+		if err := forceProcess(); err != nil {
+			return err
+		}
+		for _, zid := range []int{dbZoneID, tblZoneID} {
+			var count int
+			if err := sqlDB.QueryRow(
+				`SELECT count(*) FROM system.replication_constraint_stats
+				  WHERE zone_id = $1`, zid,
+			).Scan(&count); err != nil {
+				return err
+			}
+			if count == 0 {
+				return fmt.Errorf("constraint stats not yet generated for zone %d", zid)
+			}
+		}
+		return nil
+	})
+
+	// The key assertion: voter_constraint entries for the RBR partitions must
+	// appear under the table's zone_id (with partition subzone_ids), not under
+	// the database's zone_id. The bug caused the reporter to skip partition
+	// subzones (because zone.Constraints was nil, even though
+	// zone.VoterConstraints was set) and attribute everything to the DB zone.
+	//
+	// With 3 regions and 1 index, we expect 3 partition subzones, each with
+	// at least one voter_constraint entry.
+	var tblVoterConstraintCount int
+	tdb.QueryRow(t,
+		`SELECT count(DISTINCT subzone_id) FROM system.replication_constraint_stats
+		  WHERE zone_id = $1 AND subzone_id > 0 AND type = 'voter_constraint'`,
+		tblZoneID,
+	).Scan(&tblVoterConstraintCount)
+	require.Equal(t, 3, tblVoterConstraintCount,
+		"expected voter_constraint entries for all 3 partition subzones under "+
+			"table zone %d, but found %d — the reporter likely misattributed them "+
+			"to the database zone",
+		tblZoneID, tblVoterConstraintCount)
+}
+
 // TestSuperRegionWithNumReplicasExtension verifies that creating an RBR table
 // with super regions succeeds when the user has set num_replicas via a zone
 // config extension to a value lower than the default.
