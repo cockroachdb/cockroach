@@ -87,20 +87,31 @@ func (sd staticDataset) getDataFormat() string             { return sd.dataForma
 func (sd staticDataset) getImportOptions() []string        { return sd.importOptions }
 
 // tpchDataset represents a TPC-H dataset stored on external storage. The
-// format field determines whether data files are CSV or Parquet; schemas and
-// fingerprints are always read from the CSV bucket (the calibration master).
+// format field determines whether data files are CSV, Parquet, or AVRO;
+// schemas and fingerprints are always read from the CSV bucket (the
+// calibration master).
 type tpchDataset struct {
 	staticDataset
 	// dataBaseURL is the GCS bucket prefix where data files are stored.
 	dataBaseURL string
-	// fileExt is the data file extension (e.g. "tbl" for CSV, "parquet").
+	// fileExt is the data file extension (e.g. "tbl" for CSV, "parquet",
+	// "ocf", "bin").
 	fileExt string
 }
 
 const (
 	tpchCSVBaseURL     = "gs://cockroach-fixtures-us-east1/tpch-csv/"
 	tpchParquetBaseURL = "gs://cockroach-fixtures-us-east1/tpch-parquet/"
+	tpchAvroBaseURL    = "gs://cockroach-fixtures-us-east1/tpch-avro/"
 )
+
+// tpchAvroSchemaURL returns the GCS URL for a table's AVRO schema (.avsc) file.
+// AVRO schemas are scale-independent and live in a single per-bucket schema
+// directory, mirroring the layout written by generate-import-fixtures.
+func tpchAvroSchemaURL(tableName string) string {
+	return fmt.Sprintf("%sschema/%s.avsc?AUTH=implicit",
+		tpchAvroBaseURL, tableName)
+}
 
 // tpchFingerprintURL returns the GCS URL for a table's fingerprint file.
 // Fingerprints are always stored in the CSV bucket, which is the calibration
@@ -195,6 +206,46 @@ func newTPCHParquetDataset(name string) *tpchDataset {
 	}
 }
 
+// newTPCHAvroOCFDataset creates a TPC-H dataset backed by AVRO Object
+// Container Format (OCF) files. Each OCF file embeds its own schema, so no
+// extra IMPORT options are required.
+func newTPCHAvroOCFDataset(name string) *tpchDataset {
+	return &tpchDataset{
+		staticDataset: staticDataset{
+			tableName:  name,
+			dataFormat: "AVRO",
+		},
+		dataBaseURL: tpchAvroBaseURL,
+		fileExt:     "ocf",
+	}
+}
+
+// newTPCHAvroBinDataset creates a TPC-H dataset backed by AVRO binary records
+// files (concatenated records with no separator) plus a sibling .avsc schema.
+// IMPORT INTO needs three WITH-clause options to read this format:
+//   - data_as_binary_records: tells IMPORT the file holds raw binary records
+//     rather than OCF.
+//   - records_terminated_by set to the empty string: overrides the default
+//     newline separator; the converter writes records back-to-back with no
+//     terminator.
+//   - schema_uri='...': points at the .avsc schema written alongside the
+//     data files, since binary records are not self-describing.
+func newTPCHAvroBinDataset(name string) *tpchDataset {
+	return &tpchDataset{
+		staticDataset: staticDataset{
+			tableName:  name,
+			dataFormat: "AVRO",
+			importOptions: []string{
+				"data_as_binary_records",
+				"records_terminated_by=''",
+				fmt.Sprintf("schema_uri='%s'", tpchAvroSchemaURL(name)),
+			},
+		},
+		dataBaseURL: tpchAvroBaseURL,
+		fileExt:     "bin",
+	}
+}
+
 // datasets is the set of all known datasets to test with.
 var datasets = map[string]dataset{
 	"tpch/customer": newTPCHCSVDataset("customer"),
@@ -210,6 +261,20 @@ var datasets = map[string]dataset{
 	"tpch-parquet/part":     newTPCHParquetDataset("part"),
 	"tpch-parquet/partsupp": newTPCHParquetDataset("partsupp"),
 	"tpch-parquet/supplier": newTPCHParquetDataset("supplier"),
+
+	"tpch-avro-ocf/customer": newTPCHAvroOCFDataset("customer"),
+	"tpch-avro-ocf/lineitem": newTPCHAvroOCFDataset("lineitem"),
+	"tpch-avro-ocf/orders":   newTPCHAvroOCFDataset("orders"),
+	"tpch-avro-ocf/part":     newTPCHAvroOCFDataset("part"),
+	"tpch-avro-ocf/partsupp": newTPCHAvroOCFDataset("partsupp"),
+	"tpch-avro-ocf/supplier": newTPCHAvroOCFDataset("supplier"),
+
+	"tpch-avro-bin/customer": newTPCHAvroBinDataset("customer"),
+	"tpch-avro-bin/lineitem": newTPCHAvroBinDataset("lineitem"),
+	"tpch-avro-bin/orders":   newTPCHAvroBinDataset("orders"),
+	"tpch-avro-bin/part":     newTPCHAvroBinDataset("part"),
+	"tpch-avro-bin/partsupp": newTPCHAvroBinDataset("partsupp"),
+	"tpch-avro-bin/supplier": newTPCHAvroBinDataset("supplier"),
 }
 
 // readFileFromFixture() reads a URI by routing through the read_file() internal
@@ -238,16 +303,16 @@ type FromFunc func(rng *rand.Rand) []string
 func (f FromFunc) Strings(rng *rand.Rand) []string { return f(rng) }
 
 // allDatasets returns the names of all registered datasets, regardless of
-// format. Tests that use this pool exercise both CSV and Parquet paths via
-// randomization.
+// format. Tests that use this pool exercise CSV, Parquet, and both AVRO
+// variants via randomization.
 func allDatasets(_ *rand.Rand) []string {
 	return slices.Collect(maps.Keys(datasets))
 }
 
 // nDatasets returns n randomly chosen dataset names with distinct table names.
 // This prevents conflicts when multiple datasets are imported concurrently
-// into the same database (e.g. both tpch/orders and tpch-parquet/orders
-// target import_test.orders).
+// into the same database (e.g. tpch/orders, tpch-parquet/orders, and
+// tpch-avro-ocf/orders all target import_test.orders).
 func nDatasets(rng *rand.Rand, n int) []string {
 	all := allDatasets(rng)
 	rng.Shuffle(len(all), func(i, j int) {
@@ -384,8 +449,9 @@ var tests = []importTestSpec{
 		manualOnly:   true,
 		datasetNames: One("tpch/supplier"),
 	},
-	// Basic test w/o injected failures. Draws from all formats so that both
-	// CSV and Parquet paths are exercised via randomization.
+	// Basic test w/o injected failures. Draws from all formats so that
+	// CSV, Parquet, and AVRO (OCF and binary records) paths are exercised
+	// via randomization.
 	{
 		subtestName:  "basic",
 		nodes:        []int{4},
@@ -399,7 +465,7 @@ var tests = []importTestSpec{
 		datasetNames: One("tpch/lineitem"),
 	},
 	// Basic test importing three datasets concurrently. Draws from all
-	// formats so that both CSV and Parquet paths are exercised.
+	// formats so that CSV, Parquet, and AVRO paths are exercised.
 	{
 		subtestName:  "concurrency",
 		nodes:        []int{4},
@@ -499,6 +565,34 @@ var tests = []importTestSpec{
 		benchmark:    true,
 		nodes:        []int{4},
 		datasetNames: One("tpch-parquet/lineitem"),
+	},
+	// AVRO OCF import: small dataset for quick iteration.
+	{
+		subtestName:  "avro-ocf/smoke",
+		nodes:        []int{4},
+		manualOnly:   true,
+		datasetNames: One("tpch-avro-ocf/supplier"),
+	},
+	// AVRO OCF import: benchmarking with AVRO OCF-specific dataset.
+	{
+		subtestName:  "avro-ocf/benchmark",
+		benchmark:    true,
+		nodes:        []int{4},
+		datasetNames: One("tpch-avro-ocf/lineitem"),
+	},
+	// AVRO binary records import: small dataset for quick iteration.
+	{
+		subtestName:  "avro-bin/smoke",
+		nodes:        []int{4},
+		manualOnly:   true,
+		datasetNames: One("tpch-avro-bin/supplier"),
+	},
+	// AVRO binary records import: benchmarking with AVRO bin-specific dataset.
+	{
+		subtestName:  "avro-bin/benchmark",
+		benchmark:    true,
+		nodes:        []int{4},
+		datasetNames: One("tpch-avro-bin/lineitem"),
 	},
 }
 
