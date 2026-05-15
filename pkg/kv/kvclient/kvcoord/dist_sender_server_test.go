@@ -4414,6 +4414,20 @@ func TestUnexpectedCommitOnTxnRecovery(t *testing.T) {
 			Settings: st,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
+					// Disable autonomous lease movement so that the only lease
+					// transfer is the one performed explicitly by the test
+					// (via transferLease). Otherwise, an autonomous lease
+					// transfer can run between the failed replicated Shared
+					// lock acquisition and the parallel commit's QueryIntent,
+					// upgrading the unreplicated Exclusive lock on keyB to a
+					// replicated Exclusive lock before QueryIntent runs.
+					// QueryIntent would then find that stronger lock and the
+					// parallel commit would succeed validly (no anomaly, since
+					// any subsequent recovery would observe the same
+					// replicated lock and reach the same conclusion), but that
+					// is not the scenario this test means to exercise. See
+					// #170323.
+					DisableLeaseQueue: true,
 					TestingProposalFilter: func(fArgs kvserverbase.ProposalFilterArgs) *kvpb.Error {
 						if fArgs.Req.Header.Txn == nil ||
 							fArgs.Req.Header.Txn.ID.String() != targetTxnIDString.Load().(string) {
