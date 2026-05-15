@@ -13,7 +13,9 @@ import (
 	"math"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -31,6 +33,7 @@ type spanStatsFetcher interface {
 // tableMetadataUpdater encapsulates the logic for updating the table metadata cache.
 type tableMetadataUpdater struct {
 	ie               isql.Executor
+	codec            keys.SQLCodec
 	timeSrc          timeutil.TimeSource
 	metrics          *TableMetadataUpdateJobMetrics
 	updateProgress   func(ctx context.Context, progress float32)
@@ -52,6 +55,17 @@ type tableMetadataDetails struct {
 	// ReplicaCount is the number of voter and non-voter replicas
 	// containing data for the table.
 	ReplicaCount int32 `json:"replica_count"`
+	// PrimaryIndexID is the index ID of the table's primary index, or 0 if
+	// the relation has no primary index (e.g., views). Stored alongside
+	// IndexSizes so size functions can identify the primary entry without
+	// an additional catalog lookup.
+	PrimaryIndexID descpb.IndexID `json:"primary_index_id,omitempty"`
+	// IndexSizes maps each live index ID (primary and secondary) to its
+	// replication size in bytes. Empty for relations without indexes.
+	// Note: integer map keys are JSON-encoded as strings, so callers
+	// reading this from SQL should access entries via
+	// `details->'index_sizes'->>'<id>'`.
+	IndexSizes map[descpb.IndexID]int64 `json:"index_sizes,omitempty"`
 }
 
 var _ tablemetadatacacheutil.ITableMetadataUpdater = &tableMetadataUpdater{}
@@ -62,12 +76,14 @@ func newTableMetadataUpdater(
 	metrics *TableMetadataUpdateJobMetrics,
 	spanStatsFetcher spanStatsFetcher,
 	ie isql.Executor,
+	codec keys.SQLCodec,
 	timeSrc timeutil.TimeSource,
 	batchSize int64,
 	testKnobs *tablemetadatacacheutil.TestingKnobs,
 ) *tableMetadataUpdater {
 	return &tableMetadataUpdater{
 		ie:               ie,
+		codec:            codec,
 		metrics:          metrics,
 		updateProgress:   onProgressUpdated,
 		spanStatsFetcher: spanStatsFetcher,
@@ -98,7 +114,7 @@ func (u *tableMetadataUpdater) updateCache(ctx context.Context) (updated int, er
 	// upsertQuery is the query used to upsert table metadata rows,
 	// it is reused for each batch to avoid allocations between batches.
 	upsert := newTableMetadataBatchUpsertQuery(u.batchSize)
-	it := newTableMetadataBatchIterator(u.ie, u.spanStatsFetcher, u.testKnobs.GetAOSTClause(), u.batchSize)
+	it := newTableMetadataBatchIterator(u.ie, u.codec, u.spanStatsFetcher, u.testKnobs.GetAOSTClause(), u.batchSize)
 	estimatedRowsToUpdate, err := u.getRowsToUpdateCount(ctx)
 	if err != nil {
 		log.Dev.Errorf(ctx, "failed to get estimated row count. err=%s", err.Error())
@@ -296,6 +312,8 @@ func (q *tableMetadataBatchUpsertQuery) addRow(
 		AutoStatsEnabled: row.autoStatsEnabled,
 		StatsLastUpdated: row.statsLastUpdated,
 		ReplicaCount:     stats.ReplicaCount,
+		PrimaryIndexID:   row.primaryIndexID,
+		IndexSizes:       row.indexSizes,
 	}
 	detailsStr, err := gojson.Marshal(details)
 	if err != nil {

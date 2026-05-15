@@ -65,6 +65,7 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 			&metrics,
 			execCtx.ExecCfg().TenantStatusServer,
 			execCtx.ExecCfg().InternalDB.Executor(),
+			execCtx.ExecCfg().Codec,
 			timeutil.DefaultTimeSource{},
 			updateJobBatchSizeSetting.Get(&execCtx.ExecCfg().Settings.SV),
 			testKnobs)

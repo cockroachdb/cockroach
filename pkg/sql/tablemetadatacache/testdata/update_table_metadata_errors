@@ -12,9 +12,9 @@ SELECT * FROM system.table_metadata
 WHERE db_name <> 'system' OR table_name IN ('comments', 'locations', 'descriptor_id_seq')
 ORDER BY (db_name, table_name)
 ----
-1 24 system public comments 4 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
-1 7 system public descriptor_id_seq 1 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC SEQUENCE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
-1 21 system public locations 4 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 24 system public comments 4 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "primary_index_id": 1, "replica_count": 0, "stats_last_updated": null}
+1 7 system public descriptor_id_seq 1 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC SEQUENCE {"auto_stats_enabled": null, "primary_index_id": 1, "replica_count": 0, "stats_last_updated": null}
+1 21 system public locations 4 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "primary_index_id": 1, "replica_count": 0, "stats_last_updated": null}
 
 
 set-time unixSecs=1710000000

@@ -96,7 +96,7 @@ func TestDataDrivenTableMetadataCacheUpdater(t *testing.T) {
 						},
 					}
 				}
-				updater := newTableMetadataUpdater(mockUpdateProgress, &metrics, spanStatsSrv, s.InternalExecutor().(isql.Executor), mockTimeSrc, batchSize, knobs)
+				updater := newTableMetadataUpdater(mockUpdateProgress, &metrics, spanStatsSrv, s.InternalExecutor().(isql.Executor), s.Codec(), mockTimeSrc, batchSize, knobs)
 				prevUpdatedTables := metrics.UpdatedTables.Count()
 				prevErrs := metrics.Errors.Count()
 				err := updater.RunUpdater(ctx)
@@ -109,7 +109,7 @@ func TestDataDrivenTableMetadataCacheUpdater(t *testing.T) {
 					metrics.NumRuns.Count(),
 					metrics.Duration.CumulativeSnapshot().Mean() > 0)
 			case "prune-cache":
-				updater := newTableMetadataUpdater(mockUpdateProgress, &metrics, spanStatsServer, s.InternalExecutor().(isql.Executor), mockTimeSrc, batchSize, knobs)
+				updater := newTableMetadataUpdater(mockUpdateProgress, &metrics, spanStatsServer, s.InternalExecutor().(isql.Executor), s.Codec(), mockTimeSrc, batchSize, knobs)
 				pruned, err := updater.pruneCache(ctx)
 				if err != nil {
 					return err.Error()
@@ -173,6 +173,7 @@ func TestTableMetadataUpdateJobProgressAndMetrics(t *testing.T) {
 		&metrics,
 		s.TenantStatusServer().(serverpb.TenantStatusServer),
 		s.ExecutorConfig().(sql.ExecutorConfig).InternalDB.Executor(),
+		s.Codec(),
 		timeutil.DefaultTimeSource{},
 		defaultTableBatchSize,
 		knobs,
