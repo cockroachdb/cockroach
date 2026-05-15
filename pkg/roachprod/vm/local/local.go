@@ -127,10 +127,6 @@ func (p *Provider) IsCentralizedProvider() bool {
 	return false
 }
 
-func (p *Provider) DefaultZones(_ string, _ bool) []string {
-	return []string{}
-}
-
 func (p *Provider) ConfigureProviderFlags(*pflag.FlagSet, vm.MultipleProjectsOption) {
 }
 
