@@ -45,6 +45,16 @@ func rgGroupKey(id uint64) groupKey {
 	return groupKey{groupID: id}
 }
 
+// isBuiltin reports whether k names a built-in group (one always
+// installed in ResourceGroupConfigHolder via builtinGroupConfigs).
+// Callers use this to give built-ins lifecycle treatment that
+// caller-managed keys do not get — e.g. exemption from idle-group
+// GC.
+func (k groupKey) isBuiltin() bool {
+	_, ok := builtinGroupConfigs[k]
+	return ok
+}
+
 // metricLabels returns the (kind, id) label pair for per-group
 // metrics, preserving the existing metric label scheme.
 //

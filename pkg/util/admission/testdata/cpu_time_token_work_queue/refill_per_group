@@ -93,7 +93,8 @@ print
 closed epoch: 0 groupHeap len: 2 top group: t0g1
  group-id: t0g1 used: 0, w: 80, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
  group-id: t0g2 used: 0, w: 20, fifo: -128 waiting work heap: [0: pri: bulk-normal-pri, ct: 1, epoch: 0, qt: 100]
-burst-buckets: t0g1=fullness=99.0% tokens=99 capacity=100 maxCPU=true qual=can_burst t0g2=fullness=99.0% tokens=99 capacity=100 qual=can_burst
+ group-id: t1g0 used: 0, w: 4294967295, fifo: -128
+burst-buckets: t0g1=fullness=99.0% tokens=99 capacity=100 maxCPU=true qual=can_burst t0g2=fullness=99.0% tokens=99 capacity=100 qual=can_burst t1g0=fullness=0.0% tokens=0 capacity=0 maxCPU=true qual=can_burst
 
 # rg 2 should be granted first (it was already at top of heap when
 # rg 1 was no_burst; now both can_burst, ordering by used/weight is
@@ -122,4 +123,5 @@ print
 closed epoch: 0 groupHeap len: 0
  group-id: t0g1 used: 1, w: 80, fifo: -128
  group-id: t0g2 used: 1, w: 20, fifo: -128
-burst-buckets: t0g1=fullness=98.0% tokens=98 capacity=100 maxCPU=true qual=can_burst t0g2=fullness=98.0% tokens=98 capacity=100 qual=can_burst
+ group-id: t1g0 used: 0, w: 4294967295, fifo: -128
+burst-buckets: t0g1=fullness=98.0% tokens=98 capacity=100 maxCPU=true qual=can_burst t0g2=fullness=98.0% tokens=98 capacity=100 qual=can_burst t1g0=fullness=0.0% tokens=0 capacity=0 maxCPU=true qual=can_burst

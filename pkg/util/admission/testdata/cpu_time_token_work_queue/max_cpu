@@ -125,4 +125,5 @@ print
 closed epoch: 0 groupHeap len: 0
  group-id: t0g1 used: 100001, w: 80, fifo: -128
  group-id: t0g2 used: 1, w: 20, fifo: -128
-burst-buckets: t0g1=fullness=-25.0% tokens=-25 capacity=100 maxCPU=true qual=can_burst t0g2=fullness=48.0% tokens=48 capacity=100 qual=no_burst
+ group-id: t1g0 used: 0, w: 4294967295, fifo: -128
+burst-buckets: t0g1=fullness=-25.0% tokens=-25 capacity=100 maxCPU=true qual=can_burst t0g2=fullness=48.0% tokens=48 capacity=100 qual=no_burst t1g0=fullness=50.0% tokens=50 capacity=100 maxCPU=true qual=can_burst

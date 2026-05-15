@@ -665,9 +665,10 @@ func TestCPUTimeTokenEstimation(t *testing.T) {
 
 	// At init time, the estimators haven't seen any requests yet. They are
 	// hard-coded to return a single nanosecond token as an estimate in this
-	// case.
+	// case. Use a non-built-in tenant ID so the per-tenant estimator is
+	// eligible for GC at the bottom of the test.
 	info1 := WorkInfo{
-		TenantID: roachpb.MustMakeTenantID(1),
+		TenantID: roachpb.MustMakeTenantID(4),
 	}
 	resp1, err := q.Admit(ctx, info1)
 	require.NoError(t, err)
@@ -1366,13 +1367,11 @@ func TestRefreshResourceGroupConfigInServerlessIsNoOp(t *testing.T) {
 	require.True(t, cfg.MaxCPU)
 }
 
-// TestGCThenLazyRecreateRecoversFromHolder verifies the design's
-// safety claim: after GC removes an idle configured group, the next
-// admit recreates it via the holder with the correct weight/maxCPU.
-// Without this property, GC could silently downgrade a configured
-// group's effective weight to defaultGroupConfig values until the
-// next refresh.
-func TestGCThenLazyRecreateRecoversFromHolder(t *testing.T) {
+// TestGCExemptsBuiltins verifies that gcGroupsResetUsedAndUpdateEstimators
+// keeps built-in groups installed even when they have no recent
+// activity. Built-ins are always present in ResourceGroupConfigHolder,
+// so dropping and recreating them per interval would be wasted churn.
+func TestGCExemptsBuiltins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1383,29 +1382,65 @@ func TestGCThenLazyRecreateRecoversFromHolder(t *testing.T) {
 	cpuTimeTokenACMode.Override(ctx, &st.SV, resourceManagerMode)
 	q.refreshResourceGroupConfig()
 
-	// Sanity: the high rg container exists with the built-in config.
 	high := getGroupLocked(q, rgGroupKey(highResourceGroupID))
 	require.NotNil(t, high)
-	require.Equal(t, uint32(80), high.weight)
-	require.True(t, high.cpuTimeBurstBucket.maxCPU)
-	// Force GC eligibility: drive used to 0.
+	require.True(t, rgGroupKey(highResourceGroupID).isBuiltin())
 	withGroupLocked(q, func() { high.used = 0 })
 	q.gcGroupsResetUsedAndUpdateEstimators()
 
-	require.Nil(t, getGroupLocked(q, rgGroupKey(highResourceGroupID)),
-		"idle configured group should be GC'd")
+	require.NotNil(t, getGroupLocked(q, rgGroupKey(highResourceGroupID)),
+		"built-in group must survive GC")
+}
 
-	// Next admit recreates the container via the holder.
+// TestGCThenLazyRecreateRecoversFromHolder verifies the design's
+// safety claim: after GC removes an idle configured group, the next
+// admit recreates it via the holder with the correct weight/maxCPU.
+// Without this property, GC could silently downgrade a configured
+// group's effective weight to defaultGroupConfig values until the
+// next refresh. Uses a non-built-in tenant key so the GC step is
+// actually exercised (built-ins are exempt; see TestGCExemptsBuiltins).
+func TestGCThenLazyRecreateRecoversFromHolder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	q, _, _, cleanup := makeCPUTimeTokenWorkQueue(t)
+	defer cleanup()
+
+	const tenantID = 42
+	key := tenantGroupKey(tenantID)
+	require.False(t, key.isBuiltin())
+	q.configHolder.Set(ResourceGroupConfigSet{
+		key: {Weight: 99, BurstFrac: 0.5, MaxCPU: true},
+	})
+
+	// Lazy-create via Admit so the queue's groupInfo picks up the
+	// holder config.
 	_, err := q.Admit(context.Background(), WorkInfo{
-		TenantID: roachpb.MustMakeTenantID(1),
+		TenantID: roachpb.MustMakeTenantID(tenantID),
 		Priority: admissionpb.NormalPri,
 	})
 	require.NoError(t, err)
+	g := getGroupLocked(q, key)
+	require.NotNil(t, g)
+	require.Equal(t, uint32(99), g.weight)
+	require.True(t, g.cpuTimeBurstBucket.maxCPU)
 
-	high2 := getGroupLocked(q, rgGroupKey(highResourceGroupID))
-	require.NotNil(t, high2, "next admit should recreate the GC'd group")
-	require.Equal(t, uint32(80), high2.weight,
+	// Force GC eligibility: drive used to 0.
+	withGroupLocked(q, func() { g.used = 0 })
+	q.gcGroupsResetUsedAndUpdateEstimators()
+	require.Nil(t, getGroupLocked(q, key),
+		"idle non-built-in group should be GC'd")
+
+	// Next admit recreates the container via the holder.
+	_, err = q.Admit(context.Background(), WorkInfo{
+		TenantID: roachpb.MustMakeTenantID(tenantID),
+		Priority: admissionpb.NormalPri,
+	})
+	require.NoError(t, err)
+	g2 := getGroupLocked(q, key)
+	require.NotNil(t, g2, "next admit should recreate the GC'd group")
+	require.Equal(t, uint32(99), g2.weight,
 		"recreated group should pick up configured weight, not default")
-	require.True(t, high2.cpuTimeBurstBucket.maxCPU,
+	require.True(t, g2.cpuTimeBurstBucket.maxCPU,
 		"recreated group should pick up configured maxCPU, not default")
 }

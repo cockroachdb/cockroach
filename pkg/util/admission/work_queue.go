@@ -1297,7 +1297,13 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 //     intervals that are sized at the frequency with which this
 //     function is called (as of 1/9/26, every 1s).
 //  2. It GCs groupInfo entries, if a group has seen no workload over
-//     the interval.
+//     the interval. Built-in groups (builtinGroupConfigs) are exempt:
+//     they are always installed in the holder, so dropping and
+//     recreating them each interval is wasted churn through
+//     groupInfoPool. The cost is that built-ins not routed to in the
+//     current mode (e.g. the system tenant key in RM mode) keep
+//     publishing per-group metric series with values that stay at
+//     zero.
 //  3. It updates CPU time token estimators. The estimators are only used
 //     if mode == usesCPUTimeTokens.
 func (q *WorkQueue) gcGroupsResetUsedAndUpdateEstimators() {
@@ -1308,15 +1314,15 @@ func (q *WorkQueue) gcGroupsResetUsedAndUpdateEstimators() {
 	// longer than desired. We could break this iteration into smaller parts if
 	// needed.
 	for gKey, info := range q.mu.groups {
-		if info.used == 0 && !isInGroupHeap(info) {
+		if !gKey.isBuiltin() && info.used == 0 && !isInGroupHeap(info) {
 			delete(q.mu.groups, gKey)
 			releaseGroupInfo(info)
-		} else {
-			info.cpuTimeTokenEstimator.update()
-			info.used = 0
-			// All the heap members will reset used=0, so no need to change heap
-			// ordering.
+			continue
 		}
+		info.cpuTimeTokenEstimator.update()
+		info.used = 0
+		// All the heap members will reset used=0, so no need to change heap
+		// ordering.
 	}
 }
 
