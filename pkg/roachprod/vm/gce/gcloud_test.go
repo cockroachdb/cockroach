@@ -152,6 +152,24 @@ func TestComputeZonesRejectsUnsupportedC4AExplicitZones(t *testing.T) {
 	assert.Contains(t, err.Error(), "C4A instances are not supported")
 }
 
+func TestDefaultRetryZoneCandidates(t *testing.T) {
+	assert.Equal(
+		t,
+		[]string{"us-east1-b", "us-east1-c", "us-east1-d"},
+		DefaultRetryZoneCandidates("n2-standard-4"),
+	)
+	assert.Equal(
+		t,
+		[]string{"us-east1-b", "us-east1-c", "us-east1-d"},
+		DefaultRetryZoneCandidates("c4a-standard-4-lssd"),
+	)
+	assert.Equal(
+		t,
+		[]string{"us-central1-a", "us-central1-b", "us-central1-f"},
+		DefaultRetryZoneCandidates("t2a-standard-4"),
+	)
+}
+
 func Test_buildFilterPreemptionCliArgs(t *testing.T) {
 	type args struct {
 		vms         vm.List
