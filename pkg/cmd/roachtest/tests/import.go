@@ -54,6 +54,12 @@ type dataset interface {
 
 	// getDataFormat() returns the SQL data format keyword (e.g. "CSV", "PARQUET").
 	getDataFormat() string
+
+	// getImportOptions() returns format-specific options to append to the
+	// IMPORT INTO ... WITH clause (e.g. "delimiter='|'" for CSV, "schema_uri='...'"
+	// for AVRO binary records). The "detached" option is added separately by the
+	// statement formatter when needed.
+	getImportOptions() []string
 }
 
 // staticDataset represents a statically created dataset stored in external
@@ -66,6 +72,8 @@ type staticDataset struct {
 	dataURLs        []string
 	fingerprint     map[string]string
 	dataFormat      string
+	// importOptions are format-specific WITH-clause options. May be nil.
+	importOptions []string
 }
 
 func (sd *staticDataset) init(_ context.Context, _ cluster.Cluster, _ *logger.Logger) error {
@@ -76,6 +84,7 @@ func (sd staticDataset) getCreateTableStmt() string        { return sd.createTab
 func (sd staticDataset) getDataURLs() []string             { return sd.dataURLs }
 func (sd staticDataset) getFingerprint() map[string]string { return sd.fingerprint }
 func (sd staticDataset) getDataFormat() string             { return sd.dataFormat }
+func (sd staticDataset) getImportOptions() []string        { return sd.importOptions }
 
 // tpchDataset represents a TPC-H dataset stored on external storage. The
 // format field determines whether data files are CSV or Parquet; schemas and
@@ -165,8 +174,9 @@ func (tpch *tpchDataset) init(
 func newTPCHCSVDataset(name string) *tpchDataset {
 	return &tpchDataset{
 		staticDataset: staticDataset{
-			tableName:  name,
-			dataFormat: "CSV",
+			tableName:     name,
+			dataFormat:    "CSV",
+			importOptions: []string{"delimiter='|'"},
 		},
 		dataBaseURL: tpchCSVBaseURL,
 		fileExt:     "tbl",
@@ -848,7 +858,8 @@ func importCancellationRunner(
 			strings.Join(urls, ", ")))
 
 		var jobID jobspb.JobID
-		jobID, err = runRawAsyncImportJob(ctx, conn, ds.getTableName(), urls, ds.getDataFormat())
+		jobID, err = runRawAsyncImportJob(
+			ctx, conn, ds.getTableName(), urls, ds.getDataFormat(), ds.getImportOptions())
 		if err != nil && !errors.Is(err, context.DeadlineExceeded) {
 			return err
 		}
@@ -1046,7 +1057,8 @@ func splitImportRunner(
 
 	t.WorkerStatus(fmt.Sprintf("importing first batch (%d files) of %s",
 		len(first), ds.getTableName()))
-	importStmt := formatImportStmt(ds.getTableName(), first, ds.getDataFormat(), false)
+	importStmt := formatImportStmt(
+		ds.getTableName(), first, ds.getDataFormat(), ds.getImportOptions(), false)
 	l.Printf("first import: %s", importStmt)
 	if _, err := conn.ExecContext(ctx, importStmt); err != nil {
 		return errors.Wrapf(err, "%s", importStmt)
@@ -1054,7 +1066,8 @@ func splitImportRunner(
 
 	t.WorkerStatus(fmt.Sprintf("importing second batch (%d files) of %s",
 		len(second), ds.getTableName()))
-	importStmt = formatImportStmt(ds.getTableName(), second, ds.getDataFormat(), false)
+	importStmt = formatImportStmt(
+		ds.getTableName(), second, ds.getDataFormat(), ds.getImportOptions(), false)
 	l.Printf("second import: %s", importStmt)
 	if _, err := conn.ExecContext(ctx, importStmt); err != nil {
 		return errors.Wrapf(err, "%s", importStmt)
@@ -1111,7 +1124,7 @@ func makeColumnFamilies(ctx context.Context, t test.Test, c cluster.Cluster, rng
 // runSyncImportJob runs an import job and waits for it to complete.
 func runSyncImportJob(ctx context.Context, conn *gosql.DB, ds dataset) error {
 	importStmt := formatImportStmt(
-		ds.getTableName(), ds.getDataURLs(), ds.getDataFormat(), false)
+		ds.getTableName(), ds.getDataURLs(), ds.getDataFormat(), ds.getImportOptions(), false)
 	_, err := conn.ExecContext(ctx, importStmt)
 	if err != nil {
 		err = errors.Wrapf(err, "%s", importStmt)
@@ -1122,15 +1135,22 @@ func runSyncImportJob(ctx context.Context, conn *gosql.DB, ds dataset) error {
 // runAsyncImportJob runs an import job and returns the job id immediately.
 func runAsyncImportJob(ctx context.Context, conn *gosql.DB, ds dataset) (jobspb.JobID, error) {
 	return runRawAsyncImportJob(
-		ctx, conn, ds.getTableName(), ds.getDataURLs(), ds.getDataFormat())
+		ctx, conn, ds.getTableName(), ds.getDataURLs(), ds.getDataFormat(), ds.getImportOptions())
 }
 
 // runRawAsyncImportJob runs an import job using the table name and files
-// provided. The format parameter determines the SQL data format keyword.
+// provided. The format parameter determines the SQL data format keyword and
+// options are format-specific WITH-clause options ("detached" is appended
+// automatically).
 func runRawAsyncImportJob(
-	ctx context.Context, conn *gosql.DB, tableName string, urls []string, format string,
+	ctx context.Context,
+	conn *gosql.DB,
+	tableName string,
+	urls []string,
+	format string,
+	options []string,
 ) (jobspb.JobID, error) {
-	importStmt := formatImportStmt(tableName, urls, format, true)
+	importStmt := formatImportStmt(tableName, urls, format, options, true)
 
 	var jobID jobspb.JobID
 	err := conn.QueryRowContext(ctx, importStmt).Scan(&jobID)
@@ -1141,17 +1161,17 @@ func runRawAsyncImportJob(
 	return jobID, err
 }
 
-// formatImportStmt builds a SQL IMPORT INTO statement for the given format.
-// CSV imports include a delimiter option; other formats do not.
-func formatImportStmt(tableName string, urls []string, format string, detached bool) string {
+// formatImportStmt builds a SQL IMPORT INTO statement. options are
+// format-specific WITH-clause options supplied by the dataset (e.g.
+// "delimiter='|'" for CSV, "schema_uri='...'" for AVRO binary records).
+// "detached" is appended when detached is true.
+func formatImportStmt(
+	tableName string, urls []string, format string, options []string, detached bool,
+) string {
 	var stmt strings.Builder
 	fmt.Fprintf(&stmt, `IMPORT INTO import_test.%s %s DATA ('%s')`,
 		tableName, format, strings.Join(urls, "', '"))
 
-	var options []string
-	if format == "CSV" {
-		options = append(options, "delimiter='|'")
-	}
 	if detached {
 		options = append(options, "detached")
 	}
