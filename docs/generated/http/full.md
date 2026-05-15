@@ -4744,6 +4744,9 @@ StatementDetailsRequest requests the details of a Statement, based on its keys.
 | statement_statistics_per_plan_hash | [StatementDetailsResponse.CollectedStatementGroupedByPlanHash](#cockroach.server.serverpb.StatementDetailsResponse-cockroach.server.serverpb.StatementDetailsResponse.CollectedStatementGroupedByPlanHash) | repeated | statement_statistics_per_plan_hash returns the same statement from above, but with its statistics separated by the plan hash. | [reserved](#support-status) |
 | internal_app_name_prefix | [string](#cockroach.server.serverpb.StatementDetailsResponse-string) |  | If set and non-empty, indicates the prefix to application_name used for statements/queries issued internally by CockroachDB. | [reserved](#support-status) |
 | statement_statistics_per_aggregated_ts_and_plan_hash | [StatementDetailsResponse.StatementPlanDistribution](#cockroach.server.serverpb.StatementDetailsResponse-cockroach.server.serverpb.StatementDetailsResponse.StatementPlanDistribution) | repeated | statement_statistics_per_aggregated_ts_and_plan_hash returns execution counts grouped by both aggregated timestamp and plan hash for visualizing plan distribution over time. | [reserved](#support-status) |
+| query | [string](#cockroach.server.serverpb.StatementDetailsResponse-string) |  | query is the statement fingerprint text. | [reserved](#support-status) |
+| query_summary | [string](#cockroach.server.serverpb.StatementDetailsResponse-string) |  | query_summary is the abbreviated query. | [reserved](#support-status) |
+| database | [string](#cockroach.server.serverpb.StatementDetailsResponse-string) |  | database is the database the statement was issued against. | [reserved](#support-status) |
 
 
 

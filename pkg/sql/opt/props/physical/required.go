@@ -131,7 +131,8 @@ func (p *Required) String() string {
 func (p *Required) Equals(rhs *Required) bool {
 	return p.Presentation.Equals(rhs.Presentation) && p.Ordering.Equals(&rhs.Ordering) &&
 		p.Distribution.Equals(rhs.Distribution) &&
-		p.LimitHint == rhs.LimitHint && p.RemoteBranch == rhs.RemoteBranch
+		p.LimitHint == rhs.LimitHint && p.RemoteBranch == rhs.RemoteBranch &&
+		p.PlanGram.Equals(rhs.PlanGram)
 }
 
 // LimitHintInt64 returns the limit hint converted to an int64.

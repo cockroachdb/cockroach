@@ -10972,6 +10972,17 @@ layers:
       owner: cockroachdb/kv
 - name: SERVER
   categories:
+  - name: CHANGEFEEDS
+    metrics:
+    - name: changefeed.checkpoint_lag
+      exported_name: changefeed_checkpoint_lag
+      description: Time elapsed since a changefeed's most recently persisted checkpoint.
+      y_axis_label: Nanoseconds
+      type: GAUGE
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      owner: cockroachdb/cdc
   - name: HARDWARE
     metrics:
     - name: sys.cpu.combined.percent-normalized

@@ -98,7 +98,7 @@ type ldrCoordinatorProcessor struct {
 //
 //	feed.Subscribe -> runDecode -> runScheduleAndRoute -> Next()
 func (p *ldrCoordinatorProcessor) Start(ctx context.Context) {
-	p.StartInternal(ctx, "ldrCoordinator")
+	ctx = p.StartInternal(ctx, "ldrCoordinator")
 
 	if err := p.setup(ctx); err != nil {
 		p.MoveToDraining(err)

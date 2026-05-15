@@ -539,7 +539,7 @@ func encodeWorkloadID(id uint64, typ workloadid.WorkloadType) string {
 		return strconv.FormatUint(id, 10)
 	case workloadid.WorkloadTypeSystem:
 		return workloadid.WorkloadID(id).Name()
-	default: // WorkloadTypeUnknown + WorkloadTypeStatement
+	default: // WorkloadTypeUnknown, WorkloadTypeStatement, WorkloadTypeCommit
 		return encodeStmtFingerprintIDToString(id)
 	}
 }

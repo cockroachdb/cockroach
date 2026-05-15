@@ -2886,21 +2886,21 @@ __OID__  pg_proc  __OID__       __OID__   -1      false     c
 
 ## pg_catalog.pg_proc
 
-query TOTOOTTO colnames,rowsort
+query TOTOOFFO colnames,rowsort
 SELECT proname, pronamespace, nspname, proowner, prolang, procost, prorows, provariadic
 FROM pg_catalog.pg_proc p
 JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
 WHERE proname='substring'
 ----
 proname    pronamespace  nspname     proowner    prolang  procost  prorows  provariadic
-substring  4294967089    pg_catalog  3233629770  12       NULL     NULL     0
-substring  4294967089    pg_catalog  3233629770  12       NULL     NULL     0
-substring  4294967089    pg_catalog  3233629770  12       NULL     NULL     0
-substring  4294967089    pg_catalog  3233629770  12       NULL     NULL     0
-substring  4294967089    pg_catalog  3233629770  12       NULL     NULL     0
-substring  4294967089    pg_catalog  3233629770  12       NULL     NULL     0
-substring  4294967089    pg_catalog  3233629770  12       NULL     NULL     0
-substring  4294967089    pg_catalog  3233629770  12       NULL     NULL     0
+substring  4294967089    pg_catalog  3233629770  12       1        0        0
+substring  4294967089    pg_catalog  3233629770  12       1        0        0
+substring  4294967089    pg_catalog  3233629770  12       1        0        0
+substring  4294967089    pg_catalog  3233629770  12       1        0        0
+substring  4294967089    pg_catalog  3233629770  12       1        0        0
+substring  4294967089    pg_catalog  3233629770  12       1        0        0
+substring  4294967089    pg_catalog  3233629770  12       1        0        0
+substring  4294967089    pg_catalog  3233629770  12       1        0        0
 
 query TTBB colnames,rowsort
 SELECT proname, prokind, prosecdef, proleakproof
@@ -2923,14 +2923,14 @@ FROM pg_catalog.pg_proc
 WHERE proname='substring'
 ----
 proname    proisstrict  proretset  provolatile  proparallel
-substring  true         false      i            NULL
-substring  true         false      i            NULL
-substring  true         false      i            NULL
-substring  true         false      i            NULL
-substring  true         false      i            NULL
-substring  true         false      i            NULL
-substring  true         false      i            NULL
-substring  true         false      i            NULL
+substring  true         false      i            u
+substring  true         false      i            u
+substring  true         false      i            u
+substring  true         false      i            u
+substring  true         false      i            u
+substring  true         false      i            u
+substring  true         false      i            u
+substring  true         false      i            u
 
 # Verify that proretset is true for set-returning functions.
 query OTBT
@@ -3348,6 +3348,8 @@ distribute_scan_row_count_threshold                              10000          
 distribute_sort_row_count_threshold                              1000                NULL      NULL        NULL        string
 distsql                                                          off                 NULL      NULL        NULL        string
 distsql_plan_gateway_bias                                        2                   NULL      NULL        NULL        string
+distsql_plan_locality_filter                                     ·                   NULL      NULL        NULL        string
+distsql_plan_locality_filter_strict                              off                 NULL      NULL        NULL        string
 distsql_prevent_partitioning_soft_limited_scans                  on                  NULL      NULL        NULL        string
 distsql_use_reduced_leaf_write_sets                              on                  NULL      NULL        NULL        string
 enable_auto_rehoming                                             off                 NULL      NULL        NULL        string
@@ -3608,6 +3610,8 @@ distribute_scan_row_count_threshold                              10000          
 distribute_sort_row_count_threshold                              1000                NULL  user     NULL      1000                1000
 distsql                                                          off                 NULL  user     NULL      off                 off
 distsql_plan_gateway_bias                                        2                   NULL  user     NULL      2                   2
+distsql_plan_locality_filter                                     ·                   NULL  user     NULL      ·                   ·
+distsql_plan_locality_filter_strict                              off                 NULL  user     NULL      off                 off
 distsql_prevent_partitioning_soft_limited_scans                  on                  NULL  user     NULL      on                  on
 distsql_use_reduced_leaf_write_sets                              on                  NULL  user     NULL      on                  on
 enable_auto_rehoming                                             off                 NULL  user     NULL      off                 off
@@ -3855,6 +3859,8 @@ distribute_scan_row_count_threshold                              NULL    NULL   
 distribute_sort_row_count_threshold                              NULL    NULL     NULL     NULL        NULL
 distsql                                                          NULL    NULL     NULL     NULL        NULL
 distsql_plan_gateway_bias                                        NULL    NULL     NULL     NULL        NULL
+distsql_plan_locality_filter                                     NULL    NULL     NULL     NULL        NULL
+distsql_plan_locality_filter_strict                              NULL    NULL     NULL     NULL        NULL
 distsql_prevent_partitioning_soft_limited_scans                  NULL    NULL     NULL     NULL        NULL
 distsql_use_reduced_leaf_write_sets                              NULL    NULL     NULL     NULL        NULL
 distsql_workmem                                                  NULL    NULL     NULL     NULL        NULL

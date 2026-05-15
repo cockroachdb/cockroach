@@ -2152,7 +2152,7 @@ LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
       AND n.nspname <> 'crdb_internal'
       AND pg_catalog.pg_function_is_visible(p.oid) ORDER BY 1, 2, 4
 Schema,Name,Result data type,Argument data types,Type
-public,myfunc,int8,int8,func
+public,myfunc,int8,val int8,func
 
 cli
 \df abs
@@ -2343,7 +2343,7 @@ LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
       AND n.nspname <> 'crdb_internal'
       AND pg_catalog.pg_function_is_visible(p.oid) ORDER BY 1, 2, 4
 Schema,Name,Result data type,Argument data types,Type
-public,myfunc,int8,int8,func
+public,myfunc,int8,val int8,func
 
 cli
 \dfn+
@@ -2378,7 +2378,7 @@ LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
       AND n.nspname <> 'crdb_internal'
       AND pg_catalog.pg_function_is_visible(p.oid) ORDER BY 1, 2, 4
 Schema,Name,Result data type,Argument data types,Type,Volatility,Owner,Security,Access privileges,Source code,Description
-public,myfunc,int8,int8,func,v,root,invoker,,SELECT val;,NULL
+public,myfunc,int8,val int8,func,v,root,invoker,,SELECT val;,NULL
 
 cli
 \dfwa %tile%

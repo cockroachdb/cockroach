@@ -71,6 +71,26 @@ func (f TpccFixture) WithSchedule(schedule BackupSchedule) TpccFixture {
 	return f
 }
 
+// LargeEmptySchemaFixture is a fixture containing a large number of empty
+// tables. It is intended to be used for testing the performance of backup and
+// restore on clusters with a large number of backed up descriptors.
+type LargeEmptySchemaFixture struct {
+	NumTables int
+}
+
+func (f LargeEmptySchemaFixture) Kind() string {
+	return fmt.Sprintf("large-schema-%d-tables", f.NumTables)
+}
+
+func (f LargeEmptySchemaFixture) DatabaseName() string {
+	// The large schema fixture is comprised of several databases, so there isn't
+	// a single database name associated with the fixture. As we add more
+	// fixtures, we may want to come back and update the BackupFixture interface
+	// to better account for other types of fixtures, but for now returning the
+	// empty string is sufficient.
+	return ""
+}
+
 // TinyFixture is a TPCC fixture that is intended for smoke tests, local
 // testing, and continous testing of the fixture generation logic.
 var TinyFixture = TpccFixture{

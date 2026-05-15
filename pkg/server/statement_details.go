@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
@@ -66,6 +67,11 @@ type statementDetailsRespBuilder struct {
 	qargs                       []interface{}
 	limit                       int64
 	activityHasData             bool
+	// useNewColumns selects query, query_summary, and database from the
+	// dedicated view columns instead of leaving them blank. Gated on
+	// V26_3, when system.statements is guaranteed to be populated for
+	// new fingerprints.
+	useNewColumns bool
 }
 
 func getStatementDetails(
@@ -100,6 +106,7 @@ func getStatementDetails(
 	// This expression is used to merge the metadata column from statement
 	// activity table.
 	mergeAggStmtMetadataColExpr := mergeAggStmtMetadataColumnLatest
+	useNewColumns := settings.Version.IsActive(ctx, clusterversion.V26_3)
 
 	rb := statementDetailsRespBuilder{
 		ie:                          ie,
@@ -108,9 +115,10 @@ func getStatementDetails(
 		qargs:                       args,
 		limit:                       limit,
 		activityHasData:             activityHasData,
+		useNewColumns:               useNewColumns,
 	}
 
-	statementTotal, err := rb.getTotalStatementDetails(ctx)
+	statementTotal, query, querySummary, database, err := rb.getTotalStatementDetails(ctx)
 	if err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}
@@ -160,6 +168,9 @@ func getStatementDetails(
 		StatementStatisticsPerPlanHash:                statementStatisticsPerPlanHash,
 		StatementStatisticsPerAggregatedTsAndPlanHash: statementStatisticsPerAggregatedTsAndPlanHash,
 		InternalAppNamePrefix:                         catconstants.InternalAppNamePrefix,
+		Query:                                         query,
+		QuerySummary:                                  querySummary,
+		Database:                                      database,
 	}
 
 	return response, nil
@@ -230,21 +241,48 @@ func getStatementDetailsQueryClausesAndArgs(
 	return whereClause, args, nil
 }
 
-// getTotalStatementDetails return all the statistics for the selected statement combined.
+// queryMetadataSelectClause returns the SQL fragment for projecting query,
+// query_summary, and database from a statement statistics view. It returns an
+// empty string when the new columns must not be selected (mixed-version
+// clusters where the columns may be missing on remote nodes).
+func queryMetadataSelectClause(useNewColumns bool) string {
+	if !useNewColumns {
+		return ""
+	}
+	return `,
+       max(query)         AS query,
+       max(query_summary) AS query_summary,
+       max(database)      AS database`
+}
+
+// getTotalStatementDetails return all the statistics for the selected
+// statement combined, plus the query/query_summary/database values when the
+// caller has opted into reading them from the dedicated view columns.
 func (rb *statementDetailsRespBuilder) getTotalStatementDetails(
 	ctx context.Context,
-) (serverpb.StatementDetailsResponse_CollectedStatementSummary, error) {
-	const expectedNumDatums = 4
-	var statement serverpb.StatementDetailsResponse_CollectedStatementSummary
-	const queryFormat = `
+) (
+	summary serverpb.StatementDetailsResponse_CollectedStatementSummary,
+	query string,
+	querySummary string,
+	database string,
+	_ error,
+) {
+	baseExpectedNumDatums := 4
+	extraColumns := queryMetadataSelectClause(rb.useNewColumns)
+	expectedNumDatums := baseExpectedNumDatums
+	if rb.useNewColumns {
+		expectedNumDatums += 3
+	}
+
+	queryFormat := fmt.Sprintf(`
 SELECT merge_stats_metadata(metadata)    AS metadata,
        array_agg(app_name)               AS app_names,
        merge_statement_stats(statistics) AS statistics,
-       encode(fingerprint_id, 'hex')     AS fingerprint_id
-FROM %s %s
+       encode(fingerprint_id, 'hex')     AS fingerprint_id%s
+FROM %%s %%s
 GROUP BY
     fingerprint_id
-LIMIT 1`
+LIMIT 1`, extraColumns)
 
 	var row tree.Datums
 	var err error
@@ -255,13 +293,13 @@ LIMIT 1`
 SELECT %s                                  AS metadata,
        array_agg(app_name)                 AS app_names,
        merge_statement_stats(statistics)   AS statistics,
-       encode(fingerprint_id, 'hex')       AS fingerprint_id
+       encode(fingerprint_id, 'hex')       AS fingerprint_id%s
 FROM crdb_internal.statement_activity %s
 GROUP BY
     fingerprint_id
-LIMIT 1`, rb.mergeAggStmtMetadataColExpr, rb.whereClause), rb.qargs...)
+LIMIT 1`, rb.mergeAggStmtMetadataColExpr, extraColumns, rb.whereClause), rb.qargs...)
 		if err != nil {
-			return statement, srverrors.ServerError(ctx, err)
+			return summary, "", "", "", srverrors.ServerError(ctx, err)
 		}
 	}
 	// If there are no results from the activity table, retrieve the data from the persisted table.
@@ -273,28 +311,28 @@ LIMIT 1`, rb.mergeAggStmtMetadataColExpr, rb.whereClause), rb.qargs...)
 				CrdbInternalStmtStatsPersisted,
 				rb.whereClause), rb.qargs...)
 		if err != nil {
-			return statement, srverrors.ServerError(ctx, err)
+			return summary, "", "", "", srverrors.ServerError(ctx, err)
 		}
 	}
 
-	// If there are no results from the persisted table, retrieve the data from the combined view
-	// with data in-memory.
+	// If there are no results from the persisted table, retrieve the data from
+	// the combined view with data in-memory.
 	if row.Len() == 0 {
 		row, err = rb.ie.QueryRowEx(ctx, "combined-stmts-details-total-with-memory", nil,
 			sessiondata.NodeUserSessionDataOverride,
 			fmt.Sprintf(queryFormat, CrdbInternalStmtStatsCombined, rb.whereClause), rb.qargs...)
 		if err != nil {
-			return statement, srverrors.ServerError(ctx, err)
+			return summary, "", "", "", srverrors.ServerError(ctx, err)
 		}
 	}
 
 	// If there are no results in-memory, return empty statement object.
 	if row.Len() == 0 {
-		return statement, nil
+		return summary, "", "", "", nil
 	}
 	if row.Len() != expectedNumDatums {
-		return statement, srverrors.ServerError(ctx, errors.Newf(
-			"expected %d columns on getTotalStatementDetails, received %d", expectedNumDatums))
+		return summary, "", "", "", srverrors.ServerError(ctx, errors.Newf(
+			"expected %d columns on getTotalStatementDetails, received %d", expectedNumDatums, row.Len()))
 	}
 
 	var statistics appstatspb.CollectedStatementStatistics
@@ -302,7 +340,7 @@ LIMIT 1`, rb.mergeAggStmtMetadataColExpr, rb.whereClause), rb.qargs...)
 	metadataJSON := tree.MustBeDJSON(row[0]).JSON
 
 	if err = sqlstatsutil.DecodeAggregatedMetadataJSON(metadataJSON, &aggregatedMetadata); err != nil {
-		return statement, srverrors.ServerError(ctx, err)
+		return summary, "", "", "", srverrors.ServerError(ctx, err)
 	}
 
 	apps := tree.MustBeDArray(row[1])
@@ -314,18 +352,24 @@ LIMIT 1`, rb.mergeAggStmtMetadataColExpr, rb.whereClause), rb.qargs...)
 
 	statsJSON := tree.MustBeDJSON(row[2]).JSON
 	if err = sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON, &statistics.Stats); err != nil {
-		return statement, srverrors.ServerError(ctx, err)
+		return summary, "", "", "", srverrors.ServerError(ctx, err)
 	}
 
 	aggregatedMetadata.FormattedQuery = aggregatedMetadata.Query
 	aggregatedMetadata.FingerprintID = string(tree.MustBeDString(row[3]))
 
-	statement = serverpb.StatementDetailsResponse_CollectedStatementSummary{
+	if rb.useNewColumns {
+		query = string(tree.MustBeDStringOrDNull(row[4]))
+		querySummary = string(tree.MustBeDStringOrDNull(row[5]))
+		database = string(tree.MustBeDStringOrDNull(row[6]))
+	}
+
+	summary = serverpb.StatementDetailsResponse_CollectedStatementSummary{
 		Metadata: aggregatedMetadata,
 		Stats:    statistics.Stats,
 	}
 
-	return statement, nil
+	return summary, query, querySummary, database, nil
 }
 
 // getStatementDetailsPerAggregatedTs returns the list of statements

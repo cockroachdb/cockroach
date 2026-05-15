@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"math"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -480,7 +479,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 	// Protected timestamp cleaners, which will release any protected timestamp
 	// at the end of the query
 	var ptsCleaners []jobsprotectedts.Cleaner
-	var ptsInstalled sync.Once
+	var ptsInstalled bool
 	defer func() {
 		for _, cleaner := range ptsCleaners {
 			cleanerErr := cleaner(ctx)
@@ -575,25 +574,31 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 		defer localPlanner.curPlan.close(ctx)
 
 		// Only if a fixed timestamp is used install a protected timestamp.
-		if !ts.IsEmpty() {
-			// We could end up with retry errors, but the PTS only needs to be installed
-			// once, since the timestamp will not change.
-			ptsInstalled.Do(func() {
-				// Add a PTS record any tables accessed by this planner.
-				tbls := localPlanner.curPlan.mem.Metadata().AllTables()
-				for _, table := range tbls {
-					descID := table.Table.ID()
-					tbl, err := localPlanner.descCollection.ByIDWithoutLeased(localPlanner.Txn()).Get().Table(ctx, catid.DescID(descID))
-					if err != nil {
-						return
-					}
-					ptsCleaners = append(ptsCleaners,
-						sc.execCfg.ProtectedTimestampManager.TryToProtectBeforeGC(ctx, sc.job, tbl.GetID(), ts))
+		if !ts.IsEmpty() && !ptsInstalled {
+			if fn := sc.testingKnobs.RunBeforeQueryBackfillPTSInstall; fn != nil {
+				if err := fn(); err != nil {
+					return err
 				}
-			})
-			if err != nil {
-				return err
 			}
+			// Fetch all descriptors before installing any PTS records so that a
+			// fetch failure doesn't leave partial cleaners behind for the next
+			// txn retry to duplicate.
+			tbls := localPlanner.curPlan.mem.Metadata().AllTables()
+			fetched := make([]catalog.TableDescriptor, 0, len(tbls))
+			for _, table := range tbls {
+				tbl, err := localPlanner.descCollection.ByIDWithoutLeased(localPlanner.Txn()).
+					Get().Table(ctx, catid.DescID(table.Table.ID()))
+				if err != nil {
+					return err
+				}
+				fetched = append(fetched, tbl)
+			}
+			for _, tbl := range fetched {
+				ptsCleaners = append(ptsCleaners,
+					sc.execCfg.ProtectedTimestampManager.TryToProtectBeforeGC(
+						ctx, sc.job, tbl.GetID(), ts))
+			}
+			ptsInstalled = true
 		}
 		rw := NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 			var counts kvpb.BulkOpSummary
@@ -3029,6 +3034,11 @@ type SchemaChangerTestingKnobs struct {
 
 	// RunBeforeQueryBackfill is called before a query based backfill.
 	RunBeforeQueryBackfill func() error
+
+	// RunBeforeQueryBackfillPTSInstall is called during a query-based backfill
+	// just before PTS records are installed. If it returns an error, the error
+	// is propagated as if the descriptor fetch failed.
+	RunBeforeQueryBackfillPTSInstall func() error
 
 	// RunBeforeIndexBackfill is called just before starting the index backfill, after
 	// fixing the index backfill scan timestamp.

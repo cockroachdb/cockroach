@@ -25,33 +25,33 @@ NULL     root     test              public           test_priv_p1_100107  test  
 NULL     root     test              public           test_priv_p2_100108  test             public          test_priv_p2  ALL             YES
 NULL     root     test              test_priv_sc1    test_priv_p3_100109  test             test_priv_sc1   test_priv_p3  ALL             YES
 
-query TTTTTTB colnames,rowsort
-SHOW GRANTS ON PROCEDURE test_priv_p1, test_priv_p2, test_priv_p3
+query TTTTTTB colnames
+SELECT * FROM [SHOW GRANTS ON PROCEDURE test_priv_p1, test_priv_p2, test_priv_p3] ORDER BY 1,2,3,4,5,6,7
 ----
-database_name  schema_name    routine_id  routine_signature   grantee  privilege_type  is_grantable
-test           public         100107      test_priv_p1()      admin    ALL             true
-test           public         100107      test_priv_p1()      public   EXECUTE         false
-test           public         100107      test_priv_p1()      root     ALL             true
-test           public         100108      test_priv_p2(int8)  admin    ALL             true
-test           public         100108      test_priv_p2(int8)  public   EXECUTE         false
-test           public         100108      test_priv_p2(int8)  root     ALL             true
-test           test_priv_sc1  100109      test_priv_p3()      admin    ALL             true
-test           test_priv_sc1  100109      test_priv_p3()      public   EXECUTE         false
-test           test_priv_sc1  100109      test_priv_p3()      root     ALL             true
+database_name  schema_name    routine_id  routine_signature      grantee  privilege_type  is_grantable
+test           public         100107      test_priv_p1()         admin    ALL             true
+test           public         100107      test_priv_p1()         public   EXECUTE         false
+test           public         100107      test_priv_p1()         root     ALL             true
+test           public         100108      test_priv_p2(IN int8)  admin    ALL             true
+test           public         100108      test_priv_p2(IN int8)  public   EXECUTE         false
+test           public         100108      test_priv_p2(IN int8)  root     ALL             true
+test           test_priv_sc1  100109      test_priv_p3()         admin    ALL             true
+test           test_priv_sc1  100109      test_priv_p3()         public   EXECUTE         false
+test           test_priv_sc1  100109      test_priv_p3()         root     ALL             true
 
-query TTTTTTB colnames,rowsort
-SHOW GRANTS ON PROCEDURE test_priv_p1(), test_priv_p2(INT), test_priv_p3()
+query TTTTTTB colnames
+SELECT * FROM [SHOW GRANTS ON PROCEDURE test_priv_p1(), test_priv_p2(INT), test_priv_p3()] ORDER BY 1,2,3,4,5,6,7
 ----
-database_name  schema_name    routine_id  routine_signature   grantee  privilege_type  is_grantable
-test           public         100107      test_priv_p1()      admin    ALL             true
-test           public         100107      test_priv_p1()      public   EXECUTE         false
-test           public         100107      test_priv_p1()      root     ALL             true
-test           public         100108      test_priv_p2(int8)  admin    ALL             true
-test           public         100108      test_priv_p2(int8)  public   EXECUTE         false
-test           public         100108      test_priv_p2(int8)  root     ALL             true
-test           test_priv_sc1  100109      test_priv_p3()      admin    ALL             true
-test           test_priv_sc1  100109      test_priv_p3()      public   EXECUTE         false
-test           test_priv_sc1  100109      test_priv_p3()      root     ALL             true
+database_name  schema_name    routine_id  routine_signature      grantee  privilege_type  is_grantable
+test           public         100107      test_priv_p1()         admin    ALL             true
+test           public         100107      test_priv_p1()         public   EXECUTE         false
+test           public         100107      test_priv_p1()         root     ALL             true
+test           public         100108      test_priv_p2(IN int8)  admin    ALL             true
+test           public         100108      test_priv_p2(IN int8)  public   EXECUTE         false
+test           public         100108      test_priv_p2(IN int8)  root     ALL             true
+test           test_priv_sc1  100109      test_priv_p3()         admin    ALL             true
+test           test_priv_sc1  100109      test_priv_p3()         public   EXECUTE         false
+test           test_priv_sc1  100109      test_priv_p3()         root     ALL             true
 
 statement error pgcode 42883 procedure test_priv_p2\(string\) does not exist
 SHOW GRANTS ON PROCEDURE test_priv_p2(STRING)
@@ -102,22 +102,22 @@ NULL     test_user  test              public           test_priv_p1_100107  test
 NULL     test_user  test              public           test_priv_p2_100108  test             public          test_priv_p2  EXECUTE         YES
 NULL     test_user  test              test_priv_sc1    test_priv_p3_100109  test             test_priv_sc1   test_priv_p3  EXECUTE         YES
 
-query TTTTTTB colnames,rowsort
-SHOW GRANTS ON PROCEDURE test_priv_p1, test_priv_p2, test_priv_p3
+query TTTTTTB colnames
+SELECT * FROM [SHOW GRANTS ON PROCEDURE test_priv_p1, test_priv_p2, test_priv_p3] ORDER BY 1,2,3,4,5,6,7
 ----
-database_name  schema_name    routine_id  routine_signature   grantee    privilege_type  is_grantable
-test           public         100107      test_priv_p1()      admin      ALL             true
-test           public         100107      test_priv_p1()      public     EXECUTE         false
-test           public         100107      test_priv_p1()      root       ALL             true
-test           public         100107      test_priv_p1()      test_user  EXECUTE         true
-test           public         100108      test_priv_p2(int8)  admin      ALL             true
-test           public         100108      test_priv_p2(int8)  public     EXECUTE         false
-test           public         100108      test_priv_p2(int8)  root       ALL             true
-test           public         100108      test_priv_p2(int8)  test_user  EXECUTE         true
-test           test_priv_sc1  100109      test_priv_p3()      admin      ALL             true
-test           test_priv_sc1  100109      test_priv_p3()      public     EXECUTE         false
-test           test_priv_sc1  100109      test_priv_p3()      root       ALL             true
-test           test_priv_sc1  100109      test_priv_p3()      test_user  EXECUTE         true
+database_name  schema_name    routine_id  routine_signature      grantee    privilege_type  is_grantable
+test           public         100107      test_priv_p1()         admin      ALL             true
+test           public         100107      test_priv_p1()         public     EXECUTE         false
+test           public         100107      test_priv_p1()         root       ALL             true
+test           public         100107      test_priv_p1()         test_user  EXECUTE         true
+test           public         100108      test_priv_p2(IN int8)  admin      ALL             true
+test           public         100108      test_priv_p2(IN int8)  public     EXECUTE         false
+test           public         100108      test_priv_p2(IN int8)  root       ALL             true
+test           public         100108      test_priv_p2(IN int8)  test_user  EXECUTE         true
+test           test_priv_sc1  100109      test_priv_p3()         admin      ALL             true
+test           test_priv_sc1  100109      test_priv_p3()         public     EXECUTE         false
+test           test_priv_sc1  100109      test_priv_p3()         root       ALL             true
+test           test_priv_sc1  100109      test_priv_p3()         test_user  EXECUTE         true
 
 statement error pgcode 2BP01 pq: cannot drop role/user test_user: grants still exist on.*
 DROP USER test_user;
@@ -139,22 +139,22 @@ NULL     test_user  test              public           test_priv_p1_100107  test
 NULL     test_user  test              public           test_priv_p2_100108  test             public          test_priv_p2  EXECUTE         NO
 NULL     test_user  test              test_priv_sc1    test_priv_p3_100109  test             test_priv_sc1   test_priv_p3  EXECUTE         NO
 
-query TTTTTTB colnames,rowsort
-SHOW GRANTS ON PROCEDURE test_priv_p1, test_priv_p2, test_priv_p3
+query TTTTTTB colnames
+SELECT * FROM [SHOW GRANTS ON PROCEDURE test_priv_p1, test_priv_p2, test_priv_p3] ORDER BY 1,2,3,4,5,6,7
 ----
-database_name  schema_name    routine_id  routine_signature   grantee    privilege_type  is_grantable
-test           public         100107      test_priv_p1()      admin      ALL             true
-test           public         100107      test_priv_p1()      public     EXECUTE         false
-test           public         100107      test_priv_p1()      root       ALL             true
-test           public         100107      test_priv_p1()      test_user  EXECUTE         false
-test           public         100108      test_priv_p2(int8)  admin      ALL             true
-test           public         100108      test_priv_p2(int8)  public     EXECUTE         false
-test           public         100108      test_priv_p2(int8)  root       ALL             true
-test           public         100108      test_priv_p2(int8)  test_user  EXECUTE         false
-test           test_priv_sc1  100109      test_priv_p3()      admin      ALL             true
-test           test_priv_sc1  100109      test_priv_p3()      public     EXECUTE         false
-test           test_priv_sc1  100109      test_priv_p3()      root       ALL             true
-test           test_priv_sc1  100109      test_priv_p3()      test_user  EXECUTE         false
+database_name  schema_name    routine_id  routine_signature      grantee    privilege_type  is_grantable
+test           public         100107      test_priv_p1()         admin      ALL             true
+test           public         100107      test_priv_p1()         public     EXECUTE         false
+test           public         100107      test_priv_p1()         root       ALL             true
+test           public         100107      test_priv_p1()         test_user  EXECUTE         false
+test           public         100108      test_priv_p2(IN int8)  admin      ALL             true
+test           public         100108      test_priv_p2(IN int8)  public     EXECUTE         false
+test           public         100108      test_priv_p2(IN int8)  root       ALL             true
+test           public         100108      test_priv_p2(IN int8)  test_user  EXECUTE         false
+test           test_priv_sc1  100109      test_priv_p3()         admin      ALL             true
+test           test_priv_sc1  100109      test_priv_p3()         public     EXECUTE         false
+test           test_priv_sc1  100109      test_priv_p3()         root       ALL             true
+test           test_priv_sc1  100109      test_priv_p3()         test_user  EXECUTE         false
 
 statement ok
 REVOKE EXECUTE ON PROCEDURE test_priv_p1(), test_priv_p2(int), test_priv_sc1.test_priv_p3 FROM test_user;
@@ -167,19 +167,19 @@ ORDER BY grantee, routine_name;
 ----
 grantor  grantee  specific_catalog  specific_schema  specific_name  routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
 
-query TTTTTTB colnames,rowsort
-SHOW GRANTS ON PROCEDURE test_priv_p1, test_priv_p2, test_priv_p3
+query TTTTTTB colnames
+SELECT * FROM [SHOW GRANTS ON PROCEDURE test_priv_p1, test_priv_p2, test_priv_p3] ORDER BY 1,2,3,4,5,6,7
 ----
-database_name  schema_name    routine_id  routine_signature   grantee  privilege_type  is_grantable
-test           public         100107      test_priv_p1()      admin    ALL             true
-test           public         100107      test_priv_p1()      public   EXECUTE         false
-test           public         100107      test_priv_p1()      root     ALL             true
-test           public         100108      test_priv_p2(int8)  admin    ALL             true
-test           public         100108      test_priv_p2(int8)  public   EXECUTE         false
-test           public         100108      test_priv_p2(int8)  root     ALL             true
-test           test_priv_sc1  100109      test_priv_p3()      admin    ALL             true
-test           test_priv_sc1  100109      test_priv_p3()      public   EXECUTE         false
-test           test_priv_sc1  100109      test_priv_p3()      root     ALL             true
+database_name  schema_name    routine_id  routine_signature      grantee  privilege_type  is_grantable
+test           public         100107      test_priv_p1()         admin    ALL             true
+test           public         100107      test_priv_p1()         public   EXECUTE         false
+test           public         100107      test_priv_p1()         root     ALL             true
+test           public         100108      test_priv_p2(IN int8)  admin    ALL             true
+test           public         100108      test_priv_p2(IN int8)  public   EXECUTE         false
+test           public         100108      test_priv_p2(IN int8)  root     ALL             true
+test           test_priv_sc1  100109      test_priv_p3()         admin    ALL             true
+test           test_priv_sc1  100109      test_priv_p3()         public   EXECUTE         false
+test           test_priv_sc1  100109      test_priv_p3()         root     ALL             true
 
 # Granting on functions should have no effect on procedures.
 statement ok
@@ -207,22 +207,22 @@ NULL     test_user  test              public           test_priv_p1_100107  test
 NULL     test_user  test              public           test_priv_p2_100108  test             public          test_priv_p2  EXECUTE         YES
 NULL     test_user  test              test_priv_sc1    test_priv_p3_100109  test             test_priv_sc1   test_priv_p3  EXECUTE         YES
 
-query TTTTTTB colnames,rowsort
-SHOW GRANTS ON PROCEDURE test_priv_p1, test_priv_p2, test_priv_p3
+query TTTTTTB colnames
+SELECT * FROM [SHOW GRANTS ON PROCEDURE test_priv_p1, test_priv_p2, test_priv_p3] ORDER BY 1,2,3,4,5,6,7
 ----
-database_name  schema_name    routine_id  routine_signature   grantee    privilege_type  is_grantable
-test           public         100107      test_priv_p1()      admin      ALL             true
-test           public         100107      test_priv_p1()      public     EXECUTE         false
-test           public         100107      test_priv_p1()      root       ALL             true
-test           public         100107      test_priv_p1()      test_user  EXECUTE         true
-test           public         100108      test_priv_p2(int8)  admin      ALL             true
-test           public         100108      test_priv_p2(int8)  public     EXECUTE         false
-test           public         100108      test_priv_p2(int8)  root       ALL             true
-test           public         100108      test_priv_p2(int8)  test_user  EXECUTE         true
-test           test_priv_sc1  100109      test_priv_p3()      admin      ALL             true
-test           test_priv_sc1  100109      test_priv_p3()      public     EXECUTE         false
-test           test_priv_sc1  100109      test_priv_p3()      root       ALL             true
-test           test_priv_sc1  100109      test_priv_p3()      test_user  EXECUTE         true
+database_name  schema_name    routine_id  routine_signature      grantee    privilege_type  is_grantable
+test           public         100107      test_priv_p1()         admin      ALL             true
+test           public         100107      test_priv_p1()         public     EXECUTE         false
+test           public         100107      test_priv_p1()         root       ALL             true
+test           public         100107      test_priv_p1()         test_user  EXECUTE         true
+test           public         100108      test_priv_p2(IN int8)  admin      ALL             true
+test           public         100108      test_priv_p2(IN int8)  public     EXECUTE         false
+test           public         100108      test_priv_p2(IN int8)  root       ALL             true
+test           public         100108      test_priv_p2(IN int8)  test_user  EXECUTE         true
+test           test_priv_sc1  100109      test_priv_p3()         admin      ALL             true
+test           test_priv_sc1  100109      test_priv_p3()         public     EXECUTE         false
+test           test_priv_sc1  100109      test_priv_p3()         root       ALL             true
+test           test_priv_sc1  100109      test_priv_p3()         test_user  EXECUTE         true
 
 # Revoking on functions should have no effect on procedures.
 statement ok
@@ -253,22 +253,22 @@ NULL     test_user  test              public           test_priv_p1_100107  test
 NULL     test_user  test              public           test_priv_p2_100108  test             public          test_priv_p2  EXECUTE         NO
 NULL     test_user  test              test_priv_sc1    test_priv_p3_100109  test             test_priv_sc1   test_priv_p3  EXECUTE         NO
 
-query TTTTTTB colnames,rowsort
-SHOW GRANTS ON PROCEDURE test_priv_p1, test_priv_p2, test_priv_p3
+query TTTTTTB colnames
+SELECT * FROM [SHOW GRANTS ON PROCEDURE test_priv_p1, test_priv_p2, test_priv_p3] ORDER BY 1,2,3,4,5,6,7
 ----
-database_name  schema_name    routine_id  routine_signature   grantee    privilege_type  is_grantable
-test           public         100107      test_priv_p1()      admin      ALL             true
-test           public         100107      test_priv_p1()      public     EXECUTE         false
-test           public         100107      test_priv_p1()      root       ALL             true
-test           public         100107      test_priv_p1()      test_user  EXECUTE         false
-test           public         100108      test_priv_p2(int8)  admin      ALL             true
-test           public         100108      test_priv_p2(int8)  public     EXECUTE         false
-test           public         100108      test_priv_p2(int8)  root       ALL             true
-test           public         100108      test_priv_p2(int8)  test_user  EXECUTE         false
-test           test_priv_sc1  100109      test_priv_p3()      admin      ALL             true
-test           test_priv_sc1  100109      test_priv_p3()      public     EXECUTE         false
-test           test_priv_sc1  100109      test_priv_p3()      root       ALL             true
-test           test_priv_sc1  100109      test_priv_p3()      test_user  EXECUTE         false
+database_name  schema_name    routine_id  routine_signature      grantee    privilege_type  is_grantable
+test           public         100107      test_priv_p1()         admin      ALL             true
+test           public         100107      test_priv_p1()         public     EXECUTE         false
+test           public         100107      test_priv_p1()         root       ALL             true
+test           public         100107      test_priv_p1()         test_user  EXECUTE         false
+test           public         100108      test_priv_p2(IN int8)  admin      ALL             true
+test           public         100108      test_priv_p2(IN int8)  public     EXECUTE         false
+test           public         100108      test_priv_p2(IN int8)  root       ALL             true
+test           public         100108      test_priv_p2(IN int8)  test_user  EXECUTE         false
+test           test_priv_sc1  100109      test_priv_p3()         admin      ALL             true
+test           test_priv_sc1  100109      test_priv_p3()         public     EXECUTE         false
+test           test_priv_sc1  100109      test_priv_p3()         root       ALL             true
+test           test_priv_sc1  100109      test_priv_p3()         test_user  EXECUTE         false
 
 # Revoking on functions should have no effect on procedures.
 statement ok
@@ -296,19 +296,19 @@ ORDER BY grantee, routine_name;
 ----
 grantor  grantee  specific_catalog  specific_schema  specific_name  routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
 
-query TTTTTTB colnames,rowsort
-SHOW GRANTS ON PROCEDURE test_priv_p1, test_priv_p2, test_priv_p3
+query TTTTTTB colnames
+SELECT * FROM [SHOW GRANTS ON PROCEDURE test_priv_p1, test_priv_p2, test_priv_p3] ORDER BY 1,2,3,4,5,6,7
 ----
-database_name  schema_name    routine_id  routine_signature   grantee  privilege_type  is_grantable
-test           public         100107      test_priv_p1()      admin    ALL             true
-test           public         100107      test_priv_p1()      public   EXECUTE         false
-test           public         100107      test_priv_p1()      root     ALL             true
-test           public         100108      test_priv_p2(int8)  admin    ALL             true
-test           public         100108      test_priv_p2(int8)  public   EXECUTE         false
-test           public         100108      test_priv_p2(int8)  root     ALL             true
-test           test_priv_sc1  100109      test_priv_p3()      admin    ALL             true
-test           test_priv_sc1  100109      test_priv_p3()      public   EXECUTE         false
-test           test_priv_sc1  100109      test_priv_p3()      root     ALL             true
+database_name  schema_name    routine_id  routine_signature      grantee  privilege_type  is_grantable
+test           public         100107      test_priv_p1()         admin    ALL             true
+test           public         100107      test_priv_p1()         public   EXECUTE         false
+test           public         100107      test_priv_p1()         root     ALL             true
+test           public         100108      test_priv_p2(IN int8)  admin    ALL             true
+test           public         100108      test_priv_p2(IN int8)  public   EXECUTE         false
+test           public         100108      test_priv_p2(IN int8)  root     ALL             true
+test           test_priv_sc1  100109      test_priv_p3()         admin    ALL             true
+test           test_priv_sc1  100109      test_priv_p3()         public   EXECUTE         false
+test           test_priv_sc1  100109      test_priv_p3()         root     ALL             true
 
 # Granting on ROUTINES should affect both functions and procedures.
 statement ok
@@ -366,8 +366,8 @@ NULL     admin    test              public           test_priv_p1_100111  test  
 NULL     public   test              public           test_priv_p1_100111  test             public          test_priv_p1  EXECUTE         NO
 NULL     root     test              public           test_priv_p1_100111  test             public          test_priv_p1  ALL             YES
 
-query TTTTTTB colnames,rowsort
-SHOW GRANTS ON PROCEDURE test_priv_p1
+query TTTTTTB colnames
+SELECT * FROM [SHOW GRANTS ON PROCEDURE test_priv_p1] ORDER BY 1,2,3,4,5,6,7
 ----
 database_name  schema_name  routine_id  routine_signature  grantee  privilege_type  is_grantable
 test           public       100111      test_priv_p1()     admin    ALL             true
@@ -396,21 +396,21 @@ grantor  grantee    specific_catalog  specific_schema  specific_name        rout
 NULL     test_user  test              public           test_priv_p2_100112  test             public          test_priv_p2  EXECUTE         YES
 NULL     test_user  test              test_priv_sc1    test_priv_p3_100113  test             test_priv_sc1   test_priv_p3  EXECUTE         YES
 
-query TTTTTTB colnames,rowsort
-SHOW GRANTS ON PROCEDURE test_priv_p1, test_priv_p2, test_priv_p3
+query TTTTTTB colnames
+SELECT * FROM [SHOW GRANTS ON PROCEDURE test_priv_p1, test_priv_p2, test_priv_p3] ORDER BY 1,2,3,4,5,6,7
 ----
-database_name  schema_name    routine_id  routine_signature   grantee    privilege_type  is_grantable
-test           public         100111      test_priv_p1()      admin      ALL             true
-test           public         100111      test_priv_p1()      public     EXECUTE         false
-test           public         100111      test_priv_p1()      root       ALL             true
-test           public         100112      test_priv_p2(int8)  admin      ALL             true
-test           public         100112      test_priv_p2(int8)  public     EXECUTE         false
-test           public         100112      test_priv_p2(int8)  root       ALL             true
-test           public         100112      test_priv_p2(int8)  test_user  EXECUTE         true
-test           test_priv_sc1  100113      test_priv_p3()      admin      ALL             true
-test           test_priv_sc1  100113      test_priv_p3()      public     EXECUTE         false
-test           test_priv_sc1  100113      test_priv_p3()      root       ALL             true
-test           test_priv_sc1  100113      test_priv_p3()      test_user  EXECUTE         true
+database_name  schema_name    routine_id  routine_signature      grantee    privilege_type  is_grantable
+test           public         100111      test_priv_p1()         admin      ALL             true
+test           public         100111      test_priv_p1()         public     EXECUTE         false
+test           public         100111      test_priv_p1()         root       ALL             true
+test           public         100112      test_priv_p2(IN int8)  admin      ALL             true
+test           public         100112      test_priv_p2(IN int8)  public     EXECUTE         false
+test           public         100112      test_priv_p2(IN int8)  root       ALL             true
+test           public         100112      test_priv_p2(IN int8)  test_user  EXECUTE         true
+test           test_priv_sc1  100113      test_priv_p3()         admin      ALL             true
+test           test_priv_sc1  100113      test_priv_p3()         public     EXECUTE         false
+test           test_priv_sc1  100113      test_priv_p3()         root       ALL             true
+test           test_priv_sc1  100113      test_priv_p3()         test_user  EXECUTE         true
 
 statement ok
 DROP PROCEDURE test_priv_p2;
@@ -426,8 +426,8 @@ NULL     admin    test              public           test_priv_p1_100111  test  
 NULL     public   test              public           test_priv_p1_100111  test             public          test_priv_p1  EXECUTE         NO
 NULL     root     test              public           test_priv_p1_100111  test             public          test_priv_p1  ALL             YES
 
-query TTTTTTB colnames,rowsort
-SHOW GRANTS ON PROCEDURE test_priv_p1
+query TTTTTTB colnames
+SELECT * FROM [SHOW GRANTS ON PROCEDURE test_priv_p1] ORDER BY 1,2,3,4,5,6,7
 ----
 database_name  schema_name  routine_id  routine_signature  grantee  privilege_type  is_grantable
 test           public       100111      test_priv_p1()     admin    ALL             true
@@ -457,19 +457,19 @@ NULL     root     test              public           test_priv_p1_100111  test  
 NULL     root     test              public           test_priv_p2_100114  test             public          test_priv_p2  ALL             YES
 NULL     root     test              test_priv_sc1    test_priv_p3_100115  test             test_priv_sc1   test_priv_p3  ALL             YES
 
-query TTTTTTB colnames,rowsort
-SHOW GRANTS ON PROCEDURE test_priv_p1, test_priv_p2, test_priv_p3
+query TTTTTTB colnames
+SELECT * FROM [SHOW GRANTS ON PROCEDURE test_priv_p1, test_priv_p2, test_priv_p3] ORDER BY 1,2,3,4,5,6,7
 ----
-database_name  schema_name    routine_id  routine_signature   grantee  privilege_type  is_grantable
-test           public         100111      test_priv_p1()      admin    ALL             true
-test           public         100111      test_priv_p1()      public   EXECUTE         false
-test           public         100111      test_priv_p1()      root     ALL             true
-test           public         100114      test_priv_p2(int8)  admin    ALL             true
-test           public         100114      test_priv_p2(int8)  public   EXECUTE         false
-test           public         100114      test_priv_p2(int8)  root     ALL             true
-test           test_priv_sc1  100115      test_priv_p3()      admin    ALL             true
-test           test_priv_sc1  100115      test_priv_p3()      public   EXECUTE         false
-test           test_priv_sc1  100115      test_priv_p3()      root     ALL             true
+database_name  schema_name    routine_id  routine_signature      grantee  privilege_type  is_grantable
+test           public         100111      test_priv_p1()         admin    ALL             true
+test           public         100111      test_priv_p1()         public   EXECUTE         false
+test           public         100111      test_priv_p1()         root     ALL             true
+test           public         100114      test_priv_p2(IN int8)  admin    ALL             true
+test           public         100114      test_priv_p2(IN int8)  public   EXECUTE         false
+test           public         100114      test_priv_p2(IN int8)  root     ALL             true
+test           test_priv_sc1  100115      test_priv_p3()         admin    ALL             true
+test           test_priv_sc1  100115      test_priv_p3()         public   EXECUTE         false
+test           test_priv_sc1  100115      test_priv_p3()         root     ALL             true
 
 # Make sure has_function_privilege works.
 query B
@@ -574,15 +574,15 @@ SELECT * FROM [
   SHOW GRANTS ON PROCEDURE p_test_show_grants(INT), p_test_show_grants(INT, string, OID)
 ] ORDER BY routine_signature, grantee
 ----
-database_name  schema_name          routine_id  routine_signature                    grantee             privilege_type  is_grantable
-test           sc_test_show_grants  100117      p_test_show_grants(int8)             admin               ALL             true
-test           sc_test_show_grants  100117      p_test_show_grants(int8)             public              EXECUTE         false
-test           sc_test_show_grants  100117      p_test_show_grants(int8)             root                ALL             true
-test           sc_test_show_grants  100117      p_test_show_grants(int8)             u_test_show_grants  EXECUTE         false
-test           sc_test_show_grants  100118      p_test_show_grants(int8, text, oid)  admin               ALL             true
-test           sc_test_show_grants  100118      p_test_show_grants(int8, text, oid)  public              EXECUTE         false
-test           sc_test_show_grants  100118      p_test_show_grants(int8, text, oid)  root                ALL             true
-test           sc_test_show_grants  100118      p_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
+database_name  schema_name          routine_id  routine_signature                             grantee             privilege_type  is_grantable
+test           sc_test_show_grants  100117      p_test_show_grants(IN int8)                   admin               ALL             true
+test           sc_test_show_grants  100117      p_test_show_grants(IN int8)                   public              EXECUTE         false
+test           sc_test_show_grants  100117      p_test_show_grants(IN int8)                   root                ALL             true
+test           sc_test_show_grants  100117      p_test_show_grants(IN int8)                   u_test_show_grants  EXECUTE         false
+test           sc_test_show_grants  100118      p_test_show_grants(IN int8, IN text, IN oid)  admin               ALL             true
+test           sc_test_show_grants  100118      p_test_show_grants(IN int8, IN text, IN oid)  public              EXECUTE         false
+test           sc_test_show_grants  100118      p_test_show_grants(IN int8, IN text, IN oid)  root                ALL             true
+test           sc_test_show_grants  100118      p_test_show_grants(IN int8, IN text, IN oid)  u_test_show_grants  EXECUTE         false
 
 statement error pgcode 42883 pq: procedure p_test_show_grants\(string\) does not exist
 SHOW GRANTS ON PROCEDURE p_test_show_grants(string);
@@ -590,20 +590,20 @@ SHOW GRANTS ON PROCEDURE p_test_show_grants(string);
 query TTTTTTB colnames
 SELECT * FROM [SHOW GRANTS ON PROCEDURE p_test_show_grants(INT)] ORDER BY grantee
 ----
-database_name  schema_name          routine_id  routine_signature         grantee             privilege_type  is_grantable
-test           sc_test_show_grants  100117      p_test_show_grants(int8)  admin               ALL             true
-test           sc_test_show_grants  100117      p_test_show_grants(int8)  public              EXECUTE         false
-test           sc_test_show_grants  100117      p_test_show_grants(int8)  root                ALL             true
-test           sc_test_show_grants  100117      p_test_show_grants(int8)  u_test_show_grants  EXECUTE         false
+database_name  schema_name          routine_id  routine_signature            grantee             privilege_type  is_grantable
+test           sc_test_show_grants  100117      p_test_show_grants(IN int8)  admin               ALL             true
+test           sc_test_show_grants  100117      p_test_show_grants(IN int8)  public              EXECUTE         false
+test           sc_test_show_grants  100117      p_test_show_grants(IN int8)  root                ALL             true
+test           sc_test_show_grants  100117      p_test_show_grants(IN int8)  u_test_show_grants  EXECUTE         false
 
 query TTTTTTB colnames
 SELECT * FROM [SHOW GRANTS ON PROCEDURE p_test_show_grants(INT, string, OID)] ORDER BY routine_signature, grantee
 ----
-database_name  schema_name          routine_id  routine_signature                    grantee             privilege_type  is_grantable
-test           sc_test_show_grants  100118      p_test_show_grants(int8, text, oid)  admin               ALL             true
-test           sc_test_show_grants  100118      p_test_show_grants(int8, text, oid)  public              EXECUTE         false
-test           sc_test_show_grants  100118      p_test_show_grants(int8, text, oid)  root                ALL             true
-test           sc_test_show_grants  100118      p_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
+database_name  schema_name          routine_id  routine_signature                             grantee             privilege_type  is_grantable
+test           sc_test_show_grants  100118      p_test_show_grants(IN int8, IN text, IN oid)  admin               ALL             true
+test           sc_test_show_grants  100118      p_test_show_grants(IN int8, IN text, IN oid)  public              EXECUTE         false
+test           sc_test_show_grants  100118      p_test_show_grants(IN int8, IN text, IN oid)  root                ALL             true
+test           sc_test_show_grants  100118      p_test_show_grants(IN int8, IN text, IN oid)  u_test_show_grants  EXECUTE         false
 
 # TODO(mgartner): Fix the error message to mention "procedure" or "routine"
 # instead of "function".
@@ -615,26 +615,26 @@ SELECT * FROM [
   SHOW GRANTS ON PROCEDURE p_test_show_grants(INT), p_test_show_grants(INT, string, OID) FOR u_test_show_grants
 ] ORDER BY routine_id
 ----
-database_name  schema_name          routine_id  routine_signature                    grantee             privilege_type  is_grantable
-test           sc_test_show_grants  100117      p_test_show_grants(int8)             u_test_show_grants  EXECUTE         false
-test           sc_test_show_grants  100117      p_test_show_grants(int8)             public              EXECUTE         false
-test           sc_test_show_grants  100118      p_test_show_grants(int8, text, oid)  public              EXECUTE         false
-test           sc_test_show_grants  100118      p_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
+database_name  schema_name          routine_id  routine_signature                             grantee             privilege_type  is_grantable
+test           sc_test_show_grants  100117      p_test_show_grants(IN int8)                   u_test_show_grants  EXECUTE         false
+test           sc_test_show_grants  100117      p_test_show_grants(IN int8)                   public              EXECUTE         false
+test           sc_test_show_grants  100118      p_test_show_grants(IN int8, IN text, IN oid)  public              EXECUTE         false
+test           sc_test_show_grants  100118      p_test_show_grants(IN int8, IN text, IN oid)  u_test_show_grants  EXECUTE         false
 
 query TTTTTTB colnames
 SELECT * FROM [SHOW GRANTS FOR u_test_show_grants] ORDER BY object_name
 ----
-database_name  schema_name          object_name                          object_type  grantee             privilege_type  is_grantable
-test           public               NULL                                 schema       public              CREATE          false
-test           public               NULL                                 schema       public              USAGE           false
-test           sc_test_show_grants  p_test_show_grants(int8)             routine      public              EXECUTE         false
-test           sc_test_show_grants  p_test_show_grants(int8)             routine      u_test_show_grants  EXECUTE         false
-test           sc_test_show_grants  p_test_show_grants(int8, text, oid)  routine      u_test_show_grants  EXECUTE         false
-test           sc_test_show_grants  p_test_show_grants(int8, text, oid)  routine      public              EXECUTE         false
-test           sc_test_show_grants  test_priv_f()                        routine      public              EXECUTE         false
-test           public               test_priv_p1()                       routine      public              EXECUTE         false
-test           public               test_priv_p2(int8)                   routine      public              EXECUTE         false
-test           test_priv_sc1        test_priv_p3()                       routine      public              EXECUTE         false
+database_name  schema_name          object_name                                   object_type  grantee             privilege_type  is_grantable
+test           public               NULL                                          schema       public              CREATE          false
+test           public               NULL                                          schema       public              USAGE           false
+test           sc_test_show_grants  p_test_show_grants(IN int8)                   routine      public              EXECUTE         false
+test           sc_test_show_grants  p_test_show_grants(IN int8)                   routine      u_test_show_grants  EXECUTE         false
+test           sc_test_show_grants  p_test_show_grants(IN int8, IN text, IN oid)  routine      u_test_show_grants  EXECUTE         false
+test           sc_test_show_grants  p_test_show_grants(IN int8, IN text, IN oid)  routine      public              EXECUTE         false
+test           sc_test_show_grants  test_priv_f()                                 routine      public              EXECUTE         false
+test           public               test_priv_p1()                                routine      public              EXECUTE         false
+test           public               test_priv_p2(IN int8)                         routine      public              EXECUTE         false
+test           test_priv_sc1        test_priv_p3()                                routine      public              EXECUTE         false
 
 statement ok
 SET search_path = public;

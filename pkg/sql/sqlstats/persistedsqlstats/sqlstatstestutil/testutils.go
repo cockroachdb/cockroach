@@ -29,6 +29,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// FingerprintIDHex returns the hex-encoded statement fingerprint ID assigned
+// to a redacted statement (the "stmtNoConstants" form) executed against the
+// given database.
+func FingerprintIDHex(stmtNoConstants string, database string) string {
+	return sqlstatsutil.EncodeStmtFingerprintIDToString(
+		appstatspb.ConstructStatementFingerprintID(stmtNoConstants, database))
+}
+
 // GetRandomizedCollectedStatementStatisticsForTest returns a
 // appstatspb.CollectedStatementStatistics with its fields randomly filled.
 func GetRandomizedCollectedStatementStatisticsForTest(

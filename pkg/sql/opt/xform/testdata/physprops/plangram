@@ -1,0 +1,1060 @@
+exec-ddl
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX (b), INDEX (c))
+----
+
+exec-ddl
+CREATE TABLE xy (x INT PRIMARY KEY, y INT, INDEX xy_y_idx (y))
+----
+
+exec-ddl
+CREATE TABLE pqr (p INT PRIMARY KEY, q INT, r INT)
+----
+
+# Matching Fundamentals
+
+# Basic match.
+
+# PlanGram matches the plan the optimizer would choose anyway.
+opt format=show-cost plangram=(root: (Scan);)
+SELECT * FROM abc
+----
+scan abc
+ ├── columns: a:1!null b:2 c:3
+ ├── cost: 1088.62
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ └── fd: (1)-->(2,3)
+
+# Basic mismatch.
+
+# PlanGram specifies an operator that doesn't match.
+opt format=show-cost plangram=(root: (Select);)
+SELECT * FROM abc
+----
+scan abc
+ ├── columns: a:1!null b:2 c:3
+ ├── cost: 1088.62
+ ├── cost-flags: plangram-mismatch unbounded-cardinality
+ ├── key: (1)
+ └── fd: (1)-->(2,3)
+
+# Fewer children specified.
+
+# PlanGram with fewer children than the expression has. Should still match.
+opt format=show-cost plangram=(root: (Select (Scan));)
+SELECT * FROM abc WHERE a = 1
+----
+select
+ ├── columns: a:1!null b:2 c:3
+ ├── cardinality: [0 - 1]
+ ├── cost: 1098.64
+ ├── cost-flags: unbounded-cardinality
+ ├── key: ()
+ ├── fd: ()-->(1-3)
+ ├── scan abc
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── a:1 = 1 [outer=(1), fd=()-->(1)]
+
+# AnyPlanGram for unspecified children.
+
+# Unlike "Fewer children specified" above which uses (Select (Scan)) to match
+# the first child explicitly, this uses (Select) with no children at all —
+# omitted children are implicitly any.
+
+opt format=show-cost plangram=(root: (Select);)
+SELECT * FROM abc WHERE a = 1
+----
+select
+ ├── columns: a:1!null b:2 c:3
+ ├── cardinality: [0 - 1]
+ ├── cost: 1098.64
+ ├── cost-flags: unbounded-cardinality
+ ├── key: ()
+ ├── fd: ()-->(1-3)
+ ├── scan abc
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── a:1 = 1 [outer=(1), fd=()-->(1)]
+
+# Root any.
+
+# Should produce identical plan to no PlanGram (zigzag join, no mismatch flags).
+opt format=show-cost plangram=(root: any;)
+SELECT * FROM abc WHERE b = 1 AND c = 1
+----
+inner-join (zigzag abc@abc_b_idx abc@abc_c_idx)
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── eq columns: [1] = [1]
+ ├── left fixed columns: [2] = [1]
+ ├── right fixed columns: [3] = [1]
+ ├── cost: 30.14
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: ()-->(2,3)
+ └── filters
+      ├── b:2 = 1 [outer=(2), fd=()-->(2)]
+      └── c:3 = 1 [outer=(3), fd=()-->(3)]
+
+# Root none.
+
+# NonePlanGram matches nothing — every node gets plangram-mismatch.
+opt format=show-cost plangram=(root: none;)
+SELECT * FROM abc
+----
+scan abc
+ ├── columns: a:1!null b:2 c:3
+ ├── cost: 1088.62
+ ├── cost-flags: plangram-mismatch unbounded-cardinality
+ ├── key: (1)
+ └── fd: (1)-->(2,3)
+
+# WithNoneFallback (graceful fallback to default).
+
+# Default plan for comparison.
+opt format=show-cost
+SELECT * FROM abc WHERE b = 1 AND c = 1
+----
+inner-join (zigzag abc@abc_b_idx abc@abc_c_idx)
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── eq columns: [1] = [1]
+ ├── left fixed columns: [2] = [1]
+ ├── right fixed columns: [3] = [1]
+ ├── cost: 30.14
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: ()-->(2,3)
+ └── filters
+      ├── b:2 = 1 [outer=(2), fd=()-->(2)]
+      └── c:3 = 1 [outer=(3), fd=()-->(3)]
+
+# Impossible PlanGram: should get same plan shape but with penalty.
+opt format=show-cost plangram=(root: (InnerJoin);)
+SELECT * FROM abc WHERE b = 1 AND c = 1
+----
+inner-join (zigzag abc@abc_b_idx abc@abc_c_idx)
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── eq columns: [1] = [1]
+ ├── left fixed columns: [2] = [1]
+ ├── right fixed columns: [3] = [1]
+ ├── cost: 30.14
+ ├── cost-flags: plangram-mismatch unbounded-cardinality
+ ├── key: (1)
+ ├── fd: ()-->(2,3)
+ └── filters
+      ├── b:2 = 1 [outer=(2), fd=()-->(2)]
+      └── c:3 = 1 [outer=(3), fd=()-->(3)]
+
+# Grammar Features
+
+# Named nonterminals.
+
+# Indirect reference through a named nonterminal should match like a direct
+# expression.
+opt format=show-cost plangram=(root: (Select scan); scan: (Scan);)
+SELECT * FROM abc WHERE a = 1
+----
+select
+ ├── columns: a:1!null b:2 c:3
+ ├── cardinality: [0 - 1]
+ ├── cost: 1098.64
+ ├── cost-flags: unbounded-cardinality
+ ├── key: ()
+ ├── fd: ()-->(1-3)
+ ├── scan abc
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── a:1 = 1 [outer=(1), fd=()-->(1)]
+
+# Alternates with |.
+
+# PlanGram offers two alternate shapes. The optimizer picks the cheapest match.
+# InnerJoin (hash, ~2197) should beat LookupJoin (~7142).
+opt format=show-cost plangram=(root: plan; plan: (InnerJoin (Scan) (Scan)) | (LookupJoin (Scan));)
+SELECT * FROM abc, xy WHERE a = x
+----
+inner-join (hash)
+ ├── columns: a:1!null b:2 c:3 x:6!null y:7
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ ├── cost: 2197.20625
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (6)
+ ├── fd: (1)-->(2,3), (6)-->(7), (1)==(6), (6)==(1)
+ ├── scan abc
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ ├── scan xy
+ │    ├── columns: x:6!null y:7
+ │    ├── cost: 1068.42
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7)
+ └── filters
+      └── a:1 = x:6 [outer=(1,6), fd=(1)==(6), (6)==(1)]
+
+# Explicit any as child.
+
+# First child explicitly unconstrained, second must be Scan. Both children are
+# Scans in the natural plan, so this matches.
+opt format=show-cost plangram=(root: (InnerJoin any (Scan));)
+SELECT * FROM abc, xy WHERE a = x
+----
+inner-join (hash)
+ ├── columns: a:1!null b:2 c:3 x:6!null y:7
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ ├── cost: 2197.20625
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (6)
+ ├── fd: (1)-->(2,3), (6)-->(7), (1)==(6), (6)==(1)
+ ├── scan abc
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ ├── scan xy
+ │    ├── columns: x:6!null y:7
+ │    ├── cost: 1068.42
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7)
+ └── filters
+      └── a:1 = x:6 [outer=(1,6), fd=(1)==(6), (6)==(1)]
+
+# Match Propagation and Transparency
+
+# Nested multi-level matching.
+
+# Deep tree: Select → IndexJoin → Scan, all matching. Use a filter on c that
+# can't be pushed into the b-index scan, forcing Select to remain.
+opt format=show-cost plangram=(root: (Select (IndexJoin (Scan)));)
+SELECT * FROM abc WHERE b = 1 AND c > 0
+----
+select
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── cost: 89.0700007
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3)
+ ├── index-join abc
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── cost: 88.9400007
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1)
+ │    ├── fd: ()-->(2), (1)-->(3)
+ │    └── scan abc@abc_b_idx
+ │         ├── columns: a:1!null b:2!null
+ │         ├── constraint: /2/1: [/1 - /1]
+ │         ├── cost: 28.4200001
+ │         ├── cost-flags: unbounded-cardinality
+ │         ├── key: (1)
+ │         └── fd: ()-->(2)
+ └── filters
+      └── c:3 > 0 [outer=(3)]
+
+# Partial tree mismatch cascading.
+
+# PlanGram that matches Select at top but specifies Sort as the child, which
+# mismatches the actual IndexJoin child. The mismatch penalty cascades through
+# the subtree below the mismatch point.
+opt format=show-cost plangram=(root: (Select (Sort));)
+SELECT * FROM abc WHERE b = 1 AND c > 0
+----
+select
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── cost: 89.0700007
+ ├── cost-flags: plangram-mismatch unbounded-cardinality
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3)
+ ├── index-join abc
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── cost: 88.9400007
+ │    ├── cost-flags: plangram-mismatch unbounded-cardinality
+ │    ├── key: (1)
+ │    ├── fd: ()-->(2), (1)-->(3)
+ │    └── scan abc@abc_b_idx
+ │         ├── columns: a:1!null b:2!null
+ │         ├── constraint: /2/1: [/1 - /1]
+ │         ├── cost: 28.4200001
+ │         ├── cost-flags: plangram-mismatch unbounded-cardinality
+ │         ├── key: (1)
+ │         └── fd: ()-->(2)
+ └── filters
+      └── c:3 > 0 [outer=(3)]
+
+# Sort visibility.
+
+# PlanGram that explicitly includes Sort matches a plan with Sort.
+opt format=show-cost plangram=(root: (Sort (Scan));)
+SELECT * FROM abc ORDER BY b
+----
+sort
+ ├── columns: a:1!null b:2 c:3
+ ├── cost: 1338.10194
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── ordering: +2
+ └── scan abc
+      ├── columns: a:1!null b:2 c:3
+      ├── cost: 1088.62
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      └── fd: (1)-->(2,3)
+
+# PlanGram without Sort applied to a query that needs Sort.
+opt format=show-cost plangram=(root: (Scan);)
+SELECT * FROM abc ORDER BY b
+----
+sort
+ ├── columns: a:1!null b:2 c:3
+ ├── cost: 1338.10194
+ ├── cost-flags: plangram-mismatch unbounded-cardinality
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── ordering: +2
+ └── scan abc
+      ├── columns: a:1!null b:2 c:3
+      ├── cost: 1088.62
+      ├── cost-flags: plangram-mismatch unbounded-cardinality
+      ├── key: (1)
+      └── fd: (1)-->(2,3)
+
+# Invisible operator transparency.
+
+exec-ddl
+ALTER TABLE abc CONFIGURE ZONE USING constraints='[+region=us]'
+----
+
+# When a DistributeExpr wraps the plan, the PlanGram should see through it
+# and match the inner Scan without penalty.
+opt format=show-cost locality=(region=eu) plangram=(root: (Scan);)
+SELECT * FROM abc
+----
+distribute
+ ├── columns: a:1!null b:2 c:3
+ ├── cost: 1545.24
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── distribution: eu
+ ├── input distribution: us
+ └── scan abc
+      ├── columns: a:1!null b:2 c:3
+      ├── cost: 1345.22
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      └── fd: (1)-->(2,3)
+
+exec-ddl
+ALTER TABLE abc CONFIGURE ZONE USING DEFAULT
+----
+
+# Joins
+
+# Join — InnerJoin match.
+
+opt format=show-cost plangram=(root: (InnerJoin (Scan) (Scan));)
+SELECT * FROM abc, xy WHERE a = x
+----
+inner-join (hash)
+ ├── columns: a:1!null b:2 c:3 x:6!null y:7
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ ├── cost: 2197.20625
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (6)
+ ├── fd: (1)-->(2,3), (6)-->(7), (1)==(6), (6)==(1)
+ ├── scan abc
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ ├── scan xy
+ │    ├── columns: x:6!null y:7
+ │    ├── cost: 1068.42
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7)
+ └── filters
+      └── a:1 = x:6 [outer=(1,6), fd=(1)==(6), (6)==(1)]
+
+# Join — LeftJoin match.
+
+opt format=show-cost plangram=(root: (LeftJoin (Scan) (Scan));)
+SELECT * FROM abc LEFT JOIN xy ON a = x
+----
+left-join (hash)
+ ├── columns: a:1!null b:2 c:3 x:6 y:7
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ ├── cost: 2197.20625
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: (1)-->(2,3,6,7), (6)-->(7)
+ ├── scan abc
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ ├── scan xy
+ │    ├── columns: x:6!null y:7
+ │    ├── cost: 1068.42
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7)
+ └── filters
+      └── a:1 = x:6 [outer=(1,6), fd=(1)==(6), (6)==(1)]
+
+# Join — SemiJoin match (EXISTS).
+
+opt format=show-cost plangram=(root: (SemiJoin (Scan) (Scan));)
+SELECT * FROM abc WHERE EXISTS (SELECT 1 FROM xy WHERE a = x)
+----
+semi-join (hash)
+ ├── columns: a:1!null b:2 c:3
+ ├── cost: 2187.10625
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── scan abc
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ ├── scan xy
+ │    ├── columns: x:6!null
+ │    ├── cost: 1058.32
+ │    ├── cost-flags: unbounded-cardinality
+ │    └── key: (6)
+ └── filters
+      └── a:1 = x:6 [outer=(1,6), fd=(1)==(6), (6)==(1)]
+
+# Join — AntiJoin match (NOT EXISTS).
+
+opt format=show-cost plangram=(root: (AntiJoin (Scan) (Scan));)
+SELECT * FROM abc WHERE NOT EXISTS (SELECT 1 FROM xy WHERE a = x)
+----
+anti-join (hash)
+ ├── columns: a:1!null b:2 c:3
+ ├── cost: 2187.10625
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── scan abc
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ ├── scan xy
+ │    ├── columns: x:6!null
+ │    ├── cost: 1058.32
+ │    ├── cost-flags: unbounded-cardinality
+ │    └── key: (6)
+ └── filters
+      └── a:1 = x:6 [outer=(1,6), fd=(1)==(6), (6)==(1)]
+
+# Join — type mismatch (LeftJoin vs InnerJoin).
+
+opt format=show-cost plangram=(root: (LeftJoin (Scan) (Scan));)
+SELECT * FROM abc, xy WHERE a = x
+----
+inner-join (merge)
+ ├── columns: a:1!null b:2 c:3 x:6!null y:7
+ ├── left ordering: +1
+ ├── right ordering: +6
+ ├── cost: 2187.06
+ ├── cost-flags: plangram-mismatch unbounded-cardinality
+ ├── key: (6)
+ ├── fd: (1)-->(2,3), (6)-->(7), (1)==(6), (6)==(1)
+ ├── scan abc
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── cost: 1088.62
+ │    ├── cost-flags: plangram-mismatch unbounded-cardinality
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── ordering: +1
+ ├── scan xy
+ │    ├── columns: x:6!null y:7
+ │    ├── cost: 1068.42
+ │    ├── cost-flags: plangram-mismatch unbounded-cardinality
+ │    ├── key: (6)
+ │    ├── fd: (6)-->(7)
+ │    └── ordering: +6
+ └── filters (true)
+
+# Join — mixed child match/mismatch.
+
+opt format=show-cost plangram=(root: (InnerJoin (Select) (Scan));)
+SELECT * FROM abc, xy WHERE a = x
+----
+inner-join (merge)
+ ├── columns: a:1!null b:2 c:3 x:6!null y:7
+ ├── left ordering: +1
+ ├── right ordering: +6
+ ├── cost: 2187.06
+ ├── cost-flags: plangram-mismatch unbounded-cardinality
+ ├── key: (6)
+ ├── fd: (1)-->(2,3), (6)-->(7), (1)==(6), (6)==(1)
+ ├── scan abc
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── cost: 1088.62
+ │    ├── cost-flags: plangram-mismatch unbounded-cardinality
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── ordering: +1
+ ├── scan xy
+ │    ├── columns: x:6!null y:7
+ │    ├── cost: 1068.42
+ │    ├── cost-flags: plangram-mismatch unbounded-cardinality
+ │    ├── key: (6)
+ │    ├── fd: (6)-->(7)
+ │    └── ordering: +6
+ └── filters (true)
+
+# Join — steering to LookupJoin.
+
+opt format=show-cost plangram=(root: (LookupJoin (Scan));)
+SELECT * FROM abc, xy WHERE a = x
+----
+inner-join (lookup abc)
+ ├── columns: a:1!null b:2 c:3 x:6!null y:7
+ ├── key columns: [6] = [1]
+ ├── lookup columns are key
+ ├── cost: 7142.44
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (6)
+ ├── fd: (1)-->(2,3), (6)-->(7), (1)==(6), (6)==(1)
+ ├── scan xy
+ │    ├── columns: x:6!null y:7
+ │    ├── cost: 1068.42
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7)
+ └── filters (true)
+
+# Join — steering to MergeJoin.
+
+opt format=show-cost plangram=(root: (MergeJoin (Scan) (Scan));)
+SELECT * FROM abc, xy WHERE a = x
+----
+inner-join (merge)
+ ├── columns: a:1!null b:2 c:3 x:6!null y:7
+ ├── left ordering: +1
+ ├── right ordering: +6
+ ├── cost: 2187.06
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (6)
+ ├── fd: (1)-->(2,3), (6)-->(7), (1)==(6), (6)==(1)
+ ├── scan abc
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── ordering: +1
+ ├── scan xy
+ │    ├── columns: x:6!null y:7
+ │    ├── cost: 1068.42
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (6)
+ │    ├── fd: (6)-->(7)
+ │    └── ordering: +6
+ └── filters (true)
+
+# Join — three-way join.
+
+opt format=show-cost plangram=(root: (InnerJoin (InnerJoin (Scan) (Scan)) (Scan));)
+SELECT * FROM abc, xy, pqr WHERE a = x AND x = p
+----
+inner-join (hash)
+ ├── columns: a:1!null b:2 c:3 x:6!null y:7 p:10!null q:11 r:12
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ ├── cost: 3325.9925
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (10)
+ ├── fd: (1)-->(2,3), (6)-->(7), (10)-->(11,12), (1)==(6,10), (6)==(1,10), (10)==(1,6)
+ ├── inner-join (hash)
+ │    ├── columns: x:6!null y:7 p:10!null q:11 r:12
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ │    ├── cost: 2197.20625
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (10)
+ │    ├── fd: (6)-->(7), (10)-->(11,12), (6)==(10), (10)==(6)
+ │    ├── scan xy
+ │    │    ├── columns: x:6!null y:7
+ │    │    ├── cost: 1068.42
+ │    │    ├── cost-flags: unbounded-cardinality
+ │    │    ├── key: (6)
+ │    │    └── fd: (6)-->(7)
+ │    ├── scan pqr
+ │    │    ├── columns: p:10!null q:11 r:12
+ │    │    ├── cost: 1088.62
+ │    │    ├── cost-flags: unbounded-cardinality
+ │    │    ├── key: (10)
+ │    │    └── fd: (10)-->(11,12)
+ │    └── filters
+ │         └── x:6 = p:10 [outer=(6,10), fd=(6)==(10), (10)==(6)]
+ ├── scan abc
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── a:1 = x:6 [outer=(1,6), fd=(1)==(6), (6)==(1)]
+
+# Aggregation
+
+# Aggregation — GroupBy match.
+
+opt format=show-cost plangram=(root: (GroupBy (Scan));)
+SELECT b, count(*) FROM abc GROUP BY b
+----
+group-by (streaming)
+ ├── columns: b:2 count:6!null
+ ├── grouping columns: b:2
+ ├── internal-ordering: +2
+ ├── cost: 1079.35
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (2)
+ ├── fd: (2)-->(6)
+ ├── scan abc@abc_b_idx
+ │    ├── columns: b:2
+ │    ├── cost: 1058.32
+ │    ├── cost-flags: unbounded-cardinality
+ │    └── ordering: +2
+ └── aggregations
+      └── count-rows [as=count_rows:6]
+
+# Aggregation — ScalarGroupBy match.
+
+opt format=show-cost plangram=(root: (ScalarGroupBy (Scan));)
+SELECT count(*) FROM abc
+----
+scalar-group-by
+ ├── columns: count:6!null
+ ├── cardinality: [1 - 1]
+ ├── cost: 1058.25
+ ├── cost-flags: unbounded-cardinality
+ ├── key: ()
+ ├── fd: ()-->(6)
+ ├── scan abc@abc_b_idx
+ │    ├── cost: 1048.22
+ │    └── cost-flags: unbounded-cardinality
+ └── aggregations
+      └── count-rows [as=count_rows:6]
+
+# Aggregation — GroupBy vs ScalarGroupBy mismatch.
+
+opt format=show-cost plangram=(root: (GroupBy (Scan));)
+SELECT count(*) FROM abc
+----
+scalar-group-by
+ ├── columns: count:6!null
+ ├── cardinality: [1 - 1]
+ ├── cost: 1058.25
+ ├── cost-flags: plangram-mismatch unbounded-cardinality
+ ├── key: ()
+ ├── fd: ()-->(6)
+ ├── scan abc@abc_b_idx
+ │    ├── cost: 1048.22
+ │    └── cost-flags: plangram-mismatch unbounded-cardinality
+ └── aggregations
+      └── count-rows [as=count_rows:6]
+
+# Aggregation — DistinctOn.
+
+opt format=show-cost plangram=(root: (DistinctOn (Scan));)
+SELECT DISTINCT b FROM abc
+----
+distinct-on
+ ├── columns: b:2
+ ├── grouping columns: b:2
+ ├── internal-ordering: +2
+ ├── cost: 1069.35
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (2)
+ └── scan abc@abc_b_idx
+      ├── columns: b:2
+      ├── cost: 1058.32
+      ├── cost-flags: unbounded-cardinality
+      └── ordering: +2
+
+# Other Relational Operators
+
+# Project.
+
+opt format=show-cost plangram=(root: (Project (Scan));)
+SELECT a + 1, b FROM abc
+----
+project
+ ├── columns: "?column?":6!null b:2
+ ├── immutable
+ ├── cost: 1088.44
+ ├── cost-flags: unbounded-cardinality
+ ├── scan abc@abc_b_idx
+ │    ├── columns: a:1!null b:2
+ │    ├── cost: 1068.42
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── projections
+      └── a:1 + 1 [as="?column?":6, outer=(1), immutable]
+
+# Window.
+
+opt format=show-cost plangram=(root: (Window (Scan));)
+SELECT *, row_number() OVER () FROM abc
+----
+window partition=()
+ ├── columns: a:1!null b:2 c:3 row_number:6
+ ├── cost: 1088.64
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: (1)-->(2,3,6)
+ ├── scan abc
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── windows
+      └── row-number [as=row_number:6]
+
+# Limit + Sort PlanGram.
+
+opt format=show-cost plangram=(root: (Limit (Sort (Scan)));)
+SELECT * FROM abc ORDER BY b LIMIT 5
+----
+limit
+ ├── columns: a:1!null b:2 c:3
+ ├── internal-ordering: +2
+ ├── cardinality: [0 - 5]
+ ├── cost: 1338.16194
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── ordering: +2
+ ├── sort
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── cost: 1338.10194
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    ├── ordering: +2
+ │    ├── limit hint: 5.00
+ │    └── scan abc
+ │         ├── columns: a:1!null b:2 c:3
+ │         ├── cost: 1088.62
+ │         ├── cost-flags: unbounded-cardinality
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2,3)
+ └── 5
+
+# TopK PlanGram.
+
+opt format=show-cost plangram=(root: (TopK (Scan));)
+SELECT * FROM abc ORDER BY b LIMIT 5
+----
+top-k
+ ├── columns: a:1!null b:2 c:3
+ ├── internal-ordering: +2
+ ├── k: 5
+ ├── cardinality: [0 - 5]
+ ├── cost: 1155.21856
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── ordering: +2
+ └── scan abc
+      ├── columns: a:1!null b:2 c:3
+      ├── cost: 1088.62
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      └── fd: (1)-->(2,3)
+
+# Offset.
+
+opt format=show-cost plangram=(root: (Offset (Scan));)
+SELECT * FROM abc OFFSET 5
+----
+offset
+ ├── columns: a:1!null b:2 c:3
+ ├── cost: 1098.59
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── scan abc
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── 5
+
+# UnionAll match.
+
+opt format=show-cost plangram=(root: (UnionAll (Scan) (Scan));)
+SELECT a FROM abc UNION ALL SELECT x FROM xy
+----
+union-all
+ ├── columns: a:10!null
+ ├── left columns: abc.a:1
+ ├── right columns: x:6
+ ├── cost: 2136.66
+ ├── cost-flags: unbounded-cardinality
+ ├── scan abc@abc_b_idx
+ │    ├── columns: abc.a:1!null
+ │    ├── cost: 1058.32
+ │    ├── cost-flags: unbounded-cardinality
+ │    └── key: (1)
+ └── scan xy
+      ├── columns: x:6!null
+      ├── cost: 1058.32
+      ├── cost-flags: unbounded-cardinality
+      └── key: (6)
+
+# UnionAll mismatch (Union vs UnionAll).
+
+opt format=show-cost plangram=(root: (Union (Scan) (Scan));)
+SELECT a FROM abc UNION ALL SELECT x FROM xy
+----
+union-all
+ ├── columns: a:10!null
+ ├── left columns: abc.a:1
+ ├── right columns: x:6
+ ├── cost: 2136.66
+ ├── cost-flags: plangram-mismatch unbounded-cardinality
+ ├── scan abc@abc_b_idx
+ │    ├── columns: abc.a:1!null
+ │    ├── cost: 1058.32
+ │    ├── cost-flags: plangram-mismatch unbounded-cardinality
+ │    └── key: (1)
+ └── scan xy
+      ├── columns: x:6!null
+      ├── cost: 1058.32
+      ├── cost-flags: plangram-mismatch unbounded-cardinality
+      └── key: (6)
+
+# CTEs
+
+# CTE that gets inlined.
+
+opt format=show-cost plangram=(root: (Scan);)
+WITH cte AS (SELECT * FROM abc) SELECT * FROM cte
+----
+project
+ ├── columns: a:6!null b:7 c:8
+ ├── cost: 1128.64
+ ├── cost-flags: plangram-mismatch unbounded-cardinality
+ ├── key: (6)
+ ├── fd: (6)-->(7,8)
+ ├── scan abc
+ │    ├── columns: abc.a:1!null abc.b:2 abc.c:3
+ │    ├── cost: 1088.62
+ │    ├── cost-flags: plangram-mismatch unbounded-cardinality
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── projections
+      ├── abc.a:1 [as=a:6, outer=(1)]
+      ├── abc.b:2 [as=b:7, outer=(2)]
+      └── abc.c:3 [as=c:8, outer=(3)]
+
+# Materialized CTE with multiple references.
+
+opt format=show-cost plangram=(root: (With (Scan) (InnerJoin (WithScan) (WithScan)));)
+WITH cte AS MATERIALIZED (SELECT * FROM abc)
+SELECT * FROM cte AS c1 INNER JOIN cte AS c2 ON c1.a = c2.a
+----
+with &1 (cte)
+ ├── columns: a:6!null b:7 c:8 a:9!null b:10 c:11
+ ├── materialized
+ ├── cost: 1128.84625
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (9)
+ ├── fd: (6)-->(7,8), (9)-->(10,11), (6)==(9), (9)==(6)
+ ├── scan abc
+ │    ├── columns: abc.a:1!null abc.b:2 abc.c:3
+ │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── inner-join (hash)
+      ├── columns: a:6!null b:7 c:8 a:9!null b:10 c:11
+      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+      ├── cost: 40.2062515
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (9)
+      ├── fd: (6)-->(7,8), (9)-->(10,11), (6)==(9), (9)==(6)
+      ├── with-scan &1 (cte)
+      │    ├── columns: a:6!null b:7 c:8
+      │    ├── mapping:
+      │    │    ├──  abc.a:1 => a:6
+      │    │    ├──  abc.b:2 => b:7
+      │    │    └──  abc.c:3 => c:8
+      │    ├── cost: 0.02
+      │    ├── cost-flags: unbounded-cardinality
+      │    ├── key: (6)
+      │    └── fd: (6)-->(7,8)
+      ├── with-scan &1 (cte)
+      │    ├── columns: a:9!null b:10 c:11
+      │    ├── mapping:
+      │    │    ├──  abc.a:1 => a:9
+      │    │    ├──  abc.b:2 => b:10
+      │    │    └──  abc.c:3 => c:11
+      │    ├── cost: 0.02
+      │    ├── cost-flags: unbounded-cardinality
+      │    ├── key: (9)
+      │    └── fd: (9)-->(10,11)
+      └── filters
+           └── a:6 = a:9 [outer=(6,9), fd=(6)==(9), (9)==(6)]
+
+# Mutations
+
+# Mutation — INSERT with SELECT subtree.
+
+opt format=show-cost plangram=(root: (Insert (Select (Scan)));)
+INSERT INTO xy SELECT a, b FROM abc WHERE a > 10
+----
+insert xy
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── a:5 => x:1
+ │    └── b:6 => y:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── cost: 1078.46
+ ├── cost-flags: unbounded-cardinality
+ └── select
+      ├── columns: a:5!null b:6
+      ├── cost: 1078.45
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (5)
+      ├── fd: (5)-->(6)
+      ├── scan abc@abc_b_idx
+      │    ├── columns: a:5!null b:6
+      │    ├── cost: 1068.42
+      │    ├── cost-flags: unbounded-cardinality
+      │    ├── key: (5)
+      │    └── fd: (5)-->(6)
+      └── filters
+           └── a:5 > 10 [outer=(5)]
+
+# Mutation — Update.
+
+opt format=show-cost plangram=(root: (Update (Project (Scan)));)
+UPDATE xy SET y = 1 WHERE x > 0
+----
+update xy
+ ├── columns: <none>
+ ├── fetch columns: x:5 y:6
+ ├── update-mapping:
+ │    └── y_new:9 => y:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── cost: 371.383333
+ ├── cost-flags: unbounded-cardinality
+ └── project
+      ├── columns: y_new:9!null x:5!null y:6
+      ├── cost: 371.373333
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (5)
+      ├── fd: ()-->(9), (5)-->(6)
+      ├── scan xy
+      │    ├── columns: x:5!null y:6
+      │    ├── constraint: /5: [/1 - ]
+      │    ├── flags: avoid-full-scan
+      │    ├── cost: 364.686667
+      │    ├── cost-flags: unbounded-cardinality
+      │    ├── key: (5)
+      │    └── fd: (5)-->(6)
+      └── projections
+           └── 1 [as=y_new:9]
+
+# Mutation — Delete.
+
+opt format=show-cost plangram=(root: (Delete (Scan));)
+DELETE FROM xy WHERE x > 0
+----
+delete xy
+ ├── columns: <none>
+ ├── fetch columns: x:5 y:6
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── cost: 364.696667
+ ├── cost-flags: unbounded-cardinality
+ └── scan xy
+      ├── columns: x:5!null y:6
+      ├── constraint: /5: [/1 - ]
+      ├── flags: avoid-full-scan
+      ├── cost: 364.686667
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (5)
+      └── fd: (5)-->(6)
+
+# Deep and Complex Plans
+
+# Four-plus level nesting.
+
+# 5-level deep PlanGram. Default plan uses TopK, so this steers to the
+# non-default Limit + Sort shape.
+opt format=show-cost plangram=(root: (Limit (Sort (Select (IndexJoin (Scan)))));)
+SELECT * FROM abc WHERE b = 1 AND c > 0 ORDER BY c LIMIT 5
+----
+limit
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── internal-ordering: +3 opt(2)
+ ├── cardinality: [0 - 5]
+ ├── cost: 90.2181806
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3)
+ ├── ordering: +3 opt(2) [actual: +3]
+ ├── sort
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── cost: 90.1581806
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1)
+ │    ├── fd: ()-->(2), (1)-->(3)
+ │    ├── ordering: +3 opt(2) [actual: +3]
+ │    ├── limit hint: 5.00
+ │    └── select
+ │         ├── columns: a:1!null b:2!null c:3!null
+ │         ├── cost: 89.0700007
+ │         ├── cost-flags: unbounded-cardinality
+ │         ├── key: (1)
+ │         ├── fd: ()-->(2), (1)-->(3)
+ │         ├── index-join abc
+ │         │    ├── columns: a:1!null b:2 c:3
+ │         │    ├── cost: 88.9400007
+ │         │    ├── cost-flags: unbounded-cardinality
+ │         │    ├── key: (1)
+ │         │    ├── fd: ()-->(2), (1)-->(3)
+ │         │    └── scan abc@abc_b_idx
+ │         │         ├── columns: a:1!null b:2!null
+ │         │         ├── constraint: /2/1: [/1 - /1]
+ │         │         ├── cost: 28.4200001
+ │         │         ├── cost-flags: unbounded-cardinality
+ │         │         ├── key: (1)
+ │         │         └── fd: ()-->(2)
+ │         └── filters
+ │              └── c:3 > 0 [outer=(3)]
+ └── 5

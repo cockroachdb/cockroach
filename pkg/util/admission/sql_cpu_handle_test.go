@@ -30,7 +30,7 @@ func TestSQLCPUHandleFastAndSlowPath(t *testing.T) {
 
 	ctx := context.Background()
 	tenantID := roachpb.MustMakeTenantID(1)
-	q, tg, cleanup := makeCPUTimeTokenWorkQueue(t)
+	q, tg, _, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 
 	provider := &sqlCPUProviderImpl{}
@@ -94,7 +94,7 @@ func TestSQLCPUHandleCloseReturnsTokens(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			q, tg, cleanup := makeCPUTimeTokenWorkQueue(t)
+			q, tg, _, cleanup := makeCPUTimeTokenWorkQueue(t)
 			defer cleanup()
 
 			provider := &sqlCPUProviderImpl{}
@@ -132,7 +132,7 @@ func TestSQLCPUHandleNoWaitBypassAdmission(t *testing.T) {
 
 	ctx := context.Background()
 	tenantID := roachpb.MustMakeTenantID(1)
-	q, tg, cleanup := makeCPUTimeTokenWorkQueue(t)
+	q, tg, _, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 
 	// Make tryGet return false — a blocking Admit would hang, but
@@ -183,7 +183,7 @@ func TestSQLCPUHandleConcurrentFastPath(t *testing.T) {
 
 	ctx := context.Background()
 	tenantID := roachpb.MustMakeTenantID(1)
-	q, tg, cleanup := makeCPUTimeTokenWorkQueue(t)
+	q, tg, _, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 
 	provider := &sqlCPUProviderImpl{}
@@ -232,7 +232,7 @@ func TestSQLCPUHandleConcurrentSlowPath(t *testing.T) {
 
 	ctx := context.Background()
 	tenantID := roachpb.MustMakeTenantID(1)
-	q, _, cleanup := makeCPUTimeTokenWorkQueue(t)
+	q, _, _, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 
 	provider := &sqlCPUProviderImpl{}
@@ -267,7 +267,7 @@ func TestSQLCPUHandleConcurrentCloseAndAdmit(t *testing.T) {
 
 	ctx := context.Background()
 	tenantID := roachpb.MustMakeTenantID(1)
-	q, _, cleanup := makeCPUTimeTokenWorkQueue(t)
+	q, _, _, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 
 	provider := &sqlCPUProviderImpl{}
@@ -329,7 +329,7 @@ func TestSQLCPUHandleConcurrentCASAndSwap(t *testing.T) {
 
 	ctx := context.Background()
 	tenantID := roachpb.MustMakeTenantID(1)
-	q, _, cleanup := makeCPUTimeTokenWorkQueue(t)
+	q, _, _, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 
 	for iter := 0; iter < 100; iter++ {
@@ -397,7 +397,7 @@ func TestSQLCPUHandleAdmitVsCloseTokenConservation(t *testing.T) {
 
 	ctx := context.Background()
 	tenantID := roachpb.MustMakeTenantID(1)
-	q, _, cleanup := makeCPUTimeTokenWorkQueue(t)
+	q, _, _, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 
 	provider := &sqlCPUProviderImpl{}
@@ -448,7 +448,7 @@ func TestSQLCPUHandleContextCancellation(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	tenantID := roachpb.MustMakeTenantID(1)
-	q, _, cleanup := makeCPUTimeTokenWorkQueue(t)
+	q, _, _, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 
 	provider := &sqlCPUProviderImpl{}
@@ -493,7 +493,7 @@ func TestSQLCPUHandleCloseDoesNotBlockOnAdmitTurn(t *testing.T) {
 
 	ctx := context.Background()
 	tenantID := roachpb.MustMakeTenantID(1)
-	q, _, cleanup := makeCPUTimeTokenWorkQueue(t)
+	q, _, _, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 
 	provider := &sqlCPUProviderImpl{}
@@ -540,7 +540,7 @@ func TestSQLCPUHandleSecondDeductionAfterTurn(t *testing.T) {
 
 	ctx := context.Background()
 	tenantID := roachpb.MustMakeTenantID(1)
-	q, tg, cleanup := makeCPUTimeTokenWorkQueue(t)
+	q, tg, _, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 
 	provider := &sqlCPUProviderImpl{}
@@ -612,11 +612,11 @@ func TestSetResourceGroupConfigRGOnly(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	q, _, cleanup := makeCPUTimeTokenWorkQueue(t)
+	q, _, st, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 
 	// Create a tenant-keyed container with id=1.
-	q.setUseResourceGroup(false)
+	cpuTimeTokenACMode.Override(ctx, &st.SV, serverlessMode)
 	tenantHandle := newSQLCPUAdmissionHandle(
 		WorkInfo{
 			TenantID: roachpb.MustMakeTenantID(1),
@@ -625,7 +625,7 @@ func TestSetResourceGroupConfigRGOnly(t *testing.T) {
 	require.NoError(t, tenantHandle.reportAndAcquireConsumedCPU(ctx, 1*time.Millisecond, false))
 
 	// Create an rg-keyed container with id=1 (highResourceGroupID).
-	q.setUseResourceGroup(true)
+	cpuTimeTokenACMode.Override(ctx, &st.SV, resourceManagerMode)
 	rgHandle := newSQLCPUAdmissionHandle(
 		WorkInfo{
 			TenantID: roachpb.MustMakeTenantID(99),
@@ -695,17 +695,17 @@ func requireGroupUsed(t *testing.T, q *WorkQueue, key groupKey) uint64 {
 // the original (Admit-time) container. The reservationSourceGroup
 // field captures the key at Admit time precisely so this scenario
 // stays correct: re-deriving from the WorkQueue's current
-// useResourceGroup would route to a freshly-created container that
+// cpuTimeTokenACMode would route to a freshly-created container that
 // never received the tokens.
 func TestSQLCPUHandleCloseAfterModeFlip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	q, tg, cleanup := makeCPUTimeTokenWorkQueue(t)
+	q, tg, st, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 	// Start in serverless mode: Admit creates a tenant-keyed container.
-	q.setUseResourceGroup(false)
+	cpuTimeTokenACMode.Override(ctx, &st.SV, serverlessMode)
 
 	h := admitOnce(t, ctx, q, 7, admissionpb.NormalPri)
 	tenantKey := tenantGroupKey(7)
@@ -715,10 +715,12 @@ func TestSQLCPUHandleCloseAfterModeFlip(t *testing.T) {
 	// Flip mode mid-handle. A subsequent Admit on this WorkQueue would
 	// route to rgGroupKey(highResourceGroupID), but Close should still
 	// target the tenant-keyed container that holds the prior tokens.
-	// Note: setUseResourceGroup(true) pre-creates the rg-keyed
-	// containers via applyConfigLocked, so the rg container exists
-	// before Close runs.
-	q.setUseResourceGroup(true)
+	// Pre-create the rg-keyed containers via applyConfigLocked so the
+	// rg container exists before Close runs.
+	cpuTimeTokenACMode.Override(ctx, &st.SV, resourceManagerMode)
+	q.mu.Lock()
+	q.applyConfigLocked(q.configHolder.Snapshot())
+	q.mu.Unlock()
 	rgUsedBefore := requireGroupUsed(t, q, rgGroupKey(highResourceGroupID))
 
 	_ = tg.buf.stringAndReset()

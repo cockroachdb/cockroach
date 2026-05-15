@@ -139,7 +139,7 @@ require (
 	github.com/cockroachdb/errors v1.12.1-0.20251010171200-64801262cd6f
 	github.com/cockroachdb/gostdlib v1.19.0
 	github.com/cockroachdb/logtags v0.0.0-20241215232642-bb51bb14a506
-	github.com/cockroachdb/pebble v0.0.0-20260501001252-653468ce9392
+	github.com/cockroachdb/pebble v0.0.0-20260514124130-a8392fabe934
 	github.com/cockroachdb/redact v1.1.8
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
 	github.com/cockroachdb/tokenbucket v0.0.0-20250429170803-42689b6311bb
@@ -561,7 +561,7 @@ replace github.com/docker/docker => github.com/moby/moby v25.0.14+incompatible
 
 replace github.com/gogo/protobuf => github.com/cockroachdb/gogoproto v1.3.3-0.20241216150617-2358cdb156a1
 
-replace storj.io/drpc => github.com/cockroachdb/drpc v0.0.0-20260406142218-6c77a9e470d3
+replace storj.io/drpc => github.com/cockroachdb/drpc v0.0.0-20260514062819-a5d8e9502652
 
 // Note: This forked dependency adds a commit that opens up some
 // private APIs to enable us to make some perf improvements to

@@ -47,7 +47,7 @@ type ldrDepResolverProcessor struct {
 
 // Start implements execinfra.RowSource.
 func (p *ldrDepResolverProcessor) Start(ctx context.Context) {
-	p.StartInternal(ctx, "ldrDepResolver")
+	ctx = p.StartInternal(ctx, "ldrDepResolver")
 	p.input.Start(ctx)
 
 	p.tracker = txnapply.NewTrackerServer()

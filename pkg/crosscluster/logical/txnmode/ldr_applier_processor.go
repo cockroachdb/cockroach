@@ -71,7 +71,7 @@ type ldrApplierProcessor struct {
 
 // Start implements execinfra.RowSource.
 func (p *ldrApplierProcessor) Start(ctx context.Context) {
-	p.StartInternal(ctx, "ldrApplier")
+	ctx = p.StartInternal(ctx, "ldrApplier")
 	p.input.Start(ctx)
 
 	if err := p.setup(ctx); err != nil {

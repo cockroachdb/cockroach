@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -3944,6 +3945,48 @@ var varGen = map[string]sessionVar{
 		GlobalDefault: func(sv *settings.Values) string {
 			return strconv.FormatInt(2, 10)
 		},
+	},
+
+	// CockroachDB extension.
+	`distsql_plan_locality_filter`: {
+		Description: sessionVarDescriptions["distsql_plan_locality_filter"],
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return evalCtx.SessionData().DistSQLPlanLocalityFilter, nil
+		},
+		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			// An empty string clears the filter; otherwise validate that the
+			// supplied string parses as a CockroachDB locality.
+			if s != "" {
+				var loc roachpb.Locality
+				if err := loc.Set(s); err != nil {
+					return pgerror.Wrapf(err, pgcode.InvalidParameterValue,
+						"invalid distsql_plan_locality_filter %q", s)
+				}
+			}
+			m.SetDistSQLPlanLocalityFilter(s)
+			return nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return ""
+		},
+	},
+
+	// CockroachDB extension.
+	`distsql_plan_locality_filter_strict`: {
+		Description:  sessionVarDescriptions["distsql_plan_locality_filter_strict"],
+		GetStringVal: makePostgresBoolGetStringValFn(`distsql_plan_locality_filter_strict`),
+		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar(`distsql_plan_locality_filter_strict`, s)
+			if err != nil {
+				return err
+			}
+			m.SetDistSQLPlanLocalityFilterStrict(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().DistSQLPlanLocalityFilterStrict), nil
+		},
+		GlobalDefault: globalFalse,
 	},
 
 	// CockroachDB extension (oracle compatibility).

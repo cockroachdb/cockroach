@@ -101,12 +101,19 @@ func FormatHLCName(ts hlc.Timestamp) string {
 
 // ParseHLCName is the inverse of FormatHLCName.
 func ParseHLCName(s string) (hlc.Timestamp, error) {
-	var wall int64
-	var logical int32
-	if _, err := fmt.Sscanf(s, "%019d_%010d", &wall, &logical); err != nil {
-		return hlc.Timestamp{}, errors.Wrapf(err, "parsing HLC name %q", s)
+	// Fixed-width: 19 digits + "_" + 10 digits = 30 characters.
+	if len(s) != 30 || s[19] != '_' {
+		return hlc.Timestamp{}, errors.Newf("parsing HLC name %q: expected 30-char fixed-width format", s)
 	}
-	return hlc.Timestamp{WallTime: wall, Logical: logical}, nil
+	wall, err := strconv.ParseInt(s[:19], 10, 64)
+	if err != nil {
+		return hlc.Timestamp{}, errors.Wrapf(err, "parsing HLC name %q wall component", s)
+	}
+	logical, err := strconv.ParseInt(s[20:], 10, 32)
+	if err != nil {
+		return hlc.Timestamp{}, errors.Wrapf(err, "parsing HLC name %q logical component", s)
+	}
+	return hlc.Timestamp{WallTime: wall, Logical: int32(logical)}, nil
 }
 
 // CoveragePath is the path of one coverage epoch's object.

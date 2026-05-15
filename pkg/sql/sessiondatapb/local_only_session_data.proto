@@ -816,6 +816,19 @@ message LocalOnlySessionData {
   // OptimizerSpanLimit sets the maximum number of constraint spans allowed in
   // a scan during query optimization. 0 means no limit. Default: 131072.
   int32 optimizer_span_limit = 207;
+  // DistSQLPlanLocalityFilter restricts the set of SQL instances that the
+  // DistSQL physical planner will consider when assigning flow components for
+  // queries from this session. The value is a CockroachDB locality string
+  // (e.g. "region=us-east1,zone=us-east1-a"); only instances whose locality
+  // matches every key/value pair in the filter are eligible. The empty string
+  // disables the filter and is the default. The filter is consumed only on the
+  // gateway during physical planning, so it does not need to be propagated to
+  // remote nodes.
+  string distsql_plan_locality_filter = 208 [(gogoproto.customname) = "DistSQLPlanLocalityFilter"];
+  // DistSQLPlanLocalityFilterStrict, when true, causes physical planning to
+  // return an error if no SQL instance matches DistSQLPlanLocalityFilter
+  // instead of falling back to the gateway / random instance selection.
+  bool distsql_plan_locality_filter_strict = 209 [(gogoproto.customname) = "DistSQLPlanLocalityFilterStrict"];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

@@ -535,7 +535,16 @@ func runCPUTimeTokenWorkQueueTest(t *testing.T, path string) {
 				var toAdd, capacity int64
 				d.ScanArgs(t, "to-add", &toAdd)
 				d.ScanArgs(t, "capacity", &capacity)
-				q.refillBurstBuckets(toAdd, capacity)
+				// Test helper: apply uniform (toAdd, capacity) to every
+				// group, bypassing burstFrac scaling. This keeps testdata
+				// files unchanged. Production code uses
+				// refillGroupBurstBuckets which scales per group.
+				q.mu.Lock()
+				q.mu.burstBucketCapacity = capacity
+				for _, group := range q.mu.groups {
+					q.refillBurstBucketLocked(group, toAdd, capacity)
+				}
+				q.mu.Unlock()
 				return ""
 
 			case "gc-groups-and-reset-used":
@@ -549,10 +558,8 @@ func runCPUTimeTokenWorkQueueTest(t *testing.T, path string) {
 				d.ScanArgs(t, "v", &v)
 				// Mutate the holder's current config in place: take the
 				// snapshot (seed + prior Sets), flip the requested
-				// group, write back. Force an apply at the end because
-				// the datadriven tests run with useResourceGroup=false
-				// (tenant-keyed groups) but still expect maxCPU flips to
-				// land on existing groups.
+				// group, write back. Force an apply so maxCPU flips
+				// land on existing groups immediately.
 				cfg := q.configHolder.Snapshot()
 				k := rgGroupKey(uint64(group))
 				cur := cfg[k]
@@ -570,7 +577,14 @@ func runCPUTimeTokenWorkQueueTest(t *testing.T, path string) {
 			case "set-priority-based-groups":
 				var v bool
 				d.ScanArgs(t, "v", &v)
-				q.setUseResourceGroup(v)
+				if v {
+					cpuTimeTokenACMode.Override(context.Background(), &st.SV, resourceManagerMode)
+					q.mu.Lock()
+					q.applyConfigLocked(q.configHolder.Snapshot())
+					q.mu.Unlock()
+				} else {
+					cpuTimeTokenACMode.Override(context.Background(), &st.SV, serverlessMode)
+				}
 				return ""
 
 			case "refill-burst-bucket-for-group":
@@ -748,12 +762,14 @@ func TestCPUTimeTokenEstimation(t *testing.T) {
 // makeCPUTimeTokenWorkQueue creates a WorkQueue in CTT mode for testing. The
 // returned testGranter has tryGet returning true by default (all Admit calls
 // succeed immediately).
-func makeCPUTimeTokenWorkQueue(t *testing.T) (q *WorkQueue, tg *testGranter, cleanup func()) {
+func makeCPUTimeTokenWorkQueue(
+	t *testing.T,
+) (q *WorkQueue, tg *testGranter, st *cluster.Settings, cleanup func()) {
 	var buf builderWithMu
 	tg = &testGranter{buf: &buf}
 	tg.mu.returnValueFromTryGet = true
 
-	st := cluster.MakeTestingClusterSettings()
+	st = cluster.MakeTestingClusterSettings()
 	metrics := makeWorkQueueMetrics("", metric.NewRegistry())
 
 	initialTime := timeutil.FromUnixMicros(
@@ -775,7 +791,7 @@ func makeCPUTimeTokenWorkQueue(t *testing.T) (q *WorkQueue, tg *testGranter, cle
 	q = makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
 		KVWork, tg, st, metrics, opts).(*WorkQueue)
 	tg.r = q
-	return q, tg, q.close
+	return q, tg, st, q.close
 }
 
 // TestSQLCPUAdmission verifies the SQL CPU admission integration with the CTT
@@ -790,7 +806,7 @@ func TestSQLCPUAdmission(t *testing.T) {
 	tenantID := roachpb.MustMakeTenantID(1)
 
 	t.Run("explicit-requested-count-skips-estimator", func(t *testing.T) {
-		q, _, cleanup := makeCPUTimeTokenWorkQueue(t)
+		q, _, _, cleanup := makeCPUTimeTokenWorkQueue(t)
 		defer cleanup()
 
 		// Train the estimator so it returns something other than 1ns.
@@ -831,7 +847,7 @@ func TestSQLCPUAdmission(t *testing.T) {
 	})
 
 	t.Run("report-cpu-updates-counters", func(t *testing.T) {
-		q, _, cleanup := makeCPUTimeTokenWorkQueue(t)
+		q, _, _, cleanup := makeCPUTimeTokenWorkQueue(t)
 		defer cleanup()
 
 		provider := &sqlCPUProviderImpl{}
@@ -863,7 +879,7 @@ func TestSQLCPUAdmission(t *testing.T) {
 	})
 
 	t.Run("context-canceled-propagates-error", func(t *testing.T) {
-		q, tg, cleanup := makeCPUTimeTokenWorkQueue(t)
+		q, tg, _, cleanup := makeCPUTimeTokenWorkQueue(t)
 		defer cleanup()
 
 		// Make tryGet return false so Admit blocks and observes the
@@ -1281,19 +1297,18 @@ func withGroupLocked(q *WorkQueue, fn func()) {
 	fn()
 }
 
-// TestSetUseResourceGroupAppliesHolderSnapshot verifies that the
-// false->true mode flip materializes the holder's snapshot into
+// TestApplyConfigLockedMaterializesGroups verifies that
+// applyConfigLocked materializes the holder's snapshot into
 // q.mu.groups: the seeded high/low rg containers must exist on the
-// queue immediately after the flip, with the configured
-// weight/maxCPU. Without this, lazy-create would still reach the
-// right state on first admit, but operators-facing observers
-// (metrics, debug print) would not see the groups until traffic
-// arrives.
-func TestSetUseResourceGroupAppliesHolderSnapshot(t *testing.T) {
+// queue immediately after, with the configured weight/maxCPU. Without
+// this, lazy-create would still reach the right state on first admit,
+// but operator-facing observers (metrics, debug print) would not see
+// the groups until traffic arrives.
+func TestApplyConfigLockedMaterializesGroups(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	q, _, cleanup := makeCPUTimeTokenWorkQueue(t)
+	q, _, st, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 
 	// Custom config replaces the default seed.
@@ -1306,16 +1321,19 @@ func TestSetUseResourceGroupAppliesHolderSnapshot(t *testing.T) {
 	require.Nil(t, getGroupLocked(q, rgGroupKey(highResourceGroupID)))
 	require.Nil(t, getGroupLocked(q, rgGroupKey(lowResourceGroupID)))
 
-	q.setUseResourceGroup(true)
+	// Switch to RM mode and apply the config.
+	ctx := context.Background()
+	cpuTimeTokenACMode.Override(ctx, &st.SV, resourceManagerMode)
+	q.refreshResourceGroupConfig()
 
 	// Post-condition: both rg containers pre-created with the
 	// configured weight/maxCPU.
 	high := getGroupLocked(q, rgGroupKey(highResourceGroupID))
-	require.NotNil(t, high, "high rg container should be pre-created on mode flip")
+	require.NotNil(t, high, "high rg container should be pre-created by apply")
 	require.Equal(t, uint32(60), high.weight)
 	require.True(t, high.cpuTimeBurstBucket.maxCPU)
 	low := getGroupLocked(q, rgGroupKey(lowResourceGroupID))
-	require.NotNil(t, low, "low rg container should be pre-created on mode flip")
+	require.NotNil(t, low, "low rg container should be pre-created by apply")
 	require.Equal(t, uint32(40), low.weight)
 	require.False(t, low.cpuTimeBurstBucket.maxCPU)
 }
@@ -1329,7 +1347,7 @@ func TestRefreshResourceGroupConfigInServerlessIsNoOp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	q, _, cleanup := makeCPUTimeTokenWorkQueue(t)
+	q, _, _, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 	// Stay in serverless mode (default).
 
@@ -1358,14 +1376,16 @@ func TestGCThenLazyRecreateRecoversFromHolder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	q, _, cleanup := makeCPUTimeTokenWorkQueue(t)
+	q, _, st, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 
 	q.configHolder.Set(ResourceGroupConfigSet{
 		rgGroupKey(highResourceGroupID): {Weight: 70, MaxCPU: true},
 		rgGroupKey(lowResourceGroupID):  {Weight: 30, MaxCPU: false},
 	})
-	q.setUseResourceGroup(true)
+	ctx := context.Background()
+	cpuTimeTokenACMode.Override(ctx, &st.SV, resourceManagerMode)
+	q.refreshResourceGroupConfig()
 
 	// Sanity: the high rg container exists with the configured state.
 	high := getGroupLocked(q, rgGroupKey(highResourceGroupID))

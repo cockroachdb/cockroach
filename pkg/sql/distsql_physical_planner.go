@@ -5004,6 +5004,14 @@ func checkScanParallelizationIfLocal(
 // knows plans will only be run on one node. On SQL tenants, the plan is only
 // distributed if tenantDistributionEnabled is true. planner argument can be
 // left nil.
+//
+// If a non-nil planner is provided and its session data has a non-empty
+// distsql_plan_locality_filter, that filter (and the distsql_plan_locality_filter_strict
+// flag) is propagated to the PlanningCtx so that physical planning will
+// restrict instance selection to matching SQL instances. The session var
+// setter validates the filter string when it is set, so an unparseable value
+// at this point is a bug; we log and proceed with no filter rather than
+// failing the query.
 func (dsp *DistSQLPlanner) NewPlanningCtx(
 	ctx context.Context,
 	evalCtx *extendedEvalContext,
@@ -5011,8 +5019,23 @@ func (dsp *DistSQLPlanner) NewPlanningCtx(
 	txn *kv.Txn,
 	distributionType DistributionType,
 ) *PlanningCtx {
+	var localityFilters []roachpb.Locality
+	strictFiltering := NoStrictLocalityFiltering
+	if planner != nil {
+		sd := planner.SessionData()
+		if sd != nil && sd.DistSQLPlanLocalityFilter != "" {
+			var loc roachpb.Locality
+			if err := loc.Set(sd.DistSQLPlanLocalityFilter); err != nil {
+				log.Dev.Warningf(ctx, "ignoring invalid distsql_plan_locality_filter %q: %v",
+					sd.DistSQLPlanLocalityFilter, err)
+			} else {
+				localityFilters = SingleLocalityFilter(loc)
+				strictFiltering = sd.DistSQLPlanLocalityFilterStrict
+			}
+		}
+	}
 	return dsp.NewPlanningCtxWithOracle(
-		ctx, evalCtx, planner, txn, distributionType, physicalplan.DefaultReplicaChooser, []roachpb.Locality{}, NoStrictLocalityFiltering,
+		ctx, evalCtx, planner, txn, distributionType, physicalplan.DefaultReplicaChooser, localityFilters, strictFiltering,
 	)
 }
 

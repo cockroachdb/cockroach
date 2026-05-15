@@ -32,6 +32,17 @@ func TestResourceGroupConfigHolder(t *testing.T) {
 		require.Equal(t, defaultTenantGroupConfig,
 			h.Snapshot().GetOrDefault(tenantGroupKey(9999)))
 	})
+
+	t.Run("default_configs_have_burst_frac", func(t *testing.T) {
+		h := newResourceGroupConfigHolder()
+		snap := h.Snapshot()
+		highCfg := snap.GetOrDefault(rgGroupKey(highResourceGroupID))
+		require.Equal(t, float64(0.8), highCfg.BurstFrac)
+		lowCfg := snap.GetOrDefault(rgGroupKey(lowResourceGroupID))
+		require.Equal(t, float64(0.2), lowCfg.BurstFrac)
+		tenantCfg := snap.GetOrDefault(tenantGroupKey(9999))
+		require.Equal(t, float64(0.25), tenantCfg.BurstFrac)
+	})
 }
 
 // TestResourceGroupConfigHolderSet covers Set's wholesale-replace and

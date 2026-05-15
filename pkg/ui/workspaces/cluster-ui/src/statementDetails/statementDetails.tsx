@@ -88,6 +88,7 @@ import { Timestamp } from "../timestamp";
 import { filterByTimeScale } from "./diagnostics/diagnosticsUtils";
 import { DiagnosticsView } from "./diagnostics/diagnosticsView";
 import { PlanDetails } from "./planDetails";
+import { resolveDatabase, resolveQuery } from "./queryMetadata";
 import styles from "./statementDetails.module.scss";
 import {
   generateContentionTimeseries,
@@ -254,11 +255,9 @@ export function StatementDetails(
   };
 
   const [currentTab, setCurrentTab] = useState<string>(getInitialTab);
-  const [query, setQuery] = useState<string>(
-    statementDetails?.statement?.metadata?.query,
-  );
+  const [query, setQuery] = useState<string>(resolveQuery(statementDetails));
   const [formattedQuery, setFormattedQuery] = useState<string>(
-    statementDetails?.statement?.metadata?.formatted_query,
+    resolveQuery(statementDetails),
   );
 
   const prevStatementFingerprintIDRef = useRef<string>(statementFingerprintID);
@@ -304,12 +303,9 @@ export function StatementDetails(
 
   // Update query state when statementDetails changes
   useEffect(() => {
-    const newQuery =
-      statementDetails?.statement?.metadata?.query || query || null;
-    const newFormattedQuery =
-      statementDetails?.statement?.metadata?.formatted_query ||
-      formattedQuery ||
-      null;
+    const resolved = resolveQuery(statementDetails);
+    const newQuery = resolved || query || null;
+    const newFormattedQuery = resolved || formattedQuery || null;
     if (newQuery !== query || newFormattedQuery !== formattedQuery) {
       setQuery(newQuery);
       setFormattedQuery(newFormattedQuery);
@@ -418,12 +414,12 @@ export function StatementDetails(
     const { stats } = statementDetails.statement;
     const {
       app_names: appNames,
-      databases,
       fingerprint_id: fingerprintId,
       full_scan_count: fullScanCount,
       vec_count: vecCount,
       total_count: totalCount,
     } = statementDetails.statement.metadata;
+    const databaseName = resolveDatabase(statementDetails);
     const statementStatisticsPerAggregatedTs =
       statementDetails.statement_statistics_per_aggregated_ts;
 
@@ -454,8 +450,8 @@ export function StatementDetails(
     );
     const noSamples = statementSampled ? "" : " (no samples)";
 
-    const db = databases ? (
-      <Text>{databases}</Text>
+    const db = databaseName ? (
+      <Text>{databaseName}</Text>
     ) : (
       <Text className={cx("app-name", "app-name__unset")}>(unset)</Text>
     );
@@ -800,8 +796,9 @@ export function StatementDetails(
       statementDetails.statement_statistics_per_plan_hash;
     const statementStatisticsPerAggregatedTsAndPlanHash =
       statementDetails.statement_statistics_per_aggregated_ts_and_plan_hash;
-    const formattedQueryValue =
-      statementDetails.statement.metadata.formatted_query;
+    const formattedQueryValue = resolveQuery(statementDetails);
+    const databaseName = resolveDatabase(statementDetails);
+    const queryValue = resolveQuery(statementDetails);
 
     // Generate plan distribution data for the chart
     const { data: planDistData, planGists } =
@@ -918,6 +915,8 @@ export function StatementDetails(
             statementFingerprintID={statementFingerprintID}
             plans={statementStatisticsPerPlanHash}
             hasAdminRole={hasAdminRole}
+            database={databaseName}
+            query={queryValue}
           />
         </section>
       </>
@@ -931,10 +930,7 @@ export function StatementDetails(
       return renderNoDataTabContent();
     }
 
-    const fingerprint =
-      statementDetails?.statement?.metadata?.query.length === 0
-        ? formattedQuery
-        : statementDetails?.statement?.metadata?.query;
+    const fingerprint = resolveQuery(statementDetails) || formattedQuery;
     return (
       <DiagnosticsView
         activateDiagnosticsRef={activateDiagnosticsRef}

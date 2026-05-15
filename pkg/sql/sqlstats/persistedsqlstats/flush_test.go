@@ -1121,6 +1121,12 @@ func (s *stubTime) Now() time.Time {
 	return timeutil.Now()
 }
 
+// fingerprintIDHex returns the hex fingerprint_id for stmtNoConst executed
+// against the default database.
+func fingerprintIDHex(stmtNoConst string) string {
+	return sqlstatstestutil.FingerprintIDHex(stmtNoConst, "defaultdb")
+}
+
 func verifyInsertedFingerprintExecCount(
 	t *testing.T,
 	sqlConn *sqlutils.SQLRunner,
@@ -1137,7 +1143,7 @@ SELECT
 FROM
     system.transaction_statistics T,
     system.statement_statistics S
-WHERE S.metadata ->> 'query' = $1
+WHERE S.fingerprint_id = decode($1, 'hex')
 	  AND T.aggregated_ts = $2
     AND T.node_id = $3
     AND T.app_name = 'flush_unit_test'
@@ -1145,7 +1151,7 @@ WHERE S.metadata ->> 'query' = $1
     AND S.node_id = T.node_id
     AND S.aggregated_ts = T.aggregated_ts
     AND S.app_name = T.app_name
-`, fingerprint, ts, instanceID)
+`, fingerprintIDHex(fingerprint), ts, instanceID)
 
 	require.True(t, row.Next(), "no stats found for fingerprint: %s", fingerprint)
 
@@ -1174,12 +1180,12 @@ SELECT
 FROM
 	system.statement_statistics
 WHERE
-	metadata ->> 'query' = $1 AND
+	fingerprint_id = decode($1, 'hex') AND
   node_id = $2 AND
   app_name = 'flush_unit_test'
 GROUP BY
   (fingerprint_id, node_id)
-`, fingerprint, instanceID)
+`, fingerprintIDHex(fingerprint), instanceID)
 
 	var stmtFingerprintID string
 	var numOfInsertedStmtEntry int64
@@ -1283,9 +1289,9 @@ SELECT
 FROM
 	system.statement_statistics
 WHERE
-	metadata ->> 'query' = $1 AND
+	fingerprint_id = decode($1, 'hex') AND
   app_name = $2
-`, fingerprint, appName)
+`, fingerprintIDHex(fingerprint), appName)
 
 	var gatewayNodeID int64
 	var allNodesIds string

@@ -1,0 +1,133 @@
+# Copyright 2026 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+# This workflow cuts release staging branches whose Jira "Cut Branch Date"
+# has arrived. For each eligible CRDB Release ticket it creates the staging
+# branch on GitHub, updates the Jira ticket, posts a Slack notification,
+# and creates the matching backport label.
+
+name: Release - Cut Staging Branches
+
+on:
+  # Scheduled trigger disabled for initial rollout — dispatch manually until
+  # we've validated a few cycles end-to-end. Re-enable by uncommenting.
+  # schedule:
+  #   # 12:00 UTC = 7am EST (winter) / 8am EDT (summer). Single entry — accept
+  #   # the one-hour summer drift rather than maintain two cron lines.
+  #   - cron: '0 12 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (no Jira/GitHub mutations; Slack messages prefixed with [DRY RUN])'
+        type: boolean
+        default: true
+      test_issue_key:
+        description: 'In dry-run, treat this Jira issue as the only candidate (e.g. REL-1234)'
+        type: string
+        default: ''
+
+concurrency:
+  group: branch-cut-${{ github.ref_name }}
+  cancel-in-progress: false
+
+permissions: {}
+
+env:
+  # Scheduled runs default to non-dry-run; manual runs honor the input.
+  DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || '' }}
+  TEST_ISSUE_KEY: ${{ github.event_name == 'workflow_dispatch' && inputs.test_issue_key || '' }}
+  # Gated on USE_PROD_GCP so a staging-prod repo (IS_PRODUCTION_REPO=true,
+  # USE_PROD_GCP unset) can rehearse the branch-cut flow against the dev
+  # Secret Manager. There is no inputs.dry_run term — branch-cut's
+  # --dry-run controls Jira/Slack mutations, not which secret-manager
+  # project to read from. Real prod cutover requires both vars set to true.
+  RELEASE_WIF_PROVIDER: ${{ vars.USE_PROD_GCP != 'true' && 'projects/65523152860/locations/global/workloadIdentityPools/gha-releases-oidc/providers/gha-releases-oidc' || 'projects/182391335559/locations/global/workloadIdentityPools/gha-releases-oidc/providers/gha-releases-oidc' }}
+  RELEASE_GCP_SERVICE_ACCOUNT: ${{ vars.USE_PROD_GCP != 'true' && 'gha-releases@releases-dev-356314.iam.gserviceaccount.com' || 'gha-releases@releases-prod.iam.gserviceaccount.com' }}
+  RELEASE_GCP_PROJECT: ${{ vars.USE_PROD_GCP != 'true' && 'releases-dev-356314' || 'releases-prod' }}
+
+jobs:
+  cut-staging-branches:
+    # Restrict to the production release repo on master. Forks (variable
+    # unset) get a no-op job, which is what we want for fork-side smoke
+    # testing of the workflow definition itself.
+    if: vars.IS_PRODUCTION_REPO == 'true' && github.ref == 'refs/heads/master'
+    name: Cut staging branches
+    # Not gated behind a GitHub `environment:`. This workflow does not publish
+    # artifacts to customers — it creates a staging branch in the production
+    # release repo and updates Jira. A bad run is recoverable: delete the
+    # branch and re-run. The `if:` above (prod repo + master only) plus the
+    # workflow_dispatch + write-access requirement is the access control here.
+    # The release-ops environment is reserved for the publishing workflow.
+    runs-on: [self-hosted, ubuntu_2404]
+    timeout-minutes: 30
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ env.RELEASE_WIF_PROVIDER }}
+          service_account: ${{ env.RELEASE_GCP_SERVICE_ACCOUNT }}
+
+      # Fetch all four secrets via the official Google action. It auto-
+      # registers each value with ::add-mask:: so they're redacted from
+      # workflow logs without ever going through `echo` in our scripts.
+      #
+      # NOTE on permissions: the workflow-level `permissions:` block only
+      # constrains the built-in $GITHUB_TOKEN. The PAT fetched below has its
+      # own scopes set at provisioning time and is NOT bounded by
+      # `permissions:`.
+      - name: Fetch release secrets
+        id: secrets
+        uses: google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262 # v3
+        with:
+          secrets: |-
+            jira_api_token:${{ env.RELEASE_GCP_PROJECT }}/gha-releases-jira-api-token
+            github_pat:${{ env.RELEASE_GCP_PROJECT }}/gha-releases-release-github-pat
+            slack_bot_token:${{ env.RELEASE_GCP_PROJECT }}/gha-releases-release-slack-bot-token
+
+      # The wrapper builds the release binary inside the bazel docker
+      # container (via run_bazel) and invokes it there, so the host
+      # runner doesn't need bazel/Go installed. The DRY_RUN and
+      # TEST_ISSUE_KEY env vars from the workflow-level env: block are
+      # forwarded into the container automatically.
+      - name: Cut staging branches
+        env:
+          JIRA_API_TOKEN: ${{ steps.secrets.outputs.jira_api_token }}
+          JIRA_EMAIL: release-eng-bot@cockroachlabs.com
+          GITHUB_TOKEN: ${{ steps.secrets.outputs.github_pat }}
+          SLACK_BOT_TOKEN: ${{ steps.secrets.outputs.slack_bot_token }}
+        run: build/github/release-cut-staging-branches.sh
+
+      - name: Notify on failure
+        if: failure()
+        env:
+          SLACK_TOKEN: ${{ steps.secrets.outputs.slack_bot_token }}
+          SLACK_PAYLOAD: >-
+            {
+              "channel": "#release-ops",
+              "text": ":x: Release - Cut Staging Branches *failed* (<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View run>)",
+              "attachments": [
+                {
+                  "color": "#dc3545",
+                  "fields": [
+                    { "title": "Triggered by", "value": "${{ github.event_name }}", "short": true },
+                    { "title": "Dry run", "value": "${{ env.DRY_RUN || 'false' }}", "short": true }
+                  ]
+                }
+              ]
+            }
+        run: |
+          # If the secrets step failed, $SLACK_TOKEN is empty and curl will
+          # return 401; that's surfaced in the run log even though Slack
+          # gets nothing. The secret value never enters the shell from a
+          # `gcloud` invocation, so there's no echo path to worry about.
+          curl -sf -X POST https://slack.com/api/chat.postMessage \
+            -H "Authorization: Bearer $SLACK_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$SLACK_PAYLOAD"

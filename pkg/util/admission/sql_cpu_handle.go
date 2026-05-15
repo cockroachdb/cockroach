@@ -156,11 +156,11 @@ type SQLCPUHandle struct {
 		// reservationSourceGroup is the groupKey of the container the
 		// most recent successful Admit credited. Close uses it to
 		// return the drained reservation to the same container,
-		// without re-deriving from the WorkQueue's current
-		// useResourceGroup state — which may have flipped between
-		// Admit and Close. In RM mode the container is rg-keyed; the
-		// prior tenantGroupKey-based lookup missed and silently leaked
-		// the drained reservation.
+		// without re-deriving from the WorkQueue's current mode
+		// — which may have flipped between Admit and Close. In RM
+		// mode the container is rg-keyed; the prior
+		// tenantGroupKey-based lookup missed and silently leaked the
+		// drained reservation.
 		//
 		// Invariant: at any moment, every token in reservation came
 		// from the most recent successful Admit. Each Admit only fires

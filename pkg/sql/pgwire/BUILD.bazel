@@ -10,6 +10,7 @@ go_library(
         "authorizer.go",
         "command_result.go",
         "conn.go",
+        "doc.go",
         "hba_conf.go",
         "ident_map_conf.go",
         "last_login_updater.go",

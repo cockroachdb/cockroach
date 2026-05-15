@@ -1945,6 +1945,12 @@ message StatementDetailsResponse {
   // statement_statistics_per_aggregated_ts_and_plan_hash returns execution counts grouped by both
   // aggregated timestamp and plan hash for visualizing plan distribution over time.
   repeated StatementPlanDistribution statement_statistics_per_aggregated_ts_and_plan_hash = 5 [(gogoproto.nullable) = false];
+  // query is the statement fingerprint text.
+  string query = 6;
+  // query_summary is the abbreviated query.
+  string query_summary = 7;
+  // database is the database the statement was issued against.
+  string database = 8;
 }
 
 message StatementDiagnosticsReport {

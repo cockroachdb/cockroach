@@ -143,3 +143,14 @@ bazel query 'kind(.*_test, pkg/spanconfig/spanconfigstore:all)'
 
 bazel test //pkg/spanconfig/spanconfigstore:spanconfigstore_test --test_env=GOTRACEBACK=all --nocache_test_results --test_output errors --build_event_binary_file=/tmp/path
 ----
+
+bazel query 'kind(.*_test, pkg/security:all)'
+----
+//pkg/security:security_test
+
+bazel coverage //pkg/security:security_test --test_env=GOTRACEBACK=all --@io_bazel_rules_go//go/config:cover_format=lcov --combined_report=lcov --instrumentation_filter=//pkg/... --test_output errors --build_event_binary_file=/tmp/path
+----
+
+bazel info output_path --color=no
+----
+/private/var/tmp/_bazel/output

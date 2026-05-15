@@ -3423,17 +3423,17 @@ func addPgProcBuiltinRow(name string, addRow func(...tree.Datum) error) error {
 			nspOid,                                   // pronamespace
 			nodeOID,                                  // proowner
 			languageInternalOid,                      // prolang
-			tree.DNull,                               // procost
-			tree.DNull,                               // prorows
+			tree.NewDFloat(1),                        // procost
+			defaultProrows(isRetSet),                 // prorows
 			variadicType,                             // provariadic
-			tree.DNull,                               // prosupport
+			regprocZero,                              // prosupport
 			kind,                                     // prokind
 			tree.DBoolFalse,                          // prosecdef
 			tree.MakeDBool(tree.DBool(proleakproof)), // proleakproof
 			tree.MakeDBool(tree.DBool(proisstrict)),  // proisstrict
 			tree.MakeDBool(tree.DBool(isRetSet)),     // proretset
 			tree.NewDString(provolatile),             // provolatile
-			tree.DNull,                               // proparallel
+			proParallelUnsafe,                        // proparallel
 			tree.NewDInt(tree.DInt(builtin.Types.Length())), // pronargs
 			tree.NewDInt(tree.DInt(0)),                      // pronargdefaults
 			retType,                                         // prorettype
@@ -3461,7 +3461,28 @@ var (
 	proArgModeOut      = tree.NewDString("o")
 	proArgModeInOut    = tree.NewDString("b")
 	proArgModeVariadic = tree.NewDString("v")
+
+	// proParallelUnsafe is the value of pg_proc.proparallel for functions whose
+	// parallel-safety is unknown or not modeled. CockroachDB does not track
+	// PostgreSQL-style parallel safety on routines, so every function reports
+	// "unsafe", which is the most conservative choice.
+	proParallelUnsafe = tree.NewDString("u")
+
+	// regprocZero is the regproc-typed equivalent of OID 0. It renders as "-",
+	// the conventional placeholder for "no function" in pg_proc columns like
+	// prosupport.
+	regprocZero = tree.NewDOidWithType(0, types.RegProc)
 )
+
+// defaultProrows returns the value pg_proc.prorows uses when CockroachDB has no
+// estimate of its own. It mirrors the PostgreSQL defaults: 1000 for set-returning
+// routines, 0 otherwise.
+func defaultProrows(isRetSet bool) tree.Datum {
+	if isRetSet {
+		return tree.NewDFloat(1000)
+	}
+	return tree.NewDFloat(0)
+}
 
 func addPgProcUDFRow(
 	h oidHasher,
@@ -3563,18 +3584,18 @@ func addPgProcUDFRow(
 		tree.NewDName(fnDesc.GetName()),                 // proname
 		schemaOid(scDesc.GetID()),                       // pronamespace
 		h.UserOid(fnDesc.GetPrivileges().Owner()),       // proowner
-		lang,            // prolang
-		tree.DNull,      // procost
-		tree.DNull,      // prorows
+		lang,                // prolang
+		tree.NewDFloat(100), // procost
+		defaultProrows(fnDesc.GetReturnType().ReturnSet), // prorows
 		oidZero,         // provariadic // TODO(88947): this might need an adjustment.
-		tree.DNull,      // prosupport
+		regprocZero,     // prosupport
 		kind,            // prokind
 		tree.DBoolFalse, // prosecdef
 		tree.MakeDBool(tree.DBool(fnDesc.GetLeakProof())),                                    // proleakproof
 		tree.MakeDBool(fnDesc.GetNullInputBehavior() != catpb.Function_CALLED_ON_NULL_INPUT), // proisstrict
 		tree.MakeDBool(tree.DBool(fnDesc.GetReturnType().ReturnSet)),                         // proretset
 		tree.NewDString(funcVolatility(fnDesc.GetVolatility())),                              // provolatile
-		tree.DNull,                                      // proparallel
+		proParallelUnsafe,                               // proparallel
 		tree.NewDInt(tree.DInt(nArgs)),                  // pronargs
 		tree.NewDInt(tree.DInt(nArgDefaults)),           // pronargdefaults
 		tree.NewDOid(fnDesc.GetReturnType().Type.Oid()), // prorettype

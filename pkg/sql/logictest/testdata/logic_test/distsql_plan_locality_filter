@@ -1,0 +1,97 @@
+# LogicTest: local
+
+# Tests for the distsql_plan_locality_filter / distsql_plan_locality_filter_strict
+# session variables. These restrict which SQL instances DistSQL physical
+# planning will consider; strict mode causes planning to error out when no
+# instance matches.
+
+subtest defaults
+
+query T
+SHOW distsql_plan_locality_filter
+----
+·
+
+query T
+SHOW distsql_plan_locality_filter_strict
+----
+off
+
+subtest set_and_round_trip
+
+statement ok
+SET distsql_plan_locality_filter = 'region=us-east1,zone=us-east1-a'
+
+query T
+SHOW distsql_plan_locality_filter
+----
+region=us-east1,zone=us-east1-a
+
+statement ok
+SET distsql_plan_locality_filter_strict = on
+
+query T
+SHOW distsql_plan_locality_filter_strict
+----
+on
+
+# Reset strict mode; the query below should succeed because the gateway either
+# matches the filter or falls back to standard instance selection.
+statement ok
+RESET distsql_plan_locality_filter_strict
+
+statement ok
+SELECT 1
+
+# Empty string clears the filter.
+statement ok
+SET distsql_plan_locality_filter = ''
+
+query T
+SHOW distsql_plan_locality_filter
+----
+·
+
+subtest invalid_input
+
+statement error invalid distsql_plan_locality_filter
+SET distsql_plan_locality_filter = 'not a valid locality'
+
+# A locality string with a missing value is also rejected.
+statement error invalid distsql_plan_locality_filter
+SET distsql_plan_locality_filter = 'region='
+
+# Reset to defaults.
+statement ok
+RESET distsql_plan_locality_filter
+
+statement ok
+RESET distsql_plan_locality_filter_strict
+
+subtest strict_mode_unsatisfiable
+
+# No SQL instance has region=does-not-exist, so strict mode should surface that
+# as an error when the planner attempts to distribute work.
+statement ok
+CREATE TABLE locality_filter_t (k INT PRIMARY KEY)
+
+statement ok
+SET distsql = always
+
+statement ok
+SET distsql_plan_locality_filter = 'region=does-not-exist'
+
+statement ok
+SET distsql_plan_locality_filter_strict = on
+
+statement error no healthy sql instances available matching locality requirement
+SELECT count(*) FROM locality_filter_t
+
+statement ok
+RESET distsql_plan_locality_filter
+
+statement ok
+RESET distsql_plan_locality_filter_strict
+
+statement ok
+RESET distsql

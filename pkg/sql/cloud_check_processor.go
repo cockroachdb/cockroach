@@ -213,7 +213,7 @@ func getCloudCheckConcurrency(params CloudCheckParams) int {
 
 // Start is part of the RowSource interface.
 func (p *proc) Start(ctx context.Context) {
-	p.StartInternal(ctx, "cloudcheck.proc")
+	_ = p.StartInternal(ctx, "cloudcheck.proc")
 
 	concurrency := getCloudCheckConcurrency(p.spec.Params)
 	p.results = make(chan result, concurrency)

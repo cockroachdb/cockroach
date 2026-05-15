@@ -327,6 +327,11 @@ func (m meanNodeLoad) SafeFormat(w redact.SafePrinter, _ rune) {
 // storeLoadSummary for some of the stores in this set. This cache is lazily
 // populated and is implicitly invalidated if the loadSeqNum of the
 // storeLoadSummary no longer matches that of storeState.loadSeqNum.
+//
+// An entry with len(stores) == 0 represents a constraint expression that
+// no store satisfies. Such entries are still cached (for O(1) repeat
+// lookups) but meansLoad is left zero; meansMemo.getMeans signals this
+// case to callers via its ok return.
 type meansForStoreSet struct {
 	constraintsDisj
 	meansLoad
@@ -437,16 +442,24 @@ type loadInfoProvider interface {
 	computeLoadSummary(context.Context, roachpb.StoreID, *meanStoreLoad, *meanNodeLoad, mmaLogger) storeLoadSummary
 }
 
-// getMeans returns the means for an expression.
-func (mm *meansMemo) getMeans(expr constraintsDisj) *meansForStoreSet {
-	means, ok := mm.meansMap.get(expr)
-	if ok {
-		return means
+// getMeans returns the means for an expression. Returns ok=false if no
+// stores satisfy the expression (or, for a nil expr, if the allocator knows
+// of no stores at all). When ok is false the returned *meansForStoreSet
+// value is unspecified; callers must not pass it to getStoreLoadSummary or
+// otherwise consume it. Empty results are still inserted into the cache so
+// repeated lookups within an allocator pass remain O(1).
+func (mm *meansMemo) getMeans(expr constraintsDisj) (*meansForStoreSet, bool) {
+	means, hit := mm.meansMap.get(expr)
+	if hit {
+		return means, len(means.stores) > 0
 	}
 	means.constraintsDisj = expr
 	mm.constraintMatcher.constrainStoresForExpr(expr, &means.stores)
-	means.meansLoad = computeMeansForStoreSet(mm.loadInfoProvider, means.stores, mm.scratchNodes, mm.scratchStores)
-	return means
+	if len(means.stores) == 0 {
+		return means, false
+	}
+	means.meansLoad, _ = computeMeansForStoreSet(mm.loadInfoProvider, means.stores, mm.scratchNodes, mm.scratchStores)
+	return means, true
 }
 
 // getStoreLoadSummary returns the load summary for a store in the context of
@@ -471,6 +484,11 @@ func (mm *meansMemo) getStoreLoadSummary(
 // stores may contain duplicate storeIDs, in which case computeMeansForStoreSet
 // should deduplicate processing of the stores. stores should be immutable.
 //
+// If stores is empty, computeMeansForStoreSet returns the zero meansLoad
+// and ok=false. Callers must check ok before consuming the returned means;
+// the zero value would otherwise misclassify stores as overloaded due to
+// zero capacity.
+//
 // TODO: fix callers to exclude stores based on node failure detection, from
 // the mean.
 func computeMeansForStoreSet(
@@ -478,9 +496,9 @@ func computeMeansForStoreSet(
 	stores []roachpb.StoreID,
 	scratchNodes map[roachpb.NodeID]*NodeLoad,
 	scratchStores map[roachpb.StoreID]struct{},
-) (means meansLoad) {
+) (means meansLoad, ok bool) {
 	if len(stores) == 0 {
-		panic(fmt.Sprintf("no stores for meansForStoreSet: %v", stores))
+		return meansLoad{}, false
 	}
 	clear(scratchNodes)
 	clear(scratchStores)
@@ -540,7 +558,7 @@ func computeMeansForStoreSet(
 		float64(means.nodeLoad.loadCPU) / float64(means.nodeLoad.capacityCPU)
 	means.nodeLoad.loadCPU /= LoadValue(n)
 	means.nodeLoad.capacityCPU /= LoadValue(n)
-	return means
+	return means, true
 }
 
 // loadSummary aggregates across all load dimensions for a store, or a node.

@@ -247,6 +247,378 @@ func TestPlanGramFormatPretty(t *testing.T) {
 	}
 }
 
+type mockExpr struct {
+	op       opt.Operator
+	children []opt.Expr
+}
+
+func (m *mockExpr) Op() opt.Operator       { return m.op }
+func (m *mockExpr) ChildCount() int        { return len(m.children) }
+func (m *mockExpr) Child(nth int) opt.Expr { return m.children[nth] }
+func (m *mockExpr) Private() interface{}   { return nil }
+
+func TestPlanGramMatches(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	scanExpr := &mockExpr{op: opt.ScanOp}
+	selectExpr := &mockExpr{op: opt.SelectOp, children: []opt.Expr{scanExpr}}
+	twoChildExpr := &mockExpr{
+		op:       opt.InnerJoinOp,
+		children: []opt.Expr{scanExpr, scanExpr},
+	}
+
+	tests := []struct {
+		name     string
+		pg       PlanGram
+		expr     opt.Expr
+		expected bool
+	}{
+		{
+			name:     "any matches any expr",
+			pg:       AnyPlanGram,
+			expr:     scanExpr,
+			expected: true,
+		},
+		{
+			name:     "none matches nothing",
+			pg:       NonePlanGram,
+			expr:     scanExpr,
+			expected: false,
+		},
+		{
+			name:     "operator match",
+			pg:       PlanGram{root: &planGramExpr{op: opt.ScanOp}},
+			expr:     scanExpr,
+			expected: true,
+		},
+		{
+			name:     "operator mismatch",
+			pg:       PlanGram{root: &planGramExpr{op: opt.ScanOp}},
+			expr:     selectExpr,
+			expected: false,
+		},
+		{
+			name:     "wildcard op matches any expr",
+			pg:       PlanGram{root: &planGramExpr{op: opt.UnknownOp}},
+			expr:     scanExpr,
+			expected: true,
+		},
+		{
+			name: "fewer PG children than expr children",
+			pg: PlanGram{root: &planGramExpr{
+				op:       opt.InnerJoinOp,
+				children: []planGramTerm{&planGramExpr{op: opt.ScanOp}},
+			}},
+			expr:     twoChildExpr,
+			expected: true,
+		},
+		{
+			name: "more PG children than expr children",
+			pg: PlanGram{root: &planGramExpr{
+				op: opt.InnerJoinOp,
+				children: []planGramTerm{
+					&planGramExpr{op: opt.ScanOp},
+					&planGramExpr{op: opt.ScanOp},
+					&planGramExpr{op: opt.ScanOp},
+				},
+			}},
+			expr:     twoChildExpr,
+			expected: false,
+		},
+		{
+			name: "equal PG and expr children",
+			pg: PlanGram{root: &planGramExpr{
+				op: opt.InnerJoinOp,
+				children: []planGramTerm{
+					&planGramExpr{op: opt.ScanOp},
+					&planGramExpr{op: opt.ScanOp},
+				},
+			}},
+			expr:     twoChildExpr,
+			expected: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.expected, tc.pg.Matches(tc.expr))
+		})
+	}
+}
+
+func TestPlanGramChild(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	scanTerm := &planGramExpr{op: opt.ScanOp}
+	selectTerm := &planGramExpr{op: opt.SelectOp}
+	parentPG := PlanGram{root: &planGramExpr{
+		op:       opt.InnerJoinOp,
+		children: []planGramTerm{scanTerm, selectTerm},
+	}}
+
+	tests := []struct {
+		name          string
+		pg            PlanGram
+		childIdx      int
+		expectedChild PlanGram
+	}{
+		{
+			name:          "any child 0",
+			pg:            AnyPlanGram,
+			childIdx:      0,
+			expectedChild: AnyPlanGram,
+		},
+		{
+			name:          "any child 99",
+			pg:            AnyPlanGram,
+			childIdx:      99,
+			expectedChild: AnyPlanGram,
+		},
+		{
+			name:          "concrete child 0",
+			pg:            parentPG,
+			childIdx:      0,
+			expectedChild: PlanGram{root: scanTerm},
+		},
+		{
+			name:          "concrete child 1",
+			pg:            parentPG,
+			childIdx:      1,
+			expectedChild: PlanGram{root: selectTerm},
+		},
+		{
+			name:          "out of range returns any",
+			pg:            parentPG,
+			childIdx:      5,
+			expectedChild: AnyPlanGram,
+		},
+		{
+			name:          "none child 0 returns none",
+			pg:            NonePlanGram,
+			childIdx:      0,
+			expectedChild: NonePlanGram,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			child := tc.pg.Child(tc.childIdx)
+			require.True(t, child.Equals(tc.expectedChild),
+				"expected %s, got %s", tc.expectedChild, child)
+		})
+	}
+}
+
+func TestPlanGramHasAlternates(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tests := []struct {
+		name     string
+		pg       PlanGram
+		expected bool
+	}{
+		{
+			name:     "any",
+			pg:       AnyPlanGram,
+			expected: false,
+		},
+		{
+			name:     "none",
+			pg:       NonePlanGram,
+			expected: false,
+		},
+		{
+			name:     "concrete expr",
+			pg:       PlanGram{root: &planGramExpr{op: opt.ScanOp}},
+			expected: false,
+		},
+		{
+			name: "production with rules",
+			pg: PlanGram{root: &planGramProduction{
+				name: "p",
+				rules: []planGramTerm{
+					&planGramExpr{op: opt.ScanOp},
+					&planGramExpr{op: opt.SelectOp},
+				},
+			}},
+			expected: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.expected, tc.pg.HasAlternates())
+		})
+	}
+}
+
+func TestPlanGramVisitAlternates(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	scanTerm := &planGramExpr{op: opt.ScanOp}
+	selectTerm := &planGramExpr{op: opt.SelectOp}
+
+	tests := []struct {
+		name          string
+		pg            PlanGram
+		expectedCount int
+		verify        func(t *testing.T, alternates []PlanGram)
+	}{
+		{
+			name:          "any yields one visit",
+			pg:            AnyPlanGram,
+			expectedCount: 1,
+			verify: func(t *testing.T, alternates []PlanGram) {
+				require.True(t, alternates[0].Any())
+			},
+		},
+		{
+			name:          "none yields one visit",
+			pg:            NonePlanGram,
+			expectedCount: 1,
+			verify: func(t *testing.T, alternates []PlanGram) {
+				require.True(t, alternates[0].Equals(NonePlanGram))
+			},
+		},
+		{
+			name:          "concrete expr yields one visit",
+			pg:            PlanGram{root: scanTerm},
+			expectedCount: 1,
+			verify: func(t *testing.T, alternates []PlanGram) {
+				require.True(t, alternates[0].Equals(PlanGram{root: scanTerm}))
+			},
+		},
+		{
+			name: "production with 2 rules yields 2 visits",
+			pg: PlanGram{root: &planGramProduction{
+				name:  "p",
+				rules: []planGramTerm{scanTerm, selectTerm},
+			}},
+			expectedCount: 2,
+			verify: func(t *testing.T, alternates []PlanGram) {
+				require.False(t, alternates[0].HasAlternates())
+				require.False(t, alternates[1].HasAlternates())
+			},
+		},
+		{
+			name: "production with any alternate",
+			pg: PlanGram{root: &planGramProduction{
+				name:  "p",
+				rules: []planGramTerm{scanTerm, anyPlanGramTerm},
+			}},
+			expectedCount: 2,
+			verify: func(t *testing.T, alternates []PlanGram) {
+				hasAny := false
+				for _, a := range alternates {
+					if a.Any() {
+						hasAny = true
+					}
+				}
+				require.True(t, hasAny)
+			},
+		},
+		{
+			name: "production with none alternate",
+			pg: PlanGram{root: &planGramProduction{
+				name:  "p",
+				rules: []planGramTerm{scanTerm, nonePlanGramTerm},
+			}},
+			expectedCount: 2,
+			verify: func(t *testing.T, alternates []PlanGram) {
+				hasNone := false
+				for _, a := range alternates {
+					if a.Equals(NonePlanGram) {
+						hasNone = true
+					}
+				}
+				require.True(t, hasNone)
+			},
+		},
+		{
+			name: "nested production flattened",
+			pg: PlanGram{root: &planGramProduction{
+				name: "a",
+				rules: []planGramTerm{
+					&planGramProduction{
+						name:  "b",
+						rules: []planGramTerm{scanTerm, selectTerm},
+					},
+				},
+			}},
+			expectedCount: 2,
+			verify: func(t *testing.T, alternates []PlanGram) {
+				for _, a := range alternates {
+					require.False(t, a.HasAlternates())
+				}
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var alternates []PlanGram
+			tc.pg.VisitAlternates(func(alt PlanGram) {
+				alternates = append(alternates, alt)
+			})
+			require.Len(t, alternates, tc.expectedCount)
+			if tc.verify != nil {
+				tc.verify(t, alternates)
+			}
+		})
+	}
+}
+
+func TestPlanGramWithNoneFallback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	t.Run("any is idempotent", func(t *testing.T) {
+		result := AnyPlanGram.WithNoneFallback()
+		require.True(t, result.Any())
+	})
+
+	t.Run("none is idempotent", func(t *testing.T) {
+		result := NonePlanGram.WithNoneFallback()
+		require.True(t, result.Equals(NonePlanGram))
+	})
+
+	t.Run("concrete gets fallback", func(t *testing.T) {
+		pg := PlanGram{root: &planGramExpr{op: opt.ScanOp}}
+		result := pg.WithNoneFallback()
+		require.True(t, result.HasAlternates())
+
+		var alternates []PlanGram
+		result.VisitAlternates(func(alt PlanGram) {
+			alternates = append(alternates, alt)
+		})
+		require.Len(t, alternates, 2)
+
+		hasNone := false
+		for _, a := range alternates {
+			if a.Equals(NonePlanGram) {
+				hasNone = true
+			}
+		}
+		require.True(t, hasNone)
+	})
+
+	t.Run("double wrap still works", func(t *testing.T) {
+		pg := PlanGram{root: &planGramExpr{op: opt.ScanOp}}
+		result := pg.WithNoneFallback().WithNoneFallback()
+		require.True(t, result.HasAlternates())
+
+		var alternates []PlanGram
+		result.VisitAlternates(func(alt PlanGram) {
+			alternates = append(alternates, alt)
+		})
+		require.GreaterOrEqual(t, len(alternates), 2)
+	})
+}
+
 func TestPlanGramParse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

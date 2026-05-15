@@ -16,11 +16,19 @@ remove_files_on_exit() {
 trap remove_files_on_exit EXIT
 
 tc_start_block() {
-  echo "##teamcity[blockOpened name='$1']"
+  if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+    echo "::group::$1"
+  else
+    echo "##teamcity[blockOpened name='$1']"
+  fi
 }
 
 tc_end_block() {
-  echo "##teamcity[blockClosed name='$1']"
+  if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+    echo "::endgroup::"
+  else
+    echo "##teamcity[blockClosed name='$1']"
+  fi
 }
 
 docker_login_with_google() {
@@ -30,10 +38,15 @@ docker_login_with_google() {
 
 docker_login_gcr() {
   local repo=$1
-  local credentials=$2
+  local credentials=${2:-}
   local hostname="${repo%%/*}"
-  # https://cloud.google.com/container-registry/docs/advanced-authentication#json-key
-  echo "${credentials}" | docker login -u _json_key --password-stdin "https://${hostname}"
+  if [[ -n "${CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE:-}" ]]; then
+    # WIF: use gcloud credential helper for Docker.
+    gcloud auth configure-docker "${hostname}" --quiet
+  else
+    # https://cloud.google.com/container-registry/docs/advanced-authentication#json-key
+    echo "${credentials}" | docker login -u _json_key --password-stdin "https://${hostname}"
+  fi
 }
 
 docker_login() {

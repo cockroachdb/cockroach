@@ -74,6 +74,7 @@ go_test(
     srcs = [
         "builtins_test.go",
         "checkpoint_internal_test.go",
+        "coalesce_checkpoint_test.go",
         "desc_frontier_gating_test.go",
         "descfeed_internal_test.go",
         "descfeed_loop_test.go",
@@ -84,9 +85,12 @@ go_test(
         "main_test.go",
         "metasink_test.go",
         "persister_test.go",
+        "producer_internal_test.go",
         "progress_persist_test.go",
         "pts_test.go",
         "resume_internal_test.go",
+        "termination_test.go",
+        "tick_manager_test.go",
     ],
     embed = [":revlogjob"],
     deps = [
@@ -114,6 +118,7 @@ go_test(
         "//pkg/sql/isql",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/util/hlc",
         "//pkg/util/ioctx",

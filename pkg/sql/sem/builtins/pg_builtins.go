@@ -637,18 +637,155 @@ func makeToRegOverload(typ *types.T, helpText string) builtinDefinition {
 	)
 }
 
-// Format the array {type,othertype} as type, othertype.
-// If there are no args, output the empty string.
-const getFunctionArgStringQuery = `
-SELECT COALESCE(
-    (SELECT trim('{}' FROM replace(
-        (
-            SELECT array_agg(unnested::REGTYPE::TEXT)
-            FROM unnest(proargtypes) AS unnested
-        )::TEXT, ',', ', '))
-    ), '')
-FROM pg_catalog.pg_proc WHERE oid=$1 GROUP BY oid, proargtypes LIMIT 1
-`
+// formatFunctionArguments returns the comma-separated CREATE FUNCTION argument
+// list for the given OID, matching PostgreSQL's pg_get_function_arguments and
+// pg_get_function_identity_arguments. When printDefaults is false, DEFAULT
+// clauses are omitted (the identity-arguments form). The returned datum is
+// tree.DNull for OIDs that do not resolve to a function — pg_dump and other
+// catalog readers expect NULL rather than an error in that case.
+func formatFunctionArguments(
+	ctx context.Context, evalCtx *eval.Context, funcOID oid.Oid, printDefaults bool,
+) (tree.Datum, error) {
+	_, overload, err := evalCtx.Planner.ResolveFunctionByOID(ctx, funcOID)
+	if err != nil {
+		if errors.Is(err, tree.ErrRoutineUndefined) {
+			return tree.DNull, nil
+		}
+		return nil, err
+	}
+
+	// Built-in overloads do not populate RoutineParams; their parameters live
+	// on overload.Types. Built-ins also have no parameter names, modes, or
+	// DEFAULTs to render, so fall back to a types-only formatting helper.
+	if len(overload.RoutineParams) == 0 {
+		return formatBuiltinArguments(overload), nil
+	}
+
+	isProcedure := overload.Type == tree.ProcedureRoutine
+	var sb strings.Builder
+	for i := range overload.RoutineParams {
+		p := &overload.RoutineParams[i]
+		// TODO(#88947): when CRDB models RETURNS TABLE columns separately from
+		// regular OUT params, skip them here so they aren't emitted in the
+		// arguments list.
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		// Mode prefix. Procedures show every mode (including IN) so that the
+		// dumped signature is unambiguous when used with DROP/ALTER PROCEDURE.
+		// Functions hide the implicit IN mode and only emit the non-IN ones.
+		switch p.Class {
+		case tree.RoutineParamDefault, tree.RoutineParamIn:
+			if isProcedure {
+				sb.WriteString("IN ")
+			}
+		case tree.RoutineParamOut:
+			sb.WriteString("OUT ")
+		case tree.RoutineParamInOut:
+			sb.WriteString("INOUT ")
+		case tree.RoutineParamVariadic:
+			sb.WriteString("VARIADIC ")
+		}
+		if p.Name != "" {
+			sb.WriteString(p.Name.String())
+			sb.WriteString(" ")
+		}
+		sb.WriteString(typeReferencePGName(p.Type))
+		if printDefaults && p.IsInParam() && p.DefaultVal != nil {
+			// DefaultExpr is stored on the descriptor via tree.Serialize, which
+			// adds type-disambiguation annotations like 5:::INT8 as syntactic
+			// AnnotateTypeExpr nodes. Those nodes survive re-parsing and are
+			// not controlled by format flags, so strip them by walking the
+			// expression tree before formatting.
+			sb.WriteString(" DEFAULT ")
+			stripped, _ := tree.WalkExpr(stripTypeAnnotations{}, p.DefaultVal)
+			sb.WriteString(tree.AsString(stripped))
+		}
+	}
+	return tree.NewDString(sb.String()), nil
+}
+
+// formatBuiltinArguments returns the comma-separated input-argument types of
+// a built-in overload. It handles each TypeList kind that built-ins use:
+// fixed-arity (ParamTypes), variadic (VariadicType, e.g. concat, format), and
+// homogeneous (HomogeneousType, e.g. greatest, least).
+func formatBuiltinArguments(overload *tree.Overload) tree.Datum {
+	var sb strings.Builder
+	switch t := overload.Types.(type) {
+	case tree.ParamTypes:
+		for i := range t {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(t[i].Typ.PGName())
+		}
+	case tree.VariadicType:
+		for i, ft := range t.FixedTypes {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(ft.PGName())
+		}
+		if len(t.FixedTypes) > 0 {
+			sb.WriteString(", ")
+		}
+		// Built-ins do not populate pg_proc.proargmodes, so the rendered
+		// signature does not include the VARIADIC keyword either — keeping the
+		// argument list consistent with the proargtypes-only metadata that
+		// callers see for built-ins.
+		sb.WriteString(t.VarType.PGName())
+	case tree.HomogeneousType:
+		sb.WriteString(types.AnyElement.PGName())
+	}
+	return tree.NewDString(sb.String())
+}
+
+// typeReferencePGName renders a parameter type using PostgreSQL-compatible
+// names (e.g. "bytea" instead of "BYTES", "int8" instead of "INT8" — CRDB and
+// PG happen to share most non-string OIDs). User-defined types are
+// schema-qualified, and real arrays render as `<elem>[]` rather than the
+// pg_type internal name `_<elem>` so the output is parseable as a CREATE
+// FUNCTION argument list. For unresolved or OID-based references we fall back
+// to the standard SQLString form.
+func typeReferencePGName(ref tree.ResolvableTypeReference) string {
+	t, ok := ref.(*types.T)
+	if !ok {
+		return ref.SQLString()
+	}
+	// UDTs (enums, composites, domains) need schema qualification so the
+	// dumped signature resolves when restored under a different search_path.
+	// SQLString uses FQName(explicitCatalog=false), matching PG's
+	// format_type_be_qualified output.
+	if t.UserDefined() {
+		return t.SQLString()
+	}
+	// Real arrays render as `<elem>[]`. anyarray, int2vector, and oidvector
+	// have distinct OIDs that PG also exposes by name (not as arrays of
+	// something), so leave those alone.
+	if t.Family() == types.ArrayFamily {
+		switch t.Oid() {
+		case oid.T_anyarray, oid.T_int2vector, oid.T_oidvector:
+			return t.PGName()
+		}
+		return typeReferencePGName(t.ArrayContents()) + "[]"
+	}
+	return t.PGName()
+}
+
+// stripTypeAnnotations is a tree.Visitor that unwraps *tree.AnnotateTypeExpr
+// nodes, replacing each with its inner expression. It is used to drop the
+// CRDB-specific 5:::INT8 disambiguation suffixes from default-value text so
+// the rendered DEFAULT clause is plain SQL.
+type stripTypeAnnotations struct{}
+
+func (stripTypeAnnotations) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
+	if a, ok := expr.(*tree.AnnotateTypeExpr); ok {
+		return true, a.Expr
+	}
+	return true, expr
+}
+
+func (stripTypeAnnotations) VisitPost(expr tree.Expr) tree.Expr { return expr }
 
 var pgBuiltins = map[string]builtinDefinition{
 	// See https://www.postgresql.org/docs/9.6/static/functions-info.html.
@@ -811,12 +948,17 @@ var pgBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "func_oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Body:       getFunctionArgStringQuery,
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
+				o := tree.MustBeDOid(args[0])
+				return formatFunctionArguments(ctx, evalCtx, o.Oid, true /* printDefaults */)
+			},
 			Info: "Returns the argument list (with defaults) necessary to identify a function, " +
 				"in the form it would need to appear in within CREATE FUNCTION.",
 			Volatility:        volatility.Stable,
 			CalledOnNullInput: true,
-			Language:          tree.RoutineLangSQL,
 		},
 	),
 
@@ -900,12 +1042,17 @@ FROM defaults_parsed
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "func_oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Body:       getFunctionArgStringQuery,
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
+				o := tree.MustBeDOid(args[0])
+				return formatFunctionArguments(ctx, evalCtx, o.Oid, false /* printDefaults */)
+			},
 			Info: "Returns the argument list (without defaults) necessary to identify a function, " +
 				"in the form it would need to appear in within ALTER FUNCTION, for instance.",
 			Volatility:        volatility.Stable,
 			CalledOnNullInput: true,
-			Language:          tree.RoutineLangSQL,
 		},
 	),
 

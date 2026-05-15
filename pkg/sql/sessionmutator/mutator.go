@@ -324,6 +324,14 @@ func (m *SessionDataMutator) SetDistSQLWorkMem(val int64) {
 	m.Data.WorkMemLimit = val
 }
 
+func (m *SessionDataMutator) SetDistSQLPlanLocalityFilter(val string) {
+	m.Data.DistSQLPlanLocalityFilter = val
+}
+
+func (m *SessionDataMutator) SetDistSQLPlanLocalityFilterStrict(val bool) {
+	m.Data.DistSQLPlanLocalityFilterStrict = val
+}
+
 func (m *SessionDataMutator) SetForceSavepointRestart(val bool) {
 	m.Data.ForceSavepointRestart = val
 }

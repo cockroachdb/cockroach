@@ -4833,12 +4833,12 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.CompressionUnknownBytes.Update(int64(c.CompressedBytesWithoutStats))
 
 	overall := pebble.CompressionStatsForSetting{
-		CompressedBytes:   m.Table.Compression.NoCompressionBytes,
-		UncompressedBytes: m.Table.Compression.NoCompressionBytes,
+		CompressedBytes:   c.NoCompressionBytes,
+		UncompressedBytes: c.NoCompressionBytes,
 	}
-	overall.Add(m.Table.Compression.Snappy)
-	overall.Add(m.Table.Compression.MinLZ)
-	overall.Add(m.Table.Compression.Zstd)
+	overall.Add(c.Snappy)
+	overall.Add(c.MinLZ)
+	overall.Add(c.Zstd)
 	// We cannot use CompressedBytesWithoutStats for the overall compression
 	// ratio; we estimate it from the data we do have.
 	sm.CompressionOverallCR.Update(overall.CompressionRatio())

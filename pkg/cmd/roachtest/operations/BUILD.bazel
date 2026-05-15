@@ -55,6 +55,7 @@ go_library(
         "//pkg/testutils/fingerprintutils",
         "//pkg/util/hlc",
         "//pkg/util/randutil",
+        "//pkg/util/retry",
         "//pkg/util/timeutil",
         "//pkg/workload",
         "//pkg/workload/bank",

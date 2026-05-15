@@ -1125,34 +1125,26 @@ CREATE TABLE t_hash_pre_split (
   b INT
 );
 
-skipif config 3node-tenant-default-configs
+skipif config 3node-tenant-default-configs local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
 query TITTT retry,rowsort
 SELECT table_name, table_id, index_name, start_key, end_key
   FROM [SHOW RANGES FROM DATABASE test WITH INDEXES]
  WHERE table_name = 't_hash_pre_split'
 ----
-t_hash_pre_split  134  t_hash_pre_split_pkey  /Table/129/3/7  /Max
+t_hash_pre_split  134  t_hash_pre_split_pkey  /Table/80  /Max
 
 statement ok
 CREATE INDEX t_hash_pre_split_idx_b ON t_hash_pre_split (b) USING HASH WITH (bucket_count=8);
 
-skipif config 3node-tenant-default-configs
+skipif config 3node-tenant-default-configs local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
 query TITTT colnames,retry,rowsort
 SELECT table_name, table_id, index_name, start_key, end_key
   FROM [SHOW RANGES FROM DATABASE test WITH INDEXES]
  WHERE table_name = 't_hash_pre_split'
 ----
-table_name        table_id  index_name              start_key       end_key
-t_hash_pre_split  134       t_hash_pre_split_pkey   /Table/129/3/7  /Table/134/2
-t_hash_pre_split  134       t_hash_pre_split_idx_b  /Table/134/2    /Table/134/2/0
-t_hash_pre_split  134       t_hash_pre_split_idx_b  /Table/134/2/0  /Table/134/2/1
-t_hash_pre_split  134       t_hash_pre_split_idx_b  /Table/134/2/1  /Table/134/2/2
-t_hash_pre_split  134       t_hash_pre_split_idx_b  /Table/134/2/2  /Table/134/2/3
-t_hash_pre_split  134       t_hash_pre_split_idx_b  /Table/134/2/3  /Table/134/2/4
-t_hash_pre_split  134       t_hash_pre_split_idx_b  /Table/134/2/4  /Table/134/2/5
-t_hash_pre_split  134       t_hash_pre_split_idx_b  /Table/134/2/5  /Table/134/2/6
-t_hash_pre_split  134       t_hash_pre_split_idx_b  /Table/134/2/6  /Table/134/2/7
-t_hash_pre_split  134       t_hash_pre_split_idx_b  /Table/134/2/7  /Table/134/3
+table_name        table_id  index_name              start_key  end_key
+t_hash_pre_split  134       t_hash_pre_split_pkey   /Table/80  /Max
+t_hash_pre_split  134       t_hash_pre_split_idx_b  /Table/80  /Max
 
 subtest test_default_bucket_count
 

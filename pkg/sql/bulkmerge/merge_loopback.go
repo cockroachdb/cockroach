@@ -86,7 +86,7 @@ func (m *mergeLoopback) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadat
 
 // Start implements execinfra.RowSource.
 func (m *mergeLoopback) Start(ctx context.Context) {
-	m.StartInternal(ctx, "mergeLoopback")
+	_ = m.StartInternal(ctx, "mergeLoopback")
 	var ok bool
 	m.loopback, ok = loopback.get(m.FlowCtx)
 	if !ok {

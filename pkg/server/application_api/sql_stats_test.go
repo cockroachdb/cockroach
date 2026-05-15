@@ -1725,7 +1725,9 @@ func TestDrainSqlStats(t *testing.T) {
 	stmts, txns := filterStatementStatsByAppName(resp.Statements, resp.Transactions, appName)
 	require.Len(t, stmts, 1)
 	require.Equal(t, int64(3), stmts[0].Stats.Count)
-	require.Equal(t, "SELECT _", stmts[0].Key.Query)
+	require.Equal(t,
+		appstatspb.ConstructStatementFingerprintID("SELECT _", "defaultdb"),
+		stmts[0].ID)
 	require.Len(t, txns, 1)
 	require.Equal(t, int64(3), txns[0].Stats.Count)
 	require.Len(t, txns[0].StatementFingerprintIDs, 1)
@@ -1773,7 +1775,9 @@ func TestDrainSqlStats_partialOutage(t *testing.T) {
 	stmts, txns := filterStatementStatsByAppName(resp.Statements, resp.Transactions, appName)
 	require.Len(t, stmts, 1)
 	require.Equal(t, int64(2), stmts[0].Stats.Count)
-	require.Equal(t, "SELECT _", stmts[0].Key.Query)
+	require.Equal(t,
+		appstatspb.ConstructStatementFingerprintID("SELECT _", "defaultdb"),
+		stmts[0].ID)
 	require.Len(t, txns, 1)
 	require.Equal(t, int64(2), txns[0].Stats.Count)
 }

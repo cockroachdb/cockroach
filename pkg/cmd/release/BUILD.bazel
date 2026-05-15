@@ -3,9 +3,16 @@ load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 go_library(
     name = "release_lib",
     srcs = [
+        "cut_staging_branches.go",
         "git.go",
+        "github_client.go",
+        "jira_adf.go",
+        "jira_client.go",
         "main.go",
+        "pick_sha.go",
+        "release_notes_api.go",
         "sender.go",
+        "slack_post.go",
         "templates.go",
         "update_brew.go",
         "update_helm.go",
@@ -20,11 +27,15 @@ go_library(
         "//pkg/testutils/release",
         "//pkg/util/httputil",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_version//:version",
+        "@com_github_google_go_github_v61//github",
         "@com_github_jordan_wright_email//:email",
+        "@com_github_slack_go_slack//:slack",
         "@com_github_spf13_cobra//:cobra",
         "@in_gopkg_yaml_v2//:yaml_v2",
         "@in_gopkg_yaml_v3//:yaml_v3",
+        "@org_golang_x_oauth2//:oauth2",
     ],
 )
 
@@ -37,7 +48,9 @@ go_binary(
 go_test(
     name = "release_test",
     srcs = [
+        "cut_staging_branches_test.go",
         "git_test.go",
+        "pick_sha_test.go",
         "update_releases_test.go",
         "update_workflow_test.go",
     ],
@@ -52,6 +65,7 @@ go_test(
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/release",
         "@com_github_cockroachdb_version//:version",
+        "@com_github_slack_go_slack//:slack",
         "@com_github_stretchr_testify//require",
         "@in_gopkg_yaml_v2//:yaml_v2",
         "@in_gopkg_yaml_v3//:yaml_v3",

@@ -191,8 +191,8 @@ func (coord *CPUGrantCoordinators) GetSQLWorkQueue(workKind WorkKind) *WorkQueue
 // SetResourceGroupConfig installs a new per-resource-group config (weight +
 // maxCPU) into the holder, then signals the RM-mode WorkQueue to refresh its
 // cached per-group state. When RM mode is off, the second step is a no-op:
-// the change stays staged in the holder and is applied automatically when
-// the queue next enters RM mode via setUseResourceGroup(true).
+// the change stays staged in the holder and is applied when the mode
+// setting changes to resourceManagerMode.
 func (coord *CPUGrantCoordinators) SetResourceGroupConfig(config ResourceGroupConfigSet) {
 	coord.cpuTimeCoord.configHolder.Set(config)
 	q, ok := coord.cpuTimeCoord.queues[rmQueueTier].(*WorkQueue)
@@ -297,12 +297,6 @@ func makeCPUTimeTokenGrantCoordinator(
 		allocator.queues[tier] = requesters[tier].(*WorkQueue)
 	}
 	allocator.strategy = allocator.newStrategy(initialMode)
-	// Sync the queue's useResourceGroup with the initial strategy.
-	// Without this, a node that starts in resourceManagerMode would never
-	// have configureQueue called: resetInterval only invokes it on a
-	// strategy swap (modeChanged), and the first resetInterval sees
-	// newMode == a.strategy.mode() so modeChanged is false.
-	allocator.configureQueue()
 
 	coordinator := &cpuTimeTokenGrantCoordinator{
 		filler:       filler,

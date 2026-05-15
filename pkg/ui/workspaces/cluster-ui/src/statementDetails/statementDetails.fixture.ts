@@ -63,6 +63,9 @@ const statementDetailsNoData: StatementDetailsResponse = {
     aggregation_interval: {},
   },
   internal_app_name_prefix: "$ internal",
+  query: "",
+  query_summary: "",
+  database: "",
   statement_statistics_per_aggregated_ts: [],
   statement_statistics_per_plan_hash: [],
   statement_statistics_per_aggregated_ts_and_plan_hash: [],
@@ -816,6 +819,9 @@ const statementDetailsData: StatementDetailsResponse = {
     },
   ],
   internal_app_name_prefix: "$ internal",
+  query: "SELECT * FROM crdb_internal.node_build_info",
+  query_summary: "SELECT * FROM crdb_internal.node_build_info",
+  database: "defaultdb",
   statement_statistics_per_aggregated_ts_and_plan_hash: [],
 };
 

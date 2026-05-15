@@ -10,6 +10,7 @@ import (
 	"context"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -20,8 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/timers"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmmetrics"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -36,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/crlib/crstrings"
 	"github.com/cockroachdb/crlib/crtime"
+	prometheusgo "github.com/prometheus/client_model/go"
 	"github.com/rcrowley/go-metrics"
 )
 
@@ -56,6 +61,14 @@ const maxSLIScopeNameLen = 128
 // defaultSLIScope is the name of the default SLI scope -- i.e. the set of metrics
 // keeping track of all changefeeds which did not have explicit sli scope specified.
 const defaultSLIScope = "default"
+
+func normalizeSLIScope(scope string) string {
+	scope = strings.TrimSpace(strings.ToLower(scope))
+	if scope == "" {
+		return defaultSLIScope
+	}
+	return scope
+}
 
 // AggMetrics are aggregated metrics keeping track of aggregated changefeed performance
 // indicators, combined with a limited number of per-changefeed indicators.
@@ -871,7 +884,49 @@ var (
 		Unit:        metric.Unit_COUNT,
 		Category:    metric.Metadata_CHANGEFEEDS,
 	}
+	metaCheckpointLag = metric.Metadata{
+		Name:        "changefeed.checkpoint_lag",
+		Help:        "Time elapsed since a changefeed's most recently persisted checkpoint.",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+		Category:    metric.Metadata_CHANGEFEEDS,
+		MetricType:  prometheusgo.MetricType_GAUGE,
+	}
 )
+
+// ClusterMetrics groups all per-job cluster metrics emitted by the
+// changefeed package. New cluster metrics should be added by extending
+// this struct.
+type ClusterMetrics struct {
+	CheckpointLag *cmmetrics.WriteStopwatchVec
+}
+
+// RegisterWith attaches all cluster metrics to the given writer.
+func (cm *ClusterMetrics) RegisterClusterMetric(writer sql.ClusterMetricAdder) {
+	if writer == nil {
+		return
+	}
+	writer.AddMetricStruct(cm)
+}
+
+// SetCheckpointLag records the resolved-frontier nanos of the most
+// recent persisted checkpoint for the given job.
+func (cm *ClusterMetrics) SetCheckpointLag(jobID jobspb.JobID, scope string, frontierNanos int64) {
+	cm.CheckpointLag.UpdateStartTime(jobIDAndScopeLabels(jobID, scope), frontierNanos)
+}
+
+// DeleteJob drops all cluster metric entries belonging to the given
+// job.
+func (cm *ClusterMetrics) DeleteJob(jobID jobspb.JobID, scope string) {
+	cm.CheckpointLag.Delete(jobIDAndScopeLabels(jobID, scope))
+}
+
+func jobIDAndScopeLabels(jobID jobspb.JobID, scope string) map[string]string {
+	return map[string]string{
+		"job_id": strconv.FormatInt(int64(jobID), 10),
+		"scope":  normalizeSLIScope(scope),
+	}
+}
 
 func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *AggMetrics {
 	metaChangefeedEmittedMessages := metric.Metadata{
@@ -1316,11 +1371,7 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	scope = strings.TrimSpace(strings.ToLower(scope))
-
-	if scope == "" {
-		scope = defaultSLIScope
-	}
+	scope = normalizeSLIScope(scope)
 
 	if len(scope) > maxSLIScopeNameLen {
 		return nil, pgerror.Newf(pgcode.ConfigurationLimitExceeded,
@@ -1491,6 +1542,7 @@ type Metrics struct {
 	ParallelConsumerFlushNanos     metric.IHistogram
 	ParallelConsumerConsumeNanos   metric.IHistogram
 	ParallelConsumerInFlightEvents *metric.Gauge
+	ClusterMetrics                 *ClusterMetrics
 
 	mu struct {
 		syncutil.Mutex
@@ -1540,6 +1592,11 @@ func MakeMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) metric.Stru
 			Mode:         metric.HistogramModePrometheus,
 		}),
 		ParallelConsumerInFlightEvents: metric.NewGauge(metaChangefeedEventConsumerInFlightEvents),
+		ClusterMetrics: &ClusterMetrics{
+			CheckpointLag: cmmetrics.NewWriteStopwatchVec(
+				metaCheckpointLag, timeutil.DefaultTimeSource{}, "job_id", "scope",
+			),
+		},
 	}
 
 	m.mu.id = 1 // start the first id at 1 so we can detect initialization

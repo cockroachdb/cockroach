@@ -2664,6 +2664,17 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) (retEr
 		return err
 	}
 
+	// For explicit transactions, attribute the commit's deferred KV work
+	// to the transaction fingerprint, otherwise it will be attributed to
+	// the last statement's fingerprint which is misleading.
+	if !ex.implicitTxn() {
+		txnFingerprintID := ex.extraTxnState.transactionStatementsHash.Sum()
+		appNameID := ash.GetOrStoreAppNameID(ex.sessionData().ApplicationName)
+		ex.state.mu.txn.SetWorkloadInfo(
+			txnFingerprintID, appNameID, workloadid.WorkloadTypeCommit,
+		)
+	}
+
 	if err := ex.state.mu.txn.Commit(ctx); err != nil {
 		return err
 	}

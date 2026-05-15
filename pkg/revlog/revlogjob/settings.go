@@ -22,5 +22,9 @@ var ProducerForwardThreshold = settings.RegisterByteSizeSetting(
 	"per-tick buffer size at or below which a revlog producer "+
 		"forwards events to the coordinator for inline coalescing "+
 		"instead of PUTing them as a standalone data file (0 disables)",
-	1<<20, // 1 MiB
+	// TODO(dt): re-enable once the coordinator flushes coalesced
+	// entries to a durable file before advancing its frontier for
+	// the associated checkpoints. Without that, a crash can lose
+	// coalesced events whose frontier was already persisted.
+	0, // disabled; see TODO above
 )

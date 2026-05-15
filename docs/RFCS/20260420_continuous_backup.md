@@ -380,7 +380,7 @@ job's progress payload:
   written by producers no longer on the new plan.
 
 Closed ticks need nothing in the checkpoint — their markers are
-already durable on S3 and discoverable via the LIST walk.
+already durable on S3.
 
 **On resume:**
 
@@ -401,11 +401,15 @@ already durable on S3 and discoverable via the LIST walk.
 
 Events flushed between the persisted frontier and the crash get
 re-derived from the resumed rangefeed; the new files have new
-random names and are recorded fresh. The narrow race where the
-coordinator wrote a close marker but died before persisting
-that fact is handled by the resume-time LIST walk — markers
-that already exist on S3 win, and the coordinator skips
-re-opening those ticks.
+random names and are recorded fresh. If the coordinator wrote a
+close marker but died before persisting that fact, the tick is
+re-closed on resume with the re-derived data — the overwritten
+manifest is correct because the catch-up scan re-delivers every
+event past the persisted frontier. The pre-crash data files for
+the tick become orphaned on storage, but orphaned files are an
+inevitable consequence of any write-then-record design and are
+harmless (readers only consult files listed in the manifest).
+No resume-time LIST walk is needed.
 
 ##### Job creation
 

@@ -373,14 +373,6 @@
 #
 /pkg/raft/ @cockroachdb/kv-prs
 
-/pkg/ccl/spanconfigccl/                            @cockroachdb/kv-prs @cockroachdb/sql-foundations
-/pkg/ccl/spanconfigccl/spanconfigkvaccessorccl/    @cockroachdb/kv-prs
-/pkg/ccl/spanconfigccl/spanconfiglimiterccl/       @cockroachdb/sql-foundations
-/pkg/ccl/spanconfigccl/spanconfigreconcilerccl/    @cockroachdb/sql-foundations
-/pkg/ccl/spanconfigccl/spanconfigsplitterccl/      @cockroachdb/sql-foundations
-/pkg/ccl/spanconfigccl/spanconfigsqltranslatorccl/ @cockroachdb/sql-foundations
-/pkg/ccl/spanconfigccl/spanconfigsqlwatcherccl/    @cockroachdb/sql-foundations
-
 /pkg/storage/                @cockroachdb/storage
 /pkg/storage/fs/             @cockroachdb/storage
 

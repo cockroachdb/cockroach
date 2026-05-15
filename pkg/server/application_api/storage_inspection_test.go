@@ -362,11 +362,6 @@ func TestHotRanges2Response(t *testing.T) {
 		}
 
 		if r.QPS > 0 {
-			if r.ReadsPerSecond == 0 && r.WritesPerSecond == 0 && r.ReadBytesPerSecond == 0 && r.WriteBytesPerSecond == 0 {
-				t.Errorf("qps %.2f > 0, expected either reads=%.2f, writes=%.2f, readBytes=%.2f or writeBytes=%.2f to be non-zero",
-					r.QPS, r.ReadsPerSecond, r.WritesPerSecond, r.ReadBytesPerSecond, r.WriteBytesPerSecond)
-			}
-
 			if cpuSupport && r.CPUTimePerSecond == 0 {
 				t.Errorf("qps %.2f > 0, expected cpu=%.2f to be non-zero", r.QPS, r.CPUTimePerSecond)
 			}

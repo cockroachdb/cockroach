@@ -771,6 +771,13 @@ func TestLogic_distsql_join(
 	runLogicTest(t, "distsql_join")
 }
 
+func TestLogic_distsql_plan_locality_filter(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "distsql_plan_locality_filter")
+}
+
 func TestLogic_distsql_srfs(
 	t *testing.T,
 ) {

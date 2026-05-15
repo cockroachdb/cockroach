@@ -169,19 +169,22 @@ func TestSetResourceGroupConfigViaCoord(t *testing.T) {
 	// Force RM mode so the apply path runs synchronously when refresh
 	// is invoked. Without this, refresh is a no-op and the test would
 	// only assert the holder write.
-	rmQueue.setUseResourceGroup(true)
+	ctx := context.Background()
+	cpuTimeTokenACMode.Override(ctx, &settings.SV, resourceManagerMode)
 
 	// Public API call. This is the only thing under test.
 	cpuCoords.SetResourceGroupConfig(ResourceGroupConfigSet{
-		rgGroupKey(highResourceGroupID): {Weight: 70, MaxCPU: true},
-		rgGroupKey(lowResourceGroupID):  {Weight: 30, MaxCPU: false},
+		rgGroupKey(highResourceGroupID): {Weight: 70, BurstFrac: 0.7, MaxCPU: true},
+		rgGroupKey(lowResourceGroupID):  {Weight: 30, BurstFrac: 0.3, MaxCPU: false},
 	})
 
 	// Holder reflects the new config.
 	snap := cpuCoords.cpuTimeCoord.configHolder.Snapshot()
 	require.Equal(t, uint32(70), snap[rgGroupKey(highResourceGroupID)].Weight)
+	require.Equal(t, float64(0.7), snap[rgGroupKey(highResourceGroupID)].BurstFrac)
 	require.True(t, snap[rgGroupKey(highResourceGroupID)].MaxCPU)
 	require.Equal(t, uint32(30), snap[rgGroupKey(lowResourceGroupID)].Weight)
+	require.Equal(t, float64(0.3), snap[rgGroupKey(lowResourceGroupID)].BurstFrac)
 	require.False(t, snap[rgGroupKey(lowResourceGroupID)].MaxCPU)
 
 	// RM-mode WorkQueue's cached per-group state reflects the new
@@ -189,9 +192,11 @@ func TestSetResourceGroupConfigViaCoord(t *testing.T) {
 	high := getGroupLocked(rmQueue, rgGroupKey(highResourceGroupID))
 	require.NotNil(t, high, "rg high container should be pre-created by apply")
 	require.Equal(t, uint32(70), high.weight)
+	require.Equal(t, float64(0.7), high.burstFrac)
 	require.True(t, high.cpuTimeBurstBucket.maxCPU)
 	low := getGroupLocked(rmQueue, rgGroupKey(lowResourceGroupID))
 	require.NotNil(t, low, "rg low container should be pre-created by apply")
 	require.Equal(t, uint32(30), low.weight)
+	require.Equal(t, float64(0.3), low.burstFrac)
 	require.False(t, low.cpuTimeBurstBucket.maxCPU)
 }

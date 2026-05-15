@@ -50,8 +50,11 @@ type indexBackfillVariant struct {
 
 var indexBackfillVariants = []indexBackfillVariant{
 	{
-		nameSuffix:     "/no-disk-limit",
-		snapshotPrefix: "index-backfill-tpce-100k-nodisklimit",
+		nameSuffix: "/no-disk-limit",
+		// Keep the snapshot prefix short: GCE caps snapshot names at 63 chars,
+		// and snapshotName() appends a version+node infix that consumes ~22
+		// chars on top of the versionedSnapshotPrefix(t) prefix.
+		snapshotPrefix: "index-backfill-tpce-100k-nodl",
 	},
 	{
 		nameSuffix:         "/provisioned-bandwidth=false",

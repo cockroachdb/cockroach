@@ -310,6 +310,9 @@ func remapSchemas(
 ) (bool, error) {
 
 	txn := p.InternalSQLTxn()
+	if txn == nil {
+		return false, errors.AssertionFailedf("remapSchemas: planner has no active transaction")
+	}
 	col := txn.Descriptors()
 	shouldBufferDeprecatedPrivilegeNotice := false
 
@@ -380,6 +383,9 @@ func remapTables(
 ) (bool, error) {
 
 	txn := p.InternalSQLTxn()
+	if txn == nil {
+		return false, errors.AssertionFailedf("remapTables: planner has no active transaction")
+	}
 	col := txn.Descriptors()
 	shouldBufferDeprecatedPrivilegeNotice := false
 
@@ -616,6 +622,9 @@ func remapTypes(
 ) (bool, error) {
 
 	txn := p.InternalSQLTxn()
+	if txn == nil {
+		return false, errors.AssertionFailedf("remapTypes: planner has no active transaction")
+	}
 	col := txn.Descriptors()
 	shouldBufferDeprecatedPrivilegeNotice := false
 
@@ -769,6 +778,9 @@ func remapFunctions(
 	descriptorRewrites jobspb.DescRewriteMap,
 ) error {
 	txn := p.InternalSQLTxn()
+	if txn == nil {
+		return errors.AssertionFailedf("remapFunctions: planner has no active transaction")
+	}
 	col := txn.Descriptors()
 
 	for _, function := range functionsByID {
@@ -1087,6 +1099,9 @@ func allocateDescriptorRewrites(
 	}
 
 	txn := p.InternalSQLTxn()
+	if txn == nil {
+		return nil, 0, errors.AssertionFailedf("allocateDescriptorRewrites: planner has no active transaction")
+	}
 	col := txn.Descriptors()
 	// Check that any DBs being restored do _not_ exist.
 	// Fail fast if the necessary databases don't exist or are otherwise

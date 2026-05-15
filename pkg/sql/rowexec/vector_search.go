@@ -111,7 +111,7 @@ func newVectorSearchProcessor(
 
 // Start is part of the RowSource interface.
 func (v *vectorSearchProcessor) Start(ctx context.Context) {
-	v.StartInternal(
+	_ = v.StartInternal(
 		ctx, "vector search", &v.contentionEventsListener,
 		&v.scanStatsListener, &v.tenantConsumptionListener,
 	)

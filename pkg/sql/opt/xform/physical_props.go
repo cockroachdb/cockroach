@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/distribution"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/plangram"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -42,7 +43,8 @@ func CanProvidePhysicalProps(
 		ordering.CanProvide(ctx, evalCtx, mem, e, &required.Ordering)
 	canProvideDistribution := e.Op() == opt.DistributeOp ||
 		distribution.CanProvide(ctx, evalCtx, mem, e, &required.Distribution)
-	return canProvideOrdering && canProvideDistribution
+	canProvidePlanGram := plangram.CanProvide(e, required.PlanGram)
+	return canProvideOrdering && canProvideDistribution && canProvidePlanGram
 }
 
 // BuildChildPhysicalProps returns the set of physical properties required of
@@ -90,6 +92,7 @@ func BuildChildPhysicalProps(
 	childProps.Ordering = ordering.BuildChildRequired(mem, parent, &parentProps.Ordering, nth)
 	childProps.Distribution = distribution.BuildChildRequired(parent, &parentProps.Distribution, nth)
 	childProps.RemoteBranch = parentProps.RemoteBranch
+	childProps.PlanGram = plangram.BuildChildRequired(parent, parentProps.PlanGram, nth)
 
 	switch parent.Op() {
 	case opt.LimitOp:

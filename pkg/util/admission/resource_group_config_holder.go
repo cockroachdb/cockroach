@@ -17,15 +17,18 @@ import (
 // work in Resource Manager mode. Callers must pre-normalize the values; the
 // holder stores them as-is.
 type ResourceGroupConfig struct {
-	// Weight is the group's percentage share of node CPU, in [0, 100]. Used
-	// directly as the heap weight and as the burst-bucket refill share
-	// (Weight/100). Callers should set weights that sum to 100 across the
-	// configured set; the holder does not enforce this.
+	// Weight is the group's share used for fair-share ordering in the heap.
+	// Groups with higher weight get proportionally more CPU time before
+	// yielding to others. Must be > 0.
 	Weight uint32
+	// BurstFrac is the fraction of the 100%-CPU rate allocated to this
+	// group's per-group burst bucket. For example, 0.2 means the group's
+	// burst bucket refills at 20% of the full CPU rate.
+	BurstFrac float64
 	// MaxCPU=true forces canBurst regardless of bucket utilization. The bucket
-	// is still refilled at Weight/100; MaxCPU only exempts the group from the
-	// bucket-fullness gate. Within the same canBurst qualification, groups
-	// remain ordered by used/weight.
+	// is still refilled at BurstFrac of the 100%-CPU rate; MaxCPU only exempts
+	// the group from the bucket-fullness gate. Within the same canBurst
+	// qualification, groups remain ordered by used/weight.
 	MaxCPU bool
 }
 
@@ -45,7 +48,8 @@ func (s ResourceGroupConfigSet) SafeFormat(w redact.SafePrinter, _ rune) {
 	sort.Slice(keys, func(i, j int) bool { return keys[i].id < keys[j].id })
 	for _, k := range keys {
 		cfg := s[k]
-		w.Printf("%s weight=%d maxCPU=%t\n", k, cfg.Weight, cfg.MaxCPU)
+		w.Printf("%s weight=%d burstFrac=%.2f maxCPU=%t\n",
+			k, cfg.Weight, cfg.BurstFrac, cfg.MaxCPU)
 	}
 }
 
@@ -83,8 +87,8 @@ func (s ResourceGroupConfigSet) GetOrDefault(k groupKey) ResourceGroupConfig {
 //
 // TODO(wenyihu6): revisit weights once we have signal from real workloads.
 var defaultRMResourceGroupConfig = ResourceGroupConfigSet{
-	rgGroupKey(highResourceGroupID): {Weight: 80, MaxCPU: true},
-	rgGroupKey(lowResourceGroupID):  {Weight: 20, MaxCPU: false},
+	rgGroupKey(highResourceGroupID): {Weight: 80, BurstFrac: 0.8, MaxCPU: true},
+	rgGroupKey(lowResourceGroupID):  {Weight: 20, BurstFrac: 0.2, MaxCPU: false},
 }
 
 // defaultRGGroupConfig is the safety fallback returned by GetOrDefault for
@@ -97,12 +101,14 @@ var defaultRMResourceGroupConfig = ResourceGroupConfigSet{
 //
 // TODO(wenyihu6): once SQL DDL (CREATE/ALTER RESOURCE GROUP) is wired
 // through, decide whether unknown rgKind IDs should be a hard error.
-var defaultRGGroupConfig = ResourceGroupConfig{Weight: 20, MaxCPU: false}
+var defaultRGGroupConfig = ResourceGroupConfig{Weight: 20, BurstFrac: 0.2, MaxCPU: false}
 
 // defaultTenantGroupConfig is the fallback for tenantKind keys: every tenant
 // gets defaultGroupWeight, since per-tenant weights are no longer
 // configurable. MaxCPU=false because tenants don't carry burst flags.
-var defaultTenantGroupConfig = ResourceGroupConfig{Weight: defaultGroupWeight, MaxCPU: false}
+var defaultTenantGroupConfig = ResourceGroupConfig{
+	Weight: defaultGroupWeight, BurstFrac: 0.25, MaxCPU: false,
+}
 
 // ResourceGroupConfigHolder owns the source-of-truth config set for RM mode.
 // It is pure storage behind an RWMutex; reads (every Admit) vastly outnumber

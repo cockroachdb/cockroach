@@ -33,11 +33,16 @@ type DrainSqlStatsRespBuilder struct {
 	txnMap               map[txnDrainKey]*appstatspb.CollectedTransactionStatistics
 }
 
-// stmtDrainKey includes the aggregated timestamp so that stats from different
-// aggregation windows are not merged together during drain.
+// stmtDrainKey identifies a statement statistics row for cross-node
+// dedup/merge during a drain. Stats sharing this key are merged; stats
+// differing in any field are kept separate. The aggregated timestamp
+// keeps different aggregation windows in distinct buckets.
 type stmtDrainKey struct {
-	key          appstatspb.StatementStatisticsKey
-	aggregatedTs time.Time
+	fingerprintID            appstatspb.StmtFingerprintID
+	transactionFingerprintID appstatspb.TransactionFingerprintID
+	app                      string
+	planHash                 uint64
+	aggregatedTs             time.Time
 }
 
 // txnDrainKey includes the aggregated timestamp so that stats from different
@@ -60,7 +65,13 @@ func (b *DrainSqlStatsRespBuilder) AddStmtStats(
 	stmtStats []*appstatspb.CollectedStatementStatistics,
 ) {
 	for _, stmt := range stmtStats {
-		dk := stmtDrainKey{key: stmt.Key, aggregatedTs: stmt.AggregatedTs}
+		dk := stmtDrainKey{
+			fingerprintID:            stmt.ID,
+			transactionFingerprintID: stmt.Key.TransactionFingerprintID,
+			app:                      stmt.Key.App,
+			planHash:                 stmt.Key.PlanHash,
+			aggregatedTs:             stmt.AggregatedTs,
+		}
 		if existingStmt, ok := b.stmtMap[dk]; !ok {
 			b.stmtMap[dk] = stmt
 		} else {
