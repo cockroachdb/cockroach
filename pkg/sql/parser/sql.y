@@ -1095,7 +1095,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %token <str> RANGE RANGES READ REAL REASON REASSIGN RECURSIVE RECURRING REDACT REF REFERENCES REFERENCING REFRESH
 %token <str> REGCLASS REGION REGIONAL REGIONS REGNAMESPACE REGPROC REGPROCEDURE REGROLE REGTYPE REINDEX
 %token <str> RELATIVE RELOCATE REMOVE_PATH REMOVE_REGIONS RENAME REPEATABLE REPLACE REPLICATED REPLICATION
-%token <str> RELEASE RESET RESOLVED RESTART RESTORE RESTRICT RESTRICTED RESTRICTIVE RESUME RETENTION RETURNING RETURN RETURNS REVISION REVISION_HISTORY
+%token <str> RELEASE RESET RESOLVED RESOURCE RESTART RESTORE RESTRICT RESTRICTED RESTRICTIVE RESUME RETENTION RETURNING RETURN RETURNS REVISION REVISION_HISTORY
 %token <str> REVOKE RIGHT ROLE ROLES ROLLBACK ROLLUP ROUTINES ROW ROWS RSHIFT RULE RUN RUNNING
 
 %token <str> SAVEPOINT SCANS SCATTER SCHEDULE SCHEDULES SCROLL SCHEMA SCHEMA_ONLY SCHEMAS SCRUB
@@ -1317,6 +1317,13 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %type <tree.Statement> create_external_connection_stmt
 %type <tree.Statement> create_language_stmt
 %type <tree.Statement> alter_external_connection_stmt
+%type <tree.Statement> create_resource_group_stmt
+%type <tree.Statement> alter_resource_group_stmt
+%type <tree.Statement> drop_resource_group_stmt
+%type <tree.Statement> show_resource_group_stmt
+%type <tree.Statement> show_resource_groups_stmt
+%type <[]tree.KVOption> with_resource_group_options resource_group_option_list
+%type <tree.KVOption> resource_group_option
 %type <tree.Statement> create_index_stmt
 %type <tree.Statement> create_role_stmt
 %type <tree.Statement> create_schedule_for_backup_stmt
@@ -2008,6 +2015,7 @@ stmt_without_legacy_transaction:
 alter_stmt:
   alter_ddl_stmt      // help texts in sub-rule
 | alter_external_connection_stmt // EXTEND WITH HELP: ALTER EXTERNAL CONNECTION
+| alter_resource_group_stmt   // EXTEND WITH HELP: ALTER RESOURCE GROUP
 | alter_role_stmt     // EXTEND WITH HELP: ALTER ROLE
 | alter_virtual_cluster_stmt   /* SKIP DOC */
 | alter_unsupported_stmt
@@ -4274,6 +4282,122 @@ drop_external_connection_stmt:
 	}
 	| DROP EXTERNAL CONNECTION error // SHOW HELP: DROP EXTERNAL CONNECTION
 
+with_resource_group_options:
+  WITH resource_group_option_list
+  {
+    $$.val = $2.kvOptions()
+  }
+| WITH '(' resource_group_option_list ')'
+  {
+    $$.val = $3.kvOptions()
+  }
+
+resource_group_option_list:
+  resource_group_option
+  {
+    $$.val = []tree.KVOption{$1.kvOption()}
+  }
+| resource_group_option_list ',' resource_group_option
+  {
+    $$.val = append($1.kvOptions(), $3.kvOption())
+  }
+
+resource_group_option:
+  name '=' var_value
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: $3.expr()}
+  }
+
+// %Help: CREATE RESOURCE GROUP - create a resource group for the resource manager
+// %Category: Misc
+// %Text:
+// CREATE RESOURCE GROUP [IF NOT EXISTS] <name> WITH <option> = <value>, ...
+//
+// Options:
+//   cpu_weight = <int>   relative CPU share (must be > 0)
+//   max_cpu    = <bool>  whether the group may burst to the cluster's max CPU
+create_resource_group_stmt:
+  CREATE RESOURCE GROUP name with_resource_group_options
+  {
+    $$.val = &tree.CreateResourceGroup{
+      Name:    tree.Name($4),
+      Options: $5.kvOptions(),
+    }
+  }
+| CREATE RESOURCE GROUP IF NOT EXISTS name with_resource_group_options
+  {
+    $$.val = &tree.CreateResourceGroup{
+      IfNotExists: true,
+      Name:        tree.Name($7),
+      Options:     $8.kvOptions(),
+    }
+  }
+| CREATE RESOURCE GROUP error // SHOW HELP: CREATE RESOURCE GROUP
+
+// %Help: ALTER RESOURCE GROUP - alter an existing resource group
+// %Category: Misc
+// %Text:
+// ALTER RESOURCE GROUP [IF EXISTS] <name> WITH <option> = <value>, ...
+//
+// Only the options named are updated; unspecified options are left unchanged.
+alter_resource_group_stmt:
+  ALTER RESOURCE GROUP name with_resource_group_options
+  {
+    $$.val = &tree.AlterResourceGroup{
+      Name:    tree.Name($4),
+      Options: $5.kvOptions(),
+    }
+  }
+| ALTER RESOURCE GROUP IF EXISTS name with_resource_group_options
+  {
+    $$.val = &tree.AlterResourceGroup{
+      IfExists: true,
+      Name:     tree.Name($6),
+      Options:  $7.kvOptions(),
+    }
+  }
+| ALTER RESOURCE GROUP error // SHOW HELP: ALTER RESOURCE GROUP
+
+// %Help: DROP RESOURCE GROUP - drop an existing resource group
+// %Category: Misc
+// %Text:
+// DROP RESOURCE GROUP [IF EXISTS] <name>
+drop_resource_group_stmt:
+  DROP RESOURCE GROUP name
+  {
+    $$.val = &tree.DropResourceGroup{
+      Name: tree.Name($4),
+    }
+  }
+| DROP RESOURCE GROUP IF EXISTS name
+  {
+    $$.val = &tree.DropResourceGroup{
+      IfExists: true,
+      Name:     tree.Name($6),
+    }
+  }
+| DROP RESOURCE GROUP error // SHOW HELP: DROP RESOURCE GROUP
+
+// %Help: SHOW RESOURCE GROUP - show the configuration for a resource group
+// %Category: Misc
+// %Text: SHOW RESOURCE GROUP <name>
+show_resource_group_stmt:
+  SHOW RESOURCE GROUP name
+  {
+    $$.val = &tree.ShowResourceGroup{Name: tree.Name($4)}
+  }
+| SHOW RESOURCE GROUP error // SHOW HELP: SHOW RESOURCE GROUP
+
+// %Help: SHOW RESOURCE GROUPS - list all configured resource groups
+// %Category: Misc
+// %Text: SHOW RESOURCE GROUPS
+show_resource_groups_stmt:
+  SHOW RESOURCE GROUPS
+  {
+    $$.val = &tree.ShowResourceGroups{}
+  }
+| SHOW RESOURCE GROUPS error // SHOW HELP: SHOW RESOURCE GROUPS
+
 // %Help: RESTORE - restore data from external storage
 // %Category: CCL
 // %Text:
@@ -5033,6 +5157,7 @@ create_stmt:
 | create_extension_stmt  // EXTEND WITH HELP: CREATE EXTENSION
 | create_language_stmt   /* SKIP DOC */
 | create_external_connection_stmt // EXTEND WITH HELP: CREATE EXTERNAL CONNECTION
+| create_resource_group_stmt      // EXTEND WITH HELP: CREATE RESOURCE GROUP
 | create_virtual_cluster_stmt     // EXTEND WITH HELP: CREATE VIRTUAL CLUSTER
 | create_logical_replication_stream_stmt     // EXTEND WITH HELP: CREATE LOGICAL REPLICATION STREAM
 | create_schedule_stmt   // help texts in sub-rule
@@ -6885,6 +7010,7 @@ drop_stmt:
 | drop_provisioned_roles_stmt      // EXTEND WITH HELP: DROP PROVISIONED ROLES
 | drop_schedule_stmt               // EXTEND WITH HELP: DROP SCHEDULES
 | drop_external_connection_stmt // EXTEND WITH HELP: DROP EXTERNAL CONNECTION
+| drop_resource_group_stmt      // EXTEND WITH HELP: DROP RESOURCE GROUP
 | drop_virtual_cluster_stmt     // EXTEND WITH HELP: DROP VIRTUAL CLUSTER
 | drop_unsupported   {}
 | DROP error                    // SHOW HELP: DROP
@@ -9001,6 +9127,8 @@ show_stmt:
 | show_create_stmt           // EXTEND WITH HELP: SHOW CREATE
 | show_create_schedules_stmt // EXTEND WITH HELP: SHOW CREATE SCHEDULES
 | show_create_external_connections_stmt // EXTEND WITH HELP: SHOW CREATE EXTERNAL CONNECTIONS
+| show_resource_group_stmt   // EXTEND WITH HELP: SHOW RESOURCE GROUP
+| show_resource_groups_stmt  // EXTEND WITH HELP: SHOW RESOURCE GROUPS
 | show_local_or_virtual_cluster_csettings_stmt // EXTEND WITH HELP: SHOW CLUSTER SETTING
 | show_logical_replication_jobs_stmt	// EXTEND WITH HELP: SHOW LOGICAL REPLICATION JOBS
 | show_databases_stmt        // EXTEND WITH HELP: SHOW DATABASES
@@ -19643,6 +19771,7 @@ unreserved_keyword:
 | REPLICATION
 | RESET
 | RESOLVED
+| RESOURCE
 | RESTART
 | RESTORE
 | RESTRICT
@@ -20246,6 +20375,7 @@ bare_label_keywords:
 | REPLICATION
 | RESET
 | RESOLVED
+| RESOURCE
 | RESTART
 | RESTORE
 | RESTRICT

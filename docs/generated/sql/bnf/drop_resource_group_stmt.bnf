@@ -1,0 +1,3 @@
+drop_resource_group_stmt ::=
+	'DROP' 'RESOURCE' 'GROUP' name
+	| 'DROP' 'RESOURCE' 'GROUP' 'IF' 'EXISTS' name

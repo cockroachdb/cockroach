@@ -110,6 +110,8 @@ debug/system.replication_constraint_stats.txt
 debug/system.replication_critical_localities.txt
 debug/system.replication_stats.txt
 debug/system.reports_meta.txt
+debug/system.resource_group_id_seq.txt
+debug/system.resource_groups.txt
 debug/system.role_id_seq.txt
 debug/system.role_members.txt
 debug/system.role_options.txt
@@ -256,6 +258,8 @@ debug/system.replication_constraint_stats.txt
 debug/system.replication_critical_localities.txt
 debug/system.replication_stats.txt
 debug/system.reports_meta.txt
+debug/system.resource_group_id_seq.txt
+debug/system.resource_groups.txt
 debug/system.role_id_seq.txt
 debug/system.role_members.txt
 debug/system.role_options.txt
@@ -434,6 +438,8 @@ debug/system.replication_constraint_stats.txt
 debug/system.replication_critical_localities.txt
 debug/system.replication_stats.txt
 debug/system.reports_meta.txt
+debug/system.resource_group_id_seq.txt
+debug/system.resource_groups.txt
 debug/system.role_id_seq.txt
 debug/system.role_members.txt
 debug/system.role_options.txt
@@ -586,6 +592,8 @@ debug/system.replication_constraint_stats.txt
 debug/system.replication_critical_localities.txt
 debug/system.replication_stats.txt
 debug/system.reports_meta.txt
+debug/system.resource_group_id_seq.txt
+debug/system.resource_groups.txt
 debug/system.role_id_seq.txt
 debug/system.role_members.txt
 debug/system.role_options.txt

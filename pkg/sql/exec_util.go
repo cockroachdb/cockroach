@@ -142,7 +142,7 @@ func init() {
 		txn *kv.Txn,
 		override sessiondata.InternalExecutorOverride,
 		stmt string,
-		qargs ...interface{},
+		qargs ...any,
 	) (eval.InternalRows, error) {
 		ie := evalCtx.JobExecContext.(JobExecContext).ExecCfg().InternalDB.Executor()
 		return ie.QueryIteratorEx(ctx, opName, txn, override, stmt, qargs...)
@@ -401,6 +401,14 @@ var temporaryTablesEnabledClusterMode = settings.RegisterBoolSetting(
 	"default value for experimental_enable_temp_tables; allows for use of temporary tables by default",
 	false,
 	settings.WithPublic)
+
+var experimentalResourceGroupsEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.experimental_resource_groups.enabled",
+	"if true, enables CREATE/ALTER/DROP/SHOW RESOURCE GROUP SQL syntax; "+
+		"the resource manager is in development and not yet for production use",
+	false,
+)
 
 var implicitColumnPartitioningEnabledClusterMode = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
@@ -1719,7 +1727,7 @@ func EmptySystemTenantOnly[T any]() SystemTenantOnly[T] {
 // system.cluster_metrics. Implemented by cmwriter.Writer.
 type ClusterMetricAdder interface {
 	AddMetric(m metric.Iterable)
-	AddMetricStruct(s interface{})
+	AddMetricStruct(s any)
 }
 
 // An ExecutorConfig encompasses the auxiliary objects and configuration
@@ -2279,10 +2287,10 @@ type InspectTestingKnobs struct {
 	// has been created (if applicable). If it returns an error, the job fails.
 	OnInspectAfterProtectedTimestamp func() error
 	// InspectIssueLogger is an override to the default issue logger.
-	InspectIssueLogger interface{}
+	InspectIssueLogger any
 	// OnCheckComplete is called after a check completes. The check interface
 	// is passed to allow the callback to extract metadata (e.g., row counts).
-	OnCheckComplete func(check interface{}) error
+	OnCheckComplete func(check any) error
 	// OverrideSpans, if set, replaces the primary index spans before they
 	// are passed to PartitionSpans. This gives tests control over the exact
 	// spans used by the inspect job, bypassing the span merge logic in
@@ -2468,7 +2476,7 @@ func (p *planner) getPlanDistribution(
 // TODO: This does not support arguments of the SQL 'Date' type, as there is not
 // an equivalent type in Go's standard library. It's not currently needed by any
 // of our internal tables.
-func golangFillQueryArguments(args ...interface{}) (tree.Datums, error) {
+func golangFillQueryArguments(args ...any) (tree.Datums, error) {
 	res := make(tree.Datums, len(args))
 	for i, arg := range args {
 		if arg == nil {

@@ -28,6 +28,7 @@ proto_library(
     srcs = [
         "admission_stats.proto",
         "io_threshold.proto",
+        "resource_group.proto",
     ],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
