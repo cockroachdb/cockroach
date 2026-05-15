@@ -2635,6 +2635,29 @@ FROM defaults_parsed
 			Volatility: volatility.Volatile,
 		}),
 
+	// pg_relation_size, pg_table_size, and pg_total_relation_size all return
+	// the same cached value today: the total on-disk size of the entire table
+	// keyspace (primary index data plus all secondary indexes). This matches
+	// PG's pg_total_relation_size exactly. The other two are an over-count
+	// vs PG by the size of secondary indexes; they are intentionally distinct
+	// symbols so a future per-index extension to the metadata cache can
+	// tighten pg_relation_size and pg_table_size downward without touching
+	// pg_total_relation_size.
+	"pg_relation_size": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
+		relationSizeOverload("the relation"),
+	),
+
+	"pg_table_size": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
+		relationSizeOverload("the table, including TOAST and visibility map (where applicable)"),
+	),
+
+	"pg_total_relation_size": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
+		relationSizeOverload("the relation, including all indexes"),
+	),
+
 	// NOTE: these two builtins could be defined as user-defined functions, like
 	// they are in Postgres:
 	// https://github.com/postgres/postgres/blob/master/src/backend/catalog/information_schema.sql
@@ -3693,6 +3716,56 @@ func databaseSizeByOid(
 			"database with OID %d does not exist", dbOid)
 	}
 	return row[1], nil
+}
+
+// relationSizeQuery returns the cached on-disk size of the relation identified
+// by the supplied OID, or NULL if no such relation exists. The descriptor join
+// distinguishes "no descriptor" (NULL) from "descriptor exists but the cache
+// has not yet ingested it" (0). The query uses the NodeUser session-data
+// override at the call site to read the admin-only system.table_metadata.
+const relationSizeQuery = `
+SELECT CASE WHEN d.id IS NOT NULL
+            THEN COALESCE(tm.replication_size_bytes, 0)::INT
+            ELSE NULL
+       END
+  FROM (SELECT $1::INT AS id) input
+  LEFT JOIN system.descriptor d
+    ON d.id = input.id
+  LEFT JOIN system.table_metadata tm
+    ON tm.table_id = input.id`
+
+// relationSizeOverload constructs a single-OID-argument overload that returns
+// the cached on-disk size for a relation. The three pg_*_size functions all
+// share this overload today; see the comment on pg_relation_size above for
+// the intentional separation between symbols.
+func relationSizeOverload(infoSubject string) tree.Overload {
+	return tree.Overload{
+		Types:      tree.ParamTypes{{Name: "relation_oid", Typ: types.Oid}},
+		ReturnType: tree.FixedReturnType(types.Int),
+		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			oidArg := tree.MustBeDOid(args[0])
+			row, err := evalCtx.Planner.QueryRowEx(
+				ctx, "pg-relation-size",
+				sessiondata.NodeUserSessionDataOverride,
+				relationSizeQuery, int64(oidArg.Oid),
+			)
+			if err != nil {
+				return nil, err
+			}
+			if row == nil {
+				return tree.DNull, nil
+			}
+			return row[0], nil
+		},
+		Info: fmt.Sprintf(
+			"Returns the on-disk size, in bytes, of %s with the given OID. The size is read "+
+				"from a periodically-refreshed cache and may lag behind the true value by "+
+				"minutes. Returns NULL if no such relation exists.",
+			infoSubject,
+		),
+		// Volatile to match PostgreSQL's pg_proc.provolatile for these functions.
+		Volatility: volatility.Volatile,
+	}
 }
 
 func databaseSizeByName(
