@@ -1836,3 +1836,70 @@ SELECT pg_size_bytes(NULL)
 NULL
 
 subtest end
+
+subtest pg_database_size
+
+# Empty database with no cache entries returns 0.
+statement ok
+CREATE DATABASE pg_db_size_empty
+
+let $empty_db_oid
+SELECT oid::INT FROM pg_database WHERE datname = 'pg_db_size_empty'
+
+query I
+SELECT pg_database_size('pg_db_size_empty')
+----
+0
+
+query I
+SELECT pg_database_size($empty_db_oid::OID)
+----
+0
+
+# Errors match PG's wording for unknown OIDs and names.
+query error pgcode 42704 database with OID 99999999 does not exist
+SELECT pg_database_size(99999999::OID)
+
+query error pgcode 3D000 database "no_such_db_for_size" does not exist
+SELECT pg_database_size('no_such_db_for_size')
+
+# NULL passthrough.
+query I
+SELECT pg_database_size(NULL::OID)
+----
+NULL
+
+query I
+SELECT pg_database_size(NULL::STRING)
+----
+NULL
+
+# Insert synthetic cache rows so we can verify the SUM aggregation. The cache
+# is normally populated by a background job; inserting directly lets the test
+# avoid waiting for it.
+statement ok
+INSERT INTO system.table_metadata (
+  db_id, table_id, db_name, schema_name, table_name, total_columns,
+  total_indexes, store_ids, replication_size_bytes, total_ranges,
+  total_live_data_bytes, total_data_bytes, perc_live_data, table_type, details
+) VALUES
+  ($empty_db_oid, 90001, 'pg_db_size_empty', 'public', 't1', 2, 1, ARRAY[1], 1024, 1, 1024, 1024, 1.0, 'TABLE', '{}'),
+  ($empty_db_oid, 90002, 'pg_db_size_empty', 'public', 't2', 2, 1, ARRAY[1], 2048, 1, 2048, 2048, 1.0, 'TABLE', '{}')
+
+query I
+SELECT pg_database_size('pg_db_size_empty')
+----
+3072
+
+query I
+SELECT pg_database_size($empty_db_oid::OID)
+----
+3072
+
+statement count 2
+DELETE FROM system.table_metadata WHERE db_id = $empty_db_oid
+
+statement ok
+DROP DATABASE pg_db_size_empty
+
+subtest end

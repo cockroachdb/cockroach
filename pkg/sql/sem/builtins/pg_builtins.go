@@ -2607,6 +2607,34 @@ FROM defaults_parsed
 			Volatility: volatility.Immutable,
 		}),
 
+	"pg_database_size": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "database_oid", Typ: types.Oid}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				oidArg := tree.MustBeDOid(args[0])
+				return databaseSizeByOid(ctx, evalCtx, int64(oidArg.Oid))
+			},
+			Info: "Returns the on-disk size, in bytes, of all tables in the database with the " +
+				"given OID. The size is read from a periodically-refreshed cache and may lag " +
+				"behind the true value by minutes.",
+			// Volatile to match PostgreSQL's pg_proc.provolatile for this function.
+			Volatility: volatility.Volatile,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "database_name", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				name := string(tree.MustBeDString(args[0]))
+				return databaseSizeByName(ctx, evalCtx, name)
+			},
+			Info: "Returns the on-disk size, in bytes, of all tables in the named database. " +
+				"The size is read from a periodically-refreshed cache and may lag behind the " +
+				"true value by minutes.",
+			Volatility: volatility.Volatile,
+		}),
+
 	// NOTE: these two builtins could be defined as user-defined functions, like
 	// they are in Postgres:
 	// https://github.com/postgres/postgres/blob/master/src/backend/catalog/information_schema.sql
@@ -3623,4 +3651,69 @@ func isASCIISpace(b byte) bool {
 
 func isASCIIDigit(b byte) bool {
 	return b >= '0' && b <= '9'
+}
+
+// databaseSizeQuery is the shared query for the pg_database_size overloads.
+// It joins system.namespace (to validate that the database exists) with
+// system.table_metadata (the periodically-refreshed size cache). The query
+// returns one row containing the database's existence flag and the summed
+// replication size; the existence flag distinguishes "no such database"
+// (error) from "exists but no tables" (return 0).
+//
+// The query reads the admin-only system.table_metadata via the NodeUser
+// override at the call site.
+const databaseSizeQuery = `
+SELECT db.id IS NOT NULL,
+       COALESCE(sum(tm.replication_size_bytes), 0)::INT
+  FROM (SELECT $1::INT AS id) input
+  LEFT JOIN system.namespace db
+    ON db.id = input.id
+   AND db."parentID" = 0
+   AND db."parentSchemaID" = 0
+  LEFT JOIN system.table_metadata tm
+    ON tm.db_id = input.id
+ GROUP BY db.id`
+
+func databaseSizeByOid(
+	ctx context.Context, evalCtx *eval.Context, dbOid int64,
+) (tree.Datum, error) {
+	row, err := evalCtx.Planner.QueryRowEx(
+		ctx, "pg-database-size",
+		sessiondata.NodeUserSessionDataOverride,
+		databaseSizeQuery, dbOid,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if row == nil || !bool(tree.MustBeDBool(row[0])) {
+		// PostgreSQL uses pgcode 42704 (undefined_object) for the OID overload
+		// of pg_database_size (and 3D000 / undefined_database for the name
+		// overload — see databaseSizeByName).
+		return nil, pgerror.Newf(pgcode.UndefinedObject,
+			"database with OID %d does not exist", dbOid)
+	}
+	return row[1], nil
+}
+
+func databaseSizeByName(
+	ctx context.Context, evalCtx *eval.Context, name string,
+) (tree.Datum, error) {
+	// Resolve the database name to its descriptor ID via system.namespace, which
+	// is publicly readable. We do the resolution via SQL rather than reaching
+	// into the descriptor collection so the lookup runs under the same internal
+	// executor used for the size query, sharing its session-data override.
+	row, err := evalCtx.Planner.QueryRowEx(
+		ctx, "pg-database-size-resolve",
+		sessiondata.NodeUserSessionDataOverride,
+		`SELECT id FROM system.namespace WHERE "parentID" = 0 AND "parentSchemaID" = 0 AND name = $1`,
+		name,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if row == nil {
+		return nil, pgerror.Newf(pgcode.UndefinedDatabase,
+			"database %q does not exist", name)
+	}
+	return databaseSizeByOid(ctx, evalCtx, int64(tree.MustBeDInt(row[0])))
 }

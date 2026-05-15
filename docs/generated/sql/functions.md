@@ -3739,6 +3739,10 @@ may increase either contention or retry errors, or both.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="pg_column_size"></a><code>pg_column_size(any...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return size in bytes of the column provided as an argument</p>
 </span></td><td>Stable</td></tr>
+<tr><td><a name="pg_database_size"></a><code>pg_database_size(database_name: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the on-disk size, in bytes, of all tables in the named database. The size is read from a periodically-refreshed cache and may lag behind the true value by minutes.</p>
+</span></td><td>Volatile</td></tr>
+<tr><td><a name="pg_database_size"></a><code>pg_database_size(database_oid: oid) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the on-disk size, in bytes, of all tables in the database with the given OID. The size is read from a periodically-refreshed cache and may lag behind the true value by minutes.</p>
+</span></td><td>Volatile</td></tr>
 <tr><td><a name="pg_function_is_visible"></a><code>pg_function_is_visible(oid: oid) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the function with the given OID belongs to one of the schemas on the search path.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="pg_get_constraintdef"></a><code>pg_get_constraintdef(constraint_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the definition of the specified constraint.</p>
