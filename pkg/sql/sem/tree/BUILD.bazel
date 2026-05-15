@@ -35,6 +35,7 @@ go_library(
         "comment_on_constraint.go",
         "comment_on_database.go",
         "comment_on_index.go",
+        "comment_on_routine.go",
         "comment_on_schema.go",
         "comment_on_sequence.go",
         "comment_on_table.go",

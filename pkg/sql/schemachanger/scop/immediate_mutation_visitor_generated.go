@@ -130,6 +130,8 @@ type ImmediateMutationVisitor interface {
 	RemoveTableComment(context.Context, RemoveTableComment) error
 	UpsertTypeComment(context.Context, UpsertTypeComment) error
 	RemoveTypeComment(context.Context, RemoveTypeComment) error
+	UpsertFunctionComment(context.Context, UpsertFunctionComment) error
+	RemoveFunctionComment(context.Context, RemoveFunctionComment) error
 	UpsertDatabaseComment(context.Context, UpsertDatabaseComment) error
 	RemoveDatabaseComment(context.Context, RemoveDatabaseComment) error
 	UpsertSchemaComment(context.Context, UpsertSchemaComment) error
@@ -758,6 +760,16 @@ func (op UpsertTypeComment) Visit(ctx context.Context, v ImmediateMutationVisito
 // Visit is part of the ImmediateMutationOp interface.
 func (op RemoveTypeComment) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.RemoveTypeComment(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op UpsertFunctionComment) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.UpsertFunctionComment(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op RemoveFunctionComment) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.RemoveFunctionComment(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.

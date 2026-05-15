@@ -1096,7 +1096,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %token <str> REGCLASS REGION REGIONAL REGIONS REGNAMESPACE REGPROC REGPROCEDURE REGROLE REGTYPE REINDEX
 %token <str> RELATIVE RELOCATE REMOVE_PATH REMOVE_REGIONS RENAME REPEATABLE REPLACE REPLICATED REPLICATION
 %token <str> RELEASE RESET RESOLVED RESOURCE RESTART RESTORE RESTRICT RESTRICTED RESTRICTIVE RESUME RETENTION RETURNING RETURN RETURNS REVISION REVISION_HISTORY
-%token <str> REVOKE RIGHT ROLE ROLES ROLLBACK ROLLUP ROUTINES ROW ROWS RSHIFT RULE RUN RUNNING
+%token <str> REVOKE RIGHT ROLE ROLES ROLLBACK ROLLUP ROUTINE ROUTINES ROW ROWS RSHIFT RULE RUN RUNNING
 
 %token <str> SAVEPOINT SCANS SCATTER SCHEDULE SCHEDULES SCROLL SCHEMA SCHEMA_ONLY SCHEMAS SCRUB
 %token <str> SEARCH SECOND SECONDARY SECURITY SECURITY_INVOKER SELECT SEQUENCE SEQUENCES
@@ -5134,7 +5134,18 @@ comment_stmt:
     $$.val = &tree.CommentOnConstraint{Constraint:tree.Name($4), Table: $6.unresolvedObjectName(), Comment: $8.strPtr()}
   }
 | COMMENT ON EXTENSION error { return unimplementedWithIssueDetail(sqllex, 74777, "comment on extension") }
-| COMMENT ON FUNCTION error { return unimplementedWithIssueDetail(sqllex, 44135, "comment on function") }
+| COMMENT ON FUNCTION function_with_paramtypes IS comment_text
+  {
+    $$.val = &tree.CommentOnRoutine{Routine: $4.functionObj(), RoutineType: tree.UDFRoutine, Comment: $6.strPtr()}
+  }
+| COMMENT ON PROCEDURE function_with_paramtypes IS comment_text
+  {
+    $$.val = &tree.CommentOnRoutine{Routine: $4.functionObj(), RoutineType: tree.ProcedureRoutine, Comment: $6.strPtr()}
+  }
+| COMMENT ON ROUTINE function_with_paramtypes IS comment_text
+  {
+    $$.val = &tree.CommentOnRoutine{Routine: $4.functionObj(), RoutineType: tree.UDFRoutine | tree.ProcedureRoutine, Comment: $6.strPtr()}
+  }
 
 comment_text:
   SCONST
@@ -19822,6 +19833,7 @@ unreserved_keyword:
 | ROLES
 | ROLLBACK
 | ROLLUP
+| ROUTINE
 | ROUTINES
 | ROWS
 | RULE
@@ -20427,6 +20439,7 @@ bare_label_keywords:
 | ROLES
 | ROLLBACK
 | ROLLUP
+| ROUTINE
 | ROUTINES
 | ROW
 | ROWS

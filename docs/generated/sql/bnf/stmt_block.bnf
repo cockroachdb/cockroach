@@ -87,6 +87,9 @@ comment_stmt ::=
 	| 'COMMENT' 'ON' 'COLUMN' column_path 'IS' comment_text
 	| 'COMMENT' 'ON' 'INDEX' table_index_name 'IS' comment_text
 	| 'COMMENT' 'ON' 'CONSTRAINT' constraint_name 'ON' table_name 'IS' comment_text
+	| 'COMMENT' 'ON' 'FUNCTION' function_with_paramtypes 'IS' comment_text
+	| 'COMMENT' 'ON' 'PROCEDURE' function_with_paramtypes 'IS' comment_text
+	| 'COMMENT' 'ON' 'ROUTINE' function_with_paramtypes 'IS' comment_text
 
 execute_stmt ::=
 	'EXECUTE' table_alias_name execute_param_clause
@@ -423,6 +426,10 @@ table_index_name ::=
 
 constraint_name ::=
 	name
+
+function_with_paramtypes ::=
+	db_object_name func_params
+	| db_object_name
 
 table_alias_name ::=
 	name
@@ -1179,6 +1186,10 @@ index_name ::=
 standalone_index_name ::=
 	db_object_name
 
+func_params ::=
+	'(' func_params_list ')'
+	| '(' ')'
+
 unreserved_keyword ::=
 	'ABORT'
 	| 'ABSOLUTE'
@@ -1552,6 +1563,7 @@ unreserved_keyword ::=
 	| 'ROLES'
 	| 'ROLLBACK'
 	| 'ROLLUP'
+	| 'ROUTINE'
 	| 'ROUTINES'
 	| 'ROWS'
 	| 'RULE'
@@ -2479,9 +2491,8 @@ unrestricted_name ::=
 	| type_func_name_keyword
 	| reserved_keyword
 
-function_with_paramtypes ::=
-	db_object_name func_params
-	| db_object_name
+func_params_list ::=
+	( routine_param ) ( ( ',' routine_param ) )*
 
 transaction_mode ::=
 	transaction_iso_level
@@ -3437,9 +3448,12 @@ reserved_keyword ::=
 	| 'WITH'
 	| cockroachdb_extra_reserved_keyword
 
-func_params ::=
-	'(' func_params_list ')'
-	| '(' ')'
+routine_param ::=
+	routine_param_class param_name routine_param_type
+	| param_name routine_param_class routine_param_type
+	| param_name routine_param_type
+	| routine_param_class routine_param_type
+	| routine_param_type
 
 transaction_iso_level ::=
 	'ISOLATION' 'LEVEL' iso_level
@@ -3969,8 +3983,14 @@ type_func_name_no_crdb_extra_keyword ::=
 	| 'RIGHT'
 	| 'SIMILAR'
 
-func_params_list ::=
-	( routine_param ) ( ( ',' routine_param ) )*
+routine_param_class ::=
+	'IN'
+	| 'OUT'
+	| 'INOUT'
+	| 'IN' 'OUT'
+
+param_name ::=
+	type_function_name
 
 iso_level ::=
 	'READ' 'UNCOMMITTED'
@@ -4186,9 +4206,6 @@ create_routine_opt_item ::=
 routine_body_stmt ::=
 	stmt_without_legacy_transaction
 	| routine_return_stmt
-
-param_name ::=
-	type_function_name
 
 trigger_transition ::=
 	transition_is_new transition_is_row opt_as table_alias_name
@@ -4660,6 +4677,7 @@ bare_label_keywords ::=
 	| 'ROLES'
 	| 'ROLLBACK'
 	| 'ROLLUP'
+	| 'ROUTINE'
 	| 'ROUTINES'
 	| 'ROW'
 	| 'ROWS'
@@ -4979,13 +4997,6 @@ opt_nowait_or_skip ::=
 wildcard_pattern ::=
 	name '.' '*'
 
-routine_param ::=
-	routine_param_class param_name routine_param_type
-	| param_name routine_param_class routine_param_type
-	| param_name routine_param_type
-	| routine_param_class routine_param_type
-	| routine_param_type
-
 opt_column ::=
 	'COLUMN'
 	| 
@@ -5229,12 +5240,6 @@ group_by_item ::=
 
 window_definition ::=
 	window_name 'AS' window_specification
-
-routine_param_class ::=
-	'IN'
-	| 'OUT'
-	| 'INOUT'
-	| 'IN' 'OUT'
 
 col_qual_list ::=
 	(  ) ( ( col_qualification ) )*

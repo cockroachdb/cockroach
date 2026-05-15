@@ -590,6 +590,10 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.FunctionParams)(nil)),
 		rel.EntityAttr(DescID, "FunctionID"),
 	),
+	rel.EntityMapping(t((*scpb.FunctionComment)(nil)),
+		rel.EntityAttr(DescID, "FunctionID"),
+		rel.EntityAttr(Value, "Comment"),
+	),
 	// Domain constraint elements are placed at the end to avoid introducing
 	// new attribute ordinals before existing ones, which would change the
 	// field order in element string formatting across all golden files.

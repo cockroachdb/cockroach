@@ -1196,6 +1196,14 @@ func (w *walkCtx) walkFunction(fnDesc catalog.FunctionDescriptor) {
 			Params:     fn.Params,
 		})
 	}
+	if w.clusterVersion.IsActive(clusterversion.V26_3) {
+		if comment, ok := w.commentReader.GetFunctionComment(fnDesc.GetID()); ok {
+			w.ev(scpb.Status_PUBLIC, &scpb.FunctionComment{
+				FunctionID: fnDesc.GetID(),
+				Comment:    comment,
+			})
+		}
+	}
 
 	fnBody := &scpb.FunctionBody{
 		FunctionID:  fnDesc.GetID(),
