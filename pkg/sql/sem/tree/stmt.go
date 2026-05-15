@@ -105,7 +105,10 @@ const (
 	CommentOnColumnTag     = "COMMENT ON COLUMN"
 	CommentOnConstraintTag = "COMMENT ON CONSTRAINT"
 	CommentOnDatabaseTag   = "COMMENT ON DATABASE"
+	CommentOnFunctionTag   = "COMMENT ON FUNCTION"
 	CommentOnIndexTag      = "COMMENT ON INDEX"
+	CommentOnProcedureTag  = "COMMENT ON PROCEDURE"
+	CommentOnRoutineTag    = "COMMENT ON ROUTINE"
 	CommentOnSchemaTag     = "COMMENT ON SCHEMA"
 	CommentOnSequenceTag   = "COMMENT ON SEQUENCE"
 	CommentOnTableTag      = "COMMENT ON TABLE"
@@ -973,6 +976,26 @@ func (*CommentOnView) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*CommentOnView) StatementTag() string { return CommentOnViewTag }
+
+// StatementReturnType implements the Statement interface.
+func (*CommentOnRoutine) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*CommentOnRoutine) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns the keyword the user wrote (FUNCTION, PROCEDURE, or
+// ROUTINE) so telemetry, log lines, and EXPLAIN reflect intent rather than
+// always showing FUNCTION.
+func (n *CommentOnRoutine) StatementTag() string {
+	switch n.RoutineType {
+	case ProcedureRoutine:
+		return CommentOnProcedureTag
+	case UDFRoutine | ProcedureRoutine:
+		return CommentOnRoutineTag
+	default:
+		return CommentOnFunctionTag
+	}
+}
 
 // StatementReturnType implements the Statement interface.
 func (*CommentOnSequence) StatementReturnType() StatementReturnType { return DDL }
@@ -2782,6 +2805,7 @@ func (n *CommentOnConstraint) String() string                 { return AsString(
 func (n *CommentOnDatabase) String() string                   { return AsString(n) }
 func (n *CommentOnSchema) String() string                     { return AsString(n) }
 func (n *CommentOnIndex) String() string                      { return AsString(n) }
+func (n *CommentOnRoutine) String() string                    { return AsString(n) }
 func (n *CommentOnSequence) String() string                   { return AsString(n) }
 func (n *CommentOnTable) String() string                      { return AsString(n) }
 func (n *CommentOnType) String() string                       { return AsString(n) }

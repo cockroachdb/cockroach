@@ -22,6 +22,15 @@ var commentResolveParams = ResolveParams{
 	RequiredPrivilege:   privilege.CREATE,
 }
 
+// ownerCommentResolveParams is used by COMMENT ON statements that gate on
+// ownership rather than CREATE — currently only COMMENT ON
+// FUNCTION/PROCEDURE/ROUTINE, since functions have no per-object CREATE
+// privilege and PG requires the routine owner.
+var ownerCommentResolveParams = ResolveParams{
+	IsExistenceOptional: false,
+	RequireOwnership:    true,
+}
+
 // CommentOnDatabase implements COMMENT ON DATABASE xxx IS xxx statement.
 func CommentOnDatabase(b BuildCtx, statement *tree.CommentOnDatabase) {
 	elements := b.ResolveDatabase(statement.Name, commentResolveParams)
@@ -157,6 +166,24 @@ func CommentOnIndex(b BuildCtx, statement *tree.CommentOnIndex) {
 	}
 }
 
+// CommentOnRoutine implements COMMENT ON FUNCTION, COMMENT ON PROCEDURE,
+// and COMMENT ON ROUTINE. ResolveRoutine enforces the kind filter encoded
+// in statement.RoutineType, panics on builtins, and resolves overloads
+// from the optional argument list.
+func CommentOnRoutine(b BuildCtx, statement *tree.CommentOnRoutine) {
+	fnElements := b.ResolveRoutine(&statement.Routine, ownerCommentResolveParams, statement.RoutineType)
+	fn := fnElements.FilterFunction().MustGetOneElement()
+
+	if statement.Comment == nil {
+		if existing := fnElements.FilterFunctionComment().MustGetZeroOrOneElement(); existing != nil {
+			b.Drop(existing)
+			b.LogEventForExistingTarget(existing)
+		}
+		return
+	}
+	addComment(b, fnElements, &scpb.FunctionComment{FunctionID: fn.FunctionID, Comment: *statement.Comment})
+}
+
 // CommentOnConstraint implements COMMENT ON CONSTRAINT xxx ON table_name IS xxx
 // statement.
 func CommentOnConstraint(b BuildCtx, statement *tree.CommentOnConstraint) {
@@ -175,7 +202,8 @@ func dropComment(b BuildCtx, elements *scpb.ElementCollection[scpb.Element]) {
 	elements.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 		switch e.(type) {
 		case *scpb.DatabaseComment, *scpb.SchemaComment, *scpb.IndexComment,
-			*scpb.ConstraintComment, *scpb.ColumnComment, *scpb.TypeComment:
+			*scpb.ConstraintComment, *scpb.ColumnComment, *scpb.TypeComment,
+			*scpb.FunctionComment:
 			b.Drop(e)
 			b.LogEventForExistingTarget(e)
 		}

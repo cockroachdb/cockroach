@@ -54,6 +54,7 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	reflect.TypeOf((*tree.CommentOnConstraint)(nil)): {fn: CommentOnConstraint, statementTags: []string{tree.CommentOnConstraintTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.CommentOnDatabase)(nil)):   {fn: CommentOnDatabase, statementTags: []string{tree.CommentOnDatabaseTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.CommentOnIndex)(nil)):      {fn: CommentOnIndex, statementTags: []string{tree.CommentOnIndexTag}, on: true, checks: nil},
+	reflect.TypeOf((*tree.CommentOnRoutine)(nil)):    {fn: CommentOnRoutine, statementTags: []string{tree.CommentOnFunctionTag, tree.CommentOnProcedureTag, tree.CommentOnRoutineTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.CommentOnSchema)(nil)):     {fn: CommentOnSchema, statementTags: []string{tree.CommentOnSchemaTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.CommentOnSequence)(nil)):   {fn: CommentOnSequence, statementTags: []string{tree.CommentOnSequenceTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.CommentOnTable)(nil)):      {fn: CommentOnTable, statementTags: []string{tree.CommentOnTableTag}, on: true, checks: nil},

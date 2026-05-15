@@ -166,6 +166,7 @@ message ElementProto {
     FunctionBody function_body = 164 [(gogoproto.moretags) = "parent:\"Function\""];
     FunctionSecurity function_security = 165 [(gogoproto.moretags) = "parent:\"Function\""];
     FunctionParams function_params = 166 [(gogoproto.moretags) = "parent:\"Function\""];
+    FunctionComment function_comment = 167 [(gogoproto.moretags) = "parent:\"Function\""];
 
     // Domain type elements.
     DomainDefault domain_default = 250 [(gogoproto.moretags) = "parent:\"DomainType\""];
@@ -851,6 +852,11 @@ message TableComment {
 
 message TypeComment {
   uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  string comment = 2;
+}
+
+message FunctionComment {
+  uint32 function_id = 1 [(gogoproto.customname) = "FunctionID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   string comment = 2;
 }
 

@@ -1379,6 +1379,43 @@ func (c *ElementCollection[E]) FilterFunctionBody() *ElementCollection[*Function
 	return (*ElementCollection[*FunctionBody])(ret)
 }
 
+func (e FunctionComment) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_FunctionComment) Element() Element {
+	return e.FunctionComment
+}
+
+// ForEachFunctionComment iterates over elements of type FunctionComment.
+// Deprecated
+func ForEachFunctionComment(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *FunctionComment),
+) {
+  c.FilterFunctionComment().ForEach(fn)
+}
+
+// FindFunctionComment finds the first element of type FunctionComment.
+// Deprecated
+func FindFunctionComment(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *FunctionComment) {
+	if tc := c.FilterFunctionComment(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*FunctionComment)
+	}
+	return current, target, element
+}
+
+// FunctionCommentElements filters elements of type FunctionComment.
+func (c *ElementCollection[E]) FilterFunctionComment() *ElementCollection[*FunctionComment] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*FunctionComment)
+		return ok
+	})
+	return (*ElementCollection[*FunctionComment])(ret)
+}
+
 func (e FunctionLeakProof) element() {}
 
 // Element implements ElementGetter.
@@ -3789,6 +3826,8 @@ func (e* ElementProto) SetElement(element Element) {
 			e.ElementOneOf = &ElementProto_Function{ Function: t}
 		case *FunctionBody:
 			e.ElementOneOf = &ElementProto_FunctionBody{ FunctionBody: t}
+		case *FunctionComment:
+			e.ElementOneOf = &ElementProto_FunctionComment{ FunctionComment: t}
 		case *FunctionLeakProof:
 			e.ElementOneOf = &ElementProto_FunctionLeakProof{ FunctionLeakProof: t}
 		case *FunctionName:
@@ -3958,6 +3997,7 @@ func GetElementOneOfProtos() []interface{} {
 	((*ElementProto_ForeignKeyConstraintUnvalidated)(nil)),
 	((*ElementProto_Function)(nil)),
 	((*ElementProto_FunctionBody)(nil)),
+	((*ElementProto_FunctionComment)(nil)),
 	((*ElementProto_FunctionLeakProof)(nil)),
 	((*ElementProto_FunctionName)(nil)),
 	((*ElementProto_FunctionNullInputBehavior)(nil)),
@@ -4065,6 +4105,7 @@ func GetElementTypes() []interface{} {
 	((*ForeignKeyConstraintUnvalidated)(nil)),
 	((*Function)(nil)),
 	((*FunctionBody)(nil)),
+	((*FunctionComment)(nil)),
 	((*FunctionLeakProof)(nil)),
 	((*FunctionName)(nil)),
 	((*FunctionNullInputBehavior)(nil)),

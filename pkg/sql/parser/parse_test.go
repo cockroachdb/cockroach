@@ -371,7 +371,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE ACCESS METHOD a`, 0, `create access method`, ``},
 
 		{`COMMENT ON EXTENSION a`, 74777, `comment on extension`, ``},
-		{`COMMENT ON FUNCTION f() is 'f'`, 44135, ``, ``},
 
 		{`COPY t FROM STDIN OIDS`, 0, `copy from unsupported format`, ``},
 		{`COPY t FROM STDIN FREEZE`, 85573, `freeze`, ``},

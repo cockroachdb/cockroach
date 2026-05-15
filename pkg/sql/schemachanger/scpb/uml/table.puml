@@ -241,6 +241,11 @@ FunctionBody : []UsesSequenceIDs
 FunctionBody : []UsesTypeIDs
 FunctionBody : []UsesFunctionIDs
 
+object FunctionComment
+
+FunctionComment :  FunctionID
+FunctionComment :  Comment
+
 object FunctionLeakProof
 
 FunctionLeakProof :  FunctionID
@@ -670,6 +675,7 @@ EnumType <|-- EnumTypeValue
 Table <|-- ForeignKeyConstraint
 Table <|-- ForeignKeyConstraintUnvalidated
 Function <|-- FunctionBody
+Function <|-- FunctionComment
 Function <|-- FunctionLeakProof
 Function <|-- FunctionName
 Function <|-- FunctionNullInputBehavior

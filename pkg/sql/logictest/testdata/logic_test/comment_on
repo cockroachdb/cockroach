@@ -782,3 +782,179 @@ statement ok
 DROP SEQUENCE comment_seq
 
 subtest end
+
+# Tests for COMMENT ON FUNCTION / PROCEDURE / ROUTINE (issue #44135).
+# Declarative-only, mirroring COMMENT ON TYPE. Functions get their own
+# scpb.FunctionComment element and the catalogkeys.FunctionCommentType (6)
+# storage. Privilege model is ownership, matching PG and matching how
+# DROP/ALTER FUNCTION already gate.
+subtest comment_on_function_and_procedure
+
+statement ok
+CREATE FUNCTION fn_comment_int(x INT) RETURNS INT LANGUAGE SQL AS 'SELECT x'
+
+statement ok
+CREATE FUNCTION fn_comment_str(x STRING) RETURNS STRING LANGUAGE SQL AS 'SELECT x'
+
+statement ok
+CREATE PROCEDURE proc_comment(x INT) LANGUAGE SQL AS 'SELECT 1'
+
+# Legacy schema changer rejects all three keywords with kind-specific errors.
+onlyif config local-legacy-schema-changer
+statement error COMMENT ON FUNCTION is only implemented in the declarative schema changer
+COMMENT ON FUNCTION fn_comment_int(INT) IS 'fn_legacy'
+
+onlyif config local-legacy-schema-changer
+statement error COMMENT ON PROCEDURE is only implemented in the declarative schema changer
+COMMENT ON PROCEDURE proc_comment(INT) IS 'proc_legacy'
+
+onlyif config local-legacy-schema-changer
+statement error COMMENT ON ROUTINE is only implemented in the declarative schema changer
+COMMENT ON ROUTINE fn_comment_int(INT) IS 'routine_legacy'
+
+# Declarative path: each keyword sets a comment.
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+COMMENT ON FUNCTION fn_comment_int(INT) IS 'fn_int_v1'
+
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+COMMENT ON PROCEDURE proc_comment(INT) IS 'proc_v1'
+
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+COMMENT ON ROUTINE fn_comment_str(STRING) IS 'fn_str_via_routine'
+
+# Comments are stored with type=6 (FunctionCommentType) keyed by the
+# routine's descriptor ID. Function OIDs are descriptor IDs offset by the
+# CockroachPredefinedOIDMax (100000) so we subtract that to compare.
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query IT rowsort
+SELECT type, comment
+  FROM system.comments
+ WHERE type = 6
+   AND object_id IN (
+     'fn_comment_int(INT)'::regprocedure::oid::int - 100000,
+     'fn_comment_str(STRING)'::regprocedure::oid::int - 100000,
+     'proc_comment(INT)'::regprocedure::oid::int - 100000)
+----
+6  fn_int_v1
+6  fn_str_via_routine
+6  proc_v1
+
+# Comments surface via obj_description(oid, 'pg_proc').
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query T
+SELECT obj_description('fn_comment_int(INT)'::regprocedure::oid, 'pg_proc')
+----
+fn_int_v1
+
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query T
+SELECT obj_description('proc_comment(INT)'::regprocedure::oid, 'pg_proc')
+----
+proc_v1
+
+# Overwriting an existing comment.
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+COMMENT ON FUNCTION fn_comment_int(INT) IS 'fn_int_v2'
+
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query T
+SELECT obj_description('fn_comment_int(INT)'::regprocedure::oid, 'pg_proc')
+----
+fn_int_v2
+
+# Setting comment to NULL removes it.
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+COMMENT ON FUNCTION fn_comment_int(INT) IS NULL
+
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query I
+SELECT count(*) FROM system.comments
+ WHERE type = 6
+   AND object_id = 'fn_comment_int(INT)'::regprocedure::oid::int - 100000
+----
+0
+
+# Re-set so the DROP cleanup test below has something to clean up.
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+COMMENT ON FUNCTION fn_comment_int(INT) IS 'fn_int_v3'
+
+# Wrong-kind: COMMENT ON FUNCTION on a procedure errors, and vice versa.
+# ResolveRoutine surfaces this as "X(args) is not a function/procedure".
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement error proc_comment\(int\) is not a function
+COMMENT ON FUNCTION proc_comment(INT) IS 'oops'
+
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement error fn_comment_int\(int\) is not a procedure
+COMMENT ON PROCEDURE fn_comment_int(INT) IS 'oops'
+
+# COMMENT ON ROUTINE accepts either kind.
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+COMMENT ON ROUTINE proc_comment(INT) IS 'proc_via_routine'
+
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query T
+SELECT obj_description('proc_comment(INT)'::regprocedure::oid, 'pg_proc')
+----
+proc_via_routine
+
+# Builtin functions are off-limits for COMMENT ON writes. ResolveRoutine's
+# RoutineType filter excludes BuiltinRoutine, so the failure mode is
+# "is not a function/procedure" rather than the panic message — either way
+# the write is rejected.
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement error length\(string\) is not a function
+COMMENT ON FUNCTION length(STRING) IS 'oops'
+
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement error length\(string\) is not a procedure
+COMMENT ON PROCEDURE length(STRING) IS 'oops'
+
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement error length\(string\) is not a function
+COMMENT ON ROUTINE length(STRING) IS 'oops'
+
+# Builtin descriptions remain readable through obj_description, populated
+# by crdb_internal.kv_builtin_function_comments. Pick a stable builtin
+# whose Info string isn't expected to change. crdb_internal.cluster_id is
+# a no-arg builtin with a stable description.
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query B
+SELECT obj_description('crdb_internal.cluster_id()'::regprocedure::oid, 'pg_proc') IS NOT NULL
+----
+true
+
+# DROP FUNCTION removes the comment from system.comments via the scdecomp
+# wiring (FunctionComment element gets dropped when the parent Function
+# element is dropped).
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+DROP FUNCTION fn_comment_int(INT)
+
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query I
+SELECT count(*) FROM system.comments WHERE type = 6 AND comment = 'fn_int_v3'
+----
+0
+
+# Cleanup.
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+DROP FUNCTION fn_comment_str(STRING);
+DROP PROCEDURE proc_comment(INT)
+
+# Final invalid_objects check: the comment-on-routine plumbing should not
+# leave dangling system.comments rows.
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query ITTTT
+SELECT * FROM "".crdb_internal.invalid_objects WHERE error LIKE '%FunctionCommentType%' OR error LIKE '%type 6%'
+----
+
+subtest end
