@@ -8,7 +8,9 @@ package row
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"sort"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -36,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -44,7 +47,25 @@ const (
 	maxRowSizeFloor = 1 << 10
 	// maxRowSizeCeil is the upper bound for sql.guardrails.max_row_size_{log|err}.
 	maxRowSizeCeil = 1 << 30
+	// maxRawPrimaryKeyLen caps the raw encoded key bytes fed to keys.PrettyPrint
+	// when building the PrimaryKey field for LargeRow / LargeRowInternal events.
+	// keys.PrettyPrint allocates two full-size copies of its output (the
+	// markered redact.RedactableString and the StripMarkers result), and the
+	// downstream JSON encoding path performs several more, none tracked by the
+	// SQL memory monitor. Bounding the input bytes bounds every downstream
+	// allocation: no encoding type expands by more than a small constant
+	// factor under PrettyPrint, so a 1 KiB input bounds the output at a few
+	// KiB. The keys decoder tolerates a truncated tail
+	// (encoding.PrettyPrintValue emits "???" for unparseable values rather
+	// than panicking), so slicing the key is safe.
+	maxRawPrimaryKeyLen = 1 << 10
 )
+
+// largeRowLogEvery is the per-RowHelper rate limit on large-row event
+// emissions. Suppressed events are counted and surfaced via
+// CommonLargeRowDetails.SkippedLargeRows on the next emitted event. Declared
+// as a var (rather than a const) so tests can lower it.
+var largeRowLogEvery = time.Second
 
 var maxRowSizeLog = settings.RegisterByteSizeSetting(
 	settings.ApplicationLevel,
@@ -118,6 +139,16 @@ type RowHelper struct {
 	// Used to check row size.
 	maxRowSizeLog, maxRowSizeErr uint32
 	metrics                      *rowinfra.Metrics
+
+	// largeRowLogLast is the monotonic clock reading at which CheckRowSize
+	// last emitted a LargeRow / LargeRowInternal event. CheckRowSize
+	// suppresses subsequent emissions that fall within largeRowLogEvery and
+	// counts them in skippedLargeRows. Both fields are accessed without
+	// synchronization: a RowHelper is owned by a single statement-table
+	// pipeline and is not used concurrently (see also dirs and
+	// sortedColumnFamilies above).
+	largeRowLogLast  crtime.Mono
+	skippedLargeRows uint64
 }
 
 func NewRowHelper(
@@ -447,7 +478,13 @@ func (rh *RowHelper) SortedColumnFamily(famID descpb.FamilyID) ([]descpb.ColumnI
 }
 
 // CheckRowSize compares the size of a primary key column family against the
-// max_row_size limits.
+// max_row_size limits. When the row exceeds max_row_size_log it emits a
+// LargeRow / LargeRowInternal event; when it exceeds max_row_size_err it
+// returns a ProgramLimitExceeded error. Log emissions are rate-limited to
+// one per largeRowLogEvery per RowHelper; the count of suppressed events is
+// reported in CommonLargeRowDetails.SkippedLargeRows on the next emitted
+// event. The error path is not rate-limited (it is naturally bounded since
+// the statement aborts on the first error).
 func (rh *RowHelper) CheckRowSize(
 	ctx context.Context, key *roachpb.Key, valueBytes []byte, family descpb.FamilyID,
 ) error {
@@ -457,17 +494,39 @@ func (rh *RowHelper) CheckRowSize(
 	if !shouldLog && !shouldErr {
 		return nil
 	}
-	details := eventpb.CommonLargeRowDetails{
-		RowSize:    size,
-		TableID:    uint32(rh.TableDesc.GetID()),
-		FamilyID:   uint32(family),
-		PrimaryKey: keys.PrettyPrint(primaryIndexDirs.compute(rh), *key),
-	}
 	if rh.sd.Internal && shouldErr {
 		// Internal work should never err and always log if violating either limit.
 		shouldErr = false
 		shouldLog = true
 	}
+	// Rate-limit the log path. The error path always proceeds, so when we
+	// will return an error we must build details (and reset the suppressed
+	// counter via the emission below) regardless of the rate limiter.
+	if shouldLog && !shouldErr {
+		now := crtime.NowMono()
+		if rh.largeRowLogLast != 0 && now.Sub(rh.largeRowLogLast) < largeRowLogEvery {
+			rh.skippedLargeRows++
+			if rh.metrics != nil {
+				rh.metrics.MaxRowSizeLogCount.Inc(1)
+			}
+			return nil
+		}
+		rh.largeRowLogLast = now
+	}
+
+	// Construct details only when we will actually surface them — either as
+	// a log event or as an error. PrettyPrint, JSON encoding, and redact
+	// marker escaping are all O(key length); capping the key before any of
+	// that bounds per-event memory regardless of how wide the key is.
+	details := eventpb.CommonLargeRowDetails{
+		RowSize:          size,
+		TableID:          uint32(rh.TableDesc.GetID()),
+		FamilyID:         uint32(family),
+		PrimaryKey:       prettyPrintBoundedKey(primaryIndexDirs.compute(rh), *key),
+		SkippedLargeRows: rh.skippedLargeRows,
+	}
+	rh.skippedLargeRows = 0
+
 	if shouldLog {
 		if rh.metrics != nil {
 			rh.metrics.MaxRowSizeLogCount.Inc(1)
@@ -487,6 +546,23 @@ func (rh *RowHelper) CheckRowSize(
 		return pgerror.WithCandidateCode(&details, pgcode.ProgramLimitExceeded)
 	}
 	return nil
+}
+
+// prettyPrintBoundedKey returns a pretty-printed primary key suitable for the
+// PrimaryKey field of a LargeRow / LargeRowInternal event, with bounded
+// memory usage regardless of key size. The raw encoded key is sliced to
+// maxRawPrimaryKeyLen before pretty-printing — slicing is free, and bounding
+// the input bytes bounds every downstream allocation in the PrettyPrint →
+// JSON-encode → log pipeline. When the input is sliced, a trailer records
+// the original raw key length so an operator can tell truncation occurred
+// and how big the real key was.
+func prettyPrintBoundedKey(dirs []encoding.Direction, key roachpb.Key) string {
+	rawLen := len(key)
+	if rawLen <= maxRawPrimaryKeyLen {
+		return keys.PrettyPrint(dirs, key)
+	}
+	return keys.PrettyPrint(dirs, key[:maxRawPrimaryKeyLen]) +
+		fmt.Sprintf("…(truncated; full encoded key is %d bytes)", rawLen)
 }
 
 var deleteEncoding protoutil.Message = &rowencpb.IndexValueWrapper{

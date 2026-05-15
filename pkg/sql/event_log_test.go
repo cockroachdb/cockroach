@@ -295,22 +295,27 @@ func TestPerfLogging(t *testing.T) {
 			logExpected: false,
 		},
 		{
-			query:       `ALTER TABLE t ADD COLUMN f FLOAT DEFAULT 99.999`,
-			errRe:       ``,
-			logRe:       `"EventType":"large_row_internal","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/4/0›"`,
+			query: `ALTER TABLE t ADD COLUMN f FLOAT DEFAULT 99.999`,
+			errRe: ``,
+			// Schema-change backfills emit one large_row_internal per
+			// CheckRowSize call; CheckRowSize rate-limits per RowHelper, so
+			// only the first row whose CF size exceeds the threshold gets
+			// logged. The PK of that row depends on iteration order, so
+			// match any value rather than a specific one.
+			logRe:       `"EventType":"large_row_internal","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/\d+/0›"`,
 			logExpected: true,
 			breakHere:   true,
 		},
 		{
 			query:       `CREATE TABLE t2 (i, s, PRIMARY KEY (i)) AS SELECT i, s FROM t`,
 			errRe:       ``,
-			logRe:       `"EventType":"large_row_internal","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/4/0›"`,
+			logRe:       `"EventType":"large_row_internal","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/\d+/0›"`,
 			logExpected: true,
 		},
 		{
 			query:       `ALTER TABLE t2 ADD COLUMN z STRING DEFAULT repeat('z', 2048)`,
 			errRe:       ``,
-			logRe:       `"EventType":"large_row_internal","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/4/0›"`,
+			logRe:       `"EventType":"large_row_internal","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/\d+/0›"`,
 			logExpected: true,
 		},
 		{

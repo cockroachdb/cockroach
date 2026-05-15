@@ -2044,6 +2044,15 @@ func (m *CommonLargeRowDetails) AppendJSONFields(printComma bool, b redact.Redac
 		b = append(b, '"')
 	}
 
+	if m.SkippedLargeRows != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SkippedLargeRows\":"...)
+		b = strconv.AppendUint(b, uint64(m.SkippedLargeRows), 10)
+	}
+
 	return printComma, b
 }
 
