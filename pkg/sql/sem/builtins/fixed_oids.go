@@ -2958,6 +2958,7 @@ var builtinOidsArray = []string{
 	3003: `pg_relation_size(relation_oid: oid) -> int`,
 	3004: `pg_table_size(relation_oid: oid) -> int`,
 	3005: `pg_total_relation_size(relation_oid: oid) -> int`,
+	3006: `pg_indexes_size(relation_oid: oid) -> int`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

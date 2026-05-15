@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
 )
 
@@ -2635,27 +2636,94 @@ FROM defaults_parsed
 			Volatility: volatility.Volatile,
 		}),
 
-	// pg_relation_size, pg_table_size, and pg_total_relation_size all return
-	// the same cached value today: the total on-disk size of the entire table
-	// keyspace (primary index data plus all secondary indexes). This matches
-	// PG's pg_total_relation_size exactly. The other two are an over-count
-	// vs PG by the size of secondary indexes; they are intentionally distinct
-	// symbols so a future per-index extension to the metadata cache can
-	// tighten pg_relation_size and pg_table_size downward without touching
-	// pg_total_relation_size.
+	// pg_relation_size and pg_table_size return the size of the table's
+	// primary index — equivalent to PG's "heap only" since CRDB's primary
+	// index *is* the row data. pg_total_relation_size keeps reading the
+	// whole-table-prefix size from system.table_metadata, so any
+	// dropped-index garbage that hasn't yet been GC'd shows up as the
+	// difference between pg_total_relation_size and (pg_table_size +
+	// pg_indexes_size).
+	//
+	// During a mixed-version upgrade, cache rows written by the previous
+	// version may not yet have a primary_index_id field in details. Both
+	// pg_relation_size and pg_table_size fall back to replication_size_bytes
+	// in that case so callers see the v1 (over-counted) value rather than
+	// NULL or 0. Once the cluster is fully upgraded and the cache cycles
+	// once, all rows have the per-index data and the fallback is dormant.
 	"pg_relation_size": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
-		relationSizeOverload("the relation"),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "relation_oid", Typ: types.Oid}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			// pg_relation_size accepts either a table OID or an index OID. The
+			// SQL dispatches between the two cases based on whether the OID
+			// resolves to a system.descriptor row (table) or a pg_class row
+			// of relkind 'i' (index). The table case bypasses pg_class
+			// visibility (matching the other size builtins); the index case
+			// goes through pg_class and respects its visibility filter.
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return runRelationSizeLookup(ctx, evalCtx, "pg-relation-size",
+					relationSizeQuery, int64(tree.MustBeDOid(args[0]).Oid))
+			},
+			Info: "Returns the on-disk size, in bytes, of the relation with the given OID. " +
+				"For a table-class relation this is the primary index size (matching PG's " +
+				"\"heap only\" semantics, since CockroachDB's primary index is the row data). " +
+				"For an index this is the size of just that index. The size is read from a " +
+				"periodically-refreshed cache and may lag behind the true value by minutes. " +
+				"Returns NULL if no such relation is visible to the caller.",
+			Volatility: volatility.Volatile,
+		},
 	),
 
 	"pg_table_size": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
-		relationSizeOverload("the table, including TOAST and visibility map (where applicable)"),
+		tableRelationSizeOverload(
+			"Returns the on-disk size, in bytes, of the table with the given OID, excluding "+
+				"indexes. In CockroachDB this is the primary index size, since the primary "+
+				"index is the row data. The size is read from a periodically-refreshed cache "+
+				"and may lag behind the true value by minutes.",
+		),
 	),
 
 	"pg_total_relation_size": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
-		relationSizeOverload("the relation, including all indexes"),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "relation_oid", Typ: types.Oid}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return runRelationSizeLookup(ctx, evalCtx, "pg-total-relation-size",
+					totalRelationSizeQuery, int64(tree.MustBeDOid(args[0]).Oid))
+			},
+			Info: "Returns the on-disk size, in bytes, of the relation with the given OID, " +
+				"including all indexes and any data still occupying the table's keyspace " +
+				"(such as dropped-index data awaiting garbage collection). The size is read " +
+				"from a periodically-refreshed cache and may lag behind the true value by " +
+				"minutes.",
+			Volatility: volatility.Volatile,
+		},
+	),
+
+	"pg_indexes_size": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "relation_oid", Typ: types.Oid}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return runRelationSizeLookup(ctx, evalCtx, "pg-indexes-size",
+					indexesSizeQuery, int64(tree.MustBeDOid(args[0]).Oid))
+			},
+			// CRDB diverges from PG slightly: PostgreSQL's pg_indexes_size
+			// includes the primary index, but in CRDB the primary index is the
+			// row data (it has no separate heap), so including it would
+			// double-count against pg_table_size and break the identity
+			// pg_table_size + pg_indexes_size <= pg_total_relation_size.
+			Info: "Returns the total on-disk size, in bytes, of the secondary indexes attached " +
+				"to the relation with the given OID. The primary index is excluded (it is " +
+				"reported by pg_relation_size and pg_table_size, since CockroachDB stores " +
+				"row data in the primary index). The size is read from a " +
+				"periodically-refreshed cache and may lag behind the true value by minutes.",
+			Volatility: volatility.Volatile,
+		},
 	),
 
 	// NOTE: these two builtins could be defined as user-defined functions, like
@@ -3718,12 +3786,12 @@ func databaseSizeByOid(
 	return row[1], nil
 }
 
-// relationSizeQuery returns the cached on-disk size of the relation identified
-// by the supplied OID, or NULL if no such relation exists. The descriptor join
-// distinguishes "no descriptor" (NULL) from "descriptor exists but the cache
-// has not yet ingested it" (0). The query uses the NodeUser session-data
-// override at the call site to read the admin-only system.table_metadata.
-const relationSizeQuery = `
+// totalRelationSizeQuery returns the entire-table-prefix size of the relation
+// with the supplied OID. NULL if no descriptor exists; 0 if descriptor exists
+// but the cache hasn't ingested it. Includes any data sitting in the table's
+// keyspace that isn't in a live index (e.g., dropped-index garbage awaiting
+// GC). Used by pg_total_relation_size.
+const totalRelationSizeQuery = `
 SELECT CASE WHEN d.id IS NOT NULL
             THEN COALESCE(tm.replication_size_bytes, 0)::INT
             ELSE NULL
@@ -3734,35 +3802,123 @@ SELECT CASE WHEN d.id IS NOT NULL
   LEFT JOIN system.table_metadata tm
     ON tm.table_id = input.id`
 
-// relationSizeOverload constructs a single-OID-argument overload that returns
-// the cached on-disk size for a relation. The three pg_*_size functions all
-// share this overload today; see the comment on pg_relation_size above for
-// the intentional separation between symbols.
-func relationSizeOverload(infoSubject string) tree.Overload {
+// tableRelationSizeQuery returns the size of the relation's primary index —
+// matching PG's "heap only" semantics for pg_relation_size and pg_table_size,
+// since CRDB's primary index *is* the row data.
+//
+// The mixed-version COALESCE fallback to replication_size_bytes covers cache
+// rows written before the per-index extension landed: those rows lack the
+// primary_index_id field in details. Falling back keeps the function
+// returning the v1 (over-counted) value rather than NULL or 0 for the brief
+// window between cluster upgrade and the next cache refresh.
+const tableRelationSizeQuery = `
+SELECT CASE WHEN d.id IS NOT NULL
+            THEN COALESCE(
+              (tm.details->'index_sizes'->>(tm.details->>'primary_index_id'))::INT,
+              tm.replication_size_bytes,
+              0
+            )
+            ELSE NULL
+       END
+  FROM (SELECT $1::INT AS id) input
+  LEFT JOIN system.descriptor d
+    ON d.id = input.id
+  LEFT JOIN system.table_metadata tm
+    ON tm.table_id = input.id`
+
+// indexesSizeQuery returns the sum of secondary-index sizes for the relation
+// with the supplied OID. Excludes the primary index (which is reported by
+// pg_relation_size / pg_table_size). NULL if no descriptor exists; 0 if
+// descriptor exists but the cache lacks per-index data.
+const indexesSizeQuery = `
+SELECT CASE WHEN d.id IS NOT NULL
+            THEN COALESCE((
+              SELECT sum(value::INT)::INT
+              FROM jsonb_each_text(tm.details->'index_sizes')
+              WHERE key != (tm.details->>'primary_index_id')
+            ), 0)
+            ELSE NULL
+       END
+  FROM (SELECT $1::INT AS id) input
+  LEFT JOIN system.descriptor d
+    ON d.id = input.id
+  LEFT JOIN system.table_metadata tm
+    ON tm.table_id = input.id`
+
+// relationSizeQuery is the dispatch query used by pg_relation_size. It
+// returns the cached size for either a table-class relation (primary index
+// size, with the same mixed-version COALESCE fallback as
+// tableRelationSizeQuery) or an index (the entry in
+// details->'index_sizes' keyed by index_id, resolved via pg_class).
+//
+// Resolution priority:
+//   - If the OID resolves to a system.descriptor row (table-class),
+//     return the table primary-index size. This branch bypasses pg_class
+//     visibility, matching the other table-size builtins.
+//   - Else if the OID resolves to a pg_class row of relkind 'i' (index),
+//     return that index's cached size. This branch respects pg_class
+//     visibility — slight inconsistency with the table branch, but PG
+//     itself routes index lookups through pg_class so this is closer to
+//     PG's natural visibility model for indexes.
+//   - Else return NULL.
+const relationSizeQuery = `
+SELECT CASE
+         WHEN d.id IS NOT NULL THEN COALESCE(
+           (tm.details->'index_sizes'->>(tm.details->>'primary_index_id'))::INT,
+           tm.replication_size_bytes,
+           0
+         )
+         WHEN c.relkind = 'i' THEN COALESCE(
+           (tm_idx.details->'index_sizes'->>ti.index_id::TEXT)::INT,
+           0
+         )
+         ELSE NULL
+       END
+  FROM (SELECT $1::INT AS id) input
+  LEFT JOIN system.descriptor d   ON d.id = input.id
+  LEFT JOIN system.table_metadata tm
+         ON tm.table_id = input.id
+  LEFT JOIN pg_catalog.pg_class c ON c.oid = input.id
+  LEFT JOIN pg_catalog.pg_index i ON i.indexrelid = c.oid
+  LEFT JOIN crdb_internal.table_indexes ti
+         ON ti.descriptor_id = i.indrelid AND ti.index_name = c.relname
+  LEFT JOIN system.table_metadata tm_idx
+         ON tm_idx.table_id = i.indrelid`
+
+// runRelationSizeLookup runs one of the *RelationSizeQuery statements above
+// with the given OID, using the NodeUser session-data override to bypass the
+// admin-only privileges on system.table_metadata. Returns NULL when the OID
+// does not resolve to a relation (or, for indexRelationSizeQuery, to a
+// pg_class row of relkind 'i').
+func runRelationSizeLookup(
+	ctx context.Context, evalCtx *eval.Context, opName, query string, oidArg int64,
+) (tree.Datum, error) {
+	row, err := evalCtx.Planner.QueryRowEx(
+		ctx, redact.RedactableString(opName),
+		sessiondata.NodeUserSessionDataOverride,
+		query, oidArg,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if row == nil {
+		return tree.DNull, nil
+	}
+	return row[0], nil
+}
+
+// tableRelationSizeOverload constructs the single-OID overload that returns
+// the primary-index size for a table-class relation, used by pg_table_size.
+// Unlike pg_relation_size, pg_table_size does not also handle index OIDs.
+func tableRelationSizeOverload(info string) tree.Overload {
 	return tree.Overload{
 		Types:      tree.ParamTypes{{Name: "relation_oid", Typ: types.Oid}},
 		ReturnType: tree.FixedReturnType(types.Int),
 		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-			oidArg := tree.MustBeDOid(args[0])
-			row, err := evalCtx.Planner.QueryRowEx(
-				ctx, "pg-relation-size",
-				sessiondata.NodeUserSessionDataOverride,
-				relationSizeQuery, int64(oidArg.Oid),
-			)
-			if err != nil {
-				return nil, err
-			}
-			if row == nil {
-				return tree.DNull, nil
-			}
-			return row[0], nil
+			return runRelationSizeLookup(ctx, evalCtx, "pg-table-size",
+				tableRelationSizeQuery, int64(tree.MustBeDOid(args[0]).Oid))
 		},
-		Info: fmt.Sprintf(
-			"Returns the on-disk size, in bytes, of %s with the given OID. The size is read "+
-				"from a periodically-refreshed cache and may lag behind the true value by "+
-				"minutes. Returns NULL if no such relation exists.",
-			infoSubject,
-		),
+		Info: info,
 		// Volatile to match PostgreSQL's pg_proc.provolatile for these functions.
 		Volatility: volatility.Volatile,
 	}

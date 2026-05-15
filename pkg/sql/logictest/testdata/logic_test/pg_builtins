@@ -1988,10 +1988,124 @@ SELECT pg_relation_size(c.oid)
 ----
 4096
 
+# pg_indexes_size on a row with empty details returns 0, since there are
+# no per-index entries to sum.
+query I
+SELECT pg_indexes_size($relsize_oid::OID)
+----
+0
+
 statement count 1
 DELETE FROM system.table_metadata WHERE table_id = $relsize_oid
 
 statement ok
 DROP TABLE pg_relsize_t
+
+subtest end
+
+subtest pg_size_per_index
+
+# Build a table with two secondary indexes and populate a synthetic cache
+# row whose details JSONB has per-index sizes. Then verify the math:
+#   pg_relation_size = pg_table_size = primary index size only
+#   pg_indexes_size  = sum of secondary index sizes
+#   pg_total_relation_size = whole table prefix (including any garbage)
+#   pg_table_size + pg_indexes_size <= pg_total_relation_size
+statement ok
+CREATE TABLE pg_idxsize_t (id INT PRIMARY KEY, a STRING, b STRING, INDEX (a), INDEX (b))
+
+let $idxsize_oid
+SELECT 'pg_idxsize_t'::regclass::oid::INT
+
+let $idxsize_db_oid
+SELECT oid::INT FROM pg_database WHERE datname = current_database()
+
+# Determine the primary index_id and the two secondary index_ids from
+# crdb_internal.table_indexes so the synthetic details JSONB matches what
+# the real cache job would produce.
+let $idxsize_primary_id
+SELECT index_id FROM crdb_internal.table_indexes
+WHERE descriptor_id = $idxsize_oid AND index_type = 'primary'
+
+# Insert a synthetic cache row. replication_size_bytes is intentionally
+# 1000 larger than the sum of per-index sizes — that 1000-byte gap stands
+# in for dropped-index garbage.
+statement ok
+INSERT INTO system.table_metadata (
+  db_id, table_id, db_name, schema_name, table_name, total_columns,
+  total_indexes, store_ids, replication_size_bytes, total_ranges,
+  total_live_data_bytes, total_data_bytes, perc_live_data, table_type, details
+) VALUES (
+  $idxsize_db_oid, $idxsize_oid, current_database(), 'public', 'pg_idxsize_t',
+  4, 3, ARRAY[1], 7000, 1, 7000, 7000, 1.0, 'TABLE',
+  json_build_object(
+    'primary_index_id', $idxsize_primary_id,
+    'index_sizes', json_build_object(
+      $idxsize_primary_id::TEXT, 4000,
+      (SELECT min(index_id) FROM crdb_internal.table_indexes
+        WHERE descriptor_id = $idxsize_oid AND index_type = 'secondary')::TEXT, 1000,
+      (SELECT max(index_id) FROM crdb_internal.table_indexes
+        WHERE descriptor_id = $idxsize_oid AND index_type = 'secondary')::TEXT, 1000
+    )
+  )
+)
+
+# Primary index size only.
+query I
+SELECT pg_relation_size($idxsize_oid::OID)
+----
+4000
+
+query I
+SELECT pg_table_size($idxsize_oid::OID)
+----
+4000
+
+# Sum of secondary index sizes.
+query I
+SELECT pg_indexes_size($idxsize_oid::OID)
+----
+2000
+
+# Whole table prefix, including the 1000-byte garbage gap.
+query I
+SELECT pg_total_relation_size($idxsize_oid::OID)
+----
+7000
+
+# Identity holds: pg_table_size + pg_indexes_size <= pg_total_relation_size.
+# The gap (1000 bytes here) is the GC-pressure proxy.
+query II
+SELECT pg_table_size($idxsize_oid::OID) + pg_indexes_size($idxsize_oid::OID),
+       pg_total_relation_size($idxsize_oid::OID)
+       - (pg_table_size($idxsize_oid::OID) + pg_indexes_size($idxsize_oid::OID))
+----
+6000  1000
+
+# pg_relation_size on a secondary index OID returns just that index's size.
+query TI rowsort
+SELECT c.relname, pg_relation_size(c.oid)
+  FROM pg_catalog.pg_class c
+  JOIN pg_catalog.pg_index i ON i.indexrelid = c.oid
+ WHERE i.indrelid = $idxsize_oid AND c.relkind = 'i'
+   AND NOT i.indisprimary
+----
+pg_idxsize_t_a_idx  1000
+pg_idxsize_t_b_idx  1000
+
+# pg_relation_size on the primary index OID also returns its cached size.
+query I
+SELECT pg_relation_size(c.oid)
+  FROM pg_catalog.pg_class c
+  JOIN pg_catalog.pg_index i ON i.indexrelid = c.oid
+ WHERE i.indrelid = $idxsize_oid AND i.indisprimary
+----
+4000
+
+statement count 1
+DELETE FROM system.table_metadata WHERE table_id = $idxsize_oid
+
+statement ok
+DROP TABLE pg_idxsize_t
 
 subtest end
