@@ -56,24 +56,22 @@ EXPLAIN (VEC) SELECT * FROM lf_distributed
 
 # With the filter set to us-east-1, scan flows should move off non-matching
 # nodes (1-6) onto us-east-1 nodes (7-9). The gateway (node 1) still
-# coordinates.
+# coordinates the result via Inboxes but does not run a local scan.
+#
+# We don't pin the EXPLAIN (VEC) output here because makeInstanceResolver
+# picks randomly among matching instances when the lease holder's locality
+# has no shared prefix with the eligible set (see distsql_physical_planner.go,
+# the SpanPartitionReason_LOCALITY_FILTERED_RANDOM branch). Instead, we
+# assert the deterministic invariant: nodes outside us-east-1 (specifically
+# nodes 2-6) must not appear anywhere in the plan.
 statement ok
 SET distsql_plan_locality_filter = 'region=us-east-1'
 
-query T
-EXPLAIN (VEC) SELECT * FROM lf_distributed
+query I
+SELECT count(*) FROM [EXPLAIN (VEC) SELECT * FROM lf_distributed]
+WHERE info ~ ' Node [2-6]$'
 ----
-│
-├ Node 1
-│ └ *colexec.ParallelUnorderedSynchronizer
-│   ├ *colrpc.Inbox
-│   └ *colrpc.Inbox
-├ Node 7
-│ └ *colrpc.Outbox
-│   └ *colfetcher.ColBatchScan
-└ Node 8
-  └ *colrpc.Outbox
-    └ *colfetcher.ColBatchScan
+0
 
 # Narrowing further to a specific AZ restricts to node 7 plus the gateway
 # (node 1) which coordinates the result.
