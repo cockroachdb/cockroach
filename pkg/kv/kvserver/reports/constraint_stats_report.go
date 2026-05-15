@@ -463,28 +463,45 @@ func (v *constraintConformanceVisitor) visitNewZone(
 		v.visitErr = retErr != nil
 	}()
 
-	// Find the applicable constraints, which may be inherited.
+	// Find the applicable constraints, which may be inherited independently.
+	// A subzone may define its own VoterConstraints while inheriting
+	// Constraints from a parent zone, so we walk the zone hierarchy and
+	// capture each field from the most specific zone that defines it.
 	var numVoters int
 	var constraints []zonepb.ConstraintsConjunction
 	var voterConstraints []zonepb.ConstraintsConjunction
 	var zKey ZoneKey
+	var foundConstraints, foundVoterConstraints, foundNumVoters bool
 	_, err := visitZones(ctx, r, v.cfg, ignoreSubzonePlaceholders,
 		func(_ context.Context, zone *zonepb.ZoneConfig, key ZoneKey) bool {
-			if zone.Constraints == nil {
-				return false
+			// Use the most specific zone that defines any constraint field
+			// as the zone key for reporting.
+			if !foundConstraints && !foundVoterConstraints {
+				if zone.Constraints != nil || zone.VoterConstraints != nil {
+					zKey = key
+				}
 			}
-			// Check num voters and only set it if it is different from num replicas.
-			var numReplicas int32
-			if zone.NumReplicas != nil {
-				numReplicas = *zone.NumReplicas
+			if !foundVoterConstraints && zone.VoterConstraints != nil {
+				voterConstraints = zone.VoterConstraints
+				foundVoterConstraints = true
 			}
-			if zone.NumVoters != nil && numReplicas != *zone.NumVoters {
-				numVoters = int(*zone.NumVoters)
+			if !foundConstraints && zone.Constraints != nil {
+				constraints = zone.Constraints
+				foundConstraints = true
 			}
-			constraints = zone.Constraints
-			voterConstraints = zone.VoterConstraints
-			zKey = key
-			return true
+			// NumVoters is inherited from the most specific zone that sets
+			// it, independently of which zone provides Constraints.
+			if !foundNumVoters && zone.NumVoters != nil {
+				var numReplicas int32
+				if zone.NumReplicas != nil {
+					numReplicas = *zone.NumReplicas
+				}
+				if numReplicas != *zone.NumVoters {
+					numVoters = int(*zone.NumVoters)
+				}
+				foundNumVoters = true
+			}
+			return foundConstraints && foundVoterConstraints
 		})
 	if err != nil {
 		return errors.Wrap(err, "unexpected error visiting zones")
