@@ -52,6 +52,13 @@ func TestAllowedLocalSSDCount(t *testing.T) {
 		{"c2-standard-60", []int{8}, false},
 		// N.B. n2-standard-64 doesn't exist, but we still get the ssd counts based on cpu count.
 		{"c2-standard-64", []int{8}, false},
+
+		{"c4a-standard-4", nil, true},
+		{"c4a-standard-4-lssd", []int{1}, false},
+		{"c4a-standard-16-lssd", []int{4}, false},
+		{"c4a-standard-1-lssd", nil, true},
+		{"c4a-highmem-32-lssd", []int{6}, false},
+		{"c4a-highcpu-32-lssd", nil, true},
 	} {
 		t.Run(c.machineType, func(t *testing.T) {
 			actual, err := AllowedLocalSSDCount(c.machineType)
@@ -104,6 +111,45 @@ func TestAnnotateGCECapacityErrorAddsZone(t *testing.T) {
 	assert.True(t, errors.As(err, &capacityErr))
 	assert.Equal(t, vm.CreateCapacityClassZone, capacityErr.CapacityClass)
 	assert.Equal(t, []string{"us-central1-a"}, capacityErr.FailedZones)
+}
+
+func TestDefaultC4AZonesExcludesUnsupportedZones(t *testing.T) {
+	for _, geo := range []bool{false, true} {
+		for i := 0; i < 20; i++ {
+			zones := DefaultC4AZones(geo)
+			if !IsSupportedC4AZone(zones) {
+				t.Errorf("DefaultC4AZones(geo=%v) returned zones unsupported by C4A: %v", geo, zones)
+			}
+		}
+	}
+}
+
+func TestC4AZoneValidation(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		zones     []string
+		supported bool
+	}{
+		{name: "empty", supported: true},
+		{name: "supported default", zones: []string{"us-east1-b", "us-west1-c", "europe-central2-a"}, supported: true},
+		{name: "unsupported west1 b", zones: []string{"us-east1-b", "us-west1-b"}, supported: false},
+		{name: "unsupported asia northeast1 a", zones: []string{"asia-northeast1-a"}, supported: false},
+		{name: "unsupported europe central2 b", zones: []string{"europe-central2-b"}, supported: false},
+		{name: "unsupported europe central2 c", zones: []string{"europe-central2-c"}, supported: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.supported, IsSupportedC4AZone(tc.zones))
+		})
+	}
+}
+
+func TestComputeZonesRejectsUnsupportedC4AExplicitZones(t *testing.T) {
+	_, err := computeZones(vm.CreateOpts{GeoDistributed: true}, &ProviderOpts{
+		MachineType: "c4a-standard-4-lssd",
+		Zones:       []string{"us-east1-b", "us-west1-b"},
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "C4A instances are not supported")
 }
 
 func Test_buildFilterPreemptionCliArgs(t *testing.T) {
