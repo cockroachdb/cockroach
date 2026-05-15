@@ -158,7 +158,8 @@ func backupRestoreRoundTrip(
 	m.Go(func(ctx context.Context) error {
 		testUtils, err := setupBackupRestoreTestUtils(
 			ctx, t, c, testRNG,
-			withMock(sp.mock), withOnlineRestore(sp.onlineRestore), withCompaction(!sp.onlineRestore),
+			withMock(sp.mock), withOnlineRestore(sp.onlineRestore),
+			withCompaction(!sp.onlineRestore), withClusterSettings(envOption),
 		)
 		if err != nil {
 			return err

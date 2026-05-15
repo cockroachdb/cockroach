@@ -112,6 +112,12 @@ type CommonTestUtils struct {
 	onlineRestore     bool
 	compactionEnabled bool
 
+	// clusterSettings are the cluster setting options the test was started
+	// with. resetCluster re-applies them on every restart so the cluster comes
+	// back with the same configuration (notably env vars, which are read once
+	// at process start).
+	clusterSettings []install.ClusterSettingOption
+
 	connCache struct {
 		mu    syncutil.Mutex
 		cache []*gosql.DB
@@ -135,6 +141,12 @@ func withOnlineRestore(or bool) commonTestOption {
 func withCompaction(c bool) commonTestOption {
 	return func(cu *CommonTestUtils) {
 		cu.compactionEnabled = c
+	}
+}
+
+func withClusterSettings(s ...install.ClusterSettingOption) commonTestOption {
+	return func(cu *CommonTestUtils) {
+		cu.clusterSettings = append(cu.clusterSettings, s...)
 	}
 }
 
@@ -804,6 +816,9 @@ func (u *CommonTestUtils) resetCluster(
 	}
 
 	cockroachPath := clusterupgrade.CockroachPathForVersion(u.t, version)
+	// Prepend the test-wide cluster settings so caller-supplied settings
+	// override them on conflict.
+	settings = append(append([]install.ClusterSettingOption{}, u.clusterSettings...), settings...)
 	settings = append(settings, install.BinaryOption(cockroachPath), install.SimpleSecureOption(true))
 	return clusterupgrade.StartWithSettings(
 		ctx, l, u.cluster, u.roachNodes, option.NewStartOpts(opts...), settings...,
