@@ -386,7 +386,9 @@ func (b *Builder) buildStmt(
 		case *tree.Insert, *tree.Update, *tree.Delete:
 		case *tree.Call:
 		case *tree.DoBlock:
-		case *tree.CreateTable, *tree.DropTable:
+		case *tree.CreateTable, *tree.DropTable,
+			*tree.CreateSchema, *tree.DropSchema,
+			*tree.CreateRole, *tree.DropRole:
 			if !b.insideProcDef {
 				panic(unimplemented.NewWithIssuef(110080,
 					"%s usage inside a function definition is not supported",
