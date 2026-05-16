@@ -603,7 +603,7 @@ func (f *FlowBase) Wait() {
 	}
 	waitChan := make(chan struct{})
 
-	go func() {
+	go func() { // nolint:baregofunc
 		f.waitGroup.Wait()
 		close(waitChan)
 	}()

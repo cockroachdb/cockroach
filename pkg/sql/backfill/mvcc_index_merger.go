@@ -280,7 +280,7 @@ func (ibm *IndexBackfillMerger) Run(ctx context.Context, output execinfra.RowRec
 	})
 
 	workersDoneCh := make(chan error)
-	go func() {
+	go func() { // nolint:baregofunc
 		// Without this defer, a panic re-thrown from a ctxgroup worker via Wait
 		// would tear down the SQL pod with no Sentry report. We can't switch
 		// this goroutine to stop.Stopper.RunAsyncTask because Run blocks on

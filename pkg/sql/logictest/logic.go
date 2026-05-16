@@ -3894,7 +3894,7 @@ func (t *logicTest) execStatement(stmt logicStatement, disableCFMutator bool) (b
 		t.pendingStatements[stmt.statementName] = pending
 
 		startedChan := make(chan struct{})
-		go func() {
+		go func() { // nolint:baregofunc
 			startedChan <- struct{}{}
 			res, err := db.Exec(execSQL)
 			pending.resultChan <- pendingExecResult{execSQL, res, err}
@@ -4011,7 +4011,7 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		}
 
 		startedChan := make(chan struct{})
-		go func() {
+		go func() { // nolint:baregofunc
 			startedChan <- struct{}{}
 			rows, err := db.Query(query.sql)
 			pending.resultChan <- pendingQueryResult{rows, err}
