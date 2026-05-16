@@ -93,6 +93,15 @@ func (m mockOidcManager) ExchangeVerifyGetClaims(
 
 var _ IOIDCManager = &mockOidcManager{}
 
+func findCookie(resp *http.Response, name string) *http.Cookie {
+	for _, c := range resp.Cookies() {
+		if c.Name == name {
+			return c
+		}
+	}
+	return nil
+}
+
 func TestOIDCEnabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -154,10 +163,10 @@ func TestOIDCEnabled(t *testing.T) {
 	if resp.StatusCode != 302 {
 		t.Fatalf("expected 302 status code but got: %d", resp.StatusCode)
 	}
-	if resp.Cookies()[0].Name != secretCookieName {
+	cookie := findCookie(resp, secretCookieName)
+	if cookie == nil {
 		t.Fatal("Missing cookie")
 	}
-	cookie := resp.Cookies()[0]
 
 	authURL, err := url.Parse(resp.Header.Get("Location"))
 	require.NoError(t, err)
@@ -177,7 +186,7 @@ func TestOIDCEnabled(t *testing.T) {
 		t.Fatal("HMAC generated incorrectly.")
 	}
 
-	key, err := base64.URLEncoding.DecodeString(resp.Cookies()[0].Value)
+	key, err := base64.URLEncoding.DecodeString(cookie.Value)
 	require.NoError(t, err)
 	mac := hmac.New(sha256.New, key)
 	mac.Write(state.Token)

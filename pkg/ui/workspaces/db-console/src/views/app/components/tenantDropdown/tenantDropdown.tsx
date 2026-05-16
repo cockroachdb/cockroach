@@ -38,7 +38,11 @@ export default class TenantDropdown extends React.Component<
   onTenantChange(tenant: string) {
     if (tenant !== this.state.currentTenant) {
       setCookie(tenantIDKey, tenant);
-      location.reload();
+      // Update ?cluster= in the URL so the server-side cookie persistence
+      // (which reads ?cluster=) stays in sync with the dropdown selection.
+      const url = new URL(window.location.href);
+      url.searchParams.set("cluster", tenant);
+      window.location.href = url.toString();
     }
   }
 
