@@ -96,6 +96,7 @@ go_library(
         "//pkg/build",
         "//pkg/cloud",
         "//pkg/cloud/cloudpb",
+        "//pkg/cloud/cloudtestutils",
         "//pkg/cloud/externalconn",
         "//pkg/cloud/faulty",
         "//pkg/clusterversion",
