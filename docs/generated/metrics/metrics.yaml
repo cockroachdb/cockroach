@@ -907,6 +907,272 @@ layers:
       how_to_use: RPC errors do not necessarily indicate a problem. This metric tracks remote procedure calls that return a status value other than "success". A non-success status of an RPC should not be misconstrued as a network transport issue. It is database code logic executed on another cluster node. The non-success status is a result of an orderly execution of an RPC that reports a specific logical condition.
       visibility: ESSENTIAL
       owner: cockroachdb/kv
+  - name: EXPIRATIONS
+    metrics:
+    - name: security.certificate.expiration.ca
+      exported_name: security_certificate_expiration_ca
+      labeled_name: 'security.certificate.expiration{certificate_type: ca}'
+      description: Expiration for the CA certificate. 0 means no certificate or error.
+      y_axis_label: Certificate Expiration
+      type: GAUGE
+      unit: TIMESTAMP_SEC
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: See Description.
+      visibility: ESSENTIAL
+      owner: cockroachdb/security-engineering
+    - name: security.certificate.expiration.client-ca
+      exported_name: security_certificate_expiration_client_ca
+      labeled_name: 'security.certificate.expiration{certificate_type: client-ca}'
+      description: Expiration for the client CA certificate. 0 means no certificate or error.
+      y_axis_label: Certificate Expiration
+      type: GAUGE
+      unit: TIMESTAMP_SEC
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: See Description.
+      visibility: ESSENTIAL
+      owner: cockroachdb/security-engineering
+    - name: security.certificate.expiration.node
+      exported_name: security_certificate_expiration_node
+      labeled_name: 'security.certificate.expiration{certificate_type: node}'
+      description: Expiration for the node certificate. 0 means no certificate or error.
+      y_axis_label: Certificate Expiration
+      type: GAUGE
+      unit: TIMESTAMP_SEC
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: See Description.
+      visibility: ESSENTIAL
+      owner: cockroachdb/security-engineering
+    - name: security.certificate.expiration.node-client
+      exported_name: security_certificate_expiration_node_client
+      labeled_name: 'security.certificate.expiration{certificate_type: node-client}'
+      description: Expiration for the node's client certificate. 0 means no certificate or error.
+      y_axis_label: Certificate Expiration
+      type: GAUGE
+      unit: TIMESTAMP_SEC
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: See Description.
+      visibility: ESSENTIAL
+      owner: cockroachdb/security-engineering
+    - name: security.certificate.expiration.ui
+      exported_name: security_certificate_expiration_ui
+      labeled_name: 'security.certificate.expiration{certificate_type: ui}'
+      description: Expiration for the UI certificate. 0 means no certificate or error.
+      y_axis_label: Certificate Expiration
+      type: GAUGE
+      unit: TIMESTAMP_SEC
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: See Description.
+      visibility: ESSENTIAL
+      owner: cockroachdb/security-engineering
+    - name: security.certificate.expiration.ui-ca
+      exported_name: security_certificate_expiration_ui_ca
+      labeled_name: 'security.certificate.expiration{certificate_type: ui-ca}'
+      description: Expiration for the UI CA certificate. 0 means no certificate or error.
+      y_axis_label: Certificate Expiration
+      type: GAUGE
+      unit: TIMESTAMP_SEC
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: See Description.
+      visibility: ESSENTIAL
+      owner: cockroachdb/security-engineering
+    - name: security.certificate.expiry_days.ca
+      exported_name: security_certificate_expiry_days_ca
+      labeled_name: 'security.certificate.expiry_days{certificate_type: ca}'
+      description: Days until expiration for the CA certificate. 0 means expired, no certificate or error.
+      y_axis_label: Certificate Expiry Days
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: Alert when this value drops below your organization's rotation threshold (e.g. 30 days). A value of 0 means the certificate is expired, missing, or has an error. Renew the CA certificate and reload it before expiration to avoid cluster-wide TLS failures.
+      visibility: ESSENTIAL
+      owner: cockroachdb/security-engineering
+    - name: security.certificate.expiry_days.ca-client-tenant
+      exported_name: security_certificate_expiry_days_ca_client_tenant
+      labeled_name: 'security.certificate.expiry_days{certificate_type: ca-client-tenant}'
+      description: Days until expiration for the tenant client CA certificate. 0 means expired, no certificate or error.
+      y_axis_label: Certificate Expiry Days
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: Alert when this value drops below your organization's rotation threshold (e.g. 30 days). A value of 0 means the certificate is expired, missing, or has an error. Renew the tenant client CA certificate and reload it before expiration to avoid tenant authentication failures.
+      visibility: ESSENTIAL
+      owner: cockroachdb/security-engineering
+    - name: security.certificate.expiry_days.client-ca
+      exported_name: security_certificate_expiry_days_client_ca
+      labeled_name: 'security.certificate.expiry_days{certificate_type: client-ca}'
+      description: Days until expiration for the client CA certificate. 0 means expired, no certificate or error.
+      y_axis_label: Certificate Expiry Days
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: Alert when this value drops below your organization's rotation threshold (e.g. 30 days). A value of 0 means the certificate is expired, missing, or has an error. Renew the client CA certificate and reload it before expiration to avoid client authentication failures.
+      visibility: ESSENTIAL
+      owner: cockroachdb/security-engineering
+    - name: security.certificate.expiry_days.client-tenant
+      exported_name: security_certificate_expiry_days_client_tenant
+      labeled_name: 'security.certificate.expiry_days{certificate_type: client-tenant}'
+      description: Days until expiration for the tenant client certificate. 0 means expired, no certificate or error.
+      y_axis_label: Certificate Expiry Days
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: Alert when this value drops below your organization's rotation threshold (e.g. 30 days). A value of 0 means the certificate is expired, missing, or has an error. Renew the tenant client certificate and reload it before expiration to avoid tenant-to-KV communication failures.
+      visibility: ESSENTIAL
+      owner: cockroachdb/security-engineering
+    - name: security.certificate.expiry_days.node
+      exported_name: security_certificate_expiry_days_node
+      labeled_name: 'security.certificate.expiry_days{certificate_type: node}'
+      description: Days until expiration for the node certificate. 0 means expired, no certificate or error.
+      y_axis_label: Certificate Expiry Days
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: Alert when this value drops below your organization's rotation threshold (e.g. 30 days). A value of 0 means the certificate is expired, missing, or has an error. Renew the node certificate and reload it before expiration to avoid inter-node communication failures.
+      visibility: ESSENTIAL
+      owner: cockroachdb/security-engineering
+    - name: security.certificate.expiry_days.node-client
+      exported_name: security_certificate_expiry_days_node_client
+      labeled_name: 'security.certificate.expiry_days{certificate_type: node-client}'
+      description: Days until expiration for the node client certificate. 0 means expired, no certificate or error.
+      y_axis_label: Certificate Expiry Days
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: Alert when this value drops below your organization's rotation threshold (e.g. 30 days). A value of 0 means the certificate is expired, missing, or has an error. Renew the node client certificate and reload it before expiration to avoid node-to-node RPC failures.
+      visibility: ESSENTIAL
+      owner: cockroachdb/security-engineering
+    - name: security.certificate.expiry_days.ui
+      exported_name: security_certificate_expiry_days_ui
+      labeled_name: 'security.certificate.expiry_days{certificate_type: ui}'
+      description: Days until expiration for the UI certificate. 0 means expired, no certificate or error.
+      y_axis_label: Certificate Expiry Days
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: Alert when this value drops below your organization's rotation threshold (e.g. 30 days). A value of 0 means the certificate is expired, missing, or has an error. Renew the UI certificate and reload it before expiration to avoid DB Console HTTPS failures.
+      visibility: ESSENTIAL
+      owner: cockroachdb/security-engineering
+    - name: security.certificate.expiry_days.ui-ca
+      exported_name: security_certificate_expiry_days_ui_ca
+      labeled_name: 'security.certificate.expiry_days{certificate_type: ui-ca}'
+      description: Days until expiration for the UI CA certificate. 0 means expired, no certificate or error.
+      y_axis_label: Certificate Expiry Days
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: Alert when this value drops below your organization's rotation threshold (e.g. 30 days). A value of 0 means the certificate is expired, missing, or has an error. Renew the UI CA certificate and reload it before expiration to avoid DB Console access failures.
+      visibility: ESSENTIAL
+      owner: cockroachdb/security-engineering
+    - name: security.certificate.last_rotation.ca
+      exported_name: security_certificate_last_rotation_ca
+      labeled_name: 'security.certificate.last_rotation{certificate_type: ca}'
+      description: Unix timestamp of the last CA certificate rotation. 0 means no rotation since process start.
+      y_axis_label: Certificate Last Rotation
+      type: GAUGE
+      unit: TIMESTAMP_SEC
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: Use this metric to verify that CA certificate rotations are occurring as expected. A value of 0 indicates no rotation has happened since the process started. Compare with the corresponding expiry metric to ensure rotations happen well before expiration.
+      visibility: ESSENTIAL
+      owner: cockroachdb/security-engineering
+    - name: security.certificate.last_rotation.ca-client-tenant
+      exported_name: security_certificate_last_rotation_ca_client_tenant
+      labeled_name: 'security.certificate.last_rotation{certificate_type: ca-client-tenant}'
+      description: Unix timestamp of the last tenant client CA certificate rotation. 0 means no rotation since process start.
+      y_axis_label: Certificate Last Rotation
+      type: GAUGE
+      unit: TIMESTAMP_SEC
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: Use this metric to verify that tenant client CA certificate rotations are occurring as expected. A value of 0 indicates no rotation has happened since the process started. Compare with the corresponding expiry metric to ensure rotations happen well before expiration.
+      visibility: ESSENTIAL
+      owner: cockroachdb/security-engineering
+    - name: security.certificate.last_rotation.client-ca
+      exported_name: security_certificate_last_rotation_client_ca
+      labeled_name: 'security.certificate.last_rotation{certificate_type: client-ca}'
+      description: Unix timestamp of the last client CA certificate rotation. 0 means no rotation since process start.
+      y_axis_label: Certificate Last Rotation
+      type: GAUGE
+      unit: TIMESTAMP_SEC
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: Use this metric to verify that client CA certificate rotations are occurring as expected. A value of 0 indicates no rotation has happened since the process started. Compare with the corresponding expiry metric to ensure rotations happen well before expiration.
+      visibility: ESSENTIAL
+      owner: cockroachdb/security-engineering
+    - name: security.certificate.last_rotation.client-tenant
+      exported_name: security_certificate_last_rotation_client_tenant
+      labeled_name: 'security.certificate.last_rotation{certificate_type: client-tenant}'
+      description: Unix timestamp of the last tenant client certificate rotation. 0 means no rotation since process start.
+      y_axis_label: Certificate Last Rotation
+      type: GAUGE
+      unit: TIMESTAMP_SEC
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: Use this metric to verify that tenant client certificate rotations are occurring as expected. A value of 0 indicates no rotation has happened since the process started. Compare with the corresponding expiry metric to ensure rotations happen well before expiration.
+      visibility: ESSENTIAL
+      owner: cockroachdb/security-engineering
+    - name: security.certificate.last_rotation.node
+      exported_name: security_certificate_last_rotation_node
+      labeled_name: 'security.certificate.last_rotation{certificate_type: node}'
+      description: Unix timestamp of the last node certificate rotation. 0 means no rotation since process start.
+      y_axis_label: Certificate Last Rotation
+      type: GAUGE
+      unit: TIMESTAMP_SEC
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: Use this metric to verify that node certificate rotations are occurring as expected. A value of 0 indicates no rotation has happened since the process started. Compare with the corresponding expiry metric to ensure rotations happen well before expiration.
+      visibility: ESSENTIAL
+      owner: cockroachdb/security-engineering
+    - name: security.certificate.last_rotation.node-client
+      exported_name: security_certificate_last_rotation_node_client
+      labeled_name: 'security.certificate.last_rotation{certificate_type: node-client}'
+      description: Unix timestamp of the last node client certificate rotation. 0 means no rotation since process start.
+      y_axis_label: Certificate Last Rotation
+      type: GAUGE
+      unit: TIMESTAMP_SEC
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: Use this metric to verify that node client certificate rotations are occurring as expected. A value of 0 indicates no rotation has happened since the process started. Compare with the corresponding expiry metric to ensure rotations happen well before expiration.
+      visibility: ESSENTIAL
+      owner: cockroachdb/security-engineering
+    - name: security.certificate.last_rotation.ui
+      exported_name: security_certificate_last_rotation_ui
+      labeled_name: 'security.certificate.last_rotation{certificate_type: ui}'
+      description: Unix timestamp of the last UI certificate rotation. 0 means no rotation since process start.
+      y_axis_label: Certificate Last Rotation
+      type: GAUGE
+      unit: TIMESTAMP_SEC
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: Use this metric to verify that UI certificate rotations are occurring as expected. A value of 0 indicates no rotation has happened since the process started. Compare with the corresponding expiry metric to ensure rotations happen well before expiration.
+      visibility: ESSENTIAL
+      owner: cockroachdb/security-engineering
+    - name: security.certificate.last_rotation.ui-ca
+      exported_name: security_certificate_last_rotation_ui_ca
+      labeled_name: 'security.certificate.last_rotation{certificate_type: ui-ca}'
+      description: Unix timestamp of the last UI CA certificate rotation. 0 means no rotation since process start.
+      y_axis_label: Certificate Last Rotation
+      type: GAUGE
+      unit: TIMESTAMP_SEC
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: Use this metric to verify that UI CA certificate rotations are occurring as expected. A value of 0 indicates no rotation has happened since the process started. Compare with the corresponding expiry metric to ensure rotations happen well before expiration.
+      visibility: ESSENTIAL
+      owner: cockroachdb/security-engineering
   - name: LOGICAL_DATA_REPLICATION
     metrics:
     - name: logical_replication.commit_latency
@@ -8312,6 +8578,126 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/jobs
+    - name: security.certificate.expiration.ca-client-tenant
+      exported_name: security_certificate_expiration_ca_client_tenant
+      labeled_name: 'security.certificate.expiration{certificate_type: ca-client-tenant}'
+      description: Expiration for the Tenant Client CA certificate. 0 means no certificate or error.
+      y_axis_label: Certificate Expiration
+      type: GAUGE
+      unit: TIMESTAMP_SEC
+      aggregation: AVG
+      derivative: NONE
+      owner: cockroachdb/security-engineering
+    - name: security.certificate.expiration.client
+      exported_name: security_certificate_expiration_client
+      labeled_name: 'security.certificate.expiration{certificate_type: client}'
+      description: Minimum expiration for client certificates, labeled by SQL user. 0 means no certificate or error.
+      y_axis_label: Certificate Expiration
+      type: GAUGE
+      unit: TIMESTAMP_SEC
+      aggregation: AVG
+      derivative: NONE
+      owner: cockroachdb/security-engineering
+    - name: security.certificate.expiration.client-tenant
+      exported_name: security_certificate_expiration_client_tenant
+      labeled_name: 'security.certificate.expiration{certificate_type: client-tenant}'
+      description: Expiration for the Tenant Client certificate. 0 means no certificate or error.
+      y_axis_label: Certificate Expiration
+      type: GAUGE
+      unit: TIMESTAMP_SEC
+      aggregation: AVG
+      derivative: NONE
+      owner: cockroachdb/security-engineering
+    - name: security.certificate.ttl.ca
+      exported_name: security_certificate_ttl_ca
+      labeled_name: 'security.certificate.ttl{certificate_type: ca}'
+      description: Seconds till expiration for the CA certificate. 0 means expired, no certificate or error.
+      y_axis_label: Certificate TTL
+      type: GAUGE
+      unit: TIMESTAMP_SEC
+      aggregation: AVG
+      derivative: NONE
+      owner: cockroachdb/security-engineering
+    - name: security.certificate.ttl.ca-client-tenant
+      exported_name: security_certificate_ttl_ca_client_tenant
+      labeled_name: 'security.certificate.ttl{certificate_type: ca-client-tenant}'
+      description: Seconds till expiration for the Tenant Client CA certificate. 0 means expired, no certificate or error.
+      y_axis_label: Certificate TTL
+      type: GAUGE
+      unit: TIMESTAMP_SEC
+      aggregation: AVG
+      derivative: NONE
+      owner: cockroachdb/security-engineering
+    - name: security.certificate.ttl.client
+      exported_name: security_certificate_ttl_client
+      labeled_name: 'security.certificate.ttl{certificate_type: client}'
+      description: Seconds till expiration for the client certificates, labeled by SQL user. 0 means expired, no certificate or error.
+      y_axis_label: Certificate TTL
+      type: GAUGE
+      unit: TIMESTAMP_SEC
+      aggregation: AVG
+      derivative: NONE
+      owner: cockroachdb/security-engineering
+    - name: security.certificate.ttl.client-ca
+      exported_name: security_certificate_ttl_client_ca
+      labeled_name: 'security.certificate.ttl{certificate_type: client-ca}'
+      description: Seconds till expiration for the client CA certificate. 0 means expired, no certificate or error.
+      y_axis_label: Certificate TTL
+      type: GAUGE
+      unit: TIMESTAMP_SEC
+      aggregation: AVG
+      derivative: NONE
+      owner: cockroachdb/security-engineering
+    - name: security.certificate.ttl.client-tenant
+      exported_name: security_certificate_ttl_client_tenant
+      labeled_name: 'security.certificate.ttl{certificate_type: client-tenant}'
+      description: Seconds till expiration for the Tenant Client certificate. 0 means expired, no certificate or error.
+      y_axis_label: Certificate TTL
+      type: GAUGE
+      unit: TIMESTAMP_SEC
+      aggregation: AVG
+      derivative: NONE
+      owner: cockroachdb/security-engineering
+    - name: security.certificate.ttl.node
+      exported_name: security_certificate_ttl_node
+      labeled_name: 'security.certificate.ttl{certificate_type: node}'
+      description: Seconds till expiration for the node certificate. 0 means expired, no certificate or error.
+      y_axis_label: Certificate TTL
+      type: GAUGE
+      unit: TIMESTAMP_SEC
+      aggregation: AVG
+      derivative: NONE
+      owner: cockroachdb/security-engineering
+    - name: security.certificate.ttl.node-client
+      exported_name: security_certificate_ttl_node_client
+      labeled_name: 'security.certificate.ttl{certificate_type: node-client}'
+      description: Seconds till expiration for the node's client certificate. 0 means expired, no certificate or error.
+      y_axis_label: Certificate TTL
+      type: GAUGE
+      unit: TIMESTAMP_SEC
+      aggregation: AVG
+      derivative: NONE
+      owner: cockroachdb/security-engineering
+    - name: security.certificate.ttl.ui
+      exported_name: security_certificate_ttl_ui
+      labeled_name: 'security.certificate.ttl{certificate_type: ui}'
+      description: Seconds till expiration for the UI certificate. 0 means expired, no certificate or error.
+      y_axis_label: Certificate TTL
+      type: GAUGE
+      unit: TIMESTAMP_SEC
+      aggregation: AVG
+      derivative: NONE
+      owner: cockroachdb/security-engineering
+    - name: security.certificate.ttl.ui-ca
+      exported_name: security_certificate_ttl_ui_ca
+      labeled_name: 'security.certificate.ttl{certificate_type: ui-ca}'
+      description: Seconds till expiration for the UI CA certificate. 0 means expired, no certificate or error.
+      y_axis_label: Certificate TTL
+      type: GAUGE
+      unit: TIMESTAMP_SEC
+      aggregation: AVG
+      derivative: NONE
+      owner: cockroachdb/security-engineering
     - name: server.http.request.duration.nanos
       exported_name: server_http_request_duration_nanos
       description: Duration of an HTTP request in nanoseconds.

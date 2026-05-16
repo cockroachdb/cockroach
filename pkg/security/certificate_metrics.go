@@ -483,6 +483,55 @@ func expiryDaysGauge(
 
 var defaultTimeSource = timeutil.DefaultTimeSource{}
 
+// NewStubMetrics creates a Metrics struct with no-op gauges that always return
+// zero. This is used in insecure mode where no certificate manager exists, so
+// that the metric metadata is still registered in the metric registry. This
+// ensures that tools like `cockroach gen metric-list` can discover certificate
+// metrics even when running with Insecure=true.
+func NewStubMetrics() *Metrics {
+	noop := func() int64 { return 0 }
+	b := aggmetric.MakeBuilder(SQLUserLabel)
+	return &Metrics{
+		CAExpiration:         metric.NewFunctionalGauge(metaCAExpiration, noop),
+		TenantExpiration:     metric.NewFunctionalGauge(metaTenantExpiration, noop),
+		TenantCAExpiration:   metric.NewFunctionalGauge(metaTenantCAExpiration, noop),
+		UIExpiration:         metric.NewFunctionalGauge(metaUIExpiration, noop),
+		UICAExpiration:       metric.NewFunctionalGauge(metaUICAExpiration, noop),
+		ClientExpiration:     b.Gauge(metaClientExpiration),
+		ClientCAExpiration:   metric.NewFunctionalGauge(metaClientCAExpiration, noop),
+		NodeExpiration:       metric.NewFunctionalGauge(metaNodeExpiration, noop),
+		NodeClientExpiration: metric.NewFunctionalGauge(metaNodeClientExpiration, noop),
+
+		CATTL:         metric.NewFunctionalGauge(metaCATTL, noop),
+		TenantTTL:     metric.NewFunctionalGauge(metaTenantTTL, noop),
+		TenantCATTL:   metric.NewFunctionalGauge(metaTenantCATTL, noop),
+		UITTL:         metric.NewFunctionalGauge(metaUITTL, noop),
+		UICATTL:       metric.NewFunctionalGauge(metaUICATTL, noop),
+		ClientTTL:     b.FunctionalGauge(metaClientTTL, func(cvs []int64) int64 { return 0 }),
+		ClientCATTL:   metric.NewFunctionalGauge(metaClientCATTL, noop),
+		NodeTTL:       metric.NewFunctionalGauge(metaNodeTTL, noop),
+		NodeClientTTL: metric.NewFunctionalGauge(metaNodeClientTTL, noop),
+
+		CALastRotation:         metric.NewGauge(metaCALastRotation),
+		ClientCALastRotation:   metric.NewGauge(metaClientCALastRotation),
+		UICALastRotation:       metric.NewGauge(metaUICALastRotation),
+		TenantCALastRotation:   metric.NewGauge(metaTenantCALastRotation),
+		NodeLastRotation:       metric.NewGauge(metaNodeLastRotation),
+		NodeClientLastRotation: metric.NewGauge(metaNodeClientLastRotation),
+		UILastRotation:         metric.NewGauge(metaUILastRotation),
+		TenantLastRotation:     metric.NewGauge(metaTenantLastRotation),
+
+		CAExpiryDays:         metric.NewFunctionalGauge(metaCAExpiryDays, noop),
+		ClientCAExpiryDays:   metric.NewFunctionalGauge(metaClientCAExpiryDays, noop),
+		UICAExpiryDays:       metric.NewFunctionalGauge(metaUICAExpiryDays, noop),
+		TenantCAExpiryDays:   metric.NewFunctionalGauge(metaTenantCAExpiryDays, noop),
+		NodeExpiryDays:       metric.NewFunctionalGauge(metaNodeExpiryDays, noop),
+		NodeClientExpiryDays: metric.NewFunctionalGauge(metaNodeClientExpiryDays, noop),
+		UIExpiryDays:         metric.NewFunctionalGauge(metaUIExpiryDays, noop),
+		TenantExpiryDays:     metric.NewFunctionalGauge(metaTenantExpiryDays, noop),
+	}
+}
+
 // createMetrics makes metrics using the certificate values on the manager.
 // If the corresponding certificate is missing or invalid (Error != nil), we reset the
 // metric to zero.
