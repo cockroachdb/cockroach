@@ -10,7 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -292,9 +295,10 @@ func TestCheckClientUsernameMatchesMapping(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create mock AuthConn with real metrics
+			st := cluster.MakeTestingClusterSettings()
 			sqlMetrics := sql.MakeMemMetrics("test", metric.TestSampleInterval)
 			mockAC := &mockAuthConn{
-				metrics: newTenantSpecificMetrics(sqlMetrics, metric.TestSampleInterval),
+				metrics: newTenantSpecificMetrics(sqlMetrics, metric.TestSampleInterval, &st.SV),
 			}
 
 			// Create AuthBehaviors with appropriate mapper
@@ -349,8 +353,9 @@ func TestAuthCertSANMetrics(t *testing.T) {
 	require.True(t, b.UsedCertSANAuth())
 
 	// Verify metric counters are properly initialized and incrementable.
+	st := cluster.MakeTestingClusterSettings()
 	sqlMetrics := sql.MakeMemMetrics("test", metric.TestSampleInterval)
-	metrics := newTenantSpecificMetrics(sqlMetrics, metric.TestSampleInterval)
+	metrics := newTenantSpecificMetrics(sqlMetrics, metric.TestSampleInterval, &st.SV)
 	require.NotNil(t, metrics.AuthCertSANConnTotal)
 	require.NotNil(t, metrics.AuthCertSANConnSuccess)
 
@@ -364,4 +369,56 @@ func TestAuthCertSANMetrics(t *testing.T) {
 	metrics.AuthCertSANConnTotal.Inc(1)
 	failures := metrics.AuthCertSANConnTotal.Count() - metrics.AuthCertSANConnSuccess.Count()
 	require.Equal(t, int64(1), failures)
+}
+
+func TestPasswordEncryptionIsSCRAMGauge(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	st := cluster.MakeTestingClusterSettings()
+	sqlMetrics := sql.MakeMemMetrics("test", metric.TestSampleInterval)
+	metrics := newTenantSpecificMetrics(
+		sqlMetrics, metric.TestSampleInterval, &st.SV,
+	)
+
+	// Default is scram-sha-256, so gauge should report 1.
+	require.Equal(t, int64(1), metrics.PasswordEncryptionIsSCRAM.Value())
+
+	// Switch to crdb-bcrypt and verify the gauge reflects the change.
+	security.PasswordHashMethod.Override(
+		context.Background(), &st.SV, password.HashBCrypt,
+	)
+	require.Equal(t, int64(0), metrics.PasswordEncryptionIsSCRAM.Value())
+
+	// Switch back to scram-sha-256.
+	security.PasswordHashMethod.Override(
+		context.Background(), &st.SV, password.HashSCRAMSHA256,
+	)
+	require.Equal(t, int64(1), metrics.PasswordEncryptionIsSCRAM.Value())
+}
+
+func TestMinPasswordLengthGauge(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	st := cluster.MakeTestingClusterSettings()
+	sqlMetrics := sql.MakeMemMetrics("test", metric.TestSampleInterval)
+	metrics := newTenantSpecificMetrics(
+		sqlMetrics, metric.TestSampleInterval, &st.SV,
+	)
+
+	// Default min password length is 1.
+	require.Equal(t, int64(1), metrics.MinPasswordLength.Value())
+
+	// Increase to 12 and verify the gauge reflects the change.
+	security.MinPasswordLength.Override(
+		context.Background(), &st.SV, 12,
+	)
+	require.Equal(t, int64(12), metrics.MinPasswordLength.Value())
+
+	// Set back to 1.
+	security.MinPasswordLength.Override(
+		context.Background(), &st.SV, 1,
+	)
+	require.Equal(t, int64(1), metrics.MinPasswordLength.Value())
 }

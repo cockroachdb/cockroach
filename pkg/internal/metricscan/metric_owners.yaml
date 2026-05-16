@@ -79,7 +79,9 @@ owners:
   auth_jwt_conn_latency: cockroachdb/sql-foundations
   auth_ldap_conn_latency: cockroachdb/sql-foundations
   auth_ldap_conn_latency_internal: cockroachdb/sql-foundations
+  auth_min_password_length: cockroachdb/sql-foundations
   auth_password_conn_latency: cockroachdb/sql-foundations
+  auth_password_encryption_is_scram: cockroachdb/sql-foundations
   auth_scram_conn_latency: cockroachdb/sql-foundations
   backup_last_failed_time_kms_inaccessible: cockroachdb/disaster-recovery
   batch_requests_bytes: cockroachdb/kv

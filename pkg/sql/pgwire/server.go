@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -279,6 +280,32 @@ var (
 		Category:    metric.Metadata_SQL,
 		HowToUse:    "This metric tracks successful authentications when SAN-based certificate validation is enabled. Use this to monitor adoption and success rate of SAN authentication. Failure rate = auth.cert.san.conn.total - auth.cert.san.conn.success.",
 	}
+	MetaPasswordEncryptionIsSCRAM = metric.Metadata{
+		Name: "auth.password_encryption.is_scram",
+		Help: "Whether server.user_login.password_encryption is set " +
+			"to scram-sha-256 (1) or crdb-bcrypt (0)",
+		Measurement: "State",
+		Unit:        metric.Unit_CONST,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_SQL,
+		HowToUse: "Use this metric to verify that SCRAM-SHA-256 password " +
+			"encryption is enabled across your cluster. A value of 0 " +
+			"indicates crdb-bcrypt is in use and the cluster has not " +
+			"adopted the stronger SCRAM-SHA-256 hashing method.",
+	}
+	MetaMinPasswordLength = metric.Metadata{
+		Name: "auth.min_password_length",
+		Help: "The configured minimum password length " +
+			"(server.user_login.min_password_length)",
+		Measurement: "Characters",
+		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_SQL,
+		HowToUse: "Use this metric to confirm minimum password length " +
+			"policy is enforced. Alert if the value drops below your " +
+			"organization's required minimum to detect configuration " +
+			"drift.",
+	}
 )
 
 const (
@@ -441,10 +468,12 @@ type tenantSpecificMetrics struct {
 	AuthLDAPConnLatencyInternal metric.IHistogram
 	AuthCertSANConnTotal        *metric.Counter
 	AuthCertSANConnSuccess      *metric.Counter
+	PasswordEncryptionIsSCRAM   *metric.FunctionalGauge
+	MinPasswordLength           *metric.FunctionalGauge
 }
 
 func newTenantSpecificMetrics(
-	sqlMemMetrics sql.MemoryMetrics, histogramWindow time.Duration,
+	sqlMemMetrics sql.MemoryMetrics, histogramWindow time.Duration, sv *settings.Values,
 ) *tenantSpecificMetrics {
 	return &tenantSpecificMetrics{
 		Conns:               metric.NewGauge(MetaConns),
@@ -479,6 +508,17 @@ func newTenantSpecificMetrics(
 			getHistogramOptionsForIOLatency(AuthLDAPConnLatencyInternal, histogramWindow)),
 		AuthCertSANConnTotal:   metric.NewCounter(AuthCertSANConnTotal),
 		AuthCertSANConnSuccess: metric.NewCounter(AuthCertSANConnSuccess),
+		PasswordEncryptionIsSCRAM: metric.NewFunctionalGauge(
+			MetaPasswordEncryptionIsSCRAM, func() int64 {
+				if security.GetConfiguredPasswordHashMethod(sv) == password.HashSCRAMSHA256 {
+					return 1
+				}
+				return 0
+			}),
+		MinPasswordLength: metric.NewFunctionalGauge(
+			MetaMinPasswordLength, func() int64 {
+				return security.MinPasswordLength.Get(sv)
+			}),
 	}
 }
 
@@ -511,7 +551,7 @@ func MakeServer(
 		cfg:        cfg,
 		execCfg:    executorConfig,
 
-		tenantMetrics: newTenantSpecificMetrics(sqlMemMetrics, histogramWindow),
+		tenantMetrics: newTenantSpecificMetrics(sqlMemMetrics, histogramWindow, &st.SV),
 		destinationMetrics: destinationAggMetrics{
 			BytesInCount:  aggmetric.NewCounter(MetaBytesIn, "remote"),
 			BytesOutCount: aggmetric.NewCounter(MetaBytesOut, "remote"),

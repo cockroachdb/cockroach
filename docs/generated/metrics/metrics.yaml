@@ -1200,6 +1200,17 @@ layers:
       how_to_use: See Description.
       visibility: ESSENTIAL
       owner: cockroachdb/sql-foundations
+    - name: auth.min_password_length
+      exported_name: auth_min_password_length
+      description: The configured minimum password length (server.user_login.min_password_length)
+      y_axis_label: Characters
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: Use this metric to confirm minimum password length policy is enforced. Alert if the value drops below your organization's required minimum to detect configuration drift.
+      visibility: ESSENTIAL
+      owner: cockroachdb/sql-foundations
     - name: auth.password.conn.latency
       exported_name: auth_password_conn_latency
       description: Latency to establish and authenticate a SQL connection using password
@@ -1209,6 +1220,17 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: See Description.
+      visibility: ESSENTIAL
+      owner: cockroachdb/sql-foundations
+    - name: auth.password_encryption.is_scram
+      exported_name: auth_password_encryption_is_scram
+      description: Whether server.user_login.password_encryption is set to scram-sha-256 (1) or crdb-bcrypt (0)
+      y_axis_label: State
+      type: GAUGE
+      unit: CONST
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: Use this metric to verify that SCRAM-SHA-256 password encryption is enabled across your cluster. A value of 0 indicates crdb-bcrypt is in use and the cluster has not adopted the stronger SCRAM-SHA-256 hashing method.
       visibility: ESSENTIAL
       owner: cockroachdb/sql-foundations
     - name: auth.scram.conn.latency
