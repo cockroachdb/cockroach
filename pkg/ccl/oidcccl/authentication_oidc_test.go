@@ -121,6 +121,15 @@ func (m mockOidcManager) UserInfo(
 
 var _ IOIDCManager = &mockOidcManager{}
 
+func findCookie(resp *http.Response, name string) *http.Cookie {
+	for _, c := range resp.Cookies() {
+		if c.Name == name {
+			return c
+		}
+	}
+	return nil
+}
+
 func TestOIDCEnabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -133,8 +142,7 @@ func TestOIDCEnabled(t *testing.T) {
 	usernameUnderTest := "test"
 	basePath := "/some/random/path"
 
-	realNewManager := NewOIDCManager
-	NewOIDCManager = func(ctx context.Context, conf oidcAuthenticationConf, redirectURL string, scopes []string) (IOIDCManager, error) {
+	defer testutils.HookGlobal(&NewOIDCManager, func(ctx context.Context, conf oidcAuthenticationConf, redirectURL string, scopes []string) (IOIDCManager, error) {
 		c := &oauth2.Config{
 			ClientID:     conf.clientID,
 			ClientSecret: conf.clientSecret,
@@ -146,10 +154,7 @@ func TestOIDCEnabled(t *testing.T) {
 			Scopes: scopes,
 		}
 		return &mockOidcManager{oauth2Config: c, claimEmail: fmt.Sprintf("%s@example.com", usernameUnderTest)}, nil
-	}
-	defer func() {
-		NewOIDCManager = realNewManager
-	}()
+	})()
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, fmt.Sprintf(`CREATE USER %s with password 'unused'`, usernameUnderTest))
@@ -185,10 +190,8 @@ func TestOIDCEnabled(t *testing.T) {
 	if resp.StatusCode != 302 {
 		t.Fatalf("expected 302 status code but got: %d", resp.StatusCode)
 	}
-	if resp.Cookies()[0].Name != secretCookieName {
-		t.Fatal("Missing cookie")
-	}
-	cookie := resp.Cookies()[0]
+	cookie := findCookie(resp, secretCookieName)
+	require.NotNil(t, cookie, "Missing oidc_secret cookie")
 
 	authURL, err := url.Parse(resp.Header.Get("Location"))
 	require.NoError(t, err)
@@ -208,7 +211,7 @@ func TestOIDCEnabled(t *testing.T) {
 		t.Fatal("HMAC generated incorrectly.")
 	}
 
-	key, err := base64.URLEncoding.DecodeString(resp.Cookies()[0].Value)
+	key, err := base64.URLEncoding.DecodeString(cookie.Value)
 	require.NoError(t, err)
 	mac := hmac.New(sha256.New, key)
 	mac.Write(state.Token)
@@ -240,15 +243,8 @@ func TestOIDCEnabled(t *testing.T) {
 	if resp.Header.Get("Location") != basePath {
 		t.Fatalf("expected to be redirected to %s", basePath)
 	}
-	foundCookie := false
-	for _, c := range resp.Cookies() {
-		if c.Name == authserver.SessionCookieName {
-			foundCookie = true
-		}
-	}
-	if !foundCookie {
-		t.Fatalf("no session cookie found in callback response")
-	}
+	require.NotNil(t, findCookie(resp, authserver.SessionCookieName),
+		"no session cookie found in callback response")
 }
 
 func TestKeyAndSignedTokenIsValid(t *testing.T) {
@@ -762,8 +758,7 @@ func TestOIDCProvisioning(t *testing.T) {
 	basePath := "/base/path/for/provisioning"
 
 	// Mock the OIDC manager to simulate responses from an Identity Provider.
-	realNewManager := NewOIDCManager
-	NewOIDCManager = func(ctx context.Context, conf oidcAuthenticationConf, redirectURL string, scopes []string) (IOIDCManager, error) {
+	defer testutils.HookGlobal(&NewOIDCManager, func(ctx context.Context, conf oidcAuthenticationConf, redirectURL string, scopes []string) (IOIDCManager, error) {
 		c := &oauth2.Config{
 			ClientID:     conf.clientID,
 			ClientSecret: conf.clientSecret,
@@ -773,12 +768,8 @@ func TestOIDCProvisioning(t *testing.T) {
 			},
 			Scopes: scopes,
 		}
-		// The mockOidcManager will extract `usernameUnderTest` from this email claim.
 		return &mockOidcManager{oauth2Config: c, claimEmail: fmt.Sprintf("%s@example.com", usernameUnderTest)}, nil
-	}
-	defer func() {
-		NewOIDCManager = realNewManager
-	}()
+	})()
 
 	// Configure the necessary OIDC cluster settings for the test.
 	OIDCProviderURL.Override(ctx, &ts.ClusterSettings().SV, "https://provider.example.com")
@@ -815,8 +806,8 @@ func TestOIDCProvisioning(t *testing.T) {
 		defer resp.Body.Close()
 		require.Equal(t, http.StatusFound, resp.StatusCode)
 
-		cookie := resp.Cookies()[0]
-		require.Equal(t, secretCookieName, cookie.Name)
+		cookie := findCookie(resp, secretCookieName)
+		require.NotNil(t, cookie, "expected oidc_secret cookie")
 
 		authURL, err := url.Parse(resp.Header.Get("Location"))
 		require.NoError(t, err)
@@ -863,7 +854,8 @@ func TestOIDCProvisioning(t *testing.T) {
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, http.StatusFound, resp.StatusCode)
-		cookie := resp.Cookies()[0]
+		cookie := findCookie(resp, secretCookieName)
+		require.NotNil(t, cookie, "expected oidc_secret cookie")
 		authURL, err := url.Parse(resp.Header.Get("Location"))
 		require.NoError(t, err)
 		stateParam := authURL.Query().Get("state")
@@ -906,7 +898,8 @@ func TestOIDCProvisioning(t *testing.T) {
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, http.StatusFound, resp.StatusCode)
-		cookie := resp.Cookies()[0]
+		cookie := findCookie(resp, secretCookieName)
+		require.NotNil(t, cookie, "expected oidc_secret cookie")
 		authURL, err := url.Parse(resp.Header.Get("Location"))
 		require.NoError(t, err)
 		stateParam := authURL.Query().Get("state")
@@ -948,7 +941,8 @@ func TestOIDCProvisioning(t *testing.T) {
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, http.StatusFound, resp.StatusCode)
-		cookie := resp.Cookies()[0]
+		cookie := findCookie(resp, secretCookieName)
+		require.NotNil(t, cookie, "expected oidc_secret cookie")
 		authURL, err := url.Parse(resp.Header.Get("Location"))
 		require.NoError(t, err)
 		stateParam := authURL.Query().Get("state")
@@ -994,8 +988,7 @@ func TestOIDCExchangeVerifyFailure(t *testing.T) {
 	basePath := "/some/oidc/path"
 
 	// Intercept NewOIDCManager and return the failing mock.
-	realNewManager := NewOIDCManager
-	NewOIDCManager = func(
+	defer testutils.HookGlobal(&NewOIDCManager, func(
 		ctx context.Context,
 		conf oidcAuthenticationConf,
 		redirectURL string,
@@ -1013,8 +1006,7 @@ func TestOIDCExchangeVerifyFailure(t *testing.T) {
 			claimEmail:           fmt.Sprintf("%s@example.com", usernameUnderTest),
 			forceExchangeFailure: true,
 		}, nil
-	}
-	defer func() { NewOIDCManager = realNewManager }()
+	})()
 
 	// Minimal cluster‑setting wiring to enable OIDC.
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -1041,7 +1033,8 @@ func TestOIDCExchangeVerifyFailure(t *testing.T) {
 	defer loginResp.Body.Close()
 	require.Equal(t, http.StatusFound, loginResp.StatusCode)
 
-	cookie := loginResp.Cookies()[0]
+	cookie := findCookie(loginResp, secretCookieName)
+	require.NotNil(t, cookie, "expected oidc_secret cookie")
 	authURL, err := url.Parse(loginResp.Header.Get("Location"))
 	require.NoError(t, err)
 	stateParam := authURL.Query().Get("state")
