@@ -261,6 +261,15 @@ type planner struct {
 	// concurrency.
 	routineMetadataForwarder metadataForwarder
 
+	// routineKVStats accumulates KV read statistics from SQL routine
+	// (UDF/procedure) body executions. These stats are tracked separately
+	// from the outer plan's stats so that EXPLAIN ANALYZE can include
+	// inner routine reads in the top-level "rows decoded from KV" line.
+	routineKVStats struct {
+		rowsRead  int64
+		bytesRead int64
+	}
+
 	storedProcTxnState storedProcTxnStateAccessor
 
 	createdSequences createdSequences
@@ -1080,6 +1089,8 @@ func (p *planner) resetPlanner(
 	p.typeResolutionDbID = descpb.InvalidID
 	p.pausablePortal = nil
 	p.routineMetadataForwarder = nil
+	p.routineKVStats.rowsRead = 0
+	p.routineKVStats.bytesRead = 0
 	p.autoRetryCounter = 0
 	p.autoRetryStmtReason = nil
 	p.autoRetryStmtCounter = 0
