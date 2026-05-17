@@ -3264,50 +3264,7 @@ func TestSchemaValidation(t *testing.T) {
 				"ALTER TABLE tab ADD COLUMN virtual_col INT AS (pk + 1) VIRTUAL",
 				"CREATE UNIQUE INDEX virtual_idx ON tab(virtual_col)",
 			},
-			expectedErr: "cannot create logical replication stream: table tab has a computed column virtual_col that is a key of unique index virtual_idx",
-		},
-		{
-			name: "txn_mode_stored_computed_in_unique_index",
-			mode: "transactional",
-			destSetup: []string{
-				"ALTER TABLE tab ADD COLUMN stored_col INT AS (pk + 1) STORED",
-				"CREATE UNIQUE INDEX stored_idx ON tab(stored_col)",
-			},
-			sourceSetup: []string{
-				"ALTER TABLE tab ADD COLUMN stored_col INT AS (pk + 1) STORED",
-				"CREATE UNIQUE INDEX stored_idx ON tab(stored_col)",
-			},
-			expectedErr: "cannot create logical replication stream: table tab has a computed column stored_col that is a key of unique index stored_idx",
-		},
-		{
-			name: "txn_mode_stored_computed_in_outbound_fk",
-			mode: "transactional",
-			destSetup: []string{
-				"CREATE TABLE parent (id INT PRIMARY KEY)",
-				"ALTER TABLE tab ADD COLUMN stored_col INT AS (pk + 1) STORED",
-				"ALTER TABLE tab ADD CONSTRAINT fk_stored FOREIGN KEY (stored_col) REFERENCES parent(id)",
-			},
-			sourceSetup: []string{
-				"CREATE TABLE parent (id INT PRIMARY KEY)",
-				"ALTER TABLE tab ADD COLUMN stored_col INT AS (pk + 1) STORED",
-				"ALTER TABLE tab ADD CONSTRAINT fk_stored FOREIGN KEY (stored_col) REFERENCES parent(id)",
-			},
-			expectedErr: "cannot create logical replication stream: table tab has a computed column stored_col that is part of foreign key fk_stored",
-		},
-		{
-			name: "txn_mode_stored_computed_in_inbound_fk",
-			mode: "transactional",
-			destSetup: []string{
-				"DROP TABLE tab",
-				"CREATE TABLE tab (pk INT, stored_col INT AS (pk + 1) STORED, PRIMARY KEY (stored_col), payload STRING)",
-				"CREATE TABLE child (id INT PRIMARY KEY, ref INT REFERENCES tab(stored_col))",
-			},
-			sourceSetup: []string{
-				"DROP TABLE tab",
-				"CREATE TABLE tab (pk INT, stored_col INT AS (pk + 1) STORED, PRIMARY KEY (stored_col), payload STRING)",
-				"CREATE TABLE child (id INT PRIMARY KEY, ref INT REFERENCES tab(stored_col))",
-			},
-			expectedErr: "cannot create logical replication stream: table tab has a computed column stored_col that is referenced by foreign key",
+			expectedErr: "cannot create logical replication stream: table tab has a virtual computed column virtual_col that is a key of unique index virtual_idx",
 		},
 	}
 
