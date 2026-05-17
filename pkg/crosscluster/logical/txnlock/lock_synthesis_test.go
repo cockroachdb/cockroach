@@ -113,11 +113,12 @@ func ucRow(id int, email string) tree.Datums {
 
 // compositeRow builds datums for schema:
 //
-//	(pk1 INT, pk2 INT, a INT, b INT, PRIMARY KEY (pk1, pk2), UNIQUE (a, b))
+//	(pk1 INT, pk2 INT, a INT, b INT, c INT AS (a + b) STORED,
+//	 PRIMARY KEY (pk1, pk2), UNIQUE (a, c))
 //
 // Negative values for a or b map to DNull.
 func compositeRow(pk1, pk2, a, b int) tree.Datums {
-	var aDatum, bDatum tree.Datum
+	var aDatum, bDatum, cDatum tree.Datum
 	if a < 0 {
 		aDatum = tree.DNull
 	} else {
@@ -128,11 +129,17 @@ func compositeRow(pk1, pk2, a, b int) tree.Datums {
 	} else {
 		bDatum = tree.NewDInt(tree.DInt(b))
 	}
+	if a < 0 || b < 0 {
+		cDatum = tree.DNull
+	} else {
+		cDatum = tree.NewDInt(tree.DInt(a + b))
+	}
 	return tree.Datums{
 		tree.NewDInt(tree.DInt(pk1)),
 		tree.NewDInt(tree.DInt(pk2)),
 		aDatum,
 		bDatum,
+		cDatum,
 	}
 }
 
@@ -192,7 +199,11 @@ func selfRefRow(id, parentID, data int) tree.Datums {
 }
 
 // compositeFKParentRow builds datums for schema
-// (a INT, b INT, c INT, d INT, val INT, PRIMARY KEY (a, b), UNIQUE (c, d)).
+// (a INT, b INT, c INT, d INT, val INT,
+//
+//	e INT AS (val + 1) STORED UNIQUE, PRIMARY KEY (a, b), UNIQUE (c, d)).
+//
+// e is computed from val to match the stored computed column.
 func compositeFKParentRow(a, b, c, d, val int) tree.Datums {
 	return tree.Datums{
 		tree.NewDInt(tree.DInt(a)),
@@ -200,17 +211,20 @@ func compositeFKParentRow(a, b, c, d, val int) tree.Datums {
 		tree.NewDInt(tree.DInt(c)),
 		tree.NewDInt(tree.DInt(d)),
 		tree.NewDInt(tree.DInt(val)),
+		tree.NewDInt(tree.DInt(val + 1)),
 	}
 }
 
 // compositeFKChildRow builds datums for schema
 //
 //	(id INT PRIMARY KEY, b_pk_ref INT, a_pk_ref INT, d_uc_ref INT, c_uc_ref INT,
+//	 e_ref INT REFERENCES composite_fk_parent(e),
 //	 FOREIGN KEY (a_pk_ref, b_pk_ref) REFERENCES composite_fk_parent(a, b),
 //	 FOREIGN KEY (c_uc_ref, d_uc_ref) REFERENCES composite_fk_parent(c, d))
 //
 // Note the column order in the table is inverted relative to the FK
-// column order for both constraints.
+// column order for both constraints. e_ref defaults to NULL; the inbound
+// FK on the parent's e column still exercises the schema path.
 func compositeFKChildRow(id, bPKRef, aPKRef, dUCRef, cUCRef int) tree.Datums {
 	return tree.Datums{
 		tree.NewDInt(tree.DInt(id)),
@@ -218,6 +232,7 @@ func compositeFKChildRow(id, bPKRef, aPKRef, dUCRef, cUCRef int) tree.Datums {
 		tree.NewDInt(tree.DInt(aPKRef)),
 		tree.NewDInt(tree.DInt(dUCRef)),
 		tree.NewDInt(tree.DInt(cUCRef)),
+		tree.DNull,
 	}
 }
 
@@ -233,8 +248,13 @@ func TestDeriveLocks(t *testing.T) {
 	runner := sqlutils.MakeSQLRunner(conn)
 	runner.Exec(t, `CREATE TABLE plain_table (id INT PRIMARY KEY, data STRING)`)
 	runner.Exec(t, `CREATE TABLE uc_table (id INT PRIMARY KEY, email STRING UNIQUE)`)
-	// TODO(164507): make one of these columns a stored computed column.
-	runner.Exec(t, `CREATE TABLE composite_table (pk1 INT, pk2 INT, a INT, b INT, PRIMARY KEY (pk1, pk2), UNIQUE (a, b))`)
+	runner.Exec(t, `
+		CREATE TABLE composite_table (
+			pk1 INT, pk2 INT, a INT, b INT,
+			c INT AS (a + b) STORED,
+			PRIMARY KEY (pk1, pk2),
+			UNIQUE (a, c)
+		)`)
 	runner.Exec(t, `CREATE TABLE fk_parent (id INT PRIMARY KEY, ref_col INT UNIQUE, val INT)`)
 	runner.Exec(t, `
 		CREATE TABLE fk_child (
@@ -252,12 +272,14 @@ func TestDeriveLocks(t *testing.T) {
 	runner.Exec(t, `
 		CREATE TABLE composite_fk_parent (
 			a INT, b INT, c INT, d INT, val INT,
+			e INT AS (val + 1) STORED UNIQUE,
 			PRIMARY KEY (a, b),
 			UNIQUE (c, d)
 		)`)
 	runner.Exec(t, `
 		CREATE TABLE composite_fk_child (
 			id INT PRIMARY KEY, b_pk_ref INT, a_pk_ref INT, d_uc_ref INT, c_uc_ref INT,
+			e_ref INT REFERENCES composite_fk_parent(e),
 			FOREIGN KEY (a_pk_ref, b_pk_ref) REFERENCES composite_fk_parent(a, b),
 			FOREIGN KEY (c_uc_ref, d_uc_ref) REFERENCES composite_fk_parent(c, d)
 		)`)
@@ -529,7 +551,7 @@ func TestDeriveLocks(t *testing.T) {
 					compositeEB.InsertEvent(txnTime,
 						compositeRow(1, 2, 10, 20)),
 				},
-				writeLockCount: 2, // PK + UC(new: 10,20)
+				writeLockCount: 2, // PK + UC(new: a=10, c=30)
 				order:          []int{0},
 			},
 			txn2: txnCase{
@@ -545,7 +567,9 @@ func TestDeriveLocks(t *testing.T) {
 		},
 		{
 			// One txn updates a row's unique columns, the other deletes the
-			// same composite PK. PK and UC(30,40) locks overlap.
+			// same composite PK. PK and UC(a=30, c=70) locks overlap. The UC
+			// covers the stored computed column c, so updating b changes c
+			// and produces a new UC lock.
 			name: "composite_pk_update_and_delete",
 			txn1: txnCase{
 				events: []streampb.StreamEvent_KV{
@@ -553,7 +577,7 @@ func TestDeriveLocks(t *testing.T) {
 						compositeRow(1, 2, 30, 40),
 						compositeRow(1, 2, 10, 20)),
 				},
-				// PK + UC(old: 10,20) + UC(new: 30,40) = 3 write.
+				// PK + UC(old: a=10, c=30) + UC(new: a=30, c=70) = 3 write.
 				writeLockCount: 3,
 				order:          []int{0},
 			},
@@ -562,15 +586,15 @@ func TestDeriveLocks(t *testing.T) {
 					compositeEB.DeleteEvent(txnTime,
 						compositeRow(1, 2, 30, 40)),
 				},
-				writeLockCount: 2, // PK + UC(prev: 30,40)
+				writeLockCount: 2, // PK + UC(prev: a=30, c=70)
 				order:          []int{0},
 			},
-			writeOverlapCount: 2, // PK(1,2) + UC(30,40)
+			writeOverlapCount: 2, // PK(1,2) + UC(a=30, c=70)
 		},
 		{
 			// Unique key transfer on composite table: row 0 takes the unique
-			// value (10,20) freed by row 1's update. The sort must place
-			// row 1 before row 0. UC(10,20) is deduplicated across rows:
+			// value (a=10, c=30) freed by row 1's update. The sort must place
+			// row 1 before row 0. UC(a=10, c=30) is deduplicated across rows:
 			// read(row0) && write(row1) → write.
 			name: "composite_unique_key_transfer",
 			txn1: txnCase{
@@ -582,7 +606,7 @@ func TestDeriveLocks(t *testing.T) {
 						compositeRow(2, 2, 30, 40),
 						compositeRow(2, 2, 10, 20)),
 				},
-				// 2 PK + UC(10,20) + UC(30,40) = 4 write.
+				// 2 PK + UC(a=10, c=30) + UC(a=30, c=70) = 4 write.
 				writeLockCount: 4,
 				order:          []int{1, 0},
 			},
@@ -1075,8 +1099,8 @@ func TestDeriveLocks(t *testing.T) {
 				events: []streampb.StreamEvent_KV{
 					compositeFKParentEB.DeleteEvent(txnTime, compositeFKParentRow(1, 2, 3, 4, 0)),
 				},
-				// PK + UC + 2 inbound FK = 4.
-				writeLockCount: 4,
+				// PK + UC(c,d) + UC(e) + 3 inbound FK = 6.
+				writeLockCount: 6,
 				order:          []int{0},
 			},
 			writeOverlapCount: 2,
@@ -1089,8 +1113,11 @@ func TestDeriveLocks(t *testing.T) {
 					compositeChildEB.InsertEvent(txnTime, compositeFKChildRow(1, 2, 1, 4, 3)),
 					compositeFKParentEB.InsertEvent(txnTime, compositeFKParentRow(1, 2, 3, 4, 0)),
 				},
-				// 2 PKs + UC + 2 FK (read→write via collision) = 5.
-				writeLockCount: 5,
+				// Parent: PK + UC(c,d) + UC(e) + 3 inbound FK = 6.
+				// Child: PK + 2 outbound FK (read→write via collision with
+				// parent inbound on (a,b) and (c,d)). e_ref is NULL so it
+				// produces no outbound lock. Net: 6 + 1 = 7.
+				writeLockCount: 7,
 				order:          []int{1, 0},
 			},
 		},
@@ -1109,7 +1136,8 @@ func TestDeriveLocks(t *testing.T) {
 				events: []streampb.StreamEvent_KV{
 					compositeFKParentEB.DeleteEvent(txnTime, compositeFKParentRow(1, 2, 3, 4, 0)),
 				},
-				writeLockCount: 4,
+				// PK + UC(c,d) + UC(e) + 3 inbound FK = 6.
+				writeLockCount: 6,
 				order:          []int{0},
 			},
 		},
@@ -1123,7 +1151,8 @@ func TestDeriveLocks(t *testing.T) {
 						compositeFKChildRow(1, 20, 10, 40, 30),
 						compositeFKChildRow(1, 2, 1, 4, 3)),
 				},
-				// PK + 2 old FK + 2 new FK = 1 write, 4 read.
+				// PK + 2 old FK + 2 new FK = 1 write, 4 read. e_ref is NULL
+				// in both rows so it produces no outbound lock.
 				writeLockCount: 1,
 				readLockCount:  4,
 				order:          []int{0},
@@ -1133,7 +1162,8 @@ func TestDeriveLocks(t *testing.T) {
 					// Parent that the child is moving away from.
 					compositeFKParentEB.DeleteEvent(txnTime, compositeFKParentRow(1, 2, 3, 4, 0)),
 				},
-				writeLockCount: 4,
+				// PK + UC(c,d) + UC(e) + 3 inbound FK = 6.
+				writeLockCount: 6,
 				order:          []int{0},
 			},
 			// Child's old FK read locks on (a=1,b=2) and (c=3,d=4) overlap
