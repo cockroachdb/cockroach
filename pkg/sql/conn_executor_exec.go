@@ -3301,6 +3301,16 @@ func populateQueryLevelStats(
 	queryLevelStats, err := execstats.GetQueryLevelStats(
 		trace, cfg.TestingKnobs.DeterministicExplain, flowsMetadata,
 	)
+
+	// The queryLevelStats computed from trace spans only accounts for the
+	// outer plan's KV reads. SQL routine body executions (UDFs, stored
+	// procedures) run as inner plans whose KV reads are not captured by
+	// the outer plan's trace spans. Add the separately tracked routine
+	// KV stats so that EXPLAIN ANALYZE's "rows decoded from KV" line
+	// reflects all KV work, including routine body reads.
+	queryLevelStats.KVRowsRead += p.routineKVStats.rowsRead
+	queryLevelStats.KVBytesRead += p.routineKVStats.bytesRead
+
 	queryLevelStatsWithErr := execstats.MakeQueryLevelStatsWithErr(queryLevelStats, err)
 	ih.queryLevelStatsWithErr = &queryLevelStatsWithErr
 	if err != nil {
