@@ -738,3 +738,111 @@ subtest end
 skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
 statement ok
 DROP TABLE can_mutate_t
+
+# Regression test: the "mutations" property should propagate from a nested UDF
+# that contains a mutation to the outer expression. This was previously tested
+# in pkg/sql/opt/memo/testdata/logprops/udf but moved here because the opt test
+# catalog does not persist CanMutate on function overloads, causing incorrect
+# results with deferred UDF body building.
+
+subtest udf_mutations
+
+statement ok
+CREATE TABLE ab (a INT PRIMARY KEY, b INT);
+
+statement ok
+CREATE FUNCTION fn_mutating() RETURNS VOID LANGUAGE SQL AS 'INSERT INTO ab VALUES (1, 2)';
+
+statement ok
+CREATE FUNCTION fn_calls_mutating(a INT) RETURNS INT LANGUAGE SQL AS $$
+  SELECT fn_mutating();
+  SELECT a;
+$$;
+
+# The "mutations" property should propagate through a direct UDF call.
+query B
+SELECT EXISTS(
+  SELECT 1 FROM [EXPLAIN (OPT, VERBOSE) SELECT fn_calls_mutating(a) FROM ab]
+  WHERE info LIKE '%volatile, mutations%'
+)
+----
+true
+
+# The "mutations" property should propagate through CTEs that call mutating
+# functions.
+query B
+SELECT EXISTS(
+  SELECT 1 FROM [EXPLAIN (OPT, VERBOSE) WITH cte AS (SELECT fn_mutating()) SELECT * FROM cte]
+  WHERE info LIKE '%volatile, mutations%'
+)
+----
+true
+
+# The "mutations" property should propagate when a UDF body contains a mutation
+# inside a CTE.
+statement ok
+CREATE FUNCTION fn_mutating_via_cte() RETURNS INT LANGUAGE SQL AS $$
+  WITH cte AS (INSERT INTO ab VALUES (1, 2) RETURNING a) SELECT a FROM cte
+$$;
+
+query B
+SELECT EXISTS(
+  SELECT 1 FROM [EXPLAIN (OPT, VERBOSE) SELECT fn_mutating_via_cte() FROM ab]
+  WHERE info LIKE '%volatile, mutations%'
+)
+----
+true
+
+# The "mutations" property should propagate through a nested function that calls
+# a mutating-via-CTE function inside its own CTE.
+statement ok
+CREATE FUNCTION fn_calls_mutating_via_cte() RETURNS INT LANGUAGE SQL AS $$
+  WITH cte AS (SELECT fn_mutating_via_cte()) SELECT * FROM cte
+$$;
+
+query B
+SELECT EXISTS(
+  SELECT 1 FROM [EXPLAIN (OPT, VERBOSE) SELECT fn_calls_mutating_via_cte() FROM ab]
+  WHERE info LIKE '%volatile, mutations%'
+)
+----
+true
+
+# The "mutations" property should propagate from a PL/pgSQL routine that
+# contains a mutation.
+statement ok
+CREATE FUNCTION fn_plpgsql_mutating() RETURNS VOID LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO ab VALUES (1, 2);
+  END
+$$;
+
+query B
+SELECT EXISTS(
+  SELECT 1 FROM [EXPLAIN (OPT, VERBOSE) SELECT fn_plpgsql_mutating() FROM ab]
+  WHERE info LIKE '%volatile, mutations%'
+)
+----
+true
+
+# The "mutations" property should propagate from a PL/pgSQL routine that
+# transitively calls a mutating function.
+statement ok
+CREATE FUNCTION fn_plpgsql_calls_mutating() RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    v VOID;
+  BEGIN
+    SELECT fn_mutating() INTO v;
+    RETURN 1;
+  END
+$$;
+
+query B
+SELECT EXISTS(
+  SELECT 1 FROM [EXPLAIN (OPT, VERBOSE) SELECT fn_plpgsql_calls_mutating() FROM ab]
+  WHERE info LIKE '%volatile, mutations%'
+)
+----
+true
+
+subtest end
