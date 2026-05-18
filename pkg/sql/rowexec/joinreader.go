@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	in
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/errors"
@@ -54,6 +55,9 @@ const (
 	jrFetchingLookupRows
 	// jrEmittingRows means we are emitting the results of the index lookup.
 	jrEmittingRows
+	// jrAdaptiveHashJoiner means lookup mode has switched to hash joiner fallback
+	// and we are delegating to the hash joiner for execution.
+	jrAdaptiveHashJoiner
 	// jrReadyToDrain means we are done but have not yet started draining.
 	jrReadyToDrain
 )
@@ -124,6 +128,7 @@ type joinReader struct {
 	// parallelized).
 	parallelize bool
 	readerType  joinReaderType
+	processorID int32
 
 	// txn is the transaction used by the join reader.
 	txn *kv.Txn
@@ -258,6 +263,30 @@ type joinReader struct {
 	// only lookups to rows in remote regions and remote accesses are set to
 	// error out via a session setting.
 	errorOnLookup bool
+
+	// leftTypes are the types of columns in the left input stream.
+	leftTypes []*types.T
+
+	adaptive struct {
+		enabled         bool
+		thresholdBytes  int64
+		bytesSeen       int64
+		bytesAtDecision int64
+		decision        string
+		switchReason    string
+
+		// keyColsInFetched maps each lookup key position to the fetched column
+		// ordinal used to extract the key from lookup rows during hash probing.
+		keyColsInFetched []uint32
+
+		hashJoiner        execinfra.RowSourcedProcessor
+		hashJoinerLeft    *adaptiveBufferedInputSource
+		hashJoinerRight   *adaptiveRightScanSource
+		hashJoinerStarted bool
+		leftColCount      int
+		rightColCount     int
+		reorderScratch    rowenc.EncDatumRow
+	}
 }
 
 var _ execinfra.Processor = &joinReader{}
@@ -265,6 +294,17 @@ var _ execinfra.RowSource = &joinReader{}
 var _ execopnode.OpNode = &joinReader{}
 
 const joinReaderProcName = "join reader"
+
+const (
+	joinReaderAdaptiveDecisionDisabled = "disabled"
+	joinReaderAdaptiveDecisionLookup   = "lookup"
+	joinReaderAdaptiveDecisionHash     = "hash"
+
+	joinReaderAdaptiveSwitchReasonNone              = "none"
+	joinReaderAdaptiveSwitchReasonThresholdExceeded = "threshold_exceeded"
+	joinReaderAdaptiveSwitchReasonFeatureDisabled   = "feature_disabled"
+	joinReaderAdaptiveSwitchReasonIneligiblePlan    = "ineligible_plan"
+)
 
 // ParallelizeMultiKeyLookupJoinsEnabled determines whether the joinReader
 // parallelizes KV batches in all cases.
@@ -379,12 +419,23 @@ func newJoinReader(
 		outputGroupContinuationForLeftRow: spec.OutputGroupContinuationForLeftRow,
 		parallelize:                       parallelize,
 		readerType:                        readerType,
+		processorID:                       processorID,
 		lookupColumnsAreKey:               spec.LookupColumnsAreKey,
 		lockingWaitPolicy:                 spec.LockingWaitPolicy,
 		txn:                               txn,
 		usesStreamer:                      useStreamer,
 		limitHintHelper:                   execinfra.MakeLimitHintHelper(spec.LimitHint, post),
 		errorOnLookup:                     errorOnLookup,
+		leftTypes:                         input.OutputTypes(),
+	}
+	jr.adaptive.enabled = spec.AdaptiveEnabled
+	jr.adaptive.thresholdBytes = spec.AdaptiveThresholdBytes
+	if jr.adaptive.enabled {
+		jr.adaptive.decision = joinReaderAdaptiveDecisionLookup
+		jr.adaptive.switchReason = joinReaderAdaptiveSwitchReasonNone
+	} else {
+		jr.adaptive.decision = joinReaderAdaptiveDecisionDisabled
+		jr.adaptive.switchReason = joinReaderAdaptiveSwitchReasonFeatureDisabled
 	}
 	if readerType != indexJoinReaderType {
 		jr.groupingState = &inputBatchGroupingState{doGrouping: spec.LeftJoinWithPairedJoiner}
@@ -412,7 +463,7 @@ func newJoinReader(
 		// came from the secondary index (input rows) are ignored. As a result,
 		// we leave leftTypes as empty.
 	case lookupJoinReaderType:
-		leftTypes = input.OutputTypes()
+		leftTypes = jr.leftTypes
 	default:
 		return nil, errors.AssertionFailedf("unsupported joinReaderType")
 	}
@@ -467,6 +518,10 @@ func newJoinReader(
 				return nil, err
 			}
 		}
+	}
+
+	if err := jr.initAdaptiveMode(spec, rightTypes, readerType); err != nil {
+		return nil, err
 	}
 
 	// We will create a memory monitor with a hard memory limit since the join
@@ -643,6 +698,12 @@ func newJoinReader(
 		jr.fetcher = &fetcher
 	}
 
+	if jr.adaptive.enabled {
+		if err := jr.prepareAdaptiveHashJoiner(); err != nil {
+			return nil, err
+		}
+	}
+
 	// TODO(radu): verify the input types match the index key types
 	return jr, nil
 }
@@ -786,6 +847,228 @@ func (jr *joinReader) initJoinReaderStrategy(
 	return nil
 }
 
+func (jr *joinReader) disableAdaptiveLookup(reason string) {
+	jr.adaptive.enabled = false
+	jr.adaptive.decision = joinReaderAdaptiveDecisionDisabled
+	jr.adaptive.switchReason = reason
+	jr.adaptive.thresholdBytes = 0
+}
+
+func (jr *joinReader) initAdaptiveMode(
+	spec *execinfrapb.JoinReaderSpec, rightTypes []*types.T, readerType joinReaderType,
+) error {
+	if !jr.adaptive.enabled {
+		return nil
+	}
+	if spec.AdaptiveThresholdBytes <= 0 {
+		jr.disableAdaptiveLookup(joinReaderAdaptiveSwitchReasonFeatureDisabled)
+		return nil
+	}
+	if readerType != lookupJoinReaderType || spec.Type != descpb.InnerJoin ||
+		spec.MaintainOrdering || spec.MaintainLookupOrdering ||
+		spec.LeftJoinWithPairedJoiner || spec.OutputGroupContinuationForLeftRow ||
+		!spec.LookupExpr.Empty() || !spec.RemoteLookupExpr.Empty() || !spec.OnExpr.Empty() ||
+		len(spec.LookupColumns) == 0 {
+		jr.disableAdaptiveLookup(joinReaderAdaptiveSwitchReasonIneligiblePlan)
+		return nil
+	}
+
+	keyCols := jr.fetchSpec.KeyColumns()
+	if len(jr.lookupCols) > len(keyCols) {
+		jr.disableAdaptiveLookup(joinReaderAdaptiveSwitchReasonIneligiblePlan)
+		return nil
+	}
+	jr.adaptive.keyColsInFetched = make([]uint32, len(jr.lookupCols))
+	for i := range jr.lookupCols {
+		keyColID := keyCols[i].ColumnID
+		fetchedOrdinal := -1
+		for j := range jr.fetchSpec.FetchedColumns {
+			if jr.fetchSpec.FetchedColumns[j].ColumnID == keyColID {
+				fetchedOrdinal = j
+				break
+			}
+		}
+		if fetchedOrdinal == -1 {
+			jr.disableAdaptiveLookup(joinReaderAdaptiveSwitchReasonIneligiblePlan)
+			return nil
+		}
+		jr.adaptive.keyColsInFetched[i] = uint32(fetchedOrdinal)
+	}
+
+	if len(rightTypes) != len(jr.fetchSpec.FetchedColumns) {
+		return errors.AssertionFailedf("unexpected fetched type shape for adaptive lookup join")
+	}
+	return nil
+}
+
+func (jr *joinReader) prepareAdaptiveHashJoiner() error {
+	if jr.adaptive.hashJoiner != nil {
+		return nil
+	}
+	jr.adaptive.hashJoinerLeft = &adaptiveBufferedInputSource{input: jr.input}
+	jr.adaptive.hashJoinerRight = &adaptiveRightScanSource{
+		jr:       jr,
+		rowTypes: jr.fetchSpec.FetchedColumnTypes(),
+	}
+	hashSpec := &execinfrapb.HashJoinerSpec{
+		Type:           descpb.InnerJoin,
+		LeftEqColumns:  jr.adaptive.keyColsInFetched,
+		RightEqColumns: jr.lookupCols,
+	}
+	post := &execinfrapb.PostProcessSpec{}
+	hj, err := newHashJoiner(
+		jr.Ctx(), jr.FlowCtx, jr.processorID, hashSpec,
+		jr.adaptive.hashJoinerRight, jr.adaptive.hashJoinerLeft, post,
+	)
+	if err != nil {
+		return err
+	}
+	jr.adaptive.hashJoiner = hj
+	jr.adaptive.leftColCount = len(jr.leftTypes)
+	jr.adaptive.rightColCount = len(jr.fetchSpec.FetchedColumns)
+	return nil
+}
+
+type adaptiveBufferedInputSource struct {
+	input   execinfra.RowSource
+	rows    rowenc.EncDatumRows
+	pending rowenc.EncDatumRow
+	idx     int
+}
+
+func (s *adaptiveBufferedInputSource) OutputTypes() []*types.T {
+	return s.input.OutputTypes()
+}
+
+func (s *adaptiveBufferedInputSource) Start(context.Context) {
+}
+
+func (s *adaptiveBufferedInputSource) Reset(rows rowenc.EncDatumRows, pending rowenc.EncDatumRow) {
+	s.rows = rows
+	s.pending = pending
+	s.idx = 0
+}
+
+func (s *adaptiveBufferedInputSource) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	if s.idx < len(s.rows) {
+		row := s.rows[s.idx]
+		s.idx++
+		return row, nil
+	}
+	if s.pending != nil {
+		row := s.pending
+		s.pending = nil
+		return row, nil
+	}
+	return s.input.Next()
+}
+
+func (s *adaptiveBufferedInputSource) ConsumerDone() {
+	s.input.ConsumerDone()
+}
+
+func (s *adaptiveBufferedInputSource) ConsumerClosed() {
+	s.input.ConsumerClosed()
+}
+
+type adaptiveRightScanSource struct {
+	jr       *joinReader
+	rowTypes []*types.T
+	started  bool
+	startErr error
+	done     bool
+}
+
+func (s *adaptiveRightScanSource) OutputTypes() []*types.T {
+	return s.rowTypes
+}
+
+func (s *adaptiveRightScanSource) Start(context.Context) {
+	if s.started {
+		return
+	}
+	s.started = true
+	s.startErr = s.jr.startAdaptiveFullLookupScan()
+}
+
+func (s *adaptiveRightScanSource) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	if s.done {
+		return nil, nil
+	}
+	if s.startErr != nil {
+		meta := &execinfrapb.ProducerMetadata{Err: s.startErr}
+		s.startErr = nil
+		s.done = true
+		return nil, meta
+	}
+	row, _, err := s.jr.fetcher.NextRow(s.jr.Ctx())
+	if err != nil {
+		s.done = true
+		return nil, &execinfrapb.ProducerMetadata{Err: scrub.UnwrapScrubError(err)}
+	}
+	if row == nil {
+		s.done = true
+		return nil, nil
+	}
+	s.jr.rowsRead++
+	return row, nil
+}
+
+func (s *adaptiveRightScanSource) ConsumerDone() {
+	s.done = true
+}
+
+func (s *adaptiveRightScanSource) ConsumerClosed() {
+	s.done = true
+}
+
+func (jr *joinReader) startAdaptiveHashFallback() error {
+	jr.adaptive.decision = joinReaderAdaptiveDecisionHash
+	jr.adaptive.switchReason = joinReaderAdaptiveSwitchReasonThresholdExceeded
+	jr.adaptive.bytesAtDecision = jr.adaptive.bytesSeen
+	log.VEventf(
+		jr.Ctx(),
+		1,
+		"adaptive lookup join switched to hash fallback: bytes_seen=%d threshold=%d reason=%s",
+		jr.adaptive.bytesAtDecision,
+		jr.adaptive.thresholdBytes,
+		jr.adaptive.switchReason,
+	)
+	if jr.adaptive.hashJoiner == nil {
+		return errors.AssertionFailedf("adaptive hash joiner not prepared")
+	}
+	if jr.adaptive.hashJoinerStarted {
+		return errors.AssertionFailedf("adaptive hash joiner already started")
+	}
+	jr.adaptive.hashJoinerLeft.Reset(jr.scratchInputRows, jr.pendingRow)
+	jr.pendingRow = nil
+	jr.scratchInputRows = nil
+	if err := jr.performMemoryAccounting(); err != nil {
+		return err
+	}
+	jr.adaptive.hashJoiner.Start(jr.Ctx())
+	jr.adaptive.hashJoinerStarted = true
+	return nil
+}
+
+func (jr *joinReader) startAdaptiveFullLookupScan() error {
+	// Adaptive fallback scans the full lookup index for a hash joiner build. This
+	// is semantically safe for the MVP because adaptive mode is enabled only for
+	// plans without lookup/on/remote lookup expressions.
+	prefix := roachpb.Key(
+		rowenc.MakeIndexKeyPrefix(
+			jr.FlowCtx.Codec(),
+			jr.fetchSpec.TableID,
+			jr.fetchSpec.IndexID,
+		),
+	)
+	span := roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
+	return jr.fetcher.StartScan(
+		jr.Ctx(), roachpb.Spans{span}, nil, /* spanIDs */
+		jr.getBatchBytesLimit(), rowinfra.NoRowLimit,
+	)
+}
+
 // SetBatchSizeBytes sets the desired batch size. It should only be used in tests.
 func (jr *joinReader) SetBatchSizeBytes(batchSize int64) {
 	jr.batchSizeBytes = batchSize
@@ -816,6 +1099,11 @@ func (jr *joinReader) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
 			jr.runningState, meta = jr.fetchLookupRow()
 		case jrEmittingRows:
 			jr.runningState, row, meta = jr.emitRow()
+		case jrAdaptiveHashJoiner:
+			row, meta = jr.adaptive.hashJoiner.Next()
+			if row == nil && meta == nil {
+				jr.runningState = jrReadyToDrain
+			}
 		case jrReadyToDrain:
 			jr.MoveToDraining(nil)
 			meta = jr.DrainHelper()
@@ -829,11 +1117,29 @@ func (jr *joinReader) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
 		if meta != nil {
 			return nil, meta
 		}
+		if jr.runningState == jrAdaptiveHashJoiner && row != nil {
+			row = jr.reorderAdaptiveHashRow(row)
+		}
 		if outRow := jr.ProcessRowHelper(row); outRow != nil {
 			return outRow, nil
 		}
 	}
 	return nil, jr.DrainHelper()
+}
+
+func (jr *joinReader) reorderAdaptiveHashRow(row rowenc.EncDatumRow) rowenc.EncDatumRow {
+	leftCols := jr.adaptive.leftColCount
+	rightCols := jr.adaptive.rightColCount
+	if leftCols == 0 || rightCols == 0 || len(row) != leftCols+rightCols {
+		return row
+	}
+	if cap(jr.adaptive.reorderScratch) < len(row) {
+		jr.adaptive.reorderScratch = make(rowenc.EncDatumRow, len(row))
+	}
+	ordered := jr.adaptive.reorderScratch[:len(row)]
+	copy(ordered[:leftCols], row[rightCols:])
+	copy(ordered[leftCols:], row[:rightCols])
+	return ordered
 }
 
 // addWorkmemHint checks whether err is non-nil, and if so, wraps it with a hint
@@ -943,6 +1249,7 @@ func (jr *joinReader) readInput() (
 	}
 
 	// Read the next batch of input rows.
+	adaptiveSwitchToHash := false
 	for {
 		var encDatumRow rowenc.EncDatumRow
 		var rowSize int64
@@ -987,6 +1294,9 @@ func (jr *joinReader) readInput() (
 			rowSize = int64(encDatumRow.Size())
 		}
 		jr.curBatchSizeBytes += rowSize
+		if jr.adaptive.enabled {
+			jr.adaptive.bytesSeen += rowSize
+		}
 		if jr.groupingState != nil {
 			// Lookup Join.
 			if err := jr.processContinuationValForRow(encDatumRow); err != nil {
@@ -1003,6 +1313,10 @@ func (jr *joinReader) readInput() (
 			return jrStateUnknown, nil, jr.DrainHelper()
 		}
 		jr.scratchInputRows = append(jr.scratchInputRows, jr.rowAlloc.CopyRow(encDatumRow))
+		if jr.adaptive.enabled && jr.adaptive.bytesSeen > jr.adaptive.thresholdBytes {
+			adaptiveSwitchToHash = true
+			break
+		}
 
 		if l := jr.limitHintHelper.LimitHint(); l != 0 && l == int64(len(jr.scratchInputRows)) {
 			break
@@ -1039,6 +1353,13 @@ func (jr *joinReader) readInput() (
 	if err := jr.limitHintHelper.ReadSomeRows(int64(len(jr.scratchInputRows))); err != nil {
 		jr.MoveToDraining(err)
 		return jrStateUnknown, nil, jr.DrainHelper()
+	}
+	if adaptiveSwitchToHash {
+		if err := jr.startAdaptiveHashFallback(); err != nil {
+			jr.MoveToDraining(err)
+			return jrStateUnknown, nil, jr.DrainHelper()
+		}
+		return jrAdaptiveHashJoiner, outRow, nil
 	}
 
 	// Figure out what key spans we need to lookup.
@@ -1283,6 +1604,9 @@ func (jr *joinReader) close() {
 			}
 		}
 		jr.strategy.close(jr.Ctx())
+		if jr.adaptive.hashJoiner != nil {
+			jr.adaptive.hashJoiner.ConsumerClosed()
+		}
 		jr.memAcc.Close(jr.Ctx())
 		if jr.limitedMemMonitor != nil {
 			jr.limitedMemMonitor.Stop(jr.Ctx())
@@ -1326,6 +1650,10 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 		},
 		Output: jr.OutputHelper.Stats(),
 	}
+	ret.Exec.AdaptiveEnabled = jr.adaptive.enabled
+	ret.Exec.AdaptiveDecision = jr.adaptive.decision
+	ret.Exec.BytesSeenAtDecision = jr.adaptive.bytesAtDecision
+	ret.Exec.SwitchReason = jr.adaptive.switchReason
 	// Note that there is no need to include the maximum bytes of
 	// jr.limitedMemMonitor because it is a child of jr.MemMonitor.
 	ret.Exec.MaxAllocatedMem.Add(jr.MemMonitor.MaximumBytes())

@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -49,6 +50,7 @@ import (
 
 func TestIndexBackfillSinkSelection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderNonTestBuild(t)
 	ctx := context.Background()
 
 	fakeAdder := &testIndexBackfillBulkAdder{}
@@ -93,6 +95,7 @@ func TestIndexBackfillSinkSelection(t *testing.T) {
 
 func TestSSTFileNamingConvention(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderNonTestBuild(t)
 
 	ctx := context.Background()
 

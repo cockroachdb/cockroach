@@ -239,6 +239,18 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 	if s.Exec.CPUTime.HasValue() {
 		fn("sql cpu time", humanizeutil.Duration(s.Exec.CPUTime.Value()))
 	}
+	if s.Exec.AdaptiveEnabled {
+		fn("adaptive enabled", s.Exec.AdaptiveEnabled)
+	}
+	if s.Exec.AdaptiveDecision != "" {
+		fn("adaptive decision", s.Exec.AdaptiveDecision)
+	}
+	if s.Exec.BytesSeenAtDecision > 0 {
+		fn("adaptive bytes seen", humanize.IBytes(uint64(s.Exec.BytesSeenAtDecision)))
+	}
+	if s.Exec.SwitchReason != "" {
+		fn("adaptive switch reason", s.Exec.SwitchReason)
+	}
 
 	// Output stats.
 	if s.Output.NumBatches.HasValue() {
@@ -374,6 +386,16 @@ func (s *ComponentStats) Union(other *ComponentStats) *ComponentStats {
 	}
 	if !result.Exec.CPUTime.HasValue() {
 		result.Exec.CPUTime = other.Exec.CPUTime
+	}
+	result.Exec.AdaptiveEnabled = result.Exec.AdaptiveEnabled || other.Exec.AdaptiveEnabled
+	if result.Exec.AdaptiveDecision == "" {
+		result.Exec.AdaptiveDecision = other.Exec.AdaptiveDecision
+	}
+	if result.Exec.BytesSeenAtDecision == 0 {
+		result.Exec.BytesSeenAtDecision = other.Exec.BytesSeenAtDecision
+	}
+	if result.Exec.SwitchReason == "" {
+		result.Exec.SwitchReason = other.Exec.SwitchReason
 	}
 
 	// Output stats.

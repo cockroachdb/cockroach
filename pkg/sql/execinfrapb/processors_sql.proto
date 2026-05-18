@@ -373,6 +373,16 @@ message JoinReaderSpec {
   // Note that this field has no effect when the Streamer API is used.
   optional bool parallelize = 26 [(gogoproto.nullable) = false];
 
+  // AdaptiveEnabled toggles runtime adaptivity in the joinReader. When set,
+  // the joinReader can switch from lookup mode to an internal hash-based
+  // fallback if the left input bytes exceed AdaptiveThresholdBytes.
+  optional bool adaptive_enabled = 27 [(gogoproto.nullable) = false];
+
+  // AdaptiveThresholdBytes is the strict switch threshold for runtime
+  // adaptivity. The switch happens only when bytes seen are strictly greater
+  // than this threshold.
+  optional int64 adaptive_threshold_bytes = 28 [(gogoproto.nullable) = false];
+
   reserved 5, 7, 12, 13, 18;
 }
 
