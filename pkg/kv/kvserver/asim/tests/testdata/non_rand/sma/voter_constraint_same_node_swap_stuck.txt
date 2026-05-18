@@ -1,15 +1,18 @@
-# Reproduces a legacy allocator bug.
+# Regression test for #170471, a legacy allocator bug fixed in this same
+# commit series.
 #
 # When voter_constraints pin each voter to a specific sibling store on a
-# specific node and the existing voter on every node is on the WRONG sibling
-# of that node, considerRebalance → RebalanceVoter → RebalanceTarget picks
-# a rebalance pair of the form (ADD on n, REMOVE on m) with m != n.
-# Concretely, for a range with voters on (n1s1, n2s1, n3s1) and
-# voter_constraints = {+node1store2:1, +node2store2:1, +node3store2:1}, the
-# planner emits something like (ADD n3,s6 REMOVE n2,s3). The
-# allocatorimpl.ValidateReplicationChanges validator then rejects this pair
-# with "node 3 already has a replica; only valid actions are a removal or a
-# rebalance(add/remove)" because n3 already holds the s5 voter.
+# specific node and the existing voter on every node is on the WRONG
+# sibling of that node, considerRebalance → RebalanceVoter →
+# RebalanceTarget used to pick a rebalance pair of the form (ADD on n,
+# REMOVE on m) with m != n. Concretely, for a range with voters on
+# (n1s1, n2s1, n3s1) and voter_constraints =
+# {+node1store2:1, +node2store2:1, +node3store2:1}, the planner emitted
+# something like (ADD n3,s6 REMOVE n2,s3). The
+# allocatorimpl.ValidateReplicationChanges validator then rejected this
+# pair with "node 3 already has a replica; only valid actions are a
+# removal or a rebalance(add/remove)" because n3 already held the s5
+# voter.
 #
 # Why RebalanceTarget picks a cross-node remove: it simulates "which voter
 # to remove after adding s6" with the new voter NOT yet present. From the
@@ -58,100 +61,21 @@ set_span_config
 [0,10000): num_replicas=3 num_voters=3 voter_constraints={'+node1store2':1,'+node2store2':1,'+node3store2':1}
 ----
 
-# Expected to fail: the rejected (ADD on n, REMOVE on m≠n) pair leaves
-# many ranges stuck on the wrong-sibling stores. When the underlying
-# allocator bug is fixed, this assertion will start passing and the issue
-# annotation should be removed.
-assertion type=conformance under=0 over=0 unavailable=0 violating=0 issue=https://github.com/cockroachdb/cockroach/issues/170471
+# With the fix in simulateRemoveTarget that narrows remove candidates to
+# the target's node when the target's node already holds a voter, the
+# rebalance planner now produces same-node (ADD, REMOVE) pairs that
+# allocatorimpl.ValidateReplicationChanges accepts, and all 100 ranges
+# converge to the constraint-satisfying placement.
+assertion type=conformance under=0 over=0 unavailable=0 violating=0
 ----
 
 eval duration=5m cfgs=(sma-count) metrics=(replicas) full=true
 ----
 sma-count:
 replicas#1: first: [s1=101, s2=0, s3=101, s4=0, s5=101, s6=0] (stddev=50.50, mean=50.50, sum=303)
-replicas#1: last:  [s1=69, s2=32, s3=69, s4=32, s5=76, s6=25] (stddev=21.09, mean=50.50, sum=303)
+replicas#1: last:  [s1=1, s2=100, s3=1, s4=100, s5=1, s6=100] (stddev=49.50, mean=50.50, sum=303)
 replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%]  (sum=0%)
-hash: 81fbd893101b4b63
-failed assertion sample 1
-  conformance unavailable=0 under=0 over=0 violating=0 
-  actual unavailable=0 under=0, over=0 violating=76 lease-violating=0 lease-less-preferred=0
-violating constraints:
-	r2:0000000{100-200} [(n1,s1):1, (n2,s4):4, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r3:0000000{200-300} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r4:0000000{300-400} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r5:0000000{400-500} [(n1,s2):4, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r6:0000000{500-600} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r7:0000000{600-700} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r8:0000000{700-800} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r9:0000000{800-900} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r10:000000{0900-1000} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r11:0000001{000-100} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r12:0000001{100-200} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r13:0000001{200-300} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r14:0000001{300-400} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r15:0000001{400-500} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r16:0000001{500-600} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r17:0000001{600-700} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r18:0000001{700-800} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r19:0000001{800-900} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r20:000000{1900-2000} [(n1,s2):4, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r21:0000002{000-100} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r22:0000002{100-200} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r23:0000002{200-300} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r24:0000002{300-400} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r25:0000002{400-500} [(n1,s1):1, (n2,s4):4, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r27:0000002{600-700} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r28:0000002{700-800} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r29:0000002{800-900} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r30:000000{2900-3000} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r31:0000003{000-100} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r33:0000003{200-300} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r34:0000003{300-400} [(n1,s2):4, (n2,s4):5, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r36:0000003{500-600} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r37:0000003{600-700} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r40:000000{3900-4000} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r42:0000004{100-200} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r43:0000004{200-300} [(n1,s2):4, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r44:0000004{300-400} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r45:0000004{400-500} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r46:0000004{500-600} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r47:0000004{600-700} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r50:000000{4900-5000} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r51:0000005{000-100} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r53:0000005{200-300} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r54:0000005{300-400} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r58:0000005{700-800} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r59:0000005{800-900} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r60:000000{5900-6000} [(n1,s1):1, (n2,s4):4, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r61:0000006{000-100} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r63:0000006{200-300} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r64:0000006{300-400} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r65:0000006{400-500} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r66:0000006{500-600} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r67:0000006{600-700} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r68:0000006{700-800} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r70:000000{6900-7000} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r71:0000007{000-100} [(n1,s1):1, (n2,s4):4, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r73:0000007{200-300} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r74:0000007{300-400} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r75:0000007{400-500} [(n1,s2):4, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r76:0000007{500-600} [(n1,s1):1, (n2,s4):4, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r78:0000007{700-800} [(n1,s1):1, (n2,s4):4, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r79:0000007{800-900} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r80:000000{7900-8000} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r82:0000008{100-200} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r84:0000008{300-400} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r87:0000008{600-700} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r88:0000008{700-800} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r89:0000008{800-900} [(n1,s2):4, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r91:0000009{000-100} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r92:0000009{100-200} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r94:0000009{300-400} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r96:0000009{500-600} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r97:0000009{600-700} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r98:0000009{700-800} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r99:0000009{800-900} [(n1,s2):4, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
-	r100:00000{09900-10000} [(n1,s1):1, (n2,s3):2, (n3,s5):3] applying num_voters=3 voter_constraints=[+node1store2:1 +node2store2:1 +node3store2:1]
+hash: c48b490dd796ba89
 ==========================
 Cluster Set Up
 	n1(AU_EAST,AU_EAST_1,8vcpu): {s1:(256GiB),s2:(256GiB)}
