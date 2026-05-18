@@ -11802,6 +11802,38 @@ func TestChangefeedCSVHeaderRowWebhook(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("webhook"))
 }
 
+// TestChangefeedMultiRowWebhookBatch verifies that the webhook test feed
+// returns every row when the webhook sink batches multiple rows into a
+// single POST. Real webhook sinks wrap batches as
+// {"payload":[r1,r2,...],"length":N}; the test feed must surface all N
+// rows when consumed via Next.
+func TestChangefeedMultiRowWebhookBatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+		// Frequency=1h keeps the batcher's timer from flushing partial
+		// batches before Messages is reached.
+		wf := feed(t, f,
+			`CREATE CHANGEFEED FOR foo `+
+				`WITH webhook_sink_config='{"Flush":{"Messages":4,"Frequency":"1h"}}'`)
+		defer closeFeed(t, wf)
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b'), (3, 'c'), (4, 'd')`)
+		assertPayloads(t, wf, []string{
+			`foo: [1]->{"after": {"a": 1, "b": "a"}}`,
+			`foo: [2]->{"after": {"a": 2, "b": "b"}}`,
+			`foo: [3]->{"after": {"a": 3, "b": "c"}}`,
+			`foo: [4]->{"after": {"a": 4, "b": "d"}}`,
+		})
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("webhook"))
+}
+
 // TestCloudstorageBufferedBytesMetric tests the metric which tracks the number
 // of buffered bytes in the cloudstorage sink.
 func TestCloudstorageBufferedBytesMetric(t *testing.T) {
