@@ -7,6 +7,7 @@ go_library(
         "allocator_scorer.go",
         "test_helpers.go",
         "threshold.go",
+        "validate_changes.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl",
     visibility = ["//visibility:public"],
@@ -47,6 +48,7 @@ go_test(
     srcs = [
         "allocator_scorer_test.go",
         "allocator_test.go",
+        "validate_changes_test.go",
     ],
     embed = [":allocatorimpl"],
     deps = [
