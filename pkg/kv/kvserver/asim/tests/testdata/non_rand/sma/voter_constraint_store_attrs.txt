@@ -54,7 +54,7 @@ sma-count:
 replicas#1: first: [s1=2, s2=0, s3=2, s4=0, s5=2, s6=0] (stddev=1.00, mean=1.00, sum=6)
 replicas#1: last:  [s1=1, s2=1, s3=1, s4=1, s5=1, s6=1] (stddev=0.00, mean=1.00, sum=6)
 replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%]  (sum=0%)
-hash: ecac5f217ea68bad
+hash: 9aac6ae3858a616d
 ==========================
 Cluster Set Up
 	n1(AU_EAST,AU_EAST_1,8vcpu): {s1:(256GiB),s2:(256GiB)}
