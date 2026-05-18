@@ -10,8 +10,10 @@ import (
 	"fmt"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrsettings"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -332,7 +334,12 @@ func TestCheckpointHandler(t *testing.T) {
 
 	registry := s.JobRegistry().(*jobs.Registry)
 	internalDB := s.InternalDB().(isql.DB)
+	sv := &s.ApplicationLayer().ClusterSettings().SV
 	db := sqlutils.MakeSQLRunner(s.ApplicationLayer().SQLConn(t))
+
+	// Disable the checkpoint throttle for most subtests so back-to-back
+	// handleMeta calls persist every frontier advance.
+	ldrsettings.JobCheckpointFrequency.Override(ctx, sv, time.Nanosecond)
 
 	createJob := func(t *testing.T) *jobs.Job {
 		t.Helper()
@@ -364,7 +371,7 @@ func TestCheckpointHandler(t *testing.T) {
 		applierIDs := []base.SQLInstanceID{1, 2}
 
 		ch := newCheckpointHandler(
-			job, internalDB, nil, frontierCh, applierIDs, hlc.Timestamp{}, hlc.MaxTimestamp,
+			job, internalDB, sv, frontierCh, applierIDs, hlc.Timestamp{}, hlc.MaxTimestamp,
 			func() {},
 		)
 
@@ -395,7 +402,7 @@ func TestCheckpointHandler(t *testing.T) {
 		resumeTS := mkts(10)
 
 		ch := newCheckpointHandler(
-			job, internalDB, nil, frontierCh, applierIDs, resumeTS, hlc.MaxTimestamp,
+			job, internalDB, sv, frontierCh, applierIDs, resumeTS, hlc.MaxTimestamp,
 			func() {},
 		)
 
@@ -437,7 +444,7 @@ func TestCheckpointHandler(t *testing.T) {
 		var flowCanceled bool
 
 		ch := newCheckpointHandler(
-			job, internalDB, nil, frontierCh, applierIDs, hlc.Timestamp{}, endTime,
+			job, internalDB, sv, frontierCh, applierIDs, hlc.Timestamp{}, endTime,
 			func() { flowCanceled = true },
 		)
 
@@ -457,5 +464,36 @@ func TestCheckpointHandler(t *testing.T) {
 		err := ch.handleMeta(ctx, makeFrontierMeta(2, mkts(30)))
 		require.ErrorIs(t, err, ErrEndTimeReached)
 		require.True(t, flowCanceled)
+	})
+
+	t.Run("checkpoint_throttle", func(t *testing.T) {
+		ldrsettings.JobCheckpointFrequency.Override(ctx, sv, time.Hour)
+
+		job := createJob(t)
+		frontierCh := make(chan hlc.Timestamp, 100)
+		applierIDs := []base.SQLInstanceID{1}
+
+		endTime := mkts(100)
+		var flowCanceled bool
+		ch := newCheckpointHandler(
+			job, internalDB, sv, frontierCh, applierIDs, hlc.Timestamp{}, endTime,
+			func() { flowCanceled = true },
+		)
+
+		// First advance always persists (zero-value lastPersistenceTime).
+		require.NoError(t, ch.handleMeta(ctx, makeFrontierMeta(1, mkts(10))))
+		require.Len(t, drainChannel(frontierCh), 1)
+
+		// Intermediate advances within the throttle window are skipped.
+		require.NoError(t, ch.handleMeta(ctx, makeFrontierMeta(1, mkts(20))))
+		require.Empty(t, drainChannel(frontierCh))
+		require.NoError(t, ch.handleMeta(ctx, makeFrontierMeta(1, mkts(30))))
+		require.Empty(t, drainChannel(frontierCh))
+
+		// Reaching endTime forces persistence regardless of throttle.
+		err := ch.handleMeta(ctx, makeFrontierMeta(1, mkts(100)))
+		require.ErrorIs(t, err, ErrEndTimeReached)
+		require.True(t, flowCanceled)
+		require.Equal(t, mkts(100), drainChannel(frontierCh)[0])
 	})
 }
