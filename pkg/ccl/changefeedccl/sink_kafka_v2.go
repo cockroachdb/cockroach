@@ -513,7 +513,7 @@ func buildKgoConfig(
 				changefeedbase.KafkaMaxRequestSizeLimit, sinkCfg.Flush.MaxBytes)
 		}
 		// Override the cluster setting default set in baseOpts; kgo uses last-writer-wins.
-		opts = append(opts, kgo.ProducerBatchMaxBytes(sinkCfg.Flush.MaxBytes))
+		opts = append(opts, kgo.ProducerBatchMaxBytes(int32(sinkCfg.Flush.MaxBytes)))
 	}
 
 	// If the user sets MaxMessages, use that as kgo's overall max batch size.

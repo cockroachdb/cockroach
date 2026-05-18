@@ -828,6 +828,9 @@ func TestMaxRequestSize(t *testing.T) {
 		// perChangefeed is the value set in the config option on the changefeed
 		// as MaxBytes in the json.
 		perChangefeed int
+		// perChangefeedStr is used instead of perChangefeed when set,
+		// allowing string values like "2MiB".
+		perChangefeedStr string
 
 		// wantValue is the expected value of the kgo "ProducerBatchMaxBytes"
 		// option. If we expect the setting to be valid we assert that the
@@ -882,6 +885,16 @@ func TestMaxRequestSize(t *testing.T) {
 			perChangefeed:   256<<20 + 1,
 			wantErrContains: fmt.Sprintf("at most %d", changefeedbase.KafkaMaxRequestSizeLimit),
 		},
+		{
+			name:             "per_changefeed_human_readable",
+			perChangefeedStr: "2MiB",
+			wantValue:        int32(2 << 20),
+		},
+		{
+			name:             "per_changefeed_human_readable_kib",
+			perChangefeedStr: "512KiB",
+			wantValue:        int32(512 * 1024),
+		},
 	}
 
 	for _, tc := range tests {
@@ -897,7 +910,10 @@ func TestMaxRequestSize(t *testing.T) {
 					)
 				}))
 			}
-			if tc.perChangefeed != 0 {
+			if tc.perChangefeedStr != "" {
+				jsonStr := fmt.Sprintf(`{"Flush": {"MaxBytes": %q}}`, tc.perChangefeedStr)
+				opts = append(opts, withJSONConfig(jsonStr))
+			} else if tc.perChangefeed != 0 {
 				jsonBs, err := json.Marshal(map[string]any{
 					"Flush": map[string]any{
 						"MaxBytes": tc.perChangefeed,
