@@ -69,7 +69,7 @@ func TestSQLRowWriter(t *testing.T) {
 
 	// Create a row writer
 	desc := cdctest.GetHydratedTableDescriptor(t, s.ApplicationLayer().ExecutorConfig(), "test_table")
-	writer, err := NewRowWriter(ctx, desc, session)
+	writer, err := NewRowWriter(ctx, desc, session, true /* decodeComputedConstraints */)
 	require.NoError(t, err)
 
 	// Test InsertRow

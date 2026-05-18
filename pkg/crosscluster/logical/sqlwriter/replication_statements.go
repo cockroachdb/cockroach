@@ -35,11 +35,12 @@ type ColumnSchema struct {
 //  2. The column is not computed. If a column is not computed,
 //     it must be included in update and insert statements
 //  3. The column is a stored computed column that participates in a unique
-//     or foreign key constraint, so lock synthesis can hash its value.
+//     or foreign key constraint and decodeComputedConstraints is true. Lock
+//     synthesis requires these columns.
 //
 // Notably, this excludes virtual columns that are not part of the primary key
 // and system columns like crdb_internal_mvcc_timestamp.
-func GetColumnSchema(table catalog.TableDescriptor) []ColumnSchema {
+func GetColumnSchema(table catalog.TableDescriptor, decodeComputedConstraints bool) []ColumnSchema {
 	primaryIdx := table.GetPrimaryIndex()
 	isPrimaryKey := make(map[catid.ColumnID]bool)
 	isConstraint := make(map[catid.ColumnID]bool)
@@ -49,24 +50,26 @@ func GetColumnSchema(table catalog.TableDescriptor) []ColumnSchema {
 	}
 
 	// Collect all the constraint colIDs.
-	for _, uc := range table.EnforcedUniqueConstraintsWithIndex() {
-		for _, id := range uc.CollectKeyColumnIDs().Ordered() {
-			isConstraint[id] = true
+	if decodeComputedConstraints {
+		for _, uc := range table.EnforcedUniqueConstraintsWithIndex() {
+			for _, id := range uc.CollectKeyColumnIDs().Ordered() {
+				isConstraint[id] = true
+			}
 		}
-	}
-	for _, uc := range table.EnforcedUniqueConstraintsWithoutIndex() {
-		for _, id := range uc.CollectKeyColumnIDs().Ordered() {
-			isConstraint[id] = true
+		for _, uc := range table.EnforcedUniqueConstraintsWithoutIndex() {
+			for _, id := range uc.CollectKeyColumnIDs().Ordered() {
+				isConstraint[id] = true
+			}
 		}
-	}
-	for _, fk := range table.EnforcedOutboundForeignKeys() {
-		for _, id := range fk.CollectOriginColumnIDs().Ordered() {
-			isConstraint[id] = true
+		for _, fk := range table.EnforcedOutboundForeignKeys() {
+			for _, id := range fk.CollectOriginColumnIDs().Ordered() {
+				isConstraint[id] = true
+			}
 		}
-	}
-	for _, fk := range table.InboundForeignKeys() {
-		for _, id := range fk.CollectReferencedColumnIDs().Ordered() {
-			isConstraint[id] = true
+		for _, fk := range table.InboundForeignKeys() {
+			for _, id := range fk.CollectReferencedColumnIDs().Ordered() {
+				isConstraint[id] = true
+			}
 		}
 	}
 
@@ -79,9 +82,9 @@ func GetColumnSchema(table catalog.TableDescriptor) []ColumnSchema {
 		if col.IsVirtual() && !isPrimaryKey[col.GetID()] {
 			continue
 		}
-		// Stored computed cols are only needed if they're in the PK or in a
+		// Stored computed cols are only needed if they're in a
 		// constraint that lock synthesis hashes.
-		if col.IsComputed() && !isPrimaryKey[col.GetID()] && !isConstraint[col.GetID()] {
+		if col.IsComputed() && !isConstraint[col.GetID()] {
 			continue
 		}
 
@@ -115,9 +118,9 @@ func newTypedPlaceholder(idx int, col catalog.Column) (*tree.CastExpr, error) {
 // The statement will have `n` parameters, where `n` is the number of columns
 // in the table. Parameters are ordered by column ID.
 func newInsertStatement(
-	table catalog.TableDescriptor,
+	table catalog.TableDescriptor, decodeComputedConstraints bool,
 ) (statements.Statement[tree.Statement], []*types.T, error) {
-	columns := GetColumnSchema(table)
+	columns := GetColumnSchema(table, decodeComputedConstraints)
 	columnNames := make(tree.NameList, 0, len(columns))
 	parameters := make(tree.Exprs, 0, len(columns))
 	paramTypes := make([]*types.T, 0, len(columns))
@@ -218,9 +221,9 @@ func newMatchesLastRow(columns []ColumnSchema, startParamIdx int) (tree.Expr, er
 //
 // Parameters are ordered by column ID.
 func newUpdateStatement(
-	table catalog.TableDescriptor,
+	table catalog.TableDescriptor, decodeComputedConstraints bool,
 ) (statements.Statement[tree.Statement], []*types.T, error) {
-	columns := GetColumnSchema(table)
+	columns := GetColumnSchema(table, decodeComputedConstraints)
 	// Create WHERE clause for matching the previous row values
 	whereClause, err := newMatchesLastRow(columns, 1)
 	if err != nil {
@@ -288,9 +291,9 @@ func newUpdateStatement(
 //
 // Parameters are ordered by column ID.
 func newDeleteStatement(
-	table catalog.TableDescriptor,
+	table catalog.TableDescriptor, decodeComputedConstraints bool,
 ) (statements.Statement[tree.Statement], []*types.T, error) {
-	columns := GetColumnSchema(table)
+	columns := GetColumnSchema(table, decodeComputedConstraints)
 
 	// Create WHERE clause for matching the row to delete
 	whereClause, err := newMatchesLastRow(columns, 1)
@@ -348,9 +351,9 @@ func newDeleteStatement(
 //		ON replication_target.id = key_list.key1
 //			AND replication_target.secondary_id = key_list.key2
 func newBulkSelectStatement(
-	table catalog.TableDescriptor,
+	table catalog.TableDescriptor, decodeComputedConstraints bool,
 ) (statements.Statement[tree.Statement], []*types.T, error) {
-	cols := GetColumnSchema(table)
+	cols := GetColumnSchema(table, decodeComputedConstraints)
 	primaryKeyColumns := make([]ColumnSchema, 0, len(cols))
 	for _, col := range cols {
 		if col.IsPrimaryKey {
@@ -524,9 +527,9 @@ func newBulkSelectStatement(
 //	FROM [table_id AS replication_target]
 //	WHERE replication_target.id = $1 AND replication_target.secondary_id = $2
 func newPointSelectStatement(
-	table catalog.TableDescriptor,
+	table catalog.TableDescriptor, decodeComputedConstraints bool,
 ) (statements.Statement[tree.Statement], []*types.T, error) {
-	cols := GetColumnSchema(table)
+	cols := GetColumnSchema(table, decodeComputedConstraints)
 	primaryKeyColumns := make([]ColumnSchema, 0, len(cols))
 	for _, col := range cols {
 		if col.IsPrimaryKey {

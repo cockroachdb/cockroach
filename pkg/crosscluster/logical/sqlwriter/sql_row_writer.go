@@ -133,15 +133,18 @@ func (s *RowWriter) UpdateRow(
 }
 
 func NewRowWriter(
-	ctx context.Context, table catalog.TableDescriptor, session isql.Session,
+	ctx context.Context,
+	table catalog.TableDescriptor,
+	session isql.Session,
+	decodeComputedConstraints bool,
 ) (*RowWriter, error) {
-	columnsToDecode := GetColumnSchema(table)
+	columnsToDecode := GetColumnSchema(table, decodeComputedConstraints)
 	columns := make([]string, len(columnsToDecode))
 	for i, col := range columnsToDecode {
 		columns[i] = col.Column.GetName()
 	}
 
-	insert, insertParamTypes, err := newInsertStatement(table)
+	insert, insertParamTypes, err := newInsertStatement(table, decodeComputedConstraints)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +153,7 @@ func NewRowWriter(
 		return nil, errors.Wrap(err, "unable to prepare insert statement")
 	}
 
-	update, updateParamTypes, err := newUpdateStatement(table)
+	update, updateParamTypes, err := newUpdateStatement(table, decodeComputedConstraints)
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +162,7 @@ func NewRowWriter(
 		return nil, errors.Wrap(err, "unable to prepare update statement")
 	}
 
-	delete, deleteParamTypes, err := newDeleteStatement(table)
+	delete, deleteParamTypes, err := newDeleteStatement(table, decodeComputedConstraints)
 	if err != nil {
 		return nil, err
 	}

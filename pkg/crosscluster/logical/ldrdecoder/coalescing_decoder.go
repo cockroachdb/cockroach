@@ -34,7 +34,7 @@ type CoalescingDecoder struct {
 func NewCoalescingDecoder(
 	ctx context.Context, descriptors descs.DB, settings *cluster.Settings, tables []TableMapping,
 ) (*CoalescingDecoder, error) {
-	decoder, err := newTableDecoder(ctx, descriptors, settings, tables)
+	decoder, err := newTableDecoder(ctx, descriptors, settings, tables, false /* decodeComputedConstraints */)
 	if err != nil {
 		return nil, err
 	}

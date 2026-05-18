@@ -113,7 +113,7 @@ func newDestKeyEncoders(
 				return err
 			}
 			var colMap catalog.TableColMap
-			for i, col := range sqlwriter.GetColumnSchema(desc) {
+			for i, col := range sqlwriter.GetColumnSchema(desc, true /* decodeComputedConstraints */) {
 				colMap.Set(col.Column.GetID(), i)
 			}
 			encoders[destID] = &destKeyEncoder{

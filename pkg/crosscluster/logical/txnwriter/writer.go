@@ -88,6 +88,7 @@ func (tw *transactionWriter) initTable(ctx context.Context, tableID descpb.ID) e
 		ctx,
 		desc.Underlying().(catalog.TableDescriptor),
 		tw.session,
+		true, /* decodeComputedConstraints */
 	)
 	if err != nil {
 		return errors.Wrapf(err, "creating sql writer for table %d", tableID)
@@ -97,6 +98,7 @@ func (tw *transactionWriter) initTable(ctx context.Context, tableID descpb.ID) e
 		ctx,
 		desc.Underlying().(catalog.TableDescriptor),
 		tw.session,
+		true, /* decodeComputedConstraints */
 	)
 	if err != nil {
 		return errors.Wrapf(err, "creating sql reader for table %d", tableID)

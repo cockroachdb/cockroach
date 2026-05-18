@@ -117,12 +117,12 @@ func newTableHandler(
 	sessionOverride := ieOverrideBase
 	sessionOverride.ApplicationName = fmt.Sprintf("%s-logical-replication-%d", sd.ApplicationName, jobID)
 
-	reader, err := sqlwriter.NewRowReader(ctx, table, session)
+	reader, err := sqlwriter.NewRowReader(ctx, table, session, false /* decodeComputedConstraints */)
 	if err != nil {
 		return nil, err
 	}
 
-	writer, err := sqlwriter.NewRowWriter(ctx, table, session)
+	writer, err := sqlwriter.NewRowWriter(ctx, table, session, false /* decodeComputedConstraints */)
 	if err != nil {
 		return nil, err
 	}
