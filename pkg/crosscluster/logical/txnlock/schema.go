@@ -46,7 +46,7 @@ type tableConstraints struct {
 func newTableConstraints(
 	evalCtx *eval.Context, table catalog.TableDescriptor,
 ) (*tableConstraints, error) {
-	columnSchema := sqlwriter.GetColumnSchema(table)
+	columnSchema := sqlwriter.GetColumnSchema(table, true /* decodeComputedConstraints */)
 	colIDToIndex := make(map[descpb.ColumnID]int32, len(columnSchema))
 	for i, col := range columnSchema {
 		colIDToIndex[col.Column.GetID()] = int32(i)

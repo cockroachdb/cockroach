@@ -58,7 +58,7 @@ func TestSQLRowReader(t *testing.T) {
 
 	// Create sqlRowReader for source table
 	desc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", "tab")
-	srcReader, err := NewRowReader(ctx, desc, session)
+	srcReader, err := NewRowReader(ctx, desc, session, true /* decodeComputedConstraints */)
 	require.NoError(t, err)
 
 	db := s.InternalDB().(isql.DB)
@@ -142,7 +142,7 @@ func TestSQLRowReaderWithArrayColumn(t *testing.T) {
 	desc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", "tab_array")
 	session := newInternalSession(t, s)
 	defer session.Close(ctx)
-	reader, err := NewRowReader(ctx, desc, session)
+	reader, err := NewRowReader(ctx, desc, session, true /* decodeComputedConstraints */)
 	require.NoError(t, err)
 
 	db := s.InternalDB().(isql.DB)

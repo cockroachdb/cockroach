@@ -85,7 +85,7 @@ func TestReplicationStatements(t *testing.T) {
 
 				desc := getTableDesc(tableName)
 
-				insertStmt, types, err := newInsertStatement(desc)
+				insertStmt, types, err := newInsertStatement(desc, true /* decodeComputedConstraints */)
 				require.NoError(t, err)
 
 				prepareStatement(t, sqlDB, types, insertStmt)
@@ -97,7 +97,7 @@ func TestReplicationStatements(t *testing.T) {
 
 				desc := getTableDesc(tableName)
 
-				updateStmt, types, err := newUpdateStatement(desc)
+				updateStmt, types, err := newUpdateStatement(desc, true /* decodeComputedConstraints */)
 				require.NoError(t, err)
 
 				// update expects previous and current values to be passed as
@@ -113,7 +113,7 @@ func TestReplicationStatements(t *testing.T) {
 
 				// delete expects previous and current values to be passed as
 				// parameters.
-				deleteStmt, types, err := newDeleteStatement(desc)
+				deleteStmt, types, err := newDeleteStatement(desc, true /* decodeComputedConstraints */)
 				require.NoError(t, err)
 
 				prepareStatement(t, sqlDB, types, deleteStmt)
@@ -125,7 +125,7 @@ func TestReplicationStatements(t *testing.T) {
 
 				desc := getTableDesc(tableName)
 
-				stmt, types, err := newBulkSelectStatement(desc)
+				stmt, types, err := newBulkSelectStatement(desc, true /* decodeComputedConstraints */)
 				require.NoError(t, err)
 
 				prepareStatement(t, sqlDB, types, stmt)
@@ -137,7 +137,7 @@ func TestReplicationStatements(t *testing.T) {
 
 				desc := getTableDesc(tableName)
 
-				stmt, types, err := newPointSelectStatement(desc)
+				stmt, types, err := newPointSelectStatement(desc, true /* decodeComputedConstraints */)
 				require.NoError(t, err)
 
 				prepareStatement(t, sqlDB, types, stmt)

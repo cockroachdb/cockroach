@@ -36,7 +36,7 @@ type TxnDecoder struct {
 func NewTxnDecoder(
 	ctx context.Context, descriptors descs.DB, settings *cluster.Settings, tables []TableMapping,
 ) (*TxnDecoder, error) {
-	decoder, err := newTableDecoder(ctx, descriptors, settings, tables)
+	decoder, err := newTableDecoder(ctx, descriptors, settings, tables, true /* decodeComputedConstraints */)
 	if err != nil {
 		return nil, err
 	}

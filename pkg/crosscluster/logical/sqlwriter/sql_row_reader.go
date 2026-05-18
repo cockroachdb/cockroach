@@ -42,10 +42,13 @@ type PriorRow struct {
 }
 
 func NewRowReader(
-	ctx context.Context, table catalog.TableDescriptor, session isql.Session,
+	ctx context.Context,
+	table catalog.TableDescriptor,
+	session isql.Session,
+	decodeComputedConstraints bool,
 ) (RowReader, error) {
 	hasArrayPrimaryKey := false
-	for _, col := range GetColumnSchema(table) {
+	for _, col := range GetColumnSchema(table, decodeComputedConstraints) {
 		if col.IsPrimaryKey && col.ColumnType.Family() == types.ArrayFamily {
 			hasArrayPrimaryKey = true
 			break
@@ -56,9 +59,9 @@ func NewRowReader(
 		// array types. We can't use the bulk reader because it passes all of the
 		// primary key values in an array, which results in an array of arrays when
 		// a primary key column is an array.
-		return newPointRowReader(ctx, table, session)
+		return newPointRowReader(ctx, table, session, decodeComputedConstraints)
 	}
-	return newBulkRowReader(ctx, table, session)
+	return newBulkRowReader(ctx, table, session, decodeComputedConstraints)
 }
 
 type bulkRowReader struct {
@@ -72,9 +75,12 @@ type bulkRowReader struct {
 }
 
 func newBulkRowReader(
-	ctx context.Context, table catalog.TableDescriptor, session isql.Session,
+	ctx context.Context,
+	table catalog.TableDescriptor,
+	session isql.Session,
+	decodeComputedConstraints bool,
 ) (*bulkRowReader, error) {
-	cols := GetColumnSchema(table)
+	cols := GetColumnSchema(table, decodeComputedConstraints)
 	keyColumns := make([]int, 0, len(cols))
 	for i, col := range cols {
 		if col.IsPrimaryKey {
@@ -82,7 +88,7 @@ func newBulkRowReader(
 		}
 	}
 
-	selectStatementRaw, types, err := newBulkSelectStatement(table)
+	selectStatementRaw, types, err := newBulkSelectStatement(table, decodeComputedConstraints)
 	if err != nil {
 		return nil, err
 	}
@@ -185,9 +191,12 @@ type pointReadRowReader struct {
 }
 
 func newPointRowReader(
-	ctx context.Context, table catalog.TableDescriptor, session isql.Session,
+	ctx context.Context,
+	table catalog.TableDescriptor,
+	session isql.Session,
+	decodeComputedConstraints bool,
 ) (*pointReadRowReader, error) {
-	cols := GetColumnSchema(table)
+	cols := GetColumnSchema(table, decodeComputedConstraints)
 	keyColumns := make([]int, 0, len(cols))
 	for i, col := range cols {
 		if col.IsPrimaryKey {
@@ -195,7 +204,7 @@ func newPointRowReader(
 		}
 	}
 
-	selectStatementRaw, types, err := newPointSelectStatement(table)
+	selectStatementRaw, types, err := newPointSelectStatement(table, decodeComputedConstraints)
 	if err != nil {
 		return nil, err
 	}

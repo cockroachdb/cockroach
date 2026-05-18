@@ -170,7 +170,7 @@ func (tu *tombstoneUpdater) getDeleter(ctx context.Context, txn *kv.Txn) (row.De
 		}
 
 		table := tu.leased.descriptor.Underlying().(catalog.TableDescriptor)
-		schema := sqlwriter.GetColumnSchema(table)
+		schema := sqlwriter.GetColumnSchema(table, false /* decodeComputedConstraints */)
 		cols := make([]catalog.Column, len(schema))
 		for i, cs := range schema {
 			cols[i] = cs.Column

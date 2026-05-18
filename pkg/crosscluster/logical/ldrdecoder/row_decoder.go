@@ -39,6 +39,7 @@ func newTableDecoder(
 	descriptors descs.DB,
 	settings *cluster.Settings,
 	tableMappings []TableMapping,
+	decodeComputedConstraints bool,
 ) (tableDecoder, error) {
 	srcToDest := make(map[descpb.ID]*destinationTable, len(tableMappings))
 	err := descriptors.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
@@ -48,7 +49,7 @@ func newTableDecoder(
 				return err
 			}
 
-			columns := sqlwriter.GetColumnSchema(descriptor)
+			columns := sqlwriter.GetColumnSchema(descriptor, decodeComputedConstraints)
 			columnNames := make([]string, 0, len(columns))
 			columnTypes := make([]*types.T, 0, len(columns))
 			for _, column := range columns {

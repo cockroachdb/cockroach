@@ -150,7 +150,7 @@ func TestTombstoneUpdaterRandomTables(t *testing.T) {
 	tu := newTombstoneUpdater(s.Codec(), s.DB(), s.LeaseManager().(*lease.Manager), desc.GetID(), sd, s.ClusterSettings())
 	defer tu.ReleaseLeases(ctx)
 
-	columnSchemas := sqlwriter.GetColumnSchema(desc)
+	columnSchemas := sqlwriter.GetColumnSchema(desc, false /* decodeComputedConstraints */)
 	cols := make([]catalog.Column, len(columnSchemas))
 	for i, cs := range columnSchemas {
 		cols[i] = cs.Column
@@ -162,7 +162,7 @@ func TestTombstoneUpdaterRandomTables(t *testing.T) {
 	require.NoError(t, err)
 	defer session.Close(ctx)
 
-	writer, err := sqlwriter.NewRowWriter(ctx, desc, session)
+	writer, err := sqlwriter.NewRowWriter(ctx, desc, session, false /* decodeComputedConstraints */)
 	require.NoError(t, err)
 
 	for i := 0; i < 10; i++ {
