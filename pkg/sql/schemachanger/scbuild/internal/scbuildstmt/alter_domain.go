@@ -182,5 +182,5 @@ func alterDomainRename(
 func alterDomainSetSchema(
 	b BuildCtx, tn *tree.TypeName, domainType *scpb.DomainType, t *tree.AlterDomainSetSchema,
 ) {
-	panic(pgerror.Newf(pgcode.FeatureNotSupported, "ALTER DOMAIN SET SCHEMA is not supported"))
+	setSchemaForTypeDesc(b, domainType, domainType.TypeID, domainType.ArrayTypeID, t.Schema, "domain")
 }

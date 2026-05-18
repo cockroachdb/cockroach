@@ -277,40 +277,7 @@ func alterTypeRenameValue(
 func alterTypeSetSchema(
 	b BuildCtx, tn *tree.TypeName, enumType *scpb.EnumType, t *tree.AlterTypeSetSchema,
 ) {
-	typeID := enumType.TypeID
-
-	currNamespace := mustRetrieveNamespaceElem(b, typeID)
-	currSchemaID := currNamespace.SchemaID
-	panicIfSchemaIsTemporaryOrVirtual(t.Schema)
-	newSchema := resolveSchemaByName(b, t.Schema, currNamespace.DatabaseID)
-	newSchemaID := newSchema.SchemaID
-
-	if currSchemaID == newSchemaID {
-		return
-	}
-
-	currName := tree.MakeTableNameFromPrefix(b.NamePrefix(enumType), tree.Name(currNamespace.Name))
-	newName := currName
-	newName.SchemaName = t.Schema
-
-	checkTableNameConflicts(b, currName, newName, currNamespace)
-
-	arrayNamespace := mustRetrieveNamespaceElem(b, enumType.ArrayTypeID)
-	arrayName := tree.MakeTableNameFromPrefix(
-		b.NamePrefix(enumType), tree.Name(arrayNamespace.Name),
-	)
-	newArrayName := arrayName
-	newArrayName.SchemaName = t.Schema
-	checkTableNameConflicts(b, arrayName, newArrayName, arrayNamespace)
-
-	newNS, _ := moveDescriptorToSchema(b, typeID, currNamespace, newSchemaID)
-	moveDescriptorToSchema(b, enumType.ArrayTypeID, arrayNamespace, newSchemaID)
-
-	b.LogEventForExistingPayload(newNS, &eventpb.SetSchema{
-		DescriptorName:    currName.FQString(),
-		NewDescriptorName: newName.FQString(),
-		DescriptorType:    "type",
-	})
+	setSchemaForTypeDesc(b, enumType, enumType.TypeID, enumType.ArrayTypeID, t.Schema, "type")
 }
 
 func alterTypeOwner(

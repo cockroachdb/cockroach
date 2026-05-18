@@ -121,6 +121,50 @@ func setOwnerForTypeDesc(
 	})
 }
 
+// setSchemaForTypeDesc implements SET SCHEMA for user-defined types that have
+// an associated array type (enums, composites, domains).
+func setSchemaForTypeDesc(
+	b BuildCtx,
+	typeElem scpb.Element,
+	typeID catid.DescID,
+	arrayTypeID catid.DescID,
+	newSchemaName tree.Name,
+	descriptorType string,
+) {
+	currNamespace := mustRetrieveNamespaceElem(b, typeID)
+	currSchemaID := currNamespace.SchemaID
+	panicIfSchemaIsTemporaryOrVirtual(newSchemaName)
+	newSchema := resolveSchemaByName(b, newSchemaName, currNamespace.DatabaseID)
+	newSchemaID := newSchema.SchemaID
+
+	if currSchemaID == newSchemaID {
+		return
+	}
+
+	currName := tree.MakeTableNameFromPrefix(b.NamePrefix(typeElem), tree.Name(currNamespace.Name))
+	newName := currName
+	newName.SchemaName = newSchemaName
+
+	checkTableNameConflicts(b, currName, newName, currNamespace)
+
+	arrayNamespace := mustRetrieveNamespaceElem(b, arrayTypeID)
+	arrayName := tree.MakeTableNameFromPrefix(
+		b.NamePrefix(typeElem), tree.Name(arrayNamespace.Name),
+	)
+	newArrayName := arrayName
+	newArrayName.SchemaName = newSchemaName
+	checkTableNameConflicts(b, arrayName, newArrayName, arrayNamespace)
+
+	newNS, _ := moveDescriptorToSchema(b, typeID, currNamespace, newSchemaID)
+	moveDescriptorToSchema(b, arrayTypeID, arrayNamespace, newSchemaID)
+
+	b.LogEventForExistingPayload(newNS, &eventpb.SetSchema{
+		DescriptorName:    currName.FQString(),
+		NewDescriptorName: newName.FQString(),
+		DescriptorType:    descriptorType,
+	})
+}
+
 // moveDescriptorToSchema drops the old Namespace and SchemaChild elements for
 // the given descriptor and adds new ones with the updated schema ID. It returns
 // the new Namespace and SchemaChild elements.
