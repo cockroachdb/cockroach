@@ -212,6 +212,7 @@ go_test(
     srcs = [
         "alter_changefeed_test.go",
         "backfill_stats_collector_test.go",
+        "batching_sink_bench_test.go",
         "changefeed_dist_test.go",
         "changefeed_job_info_test.go",
         "changefeed_memory_test.go",
@@ -347,6 +348,7 @@ go_test(
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util",
+        "//pkg/util/admission",
         "//pkg/util/cidr",
         "//pkg/util/collatedstring",
         "//pkg/util/ctxgroup",
