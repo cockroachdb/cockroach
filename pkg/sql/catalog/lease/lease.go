@@ -3613,16 +3613,18 @@ func (m *Manager) DeleteOrphanedLeases(
 	// AddTags and not WithTags, so that we combine the tags with those
 	// filled by AnnotateCtx.
 	newCtx = logtags.AddTags(newCtx, logtags.FromContext(ctx))
-	// Derive the task ctx from the stopper so that the inner retry loops and
-	// any blocking KV/SQL work terminate promptly when the stopper begins to
-	// quiesce. Without this, the task is rooted at context.Background() and
-	// can keep retrying indefinitely while Stopper.Quiesce is waiting for it,
-	// blocking shutdown (see #170331).
+	// Cancel on quiesce so the retry loops and blocking KV/SQL work below
+	// don't outlive the stopper.
 	newCtx, cancel := m.stopper.WithCancelOnQuiesce(newCtx)
 	if err := m.stopper.RunAsyncTask(newCtx, "del-orphaned-leases", func(ctx context.Context) {
 		defer cancel()
 		retryOpts := base.DefaultRetryOptions()
 		retryOpts.MaxRetries = 10
+		// Plumb ctx cancellation through Closer too. retry.StartWithCtx already
+		// observes ctx.Done() from Next, but Closer also makes the inner ExecEx
+		// retry paths short-circuit even if an intermediate error is wrapped in
+		// a form that IsRetryableReplicaError happens to accept.
+		retryOpts.Closer = ctx.Done()
 		m.deleteOrphanedLeasesFromStaleSession(ctx, retryOpts, timeThreshold, locality)
 		m.deleteOrphanedLeasesWithSameInstanceID(ctx, retryOpts, timeThreshold, instanceID)
 		if err := m.cleanupUpdateKeys(ctx, true /* force */); err != nil {
