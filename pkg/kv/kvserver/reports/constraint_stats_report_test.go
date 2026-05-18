@@ -504,6 +504,107 @@ func TestConformanceReportSubzoneVoterConstraints(t *testing.T) {
 	runConformanceReportTest(t, tc)
 }
 
+// TestConformanceReportSubzoneVoterConstraintsWorkaround verifies that
+// explicitly setting constraints on a partition (duplicating the DB-level
+// constraints) works around the visitNewZone bug where subzones with only
+// voterConstraints are skipped. This simulates the customer workaround of
+// using ALTER PARTITION ... CONFIGURE ZONE USING constraints = '...' to make
+// the subzone visible to the (unfixed) constraint conformance reporter.
+func TestConformanceReportSubzoneVoterConstraintsWorkaround(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tc := conformanceConstraintTestCase{
+		name: "partition with explicit constraints workaround",
+		baseReportTestCase: baseReportTestCase{
+			defaultZone: zone{voters: 3},
+			schema: []database{
+				{
+					name: "db1",
+					zone: &zone{
+						voters:           2,
+						nonVoters:        1,
+						constraints:      `{"+region=us":1,"+region=eu":1}`,
+						voterConstraints: `{"+region=us":1}`,
+					},
+					tables: []table{{
+						name: "t1",
+						// Workaround: partition p1 sets BOTH voterConstraints
+						// AND constraints explicitly. The constraints duplicate
+						// what would be inherited from the DB, but setting them
+						// makes zone.Constraints non-nil so the buggy visitor
+						// finds the subzone.
+						partitions: []partition{{
+							name:  "p1",
+							start: []int{100},
+							end:   []int{200},
+							zone: &zone{
+								voters:           2,
+								nonVoters:        1,
+								constraints:      `{"+region=us":1,"+region=eu":1}`,
+								voterConstraints: `{"+region=eu":1}`,
+							},
+						}},
+					}},
+				},
+			},
+			splits: []split{
+				{key: "/Table/t1", stores: "1 2 3"},
+				{key: "/Table/t1/pk/100", stores: "4 5 6"},
+			},
+			nodes: []node{
+				{id: 1, locality: "region=us", stores: []store{{id: 1}}},
+				{id: 2, locality: "region=us", stores: []store{{id: 2}}},
+				{id: 3, locality: "region=us", stores: []store{{id: 3}}},
+				{id: 4, locality: "region=eu", stores: []store{{id: 4}}},
+				{id: 5, locality: "region=eu", stores: []store{{id: 5}}},
+				{id: 6, locality: "region=eu", stores: []store{{id: 6}}},
+			},
+		},
+		exp: []constraintEntry{
+			// DB-level: only the non-partition range.
+			{
+				object:         "db1",
+				constraint:     "+region=eu:1",
+				constraintType: Constraint,
+				numRanges:      1,
+			},
+			{
+				object:         "db1",
+				constraint:     "+region=us:1",
+				constraintType: Constraint,
+				numRanges:      0,
+			},
+			{
+				object:         "db1",
+				constraint:     "+region=us:1",
+				constraintType: VoterConstraint,
+				numRanges:      0,
+			},
+			// Partition p1: now has explicit constraints, so visitor
+			// finds it even without the fix.
+			{
+				object:         "t1.p1",
+				constraint:     "+region=eu:1",
+				constraintType: Constraint,
+				numRanges:      0,
+			},
+			{
+				object:         "t1.p1",
+				constraint:     "+region=us:1",
+				constraintType: Constraint,
+				numRanges:      1,
+			},
+			{
+				object:         "t1.p1",
+				constraint:     "+region=eu:1",
+				constraintType: VoterConstraint,
+				numRanges:      0,
+			},
+		},
+	}
+	runConformanceReportTest(t, tc)
+}
+
 // runConformanceReportTest runs one test case. It processes the input schema,
 // runs the reports, and verifies that the report looks as expected.
 func runConformanceReportTest(t *testing.T, tc conformanceConstraintTestCase) {
