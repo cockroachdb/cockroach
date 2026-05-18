@@ -1039,7 +1039,7 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 		t.L().Printf("starting backup")
 		collection, err := d.createBackupCollection(
 			ctx, t.L(), t, testRNG, bspec, bspec, "online-restore-recovery-backup",
-			true /* internalSystemsJobs */, false /* isMultitenant */, false, /* skipRevisionHistory */
+			true /* internalSystemsJobs */, false, /* isMultitenant */
 		)
 		if err != nil {
 			return err

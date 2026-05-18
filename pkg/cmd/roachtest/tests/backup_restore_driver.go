@@ -160,13 +160,13 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 	backupNamePrefix string,
 	internalSystemJobs bool,
 	isMultitenant bool,
-	skipRevisionHistory bool,
+	cfgs ...CollectionConfig,
 ) (*backupCollection, error) {
 	builder := d.NewCollectionBuilder(
 		l, tasker, rng, backupNamePrefix,
 		fullBackupSpec, incBackupSpec,
 		internalSystemJobs, isMultitenant,
-		skipRevisionHistory,
+		cfgs...,
 	)
 
 	// Create full backup.
@@ -801,23 +801,22 @@ func renameSSTToDeleted(
 //
 // Usage:
 //
-//	builder := driver.NewCollectionBuilder(l, tasker, rng, namePrefix, fullSpec, incSpec, internalSystemJobs, isMultitenant, skipRevisionHistory)
+//	builder := driver.NewCollectionBuilder(l, tasker, rng, namePrefix, fullSpec, incSpec, internalSystemJobs, isMultitenant)
 //	jobID, err := builder.TakeFull(ctx)
 //	incJobID, err := builder.TakeInc(ctx)
 //	collection, err := builder.Finalize(ctx)
 type CollectionBuilder struct {
 	// Immutable configuration set at construction.
-	driver              *BackupRestoreTestDriver
-	l                   *logger.Logger
-	tasker              task.Tasker
-	rng                 *rand.Rand
-	namePrefix          string
-	fullBackupSpec      backupSpec
-	incBackupSpec       backupSpec
-	internalSystemJobs  bool
-	isMultitenant       bool
-	skipRevisionHistory bool
-	cfg                 collCfg
+	driver             *BackupRestoreTestDriver
+	l                  *logger.Logger
+	tasker             task.Tasker
+	rng                *rand.Rand
+	namePrefix         string
+	fullBackupSpec     backupSpec
+	incBackupSpec      backupSpec
+	internalSystemJobs bool
+	isMultitenant      bool
+	cfg                collCfg
 
 	// Mutable state tracking backup progress.
 
@@ -853,20 +852,18 @@ func (d *BackupRestoreTestDriver) NewCollectionBuilder(
 	incBackupSpec backupSpec,
 	internalSystemJobs bool,
 	isMultitenant bool,
-	skipRevisionHistory bool,
 	cfgs ...CollectionConfig,
 ) *CollectionBuilder {
 	cb := &CollectionBuilder{
-		driver:              d,
-		l:                   l,
-		tasker:              tasker,
-		rng:                 rng,
-		namePrefix:          namePrefix,
-		fullBackupSpec:      fullBackupSpec,
-		incBackupSpec:       incBackupSpec,
-		internalSystemJobs:  internalSystemJobs,
-		isMultitenant:       isMultitenant,
-		skipRevisionHistory: skipRevisionHistory,
+		driver:             d,
+		l:                  l,
+		tasker:             tasker,
+		rng:                rng,
+		namePrefix:         namePrefix,
+		fullBackupSpec:     fullBackupSpec,
+		incBackupSpec:      incBackupSpec,
+		internalSystemJobs: internalSystemJobs,
+		isMultitenant:      isMultitenant,
 	}
 	cb.initCollCfg(cfgs...)
 	return cb
@@ -1338,15 +1335,16 @@ func (cb *CollectionBuilder) initCollCfg(cfgs ...CollectionConfig) {
 	}
 
 	if cb.cfg.options == nil {
-		cb.cfg.options = newBackupOptions(cb.rng, cb.driver.testUtils.onlineRestore, cb.skipRevisionHistory)
+		cb.cfg.options = newBackupOptions(cb.rng, cb.driver.testUtils.onlineRestore, cb.cfg.skipRevisionHistory)
 	}
 }
 
 // collCfg holds the backup configuration for the backup collection and is used
 // to build the BACKUP statement when taking backups.
 type collCfg struct {
-	scope   backupScope
-	options []backupOption
+	scope               backupScope
+	options             []backupOption
+	skipRevisionHistory bool
 
 	// fingerprintTime, when set, overrides the fingerprint AOST and
 	// restore AOST in Finalize.
@@ -1366,6 +1364,15 @@ func WithClusterScope() CollectionConfig {
 func WithRevisionStream() CollectionConfig {
 	return func(cb *CollectionBuilder) {
 		cb.cfg.options = append(cb.cfg.options, revisionStream{})
+	}
+}
+
+// WithSkipRevisionHistory excludes the revision_history option from the
+// randomized set of backup options. Used when the cluster version does not
+// support revision_history backups on the relevant tenant.
+func WithSkipRevisionHistory() CollectionConfig {
+	return func(cb *CollectionBuilder) {
+		cb.cfg.skipRevisionHistory = true
 	}
 }
 

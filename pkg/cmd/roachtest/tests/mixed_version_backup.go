@@ -315,11 +315,14 @@ func (mvb *mixedVersionBackup) createBackupCollection(
 		return err
 	}
 
-	skipRevisionHistory := h.IsMultitenant() &&
-		!h.Context().FromVersion.AtLeast(mixedversion.TenantsAndSystemAlignedSettingsVersion)
+	var cfgs []CollectionConfig
+	if h.IsMultitenant() &&
+		!h.Context().FromVersion.AtLeast(mixedversion.TenantsAndSystemAlignedSettingsVersion) {
+		cfgs = append(cfgs, WithSkipRevisionHistory())
+	}
 	collection, err := mvb.backupRestoreTestDriver.createBackupCollection(
 		ctx, l, h, rng, fullBackupSpec, incBackupSpec, backupNamePrefix,
-		internalSystemJobs, h.IsMultitenant(), skipRevisionHistory,
+		internalSystemJobs, h.IsMultitenant(), cfgs...,
 	)
 	if err != nil {
 		return err
