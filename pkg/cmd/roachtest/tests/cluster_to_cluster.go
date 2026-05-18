@@ -369,15 +369,47 @@ type replicateKV struct {
 	// Bidirectional LDR tests should probably use uniform to reduce conflict
 	// rate.
 	uniform bool
+
+	// useFixturesImport seeds the source cluster via `workload fixtures
+	// import kv` (bulk IMPORT) instead of `workload init kv` (per-row INSERT).
+	// IMPORT is much faster for large initial data sets but does not respect
+	// initWithSplitAndScatter; pre-splits should be expressed via splits.
+	useFixturesImport bool
+
+	// splits, if non-zero, pre-splits the kv table at this many points during
+	// initialization. With useFixturesImport this is passed via --splits to
+	// the import; otherwise it overrides the default (100) used when
+	// initWithSplitAndScatter is set.
+	splits int
+
+	// concurrency, if non-zero, sets --concurrency on the workload run.
+	concurrency int
 }
 
 func (kv replicateKV) sourceInitCmd(tenantName string, nodes option.NodeListOption) string {
+	if kv.useFixturesImport {
+		cmd := roachtestutil.NewCommand(`./cockroach workload fixtures import kv`).
+			MaybeFlag(kv.initRows > 0, "insert-count", kv.initRows).
+			MaybeFlag(kv.maxBlockBytes > 0, "max-block-bytes", kv.maxBlockBytes).
+			MaybeFlag(kv.splits > 0, "splits", kv.splits).
+			// Skip the post-import consistency callback; for large fixtures
+			// it adds a full table scan with no value to a perf test.
+			Flag("checks", false).
+			// fixtures import targets a single URL; pick the first node.
+			Arg("{pgurl%s:%s}", nodes[:1], tenantName).
+			WithEqualsSyntax()
+		return cmd.String()
+	}
+	splits := 100
+	if kv.splits > 0 {
+		splits = kv.splits
+	}
 	cmd := roachtestutil.NewCommand(`./cockroach workload init kv`).
 		MaybeFlag(kv.initRows > 0, "insert-count", kv.initRows).
 		// Only set the max block byte values for the init command if we
 		// actually need to insert rows.
 		MaybeFlag(kv.initRows > 0, "max-block-bytes", kv.maxBlockBytes).
-		MaybeFlag(kv.initWithSplitAndScatter, "splits", 100).
+		MaybeFlag(kv.initWithSplitAndScatter, "splits", splits).
 		MaybeOption(kv.initWithSplitAndScatter, "scatter").
 		Arg("{pgurl%s:%s}", nodes, tenantName).
 		WithEqualsSyntax()
@@ -391,6 +423,7 @@ func (kv replicateKV) sourceRunCmd(tenantName string, nodes option.NodeListOptio
 		Flag("read-percent", kv.readPercent).
 		MaybeFlag(kv.debugRunDuration > 0, "duration", kv.debugRunDuration).
 		MaybeFlag(kv.maxQPS > 0, "max-rate", kv.maxQPS).
+		MaybeFlag(kv.concurrency > 0, "concurrency", kv.concurrency).
 		MaybeFlag(kv.readOnly, "prepare-read-only", true).
 		MaybeOption(!kv.uniform, "zipfian").
 		Arg("{pgurl%s:%s}", nodes, tenantName).
@@ -605,6 +638,20 @@ type replicationSpec struct {
 	// sometimesTestFingerprintMismatchCode will occasionally test the codepath
 	// the roachtest takes if it detects a fingerprint mismatch.
 	sometimesTestFingerprintMismatchCode bool
+
+	// skipFingerprint disables the post-cutover fingerprint comparison. Use
+	// for perf tests where the headline metric (e.g. cutover_time) is
+	// captured before fingerprinting and the fingerprint scan would
+	// significantly inflate test wall-clock without contributing to the
+	// measured signal.
+	skipFingerprint bool
+
+	// skipPostValidations is forwarded to TestSpec.SkipPostValidations: a
+	// bitmask of roachtest's framework-level post-test checks to skip
+	// (e.g. PostValidationReplicaDivergence | PostValidationInspect).
+	// These can take 20+ minutes on large data sets and are usually
+	// irrelevant for perf measurements.
+	skipPostValidations registry.PostValidation
 
 	// If non-empty, the test will be skipped with the supplied reason.
 	skip string
@@ -1322,15 +1369,19 @@ func (rd *replicationDriver) main(ctx context.Context) {
 		rd.writePerfSummaryStats(exportedMetrics, lv)
 	}
 
-	rd.t.Status("comparing fingerprints")
-	rd.compareTenantFingerprintsAtTimestamp(
-		ctx,
-		retainedTime,
-		actualCutoverTime,
-	)
-	if rd.rs.sometimesTestFingerprintMismatchCode && rd.rng.Intn(5) == 0 {
-		rd.t.L().Printf("testing fingerprint mismatch path")
-		rd.onFingerprintMismatch(ctx, retainedTime, actualCutoverTime)
+	if rd.rs.skipFingerprint {
+		rd.t.L().Printf("skipping post-cutover fingerprint comparison (skipFingerprint=true)")
+	} else {
+		rd.t.Status("comparing fingerprints")
+		rd.compareTenantFingerprintsAtTimestamp(
+			ctx,
+			retainedTime,
+			actualCutoverTime,
+		)
+		if rd.rs.sometimesTestFingerprintMismatchCode && rd.rng.Intn(5) == 0 {
+			rd.t.L().Printf("testing fingerprint mismatch path")
+			rd.onFingerprintMismatch(ctx, retainedTime, actualCutoverTime)
+		}
 	}
 	lv.assertValid(rd.t)
 }
@@ -1347,6 +1398,8 @@ func c2cRegisterWrapper(
 	}
 	if sp.pdSize != 0 {
 		clusterOps = append(clusterOps, spec.VolumeSize(sp.pdSize))
+	} else {
+		clusterOps = append(clusterOps, spec.PreferLocalSSD())
 	}
 	clusterOps = append(clusterOps, spec.WorkloadNode(), spec.WorkloadNodeCPU(sp.cpus))
 
@@ -1379,6 +1432,7 @@ func c2cRegisterWrapper(
 		TestSelectionOptOutSuites: sp.suites,
 		CockroachBinary:           sp.cockroachBinary,
 		Run:                       run,
+		SkipPostValidations:       sp.skipPostValidations,
 		// Read from standby tests also spin up the schema change workload which
 		// uses the workload binary.
 		RequiresDeprecatedWorkload: sp.withReaderWorkload != nil,
@@ -1448,6 +1502,46 @@ func registerClusterToCluster(r registry.Registry) {
 			sometimesTestFingerprintMismatchCode: true,
 			clouds:                               registry.OnlyGCE,
 			suites:                               registry.Suites(registry.Nightly),
+		},
+		{
+			// Cutover wall-clock perf test. The fixture and write rate are
+			// sized so that there is non-trivial per-node data and so that
+			// cutover completes in seconds (not minutes), making per-second
+			// changes (e.g. signal-detection latency) visible as a regression
+			// KPI via the cutover_time metric.
+			//
+			// Per-node load: ~200GB physical (520M rows × ~512B avg × RF 3 / 4
+			// nodes), ~5000 pre-split ranges. Workload runs at 16k QPS for
+			// 8min, then cutover is taken at -5min so ~5min of writes are
+			// reverted and ~3min are retained.
+			name:      "c2c/cutover/kv0",
+			benchmark: true,
+			srcNodes:  4,
+			dstNodes:  4,
+			cpus:      8,
+			// pdSize=0 selects local SSD via spec.PreferLocalSSD().
+			workload: replicateKV{
+				readPercent:       0,
+				useFixturesImport: true,
+				initRows:          750_000_000,
+				maxBlockBytes:     100,
+				// No splits flag: IMPORT itself performs internal
+				// pre-splits based on data size. The post-IMPORT
+				// workloadsql split phase issues SPLIT+SCATTER
+				// sequentially per range and is unacceptably slow
+				// at hundreds of ranges (>1s per split on a loaded
+				// tenant), so we skip it.
+				maxQPS:         18000,
+				concurrency:    128,
+				uniform:        true,
+				tolerateErrors: true,
+			},
+			timeout:             90 * time.Minute,
+			additionalDuration:  8 * time.Minute,
+			cutover:             5 * time.Minute,
+			skipPostValidations: registry.PostValidationReplicaDivergence | registry.PostValidationInspect,
+			clouds:              registry.OnlyGCE,
+			suites:              registry.Suites(registry.Nightly),
 		},
 		{
 			// Initial scan perf test.
