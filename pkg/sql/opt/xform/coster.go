@@ -639,7 +639,7 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 	}
 
 	// Penalize expressions that don't match the PlanGram.
-	if plangram.VisibleToPlanGram(candidate) && !required.PlanGram.Matches(candidate) {
+	if plangram.VisibleToPlanGram(candidate) && !required.PlanGram.Matches(candidate, c.mem.Metadata()) {
 		cost.Penalties |= memo.PlanGramMismatchPenalty
 	}
 

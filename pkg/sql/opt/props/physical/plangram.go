@@ -126,15 +126,24 @@ type planGramProduction struct {
 // If the op is UnknownOp this is a wildcard expr.
 type planGramExpr struct {
 	op       opt.Operator
-	fields   []planGramExprField
+	fields   []PlanGramField
 	children []planGramTerm
 }
 
-// planGramExprField represents a single field of an optimizer expression. How
-// this matches the corresponding optgen field depends on the specific
-// expression and field.
-type planGramExprField struct {
-	key, val string
+// PlanGramField represents a single field of an optimizer expression. How this
+// matches the corresponding optgen field depends on the specific expression and
+// field.
+type PlanGramField struct {
+	Key, Val string
+}
+
+// PlanGramFieldMatchableExpr is an optional interface that optimizer expression
+// types can implement to support field-based matching in PlanGrams. Expressions
+// that implement this interface report their matchable fields (e.g. Table,
+// Index) so that PlanGram field constraints like (Scan Table="abc") can be
+// checked during matching.
+type PlanGramFieldMatchableExpr interface {
+	PlanGramMatchableFields(md *opt.Metadata) []PlanGramField
 }
 
 var _ planGramTerm = &planGramProduction{}
@@ -232,9 +241,9 @@ func (p PlanGram) FormatPretty(b *bytes.Buffer, newlines bool) {
 			for _, field := range t.fields {
 				b.WriteRune(' ')
 				// Assume field names don't need to be quoted.
-				b.WriteString(field.key)
+				b.WriteString(field.Key)
 				b.WriteRune('=')
-				b.WriteString(strconv.Quote(field.val))
+				b.WriteString(strconv.Quote(field.Val))
 			}
 			for _, child := range t.children {
 				b.WriteRune(' ')
@@ -553,7 +562,7 @@ func (p *planGramParser) parseExpr() (planGramTerm, error) {
 		if err != nil {
 			return nil, errors.Wrapf(err, "invalid field value %s", val)
 		}
-		expr.fields = append(expr.fields, planGramExprField{key: name, val: unquoted})
+		expr.fields = append(expr.fields, PlanGramField{Key: name, Val: unquoted})
 	}
 	// TODO(michae2): check for correct number of children.
 	return expr, nil
@@ -642,11 +651,11 @@ func (p PlanGram) RootHash() uint64 {
 
 // Matches reports whether this PlanGram term matches the given optimizer
 // expression. Any matches everything, None matches nothing. A concrete PlanGram
-// expression matches if the operator matches (or is a wildcard) and the child
-// count matches. This should only be called after alternates have been
-// expanded, so the root is always a planGramExpr or Any or None. It panics if
-// called on a production.
-func (p PlanGram) Matches(e opt.Expr) bool {
+// expression matches if the operator matches (or is a wildcard), the child
+// count matches, and all specified fields match. This should only be called
+// after alternates have been expanded, so the root is always a planGramExpr or
+// Any or None. It panics if called on a production.
+func (p PlanGram) Matches(e opt.Expr, md *opt.Metadata) bool {
 	if p.Any() {
 		return true
 	}
@@ -655,11 +664,34 @@ func (p PlanGram) Matches(e opt.Expr) bool {
 	}
 	switch t := p.root.(type) {
 	case *planGramExpr:
-		// TODO(michae2): check fields
-		return (t.op == opt.UnknownOp || t.op == e.Op()) && len(t.children) <= e.ChildCount()
+		if (t.op != opt.UnknownOp && t.op != e.Op()) || len(t.children) > e.ChildCount() {
+			return false
+		}
+		if len(t.fields) > 0 {
+			fm, ok := e.(PlanGramFieldMatchableExpr)
+			if !ok {
+				return false
+			}
+			exprFields := fm.PlanGramMatchableFields(md)
+			for _, f := range t.fields {
+				if !containsPlanGramField(exprFields, f) {
+					return false
+				}
+			}
+		}
+		return true
 	default:
 		panic(errors.AssertionFailedf("called Matches(%v) on non-expression PlanGram term %v", e, t))
 	}
+}
+
+func containsPlanGramField(fields []PlanGramField, f PlanGramField) bool {
+	for _, ef := range fields {
+		if ef.Key == f.Key && ef.Val == f.Val {
+			return true
+		}
+	}
+	return false
 }
 
 // Child returns the PlanGram for the nth child of this term. If this PlanGram

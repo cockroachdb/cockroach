@@ -6,6 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/plangram",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/opt",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/props/physical",
     ],
