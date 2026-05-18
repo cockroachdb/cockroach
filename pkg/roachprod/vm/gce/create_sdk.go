@@ -224,6 +224,7 @@ func (p *Provider) bulkInsertInstances(
 	// Execute the BulkInsert request (async operation).
 	op, err := client.BulkInsert(ctx, req)
 	if err != nil {
+		err = maybeGCECapacityError(err, []byte(err.Error()))
 		return errors.Wrapf(err, "BulkInsert request failed for zone %s", zone)
 	}
 
@@ -233,6 +234,7 @@ func (p *Provider) bulkInsertInstances(
 		return op.Wait(ctx)
 	}()
 	if err != nil {
+		err = maybeGCECapacityError(err, []byte(err.Error()))
 		return errors.Wrapf(err, "BulkInsert operation failed for zone %s", zone)
 	}
 	l.Printf("BulkInsert: successfully created %d instances in zone %s", len(hostNames), zone)
