@@ -175,6 +175,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/ingeststopped"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
@@ -184,14 +186,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -458,6 +467,96 @@ func (s *streamIngestionResumer) handleResumeError(
 	return jobs.MarkPauseRequestError(err)
 }
 
+// startCutoverRangefeed starts a rangefeed on the legacy_progress info_key
+// row for the given job in system.job_info. The handler decodes each value,
+// evaluates the same condition as cutoverFromJobProgress.cutoverReached
+// (cutover time set and replicated time has caught up to it), and if so
+// performs a non-blocking send on the returned wake channel. The wake
+// channel has buffer 1 so coincident events coalesce.
+//
+// The rangefeed acts only as a wake-up hint for the polling loop in
+// watchForCutover; the loop still calls cutoverReached to authoritatively
+// decide whether cutover has occurred. The rangefeed may therefore drop or
+// misclassify events without affecting correctness.
+func startCutoverRangefeed(
+	ctx context.Context, execCfg *sql.ExecutorConfig, jobID jobspb.JobID,
+) (<-chan struct{}, func(), error) {
+	// system.job_info has a dynamically-assigned descriptor ID, so resolve it at
+	// runtime. The primary index and column metadata are stable and can be read
+	// off the static systemschema template.
+	tableID, err := execCfg.SystemTableIDResolver.LookupSystemTableID(
+		ctx, string(catconstants.SystemJobInfoTableName))
+	if err != nil {
+		return nil, func() {}, err
+	}
+	jobInfo := systemschema.SystemJobInfoTable
+
+	prefix := execCfg.Codec.IndexPrefix(uint32(tableID), uint32(jobInfo.GetPrimaryIndexID()))
+	prefix = encoding.EncodeVarintAscending(prefix, int64(jobID))
+	prefix = encoding.EncodeStringAscending(prefix, jobs.LegacyProgressKey)
+	span := roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
+
+	valueCol, err := catalog.MustFindColumnByName(jobInfo, "value")
+	if err != nil {
+		return nil, func() {}, err
+	}
+	decoder := valueside.MakeDecoder([]catalog.Column{valueCol})
+
+	wake := make(chan struct{}, 1)
+
+	onValue := func(ctx context.Context, ev *kvpb.RangeFeedValue) {
+		bytes, err := ev.Value.GetTuple()
+		if err != nil {
+			log.Dev.Warningf(ctx, "cutover rangefeed: get tuple: %s", err)
+			return
+		}
+		var alloc tree.DatumAlloc
+		datums, err := decoder.Decode(&alloc, bytes)
+		if err != nil {
+			log.Dev.Warningf(ctx, "cutover rangefeed: decode row: %s", err)
+			return
+		}
+		if len(datums) != 1 || datums[0] == tree.DNull {
+			log.Dev.Warningf(ctx, "cutover rangefeed: unexpected row format with %d datums", len(datums))
+			return
+		}
+		progressBytes, ok := datums[0].(*tree.DBytes)
+		if !ok {
+			log.Dev.Warningf(ctx, "cutover rangefeed: unexpected row format %T", datums[0])
+			return
+		}
+		var progress jobspb.Progress
+		if err := protoutil.Unmarshal([]byte(*progressBytes), &progress); err != nil {
+			log.Dev.Warningf(ctx, "cutover rangefeed: unmarshal progress: %s", err)
+			return
+		}
+		ip := progress.GetStreamIngest()
+		if ip == nil {
+			log.Dev.Warningf(ctx, "cutover rangefeed: progress missing StreamIngest field")
+			return
+		}
+		if !ip.CutoverTime.IsEmpty() && ip.CutoverTime.LessEq(ip.ReplicatedTime) {
+			select {
+			case wake <- struct{}{}:
+			default:
+			}
+		}
+	}
+
+	rf, err := execCfg.RangeFeedFactory.RangeFeed(
+		ctx,
+		fmt.Sprintf("pcr-cutover-%d", jobID),
+		[]roachpb.Span{span},
+		execCfg.DB.Clock().Now(),
+		onValue,
+		rangefeed.WithSystemTablePriority(),
+	)
+	if err != nil {
+		return nil, func() {}, err
+	}
+	return wake, rf.Close, nil
+}
+
 // errCutoverSignaled is returned by watchForCutover when it detects that a
 // cutover has been signaled. When returned from a ctxgroup member, it cancels
 // the group context, which tears down the ingestion phase.
@@ -472,6 +571,14 @@ var errCutoverSignaled = errors.New("cutover signaled")
 // This complements the per-processor cutover polling in checkForCutoverSignal,
 // which only signals individual ingestion processors via cutoverCh but cannot
 // unblock the other goroutines sharing the same ctxgroup context.
+//
+// In addition to the timer, watchForCutover starts a rangefeed on the job's
+// legacy_progress info_key. When the rangefeed observes a progress write that
+// satisfies the cutover-reached condition, it wakes the loop early so we don't
+// have to wait for the next tick. The rangefeed is purely a latency
+// optimization: the timer remains the floor and the SQL-based check inside
+// cutoverReached remains the source of truth. If the rangefeed cannot start,
+// we degrade silently to poll-only behavior.
 func (s *streamIngestionResumer) watchForCutover(
 	ctx context.Context, execCfg *sql.ExecutorConfig,
 ) error {
@@ -482,20 +589,30 @@ func (s *streamIngestionResumer) watchForCutover(
 	sv := &execCfg.Settings.SV
 	tick := time.NewTicker(cutoverSignalPollInterval.Get(sv))
 	defer tick.Stop()
+
+	var wakeCh <-chan struct{}
+	if wake, closeRF, err := startCutoverRangefeed(ctx, execCfg, s.job.ID()); err != nil {
+		log.Dev.Warningf(ctx, "could not start cutover rangefeed (will poll only): %s", err)
+	} else {
+		defer closeRF()
+		wakeCh = wake
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-wakeCh:
 		case <-tick.C:
-			reached, err := provider.cutoverReached(ctx)
-			if err != nil {
-				log.Dev.Warningf(ctx, "error checking cutover signal: %s", err)
-				continue
-			}
-			if reached {
-				log.Dev.Infof(ctx, "cutover signal detected, returning error to cancel ingestion context")
-				return errCutoverSignaled
-			}
+		}
+		reached, err := provider.cutoverReached(ctx)
+		if err != nil {
+			log.Dev.Warningf(ctx, "error checking cutover signal: %s", err)
+			continue
+		}
+		if reached {
+			log.Dev.Infof(ctx, "cutover signal detected, returning error to cancel ingestion context")
+			return errCutoverSignaled
 		}
 	}
 }

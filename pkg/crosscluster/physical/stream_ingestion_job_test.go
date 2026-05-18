@@ -647,6 +647,76 @@ func TestCutoverCheckpointing(t *testing.T) {
 	require.Equal(t, getCutoverRemainingSpans().String(), roachpb.Spans{}.String())
 }
 
+// TestWatchForCutoverRangefeedWake verifies that watchForCutover returns
+// promptly when a cutover-reaching progress write occurs, relying on the
+// rangefeed wake-up rather than the (deliberately long) poll interval.
+func TestWatchForCutoverRangefeedWake(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	// Set the poll interval to something effectively infinite so that a return
+	// from watchForCutover within the test's timeout can only be explained by
+	// the rangefeed wake-up.
+	sysSQL := sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t))
+	sysSQL.Exec(t,
+		`SET CLUSTER SETTING physical_replication.consumer.failover_signal_poll_interval = '1h'`)
+
+	cutover := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+
+	execCfg := srv.SystemLayer().ExecutorConfig().(sql.ExecutorConfig)
+	registry := execCfg.JobRegistry
+	jobID := registry.MakeJobID()
+	record := jobs.Record{
+		Details: jobspb.StreamIngestionDetails{},
+		Progress: jobspb.StreamIngestionProgress{
+			// CutoverTime is set but ReplicatedTime is not, so cutoverReached
+			// initially returns false.
+			CutoverTime: cutover,
+		},
+		Username: username.RootUserName(),
+	}
+	job, err := registry.CreateJobWithTxn(ctx, record, jobID, nil)
+	require.NoError(t, err)
+
+	resumer := &streamIngestionResumer{job: job}
+	resultCh := make(chan error, 1)
+	watchCtx, cancelWatch := context.WithCancel(ctx)
+	defer cancelWatch()
+	go func() {
+		resultCh <- resumer.watchForCutover(watchCtx, &execCfg)
+	}()
+
+	// Give the rangefeed a moment to establish itself before triggering the
+	// cutover write. Without this, the write could race with rangefeed setup
+	// and we would have to wait for the (1h) poll to catch up.
+	time.Sleep(500 * time.Millisecond)
+
+	//lint:ignore SA1019 mirrors TestCutoverFractionProgressed; legacy API is the
+	// available path for in-test progress edits.
+	require.NoError(t, job.DeprecatedNoTxn().Update(ctx,
+		func(_ isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
+			progress := md.Progress
+			progress.Details.(*jobspb.Progress_StreamIngest).StreamIngest.ReplicatedTime = cutover
+			ju.UpdateProgress(progress)
+			return nil
+		}))
+
+	select {
+	case err := <-resultCh:
+		require.True(t, errors.Is(err, errCutoverSignaled),
+			"expected errCutoverSignaled, got %v", err)
+	case <-time.After(30 * time.Second):
+		t.Fatal("watchForCutover did not return within 30s of cutover write; " +
+			"rangefeed wake-up appears not to be firing")
+	}
+}
+
 // ALTER VIRTUAL CLUSTER STOP SERVICE does not block until the service
 // is stopped. But, we need to wait until the SQLServer is stopped to
 // ensure that nothing is writing to the relevant keyspace.
