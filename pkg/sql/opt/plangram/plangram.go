@@ -6,6 +6,7 @@
 package plangram
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
@@ -28,14 +29,14 @@ func VisibleToPlanGram(expr memo.RelExpr) bool {
 // BuildChildRequired returns the PlanGram term for the nth child of
 // the parent expression.
 func BuildChildRequired(
-	parent memo.RelExpr, required physical.PlanGram, childIdx int,
+	parent memo.RelExpr, required physical.PlanGram, childIdx int, md *opt.Metadata,
 ) physical.PlanGram {
 	if !VisibleToPlanGram(parent) {
 		// For expressions not visible to PlanGrams, the current term is simply
 		// passed down.
 		return required
 	}
-	if !required.Matches(parent) {
+	if !required.Matches(parent, md) {
 		// Once we hit a mismatch, NonePlanGram is passed downward to reduce the
 		// number of optimization calls for lower groups.
 		return physical.NonePlanGram

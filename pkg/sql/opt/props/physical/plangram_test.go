@@ -91,14 +91,14 @@ func TestPlanGramFormatPretty(t *testing.T) {
 		rules: []planGramTerm{
 			&planGramExpr{
 				op: opt.ScanOp,
-				fields: []planGramExprField{
-					{key: "Index", val: "abc_b_idx"},
+				fields: []PlanGramField{
+					{Key: "Index", Val: "abc_b_idx"},
 				},
 			},
 			&planGramExpr{
 				op: opt.ScanOp,
-				fields: []planGramExprField{
-					{key: "Index", val: "abc_c_idx"},
+				fields: []PlanGramField{
+					{Key: "Index", Val: "abc_c_idx"},
 				},
 			},
 		},
@@ -144,8 +144,8 @@ func TestPlanGramFormatPretty(t *testing.T) {
 			name: "simple terminal",
 			plangram: PlanGram{root: &planGramExpr{
 				op: opt.ScanOp,
-				fields: []planGramExprField{
-					{key: "Index", val: "abc_a_idx"},
+				fields: []PlanGramField{
+					{Key: "Index", Val: "abc_a_idx"},
 				},
 			}},
 			expectedOneLine:  "root: (Scan Index=\"abc_a_idx\");",
@@ -208,9 +208,9 @@ func TestPlanGramFormatPretty(t *testing.T) {
 			name: "multiple fields",
 			plangram: PlanGram{root: &planGramExpr{
 				op: opt.ScanOp,
-				fields: []planGramExprField{
-					{key: "Table", val: "abc"},
-					{key: "Index", val: "abc_b_idx"},
+				fields: []PlanGramField{
+					{Key: "Table", Val: "abc"},
+					{Key: "Index", Val: "abc_b_idx"},
 				},
 			}},
 			expectedOneLine:  "root: (Scan Table=\"abc\" Index=\"abc_b_idx\");",
@@ -220,8 +220,8 @@ func TestPlanGramFormatPretty(t *testing.T) {
 			name: "field value with special characters",
 			plangram: PlanGram{root: &planGramExpr{
 				op: opt.ScanOp,
-				fields: []planGramExprField{
-					{key: "Index", val: `has "quotes" and spaces`},
+				fields: []PlanGramField{
+					{Key: "Index", Val: `has "quotes" and spaces`},
 				},
 			}},
 			expectedOneLine:  `root: (Scan Index="has \"quotes\" and spaces");`,
@@ -257,6 +257,15 @@ func (m *mockExpr) ChildCount() int        { return len(m.children) }
 func (m *mockExpr) Child(nth int) opt.Expr { return m.children[nth] }
 func (m *mockExpr) Private() interface{}   { return nil }
 
+type mockFieldExpr struct {
+	mockExpr
+	fields []PlanGramField
+}
+
+func (m *mockFieldExpr) PlanGramMatchableFields(*opt.Metadata) []PlanGramField {
+	return m.fields
+}
+
 func TestPlanGramMatches(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -266,6 +275,13 @@ func TestPlanGramMatches(t *testing.T) {
 	twoChildExpr := &mockExpr{
 		op:       opt.InnerJoinOp,
 		children: []opt.Expr{scanExpr, scanExpr},
+	}
+	scanWithFields := &mockFieldExpr{
+		mockExpr: mockExpr{op: opt.ScanOp},
+		fields: []PlanGramField{
+			{Key: "Table", Val: "abc"},
+			{Key: "Index", Val: "abc_b_idx"},
+		},
 	}
 
 	tests := []struct {
@@ -338,11 +354,53 @@ func TestPlanGramMatches(t *testing.T) {
 			expr:     twoChildExpr,
 			expected: true,
 		},
+		{
+			name: "field match",
+			pg: PlanGram{root: &planGramExpr{
+				op:     opt.ScanOp,
+				fields: []PlanGramField{{Key: "Index", Val: "abc_b_idx"}},
+			}},
+			expr:     scanWithFields,
+			expected: true,
+		},
+		{
+			name: "field mismatch",
+			pg: PlanGram{root: &planGramExpr{
+				op:     opt.ScanOp,
+				fields: []PlanGramField{{Key: "Index", Val: "abc_c_idx"}},
+			}},
+			expr:     scanWithFields,
+			expected: false,
+		},
+		{
+			name: "field on non-matchable expr",
+			pg: PlanGram{root: &planGramExpr{
+				op:     opt.ScanOp,
+				fields: []PlanGramField{{Key: "Index", Val: "abc_b_idx"}},
+			}},
+			expr:     scanExpr,
+			expected: false,
+		},
+		{
+			name: "subset of fields matches",
+			pg: PlanGram{root: &planGramExpr{
+				op:     opt.ScanOp,
+				fields: []PlanGramField{{Key: "Table", Val: "abc"}},
+			}},
+			expr:     scanWithFields,
+			expected: true,
+		},
+		{
+			name:     "no fields with matchable expr still matches",
+			pg:       PlanGram{root: &planGramExpr{op: opt.ScanOp}},
+			expr:     scanWithFields,
+			expected: true,
+		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.expected, tc.pg.Matches(tc.expr))
+			require.Equal(t, tc.expected, tc.pg.Matches(tc.expr, nil))
 		})
 	}
 }

@@ -60,29 +60,29 @@ func TestBuildChildRequired(t *testing.T) {
 
 	t.Run("invisible parent passes through", func(t *testing.T) {
 		pg := parsePG(t, "root: (Scan);")
-		result := plangram.BuildChildRequired(&memo.DistributeExpr{}, pg, 0)
+		result := plangram.BuildChildRequired(&memo.DistributeExpr{}, pg, 0, nil)
 		require.True(t, result.Equals(pg))
 	})
 
 	t.Run("visible parent matching descends to child", func(t *testing.T) {
 		pg := parsePG(t, "root: (Select (Scan));")
-		result := plangram.BuildChildRequired(&memo.SelectExpr{}, pg, 0)
-		require.True(t, result.Matches(&memo.ScanExpr{}))
+		result := plangram.BuildChildRequired(&memo.SelectExpr{}, pg, 0, nil)
+		require.True(t, result.Matches(&memo.ScanExpr{}, nil))
 	})
 
 	t.Run("visible parent mismatching returns none", func(t *testing.T) {
 		pg := parsePG(t, "root: (Select);")
-		result := plangram.BuildChildRequired(&memo.ScanExpr{}, pg, 0)
+		result := plangram.BuildChildRequired(&memo.ScanExpr{}, pg, 0, nil)
 		require.True(t, result.Equals(physical.NonePlanGram))
 	})
 
 	t.Run("any always matches and returns any for child", func(t *testing.T) {
-		result := plangram.BuildChildRequired(&memo.SelectExpr{}, physical.AnyPlanGram, 0)
+		result := plangram.BuildChildRequired(&memo.SelectExpr{}, physical.AnyPlanGram, 0, nil)
 		require.True(t, result.Any())
 	})
 
 	t.Run("none never matches visible parent", func(t *testing.T) {
-		result := plangram.BuildChildRequired(&memo.SelectExpr{}, physical.NonePlanGram, 0)
+		result := plangram.BuildChildRequired(&memo.SelectExpr{}, physical.NonePlanGram, 0, nil)
 		require.True(t, result.Equals(physical.NonePlanGram))
 	})
 }
