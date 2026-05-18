@@ -25,6 +25,7 @@ go_library(
 go_test(
     name = "txnfeed_test",
     srcs = [
+        "main_test.go",
         "merge_feed_bench_test.go",
         "merge_feed_test.go",
         "test_helpers_test.go",
@@ -40,6 +41,8 @@ go_test(
         "//pkg/testutils",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/timeutil",
         "@com_github_stretchr_testify//require",
     ],
