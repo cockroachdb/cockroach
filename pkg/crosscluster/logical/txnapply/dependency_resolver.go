@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnpb"
 	"github.com/cockroachdb/cockroach/pkg/util/container/heap"
+	"github.com/cockroachdb/cockroach/pkg/util/container/nudge"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -40,9 +41,14 @@ type DependencyResolverClient interface {
 	// and provides the applier's latest resolvedTime timestamp.
 	Ready(txn ldrdecoder.TxnID, resolvedTime hlc.Timestamp)
 
-	// Receive returns a channel that delivers resolved dependency
-	// notifications and resolvedTime updates for the given applier.
-	Receive(applier ldrdecoder.ApplierID) <-chan DependencyUpdate
+	// Receive returns a channel that signals when resolved dependency
+	// notifications are available. Use PopReceiveUpdate to retrieve
+	// the actual updates.
+	Receive(applier ldrdecoder.ApplierID) <-chan struct{}
+
+	// PopReceiveUpdate removes and returns the next DependencyUpdate for
+	// the given applier. Returns false if no update is available.
+	PopReceiveUpdate(applier ldrdecoder.ApplierID) (DependencyUpdate, bool)
 }
 
 // TrackerServer holds the dependency tracking state for a single applier. It
@@ -180,13 +186,13 @@ type DepResolverEvent struct {
 type DistDepResolverClient struct {
 	localApplierID ldrdecoder.ApplierID
 
-	// outCh sends events to the applier processor's Next(), which
-	// serializes and routes them to the correct dep resolver processor.
-	outCh chan DepResolverEvent
+	// out buffers events destined for the applier processor's Next(),
+	// which serializes and routes them to the correct dep resolver
+	// processor.
+	out nudge.Buffer[DepResolverEvent]
 
-	// receiveCh delivers DependencyUpdates for the local applier. This is
-	// the channel returned by Receive().
-	receiveCh chan DependencyUpdate
+	// receive buffers DependencyUpdates for the local applier.
+	receive nudge.Buffer[DependencyUpdate]
 }
 
 var _ DependencyResolverClient = (*DistDepResolverClient)(nil)
@@ -196,17 +202,20 @@ var _ DependencyResolverClient = (*DistDepResolverClient)(nil)
 func NewDistDepResolverClient(localApplierID ldrdecoder.ApplierID) *DistDepResolverClient {
 	return &DistDepResolverClient{
 		localApplierID: localApplierID,
-
-		// TODO(msbutler): we should not be using buffered channels here. Probably
-		// should use channels with length 1 and a ring buffer. #170009
-		outCh:     make(chan DepResolverEvent, 1000),
-		receiveCh: make(chan DependencyUpdate, 1000),
+		out:            nudge.MakeBuffer[DepResolverEvent](),
+		receive:        nudge.MakeBuffer[DependencyUpdate](),
 	}
 }
 
-// OutCh returns the channel from which the router (DistSQL Next() or test
-// router) reads dep resolver events produced by this client.
-func (c *DistDepResolverClient) OutCh() <-chan DepResolverEvent { return c.outCh }
+// OutCh returns the notification channel that signals when dep resolver
+// events are available. Use PopOutEvent to retrieve the actual events.
+func (c *DistDepResolverClient) OutCh() <-chan struct{} { return c.out.Ch() }
+
+// PopOutEvent removes and returns the next outbound dep resolver event.
+// Returns false if no event is available.
+func (c *DistDepResolverClient) PopOutEvent() (DepResolverEvent, bool) {
+	return c.out.Pop()
+}
 
 // Wait implements DependencyResolverClient.
 func (c *DistDepResolverClient) Wait(waitingID ldrdecoder.ApplierID, txns []ldrdecoder.TxnID) {
@@ -215,7 +224,7 @@ func (c *DistDepResolverClient) Wait(waitingID ldrdecoder.ApplierID, txns []ldrd
 		grouped[txn.ApplierID] = append(grouped[txn.ApplierID], txn)
 	}
 	for targetID, txnGroup := range grouped {
-		c.outCh <- DepResolverEvent{
+		c.out.Push(DepResolverEvent{
 			TargetApplierID: targetID,
 			Event: txnpb.LDRDepResolverEvent{
 				Event: &txnpb.LDRDepResolverEvent_Wait{
@@ -225,7 +234,7 @@ func (c *DistDepResolverClient) Wait(waitingID ldrdecoder.ApplierID, txns []ldrd
 					},
 				},
 			},
-		}
+		})
 	}
 }
 
@@ -233,7 +242,7 @@ func (c *DistDepResolverClient) Wait(waitingID ldrdecoder.ApplierID, txns []ldrd
 func (c *DistDepResolverClient) WaitHorizon(
 	waitingID, dependID ldrdecoder.ApplierID, txnHorizon hlc.Timestamp,
 ) {
-	c.outCh <- DepResolverEvent{
+	c.out.Push(DepResolverEvent{
 		TargetApplierID: dependID,
 		Event: txnpb.LDRDepResolverEvent{
 			Event: &txnpb.LDRDepResolverEvent_WaitHorizon{
@@ -244,12 +253,12 @@ func (c *DistDepResolverClient) WaitHorizon(
 				},
 			},
 		},
-	}
+	})
 }
 
 // Ready implements DependencyResolverClient.
 func (c *DistDepResolverClient) Ready(txn ldrdecoder.TxnID, resolvedTime hlc.Timestamp) {
-	c.outCh <- DepResolverEvent{
+	c.out.Push(DepResolverEvent{
 		TargetApplierID: txn.ApplierID,
 		Event: txnpb.LDRDepResolverEvent{
 			Event: &txnpb.LDRDepResolverEvent_Ready{
@@ -259,18 +268,24 @@ func (c *DistDepResolverClient) Ready(txn ldrdecoder.TxnID, resolvedTime hlc.Tim
 				},
 			},
 		},
-	}
+	})
 }
 
 // Receive implements DependencyResolverClient.
-func (c *DistDepResolverClient) Receive(_ ldrdecoder.ApplierID) <-chan DependencyUpdate {
-	return c.receiveCh
+func (c *DistDepResolverClient) Receive(_ ldrdecoder.ApplierID) <-chan struct{} {
+	return c.receive.Ch()
+}
+
+// PopReceiveUpdate implements DependencyResolverClient.
+func (c *DistDepResolverClient) PopReceiveUpdate(_ ldrdecoder.ApplierID) (DependencyUpdate, bool) {
+	return c.receive.Pop()
 }
 
 // RunBackchannelForwarder reads DependencyUpdates from the loopback
-// backchannel. Updates for the local applier are pushed to receiveCh; updates
-// for remote appliers are forwarded through outCh so they reach the correct
-// dep resolver processor via DistSQL routing.
+// backchannel. Updates for the local applier are pushed to the receive
+// buffer; updates for remote appliers are forwarded through the out
+// buffer so they reach the correct dep resolver processor via DistSQL
+// routing.
 func (c *DistDepResolverClient) RunBackchannelForwarder(
 	ctx context.Context, loopbackUpdateCh <-chan DependencyUpdate,
 ) error {
@@ -283,16 +298,9 @@ func (c *DistDepResolverClient) RunBackchannelForwarder(
 				return nil
 			}
 			if update.TargetApplierID == c.localApplierID {
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case c.receiveCh <- update:
-				}
+				c.receive.Push(update)
 			} else {
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case c.outCh <- DepResolverEvent{
+				c.out.Push(DepResolverEvent{
 					TargetApplierID: update.TargetApplierID,
 					Event: txnpb.LDRDepResolverEvent{
 						Event: &txnpb.LDRDepResolverEvent_ForwardUpdate{
@@ -302,8 +310,7 @@ func (c *DistDepResolverClient) RunBackchannelForwarder(
 							},
 						},
 					},
-				}:
-				}
+				})
 			}
 		}
 	}

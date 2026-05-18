@@ -412,7 +412,11 @@ func (a *Applier) aggregator(
 				if err != nil {
 					return err
 				}
-			case update := <-remoteUpdates:
+			case <-remoteUpdates:
+				update, ok := a.depResolver.PopReceiveUpdate(a.id)
+				if !ok {
+					break
+				}
 				if err := a.processRemoteUpdate(update, &readyBuffer); err != nil {
 					return err
 				}
@@ -428,7 +432,11 @@ func (a *Applier) aggregator(
 				if err != nil {
 					return err
 				}
-			case update := <-remoteUpdates:
+			case <-remoteUpdates:
+				update, ok := a.depResolver.PopReceiveUpdate(a.id)
+				if !ok {
+					break
+				}
 				if err := a.processRemoteUpdate(update, &readyBuffer); err != nil {
 					return err
 				}

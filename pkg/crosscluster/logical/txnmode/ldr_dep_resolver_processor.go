@@ -161,8 +161,6 @@ func (p *ldrDepResolverProcessor) sendUpdate(
 	// DistDepResolverClient will forward updates that are not for the
 	// local applier.
 	update.TargetApplierID = targetApplierID
-	// TODO(butler): this ctx select may not be necessary once we add a
-	// real buffer for the loopback channel.
 	select {
 	case p.loopbackChs.updateCh <- update:
 		return nil

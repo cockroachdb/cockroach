@@ -42,7 +42,7 @@ func NewTestDependencyTrackerClient(
 	for _, id := range appliers {
 		clients[id] = NewDistDepResolverClient(id)
 		servers[id] = NewTrackerServer()
-		loopbacks[id] = make(chan DependencyUpdate, 1000)
+		loopbacks[id] = make(chan DependencyUpdate, 1)
 	}
 
 	t := &testTrackerClient{clients: clients, servers: servers, loopbacks: loopbacks}
@@ -68,9 +68,10 @@ func (t *testTrackerClient) runRouter(ctx context.Context, client *DistDepResolv
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case ev, ok := <-client.OutCh():
+		case <-client.OutCh():
+			ev, ok := client.PopOutEvent()
 			if !ok {
-				return nil
+				continue
 			}
 			if err := t.processEvent(ctx, ev); err != nil {
 				return err
@@ -164,6 +165,13 @@ func (t *testTrackerClient) Ready(txn ldrdecoder.TxnID, resolvedTime hlc.Timesta
 }
 
 // Receive implements DependencyResolverClient.
-func (t *testTrackerClient) Receive(applier ldrdecoder.ApplierID) <-chan DependencyUpdate {
+func (t *testTrackerClient) Receive(applier ldrdecoder.ApplierID) <-chan struct{} {
 	return t.clients[applier].Receive(applier)
+}
+
+// PopReceiveUpdate implements DependencyResolverClient.
+func (t *testTrackerClient) PopReceiveUpdate(
+	applier ldrdecoder.ApplierID,
+) (DependencyUpdate, bool) {
+	return t.clients[applier].PopReceiveUpdate(applier)
 }
