@@ -160,11 +160,13 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 	backupNamePrefix string,
 	internalSystemJobs bool,
 	isMultitenant bool,
+	cfgs ...CollectionConfig,
 ) (*backupCollection, error) {
 	builder := d.NewCollectionBuilder(
 		l, tasker, rng, backupNamePrefix,
 		fullBackupSpec, incBackupSpec,
 		internalSystemJobs, isMultitenant,
+		cfgs...,
 	)
 
 	// Create full backup.
@@ -1333,15 +1335,16 @@ func (cb *CollectionBuilder) initCollCfg(cfgs ...CollectionConfig) {
 	}
 
 	if cb.cfg.options == nil {
-		cb.cfg.options = newBackupOptions(cb.rng, cb.driver.testUtils.onlineRestore)
+		cb.cfg.options = newBackupOptions(cb.rng, cb.driver.testUtils.onlineRestore, cb.cfg.skipRevisionHistory)
 	}
 }
 
 // collCfg holds the backup configuration for the backup collection and is used
 // to build the BACKUP statement when taking backups.
 type collCfg struct {
-	scope   backupScope
-	options []backupOption
+	scope               backupScope
+	options             []backupOption
+	skipRevisionHistory bool
 
 	// fingerprintTime, when set, overrides the fingerprint AOST and
 	// restore AOST in Finalize.
@@ -1361,6 +1364,15 @@ func WithClusterScope() CollectionConfig {
 func WithRevisionStream() CollectionConfig {
 	return func(cb *CollectionBuilder) {
 		cb.cfg.options = append(cb.cfg.options, revisionStream{})
+	}
+}
+
+// WithSkipRevisionHistory excludes the revision_history option from the
+// randomized set of backup options. Used when the cluster version does not
+// support revision_history backups on the relevant tenant.
+func WithSkipRevisionHistory() CollectionConfig {
+	return func(cb *CollectionBuilder) {
+		cb.cfg.skipRevisionHistory = true
 	}
 }
 
@@ -1694,8 +1706,13 @@ func (rs revisionStream) String() string {
 // newBackupOptions returns a list of backup options to be used when
 // creating a new backup. Each backup option has a 50% chance of being
 // included.
-func newBackupOptions(rng *rand.Rand, onlineRestoreExpected bool) []backupOption {
-	possibleOpts := []backupOption{revisionHistory{}}
+func newBackupOptions(
+	rng *rand.Rand, onlineRestoreExpected, skipRevisionHistory bool,
+) []backupOption {
+	var possibleOpts []backupOption
+	if !skipRevisionHistory {
+		possibleOpts = append(possibleOpts, revisionHistory{})
+	}
 	if !onlineRestoreExpected {
 		possibleOpts = append(possibleOpts, newEncryptionPassphrase(rng))
 	}
