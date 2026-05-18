@@ -3613,7 +3613,14 @@ func (m *Manager) DeleteOrphanedLeases(
 	// AddTags and not WithTags, so that we combine the tags with those
 	// filled by AnnotateCtx.
 	newCtx = logtags.AddTags(newCtx, logtags.FromContext(ctx))
-	_ = m.stopper.RunAsyncTask(newCtx, "del-orphaned-leases", func(ctx context.Context) {
+	// Derive the task ctx from the stopper so that the inner retry loops and
+	// any blocking KV/SQL work terminate promptly when the stopper begins to
+	// quiesce. Without this, the task is rooted at context.Background() and
+	// can keep retrying indefinitely while Stopper.Quiesce is waiting for it,
+	// blocking shutdown (see #170331).
+	newCtx, cancel := m.stopper.WithCancelOnQuiesce(newCtx)
+	if err := m.stopper.RunAsyncTask(newCtx, "del-orphaned-leases", func(ctx context.Context) {
+		defer cancel()
 		retryOpts := base.DefaultRetryOptions()
 		retryOpts.MaxRetries = 10
 		m.deleteOrphanedLeasesFromStaleSession(ctx, retryOpts, timeThreshold, locality)
@@ -3621,7 +3628,12 @@ func (m *Manager) DeleteOrphanedLeases(
 		if err := m.cleanupUpdateKeys(ctx, true /* force */); err != nil {
 			log.Dev.Warningf(ctx, "error cleaning up update keys: %v", err)
 		}
-	})
+	}); err != nil {
+		// RunAsyncTask only fails if the stopper is already quiescing, in which
+		// case there is nothing for us to do. Release the cancel registration
+		// to avoid leaking it.
+		cancel()
+	}
 }
 
 // Codec returns the Manager's SQLCodec.
