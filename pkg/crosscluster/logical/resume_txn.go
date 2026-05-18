@@ -9,6 +9,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrsettings"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnapply"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnmode"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
@@ -99,7 +100,7 @@ func (r *logicalReplicationResumer) runTxnCoordinator(
 
 	payload := r.job.Details().(jobspb.LogicalReplicationDetails)
 	heartbeatInterval := func() time.Duration {
-		return heartbeatFrequency.Get(&jobExecCtx.ExecCfg().Settings.SV)
+		return ldrsettings.HeartbeatFrequency.Get(&jobExecCtx.ExecCfg().Settings.SV)
 	}
 	heartbeatSender := streamclient.NewHeartbeatSender(
 		ctx,

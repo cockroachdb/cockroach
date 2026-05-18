@@ -1484,6 +1484,7 @@ GO_TARGETS = [
     "//pkg/crosscluster/ldrrandgen:ldrrandgen_test",
     "//pkg/crosscluster/logical/ldrdecoder:ldrdecoder",
     "//pkg/crosscluster/logical/ldrdecoder:ldrdecoder_test",
+    "//pkg/crosscluster/logical/ldrsettings:ldrsettings",
     "//pkg/crosscluster/logical/ldrtestutils:ldrtestutils",
     "//pkg/crosscluster/logical/sqlwriter:sqlwriter",
     "//pkg/crosscluster/logical/sqlwriter:sqlwriter_test",

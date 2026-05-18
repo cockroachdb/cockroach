@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrsettings"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -36,27 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-)
-
-var (
-	// jobCheckpointFrequency controls the frequency of frontier
-	// checkpoints into the jobs table.
-	jobCheckpointFrequency = settings.RegisterDurationSetting(
-		settings.ApplicationLevel,
-		"logical_replication.consumer.job_checkpoint_frequency",
-		"controls the frequency with which the job updates their progress; if 0, disabled",
-		10*time.Second)
-
-	// heartbeatFrequency controls frequency the stream replication
-	// destination cluster sends heartbeat to the source cluster to keep
-	// the stream alive.
-	heartbeatFrequency = settings.RegisterDurationSetting(
-		settings.ApplicationLevel,
-		"logical_replication.consumer.heartbeat_frequency",
-		"controls frequency the stream replication destination cluster sends heartbeat "+
-			"to the source cluster to keep the stream alive",
-		30*time.Second,
-	)
 )
 
 var errOfflineInitialScanComplete = errors.New("spinning down offline initial scan")
@@ -372,7 +352,7 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 	replicatedTime := rh.frontier.Frontier()
 	alwaysPersist := rh.replicatedTimeAtStart.Less(replicatedTime) && rh.replicatedTimeAtStart.IsEmpty()
 
-	updateFreq := jobCheckpointFrequency.Get(rh.settings)
+	updateFreq := ldrsettings.JobCheckpointFrequency.Get(rh.settings)
 	if !alwaysPersist && (updateFreq == 0 || timeutil.Since(rh.lastPartitionUpdate) < updateFreq) {
 		return nil
 	}
