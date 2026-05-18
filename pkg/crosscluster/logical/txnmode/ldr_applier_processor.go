@@ -166,9 +166,9 @@ func (p *ldrApplierProcessor) setup(ctx context.Context) error {
 func (p *ldrApplierProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for p.State == execinfra.StateRunning {
 		select {
-		case ev, ok := <-p.depResolver.OutCh():
+		case <-p.depResolver.OutCh():
+			ev, ok := p.depResolver.PopOutEvent()
 			if !ok {
-				p.MoveToDraining(nil)
 				break
 			}
 			row, err := p.encodeDepResolverEvent(ev)

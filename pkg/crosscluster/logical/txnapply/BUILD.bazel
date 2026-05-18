@@ -17,6 +17,7 @@ go_library(
         "//pkg/crosscluster/logical/txnpb",
         "//pkg/crosscluster/logical/txnwriter",
         "//pkg/util/container/heap",
+        "//pkg/util/container/nudge",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
         "//pkg/util/ring",

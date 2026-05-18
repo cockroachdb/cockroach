@@ -54,7 +54,7 @@ func (m *ldrLoopbackMap) lookupOrCreate(
 		return chs
 	}
 	chs := &ldrLoopbackChannels{
-		updateCh: make(chan txnapply.DependencyUpdate, 1000),
+		updateCh: make(chan txnapply.DependencyUpdate, 1),
 	}
 	m.channels[key] = chs
 	return chs
