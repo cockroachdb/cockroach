@@ -134,6 +134,16 @@ func copySnapshotDataToNode(
 		if err == nil {
 			return nil
 		}
+		// A prior attempt may have created the disk on the server but
+		// failed on the response path (e.g. an HTTP 502 returned after
+		// the create succeeded). In that case, the retry sees an
+		// "already exists" error for our uniquely-named disk; treat it
+		// as success.
+		if isGCEAlreadyExistsError(result.Stderr) {
+			l.Printf("n%d: disk %s already exists (created by prior attempt), treating as success",
+				nodeID, tempDiskName)
+			return nil
+		}
 		if isGCETransientError(result.Stderr) {
 			l.Printf("n%d: transient GCE error creating disk, retrying: %v", nodeID, err)
 			return err
@@ -209,6 +219,14 @@ func copySnapshotDataToNode(
 	l.Printf("n%d: data copy complete", nodeID)
 
 	return nil
+}
+
+// isGCEAlreadyExistsError checks whether stderr from a gcloud command
+// indicates the resource already exists. This can happen on a retry
+// after a prior attempt's response was lost (e.g. HTTP 502): the server
+// created the resource but the client never got the success response.
+func isGCEAlreadyExistsError(stderr string) bool {
+	return strings.Contains(stderr, "already exists")
 }
 
 // isGCETransientError checks whether stderr from a gcloud command
