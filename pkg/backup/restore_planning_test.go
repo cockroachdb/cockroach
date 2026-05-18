@@ -635,11 +635,7 @@ func TestRestoreWithBackupIDs(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	_, sqlDB, _, cleanupFn := backuptestutils.StartBackupRestoreTestCluster(
-		t, singleNode, backuptestutils.WithInitFunc(InitManualReplication),
-		backuptestutils.WithParams(base.
-			TestClusterArgs{
-			ServerArgs: base.TestServerArgs{DefaultDRPCOption: base.TestDRPCDisabled},
-		}))
+		t, singleNode, backuptestutils.WithInitFunc(InitManualReplication))
 	defer cleanupFn()
 
 	const classicColl = "nodelocal://1/classic"

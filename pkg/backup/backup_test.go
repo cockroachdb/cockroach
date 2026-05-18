@@ -1091,15 +1091,7 @@ func TestBackupRestoreSystemTables(t *testing.T) {
 
 	const numAccounts = 0
 	ctx := context.Background()
-	// Note (kev-cao): DRPC is currently flaky on this test, disabling while it is
-	// investigated.
-	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(
-		t, multiNode, numAccounts, InitManualReplication, base.TestClusterArgs{
-			ServerArgs: base.TestServerArgs{
-				DefaultDRPCOption: base.TestDRPCDisabled,
-			},
-		},
-	)
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
 	conn := sqlDB.DB.(*gosql.DB)
 	defer cleanupFn()
 
@@ -2360,12 +2352,7 @@ func TestBackupRestoreUserDefinedTypes(t *testing.T) {
 	// ts4: no farewell type exists
 	// ts5: farewell type exists as (third)
 	t.Run("revision-history", func(t *testing.T) {
-		// Note (kev-cao): DRPC is currently flaky on this test, disabling while it
-		// is investigated.
-		_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode,
-			0, InitManualReplication, base.TestClusterArgs{
-				ServerArgs: base.TestServerArgs{DefaultDRPCOption: base.TestDRPCDisabled},
-			})
+		_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
 		defer cleanupFn()
 
 		var ts1, ts2, ts3, ts4, ts5 string
@@ -2492,10 +2479,7 @@ RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/rev-history-backup'
 
 	// Test backup/restore of a single table.
 	t.Run("table", func(t *testing.T) {
-		_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode,
-			0, InitManualReplication, base.TestClusterArgs{
-				ServerArgs: base.TestServerArgs{DefaultDRPCOption: base.TestDRPCDisabled},
-			})
+		_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
 		defer cleanupFn()
 		sqlDB.Exec(t, `
 CREATE DATABASE d;
@@ -3980,12 +3964,7 @@ func TestRestoreAsOfSystemTimeGCBounds(t *testing.T) {
 
 	const numAccounts = 10
 	ctx := context.Background()
-	args := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultDRPCOption: base.TestDRPCDisabled,
-		},
-	}
-	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, args)
+	tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 	const dir = "nodelocal://1/"
 	s := tc.SystemLayer(0)
@@ -4021,7 +4000,7 @@ func TestRestoreAsOfSystemTimeGCBounds(t *testing.T) {
 
 	t.Run("restore-pre-gc-aost", func(t *testing.T) {
 		backupPath := dir + "/tbl-before-gc"
-		_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 0, InitManualReplication, args)
+		_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
 		defer cleanupFn()
 
 		sqlDB.Exec(t, "CREATE DATABASE db")
@@ -10887,12 +10866,8 @@ func TestBackupRestoreForeignKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params := base.TestServerArgs{
-		DefaultDRPCOption: base.TestDRPCDisabled,
-	}
 	const numAccounts = 1000
-	_, sqlDB, _, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
-		InitManualReplication, base.TestClusterArgs{ServerArgs: params})
+	_, sqlDB, _, cleanup := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanup()
 	sqlDB.Exec(t, `SET use_backups_with_ids = true`)
 
