@@ -182,5 +182,13 @@ func alterDomainRename(
 func alterDomainSetSchema(
 	b BuildCtx, tn *tree.TypeName, domainType *scpb.DomainType, t *tree.AlterDomainSetSchema,
 ) {
-	panic(pgerror.Newf(pgcode.FeatureNotSupported, "ALTER DOMAIN SET SCHEMA is not supported"))
+	// Postgres errors when moving a domain to its current schema.
+	currNamespace := mustRetrieveNamespaceElem(b, domainType.TypeID)
+	newSchema := resolveSchemaByName(b, t.Schema, currNamespace.DatabaseID)
+	if currNamespace.SchemaID == newSchema.SchemaID {
+		panic(pgerror.Newf(pgcode.DuplicateObject,
+			"type %q is already in schema %q", currNamespace.Name, t.Schema))
+	}
+
+	setSchemaForTypeDesc(b, domainType, domainType.TypeID, domainType.ArrayTypeID, t.Schema, "domain")
 }
