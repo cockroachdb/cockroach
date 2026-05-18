@@ -1055,7 +1055,9 @@ func TestProtectedTimestampManagement(t *testing.T) {
 		checkDestinationPTSExists(t, replicationJobID)
 
 		if completeReplication {
-			// Complete replication via cutover.
+			// Wait for the replicated time to advance past the start time
+			// before attempting cutover to LATEST.
+			c.WaitUntilStartTimeReached(jobspb.JobID(replicationJobID))
 			var emptyCutoverTime time.Time
 			c.Cutover(ctx, producerJobID, replicationJobID, emptyCutoverTime, false)
 		} else {
