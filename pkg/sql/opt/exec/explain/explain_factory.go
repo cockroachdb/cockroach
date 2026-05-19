@@ -127,6 +127,21 @@ type Plan struct {
 	Checks      []*Node
 	WrappedPlan exec.Plan
 	Gist        PlanGist
+	// RoutinePlans holds captured explain plans for non-inlined SQL
+	// routine bodies (UDFs, stored procedures), populated during
+	// EXPLAIN ANALYZE execution.
+	RoutinePlans []RoutinePlanInfo
+}
+
+// RoutinePlanInfo holds the captured explain plan for a single routine
+// body variant (identified by routine name + plan gist vector).
+type RoutinePlanInfo struct {
+	// Name is the function or procedure name.
+	Name string
+	// ExplainPlan holds the captured explain tree for each body statement.
+	ExplainPlan []*Node
+	// BodyStmts holds the SQL text of each body statement.
+	BodyStmts []string
 }
 
 var _ exec.Plan = &Plan{}

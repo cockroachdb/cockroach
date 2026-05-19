@@ -1,0 +1,483 @@
+# LogicTest: local
+
+# Tests for surfacing routine body plans in EXPLAIN ANALYZE output.
+# Issue: #170448
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT, FAMILY (a, b))
+
+statement ok
+INSERT INTO t SELECT i, i*10 FROM generate_series(1, 10) AS g(i)
+
+# ------------------------------------------------------------------
+# 1. Single-statement volatile SQL UDF.
+# ------------------------------------------------------------------
+subtest single_stmt_volatile_udf
+
+statement ok
+CREATE FUNCTION lookup_volatile(x INT) RETURNS INT VOLATILE LANGUAGE SQL AS $$
+  SELECT b FROM t WHERE a = x
+$$
+
+# The routine body plan should appear in a "routine" section below
+# the main plan.
+query T
+EXPLAIN ANALYZE SELECT lookup_volatile(a) FROM t WHERE a <= 3
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+rows decoded from KV: 6 (57 B, 3 gRPC calls)
+regions: <hidden>
+·
+• root
+│
+├── • render
+│   │ execution time: 0µs
+│   │ actual row count: 3
+│   │
+│   └── • scan
+│         sql nodes: <hidden>
+│         kv nodes: <hidden>
+│         regions: <hidden>
+│         KV time: 0µs
+│         KV rows decoded: 3
+│         actual row count: 3
+│         missing stats
+│         table: t@t_pkey
+│         spans: [ - /3]
+│
+└── • routine
+    │ name: lookup_volatile
+    │
+    └── • body stmt
+        │ sql: SELECT b FROM test.public.t WHERE a = x
+        │
+        └── • scan
+              missing stats
+              table: t@t_pkey
+              spans: [/1 - /1]
+
+subtest end
+
+# ------------------------------------------------------------------
+# 2. Multi-statement volatile SQL UDF.
+# ------------------------------------------------------------------
+subtest multi_stmt_udf
+
+statement ok
+CREATE FUNCTION multi_stmt(x INT) RETURNS INT VOLATILE LANGUAGE SQL AS $$
+  SELECT 1;
+  SELECT b FROM t WHERE a = x
+$$
+
+query T
+EXPLAIN ANALYZE SELECT multi_stmt(a) FROM t WHERE a <= 3
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+rows decoded from KV: 6 (57 B, 3 gRPC calls)
+regions: <hidden>
+·
+• root
+│
+├── • render
+│   │ execution time: 0µs
+│   │ actual row count: 3
+│   │
+│   └── • scan
+│         sql nodes: <hidden>
+│         kv nodes: <hidden>
+│         regions: <hidden>
+│         KV time: 0µs
+│         KV rows decoded: 3
+│         actual row count: 3
+│         missing stats
+│         table: t@t_pkey
+│         spans: [ - /3]
+│
+└── • routine
+    │ name: multi_stmt
+    │
+    ├── • body stmt
+    │   │ sql: SELECT 1
+    │   │
+    │   └── • values
+    │         size: 1 column, 1 row
+    │
+    └── • body stmt
+        │ sql: SELECT b FROM test.public.t WHERE a = x
+        │
+        └── • scan
+              missing stats
+              table: t@t_pkey
+              spans: [/1 - /1]
+
+subtest end
+
+# ------------------------------------------------------------------
+# 3. Same UDF in multiple positions (deduplication).
+# Only one routine section should appear.
+# ------------------------------------------------------------------
+subtest dedup_same_udf
+
+query T
+EXPLAIN ANALYZE SELECT lookup_volatile(a), lookup_volatile(b) FROM t WHERE a <= 3
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+rows decoded from KV: 7 (69 B, 6 KVs, 3 gRPC calls)
+regions: <hidden>
+·
+• root
+│
+├── • render
+│   │ execution time: 0µs
+│   │ actual row count: 3
+│   │
+│   └── • scan
+│         sql nodes: <hidden>
+│         kv nodes: <hidden>
+│         regions: <hidden>
+│         KV time: 0µs
+│         KV rows decoded: 3
+│         actual row count: 3
+│         missing stats
+│         table: t@t_pkey
+│         spans: [ - /3]
+│
+└── • routine
+    │ name: lookup_volatile
+    │
+    └── • body stmt
+        │ sql: SELECT b FROM test.public.t WHERE a = x
+        │
+        └── • scan
+              missing stats
+              table: t@t_pkey
+              spans: [/1 - /1]
+
+subtest end
+
+# ------------------------------------------------------------------
+# 4. Multiple distinct UDFs.
+# Both routine sections should appear.
+# ------------------------------------------------------------------
+subtest multiple_distinct_udfs
+
+statement ok
+CREATE FUNCTION other_udf(x INT) RETURNS INT VOLATILE LANGUAGE SQL AS $$
+  SELECT x + 1
+$$
+
+query T
+EXPLAIN ANALYZE SELECT lookup_volatile(a), other_udf(a) FROM t WHERE a <= 3
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+rows decoded from KV: 6 (57 B, 3 gRPC calls)
+regions: <hidden>
+·
+• root
+│
+├── • render
+│   │ execution time: 0µs
+│   │ actual row count: 3
+│   │
+│   └── • scan
+│         sql nodes: <hidden>
+│         kv nodes: <hidden>
+│         regions: <hidden>
+│         KV time: 0µs
+│         KV rows decoded: 3
+│         actual row count: 3
+│         missing stats
+│         table: t@t_pkey
+│         spans: [ - /3]
+│
+├── • routine
+│   │ name: lookup_volatile
+│   │
+│   └── • body stmt
+│       │ sql: SELECT b FROM test.public.t WHERE a = x
+│       │
+│       └── • scan
+│             missing stats
+│             table: t@t_pkey
+│             spans: [/1 - /1]
+│
+└── • routine
+    │ name: other_udf
+    │
+    └── • body stmt
+        │ sql: SELECT x + 1
+        │
+        └── • values
+              size: 1 column, 1 row
+
+subtest end
+
+# ------------------------------------------------------------------
+# 5. Nested UDF calls.
+# Both outer and inner routines should get sections.
+# ------------------------------------------------------------------
+subtest nested_udfs
+
+statement ok
+CREATE FUNCTION inner_fn(x INT) RETURNS INT VOLATILE LANGUAGE SQL AS $$
+  SELECT x * 10
+$$
+
+statement ok
+CREATE FUNCTION outer_fn(x INT) RETURNS INT VOLATILE LANGUAGE SQL AS $$
+  SELECT inner_fn(x) + 1
+$$
+
+query T
+EXPLAIN ANALYZE SELECT outer_fn(a) FROM t WHERE a <= 3
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+rows decoded from KV: 3 (24 B, 6 KVs, 3 gRPC calls)
+regions: <hidden>
+·
+• root
+│
+├── • render
+│   │ execution time: 0µs
+│   │ actual row count: 3
+│   │
+│   └── • scan
+│         sql nodes: <hidden>
+│         kv nodes: <hidden>
+│         regions: <hidden>
+│         KV time: 0µs
+│         KV rows decoded: 3
+│         actual row count: 3
+│         missing stats
+│         table: t@t_pkey
+│         spans: [ - /3]
+│
+├── • routine
+│   │ name: inner_fn
+│   │
+│   └── • body stmt
+│       │ sql: SELECT x * 10
+│       │
+│       └── • values
+│             size: 1 column, 1 row
+│
+└── • routine
+    │ name: outer_fn
+    │
+    └── • body stmt
+        │ sql: SELECT public.inner_fn(x) + 1
+        │
+        └── • values
+              size: 1 column, 1 row
+
+subtest end
+
+# ------------------------------------------------------------------
+# 6. No-routine baseline (regression guard).
+# No routine section should appear.
+# ------------------------------------------------------------------
+subtest no_routine_baseline
+
+query T
+EXPLAIN ANALYZE SELECT * FROM t WHERE a <= 3
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+rows decoded from KV: 3 (24 B, 6 KVs, 3 gRPC calls)
+regions: <hidden>
+·
+• scan
+  sql nodes: <hidden>
+  kv nodes: <hidden>
+  regions: <hidden>
+  KV time: 0µs
+  KV rows decoded: 3
+  actual row count: 3
+  missing stats
+  table: t@t_pkey
+  spans: [ - /3]
+
+subtest end
+
+# ------------------------------------------------------------------
+# 7. Inlined (STABLE) UDF — no routine section should appear.
+# ------------------------------------------------------------------
+subtest inlined_udf
+
+statement ok
+CREATE FUNCTION lookup_stable(x INT) RETURNS INT STABLE LANGUAGE SQL AS $$
+  SELECT b FROM t WHERE a = x
+$$
+
+query T
+EXPLAIN ANALYZE SELECT lookup_stable(a) FROM t WHERE a <= 3
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+rows decoded from KV: 10 (80 B, 20 KVs, 10 gRPC calls)
+regions: <hidden>
+·
+• render
+│
+└── • merge join
+    │ sql nodes: <hidden>
+    │ regions: <hidden>
+    │ execution time: 0µs
+    │ actual row count: 3
+    │ equality: (a) = (a)
+    │ left cols are key
+    │ right cols are key
+    │
+    ├── • scan
+    │     sql nodes: <hidden>
+    │     kv nodes: <hidden>
+    │     regions: <hidden>
+    │     KV time: 0µs
+    │     KV rows decoded: 7
+    │     actual row count: 7
+    │     missing stats
+    │     table: t@t_pkey
+    │     spans: FULL SCAN
+    │
+    └── • scan
+          sql nodes: <hidden>
+          kv nodes: <hidden>
+          regions: <hidden>
+          KV time: 0µs
+          KV rows decoded: 3
+          actual row count: 3
+          missing stats
+          table: t@t_pkey
+          spans: [ - /3]
+
+subtest end
+
+# ------------------------------------------------------------------
+# 8. PL/pgSQL UDF.
+# ------------------------------------------------------------------
+subtest plpgsql_udf
+
+statement ok
+CREATE FUNCTION lookup_plpgsql(x INT) RETURNS INT LANGUAGE PLpgSQL AS $$
+DECLARE result INT;
+BEGIN
+  SELECT b INTO result FROM t WHERE a = x;
+  RETURN result;
+END
+$$
+
+query T
+EXPLAIN ANALYZE SELECT lookup_plpgsql(a) FROM t WHERE a <= 3
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+rows decoded from KV: 6 (57 B, 3 gRPC calls)
+regions: <hidden>
+·
+• root
+│
+├── • render
+│   │ execution time: 0µs
+│   │ actual row count: 3
+│   │
+│   └── • scan
+│         sql nodes: <hidden>
+│         kv nodes: <hidden>
+│         regions: <hidden>
+│         KV time: 0µs
+│         KV rows decoded: 3
+│         actual row count: 3
+│         missing stats
+│         table: t@t_pkey
+│         spans: [ - /3]
+│
+└── • routine
+    │ name: lookup_plpgsql
+    │
+    └── • body stmt
+        │
+        └── • render
+            │
+            └── • cross join (left outer)
+                │
+                ├── • emptyrow
+                │
+                └── • scan
+                      missing stats
+                      table: t@t_pkey
+                      spans: [/1 - /1]
+
+subtest end
+
+# ------------------------------------------------------------------
+# 9. Plan variants: different argument values produce different plans.
+# Non-NULL values produce a point lookup; NULL produces a
+# contradiction (a = NULL is always false). Both variants should
+# appear as separate routine sections.
+# ------------------------------------------------------------------
+subtest plan_variants
+
+query T
+EXPLAIN ANALYZE SELECT lookup_volatile(a) FROM (VALUES (1), (NULL::INT)) AS v(a)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+rows decoded from KV: 1 (11 B, 0 KVs, 0 gRPC calls)
+regions: <hidden>
+·
+• root
+│
+├── • render
+│   │ execution time: 0µs
+│   │ actual row count: 2
+│   │
+│   └── • values
+│         sql nodes: <hidden>
+│         regions: <hidden>
+│         execution time: 0µs
+│         actual row count: 2
+│         size: 1 column, 2 rows
+│
+├── • routine
+│   │ name: lookup_volatile
+│   │
+│   └── • body stmt
+│       │ sql: SELECT b FROM test.public.t WHERE a = x
+│       │
+│       └── • scan
+│             missing stats
+│             table: t@t_pkey
+│             spans: [/1 - /1]
+│
+└── • routine
+    │ name: lookup_volatile
+    │
+    └── • body stmt
+        │ sql: SELECT b FROM test.public.t WHERE a = x
+        │
+        └── • norows
+
+subtest end

@@ -8,6 +8,7 @@ package execbuilder
 import (
 	"bytes"
 	"context"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -1280,6 +1281,14 @@ func (b *Builder) buildRoutinePlanGenerator(
 		appName := b.evalCtx.SessionData().ApplicationName
 		// TODO(yuzefovich): look into computing fingerprintFormat lazily.
 		fingerprintFormat := tree.FmtHideConstants | tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&b.evalCtx.Settings.SV))
+
+		// captureExplain is true when we are inside an EXPLAIN ANALYZE
+		// and should capture routine body plans. We only capture for
+		// named routines (not subquery/exists wrappers).
+		captureExplain := b.evalCtx.CapturedRoutineGists != nil && routineName != ""
+		var explainNodes []*explain.Node
+		var gistStrs []string
+
 		for i := range stmts {
 			latencyRecorder.Reset()
 			var builder *sqlstats.RecordedStatementStatsBuilder
@@ -1389,6 +1398,15 @@ func (b *Builder) buildRoutinePlanGenerator(
 				ef = &gistFactory
 			}
 
+			// Wrap with explain.Factory for EXPLAIN ANALYZE routine
+			// plan capture. The explain.Factory must be outermost so it
+			// captures the full plan structure, with gistFactory inside.
+			var explainFactory *explain.Factory
+			if captureExplain {
+				explainFactory = explain.NewFactory(ef, b.semaCtx, b.evalCtx)
+				ef = explainFactory
+			}
+
 			eb := New(ctx, ef, &o, f.Memo(), b.catalog, optimizedExpr, b.semaCtx, b.evalCtx, false /* allowAutoCommit */, b.IsANSIDML)
 			eb.withExprs = withExprs
 			eb.disableTelemetry = true
@@ -1402,10 +1420,34 @@ func (b *Builder) buildRoutinePlanGenerator(
 				eb.addRoutineResultBuffer(resultBufferID, resultWriter)
 			}
 			plan, err := eb.Build()
+
+			// Extract explain tree and unwrap the plan for execution.
+			// When explain.Factory is used, eb.Build() returns
+			// *explain.Plan wrapping the real exec plan in WrappedPlan.
+			// We capture the explain root for EXPLAIN ANALYZE output and
+			// pass the unwrapped plan to fn() for execution.
+			var execPlan exec.Plan = plan
+			if explainFactory != nil && plan != nil {
+				ep, ok := plan.(*explain.Plan)
+				if ok {
+					explainNodes = append(explainNodes, ep.Root)
+					execPlan = ep.WrappedPlan
+				}
+			}
+
 			if gistFactory.Initialized() {
 				planGist := gistFactory.PlanGist()
-				builder.PlanGist(planGist.String(), planGist.Hash())
+				gistStr := planGist.String()
+				builder.PlanGist(gistStr, planGist.Hash())
+				if captureExplain {
+					gistStrs = append(gistStrs, gistStr)
+				}
+			} else if captureExplain {
+				// No gist available (e.g., PL/pgSQL with nil AST or
+				// gists disabled). Use empty string for the dedup key.
+				gistStrs = append(gistStrs, "")
 			}
+
 			if err != nil {
 				if errors.IsAssertionFailure(err) {
 					// Enhance the error with the EXPLAIN (OPT, VERBOSE) of the
@@ -1428,12 +1470,44 @@ func (b *Builder) buildRoutinePlanGenerator(
 			}
 			incrementRoutineStmtCounter(b.evalCtx.StartedRoutineStatementCounters, dbName, appName, tag)
 			sqlstats.RecordStatementPhase(latencyRecorder, sqlstats.StatementEndPlanning)
-			err = fn(plan, statsBuilderWithLatencies, stmtForDistSQLDiagram, isFinalPlan)
+			err = fn(execPlan, statsBuilderWithLatencies, stmtForDistSQLDiagram, isFinalPlan)
 			if err != nil {
 				return err
 			}
 			incrementRoutineStmtCounter(b.evalCtx.ExecutedRoutineStatementCounters, dbName, appName, tag)
 		}
+
+		// Store captured routine body explain plans for EXPLAIN
+		// ANALYZE if this is a new {name, gist} variant. The dedup
+		// key is "routineName:gist1,gist2,..." where each gist is
+		// the per-body-statement plan gist string.
+		if captureExplain && len(explainNodes) > 0 {
+			gistKey := strings.Join(gistStrs, ",")
+			dedupKey := routineName + ":" + gistKey
+			if _, ok := b.evalCtx.CapturedRoutineGists[dedupKey]; !ok {
+				b.evalCtx.CapturedRoutineGists[dedupKey] = struct{}{}
+				bodyStmtTexts := make([]string, len(explainNodes))
+				for j := range bodyStmtTexts {
+					if j < len(stmtASTs) && stmtASTs[j] != nil {
+						bodyStmtTexts[j] = tree.AsString(stmtASTs[j])
+					}
+				}
+				explainAny := make([]any, len(explainNodes))
+				for j, n := range explainNodes {
+					explainAny[j] = n
+				}
+				b.evalCtx.DeferredRoutineOptPlans = append(
+					b.evalCtx.DeferredRoutineOptPlans,
+					eval.DeferredRoutineOptPlan{
+						Name:        routineName,
+						ExplainPlan: explainAny,
+						BodyStmts:   bodyStmtTexts,
+						GistKey:     gistKey,
+					},
+				)
+			}
+		}
+
 		return nil
 	}
 	return planGen
