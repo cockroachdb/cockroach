@@ -265,6 +265,17 @@ func TestServerQueryCombinedBatchReducesKVRPCs(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var tsBatchCount atomic.Int64
+	// isTSRead reports whether the request reads from the timeseries keyspace.
+	// The background ts poller writes metrics via Merge requests on the same
+	// keyspace; filtering by request type prevents a poll inflating the count.
+	isTSRead := func(ru kvpb.RequestUnion) bool {
+		inner := ru.GetInner()
+		switch inner.(type) {
+		case *kvpb.GetRequest, *kvpb.ScanRequest:
+			return bytes.HasPrefix(inner.Header().Key, keys.TimeseriesPrefix)
+		}
+		return false
+	}
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 		Knobs: base.TestingKnobs{
@@ -274,10 +285,7 @@ func TestServerQueryCombinedBatchReducesKVRPCs(t *testing.T) {
 					_ context.Context, req *kvpb.BatchRequest,
 				) *kvpb.Error {
 					for _, ru := range req.Requests {
-						if bytes.HasPrefix(
-							ru.GetInner().Header().Key,
-							keys.TimeseriesPrefix,
-						) {
+						if isTSRead(ru) {
 							tsBatchCount.Add(1)
 							break
 						}
