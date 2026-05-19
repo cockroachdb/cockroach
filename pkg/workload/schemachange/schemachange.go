@@ -589,11 +589,20 @@ func (w *schemaChangeWorker) runInTxn(
 
 		op, err := w.opGen.randOp(ctx, tx, useDeclarativeSchemaChanger, numOps)
 		if pgErr := new(pgconn.PgError); errors.As(err, &pgErr) {
-			// OutOfMemory (53200) is rollback-worthy: the workload's
-			// introspection queries can exhaust the server's per-query
-			// memory budget under load, which is not a workload bug.
 			switch pgcode.MakeCode(pgErr.Code) {
-			case pgcode.SerializationFailure, pgcode.OutOfMemory:
+			// These errors are rollback-worthy.
+			//
+			// OutOfMemory: introspection queries can exceed the per-query
+			// memory budget under load.
+			//
+			// Undefined*: A concurrent DROP can remove a descriptor while an
+			// operation is generated against it, aborting the server-side
+			// transaction.
+			case pgcode.SerializationFailure,
+				pgcode.OutOfMemory,
+				pgcode.UndefinedTable, pgcode.UndefinedDatabase,
+				pgcode.UndefinedSchema, pgcode.UndefinedObject,
+				pgcode.UndefinedFunction:
 				return errors.Mark(err, errRunInTxnRbkSentinel)
 			}
 		}
