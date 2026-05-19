@@ -34,5 +34,5 @@ bazel test $TEST_TARGETS //pkg/ui:lint //pkg/ui:test \
     --config crosslinux --jobs 200 --remote_download_minimal \
     --bes_keywords ci-unit-test --config=use_ci_timeouts \
     --build_event_binary_file=bes.bin $(./build/github/engflow-args.sh) \
-    --test_output=errors --noshow_progress \
+    --test_output=summary --noshow_progress \
     $EXTRA_PARAMS
