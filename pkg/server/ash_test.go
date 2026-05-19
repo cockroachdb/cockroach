@@ -193,3 +193,67 @@ func TestASHVirtualTableAccessControl(t *testing.T) {
 		})
 	}
 }
+
+// TestASHSampleEnrichmentEndToEnd verifies that the per-execution
+// attribute enrichment pipeline (gateway cache → enrichment_id flow →
+// sampler resolution) populates user/database/query/txn_id columns in
+// the cluster ASH virtual table.
+func TestASHSampleEnrichmentEndToEnd(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Reset the global ASH sampler so that the server started below
+	// gets a fresh sampler goroutine — see comment on the same call
+	// in TestASHMultiTenantIsolation.
+	ash.ResetGlobalSamplerForTesting()
+
+	ctx := context.Background()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `SET CLUSTER SETTING obs.ash.enabled = true`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING obs.ash.sample_interval = '10ms'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING obs.execution_cache.enabled = true`)
+
+	sqlDB.Exec(t, `CREATE DATABASE enrichdb`)
+	sqlDB.Exec(t, `SET database = enrichdb`)
+	sqlDB.Exec(t, `SET application_name = 'enrichment_e2e'`)
+
+	// Drive a workload that takes long enough for the sampler to hit
+	// it. pg_sleep keeps the goroutine in the sampler's scan range
+	// for the work's duration.
+	testutils.SucceedsSoon(t, func() error {
+		for i := 0; i < 20; i++ {
+			sqlDB.Exec(t, fmt.Sprintf("SELECT pg_sleep(0.005), %d AS enrichment_probe", i))
+		}
+
+		var (
+			user     string
+			database string
+			query    string
+			txnID    []byte
+		)
+		err := db.QueryRow(`
+			SELECT user_name, database_name, query, txn_id
+			FROM crdb_internal.cluster_active_session_history
+			WHERE user_name IS NOT NULL
+			  AND database_name = 'enrichdb'
+			  AND query ILIKE '%enrichment_probe%'
+			LIMIT 1`).Scan(&user, &database, &query, &txnID)
+		if err != nil {
+			return errors.Wrap(err, "scanning enriched sample")
+		}
+		if user == "" || database == "" || query == "" || len(txnID) == 0 {
+			return errors.Newf(
+				"expected all enrichment columns populated, got user=%q db=%q query=%q txnID=%v",
+				user, database, query, txnID,
+			)
+		}
+		require.Equal(t, "root", user)
+		require.Equal(t, "enrichdb", database)
+		require.Contains(t, query, "enrichment_probe")
+		require.NotEmpty(t, txnID)
+		return nil
+	})
+}
