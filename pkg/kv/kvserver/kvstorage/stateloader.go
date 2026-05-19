@@ -82,6 +82,7 @@ func (s StateLoader) Load(
 	ms := as.RangeStats.ToStats()
 	r.Stats = &ms
 	r.RaftClosedTimestamp = as.RaftClosedTimestamp
+	r.ApproxStoreLocalBytes = as.ApproxStoreLocalBytes
 
 	// Invariant: TruncatedState == nil. The field is being phased out. The
 	// RaftTruncatedState must be loaded separately.

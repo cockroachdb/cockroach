@@ -159,6 +159,12 @@ message ReplicaState {
   // the RangeForceFlushKey.
   roachpb.ForceFlushIndex force_flush_index = 16 [(gogoproto.nullable) = false];
 
+  // ApproxStoreLocalBytes is an estimate of bytes written to the store-local
+  // engine for this range. It increases with each applied write and decreases
+  // on flush commit (when data moves to the range-shared engine). Derived from
+  // RangeAppliedState.ApproxStoreLocalBytes.
+  int64 approx_store_local_bytes = 17;
+
   reserved 8, 9, 10;
 }
 
@@ -260,6 +266,27 @@ message RangeAppliedState {
   // want a mixed version cluster (v21.2 and v22.1) to have divergent replica
   // state simply because we have introduced this field.
   uint64 raft_applied_index_term = 5 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.RaftTerm"];
+
+  // ApproxStoreLocalBytes is a monotonically increasing estimate of bytes
+  // accumulated in the store-local engine for this range since the last range
+  // flush. On each applied command, WriteBatch size + ingested SST size is
+  // added; the counter is never decremented by normal writes.
+  //
+  // Monotonic increase avoids the "barrier problem" at RANGEDEL_OFF
+  // boundaries. Example: SET foo#90 writes b1 bytes before RANGEDEL_OFF, then
+  // DEL foo#110 writes b2 bytes after RANGEDEL_OFF. If we tracked net bytes,
+  // the DEL would subtract b1, but those bytes are already "claimed" by the
+  // flush prepare snapshot. Monotonic increase counts b1+b2, and flush commit
+  // subtracts the value captured at flush prepare.
+  //
+  // This field lives in RangeAppliedState rather than MVCCStats to avoid
+  // interaction with the consistency checker, which can't recompute a
+  // monotonically-increasing counter from a scan.
+  //
+  // In proto3, value 0 is not serialized, so adding this field is safe for
+  // mixed-version clusters as long as it remains 0 until all replicas
+  // understand it (same pattern as RaftAppliedIndexTerm).
+  int64 approx_store_local_bytes = 6;
 }
 
 // MVCCPersistentStats is convertible to MVCCStats, but uses signed variable

@@ -702,6 +702,7 @@ func SendEmptySnapshot(
 		hlc.Timestamp{}, // gcThreshold
 		roachpb.GCHint{},
 		st.Version.ActiveVersionOrEmpty(ctx).Version,
+		0, /* approxStoreLocalBytes */
 	)
 	if err != nil {
 		return err

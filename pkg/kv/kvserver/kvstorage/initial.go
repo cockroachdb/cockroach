@@ -56,11 +56,13 @@ func WriteInitialReplicaState(
 	gcThreshold hlc.Timestamp,
 	gcHint roachpb.GCHint,
 	replicaVersion roachpb.Version,
+	approxStoreLocalBytes int64,
 ) (enginepb.MVCCStats, error) {
 	s := kvserverpb.ReplicaState{
-		RaftAppliedIndex:     RaftInitialLogIndex,
-		RaftAppliedIndexTerm: RaftInitialLogTerm,
-		LeaseAppliedIndex:    InitialLeaseAppliedIndex,
+		RaftAppliedIndex:      RaftInitialLogIndex,
+		RaftAppliedIndexTerm:  RaftInitialLogTerm,
+		LeaseAppliedIndex:     InitialLeaseAppliedIndex,
+		ApproxStoreLocalBytes: approxStoreLocalBytes,
 		Desc: &roachpb.RangeDescriptor{
 			RangeID: desc.RangeID,
 		},
@@ -123,7 +125,7 @@ func WriteInitialRangeState(
 
 	if _, err := WriteInitialReplicaState(
 		ctx, stateRW, initialMS, desc, initialLease, initialGCThreshold, initialGCHint,
-		replicaVersion,
+		replicaVersion, 0, /* approxStoreLocalBytes */
 	); err != nil {
 		return err
 	}

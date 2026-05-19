@@ -24,10 +24,11 @@ func (m *ReplicaState) ToRangeAppliedState() RangeAppliedState {
 	// replicas. If you need to change the returned fields here, most likely this
 	// needs to be accompanied by a below-raft migration.
 	return RangeAppliedState{
-		RaftAppliedIndex:     m.RaftAppliedIndex,
-		LeaseAppliedIndex:    m.LeaseAppliedIndex,
-		RangeStats:           MVCCPersistentStats(*m.Stats),
-		RaftClosedTimestamp:  m.RaftClosedTimestamp,
-		RaftAppliedIndexTerm: m.RaftAppliedIndexTerm,
+		RaftAppliedIndex:      m.RaftAppliedIndex,
+		LeaseAppliedIndex:     m.LeaseAppliedIndex,
+		RangeStats:            MVCCPersistentStats(*m.Stats),
+		RaftClosedTimestamp:   m.RaftClosedTimestamp,
+		RaftAppliedIndexTerm:  m.RaftAppliedIndexTerm,
+		ApproxStoreLocalBytes: m.ApproxStoreLocalBytes,
 	}
 }
