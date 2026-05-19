@@ -40,7 +40,7 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 		// causing the bandwidth lower-bound check to flake.
 		// See: https://github.com/cockroachdb/cockroach/issues/167455
 		CompatibleClouds: registry.AllExceptAzure.NoIBM(),
-		Suites:           registry.Suites(registry.Nightly),
+		Suites:           registry.Suites(registry.Weekly),
 		// TODO(darryl): Enable FIPS once we can upgrade to Ubuntu 22 and use cgroups v2 for disk stalls.
 		Cluster: r.MakeClusterSpec(
 			2,
