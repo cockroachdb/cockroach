@@ -190,6 +190,21 @@ func TestPlanGramFormatPretty(t *testing.T) {
 			expectedNewlines: "root: (Select none);\n",
 		},
 		{
+			name:             "wildcard expression",
+			plangram:         PlanGram{root: &planGramExpr{op: opt.UnknownOp}},
+			expectedOneLine:  "root: (_);",
+			expectedNewlines: "root: (_);\n",
+		},
+		{
+			name: "wildcard child",
+			plangram: PlanGram{root: &planGramExpr{
+				op:       opt.SelectOp,
+				children: []planGramTerm{&planGramExpr{op: opt.UnknownOp}},
+			}},
+			expectedOneLine:  "root: (Select (_));",
+			expectedNewlines: "root: (Select (_));\n",
+		},
+		{
 			name: "with nonterminal production",
 			plangram: PlanGram{root: &planGramExpr{
 				op: opt.SelectOp,
@@ -347,10 +362,37 @@ func TestPlanGramMatches(t *testing.T) {
 			expected: false,
 		},
 		{
-			name:     "wildcard op matches any expr",
+			name:     "wildcard op matches scan",
 			pg:       PlanGram{root: &planGramExpr{op: opt.UnknownOp}},
 			expr:     scanExpr,
 			expected: true,
+		},
+		{
+			name:     "wildcard op matches select",
+			pg:       PlanGram{root: &planGramExpr{op: opt.UnknownOp}},
+			expr:     selectExpr,
+			expected: true,
+		},
+		{
+			name: "wildcard op with children",
+			pg: PlanGram{root: &planGramExpr{
+				op:       opt.UnknownOp,
+				children: []planGramTerm{&planGramExpr{op: opt.ScanOp}},
+			}},
+			expr:     selectExpr,
+			expected: true,
+		},
+		{
+			name: "wildcard op with too many children",
+			pg: PlanGram{root: &planGramExpr{
+				op: opt.UnknownOp,
+				children: []planGramTerm{
+					&planGramExpr{op: opt.ScanOp},
+					&planGramExpr{op: opt.ScanOp},
+				},
+			}},
+			expr:     selectExpr,
+			expected: false,
 		},
 		{
 			name: "fewer PG children than expr children",
@@ -828,6 +870,10 @@ func TestPlanGramParse(t *testing.T) {
 			name:  "nullary expression",
 			input: "root: (Scan);",
 		},
+		{
+			name:  "wildcard expression",
+			input: "root: (_);",
+		},
 		// Expressions with fields.
 		{
 			name:  "one field",
@@ -842,6 +888,14 @@ func TestPlanGramParse(t *testing.T) {
 			input: `root: (Scan Index="has \"quotes\" and spaces");`,
 		},
 		// Expressions with children.
+		{
+			name:  "wildcard child",
+			input: "root: (Select (_));",
+		},
+		{
+			name:  "wildcard with children",
+			input: "root: (_ (Scan));",
+		},
 		{
 			name:  "child referencing any",
 			input: "root: (Select any);",
