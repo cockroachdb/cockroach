@@ -29,9 +29,9 @@ func TestAlterLDRSkipAdvancesReplicatedTime(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	srv, sourceDB, destDB := setupTxnModeTest(t)
-	defer srv.Stopper().Stop(ctx)
-	jobID := setupConflictingLDR(t, srv, sourceDB, destDB)
+	cluster, sourceDB, destDB := setupTxnModeTest(t, 1 /* numNodes */)
+	defer cluster.Stopper().Stop(ctx)
+	jobID := setupConflictingLDR(t, cluster, sourceDB, destDB)
 	jobutils.WaitForJobToPause(t, destDB, jobID)
 
 	replicatedBefore, err := ldrtestutils.GetReplicatedTime(t, destDB, jobID)
@@ -47,7 +47,7 @@ func TestAlterLDRSkipAdvancesReplicatedTime(t *testing.T) {
 	jobutils.WaitForJobToRun(t, destDB, jobID)
 
 	sourceDB.Exec(t, "INSERT INTO tab VALUES (2, 'after-skip')")
-	ldrtestutils.WaitUntilReplicatedTime(t, srv.Clock().Now(), destDB, jobID)
+	ldrtestutils.WaitUntilReplicatedTime(t, cluster.Server(0).Clock().Now(), destDB, jobID)
 
 	destDB.CheckQueryResults(t,
 		"SELECT pk, val FROM tab ORDER BY pk",
@@ -61,14 +61,14 @@ func TestAlterLDRSkipRejectsInvalidState(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	srv, sourceDB, destDB := setupTxnModeTest(t)
-	defer srv.Stopper().Stop(ctx)
+	cluster, sourceDB, destDB := setupTxnModeTest(t, 1 /* numNodes */)
+	defer cluster.Stopper().Stop(ctx)
 
 	for _, db := range []*sqlutils.SQLRunner{sourceDB, destDB} {
 		db.Exec(t, "CREATE TABLE tab (pk INT PRIMARY KEY, val STRING NOT NULL)")
 	}
 
-	s := srv.ApplicationLayer()
+	s := cluster.Server(0).ApplicationLayer()
 	sourceURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("source_db"))
 
 	t.Run("skip on running job", func(t *testing.T) {
