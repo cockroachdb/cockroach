@@ -794,3 +794,75 @@ statement ok
 EXPLAIN ANALYZE (DEBUG) SELECT f161993('{}')
 
 subtest end
+
+subtest regression_62227
+
+# Regression test for #62227. Creating a PL/pgSQL UDF that references a
+# schema-qualified sequence via a REGCLASS cast should not fail with
+# "relation does not exist" at CREATE FUNCTION time.
+statement ok
+CREATE SCHEMA sc_62227;
+CREATE SEQUENCE sc_62227.myseq;
+
+statement ok
+CREATE FUNCTION sc_62227.next_id()
+RETURNS INT
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v INT;
+BEGIN
+  SELECT nextval('sc_62227.myseq'::REGCLASS) INTO v;
+  RETURN v;
+END;
+$$;
+
+query I
+SELECT sc_62227.next_id()
+----
+1
+
+# The same bug affected SQL UDFs, not only PL/pgSQL.
+statement ok
+CREATE FUNCTION sc_62227.next_id_sql()
+RETURNS INT
+LANGUAGE sql
+AS $$
+  SELECT nextval('sc_62227.myseq'::REGCLASS);
+$$;
+
+query I
+SELECT sc_62227.next_id_sql()
+----
+2
+
+# Also test using an OID integer as the source of a ::REGCLASS cast. The OID
+# may change across test runs, so we capture it in a variable first.
+let $seqoid
+SELECT 'sc_62227.myseq'::REGCLASS::OID;
+
+statement ok
+CREATE OR REPLACE FUNCTION sc_62227.next_id()
+RETURNS INT
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v INT;
+BEGIN
+  SELECT nextval($seqoid::REGCLASS) INTO v;
+  RETURN v;
+END;
+$$;
+
+query I
+SELECT sc_62227.next_id()
+----
+3
+
+statement ok
+DROP FUNCTION sc_62227.next_id;
+DROP FUNCTION sc_62227.next_id_sql;
+DROP SEQUENCE sc_62227.myseq;
+DROP SCHEMA sc_62227;
+
+subtest end
