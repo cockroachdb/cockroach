@@ -22,8 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/growstack"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -441,21 +442,15 @@ func (m *Outbox) Start(
 		panic("outbox not initialized")
 	}
 	m.flowCtxCancel = flowCtxCancel
-	ctx, hdl, err := m.flowCtx.Stopper().GetHandle(ctx, stop.TaskOpts{
-		TaskName: "outbox",
-		SpanOpt:  stop.FollowsFromSpan,
-	})
-	if err != nil {
-		return err
-	}
 	wg.Add(1)
-	go func() {
-		defer hdl.Activate(ctx).Release(ctx)
+	go func() { // nolint:baregofunc
+		defer logcrash.RecoverAndReportPanic(ctx, &m.flowCtx.Cfg.Settings.SV)
+		defer wg.Done()
+		growstack.Grow()
 		if cpuHandle := admission.SQLCPUHandleFromContext(ctx); cpuHandle != nil {
 			gh := cpuHandle.RegisterGoroutine()
 			defer gh.Close(ctx)
 		}
-		defer wg.Done()
 		m.setErr(m.mainLoop(ctx, wg))
 	}()
 	return nil

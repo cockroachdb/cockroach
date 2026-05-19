@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxlog"
+	"github.com/cockroachdb/cockroach/pkg/util/growstack"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
@@ -523,6 +524,7 @@ func (f *FlowBase) StartInternal(
 		go func(ctx context.Context, i int) { // nolint:baregofunc
 			defer logcrash.RecoverAndReportPanic(ctx, &f.Cfg.Settings.SV)
 			defer f.waitGroup.Done()
+			growstack.Grow()
 			if cpuHandle != nil {
 				gh := cpuHandle.RegisterGoroutine()
 				defer gh.Close(ctx)
