@@ -1209,6 +1209,19 @@ func WithClusterScope() CollectionConfig {
 	}
 }
 
+func WithTableScope() CollectionConfig {
+	return func(cb *CollectionBuilder) {
+		cb.cfg.scope = newTableBackup(cb.rng, cb.driver.dbs, cb.driver.tables)
+	}
+}
+
+func WithDatabaseScope() CollectionConfig {
+	return func(cb *CollectionBuilder) {
+		cb.cfg.scope = newDatabaseBackup(cb.rng, cb.driver.dbs, cb.driver.tables)
+	}
+}
+
+
 type (
 	// backupOption is an option passed to the `BACKUP` command (i.e.,
 	// `WITH ...` portion).

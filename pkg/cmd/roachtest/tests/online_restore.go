@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -894,24 +895,24 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 	)
 	require.NoError(t, err, "failed to set download phase retry duration")
 
-	// We set this pausepoint so that the download job is paused before it
-	// begins downloading external files. This allows us to delete the backup
-	// SSTs before the download job attempts to read them.
-	// We also must set this BEFORE taking backups. In the event of a full
-	// cluster backup, the link phase of OR will reset the pausepoints back to
-	// the point of the backup, which means this pausepoint will be wiped if it
-	// is set after the backups.
-	_, err = dbConn.ExecContext(
-		ctx, "SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_do_download_files'",
-	)
-	require.NoError(t, err, "failed to set pausepoint for online restore")
-
+	// A cluster backup will not allow deleting SSTs before the link phase
+	// completes, as it reads from the SSTs to restore the system tables. #170225
+	// outlines a bug where linked SSTs are being ingested into L0, which triggers
+	// a Pebble compaction that downloads the SSTs before the download job
+	// attempts to download them, which breaks this test. Until that issue is
+	// resolved, we will only run database/table backups so that we can delete the
+	// SSTs before the link phase, preventing Pebble compaction.
+	scopes := []CollectionConfig{
+		WithDatabaseScope(),
+		WithTableScope(),
+	}
 	builder := d.NewCollectionBuilder(
 		t.L(), t,
 		testRNG,
 		"online-restore-recovery",
 		bspec, bspec,
 		true /* internalSystemsJobs */, false, /* isMultitenant */
+		scopes[rand.Intn(len(scopes))],
 	)
 	t.L().Printf("building backup collection")
 	_, err = builder.TakeFullSync(ctx)
@@ -928,25 +929,17 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 	collection, err := builder.Finalize(ctx)
 	require.NoError(t, err)
 
-	// If we're running a cluster backup, we need to reset the cluster
-	// to restore it. We also intentionally stop background commands so
-	// the workloads don't report errors.
-	if _, ok := collection.btype.(*clusterBackup); ok {
-		t.L().Printf("resetting cluster before restoring full cluster backup")
-		stopBackgroundCommands()
-		t.Monitor().ExpectProcessDead(c.CRDBNodes())
+	// Delete the backup SSTs as soon as possible after the link phase
+	// completes to minimize the window in which regular LSM compaction
+	// could download and incorporate the external SSTs, which would cause
+	// the download job to see 0 external bytes and succeed immediately.
+	err = d.deleteSSTFromBackupLayers(ctx, t.L(), dbConn, collection)
+	require.NoError(t, err, "failed to delete SSTs from backup layers")
 
-		// Between each reset grab a debug zip from the cluster.
-		zipPath := fmt.Sprintf("debug-%d.zip", timeutil.Now().Unix())
-		if err := testUtils.cluster.FetchDebugZip(ctx, t.L(), zipPath); err != nil {
-			t.L().Printf("failed to fetch a debug zip: %v", err)
-		}
-		err := testUtils.resetCluster(
-			ctx, t.L(), clusterupgrade.CurrentVersion(),
-			nil /* expectDeathsFn */, []install.ClusterSettingOption{},
-		)
-		require.NoError(t, err, "failed to reset cluster before restore")
-	}
+	// defaultdb is going to be set offline by the failed download job, so we
+	// need to switch to the system database first to avoid any errors.
+	_, err = dbConn.ExecContext(ctx, "USE system")
+	require.NoError(t, err)
 
 	t.L().Printf("performing online restore of backup")
 	_, _, err = d.runRestore(
@@ -958,34 +951,8 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 	downloadJobID, err := d.getORDownloadJobID(ctx, t.L(), testRNG)
 	require.NoError(t, err, "failed to get online restore download job ID")
 
-	// Delete the backup SSTs as soon as possible after the link phase
-	// completes to minimize the window in which regular LSM compaction
-	// could download and incorporate the external SSTs, which would cause
-	// the download job to see 0 external bytes and succeed immediately.
-	err = d.deleteSSTFromBackupLayers(ctx, t.L(), dbConn, collection)
-	require.NoError(t, err, "failed to delete SSTs from backup layers")
-
 	err = WaitForPaused(ctx, dbConn, jobspb.JobID(downloadJobID), jobStatusWait)
-	require.NoError(t, err, "download job did not pause after deleting SSTs")
-
-	// defaultdb is going to be set offline by the failed download job, so we
-	// need to switch to the system database first to avoid any errors.
-	_, err = dbConn.ExecContext(ctx, "USE system")
-	require.NoError(t, err)
-
-	_, err = dbConn.ExecContext(
-		ctx, "SET CLUSTER SETTING jobs.debug.pausepoints = ''",
-	)
-	require.NoError(t, err, "failed to remove pausepoint for online restore")
-
-	_, err = dbConn.ExecContext(ctx, "RESUME JOB $1", downloadJobID)
-	require.NoError(t, err, "failed to resume download job after deleting SSTs")
-
-	err = WaitForResume(ctx, dbConn, jobspb.JobID(downloadJobID), jobStatusWait)
-	require.NoError(t, err, "download job did not resume after being resumed")
-
-	err = WaitForPaused(ctx, dbConn, jobspb.JobID(downloadJobID), jobStatusWait)
-	require.NoError(t, err, "download job did not pause after resuming")
+	require.NoError(t, err, "download job did not pause due to deleted SSTs")
 
 	_, err = dbConn.ExecContext(ctx, "CANCEL JOB $1", downloadJobID)
 	require.NoError(t, err, "failed to cancel download job after it paused")
