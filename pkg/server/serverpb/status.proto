@@ -1247,6 +1247,19 @@ message ASHSample {
   // WorkloadType distinguishes the kind of workload (e.g., "STATEMENT",
   // "JOB", "SYSTEM", "UNKNOWN").
   string workload_type = 9;
+  // User is the SQL user that initiated the statement, resolved via
+  // the gateway node's ExecutionCache.
+  string user = 10;
+  // Database is the session's current database at execution time.
+  string database = 11;
+  // Query is the SQL statement text.
+  string query = 12;
+  // TxnID identifies the KV transaction the statement ran in.
+  bytes txn_id = 13 [
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "TxnID"
+  ];
 }
 
 // An error wrapper for ListActiveSessionHistory fan-out.
