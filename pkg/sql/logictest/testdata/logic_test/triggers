@@ -1414,6 +1414,9 @@ statement ok
 ALTER TYPE typ RENAME TO typ2;
 
 # Routines are referenced by name, so renaming is not allowed.
+# In mixed-version clusters (before V26_3_Start), the trigger/policy dependency
+# check is skipped, so the rename succeeds.
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
 statement error cannot rename function "g" because other objects \(.*\) still depend on it
 ALTER FUNCTION g RENAME TO g2;
 
@@ -6499,6 +6502,9 @@ statement ok
 INSERT INTO t_tr_udf_dep VALUES (1, 1);
 
 # Renaming the UDF referenced by the trigger body should be blocked.
+# In mixed-version clusters (before V26_3_Start), the trigger dependency
+# check is skipped, so the rename succeeds.
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
 statement error cannot rename function "udf_dep_helper" because other objects \(\[trigger "tr_udf_dep" on .*t_tr_udf_dep\]\) still depend on it
 ALTER FUNCTION udf_dep_helper() RENAME TO udf_dep_helper_renamed;
 
@@ -6506,6 +6512,7 @@ ALTER FUNCTION udf_dep_helper() RENAME TO udf_dep_helper_renamed;
 statement ok
 CREATE SCHEMA sc_tr_dep;
 
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
 statement error cannot set schema for function "udf_dep_helper" because other objects \(\[trigger "tr_udf_dep" on .*t_tr_udf_dep\]\) still depend on it
 ALTER FUNCTION udf_dep_helper() SET SCHEMA sc_tr_dep;
 
