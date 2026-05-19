@@ -86,6 +86,7 @@ type variations struct {
 	validationDuration   time.Duration
 	ratioOfMax           float64
 	splits               int
+	timeout              time.Duration
 	numNodes             int
 	numWorkloadNodes     int
 	vcpu                 int
@@ -529,13 +530,22 @@ var perturbationDefaultProcessFunction = func(test string, histograms *roachtest
 	return aggregatedMeanMetrics, nil
 }
 
+// applyTimeout copies v.timeout into spec.Timeout when non-zero so tests
+// that need to override the registry default can do so by setting one
+// variations field, without each add* function repeating the check.
+func (v variations) applyTimeout(spec *registry.TestSpec) {
+	if v.timeout > 0 {
+		spec.Timeout = v.timeout
+	}
+}
+
 //lint:ignore U1000 unused
 func addMetamorphic(r registry.Registry, p perturbation, skipReason string) {
 	rng, seed := randutil.NewPseudoRand()
 	v := p.setupMetamorphic(rng)
 	v.seed = seed
 	v = v.finishSetup()
-	r.Add(registry.TestSpec{
+	spec := registry.TestSpec{
 		Name:                   fmt.Sprintf("perturbation/metamorphic/%s", v.perturbationName()),
 		Skip:                   skipReason,
 		CompatibleClouds:       v.cloud,
@@ -546,13 +556,15 @@ func addMetamorphic(r registry.Registry, p perturbation, skipReason string) {
 		Randomized:             true,
 		PostProcessPerfMetrics: perturbationDefaultProcessFunction,
 		Run:                    v.runTest,
-	})
+	}
+	v.applyTimeout(&spec)
+	r.Add(spec)
 }
 
 func addFull(r registry.Registry, p perturbation, skipReason string) {
 	v := p.setup()
 	v = v.finishSetup()
-	r.Add(registry.TestSpec{
+	spec := registry.TestSpec{
 		Name:                   fmt.Sprintf("perturbation/full/%s", v.perturbationName()),
 		Skip:                   skipReason,
 		CompatibleClouds:       v.cloud,
@@ -563,7 +575,9 @@ func addFull(r registry.Registry, p perturbation, skipReason string) {
 		Benchmark:              true,
 		PostProcessPerfMetrics: perturbationDefaultProcessFunction,
 		Run:                    v.runTest,
-	})
+	}
+	v.applyTimeout(&spec)
+	r.Add(spec)
 }
 
 // addLong registers a heavyweight variant of a perturbation test that runs
@@ -602,7 +616,7 @@ func addLong(r registry.Registry, p perturbation) {
 	v := p.setup()
 	v.fillDuration = 2 * time.Hour
 	v = v.finishSetup()
-	r.Add(registry.TestSpec{
+	spec := registry.TestSpec{
 		Name:             fmt.Sprintf("perturbation/long/%s", v.perturbationName()),
 		CompatibleClouds: v.cloud,
 		Suites:           registry.Suites(registry.Weekly),
@@ -614,7 +628,8 @@ func addLong(r registry.Registry, p perturbation) {
 		// validation/recovery windows + teardown). The timeout is set well
 		// above that — it is a backstop for pathological cases (everything
 		// seizing up in a way that does not surface as a test failure) and
-		// not a target.
+		// not a target. Perturbations that need longer (e.g. heavier fill)
+		// can override via v.timeout, applied via applyTimeout below.
 		Timeout: 6 * time.Hour,
 		// The 2h fill produces enough data that the post-test replica
 		// divergence check exceeds its 20m budget, mirroring the carve-out
@@ -624,7 +639,9 @@ func addLong(r registry.Registry, p perturbation) {
 		SkipPostValidations:    registry.PostValidationReplicaDivergence,
 		PostProcessPerfMetrics: perturbationDefaultProcessFunction,
 		Run:                    v.runTest,
-	})
+	}
+	v.applyTimeout(&spec)
+	r.Add(spec)
 }
 
 func addDev(r registry.Registry, p perturbation) {
@@ -653,7 +670,7 @@ func addDev(r registry.Registry, p perturbation) {
 	// Allow the test to run on dev machines.
 	v.cloud = registry.AllClouds
 	v = v.finishSetup()
-	r.Add(registry.TestSpec{
+	spec := registry.TestSpec{
 		Name:                   fmt.Sprintf("perturbation/dev/%s", v.perturbationName()),
 		CompatibleClouds:       v.cloud,
 		Suites:                 registry.ManualOnly,
@@ -663,7 +680,9 @@ func addDev(r registry.Registry, p perturbation) {
 		Benchmark:              true,
 		PostProcessPerfMetrics: perturbationDefaultProcessFunction,
 		Run:                    v.runTest,
-	})
+	}
+	v.applyTimeout(&spec)
+	r.Add(spec)
 }
 
 type perturbation interface {
