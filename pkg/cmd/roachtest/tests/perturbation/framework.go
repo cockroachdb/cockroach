@@ -86,6 +86,7 @@ type variations struct {
 	validationDuration   time.Duration
 	ratioOfMax           float64
 	splits               int
+	scatter              bool // pass --scatter when initializing the workload table
 	timeout              time.Duration
 	numNodes             int
 	numWorkloadNodes     int

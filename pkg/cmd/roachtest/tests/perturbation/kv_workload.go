@@ -24,7 +24,12 @@ func (w kvWorkload) operations() []string {
 }
 
 func (w kvWorkload) initWorkload(ctx context.Context, v variations) error {
-	initCmd := fmt.Sprintf("./cockroach workload init kv --db target --splits %d {pgurl:1}", v.splits)
+	scatterFlag := ""
+	if v.scatter {
+		scatterFlag = " --scatter"
+	}
+	initCmd := fmt.Sprintf("./cockroach workload init kv --db target --splits %d%s {pgurl:1}",
+		v.splits, scatterFlag)
 	return v.RunE(ctx, option.WithNodes(v.Node(1)), initCmd)
 }
 
