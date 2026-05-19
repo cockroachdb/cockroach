@@ -2227,6 +2227,13 @@ func TestSplitTriggerWritesInitialReplicaState(t *testing.T) {
 	require.NoError(t, err)
 	err = sl.SetVersion(ctx, batch, nil, &version)
 	require.NoError(t, err)
+	// Write a LHS RangeAppliedState with a non-zero ApproxStoreLocalBytes so
+	// we can verify the RHS gets half after the split.
+	lhsAppliedState := kvserverpb.RangeAppliedState{
+		ApproxStoreLocalBytes: 1000,
+	}
+	err = sl.SetRangeAppliedState(ctx, batch, &lhsAppliedState)
+	require.NoError(t, err)
 
 	in := SplitTriggerHelperInput{
 		LeftLease:      lease,
@@ -2276,9 +2283,10 @@ func TestSplitTriggerWritesInitialReplicaState(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, version, loadedVersion)
 	expAppliedState := kvserverpb.RangeAppliedState{
-		RaftAppliedIndexTerm: kvstorage.RaftInitialLogTerm,
-		RaftAppliedIndex:     kvstorage.RaftInitialLogIndex,
-		LeaseAppliedIndex:    kvstorage.InitialLeaseAppliedIndex,
+		RaftAppliedIndexTerm:  kvstorage.RaftInitialLogTerm,
+		RaftAppliedIndex:      kvstorage.RaftInitialLogIndex,
+		LeaseAppliedIndex:     kvstorage.InitialLeaseAppliedIndex,
+		ApproxStoreLocalBytes: 500, // half of LHS's 1000
 	}
 	loadedAppliedState, err := slRight.LoadRangeAppliedState(ctx, batch)
 	require.NoError(t, err)
