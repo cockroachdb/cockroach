@@ -589,10 +589,25 @@ func (w *schemaChangeWorker) runInTxn(
 		}
 
 		op, err := w.opGen.randOp(ctx, tx, useDeclarativeSchemaChanger, numOps)
-		if pgErr := new(pgconn.PgError); errors.As(err, &pgErr) &&
-			pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
-			return errors.Mark(err, errRunInTxnRbkSentinel)
-		} else if err != nil && errors.Is(err, errRunInTxnRbkSentinel) {
+		if pgErr := new(pgconn.PgError); errors.As(err, &pgErr) {
+			switch pgcode.MakeCode(pgErr.Code) {
+			// These errors are rollback-worthy.
+			//
+			// OutOfMemory: introspection queries can exceed the per-query
+			// memory budget under load.
+			//
+			// Undefined*: A concurrent DROP can remove a descriptor while an
+			// operation is generated against it, aborting the server-side
+			// transaction.
+			case pgcode.SerializationFailure,
+				pgcode.OutOfMemory,
+				pgcode.UndefinedTable, pgcode.UndefinedDatabase,
+				pgcode.UndefinedSchema, pgcode.UndefinedObject,
+				pgcode.UndefinedFunction:
+				return errors.Mark(err, errRunInTxnRbkSentinel)
+			}
+		}
+		if err != nil && errors.Is(err, errRunInTxnRbkSentinel) {
 			// Error was already marked for us.
 			return err
 		} else if errors.Is(err, context.DeadlineExceeded) {
