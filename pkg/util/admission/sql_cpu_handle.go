@@ -117,6 +117,10 @@ type SQLCPUHandle struct {
 	//     covers the shortfall entirely. No Admit call is needed.
 	admitTurn chan struct{}
 
+	// nextAdmitBuffer is state for refillHeuristic, read/written only
+	// inside the admitTurn-serialized slow-path section.
+	nextAdmitBuffer int64
+
 	mu struct {
 		syncutil.Mutex
 
@@ -224,22 +228,36 @@ func (h *SQLCPUHandle) tryDeductReservation(diffNanos int64) int64 {
 // prevent large checkpoints from holding excessive tokens idle.
 const maxRefillBuffer = int64(1 * time.Millisecond)
 
-// refillHeuristic determines how many tokens to request from the WorkQueue when
-// the reservation runs out. It requests the deficit (to cover the current
-// shortfall) plus a buffer (to pre-pay future fast-path CAS deductions). A
-// larger buffer means fewer blocking Admit calls and less contention on
-// WorkQueue.mu, but it also means more tokens are held in this handle's
-// reservation instead of the shared pool. Tokens sitting in reservation are
-// unavailable to other tenants and other handles within the same tenant, which
-// can reduce fairness. The buffer is capped at maxRefillBuffer to bound
-// this unfairness.
+// bufferSeed is the smallest non-zero buffer the refill heuristic ever
+// requests; it kicks off the doubling ramp.
+const bufferSeed = int64(10 * time.Microsecond)
+
+// refillHeuristic returns deficit + buffer to request from
+// WorkQueue.Admit when the local reservation runs out. The buffer
+// grows exponentially from bufferSeed, doubling on each call up to
+// maxRefillBuffer:
 //
-// TODO(wenyihu6): replace this simple 2x heuristic with an adaptive scheme
-// (e.g. exponential growth) that grows the buffer when Admit calls are too
-// frequent and shrinks it when they are infrequent.
+//   - First Admit: buffer = 0. Many SQLCPUHandles are short-lived; a
+//     buffer for them is wasted since it's just returned via
+//     AdmittedSQLWorkDone at Close.
+//   - Subsequent Admits: buffer doubles from bufferSeed, capped at
+//     maxRefillBuffer. The handle keeps hitting the slow path, so it
+//     needs a bigger buffer.
+//
+// No idle reset is needed: SQLCPUHandle is per-statement, so its
+// lifetime is the natural reset boundary.
+//
+// REQUIRES: caller holds admitTurn (state is mutated unsynchronized).
 func (h *SQLCPUHandle) refillHeuristic(deficit int64) int64 {
-	buffer := min(deficit, maxRefillBuffer)
-	return deficit + buffer
+	switch {
+	case h.nextAdmitBuffer == 0:
+		h.nextAdmitBuffer = bufferSeed
+		return deficit
+	default:
+		buffer := h.nextAdmitBuffer
+		h.nextAdmitBuffer = min(2*h.nextAdmitBuffer, maxRefillBuffer)
+		return deficit + buffer
+	}
 }
 
 // constructWorkInfo returns a WorkInfo copy with the given
