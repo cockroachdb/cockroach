@@ -104,6 +104,24 @@ func (h StatementHintUnion) RecreateStmt(stmt string, database tree.Datum) (stri
 	}
 }
 
+// Conflicts reports whether this hint conflicts with another hint. Two hints
+// conflict when only the newer one will be applied at execution time (the older
+// is skipped by deduplication logic). InjectHints always conflict with other
+// InjectHints. SessionVariableHints conflict only when they set the same
+// variable. Hints of different types never conflict.
+func (h *StatementHintUnion) Conflicts(other *StatementHintUnion) bool {
+	switch t := h.GetValue().(type) {
+	case *InjectHints:
+		_, ok := other.GetValue().(*InjectHints)
+		return ok
+	case *SessionVariableHint:
+		o, ok := other.GetValue().(*SessionVariableHint)
+		return ok && t.VariableName == o.VariableName
+	default:
+		return false
+	}
+}
+
 // Details returns a JSON representation of the hint details. This is used for
 // displaying hint information in SHOW STATEMENT HINTS WITH DETAILS.
 func (h *StatementHintUnion) Details() (json.JSON, error) {
