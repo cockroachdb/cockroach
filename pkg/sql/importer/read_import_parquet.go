@@ -645,10 +645,10 @@ func determineColumnsToRead(
 // parquetRowConsumer implements importRowConsumer for Parquet files.
 type parquetRowConsumer struct {
 	importCtx      *parallelImportContext
-	fieldNameToIdx map[string]int                 // Maps Parquet column name -> table column index
+	fieldNameToIdx map[string]int                 // Maps Parquet column name -> full-table visible column index
 	columnMetadata map[int]*parquetColumnMetadata // Maps column index -> metadata (for conversion)
 	reader         *file.Reader                   // Parquet file reader (for accessing schema)
-	colMapping     []int                          // Precomputed mapping: parquet col idx -> table col idx (-1 if not mapped)
+	colMapping     []int                          // Precomputed mapping: parquet col idx -> target col idx (-1 if not mapped)
 }
 
 // newParquetRowConsumer creates a consumer that converts Parquet rows to datums.
@@ -659,27 +659,42 @@ func newParquetRowConsumer(
 	strict bool,
 ) (*parquetRowConsumer, error) {
 
-	// Validate schema and build column mapping
+	// Validate schema and build column mapping.
 	fieldNameToIdx, err := producer.validateAndBuildColumnMapping(importCtx)
 	if err != nil {
 		return nil, err
 	}
 
+	// fieldNameToIdx maps column names to full-table visibleCols indices, which
+	// is what type validation needs. DatumRowConverter, however, sizes Datums
+	// and VisibleColTypes to len(targetCols) when an explicit column list is
+	// given, so colMapping must store target-column indices (positions in
+	// targetCols) to avoid out-of-bounds access when a non-last column is
+	// excluded. When no explicit list is given (or in test mode without a
+	// tableDesc), target-idx and full-table-idx coincide and fieldNameToIdx is
+	// already what we want.
+	nameToTargetIdx := fieldNameToIdx
+	if importCtx.tableDesc != nil && len(importCtx.targetCols) > 0 {
+		nameToTargetIdx = make(map[string]int, len(importCtx.targetCols))
+		for targetIdx, colName := range importCtx.targetCols {
+			nameToTargetIdx[strings.ToLower(string(colName))] = targetIdx
+		}
+	}
+
 	// Precompute column mapping to avoid hash lookups in the hot path (FillDatums).
-	// For each Parquet column index, store the corresponding table column index (-1 if not mapped).
+	// For each Parquet column index, store the corresponding target column index (-1 if not mapped).
 	numCols := producer.reader.MetaData().Schema.NumColumns()
 	colMapping := make([]int, numCols)
 	for parquetColIdx := 0; parquetColIdx < numCols; parquetColIdx++ {
-		col := producer.reader.MetaData().Schema.Column(parquetColIdx)
-		parquetColName := col.Name()
-		if tableColIdx, found := fieldNameToIdx[strings.ToLower(parquetColName)]; found {
-			colMapping[parquetColIdx] = tableColIdx
-		} else {
-			colMapping[parquetColIdx] = -1
-			if strict {
-				return nil, errors.Newf(
-					"column %q in Parquet file is not in the target table", parquetColName)
-			}
+		parquetColName := producer.reader.MetaData().Schema.Column(parquetColIdx).Name()
+		if targetIdx, found := nameToTargetIdx[strings.ToLower(parquetColName)]; found {
+			colMapping[parquetColIdx] = targetIdx
+			continue
+		}
+		colMapping[parquetColIdx] = -1
+		if strict {
+			return nil, errors.Newf(
+				"column %q in Parquet file is not in the target table", parquetColName)
 		}
 	}
 
@@ -705,36 +720,33 @@ func (c *parquetRowConsumer) FillDatums(
 
 	rowIdx := view.rowIndex
 
-	// For each column in the Parquet file, find the corresponding table column
+	// For each column in the Parquet file, find the corresponding target column.
 	for parquetColIdx := 0; parquetColIdx < view.numColumns; parquetColIdx++ {
-		// Skip columns we didn't read
+		// Skip columns we didn't read.
 		batch := view.batches[parquetColIdx]
 		if batch == nil {
 			continue
 		}
 
-		// Use precomputed mapping to find table column index (O(1) array access)
-		tableColIdx := c.colMapping[parquetColIdx]
-		if tableColIdx < 0 {
-			// Column not mapped to the target table; skip it.
-			// In strict mode, newParquetRowConsumer would have
-			// already rejected unmapped columns.
+		// Use precomputed mapping to find target column index (O(1) array access).
+		targetColIdx := c.colMapping[parquetColIdx]
+		if targetColIdx < 0 {
+			// Column not in the target column set; skip it.
 			continue
 		}
 
-		// Extract value from batch
+		// Extract value from batch.
 		value, isNull, err := batch.GetValueAt(int(rowIdx))
 		if err != nil {
 			return newImportRowError(err, fmt.Sprintf("row %d", rowNum), rowNum)
 		}
 
-		// Convert to datum
+		// Convert to datum.
 		var datum tree.Datum
 		if isNull {
 			datum = tree.DNull
 		} else {
-			// Convert Parquet value to datum using unified LogicalType conversion
-			targetType := conv.VisibleColTypes[tableColIdx]
+			targetType := conv.VisibleColTypes[targetColIdx]
 			metadata := c.columnMetadata[parquetColIdx]
 			datum, err = convertWithLogicalType(value, targetType, metadata)
 			if err != nil {
@@ -742,8 +754,7 @@ func (c *parquetRowConsumer) FillDatums(
 			}
 		}
 
-		// Set datum in converter
-		conv.Datums[tableColIdx] = datum
+		conv.Datums[targetColIdx] = datum
 	}
 
 	// Set any nil datums to DNull (for columns not in Parquet file)
