@@ -31,7 +31,7 @@ type tableHandler struct {
 	sqlReader        sqlwriter.RowReader
 	sqlWriter        *sqlwriter.RowWriter
 	session          isql.Session
-	tombstoneUpdater *tombstoneUpdater
+	tombstoneUpdater *sqlwriter.TombstoneUpdater
 }
 
 type tableBatchStats struct {
@@ -127,7 +127,7 @@ func newTableHandler(
 		return nil, err
 	}
 
-	tombstoneUpdater := newTombstoneUpdater(codec, db.KV(), leaseMgr, tableID, sd, settings)
+	tombstoneUpdater := sqlwriter.NewTombstoneUpdater(codec, db.KV(), leaseMgr, tableID, sd, settings)
 
 	return &tableHandler{
 		sqlReader:        reader,
@@ -184,8 +184,8 @@ func (t *tableHandler) attemptBatch(
 				// on one tombstone does not abort the surrounding transaction.
 				err := t.session.KVSavepoint(ctx, func(ctx context.Context, txn *kv.Txn) error {
 					batch := txn.NewBatch()
-					batch.Header.WriteOptions = originID1Options
-					if err := t.tombstoneUpdater.addToBatch(ctx, txn, batch, event.RowTimestamp, event.Row); err != nil {
+					batch.Header.WriteOptions = sqlwriter.OriginID1Options
+					if err := t.tombstoneUpdater.AddToBatch(ctx, txn, batch, event.RowTimestamp, event.Row); err != nil {
 						return err
 					}
 					return txn.Run(ctx, batch)

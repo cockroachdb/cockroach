@@ -3,14 +3,14 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package logical
+package sqlwriter
 
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/sqlwriter"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -22,10 +22,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
-// tombstoneUpdater is a helper for updating the mvcc origin timestamp assigned
+// OriginID1Options sets the origin ID to 1 for all replication writes. This
+// prevents logical replication from picking up the tombstone update as a
+// deletion event.
+var OriginID1Options = &kvpb.WriteOptions{OriginID: 1}
+
+// TombstoneUpdater is a helper for updating the mvcc origin timestamp assigned
 // to a tombstone. It internally manages leasing a descriptor for a single
 // table. The lease should be released by calling ReleaseLeases.
-type tombstoneUpdater struct {
+type TombstoneUpdater struct {
 	codec    keys.SQLCodec
 	db       *kv.DB
 	leaseMgr *lease.Manager
@@ -46,9 +51,9 @@ type tombstoneUpdater struct {
 	scratch []tree.Datum
 }
 
-func (c *tombstoneUpdater) ReleaseLeases(ctx context.Context) {
-	// NOTE: ReleaseLeases may be called multiple times since its called if the lease
-	// expires and a new lease is acquired.
+func (c *TombstoneUpdater) ReleaseLeases(ctx context.Context) {
+	// NOTE: ReleaseLeases may be called multiple times since its called if the
+	// lease expires and a new lease is acquired.
 	if c.leased.descriptor != nil {
 		c.leased.descriptor.Release(ctx)
 		c.leased.descriptor = nil
@@ -56,15 +61,15 @@ func (c *tombstoneUpdater) ReleaseLeases(ctx context.Context) {
 	}
 }
 
-func newTombstoneUpdater(
+func NewTombstoneUpdater(
 	codec keys.SQLCodec,
 	db *kv.DB,
 	leaseMgr *lease.Manager,
 	descID descpb.ID,
 	sd *sessiondata.SessionData,
 	settings *cluster.Settings,
-) *tombstoneUpdater {
-	return &tombstoneUpdater{
+) *TombstoneUpdater {
+	return &TombstoneUpdater{
 		codec:    codec,
 		db:       db,
 		leaseMgr: leaseMgr,
@@ -74,57 +79,63 @@ func newTombstoneUpdater(
 	}
 }
 
-// updateTombstoneAny is an `updateTombstone` wrapper that accepts the []any
+// UpdateTombstoneAny is an UpdateTombstone wrapper that accepts the []any
 // datum slice from the original sql writer's datum builder.
-func (tu *tombstoneUpdater) updateTombstoneAny(
+func (tu *TombstoneUpdater) UpdateTombstoneAny(
 	ctx context.Context, txn isql.Txn, mvccTimestamp hlc.Timestamp, datums []any,
-) (batchStats, error) {
+) (bool, error) {
 	tu.scratch = tu.scratch[:0]
 	for _, datum := range datums {
 		tu.scratch = append(tu.scratch, datum.(tree.Datum))
 	}
-	return tu.updateTombstone(ctx, txn, mvccTimestamp, tu.scratch)
+	return tu.UpdateTombstone(ctx, txn, mvccTimestamp, tu.scratch)
 }
 
-// updateTombstone attempts to update the tombstone for the given row. This is
+// UpdateTombstone attempts to update the tombstone for the given row. This is
 // expected to always succeed. The delete will only return zero rows if the
 // operation loses LWW or the row does not exist. So if the cput fails on a
 // condition, it should also fail on LWW, which is treated as a success.
-func (tu *tombstoneUpdater) updateTombstone(
+//
+// It returns true if the update lost LWW (i.e. the local tombstone was already
+// newer).
+func (tu *TombstoneUpdater) UpdateTombstone(
 	ctx context.Context, txn isql.Txn, mvccTimestamp hlc.Timestamp, afterRow []tree.Datum,
-) (batchStats, error) {
+) (bool, error) {
 	err := func() error {
 		if txn != nil {
-			// If updateTombstone is called in a transaction, create and run a batch
-			// in the transaction.
+			// If UpdateTombstone is called in a transaction, create and run a
+			// batch in the transaction.
 			batch := txn.KV().NewBatch()
-			batch.Header.WriteOptions = originID1Options
-			if err := tu.addToBatch(ctx, txn.KV(), batch, mvccTimestamp, afterRow); err != nil {
+			batch.Header.WriteOptions = OriginID1Options
+			if err := tu.AddToBatch(ctx, txn.KV(), batch, mvccTimestamp, afterRow); err != nil {
 				return err
 			}
 			return txn.KV().Run(ctx, batch)
 		}
-		// If updateTombstone is called outside of a transaction, create and run a
-		// 1pc transaction.
+		// If UpdateTombstone is called outside of a transaction, create and
+		// run a 1pc transaction.
 		return tu.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			batch := txn.NewBatch()
-			batch.Header.WriteOptions = originID1Options
-			if err := tu.addToBatch(ctx, txn, batch, mvccTimestamp, afterRow); err != nil {
+			batch.Header.WriteOptions = OriginID1Options
+			if err := tu.AddToBatch(ctx, txn, batch, mvccTimestamp, afterRow); err != nil {
 				return err
 			}
 			return txn.CommitInBatch(ctx, batch)
 		})
 	}()
 	if err != nil {
-		if isLwwLoser(err) {
-			return batchStats{kvWriteTooOld: 1}, nil
+		if IsLwwLoser(err) {
+			return true, nil
 		}
-		return batchStats{}, err
+		return false, err
 	}
-	return batchStats{}, nil
+	return false, nil
 }
 
-func (tu *tombstoneUpdater) addToBatch(
+// AddToBatch adds a tombstone delete operation to the given KV batch. The
+// caller is responsible for setting the batch's WriteOptions and running the
+// batch.
+func (tu *TombstoneUpdater) AddToBatch(
 	ctx context.Context,
 	txn *kv.Txn,
 	batch *kv.Batch,
@@ -154,11 +165,11 @@ func (tu *tombstoneUpdater) addToBatch(
 	)
 }
 
-func (tu *tombstoneUpdater) hasValidLease(ctx context.Context, now hlc.Timestamp) bool {
+func (tu *TombstoneUpdater) hasValidLease(ctx context.Context, now hlc.Timestamp) bool {
 	return tu.leased.descriptor != nil && tu.leased.descriptor.Expiration(ctx).After(now)
 }
 
-func (tu *tombstoneUpdater) getDeleter(ctx context.Context, txn *kv.Txn) (row.Deleter, error) {
+func (tu *TombstoneUpdater) getDeleter(ctx context.Context, txn *kv.Txn) (row.Deleter, error) {
 	timestamp := txn.ProvisionalCommitTimestamp()
 	if !tu.hasValidLease(ctx, timestamp) {
 		tu.ReleaseLeases(ctx)
@@ -170,13 +181,21 @@ func (tu *tombstoneUpdater) getDeleter(ctx context.Context, txn *kv.Txn) (row.De
 		}
 
 		table := tu.leased.descriptor.Underlying().(catalog.TableDescriptor)
-		schema := sqlwriter.GetColumnSchema(table)
+		schema := GetColumnSchema(table)
 		cols := make([]catalog.Column, len(schema))
 		for i, cs := range schema {
 			cols[i] = cs.Column
 		}
 
-		tu.leased.deleter = row.MakeDeleter(tu.codec, tu.leased.descriptor.Underlying().(catalog.TableDescriptor), nil /* lockedIndexes */, cols, tu.sd, &tu.settings.SV, nil /* metrics */)
+		tu.leased.deleter = row.MakeDeleter(
+			tu.codec,
+			tu.leased.descriptor.Underlying().(catalog.TableDescriptor),
+			nil, /* lockedIndexes */
+			cols,
+			tu.sd,
+			&tu.settings.SV,
+			nil, /* metrics */
+		)
 	}
 	if err := txn.UpdateDeadline(ctx, tu.leased.descriptor.Expiration(ctx)); err != nil {
 		return row.Deleter{}, err

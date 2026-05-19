@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/sqlwriter"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -115,8 +116,6 @@ func newCdcEventDecoder(
 
 	return cdcevent.NewEventDecoderWithCache(ctx, rfCache, false, false, cdcevent.DecoderOptions{}), nil
 }
-
-var originID1Options = &kvpb.WriteOptions{OriginID: 1}
 
 func (p *kvRowProcessor) HandleBatch(
 	ctx context.Context, batch []streampb.StreamEvent_KV,
@@ -235,7 +234,7 @@ const maxRefreshCount = 10
 
 func makeKVBatch(lowPri bool, txn *kv.Txn) *kv.Batch {
 	b := txn.NewBatch()
-	b.Header.WriteOptions = originID1Options
+	b.Header.WriteOptions = sqlwriter.OriginID1Options
 	if lowPri {
 		b.AdmissionHeader.Priority = int32(admissionpb.BulkLowPri)
 	} else {
