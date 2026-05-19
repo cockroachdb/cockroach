@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"math"
 	"math/big"
 	"net"
 	"net/http"
@@ -146,7 +147,12 @@ func (ct *cdcTester) startStatsCollection(aggs ...clusterstats.AggQuery) func() 
 	startTime := timeutil.Now()
 	return func() {
 		endTime := timeutil.Now()
-		_, err := statsCollector.Exporter().Export(ct.ctx, ct.cluster, ct.t, false, /* dryRun */
+		// Collect via dryRun so we can scrub NaN values before serializing. NaN
+		// shows up in histogram_quantile-based aggregations whenever the rate
+		// window has zero increments (e.g. before the first event or after the
+		// workload stops), and Go's encoding/json refuses to serialize NaN,
+		// which would fail the entire export.
+		testRun, err := statsCollector.Exporter().Export(ct.ctx, ct.cluster, ct.t, true, /* dryRun */
 			startTime,
 			endTime,
 			aggs,
@@ -169,7 +175,38 @@ func (ct *cdcTester) startStatsCollection(aggs ...clusterstats.AggQuery) func() 
 			},
 		)
 		if err != nil {
+			ct.t.Errorf("error collecting stats: %s", err)
+			return
+		}
+		scrubNaNStats(testRun)
+		if err := testRun.SerializeOutRun(ct.ctx, ct.t, ct.cluster, ct.t.ExportOpenmetrics()); err != nil {
 			ct.t.Errorf("error exporting stats file: %s", err)
+		}
+	}
+}
+
+// scrubNaNStats replaces NaN values inside a ClusterStatRun with 0 so the
+// run can be JSON-serialized. NaN typically surfaces from
+// histogram_quantile-based aggregations when the rate window has no
+// increments at the head or tail of the collection window.
+func scrubNaNStats(r *clusterstats.ClusterStatRun) {
+	for name, v := range r.Total {
+		if math.IsNaN(v) {
+			r.Total[name] = 0
+		}
+	}
+	for _, stat := range r.Stats {
+		for i, v := range stat.Value {
+			if math.IsNaN(v) {
+				stat.Value[i] = 0
+			}
+		}
+		for _, vals := range stat.Tagged {
+			for i, v := range vals {
+				if math.IsNaN(v) {
+					vals[i] = 0
+				}
+			}
 		}
 	}
 }
@@ -3647,17 +3684,18 @@ func runCDCLingerBench(ctx context.Context, t test.Test, c cluster.Cluster, flus
 
 	// --ramp staggers worker startup over 10m (workload/cli/run.go:580-590),
 	// so concurrency — and therefore offered load — grows roughly linearly
-	// from ~0 to N until the system saturates. The 2-minute tail past the
-	// ramp gives the run a steady-state segment at peak. --read-percent=0
-	// makes every op a write so every op produces a changefeed event. We
-	// intentionally do not pass --histograms: workload-side per-tick
-	// snapshots are suppressed during the ramp (workload/cli/run.go:636), so
-	// they would silently drop the data we care about. All time-series come
-	// from prometheus.
+	// from ~0 to N until the system saturates. --duration is additive with
+	// --ramp (workload/cli/run.go:51), so a 2m duration gives a 2-minute
+	// steady-state tail past the ramp — 12m of workload total.
+	// --read-percent=0 makes every op a write so every op produces a
+	// changefeed event. We intentionally do not pass --histograms:
+	// workload-side per-tick snapshots are suppressed during the ramp
+	// (workload/cli/run.go:636), so they would silently drop the data we
+	// care about. All time-series come from prometheus.
 	concurrency := len(ct.crdbNodes) * 64
 	const (
 		ramp     = 10 * time.Minute
-		duration = 12 * time.Minute
+		duration = 2 * time.Minute
 	)
 	t.Status("running kv workload with ramp")
 	if err := c.RunE(ctx, option.WithNodes(ct.workloadNode), fmt.Sprintf(
