@@ -1359,6 +1359,18 @@ func WithClusterScope() CollectionConfig {
 	}
 }
 
+func WithTableScope() CollectionConfig {
+	return func(cb *CollectionBuilder) {
+		cb.cfg.scope = newTableBackup(cb.rng, cb.driver.dbs, cb.driver.tables)
+	}
+}
+
+func WithDatabaseScope() CollectionConfig {
+	return func(cb *CollectionBuilder) {
+		cb.cfg.scope = newDatabaseBackup(cb.rng, cb.driver.dbs, cb.driver.tables)
+	}
+}
+
 // WithRevisionStream adds the `revision stream` backup option to the
 // collection, which establishes a continuous backup (revlog) sibling job.
 func WithRevisionStream() CollectionConfig {
