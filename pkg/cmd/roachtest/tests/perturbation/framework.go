@@ -86,6 +86,7 @@ type variations struct {
 	validationDuration   time.Duration
 	ratioOfMax           float64
 	splits               int
+	timeout              time.Duration
 	numNodes             int
 	numWorkloadNodes     int
 	vcpu                 int
@@ -529,13 +530,22 @@ var perturbationDefaultProcessFunction = func(test string, histograms *roachtest
 	return aggregatedMeanMetrics, nil
 }
 
+// applyTimeout copies v.timeout into spec.Timeout when non-zero so tests
+// that need to override the registry default can do so by setting one
+// variations field, without each add* function repeating the check.
+func (v variations) applyTimeout(spec *registry.TestSpec) {
+	if v.timeout > 0 {
+		spec.Timeout = v.timeout
+	}
+}
+
 //lint:ignore U1000 unused
 func addMetamorphic(r registry.Registry, p perturbation, skipReason string) {
 	rng, seed := randutil.NewPseudoRand()
 	v := p.setupMetamorphic(rng)
 	v.seed = seed
 	v = v.finishSetup()
-	r.Add(registry.TestSpec{
+	spec := registry.TestSpec{
 		Name:                   fmt.Sprintf("perturbation/metamorphic/%s", v.perturbationName()),
 		Skip:                   skipReason,
 		CompatibleClouds:       v.cloud,
@@ -546,13 +556,15 @@ func addMetamorphic(r registry.Registry, p perturbation, skipReason string) {
 		Randomized:             true,
 		PostProcessPerfMetrics: perturbationDefaultProcessFunction,
 		Run:                    v.runTest,
-	})
+	}
+	v.applyTimeout(&spec)
+	r.Add(spec)
 }
 
 func addFull(r registry.Registry, p perturbation, skipReason string) {
 	v := p.setup()
 	v = v.finishSetup()
-	r.Add(registry.TestSpec{
+	spec := registry.TestSpec{
 		Name:                   fmt.Sprintf("perturbation/full/%s", v.perturbationName()),
 		Skip:                   skipReason,
 		CompatibleClouds:       v.cloud,
@@ -563,7 +575,9 @@ func addFull(r registry.Registry, p perturbation, skipReason string) {
 		Benchmark:              true,
 		PostProcessPerfMetrics: perturbationDefaultProcessFunction,
 		Run:                    v.runTest,
-	})
+	}
+	v.applyTimeout(&spec)
+	r.Add(spec)
 }
 
 // addLong registers a heavyweight variant of a perturbation test that runs
@@ -653,7 +667,7 @@ func addDev(r registry.Registry, p perturbation) {
 	// Allow the test to run on dev machines.
 	v.cloud = registry.AllClouds
 	v = v.finishSetup()
-	r.Add(registry.TestSpec{
+	spec := registry.TestSpec{
 		Name:                   fmt.Sprintf("perturbation/dev/%s", v.perturbationName()),
 		CompatibleClouds:       v.cloud,
 		Suites:                 registry.ManualOnly,
@@ -663,7 +677,9 @@ func addDev(r registry.Registry, p perturbation) {
 		Benchmark:              true,
 		PostProcessPerfMetrics: perturbationDefaultProcessFunction,
 		Run:                    v.runTest,
-	})
+	}
+	v.applyTimeout(&spec)
+	r.Add(spec)
 }
 
 type perturbation interface {
