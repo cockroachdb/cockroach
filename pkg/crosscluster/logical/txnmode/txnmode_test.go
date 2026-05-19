@@ -42,9 +42,7 @@ func setupParentChildReplication(
 
 	for _, db := range []*sqlutils.SQLRunner{sourceDB, destDB} {
 		db.Exec(t, "CREATE TABLE parent (id INT PRIMARY KEY)")
-		db.Exec(t, "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT)")
-		// TODO(jeffswenson): add fk support to lock derivation then uncomment this.
-		// db.Exec(t, "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT REFERENCES parent(id))")
+		db.Exec(t, "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT REFERENCES parent(id))")
 	}
 
 	sourceURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("source_db"))
@@ -150,9 +148,9 @@ func TestTxnModeUniqueConstraintUpdate(t *testing.T) {
 
 	// Update the UUID (primary key) of the row with unique_value = 1337
 	// This tests that lock synthesis correctly orders the delete and insert operations
-	now := s.Clock().Now()
 	sourceDB.Exec(t, "UPDATE test_table SET uuid = gen_random_uuid() WHERE unique_value = 1337")
 
+	now := s.Clock().Now()
 	ldrtestutils.WaitUntilReplicatedTime(t, now, destDB, jobID)
 
 	// Verify the update was replicated (row with unique_value = 1337 still exists with new UUID)

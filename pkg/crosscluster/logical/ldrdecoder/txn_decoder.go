@@ -29,6 +29,13 @@ type Transaction struct {
 	WriteSet []DecodedRow
 }
 
+// TxnEnvelope pairs a decoded Transaction with the raw KV events it was
+// decoded from. RawKVs[i] is the source KV for Txn.WriteSet[i].
+type TxnEnvelope struct {
+	Txn    Transaction
+	RawKVs []streampb.StreamEvent_KV
+}
+
 type TxnDecoder struct {
 	decoder tableDecoder
 }

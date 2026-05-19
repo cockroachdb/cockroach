@@ -26,7 +26,7 @@ type Lock struct {
 
 type LockSet struct {
 	Locks      []Lock
-	SortedRows []ldrdecoder.DecodedRow
+	SortedRows ldrdecoder.TxnEnvelope
 }
 
 type LockSynthesizer struct {
@@ -77,8 +77,14 @@ type rowsWithLock struct {
 }
 
 func (ls *LockSynthesizer) DeriveLocks(
-	ctx context.Context, rows []ldrdecoder.DecodedRow,
+	ctx context.Context, envelope ldrdecoder.TxnEnvelope,
 ) (LockSet, error) {
+	rows := envelope.Txn.WriteSet
+	if len(rows) != len(envelope.RawKVs) {
+		return LockSet{}, errors.AssertionFailedf(
+			"WriteSet and RawKVs must have the same length: %d vs %d", len(rows), len(envelope.RawKVs))
+	}
+
 	// We build a table of locks for two reasons:
 	// 1. We use it to eliminate duplicate locks for the same row.
 	// 2. We need to topologically sort the rows to get an apply order and
@@ -104,7 +110,7 @@ func (ls *LockSynthesizer) DeriveLocks(
 		}
 	}
 
-	sorted, err := ls.sort(ctx, rows, rowLocks, locks)
+	sorted, err := ls.sort(ctx, envelope, rowLocks, locks)
 	if err != nil {
 		return LockSet{}, err
 	}
@@ -113,7 +119,6 @@ func (ls *LockSynthesizer) DeriveLocks(
 		SortedRows: sorted,
 		Locks:      make([]Lock, 0, len(locks)),
 	}
-
 	for hash, lr := range locks {
 		lockSet.Locks = append(lockSet.Locks, Lock{
 			Hash: hash,

@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -23,21 +24,27 @@ const (
 	statusVisited  sortStatus = 2
 )
 
-// sort topologically sorts the write set by the order writes should be
+// sort topologically sorts the txn envelope by the order writes should be
 // applied.
 func (ls *LockSynthesizer) sort(
 	ctx context.Context,
-	rows []ldrdecoder.DecodedRow,
+	envelope ldrdecoder.TxnEnvelope,
 	rowLocks [][]Lock,
 	locks map[LockHash]rowsWithLock,
-) ([]ldrdecoder.DecodedRow, error) {
-	status := make([]sortStatus, len(rows))
-	sorted := make([]ldrdecoder.DecodedRow, 0, len(rows))
+) (ldrdecoder.TxnEnvelope, error) {
+	n := len(envelope.Txn.WriteSet)
+	status := make([]sortStatus, n)
+	sorted := ldrdecoder.TxnEnvelope{
+		Txn: ldrdecoder.Transaction{
+			TxnID:    envelope.Txn.TxnID,
+			WriteSet: make([]ldrdecoder.DecodedRow, 0, n),
+		},
+		RawKVs: make([]streampb.StreamEvent_KV, 0, n),
+	}
 
-	for i := range rows {
-		err := ls.sortInner(ctx, i, rows, status, rowLocks, locks, &sorted)
-		if err != nil {
-			return nil, err
+	for i := range envelope.Txn.WriteSet {
+		if err := ls.sortInner(ctx, i, envelope, status, rowLocks, locks, &sorted); err != nil {
+			return ldrdecoder.TxnEnvelope{}, err
 		}
 	}
 
@@ -47,11 +54,11 @@ func (ls *LockSynthesizer) sort(
 func (ls *LockSynthesizer) sortInner(
 	ctx context.Context,
 	row int,
-	rows []ldrdecoder.DecodedRow,
+	envelope ldrdecoder.TxnEnvelope,
 	status []sortStatus,
 	rowLocks [][]Lock,
 	locks map[LockHash]rowsWithLock,
-	output *[]ldrdecoder.DecodedRow,
+	output *ldrdecoder.TxnEnvelope,
 ) error {
 	if status[row] == statusVisited {
 		return nil
@@ -77,20 +84,21 @@ func (ls *LockSynthesizer) sortInner(
 			if dependentRow == int32(row) {
 				continue
 			}
-			dep, err := ls.dependsOn(ctx, rows[row], rows[dependentRow])
+			dep, err := ls.dependsOn(ctx, envelope.Txn.WriteSet[row], envelope.Txn.WriteSet[dependentRow])
 			if err != nil {
 				return err
 			}
 			if !dep {
 				continue
 			}
-			if err := ls.sortInner(ctx, int(dependentRow), rows, status, rowLocks, locks, output); err != nil {
+			if err := ls.sortInner(ctx, int(dependentRow), envelope, status, rowLocks, locks, output); err != nil {
 				return err
 			}
 		}
 	}
 
 	status[row] = statusVisited
-	*output = append(*output, rows[row])
+	output.Txn.WriteSet = append(output.Txn.WriteSet, envelope.Txn.WriteSet[row])
+	output.RawKVs = append(output.RawKVs, envelope.RawKVs[row])
 	return nil
 }
