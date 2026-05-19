@@ -623,10 +623,10 @@ func TestGroupBurstRates(t *testing.T) {
 	require.Equal(t, [2]float64{-500, 4000}, out[1])
 }
 
-// TestDampeningFactor verifies that allocateTokens reduces token
-// dispensing when the scheduler is overloaded (runnable >=
-// threshold*procs) and recovers when load drops. It also verifies
-// that burst refill is NOT dampened.
+// TestDampeningFactor exercises the four regimes (descent, hold,
+// recovery, snap-back), checks that dampening scales granter
+// allocations without touching per-tier burst buckets, and that the
+// deficit counter stops growing once the factor is back at 1.0.
 func TestDampeningFactor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -687,30 +687,27 @@ func TestDampeningFactor(t *testing.T) {
 	ctx := context.Background()
 	allocator.resetInterval(ctx)
 
-	// Default threshold is 32. Set overload: runnable=320, procs=10.
-	// 320 >= 32*10 = true -> overloaded.
-	allocator.lastRunnable.Store(320)
+	// With the default threshold=32 and procs=10: descend when runnable
+	// >= 320, snap to 1.0 when runnable < 40, recover otherwise.
 	allocator.lastProcs.Store(10)
 
-	// Zero out buckets so we can measure the effect of dampening.
-	granter.mu.buckets[testTier0][canBurst].tokens = 0
-	granter.mu.buckets[testTier0][noBurst].tokens = 0
-	granter.mu.buckets[testTier1][canBurst].tokens = 0
-	granter.mu.buckets[testTier1][noBurst].tokens = 0
-	burstMgrs[testTier0].tokens = 0
-	burstMgrs[testTier1].tokens = 0
+	clearBuckets := func() {
+		granter.mu.buckets[testTier0][canBurst].tokens = 0
+		granter.mu.buckets[testTier0][noBurst].tokens = 0
+		granter.mu.buckets[testTier1][canBurst].tokens = 0
+		granter.mu.buckets[testTier1][noBurst].tokens = 0
+		burstMgrs[testTier0].tokens = 0
+		burstMgrs[testTier1].tokens = 0
+	}
 
-	// Allocate once at remaining=1 so full refill rates are emitted.
+	// Descent. One tick at runnable=320: 1.0 -> 0.99.
+	allocator.lastRunnable.Store(320)
+	clearBuckets()
 	allocator.allocateTokens(1)
-
-	// After one tick of overload, dampeningFactor should be 0.99.
 	require.InDelta(t, 0.99, allocator.dampeningFactor, 0.001)
-
-	// Dampened tokens should be less than the full refill rates.
-	// Full canBurst tier0 = 5000, dampened at 0.99 = 4950.
+	// Granter allocations are scaled (5000*0.99); per-tier burst is not.
 	require.Equal(t, int64(4950), granter.mu.buckets[testTier0][canBurst].tokens)
 	require.Equal(t, int64(3960), granter.mu.buckets[testTier0][noBurst].tokens)
-
 	// Burst refill should NOT be dampened. It uses the undampened
 	// allocations through groupBurstRates, which derives rate100 from
 	// the system tier's canBurst allocation (5000 with default
@@ -718,65 +715,59 @@ func TestDampeningFactor(t *testing.T) {
 	require.Equal(t, int64(1000), burstMgrs[testTier0].tokens)
 	require.Equal(t, int64(1000), burstMgrs[testTier1].tokens)
 
-	// Call allocateTokens many more times with overload to drive dampening
-	// to the floor.
+	// Drive to the floor.
 	for i := 0; i < 100; i++ {
 		allocator.resetInterval(ctx)
-		granter.mu.buckets[testTier0][canBurst].tokens = 0
-		granter.mu.buckets[testTier0][noBurst].tokens = 0
-		granter.mu.buckets[testTier1][canBurst].tokens = 0
-		granter.mu.buckets[testTier1][noBurst].tokens = 0
+		clearBuckets()
 		allocator.allocateTokens(1)
 	}
-	// Clamped at dampeningFloor (0.50).
 	require.Equal(t, dampeningFloor, allocator.dampeningFactor)
-	// Tokens at 50% of full rate: 5000 * 0.5 = 2500.
 	require.Equal(t, int64(2500), granter.mu.buckets[testTier0][canBurst].tokens)
 
-	// Now drop load below threshold: recovery.
-	allocator.lastRunnable.Store(0)
-	allocator.lastProcs.Store(10)
-	allocator.resetInterval(ctx)
-	granter.mu.buckets[testTier0][canBurst].tokens = 0
-	granter.mu.buckets[testTier0][noBurst].tokens = 0
-	granter.mu.buckets[testTier1][canBurst].tokens = 0
-	granter.mu.buckets[testTier1][noBurst].tokens = 0
-	allocator.allocateTokens(1)
-
-	require.InDelta(t, 0.51, allocator.dampeningFactor, 0.001)
-	// Tokens at 51% of full rate: 5000 * 0.51 = 2550.
-	require.Equal(t, int64(2550), granter.mu.buckets[testTier0][canBurst].tokens)
-
-	// Deficit metric covers every allocateTokens call past the first
-	// (the first finds lastDampeningUpdate == 0 and is skipped). Above
-	// we have made 102 calls total: 1 initial, then 100 in the loop,
-	// then 1 after dropping load. So 101 calls contribute, each weighted
-	// by tickInterval. The factor sequence (after each call) is:
-	//   - calls 1..49 in the loop ramp factor from 0.98 down to 0.50;
-	//     sum of (1-factor) = 0.02 + 0.03 + ... + 0.50 = 12.74
-	//   - calls 50..100 in the loop stay at factor=0.50 (51 calls);
-	//     sum of (1-factor) = 51 * 0.50 = 25.5
-	//   - the post-drop call moves factor 0.50 -> 0.51;
-	//     contributes (1-0.51) = 0.49
-	// Total: (12.74 + 25.5 + 0.49) * tickInterval = 38.73 * tickInterval.
-	require.Equal(t,
-		int64(38.73*float64(tickInterval.Nanoseconds())),
-		metrics.DampeningDeficitNanos.Count())
-
-	// Recovery: many ticks at low load -> factor returns to 1.0.
-	for i := 0; i < 100; i++ {
+	// Hold. runnable=260 sits in [240, 320), so the factor must not move.
+	allocator.lastRunnable.Store(260)
+	for i := 0; i < 10; i++ {
 		allocator.resetInterval(ctx)
-		granter.mu.buckets[testTier0][canBurst].tokens = 0
-		granter.mu.buckets[testTier0][noBurst].tokens = 0
-		granter.mu.buckets[testTier1][canBurst].tokens = 0
-		granter.mu.buckets[testTier1][noBurst].tokens = 0
+		clearBuckets()
 		allocator.allocateTokens(1)
 	}
-	// Clamped at 1.0.
+	require.Equal(t, dampeningFloor, allocator.dampeningFactor)
+	require.Equal(t, int64(2500), granter.mu.buckets[testTier0][canBurst].tokens)
+
+	// Recovery. runnable=200 is between 40 and 240; one tick: 0.50 -> 0.52.
+	allocator.lastRunnable.Store(200)
+	allocator.resetInterval(ctx)
+	clearBuckets()
+	allocator.allocateTokens(1)
+	require.InDelta(t, 0.52, allocator.dampeningFactor, 0.001)
+	require.Equal(t, int64(2600), granter.mu.buckets[testTier0][canBurst].tokens)
+
+	// 30 more ticks at +0.02 covers the climb back to 1.0.
+	for i := 0; i < 30; i++ {
+		allocator.resetInterval(ctx)
+		clearBuckets()
+		allocator.allocateTokens(1)
+	}
+	require.Equal(t, 1.0, allocator.dampeningFactor)
+
+	// Snap-back. Drive to the floor again, then drop runnable below 40.
+	allocator.lastRunnable.Store(320)
+	for i := 0; i < 60; i++ {
+		allocator.resetInterval(ctx)
+		clearBuckets()
+		allocator.allocateTokens(1)
+	}
+	require.Equal(t, dampeningFloor, allocator.dampeningFactor)
+
+	allocator.lastRunnable.Store(20)
+	allocator.resetInterval(ctx)
+	clearBuckets()
+	allocator.allocateTokens(1)
 	require.Equal(t, 1.0, allocator.dampeningFactor)
 	require.Equal(t, int64(5000), granter.mu.buckets[testTier0][canBurst].tokens)
 
-	// Once the factor reaches 1.0, the deficit counter must stop growing.
+	// Deficit was accumulated; with factor at 1.0 it stops growing.
+	require.Positive(t, metrics.DampeningDeficitNanos.Count())
 	deficitBefore := metrics.DampeningDeficitNanos.Count()
 	for i := 0; i < 10; i++ {
 		allocator.resetInterval(ctx)

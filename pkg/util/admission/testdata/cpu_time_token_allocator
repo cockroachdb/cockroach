@@ -423,3 +423,176 @@ tier1  -2000     -3000
 burstM
 tier0  -294
 tier1  -294
+
+# ----- Dampening tests -----
+#
+# Reset to default cluster settings and bring refill rates back to round
+# numbers. The prior tests left model.rates at 4999/3999/2999/1999
+# (after increase_rates_by=+1 then -2). Adding +1 restores 5000/4000/
+# 3000/2000.
+setClusterSettings app=0.8 system=0.95 burst=0.05
+----
+SET CLUSTER SETTING admission.cpu_time_tokens.target_util.app_tenant = 0.8
+SET CLUSTER SETTING admission.cpu_time_tokens.target_util.system_tenant = 0.95
+SET CLUSTER SETTING admission.cpu_time_tokens.target_util.burst_delta = 0.05
+cpuTTG can_burst no_burst
+tier0  0         -1000
+tier1  -2000     -3000
+burstM
+tier0  -294
+tier1  -294
+
+resetInterval increase_rates_by=1
+----
+fit(
+	tier1 no_burst -> 80%
+	tier1 can_burst -> 85%
+	tier0 no_burst -> 95%
+	tier0 can_burst -> 100%
+)
+cpuTTG can_burst no_burst
+tier0  1         -999
+tier1  -1999     -2999
+burstM
+tier0  -250
+tier1  -250
+
+# Default threshold=32, procs=10:
+#   runnable >= 320       -> descend
+#   runnable in [240,320) -> hold
+#   runnable in [40,240)  -> recover
+#   runnable < 40         -> snap to 1.0
+set-cpu-load runnable=320 procs=10
+----
+cpu-load: runnable=320 procs=10
+
+set-tokens v=0
+----
+cpuTTG can_burst no_burst
+tier0  0         0
+tier1  0         0
+burstM
+tier0  0
+tier1  0
+
+# Descend: factor 1.0 -> 0.99. Granter scaled by 0.99; per-tier burst
+# buckets are not scaled.
+allocate remaining=1
+----
+cpuTTG can_burst no_burst
+tier0  4950      3960
+tier1  2970      1980
+burstM
+tier0  1000
+tier1  1000
+
+# Descend again: 0.99 -> 0.98.
+resetInterval
+----
+fit(
+	tier1 no_burst -> 80%
+	tier1 can_burst -> 85%
+	tier0 no_burst -> 95%
+	tier0 can_burst -> 100%
+)
+cpuTTG can_burst no_burst
+tier0  4950      3960
+tier1  2970      1980
+burstM
+tier0  1000
+tier1  1000
+
+set-tokens v=0
+----
+cpuTTG can_burst no_burst
+tier0  0         0
+tier1  0         0
+burstM
+tier0  0
+tier1  0
+
+allocate remaining=1
+----
+cpuTTG can_burst no_burst
+tier0  4900      3920
+tier1  2940      1960
+burstM
+tier0  1000
+tier1  1000
+
+# Hold: runnable=260 is in [240, 320), so the factor stays at 0.98.
+set-cpu-load runnable=260 procs=10
+----
+cpu-load: runnable=260 procs=10
+
+resetInterval
+----
+fit(
+	tier1 no_burst -> 80%
+	tier1 can_burst -> 85%
+	tier0 no_burst -> 95%
+	tier0 can_burst -> 100%
+)
+cpuTTG can_burst no_burst
+tier0  4900      3920
+tier1  2940      1960
+burstM
+tier0  1000
+tier1  1000
+
+set-tokens v=0
+----
+cpuTTG can_burst no_burst
+tier0  0         0
+tier1  0         0
+burstM
+tier0  0
+tier1  0
+
+allocate remaining=1
+----
+cpuTTG can_burst no_burst
+tier0  4900      3920
+tier1  2940      1960
+burstM
+tier0  1000
+tier1  1000
+
+# Snap-back: runnable=20 is below 40, so the factor jumps 0.98 -> 1.0
+# in a single tick, bypassing the per-tick recovery ramp.
+set-cpu-load runnable=20 procs=10
+----
+cpu-load: runnable=20 procs=10
+
+resetInterval
+----
+fit(
+	tier1 no_burst -> 80%
+	tier1 can_burst -> 85%
+	tier0 no_burst -> 95%
+	tier0 can_burst -> 100%
+)
+cpuTTG can_burst no_burst
+tier0  4900      3920
+tier1  2940      1960
+burstM
+tier0  1000
+tier1  1000
+
+set-tokens v=0
+----
+cpuTTG can_burst no_burst
+tier0  0         0
+tier1  0         0
+burstM
+tier0  0
+tier1  0
+
+allocate remaining=1
+----
+cpuTTG can_burst no_burst
+tier0  5000      4000
+tier1  3000      2000
+burstM
+tier0  1000
+tier1  1000

@@ -233,17 +233,6 @@ type cpuTimeTokenAllocatorI interface {
 
 var _ cpuTimeTokenAllocatorI = &cpuTimeTokenAllocator{}
 
-// dampeningDelta is the per-tick increment/decrement of the dampening
-// factor. At 1ms ticks, reaching the floor from 1.0 takes ~50 ticks
-// = ~50ms, and recovery is symmetric.
-const dampeningDelta = 0.01
-
-// dampeningFloor is the minimum dampening factor. The system always
-// dispenses at least this fraction of computed tokens, even under
-// sustained scheduler overload. This prevents full starvation and
-// keeps the system functioning enough to self-correct.
-const dampeningFloor = 0.50
-
 // cpuTimeTokenAllocator allocates tokens to a cpuTimeTokenGranter. See the
 // comment above cpuTimeTokenFiller for a high level picture. The
 // responsibility of cpuTimeTokenAllocator is to gradually allocate tokens
@@ -436,6 +425,85 @@ func (a *cpuTimeTokenAllocator) CPULoad(runnable, procs int, _ time.Duration) {
 	a.lastProcs.Store(int64(procs))
 }
 
+// Dampening descends slowly under overload and recovers faster once
+// load eases. At 1ms ticks, descent from 1.0 to dampeningFloor takes
+// ~50ms; recovery takes ~25ms.
+const (
+	dampeningDescentDelta  = 0.01
+	dampeningRecoveryDelta = 0.02
+	// dampeningFloor caps how far the factor can drop. Even under
+	// sustained overload we still dispense at least this fraction so
+	// the system can keep making progress and self-correct.
+	dampeningFloor = 0.50
+	// dampeningSnapBackFrac is the fraction of the overload threshold
+	// below which the factor jumps directly to 1.0. With the default
+	// threshold of 32 runnable goroutines per CPU this fires when
+	// runnable falls below 4 per CPU.
+	dampeningSnapBackFrac = 0.125
+	// dampeningHoldFrac sets the lower edge of a hold zone immediately
+	// below the overload threshold. While runnable is in [hold, overload)
+	// the factor stays where it is, which prevents ping-pong recovery
+	// the moment load dips just below the overload threshold. Recovery
+	// only resumes once runnable drops further. With the default
+	// threshold of 32 runnable goroutines per CPU this means we hold
+	// in [24, 32) per CPU.
+	dampeningHoldFrac = 0.75
+)
+
+// updateDampening advances the dampening factor for one tick based on the most
+// recent CPULoad sample and records the resulting deficit on
+// DampeningDeficitNanos. Called by allocateTokens.
+//
+//   - Runnable goroutines at or above the overload threshold: increase dampening
+//     by 1% per tick, down to a floor of 50% (dampeningFactor = 0.5).
+//
+//   - Runnable goroutines in the hold zone just below the overload threshold
+//     (>= 75% of threshold by default): leave the factor unchanged so we don't
+//     bounce in and out of recovery while load hovers near the overload point.
+//
+//   - Runnable goroutines clearly below the overload threshold: decrease
+//     dampening by 2% per tick.
+//
+//   - Runnable goroutines below 12.5% of the overload threshold: snap dampening
+//     all the way back to 0 (dampeningFactor = 1) without ramping.
+//
+// The deficit (1 - factor) is added to the counter scaled by the wall-clock gap
+// since the previous call. The gap is nominally timePerTick (1ms) but can be
+// larger when the filler ticker is delayed or drops ticks. The first call is
+// skipped so we don't attribute the process-start gap to dampening.
+func (a *cpuTimeTokenAllocator) updateDampening() {
+	procs := int(a.lastProcs.Load())
+	if procs <= 0 {
+		// CPULoad has not been called yet. Leave the factor
+		// at its initial value.
+		return
+	}
+	runnable := int(a.lastRunnable.Load())
+	threshold := int(KVSlotAdjusterOverloadThreshold.Get(&a.settings.SV))
+	snapPerCPU := max(1, int(float64(threshold)*dampeningSnapBackFrac))
+	holdPerCPU := max(1, int(float64(threshold)*dampeningHoldFrac))
+
+	switch {
+	case runnable >= threshold*procs:
+		a.dampeningFactor = max(dampeningFloor, a.dampeningFactor-dampeningDescentDelta)
+	case runnable >= holdPerCPU*procs:
+		// Hold zone: leave the factor where it is.
+	case runnable < snapPerCPU*procs:
+		a.dampeningFactor = 1.0
+	default:
+		a.dampeningFactor = min(1.0, a.dampeningFactor+dampeningRecoveryDelta)
+	}
+
+	now := a.nowMono()
+	if a.lastDampeningUpdate != 0 {
+		if elapsed := now.Sub(a.lastDampeningUpdate); elapsed > 0 {
+			a.metrics.DampeningDeficitNanos.Inc(
+				int64((1.0 - a.dampeningFactor) * float64(elapsed.Nanoseconds())))
+		}
+	}
+	a.lastDampeningUpdate = now
+}
+
 // allocateTokensFn distributes refillRates across remaining ticks in
 // the interval, returning the per-tick allocations. Extracted as a
 // standalone function so it can be reused by future strategy
@@ -478,32 +546,7 @@ func allocateTokensFn(refillRates rates, allocated *tokenCounts, remainingTicks 
 // INVARIANT: remainingTicks >= 1.
 // TODO(josh): Expand to cover group-specific token buckets too.
 func (a *cpuTimeTokenAllocator) allocateTokens(expectedRemainingTicksInInterval int64) {
-	// Adjust the dampening factor based on scheduler load. When the
-	// runnable goroutine count exceeds the overload threshold, decrease
-	// the factor to throttle token dispensing. This gives the scheduler
-	// room to drain its backlog. Recovery is symmetric.
-	runnable := int(a.lastRunnable.Load())
-	procs := int(a.lastProcs.Load())
-	threshold := int(KVSlotAdjusterOverloadThreshold.Get(&a.settings.SV))
-	if procs > 0 && runnable >= threshold*procs {
-		a.dampeningFactor = max(dampeningFloor, a.dampeningFactor-dampeningDelta)
-	} else {
-		a.dampeningFactor = min(1.0, a.dampeningFactor+dampeningDelta)
-	}
-
-	// Add the dampening deficit (1 - factor) to the counter, scaled by
-	// the wall-clock gap since the previous tick. The gap is nominally
-	// timePerTick (1ms) but can be larger when the filler ticker is
-	// delayed or drops ticks (see cpuTimeTokenFiller). Skip the first
-	// call so we don't attribute the process-start gap to dampening.
-	now := a.nowMono()
-	if a.lastDampeningUpdate != 0 {
-		if elapsed := now.Sub(a.lastDampeningUpdate); elapsed > 0 {
-			a.metrics.DampeningDeficitNanos.Inc(
-				int64((1.0 - a.dampeningFactor) * float64(elapsed.Nanoseconds())))
-		}
-	}
-	a.lastDampeningUpdate = now
+	a.updateDampening()
 
 	allocations := allocateTokensFn(a.refillRates, &a.allocated, expectedRemainingTicksInInterval)
 
