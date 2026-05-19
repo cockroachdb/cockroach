@@ -1076,7 +1076,7 @@ message ListSessionsRequest {
 message HeldAdvisoryLock {
   int64 lock_id = 1;
   int64 lock_database_id = 2;
-  bool isSingeValue  = 3;
+  bool is_single_value = 3;
   enum AdvisoryLockMode {
     ADVISORY_LOCK_MODE_UNKNOWN = 0;
     ADVISORY_LOCK_MODE_SHARED = 1;

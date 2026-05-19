@@ -2440,7 +2440,7 @@ HeldAdvisoryLock is one transaction-scoped advisory lock held by a session.
 | ----- | ---- | ----- | ----------- | -------------- |
 | lock_id | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  |  | [reserved](#support-status) |
 | lock_database_id | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  |  | [reserved](#support-status) |
-| isSingeValue | [bool](#cockroach.server.serverpb.ListSessionsResponse-bool) |  |  | [reserved](#support-status) |
+| is_single_value | [bool](#cockroach.server.serverpb.ListSessionsResponse-bool) |  |  | [reserved](#support-status) |
 | lock_mode | [HeldAdvisoryLock.AdvisoryLockMode](#cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.HeldAdvisoryLock.AdvisoryLockMode) |  |  | [reserved](#support-status) |
 
 
@@ -2609,7 +2609,7 @@ HeldAdvisoryLock is one transaction-scoped advisory lock held by a session.
 | ----- | ---- | ----- | ----------- | -------------- |
 | lock_id | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  |  | [reserved](#support-status) |
 | lock_database_id | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  |  | [reserved](#support-status) |
-| isSingeValue | [bool](#cockroach.server.serverpb.ListSessionsResponse-bool) |  |  | [reserved](#support-status) |
+| is_single_value | [bool](#cockroach.server.serverpb.ListSessionsResponse-bool) |  |  | [reserved](#support-status) |
 | lock_mode | [HeldAdvisoryLock.AdvisoryLockMode](#cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.HeldAdvisoryLock.AdvisoryLockMode) |  |  | [reserved](#support-status) |
 
 

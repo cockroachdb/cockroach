@@ -1663,7 +1663,7 @@ type connExecutor struct {
 		descCollection *descs.Collection
 
 		// advisoryLockManager is an atomic pointer that refers to
-		//  the current advisory lock manager.
+		// the current advisory lock manager.
 		advisoryLockManager *atomic.Pointer[advisorylock.Manager]
 
 		jobs *txnJobsCollection
@@ -4787,7 +4787,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 				heldAdvisoryLocks = append(heldAdvisoryLocks, serverpb.HeldAdvisoryLock{
 					LockDatabaseId: int64(db),
 					LockId:         id,
-					IsSingeValue:   isSingleValue,
+					IsSingleValue:  isSingleValue,
 					LockMode:       convertedMode,
 				})
 			}

@@ -2638,7 +2638,7 @@ func populateClusterHeldAdvisoryLocksTable(
 				sessionID,
 				tree.NewDInt(tree.DInt(h.LockDatabaseId)),
 				tree.NewDInt(tree.DInt(h.LockId)),
-				tree.MakeDBool(tree.DBool(h.IsSingeValue)),
+				tree.MakeDBool(tree.DBool(h.IsSingleValue)),
 				tree.NewDString(lockMode),
 			); err != nil {
 				return err

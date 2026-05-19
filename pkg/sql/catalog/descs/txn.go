@@ -136,7 +136,7 @@ func CheckTwoVersionInvariant(
 	// as a timeout rather than the retryable violation sentinel; fall
 	// through to the sentinel defensively.
 	if err := ctx.Err(); err != nil {
-		return err
+		return errors.Wrapf(err, "waiting for %d descriptor lease(s) to drain", len(withNewVersion))
 	}
 	return &twoVersionInvariantViolationError{ids: withNewVersion}
 }

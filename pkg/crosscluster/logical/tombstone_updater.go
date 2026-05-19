@@ -176,7 +176,15 @@ func (tu *tombstoneUpdater) getDeleter(ctx context.Context, txn *kv.Txn) (row.De
 			cols[i] = cs.Column
 		}
 
-		tu.leased.deleter = row.MakeDeleter(tu.codec, tu.leased.descriptor.Underlying().(catalog.TableDescriptor), nil /* lockedIndexes */, cols, tu.sd, &tu.settings.SV, nil /* metrics */)
+		tu.leased.deleter = row.MakeDeleter(
+			tu.codec,
+			tu.leased.descriptor.Underlying().(catalog.TableDescriptor),
+			nil, /* lockedIndexes */
+			cols,
+			tu.sd,
+			&tu.settings.SV,
+			nil, /* metrics */
+		)
 	}
 	if err := txn.UpdateDeadline(ctx, tu.leased.descriptor.Expiration(ctx)); err != nil {
 		return row.Deleter{}, err
