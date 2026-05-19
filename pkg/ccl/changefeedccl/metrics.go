@@ -1640,6 +1640,11 @@ func MakeMemoryMetrics(
 }
 
 func init() {
+	// Register metric so cmreader on other nodes knows this metric exists
+	// before any node constructs it.
+	cmmetrics.RegisterLabeledClusterMetric(
+		metaCheckpointLag.Name, metaCheckpointLag, []string{"job_id", "scope"},
+	)
 	jobs.MakeChangefeedMetricsHook = MakeMetrics
 	jobs.MakeChangefeedMemoryMetricsHook = MakeMemoryMetrics
 }
