@@ -3548,6 +3548,33 @@ func (s *statusServer) AppNameMappings(
 	}, nil
 }
 
+// ExecutionAttributes returns the cached ExecutionAttrs for the
+// requested enrichment IDs. Used by remote ASH samplers to resolve
+// attributes for samples whose gateway is this node.
+func (s *statusServer) ExecutionAttributes(
+	ctx context.Context, req *serverpb.ExecutionAttributesRequest,
+) (*serverpb.ExecutionAttributesResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
+
+	if err := s.privilegeChecker.RequireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	mappings := ash.GetExecutionMappings(req.Ids)
+	resp := &serverpb.ExecutionAttributesResponse{
+		Mappings: make(map[uint64]serverpb.ExecutionAttribute, len(mappings)),
+	}
+	for id, attrs := range mappings {
+		resp.Mappings[id] = serverpb.ExecutionAttribute{
+			User:     attrs.User,
+			Database: attrs.Database,
+			Query:    attrs.Query,
+			TxnID:    attrs.TxnID,
+		}
+	}
+	return resp, nil
+}
+
 // ListActiveSessionHistory returns ASH samples from all nodes in the cluster.
 func (s *statusServer) ListActiveSessionHistory(
 	ctx context.Context, req *serverpb.ListActiveSessionHistoryRequest,
