@@ -64,6 +64,28 @@ func (i *immediateVisitor) ResetTableStorageParam(
 	if err != nil {
 		return err
 	}
+	// When DROP TABLE cascades, every TableStorageParam element transitions
+	// PUBLIC -> ABSENT alongside the parent Table. There is no value in
+	// scrubbing the soon-to-be-deleted descriptor's storage-param fields,
+	// and doing so is actively harmful for some params: clearing
+	// ExcludeDataFromBackup, for example, removes the only signal that
+	// lets the spanconfig reconciler keep the ExcludeDataFromBackup flag
+	// on the span config record, which is what the backup processor reads
+	// (via DataExcludedFromBackup on BatchTimestampBeforeGCError) to
+	// recover from a GC error during the post-drop window.
+	//
+	// This early-return is safe under the existing dep rule "descriptor
+	// dropped before dependent element removal" (see
+	// scplan/internal/rules/current/dep_drop_object.go), which lists
+	// TableStorageParam as a simple dependent and orders its
+	// PUBLIC -> ABSENT transition after the parent Table reaches DROPPED
+	// (i.e. after MarkDescriptorAsDropped has set State=DROP). So when
+	// this visitor runs from a DROP TABLE plan, tbl.Dropped() is
+	// guaranteed to be true; from an ALTER TABLE RESET (param) plan it is
+	// false and the reset proceeds normally.
+	if tbl.Dropped() {
+		return nil
+	}
 	setter := tablestorageparam.NewSetter(tbl, false /* isNewObject */)
 	return setter.ResetToZeroValue(ctx, op.Param.Name)
 }

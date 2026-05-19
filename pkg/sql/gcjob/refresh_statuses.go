@@ -172,9 +172,11 @@ func updateTableStatus(
 			ctx,
 			jobID,
 			tableDropTimes[t.ID],
-			execCfg,
+			execCfg.Codec,
+			execCfg.GCJobTestingKnobs,
 			execCfg.SpanConfigKVAccessor,
 			sp,
+			protectionScopeForDataGC,
 		)
 		if err != nil {
 			log.Dev.Errorf(ctx, "error checking protection status %v", err)
@@ -238,9 +240,11 @@ func updateIndexesStatus(
 			ctx,
 			jobID,
 			indexDropTimes[idxProgress.IndexID],
-			execCfg,
+			execCfg.Codec,
+			execCfg.GCJobTestingKnobs,
 			execCfg.SpanConfigKVAccessor,
 			sp,
+			protectionScopeForDataGC,
 		)
 		if err != nil {
 			log.Dev.Errorf(ctx, "error checking protection status %v", err)
@@ -290,8 +294,34 @@ func getTableTTL(defTTL int32, zoneCfg *zonepb.ZoneConfig) int32 {
 	return ttlSeconds
 }
 
+// protectionScope describes which protected timestamp records the caller wants
+// considered when asking whether a span is "protected".
+type protectionScope int
+
+const (
+	// protectionScopeForDataGC mirrors the policy enforced by the KV
+	// subscriber: protected timestamps written by backups are ignored on
+	// spans that are excluded from backup, since the whole point of
+	// exclude_data_from_backup is to let MVCC GC reclaim the data despite
+	// any backup-issued PTS. Use this when deciding whether to advance MVCC
+	// GC over the data.
+	protectionScopeForDataGC protectionScope = iota
+
+	// protectionScopeForDescriptorCleanup considers every protected
+	// timestamp record covering the span, including backup-issued PTSes
+	// with IgnoreIfExcludedFromBackup set. Tearing down the descriptor
+	// (and therefore the span config record carrying ExcludeDataFromBackup)
+	// destroys the very signal that lets the data-GC path ignore the
+	// backup PTS, so we must keep the descriptor around until the PTS is
+	// released.
+	protectionScopeForDescriptorCleanup
+)
+
 // isProtected returns true if the supplied span is considered protected, and
 // thus exempt from GC-ing, given the wall time at which it was dropped.
+//
+// The scope argument determines whether backup PTSes that opt into
+// IgnoreIfExcludedFromBackup are honored; see protectionScope for details.
 //
 // This function is intended for table/index spans -- for spans that cover a
 // secondary tenant's keyspace, checkout `isTenantProtected` instead.
@@ -299,9 +329,11 @@ func isProtected(
 	ctx context.Context,
 	jobID jobspb.JobID,
 	droppedAtTime int64,
-	execCfg *sql.ExecutorConfig,
+	codec keys.SQLCodec,
+	knobs *sql.GCJobTestingKnobs,
 	kvAccessor spanconfig.KVAccessor,
 	sp roachpb.Span,
+	scope protectionScope,
 ) (bool, error) {
 	// Wrap this in a closure so we can pass the protection status to the testing
 	// knob.
@@ -313,7 +345,7 @@ func isProtected(
 			return false, err
 		}
 
-		_, tenID, err := keys.DecodeTenantPrefix(execCfg.Codec.TenantPrefix())
+		_, tenID, err := keys.DecodeTenantPrefix(codec.TenantPrefix())
 		if err != nil {
 			return false, err
 		}
@@ -328,10 +360,11 @@ func isProtected(
 		collectProtectedTimestamps := func(configs ...roachpb.SpanConfig) {
 			for _, config := range configs {
 				for _, protectionPolicy := range config.GCPolicy.ProtectionPolicies {
-					// We don't consider protected timestamps written by backups if the span
-					// is indicated as "excluded from backup". Checkout the field
-					// descriptions for more details about this coupling.
-					if config.ExcludeDataFromBackup && protectionPolicy.IgnoreIfExcludedFromBackup {
+					// In the data-GC scope, drop protected timestamps written by
+					// backups when the span is excluded from backup. See
+					// protectionScope for the rationale.
+					if scope == protectionScopeForDataGC &&
+						config.ExcludeDataFromBackup && protectionPolicy.IgnoreIfExcludedFromBackup {
 						continue
 					}
 					protectedTimestamps = append(protectedTimestamps, protectionPolicy.ProtectedTimestamp)
@@ -355,8 +388,10 @@ func isProtected(
 		return false, err
 	}
 
-	if fn := execCfg.GCJobTestingKnobs.RunAfterIsProtectedCheck; fn != nil {
-		fn(jobID, isProtected)
+	if knobs != nil {
+		if fn := knobs.RunAfterIsProtectedCheck; fn != nil {
+			fn(jobID, isProtected)
+		}
 	}
 
 	return isProtected, nil

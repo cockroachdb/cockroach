@@ -9,6 +9,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -272,9 +273,15 @@ func deleteAllSpanData(
 func deleteTableDescriptorsAfterGC(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
+	job *jobs.Job,
 	details *jobspb.SchemaChangeGCDetails,
 	progress *jobspb.SchemaChangeGCProgress,
 ) error {
+	tableDropTimes := make(map[descpb.ID]int64, len(details.Tables))
+	for _, t := range details.Tables {
+		tableDropTimes[t.ID] = t.DropTime
+	}
+
 	checkImmediatelyOnWait := false
 	for _, droppedTable := range progress.Tables {
 		if droppedTable.Status == jobspb.SchemaChangeGCProgress_CLEARED {
@@ -304,7 +311,11 @@ func deleteTableDescriptorsAfterGC(
 			continue
 		}
 
-		// First, delete all the table data.
+		// First, wait until the data range becomes empty: the GC job laid
+		// down MVCC range tombstones in deleteData, and KV will eventually
+		// compact them away. Removing the descriptor and zone config before
+		// this is observable is what would let span configuration disappear
+		// out from under in-flight readers.
 		if err := waitForEmptyPrefix(
 			ctx, execCfg.DB, &execCfg.Settings.SV,
 			execCfg.GCJobTestingKnobs.SkipWaitingForMVCCGC,
@@ -316,6 +327,25 @@ func deleteTableDescriptorsAfterGC(
 		// Assume that once one of our tables have completed GC, the next table may
 		// also have completed GC.
 		checkImmediatelyOnWait = true
+
+		// Now wait for any protected timestamp record covering the span to
+		// be released. The descriptor (and the span config record derived
+		// from it) carries the ExcludeDataFromBackup flag that the backup
+		// processor relies on when handling BatchTimestampBeforeGCError;
+		// cleaning either up while a PTS is still held would silently
+		// remove that signal. See protectionScope for the broader story.
+		if err := waitForNoProtectionsBeforeDropTime(
+			ctx, execCfg, job.ID(),
+			table.GetID(), tableDropTimes[table.GetID()],
+			table.TableSpan(execCfg.Codec),
+			func() {
+				persistProgress(ctx, execCfg, job, progress,
+					sql.StatusWaitingForProtectedTimestamp)
+			},
+		); err != nil {
+			return errors.Wrapf(err, "waiting for PTS release on table %d", table.GetID())
+		}
+
 		delta, err := spanconfig.Delta(ctx, execCfg.SpanConfigSplitter, table, nil /* uncommitted */)
 		if err != nil {
 			return err
@@ -351,4 +381,62 @@ func deleteTableDescriptorsAfterGC(
 		}
 	}
 	return nil
+}
+
+// waitForNoProtectionsBeforeDropTime polls until no protected timestamp record
+// covers the span at a wall time earlier than droppedAtTime. Backup-issued PTS
+// records that opt into IgnoreIfExcludedFromBackup are honored here even on
+// excluded spans; see protectionScope for the rationale.
+//
+// onWait is invoked exactly once, just before we begin polling, so callers can
+// surface a meaningful job status. Returns immediately if SkipWaitingForPTSRelease
+// is set.
+func waitForNoProtectionsBeforeDropTime(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	jobID jobspb.JobID,
+	descID descpb.ID,
+	droppedAtTime int64,
+	sp roachpb.Span,
+	onWait func(),
+) error {
+	if execCfg.GCJobTestingKnobs.SkipWaitingForPTSRelease {
+		return nil
+	}
+	check := func() (bool, error) {
+		isProtected, err := isProtected(
+			ctx, jobID, droppedAtTime, execCfg.Codec, execCfg.GCJobTestingKnobs,
+			execCfg.SpanConfigKVAccessor, sp, protectionScopeForDescriptorCleanup,
+		)
+		if err != nil {
+			return false, err
+		}
+		if fn := execCfg.GCJobTestingKnobs.RunAfterPTSReleaseCheck; fn != nil {
+			fn(jobID, descID, isProtected)
+		}
+		return !isProtected, nil
+	}
+	if released, err := check(); err != nil || released {
+		return err
+	}
+	if onWait != nil {
+		onWait()
+	}
+	var timer timeutil.Timer
+	defer timer.Stop()
+	for {
+		timer.Reset(EmptySpanPollInterval.Get(&execCfg.Settings.SV))
+		select {
+		case <-timer.C:
+			released, err := check()
+			if err != nil {
+				return err
+			}
+			if released {
+				return nil
+			}
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 }
