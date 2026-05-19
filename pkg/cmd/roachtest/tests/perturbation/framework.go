@@ -97,13 +97,25 @@ type variations struct {
 	perturbation         perturbation
 	workload             workloadType
 	impact               acceptableImpact
-	cloud                registry.CloudSet
-	acMode               admissionControlMode
-	diskBandwidthLimit   string
-	histogramArgs        string // set at test start for workload histogram export
-	profileOptions       []roachtestutil.ProfileOptionFunc
-	specOptions          []spec.Option
-	clusterSettings      map[string]string
+	// recoveryImpact is the threshold applied to the recovery interval
+	// (after the perturbation completes). The zero value means "use the
+	// same threshold as the perturbation interval (impact)". Reading at
+	// the runTest use site (rather than eager-copying at setup time)
+	// keeps the fallback automatic — perturbations that override impact
+	// after setup() don't have to remember to update recoveryImpact too.
+	//
+	// Separate from impact because some perturbations (e.g. mass splits)
+	// put the cluster under heavy short-term stress that the cluster is
+	// expected to absorb; the meaningful signal is whether the cluster
+	// returns to baseline afterwards.
+	recoveryImpact     acceptableImpact
+	cloud              registry.CloudSet
+	acMode             admissionControlMode
+	diskBandwidthLimit string
+	histogramArgs      string // set at test start for workload histogram export
+	profileOptions     []roachtestutil.ProfileOptionFunc
+	specOptions        []spec.Option
+	clusterSettings    map[string]string
 }
 
 const NUM_REGIONS = 3
@@ -931,7 +943,14 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	t.L().Printf("validating stats during the perturbation")
 	failures := isAcceptableChange(t.L(), baselineStats, perturbationStats, v.impact)
 	t.L().Printf("validating stats after the perturbation")
-	failures = append(failures, isAcceptableChange(t.L(), baselineStats, afterStats, v.impact)...)
+	// recoveryImpact is the zero value by default; fall back to impact so
+	// callers that don't care about separate thresholds get the obvious
+	// behavior automatically.
+	recovery := v.recoveryImpact
+	if recovery == (acceptableImpact{}) {
+		recovery = v.impact
+	}
+	failures = append(failures, isAcceptableChange(t.L(), baselineStats, afterStats, recovery)...)
 	if len(failures) > 0 {
 		// Collect perf artifacts before failing so that roachperf still gets
 		// the data for this run.
