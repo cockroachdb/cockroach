@@ -69,10 +69,18 @@ type constraintsBuilder struct {
 func (cb *constraintsBuilder) buildSingleColumnConstraint(
 	col opt.ColumnID, op opt.Operator, val opt.Expr,
 ) (_ *constraint.Set, tight bool) {
-	if op == opt.InOp && CanExtractConstTuple(val) {
+	if (op == opt.InOp || op == opt.NotInOp) && CanExtractConstTuple(val) {
 		els := val.(*TupleExpr).Elems
+		if !IsSortedUniqueList(cb.ctx, cb.evalCtx, els) {
+			els, _ = ConstructSortedUniqueList(cb.ctx, cb.evalCtx, els)
+		}
 		keyCtx := constraint.KeyContext{Ctx: cb.ctx, EvalCtx: cb.evalCtx}
 		keyCtx.Columns.InitSingle(opt.MakeOrderingColumn(col, false /* descending */))
+
+		// Keep track of the key from each previous iteration to form the exclusive
+		// start boundary for NOT IN. The first such boundary is NULL, which
+		// excludes NULL from all spans (x NOT IN (...) is NULL when x is NULL).
+		key := constraint.MakeKey(tree.DNull)
 
 		var spans constraint.Spans
 		spans.Alloc(len(els))
@@ -86,8 +94,25 @@ func (cb *constraintsBuilder) buildSingleColumnConstraint(
 				// Ignore NULLs - they can't match any values
 				continue
 			}
-			key := constraint.MakeKey(datum)
-			sp.Init(key, includeBoundary, key, includeBoundary)
+			lastKey := key
+			key = constraint.MakeKey(datum)
+			if op == opt.InOp {
+				sp.Init(key, includeBoundary, key, includeBoundary)
+			} else {
+				sp.Init(lastKey, excludeBoundary, key, excludeBoundary)
+				if sp.EndKey().IsNextKey(&keyCtx, sp.StartKey()) {
+					// Since the boundaries are exclusive, this is an empty span.
+					continue
+				}
+				sp.PreferInclusive(&keyCtx)
+			}
+			spans.Append(&sp)
+		}
+		if op == opt.NotInOp {
+			// NOT IN requires an end span, starting from the last value with no end
+			// boundary.
+			sp.Init(key, excludeBoundary, constraint.EmptyKey, includeBoundary)
+			sp.PreferInclusive(&keyCtx)
 			spans.Append(&sp)
 		}
 		var c constraint.Constraint

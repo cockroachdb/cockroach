@@ -568,6 +568,61 @@ a IN (1, 2)
 ----
 false
 
+# NOT IN filters
+
+predtest vars=(a int)
+a NOT IN (1, 2, 3)
+=>
+a NOT IN (1, 2, 3)
+----
+true
+└── remaining filters: none
+
+predtest vars=(a int)
+a NOT IN (1, 2)
+=>
+a NOT IN (1, 2, 3)
+----
+false
+
+predtest vars=(a int)
+a NOT IN (1, 2, 3)
+=>
+a NOT IN (1, 2)
+----
+true
+└── remaining filters: a NOT IN (1, 2, 3)
+
+predtest vars=(a int)
+a NOT IN (1, 2, 3)
+=>
+a > 0
+----
+false
+
+predtest vars=(a int)
+a NOT IN (1, 2, 3)
+=>
+a IS NOT NULL
+----
+true
+└── remaining filters: a NOT IN (1, 2, 3)
+
+predtest vars=(a int)
+a NOT IN (1, 2, 3)
+=>
+a IN (4, 5)
+----
+false
+
+predtest vars=(a int)
+a IN (4, 5)
+=>
+a NOT IN (1, 2, 3)
+----
+true
+└── remaining filters: a IN (4, 5)
+
 # Tuple filters
 
 predtest vars=(a int, b int)
