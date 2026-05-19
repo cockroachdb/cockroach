@@ -134,7 +134,20 @@ func (b *Builder) buildPlaceholder(
 	ctx *buildScalarCtx, scalar opt.ScalarExpr,
 ) (tree.TypedExpr, error) {
 	if b.evalCtx != nil && b.evalCtx.Placeholders != nil {
-		return eval.Expr(b.ctx, b.evalCtx, scalar.Private().(*tree.Placeholder))
+		d, err := eval.Expr(b.ctx, b.evalCtx, scalar.Private().(*tree.Placeholder))
+		if err != nil {
+			return nil, err
+		}
+		if d == tree.DNull {
+			// When a placeholder evaluates to NULL, the result is tree.DNull
+			// which has type Unknown. We must retype it to the placeholder's
+			// declared type so that downstream operators see the correct type.
+			retypedNull, ok := eval.ReType(tree.DNull, scalar.DataType())
+			if ok {
+				return retypedNull, nil
+			}
+		}
+		return d, nil
 	}
 	return b.buildTypedExpr(ctx, scalar)
 }
