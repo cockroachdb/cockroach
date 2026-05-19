@@ -217,8 +217,67 @@ subtest end
 
 subtest rename_to
 
-statement error pgcode 0A000 ALTER DOMAIN RENAME TO is not supported
-ALTER DOMAIN d RENAME TO d2
+statement ok
+CREATE DOMAIN d_rename AS INT DEFAULT 10
+
+statement ok
+ALTER DOMAIN d_rename RENAME TO d_renamed
+
+query T
+SELECT 1::d_renamed
+----
+1
+
+# The old name no longer exist.
+statement error pgcode 42704 type "d_rename" does not exist
+SELECT 1::d_rename
+
+# The implicit array type is also renamed.
+query TT
+SELECT typname, nspname FROM pg_type JOIN pg_namespace ON typnamespace = pg_namespace.oid
+WHERE typname IN ('d_renamed', '_d_renamed') ORDER BY typname
+----
+_d_renamed  public
+d_renamed   public
+
+# Renaming to the same name is an error.
+statement error pgcode 42710 type "test.public.d_renamed" already exists
+ALTER DOMAIN d_renamed RENAME TO d_renamed
+
+# Renaming to a name that already exists fails.
+statement ok
+CREATE DOMAIN d_conflict AS TEXT
+
+statement error pgcode 42710 type "test.public.d_conflict" already exists
+ALTER DOMAIN d_renamed RENAME TO d_conflict
+
+# Renaming to a name that collides with a table fails.
+statement ok
+CREATE TABLE t_conflict (a INT)
+
+statement error pgcode 42P07 relation "test.public.t_conflict" already exists
+ALTER DOMAIN d_renamed RENAME TO t_conflict
+
+# A table referencing the domain by ID should still work after rename.
+statement ok
+CREATE DOMAIN d_ref_rename AS INT DEFAULT 42;
+CREATE TABLE t_dref2 (c d_ref_rename);
+INSERT INTO t_dref2 VALUES (1)
+
+statement ok
+ALTER DOMAIN d_ref_rename RENAME TO d_ref_renamed
+
+query T
+SELECT c FROM t_dref2
+----
+1
+
+statement ok
+DROP TABLE t_dref2;
+DROP DOMAIN d_ref_renamed;
+DROP DOMAIN d_renamed;
+DROP DOMAIN d_conflict;
+DROP TABLE t_conflict
 
 subtest end
 
