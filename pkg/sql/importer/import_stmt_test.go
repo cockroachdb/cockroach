@@ -1494,6 +1494,12 @@ func setupTestImportCSVStmt(
 
 	sqlDB = sqlutils.MakeSQLRunner(conn)
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
+	// Disable row count validation to avoid blocking INSPECT jobs that can
+	// exhaust the test timeout when the metamorphic default picks 'sync'.
+	ctx := context.Background()
+	for i := 0; i < nodes; i++ {
+		importRowCountValidation.Override(ctx, &tc.Server(i).ClusterSettings().SV, ImportRowCountValidationOff)
+	}
 
 	testFiles = makeCSVData(t, numFiles, rowsPerFile, nodes, rowsPerRaceFile)
 	if util.RaceEnabled {
