@@ -207,7 +207,18 @@ func (d *dev) crossBuild(
 		}
 	}
 
-	dockerArgs, err := d.getDockerRunArgs(ctx, volume, false, dockerArgs)
+	// The credential helper at build/bazelutil/credential-helper, wired into
+	// .bazelrc, authenticates Bazel against the private cockroach-godeps GCS
+	// bucket. Its "local" fallback shells out to `roachdev`, which is not
+	// installed inside the builder image, so we must mint the token on the
+	// host and forward it via the environment. See d6dcf8a4b3.
+	token, err := d.getBazelStorageAccessToken(ctx)
+	if err != nil {
+		return err
+	}
+	dockerArgs = append(dockerArgs, "-e", "BAZEL_STORAGE_ACCESS_TOKEN="+token)
+
+	dockerArgs, err = d.getDockerRunArgs(ctx, volume, false, dockerArgs)
 	if err != nil {
 		return err
 	}
@@ -260,6 +271,27 @@ func (d *dev) crossBuild(
 	}
 	_, err = d.exec.CommandContextWithInput(ctx, script.String(), "docker", dockerArgs...)
 	return err
+}
+
+// getBazelStorageAccessToken returns a GCP access token suitable for use
+// as $BAZEL_STORAGE_ACCESS_TOKEN. If the variable is already set in the
+// environment (as it is in CI, where build/github/set-bazel-storage-access-token.sh
+// mints it), that value is returned unchanged. Otherwise the token is
+// fetched via `roachdev gcp token`, which serves a daemon-cached
+// `gcloud auth application-default print-access-token`.
+func (d *dev) getBazelStorageAccessToken(ctx context.Context) (string, error) {
+	if token := d.os.Getenv("BAZEL_STORAGE_ACCESS_TOKEN"); token != "" {
+		return token, nil
+	}
+	out, err := d.exec.CommandContextSilent(ctx, "roachdev", "gcp", "token")
+	if err != nil {
+		return "", fmt.Errorf("could not mint BAZEL_STORAGE_ACCESS_TOKEN via `roachdev gcp token` (%w)", err)
+	}
+	token := strings.TrimSpace(string(out))
+	if token == "" {
+		return "", errors.New("`roachdev gcp token` returned an empty token")
+	}
+	return token, nil
 }
 
 func (d *dev) stageArtifacts(
