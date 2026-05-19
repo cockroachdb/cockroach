@@ -69,7 +69,7 @@ func registerSingleNodeIndexBackfill(r registry.Registry) {
 			Timeout:          12 * time.Hour,
 			Benchmark:        true,
 			CompatibleClouds: registry.OnlyGCE,
-			Suites:           registry.Suites(registry.Nightly),
+			Suites:           registry.Suites(registry.Weekly),
 			Cluster: r.MakeClusterSpec(
 				2, // 1 CRDB node + 1 workload node
 				// 16vCPUs so that CPU is not the bottleneck.
