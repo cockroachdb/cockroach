@@ -100,6 +100,11 @@ message EvalContext {
   // represents. Used by the ASH sampler to choose the right encoding.
   optional uint32 workload_type = 19 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "WorkloadType"];
+  // EnrichmentID is the per-execution attribute cache key. Used by
+  // ASH sampling to resolve user/database/query/txn_id via the
+  // ExecutionAttributes RPC against the gateway node.
+  optional uint64 enrichment_id = 20 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "EnrichmentID"];
 }
 
 message SimpleResponse {

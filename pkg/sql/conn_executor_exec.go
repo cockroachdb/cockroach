@@ -2975,6 +2975,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			ctx, cpuProvider, planner.extendedEvalCtx.Codec.TenantID, planner.txn, true, /* atGateway */
 			planner.extendedEvalCtx.WorkloadID,
 			planner.extendedEvalCtx.AppNameID,
+			planner.extendedEvalCtx.EnrichmentID,
 			roachpb.NodeID(planner.extendedEvalCtx.NodeID.SQLInstanceID()),
 		)
 		if err != nil {

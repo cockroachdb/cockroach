@@ -161,6 +161,15 @@ func (o *Outbox) appNameID() uint64 {
 	return 0
 }
 
+// enrichmentID returns the EnrichmentID from the flow context's EvalCtx, or
+// 0 if EvalCtx is nil (which happens in tests).
+func (o *Outbox) enrichmentID() uint64 {
+	if o.flowCtx != nil && o.flowCtx.EvalCtx != nil {
+		return o.flowCtx.EvalCtx.EnrichmentID
+	}
+	return 0
+}
+
 // gatewayNodeID returns the GatewayNodeID derived from the flow
 // context's NodeID, or 0 if the flow context or NodeID is nil (which
 // happens in tests).
@@ -333,6 +342,7 @@ func (o *Outbox) sendBatches(
 					ash.WorkloadInfo{
 						WorkloadID:    o.workloadID(),
 						AppNameID:     o.appNameID(),
+						EnrichmentID:  o.enrichmentID(),
 						GatewayNodeID: o.gatewayNodeID(),
 						WorkloadType:  o.workloadType(),
 					},
@@ -383,6 +393,7 @@ func (o *Outbox) sendBatches(
 				ash.WorkloadInfo{
 					WorkloadID:    o.workloadID(),
 					AppNameID:     o.appNameID(),
+					EnrichmentID:  o.enrichmentID(),
 					GatewayNodeID: o.gatewayNodeID(),
 					WorkloadType:  o.workloadType(),
 				},

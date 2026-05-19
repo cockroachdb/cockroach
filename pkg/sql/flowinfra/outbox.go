@@ -181,6 +181,7 @@ func (m *Outbox) flush(ctx context.Context) error {
 			ash.WorkloadInfo{
 				WorkloadID:    m.flowCtx.EvalCtx.WorkloadID,
 				AppNameID:     m.flowCtx.EvalCtx.AppNameID,
+				EnrichmentID:  m.flowCtx.EvalCtx.EnrichmentID,
 				GatewayNodeID: roachpb.NodeID(m.flowCtx.NodeID.SQLInstanceID()),
 				WorkloadType:  m.flowCtx.EvalCtx.WorkloadType,
 			},

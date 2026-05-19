@@ -399,6 +399,11 @@ type Context struct {
 	// enrich samples with more workload context.
 	AppNameID uint64
 
+	// EnrichmentID is the per-execution attribute cache key for ASH
+	// enrichment. Populated at statement entry on the gateway; carried
+	// through DistSQL setup so remote nodes can resolve attrs via RPC.
+	EnrichmentID uint64
+
 	// WorkloadType distinguishes the kind of workload that WorkloadID
 	// represents (statement fingerprint, job ID, system task).
 	WorkloadType workloadid.WorkloadType

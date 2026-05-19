@@ -280,7 +280,7 @@ func (ds *ServerImpl) setupFlow(
 		leafTxn.SetWorkloadInfo(
 			req.EvalContext.WorkloadID,
 			req.EvalContext.AppNameID,
-			0, /* enrichmentID */
+			req.EvalContext.EnrichmentID,
 			workloadid.WorkloadType(req.EvalContext.WorkloadType),
 		)
 		return leafTxn, nil
@@ -389,6 +389,7 @@ func (ds *ServerImpl) setupFlow(
 		evalCtx.TestingKnobs.ForceProductionValues = req.EvalContext.TestingKnobsForceProductionValues
 		evalCtx.WorkloadID = req.EvalContext.WorkloadID
 		evalCtx.AppNameID = req.EvalContext.AppNameID
+		evalCtx.EnrichmentID = req.EvalContext.EnrichmentID
 		evalCtx.WorkloadType = workloadid.WorkloadType(req.EvalContext.WorkloadType)
 
 		// In DistSQL flows, we eagerly store the app name on remote nodes to reduce
@@ -413,6 +414,7 @@ func (ds *ServerImpl) setupFlow(
 				ctx, ds.SQLCPUProvider, evalCtx.Codec.TenantID, evalCtx.Txn, false, /* atGateway */
 				evalCtx.WorkloadID,
 				evalCtx.AppNameID,
+				evalCtx.EnrichmentID,
 				roachpb.NodeID(ds.ServerConfig.NodeID.SQLInstanceID()),
 			)
 			if err != nil {

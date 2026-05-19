@@ -302,6 +302,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 		p.extendedEvalCtx.Codec.TenantID, ash.WorkloadInfo{
 			WorkloadID:    p.extendedEvalCtx.WorkloadID,
 			AppNameID:     p.extendedEvalCtx.AppNameID,
+			EnrichmentID:  p.extendedEvalCtx.EnrichmentID,
 			GatewayNodeID: roachpb.NodeID(p.extendedEvalCtx.NodeID.SQLInstanceID()),
 			WorkloadType:  p.extendedEvalCtx.WorkloadType,
 		},

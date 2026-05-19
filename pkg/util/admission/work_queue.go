@@ -225,6 +225,9 @@ type WorkInfo struct {
 	WorkloadID uint64
 	// AppNameID is the hash of the application name. Used for ASH sampling.
 	AppNameID uint64
+	// EnrichmentID is the per-execution attribute cache key. Used for
+	// ASH sampling.
+	EnrichmentID uint64
 	// GatewayNodeID is the node that initiated the workload. Used for ASH
 	// sampling.
 	GatewayNodeID roachpb.NodeID
@@ -1025,6 +1028,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		info.TenantID, ash.WorkloadInfo{
 			WorkloadID:    info.WorkloadID,
 			AppNameID:     info.AppNameID,
+			EnrichmentID:  info.EnrichmentID,
 			GatewayNodeID: info.GatewayNodeID,
 			WorkloadType:  info.WorkloadType,
 		},

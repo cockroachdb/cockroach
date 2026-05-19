@@ -341,6 +341,7 @@ func (i *Inbox) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 			ash.WorkloadInfo{
 				WorkloadID:    i.admissionInfo.WorkloadID,
 				AppNameID:     i.admissionInfo.AppNameID,
+				EnrichmentID:  i.admissionInfo.EnrichmentID,
 				GatewayNodeID: i.admissionInfo.GatewayNodeID,
 				WorkloadType:  i.admissionInfo.WorkloadType,
 			},

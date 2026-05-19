@@ -139,6 +139,7 @@ func processInboundStreamHelper(
 				ash.WorkloadInfo{
 					WorkloadID:    admissionInfo.WorkloadID,
 					AppNameID:     admissionInfo.AppNameID,
+					EnrichmentID:  admissionInfo.EnrichmentID,
 					GatewayNodeID: admissionInfo.GatewayNodeID,
 					WorkloadType:  admissionInfo.WorkloadType,
 				},
