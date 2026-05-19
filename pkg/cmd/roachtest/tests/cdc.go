@@ -128,10 +128,14 @@ type cdcTester struct {
 
 // startStatsCollection sets the start point of the stats collection window
 // and returns a function which should be called at the end of the test to dump a
-// stats.json file to the artifacts directory.
-func (ct *cdcTester) startStatsCollection() func() {
+// stats.json file to the artifacts directory. If no aggregations are supplied,
+// a default set covering SQL latency, changefeed throughput, and CPU is used.
+func (ct *cdcTester) startStatsCollection(aggs ...clusterstats.AggQuery) func() {
 	if ct.promCfg == nil {
 		ct.t.Fatalf("prometheus configuration is nil")
+	}
+	if len(aggs) == 0 {
+		aggs = []clusterstats.AggQuery{sqlServiceLatencyAgg, changefeedThroughputAgg, cpuUsageAgg}
 	}
 	promClient, err := clusterstats.SetupCollectorPromClient(ct.ctx, ct.cluster, ct.t.L(), ct.promCfg)
 	if err != nil {
@@ -145,7 +149,7 @@ func (ct *cdcTester) startStatsCollection() func() {
 		_, err := statsCollector.Exporter().Export(ct.ctx, ct.cluster, ct.t, false, /* dryRun */
 			startTime,
 			endTime,
-			[]clusterstats.AggQuery{sqlServiceLatencyAgg, changefeedThroughputAgg, cpuUsageAgg},
+			aggs,
 			func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
 				// TODO(jayant): update this metric to be more accurate.
 				// It may be worth plugging in real latency values from the latency
@@ -3564,6 +3568,105 @@ CONFIGURE ZONE USING
 				},
 			})
 		}
+	}
+
+	// cdc/linger/* are roachperf benchmarks for the v2 kafka sink's
+	// time-based flush trigger (batchingSink.minFlushFrequency, fed from
+	// kafka_sink_config.Flush.Frequency at sink_kafka_v2.go:430). Each variant
+	// runs the same kv workload with a 10-minute ramp; differing only in the
+	// configured Flush.Frequency, the pair traces both ends of the linger
+	// tradeoff so they can be overlaid in roachperf.
+	for _, flushFreq := range []string{"10ms", "5s"} {
+		flushFreq := flushFreq
+		r.Add(registry.TestSpec{
+			Name:             fmt.Sprintf("cdc/linger/%s", flushFreq),
+			Owner:            registry.OwnerCDC,
+			Benchmark:        true,
+			Cluster:          r.MakeClusterSpec(6, spec.CPU(16), spec.WorkloadNode()),
+			Leases:           registry.MetamorphicLeases,
+			CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
+			Suites:           registry.Suites(registry.Weekly),
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				runCDCLingerBench(ctx, t, c, flushFreq)
+			},
+		})
+	}
+}
+
+// runCDCLingerBench runs a kv workload that ramps from ~0 to system
+// saturation while a v2 Kafka changefeed is active. The v2 sink's
+// minFlushFrequency is wired directly from kafka_sink_config.Flush.Frequency
+// (sink_kafka_v2.go:430), so varying that string exposes the linger
+// tradeoff: a tight cadence (e.g. "10ms") keeps commit latency low at the
+// low end of the ramp but caps achievable throughput; a slack cadence (e.g.
+// "5s") saturates higher throughput but pays latency at low load.
+//
+// Server-side changefeed.commit_latency (p50, p99) and the rate of
+// changefeed.emitted_messages are exported to roachperf as per-tick
+// time-series, so each variant traces a latency-vs-throughput curve.
+func runCDCLingerBench(ctx context.Context, t test.Test, c cluster.Cluster, flushFrequency string) {
+	// withNumSinkNodes(1) splits the workload+sink node into two, isolating
+	// the kafka broker from the workload runner so neither poisons the other's
+	// perf signal. With 6 cluster nodes: 4 crdb + 1 kafka + 1 workload.
+	ct := newCDCTester(ctx, t, c, withNumSinkNodes(1))
+	defer ct.Close()
+
+	conn := ct.DB()
+
+	t.Status("initializing kv workload")
+	c.Run(ctx, option.WithNodes(ct.workloadNode), fmt.Sprintf(
+		`./cockroach workload init kv --splits 100 {pgurl:%d}`, ct.crdbNodes[0]))
+	require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t.L(), conn))
+
+	// Only the two options the experiment actually depends on are set; all
+	// others (format, min_checkpoint_frequency, resolved, envelope,
+	// compression, count-based flush triggers, new_kafka_sink.enabled) are
+	// left at default so the test reads plainly and so the only knob
+	// differing between variants is Flush.Frequency.
+	feed := ct.newChangefeed(feedArgs{
+		sinkType: kafkaSink,
+		targets:  []string{"kv.kv"},
+		opts: map[string]string{
+			"initial_scan": "'no'",
+			"kafka_sink_config": fmt.Sprintf(
+				`'{"Flush": {"Frequency": "%s"}}'`, flushFrequency),
+		},
+	})
+	_ = feed
+
+	// startStatsCollection records the window start now; the deferred closure
+	// pulls per-tick prometheus series for the configured aggregations at
+	// teardown and writes a stats.json roachperf consumes.
+	doneStats := ct.startStatsCollection(
+		changefeedCommitLatencyP50Agg,
+		changefeedCommitLatencyP99Agg,
+		changefeedEmittedMessagesRateAgg,
+		cpuUsageAgg,
+	)
+	defer doneStats()
+
+	// --ramp staggers worker startup over 10m (workload/cli/run.go:580-590),
+	// so concurrency — and therefore offered load — grows roughly linearly
+	// from ~0 to N until the system saturates. The 2-minute tail past the
+	// ramp gives the run a steady-state segment at peak. --read-percent=0
+	// makes every op a write so every op produces a changefeed event. We
+	// intentionally do not pass --histograms: workload-side per-tick
+	// snapshots are suppressed during the ramp (workload/cli/run.go:636), so
+	// they would silently drop the data we care about. All time-series come
+	// from prometheus.
+	concurrency := len(ct.crdbNodes) * 64
+	const (
+		ramp     = 10 * time.Minute
+		duration = 12 * time.Minute
+	)
+	t.Status("running kv workload with ramp")
+	if err := c.RunE(ctx, option.WithNodes(ct.workloadNode), fmt.Sprintf(
+		`./cockroach workload run kv `+
+			`--ramp %s --duration %s --read-percent 0 --concurrency %d `+
+			`{pgurl:%d-%d}`,
+		ramp, duration, concurrency,
+		ct.crdbNodes[0], ct.crdbNodes[len(ct.crdbNodes)-1])); err != nil {
+		t.Fatal(err)
 	}
 }
 

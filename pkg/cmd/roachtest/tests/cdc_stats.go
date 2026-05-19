@@ -34,4 +34,30 @@ var (
 		Query: "avg(sys_cpu_combined_percent_normalized) * 100",
 		Tag:   "CPU Utilization (%)",
 	}
+
+	// changefeedCommitLatency is the changefeed.commit_latency prometheus
+	// histogram (nanoseconds). It measures the gap between an event's MVCC
+	// timestamp and downstream sink acknowledgement.
+	changefeedCommitLatency = clusterstats.ClusterStat{LabelName: "node", Query: "changefeed_commit_latency_bucket"}
+	// changefeedCommitLatencyP50Agg is the cluster-wide p50 commit latency in ms.
+	changefeedCommitLatencyP50Agg = clusterstats.AggQuery{
+		Stat:  changefeedCommitLatency,
+		Query: "histogram_quantile(0.50, sum by(le) (rate(changefeed_commit_latency_bucket[30s]))) / (1000*1000)",
+		Tag:   "Commit Latency P50 (ms)",
+	}
+	// changefeedCommitLatencyP99Agg is the cluster-wide p99 commit latency in ms.
+	changefeedCommitLatencyP99Agg = clusterstats.AggQuery{
+		Stat:  changefeedCommitLatency,
+		Query: "histogram_quantile(0.99, sum by(le) (rate(changefeed_commit_latency_bucket[30s]))) / (1000*1000)",
+		Tag:   "Commit Latency P99 (ms)",
+	}
+
+	// changefeedEmittedMessages is the changefeed.emitted_messages prometheus counter.
+	changefeedEmittedMessages = clusterstats.ClusterStat{LabelName: "node", Query: "changefeed_emitted_messages"}
+	// changefeedEmittedMessagesRateAgg is the cluster-wide emitted rows per second.
+	changefeedEmittedMessagesRateAgg = clusterstats.AggQuery{
+		Stat:  changefeedEmittedMessages,
+		Query: "sum(rate(changefeed_emitted_messages[30s]))",
+		Tag:   "Emitted Rows/sec",
+	}
 )
