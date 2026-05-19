@@ -6,13 +6,14 @@
 package ash
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
 
-func TestExecutionCache_PutGet(t *testing.T) {
+func TestExecutionCachePutGet(t *testing.T) {
 	c := NewExecutionCache(10)
 	txnID := uuid.MakeV4()
 	attrs := ExecutionAttrs{
@@ -29,19 +30,19 @@ func TestExecutionCache_PutGet(t *testing.T) {
 	require.Equal(t, attrs, got)
 }
 
-func TestExecutionCache_GetMissReturnsZeroValue(t *testing.T) {
+func TestExecutionCacheGetMiss(t *testing.T) {
 	c := NewExecutionCache(10)
 	_, ok := c.Get(99)
 	require.False(t, ok)
 }
 
-func TestExecutionCache_PutZeroLimitReturnsZero(t *testing.T) {
+func TestExecutionCachePutZeroLimit(t *testing.T) {
 	c := NewExecutionCache(0)
 	id := c.Put(ExecutionAttrs{User: "alice"})
 	require.Zero(t, id)
 }
 
-func TestExecutionCache_FIFOEviction(t *testing.T) {
+func TestExecutionCacheFIFOEviction(t *testing.T) {
 	c := NewExecutionCache(3)
 	ids := make([]uint64, 0, 5)
 	for i := 0; i < 5; i++ {
@@ -59,7 +60,7 @@ func TestExecutionCache_FIFOEviction(t *testing.T) {
 	}
 }
 
-func TestExecutionCache_GetMappingsBatch(t *testing.T) {
+func TestExecutionCacheGetMappings(t *testing.T) {
 	c := NewExecutionCache(10)
 	id1 := c.Put(ExecutionAttrs{User: "alice"})
 	id2 := c.Put(ExecutionAttrs{User: "bob"})
@@ -67,4 +68,36 @@ func TestExecutionCache_GetMappingsBatch(t *testing.T) {
 	require.Len(t, mappings, 2)
 	require.Equal(t, "alice", mappings[id1].User)
 	require.Equal(t, "bob", mappings[id2].User)
+}
+
+func TestExecutionCacheNoEvictionAtLimit(t *testing.T) {
+	c := NewExecutionCache(3)
+	ids := make([]uint64, 0, 3)
+	for i := 0; i < 3; i++ {
+		ids = append(ids, c.Put(ExecutionAttrs{User: "u"}))
+	}
+	for _, id := range ids {
+		_, ok := c.Get(id)
+		require.True(t, ok, "id %d should be present (at-limit, no eviction)", id)
+	}
+}
+
+func TestExecutionCacheConcurrent(t *testing.T) {
+	const goroutines = 8
+	const opsPerGoroutine = 200
+	c := NewExecutionCache(1000)
+
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for g := 0; g < goroutines; g++ {
+		go func() {
+			defer wg.Done()
+			for i := 0; i < opsPerGoroutine; i++ {
+				id := c.Put(ExecutionAttrs{User: "u"})
+				_, _ = c.Get(id)
+				_ = c.GetMappings([]uint64{id, id + 1})
+			}
+		}()
+	}
+	wg.Wait()
 }
