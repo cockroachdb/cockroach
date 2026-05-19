@@ -139,6 +139,11 @@ func (t *TestTimeSource) Advance() {
 	t.counter++
 }
 
+// AdvanceBy advances the current time according to t by the given duration.
+func (t *TestTimeSource) AdvanceBy(d time.Duration) {
+	t.counter += int64(d)
+}
+
 // Elapsed returns how much time has passed since t has been created. Note that
 // it is equal to the number of advances in nanoseconds.
 func (t *TestTimeSource) Elapsed() time.Duration {
