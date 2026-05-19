@@ -15,10 +15,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -33,66 +35,69 @@ func TestTxnModePauseOnConflict(t *testing.T) {
 	skip.UnderDeadlock(t)
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
+	testutils.RunValues(t, "nodes", []int{1, 3}, func(t *testing.T, numNodes int) {
+		ctx := context.Background()
+		cluster := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(134857),
+				Knobs: base.TestingKnobs{
+					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+				},
+			},
+		})
+		defer cluster.Stopper().Stop(ctx)
 
-	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(134857),
-		Knobs: base.TestingKnobs{
-			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-		},
+		s := cluster.Server(0).ApplicationLayer()
+		runner := sqlutils.MakeSQLRunner(cluster.Conns[0])
+
+		sysRunner := sqlutils.MakeSQLRunner(cluster.SystemLayer(0).SQLConn(t))
+		ldrtestutils.ApplyLowLatencyReplicationSettings(t, sysRunner, runner)
+
+		runner.Exec(t, "CREATE DATABASE source_db")
+		runner.Exec(t, "CREATE DATABASE dest_db")
+
+		sourceDB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("source_db")))
+		destDB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("dest_db")))
+
+		for _, db := range []*sqlutils.SQLRunner{sourceDB, destDB} {
+			db.Exec(t, "CREATE TABLE tab (pk INT PRIMARY KEY, val STRING NOT NULL)")
+			db.Exec(t, "CREATE UNIQUE INDEX ON tab(val)")
+		}
+
+		destDB.Exec(t, "INSERT INTO tab VALUES (100, 'collide')")
+
+		sourceURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("source_db"))
+
+		var jobID jobspb.JobID
+		destDB.QueryRow(t,
+			"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = 'transactional'",
+			sourceURL.String(),
+		).Scan(&jobID)
+
+		sourceDB.Exec(t, "INSERT INTO tab VALUES (1, 'collide')")
+
+		jobutils.WaitForJobToPause(t, destDB, jobID)
+
+		var runningStatus string
+		destDB.QueryRow(t, "SELECT running_status FROM [SHOW JOBS] WHERE job_id = $1", jobID).Scan(&runningStatus)
+		require.Contains(t, runningStatus, "replication error")
+		require.Contains(t, runningStatus, "duplicate key value violates unique constraint")
+
+		// The conflicting source row at pk=1 must not have been applied.
+		destDB.CheckQueryResults(t, "SELECT pk, val FROM tab ORDER BY pk", [][]string{
+			{"100", "collide"},
+		})
+
+		// Check that the replicated time equals the MVCC timestamp of the
+		// conflicting source insert minus one logical tick.
+		var conflictMVCCDec apd.Decimal
+		sourceDB.QueryRow(t, "SELECT crdb_internal_mvcc_timestamp FROM tab WHERE pk = 1").Scan(&conflictMVCCDec)
+		conflictMVCC, err := hlc.DecimalToHLC(&conflictMVCCDec)
+		require.NoError(t, err)
+		replicatedTime, err := ldrtestutils.GetReplicatedTime(t, destDB, jobID)
+		require.NoError(t, err)
+		require.Equal(t, conflictMVCC.Prev(), replicatedTime)
 	})
-	defer srv.Stopper().Stop(ctx)
-
-	s := srv.ApplicationLayer()
-	runner := sqlutils.MakeSQLRunner(conn)
-
-	sysRunner := sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t))
-	ldrtestutils.ApplyLowLatencyReplicationSettings(t, sysRunner, runner)
-
-	runner.Exec(t, "CREATE DATABASE source_db")
-	runner.Exec(t, "CREATE DATABASE dest_db")
-
-	sourceDB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("source_db")))
-	destDB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("dest_db")))
-
-	for _, db := range []*sqlutils.SQLRunner{sourceDB, destDB} {
-		db.Exec(t, "CREATE TABLE tab (pk INT PRIMARY KEY, val STRING NOT NULL)")
-		db.Exec(t, "CREATE UNIQUE INDEX ON tab(val)")
-	}
-
-	destDB.Exec(t, "INSERT INTO tab VALUES (100, 'collide')")
-
-	sourceURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("source_db"))
-
-	var jobID jobspb.JobID
-	destDB.QueryRow(t,
-		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = 'transactional'",
-		sourceURL.String(),
-	).Scan(&jobID)
-
-	sourceDB.Exec(t, "INSERT INTO tab VALUES (1, 'collide')")
-
-	jobutils.WaitForJobToPause(t, destDB, jobID)
-
-	var runningStatus string
-	destDB.QueryRow(t, "SELECT running_status FROM [SHOW JOBS] WHERE job_id = $1", jobID).Scan(&runningStatus)
-	require.Contains(t, runningStatus, "replication error")
-	require.Contains(t, runningStatus, "duplicate key value violates unique constraint")
-
-	// The conflicting source row at pk=1 must not have been applied.
-	destDB.CheckQueryResults(t, "SELECT pk, val FROM tab ORDER BY pk", [][]string{
-		{"100", "collide"},
-	})
-
-	// Check that the replicated time equals the MVCC timestamp of the
-	// conflicting source insert minus one logical tick.
-	var conflictMVCCDec apd.Decimal
-	sourceDB.QueryRow(t, "SELECT crdb_internal_mvcc_timestamp FROM tab WHERE pk = 1").Scan(&conflictMVCCDec)
-	conflictMVCC, err := hlc.DecimalToHLC(&conflictMVCCDec)
-	require.NoError(t, err)
-	replicatedTime, err := ldrtestutils.GetReplicatedTime(t, destDB, jobID)
-	require.NoError(t, err)
-	require.Equal(t, conflictMVCC.Prev(), replicatedTime)
 }
 
 // TestTxnModePauseOnEarliestConflict verifies that when multiple replicated
