@@ -52,7 +52,7 @@ type artifactUploader func(ctx context.Context, bucket, object, filePath string)
 // archive is uploaded to GCS instead, and the local artifacts.zip is replaced
 // with a small marker archive that contains the artifact's GCS URI.
 func publishTeamCityArtifactsWithFailover(
-	ctx context.Context, t *testImpl, l *logger.Logger, stdout io.Writer,
+	ctx context.Context, t *testImpl, runnerL *logger.Logger, stdout io.Writer,
 ) {
 	publishTeamCityArtifacts := func() {
 		// Tell TeamCity to collect this test's artifacts now. The TC job
@@ -61,18 +61,18 @@ func publishTeamCityArtifactsWithFailover(
 		// finished are available in the UI even before the job as a whole
 		// has completed. We're using the exact same destination to avoid
 		// duplication of any of the artifacts.
-		shout(ctx, l, stdout, "##teamcity[publishArtifacts '%s']", t.artifactsSpec)
+		shout(ctx, runnerL, stdout, "##teamcity[publishArtifacts '%s']", t.artifactsSpec)
 	}
 
 	artifactsZipSizeBytes, err := artifactsZipSize(t)
 	if err != nil {
-		shout(ctx, l, stdout, "unable to check roachtest artifacts for failover: %s", err)
+		runnerL.PrintfCtx(ctx, "unable to check roachtest artifacts for failover for test %q: %s", t.Name(), err)
 	}
 	artifactFailoverMaxBytes, maxBytesErr := roachtestArtifactFailoverMaxBytes()
 	if maxBytesErr != nil {
-		shout(ctx, l, stdout,
-			"unable to parse roachtest artifact failover max bytes; using default %d bytes: %s",
-			teamCityMaxArtifactFileSizeBytes, maxBytesErr)
+		runnerL.PrintfCtx(ctx,
+			"unable to parse roachtest artifact failover max bytes for test %q; using default %d bytes: %s",
+			t.Name(), teamCityMaxArtifactFileSizeBytes, maxBytesErr)
 	}
 	if err != nil || artifactsZipSizeBytes < artifactFailoverMaxBytes {
 		// Publish the artifacts directory without failover.
@@ -80,30 +80,30 @@ func publishTeamCityArtifactsWithFailover(
 		return
 	}
 
-	shout(ctx, l, stdout,
-		"roachtest artifacts failover uploading oversized %s (%d bytes) to GCS bucket %s",
-		artifactsZipName, artifactsZipSizeBytes, roachtestArtifactFailoverBucket())
+	runnerL.PrintfCtx(ctx,
+		"roachtest artifacts failover uploading oversized %s (%d bytes) for test %q to GCS bucket %s",
+		artifactsZipName, artifactsZipSizeBytes, t.Name(), roachtestArtifactFailoverBucket())
 	uploadStart := timeutil.Now()
 	failover, err := failoverOversizedArtifactsZip(ctx, t, artifactsZipSizeBytes)
 	uploadDuration := timeutil.Since(uploadStart)
 	if err != nil {
-		shout(ctx, l, stdout,
-			"roachtest artifacts failover failed after %.2fs for oversized %s (%d bytes): %s; "+
+		runnerL.PrintfCtx(ctx,
+			"roachtest artifacts failover failed after %.2fs for oversized %s (%d bytes) for test %q: %s; "+
 				"skipping TeamCity artifact publish for %s to avoid exceeding the TeamCity artifact file size limit",
-			uploadDuration.Seconds(), artifactsZipName, failover.sizeBytes, err, t.artifactsSpec)
+			uploadDuration.Seconds(), artifactsZipName, failover.sizeBytes, t.Name(), err, t.artifactsSpec)
 		return
 	}
 	if err := replaceArtifactsZipWithFailoverMarker(t, failover); err != nil {
-		shout(ctx, l, stdout,
-			"roachtest artifacts failover uploaded oversized %s (%d bytes) to %s in %.2fs, but failed to replace the local zip with a marker archive: %s; "+
+		runnerL.PrintfCtx(ctx,
+			"roachtest artifacts failover uploaded oversized %s (%d bytes) for test %q to %s in %.2fs, but failed to replace the local zip with a marker archive: %s; "+
 				"skipping TeamCity artifact publish for %s to avoid exceeding the TeamCity artifact file size limit",
-			artifactsZipName, failover.sizeBytes, failover.gcsURI, uploadDuration.Seconds(), err, t.artifactsSpec)
+			artifactsZipName, failover.sizeBytes, t.Name(), failover.gcsURI, uploadDuration.Seconds(), err, t.artifactsSpec)
 		return
 	}
 
-	shout(ctx, l, stdout,
-		"roachtest artifacts failover uploaded oversized %s (%d bytes) to %s in %.2fs",
-		artifactsZipName, failover.sizeBytes, failover.gcsURI, uploadDuration.Seconds())
+	runnerL.PrintfCtx(ctx,
+		"roachtest artifacts failover uploaded oversized %s (%d bytes) for test %q to %s in %.2fs",
+		artifactsZipName, failover.sizeBytes, t.Name(), failover.gcsURI, uploadDuration.Seconds())
 	// Publish the artifacts directory with a small artifacts.zip marker
 	// archive pointing to the full archive in GCS.
 	publishTeamCityArtifacts()
