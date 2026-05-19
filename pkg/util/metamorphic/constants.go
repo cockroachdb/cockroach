@@ -11,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -229,6 +230,19 @@ func metamorphicEligible() bool {
 	}
 
 	if bazel.InTestWrapper() {
+		return false
+	}
+
+	// Skip when the binary is not a Go test binary. The `crdb_test` build tag
+	// is inherited by non-test binaries built from packages that transitively
+	// import this one — most notably the gomock reflect helpers that rules_go
+	// links and executes at build time to generate mock sources. Those
+	// processes have no reason to randomize constants, and their stderr is
+	// captured into bazel's stdout, producing many "INFO: From
+	// GoMockReflectExecOnlyGen ..." blocks of metamorphic preamble in CI
+	// logs. testing.Testing() is set by a linker-injected var in `go test`
+	// binaries and is safe to read from init().
+	if !testing.Testing() {
 		return false
 	}
 
