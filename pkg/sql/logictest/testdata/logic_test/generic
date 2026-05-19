@@ -838,3 +838,19 @@ statement ok
 DEALLOCATE ALL
 
 subtest end
+
+# Regression test for having an untyped NULL as the placeholder value (#153687).
+statement ok
+SET plan_cache_mode = force_generic_plan;
+
+statement ok
+CREATE TABLE t153687 (i INT);
+
+statement ok
+PREPARE p153687(INT) AS SELECT SUBSTRING('k', $1, 1) FROM t153687;
+
+query empty
+EXECUTE p153687(NULL);
+
+statement ok
+RESET plan_cache_mode;
