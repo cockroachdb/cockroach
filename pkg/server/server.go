@@ -1931,6 +1931,28 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		}
 		return resp.Mappings, nil
 	})
+	ash.SetGlobalEnrichmentResolver(func(
+		ctx context.Context, nodeID roachpb.NodeID, ids []uint64,
+	) (map[uint64]ash.ExecutionAttrs, error) {
+		client, err := s.status.dialNode(ctx, nodeID)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := client.ExecutionAttributes(ctx, &serverpb.ExecutionAttributesRequest{Ids: ids})
+		if err != nil {
+			return nil, err
+		}
+		result := make(map[uint64]ash.ExecutionAttrs, len(resp.Mappings))
+		for id, attr := range resp.Mappings {
+			result[id] = ash.ExecutionAttrs{
+				User:     attr.User,
+				Database: attr.Database,
+				Query:    attr.Query,
+				TxnID:    attr.TxnID,
+			}
+		}
+		return result, nil
+	})
 
 	// TODO(irfansharif): Now that we have our node ID, we should run another
 	// check here to make sure we've not been decommissioned away (if we're here

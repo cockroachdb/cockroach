@@ -908,6 +908,28 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 			}
 			return resp.Mappings, nil
 		})
+		ash.SetGlobalEnrichmentResolver(func(
+			ctx context.Context, nodeID roachpb.NodeID, ids []uint64,
+		) (map[uint64]ash.ExecutionAttrs, error) {
+			client, err := s.tenantStatus.dialNode(ctx, nodeID)
+			if err != nil {
+				return nil, err
+			}
+			resp, err := client.ExecutionAttributes(ctx, &serverpb.ExecutionAttributesRequest{Ids: ids})
+			if err != nil {
+				return nil, err
+			}
+			result := make(map[uint64]ash.ExecutionAttrs, len(resp.Mappings))
+			for id, attr := range resp.Mappings {
+				result[id] = ash.ExecutionAttrs{
+					User:     attr.User,
+					Database: attr.Database,
+					Query:    attr.Query,
+					TxnID:    attr.TxnID,
+				}
+			}
+			return result, nil
+		})
 	}
 
 	var apiInternalServer http.Handler

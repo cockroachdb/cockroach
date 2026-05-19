@@ -106,6 +106,15 @@ var LogTopN = settings.RegisterIntSetting(
 // contains entries for the subset that the remote node could resolve.
 type AppNameResolverFn func(ctx context.Context, nodeID roachpb.NodeID, ids []uint64) (map[uint64]string, error)
 
+// EnrichmentResolverFn fetches execution-attribute mappings from a
+// remote node. The sampler calls this when a sample has a non-zero
+// enrichment_id whose gateway is a remote node. Only the specified IDs
+// are requested; the returned map contains entries for the subset that
+// the remote node could resolve.
+type EnrichmentResolverFn func(
+	ctx context.Context, nodeID roachpb.NodeID, ids []uint64,
+) (map[uint64]ExecutionAttrs, error)
+
 // globalSampler is the process-wide ASH sampler singleton. It is
 // initialized once by InitGlobalSampler and read by GetSamples.
 var globalSampler atomic.Pointer[Sampler]
@@ -125,6 +134,9 @@ type pendingSample struct {
 	state         WorkState
 	workloadIDStr string
 	appName       string
+	// enrichment is populated by the enrichment-resolution pass.
+	// All fields are zero if resolution did not happen or failed.
+	enrichment ExecutionAttrs
 }
 
 // workloadKey groups samples for the periodic top-N summary.
@@ -151,6 +163,10 @@ type Sampler struct {
 	// resolver, when set, fetches app name mappings from remote nodes
 	// for work states whose app name could not be resolved locally.
 	resolver atomic.Pointer[AppNameResolverFn]
+	// enrichmentResolver, when set, fetches per-execution enrichment
+	// attributes from remote nodes for work states whose enrichment_id
+	// could not be resolved locally.
+	enrichmentResolver atomic.Pointer[EnrichmentResolverFn]
 	// pendingSamples is a reusable slice for collecting work state snapshots
 	// during rangeWorkStates. Reused across samples to avoid per-sample
 	// slice allocation.
@@ -191,6 +207,22 @@ func SetGlobalAppNameResolver(fn AppNameResolverFn) {
 		return
 	}
 	s.SetAppNameResolver(fn)
+}
+
+// SetEnrichmentResolver sets the callback used to fetch execution
+// attribute mappings from remote nodes when local resolution fails.
+func (s *Sampler) SetEnrichmentResolver(fn EnrichmentResolverFn) {
+	s.enrichmentResolver.Store(&fn)
+}
+
+// SetGlobalEnrichmentResolver sets the resolver on the global sampler.
+// This is a no-op if the global sampler has not been initialized.
+func SetGlobalEnrichmentResolver(fn EnrichmentResolverFn) {
+	s := globalSampler.Load()
+	if s == nil {
+		return
+	}
+	s.SetEnrichmentResolver(fn)
 }
 
 // start begins the background sampling loop. It must be called at most once.
@@ -299,6 +331,25 @@ func (s *Sampler) takeSample(ctx context.Context) {
 		s.resolveRemoteAppNames(ctx, unresolvedIndices)
 	}
 
+	// Resolve enrichment IDs to attributes. Same shape as app-name
+	// resolution: local cache first, then RPC to gateway nodes for
+	// anything that misses locally.
+	var unresolvedEnrichmentIndices []int
+	for i := range s.pendingSamples {
+		ps := &s.pendingSamples[i]
+		if ps.state.WorkloadInfo.EnrichmentID == 0 {
+			continue
+		}
+		if attrs, ok := GetExecution(nil, ps.state.WorkloadInfo.EnrichmentID); ok {
+			ps.enrichment = attrs
+			continue
+		}
+		unresolvedEnrichmentIndices = append(unresolvedEnrichmentIndices, i)
+	}
+	if len(unresolvedEnrichmentIndices) > 0 {
+		s.resolveRemoteEnrichment(ctx, unresolvedEnrichmentIndices)
+	}
+
 	// Emit samples.
 	for i := range s.pendingSamples {
 		ps := &s.pendingSamples[i]
@@ -309,6 +360,10 @@ func (s *Sampler) takeSample(ctx context.Context) {
 			WorkloadID:    ps.workloadIDStr,
 			WorkloadType:  ps.state.WorkloadInfo.WorkloadType.String(),
 			AppName:       ps.appName,
+			User:          ps.enrichment.User,
+			Database:      ps.enrichment.Database,
+			Query:         ps.enrichment.Query,
+			TxnID:         ps.enrichment.TxnID,
 			WorkEventType: ps.state.WorkEventType,
 			WorkEvent:     ps.state.WorkEvent,
 			GoroutineID:   ps.gid,
@@ -464,6 +519,69 @@ func (s *Sampler) resolveRemoteAppNames(ctx context.Context, unresolvedIndices [
 	for _, idx := range unresolvedIndices {
 		ps := &s.pendingSamples[idx]
 		ps.appName, _ = GetAppName(ps.state.WorkloadInfo.AppNameID)
+	}
+}
+
+// resolveRemoteEnrichment fetches execution-attribute mappings from
+// remote gateway nodes for samples whose enrichment_id could not be
+// resolved from the local cache. Mirrors resolveRemoteAppNames, with
+// two differences: (1) the resolved values are stored directly on
+// the pendingSample rather than back into the local cache, since the
+// execution cache is intentionally gateway-local; (2) failed
+// resolution is silent (the sample simply lacks enrichment).
+func (s *Sampler) resolveRemoteEnrichment(ctx context.Context, unresolvedIndices []int) {
+	resolverPtr := s.enrichmentResolver.Load()
+	if resolverPtr == nil {
+		return
+	}
+	resolver := *resolverPtr
+
+	// Group unresolved enrichment IDs by gateway node, skipping node
+	// ID 0 (unknown) and the sampler's own node.
+	type idSet = map[uint64]struct{}
+	gatewayIDs := make(map[roachpb.NodeID]idSet)
+	indicesByID := make(map[uint64][]int)
+	for _, idx := range unresolvedIndices {
+		ps := &s.pendingSamples[idx]
+		gw := ps.state.WorkloadInfo.GatewayNodeID
+		eid := ps.state.WorkloadInfo.EnrichmentID
+		if gw == 0 || gw == s.nodeID {
+			continue
+		}
+		ids, ok := gatewayIDs[gw]
+		if !ok {
+			ids = make(idSet)
+			gatewayIDs[gw] = ids
+		}
+		ids[eid] = struct{}{}
+		indicesByID[eid] = append(indicesByID[eid], idx)
+	}
+
+	for nodeID, ids := range gatewayIDs {
+		idSlice := make([]uint64, 0, len(ids))
+		for id := range ids {
+			idSlice = append(idSlice, id)
+		}
+		if err := timeutil.RunWithTimeout(
+			ctx, "ash-resolve-enrichment", 250*time.Millisecond,
+			func(resolveCtx context.Context) error {
+				mappings, err := resolver(resolveCtx, nodeID, idSlice)
+				if err != nil {
+					return err
+				}
+				for id, attrs := range mappings {
+					for _, idx := range indicesByID[id] {
+						s.pendingSamples[idx].enrichment = attrs
+					}
+				}
+				return nil
+			},
+		); err != nil {
+			log.Ops.Warningf(
+				ctx, "ASH: failed to resolve enrichment mappings from n%d: %v",
+				nodeID, err,
+			)
+		}
 	}
 }
 
