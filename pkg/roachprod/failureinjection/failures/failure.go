@@ -10,7 +10,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -65,12 +64,6 @@ type FailureMode interface {
 	WaitForFailureToRecover(ctx context.Context, l *logger.Logger, args FailureArgs) error
 }
 
-type diskDevice struct {
-	name  string
-	major int
-	minor int
-}
-
 // GenericFailure is a generic helper struct that FailureModes can embed to
 // provide commonly used functionality that doesn't differ between failure modes,
 // e.g. running remote commands on the cluster.
@@ -80,7 +73,6 @@ type GenericFailure struct {
 	// runTitle is the title to prefix command output with.
 	runTitle          string
 	networkInterfaces []string
-	diskDevice        diskDevice
 	connCache         []*gosql.DB
 	localCertsPath    string
 	replicationFactor int
@@ -204,47 +196,6 @@ func (f *GenericFailure) NetworkInterfaces(
 		}
 	}
 	return f.networkInterfaces, nil
-}
-
-func getDiskDevice(ctx context.Context, f *GenericFailure, l *logger.Logger) error {
-	if f.diskDevice.name == "" {
-		res, err := f.c.RunWithDetails(ctx, l, install.WithNodes(f.c.Nodes[:1]), "Get Disk Device", "lsblk -o NAME,MAJ:MIN,MOUNTPOINTS | grep /mnt/data1 | awk '{print $1, $2}'")
-		if err != nil {
-			return errors.Wrapf(err, "error when determining block device")
-		}
-		parts := strings.Split(strings.TrimSpace(res[0].Stdout), " ")
-		if len(parts) != 2 {
-			return errors.Newf("unexpected output from lsblk: %s", res[0].Stdout)
-		}
-		f.diskDevice.name = strings.TrimSpace(parts[0])
-		major, minor, found := strings.Cut(parts[1], ":")
-		if !found {
-			return errors.Newf("unexpected output from lsblk: %s", res[0].Stdout)
-		}
-		if f.diskDevice.major, err = strconv.Atoi(major); err != nil {
-			return err
-		}
-		if f.diskDevice.minor, err = strconv.Atoi(minor); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (f *GenericFailure) DiskDeviceName(ctx context.Context, l *logger.Logger) (string, error) {
-	if err := getDiskDevice(ctx, f, l); err != nil {
-		return "", err
-	}
-	return "/dev/" + f.diskDevice.name, nil
-}
-
-func (f *GenericFailure) DiskDeviceMajorMinor(
-	ctx context.Context, l *logger.Logger,
-) (int, int, error) {
-	if err := getDiskDevice(ctx, f, l); err != nil {
-		return 0, 0, err
-	}
-	return f.diskDevice.major, f.diskDevice.minor, nil
 }
 
 func (f *GenericFailure) PingNode(ctx context.Context, l *logger.Logger, node install.Nodes) error {
