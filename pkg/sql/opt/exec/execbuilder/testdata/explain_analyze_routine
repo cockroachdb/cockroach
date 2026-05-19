@@ -69,20 +69,38 @@ plan type: custom
 rows decoded from KV: 33 (906 B, 6 KVs, 3 gRPC calls)
 regions: <hidden>
 ·
-• render
-│ execution time: 0µs
-│ actual row count: 3
+• root
 │
-└── • scan
-      sql nodes: <hidden>
-      kv nodes: <hidden>
-      regions: <hidden>
-      KV time: 0µs
-      KV rows decoded: 3
-      actual row count: 3
-      missing stats
-      table: t_ea@t_ea_pkey
-      spans: [ - /3]
+├── • render
+│   │ execution time: 0µs
+│   │ actual row count: 3
+│   │
+│   └── • scan
+│         sql nodes: <hidden>
+│         kv nodes: <hidden>
+│         regions: <hidden>
+│         KV time: 0µs
+│         KV rows decoded: 3
+│         actual row count: 3
+│         missing stats
+│         table: t_ea@t_ea_pkey
+│         spans: [ - /3]
+│
+└── • routine
+    │ name: count_above_volatile
+    │
+    └── • body stmt
+        │ sql: SELECT count(*)::INT8 FROM test.public.t_ea WHERE v > x
+        │
+        └── • group (scalar)
+            │
+            └── • filter
+                │ filter: v > 1
+                │
+                └── • scan
+                      missing stats
+                      table: t_ea@t_ea_pkey
+                      spans: FULL SCAN
 
 subtest end
 
@@ -114,20 +132,43 @@ plan type: custom
 rows decoded from KV: 33 (906 B, 6 KVs, 3 gRPC calls)
 regions: <hidden>
 ·
-• render
-│ execution time: 0µs
-│ actual row count: 3
+• root
 │
-└── • scan
-      sql nodes: <hidden>
-      kv nodes: <hidden>
-      regions: <hidden>
-      KV time: 0µs
-      KV rows decoded: 3
-      actual row count: 3
-      missing stats
-      table: t_ea@t_ea_pkey
-      spans: [ - /3]
+├── • render
+│   │ execution time: 0µs
+│   │ actual row count: 3
+│   │
+│   └── • scan
+│         sql nodes: <hidden>
+│         kv nodes: <hidden>
+│         regions: <hidden>
+│         KV time: 0µs
+│         KV rows decoded: 3
+│         actual row count: 3
+│         missing stats
+│         table: t_ea@t_ea_pkey
+│         spans: [ - /3]
+│
+└── • routine
+    │ name: count_above_plpgsql
+    │
+    └── • body stmt
+        │
+        └── • render
+            │
+            └── • group (streaming)
+                │
+                └── • cross join (right outer)
+                    │
+                    ├── • filter
+                    │   │ filter: v > 1
+                    │   │
+                    │   └── • scan
+                    │         missing stats
+                    │         table: t_ea@t_ea_pkey
+                    │         spans: FULL SCAN
+                    │
+                    └── • emptyrow
 
 subtest end
 
@@ -153,20 +194,44 @@ plan type: custom
 rows decoded from KV: 33 (906 B, 6 KVs, 3 gRPC calls)
 regions: <hidden>
 ·
-• render
-│ execution time: 0µs
-│ actual row count: 3
+• root
 │
-└── • scan
-      sql nodes: <hidden>
-      kv nodes: <hidden>
-      regions: <hidden>
-      KV time: 0µs
-      KV rows decoded: 3
-      actual row count: 3
-      missing stats
-      table: t_ea@t_ea_pkey
-      spans: [ - /3]
+├── • render
+│   │ execution time: 0µs
+│   │ actual row count: 3
+│   │
+│   └── • scan
+│         sql nodes: <hidden>
+│         kv nodes: <hidden>
+│         regions: <hidden>
+│         KV time: 0µs
+│         KV rows decoded: 3
+│         actual row count: 3
+│         missing stats
+│         table: t_ea@t_ea_pkey
+│         spans: [ - /3]
+│
+└── • routine
+    │ name: count_above_multi
+    │
+    ├── • body stmt
+    │   │ sql: SELECT 1
+    │   │
+    │   └── • values
+    │         size: 1 column, 1 row
+    │
+    └── • body stmt
+        │ sql: SELECT count(*)::INT8 FROM test.public.t_ea WHERE v > x
+        │
+        └── • group (scalar)
+            │
+            └── • filter
+                │ filter: v > 1
+                │
+                └── • scan
+                      missing stats
+                      table: t_ea@t_ea_pkey
+                      spans: FULL SCAN
 
 subtest end
 
@@ -199,20 +264,51 @@ plan type: custom
 rows decoded from KV: 48 (1.3 KiB, 6 KVs, 3 gRPC calls)
 regions: <hidden>
 ·
-• render
-│ execution time: 0µs
-│ actual row count: 3
+• root
 │
-└── • scan
-      sql nodes: <hidden>
-      kv nodes: <hidden>
-      regions: <hidden>
-      KV time: 0µs
-      KV rows decoded: 3
-      actual row count: 3
-      missing stats
-      table: t_ea@t_ea_pkey
-      spans: [ - /3]
+├── • render
+│   │ execution time: 0µs
+│   │ actual row count: 3
+│   │
+│   └── • scan
+│         sql nodes: <hidden>
+│         kv nodes: <hidden>
+│         regions: <hidden>
+│         KV time: 0µs
+│         KV rows decoded: 3
+│         actual row count: 3
+│         missing stats
+│         table: t_ea@t_ea_pkey
+│         spans: [ - /3]
+│
+└── • routine
+    │ name: multi_scan
+    │
+    ├── • body stmt
+    │   │ sql: SELECT count(*)::INT8 FROM test.public.t_ea WHERE v > x
+    │   │
+    │   └── • group (scalar)
+    │       │
+    │       └── • filter
+    │           │ filter: v > 1
+    │           │
+    │           └── • scan
+    │                 missing stats
+    │                 table: t_ea@t_ea_pkey
+    │                 spans: FULL SCAN
+    │
+    └── • body stmt
+        │ sql: SELECT count(*)::INT8 FROM test.public.t_ea2 WHERE v > x
+        │
+        └── • group (scalar)
+            │
+            └── • filter
+                │ filter: v > 1
+                │
+                └── • scan
+                      missing stats
+                      table: t_ea2@t_ea2_pkey
+                      spans: FULL SCAN
 
 subtest end
 
@@ -257,32 +353,48 @@ regions: <hidden>
 │         actual row count: 3
 │         label: buffer 1 (cte)
 │
-└── • subquery
-    │ id: @S1
-    │ original sql: SELECT k, public.count_above_volatile(k) AS cnt FROM t_ea WHERE k <= 3
-    │ exec mode: discard all rows
+├── • subquery
+│   │ id: @S1
+│   │ original sql: SELECT k, public.count_above_volatile(k) AS cnt FROM t_ea WHERE k <= 3
+│   │ exec mode: discard all rows
+│   │
+│   └── • buffer
+│       │ sql nodes: <hidden>
+│       │ regions: <hidden>
+│       │ execution time: 0µs
+│       │ actual row count: 3
+│       │ label: buffer 1 (cte)
+│       │
+│       └── • render
+│           │ execution time: 0µs
+│           │ actual row count: 3
+│           │
+│           └── • scan
+│                 sql nodes: <hidden>
+│                 kv nodes: <hidden>
+│                 regions: <hidden>
+│                 KV time: 0µs
+│                 KV rows decoded: 3
+│                 actual row count: 3
+│                 missing stats
+│                 table: t_ea@t_ea_pkey
+│                 spans: [ - /3]
+│
+└── • routine
+    │ name: count_above_volatile
     │
-    └── • buffer
-        │ sql nodes: <hidden>
-        │ regions: <hidden>
-        │ execution time: 0µs
-        │ actual row count: 3
-        │ label: buffer 1 (cte)
+    └── • body stmt
+        │ sql: SELECT count(*)::INT8 FROM test.public.t_ea WHERE v > x
         │
-        └── • render
-            │ execution time: 0µs
-            │ actual row count: 3
+        └── • group (scalar)
             │
-            └── • scan
-                  sql nodes: <hidden>
-                  kv nodes: <hidden>
-                  regions: <hidden>
-                  KV time: 0µs
-                  KV rows decoded: 3
-                  actual row count: 3
-                  missing stats
-                  table: t_ea@t_ea_pkey
-                  spans: [ - /3]
+            └── • filter
+                │ filter: v > 1
+                │
+                └── • scan
+                      missing stats
+                      table: t_ea@t_ea_pkey
+                      spans: FULL SCAN
 
 subtest end
 

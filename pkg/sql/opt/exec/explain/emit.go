@@ -111,7 +111,8 @@ func emitInternal(
 	}
 
 	if len(plan.Subqueries) == 0 && len(plan.Cascades) == 0 &&
-		len(plan.Checks) == 0 && len(plan.Triggers) == 0 {
+		len(plan.Checks) == 0 && len(plan.Triggers) == 0 &&
+		len(plan.RoutinePlans) == 0 {
 		return walk(plan.Root)
 	}
 	ob.EnterNode("root", plan.Root.Columns(), plan.Root.Ordering())
@@ -213,6 +214,24 @@ func emitInternal(
 		}
 		if err = emitPostQuery(afterTriggers, afterTriggersPlan, false /* alreadyEmitted */); err != nil {
 			return err
+		}
+		ob.LeaveNode()
+	}
+	// Emit routine body plans captured during EXPLAIN ANALYZE.
+	// Each body statement is wrapped in its own sub-node to
+	// keep the SQL text paired with its plan tree.
+	for _, rp := range plan.RoutinePlans {
+		ob.EnterMetaNode("routine")
+		ob.Attr("name", rp.Name)
+		for j, bodyNode := range rp.ExplainPlan {
+			ob.EnterMetaNode("body stmt")
+			if j < len(rp.BodyStmts) && rp.BodyStmts[j] != "" {
+				ob.Attr("sql", rp.BodyStmts[j])
+			}
+			if err := walk(bodyNode); err != nil {
+				return err
+			}
+			ob.LeaveNode()
 		}
 		ob.LeaveNode()
 	}

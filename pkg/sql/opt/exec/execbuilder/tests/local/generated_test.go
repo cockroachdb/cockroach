@@ -223,6 +223,13 @@ func TestExecBuild_explain_analyze_routine(
 	runExecBuildLogicTest(t, "explain_analyze_routine")
 }
 
+func TestExecBuild_explain_analyze_routine_plans(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "explain_analyze_routine_plans")
+}
+
 func TestExecBuild_explain_env(
 	t *testing.T,
 ) {

@@ -480,9 +480,22 @@ func (ih *instrumentationHelper) Setup(
 		// TODO(radu): maybe capture some of the rows and include them in the
 		// bundle.
 		ih.discardRows = true
+		// Initialize capture state for routine body plans. Clear stale
+		// entries from previous statements so each EXPLAIN ANALYZE
+		// starts fresh; both the bundle code and populateRoutinePlans
+		// read DeferredRoutineOptPlans during Finish of this statement.
+		if ih.evalCtx != nil {
+			ih.evalCtx.CapturedRoutineGists = make(map[string]struct{})
+			ih.evalCtx.DeferredRoutineOptPlans = nil
+		}
 
 	case explainAnalyzePlanOutput, explainAnalyzeDistSQLOutput:
 		ih.discardRows = true
+		// Initialize capture state for routine body plans. See above.
+		if ih.evalCtx != nil {
+			ih.evalCtx.CapturedRoutineGists = make(map[string]struct{})
+			ih.evalCtx.DeferredRoutineOptPlans = nil
+		}
 
 	default:
 		// Handle transaction-level diagnostics
@@ -804,6 +817,10 @@ func (ih *instrumentationHelper) Finish(
 		return retErr
 	}
 
+	// Transfer any captured routine body explain plans into the explain.Plan
+	// so they're available for rendering.
+	ih.populateRoutinePlans()
+
 	switch ih.outputMode {
 	case explainAnalyzeDebugOutput:
 		return setExplainBundleResult(ctx, res, bundle, cfg, warnings)
@@ -870,6 +887,31 @@ func (ih *instrumentationHelper) ShouldCollectExecStats() bool {
 // RecordExplainPlan records the explain.Plan for this query.
 func (ih *instrumentationHelper) RecordExplainPlan(explainPlan *explain.Plan) {
 	ih.explainPlan = explainPlan
+}
+
+// populateRoutinePlans transfers captured routine body explain plans from
+// eval.Context into the explain.Plan so they're available for rendering.
+// This must be called after execution completes (so all routine invocations
+// have had a chance to capture) and before emitExplain.
+func (ih *instrumentationHelper) populateRoutinePlans() {
+	if ih.explainPlan == nil || ih.evalCtx == nil {
+		return
+	}
+	for _, dp := range ih.evalCtx.DeferredRoutineOptPlans {
+		if len(dp.ExplainPlan) == 0 {
+			continue
+		}
+		// Type-assert the []any elements back to *explain.Node.
+		nodes := make([]*explain.Node, len(dp.ExplainPlan))
+		for i, n := range dp.ExplainPlan {
+			nodes[i] = n.(*explain.Node)
+		}
+		ih.explainPlan.RoutinePlans = append(ih.explainPlan.RoutinePlans, explain.RoutinePlanInfo{
+			Name:        dp.Name,
+			ExplainPlan: nodes,
+			BodyStmts:   dp.BodyStmts,
+		})
+	}
 }
 
 // RecordPlanInfo records top-level information about the plan.
