@@ -912,6 +912,7 @@ func (ih *instrumentationHelper) populateRoutinePlans() {
 			BodyStmts:   dp.BodyStmts,
 		})
 	}
+	ih.evalCtx.DeferredRoutineOptPlans = nil
 }
 
 // RecordPlanInfo records top-level information about the plan.
@@ -1297,6 +1298,11 @@ func (m execNodeTraceMetadata) annotateExplain(
 		const createPlanIfMissing = false
 		if tp, _ := trigger.GetExplainPlan(ctx, createPlanIfMissing); tp != nil {
 			m.annotateExplain(ctx, tp.(*explain.Plan), spans, makeDeterministic, p)
+		}
+	}
+	for _, rp := range plan.RoutinePlans {
+		for _, n := range rp.ExplainPlan {
+			walk(n)
 		}
 	}
 }

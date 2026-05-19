@@ -342,6 +342,7 @@ func runPlanInsidePlan(
 	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, &plannerCopy, plannerCopy.txn, distributeType)
 	planCtx.distSQLBlockers = blockers
 	planCtx.stmtType = recv.stmtType
+	planCtx.associateNodeWithComponents = plannerCopy.instrumentation.getAssociateNodeWithComponentsFn()
 	if sqlStatsBuilder != nil && plannerCopy.instrumentation.ShouldSaveFlows() {
 		planCtx.collectExecStats = true
 		planCtx.saveFlows = getDefaultSaveFlowsFunc(ctx, &plannerCopy, planComponentTypeInner)

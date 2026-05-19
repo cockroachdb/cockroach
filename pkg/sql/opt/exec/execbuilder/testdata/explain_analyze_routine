@@ -93,11 +93,25 @@ regions: <hidden>
         │ sql: SELECT count(*)::INT8 FROM test.public.t_ea WHERE v > x
         │
         └── • group (scalar)
+            │ sql nodes: <hidden>
+            │ regions: <hidden>
+            │ execution time: 0µs
+            │ actual row count: 1
             │
             └── • filter
+                │ sql nodes: <hidden>
+                │ regions: <hidden>
+                │ execution time: 0µs
+                │ actual row count: 10
                 │ filter: v > 1
                 │
                 └── • scan
+                      sql nodes: <hidden>
+                      kv nodes: <hidden>
+                      regions: <hidden>
+                      KV time: 0µs
+                      KV rows decoded: 30
+                      actual row count: 10
                       missing stats
                       table: t_ea@t_ea_pkey
                       spans: FULL SCAN
@@ -218,17 +232,35 @@ regions: <hidden>
     │   │ sql: SELECT 1
     │   │
     │   └── • values
+    │         sql nodes: <hidden>
+    │         regions: <hidden>
+    │         execution time: 0µs
+    │         actual row count: 1
     │         size: 1 column, 1 row
     │
     └── • body stmt
         │ sql: SELECT count(*)::INT8 FROM test.public.t_ea WHERE v > x
         │
         └── • group (scalar)
+            │ sql nodes: <hidden>
+            │ regions: <hidden>
+            │ execution time: 0µs
+            │ actual row count: 1
             │
             └── • filter
+                │ sql nodes: <hidden>
+                │ regions: <hidden>
+                │ execution time: 0µs
+                │ actual row count: 10
                 │ filter: v > 1
                 │
                 └── • scan
+                      sql nodes: <hidden>
+                      kv nodes: <hidden>
+                      regions: <hidden>
+                      KV time: 0µs
+                      KV rows decoded: 30
+                      actual row count: 10
                       missing stats
                       table: t_ea@t_ea_pkey
                       spans: FULL SCAN
@@ -288,11 +320,25 @@ regions: <hidden>
     │   │ sql: SELECT count(*)::INT8 FROM test.public.t_ea WHERE v > x
     │   │
     │   └── • group (scalar)
+    │       │ sql nodes: <hidden>
+    │       │ regions: <hidden>
+    │       │ execution time: 0µs
+    │       │ actual row count: 1
     │       │
     │       └── • filter
+    │           │ sql nodes: <hidden>
+    │           │ regions: <hidden>
+    │           │ execution time: 0µs
+    │           │ actual row count: 10
     │           │ filter: v > 1
     │           │
     │           └── • scan
+    │                 sql nodes: <hidden>
+    │                 kv nodes: <hidden>
+    │                 regions: <hidden>
+    │                 KV time: 0µs
+    │                 KV rows decoded: 45
+    │                 actual row count: 5
     │                 missing stats
     │                 table: t_ea@t_ea_pkey
     │                 spans: FULL SCAN
@@ -301,11 +347,25 @@ regions: <hidden>
         │ sql: SELECT count(*)::INT8 FROM test.public.t_ea2 WHERE v > x
         │
         └── • group (scalar)
+            │ sql nodes: <hidden>
+            │ regions: <hidden>
+            │ execution time: 0µs
+            │ actual row count: 1
             │
             └── • filter
+                │ sql nodes: <hidden>
+                │ regions: <hidden>
+                │ execution time: 0µs
+                │ actual row count: 4
                 │ filter: v > 1
                 │
                 └── • scan
+                      sql nodes: <hidden>
+                      kv nodes: <hidden>
+                      regions: <hidden>
+                      KV time: 0µs
+                      KV rows decoded: 45
+                      actual row count: 5
                       missing stats
                       table: t_ea2@t_ea2_pkey
                       spans: FULL SCAN
@@ -387,11 +447,25 @@ regions: <hidden>
         │ sql: SELECT count(*)::INT8 FROM test.public.t_ea WHERE v > x
         │
         └── • group (scalar)
+            │ sql nodes: <hidden>
+            │ regions: <hidden>
+            │ execution time: 0µs
+            │ actual row count: 1
             │
             └── • filter
+                │ sql nodes: <hidden>
+                │ regions: <hidden>
+                │ execution time: 0µs
+                │ actual row count: 10
                 │ filter: v > 1
                 │
                 └── • scan
+                      sql nodes: <hidden>
+                      kv nodes: <hidden>
+                      regions: <hidden>
+                      KV time: 0µs
+                      KV rows decoded: 60
+                      actual row count: 10
                       missing stats
                       table: t_ea@t_ea_pkey
                       spans: FULL SCAN

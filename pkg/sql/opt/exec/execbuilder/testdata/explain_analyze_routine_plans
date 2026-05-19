@@ -55,6 +55,12 @@ regions: <hidden>
         │ sql: SELECT b FROM test.public.t WHERE a = x
         │
         └── • scan
+              sql nodes: <hidden>
+              kv nodes: <hidden>
+              regions: <hidden>
+              KV time: 0µs
+              KV rows decoded: 3
+              actual row count: 1
               missing stats
               table: t@t_pkey
               spans: [/1 - /1]
@@ -106,12 +112,22 @@ regions: <hidden>
     │   │ sql: SELECT 1
     │   │
     │   └── • values
+    │         sql nodes: <hidden>
+    │         regions: <hidden>
+    │         execution time: 0µs
+    │         actual row count: 1
     │         size: 1 column, 1 row
     │
     └── • body stmt
         │ sql: SELECT b FROM test.public.t WHERE a = x
         │
         └── • scan
+              sql nodes: <hidden>
+              kv nodes: <hidden>
+              regions: <hidden>
+              KV time: 0µs
+              KV rows decoded: 3
+              actual row count: 1
               missing stats
               table: t@t_pkey
               spans: [/1 - /1]
@@ -158,6 +174,12 @@ regions: <hidden>
         │ sql: SELECT b FROM test.public.t WHERE a = x
         │
         └── • scan
+              sql nodes: <hidden>
+              kv nodes: <hidden>
+              regions: <hidden>
+              KV time: 0µs
+              KV rows decoded: 4
+              actual row count: 0
               missing stats
               table: t@t_pkey
               spans: [/1 - /1]
@@ -209,6 +231,12 @@ regions: <hidden>
 │       │ sql: SELECT b FROM test.public.t WHERE a = x
 │       │
 │       └── • scan
+│             sql nodes: <hidden>
+│             kv nodes: <hidden>
+│             regions: <hidden>
+│             KV time: 0µs
+│             KV rows decoded: 3
+│             actual row count: 1
 │             missing stats
 │             table: t@t_pkey
 │             spans: [/1 - /1]
@@ -220,6 +248,10 @@ regions: <hidden>
         │ sql: SELECT x + 1
         │
         └── • values
+              sql nodes: <hidden>
+              regions: <hidden>
+              execution time: 0µs
+              actual row count: 1
               size: 1 column, 1 row
 
 subtest end
@@ -274,6 +306,10 @@ regions: <hidden>
 │       │ sql: SELECT x * 10
 │       │
 │       └── • values
+│             sql nodes: <hidden>
+│             regions: <hidden>
+│             execution time: 0µs
+│             actual row count: 1
 │             size: 1 column, 1 row
 │
 └── • routine
@@ -283,6 +319,10 @@ regions: <hidden>
         │ sql: SELECT public.inner_fn(x) + 1
         │
         └── • values
+              sql nodes: <hidden>
+              regions: <hidden>
+              execution time: 0µs
+              actual row count: 1
               size: 1 column, 1 row
 
 subtest end
@@ -431,7 +471,163 @@ regions: <hidden>
 subtest end
 
 # ------------------------------------------------------------------
-# 9. Plan variants: different argument values produce different plans.
+# 9. SQL stored procedure.
+# ------------------------------------------------------------------
+subtest sql_stored_procedure
+
+statement ok
+CREATE PROCEDURE read_proc(x INT) LANGUAGE SQL AS $$
+  SELECT b FROM t WHERE a = x;
+$$
+
+query T
+EXPLAIN ANALYZE CALL read_proc(1)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+rows decoded from KV: 1 (11 B, 0 KVs, 0 gRPC calls)
+regions: <hidden>
+·
+• root
+│
+├── • call
+│     sql nodes: <hidden>
+│     regions: <hidden>
+│     execution time: 0µs
+│     actual row count: 0
+│     estimated row count: 0
+│     procedure: read_proc(1)
+│
+└── • routine
+    │ name: read_proc
+    │
+    ├── • body stmt
+    │   │ sql: SELECT b FROM test.public.t WHERE a = x
+    │   │
+    │   └── • scan
+    │         sql nodes: <hidden>
+    │         kv nodes: <hidden>
+    │         regions: <hidden>
+    │         KV time: 0µs
+    │         KV rows decoded: 1
+    │         actual row count: 1
+    │         missing stats
+    │         table: t@t_pkey
+    │         spans: [/1 - /1]
+    │
+    └── • body stmt
+        │
+        └── • values
+              size: 1 column, 1 row
+
+subtest end
+
+# ------------------------------------------------------------------
+# 10. PL/pgSQL stored procedure with SELECT INTO.
+# ------------------------------------------------------------------
+subtest plpgsql_stored_procedure
+
+statement ok
+CREATE PROCEDURE read_proc_plpgsql(x INT) LANGUAGE PLpgSQL AS $$
+DECLARE result INT;
+BEGIN
+  SELECT b INTO result FROM t WHERE a = x;
+  RAISE NOTICE 'result: %', result;
+END
+$$
+
+query T
+EXPLAIN ANALYZE CALL read_proc_plpgsql(1)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+rows decoded from KV: 1 (11 B, 0 KVs, 0 gRPC calls)
+regions: <hidden>
+·
+• root
+│
+├── • call
+│     sql nodes: <hidden>
+│     regions: <hidden>
+│     execution time: 0µs
+│     actual row count: 0
+│     estimated row count: 0
+│     procedure: read_proc_plpgsql(1)
+│
+├── • routine
+│   │ name: _stmt_raise_3
+│   │
+│   ├── • body stmt
+│   │   │
+│   │   └── • values
+│   │         size: 1 column, 1 row
+│   │
+│   └── • body stmt
+│       │
+│       └── • values
+│             size: 1 column, 1 row
+│
+├── • routine
+│   │ name: _stmt_exec_ret_2
+│   │
+│   └── • body stmt
+│       │
+│       └── • values
+│             size: 1 column, 1 row
+│
+├── • routine
+│   │ name: _stmt_exec_1
+│   │
+│   └── • body stmt
+│       │ sql: SELECT b FROM test.public.t WHERE a = x
+│       │
+│       └── • render
+│           │ execution time: 0µs
+│           │ actual row count: 1
+│           │
+│           └── • render
+│               │
+│               └── • cross join (left outer)
+│                   │ sql nodes: <hidden>
+│                   │ regions: <hidden>
+│                   │ execution time: 0µs
+│                   │ actual row count: 1
+│                   │
+│                   ├── • emptyrow
+│                   │     sql nodes: <hidden>
+│                   │     regions: <hidden>
+│                   │     execution time: 0µs
+│                   │     actual row count: 1
+│                   │
+│                   └── • scan
+│                         sql nodes: <hidden>
+│                         kv nodes: <hidden>
+│                         regions: <hidden>
+│                         KV time: 0µs
+│                         KV rows decoded: 1
+│                         actual row count: 1
+│                         missing stats
+│                         table: t@t_pkey
+│                         spans: [/1 - /1]
+│
+└── • routine
+    │ name: read_proc_plpgsql
+    │
+    └── • body stmt
+        │
+        └── • render
+            │
+            └── • values
+                  size: 1 column, 1 row
+
+subtest end
+
+# ------------------------------------------------------------------
+# 11. Plan variants: different argument values produce different plans.
 # Non-NULL values produce a point lookup; NULL produces a
 # contradiction (a = NULL is always false). Both variants should
 # appear as separate routine sections.
@@ -468,6 +664,12 @@ regions: <hidden>
 │       │ sql: SELECT b FROM test.public.t WHERE a = x
 │       │
 │       └── • scan
+│             sql nodes: <hidden>
+│             kv nodes: <hidden>
+│             regions: <hidden>
+│             KV time: 0µs
+│             KV rows decoded: 1
+│             actual row count: 1
 │             missing stats
 │             table: t@t_pkey
 │             spans: [/1 - /1]
@@ -479,5 +681,9 @@ regions: <hidden>
         │ sql: SELECT b FROM test.public.t WHERE a = x
         │
         └── • norows
+              sql nodes: <hidden>
+              regions: <hidden>
+              execution time: 0µs
+              actual row count: 0
 
 subtest end

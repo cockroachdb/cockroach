@@ -3346,6 +3346,7 @@ func populateQueryLevelStats(
 			ih.queryLevelStatsWithErr.Stats.MaxMemUsage = p.execMon.MaximumBytes()
 		}
 	}
+	ih.populateRoutinePlans()
 	if ih.traceMetadata != nil && ih.explainPlan != nil {
 		ih.traceMetadata.annotateExplain(
 			ctx,
