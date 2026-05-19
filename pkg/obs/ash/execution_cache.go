@@ -115,10 +115,9 @@ func (c *ExecutionCache) GetMappings(ids []uint64) map[uint64]ExecutionAttrs {
 }
 
 // PutExecution stores the attributes in the process-wide cache and
-// returns an enrichment_id. Returns 0 if the feature is disabled by
-// the obs.execution_cache.enabled cluster setting. Errors are not
-// returned; cache failures are silent by design so as not to affect
-// execution.
+// returns an enrichment_id. A nil sv means "skip the enabled gate" and
+// is used by callers that don't have a settings.Values handy (e.g.,
+// the status RPC handler). Returns 0 when the feature is gated off.
 func PutExecution(sv *settings.Values, attrs ExecutionAttrs) uint64 {
 	if sv != nil && !ExecutionCacheEnabled.Get(sv) {
 		return 0
@@ -127,7 +126,8 @@ func PutExecution(sv *settings.Values, attrs ExecutionAttrs) uint64 {
 }
 
 // GetExecution returns the attributes for id, or the zero value and
-// false if not present (or if the feature is disabled).
+// false if not present (or if the feature is gated off). A nil sv
+// means "skip the enabled gate" — see PutExecution.
 func GetExecution(sv *settings.Values, id uint64) (ExecutionAttrs, bool) {
 	if sv != nil && !ExecutionCacheEnabled.Get(sv) {
 		return ExecutionAttrs{}, false

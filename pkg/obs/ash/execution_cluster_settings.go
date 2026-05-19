@@ -16,7 +16,7 @@ import (
 var ExecutionCacheEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"obs.execution_cache.enabled",
-	"if set, ASH execution-attribute enrichment is enabled",
+	"enable ASH execution-attribute enrichment",
 	true,
 )
 
@@ -30,15 +30,16 @@ var ExecutionCacheLimit = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
-// globalExecutionCache is a process-wide singleton. We use a single
-// cache across tenants for the same reason as appNameMap (see comments
-// in app_name.go).
+// globalExecutionCache is a process-wide singleton. A single
+// cross-tenant cache is acceptable because (1) shared-process
+// multi-tenancy with many in-process tenants is not a production
+// configuration, and (2) the ASH sampler is itself process-wide and
+// would otherwise have to dial each tenant's server to resolve attrs.
 var globalExecutionCache atomic.Pointer[ExecutionCache]
 
-// getGlobalExecutionCache lazily initializes the singleton at the limit
-// defined by the cluster setting. The size is fixed at first use;
-// changing the setting at runtime takes effect for newly-built caches
-// only. (POC limitation; sufficient for a demo.)
+// getGlobalExecutionCache lazily initializes the singleton at the
+// registered default of ExecutionCacheLimit. Cluster-setting overrides
+// of the limit do not resize the cache at runtime (POC limitation).
 func getGlobalExecutionCache() *ExecutionCache {
 	if c := globalExecutionCache.Load(); c != nil {
 		return c
