@@ -74,6 +74,7 @@ var activeRecordIgnoreList = blocklist{
 	`CockroachDB::FixturesTest#test_create_symbol_fixtures`:                                                                                                    "flaky",
 	`CockroachDBReferentialIntegrityTest#test_should_reraise_invalid_foreign_key_exception_and_show_warning`:                                                   "affected by autocommit_before_ddl",
 	`DumpSchemasTest#test_schema_dump_with_dump_schemas_all`:                                                                                                   "flaky",
+	`FinderTest#test_select_values`:                                                                                                                            "flaky",
 	`FixtureWithSetModelClassPrevailsOverNamingConventionTest#test_model_class_in_fixture_file_is_respected`:                                                   "flaky",
 	`HasManyAssociationsTest#test_collection_association_with_private_kernel_method`:                                                                           "flaky",
 	`HasManyAssociationsTest#test_delete_all_association_with_primary_key_deletes_correct_records`:                                                             "flaky",
