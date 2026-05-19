@@ -686,12 +686,26 @@ func (p PlanGram) Matches(e opt.Expr, md *opt.Metadata) bool {
 }
 
 func containsPlanGramField(fields []PlanGramField, f PlanGramField) bool {
+	ci := caseInsensitivePlanGramField(f.Key)
 	for _, ef := range fields {
-		if ef.Key == f.Key && ef.Val == f.Val {
+		if ef.Key == f.Key &&
+			(ci && strings.EqualFold(ef.Val, f.Val) || !ci && ef.Val == f.Val) {
 			return true
 		}
 	}
 	return false
+}
+
+// caseInsensitivePlanGramField returns true for field keys whose values should
+// be matched case-insensitively (e.g. boolean and enum fields). Table and Index
+// names remain exact-match because quoted identifiers can be case-sensitive.
+func caseInsensitivePlanGramField(key string) bool {
+	switch key {
+	case "JoinType", "HasConstraint", "HasLimit":
+		return true
+	default:
+		return false
+	}
 }
 
 // Child returns the PlanGram for the nth child of this term. If this PlanGram
