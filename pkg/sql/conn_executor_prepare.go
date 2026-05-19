@@ -29,7 +29,7 @@ import (
 
 func (ex *connExecutor) execPrepare(
 	ctx context.Context, parseCmd PrepareStmt,
-) (fsm.Event, fsm.EventPayload) {
+) (retEv fsm.Event, retPayload fsm.EventPayload) {
 	retErr := func(err error) (fsm.Event, fsm.EventPayload) {
 		return ex.makeErrEvent(err, parseCmd.AST)
 	}
@@ -82,15 +82,21 @@ func (ex *connExecutor) execPrepare(
 		tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(ex.server.cfg.SV())),
 		statementHintsCache,
 	)
-	// Step the read sequence so that any KV reads during Prepare (e.g.
-	// descriptor resolution) use a sequence number past ignored ranges
-	// from a prior savepoint rollback.
-	if _, isOpen := ex.machine.CurState().(stateOpen); isOpen {
-		if err := ex.stepReadSequence(ctx); err != nil {
-			return retErr(err)
-		}
+	// Create a sequencing point so KV reads issued during prepare (e.g.
+	// descriptor resolution) observe a valid read snapshot, including
+	// after a prior ROLLBACK TO SAVEPOINT. For an internal executor
+	// running under an outer txn, the deferred cleanup undoes the step
+	// so the parent's read snapshot is left untouched.
+	cleanup, err := ex.stepReadSequenceWithRestore(ctx)
+	if err != nil {
+		return retErr(err)
 	}
-	_, err := ex.addPreparedStmt(
+	defer func() {
+		if err := cleanup(); err != nil {
+			retEv, retPayload = retErr(err)
+		}
+	}()
+	_, err = ex.addPreparedStmt(
 		ctx,
 		parseCmd.Name,
 		stmt,
@@ -342,7 +348,7 @@ func (ex *connExecutor) populatePrepared(
 
 func (ex *connExecutor) execBind(
 	ctx context.Context, bindCmd BindStmt,
-) (fsm.Event, fsm.EventPayload) {
+) (retEv fsm.Event, retPayload fsm.EventPayload) {
 	var ps *prep.Statement
 	retErr := func(err error) (fsm.Event, fsm.EventPayload) {
 		if bindCmd.PreparedStatementName != "" {
@@ -405,15 +411,21 @@ func (ex *connExecutor) execBind(
 
 	numQArgs := uint16(len(ps.InferredTypes))
 
-	// Step the read sequence so that any KV reads during Bind (e.g.
+	// Create a sequencing point so KV reads issued during bind (e.g.
 	// ResolveTypeByOID for enum parameters, descriptor staleness checks)
-	// use a sequence number past ignored ranges from a prior savepoint
-	// rollback.
-	if _, isOpen := ex.machine.CurState().(stateOpen); isOpen {
-		if err := ex.stepReadSequence(ctx); err != nil {
-			return retErr(err)
-		}
+	// observe a valid read snapshot, including after a prior ROLLBACK TO
+	// SAVEPOINT. For an internal executor running under an outer txn,
+	// the deferred cleanup undoes the step so the parent's read snapshot
+	// is left untouched.
+	cleanup, err := ex.stepReadSequenceWithRestore(ctx)
+	if err != nil {
+		return retErr(err)
 	}
+	defer func() {
+		if err := cleanup(); err != nil {
+			retEv, retPayload = retErr(err)
+		}
+	}()
 
 	// Decode the arguments, except for internal queries for which we just verify
 	// that the arguments match what's expected.
