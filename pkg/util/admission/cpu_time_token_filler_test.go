@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -191,6 +192,7 @@ func TestCPUTimeTokenAllocator(t *testing.T) {
 		metrics:         metrics,
 		queues:          queues,
 		lastMode:        serverlessMode,
+		nowMono:         crtime.NowMono,
 		dampeningFactor: 1.0,
 	}
 	printBurstMgrs = func() string {
@@ -662,6 +664,14 @@ func TestDampeningFactor(t *testing.T) {
 	model.rates[testTier0][noBurst] = 4000
 	model.rates[testTier1][canBurst] = 3000
 	model.rates[testTier1][noBurst] = 2000
+	// Use a manual monotonic clock so the deficit metric accumulates a
+	// predictable number of nanoseconds per allocateTokens call.
+	ts := timeutil.NewTestTimeSource()
+	const tickInterval = time.Millisecond
+	tickAndNow := func() crtime.Mono {
+		ts.AdvanceBy(tickInterval)
+		return ts.NowMono()
+	}
 	allocator := cpuTimeTokenAllocator{
 		granter:         granter,
 		settings:        st,
@@ -670,6 +680,7 @@ func TestDampeningFactor(t *testing.T) {
 		metrics:         metrics,
 		queues:          queues,
 		lastMode:        serverlessMode,
+		nowMono:         tickAndNow,
 		dampeningFactor: 1.0,
 	}
 
@@ -736,6 +747,22 @@ func TestDampeningFactor(t *testing.T) {
 	// Tokens at 51% of full rate: 5000 * 0.51 = 2550.
 	require.Equal(t, int64(2550), granter.mu.buckets[testTier0][canBurst].tokens)
 
+	// Deficit metric covers every allocateTokens call past the first
+	// (the first finds lastDampeningUpdate == 0 and is skipped). Above
+	// we have made 102 calls total: 1 initial, then 100 in the loop,
+	// then 1 after dropping load. So 101 calls contribute, each weighted
+	// by tickInterval. The factor sequence (after each call) is:
+	//   - calls 1..49 in the loop ramp factor from 0.98 down to 0.50;
+	//     sum of (1-factor) = 0.02 + 0.03 + ... + 0.50 = 12.74
+	//   - calls 50..100 in the loop stay at factor=0.50 (51 calls);
+	//     sum of (1-factor) = 51 * 0.50 = 25.5
+	//   - the post-drop call moves factor 0.50 -> 0.51;
+	//     contributes (1-0.51) = 0.49
+	// Total: (12.74 + 25.5 + 0.49) * tickInterval = 38.73 * tickInterval.
+	require.Equal(t,
+		int64(38.73*float64(tickInterval.Nanoseconds())),
+		metrics.DampeningDeficitNanos.Count())
+
 	// Recovery: many ticks at low load -> factor returns to 1.0.
 	for i := 0; i < 100; i++ {
 		allocator.resetInterval(ctx)
@@ -749,6 +776,11 @@ func TestDampeningFactor(t *testing.T) {
 	require.Equal(t, 1.0, allocator.dampeningFactor)
 	require.Equal(t, int64(5000), granter.mu.buckets[testTier0][canBurst].tokens)
 
-	// Verify metric is updated.
-	require.Equal(t, 1.0, metrics.DampeningFactor.Value())
+	// Once the factor reaches 1.0, the deficit counter must stop growing.
+	deficitBefore := metrics.DampeningDeficitNanos.Count()
+	for i := 0; i < 10; i++ {
+		allocator.resetInterval(ctx)
+		allocator.allocateTokens(1)
+	}
+	require.Equal(t, deficitBefore, metrics.DampeningDeficitNanos.Count())
 }

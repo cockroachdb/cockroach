@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -274,6 +275,7 @@ func makeCPUTimeTokenGrantCoordinator(
 		settings:        settings,
 		configHolder:    configHolder,
 		metrics:         metrics,
+		nowMono:         crtime.NowMono,
 		dampeningFactor: 1.0,
 	}
 	model := &cpuTimeTokenLinearModel{

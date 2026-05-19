@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -283,11 +284,22 @@ type cpuTimeTokenAllocator struct {
 	// the allocator.
 	allocated tokenCounts
 
+	// nowMono returns a monotonic timestamp. Defaults to crtime.NowMono;
+	// tests substitute a manual clock to make DampeningDeficitNanos
+	// deterministic. Only called by the filler goroutine.
+	nowMono func() crtime.Mono
 	// dampeningFactor scales per-tick token allocations to leave CPU
 	// headroom when the goroutine scheduler is overloaded. 1.0 means no
-	// dampening; 0.0 means fully dampened (no tokens dispensed). Written
-	// only by the filler goroutine via allocateTokens.
+	// dampening; dampeningFloor means fully dampened. Written only by the
+	// filler goroutine via allocateTokens.
 	dampeningFactor float64
+	// lastDampeningUpdate is the monotonic timestamp of the previous
+	// allocateTokens call. Used to weight DampeningDeficitNanos by elapsed
+	// time, so the counter reflects the true cumulative deficit even when
+	// the filler ticker delays or drops ticks (see cpuTimeTokenFiller).
+	// Zero until the first allocateTokens call. Only read/written by the
+	// filler goroutine.
+	lastDampeningUpdate crtime.Mono
 
 	// Written by CPULoad callback (arbitrary goroutine), read by
 	// filler goroutine on the next tick.
@@ -478,18 +490,27 @@ func (a *cpuTimeTokenAllocator) allocateTokens(expectedRemainingTicksInInterval 
 	} else {
 		a.dampeningFactor = min(1.0, a.dampeningFactor+dampeningDelta)
 	}
-	a.metrics.DampeningFactor.Update(a.dampeningFactor)
+
+	// Add the dampening deficit (1 - factor) to the counter, scaled by
+	// the wall-clock gap since the previous tick. The gap is nominally
+	// timePerTick (1ms) but can be larger when the filler ticker is
+	// delayed or drops ticks (see cpuTimeTokenFiller). Skip the first
+	// call so we don't attribute the process-start gap to dampening.
+	now := a.nowMono()
+	if a.lastDampeningUpdate != 0 {
+		if elapsed := now.Sub(a.lastDampeningUpdate); elapsed > 0 {
+			a.metrics.DampeningDeficitNanos.Inc(
+				int64((1.0 - a.dampeningFactor) * float64(elapsed.Nanoseconds())))
+		}
+	}
+	a.lastDampeningUpdate = now
 
 	allocations := allocateTokensFn(a.refillRates, &a.allocated, expectedRemainingTicksInInterval)
 
 	// Save undampened allocations for per-group burst bucket refill.
-	// Per-group burst buckets control priority ordering (whether a
-	// group qualifies for canBurst), not total throughput, so they
-	// are not dampened.
-	// TODO(ssd): Should we also dampen the per-group burst bucket
-	// refill? Under sustained overload, groups would continue
-	// accumulating burst budget at the full rate, which could cause
-	// a burst of admitted work when dampening lifts.
+	// Per-group burst buckets control priority ordering (whether a group
+	// qualifies for canBurst), not total throughput, so dampening — a
+	// total-throughput control — does not apply.
 	undampenedAllocations := allocations
 	for tier := range allocations {
 		for qual := range allocations[tier] {

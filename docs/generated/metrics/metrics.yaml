@@ -13570,14 +13570,14 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.dampening_factor
-      exported_name: admission_cpu_time_tokens_dampening_factor
-      description: The current dampening factor applied to CPU time token allocations when scheduler overload is detected; 1.0 means no dampening, 0.0 means fully dampened
-      y_axis_label: Factor
-      type: GAUGE
-      unit: COUNT
+    - name: admission.cpu_time_tokens.dampening_deficit_nanos
+      exported_name: admission_cpu_time_tokens_dampening_deficit_nanos
+      description: Cumulative time-weighted deficit from dampening CPU time token allocations during scheduler overload. Each tick increments by (1 - dampening_factor) * elapsed_nanos, where dampening_factor is in [floor, 1.0] (floor is 0.5). rate() / 1e9 yields the average fraction of token issuance suppressed; a rate of 0 means no dampening was active in the window, 5e8 means the floor was held for the full window
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
       aggregation: AVG
-      derivative: NONE
+      derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
     - name: admission.cpu_time_tokens.exhausted_duration_nanos.app_tenant.can_burst
       exported_name: admission_cpu_time_tokens_exhausted_duration_nanos_app_tenant_can_burst
