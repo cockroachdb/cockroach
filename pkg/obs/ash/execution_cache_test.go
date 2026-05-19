@@ -101,3 +101,11 @@ func TestExecutionCacheConcurrent(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestPutGetExecutionSingleton(t *testing.T) {
+	id := PutExecution(nil, ExecutionAttrs{User: "alice"})
+	require.NotZero(t, id)
+	got, ok := GetExecution(nil, id)
+	require.True(t, ok)
+	require.Equal(t, "alice", got.User)
+}

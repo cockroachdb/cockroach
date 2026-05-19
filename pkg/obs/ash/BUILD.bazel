@@ -8,6 +8,7 @@ go_library(
         "buffer.go",
         "doc.go",
         "execution_cache.go",
+        "execution_cluster_settings.go",
         "metrics.go",
         "report.go",
         "sampler.go",

@@ -9,6 +9,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -111,4 +112,30 @@ func (c *ExecutionCache) GetMappings(ids []uint64) map[uint64]ExecutionAttrs {
 		}
 	}
 	return result
+}
+
+// PutExecution stores the attributes in the process-wide cache and
+// returns an enrichment_id. Returns 0 if the feature is disabled by
+// the obs.execution_cache.enabled cluster setting. Errors are not
+// returned; cache failures are silent by design so as not to affect
+// execution.
+func PutExecution(sv *settings.Values, attrs ExecutionAttrs) uint64 {
+	if sv != nil && !ExecutionCacheEnabled.Get(sv) {
+		return 0
+	}
+	return getGlobalExecutionCache().Put(attrs)
+}
+
+// GetExecution returns the attributes for id, or the zero value and
+// false if not present (or if the feature is disabled).
+func GetExecution(sv *settings.Values, id uint64) (ExecutionAttrs, bool) {
+	if sv != nil && !ExecutionCacheEnabled.Get(sv) {
+		return ExecutionAttrs{}, false
+	}
+	return getGlobalExecutionCache().Get(id)
+}
+
+// GetExecutionMappings is the batch variant used by the status RPC.
+func GetExecutionMappings(ids []uint64) map[uint64]ExecutionAttrs {
+	return getGlobalExecutionCache().GetMappings(ids)
 }
