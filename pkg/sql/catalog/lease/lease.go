@@ -3613,15 +3613,29 @@ func (m *Manager) DeleteOrphanedLeases(
 	// AddTags and not WithTags, so that we combine the tags with those
 	// filled by AnnotateCtx.
 	newCtx = logtags.AddTags(newCtx, logtags.FromContext(ctx))
-	_ = m.stopper.RunAsyncTask(newCtx, "del-orphaned-leases", func(ctx context.Context) {
+	// Cancel on quiesce so the retry loops and blocking KV/SQL work below
+	// don't outlive the stopper.
+	newCtx, cancel := m.stopper.WithCancelOnQuiesce(newCtx)
+	if err := m.stopper.RunAsyncTask(newCtx, "del-orphaned-leases", func(ctx context.Context) {
+		defer cancel()
 		retryOpts := base.DefaultRetryOptions()
 		retryOpts.MaxRetries = 10
+		// Plumb ctx cancellation through Closer too. retry.StartWithCtx already
+		// observes ctx.Done() from Next, but Closer also makes the inner ExecEx
+		// retry paths short-circuit even if an intermediate error is wrapped in
+		// a form that IsRetryableReplicaError happens to accept.
+		retryOpts.Closer = ctx.Done()
 		m.deleteOrphanedLeasesFromStaleSession(ctx, retryOpts, timeThreshold, locality)
 		m.deleteOrphanedLeasesWithSameInstanceID(ctx, retryOpts, timeThreshold, instanceID)
 		if err := m.cleanupUpdateKeys(ctx, true /* force */); err != nil {
 			log.Dev.Warningf(ctx, "error cleaning up update keys: %v", err)
 		}
-	})
+	}); err != nil {
+		// RunAsyncTask only fails if the stopper is already quiescing, in which
+		// case there is nothing for us to do. Release the cancel registration
+		// to avoid leaking it.
+		cancel()
+	}
 }
 
 // Codec returns the Manager's SQLCodec.
