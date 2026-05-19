@@ -3039,9 +3039,14 @@ message Header {
   // Used by the ASH sampler to choose the right encoding.
   uint32 workload_type = 41 [(gogoproto.customname) = "WorkloadType"];
 
+  // enrichment_id is the per-execution attribute cache key set by the
+  // gateway node. Used by ASH sampling to resolve attributes
+  // (user, database, query, txn_id) via the ExecutionAttributes RPC.
+  uint64 enrichment_id = 42 [(gogoproto.customname) = "EnrichmentID"];
+
   reserved 7, 10, 12, 14, 20, 24;
 
-  // Next ID: 42
+  // Next ID: 43
 }
 
 message WriteOptions {

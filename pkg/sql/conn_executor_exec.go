@@ -669,7 +669,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.extendedEvalCtx.WorkloadType = workloadid.WorkloadTypeStatement
 	if p.txn != nil {
 		p.txn.SetWorkloadInfo(
-			uint64(ih.fingerprintId), appNameID, workloadid.WorkloadTypeStatement,
+			uint64(ih.fingerprintId), appNameID, 0 /* enrichmentID */, workloadid.WorkloadTypeStatement,
 		)
 	}
 
@@ -1762,7 +1762,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	p.extendedEvalCtx.WorkloadType = workloadid.WorkloadTypeStatement
 	if p.txn != nil {
 		p.txn.SetWorkloadInfo(
-			uint64(ih.fingerprintId), appNameID2, workloadid.WorkloadTypeStatement,
+			uint64(ih.fingerprintId), appNameID2, 0 /* enrichmentID */, workloadid.WorkloadTypeStatement,
 		)
 	}
 
@@ -2671,7 +2671,7 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) (retEr
 		txnFingerprintID := ex.extraTxnState.transactionStatementsHash.Sum()
 		appNameID := ash.GetOrStoreAppNameID(ex.sessionData().ApplicationName)
 		ex.state.mu.txn.SetWorkloadInfo(
-			txnFingerprintID, appNameID, workloadid.WorkloadTypeCommit,
+			txnFingerprintID, appNameID, 0 /* enrichmentID */, workloadid.WorkloadTypeCommit,
 		)
 	}
 

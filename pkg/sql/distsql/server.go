@@ -280,6 +280,7 @@ func (ds *ServerImpl) setupFlow(
 		leafTxn.SetWorkloadInfo(
 			req.EvalContext.WorkloadID,
 			req.EvalContext.AppNameID,
+			0, /* enrichmentID */
 			workloadid.WorkloadType(req.EvalContext.WorkloadType),
 		)
 		return leafTxn, nil

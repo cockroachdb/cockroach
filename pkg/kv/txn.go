@@ -91,6 +91,11 @@ type Txn struct {
 	// enrich samples with more workload context.
 	appNameID uint64
 
+	// enrichmentID, if != 0, is the per-execution attribute cache key set by the
+	// gateway node. Used by ASH sampling to resolve attributes (user, database,
+	// query, txn_id) via the ExecutionAttributes RPC.
+	enrichmentID uint64
+
 	// workloadID, if != 0, is the identifier for the workload that is using
 	// this transaction (e.g., statement fingerprint ID, job ID). It will be
 	// attached to all requests sent through this transaction.
@@ -463,14 +468,15 @@ func (txn *Txn) debugNameLocked() string {
 	return fmt.Sprintf("%s (id: %s)", txn.mu.debugName, txn.mu.ID)
 }
 
-// SetWorkloadInfo sets the workload ID, app name ID, and workload
-// type for ASH sampling. All three are automatically propagated to
-// all BatchRequests sent through this transaction.
+// SetWorkloadInfo sets the workload ID, app name ID, enrichment ID,
+// and workload type for ASH sampling. All four are automatically
+// propagated to all BatchRequests sent through this transaction.
 func (txn *Txn) SetWorkloadInfo(
-	workloadID, appNameID uint64, workloadType workloadid.WorkloadType,
+	workloadID, appNameID, enrichmentID uint64, workloadType workloadid.WorkloadType,
 ) {
 	txn.workloadID = workloadID
 	txn.appNameID = appNameID
+	txn.enrichmentID = enrichmentID
 	txn.workloadType = workloadType
 }
 
@@ -1392,6 +1398,10 @@ func (txn *Txn) Send(
 
 	if txn.appNameID != 0 && ba.Header.AppNameID == 0 {
 		ba.Header.AppNameID = txn.appNameID
+	}
+
+	if txn.enrichmentID != 0 && ba.Header.EnrichmentID == 0 {
+		ba.Header.EnrichmentID = txn.enrichmentID
 	}
 
 	if txn.workloadType != workloadid.WorkloadTypeUnknown && ba.Header.WorkloadType == 0 {
