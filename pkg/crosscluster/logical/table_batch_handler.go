@@ -106,7 +106,13 @@ func newTableHandler(
 	err = db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 		var err error
 		table, err = txn.Descriptors().GetLeasedImmutableTableByID(ctx, txn.KV(), tableID)
-		return err
+		if err != nil {
+			return err
+		}
+		if table == nil {
+			return catalog.NewDescriptorNotFoundError(tableID)
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, err
