@@ -1040,7 +1040,7 @@ func (r *testRunner) runWorker(
 				wStatus.SetStatus("running test")
 
 				r.runTest(ctx, t, testToRun.runNum, testToRun.runCount, c, stdout, testL,
-					github, issueInfo)
+					workerL, github, issueInfo)
 			}
 		}
 
@@ -1197,6 +1197,7 @@ func (r *testRunner) runTest(
 	c *clusterImpl,
 	stdout io.Writer,
 	l *logger.Logger,
+	runnerL *logger.Logger,
 	github GithubPoster,
 	issueInfo *githubIssueInfo,
 ) {
@@ -1354,7 +1355,7 @@ func (r *testRunner) runTest(
 			}
 
 			if t.artifactsSpec != "" {
-				publishTeamCityArtifactsWithFailover(ctx, t, l, stdout)
+				publishTeamCityArtifactsWithFailover(ctx, t, runnerL, stdout)
 			}
 		}
 
