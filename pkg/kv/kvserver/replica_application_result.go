@@ -63,6 +63,7 @@ func clearTrivialReplicatedEvalResultFields(r *kvserverpb.ReplicatedEvalResult) 
 	// DoTimelyApplicationToAllReplicas is trivial. It has been consumed in
 	// apply.Batch.Stage.
 	r.DoTimelyApplicationToAllReplicas = false
+	r.ApproxStoreLocalBytesDelta = 0
 }
 
 // prepareLocalResult is performed after the command has been committed to the

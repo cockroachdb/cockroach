@@ -266,7 +266,7 @@ func (b *appBatch) applyEntry(ctx context.Context, cmd *replicatedCmd) error {
 // stageTrivialResult updates the applied state in b.state to reflect a
 // successfully checked command. This covers the "trivial" fields that are
 // updated for every command: applied index/term, lease applied index, closed
-// timestamp, and MVCC stats.
+// timestamp, MVCC stats, and ApproxStoreLocalBytes.
 func (b *appBatch) stageTrivialResult(cmd *raftlog.ReplicatedCmd, fr kvserverbase.ForcedErrResult) {
 	b.state.RaftAppliedIndex = cmd.Index()
 	b.state.RaftAppliedIndexTerm = kvpb.RaftTerm(cmd.Term)
@@ -284,6 +284,10 @@ func (b *appBatch) stageTrivialResult(cmd *raftlog.ReplicatedCmd, fr kvserverbas
 	// not have to serialize on the stats key.
 	res := cmd.ReplicatedResult()
 	b.state.Stats.Add(res.Delta.ToStats())
+
+	// Accumulate the store-local write bytes. The value was set at
+	// evaluation time on the leaseholder.
+	b.state.ApproxStoreLocalBytes += res.ApproxStoreLocalBytesDelta
 	if res.DoTimelyApplicationToAllReplicas {
 		// Update the pending ForceFlushIndex of this batch. Writing is deferred
 		// to addAppliedStateToBatch, following the same pattern as AppliedState

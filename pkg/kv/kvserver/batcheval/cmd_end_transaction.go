@@ -1550,9 +1550,19 @@ func splitTriggerHelper(
 		// HardState via a call to synthesizeRaftState. Here, we only call
 		// writeInitialReplicaState which essentially writes a ReplicaState
 		// only.
+
+		// Load the LHS RangeAppliedState to get ApproxStoreLocalBytes so we
+		// can halve it for the RHS.
+		lhsSL := kvstorage.MakeStateLoader(split.LeftDesc.RangeID)
+		lhsAS, err := lhsSL.LoadRangeAppliedState(ctx, batch)
+		if err != nil {
+			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "loading LHS RangeAppliedState for split")
+		}
+
 		if *h.AbsPostSplitRight(), err = kvstorage.WriteInitialReplicaState(
 			ctx, batch, *h.AbsPostSplitRight(), split.RightDesc, rightLease,
 			*in.GCThreshold, *in.GCHint, in.ReplicaVersion,
+			lhsAS.ApproxStoreLocalBytes/2,
 		); err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to write initial Replica state")
 		}

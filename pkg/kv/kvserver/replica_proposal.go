@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
@@ -1071,6 +1072,20 @@ func (r *Replica) evaluateProposal(
 		// This is the result of a migration. See the field for more details.
 		if res.Replicated.Delta.ContainsEstimates > 0 {
 			res.Replicated.Delta.ContainsEstimates *= 2
+		}
+
+		// Compute store-local write bytes for ApproxStoreLocalBytes tracking.
+		// This is set at evaluation time so that all replicas apply the same
+		// deterministic value. Gated on a cluster version because old-binary
+		// replicas don't know about this field and would produce divergent
+		// RangeAppliedState.
+		if r.ClusterSettings().Version.IsActive(ctx, clusterversion.V26_3_ApproxStoreLocalBytes) {
+			if res.WriteBatch != nil {
+				res.Replicated.ApproxStoreLocalBytesDelta += int64(len(res.WriteBatch.Data))
+			}
+			if res.Replicated.AddSSTable != nil {
+				res.Replicated.ApproxStoreLocalBytesDelta += int64(len(res.Replicated.AddSSTable.Data))
+			}
 		}
 	}
 

@@ -290,6 +290,10 @@ const (
 	// to persist per-tenant resource group configurations.
 	V26_3_AddResourceGroupsTable
 
+	// V26_3_ApproxStoreLocalBytes enables tracking of store-local write
+	// bytes in RangeAppliedState.
+	V26_3_ApproxStoreLocalBytes
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -380,6 +384,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_3_AlterStatementsTablePK: {Major: 26, Minor: 2, Internal: 8},
 
 	V26_3_AddResourceGroupsTable: {Major: 26, Minor: 2, Internal: 10},
+
+	V26_3_ApproxStoreLocalBytes: {Major: 26, Minor: 2, Internal: 12},
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// *************************************************
