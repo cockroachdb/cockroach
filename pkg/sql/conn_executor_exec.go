@@ -667,9 +667,20 @@ func (ex *connExecutor) execStmtInOpenState(
 	appNameID := ash.GetOrStoreAppNameID(p.SessionData().ApplicationName)
 	p.extendedEvalCtx.AppNameID = appNameID
 	p.extendedEvalCtx.WorkloadType = workloadid.WorkloadTypeStatement
+	var txnID uuid.UUID
+	if p.txn != nil {
+		txnID = p.txn.ID()
+	}
+	enrichmentID := ash.PutExecution(&ex.server.cfg.Settings.SV, ash.ExecutionAttrs{
+		User:     p.SessionData().SessionUser().Normalized(),
+		Database: p.SessionData().Database,
+		Query:    stmt.SQL,
+		TxnID:    txnID,
+	})
+	p.extendedEvalCtx.EnrichmentID = enrichmentID
 	if p.txn != nil {
 		p.txn.SetWorkloadInfo(
-			uint64(ih.fingerprintId), appNameID, 0 /* enrichmentID */, workloadid.WorkloadTypeStatement,
+			uint64(ih.fingerprintId), appNameID, enrichmentID, workloadid.WorkloadTypeStatement,
 		)
 	}
 
@@ -1760,9 +1771,20 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	appNameID2 := ash.GetOrStoreAppNameID(p.SessionData().ApplicationName)
 	p.extendedEvalCtx.AppNameID = appNameID2
 	p.extendedEvalCtx.WorkloadType = workloadid.WorkloadTypeStatement
+	var txnID2 uuid.UUID
+	if p.txn != nil {
+		txnID2 = p.txn.ID()
+	}
+	enrichmentID2 := ash.PutExecution(&ex.server.cfg.Settings.SV, ash.ExecutionAttrs{
+		User:     p.SessionData().SessionUser().Normalized(),
+		Database: p.SessionData().Database,
+		Query:    vars.stmt.SQL,
+		TxnID:    txnID2,
+	})
+	p.extendedEvalCtx.EnrichmentID = enrichmentID2
 	if p.txn != nil {
 		p.txn.SetWorkloadInfo(
-			uint64(ih.fingerprintId), appNameID2, 0 /* enrichmentID */, workloadid.WorkloadTypeStatement,
+			uint64(ih.fingerprintId), appNameID2, enrichmentID2, workloadid.WorkloadTypeStatement,
 		)
 	}
 
