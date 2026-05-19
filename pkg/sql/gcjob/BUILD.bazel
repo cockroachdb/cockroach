@@ -59,7 +59,6 @@ go_test(
     embed = [":gcjob"],
     deps = [
         "//pkg/base",
-        "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
@@ -70,7 +69,6 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/spanconfig",
-        "//pkg/sql",
         "//pkg/sql/isql",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",

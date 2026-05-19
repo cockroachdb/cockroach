@@ -405,8 +405,8 @@ func waitForNoProtectionsBeforeDropTime(
 	}
 	check := func() (bool, error) {
 		isProtected, err := isProtected(
-			ctx, jobID, droppedAtTime, execCfg, execCfg.SpanConfigKVAccessor, sp,
-			protectionScopeForDescriptorCleanup,
+			ctx, jobID, droppedAtTime, execCfg.Codec, execCfg.GCJobTestingKnobs,
+			execCfg.SpanConfigKVAccessor, sp, protectionScopeForDescriptorCleanup,
 		)
 		if err != nil {
 			return false, err

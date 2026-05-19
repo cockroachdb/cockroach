@@ -9,16 +9,12 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -33,13 +29,6 @@ func TestProtectedTimestampsPreventGC(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-		},
-	})
-	defer srv.Stopper().Stop(ctx)
-	execCfg := srv.ExecutorConfig().(sql.ExecutorConfig)
 
 	ts := func(nanos int) hlc.Timestamp {
 		return hlc.Timestamp{
@@ -193,7 +182,8 @@ func TestProtectedTimestampsPreventGC(t *testing.T) {
 					kvAccessor := &manualKVAccessor{}
 					tc.setup(t, kvAccessor)
 					isProtected, err := isProtected(
-						ctx, jobspb.InvalidJobID, tc.droppedAtTime, &execCfg, kvAccessor, scratchRange, sc.scope,
+						ctx, jobspb.InvalidJobID, tc.droppedAtTime,
+						keys.SystemSQLCodec, nil /* knobs */, kvAccessor, scratchRange, sc.scope,
 					)
 					require.NoError(t, err)
 					require.Equal(t, sc.expected, isProtected)

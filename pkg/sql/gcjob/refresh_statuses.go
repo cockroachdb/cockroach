@@ -172,7 +172,8 @@ func updateTableStatus(
 			ctx,
 			jobID,
 			tableDropTimes[t.ID],
-			execCfg,
+			execCfg.Codec,
+			execCfg.GCJobTestingKnobs,
 			execCfg.SpanConfigKVAccessor,
 			sp,
 			protectionScopeForDataGC,
@@ -239,7 +240,8 @@ func updateIndexesStatus(
 			ctx,
 			jobID,
 			indexDropTimes[idxProgress.IndexID],
-			execCfg,
+			execCfg.Codec,
+			execCfg.GCJobTestingKnobs,
 			execCfg.SpanConfigKVAccessor,
 			sp,
 			protectionScopeForDataGC,
@@ -327,7 +329,8 @@ func isProtected(
 	ctx context.Context,
 	jobID jobspb.JobID,
 	droppedAtTime int64,
-	execCfg *sql.ExecutorConfig,
+	codec keys.SQLCodec,
+	knobs *sql.GCJobTestingKnobs,
 	kvAccessor spanconfig.KVAccessor,
 	sp roachpb.Span,
 	scope protectionScope,
@@ -342,7 +345,7 @@ func isProtected(
 			return false, err
 		}
 
-		_, tenID, err := keys.DecodeTenantPrefix(execCfg.Codec.TenantPrefix())
+		_, tenID, err := keys.DecodeTenantPrefix(codec.TenantPrefix())
 		if err != nil {
 			return false, err
 		}
@@ -385,8 +388,10 @@ func isProtected(
 		return false, err
 	}
 
-	if fn := execCfg.GCJobTestingKnobs.RunAfterIsProtectedCheck; fn != nil {
-		fn(jobID, isProtected)
+	if knobs != nil {
+		if fn := knobs.RunAfterIsProtectedCheck; fn != nil {
+			fn(jobID, isProtected)
+		}
 	}
 
 	return isProtected, nil
