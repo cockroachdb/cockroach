@@ -283,6 +283,38 @@ func TestPlanGramMatches(t *testing.T) {
 			{Key: "Index", Val: "abc_b_idx"},
 		},
 	}
+	scanWithConstraint := &mockFieldExpr{
+		mockExpr: mockExpr{op: opt.ScanOp},
+		fields: []PlanGramField{
+			{Key: "Table", Val: "abc"},
+			{Key: "Index", Val: "abc_b_idx"},
+			{Key: "HasConstraint", Val: "true"},
+			{Key: "HasLimit", Val: "false"},
+		},
+	}
+	scanWithLimit := &mockFieldExpr{
+		mockExpr: mockExpr{op: opt.ScanOp},
+		fields: []PlanGramField{
+			{Key: "Table", Val: "abc"},
+			{Key: "Index", Val: "abc_b_idx"},
+			{Key: "HasConstraint", Val: "false"},
+			{Key: "HasLimit", Val: "true"},
+		},
+	}
+	innerJoinWithType := &mockFieldExpr{
+		mockExpr: mockExpr{op: opt.InnerJoinOp, children: []opt.Expr{scanExpr, scanExpr}},
+		fields: []PlanGramField{
+			{Key: "JoinType", Val: "inner"},
+		},
+	}
+	lookupJoinWithType := &mockFieldExpr{
+		mockExpr: mockExpr{op: opt.LookupJoinOp, children: []opt.Expr{scanExpr}},
+		fields: []PlanGramField{
+			{Key: "Table", Val: "abc"},
+			{Key: "Index", Val: "abc_pkey"},
+			{Key: "JoinType", Val: "left"},
+		},
+	}
 
 	tests := []struct {
 		name     string
@@ -395,6 +427,102 @@ func TestPlanGramMatches(t *testing.T) {
 			pg:       PlanGram{root: &planGramExpr{op: opt.ScanOp}},
 			expr:     scanWithFields,
 			expected: true,
+		},
+		{
+			name: "HasConstraint match true",
+			pg: PlanGram{root: &planGramExpr{
+				op:     opt.ScanOp,
+				fields: []PlanGramField{{Key: "HasConstraint", Val: "true"}},
+			}},
+			expr:     scanWithConstraint,
+			expected: true,
+		},
+		{
+			name: "HasConstraint mismatch",
+			pg: PlanGram{root: &planGramExpr{
+				op:     opt.ScanOp,
+				fields: []PlanGramField{{Key: "HasConstraint", Val: "true"}},
+			}},
+			expr:     scanWithLimit,
+			expected: false,
+		},
+		{
+			name: "HasLimit match true",
+			pg: PlanGram{root: &planGramExpr{
+				op:     opt.ScanOp,
+				fields: []PlanGramField{{Key: "HasLimit", Val: "true"}},
+			}},
+			expr:     scanWithLimit,
+			expected: true,
+		},
+		{
+			name: "HasLimit mismatch",
+			pg: PlanGram{root: &planGramExpr{
+				op:     opt.ScanOp,
+				fields: []PlanGramField{{Key: "HasLimit", Val: "true"}},
+			}},
+			expr:     scanWithConstraint,
+			expected: false,
+		},
+		{
+			name: "JoinType match",
+			pg: PlanGram{root: &planGramExpr{
+				op:     opt.InnerJoinOp,
+				fields: []PlanGramField{{Key: "JoinType", Val: "inner"}},
+			}},
+			expr:     innerJoinWithType,
+			expected: true,
+		},
+		{
+			name: "JoinType mismatch",
+			pg: PlanGram{root: &planGramExpr{
+				op:     opt.InnerJoinOp,
+				fields: []PlanGramField{{Key: "JoinType", Val: "left"}},
+			}},
+			expr:     innerJoinWithType,
+			expected: false,
+		},
+		{
+			name: "JoinType case-insensitive match",
+			pg: PlanGram{root: &planGramExpr{
+				op:     opt.InnerJoinOp,
+				fields: []PlanGramField{{Key: "JoinType", Val: "Inner"}},
+			}},
+			expr:     innerJoinWithType,
+			expected: true,
+		},
+		{
+			name: "HasConstraint case-insensitive match",
+			pg: PlanGram{root: &planGramExpr{
+				op:     opt.ScanOp,
+				fields: []PlanGramField{{Key: "HasConstraint", Val: "True"}},
+			}},
+			expr:     scanWithConstraint,
+			expected: true,
+		},
+		{
+			name: "combined Table + JoinType match",
+			pg: PlanGram{root: &planGramExpr{
+				op: opt.LookupJoinOp,
+				fields: []PlanGramField{
+					{Key: "Table", Val: "abc"},
+					{Key: "JoinType", Val: "left"},
+				},
+			}},
+			expr:     lookupJoinWithType,
+			expected: true,
+		},
+		{
+			name: "combined Table match + JoinType mismatch",
+			pg: PlanGram{root: &planGramExpr{
+				op: opt.LookupJoinOp,
+				fields: []PlanGramField{
+					{Key: "Table", Val: "abc"},
+					{Key: "JoinType", Val: "inner"},
+				},
+			}},
+			expr:     lookupJoinWithType,
+			expected: false,
 		},
 	}
 
