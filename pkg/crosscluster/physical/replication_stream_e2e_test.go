@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
+	"github.com/cockroachdb/cockroach/pkg/util/besteffort"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -801,6 +802,9 @@ func TestStreamingAutoReplan(t *testing.T) {
 
 	skip.UnderRace(t, "multi cluster/node config exhausts hardware")
 	skip.UnderDeadlock(t, "scatter may take too long")
+
+	// This test explicitly validates the progress reloading in ingestWithRetries.
+	defer besteffort.TestForbidSkip("ingest-reload-progress")()
 
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
