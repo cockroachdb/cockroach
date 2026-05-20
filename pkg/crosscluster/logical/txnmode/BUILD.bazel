@@ -56,7 +56,6 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_gogo_protobuf//types",
     ],
 )
 
@@ -76,6 +75,7 @@ go_test(
         "//pkg/crosscluster/logical/ldrdecoder",
         "//pkg/crosscluster/logical/ldrsettings",
         "//pkg/crosscluster/logical/ldrtestutils",
+        "//pkg/crosscluster/logical/txnpb",
         "//pkg/crosscluster/replicationtestutils",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
@@ -101,11 +101,11 @@ go_test(
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_gogo_protobuf//types",
         "@com_github_stretchr_testify//require",
     ],
 )

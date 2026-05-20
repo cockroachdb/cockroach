@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrsettings"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -27,8 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -251,14 +252,16 @@ func mkts(wallTime int64) hlc.Timestamp {
 func makeFrontierMeta(
 	applierID base.SQLInstanceID, frontier hlc.Timestamp,
 ) *execinfrapb.ProducerMetadata {
-	marshalled, err := pbtypes.MarshalAny(&frontier)
+	progressBytes, err := protoutil.Marshal(&txnpb.TxnLDRProcProgress{
+		ApplierID:  int32(applierID),
+		Checkpoint: frontier,
+	})
 	if err != nil {
 		panic(err)
 	}
 	return &execinfrapb.ProducerMetadata{
 		BulkProcessorProgress: &execinfrapb.RemoteProducerMetadata_BulkProcessorProgress{
-			ProgressDetails: *marshalled,
-			NodeID:          applierID,
+			ProgressMessage: progressBytes,
 		},
 	}
 }

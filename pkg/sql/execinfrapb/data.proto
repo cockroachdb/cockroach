@@ -303,7 +303,11 @@ message RemoteProducerMetadata {
     optional bool drained = 9 [(gogoproto.nullable) = false];
     // ProcessorID is the ID of the processor that published the metadata.
     optional int32 processor_id = 10 [(gogoproto.nullable) = false, (gogoproto.customname) = "ProcessorID"];
-    // NEXT ID: 11
+    // ProgressMessage is an opaque bytes field that job-specific DistSQL
+    // processors can use to marshal their own progress protos into. Prefer
+    // this over ProgressDetails, which uses google.protobuf.Any.
+    optional bytes progress_message = 11;
+    // NEXT ID: 12
   }
   // Metrics are unconditionally emitted by table readers.
   message Metrics {
