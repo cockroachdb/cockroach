@@ -78,6 +78,17 @@ var (
 		"COUNTER": datadogV2.METRICINTAKETYPE_COUNT.Ptr(),
 	}
 	prometheusNameReplaceRE = regexp.MustCompile("^[^a-zA-Z_:]|[^a-zA-Z0-9_:]")
+
+	// tsdumpMetricNameOverrides provides name overrides for metrics whose
+	// Datadog name from the auto-generated mapping conflicts with the same
+	// metric emitted through a different ingestion pipeline. For example,
+	// sys.uptime is emitted as a gauge via OTel but as a count via tsdump;
+	// Datadog requires a single type per metric name, so tsdump renames it
+	// to sys.uptime.count.
+	tsdumpMetricNameOverrides = map[string]string{
+		"sys_uptime": "sys.uptime.count",
+	}
+
 	// Skip patterns - metrics that we haven't included for historical reasons
 	skipPatterns = []*regexp.Regexp{
 		regexp.MustCompile(`^auth_`),
@@ -483,7 +494,9 @@ func (d *datadogWriter) dump(kv *roachpb.KeyValue) (*datadogV2.MetricSeries, err
 
 	// Convert metric name to Prometheus format and lookup in metricsNameMap
 	promName := prometheusNameReplaceRE.ReplaceAllString(series.Metric, "_")
-	if datadogName, ok := d.metricsNameMap[promName]; ok {
+	if override, ok := tsdumpMetricNameOverrides[promName]; ok {
+		series.Metric = override
+	} else if datadogName, ok := d.metricsNameMap[promName]; ok {
 		series.Metric = datadogName
 	}
 
