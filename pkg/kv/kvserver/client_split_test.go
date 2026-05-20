@@ -1584,7 +1584,16 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			var activateSplitFilter int32
 			splitKey := roachpb.RKey(bootstrap.TestingUserTableDataMin(keys.SystemSQLCodec))
-			splitPending, blockSplits := make(chan struct{}), make(chan struct{})
+			// splitPending is buffered so the request filter doesn't block
+			// indefinitely if the test fails before reading the signal.
+			splitPending, blockSplits := make(chan struct{}, 1), make(chan struct{})
+			// backpressureRegistered receives one signal per write that
+			// successfully registered a backpressure callback with the split
+			// queue. This lets the test wait until both writes are registered
+			// before unblocking the split, avoiding a time-based coordination
+			// race on slow hardware (e.g. s390x). Buffered so the knob never
+			// blocks if the test stops listening early.
+			backpressureRegistered := make(chan roachpb.RangeID, 8)
 
 			// Set maxBytes to something small so we can exceed the maximum split
 			// size without adding 2x64MB of data.
@@ -1626,6 +1635,12 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 						DisableMergeQueue:              true,
 						DisableSplitQueue:              true,
 						TestingRequestFilter:           testingRequestFilter,
+						TestingBackpressureCallbackRegistered: func(id roachpb.RangeID) {
+							select {
+							case backpressureRegistered <- id:
+							default:
+							}
+						},
 					},
 				},
 			})
@@ -1664,7 +1679,11 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 				}); err != nil {
 					t.Fatal(err)
 				}
-				<-splitPending
+				select {
+				case <-splitPending:
+				case <-time.After(testutils.DefaultSucceedsSoonDuration):
+					t.Fatal("timed out waiting for split filter to trigger")
+				}
 			} else if tc.splitImpossible {
 				store.TestingSetSplitQueueActive(true)
 				if err := store.ForceSplitScanAndProcess(); err != nil {
@@ -1701,17 +1720,29 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 				})
 			}()
 
-			// Make sure the write doesn't return while a split is ongoing. If no
-			// split is ongoing, the write will return an error immediately.
+			// Wait for both writes to register a backpressure callback before
+			// unblocking the split. This ensures both writes will observe the
+			// split's outcome via their registered callbacks, avoiding a race
+			// where the split completes (and removes the range from the split
+			// queue's tracked replicas) before a slow goroutine calls
+			// MaybeAddCallback. While waiting, also fail fast if either write
+			// returns prematurely.
 			if tc.splitOngoing {
-				select {
-				case err := <-putRes:
-					close(blockSplits)
-					t.Fatalf("put was not blocked on split, returned err %v", err)
-				case err := <-delRes:
-					close(blockSplits)
-					t.Fatalf("delete was not blocked on split, returned err %v", err)
-				case <-time.After(100 * time.Millisecond):
+				timeout := time.After(testutils.DefaultSucceedsSoonDuration)
+				for registered := 0; registered < 2; {
+					select {
+					case err := <-putRes:
+						close(blockSplits)
+						t.Fatalf("put was not blocked on split, returned err %v", err)
+					case err := <-delRes:
+						close(blockSplits)
+						t.Fatalf("delete was not blocked on split, returned err %v", err)
+					case <-backpressureRegistered:
+						registered++
+					case <-timeout:
+						close(blockSplits)
+						t.Fatalf("timed out waiting for backpressure callbacks to register (got %d/2)", registered)
+					}
 				}
 
 				// Let split through. Write should follow.
@@ -1723,7 +1754,13 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 				"put":    putRes,
 				"delete": delRes,
 			} {
-				if err := <-resCh; tc.expErr == "" {
+				var err error
+				select {
+				case err = <-resCh:
+				case <-time.After(testutils.DefaultSucceedsSoonDuration):
+					t.Fatalf("timed out waiting for %s to return", op)
+				}
+				if tc.expErr == "" {
 					if err != nil {
 						t.Fatalf("%s returned err %v, expected success", op, err)
 					}
