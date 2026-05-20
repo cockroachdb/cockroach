@@ -60,8 +60,8 @@ for platform in linux-amd64 linux-amd64-fips linux-arm64 linux-s390x; do
   tarball=${cockroach_archive_prefix}-${version}.${platform}.tgz
 
   echo "Downloading $tarball..."
-  gsutil -o 'GSUtil:num_retries=5' cp "gs://$gcs_staged_bucket/$tarball" "$tarball"
-  gsutil -o 'GSUtil:num_retries=5' cp "gs://$gcs_staged_bucket/$tarball.sha256sum" "$tarball.sha256sum"
+  gcloud storage cp "gs://$gcs_staged_bucket/$tarball" "$tarball"
+  gcloud storage cp "gs://$gcs_staged_bucket/$tarball.sha256sum" "$tarball.sha256sum"
 
   echo "Verifying checksum..."
   shasum --algorithm 256 --check "$tarball.sha256sum"
@@ -73,6 +73,6 @@ for platform in linux-amd64 linux-amd64-fips linux-arm64 linux-s390x; do
   gpg --homedir "$secrets_dir" --verify "$tarball.asc" "$tarball"
 
   echo "Uploading $tarball.asc..."
-  gsutil -o 'GSUtil:num_retries=5' cp "$tarball.asc" "gs://$gcs_staged_bucket/$tarball.asc"
+  gcloud storage cp "$tarball.asc" "gs://$gcs_staged_bucket/$tarball.asc"
 done
 echo "IBM GPG signing complete."
