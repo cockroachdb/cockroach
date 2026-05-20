@@ -51,6 +51,8 @@ import (
 //	root: (Select (IndexJoin scan));
 //	scan: (Scan Index="abc_b_idx") | (Scan Index="abc_c_idx");
 //
+// Use "_" as a wildcard operator to match any expression, e.g. "root: (_);".
+//
 // The grammar is stored as a linked graph of terms, starting with the "root"
 // nonterminal. The graph could contain cycles (for example to match a plan with
 // a FK cascade cycle).
@@ -237,7 +239,11 @@ func (p PlanGram) FormatPretty(b *bytes.Buffer, newlines bool) {
 			b.WriteString(t.name)
 		case *planGramExpr:
 			b.WriteRune('(')
-			b.WriteString(t.op.CamelCase())
+			if t.op == opt.UnknownOp {
+				b.WriteRune('_')
+			} else {
+				b.WriteString(t.op.CamelCase())
+			}
 			for _, field := range t.fields {
 				b.WriteRune(' ')
 				// Assume field names don't need to be quoted.
@@ -497,9 +503,15 @@ func (p *planGramParser) parseExpr() (planGramTerm, error) {
 	if err != nil {
 		return nil, err
 	}
-	op, ok := opt.OperatorByCamelCase(opName)
-	if !ok {
-		return nil, errors.Newf("unknown operator %q", opName)
+	var op opt.Operator
+	if opName == "_" {
+		op = opt.UnknownOp
+	} else {
+		var ok bool
+		op, ok = opt.OperatorByCamelCase(opName)
+		if !ok {
+			return nil, errors.Newf("unknown operator %q", opName)
+		}
 	}
 	expr := &planGramExpr{op: op}
 
