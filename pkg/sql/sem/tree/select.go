@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -213,11 +214,25 @@ type ColumnDef struct {
 
 // Format implements the NodeFormatter interface.
 func (c *ColumnDef) Format(ctx *FmtCtx) {
-	ctx.FormatNode(&c.Name)
+	if !ctx.flags.HasFlags(FmtAnonymize) && needsLexerEscapeAsColName(string(c.Name)) {
+		lexbase.EncodeEscapedSQLIdent(&ctx.Buffer, string(c.Name))
+	} else {
+		ctx.FormatNode(&c.Name)
+	}
 	if c.Type != nil {
 		ctx.WriteByte(' ')
 		ctx.FormatTypeReference(c.Type)
 	}
+}
+
+// needsLexerEscapeAsColName returns true when n must be force-quoted to be
+// recognized as a column name by the parser, even though it is not a reserved
+// keyword. This is necessary for identifiers that the lexer reclassifies into
+// a non-name token based on lookahead (e.g. INDEX followed by an identifier
+// and '(' becomes INDEX_BEFORE_NAME_THEN_PAREN). See the INDEX disambiguation
+// comment in pkg/sql/parser/lexer.go for details.
+func needsLexerEscapeAsColName(n string) bool {
+	return n == "index"
 }
 
 // ColumnDefList represents a list of ColumnDefs.
