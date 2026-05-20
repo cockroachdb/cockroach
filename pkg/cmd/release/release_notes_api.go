@@ -63,7 +63,10 @@ func postReleaseNotes(url, apiKey string, p releaseNotesPayload) error {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", apiKey)
-	client := httputil.NewClientWithTimeout(30 * time.Second)
+	// The endpoint is a Cloud Function that synthesizes a release-notes
+	// draft; cold starts plus the docs work itself can easily exceed
+	// 30s, so allow a couple of minutes before giving up.
+	client := httputil.NewClientWithTimeout(2 * time.Minute)
 	resp, err := client.Do(req)
 	if err != nil {
 		return errors.Wrap(err, "posting to release-notes API")
