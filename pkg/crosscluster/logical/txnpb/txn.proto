@@ -86,3 +86,12 @@ message LDRDepResolverEvent {
     DepResolverForwardUpdate forward_update = 4;
   }
 }
+
+// TxnLDRProcProgress carries the frontier timestamp from a transactional LDR
+// applier processor back to the gateway's checkpoint handler. It is serialized
+// into BulkProcessorProgress.ProgressMessage by the applier and deserialized
+// by the gateway's checkpointHandler.
+message TxnLDRProcProgress {
+  int32 applier_id = 1 [(gogoproto.customname) = "ApplierID"];
+  util.hlc.Timestamp checkpoint = 2 [(gogoproto.nullable) = false];
+}

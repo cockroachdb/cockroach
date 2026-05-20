@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
-	pbtypes "github.com/gogo/protobuf/types"
 )
 
 var (
@@ -183,7 +182,11 @@ func (p *ldrApplierProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerM
 				p.MoveToDraining(nil)
 				break
 			}
-			meta := p.encodeFrontierMeta(frontier)
+			meta, err := p.encodeFrontierMeta(frontier)
+			if err != nil {
+				p.MoveToDraining(err)
+				break
+			}
 			return nil, meta
 		}
 	}
@@ -310,23 +313,23 @@ func (p *ldrApplierProcessor) encodeDepResolverEvent(
 }
 
 // encodeFrontierMeta creates a ProducerMetadata carrying the applier's
-// frontier timestamp. The gateway metadata handler unmarshals this and
+// frontier timestamp. The gateway metadata handler extracts this and
 // persists it as the job's replicated time.
 func (p *ldrApplierProcessor) encodeFrontierMeta(
 	frontier hlc.Timestamp,
-) *execinfrapb.ProducerMetadata {
-	// TODO(msbutler): any protos are the enemy. Refactor this.
-	marshalledFrontier, err := pbtypes.MarshalAny(&frontier)
+) (*execinfrapb.ProducerMetadata, error) {
+	progressBytes, err := protoutil.Marshal(&txnpb.TxnLDRProcProgress{
+		ApplierID:  p.spec.ApplierID,
+		Checkpoint: frontier,
+	})
 	if err != nil {
-		panic(errors.NewAssertionErrorWithWrappedErrf(
-			err, "marshaling frontier timestamp"))
+		return nil, errors.NewAssertionErrorWithWrappedErrf(err, "marshaling applier frontier progress")
 	}
 	return &execinfrapb.ProducerMetadata{
 		BulkProcessorProgress: &execinfrapb.RemoteProducerMetadata_BulkProcessorProgress{
-			ProgressDetails: *marshalledFrontier,
-			NodeID:          base.SQLInstanceID(p.spec.ApplierID),
+			ProgressMessage: progressBytes,
 		},
-	}
+	}, nil
 }
 
 func init() {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrsettings"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnpb"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -23,9 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	pbtypes "github.com/gogo/protobuf/types"
 )
 
 // PlanTxnReplication constructs a 3-stage DistSQL physical plan for
@@ -385,22 +386,31 @@ func newCheckpointHandler(
 	}
 }
 
+// handleMeta is a MetadataCallbackWriter callback. It only extracts frontier
+// progress; meta.Err is handled separately by DistSQLReceiver.pushMeta, which
+// calls r.SetError(meta.Err) after this callback returns.
 func (ch *checkpointHandler) handleMeta(
 	ctx context.Context, meta *execinfrapb.ProducerMetadata,
 ) error {
-	if meta.BulkProcessorProgress == nil {
+	if meta.BulkProcessorProgress == nil ||
+		len(meta.BulkProcessorProgress.ProgressMessage) == 0 {
 		return nil
 	}
 
-	var frontier hlc.Timestamp
-	if err := pbtypes.UnmarshalAny(
-		&meta.BulkProcessorProgress.ProgressDetails, &frontier,
+	var progress txnpb.TxnLDRProcProgress
+	if err := protoutil.Unmarshal(
+		meta.BulkProcessorProgress.ProgressMessage, &progress,
 	); err != nil {
-		return errors.Wrap(err, "unmarshaling applier frontier")
+		return errors.NewAssertionErrorWithWrappedErrf(
+			err, "unmarshaling applier frontier progress")
 	}
 
-	applierID := meta.BulkProcessorProgress.NodeID
-	ch.applierFrontiers[applierID] = frontier
+	applierID := base.SQLInstanceID(progress.ApplierID)
+	if _, ok := ch.applierFrontiers[applierID]; !ok {
+		return errors.AssertionFailedf(
+			"received frontier progress from unknown applier %d", applierID)
+	}
+	ch.applierFrontiers[applierID] = progress.Checkpoint
 
 	replicatedTime := ch.minFrontier()
 	if !replicatedTime.IsSet() {
