@@ -181,6 +181,10 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 			if t.IsTemporary {
 				panic(scerrors.NotImplementedErrorf(nil, "dropping a temporary table"))
 			}
+			if ldrJobIDs := undropped.FilterLDRJobIDs().MustGetZeroOrOneElement(); ldrJobIDs != nil && len(ldrJobIDs.JobIDs) > 0 {
+				ns := undropped.FilterNamespace().MustGetOneElement()
+				panic(sqlerrors.NewDisallowedSchemaChangeOnLDRTableErr(ns.Name, ldrJobIDs.JobIDs))
+			}
 		case *scpb.Sequence:
 			if t.IsTemporary {
 				panic(scerrors.NotImplementedErrorf(nil, "dropping a temporary sequence"))

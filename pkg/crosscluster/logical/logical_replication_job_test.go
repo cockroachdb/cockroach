@@ -2531,6 +2531,8 @@ func TestLogicalReplicationSchemaChanges(t *testing.T) {
 
 		// Drop table is blocked
 		{"drop table", "DROP TABLE tab", false},
+		// Drop database cascade is blocked.
+		{"drop database cascade", "DROP DATABASE a CASCADE", false},
 
 		// Dissalow storage param updates if is not the only change.
 		{"disable schema locked", "ALTER TABLE tab SET (schema_locked = false)", true},
