@@ -22,7 +22,6 @@ go_library(
         "//pkg/kv/kvserver/kvstorage",
         "//pkg/kv/kvserver/liveness",
         "//pkg/kv/kvserver/load",
-        "//pkg/kv/kvserver/mmaintegration",
         "//pkg/kv/kvserver/storeliveness",
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer",
         "//pkg/roachpb",
