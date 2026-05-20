@@ -1004,23 +1004,30 @@ func (p *Provider) ListVolumes(l *logger.Logger, v *vm.VM) ([]vm.Volume, error) 
 		}
 	}
 
-	// Unfortunately the above responses contain no common identifier to join
-	// on, so we must resort to indexing. This does not work if the number of
-	// attached disks is different from the number of described volumes, i.e.
-	// if the cluster is using local SSDs.
-	if len(attachedDisks) != len(describedVolumes) {
-		err := errors.Newf("expected to find the same number of attached disks (%d) as described volumes (%d)",
-			len(attachedDisks), len(describedVolumes))
-		return nil, errors.WithHint(err, "is the cluster using local SSD?")
+	// We join the two sets based on their disk name. describedVolumes contains
+	// the metadata required, so we iterate over describedVolumes to retrieve the
+	// needed information. Local SSDs appear in attachedDisks, so we drop them
+	// when creating the bootByName mapping and exclude them from the join. The
+	// boot disk only holds the OS so it is skipped in the join loop.
+	bootByName := make(map[string]bool, len(attachedDisks))
+	for _, a := range attachedDisks {
+		if a.Source == "" {
+			continue
+		}
+		bootByName[lastComponent(a.Source)] = a.Boot
 	}
 
 	var volumes []vm.Volume
-	for idx := range attachedDisks {
-		attachedDisk := attachedDisks[idx]
-		if attachedDisk.Boot {
+	for _, describedVolume := range describedVolumes {
+		isBoot, ok := bootByName[describedVolume.Name]
+		if !ok {
+			return nil, errors.AssertionFailedf(
+				"described volume %q has no matching attached disk", describedVolume.Name,
+			)
+		}
+		if isBoot {
 			continue
 		}
-		describedVolume := describedVolumes[idx]
 		size, err := strconv.Atoi(describedVolume.SizeGB)
 		if err != nil {
 			return nil, err
