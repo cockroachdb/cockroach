@@ -139,8 +139,8 @@ for product in cockroach cockroach-sql; do
           archive_suffix=zip
       fi
       archive="$product-$version.$platform.$archive_suffix"
-      gsutil cp "gs://$gcs_staged_bucket/$archive" "gs://$gcs_bucket/$archive"
-      gsutil cp "gs://$gcs_staged_bucket/$archive.sha256sum" "gs://$gcs_bucket/$archive.sha256sum"
+      gcloud storage cp "gs://$gcs_staged_bucket/$archive" "gs://$gcs_bucket/$archive"
+      gcloud storage cp "gs://$gcs_staged_bucket/$archive.sha256sum" "gs://$gcs_bucket/$archive.sha256sum"
   done
 done
 tc_end_block "Copy binaries"
@@ -215,8 +215,8 @@ if [[ -n "${PUBLISH_LATEST}" && $prerelease == false ]]; then
         fi
         from="$product-$version.$platform.$archive_suffix"
         to="$product-latest.$platform.$archive_suffix"
-        gsutil cp "gs://$gcs_bucket/$from" "gs://$gcs_bucket/$to"
-        gsutil cp "gs://$gcs_bucket/$from.sha256sum" "gs://$gcs_bucket/$to.sha256sum"
+        gcloud storage cp "gs://$gcs_bucket/$from" "gs://$gcs_bucket/$to"
+        gcloud storage cp "gs://$gcs_bucket/$from.sha256sum" "gs://$gcs_bucket/$to.sha256sum"
     done
   done
 else
