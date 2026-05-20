@@ -3648,7 +3648,11 @@ CONFIGURE ZONE USING
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCLingerLoadMatrix(ctx, t, c,
 				[]string{"10ms", "100ms", "1s"},
-				[]int{12000, 25000, 40000, 60000, 80000})
+				// Loads zoom on the saturation transition zone. The earlier
+				// matrix at 12k/25k showed cadences are indistinguishable
+				// well below saturation, so the interesting question is the
+				// exact rate at which each cadence's pipeline tips over.
+				[]int{40000, 45000, 50000, 55000, 60000, 70000})
 		},
 	})
 }
@@ -3804,8 +3808,15 @@ func runCDCLingerLoadMatrix(
 			if _, err := conn.ExecContext(ctx, fmt.Sprintf("CANCEL JOB %d", currentJobID)); err != nil {
 				t.Fatal(err)
 			}
+			// resolved = '' enables resolved-timestamp emission with the
+			// default cadence, matching what ct.newChangefeed configures for
+			// the kafka sink (cdc.go:541). Without this, the topic consumer
+			// stops seeing resolved timestamps and the Max Changefeed Latency
+			// Grafana panel freezes — the row data still flows but the lag
+			// signal is lost.
 			createSQL := fmt.Sprintf(
 				`CREATE CHANGEFEED FOR kv.kv INTO '%s' WITH initial_scan = 'no', `+
+					`resolved = '', `+
 					`kafka_sink_config = '{"Flush": {"Frequency": "%s"}}'`,
 				sinkURI, cadence)
 			if err := conn.QueryRowContext(ctx, createSQL).Scan(&currentJobID); err != nil {
