@@ -1216,6 +1216,7 @@ larger than cluster settings `sql.guardrails.max_row_size_log` or
 | `TableID` |  | no |
 | `FamilyID` |  | no |
 | `PrimaryKey` |  | yes |
+| `SkippedLargeRows` | skipped_large_rows is the number of large-row events that were suppressed by per-statement rate limiting prior to this one. If the field is omitted, or its value is zero, no large-row events were suppressed since the previous emitted event. | no |
 
 ### `txn_rows_read_limit_internal`
 
@@ -3226,6 +3227,7 @@ of transaction abort there will not be a corresponding row in the database.
 | `TableID` |  | no |
 | `FamilyID` |  | no |
 | `PrimaryKey` |  | yes |
+| `SkippedLargeRows` | skipped_large_rows is the number of large-row events that were suppressed by per-statement rate limiting prior to this one. If the field is omitted, or its value is zero, no large-row events were suppressed since the previous emitted event. | no |
 
 ### `scan_row_count_misestimate`
 

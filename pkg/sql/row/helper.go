@@ -9,6 +9,8 @@ import (
 	"bytes"
 	"context"
 	"sort"
+	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -44,7 +46,28 @@ const (
 	maxRowSizeFloor = 1 << 10
 	// maxRowSizeCeil is the upper bound for sql.guardrails.max_row_size_{log|err}.
 	maxRowSizeCeil = 1 << 30
+	// maxRawPrimaryKeyLen caps the raw key bytes pretty-printed for large-row
+	// events; see keys.PrettyPrintBounded.
+	maxRawPrimaryKeyLen = 1 << 10
 )
+
+// largeRowLogEvery rate-limits LargeRow / LargeRowInternal emissions across
+// all RowHelpers in the process. Suppressions are counted in
+// skippedLargeRows and surfaced on the next emitted event's
+// CommonLargeRowDetails.SkippedLargeRows. A var so tests can lower the
+// interval.
+var largeRowLogEvery = log.Every(time.Second)
+var skippedLargeRows atomic.Uint64
+
+// TestingDisableLargeRowRateLimit disables the process-wide LargeRow rate
+// limit (see largeRowLogEvery) and returns a function that restores the
+// default 1-second interval. Tests exercising CheckRowSize's emission logic
+// should call this when other code in the same test binary may concurrently
+// emit LargeRow events and steal the rate-limit window.
+func TestingDisableLargeRowRateLimit() func() {
+	largeRowLogEvery = log.Every(0)
+	return func() { largeRowLogEvery = log.Every(time.Second) }
+}
 
 var maxRowSizeLog = settings.RegisterByteSizeSetting(
 	settings.ApplicationLevel,
@@ -446,8 +469,10 @@ func (rh *RowHelper) SortedColumnFamily(famID descpb.FamilyID) ([]descpb.ColumnI
 	return colIDs, ok
 }
 
-// CheckRowSize compares the size of a primary key column family against the
-// max_row_size limits.
+// CheckRowSize checks the row size against the max_row_size limits. Over
+// max_row_size_log emits a LargeRow / LargeRowInternal event (rate-limited
+// process-wide; suppressed counts surface in the next event's
+// SkippedLargeRows). Over max_row_size_err returns ProgramLimitExceeded.
 func (rh *RowHelper) CheckRowSize(
 	ctx context.Context, key *roachpb.Key, valueBytes []byte, family descpb.FamilyID,
 ) error {
@@ -457,21 +482,38 @@ func (rh *RowHelper) CheckRowSize(
 	if !shouldLog && !shouldErr {
 		return nil
 	}
-	details := eventpb.CommonLargeRowDetails{
-		RowSize:    size,
-		TableID:    uint32(rh.TableDesc.GetID()),
-		FamilyID:   uint32(family),
-		PrimaryKey: keys.PrettyPrint(primaryIndexDirs.compute(rh), *key),
-	}
 	if rh.sd.Internal && shouldErr {
 		// Internal work should never err and always log if violating either limit.
 		shouldErr = false
 		shouldLog = true
 	}
-	if shouldLog {
-		if rh.metrics != nil {
+	if rh.metrics != nil {
+		if shouldLog {
 			rh.metrics.MaxRowSizeLogCount.Inc(1)
 		}
+		if shouldErr {
+			rh.metrics.MaxRowSizeErrCount.Inc(1)
+		}
+	}
+	// Rate-limit the log path. The error path always proceeds — it builds
+	// details below and the SkippedLargeRows drain there folds in the
+	// suppressed log count regardless.
+	if shouldLog && !shouldErr && !largeRowLogEvery.ShouldLog() {
+		skippedLargeRows.Add(1)
+		return nil
+	}
+
+	// Construct details only when we will actually surface them — either as
+	// a log event or as an error.
+	details := eventpb.CommonLargeRowDetails{
+		RowSize:          size,
+		TableID:          uint32(rh.TableDesc.GetID()),
+		FamilyID:         uint32(family),
+		PrimaryKey:       keys.PrettyPrintBounded(primaryIndexDirs.compute(rh), *key, maxRawPrimaryKeyLen),
+		SkippedLargeRows: skippedLargeRows.Swap(0),
+	}
+
+	if shouldLog {
 		var event logpb.EventPayload
 		if rh.sd.Internal {
 			event = &eventpb.LargeRowInternal{CommonLargeRowDetails: details}
@@ -481,9 +523,6 @@ func (rh *RowHelper) CheckRowSize(
 		log.StructuredEvent(ctx, severity.INFO, event)
 	}
 	if shouldErr {
-		if rh.metrics != nil {
-			rh.metrics.MaxRowSizeErrCount.Inc(1)
-		}
 		return pgerror.WithCandidateCode(&details, pgcode.ProgramLimitExceeded)
 	}
 	return nil
