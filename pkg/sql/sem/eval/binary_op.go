@@ -436,6 +436,17 @@ func (e *evaluator) EvalDivDecimalIntOp(
 	return dd, err
 }
 
+func (e *evaluator) EvalDivFloatIntOp(
+	ctx context.Context, _ *tree.DivFloatIntOp, left, right tree.Datum,
+) (tree.Datum, error) {
+	l := float64(*left.(*tree.DFloat))
+	r := tree.MustBeDInt(right)
+	if r == 0 && !math.IsNaN(l) {
+		return nil, tree.ErrDivByZero
+	}
+	return tree.NewDFloat(tree.DFloat(l / float64(r))), nil
+}
+
 func (e *evaluator) EvalDivDecimalOp(
 	ctx context.Context, _ *tree.DivDecimalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
@@ -476,6 +487,17 @@ func (e *evaluator) EvalDivIntDecimalOp(
 	dd.SetInt64(int64(l))
 	_, err := tree.DecimalCtx.Quo(&dd.Decimal, &dd.Decimal, r)
 	return dd, err
+}
+
+func (e *evaluator) EvalDivIntFloatOp(
+	ctx context.Context, _ *tree.DivIntFloatOp, left, right tree.Datum,
+) (tree.Datum, error) {
+	l := tree.MustBeDInt(left)
+	r := float64(*right.(*tree.DFloat))
+	if r == 0.0 {
+		return nil, tree.ErrDivByZero
+	}
+	return tree.NewDFloat(tree.DFloat(float64(l) / r)), nil
 }
 
 func (e *evaluator) EvalDivIntOp(

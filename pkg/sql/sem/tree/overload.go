@@ -1396,6 +1396,10 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 			// keep track of previous overload indexes to return ambiguous error (>1 overloads)
 			// instead of unsupported error (0 overloads) when applicable.
 			prevOverloadIdxs := s.overloadIdxs
+			// Track whether bestConstType matched any candidates so a failed
+			// preference does not influence later homogeneous-type heuristics.
+			bestConstTypeMatched := true
+
 			for i, ok := s.constIdxs.Next(0); ok; i, ok = s.constIdxs.Next(i + 1) {
 				filter := makeFilter(i, func(params TypeList, ordinal int) bool {
 					return params.GetAt(ordinal).Equivalent(bestConstType)
@@ -1403,17 +1407,31 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 				s.overloadIdxs = filterParams(s.overloadIdxs, s.overloads, s.params, filter)
 			}
 			if ok, err := checkReturn(ctx, semaCtx, s); ok {
+				if err != nil {
+					return err
+				}
 				if len(s.overloadIdxs) == 0 {
 					s.overloadIdxs = prevOverloadIdxs
+					// Preserve existing placeholder ambiguity behavior. Continuing
+					// would try to type unresolved placeholders without a unique overload.
+					if !s.placeholderIdxs.Empty() {
+						return nil
+					}
+					// Continue to later heuristics, but don't treat the failed
+					// bestConstType preference as the new homogeneous type.
+					bestConstTypeMatched = false
+				} else {
+					return nil
 				}
-				return err
 			}
-			if homogeneousTyp != nil {
-				if !homogeneousTyp.Equivalent(bestConstType) {
-					homogeneousTyp = nil
+			if bestConstTypeMatched {
+				if homogeneousTyp != nil {
+					if !homogeneousTyp.Equivalent(bestConstType) {
+						homogeneousTyp = nil
+					}
+				} else {
+					homogeneousTyp = bestConstType
 				}
-			} else {
-				homogeneousTyp = bestConstType
 			}
 		}
 	}
