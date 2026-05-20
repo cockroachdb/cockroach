@@ -255,8 +255,8 @@ type cpuTimeTokenAllocator struct {
 	// goroutines.
 	//
 	// TODO(ssd): Will be removed in a future commit. GetKVWorkQueue
-	// and groupKeyForWorkLocked can read the mode setting directly;
-	// activeMode and lastMode are unnecessary indirection.
+	// and cpuTimeTokenGroupKeyForWorkInfo can read the mode setting
+	// directly; activeMode and lastMode are unnecessary indirection.
 	lastMode cpuTimeTokenMode
 
 	// refillRates stores the number of CPU time tokens to add to each bucket
