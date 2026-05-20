@@ -12,93 +12,87 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/bulkmerge"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
-// TestCheckRequiredInstancesAvailable tests the instance availability
-// validation logic used before starting a distributed merge.
+// TestCheckRequiredInstancesAvailable verifies that the helper detects
+// when the available instance set is missing one or more SQL instances
+// referenced by an input SST URI.
 func TestCheckRequiredInstancesAvailable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	t.Run("empty sst list returns nil", func(t *testing.T) {
-		err := bulkmerge.CheckRequiredInstancesAvailable(nil, nil)
-		require.NoError(t, err)
-	})
+	tests := []struct {
+		name                string
+		ssts                []execinfrapb.BulkMergeSpec_SST
+		availableInstances  []base.SQLInstanceID
+		expectedUnavailable []base.SQLInstanceID
+	}{
+		{
+			name:               "empty ssts returns nil",
+			ssts:               nil,
+			availableInstances: nil,
+		},
+		{
+			name: "plan covers required instance",
+			ssts: []execinfrapb.BulkMergeSpec_SST{
+				{URI: "nodelocal://1/job/123/map/file1.sst"},
+			},
+			availableInstances: []base.SQLInstanceID{1, 2},
+		},
+		{
+			name: "plan missing one required instance",
+			ssts: []execinfrapb.BulkMergeSpec_SST{
+				{URI: "nodelocal://2/job/123/map/file1.sst"},
+			},
+			availableInstances:  []base.SQLInstanceID{1, 3},
+			expectedUnavailable: []base.SQLInstanceID{2},
+		},
+		{
+			name: "plan missing multiple required instances",
+			ssts: []execinfrapb.BulkMergeSpec_SST{
+				{URI: "nodelocal://2/job/123/map/file1.sst"},
+				{URI: "nodelocal://4/job/123/map/file2.sst"},
+				{URI: "nodelocal://1/job/123/map/file3.sst"},
+			},
+			availableInstances:  []base.SQLInstanceID{1},
+			expectedUnavailable: []base.SQLInstanceID{2, 4},
+		},
+		{
+			name: "non-nodelocal uris ignored",
+			ssts: []execinfrapb.BulkMergeSpec_SST{
+				{URI: "s3://bucket/file1.sst"},
+				{URI: "gs://bucket/file2.sst"},
+				{URI: ""},
+			},
+			availableInstances: nil,
+		},
+		{
+			name: "instance 0 (self) ignored",
+			ssts: []execinfrapb.BulkMergeSpec_SST{
+				{URI: "nodelocal://0/job/123/map/file1.sst"},
+			},
+			availableInstances: nil,
+		},
+	}
 
-	t.Run("all instances available returns nil", func(t *testing.T) {
-		// Create SSTs with URIs for instance 1.
-		ssts := []execinfrapb.BulkMergeSpec_SST{
-			{URI: "nodelocal://1/job/123/map/file1.sst"},
-			{URI: "nodelocal://1/job/123/map/file2.sst"},
-		}
-
-		// Create available instances list including instance 1.
-		availableInstances := []sqlinstance.InstanceInfo{
-			{InstanceID: base.SQLInstanceID(1), SessionID: sqlliveness.SessionID("session1")},
-			{InstanceID: base.SQLInstanceID(2), SessionID: sqlliveness.SessionID("session2")},
-		}
-
-		err := bulkmerge.CheckRequiredInstancesAvailable(ssts, availableInstances)
-		require.NoError(t, err)
-	})
-
-	t.Run("missing instance returns InstanceUnavailableError", func(t *testing.T) {
-		// Create SSTs with URIs for instance 2 (which is not available).
-		ssts := []execinfrapb.BulkMergeSpec_SST{
-			{URI: "nodelocal://2/job/123/map/file1.sst"},
-		}
-
-		// Create available instances list NOT including instance 2.
-		availableInstances := []sqlinstance.InstanceInfo{
-			{InstanceID: base.SQLInstanceID(1), SessionID: sqlliveness.SessionID("session1")},
-		}
-
-		err := bulkmerge.CheckRequiredInstancesAvailable(ssts, availableInstances)
-		require.Error(t, err)
-
-		var unavailErr *bulkmerge.InstanceUnavailableError
-		require.True(t, errors.As(err, &unavailErr), "expected InstanceUnavailableError, got: %v", err)
-		require.Contains(t, err.Error(), "which are unavailable")
-		require.Equal(t, []base.SQLInstanceID{2}, unavailErr.UnavailableInstances)
-
-		// The error should be marked as a permanent job error so the job
-		// registry does not retry after the internal backoff loop has been
-		// exhausted.
-		require.True(t, jobs.IsPermanentJobError(err),
-			"InstanceUnavailableError should be a permanent job error")
-	})
-
-	t.Run("non-nodelocal URIs are ignored", func(t *testing.T) {
-		// Create SSTs with non-nodelocal URIs.
-		ssts := []execinfrapb.BulkMergeSpec_SST{
-			{URI: "s3://bucket/job/123/map/file1.sst"},
-			{URI: "gs://bucket/job/123/map/file2.sst"},
-			{URI: ""}, // empty URI
-		}
-
-		// No instances available, but it should not matter.
-		availableInstances := []sqlinstance.InstanceInfo{}
-
-		err := bulkmerge.CheckRequiredInstancesAvailable(ssts, availableInstances)
-		require.NoError(t, err)
-	})
-
-	t.Run("instance 0 (self) is ignored", func(t *testing.T) {
-		// Create SSTs with instance 0 (self) URI.
-		ssts := []execinfrapb.BulkMergeSpec_SST{
-			{URI: "nodelocal://0/job/123/map/file1.sst"},
-		}
-
-		// No instances in list.
-		availableInstances := []sqlinstance.InstanceInfo{}
-
-		err := bulkmerge.CheckRequiredInstancesAvailable(ssts, availableInstances)
-		require.NoError(t, err)
-	})
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := bulkmerge.CheckRequiredInstancesAvailable(tc.ssts, tc.availableInstances)
+			if len(tc.expectedUnavailable) == 0 {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			var unavailErr *bulkmerge.InstanceUnavailableError
+			require.True(t, errors.As(err, &unavailErr),
+				"expected InstanceUnavailableError, got: %v", err)
+			require.ElementsMatch(t, tc.expectedUnavailable, unavailErr.UnavailableInstances)
+			require.True(t, jobs.IsPermanentJobError(err),
+				"InstanceUnavailableError must be a permanent job error")
+		})
+	}
 }

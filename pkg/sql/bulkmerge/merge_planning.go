@@ -22,23 +22,18 @@ import (
 func newBulkMergePlan(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
+	planCtx *sql.PlanningCtx,
+	sqlInstanceIDs []base.SQLInstanceID,
 	ssts []execinfrapb.BulkMergeSpec_SST,
 	spans []roachpb.Span,
 	genOutputURIAndRecordPrefix func(sqlInstance base.SQLInstanceID) (string, error),
 	opts MergeOptions,
-) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
+) (*sql.PhysicalPlan, error) {
 	if len(spans) == 0 {
-		return nil, nil, errors.Newf("no spans specified")
+		return nil, errors.Newf("no spans specified")
 	}
 	// NOTE: This implementation is inspired by the physical plan created by
 	// restore in `pkg/backup/restore_processor_planning.go`
-	// TODO(mw5h): We need to be careful about mixed version clusters, so consider
-	// where we'll want to add a version gate.
-	planCtx, sqlInstanceIDs, err := execCtx.DistSQLPlanner().SetupAllNodesPlanning(
-		ctx, execCtx.ExtendedEvalContext(), execCtx.ExecCfg())
-	if err != nil {
-		return nil, nil, err
-	}
 
 	plan := planCtx.NewPhysicalPlan()
 	// Use the gateway node as the coordinator, which is where the job was initiated.
@@ -51,7 +46,7 @@ func newBulkMergePlan(
 
 	router, err := physicalplan.MakeInstanceRouter(sqlInstanceIDs)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "unable to make instance router")
+		return nil, errors.Wrap(err, "unable to make instance router")
 	}
 
 	// For non-final iterations, use the full span with one task per node.
@@ -106,7 +101,7 @@ func newBulkMergePlan(
 		if opts.Iteration < opts.MaxIterations {
 			outputURI, err := genOutputURIAndRecordPrefix(sqlInstanceID)
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 			outputStorage, err := execCtx.ExecCfg().DistSQLSrv.ExternalStorageFromURI(
 				ctx,
@@ -114,7 +109,7 @@ func newBulkMergePlan(
 				execCtx.User(),
 			)
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 			outputStorageConf = outputStorage.Conf()
 			outputStorage.Close()
@@ -164,5 +159,5 @@ func newBulkMergePlan(
 	plan.PlanToStreamColMap = []int{0} // Needed for FinalizePlan to populate ResultTypes
 	sql.FinalizePlan(ctx, planCtx, plan)
 
-	return plan, planCtx, nil
+	return plan, nil
 }

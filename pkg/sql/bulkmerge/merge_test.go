@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/taskset"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -330,9 +331,14 @@ func testMergeProcessors(
 		}
 	}
 
-	plan, planCtx, err := newBulkMergePlan(
+	planCtx, sqlInstanceIDs, err := jobExecCtx.DistSQLPlanner().SetupAllNodesPlanning(
+		ctx, jobExecCtx.ExtendedEvalContext(), jobExecCtx.ExecCfg())
+	require.NoError(t, err)
+	plan, err := newBulkMergePlan(
 		ctx,
 		jobExecCtx,
+		planCtx,
+		sqlInstanceIDs,
 		ssts,
 		spans,
 		func(instanceID base.SQLInstanceID) (string, error) {
@@ -537,9 +543,14 @@ func TestMergeSSTsSplitsAtRowBoundaries(t *testing.T) {
 	defer cleanup()
 
 	writeTS := hlc.Timestamp{WallTime: 1}
-	plan, planCtx, err := newBulkMergePlan(
+	planCtx, sqlInstanceIDs, err := jobExecCtx.DistSQLPlanner().SetupAllNodesPlanning(
+		ctx, jobExecCtx.ExtendedEvalContext(), jobExecCtx.ExecCfg())
+	require.NoError(t, err)
+	plan, err := newBulkMergePlan(
 		ctx,
 		jobExecCtx,
+		planCtx,
+		sqlInstanceIDs,
 		ssts,
 		spans,
 		func(instanceID base.SQLInstanceID) (string, error) {
@@ -1007,4 +1018,86 @@ func TestMergeMemoryMonitorSelection(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestWaitForViablePlan exercises the retry loop that drives the merge
+// plan's instance set until it covers every SST-referenced instance.
+func TestWaitForViablePlan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tightRetry := retry.Options{
+		InitialBackoff: 1 * time.Millisecond,
+		MaxBackoff:     5 * time.Millisecond,
+		Multiplier:     2,
+		MaxDuration:    100 * time.Millisecond,
+	}
+
+	sstsRequiringInstance2 := []execinfrapb.BulkMergeSpec_SST{
+		{URI: "nodelocal://2/job/1/map/a.sst"},
+	}
+
+	t.Run("succeeds on first attempt", func(t *testing.T) {
+		var attempts int
+		plan := func(ctx context.Context) (*sql.PlanningCtx, []base.SQLInstanceID, error) {
+			attempts++
+			return nil, []base.SQLInstanceID{1, 2, 3}, nil
+		}
+
+		_, _, err := waitForViablePlan(
+			context.Background(), sstsRequiringInstance2, tightRetry, plan)
+		require.NoError(t, err)
+		require.Equal(t, 1, attempts)
+	})
+
+	t.Run("retries until coverage is reached", func(t *testing.T) {
+		var attempts int
+		plan := func(ctx context.Context) (*sql.PlanningCtx, []base.SQLInstanceID, error) {
+			attempts++
+			if attempts == 1 {
+				return nil, []base.SQLInstanceID{1, 3}, nil // missing 2
+			}
+			return nil, []base.SQLInstanceID{1, 2, 3}, nil
+		}
+
+		_, _, err := waitForViablePlan(
+			context.Background(), sstsRequiringInstance2, tightRetry, plan)
+		require.NoError(t, err)
+		require.Equal(t, 2, attempts)
+	})
+
+	t.Run("times out and returns InstanceUnavailableError", func(t *testing.T) {
+		plan := func(ctx context.Context) (*sql.PlanningCtx, []base.SQLInstanceID, error) {
+			return nil, []base.SQLInstanceID{1, 3}, nil // never covers 2
+		}
+
+		_, _, err := waitForViablePlan(
+			context.Background(), sstsRequiringInstance2, tightRetry, plan)
+		require.Error(t, err)
+		var unavailErr *InstanceUnavailableError
+		require.True(t, errors.As(err, &unavailErr))
+		require.Equal(t, []base.SQLInstanceID{2}, unavailErr.UnavailableInstances)
+	})
+
+	t.Run("propagates non-coverage error from plan", func(t *testing.T) {
+		boom := errors.New("planner exploded")
+		plan := func(ctx context.Context) (*sql.PlanningCtx, []base.SQLInstanceID, error) {
+			return nil, nil, boom
+		}
+
+		_, _, err := waitForViablePlan(
+			context.Background(), sstsRequiringInstance2, tightRetry, plan)
+		require.ErrorIs(t, err, boom)
+	})
+
+	t.Run("returns ctx.Err on cancellation", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		plan := func(ctx context.Context) (*sql.PlanningCtx, []base.SQLInstanceID, error) {
+			cancel()
+			return nil, []base.SQLInstanceID{1, 3}, nil // never covers 2
+		}
+
+		_, _, err := waitForViablePlan(ctx, sstsRequiringInstance2, tightRetry, plan)
+		require.ErrorIs(t, err, context.Canceled)
+	})
 }
