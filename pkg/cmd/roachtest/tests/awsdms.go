@@ -450,6 +450,9 @@ func checkFullLargeDataLoad(ctx context.Context, t test.Test, dmsCli *dms.Client
 				}
 				// If the task is stopped and stop reason is full load finished, we have succeeded.
 				if *task.Status == "stopped" && *task.StopReason == "Stop Reason FULL_LOAD_ONLY_FINISHED" {
+					if len(tableStats.TableStatistics) == 0 {
+						return errors.New("table statistics not yet available")
+					}
 					// Check we full loaded the right number of rows
 					if tableStats.TableStatistics[0].FullLoadRows == awsrdsNumInitialRows {
 						t.L().Printf("test_table_large successfully replicated all rows")
@@ -459,6 +462,9 @@ func checkFullLargeDataLoad(ctx context.Context, t test.Test, dmsCli *dms.Client
 					}
 					close(closer)
 				} else if *task.Status == "running" {
+					if len(tableStats.TableStatistics) == 0 {
+						return errors.New("table statistics not yet available")
+					}
 					if tableStats.TableStatistics[0].FullLoadRows != awsrdsNumInitialRows {
 						if tableStats.TableStatistics[0].FullLoadRows > int64(numRows) {
 							nonUpdate = 0
