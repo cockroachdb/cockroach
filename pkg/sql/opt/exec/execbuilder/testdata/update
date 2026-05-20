@@ -1120,8 +1120,10 @@ quality of service: regular
                   execution time: 0µs
                   size: 1 column, 1 row
 
-statement ok
+statement count 1
 DELETE FROM t137352 WHERE true;
+
+statement ok
 INSERT INTO t137352 VALUES (1, 10, 3);
 
 query T kvtrace
@@ -1193,8 +1195,10 @@ quality of service: regular
               execution time: 0µs
               size: 1 column, 1 row
 
-statement ok
+statement count 1
 DELETE FROM t137352 WHERE true;
+
+statement ok
 INSERT INTO t137352 VALUES (1, 2, 3);
 
 query T kvtrace
@@ -1256,54 +1260,71 @@ quality of service: regular
     └── • limit
         │ count: 1
         │
-        └── • lookup join
+        └── • cross join
             │ sql nodes: <hidden>
             │ regions: <hidden>
             │ actual row count: 0
-            │ KV time: 0µs
-            │ KV rows decoded: 0
-            │ KV bytes read: 0 B
-            │ KV gRPC calls: 0
             │ execution time: 0µs
             │ estimated max memory allocated: 0 B
+            │ estimated max sql temp disk usage: 0 B
             │ estimated row count: 10
-            │ table: t137352@t137352_pkey
-            │ equality: (k) = (k)
-            │ equality cols are key
             │
-            └── • lookup join
-                │ sql nodes: <hidden>
-                │ kv nodes: <hidden>
-                │ regions: <hidden>
-                │ actual row count: 0
-                │ KV time: 0µs
-                │ KV rows decoded: 0
-                │ KV bytes read: 0 B
-                │ KV gRPC calls: 0
-                │ execution time: 0µs
-                │ estimated max memory allocated: 0 B
-                │ estimated row count: 10
-                │ table: t137352@t137352_a_idx
-                │ equality: (k) = (a)
-                │ pred: a = 1
-                │
-                └── • scan
-                      sql nodes: <hidden>
-                      kv nodes: <hidden>
-                      regions: <hidden>
-                      actual row count: 1
-                      KV time: 0µs
-                      KV rows decoded: 1
-                      KV pairs read: 2
-                      KV bytes read: 8 B
-                      KV gRPC calls: 1
-                      estimated max memory allocated: 0 B
-                      estimated row count: 1
-                      table: t137352@t137352_pkey
-                      spans: [/1 - /1]
+            ├── • lookup join
+            │   │ sql nodes: <hidden>
+            │   │ regions: <hidden>
+            │   │ actual row count: 0
+            │   │ KV time: 0µs
+            │   │ KV rows decoded: 0
+            │   │ KV bytes read: 0 B
+            │   │ KV gRPC calls: 0
+            │   │ execution time: 0µs
+            │   │ estimated max memory allocated: 0 B
+            │   │ estimated row count: 10
+            │   │ table: t137352@t137352_pkey
+            │   │ equality: (k) = (k)
+            │   │ equality cols are key
+            │   │
+            │   └── • lookup join
+            │       │ sql nodes: <hidden>
+            │       │ kv nodes: <hidden>
+            │       │ regions: <hidden>
+            │       │ actual row count: 0
+            │       │ KV time: 0µs
+            │       │ KV rows decoded: 0
+            │       │ KV bytes read: 0 B
+            │       │ KV gRPC calls: 0
+            │       │ execution time: 0µs
+            │       │ estimated max memory allocated: 0 B
+            │       │ estimated row count: 10
+            │       │ table: t137352@t137352_a_idx
+            │       │ equality: ($1) = (a)
+            │       │
+            │       └── • values
+            │             sql nodes: <hidden>
+            │             regions: <hidden>
+            │             actual row count: 1
+            │             execution time: 0µs
+            │             size: 1 column, 1 row
+            │
+            └── • scan
+                  sql nodes: <hidden>
+                  kv nodes: <hidden>
+                  regions: <hidden>
+                  actual row count: 1
+                  KV time: 0µs
+                  KV rows decoded: 1
+                  KV pairs read: 2
+                  KV bytes read: 8 B
+                  KV gRPC calls: 1
+                  estimated max memory allocated: 0 B
+                  estimated row count: 1
+                  table: t137352@t137352_pkey
+                  spans: [/1 - /1]
+
+statement count 1
+DELETE FROM t137352 WHERE true;
 
 statement ok
-DELETE FROM t137352 WHERE true;
 INSERT INTO t137352 VALUES (1, 1, 1);
 
 query T kvtrace
@@ -1375,8 +1396,10 @@ CPut /Table/119/3/4/0 -> /BYTES/0x892306
 Del (locking) /Table/119/4/4/0
 CPut /Table/119/4/5/0 -> /BYTES/0x89
 
-statement ok
+statement count 1
 DELETE FROM t139160 WHERE true;
+
+statement ok
 INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
 
 # Same as above, but the second column family is set to NULL.
@@ -1393,8 +1416,10 @@ CPut /Table/119/3/4/0 -> /BYTES/0x892306
 Del (locking) /Table/119/4/4/0
 CPut /Table/119/4/5/0 -> /BYTES/0x89
 
-statement ok
+statement count 1
 DELETE FROM t139160 WHERE true;
+
+statement ok
 INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
 
 # Both primary and non-unique secondary indexes are scanned and locked.
@@ -1435,8 +1460,10 @@ CPut /Table/119/3/4/0 -> /BYTES/0x892306
 Del (locking) /Table/119/4/4/0
 CPut /Table/119/4/5/0 -> /BYTES/0x89
 
-statement ok
+statement count 1
 DELETE FROM t139160 WHERE true;
+
+statement ok
 INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
 
 # Same as above, but the second column family is set to NULL.
@@ -1454,8 +1481,10 @@ CPut /Table/119/3/4/0 -> /BYTES/0x892306
 Del (locking) /Table/119/4/4/0
 CPut /Table/119/4/5/0 -> /BYTES/0x89
 
-statement ok
+statement count 1
 DELETE FROM t139160 WHERE true;
+
+statement ok
 INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
 
 # Both primary and unique secondary (on nullable column) indexes are scanned and
@@ -1497,8 +1526,10 @@ CPut /Table/119/3/4/0 -> /BYTES/0x892306
 Del (locking) /Table/119/4/4/0
 CPut /Table/119/4/5/0 -> /BYTES/0x89
 
-statement ok
+statement count 1
 DELETE FROM t139160 WHERE true;
+
+statement ok
 INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
 
 # Same as above, but the second column family is set to NULL.
@@ -1516,8 +1547,10 @@ CPut /Table/119/3/4/0 -> /BYTES/0x892306
 Del (locking) /Table/119/4/4/0
 CPut /Table/119/4/5/0 -> /BYTES/0x89
 
-statement ok
+statement count 1
 DELETE FROM t139160 WHERE true;
+
+statement ok
 INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
 
 # Both primary and unique secondary (on non-nullable column) indexes are scanned
@@ -1559,8 +1592,10 @@ CPut /Table/119/3/4/0 -> /BYTES/0x892306
 Del /Table/119/4/4/0
 CPut /Table/119/4/5/0 -> /BYTES/0x89
 
-statement ok
+statement count 1
 DELETE FROM t139160 WHERE true;
+
+statement ok
 INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
 
 # Same as above, but the second column family is set to NULL.
@@ -1578,8 +1613,10 @@ CPut /Table/119/3/4/0 -> /BYTES/0x892306
 Del /Table/119/4/4/0
 CPut /Table/119/4/5/0 -> /BYTES/0x89
 
-statement ok
+statement count 1
 DELETE FROM t139160 WHERE true;
+
+statement ok
 INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
 
 # The filter is not pushed down into the scan, so no index is locked.
@@ -1617,8 +1654,10 @@ CPut /Table/119/3/4/0 -> /BYTES/0x892306
 Del (locking) /Table/119/4/4/0
 CPut /Table/119/4/5/0 -> /BYTES/0x89
 
-statement ok
+statement count 1
 DELETE FROM t139160 WHERE true;
+
+statement ok
 INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
 
 # Same as above, but the second column family is set to NULL.
@@ -1684,8 +1723,10 @@ CPut /Table/120/3/4/1/1 -> /TUPLE/2:2:Int/3
 Del (locking) /Table/120/4/4/0
 CPut /Table/120/4/5/0 -> /BYTES/0x89
 
-statement ok
+statement count 1
 DELETE FROM t139160_families WHERE true;
+
+statement ok
 INSERT INTO t139160_families VALUES (1, 2, 3, 4, 5);
 
 query T kvtrace
@@ -1708,8 +1749,10 @@ CPut /Table/120/3/4/1/1 -> /TUPLE/2:2:Int/3
 Del (locking) /Table/120/4/4/0
 CPut /Table/120/4/5/0 -> /BYTES/0x89
 
-statement ok
+statement count 1
 DELETE FROM t139160_families WHERE true;
+
+statement ok
 INSERT INTO t139160_families VALUES (1, 2, 3, 4, 5);
 
 query T kvtrace
@@ -1732,8 +1775,10 @@ CPut /Table/120/3/4/1/1 -> /TUPLE/2:2:Int/3
 Del (locking) /Table/120/4/4/0
 CPut /Table/120/4/5/0 -> /BYTES/0x89
 
-statement ok
+statement count 1
 DELETE FROM t139160_families WHERE true;
+
+statement ok
 INSERT INTO t139160_families VALUES (1, 2, 3, 4, 5);
 
 query T kvtrace
@@ -1761,8 +1806,10 @@ statement ok
 SET use_cputs_on_non_unique_indexes = true;
 SET optimizer_use_lock_elision_multiple_families = true;
 
-statement ok
+statement count 1
 DELETE FROM t139160_families WHERE true;
+
+statement ok
 INSERT INTO t139160_families VALUES (1, 2, 3, 4, 5);
 
 query T kvtrace
@@ -1784,8 +1831,10 @@ CPut /Table/120/3/4/1/1 -> /TUPLE/2:2:Int/3
 Del (locking) /Table/120/4/4/0
 CPut /Table/120/4/5/0 -> /BYTES/0x89
 
-statement ok
+statement count 1
 DELETE FROM t139160_families WHERE true;
+
+statement ok
 INSERT INTO t139160_families VALUES (1, 2, 3, 4, 5);
 SET optimizer_enable_lock_elision = false;
 
