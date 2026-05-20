@@ -1195,6 +1195,20 @@ func (r *testRunner) runWorker(
 			}
 		}
 
+		// A preempted benchmark loses its per-nightly perf data point: the
+		// runner uses --count=1 and the test selector only forces re-selection
+		// on the *next* nightly. Requeue one retry on a non-spot cluster (which
+		// is also the loop-breaker, since only spot runs can preempt). Skip
+		// when --count>1: workPool.decTestLocked identifies entries by name,
+		// so a duplicate-named entry would race with the original's remaining
+		// runs.
+		if t.wasPreempted() && testToRun.spec.Benchmark &&
+			testToRun.spec.Cluster.UseSpotVMs && testToRun.runCount == 1 {
+			retrySpec := testToRun.spec
+			retrySpec.Cluster.UseSpotVMs = false
+			work.requeueForPreemptionRetry(ctx, workerL, retrySpec)
+		}
+
 		msg := "test passed: %s (run %d)"
 		if t.Failed() {
 			msg = "test failed: %s (run %d)"
@@ -1367,6 +1381,7 @@ func (r *testRunner) runTest(
 					// want to propagate the preemption error and avoid creating an issue.
 					t.resetFailures()
 					t.Error(vmPreemptionError(preemptedVMNames))
+					t.markPreempted()
 				}
 				hostErrorVMNames := getHostErrorVMNames(ctx, c, l)
 				if hostErrorVMNames != "" {

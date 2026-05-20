@@ -1156,6 +1156,36 @@ func TestVMPreemptionPolling(t *testing.T) {
 
 		require.NoError(t, err)
 	})
+
+	// Test that a benchmark whose spot VM gets preempted is automatically
+	// requeued for one retry. Without this, a single preemption silently
+	// loses the nightly's perf data point for that benchmark (the runner
+	// uses --count=1 and the test selector only forces re-selection on
+	// the *next* nightly). The retry runs on a non-spot cluster, which is
+	// also the loop-breaker: only spot runs can preempt.
+	t.Run("benchmark preempted on spot is requeued for retry", func(t *testing.T) {
+		// Drive preemption via the polling path: both the original and the
+		// retry's Run will block on ctx.Done() and be cancelled when
+		// monitorForPreemptedVMs observes the (always-on) preemption hook.
+		setPollPreemptionInterval(50 * time.Millisecond)
+		getPreemptedVMsHook = func(c cluster.Cluster, ctx context.Context, l *logger.Logger) ([]vm.PreemptedVM, error) {
+			return []vm.PreemptedVM{{Name: "test_node", PreemptedAt: time.Now()}}, nil
+		}
+
+		var calls atomic.Int32
+		benchmarkTest := mockTest
+		benchmarkTest.Benchmark = true
+		benchmarkTest.Run = func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			calls.Add(1)
+			<-ctx.Done()
+		}
+
+		err := runner.Run(ctx, []registry.TestSpec{benchmarkTest}, 1, /* count */
+			defaultParallelism, copt, testOpts{}, lopt, github)
+		require.NoError(t, err)
+		require.Equal(t, int32(2), calls.Load(),
+			"benchmark should run twice: original (spot, preempted) + one non-spot retry")
+	})
 }
 
 // TestRunnerFailureAfterTimeout checks that a test has a failure added
