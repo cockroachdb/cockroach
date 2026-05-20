@@ -400,7 +400,7 @@ func (a *Applier) aggregator(
 	// WARNING: there is a deadlock risk in aggregator because we are creating a
 	// loop between the channels. We avoid this deadlock by buffering newly ready
 	// transactions.
-	remoteUpdates := a.depResolver.Receive(a.id)
+	receiveBuffer := a.depResolver.Receive(a.id)
 	readyBuffer := ring.MakeBuffer[ldrdecoder.Transaction](nil)
 	for {
 		if readyBuffer.Len() == 0 {
@@ -412,7 +412,14 @@ func (a *Applier) aggregator(
 				if err != nil {
 					return err
 				}
-			case update := <-remoteUpdates:
+			case <-receiveBuffer.Ch():
+				update, ok := receiveBuffer.Pop()
+				if !ok {
+					// NB: !ok implies the buffer is empty. Further, the receivBuffer.Ch
+					// is never closed, so there's no reason tear down the flow based this
+					// channel closing.
+					break
+				}
 				if err := a.processRemoteUpdate(update, &readyBuffer); err != nil {
 					return err
 				}
@@ -428,7 +435,11 @@ func (a *Applier) aggregator(
 				if err != nil {
 					return err
 				}
-			case update := <-remoteUpdates:
+			case <-receiveBuffer.Ch():
+				update, ok := receiveBuffer.Pop()
+				if !ok {
+					break
+				}
 				if err := a.processRemoteUpdate(update, &readyBuffer); err != nil {
 					return err
 				}
