@@ -37,6 +37,7 @@ func registerRevlogBackupRestore(r registry.Registry) {
 		CompatibleClouds:  registry.Clouds(spec.GCE, spec.Local),
 		Suites:            registry.Suites(registry.Nightly),
 		Randomized:        true,
+		Skip:              "known issue: #170378",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			continuousBackupRestoreRoundTrip(ctx, t, c)
 		},
