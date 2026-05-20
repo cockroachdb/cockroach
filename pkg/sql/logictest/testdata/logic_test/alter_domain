@@ -1,0 +1,133 @@
+# LogicTest: local
+
+# Test ALTER DOMAIN syntax. All operations currently return unimplemented
+# errors, but the grammar should parse correctly and dispatch through the
+# declarative schema changer.
+
+statement ok
+CREATE DOMAIN d AS INT DEFAULT 0 NOT NULL CHECK (VALUE > 0)
+
+subtest set_default
+
+statement error pgcode 0A000 ALTER DOMAIN SET DEFAULT is not supported
+ALTER DOMAIN d SET DEFAULT 42
+
+statement error pgcode 0A000 ALTER DOMAIN SET DEFAULT is not supported
+ALTER DOMAIN d SET DEFAULT 1 + 2
+
+subtest end
+
+subtest drop_default
+
+statement error pgcode 0A000 ALTER DOMAIN DROP DEFAULT is not supported
+ALTER DOMAIN d DROP DEFAULT
+
+subtest end
+
+subtest set_not_null
+
+statement error pgcode 0A000 ALTER DOMAIN SET NOT NULL is not supported
+ALTER DOMAIN d SET NOT NULL
+
+subtest end
+
+subtest drop_not_null
+
+statement error pgcode 0A000 ALTER DOMAIN DROP NOT NULL is not supported
+ALTER DOMAIN d DROP NOT NULL
+
+subtest end
+
+subtest add_constraint
+
+statement error pgcode 0A000 ALTER DOMAIN ADD CHECK CONSTRAINT is not supported
+ALTER DOMAIN d ADD CHECK (VALUE < 100)
+
+statement error pgcode 0A000 ALTER DOMAIN ADD CHECK CONSTRAINT is not supported
+ALTER DOMAIN d ADD CONSTRAINT positive CHECK (VALUE > 0)
+
+statement error pgcode 0A000 ALTER DOMAIN ADD CHECK CONSTRAINT is not supported
+ALTER DOMAIN d ADD CONSTRAINT bounded CHECK (VALUE < 100) NOT VALID
+
+statement error pgcode 0A000 ALTER DOMAIN ADD NOT NULL CONSTRAINT is not supported
+ALTER DOMAIN d ADD NOT NULL
+
+statement error pgcode 0A000 ALTER DOMAIN ADD NOT NULL CONSTRAINT is not supported
+ALTER DOMAIN d ADD CONSTRAINT nn NOT NULL
+
+subtest end
+
+subtest drop_constraint
+
+statement error pgcode 0A000 ALTER DOMAIN DROP CONSTRAINT is not supported
+ALTER DOMAIN d DROP CONSTRAINT positive
+
+statement error pgcode 0A000 ALTER DOMAIN DROP CONSTRAINT is not supported
+ALTER DOMAIN d DROP CONSTRAINT IF EXISTS positive
+
+subtest end
+
+subtest rename_constraint
+
+statement error pgcode 0A000 ALTER DOMAIN RENAME CONSTRAINT is not supported
+ALTER DOMAIN d RENAME CONSTRAINT positive TO nonneg
+
+subtest end
+
+subtest validate_constraint
+
+statement error pgcode 0A000 ALTER DOMAIN VALIDATE CONSTRAINT is not supported
+ALTER DOMAIN d VALIDATE CONSTRAINT positive
+
+subtest end
+
+subtest owner_to
+
+statement error pgcode 0A000 ALTER DOMAIN OWNER TO is not supported
+ALTER DOMAIN d OWNER TO testuser
+
+subtest end
+
+subtest rename_to
+
+statement error pgcode 0A000 ALTER DOMAIN RENAME TO is not supported
+ALTER DOMAIN d RENAME TO d2
+
+subtest end
+
+subtest set_schema
+
+statement error pgcode 0A000 ALTER DOMAIN SET SCHEMA is not supported
+ALTER DOMAIN d SET SCHEMA public
+
+subtest end
+
+subtest nonexistent_domain
+
+statement error pgcode 42704 type "nonexistent" does not exist
+ALTER DOMAIN nonexistent SET DEFAULT 1
+
+subtest end
+
+subtest non_domain_type
+
+statement ok
+CREATE TYPE e AS ENUM ('a', 'b')
+
+statement error pgcode 42809 "e" is not a domain
+ALTER DOMAIN e SET DEFAULT 1
+
+subtest end
+
+subtest schema_qualified
+
+statement ok
+CREATE SCHEMA s
+
+statement ok
+CREATE DOMAIN s.d_qual AS INT
+
+statement error pgcode 0A000 ALTER DOMAIN SET DEFAULT is not supported
+ALTER DOMAIN s.d_qual SET DEFAULT 1
+
+subtest end

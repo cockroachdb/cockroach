@@ -20,6 +20,10 @@ import (
 // The below methods are ordered in alphabetical order. They represent statements
 // which are UNIMPLEMENTED for the legacy schema changer.
 
+func (p *planner) AlterDomain(ctx context.Context, n *tree.AlterDomain) (planNode, error) {
+	return nil, makeUnimplementedLegacyError("ALTER DOMAIN")
+}
+
 func (p *planner) AlterPolicy(ctx context.Context, n *tree.AlterPolicy) (planNode, error) {
 	return nil, makeUnimplementedLegacyError("ALTER POLICY")
 }
