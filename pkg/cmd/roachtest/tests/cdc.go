@@ -3607,46 +3607,42 @@ CONFIGURE ZONE USING
 		}
 	}
 
-	// cdc/linger/sweep walks the v2 kafka sink's time-based flush trigger
-	// (batchingSink.minFlushFrequency, fed from kafka_sink_config.Flush.Frequency
-	// at sink_kafka_v2.go:430) across a range of values back-to-back on a
-	// single cluster. Each frequency runs the same kv --ramp workload, so the
-	// shared Grafana dashboard traces a labeled epoch per variant: low cadence
-	// at the start, slack cadence at the end, with the linger tradeoff visible
-	// in the latency and emit-rate panels.
-	r.Add(registry.TestSpec{
-		Name:             "cdc/linger/sweep",
-		Owner:            registry.OwnerCDC,
-		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(6, spec.CPU(16), spec.WorkloadNode()),
-		Leases:           registry.MetamorphicLeases,
-		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
-		Suites:           registry.Suites(registry.Weekly),
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runCDCLingerSweep(ctx, t, c, []string{"10ms", "100ms", "500ms", "1s", "5s"})
-		},
-	})
+	// cdc/linger/* are roachperf benchmarks for the v2 kafka sink's
+	// time-based flush trigger (batchingSink.minFlushFrequency, fed from
+	// kafka_sink_config.Flush.Frequency at sink_kafka_v2.go:430). Each variant
+	// runs the same kv --ramp workload; differing only in the configured
+	// Flush.Frequency, the set traces the linger tradeoff across cadences.
+	// Run the whole sweep on one reused cluster with:
+	//   bin/roachtest run --cluster <name> --wipe cdc/linger
+	for _, flushFreq := range []string{"10ms", "100ms", "500ms", "1s", "5s"} {
+		flushFreq := flushFreq
+		r.Add(registry.TestSpec{
+			Name:             fmt.Sprintf("cdc/linger/%s", flushFreq),
+			Owner:            registry.OwnerCDC,
+			Benchmark:        true,
+			Cluster:          r.MakeClusterSpec(6, spec.CPU(16), spec.WorkloadNode()),
+			Leases:           registry.MetamorphicLeases,
+			CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
+			Suites:           registry.Suites(registry.Weekly),
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				runCDCLingerBench(ctx, t, c, flushFreq)
+			},
+		})
+	}
 }
 
-// runCDCLingerSweep runs the same kv --ramp workload back-to-back against a
-// v2 Kafka changefeed configured with each of the supplied Flush.Frequency
-// values. The v2 sink wires kafka_sink_config.Flush.Frequency directly into
-// batchingSink.minFlushFrequency (sink_kafka_v2.go:430), so each variant
-// exercises a different point on the linger tradeoff curve — tight cadences
-// keep latency low at low load but cap throughput; slack cadences saturate
-// higher throughput but pay latency at low load.
+// runCDCLingerBench runs a kv workload that ramps from ~0 to system
+// saturation while a v2 Kafka changefeed is active. The v2 sink's
+// minFlushFrequency is wired directly from kafka_sink_config.Flush.Frequency
+// (sink_kafka_v2.go:430), so varying that string exposes the linger
+// tradeoff: a tight cadence (e.g. "10ms") keeps commit latency low at the
+// low end of the ramp but caps achievable throughput; a slack cadence (e.g.
+// "5s") saturates higher throughput but pays latency at low load.
 //
-// Variants share one cluster and one Kafka install. The first variant uses
-// newChangefeed (which sets up Kafka, creates the topic, and starts the
-// topic consumers); subsequent variants cancel the previous changefeed job
-// and issue CREATE CHANGEFEED directly against the cached sink URI. The
-// topic consumers stay up across variants and drain whichever changefeed is
-// currently producing.
-//
-// No per-variant artifacts are written — variant boundaries are recorded as
-// t.Status timestamps in test.log, and the shared Grafana dashboard spans
-// the full run so each variant is identifiable by its time range.
-func runCDCLingerSweep(ctx context.Context, t test.Test, c cluster.Cluster, frequencies []string) {
+// Server-side changefeed.commit_latency (p50, p99) and the rate of
+// changefeed.emitted_messages are exported to roachperf as per-tick
+// time-series, so each variant traces a latency-vs-throughput curve.
+func runCDCLingerBench(ctx context.Context, t test.Test, c cluster.Cluster, flushFrequency string) {
 	// withNumSinkNodes(1) splits the workload+sink node into two, isolating
 	// the kafka broker from the workload runner so neither poisons the other's
 	// perf signal. With 6 cluster nodes: 4 crdb + 1 kafka + 1 workload.
@@ -3665,65 +3661,50 @@ func runCDCLingerSweep(ctx context.Context, t test.Test, c cluster.Cluster, freq
 	// compression, count-based flush triggers, new_kafka_sink.enabled) are
 	// left at default so the test reads plainly and so the only knob
 	// differing between variants is Flush.Frequency.
-	firstFeed := ct.newChangefeed(feedArgs{
+	feed := ct.newChangefeed(feedArgs{
 		sinkType: kafkaSink,
 		targets:  []string{"kv.kv"},
 		opts: map[string]string{
-			"initial_scan":      "'no'",
-			"kafka_sink_config": fmt.Sprintf(`'{"Flush": {"Frequency": "%s"}}'`, frequencies[0]),
+			"initial_scan": "'no'",
+			"kafka_sink_config": fmt.Sprintf(
+				`'{"Flush": {"Frequency": "%s"}}'`, flushFrequency),
 		},
 	})
-	sinkURI := firstFeed.sinkURI
-	currentJobID := firstFeed.jobID
+	_ = feed
+
+	// startStatsCollection records the window start now; the deferred closure
+	// pulls per-tick prometheus series for the configured aggregations at
+	// teardown and writes a stats.json roachperf consumes.
+	doneStats := ct.startStatsCollection(
+		changefeedCommitLatencyP50Agg,
+		changefeedCommitLatencyP99Agg,
+		changefeedEmittedMessagesRateAgg,
+		cpuUsageAgg,
+	)
+	defer doneStats()
 
 	// --ramp staggers worker startup over 10m (workload/cli/run.go:580-590),
 	// so concurrency — and therefore offered load — grows roughly linearly
 	// from ~0 to N until the system saturates. --duration is additive with
 	// --ramp (workload/cli/run.go:51), so a 2m duration gives a 2-minute
-	// steady-state tail past the ramp — 12m of workload total per variant.
-	// --read-percent=0 makes every op a write so every op produces a
-	// changefeed event.
+	// steady-state tail past the ramp — 12m of workload total. --read-percent=0
+	// makes every op a write so every op produces a changefeed event. We
+	// intentionally do not pass --histograms: workload-side per-tick snapshots
+	// are suppressed during the ramp (workload/cli/run.go:636), so they would
+	// silently drop the data we care about. All time-series come from prometheus.
 	concurrency := len(ct.crdbNodes) * 64
 	const (
 		ramp     = 10 * time.Minute
 		duration = 2 * time.Minute
 	)
-
-	for i, freq := range frequencies {
-		if i > 0 {
-			// Cancel the previous variant's changefeed and start a fresh one
-			// against the same sink URI with the new Flush.Frequency. The
-			// topic consumers from setupSink keep draining the topic
-			// regardless of which changefeed job is producing.
-			t.Status(fmt.Sprintf("cancelling job %d before variant %d/%d (Flush.Frequency=%s)",
-				currentJobID, i+1, len(frequencies), freq))
-			if _, err := conn.ExecContext(ctx, fmt.Sprintf("CANCEL JOB %d", currentJobID)); err != nil {
-				t.Fatal(err)
-			}
-			createSQL := fmt.Sprintf(
-				`CREATE CHANGEFEED FOR kv.kv INTO '%s' WITH initial_scan = 'no', `+
-					`kafka_sink_config = '{"Flush": {"Frequency": "%s"}}'`,
-				sinkURI, freq)
-			if err := conn.QueryRowContext(ctx, createSQL).Scan(&currentJobID); err != nil {
-				t.Fatal(err)
-			}
-		}
-
-		variantStart := timeutil.Now()
-		t.Status(fmt.Sprintf("=== variant %d/%d START Flush.Frequency=%s at %s (job %d) ===",
-			i+1, len(frequencies), freq, variantStart.Format(time.RFC3339), currentJobID))
-		if err := c.RunE(ctx, option.WithNodes(ct.workloadNode), fmt.Sprintf(
-			`./cockroach workload run kv `+
-				`--ramp %s --duration %s --read-percent 0 --concurrency %d `+
-				`{pgurl:%d-%d}`,
-			ramp, duration, concurrency,
-			ct.crdbNodes[0], ct.crdbNodes[len(ct.crdbNodes)-1])); err != nil {
-			t.Fatal(err)
-		}
-		variantEnd := timeutil.Now()
-		t.Status(fmt.Sprintf("=== variant %d/%d END Flush.Frequency=%s at %s (took %s) ===",
-			i+1, len(frequencies), freq, variantEnd.Format(time.RFC3339),
-			variantEnd.Sub(variantStart).Round(time.Second)))
+	t.Status("running kv workload with ramp")
+	if err := c.RunE(ctx, option.WithNodes(ct.workloadNode), fmt.Sprintf(
+		`./cockroach workload run kv `+
+			`--ramp %s --duration %s --read-percent 0 --concurrency %d `+
+			`{pgurl:%d-%d}`,
+		ramp, duration, concurrency,
+		ct.crdbNodes[0], ct.crdbNodes[len(ct.crdbNodes)-1])); err != nil {
+		t.Fatal(err)
 	}
 }
 
