@@ -80,8 +80,10 @@ type BinaryOpEvaluator interface {
 	EvalDistanceVectorOp(context.Context, *DistanceVectorOp, Datum, Datum) (Datum, error)
 	EvalDivDecimalIntOp(context.Context, *DivDecimalIntOp, Datum, Datum) (Datum, error)
 	EvalDivDecimalOp(context.Context, *DivDecimalOp, Datum, Datum) (Datum, error)
+	EvalDivFloatIntOp(context.Context, *DivFloatIntOp, Datum, Datum) (Datum, error)
 	EvalDivFloatOp(context.Context, *DivFloatOp, Datum, Datum) (Datum, error)
 	EvalDivIntDecimalOp(context.Context, *DivIntDecimalOp, Datum, Datum) (Datum, error)
+	EvalDivIntFloatOp(context.Context, *DivIntFloatOp, Datum, Datum) (Datum, error)
 	EvalDivIntOp(context.Context, *DivIntOp, Datum, Datum) (Datum, error)
 	EvalDivIntervalFloatOp(context.Context, *DivIntervalFloatOp, Datum, Datum) (Datum, error)
 	EvalDivIntervalIntOp(context.Context, *DivIntervalIntOp, Datum, Datum) (Datum, error)
@@ -408,6 +410,11 @@ func (op *DivDecimalOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Da
 }
 
 // Eval is part of the BinaryEvalOp interface.
+func (op *DivFloatIntOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalDivFloatIntOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
 func (op *DivFloatOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalDivFloatOp(ctx, op, a, b)
 }
@@ -415,6 +422,11 @@ func (op *DivFloatOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datu
 // Eval is part of the BinaryEvalOp interface.
 func (op *DivIntDecimalOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalDivIntDecimalOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
+func (op *DivIntFloatOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalDivIntFloatOp(ctx, op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.

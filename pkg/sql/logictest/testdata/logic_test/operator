@@ -4,6 +4,35 @@ SELECT |/ -1.0::float
 query error cannot take square root of a negative number
 SELECT |/ -1.0::decimal
 
+query RRTT
+SELECT 8::float / 8::int, 8::int / 8::float,
+       pg_typeof(8::float / 8::int), pg_typeof(8::int / 8::float)
+----
+1  1  double precision  double precision
+
+query RRTT
+SELECT 8::float / 8::int4, 8::int4 / 8::float,
+       pg_typeof(8::float / 8::int4), pg_typeof(8::int4 / 8::float)
+----
+1  1  double precision  double precision
+
+
+statement ok
+CREATE TABLE float_int_div (f FLOAT8, i INT8, i4 INT4)
+
+statement ok
+INSERT INTO float_int_div VALUES (8, 8, 8)
+
+query RRTT
+SELECT f / i, i / f, pg_typeof(f / i), pg_typeof(i / f) FROM float_int_div
+----
+1  1  double precision  double precision
+
+query RRTT
+SELECT f / i4, i4 / f, pg_typeof(f / i4), pg_typeof(i4 / f) FROM float_int_div
+----
+1  1  double precision  double precision
+
 query I
 SELECT ~-1;
 ----

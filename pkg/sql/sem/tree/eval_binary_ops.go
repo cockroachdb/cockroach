@@ -276,10 +276,14 @@ type (
 	DivDecimalIntOp struct{}
 	// DivDecimalOp is a BinaryEvalOp.
 	DivDecimalOp struct{}
+
+	DivFloatIntOp struct{}
 	// DivFloatOp is a BinaryEvalOp.
 	DivFloatOp struct{}
 	// DivIntDecimalOp is a BinaryEvalOp.
 	DivIntDecimalOp struct{}
+
+	DivIntFloatOp struct{}
 	// DivIntOp is a BinaryEvalOp.
 	DivIntOp struct{}
 	// DivIntervalFloatOp is a BinaryEvalOp.
