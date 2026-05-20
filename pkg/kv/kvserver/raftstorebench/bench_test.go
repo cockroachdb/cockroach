@@ -168,5 +168,8 @@ func maybeReportMetrics(t T, res Result) {
 // is too heavyweight).
 func TestBenchmarkRaftStoreSmokeTest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	if runtime.GOARCH == "s390x" {
+		skip.IgnoreLint(t, "too slow on s390x (see #170571)")
+	}
 	benchmarkRaftStoreInner(t, true)
 }
