@@ -807,17 +807,18 @@ update (swap) abc
       ├── key: ()
       ├── fd: ()-->(11-13)
       ├── values
-      │    ├── columns: a:11 b:12 c:13!null
+      │    ├── columns: a:11 b:12 c:13
       │    ├── cardinality: [1 - 1]
       │    ├── has-placeholder
       │    ├── key: ()
       │    ├── fd: ()-->(11-13)
-      │    └── ($1, $2, true)
+      │    └── ($1, $2, $3)
       └── filters
            ├── a:11 IS NOT NULL [outer=(11), constraints=(/11: (/NULL - ]; tight)]
            ├── b:12 IS NOT NULL [outer=(12), constraints=(/12: (/NULL - ]; tight)]
            ├── $3
-           └── a:11 < b:12 [outer=(11,12), constraints=(/11: (/NULL - ]; /12: (/NULL - ])]
+           ├── c:13 IS NOT NULL [outer=(13), constraints=(/13: (/NULL - ]; tight)]
+           └── $1 < $2
 
 # Test that we do use swap mutations with RETURNING.
 
@@ -851,7 +852,7 @@ update (swap) abc
       └── filters
            ├── a:11 IS NOT NULL [outer=(11), constraints=(/11: (/NULL - ]; tight)]
            ├── b:12 IS NOT NULL [outer=(12), constraints=(/12: (/NULL - ]; tight)]
-           └── a:11 < b:12 [outer=(11,12), constraints=(/11: (/NULL - ]; /12: (/NULL - ])]
+           └── $1 < $2
 
 norm set=use_swap_mutations=true expect=UseSwapMutation
 UPDATE abc SET a = b WHERE a = $1 AND b = $2 + 1 AND c RETURNING a + b
@@ -1246,8 +1247,8 @@ update (swap) mnop
       │    │    │    ├── fd: ()-->(17,18)
       │    │    │    └── ($3, $4)
       │    │    └── filters
-      │    │         ├── (m:17 + n:18) = $5 [outer=(17,18), immutable]
-      │    │         ├── m:17 >= n:18 [outer=(17,18), constraints=(/17: (/NULL - ]; /18: (/NULL - ])]
+      │    │         ├── (n:18 + $3) = $5 [outer=(18), immutable]
+      │    │         ├── n:18 <= $3 [outer=(18), constraints=(/18: (/NULL - ])]
       │    │         └── m:17 IS NOT NULL [outer=(17), constraints=(/17: (/NULL - ]; tight)]
       │    └── projections
       │         ├── $1 [as=m_new:13]
@@ -2226,13 +2227,13 @@ update (swap) hij
       ├── cardinality: [0 - 1]
       ├── immutable, has-placeholder
       ├── key: ()
-      ├── fd: ()-->(11-14), (13)==(14), (14)==(13)
+      ├── fd: ()-->(11-14)
       ├── select
       │    ├── columns: h:12!null i:13!null j:14!null
       │    ├── cardinality: [0 - 1]
       │    ├── has-placeholder
       │    ├── key: ()
-      │    ├── fd: ()-->(12-14), (13)==(14), (14)==(13)
+      │    ├── fd: ()-->(12-14)
       │    ├── values
       │    │    ├── columns: h:12 i:13 j:14
       │    │    ├── cardinality: [1 - 1]
@@ -2244,7 +2245,7 @@ update (swap) hij
       │         ├── h:12 IS NOT NULL [outer=(12), constraints=(/12: (/NULL - ]; tight)]
       │         ├── i:13 IS NOT NULL [outer=(13), constraints=(/13: (/NULL - ]; tight)]
       │         ├── j:14 IS NOT NULL [outer=(14), constraints=(/14: (/NULL - ]; tight)]
-      │         └── i:13 = j:14 [outer=(13,14), constraints=(/13: (/NULL - ]; /14: (/NULL - ]), fd=(13)==(14), (14)==(13)]
+      │         └── $2 = $3
       └── projections
            └── i:13 + 1 [as=i_new:11, outer=(13), immutable]
 
@@ -2278,7 +2279,7 @@ update hij
       │    └── filters
       │         ├── h:6 = $1 [outer=(6), constraints=(/6: (/NULL - ]), fd=()-->(6)]
       │         ├── i:7 = (j:8 + 1) [outer=(7,8), immutable, constraints=(/7: (/NULL - ]), fd=(8)-->(7)]
-      │         └── j:8 = (h:6 * 2) [outer=(6,8), immutable, constraints=(/8: (/NULL - ]), fd=(6)-->(8)]
+      │         └── j:8 = ($1 * 2) [outer=(8), immutable, constraints=(/8: (/NULL - ]), fd=()-->(8)]
       └── projections
            └── i:7 + 1 [as=i_new:11, outer=(7), immutable]
 
