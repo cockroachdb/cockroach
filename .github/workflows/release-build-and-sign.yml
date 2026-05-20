@@ -83,7 +83,7 @@ env:
   # in repo Variables. Dry-run forces dev GCP regardless, since it
   # writes to dev GCS / Artifact Registry.
   RELEASE_WIF_PROVIDER: ${{ (inputs.dry_run || vars.USE_PROD_GCP != 'true') && 'projects/65523152860/locations/global/workloadIdentityPools/gha-releases-oidc/providers/gha-releases-oidc' || 'projects/182391335559/locations/global/workloadIdentityPools/gha-releases-oidc/providers/gha-releases-oidc' }}
-  RELEASE_GCP_SERVICE_ACCOUNT: ${{ (inputs.dry_run || vars.USE_PROD_GCP != 'true') && 'gha-releases@releases-dev-356314.iam.gserviceaccount.com' || 'release-artifacts@releases-prod.iam.gserviceaccount.com' }}
+  RELEASE_GCP_SERVICE_ACCOUNT: ${{ (inputs.dry_run || vars.USE_PROD_GCP != 'true') && 'gha-releases@releases-dev-356314.iam.gserviceaccount.com' || 'gha-releases@releases-prod.iam.gserviceaccount.com' }}
   RELEASE_SIGNING_SERVICE_ACCOUNT: ${{ (inputs.dry_run || vars.USE_PROD_GCP != 'true') && 'gha-releases@releases-dev-356314.iam.gserviceaccount.com' || 'release-signing@releases-prod.iam.gserviceaccount.com' }}
   RELEASE_GCP_PROJECT: ${{ (inputs.dry_run || vars.USE_PROD_GCP != 'true') && 'releases-dev-356314' || 'releases-prod' }}
 
