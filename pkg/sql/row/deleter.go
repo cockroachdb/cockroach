@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -254,47 +253,16 @@ func (rd *Deleter) DeleteRow(
 	return nil
 }
 
-// encodeValueForPrimaryIndexFamily encodes the expected roachpb.Value
-// for the given family and valuses.
-//
-// TODO(ssd): Lots of duplication between this and
-// prepareInsertOrUpdateBatch. This is rather unfortunate.
+// encodeValueForPrimaryIndexFamily encodes the expected roachpb.Value for
+// the given family and values. It is used to compute the expected previous
+// value for CPut-based deletes (origin-timestamp logical replication and
+// mustValidateOldPKValues paths).
 func (rd *Deleter) encodeValueForPrimaryIndexFamily(
 	family *descpb.ColumnFamilyDescriptor, values []tree.Datum,
 ) (roachpb.Value, error) {
-	if len(family.ColumnIDs) == 1 && family.ColumnIDs[0] == family.DefaultColumnID && family.ID != 0 {
-		idx, ok := rd.FetchColIDtoRowIndex.Get(family.DefaultColumnID)
-		if !ok {
-			return roachpb.Value{}, nil
-		}
-		if skip, _ := rd.Helper.SkipColumnNotInPrimaryIndexValue(family.DefaultColumnID, values[idx]); skip {
-			return roachpb.Value{}, nil
-		}
-		typ := rd.FetchCols[idx].GetType()
-		marshaled, err := valueside.MarshalLegacy(typ, values[idx])
-		if err != nil {
-			return roachpb.Value{}, err
-		}
-
-		return marshaled, err
-	}
-
-	rd.rawValueBuf = rd.rawValueBuf[:0]
-	familySortedColumnIDs, ok := rd.Helper.SortedColumnFamily(family.ID)
-	if !ok {
-		return roachpb.Value{}, errors.AssertionFailedf("invalid family sorted column id map")
-	}
-
-	var err error
-	rd.rawValueBuf, err = rd.Helper.encodePrimaryIndexValuesToBuf(values, rd.FetchColIDtoRowIndex, familySortedColumnIDs, rd.FetchCols, rd.rawValueBuf)
-	if err != nil {
-		return roachpb.Value{}, err
-	}
-	ret := roachpb.Value{}
-	// For family 0, we expect a value even when no columns have
-	// been encoded to oldBytes.
-	if family.ID == 0 || len(rd.rawValueBuf) > 0 {
-		ret.SetTuple(rd.rawValueBuf)
-	}
-	return ret, nil
+	res, retBuf, err := rd.Helper.PrimaryIndexEncoder().EncodeFamily(
+		family, rd.FetchColIDtoRowIndex, values, rd.rawValueBuf,
+	)
+	rd.rawValueBuf = retBuf
+	return res.Value, err
 }

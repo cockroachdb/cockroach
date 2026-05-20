@@ -8,7 +8,6 @@ package row
 import (
 	"bytes"
 	"context"
-	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -23,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/rowencpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -102,11 +100,13 @@ type RowHelper struct {
 		secondary [][]encoding.Direction
 	}
 
-	// Computed and cached.
+	// PrimaryIndexKeyPrefix is the encoded key prefix for the table's
+	// primary index. Initialized by Init.
 	PrimaryIndexKeyPrefix []byte
-	primaryIndexKeyCols   catalog.TableColSet
-	primaryIndexValueCols catalog.TableColSet
-	sortedColumnFamilies  map[descpb.FamilyID][]descpb.ColumnID
+	// pkEncoder owns the per-table state for encoding primary-index
+	// family values (key/stored column sets, sorted family column IDs).
+	// Initialized by Init and reused across every row.
+	pkEncoder rowenc.PrimaryIndexEncoder
 
 	// Used to build tmpTombstones for non-Serializable uniqueness checks.
 	index2UniqueWithTombstoneEntry map[catalog.Index]*uniqueWithTombstoneEntry
@@ -212,6 +212,13 @@ func (rh *RowHelper) Init() {
 	rh.PrimaryIndexKeyPrefix = rowenc.MakeIndexKeyPrefix(
 		rh.Codec, rh.TableDesc.GetID(), rh.TableDesc.GetPrimaryIndexID(),
 	)
+	rh.pkEncoder = rowenc.MakePrimaryIndexEncoder(rh.TableDesc, rh.TableDesc.GetPrimaryIndex())
+}
+
+// PrimaryIndexEncoder returns the encoder for the table's primary index.
+// Init must have been called.
+func (rh *RowHelper) PrimaryIndexEncoder() *rowenc.PrimaryIndexEncoder {
+	return &rh.pkEncoder
 }
 
 // encodePrimaryIndexKey encodes the primary index key.
@@ -380,70 +387,25 @@ func (rh *RowHelper) encodeSecondaryIndexes(
 	return rh.indexEntries, nil
 }
 
-// encodePrimaryIndexValuesToBuf encodes the given values, writing
-// into the given buffer.
-func (rh *RowHelper) encodePrimaryIndexValuesToBuf(
-	vals []tree.Datum,
-	valColIDMapping catalog.TableColMap,
-	sortedColumnIDs []descpb.ColumnID,
-	fetchedCols []catalog.Column,
-	buf []byte,
-) ([]byte, error) {
-	var lastColID descpb.ColumnID
-	for _, colID := range sortedColumnIDs {
-		idx, ok := valColIDMapping.Get(colID)
-		if !ok || vals[idx] == tree.DNull {
-			// Column not being updated or inserted.
-			continue
-		}
-
-		if skip, _ := rh.SkipColumnNotInPrimaryIndexValue(colID, vals[idx]); skip {
-			continue
-		}
-
-		col := fetchedCols[idx]
-		if lastColID > col.GetID() {
-			return nil, errors.AssertionFailedf("cannot write column id %d after %d", col.GetID(), lastColID)
-		}
-		colIDDelta := valueside.MakeColumnIDDelta(lastColID, col.GetID())
-		lastColID = col.GetID()
-		var err error
-		buf, err = valueside.Encode(buf, colIDDelta, vals[idx])
-		if err != nil {
-			return nil, err
-		}
-	}
-	return buf, nil
-}
-
 // SkipColumnNotInPrimaryIndexValue returns true if the value at column colID
-// does not need to be encoded, either because it is already part of the primary
-// key, or because it is not part of the primary index altogether. Composite
-// datums are considered too, so a composite datum in a PK will return false
-// (but will return true for couldBeComposite).
+// does not need to be encoded, either because it is already part of the
+// primary key, or because it is not part of the primary index altogether.
+// Composite datums are considered too, so a composite datum in a PK will
+// return false (but will return true for couldBeComposite).
 func (rh *RowHelper) SkipColumnNotInPrimaryIndexValue(
 	colID descpb.ColumnID, value tree.Datum,
 ) (skip, couldBeComposite bool) {
-	if rh.primaryIndexKeyCols.Empty() {
-		rh.primaryIndexKeyCols = rh.TableDesc.GetPrimaryIndex().CollectKeyColumnIDs()
-		rh.primaryIndexValueCols = rh.TableDesc.GetPrimaryIndex().CollectPrimaryStoredColumnIDs()
-	}
-	return rowenc.SkipColumnNotInPrimaryIndexValue(colID, value, rh.primaryIndexKeyCols, rh.primaryIndexValueCols)
+	// We pass an empty colMap; the encoder only consults it to compute the
+	// stored column set when the primary index uses a pre-storedcols
+	// version. RowHelper has no colMap of its own and historically did not
+	// handle that case either.
+	return rh.pkEncoder.SkipColumn(colID, value, catalog.TableColMap{})
 }
 
+// SortedColumnFamily returns the cached sorted column IDs for family famID
+// of the primary index, or (nil, false) if no such family exists.
 func (rh *RowHelper) SortedColumnFamily(famID descpb.FamilyID) ([]descpb.ColumnID, bool) {
-	if rh.sortedColumnFamilies == nil {
-		rh.sortedColumnFamilies = make(map[descpb.FamilyID][]descpb.ColumnID, rh.TableDesc.NumFamilies())
-
-		_ = rh.TableDesc.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
-			colIDs := append([]descpb.ColumnID{}, family.ColumnIDs...)
-			sort.Sort(descpb.ColumnIDs(colIDs))
-			rh.sortedColumnFamilies[family.ID] = colIDs
-			return nil
-		})
-	}
-	colIDs, ok := rh.sortedColumnFamilies[famID]
-	return colIDs, ok
+	return rh.pkEncoder.SortedFamilyColumnIDs(famID)
 }
 
 // CheckRowSize compares the size of a primary key column family against the
