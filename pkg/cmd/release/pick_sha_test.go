@@ -377,13 +377,12 @@ func TestPostReleaseNotes(t *testing.T) {
 		require.Equal(t, "secret-key", gotKey)
 		require.Equal(t, "application/json", gotContentType)
 
-		// The Go function wraps the payload in {"ReleaseNotesPayload": ...}
-		// so the docs API consumer keeps its existing field name.
-		var wrapped struct {
-			ReleaseNotesPayload releaseNotesPayload `json:"ReleaseNotesPayload"`
-		}
-		require.NoError(t, json.Unmarshal(gotBody, &wrapped))
-		require.Equal(t, payload, wrapped.ReleaseNotesPayload)
+		// The docs API expects the payload fields at the top level of the
+		// request body; an envelope causes 400s on the required-field
+		// validators (Request.CurrentRelease / ReleaseDate / ReleaseSHA).
+		var got releaseNotesPayload
+		require.NoError(t, json.Unmarshal(gotBody, &got))
+		require.Equal(t, payload, got)
 	})
 
 	t.Run("non-2xx returns error including status and body", func(t *testing.T) {
