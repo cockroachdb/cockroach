@@ -210,6 +210,7 @@ func (gt *grpcTransport) sendBatch(
 	info := ash.WorkloadInfo{
 		WorkloadID:    ba.WorkloadID,
 		AppNameID:     ba.AppNameID,
+		EnrichmentID:  ba.EnrichmentID,
 		GatewayNodeID: ba.GatewayNodeID,
 		WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
 	}

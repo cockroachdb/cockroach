@@ -115,6 +115,7 @@ func (r *Replica) SendWithWorkStats(
 		tenantIDOrZero, ash.WorkloadInfo{
 			WorkloadID:    ba.WorkloadID,
 			AppNameID:     ba.AppNameID,
+			EnrichmentID:  ba.EnrichmentID,
 			GatewayNodeID: ba.GatewayNodeID,
 			WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
 		},
@@ -315,6 +316,7 @@ func (r *Replica) maybeCommitWaitBeforeCommitTrigger(
 		tenantID, ash.WorkloadInfo{
 			WorkloadID:    ba.WorkloadID,
 			AppNameID:     ba.AppNameID,
+			EnrichmentID:  ba.EnrichmentID,
 			GatewayNodeID: ba.GatewayNodeID,
 			WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
 		},
@@ -883,6 +885,7 @@ func (r *Replica) handleInvalidLeaseError(ctx context.Context, ba *kvpb.BatchReq
 		ctx, ba.Timestamp, r.signallerForBatch(ba), tenantIDOrZero, ash.WorkloadInfo{
 			WorkloadID:    ba.WorkloadID,
 			AppNameID:     ba.AppNameID,
+			EnrichmentID:  ba.EnrichmentID,
 			GatewayNodeID: ba.GatewayNodeID,
 			WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
 		},
@@ -978,6 +981,7 @@ func (r *Replica) executeAdminBatch(
 				ctx, ba.Timestamp, r.signallerForBatch(ba), tenantIDOrZero, ash.WorkloadInfo{
 					WorkloadID:    ba.WorkloadID,
 					AppNameID:     ba.AppNameID,
+					EnrichmentID:  ba.EnrichmentID,
 					GatewayNodeID: ba.GatewayNodeID,
 					WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
 				},

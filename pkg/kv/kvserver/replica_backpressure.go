@@ -206,6 +206,7 @@ func (r *Replica) maybeBackpressureBatch(ctx context.Context, ba *kvpb.BatchRequ
 				tenantID, ash.WorkloadInfo{
 					WorkloadID:    ba.WorkloadID,
 					AppNameID:     ba.AppNameID,
+					EnrichmentID:  ba.EnrichmentID,
 					GatewayNodeID: ba.GatewayNodeID,
 					WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
 				},

@@ -304,6 +304,7 @@ func (n *controllerImpl) AdmitKVWork(
 				ash.WorkloadInfo{
 					WorkloadID:    admissionInfo.WorkloadID,
 					AppNameID:     admissionInfo.AppNameID,
+					EnrichmentID:  admissionInfo.EnrichmentID,
 					GatewayNodeID: admissionInfo.GatewayNodeID,
 					WorkloadType:  admissionInfo.WorkloadType,
 				})
@@ -638,6 +639,7 @@ func workInfoForBatch(
 		BypassAdmission: bypassAdmission,
 		WorkloadID:      ba.Header.WorkloadID,
 		AppNameID:       ba.Header.AppNameID,
+		EnrichmentID:    ba.Header.EnrichmentID,
 		GatewayNodeID:   ba.Header.GatewayNodeID,
 		WorkloadType:    workloadid.WorkloadType(ba.Header.WorkloadType),
 	}

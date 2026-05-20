@@ -205,6 +205,7 @@ func (r *Replica) executeWriteBatch(
 		tenantIDOrZero, ash.WorkloadInfo{
 			WorkloadID:    ba.WorkloadID,
 			AppNameID:     ba.AppNameID,
+			EnrichmentID:  ba.EnrichmentID,
 			GatewayNodeID: ba.GatewayNodeID,
 			WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
 		},
