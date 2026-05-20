@@ -3629,6 +3629,28 @@ CONFIGURE ZONE USING
 			},
 		})
 	}
+
+	// cdc/linger/loadmatrix sweeps a (cadence x offered-rate) matrix on one
+	// cluster. Each cell runs at a fixed --max-rate for a few minutes, so
+	// every (cadence, load) point has a steady-state latency reading. The
+	// resulting grid is what produces the latency-vs-throughput curve #170574
+	// wants for release notes, and also resolves whether tight cadences
+	// actually cost throughput on a real sink (#170200) — by pushing offered
+	// load above the saturation point seen with the unconstrained sweep.
+	r.Add(registry.TestSpec{
+		Name:             "cdc/linger/loadmatrix",
+		Owner:            registry.OwnerCDC,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(6, spec.CPU(16), spec.WorkloadNode()),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
+		Suites:           registry.Suites(registry.Weekly),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runCDCLingerLoadMatrix(ctx, t, c,
+				[]string{"10ms", "100ms", "1s"},
+				[]int{12000, 25000, 40000, 60000, 80000})
+		},
+	})
 }
 
 // runCDCLingerBench runs a kv workload that ramps from ~0 to system
@@ -3712,6 +3734,103 @@ func runCDCLingerBench(ctx context.Context, t test.Test, c cluster.Cluster, flus
 		ramp, duration, concurrency,
 		ct.crdbNodes[0], ct.crdbNodes[len(ct.crdbNodes)-1])); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// runCDCLingerLoadMatrix sweeps a (cadence x offered-rate) matrix on a
+// single cluster. For each cadence, it (re)creates the changefeed with that
+// kafka_sink_config.Flush.Frequency, then runs a sequence of fixed-rate kv
+// workloads — one per offered-rate value — back-to-back. Each cell produces
+// a steady-state latency and achieved-throughput point that can be read off
+// the Grafana dashboard by timestamp.
+//
+// --max-rate is a fixed rate.Limiter (workload/cli/run.go:438-443), so
+// combined with --ramp 0 the workload offers exactly that rate from t=0 with
+// no warmup ambiguity. Concurrency is set high so the limiter is the actual
+// bottleneck rather than worker count.
+//
+// Cell boundaries are logged as t.Status `=== cell N/M ===` lines so the
+// shared Grafana dashboard can be sliced into (cadence, rate) windows by
+// timestamp. No per-cell artifacts are written.
+func runCDCLingerLoadMatrix(
+	ctx context.Context, t test.Test, c cluster.Cluster, cadences []string, loadOpsPerSec []int,
+) {
+	// withNumSinkNodes(1) splits the workload+sink node into two, isolating
+	// the kafka broker from the workload runner. With 6 cluster nodes:
+	// 4 crdb + 1 kafka + 1 workload.
+	ct := newCDCTester(ctx, t, c, withNumSinkNodes(1))
+	defer ct.Close()
+
+	conn := ct.DB()
+
+	t.Status("initializing kv workload")
+	c.Run(ctx, option.WithNodes(ct.workloadNode), fmt.Sprintf(
+		`./cockroach workload init kv --splits 100 {pgurl:%d}`, ct.crdbNodes[0]))
+	require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t.L(), conn))
+
+	// First changefeed uses newChangefeed so that setupSink runs once:
+	// installs kafka, creates the topic, starts the topic consumers. The
+	// consumers keep draining the topic for the rest of the test regardless
+	// of which changefeed job is currently producing.
+	firstFeed := ct.newChangefeed(feedArgs{
+		sinkType: kafkaSink,
+		targets:  []string{"kv.kv"},
+		opts: map[string]string{
+			"initial_scan":      "'no'",
+			"kafka_sink_config": fmt.Sprintf(`'{"Flush": {"Frequency": "%s"}}'`, cadences[0]),
+		},
+	})
+	sinkURI := firstFeed.sinkURI
+	currentJobID := firstFeed.jobID
+
+	// Each cell is a short fixed-rate run. 4 minutes gives ~30s for steady
+	// state to settle plus ~3.5 min of stable sampling for p99.
+	const cellDuration = 4 * time.Minute
+	// Workers need to be plentiful enough that --max-rate is the bottleneck,
+	// not concurrency. At ~200 ops/sec/worker (a conservative estimate for
+	// kv writes on this cluster), 512 workers can drive ~100k ops/sec,
+	// well above the matrix's top load value.
+	const concurrency = 512
+
+	totalCells := len(cadences) * len(loadOpsPerSec)
+	cellIdx := 0
+
+	for ci, cadence := range cadences {
+		if ci > 0 {
+			// Swap cadence: cancel the previous changefeed and create a fresh
+			// one against the same sink URI with the new Flush.Frequency.
+			t.Status(fmt.Sprintf("cancelling job %d to switch cadence to %s",
+				currentJobID, cadence))
+			if _, err := conn.ExecContext(ctx, fmt.Sprintf("CANCEL JOB %d", currentJobID)); err != nil {
+				t.Fatal(err)
+			}
+			createSQL := fmt.Sprintf(
+				`CREATE CHANGEFEED FOR kv.kv INTO '%s' WITH initial_scan = 'no', `+
+					`kafka_sink_config = '{"Flush": {"Frequency": "%s"}}'`,
+				sinkURI, cadence)
+			if err := conn.QueryRowContext(ctx, createSQL).Scan(&currentJobID); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		for _, load := range loadOpsPerSec {
+			cellIdx++
+			cellStart := timeutil.Now()
+			t.Status(fmt.Sprintf("=== cell %d/%d START cadence=%s load=%d ops/s at %s (job %d) ===",
+				cellIdx, totalCells, cadence, load, cellStart.Format(time.RFC3339), currentJobID))
+			if err := c.RunE(ctx, option.WithNodes(ct.workloadNode), fmt.Sprintf(
+				`./cockroach workload run kv `+
+					`--ramp 0 --duration %s --max-rate %d --read-percent 0 --concurrency %d `+
+					`{pgurl:%d-%d}`,
+				cellDuration, load, concurrency,
+				ct.crdbNodes[0], ct.crdbNodes[len(ct.crdbNodes)-1])); err != nil {
+				t.Fatal(err)
+			}
+			cellEnd := timeutil.Now()
+			t.Status(fmt.Sprintf("=== cell %d/%d END cadence=%s load=%d ops/s at %s (took %s) ===",
+				cellIdx, totalCells, cadence, load, cellEnd.Format(time.RFC3339),
+				cellEnd.Sub(cellStart).Round(time.Second)))
+		}
 	}
 }
 
