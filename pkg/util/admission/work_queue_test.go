@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/pebble"
+	prometheusgo "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 )
 
@@ -335,7 +336,7 @@ func TestWorkQueueBasic(t *testing.T) {
 				return q.String()
 
 			case "gc-groups-and-reset-used":
-				q.gcGroupsResetUsedAndUpdateEstimators()
+				q.gcGroupsResetUsedAndUpdateEstimators(timeSource.Now())
 				return q.String()
 
 			default:
@@ -564,7 +565,7 @@ func runCPUTimeTokenWorkQueueTest(t *testing.T, path string) {
 				return ""
 
 			case "gc-groups-and-reset-used":
-				q.gcGroupsResetUsedAndUpdateEstimators()
+				q.gcGroupsResetUsedAndUpdateEstimators(timeSource.Now())
 				return ""
 
 			case "set-max-cpu-groups":
@@ -704,7 +705,7 @@ func TestCPUTimeTokenEstimation(t *testing.T) {
 		q.AdmittedWorkDone(resp1, 150*time.Millisecond)
 
 		if i%10 == 0 {
-			q.gcGroupsResetUsedAndUpdateEstimators()
+			q.gcGroupsResetUsedAndUpdateEstimators(time.Now())
 		}
 	}
 
@@ -736,7 +737,7 @@ func TestCPUTimeTokenEstimation(t *testing.T) {
 		q.AdmittedWorkDone(resp2, 350*time.Millisecond)
 
 		if i%10 == 0 {
-			q.gcGroupsResetUsedAndUpdateEstimators()
+			q.gcGroupsResetUsedAndUpdateEstimators(time.Now())
 		}
 	}
 
@@ -759,14 +760,12 @@ func TestCPUTimeTokenEstimation(t *testing.T) {
 	require.NoError(t, err)
 	checkEstimation(resp3, 250*time.Millisecond)
 
-	// This is a test of GC. If a call to update happens without any
-	// work happening during that interval, the tenant's estimator should be
-	// GCed. The first call to gcGroupsResetUsedAndUpdateEstimators resets
-	// the interval over which activity is checked. The second call GCes the
-	// per-tenant estimators. So tenant 1 & tenant 2 should use the global
-	// estimator, just like tenant 3.
-	q.gcGroupsResetUsedAndUpdateEstimators()
-	q.gcGroupsResetUsedAndUpdateEstimators()
+	// GC the per-tenant estimators (two ticks separated by the idle
+	// threshold), forcing tenant 1 & tenant 2 to fall back to the
+	// global estimator like tenant 3.
+	t0 := time.Now()
+	q.gcGroupsResetUsedAndUpdateEstimators(t0)
+	q.gcGroupsResetUsedAndUpdateEstimators(t0.Add(groupGCIdleThreshold + time.Second))
 	resp1, err = q.Admit(ctx, info1)
 	require.NoError(t, err)
 	checkEstimation(resp1, 250*time.Millisecond)
@@ -831,7 +830,7 @@ func TestSQLCPUAdmission(t *testing.T) {
 		for i := 0; i < 100; i++ {
 			q.AdmittedWorkDone(resp, 50*time.Millisecond)
 			if i%10 == 0 {
-				q.gcGroupsResetUsedAndUpdateEstimators()
+				q.gcGroupsResetUsedAndUpdateEstimators(time.Now())
 			}
 		}
 
@@ -999,7 +998,7 @@ func TestWorkQueueTokenResetRace(t *testing.T) {
 				// This hot loop with GC calls is able to trigger the previously buggy
 				// code by squeezing in multiple times between the token grant and
 				// cancellation.
-				q.gcGroupsResetUsedAndUpdateEstimators()
+				q.gcGroupsResetUsedAndUpdateEstimators(time.Now())
 			}
 		}
 	}()
@@ -1394,7 +1393,9 @@ func TestGCExemptsBuiltins(t *testing.T) {
 	require.NotNil(t, high)
 	require.True(t, rgGroupKey(highResourceGroupID).isBuiltin())
 	withGroupLocked(q, func() { high.used = 0 })
-	q.gcGroupsResetUsedAndUpdateEstimators()
+	t0 := time.Now()
+	q.gcGroupsResetUsedAndUpdateEstimators(t0)
+	q.gcGroupsResetUsedAndUpdateEstimators(t0.Add(groupGCIdleThreshold + time.Second))
 
 	require.NotNil(t, getGroupLocked(q, rgGroupKey(highResourceGroupID)),
 		"built-in group must survive GC")
@@ -1433,11 +1434,12 @@ func TestGCThenLazyRecreateRecoversFromHolder(t *testing.T) {
 	require.Equal(t, uint32(99), g.weight)
 	require.True(t, g.cpuTimeBurstBucket.maxCPU)
 
-	// Force GC eligibility: drive used to 0.
+	// Force GC: drive used to 0, then tick past the idle threshold.
 	withGroupLocked(q, func() { g.used = 0 })
-	q.gcGroupsResetUsedAndUpdateEstimators()
-	require.Nil(t, getGroupLocked(q, key),
-		"idle non-built-in group should be GC'd")
+	t0 := time.Now()
+	q.gcGroupsResetUsedAndUpdateEstimators(t0)
+	q.gcGroupsResetUsedAndUpdateEstimators(t0.Add(groupGCIdleThreshold + time.Second))
+	require.Nil(t, getGroupLocked(q, key), "idle non-built-in group should be GC'd")
 
 	// Next admit recreates the container via the holder.
 	_, err = q.Admit(context.Background(), WorkInfo{
@@ -1492,4 +1494,52 @@ func TestGroupKeyForWorkInfoSelection(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestGCKeepsMetricChildVisibleAcrossScrapes admits work for a
+// tenant, then simulates a sequence of GC ticks and observes
+// which labeled children the per-group parent counter exposes
+// (i.e., what a Prometheus scrape would see). The child for the
+// tenant remains visible across sub-threshold idle ticks and
+// disappears only once groupGCIdleThreshold has elapsed.
+func TestGCKeepsMetricChildVisibleAcrossScrapes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	q, _, _, cleanup := makeCPUTimeTokenWorkQueue(t)
+	defer cleanup()
+
+	const tenantID = 42
+	info := WorkInfo{
+		TenantID: roachpb.MustMakeTenantID(tenantID),
+		Priority: admissionpb.NormalPri,
+	}
+
+	// scrape returns the tenant_id label values currently exposed
+	// on the per-group admittedCount parent.
+	scrape := func() []string {
+		var tenants []string
+		q.perGroupAggMetrics.primary.admittedCount.Each(nil, func(m *prometheusgo.Metric) {
+			for _, lp := range m.Label {
+				if lp.GetName() == "tenant_id" {
+					tenants = append(tenants, lp.GetValue())
+				}
+			}
+		})
+		return tenants
+	}
+
+	resp, err := q.Admit(context.Background(), info)
+	require.NoError(t, err)
+	q.AdmittedWorkDone(resp, 50*time.Millisecond)
+	require.Contains(t, scrape(), "42")
+
+	t0 := time.Now()
+	for i := 0; i < 5; i++ {
+		q.gcGroupsResetUsedAndUpdateEstimators(t0.Add(time.Duration(i) * time.Second))
+		require.Contains(t, scrape(), "42", "sub-threshold tick %d", i)
+	}
+
+	q.gcGroupsResetUsedAndUpdateEstimators(t0.Add(groupGCIdleThreshold))
+	require.NotContains(t, scrape(), "42")
 }

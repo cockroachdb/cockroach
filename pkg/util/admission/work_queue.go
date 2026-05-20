@@ -528,8 +528,8 @@ func initWorkQueue(
 			ticker := time.NewTicker(time.Second)
 			for {
 				select {
-				case <-ticker.C:
-					q.gcGroupsResetUsedAndUpdateEstimators()
+				case tickTime := <-ticker.C:
+					q.gcGroupsResetUsedAndUpdateEstimators(tickTime)
 				case <-stopCh:
 					// Channel closed.
 					return
@@ -1343,22 +1343,24 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 	return requestedCount
 }
 
+// groupGCIdleThreshold sets how long an idle non-built-in group's
+// per-group metric children stay registered before Unlink, so a
+// scrape (typically 10-30s) can observe them.
+const groupGCIdleThreshold = time.Minute
+
 // gcGroupsResetUsedAndUpdateEstimators does three things:
 //  1. It resets group.used, which is the resource count over which the
 //     WorkQueue does fair-sharing. That is, fair-sharing is done over
 //     intervals that are sized at the frequency with which this
 //     function is called (as of 1/9/26, every 1s).
-//  2. It GCs groupInfo entries, if a group has seen no workload over
-//     the interval. Built-in groups (builtinGroupConfigs) are exempt:
-//     they are always installed in the holder, so dropping and
-//     recreating them each interval is wasted churn through
-//     groupInfoPool. The cost is that built-ins not routed to in the
-//     current mode (e.g. the system tenant key in RM mode) keep
-//     publishing per-group metric series with values that stay at
-//     zero.
+//  2. It GCs groupInfo entries that have been continuously idle for
+//     at least groupGCIdleThreshold. Built-ins are exempt; dropping
+//     and recreating them is wasted pool churn. The cost is that
+//     built-ins not routed to in the current mode keep publishing
+//     per-group metric series with values that stay at zero.
 //  3. It updates CPU time token estimators. The estimators are only used
 //     if mode == usesCPUTimeTokens.
-func (q *WorkQueue) gcGroupsResetUsedAndUpdateEstimators() {
+func (q *WorkQueue) gcGroupsResetUsedAndUpdateEstimators(now time.Time) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	q.mu.defaultCPUTimeTokenEstimator.update()
@@ -1366,7 +1368,11 @@ func (q *WorkQueue) gcGroupsResetUsedAndUpdateEstimators() {
 	// longer than desired. We could break this iteration into smaller parts if
 	// needed.
 	for gKey, info := range q.mu.groups {
-		if !gKey.isBuiltin() && info.used == 0 && !isInGroupHeap(info) {
+		active := info.used > 0 || isInGroupHeap(info)
+		if active || info.idleSince.IsZero() {
+			// Refresh on activity; initialize on first observation.
+			info.idleSince = now
+		} else if !gKey.isBuiltin() && now.Sub(info.idleSince) >= groupGCIdleThreshold {
 			delete(q.mu.groups, gKey)
 			releaseGroupInfo(info)
 			continue
@@ -1846,7 +1852,14 @@ type groupInfo struct {
 	// simply (a) do not do used--, if used is already zero, or (b) do not do
 	// used-- if the request was canceled. This does imply some inaccuracy in
 	// accounting -- it can be fixed if needed.
-	used            uint64
+	used uint64
+
+	// idleSince is the most recent GC-tick time at which this group
+	// was observed active, or the first tick that visited it if it
+	// has never been active. The group is GC'd once
+	// (now - idleSince) >= groupGCIdleThreshold.
+	idleSince time.Time
+
 	waitingWorkHeap waitingWorkHeap
 	openEpochsHeap  openEpochsHeap
 
