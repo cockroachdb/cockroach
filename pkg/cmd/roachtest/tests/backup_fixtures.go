@@ -44,8 +44,15 @@ var expectedNumTables = map[string]int{
 
 type BackupFixture interface {
 	Kind() string
-	// The database that is backed up.
+	// DatabaseName is the database that is backed up. Empty if the fixture is
+	// not scoped to a single database (e.g. a multi-database large-schema
+	// fixture).
 	DatabaseName() string
+	// RestoreTarget returns the target clause for a RESTORE statement against
+	// this fixture. For database-scoped fixtures this is "DATABASE <name>"; for
+	// fixtures that span the whole cluster it is the empty string, which causes
+	// the driver to issue a full-cluster restore.
+	RestoreTarget() string
 }
 
 type TpccFixture struct {
@@ -66,28 +73,36 @@ func (f TpccFixture) DatabaseName() string {
 	return "tpcc"
 }
 
+func (f TpccFixture) RestoreTarget() string {
+	return "DATABASE " + f.DatabaseName()
+}
+
 func (f TpccFixture) WithSchedule(schedule BackupSchedule) TpccFixture {
 	f.Schedule = schedule
 	return f
 }
 
 // LargeEmptySchemaFixture is a fixture containing a large number of empty
-// tables. It is intended to be used for testing the performance of backup and
-// restore on clusters with a large number of backed up descriptors.
+// tables spread across many databases. It is intended for testing the
+// performance of backup and restore on clusters with a large number of backed
+// up descriptors.
 type LargeEmptySchemaFixture struct {
 	NumTables int
 }
+
+var _ BackupFixture = LargeEmptySchemaFixture{}
 
 func (f LargeEmptySchemaFixture) Kind() string {
 	return fmt.Sprintf("large-schema-%d-tables", f.NumTables)
 }
 
 func (f LargeEmptySchemaFixture) DatabaseName() string {
-	// The large schema fixture is comprised of several databases, so there isn't
-	// a single database name associated with the fixture. As we add more
-	// fixtures, we may want to come back and update the BackupFixture interface
-	// to better account for other types of fixtures, but for now returning the
-	// empty string is sufficient.
+	return ""
+}
+
+func (f LargeEmptySchemaFixture) RestoreTarget() string {
+	// The fixture spans multiple databases, so a full-cluster restore is the
+	// only way to bring it back.
 	return ""
 }
 
