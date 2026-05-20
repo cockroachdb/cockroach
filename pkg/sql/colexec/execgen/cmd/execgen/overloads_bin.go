@@ -136,6 +136,10 @@ func registerBinOpOutputTypes() {
 			binOpOutputTypes[treebin.Div][typePair{types.IntFamily, leftIntWidth, types.IntFamily, rightIntWidth}] = types.Decimal
 		}
 	}
+	for _, intWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
+		binOpOutputTypes[treebin.Div][typePair{types.FloatFamily, anyWidth, types.IntFamily, intWidth}] = types.Float
+		binOpOutputTypes[treebin.Div][typePair{types.IntFamily, intWidth, types.FloatFamily, anyWidth}] = types.Float
+	}
 	binOpOutputTypes[treebin.Minus][typePair{types.TimestampTZFamily, anyWidth, types.TimestampTZFamily, anyWidth}] = types.Interval
 	binOpOutputTypes[treebin.Plus][typePair{types.IntervalFamily, anyWidth, types.IntervalFamily, anyWidth}] = types.Interval
 	binOpOutputTypes[treebin.Minus][typePair{types.IntervalFamily, anyWidth, types.IntervalFamily, anyWidth}] = types.Interval
@@ -405,6 +409,44 @@ func (c floatCustomizer) getBinOpAssignFunc() assignFunc {
 			colexecerror.InternalError(err)
 		}
 		return buf.String()
+	}
+}
+
+func (c floatIntCustomizer) getBinOpAssignFunc() assignFunc {
+	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
+		switch op.overloadBase.BinOp {
+		case treebin.Div:
+			return fmt.Sprintf(`
+				{
+					if %[3]s == 0 && !math.IsNaN(float64(%[2]s)) {
+						colexecerror.ExpectedError(tree.ErrDivByZero)
+					}
+					%[1]s = float64(%[2]s) / float64(%[3]s)
+				}`,
+				targetElem, leftElem, rightElem)
+		default:
+			colexecerror.InternalError(errors.AssertionFailedf("unhandled binary operator %s", op.overloadBase.BinOp.String()))
+		}
+		return ""
+	}
+}
+
+func (c intFloatCustomizer) getBinOpAssignFunc() assignFunc {
+	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
+		switch op.overloadBase.BinOp {
+		case treebin.Div:
+			return fmt.Sprintf(`
+				{
+					if %[3]s == 0.0 {
+						colexecerror.ExpectedError(tree.ErrDivByZero)
+					}
+					%[1]s = float64(%[2]s) / float64(%[3]s)
+				}`,
+				targetElem, leftElem, rightElem)
+		default:
+			colexecerror.InternalError(errors.AssertionFailedf("unhandled binary operator %s", op.overloadBase.BinOp.String()))
+		}
+		return ""
 	}
 }
 
