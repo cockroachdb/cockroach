@@ -639,6 +639,12 @@ func (r *Replica) handleGCHintResult(ctx context.Context, hint *roachpb.GCHint) 
 	r.mu.Unlock()
 }
 
+func (r *Replica) handleFlushGenerationResult(ctx context.Context, gen uint64) {
+	r.mu.Lock()
+	r.shMu.state.FlushGeneration = gen
+	r.mu.Unlock()
+}
+
 func (r *Replica) handleVersionResult(ctx context.Context, version *roachpb.Version) {
 	if (*version == roachpb.Version{}) {
 		log.KvExec.Fatal(ctx, "not expecting empty replica version downstream of raft")

@@ -703,6 +703,7 @@ func SendEmptySnapshot(
 		roachpb.GCHint{},
 		st.Version.ActiveVersionOrEmpty(ctx).Version,
 		0, /* approxStoreLocalBytes */
+		0, /* flushGeneration */
 	)
 	if err != nil {
 		return err

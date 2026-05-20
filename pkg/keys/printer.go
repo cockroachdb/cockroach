@@ -124,6 +124,7 @@ var (
 		{name: "RangeVersion", suffix: LocalRangeVersionSuffix},
 		{name: "RangeGCHint", suffix: LocalRangeGCHintSuffix},
 		{name: "RangeFileNumAlloc", suffix: LocalRangeFileNumAllocSuffix},
+		{name: "RangeFlushGeneration", suffix: LocalRangeFlushGenerationSuffix},
 		{name: "RangeSharedManifestNum", suffix: LocalRangeSharedManifestNumSuffix},
 	}
 

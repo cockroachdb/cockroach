@@ -113,9 +113,9 @@ type ManifestChangeCommitter interface {
 // ManifestChangeCommitter uses it for safety validation and bookkeeping. The
 // contents are opaque to Pebble.
 type FlushCommitInfo struct {
-	// ExpectedFlushStartedCount is used to prevent flush commit when two flushes
+	// ExpectedFlushGeneration is used to prevent flush commit when two flushes
 	// have started concurrently (can happen due to lease transfers).
-	ExpectedFlushStartedCount uint64
+	ExpectedFlushGeneration uint64
 	// ActivateSpans are the key spans over which Writer.ClearRawRangeActivate is
 	// written, activating dormant deletions from flush prepare. Currently, only
 	// the user key span.

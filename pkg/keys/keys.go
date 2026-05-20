@@ -416,6 +416,12 @@ func RangeFileNumAllocKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RangeFileNumAllocKey()
 }
 
+// RangeFlushGenerationKey returns a replicated range-ID local key for
+// the flush generation state.
+func RangeFlushGenerationKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDPrefixBuf(rangeID).RangeFlushGenerationKey()
+}
+
 // RangeSharedManifestNumKey returns a replicated range-ID local key for the
 // range-shared engine manifest number.
 func RangeSharedManifestNumKey(rangeID roachpb.RangeID) roachpb.Key {
@@ -1307,6 +1313,12 @@ func (b RangeIDPrefixBuf) RangeTombstoneKey() roachpb.Key {
 // number allocation state for a range's range-shared LSM.
 func (b RangeIDPrefixBuf) RangeFileNumAllocKey() roachpb.Key {
 	return append(b.ReplicatedPrefix(), LocalRangeFileNumAllocSuffix...)
+}
+
+// RangeFlushGenerationKey returns a replicated range-ID local key for
+// the flush generation state.
+func (b RangeIDPrefixBuf) RangeFlushGenerationKey() roachpb.Key {
+	return append(b.ReplicatedPrefix(), LocalRangeFlushGenerationSuffix...)
 }
 
 // RangeSharedManifestNumKey returns a replicated range-ID local key for the

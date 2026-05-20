@@ -82,6 +82,10 @@ var (
 	LocalRangeAppliedStateSuffix = []byte("rask")
 	// LocalRangeForceFlushSuffix is the suffix for the range force flush key.
 	LocalRangeForceFlushSuffix = []byte("rffk")
+	// LocalRangeFlushGenerationSuffix is the suffix for the flush generation
+	// state. This tracks the flush generation for a range, incremented on
+	// each flush prepare.
+	LocalRangeFlushGenerationSuffix = []byte("rfgn")
 	// LocalRangeFileNumAllocSuffix is the suffix for the file number allocation
 	// state for a range's range-shared LSM. This tracks the next available file
 	// number that can be allocated for files in the RSEngine.

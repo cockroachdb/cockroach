@@ -165,6 +165,12 @@ message ReplicaState {
   // RangeAppliedState.ApproxStoreLocalBytes.
   int64 approx_store_local_bytes = 17;
 
+  // FlushGeneration mirrors the on-disk RangeFlushGenerationKey in memory.
+  // It is updated during application from the value in ReplicatedEvalResult,
+  // so that no engine reads are needed during application. See
+  // RangeFlushGenerationState for the full protocol description.
+  uint64 flush_generation = 18;
+
   reserved 8, 9, 10;
 }
 
@@ -293,6 +299,32 @@ message RangeAppliedState {
   // mixed-version clusters as long as it remains 0 until all replicas
   // understand it (same pattern as RaftAppliedIndexTerm).
   int64 approx_store_local_bytes = 6;
+}
+
+// RangeFlushGenerationState tracks the flush generation for a range. Stored
+// in its own replicated range-ID local key (RangeFlushGenerationKey). It also
+// serves as a unique identifier for scratch file naming during flushes.
+//
+// Flush prepare increments the generation and records the new value. Flush
+// commit validates that the current generation matches the value recorded at
+// prepare time. If they differ, a concurrent flush prepare has occurred and
+// the commit is rejected. There are two situations where this can happen:
+//
+// Lease transfer: if the lease transfers and the new leaseholder runs its
+// own flush prepare, the generation increments. When the old leaseholder's
+// commit checks the generation, it sees the mismatch and is rejected.
+//
+// Split/merge: on split, the RHS inherits the LHS generation. On merge,
+// the LHS takes max(LHS, RHS). If either side ran a flush prepare between
+// the original prepare and the merge, the generation will have incremented
+// on that sub-range. The merge propagates it via max, so the merged
+// range's generation will be higher than what the original prepare
+// recorded, and the commit will be rejected.
+message RangeFlushGenerationState {
+  option (gogoproto.equal) = true;
+
+  // generation is the flush generation (incremented on each flush prepare).
+  uint64 generation = 1;
 }
 
 // MVCCPersistentStats is convertible to MVCCStats, but uses signed variable

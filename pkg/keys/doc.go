@@ -183,6 +183,7 @@ var schema = [...]interface{}{
 	RangeGCThresholdKey,                         // "lgc-"
 	RangeAppliedStateKey,                        // "rask"
 	RangeForceFlushKey,                          // "rffk"
+	RangeFlushGenerationKey,                     // "rfgn"
 	RangeFileNumAllocKey,                        // "rfna"
 	RangeLeaseKey,                               // "rll-"
 	RangePriorReadSummaryKey,                    // "rprs"

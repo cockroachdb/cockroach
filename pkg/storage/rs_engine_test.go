@@ -64,8 +64,8 @@ func (m *mockManifestChangeCommitter) InstallNewManifest(
 	if ingestHandle != nil {
 		flushCommit := ingestHandle.(*FlushCommitInfo)
 		if flushCommit != nil {
-			fmt.Fprintf(&m.mu.log, ", flushCommit={ExpectedFlushStartedCount:%d, ActivateSpans:%v}",
-				flushCommit.ExpectedFlushStartedCount, flushCommit.ActivateSpans)
+			fmt.Fprintf(&m.mu.log, ", flushCommit={ExpectedFlushGeneration:%d, ActivateSpans:%v}",
+				flushCommit.ExpectedFlushGeneration, flushCommit.ActivateSpans)
 		}
 	}
 	fmt.Fprintf(&m.mu.log, ")\n")

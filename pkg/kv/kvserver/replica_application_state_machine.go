@@ -305,6 +305,17 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 			rResult.State.GCHint = nil
 		}
 
+		// FlushGeneration is non-trivial (rather than handled in
+		// stageTrivialResult) because flush prepare takes a store-local
+		// engine snapshot after the apply.Batch commits. If other raft
+		// entries were applied in the same batch, their writes would be
+		// captured by the snapshot but not covered by the dormant clears,
+		// violating the flush boundary invariant.
+		if rResult.State.FlushGeneration != 0 {
+			sm.r.handleFlushGenerationResult(ctx, rResult.State.FlushGeneration)
+			rResult.State.FlushGeneration = 0
+		}
+
 		if (*rResult.State == kvserverpb.ReplicaState{}) {
 			rResult.State = nil
 		}

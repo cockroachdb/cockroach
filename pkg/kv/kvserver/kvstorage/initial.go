@@ -47,6 +47,9 @@ const (
 // entries already having applied. The supplied MVCCStats are used for the Stats
 // field after adjusting for persisting the state itself, and the updated stats
 // are returned.
+//
+// TODO(angeladietz): refactor to accept a config struct instead of individual
+// parameters. The parameter list is growing unwieldy.
 func WriteInitialReplicaState(
 	ctx context.Context,
 	stateRW StateRW,
@@ -57,12 +60,14 @@ func WriteInitialReplicaState(
 	gcHint roachpb.GCHint,
 	replicaVersion roachpb.Version,
 	approxStoreLocalBytes int64,
+	flushGeneration uint64,
 ) (enginepb.MVCCStats, error) {
 	s := kvserverpb.ReplicaState{
 		RaftAppliedIndex:      RaftInitialLogIndex,
 		RaftAppliedIndexTerm:  RaftInitialLogTerm,
 		LeaseAppliedIndex:     InitialLeaseAppliedIndex,
 		ApproxStoreLocalBytes: approxStoreLocalBytes,
+		FlushGeneration:       flushGeneration,
 		Desc: &roachpb.RangeDescriptor{
 			RangeID: desc.RangeID,
 		},
@@ -125,7 +130,7 @@ func WriteInitialRangeState(
 
 	if _, err := WriteInitialReplicaState(
 		ctx, stateRW, initialMS, desc, initialLease, initialGCThreshold, initialGCHint,
-		replicaVersion, 0, /* approxStoreLocalBytes */
+		replicaVersion, 0 /* approxStoreLocalBytes */, 0, /* flushGeneration */
 	); err != nil {
 		return err
 	}
