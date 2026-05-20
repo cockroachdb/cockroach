@@ -299,6 +299,9 @@ func TestOIDCAuthorization_TokenPaths(t *testing.T) {
 			rpcCtx := app.NewClientRPCContext(ctx, username.TestUserName())
 			client, err := rpcCtx.GetHTTPClient()
 			require.NoError(t, err)
+			// The default 10s timeout is too short under race detection where OIDC
+			// callback processing can take 20s+.
+			client.Timeout = 45 * time.Second
 			// Prevent automatic redirects so we can capture cookies and headers.
 			client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
@@ -376,6 +379,9 @@ func TestOIDCAuthorization_UserinfoPaths(t *testing.T) {
 	rpc := app.NewClientRPCContext(ctx, username.TestUserName())
 	cl, err := rpc.GetHTTPClient()
 	require.NoError(t, err)
+	// The default 10s timeout is too short under race detection where OIDC
+	// callback processing can take 20s+.
+	cl.Timeout = 45 * time.Second
 	cl.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
 	// Create an RSA key pair for signing and verifying tokens.
@@ -729,6 +735,9 @@ func TestOIDCAuthorization_RoleGrantAndRevoke(t *testing.T) {
 	rpcCtx := app.NewClientRPCContext(ctx, username.TestUserName())
 	client, err := rpcCtx.GetHTTPClient()
 	require.NoError(t, err)
+	// The default 10s timeout is too short under race detection where OIDC
+	// callback processing can take 20s+.
+	client.Timeout = 45 * time.Second
 	// Prevent automatic redirects so we can capture cookies and headers.
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
