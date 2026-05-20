@@ -3566,6 +3566,44 @@ func (m *ForceDeleteTableDataEntry) AppendJSONFields(printComma bool, b redact.R
 }
 
 // AppendJSONFields implements the EventPayload interface.
+func (m *GCPressureDetected) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	if m.NodeID != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"NodeID\":"...)
+		b = strconv.AppendInt(b, int64(m.NodeID), 10)
+	}
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"GCCPUFraction\":"...)
+	b = strconv.AppendFloat(b, float64(m.GCCPUFraction), 'f', -1, 64)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"GoAllocBytes\":"...)
+	b = strconv.AppendUint(b, uint64(m.GoAllocBytes), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"GoLimitBytes\":"...)
+	b = strconv.AppendUint(b, uint64(m.GoLimitBytes), 10)
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
 func (m *GrantRole) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)

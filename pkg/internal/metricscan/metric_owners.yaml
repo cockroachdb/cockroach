@@ -1282,6 +1282,7 @@ owners:
   sys_gc_assist_enabled: cockroachdb/obs-prs
   sys_gc_assist_ns: cockroachdb/obs-prs
   sys_gc_count: cockroachdb/obs-prs
+  sys_gc_cpu_percent: cockroachdb/obs-prs
   sys_gc_pause_ns: cockroachdb/obs-prs
   sys_gc_pause_percent: cockroachdb/obs-prs
   sys_gc_stop_ns: cockroachdb/obs-prs
