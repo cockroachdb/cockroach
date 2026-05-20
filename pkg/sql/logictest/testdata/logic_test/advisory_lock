@@ -1016,6 +1016,74 @@ true
 statement ok
 ROLLBACK
 
+subtest pg_advisory_xact_lock_respects_lock_timeout
+
+# Blocking advisory-lock acquires must honor the session's lock_timeout, the
+# same way row-level locks do. The non-blocking try_ variants are unaffected
+# (they short-circuit via WaitPolicy_Error before any waiting).
+
+# Advisory locks are scoped per-database, so both sessions must use the same
+# database for the contention to be observable. The lock_namespace subtest
+# above leaves the two connections pointed at different databases.
+user root
+
+statement ok
+USE defaultdb
+
+statement ok
+BEGIN
+
+statement ok
+SELECT pg_advisory_xact_lock(7777777)
+
+user testuser
+
+statement ok
+USE defaultdb
+
+statement ok
+SET lock_timeout = '50ms'
+
+statement ok
+BEGIN
+
+statement error pgcode 55P03 canceling statement due to lock timeout
+SELECT pg_advisory_xact_lock(7777777)
+
+statement ok
+ROLLBACK
+
+# Shared waiter on an exclusive holder also times out.
+statement ok
+BEGIN
+
+statement error pgcode 55P03 canceling statement due to lock timeout
+SELECT pg_advisory_xact_lock_shared(7777777)
+
+statement ok
+ROLLBACK
+
+# try_ variants return false rather than waiting: lock_timeout must not affect
+# them.
+statement ok
+BEGIN
+
+query B
+SELECT pg_try_advisory_xact_lock(7777777)
+----
+false
+
+statement ok
+COMMIT
+
+statement ok
+RESET lock_timeout
+
+user root
+
+statement ok
+COMMIT
+
 subtest end
 
 subtest advisory_savepoint_release

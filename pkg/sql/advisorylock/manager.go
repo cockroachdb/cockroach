@@ -7,6 +7,7 @@ package advisorylock
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -15,6 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -185,9 +188,17 @@ func (m *Manager) getBaseKey(ctx context.Context, txn *kv.Txn) (roachpb.Key, err
 }
 
 // AcquireInTxn acquires a lock in the given transaction. Transaction
-// locks are automatically released on commit / rollback.
+// locks are automatically released on commit / rollback. If wait is true
+// and lockTimeout is positive, the acquisition will be aborted with a
+// pgcode.LockNotAvailable error after the timeout elapses, matching
+// PostgreSQL's lock_timeout semantics.
 func (m *Manager) AcquireInTxn(
-	ctx context.Context, txn *kv.Txn, key LockKey, mode LockMode, wait bool,
+	ctx context.Context,
+	txn *kv.Txn,
+	key LockKey,
+	mode LockMode,
+	wait bool,
+	lockTimeout time.Duration,
 ) error {
 	// Encode the key into the primary index key for the advisory lock table.
 	baseKey, err := m.getBaseKey(ctx, txn)
@@ -199,9 +210,12 @@ func (m *Manager) AcquireInTxn(
 		return err
 	}
 	b := txn.NewBatch()
-	// If waiting is disabled, we will return an error if the lock is not available.
+	// If waiting is disabled, we will return an error if the lock is not
+	// available. Otherwise, honor the session's lock_timeout if one is set.
 	if !wait {
 		b.Header.WaitPolicy = lock.WaitPolicy_Error
+	} else if lockTimeout > 0 {
+		b.Header.LockTimeout = lockTimeout
 	}
 	// Lock the key in the appropriate mode, we are going to be locking
 	// a non-existing key. Additionally, for simplicity this lock will
@@ -219,20 +233,20 @@ func (m *Manager) AcquireInTxn(
 		LockNonExisting:      true, // Key will not exist.
 		KeyLockingDurability: lock.Replicated,
 	})
-	err = txn.Run(ctx, b)
-	// Detect if the lock is not available if we are not waiting for it.
-	if err != nil {
-		if !wait && isWaitPolicyLockConflict(err) {
-			return LockIsNotAvailableErr
-		}
-		return errors.Wrap(err, "failed to acquire advisory lock in transaction")
+	runErr := txn.Run(ctx, b)
+	if runErr == nil && len(b.Results) > 0 {
+		runErr = b.Results[0].Err
 	}
-	if len(b.Results) > 0 && b.Results[0].Err != nil {
-		resErr := b.Results[0].Err
-		if !wait && isWaitPolicyLockConflict(resErr) {
+	// Detect if the lock is not available if we are not waiting for it,
+	// or if the acquisition exceeded the session's lock_timeout.
+	if runErr != nil {
+		if !wait && isWaitPolicyLockConflict(runErr) {
 			return LockIsNotAvailableErr
 		}
-		return errors.Wrap(resErr, "failed to acquire advisory lock in transaction")
+		if isLockTimeoutConflict(runErr) {
+			return newLockTimeoutErr()
+		}
+		return errors.Wrap(runErr, "failed to acquire advisory lock in transaction")
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -248,6 +262,24 @@ func isWaitPolicyLockConflict(err error) bool {
 		return false
 	}
 	return wi.Reason == kvpb.WriteIntentError_REASON_WAIT_POLICY
+}
+
+// isLockTimeoutConflict checks if the error is a lock conflict error that
+// was surfaced because the request's LockTimeout elapsed before the lock
+// could be acquired.
+func isLockTimeoutConflict(err error) bool {
+	var wi *kvpb.WriteIntentError
+	if !errors.As(err, &wi) {
+		return false
+	}
+	return wi.Reason == kvpb.WriteIntentError_REASON_LOCK_TIMEOUT
+}
+
+// newLockTimeoutErr returns the user-facing error surfaced when an advisory
+// lock acquisition exceeds the session's lock_timeout. The wording and
+// SQLSTATE match PostgreSQL.
+func newLockTimeoutErr() error {
+	return pgerror.New(pgcode.LockNotAvailable, "canceling statement due to lock timeout")
 }
 
 // HeldLockInfo represents information about a held advisory lock.
