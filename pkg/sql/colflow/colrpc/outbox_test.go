@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,13 +35,16 @@ func TestOutboxCatchesPanics(t *testing.T) {
 	// crdb_test-build behavior.
 	defer colexecerror.ProductionBehaviorForTests()()
 
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
 	var (
 		input    = colexecop.NewBatchBuffer()
 		typs     = []*types.T{types.Int}
 		rpcLayer = makeMockFlowStreamRPCLayer()
 	)
 	input.Init(ctx)
-	outbox, err := NewOutbox(&execinfra.FlowCtx{Gateway: false}, 0 /* processorID */, testAllocator, testMemAcc, colexecargs.OpWithMetaInfo{Root: input}, typs, nil /* getStats */)
+	outbox, err := NewOutbox(&execinfra.FlowCtx{Gateway: false, Cfg: &execinfra.ServerConfig{Stopper: stopper}}, 0 /* processorID */, testAllocator, testMemAcc, colexecargs.OpWithMetaInfo{Root: input}, typs, nil /* getStats */)
 	require.NoError(t, err)
 
 	// This test relies on the fact that BatchBuffer panics when there are no
@@ -86,6 +90,9 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 
 	ctx := context.Background()
 
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
 	var (
 		input = colexecop.NewBatchBuffer()
 		typs  = []*types.T{types.Int}
@@ -96,7 +103,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 	newOutboxWithMetaSources := func() (*Outbox, *uint32, error) {
 		var sourceDrained uint32
 		outbox, err := NewOutbox(
-			&execinfra.FlowCtx{Gateway: false},
+			&execinfra.FlowCtx{Gateway: false, Cfg: &execinfra.ServerConfig{Stopper: stopper}},
 			0, /* processorID */
 			testAllocator,
 			testMemAcc,

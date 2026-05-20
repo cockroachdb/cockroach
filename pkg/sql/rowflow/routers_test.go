@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -46,6 +47,7 @@ import (
 func setupRouter(
 	t testing.TB,
 	st *cluster.Settings,
+	stopper *stop.Stopper,
 	evalCtx *eval.Context,
 	diskMonitor *mon.BytesMonitor,
 	spec execinfrapb.OutputRouterSpec,
@@ -67,6 +69,7 @@ func setupRouter(
 	flowCtx := execinfra.FlowCtx{
 		Cfg: &execinfra.ServerConfig{
 			Settings: st,
+			Stopper:  stopper,
 		},
 		EvalCtx:     evalCtx,
 		Mon:         evalCtx.TestingMon,
@@ -74,7 +77,7 @@ func setupRouter(
 	}
 	r.init(ctx, &flowCtx, 0 /* processorID */, inputTypes)
 	wg := &sync.WaitGroup{}
-	r.Start(ctx, wg, nil /* flowCtxCancel */)
+	require.NoError(t, r.Start(ctx, wg, nil /* flowCtxCancel */))
 	return r, wg
 }
 
@@ -88,6 +91,8 @@ func TestRouters(t *testing.T) {
 	alloc := &tree.DatumAlloc{}
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
 	evalCtx := eval.NewTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
@@ -154,7 +159,7 @@ func TestRouters(t *testing.T) {
 				tc.spec.Streams[i] = execinfrapb.StreamEndpointSpec{StreamID: execinfrapb.StreamID(i)}
 			}
 
-			r, wg := setupRouter(t, st, evalCtx, diskMonitor, tc.spec, types, recvs)
+			r, wg := setupRouter(t, st, stopper, evalCtx, diskMonitor, tc.spec, types, recvs)
 
 			for i := 0; i < numRows; i++ {
 				row := make(rowenc.EncDatumRow, numCols)
@@ -301,6 +306,8 @@ func TestConsumerStatus(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
 	evalCtx := eval.NewTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
@@ -336,7 +343,7 @@ func TestConsumerStatus(t *testing.T) {
 			}
 
 			colTypes := []*types.T{types.Int}
-			router, wg := setupRouter(t, st, evalCtx, diskMonitor, tc.spec, colTypes, recvs)
+			router, wg := setupRouter(t, st, stopper, evalCtx, diskMonitor, tc.spec, colTypes, recvs)
 
 			// row0 will be a row that the router sends to the first stream, row1 to
 			// the 2nd stream.
@@ -457,6 +464,8 @@ func TestMetadataIsForwarded(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
 	evalCtx := eval.NewTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
@@ -554,7 +563,7 @@ func TestMetadataIsForwarded(t *testing.T) {
 					recvs[i] = &chans[i]
 					tc.spec.Streams[i] = execinfrapb.StreamEndpointSpec{StreamID: execinfrapb.StreamID(i)}
 				}
-				router, wg := setupRouter(t, st, evalCtx, diskMonitor, tc.spec, nil /* no columns */, recvs)
+				router, wg := setupRouter(t, st, stopper, evalCtx, diskMonitor, tc.spec, nil /* no columns */, recvs)
 
 				stage := 1
 				for i := 0; i < 10; i++ {
@@ -657,6 +666,8 @@ func TestRouterBlocks(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
 			ctx := context.Background()
+			stopper := stop.NewStopper()
+			defer stopper.Stop(ctx)
 			evalCtx := eval.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(ctx)
 			diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
@@ -664,6 +675,7 @@ func TestRouterBlocks(t *testing.T) {
 			flowCtx := execinfra.FlowCtx{
 				Cfg: &execinfra.ServerConfig{
 					Settings: st,
+					Stopper:  stopper,
 				},
 				EvalCtx:     &evalCtx,
 				Mon:         evalCtx.TestingMon,
@@ -690,7 +702,7 @@ func TestRouterBlocks(t *testing.T) {
 			}
 			router.init(ctx, &flowCtx, 0 /* processorID */, colTypes)
 			var wg sync.WaitGroup
-			router.Start(ctx, &wg, nil /* flowCtxCancel */)
+			require.NoError(t, router.Start(ctx, &wg, nil /* flowCtxCancel */))
 
 			// Set up a goroutine that tries to send rows until the stop channel
 			// is closed.
@@ -771,6 +783,8 @@ func TestRouterDiskSpill(t *testing.T) {
 	ctx := tracing.ContextWithSpan(context.Background(), sp)
 
 	st := cluster.MakeTestingClusterSettings()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), nil /* statsCollector */)
@@ -796,6 +810,7 @@ func TestRouterDiskSpill(t *testing.T) {
 		Mon:     evalCtx.TestingMon,
 		Cfg: &execinfra.ServerConfig{
 			Settings:    st,
+			Stopper:     stopper,
 			TempStorage: tempEngine,
 		},
 		DiskMonitor: diskMonitor,
@@ -836,7 +851,7 @@ func TestRouterDiskSpill(t *testing.T) {
 			output.rowBufToPushFromAcc.Close(ctx)
 			output.rowBufToPushFromAcc = &separateAcc
 		}
-		rb.Start(ctx, &wg, nil /* ctxCancel */)
+		require.NoError(t, rb.Start(ctx, &wg, nil /* ctxCancel */))
 
 		rows := randgen.MakeIntRows(numRows, numCols)
 		errChan := make(chan error)
@@ -1016,6 +1031,8 @@ func BenchmarkRouter(b *testing.B) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
 	evalCtx := eval.NewTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
@@ -1053,7 +1070,7 @@ func BenchmarkRouter(b *testing.B) {
 							recvs[i] = &chans[i]
 							spec.Streams[i] = execinfrapb.StreamEndpointSpec{StreamID: execinfrapb.StreamID(i)}
 						}
-						r, wg := setupRouter(b, st, evalCtx, diskMonitor, spec, colTypes, recvs)
+						r, wg := setupRouter(b, st, stopper, evalCtx, diskMonitor, spec, colTypes, recvs)
 						for i := range chans {
 							go drainRowChannel(&chans[i])
 						}

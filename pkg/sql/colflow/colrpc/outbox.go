@@ -455,7 +455,8 @@ func (o *Outbox) runWithStream(
 		outboxCtxCancel = func() {}
 	}
 	waitCh := make(chan struct{})
-	go func() {
+	err := o.flowCtx.Cfg.Stopper.RunAsyncTask(ctx, "outbox watchdog" /* taskName */, func(ctx context.Context) {
+		defer close(waitCh)
 		// This goroutine's job is to listen continually on the stream from the
 		// consumer for errors or drain requests, while the remainder of this
 		// function concurrently is producing data and sending it over the
@@ -484,8 +485,10 @@ func (o *Outbox) runWithStream(
 				o.moveToDraining(ctx, "consumer requested draining" /* reason */)
 			}
 		}
+	})
+	if err != nil {
 		close(waitCh)
-	}()
+	}
 
 	terminatedGracefully, errToSend := o.sendBatches(ctx, stream, flowCtxCancel, outboxCtxCancel)
 	if terminatedGracefully || errToSend != nil {

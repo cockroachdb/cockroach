@@ -43,12 +43,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/growstack"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -714,19 +714,27 @@ func (s *vectorizedFlowCreator) Release() {
 // accumulateAsyncComponent stores a component (either a router or an outbox)
 // to be run asynchronously. Note that this component doesn't run until the flow
 // is started.
-func (s *vectorizedFlowCreator) accumulateAsyncComponent(run runFn) {
+func (s *vectorizedFlowCreator) accumulateAsyncComponent(taskName string, run runFn) {
 	s.f.AddStartable(
-		flowinfra.StartableFn(func(ctx context.Context, wg *sync.WaitGroup, flowCtxCancel context.CancelFunc) {
+		flowinfra.StartableFn(func(ctx context.Context, wg *sync.WaitGroup, flowCtxCancel context.CancelFunc) error {
+			ctx, hdl, err := s.f.Stopper().GetHandle(ctx, stop.TaskOpts{
+				TaskName: taskName,
+				SpanOpt:  stop.FollowsFromSpan,
+			})
+			if err != nil {
+				return err
+			}
 			wg.Add(1)
 			go func() {
+				defer hdl.Activate(ctx).Release(ctx)
 				if cpuHandle := admission.SQLCPUHandleFromContext(ctx); cpuHandle != nil {
 					gh := cpuHandle.RegisterGoroutine()
 					defer gh.Close(ctx)
 				}
-				growstack.Grow()
 				defer wg.Done()
 				run(ctx, flowCtxCancel)
 			}()
+			return nil
 		}))
 }
 
@@ -772,7 +780,7 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 			flowinfra.SettingFlowStreamTimeout.Get(&flowCtx.Cfg.Settings.SV),
 		)
 	}
-	s.accumulateAsyncComponent(run)
+	s.accumulateAsyncComponent("outbox", run)
 	return outbox, nil
 }
 
@@ -825,7 +833,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 	runRouter := func(ctx context.Context, _ context.CancelFunc) {
 		router.Run(logtags.AddTag(ctx, "hashRouterID", streamIDs))
 	}
-	s.accumulateAsyncComponent(runRouter)
+	s.accumulateAsyncComponent("router", runRouter)
 
 	foundLocalOutput := false
 	for i, op := range outputs {

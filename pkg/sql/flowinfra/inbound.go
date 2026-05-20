@@ -130,7 +130,7 @@ func processInboundStreamHelper(
 	errChan := make(chan error, 1)
 
 	f.GetWaitGroup().Add(1)
-	go func() {
+	err := f.Stopper().RunAsyncTask(ctx, "inbound stream", func(ctx context.Context) {
 		defer f.GetWaitGroup().Done()
 		admissionInfo := f.GetAdmissionInfo()
 		for {
@@ -169,7 +169,11 @@ func processInboundStreamHelper(
 				return
 			}
 		}
-	}()
+	})
+	if err != nil {
+		f.GetWaitGroup().Done()
+		return err
+	}
 
 	// Check for context cancellation while reading from the stream on another
 	// goroutine.

@@ -63,7 +63,9 @@ func (ah *activeHandle) Release(ctx context.Context) {
 	hdl := (*Handle)(ah)
 	hdl.s.recover(ctx)
 	hdl.region.End()
-	hdl.sp.Finish()
+	if hdl.spanOpt != CallerProvidedSpan {
+		hdl.sp.Finish()
+	}
 	if hdl.alloc != nil {
 		hdl.alloc.Release()
 	}

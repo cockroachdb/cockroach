@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -371,45 +372,57 @@ var timeoutTraceCollectionEnabled = settings.RegisterBoolSetting(
 // collecting a bundle and inFlightTraceCollector.finish must be called when
 // building the bundle.
 func (ih *instrumentationHelper) startInFlightTraceCollector(
-	ctx context.Context, ie isql.Executor, pollInterval time.Duration,
+	ctx context.Context, stopper *stop.Stopper, ie isql.Executor, pollInterval time.Duration,
 ) {
 	traceID := ih.sp.TraceID()
 	c := &ih.inFlightTraceCollector
 	ctx, c.cancel = context.WithCancel(ctx)
 	c.waitCh = make(chan struct{})
-	go func(ctx context.Context) {
-		defer close(c.waitCh)
-		// Derive a detached tracing span that won't pollute the recording we're
-		// collecting for the bundle.
-		var sp *tracing.Span
-		ctx, sp = ih.sp.Tracer().StartSpanCtx(ctx, inFlightTraceOpName, tracing.WithDetachedRecording())
-		defer sp.Finish()
+	// Derive a detached tracing span that won't pollute the recording we're
+	// collecting for the bundle.
+	taskCtx, taskSp := ih.sp.Tracer().StartSpanCtx(ctx, inFlightTraceOpName, tracing.WithDetachedRecording())
+	spanOpt := stop.CallerProvidedSpan
+	if taskSp == nil {
+		spanOpt = stop.FollowsFromSpan
+	}
+	err := stopper.RunAsyncTaskEx(
+		taskCtx,
+		stop.TaskOpts{
+			TaskName: inFlightTraceOpName,
+			SpanOpt:  spanOpt,
+			Span:     taskSp,
+		},
+		func(ctx context.Context) {
+			defer close(c.waitCh)
 
-		timer := time.NewTimer(pollInterval)
-		defer timer.Stop()
+			timer := time.NewTimer(pollInterval)
+			defer timer.Stop()
 
-		for {
-			// Now sleep for the duration of the poll interval (or until we're
-			// canceled).
-			select {
-			case <-ctx.Done():
-				return
-			case <-timer.C:
-				timer.Reset(pollInterval)
+			for {
+				// Now sleep for the duration of the poll interval (or until we're
+				// canceled).
+				select {
+				case <-ctx.Done():
+					return
+				case <-timer.C:
+					timer.Reset(pollInterval)
+				}
+
+				trace, err := pollInFlightTrace(ctx, ie, traceID)
+				if err == nil {
+					c.trace = trace
+				} else if ctx.Err() == nil {
+					// When the context is canceled, we expect to receive an error.
+					// Note that the context cancellation occurs in the "happy" case
+					// too when the execution of the traced query finished, and
+					// we're building the bundle, so we're ignoring such an error.
+					c.errors = append(c.errors, err)
+				}
 			}
-
-			trace, err := pollInFlightTrace(ctx, ie, traceID)
-			if err == nil {
-				c.trace = trace
-			} else if ctx.Err() == nil {
-				// When the context is canceled, we expect to receive an error.
-				// Note that the context cancellation occurs in the "happy" case
-				// too when the execution of the traced query finished, and
-				// we're building the bundle, so we're ignoring such an error.
-				c.errors = append(c.errors, err)
-			}
-		}
-	}(ctx)
+		})
+	if err != nil {
+		taskSp.Finish()
+	}
 }
 
 func (ih *instrumentationHelper) finalizeSetup(ctx context.Context, cfg *ExecutorConfig) {
@@ -420,7 +433,7 @@ func (ih *instrumentationHelper) finalizeSetup(ctx context.Context, cfg *Executo
 	}
 	if ih.collectBundle {
 		if pollInterval := inFlightTraceCollectorPollInterval.Get(cfg.SV()); pollInterval > 0 {
-			ih.startInFlightTraceCollector(ctx, cfg.InternalDB.Executor(), pollInterval)
+			ih.startInFlightTraceCollector(ctx, cfg.Stopper, cfg.InternalDB.Executor(), pollInterval)
 		}
 	}
 }

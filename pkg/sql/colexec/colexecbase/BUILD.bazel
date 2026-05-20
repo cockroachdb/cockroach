@@ -80,6 +80,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/randutil",
+        "//pkg/util/stop",
         "@com_github_stretchr_testify//require",
     ],
 )

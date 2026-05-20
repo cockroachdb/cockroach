@@ -610,7 +610,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		var wg sync.WaitGroup
 		wg.Add(1)
 		var res string
-		go func() {
+		go func() { // nolint:baregofunc
 			defer wg.Done()
 			res = ot.runCommandInternal(tb, d)
 		}()

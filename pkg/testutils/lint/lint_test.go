@@ -2864,4 +2864,70 @@ func TestLint(t *testing.T) {
 			}
 		}
 	})
+
+	// Forbid bare `go func()` in pkg/sql. Use a Stopper handle instead.
+	t.Run("TestNoBareGoFunc", func(t *testing.T) {
+		t.Parallel()
+
+		cmd, stderr, filter, err := dirCmd(
+			pkgDir,
+			"git",
+			"grep",
+			"-nE", "-A1",
+			`go func\(`, "--", "sql/**/*.go", ":!*_test.go",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		// git grep -A1 outputs pairs of lines: the match line (separated by
+		// ':') and the context line (separated by '-'), with '--' between
+		// groups. We track the last match and clear it if the following context
+		// line contains '.Activate(' (the approved Stopper handle pattern).
+		var pending string
+		if err := stream.ForEach(
+			stream.Sequence(
+				filter,
+				stream.GrepNot(`nolint:baregofunc`),
+			),
+			func(s string) {
+				if s == "--" {
+					if pending != "" {
+						t.Errorf("\n%s <- use a Stopper handle instead of bare `go func()`", pending)
+						pending = ""
+					}
+					return
+				}
+				// Match lines use ':' as the separator after the line number,
+				// context lines use '-'.
+				parts := strings.SplitN(s, ":", 3)
+				if len(parts) == 3 {
+					// This is a match line.
+					if pending != "" {
+						t.Errorf("\n%s <- use a Stopper handle instead of bare `go func()`", pending)
+					}
+					pending = s
+				} else {
+					// Context line — check for the handle pattern.
+					if strings.Contains(s, ".Activate(") {
+						pending = ""
+					}
+				}
+			}); err != nil {
+			t.Error(err)
+		}
+		if pending != "" {
+			t.Errorf("\n%s <- use a Stopper handle instead of bare `go func()`", pending)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
 }

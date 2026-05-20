@@ -35,12 +35,12 @@ func FuzzServeConn(data []byte) int {
 
 	// Fake a connection using a pipe.
 	srv, client := net.Pipe()
-	go func() {
+	go func() { // nolint:baregofunc
 		// Write the fuzz data to the connection and close.
 		_, _ = client.Write(data)
 		_ = client.Close()
 	}()
-	go func() {
+	go func() { // nolint:baregofunc
 		// Discard all data sent from the server.
 		_, _ = io.Copy(io.Discard, client)
 	}()

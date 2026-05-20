@@ -233,7 +233,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						},
 					)
 				}
-				syncFlowCtx := &execinfra.FlowCtx{Local: false, Gateway: !addAnotherRemote}
+				syncFlowCtx := &execinfra.FlowCtx{Local: false, Gateway: !addAnotherRemote, Cfg: &execinfra.ServerConfig{Stopper: stopper}}
 				synchronizer := colexec.NewParallelUnorderedSynchronizer(syncFlowCtx, 0 /* processorID */, testAllocator, typs, synchronizerInputs, &wg)
 				inputMetadataSource := colexecop.MetadataSource(synchronizer)
 
@@ -253,6 +253,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 							Cfg: &execinfra.ServerConfig{
 								Settings:   st,
 								RPCContext: &rpc.Context{ContextOptions: rpc.ContextOptions{}},
+								Stopper:    stopper,
 							},
 						},
 						0, /* processorID */

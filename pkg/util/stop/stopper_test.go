@@ -645,6 +645,22 @@ func TestStopperRunAsyncTaskTracing(t *testing.T) {
 		require.NoError(t, <-errC)
 	}
 
+	// Start another task with detached recording that should be absent from the
+	// parent's recording.
+	{
+		sp := tracing.SpanFromContext(ctx)
+		detachedCtx, detachedSp := tr.StartSpanCtx(ctx, "detached", tracing.WithParent(sp), tracing.WithDetachedRecording())
+		require.NoError(t, s.RunAsyncTaskEx(
+			detachedCtx,
+			stop.TaskOpts{
+				TaskName: "async detached recording",
+				SpanOpt:  stop.CallerProvidedSpan,
+				Span:     detachedSp,
+			},
+			func(ctx context.Context) { log.Event(ctx, "async 4") },
+		))
+	}
+
 	s.Stop(ctx)
 	require.NoError(t, tracing.CheckRecordedSpans(getRecAndFinish(), `
 		span: parent

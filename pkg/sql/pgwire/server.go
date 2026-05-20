@@ -820,7 +820,7 @@ func (s *Server) waitConnsDone() (cancelChanMap, chan struct{}, chan struct{}) {
 
 	quitWaitingForConns := make(chan struct{}, 1)
 
-	go func() {
+	go func() { // nolint:baregofunc
 		defer close(allConnsDone)
 
 		for done := range connCancelMap {
@@ -1258,7 +1258,7 @@ func (s *Server) serveImpl(
 	sqlServer := s.SQLServer
 	inTestWithoutSQL := sqlServer == nil
 
-	go func() {
+	go func() { // nolint:baregofunc
 		select {
 		case <-ctx.Done():
 			// If the context was canceled, it's time to stop reading. Either a
@@ -1329,7 +1329,7 @@ func (s *Server) serveImpl(
 		// authentication). It will notify us when it's done through procWg, and
 		// we'll also interact with the authentication process through authPipe.
 		procWg.Add(1)
-		go func() {
+		go func() { // nolint:baregofunc
 			// Inform the connection goroutine.
 			defer procWg.Done()
 			c.processCommands(

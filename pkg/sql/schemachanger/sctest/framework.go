@@ -898,7 +898,7 @@ func executeSchemaChangeTxn(
 	ctx context.Context, t *testing.T, spec CumulativeTestSpec, db *gosql.DB,
 ) (err error) {
 	c := make(chan error, 1)
-	go func() {
+	go func() { // nolint:baregofunc
 		conn, err := db.Conn(ctx)
 		if err != nil {
 			c <- err

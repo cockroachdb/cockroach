@@ -24,7 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/growstack"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -308,15 +310,17 @@ func (rb *routerBase) init(
 }
 
 // Start must be called after init.
-func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, _ context.CancelFunc) {
-	wg.Add(len(rb.outputs))
+func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, _ context.CancelFunc) error {
 	for i := range rb.outputs {
-		go func(ctx context.Context, rb *routerBase, ro *routerOutput) {
+		wg.Add(1)
+		go func(ctx context.Context, rb *routerBase, ro *routerOutput) { // nolint:baregofunc
+			defer logcrash.RecoverAndReportPanic(ctx, &rb.flowCtx.Cfg.Settings.SV)
+			defer wg.Done()
+			growstack.Grow()
 			if cpuHandle := admission.SQLCPUHandleFromContext(ctx); cpuHandle != nil {
 				gh := cpuHandle.RegisterGoroutine()
 				defer gh.Close(ctx)
 			}
-			defer wg.Done()
 			var span *tracing.Span
 			if rb.statsCollectionEnabled {
 				ctx, span = execinfra.ProcessorSpan(ctx, rb.flowCtx, "router output", rb.processorID)
@@ -408,6 +412,7 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, _ context.C
 			ro.rowBufToPushFromAcc.Close(ctx)
 		}(ctx, rb, &rb.outputs[i])
 	}
+	return nil
 }
 
 // ProducerDone is part of the RowReceiver interface.

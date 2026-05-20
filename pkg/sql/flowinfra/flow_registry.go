@@ -117,7 +117,7 @@ func (s *InboundStreamInfo) cancelLocked(err error) {
 	s.mu.canceled = true
 	s.finishLocked()
 	// Since Timeout might block, we must send the error in a new goroutine.
-	go func() {
+	go func() { // nolint:baregofunc
 		s.receiver.Timeout(err)
 	}()
 }
@@ -483,7 +483,7 @@ func (fr *FlowRegistry) Drain(
 		reporter(len(fr.flows), "distSQL execution flows")
 	}
 
-	go func() {
+	go func() { // nolint:baregofunc
 		select {
 		case <-time.After(flowDrainWait):
 			fr.Lock()

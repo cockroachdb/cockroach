@@ -408,6 +408,11 @@ const (
 	// long-running task to its parent is also problematic because of the
 	// different lifetimes.
 	SterileRootSpan
+
+	// CallerProvidedSpan makes the task run in a span created by the caller.
+	// TaskOpts.Span must be non-nil. The caller is responsible for Finish()'ing
+	// the span.
+	CallerProvidedSpan
 )
 
 // TaskOpts groups the task execution options for RunAsyncTaskEx.
@@ -418,6 +423,9 @@ type TaskOpts struct {
 
 	// SpanOpt controls the kind of span that the task will run in.
 	SpanOpt SpanOption
+
+	// Span should only be set with the CallerProvidedSpan SpanOption.
+	Span *tracing.Span
 
 	// If set, Sem is used as a semaphore limiting the concurrency (each task has
 	// weight 1).
@@ -519,6 +527,11 @@ func (s *Stopper) GetHandle(ctx context.Context, opt TaskOpts) (context.Context,
 		ctx, sp = tracing.ChildSpan(ctx, opt.TaskName)
 	case SterileRootSpan:
 		ctx, sp = s.tracer.StartSpanCtx(ctx, opt.TaskName, tracing.WithSterile())
+	case CallerProvidedSpan:
+		if opt.Span == nil {
+			panic("Span must be non-nil with CallerProvidedSpan span option")
+		}
+		sp = opt.Span
 	default:
 		panic(fmt.Sprintf("unsupported SpanOption: %v", opt.SpanOpt))
 	}
