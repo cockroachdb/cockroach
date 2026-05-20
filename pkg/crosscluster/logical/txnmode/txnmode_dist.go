@@ -7,8 +7,10 @@ package txnmode
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrsettings"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -21,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
 )
@@ -330,10 +333,9 @@ func RunDistSQLFlow(
 
 // checkpointHandler receives frontier metadata from applier processors,
 // tracks the minimum frontier across all appliers, and periodically
-// persists it as the job's replicated time.
-//
-// TODO(msbutler): add time based checkpointing based on existing cluster
-// setting and finer grain frontier updates.
+// persists it as the job's replicated time. Persistence is throttled
+// by ldrsettings.JobCheckpointFrequency so that intermediate frontier
+// advances do not each incur KV writes.
 //
 // TODO(msbutler): understand why returnin an error in handlemeta doesn't shut
 // the flow down.
@@ -346,7 +348,8 @@ type checkpointHandler struct {
 	cancelFlow      context.CancelFunc
 	replicatedTime  hlc.Timestamp
 
-	applierFrontiers map[base.SQLInstanceID]hlc.Timestamp
+	lastPersistenceTime time.Time
+	applierFrontiers    map[base.SQLInstanceID]hlc.Timestamp
 }
 
 // newCheckpointHandler creates a checkpointHandler pre-initialized with
@@ -408,19 +411,26 @@ func (ch *checkpointHandler) handleMeta(
 		return nil
 	}
 
+	reachedEndTime := !replicatedTime.Less(ch.endTime.Prev())
+	updateFreq := ldrsettings.JobCheckpointFrequency.Get(ch.sv)
+	if !reachedEndTime && (updateFreq == 0 || timeutil.Since(ch.lastPersistenceTime) < updateFreq) {
+		return nil
+	}
+
 	if err := ch.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		return ch.job.ProgressStorage().SetResolved(ctx, txn, replicatedTime)
 	}); err != nil {
 		return err
 	}
 	ch.replicatedTime = replicatedTime
+	ch.lastPersistenceTime = timeutil.Now()
 
 	select {
 	case ch.frontierUpdates <- replicatedTime:
 	case <-ctx.Done():
 		return ctx.Err()
 	}
-	if !replicatedTime.Less(ch.endTime.Prev()) {
+	if reachedEndTime {
 		ch.cancelFlow()
 		log.Dev.Infof(ctx, "reached end time: %s", ch.endTime.GoTime())
 		return ErrEndTimeReached

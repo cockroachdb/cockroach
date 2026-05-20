@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrsettings"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/physical"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
@@ -130,7 +131,7 @@ func (r *logicalReplicationResumer) ingest(
 
 	heartbeatSender := streamclient.NewHeartbeatSender(ctx, client, streampb.StreamID(streamID),
 		func() time.Duration {
-			return heartbeatFrequency.Get(&execCfg.Settings.SV)
+			return ldrsettings.HeartbeatFrequency.Get(&execCfg.Settings.SV)
 		})
 	defer func() {
 		_ = heartbeatSender.Stop()

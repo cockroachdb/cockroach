@@ -33,6 +33,7 @@ go_library(
         "//pkg/cloud",
         "//pkg/crosscluster",
         "//pkg/crosscluster/logical/ldrdecoder",
+        "//pkg/crosscluster/logical/ldrsettings",
         "//pkg/crosscluster/logical/sqlwriter",
         "//pkg/crosscluster/logical/txnapply",
         "//pkg/crosscluster/logical/txnmode",
