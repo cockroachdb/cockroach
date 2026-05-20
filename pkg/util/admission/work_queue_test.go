@@ -424,6 +424,7 @@ func runCPUTimeTokenWorkQueueTest(t *testing.T, path string) {
 					tokensReturned: cpuMetrics.TokensReturnedPerTenant[systemTenant],
 				}
 				opts.configHolder = newResourceGroupConfigHolder(&st.SV)
+				opts.groupKeyForWorkInfo = cpuTimeTokenGroupKeyForWorkInfo
 				q = makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
 					workKind, tg, st, metrics, opts).(*WorkQueue)
 				q.knobs.DisableCPUTimeTokenEstimation = true
@@ -647,6 +648,7 @@ func TestCPUTimeTokenEstimation(t *testing.T) {
 		tokensUsed:     cpuMetrics.TokensUsedPerTenant[systemTenant],
 		tokensReturned: cpuMetrics.TokensReturnedPerTenant[systemTenant],
 	}
+	opts.groupKeyForWorkInfo = cpuTimeTokenGroupKeyForWorkInfo
 	timeSource = timeutil.NewManualTime(initialTime)
 	opts.timeSource = timeSource
 	opts.disableEpochClosingGoroutine = true
@@ -794,6 +796,7 @@ func makeCPUTimeTokenWorkQueue(
 	opts.disableEpochClosingGoroutine = true
 	opts.disableGCGroupsAndResetUsed = true
 	opts.configHolder = newResourceGroupConfigHolder(&st.SV)
+	opts.groupKeyForWorkInfo = cpuTimeTokenGroupKeyForWorkInfo
 
 	q = makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
 		KVWork, tg, st, metrics, opts).(*WorkQueue)
@@ -1443,4 +1446,45 @@ func TestGCThenLazyRecreateRecoversFromHolder(t *testing.T) {
 		"recreated group should pick up configured weight, not default")
 	require.True(t, g2.cpuTimeBurstBucket.maxCPU,
 		"recreated group should pick up configured maxCPU, not default")
+}
+
+// TestGroupKeyForWorkInfoSelection verifies the per-WorkQueue
+// groupKey derivation policy: the default (tenantGroupKeyForWorkInfo)
+// ignores cpuTimeTokenACMode, while the CTT variant
+// (cpuTimeTokenGroupKeyForWorkInfo) honors it. This is the
+// invariant that keeps StoreWorkQueue's IO queues from being
+// reshaped by CTT settings.
+func TestGroupKeyForWorkInfoSelection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	st := cluster.MakeTestingClusterSettings()
+	ctx := context.Background()
+	info := WorkInfo{
+		TenantID: roachpb.MustMakeTenantID(5),
+		Priority: admissionpb.NormalPri,
+	}
+
+	for _, tc := range []struct {
+		name string
+		mode cpuTimeTokenMode
+	}{
+		{"off", offMode},
+		{"serverless", serverlessMode},
+		{"resource_manager", resourceManagerMode},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cpuTimeTokenACMode.Override(ctx, &st.SV, tc.mode)
+
+			require.Equal(t, tenantGroupKey(5), tenantGroupKeyForWorkInfo(info, &st.SV),
+				"default keying must not depend on cpuTimeTokenACMode")
+
+			cttKey := cpuTimeTokenGroupKeyForWorkInfo(info, &st.SV)
+			if tc.mode == resourceManagerMode {
+				require.Equal(t, rgGroupKey(highResourceGroupID), cttKey)
+			} else {
+				require.Equal(t, tenantGroupKey(5), cttKey)
+			}
+		})
+	}
 }

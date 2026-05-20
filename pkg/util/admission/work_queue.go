@@ -363,6 +363,15 @@ type WorkQueue struct {
 	// metrics. Only set when mode == usesCPUTimeTokens.
 	perGroupAggMetrics *groupAggMetrics
 
+	// groupKeyForWorkInfo derives the groupKey for an incoming
+	// request. Set at construction via workQueueOptions; defaults to
+	// tenantGroupKeyForWorkInfo. The CTT WorkQueue installs a
+	// variant that returns an rg-keyed key under resourceManagerMode.
+	// Queues for other purposes (StoreWorkQueue IO queues, SQL
+	// response queues) keep the default and are unaffected by CTT
+	// settings.
+	groupKeyForWorkInfo func(info WorkInfo, sv *settings.Values) groupKey
+
 	timeSource timeutil.TimeSource
 	knobs      *TestingKnobs
 }
@@ -386,6 +395,10 @@ type workQueueOptions struct {
 	// metrics. Only set when mode == usesCPUTimeTokens. See
 	// cpuTimeTokenMetrics for details.
 	perGroupAggMetrics *groupAggMetrics
+	// groupKeyForWorkInfo derives the groupKey for an incoming
+	// request. If nil, initWorkQueue installs tenantGroupKeyForWorkInfo
+	// as the default. See WorkQueue.groupKeyForWorkInfo.
+	groupKeyForWorkInfo func(info WorkInfo, sv *settings.Values) groupKey
 	// configHolder is the per-resource-group config for RM mode. The CTT
 	// grant coordinator passes a shared holder across both per-tier
 	// WorkQueues; other call sites leave this nil and initWorkQueue
@@ -477,6 +490,10 @@ func initWorkQueue(
 		q.configHolder = newResourceGroupConfigHolder(&settings.SV)
 	}
 	q.perGroupAggMetrics = opts.perGroupAggMetrics
+	q.groupKeyForWorkInfo = opts.groupKeyForWorkInfo
+	if q.groupKeyForWorkInfo == nil {
+		q.groupKeyForWorkInfo = tenantGroupKeyForWorkInfo
+	}
 	q.timeSource = timeSource
 	q.knobs = knobs
 	q.mu.defaultCPUTimeTokenEstimator = cpuTimeTokenEstimator{}
@@ -723,14 +740,18 @@ func priorityToResourceGroupKey(pri admissionpb.WorkPriority) groupKey {
 	return rgGroupKey(lowResourceGroupID)
 }
 
-// groupKeyForWorkLocked returns the groupKey for the given WorkInfo.
-// In RM mode the key is derived from WorkInfo.Priority (groupID only);
-// otherwise it is from TenantID (tenantID only).
-//
-// REQUIRES: q.mu is held.
-func (q *WorkQueue) groupKeyForWorkLocked(info WorkInfo) groupKey {
-	q.mu.AssertHeld()
-	if cpuTimeTokenACMode.Get(&q.settings.SV) == resourceManagerMode {
+// tenantGroupKeyForWorkInfo is the default groupKeyForWorkInfo
+// installed by initWorkQueue. Ignores the cluster settings argument.
+func tenantGroupKeyForWorkInfo(info WorkInfo, _ *settings.Values) groupKey {
+	return tenantGroupKey(info.TenantID.ToUint64())
+}
+
+// cpuTimeTokenGroupKeyForWorkInfo is the groupKeyForWorkInfo
+// installed by the CTT WorkQueue. In resourceManagerMode the key is
+// derived from WorkInfo.Priority; otherwise it falls back to
+// tenant-keyed grouping.
+func cpuTimeTokenGroupKeyForWorkInfo(info WorkInfo, sv *settings.Values) groupKey {
+	if cpuTimeTokenACMode.Get(sv) == resourceManagerMode {
 		return priorityToResourceGroupKey(info.Priority)
 	}
 	return tenantGroupKey(info.TenantID.ToUint64())
@@ -786,9 +807,9 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 	// needs the flexibility of selectively unlocking on a certain code path.
 	// When changing the code, be careful in making sure the mutex is properly
 	// unlocked on all code paths.
+	gKey := q.groupKeyForWorkInfo(info, &q.settings.SV)
 	q.mu.Lock()
 
-	gKey := q.groupKeyForWorkLocked(info)
 	group, ok := q.mu.groups[gKey]
 	if !ok {
 		// See comment below about CPU time token estimation. If no groupInfo
@@ -900,9 +921,10 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 						info.ReplicatedWorkInfo.Ingested,
 					)
 				}
-				// Replicated work is a Serverless-mode-only path
-				// (StoreWorkQueue runs in usesTokens mode), so gKey is
-				// always tenant-keyed.
+				// StoreWorkQueue's inner queues install the default
+				// tenantGroupKeyForWorkInfo, so gKey here is always
+				// tenant-keyed and gKey.tenantID is the request's
+				// tenant.
 				q.onAdmittedReplicatedWork.admittedReplicatedWork(
 					roachpb.MustMakeTenantID(gKey.tenantID),
 					info.Priority,
@@ -936,7 +958,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 
 		// Re-derive gKey: the mode may have changed while the lock
 		// was released (though mode transitions are not yet supported).
-		gKey = q.groupKeyForWorkLocked(info)
+		gKey = q.groupKeyForWorkInfo(info, &q.settings.SV)
 		admitResponse.groupKey = gKey
 
 		// The group could have been removed. See the comment where the
@@ -1270,8 +1292,8 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 			)
 		}
 		defer releaseWaitingWork(item)
-		// Replicated work is a Serverless-mode-only path; same caveat
-		// as the fast-path admit site above.
+		// See the fast-path admit site above for why gKey is
+		// always tenant-keyed here.
 		q.onAdmittedReplicatedWork.admittedReplicatedWork(
 			roachpb.MustMakeTenantID(gKey.tenantID),
 			item.priority,
