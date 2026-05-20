@@ -5,7 +5,11 @@
 
 package main
 
-import "github.com/spf13/cobra"
+import (
+	"os"
+
+	"github.com/spf13/cobra"
+)
 
 var rootCmd = &cobra.Command{Use: "release"}
 var artifactsDir string
@@ -27,7 +31,23 @@ const (
 	dryRun          = "dry-run"
 
 	fromEmailFormat = "Justin Beaver <%s>"
+
+	// envIsProductionRepo is the env var the GHA workflow forwards from a
+	// repository variable that's set only on the production release repo.
+	// It's the single signal this binary uses to choose between prod and
+	// non-prod side-effect targets (e.g. Slack channels). When unset
+	// (TeamCity, local invocations, forks) we treat the run as non-prod.
+	envIsProductionRepo = "IS_PRODUCTION_REPO"
 )
+
+// isProductionRepo reports whether the binary is running under the
+// production release repo, as signalled by the IS_PRODUCTION_REPO env var
+// (forwarded from a GHA repository variable that's only set on the
+// canonical repo). When unset (TeamCity, local invocations, forks) the
+// default is false — non-prod paths are safer.
+func isProductionRepo() bool {
+	return os.Getenv(envIsProductionRepo) == "true"
+}
 
 func main() {
 	if err := rootCmd.Execute(); err != nil {
@@ -36,6 +56,8 @@ func main() {
 }
 
 func init() {
+	rootCmd.AddCommand(cutStagingBranchesCmd)
+	rootCmd.AddCommand(pickSHACmd)
 	rootCmd.AddCommand(updateReleasesTestFilesCmd)
 	rootCmd.AddCommand(updateVersionsCmd)
 	rootCmd.AddCommand(updateWorkflowBranchesCmd)
