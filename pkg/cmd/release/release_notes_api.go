@@ -53,9 +53,7 @@ type releaseNotesPayload struct {
 // docs team can re-trigger manually. URL is injected (rather than reading
 // the constant directly) so tests can point at an httptest server.
 func postReleaseNotes(url, apiKey string, p releaseNotesPayload) error {
-	body, err := json.Marshal(map[string]interface{}{
-		"ReleaseNotesPayload": p,
-	})
+	body, err := json.Marshal(p)
 	if err != nil {
 		return errors.Wrap(err, "marshalling payload")
 	}
