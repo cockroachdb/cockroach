@@ -344,6 +344,8 @@ type importTestSpec struct {
 	// merge, e.g. node shutdown tests where the merge phase requires SSTs
 	// from all participating instances.
 	skipDistMerge bool
+	// disableEncryption, when true, disables encryption for this test.
+	disableEncryption bool
 
 	// preTestHook is run after tables are created, but before the import starts.
 	preTestHook func(context.Context, test.Test, cluster.Cluster, *rand.Rand)
@@ -489,6 +491,8 @@ var tests = []importTestSpec{
 		benchmark:    true,
 		nodes:        []int{4},
 		datasetNames: One("tpch-parquet/lineitem"),
+		// Encryption disabled due to timeouts (#170044).
+		disableEncryption: true,
 	},
 }
 
@@ -513,6 +517,10 @@ func registerImport(r registry.Registry) {
 				numNodes := numNodes
 
 				name := fmt.Sprintf("import/%s/distmerge=%v/nodes=%d", ts.subtestName, distMerge, numNodes)
+				encryption := registry.EncryptionMetamorphic
+				if ts.disableEncryption {
+					encryption = registry.EncryptionAlwaysDisabled
+				}
 				r.Add(registry.TestSpec{
 					Name:              name,
 					Owner:             registry.OwnerSQLFoundations,
@@ -521,7 +529,7 @@ func registerImport(r registry.Registry) {
 					Cluster:           r.MakeClusterSpec(numNodes),
 					CompatibleClouds:  registry.Clouds(spec.GCE, spec.Local),
 					Suites:            suites,
-					EncryptionSupport: registry.EncryptionMetamorphic,
+					EncryptionSupport: encryption,
 					Leases:            registry.MetamorphicLeases,
 					// Never run with runtime assertions as this makes this test
 					// take too long to complete.
