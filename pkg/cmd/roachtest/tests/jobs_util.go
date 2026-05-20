@@ -296,6 +296,27 @@ func WaitForFailed(
 		}, maxWait)
 }
 
+// WaitForCanceled waits for a job to reach the canceled state.
+func WaitForCanceled(
+	ctx context.Context, db *gosql.DB, jobID jobspb.JobID, maxWait time.Duration,
+) error {
+	return WaitForState(ctx, db, jobID,
+		func(state jobs.State) (success bool, unexpected bool) {
+			switch state {
+			case jobs.StateCanceled:
+				return true, false
+			case jobs.StateCancelRequested:
+				return false, false
+			case jobs.StateReverting:
+				return false, false
+			case jobs.StateRunning:
+				return false, false
+			default:
+				return false, true
+			}
+		}, maxWait)
+}
+
 type jobRecord struct {
 	status   string
 	payload  jobspb.Payload

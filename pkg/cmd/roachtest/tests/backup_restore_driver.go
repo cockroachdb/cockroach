@@ -1190,15 +1190,16 @@ func (cb *CollectionBuilder) initCollCfg(cfgs ...CollectionConfig) {
 	}
 
 	if cb.cfg.options == nil {
-		cb.cfg.options = newBackupOptions(cb.rng, cb.driver.testUtils.onlineRestore)
+		cb.cfg.options = newBackupOptions(cb.rng, cb.driver.testUtils.onlineRestore, cb.cfg.skipRevisionHistory)
 	}
 }
 
 // collCfg holds the backup configuration for the backup collection and is used
 // to build the BACKUP statement when taking backups.
 type collCfg struct {
-	scope   backupScope
-	options []backupOption
+	scope               backupScope
+	options             []backupOption
+	skipRevisionHistory bool
 }
 
 type CollectionConfig func(*CollectionBuilder)
@@ -1221,6 +1222,16 @@ func WithDatabaseScope() CollectionConfig {
 	}
 }
 
+// WithSkipRevisionHistory excludes the revision_history option from the
+// randomized set of backup options. Used when revision_history backups are
+// known to be incompatible with the test (e.g., the OR recovery test relies
+// on the link phase not ingesting SSTs, which a revision_history backup
+// would cause).
+func WithSkipRevisionHistory() CollectionConfig {
+	return func(cb *CollectionBuilder) {
+		cb.cfg.skipRevisionHistory = true
+	}
+}
 
 type (
 	// backupOption is an option passed to the `BACKUP` command (i.e.,
@@ -1544,8 +1555,13 @@ func (rh revisionHistory) String() string {
 // newBackupOptions returns a list of backup options to be used when
 // creating a new backup. Each backup option has a 50% chance of being
 // included.
-func newBackupOptions(rng *rand.Rand, onlineRestoreExpected bool) []backupOption {
-	possibleOpts := []backupOption{revisionHistory{}}
+func newBackupOptions(
+	rng *rand.Rand, onlineRestoreExpected, skipRevisionHistory bool,
+) []backupOption {
+	var possibleOpts []backupOption
+	if !skipRevisionHistory {
+		possibleOpts = append(possibleOpts, revisionHistory{})
+	}
 	if !onlineRestoreExpected {
 		possibleOpts = append(possibleOpts, newEncryptionPassphrase(rng))
 	}

@@ -871,7 +871,7 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 
 	dbs := []string{"bank", "tpcc", schemaChangeDB}
 	d, runBackgroundWorkload, _, err := createDriversForBackupRestore(
-		ctx, t, c, testRNG, workloadSeed, testUtils, dbs, nil, /* excludedWorkloads */
+		ctx, t, c, testRNG, workloadSeed, testUtils, dbs,
 	)
 	require.NoError(t, err)
 
@@ -912,6 +912,7 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 		"online-restore-recovery",
 		bspec, bspec,
 		true /* internalSystemsJobs */, false, /* isMultitenant */
+		WithSkipRevisionHistory(),
 		scopes[rand.Intn(len(scopes))],
 	)
 	t.L().Printf("building backup collection")
