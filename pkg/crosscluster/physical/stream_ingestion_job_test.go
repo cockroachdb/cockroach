@@ -650,7 +650,7 @@ func TestCutoverCheckpointing(t *testing.T) {
 // TestWatchForCutoverRangefeedWake verifies that watchForCutover returns
 // promptly when a cutover-reaching progress write occurs, relying on the
 // rangefeed wake-up rather than the (deliberately long) poll interval.
-func TestWatchForCutoverRangefeedWake(t *testing.T) {
+func TestCutoverRangefeedNudgesPoller(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -661,8 +661,8 @@ func TestWatchForCutoverRangefeedWake(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 
 	// Set the poll interval to something effectively infinite so that a return
-	// from watchForCutover within the test's timeout can only be explained by
-	// the rangefeed wake-up.
+	// from the poller within the test's timeout can only be explained by the
+	// rangefeed nudging it.
 	sysSQL := sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t))
 	sysSQL.Exec(t,
 		`SET CLUSTER SETTING physical_replication.consumer.failover_signal_poll_interval = '1h'`)
@@ -685,11 +685,19 @@ func TestWatchForCutoverRangefeedWake(t *testing.T) {
 	require.NoError(t, err)
 
 	resumer := &streamIngestionResumer{job: job}
+	runCtx, cancelRun := context.WithCancel(ctx)
+	defer cancelRun()
+	nudge := make(chan struct{}, 1)
 	resultCh := make(chan error, 1)
-	watchCtx, cancelWatch := context.WithCancel(ctx)
-	defer cancelWatch()
 	go func() {
-		resultCh <- resumer.watchForCutover(watchCtx, &execCfg)
+		resultCh <- ctxgroup.GoAndWait(runCtx,
+			func(ctx context.Context) error {
+				return cutoverSignalRangefeed(ctx, &execCfg, job.ID(), nudge)
+			},
+			func(ctx context.Context) error {
+				return resumer.pollForCutoverSignal(ctx, &execCfg, nudge)
+			},
+		)
 	}()
 
 	// Give the rangefeed a moment to establish itself before triggering the
@@ -712,8 +720,8 @@ func TestWatchForCutoverRangefeedWake(t *testing.T) {
 		require.True(t, errors.Is(err, errCutoverSignaled),
 			"expected errCutoverSignaled, got %v", err)
 	case <-time.After(30 * time.Second):
-		t.Fatal("watchForCutover did not return within 30s of cutover write; " +
-			"rangefeed wake-up appears not to be firing")
+		t.Fatal("poller did not return within 30s of cutover write; " +
+			"rangefeed nudge appears not to be firing")
 	}
 }
 

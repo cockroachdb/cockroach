@@ -467,27 +467,55 @@ func (s *streamIngestionResumer) handleResumeError(
 	return jobs.MarkPauseRequestError(err)
 }
 
-// startCutoverRangefeed starts a rangefeed on the legacy_progress info_key
-// row for the given job in system.job_info. The handler decodes each value,
-// evaluates the same condition as cutoverFromJobProgress.cutoverReached
-// (cutover time set and replicated time has caught up to it), and if so
-// performs a non-blocking send on the returned wake channel. The wake
-// channel has buffer 1 so coincident events coalesce.
+// cutoverSignalRangefeed maintains a rangefeed on the legacy_progress
+// info_key row for the given job in system.job_info for the lifetime of ctx.
+// It sends on the nudge channel whenever it observes a progress update that
+// might mean it is time to cut over, prompting the poller to perform its
+// authoritative SQL read (the rangefeed does not wait for resolved
+// timestamps, so its own view is not sufficient to decide).
 //
-// The rangefeed acts only as a wake-up hint for the polling loop in
-// watchForCutover; the loop still calls cutoverReached to authoritatively
-// decide whether cutover has occurred. The rangefeed may therefore drop or
-// misclassify events without affecting correctness.
-func startCutoverRangefeed(
-	ctx context.Context, execCfg *sql.ExecutorConfig, jobID jobspb.JobID,
-) (<-chan struct{}, func(), error) {
+// The rangefeed is automatically restarted, after a fixed delay, when it
+// surfaces an error the client gives up retrying internally; all such errors
+// are logged and swallowed, as this path is purely a latency-reduction
+// optimization backstopped by the poller. It runs until ctx is cancelled,
+// which happens when the poller returns a non-nil error (which it does on
+// all return paths).
+func cutoverSignalRangefeed(
+	ctx context.Context, execCfg *sql.ExecutorConfig, jobID jobspb.JobID, nudge chan<- struct{},
+) error {
+	for ctx.Err() == nil {
+		if err := runOneCutoverSignalRangefeed(ctx, execCfg, jobID, nudge); err != nil {
+			log.Dev.Warningf(ctx, "cutover rangefeed: %s", err)
+			select {
+			case nudge <- struct{}{}: // nudge just to be sure, since we're not watching right now
+			default:
+			}
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-time.After(10 * time.Second):
+			}
+		}
+	}
+	return nil
+}
+
+// runOneCutoverSignalRangefeed runs a single rangefeed instance on the job's
+// legacy_progress info_key row, sending on nudge whenever an observed
+// progress update satisfies the cutover-reached condition (cutover time set
+// and replicated time has caught up to it). It blocks until ctx is cancelled
+// (returning nil) or the rangefeed surfaces an unrecoverable error (returned
+// to the caller, which is expected to restart).
+func runOneCutoverSignalRangefeed(
+	ctx context.Context, execCfg *sql.ExecutorConfig, jobID jobspb.JobID, nudge chan<- struct{},
+) error {
 	// system.job_info has a dynamically-assigned descriptor ID, so resolve it at
 	// runtime. The primary index and column metadata are stable and can be read
 	// off the static systemschema template.
 	tableID, err := execCfg.SystemTableIDResolver.LookupSystemTableID(
 		ctx, string(catconstants.SystemJobInfoTableName))
 	if err != nil {
-		return nil, func() {}, err
+		return errors.Wrap(err, "looking up system.job_info")
 	}
 	jobInfo := systemschema.SystemJobInfoTable
 
@@ -498,11 +526,9 @@ func startCutoverRangefeed(
 
 	valueCol, err := catalog.MustFindColumnByName(jobInfo, "value")
 	if err != nil {
-		return nil, func() {}, err
+		return errors.Wrap(err, "resolving value column")
 	}
 	decoder := valueside.MakeDecoder([]catalog.Column{valueCol})
-
-	wake := make(chan struct{}, 1)
 
 	onValue := func(ctx context.Context, ev *kvpb.RangeFeedValue) {
 		bytes, err := ev.Value.GetTuple()
@@ -537,12 +563,13 @@ func startCutoverRangefeed(
 		}
 		if !ip.CutoverTime.IsEmpty() && ip.CutoverTime.LessEq(ip.ReplicatedTime) {
 			select {
-			case wake <- struct{}{}:
+			case nudge <- struct{}{}:
 			default:
 			}
 		}
 	}
 
+	errCh := make(chan error, 1)
 	rf, err := execCfg.RangeFeedFactory.RangeFeed(
 		ctx,
 		fmt.Sprintf("pcr-cutover-%d", jobID),
@@ -550,59 +577,63 @@ func startCutoverRangefeed(
 		execCfg.DB.Clock().Now(),
 		onValue,
 		rangefeed.WithSystemTablePriority(),
+		rangefeed.WithOnInternalError(func(ctx context.Context, err error) {
+			select {
+			case errCh <- err:
+			case <-ctx.Done():
+			}
+		}),
 	)
 	if err != nil {
-		return nil, func() {}, err
+		return errors.Wrap(err, "starting rangefeed")
 	}
-	return wake, rf.Close, nil
+	defer rf.Close()
+
+	select {
+	case <-ctx.Done():
+		return nil
+	case err := <-errCh:
+		return err
+	}
 }
 
-// errCutoverSignaled is returned by watchForCutover when it detects that a
-// cutover has been signaled. When returned from a ctxgroup member, it cancels
-// the group context, which tears down the ingestion phase.
+// errCutoverSignaled is returned by pollForCutoverSignal when it detects
+// that a cutover has been signaled. When returned from a ctxgroup member, it
+// cancels the group context, which tears down the ingestion phase.
 var errCutoverSignaled = errors.New("cutover signaled")
 
-// watchForCutover periodically polls the job progress to detect when a cutover
-// has been signaled. It returns errCutoverSignaled when cutover is reached,
-// which cancels the ctxgroup context and unblocks all goroutines in the
-// ingestion phase (heartbeat sender, span config stream, replanning, connection
-// refresher) that may be stuck on dead TCP connections.
+// pollForCutoverSignal periodically polls the job progress to detect when a
+// cutover has been signaled. It returns errCutoverSignaled when cutover is
+// reached, which cancels the ctxgroup context and unblocks all goroutines in
+// the ingestion phase (heartbeat sender, span config stream, replanning,
+// connection refresher) that may be stuck on dead TCP connections.
 //
 // This complements the per-processor cutover polling in checkForCutoverSignal,
 // which only signals individual ingestion processors via cutoverCh but cannot
 // unblock the other goroutines sharing the same ctxgroup context.
 //
-// In addition to the timer, watchForCutover starts a rangefeed on the job's
-// legacy_progress info_key. When the rangefeed observes a progress write that
-// satisfies the cutover-reached condition, it wakes the loop early so we don't
-// have to wait for the next tick. The rangefeed is purely a latency
-// optimization: the timer remains the floor and the SQL-based check inside
-// cutoverReached remains the source of truth. If the rangefeed cannot start,
-// we degrade silently to poll-only behavior.
-func (s *streamIngestionResumer) watchForCutover(
-	ctx context.Context, execCfg *sql.ExecutorConfig,
+// The nudge channel, driven by cutoverSignalRangefeed running as a sibling
+// ctxgroup member, lets the loop wake before the next tick on observed
+// progress writes; the timer remains the floor and the SQL-based check
+// inside cutoverReached remains the source of truth, so a missing or
+// degraded rangefeed only affects latency, not correctness.
+func (s *streamIngestionResumer) pollForCutoverSignal(
+	ctx context.Context, execCfg *sql.ExecutorConfig, nudge <-chan struct{},
 ) error {
 	provider := &cutoverFromJobProgress{
 		db:    execCfg.InternalDB,
 		jobID: s.job.ID(),
 	}
 	sv := &execCfg.Settings.SV
-	tick := time.NewTicker(cutoverSignalPollInterval.Get(sv))
+	pollInterval := cutoverSignalPollInterval.Get(sv)
+	tick := time.NewTicker(pollInterval)
 	defer tick.Stop()
-
-	var wakeCh <-chan struct{}
-	if wake, closeRF, err := startCutoverRangefeed(ctx, execCfg, s.job.ID()); err != nil {
-		log.Dev.Warningf(ctx, "could not start cutover rangefeed (will poll only): %s", err)
-	} else {
-		defer closeRF()
-		wakeCh = wake
-	}
 
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-wakeCh:
+		case <-nudge:
 		case <-tick.C:
 		}
 		reached, err := provider.cutoverReached(ctx)
@@ -660,12 +691,16 @@ func (s *streamIngestionResumer) Resume(ctx context.Context, execCtx interface{}
 		// context, tearing down the entire ingestion phase including goroutines
 		// that the per-processor poller cannot reach (heartbeat sender, span config
 		// stream, replanning, etc.).
+		nudge := make(chan struct{}, 1)
 		err = ctxgroup.GoAndWait(ctx,
 			func(ctx context.Context) error {
 				return ingestWithRetries(ctx, jobExecCtx, s)
 			},
 			func(ctx context.Context) error {
-				return s.watchForCutover(ctx, execCfg)
+				return cutoverSignalRangefeed(ctx, execCfg, s.job.ID(), nudge)
+			},
+			func(ctx context.Context) error {
+				return s.pollForCutoverSignal(ctx, execCfg, nudge)
 			},
 		)
 		if err != nil {
