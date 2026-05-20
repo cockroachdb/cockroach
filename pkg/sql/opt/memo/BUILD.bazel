@@ -18,6 +18,7 @@ go_library(
         "logical_props_builder.go",
         "memo.go",
         "multiplicity_builder.go",
+        "plangram.go",
         "statistics_builder.go",
         "typing.go",
         ":gen-expr",  # keep

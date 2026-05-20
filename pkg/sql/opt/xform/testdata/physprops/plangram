@@ -10,6 +10,10 @@ exec-ddl
 CREATE TABLE pqr (p INT PRIMARY KEY, q INT, r INT)
 ----
 
+exec-ddl
+CREATE TABLE vec_tab (id INT PRIMARY KEY, v VECTOR(3), VECTOR INDEX v_idx (v))
+----
+
 # Matching Fundamentals
 
 # Basic match.
@@ -1058,3 +1062,829 @@ limit
  │         └── filters
  │              └── c:3 > 0 [outer=(3)]
  └── 5
+
+# Field Matching
+
+# Table field match — Scan on abc matches Table="abc".
+
+opt format=show-cost plangram=(root: (Scan Table="abc");)
+SELECT * FROM abc
+----
+scan abc
+ ├── columns: a:1!null b:2 c:3
+ ├── cost: 1088.62
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ └── fd: (1)-->(2,3)
+
+# Table field mismatch — Scan on abc does not match Table="xy".
+
+opt format=show-cost plangram=(root: (Scan Table="xy");)
+SELECT * FROM abc
+----
+scan abc
+ ├── columns: a:1!null b:2 c:3
+ ├── cost: 1088.62
+ ├── cost-flags: plangram-mismatch unbounded-cardinality
+ ├── key: (1)
+ └── fd: (1)-->(2,3)
+
+# Index field match — steer to a specific index using Index=.
+
+opt format=show-cost plangram=(root: (Select (IndexJoin (Scan Index="abc_c_idx")));)
+SELECT * FROM abc WHERE b = 1 AND c > 0
+----
+select
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── cost: 2384.73667
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3)
+ ├── index-join abc
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── cost: 2381.37333
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── scan abc@abc_c_idx
+ │         ├── columns: a:1!null c:3!null
+ │         ├── constraint: /3/1: [/1 - ]
+ │         ├── cost: 364.686667
+ │         ├── cost-flags: unbounded-cardinality
+ │         ├── key: (1)
+ │         └── fd: (1)-->(3)
+ └── filters
+      └── b:2 = 1 [outer=(2), fd=()-->(2)]
+
+# Index field mismatch — specifying a non-matching index causes penalty.
+
+opt format=show-cost plangram=(root: (Scan Index="abc_b_idx");)
+SELECT * FROM abc
+----
+scan abc
+ ├── columns: a:1!null b:2 c:3
+ ├── cost: 1088.62
+ ├── cost-flags: plangram-mismatch unbounded-cardinality
+ ├── key: (1)
+ └── fd: (1)-->(2,3)
+
+# Table and Index fields together — both must match. Query only indexed columns
+# so the plan is a bare Scan (no IndexJoin).
+
+opt format=show-cost plangram=(root: (Scan Table="abc" Index="abc_b_idx");)
+SELECT a, b FROM abc@abc_b_idx
+----
+scan abc@abc_b_idx
+ ├── columns: a:1!null b:2
+ ├── flags: force-index=abc_b_idx
+ ├── cost: 1068.42
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+# Table match + Index mismatch — both fields must match for the expression to
+# match. Query only indexed columns so the plan is a bare Scan.
+
+opt format=show-cost plangram=(root: (Scan Table="abc" Index="abc_c_idx");)
+SELECT a, b FROM abc@abc_b_idx
+----
+scan abc@abc_b_idx
+ ├── columns: a:1!null b:2
+ ├── flags: force-index=abc_b_idx
+ ├── cost: 1068.42
+ ├── cost-flags: plangram-mismatch unbounded-cardinality
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+# Index field steering with alternates — both alternates specify valid indexes.
+# The scan with abc_b_idx matches because the query forces that index.
+
+opt format=show-cost plangram=(root: scan; scan: (Scan Index="abc_c_idx") | (Scan Index="abc_b_idx");)
+SELECT a, b FROM abc@abc_b_idx
+----
+scan abc@abc_b_idx
+ ├── columns: a:1!null b:2
+ ├── flags: force-index=abc_b_idx
+ ├── cost: 1068.42
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+# Field match on non-matchable expression — field matching on operators that
+# don't implement PlanGramFieldMatchableExpr always mismatches.
+
+opt format=show-cost plangram=(root: (Select Table="abc");)
+SELECT * FROM abc WHERE a = 1
+----
+scan abc
+ ├── columns: a:1!null b:2 c:3
+ ├── constraint: /1: [/1 - /1]
+ ├── cardinality: [0 - 1]
+ ├── cost: 9.07
+ ├── cost-flags: plangram-mismatch
+ ├── key: ()
+ └── fd: ()-->(1-3)
+
+# IndexJoin — Table field match.
+
+opt format=show-cost plangram=(root: (Select (IndexJoin Table="abc" (Scan)));)
+SELECT * FROM abc WHERE b = 1 AND c > 0
+----
+select
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── cost: 89.0700007
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3)
+ ├── index-join abc
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── cost: 88.9400007
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1)
+ │    ├── fd: ()-->(2), (1)-->(3)
+ │    └── scan abc@abc_b_idx
+ │         ├── columns: a:1!null b:2!null
+ │         ├── constraint: /2/1: [/1 - /1]
+ │         ├── cost: 28.4200001
+ │         ├── cost-flags: unbounded-cardinality
+ │         ├── key: (1)
+ │         └── fd: ()-->(2)
+ └── filters
+      └── c:3 > 0 [outer=(3)]
+
+# IndexJoin — Table field mismatch.
+
+opt format=show-cost plangram=(root: (Select (IndexJoin Table="xy" (Scan)));)
+SELECT * FROM abc WHERE b = 1 AND c > 0
+----
+select
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── cost: 89.0700007
+ ├── cost-flags: plangram-mismatch unbounded-cardinality
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3)
+ ├── index-join abc
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── cost: 88.9400007
+ │    ├── cost-flags: plangram-mismatch unbounded-cardinality
+ │    ├── key: (1)
+ │    ├── fd: ()-->(2), (1)-->(3)
+ │    └── scan abc@abc_b_idx
+ │         ├── columns: a:1!null b:2!null
+ │         ├── constraint: /2/1: [/1 - /1]
+ │         ├── cost: 28.4200001
+ │         ├── cost-flags: plangram-mismatch unbounded-cardinality
+ │         ├── key: (1)
+ │         └── fd: ()-->(2)
+ └── filters
+      └── c:3 > 0 [outer=(3)]
+
+# LookupJoin — Table field match.
+
+opt format=show-cost plangram=(root: (LookupJoin Table="abc" (Scan));)
+SELECT * FROM abc, xy WHERE a = x
+----
+inner-join (lookup abc)
+ ├── columns: a:1!null b:2 c:3 x:6!null y:7
+ ├── key columns: [6] = [1]
+ ├── lookup columns are key
+ ├── cost: 7142.44
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (6)
+ ├── fd: (1)-->(2,3), (6)-->(7), (1)==(6), (6)==(1)
+ ├── scan xy
+ │    ├── columns: x:6!null y:7
+ │    ├── cost: 1068.42
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7)
+ └── filters (true)
+
+# LookupJoin — Table field steering. The PlanGram asks for a lookup into xy, so
+# the optimizer steers to scan abc and look up into xy (instead of the default
+# direction). No mismatch.
+
+opt format=show-cost plangram=(root: (LookupJoin Table="xy" (Scan));)
+SELECT * FROM abc, xy WHERE a = x
+----
+inner-join (lookup xy)
+ ├── columns: a:1!null b:2 c:3 x:6!null y:7
+ ├── key columns: [1] = [6]
+ ├── lookup columns are key
+ ├── cost: 7142.64
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (6)
+ ├── fd: (1)-->(2,3), (6)-->(7), (1)==(6), (6)==(1)
+ ├── scan abc
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters (true)
+
+# Insert — Table field match.
+
+opt format=show-cost plangram=(root: (Insert Table="xy");)
+INSERT INTO xy SELECT a, b FROM abc WHERE a > 10
+----
+insert xy
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── a:5 => x:1
+ │    └── b:6 => y:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── cost: 368.03
+ ├── cost-flags: unbounded-cardinality
+ └── scan abc
+      ├── columns: a:5!null b:6
+      ├── constraint: /5: [/11 - ]
+      ├── cost: 368.02
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (5)
+      └── fd: (5)-->(6)
+
+# Insert — Table field mismatch.
+
+opt format=show-cost plangram=(root: (Insert Table="abc");)
+INSERT INTO xy SELECT a, b FROM abc WHERE a > 10
+----
+insert xy
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── a:5 => x:1
+ │    └── b:6 => y:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── cost: 368.03
+ ├── cost-flags: plangram-mismatch unbounded-cardinality
+ └── scan abc
+      ├── columns: a:5!null b:6
+      ├── constraint: /5: [/11 - ]
+      ├── cost: 368.02
+      ├── cost-flags: plangram-mismatch unbounded-cardinality
+      ├── key: (5)
+      └── fd: (5)-->(6)
+
+# Delete — Table field match.
+
+opt format=show-cost plangram=(root: (Delete Table="xy");)
+DELETE FROM xy WHERE x > 0
+----
+delete xy
+ ├── columns: <none>
+ ├── fetch columns: x:5 y:6
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── cost: 364.696667
+ ├── cost-flags: unbounded-cardinality
+ └── scan xy
+      ├── columns: x:5!null y:6
+      ├── constraint: /5: [/1 - ]
+      ├── flags: avoid-full-scan
+      ├── cost: 364.686667
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (5)
+      └── fd: (5)-->(6)
+
+# ZigzagJoin — LeftIndex and RightIndex field match.
+
+opt format=show-cost plangram=(root: (ZigzagJoin LeftIndex="abc_b_idx" RightIndex="abc_c_idx");)
+SELECT * FROM abc WHERE b = 1 AND c = 1
+----
+inner-join (zigzag abc@abc_b_idx abc@abc_c_idx)
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── eq columns: [1] = [1]
+ ├── left fixed columns: [2] = [1]
+ ├── right fixed columns: [3] = [1]
+ ├── cost: 30.14
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: ()-->(2,3)
+ └── filters
+      ├── b:2 = 1 [outer=(2), fd=()-->(2)]
+      └── c:3 = 1 [outer=(3), fd=()-->(3)]
+
+# ZigzagJoin — RightIndex field mismatch.
+
+opt format=show-cost plangram=(root: (ZigzagJoin LeftIndex="abc_b_idx" RightIndex="abc_b_idx");)
+SELECT * FROM abc WHERE b = 1 AND c = 1
+----
+inner-join (zigzag abc@abc_b_idx abc@abc_c_idx)
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── eq columns: [1] = [1]
+ ├── left fixed columns: [2] = [1]
+ ├── right fixed columns: [3] = [1]
+ ├── cost: 30.14
+ ├── cost-flags: plangram-mismatch unbounded-cardinality
+ ├── key: (1)
+ ├── fd: ()-->(2,3)
+ └── filters
+      ├── b:2 = 1 [outer=(2), fd=()-->(2)]
+      └── c:3 = 1 [outer=(3), fd=()-->(3)]
+
+# Field on nested (non-root) child expression.
+
+opt format=show-cost plangram=(root: (Insert Table="xy" (Select (Scan Table="abc")));)
+INSERT INTO xy SELECT a, b FROM abc WHERE a > 10
+----
+insert xy
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── a:5 => x:1
+ │    └── b:6 => y:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── cost: 1078.46
+ ├── cost-flags: unbounded-cardinality
+ └── select
+      ├── columns: a:5!null b:6
+      ├── cost: 1078.45
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (5)
+      ├── fd: (5)-->(6)
+      ├── scan abc@abc_b_idx
+      │    ├── columns: a:5!null b:6
+      │    ├── cost: 1068.42
+      │    ├── cost-flags: unbounded-cardinality
+      │    ├── key: (5)
+      │    └── fd: (5)-->(6)
+      └── filters
+           └── a:5 > 10 [outer=(5)]
+
+# Unknown field key — should mismatch since Scan doesn't report "Foo".
+
+opt format=show-cost plangram=(root: (Scan Foo="bar");)
+SELECT * FROM abc
+----
+scan abc
+ ├── columns: a:1!null b:2 c:3
+ ├── cost: 1088.62
+ ├── cost-flags: plangram-mismatch unbounded-cardinality
+ ├── key: (1)
+ └── fd: (1)-->(2,3)
+
+# Update — Table field match.
+
+opt format=show-cost plangram=(root: (Update Table="xy");)
+UPDATE xy SET y = 1 WHERE x > 0
+----
+update xy
+ ├── columns: <none>
+ ├── fetch columns: x:5 y:6
+ ├── update-mapping:
+ │    └── y_new:9 => y:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── cost: 371.383333
+ ├── cost-flags: unbounded-cardinality
+ └── project
+      ├── columns: y_new:9!null x:5!null y:6
+      ├── cost: 371.373333
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (5)
+      ├── fd: ()-->(9), (5)-->(6)
+      ├── scan xy
+      │    ├── columns: x:5!null y:6
+      │    ├── constraint: /5: [/1 - ]
+      │    ├── flags: avoid-full-scan
+      │    ├── cost: 364.686667
+      │    ├── cost-flags: unbounded-cardinality
+      │    ├── key: (5)
+      │    └── fd: (5)-->(6)
+      └── projections
+           └── 1 [as=y_new:9]
+
+# Update — Table field mismatch.
+
+opt format=show-cost plangram=(root: (Update Table="abc");)
+UPDATE xy SET y = 1 WHERE x > 0
+----
+update xy
+ ├── columns: <none>
+ ├── fetch columns: x:5 y:6
+ ├── update-mapping:
+ │    └── y_new:9 => y:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── cost: 371.383333
+ ├── cost-flags: plangram-mismatch unbounded-cardinality
+ └── project
+      ├── columns: y_new:9!null x:5!null y:6
+      ├── cost: 371.373333
+      ├── cost-flags: plangram-mismatch unbounded-cardinality
+      ├── key: (5)
+      ├── fd: ()-->(9), (5)-->(6)
+      ├── scan xy
+      │    ├── columns: x:5!null y:6
+      │    ├── constraint: /5: [/1 - ]
+      │    ├── flags: avoid-full-scan
+      │    ├── cost: 364.686667
+      │    ├── cost-flags: plangram-mismatch unbounded-cardinality
+      │    ├── key: (5)
+      │    └── fd: (5)-->(6)
+      └── projections
+           └── 1 [as=y_new:9]
+
+# IndexJoin — Index field match. IndexJoin always uses the primary index.
+
+opt format=show-cost plangram=(root: (Select (IndexJoin Index="abc_pkey" (Scan)));)
+SELECT * FROM abc WHERE b = 1 AND c > 0
+----
+select
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── cost: 89.0700007
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3)
+ ├── index-join abc
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── cost: 88.9400007
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1)
+ │    ├── fd: ()-->(2), (1)-->(3)
+ │    └── scan abc@abc_b_idx
+ │         ├── columns: a:1!null b:2!null
+ │         ├── constraint: /2/1: [/1 - /1]
+ │         ├── cost: 28.4200001
+ │         ├── cost-flags: unbounded-cardinality
+ │         ├── key: (1)
+ │         └── fd: ()-->(2)
+ └── filters
+      └── c:3 > 0 [outer=(3)]
+
+# IndexJoin — Index field mismatch.
+
+opt format=show-cost plangram=(root: (Select (IndexJoin Index="abc_b_idx" (Scan)));)
+SELECT * FROM abc WHERE b = 1 AND c > 0
+----
+select
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── cost: 89.0700007
+ ├── cost-flags: plangram-mismatch unbounded-cardinality
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3)
+ ├── index-join abc
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── cost: 88.9400007
+ │    ├── cost-flags: plangram-mismatch unbounded-cardinality
+ │    ├── key: (1)
+ │    ├── fd: ()-->(2), (1)-->(3)
+ │    └── scan abc@abc_b_idx
+ │         ├── columns: a:1!null b:2!null
+ │         ├── constraint: /2/1: [/1 - /1]
+ │         ├── cost: 28.4200001
+ │         ├── cost-flags: plangram-mismatch unbounded-cardinality
+ │         ├── key: (1)
+ │         └── fd: ()-->(2)
+ └── filters
+      └── c:3 > 0 [outer=(3)]
+
+# LookupJoin — Index field match. Lookup into abc uses primary key index.
+
+opt format=show-cost plangram=(root: (LookupJoin Index="abc_pkey" (Scan));)
+SELECT * FROM abc, xy WHERE a = x
+----
+inner-join (lookup abc)
+ ├── columns: a:1!null b:2 c:3 x:6!null y:7
+ ├── key columns: [6] = [1]
+ ├── lookup columns are key
+ ├── cost: 7142.44
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (6)
+ ├── fd: (1)-->(2,3), (6)-->(7), (1)==(6), (6)==(1)
+ ├── scan xy
+ │    ├── columns: x:6!null y:7
+ │    ├── cost: 1068.42
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7)
+ └── filters (true)
+
+# LookupJoin — Index field mismatch.
+
+opt format=show-cost plangram=(root: (LookupJoin Index="abc_b_idx" (Scan));)
+SELECT * FROM abc, xy WHERE a = x
+----
+inner-join (merge)
+ ├── columns: a:1!null b:2 c:3 x:6!null y:7
+ ├── left ordering: +1
+ ├── right ordering: +6
+ ├── cost: 2187.06
+ ├── cost-flags: plangram-mismatch unbounded-cardinality
+ ├── key: (6)
+ ├── fd: (1)-->(2,3), (6)-->(7), (1)==(6), (6)==(1)
+ ├── scan abc
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── cost: 1088.62
+ │    ├── cost-flags: plangram-mismatch unbounded-cardinality
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── ordering: +1
+ ├── scan xy
+ │    ├── columns: x:6!null y:7
+ │    ├── cost: 1068.42
+ │    ├── cost-flags: plangram-mismatch unbounded-cardinality
+ │    ├── key: (6)
+ │    ├── fd: (6)-->(7)
+ │    └── ordering: +6
+ └── filters (true)
+
+# ZigzagJoin — LeftTable and RightTable field match.
+
+opt format=show-cost plangram=(root: (ZigzagJoin LeftTable="abc" RightTable="abc");)
+SELECT * FROM abc WHERE b = 1 AND c = 1
+----
+inner-join (zigzag abc@abc_b_idx abc@abc_c_idx)
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── eq columns: [1] = [1]
+ ├── left fixed columns: [2] = [1]
+ ├── right fixed columns: [3] = [1]
+ ├── cost: 30.14
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: ()-->(2,3)
+ └── filters
+      ├── b:2 = 1 [outer=(2), fd=()-->(2)]
+      └── c:3 = 1 [outer=(3), fd=()-->(3)]
+
+# ZigzagJoin — LeftTable field mismatch.
+
+opt format=show-cost plangram=(root: (ZigzagJoin LeftTable="xy");)
+SELECT * FROM abc WHERE b = 1 AND c = 1
+----
+inner-join (zigzag abc@abc_b_idx abc@abc_c_idx)
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── eq columns: [1] = [1]
+ ├── left fixed columns: [2] = [1]
+ ├── right fixed columns: [3] = [1]
+ ├── cost: 30.14
+ ├── cost-flags: plangram-mismatch unbounded-cardinality
+ ├── key: (1)
+ ├── fd: ()-->(2,3)
+ └── filters
+      ├── b:2 = 1 [outer=(2), fd=()-->(2)]
+      └── c:3 = 1 [outer=(3), fd=()-->(3)]
+
+# Upsert — Table field match.
+
+opt format=show-cost plangram=(root: (Upsert Table="xy");)
+UPSERT INTO xy VALUES (1, 2)
+----
+upsert xy
+ ├── arbiter indexes: xy_pkey
+ ├── columns: <none>
+ ├── canary column: x:7
+ ├── fetch columns: x:7 y:8
+ ├── insert-mapping:
+ │    ├── column1:5 => x:1
+ │    └── column2:6 => y:2
+ ├── update-mapping:
+ │    └── column2:6 => y:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── cost: 9.13
+ └── left-join (cross)
+      ├── columns: column1:5!null column2:6!null x:7 y:8
+      ├── cardinality: [1 - 1]
+      ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+      ├── cost: 9.12
+      ├── key: ()
+      ├── fd: ()-->(5-8)
+      ├── values
+      │    ├── columns: column1:5!null column2:6!null
+      │    ├── cardinality: [1 - 1]
+      │    ├── cost: 0.02
+      │    ├── key: ()
+      │    ├── fd: ()-->(5,6)
+      │    └── (1, 2)
+      ├── scan xy
+      │    ├── columns: x:7!null y:8
+      │    ├── constraint: /7: [/1 - /1]
+      │    ├── flags: avoid-full-scan
+      │    ├── cardinality: [0 - 1]
+      │    ├── cost: 9.05
+      │    ├── key: ()
+      │    └── fd: ()-->(7,8)
+      └── filters (true)
+
+# Upsert — Table field mismatch.
+
+opt format=show-cost plangram=(root: (Upsert Table="abc");)
+UPSERT INTO xy VALUES (1, 2)
+----
+upsert xy
+ ├── arbiter indexes: xy_pkey
+ ├── columns: <none>
+ ├── canary column: x:7
+ ├── fetch columns: x:7 y:8
+ ├── insert-mapping:
+ │    ├── column1:5 => x:1
+ │    └── column2:6 => y:2
+ ├── update-mapping:
+ │    └── column2:6 => y:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── cost: 9.13
+ ├── cost-flags: plangram-mismatch
+ └── left-join (cross)
+      ├── columns: column1:5!null column2:6!null x:7 y:8
+      ├── cardinality: [1 - 1]
+      ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+      ├── cost: 9.12
+      ├── cost-flags: plangram-mismatch
+      ├── key: ()
+      ├── fd: ()-->(5-8)
+      ├── values
+      │    ├── columns: column1:5!null column2:6!null
+      │    ├── cardinality: [1 - 1]
+      │    ├── cost: 0.02
+      │    ├── cost-flags: plangram-mismatch
+      │    ├── key: ()
+      │    ├── fd: ()-->(5,6)
+      │    └── (1, 2)
+      ├── scan xy
+      │    ├── columns: x:7!null y:8
+      │    ├── constraint: /7: [/1 - /1]
+      │    ├── flags: avoid-full-scan
+      │    ├── cardinality: [0 - 1]
+      │    ├── cost: 9.05
+      │    ├── cost-flags: plangram-mismatch
+      │    ├── key: ()
+      │    └── fd: ()-->(7,8)
+      └── filters (true)
+
+# Lock — Table field match.
+
+opt format=show-cost set=(optimizer_use_lock_op_for_serializable=true) plangram=(root: (Lock Table="xy");)
+SELECT * FROM xy WHERE x = 1 FOR UPDATE
+----
+lock xy
+ ├── columns: x:1!null y:2
+ ├── key columns: x:1
+ ├── lock columns: (5,6)
+ ├── locking: for-update
+ ├── cardinality: [0 - 1]
+ ├── volatile
+ ├── cost: 9.06
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ └── scan xy
+      ├── columns: x:1!null y:2
+      ├── constraint: /1: [/1 - /1]
+      ├── cardinality: [0 - 1]
+      ├── cost: 9.05
+      ├── key: ()
+      └── fd: ()-->(1,2)
+
+# Lock — Table field mismatch.
+
+opt format=show-cost set=(optimizer_use_lock_op_for_serializable=true) plangram=(root: (Lock Table="abc");)
+SELECT * FROM xy WHERE x = 1 FOR UPDATE
+----
+lock xy
+ ├── columns: x:1!null y:2
+ ├── key columns: x:1
+ ├── lock columns: (5,6)
+ ├── locking: for-update
+ ├── cardinality: [0 - 1]
+ ├── volatile
+ ├── cost: 9.06
+ ├── cost-flags: plangram-mismatch
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ └── scan xy
+      ├── columns: x:1!null y:2
+      ├── constraint: /1: [/1 - /1]
+      ├── cardinality: [0 - 1]
+      ├── cost: 9.05
+      ├── cost-flags: plangram-mismatch
+      ├── key: ()
+      └── fd: ()-->(1,2)
+
+# VectorSearch — Table field match.
+
+opt format=show-cost plangram=(root: (TopK (Project (LookupJoin (VectorSearch Table="vec_tab"))));)
+SELECT * FROM vec_tab ORDER BY v <-> '[1,2,3]' LIMIT 5
+----
+top-k
+ ├── columns: id:1!null v:2  [hidden: column5:5]
+ ├── internal-ordering: +5
+ ├── k: 5
+ ├── cardinality: [0 - 5]
+ ├── immutable
+ ├── cost: 65.5843856
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: (1)-->(2), (2)-->(5)
+ ├── ordering: +5
+ └── project
+      ├── columns: column5:5 id:1!null v:2
+      ├── immutable
+      ├── cost: 64.76
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      ├── fd: (1)-->(2), (2)-->(5)
+      ├── inner-join (lookup vec_tab)
+      │    ├── columns: id:1!null v:2
+      │    ├── key columns: [1] = [1]
+      │    ├── lookup columns are key
+      │    ├── cost: 64.54
+      │    ├── cost-flags: unbounded-cardinality
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    ├── vector-search vec_tab@v_idx,vector
+      │    │    ├── columns: id:1!null
+      │    │    ├── target nearest neighbors: 5
+      │    │    ├── cost: 0.12
+      │    │    ├── cost-flags: unbounded-cardinality
+      │    │    ├── key: (1)
+      │    │    └── '[1,2,3]'
+      │    └── filters (true)
+      └── projections
+           └── v:2 <-> '[1,2,3]' [as=column5:5, outer=(2), immutable]
+
+# VectorSearch — Table field mismatch.
+
+opt format=show-cost plangram=(root: (TopK (Project (LookupJoin (VectorSearch Table="abc"))));)
+SELECT * FROM vec_tab ORDER BY v <-> '[1,2,3]' LIMIT 5
+----
+top-k
+ ├── columns: id:1!null v:2  [hidden: column5:5]
+ ├── internal-ordering: +5
+ ├── k: 5
+ ├── cardinality: [0 - 5]
+ ├── immutable
+ ├── cost: 65.5843856
+ ├── cost-flags: plangram-mismatch unbounded-cardinality
+ ├── key: (1)
+ ├── fd: (1)-->(2), (2)-->(5)
+ ├── ordering: +5
+ └── project
+      ├── columns: column5:5 id:1!null v:2
+      ├── immutable
+      ├── cost: 64.76
+      ├── cost-flags: plangram-mismatch unbounded-cardinality
+      ├── key: (1)
+      ├── fd: (1)-->(2), (2)-->(5)
+      ├── inner-join (lookup vec_tab)
+      │    ├── columns: id:1!null v:2
+      │    ├── key columns: [1] = [1]
+      │    ├── lookup columns are key
+      │    ├── cost: 64.54
+      │    ├── cost-flags: plangram-mismatch unbounded-cardinality
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    ├── vector-search vec_tab@v_idx,vector
+      │    │    ├── columns: id:1!null
+      │    │    ├── target nearest neighbors: 5
+      │    │    ├── cost: 0.12
+      │    │    ├── cost-flags: plangram-mismatch unbounded-cardinality
+      │    │    ├── key: (1)
+      │    │    └── '[1,2,3]'
+      │    └── filters (true)
+      └── projections
+           └── v:2 <-> '[1,2,3]' [as=column5:5, outer=(2), immutable]
+
+# VectorSearch — Index field match.
+
+opt format=show-cost plangram=(root: (TopK (Project (LookupJoin (VectorSearch Index="v_idx"))));)
+SELECT * FROM vec_tab ORDER BY v <-> '[1,2,3]' LIMIT 5
+----
+top-k
+ ├── columns: id:1!null v:2  [hidden: column5:5]
+ ├── internal-ordering: +5
+ ├── k: 5
+ ├── cardinality: [0 - 5]
+ ├── immutable
+ ├── cost: 65.5843856
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: (1)-->(2), (2)-->(5)
+ ├── ordering: +5
+ └── project
+      ├── columns: column5:5 id:1!null v:2
+      ├── immutable
+      ├── cost: 64.76
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      ├── fd: (1)-->(2), (2)-->(5)
+      ├── inner-join (lookup vec_tab)
+      │    ├── columns: id:1!null v:2
+      │    ├── key columns: [1] = [1]
+      │    ├── lookup columns are key
+      │    ├── cost: 64.54
+      │    ├── cost-flags: unbounded-cardinality
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    ├── vector-search vec_tab@v_idx,vector
+      │    │    ├── columns: id:1!null
+      │    │    ├── target nearest neighbors: 5
+      │    │    ├── cost: 0.12
+      │    │    ├── cost-flags: unbounded-cardinality
+      │    │    ├── key: (1)
+      │    │    └── '[1,2,3]'
+      │    └── filters (true)
+      └── projections
+           └── v:2 <-> '[1,2,3]' [as=column5:5, outer=(2), immutable]
