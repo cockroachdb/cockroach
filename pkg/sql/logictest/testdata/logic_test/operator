@@ -4,6 +4,92 @@ SELECT |/ -1.0::float
 query error cannot take square root of a negative number
 SELECT |/ -1.0::decimal
 
+query RRTT
+SELECT 8::float / 8::int, 8::int / 8::float,
+       pg_typeof(8::float / 8::int), pg_typeof(8::int / 8::float)
+----
+1  1  double precision  double precision
+
+query RRTT
+SELECT 8::float / 8::int4, 8::int4 / 8::float,
+       pg_typeof(8::float / 8::int4), pg_typeof(8::int4 / 8::float)
+----
+1  1  double precision  double precision
+
+
+statement ok
+CREATE TABLE float_int_div (f FLOAT8, i INT8, i4 INT4)
+
+statement ok
+INSERT INTO float_int_div VALUES (8, 8, 8)
+
+query RRTT
+SELECT f / i, i / f, pg_typeof(f / i), pg_typeof(i / f) FROM float_int_div
+----
+1  1  double precision  double precision
+
+query RRTT
+SELECT f / i4, i4 / f, pg_typeof(f / i4), pg_typeof(i4 / f) FROM float_int_div
+----
+1  1  double precision  double precision
+
+statement ok
+CREATE TABLE float_int_div_insert (x FLOAT8)
+
+statement ok
+INSERT INTO float_int_div_insert(x) VALUES (3/2), (1)
+
+query R
+SELECT x FROM float_int_div_insert ORDER BY x
+----
+1
+1.5
+
+statement ok
+PREPARE float_int_div_stmt AS
+  SELECT $1::FLOAT8 / $2::INT8, $2::INT8 / $1::FLOAT8,
+         pg_typeof($1::FLOAT8 / $2::INT8), pg_typeof($2::INT8 / $1::FLOAT8)
+
+query RRTT
+EXECUTE float_int_div_stmt(8, 8)
+----
+1  1  double precision  double precision
+
+statement ok
+DEALLOCATE float_int_div_stmt
+
+statement ok
+SET vectorize = off
+
+query RR
+SELECT f / i, i / f FROM float_int_div
+----
+1  1
+
+statement ok
+SET vectorize = experimental_always
+
+query RR
+SELECT f / i, i / f FROM float_int_div
+----
+1  1
+
+statement ok
+RESET vectorize
+
+query RRRRRR
+SELECT 'NaN'::FLOAT8 / 0::INT8, 'NaN'::FLOAT8 / 0::INT4,
+       'Infinity'::FLOAT8 / 2::INT8, 2::INT8 / 'Infinity'::FLOAT8,
+       NULL::FLOAT8 / 1::INT8, 1::INT8 / NULL::FLOAT8
+----
+NaN  NaN  +Inf  0  NULL  NULL
+
+statement error division by zero
+SELECT 1::FLOAT8 / 0::INT8
+
+statement error division by zero
+SELECT 1::INT8 / 0::FLOAT8
+
 query I
 SELECT ~-1;
 ----
