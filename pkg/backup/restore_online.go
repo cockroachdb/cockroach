@@ -54,6 +54,10 @@ import (
 
 const defaultLinkWorkersPerNode = 2
 
+// experimentalCopyLinkFraction is the fraction of overall job progress
+// allocated to the link phase of an ExperimentalCopy restore.
+const experimentalCopyLinkFraction = 0.05
+
 var onlineRestoreLinkWorkers = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"backup.restore.online_worker_count",
@@ -786,7 +790,12 @@ func (r *restoreResumer) waitForDownloadToComplete(
 			total = remaining
 		}
 
-		fractionComplete := float32(total-remaining) / float32(total)
+		rawFraction := float32(total-remaining) / float32(total)
+		fractionComplete := rawFraction
+		if details.ExperimentalCopy {
+			fractionComplete = experimentalCopyLinkFraction +
+				rawFraction*(1.0-experimentalCopyLinkFraction)
+		}
 		log.Dev.VInfof(ctx, 1, "restore download phase, %s downloaded, %s remaining of %s total (%.2f complete)",
 			sz(total-remaining), sz(remaining), sz(total), fractionComplete,
 		)

@@ -948,7 +948,7 @@ func doCompaction(
 		frac = 0
 	}
 	logger := jobs.NewChunkProgressLoggerForJob(
-		jobID, execCtx.ExecCfg().InternalDB, totalEntriesLeft, frac,
+		jobID, execCtx.ExecCfg().InternalDB, totalEntriesLeft, frac, 1.0,
 	)
 	progressLoop := func(ctx context.Context) error {
 		return logger.Loop(ctx, chunkFinishedCh)
