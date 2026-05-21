@@ -15,6 +15,7 @@ plan type: custom
 maximum memory usage: 0 B
 DistSQL network usage: 0 B (0 messages)
 kv cpu time: 0µs
+sql cpu time: 0µs
 isolation level: serializable
 priority: normal
 quality of service: regular
@@ -39,6 +40,7 @@ plan type: custom
 maximum memory usage: 0 B
 DistSQL network usage: 0 B (0 messages)
 kv cpu time: 0µs
+sql cpu time: 0µs
 isolation level: serializable
 priority: normal
 quality of service: regular
@@ -63,6 +65,7 @@ plan type: custom
 maximum memory usage: 0 B
 DistSQL network usage: 0 B (0 messages)
 kv cpu time: 0µs
+sql cpu time: 0µs
 isolation level: serializable
 priority: normal
 quality of service: regular
@@ -115,6 +118,7 @@ plan type: custom
 maximum memory usage: 0 B
 DistSQL network usage: 0 B (0 messages)
 kv cpu time: 0µs
+sql cpu time: 0µs
 isolation level: serializable
 priority: normal
 quality of service: regular
@@ -139,6 +143,7 @@ plan type: custom
 maximum memory usage: 0 B
 DistSQL network usage: 0 B (0 messages)
 kv cpu time: 0µs
+sql cpu time: 0µs
 isolation level: serializable
 priority: normal
 quality of service: regular
@@ -199,6 +204,7 @@ plan type: custom
 maximum memory usage: 0 B
 DistSQL network usage: 0 B (0 messages)
 kv cpu time: 0µs
+sql cpu time: 0µs
 isolation level: serializable
 priority: normal
 quality of service: regular

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -339,7 +340,14 @@ func (s *ParallelUnorderedSynchronizer) workerSendErr(err error) {
 // error on s.errCh, resulting in the first error pushed to be observed by the
 // Next goroutine. Inputs are asynchronous so that the synchronizer is minimally
 // affected by slow inputs.
+//
+// As a side-effect, this goroutine's grunning is measured and emitted as a
+// Metrics.RawSQLCPUTime entry on the drained metadata so that the gateway can
+// attribute the upstream operator work driven via input.Root.Next() to the
+// query's SQL CPU time.
 func (s *ParallelUnorderedSynchronizer) workerRun(input colexecargs.OpWithMetaInfo, inputIdx int) {
+	var cpuStopWatch timeutil.CPUStopWatch
+	cpuStopWatch.Start()
 	select {
 	case <-s.blockWorkersCh:
 	case <-s.exitWorkersCh:
@@ -407,6 +415,15 @@ func (s *ParallelUnorderedSynchronizer) workerRun(input colexecargs.OpWithMetaIn
 			}
 			if input.MetadataSources != nil {
 				msg.meta = append(msg.meta, input.MetadataSources.DrainMeta()...)
+			}
+			// Emit this worker goroutine's grunning as metadata. The synchronizer
+			// drives upstream operator work inline via input.Root.Next(), so this
+			// goroutine's CPU includes that work.
+			if delta := cpuStopWatch.Stop(); delta > 0 {
+				grunningMeta := execinfrapb.ProducerMetadata{}
+				grunningMeta.Metrics = execinfrapb.GetMetricsMeta()
+				grunningMeta.Metrics.RawSQLCPUTime = int64(delta)
+				msg.meta = append(msg.meta, grunningMeta)
 			}
 		default:
 			s.workerSendErr(errors.AssertionFailedf("unhandled state in ParallelUnorderedSynchronizer input goroutine: %d", state))

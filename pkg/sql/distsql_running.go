@@ -1644,6 +1644,11 @@ func forwardInnerQueryStats(f metadataForwarder, stats topLevelQueryStats) {
 	meta.Metrics.IndexRowsWritten = stats.indexRowsWritten
 	meta.Metrics.IndexBytesWritten = stats.indexBytesWritten
 	meta.Metrics.KVCPUTime = int64(stats.kvCPUTimeNanos)
+	meta.Metrics.LocalKVCPUTime = int64(stats.localKVCPUTime)
+	// Do not forward rawSQLCPUTime: the outer query's gateway grunning
+	// already includes the inner query's CPU (same goroutine), so
+	// forwarding it would double-count.
+	//
 	// stats.networkEgressEstimate and stats.clientTime are ignored since they
 	// only matter at the "true" top-level query (and actually should be zero
 	// here anyway).
@@ -1702,6 +1707,8 @@ func (r *DistSQLReceiver) pushMeta(meta *execinfrapb.ProducerMetadata) execinfra
 		r.stats.indexRowsWritten += meta.Metrics.IndexRowsWritten
 		r.stats.indexBytesWritten += meta.Metrics.IndexBytesWritten
 		r.stats.kvCPUTimeNanos += time.Duration(meta.Metrics.KVCPUTime)
+		r.stats.localKVCPUTime += time.Duration(meta.Metrics.LocalKVCPUTime)
+		r.stats.rawSQLCPUTime += time.Duration(meta.Metrics.RawSQLCPUTime)
 
 		if sm, ok := r.scanStageEstimateMap[meta.Metrics.StageID]; ok {
 			sm.rowsRead += uint64(meta.Metrics.RowsRead)
@@ -2997,7 +3004,20 @@ func (dsp *DistSQLPlanner) planAndRunChecksInParallel(
 			},
 			func(ctx context.Context) {
 				defer wg.Done()
+				// Measure this worker goroutine's CPU time. It is not
+				// captured by the main cpuStopWatch in
+				// dispatchToExecutionEngine since it runs on a separate
+				// goroutine. We add raw grunning here; the gateway's
+				// sqlCPUTime() helper will subtract localKVCPUTime (which
+				// is propagated via addTopLevelQueryStats).
+				var cpuStopWatch timeutil.CPUStopWatch
+				cpuStopWatch.Start()
 				runCheck(ctx, checkPlanIdx, parallelCheckWorkerGoroutine)
+				if workerGrunning := cpuStopWatch.Stop(); workerGrunning > 0 {
+					mu.Lock()
+					recv.stats.rawSQLCPUTime += workerGrunning
+					mu.Unlock()
+				}
 			}); err != nil {
 			// The server is quiescing, so we just make sure to wait for all
 			// already started checks to complete after canceling them.

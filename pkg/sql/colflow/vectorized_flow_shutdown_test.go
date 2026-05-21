@@ -403,6 +403,11 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				checkMetadata := func(receivedMeta []execinfrapb.ProducerMetadata) {
 					receivedMetaFromID := make([]bool, streamID)
 					for _, meta := range receivedMeta {
+						// Each outbox also emits an always-on Metrics record
+						// carrying RawSQLCPUTime; skip those.
+						if meta.Metrics != nil {
+							continue
+						}
 						require.NotNil(t, meta.Err)
 						id, err := strconv.Atoi(meta.Err.Error())
 						require.NoError(t, err)

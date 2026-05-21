@@ -155,9 +155,10 @@ type KVBatchFetcher interface {
 	// use and is able to handle a case of uninitialized fetcher.
 	GetKVCPUTime() int64
 
-	// GetLocalKVCPUTime returns the CPU time spent on the calling goroutine
-	// during KV operations (the "local fast path" portion). It is measured via
-	// grunning deltas around txn.Send() calls. It is safe for concurrent use
+	// GetLocalKVCPUTime returns the SQL goroutine CPU time spent inside KV
+	// calls, measured via grunning deltas around txn.Send. This is the portion
+	// of SQL goroutine CPU that overlapped with KV work, not the CPU consumed
+	// on KV servers (see GetKVCPUTime for that). It is safe for concurrent use
 	// and is able to handle a case of uninitialized fetcher.
 	GetLocalKVCPUTime() int64
 
@@ -1463,8 +1464,9 @@ func (rf *Fetcher) GetKVCPUTime() int64 {
 	return rf.kvFetcher.GetKVCPUTime()
 }
 
-// GetLocalKVCPUTime returns the CPU time spent on the calling goroutine during
-// KV operations.
+// GetLocalKVCPUTime returns the SQL goroutine CPU time spent inside KV calls,
+// measured via grunning around txn.Send. This is the portion of SQL goroutine
+// CPU that overlapped with KV work, not the CPU consumed on KV servers.
 func (rf *Fetcher) GetLocalKVCPUTime() int64 {
 	if rf == nil || rf.kvFetcher == nil {
 		return 0

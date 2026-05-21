@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
@@ -590,6 +591,8 @@ func (r *HashRouter) getDrainState() hashRouterDrainState {
 // output calculated by hashing columns. Cancel the given context to terminate
 // early.
 func (r *HashRouter) Run(ctx context.Context) {
+	var cpuStopWatch timeutil.CPUStopWatch
+	cpuStopWatch.Start()
 	var span *tracing.Span
 	ctx, span = execinfra.ProcessorSpan(ctx, r.flowCtx, "hash router", r.processorID)
 	if span != nil {
@@ -670,6 +673,15 @@ func (r *HashRouter) Run(ctx context.Context) {
 			}
 		}
 		drainedMeta = append(drainedMeta, r.inputMetaInfo.MetadataSources.DrainMeta()...)
+	}
+	// Emit this goroutine's CPU time as metadata. The hash router goroutine
+	// executes upstream operators via Input.Next(), so its CPU includes all
+	// upstream operator work.
+	if delta := cpuStopWatch.Stop(); delta > 0 {
+		grunningMeta := execinfrapb.ProducerMetadata{}
+		grunningMeta.Metrics = execinfrapb.GetMetricsMeta()
+		grunningMeta.Metrics.RawSQLCPUTime = int64(delta)
+		drainedMeta = append(drainedMeta, grunningMeta)
 	}
 	// Non-blocking send of metadata so that one of the outputs can return it
 	// in DrainMeta.

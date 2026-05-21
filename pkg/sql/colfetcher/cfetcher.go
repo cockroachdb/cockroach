@@ -278,8 +278,9 @@ type cFetcher struct {
 	stableKVs bool
 	// bytesRead, kvPairsRead, kvCPUTime, localKVCPUTime, and
 	// batchRequestsIssued store the total number of bytes read, key-value
-	// pairs read, CPU time reported by KV BatchResponses, local KV CPU time,
-	// and BatchRequests issued, respectively, by this cFetcher throughout its
+	// pairs read, KV-server CPU time reported by BatchResponses, SQL goroutine
+	// CPU time spent inside KV calls (measured via grunning), and
+	// BatchRequests issued, respectively, by this cFetcher throughout its
 	// lifetime in case when the underlying row.KVFetcher has already been
 	// closed and nil-ed out.
 	//
@@ -1500,8 +1501,10 @@ func (cf *cFetcher) getKVCPUTime() int64 {
 	return cf.kvCPUTime
 }
 
-// getLocalKVCPUTime returns the CPU time spent on the calling goroutine during
-// KV operations, as measured by grunning deltas around txn.Send() calls.
+// getLocalKVCPUTime returns the SQL goroutine CPU time spent inside KV calls,
+// measured via grunning deltas around txn.Send. This is the portion of SQL
+// goroutine CPU that overlapped with KV work, not the CPU consumed on KV
+// servers (see getKVCPUTime for that).
 func (cf *cFetcher) getLocalKVCPUTime() int64 {
 	if cf.fetcher != nil {
 		return cf.fetcher.GetLocalKVCPUTime()
