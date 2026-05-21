@@ -134,8 +134,14 @@ func (t *TenantServer) Query(
 		// Tenant-scoped metrics get marked with the tenantID. This includes both
 		// app-level metrics (in tenantRegistry) and store-level tenant metrics
 		// (identified by isStoreTenantMetric).
-		metricName := strings.TrimPrefix(q.Name, "cr.store.")
-		if t.tenantRegistry.Contains(q.Name) || isStoreTenantMetric(metricName) {
+		//
+		// Histogram metrics are stored in TSDB under suffixed names (e.g.
+		// "cr.node.sql.service.latency-p99") but registered under the base name
+		// ("sql.service.latency"). Strip the suffix so both the registry lookup
+		// and the store metric check use the base metric name.
+		baseName := stripHistogramSuffix(q.Name)
+		storeMetricName := strings.TrimPrefix(baseName, "cr.store.")
+		if t.tenantRegistry.Contains(baseName) || isStoreTenantMetric(storeMetricName) {
 			req.Queries[i].TenantID = t.tenantID
 		}
 	}
