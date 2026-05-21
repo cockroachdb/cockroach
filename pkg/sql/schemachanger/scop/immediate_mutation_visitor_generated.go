@@ -197,6 +197,8 @@ type ImmediateMutationVisitor interface {
 	RemoveDomainNotNull(context.Context, RemoveDomainNotNull) error
 	SetDomainConstraintName(context.Context, SetDomainConstraintName) error
 	RemoveDomainConstraintName(context.Context, RemoveDomainConstraintName) error
+	SetDomainDefault(context.Context, SetDomainDefault) error
+	RemoveDomainDefault(context.Context, RemoveDomainDefault) error
 }
 
 // Visit is part of the ImmediateMutationOp interface.
@@ -1097,4 +1099,14 @@ func (op SetDomainConstraintName) Visit(ctx context.Context, v ImmediateMutation
 // Visit is part of the ImmediateMutationOp interface.
 func (op RemoveDomainConstraintName) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.RemoveDomainConstraintName(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op SetDomainDefault) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetDomainDefault(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op RemoveDomainDefault) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.RemoveDomainDefault(ctx, op)
 }
