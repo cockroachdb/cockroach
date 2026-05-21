@@ -21,8 +21,55 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+// assertDependencyGeneratesLock is an expensive test-only invariant
+// check installed via TestingKnobs.LockValidation:
+//
+// If two rows have a lock conflict, they may have a dependency but are
+// not guaranteed to. However, if two rows _don't_ have a lock conflict,
+// they must not have a dependency.
+func assertDependencyGeneratesLock(
+	ctx context.Context, ls *LockSynthesizer, rows []ldrdecoder.DecodedRow, rowLocks [][]Lock,
+) error {
+	// Iterate every pair of rows and see if we generate a dependency.
+	// N.B. we normally only check for dependencies if we had a lock
+	// conflict.
+	for i := range rows {
+		// Find all the locks generated for row_i.
+		iLocks := make(map[LockHash]bool, len(rowLocks[i]))
+		for _, l := range rowLocks[i] {
+			iLocks[l.Hash] = true
+		}
+		for j := range rows {
+			if i == j {
+				continue
+			}
+			dep, err := ls.dependsOn(ctx, rows[i], rows[j])
+			if err != nil {
+				return err
+			}
+			// if row i is dependent on row j, then the two must share at least one
+			// lock hash.
+			if dep {
+				matchingLock := false
+				for _, l := range rowLocks[j] {
+					if iLocks[l.Hash] {
+						matchingLock = true
+						break
+					}
+				}
+				if !matchingLock {
+					return errors.AssertionFailedf(
+						"row %d depends on row %d but we did not generate a lock", i, j)
+				}
+			}
+		}
+	}
+	return nil
+}
 
 // overlappingLocks counts lock hashes shared between two LockSets,
 // separated by whether the overlap involves a write lock (at least one
@@ -66,10 +113,10 @@ func requireSortOrder(
 		// Compare PK value (first datum).
 		wantPK := want.Row[0]
 		gotPK := got.Row[0]
-		if want.IsDelete {
+		if want.IsDeleteRow() {
 			wantPK = want.PrevRow[0]
 		}
-		if got.IsDelete {
+		if got.IsDeleteRow() {
 			gotPK = got.PrevRow[0]
 		}
 		require.Equal(t, wantPK, gotPK,
@@ -191,6 +238,12 @@ func selfRefRow(id, parentID, data int) tree.Datums {
 	}
 }
 
+// pkFKRow builds datums for schemas (id INT PRIMARY KEY) and
+// (id INT PRIMARY KEY REFERENCES pk_fk_parent(id)).
+func pkFKRow(id int) tree.Datums {
+	return tree.Datums{tree.NewDInt(tree.DInt(id))}
+}
+
 // compositeFKParentRow builds datums for schema
 // (a INT, b INT, c INT, d INT, val INT, PRIMARY KEY (a, b), UNIQUE (c, d)).
 func compositeFKParentRow(a, b, c, d, val int) tree.Datums {
@@ -249,6 +302,11 @@ func TestDeriveLocks(t *testing.T) {
 			parent_id INT REFERENCES fk_self_ref(id),
 			data INT
 		)`)
+	runner.Exec(t, `CREATE TABLE pk_fk_parent (id INT PRIMARY KEY)`)
+	runner.Exec(t, `
+		CREATE TABLE pk_fk_child (
+			id INT PRIMARY KEY REFERENCES pk_fk_parent(id)
+		)`)
 	runner.Exec(t, `
 		CREATE TABLE composite_fk_parent (
 			a INT, b INT, c INT, d INT, val INT,
@@ -279,6 +337,12 @@ func TestDeriveLocks(t *testing.T) {
 	selfRefDesc := cdctest.GetHydratedTableDescriptor(
 		t, s.ExecutorConfig(), "fk_self_ref",
 	)
+	pkFKParentDesc := cdctest.GetHydratedTableDescriptor(
+		t, s.ExecutorConfig(), "pk_fk_parent",
+	)
+	pkFKChildDesc := cdctest.GetHydratedTableDescriptor(
+		t, s.ExecutorConfig(), "pk_fk_child",
+	)
 	compositeFKParentDesc := cdctest.GetHydratedTableDescriptor(
 		t, s.ExecutorConfig(), "composite_fk_parent",
 	)
@@ -292,6 +356,8 @@ func TestDeriveLocks(t *testing.T) {
 	parentEB := ldrdecoder.NewTestEventBuilder(t, parentDesc.TableDesc())
 	childEB := ldrdecoder.NewTestEventBuilder(t, childDesc.TableDesc())
 	selfRefEB := ldrdecoder.NewTestEventBuilder(t, selfRefDesc.TableDesc())
+	pkFKParentEB := ldrdecoder.NewTestEventBuilder(t, pkFKParentDesc.TableDesc())
+	pkFKChildEB := ldrdecoder.NewTestEventBuilder(t, pkFKChildDesc.TableDesc())
 	compositeFKParentEB := ldrdecoder.NewTestEventBuilder(t, compositeFKParentDesc.TableDesc())
 	compositeChildEB := ldrdecoder.NewTestEventBuilder(t, compositeChildDesc.TableDesc())
 	txnTime := s.Clock().Now()
@@ -305,6 +371,8 @@ func TestDeriveLocks(t *testing.T) {
 			{SourceDescriptor: parentDesc, DestID: parentDesc.GetID()},
 			{SourceDescriptor: childDesc, DestID: childDesc.GetID()},
 			{SourceDescriptor: selfRefDesc, DestID: selfRefDesc.GetID()},
+			{SourceDescriptor: pkFKParentDesc, DestID: pkFKParentDesc.GetID()},
+			{SourceDescriptor: pkFKChildDesc, DestID: pkFKChildDesc.GetID()},
 			{SourceDescriptor: compositeFKParentDesc, DestID: compositeFKParentDesc.GetID()},
 			{SourceDescriptor: compositeChildDesc, DestID: compositeChildDesc.GetID()},
 		},
@@ -323,9 +391,14 @@ func TestDeriveLocks(t *testing.T) {
 			{DestID: parentDesc.GetID()},
 			{DestID: childDesc.GetID()},
 			{DestID: selfRefDesc.GetID()},
+			{DestID: pkFKParentDesc.GetID()},
+			{DestID: pkFKChildDesc.GetID()},
 			{DestID: compositeFKParentDesc.GetID()},
 			{DestID: compositeChildDesc.GetID()},
 		},
+		WithTestingKnobs(TestingKnobs{
+			LockValidation: assertDependencyGeneratesLock,
+		}),
 	)
 	require.NoError(t, err)
 
@@ -825,6 +898,28 @@ func TestDeriveLocks(t *testing.T) {
 			},
 		},
 		{
+			// Deleting a child and its parent where the child's FK column is
+			// also its primary key.
+			//
+			// This test is a regression test for the following behavior:
+			//	1. We always emit the PK for a deleted row.
+			//	2. It's possible for a FK (but not a UC) to decode as
+			//	   the same exact value as its own PK.
+			// Deleting such a row would appear as though the fk was updated
+			// rather than deleted if we only checked the row values, instead
+			// of the actual decoded row IsDelete. This would cause this test
+			// to erroneously detect a cycle.
+			name: "fk_delete_child_then_parent_pk_fk",
+			txn1: txnCase{
+				events: []streampb.StreamEvent_KV{
+					pkFKParentEB.DeleteEvent(txnTime, pkFKRow(1)),
+					pkFKChildEB.DeleteEvent(txnTime, pkFKRow(1)),
+				},
+				writeLockCount: 3,
+				order:          []int{1, 0},
+			},
+		},
+		{
 			// Inserting a new parent and a child that references it in the
 			// same txn. The parent must be inserted before the child so the
 			// FK reference is valid.
@@ -979,6 +1074,50 @@ func TestDeriveLocks(t *testing.T) {
 				// child: FK(parent_id=5)
 				readLockCount: 1,
 				order:         []int{1, 0},
+			},
+		},
+		{
+			// Test that tombstone events are properly ordered with their deletes,
+			// and that FK locks are unnecessarily emitted.
+			name: "tombstone_event",
+			txn1: txnCase{
+				events: []streampb.StreamEvent_KV{
+					childEB.DeleteEvent(txnTime, fkChildRow(1, 10, 50, 0)),
+				},
+				// PK(id=1) + outbound FK(parent_id=10, read) + outbound FK(parent_ref=50, read).
+				writeLockCount: 1,
+				readLockCount:  2,
+				order:          []int{0},
+			},
+			txn2: txnCase{
+				events: []streampb.StreamEvent_KV{
+					childEB.TombstoneEvent(txnTime, fkChildRow(1, 10, 50, 0)),
+				},
+				// PK only, tombstone events shouldn't emit FK locks.
+				writeLockCount: 1,
+				order:          []int{0},
+			},
+			writeOverlapCount: 1,
+		},
+		{
+			// Updating a parent's non-constraint column and inserting a
+			// child that references the parent's UC in the same txn. The
+			// parent update touches no FK/UC columns, so it emits only a
+			// PK lock and does not conflict with the child's FK read
+			// locks on the unchanged referenced values.
+			name: "fk_update_parent_unreferenced_col_insert_child_same_txn",
+			txn1: txnCase{
+				events: []streampb.StreamEvent_KV{
+					parentEB.UpdateEvent(txnTime,
+						fkParentRow(10, 50, 1),
+						fkParentRow(10, 50, 0)),
+					childEB.InsertEvent(txnTime, fkChildRow(1, 10, 50, 0)),
+				},
+				// parent update: PK only.
+				// child insert: PK + FK(read,parent_id=10) + FK(read,parent_ref=50).
+				writeLockCount: 2,
+				readLockCount:  2,
+				order:          []int{0, 1},
 			},
 		},
 		{
