@@ -13589,36 +13589,36 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.exhausted_duration_nanos.app_tenant.can_burst
-      exported_name: admission_cpu_time_tokens_exhausted_duration_nanos_app_tenant_can_burst
-      description: Cumulative nanoseconds the app_tenant/can_burst CPU time token bucket has spent exhausted (tokens <= 0); rate() gives the fraction of wall-clock time the bucket was exhausted
+    - name: admission.cpu_time_tokens.exhausted_duration_nanos.can_burst
+      exported_name: admission_cpu_time_tokens_exhausted_duration_nanos_can_burst
+      description: Cumulative nanoseconds the can_burst CPU time token bucket has spent exhausted (tokens <= 0); rate() gives the fraction of wall-clock time the bucket was exhausted
       y_axis_label: Nanoseconds
       type: COUNTER
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.exhausted_duration_nanos.app_tenant.no_burst
-      exported_name: admission_cpu_time_tokens_exhausted_duration_nanos_app_tenant_no_burst
-      description: Cumulative nanoseconds the app_tenant/no_burst CPU time token bucket has spent exhausted (tokens <= 0); rate() gives the fraction of wall-clock time the bucket was exhausted
+    - name: admission.cpu_time_tokens.exhausted_duration_nanos.can_burst.app_tenant
+      exported_name: admission_cpu_time_tokens_exhausted_duration_nanos_can_burst_app_tenant
+      description: 'Deprecated: use admission.cpu_time_tokens.exhausted_duration_nanos.can_burst. Cumulative nanoseconds the can_burst CPU time token bucket has spent exhausted (tokens <= 0); rate() gives the fraction of wall-clock time the bucket was exhausted'
       y_axis_label: Nanoseconds
       type: COUNTER
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.exhausted_duration_nanos.system_tenant.can_burst
-      exported_name: admission_cpu_time_tokens_exhausted_duration_nanos_system_tenant_can_burst
-      description: Cumulative nanoseconds the system_tenant/can_burst CPU time token bucket has spent exhausted (tokens <= 0); rate() gives the fraction of wall-clock time the bucket was exhausted
+    - name: admission.cpu_time_tokens.exhausted_duration_nanos.no_burst
+      exported_name: admission_cpu_time_tokens_exhausted_duration_nanos_no_burst
+      description: Cumulative nanoseconds the no_burst CPU time token bucket has spent exhausted (tokens <= 0); rate() gives the fraction of wall-clock time the bucket was exhausted
       y_axis_label: Nanoseconds
       type: COUNTER
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.exhausted_duration_nanos.system_tenant.no_burst
-      exported_name: admission_cpu_time_tokens_exhausted_duration_nanos_system_tenant_no_burst
-      description: Cumulative nanoseconds the system_tenant/no_burst CPU time token bucket has spent exhausted (tokens <= 0); rate() gives the fraction of wall-clock time the bucket was exhausted
+    - name: admission.cpu_time_tokens.exhausted_duration_nanos.no_burst.app_tenant
+      exported_name: admission_cpu_time_tokens_exhausted_duration_nanos_no_burst_app_tenant
+      description: 'Deprecated: use admission.cpu_time_tokens.exhausted_duration_nanos.no_burst. Cumulative nanoseconds the no_burst CPU time token bucket has spent exhausted (tokens <= 0); rate() gives the fraction of wall-clock time the bucket was exhausted'
       y_axis_label: Nanoseconds
       type: COUNTER
       unit: NANOSECONDS
@@ -13634,26 +13634,26 @@ layers:
       aggregation: AVG
       derivative: NONE
       owner: cockroachdb/admission-control
+    - name: admission.cpu_time_tokens.per_tenant.admitted_count
+      exported_name: admission_cpu_time_tokens_per_tenant_admitted_count
+      description: Cumulative number of requests admitted per tenant by CPU time token admission control; use with wait_time_nanos to compute mean wait time via rate(wait_time) / rate(admitted_count)
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/admission-control
     - name: admission.cpu_time_tokens.per_tenant.admitted_count.app_tenant
       exported_name: admission_cpu_time_tokens_per_tenant_admitted_count_app_tenant
-      description: Cumulative number of requests admitted per tenant by CPU time token admission control; use with wait_time_nanos to compute mean wait time via rate(wait_time) / rate(admitted_count)
+      description: 'Deprecated: use admission.cpu_time_tokens.per_tenant.admitted_count. Cumulative number of requests admitted per tenant by CPU time token admission control; use with wait_time_nanos to compute mean wait time via rate(wait_time) / rate(admitted_count)'
       y_axis_label: Requests
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.per_tenant.admitted_count.system_tenant
-      exported_name: admission_cpu_time_tokens_per_tenant_admitted_count_system_tenant
-      description: Cumulative number of requests admitted per tenant by CPU time token admission control; use with wait_time_nanos to compute mean wait time via rate(wait_time) / rate(admitted_count)
-      y_axis_label: Requests
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.per_tenant.tokens_returned.app_tenant
-      exported_name: admission_cpu_time_tokens_per_tenant_tokens_returned_app_tenant
+    - name: admission.cpu_time_tokens.per_tenant.tokens_returned
+      exported_name: admission_cpu_time_tokens_per_tenant_tokens_returned
       description: Cumulative CPU time tokens returned per tenant, for example when actual CPU usage was lower than the initial estimate; rate() gives the per-tenant token return rate
       y_axis_label: Tokens
       type: COUNTER
@@ -13661,9 +13661,18 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.per_tenant.tokens_returned.system_tenant
-      exported_name: admission_cpu_time_tokens_per_tenant_tokens_returned_system_tenant
-      description: Cumulative CPU time tokens returned per tenant, for example when actual CPU usage was lower than the initial estimate; rate() gives the per-tenant token return rate
+    - name: admission.cpu_time_tokens.per_tenant.tokens_returned.app_tenant
+      exported_name: admission_cpu_time_tokens_per_tenant_tokens_returned_app_tenant
+      description: 'Deprecated: use admission.cpu_time_tokens.per_tenant.tokens_returned. Cumulative CPU time tokens returned per tenant, for example when actual CPU usage was lower than the initial estimate; rate() gives the per-tenant token return rate'
+      y_axis_label: Tokens
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/admission-control
+    - name: admission.cpu_time_tokens.per_tenant.tokens_used
+      exported_name: admission_cpu_time_tokens_per_tenant_tokens_used
+      description: Cumulative CPU time tokens consumed per tenant by admitted work; rate() gives the per-tenant token consumption rate
       y_axis_label: Tokens
       type: COUNTER
       unit: COUNT
@@ -13672,106 +13681,97 @@ layers:
       owner: cockroachdb/admission-control
     - name: admission.cpu_time_tokens.per_tenant.tokens_used.app_tenant
       exported_name: admission_cpu_time_tokens_per_tenant_tokens_used_app_tenant
-      description: Cumulative CPU time tokens consumed per tenant by admitted work; rate() gives the per-tenant token consumption rate
+      description: 'Deprecated: use admission.cpu_time_tokens.per_tenant.tokens_used. Cumulative CPU time tokens consumed per tenant by admitted work; rate() gives the per-tenant token consumption rate'
       y_axis_label: Tokens
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.per_tenant.tokens_used.system_tenant
-      exported_name: admission_cpu_time_tokens_per_tenant_tokens_used_system_tenant
-      description: Cumulative CPU time tokens consumed per tenant by admitted work; rate() gives the per-tenant token consumption rate
-      y_axis_label: Tokens
+    - name: admission.cpu_time_tokens.per_tenant.wait_time_nanos
+      exported_name: admission_cpu_time_tokens_per_tenant_wait_time_nanos
+      description: Cumulative nanoseconds of admission queue wait time per tenant in CPU time token admission control; use with admitted_count to compute mean wait time via rate(wait_time) / rate(admitted_count)
+      y_axis_label: Nanoseconds
       type: COUNTER
-      unit: COUNT
+      unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
     - name: admission.cpu_time_tokens.per_tenant.wait_time_nanos.app_tenant
       exported_name: admission_cpu_time_tokens_per_tenant_wait_time_nanos_app_tenant
-      description: Cumulative nanoseconds of admission queue wait time per tenant in CPU time token admission control; use with admitted_count to compute mean wait time via rate(wait_time) / rate(admitted_count)
+      description: 'Deprecated: use admission.cpu_time_tokens.per_tenant.wait_time_nanos. Cumulative nanoseconds of admission queue wait time per tenant in CPU time token admission control; use with admitted_count to compute mean wait time via rate(wait_time) / rate(admitted_count)'
       y_axis_label: Nanoseconds
       type: COUNTER
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.per_tenant.wait_time_nanos.system_tenant
-      exported_name: admission_cpu_time_tokens_per_tenant_wait_time_nanos_system_tenant
-      description: Cumulative nanoseconds of admission queue wait time per tenant in CPU time token admission control; use with admitted_count to compute mean wait time via rate(wait_time) / rate(admitted_count)
-      y_axis_label: Nanoseconds
-      type: COUNTER
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.refill.added.app_tenant.can_burst
-      exported_name: admission_cpu_time_tokens_refill_added_app_tenant_can_burst
-      description: Cumulative tokens added to the app_tenant/can_burst CPU time token bucket via the refill process; rate() gives the effective refill rate
+    - name: admission.cpu_time_tokens.refill.added.can_burst
+      exported_name: admission_cpu_time_tokens_refill_added_can_burst
+      description: Cumulative tokens added to the can_burst CPU time token bucket via the refill process; rate() gives the effective refill rate
       y_axis_label: Tokens
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.refill.added.app_tenant.no_burst
-      exported_name: admission_cpu_time_tokens_refill_added_app_tenant_no_burst
-      description: Cumulative tokens added to the app_tenant/no_burst CPU time token bucket via the refill process; rate() gives the effective refill rate
+    - name: admission.cpu_time_tokens.refill.added.can_burst.app_tenant
+      exported_name: admission_cpu_time_tokens_refill_added_can_burst_app_tenant
+      description: 'Deprecated: use admission.cpu_time_tokens.refill.added.can_burst. Cumulative tokens added to the can_burst CPU time token bucket via the refill process; rate() gives the effective refill rate'
       y_axis_label: Tokens
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.refill.added.system_tenant.can_burst
-      exported_name: admission_cpu_time_tokens_refill_added_system_tenant_can_burst
-      description: Cumulative tokens added to the system_tenant/can_burst CPU time token bucket via the refill process; rate() gives the effective refill rate
+    - name: admission.cpu_time_tokens.refill.added.no_burst
+      exported_name: admission_cpu_time_tokens_refill_added_no_burst
+      description: Cumulative tokens added to the no_burst CPU time token bucket via the refill process; rate() gives the effective refill rate
       y_axis_label: Tokens
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.refill.added.system_tenant.no_burst
-      exported_name: admission_cpu_time_tokens_refill_added_system_tenant_no_burst
-      description: Cumulative tokens added to the system_tenant/no_burst CPU time token bucket via the refill process; rate() gives the effective refill rate
+    - name: admission.cpu_time_tokens.refill.added.no_burst.app_tenant
+      exported_name: admission_cpu_time_tokens_refill_added_no_burst_app_tenant
+      description: 'Deprecated: use admission.cpu_time_tokens.refill.added.no_burst. Cumulative tokens added to the no_burst CPU time token bucket via the refill process; rate() gives the effective refill rate'
       y_axis_label: Tokens
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.refill.removed.app_tenant.can_burst
-      exported_name: admission_cpu_time_tokens_refill_removed_app_tenant_can_burst
-      description: Cumulative tokens removed from the app_tenant/can_burst CPU time token bucket when refill rates decrease between intervals
+    - name: admission.cpu_time_tokens.refill.removed.can_burst
+      exported_name: admission_cpu_time_tokens_refill_removed_can_burst
+      description: Cumulative tokens removed from the can_burst CPU time token bucket when refill rates decrease between intervals
       y_axis_label: Tokens
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.refill.removed.app_tenant.no_burst
-      exported_name: admission_cpu_time_tokens_refill_removed_app_tenant_no_burst
-      description: Cumulative tokens removed from the app_tenant/no_burst CPU time token bucket when refill rates decrease between intervals
+    - name: admission.cpu_time_tokens.refill.removed.can_burst.app_tenant
+      exported_name: admission_cpu_time_tokens_refill_removed_can_burst_app_tenant
+      description: 'Deprecated: use admission.cpu_time_tokens.refill.removed.can_burst. Cumulative tokens removed from the can_burst CPU time token bucket when refill rates decrease between intervals'
       y_axis_label: Tokens
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.refill.removed.system_tenant.can_burst
-      exported_name: admission_cpu_time_tokens_refill_removed_system_tenant_can_burst
-      description: Cumulative tokens removed from the system_tenant/can_burst CPU time token bucket when refill rates decrease between intervals
+    - name: admission.cpu_time_tokens.refill.removed.no_burst
+      exported_name: admission_cpu_time_tokens_refill_removed_no_burst
+      description: Cumulative tokens removed from the no_burst CPU time token bucket when refill rates decrease between intervals
       y_axis_label: Tokens
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.refill.removed.system_tenant.no_burst
-      exported_name: admission_cpu_time_tokens_refill_removed_system_tenant_no_burst
-      description: Cumulative tokens removed from the system_tenant/no_burst CPU time token bucket when refill rates decrease between intervals
+    - name: admission.cpu_time_tokens.refill.removed.no_burst.app_tenant
+      exported_name: admission_cpu_time_tokens_refill_removed_no_burst_app_tenant
+      description: 'Deprecated: use admission.cpu_time_tokens.refill.removed.no_burst. Cumulative tokens removed from the no_burst CPU time token bucket when refill rates decrease between intervals'
       y_axis_label: Tokens
       type: COUNTER
       unit: COUNT

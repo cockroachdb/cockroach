@@ -377,12 +377,20 @@ type WorkQueue struct {
 }
 
 // groupAggMetrics groups the parent AggCounters from which per-group
-// child counters are created via AddChild.
+// child counters are created via AddChild. The *Alias fields, when
+// non-nil, are mirrors of the corresponding parent counters published
+// under a legacy metric name; see aliasAppTenantSuffix. Each Inc on a
+// per-group child is fanned out to the alias child so both metric
+// series carry identical values.
 type groupAggMetrics struct {
-	admittedCount  *aggmetric.AggCounter
-	waitTimeNanos  *aggmetric.AggCounter
-	tokensUsed     *aggmetric.AggCounter
-	tokensReturned *aggmetric.AggCounter
+	admittedCount       *aggmetric.AggCounter
+	waitTimeNanos       *aggmetric.AggCounter
+	tokensUsed          *aggmetric.AggCounter
+	tokensReturned      *aggmetric.AggCounter
+	admittedCountAlias  *aggmetric.AggCounter
+	waitTimeNanosAlias  *aggmetric.AggCounter
+	tokensUsedAlias     *aggmetric.AggCounter
+	tokensReturnedAlias *aggmetric.AggCounter
 }
 
 var _ requester = &WorkQueue{}
@@ -863,6 +871,9 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		q.adjustGroupUsedLocked(group, info.RequestedCount)
 		if group.perGroupMetrics.admittedCount != nil {
 			group.perGroupMetrics.admittedCount.Inc(1)
+			if group.perGroupMetrics.admittedCountAlias != nil {
+				group.perGroupMetrics.admittedCountAlias.Inc(1)
+			}
 		}
 		q.mu.Unlock()
 		q.granter.tookWithoutPermission(info.RequestedCount)
@@ -889,11 +900,12 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		// Fast-path. Try to grab token/slot.
 		// Optimistically update used to avoid locking again.
 		q.adjustGroupUsedLocked(group, info.RequestedCount)
-		// Save the admittedCount counter before releasing the mutex,
+		// Save the admittedCount counters before releasing the mutex,
 		// since group may be GC'd and its counters Unlink'd after
 		// unlock. Inc after Unlink is safe: the aggregate parent counter
 		// still gets the increment (see aggmetric.Counter.Unlink docs).
 		admittedCount := group.perGroupMetrics.admittedCount
+		admittedCountAlias := group.perGroupMetrics.admittedCountAlias
 		q.mu.Unlock()
 		// We have unlocked q.mu, so another concurrent request can also do tryGet
 		// and get ahead of this request. We don't need to be fair for such
@@ -901,6 +913,9 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		if q.granter.tryGet(burstQual, info.RequestedCount) {
 			if admittedCount != nil {
 				admittedCount.Inc(1)
+				if admittedCountAlias != nil {
+					admittedCountAlias.Inc(1)
+				}
 			}
 			q.metrics.incAdmitted(info.Priority)
 			if info.ReplicatedWorkInfo.Enabled {
@@ -1260,6 +1275,10 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 	if group.perGroupMetrics.admittedCount != nil {
 		group.perGroupMetrics.admittedCount.Inc(1)
 		group.perGroupMetrics.waitTimeNanos.Inc(waitDur.Nanoseconds())
+		if group.perGroupMetrics.admittedCountAlias != nil {
+			group.perGroupMetrics.admittedCountAlias.Inc(1)
+			group.perGroupMetrics.waitTimeNanosAlias.Inc(waitDur.Nanoseconds())
+		}
 	}
 	if !isInGroupHeap(group) {
 		q.mu.groupHeap.remove(group)
@@ -1374,10 +1393,17 @@ func (q *WorkQueue) adjustGroupUsedLocked(group *groupInfo, delta int64) {
 		group.used += uint64(delta)
 	}
 	if group.perGroupMetrics.tokensUsed != nil {
+		hasAlias := group.perGroupMetrics.tokensUsedAlias != nil
 		if delta > 0 {
 			group.perGroupMetrics.tokensUsed.Inc(delta)
+			if hasAlias {
+				group.perGroupMetrics.tokensUsedAlias.Inc(delta)
+			}
 		} else if delta < 0 {
 			group.perGroupMetrics.tokensReturned.Inc(-delta)
+			if hasAlias {
+				group.perGroupMetrics.tokensReturnedAlias.Inc(-delta)
+			}
 		}
 	}
 	if q.mode == usesCPUTimeTokens {
@@ -1837,12 +1863,18 @@ type groupInfo struct {
 }
 
 // groupMetrics groups the per-group metric children that are created
-// via AggCounter.AddChild for each group.
+// via AggCounter.AddChild for each group. The *Alias fields, when
+// non-nil, mirror the corresponding child counters under a legacy
+// metric name; see groupAggMetrics and aliasAppTenantSuffix.
 type groupMetrics struct {
-	admittedCount  *aggmetric.Counter
-	waitTimeNanos  *aggmetric.Counter
-	tokensUsed     *aggmetric.Counter
-	tokensReturned *aggmetric.Counter
+	admittedCount       *aggmetric.Counter
+	waitTimeNanos       *aggmetric.Counter
+	tokensUsed          *aggmetric.Counter
+	tokensReturned      *aggmetric.Counter
+	admittedCountAlias  *aggmetric.Counter
+	waitTimeNanosAlias  *aggmetric.Counter
+	tokensUsedAlias     *aggmetric.Counter
+	tokensReturnedAlias *aggmetric.Counter
 }
 
 // groupHeap is a heap of groups with waiting work, ordered by burst
@@ -1895,6 +1927,12 @@ func newGroupInfo(
 		ti.perGroupMetrics.waitTimeNanos = aggMetrics.waitTimeNanos.AddChild(kindStr, idStr)
 		ti.perGroupMetrics.tokensUsed = aggMetrics.tokensUsed.AddChild(kindStr, idStr)
 		ti.perGroupMetrics.tokensReturned = aggMetrics.tokensReturned.AddChild(kindStr, idStr)
+		if aggMetrics.admittedCountAlias != nil {
+			ti.perGroupMetrics.admittedCountAlias = aggMetrics.admittedCountAlias.AddChild(kindStr, idStr)
+			ti.perGroupMetrics.waitTimeNanosAlias = aggMetrics.waitTimeNanosAlias.AddChild(kindStr, idStr)
+			ti.perGroupMetrics.tokensUsedAlias = aggMetrics.tokensUsedAlias.AddChild(kindStr, idStr)
+			ti.perGroupMetrics.tokensReturnedAlias = aggMetrics.tokensReturnedAlias.AddChild(kindStr, idStr)
+		}
 	}
 	return ti
 }
@@ -1908,6 +1946,12 @@ func releaseGroupInfo(ti *groupInfo) {
 		ti.perGroupMetrics.waitTimeNanos.Unlink()
 		ti.perGroupMetrics.tokensUsed.Unlink()
 		ti.perGroupMetrics.tokensReturned.Unlink()
+	}
+	if ti.perGroupMetrics.admittedCountAlias != nil {
+		ti.perGroupMetrics.admittedCountAlias.Unlink()
+		ti.perGroupMetrics.waitTimeNanosAlias.Unlink()
+		ti.perGroupMetrics.tokensUsedAlias.Unlink()
+		ti.perGroupMetrics.tokensReturnedAlias.Unlink()
 	}
 	// NB: {waitingWorkHeap,openEpochsHeap}.Pop nil the slice elements when
 	// removing, so we are not inadvertently holding any references.
