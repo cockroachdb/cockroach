@@ -199,11 +199,10 @@ func validateWithLogicalType(
 			return nil
 		}
 
-		// Check for unsupported LogicalTypes that require nested column handling
-		if _, ok := logicalType.(schema.ListLogicalType); ok {
-			return unimplemented.NewWithIssuef(162543,
-				"ListLogicalType not supported (requires nested column chunk handling)")
-		}
+		// Check for unsupported LogicalTypes that require nested column handling.
+		// Note: ListLogicalType is not checked here because LIST columns are
+		// detected and validated at a higher level (detectListColumn). This
+		// function only sees the element's logical type for LIST columns.
 		if _, ok := logicalType.(schema.MapLogicalType); ok {
 			return unimplemented.NewWithIssuef(162543,
 				"MapLogicalType not supported (requires nested column chunk handling)")

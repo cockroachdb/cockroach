@@ -34,6 +34,9 @@ type parquetColumnMetadata struct {
 	// logicalType and convertedType describe the element's types, not the
 	// enclosing group's.
 	isList bool
+
+	// listInfo holds the list schema metadata; non-nil iff isList is true.
+	listInfo *parquetListColumnInfo
 }
 
 // Helper functions for common Parquet type conversions.
