@@ -591,8 +591,10 @@ func refillGranter(
 	for qual := range toAdd {
 		if v := toAdd[qual]; v > 0 {
 			metrics.RefillAdded[qual].Inc(v)
+			metrics.RefillAddedAppTenantAlias[qual].Inc(v)
 		} else if v < 0 {
 			metrics.RefillRemoved[qual].Inc(-v)
+			metrics.RefillRemovedAppTenantAlias[qual].Inc(-v)
 		}
 	}
 	granter.refill(toAdd, bucketCapacities, bucketMinimums, updateMetrics)

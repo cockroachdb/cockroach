@@ -65,6 +65,8 @@ func newCPUTimeTokenGranter(
 		g.mu.buckets[qual].exhaustedStart = now
 		g.mu.buckets[qual].exhaustedDuration =
 			metrics.ExhaustedDurationNanos[qual]
+		g.mu.buckets[qual].exhaustedDurationAlias =
+			metrics.ExhaustedDurationNanosAppTenantAlias[qual]
 	}
 	return g
 }
@@ -76,6 +78,9 @@ type tokenBucket struct {
 	exhaustedStart time.Time
 	// exhaustedDuration is a cumulative counter of nanoseconds spent exhausted.
 	exhaustedDuration *metric.Counter
+	// exhaustedDurationAlias mirrors exhaustedDuration under the old
+	// app_tenant-suffixed metric name. See aliasAppTenantSuffix.
+	exhaustedDurationAlias *metric.Counter
 }
 
 // updateTokenCount sets the bucket's token count and updates the
@@ -94,14 +99,22 @@ func (tb *tokenBucket) updateTokenCount(newTokens int64, now time.Time, flushToM
 	wasExhausted := tb.tokens <= 0
 	tb.tokens = newTokens
 	isExhausted := tb.tokens <= 0
+	incExhausted := func(elapsed int64) {
+		tb.exhaustedDuration.Inc(elapsed)
+		// The alias is optional: tests construct tokenBucket directly
+		// without one.
+		if tb.exhaustedDurationAlias != nil {
+			tb.exhaustedDurationAlias.Inc(elapsed)
+		}
+	}
 	switch {
 	case wasExhausted && !isExhausted:
-		tb.exhaustedDuration.Inc(now.Sub(tb.exhaustedStart).Nanoseconds())
+		incExhausted(now.Sub(tb.exhaustedStart).Nanoseconds())
 		tb.exhaustedStart = time.Time{}
 	case !wasExhausted && isExhausted:
 		tb.exhaustedStart = now
 	case isExhausted && flushToMetricNow:
-		tb.exhaustedDuration.Inc(now.Sub(tb.exhaustedStart).Nanoseconds())
+		incExhausted(now.Sub(tb.exhaustedStart).Nanoseconds())
 		tb.exhaustedStart = now
 	}
 }

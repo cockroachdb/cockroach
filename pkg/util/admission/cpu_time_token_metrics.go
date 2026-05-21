@@ -13,6 +13,15 @@ import (
 	"github.com/cockroachdb/crlib/crstrings"
 )
 
+// The per-bucket and per-tenant CTT metrics below were renamed when the
+// system_tenant/app_tenant tiers were collapsed into a single WorkQueue.
+// To keep existing dashboards functional, each renamed metric is also
+// published under its old app_tenant-suffixed name (the system_tenant
+// variants are gone). The aliases carry identical values to the new
+// metrics — they are not a partition of the data — so summing across
+// new and alias names will double-count.
+const aliasAppTenantSuffix = ".app_tenant"
+
 var (
 	cpuTimeTokenDampeningDeficitMeta = metric.Metadata{
 		Name: "admission.cpu_time_tokens.dampening_deficit_nanos",
@@ -121,15 +130,25 @@ type cpuTimeTokenMetrics struct {
 	// wall-clock time the bucket was exhausted, queryable over any window
 	// (1m, 5m, 30m, etc.).
 	ExhaustedDurationNanos [numBurstQualifications]*metric.Counter
+	// ExhaustedDurationNanosAppTenantAlias mirrors ExhaustedDurationNanos
+	// under the old app_tenant-suffixed metric names. See
+	// aliasAppTenantSuffix.
+	ExhaustedDurationNanosAppTenantAlias [numBurstQualifications]*metric.Counter
 
 	// RefillAdded tracks cumulative tokens added to each bucket via
 	// the refill process. rate(refill.added) gives the effective refill
 	// rate per bucket.
 	RefillAdded [numBurstQualifications]*metric.Counter
+	// RefillAddedAppTenantAlias mirrors RefillAdded under the old
+	// app_tenant-suffixed metric names. See aliasAppTenantSuffix.
+	RefillAddedAppTenantAlias [numBurstQualifications]*metric.Counter
 
 	// RefillRemoved tracks cumulative tokens removed from each bucket
 	// when refill rates decrease between intervals (negative delta).
 	RefillRemoved [numBurstQualifications]*metric.Counter
+	// RefillRemovedAppTenantAlias mirrors RefillRemoved under the old
+	// app_tenant-suffixed metric names. See aliasAppTenantSuffix.
+	RefillRemovedAppTenantAlias [numBurstQualifications]*metric.Counter
 
 	// AdmittedCountPerTenant and WaitTimeNanosPerTenant track per-tenant
 	// admission stats. Together they enable computing mean wait time per
@@ -140,12 +159,35 @@ type cpuTimeTokenMetrics struct {
 	// mean rather than a histogram, also for cost reasons.
 	AdmittedCountPerTenant *aggmetric.AggCounter
 	WaitTimeNanosPerTenant *aggmetric.AggCounter
+	// AdmittedCountPerTenantAppTenantAlias and
+	// WaitTimeNanosPerTenantAppTenantAlias mirror the corresponding
+	// AggCounters under the old app_tenant-suffixed names. See
+	// aliasAppTenantSuffix.
+	AdmittedCountPerTenantAppTenantAlias *aggmetric.AggCounter
+	WaitTimeNanosPerTenantAppTenantAlias *aggmetric.AggCounter
 
 	// TokensUsedPerTenant and TokensReturnedPerTenant track per-tenant
 	// token consumption and returns via adjustGroupUsedLocked. Together
 	// they give per-tenant visibility into token flow.
 	TokensUsedPerTenant     *aggmetric.AggCounter
 	TokensReturnedPerTenant *aggmetric.AggCounter
+	// TokensUsedPerTenantAppTenantAlias and
+	// TokensReturnedPerTenantAppTenantAlias mirror the corresponding
+	// AggCounters under the old app_tenant-suffixed names. See
+	// aliasAppTenantSuffix.
+	TokensUsedPerTenantAppTenantAlias     *aggmetric.AggCounter
+	TokensReturnedPerTenantAppTenantAlias *aggmetric.AggCounter
+}
+
+// aliasMeta returns a copy of meta with aliasAppTenantSuffix appended to
+// the metric name and a "Deprecated:" prefix on the Help text pointing
+// at the new name. Used to register parallel counters that preserve old
+// dashboards across metric renames.
+func aliasMeta(meta metric.Metadata) metric.Metadata {
+	newName := meta.Name
+	meta.Name += aliasAppTenantSuffix
+	meta.Help = fmt.Sprintf("Deprecated: use %s. %s", newName, meta.Help)
+	return meta
 }
 
 func makeCPUTimeTokenMetrics() *cpuTimeTokenMetrics {
@@ -157,14 +199,18 @@ func makeCPUTimeTokenMetrics() *cpuTimeTokenMetrics {
 	// keep working.
 	b := aggmetric.MakeBuilder("kind", "tenant_id")
 	m := &cpuTimeTokenMetrics{
-		DampeningDeficitNanos:   metric.NewCounter(cpuTimeTokenDampeningDeficitMeta),
-		Multiplier:              metric.NewGaugeFloat64(cpuTimeTokenMultiplierMeta),
-		TokensConsumed:          metric.NewCounter(cpuTimeTokensConsumedMeta),
-		TokensReturned:          metric.NewCounter(cpuTimeTokensReturnedMeta),
-		AdmittedCountPerTenant:  b.Counter(cpuTimeTokenAdmittedCountPerTenantMeta),
-		WaitTimeNanosPerTenant:  b.Counter(cpuTimeTokenWaitTimeNanosPerTenantMeta),
-		TokensUsedPerTenant:     b.Counter(cpuTimeTokensUsedPerTenantMeta),
-		TokensReturnedPerTenant: b.Counter(cpuTimeTokensReturnedPerTenantMeta),
+		DampeningDeficitNanos:                 metric.NewCounter(cpuTimeTokenDampeningDeficitMeta),
+		Multiplier:                            metric.NewGaugeFloat64(cpuTimeTokenMultiplierMeta),
+		TokensConsumed:                        metric.NewCounter(cpuTimeTokensConsumedMeta),
+		TokensReturned:                        metric.NewCounter(cpuTimeTokensReturnedMeta),
+		AdmittedCountPerTenant:                b.Counter(cpuTimeTokenAdmittedCountPerTenantMeta),
+		WaitTimeNanosPerTenant:                b.Counter(cpuTimeTokenWaitTimeNanosPerTenantMeta),
+		TokensUsedPerTenant:                   b.Counter(cpuTimeTokensUsedPerTenantMeta),
+		TokensReturnedPerTenant:               b.Counter(cpuTimeTokensReturnedPerTenantMeta),
+		AdmittedCountPerTenantAppTenantAlias:  b.Counter(aliasMeta(cpuTimeTokenAdmittedCountPerTenantMeta)),
+		WaitTimeNanosPerTenantAppTenantAlias:  b.Counter(aliasMeta(cpuTimeTokenWaitTimeNanosPerTenantMeta)),
+		TokensUsedPerTenantAppTenantAlias:     b.Counter(aliasMeta(cpuTimeTokensUsedPerTenantMeta)),
+		TokensReturnedPerTenantAppTenantAlias: b.Counter(aliasMeta(cpuTimeTokensReturnedPerTenantMeta)),
 	}
 	for qual := burstQualification(0); qual < numBurstQualifications; qual++ {
 		exhMeta := metric.Metadata{
@@ -179,6 +225,7 @@ func makeCPUTimeTokenMetrics() *cpuTimeTokenMetrics {
 			Unit:        metric.Unit_NANOSECONDS,
 		}
 		m.ExhaustedDurationNanos[qual] = metric.NewCounter(exhMeta)
+		m.ExhaustedDurationNanosAppTenantAlias[qual] = metric.NewCounter(aliasMeta(exhMeta))
 
 		addedMeta := metric.Metadata{
 			Name: fmt.Sprintf(
@@ -191,6 +238,7 @@ func makeCPUTimeTokenMetrics() *cpuTimeTokenMetrics {
 			Unit:        metric.Unit_COUNT,
 		}
 		m.RefillAdded[qual] = metric.NewCounter(addedMeta)
+		m.RefillAddedAppTenantAlias[qual] = metric.NewCounter(aliasMeta(addedMeta))
 
 		removedMeta := metric.Metadata{
 			Name: fmt.Sprintf(
@@ -203,6 +251,7 @@ func makeCPUTimeTokenMetrics() *cpuTimeTokenMetrics {
 			Unit:        metric.Unit_COUNT,
 		}
 		m.RefillRemoved[qual] = metric.NewCounter(removedMeta)
+		m.RefillRemovedAppTenantAlias[qual] = metric.NewCounter(aliasMeta(removedMeta))
 	}
 	return m
 }
