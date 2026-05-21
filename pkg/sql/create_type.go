@@ -605,11 +605,14 @@ func (p *planner) createDomainWithID(
 	// Assign a constraint ID and auto-generated name for the NOT NULL constraint.
 	var notNullConstraintName string
 	var notNullConstraintID descpb.ConstraintID
+	notNullState := descpb.TypeDescriptor_Domain_NONE
 	if n.DomainNotNull {
 		notNullConstraintName = chooseDomainConstraintName(
 			typeName.Type(), "not_null", usedNames,
 		)
 		notNullConstraintID = nextConstraintID
+		nextConstraintID++
+		notNullState = descpb.TypeDescriptor_Domain_ENFORCING
 	}
 
 	// Serialize default expression if present.
@@ -637,11 +640,12 @@ func (p *planner) createDomainWithID(
 		Kind:           descpb.TypeDescriptor_DOMAIN,
 		Domain: &descpb.TypeDescriptor_Domain{
 			BaseType:              baseType,
-			NotNull:               n.DomainNotNull,
+			NotNullState:          notNullState,
 			NotNullConstraintName: notNullConstraintName,
 			NotNullConstraintID:   notNullConstraintID,
 			DefaultExpr:           defaultExpr,
 			CheckConstraints:      checks,
+			NextConstraintID:      nextConstraintID,
 		},
 		Version:    1,
 		Privileges: privs,

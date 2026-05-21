@@ -411,6 +411,14 @@ func isConstraintWithoutIndexName(e scpb.Element) bool {
 	return false
 }
 
+func isConstraintName(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.ConstraintWithoutIndexName, *scpb.DomainConstraintName:
+		return true
+	}
+	return false
+}
+
 func isTriggerOrDependent(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.Trigger:

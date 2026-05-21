@@ -1,9 +1,8 @@
 setup
 CREATE DOMAIN salmon AS INT DEFAULT 0;
 CREATE TABLE t (c salmon);
-CREATE VIEW v AS SELECT c FROM t;
 ----
 
 test
-ALTER DOMAIN salmon RENAME TO trout;
+ALTER DOMAIN salmon SET NOT NULL;
 ----
