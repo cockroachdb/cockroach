@@ -1590,14 +1590,24 @@ func (a *Allocator) allocateTargetFromList(
 	return roachpb.ReplicationTarget{}, ""
 }
 
+// simulateRemoveTarget chooses which existing replica of the rebalance set
+// (voters for VoterTarget, non-voters for NonVoterTarget) to remove given
+// that a new replica is about to be added on targetStore.
+//
+// rebalanceSet is the existing replicas of the rebalance type PLUS the
+// to-be-added replica on targetStore (the caller appends it before
+// invoking; see RebalanceTarget). otherReplicas is the existing replicas
+// of the other type (untouched by this rebalance). candidates is the
+// subset of rebalanceSet that is eligible for removal (already filtered
+// for raft removability — notably excludes the just-appended target).
 func (a Allocator) simulateRemoveTarget(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
 	targetStore roachpb.StoreID,
 	conf *roachpb.SpanConfig,
 	candidates []roachpb.ReplicaDescriptor,
-	existingVoters []roachpb.ReplicaDescriptor,
-	existingNonVoters []roachpb.ReplicaDescriptor,
+	rebalanceSet []roachpb.ReplicaDescriptor,
+	otherReplicas []roachpb.ReplicaDescriptor,
 	sl storepool.StoreList,
 	rangeUsageInfo allocator.RangeUsageInfo,
 	targetType TargetReplicaType,
@@ -1611,6 +1621,26 @@ func (a Allocator) simulateRemoveTarget(
 			}
 		}
 	}
+
+	// If the to-be-added target lands on a node that already holds another
+	// replica of this range (i.e. the rebalance is logically a same-node
+	// store-to-store swap), narrow the remove candidates to that same node.
+	// See narrowRemoveCandidatesToSameNode for why.
+	narrowed, abort := narrowRemoveCandidatesToSameNode(
+		candidateStores, targetStore, rebalanceSet, otherReplicas)
+	if abort {
+		log.KvDistribution.VEventf(ctx, 2,
+			"refusing rebalance to s%d: target node already holds a replica "+
+				"but its same-node sibling is not a removable candidate", targetStore)
+		// Returning a removeReplica with the same StoreID as the add
+		// target signals the outer RebalanceTarget loop to skip this
+		// (add, remove) pair and try the next one from
+		// bestRebalanceTarget (the loop's check is `target.store.StoreID
+		// != removeReplica.StoreID`). The NodeID is unused by that
+		// check; zero is fine.
+		return roachpb.ReplicationTarget{StoreID: targetStore}, "", nil
+	}
+	candidateStores = narrowed
 
 	// Update statistics first
 	switch t := targetType; t {
@@ -1626,7 +1656,7 @@ func (a Allocator) simulateRemoveTarget(
 
 		return a.RemoveTarget(
 			ctx, storePool, conf, storepool.MakeStoreList(candidateStores),
-			existingVoters, existingNonVoters, VoterTarget, options,
+			rebalanceSet, otherReplicas, VoterTarget, options,
 		)
 	case NonVoterTarget:
 		storePool.UpdateLocalStoreAfterRebalance(targetStore, rangeUsageInfo, roachpb.ADD_NON_VOTER)
@@ -1639,11 +1669,82 @@ func (a Allocator) simulateRemoveTarget(
 			targetStore)
 		return a.RemoveTarget(
 			ctx, storePool, conf, storepool.MakeStoreList(candidateStores),
-			existingVoters, existingNonVoters, NonVoterTarget, options,
+			rebalanceSet, otherReplicas, NonVoterTarget, options,
 		)
 	default:
 		panic(fmt.Sprintf("unknown targetReplicaType: %s", t))
 	}
+}
+
+// rebalanceSetNodeFor returns the NodeID for storeID by scanning the
+// rebalance set. Returns 0 if not found.
+func rebalanceSetNodeFor(
+	rebalanceSet []roachpb.ReplicaDescriptor, storeID roachpb.StoreID,
+) roachpb.NodeID {
+	for _, repl := range rebalanceSet {
+		if repl.StoreID == storeID {
+			return repl.NodeID
+		}
+	}
+	return 0
+}
+
+// narrowRemoveCandidatesToSameNode implements the
+// same-node-swap-on-conflict policy used by simulateRemoveTarget.
+//
+// The contract: if the to-be-added rebalance target (identified by
+// targetStore, with its NodeID resolved from rebalanceSet) lands on a
+// node that already holds another replica of this range (counting both
+// the rebalanceSet and otherReplicas, since validateOneReplicaPerNode is
+// type-agnostic — an ADD_VOTER on a node already holding a non-voter,
+// paired with a cross-node REMOVE, is rejected just as readily as the
+// same-type case), the returned candidate slice is narrowed to
+// candidates on that same node. Otherwise the original slice is returned
+// unchanged. If the same-node sibling exists but is not among the
+// removable candidates (e.g. it was filtered out by
+// simulateFilterUnremovableReplicas because it is the leaseholder), the
+// function returns abort=true to signal that the caller should reject
+// this (add, remove) pair entirely; the rebalance loop will then try
+// the next one from bestRebalanceTarget.
+//
+// Without this narrowing, the RemoveTarget call that simulateRemoveTarget
+// makes downstream scores removal candidates against the existing replica
+// set without modelling the simultaneous ADD. With per-store
+// voter_constraints that none of the existing voters individually
+// satisfy, all candidates score "constraint check fail" equally, and
+// locality-collapsed diversity scores then leave the tie-break to pick
+// an arbitrary cross-node remove — which the production validator throws
+// away, leaving the range stuck forever. See cockroach issue #170471.
+func narrowRemoveCandidatesToSameNode(
+	candidateStores []roachpb.StoreDescriptor,
+	targetStore roachpb.StoreID,
+	rebalanceSet, otherReplicas []roachpb.ReplicaDescriptor,
+) (narrowed []roachpb.StoreDescriptor, abort bool) {
+	targetNodeID := rebalanceSetNodeFor(rebalanceSet, targetStore)
+	if targetNodeID == 0 {
+		return candidateStores, false
+	}
+	hasOnNode := func(repls []roachpb.ReplicaDescriptor) bool {
+		for _, repl := range repls {
+			if repl.StoreID != targetStore && repl.NodeID == targetNodeID {
+				return true
+			}
+		}
+		return false
+	}
+	if !hasOnNode(rebalanceSet) && !hasOnNode(otherReplicas) {
+		return candidateStores, false
+	}
+	sameNode := candidateStores[:0]
+	for _, c := range candidateStores {
+		if c.Node.NodeID == targetNodeID {
+			sameNode = append(sameNode, c)
+		}
+	}
+	if len(sameNode) == 0 {
+		return nil, true
+	}
+	return sameNode, false
 }
 
 // RemoveTarget returns a suitable replica (of the given type) to remove from

@@ -109,6 +109,13 @@ var runAsimTests = envutil.EnvOrDefaultBool("COCKROACH_RUN_ASIM_TESTS", false)
 //     of the simulation or with some delay after the simulation stats, if
 //     specified.
 //
+//   - set_store_attrs store=<int> attrs=(a,b,...) [delay=<duration>]
+//     Overwrites the store-level attributes of the store with the given
+//     StoreID. The constraint matcher in span configs sees these as "+attr"
+//     tokens (e.g. voter_constraints={"+ssd":1}). Stores have empty Attrs by
+//     default, so this is the only way to make constraints discriminate
+//     between sibling stores on the same node (since locality is per-node).
+//
 //   - add_node: [stores=<int>] [locality=<string>] [delay=<duration>]
 //     Add a node to the cluster after initial generation with some delay,
 //     locality and number of stores on the node. The default values are
@@ -566,6 +573,21 @@ func TestDataDriven(t *testing.T) {
 						TargetEvent: event.SetNodeLocalityEvent{
 							NodeID:         state.NodeID(nodeID),
 							LocalityString: localityString,
+						},
+					})
+					return ""
+				case "set_store_attrs":
+					var store int
+					var attrs []string
+					var delay time.Duration
+					scanMustExist(t, d, "store", &store)
+					scanMustExist(t, d, "attrs", &attrs)
+					scanIfExists(t, d, "delay", &delay)
+					events = append(events, scheduled.ScheduledEvent{
+						At: settingsGen.Settings.StartTime.Add(delay),
+						TargetEvent: event.SetStoreAttrsEvent{
+							StoreID: state.StoreID(store),
+							Attrs:   attrs,
 						},
 					})
 					return ""

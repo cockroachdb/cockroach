@@ -95,6 +95,10 @@ type State interface {
 	AddStore(NodeID) (Store, bool)
 	// SetStoreCapacity sets the capacity in bytes of the store with ID storeID.
 	SetStoreCapacity(StoreID, int64)
+	// SetStoreAttrs sets store-level attributes on the store with ID storeID.
+	// Constraints in span configs match against these via the "+attr" token
+	// (e.g. voter_constraints={"+ssd":1}). Stores have empty Attrs by default.
+	SetStoreAttrs(StoreID, []string)
 	// CanAddReplica returns whether adding a replica for the Range with ID RangeID
 	// to the Store with ID StoreID is valid.
 	CanAddReplica(RangeID, StoreID) bool
