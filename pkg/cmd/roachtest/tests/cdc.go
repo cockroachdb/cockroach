@@ -3614,8 +3614,22 @@ CONFIGURE ZONE USING
 	// Flush.Frequency, the set traces the linger tradeoff across cadences.
 	// cdc/linger/control is the no-batching baseline: kafka_sink_config is
 	// omitted entirely so the sink uses defaults (no CDC-level linger; kgo
-	// handles its own producer-side batching). Run the whole sweep on one
-	// reused cluster with:
+	// handles its own producer-side batching).
+	//
+	// The cluster is multi-region with the kafka sink node in us-west1 and
+	// everything else (crdb + workload) in us-east1. Cross-region RTT to the
+	// sink (~25-35ms) makes per-flush network cost a meaningful fraction of
+	// total work, which is the regime where the linger tradeoff actually
+	// manifests as a throughput effect. The earlier colocated runs showed
+	// per-flush overhead was sub-ms in a same-zone setup, so cadence had no
+	// measurable throughput impact — the bottleneck was always upstream.
+	//
+	// Layout (withNumSinkNodes(1) at runtime):
+	//   node 1-4: crdb       (us-east1-b)
+	//   node 5:   kafka sink (us-west1-b)
+	//   node 6:   workload   (us-east1-b)
+	//
+	// Run the whole sweep on one reused cluster with:
 	//   bin/roachtest run --cluster <name> --wipe cdc/linger
 	for _, flushFreq := range []string{"", "10ms", "100ms", "500ms", "1s", "5s"} {
 		flushFreq := flushFreq
@@ -3624,12 +3638,13 @@ CONFIGURE ZONE USING
 			name = fmt.Sprintf("cdc/linger/%s", flushFreq)
 		}
 		r.Add(registry.TestSpec{
-			Name:             name,
-			Owner:            registry.OwnerCDC,
-			Benchmark:        true,
-			Cluster:          r.MakeClusterSpec(6, spec.CPU(16), spec.WorkloadNode()),
+			Name:      name,
+			Owner:     registry.OwnerCDC,
+			Benchmark: true,
+			Cluster: r.MakeClusterSpec(6, spec.CPU(16), spec.WorkloadNode(),
+				spec.Geo(), spec.GCEZones("us-east1-b,us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-east1-b")),
 			Leases:           registry.MetamorphicLeases,
-			CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
+			CompatibleClouds: registry.OnlyGCE,
 			Suites:           registry.Suites(registry.Weekly),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runCDCLingerBench(ctx, t, c, flushFreq)
@@ -3722,11 +3737,11 @@ func runCDCLingerBench(ctx context.Context, t test.Test, c cluster.Cluster, flus
 	)
 	defer doneStats()
 
-	// --ramp staggers worker startup over 10m (workload/cli/run.go:580-590),
+	// --ramp staggers worker startup over 5m (workload/cli/run.go:580-590),
 	// so concurrency — and therefore offered load — grows roughly linearly
 	// from ~0 to N until the system saturates. --duration is additive with
-	// --ramp (workload/cli/run.go:51), so a 2m duration gives a 2-minute
-	// steady-state tail past the ramp — 12m of workload total. --read-percent=0
+	// --ramp (workload/cli/run.go:51), so a 1m duration gives a 1-minute
+	// steady-state tail past the ramp — 6m of workload total. --read-percent=0
 	// makes every op a write so every op produces a changefeed event. We
 	// intentionally do not pass --histograms: workload-side per-tick snapshots
 	// are suppressed during the ramp (workload/cli/run.go:636), so they would
@@ -3734,8 +3749,8 @@ func runCDCLingerBench(ctx context.Context, t test.Test, c cluster.Cluster, flus
 	//
 	concurrency := len(ct.crdbNodes) * 64
 	const (
-		ramp     = 10 * time.Minute
-		duration = 2 * time.Minute
+		ramp     = 5 * time.Minute
+		duration = 1 * time.Minute
 	)
 	t.Status("running kv workload with ramp")
 	if err := c.RunE(ctx, option.WithNodes(ct.workloadNode), fmt.Sprintf(
