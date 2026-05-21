@@ -160,7 +160,7 @@ func TestPlanGramFormatPretty(t *testing.T) {
 				},
 			}},
 			expectedOneLine:  "root: (Select (Scan));",
-			expectedNewlines: "root: (Select (Scan));\n",
+			expectedNewlines: "root:\n  (Select\n    (Scan));\n",
 		},
 		{
 			name: "child referencing nil",
@@ -202,7 +202,7 @@ func TestPlanGramFormatPretty(t *testing.T) {
 				children: []planGramTerm{&planGramExpr{op: opt.UnknownOp}},
 			}},
 			expectedOneLine:  "root: (Select (_));",
-			expectedNewlines: "root: (Select (_));\n",
+			expectedNewlines: "root:\n  (Select\n    (_));\n",
 		},
 		{
 			name: "with nonterminal production",
@@ -216,8 +216,12 @@ func TestPlanGramFormatPretty(t *testing.T) {
 				},
 			}},
 			expectedOneLine: "root: (Select (IndexJoin scan)); scan: (Scan Index=\"abc_b_idx\") | (Scan Index=\"abc_c_idx\");",
-			expectedNewlines: "root: (Select (IndexJoin scan));\n" +
-				"scan: (Scan Index=\"abc_b_idx\") | (Scan Index=\"abc_c_idx\");\n",
+			expectedNewlines: "root:\n" +
+				"  (Select\n" +
+				"    (IndexJoin scan));\n" +
+				"scan:\n" +
+				"  (Scan Index=\"abc_b_idx\")\n" +
+				"  | (Scan Index=\"abc_c_idx\");\n",
 		},
 		{
 			name: "multiple fields",
@@ -243,10 +247,16 @@ func TestPlanGramFormatPretty(t *testing.T) {
 			expectedNewlines: "root: (Scan Index=\"has \\\"quotes\\\" and spaces\");\n",
 		},
 		{
-			name:             "cyclical productions",
-			plangram:         PlanGram{root: cycle},
-			expectedOneLine:  "root: cycle; cycle: (InnerJoin cycle cycle) | scan; scan: (Scan Index=\"abc_b_idx\") | (Scan Index=\"abc_c_idx\");",
-			expectedNewlines: "root: cycle;\ncycle: (InnerJoin cycle cycle) | scan;\nscan: (Scan Index=\"abc_b_idx\") | (Scan Index=\"abc_c_idx\");\n",
+			name:            "cyclical productions",
+			plangram:        PlanGram{root: cycle},
+			expectedOneLine: "root: cycle; cycle: (InnerJoin cycle cycle) | scan; scan: (Scan Index=\"abc_b_idx\") | (Scan Index=\"abc_c_idx\");",
+			expectedNewlines: "root: cycle;\n" +
+				"cycle:\n" +
+				"  (InnerJoin cycle cycle)\n" +
+				"  | scan;\n" +
+				"scan:\n" +
+				"  (Scan Index=\"abc_b_idx\")\n" +
+				"  | (Scan Index=\"abc_c_idx\");\n",
 		},
 	}
 

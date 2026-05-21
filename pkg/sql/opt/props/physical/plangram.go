@@ -16,7 +16,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -208,7 +207,9 @@ func (p PlanGram) WithNoneFallback() PlanGram {
 }
 
 // FormatPretty writes the full PlanGram grammar to the buffer, starting with
-// the root, optionally with multiple lines.
+// the root. If newlines is true, each production is on its own line and
+// nested parenthesized expressions are indented to their paren depth. If
+// newlines is false, the entire grammar is written on a single line.
 func (p PlanGram) FormatPretty(b *bytes.Buffer, newlines bool) {
 	if newlines {
 		defer b.WriteRune('\n')
@@ -222,9 +223,33 @@ func (p PlanGram) FormatPretty(b *bytes.Buffer, newlines bool) {
 		return
 	}
 
-	// formatTerm writes a RHS term to the buffer.
-	var formatTerm func(planGramTerm)
-	formatTerm = func(term planGramTerm) {
+	// hasNestedExpr reports whether term is an expression with at least one
+	// nested expression child. Such terms are broken across multiple lines
+	// in the indented form; expressions whose children are all refs/any/none
+	// stay on a single line.
+	hasNestedExpr := func(term planGramTerm) bool {
+		expr, ok := term.(*planGramExpr)
+		if !ok {
+			return false
+		}
+		for _, child := range expr.children {
+			if _, isExpr := child.(*planGramExpr); isExpr {
+				return true
+			}
+		}
+		return false
+	}
+
+	writeIndent := func(depth int) {
+		for i := 0; i < depth*2; i++ {
+			b.WriteRune(' ')
+		}
+	}
+
+	// formatTerm writes a RHS term to the buffer. depth is the current paren
+	// depth, used to indent broken expressions when newlines is true.
+	var formatTerm func(term planGramTerm, depth int)
+	formatTerm = func(term planGramTerm, depth int) {
 		if term == nil {
 			b.WriteString("any")
 			return
@@ -251,24 +276,50 @@ func (p PlanGram) FormatPretty(b *bytes.Buffer, newlines bool) {
 				b.WriteRune('=')
 				b.WriteString(strconv.Quote(field.Val))
 			}
+			breakChildren := newlines && hasNestedExpr(t)
 			for _, child := range t.children {
-				b.WriteRune(' ')
-				formatTerm(child)
+				if breakChildren {
+					b.WriteRune('\n')
+					writeIndent(depth + 1)
+				} else {
+					b.WriteRune(' ')
+				}
+				formatTerm(child, depth+1)
 			}
 			b.WriteRune(')')
 		default:
-			if buildutil.CrdbTestBuild {
-				panic(errors.AssertionFailedf("unexpected planGramTerm type %T", t))
-			}
+			panic(errors.AssertionFailedf("unexpected planGramTerm type %T", t))
 		}
 	}
 
-	b.WriteString("root: ")
-	formatTerm(p.root)
-	b.WriteRune(';')
+	// writeProduction emits a production. If newlines is true and the
+	// production has multiple rules or a single rule that needs breaking,
+	// the rules go on their own indented lines (with `|` prefixing alts);
+	// otherwise the production stays on a single line.
+	writeProduction := func(name string, rules []planGramTerm) {
+		b.WriteString(name)
+		b.WriteRune(':')
+		breakLines := newlines && (len(rules) > 1 || hasNestedExpr(rules[0]))
+		for i, rule := range rules {
+			if breakLines {
+				b.WriteRune('\n')
+				writeIndent(1)
+				if i > 0 {
+					b.WriteString("| ")
+				}
+			} else if i == 0 {
+				b.WriteRune(' ')
+			} else {
+				b.WriteString(" | ")
+			}
+			formatTerm(rule, 1)
+		}
+		b.WriteRune(';')
+	}
 
-	// Visit each LHS nonterminal reachable from the root, and for each, write all
-	// the production rules to the buffer.
+	writeProduction("root", []planGramTerm{p.root})
+
+	// Write each production reachable from the root.
 	visited := make(map[*planGramProduction]struct{})
 	p.root.visitProductions(visited, func(pp *planGramProduction) {
 		if newlines {
@@ -276,16 +327,7 @@ func (p PlanGram) FormatPretty(b *bytes.Buffer, newlines bool) {
 		} else {
 			b.WriteRune(' ')
 		}
-		b.WriteString(pp.name)
-		for i, rule := range pp.rules {
-			if i == 0 {
-				b.WriteString(": ")
-			} else {
-				b.WriteString(" | ")
-			}
-			formatTerm(rule)
-		}
-		b.WriteRune(';')
+		writeProduction(pp.name, pp.rules)
 	})
 }
 

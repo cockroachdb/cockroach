@@ -20,7 +20,6 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sqlerrors",
-        "//pkg/util/buildutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
