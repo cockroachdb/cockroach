@@ -611,8 +611,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	db.AdmissionPacerFactory = gcoords.ElasticCPU
 	sqlCPUProvider := admission.NewSQLCPUProvider(
 		&st.SV,
-		func(tenantID roachpb.TenantID) *admission.WorkQueue {
-			return gcoords.RegularCPU.GetCTTWorkQueue(tenantID.IsSystem())
+		func() *admission.WorkQueue {
+			return gcoords.RegularCPU.GetCTTWorkQueue()
 		},
 	)
 	db.SQLCPUProvider = sqlCPUProvider

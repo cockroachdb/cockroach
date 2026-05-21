@@ -20,45 +20,32 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// Serverless per-tier non-burstable utilization goals. See resetInterval
-// for more details.
-var KVCPUTimeAppUtilGoal = settings.RegisterFloatSetting(
+// KVCPUTimeUtilGoal is the non-burstable CPU utilization target. The
+// InternalKey retains the historical .app_tenant suffix (predating the
+// collapse) for storage continuity; the public name is the unsuffixed
+// admission.cpu_time_tokens.target_util.
+var KVCPUTimeUtilGoal = settings.RegisterFloatSetting(
 	settings.SystemOnly,
 	"admission.cpu_time_tokens.target_util.app_tenant",
-	"the target CPU utilization for app tenant work if using the KV CPU time "+
+	"the target CPU utilization if using the KV CPU time "+
 		"token system, value is in the interval [0,1] where 1 means all cores",
 	0.8,
-	settings.FloatWithMinimum(minTargetUtilFrac))
+	settings.FloatWithMinimum(minTargetUtilFrac),
+	settings.WithName("admission.cpu_time_tokens.target_util"))
 
-var KVCPUTimeSystemUtilGoal = settings.RegisterFloatSetting(
+// Keep the pre-collapse admission.cpu_time_tokens.target_util.system_tenant
+// setting registered as a no-op so external automation that still references
+// it does not see a missing-setting error. Its value is ignored;
+// KVCPUTimeUtilGoal is the sole target.
+var _ = settings.RegisterFloatSetting(
 	settings.SystemOnly,
 	"admission.cpu_time_tokens.target_util.system_tenant",
-	"the target CPU utilization for system tenant work if using the KV CPU "+
-		"time token system, value is in the interval [0,1] where 1 means all cores",
+	"retired: use admission.cpu_time_tokens.target_util",
 	0.95,
-	settings.FloatWithMinimum(minTargetUtilFrac))
-
-// KVCPUTimeUtilTarget is the non-burstable CPU utilization target in
-// resource manager mode. Resource groups that have not qualified for
-// burst are limited to this target.
-//
-// TODO(wenyihu): This setting is not yet consumed; it will be wired
-// into the filler when resourceManagerMode is implemented.
-var KVCPUTimeUtilTarget = settings.RegisterFloatSetting(
-	settings.SystemOnly,
-	"admission.cpu_time_tokens.target_util",
-	"the non-burstable CPU utilization target in resource manager mode "+
-		"(not yet active; reserved for future use), "+
-		"value is in the interval [0,1] where 1 means all cores",
-	0.75,
-	settings.FloatInRange(minTargetUtilFrac, 1.0))
+	settings.Retired)
 
 // KVCPUTimeUtilBurstDelta is the delta added to the non-burstable CPU
-// utilization target to compute the burstable utilization ceiling. In
-// Serverless mode this delta is added to both the system and app tenant
-// targets; in Resource Manager mode it is added to KVCPUTimeUtilTarget to
-// produce the ceiling for resource groups that have qualified for burst
-// (e.g. MAX_CPU groups).
+// utilization target to compute the burstable utilization ceiling.
 //
 // If target + delta exceeds 1.0, the burstable token bucket refill rate
 // will exceed the machine's CPU capacity. In practice this means burstable
@@ -70,10 +57,8 @@ var KVCPUTimeUtilBurstDelta = settings.RegisterFloatSetting(
 	settings.SystemOnly,
 	"admission.cpu_time_tokens.target_util.burst_delta",
 	"the delta between non-burstable & burstable CPU utilization target if "+
-		"using the KV CPU time token system, this delta is the same for both system "+
-		"& app tenant work, and is expressed in the same units as "+
-		"admission.cpu_time_tokens.target_util.app_tenant & "+
-		"admission.cpu_time_tokens.target_util.system_tenant (value is in the "+
+		"using the KV CPU time token system, expressed in the same units as "+
+		"admission.cpu_time_tokens.target_util (value is in the "+
 		"interval [0,1] where 1 means all cores)",
 	// Why is the default value 0.05 (5%)? It tends to work out because in the
 	// worst case there is  5% remaining burst budget and then over time the 85%
@@ -107,12 +92,12 @@ const timePerTick = 1 * time.Millisecond
 
 // cpuTimeTokenFiller starts a goroutine which periodically calls
 // cpuTimeTokenAllocator to add tokens to a cpuTimeTokenGranter. For example, on
-// an 8 vCPU machine, we may want to allow burstable tier-0 work to use 6 seconds
-// of CPU time per second. Then the refill rates for tier0 burstable work would
+// an 8 vCPU machine, we may want to allow burstable work to use 6 seconds
+// of CPU time per second. Then the refill rates for burstable work would
 // equal 6 seconds per second, and cpuTimeTokenFiller would add 6 seconds of token
 // every second, but smoothly -- 1ms at a time. See cpuTimeTokenGranter for details
-// on the multi-dimensional token buckets owned by cpuTimeTokenGranter; the TLDR is
-// there is one bucket per <resource tier, burst qualification> pair.
+// on the token buckets owned by cpuTimeTokenGranter; the TLDR is there is one
+// bucket per burst qualification.
 //
 // cpuTimeTokenFiller owns the time.Ticker logic. The details of the token allocation
 // are left to the cpuTimeTokenAllocator, in order to improve clarity & testability.
@@ -142,18 +127,12 @@ type cpuTimeTokenFiller struct {
 	closeCh    chan struct{}
 	// Used only in unit tests.
 	tickCh *chan struct{}
-	// activeMode is the cpuTimeTokenMode after the most recent
-	// resetInterval. Written by the filler goroutine, read by
-	// GetKVWorkQueue via cpuTimeTokenGrantCoordinator.
-	//
-	// TODO(ssd): Will be removed in a future commit. See lastMode.
-	activeMode atomic.Int64
 }
 
 func (f *cpuTimeTokenFiller) start(ctx context.Context) {
 	// The token buckets should start full. The first call to resetInterval will
 	// fill the buckets.
-	f.activeMode.Store(int64(f.allocator.resetInterval(ctx)))
+	f.allocator.resetInterval(ctx)
 
 	ticker := f.timeSource.NewTicker(timePerTick)
 	intervalStart := f.timeSource.Now()
@@ -195,7 +174,7 @@ func (f *cpuTimeTokenFiller) start(ctx context.Context) {
 						f.allocator.allocateTokens(1)
 					}
 					intervalStart = t
-					f.activeMode.Store(int64(f.allocator.resetInterval(ctx)))
+					f.allocator.resetInterval(ctx)
 					remainingTicks = int64(time.Second / timePerTick)
 				} else {
 					remainingSinceIntervalStart := time.Second - elapsedSinceIntervalStart
@@ -228,7 +207,7 @@ func (f *cpuTimeTokenFiller) close() {
 // cpuTimeTokenAllocatorI abstracts cpuTimeTokenAllocator for testing.
 type cpuTimeTokenAllocatorI interface {
 	allocateTokens(expectedRemainingTicksInInterval int64)
-	resetInterval(context.Context) cpuTimeTokenMode
+	resetInterval(context.Context)
 }
 
 var _ cpuTimeTokenAllocatorI = &cpuTimeTokenAllocator{}
@@ -240,25 +219,14 @@ var _ cpuTimeTokenAllocatorI = &cpuTimeTokenAllocator{}
 // of the rate of tokens to add every interval is left to cpuTimeModel.
 type cpuTimeTokenAllocator struct {
 	granter *cpuTimeTokenGranter
-	// queues holds references to WorkQueues for each resource tier. Used to
-	// refill per-group burst buckets that determine queue priority ordering.
-	// See cpu_time_token_burst.go for more.
-	queues       [numResourceTiers]workQueueIForAllocator
+	// queue holds a reference to the WorkQueue. Used to refill per-group
+	// burst buckets that determine queue priority ordering. See
+	// cpu_time_token_burst.go for more.
+	queue        workQueueIForAllocator
 	settings     *cluster.Settings
 	configHolder *ResourceGroupConfigHolder
 	model        cpuTimeModel
 	metrics      *cpuTimeTokenMetrics
-	// lastMode tracks the most recent non-off mode so that
-	// resetInterval can detect mode transitions. Only accessed by the
-	// filler goroutine (via allocateTokens and resetInterval), so no
-	// synchronization is needed. Contrast with filler.activeMode,
-	// which is atomic because GetKVWorkQueue reads it from arbitrary
-	// goroutines.
-	//
-	// TODO(ssd): Will be removed in a future commit. GetKVWorkQueue
-	// and cpuTimeTokenGroupKeyForWorkInfo can read the mode setting
-	// directly; activeMode and lastMode are unnecessary indirection.
-	lastMode cpuTimeTokenMode
 
 	// refillRates stores the number of CPU time tokens to add to each bucket
 	// per interval (1s).
@@ -297,22 +265,16 @@ type cpuTimeTokenAllocator struct {
 }
 
 // computeTargets derives target utilizations from a ConfigSnapshot.
-// The snapshot provides per-tier non-burstable and burstable ceilings
-// via MaxNonBurstableFraction and MaxFraction.
 func computeTargets(snap ConfigSnapshot) targetUtilizations {
-	var targets targetUtilizations
-	nonBurst := snap.MaxNonBurstableFraction()
-	burst := snap.MaxFraction()
-	for tier := range targets {
-		targets[tier][noBurst] = nonBurst[tier]
-		targets[tier][canBurst] = burst[tier]
+	return targetUtilizations{
+		canBurst: snap.MaxFraction(),
+		noBurst:  snap.MaxNonBurstableFraction(),
 	}
-	return targets
 }
 
-// groupBurstRates returns per-tier (rate, cap) pairs from which
-// per-group burst amounts are derived. The allocator iterates queues
-// and calls refillGroupBurstBuckets with these values.
+// groupBurstRates returns (rate100, cap100) from which per-group
+// burst amounts are derived. The allocator calls
+// refillGroupBurstBuckets with these values.
 //
 // The 100%-CPU rate is recovered by dividing the canBurst allocation
 // (or refill rate) by canBurstTarget, which is valid because
@@ -322,24 +284,19 @@ func computeTargets(snap ConfigSnapshot) targetUtilizations {
 // change between calls.
 func (a *cpuTimeTokenAllocator) groupBurstRates(
 	snap ConfigSnapshot, allocations tokenCounts, refillRates rates,
-) [numResourceTiers][2]float64 {
-	var out [numResourceTiers][2]float64
-	canBurstTarget := snap.MaxFraction()[0]
+) (rate100, cap100 float64) {
+	canBurstTarget := snap.MaxFraction()
 	if canBurstTarget == 0 {
-		return out
+		return 0, 0
 	}
-	rate100 := float64(allocations[0][canBurst]) / canBurstTarget
-	cap100 := float64(refillRates[0][canBurst]) / canBurstTarget
-	for tier := range out {
-		out[tier] = [2]float64{rate100, cap100}
-	}
-	return out
+	return float64(allocations[canBurst]) / canBurstTarget,
+		float64(refillRates[canBurst]) / canBurstTarget
 }
 
 // rates stores a token count per second, for example, the refill
 // rates at which we add tokens per second, one per bucket in
 // cpuTimeTokenGranter.
-type rates [numResourceTiers][numBurstQualifications]int64
+type rates [numBurstQualifications]int64
 
 func (r rates) String() string {
 	return redact.StringWithoutMarkers(r)
@@ -349,70 +306,57 @@ func (r rates) String() string {
 func (r rates) SafeFormat(s redact.SafePrinter, _ rune) {
 	s.SafeRune('[')
 	first := true
-	for tier := resourceTier(0); tier < numResourceTiers; tier++ {
-		for qual := burstQualification(0); qual < numBurstQualifications; qual++ {
-			if !first {
-				s.SafeRune(' ')
-			}
-			first = false
-			s.Printf("%s-%s=%s",
-				tier, qual, redact.Safe(time.Duration(r[tier][qual])))
+	for qual := burstQualification(0); qual < numBurstQualifications; qual++ {
+		if !first {
+			s.SafeRune(' ')
 		}
+		first = false
+		s.Printf("%s=%s",
+			qual, redact.Safe(time.Duration(r[qual])))
 	}
 	s.SafeRune(']')
 }
 
 // capacities stores the maximum number of tokens that can be in the
 // buckets, one per bucket in cpuTimeTokenGranter.
-type capacities [numResourceTiers][numBurstQualifications]int64
+type capacities [numBurstQualifications]int64
 
 // minimums stores the minimum number of tokens that can be in the
 // buckets, one per bucket in cpuTimeTokenGranter.
-type minimums [numResourceTiers][numBurstQualifications]int64
+type minimums [numBurstQualifications]int64
 
 // tokenCounts stores unit-less token counts, one per bucket in
 // cpuTimeTokenGranter.
-type tokenCounts [numResourceTiers][numBurstQualifications]int64
+type tokenCounts [numBurstQualifications]int64
 
 // targetUtilizations stores a target CPU utilization, as a float64 (so
 // 0.8 for 80% CPU utilization), one per bucket in CPUTimeTokenGranter. This
 // is aggregate CPU usage, so 0.8 means 80% of CPU time across all cores.
-type targetUtilizations [numResourceTiers][numBurstQualifications]float64
+type targetUtilizations [numBurstQualifications]float64
 
 // computeMinimums computes per-bucket minimums from refill rates. These
 // minimums prevent higher priority work from putting lower priority buckets
 // into unbounded token debt.
 //
-// The top priority bucket (tier0/canBurst) has a floor of 0. Each subsequent
-// bucket's floor is its rate minus the top priority rate, which is always
-// negative. For example, with refill rates of 100, 95, 80, 75, the minimums
-// are 0, -5, -20, -25.
+// The top priority bucket (canBurst) has a floor of 0. The noBurst
+// bucket's floor is its rate minus the canBurst rate, which is always
+// negative. For example, with refill rates of 85 and 80, the minimums
+// are 0 and -5.
 //
-// Any choice of minimums must respect the invariants in cpuTimeTokenGranter
-// that higher priority buckets always have more tokens than lower priority
-// ones (see Invariant #1 and #2 on cpuTimeTokenGranter.mu.buckets). The
-// approach here satisfies these invariants because the minimums are derived
-// from the refill rates, which are themselves ordered by priority.
+// Any choice of minimums must respect the invariant in cpuTimeTokenGranter
+// that the canBurst bucket always has more tokens than the noBurst bucket
+// (see cpuTimeTokenGranter.mu.buckets). The approach here satisfies this
+// because the minimums are derived from the refill rates, which are
+// themselves ordered by priority.
 //
-// An alternative would be to set all minimums to 0. We go with the
-// rate-derived minimums instead because they preserve the same delta
-// in token counts between buckets that cpuTimeTokenLinearModel
-// establishes during normal operation. That is, the spacing between
-// bucket token counts is consistent regardless of whether buckets are
-// full, partially drained, or at their minimum. One concrete benefit:
-// during overload, when all buckets are at their minimums, the higher
-// priority buckets recover to positive first, which means burstable
-// work is naturally prioritized over non-burstable work (and, less
-// importantly, system tenant work over app tenant work). With all-zero
-// minimums, all buckets would recover roughly simultaneously, losing
-// this prioritization at an important moment.
+// One concrete benefit: during overload, when all buckets are at their
+// minimums, the canBurst bucket recovers to positive first, which
+// means burstable work is naturally prioritized over non-burstable work.
 func computeMinimums(r rates) minimums {
 	var m minimums
-	topRate := r[0][0]
-	for tier := range r {
-		for qual := range r[tier] {
-			m[tier][qual] = r[tier][qual] - topRate
-		}
+	topRate := r[canBurst]
+	for qual := range r {
+		m[qual] = r[qual] - topRate
 	}
 	return m
 }
@@ -528,13 +472,11 @@ func allocateTokensFn(refillRates rates, allocated *tokenCounts, remainingTicks 
 	// than once every 1s (typically). The amount we need to allocate this call
 	// to allocateTokens is stored in allocations.
 	var allocations tokenCounts
-	for wc := range refillRates {
-		for kind := range refillRates[wc] {
-			toAllocate := allocateFunc(
-				refillRates[wc][kind], allocated[wc][kind], remainingTicks)
-			allocated[wc][kind] += toAllocate
-			allocations[wc][kind] = toAllocate
-		}
+	for qual := range refillRates {
+		toAllocate := allocateFunc(
+			refillRates[qual], allocated[qual], remainingTicks)
+		allocated[qual] += toAllocate
+		allocations[qual] = toAllocate
 	}
 	return allocations
 }
@@ -555,10 +497,8 @@ func (a *cpuTimeTokenAllocator) allocateTokens(expectedRemainingTicksInInterval 
 	// qualifies for canBurst), not total throughput, so dampening — a
 	// total-throughput control — does not apply.
 	undampenedAllocations := allocations
-	for tier := range allocations {
-		for qual := range allocations[tier] {
-			allocations[tier][qual] = int64(float64(allocations[tier][qual]) * a.dampeningFactor)
-		}
+	for qual := range allocations {
+		allocations[qual] = int64(float64(allocations[qual]) * a.dampeningFactor)
 	}
 
 	// Each bucket has a max capacity. The max capacity for each bucket is
@@ -574,41 +514,30 @@ func (a *cpuTimeTokenAllocator) allocateTokens(expectedRemainingTicksInInterval 
 	refillGranter(a.granter, a.metrics, allocations,
 		bucketCapacities, bucketMinimums, false /* updateMetrics */)
 
-	// Refill per-group burst buckets in the WorkQueues. groupBurstRates
-	// returns the 100%-CPU rate; refillGroupBurstBuckets scales it by
-	// each group's burstFrac. If a group's bucket is mostly full, we
-	// allow it to get priority in the queue (see cpu_time_token_burst.go
-	// for more). With defaultTenantGroupConfig.BurstFrac = 0.20, an
-	// application tenant can burst if it is using roughly less than 20%
-	// of the CPU on a CRDB node.
+	// Refill the per-group burst buckets in the WorkQueue. groupBurstRates
+	// returns the 100%-CPU rate; refillGroupBurstBuckets scales it by each
+	// group's burstFrac. If a group's bucket is mostly full, we allow it
+	// to get priority in the queue (see cpu_time_token_burst.go). With
+	// defaultTenantGroupConfig.BurstFrac = 0.20, an application tenant can
+	// burst if it is using roughly less than 20% of the CPU on a CRDB node.
 	//
 	// Per-group burst buckets control priority ordering (whether a group
 	// qualifies for canBurst), not total throughput, so dampening — a
 	// total-throughput control — does not apply. Pass the undampened
 	// allocations through.
-	burstRates := a.groupBurstRates(a.snap, undampenedAllocations, a.refillRates)
-	for tier, q := range a.queues {
-		q.refillGroupBurstBuckets(burstRates[tier][0], burstRates[tier][1])
-	}
+	rate, capacity := a.groupBurstRates(a.snap, undampenedAllocations, a.refillRates)
+	a.queue.refillGroupBurstBuckets(rate, capacity)
 }
 
 // resetInterval recomputes refill rates and applies the delta to the
-// granter and burst buckets. The snapshot's Mode is folded into
-// lastMode so the filler's activeMode tracks the same value the
-// targets were derived under. offMode is skipped: it is not a real
-// mode for routing purposes — the constructor defaults offMode to
-// serverlessMode, and GetKVWorkQueue handles the off case before
-// reaching activeMode routing.
-func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) cpuTimeTokenMode {
+// granter and burst buckets.
+func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) {
 	// Refresh the cached snapshot for this interval. Everything that
 	// runs until the next resetInterval — model.fit, the refillRates
 	// it produces, and the per-tick groupBurstRates calls in
 	// allocateTokens — reads from this snap so the interval is
 	// coherent with one view of the holder.
 	a.snap = a.configHolder.Snapshot()
-	if a.snap.Mode != offMode {
-		a.lastMode = a.snap.Mode
-	}
 	targets := computeTargets(a.snap)
 	newRefillRates := a.model.fit(ctx, targets)
 
@@ -624,10 +553,8 @@ func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) cpuTimeTokenM
 	// TODO(wenyihu6): we should do something here for per group burst bucket as
 	// well
 	var deltaRefillRates tokenCounts
-	for tier := range newRefillRates {
-		for qual := range newRefillRates[tier] {
-			deltaRefillRates[tier][qual] = newRefillRates[tier][qual] - a.refillRates[tier][qual]
-		}
+	for qual := range newRefillRates {
+		deltaRefillRates[qual] = newRefillRates[qual] - a.refillRates[qual]
 	}
 	// See comment above the call to refill in allocateTokens for a discussion of
 	// bucketCapacities and bucketMinimums.
@@ -639,19 +566,13 @@ func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) cpuTimeTokenM
 		bucketCapacities, bucketMinimums, true /* updateMetrics */)
 	a.refillRates = newRefillRates
 	// Apply the delta to the per-group burst buckets also.
-	burstRates := a.groupBurstRates(a.snap, deltaRefillRates, a.refillRates)
-	for tier, q := range a.queues {
-		q.refillGroupBurstBuckets(burstRates[tier][0], burstRates[tier][1])
-	}
+	rate, capacity := a.groupBurstRates(a.snap, deltaRefillRates, a.refillRates)
+	a.queue.refillGroupBurstBuckets(rate, capacity)
 
 	// Reset allocated.
-	for wc := range a.allocated {
-		for kind := range a.allocated[wc] {
-			a.allocated[wc][kind] = 0
-		}
+	for qual := range a.allocated {
+		a.allocated[qual] = 0
 	}
-
-	return a.lastMode
 }
 
 // refillGranter increments per-bucket refill metrics, then delegates
@@ -666,14 +587,11 @@ func refillGranter(
 	bucketMinimums minimums,
 	updateMetrics bool,
 ) {
-	for tier := range toAdd {
-		for qual := range toAdd[tier] {
-			idx := perBucketIdx(resourceTier(tier), burstQualification(qual))
-			if v := toAdd[tier][qual]; v > 0 {
-				metrics.RefillAdded[idx].Inc(v)
-			} else if v < 0 {
-				metrics.RefillRemoved[idx].Inc(-v)
-			}
+	for qual := range toAdd {
+		if v := toAdd[qual]; v > 0 {
+			metrics.RefillAdded[qual].Inc(v)
+		} else if v < 0 {
+			metrics.RefillRemoved[qual].Inc(-v)
 		}
 	}
 	granter.refill(toAdd, bucketCapacities, bucketMinimums, updateMetrics)
@@ -683,8 +601,8 @@ func refillGranter(
 // the allocator/strategy layer, to enable unit testing.
 type workQueueIForAllocator interface {
 	// refillGroupBurstBuckets refills every group's burst bucket,
-	// scaling rate and cap by each group's burstFrac.
-	refillGroupBurstBuckets(rate, cap float64)
+	// scaling rate and capacity by each group's burstFrac.
+	refillGroupBurstBuckets(rate, capacity float64)
 }
 
 // cpuTimeModel abstracts cpuTimeLinearModel for testing.
@@ -903,11 +821,9 @@ func (m *cpuTimeTokenLinearModel) fit(ctx context.Context, targets targetUtiliza
 		// Again, in the case of low CPU, we would rather give out too many tokens
 		// than not enough.
 		smallestTargetUtil := math.MaxFloat64
-		for tier := range targets {
-			for qual := range targets[tier] {
-				if targets[tier][qual] < smallestTargetUtil {
-					smallestTargetUtil = targets[tier][qual]
-				}
+		for qual := range targets {
+			if targets[qual] < smallestTargetUtil {
+				smallestTargetUtil = targets[qual]
 			}
 		}
 		upperBound := smallestTargetUtil / lowCPUUtilFrac
@@ -983,10 +899,8 @@ func (*cpuTimeTokenLinearModel) computeRefillRates(
 	targets targetUtilizations, tokenToCPUTimeMultiplier float64, cpuCapacity float64,
 ) rates {
 	var refillRates rates
-	for tier := range targets {
-		for qual := range targets[tier] {
-			refillRates[tier][qual] = int64(cpuCapacity * float64(time.Second) * targets[tier][qual] / tokenToCPUTimeMultiplier)
-		}
+	for qual := range targets {
+		refillRates[qual] = int64(cpuCapacity * float64(time.Second) * targets[qual] / tokenToCPUTimeMultiplier)
 	}
 	return refillRates
 }
