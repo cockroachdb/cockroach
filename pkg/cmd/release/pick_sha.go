@@ -41,6 +41,16 @@ const pickSHAJQLDryRun = `issueType="CRDB Release" and ` +
 // "Pick SHA" subtask on a release ticket.
 const pickSHASubtaskMatch = "Pick SHA"
 
+// pickSHA success notifications go to the release-ops channels — a
+// RelEng-only audience. This deliberately differs from the wider
+// #db-release-status / #db-release-test channels that branch-cut uses,
+// because the "build-and-sign triggered" announcement is operational
+// noise that doesn't need to reach the broader release audience.
+const (
+	pickSHASlackChannel        = "#release-ops"
+	pickSHASlackStagingChannel = "#release-ops-staging"
+)
+
 // defaultBuildWorkflow is the workflow file dispatched by `pick-sha`. It
 // must accept `dry_run` and `sha` workflow_dispatch inputs.
 const defaultBuildWorkflow = "release-build-and-sign.yml"
@@ -85,8 +95,8 @@ func init() {
 	pickSHACmd.Flags().StringVar(&pickSHAFlags.repo, "repo", defaultRepo(),
 		"target GitHub repository in owner/name form (defaults to $GITHUB_REPOSITORY when set)")
 	pickSHACmd.Flags().StringVar(&pickSHAFlags.channel, "slack-channel", "",
-		"Slack channel for success notifications (default: "+releaseChannel+
-			" when "+envIsProductionRepo+"=true, "+nonProdChannel+" otherwise)")
+		"Slack channel for success notifications (default: "+pickSHASlackChannel+
+			" when "+envIsProductionRepo+"=true, "+pickSHASlackStagingChannel+" otherwise)")
 	pickSHACmd.Flags().StringVar(&pickSHAFlags.opsChannel, "ops-channel", opsChannel,
 		"Slack channel for failure notifications")
 	pickSHACmd.Flags().StringVar(&pickSHAFlags.buildWorkflow, "build-workflow", defaultBuildWorkflow,
@@ -130,13 +140,13 @@ func runPickSHA(_ *cobra.Command, _ []string) error {
 	sl := newSlackClient(slackToken)
 
 	// Repo identity (not --dry-run) decides which channel to post to: a fork
-	// rehearsal must not echo into #db-release-status. Explicit
-	// --slack-channel always wins.
+	// rehearsal must not echo into #release-ops. Explicit --slack-channel
+	// always wins.
 	channel := pickSHAFlags.channel
 	if channel == "" {
-		channel = nonProdChannel
+		channel = pickSHASlackStagingChannel
 		if isProductionRepo() {
-			channel = releaseChannel
+			channel = pickSHASlackChannel
 		}
 	}
 	r := &pickSHARunner{
@@ -301,36 +311,43 @@ func (r *pickSHARunner) processCandidate(ctx context.Context, c jiraIssue) error
 		log.Printf("[DRY RUN] would set SHA field on %s to %s", c.Key, sha)
 	}
 
-	msg := buildPickSHASlackMessage(details, r.dryRun)
+	// Trigger the docs release-notes draft before composing the Slack
+	// message so we can include the generated PR's URL inline (operators
+	// linked to it from the old Superblocks notification). It's safe to
+	// call here because the Pick SHA subtask was transitioned to Done
+	// above: the gate at the top of processCandidate skips this entire
+	// path on retry, so a transient slack/jira failure below can't
+	// re-fire the API and produce a duplicate docs draft. API failures
+	// remain non-fatal — see notifyReleaseNotes.
+	releaseNotesPRURL := r.notifyReleaseNotes(c.Key, full, sha)
+
+	msg := buildPickSHASlackMessage(details, releaseNotesPRURL, r.dryRun)
 	link, err := r.slack.PostMessage(r.channel, msg)
 	if err != nil {
 		return errors.Wrap(err, "posting Slack message")
 	}
 	if !r.dryRun {
-		if err := r.jira.AddComment(c.Key, buildPickSHAJiraComment(details, link)); err != nil {
+		if err := r.jira.AddComment(c.Key, buildPickSHAJiraComment(details, releaseNotesPRURL, link)); err != nil {
 			return errors.Wrap(err, "adding Jira comment")
 		}
 	} else {
 		log.Printf("[DRY RUN] would add Jira comment on %s with Slack link %q", c.Key, link)
 	}
 
-	// Notify the docs release-notes API last, after every other side effect
-	// has succeeded. Failures here are non-fatal: we already dispatched
-	// build-and-sign and updated Jira/Slack, so failing the candidate would
-	// re-fire those (expensive) side effects on the next cron. A Slack
-	// warning to #release-ops gives operators a chance to re-trigger
-	// generation manually.
-	r.notifyReleaseNotes(c.Key, full, sha)
-
 	log.Printf("ticket %s: dispatched %s on %s at %s", c.Key, r.buildWorkflow, ref, sha)
 	return nil
 }
 
 // notifyReleaseNotes builds the release-notes API payload from the Jira
-// issue and POSTs it. Skipped (with a log line) under --dry-run, since the
-// API has no non-prod endpoint and a dry-run call would create real docs
-// drafts. Errors are swallowed after a warning is posted to #release-ops:
-// see the call site for why.
+// issue and POSTs it. Returns the generated docs PR URL on success, or
+// "" on dry-run, idempotency skip, or any error (after warning to
+// #release-ops). The caller surfaces the URL in the success Slack and
+// Jira messages; it isn't load-bearing for correctness.
+//
+// Skipped (with a log line) under --dry-run, since the API has no
+// non-prod endpoint and a dry-run call would create real docs drafts.
+// Errors are swallowed after a warning is posted to #release-ops: see
+// the call site for why.
 //
 // Idempotency: the call is also skipped when the docs subtask is already
 // marked Done, because that means the docs team has already opened (and
@@ -339,14 +356,14 @@ func (r *pickSHARunner) processCandidate(ctx context.Context, c jiraIssue) error
 // processCandidate normally prevents re-entry on the same ticket, but a
 // transition failure between DispatchWorkflow and the subtask transition
 // could re-fire the rest of the chain — this gate covers that window.
-func (r *pickSHARunner) notifyReleaseNotes(key string, full *jiraIssue, sha string) {
+func (r *pickSHARunner) notifyReleaseNotes(key string, full *jiraIssue, sha string) string {
 	if r.dryRun {
 		log.Printf("[DRY RUN] would call release-notes API for %s", key)
-		return
+		return ""
 	}
 	if _, docsDone := findSubtask(full, docsSubtaskMatch); docsDone {
 		log.Printf("ticket %s: docs subtask already Done, skipping release-notes API call", key)
-		return
+		return ""
 	}
 	payload, err := buildReleaseNotesPayload(full, sha)
 	if err != nil {
@@ -355,12 +372,15 @@ func (r *pickSHARunner) notifyReleaseNotes(key string, full *jiraIssue, sha stri
 		// ticket key in the headline.
 		log.Printf("ticket %s: building release-notes payload failed: %v", key, err)
 		r.warnReleaseNotes(key, releaseNotesPayload{}, err)
-		return
+		return ""
 	}
-	if err := postReleaseNotes(releaseNotesAPIURL, r.releaseNotesAPIKey, payload); err != nil {
+	resp, err := postReleaseNotes(releaseNotesAPIURL, r.releaseNotesAPIKey, payload)
+	if err != nil {
 		log.Printf("ticket %s: release-notes API call failed: %v", key, err)
 		r.warnReleaseNotes(key, payload, err)
+		return ""
 	}
+	return resp.PullRequestURL
 }
 
 func (r *pickSHARunner) warnReleaseNotes(key string, payload releaseNotesPayload, err error) {
@@ -526,8 +546,11 @@ func buildPickSHADetails(
 }
 
 // buildPickSHASlackMessage renders the announcement that goes to
-// #db-release-status (or the non-prod channel for fork rehearsals).
-func buildPickSHASlackMessage(d pickSHADetails, dryRun bool) string {
+// #release-ops (or the staging channel for fork rehearsals).
+// releaseNotesPRURL is the docs PR opened by the release-notes API and
+// is rendered as an extra bullet when non-empty; an empty value (dry-run,
+// API failure, or idempotency skip) just omits the bullet.
+func buildPickSHASlackMessage(d pickSHADetails, releaseNotesPRURL string, dryRun bool) string {
 	body := fmt.Sprintf("SHA picked for `%s` — build-and-sign triggered:\n"+
 		"• Picked SHA: <%s|%s>\n"+
 		"• Build run: <%s|view in Actions>\n"+
@@ -538,6 +561,9 @@ func buildPickSHASlackMessage(d pickSHADetails, dryRun bool) string {
 		d.BuildRunListURL,
 		d.CloudReleaseNotesDate,
 		d.PublishBinaryDate)
+	if releaseNotesPRURL != "" {
+		body += fmt.Sprintf("\n• *Release notes PR:* <%s|%s>", releaseNotesPRURL, releaseNotesPRURL)
+	}
 	if dryRun {
 		return "[DRY RUN] " + body
 	}
@@ -547,11 +573,39 @@ func buildPickSHASlackMessage(d pickSHADetails, dryRun bool) string {
 // buildPickSHAJiraComment returns an ADF doc that mirrors the Slack message
 // using native Jira marks (strong, code, link) so the comment doesn't show
 // literal `*` and backticks. The Slack permalink, when non-empty, is
-// rendered as the first paragraph for traceability.
-func buildPickSHAJiraComment(d pickSHADetails, slackLink string) map[string]interface{} {
+// rendered as the first paragraph for traceability. The release-notes PR
+// URL, when non-empty, becomes an extra bullet — symmetric with the Slack
+// message.
+func buildPickSHAJiraComment(
+	d pickSHADetails, releaseNotesPRURL, slackLink string,
+) map[string]interface{} {
 	var blocks []interface{}
 	if slackLink != "" {
 		blocks = append(blocks, adfPara(adfMarked(slackLink, adfLink(slackLink))))
+	}
+	bullets := [][]interface{}{
+		{
+			adfMarked("Picked SHA: ", adfStrong()),
+			adfMarked(d.PickedSHA, adfLink(d.PickedCommitURL), adfCode()),
+		},
+		{
+			adfMarked("Build run: ", adfStrong()),
+			adfMarked("view in Actions", adfLink(d.BuildRunListURL)),
+		},
+		{
+			adfMarked("Cloud Release Notes Date: ", adfStrong()),
+			adfMarked(d.CloudReleaseNotesDate, adfCode()),
+		},
+		{
+			adfMarked("Publish Binaries Date: ", adfStrong()),
+			adfMarked(d.PublishBinaryDate, adfCode()),
+		},
+	}
+	if releaseNotesPRURL != "" {
+		bullets = append(bullets, []interface{}{
+			adfMarked("Release notes PR: ", adfStrong()),
+			adfMarked(releaseNotesPRURL, adfLink(releaseNotesPRURL)),
+		})
 	}
 	blocks = append(blocks,
 		adfPara(
@@ -559,24 +613,7 @@ func buildPickSHAJiraComment(d pickSHADetails, slackLink string) map[string]inte
 			adfMarked(d.StagingBranch, adfCode()),
 			adfText(" — build-and-sign triggered:"),
 		),
-		adfBullet(
-			[]interface{}{
-				adfMarked("Picked SHA: ", adfStrong()),
-				adfMarked(d.PickedSHA, adfLink(d.PickedCommitURL), adfCode()),
-			},
-			[]interface{}{
-				adfMarked("Build run: ", adfStrong()),
-				adfMarked("view in Actions", adfLink(d.BuildRunListURL)),
-			},
-			[]interface{}{
-				adfMarked("Cloud Release Notes Date: ", adfStrong()),
-				adfMarked(d.CloudReleaseNotesDate, adfCode()),
-			},
-			[]interface{}{
-				adfMarked("Publish Binaries Date: ", adfStrong()),
-				adfMarked(d.PublishBinaryDate, adfCode()),
-			},
-		),
+		adfBullet(bullets...),
 	)
 	return adfDoc(blocks...)
 }

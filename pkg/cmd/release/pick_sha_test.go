@@ -82,7 +82,7 @@ func TestBuildPickSHASlackMessage(t *testing.T) {
 	}
 
 	t.Run("regular message", func(t *testing.T) {
-		msg := buildPickSHASlackMessage(d, false)
+		msg := buildPickSHASlackMessage(d, "", false)
 		require.Contains(t, msg, "SHA picked for `release-25.4.3-rc`")
 		require.Contains(t, msg, "<https://github.com/example-org/example-repo/commit/deadbeef|deadbeef>")
 		require.Contains(t, msg,
@@ -90,10 +90,17 @@ func TestBuildPickSHASlackMessage(t *testing.T) {
 		require.Contains(t, msg, "*Cloud Release Notes Date:* `Thursday, 04/23`")
 		require.Contains(t, msg, "*Publish Binaries Date:* `Friday, 04/24`")
 		require.False(t, strings.HasPrefix(msg, "[DRY RUN] "))
+		require.NotContains(t, msg, "Release notes PR")
+	})
+
+	t.Run("with release-notes PR", func(t *testing.T) {
+		const prURL = "https://github.com/cockroachdb/docs/pull/23375"
+		msg := buildPickSHASlackMessage(d, prURL, false)
+		require.Contains(t, msg, "*Release notes PR:* <"+prURL+"|"+prURL+">")
 	})
 
 	t.Run("dry-run prefix", func(t *testing.T) {
-		require.True(t, strings.HasPrefix(buildPickSHASlackMessage(d, true), "[DRY RUN] "))
+		require.True(t, strings.HasPrefix(buildPickSHASlackMessage(d, "", true), "[DRY RUN] "))
 	})
 }
 
@@ -108,7 +115,7 @@ func TestBuildPickSHAJiraComment(t *testing.T) {
 	}
 	const slackLink = "https://example.slack.com/archives/C123/p456"
 
-	doc := buildPickSHAJiraComment(d, slackLink)
+	doc := buildPickSHAJiraComment(d, "", slackLink)
 	require.Equal(t, "doc", doc["type"])
 	require.Equal(t, 1, doc["version"])
 	content, ok := doc["content"].([]interface{})
@@ -144,7 +151,7 @@ func TestBuildPickSHAJiraCommentNoSlackLink(t *testing.T) {
 		CloudReleaseNotesDate: "TBD",
 		PublishBinaryDate:     "TBD",
 	}
-	doc := buildPickSHAJiraComment(d, "")
+	doc := buildPickSHAJiraComment(d, "", "")
 	content, ok := doc["content"].([]interface{})
 	require.True(t, ok)
 	// No Slack-link paragraph: just intro paragraph + bullet list.
@@ -360,7 +367,7 @@ func TestPostReleaseNotes(t *testing.T) {
 		DocsTicket:     "DOC-42",
 	}
 
-	t.Run("posts payload with X-API-Key header on success", func(t *testing.T) {
+	t.Run("posts payload and decodes pull_request_url on success", func(t *testing.T) {
 		var gotMethod, gotKey, gotContentType string
 		var gotBody []byte
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -369,13 +376,16 @@ func TestPostReleaseNotes(t *testing.T) {
 			gotContentType = r.Header.Get("Content-Type")
 			gotBody, _ = io.ReadAll(r.Body)
 			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"pull_request_url":"https://github.com/cockroachdb/docs/pull/123"}`))
 		}))
 		defer srv.Close()
 
-		require.NoError(t, postReleaseNotes(srv.URL, "secret-key", payload))
+		resp, err := postReleaseNotes(srv.URL, "secret-key", payload)
+		require.NoError(t, err)
 		require.Equal(t, http.MethodPost, gotMethod)
 		require.Equal(t, "secret-key", gotKey)
 		require.Equal(t, "application/json", gotContentType)
+		require.Equal(t, "https://github.com/cockroachdb/docs/pull/123", resp.PullRequestURL)
 
 		// The docs API expects the payload fields at the top level of the
 		// request body; an envelope causes 400s on the required-field
@@ -385,6 +395,17 @@ func TestPostReleaseNotes(t *testing.T) {
 		require.Equal(t, payload, got)
 	})
 
+	t.Run("empty body yields zero-value response", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer srv.Close()
+
+		resp, err := postReleaseNotes(srv.URL, "k", payload)
+		require.NoError(t, err)
+		require.Empty(t, resp.PullRequestURL)
+	})
+
 	t.Run("non-2xx returns error including status and body", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -392,7 +413,7 @@ func TestPostReleaseNotes(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		err := postReleaseNotes(srv.URL, "k", payload)
+		_, err := postReleaseNotes(srv.URL, "k", payload)
 		require.ErrorContains(t, err, "500")
 		require.ErrorContains(t, err, "boom")
 	})

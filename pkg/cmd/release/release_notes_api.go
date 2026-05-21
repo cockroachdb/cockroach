@@ -46,20 +46,30 @@ type releaseNotesPayload struct {
 	DocsTicket     string `json:"docs_ticket"`
 }
 
-// postReleaseNotes POSTs payload to url with the X-API-Key header. Returns
-// nil on a 2xx response, otherwise an error containing the response status
-// and (truncated) body. Caller is expected to treat failures as a warning,
-// not a fatal error: the rest of pick-sha has already succeeded and the
-// docs team can re-trigger manually. URL is injected (rather than reading
-// the constant directly) so tests can point at an httptest server.
-func postReleaseNotes(url, apiKey string, p releaseNotesPayload) error {
+// releaseNotesResponse is the JSON body the docs API returns on success.
+// PullRequestURL points at the cockroachdb/docs PR that holds the
+// generated release-notes draft. Other fields the API may return are
+// intentionally not modelled — callers only need the PR link today.
+type releaseNotesResponse struct {
+	PullRequestURL string `json:"pull_request_url"`
+}
+
+// postReleaseNotes POSTs payload to url with the X-API-Key header. On a 2xx
+// response it returns the parsed body (which may have an empty
+// PullRequestURL if the API omits it); on non-2xx it returns an error
+// containing the response status and (truncated) body. Caller is expected
+// to treat failures as a warning, not a fatal error: the rest of pick-sha
+// has already succeeded and the docs team can re-trigger manually. URL is
+// injected (rather than reading the constant directly) so tests can point
+// at an httptest server.
+func postReleaseNotes(url, apiKey string, p releaseNotesPayload) (releaseNotesResponse, error) {
 	body, err := json.Marshal(p)
 	if err != nil {
-		return errors.Wrap(err, "marshalling payload")
+		return releaseNotesResponse{}, errors.Wrap(err, "marshalling payload")
 	}
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return errors.Wrap(err, "building request")
+		return releaseNotesResponse{}, errors.Wrap(err, "building request")
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", apiKey)
@@ -69,12 +79,24 @@ func postReleaseNotes(url, apiKey string, p releaseNotesPayload) error {
 	client := httputil.NewClientWithTimeout(2 * time.Minute)
 	resp, err := client.Do(req)
 	if err != nil {
-		return errors.Wrap(err, "posting to release-notes API")
+		return releaseNotesResponse{}, errors.Wrap(err, "posting to release-notes API")
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return errors.Newf("release-notes API returned %s: %s", resp.Status, respBody)
+		return releaseNotesResponse{}, errors.Newf("release-notes API returned %s: %s", resp.Status, respBody)
 	}
-	return nil
+	// Bound the read so a runaway response can't exhaust memory. 16 KiB
+	// is well above the small JSON the API actually returns.
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 16<<10))
+	if err != nil {
+		return releaseNotesResponse{}, errors.Wrap(err, "reading release-notes response")
+	}
+	var out releaseNotesResponse
+	if len(respBody) > 0 {
+		if err := json.Unmarshal(respBody, &out); err != nil {
+			return releaseNotesResponse{}, errors.Wrap(err, "decoding release-notes response")
+		}
+	}
+	return out, nil
 }
