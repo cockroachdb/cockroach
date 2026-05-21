@@ -1032,6 +1032,7 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 		"online-restore-recovery",
 		bspec, bspec,
 		true /* internalSystemsJobs */, false, /* isMultitenant */
+		WithSkipRevisionHistory(),
 		scopes[rand.Intn(len(scopes))],
 	)
 	t.L().Printf("building backup collection")
