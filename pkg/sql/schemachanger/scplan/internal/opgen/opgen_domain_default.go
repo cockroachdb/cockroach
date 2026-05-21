@@ -15,28 +15,25 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_WRITE_ONLY,
-				emit(func(this *scpb.DomainDefault) *scop.NotImplemented {
-					return notImplemented(this)
+				emit(func(this *scpb.DomainDefault) *scop.SetDomainDefault {
+					return &scop.SetDomainDefault{
+						TypeID: this.TypeID,
+						Expr:   this.Expression.Expr,
+					}
 				}),
 			),
-			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.DomainDefault) *scop.NotImplemented {
-					return notImplemented(this)
-				}),
-			),
+			to(scpb.Status_PUBLIC),
 		),
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_WRITE_ONLY,
-				emit(func(this *scpb.DomainDefault) *scop.NotImplementedForPublicObjects {
-					return notImplementedForPublicObjects(this)
+				emit(func(this *scpb.DomainDefault) *scop.RemoveDomainDefault {
+					return &scop.RemoveDomainDefault{
+						TypeID: this.TypeID,
+					}
 				}),
 			),
-			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.DomainDefault) *scop.NotImplementedForPublicObjects {
-					return notImplementedForPublicObjects(this)
-				}),
-			),
+			to(scpb.Status_ABSENT),
 		),
 	)
 }

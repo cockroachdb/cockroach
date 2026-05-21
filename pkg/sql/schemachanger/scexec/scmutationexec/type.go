@@ -204,3 +204,33 @@ func (i *immediateVisitor) RemoveDomainConstraintName(
 		op.ConstraintID, op.TypeID,
 	)
 }
+
+func (i *immediateVisitor) SetDomainDefault(ctx context.Context, op scop.SetDomainDefault) error {
+	typ, err := i.checkOutType(ctx, op.TypeID)
+	if err != nil {
+		return err
+	}
+	if typ.Domain == nil {
+		return errors.AssertionFailedf(
+			"type descriptor %d is not a domain type", op.TypeID,
+		)
+	}
+	typ.Domain.DefaultExpr = string(op.Expr)
+	return nil
+}
+
+func (i *immediateVisitor) RemoveDomainDefault(
+	ctx context.Context, op scop.RemoveDomainDefault,
+) error {
+	typ, err := i.checkOutType(ctx, op.TypeID)
+	if err != nil {
+		return err
+	}
+	if typ.Domain == nil {
+		return errors.AssertionFailedf(
+			"type descriptor %d is not a domain type", op.TypeID,
+		)
+	}
+	typ.Domain.DefaultExpr = ""
+	return nil
+}

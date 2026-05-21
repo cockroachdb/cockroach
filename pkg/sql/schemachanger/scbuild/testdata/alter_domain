@@ -63,6 +63,34 @@ CREATE SCHEMA s;
 ----
 
 build skip=sql_dependencies
+ALTER DOMAIN defaultdb.d SET DEFAULT 42
+----
+- [[DomainDefault:{DescID: 104, Expr: 0}, ABSENT], PUBLIC]
+  {expr: "0", typeId: 104}
+- [[DomainDefault:{DescID: 104, Expr: 42:::INT8}, PUBLIC], ABSENT]
+  {expr: '42:::INT8', typeId: 104}
+
+build skip=sql_dependencies
+ALTER DOMAIN defaultdb.d DROP DEFAULT
+----
+- [[DomainDefault:{DescID: 104, Expr: 0}, ABSENT], PUBLIC]
+  {expr: "0", typeId: 104}
+
+setup
+CREATE DOMAIN defaultdb.d_no_def AS INT;
+----
+
+build skip=sql_dependencies
+ALTER DOMAIN defaultdb.d_no_def SET DEFAULT 99
+----
+- [[DomainDefault:{DescID: 109, Expr: 99:::INT8}, PUBLIC], ABSENT]
+  {expr: '99:::INT8', typeId: 109}
+
+build skip=sql_dependencies
+ALTER DOMAIN defaultdb.d_no_def DROP DEFAULT
+----
+
+build skip=sql_dependencies
 ALTER DOMAIN defaultdb.d SET SCHEMA s
 ----
 - [[Namespace:{DescID: 104, Name: d, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC]

@@ -11,11 +11,13 @@ import (
 	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/errors"
 )
@@ -112,13 +114,49 @@ func AlterDomain(b BuildCtx, n *tree.AlterDomain) {
 func alterDomainSetDefault(
 	b BuildCtx, tn *tree.TypeName, domainType *scpb.DomainType, t *tree.AlterDomainSetDefault,
 ) {
-	panic(pgerror.Newf(pgcode.FeatureNotSupported, "ALTER DOMAIN SET DEFAULT is not supported"))
+	typeID := domainType.TypeID
+	domainElts := b.QueryByID(typeID)
+
+	oldDefault := domainElts.FilterDomainDefault().MustGetZeroOrOneElement()
+	if oldDefault != nil {
+		b.Drop(oldDefault)
+	}
+
+	if t.Default == nil || t.Default == tree.DNull {
+		return
+	}
+
+	typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
+		b, t.Default, domainType.BaseTypeT.Type,
+		tree.ColumnDefaultExprInSetDefault,
+		b.SemaCtx(), volatility.Volatile, false, /* allowAssignmentCast */
+	)
+	if err != nil {
+		panic(pgerror.WithCandidateCode(err, pgcode.DatatypeMismatch))
+	}
+
+	typedExpr, err = schemaexpr.MaybeReplaceUDFNameWithOIDReferenceInTypedExpr(typedExpr)
+	if err != nil {
+		panic(err)
+	}
+
+	b.Add(&scpb.DomainDefault{
+		TypeID:     typeID,
+		Expression: *b.WrapExpression(typeID, typedExpr),
+	})
 }
 
 func alterDomainDropDefault(
 	b BuildCtx, tn *tree.TypeName, domainType *scpb.DomainType, t *tree.AlterDomainDropDefault,
 ) {
-	panic(pgerror.Newf(pgcode.FeatureNotSupported, "ALTER DOMAIN DROP DEFAULT is not supported"))
+	typeID := domainType.TypeID
+	domainElts := b.QueryByID(typeID)
+
+	existingDefault := domainElts.FilterDomainDefault().MustGetZeroOrOneElement()
+	if existingDefault == nil {
+		return
+	}
+	b.Drop(existingDefault)
 }
 
 func alterDomainSetNotNull(
