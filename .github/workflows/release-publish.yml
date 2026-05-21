@@ -545,7 +545,7 @@ jobs:
           SLACK_TOKEN: ${{ steps.secrets.outputs.slack_bot_token }}
           SLACK_PAYLOAD: >-
             {
-              "channel": "C08H9FA1W3C",
+              "channel": "#release-ops",
               "text": "${{ steps.status.outputs.emoji }} Release publish *${{ steps.status.outputs.result }}* for `${{ github.ref_name }}` (<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View run>)",
               "attachments": [
                 {
