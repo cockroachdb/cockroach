@@ -746,7 +746,7 @@ func TestSQLCPUHandleCloseAfterModeFlip(t *testing.T) {
 	// rg container exists before Close runs.
 	cpuTimeTokenACMode.Override(ctx, &st.SV, resourceManagerMode)
 	q.mu.Lock()
-	q.applyConfigLocked(q.configHolder.Snapshot().Groups)
+	q.applyConfigLocked(q.configHolder.Snapshot().Groups())
 	q.mu.Unlock()
 	rgUsedBefore := requireGroupUsed(t, q, rgGroupKey(highResourceGroupID))
 

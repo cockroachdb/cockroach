@@ -30,36 +30,36 @@ func TestResourceGroupConfigHolder(t *testing.T) {
 		h := testHolder()
 		snap := h.Snapshot()
 		// All built-in configs are present.
-		require.Equal(t, systemTenantGroupConfig, snap.Groups[tenantGroupKey(1)])
+		require.Equal(t, systemTenantGroupConfig, snap.Groups()[tenantGroupKey(1)])
 		require.Equal(t,
 			builtinGroupConfigs[rgGroupKey(highResourceGroupID)],
-			snap.Groups[rgGroupKey(highResourceGroupID)])
+			snap.Groups()[rgGroupKey(highResourceGroupID)])
 		require.Equal(t,
 			builtinGroupConfigs[rgGroupKey(lowResourceGroupID)],
-			snap.Groups[rgGroupKey(lowResourceGroupID)])
-		require.Len(t, snap.Groups, 3) // 3 built-ins
+			snap.Groups()[rgGroupKey(lowResourceGroupID)])
+		require.Len(t, snap.Groups(), 3) // 3 built-ins
 	})
 
 	t.Run("get_or_default_unknown_rg", func(t *testing.T) {
 		h := testHolder()
 		require.Equal(t, defaultRGGroupConfig,
-			h.Snapshot().Groups.GetOrDefault(rgGroupKey(9999)))
+			h.Snapshot().Groups().GetOrDefault(rgGroupKey(9999)))
 	})
 
 	t.Run("get_or_default_unknown_tenant", func(t *testing.T) {
 		h := testHolder()
 		require.Equal(t, defaultTenantGroupConfig,
-			h.Snapshot().Groups.GetOrDefault(tenantGroupKey(9999)))
+			h.Snapshot().Groups().GetOrDefault(tenantGroupKey(9999)))
 	})
 
 	t.Run("default_configs_have_burst_frac", func(t *testing.T) {
 		h := testHolder()
 		snap := h.Snapshot()
-		highCfg := snap.Groups.GetOrDefault(rgGroupKey(highResourceGroupID))
+		highCfg := snap.Groups().GetOrDefault(rgGroupKey(highResourceGroupID))
 		require.Equal(t, float64(0.8), highCfg.BurstFrac)
-		lowCfg := snap.Groups.GetOrDefault(rgGroupKey(lowResourceGroupID))
+		lowCfg := snap.Groups().GetOrDefault(rgGroupKey(lowResourceGroupID))
 		require.Equal(t, float64(0.2), lowCfg.BurstFrac)
-		tenantCfg := snap.Groups.GetOrDefault(tenantGroupKey(9999))
+		tenantCfg := snap.Groups().GetOrDefault(tenantGroupKey(9999))
 		require.Equal(t, float64(0.20), tenantCfg.BurstFrac)
 	})
 }
@@ -72,7 +72,7 @@ func TestResourceGroupConfigHolderSet(t *testing.T) {
 		h.Set(ResourceGroupConfigSet{
 			rgGroupKey(42): {Weight: 100, MaxCPU: false},
 		})
-		groups := h.Snapshot().Groups
+		groups := h.Snapshot().Groups()
 		// Set is wholesale: the freshly-Set key is present alongside
 		// the built-ins (system tenant + high/low RM groups).
 		require.Equal(t, ResourceGroupConfig{Weight: 100, MaxCPU: false},
@@ -92,7 +92,7 @@ func TestResourceGroupConfigHolderSet(t *testing.T) {
 		input[rgGroupKey(7)] = ResourceGroupConfig{Weight: 1, MaxCPU: true}
 		input[rgGroupKey(8)] = ResourceGroupConfig{Weight: 1, MaxCPU: false}
 
-		groups := h.Snapshot().Groups
+		groups := h.Snapshot().Groups()
 		require.Equal(t, ResourceGroupConfig{Weight: 100, MaxCPU: false},
 			groups[rgGroupKey(7)])
 		require.Len(t, groups, 4) // 3 built-ins + 1 caller key
@@ -115,7 +115,7 @@ func TestResourceGroupConfigHolderGet(t *testing.T) {
 	})
 	require.Equal(t,
 		ResourceGroupConfig{Weight: 75, MaxCPU: true},
-		h.Snapshot().Groups.GetOrDefault(rgGroupKey(42)))
+		h.Snapshot().Groups().GetOrDefault(rgGroupKey(42)))
 }
 
 // TestResourceGroupConfigHolderSnapshot verifies Snapshot's contract:
@@ -131,7 +131,7 @@ func TestResourceGroupConfigHolderSnapshot(t *testing.T) {
 	h.mu.RLock()
 	internalPtr := reflect.ValueOf(h.mu.config).Pointer()
 	h.mu.RUnlock()
-	require.Equal(t, internalPtr, reflect.ValueOf(snap1.Groups).Pointer(),
+	require.Equal(t, internalPtr, reflect.ValueOf(snap1.Groups()).Pointer(),
 		"Snapshot should return the installed map directly")
 
 	// A subsequent Set installs a brand-new map. snap1 must remain
@@ -143,14 +143,14 @@ func TestResourceGroupConfigHolderSnapshot(t *testing.T) {
 	// snap1 must still have the built-in configs.
 	require.Equal(t,
 		builtinGroupConfigs[rgGroupKey(highResourceGroupID)],
-		snap1.Groups[rgGroupKey(highResourceGroupID)],
+		snap1.Groups()[rgGroupKey(highResourceGroupID)],
 		"prior snapshot must be unaffected by a subsequent Set")
 	// New snapshot has builtins + the freshly-set key.
 	snap2 := h.Snapshot()
 	require.Equal(t, ResourceGroupConfig{Weight: 100, MaxCPU: true},
-		snap2.Groups[rgGroupKey(42)])
-	require.Equal(t, systemTenantGroupConfig, snap2.Groups[tenantGroupKey(1)])
-	require.Len(t, snap2.Groups, 4) // 3 built-ins + 1 caller key
+		snap2.Groups()[rgGroupKey(42)])
+	require.Equal(t, systemTenantGroupConfig, snap2.Groups()[tenantGroupKey(1)])
+	require.Len(t, snap2.Groups(), 4) // 3 built-ins + 1 caller key
 }
 
 // TestSystemTenantGroupConfig verifies the field values of the built-in
@@ -166,7 +166,7 @@ func TestSystemTenantGroupConfig(t *testing.T) {
 // construction, without any explicit Set call beyond the seed.
 func TestBuiltinGroupConfigInSnapshot(t *testing.T) {
 	h := testHolder()
-	groups := h.Snapshot().Groups
+	groups := h.Snapshot().Groups()
 	cfg, ok := groups[tenantGroupKey(1)]
 	require.True(t, ok, "system tenant (ID 1) must be present in snapshot")
 	require.Equal(t, systemTenantGroupConfig, cfg)
@@ -191,31 +191,26 @@ func TestSetPanicsOnBuiltinOverwrite(t *testing.T) {
 func TestConfigSnapshotDefaults(t *testing.T) {
 	h := testHolder()
 	snap := h.Snapshot()
-	require.Equal(t, 0.8, snap.AppNoBurstFrac)
-	require.Equal(t, 0.95, snap.SystemNoBurstFrac)
-	require.Equal(t, 0.05, snap.BurstDelta)
+	require.Equal(t, 0.8, snap.MaxNonBurstableFraction())
+	require.InEpsilon(t, 0.85, snap.MaxFraction(), 1e-9)
 }
 
 // TestConfigSnapshotMaxNonBurstableFraction verifies
-// MaxNonBurstableFraction returns per-tier non-burstable targets.
+// MaxNonBurstableFraction returns the non-burstable target.
 func TestConfigSnapshotMaxNonBurstableFraction(t *testing.T) {
 	snap := ConfigSnapshot{
-		AppNoBurstFrac:    0.75,
-		SystemNoBurstFrac: 0.90,
-		BurstDelta:        0.10,
+		noBurstFrac: 0.75,
+		burstDelta:  0.10,
 	}
-	expected := [numResourceTiers]float64{0.90, 0.75}
-	require.Equal(t, expected, snap.MaxNonBurstableFraction())
+	require.Equal(t, 0.75, snap.MaxNonBurstableFraction())
 }
 
-// TestConfigSnapshotMaxFraction verifies MaxFraction returns per-tier
-// burstable targets (noBurstFrac + BurstDelta).
+// TestConfigSnapshotMaxFraction verifies MaxFraction returns the
+// burstable target (non-burstable target + burst delta).
 func TestConfigSnapshotMaxFraction(t *testing.T) {
 	snap := ConfigSnapshot{
-		AppNoBurstFrac:    0.75,
-		SystemNoBurstFrac: 0.90,
-		BurstDelta:        0.10,
+		noBurstFrac: 0.75,
+		burstDelta:  0.10,
 	}
-	expected := [numResourceTiers]float64{1.0, 0.85}
-	require.Equal(t, expected, snap.MaxFraction())
+	require.Equal(t, 0.85, snap.MaxFraction())
 }
