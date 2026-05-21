@@ -1404,3 +1404,17 @@ type RemoveDomainConstraintName struct {
 	TypeID       descpb.ID
 	ConstraintID descpb.ConstraintID
 }
+
+// SetDomainDefault sets the default expression on a domain type descriptor.
+type SetDomainDefault struct {
+	immediateMutationOp
+	TypeID descpb.ID
+	Expr   catpb.Expression
+}
+
+// RemoveDomainDefault removes the default expression from a domain type
+// descriptor.
+type RemoveDomainDefault struct {
+	immediateMutationOp
+	TypeID descpb.ID
+}
