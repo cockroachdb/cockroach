@@ -123,6 +123,11 @@ type variations struct {
 	profileOptions     []roachtestutil.ProfileOptionFunc
 	specOptions        []spec.Option
 	clusterSettings    map[string]string
+	// skipPostValidations is forwarded to TestSpec.SkipPostValidations. The
+	// zero value runs all post-test validations. Perturbations that
+	// inflate the cluster (large range counts, heavy fills) can set this
+	// to skip checks that exceed the framework's per-check budget.
+	skipPostValidations registry.PostValidation
 }
 
 const NUM_REGIONS = 3
@@ -395,6 +400,9 @@ func setup(p perturbation, impact acceptableImpact) variations {
 		roachtestutil.ProfMultipleFromP99(10),
 	}
 	v.impact = impact
+	// recoveryImpact left at zero value — falls back to impact at the
+	// runTest use site. Tests that want a different threshold for the
+	// recovery interval set it explicitly.
 	v.clusterSettings = make(map[string]string)
 	// Having the io_load_listener logs makes it easier to debug failures.
 	v.clusterSettings["server.debug.default_vmodule"] = "io_load_listener=1"
@@ -416,6 +424,13 @@ func RegisterTests(r registry.Registry) {
 	register(r, restart{}, notSkipped)
 	addLong(r, restart{})
 	register(r, backup{}, notSkipped)
+	// splits runs in two flavors: asleep=true exercises total replica
+	// capacity (followers park via store liveness quiescence), asleep=false
+	// exercises active-replica capacity (every replica costs full per-tick
+	// CPU). See splits.go for the long-form rationale.
+	for _, asleep := range []bool{true, false} {
+		register(r, splits{asleep: asleep}, notSkipped)
+	}
 
 	// TODO(ssd): We skipped the majority of these tests so that we can focus on
 	// one at a time. These are vaguely ordered by their previous pass rate
@@ -571,6 +586,13 @@ func addMetamorphic(r registry.Registry, p perturbation, skipReason string) {
 	rng, seed := randutil.NewPseudoRand()
 	v := p.setupMetamorphic(rng)
 	v.seed = seed
+	// Some perturbations need to scale down for the metamorphic variant
+	// (the randomized clusters this suite picks are smaller than the
+	// dedicated nightly cluster). They implement metamorphicSizer to
+	// return a shrunk version of themselves.
+	if ms, ok := v.perturbation.(metamorphicSizer); ok {
+		v.perturbation = ms.sizeForMetamorphic()
+	}
 	v = v.finishSetup()
 	spec := registry.TestSpec{
 		Name:                   fmt.Sprintf("perturbation/metamorphic/%s", v.perturbationName()),
@@ -581,6 +603,7 @@ func addMetamorphic(r registry.Registry, p perturbation, skipReason string) {
 		Cluster:                v.makeClusterSpec(),
 		Leases:                 v.leaseType,
 		Randomized:             true,
+		SkipPostValidations:    v.skipPostValidations,
 		PostProcessPerfMetrics: perturbationDefaultProcessFunction,
 		Run:                    v.runTest,
 	}
@@ -600,6 +623,7 @@ func addFull(r registry.Registry, p perturbation, skipReason string) {
 		Cluster:                v.makeClusterSpec(),
 		Leases:                 v.leaseType,
 		Benchmark:              true,
+		SkipPostValidations:    v.skipPostValidations,
 		PostProcessPerfMetrics: perturbationDefaultProcessFunction,
 		Run:                    v.runTest,
 	}
@@ -673,8 +697,22 @@ func addLong(r registry.Registry, p perturbation) {
 
 func addDev(r registry.Registry, p perturbation) {
 	v := p.setup()
-	// Dev tests never fail on latency increases.
+	// Dev tests never fail on latency or throughput changes — local
+	// processes on a developer machine are too noisy for either to be
+	// meaningful. Zero out both intervals' thresholds. recoveryImpact
+	// must be zeroed explicitly even though impact is also zero: a
+	// perturbation setup that set recoveryImpact to a non-zero value
+	// would otherwise survive and gate the dev run.
 	v.impact = noImpactThresholds()
+	v.recoveryImpact = acceptableImpact{}
+	// Clear any per-test timeout override; the registry default is fine
+	// for a 30-second perturbation on a 5-node local cluster, and an
+	// override sized for the nightly variant (e.g. several hours) would
+	// hide hangs in the dev run. Same reasoning for tokenReturnTime:
+	// the nightly override (e.g. 1h) wildly overshoots what's
+	// meaningful on a 5-node local cluster.
+	v.timeout = 0
+	v.tokenReturnTime = 0
 	// Make the tests faster for development.
 	v.splits = 1
 	v.numNodes = 5
@@ -696,6 +734,12 @@ func addDev(r registry.Registry, p perturbation) {
 
 	// Allow the test to run on dev machines.
 	v.cloud = registry.AllClouds
+	// Some perturbations need to scale down for the dev variant (smaller
+	// cluster, faster wall time). They implement devSizer to return a
+	// shrunk version of themselves.
+	if ds, ok := v.perturbation.(devSizer); ok {
+		v.perturbation = ds.sizeForDev()
+	}
 	v = v.finishSetup()
 	spec := registry.TestSpec{
 		Name:                   fmt.Sprintf("perturbation/dev/%s", v.perturbationName()),
@@ -745,6 +789,18 @@ type perturbation interface {
 // with the parent path.
 type perturbationNamer interface {
 	nameSuffix() string
+}
+
+// devSizer is an optional interface for perturbations that need to shrink
+// themselves for the dev variant (small cluster, fast wall time). addDev
+// invokes sizeForDev() if the perturbation implements it.
+type devSizer interface {
+	sizeForDev() perturbation
+}
+
+// metamorphicSizer is the same idea as devSizer for the metamorphic variant.
+type metamorphicSizer interface {
+	sizeForMetamorphic() perturbation
 }
 
 func prettyPrint(title string, stats map[string]aggregatedStat) string {
