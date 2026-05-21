@@ -47,9 +47,8 @@ var gcAssistEnabled = settings.RegisterBoolSetting(
 	settings.SystemVisible,
 	"server.gc_assist.enabled",
 	"set to false to dynamically disable GC assist in the Go runtime "+
-		"(requires CockroachDB's forked Go runtime; no-op otherwise); "+
-		"picks up the GODEBUG gcnoassist flag as its default",
-	gcassist.Enabled(), // default reflects GODEBUG=gcnoassist at startup
+		"(requires CockroachDB's forked Go runtime; no-op otherwise)",
+	false, // disabled by default to reduce tail latencies
 )
 
 var gcPressureWarningThreshold = settings.RegisterFloatSetting(
