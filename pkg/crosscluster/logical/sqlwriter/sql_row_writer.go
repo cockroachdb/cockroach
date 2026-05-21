@@ -42,27 +42,35 @@ func (s *RowWriter) setOriginTimestamp(ctx context.Context, originTimestamp hlc.
 	})
 }
 
-// DeleteRow deletes a row from the table. It returns errStalePreviousValue
-// if the oldRow argument does not match the value in the local database.
+// DeleteRow deletes a row from the table. It returns ErrStalePreviousValue if
+// the oldRow argument does not match the value in the local database. It
+// returns a ConditionFailedError with OriginTimestampOlderThan set if the
+// previous value matches but the local row has a newer origin timestamp (LWW
+// loser).
 func (s *RowWriter) DeleteRow(
 	ctx context.Context, originTimestamp hlc.Timestamp, oldRow tree.Datums,
 ) error {
-	s.scratchDatums = s.scratchDatums[:0]
-	s.scratchDatums = append(s.scratchDatums, oldRow...)
+	// We use a savepoint because the KV layer may reject the delete with a
+	// ConditionFailedError if the local row has a newer origin timestamp. Without
+	// the savepoint, the rejection would abort the entire transaction.
+	return s.session.Savepoint(ctx, func(ctx context.Context) error {
+		s.scratchDatums = s.scratchDatums[:0]
+		s.scratchDatums = append(s.scratchDatums, oldRow...)
 
-	err := s.setOriginTimestamp(ctx, originTimestamp)
-	if err != nil {
-		return err
-	}
+		err := s.setOriginTimestamp(ctx, originTimestamp)
+		if err != nil {
+			return err
+		}
 
-	rowsAffected, err := s.session.ExecutePrepared(ctx, s.delete, s.scratchDatums)
-	if err != nil {
-		return errors.Wrap(err, "deleting row")
-	}
-	if rowsAffected != 1 {
-		return ErrStalePreviousValue
-	}
-	return nil
+		rowsAffected, err := s.session.ExecutePrepared(ctx, s.delete, s.scratchDatums)
+		if err != nil {
+			return errors.Wrap(err, "deleting row")
+		}
+		if rowsAffected != 1 {
+			return ErrStalePreviousValue
+		}
+		return nil
+	})
 }
 
 // InsertRow inserts a row into the table. It returns a ConditionFailedError
@@ -75,9 +83,7 @@ func (s *RowWriter) InsertRow(
 	// We use a savepoint here because LWW may reject the insert if it conflicts
 	// with a tombstone or an existing row with a more recent origin timestamp.
 	// Without the savepoint, the LWW rejection would abort the entire
-	// transaction. Updates and deletes do not need savepoints because a conflict
-	// results in zero rows modified, which leaves the transaction in a healthy
-	// state.
+	// transaction.
 	err := s.session.Savepoint(ctx, func(ctx context.Context) error {
 		s.scratchDatums = s.scratchDatums[:0]
 		s.scratchDatums = append(s.scratchDatums, row...)
@@ -108,28 +114,36 @@ func (s *RowWriter) InsertRow(
 	return err
 }
 
-// UpdateRow updates a row in the table. It returns errStalePreviousValue
-// if the oldRow argument does not match the value in the local database.
+// UpdateRow updates a row in the table. It returns ErrStalePreviousValue if
+// the oldRow argument does not match the value in the local database. It
+// returns a ConditionFailedError with OriginTimestampOlderThan set if the
+// previous value matches but the local row has a newer origin timestamp (LWW
+// loser).
 func (s *RowWriter) UpdateRow(
 	ctx context.Context, originTimestamp hlc.Timestamp, oldRow tree.Datums, newRow tree.Datums,
 ) error {
-	s.scratchDatums = s.scratchDatums[:0]
-	s.scratchDatums = append(s.scratchDatums, oldRow...)
-	s.scratchDatums = append(s.scratchDatums, newRow...)
+	// We use a savepoint because the KV layer may reject the update with a
+	// ConditionFailedError if the local row has a newer origin timestamp. Without
+	// the savepoint, the rejection would abort the entire transaction.
+	return s.session.Savepoint(ctx, func(ctx context.Context) error {
+		s.scratchDatums = s.scratchDatums[:0]
+		s.scratchDatums = append(s.scratchDatums, oldRow...)
+		s.scratchDatums = append(s.scratchDatums, newRow...)
 
-	err := s.setOriginTimestamp(ctx, originTimestamp)
-	if err != nil {
-		return err
-	}
+		err := s.setOriginTimestamp(ctx, originTimestamp)
+		if err != nil {
+			return err
+		}
 
-	rowsAffected, err := s.session.ExecutePrepared(ctx, s.update, s.scratchDatums)
-	if err != nil {
-		return errors.Wrap(err, "updating row")
-	}
-	if rowsAffected != 1 {
-		return ErrStalePreviousValue
-	}
-	return err
+		rowsAffected, err := s.session.ExecutePrepared(ctx, s.update, s.scratchDatums)
+		if err != nil {
+			return errors.Wrap(err, "updating row")
+		}
+		if rowsAffected != 1 {
+			return ErrStalePreviousValue
+		}
+		return nil
+	})
 }
 
 func NewRowWriter(
