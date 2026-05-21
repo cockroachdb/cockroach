@@ -26,7 +26,7 @@ const (
 	OwnerObservability      Owner = `obs-prs`
 	OwnerObservabilityIndia Owner = `obs-india-prs`
 	OwnerServer             Owner = `server`
-	OwnerSQLFoundations     Owner = `sql-foundations`
+	OwnerSQLFoundations     Owner = `sql-foundations-prs`
 	OwnerMigrations         Owner = `migrations`
 	OwnerProductSecurity    Owner = `product-security`
 	OwnerReleaseEng         Owner = `release-eng`
