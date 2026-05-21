@@ -25,15 +25,50 @@ subtest end
 
 subtest set_not_null
 
-statement error pgcode 0A000 ALTER DOMAIN SET NOT NULL is not supported
+statement ok
 ALTER DOMAIN d SET NOT NULL
+
+statement ok
+CREATE DOMAIN d_nn AS INT DEFAULT 0
+
+query T
+SELECT conname FROM pg_constraint WHERE contypid = 'd_nn'::regtype AND contype = 'n' ORDER BY conname
+----
+
+statement ok
+ALTER DOMAIN d_nn SET NOT NULL
+
+# Verify the NOT NULL constraint exists.
+query T
+SELECT conname FROM pg_constraint WHERE contypid = 'd_nn'::regtype AND contype = 'n' ORDER BY conname
+----
+d_nn_not_null
+
+statement ok
+ALTER DOMAIN d_nn SET NOT NULL
+
+# Verify there is exactly one NOT NULL constraint.
+query T
+SELECT conname FROM pg_constraint WHERE contypid = 'd_nn'::regtype AND contype = 'n' ORDER BY conname
+----
+d_nn_not_null
 
 subtest end
 
 subtest drop_not_null
 
-statement error pgcode 0A000 ALTER DOMAIN DROP NOT NULL is not supported
-ALTER DOMAIN d DROP NOT NULL
+statement ok
+ALTER DOMAIN d_nn DROP NOT NULL
+
+query T
+SELECT conname FROM pg_constraint WHERE contypid = 'd_nn'::regtype AND contype = 'n' ORDER BY conname
+----
+
+statement ok
+ALTER DOMAIN d_nn DROP NOT NULL
+
+statement ok
+DROP DOMAIN d_nn
 
 subtest end
 

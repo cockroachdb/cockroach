@@ -11,6 +11,7 @@ import (
 	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/errors"
 )
@@ -107,5 +108,99 @@ func (i *immediateVisitor) RemoveEnumTypeValue(
 	return errors.AssertionFailedf(
 		"enum value %q not found in type descriptor %d",
 		op.LogicalRepresentation, op.TypeID,
+	)
+}
+
+func (i *immediateVisitor) AddDomainNotNull(ctx context.Context, op scop.AddDomainNotNull) error {
+	typ, err := i.checkOutType(ctx, op.TypeID)
+	if err != nil {
+		return err
+	}
+	if typ.Domain == nil {
+		return errors.AssertionFailedf(
+			"type descriptor %d is not a domain type", op.TypeID,
+		)
+	}
+	typ.Domain.NotNull = true
+	typ.Domain.NotNullConstraintID = op.ConstraintID
+	// Use a placeholder name until its properly set.
+	typ.Domain.NotNullConstraintName = tabledesc.ConstraintNamePlaceholder(op.ConstraintID)
+	return nil
+}
+
+func (i *immediateVisitor) RemoveDomainNotNull(
+	ctx context.Context, op scop.RemoveDomainNotNull,
+) error {
+	typ, err := i.checkOutType(ctx, op.TypeID)
+	if err != nil {
+		return err
+	}
+	if typ.Domain == nil {
+		return errors.AssertionFailedf(
+			"type descriptor %d is not a domain type", op.TypeID,
+		)
+	}
+	typ.Domain.NotNull = false
+	typ.Domain.NotNullConstraintID = 0
+	typ.Domain.NotNullConstraintName = ""
+	return nil
+}
+
+func (i *immediateVisitor) SetDomainConstraintName(
+	ctx context.Context, op scop.SetDomainConstraintName,
+) error {
+	typ, err := i.checkOutType(ctx, op.TypeID)
+	if err != nil {
+		return err
+	}
+	if typ.Domain == nil {
+		return errors.AssertionFailedf(
+			"type descriptor %d is not a domain type", op.TypeID,
+		)
+	}
+	if typ.Domain.NotNullConstraintID == op.ConstraintID {
+		typ.Domain.NotNullConstraintName = op.Name
+		return nil
+	}
+	for j := range typ.Domain.CheckConstraints {
+		if typ.Domain.CheckConstraints[j].ConstraintID == op.ConstraintID {
+			typ.Domain.CheckConstraints[j].Name = op.Name
+			return nil
+		}
+	}
+	return errors.AssertionFailedf(
+		"constraint %d not found in domain type descriptor %d",
+		op.ConstraintID, op.TypeID,
+	)
+}
+
+func (i *immediateVisitor) RemoveDomainConstraintName(
+	ctx context.Context, op scop.RemoveDomainConstraintName,
+) error {
+	typ, err := i.checkOutType(ctx, op.TypeID)
+	if err != nil {
+		return err
+	}
+	if typ.Domain == nil {
+		return errors.AssertionFailedf(
+			"type descriptor %d is not a domain type", op.TypeID,
+		)
+	}
+	// Use a placeholder to free the name for reuse while the constraint is
+	// still present in the descriptor.
+	placeholder := tabledesc.ConstraintNamePlaceholder(op.ConstraintID)
+	if typ.Domain.NotNullConstraintID == op.ConstraintID {
+		typ.Domain.NotNullConstraintName = placeholder
+		return nil
+	}
+	for j := range typ.Domain.CheckConstraints {
+		if typ.Domain.CheckConstraints[j].ConstraintID == op.ConstraintID {
+			typ.Domain.CheckConstraints[j].Name = placeholder
+			return nil
+		}
+	}
+	return errors.AssertionFailedf(
+		"constraint %d not found in domain type descriptor %d",
+		op.ConstraintID, op.TypeID,
 	)
 }

@@ -931,7 +931,7 @@ deprules
     - descriptorIsNotBeingDropped-26.3($prev)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
-- name: 'DomainNotNull transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC'
+- name: 'DomainNotNull transitions to PUBLIC uphold 2-version invariant: VALIDATED->WRITE_ONLY'
   from: prev-Node
   kind: PreviousTransactionPrecedence
   to: next-Node
@@ -943,11 +943,11 @@ deprules
     - $prev-Target[Self] = $next-Target
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = VALIDATED
-    - $next-Node[CurrentStatus] = PUBLIC
+    - $next-Node[CurrentStatus] = WRITE_ONLY
     - descriptorIsNotBeingDropped-26.3($prev)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
-- name: 'DomainNotNull transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED'
+- name: 'DomainNotNull transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->PUBLIC'
   from: prev-Node
   kind: PreviousTransactionPrecedence
   to: next-Node
@@ -959,8 +959,9 @@ deprules
     - $prev-Target[Self] = $next-Target
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = WRITE_ONLY
-    - $next-Node[CurrentStatus] = VALIDATED
+    - $next-Node[CurrentStatus] = PUBLIC
     - descriptorIsNotBeingDropped-26.3($prev)
+    - nodeNotExistsWithStatusIn_VALIDATED($prev-Target)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'EnumTypeValue transitions to ABSENT uphold 2-version invariant: PUBLIC->WRITE_ONLY'
@@ -3425,7 +3426,7 @@ deprules
   kind: SameStagePrecedence
   to: complex-constraint-Node
   query:
-    - $dependent[Type] IN ['*scpb.ConstraintComment', '*scpb.DomainConstraintName', '*scpb.TableLocalityRegionalByRowUsingConstraint']
+    - $dependent[Type] IN ['*scpb.ConstraintComment', '*scpb.TableLocalityRegionalByRowUsingConstraint']
     - $complex-constraint[Type] IN ['*scpb.CheckConstraint', '*scpb.ColumnNotNull', '*scpb.DomainCheckConstraint', '*scpb.DomainNotNull', '*scpb.ForeignKeyConstraint', '*scpb.UniqueWithoutIndexConstraint']
     - joinOnConstraintID($dependent, $complex-constraint, $table-id, $constraint-id)
     - ToPublicOrTransient($dependent-Target, $complex-constraint-Target)
@@ -4121,6 +4122,19 @@ deprules
     - $data-Node[CurrentStatus] = DROPPED
     - joinTargetNode($database, $database-Target, $database-Node)
     - joinTargetNode($data, $data-Target, $data-Node)
+- name: domain constraint visible before domain constraint name
+  from: domain-constraint-Node
+  kind: Precedence
+  to: domain-constraint-name-Node
+  query:
+    - $domain-constraint[Type] IN ['*scpb.DomainCheckConstraint', '*scpb.DomainCheckConstraintUnvalidated', '*scpb.DomainNotNull']
+    - $domain-constraint-name[Type] = '*scpb.DomainConstraintName'
+    - joinOnConstraintID($domain-constraint, $domain-constraint-name, $type-id, $constraint-id)
+    - ToPublicOrTransient($domain-constraint-Target, $domain-constraint-name-Target)
+    - $domain-constraint-Node[CurrentStatus] = WRITE_ONLY
+    - $domain-constraint-name-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($domain-constraint, $domain-constraint-Target, $domain-constraint-Node)
+    - joinTargetNode($domain-constraint-name, $domain-constraint-name-Target, $domain-constraint-name-Node)
 - name: during a column type alterations, column type dependents removed before column type
   from: dependent-Node
   kind: Precedence
@@ -6774,7 +6788,7 @@ deprules
     - descriptorIsNotBeingDropped-26.3($prev)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
-- name: 'DomainNotNull transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC'
+- name: 'DomainNotNull transitions to PUBLIC uphold 2-version invariant: VALIDATED->WRITE_ONLY'
   from: prev-Node
   kind: PreviousTransactionPrecedence
   to: next-Node
@@ -6786,11 +6800,11 @@ deprules
     - $prev-Target[Self] = $next-Target
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = VALIDATED
-    - $next-Node[CurrentStatus] = PUBLIC
+    - $next-Node[CurrentStatus] = WRITE_ONLY
     - descriptorIsNotBeingDropped-26.3($prev)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
-- name: 'DomainNotNull transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED'
+- name: 'DomainNotNull transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->PUBLIC'
   from: prev-Node
   kind: PreviousTransactionPrecedence
   to: next-Node
@@ -6802,8 +6816,9 @@ deprules
     - $prev-Target[Self] = $next-Target
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = WRITE_ONLY
-    - $next-Node[CurrentStatus] = VALIDATED
+    - $next-Node[CurrentStatus] = PUBLIC
     - descriptorIsNotBeingDropped-26.3($prev)
+    - nodeNotExistsWithStatusIn_VALIDATED($prev-Target)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'EnumTypeValue transitions to ABSENT uphold 2-version invariant: PUBLIC->WRITE_ONLY'
@@ -9268,7 +9283,7 @@ deprules
   kind: SameStagePrecedence
   to: complex-constraint-Node
   query:
-    - $dependent[Type] IN ['*scpb.ConstraintComment', '*scpb.DomainConstraintName', '*scpb.TableLocalityRegionalByRowUsingConstraint']
+    - $dependent[Type] IN ['*scpb.ConstraintComment', '*scpb.TableLocalityRegionalByRowUsingConstraint']
     - $complex-constraint[Type] IN ['*scpb.CheckConstraint', '*scpb.ColumnNotNull', '*scpb.DomainCheckConstraint', '*scpb.DomainNotNull', '*scpb.ForeignKeyConstraint', '*scpb.UniqueWithoutIndexConstraint']
     - joinOnConstraintID($dependent, $complex-constraint, $table-id, $constraint-id)
     - ToPublicOrTransient($dependent-Target, $complex-constraint-Target)
@@ -9964,6 +9979,19 @@ deprules
     - $data-Node[CurrentStatus] = DROPPED
     - joinTargetNode($database, $database-Target, $database-Node)
     - joinTargetNode($data, $data-Target, $data-Node)
+- name: domain constraint visible before domain constraint name
+  from: domain-constraint-Node
+  kind: Precedence
+  to: domain-constraint-name-Node
+  query:
+    - $domain-constraint[Type] IN ['*scpb.DomainCheckConstraint', '*scpb.DomainCheckConstraintUnvalidated', '*scpb.DomainNotNull']
+    - $domain-constraint-name[Type] = '*scpb.DomainConstraintName'
+    - joinOnConstraintID($domain-constraint, $domain-constraint-name, $type-id, $constraint-id)
+    - ToPublicOrTransient($domain-constraint-Target, $domain-constraint-name-Target)
+    - $domain-constraint-Node[CurrentStatus] = WRITE_ONLY
+    - $domain-constraint-name-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($domain-constraint, $domain-constraint-Target, $domain-constraint-Node)
+    - joinTargetNode($domain-constraint-name, $domain-constraint-name-Target, $domain-constraint-name-Node)
 - name: during a column type alterations, column type dependents removed before column type
   from: dependent-Node
   kind: Precedence

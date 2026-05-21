@@ -6,12 +6,15 @@
 package scbuildstmt
 
 import (
+	"fmt"
 	"reflect"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/errors"
@@ -121,13 +124,97 @@ func alterDomainDropDefault(
 func alterDomainSetNotNull(
 	b BuildCtx, tn *tree.TypeName, domainType *scpb.DomainType, t *tree.AlterDomainSetNotNull,
 ) {
-	panic(pgerror.Newf(pgcode.FeatureNotSupported, "ALTER DOMAIN SET NOT NULL is not supported"))
+	typeID := domainType.TypeID
+	domainElts := b.QueryByID(typeID)
+
+	existingNotNull := domainElts.FilterDomainNotNull().MustGetZeroOrOneElement()
+	if existingNotNull != nil {
+		return
+	}
+
+	constraintID := nextDomainConstraintID(b, typeID)
+	constraintName := chooseDomainNotNullConstraintName(b, tn, typeID)
+
+	b.Add(&scpb.DomainNotNull{
+		TypeID:       typeID,
+		ConstraintID: constraintID,
+	})
+	b.Add(&scpb.DomainConstraintName{
+		TypeID:       typeID,
+		ConstraintID: constraintID,
+		Name:         constraintName,
+	})
 }
 
 func alterDomainDropNotNull(
 	b BuildCtx, tn *tree.TypeName, domainType *scpb.DomainType, t *tree.AlterDomainDropNotNull,
 ) {
-	panic(pgerror.Newf(pgcode.FeatureNotSupported, "ALTER DOMAIN DROP NOT NULL is not supported"))
+	typeID := domainType.TypeID
+	domainElts := b.QueryByID(typeID)
+
+	existingNotNull := domainElts.FilterDomainNotNull().MustGetZeroOrOneElement()
+	if existingNotNull == nil {
+		return
+	}
+	b.Drop(existingNotNull)
+
+	domainElts.FilterDomainConstraintName().Filter(
+		func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.DomainConstraintName) bool {
+			return e.ConstraintID == existingNotNull.ConstraintID
+		},
+	).ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.DomainConstraintName) {
+		b.Drop(e)
+	})
+}
+
+// nextDomainConstraintID returns the next available constraint ID for a domain
+// type by checking the existing constraint elements.
+func nextDomainConstraintID(b BuildCtx, typeID catid.DescID) catid.ConstraintID {
+	var maxID catid.ConstraintID
+	domainElts := b.QueryByID(typeID)
+	domainElts.FilterDomainNotNull().ForEach(
+		func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.DomainNotNull) {
+			if e.ConstraintID > maxID {
+				maxID = e.ConstraintID
+			}
+		},
+	)
+	domainElts.FilterDomainCheckConstraint().ForEach(
+		func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.DomainCheckConstraint) {
+			if e.ConstraintID > maxID {
+				maxID = e.ConstraintID
+			}
+		},
+	)
+	domainElts.FilterDomainCheckConstraintUnvalidated().ForEach(
+		func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.DomainCheckConstraintUnvalidated) {
+			if e.ConstraintID > maxID {
+				maxID = e.ConstraintID
+			}
+		},
+	)
+	return maxID + 1
+}
+
+// chooseDomainNotNullConstraintName generates a unique, unconflicted name for a
+// domain NOT NULL constraint.
+func chooseDomainNotNullConstraintName(b BuildCtx, tn *tree.TypeName, typeID catid.DescID) string {
+	var usedNames []string
+	b.QueryByID(typeID).FilterDomainConstraintName().ForEach(
+		func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.DomainConstraintName) {
+			usedNames = append(usedNames, e.Name)
+		},
+	)
+	domainName := tn.Object()
+	candidate := fmt.Sprintf("%s_not_null", domainName)
+	for pass := 0; ; pass++ {
+		if pass > 0 {
+			candidate = fmt.Sprintf("%s_not_null%d", domainName, pass)
+		}
+		if !slices.Contains(usedNames, candidate) {
+			return candidate
+		}
+	}
 }
 
 func alterDomainAddCheckConstraint(
