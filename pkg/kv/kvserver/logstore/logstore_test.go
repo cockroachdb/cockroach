@@ -82,7 +82,7 @@ func TestRaftStorageWrites(t *testing.T) {
 			batch := writeBatch(func(rw storage.ReadWriter) {
 				require.NoError(t, storeHardState(ctx, rw, sl, hs))
 				var err error
-				newState, err = logAppend(ctx, sl.RaftLogPrefix(), rw, state, entries, false /* enginesSeparated */)
+				newState, err = logAppend(ctx, sl.RangeIDPrefixBuf, rw, state, entries, false /* enginesSeparated */)
 				require.NoError(t, err)
 			})
 			state = newState
@@ -162,7 +162,7 @@ func (h *clearRangeHelper) populate(ctx context.Context, firstIndex uint64, last
 	b := h.eng.NewBatch()
 	defer b.Close()
 	_, err := logAppend(
-		ctx, h.prefixBuf.RaftLogPrefix(), b, RaftState{}, entries, false, /* enginesSeparated */
+		ctx, h.prefixBuf, b, RaftState{}, entries, false, /* enginesSeparated */
 	)
 	require.NoError(h.t, err)
 	require.NoError(h.t, b.Commit(false /* sync */))
