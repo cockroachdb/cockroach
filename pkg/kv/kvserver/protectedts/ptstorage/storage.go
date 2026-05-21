@@ -58,7 +58,7 @@ func (p *storage) Protect(ctx context.Context, r *ptpb.Record) (err error) {
 		}
 	}()
 
-	if err := validateRecordForProtect(ctx, r, p.settings, p.knobs); err != nil {
+	if err := validateRecordForProtect(ctx, r, p.knobs); err != nil {
 		return err
 	}
 
@@ -357,7 +357,7 @@ var (
 )
 
 func validateRecordForProtect(
-	ctx context.Context, r *ptpb.Record, st *cluster.Settings, knobs *protectedts.TestingKnobs,
+	ctx context.Context, r *ptpb.Record, knobs *protectedts.TestingKnobs,
 ) error {
 	if r.Timestamp.IsEmpty() {
 		return errZeroTimestamp
