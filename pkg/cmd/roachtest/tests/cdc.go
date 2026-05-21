@@ -3732,13 +3732,7 @@ func runCDCLingerBench(ctx context.Context, t test.Test, c cluster.Cluster, flus
 	// are suppressed during the ramp (workload/cli/run.go:636), so they would
 	// silently drop the data we care about. All time-series come from prometheus.
 	//
-	// Concurrency of 8 per data node (32 total) is deliberately well below the
-	// sink-saturation point seen at 64/node (~256 total), where every Flush.Frequency
-	// variant overran the changefeed pipeline and triggered source-side
-	// backpressure that collapsed throughput. The aim here is to stay in the
-	// sustainable regime so latency reflects flush cadence rather than buffer
-	// fill — i.e. the regime where the linger tradeoff is actually visible.
-	concurrency := len(ct.crdbNodes) * 8
+	concurrency := len(ct.crdbNodes) * 64
 	const (
 		ramp     = 10 * time.Minute
 		duration = 2 * time.Minute
