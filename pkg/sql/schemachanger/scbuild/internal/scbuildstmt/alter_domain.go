@@ -11,11 +11,13 @@ import (
 	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/errors"
 )
@@ -112,13 +114,56 @@ func AlterDomain(b BuildCtx, n *tree.AlterDomain) {
 func alterDomainSetDefault(
 	b BuildCtx, tn *tree.TypeName, domainType *scpb.DomainType, t *tree.AlterDomainSetDefault,
 ) {
-	panic(pgerror.Newf(pgcode.FeatureNotSupported, "ALTER DOMAIN SET DEFAULT is not supported"))
+	typeID := domainType.TypeID
+	oldDefault := b.QueryByID(typeID).FilterDomainDefault().NotToAbsent().MustGetZeroOrOneElement()
+	if oldDefault != nil {
+		b.Drop(oldDefault)
+	}
+
+	typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
+		b, t.Default, domainType.BaseTypeT.Type,
+		tree.ColumnDefaultExprInSetDefault,
+		b.SemaCtx(), volatility.Volatile, false, /* allowAssignmentCast */
+	)
+	if err != nil {
+		panic(pgerror.WithCandidateCode(err, pgcode.DatatypeMismatch))
+	}
+
+	typedExpr, err = schemaexpr.MaybeReplaceUDFNameWithOIDReferenceInTypedExpr(typedExpr)
+	if err != nil {
+		panic(err)
+	}
+
+	expr := b.WrapExpression(typeID, typedExpr)
+	// References to other descriptors in a domain default would require
+	// establishing back-references from those descriptors to the domain type,
+	// so that the referenced object cannot be dropped while the domain still
+	// depends on it.
+	switch {
+	case len(expr.UsesSequenceIDs) > 0:
+		panic(pgerror.Newf(pgcode.FeatureNotSupported,
+			"sequence references in domain DEFAULT expressions are not supported"))
+	case len(expr.UsesFunctionIDs) > 0:
+		panic(pgerror.Newf(pgcode.FeatureNotSupported,
+			"function references in domain DEFAULT expressions are not supported"))
+	case len(expr.UsesTypeIDs) > 0:
+		panic(pgerror.Newf(pgcode.FeatureNotSupported,
+			"user-defined type references in domain DEFAULT expressions are not supported"))
+	}
+
+	b.Add(&scpb.DomainDefault{
+		TypeID:     typeID,
+		Expression: *expr,
+	})
 }
 
 func alterDomainDropDefault(
 	b BuildCtx, tn *tree.TypeName, domainType *scpb.DomainType, t *tree.AlterDomainDropDefault,
 ) {
-	panic(pgerror.Newf(pgcode.FeatureNotSupported, "ALTER DOMAIN DROP DEFAULT is not supported"))
+	if oldDefault := b.QueryByID(domainType.TypeID).
+		FilterDomainDefault().NotToAbsent().MustGetZeroOrOneElement(); oldDefault != nil {
+		b.Drop(oldDefault)
+	}
 }
 
 func alterDomainSetNotNull(

@@ -1,0 +1,34 @@
+/* setup */
+CREATE DOMAIN salmon AS INT DEFAULT 0;
+CREATE TABLE t (c salmon);
+
+/* test */
+EXPLAIN (DDL) ALTER DOMAIN salmon DROP DEFAULT;
+----
+Schema change plan for ALTER DOMAIN ‹defaultdb›.‹public›.‹salmon› DROP DEFAULT;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 1 element transitioning toward ABSENT
+ │         │    └── PUBLIC → WRITE_ONLY DomainDefault:{DescID: 104 (salmon), Expr: 0}
+ │         └── 1 Mutation operation
+ │              └── RemoveDomainDefault {"TypeID":104}
+ ├── PreCommitPhase
+ │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 1 element transitioning toward ABSENT
+ │    │    │    └── WRITE_ONLY → PUBLIC DomainDefault:{DescID: 104 (salmon), Expr: 0}
+ │    │    └── 1 Mutation operation
+ │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
+ │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 1 element transitioning toward ABSENT
+ │         │    └── PUBLIC → WRITE_ONLY DomainDefault:{DescID: 104 (salmon), Expr: 0}
+ │         └── 3 Mutation operations
+ │              ├── RemoveDomainDefault {"TypeID":104}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"Pending: PostCom..."}
+ └── PostCommitPhase
+      └── Stage 1 of 1 in PostCommitPhase
+           ├── 1 element transitioning toward ABSENT
+           │    └── WRITE_ONLY → ABSENT DomainDefault:{DescID: 104 (salmon), Expr: 0}
+           └── 2 Mutation operations
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

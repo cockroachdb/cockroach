@@ -4314,6 +4314,20 @@ deprules
     - $new-column-expression-Node[CurrentStatus] = PUBLIC
     - joinTargetNode($old-column-expression, $old-column-expression-Target, $old-column-expression-Node)
     - joinTargetNode($new-column-expression, $new-column-expression-Target, $new-column-expression-Node)
+- name: handle domain default expression swaps
+  from: old-domain-default-Node
+  kind: SameStagePrecedence
+  to: new-domain-default-Node
+  query:
+    - $old-domain-default[Type] = '*scpb.DomainDefault'
+    - $new-domain-default[Type] = '*scpb.DomainDefault'
+    - joinOnDescID($old-domain-default, $new-domain-default, $type-id)
+    - $old-domain-default-Target[TargetStatus] = ABSENT
+    - $old-domain-default-Node[CurrentStatus] = WRITE_ONLY
+    - $new-domain-default-Target[TargetStatus] = PUBLIC
+    - $new-domain-default-Node[CurrentStatus] = WRITE_ONLY
+    - joinTargetNode($old-domain-default, $old-domain-default-Target, $old-domain-default-Node)
+    - joinTargetNode($new-domain-default, $new-domain-default-Target, $new-domain-default-Node)
 - name: index data exists as soon as index accepts backfills
   from: index-name-Node
   kind: SameStagePrecedence
@@ -10171,6 +10185,20 @@ deprules
     - $new-column-expression-Node[CurrentStatus] = PUBLIC
     - joinTargetNode($old-column-expression, $old-column-expression-Target, $old-column-expression-Node)
     - joinTargetNode($new-column-expression, $new-column-expression-Target, $new-column-expression-Node)
+- name: handle domain default expression swaps
+  from: old-domain-default-Node
+  kind: SameStagePrecedence
+  to: new-domain-default-Node
+  query:
+    - $old-domain-default[Type] = '*scpb.DomainDefault'
+    - $new-domain-default[Type] = '*scpb.DomainDefault'
+    - joinOnDescID($old-domain-default, $new-domain-default, $type-id)
+    - $old-domain-default-Target[TargetStatus] = ABSENT
+    - $old-domain-default-Node[CurrentStatus] = WRITE_ONLY
+    - $new-domain-default-Target[TargetStatus] = PUBLIC
+    - $new-domain-default-Node[CurrentStatus] = WRITE_ONLY
+    - joinTargetNode($old-domain-default, $old-domain-default-Target, $old-domain-default-Node)
+    - joinTargetNode($new-domain-default, $new-domain-default-Target, $new-domain-default-Node)
 - name: index data exists as soon as index accepts backfills
   from: index-name-Node
   kind: SameStagePrecedence
