@@ -15,6 +15,7 @@ import (
 	"os/user"
 	"regexp"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -130,6 +131,20 @@ Examples:
 			specs, hint := filter.FilterWithHint(r.AllTests())
 			if len(specs) == 0 {
 				return errors.Newf("%s", filter.NoMatchesHintString(hint))
+			}
+
+			if roachtestflags.ListDetails {
+				tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+				fmt.Fprintln(tw, "NAME\tOWNER\tTIMEOUT\tRANDOMIZED\tSKIP-POST-VALIDATIONS\tSKIP")
+				for _, s := range specs {
+					timeout := "-"
+					if s.Timeout != 0 {
+						timeout = s.Timeout.String()
+					}
+					fmt.Fprintf(tw, "%s\t%s\t%s\t%t\t%s\t%s\n",
+						s.Name, s.Owner, timeout, s.Randomized, s.SkipPostValidations, s.Skip)
+				}
+				return tw.Flush()
 			}
 
 			for _, s := range specs {

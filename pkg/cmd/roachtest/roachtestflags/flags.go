@@ -60,6 +60,12 @@ var (
 		Usage: `List only benchmarks`,
 	})
 
+	ListDetails bool
+	_           = registerListFlag(&ListDetails, FlagInfo{
+		Name:  "details",
+		Usage: `Include additional per-test fields (e.g. SkipPostValidations) in the listing`,
+	})
+
 	ForceCloudCompat bool
 	_                = registerRunFlag(&ForceCloudCompat, FlagInfo{
 		Name:  "force-cloud-compat",
