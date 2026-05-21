@@ -262,7 +262,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		stats.EntryStats.Add(entryStats) // TODO(pav-kv): just return the stats.
 		state.ByteSize += entryStats.SideloadedBytes
 		if state, err = logAppend(
-			ctx, s.StateLoader.RaftLogPrefix(), batch, state, thinEntries,
+			ctx, s.StateLoader.RangeIDPrefixBuf, batch, state, thinEntries,
 			UseRaftLogSingleDelete(s.Separated),
 		); err != nil {
 			const expl = "during append"
@@ -456,7 +456,7 @@ func storeHardState(
 // on-disk payloads in case the log tail is replaced.
 func logAppend(
 	ctx context.Context,
-	raftLogPrefix roachpb.Key,
+	prefixBuf keys.RangeIDPrefixBuf,
 	rw storage.ReadWriter,
 	prev RaftState,
 	entries []raftpb.Entry,
@@ -481,6 +481,7 @@ func logAppend(
 
 	useSingleDelete := UseRaftLogSingleDelete(enginesSeparated)
 	opts := storage.MVCCWriteOptions{Stats: diff, Category: fs.ReplicationReadCategory}
+	raftLogPrefix := prefixBuf.RaftLogPrefix()
 	for i := range entries {
 		ent := &entries[i]
 		key := keys.RaftLogKeyFromPrefix(raftLogPrefix, kvpb.RaftIndex(ent.Index))
