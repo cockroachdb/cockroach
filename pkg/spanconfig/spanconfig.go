@@ -500,8 +500,7 @@ func (u Update) GetConfig() roachpb.SpanConfig {
 }
 
 // ProtectedTSReader is the read-only portion for querying protected
-// timestamp information. It doubles up as an adaptor interface for
-// protectedts.Cache.
+// timestamp information.
 type ProtectedTSReader interface {
 	// GetProtectionTimestamps returns all protected timestamps that apply to any
 	// part of the given key span. The time at which this protected timestamp
