@@ -239,6 +239,8 @@ func replaceFunction(
 ) {
 	_, _, existingFnElem := scpb.FindFunction(existingFnElts)
 	fnID := existingFnElem.FunctionID
+	_, _, existingFnBody := scpb.FindFunctionBody(existingFnElts)
+	oldCanMutate := existingFnBody.CanMutate
 
 	// Validate compatibility: routine kind must match.
 	if n.IsProcedure != existingFnElem.IsProcedure {
@@ -419,6 +421,16 @@ func replaceFunction(
 		fnBody.CanMutate = funcdesc.CanMutateBoolToProto(n.CanMutate)
 	}
 	b.Replace(fnBody)
+
+	// If the function became mutating, propagate CAN_MUTATE to all
+	// transitive callers so their descriptors stay accurate for
+	// deferred opt-building and leaf/root txn selection.
+	if b.EvalCtx().Settings.Version.ActiveVersion(b).IsActive(clusterversion.V26_3_FunctionDescCanMutate) {
+		if fnBody.CanMutate == catpb.Function_CAN_MUTATE &&
+			oldCanMutate != catpb.Function_CAN_MUTATE {
+			propagateCanMutateToCallersDSC(b, fnID)
+		}
+	}
 
 	// Replace the FunctionParams element with the updated params.
 	funcParams := &scpb.FunctionParams{
@@ -713,4 +725,46 @@ func routineLazilyEvaluatesSQL(
 	}
 	return n.IsProcedure && lang == catpb.Function_PLPGSQL &&
 		sqlclustersettings.PLpgSQLProcedureLateBindingEnabled(b, b.EvalCtx().Settings)
+}
+
+// propagateCanMutateToCallersDSC transitively updates CAN_MUTATE on all
+// functions that (directly or indirectly) call the given function. See
+// propagateCanMutateToCallers in pkg/sql/create_function.go for the
+// legacy-path equivalent.
+func propagateCanMutateToCallersDSC(b BuildCtx, fnID descpb.ID) {
+	visited := make(map[descpb.ID]struct{})
+	visited[fnID] = struct{}{}
+	propagateCanMutateDSCImpl(b, fnID, visited)
+}
+
+func propagateCanMutateDSCImpl(b BuildCtx, fnID descpb.ID, visited map[descpb.ID]struct{}) {
+	type callerInfo struct {
+		fnID descpb.ID
+		body *scpb.FunctionBody
+	}
+	var callers []callerInfo
+
+	b.BackReferences(fnID).FilterFunctionBody().ForEach(
+		func(_ scpb.Status, target scpb.TargetStatus, e *scpb.FunctionBody) {
+			if target != scpb.ToPublic {
+				return
+			}
+			if _, ok := visited[e.FunctionID]; ok {
+				return
+			}
+			if e.CanMutate == catpb.Function_CAN_MUTATE {
+				visited[e.FunctionID] = struct{}{}
+				return
+			}
+			callers = append(callers, callerInfo{fnID: e.FunctionID, body: e})
+		},
+	)
+
+	for _, c := range callers {
+		visited[c.fnID] = struct{}{}
+		updated := *c.body
+		updated.CanMutate = catpb.Function_CAN_MUTATE
+		b.Replace(&updated)
+		propagateCanMutateDSCImpl(b, c.fnID, visited)
+	}
 }
