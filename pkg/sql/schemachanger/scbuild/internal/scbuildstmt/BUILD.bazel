@@ -66,6 +66,7 @@ go_library(
         "statement_control.go",
         "table_zone_config.go",
         "truncate.go",
+        "type_helpers.go",
         "zone_config_helpers.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt",

@@ -1,3 +1,15 @@
 setup
 CREATE DOMAIN defaultdb.d AS INT DEFAULT 0 NOT NULL CHECK (VALUE > 0);
 ----
+
+build skip=sql_dependencies
+ALTER DOMAIN defaultdb.d OWNER TO root
+----
+
+build skip=sql_dependencies
+ALTER DOMAIN defaultdb.d OWNER TO testuser
+----
+- [[Owner:{DescID: 104}, PUBLIC], ABSENT]
+  {descriptorId: 104, owner: testuser}
+- [[Owner:{DescID: 105}, PUBLIC], ABSENT]
+  {descriptorId: 105, owner: testuser}

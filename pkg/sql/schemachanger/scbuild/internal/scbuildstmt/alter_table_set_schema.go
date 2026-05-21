@@ -6,14 +6,9 @@
 package scbuildstmt
 
 import (
-	"strings"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
@@ -76,56 +71,4 @@ func AlterTableSetSchema(b BuildCtx, n *tree.AlterTableSetSchema) {
 		DescriptorType:    kind,
 	}
 	b.LogEventForExistingPayload(newNamespace, setSchemaEvent)
-}
-
-func resolveSchemaByName(b BuildCtx, schemaName tree.Name, databaseID catid.DescID) *scpb.Schema {
-	dbElts := b.QueryByID(databaseID)
-	dbNamespace := dbElts.FilterNamespace().MustGetOneElement()
-	// Resolve the new schema to get its elements
-	newSchemaPrefix := tree.ObjectNamePrefix{
-		CatalogName:     tree.Name(dbNamespace.Name),
-		SchemaName:      schemaName,
-		ExplicitCatalog: true,
-		ExplicitSchema:  true,
-	}
-	newSchema := b.ResolveSchema(newSchemaPrefix, ResolveParams{
-		RequiredPrivilege: privilege.CREATE,
-	}).FilterSchema().MustGetOneElement()
-	return newSchema
-}
-
-func panicIfSchemaIsTemporaryOrVirtual(schemaName tree.Name) {
-	name := string(schemaName)
-	if _, ok := catconstants.VirtualSchemaNames[name]; ok {
-		panic(pgerror.Newf(pgcode.FeatureNotSupported,
-			"cannot move objects into or out of virtual schemas"))
-	}
-	if strings.HasPrefix(name, catconstants.PgTempSchemaName) {
-		panic(pgerror.Newf(pgcode.FeatureNotSupported,
-			"cannot move objects into or out of temporary schemas"))
-	}
-}
-
-// moveDescriptorToSchema drops the old Namespace and SchemaChild elements for
-// the given descriptor and adds new ones with the updated schema ID.
-// It returns the new Namespace and SchemaChild elements.
-func moveDescriptorToSchema(
-	b BuildCtx, descID catid.DescID, currNamespace *scpb.Namespace, newSchemaID catid.DescID,
-) (*scpb.Namespace, *scpb.SchemaChild) {
-	// drop the old namespace and add a new one
-	newNamespace := *currNamespace
-	newNamespace.SchemaID = newSchemaID
-	b.Drop(currNamespace)
-	b.Add(&newNamespace)
-
-	// drop old schema child and add new one
-	currSchemaChild := b.QueryByID(descID).FilterSchemaChild().MustGetOneElement()
-	newSchemaChild := &scpb.SchemaChild{
-		ChildObjectID: descID,
-		SchemaID:      newSchemaID,
-	}
-	b.Drop(currSchemaChild)
-	b.Add(newSchemaChild)
-
-	return &newNamespace, newSchemaChild
 }
