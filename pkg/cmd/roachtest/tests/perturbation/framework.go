@@ -88,15 +88,22 @@ type variations struct {
 	splits               int
 	scatter              bool // pass --scatter when initializing the workload table
 	timeout              time.Duration
-	numNodes             int
-	numWorkloadNodes     int
-	vcpu                 int
-	disks                int
-	mem                  spec.MemPerCPU
-	leaseType            registry.LeaseType
-	perturbation         perturbation
-	workload             workloadType
-	impact               acceptableImpact
+	// tokenReturnTime is the budget the post-test ValidateTokensReturned
+	// check is given to observe all kvadmission flow-control tokens
+	// returned. Zero means use the framework default (10m, 1h if a disk
+	// bandwidth limit is set). Tests that drive large send queues or hold
+	// many tokens at the end of the perturbation should bump this so the
+	// check doesn't trip while drain finishes.
+	tokenReturnTime  time.Duration
+	numNodes         int
+	numWorkloadNodes int
+	vcpu             int
+	disks            int
+	mem              spec.MemPerCPU
+	leaseType        registry.LeaseType
+	perturbation     perturbation
+	workload         workloadType
+	impact           acceptableImpact
 	// recoveryImpact is the threshold applied to the recovery interval
 	// (after the perturbation completes). The zero value means "use the
 	// same threshold as the perturbation interval (impact)". Reading at
@@ -954,12 +961,16 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 		artifactsutil.CollectPerfArtifacts(ctx, t, c)
 		require.Fail(t, strings.Join(failures, "\n"))
 	}
+	// Per-test override wins; otherwise fall back to the previous default
+	// (10m, lifted to 1h when a disk bandwidth limit is set per #137017).
 	// TODO(baptist): Look at the time for token return in actual tests to
-	// determine if this can be lowered further.
-	tokenReturnTime := 10 * time.Minute
-	// TODO(#137017): Increase the return time if disk bandwidth limit is set.
-	if v.diskBandwidthLimit != "0" {
-		tokenReturnTime = 1 * time.Hour
+	// determine if the default can be lowered further.
+	tokenReturnTime := v.tokenReturnTime
+	if tokenReturnTime == 0 {
+		tokenReturnTime = 10 * time.Minute
+		if v.diskBandwidthLimit != "0" {
+			tokenReturnTime = 1 * time.Hour
+		}
 	}
 	roachtestutil.ValidateTokensReturned(ctx, t, v, v.stableNodes(), tokenReturnTime)
 }
