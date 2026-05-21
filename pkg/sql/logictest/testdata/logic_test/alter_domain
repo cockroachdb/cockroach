@@ -8,18 +8,97 @@ CREATE DOMAIN d AS INT DEFAULT 0 NOT NULL CHECK (VALUE > 0)
 
 subtest set_default
 
-statement error pgcode 0A000 ALTER DOMAIN SET DEFAULT is not supported
-ALTER DOMAIN d SET DEFAULT 42
+# Use a domain without NOT NULL to allow NULL default testing.
+statement ok
+CREATE DOMAIN d_def AS INT DEFAULT 0
 
-statement error pgcode 0A000 ALTER DOMAIN SET DEFAULT is not supported
-ALTER DOMAIN d SET DEFAULT 1 + 2
+statement ok
+ALTER DOMAIN d_def SET DEFAULT 42
+
+# Verify the default was applied by creating a table and inserting.
+statement ok
+CREATE TABLE t_set_def (c d_def);
+INSERT INTO t_set_def (c) VALUES (DEFAULT)
+
+query T
+SELECT c FROM t_set_def
+----
+42
+
+# Replace the default with an expression.
+statement ok
+ALTER DOMAIN d_def SET DEFAULT 1 + 2
+
+statement ok
+TRUNCATE t_set_def;
+INSERT INTO t_set_def (c) VALUES (DEFAULT)
+
+query T
+SELECT c FROM t_set_def
+----
+3
+
+# Setting the default to NULL clears it.
+statement ok
+ALTER DOMAIN d_def SET DEFAULT NULL
+
+statement ok
+TRUNCATE t_set_def;
+INSERT INTO t_set_def (c) VALUES (DEFAULT)
+
+query T
+SELECT c FROM t_set_def
+----
+NULL
+
+# SET DEFAULT is idempotent (setting when already absent).
+statement ok
+ALTER DOMAIN d_def SET DEFAULT 10
+
+statement ok
+TRUNCATE t_set_def;
+INSERT INTO t_set_def (c) VALUES (DEFAULT)
+
+query T
+SELECT c FROM t_set_def
+----
+10
+
+# Type mismatch should be caught.
+statement error could not parse "not an int" as type int
+ALTER DOMAIN d_def SET DEFAULT 'not an int'
+
+statement ok
+DROP TABLE t_set_def
 
 subtest end
 
 subtest drop_default
 
-statement error pgcode 0A000 ALTER DOMAIN DROP DEFAULT is not supported
-ALTER DOMAIN d DROP DEFAULT
+statement ok
+ALTER DOMAIN d_def DROP DEFAULT
+
+# Verify the default is gone.
+statement ok
+CREATE TABLE t_drop_def (c d_def);
+INSERT INTO t_drop_def (c) VALUES (DEFAULT)
+
+query T
+SELECT c FROM t_drop_def
+----
+NULL
+
+# DROP DEFAULT is idempotent.
+statement ok
+ALTER DOMAIN d_def DROP DEFAULT
+
+# Restore the original default for subsequent tests.
+statement ok
+ALTER DOMAIN d_def SET DEFAULT 0
+
+statement ok
+DROP TABLE t_drop_def;
+DROP DOMAIN d_def
 
 subtest end
 
@@ -420,7 +499,7 @@ CREATE SCHEMA s
 statement ok
 CREATE DOMAIN s.d_qual AS INT
 
-statement error pgcode 0A000 ALTER DOMAIN SET DEFAULT is not supported
+statement ok
 ALTER DOMAIN s.d_qual SET DEFAULT 1
 
 subtest end
