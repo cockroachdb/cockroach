@@ -591,37 +591,17 @@ func Compact(
 	// Truncate the Raft log from the entry after the previous truncation index to
 	// the new truncation index. This is performed atomically with updating the
 	// RaftTruncatedState so that the state of the log is consistent.
-	prefixBuf := &loader.RangeIDPrefixBuf
-	numTruncatedEntries := next.Index - prev.Index
-	if numTruncatedEntries >= raftLogTruncationClearRangeThreshold {
-		start := prefixBuf.RaftLogKey(prev.Index + 1).Clone()
-		end := prefixBuf.RaftLogKey(next.Index + 1).Clone() // end is exclusive
-		if err := writer.ClearRawRange(start, end, true, false); err != nil {
-			return errors.Wrapf(err,
-				"unable to clear truncated Raft entries for %+v after index %d",
-				next, prev.Index)
-		}
-	} else {
-		// NB: RangeIDPrefixBufs have sufficient capacity (32 bytes) to avoid
-		// allocating when constructing Raft log keys (16 bytes).
-		useSingleDelete := UseRaftLogSingleDelete(enginesSeparated)
-		prefix := prefixBuf.RaftLogPrefix()
-		for idx := prev.Index + 1; idx <= next.Index; idx++ {
-			key := keys.RaftLogKeyFromPrefix(prefix, idx)
-			var err error
-			if useSingleDelete {
-				err = writer.SingleClearUnversioned(key)
-			} else {
-				err = writer.ClearUnversioned(key, storage.ClearOptions{})
-			}
-			if err != nil {
-				return errors.Wrapf(err, "unable to clear truncated Raft entries for %+v at index %d",
-					next, idx)
-			}
-		}
+	if err := ClearRangeSizeKnown(
+		writer, loader.RangeIDPrefixBuf,
+		prev.Index, next.Index, int(raftLogTruncationClearRangeThreshold),
+		UseRaftLogSingleDelete(enginesSeparated),
+	); err != nil {
+		return errors.Wrapf(err,
+			"unable to clear truncated Raft entries for %+v after index %d",
+			next, prev.Index)
 	}
 
-	key := prefixBuf.RaftTruncatedStateKey()
+	key := loader.RaftTruncatedStateKey()
 	var value roachpb.Value
 	if _, err := next.MarshalToSizedBuffer(value.AllocBytes(next.Size())); err != nil {
 		return err
@@ -634,6 +614,91 @@ func Compact(
 		return errors.Wrap(err, "unable to write RaftTruncatedState")
 	}
 	return nil
+}
+
+// ClearRange clears raft log entries in the range (lo, hi]. It calls
+// storage.ClearRangeWithHeuristic() which scans up to pointKeyThreshold keys to
+// choose between point deletes and a single Pebble range tombstone.
+// No-op if lo >= hi. Uses point deletes when number of entries < pointKeyThreshold,
+// or a range deletion otherwise.
+func ClearRange(
+	ctx context.Context,
+	r storage.Reader,
+	w storage.Writer,
+	prefixBuf keys.RangeIDPrefixBuf,
+	lo, hi kvpb.RaftIndex,
+	pointKeyThreshold int,
+) error {
+	if lo >= hi {
+		return nil
+	}
+	start, end := raftLogBounds(prefixBuf, lo, hi)
+	return storage.ClearRangeWithHeuristic(ctx, r, w, start, end, pointKeyThreshold)
+}
+
+// ClearRangeSizeKnown clears raft log entries in range (lo, hi] when the caller
+// already knows how many entries the range contains. Uses point deletes
+// when hi-lo < pointKeyThreshold, or a range deletion otherwise.
+// No-op if lo >= hi.
+//
+// If maybeUseSingleDel is true, it uses SingleDelete instead of regular Delete
+// if the size is <= pointKeyThreshold.
+func ClearRangeSizeKnown(
+	w storage.Writer,
+	prefixBuf keys.RangeIDPrefixBuf,
+	lo, hi kvpb.RaftIndex,
+	pointKeyThreshold int,
+	maybeUseSingleDel bool,
+) error {
+	if lo >= hi {
+		return nil
+	}
+	if hi-lo >= kvpb.RaftIndex(pointKeyThreshold) {
+		start, end := raftLogBounds(prefixBuf, lo, hi)
+		return w.ClearRawRange(start, end, true /* pointKeys */, false /* rangeKeys */)
+	}
+	raftLogPrefix := prefixBuf.RaftLogPrefix()
+	// NB: each iteration consumes a key before the next call mutates the bytes
+	// after raftLogPrefix.
+	// NB: avoid overflow in the unlikely case hi == MaxUint64.
+	for idx := lo; idx < hi; idx++ {
+		key := keys.RaftLogKeyFromPrefix(raftLogPrefix, idx+1)
+		var err error
+		if maybeUseSingleDel {
+			err = w.SingleClearUnversioned(key)
+		} else {
+			err = w.ClearUnversioned(key, storage.ClearOptions{})
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// raftLogBounds converts (lo, hi] to their roachpb keys. The sentinels lo == 0
+// and hi == math.MaxUint64 expand to raftLogPrefix and raftLogPrefix.PrefixEnd
+// respectively.
+//
+// The returned keys are independent of prefixBuf's underlying buffer:
+// keys.RaftLogKeyFromPrefix returns a slice that aliases the bytes immediately
+// after the raft log prefix, so building two bounds from the same prefix
+// without cloning would have the second call clobber the first.
+func raftLogBounds(
+	prefixBuf keys.RangeIDPrefixBuf, lo, hi kvpb.RaftIndex,
+) (start, end roachpb.Key) {
+	raftLogPrefix := prefixBuf.RaftLogPrefix()
+	if lo == 0 {
+		start = raftLogPrefix.Clone()
+	} else {
+		start = keys.RaftLogKeyFromPrefix(raftLogPrefix, lo+1).Clone()
+	}
+	if hi == math.MaxUint64 {
+		end = raftLogPrefix.PrefixEnd()
+	} else {
+		end = keys.RaftLogKeyFromPrefix(raftLogPrefix, hi+1).Clone()
+	}
+	return start, end
 }
 
 // ComputeSize computes the size (in bytes) of the raft log from the storage

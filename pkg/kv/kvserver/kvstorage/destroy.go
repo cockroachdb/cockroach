@@ -161,30 +161,33 @@ func destroyReplicaImpl(
 	//
 	// TODO(pav-kv): make a helper for piece-wise clearing, instead of using a
 	// series of ClearRangeWithHeuristic.
-	if info.Separated {
-		// With separated engines, only clear the unapplied suffix of the raft log.
-		// The applied entries are cleared during WAG garbage collection.
-		if err := storage.ClearRangeWithHeuristic(
-			ctx, rw.Raft.RO, rw.Raft.WO,
-			buf.RangeTombstoneKey().Next(), sl.RaftLogPrefix(),
-			ClearRangeThresholdPointKeys(),
-		); err != nil {
-			return err
-		}
-		if err := storage.ClearRangeWithHeuristic(
-			ctx, rw.Raft.RO, rw.Raft.WO,
-			buf.RaftLogKey(info.RaftAppliedIndex+1), sl.RaftReplicaIDKey(),
-			ClearRangeThresholdPointKeys(),
-		); err != nil {
-			return err
-		}
-	} else if err := storage.ClearRangeWithHeuristic(
+	if err := storage.ClearRangeWithHeuristic(
 		ctx, rw.Raft.RO, rw.Raft.WO,
-		buf.RangeTombstoneKey().Next(), sl.RaftReplicaIDKey(),
+		buf.RangeTombstoneKey().Next(), sl.RaftLogPrefix(),
 		ClearRangeThresholdPointKeys(),
 	); err != nil {
 		return err
 	}
+	clearAfter := kvpb.RaftIndex(0) // index 0 never has an entry
+	if info.Separated {
+		// With separated engines, only clear the unapplied suffix of the raft log.
+		// The applied entries are cleared during WAG garbage collection.
+		clearAfter = info.RaftAppliedIndex
+	}
+	// Note: We could just clear the whole raft log in the
+	// ClearRangeWithHeuristic() above. However, we want to funnel all raft log
+	// deletions through the logstore package to make it easier to reason about
+	// them.
+	// TODO(ibrahim): We could know `hi` if DestroyReplicaInfo passes down the
+	// log's last index.
+	if err := logstore.ClearRange(
+		ctx, rw.Raft.RO, rw.Raft.WO, buf,
+		clearAfter /* lo */, math.MaxUint64 /* hi */, ClearRangeThresholdPointKeys(),
+	); err != nil {
+		return err
+	}
+	// We're technically skipping the keys between the raft log and
+	// RaftReplicaID. This is ok because there are no keys there.
 	if err := sl.ClearRaftReplicaID(rw.State.WO); err != nil {
 		return err
 	}
@@ -265,10 +268,16 @@ func RewriteRaftState(
 	if err := sl.SetHardState(ctx, raftWO, hs); err != nil {
 		return errors.Wrapf(err, "unable to write HardState")
 	}
-	// Clear the raft log. Note that there are no Pebble range keys in this span.
-	raftLog := sl.RaftLogPrefix() // NB: use only until next StateLoader call
-	if err := raftWO.ClearRawRange(
-		raftLog, raftLog.PrefixEnd(), true /* pointKeys */, false, /* rangeKeys */
+	// Clear the raft log via the logstore. Note that there are no Pebble range
+	// keys in this span. We use ClearRangeSizeKnown with pointKeyThreshold=0 to
+	// force a single range tombstone over the whole log span, without scanning.
+	// TODO(ibrahim): We can actually know the log bounds using truncIndex and lastIndex.
+	// TODO(sep-raft-log): delegate clearing <= AppliedIndex to WAG cleanup when engines
+	// are separated.
+	if err := logstore.ClearRangeSizeKnown(
+		raftWO, sl.RangeIDPrefixBuf,
+		0 /* lo */, math.MaxUint64 /* hi */, 0, /* pointKeyThreshold */
+		false, /* maybeUseSingleDel */
 	); err != nil {
 		return errors.Wrapf(err, "unable to clear the raft log")
 	}
