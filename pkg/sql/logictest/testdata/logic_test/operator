@@ -4,6 +4,11 @@ SELECT |/ -1.0::float
 query error cannot take square root of a negative number
 SELECT |/ -1.0::decimal
 
+query RR
+SELECT 8::float / 8::int, 8::int / 8::float
+----
+1  1
+
 query I
 SELECT ~-1;
 ----

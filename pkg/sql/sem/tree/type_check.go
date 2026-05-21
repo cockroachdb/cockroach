@@ -420,6 +420,20 @@ func (expr *BinaryExpr) TypeCheck(
 	leftReturn := leftTyped.ResolvedType()
 	rightReturn := rightTyped.ResolvedType()
 
+	if len(s.overloadIdxs) == 0 {
+		s.overloadIdxs = binaryImplicitCastOverloadCandidates(
+			ops, leftReturn, rightReturn, s.overloadIdxs,
+		)
+		if len(s.overloadIdxs) == 1 {
+			binOp := ops.overloads[s.overloadIdxs[0]]
+			leftTyped = wrapBinaryImplicitCast(leftTyped, binOp.LeftType)
+			rightTyped = wrapBinaryImplicitCast(rightTyped, binOp.RightType)
+			typedSubExprs[0], typedSubExprs[1] = leftTyped, rightTyped
+			leftReturn = leftTyped.ResolvedType()
+			rightReturn = rightTyped.ResolvedType()
+		}
+	}
+
 	// Return NULL if at least one overload is possible, NULL is an argument,
 	// and none of the overloads accept NULL.
 	if leftReturn.Family() == types.UnknownFamily || rightReturn.Family() == types.UnknownFamily {
@@ -470,6 +484,36 @@ func (expr *BinaryExpr) TypeCheck(
 	expr.Op = binOp
 	expr.typ = binOp.returnType()(typedSubExprs)
 	return expr, nil
+}
+
+func binaryImplicitCastOverloadCandidates(
+	ops *BinOpOverloads, left, right *types.T, overloadIdxs []uint8,
+) []uint8 {
+	overloadIdxs = overloadIdxs[:0]
+	if left.Family() == types.UnknownFamily || right.Family() == types.UnknownFamily {
+		return overloadIdxs
+	}
+	for i, overload := range ops.overloads {
+		if binaryImplicitCastParamMatches(left, overload.LeftType) &&
+			binaryImplicitCastParamMatches(right, overload.RightType) {
+			overloadIdxs = append(overloadIdxs, uint8(i))
+		}
+	}
+	return overloadIdxs
+}
+
+func binaryImplicitCastParamMatches(actual, target *types.T) bool {
+	if target.Equivalent(actual) {
+		return true
+	}
+	return cast.ValidCast(actual, target, cast.ContextImplicit)
+}
+
+func wrapBinaryImplicitCast(expr TypedExpr, target *types.T) TypedExpr {
+	if expr.ResolvedType().Equivalent(target) {
+		return expr
+	}
+	return NewTypedCastExpr(expr, target)
 }
 
 // TypeCheck implements the Expr interface.
