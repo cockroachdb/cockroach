@@ -3463,7 +3463,7 @@ parallelize_multi_key_lookup_joins_avg_lookup_ratio              10             
 parallelize_multi_key_lookup_joins_avg_lookup_row_size           100 KiB             NULL      NULL        NULL        string
 parallelize_multi_key_lookup_joins_enabled                       off                 NULL      NULL        NULL        string
 parallelize_multi_key_lookup_joins_max_lookup_ratio              10000               NULL      NULL        NULL        string
-parallelize_multi_key_lookup_joins_only_on_mr_mutations          on                  NULL      NULL        NULL        string
+parallelize_multi_key_lookup_joins_only_on_mr_mutations          off                 NULL      NULL        NULL        string
 password_encryption                                              scram-sha-256       NULL      NULL        NULL        string
 pg_dump_compatibility                                            off                 NULL      NULL        NULL        string
 pg_trgm.similarity_threshold                                     0.3                 NULL      NULL        NULL        string
@@ -3725,7 +3725,7 @@ parallelize_multi_key_lookup_joins_avg_lookup_ratio              10             
 parallelize_multi_key_lookup_joins_avg_lookup_row_size           100 KiB             B     user     NULL      100 KiB             100 KiB
 parallelize_multi_key_lookup_joins_enabled                       off                 NULL  user     NULL      off                 off
 parallelize_multi_key_lookup_joins_max_lookup_ratio              10000               NULL  user     NULL      10000               10000
-parallelize_multi_key_lookup_joins_only_on_mr_mutations          on                  NULL  user     NULL      on                  on
+parallelize_multi_key_lookup_joins_only_on_mr_mutations          off                 NULL  user     NULL      off                 off
 password_encryption                                              scram-sha-256       NULL  user     NULL      scram-sha-256       scram-sha-256
 pg_dump_compatibility                                            off                 NULL  user     NULL      off                 off
 pg_trgm.similarity_threshold                                     0.3                 NULL  user     NULL      0.3                 0.3

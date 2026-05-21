@@ -202,7 +202,7 @@ parallelize_multi_key_lookup_joins_avg_lookup_ratio              10             
 parallelize_multi_key_lookup_joins_avg_lookup_row_size           100 KiB             Sets the average lookup row size threshold for parallelizing multi-key lookup joins.
 parallelize_multi_key_lookup_joins_enabled                       off                 Controls whether the join reader should parallelize lookup batches. When enabled, this increases the speed of lookup joins with multiple looked up rows at the cost of increased memory usage.
 parallelize_multi_key_lookup_joins_max_lookup_ratio              10000               Sets the maximum lookup ratio threshold for parallelizing multi-key lookup joins.
-parallelize_multi_key_lookup_joins_only_on_mr_mutations          on                  Controls whether parallelization of multi-key lookup joins is restricted to multi-row mutations only.
+parallelize_multi_key_lookup_joins_only_on_mr_mutations          off                 Controls whether parallelization of multi-key lookup joins is restricted to multi-row mutations only.
 password_encryption                                              scram-sha-256       The encryption method used for passwords.
 pg_dump_compatibility                                            off                 Controls how CockroachDB presents metadata to external tools. Valid values: off (default), postgres (suppress CRDB-specific syntax for pg_dump compatibility), cockroachdb (show CRDB syntax explicitly).
 pg_trgm.similarity_threshold                                     0.3                 Sets the value used to compare trigram similarities for the string % string overload.
