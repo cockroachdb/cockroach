@@ -29,6 +29,11 @@ import (
 type parquetColumnMetadata struct {
 	logicalType   schema.LogicalType   // Always populated (derived from ConvertedType if needed)
 	convertedType schema.ConvertedType // Original annotation (for reference/debugging)
+
+	// isList is true when this column is a LIST. When isList is true,
+	// logicalType and convertedType describe the element's types, not the
+	// enclosing group's.
+	isList bool
 }
 
 // Helper functions for common Parquet type conversions.
