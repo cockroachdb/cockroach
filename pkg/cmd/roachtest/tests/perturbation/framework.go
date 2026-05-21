@@ -445,7 +445,14 @@ func (v variations) perturbationName() string {
 	if t.Kind() == reflect.Ptr {
 		t = t.Elem()
 	}
-	return t.Name()
+	name := t.Name()
+	// Allow a perturbation to append a variation suffix (e.g. "/asleep=true")
+	// so the same struct type can register multiple test entries that differ
+	// in configuration. See perturbationNamer.
+	if namer, ok := v.perturbation.(perturbationNamer); ok {
+		name += namer.nameSuffix()
+	}
+	return name
 }
 
 // finishSetup completes initialization of the variations.
@@ -722,6 +729,19 @@ type perturbation interface {
 	// endPerturbation ends the system change. Not all perturbations do anything on stop.
 	// It returns the duration looking backwards to collect performance stats.
 	endPerturbation(ctx context.Context, t test.Test, v variations) time.Duration
+}
+
+// perturbationNamer is an optional interface a perturbation may implement to
+// append a variation suffix to its test name. For example, a perturbation
+// that registers two flavors of the same struct can return "/asleep=true"
+// and "/asleep=false" to produce distinct test names like
+// "perturbation/full/splits/asleep=true".
+//
+// Implementations should return either an empty string (no suffix) or a
+// string starting with "/" so the test name reads naturally when composed
+// with the parent path.
+type perturbationNamer interface {
+	nameSuffix() string
 }
 
 func prettyPrint(title string, stats map[string]aggregatedStat) string {
