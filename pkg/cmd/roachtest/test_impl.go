@@ -148,6 +148,12 @@ type testImpl struct {
 		// githubIpToNodeMapping contains the ip to node map that will be passed to
 		// github.MaybePost
 		githubIpToNodeMapping string
+
+		// preempted is set when the test's failure was attributed to a VM
+		// preemption by runTest's post-failure checks. Read by the test runner
+		// after runTest returns to decide whether to requeue (e.g. retry a
+		// benchmark on non-spot VMs).
+		preempted bool
 	}
 	// Map from version to path to the cockroach binary to be used when
 	// mixed-version test wants a binary for that binary. If a particular version
@@ -522,6 +528,21 @@ func (t *testImpl) resetFailures() {
 	defer t.mu.Unlock()
 	t.mu.failures = nil
 	t.mu.failuresSuppressed = false
+}
+
+// markPreempted records that this test's failure was attributed to a VM
+// preemption. See the comment on the preempted field for details.
+func (t *testImpl) markPreempted() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.mu.preempted = true
+}
+
+// wasPreempted reports whether markPreempted was called.
+func (t *testImpl) wasPreempted() bool {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.mu.preempted
 }
 
 // We take the "squashed" error that contains information of all the errors for each failure.
