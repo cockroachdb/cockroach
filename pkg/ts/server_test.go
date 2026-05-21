@@ -312,6 +312,11 @@ func TestServerQueryTenant(t *testing.T) {
 	hostMetricName := "sys.rss"
 	// This is a store-level metric identified by isStoreTenantMetric.
 	storeMetricName := "cr.store.livebytes"
+	// Histogram metrics are stored in TSDB with quantile suffixes (e.g. "-p99")
+	// but registered under their base name. This tests that TenantServer.Query
+	// correctly strips the suffix before the registry lookup.
+	histogramBaseName := "sql.service.latency"
+	histogramSuffixedName := histogramBaseName + "-p99"
 
 	// Populate data directly. Aggregate sources ("1", "10") contain the sum
 	// of all tenants' data. Per-tenant sources ("1-2", "10-2") track tenant 2's
@@ -432,6 +437,36 @@ func TestServerQueryTenant(t *testing.T) {
 				{
 					TimestampNanos: 500 * 1e9,
 					Value:          20.0,
+				},
+			},
+		},
+		// Histogram metric with quantile suffix. Same aggregate/per-tenant
+		// pattern: aggregate "1" = 500, per-tenant "1-2" = 50.
+		{
+			Name:   histogramSuffixedName,
+			Source: "1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{
+					TimestampNanos: 400 * 1e9,
+					Value:          500.0,
+				},
+				{
+					TimestampNanos: 500 * 1e9,
+					Value:          600.0,
+				},
+			},
+		},
+		{
+			Name:   histogramSuffixedName,
+			Source: "1-2",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{
+					TimestampNanos: 400 * 1e9,
+					Value:          50.0,
+				},
+				{
+					TimestampNanos: 500 * 1e9,
+					Value:          60.0,
 				},
 			},
 		},
@@ -761,6 +796,41 @@ func TestServerQueryTenant(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, expectedTenantHostMetricsResponse, tenantResponse)
+
+	// We should get back the histogram data for the tenant.
+	expectedTenantHistogramResponse := &tspb.TimeSeriesQueryResponse{
+		Results: []tspb.TimeSeriesQueryResponse_Result{
+			{
+				Query: tspb.Query{
+					Name:     histogramSuffixedName,
+					Sources:  []string{"1"},
+					TenantID: tenantID,
+				},
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					{
+						TimestampNanos: 400 * 1e9,
+						Value:          50.0,
+					},
+					{
+						TimestampNanos: 500 * 1e9,
+						Value:          60.0,
+					},
+				},
+			},
+		},
+	}
+	tenantHistogramResponse, err := tenantClient.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 400 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries: []tspb.Query{
+			{
+				Name:    histogramSuffixedName,
+				Sources: []string{"1"},
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, expectedTenantHistogramResponse, tenantHistogramResponse)
 }
 
 // TestServerQueryMemoryManagement verifies that queries succeed under
