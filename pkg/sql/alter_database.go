@@ -589,7 +589,7 @@ func (p *planner) checkCanDropSystemDatabaseRegion(
 		// Use the synchronous version of sql_liveness_is_alive to make sure
 		// data is fresh.
 		livenessQuery := fmt.Sprintf(
-			`SELECT count(*) > 0 FROM system.%s WHERE crdb_region = $1 AND
+			`SELECT count(*) > 0 FROM system.%s WHERE crdb_region = $1::system.crdb_internal_region AND
           crdb_internal.sql_liveness_is_alive(session_id, true)`, t)
 		row, err := p.QueryRowEx(ctx, "check-session-liveness-for-region",
 			sessiondata.NodeUserSessionDataOverride, livenessQuery, region)
@@ -823,7 +823,7 @@ func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
 		// (if any) of the dropping region from the table.
 		if _, err := params.p.ExecEx(params.ctx, "remove-region-liveness-ref",
 			sessiondata.NodeUserSessionDataOverride, `DELETE FROM system.region_liveness
-			        WHERE crdb_region = $1`, n.n.Region); err != nil {
+			        WHERE crdb_region = $1::system.crdb_internal_region`, n.n.Region); err != nil {
 			return err
 		}
 
