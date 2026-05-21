@@ -25,15 +25,163 @@ subtest end
 
 subtest set_not_null
 
-statement error pgcode 0A000 ALTER DOMAIN SET NOT NULL is not supported
+statement ok
 ALTER DOMAIN d SET NOT NULL
+
+statement ok
+CREATE DOMAIN d_nn AS INT DEFAULT 0
+
+query T
+SELECT conname FROM pg_constraint WHERE contypid = 'd_nn'::regtype AND contype = 'n' ORDER BY conname
+----
+
+statement ok
+ALTER DOMAIN d_nn SET NOT NULL
+
+# Verify the NOT NULL constraint exists.
+query T
+SELECT conname FROM pg_constraint WHERE contypid = 'd_nn'::regtype AND contype = 'n' ORDER BY conname
+----
+d_nn_not_null
+
+statement ok
+ALTER DOMAIN d_nn SET NOT NULL
+
+# Verify there is exactly one NOT NULL constraint.
+query T
+SELECT conname FROM pg_constraint WHERE contypid = 'd_nn'::regtype AND contype = 'n' ORDER BY conname
+----
+d_nn_not_null
 
 subtest end
 
 subtest drop_not_null
 
-statement error pgcode 0A000 ALTER DOMAIN DROP NOT NULL is not supported
-ALTER DOMAIN d DROP NOT NULL
+statement ok
+ALTER DOMAIN d_nn DROP NOT NULL
+
+query T
+SELECT conname FROM pg_constraint WHERE contypid = 'd_nn'::regtype AND contype = 'n' ORDER BY conname
+----
+
+statement ok
+ALTER DOMAIN d_nn DROP NOT NULL
+
+statement ok
+DROP DOMAIN d_nn
+
+subtest end
+
+# Rolling back a SET NOT NULL transaction must leave the descriptor with no
+# residual NOT NULL state, even though the schema changer transitions through
+# an intermediate WRITE_ONLY status when adding it.
+subtest set_not_null_rollback_in_txn
+
+statement ok
+CREATE DOMAIN d_rb AS INT DEFAULT 0
+
+statement ok
+BEGIN;
+ALTER DOMAIN d_rb SET NOT NULL;
+ROLLBACK
+
+query T
+SELECT conname FROM pg_constraint WHERE contypid = 'd_rb'::regtype AND contype = 'n' ORDER BY conname
+----
+
+# The domain should still permit NULLs after the rollback.
+statement ok
+CREATE TABLE t_rb (c d_rb)
+
+statement ok
+INSERT INTO t_rb VALUES (NULL)
+
+statement ok
+DROP TABLE t_rb;
+DROP DOMAIN d_rb
+
+subtest end
+
+# DROP NOT NULL followed by SET NOT NULL in the same transaction must produce a
+# domain with the NOT NULL constraint present (rather than the SET being
+# silently dropped as a no-op against the still-staged-but-being-dropped
+# constraint).
+subtest drop_then_set_not_null_in_txn
+
+statement ok
+CREATE DOMAIN d_drop_set AS INT DEFAULT 0 NOT NULL
+
+statement ok
+BEGIN;
+ALTER DOMAIN d_drop_set DROP NOT NULL;
+ALTER DOMAIN d_drop_set SET NOT NULL;
+COMMIT
+
+query T
+SELECT conname FROM pg_constraint WHERE contypid = 'd_drop_set'::regtype AND contype = 'n' ORDER BY conname
+----
+d_drop_set_not_null
+
+statement ok
+DROP DOMAIN d_drop_set
+
+subtest end
+
+# A SET NOT NULL added after a previous DROP NOT NULL committed must use a
+# fresh constraint ID instead of reusing the dropped one. Verify by adding,
+# dropping, and re-adding NOT NULL across separate transactions and checking
+# that the second NOT NULL gets a higher constraint ID than the first.
+subtest not_null_constraint_id_monotonic
+
+statement ok
+CREATE DOMAIN d_ids AS INT DEFAULT 0
+
+statement ok
+ALTER DOMAIN d_ids SET NOT NULL
+
+let $first_id
+SELECT oid::int FROM pg_constraint WHERE contypid = 'd_ids'::regtype AND contype = 'n'
+
+statement ok
+ALTER DOMAIN d_ids DROP NOT NULL
+
+statement ok
+ALTER DOMAIN d_ids SET NOT NULL
+
+query B
+SELECT (SELECT oid::int FROM pg_constraint WHERE contypid = 'd_ids'::regtype AND contype = 'n') <> $first_id
+----
+true
+
+statement ok
+DROP DOMAIN d_ids
+
+subtest end
+
+subtest not_null_enforcement
+
+statement ok
+CREATE DOMAIN d_enforce AS INT;
+CREATE TABLE t_enforce (c d_enforce)
+
+statement ok
+INSERT INTO t_enforce VALUES (NULL)
+
+statement ok
+ALTER DOMAIN d_enforce SET NOT NULL
+
+statement error domain d_enforce does not allow null values
+INSERT INTO t_enforce VALUES (NULL)
+
+statement ok
+ALTER DOMAIN d_enforce DROP NOT NULL
+
+statement ok
+INSERT INTO t_enforce VALUES (NULL)
+
+statement ok
+DROP TABLE t_enforce;
+DROP DOMAIN d_enforce
 
 subtest end
 
@@ -279,6 +427,44 @@ DROP DOMAIN d_renamed;
 DROP DOMAIN d_conflict;
 DROP TABLE t_conflict
 
+# A view referencing the domain should continue to work after the rename.
+statement ok
+CREATE DOMAIN d_view_rename AS INT;
+CREATE TABLE t_view_rename (c d_view_rename);
+INSERT INTO t_view_rename VALUES (7);
+CREATE VIEW v_view_rename AS SELECT c FROM t_view_rename
+
+statement ok
+ALTER DOMAIN d_view_rename RENAME TO d_view_renamed
+
+query T
+SELECT c FROM v_view_rename
+----
+7
+
+statement ok
+DROP VIEW v_view_rename;
+DROP TABLE t_view_rename;
+DROP DOMAIN d_view_renamed
+
+# A UDF that uses the domain (as parameter and return type) should still work
+# after the rename — UDFs reference types by ID.
+statement ok
+CREATE DOMAIN d_fn_rename AS INT;
+CREATE FUNCTION f_fn_rename(x d_fn_rename) RETURNS d_fn_rename LANGUAGE SQL AS 'SELECT x + 1'
+
+statement ok
+ALTER DOMAIN d_fn_rename RENAME TO d_fn_renamed
+
+query T
+SELECT f_fn_rename(41)
+----
+42
+
+statement ok
+DROP FUNCTION f_fn_rename;
+DROP DOMAIN d_fn_renamed
+
 subtest end
 
 subtest set_schema
@@ -325,6 +511,55 @@ SELECT '{}'::s_sc1._d_sc
 statement error pq: unknown schema "does_not_exist"
 ALTER DOMAIN s_sc2.d_sc SET SCHEMA does_not_exist
 
+# Cannot move into a virtual schema.
+statement error pq: cannot move objects into or out of virtual schemas
+ALTER DOMAIN s_sc2.d_sc SET SCHEMA pg_catalog
+
+statement error pq: cannot move objects into or out of virtual schemas
+ALTER DOMAIN s_sc2.d_sc SET SCHEMA information_schema
+
+statement error pq: cannot move objects into or out of virtual schemas
+ALTER DOMAIN s_sc2.d_sc SET SCHEMA crdb_internal
+
+# Cannot move into a temporary schema.
+statement ok
+SET experimental_enable_temp_tables = 'on'
+
+statement ok
+CREATE TEMPORARY TABLE t_tmp_marker (x INT)
+
+let $temp_schema
+SELECT schema_name FROM [show schemas] WHERE schema_name LIKE '%pg_temp%'
+
+statement error pq: cannot move objects into or out of temporary schemas
+ALTER DOMAIN s_sc2.d_sc SET SCHEMA $temp_schema
+
+statement ok
+DROP TABLE t_tmp_marker
+
+# Requires CREATE privilege on the destination schema. Use testuser2 since
+# testuser is a member of the root admin role earlier in this file.
+statement ok
+GRANT CREATE ON DATABASE test TO testuser2;
+REVOKE USAGE ON SCHEMA s_sc2 FROM public
+
+user testuser2
+
+statement ok
+CREATE DOMAIN d_sc_priv AS INT
+
+statement error pq: user testuser2 does not have CREATE privilege on schema s_sc2
+ALTER DOMAIN d_sc_priv SET SCHEMA s_sc2
+
+statement ok
+DROP DOMAIN d_sc_priv
+
+user root
+
+statement ok
+REVOKE CREATE ON DATABASE test FROM testuser2;
+GRANT USAGE ON SCHEMA s_sc2 TO public
+
 # Error when there's a name conflict in the target schema.
 statement ok
 CREATE DOMAIN s_sc1.d_sc AS TEXT
@@ -351,7 +586,48 @@ statement ok
 DROP TABLE t_dref;
 DROP DOMAIN s_sc1.d_sc;
 DROP DOMAIN s_sc2.d_sc;
-DROP DOMAIN s_sc2.d_ref;
+DROP DOMAIN s_sc2.d_ref
+
+# A view referencing the domain should continue to work after the domain
+# moves to a different schema — types are referenced by ID.
+statement ok
+CREATE DOMAIN d_view_sc AS INT;
+CREATE TABLE t_view_sc (c d_view_sc);
+INSERT INTO t_view_sc VALUES (3);
+CREATE VIEW v_view_sc AS SELECT c FROM t_view_sc
+
+statement ok
+ALTER DOMAIN d_view_sc SET SCHEMA s_sc1
+
+query T
+SELECT c FROM v_view_sc
+----
+3
+
+statement ok
+DROP VIEW v_view_sc;
+DROP TABLE t_view_sc;
+DROP DOMAIN s_sc1.d_view_sc
+
+# A UDF whose signature uses the domain (parameter / return) should still
+# resolve after the domain is moved between schemas.
+statement ok
+CREATE DOMAIN d_fn_sc AS INT;
+CREATE FUNCTION f_fn_sc(x d_fn_sc) RETURNS d_fn_sc LANGUAGE SQL AS 'SELECT x * 2'
+
+statement ok
+ALTER DOMAIN d_fn_sc SET SCHEMA s_sc1
+
+query T
+SELECT f_fn_sc(21)
+----
+42
+
+statement ok
+DROP FUNCTION f_fn_sc;
+DROP DOMAIN s_sc1.d_fn_sc
+
+statement ok
 DROP SCHEMA s_sc1;
 DROP SCHEMA s_sc2
 

@@ -6,12 +6,15 @@
 package scbuildstmt
 
 import (
+	"fmt"
 	"reflect"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/errors"
@@ -121,13 +124,77 @@ func alterDomainDropDefault(
 func alterDomainSetNotNull(
 	b BuildCtx, tn *tree.TypeName, domainType *scpb.DomainType, t *tree.AlterDomainSetNotNull,
 ) {
-	panic(pgerror.Newf(pgcode.FeatureNotSupported, "ALTER DOMAIN SET NOT NULL is not supported"))
+	typeID := domainType.TypeID
+	domainElts := b.QueryByID(typeID).NotToAbsent()
+
+	if existingNotNull := domainElts.FilterDomainNotNull().MustGetZeroOrOneElement(); existingNotNull != nil {
+		return
+	}
+
+	constraintID := b.NextDomainConstraintID(typeID)
+	constraintName := chooseDomainNotNullConstraintName(b, tn.Object(), typeID)
+
+	b.Add(&scpb.DomainNotNull{
+		TypeID:       typeID,
+		ConstraintID: constraintID,
+	})
+	b.Add(&scpb.DomainConstraintName{
+		TypeID:       typeID,
+		ConstraintID: constraintID,
+		Name:         constraintName,
+	})
 }
 
 func alterDomainDropNotNull(
 	b BuildCtx, tn *tree.TypeName, domainType *scpb.DomainType, t *tree.AlterDomainDropNotNull,
 ) {
-	panic(pgerror.Newf(pgcode.FeatureNotSupported, "ALTER DOMAIN DROP NOT NULL is not supported"))
+	typeID := domainType.TypeID
+	// Restricting to NotToAbsent both makes a repeated DROP NOT NULL a no-op
+	// rather than a panic on MustGetZeroOrOneElement, and avoids a redundant
+	// b.Drop on an element already targeting ABSENT.
+	domainElts := b.QueryByID(typeID).NotToAbsent()
+
+	existingNotNull := domainElts.FilterDomainNotNull().MustGetZeroOrOneElement()
+	if existingNotNull == nil {
+		return
+	}
+	b.Drop(existingNotNull)
+
+	domainElts.FilterDomainConstraintName().Filter(
+		func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.DomainConstraintName) bool {
+			return e.ConstraintID == existingNotNull.ConstraintID
+		},
+	).ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.DomainConstraintName) {
+		b.Drop(e)
+	})
+}
+
+// chooseDomainNotNullConstraintName generates a unique name for a domain
+// NOT NULL constraint, of the form `<domain>_not_null[<n>]`. It avoids
+// colliding with names already in use either in the persisted descriptor or
+// among in-flight constraint-name elements scheduled for addition during this
+// build.
+func chooseDomainNotNullConstraintName(b BuildCtx, domainName string, typeID catid.DescID) string {
+	// Persisted constraint names on the descriptor.
+	usedNames := b.DomainConstraintNames(typeID)
+	// In-flight constraint-name elements heading toward PUBLIC. Names that are
+	// being dropped (heading to ABSENT) can be reused, and are filtered out by
+	// NotToAbsent.
+	b.QueryByID(typeID).NotToAbsent().FilterDomainConstraintName().ForEach(
+		func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.DomainConstraintName) {
+			usedNames = append(usedNames, e.Name)
+		},
+	)
+	base := domainName + "_not_null"
+	for pass := 0; ; pass++ {
+		candidate := base
+		if pass > 0 {
+			candidate = fmt.Sprintf("%s%d", base, pass)
+		}
+		if !slices.Contains(usedNames, candidate) {
+			return candidate
+		}
+	}
 }
 
 func alterDomainAddCheckConstraint(
@@ -170,17 +237,17 @@ func alterDomainValidateConstraint(
 func alterDomainOwner(
 	b BuildCtx, tn *tree.TypeName, domainType *scpb.DomainType, t *tree.AlterDomainOwner,
 ) {
-	setOwnerForTypeDesc(b, tn, domainType, domainType.TypeID, domainType.ArrayTypeID, t.Owner)
+	setOwnerForTypeDesc(b, tn, domainType.TypeID, domainType.ArrayTypeID, t.Owner)
 }
 
 func alterDomainRename(
 	b BuildCtx, tn *tree.TypeName, domainType *scpb.DomainType, t *tree.AlterDomainRename,
 ) {
-	renameForTypeDesc(b, tn, domainType, domainType.TypeID, domainType.ArrayTypeID, string(t.NewName))
+	renameForTypeDesc(b, tn, domainType.TypeID, domainType.ArrayTypeID, string(t.NewName))
 }
 
 func alterDomainSetSchema(
 	b BuildCtx, tn *tree.TypeName, domainType *scpb.DomainType, t *tree.AlterDomainSetSchema,
 ) {
-	setSchemaForTypeDesc(b, domainType, domainType.TypeID, domainType.ArrayTypeID, t.Schema, "domain")
+	setSchemaForTypeDesc(b, domainType.TypeID, domainType.ArrayTypeID, t.Schema, "domain")
 }

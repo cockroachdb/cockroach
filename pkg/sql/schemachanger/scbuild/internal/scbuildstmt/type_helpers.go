@@ -51,12 +51,7 @@ func panicIfSchemaIsTemporaryOrVirtual(schemaName tree.Name) {
 // setOwnerForTypeDesc implements OWNER TO for user-defined types that have an
 // associated array type (enums, composites, domains).
 func setOwnerForTypeDesc(
-	b BuildCtx,
-	tn *tree.TypeName,
-	typeElem scpb.Element,
-	typeID catid.DescID,
-	arrayTypeID catid.DescID,
-	owner tree.RoleSpec,
+	b BuildCtx, tn *tree.TypeName, typeID catid.DescID, arrayTypeID catid.DescID, owner tree.RoleSpec,
 ) {
 	newOwner, err := decodeusername.FromRoleSpec(
 		b.SessionData(), username.PurposeValidation, owner,
@@ -72,7 +67,7 @@ func setOwnerForTypeDesc(
 		return
 	}
 
-	if !b.HasOwnership(typeElem) {
+	if !b.HasOwnership(oldOwner) {
 		panic(pgerror.Newf(pgcode.InsufficientPrivilege,
 			"must be owner of type %s", tn.Object()))
 	}
@@ -104,7 +99,7 @@ func setOwnerForTypeDesc(
 
 	arrayElts := b.QueryByID(arrayTypeID)
 	arrayNs := arrayElts.FilterNamespace().MustGetOneElement()
-	arrayTn := tree.MakeTypeNameWithPrefix(b.NamePrefix(typeElem), arrayNs.Name)
+	arrayTn := tree.MakeTypeNameWithPrefix(b.NamePrefix(arrayNs), arrayNs.Name)
 
 	b.LogEventForExistingPayload(&scpb.Owner{
 		DescriptorID: typeID,
@@ -126,7 +121,6 @@ func setOwnerForTypeDesc(
 // an associated array type (enums, composites, domains).
 func setSchemaForTypeDesc(
 	b BuildCtx,
-	typeElem scpb.Element,
 	typeID catid.DescID,
 	arrayTypeID catid.DescID,
 	newSchemaName tree.Name,
@@ -142,7 +136,7 @@ func setSchemaForTypeDesc(
 		return
 	}
 
-	currName := tree.MakeTableNameFromPrefix(b.NamePrefix(typeElem), tree.Name(currNamespace.Name))
+	currName := tree.MakeTableNameFromPrefix(b.NamePrefix(currNamespace), tree.Name(currNamespace.Name))
 	newName := currName
 	newName.SchemaName = newSchemaName
 
@@ -150,7 +144,7 @@ func setSchemaForTypeDesc(
 
 	arrayNamespace := mustRetrieveNamespaceElem(b, arrayTypeID)
 	arrayName := tree.MakeTableNameFromPrefix(
-		b.NamePrefix(typeElem), tree.Name(arrayNamespace.Name),
+		b.NamePrefix(arrayNamespace), tree.Name(arrayNamespace.Name),
 	)
 	newArrayName := arrayName
 	newArrayName.SchemaName = newSchemaName
@@ -169,12 +163,7 @@ func setSchemaForTypeDesc(
 // renameForTypeDesc implements RENAME TO for user-defined types that have an
 // associated array type (enums, composites, domains).
 func renameForTypeDesc(
-	b BuildCtx,
-	tn *tree.TypeName,
-	typeElem scpb.Element,
-	typeID catid.DescID,
-	arrayTypeID catid.DescID,
-	newName string,
+	b BuildCtx, tn *tree.TypeName, typeID catid.DescID, arrayTypeID catid.DescID, newName string,
 ) {
 	typeElts := b.QueryByID(typeID)
 	currentNS := typeElts.FilterNamespace().NotToAbsent().MustGetOneElement()
@@ -203,7 +192,7 @@ func renameForTypeDesc(
 	arrayElts := b.QueryByID(arrayTypeID)
 	arrayNS := arrayElts.FilterNamespace().NotToAbsent().MustGetOneElement()
 
-	newArrayName := findFreeNameInSchema(b, b.NamePrefix(typeElem), "_"+newName)
+	newArrayName := findFreeNameInSchema(b, b.NamePrefix(arrayNS), "_"+newName)
 	newArrayNS := &scpb.Namespace{
 		DatabaseID:   arrayNS.DatabaseID,
 		SchemaID:     arrayNS.SchemaID,
