@@ -1,9 +1,10 @@
 # LogicTest: local
 
 # Tests that CanMutate is persisted on the trigger descriptor at CREATE TRIGGER
-# time. The value is stored on the trigger (nested in the table descriptor), not
-# on the trigger function's own descriptor, because the function body can only be
-# analyzed once bound to a table.
+# time and kept consistent when the trigger function is replaced. The value is
+# stored on the trigger (nested in the table descriptor), not on the trigger
+# function's own descriptor, because the function body can only be analyzed once
+# bound to a table.
 
 subtest persist
 
@@ -47,5 +48,27 @@ ORDER BY name
 name    can_mutate
 tr_mut  CAN_MUTATE
 tr_ro   CANNOT_MUTATE
+
+subtest propagate
+
+# Replacing the read-only trigger function with a mutating body propagates the
+# new CanMutate to the dependent trigger descriptor.
+statement ok
+CREATE OR REPLACE FUNCTION f_ro() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO audit_log VALUES (NEW.a);
+    RETURN NEW;
+  END
+$$
+
+query T
+SELECT tr->>'canMutate'
+FROM system.descriptor,
+     jsonb_array_elements(
+       crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)->'table'->'triggers'
+     ) AS tr
+WHERE id = 't'::regclass::oid::int AND tr->>'name' = 'tr_ro'
+----
+CAN_MUTATE
 
 subtest end

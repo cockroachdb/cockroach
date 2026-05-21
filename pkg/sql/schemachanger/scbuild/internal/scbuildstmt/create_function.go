@@ -238,6 +238,8 @@ func replaceFunction(
 ) {
 	_, _, existingFnElem := scpb.FindFunction(existingFnElts)
 	fnID := existingFnElem.FunctionID
+	_, _, existingFnBody := scpb.FindFunctionBody(existingFnElts)
+	oldCanMutate := existingFnBody.CanMutate
 
 	// Validate compatibility: routine kind must match.
 	if n.IsProcedure != existingFnElem.IsProcedure {
@@ -413,9 +415,17 @@ func replaceFunction(
 	validateFunctionToFunctionReferences(b, refProvider, db.DatabaseID)
 
 	// Build the FunctionBody element with the new body and references.
-	fnBody := b.WrapFunctionBody(fnID, fnBodyStr, lang, routineLazilyEvaluatesSQL(b, n, lang, typ), refProvider)
-	if b.EvalCtx().Settings.Version.ActiveVersion(b).IsActive(clusterversion.V26_3_FunctionDescCanMutate) {
-		fnBody.CanMutate = funcdesc.CanMutateToProto(n.CanMutate)
+	fnBody := b.WrapFunctionBody(
+		fnID, fnBodyStr, lang, routineLazilyEvaluatesSQL(b, n, lang, typ), n.CanMutate, refProvider,
+	)
+	// If the function became mutating, propagate CAN_MUTATE to all transitive
+	// callers so their descriptors stay accurate for deferred opt-building and
+	// leaf/root txn selection. WrapFunctionBody only writes CanMutate once the
+	// version gate is active, so fnBody.CanMutate is UNKNOWN beforehand and this
+	// is naturally a no-op.
+	if fnBody.CanMutate == catpb.Function_CAN_MUTATE &&
+		oldCanMutate != catpb.Function_CAN_MUTATE {
+		propagateCanMutateToCallersDSC(b, fnID)
 	}
 	b.Replace(fnBody)
 
@@ -462,14 +472,22 @@ func updateDependentTriggers(b BuildCtx, fnID descpb.ID, fnBodyStr string) {
 			triggerRefProvider := b.BuildReferenceProvider(syntheticCT)
 
 			// Replace TriggerFunctionCall with the qualified function body produced
-			// by the optbuilder.
-			b.Replace(&scpb.TriggerFunctionCall{
+			// by the optbuilder. BuildReferenceProvider above ran the optbuilder on
+			// the synthetic CREATE TRIGGER, so syntheticCT.CanMutate now reflects
+			// the new body; propagate it so the trigger's persisted CanMutate stays
+			// consistent with the replaced function. Gate the write for rollback
+			// safety, mirroring the CREATE TRIGGER path.
+			funcCall := &scpb.TriggerFunctionCall{
 				TableID:   tableID,
 				TriggerID: triggerID,
 				FuncID:    fnID,
 				FuncBody:  syntheticCT.FuncBody,
 				FuncArgs:  e.FuncArgs,
-			})
+			}
+			if b.ClusterSettings().Version.IsActive(b, clusterversion.V26_3_Start) {
+				funcCall.CanMutate = funcdesc.CanMutateToProto(syntheticCT.CanMutate)
+			}
+			b.Replace(funcCall)
 
 			// Replace TriggerDeps with new dependencies from the new function body.
 			routineIDs := triggerRefProvider.ReferencedRoutines()
@@ -712,4 +730,51 @@ func routineLazilyEvaluatesSQL(
 	}
 	return n.IsProcedure && lang == catpb.Function_PLPGSQL &&
 		sqlclustersettings.PLpgSQLProcedureLateBindingEnabled(b, b.EvalCtx().Settings)
+}
+
+// propagateCanMutateToCallersDSC transitively updates CAN_MUTATE on all
+// functions that (directly or indirectly) call the given function. See
+// propagateCanMutateToCallers in pkg/sql/create_function.go for the
+// legacy-path equivalent.
+//
+// TODO(janexing): this walks only function back-references, so a trigger whose
+// function transitively calls fnID keeps a stale persisted CanMutate. Harmless
+// while triggers re-derive from the live body (see trigger.go), but once trigger
+// optbuild is deferred this must also flip dependent TriggerFunctionCall elements.
+func propagateCanMutateToCallersDSC(b BuildCtx, fnID descpb.ID) {
+	visited := make(map[descpb.ID]struct{})
+	visited[fnID] = struct{}{}
+	propagateCanMutateDSCImpl(b, fnID, visited)
+}
+
+func propagateCanMutateDSCImpl(b BuildCtx, fnID descpb.ID, visited map[descpb.ID]struct{}) {
+	type callerInfo struct {
+		fnID descpb.ID
+		body *scpb.FunctionBody
+	}
+	var callers []callerInfo
+
+	b.BackReferences(fnID).FilterFunctionBody().ForEach(
+		func(_ scpb.Status, target scpb.TargetStatus, e *scpb.FunctionBody) {
+			if target != scpb.ToPublic {
+				return
+			}
+			if _, ok := visited[e.FunctionID]; ok {
+				return
+			}
+			if e.CanMutate == catpb.Function_CAN_MUTATE {
+				visited[e.FunctionID] = struct{}{}
+				return
+			}
+			callers = append(callers, callerInfo{fnID: e.FunctionID, body: e})
+		},
+	)
+
+	for _, c := range callers {
+		visited[c.fnID] = struct{}{}
+		updated := *c.body
+		updated.CanMutate = catpb.Function_CAN_MUTATE
+		b.Replace(&updated)
+		propagateCanMutateDSCImpl(b, c.fnID, visited)
+	}
 }

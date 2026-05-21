@@ -210,7 +210,6 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
               INSERT INTO log2 VALUES ('replaced');
               RETURN NEW;
             END
-        CanMutate: 2
         FunctionID: 113
         Lang:
           Lang: 2
@@ -220,6 +219,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
       FunctionID: 113
     *scop.SetTriggerFunctionCall
       FunctionCall:
+        CanMutate: 1
         FuncBody: |
           BEGIN
           INSERT INTO defaultdb.public.log2 VALUES ('replaced');
@@ -298,7 +298,6 @@ PreCommitPhase stage 2 of 2 with 12 MutationType ops
               INSERT INTO log2 VALUES ('replaced');
               RETURN NEW;
             END
-        CanMutate: 2
         FunctionID: 113
         Lang:
           Lang: 2
@@ -308,6 +307,7 @@ PreCommitPhase stage 2 of 2 with 12 MutationType ops
       FunctionID: 113
     *scop.SetTriggerFunctionCall
       FunctionCall:
+        CanMutate: 1
         FuncBody: |
           BEGIN
           INSERT INTO defaultdb.public.log2 VALUES ('replaced');
