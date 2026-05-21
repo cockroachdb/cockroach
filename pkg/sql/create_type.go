@@ -610,6 +610,7 @@ func (p *planner) createDomainWithID(
 			typeName.Type(), "not_null", usedNames,
 		)
 		notNullConstraintID = nextConstraintID
+		nextConstraintID++
 	}
 
 	// Serialize default expression if present.
@@ -642,6 +643,7 @@ func (p *planner) createDomainWithID(
 			NotNullConstraintID:   notNullConstraintID,
 			DefaultExpr:           defaultExpr,
 			CheckConstraints:      checks,
+			NextConstraintID:      nextConstraintID,
 		},
 		Version:    1,
 		Privileges: privs,

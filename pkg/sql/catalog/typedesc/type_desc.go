@@ -1182,6 +1182,11 @@ func (desc *immutable) GetNotNullConstraintID() descpb.ConstraintID {
 	return desc.Domain.NotNullConstraintID
 }
 
+// GetNextConstraintID implements the catalog.DomainTypeDescriptor interface.
+func (desc *immutable) GetNextConstraintID() descpb.ConstraintID {
+	return desc.Domain.NextConstraintID
+}
+
 // GetDefaultExpr implements the catalog.DomainTypeDescriptor interface.
 func (desc *immutable) GetDefaultExpr() string {
 	return desc.Domain.DefaultExpr

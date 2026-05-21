@@ -594,6 +594,62 @@ func (b *builderState) NextTableConstraintID(tableID catid.DescID) (ret catid.Co
 	return ret
 }
 
+// NextDomainConstraintID implements the scbuildstmt.TypeHelpers interface.
+//
+// The returned ID is the greater of the descriptor's persisted NextConstraintID
+// counter and one past the max ConstraintID across all in-flight elements for
+// the domain.
+func (b *builderState) NextDomainConstraintID(typeID catid.DescID) (ret catid.ConstraintID) {
+	domain := b.mustGetDomainTypeDescriptor(typeID)
+	ret = domain.GetNextConstraintID()
+	if ret == 0 {
+		ret = 1
+	}
+	b.QueryByID(typeID).ForEach(func(
+		_ scpb.Status, _ scpb.TargetStatus, e scpb.Element,
+	) {
+		v, _ := screl.Schema.GetAttribute(screl.ConstraintID, e)
+		if id, ok := v.(catid.ConstraintID); ok && id >= ret {
+			ret = id + 1
+		}
+	})
+	return ret
+}
+
+// DomainConstraintNames implements the scbuildstmt.TypeHelpers interface.
+func (b *builderState) DomainConstraintNames(typeID catid.DescID) []string {
+	domain := b.mustGetDomainTypeDescriptor(typeID)
+	names := make([]string, 0, 1+domain.NumCheckConstraints())
+	if domain.IsNotNull() {
+		names = append(names, domain.GetNotNullConstraintName())
+	}
+	for i := 0; i < domain.NumCheckConstraints(); i++ {
+		names = append(names, domain.GetCheckConstraintName(i))
+	}
+	return names
+}
+
+// mustGetDomainTypeDescriptor fetches the descriptor for typeID and panics if
+// it isn't a domain type.
+func (b *builderState) mustGetDomainTypeDescriptor(
+	typeID catid.DescID,
+) catalog.DomainTypeDescriptor {
+	b.ensureDescriptor(typeID)
+	desc := b.descCache[typeID].desc
+	typ, ok := desc.(catalog.TypeDescriptor)
+	if !ok {
+		panic(errors.AssertionFailedf("expected type descriptor for ID %d, instead got %s",
+			desc.GetID(), desc.DescriptorType()))
+	}
+	domain := typ.AsDomainTypeDescriptor()
+	if domain == nil {
+		panic(errors.AssertionFailedf(
+			"expected domain type descriptor for ID %d, instead got %s",
+			desc.GetID(), typ.GetKind()))
+	}
+	return domain
+}
+
 // NextTableTriggerID implements the scbuildstmt.TableHelpers interface.
 func (b *builderState) NextTableTriggerID(tableID catid.DescID) (ret catid.TriggerID) {
 	{
