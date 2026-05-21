@@ -17,13 +17,15 @@ import (
 )
 
 func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope *scope) {
-	if _, ok := explain.Statement.(*tree.Execute); ok {
-		// EXPLAIN (FINGERPRINT) EXECUTE is supported, but other modes are not.
-		if explain.Mode != tree.ExplainFingerprint {
-			panic(pgerror.New(
-				pgcode.FeatureNotSupported, "EXPLAIN EXECUTE is not supported; use EXPLAIN ANALYZE",
-			))
-		}
+	if _, ok := explain.Statement.(*tree.Execute); ok && explain.Mode != tree.ExplainFingerprint {
+		// EXPLAIN EXECUTE is resolved at the top level of the conn executor.
+		// If we reach here, it means the EXPLAIN EXECUTE was used in a
+		// subquery context (e.g., SELECT * FROM [EXPLAIN EXECUTE ...]) which
+		// is not supported.
+		panic(pgerror.New(
+			pgcode.FeatureNotSupported,
+			"EXPLAIN EXECUTE cannot be used in a subquery",
+		))
 	}
 
 	var stmtScope *scope

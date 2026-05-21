@@ -140,12 +140,6 @@ EXPLAIN (FINGERPRINT, TYPES) SELECT * FROM t
 statement error pq: at or near "EOF": syntax error: the JSON flag can only be used with DISTSQL
 EXPLAIN (FINGERPRINT, JSON) SELECT * FROM t
 
-# Test that regular EXPLAIN EXECUTE is still rejected while FINGERPRINT works
-statement error EXPLAIN EXECUTE is not supported; use EXPLAIN ANALYZE
-EXPLAIN EXECUTE stmt1
-
-# But EXPLAIN (FINGERPRINT) EXECUTE should work (already tested above)
-
 # Test with more complex queries
 query T
 EXPLAIN (FINGERPRINT)
