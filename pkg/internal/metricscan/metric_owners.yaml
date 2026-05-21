@@ -22,16 +22,16 @@ owners:
   addsstable_copies: cockroachdb/kv
   addsstable_delay_total: cockroachdb/kv
   addsstable_proposals: cockroachdb/kv
-  admission.cpu_time_tokens.exhausted_duration_nanos.%s.%s: cockroachdb/admission-control
-  admission.cpu_time_tokens.per_tenant.admitted_count.%s: cockroachdb/admission-control
-  admission.cpu_time_tokens.per_tenant.tokens_returned.%s: cockroachdb/admission-control
-  admission.cpu_time_tokens.per_tenant.tokens_used.%s: cockroachdb/admission-control
-  admission.cpu_time_tokens.per_tenant.wait_time_nanos.%s: cockroachdb/admission-control
-  admission.cpu_time_tokens.refill.added.%s.%s: cockroachdb/admission-control
-  admission.cpu_time_tokens.refill.removed.%s.%s: cockroachdb/admission-control
+  admission.cpu_time_tokens.exhausted_duration_nanos.%s: cockroachdb/admission-control
+  admission.cpu_time_tokens.refill.added.%s: cockroachdb/admission-control
+  admission.cpu_time_tokens.refill.removed.%s: cockroachdb/admission-control
   admission_admitted_snapshot_bytes: cockroachdb/admission-control
   admission_cpu_time_tokens_dampening_deficit_nanos: cockroachdb/admission-control
   admission_cpu_time_tokens_multiplier: cockroachdb/admission-control
+  admission_cpu_time_tokens_per_tenant_admitted_count: cockroachdb/admission-control
+  admission_cpu_time_tokens_per_tenant_tokens_returned: cockroachdb/admission-control
+  admission_cpu_time_tokens_per_tenant_tokens_used: cockroachdb/admission-control
+  admission_cpu_time_tokens_per_tenant_wait_time_nanos: cockroachdb/admission-control
   admission_cpu_time_tokens_usage_consumed: cockroachdb/admission-control
   admission_cpu_time_tokens_usage_returned: cockroachdb/admission-control
   admission_elastic_cpu_acquired_nanos: cockroachdb/admission-control

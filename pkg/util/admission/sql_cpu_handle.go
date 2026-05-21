@@ -11,7 +11,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
@@ -608,10 +607,9 @@ type sqlCPUProviderImpl struct {
 	cumulativeDistSQLCPUNanos atomic.Int64
 	// sv is the settings values used to check if CTT AC is enabled.
 	sv *settings.Values
-	// getWorkQueue returns the CTT WorkQueue for the given tenant. This
-	// allows SQL to share the KV CTT WorkQueue, using the appropriate
-	// tier (system vs app) based on tenant ID. Can be nil in testing.
-	getWorkQueue func(roachpb.TenantID) *WorkQueue
+	// getWorkQueue returns the CTT WorkQueue. This allows SQL to share
+	// the KV CTT WorkQueue. Can be nil in testing.
+	getWorkQueue func() *WorkQueue
 }
 
 func (p *sqlCPUProviderImpl) GetCumulativeSQLCPUNanos() (gatewayCPUNanos, distCPUNanos int64) {
@@ -621,19 +619,17 @@ func (p *sqlCPUProviderImpl) GetCumulativeSQLCPUNanos() (gatewayCPUNanos, distCP
 func (p *sqlCPUProviderImpl) GetHandle(workInfo WorkInfo, atGateway bool) *SQLCPUHandle {
 	var wq *WorkQueue
 	if p.getWorkQueue != nil && sqlCPUTimeTokenACIsEnabled(p.sv) {
-		wq = p.getWorkQueue(workInfo.TenantID)
+		wq = p.getWorkQueue()
 	}
 	return newSQLCPUAdmissionHandle(workInfo, atGateway, p, wq)
 }
 
 // NewSQLCPUProvider creates a new SQLCPUProvider. The sv parameter is required
 // and provides access to cluster settings for checking if SQL CPU time token
-// AC is enabled. The getWorkQueue function returns the CTT WorkQueue for a
-// given tenant, allowing SQL to share the KV CTT WorkQueue; it may be nil when
-// CTT AC is not available (e.g. separate-process tenants).
-func NewSQLCPUProvider(
-	sv *settings.Values, getWorkQueue func(roachpb.TenantID) *WorkQueue,
-) SQLCPUProvider {
+// AC is enabled. The getWorkQueue function returns the CTT WorkQueue, allowing
+// SQL to share the KV CTT WorkQueue; it may be nil when CTT AC is not
+// available (e.g. separate-process tenants).
+func NewSQLCPUProvider(sv *settings.Values, getWorkQueue func() *WorkQueue) SQLCPUProvider {
 	return &sqlCPUProviderImpl{
 		sv:           sv,
 		getWorkQueue: getWorkQueue,

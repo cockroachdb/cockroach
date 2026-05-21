@@ -418,10 +418,10 @@ func runCPUTimeTokenWorkQueueTest(t *testing.T, path string) {
 				opts.mode = usesCPUTimeTokens
 				cpuMetrics := makeCPUTimeTokenMetrics()
 				opts.perGroupAggMetrics = &groupAggMetrics{
-					admittedCount:  cpuMetrics.AdmittedCountPerTenant[systemTenant],
-					waitTimeNanos:  cpuMetrics.WaitTimeNanosPerTenant[systemTenant],
-					tokensUsed:     cpuMetrics.TokensUsedPerTenant[systemTenant],
-					tokensReturned: cpuMetrics.TokensReturnedPerTenant[systemTenant],
+					admittedCount:  cpuMetrics.AdmittedCountPerTenant,
+					waitTimeNanos:  cpuMetrics.WaitTimeNanosPerTenant,
+					tokensUsed:     cpuMetrics.TokensUsedPerTenant,
+					tokensReturned: cpuMetrics.TokensReturnedPerTenant,
 				}
 				opts.configHolder = newResourceGroupConfigHolder(&st.SV)
 				opts.groupKeyForWorkInfo = cpuTimeTokenGroupKeyForWorkInfo
@@ -643,10 +643,10 @@ func TestCPUTimeTokenEstimation(t *testing.T) {
 	opts.mode = usesCPUTimeTokens
 	cpuMetrics := makeCPUTimeTokenMetrics()
 	opts.perGroupAggMetrics = &groupAggMetrics{
-		admittedCount:  cpuMetrics.AdmittedCountPerTenant[systemTenant],
-		waitTimeNanos:  cpuMetrics.WaitTimeNanosPerTenant[systemTenant],
-		tokensUsed:     cpuMetrics.TokensUsedPerTenant[systemTenant],
-		tokensReturned: cpuMetrics.TokensReturnedPerTenant[systemTenant],
+		admittedCount:  cpuMetrics.AdmittedCountPerTenant,
+		waitTimeNanos:  cpuMetrics.WaitTimeNanosPerTenant,
+		tokensUsed:     cpuMetrics.TokensUsedPerTenant,
+		tokensReturned: cpuMetrics.TokensReturnedPerTenant,
 	}
 	opts.groupKeyForWorkInfo = cpuTimeTokenGroupKeyForWorkInfo
 	timeSource = timeutil.NewManualTime(initialTime)
@@ -787,10 +787,10 @@ func makeCPUTimeTokenWorkQueue(
 	opts.mode = usesCPUTimeTokens
 	cpuMetrics := makeCPUTimeTokenMetrics()
 	opts.perGroupAggMetrics = &groupAggMetrics{
-		admittedCount:  cpuMetrics.AdmittedCountPerTenant[systemTenant],
-		waitTimeNanos:  cpuMetrics.WaitTimeNanosPerTenant[systemTenant],
-		tokensUsed:     cpuMetrics.TokensUsedPerTenant[systemTenant],
-		tokensReturned: cpuMetrics.TokensReturnedPerTenant[systemTenant],
+		admittedCount:  cpuMetrics.AdmittedCountPerTenant,
+		waitTimeNanos:  cpuMetrics.WaitTimeNanosPerTenant,
+		tokensUsed:     cpuMetrics.TokensUsedPerTenant,
+		tokensReturned: cpuMetrics.TokensReturnedPerTenant,
 	}
 	opts.timeSource = timeutil.NewManualTime(initialTime)
 	opts.disableEpochClosingGoroutine = true
