@@ -381,19 +381,30 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 					return err
 				}
 			}
+			pc := plan.(*planComponents)
+			if pc.flags.IsSet(planFlagIsDDL) {
+				// Reject DDL inside a procedure called from an explicit
+				// transaction. Mixing schema changes with arbitrary post-CALL
+				// statements in the same user transaction is not yet supported.
+				if !g.p.EvalContext().TxnImplicit {
+					return errors.WithHint(
+						pgerror.New(pgcode.FeatureNotSupported,
+							"DDL statements are not allowed in stored procedures called from an explicit transaction"),
+						"call the procedure outside of a BEGIN ... COMMIT block",
+					)
+				}
+				// Safety net: reject DDL in a routine body when the txn iso
+				// still tolerates write skew. The primary upgrade path runs
+				// at CALL planning time via maybeAutoCommitBeforeDDL; this
+				// catches paths the pre-plan walker did not cover (e.g. DDL
+				// inside a nested CALL the outer body walker did not recurse
+				// into).
+				if err := g.p.storedProcTxnState.rejectDDLInRoutineUnderWeakIso(txn); err != nil {
+					return err
+				}
+			}
 			// Run the plan.
 			params := runParams{ctx, g.p.ExtendedEvalContext(), g.p}
-			pc := plan.(*planComponents)
-			// Reject DDL inside a procedure called from an explicit
-			// transaction. Mixing schema changes with arbitrary post-CALL
-			// statements in the same user transaction is not yet supported.
-			if pc.flags.IsSet(planFlagIsDDL) && !g.p.EvalContext().TxnImplicit {
-				return errors.WithHint(
-					pgerror.New(pgcode.FeatureNotSupported,
-						"DDL statements are not allowed in stored procedures called from an explicit transaction"),
-					"call the procedure outside of a BEGIN ... COMMIT block",
-				)
-			}
 			if statsBuilder != nil {
 				defer func() {
 					flags := pc.flags
@@ -777,6 +788,27 @@ func (a *storedProcTxnStateAccessor) getTxnModes() *tree.TransactionModes {
 		return nil
 	}
 	return a.ex.extraTxnState.storedProcTxnState.txnModes
+}
+
+// rejectDDLInRoutineUnderWeakIso is a runtime safety net: when a DDL plan
+// node is encountered in a routine body and the txn isolation still
+// tolerates write skew, it returns txnSchemaChangeErr. The primary upgrade
+// path runs at CALL planning time via maybeAutoCommitBeforeDDL — this check
+// only fires for cases the pre-plan walker did not handle (most notably
+// DDL inside a nested CALL, where the outer body walker does not recurse).
+//
+// In-place SetIsoLevel cannot succeed here because the txn is already
+// active by the time we reach a body statement, so this method does not
+// attempt an upgrade. It is a no-op for accessors not backed by a
+// connExecutor (e.g. internal SQL).
+func (a *storedProcTxnStateAccessor) rejectDDLInRoutineUnderWeakIso(txn *kv.Txn) error {
+	if a.ex == nil {
+		return nil
+	}
+	if !txn.IsoLevel().ToleratesWriteSkew() {
+		return nil
+	}
+	return txnSchemaChangeErr
 }
 
 // EvalTxnControlExpr produces the side effects of a COMMIT or ROLLBACK

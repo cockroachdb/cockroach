@@ -3865,6 +3865,11 @@ func (ex *connExecutor) execStmtInNoTxnState(
 				ex.incrementExecutedStmtCounter(ast)
 			}
 		}()
+		// The implicit-CALL+DDL upgrade override (forceNextTxnSerializable)
+		// is meant for the very next implicit txn; an intervening explicit
+		// BEGIN discards it so it can't silently upgrade an unrelated
+		// future implicit txn.
+		ex.forceNextTxnSerializable = false
 		mode, sqlTs, historicalTs, err := ex.beginTransactionTimestampsAndReadMode(ctx, s)
 		if err != nil {
 			return ex.makeErrEvent(err, s)
@@ -3913,7 +3918,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 				historicalTs,
 				ex.transitionCtx,
 				ex.QualityOfService(),
-				ex.txnIsolationLevelToKV(ctx, tree.UnspecifiedIsolation),
+				ex.implicitTxnIsoLevel(ctx),
 				ex.omitInRangefeeds(),
 				ex.bufferedWritesEnabled(implicitTxn),
 				ex.rng.internal,
@@ -3948,7 +3953,7 @@ func (ex *connExecutor) beginImplicitTxn(
 			historicalTs,
 			ex.transitionCtx,
 			qos,
-			ex.txnIsolationLevelToKV(ctx, tree.UnspecifiedIsolation),
+			ex.implicitTxnIsoLevel(ctx),
 			ex.omitInRangefeeds(),
 			ex.bufferedWritesEnabled(implicitTxn),
 			ex.rng.internal,

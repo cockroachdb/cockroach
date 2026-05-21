@@ -1991,6 +1991,23 @@ type connExecutor struct {
 	// responds to user queries or an internal one.
 	executorType executorType
 
+	// forceNextTxnSerializable is a one-shot override consumed when the next
+	// implicit txn is opened. It is set by maybeAutoCommitBeforeDDL only
+	// after handleAutoCommit confirms the current txn was committed for a
+	// CALL whose body contains DDL under weaker isolation; the restart must
+	// then begin at SERIALIZABLE so the body's DDL runs safely.
+	//
+	// The flag is cleared in two places to bound its lifetime to the very
+	// next txn: implicitTxnIsoLevel applies and clears it when the restart's
+	// implicit txn opens; the BEGIN branch of execStmtInNoTxnState discards
+	// it if the user opens an explicit txn first, preventing leakage into
+	// a later unrelated implicit txn.
+	//
+	// Lives outside extraTxnState because that struct is reset per-txn and
+	// this flag must survive the boundary between the auto-committed txn
+	// and its restart.
+	forceNextTxnSerializable bool
+
 	// hasCreatedTemporarySchema is set if the executor has created a
 	// temporary schema, which requires special cleanup on close.
 	hasCreatedTemporarySchema bool
@@ -3820,6 +3837,18 @@ var allowBufferedWritesForWeakIsolation = settings.RegisterBoolSetting(
 		"sql.txn.write_buffering_for_weak_isolation.enabled", false, /* defaultValue */
 	),
 )
+
+// implicitTxnIsoLevel returns the isolation level to use for a new implicit
+// transaction. It honors and clears forceNextTxnSerializable: when set, the
+// next implicit txn starts at SERIALIZABLE regardless of the session default.
+// The flag is consumed exactly once.
+func (ex *connExecutor) implicitTxnIsoLevel(ctx context.Context) isolation.Level {
+	if ex.forceNextTxnSerializable {
+		ex.forceNextTxnSerializable = false
+		return isolation.Serializable
+	}
+	return ex.txnIsolationLevelToKV(ctx, tree.UnspecifiedIsolation)
+}
 
 func (ex *connExecutor) txnIsolationLevelToKV(
 	ctx context.Context, level tree.IsolationLevel,

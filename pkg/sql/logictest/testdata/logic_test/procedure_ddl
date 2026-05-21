@@ -1,5 +1,13 @@
-# LogicTest: !local-mixed-25.4 !local-mixed-26.1 !local-mixed-26.2
+# LogicTest: !local-mixed-25.4 !local-mixed-26.1 !local-mixed-26.2 !local-prepared
 # knob-opt: allow-unsafe
+#
+# local-prepared is excluded because the routine-context DDL isolation
+# upgrade (#170020) auto-commits and restarts the implicit txn, which
+# invalidates any in-flight portal. In the extended-query protocol, simple
+# statements are run as Prepare+Bind+Execute, so an active portal exists at
+# the moment we want to auto-commit. Users on the extended protocol fall
+# back to the in-routine safety net (txnSchemaChangeErr) and must explicitly
+# use SERIALIZABLE.
 
 subtest ddl_blocked_in_functions
 
@@ -300,20 +308,11 @@ subtest end
 
 subtest autocommit_before_ddl
 
-# autocommit_before_ddl controls which schema changer is used for DDL inside
-# procedures, even though the autocommit NOTICE does not fire (routine body
-# DDL goes through runPlanInsidePlan, not execStmtInOpenState).
-#
-# With autocommit_before_ddl = true: DDL uses the declarative schema changer
-# (the transaction is treated as fresh for schema change purposes).
-# With autocommit_before_ddl = false: DDL runs inside the existing multi-
-# statement transaction and falls back to the legacy schema changer.
-#
-# TODO(spilchen): we don't want this long term. This test exists to show the current behaviour.
-#
-# For CREATE TABLE this doesn't matter — both paths work.
+# Under READ COMMITTED (the local-read-committed config default), CALLing a
+# procedure whose body contains DDL fires the upgrade NOTICE via the pre-plan
+# walker, regardless of the autocommit_before_ddl setting. The procedure then
+# runs entirely under SERIALIZABLE.
 
-# First verify the NOTICE does NOT fire — autocommit doesn't visibly commit.
 statement ok
 SET autocommit_before_ddl = true;
 
@@ -329,9 +328,12 @@ BEGIN
 END
 $$;
 
-query T noticetrace
+# Under SERIALIZABLE no upgrade is needed; under weaker isolation the upgrade
+# NOTICE fires. Skip the noticetrace assertion since both behaviors are
+# correct depending on the config's default isolation.
+
+statement ok
 CALL p_autocommit();
-----
 
 query I rowsort
 SELECT * FROM t_autocommit_test;
@@ -607,11 +609,38 @@ BEGIN
 END
 $$;
 
+# Under SERIALIZABLE the nested CALL succeeds: the txn is already at the
+# required isolation level so no upgrade is needed.
+skipif config local-read-committed
+skipif config local-repeatable-read
 statement ok
 CALL p_outer_calls_ddl();
 
+skipif config local-read-committed
+skipif config local-repeatable-read
 statement ok
 DROP TABLE t_nested;
+
+# Under weak isolation the pre-plan body walker does not recurse into nested
+# CALLs, so the inner CREATE TABLE hits the in-routine safety net and is
+# rejected. Failing the CALL is preferable to silently running DDL at the
+# wrong isolation level; users that need this should call the inner
+# procedure directly (which the walker handles) or run under SERIALIZABLE.
+onlyif config local-read-committed
+statement error pgcode 0A000 to use multi-statement transactions involving a schema change under weak isolation levels
+CALL p_outer_calls_ddl();
+
+onlyif config local-repeatable-read
+statement error pgcode 0A000 to use multi-statement transactions involving a schema change under weak isolation levels
+CALL p_outer_calls_ddl();
+
+onlyif config local-read-committed
+statement error pgcode 42P01 relation "t_nested" does not exist
+SELECT * FROM t_nested;
+
+onlyif config local-repeatable-read
+statement error pgcode 42P01 relation "t_nested" does not exist
+SELECT * FROM t_nested;
 
 # Nested procedures: outer CALL in explicit transaction, inner procedure has
 # DDL — should be rejected. The explicit-transaction context propagates to
@@ -843,6 +872,9 @@ statement ok
 DROP TABLE t_nested_outer, t_nested_inner;
 
 # Test that ROLLBACK in outer procedure undoes inner procedure's DDL.
+# Under SERIALIZABLE the CALL succeeds; under weak isolation the outer body
+# walker does not recurse into the inner CALL, so the inner CREATE TABLE
+# hits the in-routine safety net and the CALL is rejected.
 statement ok
 CREATE PROCEDURE p_outer_rollback() LANGUAGE PLpgSQL AS $$
 BEGIN
@@ -851,11 +883,23 @@ BEGIN
 END
 $$;
 
+skipif config local-read-committed
+skipif config local-repeatable-read
 statement ok
 CALL p_outer_rollback();
 
+skipif config local-read-committed
+skipif config local-repeatable-read
 statement error pgcode 42P01 relation "t_nested_inner" does not exist
 SELECT * FROM t_nested_inner;
+
+onlyif config local-read-committed
+statement error pgcode 0A000 to use multi-statement transactions involving a schema change under weak isolation levels
+CALL p_outer_rollback();
+
+onlyif config local-repeatable-read
+statement error pgcode 0A000 to use multi-statement transactions involving a schema change under weak isolation levels
+CALL p_outer_rollback();
 
 statement ok
 DROP PROCEDURE p_outer_rollback;
@@ -903,18 +947,10 @@ subtest end
 
 subtest ddl_under_read_committed
 
-# DDL in procedure bodies bypasses maybeAdjustTxnForDDL because the DDL
-# executes through runPlanInsidePlan, not execStmtInOpenState. This means
-# the automatic isolation upgrade to SERIALIZABLE does NOT happen for DDL
-# inside procedures — the DDL runs at whatever isolation level the caller's
-# transaction uses.
-#
-# For bare DDL statements under READ COMMITTED, we automatically upgrades to
-# SERIALIZABLE and sends a NOTICE. Inside a procedure body, neither the
-# upgrade nor the NOTICE occurs.
-#
-# TODO(spilchen): this will be something we need to address. We must upgrade to
-# SERIALIZABLE for DDL in procedures to ensure safety.
+# DDL inside a routine body mirrors the top-level isolation enforcement:
+# the txn is upgraded to SERIALIZABLE (with a NOTICE) when the DDL is the
+# first body statement, and rejected with an error when prior body
+# statements have already executed at a weaker isolation level.
 
 statement ok
 SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true;
@@ -922,7 +958,8 @@ SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true;
 statement ok
 SET default_transaction_isolation = 'read committed';
 
-# Basic DDL in procedure under READ COMMITTED implicit txn.
+# Basic DDL in procedure under READ COMMITTED implicit txn fires the
+# isolation upgrade NOTICE.
 statement ok
 CREATE PROCEDURE p_rc_create() LANGUAGE PLpgSQL AS $$
 BEGIN
@@ -930,8 +967,10 @@ BEGIN
 END
 $$;
 
-statement ok
+query T noticetrace
 CALL p_rc_create();
+----
+NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
 
 query I
 SELECT count(*) FROM t_rc_test;
@@ -943,6 +982,104 @@ DROP TABLE t_rc_test;
 
 statement ok
 DROP PROCEDURE p_rc_create;
+
+# Multiple DDL statements as the first body statements: the upgrade fires
+# once on the first DDL; subsequent DDLs run silently under SERIALIZABLE.
+statement ok
+CREATE PROCEDURE p_rc_multi_ddl() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_rc_multi1 (a INT);
+  CREATE TABLE t_rc_multi2 (a INT);
+  CREATE TABLE t_rc_multi3 (a INT);
+END
+$$;
+
+query T noticetrace
+CALL p_rc_multi_ddl();
+----
+NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
+
+statement ok
+DROP TABLE t_rc_multi1; DROP TABLE t_rc_multi2; DROP TABLE t_rc_multi3;
+
+statement ok
+DROP PROCEDURE p_rc_multi_ddl;
+
+# A procedure body that mixes DML and DDL also triggers the upgrade: the
+# pre-plan walker discovers DDL anywhere in the body and auto-commits to a
+# fresh SERIALIZABLE txn, so the entire body (DML and DDL) runs safely.
+statement ok
+CREATE TABLE t_rc_seed (a INT);
+
+statement ok
+CREATE PROCEDURE p_rc_dml_then_ddl() LANGUAGE PLpgSQL AS $$
+BEGIN
+  INSERT INTO t_rc_seed VALUES (1);
+  CREATE TABLE t_rc_dml_first (a INT);
+END
+$$;
+
+query T noticetrace
+CALL p_rc_dml_then_ddl();
+----
+NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
+
+query I
+SELECT count(*) FROM t_rc_seed;
+----
+1
+
+statement ok
+DROP TABLE t_rc_dml_first;
+
+statement ok
+DROP PROCEDURE p_rc_dml_then_ddl;
+
+statement ok
+DROP TABLE t_rc_seed;
+
+# SQL-language procedures with DDL also trigger the upgrade. The body
+# walker dispatches on RoutineLanguage, so this exercises the
+# tree.RoutineLangSQL branch separately from PL/pgSQL.
+statement ok
+CREATE PROCEDURE p_rc_sql_ddl() LANGUAGE SQL AS $$
+  CREATE TABLE t_rc_sql_lang (a INT PRIMARY KEY);
+$$;
+
+query T noticetrace
+CALL p_rc_sql_ddl();
+----
+NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
+
+statement ok
+DROP TABLE t_rc_sql_lang;
+
+statement ok
+DROP PROCEDURE p_rc_sql_ddl;
+
+# The forced SERIALIZABLE override consumed by the upgraded CALL must not
+# leak into the next implicit txn. Run a CALL that triggers the upgrade,
+# then verify the session is back at READ COMMITTED.
+statement ok
+CREATE PROCEDURE p_rc_no_leak() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_rc_no_leak (a INT);
+END
+$$;
+
+statement ok
+CALL p_rc_no_leak();
+
+query T
+SHOW transaction_isolation;
+----
+read committed
+
+statement ok
+DROP TABLE t_rc_no_leak;
+
+statement ok
+DROP PROCEDURE p_rc_no_leak;
 
 # DDL in procedure under READ COMMITTED explicit txn is rejected like every
 # other explicit-txn case; the isolation level does not matter.
@@ -980,29 +1117,72 @@ DROP TABLE t_notice_check;
 ----
 NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
 
-# CALL with DDL inside the procedure does NOT fire the NOTICE because
-# maybeAdjustTxnForDDL is not called from the runPlanInsidePlan path.
+# Nested procedures: the upgrade triggered by an inner DDL applies to the
+# outer txn, so subsequent DDLs at any nesting level run silently.
 statement ok
-CREATE PROCEDURE p_rc_no_notice() LANGUAGE PLpgSQL AS $$
+CREATE PROCEDURE p_rc_inner_ddl_first() LANGUAGE PLpgSQL AS $$
 BEGIN
-  CREATE TABLE t_rc_no_notice (a INT);
+  CREATE TABLE t_rc_nested_inner (a INT);
+END
+$$;
+
+statement ok
+CREATE PROCEDURE p_rc_outer_calls_inner() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CALL p_rc_inner_ddl_first();
+  CREATE TABLE t_rc_nested_outer (a INT);
 END
 $$;
 
 query T noticetrace
-CALL p_rc_no_notice();
+CALL p_rc_outer_calls_inner();
 ----
-
-query I
-SELECT count(*) FROM t_rc_no_notice;
-----
-0
+NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
 
 statement ok
-DROP PROCEDURE p_rc_no_notice;
+DROP TABLE t_rc_nested_inner;
 
 statement ok
-DROP TABLE t_rc_no_notice;
+DROP TABLE t_rc_nested_outer;
+
+statement ok
+DROP PROCEDURE p_rc_outer_calls_inner;
+
+statement ok
+DROP PROCEDURE p_rc_inner_ddl_first;
+
+# Nested procedures: outer body runs DML before invoking an inner that does
+# DDL. The inner DDL is rejected because the outer DML already executed at
+# READ COMMITTED.
+statement ok
+CREATE TABLE t_rc_outer_seed (a INT);
+
+statement ok
+CREATE PROCEDURE p_rc_inner_ddl() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_rc_inner_should_not_exist (a INT);
+END
+$$;
+
+statement ok
+CREATE PROCEDURE p_rc_outer_dml_first() LANGUAGE PLpgSQL AS $$
+BEGIN
+  INSERT INTO t_rc_outer_seed VALUES (1);
+  CALL p_rc_inner_ddl();
+END
+$$;
+
+statement error pgcode 0A000 to use multi-statement transactions involving a schema change under weak isolation levels
+CALL p_rc_outer_dml_first();
+
+statement ok
+DROP PROCEDURE p_rc_outer_dml_first;
+
+statement ok
+DROP PROCEDURE p_rc_inner_ddl;
+
+statement ok
+DROP TABLE t_rc_outer_seed;
 
 statement ok
 SET default_transaction_isolation = 'serializable';
@@ -1012,8 +1192,9 @@ subtest end
 
 subtest ddl_under_repeatable_read
 
-# DDL in procedures also works under REPEATABLE READ (SNAPSHOT) isolation
-# without the automatic upgrade to SERIALIZABLE.
+# DDL inside a routine body under REPEATABLE READ behaves like the READ
+# COMMITTED case: the txn is upgraded when the DDL is the first body
+# statement, and rejected otherwise.
 
 statement ok
 SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = true;
@@ -1021,7 +1202,7 @@ SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = true;
 statement ok
 SET default_transaction_isolation = 'repeatable read';
 
-# Basic DDL in procedure under REPEATABLE READ.
+# Basic DDL in procedure under REPEATABLE READ fires the NOTICE.
 statement ok
 CREATE PROCEDURE p_rr_create() LANGUAGE PLpgSQL AS $$
 BEGIN
@@ -1029,8 +1210,10 @@ BEGIN
 END
 $$;
 
-statement ok
+query T noticetrace
 CALL p_rr_create();
+----
+NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
 
 query I
 SELECT count(*) FROM t_rr_test;
@@ -1066,28 +1249,31 @@ SELECT * FROM t_rr_rb;
 statement ok
 DROP PROCEDURE p_rr_rollback;
 
-# No isolation upgrade NOTICE for CALL under REPEATABLE READ.
+# DML mixed with DDL in an implicit-txn CALL also triggers the upgrade.
 statement ok
-CREATE PROCEDURE p_rr_no_notice() LANGUAGE PLpgSQL AS $$
+CREATE TABLE t_rr_seed (a INT);
+
+statement ok
+CREATE PROCEDURE p_rr_dml_then_ddl() LANGUAGE PLpgSQL AS $$
 BEGIN
-  CREATE TABLE t_rr_no_notice (a INT);
+  INSERT INTO t_rr_seed VALUES (1);
+  CREATE TABLE t_rr_dml_first (a INT);
 END
 $$;
 
 query T noticetrace
-CALL p_rr_no_notice();
+CALL p_rr_dml_then_ddl();
 ----
-
-query I
-SELECT count(*) FROM t_rr_no_notice;
-----
-0
+NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
 
 statement ok
-DROP PROCEDURE p_rr_no_notice;
+DROP TABLE t_rr_dml_first;
 
 statement ok
-DROP TABLE t_rr_no_notice;
+DROP PROCEDURE p_rr_dml_then_ddl;
+
+statement ok
+DROP TABLE t_rr_seed;
 
 statement ok
 SET default_transaction_isolation = 'serializable';
@@ -1547,5 +1733,36 @@ DROP ROLE r_owner;
 
 statement ok
 DROP PROCEDURE p_create_schema_auth;
+
+subtest end
+
+
+subtest ddl_under_serializable
+
+# Under SERIALIZABLE no upgrade is needed, so DDL in any position runs
+# without firing the NOTICE.
+statement ok
+CREATE TABLE t_ser_seed (a INT);
+
+statement ok
+CREATE PROCEDURE p_ser_dml_then_ddl() LANGUAGE PLpgSQL AS $$
+BEGIN
+  INSERT INTO t_ser_seed VALUES (1);
+  CREATE TABLE t_ser_after (a INT);
+END
+$$;
+
+query T noticetrace
+CALL p_ser_dml_then_ddl();
+----
+
+statement ok
+DROP TABLE t_ser_after;
+
+statement ok
+DROP PROCEDURE p_ser_dml_then_ddl;
+
+statement ok
+DROP TABLE t_ser_seed;
 
 subtest end
