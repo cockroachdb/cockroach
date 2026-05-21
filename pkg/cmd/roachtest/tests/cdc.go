@@ -3612,12 +3612,19 @@ CONFIGURE ZONE USING
 	// kafka_sink_config.Flush.Frequency at sink_kafka_v2.go:430). Each variant
 	// runs the same kv --ramp workload; differing only in the configured
 	// Flush.Frequency, the set traces the linger tradeoff across cadences.
-	// Run the whole sweep on one reused cluster with:
+	// cdc/linger/control is the no-batching baseline: kafka_sink_config is
+	// omitted entirely so the sink uses defaults (no CDC-level linger; kgo
+	// handles its own producer-side batching). Run the whole sweep on one
+	// reused cluster with:
 	//   bin/roachtest run --cluster <name> --wipe cdc/linger
-	for _, flushFreq := range []string{"10ms", "100ms", "500ms", "1s", "5s"} {
+	for _, flushFreq := range []string{"", "10ms", "100ms", "500ms", "1s", "5s"} {
 		flushFreq := flushFreq
+		name := "cdc/linger/control"
+		if flushFreq != "" {
+			name = fmt.Sprintf("cdc/linger/%s", flushFreq)
+		}
 		r.Add(registry.TestSpec{
-			Name:             fmt.Sprintf("cdc/linger/%s", flushFreq),
+			Name:             name,
 			Owner:            registry.OwnerCDC,
 			Benchmark:        true,
 			Cluster:          r.MakeClusterSpec(6, spec.CPU(16), spec.WorkloadNode()),
@@ -3686,15 +3693,21 @@ func runCDCLingerBench(ctx context.Context, t test.Test, c cluster.Cluster, flus
 	// others (format, min_checkpoint_frequency, resolved, envelope,
 	// compression, count-based flush triggers, new_kafka_sink.enabled) are
 	// left at default so the test reads plainly and so the only knob
-	// differing between variants is Flush.Frequency.
+	// differing between variants is Flush.Frequency. An empty
+	// flushFrequency omits kafka_sink_config entirely, giving the
+	// no-CDC-batching control: the v2 sink falls through to kgo's default
+	// producer-side batching.
+	opts := map[string]string{
+		"initial_scan": "'no'",
+	}
+	if flushFrequency != "" {
+		opts["kafka_sink_config"] = fmt.Sprintf(
+			`'{"Flush": {"Frequency": "%s"}}'`, flushFrequency)
+	}
 	feed := ct.newChangefeed(feedArgs{
 		sinkType: kafkaSink,
 		targets:  []string{"kv.kv"},
-		opts: map[string]string{
-			"initial_scan": "'no'",
-			"kafka_sink_config": fmt.Sprintf(
-				`'{"Flush": {"Frequency": "%s"}}'`, flushFrequency),
-		},
+		opts:     opts,
 	})
 	_ = feed
 
