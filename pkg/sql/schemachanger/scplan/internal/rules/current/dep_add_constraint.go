@@ -22,7 +22,7 @@ func init() {
 		"dependent", "complex-constraint",
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.TypeFilter(rulesVersionKey, isConstraintDependent, Not(isConstraintWithoutIndexName)),
+				from.TypeFilter(rulesVersionKey, isConstraintDependent, Not(isConstraintName)),
 				to.TypeFilter(rulesVersionKey, isNonIndexBackedConstraint, isSubjectTo2VersionInvariant),
 				JoinOnConstraintID(from, to, "table-id", "constraint-id"),
 				StatusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
@@ -55,6 +55,20 @@ func init() {
 				from.TypeFilter(rulesVersionKey, isNonIndexBackedConstraint),
 				to.TypeFilter(rulesVersionKey, isConstraintWithoutIndexName),
 				JoinOnConstraintID(from, to, "table-id", "constraint-id"),
+				StatusesToPublicOrTransient(from, scpb.Status_WRITE_ONLY, to, scpb.Status_PUBLIC),
+			}
+		},
+	)
+
+	registerDepRule(
+		"domain constraint visible before domain constraint name",
+		scgraph.Precedence,
+		"domain-constraint", "domain-constraint-name",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.TypeFilter(rulesVersionKey, isTypeConstraint),
+				to.Type((*scpb.DomainConstraintName)(nil)),
+				JoinOnConstraintID(from, to, "type-id", "constraint-id"),
 				StatusesToPublicOrTransient(from, scpb.Status_WRITE_ONLY, to, scpb.Status_PUBLIC),
 			}
 		},

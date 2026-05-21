@@ -15,16 +15,23 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.DomainConstraintName) *scop.NotImplemented {
-					return notImplemented(this)
+				emit(func(this *scpb.DomainConstraintName) *scop.SetDomainConstraintName {
+					return &scop.SetDomainConstraintName{
+						TypeID:       this.TypeID,
+						ConstraintID: this.ConstraintID,
+						Name:         this.Name,
+					}
 				}),
 			),
 		),
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.DomainConstraintName) *scop.NotImplementedForPublicObjects {
-					return notImplementedForPublicObjects(this)
+				emit(func(this *scpb.DomainConstraintName) *scop.RemoveDomainConstraintName {
+					return &scop.RemoveDomainConstraintName{
+						TypeID:       this.TypeID,
+						ConstraintID: this.ConstraintID,
+					}
 				}),
 			),
 		),
