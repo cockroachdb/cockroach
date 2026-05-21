@@ -117,8 +117,12 @@ func (c *ExecutionCache) GetMappings(ids []uint64) map[uint64]ExecutionAttrs {
 // PutExecution stores the attributes in the process-wide cache and
 // returns an enrichment_id. A nil sv means "skip the enabled gate" and
 // is used by callers that don't have a settings.Values handy (e.g.,
-// the status RPC handler). Returns 0 when the feature is gated off.
+// the status RPC handler). Returns 0 when the feature is gated off or
+// when ASH sampling itself is disabled (no consumer to enrich for).
 func PutExecution(sv *settings.Values, attrs ExecutionAttrs) uint64 {
+	if !enabled.Load() {
+		return 0
+	}
 	if sv != nil && !ExecutionCacheEnabled.Get(sv) {
 		return 0
 	}

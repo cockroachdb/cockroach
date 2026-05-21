@@ -103,9 +103,24 @@ func TestExecutionCacheConcurrent(t *testing.T) {
 }
 
 func TestPutGetExecutionSingleton(t *testing.T) {
+	// PutExecution short-circuits when ASH sampling is disabled, since
+	// there would be no consumer for the enrichment data.
+	enabled.Store(true)
+	defer enabled.Store(false)
+
 	id := PutExecution(nil, ExecutionAttrs{User: "alice"})
 	require.NotZero(t, id)
 	got, ok := GetExecution(nil, id)
 	require.True(t, ok)
 	require.Equal(t, "alice", got.User)
+}
+
+func TestPutExecutionGatedByASHEnabled(t *testing.T) {
+	// When ASH sampling is disabled, PutExecution must return 0
+	// regardless of the execution-cache enabled setting, because
+	// the cached attributes would never be consumed.
+	enabled.Store(false)
+
+	id := PutExecution(nil, ExecutionAttrs{User: "alice"})
+	require.Zero(t, id)
 }
