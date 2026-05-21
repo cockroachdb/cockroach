@@ -278,6 +278,8 @@ func (n *createFunctionNode) replaceFunction(
 		}
 	}
 
+	oldCanMutate := udfDesc.GetCanMutate()
+
 	resetFuncOption(udfDesc)
 	if err := validateVolatilityInOptions(n.cf.Options, udfDesc); err != nil {
 		return err
@@ -295,6 +297,15 @@ func (n *createFunctionNode) replaceFunction(
 	// after re-upgrade to incorrectly skip the body-loop fallback.
 	if params.p.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.V26_3_FunctionDescCanMutate) {
 		udfDesc.SetCanMutate(funcdesc.CanMutateBoolToProto(n.cf.CanMutate))
+		// If the function became mutating, propagate CAN_MUTATE to all
+		// transitive callers so their descriptors stay accurate for
+		// deferred opt-building and leaf/root txn selection.
+		if udfDesc.GetCanMutate() == catpb.Function_CAN_MUTATE &&
+			oldCanMutate != catpb.Function_CAN_MUTATE {
+			if err := propagateCanMutateToCallers(params, udfDesc); err != nil {
+				return err
+			}
+		}
 	}
 
 	// Removing all existing references before adding new references.
@@ -803,6 +814,56 @@ func (n *createFunctionNode) validateParameters(udfDesc *funcdesc.Mutable) error
 			return pgerror.Newf(
 				pgcode.InvalidFunctionDefinition, "cannot remove parameter defaults from existing function",
 			)
+		}
+	}
+	return nil
+}
+
+// propagateCanMutateToCallers transitively updates CAN_MUTATE on all
+// functions that (directly or indirectly) call the given function.
+// This is needed because a caller's persisted CanMutate is a snapshot
+// from its creation time and becomes stale when a callee is replaced
+// with a mutating body. Deferred opt-building relies on the descriptor
+// value, so it must be kept current.
+func propagateCanMutateToCallers(params runParams, fnDesc *funcdesc.Mutable) error {
+	visited := make(map[descpb.ID]struct{})
+	visited[fnDesc.GetID()] = struct{}{}
+	return propagateCanMutateImpl(params, fnDesc.DependedOnBy, visited)
+}
+
+func propagateCanMutateImpl(
+	params runParams, refs []descpb.FunctionDescriptor_Reference, visited map[descpb.ID]struct{},
+) error {
+	for i := range refs {
+		callerID := refs[i].ID
+		if _, ok := visited[callerID]; ok {
+			continue
+		}
+		visited[callerID] = struct{}{}
+
+		desc, err := params.p.Descriptors().MutableByID(params.p.txn).Desc(
+			params.ctx, callerID,
+		)
+		if err != nil {
+			return err
+		}
+		if desc.DescriptorType() != catalog.Function {
+			continue
+		}
+		callerFnDesc := desc.(*funcdesc.Mutable)
+		if callerFnDesc.GetCanMutate() == catpb.Function_CAN_MUTATE {
+			continue
+		}
+		callerFnDesc.SetCanMutate(catpb.Function_CAN_MUTATE)
+		if err := params.p.writeFuncSchemaChange(
+			params.ctx, callerFnDesc,
+		); err != nil {
+			return err
+		}
+		if err := propagateCanMutateImpl(
+			params, callerFnDesc.DependedOnBy, visited,
+		); err != nil {
+			return err
 		}
 	}
 	return nil
