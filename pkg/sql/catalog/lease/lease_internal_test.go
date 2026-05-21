@@ -1815,7 +1815,11 @@ func TestLeaseManagerLockedTimestampBasic(t *testing.T) {
 			// the new descriptor version. This happens because we are
 			// aware of the new version but the lease is not yet been
 			// acquired.
-			if errors.Is(err, errRenewLease) {
+			// errReadOlderVersion can be observed transiently when
+			// a previous version is removed from active.data before
+			// acquireLeaseOnPrevious re-acquires it during version
+			// purge.
+			if errors.Is(err, errRenewLease) || errors.Is(err, errReadOlderVersion) {
 				return err
 			}
 			require.NoError(t, err)
