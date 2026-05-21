@@ -3829,9 +3829,15 @@ func runCDCLingerLoadMatrix(
 			cellStart := timeutil.Now()
 			t.Status(fmt.Sprintf("=== cell %d/%d START cadence=%s load=%d ops/s at %s (job %d) ===",
 				cellIdx, totalCells, cadence, load, cellStart.Format(time.RFC3339), currentJobID))
+			// --tolerate-errors keeps the workload running through transient
+			// SQL errors (e.g. NEW_LEASE_PREVENTS_TXN, ambiguous results
+			// from gRPC cancellations) that can fire when the cluster is
+			// under sustained backpressure from prior over-saturation cells.
+			// Without it, the first such error kills the workload and the
+			// whole matrix aborts mid-stream.
 			if err := c.RunE(ctx, option.WithNodes(ct.workloadNode), fmt.Sprintf(
 				`./cockroach workload run kv `+
-					`--ramp 0 --duration %s --max-rate %d --read-percent 0 --concurrency %d `+
+					`--ramp 0 --duration %s --max-rate %d --read-percent 0 --concurrency %d --tolerate-errors `+
 					`{pgurl:%d-%d}`,
 				cellDuration, load, concurrency,
 				ct.crdbNodes[0], ct.crdbNodes[len(ct.crdbNodes)-1])); err != nil {
