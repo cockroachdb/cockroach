@@ -286,7 +286,8 @@ func alterTypeSetSchema(
 	newSchemaID := newSchema.SchemaID
 
 	if currSchemaID == newSchemaID {
-		return
+		panic(pgerror.Newf(pgcode.DuplicateObject,
+			"type %q is already in schema %q", currNamespace.Name, t.Schema))
 	}
 
 	currName := tree.MakeTableNameFromPrefix(b.NamePrefix(enumType), tree.Name(currNamespace.Name))

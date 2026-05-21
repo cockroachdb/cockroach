@@ -952,8 +952,7 @@ SELECT ARRAY['a']::s1._sc_type
 ----
 {a}
 
-# Setting the same schema should be a no-op.
-statement ok
+statement error pgcode 42710 type "sc_type" is already in schema "s1"
 ALTER TYPE s1.sc_type SET SCHEMA s1
 
 # Move from s1 to s2.

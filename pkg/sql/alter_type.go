@@ -362,10 +362,9 @@ func (p *planner) setTypeSchema(ctx context.Context, n *alterTypeNode, schema st
 		return err
 	}
 
-	// If the schema being changed to is the same as the current schema for the
-	// type, do a no-op.
 	if desiredSchemaID == schemaID {
-		return nil
+		return pgerror.Newf(pgcode.DuplicateObject,
+			"type %q is already in schema %q", typeDesc.GetName(), schema)
 	}
 
 	arrayDesc, err := p.Descriptors().MutableByID(p.txn).Type(ctx, n.desc.ArrayTypeID)
