@@ -5035,6 +5035,24 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`optimizer_inline_placeholder_equalities`: {
+		Description:  sessionVarDescriptions["optimizer_inline_placeholder_equalities"],
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_inline_placeholder_equalities`),
+		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_inline_placeholder_equalities", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerInlinePlaceholderEqualities(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerInlinePlaceholderEqualities), nil
+		},
+		GlobalDefault: globalTrue,
+	},
+
+	// CockroachDB extension.
 	`optimizer_use_min_row_count_anti_join_fix`: {
 		Description:  sessionVarDescriptions["optimizer_use_min_row_count_anti_join_fix"],
 		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_min_row_count_anti_join_fix`),

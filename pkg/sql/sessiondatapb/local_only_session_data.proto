@@ -829,6 +829,11 @@ message LocalOnlySessionData {
   // return an error if no SQL instance matches DistSQLPlanLocalityFilter
   // instead of falling back to the gateway / random instance selection.
   bool distsql_plan_locality_filter_strict = 209 [(gogoproto.customname) = "DistSQLPlanLocalityFilterStrict"];
+  // OptimizerInlinePlaceholderEqualities, when true, allows the
+  // InlineConstVar normalization rule to inline placeholder expressions
+  // (e.g. $1) in addition to constants. This enables better index usage
+  // in correlated subqueries with placeholder equalities.
+  bool optimizer_inline_placeholder_equalities = 210;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

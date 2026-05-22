@@ -3424,6 +3424,7 @@ optimizer_disable_cross_region_cascade_fast_path_for_rbr_tables  on             
 optimizer_enable_lock_elision                                    on                  NULL      NULL        NULL        string
 optimizer_hoist_uncorrelated_equality_subqueries                 on                  NULL      NULL        NULL        string
 optimizer_inline_any_unnest_subquery                             on                  NULL      NULL        NULL        string
+optimizer_inline_placeholder_equalities                          on                  NULL      NULL        NULL        string
 optimizer_merge_joins_enabled                                    on                  NULL      NULL        NULL        string
 optimizer_min_row_count                                          1                   NULL      NULL        NULL        string
 optimizer_plan_lookup_joins_with_reverse_scans                   on                  NULL      NULL        NULL        string
@@ -3686,6 +3687,7 @@ optimizer_disable_cross_region_cascade_fast_path_for_rbr_tables  on             
 optimizer_enable_lock_elision                                    on                  NULL  user     NULL      on                  on
 optimizer_hoist_uncorrelated_equality_subqueries                 on                  NULL  user     NULL      on                  on
 optimizer_inline_any_unnest_subquery                             on                  NULL  user     NULL      on                  on
+optimizer_inline_placeholder_equalities                          on                  NULL  user     NULL      on                  on
 optimizer_merge_joins_enabled                                    on                  NULL  user     NULL      on                  on
 optimizer_min_row_count                                          1                   NULL  user     NULL      1                   1
 optimizer_plan_lookup_joins_with_reverse_scans                   on                  NULL  user     NULL      on                  on
@@ -3939,6 +3941,7 @@ optimizer_disable_cross_region_cascade_fast_path_for_rbr_tables  NULL    NULL   
 optimizer_enable_lock_elision                                    NULL    NULL     NULL     NULL        NULL
 optimizer_hoist_uncorrelated_equality_subqueries                 NULL    NULL     NULL     NULL        NULL
 optimizer_inline_any_unnest_subquery                             NULL    NULL     NULL     NULL        NULL
+optimizer_inline_placeholder_equalities                          NULL    NULL     NULL     NULL        NULL
 optimizer_merge_joins_enabled                                    NULL    NULL     NULL     NULL        NULL
 optimizer_min_row_count                                          NULL    NULL     NULL     NULL        NULL
 optimizer_plan_lookup_joins_with_reverse_scans                   NULL    NULL     NULL     NULL        NULL

@@ -632,6 +632,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerInlineAnyUnnestSubquery = false
 	notStale()
 
+	// Stale optimizer_inline_placeholder_equalities.
+	evalCtx.SessionData().OptimizerInlinePlaceholderEqualities = true
+	stale()
+	evalCtx.SessionData().OptimizerInlinePlaceholderEqualities = false
+	notStale()
+
 	// Stale optimizer_use_min_row_count_anti_join_fix.
 	evalCtx.SessionData().OptimizerUseMinRowCountAntiJoinFix = true
 	stale()
