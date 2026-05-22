@@ -61,6 +61,7 @@ func initCLIDefaults() {
 	setDemoContextDefaults()
 	setStmtDiagContextDefaults()
 	setAuthContextDefaults()
+	setLicenseContextDefaults()
 	setUserfileContextDefaults()
 	setCertContextDefaults()
 	setDebugRecoverContextDefaults()
@@ -775,6 +776,45 @@ var stmtDiagCtx struct {
 
 func setStmtDiagContextDefaults() {
 	stmtDiagCtx.all = false
+}
+
+// auditFormat enumerates the supported output formats for the `license audit`
+// command.
+type auditFormat string
+
+const (
+	auditFormatYAML auditFormat = "yaml"
+	auditFormatJSON auditFormat = "json"
+)
+
+var auditFormats = []auditFormat{
+	auditFormatYAML,
+	auditFormatJSON,
+}
+
+func (f *auditFormat) String() string {
+	return string(*f)
+}
+
+func (f *auditFormat) Set(s string) error {
+	if slices.Contains(auditFormats, auditFormat(s)) {
+		*f = auditFormat(s)
+		return nil
+	}
+	return errors.Newf("must be one of %s", auditFormats)
+}
+
+func (f *auditFormat) Type() string {
+	return "string"
+}
+
+// licenseCtx captures the command-line parameters of the 'license' command.
+var licenseCtx struct {
+	auditFormat auditFormat
+}
+
+func setLicenseContextDefaults() {
+	licenseCtx.auditFormat = auditFormatYAML
 }
 
 // userfileCtx captures the command-line parameters of the
