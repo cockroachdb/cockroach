@@ -194,10 +194,3 @@ func (fc *forcingCoster) ComputeCost(e memo.RelExpr, required *physical.Required
 
 	return cost
 }
-
-// MaybeGetBestCostRelation is part of the xform.Coster interface.
-func (fc *forcingCoster) MaybeGetBestCostRelation(
-	grp memo.RelExpr, required *physical.Required,
-) (best memo.RelExpr, ok bool) {
-	return fc.o.MaybeGetBestCostRelation(grp, required)
-}

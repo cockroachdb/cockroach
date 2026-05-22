@@ -11,7 +11,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
@@ -29,12 +28,9 @@ func (c *CustomFuncs) IsCanonicalGroupBy(private *memo.GroupingPrivate) bool {
 // expressions (aggs) and a scanPrivate into multiple scalar subqueries, with
 // one MIN or MAX expression per subquery.
 func (c *CustomFuncs) MakeMinMaxScalarSubqueries(
-	grp memo.RelExpr,
-	required *physical.Required,
-	scanPrivate *memo.ScanPrivate,
-	aggs memo.AggregationsExpr,
+	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, aggs memo.AggregationsExpr,
 ) {
-	c.MakeMinMaxScalarSubqueriesWithFilter(grp, required, scanPrivate, aggs, nil)
+	c.MakeMinMaxScalarSubqueriesWithFilter(grp, scanPrivate, aggs, nil)
 }
 
 // MakeMinMaxScalarSubqueriesWithFilter transforms a list of MIN and MAX aggregate
@@ -42,7 +38,6 @@ func (c *CustomFuncs) MakeMinMaxScalarSubqueries(
 // subqueries, with one MIN or MAX expression per subquery.
 func (c *CustomFuncs) MakeMinMaxScalarSubqueriesWithFilter(
 	grp memo.RelExpr,
-	required *physical.Required,
 	scanPrivate *memo.ScanPrivate,
 	aggs memo.AggregationsExpr,
 	filters memo.FiltersExpr,
@@ -148,11 +143,7 @@ func (c *CustomFuncs) TwoOrMoreMinOrMax(aggs memo.AggregationsExpr) bool {
 // input expression is expected to return zero or one rows, and the aggregate
 // functions are expected to always pass through their values in that case.
 func (c *CustomFuncs) MakeProjectFromPassthroughAggs(
-	grp memo.RelExpr,
-	required *physical.Required,
-	input memo.RelExpr,
-	aggs memo.AggregationsExpr,
-	groupingCols opt.ColSet,
+	grp memo.RelExpr, input memo.RelExpr, aggs memo.AggregationsExpr, groupingCols opt.ColSet,
 ) {
 	if !input.Relational().Cardinality.IsZeroOrOne() {
 		panic(errors.AssertionFailedf("input expression cannot have more than one row: %v", input))
@@ -224,7 +215,6 @@ func (c *CustomFuncs) GroupingColsClosureOverlappingOrdering(
 // `newOrdering`. Argument `private` is expected to be a canonical group-by.
 func (c *CustomFuncs) GenerateStreamingGroupByLimitOrderingHint(
 	grp memo.RelExpr,
-	required *physical.Required,
 	limitExpr *memo.LimitExpr,
 	aggregation memo.RelExpr,
 	input memo.RelExpr,
@@ -311,7 +301,6 @@ func (c *CustomFuncs) GenerateStreamingGroupByLimitOrderingHint(
 // orderings property. See the GenerateStreamingGroupBy rule.
 func (c *CustomFuncs) GenerateStreamingGroupBy(
 	grp memo.RelExpr,
-	required *physical.Required,
 	op opt.Operator,
 	input memo.RelExpr,
 	aggs memo.AggregationsExpr,
@@ -528,7 +517,6 @@ func (c *CustomFuncs) MakeGroupingPrivate(
 // GenerateIndexScans, which does not construct an IndexJoin.
 func (c *CustomFuncs) GenerateLimitedGroupByScans(
 	grp memo.RelExpr,
-	required *physical.Required,
 	sp *memo.ScanPrivate,
 	aggs memo.AggregationsExpr,
 	gp *memo.GroupingPrivate,

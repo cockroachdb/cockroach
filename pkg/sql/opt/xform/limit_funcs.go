@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -101,7 +100,6 @@ func (c *CustomFuncs) PushLimitIntoProjectFilteredScanEnabled() bool {
 // PushLimitIntoFilteredScans rule.
 func (c *CustomFuncs) GenerateLimitedScans(
 	grp memo.RelExpr,
-	required *physical.Required,
 	scanPrivate *memo.ScanPrivate,
 	limit tree.Datum,
 	requiredOrdering props.OrderingChoice,
@@ -279,7 +277,7 @@ func (c *CustomFuncs) MakeTopKPrivate(
 // For cases where the Scan's secondary index covers all needed columns, see
 // GenerateIndexScans, which does not construct an IndexJoin.
 func (c *CustomFuncs) GenerateLimitedTopKScans(
-	grp memo.RelExpr, required *physical.Required, sp *memo.ScanPrivate, tp *memo.TopKPrivate,
+	grp memo.RelExpr, sp *memo.ScanPrivate, tp *memo.TopKPrivate,
 ) {
 	requiredOrdering := tp.Ordering
 	// If the ordering was already optimized out (e.g., there is only one possible
@@ -407,7 +405,7 @@ func getPrefixFromOrdering(
 // based on the interesting orderings property. This enables the optimizer to
 // explore TopK with partially ordered input columns.
 func (c *CustomFuncs) GeneratePartialOrderTopK(
-	grp memo.RelExpr, required *physical.Required, input memo.RelExpr, private *memo.TopKPrivate,
+	grp memo.RelExpr, input memo.RelExpr, private *memo.TopKPrivate,
 ) {
 	orders := ordering.DeriveInterestingOrderings(c.e.mem, input)
 	intraOrd := private.Ordering
@@ -465,7 +463,6 @@ func (c *CustomFuncs) OrderingBySingleColAsc(ordering props.OrderingChoice, col 
 // those used to constrain index prefix columns.
 func (c *CustomFuncs) TryGenerateVectorSearch(
 	grp memo.RelExpr,
-	_ *physical.Required,
 	scanExpr *memo.ScanExpr,
 	originalFilters memo.FiltersExpr,
 	passthrough opt.ColSet,
