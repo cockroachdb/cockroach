@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -587,11 +588,15 @@ func setFuncOptions(
 	}
 
 	if lang != catpb.Function_UNKNOWN_LANGUAGE && body != "" {
-		// Trigger functions do not analyze SQL statements beyond parsing, so type
-		// and sequence names should not be replaced during trigger-function
-		// creation.
+		// Trigger functions and late-bound PL/pgSQL procedures do not analyze SQL
+		// statements beyond parsing, so type and sequence names should not be
+		// replaced.
 		returnType := udfDesc.ReturnType.Type
 		lazilyEvalSQL := returnType != nil && returnType.Identical(types.Trigger)
+		if !lazilyEvalSQL && udfDesc.IsProcedure() && lang == catpb.Function_PLPGSQL &&
+			sqlclustersettings.PLpgSQLProcedureLateBindingEnabled(params.ctx, params.p.ExecCfg().Settings) {
+			lazilyEvalSQL = true
+		}
 		if !lazilyEvalSQL {
 			// Replace any sequence names in the function body with IDs.
 			body, err = replaceSeqNamesWithIDsLang(params.ctx, params.p, body, true, lang)

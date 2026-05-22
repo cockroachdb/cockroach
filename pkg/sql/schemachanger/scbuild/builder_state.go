@@ -1946,17 +1946,12 @@ func (b *builderState) WrapFunctionBody(
 	fnID descpb.ID,
 	bodyStr string,
 	lang catpb.Function_Language,
-	returnType tree.ResolvableTypeReference,
+	lazilyEvalSQL bool,
 	refProvider scbuildstmt.ReferenceProvider,
 ) *scpb.FunctionBody {
-	// Trigger functions do not analyze SQL statements beyond parsing, so type and
-	// sequence names should not be replaced during trigger-function creation.
-	var lazilyEvalSQL bool
-	if returnType != nil {
-		if typ, ok := returnType.(*types.T); ok && typ.Identical(types.Trigger) {
-			lazilyEvalSQL = true
-		}
-	}
+	// When the body is evaluated lazily (trigger functions and late-bound
+	// procedures), SQL inside it is not analyzed at creation time, so type
+	// and sequence names must not be rewritten.
 	if !lazilyEvalSQL {
 		bodyStr = b.replaceSeqNamesWithIDs(bodyStr, lang)
 		bodyStr = b.serializeUserDefinedTypes(bodyStr, lang)

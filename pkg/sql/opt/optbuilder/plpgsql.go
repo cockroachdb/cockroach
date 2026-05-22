@@ -216,7 +216,9 @@ type plOptions struct {
 	isDoBlock        bool
 
 	// skipSQL is true if SQL statements and expressions should not be built.
-	// This is used during trigger function creation.
+	// This is used during trigger function creation and when building a
+	// late-bound PL/pgSQL procedure, where the body is stored verbatim and
+	// references are resolved at CALL time.
 	skipSQL bool
 }
 
@@ -2904,6 +2906,63 @@ func (tc *transactionControlVisitor) Visit(
 		return stmt, false
 	}
 	return stmt, !tc.foundTxnControlStatement
+}
+
+// isAllowlistedProcedureDDL reports whether stmt is one of the DDL statements
+// supported inside stored procedure bodies. The set must be kept in sync with
+// the corresponding case in (*Builder).buildStmtAtRoot.
+func isAllowlistedProcedureDDL(stmt tree.Statement) bool {
+	switch stmt.(type) {
+	case *tree.CreateTable, *tree.DropTable,
+		*tree.CreateSchema, *tree.DropSchema,
+		*tree.CreateRole, *tree.DropRole:
+		return true
+	}
+	return false
+}
+
+// ddlVisitor walks a PL/pgSQL routine body and classifies any embedded DDL.
+// It inspects the wrapped tree.Statement on each PL/pgSQL node that carries
+// one. DynamicExecute (EXECUTE of a string expression) is not implemented in
+// the optbuilder and is intentionally not inspected here.
+//
+// foundDDLStmt holds the first DDL statement encountered that is allowed
+// inside stored procedures (see isAllowlistedProcedureDDL); when non-nil it
+// indicates the body contains allowlisted DDL. unsupportedStmt holds the
+// first DDL statement encountered that is not in that allowlist. The two
+// fields drive different error paths in buildCreateFunction: an unsupported
+// statement is reported as an "unimplemented" feature, while a body that
+// contains only allowlisted DDL is gated on the late-binding cluster setting.
+type ddlVisitor struct {
+	foundDDLStmt    tree.Statement
+	unsupportedStmt tree.Statement
+}
+
+var _ ast.StatementVisitor = &ddlVisitor{}
+
+func (dv *ddlVisitor) Visit(stmt ast.Statement) (newStmt ast.Statement, recurse bool) {
+	var sqlStmt tree.Statement
+	switch s := stmt.(type) {
+	case *ast.Execute:
+		sqlStmt = s.SqlStmt
+	case *ast.ReturnQuery:
+		sqlStmt = s.SqlStmt
+	case *ast.CursorDeclaration:
+		sqlStmt = s.Query
+	case *ast.Open:
+		sqlStmt = s.Query
+	}
+	if sqlStmt == nil || !tree.CanModifySchema(sqlStmt) {
+		return stmt, true
+	}
+	if isAllowlistedProcedureDDL(sqlStmt) {
+		if dv.foundDDLStmt == nil {
+			dv.foundDDLStmt = sqlStmt
+		}
+	} else if dv.unsupportedStmt == nil {
+		dv.unsupportedStmt = sqlStmt
+	}
+	return stmt, true
 }
 
 var (

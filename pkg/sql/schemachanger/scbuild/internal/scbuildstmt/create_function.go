@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -210,7 +211,7 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 	validateTypeReferences(b, refProvider, db.DatabaseID)
 	validateFunctionRelationReferences(b, refProvider, db.DatabaseID)
 	validateFunctionToFunctionReferences(b, refProvider, db.DatabaseID)
-	b.Add(b.WrapFunctionBody(fnID, fnBodyStr, lang, typ, refProvider))
+	b.Add(b.WrapFunctionBody(fnID, fnBodyStr, lang, routineLazilyEvaluatesSQL(b, n, lang, typ), refProvider))
 	if b.EvalCtx().Settings.Version.ActiveVersion(b).IsActive(clusterversion.V26_2) {
 		b.Add(&scpb.FunctionParams{
 			FunctionID: fnID,
@@ -409,7 +410,7 @@ func replaceFunction(
 	validateFunctionToFunctionReferences(b, refProvider, db.DatabaseID)
 
 	// Build the FunctionBody element with the new body and references.
-	fnBody := b.WrapFunctionBody(fnID, fnBodyStr, lang, typ, refProvider)
+	fnBody := b.WrapFunctionBody(fnID, fnBodyStr, lang, routineLazilyEvaluatesSQL(b, n, lang, typ), refProvider)
 	b.Replace(fnBody)
 
 	// Replace the FunctionParams element with the updated params.
@@ -685,4 +686,24 @@ func validateFunctionLeakProof(options tree.RoutineOptions, vp funcinfo.Volatili
 	if err := vp.Validate(); err != nil {
 		panic(sqlerrors.NewInvalidVolatilityError(err))
 	}
+}
+
+// routineLazilyEvaluatesSQL reports whether the routine's body should be
+// stored verbatim instead of having its SQL analyzed at creation time. This
+// applies to trigger functions (which are bound to a trigger later) and to
+// late-bound PL/pgSQL procedures (whose references are resolved at CALL
+// time).
+func routineLazilyEvaluatesSQL(
+	b BuildCtx,
+	n *tree.CreateRoutine,
+	lang catpb.Function_Language,
+	returnType tree.ResolvableTypeReference,
+) bool {
+	if returnType != nil {
+		if t, ok := returnType.(*types.T); ok && t.Identical(types.Trigger) {
+			return true
+		}
+	}
+	return n.IsProcedure && lang == catpb.Function_PLPGSQL &&
+		sqlclustersettings.PLpgSQLProcedureLateBindingEnabled(b, b.EvalCtx().Settings)
 }

@@ -384,26 +384,26 @@ func (b *Builder) buildStmt(
 		case *tree.Insert, *tree.Update, *tree.Delete:
 		case *tree.Call:
 		case *tree.DoBlock:
-		case *tree.CreateTable, *tree.DropTable,
-			*tree.CreateSchema, *tree.DropSchema,
-			*tree.CreateRole, *tree.DropRole:
-			if !b.insideProcDef {
-				panic(unimplemented.NewWithIssuef(110080,
-					"%s usage inside a function definition is not supported",
-					stmt.StatementTag(),
-				))
-			}
-			// DDL is allowed inside stored procedures when the cluster has
-			// been upgraded to v26.3.
-			if !b.evalCtx.Settings.Version.IsActive(
-				b.ctx, clusterversion.V26_3,
-			) {
-				panic(pgerror.Newf(pgcode.FeatureNotSupported,
-					"%s usage inside a stored procedure is not supported until upgrade to version 26.3 is finalized",
-					stmt.StatementTag(),
-				))
-			}
 		default:
+			if isAllowlistedProcedureDDL(stmt) {
+				if !b.insideProcDef {
+					panic(unimplemented.NewWithIssuef(110080,
+						"%s usage inside a function definition is not supported",
+						stmt.StatementTag(),
+					))
+				}
+				// DDL is allowed inside stored procedures when the cluster has
+				// been upgraded to v26.3.
+				if !b.evalCtx.Settings.Version.IsActive(
+					b.ctx, clusterversion.V26_3,
+				) {
+					panic(pgerror.Newf(pgcode.FeatureNotSupported,
+						"%s usage inside a stored procedure is not supported until upgrade to version 26.3 is finalized",
+						stmt.StatementTag(),
+					))
+				}
+				break
+			}
 			if tree.CanModifySchema(stmt) {
 				panic(unimplemented.NewWithIssuef(110080,
 					"%s usage inside a function definition is not supported", stmt.StatementTag(),

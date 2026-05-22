@@ -1,6 +1,10 @@
 # LogicTest: !local-mixed-25.4 !local-mixed-26.1 !local-mixed-26.2
 # knob-opt: allow-unsafe
 
+# DDL in PL/pgSQL procedure bodies requires late binding.
+statement ok
+SET CLUSTER SETTING sql.procedures.plpgsql.late_binding.enabled = true
+
 subtest ddl_blocked_in_functions
 
 # DDL should remain blocked in functions.
@@ -417,28 +421,16 @@ subtest end
 
 subtest ddl_then_dml_same_table
 
-# CockroachDB compiles routine body statements at CREATE PROCEDURE time,
-# resolving all table references against the current catalog. A table
-# created by DDL inside the procedure does not exist in the catalog when
-# subsequent statements in the same body are compiled, so referencing the
-# new table from a later statement in the same procedure fails at
-# definition time — not at execution time.
-#
-# This diverges from PostgreSQL, where PL/pgSQL uses late binding:
-# statements are planned at CALL time (or on first execution), so a
-# CREATE TABLE followed by INSERT INTO that table in the same body works
-# in PostgreSQL. PostgreSQL performs only PL/pgSQL structural parsing at
-# CREATE time (block syntax, control flow, variable resolution) but does
-# NOT plan or resolve SQL statements — those remain opaque strings until
-# execution. For example, INSERT INTO nonexistent_table succeeds at
-# CREATE PROCEDURE time in PostgreSQL and only errors at CALL time.
-#
-# TODO(spilchen): we will need to add late-binding support for procedure body
-# DDL to work like PostgreSQL.
-#
-# Workaround: split DDL and DML into separate procedures.
+# With late binding CREATE PROCEDURE accepts a body that does DDL and then
+# references the new table in the same body — references are not resolved
+# until CALL time. CALL still fails today because the body's statements
+# are built (AST -> RelExpr) eagerly at CALL plan time, before the
+# preceding CREATE TABLE has actually executed. See #167687 for the
+# proposal to defer body-statement building to execution time, which
+# would let these cases succeed. Workaround: split DDL and DML into
+# separate procedures.
 
-statement error pgcode 42P01 relation "t_immediate" does not exist
+statement ok
 CREATE PROCEDURE p_create_and_insert() LANGUAGE PLpgSQL AS $$
 BEGIN
   CREATE TABLE t_immediate (a INT PRIMARY KEY, b TEXT);
@@ -446,11 +438,14 @@ BEGIN
 END
 $$;
 
-# Test whether a COMMIT boundary between CREATE TABLE and INSERT allows
-# the INSERT to succeed. Since compilation happens at CREATE PROCEDURE
-# time, the COMMIT should not help — the INSERT is still resolved against
-# a catalog that does not yet contain the table.
-statement error pgcode 42P01 relation "t_commit_then_use" does not exist
+statement error pgcode 42P01 relation "t_immediate" does not exist
+CALL p_create_and_insert();
+
+statement ok
+DROP PROCEDURE p_create_and_insert;
+
+# Same shape but with an intervening COMMIT.
+statement ok
 CREATE PROCEDURE p_create_commit_insert() LANGUAGE PLpgSQL AS $$
 BEGIN
   CREATE TABLE t_commit_then_use (a INT);
@@ -458,6 +453,12 @@ BEGIN
   INSERT INTO t_commit_then_use VALUES (1);
 END
 $$;
+
+statement error pgcode 42P01 relation "t_commit_then_use" does not exist
+CALL p_create_commit_insert();
+
+statement ok
+DROP PROCEDURE p_create_commit_insert;
 
 subtest end
 
@@ -1344,20 +1345,24 @@ SELECT rolname FROM pg_roles WHERE rolname IN ('r_multi_1', 'r_multi_2');
 r_multi_1
 r_multi_2
 
-# CREATE SCHEMA followed by DROP SCHEMA on the same name in one body hits
-# the early-binding limitation: routine body statements resolve catalog
-# names at compile time, so the DROP SCHEMA cannot find the schema the
-# preceding CREATE SCHEMA would produce. See the ddl_then_dml_same_table
-# subtest for the analogous CREATE TABLE + INSERT case and the underlying
-# rationale.
-# TODO(#89109): late-binding support would let this work like PostgreSQL.
-statement error pgcode 3F000 unknown schema "s_transient"
+# CREATE SCHEMA followed by DROP SCHEMA on the same name in one body: with
+# late binding the CREATE PROCEDURE succeeds (the DROP SCHEMA's reference
+# is not resolved at compile time), but CALL still fails because body
+# statements are built eagerly at CALL plan time (see #167687 and
+# ddl_then_dml_same_table).
+statement ok
 CREATE PROCEDURE p_create_drop_schema() LANGUAGE PLpgSQL AS $$
 BEGIN
   CREATE SCHEMA s_transient;
   DROP SCHEMA s_transient;
 END
 $$;
+
+statement error pgcode 3F000 unknown schema "s_transient"
+CALL p_create_drop_schema();
+
+statement ok
+DROP PROCEDURE p_create_drop_schema;
 
 statement ok
 DROP ROLE r_multi_1, r_multi_2;
@@ -1484,16 +1489,21 @@ CREATE SCHEMA s_with_table;
 statement ok
 CREATE TABLE s_with_table.t (a INT);
 
-# DROP SCHEMA RESTRICT performs the non-empty check at procedure compile
-# time (early binding), so a procedure that targets a non-empty schema
-# fails to define rather than failing at CALL time. This is consistent
-# with the early-binding behavior covered by ddl_then_dml_same_table.
-statement error pgcode 2BP01 schema "s_with_table" is not empty
+# DROP SCHEMA RESTRICT against a non-empty schema fails at CALL time. With
+# late binding the CREATE PROCEDURE succeeds because the non-empty check
+# is performed when the DROP SCHEMA actually runs.
+statement ok
 CREATE PROCEDURE p_drop_schema_restrict() LANGUAGE PLpgSQL AS $$
 BEGIN
   DROP SCHEMA s_with_table RESTRICT;
 END
 $$;
+
+statement error pgcode 2BP01 schema "s_with_table" is not empty
+CALL p_drop_schema_restrict();
+
+statement ok
+DROP PROCEDURE p_drop_schema_restrict;
 
 # CASCADE drops the schema and its child objects when CALLed.
 statement ok
