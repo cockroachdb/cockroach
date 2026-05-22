@@ -3960,9 +3960,11 @@ func TestTxnCoordSenderRetriesAcrossEndTxn(t *testing.T) {
 			sideRejectedOnSecondAttempt: left,
 			// The first attempt of right side contains a parallel commit (i.e. an
 			// EndTxn), but fails. The 2nd attempt of the right side will no longer
-			// contain an EndTxn, as explained above. So we expect the txn record to
-			// not exist.
-			txnRecExpectation: kvclientutils.ExpectPusheeTxnRecordNotFound,
+			// contain an EndTxn, as explained above. So we expect no STAGING txn
+			// record / no transaction recovery. Note that a PENDING txn record may
+			// or may not exist depending on whether the heartbeat loop managed to
+			// fire before the CommitInBatch completed.
+			txnRecExpectation: kvclientutils.ExpectNoTxnRecovery,
 		},
 		{
 			// On the first attempt, the right side succeed in writing a STAGING txn
