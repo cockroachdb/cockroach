@@ -602,10 +602,6 @@ func TestErrorsFromSQL(t *testing.T) {
 		return pts.WithTxn(wrapTxn(txn, errFunc)).Release(ctx, rec.ID.GetUUID())
 	}), fmt.Sprintf("failed to release record %v: boom", rec.ID))
 	require.EqualError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		_, err := pts.WithTxn(wrapTxn(txn, errFunc)).GetMetadata(ctx)
-		return err
-	}), "failed to read metadata: boom")
-	require.EqualError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		_, err := pts.WithTxn(wrapTxn(txn, errFunc)).GetState(ctx)
 		return err
 	}), "failed to read metadata: boom")

@@ -11,8 +11,8 @@ const (
 	// none exists yet. At the time of writing, there will never be a
 	// physical row in the meta table with version zero.
 	//
-	// This is the read-only variant, used by getMetadataQuery. Mutating
-	// queries (protect, release) use currentMetaCTEForUpdate to avoid the
+	// This is the read-only variant, used by GetState. Mutating queries
+	// (protect, release) use currentMetaCTEForUpdate to avoid the
 	// WriteTooOld retry storm that concurrent writers would otherwise
 	// trigger on the shared meta row.
 	currentMetaCTE = `
@@ -199,12 +199,4 @@ WHERE
 RETURNING
     id
 `
-
-	getMetadataQuery = `
-WITH
-    current_meta AS (` + currentMetaCTE + `)
-SELECT
-    version, num_records, num_spans, total_bytes
-FROM
-    current_meta;`
 )
