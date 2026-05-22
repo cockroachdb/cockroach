@@ -30,6 +30,11 @@ if [ -n "${BASE_SHA:-}" ]; then
   fi
 fi
 
+# Note: --remote_download_minimal is intentionally present despite the warning
+# from bazel about conflict with --remote_download_toplevel (from
+# --config=engflowpublic via engflow-args.sh). Bazel gives explicit command-line
+# flags precedence over config expansions, so 'minimal' is in effect. The warning
+# can be ignored.
 bazel test $TEST_TARGETS //pkg/ui:lint //pkg/ui:test \
     --config crosslinux --jobs 200 --remote_download_minimal \
     --bes_keywords ci-unit-test --config=use_ci_timeouts \
