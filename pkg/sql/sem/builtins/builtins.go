@@ -5330,10 +5330,11 @@ value if you rely on the HLC for accuracy.`,
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if evalCtx.SessionData().User().Undefined() {
+				u := evalCtx.EffectiveUser()
+				if u.Undefined() {
 					return tree.DNull, nil
 				}
-				return tree.NewDString(evalCtx.SessionData().User().Normalized()), nil
+				return tree.NewDString(u.Normalized()), nil
 			},
 			Info: "Returns the current user. This function is provided for " +
 				"compatibility with PostgreSQL.",

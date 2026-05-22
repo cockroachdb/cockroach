@@ -481,10 +481,11 @@ func (b *builderState) CurrentUserHasAdminOrIsMemberOf(role username.SQLUsername
 	if b.hasAdmin {
 		return true
 	}
-	if b.evalCtx.SessionData().User() == role {
+	user := b.evalCtx.EffectiveUser()
+	if user == role {
 		return true
 	}
-	memberships, err := b.auth.MemberOfWithAdminOption(b.ctx, b.evalCtx.SessionData().User())
+	memberships, err := b.auth.MemberOfWithAdminOption(b.ctx, user)
 	if err != nil {
 		panic(err)
 	}
@@ -493,7 +494,10 @@ func (b *builderState) CurrentUserHasAdminOrIsMemberOf(role username.SQLUsername
 }
 
 func (b *builderState) CurrentUser() username.SQLUsername {
-	return b.evalCtx.SessionData().User()
+	// EffectiveUser yields the SECURITY DEFINER routine owner when DDL runs
+	// inside a stored procedure body (e.g. CREATE SCHEMA), and the session
+	// user otherwise. This matches PostgreSQL ownership semantics.
+	return b.evalCtx.EffectiveUser()
 }
 
 // CheckRoleExists implements the scbuild.AuthorizationAccessor interface.

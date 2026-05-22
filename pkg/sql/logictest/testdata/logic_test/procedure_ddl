@@ -2306,3 +2306,941 @@ statement ok
 DROP TABLE t_ser_seed;
 
 subtest end
+
+
+# The subtests below cover SECURITY DEFINER applied to DDL inside stored
+# procedure bodies. Privilege checks, ownership assignments, and the
+# current_user builtin all resolve to the routine owner for the duration of
+# the body, matching PostgreSQL.
+
+subtest security_definer_create_schema
+
+statement ok
+CREATE ROLE r_def_schema;
+GRANT CREATE ON DATABASE test TO r_def_schema;
+
+statement ok
+CREATE ROLE r_inv_schema;
+
+statement ok
+SET ROLE r_def_schema;
+
+statement ok
+CREATE PROCEDURE p_sd_schema() LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  CREATE SCHEMA s_sd;
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_sd_schema TO r_inv_schema;
+
+statement ok
+SET ROLE r_inv_schema;
+
+statement ok
+CALL p_sd_schema();
+
+# Owner is the definer even though the invoker issued the CALL.
+query TT
+SELECT schema_name, owner FROM [SHOW SCHEMAS] WHERE schema_name = 's_sd';
+----
+s_sd  r_def_schema
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP SCHEMA s_sd;
+
+statement ok
+DROP PROCEDURE p_sd_schema;
+
+statement ok
+REVOKE CREATE ON DATABASE test FROM r_def_schema;
+
+statement ok
+DROP ROLE r_def_schema, r_inv_schema;
+
+subtest end
+
+
+subtest security_definer_create_role
+
+statement ok
+CREATE ROLE r_def_role WITH CREATEROLE;
+
+statement ok
+CREATE ROLE r_inv_role;
+
+statement ok
+SET ROLE r_def_role;
+
+statement ok
+CREATE PROCEDURE p_sd_role() LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  CREATE ROLE r_sd_created;
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_sd_role TO r_inv_role;
+
+statement ok
+SET ROLE r_inv_role;
+
+# CREATEROLE is evaluated against the definer; the invoker (without
+# CREATEROLE) can still call the procedure.
+statement ok
+CALL p_sd_role();
+
+query T
+SELECT rolname FROM pg_roles WHERE rolname = 'r_sd_created';
+----
+r_sd_created
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP ROLE r_sd_created;
+
+statement ok
+DROP PROCEDURE p_sd_role;
+
+statement ok
+DROP ROLE r_def_role, r_inv_role;
+
+subtest end
+
+
+subtest security_definer_create_table
+
+# CREATE TABLE goes through a different code path than CREATE SCHEMA, so
+# cover the table-owner side of the same bug. The invoker lacks CREATE on
+# the schema and would fail without the definer override.
+statement ok
+CREATE ROLE r_def_tbl;
+GRANT ALL ON SCHEMA public TO r_def_tbl;
+
+statement ok
+CREATE ROLE r_inv_tbl;
+
+statement ok
+SET ROLE r_def_tbl;
+
+statement ok
+CREATE PROCEDURE p_sd_table() LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  CREATE TABLE t_sd (a INT);
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_sd_table TO r_inv_tbl;
+
+statement ok
+SET ROLE r_inv_tbl;
+
+statement ok
+CALL p_sd_table();
+
+query TTT colnames
+SELECT schema_name, table_name, owner FROM [SHOW TABLES FROM public] WHERE table_name = 't_sd';
+----
+schema_name  table_name  owner
+public       t_sd        r_def_tbl
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP TABLE t_sd;
+
+statement ok
+DROP PROCEDURE p_sd_table;
+
+statement ok
+REVOKE ALL ON SCHEMA public FROM r_def_tbl;
+
+statement ok
+DROP ROLE r_def_tbl, r_inv_tbl;
+
+subtest end
+
+
+subtest security_definer_drop
+
+# DROP SCHEMA, DROP ROLE, and DROP TABLE all evaluate authorization
+# against the effective user. Set up objects owned by a "manager" role,
+# wrap the drops in a SECURITY DEFINER procedure owned by the manager,
+# and call it as an unprivileged invoker.
+statement ok
+CREATE ROLE r_mgr WITH CREATEROLE;
+GRANT CREATE ON DATABASE test TO r_mgr;
+
+statement ok
+CREATE ROLE r_caller;
+
+statement ok
+SET ROLE r_mgr;
+
+statement ok
+CREATE SCHEMA s_drop;
+CREATE TABLE s_drop.t_drop (a INT);
+CREATE ROLE r_drop;
+
+statement ok
+CREATE PROCEDURE p_sd_drop() LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  -- CASCADE is required because the DROP SCHEMA non-empty check happens
+  -- at compile time, before the DROP TABLE in the same body runs (see
+  -- the drop_schema_cascade_restrict_in_procedure subtest above).
+  DROP SCHEMA s_drop CASCADE;
+  DROP ROLE r_drop;
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_sd_drop TO r_caller;
+
+statement ok
+SET ROLE r_caller;
+
+statement ok
+CALL p_sd_drop();
+
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_drop';
+----
+
+query T
+SELECT rolname FROM pg_roles WHERE rolname = 'r_drop';
+----
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP PROCEDURE p_sd_drop;
+
+statement ok
+REVOKE CREATE ON DATABASE test FROM r_mgr;
+
+statement ok
+DROP ROLE r_mgr, r_caller;
+
+subtest end
+
+
+subtest security_definer_current_user
+
+# A SECURITY DEFINER body sees current_user = definer, matching PostgreSQL
+# (`CREATE PROCEDURE ... LANGUAGE plpgsql SECURITY DEFINER`). The companion
+# SECURITY INVOKER procedure is the regression baseline: same body, same
+# call, but current_user reports the invoker. session_user is unaffected
+# by SET ROLE in both cases (it tracks the authenticated connection).
+statement ok
+CREATE ROLE r_def_cu;
+
+statement ok
+CREATE ROLE r_inv_cu;
+
+statement ok
+SET ROLE r_def_cu;
+
+statement ok
+CREATE PROCEDURE p_sd_cu(OUT cu STRING, OUT su STRING) LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  cu := current_user;
+  su := session_user;
+END
+$$;
+
+statement ok
+CREATE PROCEDURE p_si_cu(OUT cu STRING, OUT su STRING) LANGUAGE PLpgSQL SECURITY INVOKER AS $$
+BEGIN
+  cu := current_user;
+  su := session_user;
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_sd_cu, p_si_cu TO r_inv_cu;
+
+statement ok
+SET ROLE r_inv_cu;
+
+query TT colnames
+CALL p_sd_cu(NULL, NULL);
+----
+cu        su
+r_def_cu  root
+
+query TT colnames
+CALL p_si_cu(NULL, NULL);
+----
+cu        su
+r_inv_cu  root
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP PROCEDURE p_sd_cu;
+
+statement ok
+DROP PROCEDURE p_si_cu;
+
+statement ok
+DROP ROLE r_def_cu, r_inv_cu;
+
+subtest end
+
+
+subtest security_definer_nested_stack
+
+# Stacking: an outer DEFINER procedure that calls an inner DEFINER
+# procedure sees the inner owner for the inner body, then sees the outer
+# owner again afterwards.
+statement ok
+CREATE ROLE r_outer_def;
+
+statement ok
+CREATE ROLE r_inner_def;
+
+statement ok
+CREATE ROLE r_invoker_nested;
+
+statement ok
+SET ROLE r_inner_def;
+
+statement ok
+CREATE PROCEDURE p_inner_def(OUT u STRING) LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  u := current_user;
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_inner_def TO PUBLIC;
+
+statement ok
+SET ROLE r_outer_def;
+
+statement ok
+CREATE PROCEDURE p_outer_def(OUT before_inner STRING, OUT inner_u STRING, OUT after_inner STRING)
+LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  before_inner := current_user;
+  CALL p_inner_def(inner_u);
+  after_inner := current_user;
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_outer_def TO r_invoker_nested;
+
+statement ok
+SET ROLE r_invoker_nested;
+
+query TTT colnames
+CALL p_outer_def(NULL, NULL, NULL);
+----
+before_inner  inner_u      after_inner
+r_outer_def   r_inner_def  r_outer_def
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP PROCEDURE p_outer_def;
+
+statement ok
+DROP PROCEDURE p_inner_def;
+
+statement ok
+DROP ROLE r_outer_def, r_inner_def, r_invoker_nested;
+
+subtest end
+
+
+subtest security_invoker_calls_definer
+
+# An INVOKER outer procedure calls a DEFINER inner procedure. The outer
+# body sees the invoker as current_user (no push); the inner body sees
+# the inner definer (single push); after the inner returns, the outer
+# body sees the invoker again (pop). Exercises push/pop on top of an
+# unmodified base stack.
+statement ok
+CREATE ROLE r_inner_idi;
+
+statement ok
+CREATE ROLE r_invoker_idi;
+
+statement ok
+SET ROLE r_inner_idi;
+
+statement ok
+CREATE PROCEDURE p_inner_idi(OUT u STRING) LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  u := current_user;
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_inner_idi TO PUBLIC;
+
+statement ok
+SET ROLE r_invoker_idi;
+
+statement ok
+CREATE PROCEDURE p_outer_idi(OUT before_inner STRING, OUT inner_u STRING, OUT after_inner STRING)
+LANGUAGE PLpgSQL AS $$
+BEGIN
+  before_inner := current_user;
+  CALL p_inner_idi(inner_u);
+  after_inner := current_user;
+END
+$$;
+
+query TTT colnames
+CALL p_outer_idi(NULL, NULL, NULL);
+----
+before_inner   inner_u      after_inner
+r_invoker_idi  r_inner_idi  r_invoker_idi
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP PROCEDURE p_outer_idi;
+
+statement ok
+DROP PROCEDURE p_inner_idi;
+
+statement ok
+DROP ROLE r_inner_idi, r_invoker_idi;
+
+subtest end
+
+
+subtest security_invoker_unchanged
+
+# Regression guard: SECURITY INVOKER (the default) must still evaluate
+# privilege checks against the invoker, even now that DEFINER works.
+statement ok
+CREATE ROLE r_def_inv WITH CREATEROLE;
+
+statement ok
+CREATE ROLE r_inv_inv;
+
+statement ok
+SET ROLE r_def_inv;
+
+statement ok
+CREATE PROCEDURE p_si_role() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE ROLE r_si_created;
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_si_role TO r_inv_inv;
+
+statement ok
+SET ROLE r_inv_inv;
+
+statement error pgcode 42501 user r_inv_inv does not have CREATEROLE privilege
+CALL p_si_role();
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP PROCEDURE p_si_role;
+
+statement ok
+DROP ROLE r_def_inv, r_inv_inv;
+
+subtest end
+
+
+subtest security_definer_exception_restores
+
+# After a SECURITY DEFINER routine returns (including via an exception
+# block that catches an error in the body), the invoker's effective user
+# is restored.
+statement ok
+CREATE ROLE r_def_exc;
+
+statement ok
+CREATE ROLE r_inv_exc;
+
+statement ok
+SET ROLE r_def_exc;
+
+statement ok
+CREATE PROCEDURE p_sd_exc(OUT u_inside STRING) LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  BEGIN
+    u_inside := current_user;
+    RAISE EXCEPTION 'boom';
+  EXCEPTION WHEN raise_exception THEN
+    -- swallow
+  END;
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_sd_exc TO r_inv_exc;
+
+statement ok
+SET ROLE r_inv_exc;
+
+query T colnames
+CALL p_sd_exc(NULL);
+----
+u_inside
+r_def_exc
+
+# After the call returns, current_user is back to the invoker.
+query T
+SELECT current_user;
+----
+r_inv_exc
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP PROCEDURE p_sd_exc;
+
+statement ok
+DROP ROLE r_def_exc, r_inv_exc;
+
+subtest end
+
+
+subtest security_definer_nested_definer_tail_call
+
+# An outer SECURITY DEFINER procedure whose final body statement is a CALL
+# to an inner SECURITY DEFINER procedure that performs DDL. The inner CALL
+# is in tail-call position. The inner owner has the privilege required by
+# the DDL; the outer owner and invoker do not. The schema must be created
+# and owned by the inner owner.
+statement ok
+CREATE ROLE r_outer_tc;
+GRANT CREATE ON DATABASE test TO r_outer_tc;
+
+statement ok
+CREATE ROLE r_inner_tc;
+GRANT CREATE ON DATABASE test TO r_inner_tc;
+
+statement ok
+CREATE ROLE r_invoker_tc;
+
+statement ok
+SET ROLE r_inner_tc;
+
+statement ok
+CREATE PROCEDURE p_inner_tc_ddl() LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  CREATE SCHEMA s_tc;
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_inner_tc_ddl TO PUBLIC;
+
+statement ok
+SET ROLE r_outer_tc;
+
+statement ok
+CREATE PROCEDURE p_outer_tc() LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  CALL p_inner_tc_ddl();
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_outer_tc TO r_invoker_tc;
+
+statement ok
+SET ROLE r_invoker_tc;
+
+statement ok
+CALL p_outer_tc();
+
+# Owner is the inner DEFINER, not the outer DEFINER and not the invoker.
+query TT
+SELECT schema_name, owner FROM [SHOW SCHEMAS] WHERE schema_name = 's_tc';
+----
+s_tc  r_inner_tc
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP SCHEMA s_tc;
+
+statement ok
+DROP PROCEDURE p_outer_tc;
+
+statement ok
+DROP PROCEDURE p_inner_tc_ddl;
+
+statement ok
+REVOKE CREATE ON DATABASE test FROM r_outer_tc, r_inner_tc;
+
+statement ok
+DROP ROLE r_outer_tc, r_inner_tc, r_invoker_tc;
+
+subtest end
+
+
+subtest security_definer_sql_language
+
+# LANGUAGE SQL procedure body: the definer override must apply
+# regardless of routine language. Verify ownership lands on the definer.
+statement ok
+CREATE ROLE r_def_sql;
+GRANT CREATE ON DATABASE test TO r_def_sql;
+
+statement ok
+CREATE ROLE r_inv_sql;
+GRANT CREATE ON DATABASE test TO r_inv_sql;
+
+statement ok
+SET ROLE r_def_sql;
+
+statement ok
+CREATE PROCEDURE p_sd_sql() LANGUAGE SQL SECURITY DEFINER AS $$
+  CREATE SCHEMA s_sd_sql;
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_sd_sql TO r_inv_sql;
+
+statement ok
+SET ROLE r_inv_sql;
+
+statement ok
+CALL p_sd_sql();
+
+query TT
+SELECT schema_name, owner FROM [SHOW SCHEMAS] WHERE schema_name = 's_sd_sql';
+----
+s_sd_sql  r_def_sql
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP SCHEMA s_sd_sql;
+
+statement ok
+DROP PROCEDURE p_sd_sql;
+
+statement ok
+REVOKE CREATE ON DATABASE test FROM r_def_sql, r_inv_sql;
+
+statement ok
+DROP ROLE r_def_sql, r_inv_sql;
+
+subtest end
+
+
+subtest security_definer_multi_statement_body
+
+# Multiple independent DDL statements in one SECURITY DEFINER body.
+# Confirms the effective-user override stays in effect across all body
+# statements rather than leaking after the first. Targets are deliberately
+# non-dependent to avoid the early-binding limitation covered by
+# drop_schema_cascade_restrict_in_procedure.
+statement ok
+CREATE ROLE r_def_multi WITH CREATEROLE;
+GRANT CREATE ON DATABASE test TO r_def_multi;
+
+statement ok
+CREATE ROLE r_inv_multi;
+
+statement ok
+SET ROLE r_def_multi;
+
+statement ok
+CREATE PROCEDURE p_sd_multi() LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  CREATE SCHEMA s_multi_a;
+  CREATE SCHEMA s_multi_b;
+  CREATE ROLE r_multi_created;
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_sd_multi TO r_inv_multi;
+
+statement ok
+SET ROLE r_inv_multi;
+
+statement ok
+CALL p_sd_multi();
+
+# All three objects record the definer, not the invoker.
+query TT rowsort
+SELECT schema_name, owner FROM [SHOW SCHEMAS]
+WHERE schema_name IN ('s_multi_a', 's_multi_b');
+----
+s_multi_a  r_def_multi
+s_multi_b  r_def_multi
+
+query T
+SELECT rolname FROM pg_roles WHERE rolname = 'r_multi_created';
+----
+r_multi_created
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP SCHEMA s_multi_a;
+
+statement ok
+DROP SCHEMA s_multi_b;
+
+statement ok
+DROP ROLE r_multi_created;
+
+statement ok
+DROP PROCEDURE p_sd_multi;
+
+statement ok
+REVOKE CREATE ON DATABASE test FROM r_def_multi;
+
+statement ok
+DROP ROLE r_def_multi, r_inv_multi;
+
+subtest end
+
+
+subtest security_definer_unhandled_error_restores
+
+# Companion to security_definer_exception_restores: an uncaught
+# exception must still pop the definer push.
+statement ok
+CREATE ROLE r_def_unh;
+
+statement ok
+CREATE ROLE r_inv_unh;
+
+statement ok
+SET ROLE r_def_unh;
+
+statement ok
+CREATE PROCEDURE p_sd_unh() LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  RAISE EXCEPTION 'boom';
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_sd_unh TO r_inv_unh;
+
+statement ok
+SET ROLE r_inv_unh;
+
+statement error pgcode P0001 pq: boom
+CALL p_sd_unh();
+
+# Effective user is back to the invoker after the failed CALL.
+query T
+SELECT current_user;
+----
+r_inv_unh
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP PROCEDURE p_sd_unh;
+
+statement ok
+DROP ROLE r_def_unh, r_inv_unh;
+
+subtest end
+
+
+subtest security_definer_has_schema_privilege
+
+# has_*_privilege builtins without a user argument resolve against
+# current_user, so inside a DEFINER body they reflect the definer.
+statement ok
+CREATE ROLE r_def_priv;
+GRANT CREATE ON DATABASE test TO r_def_priv;
+
+statement ok
+CREATE ROLE r_inv_priv;
+
+statement ok
+SET ROLE r_def_priv;
+
+statement ok
+CREATE SCHEMA s_priv;
+
+statement ok
+CREATE PROCEDURE p_sd_priv(OUT has_usage BOOL) LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  has_usage := has_schema_privilege('s_priv', 'USAGE');
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_sd_priv TO r_inv_priv;
+
+statement ok
+SET ROLE r_inv_priv;
+
+# Invoker has no access; definer (schema owner) does.
+query B
+SELECT has_schema_privilege('s_priv', 'USAGE');
+----
+false
+
+query B
+CALL p_sd_priv(NULL);
+----
+true
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP SCHEMA s_priv;
+
+statement ok
+DROP PROCEDURE p_sd_priv;
+
+statement ok
+REVOKE CREATE ON DATABASE test FROM r_def_priv;
+
+statement ok
+DROP ROLE r_def_priv, r_inv_priv;
+
+subtest end
+
+
+subtest security_definer_has_function_privilege
+
+# Companion to security_definer_has_schema_privilege covering the
+# user-defined-function branch of has_function_privilege, which was a
+# pre-existing outlier reaching for SessionData().User() directly.
+statement ok
+CREATE ROLE r_def_fpriv;
+GRANT CREATE ON DATABASE test TO r_def_fpriv;
+
+statement ok
+CREATE ROLE r_inv_fpriv;
+
+statement ok
+SET ROLE r_def_fpriv;
+
+statement ok
+CREATE FUNCTION f_fpriv(n INT) RETURNS INT LANGUAGE SQL AS $$ SELECT n + 1 $$;
+
+# EXECUTE is granted to PUBLIC by default; revoke so the invoker truly
+# has no path to the function.
+statement ok
+REVOKE EXECUTE ON FUNCTION f_fpriv(INT) FROM PUBLIC;
+
+statement ok
+CREATE PROCEDURE p_sd_fpriv(OUT has_exec BOOL) LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  has_exec := has_function_privilege('f_fpriv(INT)', 'EXECUTE');
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_sd_fpriv TO r_inv_fpriv;
+
+statement ok
+SET ROLE r_inv_fpriv;
+
+# Invoker has no EXECUTE; definer (function owner) does.
+query B
+SELECT has_function_privilege('f_fpriv(INT)', 'EXECUTE');
+----
+false
+
+query B
+CALL p_sd_fpriv(NULL);
+----
+true
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP PROCEDURE p_sd_fpriv;
+
+statement ok
+DROP FUNCTION f_fpriv(INT);
+
+statement ok
+REVOKE CREATE ON DATABASE test FROM r_def_fpriv;
+
+statement ok
+DROP ROLE r_def_fpriv, r_inv_fpriv;
+
+subtest end
+
+
+subtest security_definer_plpgsql_loop
+
+# PL/pgSQL loops compile into INVOKER continuation routines that
+# tail-call through routineGenerator.Start's for-loop. The outer DEFINER
+# push must remain in effect for every continuation; capturing
+# current_user on each iteration confirms it never falls back to the
+# invoker.
+statement ok
+CREATE ROLE r_def_loop;
+
+statement ok
+CREATE ROLE r_inv_loop;
+
+statement ok
+SET ROLE r_def_loop;
+
+statement ok
+CREATE PROCEDURE p_sd_loop(OUT u STRING) LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+DECLARE
+  i INT := 0;
+BEGIN
+  WHILE i < 5 LOOP
+    u := current_user;
+    i := i + 1;
+  END LOOP;
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_sd_loop TO r_inv_loop;
+
+statement ok
+SET ROLE r_inv_loop;
+
+query T colnames
+CALL p_sd_loop(NULL);
+----
+u
+r_def_loop
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP PROCEDURE p_sd_loop;
+
+statement ok
+DROP ROLE r_def_loop, r_inv_loop;
+
+subtest end
