@@ -75,7 +75,7 @@ func NoopMMARebalanceAdvisor() *MMARebalanceAdvisor {
 // determine if a candidate is vetoed by the multi-metric allocator due to
 // running counter to its goals.
 func (a *allocatorState) BuildMMARebalanceAdvisor(
-	existing roachpb.StoreID, cands []roachpb.StoreID,
+	ctx context.Context, existing roachpb.StoreID, cands []roachpb.StoreID,
 ) *MMARebalanceAdvisor {
 	// a.cs is mutated by gossip-driven callbacks (e.g. ProcessStoreLoadMsg) and
 	// must only be accessed under a.mu. The other public methods on
@@ -93,7 +93,7 @@ func (a *allocatorState) BuildMMARebalanceAdvisor(
 		// test builds; in production, fall back to a no-op advisor rather than
 		// return a zero-valued means that would misclassify stores. Gating on
 		// !ok avoids variadic arg boxing on the success path.
-		assertTruef(context.Background(), false, "computeMeansForStoreSet returned !ok for non-empty cands=%v", cands)
+		assertTruef(ctx, false, "computeMeansForStoreSet returned !ok for non-empty cands=%v", cands)
 		return NoopMMARebalanceAdvisor()
 	}
 	return &MMARebalanceAdvisor{

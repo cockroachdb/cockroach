@@ -193,7 +193,9 @@ type Allocator interface {
 	//
 	// TODO(sumeer): merge the above comment with the comment in the
 	// implementation.
-	BuildMMARebalanceAdvisor(existing roachpb.StoreID, cands []roachpb.StoreID) *MMARebalanceAdvisor
+	BuildMMARebalanceAdvisor(
+		ctx context.Context, existing roachpb.StoreID, cands []roachpb.StoreID,
+	) *MMARebalanceAdvisor
 
 	// IsInConflictWithMMA is called by the allocator sync to determine if the
 	// given candidate is in conflict with the existing store.

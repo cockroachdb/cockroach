@@ -1914,7 +1914,7 @@ func (a Allocator) RebalanceTarget(
 	// continues to correspond to the original candidate set and source store,
 	// even as candidates are removed.
 	for {
-		target, existingCandidate, bestIdx = bestRebalanceTarget(a.randGen, results, a.as)
+		target, existingCandidate, bestIdx = bestRebalanceTarget(ctx, a.randGen, results, a.as)
 		if target == nil {
 			return zero, zero, "", false
 		}
@@ -2555,7 +2555,7 @@ func (a *Allocator) TransferLeaseTarget(
 		for _, s := range sl.Stores {
 			targetStores = append(targetStores, s.StoreID)
 		}
-		handle := a.as.BuildMMARebalanceAdvisor(source.StoreID, targetStores)
+		handle := a.as.BuildMMARebalanceAdvisor(ctx, source.StoreID, targetStores)
 		var bestOption roachpb.ReplicaDescriptor
 		candidates := make([]roachpb.ReplicaDescriptor, 0, len(validTargets))
 		bestOptionLeaseCount := int32(math.MaxInt32)
