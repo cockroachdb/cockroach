@@ -484,6 +484,15 @@ func (mm *meansMemo) getStoreLoadSummary(
 // stores may contain duplicate storeIDs, in which case computeMeansForStoreSet
 // should deduplicate processing of the stores. stores should be immutable.
 //
+// Precondition: every storeID in stores must be known to loadProvider
+// (loadProvider.getStoreReportedLoad must return a non-nil *storeLoad).
+// Callers receiving storeIDs from outside MMA (notably the legacy
+// allocator's StorePool view, which can run ahead of MMA's gossip
+// updates) must filter unknown stores out first. BuildMMARebalanceAdvisor
+// is the canonical filtering point; clusterState.hasStore is the helper
+// to use. A violation is asserted in test builds and logged-and-skipped
+// in production rather than nil-dereferenced (see #170703).
+//
 // If stores is empty, computeMeansForStoreSet returns the zero meansLoad
 // and ok=false. Callers must check ok before consuming the returned means;
 // the zero value would otherwise misclassify stores as overloaded due to
@@ -510,6 +519,17 @@ func computeMeansForStoreSet(
 		if _, ok := scratchStores[storeID]; ok {
 			continue
 		}
+		if sload == nil {
+			// Precondition violation: a caller passed an unknown storeID. In
+			// test builds this panics, surfacing the bug; in production it
+			// logs and skips, avoiding the nil-pointer crash from #170703.
+			// context.Background is used because plumbing ctx into this
+			// internal helper would touch every memo path; the assertion is a
+			// last-resort safety net and is not expected to fire.
+			assertTruef(context.Background(), false,
+				"computeMeansForStoreSet: storeID %d not known to loadProvider", storeID)
+			continue
+		}
 		n++
 		scratchStores[storeID] = struct{}{}
 		for j := range sload.reportedLoad {
@@ -529,6 +549,11 @@ func computeMeansForStoreSet(
 			// negative.
 			scratchNodes[nodeID] = loadProvider.getNodeReportedLoad(nodeID)
 		}
+	}
+	if n == 0 {
+		// Every storeID hit the nil-sload guard above. Bail out before the
+		// divisions below would panic with division by zero.
+		return meansLoad{}, false
 	}
 	for i := range means.storeLoad.load {
 		if means.storeLoad.capacity[i] != UnknownCapacity {

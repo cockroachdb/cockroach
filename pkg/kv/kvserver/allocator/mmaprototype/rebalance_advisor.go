@@ -71,6 +71,16 @@ func NoopMMARebalanceAdvisor() *MMARebalanceAdvisor {
 // duplicate storeIDs. It is up to computeMeansForStoreSet to handle
 // de-duplication of storeIDs from the cands list.
 //
+// Callers may pass storeIDs (in `existing` or `cands`) that MMA's
+// clusterState has not yet seen. This happens during startup, when the
+// legacy allocator's StorePool reflects gossiped store descriptors that
+// MMA has not yet been notified of via SetStore. Such stores are filtered
+// out of `cands` before computing means; if `existing` itself is unknown,
+// a NoopMMARebalanceAdvisor is returned because MMA has no load history
+// against which to judge candidates. The same asymmetry is acknowledged
+// in updateStoreStatuses, which logs and skips unknown stores rather
+// than panicking. See #170703.
+//
 // The returned advisor should be passed to IsInConflictWithMMA as a helper to
 // determine if a candidate is vetoed by the multi-metric allocator due to
 // running counter to its goals.
@@ -82,6 +92,36 @@ func (a *allocatorState) BuildMMARebalanceAdvisor(
 	// allocatorState follow this discipline.
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if !a.cs.hasStore(existing) {
+		// MMA has no load history for the source store, so it cannot judge
+		// whether any candidate is more overloaded than existing. Fall back to
+		// a no-op advisor rather than risk a misclassification (or, before the
+		// hasStore filter on cands below was added, a nil-pointer panic).
+		log.KvDistribution.VEventf(ctx, 2,
+			"mma skipping advisor: existing store s%d not yet known to mma", existing)
+		return NoopMMARebalanceAdvisor()
+	}
+	// Drop any cand the integration layer learned about (via gossip / StorePool)
+	// before MMA did. computeMeansForStoreSet would otherwise nil-deref on the
+	// missing storeLoad. In the steady state every cand is known, so copy on
+	// write: keep aliasing the caller's slice until the first unknown cand,
+	// then peel off into a fresh slice. `range cands` captures the original
+	// slice header, so reassigning cands inside the loop is safe.
+	var cow bool
+	for i, c := range cands {
+		if !a.cs.hasStore(c) {
+			if !cow {
+				filtered := make([]roachpb.StoreID, i, len(cands)+1)
+				copy(filtered, cands[:i])
+				cands = filtered
+				cow = true
+			}
+			continue
+		}
+		if cow {
+			cands = append(cands, c)
+		}
+	}
 	// TODO(wenyihu6): for simplicity, we create a new scratchNodes every call.
 	// We should reuse the scratchNodes instead.
 	scratchNodes := map[roachpb.NodeID]*NodeLoad{}
@@ -89,10 +129,11 @@ func (a *allocatorState) BuildMMARebalanceAdvisor(
 	cands = append(cands, existing)
 	means, ok := computeMeansForStoreSet(a.cs, cands, scratchNodes, scratchStores)
 	if !ok {
-		// Unreachable: cands always contains at least `existing`. Assert in
-		// test builds; in production, fall back to a no-op advisor rather than
-		// return a zero-valued means that would misclassify stores. Gating on
-		// !ok avoids variadic arg boxing on the success path.
+		// Unreachable: cands always contains at least `existing`, which we
+		// just verified is known to MMA. Assert in test builds; in production,
+		// fall back to a no-op advisor rather than return a zero-valued means
+		// that would misclassify stores. Gating on !ok avoids variadic arg
+		// boxing on the success path.
 		assertTruef(ctx, false, "computeMeansForStoreSet returned !ok for non-empty cands=%v", cands)
 		return NoopMMARebalanceAdvisor()
 	}
