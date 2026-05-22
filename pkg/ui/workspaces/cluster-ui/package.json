@@ -4,7 +4,7 @@
   "description": "Cluster UI is a library of large features shared between CockroachDB and CockroachCloud",
   "repository": {
     "type": "git",
-    "url": "https://github.com/cockroachdb/ui/"
+    "url": "https://github.com/cockroachdb/cockroach"
   },
   "main": "dist/js/main.js",
   "types": "dist/types/index.d.ts",
