@@ -27,13 +27,82 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
+
+func TestDecommissionRPCsRequireRepairClusterPermission(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+	runner.Exec(t, "CREATE USER testuser")
+	runner.Exec(t, "CREATE USER privuser")
+	runner.Exec(t, "GRANT SYSTEM REPAIRCLUSTER TO privuser")
+
+	adminClient := srv.GetAdminClient(t)
+	nodeID := srv.NodeID()
+
+	rpcs := []struct {
+		name string
+		fn   func(ctx context.Context) error
+	}{
+		{"DecommissionPreCheck", func(ctx context.Context) error {
+			_, err := adminClient.DecommissionPreCheck(ctx, &serverpb.DecommissionPreCheckRequest{
+				NodeIDs: []roachpb.NodeID{nodeID},
+			})
+			return err
+		}},
+		{"DecommissionStatus", func(ctx context.Context) error {
+			_, err := adminClient.DecommissionStatus(ctx, &serverpb.DecommissionStatusRequest{
+				NodeIDs: []roachpb.NodeID{nodeID},
+			})
+			return err
+		}},
+		{"Decommission", func(ctx context.Context) error {
+			_, err := adminClient.Decommission(ctx, &serverpb.DecommissionRequest{
+				NodeIDs:          []roachpb.NodeID{nodeID},
+				TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
+			})
+			return err
+		}},
+	}
+
+	for _, rpc := range rpcs {
+		t.Run(rpc.name, func(t *testing.T) {
+			testutils.RunTrueAndFalse(t, "privileged", func(t *testing.T, privileged bool) {
+				user := "testuser"
+				if privileged {
+					user = "privuser"
+				}
+				rpcCtx := metadata.NewOutgoingContext(ctx, metadata.New(map[string]string{
+					"websessionuser": user,
+				}))
+				err := rpc.fn(rpcCtx)
+				if !privileged {
+					s, ok := status.FromError(err)
+					require.True(t, ok, "expected gRPC status error, got %v", err)
+					require.Equal(t, codes.PermissionDenied, s.Code())
+					require.Contains(t, s.Message(), "REPAIRCLUSTER")
+				} else {
+					require.NoError(t, err)
+				}
+			})
+		})
+	}
+}
 
 // TestDecommissionPreCheckInvalid tests decommission pre check expected errors.
 func TestDecommissionPreCheckInvalid(t *testing.T) {
