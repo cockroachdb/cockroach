@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -18,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -203,9 +205,17 @@ func (coord *CPUGrantCoordinators) SetResourceGroupConfig(config ResourceGroupCo
 }
 
 // GetRunnableCountCallback returns a callback of type
-// goschedstats.RunnableCountCallback.
+// goschedstats.RunnableCountCallback. The callback fans out to both
+// the slot-based coordinator (which adjusts slots and records period
+// duration metrics) and the CPU time token allocator (which adjusts
+// its dampening factor). The slot coordinator is called first so its
+// KVCPULoadShortPeriodDuration / KVCPULoadLongPeriodDuration metrics
+// are incremented before the token allocator reads them.
 func (coord *CPUGrantCoordinators) GetRunnableCountCallback() goschedstats.RunnableCountCallback {
-	return coord.slotsCoord.CPULoad
+	return func(runnable int, procs int, samplePeriod time.Duration) {
+		coord.slotsCoord.CPULoad(runnable, procs, samplePeriod)
+		coord.cpuTimeCoord.allocator.CPULoad(runnable, procs, samplePeriod)
+	}
 }
 
 // Close implements the stop.Closer interface.
@@ -221,6 +231,7 @@ const rmQueueTier resourceTier = 0
 
 type cpuTimeTokenGrantCoordinator struct {
 	filler       *cpuTimeTokenFiller
+	allocator    *cpuTimeTokenAllocator
 	queues       [numResourceTiers]requesterClose
 	configHolder *ResourceGroupConfigHolder
 }
@@ -260,10 +271,12 @@ func makeCPUTimeTokenGrantCoordinator(
 	}
 	configHolder := newResourceGroupConfigHolder(&settings.SV)
 	allocator := &cpuTimeTokenAllocator{
-		granter:      granter,
-		settings:     settings,
-		configHolder: configHolder,
-		metrics:      metrics,
+		granter:         granter,
+		settings:        settings,
+		configHolder:    configHolder,
+		metrics:         metrics,
+		nowMono:         crtime.NowMono,
+		dampeningFactor: 1.0,
 	}
 	model := &cpuTimeTokenLinearModel{
 		granter:            granter,
@@ -303,6 +316,7 @@ func makeCPUTimeTokenGrantCoordinator(
 
 	coordinator := &cpuTimeTokenGrantCoordinator{
 		filler:       filler,
+		allocator:    allocator,
 		configHolder: configHolder,
 	}
 	for tier := resourceTier(0); tier < numResourceTiers; tier++ {

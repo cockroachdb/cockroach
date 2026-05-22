@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -184,13 +185,15 @@ func TestCPUTimeTokenAllocator(t *testing.T) {
 	}
 	st := cluster.MakeClusterSettings()
 	allocator := cpuTimeTokenAllocator{
-		granter:      granter,
-		settings:     st,
-		configHolder: newResourceGroupConfigHolder(&st.SV),
-		model:        model,
-		metrics:      metrics,
-		queues:       queues,
-		lastMode:     serverlessMode,
+		granter:         granter,
+		settings:        st,
+		configHolder:    newResourceGroupConfigHolder(&st.SV),
+		model:           model,
+		metrics:         metrics,
+		queues:          queues,
+		lastMode:        serverlessMode,
+		nowMono:         crtime.NowMono,
+		dampeningFactor: 1.0,
 	}
 	printBurstMgrs = func() string {
 		var b strings.Builder
@@ -229,6 +232,13 @@ func TestCPUTimeTokenAllocator(t *testing.T) {
 			burstMgrs[testTier0].tokens = v
 			burstMgrs[testTier1].tokens = v
 			return flushAndReset()
+		case "set-cpu-load":
+			var runnable, procs int
+			d.ScanArgs(t, "runnable", &runnable)
+			d.ScanArgs(t, "procs", &procs)
+			allocator.lastRunnable.Store(int64(runnable))
+			allocator.lastProcs.Store(int64(procs))
+			return fmt.Sprintf("cpu-load: runnable=%d procs=%d\n", runnable, procs)
 		case "setClusterSettings":
 			ctx := context.Background()
 			var override float64
@@ -611,4 +621,157 @@ func TestGroupBurstRates(t *testing.T) {
 	out = allocator.groupBurstRates(allocator.configHolder.Snapshot(), tokens, rr)
 	require.Equal(t, [2]float64{-500, 4000}, out[0])
 	require.Equal(t, [2]float64{-500, 4000}, out[1])
+}
+
+// TestDampeningFactor exercises the four regimes (descent, hold,
+// recovery, snap-back), checks that dampening scales granter
+// allocations without touching per-tier burst buckets, and that the
+// deficit counter stops growing once the factor is back at 1.0.
+func TestDampeningFactor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	metrics := makeCPUTimeTokenMetrics()
+	granter := newCPUTimeTokenGranter(metrics, timeutil.DefaultTimeSource{})
+	tier0Granter := &cpuTimeTokenChildGranter{
+		tier:   testTier0,
+		parent: granter,
+	}
+	tier1Granter := &cpuTimeTokenChildGranter{
+		tier:   testTier1,
+		parent: granter,
+	}
+	granter.requester[testTier0] = &testRequester{
+		additionalID: "tier0",
+		granter:      tier0Granter,
+	}
+	granter.requester[testTier1] = &testRequester{
+		additionalID: "tier1",
+		granter:      tier1Granter,
+	}
+	burstMgrs := [numResourceTiers]*testBurstManager{
+		testTier0: {burstFrac: defaultTenantGroupConfig.BurstFrac},
+		testTier1: {burstFrac: defaultTenantGroupConfig.BurstFrac},
+	}
+	queues := [numResourceTiers]workQueueIForAllocator{
+		testTier0: burstMgrs[testTier0],
+		testTier1: burstMgrs[testTier1],
+	}
+
+	st := cluster.MakeClusterSettings()
+	model := &testModel{buf: &strings.Builder{}, rates: rates{}}
+	model.rates[testTier0][canBurst] = 5000
+	model.rates[testTier0][noBurst] = 4000
+	model.rates[testTier1][canBurst] = 3000
+	model.rates[testTier1][noBurst] = 2000
+	// Use a manual monotonic clock so the deficit metric accumulates a
+	// predictable number of nanoseconds per allocateTokens call.
+	ts := timeutil.NewTestTimeSource()
+	const tickInterval = time.Millisecond
+	tickAndNow := func() crtime.Mono {
+		ts.AdvanceBy(tickInterval)
+		return ts.NowMono()
+	}
+	allocator := cpuTimeTokenAllocator{
+		granter:         granter,
+		settings:        st,
+		configHolder:    newResourceGroupConfigHolder(&st.SV),
+		model:           model,
+		metrics:         metrics,
+		queues:          queues,
+		lastMode:        serverlessMode,
+		nowMono:         tickAndNow,
+		dampeningFactor: 1.0,
+	}
+
+	ctx := context.Background()
+	allocator.resetInterval(ctx)
+
+	// With the default threshold=32 and procs=10: descend when runnable
+	// >= 320, snap to 1.0 when runnable < 40, recover otherwise.
+	allocator.lastProcs.Store(10)
+
+	clearBuckets := func() {
+		granter.mu.buckets[testTier0][canBurst].tokens = 0
+		granter.mu.buckets[testTier0][noBurst].tokens = 0
+		granter.mu.buckets[testTier1][canBurst].tokens = 0
+		granter.mu.buckets[testTier1][noBurst].tokens = 0
+		burstMgrs[testTier0].tokens = 0
+		burstMgrs[testTier1].tokens = 0
+	}
+
+	// Descent. One tick at runnable=320: 1.0 -> 0.99.
+	allocator.lastRunnable.Store(320)
+	clearBuckets()
+	allocator.allocateTokens(1)
+	require.InDelta(t, 0.99, allocator.dampeningFactor, 0.001)
+	// Granter allocations are scaled (5000*0.99); per-tier burst is not.
+	require.Equal(t, int64(4950), granter.mu.buckets[testTier0][canBurst].tokens)
+	require.Equal(t, int64(3960), granter.mu.buckets[testTier0][noBurst].tokens)
+	// Burst refill should NOT be dampened. It uses the undampened
+	// allocations through groupBurstRates, which derives rate100 from
+	// the system tier's canBurst allocation (5000 with default
+	// canBurstTarget=1.0). Scaled by BurstFrac=0.20 per tier => 1000.
+	require.Equal(t, int64(1000), burstMgrs[testTier0].tokens)
+	require.Equal(t, int64(1000), burstMgrs[testTier1].tokens)
+
+	// Drive to the floor.
+	for i := 0; i < 100; i++ {
+		allocator.resetInterval(ctx)
+		clearBuckets()
+		allocator.allocateTokens(1)
+	}
+	require.Equal(t, dampeningFloor, allocator.dampeningFactor)
+	require.Equal(t, int64(2500), granter.mu.buckets[testTier0][canBurst].tokens)
+
+	// Hold. runnable=260 sits in [240, 320), so the factor must not move.
+	allocator.lastRunnable.Store(260)
+	for i := 0; i < 10; i++ {
+		allocator.resetInterval(ctx)
+		clearBuckets()
+		allocator.allocateTokens(1)
+	}
+	require.Equal(t, dampeningFloor, allocator.dampeningFactor)
+	require.Equal(t, int64(2500), granter.mu.buckets[testTier0][canBurst].tokens)
+
+	// Recovery. runnable=200 is between 40 and 240; one tick: 0.50 -> 0.52.
+	allocator.lastRunnable.Store(200)
+	allocator.resetInterval(ctx)
+	clearBuckets()
+	allocator.allocateTokens(1)
+	require.InDelta(t, 0.52, allocator.dampeningFactor, 0.001)
+	require.Equal(t, int64(2600), granter.mu.buckets[testTier0][canBurst].tokens)
+
+	// 30 more ticks at +0.02 covers the climb back to 1.0.
+	for i := 0; i < 30; i++ {
+		allocator.resetInterval(ctx)
+		clearBuckets()
+		allocator.allocateTokens(1)
+	}
+	require.Equal(t, 1.0, allocator.dampeningFactor)
+
+	// Snap-back. Drive to the floor again, then drop runnable below 40.
+	allocator.lastRunnable.Store(320)
+	for i := 0; i < 60; i++ {
+		allocator.resetInterval(ctx)
+		clearBuckets()
+		allocator.allocateTokens(1)
+	}
+	require.Equal(t, dampeningFloor, allocator.dampeningFactor)
+
+	allocator.lastRunnable.Store(20)
+	allocator.resetInterval(ctx)
+	clearBuckets()
+	allocator.allocateTokens(1)
+	require.Equal(t, 1.0, allocator.dampeningFactor)
+	require.Equal(t, int64(5000), granter.mu.buckets[testTier0][canBurst].tokens)
+
+	// Deficit was accumulated; with factor at 1.0 it stops growing.
+	require.Positive(t, metrics.DampeningDeficitNanos.Count())
+	deficitBefore := metrics.DampeningDeficitNanos.Count()
+	for i := 0; i < 10; i++ {
+		allocator.resetInterval(ctx)
+		allocator.allocateTokens(1)
+	}
+	require.Equal(t, deficitBefore, metrics.DampeningDeficitNanos.Count())
 }

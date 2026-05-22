@@ -13580,6 +13580,15 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
+    - name: admission.cpu_time_tokens.dampening_deficit_nanos
+      exported_name: admission_cpu_time_tokens_dampening_deficit_nanos
+      description: Cumulative time-weighted deficit from dampening CPU time token allocations during scheduler overload. Each tick increments by (1 - dampening_factor) * elapsed_nanos, where dampening_factor is in [floor, 1.0] (floor is 0.5). rate() / 1e9 yields the average fraction of token issuance suppressed; a rate of 0 means no dampening was active in the window, 5e8 means the floor was held for the full window
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/admission-control
     - name: admission.cpu_time_tokens.exhausted_duration_nanos.app_tenant.can_burst
       exported_name: admission_cpu_time_tokens_exhausted_duration_nanos_app_tenant_can_burst
       description: Cumulative nanoseconds the app_tenant/can_burst CPU time token bucket has spent exhausted (tokens <= 0); rate() gives the fraction of wall-clock time the bucket was exhausted

@@ -30,6 +30,7 @@ owners:
   admission.cpu_time_tokens.refill.added.%s.%s: cockroachdb/admission-control
   admission.cpu_time_tokens.refill.removed.%s.%s: cockroachdb/admission-control
   admission_admitted_snapshot_bytes: cockroachdb/admission-control
+  admission_cpu_time_tokens_dampening_deficit_nanos: cockroachdb/admission-control
   admission_cpu_time_tokens_multiplier: cockroachdb/admission-control
   admission_cpu_time_tokens_usage_consumed: cockroachdb/admission-control
   admission_cpu_time_tokens_usage_returned: cockroachdb/admission-control

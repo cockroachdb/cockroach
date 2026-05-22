@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -271,6 +272,28 @@ type cpuTimeTokenAllocator struct {
 	// cpuTimeTokenAllocator. No mutex, since only a single goroutine will call
 	// the allocator.
 	allocated tokenCounts
+
+	// nowMono returns a monotonic timestamp. Defaults to crtime.NowMono;
+	// tests substitute a manual clock to make DampeningDeficitNanos
+	// deterministic. Only called by the filler goroutine.
+	nowMono func() crtime.Mono
+	// dampeningFactor scales per-tick token allocations to leave CPU
+	// headroom when the goroutine scheduler is overloaded. 1.0 means no
+	// dampening; dampeningFloor means fully dampened. Written only by the
+	// filler goroutine via allocateTokens.
+	dampeningFactor float64
+	// lastDampeningUpdate is the monotonic timestamp of the previous
+	// allocateTokens call. Used to weight DampeningDeficitNanos by elapsed
+	// time, so the counter reflects the true cumulative deficit even when
+	// the filler ticker delays or drops ticks (see cpuTimeTokenFiller).
+	// Zero until the first allocateTokens call. Only read/written by the
+	// filler goroutine.
+	lastDampeningUpdate crtime.Mono
+
+	// Written by CPULoad callback (arbitrary goroutine), read by
+	// filler goroutine on the next tick.
+	lastRunnable atomic.Int64
+	lastProcs    atomic.Int64
 }
 
 // computeTargets derives target utilizations from a ConfigSnapshot.
@@ -394,6 +417,93 @@ func computeMinimums(r rates) minimums {
 	return m
 }
 
+// CPULoad stores the latest runnable goroutine count and GOMAXPROCS
+// for use by allocateTokens on the next tick. Called from an arbitrary
+// goroutine by the goschedstats callback.
+func (a *cpuTimeTokenAllocator) CPULoad(runnable, procs int, _ time.Duration) {
+	a.lastRunnable.Store(int64(runnable))
+	a.lastProcs.Store(int64(procs))
+}
+
+// Dampening descends slowly under overload and recovers faster once
+// load eases. At 1ms ticks, descent from 1.0 to dampeningFloor takes
+// ~50ms; recovery takes ~25ms.
+const (
+	dampeningDescentDelta  = 0.01
+	dampeningRecoveryDelta = 0.02
+	// dampeningFloor caps how far the factor can drop. Even under
+	// sustained overload we still dispense at least this fraction so
+	// the system can keep making progress and self-correct.
+	dampeningFloor = 0.50
+	// dampeningSnapBackFrac is the fraction of the overload threshold
+	// below which the factor jumps directly to 1.0. With the default
+	// threshold of 32 runnable goroutines per CPU this fires when
+	// runnable falls below 4 per CPU.
+	dampeningSnapBackFrac = 0.125
+	// dampeningHoldFrac sets the lower edge of a hold zone immediately
+	// below the overload threshold. While runnable is in [hold, overload)
+	// the factor stays where it is, which prevents ping-pong recovery
+	// the moment load dips just below the overload threshold. Recovery
+	// only resumes once runnable drops further. With the default
+	// threshold of 32 runnable goroutines per CPU this means we hold
+	// in [24, 32) per CPU.
+	dampeningHoldFrac = 0.75
+)
+
+// updateDampening advances the dampening factor for one tick based on the most
+// recent CPULoad sample and records the resulting deficit on
+// DampeningDeficitNanos. Called by allocateTokens.
+//
+//   - Runnable goroutines at or above the overload threshold: increase dampening
+//     by 1% per tick, down to a floor of 50% (dampeningFactor = 0.5).
+//
+//   - Runnable goroutines in the hold zone just below the overload threshold
+//     (>= 75% of threshold by default): leave the factor unchanged so we don't
+//     bounce in and out of recovery while load hovers near the overload point.
+//
+//   - Runnable goroutines clearly below the overload threshold: decrease
+//     dampening by 2% per tick.
+//
+//   - Runnable goroutines below 12.5% of the overload threshold: snap dampening
+//     all the way back to 0 (dampeningFactor = 1) without ramping.
+//
+// The deficit (1 - factor) is added to the counter scaled by the wall-clock gap
+// since the previous call. The gap is nominally timePerTick (1ms) but can be
+// larger when the filler ticker is delayed or drops ticks. The first call is
+// skipped so we don't attribute the process-start gap to dampening.
+func (a *cpuTimeTokenAllocator) updateDampening() {
+	procs := int(a.lastProcs.Load())
+	if procs <= 0 {
+		// CPULoad has not been called yet. Leave the factor
+		// at its initial value.
+		return
+	}
+	runnable := int(a.lastRunnable.Load())
+	threshold := int(KVSlotAdjusterOverloadThreshold.Get(&a.settings.SV))
+	snapPerCPU := max(1, int(float64(threshold)*dampeningSnapBackFrac))
+	holdPerCPU := max(1, int(float64(threshold)*dampeningHoldFrac))
+
+	switch {
+	case runnable >= threshold*procs:
+		a.dampeningFactor = max(dampeningFloor, a.dampeningFactor-dampeningDescentDelta)
+	case runnable >= holdPerCPU*procs:
+		// Hold zone: leave the factor where it is.
+	case runnable < snapPerCPU*procs:
+		a.dampeningFactor = 1.0
+	default:
+		a.dampeningFactor = min(1.0, a.dampeningFactor+dampeningRecoveryDelta)
+	}
+
+	now := a.nowMono()
+	if a.lastDampeningUpdate != 0 {
+		if elapsed := now.Sub(a.lastDampeningUpdate); elapsed > 0 {
+			a.metrics.DampeningDeficitNanos.Inc(
+				int64((1.0 - a.dampeningFactor) * float64(elapsed.Nanoseconds())))
+		}
+	}
+	a.lastDampeningUpdate = now
+}
+
 // allocateTokensFn distributes refillRates across remaining ticks in
 // the interval, returning the per-tick allocations. Extracted as a
 // standalone function so it can be reused by future strategy
@@ -436,7 +546,21 @@ func allocateTokensFn(refillRates rates, allocated *tokenCounts, remainingTicks 
 // INVARIANT: remainingTicks >= 1.
 // TODO(josh): Expand to cover group-specific token buckets too.
 func (a *cpuTimeTokenAllocator) allocateTokens(expectedRemainingTicksInInterval int64) {
+	a.updateDampening()
+
 	allocations := allocateTokensFn(a.refillRates, &a.allocated, expectedRemainingTicksInInterval)
+
+	// Save undampened allocations for per-group burst bucket refill.
+	// Per-group burst buckets control priority ordering (whether a group
+	// qualifies for canBurst), not total throughput, so dampening — a
+	// total-throughput control — does not apply.
+	undampenedAllocations := allocations
+	for tier := range allocations {
+		for qual := range allocations[tier] {
+			allocations[tier][qual] = int64(float64(allocations[tier][qual]) * a.dampeningFactor)
+		}
+	}
+
 	// Each bucket has a max capacity. The max capacity for each bucket is
 	// one second worth of tokens at the current refill rate. This is a fairly
 	// arbitrary decision.
@@ -457,7 +581,12 @@ func (a *cpuTimeTokenAllocator) allocateTokens(expectedRemainingTicksInInterval 
 	// for more). With defaultTenantGroupConfig.BurstFrac = 0.20, an
 	// application tenant can burst if it is using roughly less than 20%
 	// of the CPU on a CRDB node.
-	burstRates := a.groupBurstRates(a.snap, allocations, a.refillRates)
+	//
+	// Per-group burst buckets control priority ordering (whether a group
+	// qualifies for canBurst), not total throughput, so dampening — a
+	// total-throughput control — does not apply. Pass the undampened
+	// allocations through.
+	burstRates := a.groupBurstRates(a.snap, undampenedAllocations, a.refillRates)
 	for tier, q := range a.queues {
 		q.refillGroupBurstBuckets(burstRates[tier][0], burstRates[tier][1])
 	}
