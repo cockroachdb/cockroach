@@ -242,22 +242,20 @@ exec-sql
 CREATE DATABASE testuser_db;
 ----
 
-# testuser needs CREATE to run the RESTORE.
+# testuser needs RESTORE on the parent database to run the RESTORE.
 exec-sql
-GRANT CREATE ON DATABASE testuser_db TO testuser;
+GRANT RESTORE ON DATABASE testuser_db TO testuser;
 ----
 
 # Restore a table where only `user1` had privileges.
 exec-sql user=testuser
 RESTORE testdb.sc.othertable FROM LATEST IN 'nodelocal://1/test' WITH into_db='testuser_db';
 ----
-NOTICE: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/restore.html#required-privileges. In a future release, to run RESTORE TABLE, user testuser will exclusively require the RESTORE privilege on databases testuser_db
 
 # Restore a table where only `testuser` had privileges.
 exec-sql user=testuser
 RESTORE testdb.testtable_greeting_usage FROM LATEST IN 'nodelocal://1/test' WITH into_db='testuser_db';
 ----
-NOTICE: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/restore.html#required-privileges. In a future release, to run RESTORE TABLE, user testuser will exclusively require the RESTORE privilege on databases testuser_db
 
 exec-sql
 USE testuser_db
@@ -270,7 +268,7 @@ testuser_db admin ALL true
 testuser_db public CONNECT false
 testuser_db public TEMPORARY false
 testuser_db root ALL true
-testuser_db testuser CREATE false
+testuser_db testuser RESTORE false
 
 query-sql
 SHOW GRANTS ON SCHEMA testuser_db.public;
@@ -504,7 +502,7 @@ subtest end
 exec-sql
 USE defaultdb;
 DROP DATABASE testdb CASCADE;
-ALTER USER testuser CREATEDB;
+GRANT SYSTEM RESTORE TO testuser;
 ----
 
 # Lastly, restore the database as a non-admin (testuser). We expect only root
@@ -514,7 +512,6 @@ subtest restore-database-as-non-admin
 exec-sql user=testuser
 RESTORE DATABASE testdb FROM LATEST IN 'nodelocal://1/test/';
 ----
-NOTICE: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/restore.html#required-privileges. In a future release, to run RESTORE DATABASE, user testuser will exclusively require the RESTORE system privilege.
 
 exec-sql
 USE testdb

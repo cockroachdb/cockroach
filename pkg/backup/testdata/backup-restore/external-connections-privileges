@@ -71,12 +71,11 @@ GRANT USAGE ON EXTERNAL CONNECTION "testuser-ec" TO testuser;
 
 exec-sql
 CREATE DATABASE failsdb;
-GRANT CREATE ON DATABASE failsdb TO testuser;
+GRANT RESTORE ON DATABASE failsdb TO testuser;
 ----
 
 exec-sql user=testuser
 RESTORE TABLE foo FROM LATEST IN 'external://testuser-ec' WITH into_db=failsdb;
 ----
-NOTICE: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/restore.html#required-privileges. In a future release, to run RESTORE TABLE, user testuser will exclusively require the RESTORE privilege on databases failsdb
 
 subtest end

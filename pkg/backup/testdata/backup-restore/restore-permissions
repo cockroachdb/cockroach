@@ -50,13 +50,11 @@ exec-sql
 REVOKE ADMIN FROM testuser;
 ----
 
-# Non-admin cannot run database restore unless they have CREATEDB today but we recommend the system
-# RESTORE privilege.
+# Non-admin requires the RESTORE system privilege to run a database restore.
 exec-sql user=testuser
 RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/foo' WITH new_db_name = ddup_nonroot_fail;
 ----
-pq: only users with the CREATEDB privilege can restore databases
-HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/restore.html#required-privileges. In a future release, to run RESTORE DATABASE, user testuser will exclusively require the RESTORE system privilege.
+pq: only users with the admin role or the RESTORE system privilege are allowed to perform a database restore: user testuser does not have RESTORE system privilege
 
 exec-sql
 GRANT SYSTEM RESTORE TO testuser;
@@ -141,13 +139,12 @@ exec-sql
 GRANT SYSTEM EXTERNALIOIMPLICITACCESS TO testuser;
 ----
 
-# Non-admin cannot run table restore unless they have CREATE on the database
-# today but we recommend the database RESTORE privilege.
+# Non-admin requires the RESTORE privilege on the parent database to run a
+# table restore.
 exec-sql user=testuser
 RESTORE TABLE d.ds.t FROM LATEST IN 'nodelocal://1/foo' WITH into_db = nonadmin;
 ----
-pq: user testuser does not have CREATE privilege on database nonadmin
-HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/restore.html#required-privileges. In a future release, to run RESTORE TABLE, user testuser will exclusively require the RESTORE privilege on database nonadmin.
+pq: user testuser does not have RESTORE privilege on database nonadmin
 
 exec-sql
 GRANT RESTORE ON DATABASE nonadmin TO testuser;

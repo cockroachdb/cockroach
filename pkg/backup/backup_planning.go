@@ -44,10 +44,6 @@ const (
 	deprecatedPrivilegesBackupPreamble = "The existing privileges are being deprecated " +
 		"in favour of a fine-grained privilege model explained here " +
 		"https://www.cockroachlabs.com/docs/stable/backup.html#required-privileges. In a future release, to run"
-
-	deprecatedPrivilegesRestorePreamble = "The existing privileges are being deprecated " +
-		"in favour of a fine-grained privilege model explained here " +
-		"https://www.cockroachlabs.com/docs/stable/restore.html#required-privileges. In a future release, to run"
 )
 
 type tableAndIndex struct {
