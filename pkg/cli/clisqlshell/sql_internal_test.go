@@ -268,3 +268,30 @@ func TestHandleEmbedderInterruptIgnoresIdle(t *testing.T) {
 	interruptCh <- struct{}{}
 	time.Sleep(50 * time.Millisecond)
 }
+
+func TestDisableLocalCmds(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	blocked := []string{`\!`, `\| sort`, `\i file.sql`, `\ir file.sql`, `\o output`}
+	for _, line := range blocked {
+		c := setupTestCliState()
+		c.sqlCtx.DisableLocalCmds = true
+		c.lastInputLine = line
+		c.doHandleCliCmd(cliStateEnum(0), cliStateEnum(1))
+		require.Error(t, c.exitErr, "input %q", line)
+		assert.Contains(t, c.exitErr.Error(), "disabled by embedder", "input %q", line)
+	}
+}
+
+func TestDisablePasswordCmd(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	c := setupTestCliState()
+	c.sqlCtx.DisablePasswordCmd = true
+	c.lastInputLine = `\password`
+	c.doHandleCliCmd(cliStateEnum(0), cliStateEnum(1))
+	require.Error(t, c.exitErr)
+	assert.Contains(t, c.exitErr.Error(), "disabled by embedder")
+}

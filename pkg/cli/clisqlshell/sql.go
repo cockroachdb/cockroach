@@ -1445,6 +1445,20 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		return c.cliError(errState, errors.New(
 			`backslash commands are restricted; only \unrestrict is allowed`))
 	}
+	// Embedder-disabled commands. \e is enforced separately at
+	// editor-init time (see editor_bubbline.go); the cases below
+	// cover the commands that route through this dispatcher.
+	if c.sqlCtx.DisableLocalCmds {
+		switch cmd[0] {
+		case `\!`, `\|`, `\i`, `\ir`, `\o`:
+			return c.cliError(errState, errors.Newf(
+				"%s: local command disabled by embedder", cmd[0]))
+		}
+	}
+	if c.sqlCtx.DisablePasswordCmd && cmd[0] == `\password` {
+		return c.cliError(errState, errors.New(
+			`\password: disabled by embedder`))
+	}
 	if cmd[0] == `\z` {
 		// psql compatibility.
 		cmd[0] = `\dp`
@@ -2547,6 +2561,15 @@ func (c *cliState) runStatements(stmts []string) error {
 // enableDebug implements the sqlShell interface (to support the editor).
 func (c *cliState) enableDebug() bool {
 	return c.sqlConnCtx.DebugMode
+}
+
+// externalEditorAllowed implements the sqlShell interface. The bubbline
+// editor's \e command launches an external editor (vi/nano/etc) on the
+// current input buffer, which is a shell-out; the embedder disables it
+// via Context.DisableLocalCmds in the same way as the dispatcher-level
+// \! and \i guards.
+func (c *cliState) externalEditorAllowed() bool {
+	return !c.sqlCtx.DisableLocalCmds
 }
 
 // serverSideParse implements the sqlShell interface (to support the editor).

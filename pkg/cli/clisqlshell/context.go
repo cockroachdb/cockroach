@@ -66,6 +66,21 @@ type Context struct {
 	// lifetime (e.g. closing the input). Mutually exclusive with the
 	// default signal handler: when set, signal.Notify is not called.
 	InterruptCh <-chan struct{}
+
+	// DisableLocalCmds, if true, causes the shell to refuse the
+	// metacommands that touch the local filesystem or shell out: \!,
+	// \|, \i, \ir, \o, and \e (external editor). Embedders that run
+	// the shell inside a privileged service process must set this:
+	// otherwise any user who opens a session can execute commands
+	// with the service's UID and read or write its filesystem.
+	DisableLocalCmds bool
+
+	// DisablePasswordCmd, if true, causes the shell to refuse the
+	// \password metacommand. \password is harmless on the server side
+	// — it issues a SQL ALTER USER ... WITH PASSWORD statement — but
+	// the password is typed into the shell session, which is not
+	// always desirable in an embedded context.
+	DisablePasswordCmd bool
 }
 
 // internalContext represents the internal configuration state of the
