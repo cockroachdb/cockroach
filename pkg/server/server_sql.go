@@ -429,6 +429,12 @@ type sqlServerArgs struct {
 	// tenantTimeSeriesServer is used to make TSDB queries by the DB Console.
 	tenantTimeSeriesServer *ts.TenantServer
 
+	// timeSeriesQuerier exposes the TSDB to SQL through
+	// crdb_internal.tsdb_query generator builtin.
+	// For the system tenant this wraps *ts.Server;
+	// For secondary tenants it wraps *ts.TenantServer.
+	timeSeriesQuerier eval.TimeSeriesQuerier
+
 	tenantCapabilitiesReader sql.SystemTenantOnly[tenantcapabilities.Reader]
 }
 
@@ -1003,6 +1009,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		SQLLiveness:             cfg.sqlLivenessProvider,
 		JobRegistry:             jobRegistry,
 		VirtualSchemas:          virtualSchemas,
+		TimeSeriesQuerier:       cfg.timeSeriesQuerier,
 		HistogramWindowInterval: cfg.HistogramWindowInterval(),
 		RangeDescriptorCache:    cfg.distSender.RangeDescriptorCache(),
 		RoleMemberCache: rolemembershipcache.NewMembershipCache(

@@ -351,6 +351,11 @@ func (*DummyEvalPlanner) ExecutorConfig() interface{} {
 	return nil
 }
 
+// TimeSeriesQuerier is part of the eval.Planner interface.
+func (*DummyEvalPlanner) TimeSeriesQuerier() eval.TimeSeriesQuerier {
+	return nil
+}
+
 // Optimizer is part of the cat.Catalog interface.
 func (*DummyEvalPlanner) Optimizer() interface{} {
 	return nil
