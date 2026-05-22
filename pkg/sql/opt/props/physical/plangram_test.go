@@ -859,50 +859,83 @@ func TestPlanGramVisitAlternates(t *testing.T) {
 	}
 }
 
-func TestPlanGramWithNoneFallback(t *testing.T) {
+func TestMergePlanGrams(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	t.Run("any is idempotent", func(t *testing.T) {
-		result := AnyPlanGram.WithNoneFallback()
-		require.True(t, result.Any())
-	})
+	scanPG := PlanGram{root: &planGramExpr{op: opt.ScanOp}}
+	selectPG := PlanGram{root: &planGramExpr{
+		op:       opt.SelectOp,
+		children: []planGramTerm{&planGramExpr{op: opt.ScanOp}},
+	}}
 
-	t.Run("none is idempotent", func(t *testing.T) {
-		result := NonePlanGram.WithNoneFallback()
-		require.True(t, result.Equals(NonePlanGram))
-	})
+	tests := []struct {
+		name     string
+		inputs   []IdentifiedPlanGram
+		expected string
+	}{
+		{
+			name:     "zero inputs",
+			inputs:   nil,
+			expected: "root: any;",
+		},
+		{
+			name: "single input adds default",
+			inputs: []IdentifiedPlanGram{
+				{ID: "x", PlanGram: scanPG},
+			},
+			expected: "root: _merge; _merge: _merge_x | _merge_default; _merge_x: (Scan); _merge_default: none;",
+		},
+		{
+			name: "multiple inputs",
+			inputs: []IdentifiedPlanGram{
+				{ID: "x", PlanGram: scanPG},
+				{ID: "y", PlanGram: selectPG},
+			},
+			expected: "root: _merge; _merge: _merge_x | _merge_y | _merge_default; _merge_x: (Scan); _merge_y: (Select (Scan)); _merge_default: none;",
+		},
+		{
+			name: "any input kept as branch",
+			inputs: []IdentifiedPlanGram{
+				{ID: "a", PlanGram: scanPG},
+				{ID: "b", PlanGram: AnyPlanGram},
+			},
+			expected: "root: _merge; _merge: _merge_a | _merge_b | _merge_default; _merge_a: (Scan); _merge_b: any; _merge_default: none;",
+		},
+		{
+			name: "none input suppresses default",
+			inputs: []IdentifiedPlanGram{
+				{ID: "a", PlanGram: scanPG},
+				{ID: "b", PlanGram: NonePlanGram},
+			},
+			expected: "root: _merge; _merge: _merge_a | _merge_b; _merge_a: (Scan); _merge_b: none;",
+		},
+		{
+			name: "all none inputs no default added",
+			inputs: []IdentifiedPlanGram{
+				{ID: "a", PlanGram: NonePlanGram},
+				{ID: "b", PlanGram: NonePlanGram},
+			},
+			expected: "root: _merge; _merge: _merge_a | _merge_b; _merge_a: none; _merge_b: none;",
+		},
+	}
 
-	t.Run("concrete gets fallback", func(t *testing.T) {
-		pg := PlanGram{root: &planGramExpr{op: opt.ScanOp}}
-		result := pg.WithNoneFallback()
-		require.True(t, result.HasAlternates())
-
-		var alternates []PlanGram
-		result.VisitAlternates(func(alt PlanGram) {
-			alternates = append(alternates, alt)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := MergePlanGrams(tc.inputs...)
+			require.Equal(t, tc.expected, result.String())
 		})
-		require.Len(t, alternates, 2)
+	}
 
-		hasNone := false
-		for _, a := range alternates {
-			if a.Equals(NonePlanGram) {
-				hasNone = true
-			}
-		}
-		require.True(t, hasNone)
-	})
-
-	t.Run("double wrap still works", func(t *testing.T) {
-		pg := PlanGram{root: &planGramExpr{op: opt.ScanOp}}
-		result := pg.WithNoneFallback().WithNoneFallback()
-		require.True(t, result.HasAlternates())
-
-		var alternates []PlanGram
-		result.VisitAlternates(func(alt PlanGram) {
-			alternates = append(alternates, alt)
-		})
-		require.GreaterOrEqual(t, len(alternates), 2)
+	t.Run("round-trip", func(t *testing.T) {
+		merged := MergePlanGrams(
+			IdentifiedPlanGram{ID: "x", PlanGram: scanPG},
+			IdentifiedPlanGram{ID: "y", PlanGram: selectPG},
+		)
+		s := merged.String()
+		parsed, err := ParsePlanGram(strings.NewReader(s))
+		require.NoError(t, err)
+		require.Equal(t, s, parsed.String())
 	})
 }
 

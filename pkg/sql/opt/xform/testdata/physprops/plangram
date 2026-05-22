@@ -121,7 +121,7 @@ scan abc
  ├── key: (1)
  └── fd: (1)-->(2,3)
 
-# WithNoneFallback (graceful fallback to default).
+# MergePlanGrams (graceful fallback to default).
 
 # Default plan for comparison.
 opt format=show-cost
