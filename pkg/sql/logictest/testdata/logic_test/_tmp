@@ -1,0 +1,5 @@
+statement ok
+CREATE TABLE t (i INT, l LTREE)
+
+statement ok
+SELECT array_position(ARRAY['foo']::LTREE[], l, i) FROM t
