@@ -12,21 +12,6 @@ import (
 	"text/template"
 )
 
-// templateToText is helper function to execute a template using the text/template package
-func templateToText(args interface{}, templateText string) (string, error) {
-	templ, err := template.New("").Parse(templateText)
-	if err != nil {
-		return "", fmt.Errorf("cannot parse template: %w", err)
-	}
-
-	var buf bytes.Buffer
-	err = templ.Execute(&buf, args)
-	if err != nil {
-		return "", fmt.Errorf("cannot execute template: %w", err)
-	}
-	return buf.String(), nil
-}
-
 // templateFilesToText is helper function to execute templates using the text/template package
 func templateFilesToText(args interface{}, templateFiles ...string) (string, error) {
 	templ := template.Must(template.ParseFiles(templateFiles...))
