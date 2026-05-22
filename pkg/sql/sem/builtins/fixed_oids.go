@@ -2951,6 +2951,7 @@ var builtinOidsArray = []string{
 	2996: `st_3dperimeter(geometry: geometry) -> float`,
 	2997: `pg_get_function_sqlbody(func_oid: oid) -> string`,
 	2998: `crdb_internal.tsdb_query(name: string, start_time: timestamptz, end_time: timestamptz) -> tuple{timestamptz AS timestamp, float AS value, string AS source}`,
+	2999: `crdb_internal.tsdb_query(name: string, start_time: timestamptz, end_time: timestamptz, options: jsonb) -> tuple{timestamptz AS timestamp, float AS value, string AS source}`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

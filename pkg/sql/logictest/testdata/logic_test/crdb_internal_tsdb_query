@@ -95,3 +95,128 @@ SELECT * FROM crdb_internal.tsdb_query(
 ----
 
 user root
+
+subtest options_jsonb
+
+# 4-arg with empty options is equivalent to 3-arg.
+query TFT colnames
+SELECT * FROM crdb_internal.tsdb_query(
+  'cr.node.sql.query.count',
+  '2026-05-01 00:00:00+00'::timestamptz,
+  '2026-05-01 00:00:01+00'::timestamptz,
+  '{}'::jsonb
+) LIMIT 0
+----
+timestamp  value  source
+
+# 4-arg with NULL options is equivalent to 3-arg.
+query TFT colnames
+SELECT * FROM crdb_internal.tsdb_query(
+  'cr.node.sql.query.count',
+  '2026-05-01 00:00:00+00'::timestamptz,
+  '2026-05-01 00:00:01+00'::timestamptz,
+  NULL
+) LIMIT 0
+----
+timestamp  value  source
+
+# Unknown JSONB field is rejected.
+query error pq: unknown option "downsamplr"; accepted options: downsampler, interval, derivative, source_aggregator, sources
+SELECT * FROM crdb_internal.tsdb_query(
+  'cr.node.does_not_exist',
+  '2026-05-01 00:00:00+00'::timestamptz,
+  '2026-05-01 00:00:01+00'::timestamptz,
+  '{"downsamplr":"SUM"}'::jsonb
+)
+
+# Invalid downsampler enum.
+query error pq: invalid downsampler "sun"; must be one of AVG, SUM, MAX, MIN
+SELECT * FROM crdb_internal.tsdb_query(
+  'cr.node.does_not_exist',
+  '2026-05-01 00:00:00+00'::timestamptz,
+  '2026-05-01 00:00:01+00'::timestamptz,
+  '{"downsampler":"sun","interval":"1m"}'::jsonb
+)
+
+# downsampler without interval is rejected.
+query error pq: "downsampler" requires "interval" to be set
+SELECT * FROM crdb_internal.tsdb_query(
+  'cr.node.does_not_exist',
+  '2026-05-01 00:00:00+00'::timestamptz,
+  '2026-05-01 00:00:01+00'::timestamptz,
+  '{"downsampler":"SUM"}'::jsonb
+)
+
+# interval not a multiple of 10s is rejected.
+query error pq: interval must be a positive multiple of 10s; got 15s
+SELECT * FROM crdb_internal.tsdb_query(
+  'cr.node.does_not_exist',
+  '2026-05-01 00:00:00+00'::timestamptz,
+  '2026-05-01 00:00:01+00'::timestamptz,
+  '{"interval":"15s"}'::jsonb
+)
+
+# interval with month components is rejected.
+query error pq: interval must not contain month or year components
+SELECT * FROM crdb_internal.tsdb_query(
+  'cr.node.does_not_exist',
+  '2026-05-01 00:00:00+00'::timestamptz,
+  '2026-05-01 00:00:01+00'::timestamptz,
+  '{"interval":"1 month"}'::jsonb
+)
+
+# source_aggregator FIRST is rejected. The eval.Aggregator enum mirrors
+# tspb and includes FIRST/LAST/VARIANCE, but the TSDB server does not
+# implement them, so the parser refuses them at the SQL boundary
+# rather than letting an opaque server-internal error reach the user.
+query error pq: invalid source_aggregator "FIRST"; must be one of AVG, SUM, MAX, MIN
+SELECT * FROM crdb_internal.tsdb_query(
+  'cr.node.does_not_exist',
+  '2026-05-01 00:00:00+00'::timestamptz,
+  '2026-05-01 00:00:01+00'::timestamptz,
+  '{"source_aggregator":"FIRST"}'::jsonb
+)
+
+# downsampler VARIANCE is rejected at the parser boundary for the same
+# reason — the TSDB server's verifyDownsampler in pkg/ts/query.go does
+# not yet support VARIANCE.
+query error pq: invalid downsampler "VARIANCE"; must be one of AVG, SUM, MAX, MIN
+SELECT * FROM crdb_internal.tsdb_query(
+  'cr.node.does_not_exist',
+  '2026-05-01 00:00:00+00'::timestamptz,
+  '2026-05-01 00:00:01+00'::timestamptz,
+  '{"downsampler":"VARIANCE","interval":"1m"}'::jsonb
+)
+
+# sources must be an array of strings.
+query error pq: option "sources" must be an array of strings, got string
+SELECT * FROM crdb_internal.tsdb_query(
+  'cr.node.does_not_exist',
+  '2026-05-01 00:00:00+00'::timestamptz,
+  '2026-05-01 00:00:01+00'::timestamptz,
+  '{"sources":"1"}'::jsonb
+)
+
+# Case-insensitive enum parsing.
+query TFT colnames
+SELECT * FROM crdb_internal.tsdb_query(
+  'cr.node.does_not_exist',
+  '2026-05-01 00:00:00+00'::timestamptz,
+  '2026-05-01 00:01:00+00'::timestamptz,
+  '{"downsampler":"sum","interval":"1m","derivative":"non_negative_derivative"}'::jsonb
+) LIMIT 0
+----
+timestamp  value  source
+
+# PREPARE/EXECUTE with placeholders including JSONB.
+statement ok
+PREPARE q AS
+  SELECT * FROM crdb_internal.tsdb_query($1, $2, $3, $4) LIMIT 0
+
+query TFT colnames
+EXECUTE q('cr.node.does_not_exist',
+          '2026-05-01 00:00:00+00'::timestamptz,
+          '2026-05-01 00:00:01+00'::timestamptz,
+          '{"interval":"10s"}'::jsonb)
+----
+timestamp  value  source

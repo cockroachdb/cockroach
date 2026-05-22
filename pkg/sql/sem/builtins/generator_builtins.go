@@ -1002,6 +1002,29 @@ The last argument is a JSONB object containing the following optional fields:
 				"VIEWCLUSTERMETADATA.",
 			volatility.Volatile,
 		),
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "name", Typ: types.String},
+				{Name: "start_time", Typ: types.TimestampTZ},
+				{Name: "end_time", Typ: types.TimestampTZ},
+				{Name: "options", Typ: types.Jsonb},
+			},
+			tsdbQueryGeneratorType,
+			makeTSDBQueryGeneratorWithOptions,
+			"Returns datapoints from the in-cluster TSDB for the metric "+
+				"`name` over the window from `start_time` to `end_time`, "+
+				"with optional `options` controlling downsampling, derivative, "+
+				"source filtering, and cross-source aggregation. Accepted "+
+				"option keys: downsampler (AVG|SUM|MAX|MIN), "+
+				"interval (positive multiple of 10s), derivative "+
+				"(NONE|DERIVATIVE|NON_NEGATIVE_DERIVATIVE), "+
+				"source_aggregator (AVG|SUM|MAX|MIN), "+
+				"sources (array of strings). When sources is listed without "+
+				"source_aggregator, returns per-source rows; otherwise returns "+
+				"one row per bucket with source column NULL. Requires "+
+				"VIEWCLUSTERMETADATA.",
+			volatility.Volatile,
+		),
 	),
 }
 
@@ -2842,9 +2865,13 @@ type tsdbQueryGenerator struct {
 // strings (typically a node ID as decimal) are not charged separately.
 const tsdbQueryRowSize = int64(unsafe.Sizeof(eval.TimeSeriesRow{}))
 
-func makeTSDBQueryGenerator(
-	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
-) (eval.ValueGenerator, error) {
+// newTSDBQueryGenerator builds the per-call generator state shared by
+// both overloads of crdb_internal.tsdb_query. The caller may further
+// mutate the returned generator's eval.TimeSeriesQuery (e.g. to merge
+// JSONB options) before returning it.
+func newTSDBQueryGenerator(
+	ctx context.Context, evalCtx *eval.Context, nameArg, startArg, endArg tree.Datum,
+) (*tsdbQueryGenerator, error) {
 	// Privilege check before the version gate, so an unprivileged user
 	// can't infer cluster upgrade state from which error they receive.
 	if err := evalCtx.SessionAccessor.CheckPrivilege(
@@ -2871,9 +2898,9 @@ func makeTSDBQueryGenerator(
 		return nil, pgerror.New(pgcode.FeatureNotSupported,
 			"crdb_internal.tsdb_query is not available in this server configuration")
 	}
-	name := string(tree.MustBeDString(args[0]))
-	startTS := tree.MustBeDTimestampTZ(args[1])
-	endTS := tree.MustBeDTimestampTZ(args[2])
+	name := string(tree.MustBeDString(nameArg))
+	startTS := tree.MustBeDTimestampTZ(startArg)
+	endTS := tree.MustBeDTimestampTZ(endArg)
 	if !endTS.Time.After(startTS.Time) {
 		return nil, pgerror.Newf(pgcode.InvalidParameterValue,
 			"crdb_internal.tsdb_query end_time (%s) must be greater than start_time (%s)",
@@ -2888,6 +2915,27 @@ func makeTSDBQueryGenerator(
 		querier: querier,
 		acc:     evalCtx.Planner.ExecMon().MakeBoundAccount(),
 	}, nil
+}
+
+func makeTSDBQueryGenerator(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
+	return newTSDBQueryGenerator(ctx, evalCtx, args[0], args[1], args[2])
+}
+
+func makeTSDBQueryGeneratorWithOptions(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
+	gen, err := newTSDBQueryGenerator(ctx, evalCtx, args[0], args[1], args[2])
+	if err != nil {
+		return nil, err
+	}
+	// Generators run with calledOnNullInput=false, so any NULL arg
+	// short-circuits before we reach here.
+	if err := eval.ParseTSDBQueryOptions(tree.MustBeDJSON(args[3]).JSON, &gen.query); err != nil {
+		return nil, err
+	}
+	return gen, nil
 }
 
 // ResolvedType implements the eval.ValueGenerator interface.
@@ -2922,7 +2970,13 @@ func (g *tsdbQueryGenerator) Values() (tree.Datums, error) {
 	}
 	g.buf[0] = ts
 	g.buf[1] = tree.NewDFloat(tree.DFloat(row.Value))
-	g.buf[2] = tree.NewDString(row.Source)
+	// Empty Source means the row was produced by an aggregating
+	// dispatch path; render NULL so the column is unambiguous.
+	if row.Source == "" {
+		g.buf[2] = tree.DNull
+	} else {
+		g.buf[2] = tree.NewDString(row.Source)
+	}
 	return g.buf[:], nil
 }
 
