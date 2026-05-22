@@ -345,6 +345,11 @@ type Planner interface {
 	// DecodeGist exposes gist functionality to the builtin functions.
 	DecodeGist(ctx context.Context, gist string, external bool) ([]string, error)
 
+	// TimeSeriesQuerier returns the TSDB bridge wired into ExecutorConfig
+	// at server startup, or nil in test configurations that do not bring
+	// up a TSDB server.
+	TimeSeriesQuerier() TimeSeriesQuerier
+
 	// SerializeSessionState serializes the variables in the current session
 	// and returns a state, in bytes form.
 	SerializeSessionState() (*tree.DBytes, error)

@@ -28,6 +28,7 @@ go_library(
         "parse_doid.go",
         "settings.go",
         "testing_knobs.go",
+        "tsdb.go",
         "tuple.go",
         "unary_op.go",
         "unsupported_types.go",
