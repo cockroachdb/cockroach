@@ -58,6 +58,14 @@ type Context struct {
 	// interactive mode. Equivalent to (but more explicit than)
 	// leaving the internal histFile unset.
 	DisableHistory bool
+
+	// InterruptCh, if non-nil, replaces the SIGINT-based interrupt
+	// handler. The embedder writes to this channel to request
+	// cancellation of a running query. When no query is running, writes
+	// are silently ignored — the embedder is responsible for shell
+	// lifetime (e.g. closing the input). Mutually exclusive with the
+	// default signal handler: when set, signal.Notify is not called.
+	InterruptCh <-chan struct{}
 }
 
 // internalContext represents the internal configuration state of the

@@ -7,8 +7,10 @@ package clisqlshell
 
 import (
 	"bufio"
+	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clicfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
@@ -209,4 +211,60 @@ func TestDisableHistory(t *testing.T) {
 
 	assert.Empty(t, c.iCtx.histFile,
 		"DisableHistory=true should leave histFile unset")
+}
+
+func TestHandleEmbedderInterrupt(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	c := setupTestCliState()
+	c.cliCtx.IsInteractive = true
+	c.iCtx.stderr = os.Stderr // handleEmbedderInterrupt writes status here
+
+	interruptCh := make(chan struct{}, 1)
+	c.sqlCtx.InterruptCh = interruptCh
+
+	// Simulate a query in flight: cancelFn signals it was called;
+	// doneCh releases the wait loop afterwards.
+	cancelCalled := make(chan struct{}, 1)
+	doneCh := make(chan struct{})
+	c.iCtx.mu.cancelFn = func(context.Context) error {
+		cancelCalled <- struct{}{}
+		return nil
+	}
+	c.iCtx.mu.doneCh = doneCh
+
+	finalFn := c.maybeHandleInterrupt()
+	defer finalFn()
+
+	interruptCh <- struct{}{}
+	select {
+	case <-cancelCalled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("cancelFn was not invoked after InterruptCh write")
+	}
+	// Release the inner wait loop so the goroutine returns to its outer
+	// select; finalFn() in the defer then exits the goroutine cleanly.
+	close(doneCh)
+}
+
+func TestHandleEmbedderInterruptIgnoresIdle(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	c := setupTestCliState()
+	c.cliCtx.IsInteractive = true
+	c.iCtx.stderr = os.Stderr
+	interruptCh := make(chan struct{}, 1)
+	c.sqlCtx.InterruptCh = interruptCh
+	// No cancelFn set: simulates "no query running".
+
+	finalFn := c.maybeHandleInterrupt()
+	defer finalFn()
+
+	// A write must be silently dropped and not block subsequent writes.
+	interruptCh <- struct{}{}
+	time.Sleep(50 * time.Millisecond)
+	interruptCh <- struct{}{}
+	time.Sleep(50 * time.Millisecond)
 }

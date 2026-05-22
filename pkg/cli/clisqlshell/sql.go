@@ -2619,6 +2619,9 @@ func (c *cliState) maybeHandleInterrupt() func() {
 	if !c.cliCtx.IsInteractive {
 		return func() {}
 	}
+	if c.sqlCtx.InterruptCh != nil {
+		return c.handleEmbedderInterrupt()
+	}
 	intCh := make(chan os.Signal, 1)
 	signal.Notify(intCh, os.Interrupt)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -2672,6 +2675,62 @@ func (c *cliState) maybeHandleInterrupt() func() {
 
 			case <-ctx.Done():
 				// Shell is terminating.
+				return
+			}
+		}
+	}()
+	return cancel
+}
+
+// handleEmbedderInterrupt is the channel-driven analogue of
+// maybeHandleInterrupt for embedders that supply Context.InterruptCh.
+// It performs no signal-handler manipulation, since the embedder
+// translates network-level cancel events (e.g. an SSH signal request
+// or a 0x03 byte in the input stream) into channel writes itself.
+//
+// A write to the channel cancels any in-flight query. Writes that
+// arrive while no query is running are ignored — the embedder owns
+// the shell's lifetime and terminates it via input closure rather
+// than via a synthesized signal.
+func (c *cliState) handleEmbedderInterrupt() func() {
+	embedderCh := c.sqlCtx.InterruptCh
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go func() {
+		for {
+			select {
+			case <-embedderCh:
+				c.iCtx.mu.Lock()
+				cancelFn, doneCh := c.iCtx.mu.cancelFn, c.iCtx.mu.doneCh
+				c.iCtx.mu.Unlock()
+				if cancelFn == nil {
+					// No query currently executing; the interactive
+					// editor handles in-line cancellation itself.
+					continue
+				}
+
+				fmt.Fprintf(c.iCtx.stderr, "\nattempting to cancel query...\n")
+				if err := cancelFn(ctx); err != nil {
+					fmt.Fprintf(c.iCtx.stderr, "\nerror while cancelling query: %v\n", err)
+				}
+
+				// Wait for the shell to process the cancellation, with
+				// the same 3-second timeout the signal path uses. We
+				// don't re-throw — the embedder, not the signal handler,
+				// owns escalation if the server is unresponsive.
+				tooLongTimer := time.After(3 * time.Second)
+			wait:
+				for {
+					select {
+					case <-doneCh:
+						break wait
+					case <-tooLongTimer:
+						fmt.Fprintln(c.iCtx.stderr, "server does not respond to query cancellation.")
+						break wait
+					}
+				}
+
+			case <-ctx.Done():
 				return
 			}
 		}
