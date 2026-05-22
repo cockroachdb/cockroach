@@ -300,10 +300,15 @@ var showResourceGroupColumns = colinfo.ResultColumns{
 	{Name: "name", Typ: types.String},
 	{Name: "cpu_weight", Typ: types.Int},
 	{Name: "max_cpu", Typ: types.Bool},
+	{Name: "cpu_share_percent", Typ: types.Float},
 }
 
 // showResourceGroupsImpl backs both SHOW RESOURCE GROUP <name> and
 // SHOW RESOURCE GROUPS. An empty name lists all groups.
+//
+// The cpu_share_percent column is derived: every row is loaded so
+// admissionpb.Normalize can compute each group's share from the full
+// set of weights, even when only one row is being returned.
 func (p *planner) showResourceGroupsImpl(name string) (planNode, error) {
 	planName := "SHOW RESOURCE GROUPS"
 	if name != "" {
@@ -320,48 +325,60 @@ func (p *planner) showResourceGroupsImpl(name string) (planNode, error) {
 				return nil, err
 			}
 
-			query := `SELECT id, name, config FROM system.resource_groups`
-			var args []any
-			if name != "" {
-				query += ` WHERE name = $1`
-				args = append(args, name)
-			}
-			query += ` ORDER BY id`
-
+			// Load every row, even when a single name was requested:
+			// share is a function of the entire set of weights.
 			it, err := p.InternalSQLTxn().QueryIteratorEx(
 				ctx, resourceGroupOp, p.Txn(),
 				sessiondata.NodeUserSessionDataOverride,
-				query, args...,
+				`SELECT id, name, config FROM system.resource_groups ORDER BY id`,
 			)
 			if err != nil {
 				return nil, errors.Wrap(err, "loading resource groups")
 			}
 			defer func() { _ = it.Close() }()
 
-			v := p.newContainerValuesNode(showResourceGroupColumns, 0)
-			seen := false
+			type rgRow struct {
+				id   tree.Datum
+				name tree.Datum
+				cfg  admissionpb.ResourceGroupConfig
+			}
+			var rows []rgRow
 			for {
 				ok, err := it.Next(ctx)
 				if err != nil {
-					v.Close(ctx)
 					return nil, err
 				}
 				if !ok {
 					break
 				}
-				seen = true
-				row := it.Cur()
+				cur := it.Cur()
 				var cfg admissionpb.ResourceGroupConfig
-				if err := protoutil.Unmarshal([]byte(tree.MustBeDBytes(row[2])), &cfg); err != nil {
-					v.Close(ctx)
+				if err := protoutil.Unmarshal([]byte(tree.MustBeDBytes(cur[2])), &cfg); err != nil {
 					return nil, errors.NewAssertionErrorWithWrappedErrf(err,
-						"decoding resource group config for row %v", row[0])
+						"decoding resource group config for row %v", cur[0])
 				}
+				rows = append(rows, rgRow{id: cur[0], name: cur[1], cfg: cfg})
+			}
+
+			cfgs := make([]admissionpb.ResourceGroupConfig, len(rows))
+			for i, r := range rows {
+				cfgs[i] = r.cfg
+			}
+			admissionpb.Normalize(cfgs)
+
+			v := p.newContainerValuesNode(showResourceGroupColumns, 0)
+			matched := false
+			for i, r := range rows {
+				if name != "" && string(tree.MustBeDString(r.name)) != name {
+					continue
+				}
+				matched = true
 				out := tree.Datums{
-					row[0],
-					row[1],
-					tree.NewDInt(tree.DInt(cfg.CPUWeight)),
-					tree.MakeDBool(tree.DBool(cfg.MaxCPU)),
+					r.id,
+					r.name,
+					tree.NewDInt(tree.DInt(cfgs[i].CPUWeight)),
+					tree.MakeDBool(tree.DBool(cfgs[i].MaxCPU)),
+					tree.NewDFloat(tree.DFloat(cfgs[i].BurstFrac * 100)),
 				}
 				if _, err := v.rows.AddRow(ctx, out); err != nil {
 					v.Close(ctx)
@@ -371,7 +388,7 @@ func (p *planner) showResourceGroupsImpl(name string) (planNode, error) {
 			// SHOW RESOURCE GROUP <name> errors if the named group does not
 			// exist, matching SHOW HISTOGRAM / SHOW CREATE TABLE. SHOW
 			// RESOURCE GROUPS (no name) is allowed to return zero rows.
-			if name != "" && !seen {
+			if name != "" && !matched {
 				v.Close(ctx)
 				return nil, pgerror.Newf(pgcode.UndefinedObject,
 					"resource group %q does not exist", name)

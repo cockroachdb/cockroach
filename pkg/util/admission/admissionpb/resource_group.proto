@@ -22,4 +22,12 @@ message ResourceGroupConfig {
   // MaxCPU allows the group to burst to the cluster's maximum
   // available CPU when no other group is contending.
   bool max_cpu = 2 [(gogoproto.customname) = "MaxCPU"];
+
+  // BurstFrac is the share of CPU the group is entitled to, derived
+  // from CPUWeight by Normalize(). It is never written to
+  // system.resource_groups: writers leave it zero, and readers (e.g.
+  // SHOW RESOURCE GROUP) populate it by calling Normalize over the
+  // full set of rows. The field is on the proto so the same struct can
+  // carry the derived share across package boundaries.
+  double burst_frac = 3 [(gogoproto.customname) = "BurstFrac"];
 }
