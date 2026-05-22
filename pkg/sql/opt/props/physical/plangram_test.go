@@ -1195,3 +1195,253 @@ func TestPlanGramParse(t *testing.T) {
 		})
 	}
 }
+
+func TestPlanGramFixNames(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	t.Run("any returns nil", func(t *testing.T) {
+		require.Nil(t, AnyPlanGram.fixNames())
+	})
+
+	t.Run("none returns nil", func(t *testing.T) {
+		require.Nil(t, NonePlanGram.fixNames())
+	})
+
+	t.Run("no duplicates returns nil", func(t *testing.T) {
+		scan := &planGramProduction{
+			name:  "scan",
+			rules: []planGramTerm{&planGramExpr{op: opt.ScanOp}},
+		}
+		pg := PlanGram{root: &planGramExpr{
+			op:       opt.SelectOp,
+			children: []planGramTerm{scan},
+		}}
+		require.Nil(t, pg.fixNames())
+	})
+
+	t.Run("duplicates get renamed", func(t *testing.T) {
+		s1 := &planGramProduction{
+			name:  "s",
+			rules: []planGramTerm{&planGramExpr{op: opt.ScanOp}},
+		}
+		s2 := &planGramProduction{
+			name:  "s",
+			rules: []planGramTerm{&planGramExpr{op: opt.SelectOp}},
+		}
+		pg := PlanGram{root: &planGramExpr{
+			op:       opt.InnerJoinOp,
+			children: []planGramTerm{s1, s2},
+		}}
+		renames := pg.fixNames()
+		require.NotNil(t, renames)
+		require.Len(t, renames, 1)
+
+		// Exactly one of s1/s2 should be renamed. Collect all final names.
+		names := make(map[string]struct{})
+		for _, pp := range []*planGramProduction{s1, s2} {
+			if newName, ok := renames[pp]; ok {
+				names[newName] = struct{}{}
+			} else {
+				names[pp.name] = struct{}{}
+			}
+		}
+		require.Len(t, names, 2, "all names should be unique")
+	})
+
+	t.Run("empty name", func(t *testing.T) {
+		pp := &planGramProduction{
+			name:  "",
+			rules: []planGramTerm{&planGramExpr{op: opt.ScanOp}},
+		}
+		pg := PlanGram{root: &planGramExpr{
+			op:       opt.SelectOp,
+			children: []planGramTerm{pp},
+		}}
+		renames := pg.fixNames()
+		require.Equal(t, "_1", renames[pp])
+	})
+
+	t.Run("whitespace in name", func(t *testing.T) {
+		pp := &planGramProduction{
+			name:  "a b",
+			rules: []planGramTerm{&planGramExpr{op: opt.ScanOp}},
+		}
+		pg := PlanGram{root: &planGramExpr{
+			op:       opt.SelectOp,
+			children: []planGramTerm{pp},
+		}}
+		renames := pg.fixNames()
+		require.Equal(t, "a_b", renames[pp])
+	})
+
+	t.Run("illegal punctuation", func(t *testing.T) {
+		pp := &planGramProduction{
+			name:  "a(b)",
+			rules: []planGramTerm{&planGramExpr{op: opt.ScanOp}},
+		}
+		pg := PlanGram{root: &planGramExpr{
+			op:       opt.SelectOp,
+			children: []planGramTerm{pp},
+		}}
+		renames := pg.fixNames()
+		require.Equal(t, "a_b_", renames[pp])
+	})
+
+	t.Run("starts with digit", func(t *testing.T) {
+		pp := &planGramProduction{
+			name:  "1scan",
+			rules: []planGramTerm{&planGramExpr{op: opt.ScanOp}},
+		}
+		pg := PlanGram{root: &planGramExpr{
+			op:       opt.SelectOp,
+			children: []planGramTerm{pp},
+		}}
+		renames := pg.fixNames()
+		require.Equal(t, "_1scan", renames[pp])
+	})
+
+	t.Run("reserved name any", func(t *testing.T) {
+		pp := &planGramProduction{
+			name:  "any",
+			rules: []planGramTerm{&planGramExpr{op: opt.ScanOp}},
+		}
+		pg := PlanGram{root: &planGramExpr{
+			op:       opt.SelectOp,
+			children: []planGramTerm{pp},
+		}}
+		renames := pg.fixNames()
+		require.Equal(t, "any_1", renames[pp])
+	})
+
+	t.Run("reserved name none", func(t *testing.T) {
+		pp := &planGramProduction{
+			name:  "none",
+			rules: []planGramTerm{&planGramExpr{op: opt.ScanOp}},
+		}
+		pg := PlanGram{root: &planGramExpr{
+			op:       opt.SelectOp,
+			children: []planGramTerm{pp},
+		}}
+		renames := pg.fixNames()
+		require.Equal(t, "none_1", renames[pp])
+	})
+
+	t.Run("nested reserved name any", func(t *testing.T) {
+		inner := &planGramProduction{
+			name:  "any",
+			rules: []planGramTerm{&planGramExpr{op: opt.ScanOp}},
+		}
+		outer := &planGramProduction{
+			name: "outer",
+			rules: []planGramTerm{
+				&planGramExpr{
+					op:       opt.SelectOp,
+					children: []planGramTerm{inner},
+				},
+			},
+		}
+		pg := PlanGram{root: &planGramExpr{
+			op:       opt.SelectOp,
+			children: []planGramTerm{outer},
+		}}
+		renames := pg.fixNames()
+		require.Equal(t, "any_1", renames[inner])
+		require.NotContains(t, renames, outer)
+	})
+
+	t.Run("nested reserved name none", func(t *testing.T) {
+		inner := &planGramProduction{
+			name:  "none",
+			rules: []planGramTerm{&planGramExpr{op: opt.ScanOp}},
+		}
+		outer := &planGramProduction{
+			name:  "outer",
+			rules: []planGramTerm{inner},
+		}
+		pg := PlanGram{root: &planGramExpr{
+			op:       opt.SelectOp,
+			children: []planGramTerm{outer},
+		}}
+		renames := pg.fixNames()
+		require.Equal(t, "none_1", renames[inner])
+		require.NotContains(t, renames, outer)
+	})
+
+	t.Run("any term in production not renamed", func(t *testing.T) {
+		pp := &planGramProduction{
+			name:  "p",
+			rules: []planGramTerm{nil, &planGramExpr{op: opt.ScanOp}},
+		}
+		pg := PlanGram{root: &planGramExpr{
+			op:       opt.SelectOp,
+			children: []planGramTerm{pp},
+		}}
+		require.Nil(t, pg.fixNames())
+	})
+
+	t.Run("none term in production not renamed", func(t *testing.T) {
+		pp := &planGramProduction{
+			name:  "p",
+			rules: []planGramTerm{nonePlanGramTerm, &planGramExpr{op: opt.ScanOp}},
+		}
+		pg := PlanGram{root: &planGramExpr{
+			op:       opt.SelectOp,
+			children: []planGramTerm{pp},
+		}}
+		require.Nil(t, pg.fixNames())
+	})
+
+	t.Run("sanitize then deduplicate", func(t *testing.T) {
+		p1 := &planGramProduction{
+			name:  "a b",
+			rules: []planGramTerm{&planGramExpr{op: opt.ScanOp}},
+		}
+		p2 := &planGramProduction{
+			name:  "a b",
+			rules: []planGramTerm{&planGramExpr{op: opt.SelectOp}},
+		}
+		pg := PlanGram{root: &planGramExpr{
+			op:       opt.InnerJoinOp,
+			children: []planGramTerm{p1, p2},
+		}}
+		renames := pg.fixNames()
+		require.NotNil(t, renames)
+
+		names := make(map[string]struct{})
+		for _, pp := range []*planGramProduction{p1, p2} {
+			names[renames[pp]] = struct{}{}
+		}
+		require.Len(t, names, 2, "all names should be unique")
+		_, hasBase := names["a_b"]
+		_, hasSuffix := names["a_b_1"]
+		require.True(t, hasBase && hasSuffix)
+	})
+
+	t.Run("three-way duplicates", func(t *testing.T) {
+		prods := make([]*planGramProduction, 3)
+		for i := range prods {
+			prods[i] = &planGramProduction{
+				name:  "p",
+				rules: []planGramTerm{&planGramExpr{op: opt.ScanOp}},
+			}
+		}
+		pg := PlanGram{root: &planGramExpr{
+			op:       opt.InnerJoinOp,
+			children: []planGramTerm{prods[0], prods[1], prods[2]},
+		}}
+		renames := pg.fixNames()
+		require.NotNil(t, renames)
+		require.Len(t, renames, 2)
+
+		names := make(map[string]struct{})
+		for _, pp := range prods {
+			if newName, ok := renames[pp]; ok {
+				names[newName] = struct{}{}
+			} else {
+				names[pp.name] = struct{}{}
+			}
+		}
+		require.Len(t, names, 3, "all names should be unique")
+	})
+}

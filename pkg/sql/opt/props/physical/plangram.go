@@ -830,3 +830,52 @@ func (pe *planGramExpr) visitAlternateExprs(
 	// alternates for the current level.
 	return true
 }
+
+// fixNames detects production names that are invalid or duplicate and returns a
+// rename map that resolves all issues. Returns nil when no fixes are needed.
+func (p PlanGram) fixNames() map[*planGramProduction]string {
+	if p.root == nil || p.root == nonePlanGramTerm {
+		return nil
+	}
+	seen := map[string]struct{}{
+		"":     {},
+		"any":  {},
+		"none": {},
+		"root": {},
+	}
+	var renames map[*planGramProduction]string
+	visited := make(map[*planGramProduction]struct{})
+	p.root.visitProductions(visited, func(pp *planGramProduction) {
+		name := strings.Map(func(r rune) rune {
+			if unicode.IsSpace(r) || strings.ContainsRune(`"'\,():;=|`, r) {
+				return '_'
+			}
+			return r
+		}, pp.name)
+		if len(name) > 0 && name[0] >= '0' && name[0] <= '9' {
+			name = "_" + name
+		}
+		if name != pp.name {
+			if renames == nil {
+				renames = make(map[*planGramProduction]string)
+			}
+			renames[pp] = name
+		}
+		if _, ok := seen[name]; !ok {
+			seen[name] = struct{}{}
+			return
+		}
+		for i := 1; ; i++ {
+			candidate := name + "_" + strconv.Itoa(i)
+			if _, ok := seen[candidate]; !ok {
+				seen[candidate] = struct{}{}
+				if renames == nil {
+					renames = make(map[*planGramProduction]string)
+				}
+				renames[pp] = candidate
+				return
+			}
+		}
+	})
+	return renames
+}
