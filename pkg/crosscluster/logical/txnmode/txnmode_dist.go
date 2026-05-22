@@ -392,6 +392,11 @@ func newCheckpointHandler(
 func (ch *checkpointHandler) handleMeta(
 	ctx context.Context, meta *execinfrapb.ProducerMetadata,
 ) error {
+	if meta.Err != nil {
+		ch.cancelFlow()
+		return nil
+	}
+
 	if meta.BulkProcessorProgress == nil ||
 		len(meta.BulkProcessorProgress.ProgressMessage) == 0 {
 		return nil
