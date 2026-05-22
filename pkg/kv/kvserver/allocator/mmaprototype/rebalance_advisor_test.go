@@ -17,17 +17,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestBuildMMARebalanceAdvisorUnknownStores documents the crash described in
-// #170703: BuildMMARebalanceAdvisor panics with a nil pointer dereference if
-// any storeID it is given (either `existing` or anything in `cands`) is not
-// yet known to MMA's clusterState. This can happen during startup, when the
-// caller (the legacy allocator) builds candidate lists from StorePool's
-// gossip-driven view before MMA has been notified of the corresponding stores
-// via SetStore.
+// TestBuildMMARebalanceAdvisorUnknownStores covers the crash described in
+// #170703: before the fix in this commit, BuildMMARebalanceAdvisor would
+// nil-pointer-deref if any storeID it was given (either `existing` or
+// anything in `cands`) was not yet known to MMA's clusterState. This
+// happens during startup, when the caller (the legacy allocator) builds
+// candidate lists from StorePool's gossip-driven view before MMA has been
+// notified of the corresponding stores via SetStore.
 //
-// The assertions below pin the *current, broken* behavior so that the fix in
-// the following commit can be reviewed as a clean diff: the require.Panics
-// calls flip to require.NotPanics + a behavior check.
+// After the fix, unknown cands are silently dropped, and an unknown
+// existing falls back to a no-op advisor (which always reports no
+// conflict).
 func TestBuildMMARebalanceAdvisorUnknownStores(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -50,15 +50,21 @@ func TestBuildMMARebalanceAdvisorUnknownStores(t *testing.T) {
 
 	t.Run("unknown cand", func(t *testing.T) {
 		a := makeAllocator()
-		require.Panics(t, func() {
-			_ = a.BuildMMARebalanceAdvisor(ctx, knownStore, []roachpb.StoreID{unknownStore})
-		})
+		// Unknown cand is silently dropped; the advisor is built over just
+		// the known existing store.
+		advisor := a.BuildMMARebalanceAdvisor(ctx, knownStore, []roachpb.StoreID{unknownStore})
+		require.NotNil(t, advisor)
+		require.False(t, advisor.disabled)
+		require.Equal(t, knownStore, advisor.existingStoreID)
 	})
 
 	t.Run("unknown existing", func(t *testing.T) {
 		a := makeAllocator()
-		require.Panics(t, func() {
-			_ = a.BuildMMARebalanceAdvisor(ctx, unknownStore, nil)
-		})
+		// MMA cannot judge candidates against a source it does not know;
+		// the no-op advisor short-circuits IsInConflictWithMMA to false.
+		advisor := a.BuildMMARebalanceAdvisor(ctx, unknownStore, nil)
+		require.NotNil(t, advisor)
+		require.True(t, advisor.disabled)
+		require.False(t, a.IsInConflictWithMMA(ctx, knownStore, advisor, false /* cpuOnly */))
 	})
 }

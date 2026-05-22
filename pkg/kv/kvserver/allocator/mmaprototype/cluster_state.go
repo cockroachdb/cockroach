@@ -2409,6 +2409,15 @@ func (cs *clusterState) getStoreReportedLoad(storeID roachpb.StoreID) (roachpb.N
 	return 0, nil
 }
 
+// hasStore reports whether storeID is known to mma's clusterState.
+// Used by BuildMMARebalanceAdvisor to filter candidate slices that come
+// from the legacy allocator's StorePool view, which can include stores
+// that gossip has not yet announced to MMA.
+func (cs *clusterState) hasStore(storeID roachpb.StoreID) bool {
+	_, ok := cs.stores[storeID]
+	return ok
+}
+
 func (cs *clusterState) getNodeReportedLoad(nodeID roachpb.NodeID) *NodeLoad {
 	if nodeState, ok := cs.nodes[nodeID]; ok {
 		return &nodeState.NodeLoad
