@@ -3508,6 +3508,103 @@ func (p projPlusInt16Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetada
 	return batch, nil
 }
 
+type projPlusInt16Float64Op struct {
+	projOpBase
+}
+
+func (p projPlusInt16Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Int16()
+		col2 := vec2.Float64()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) + float64(arg2)
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) + float64(arg2)
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) + float64(arg2)
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) + float64(arg2)
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
 type projPlusInt16DecimalOp struct {
 	projOpBase
 }
@@ -4077,6 +4174,103 @@ func (p projPlusInt32Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetada
 							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 						}
 						projCol[i] = result
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
+type projPlusInt32Float64Op struct {
+	projOpBase
+}
+
+func (p projPlusInt32Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Int32()
+		col2 := vec2.Float64()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) + float64(arg2)
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) + float64(arg2)
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) + float64(arg2)
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) + float64(arg2)
 					}
 
 				}
@@ -4664,6 +4858,103 @@ func (p projPlusInt64Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetada
 	return batch, nil
 }
 
+type projPlusInt64Float64Op struct {
+	projOpBase
+}
+
+func (p projPlusInt64Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Int64()
+		col2 := vec2.Float64()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) + float64(arg2)
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) + float64(arg2)
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) + float64(arg2)
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) + float64(arg2)
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
 type projPlusInt64DecimalOp struct {
 	projOpBase
 }
@@ -4907,6 +5198,297 @@ func (p projPlusInt64DatumOp) Next() (coldata.Batch, *execinfrapb.ProducerMetada
 						_outNulls.SetNull(i)
 					}
 					projCol.Set(i, _res)
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
+type projPlusFloat64Int16Op struct {
+	projOpBase
+}
+
+func (p projPlusFloat64Int16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Float64()
+		col2 := vec2.Int16()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) + float64(arg2)
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) + float64(arg2)
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) + float64(arg2)
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) + float64(arg2)
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
+type projPlusFloat64Int32Op struct {
+	projOpBase
+}
+
+func (p projPlusFloat64Int32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Float64()
+		col2 := vec2.Int32()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) + float64(arg2)
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) + float64(arg2)
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) + float64(arg2)
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) + float64(arg2)
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
+type projPlusFloat64Int64Op struct {
+	projOpBase
+}
+
+func (p projPlusFloat64Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Float64()
+		col2 := vec2.Int64()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) + float64(arg2)
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) + float64(arg2)
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) + float64(arg2)
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) + float64(arg2)
+					}
 
 				}
 			}
@@ -6712,6 +7294,103 @@ func (p projMinusInt16Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetad
 	return batch, nil
 }
 
+type projMinusInt16Float64Op struct {
+	projOpBase
+}
+
+func (p projMinusInt16Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Int16()
+		col2 := vec2.Float64()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) - float64(arg2)
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) - float64(arg2)
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) - float64(arg2)
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) - float64(arg2)
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
 type projMinusInt16DecimalOp struct {
 	projOpBase
 }
@@ -7281,6 +7960,103 @@ func (p projMinusInt32Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetad
 							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 						}
 						projCol[i] = result
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
+type projMinusInt32Float64Op struct {
+	projOpBase
+}
+
+func (p projMinusInt32Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Int32()
+		col2 := vec2.Float64()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) - float64(arg2)
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) - float64(arg2)
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) - float64(arg2)
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) - float64(arg2)
 					}
 
 				}
@@ -7868,6 +8644,103 @@ func (p projMinusInt64Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetad
 	return batch, nil
 }
 
+type projMinusInt64Float64Op struct {
+	projOpBase
+}
+
+func (p projMinusInt64Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Int64()
+		col2 := vec2.Float64()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) - float64(arg2)
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) - float64(arg2)
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) - float64(arg2)
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) - float64(arg2)
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
 type projMinusInt64DecimalOp struct {
 	projOpBase
 }
@@ -8111,6 +8984,297 @@ func (p projMinusInt64DatumOp) Next() (coldata.Batch, *execinfrapb.ProducerMetad
 						_outNulls.SetNull(i)
 					}
 					projCol.Set(i, _res)
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
+type projMinusFloat64Int16Op struct {
+	projOpBase
+}
+
+func (p projMinusFloat64Int16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Float64()
+		col2 := vec2.Int16()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) - float64(arg2)
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) - float64(arg2)
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) - float64(arg2)
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) - float64(arg2)
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
+type projMinusFloat64Int32Op struct {
+	projOpBase
+}
+
+func (p projMinusFloat64Int32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Float64()
+		col2 := vec2.Int32()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) - float64(arg2)
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) - float64(arg2)
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) - float64(arg2)
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) - float64(arg2)
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
+type projMinusFloat64Int64Op struct {
+	projOpBase
+}
+
+func (p projMinusFloat64Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Float64()
+		col2 := vec2.Int64()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) - float64(arg2)
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) - float64(arg2)
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) - float64(arg2)
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) - float64(arg2)
+					}
 
 				}
 			}
@@ -10749,6 +11913,103 @@ func (p projMultInt16Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetada
 	return batch, nil
 }
 
+type projMultInt16Float64Op struct {
+	projOpBase
+}
+
+func (p projMultInt16Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Int16()
+		col2 := vec2.Float64()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) * float64(arg2)
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) * float64(arg2)
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) * float64(arg2)
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) * float64(arg2)
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
 type projMultInt16DecimalOp struct {
 	projOpBase
 }
@@ -11361,6 +12622,103 @@ func (p projMultInt32Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetada
 							}
 						}
 						projCol[i] = result
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
+type projMultInt32Float64Op struct {
+	projOpBase
+}
+
+func (p projMultInt32Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Int32()
+		col2 := vec2.Float64()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) * float64(arg2)
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) * float64(arg2)
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) * float64(arg2)
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) * float64(arg2)
 					}
 
 				}
@@ -11991,6 +13349,103 @@ func (p projMultInt64Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetada
 	return batch, nil
 }
 
+type projMultInt64Float64Op struct {
+	projOpBase
+}
+
+func (p projMultInt64Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Int64()
+		col2 := vec2.Float64()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) * float64(arg2)
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) * float64(arg2)
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) * float64(arg2)
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) * float64(arg2)
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
 type projMultInt64DecimalOp struct {
 	projOpBase
 }
@@ -12182,6 +13637,297 @@ func (p projMultInt64IntervalOp) Next() (coldata.Batch, *execinfrapb.ProducerMet
 					//gcassert:bce
 					arg2 := col2.Get(i)
 					projCol[i] = arg2.Mul(int64(arg1))
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
+type projMultFloat64Int16Op struct {
+	projOpBase
+}
+
+func (p projMultFloat64Int16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Float64()
+		col2 := vec2.Int16()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) * float64(arg2)
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) * float64(arg2)
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) * float64(arg2)
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) * float64(arg2)
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
+type projMultFloat64Int32Op struct {
+	projOpBase
+}
+
+func (p projMultFloat64Int32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Float64()
+		col2 := vec2.Int32()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) * float64(arg2)
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) * float64(arg2)
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) * float64(arg2)
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) * float64(arg2)
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
+type projMultFloat64Int64Op struct {
+	projOpBase
+}
+
+func (p projMultFloat64Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Float64()
+		col2 := vec2.Int64()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) * float64(arg2)
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							projCol[i] = float64(arg1) * float64(arg2)
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) * float64(arg2)
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						projCol[i] = float64(arg1) * float64(arg2)
+					}
+
 				}
 			}
 		}
@@ -13675,6 +15421,119 @@ func (p projDivInt16Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadat
 	return batch, nil
 }
 
+type projDivInt16Float64Op struct {
+	projOpBase
+}
+
+func (p projDivInt16Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Int16()
+		col2 := vec2.Float64()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0.0 {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = float64(arg1) / float64(arg2)
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0.0 {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = float64(arg1) / float64(arg2)
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0.0 {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = float64(arg1) / float64(arg2)
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0.0 {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = float64(arg1) / float64(arg2)
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
 type projDivInt16DecimalOp struct {
 	projOpBase
 }
@@ -14194,6 +16053,119 @@ func (p projDivInt32Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadat
 						if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
+type projDivInt32Float64Op struct {
+	projOpBase
+}
+
+func (p projDivInt32Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Int32()
+		col2 := vec2.Float64()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0.0 {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = float64(arg1) / float64(arg2)
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0.0 {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = float64(arg1) / float64(arg2)
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0.0 {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = float64(arg1) / float64(arg2)
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0.0 {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = float64(arg1) / float64(arg2)
 					}
 
 				}
@@ -14731,6 +16703,119 @@ func (p projDivInt64Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadat
 	return batch, nil
 }
 
+type projDivInt64Float64Op struct {
+	projOpBase
+}
+
+func (p projDivInt64Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Int64()
+		col2 := vec2.Float64()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0.0 {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = float64(arg1) / float64(arg2)
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0.0 {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = float64(arg1) / float64(arg2)
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0.0 {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = float64(arg1) / float64(arg2)
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0.0 {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = float64(arg1) / float64(arg2)
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
 type projDivInt64DecimalOp struct {
 	projOpBase
 }
@@ -14884,6 +16969,345 @@ func (p projDivInt64DecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetad
 	return batch, nil
 }
 
+type projDivFloat64Int16Op struct {
+	projOpBase
+}
+
+func (p projDivFloat64Int16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Float64()
+		col2 := vec2.Int16()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = float64(arg1) / float64(arg2)
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = float64(arg1) / float64(arg2)
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = float64(arg1) / float64(arg2)
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = float64(arg1) / float64(arg2)
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
+type projDivFloat64Int32Op struct {
+	projOpBase
+}
+
+func (p projDivFloat64Int32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Float64()
+		col2 := vec2.Int32()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = float64(arg1) / float64(arg2)
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = float64(arg1) / float64(arg2)
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = float64(arg1) / float64(arg2)
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = float64(arg1) / float64(arg2)
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
+type projDivFloat64Int64Op struct {
+	projOpBase
+}
+
+func (p projDivFloat64Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Float64()
+		col2 := vec2.Int64()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = float64(arg1) / float64(arg2)
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = float64(arg1) / float64(arg2)
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = float64(arg1) / float64(arg2)
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = float64(arg1) / float64(arg2)
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
 type projDivFloat64Float64Op struct {
 	projOpBase
 }
@@ -14919,7 +17343,7 @@ func (p projDivFloat64Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMet
 
 						{
 
-							if arg2 == 0.0 && !math.IsNaN(arg1) {
+							if arg2 == 0.0 && !math.IsNaN(float64(arg1)) {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -14943,7 +17367,7 @@ func (p projDivFloat64Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMet
 
 						{
 
-							if arg2 == 0.0 && !math.IsNaN(arg1) {
+							if arg2 == 0.0 && !math.IsNaN(float64(arg1)) {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -14963,7 +17387,7 @@ func (p projDivFloat64Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMet
 
 					{
 
-						if arg2 == 0.0 && !math.IsNaN(arg1) {
+						if arg2 == 0.0 && !math.IsNaN(float64(arg1)) {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -14983,7 +17407,7 @@ func (p projDivFloat64Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMet
 
 					{
 
-						if arg2 == 0.0 && !math.IsNaN(arg1) {
+						if arg2 == 0.0 && !math.IsNaN(float64(arg1)) {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -16216,6 +18640,119 @@ func (p projFloorDivInt16Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMe
 	return batch, nil
 }
 
+type projFloorDivInt16Float64Op struct {
+	projOpBase
+}
+
+func (p projFloorDivInt16Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Int16()
+		col2 := vec2.Float64()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0.0 {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = math.Trunc(float64(arg1) / float64(arg2))
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0.0 {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = math.Trunc(float64(arg1) / float64(arg2))
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0.0 {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = math.Trunc(float64(arg1) / float64(arg2))
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0.0 {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = math.Trunc(float64(arg1) / float64(arg2))
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
 type projFloorDivInt16DecimalOp struct {
 	projOpBase
 }
@@ -16675,6 +19212,119 @@ func (p projFloorDivInt32Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMe
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 						projCol[i] = int64(arg1) / int64(arg2)
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
+type projFloorDivInt32Float64Op struct {
+	projOpBase
+}
+
+func (p projFloorDivInt32Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Int32()
+		col2 := vec2.Float64()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0.0 {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = math.Trunc(float64(arg1) / float64(arg2))
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0.0 {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = math.Trunc(float64(arg1) / float64(arg2))
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0.0 {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = math.Trunc(float64(arg1) / float64(arg2))
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0.0 {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = math.Trunc(float64(arg1) / float64(arg2))
 					}
 
 				}
@@ -17152,6 +19802,119 @@ func (p projFloorDivInt64Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMe
 	return batch, nil
 }
 
+type projFloorDivInt64Float64Op struct {
+	projOpBase
+}
+
+func (p projFloorDivInt64Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Int64()
+		col2 := vec2.Float64()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0.0 {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = math.Trunc(float64(arg1) / float64(arg2))
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0.0 {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = math.Trunc(float64(arg1) / float64(arg2))
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0.0 {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = math.Trunc(float64(arg1) / float64(arg2))
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0.0 {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = math.Trunc(float64(arg1) / float64(arg2))
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
 type projFloorDivInt64DecimalOp struct {
 	projOpBase
 }
@@ -17305,6 +20068,345 @@ func (p projFloorDivInt64DecimalOp) Next() (coldata.Batch, *execinfrapb.Producer
 	return batch, nil
 }
 
+type projFloorDivFloat64Int16Op struct {
+	projOpBase
+}
+
+func (p projFloorDivFloat64Int16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Float64()
+		col2 := vec2.Int16()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = math.Trunc(float64(arg1) / float64(arg2))
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = math.Trunc(float64(arg1) / float64(arg2))
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = math.Trunc(float64(arg1) / float64(arg2))
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = math.Trunc(float64(arg1) / float64(arg2))
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
+type projFloorDivFloat64Int32Op struct {
+	projOpBase
+}
+
+func (p projFloorDivFloat64Int32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Float64()
+		col2 := vec2.Int32()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = math.Trunc(float64(arg1) / float64(arg2))
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = math.Trunc(float64(arg1) / float64(arg2))
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = math.Trunc(float64(arg1) / float64(arg2))
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = math.Trunc(float64(arg1) / float64(arg2))
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
+type projFloorDivFloat64Int64Op struct {
+	projOpBase
+}
+
+func (p projFloorDivFloat64Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Float64()
+		col2 := vec2.Int64()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = math.Trunc(float64(arg1) / float64(arg2))
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = math.Trunc(float64(arg1) / float64(arg2))
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = math.Trunc(float64(arg1) / float64(arg2))
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = math.Trunc(float64(arg1) / float64(arg2))
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
 type projFloorDivFloat64Float64Op struct {
 	projOpBase
 }
@@ -17340,7 +20442,7 @@ func (p projFloorDivFloat64Float64Op) Next() (coldata.Batch, *execinfrapb.Produc
 
 						{
 
-							if arg2 == 0.0 && !math.IsNaN(arg1) {
+							if arg2 == 0.0 && !math.IsNaN(float64(arg1)) {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -17364,7 +20466,7 @@ func (p projFloorDivFloat64Float64Op) Next() (coldata.Batch, *execinfrapb.Produc
 
 						{
 
-							if arg2 == 0.0 && !math.IsNaN(arg1) {
+							if arg2 == 0.0 && !math.IsNaN(float64(arg1)) {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -17384,7 +20486,7 @@ func (p projFloorDivFloat64Float64Op) Next() (coldata.Batch, *execinfrapb.Produc
 
 					{
 
-						if arg2 == 0.0 && !math.IsNaN(arg1) {
+						if arg2 == 0.0 && !math.IsNaN(float64(arg1)) {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -17404,7 +20506,7 @@ func (p projFloorDivFloat64Float64Op) Next() (coldata.Batch, *execinfrapb.Produc
 
 					{
 
-						if arg2 == 0.0 && !math.IsNaN(arg1) {
+						if arg2 == 0.0 && !math.IsNaN(float64(arg1)) {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -18249,6 +21351,119 @@ func (p projModInt16Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadat
 	return batch, nil
 }
 
+type projModInt16Float64Op struct {
+	projOpBase
+}
+
+func (p projModInt16Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Int16()
+		col2 := vec2.Float64()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0.0 {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = math.Mod(float64(arg1), float64(arg2))
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0.0 {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = math.Mod(float64(arg1), float64(arg2))
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0.0 {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = math.Mod(float64(arg1), float64(arg2))
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0.0 {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = math.Mod(float64(arg1), float64(arg2))
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
 type projModInt16DecimalOp struct {
 	projOpBase
 }
@@ -18692,6 +21907,119 @@ func (p projModInt32Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadat
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 						projCol[i] = int64(arg1) % int64(arg2)
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
+type projModInt32Float64Op struct {
+	projOpBase
+}
+
+func (p projModInt32Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Int32()
+		col2 := vec2.Float64()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0.0 {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = math.Mod(float64(arg1), float64(arg2))
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0.0 {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = math.Mod(float64(arg1), float64(arg2))
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0.0 {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = math.Mod(float64(arg1), float64(arg2))
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0.0 {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = math.Mod(float64(arg1), float64(arg2))
 					}
 
 				}
@@ -19153,6 +22481,119 @@ func (p projModInt64Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadat
 	return batch, nil
 }
 
+type projModInt64Float64Op struct {
+	projOpBase
+}
+
+func (p projModInt64Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Int64()
+		col2 := vec2.Float64()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0.0 {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = math.Mod(float64(arg1), float64(arg2))
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0.0 {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = math.Mod(float64(arg1), float64(arg2))
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0.0 {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = math.Mod(float64(arg1), float64(arg2))
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0.0 {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = math.Mod(float64(arg1), float64(arg2))
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
 type projModInt64DecimalOp struct {
 	projOpBase
 }
@@ -19290,6 +22731,345 @@ func (p projModInt64DecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetad
 	return batch, nil
 }
 
+type projModFloat64Int16Op struct {
+	projOpBase
+}
+
+func (p projModFloat64Int16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Float64()
+		col2 := vec2.Int16()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = math.Mod(float64(arg1), float64(arg2))
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = math.Mod(float64(arg1), float64(arg2))
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = math.Mod(float64(arg1), float64(arg2))
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = math.Mod(float64(arg1), float64(arg2))
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
+type projModFloat64Int32Op struct {
+	projOpBase
+}
+
+func (p projModFloat64Int32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Float64()
+		col2 := vec2.Int32()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = math.Mod(float64(arg1), float64(arg2))
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = math.Mod(float64(arg1), float64(arg2))
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = math.Mod(float64(arg1), float64(arg2))
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = math.Mod(float64(arg1), float64(arg2))
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
+type projModFloat64Int64Op struct {
+	projOpBase
+}
+
+func (p projModFloat64Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Float64()
+		col2 := vec2.Int64()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = math.Mod(float64(arg1), float64(arg2))
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+
+							projCol[i] = math.Mod(float64(arg1), float64(arg2))
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = math.Mod(float64(arg1), float64(arg2))
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						if arg2 == 0 && !math.IsNaN(float64(arg1)) {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+
+						projCol[i] = math.Mod(float64(arg1), float64(arg2))
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
 type projModFloat64Float64Op struct {
 	projOpBase
 }
@@ -19325,7 +23105,7 @@ func (p projModFloat64Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMet
 
 						{
 
-							if arg2 == 0.0 && !math.IsNaN(arg1) {
+							if arg2 == 0.0 && !math.IsNaN(float64(arg1)) {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -19349,7 +23129,7 @@ func (p projModFloat64Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMet
 
 						{
 
-							if arg2 == 0.0 && !math.IsNaN(arg1) {
+							if arg2 == 0.0 && !math.IsNaN(float64(arg1)) {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -19369,7 +23149,7 @@ func (p projModFloat64Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMet
 
 					{
 
-						if arg2 == 0.0 && !math.IsNaN(arg1) {
+						if arg2 == 0.0 && !math.IsNaN(float64(arg1)) {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -19389,7 +23169,7 @@ func (p projModFloat64Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMet
 
 					{
 
-						if arg2 == 0.0 && !math.IsNaN(arg1) {
+						if arg2 == 0.0 && !math.IsNaN(float64(arg1)) {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -20254,6 +24034,119 @@ func (p projPowInt16Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadat
 	return batch, nil
 }
 
+type projPowInt16Float64Op struct {
+	projOpBase
+}
+
+func (p projPowInt16Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Int16()
+		col2 := vec2.Float64()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							res, err := eval.FloatPow(float64(arg1), float64(arg2))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							projCol[i] = float64(*res)
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							res, err := eval.FloatPow(float64(arg1), float64(arg2))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							projCol[i] = float64(*res)
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						res, err := eval.FloatPow(float64(arg1), float64(arg2))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+						projCol[i] = float64(*res)
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						res, err := eval.FloatPow(float64(arg1), float64(arg2))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+						projCol[i] = float64(*res)
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
 type projPowInt16DecimalOp struct {
 	projOpBase
 }
@@ -20765,6 +24658,119 @@ func (p projPowInt32Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadat
 							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 						}
 						projCol[i] = resultInt
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
+type projPowInt32Float64Op struct {
+	projOpBase
+}
+
+func (p projPowInt32Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Int32()
+		col2 := vec2.Float64()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							res, err := eval.FloatPow(float64(arg1), float64(arg2))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							projCol[i] = float64(*res)
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							res, err := eval.FloatPow(float64(arg1), float64(arg2))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							projCol[i] = float64(*res)
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						res, err := eval.FloatPow(float64(arg1), float64(arg2))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+						projCol[i] = float64(*res)
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						res, err := eval.FloatPow(float64(arg1), float64(arg2))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+						projCol[i] = float64(*res)
 					}
 
 				}
@@ -21294,6 +25300,119 @@ func (p projPowInt64Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadat
 	return batch, nil
 }
 
+type projPowInt64Float64Op struct {
+	projOpBase
+}
+
+func (p projPowInt64Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Int64()
+		col2 := vec2.Float64()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							res, err := eval.FloatPow(float64(arg1), float64(arg2))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							projCol[i] = float64(*res)
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							res, err := eval.FloatPow(float64(arg1), float64(arg2))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							projCol[i] = float64(*res)
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						res, err := eval.FloatPow(float64(arg1), float64(arg2))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+						projCol[i] = float64(*res)
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						res, err := eval.FloatPow(float64(arg1), float64(arg2))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+						projCol[i] = float64(*res)
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
 type projPowInt64DecimalOp struct {
 	projOpBase
 }
@@ -21406,6 +25525,345 @@ func (p projPowInt64DecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetad
 							colexecerror.ExpectedError(err)
 						}
 
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
+type projPowFloat64Int16Op struct {
+	projOpBase
+}
+
+func (p projPowFloat64Int16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Float64()
+		col2 := vec2.Int16()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							res, err := eval.FloatPow(float64(arg1), float64(arg2))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							projCol[i] = float64(*res)
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							res, err := eval.FloatPow(float64(arg1), float64(arg2))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							projCol[i] = float64(*res)
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						res, err := eval.FloatPow(float64(arg1), float64(arg2))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+						projCol[i] = float64(*res)
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						res, err := eval.FloatPow(float64(arg1), float64(arg2))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+						projCol[i] = float64(*res)
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
+type projPowFloat64Int32Op struct {
+	projOpBase
+}
+
+func (p projPowFloat64Int32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Float64()
+		col2 := vec2.Int32()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							res, err := eval.FloatPow(float64(arg1), float64(arg2))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							projCol[i] = float64(*res)
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							res, err := eval.FloatPow(float64(arg1), float64(arg2))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							projCol[i] = float64(*res)
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						res, err := eval.FloatPow(float64(arg1), float64(arg2))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+						projCol[i] = float64(*res)
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						res, err := eval.FloatPow(float64(arg1), float64(arg2))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+						projCol[i] = float64(*res)
+					}
+
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
+type projPowFloat64Int64Op struct {
+	projOpBase
+}
+
+func (p projPowFloat64Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		projCol := projVec.Float64()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Float64()
+		col2 := vec2.Int64()
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						{
+
+							res, err := eval.FloatPow(float64(arg1), float64(arg2))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							projCol[i] = float64(*res)
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						{
+
+							res, err := eval.FloatPow(float64(arg1), float64(arg2))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							projCol[i] = float64(*res)
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+
+						res, err := eval.FloatPow(float64(arg1), float64(arg2))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+						projCol[i] = float64(*res)
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+
+						res, err := eval.FloatPow(float64(arg1), float64(arg2))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+						projCol[i] = float64(*res)
 					}
 
 				}
@@ -52356,6 +56814,13 @@ func GetProjectionOperator(
 							op := &projPlusInt16Int64Op{projOpBase: projOpBase}
 							return op, nil
 						}
+					case types.FloatFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							op := &projPlusInt16Float64Op{projOpBase: projOpBase}
+							return op, nil
+						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
@@ -52385,6 +56850,13 @@ func GetProjectionOperator(
 						case -1:
 						default:
 							op := &projPlusInt32Int64Op{projOpBase: projOpBase}
+							return op, nil
+						}
+					case types.FloatFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							op := &projPlusInt32Float64Op{projOpBase: projOpBase}
 							return op, nil
 						}
 					case types.DecimalFamily:
@@ -52419,6 +56891,13 @@ func GetProjectionOperator(
 							op := &projPlusInt64Int64Op{projOpBase: projOpBase}
 							return op, nil
 						}
+					case types.FloatFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							op := &projPlusInt64Float64Op{projOpBase: projOpBase}
+							return op, nil
+						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
@@ -52441,6 +56920,19 @@ func GetProjectionOperator(
 				case -1:
 				default:
 					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					case types.IntFamily:
+						switch rightType.Width() {
+						case 16:
+							op := &projPlusFloat64Int16Op{projOpBase: projOpBase}
+							return op, nil
+						case 32:
+							op := &projPlusFloat64Int32Op{projOpBase: projOpBase}
+							return op, nil
+						case -1:
+						default:
+							op := &projPlusFloat64Int64Op{projOpBase: projOpBase}
+							return op, nil
+						}
 					case types.FloatFamily:
 						switch rightType.Width() {
 						case -1:
@@ -52571,6 +57063,13 @@ func GetProjectionOperator(
 							op := &projMinusInt16Int64Op{projOpBase: projOpBase}
 							return op, nil
 						}
+					case types.FloatFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							op := &projMinusInt16Float64Op{projOpBase: projOpBase}
+							return op, nil
+						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
@@ -52600,6 +57099,13 @@ func GetProjectionOperator(
 						case -1:
 						default:
 							op := &projMinusInt32Int64Op{projOpBase: projOpBase}
+							return op, nil
+						}
+					case types.FloatFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							op := &projMinusInt32Float64Op{projOpBase: projOpBase}
 							return op, nil
 						}
 					case types.DecimalFamily:
@@ -52634,6 +57140,13 @@ func GetProjectionOperator(
 							op := &projMinusInt64Int64Op{projOpBase: projOpBase}
 							return op, nil
 						}
+					case types.FloatFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							op := &projMinusInt64Float64Op{projOpBase: projOpBase}
+							return op, nil
+						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
@@ -52656,6 +57169,19 @@ func GetProjectionOperator(
 				case -1:
 				default:
 					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					case types.IntFamily:
+						switch rightType.Width() {
+						case 16:
+							op := &projMinusFloat64Int16Op{projOpBase: projOpBase}
+							return op, nil
+						case 32:
+							op := &projMinusFloat64Int32Op{projOpBase: projOpBase}
+							return op, nil
+						case -1:
+						default:
+							op := &projMinusFloat64Int64Op{projOpBase: projOpBase}
+							return op, nil
+						}
 					case types.FloatFamily:
 						switch rightType.Width() {
 						case -1:
@@ -52836,6 +57362,13 @@ func GetProjectionOperator(
 							op := &projMultInt16Int64Op{projOpBase: projOpBase}
 							return op, nil
 						}
+					case types.FloatFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							op := &projMultInt16Float64Op{projOpBase: projOpBase}
+							return op, nil
+						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
@@ -52864,6 +57397,13 @@ func GetProjectionOperator(
 						case -1:
 						default:
 							op := &projMultInt32Int64Op{projOpBase: projOpBase}
+							return op, nil
+						}
+					case types.FloatFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							op := &projMultInt32Float64Op{projOpBase: projOpBase}
 							return op, nil
 						}
 					case types.DecimalFamily:
@@ -52897,6 +57437,13 @@ func GetProjectionOperator(
 							op := &projMultInt64Int64Op{projOpBase: projOpBase}
 							return op, nil
 						}
+					case types.FloatFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							op := &projMultInt64Float64Op{projOpBase: projOpBase}
+							return op, nil
+						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
@@ -52918,6 +57465,19 @@ func GetProjectionOperator(
 				case -1:
 				default:
 					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					case types.IntFamily:
+						switch rightType.Width() {
+						case 16:
+							op := &projMultFloat64Int16Op{projOpBase: projOpBase}
+							return op, nil
+						case 32:
+							op := &projMultFloat64Int32Op{projOpBase: projOpBase}
+							return op, nil
+						case -1:
+						default:
+							op := &projMultFloat64Int64Op{projOpBase: projOpBase}
+							return op, nil
+						}
 					case types.FloatFamily:
 						switch rightType.Width() {
 						case -1:
@@ -53015,6 +57575,13 @@ func GetProjectionOperator(
 							op := &projDivInt16Int64Op{projOpBase: projOpBase}
 							return op, nil
 						}
+					case types.FloatFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							op := &projDivInt16Float64Op{projOpBase: projOpBase}
+							return op, nil
+						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
@@ -53036,6 +57603,13 @@ func GetProjectionOperator(
 						case -1:
 						default:
 							op := &projDivInt32Int64Op{projOpBase: projOpBase}
+							return op, nil
+						}
+					case types.FloatFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							op := &projDivInt32Float64Op{projOpBase: projOpBase}
 							return op, nil
 						}
 					case types.DecimalFamily:
@@ -53062,6 +57636,13 @@ func GetProjectionOperator(
 							op := &projDivInt64Int64Op{projOpBase: projOpBase}
 							return op, nil
 						}
+					case types.FloatFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							op := &projDivInt64Float64Op{projOpBase: projOpBase}
+							return op, nil
+						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
@@ -53076,6 +57657,19 @@ func GetProjectionOperator(
 				case -1:
 				default:
 					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					case types.IntFamily:
+						switch rightType.Width() {
+						case 16:
+							op := &projDivFloat64Int16Op{projOpBase: projOpBase}
+							return op, nil
+						case 32:
+							op := &projDivFloat64Int32Op{projOpBase: projOpBase}
+							return op, nil
+						case -1:
+						default:
+							op := &projDivFloat64Int64Op{projOpBase: projOpBase}
+							return op, nil
+						}
 					case types.FloatFamily:
 						switch rightType.Width() {
 						case -1:
@@ -53159,6 +57753,13 @@ func GetProjectionOperator(
 							op := &projFloorDivInt16Int64Op{projOpBase: projOpBase}
 							return op, nil
 						}
+					case types.FloatFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							op := &projFloorDivInt16Float64Op{projOpBase: projOpBase}
+							return op, nil
+						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
@@ -53180,6 +57781,13 @@ func GetProjectionOperator(
 						case -1:
 						default:
 							op := &projFloorDivInt32Int64Op{projOpBase: projOpBase}
+							return op, nil
+						}
+					case types.FloatFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							op := &projFloorDivInt32Float64Op{projOpBase: projOpBase}
 							return op, nil
 						}
 					case types.DecimalFamily:
@@ -53206,6 +57814,13 @@ func GetProjectionOperator(
 							op := &projFloorDivInt64Int64Op{projOpBase: projOpBase}
 							return op, nil
 						}
+					case types.FloatFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							op := &projFloorDivInt64Float64Op{projOpBase: projOpBase}
+							return op, nil
+						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
@@ -53220,6 +57835,19 @@ func GetProjectionOperator(
 				case -1:
 				default:
 					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					case types.IntFamily:
+						switch rightType.Width() {
+						case 16:
+							op := &projFloorDivFloat64Int16Op{projOpBase: projOpBase}
+							return op, nil
+						case 32:
+							op := &projFloorDivFloat64Int32Op{projOpBase: projOpBase}
+							return op, nil
+						case -1:
+						default:
+							op := &projFloorDivFloat64Int64Op{projOpBase: projOpBase}
+							return op, nil
+						}
 					case types.FloatFamily:
 						switch rightType.Width() {
 						case -1:
@@ -53276,6 +57904,13 @@ func GetProjectionOperator(
 							op := &projModInt16Int64Op{projOpBase: projOpBase}
 							return op, nil
 						}
+					case types.FloatFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							op := &projModInt16Float64Op{projOpBase: projOpBase}
+							return op, nil
+						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
@@ -53297,6 +57932,13 @@ func GetProjectionOperator(
 						case -1:
 						default:
 							op := &projModInt32Int64Op{projOpBase: projOpBase}
+							return op, nil
+						}
+					case types.FloatFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							op := &projModInt32Float64Op{projOpBase: projOpBase}
 							return op, nil
 						}
 					case types.DecimalFamily:
@@ -53323,6 +57965,13 @@ func GetProjectionOperator(
 							op := &projModInt64Int64Op{projOpBase: projOpBase}
 							return op, nil
 						}
+					case types.FloatFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							op := &projModInt64Float64Op{projOpBase: projOpBase}
+							return op, nil
+						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
@@ -53337,6 +57986,19 @@ func GetProjectionOperator(
 				case -1:
 				default:
 					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					case types.IntFamily:
+						switch rightType.Width() {
+						case 16:
+							op := &projModFloat64Int16Op{projOpBase: projOpBase}
+							return op, nil
+						case 32:
+							op := &projModFloat64Int32Op{projOpBase: projOpBase}
+							return op, nil
+						case -1:
+						default:
+							op := &projModFloat64Int64Op{projOpBase: projOpBase}
+							return op, nil
+						}
 					case types.FloatFamily:
 						switch rightType.Width() {
 						case -1:
@@ -53393,6 +58055,13 @@ func GetProjectionOperator(
 							op := &projPowInt16Int64Op{projOpBase: projOpBase}
 							return op, nil
 						}
+					case types.FloatFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							op := &projPowInt16Float64Op{projOpBase: projOpBase}
+							return op, nil
+						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
@@ -53414,6 +58083,13 @@ func GetProjectionOperator(
 						case -1:
 						default:
 							op := &projPowInt32Int64Op{projOpBase: projOpBase}
+							return op, nil
+						}
+					case types.FloatFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							op := &projPowInt32Float64Op{projOpBase: projOpBase}
 							return op, nil
 						}
 					case types.DecimalFamily:
@@ -53440,6 +58116,13 @@ func GetProjectionOperator(
 							op := &projPowInt64Int64Op{projOpBase: projOpBase}
 							return op, nil
 						}
+					case types.FloatFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							op := &projPowInt64Float64Op{projOpBase: projOpBase}
+							return op, nil
+						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
@@ -53454,6 +58137,19 @@ func GetProjectionOperator(
 				case -1:
 				default:
 					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					case types.IntFamily:
+						switch rightType.Width() {
+						case 16:
+							op := &projPowFloat64Int16Op{projOpBase: projOpBase}
+							return op, nil
+						case 32:
+							op := &projPowFloat64Int32Op{projOpBase: projOpBase}
+							return op, nil
+						case -1:
+						default:
+							op := &projPowFloat64Int64Op{projOpBase: projOpBase}
+							return op, nil
+						}
 					case types.FloatFamily:
 						switch rightType.Width() {
 						case -1:

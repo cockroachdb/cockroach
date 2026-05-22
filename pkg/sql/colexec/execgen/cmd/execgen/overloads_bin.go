@@ -127,6 +127,8 @@ func registerBinOpOutputTypes() {
 		for _, intWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
 			binOpOutputTypes[binOp][typePair{types.DecimalFamily, anyWidth, types.IntFamily, intWidth}] = types.Decimal
 			binOpOutputTypes[binOp][typePair{types.IntFamily, intWidth, types.DecimalFamily, anyWidth}] = types.Decimal
+			binOpOutputTypes[binOp][typePair{types.FloatFamily, anyWidth, types.IntFamily, intWidth}] = types.Float
+			binOpOutputTypes[binOp][typePair{types.IntFamily, intWidth, types.FloatFamily, anyWidth}] = types.Float
 		}
 	}
 	// There is a special case for division with integers; it should have a
@@ -182,6 +184,8 @@ func registerBinOpOutputTypes() {
 		for _, intWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
 			binOpOutputTypes[binOp][typePair{types.DecimalFamily, anyWidth, types.IntFamily, intWidth}] = types.Decimal
 			binOpOutputTypes[binOp][typePair{types.IntFamily, intWidth, types.DecimalFamily, anyWidth}] = types.Decimal
+			binOpOutputTypes[binOp][typePair{types.FloatFamily, anyWidth, types.IntFamily, intWidth}] = types.Float
+			binOpOutputTypes[binOp][typePair{types.IntFamily, intWidth, types.FloatFamily, anyWidth}] = types.Float
 		}
 	}
 
@@ -355,15 +359,45 @@ func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 }
 
 func (c floatCustomizer) getBinOpAssignFunc() assignFunc {
+	return floatResultBinOpAssignFunc(true /* leftIsFloat */, true /* rightIsFloat */)
+}
+
+func (c floatIntCustomizer) getBinOpAssignFunc() assignFunc {
+	return floatResultBinOpAssignFunc(true /* leftIsFloat */, false /* rightIsFloat */)
+}
+
+func (c intFloatCustomizer) getBinOpAssignFunc() assignFunc {
+	return floatResultBinOpAssignFunc(false /* leftIsFloat */, true /* rightIsFloat */)
+}
+
+// floatResultBinOpAssignFunc returns an assignFunc for arithmetic binary
+// operators whose result is float64. Both operands are cast to float64 before
+// the operation, regardless of whether they are stored as float or int.
+// leftIsFloat/rightIsFloat describe the storage types of the operands and
+// control two pieces of generated code: the divide-by-zero check on the
+// right operand (which uses an integer literal when the right is int and a
+// float literal when the right is float), and the NaN guard on the left
+// (only emitted when the left is float, since an int cannot be NaN). The
+// NaN guard preserves PG semantics: `NaN / 0` yields NaN rather than a
+// divide-by-zero error.
+func floatResultBinOpAssignFunc(leftIsFloat, rightIsFloat bool) assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		binOp := op.overloadBase.BinOp
-		tmpl := `
+		zeroLit := "0"
+		if rightIsFloat {
+			zeroLit = "0.0"
+		}
+		nanGuard := ""
+		if leftIsFloat {
+			nanGuard = fmt.Sprintf(" && !math.IsNaN(float64(%s))", leftElem)
+		}
+		tmpl := fmt.Sprintf(`
 			{
 				{{if .CheckRightIsZero}}
-				if {{.Right}} == 0.0 && !math.IsNaN({{.Left}}) {
+				if %s == %s%s {
 					colexecerror.ExpectedError(tree.ErrDivByZero)
 				}
-				{{end}}`
+				{{end}}`, rightElem, zeroLit, nanGuard)
 		if binOp == treebin.Pow {
 			// Floats use eval.FloatPow which returns two arguments and has to
 			// be treated separately.
@@ -395,8 +429,6 @@ func (c floatCustomizer) getBinOpAssignFunc() assignFunc {
 		args := map[string]interface{}{
 			"CheckRightIsZero": checkRightIsZero(binOp),
 			"Target":           targetElem,
-			"Left":             leftElem,
-			"Right":            rightElem,
 			"ComputeBinOp":     computeBinOp,
 		}
 		buf := strings.Builder{}

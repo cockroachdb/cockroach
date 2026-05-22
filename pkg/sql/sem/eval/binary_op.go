@@ -579,6 +579,28 @@ func (e *evaluator) EvalFloorDivFloatOp(
 	return tree.NewDFloat(tree.DFloat(math.Trunc(l / r))), nil
 }
 
+func (e *evaluator) EvalFloorDivFloatIntOp(
+	ctx context.Context, _ *tree.FloorDivFloatIntOp, left, right tree.Datum,
+) (tree.Datum, error) {
+	l := float64(*left.(*tree.DFloat))
+	r := tree.MustBeDInt(right)
+	if r == 0 && !math.IsNaN(l) {
+		return nil, tree.ErrDivByZero
+	}
+	return tree.NewDFloat(tree.DFloat(math.Trunc(l / float64(r)))), nil
+}
+
+func (e *evaluator) EvalFloorDivIntFloatOp(
+	ctx context.Context, _ *tree.FloorDivIntFloatOp, left, right tree.Datum,
+) (tree.Datum, error) {
+	l := tree.MustBeDInt(left)
+	r := float64(*right.(*tree.DFloat))
+	if r == 0.0 {
+		return nil, tree.ErrDivByZero
+	}
+	return tree.NewDFloat(tree.DFloat(math.Trunc(float64(l) / r))), nil
+}
+
 func (e *evaluator) EvalFloorDivIntDecimalOp(
 	ctx context.Context, _ *tree.FloorDivIntDecimalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
@@ -931,6 +953,22 @@ func (e *evaluator) EvalMinusFloatOp(
 	return tree.NewDFloat(*left.(*tree.DFloat) - *right.(*tree.DFloat)), nil
 }
 
+func (e *evaluator) EvalMinusFloatIntOp(
+	ctx context.Context, _ *tree.MinusFloatIntOp, left, right tree.Datum,
+) (tree.Datum, error) {
+	l := float64(*left.(*tree.DFloat))
+	r := tree.MustBeDInt(right)
+	return tree.NewDFloat(tree.DFloat(l - float64(r))), nil
+}
+
+func (e *evaluator) EvalMinusIntFloatOp(
+	ctx context.Context, _ *tree.MinusIntFloatOp, left, right tree.Datum,
+) (tree.Datum, error) {
+	l := tree.MustBeDInt(left)
+	r := float64(*right.(*tree.DFloat))
+	return tree.NewDFloat(tree.DFloat(float64(l) - r)), nil
+}
+
 func (e *evaluator) EvalMinusINetIntOp(
 	ctx context.Context, _ *tree.MinusINetIntOp, left, right tree.Datum,
 ) (tree.Datum, error) {
@@ -1159,6 +1197,28 @@ func (e *evaluator) EvalModFloatOp(
 	return tree.NewDFloat(tree.DFloat(math.Mod(l, r))), nil
 }
 
+func (e *evaluator) EvalModFloatIntOp(
+	ctx context.Context, _ *tree.ModFloatIntOp, left, right tree.Datum,
+) (tree.Datum, error) {
+	l := float64(*left.(*tree.DFloat))
+	r := tree.MustBeDInt(right)
+	if r == 0 && !math.IsNaN(l) {
+		return nil, tree.ErrDivByZero
+	}
+	return tree.NewDFloat(tree.DFloat(math.Mod(l, float64(r)))), nil
+}
+
+func (e *evaluator) EvalModIntFloatOp(
+	ctx context.Context, _ *tree.ModIntFloatOp, left, right tree.Datum,
+) (tree.Datum, error) {
+	l := tree.MustBeDInt(left)
+	r := float64(*right.(*tree.DFloat))
+	if r == 0.0 {
+		return nil, tree.ErrDivByZero
+	}
+	return tree.NewDFloat(tree.DFloat(math.Mod(float64(l), r))), nil
+}
+
 func (e *evaluator) EvalModIntDecimalOp(
 	ctx context.Context, _ *tree.ModIntDecimalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
@@ -1244,6 +1304,22 @@ func (e *evaluator) EvalMultFloatOp(
 	ctx context.Context, _ *tree.MultFloatOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	return tree.NewDFloat(*left.(*tree.DFloat) * *right.(*tree.DFloat)), nil
+}
+
+func (e *evaluator) EvalMultFloatIntOp(
+	ctx context.Context, _ *tree.MultFloatIntOp, left, right tree.Datum,
+) (tree.Datum, error) {
+	l := float64(*left.(*tree.DFloat))
+	r := tree.MustBeDInt(right)
+	return tree.NewDFloat(tree.DFloat(l * float64(r))), nil
+}
+
+func (e *evaluator) EvalMultIntFloatOp(
+	ctx context.Context, _ *tree.MultIntFloatOp, left, right tree.Datum,
+) (tree.Datum, error) {
+	l := tree.MustBeDInt(left)
+	r := float64(*right.(*tree.DFloat))
+	return tree.NewDFloat(tree.DFloat(float64(l) * r)), nil
 }
 
 func (e *evaluator) EvalMultIntDecimalOp(
@@ -1447,6 +1523,22 @@ func (e *evaluator) EvalPlusFloatOp(
 	return tree.NewDFloat(*left.(*tree.DFloat) + *right.(*tree.DFloat)), nil
 }
 
+func (e *evaluator) EvalPlusFloatIntOp(
+	ctx context.Context, _ *tree.PlusFloatIntOp, left, right tree.Datum,
+) (tree.Datum, error) {
+	l := float64(*left.(*tree.DFloat))
+	r := tree.MustBeDInt(right)
+	return tree.NewDFloat(tree.DFloat(l + float64(r))), nil
+}
+
+func (e *evaluator) EvalPlusIntFloatOp(
+	ctx context.Context, _ *tree.PlusIntFloatOp, left, right tree.Datum,
+) (tree.Datum, error) {
+	l := tree.MustBeDInt(left)
+	r := float64(*right.(*tree.DFloat))
+	return tree.NewDFloat(tree.DFloat(float64(l) + r)), nil
+}
+
 func (e *evaluator) EvalPlusINetIntOp(
 	ctx context.Context, _ *tree.PlusINetIntOp, left, right tree.Datum,
 ) (tree.Datum, error) {
@@ -1636,6 +1728,18 @@ func (e *evaluator) EvalPowFloatOp(
 	ctx context.Context, _ *tree.PowFloatOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	return FloatPow(float64(*left.(*tree.DFloat)), float64(*right.(*tree.DFloat)))
+}
+
+func (e *evaluator) EvalPowFloatIntOp(
+	ctx context.Context, _ *tree.PowFloatIntOp, left, right tree.Datum,
+) (tree.Datum, error) {
+	return FloatPow(float64(*left.(*tree.DFloat)), float64(tree.MustBeDInt(right)))
+}
+
+func (e *evaluator) EvalPowIntFloatOp(
+	ctx context.Context, _ *tree.PowIntFloatOp, left, right tree.Datum,
+) (tree.Datum, error) {
+	return FloatPow(float64(tree.MustBeDInt(left)), float64(*right.(*tree.DFloat)))
 }
 
 func (e *evaluator) EvalPowIntDecimalOp(

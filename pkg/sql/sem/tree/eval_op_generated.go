@@ -91,8 +91,10 @@ type BinaryOpEvaluator interface {
 	EvalFirstContainsLTreeOp(context.Context, *FirstContainsLTreeOp, Datum, Datum) (Datum, error)
 	EvalFloorDivDecimalIntOp(context.Context, *FloorDivDecimalIntOp, Datum, Datum) (Datum, error)
 	EvalFloorDivDecimalOp(context.Context, *FloorDivDecimalOp, Datum, Datum) (Datum, error)
+	EvalFloorDivFloatIntOp(context.Context, *FloorDivFloatIntOp, Datum, Datum) (Datum, error)
 	EvalFloorDivFloatOp(context.Context, *FloorDivFloatOp, Datum, Datum) (Datum, error)
 	EvalFloorDivIntDecimalOp(context.Context, *FloorDivIntDecimalOp, Datum, Datum) (Datum, error)
+	EvalFloorDivIntFloatOp(context.Context, *FloorDivIntFloatOp, Datum, Datum) (Datum, error)
 	EvalFloorDivIntOp(context.Context, *FloorDivIntOp, Datum, Datum) (Datum, error)
 	EvalInTupleOp(context.Context, *InTupleOp, Datum, Datum) (Datum, error)
 	EvalJSONAllExistsOp(context.Context, *JSONAllExistsOp, Datum, Datum) (Datum, error)
@@ -115,10 +117,12 @@ type BinaryOpEvaluator interface {
 	EvalMinusDateTimeOp(context.Context, *MinusDateTimeOp, Datum, Datum) (Datum, error)
 	EvalMinusDecimalIntOp(context.Context, *MinusDecimalIntOp, Datum, Datum) (Datum, error)
 	EvalMinusDecimalOp(context.Context, *MinusDecimalOp, Datum, Datum) (Datum, error)
+	EvalMinusFloatIntOp(context.Context, *MinusFloatIntOp, Datum, Datum) (Datum, error)
 	EvalMinusFloatOp(context.Context, *MinusFloatOp, Datum, Datum) (Datum, error)
 	EvalMinusINetIntOp(context.Context, *MinusINetIntOp, Datum, Datum) (Datum, error)
 	EvalMinusINetOp(context.Context, *MinusINetOp, Datum, Datum) (Datum, error)
 	EvalMinusIntDecimalOp(context.Context, *MinusIntDecimalOp, Datum, Datum) (Datum, error)
+	EvalMinusIntFloatOp(context.Context, *MinusIntFloatOp, Datum, Datum) (Datum, error)
 	EvalMinusIntOp(context.Context, *MinusIntOp, Datum, Datum) (Datum, error)
 	EvalMinusIntervalOp(context.Context, *MinusIntervalOp, Datum, Datum) (Datum, error)
 	EvalMinusJsonbIntOp(context.Context, *MinusJsonbIntOp, Datum, Datum) (Datum, error)
@@ -138,16 +142,20 @@ type BinaryOpEvaluator interface {
 	EvalMinusTimestampTimestampTZOp(context.Context, *MinusTimestampTimestampTZOp, Datum, Datum) (Datum, error)
 	EvalModDecimalIntOp(context.Context, *ModDecimalIntOp, Datum, Datum) (Datum, error)
 	EvalModDecimalOp(context.Context, *ModDecimalOp, Datum, Datum) (Datum, error)
+	EvalModFloatIntOp(context.Context, *ModFloatIntOp, Datum, Datum) (Datum, error)
 	EvalModFloatOp(context.Context, *ModFloatOp, Datum, Datum) (Datum, error)
 	EvalModIntDecimalOp(context.Context, *ModIntDecimalOp, Datum, Datum) (Datum, error)
+	EvalModIntFloatOp(context.Context, *ModIntFloatOp, Datum, Datum) (Datum, error)
 	EvalModIntOp(context.Context, *ModIntOp, Datum, Datum) (Datum, error)
 	EvalModStringOp(context.Context, *ModStringOp, Datum, Datum) (Datum, error)
 	EvalMultDecimalIntOp(context.Context, *MultDecimalIntOp, Datum, Datum) (Datum, error)
 	EvalMultDecimalIntervalOp(context.Context, *MultDecimalIntervalOp, Datum, Datum) (Datum, error)
 	EvalMultDecimalOp(context.Context, *MultDecimalOp, Datum, Datum) (Datum, error)
+	EvalMultFloatIntOp(context.Context, *MultFloatIntOp, Datum, Datum) (Datum, error)
 	EvalMultFloatIntervalOp(context.Context, *MultFloatIntervalOp, Datum, Datum) (Datum, error)
 	EvalMultFloatOp(context.Context, *MultFloatOp, Datum, Datum) (Datum, error)
 	EvalMultIntDecimalOp(context.Context, *MultIntDecimalOp, Datum, Datum) (Datum, error)
+	EvalMultIntFloatOp(context.Context, *MultIntFloatOp, Datum, Datum) (Datum, error)
 	EvalMultIntIntervalOp(context.Context, *MultIntIntervalOp, Datum, Datum) (Datum, error)
 	EvalMultIntOp(context.Context, *MultIntOp, Datum, Datum) (Datum, error)
 	EvalMultIntervalDecimalOp(context.Context, *MultIntervalDecimalOp, Datum, Datum) (Datum, error)
@@ -164,10 +172,12 @@ type BinaryOpEvaluator interface {
 	EvalPlusDecimalIntOp(context.Context, *PlusDecimalIntOp, Datum, Datum) (Datum, error)
 	EvalPlusDecimalOp(context.Context, *PlusDecimalOp, Datum, Datum) (Datum, error)
 	EvalPlusDecimalPGLSNOp(context.Context, *PlusDecimalPGLSNOp, Datum, Datum) (Datum, error)
+	EvalPlusFloatIntOp(context.Context, *PlusFloatIntOp, Datum, Datum) (Datum, error)
 	EvalPlusFloatOp(context.Context, *PlusFloatOp, Datum, Datum) (Datum, error)
 	EvalPlusINetIntOp(context.Context, *PlusINetIntOp, Datum, Datum) (Datum, error)
 	EvalPlusIntDateOp(context.Context, *PlusIntDateOp, Datum, Datum) (Datum, error)
 	EvalPlusIntDecimalOp(context.Context, *PlusIntDecimalOp, Datum, Datum) (Datum, error)
+	EvalPlusIntFloatOp(context.Context, *PlusIntFloatOp, Datum, Datum) (Datum, error)
 	EvalPlusIntINetOp(context.Context, *PlusIntINetOp, Datum, Datum) (Datum, error)
 	EvalPlusIntOp(context.Context, *PlusIntOp, Datum, Datum) (Datum, error)
 	EvalPlusIntervalDateOp(context.Context, *PlusIntervalDateOp, Datum, Datum) (Datum, error)
@@ -186,8 +196,10 @@ type BinaryOpEvaluator interface {
 	EvalPlusTimestampTZIntervalOp(context.Context, *PlusTimestampTZIntervalOp, Datum, Datum) (Datum, error)
 	EvalPowDecimalIntOp(context.Context, *PowDecimalIntOp, Datum, Datum) (Datum, error)
 	EvalPowDecimalOp(context.Context, *PowDecimalOp, Datum, Datum) (Datum, error)
+	EvalPowFloatIntOp(context.Context, *PowFloatIntOp, Datum, Datum) (Datum, error)
 	EvalPowFloatOp(context.Context, *PowFloatOp, Datum, Datum) (Datum, error)
 	EvalPowIntDecimalOp(context.Context, *PowIntDecimalOp, Datum, Datum) (Datum, error)
+	EvalPowIntFloatOp(context.Context, *PowIntFloatOp, Datum, Datum) (Datum, error)
 	EvalPowIntOp(context.Context, *PowIntOp, Datum, Datum) (Datum, error)
 	EvalPrependToMaybeNullArrayOp(context.Context, *PrependToMaybeNullArrayOp, Datum, Datum) (Datum, error)
 	EvalRShiftINetOp(context.Context, *RShiftINetOp, Datum, Datum) (Datum, error)
@@ -465,6 +477,11 @@ func (op *FloorDivDecimalOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum
 }
 
 // Eval is part of the BinaryEvalOp interface.
+func (op *FloorDivFloatIntOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalFloorDivFloatIntOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
 func (op *FloorDivFloatOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalFloorDivFloatOp(ctx, op, a, b)
 }
@@ -472,6 +489,11 @@ func (op *FloorDivFloatOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) 
 // Eval is part of the BinaryEvalOp interface.
 func (op *FloorDivIntDecimalOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalFloorDivIntDecimalOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
+func (op *FloorDivIntFloatOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalFloorDivIntFloatOp(ctx, op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
@@ -585,6 +607,11 @@ func (op *MinusDecimalOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (
 }
 
 // Eval is part of the BinaryEvalOp interface.
+func (op *MinusFloatIntOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalMinusFloatIntOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
 func (op *MinusFloatOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMinusFloatOp(ctx, op, a, b)
 }
@@ -602,6 +629,11 @@ func (op *MinusINetOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Dat
 // Eval is part of the BinaryEvalOp interface.
 func (op *MinusIntDecimalOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMinusIntDecimalOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
+func (op *MinusIntFloatOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalMinusIntFloatOp(ctx, op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
@@ -700,6 +732,11 @@ func (op *ModDecimalOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Da
 }
 
 // Eval is part of the BinaryEvalOp interface.
+func (op *ModFloatIntOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalModFloatIntOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
 func (op *ModFloatOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalModFloatOp(ctx, op, a, b)
 }
@@ -707,6 +744,11 @@ func (op *ModFloatOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datu
 // Eval is part of the BinaryEvalOp interface.
 func (op *ModIntDecimalOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalModIntDecimalOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
+func (op *ModIntFloatOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalModIntFloatOp(ctx, op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
@@ -735,6 +777,11 @@ func (op *MultDecimalOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (D
 }
 
 // Eval is part of the BinaryEvalOp interface.
+func (op *MultFloatIntOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalMultFloatIntOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
 func (op *MultFloatIntervalOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMultFloatIntervalOp(ctx, op, a, b)
 }
@@ -747,6 +794,11 @@ func (op *MultFloatOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Dat
 // Eval is part of the BinaryEvalOp interface.
 func (op *MultIntDecimalOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMultIntDecimalOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
+func (op *MultIntFloatOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalMultIntFloatOp(ctx, op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
@@ -830,6 +882,11 @@ func (op *PlusDecimalPGLSNOp) Eval(ctx context.Context, e OpEvaluator, a, b Datu
 }
 
 // Eval is part of the BinaryEvalOp interface.
+func (op *PlusFloatIntOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalPlusFloatIntOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
 func (op *PlusFloatOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPlusFloatOp(ctx, op, a, b)
 }
@@ -847,6 +904,11 @@ func (op *PlusIntDateOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (D
 // Eval is part of the BinaryEvalOp interface.
 func (op *PlusIntDecimalOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPlusIntDecimalOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
+func (op *PlusIntFloatOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalPlusIntFloatOp(ctx, op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
@@ -940,6 +1002,11 @@ func (op *PowDecimalOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Da
 }
 
 // Eval is part of the BinaryEvalOp interface.
+func (op *PowFloatIntOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalPowFloatIntOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
 func (op *PowFloatOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPowFloatOp(ctx, op, a, b)
 }
@@ -947,6 +1014,11 @@ func (op *PowFloatOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datu
 // Eval is part of the BinaryEvalOp interface.
 func (op *PowIntDecimalOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPowIntDecimalOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
+func (op *PowIntFloatOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalPowIntFloatOp(ctx, op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.

@@ -33,6 +33,100 @@ SELECT f / i4, i4 / f, pg_typeof(f / i4), pg_typeof(i4 / f) FROM float_int_div
 ----
 1  1  double precision  double precision
 
+# Regression test for issue #82478. Mixed float/int operands are supported for
+# all arithmetic operators, not just division. The result type is float in
+# every case, matching PostgreSQL.
+subtest float_int_mixed_arithmetic
+
+query RRTT
+SELECT 1::float + 2::int, 1::int + 2::float,
+       pg_typeof(1::float + 2::int), pg_typeof(1::int + 2::float)
+----
+3  3  double precision  double precision
+
+query RRTT
+SELECT 1::float - 2::int, 1::int - 2::float,
+       pg_typeof(1::float - 2::int), pg_typeof(1::int - 2::float)
+----
+-1  -1  double precision  double precision
+
+query RRTT
+SELECT 1.5::float * 2::int, 2::int * 1.5::float,
+       pg_typeof(1.5::float * 2::int), pg_typeof(2::int * 1.5::float)
+----
+3  3  double precision  double precision
+
+query RRTT
+SELECT 7.5::float // 2::int, 7::int // 2.0::float,
+       pg_typeof(7.5::float // 2::int), pg_typeof(7::int // 2.0::float)
+----
+3  3  double precision  double precision
+
+query RRTT
+SELECT 7.5::float % 2::int, 7::int % 2.5::float,
+       pg_typeof(7.5::float % 2::int), pg_typeof(7::int % 2.5::float)
+----
+1.5  2  double precision  double precision
+
+query RRTT
+SELECT 2.0::float ^ 3::int, 2::int ^ 3.0::float,
+       pg_typeof(2.0::float ^ 3::int), pg_typeof(2::int ^ 3.0::float)
+----
+8  8  double precision  double precision
+
+# Divide-by-zero on / and // and % must raise the expected error in both
+# operand orderings.
+query error division by zero
+SELECT 1::float / 0::int
+
+query error division by zero
+SELECT 1::int / 0::float
+
+query error division by zero
+SELECT 1::float // 0::int
+
+query error division by zero
+SELECT 1::int // 0::float
+
+query error division by zero
+SELECT 1::float % 0::int
+
+query error division by zero
+SELECT 1::int % 0::float
+
+# NaN on the float side propagates through division rather than triggering a
+# divide-by-zero error, matching PG semantics for float / int.
+query R
+SELECT 'NaN'::float / 0::int
+----
+NaN
+
+# NULL operands propagate through mixed-type ops.
+query RRR
+SELECT NULL::float + 1::int, NULL::int * 2.5::float, 3::float / NULL::int
+----
+NULL  NULL  NULL
+
+# Exercise the vectorized engine path: column-op-column projection over a
+# small table.
+statement ok
+CREATE TABLE float_int_arith (f FLOAT8, i INT8)
+
+statement ok
+INSERT INTO float_int_arith VALUES (8.0, 2), (10.0, 4)
+
+query RR rowsort
+SELECT f + i, i - f FROM float_int_arith
+----
+10  -6
+14  -6
+
+query RR rowsort
+SELECT f * i, i % f FROM float_int_arith
+----
+16   2
+40   4
+
 query I
 SELECT ~-1;
 ----

@@ -142,6 +142,10 @@ type (
 	PlusDecimalIntOp struct{}
 	// PlusIntDecimalOp is a BinaryEvalOp.
 	PlusIntDecimalOp struct{}
+
+	PlusFloatIntOp struct{}
+
+	PlusIntFloatOp struct{}
 	// PlusDateIntOp is a BinaryEvalOp.
 	PlusDateIntOp struct{}
 	// PlusIntDateOp is a BinaryEvalOp.
@@ -199,6 +203,10 @@ type (
 	MinusDecimalIntOp struct{}
 	// MinusIntDecimalOp is a BinaryEvalOp.
 	MinusIntDecimalOp struct{}
+
+	MinusFloatIntOp struct{}
+
+	MinusIntFloatOp struct{}
 	// MinusDateIntOp is a BinaryEvalOp.
 	MinusDateIntOp struct{}
 	// MinusDateOp is a BinaryEvalOp.
@@ -255,8 +263,12 @@ type (
 	MultFloatIntervalOp struct{}
 	// MultFloatOp is a BinaryEvalOp.
 	MultFloatOp struct{}
+
+	MultFloatIntOp struct{}
 	// MultIntDecimalOp is a BinaryEvalOp.
 	MultIntDecimalOp struct{}
+
+	MultIntFloatOp struct{}
 	// MultIntIntervalOp is a BinaryEvalOp.
 	MultIntIntervalOp struct{}
 	// MultIntOp is a BinaryEvalOp.
@@ -299,8 +311,12 @@ type (
 	FloorDivDecimalOp struct{}
 	// FloorDivFloatOp is a BinaryEvalOp.
 	FloorDivFloatOp struct{}
+
+	FloorDivFloatIntOp struct{}
 	// FloorDivIntDecimalOp is a BinaryEvalOp.
 	FloorDivIntDecimalOp struct{}
+
+	FloorDivIntFloatOp struct{}
 	// FloorDivIntOp is a BinaryEvalOp.
 	FloorDivIntOp struct{}
 )
@@ -312,8 +328,12 @@ type (
 	ModDecimalOp struct{}
 	// ModFloatOp is a BinaryEvalOp.
 	ModFloatOp struct{}
+
+	ModFloatIntOp struct{}
 	// ModIntDecimalOp is a BinaryEvalOp.
 	ModIntDecimalOp struct{}
+
+	ModIntFloatOp struct{}
 	// ModIntOp is a BinaryEvalOp.
 	ModIntOp struct{}
 	// ModStringOp is a BinaryEvalOp.
@@ -358,8 +378,12 @@ type (
 	PowDecimalOp struct{}
 	// PowFloatOp is a BinaryEvalOp.
 	PowFloatOp struct{}
+
+	PowFloatIntOp struct{}
 	// PowIntDecimalOp is a BinaryEvalOp.
 	PowIntDecimalOp struct{}
+
+	PowIntFloatOp struct{}
 	// PowIntOp is a BinaryEvalOp.
 	PowIntOp struct{}
 )
