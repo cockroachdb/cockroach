@@ -798,7 +798,6 @@ public,ftable1_pkey,index,root,ftable1
 public,ftable1_x_key,index,root,ftable1
 public,ftable2_pkey,index,root,ftable2
 public,myidx,index,root,mytable
-public,mymview_pkey,index,root,mymview
 public,mytable_pkey,index,root,mytable
 
 cli
@@ -844,7 +843,6 @@ public,ftable1_pkey,index,root,ftable1,permanent,prefix,
 public,ftable1_x_key,index,root,ftable1,permanent,prefix,
 public,ftable2_pkey,index,root,ftable2,permanent,prefix,
 public,myidx,index,root,mytable,permanent,prefix,my awesome idx comment
-public,mymview_pkey,index,root,mymview,permanent,prefix,
 public,mytable_pkey,index,root,mytable,permanent,prefix,
 
 cli
@@ -1668,7 +1666,6 @@ SELECT pg_catalog.quote_ident(idxname) ||
   FROM idx
 ORDER BY indisprimary DESC, idxname
 Indexes
-"mymview_pkey PRIMARY KEY, btree (rowid ASC)"
 > SELECT pg_catalog.pg_get_viewdef(107::pg_catalog.oid, true) AS "View definition"
 View definition
 SELECT mycolumn FROM defaultdb.public.mytable;

@@ -1187,3 +1187,41 @@ statement ok
 SET autocommit_before_ddl=on;
 
 subtest end
+
+subtest format_type_vector
+
+# format_type must include the dimension when atttypmod is set so that pg_dump
+# (and any other PostgreSQL-style consumer of pg_catalog) can reconstruct the
+# original VECTOR(N) declaration.
+statement ok
+CREATE TABLE format_type_vec_test (
+  id INT PRIMARY KEY,
+  vec_with_dim VECTOR(3),
+  vec_no_dim VECTOR
+);
+
+query TT colnames,rowsort
+SELECT attname, format_type(atttypid, atttypmod) AS formatted
+FROM pg_attribute
+WHERE attrelid = 'format_type_vec_test'::regclass AND attnum > 0
+----
+attname       formatted
+id            bigint
+vec_with_dim  vector(3)
+vec_no_dim    vector
+
+# format_type called directly with explicit typmods.
+query T
+SELECT format_type('vector'::regtype, 5)
+----
+vector(5)
+
+query T
+SELECT format_type('vector'::regtype, -1)
+----
+vector
+
+statement ok
+DROP TABLE format_type_vec_test
+
+subtest end
