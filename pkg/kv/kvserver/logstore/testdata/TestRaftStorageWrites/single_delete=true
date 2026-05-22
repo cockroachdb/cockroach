@@ -19,14 +19,24 @@ Put: 0,0 /Local/RangeID/123/u/RaftLog/logIndex:103 (0x0169f67b757266746c00000000
 Put: 0,0 /Local/RangeID/123/u/RaftLog/logIndex:104 (0x0169f67b757266746c000000000000006800): Term:22 Index:104 Type:EntryNormal : EMPTY
 Put: 0,0 /Local/RangeID/123/u/RaftLog/logIndex:105 (0x0169f67b757266746c000000000000006900): Term:22 Index:105 Type:EntryNormal : EMPTY
 State:{LastIndex:105 LastTerm:22 ByteSize:215} RaftTruncatedState:{Index:100 Term:20}
+>> append (103,107] with overlap extending past tail
+Single Delete: 0,0 /Local/RangeID/123/u/RaftLog/logIndex:104 (0x0169f67b757266746c000000000000006800): 
+Put: 0,0 /Local/RangeID/123/u/RaftLog/logIndex:104 (0x0169f67b757266746c000000000000006800): Term:22 Index:104 Type:EntryNormal : EMPTY
+Single Delete: 0,0 /Local/RangeID/123/u/RaftLog/logIndex:105 (0x0169f67b757266746c000000000000006900): 
+Put: 0,0 /Local/RangeID/123/u/RaftLog/logIndex:105 (0x0169f67b757266746c000000000000006900): Term:22 Index:105 Type:EntryNormal : EMPTY
+Put: 0,0 /Local/RangeID/123/u/RaftLog/logIndex:106 (0x0169f67b757266746c000000000000006a00): Term:22 Index:106 Type:EntryNormal : EMPTY
+Put: 0,0 /Local/RangeID/123/u/RaftLog/logIndex:107 (0x0169f67b757266746c000000000000006b00): Term:22 Index:107 Type:EntryNormal : EMPTY
+State:{LastIndex:107 LastTerm:22 ByteSize:301} RaftTruncatedState:{Index:100 Term:20}
 >> truncate at 103
 Single Delete: 0,0 /Local/RangeID/123/u/RaftLog/logIndex:101 (0x0169f67b757266746c000000000000006500): 
 Single Delete: 0,0 /Local/RangeID/123/u/RaftLog/logIndex:102 (0x0169f67b757266746c000000000000006600): 
 Single Delete: 0,0 /Local/RangeID/123/u/RaftLog/logIndex:103 (0x0169f67b757266746c000000000000006700): 
 Put: 0,0 /Local/RangeID/123/u/RaftTruncatedState (0x0169f67b757266747400): index:103 term:22 
-State:{LastIndex:105 LastTerm:22 ByteSize:86} RaftTruncatedState:{Index:103 Term:22}
+State:{LastIndex:107 LastTerm:22 ByteSize:172} RaftTruncatedState:{Index:103 Term:22}
 >> truncate all
 Single Delete: 0,0 /Local/RangeID/123/u/RaftLog/logIndex:104 (0x0169f67b757266746c000000000000006800): 
 Single Delete: 0,0 /Local/RangeID/123/u/RaftLog/logIndex:105 (0x0169f67b757266746c000000000000006900): 
-Put: 0,0 /Local/RangeID/123/u/RaftTruncatedState (0x0169f67b757266747400): index:105 term:22 
-State:{LastIndex:105 LastTerm:22 ByteSize:0} RaftTruncatedState:{Index:105 Term:22}
+Single Delete: 0,0 /Local/RangeID/123/u/RaftLog/logIndex:106 (0x0169f67b757266746c000000000000006a00): 
+Single Delete: 0,0 /Local/RangeID/123/u/RaftLog/logIndex:107 (0x0169f67b757266746c000000000000006b00): 
+Put: 0,0 /Local/RangeID/123/u/RaftTruncatedState (0x0169f67b757266747400): index:107 term:22 
+State:{LastIndex:107 LastTerm:22 ByteSize:0} RaftTruncatedState:{Index:107 Term:22}

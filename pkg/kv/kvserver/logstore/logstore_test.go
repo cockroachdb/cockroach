@@ -118,8 +118,14 @@ func TestRaftStorageWrites(t *testing.T) {
 			{Index: 104, Term: 22},
 			{Index: 105, Term: 22},
 		})
+		write("append (103,107] with overlap extending past tail", raftpb.HardState{}, []raftpb.Entry{
+			{Index: 104, Term: 22},
+			{Index: 105, Term: 22},
+			{Index: 106, Term: 22},
+			{Index: 107, Term: 22},
+		})
 		truncate("truncate at 103", kvserverpb.RaftTruncatedState{Index: 103, Term: 22})
-		truncate("truncate all", kvserverpb.RaftTruncatedState{Index: 105, Term: 22})
+		truncate("truncate all", kvserverpb.RaftTruncatedState{Index: 107, Term: 22})
 
 		// TODO(pav-kv): print the engine content as well.
 
