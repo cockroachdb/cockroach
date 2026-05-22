@@ -1164,7 +1164,7 @@ func (r *testRunner) runWorker(
 				wStatus.SetStatus("running test")
 
 				r.runTest(ctx, t, testToRun.runNum, testToRun.runCount, c, stdout, testL,
-					github, issueInfo)
+					workerL, github, issueInfo)
 			}
 		}
 
@@ -1321,6 +1321,7 @@ func (r *testRunner) runTest(
 	c *clusterImpl,
 	stdout io.Writer,
 	l *logger.Logger,
+	runnerL *logger.Logger,
 	github GithubPoster,
 	issueInfo *githubIssueInfo,
 ) {
@@ -1492,13 +1493,7 @@ func (r *testRunner) runTest(
 			}
 
 			if t.artifactsSpec != "" {
-				// Tell TeamCity to collect this test's artifacts now. The TC job
-				// also collects the artifacts directory wholesale at the end, but
-				// here we make sure that the artifacts for any test that has already
-				// finished are available in the UI even before the job as a whole
-				// has completed. We're using the exact same destination to avoid
-				// duplication of any of the artifacts.
-				shout(ctx, l, stdout, "##teamcity[publishArtifacts '%s']", t.artifactsSpec)
+				publishTeamCityArtifactsWithFailover(ctx, t, runnerL, stdout)
 			}
 		}
 
