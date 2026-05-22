@@ -188,36 +188,11 @@ func (p storage) Release(ctx context.Context, id uuid.UUID) (err error) {
 }
 
 func (p storage) GetState(ctx context.Context) (ptpb.State, error) {
-	md, err := p.getMetadata(ctx)
-	if err != nil {
-		return ptpb.State{}, err
-	}
 	records, err := p.getRecords(ctx)
 	if err != nil {
 		return ptpb.State{}, err
 	}
-	return ptpb.State{
-		Metadata: md,
-		Records:  records,
-	}, nil
-}
-
-func (p storage) getMetadata(ctx context.Context) (ptpb.Metadata, error) {
-	row, err := p.txn.QueryRowEx(ctx, "protectedts-GetMetadata", p.txn.KV(),
-		sessiondata.NodeUserSessionDataOverride,
-		currentMetaCTE)
-	if err != nil {
-		return ptpb.Metadata{}, errors.Wrap(err, "failed to read metadata")
-	}
-	if row == nil {
-		return ptpb.Metadata{}, errors.New("failed to read metadata")
-	}
-	return ptpb.Metadata{
-		Version:    uint64(*row[0].(*tree.DInt)),
-		NumRecords: uint64(*row[1].(*tree.DInt)),
-		NumSpans:   uint64(*row[2].(*tree.DInt)),
-		TotalBytes: uint64(*row[3].(*tree.DInt)),
-	}, nil
+	return ptpb.State{Records: records}, nil
 }
 
 func (p *storage) getRecords(ctx context.Context) ([]ptpb.Record, error) {

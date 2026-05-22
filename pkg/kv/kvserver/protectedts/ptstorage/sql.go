@@ -7,36 +7,18 @@ package ptstorage
 
 const (
 
-	// currentMetaCTE reads the meta row, returning a default zero row if
-	// none exists yet. At the time of writing, there will never be a
-	// physical row in the meta table with version zero.
+	// currentMetaCTEForUpdate reads the singleton meta row with FOR UPDATE,
+	// returning a default zero row if none exists yet. At the time of writing,
+	// there will never be a physical row in the meta table with version zero.
 	//
-	// This is the read-only variant, used by GetState. Mutating queries
-	// (protect, release) use currentMetaCTEForUpdate to avoid the
-	// WriteTooOld retry storm that concurrent writers would otherwise
-	// trigger on the shared meta row.
-	currentMetaCTE = `
-SELECT
-    version, num_records, num_spans, total_bytes
-FROM
-    system.protected_ts_meta
-UNION ALL
-    SELECT 0 AS version, 0 AS num_records, 0 AS num_spans, 0 AS total_bytes
-ORDER BY
-    version DESC
-LIMIT
-    1
-`
-
-	// currentMetaCTEForUpdate is the locking variant of currentMetaCTE used by
-	// the protect and release queries. Both are read-modify-writes against
-	// the singleton meta row: every concurrent caller reads the same row,
-	// then upserts a new version. Without serialization the writers race,
-	// producing a storm of WriteTooOld retries on the shared key. Acquiring
-	// an exclusive lock on the real meta row during the read forces those
-	// callers to queue rather than collide. The FOR UPDATE clause is bound
-	// to the real-table leg only; the synthetic zero-row fallback (used when
-	// no meta row exists yet) does not lock anything.
+	// It is used by the protect and release queries. Both are read-modify-
+	// writes against the singleton meta row: every concurrent caller reads the
+	// same row, then upserts a new version. Without serialization the writers
+	// race, producing a storm of WriteTooOld retries on the shared key.
+	// Acquiring an exclusive lock on the real meta row during the read forces
+	// those callers to queue rather than collide. The FOR UPDATE clause is
+	// bound to the real-table leg only; the synthetic zero-row fallback (used
+	// when no meta row exists yet) does not lock anything.
 	currentMetaCTEForUpdate = `
 SELECT
     version, num_records, num_spans, total_bytes
