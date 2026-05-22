@@ -18,7 +18,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/gogo/protobuf/proto"
 )
+
+func init() {
+	pKey := errors.GetTypeKey((*ReplicationError)(nil))
+	errors.RegisterWrapperEncoder(pKey, encodeReplicationError)
+	errors.RegisterWrapperDecoder(pKey, decodeReplicationError)
+}
 
 // ReplicationError is returned by a writer goroutine when a source transaction
 // cannot be applied to the destination (e.g. a constraint violation).
@@ -41,6 +48,25 @@ func (e *ReplicationError) SafeFormat(p redact.SafePrinter, _ rune) {
 
 // Unwrap implements the errors.Wrapper interface.
 func (e *ReplicationError) Unwrap() error { return e.Err }
+
+func encodeReplicationError(
+	_ context.Context, err error,
+) (msgPrefix string, safe []string, details proto.Message) {
+	var e *ReplicationError
+	errors.As(err, &e)
+	return "", nil, &e.Timestamp
+}
+
+func decodeReplicationError(
+	_ context.Context, cause error, _ string, _ []string, payload proto.Message,
+) error {
+	ts, ok := payload.(*hlc.Timestamp)
+	if !ok {
+		// Payload type changed unexpectedly; fall back to opaque decode.
+		return nil
+	}
+	return &ReplicationError{Timestamp: *ts, Err: cause}
+}
 
 type appliedTransaction struct {
 	ldrdecoder.Transaction
