@@ -471,11 +471,11 @@ func makePGPrivilegeInquiryDef(
 					// Remove the first argument.
 					args = args[1:]
 				} else {
-					if evalCtx.SessionData().User().Undefined() {
+					user = evalCtx.EffectiveUser()
+					if user.Undefined() {
 						// Wut... is this possible?
 						return tree.DNull, nil
 					}
-					user = evalCtx.SessionData().User()
 				}
 				ret, err := fn(ctx, evalCtx, args, user)
 				if err != nil {
@@ -2097,7 +2097,7 @@ FROM defaults_parsed
 
 			// For user-defined function, utilize the descriptor based way.
 			if catid.IsOIDUserDefined(oid.(*tree.DOid).Oid) {
-				return evalCtx.Planner.HasAnyPrivilegeForSpecifier(ctx, specifier, evalCtx.SessionData().User(), privs)
+				return evalCtx.Planner.HasAnyPrivilegeForSpecifier(ctx, specifier, user, privs)
 			}
 
 			// For builtin functions, all users should have `EXECUTE` privilege, but
@@ -2643,7 +2643,7 @@ FROM defaults_parsed
                   WHEN sub.db_id IS NULL
                     THEN crdb_internal.force_error('42704',
                            'database with OID ' || $1::STRING || ' does not exist')::INT
-                  WHEN NOT has_database_privilege(sub.db_id::OID, 'CONNECT')
+                  WHEN NOT has_database_privilege(session_user, sub.db_id::OID, 'CONNECT')
                     THEN crdb_internal.force_error('42501',
                            'permission denied for database ' || sub.db_name)::INT
                   ELSE sub.size
@@ -2675,7 +2675,7 @@ FROM defaults_parsed
                   WHEN sub.db_id IS NULL
                     THEN crdb_internal.force_error('3D000',
                            'database "' || $1 || '" does not exist')::INT
-                  WHEN NOT has_database_privilege(sub.db_id::OID, 'CONNECT')
+                  WHEN NOT has_database_privilege(session_user, sub.db_id::OID, 'CONNECT')
                     THEN crdb_internal.force_error('42501',
                            'permission denied for database ' || $1)::INT
                   ELSE sub.size
@@ -2714,7 +2714,11 @@ FROM defaults_parsed
 	// Postgres treats these as effectively public (any user can ask for the
 	// size of any relation). pg_database_size matches Postgres' stricter
 	// rule: the caller must have CONNECT on the database, otherwise the
-	// builtin errors with 42501. The bodies inline into outer queries, so
+	// builtin errors with 42501. The gate passes session_user explicitly
+	// because current_user inside a SECURITY DEFINER body resolves to the
+	// definer (NodeUser, which trivially has CONNECT). session_user ignores
+	// SET ROLE, so the check is against the connection's authenticated user
+	// rather than its currently-impersonated role. The bodies inline into outer queries, so
 	// bulk calls (e.g. SELECT pg_relation_size(c.oid) FROM pg_class c)
 	// scan system.table_metadata once total rather than once per row.
 	//
