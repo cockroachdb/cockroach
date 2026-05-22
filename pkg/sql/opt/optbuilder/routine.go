@@ -376,7 +376,12 @@ func (b *Builder) buildRoutine(
 	b.insideUDF = true
 	b.insideSQLRoutine = o.Language == tree.RoutineLangSQL
 	isSetReturning := o.Class == tree.GeneratorClass
+	// Source securityMode and routineOwner from the same predicate so the
+	// pair cannot disagree (builtins keep both at zero).
+	var securityMode tree.RoutineSecurity
+	var routineOwner username.SQLUsername
 	if o.Type != tree.BuiltinRoutine {
+		securityMode = o.SecurityMode
 		if o.SecurityMode == tree.RoutineDefiner {
 			// SECURITY DEFINER: override both privilege users to the routine
 			// owner, so all privilege checks inside the routine body use the
@@ -387,6 +392,12 @@ func (b *Builder) buildRoutine(
 			}
 			b.dataSourcePrivilegeUserOverride = checkPrivUser
 			b.executePrivilegeUserOverride = checkPrivUser
+			routineOwner = checkPrivUser
+			// Push the owner as the effective user so DDL routed through the
+			// declarative schema changer, which runs at build time, sees the
+			// definer. Legacy planNode DDLs get the runtime push in
+			// routineGenerator.Start.
+			defer b.evalCtx.PushEffectiveUser(checkPrivUser)()
 		} else {
 			// SECURITY INVOKER (default): set dataSourcePrivilegeUserOverride to
 			// the invoker. This is necessary because a view may have overridden
@@ -563,6 +574,8 @@ func (b *Builder) buildRoutine(
 				BodyASTs:           bodyASTs,
 				Params:             params,
 				ResultBufferID:     resultBufferID,
+				SecurityMode:       securityMode,
+				RoutineOwner:       routineOwner,
 			},
 		},
 	)

@@ -204,7 +204,7 @@ func (p *planner) HasAnyPrivilege(
 		return false, errors.AssertionFailedf("cannot use CheckAnyPrivilege without a txn")
 	}
 
-	user := p.SessionData().User()
+	user := p.User()
 	if user.IsNodeUser() {
 		// User "node" has all privileges.
 		return true, nil
@@ -422,7 +422,7 @@ func isOwner(
 func (p *planner) HasOwnership(
 	ctx context.Context, privilegeObject privilege.Object,
 ) (bool, error) {
-	return p.UserHasOwnership(ctx, privilegeObject, p.SessionData().User())
+	return p.UserHasOwnership(ctx, privilegeObject, p.User())
 }
 
 // UserHasOwnership implements the AuthorizationAccessor interface.
@@ -468,7 +468,7 @@ func (p *planner) checkRolePredicate(
 // CheckAnyPrivilege implements the AuthorizationAccessor interface.
 // Requires a valid transaction to be open.
 func (p *planner) CheckAnyPrivilege(ctx context.Context, privilegeObject privilege.Object) error {
-	user := p.SessionData().User()
+	user := p.User()
 	ok, err := p.HasAnyPrivilege(ctx, privilegeObject)
 	if err != nil {
 		return err

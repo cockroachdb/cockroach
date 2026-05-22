@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -777,6 +778,17 @@ type UDFDefinition struct {
 	// results to the same buffer. This is used to implement the PL/pgsql
 	// RETURN NEXT and RETURN QUERY statements.
 	ResultBufferID RoutineResultBufferID
+
+	// SecurityMode is RoutineDefiner when this routine was declared SECURITY
+	// DEFINER. It is consumed at runtime in pkg/sql/routine.go to push the
+	// routine owner onto the eval context's effective-user stack for the
+	// duration of the body's execution, so privilege checks, ownership
+	// assignments, and the current_user builtin all resolve to RoutineOwner.
+	SecurityMode tree.RoutineSecurity
+
+	// RoutineOwner is the owner of the routine, populated only when
+	// SecurityMode is RoutineDefiner. See SecurityMode for how it is used.
+	RoutineOwner username.SQLUsername
 }
 
 // ExceptionBlock contains the information needed to match and handle errors in
