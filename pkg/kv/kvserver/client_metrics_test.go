@@ -327,7 +327,10 @@ func TestStoreMetrics(t *testing.T) {
 	verifyStatsOnServers(t, tc, specs, stickyVFSRegistry, 1, 2)
 	checkGauge(t, "store 0", tc.GetFirstStoreFromServer(t, 0).Metrics().ReplicaCount, initialCount+1)
 	tc.RemoveLeaseHolderOrFatal(t, desc, tc.Target(0), tc.Target(1))
+	// The removed replica may never learn about its own removal through raft,
+	// so force the replica GC queue to clean it up.
 	testutils.SucceedsSoon(t, func() error {
+		tc.GetFirstStoreFromServer(t, 0).MustForceReplicaGCScanAndProcess()
 		_, err := tc.GetFirstStoreFromServer(t, 0).GetReplica(desc.RangeID)
 		if err == nil {
 			return fmt.Errorf("replica still exists on dest 0")
