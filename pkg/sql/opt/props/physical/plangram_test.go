@@ -260,6 +260,65 @@ func TestPlanGramFormatPretty(t *testing.T) {
 			require.Equal(t, tc.expectedNewlines, b.String())
 		})
 	}
+
+	t.Run("with renames", func(t *testing.T) {
+		s1 := &planGramProduction{
+			name:  "s",
+			rules: []planGramTerm{&planGramExpr{op: opt.ScanOp}},
+		}
+		s2 := &planGramProduction{
+			name:  "s",
+			rules: []planGramTerm{&planGramExpr{op: opt.SelectOp, children: []planGramTerm{s1}}},
+		}
+		pg := PlanGram{root: &planGramExpr{
+			op:       opt.InnerJoinOp,
+			children: []planGramTerm{s1, s2},
+		}}
+		renames := pg.fixNames()
+		require.NotNil(t, renames)
+
+		var b bytes.Buffer
+		pg.formatPretty(&b, false /* newlines */, renames)
+		require.Equal(t,
+			`root: (InnerJoin s s_1); s: (Scan); s_1: (Select s);`,
+			b.String(),
+		)
+
+		b.Reset()
+		pg.formatPretty(&b, true /* newlines */, renames)
+		require.Equal(t,
+			"root: (InnerJoin s s_1);\ns: (Scan);\ns_1: (Select s);\n",
+			b.String(),
+		)
+	})
+
+	t.Run("all empty names", func(t *testing.T) {
+		p1 := &planGramProduction{
+			name:  "",
+			rules: []planGramTerm{&planGramExpr{op: opt.ScanOp}},
+		}
+		p2 := &planGramProduction{
+			name:  "",
+			rules: []planGramTerm{&planGramExpr{op: opt.ScanOp}},
+		}
+		p3 := &planGramProduction{
+			name:  "",
+			rules: []planGramTerm{&planGramExpr{op: opt.ScanOp}},
+		}
+		pg := PlanGram{root: &planGramExpr{
+			op:       opt.InnerJoinOp,
+			children: []planGramTerm{p1, p2, p3},
+		}}
+		renames := pg.fixNames()
+		require.NotNil(t, renames)
+
+		var b bytes.Buffer
+		pg.formatPretty(&b, false /* newlines */, renames)
+		require.Equal(t,
+			`root: (InnerJoin _1 _2 _3); _1: (Scan); _2: (Scan); _3: (Scan);`,
+			b.String(),
+		)
+	})
 }
 
 type mockExpr struct {

@@ -210,6 +210,14 @@ func (p PlanGram) WithNoneFallback() PlanGram {
 // FormatPretty writes the full PlanGram grammar to the buffer, starting with
 // the root, optionally with multiple lines.
 func (p PlanGram) FormatPretty(b *bytes.Buffer, newlines bool) {
+	p.formatPretty(b, newlines, p.fixNames())
+}
+
+// formatPretty writes the full PlanGram grammar to the buffer, substituting
+// production names from the renames map.
+func (p PlanGram) formatPretty(
+	b *bytes.Buffer, newlines bool, renames map[*planGramProduction]string,
+) {
 	if newlines {
 		defer b.WriteRune('\n')
 	}
@@ -220,6 +228,13 @@ func (p PlanGram) FormatPretty(b *bytes.Buffer, newlines bool) {
 	if p.None() {
 		b.WriteString("root: none;")
 		return
+	}
+
+	prodName := func(pp *planGramProduction) string {
+		if n, ok := renames[pp]; ok {
+			return n
+		}
+		return pp.name
 	}
 
 	// formatTerm writes a RHS term to the buffer.
@@ -236,7 +251,7 @@ func (p PlanGram) FormatPretty(b *bytes.Buffer, newlines bool) {
 		switch t := term.(type) {
 		case *planGramProduction:
 			// Assume nonterminal names don't need to be quoted.
-			b.WriteString(t.name)
+			b.WriteString(prodName(t))
 		case *planGramExpr:
 			b.WriteRune('(')
 			if t.op == opt.UnknownOp {
@@ -276,7 +291,7 @@ func (p PlanGram) FormatPretty(b *bytes.Buffer, newlines bool) {
 		} else {
 			b.WriteRune(' ')
 		}
-		b.WriteString(pp.name)
+		b.WriteString(prodName(pp))
 		for i, rule := range pp.rules {
 			if i == 0 {
 				b.WriteString(": ")
