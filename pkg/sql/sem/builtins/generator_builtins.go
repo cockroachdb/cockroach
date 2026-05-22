@@ -14,8 +14,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -973,6 +975,31 @@ The last argument is a JSONB object containing the following optional fields:
 			txnDiagnosticsRequestGeneratorType,
 			makeTxnDiagnosticsRequestGenerator,
 			"Starts a transaction diagnostic for the transaction fingerprint id",
+			volatility.Volatile,
+		),
+	),
+	"crdb_internal.tsdb_query": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // local-only; calls into the gateway's TSDB
+		},
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "name", Typ: types.String},
+				{Name: "start_time", Typ: types.TimestampTZ},
+				{Name: "end_time", Typ: types.TimestampTZ},
+			},
+			tsdbQueryGeneratorType,
+			makeTSDBQueryGenerator,
+			"Returns datapoints from the in-cluster TSDB for the metric "+
+				"`name` over the time window from `start_time` to "+
+				"`end_time` (both endpoints best-effort inclusive, subject "+
+				"to the underlying TSDB sample resolution). end_time must "+
+				"be strictly greater than start_time, and end_time is "+
+				"clamped to the current wall-clock time so future windows "+
+				"return zero rows. The result aggregates across all sources "+
+				"and renders the source column NULL. Requires "+
+				"VIEWCLUSTERMETADATA.",
 			volatility.Volatile,
 		),
 	),
@@ -2791,6 +2818,118 @@ func (sp *spanKeyIterator) Close(ctx context.Context) {
 // ResolvedType implements the eval.ValueGenerator interface.
 func (sp *spanKeyIterator) ResolvedType() *types.T {
 	return spanKeyIteratorType
+}
+
+var tsdbQueryGeneratorType = types.MakeLabeledTuple(
+	[]*types.T{types.TimestampTZ, types.Float, types.String},
+	[]string{"timestamp", "value", "source"},
+)
+
+// tsdbQueryGenerator backs crdb_internal.tsdb_query. It calls the
+// eval.TimeSeriesQuerier once during Start, materializes the rows,
+// and serves them out via Next/Values.
+type tsdbQueryGenerator struct {
+	query   eval.TimeSeriesQuery
+	querier eval.TimeSeriesQuerier
+	acc     mon.BoundAccount
+	rows    []eval.TimeSeriesRow
+	index   int
+	// buf avoids re-allocating the Datums slice on every Values call.
+	buf [3]tree.Datum
+}
+
+// tsdbQueryRowSize covers the eval.TimeSeriesRow struct only; Source
+// strings (typically a node ID as decimal) are not charged separately.
+const tsdbQueryRowSize = int64(unsafe.Sizeof(eval.TimeSeriesRow{}))
+
+func makeTSDBQueryGenerator(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
+	// Privilege check before the version gate, so an unprivileged user
+	// can't infer cluster upgrade state from which error they receive.
+	if err := evalCtx.SessionAccessor.CheckPrivilege(
+		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA,
+	); err != nil {
+		return nil, err
+	}
+	// ActiveVersionOrEmpty (not IsActive): IsActive log.Fatals when the
+	// version handle is uninitialized, which is reachable from tests
+	// using a fresh cluster.Settings. Empty version sorts below any
+	// real version, so the Less check degrades to FeatureNotSupported.
+	gateVersion := clusterversion.V26_3_CrdbInternalTSDB.Version()
+	activeVersion := evalCtx.Settings.Version.ActiveVersionOrEmpty(ctx)
+	if activeVersion.Version.Less(gateVersion) {
+		return nil, errors.WithHint(
+			pgerror.Newf(pgcode.FeatureNotSupported,
+				"crdb_internal.tsdb_query requires cluster version %s to be active",
+				gateVersion),
+			"wait for the rolling upgrade to finalize and re-issue the query",
+		)
+	}
+	querier := evalCtx.Planner.TimeSeriesQuerier()
+	if querier == nil {
+		return nil, pgerror.New(pgcode.FeatureNotSupported,
+			"crdb_internal.tsdb_query is not available in this server configuration")
+	}
+	name := string(tree.MustBeDString(args[0]))
+	startTS := tree.MustBeDTimestampTZ(args[1])
+	endTS := tree.MustBeDTimestampTZ(args[2])
+	if !endTS.Time.After(startTS.Time) {
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+			"crdb_internal.tsdb_query end_time (%s) must be greater than start_time (%s)",
+			endTS.Time, startTS.Time)
+	}
+	return &tsdbQueryGenerator{
+		query: eval.TimeSeriesQuery{
+			MetricName: name,
+			StartNanos: startTS.UnixNano(),
+			EndNanos:   endTS.UnixNano(),
+		},
+		querier: querier,
+		acc:     evalCtx.Planner.ExecMon().MakeBoundAccount(),
+	}, nil
+}
+
+// ResolvedType implements the eval.ValueGenerator interface.
+func (*tsdbQueryGenerator) ResolvedType() *types.T { return tsdbQueryGeneratorType }
+
+// Start implements the eval.ValueGenerator interface.
+func (g *tsdbQueryGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+	rows, err := g.querier.QueryTimeSeries(ctx, g.query)
+	if err != nil {
+		return err
+	}
+	if err := g.acc.Grow(ctx, int64(len(rows))*tsdbQueryRowSize); err != nil {
+		return err
+	}
+	g.rows = rows
+	g.index = -1
+	return nil
+}
+
+// Next implements the eval.ValueGenerator interface.
+func (g *tsdbQueryGenerator) Next(_ context.Context) (bool, error) {
+	g.index++
+	return g.index < len(g.rows), nil
+}
+
+// Values implements the eval.ValueGenerator interface.
+func (g *tsdbQueryGenerator) Values() (tree.Datums, error) {
+	row := g.rows[g.index]
+	ts, err := tree.MakeDTimestampTZ(timeutil.Unix(0, row.TimestampNanos), time.Microsecond)
+	if err != nil {
+		return nil, err
+	}
+	g.buf[0] = ts
+	g.buf[1] = tree.NewDFloat(tree.DFloat(row.Value))
+	g.buf[2] = tree.NewDString(row.Source)
+	return g.buf[:], nil
+}
+
+// Close implements the eval.ValueGenerator interface.
+func (g *tsdbQueryGenerator) Close(ctx context.Context) {
+	g.acc.Close(ctx)
+	g.rows = nil
 }
 
 type rangeKeyIterator struct {
