@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -99,7 +100,9 @@ func WaitForJobToHaveStatus(
 		return nil
 	})
 	if err != nil {
-		t.Fatalf("condition failed to evaluate within %s: %s", duration, err)
+		dumpFile := testutils.WriteGoroutineDump()
+		t.Fatalf("condition failed to evaluate within %s: %s\n\ngoroutine dump: %s",
+			duration, err, dumpFile)
 	}
 }
 
