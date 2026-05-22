@@ -4061,6 +4061,12 @@ func TestTxnCoordSenderRetriesAcrossEndTxn(t *testing.T) {
 					return nil
 				}
 				count++
+				if count == 1 {
+					// Dirty hack to reproduce #170829: sleep on the first CPut
+					// attempt so the heartbeat loop fires and writes a txn record
+					// before the CommitInBatch completes.
+					time.Sleep(2 * time.Second)
+				}
 				// Reject the right request on the 2nd attempt.
 				if count == 2 {
 					return kvpb.NewErrorf("injected error; test rejecting request")
