@@ -270,16 +270,6 @@ def go_deps():
         ],
     )
     go_repository(
-        name = "com_github_andygrunwald_go_jira",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/andygrunwald/go-jira",
-        sha256 = "89fc3ece1f9d367e211845ef4f33bed49273af58fdf65c561eb67903d3b72979",
-        strip_prefix = "github.com/andygrunwald/go-jira@v1.14.0",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/andygrunwald/go-jira/com_github_andygrunwald_go_jira-v1.14.0.zip",
-        ],
-    )
-    go_repository(
         name = "com_github_antihax_optional",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/antihax/optional",
@@ -1268,16 +1258,6 @@ def go_deps():
         ],
     )
     go_repository(
-        name = "com_github_bradleyfalzon_ghinstallation_v2",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/bradleyfalzon/ghinstallation/v2",
-        sha256 = "cb473a9105ac77549a8e04a989cc95e72dc615b3993b9ee16d75da8c6ef23bd4",
-        strip_prefix = "github.com/bradleyfalzon/ghinstallation/v2@v2.0.3",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/bradleyfalzon/ghinstallation/v2/com_github_bradleyfalzon_ghinstallation_v2-v2.0.3.zip",
-        ],
-    )
-    go_repository(
         name = "com_github_broady_gogeohash",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/broady/gogeohash",
@@ -1922,6 +1902,16 @@ def go_deps():
         strip_prefix = "github.com/cockroachdb/ttycolor@v0.0.0-20210902133924-c7d7dcdde4e8",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/ttycolor/com_github_cockroachdb_ttycolor-v0.0.0-20210902133924-c7d7dcdde4e8.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_cockroachdb_version",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/cockroachdb/version",
+        sha256 = "05edbf709b51a4a95b8cbcc932ca725c5137d235dce9cb0d59027662257e7ac5",
+        strip_prefix = "github.com/cockroachdb/version@v0.0.0-20250509181251-54dac3003410",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/version/com_github_cockroachdb_version-v0.0.0-20250509181251-54dac3003410.zip",
         ],
     )
     go_repository(
@@ -4100,23 +4090,13 @@ def go_deps():
         ],
     )
     go_repository(
-        name = "com_github_google_go_github_v39",
+        name = "com_github_google_go_github_v61",
         build_file_proto_mode = "disable_global",
-        importpath = "github.com/google/go-github/v39",
-        sha256 = "e8c6bb1c02f57d533559b4125a7f931c55901c9e2560bd688770314c27bcef4f",
-        strip_prefix = "github.com/google/go-github/v39@v39.0.0",
+        importpath = "github.com/google/go-github/v61",
+        sha256 = "81c8199e9fae06865d65a50545ddb45a4877c33809a701da839c3a558120f62c",
+        strip_prefix = "github.com/google/go-github/v61@v61.0.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/go-github/v39/com_github_google_go_github_v39-v39.0.0.zip",
-        ],
-    )
-    go_repository(
-        name = "com_github_google_go_github_v42",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/google/go-github/v42",
-        sha256 = "250d7e937ea6b1d06a95168dba8708db6cc1f447ffe94712d0e2a82540ea01c9",
-        strip_prefix = "github.com/google/go-github/v42@v42.0.0",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/go-github/v42/com_github_google_go_github_v42-v42.0.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/go-github/v61/com_github_google_go_github_v61-v61.0.0.zip",
         ],
     )
     go_repository(
@@ -8469,10 +8449,10 @@ def go_deps():
         name = "com_github_stretchr_testify",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/stretchr/testify",
-        sha256 = "ee5d4f73cb689b1b5432c6908a189f9fbdb172507c49c32dbdf79b239ea9b8e0",
-        strip_prefix = "github.com/stretchr/testify@v1.9.0",
+        sha256 = "36c87573527a97ce97fc15ce2a101e65e5ebb350db142d09f633580cb8d5c839",
+        strip_prefix = "github.com/stretchr/testify@v1.10.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/stretchr/testify/com_github_stretchr_testify-v1.9.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/stretchr/testify/com_github_stretchr_testify-v1.10.0.zip",
         ],
     )
     go_repository(
@@ -8603,16 +8583,6 @@ def go_deps():
         strip_prefix = "github.com/TomiHiltunen/geohash-golang@v0.0.0-20150112065804-b3e4e625abfb",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/TomiHiltunen/geohash-golang/com_github_tomihiltunen_geohash_golang-v0.0.0-20150112065804-b3e4e625abfb.zip",
-        ],
-    )
-    go_repository(
-        name = "com_github_trivago_tgo",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/trivago/tgo",
-        sha256 = "795b3a41901f6b694195d6be9c6e7730a971fbc0ec4cd236e73cc845aca6cb7e",
-        strip_prefix = "github.com/trivago/tgo@v1.0.7",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/trivago/tgo/com_github_trivago_tgo-v1.0.7.zip",
         ],
     )
     go_repository(

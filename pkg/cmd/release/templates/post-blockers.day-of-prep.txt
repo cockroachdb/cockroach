@@ -1,6 +1,0 @@
-Hello!
-
-The {{ .Args.Version }} release date of {{ .Args.ReleaseDate }} will be cancelled tomorrow if the following release blockers are not resolved before tonight's nightly build.
-{{template "blockers" .}}
-Thanks,
-Release Engineering
