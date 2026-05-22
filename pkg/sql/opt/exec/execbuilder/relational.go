@@ -2763,10 +2763,10 @@ func (b *Builder) shouldParallelizeLookupJoin(
 	}
 	md := b.mem.Metadata()
 	table := md.Table(join.Table)
-	// Out of caution, we currently utilize the heuristic only for mutations of
-	// multi-region tables.
-	// TODO(#149849): remove this check so that the heuristic is applicable in
-	// all cases.
+	// If the session var has non-default value 'true', we'll apply the
+	// heuristic only to mutations of MR tables.
+	// TODO(yuzefovich): consider removing this session variable altogether once
+	// we have enough confidence in applying the heuristic across the board.
 	if sd.ParallelizeMultiKeyLookupJoinsOnlyOnMRMutations {
 		if !table.IsMultiregion() || !b.flags.IsSet(exec.PlanFlagContainsMutation) {
 			log.VEventf(b.ctx, 2, "either not multi-region or not a mutation, not parallelizing")
