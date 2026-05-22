@@ -5528,3 +5528,93 @@ distinct-on
       │    └── columns: c100478.region:5!null p_id:7!null
       └── filters
            └── p_id:7 = p.id:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+
+# Regression test for #159793. PruneUnionAllCols must intersect the needed
+# columns with the UnionAll's output columns before calling NeededColMapLeft/
+# Right, since the projections may reference outer columns.
+exec-ddl
+CREATE TABLE t159793 (k INT PRIMARY KEY)
+----
+
+norm format=hide-all
+SELECT (
+  WITH cte (col) AS (
+    SELECT * FROM (VALUES (false))
+    UNION
+    SELECT * FROM (VALUES ((NOT true) AND false), (false))
+    UNION ALL
+    SELECT * FROM (VALUES (NULL::BOOL IN (SELECT true FROM t159793 AS t1)))
+  )
+  SELECT t.k::TEXT FROM cte WHERE col
+) FROM t159793 AS t
+----
+project
+ ├── ensure-distinct-on
+ │    ├── left-join-apply
+ │    │    ├── scan t159793 [as=t]
+ │    │    ├── project
+ │    │    │    ├── union-all
+ │    │    │    │    ├── project
+ │    │    │    │    │    └── limit
+ │    │    │    │    │         ├── select
+ │    │    │    │    │         │    ├── values
+ │    │    │    │    │         │    │    ├── (false,)
+ │    │    │    │    │         │    │    └── (false,)
+ │    │    │    │    │         │    └── filters
+ │    │    │    │    │         │         └── column1
+ │    │    │    │    │         └── 1
+ │    │    │    │    └── project
+ │    │    │    │         └── select
+ │    │    │    │              ├── values
+ │    │    │    │              │    └── tuple
+ │    │    │    │              │         └── any: eq
+ │    │    │    │              │              ├── project
+ │    │    │    │              │              │    ├── scan t159793 [as=t1]
+ │    │    │    │              │              │    └── projections
+ │    │    │    │              │              │         └── true
+ │    │    │    │              │              └── CAST(NULL AS BOOL)
+ │    │    │    │              └── filters
+ │    │    │    │                   └── column1
+ │    │    │    └── projections
+ │    │    │         └── t.k::STRING
+ │    │    └── filters (true)
+ │    └── aggregations
+ │         └── const-agg
+ │              └── k
+ └── projections
+      └── k
+
+# Regression test for #159793 with PL/pgSQL. The projection references a
+# PL/pgSQL variable which is an outer scope column.
+norm
+DO $$
+DECLARE
+  decl OIDVECTOR;
+BEGIN
+  WHILE true LOOP
+  CONTINUE WHEN false;
+  WITH cte (col) AS
+    (
+      SELECT * FROM (VALUES (false))
+    UNION
+      SELECT * FROM (VALUES ((NOT true) AND false), (false))
+    UNION ALL
+      SELECT * FROM (VALUES (NULL::BOOL IN (SELECT true FROM t159793 AS t1)))
+    )
+    SELECT decl FROM cte WHERE col INTO decl;
+  END LOOP;
+END;
+$$
+----
+call
+ ├── cardinality: [0 - 0]
+ ├── volatile
+ └── procedure: inline_code_block
+      ├── strict
+      └── body
+           └── values
+                ├── columns: stmt_loop_2:30
+                ├── cardinality: [1 - 1]
+                ├── key: ()
+                ├── fd: ()-->(30)
+                └── (stmt_loop_2(CAST(NULL AS OIDVECTOR)),)
