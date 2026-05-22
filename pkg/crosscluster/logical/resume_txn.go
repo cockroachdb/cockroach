@@ -26,16 +26,17 @@ import (
 
 // resumeTransactionalLdr runs the transactional LDR ingestion loop, converging
 // on the earliest unappliable transaction before pausing the job.
+//
 // The control loop has three outcomes per attempt:
 //  1. The coordinator returns a txnapply.ReplicationError at timestamp T:
-//     capture it as the candidate pause cause, shrink endTime to T, and retry.
-//     The next attempt's mergefeed will skip events at and after T, so a
-//     conflicting txn at T can never re-trigger the same error; instead, an
+//     capture it as the candidate pause cause, shrink endTime to T.Prev(), and
+//     retry. The next attempt's mergefeed will skip events at and after T, so
+//     a conflicting txn at T can never re-trigger the same error; instead, an
 //     earlier conflict (if any) will surface.
 //  2. The coordinator returns ErrEndTimeReached: every txn with timestamp
-//     strictly less than endTime has been applied without surfacing a new
-//     conflict, so the captured ReplicationError identifies the earliest
-//     conflicting transaction. Pause the job with that error.
+//     <= endTime has been applied without surfacing a new conflict, so the
+//     captured ReplicationError identifies the earliest conflicting
+//     transaction. Pause the job with that error.
 //  3. Any other error: propagate it; resumeWithRetries decides whether to
 //     retry or surface the failure.
 func (r *logicalReplicationResumer) resumeTransactionalLdr(
@@ -47,7 +48,7 @@ func (r *logicalReplicationResumer) resumeTransactionalLdr(
 		err := r.runTxnCoordinator(ctx, jobExecCtx, endTime)
 		switch {
 		case errors.As(err, &capturedErr):
-			endTime = capturedErr.Timestamp
+			endTime = capturedErr.Timestamp.Prev()
 			return err
 		case errors.Is(err, txnmode.ErrEndTimeReached):
 			if capturedErr == nil {
@@ -68,6 +69,19 @@ func (r *logicalReplicationResumer) resumeTransactionalLdr(
 func (r *logicalReplicationResumer) runTxnCoordinator(
 	ctx context.Context, jobExecCtx sql.JobExecContext, endTime hlc.Timestamp,
 ) error {
+	// Skip setup entirely if the job has already replicated past endTime. This
+	// happens when the convergence loop has shrunk endTime below the persisted
+	// frontier and there is no work left in the [replicatedTime, endTime]
+	// window. Without this fast path we would spin up DistSQL, connect to the
+	// producer, and tear everything down on the first frontier update.
+	replicatedTime, err := replicatedTimeFromJob(ctx, jobExecCtx.ExecCfg().InternalDB, r.job)
+	if err != nil {
+		return err
+	}
+	if endTime.LessEq(replicatedTime) {
+		return txnmode.ErrEndTimeReached
+	}
+
 	client, err := r.getActiveClient(ctx, jobExecCtx.ExecCfg().InternalDB)
 	if err != nil {
 		return err
@@ -87,11 +101,6 @@ func (r *logicalReplicationResumer) runTxnCoordinator(
 	// TODO(jeffswenson): checkpoint partition URIs via
 	// r.checkpointPartitionURIs once plan generation is added.
 
-	// Build the DistSQL physical plan before starting concurrent work.
-	replicatedTime, err := replicatedTimeFromJob(ctx, jobExecCtx.ExecCfg().InternalDB, r.job)
-	if err != nil {
-		return err
-	}
 	flowPlan, planCtx, applierInstanceIDs, err :=
 		txnmode.PlanTxnReplication(ctx, r.job, jobExecCtx, sourcePlan, replicatedTime, endTime)
 	if err != nil {

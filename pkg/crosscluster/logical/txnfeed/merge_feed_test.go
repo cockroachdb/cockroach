@@ -291,6 +291,7 @@ func TestMergeFeedEndTime(t *testing.T) {
 		sub2 := makeTestSubscription([]any{
 			kvEvent{key: "b3", time: 3},
 			kvEvent{key: "b6", time: 6},
+			kvEvent{key: "b7", time: 7},
 			kvEvent{key: "b8", time: 8},
 			checkpoint{start: "a", end: "b", time: 8},
 			closeEvent{},
@@ -322,18 +323,18 @@ func TestMergeFeedEndTime(t *testing.T) {
 				}
 			case crosscluster.CheckpointEvent:
 				cp := ev.GetCheckpoint().ResolvedSpans[0].Timestamp
-				require.True(t, cp.Less(endTime),
-					"checkpoints at or beyond endTime must not be emitted")
-				if cp.Equal(endTime.Prev()) {
+				require.True(t, cp.LessEq(endTime),
+					"checkpoints past endTime must not be emitted")
+				if cp.Equal(endTime) {
 					sawSyntheticCP = true
 				}
 			}
 		}
 
-		// Only KVs with timestamp strictly less than endTime should be emitted.
+		// Only KVs with timestamp <= endTime should be emitted.
 		var expectedKVTimes []int
-		for _, ts := range []int{1, 3, 5, 6, 8, 10} {
-			if (hlc.Timestamp{WallTime: int64(ts)}).Less(endTime) {
+		for _, ts := range []int{1, 3, 5, 6, 7, 8, 10} {
+			if (hlc.Timestamp{WallTime: int64(ts)}).LessEq(endTime) {
 				expectedKVTimes = append(expectedKVTimes, ts)
 			}
 		}
