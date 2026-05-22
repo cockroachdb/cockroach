@@ -13,6 +13,16 @@ if [ -z $token ]; then
 TEAMCITY_TOKEN not set. Get one here:
 
 https://teamcity.cockroachdb.com/profile.html?item=accessTokens
+
+Usage: $0 <pr-number-or-branch> <test-regex> [sha]
+
+Examples:
+  $0 12345 'perturbation/full/intents'
+  $0 my-branch-name 'kv/splits.*' a1b2c3d4
+
+Note: PR numbers work for all cases (recommended). Branch names only work
+for branches pushed directly to cockroachdb/cockroach, not personal forks.
+For fork branches, use the PR number instead.
 EOF
   exit 1
 fi
@@ -20,7 +30,7 @@ fi
 pr=${1-}
 
 while [ -z $pr ]; do
-  read -p 'PR number (defaults to first arg, can also use branch name): ' pr
+  read -p 'PR number or branch name (PR number recommended): ' pr
 done
 
 tests=${2-}
