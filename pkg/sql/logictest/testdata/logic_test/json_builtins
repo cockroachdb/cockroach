@@ -777,6 +777,44 @@ SELECT jsonb_build_array('+Inf'::FLOAT8, 'NaN'::FLOAT8)::STRING::JSONB
 ----
 ["Infinity", "NaN"]
 
+# Regression for #170623: extracting non-finite float values from JSONB with
+# the ->> operator should return unquoted text, just as it does for normal
+# numbers, so that ::float casts work.
+query R
+SELECT (jsonb_build_object('a', 'NaN'::float) ->> 'a')::float
+----
+NaN
+
+query R
+SELECT (jsonb_build_object('a', '+Inf'::float) ->> 'a')::float
+----
++Inf
+
+query R
+SELECT (jsonb_build_object('a', '-Inf'::float) ->> 'a')::float
+----
+-Inf
+
+query T
+SELECT jsonb_build_object('a', 1.5) ->> 'a'
+----
+1.5
+
+query T
+SELECT jsonb_build_object('a', 'NaN'::float) ->> 'a'
+----
+NaN
+
+query T
+SELECT jsonb_build_object('a', '+Inf'::float) ->> 'a'
+----
+Infinity
+
+query T
+SELECT jsonb_build_object('a', '-Inf'::float) ->> 'a'
+----
+-Infinity
+
 statement error pgcode 2202E array must have even number of elements
 SELECT json_object('{a,b,c}'::TEXT[])
 
