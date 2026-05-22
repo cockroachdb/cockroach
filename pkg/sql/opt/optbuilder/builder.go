@@ -386,15 +386,16 @@ func (b *Builder) buildStmt(
 		case *tree.DoBlock:
 		case *tree.CreateTable, *tree.DropTable,
 			*tree.CreateSchema, *tree.DropSchema,
-			*tree.CreateRole, *tree.DropRole:
+			*tree.CreateRole, *tree.DropRole,
+			*tree.Grant, *tree.Revoke, *tree.AlterDefaultPrivileges:
 			if !b.insideProcDef {
 				panic(unimplemented.NewWithIssuef(110080,
 					"%s usage inside a function definition is not supported",
 					stmt.StatementTag(),
 				))
 			}
-			// DDL is allowed inside stored procedures when the cluster has
-			// been upgraded to v26.3.
+			// DDL and DCL are allowed inside stored procedures when the
+			// cluster has been upgraded to v26.3.
 			if !b.evalCtx.Settings.Version.IsActive(
 				b.ctx, clusterversion.V26_3,
 			) {
