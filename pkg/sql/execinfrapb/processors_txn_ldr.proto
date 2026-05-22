@@ -63,7 +63,7 @@ message TxnLDRCoordinatorSpec {
 
   optional LDRSchema schema = 6 [(gogoproto.nullable) = false];
 
-  // The coordinator processes only events with timestamp strictly less than
+  // The coordinator processes only events with timestamp less than or equal to
   // end_time and returns ErrEndTimeReached once the merge feed reaches this
   // cutoff. Used by the pause-on-conflict convergence loop.
   optional util.hlc.Timestamp end_time = 7 [(gogoproto.nullable) = false];
