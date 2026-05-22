@@ -2455,7 +2455,7 @@ func (c *cliState) configurePreShellDefaults(
 	// all), to prevent abnormal situation where a history runs into
 	// megabytes and starts slowing down the shell.
 	const maxHistEntries = 10000
-	if useEditor {
+	if useEditor && !c.sqlCtx.DisableHistory {
 		homeDir, err := envutil.HomeDir()
 		if err != nil {
 			fmt.Fprintf(c.iCtx.stderr, "warning: cannot retrieve user information: %v\nwarning: history will not be saved\n", err)

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIsEndOfStatement(t *testing.T) {
@@ -186,4 +187,26 @@ func TestGetSetArgs(t *testing.T) {
 				ok, option, hasValue, value)
 		}
 	}
+}
+
+func TestDisableHistory(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	c := setupTestCliState()
+	c.cliCtx.IsInteractive = true
+	c.sqlCtx.DisableHistory = true
+
+	// configurePreShellDefaults needs *os.File for in/out/err but does
+	// not read from them in this code path; a fresh pipe is sufficient.
+	rIn, wIn, err := os.Pipe()
+	require.NoError(t, err)
+	defer func() { _ = rIn.Close(); _ = wIn.Close() }()
+
+	cleanup, err := c.configurePreShellDefaults(rIn, os.Stdout, os.Stderr)
+	require.NoError(t, err)
+	defer cleanup()
+
+	assert.Empty(t, c.iCtx.histFile,
+		"DisableHistory=true should leave histFile unset")
 }

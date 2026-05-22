@@ -52,6 +52,12 @@ type Context struct {
 	// CertsDir is an extra directory to look for client certs in,
 	// when the \c command is used.
 	CertsDir string
+
+	// DisableHistory, if true, suppresses persistent shell history.
+	// When set, no history file is created or read, even in
+	// interactive mode. Equivalent to (but more explicit than)
+	// leaving the internal histFile unset.
+	DisableHistory bool
 }
 
 // internalContext represents the internal configuration state of the
