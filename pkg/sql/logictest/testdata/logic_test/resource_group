@@ -57,11 +57,11 @@ CREATE RESOURCE GROUP dup_max_cpu WITH cpu_weight = 1, max_cpu = true, max_cpu =
 statement ok
 CREATE RESOURCE GROUP high WITH cpu_weight = 100, max_cpu = true
 
-query ITIB colnames
+query ITIBF colnames
 SHOW RESOURCE GROUP high
 ----
-id  name  cpu_weight  max_cpu
-17  high  100         true
+id  name  cpu_weight  max_cpu  cpu_share_percent
+17  high  100         true     100
 
 # The parens form is also accepted.
 statement ok
@@ -74,11 +74,11 @@ DROP RESOURCE GROUP parens
 statement ok
 CREATE RESOURCE GROUP medium WITH cpu_weight = 50
 
-query ITIB colnames
+query ITIBF colnames
 SHOW RESOURCE GROUP medium
 ----
-id  name    cpu_weight  max_cpu
-19  medium  50          false
+id  name    cpu_weight  max_cpu  cpu_share_percent
+19  medium  50          false    33.33333333333333
 
 # Duplicate name is rejected; IF NOT EXISTS swallows the conflict.
 statement error pq: resource group "high" already exists
@@ -98,12 +98,12 @@ subtest end
 subtest show
 
 # SHOW RESOURCE GROUPS lists all.
-query ITIB colnames,rowsort
+query ITIBF colnames,rowsort
 SHOW RESOURCE GROUPS
 ----
-id  name    cpu_weight  max_cpu
-17  high    100         true
-19  medium  50          false
+id  name    cpu_weight  max_cpu  cpu_share_percent
+17  high    100         true     66.66666666666666
+19  medium  50          false    33.33333333333333
 
 # SHOW RESOURCE GROUP <name> errors when the named group does not exist.
 statement error pq: resource group "ghost" does not exist
@@ -117,20 +117,20 @@ subtest alter
 statement ok
 ALTER RESOURCE GROUP high WITH cpu_weight = 200
 
-query ITIB colnames
+query ITIBF colnames
 SHOW RESOURCE GROUP high
 ----
-id  name  cpu_weight  max_cpu
-17  high  200         true
+id  name  cpu_weight  max_cpu  cpu_share_percent
+17  high  200         true     80
 
 statement ok
 ALTER RESOURCE GROUP high WITH max_cpu = false
 
-query ITIB colnames
+query ITIBF colnames
 SHOW RESOURCE GROUP high
 ----
-id  name  cpu_weight  max_cpu
-17  high  200         false
+id  name  cpu_weight  max_cpu  cpu_share_percent
+17  high  200         false    80
 
 # ALTER on a missing group: error without IF EXISTS, no-op with.
 statement error pq: resource group "ghost" does not exist
@@ -157,11 +157,63 @@ statement ok
 DROP RESOURCE GROUP IF EXISTS medium
 
 # After dropping medium, only high remains.
-query ITIB colnames
+query ITIBF colnames
 SHOW RESOURCE GROUPS
 ----
-id  name  cpu_weight  max_cpu
-17  high  200         false
+id  name  cpu_weight  max_cpu  cpu_share_percent
+17  high  200         false    100
+
+subtest end
+
+subtest cpu_share
+
+# cpu_share_percent is derived from the entire set of user-defined
+# groups: share = weight / max(100, Σ weights). The 100-weight floor
+# prevents a single small group from appearing to receive 100% of CPU.
+#
+# Only `high` (weight 200) is present; the floor does not bind and the
+# whole 100% goes to `high`.
+query F
+SELECT cpu_share_percent FROM [SHOW RESOURCE GROUP high]
+----
+100
+
+# Shrink high so the sum exactly hits the floor (20+30+50 = 100). At
+# the boundary, weights coincide with percentages.
+statement ok
+ALTER RESOURCE GROUP high WITH cpu_weight = 20
+
+statement ok
+CREATE RESOURCE GROUP a WITH cpu_weight = 30
+
+statement ok
+CREATE RESOURCE GROUP b WITH cpu_weight = 50
+
+query TF rowsort
+SELECT name, cpu_share_percent FROM [SHOW RESOURCE GROUPS]
+----
+high  20
+a     30
+b     50
+
+# Drop b. Sum is now 50, below the floor, so the floor binds: each
+# group's share is weight/100 and the shares no longer add to 100%.
+statement ok
+DROP RESOURCE GROUP b
+
+query TF rowsort
+SELECT name, cpu_share_percent FROM [SHOW RESOURCE GROUPS]
+----
+high  20
+a     30
+
+# Restore the prior state so the rest of the file sees `high` alone
+# with cpu_weight=200.
+statement ok
+DROP RESOURCE GROUP a
+
+statement ok
+ALTER RESOURCE GROUP high WITH cpu_weight = 200
 
 subtest end
 
