@@ -417,10 +417,11 @@ func (ch *checkpointHandler) handleMeta(
 		return nil
 	}
 
-	reachedEndTime := !replicatedTime.Less(ch.endTime.Prev())
-	if replicatedTime.LessEq(ch.replicatedTime) && !reachedEndTime {
+	if replicatedTime.LessEq(ch.replicatedTime) {
 		return nil
 	}
+
+	reachedEndTime := ch.endTime.LessEq(replicatedTime)
 	updateFreq := ldrsettings.JobCheckpointFrequency.Get(ch.sv)
 	if !reachedEndTime && (updateFreq == 0 || timeutil.Since(ch.lastPersistenceTime) < updateFreq) {
 		return nil
