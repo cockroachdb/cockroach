@@ -34,6 +34,7 @@ go_test(
     name = "ptstorage_test",
     size = "large",
     srcs = [
+        "bench_test.go",
         "main_test.go",
         "metrics_test.go",
         "storage_test.go",
@@ -63,6 +64,7 @@ go_test(
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/testcluster",
+        "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
