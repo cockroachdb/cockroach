@@ -156,6 +156,7 @@ SHOW application_name;
 <tr><td><code>optimizer_enable_lock_elision</code></td><td>Controls whether the optimizer can eliminate unnecessary locking operations.</td><td><code>on</code></td><td>No</td><td>-</td></tr>
 <tr><td><code>optimizer_hoist_uncorrelated_equality_subqueries</code></td><td>Controls whether the optimizer hoists uncorrelated subqueries in equality expressions with columns, potentially producing more efficient plans.</td><td><code>on</code></td><td>No</td><td>-</td></tr>
 <tr><td><code>optimizer_inline_any_unnest_subquery</code></td><td>Controls whether the optimizer inlines subqueries containing ANY expressions combined with UNNEST.</td><td><code>on</code></td><td>No</td><td>-</td></tr>
+<tr><td><code>optimizer_inline_placeholder_equalities</code></td><td>Controls whether the optimizer inlines placeholder equalities in the InlineConstVar normalization rule.</td><td><code>on</code></td><td>No</td><td>-</td></tr>
 <tr><td><code>optimizer_merge_joins_enabled</code></td><td>Controls whether the optimizer should explore query plans with merge joins.</td><td><code>on</code></td><td>No</td><td>-</td></tr>
 <tr><td><code>optimizer_min_row_count</code></td><td>Sets a lower bound on row count estimates during query planning, except for expressions with zero cardinality.</td><td><code>1</code></td><td>No</td><td>-</td></tr>
 <tr><td><code>optimizer_plan_lookup_joins_with_reverse_scans</code></td><td>Controls whether the optimizer can plan lookup joins using reverse index scans.</td><td><code>on</code></td><td>No</td><td>-</td></tr>

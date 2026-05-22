@@ -1164,6 +1164,10 @@ func (m *SessionDataMutator) SetOptimizerInlineAnyUnnestSubquery(val bool) {
 	m.Data.OptimizerInlineAnyUnnestSubquery = val
 }
 
+func (m *SessionDataMutator) SetOptimizerInlinePlaceholderEqualities(val bool) {
+	m.Data.OptimizerInlinePlaceholderEqualities = val
+}
+
 func (m *SessionDataMutator) SetUseBackupsWithIDs(val bool) {
 	m.Data.UseBackupsWithIDs = val
 }

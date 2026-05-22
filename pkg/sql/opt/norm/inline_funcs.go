@@ -301,8 +301,12 @@ func (c *CustomFuncs) extractVarEqualsConst(
 	if eq, ok := e.(*memo.EqExpr); ok {
 		if l, ok := eq.Left.(*memo.VariableExpr); ok {
 			switch eq.Right.(type) {
-			case *memo.ConstExpr, *memo.PlaceholderExpr:
+			case *memo.ConstExpr:
 				return true, l, eq.Right
+			case *memo.PlaceholderExpr:
+				if c.f.evalCtx.SessionData().OptimizerInlinePlaceholderEqualities {
+					return true, l, eq.Right
+				}
 			}
 		}
 	}
