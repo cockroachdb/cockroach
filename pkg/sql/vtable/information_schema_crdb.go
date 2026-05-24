@@ -43,3 +43,23 @@ CREATE VIEW information_schema.crdb_cluster_active_session_history AS
            work_event,
            goroutine_id
     FROM crdb_internal.cluster_active_session_history`
+
+// CRDBJobs describes the schema of the information_schema view that exposes
+// per-job metadata from system.jobs without the truncation or column omission
+// that SHOW JOBS applies for human readability. The column set is intentionally
+// scoped to what is useful to customers programmatically: internal execution
+// detail (claim session/instance), retry bookkeeping (num_runs, last_run), and
+// creator coupling (created_by_*) are deliberately excluded so the contract
+// does not depend on those implementation choices.
+const CRDBJobs = `
+CREATE VIEW information_schema.crdb_jobs AS
+    SELECT id                  AS job_id,
+           job_type,
+           owner,
+           description,
+           created::TIMESTAMPTZ AS created,
+           finished,
+           status               AS state,
+           error_msg            AS error
+    FROM system.public.jobs
+    WHERE crdb_internal.can_view_job(owner)`
