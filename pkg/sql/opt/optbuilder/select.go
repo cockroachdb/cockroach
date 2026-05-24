@@ -373,6 +373,20 @@ func (b *Builder) buildView(
 			b.skipSelectPrivilegeChecks = true
 			defer func() { b.skipSelectPrivilegeChecks = false }()
 		}
+		// System views are authored by the node user and are part of the
+		// supported customer surface; mirror the privilege-check skip above
+		// for the unsafe-internals guard so that table and builtin gates are
+		// symmetric inside a system-view definer context. Without this, a
+		// system view body in (e.g.) information_schema could reference
+		// system tables (since the SELECT check is skipped) but could not
+		// invoke a crdb_internal builtin in its WHERE clause, forcing every
+		// such view to alias each crdb_internal builtin it depends on.
+		// Restricted to actual system views so the cluster-setting bypass
+		// (skipUnderlyingPrivilegeChecks) does not re-expose user-created
+		// views to unsafe builtins.
+		if view.IsSystemView() {
+			defer b.DisableUnsafeInternalCheck()()
+		}
 	} else {
 		if !view.IsSecurityInvoker() {
 			defer func(dataSourcePrivilegeUserOverride username.SQLUsername) {
