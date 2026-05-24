@@ -455,3 +455,119 @@ statement ok
 DROP TABLE crdb_jobs_long_named_test_table
 
 subtest end
+
+subtest information_schema_crdb_jobs_with_progress
+
+user root
+
+# Drive a schema change so we have a job with progress/status entries we can
+# query through the joined view.
+statement ok
+CREATE TABLE crdb_jobs_wp_test (x INT)
+
+statement ok
+CREATE INDEX a_descriptively_named_idx_for_with_progress_assertions
+  ON crdb_jobs_wp_test (x)
+
+let $job_id
+SELECT job_id FROM information_schema.crdb_jobs
+WHERE job_type = 'SCHEMA CHANGE'
+  AND description LIKE 'CREATE INDEX a_descriptively_named_idx_for_with_progress_assertions%'
+
+# Column shape — exact column names, types, ordering. Stable contract.
+query TT colnames
+SELECT column_name, data_type
+  FROM information_schema.columns
+ WHERE table_schema = 'information_schema' AND table_name = 'crdb_jobs_with_progress'
+ ORDER BY ordinal_position
+----
+column_name        data_type
+job_id             bigint
+job_type           text
+owner              text
+description        text
+created            timestamp with time zone
+finished           timestamp with time zone
+state              text
+error              text
+progress_fraction  double precision
+resolved           numeric
+status_message     text
+last_updated       timestamp with time zone
+
+# The first eight columns return the same values as crdb_jobs.
+query TTTTBB
+SELECT v.job_type, v.owner, v.description, v.state,
+       v.error IS NULL,
+       v.created = j.created
+  FROM information_schema.crdb_jobs_with_progress v
+  JOIN information_schema.crdb_jobs              j USING (job_id)
+ WHERE job_id = $job_id
+----
+SCHEMA CHANGE  root  CREATE INDEX a_descriptively_named_idx_for_with_progress_assertions ON test.public.crdb_jobs_wp_test (x)  succeeded  true  true
+
+# progress_fraction reaches 1.0 on a successful schema change.
+query R
+SELECT progress_fraction FROM information_schema.crdb_jobs_with_progress WHERE job_id = $job_id
+----
+1
+
+# resolved is the raw HLC decimal or NULL for jobs that don't report a
+# high-water. Successful schema changes typically don't. Apply
+# hlc_to_timestamp at the call site to get a wall-clock value.
+query I
+SELECT count(*) FROM information_schema.crdb_jobs_with_progress
+WHERE job_id = $job_id
+  AND (resolved IS NULL OR hlc_to_timestamp(resolved) <= now())
+----
+1
+
+# last_updated is non-NULL for any job that reported progress at least once.
+query B
+SELECT last_updated IS NOT NULL FROM information_schema.crdb_jobs_with_progress
+WHERE job_id = $job_id
+----
+true
+
+# Row-level access control matches crdb_jobs.
+user testuser
+
+query I
+SELECT count(*) FROM information_schema.crdb_jobs_with_progress WHERE job_id = $job_id
+----
+0
+
+user root
+
+statement ok
+GRANT SYSTEM VIEWJOB TO testuser
+
+user testuser
+
+query I
+SELECT count(*) FROM information_schema.crdb_jobs_with_progress WHERE job_id = $job_id
+----
+1
+
+user root
+
+statement ok
+REVOKE SYSTEM VIEWJOB FROM testuser
+
+# Works under the unsafe-internals gate (the whole point of putting it in
+# information_schema rather than crdb_internal).
+statement ok
+SET allow_unsafe_internals = false
+
+query I
+SELECT count(*) FROM information_schema.crdb_jobs_with_progress WHERE job_id = $job_id
+----
+1
+
+statement ok
+RESET allow_unsafe_internals
+
+statement ok
+DROP TABLE crdb_jobs_wp_test
+
+subtest end
