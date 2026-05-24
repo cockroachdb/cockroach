@@ -45,7 +45,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  
  -- Look for "toastable" types that aren't varlena.
  SELECT t1.oid, t1.typname
-@@ -67,15 +81,378 @@
+@@ -67,15 +81,379 @@
       WHERE t2.typname = ('_' || t1.typname)::name AND
             t2.typelem = t1.oid and t1.typarray = t2.oid)
  ORDER BY t1.oid;
@@ -91,6 +91,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
 +     100198 | interval_tbl
 +     100213 | timestamp_tbl
 +     100214 | timestamptz_tbl
++ 4294966952 | crdb_jobs_with_progress
 + 4294966953 | crdb_jobs
 + 4294966954 | crdb_cluster_active_session_history
 + 4294966955 | crdb_node_active_session_history
@@ -429,7 +430,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
 + 4294967292 | builtin_functions
 + 4294967293 | node_build_info
 + 4294967294 | backward_dependencies
-+(369 rows)
++(370 rows)
  
  -- Make sure typarray points to a "true" array type of our own base
  SELECT t1.oid, t1.typname as basetype, t2.typname as arraytype,
