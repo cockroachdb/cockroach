@@ -483,6 +483,7 @@ const (
 	InformationSchemaCrdbClusterActiveSessionHistoryTableID
 	InformationSchemaCrdbStatementStatisticsTableID
 	InformationSchemaCrdbTransactionStatisticsTableID
+	InformationSchemaCrdbJobsViewID
 	CrdbInternalClusterHeldAdvisoryLocksTableID
 	MinVirtualID = CrdbInternalClusterHeldAdvisoryLocksTableID
 )

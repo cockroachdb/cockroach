@@ -161,6 +161,7 @@ var informationSchema = virtualSchema{
 		catconstants.InformationSchemaCrdbClusterActiveSessionHistoryTableID: informationSchemaCrdbClusterActiveSessionHistoryTable,
 		catconstants.InformationSchemaCrdbStatementStatisticsTableID:         informationSchemaCrdbStatementStatisticsTable,
 		catconstants.InformationSchemaCrdbTransactionStatisticsTableID:       informationSchemaCrdbTransactionStatisticsTable,
+		catconstants.InformationSchemaCrdbJobsViewID:                         informationSchemaCrdbJobsView,
 	},
 	tableValidator:             validateInformationSchemaTable,
 	validWithNoDatabaseContext: true,
@@ -2682,6 +2683,23 @@ var informationSchemaCrdbTransactionStatisticsTable = virtualSchemaView{
 		{Name: "commit_lat_sum", Typ: types.Float},
 		{Name: "commit_lat_sum_sq", Typ: types.Float},
 		{Name: "stmt_fingerprint_ids", Typ: types.BytesArray},
+	},
+}
+
+var informationSchemaCrdbJobsView = virtualSchemaView{
+	comment: `per-job metadata from system.jobs without the truncation or column ` +
+		`omission applied by SHOW JOBS. Rows are filtered by ` +
+		`crdb_internal.can_view_job(owner).`,
+	schema: vtable.CRDBJobs,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "job_id", Typ: types.Int},
+		{Name: "job_type", Typ: types.String},
+		{Name: "owner", Typ: types.String},
+		{Name: "description", Typ: types.String},
+		{Name: "created", Typ: types.TimestampTZ},
+		{Name: "finished", Typ: types.TimestampTZ},
+		{Name: "state", Typ: types.String},
+		{Name: "error", Typ: types.String},
 	},
 }
 

@@ -352,3 +352,106 @@ statement ok
 DROP ROLE jobcontroller
 
 subtest end
+
+subtest information_schema_crdb_jobs
+
+user root
+
+# Set up a schema-change job we can predict on. The CREATE INDEX is named to
+# include a long enough description to verify the view does not truncate.
+statement ok
+CREATE TABLE crdb_jobs_long_named_test_table (x INT)
+
+statement ok
+CREATE INDEX a_descriptively_named_index_for_truncation_assertions
+  ON crdb_jobs_long_named_test_table (x)
+
+let $job_id
+SELECT job_id FROM information_schema.crdb_jobs
+WHERE job_type = 'SCHEMA CHANGE'
+  AND description LIKE 'CREATE INDEX a_descriptively_named_index_for_truncation_assertions%'
+
+# Column shape — exact column names, types, ordering. This is the stable contract.
+query TT colnames
+SELECT column_name, data_type
+  FROM information_schema.columns
+ WHERE table_schema = 'information_schema' AND table_name = 'crdb_jobs'
+ ORDER BY ordinal_position
+----
+column_name  data_type
+job_id       bigint
+job_type     text
+owner        text
+description  text
+created      timestamp with time zone
+finished     timestamp with time zone
+state        text
+error        text
+
+# The full description appears un-truncated.
+query T
+SELECT description FROM information_schema.crdb_jobs WHERE job_id = $job_id
+----
+CREATE INDEX a_descriptively_named_index_for_truncation_assertions ON test.public.crdb_jobs_long_named_test_table (x)
+
+# Compare with crdb_internal.jobs: error there is coalesced to '', here it is NULL
+# when the job has no error. We use length() rather than comparing strings so the
+# difference is unambiguous (NULL length() returns NULL, '' length() returns 0).
+query II
+SELECT length(error), (SELECT length(error) FROM crdb_internal.jobs WHERE job_id = $job_id)
+  FROM information_schema.crdb_jobs WHERE job_id = $job_id
+----
+NULL  0
+
+# The lifecycle column is named `state`, not `status` (which the underlying
+# system.jobs column was named, and which we reserve for granular phase strings
+# in the with-progress surface).
+query T
+SELECT state FROM information_schema.crdb_jobs WHERE job_id = $job_id
+----
+succeeded
+
+# Row-level access control mirrors crdb_internal.jobs: a non-admin user that
+# does not own a job and lacks VIEWJOB does not see it.
+user testuser
+
+query I
+SELECT count(*) FROM information_schema.crdb_jobs WHERE job_id = $job_id
+----
+0
+
+# Granting VIEWJOB exposes the row.
+user root
+
+statement ok
+GRANT SYSTEM VIEWJOB TO testuser
+
+user testuser
+
+query I
+SELECT count(*) FROM information_schema.crdb_jobs WHERE job_id = $job_id
+----
+1
+
+user root
+
+statement ok
+REVOKE SYSTEM VIEWJOB FROM testuser
+
+# allow_unsafe_internals = false (the post-unsafesql default for ordinary
+# sessions) must not block this surface. This is the entire point of the change.
+statement ok
+SET allow_unsafe_internals = false
+
+query I
+SELECT count(*) FROM information_schema.crdb_jobs WHERE job_id = $job_id
+----
+1
+
+statement ok
+RESET allow_unsafe_internals
+
+statement ok
+DROP TABLE crdb_jobs_long_named_test_table
+
+subtest end
