@@ -4,6 +4,9 @@ on:
     - cron: '0 8 * * *' # Every day at 8:00 UTC
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   check-pebble-dep:
     if: github.repository == 'cockroachdb/cockroach'
