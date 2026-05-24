@@ -103,5 +103,6 @@ sudo systemd-run --unit "${VIRTUAL_CLUSTER_LABEL}" \
   -p "MemoryMax=${MEMORY_MAX}" \
   -p LimitCORE=infinity \
   -p "LimitNOFILE=${NUM_FILES_LIMIT}" \
+  -p TimeoutStartSec=300 \
   ${AUTO_RESTART:+-p Restart=always -p RestartSec=5s -p StartLimitIntervalSec=60s -p StartLimitBurst=3} \
   bash "${0}" run
