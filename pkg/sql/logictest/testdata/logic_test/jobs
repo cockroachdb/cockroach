@@ -659,3 +659,97 @@ statement ok
 DROP TABLE crdb_jobs_msg_test
 
 subtest end
+
+subtest information_schema_crdb_job_progress_history
+
+user root
+
+statement ok
+CREATE TABLE crdb_jobs_ph_test (x INT)
+
+statement ok
+CREATE INDEX a_descriptively_named_idx_for_progress_history_assertions
+  ON crdb_jobs_ph_test (x)
+
+let $job_id
+SELECT job_id FROM information_schema.crdb_jobs
+WHERE job_type = 'SCHEMA CHANGE'
+  AND description LIKE 'CREATE INDEX a_descriptively_named_idx_for_progress_history_assertions%'
+
+# Function exists and returns the right column shape.
+query TRT colnames
+SELECT * FROM information_schema.crdb_job_progress_history($job_id) LIMIT 0
+----
+recorded  progress_fraction  resolved
+
+# A completed schema change writes at least one progress entry.
+query B
+SELECT count(*) > 0 FROM information_schema.crdb_job_progress_history($job_id)
+----
+true
+
+# Rows are ordered by recorded time descending.
+query B
+SELECT bool_and(prev IS NULL OR prev >= recorded)
+  FROM (
+    SELECT recorded, lag(recorded) OVER (ORDER BY recorded DESC) AS prev
+      FROM information_schema.crdb_job_progress_history($job_id)
+  )
+----
+true
+
+# resolved is the raw HLC decimal or NULL — never a TIMESTAMPTZ. Callers
+# wanting wall-clock apply hlc_to_timestamp at the call site.
+query B
+SELECT bool_and(resolved IS NULL OR hlc_to_timestamp(resolved) <= now())
+  FROM information_schema.crdb_job_progress_history($job_id)
+----
+true
+
+# Non-existent job: zero rows, no error.
+query I
+SELECT count(*) FROM information_schema.crdb_job_progress_history(-1)
+----
+0
+
+# Row-level access.
+user testuser
+
+query I
+SELECT count(*) FROM information_schema.crdb_job_progress_history($job_id)
+----
+0
+
+user root
+
+statement ok
+GRANT SYSTEM VIEWJOB TO testuser
+
+user testuser
+
+query B
+SELECT count(*) > 0 FROM information_schema.crdb_job_progress_history($job_id)
+----
+true
+
+user root
+
+statement ok
+REVOKE SYSTEM VIEWJOB FROM testuser
+
+# Unsafe-internals gate.
+statement ok
+SET allow_unsafe_internals = false
+
+query B
+SELECT count(*) > 0 FROM information_schema.crdb_job_progress_history($job_id)
+----
+true
+
+statement ok
+RESET allow_unsafe_internals
+
+statement ok
+DROP TABLE crdb_jobs_ph_test
+
+subtest end
