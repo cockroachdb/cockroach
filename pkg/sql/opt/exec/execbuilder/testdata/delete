@@ -1020,3 +1020,80 @@ Del (locking) /Table/120/1/1/0
 Del (locking) /Table/120/2/"foo"/"bar"/0
 
 subtest end
+
+# Cascades should be short-circuited if the main query didn't delete any rows.
+statement ok
+CREATE TABLE parent138975 (k INT PRIMARY KEY, v INT, INDEX(v));
+
+statement ok
+CREATE TABLE child138975 (k INT PRIMARY KEY, parent_k INT REFERENCES parent138975(k) ON DELETE CASCADE);
+
+query T
+EXPLAIN ANALYZE DELETE FROM parent138975 WHERE k >= 1 AND k <= 100;
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+regions: <hidden>
+·
+• root
+│
+├── • delete
+│   │ sql nodes: <hidden>
+│   │ regions: <hidden>
+│   │ execution time: 0µs
+│   │ actual row count: 0
+│   │ from: parent138975
+│   │
+│   └── • scan
+│         sql nodes: <hidden>
+│         kv nodes: <hidden>
+│         regions: <hidden>
+│         KV time: 0µs
+│         KV rows decoded: 0
+│         actual row count: 0
+│         missing stats
+│         table: parent138975@parent138975_pkey
+│         spans: [/1 - /100]
+│         locking strength: for update
+│
+└── • fk-cascade
+      fk: child138975_parent_k_fkey
+      short-circuited
+
+# Same as above but using the delete-range operator.
+statement ok
+DROP TABLE child138975;
+
+statement ok
+DROP TABLE parent138975;
+
+statement ok
+CREATE TABLE parent138975 (k INT PRIMARY KEY);
+
+statement ok
+CREATE TABLE child138975 (k INT PRIMARY KEY, parent_k INT REFERENCES parent138975(k) ON DELETE CASCADE);
+
+query T
+EXPLAIN ANALYZE DELETE FROM parent138975 WHERE k >= 1 AND k <= 100;
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: generic, re-optimized
+regions: <hidden>
+·
+• root
+│
+├── • delete range
+│     sql nodes: <hidden>
+│     regions: <hidden>
+│     execution time: 0µs
+│     actual row count: 0
+│     from: parent138975
+│     spans: [/1 - /100]
+│
+└── • fk-cascade
+      fk: child138975_parent_k_fkey
+      short-circuited
