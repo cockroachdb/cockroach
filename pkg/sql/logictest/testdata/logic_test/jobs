@@ -571,3 +571,91 @@ statement ok
 DROP TABLE crdb_jobs_wp_test
 
 subtest end
+
+subtest information_schema_crdb_job_messages
+
+user root
+
+statement ok
+CREATE TABLE crdb_jobs_msg_test (x INT)
+
+statement ok
+CREATE INDEX a_descriptively_named_idx_for_messages_assertions
+  ON crdb_jobs_msg_test (x)
+
+let $job_id
+SELECT job_id FROM information_schema.crdb_jobs
+WHERE job_type = 'SCHEMA CHANGE'
+  AND description LIKE 'CREATE INDEX a_descriptively_named_idx_for_messages_assertions%'
+
+# Function exists and returns the right column shape.
+query TTT colnames
+SELECT * FROM information_schema.crdb_job_messages($job_id) LIMIT 0
+----
+recorded  kind  message
+
+# A schema-change job emits at least one state-transition message during its
+# lifecycle. We don't pin the exact message text or kind set because those are
+# documented as informational/extensible.
+query B
+SELECT count(*) > 0 FROM information_schema.crdb_job_messages($job_id)
+----
+true
+
+# Messages are returned ordered by recorded time descending.
+query B
+SELECT bool_and(prev IS NULL OR prev >= recorded)
+  FROM (
+    SELECT recorded, lag(recorded) OVER (ORDER BY recorded DESC) AS prev
+      FROM information_schema.crdb_job_messages($job_id)
+  )
+----
+true
+
+# Non-existent job: zero rows, no error.
+query I
+SELECT count(*) FROM information_schema.crdb_job_messages(-1)
+----
+0
+
+# Row-level access: a non-admin user sees no messages for jobs they cannot view.
+user testuser
+
+query I
+SELECT count(*) FROM information_schema.crdb_job_messages($job_id)
+----
+0
+
+user root
+
+statement ok
+GRANT SYSTEM VIEWJOB TO testuser
+
+user testuser
+
+query B
+SELECT count(*) > 0 FROM information_schema.crdb_job_messages($job_id)
+----
+true
+
+user root
+
+statement ok
+REVOKE SYSTEM VIEWJOB FROM testuser
+
+# Unsafe-internals gate.
+statement ok
+SET allow_unsafe_internals = false
+
+query B
+SELECT count(*) > 0 FROM information_schema.crdb_job_messages($job_id)
+----
+true
+
+statement ok
+RESET allow_unsafe_internals
+
+statement ok
+DROP TABLE crdb_jobs_msg_test
+
+subtest end

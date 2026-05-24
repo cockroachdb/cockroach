@@ -2961,6 +2961,7 @@ var builtinOidsArray = []string{
 	3006: `pg_indexes_size(relation_oid: oid) -> int`,
 	3007: `crdb_internal.tsdb_query(name: string, start_time: timestamptz, end_time: timestamptz) -> tuple{timestamptz AS timestamp, float AS value, string AS source}`,
 	3008: `crdb_internal.tsdb_query(name: string, start_time: timestamptz, end_time: timestamptz, options: jsonb) -> tuple{timestamptz AS timestamp, float AS value, string AS source}`,
+	3009: `information_schema.crdb_job_messages(job_id: int) -> tuple{timestamptz AS recorded, string AS kind, string AS message}`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
