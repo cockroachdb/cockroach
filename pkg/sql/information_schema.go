@@ -160,6 +160,7 @@ var informationSchema = virtualSchema{
 		catconstants.InformationSchemaCrdbNodeActiveSessionHistoryTableID:    informationSchemaCrdbNodeActiveSessionHistoryTable,
 		catconstants.InformationSchemaCrdbClusterActiveSessionHistoryTableID: informationSchemaCrdbClusterActiveSessionHistoryTable,
 		catconstants.InformationSchemaCrdbJobsViewID:                         informationSchemaCrdbJobsView,
+		catconstants.InformationSchemaCrdbJobsWithProgressViewID:             informationSchemaCrdbJobsWithProgressView,
 	},
 	tableValidator:             validateInformationSchemaTable,
 	validWithNoDatabaseContext: true,
@@ -2618,6 +2619,28 @@ var informationSchemaCrdbJobsView = virtualSchemaView{
 		{Name: "finished", Typ: types.TimestampTZ},
 		{Name: "state", Typ: types.String},
 		{Name: "error", Typ: types.String},
+	},
+}
+
+var informationSchemaCrdbJobsWithProgressView = virtualSchemaView{
+	comment: `crdb_jobs extended with the current progress reading and ` +
+		`user-visible status message. resolved is the raw HLC decimal; ` +
+		`apply hlc_to_timestamp at the call site for a wall-clock value. ` +
+		`last_updated combines progress and status write timestamps.`,
+	schema: vtable.CRDBJobsWithProgress,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "job_id", Typ: types.Int},
+		{Name: "job_type", Typ: types.String},
+		{Name: "owner", Typ: types.String},
+		{Name: "description", Typ: types.String},
+		{Name: "created", Typ: types.TimestampTZ},
+		{Name: "finished", Typ: types.TimestampTZ},
+		{Name: "state", Typ: types.String},
+		{Name: "error", Typ: types.String},
+		{Name: "progress_fraction", Typ: types.Float},
+		{Name: "resolved", Typ: types.Decimal},
+		{Name: "status_message", Typ: types.String},
+		{Name: "last_updated", Typ: types.TimestampTZ},
 	},
 }
 
