@@ -177,10 +177,12 @@ func registerCallbackOnLicenseChange(
 		}
 		var licenseType LicType
 		var licenseExpiry time.Time
+		var licenseID []byte
 		if lic == nil {
 			licenseType = LicTypeNone
 		} else {
 			licenseExpiry = timeutil.Unix(lic.ValidUntilUnixSec, 0)
+			licenseID = lic.LicenseId
 			switch lic.Type {
 			case licensepb.License_Free:
 				licenseType = LicTypeFree
@@ -192,7 +194,7 @@ func registerCallbackOnLicenseChange(
 				licenseType = LicTypeEnterprise
 			}
 		}
-		licenseEnforcer.RefreshForLicenseChange(ctx, licenseType, licenseExpiry)
+		licenseEnforcer.RefreshForLicenseChange(ctx, licenseType, licenseExpiry, licenseID)
 
 		err = licenseEnforcer.UpdateTrialLicenseExpiry(
 			ctx, licenseType, isChange, licenseExpiry.Unix())

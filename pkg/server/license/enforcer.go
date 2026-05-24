@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -96,6 +97,18 @@ type Enforcer struct {
 	// in the metadata accessor. This is set to true during initialization if the
 	// latest timestamp was not received.
 	continueToPollMetadataAccessor atomic.Bool
+
+	// currentLicenseID is the license ID for the currently active license.
+	// Used to write vCPU audit records and detect license rotation.
+	// Stores []byte or nil if no license is installed.
+	currentLicenseID atomic.Value
+
+	// nodeID is set once during StartVCPUAuditWriter and used for writing
+	// vCPU audit records. Zero value indicates audit writer not started.
+	nodeID roachpb.NodeID
+
+	// auditStarted prevents multiple concurrent calls to StartVCPUAuditWriter.
+	auditStarted atomic.Bool
 }
 
 type TestingKnobs struct {
@@ -124,6 +137,14 @@ type TestingKnobs struct {
 	// OverrideTelemetryStatusReporter, if set, will set the telemetry status
 	// reporter in Start().
 	OverrideTelemetryStatusReporter TelemetryStatusReporter
+
+	// OverrideVCPUAuditInterval if set, overrides the 1-hour vCPU audit interval.
+	// Used for testing to accelerate ticker firing.
+	OverrideVCPUAuditInterval *time.Duration
+
+	// OverrideVCPUCount if set, overrides the value returned by status.GetVCPUs().
+	// Used for testing to provide deterministic vCPU counts.
+	OverrideVCPUCount *float64
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
@@ -197,7 +218,7 @@ func (e *Enforcer) Start(ctx context.Context, st *cluster.Settings, opts ...Opti
 	// must be done after setting the cluster init grace period timestamp. And it
 	// is needed for testing that may be running this in isolation to the license
 	// ccl package.
-	e.RefreshForLicenseChange(ctx, LicTypeNone, time.Time{})
+	e.RefreshForLicenseChange(ctx, LicTypeNone, time.Time{}, nil /* licenseID */)
 
 	// Register a callback so that we refresh our state whenever the license
 	// changes. This will also update the state for the current license if not
@@ -455,8 +476,11 @@ func (e *Enforcer) MaybeFailIfThrottled(
 // information to optimize enforcement. Instead of reading the license from the
 // settings, unmarshaling it, and checking its type and expiry each time,
 // caching the information improves efficiency since licenses change infrequently.
+//
+// The licenseID parameter is used to detect license rotation for vCPU audit purposes.
+// Pass nil if no license is installed.
 func (e *Enforcer) RefreshForLicenseChange(
-	ctx context.Context, licType LicType, licenseExpiry time.Time,
+	ctx context.Context, licType LicType, licenseExpiry time.Time, licenseID []byte,
 ) {
 	e.hasLicense.Store(licType != LicTypeNone)
 	e.licenseExpiryTS.Store(licenseExpiry.Unix())
@@ -491,6 +515,9 @@ func (e *Enforcer) RefreshForLicenseChange(
 	}
 	sb.Printf("telemetry required: %t", e.licenseRequiresTelemetry.Load())
 	log.Dev.Infof(ctx, "%s", sb.RedactableString())
+
+	// Detect license rotation and trigger immediate vCPU audit write if needed.
+	e.maybeWriteOnLicenseRotation(ctx, licenseID)
 }
 
 // UpdateTrialLicenseExpiry updates the expiration timestamp of trial license
