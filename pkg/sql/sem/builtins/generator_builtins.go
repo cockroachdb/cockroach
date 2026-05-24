@@ -816,6 +816,23 @@ The output can be used to recreate a database.'
 			volatility.Volatile,
 		),
 	),
+	"information_schema.crdb_job_progress_history": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
+		makeGeneratorOverload(
+			tree.ParamTypes{{Name: "job_id", Typ: types.Int}},
+			jobProgressHistoryGeneratorType,
+			makeJobProgressHistoryGenerator,
+			`Returns the progress trajectory of the specified job, ordered by `+
+				`recorded time descending. Returns no rows if the job does not `+
+				`exist or is not visible to the current user. The resolved `+
+				`column is the raw HLC; apply hlc_to_timestamp at the call `+
+				`site for a wall-clock value.`,
+			volatility.Volatile,
+		),
+	),
 	"crdb_internal.decode_plan_gist": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         builtinconstants.CategorySystemInfo,
@@ -3341,6 +3358,11 @@ var jobMessagesGeneratorType = types.MakeLabeledTuple(
 	[]string{"recorded", "kind", "message"},
 )
 
+var jobProgressHistoryGeneratorType = types.MakeLabeledTuple(
+	[]*types.T{types.TimestampTZ, types.Float, types.Decimal},
+	[]string{"recorded", "progress_fraction", "resolved"},
+)
+
 // Phase is used to determine if CREATE statements or ALTER statements
 // are being generated for showCreateAllTables.
 type Phase int
@@ -3952,6 +3974,80 @@ func (g *jobMessagesGenerator) Values() (tree.Datums, error) {
 
 // Close implements the eval.ValueGenerator interface.
 func (g *jobMessagesGenerator) Close(_ context.Context) {
+	if g.rows != nil {
+		_ = g.rows.Close()
+	}
+}
+
+// jobProgressHistoryGenerator backs
+// information_schema.crdb_job_progress_history(job_id). Same access semantics
+// as jobMessagesGenerator (visible-job-only, empty otherwise). The resolved
+// column is returned as the raw HLC decimal stored in
+// system.job_progress_history; callers wanting a wall-clock value apply
+// hlc_to_timestamp at the call site.
+type jobProgressHistoryGenerator struct {
+	jobID   jobspb.JobID
+	evalCtx *eval.Context
+	rows    eval.InternalRows
+}
+
+func makeJobProgressHistoryGenerator(
+	_ context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
+	return &jobProgressHistoryGenerator{
+		jobID:   jobspb.JobID(int64(tree.MustBeDInt(args[0]))),
+		evalCtx: evalCtx,
+	}, nil
+}
+
+// ResolvedType implements the eval.ValueGenerator interface.
+func (g *jobProgressHistoryGenerator) ResolvedType() *types.T {
+	return jobProgressHistoryGeneratorType
+}
+
+// Start implements the eval.ValueGenerator interface.
+func (g *jobProgressHistoryGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+	// Start may be called again to restart the generator; release any iterator
+	// from a prior run before opening a new one.
+	if g.rows != nil {
+		_ = g.rows.Close()
+		g.rows = nil
+	}
+	owner, ok, err := lookupJobOwner(ctx, g.evalCtx, g.jobID)
+	if err != nil {
+		return err
+	}
+	if !ok || !g.evalCtx.SessionAccessor.HasViewAccessToJob(ctx, owner) {
+		return nil
+	}
+	rows, err := g.evalCtx.Planner.QueryIteratorEx(ctx,
+		"crdb-job-progress-history",
+		sessiondata.NodeUserSessionDataOverride,
+		"SELECT written, fraction, resolved FROM system.job_progress_history "+
+			"WHERE job_id = $1 ORDER BY written DESC",
+		int64(g.jobID))
+	if err != nil {
+		return err
+	}
+	g.rows = rows
+	return nil
+}
+
+// Next implements the eval.ValueGenerator interface.
+func (g *jobProgressHistoryGenerator) Next(ctx context.Context) (bool, error) {
+	if g.rows == nil {
+		return false, nil
+	}
+	return g.rows.Next(ctx)
+}
+
+// Values implements the eval.ValueGenerator interface.
+func (g *jobProgressHistoryGenerator) Values() (tree.Datums, error) {
+	return g.rows.Cur(), nil
+}
+
+// Close implements the eval.ValueGenerator interface.
+func (g *jobProgressHistoryGenerator) Close(_ context.Context) {
 	if g.rows != nil {
 		_ = g.rows.Close()
 	}
