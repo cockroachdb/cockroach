@@ -2009,6 +2009,16 @@ func (s *SQLServer) startLicenseEnforcer(ctx context.Context, knobs base.Testing
 	if err != nil {
 		log.Dev.Warningf(ctx, "failed to start the license enforcer: %v", err)
 	}
+
+	// TODO(sadaf-crl): Start the vCPU audit writer here once system.vcpu_hours_audit
+	// is created and writeVCPUAuditRecord is wired up with a real SQL INSERT.
+	// Only start for the system tenant since audit records go to a system table.
+	//   if s.execCfg.Codec.ForSystemTenant() {
+	//     nodeID := s.execCfg.NodeInfo.NodeID.SQLInstanceID()
+	//     if err := licenseEnforcer.StartVCPUAuditWriter(ctx, s.stopper, s.cfg.Settings, nodeID); err != nil {
+	//       log.Dev.Warningf(ctx, "failed to start vCPU audit writer: %v", err)
+	//     }
+	//   }
 }
 
 func (s *SQLServer) disableLicenseEnforcement(ctx context.Context) {
