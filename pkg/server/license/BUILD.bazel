@@ -8,13 +8,16 @@ go_library(
         "enforcer.go",
         "license.go",
         "opts.go",
+        "vcpu_audit.go",
         ":gen-lictype-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/server/license",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
+        "//pkg/roachpb",
         "//pkg/server/license/licensepb",
+        "//pkg/server/status",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/isql",
@@ -25,6 +28,7 @@ go_library(
         "//pkg/util/envutil",
         "//pkg/util/log",
         "//pkg/util/metric",
+        "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
@@ -40,6 +44,7 @@ go_test(
         "license_decode_test.go",
         "license_enforcer_integration_test.go",
         "main_test.go",
+        "vcpu_audit_test.go",
     ],
     embed = [":license"],
     deps = [
