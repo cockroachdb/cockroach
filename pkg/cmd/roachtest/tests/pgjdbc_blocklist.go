@@ -377,7 +377,6 @@ var pgjdbcBlockList = blocklist{
 	`org.postgresql.test.jdbc2.StatementTest.parsingSemiColons()`:                                                                                                   "unknown",
 	`org.postgresql.test.jdbc2.StatementTest.updateCount()`:                                                                                                         "unknown",
 	`org.postgresql.test.jdbc2.StatementTest.warningsAreAvailableAsap()`:                                                                                            "unknown",
-	`org.postgresql.test.jdbc2.TimeTest.getTimeZone()`:                                                                                                              "unknown",
 	`org.postgresql.test.jdbc2.UpdateableResultTest.testArray`:                                                                                                      "26925",
 	`org.postgresql.test.jdbc2.UpdateableResultTest.testOidUpdatable`:                                                                                               "unknown",
 	`org.postgresql.test.jdbc3.CompositeTest.complexArgumentSelect()`:                                                                                               "51480",
