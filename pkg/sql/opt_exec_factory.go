@@ -1922,9 +1922,10 @@ func (ef *execFactory) ConstructDeleteRange(
 	}
 
 	dr := &deleteRangeNode{
-		spans:             spans,
-		desc:              tabDesc,
-		autoCommitEnabled: autoCommit,
+		spans:              spans,
+		desc:               tabDesc,
+		singleColumnFamily: tabDesc.NumFamilies() == 1,
+		autoCommitEnabled:  autoCommit,
 	}
 
 	return dr, nil
