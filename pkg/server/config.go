@@ -666,6 +666,7 @@ func (cfg *Config) SafeFormat(sp redact.SafePrinter, _ rune) {
 	fmt.Fprintln(w, "scan min idle time\t", cfg.ScanMinIdleTime)
 	fmt.Fprintln(w, "scan max idle time\t", cfg.ScanMaxIdleTime)
 	fmt.Fprintln(w, "event log enabled\t", cfg.EventLogEnabled)
+	fmt.Fprintln(w, "DRPC enabled\t", cfg.UseDRPC)
 	if cfg.Linearizable {
 		fmt.Fprintln(w, "linearizable\t", cfg.Linearizable)
 	}
