@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -431,6 +432,47 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 				panic(errors.WithDetailf(
 					pgerror.Newf(pgcode.InvalidTransactionTermination, "invalid transaction termination"),
 					"transaction control statements are only allowed in procedures",
+				))
+			}
+		}
+
+		// Walk the body to classify any DDL statements before deciding
+		// whether to build it. The PL/pgSQL builder relies on this check
+		// for two reasons:
+		//   1. Under late binding the body is not analyzed, so the
+		//      optbuilder's per-statement DDL gate in builder.go is never
+		//      reached. Unsupported DDL has to be rejected here or it
+		//      would silently survive until CALL time.
+		//   2. Under early binding, supported DDL is rejected here with a
+		//      hint pointing at the late-binding setting, since an early
+		//      build cannot validate references that the DDL would create
+		//      or alter later in the body.
+		// Unsupported DDL takes precedence: enabling late binding does
+		// not make it work.
+		if cf.IsProcedure {
+			var dv ddlVisitor
+			plpgsqltree.Walk(&dv, stmt.AST)
+			if dv.unsupportedStmt != nil {
+				panic(unimplemented.NewWithIssuef(110080,
+					"%s usage inside a function definition is not supported",
+					dv.unsupportedStmt.StatementTag(),
+				))
+			}
+			if dv.foundDDLStmt != nil && !lateBinding {
+				// Distinguish "the cluster has not finished upgrading" from
+				// "late binding is off" so the user sees an actionable
+				// message rather than a hint that does not yet apply.
+				if !b.evalCtx.Settings.Version.IsActive(b.ctx, clusterversion.V26_3) {
+					panic(pgerror.Newf(pgcode.FeatureNotSupported,
+						"%s usage inside a stored procedure is not supported until upgrade to version 26.3 is finalized",
+						dv.foundDDLStmt.StatementTag(),
+					))
+				}
+				panic(errors.WithHintf(
+					pgerror.Newf(pgcode.FeatureNotSupported,
+						"DDL statements in PL/pgSQL procedure bodies require late binding"),
+					"enable the cluster setting %s",
+					sqlclustersettings.PLpgSQLProcedureLateBinding.Name(),
 				))
 			}
 		}

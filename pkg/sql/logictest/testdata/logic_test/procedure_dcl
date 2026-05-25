@@ -1,5 +1,11 @@
 # LogicTest: !local-mixed-25.4 !local-mixed-26.1 !local-mixed-26.2
 
+# DDL in PL/pgSQL procedure bodies requires late binding; DCL on its own does
+# not, but enabling it here keeps the mixed DDL/DCL subtests below uniform
+# with procedure_ddl.
+statement ok
+SET CLUSTER SETTING sql.procedures.plpgsql.late_binding.enabled = true
+
 statement ok
 CREATE ROLE r1;
 CREATE ROLE r2;
@@ -209,9 +215,9 @@ subtest end
 
 subtest mixed_ddl_and_dcl
 
-# DDL and DCL freely mix in the same procedure body, but DCL targets are
-# early-bound: a GRANT cannot reference a table created in the same body.
-# This procedure grants on a pre-existing table and then creates a new one.
+# DDL and DCL mix in the same procedure body. Late-binding behavior for
+# DCL targets that reference a table created earlier in the same body is
+# covered by the grant_on_newly_created_table subtest below.
 statement ok
 CREATE PROCEDURE p_mixed() LANGUAGE PLpgSQL AS $$
 BEGIN
@@ -244,20 +250,26 @@ DROP PROCEDURE p_mixed;
 subtest end
 
 
-subtest early_binding_limitations
+subtest grant_on_newly_created_table
 
-# GRANT targets are resolved when the procedure body is built (at CREATE
-# PROCEDURE time), not when CALL executes, so a GRANT cannot refer to a
-# table created earlier in the same body. This test pins the early-binding
-# behavior so a future late-binding change for stored procedures will
-# visibly flip it.
-statement error pgcode 42P01 relation "t_grant_target" does not exist
+# With late binding CREATE PROCEDURE accepts a body that creates a table
+# and then GRANTs on it — references are not resolved until CALL time. CALL
+# still fails today because body statements are built (AST -> RelExpr)
+# eagerly at CALL plan time, before the preceding CREATE TABLE has
+# executed. See the analogous CREATE TABLE + INSERT case in procedure_ddl.
+statement ok
 CREATE PROCEDURE p_grant_on_new_table() LANGUAGE PLpgSQL AS $$
 BEGIN
   CREATE TABLE t_grant_target (a INT PRIMARY KEY);
   GRANT SELECT ON t_grant_target TO r1;
 END
 $$;
+
+statement error pgcode 42P01 relation "t_grant_target" does not exist
+CALL p_grant_on_new_table();
+
+statement ok
+DROP PROCEDURE p_grant_on_new_table;
 
 subtest end
 
