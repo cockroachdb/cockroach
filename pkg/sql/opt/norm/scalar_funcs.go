@@ -74,23 +74,63 @@ func (c *CustomFuncs) ConstructSortedUniqueList(
 // SimplifyCoalesce discards any leading null operands, and then if the next
 // operand is a constant, replaces with that constant.
 func (c *CustomFuncs) SimplifyCoalesce(args memo.ScalarListExpr) opt.ScalarExpr {
-	for i := 0; i < len(args)-1; i++ {
-		item := args[i]
+	return c.simplifyCoalesce(args, opt.ColSet{})
+}
 
-		// If item is not a constant value, then its value may turn out to be
-		// null, so no more folding. Return operands from then on.
-		if !c.IsConstValueOrGroupOfConstValues(item) {
+// SimplifyCoalesceWithNotNullCols is like SimplifyCoalesce, but also discards
+// leading operands that are guaranteed to be non-null according to notNullCols.
+func (c *CustomFuncs) SimplifyCoalesceWithNotNullCols(
+	args memo.ScalarListExpr, notNullCols opt.ColSet,
+) opt.ScalarExpr {
+	return c.simplifyCoalesce(args, notNullCols)
+}
+
+func (c *CustomFuncs) simplifyCoalesce(
+	args memo.ScalarListExpr, notNullCols opt.ColSet,
+) opt.ScalarExpr {
+	for i := 0; i < len(args); i++ {
+		if memo.ExprIsNeverNull(args[i], notNullCols) {
+			return args[i]
+		}
+
+		if !c.IsConstValueOrGroupOfConstValues(args[i]) {
+			if i >= len(args)-1 {
+				return args[i]
+			}
 			return c.f.ConstructCoalesce(args[i:])
 		}
 
-		if item.Op() != opt.NullOp {
-			return item
+		if args[i].Op() != opt.NullOp {
+			return args[i]
 		}
 	}
 
-	// All operands up to the last were null (or the last is the only operand),
-	// so return the last operand without the wrapping COALESCE function.
 	return args[len(args)-1]
+}
+
+// CanSimplifyCoalesce returns true if simplifyCoalesce would change the given
+// Coalesce expression.
+func (c *CustomFuncs) CanSimplifyCoalesce(args memo.ScalarListExpr, notNullCols opt.ColSet) bool {
+	simplified := c.simplifyCoalesce(args, notNullCols)
+	if co, ok := simplified.(*memo.CoalesceExpr); ok {
+		return len(co.Args) < len(args)
+	}
+	return true
+}
+
+// SimplifyCoalesceInScalar recursively simplifies Coalesce expressions in the
+// given scalar expression tree using the provided not-null columns.
+func (c *CustomFuncs) SimplifyCoalesceInScalar(
+	e opt.ScalarExpr, notNullCols opt.ColSet,
+) opt.ScalarExpr {
+	var replace ReplaceFunc
+	replace = func(e opt.Expr) opt.Expr {
+		if co, ok := e.(*memo.CoalesceExpr); ok {
+			return c.simplifyCoalesce(co.Args, notNullCols)
+		}
+		return c.f.Replace(e, replace)
+	}
+	return replace(e).(opt.ScalarExpr)
 }
 
 // IsConstValueEqual returns whether const1 and const2 are equal.

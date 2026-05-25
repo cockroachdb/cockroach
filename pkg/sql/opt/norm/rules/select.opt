@@ -31,6 +31,17 @@
 =>
 (Select $input (SimplifyFilters $filters))
 
+# SimplifyCoalesceSelect simplifies Coalesce expressions in Select filters by
+# eliminating leading operands that are guaranteed to be non-null according to
+# the input's relational properties.
+[SimplifyCoalesceSelect, Normalize, LowPriority]
+(Select
+    $input:*
+    $filters:* & (CanSimplifyCoalesceInFilters $filters $input)
+)
+=>
+(Select $input (SimplifyCoalesceInFilters $filters $input))
+
 # ConsolidateSelectFilters consolidates filters that constrain a single
 # variable. For example, filters x >= 5 and x <= 10 would be combined into a
 # single Range operation.

@@ -419,3 +419,50 @@ func (c *CustomFuncs) addConjuncts(
 func (c *CustomFuncs) ForDuplicateRemoval(private *memo.OrdinalityPrivate) (ok bool) {
 	return private.ForDuplicateRemoval
 }
+
+// CanSimplifyCoalesceInFilters returns true if any filter condition contains a
+// Coalesce expression that can be simplified using the input's not-null columns.
+func (c *CustomFuncs) CanSimplifyCoalesceInFilters(
+	filters memo.FiltersExpr, input memo.RelExpr,
+) bool {
+	notNullCols := c.NotNullCols(input)
+	for i := range filters {
+		if c.scalarContainsSimplifiableCoalesce(filters[i].Condition, notNullCols) {
+			return true
+		}
+	}
+	return false
+}
+
+// SimplifyCoalesceInFilters simplifies Coalesce expressions in filter conditions
+// using the input's not-null columns.
+func (c *CustomFuncs) SimplifyCoalesceInFilters(
+	filters memo.FiltersExpr, input memo.RelExpr,
+) memo.FiltersExpr {
+	notNullCols := c.NotNullCols(input)
+	newFilters := make(memo.FiltersExpr, len(filters))
+	for i := range filters {
+		newFilters[i] = c.f.ConstructFiltersItem(
+			c.SimplifyCoalesceInScalar(filters[i].Condition, notNullCols),
+		)
+	}
+	return newFilters
+}
+
+func (c *CustomFuncs) scalarContainsSimplifiableCoalesce(
+	e opt.ScalarExpr, notNullCols opt.ColSet,
+) bool {
+	found := false
+	var replace ReplaceFunc
+	replace = func(e opt.Expr) opt.Expr {
+		if co, ok := e.(*memo.CoalesceExpr); ok {
+			if c.CanSimplifyCoalesce(co.Args, notNullCols) {
+				found = true
+			}
+			return co
+		}
+		return c.f.Replace(e, replace)
+	}
+	replace(e)
+	return found
+}

@@ -3,6 +3,10 @@ CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, arr int[])
 ----
 
 exec-ddl
+CREATE TABLE ij (i INT NOT NULL, j INT)
+----
+
+exec-ddl
 CREATE TABLE xy (x INT PRIMARY KEY, y INT)
 ----
 
@@ -182,6 +186,30 @@ project
  │    └── columns: i:2
  └── projections
       └── COALESCE(i:2, CAST(NULL AS INT8), CAST(NULL AS INT8)) [as=coalesce:8, outer=(2)]
+
+# --------------------------------------------------
+# SimplifyCoalesceProject
+# --------------------------------------------------
+
+norm expect=SimplifyCoalesceProject
+SELECT COALESCE(i, j) FROM ij
+----
+project
+ ├── columns: coalesce:6!null
+ ├── scan ij
+ │    └── columns: i:1!null
+ └── projections
+      └── i:1 [as=coalesce:6, outer=(1)]
+
+norm expect=SimplifyCoalesceProject
+SELECT COALESCE(i, NULL, NULL) FROM ij
+----
+project
+ ├── columns: coalesce:6!null
+ ├── scan ij
+ │    └── columns: i:1!null
+ └── projections
+      └── i:1 [as=coalesce:6, outer=(1)]
 
 norm expect=SimplifyCoalesce
 SELECT COALESCE((1, 2, 3), (2, 3, 4)) FROM a

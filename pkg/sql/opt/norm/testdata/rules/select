@@ -1946,6 +1946,24 @@ select
 
 
 # --------------------------------------------------
+# SimplifyCoalesceSelect
+# --------------------------------------------------
+
+norm expect=SimplifyCoalesceSelect
+SELECT * FROM d WHERE COALESCE(a, b) = 1
+----
+select
+ ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3-5)
+ ├── scan d
+ │    ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── a:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+
+# --------------------------------------------------
 # EliminateCaseTrailingFalsyBranch
 # --------------------------------------------------
 
