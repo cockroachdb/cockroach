@@ -113,6 +113,7 @@ SHOW application_name;
 <tr><td><code>foreign_key_cascades_limit</code></td><td>Sets the maximum number of cascading operations for foreign key actions.</td><td><code>10000</code></td><td>No</td><td><code>sql.defaults.foreign_key_cascades_limit</code></td></tr>
 <tr><td><code>idle_in_transaction_session_timeout</code></td><td>Sets the maximum allowed duration for an idle transaction session. The session is terminated if it exceeds this limit.</td><td><code>0s</code></td><td>No</td><td><code>sql.defaults.idle_in_transaction_session_timeout</code></td></tr>
 <tr><td><code>idle_session_timeout</code></td><td>Sets the maximum allowed duration for an idle session. The session is terminated if it exceeds this limit.</td><td><code>0s</code></td><td>No</td><td><code>sql.defaults.idle_in_session_timeout</code></td></tr>
+<tr><td><code>in_hot_standby</code></td><td>Reports whether the server is currently in hot standby mode (always off in CockroachDB).</td><td><code>off</code></td><td>Yes</td><td>-</td></tr>
 <tr><td><code>index_join_streamer_batch_size</code></td><td>Sets the size limit on input rows to the ColIndexJoin operator when using the Streamer API for a single lookup KV batch.</td><td><code>8.0 MiB</code></td><td>No</td><td><code>sql.distsql.index_join_streamer.batch_size</code></td></tr>
 <tr><td><code>index_recommendations_enabled</code></td><td>Controls whether index recommendations are enabled.</td><td><code>on</code></td><td>No</td><td>-</td></tr>
 <tr><td><code>initial_retry_backoff_for_read_committed</code></td><td>Sets the initial backoff duration for automatic retries of statements in explicit READ COMMITTED transactions that encounter retry errors.</td><td><code>2ms</code></td><td>No</td><td>-</td></tr>
@@ -213,6 +214,7 @@ SHOW application_name;
 <tr><td><code>results_buffer_size</code></td><td>Specifies the size at which the pgwire results buffer will self-flush.</td><td><code>-</code></td><td>Yes</td><td>-</td></tr>
 <tr><td><code>role</code></td><td>The current role for the session.</td><td><code>none</code></td><td>No</td><td>-</td></tr>
 <tr><td><code>row_security</code></td><td>Controls whether row level security is enabled.</td><td><code>on</code></td><td>No</td><td>-</td></tr>
+<tr><td><code>scram_iterations</code></td><td>Reports the iteration count for SCRAM-SHA-256 password hashing.</td><td><code>10610</code></td><td>Yes</td><td>-</td></tr>
 <tr><td><code>search_path</code></td><td>Sets the list of namespaces to search when resolving unqualified names.</td><td><code>"$user", public</code></td><td>No</td><td>-</td></tr>
 <tr><td><code>serial_normalization</code></td><td>Controls how `SERIAL` columns are normalized.</td><td><code>rowid</code></td><td>No</td><td><code>sql.defaults.serial_normalization</code></td></tr>
 <tr><td><code>server_encoding</code></td><td>Reports the database encoding (always UTF8). This cannot be changed.</td><td><code>UTF8</code></td><td>Yes</td><td>-</td></tr>

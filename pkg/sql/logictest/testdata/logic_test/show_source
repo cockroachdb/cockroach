@@ -123,6 +123,7 @@ force_savepoint_restart                                          off            
 foreign_key_cascades_limit                                       10000               Sets the maximum number of cascading operations for foreign key actions.
 idle_in_transaction_session_timeout                              0                   Sets the maximum allowed duration for an idle transaction session. The session is terminated if it exceeds this limit.
 idle_session_timeout                                             0                   Sets the maximum allowed duration for an idle session. The session is terminated if it exceeds this limit.
+in_hot_standby                                                   off                 Reports whether the server is currently in hot standby mode (always off in CockroachDB).
 index_join_streamer_batch_size                                   8.0 MiB             Sets the size limit on input rows to the ColIndexJoin operator when using the Streamer API for a single lookup KV batch.
 index_recommendations_enabled                                    off                 Controls whether index recommendations are enabled.
 initial_retry_backoff_for_read_committed                         2                   Sets the initial backoff duration for automatic retries of statements in explicit READ COMMITTED transactions that encounter retry errors.
@@ -220,6 +221,7 @@ require_explicit_primary_keys                                    off            
 results_buffer_size                                              524288              Specifies the size at which the pgwire results buffer will self-flush.
 role                                                             none                The current role for the session.
 row_security                                                     on                  Controls whether row level security is enabled.
+scram_iterations                                                 10610               Reports the iteration count for SCRAM-SHA-256 password hashing.
 search_path                                                      "$user", public     Sets the list of namespaces to search when resolving unqualified names.
 serial_normalization                                             rowid               Controls how `SERIAL` columns are normalized.
 server_encoding                                                  UTF8                Reports the database encoding (always UTF8). This cannot be changed.
