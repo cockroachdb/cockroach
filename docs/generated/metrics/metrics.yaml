@@ -1628,6 +1628,221 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/sql-queries
+    - name: sql.routine.alter_default_privileges.count
+      exported_name: sql_routine_alter_default_privileges_count
+      labeled_name: 'sql.count{query_type: routine_alter_default_privileges}'
+      description: Number of SQL ALTER DEFAULT PRIVILEGES statements successfully executed within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      visibility: ESSENTIAL
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.alter_default_privileges.count.internal
+      exported_name: sql_routine_alter_default_privileges_count_internal
+      labeled_name: 'sql.count{query_type: routine_alter_default_privileges, query_internal: true}'
+      description: Number of SQL ALTER DEFAULT PRIVILEGES statements successfully executed within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.alter_default_privileges.started.count
+      exported_name: sql_routine_alter_default_privileges_started_count
+      labeled_name: 'sql.started.count{query_type: routine_started_alter_default_privileges}'
+      description: Number of SQL ALTER DEFAULT PRIVILEGES statements started within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.alter_default_privileges.started.count.internal
+      exported_name: sql_routine_alter_default_privileges_started_count_internal
+      labeled_name: 'sql.started.count{query_type: routine_started_alter_default_privileges, query_internal: true}'
+      description: Number of SQL ALTER DEFAULT PRIVILEGES statements started within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.create_role.count
+      exported_name: sql_routine_create_role_count
+      labeled_name: 'sql.count{query_type: routine_create_role}'
+      description: Number of SQL CREATE ROLE statements successfully executed within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      visibility: ESSENTIAL
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.create_role.count.internal
+      exported_name: sql_routine_create_role_count_internal
+      labeled_name: 'sql.count{query_type: routine_create_role, query_internal: true}'
+      description: Number of SQL CREATE ROLE statements successfully executed within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.create_role.started.count
+      exported_name: sql_routine_create_role_started_count
+      labeled_name: 'sql.started.count{query_type: routine_started_create_role}'
+      description: Number of SQL CREATE ROLE statements started within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.create_role.started.count.internal
+      exported_name: sql_routine_create_role_started_count_internal
+      labeled_name: 'sql.started.count{query_type: routine_started_create_role, query_internal: true}'
+      description: Number of SQL CREATE ROLE statements started within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.create_schema.count
+      exported_name: sql_routine_create_schema_count
+      labeled_name: 'sql.count{query_type: routine_create_schema}'
+      description: Number of SQL CREATE SCHEMA statements successfully executed within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      visibility: ESSENTIAL
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.create_schema.count.internal
+      exported_name: sql_routine_create_schema_count_internal
+      labeled_name: 'sql.count{query_type: routine_create_schema, query_internal: true}'
+      description: Number of SQL CREATE SCHEMA statements successfully executed within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.create_schema.started.count
+      exported_name: sql_routine_create_schema_started_count
+      labeled_name: 'sql.started.count{query_type: routine_started_create_schema}'
+      description: Number of SQL CREATE SCHEMA statements started within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.create_schema.started.count.internal
+      exported_name: sql_routine_create_schema_started_count_internal
+      labeled_name: 'sql.started.count{query_type: routine_started_create_schema, query_internal: true}'
+      description: Number of SQL CREATE SCHEMA statements started within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.create_table.count
+      exported_name: sql_routine_create_table_count
+      labeled_name: 'sql.count{query_type: routine_create_table}'
+      description: Number of SQL CREATE TABLE statements for permanent tables successfully executed within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      visibility: ESSENTIAL
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.create_table.count.internal
+      exported_name: sql_routine_create_table_count_internal
+      labeled_name: 'sql.count{query_type: routine_create_table, query_internal: true}'
+      description: Number of SQL CREATE TABLE statements for permanent tables successfully executed within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.create_table.started.count
+      exported_name: sql_routine_create_table_started_count
+      labeled_name: 'sql.started.count{query_type: routine_started_create_table}'
+      description: Number of SQL CREATE TABLE statements for permanent tables started within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.create_table.started.count.internal
+      exported_name: sql_routine_create_table_started_count_internal
+      labeled_name: 'sql.started.count{query_type: routine_started_create_table, query_internal: true}'
+      description: Number of SQL CREATE TABLE statements for permanent tables started within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.create_temp_table.count
+      exported_name: sql_routine_create_temp_table_count
+      labeled_name: 'sql.count{query_type: routine_create_temp_table}'
+      description: Number of SQL CREATE TABLE statements for temporary tables successfully executed within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      visibility: ESSENTIAL
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.create_temp_table.count.internal
+      exported_name: sql_routine_create_temp_table_count_internal
+      labeled_name: 'sql.count{query_type: routine_create_temp_table, query_internal: true}'
+      description: Number of SQL CREATE TABLE statements for temporary tables successfully executed within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.create_temp_table.started.count
+      exported_name: sql_routine_create_temp_table_started_count
+      labeled_name: 'sql.started.count{query_type: routine_started_create_temp_table}'
+      description: Number of SQL CREATE TABLE statements for temporary tables started within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.create_temp_table.started.count.internal
+      exported_name: sql_routine_create_temp_table_started_count_internal
+      labeled_name: 'sql.started.count{query_type: routine_started_create_temp_table, query_internal: true}'
+      description: Number of SQL CREATE TABLE statements for temporary tables started within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
     - name: sql.routine.delete.count
       exported_name: sql_routine_delete_count
       labeled_name: 'sql.count{query_type: routine_delete}'
@@ -1671,6 +1886,178 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/sql-queries
+    - name: sql.routine.drop_role.count
+      exported_name: sql_routine_drop_role_count
+      labeled_name: 'sql.count{query_type: routine_drop_role}'
+      description: Number of SQL DROP ROLE statements successfully executed within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      visibility: ESSENTIAL
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.drop_role.count.internal
+      exported_name: sql_routine_drop_role_count_internal
+      labeled_name: 'sql.count{query_type: routine_drop_role, query_internal: true}'
+      description: Number of SQL DROP ROLE statements successfully executed within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.drop_role.started.count
+      exported_name: sql_routine_drop_role_started_count
+      labeled_name: 'sql.started.count{query_type: routine_started_drop_role}'
+      description: Number of SQL DROP ROLE statements started within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.drop_role.started.count.internal
+      exported_name: sql_routine_drop_role_started_count_internal
+      labeled_name: 'sql.started.count{query_type: routine_started_drop_role, query_internal: true}'
+      description: Number of SQL DROP ROLE statements started within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.drop_schema.count
+      exported_name: sql_routine_drop_schema_count
+      labeled_name: 'sql.count{query_type: routine_drop_schema}'
+      description: Number of SQL DROP SCHEMA statements successfully executed within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      visibility: ESSENTIAL
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.drop_schema.count.internal
+      exported_name: sql_routine_drop_schema_count_internal
+      labeled_name: 'sql.count{query_type: routine_drop_schema, query_internal: true}'
+      description: Number of SQL DROP SCHEMA statements successfully executed within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.drop_schema.started.count
+      exported_name: sql_routine_drop_schema_started_count
+      labeled_name: 'sql.started.count{query_type: routine_started_drop_schema}'
+      description: Number of SQL DROP SCHEMA statements started within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.drop_schema.started.count.internal
+      exported_name: sql_routine_drop_schema_started_count_internal
+      labeled_name: 'sql.started.count{query_type: routine_started_drop_schema, query_internal: true}'
+      description: Number of SQL DROP SCHEMA statements started within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.drop_table.count
+      exported_name: sql_routine_drop_table_count
+      labeled_name: 'sql.count{query_type: routine_drop_table}'
+      description: Number of SQL DROP TABLE statements successfully executed within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      visibility: ESSENTIAL
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.drop_table.count.internal
+      exported_name: sql_routine_drop_table_count_internal
+      labeled_name: 'sql.count{query_type: routine_drop_table, query_internal: true}'
+      description: Number of SQL DROP TABLE statements successfully executed within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.drop_table.started.count
+      exported_name: sql_routine_drop_table_started_count
+      labeled_name: 'sql.started.count{query_type: routine_started_drop_table}'
+      description: Number of SQL DROP TABLE statements started within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.drop_table.started.count.internal
+      exported_name: sql_routine_drop_table_started_count_internal
+      labeled_name: 'sql.started.count{query_type: routine_started_drop_table, query_internal: true}'
+      description: Number of SQL DROP TABLE statements started within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.grant.count
+      exported_name: sql_routine_grant_count
+      labeled_name: 'sql.count{query_type: routine_grant}'
+      description: Number of SQL GRANT statements successfully executed within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      visibility: ESSENTIAL
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.grant.count.internal
+      exported_name: sql_routine_grant_count_internal
+      labeled_name: 'sql.count{query_type: routine_grant, query_internal: true}'
+      description: Number of SQL GRANT statements successfully executed within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.grant.started.count
+      exported_name: sql_routine_grant_started_count
+      labeled_name: 'sql.started.count{query_type: routine_started_grant}'
+      description: Number of SQL GRANT statements started within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.grant.started.count.internal
+      exported_name: sql_routine_grant_started_count_internal
+      labeled_name: 'sql.started.count{query_type: routine_started_grant, query_internal: true}'
+      description: Number of SQL GRANT statements started within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
     - name: sql.routine.insert.count
       exported_name: sql_routine_insert_count
       labeled_name: 'sql.count{query_type: routine_insert}'
@@ -1708,6 +2095,49 @@ layers:
       exported_name: sql_routine_insert_started_count_internal
       labeled_name: 'sql.started.count{query_type: routine_started_insert, query_internal: true}'
       description: Number of SQL INSERT statements started within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.revoke.count
+      exported_name: sql_routine_revoke_count
+      labeled_name: 'sql.count{query_type: routine_revoke}'
+      description: Number of SQL REVOKE statements successfully executed within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      visibility: ESSENTIAL
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.revoke.count.internal
+      exported_name: sql_routine_revoke_count_internal
+      labeled_name: 'sql.count{query_type: routine_revoke, query_internal: true}'
+      description: Number of SQL REVOKE statements successfully executed within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.revoke.started.count
+      exported_name: sql_routine_revoke_started_count
+      labeled_name: 'sql.started.count{query_type: routine_started_revoke}'
+      description: Number of SQL REVOKE statements started within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.revoke.started.count.internal
+      exported_name: sql_routine_revoke_started_count_internal
+      labeled_name: 'sql.started.count{query_type: routine_started_revoke, query_internal: true}'
+      description: Number of SQL REVOKE statements started within routine invocation (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
       unit: COUNT

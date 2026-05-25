@@ -1113,7 +1113,7 @@ func (b *Builder) initRoutineExceptionHandler(
 			action.BodyProps,
 			action.BodyStmts,
 			action.BodyTags,
-			nil,   /* stmtASTs */
+			action.BodyASTs,
 			false, /* allowOuterWithRefs */
 			nil,   /* wrapRootExpr */
 			0,     /* resultBufferID */
@@ -1394,21 +1394,34 @@ func (b *Builder) buildRoutinePlanGenerator(
 			if i < len(stmtStr) {
 				stmtForDistSQLDiagram = stmtStr[i]
 			}
-			incrementRoutineStmtCounter(b.evalCtx.StartedRoutineStatementCounters, dbName, appName, tag)
+			var ast tree.Statement
+			if i < len(stmtASTs) {
+				ast = stmtASTs[i]
+			}
+			incrementRoutineStmtCounter(b.evalCtx.StartedRoutineStatementCounters, dbName, appName, tag, ast)
 			sqlstats.RecordStatementPhase(latencyRecorder, sqlstats.StatementEndPlanning)
 			err = fn(plan, statsBuilderWithLatencies, stmtForDistSQLDiagram, isFinalPlan)
 			if err != nil {
 				return err
 			}
-			incrementRoutineStmtCounter(b.evalCtx.ExecutedRoutineStatementCounters, dbName, appName, tag)
+			incrementRoutineStmtCounter(b.evalCtx.ExecutedRoutineStatementCounters, dbName, appName, tag, ast)
 		}
 		return nil
 	}
 	return planGen
 }
 
+// incrementRoutineStmtCounter increments the routine statement counter that
+// corresponds to stmtTag. ast is the parsed statement that produced stmtTag;
+// it is consulted only to distinguish permanent from temporary CREATE TABLE.
+// When ast is nil, CREATE TABLE is counted as permanent. Unknown tags
+// (statement types without a dedicated routine counter) are silently ignored.
 func incrementRoutineStmtCounter(
-	counters eval.RoutineStatementCounters, dbName string, appName string, stmtTag string,
+	counters eval.RoutineStatementCounters,
+	dbName string,
+	appName string,
+	stmtTag string,
+	ast tree.Statement,
 ) {
 	switch stmtTag {
 	case "INSERT":
@@ -1426,6 +1439,49 @@ func incrementRoutineStmtCounter(
 	case "DELETE":
 		if counters.DeleteCount != nil {
 			counters.DeleteCount.Inc(dbName, appName)
+		}
+	case "CREATE TABLE":
+		// Permanent and temporary CREATE TABLE share a statement tag but
+		// have distinct counters; fall back to the permanent counter when
+		// the AST is unavailable.
+		if ct, ok := ast.(*tree.CreateTable); ok && ct.Persistence.IsTemporary() {
+			if counters.CreateTempTableCount != nil {
+				counters.CreateTempTableCount.Inc(dbName, appName)
+			}
+		} else if counters.CreateTableCount != nil {
+			counters.CreateTableCount.Inc(dbName, appName)
+		}
+	case "DROP TABLE":
+		if counters.DropTableCount != nil {
+			counters.DropTableCount.Inc(dbName, appName)
+		}
+	case "CREATE SCHEMA":
+		if counters.CreateSchemaCount != nil {
+			counters.CreateSchemaCount.Inc(dbName, appName)
+		}
+	case "DROP SCHEMA":
+		if counters.DropSchemaCount != nil {
+			counters.DropSchemaCount.Inc(dbName, appName)
+		}
+	case "CREATE ROLE":
+		if counters.CreateRoleCount != nil {
+			counters.CreateRoleCount.Inc(dbName, appName)
+		}
+	case "DROP ROLE":
+		if counters.DropRoleCount != nil {
+			counters.DropRoleCount.Inc(dbName, appName)
+		}
+	case "GRANT":
+		if counters.GrantCount != nil {
+			counters.GrantCount.Inc(dbName, appName)
+		}
+	case "REVOKE":
+		if counters.RevokeCount != nil {
+			counters.RevokeCount.Inc(dbName, appName)
+		}
+	case "ALTER DEFAULT PRIVILEGES":
+		if counters.AlterDefaultPrivilegesCount != nil {
+			counters.AlterDefaultPrivilegesCount.Inc(dbName, appName)
 		}
 	}
 }
