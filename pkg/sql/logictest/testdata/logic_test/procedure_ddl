@@ -749,6 +749,540 @@ DROP TABLE t_from_handler;
 subtest end
 
 
+subtest ddl_in_exception_block_rollback_each_type
+
+# Per-DDL rollback when a sub-block raises a caught exception: DROP TABLE,
+# DROP ROLE, and CREATE/DROP SCHEMA. The DSC paths leak post-commit work
+# that the savepoint does not see; assertions diverge between legacy and
+# DSC and are gated accordingly. The DSC divergences are an instance of
+# issue #10735 (ROLLBACK TO SAVEPOINT after DDL).
+
+# DROP TABLE inside an exception sub-block. Behaviors diverge:
+# - Legacy: the descriptor write to KV is rolled back by the savepoint and
+#   the queued schema-change job runs against a still-PUBLIC descriptor at
+#   commit, doing nothing. The table survives.
+# - DSC: the post-commit job is bound to the parent transaction's commit,
+#   not to the savepoint. The job runs and finalizes the drop. The table
+#   is gone.
+statement ok
+CREATE TABLE t_drop_in_exc (a INT);
+
+statement ok
+CREATE PROCEDURE p_drop_table_in_exc() LANGUAGE PLpgSQL AS $$
+BEGIN
+  BEGIN
+    DROP TABLE t_drop_in_exc;
+    SELECT 1 // 0;
+  EXCEPTION WHEN division_by_zero THEN
+    RAISE NOTICE 'caught';
+  END;
+END
+$$;
+
+statement ok
+CALL p_drop_table_in_exc();
+
+onlyif config local-legacy-schema-changer
+query I
+SELECT count(*) FROM t_drop_in_exc;
+----
+0
+
+skipif config local-legacy-schema-changer
+statement error pgcode 42P01 relation "t_drop_in_exc" does not exist
+SELECT * FROM t_drop_in_exc;
+
+statement ok
+DROP PROCEDURE p_drop_table_in_exc;
+
+statement ok
+DROP TABLE IF EXISTS t_drop_in_exc;
+
+# DROP ROLE inside the exception sub-block. Roles do not go through the
+# descriptor cache or the schema-change job machinery, so the savepoint
+# rolls them back cleanly under both schema changers.
+statement ok
+CREATE ROLE r_drop_in_exc;
+
+statement ok
+CREATE PROCEDURE p_drop_role_in_exc() LANGUAGE PLpgSQL AS $$
+BEGIN
+  BEGIN
+    DROP ROLE r_drop_in_exc;
+    SELECT 1 // 0;
+  EXCEPTION WHEN division_by_zero THEN
+    RAISE NOTICE 'caught';
+  END;
+END
+$$;
+
+statement ok
+CALL p_drop_role_in_exc();
+
+query T
+SELECT rolname FROM pg_roles WHERE rolname = 'r_drop_in_exc';
+----
+r_drop_in_exc
+
+statement ok
+DROP PROCEDURE p_drop_role_in_exc;
+
+statement ok
+DROP ROLE r_drop_in_exc;
+
+# CREATE SCHEMA inside the exception sub-block. Behaviors diverge:
+# - Legacy: the KV write is rolled back; the queued database-schema-change
+#   job survives as an orphan no-op, but the schema is not visible.
+# - DSC: the post-commit job creates the schema after the savepoint, so
+#   the schema survives. Same DSC-post-commit-job class as DROP TABLE above.
+statement ok
+CREATE PROCEDURE p_create_schema_in_exc() LANGUAGE PLpgSQL AS $$
+BEGIN
+  BEGIN
+    CREATE SCHEMA s_create_in_exc;
+    SELECT 1 // 0;
+  EXCEPTION WHEN division_by_zero THEN
+    RAISE NOTICE 'caught';
+  END;
+END
+$$;
+
+statement ok
+CALL p_create_schema_in_exc();
+
+onlyif config local-legacy-schema-changer
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_create_in_exc';
+----
+
+skipif config local-legacy-schema-changer
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_create_in_exc';
+----
+s_create_in_exc
+
+statement ok
+DROP PROCEDURE p_create_schema_in_exc;
+
+statement ok
+DROP SCHEMA IF EXISTS s_create_in_exc;
+
+# DROP SCHEMA inside the exception sub-block. Same legacy / DSC divergence
+# as CREATE SCHEMA.
+statement ok
+CREATE SCHEMA s_drop_in_exc;
+
+statement ok
+CREATE PROCEDURE p_drop_schema_in_exc() LANGUAGE PLpgSQL AS $$
+BEGIN
+  BEGIN
+    DROP SCHEMA s_drop_in_exc;
+    SELECT 1 // 0;
+  EXCEPTION WHEN division_by_zero THEN
+    RAISE NOTICE 'caught';
+  END;
+END
+$$;
+
+statement ok
+CALL p_drop_schema_in_exc();
+
+onlyif config local-legacy-schema-changer
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_drop_in_exc';
+----
+s_drop_in_exc
+
+skipif config local-legacy-schema-changer
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_drop_in_exc';
+----
+
+statement ok
+DROP PROCEDURE p_drop_schema_in_exc;
+
+statement ok
+DROP SCHEMA IF EXISTS s_drop_in_exc;
+
+subtest end
+
+
+subtest ddl_before_exception_block_survives_each_type
+
+# DDL run before the exception sub-block sits outside the savepoint scope and
+# must survive when the sub-block raises. The existing ddl_in_exception_block
+# covers CREATE TABLE; this widens the coverage to one procedure that creates
+# a table, a schema, and a role before the sub-block raises.
+statement ok
+CREATE PROCEDURE p_ddl_before_exc() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_before_each (a INT);
+  CREATE SCHEMA s_before_each;
+  CREATE ROLE r_before_each;
+  BEGIN
+    SELECT 1 // 0;
+  EXCEPTION WHEN division_by_zero THEN
+    RAISE NOTICE 'caught';
+  END;
+END
+$$;
+
+statement ok
+CALL p_ddl_before_exc();
+
+query I
+SELECT count(*) FROM t_before_each;
+----
+0
+
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_before_each';
+----
+s_before_each
+
+query T
+SELECT rolname FROM pg_roles WHERE rolname = 'r_before_each';
+----
+r_before_each
+
+statement ok
+DROP PROCEDURE p_ddl_before_exc;
+
+statement ok
+DROP TABLE t_before_each;
+
+statement ok
+DROP SCHEMA s_before_each;
+
+statement ok
+DROP ROLE r_before_each;
+
+subtest end
+
+
+subtest drop_ddl_before_exception_block_survives
+
+# DROP variant of ddl_before_exception_block_survives_each_type. A DROP that
+# completes before the savepoint is created sits outside the savepoint's
+# scope, so the savepoint cannot reach it. The descriptors-collection
+# limitation that breaks DROP TABLE inside the sub-block does not affect
+# this case because the work was already past the point the savepoint can
+# rewind to.
+statement ok
+CREATE TABLE t_drop_before (a INT);
+
+statement ok
+CREATE SCHEMA s_drop_before;
+
+statement ok
+CREATE ROLE r_drop_before;
+
+statement ok
+CREATE PROCEDURE p_drop_before_exc() LANGUAGE PLpgSQL AS $$
+BEGIN
+  DROP TABLE t_drop_before;
+  DROP SCHEMA s_drop_before;
+  DROP ROLE r_drop_before;
+  BEGIN
+    SELECT 1 // 0;
+  EXCEPTION WHEN division_by_zero THEN
+    RAISE NOTICE 'caught';
+  END;
+END
+$$;
+
+statement ok
+CALL p_drop_before_exc();
+
+statement error pgcode 42P01 relation "t_drop_before" does not exist
+SELECT * FROM t_drop_before;
+
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_drop_before';
+----
+
+query T
+SELECT rolname FROM pg_roles WHERE rolname = 'r_drop_before';
+----
+
+statement ok
+DROP PROCEDURE p_drop_before_exc;
+
+subtest end
+
+
+subtest ddl_in_nested_exception_blocks
+
+# Two nested exception sub-blocks. The inner block raises and is caught by
+# its own handler; the outer block's handler should not fire. DDL done in the
+# inner block must be rolled back; DDL done in the outer block (before the
+# inner block was entered) must survive, since it is outside the inner
+# savepoint and the outer block's savepoint is never rolled back.
+statement ok
+CREATE PROCEDURE p_nested_exc_blocks() LANGUAGE PLpgSQL AS $$
+BEGIN
+  BEGIN
+    CREATE TABLE t_outer_nested (a INT);
+    CREATE SCHEMA s_outer_nested;
+    BEGIN
+      CREATE TABLE t_inner_nested (a INT);
+      CREATE SCHEMA s_inner_nested;
+      SELECT 1 // 0;
+    EXCEPTION WHEN division_by_zero THEN
+      RAISE NOTICE 'inner caught';
+    END;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'outer caught';
+  END;
+END
+$$;
+
+statement ok
+CALL p_nested_exc_blocks();
+
+query I
+SELECT count(*) FROM t_outer_nested;
+----
+0
+
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_outer_nested';
+----
+s_outer_nested
+
+statement error pgcode 42P01 relation "t_inner_nested" does not exist
+SELECT * FROM t_inner_nested;
+
+# s_inner_nested: legacy rolls it back; DSC's post-commit job creates it.
+onlyif config local-legacy-schema-changer
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_inner_nested';
+----
+
+skipif config local-legacy-schema-changer
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_inner_nested';
+----
+s_inner_nested
+
+statement ok
+DROP PROCEDURE p_nested_exc_blocks;
+
+statement ok
+DROP TABLE t_outer_nested;
+
+statement ok
+DROP SCHEMA s_outer_nested;
+
+statement ok
+DROP SCHEMA IF EXISTS s_inner_nested;
+
+subtest end
+
+
+subtest ddl_in_nested_procedure_with_exception
+
+# The outer procedure's exception sub-block CALLs an inner procedure that does
+# DDL and then raises. The outer handler catches the error; the inner DDL must
+# be rolled back. This validates that the savepoint scope spans nested CALL
+# boundaries.
+#
+# Skipped under weak isolation: a nested CALL whose inner body performs
+# multiple DDLs trips the read-committed / repeatable-read multi-statement-
+# schema-change guard, which would require autocommit_before_ddl and
+# defeat the implicit-txn-only semantics this subtest is meant to exercise.
+statement ok
+CREATE PROCEDURE p_inner_ddl_then_raise() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_inner_proc (a INT);
+  CREATE SCHEMA s_inner_proc;
+  SELECT 1 // 0;
+END
+$$;
+
+statement ok
+CREATE PROCEDURE p_outer_with_exc() LANGUAGE PLpgSQL AS $$
+BEGIN
+  BEGIN
+    CALL p_inner_ddl_then_raise();
+  EXCEPTION WHEN division_by_zero THEN
+    RAISE NOTICE 'outer caught';
+  END;
+END
+$$;
+
+skipif config local-read-committed local-repeatable-read
+statement ok
+CALL p_outer_with_exc();
+
+skipif config local-read-committed local-repeatable-read
+statement error pgcode 42P01 relation "t_inner_proc" does not exist
+SELECT * FROM t_inner_proc;
+
+# s_inner_proc: legacy rolls it back; DSC's post-commit job creates it.
+onlyif config local-legacy-schema-changer
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_inner_proc';
+----
+
+skipif config local-legacy-schema-changer local-read-committed local-repeatable-read
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_inner_proc';
+----
+s_inner_proc
+
+statement ok
+DROP PROCEDURE p_outer_with_exc;
+
+statement ok
+DROP PROCEDURE p_inner_ddl_then_raise;
+
+statement ok
+DROP SCHEMA IF EXISTS s_inner_proc;
+
+subtest end
+
+
+subtest ddl_in_exception_block_partial_progress
+
+# Multiple DDL statements before the error in a single sub-block. All of them
+# must be rolled back, not just the most recent one, and any DDL after the
+# error must not run at all.
+statement ok
+CREATE PROCEDURE p_partial_ddl() LANGUAGE PLpgSQL AS $$
+BEGIN
+  BEGIN
+    CREATE TABLE t_partial_a (a INT);
+    CREATE TABLE t_partial_b (a INT);
+    CREATE SCHEMA s_partial_a;
+    CREATE SCHEMA s_partial_b;
+    SELECT 1 // 0;
+    -- The statement below must never run, because control transfers to the
+    -- exception handler at the divide-by-zero above.
+    CREATE TABLE t_partial_c (a INT);
+  EXCEPTION WHEN division_by_zero THEN
+    RAISE NOTICE 'caught';
+  END;
+END
+$$;
+
+statement ok
+CALL p_partial_ddl();
+
+statement error pgcode 42P01 relation "t_partial_a" does not exist
+SELECT * FROM t_partial_a;
+
+statement error pgcode 42P01 relation "t_partial_b" does not exist
+SELECT * FROM t_partial_b;
+
+statement error pgcode 42P01 relation "t_partial_c" does not exist
+SELECT * FROM t_partial_c;
+
+# Schemas: legacy rolls both back; DSC's post-commit job creates both.
+onlyif config local-legacy-schema-changer
+query T rowsort
+SELECT schema_name FROM [SHOW SCHEMAS]
+WHERE schema_name IN ('s_partial_a', 's_partial_b');
+----
+
+skipif config local-legacy-schema-changer
+query T rowsort
+SELECT schema_name FROM [SHOW SCHEMAS]
+WHERE schema_name IN ('s_partial_a', 's_partial_b');
+----
+s_partial_a
+s_partial_b
+
+statement ok
+DROP PROCEDURE p_partial_ddl;
+
+statement ok
+DROP SCHEMA IF EXISTS s_partial_a;
+
+statement ok
+DROP SCHEMA IF EXISTS s_partial_b;
+
+subtest end
+
+
+subtest ddl_in_exception_block_when_clause_match
+
+# When the raised exception matches a WHEN clause, the savepoint rolls back
+# the sub-block's DDL and the procedure returns successfully. When the raised
+# exception does not match any WHEN clause, the error propagates out of the
+# procedure and the whole CALL transaction is aborted; either way the DDL must
+# not survive.
+
+# Matched: division_by_zero is caught, procedure returns OK, DDL rolled back.
+statement ok
+CREATE PROCEDURE p_when_matches() LANGUAGE PLpgSQL AS $$
+BEGIN
+  BEGIN
+    CREATE TABLE t_when_matched (a INT);
+    CREATE SCHEMA s_when_matched;
+    SELECT 1 // 0;
+  EXCEPTION WHEN division_by_zero THEN
+    RAISE NOTICE 'matched';
+  END;
+END
+$$;
+
+statement ok
+CALL p_when_matches();
+
+statement error pgcode 42P01 relation "t_when_matched" does not exist
+SELECT * FROM t_when_matched;
+
+# s_when_matched: legacy rolls it back; DSC's post-commit job creates it.
+onlyif config local-legacy-schema-changer
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_when_matched';
+----
+
+skipif config local-legacy-schema-changer
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_when_matched';
+----
+s_when_matched
+
+statement ok
+DROP PROCEDURE p_when_matches;
+
+statement ok
+DROP SCHEMA IF EXISTS s_when_matched;
+
+# Unmatched: RAISE EXCEPTION (P0001) is not caught by WHEN division_by_zero,
+# so the error escapes the procedure and the CALL fails. The DDL still must
+# not be visible after the failed CALL.
+statement ok
+CREATE PROCEDURE p_when_unmatched() LANGUAGE PLpgSQL AS $$
+BEGIN
+  BEGIN
+    CREATE TABLE t_when_unmatched (a INT);
+    CREATE SCHEMA s_when_unmatched;
+    RAISE EXCEPTION 'boom';
+  EXCEPTION WHEN division_by_zero THEN
+    RAISE NOTICE 'will not match';
+  END;
+END
+$$;
+
+statement error pgcode P0001 pq: boom
+CALL p_when_unmatched();
+
+statement error pgcode 42P01 relation "t_when_unmatched" does not exist
+SELECT * FROM t_when_unmatched;
+
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_when_unmatched';
+----
+
+statement ok
+DROP PROCEDURE p_when_unmatched;
+
+subtest end
+
+
 subtest ddl_with_rollback_and_dml
 
 # Both DML and DDL should be rolled back together when ROLLBACK is called.
