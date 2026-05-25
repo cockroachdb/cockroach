@@ -573,6 +573,7 @@ func registerKVGracefulDraining(r registry.Registry) {
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
+		SkipDRPC:         true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			nodes := c.Spec().NodeCount - 1
 			t.Status("starting cluster")

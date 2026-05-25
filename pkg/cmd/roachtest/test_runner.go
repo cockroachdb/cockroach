@@ -1176,7 +1176,7 @@ func (r *testRunner) runWorker(
 					c.SetUseDRPC(true)
 					c.status("Enabling DRPC")
 					t.AddParam("forceDRPC", "true")
-				} else if !testSpec.Benchmark && !isMixedVersion && prng.Intn(2) == 0 {
+				} else if !testSpec.Benchmark && !isMixedVersion && !testSpec.SkipDRPC && prng.Intn(2) == 0 {
 					c.SetUseDRPC(true)
 					c.status("Enabling DRPC")
 					t.AddParam("metamorphicDRPC", "true")
