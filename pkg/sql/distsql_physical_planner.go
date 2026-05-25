@@ -1810,6 +1810,69 @@ var localScansConcurrencyLimit = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
+var adaptiveLookupJoinEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.distsql.adaptive_lookup_join.enabled",
+	"determines whether eligible lookup joins can switch to a hash fallback at runtime",
+	false,
+)
+
+var adaptiveLookupJoinThresholdBytes = settings.RegisterByteSizeSetting(
+	settings.ApplicationLevel,
+	"sql.distsql.adaptive_lookup_join.threshold",
+	"left input bytes threshold for switching an eligible adaptive lookup join to hash fallback",
+	64<<20, /* 64 MiB */
+	settings.PositiveInt,
+)
+
+func shouldEnableAdaptiveLookupJoin(
+	sv *settings.Values, joinReaderSpec *execinfrapb.JoinReaderSpec, planInfo *lookupJoinPlanningInfo,
+) (enabled bool, thresholdBytes int64) {
+	if !adaptiveLookupJoinEnabled.Get(sv) {
+		return false, 0
+	}
+	if planInfo.joinType != descpb.InnerJoin {
+		return false, 0
+	}
+	if joinReaderSpec.MaintainOrdering || joinReaderSpec.MaintainLookupOrdering {
+		return false, 0
+	}
+	if planInfo.remoteLookupExpr != nil || planInfo.remoteOnlyLookups {
+		return false, 0
+	}
+	if planInfo.isFirstJoinInPairedJoiner || planInfo.isSecondJoinInPairedJoiner {
+		return false, 0
+	}
+	if planInfo.lookupExpr != nil || planInfo.onCond != nil {
+		return false, 0
+	}
+	if len(joinReaderSpec.LookupColumns) == 0 {
+		return false, 0
+	}
+
+	// The fallback hash probe needs to extract lookup key columns from fetched
+	// rows. Restrict the MVP to plans that fetch all lookup key columns.
+	keyCols := joinReaderSpec.FetchSpec.KeyColumns()
+	fetchedColIDs := make(map[descpb.ColumnID]struct{}, len(joinReaderSpec.FetchSpec.FetchedColumns))
+	for i := range joinReaderSpec.FetchSpec.FetchedColumns {
+		fetchedColIDs[descpb.ColumnID(joinReaderSpec.FetchSpec.FetchedColumns[i].ColumnID)] = struct{}{}
+	}
+	for i := range joinReaderSpec.LookupColumns {
+		if i >= len(keyCols) {
+			return false, 0
+		}
+		if _, ok := fetchedColIDs[descpb.ColumnID(keyCols[i].ColumnID)]; !ok {
+			return false, 0
+		}
+	}
+
+	thresholdBytes = adaptiveLookupJoinThresholdBytes.Get(sv)
+	if thresholdBytes <= 0 {
+		return false, 0
+	}
+	return true, thresholdBytes
+}
+
 // maybeParallelizeLocalScans check whether we are planning such a TableReader
 // for the local flow that would benefit (and is safe) to parallelize.
 func (dsp *DistSQLPlanner) maybeParallelizeLocalScans(
@@ -3043,6 +3106,10 @@ func (dsp *DistSQLPlanner) planLookupJoin(
 		joinReaderSpec.LookupColumns[i] = uint32(p.PlanToStreamColMap[col])
 	}
 	joinReaderSpec.LookupColumnsAreKey = planInfo.eqColsAreKey
+	if enabled, thresholdBytes := shouldEnableAdaptiveLookupJoin(&dsp.st.SV, &joinReaderSpec, planInfo); enabled {
+		joinReaderSpec.AdaptiveEnabled = true
+		joinReaderSpec.AdaptiveThresholdBytes = thresholdBytes
+	}
 
 	inputTypes := p.GetResultTypes()
 	fetchedColumns := joinReaderSpec.FetchSpec.FetchedColumns
