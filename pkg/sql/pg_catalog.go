@@ -1024,7 +1024,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			tree.DBoolFalse, // relhasoids
 			tree.MakeDBool(tree.DBool(table.IsPhysicalTable())), // relhaspkey
 			tree.DBoolFalse, // relhasrules
-			tree.DBoolFalse, // relhastriggers
+			tree.MakeDBool(tree.DBool(len(table.GetTriggers()) > 0)), // relhastriggers
 			tree.DBoolFalse, // relhassubclass
 			zeroVal,         // relfrozenxid
 			relacl,          // relacl
@@ -4171,8 +4171,8 @@ https://www.postgresql.org/docs/9.5/view-pg-tables.html`,
 					tree.DNull,                     // tablespace
 					tree.MakeDBool(tree.DBool(table.IsPhysicalTable())), // hasindexes
 					tree.DBoolFalse, // hasrules
-					tree.DBoolFalse, // hastriggers
-					tree.DBoolFalse, // rowsecurity
+					tree.MakeDBool(tree.DBool(len(table.GetTriggers()) > 0)),      // hastriggers
+					tree.MakeDBool(tree.DBool(table.IsRowLevelSecurityEnabled())), // rowsecurity
 				)
 			})
 	},
@@ -4254,8 +4254,11 @@ https://www.postgresql.org/docs/16/catalog-pg-trigger.html`,
 						}
 					}
 
-					// tgenabled: O = origin and local, D = disabled, R = replica, A = always
-					tgenabled := tree.NewDString("A")
+					// tgenabled: O = origin and local, D = disabled, R = replica, A = always.
+					// CockroachDB has no session_replication_role equivalent, so a trigger
+					// is either enabled (firing on origin and local, the PostgreSQL default)
+					// or disabled.
+					tgenabled := tree.NewDString("O")
 					if !trigger.Enabled {
 						tgenabled = tree.NewDString("D")
 					}

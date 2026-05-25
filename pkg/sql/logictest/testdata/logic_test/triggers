@@ -4164,19 +4164,19 @@ query TT colnames
 SHOW CREATE TRIGGER tr ON t;
 ----
 trigger_name  create_statement
-tr            CREATE TRIGGER tr AFTER INSERT ON test.public.t FOR EACH ROW EXECUTE FUNCTION test.public.g()
+tr            CREATE TRIGGER tr AFTER INSERT ON public.t FOR EACH ROW EXECUTE FUNCTION public.g()
 
 query TT colnames
 SHOW CREATE TRIGGER tr2 ON t;
 ----
 trigger_name  create_statement
-tr2           CREATE TRIGGER tr2 BEFORE UPDATE ON test.public.t FOR EACH ROW EXECUTE FUNCTION test.public.g()
+tr2           CREATE TRIGGER tr2 BEFORE UPDATE ON public.t FOR EACH ROW EXECUTE FUNCTION public.g()
 
 query TT colnames
 SHOW CREATE TRIGGER tr3 ON t;
 ----
 trigger_name  create_statement
-tr3           CREATE TRIGGER tr3 AFTER INSERT OR UPDATE ON test.public.t FOR EACH ROW WHEN (new).a < 5:::INT8 EXECUTE FUNCTION test.public.g()
+tr3           CREATE TRIGGER tr3 AFTER INSERT OR UPDATE ON public.t FOR EACH ROW WHEN (new).a < 5:::INT8 EXECUTE FUNCTION public.g()
 
 statement ok
 DROP TRIGGER tr ON t;
@@ -4564,7 +4564,7 @@ CREATE OR REPLACE TRIGGER replace_test BEFORE INSERT ON xy FOR EACH ROW EXECUTE 
 query TT
 SHOW CREATE TRIGGER replace_test ON xy;
 ----
-replace_test  CREATE TRIGGER replace_test BEFORE INSERT ON test.public.xy FOR EACH ROW EXECUTE FUNCTION test.public.f()
+replace_test  CREATE TRIGGER replace_test BEFORE INSERT ON public.xy FOR EACH ROW EXECUTE FUNCTION public.f()
 
 # CREATE OR REPLACE TRIGGER when the trigger already exists replaces it.
 statement ok
@@ -4573,7 +4573,7 @@ CREATE OR REPLACE TRIGGER replace_test AFTER UPDATE ON xy FOR EACH ROW EXECUTE F
 query TT
 SHOW CREATE TRIGGER replace_test ON xy;
 ----
-replace_test  CREATE TRIGGER replace_test AFTER UPDATE ON test.public.xy FOR EACH ROW EXECUTE FUNCTION test.public.f()
+replace_test  CREATE TRIGGER replace_test AFTER UPDATE ON public.xy FOR EACH ROW EXECUTE FUNCTION public.f()
 
 # CREATE TRIGGER (without REPLACE) still errors on duplicate.
 statement error pgcode 42710 pq: trigger "replace_test" for relation "xy" already exists
@@ -4978,11 +4978,11 @@ WHERE tgrelid = 'test_triggers'::regclass
 ORDER BY tgname;
 ----
 tgname              tgtype  has_func_oid  tgnargs  tgenabled  tgoldtable  tgnewtable
-after_delete_row    9       true          0        A          NULL        NULL
-after_insert_row    5       true          0        A          NULL        NULL
-before_update_row   19      true          0        A          NULL        NULL
-multi_event_trigger 31      true          0        A          NULL        NULL
-trigger_with_args   5       true          3        A          NULL        NULL
+after_delete_row    9       true          0        O          NULL        NULL
+after_insert_row    5       true          0        O          NULL        NULL
+before_update_row   19      true          0        O          NULL        NULL
+multi_event_trigger 31      true          0        O          NULL        NULL
+trigger_with_args   5       true          3        O          NULL        NULL
 
 # Test INSTEAD OF triggers (not yet implemented)
 statement error pgcode 42809 "test_triggers" is a table\nDETAIL: Tables cannot have INSTEAD OF triggers.
@@ -5075,6 +5075,28 @@ WHERE tgrelid = 'other_schema.test_table'::regclass;
 tgname                table_name  trigger_func_name
 other_schema_trigger  test_table  trigger_func1
 
+# Test that pg_class.relhastriggers reflects the presence of triggers.
+query TB colnames,rowsort
+SELECT relname, relhastriggers
+FROM pg_catalog.pg_class
+WHERE relname IN ('test_triggers', 'audit_log', 'test_table');
+----
+relname        relhastriggers
+audit_log      false
+test_table     true
+test_triggers  true
+
+# pg_tables.hastriggers should agree with pg_class.relhastriggers.
+query TB colnames,rowsort
+SELECT tablename, hastriggers
+FROM pg_catalog.pg_tables
+WHERE tablename IN ('test_triggers', 'audit_log', 'test_table');
+----
+tablename      hastriggers
+audit_log      false
+test_table     true
+test_triggers  true
+
 # Clean up
 statement ok
 DROP TABLE test_triggers CASCADE;
@@ -5141,12 +5163,12 @@ CREATE TRIGGER insert_trigger
   FOR EACH ROW
   EXECUTE FUNCTION audit_trigger_func();
 
-# Verify trigger is enabled by default (tgenabled = 'A' for always).
+# Verify trigger is enabled by default (tgenabled = 'O' for origin).
 skipif config local-mixed-25.4 local-mixed-26.1
 query T
 SELECT tgenabled FROM pg_trigger WHERE tgname = 'insert_trigger';
 ----
-A
+O
 
 # SHOW TRIGGERS should also report enabled = true.
 skipif config local-mixed-25.4 local-mixed-26.1
@@ -5205,7 +5227,7 @@ skipif config local-mixed-25.4 local-mixed-26.1
 query T
 SELECT tgenabled FROM pg_trigger WHERE tgname = 'insert_trigger';
 ----
-A
+O
 
 # Insert another row - trigger should fire again.
 skipif config local-mixed-25.4 local-mixed-26.1
@@ -5247,7 +5269,7 @@ skipif config local-mixed-25.4 local-mixed-26.1
 query T
 SELECT tgenabled FROM pg_trigger WHERE tgname = 'insert_trigger';
 ----
-A
+O
 
 # Test error when trigger doesn't exist.
 skipif config local-mixed-25.4 local-mixed-26.1
@@ -5272,8 +5294,8 @@ skipif config local-mixed-25.4 local-mixed-26.1
 query TT rowsort
 SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
 ----
-insert_trigger  A
-update_trigger  A
+insert_trigger  O
+update_trigger  O
 
 # Insert and update - both triggers should fire.
 skipif config local-mixed-25.4 local-mixed-26.1
@@ -5340,8 +5362,8 @@ skipif config local-mixed-25.4 local-mixed-26.1
 query TT rowsort
 SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
 ----
-insert_trigger  A
-update_trigger  A
+insert_trigger  O
+update_trigger  O
 
 # Both triggers should fire again.
 skipif config local-mixed-25.4 local-mixed-26.1
@@ -5374,7 +5396,7 @@ query TT rowsort
 SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
 ----
 insert_trigger  D
-update_trigger  A
+update_trigger  O
 
 # Insert and update - only update trigger should fire.
 skipif config local-mixed-25.4 local-mixed-26.1
@@ -5431,8 +5453,8 @@ skipif config local-mixed-25.4 local-mixed-26.1
 query TT rowsort
 SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
 ----
-insert_trigger  A
-update_trigger  A
+insert_trigger  O
+update_trigger  O
 
 # Test that ALL/USER on a table with no triggers is a no-op.
 skipif config local-mixed-25.4 local-mixed-26.1
@@ -5471,8 +5493,8 @@ skipif config local-mixed-25.4 local-mixed-26.1
 query TT rowsort
 SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
 ----
-insert_trigger  A
-update_trigger  A
+insert_trigger  O
+update_trigger  O
 
 # Test with IF EXISTS on table.
 skipif config local-mixed-25.4 local-mixed-26.1

@@ -1104,6 +1104,12 @@ select relname, relrowsecurity, relforcerowsecurity from pg_class where relname 
 ----
 roaches  true  true
 
+# pg_tables.rowsecurity should agree with pg_class.relrowsecurity.
+query TB
+select tablename, rowsecurity from pg_tables where tablename = 'roaches';
+----
+roaches  true
+
 skipif config schema-locked-disabled
 query T
 select create_statement from crdb_internal.create_statements where descriptor_name='roaches'
