@@ -118,7 +118,11 @@ func (rpcCtx *Context) drpcDialOptsCommon(
 		drpcDialOpts = append(drpcDialOpts, drpcclient.WithPerRPCMetadata(map[string]string{key: value}))
 	}
 
+	// Bound capacity so that the append below cannot race with concurrent
+	// dials on the same rpcCtx by writing into a shared backing array. The
+	// gRPC sibling in dialOptsCommon does the same.
 	unaryInterceptors := rpcCtx.clientUnaryInterceptorsDRPC
+	unaryInterceptors = unaryInterceptors[:len(unaryInterceptors):len(unaryInterceptors)]
 	if rpcCtx.Knobs.UnaryClientInterceptorDRPC != nil {
 		interceptor := rpcCtx.Knobs.UnaryClientInterceptorDRPC(target, rpcbase.DefaultClass)
 		if interceptor != nil {
@@ -128,6 +132,7 @@ func (rpcCtx *Context) drpcDialOptsCommon(
 	drpcDialOpts = append(drpcDialOpts, drpcclient.WithChainUnaryInterceptor(unaryInterceptors...))
 
 	streamInterceptors := rpcCtx.clientStreamInterceptorsDRPC
+	streamInterceptors = streamInterceptors[:len(streamInterceptors):len(streamInterceptors)]
 	if rpcCtx.Knobs.StreamClientInterceptorDRPC != nil {
 		interceptor := rpcCtx.Knobs.StreamClientInterceptorDRPC(target, rpcbase.DefaultClass)
 		if interceptor != nil {
