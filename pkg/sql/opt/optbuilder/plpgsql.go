@@ -216,7 +216,9 @@ type plOptions struct {
 	isDoBlock        bool
 
 	// skipSQL is true if SQL statements and expressions should not be built.
-	// This is used during trigger function creation.
+	// This is used during trigger function creation and when building a
+	// late-bound PL/pgSQL procedure, where the body is stored verbatim and
+	// references are resolved at CALL time.
 	skipSQL bool
 }
 
