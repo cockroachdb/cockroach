@@ -55,9 +55,18 @@ const numWorkStateShards = 32
 // Compile-time assertion: numWorkStateShards must be a power of two.
 const _ = -uint(numWorkStateShards & (numWorkStateShards - 1))
 
+// maxRetiredPerShard caps each shard's retired list independently.
+const maxRetiredPerShard = maxRetiredWorkStates / numWorkStateShards
+
 // workStateMapShard is a single shard of the work state map.
 type workStateMapShard struct {
 	m syncutil.Map[int64, WorkState]
+
+	retired struct {
+		syncutil.Mutex
+		states []*WorkState
+	}
+
 	// Padding ensures each shard occupies its own cache line, so that a
 	// write to one shard's mutex doesn't invalidate the cache line holding
 	// an adjacent shard's mutex on other cores.
@@ -69,9 +78,14 @@ type workStateMapShard struct {
 // goroutineID & (N-1).
 var activeWorkStateShards [numWorkStateShards]workStateMapShard
 
+// workStateShardIndex returns the shard index for the given goroutine ID.
+func workStateShardIndex(gid int64) uint64 {
+	return uint64(gid) & (numWorkStateShards - 1)
+}
+
 // workStateShard returns the syncutil.Map shard for the given goroutine ID.
 func workStateShard(gid int64) *syncutil.Map[int64, WorkState] {
-	return &activeWorkStateShards[uint64(gid)&(numWorkStateShards-1)].m
+	return &activeWorkStateShards[workStateShardIndex(gid)].m
 }
 
 // activeWorkStatesCount tracks the number of goroutines with an
@@ -81,22 +95,9 @@ func workStateShard(gid int64) *syncutil.Map[int64, WorkState] {
 // the map key already exists.
 var activeWorkStatesCount atomic.Int64
 
-// maxRetiredWorkStates caps the retired list to prevent unbounded growth
-// during bursts between sampler drain ticks. This value is based on an
-// estimated ceiling of 10,000 QPS per node with a 3x multiplier for goroutines
-// per query. States beyond this cap are not tracked for pooling and are instead
-// garbage-collected.
+// maxRetiredWorkStates caps the total retired list to prevent unbounded
+// growth during bursts between sampler drain ticks.
 const maxRetiredWorkStates = 30000
-
-// retiredWorkStates holds WorkState objects that have been removed from
-// activeWorkStates but cannot yet be returned to the pool. This is because
-// rangeWorkStates may be dereferencing or copying a WorkState object.
-// clearWorkState appends to this list; rangeWorkStates drains it after
-// iteration completes.
-var retiredWorkStates struct {
-	syncutil.Mutex
-	states []*WorkState
-}
 
 // SetWorkState registers the current goroutine's work state.
 // It returns a cleanup function that should be deferred to clear the state.
@@ -167,8 +168,9 @@ func clearWorkState() {
 }
 
 func _clearWorkState(gid int64) {
-	shard := workStateShard(gid)
-	state, ok := shard.Load(gid)
+	idx := workStateShardIndex(gid)
+	shard := &activeWorkStateShards[idx]
+	state, ok := shard.m.Load(gid)
 	if !ok {
 		return
 	}
@@ -178,38 +180,57 @@ func _clearWorkState(gid int64) {
 	// zeroes the struct anyway. We skip it to avoid a race with the
 	// sampler's concurrent *value copy in rangeWorkStates.
 	if prev != nil {
-		shard.Store(gid, prev)
+		shard.m.Store(gid, prev)
 	} else {
-		shard.Delete(gid)
+		shard.m.Delete(gid)
 		activeWorkStatesCount.Add(-1)
 	}
-	retireWorkState(state)
+	retireWorkState(shard, state)
 }
 
-// retireWorkState adds a WorkState to the retired list for deferred pool
-// return. If the retired list has reached maxRetiredWorkStates, the state
-// is not tracked for pooling and will be garbage-collected instead.
-func retireWorkState(state *WorkState) {
-	retiredWorkStates.Lock()
-	defer retiredWorkStates.Unlock()
-	if len(retiredWorkStates.states) >= maxRetiredWorkStates {
+// retireWorkState adds a WorkState to the shard-local retired list for
+// deferred pool return.
+func retireWorkState(shard *workStateMapShard, state *WorkState) {
+	shard.retired.Lock()
+	defer shard.retired.Unlock()
+	if len(shard.retired.states) >= maxRetiredPerShard {
 		return
 	}
-	retiredWorkStates.states = append(retiredWorkStates.states, state)
+	shard.retired.states = append(shard.retired.states, state)
 }
 
-// reclaimRetiredWorkStates atomically drains the retired list and
-// returns all retired WorkState objects to the pool.
+// reclaimRetiredWorkStates drains all per-shard retired lists and returns
+// WorkState objects to the pool.
 func reclaimRetiredWorkStates() {
-	retiredWorkStates.Lock()
-	states := retiredWorkStates.states
-	retiredWorkStates.states = nil
-	retiredWorkStates.Unlock()
-
-	for _, s := range states {
-		*s = WorkState{}
-		workStatePool.Put(s)
+	for i := range activeWorkStateShards {
+		shard := &activeWorkStateShards[i]
+		states := func() []*WorkState {
+			shard.retired.Lock()
+			defer shard.retired.Unlock()
+			s := shard.retired.states
+			shard.retired.states = nil
+			return s
+		}()
+		for _, s := range states {
+			*s = WorkState{}
+			workStatePool.Put(s)
+		}
 	}
+}
+
+// totalRetiredWorkStates returns the total number of retired work states
+// across all shards. This is only used in tests.
+func totalRetiredWorkStates() int {
+	total := 0
+	for i := range activeWorkStateShards {
+		total += func() int {
+			shard := &activeWorkStateShards[i]
+			shard.retired.Lock()
+			defer shard.retired.Unlock()
+			return len(shard.retired.states)
+		}()
+	}
+	return total
 }
 
 func getWorkState(gid int64) (*WorkState, bool) {
