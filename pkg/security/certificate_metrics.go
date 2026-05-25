@@ -488,6 +488,12 @@ var defaultTimeSource = timeutil.DefaultTimeSource{}
 // that the metric metadata is still registered in the metric registry. This
 // ensures that tools like `cockroach gen metric-list` can discover certificate
 // metrics even when running with Insecure=true.
+//
+// TODO(Abhinav1299): This duplicates the metric construction logic from
+// createMetrics and introduces an anti-pattern of constructing real metric
+// objects solely for metadata registration. Consider refactoring to extract
+// metric metadata registration from metric value construction, so insecure
+// mode can register metadata without creating stub gauges.
 func NewStubMetrics() *Metrics {
 	noop := func() int64 { return 0 }
 	b := aggmetric.MakeBuilder(SQLUserLabel)
