@@ -157,7 +157,7 @@ func TestProgressPaused(t *testing.T) {
 func TestProgressFlowControl(t *testing.T) {
 	cfg := newTestConfig(1, 5, 1, newTestMemoryStorage(withPeers(1, 2)))
 	cfg.MaxInflightMsgs = 3
-	cfg.MaxSizePerMsg = 2048
+	cfg.MaxSizePerMsg = 2 * (pb.EntryOverhead + 1000)
 	cfg.MaxInflightBytes = 9000 // A little over MaxInflightMsgs * MaxSizePerMsg.
 	r := newRaft(cfg)
 	r.becomeCandidate()

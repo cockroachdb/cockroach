@@ -21,6 +21,8 @@ import (
 	"math/bits"
 	"testing"
 	"unsafe"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestProtoMemorySizes(t *testing.T) {
@@ -64,4 +66,10 @@ func TestProtoMemorySizes(t *testing.T) {
 
 	var ccv2 ConfChangeV2
 	assert(unsafe.Sizeof(ccv2), if64Bit(56, 28), "ConfChangeV2")
+}
+
+func TestEntrySizeEst(t *testing.T) {
+	require.Equal(t, EntryOverhead, int(unsafe.Sizeof(Entry{})))
+	require.Equal(t, EntryOverhead, int((&Entry{}).SizeEst()))
+	require.Equal(t, EntryOverhead+3, int((&Entry{Data: []byte("abc")}).SizeEst()))
 }

@@ -791,7 +791,7 @@ func LoadEntries(
 	// the same entries twice, and computing their sizes.
 	sh := sizeHelper{maxBytes: maxBytes, account: account}
 	for i, entry := range ents {
-		if sh.done || !sh.add(uint64(entry.Size())) {
+		if sh.done || !sh.add(entry.SizeEst()) {
 			// Remove the remaining entries, and dereference the memory they hold.
 			ents = slices.Delete(ents, i, len(ents))
 			break
@@ -829,7 +829,7 @@ func LoadEntries(
 			}
 		}
 
-		if sh.add(uint64(ent.Size())) {
+		if sh.add(ent.SizeEst()) {
 			ents = append(ents, ent)
 		}
 		if sh.done {
