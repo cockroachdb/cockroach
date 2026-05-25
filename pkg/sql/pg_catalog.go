@@ -1024,7 +1024,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			tree.DBoolFalse, // relhasoids
 			tree.MakeDBool(tree.DBool(table.IsPhysicalTable())), // relhaspkey
 			tree.DBoolFalse, // relhasrules
-			tree.DBoolFalse, // relhastriggers
+			tree.MakeDBool(tree.DBool(len(table.GetTriggers()) > 0)), // relhastriggers
 			tree.DBoolFalse, // relhassubclass
 			zeroVal,         // relfrozenxid
 			relacl,          // relacl

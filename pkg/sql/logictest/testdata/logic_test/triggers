@@ -5075,6 +5075,17 @@ WHERE tgrelid = 'other_schema.test_table'::regclass;
 tgname                table_name  trigger_func_name
 other_schema_trigger  test_table  trigger_func1
 
+# Test that pg_class.relhastriggers reflects the presence of triggers.
+query TB colnames,rowsort
+SELECT relname, relhastriggers
+FROM pg_catalog.pg_class
+WHERE relname IN ('test_triggers', 'audit_log', 'test_table');
+----
+relname        relhastriggers
+audit_log      false
+test_table     true
+test_triggers  true
+
 # Clean up
 statement ok
 DROP TABLE test_triggers CASCADE;
