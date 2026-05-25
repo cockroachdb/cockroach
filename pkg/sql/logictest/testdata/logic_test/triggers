@@ -4978,11 +4978,11 @@ WHERE tgrelid = 'test_triggers'::regclass
 ORDER BY tgname;
 ----
 tgname              tgtype  has_func_oid  tgnargs  tgenabled  tgoldtable  tgnewtable
-after_delete_row    9       true          0        A          NULL        NULL
-after_insert_row    5       true          0        A          NULL        NULL
-before_update_row   19      true          0        A          NULL        NULL
-multi_event_trigger 31      true          0        A          NULL        NULL
-trigger_with_args   5       true          3        A          NULL        NULL
+after_delete_row    9       true          0        O          NULL        NULL
+after_insert_row    5       true          0        O          NULL        NULL
+before_update_row   19      true          0        O          NULL        NULL
+multi_event_trigger 31      true          0        O          NULL        NULL
+trigger_with_args   5       true          3        O          NULL        NULL
 
 # Test INSTEAD OF triggers (not yet implemented)
 statement error pgcode 42809 "test_triggers" is a table\nDETAIL: Tables cannot have INSTEAD OF triggers.
@@ -5163,12 +5163,12 @@ CREATE TRIGGER insert_trigger
   FOR EACH ROW
   EXECUTE FUNCTION audit_trigger_func();
 
-# Verify trigger is enabled by default (tgenabled = 'A' for always).
+# Verify trigger is enabled by default (tgenabled = 'O' for origin).
 skipif config local-mixed-25.4 local-mixed-26.1
 query T
 SELECT tgenabled FROM pg_trigger WHERE tgname = 'insert_trigger';
 ----
-A
+O
 
 # SHOW TRIGGERS should also report enabled = true.
 skipif config local-mixed-25.4 local-mixed-26.1
@@ -5227,7 +5227,7 @@ skipif config local-mixed-25.4 local-mixed-26.1
 query T
 SELECT tgenabled FROM pg_trigger WHERE tgname = 'insert_trigger';
 ----
-A
+O
 
 # Insert another row - trigger should fire again.
 skipif config local-mixed-25.4 local-mixed-26.1
@@ -5269,7 +5269,7 @@ skipif config local-mixed-25.4 local-mixed-26.1
 query T
 SELECT tgenabled FROM pg_trigger WHERE tgname = 'insert_trigger';
 ----
-A
+O
 
 # Test error when trigger doesn't exist.
 skipif config local-mixed-25.4 local-mixed-26.1
@@ -5294,8 +5294,8 @@ skipif config local-mixed-25.4 local-mixed-26.1
 query TT rowsort
 SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
 ----
-insert_trigger  A
-update_trigger  A
+insert_trigger  O
+update_trigger  O
 
 # Insert and update - both triggers should fire.
 skipif config local-mixed-25.4 local-mixed-26.1
@@ -5362,8 +5362,8 @@ skipif config local-mixed-25.4 local-mixed-26.1
 query TT rowsort
 SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
 ----
-insert_trigger  A
-update_trigger  A
+insert_trigger  O
+update_trigger  O
 
 # Both triggers should fire again.
 skipif config local-mixed-25.4 local-mixed-26.1
@@ -5396,7 +5396,7 @@ query TT rowsort
 SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
 ----
 insert_trigger  D
-update_trigger  A
+update_trigger  O
 
 # Insert and update - only update trigger should fire.
 skipif config local-mixed-25.4 local-mixed-26.1
@@ -5453,8 +5453,8 @@ skipif config local-mixed-25.4 local-mixed-26.1
 query TT rowsort
 SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
 ----
-insert_trigger  A
-update_trigger  A
+insert_trigger  O
+update_trigger  O
 
 # Test that ALL/USER on a table with no triggers is a no-op.
 skipif config local-mixed-25.4 local-mixed-26.1
@@ -5493,8 +5493,8 @@ skipif config local-mixed-25.4 local-mixed-26.1
 query TT rowsort
 SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
 ----
-insert_trigger  A
-update_trigger  A
+insert_trigger  O
+update_trigger  O
 
 # Test with IF EXISTS on table.
 skipif config local-mixed-25.4 local-mixed-26.1

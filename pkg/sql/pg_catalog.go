@@ -4254,8 +4254,11 @@ https://www.postgresql.org/docs/16/catalog-pg-trigger.html`,
 						}
 					}
 
-					// tgenabled: O = origin and local, D = disabled, R = replica, A = always
-					tgenabled := tree.NewDString("A")
+					// tgenabled: O = origin and local, D = disabled, R = replica, A = always.
+					// CockroachDB has no session_replication_role equivalent, so a trigger
+					// is either enabled (firing on origin and local, the PostgreSQL default)
+					// or disabled.
+					tgenabled := tree.NewDString("O")
 					if !trigger.Enabled {
 						tgenabled = tree.NewDString("D")
 					}
