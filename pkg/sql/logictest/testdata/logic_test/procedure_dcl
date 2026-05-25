@@ -318,17 +318,28 @@ BEGIN
 END
 $$;
 
+# Under SERIALIZABLE the nested CALL succeeds. Under weak isolation the
+# pre-plan body walker does not recurse into nested CALLs, so the inner
+# GRANT hits the in-routine safety net and the CALL is rejected. See the
+# analogous nested-CALL case in procedure_ddl for the same trade-off.
+skipif config local-read-committed local-repeatable-read
 statement ok
 CALL p_outer_dcl();
 
+skipif config local-read-committed local-repeatable-read
 query TTTTTB colnames
 SHOW GRANTS ON t_dcl FOR r1
 ----
 database_name  schema_name  table_name  grantee  privilege_type  is_grantable
 test           public       t_dcl       r1       SELECT          false
 
+skipif config local-read-committed local-repeatable-read
 statement ok
 REVOKE SELECT ON t_dcl FROM r1;
+
+onlyif config local-read-committed local-repeatable-read
+statement error pgcode 0A000 to use multi-statement transactions involving a schema change under weak isolation levels
+CALL p_outer_dcl();
 
 statement ok
 DROP PROCEDURE p_outer_dcl;
