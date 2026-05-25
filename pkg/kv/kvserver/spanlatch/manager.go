@@ -562,6 +562,16 @@ func (m *Manager) iterAndWait(
 	wait *latch,
 	ignore ignoreFn,
 ) error {
+	tenantID, _ := roachpb.ClientTenantFromContext(ctx)
+	var info ash.WorkloadInfo
+	if lg.ba != nil {
+		info = ash.WorkloadInfo{
+			WorkloadID:    lg.ba.WorkloadID,
+			AppNameID:     lg.ba.AppNameID,
+			GatewayNodeID: lg.ba.GatewayNodeID,
+			WorkloadType:  workloadid.WorkloadType(lg.ba.WorkloadType),
+		}
+	}
 	for it.FirstOverlap(wait); it.Valid(); it.NextOverlap(wait) {
 		held := it.Cur()
 		if held.g.done.signaled() {
@@ -569,16 +579,6 @@ func (m *Manager) iterAndWait(
 		}
 		if ignore(wait.ts, held.ts) {
 			continue
-		}
-		tenantID, _ := roachpb.ClientTenantFromContext(ctx)
-		var info ash.WorkloadInfo
-		if lg.ba != nil {
-			info = ash.WorkloadInfo{
-				WorkloadID:    lg.ba.WorkloadID,
-				AppNameID:     lg.ba.AppNameID,
-				GatewayNodeID: lg.ba.GatewayNodeID,
-				WorkloadType:  workloadid.WorkloadType(lg.ba.WorkloadType),
-			}
 		}
 		cleanup := ash.SetWorkState(
 			tenantID, info,
