@@ -4164,19 +4164,19 @@ query TT colnames
 SHOW CREATE TRIGGER tr ON t;
 ----
 trigger_name  create_statement
-tr            CREATE TRIGGER tr AFTER INSERT ON test.public.t FOR EACH ROW EXECUTE FUNCTION test.public.g()
+tr            CREATE TRIGGER tr AFTER INSERT ON public.t FOR EACH ROW EXECUTE FUNCTION public.g()
 
 query TT colnames
 SHOW CREATE TRIGGER tr2 ON t;
 ----
 trigger_name  create_statement
-tr2           CREATE TRIGGER tr2 BEFORE UPDATE ON test.public.t FOR EACH ROW EXECUTE FUNCTION test.public.g()
+tr2           CREATE TRIGGER tr2 BEFORE UPDATE ON public.t FOR EACH ROW EXECUTE FUNCTION public.g()
 
 query TT colnames
 SHOW CREATE TRIGGER tr3 ON t;
 ----
 trigger_name  create_statement
-tr3           CREATE TRIGGER tr3 AFTER INSERT OR UPDATE ON test.public.t FOR EACH ROW WHEN (new).a < 5:::INT8 EXECUTE FUNCTION test.public.g()
+tr3           CREATE TRIGGER tr3 AFTER INSERT OR UPDATE ON public.t FOR EACH ROW WHEN (new).a < 5:::INT8 EXECUTE FUNCTION public.g()
 
 statement ok
 DROP TRIGGER tr ON t;
@@ -4564,7 +4564,7 @@ CREATE OR REPLACE TRIGGER replace_test BEFORE INSERT ON xy FOR EACH ROW EXECUTE 
 query TT
 SHOW CREATE TRIGGER replace_test ON xy;
 ----
-replace_test  CREATE TRIGGER replace_test BEFORE INSERT ON test.public.xy FOR EACH ROW EXECUTE FUNCTION test.public.f()
+replace_test  CREATE TRIGGER replace_test BEFORE INSERT ON public.xy FOR EACH ROW EXECUTE FUNCTION public.f()
 
 # CREATE OR REPLACE TRIGGER when the trigger already exists replaces it.
 statement ok
@@ -4573,7 +4573,7 @@ CREATE OR REPLACE TRIGGER replace_test AFTER UPDATE ON xy FOR EACH ROW EXECUTE F
 query TT
 SHOW CREATE TRIGGER replace_test ON xy;
 ----
-replace_test  CREATE TRIGGER replace_test AFTER UPDATE ON test.public.xy FOR EACH ROW EXECUTE FUNCTION test.public.f()
+replace_test  CREATE TRIGGER replace_test AFTER UPDATE ON public.xy FOR EACH ROW EXECUTE FUNCTION public.f()
 
 # CREATE TRIGGER (without REPLACE) still errors on duplicate.
 statement error pgcode 42710 pq: trigger "replace_test" for relation "xy" already exists
