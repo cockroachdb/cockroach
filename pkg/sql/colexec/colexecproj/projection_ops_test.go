@@ -101,6 +101,82 @@ func TestProjDivFloat64Float64Op(t *testing.T) {
 		})
 }
 
+func TestProjMixedFloatIntDivOps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := eval.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Mon:     evalCtx.TestingMon,
+		Cfg: &execinfra.ServerConfig{
+			Settings: st,
+		},
+	}
+	testCases := []struct {
+		name           string
+		input          []colexectestutils.Tuples
+		expected       colexectestutils.Tuples
+		inputTypes     []*types.T
+		projectingExpr string
+	}{
+		{
+			name:           "float-int",
+			input:          []colexectestutils.Tuples{{{8.0, 2}, {9.0, 4}, {nil, 5}, {7.0, nil}}},
+			expected:       colexectestutils.Tuples{{8.0, 2, 4.0}, {9.0, 4, 2.25}, {nil, 5, nil}, {7.0, nil, nil}},
+			inputTypes:     []*types.T{types.Float, types.Int},
+			projectingExpr: "@1 / @2",
+		},
+		{
+			name:           "int-float",
+			input:          []colexectestutils.Tuples{{{8, 2.0}, {9, 4.0}, {nil, 5.0}, {7, nil}}},
+			expected:       colexectestutils.Tuples{{8, 2.0, 4.0}, {9, 4.0, 2.25}, {nil, 5.0, nil}, {7, nil, nil}},
+			inputTypes:     []*types.T{types.Int, types.Float},
+			projectingExpr: "@1 / @2",
+		},
+		{
+			name:           "float-int-const",
+			input:          []colexectestutils.Tuples{{{8.0}, {9.0}, {nil}}},
+			expected:       colexectestutils.Tuples{{8.0, 4.0}, {9.0, 4.5}, {nil, nil}},
+			inputTypes:     []*types.T{types.Float},
+			projectingExpr: "@1 / 2::int",
+		},
+		{
+			name:           "int-float-const",
+			input:          []colexectestutils.Tuples{{{8}, {9}, {nil}}},
+			expected:       colexectestutils.Tuples{{8, 4.0}, {9, 4.5}, {nil, nil}},
+			inputTypes:     []*types.T{types.Int},
+			projectingExpr: "@1 / 2.0::float",
+		},
+		{
+			name:           "float-const-int",
+			input:          []colexectestutils.Tuples{{{2}, {4}, {nil}}},
+			expected:       colexectestutils.Tuples{{2, 4.0}, {4, 2.0}, {nil, nil}},
+			inputTypes:     []*types.T{types.Int},
+			projectingExpr: "8.0::float / @1",
+		},
+		{
+			name:           "int-const-float",
+			input:          []colexectestutils.Tuples{{{2.0}, {4.0}, {nil}}},
+			expected:       colexectestutils.Tuples{{2.0, 4.0}, {4.0, 2.0}, {nil, nil}},
+			inputTypes:     []*types.T{types.Float},
+			projectingExpr: "8::int / @1",
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			colexectestutils.RunTests(t, testAllocator, tc.input, tc.expected, colexectestutils.OrderedVerifier,
+				func(input []colexecop.Operator) (colexecop.Operator, error) {
+					return colexectestutils.CreateTestProjectingOperator(
+						ctx, flowCtx, input[0], tc.inputTypes, tc.projectingExpr, testMemAcc,
+					)
+				})
+		})
+	}
+}
+
 // TestRandomComparisons runs comparisons against all scalar types with random
 // non-null data verifying that the result of Datum.Compare matches the result
 // of the exec projection.

@@ -12661,6 +12661,99 @@ func (p projDivInt16ConstInt64Op) Next() (coldata.Batch, *execinfrapb.ProducerMe
 	return batch, nil
 }
 
+type projDivInt16ConstFloat64Op struct {
+	projConstOpBase
+	constArg int16
+}
+
+func (p projDivInt16ConstFloat64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	vec := batch.ColVec(p.colIdx)
+	var col coldata.Float64s
+	col = vec.Float64()
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		projCol := projVec.Float64()
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+
+						{
+							if arg == 0.0 {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+							projCol[i] = float64(p.constArg) / float64(arg)
+						}
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
+						arg := col.Get(i)
+
+						{
+							if arg == 0.0 {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+							projCol[i] = float64(p.constArg) / float64(arg)
+						}
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+
+					{
+						if arg == 0.0 {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+						projCol[i] = float64(p.constArg) / float64(arg)
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg := col.Get(i)
+
+					{
+						if arg == 0.0 {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+						projCol[i] = float64(p.constArg) / float64(arg)
+					}
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
 type projDivInt16ConstDecimalOp struct {
 	projConstOpBase
 	constArg int16
@@ -13150,6 +13243,99 @@ func (p projDivInt32ConstInt64Op) Next() (coldata.Batch, *execinfrapb.ProducerMe
 						}
 					}
 
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
+type projDivInt32ConstFloat64Op struct {
+	projConstOpBase
+	constArg int32
+}
+
+func (p projDivInt32ConstFloat64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	vec := batch.ColVec(p.colIdx)
+	var col coldata.Float64s
+	col = vec.Float64()
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		projCol := projVec.Float64()
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+
+						{
+							if arg == 0.0 {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+							projCol[i] = float64(p.constArg) / float64(arg)
+						}
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
+						arg := col.Get(i)
+
+						{
+							if arg == 0.0 {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+							projCol[i] = float64(p.constArg) / float64(arg)
+						}
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+
+					{
+						if arg == 0.0 {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+						projCol[i] = float64(p.constArg) / float64(arg)
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg := col.Get(i)
+
+					{
+						if arg == 0.0 {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+						projCol[i] = float64(p.constArg) / float64(arg)
+					}
 				}
 			}
 		}
@@ -13653,6 +13839,99 @@ func (p projDivInt64ConstInt64Op) Next() (coldata.Batch, *execinfrapb.ProducerMe
 	return batch, nil
 }
 
+type projDivInt64ConstFloat64Op struct {
+	projConstOpBase
+	constArg int64
+}
+
+func (p projDivInt64ConstFloat64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	vec := batch.ColVec(p.colIdx)
+	var col coldata.Float64s
+	col = vec.Float64()
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		projCol := projVec.Float64()
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+
+						{
+							if arg == 0.0 {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+							projCol[i] = float64(p.constArg) / float64(arg)
+						}
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
+						arg := col.Get(i)
+
+						{
+							if arg == 0.0 {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+							projCol[i] = float64(p.constArg) / float64(arg)
+						}
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+
+					{
+						if arg == 0.0 {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+						projCol[i] = float64(p.constArg) / float64(arg)
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg := col.Get(i)
+
+					{
+						if arg == 0.0 {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+						projCol[i] = float64(p.constArg) / float64(arg)
+					}
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
 type projDivInt64ConstDecimalOp struct {
 	projConstOpBase
 	constArg int64
@@ -13791,6 +14070,285 @@ func (p projDivInt64ConstDecimalOp) Next() (coldata.Batch, *execinfrapb.Producer
 
 					}
 
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
+type projDivFloat64ConstInt16Op struct {
+	projConstOpBase
+	constArg float64
+}
+
+func (p projDivFloat64ConstInt16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	vec := batch.ColVec(p.colIdx)
+	var col coldata.Int16s
+	col = vec.Int16()
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		projCol := projVec.Float64()
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+
+						{
+							if arg == 0 && !math.IsNaN(float64(p.constArg)) {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+							projCol[i] = float64(p.constArg) / float64(arg)
+						}
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
+						arg := col.Get(i)
+
+						{
+							if arg == 0 && !math.IsNaN(float64(p.constArg)) {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+							projCol[i] = float64(p.constArg) / float64(arg)
+						}
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+
+					{
+						if arg == 0 && !math.IsNaN(float64(p.constArg)) {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+						projCol[i] = float64(p.constArg) / float64(arg)
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg := col.Get(i)
+
+					{
+						if arg == 0 && !math.IsNaN(float64(p.constArg)) {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+						projCol[i] = float64(p.constArg) / float64(arg)
+					}
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
+type projDivFloat64ConstInt32Op struct {
+	projConstOpBase
+	constArg float64
+}
+
+func (p projDivFloat64ConstInt32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	vec := batch.ColVec(p.colIdx)
+	var col coldata.Int32s
+	col = vec.Int32()
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		projCol := projVec.Float64()
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+
+						{
+							if arg == 0 && !math.IsNaN(float64(p.constArg)) {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+							projCol[i] = float64(p.constArg) / float64(arg)
+						}
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
+						arg := col.Get(i)
+
+						{
+							if arg == 0 && !math.IsNaN(float64(p.constArg)) {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+							projCol[i] = float64(p.constArg) / float64(arg)
+						}
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+
+					{
+						if arg == 0 && !math.IsNaN(float64(p.constArg)) {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+						projCol[i] = float64(p.constArg) / float64(arg)
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg := col.Get(i)
+
+					{
+						if arg == 0 && !math.IsNaN(float64(p.constArg)) {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+						projCol[i] = float64(p.constArg) / float64(arg)
+					}
+				}
+			}
+		}
+	})
+	return batch, nil
+}
+
+type projDivFloat64ConstInt64Op struct {
+	projConstOpBase
+	constArg float64
+}
+
+func (p projDivFloat64ConstInt64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch, nil
+	}
+	vec := batch.ColVec(p.colIdx)
+	var col coldata.Int64s
+	col = vec.Int64()
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		projCol := projVec.Float64()
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+
+						{
+							if arg == 0 && !math.IsNaN(float64(p.constArg)) {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+							projCol[i] = float64(p.constArg) / float64(arg)
+						}
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
+						arg := col.Get(i)
+
+						{
+							if arg == 0 && !math.IsNaN(float64(p.constArg)) {
+								colexecerror.ExpectedError(tree.ErrDivByZero)
+							}
+							projCol[i] = float64(p.constArg) / float64(arg)
+						}
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+
+					{
+						if arg == 0 && !math.IsNaN(float64(p.constArg)) {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+						projCol[i] = float64(p.constArg) / float64(arg)
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg := col.Get(i)
+
+					{
+						if arg == 0 && !math.IsNaN(float64(p.constArg)) {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+						projCol[i] = float64(p.constArg) / float64(arg)
+					}
 				}
 			}
 		}
@@ -25405,6 +25963,16 @@ func GetProjectionLConstOperator(
 							}
 							return op, nil
 						}
+					case types.FloatFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							op := &projDivInt16ConstFloat64Op{
+								projConstOpBase: projConstOpBase,
+								constArg:        c.(int16),
+							}
+							return op, nil
+						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
@@ -25435,6 +26003,16 @@ func GetProjectionLConstOperator(
 						case -1:
 						default:
 							op := &projDivInt32ConstInt64Op{
+								projConstOpBase: projConstOpBase,
+								constArg:        c.(int32),
+							}
+							return op, nil
+						}
+					case types.FloatFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							op := &projDivInt32ConstFloat64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
 							}
@@ -25476,6 +26054,16 @@ func GetProjectionLConstOperator(
 							}
 							return op, nil
 						}
+					case types.FloatFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							op := &projDivInt64ConstFloat64Op{
+								projConstOpBase: projConstOpBase,
+								constArg:        c.(int64),
+							}
+							return op, nil
+						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
@@ -25493,6 +26081,28 @@ func GetProjectionLConstOperator(
 				case -1:
 				default:
 					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					case types.IntFamily:
+						switch rightType.Width() {
+						case 16:
+							op := &projDivFloat64ConstInt16Op{
+								projConstOpBase: projConstOpBase,
+								constArg:        c.(float64),
+							}
+							return op, nil
+						case 32:
+							op := &projDivFloat64ConstInt32Op{
+								projConstOpBase: projConstOpBase,
+								constArg:        c.(float64),
+							}
+							return op, nil
+						case -1:
+						default:
+							op := &projDivFloat64ConstInt64Op{
+								projConstOpBase: projConstOpBase,
+								constArg:        c.(float64),
+							}
+							return op, nil
+						}
 					case types.FloatFamily:
 						switch rightType.Width() {
 						case -1:
