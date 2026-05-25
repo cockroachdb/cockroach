@@ -2130,7 +2130,7 @@ func buildSnapshotListCmd() *cobra.Command {
 				return err
 			}
 			for _, snapshot := range snapshots {
-				config.Logger.Printf("found snapshot %s (id: %s)", snapshot.Name, snapshot.ID)
+				config.Logger.Printf("found snapshot %s (id: %s, status: %s)", snapshot.Name, snapshot.ID, snapshot.Status)
 			}
 			return nil
 		}),

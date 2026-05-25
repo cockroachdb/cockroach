@@ -7,6 +7,7 @@ package roachprod
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -26,6 +27,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -2415,14 +2417,10 @@ func CreateSnapshot(
 	// probably the predecessor one. Also ensure that any running CRDB processes
 	// have been stopped since we're taking raw disk snapshots cluster-wide.
 
-	// Count total volumes across all nodes for the progress spinner.
-	totalVolumes := 0
-	for _, node := range nodes {
-		totalVolumes += len(c.VMs[node-1].NonBootAttachedVolumes)
-	}
-	spinner := ui.NewDefaultCountingSpinner(l, "creating snapshots", totalVolumes)
+	spinner := ui.NewDefaultCountingSpinner(l, "creating snapshots", len(nodes))
 	defer spinner.Start()()
 
+	var nodesSnapped atomic.Int32
 	volumesSnapshotMu := struct {
 		syncutil.Mutex
 		snapshots []vm.VolumeSnapshot
@@ -2488,7 +2486,6 @@ func CreateSnapshot(
 						}
 						volumesSnapshotMu.Lock()
 						volumesSnapshotMu.snapshots = append(volumesSnapshotMu.snapshots, volumeSnapshot)
-						spinner.CountStatus(len(volumesSnapshotMu.snapshots))
 						volumesSnapshotMu.Unlock()
 						return nil
 					})
@@ -2496,6 +2493,7 @@ func CreateSnapshot(
 				if err := g.Wait(); err != nil {
 					return err
 				}
+				spinner.CountStatus(int(nodesSnapped.Add(1)))
 				return nil
 			}); err != nil {
 				res.Err = err
@@ -2649,6 +2647,15 @@ func ApplySnapshots(
 					return err
 				}
 
+				// Sort by storeIdx so volumes are attached in order.
+				// AttachVolume assigns device names sequentially
+				// (/dev/sdd, /dev/sde, ...) based on attachment order,
+				// so attaching in storeIdx order ensures the device-to-
+				// store mapping is consistent with the original cluster.
+				slices.SortFunc(createdVolumes, func(a, b createdVolume) int {
+					return cmp.Compare(a.storeIdx, b.storeIdx)
+				})
+
 				// Attach and mount volumes sequentially since GCE
 				// does not support concurrent instance modifications.
 				for _, cv := range createdVolumes {
@@ -2665,7 +2672,7 @@ func ApplySnapshots(
 						l.Printf(buf.String())
 						return err
 					}
-					l.Printf("mounted %s at %s on %s", cv.volume.ProviderResourceID, mountDir, cVM.ProviderID)
+					l.Printf("mounted %s at %s on %s", cv.volume.ProviderResourceID, mountDir, cVM.Name)
 				}
 				// Save the cluster cache once after all volumes are
 				// attached and mounted for this node.
