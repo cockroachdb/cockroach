@@ -21,8 +21,9 @@ func (node *CreateResourceGroup) Format(ctx *FmtCtx) {
 		ctx.WriteString("IF NOT EXISTS ")
 	}
 	ctx.FormatNode(&node.Name)
-	ctx.WriteString(" WITH ")
+	ctx.WriteString(" WITH (")
 	node.Options.Format(ctx)
+	ctx.WriteByte(')')
 }
 
 // AlterResourceGroup represents an ALTER RESOURCE GROUP statement.
@@ -41,8 +42,9 @@ func (node *AlterResourceGroup) Format(ctx *FmtCtx) {
 		ctx.WriteString("IF EXISTS ")
 	}
 	ctx.FormatNode(&node.Name)
-	ctx.WriteString(" WITH ")
+	ctx.WriteString(" WITH (")
 	node.Options.Format(ctx)
+	ctx.WriteByte(')')
 }
 
 // DropResourceGroup represents a DROP RESOURCE GROUP statement.

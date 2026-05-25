@@ -8,53 +8,80 @@ CREATE RESOURCE GROUP my_group
 HINT: try \h CREATE RESOURCE GROUP
 
 parse
-CREATE RESOURCE GROUP my_group WITH cpu_weight = 100, max_cpu = false
-----
-CREATE RESOURCE GROUP my_group WITH cpu_weight = 100, max_cpu = false
-CREATE RESOURCE GROUP my_group WITH cpu_weight = (100), max_cpu = (false) -- fully parenthesized
-CREATE RESOURCE GROUP my_group WITH cpu_weight = _, max_cpu = _ -- literals removed
-CREATE RESOURCE GROUP _ WITH cpu_weight = 100, max_cpu = false -- identifiers removed
-
-# Parens form is also accepted; the canonical form drops them.
-parse
 CREATE RESOURCE GROUP my_group WITH (cpu_weight = 100, max_cpu = false)
 ----
-CREATE RESOURCE GROUP my_group WITH cpu_weight = 100, max_cpu = false -- normalized!
-CREATE RESOURCE GROUP my_group WITH cpu_weight = (100), max_cpu = (false) -- fully parenthesized
-CREATE RESOURCE GROUP my_group WITH cpu_weight = _, max_cpu = _ -- literals removed
-CREATE RESOURCE GROUP _ WITH cpu_weight = 100, max_cpu = false -- identifiers removed
+CREATE RESOURCE GROUP my_group WITH (cpu_weight = 100, max_cpu = false)
+CREATE RESOURCE GROUP my_group WITH (cpu_weight = (100), max_cpu = (false)) -- fully parenthesized
+CREATE RESOURCE GROUP my_group WITH (cpu_weight = _, max_cpu = _) -- literals removed
+CREATE RESOURCE GROUP _ WITH (cpu_weight = 100, max_cpu = false) -- identifiers removed
+
+# No-parens form is also accepted; the canonical form adds them.
+parse
+CREATE RESOURCE GROUP my_group WITH cpu_weight = 100, max_cpu = false
+----
+CREATE RESOURCE GROUP my_group WITH (cpu_weight = 100, max_cpu = false) -- normalized!
+CREATE RESOURCE GROUP my_group WITH (cpu_weight = (100), max_cpu = (false)) -- fully parenthesized
+CREATE RESOURCE GROUP my_group WITH (cpu_weight = _, max_cpu = _) -- literals removed
+CREATE RESOURCE GROUP _ WITH (cpu_weight = 100, max_cpu = false) -- identifiers removed
 
 parse
-CREATE RESOURCE GROUP IF NOT EXISTS my_group WITH cpu_weight = 1, max_cpu = true
+CREATE RESOURCE GROUP IF NOT EXISTS my_group WITH (cpu_weight = 1, max_cpu = true)
 ----
-CREATE RESOURCE GROUP IF NOT EXISTS my_group WITH cpu_weight = 1, max_cpu = true
-CREATE RESOURCE GROUP IF NOT EXISTS my_group WITH cpu_weight = (1), max_cpu = (true) -- fully parenthesized
-CREATE RESOURCE GROUP IF NOT EXISTS my_group WITH cpu_weight = _, max_cpu = _ -- literals removed
-CREATE RESOURCE GROUP IF NOT EXISTS _ WITH cpu_weight = 1, max_cpu = true -- identifiers removed
+CREATE RESOURCE GROUP IF NOT EXISTS my_group WITH (cpu_weight = 1, max_cpu = true)
+CREATE RESOURCE GROUP IF NOT EXISTS my_group WITH (cpu_weight = (1), max_cpu = (true)) -- fully parenthesized
+CREATE RESOURCE GROUP IF NOT EXISTS my_group WITH (cpu_weight = _, max_cpu = _) -- literals removed
+CREATE RESOURCE GROUP IF NOT EXISTS _ WITH (cpu_weight = 1, max_cpu = true) -- identifiers removed
+
+# Ensure BUCKET_COUNT (which triggers WITH_LA in the lexer) works correctly.
+parse
+CREATE RESOURCE GROUP my_group WITH (bucket_count = 10)
+----
+CREATE RESOURCE GROUP my_group WITH (bucket_count = 10)
+CREATE RESOURCE GROUP my_group WITH (bucket_count = (10)) -- fully parenthesized
+CREATE RESOURCE GROUP my_group WITH (bucket_count = _) -- literals removed
+CREATE RESOURCE GROUP _ WITH (bucket_count = 10) -- identifiers removed
 
 parse
-ALTER RESOURCE GROUP my_group WITH cpu_weight = 200
+CREATE RESOURCE GROUP my_group WITH bucket_count = 10
 ----
-ALTER RESOURCE GROUP my_group WITH cpu_weight = 200
-ALTER RESOURCE GROUP my_group WITH cpu_weight = (200) -- fully parenthesized
-ALTER RESOURCE GROUP my_group WITH cpu_weight = _ -- literals removed
-ALTER RESOURCE GROUP _ WITH cpu_weight = 200 -- identifiers removed
+CREATE RESOURCE GROUP my_group WITH (bucket_count = 10) -- normalized!
+CREATE RESOURCE GROUP my_group WITH (bucket_count = (10)) -- fully parenthesized
+CREATE RESOURCE GROUP my_group WITH (bucket_count = _) -- literals removed
+CREATE RESOURCE GROUP _ WITH (bucket_count = 10) -- identifiers removed
 
 parse
 ALTER RESOURCE GROUP my_group WITH (cpu_weight = 200)
 ----
-ALTER RESOURCE GROUP my_group WITH cpu_weight = 200 -- normalized!
-ALTER RESOURCE GROUP my_group WITH cpu_weight = (200) -- fully parenthesized
-ALTER RESOURCE GROUP my_group WITH cpu_weight = _ -- literals removed
-ALTER RESOURCE GROUP _ WITH cpu_weight = 200 -- identifiers removed
+ALTER RESOURCE GROUP my_group WITH (cpu_weight = 200)
+ALTER RESOURCE GROUP my_group WITH (cpu_weight = (200)) -- fully parenthesized
+ALTER RESOURCE GROUP my_group WITH (cpu_weight = _) -- literals removed
+ALTER RESOURCE GROUP _ WITH (cpu_weight = 200) -- identifiers removed
+
+# No-parens form is also accepted; the canonical form adds them.
+parse
+ALTER RESOURCE GROUP my_group WITH cpu_weight = 200
+----
+ALTER RESOURCE GROUP my_group WITH (cpu_weight = 200) -- normalized!
+ALTER RESOURCE GROUP my_group WITH (cpu_weight = (200)) -- fully parenthesized
+ALTER RESOURCE GROUP my_group WITH (cpu_weight = _) -- literals removed
+ALTER RESOURCE GROUP _ WITH (cpu_weight = 200) -- identifiers removed
 
 parse
-ALTER RESOURCE GROUP IF EXISTS my_group WITH max_cpu = true
+ALTER RESOURCE GROUP IF EXISTS my_group WITH (max_cpu = true)
 ----
-ALTER RESOURCE GROUP IF EXISTS my_group WITH max_cpu = true
-ALTER RESOURCE GROUP IF EXISTS my_group WITH max_cpu = (true) -- fully parenthesized
-ALTER RESOURCE GROUP IF EXISTS my_group WITH max_cpu = _ -- literals removed
-ALTER RESOURCE GROUP IF EXISTS _ WITH max_cpu = true -- identifiers removed
+ALTER RESOURCE GROUP IF EXISTS my_group WITH (max_cpu = true)
+ALTER RESOURCE GROUP IF EXISTS my_group WITH (max_cpu = (true)) -- fully parenthesized
+ALTER RESOURCE GROUP IF EXISTS my_group WITH (max_cpu = _) -- literals removed
+ALTER RESOURCE GROUP IF EXISTS _ WITH (max_cpu = true) -- identifiers removed
+
+# Ensure BUCKET_COUNT (which triggers WITH_LA in the lexer) works correctly.
+parse
+ALTER RESOURCE GROUP my_group WITH bucket_count = 10
+----
+ALTER RESOURCE GROUP my_group WITH (bucket_count = 10) -- normalized!
+ALTER RESOURCE GROUP my_group WITH (bucket_count = (10)) -- fully parenthesized
+ALTER RESOURCE GROUP my_group WITH (bucket_count = _) -- literals removed
+ALTER RESOURCE GROUP _ WITH (bucket_count = 10) -- identifiers removed
 
 parse
 DROP RESOURCE GROUP my_group
