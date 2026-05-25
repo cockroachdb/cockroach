@@ -82,7 +82,7 @@ func TestRaftStorageWrites(t *testing.T) {
 			batch := writeBatch(func(rw storage.ReadWriter) {
 				require.NoError(t, storeHardState(ctx, rw, sl, hs))
 				var err error
-				newState, err = logAppend(ctx, sl.RaftLogPrefix(), rw, state, entries, false /* enginesSeparated */)
+				newState, err = logAppend(ctx, sl.RangeIDPrefixBuf, eng, rw, state, entries, false /* enginesSeparated */)
 				require.NoError(t, err)
 			})
 			state = newState
@@ -118,8 +118,14 @@ func TestRaftStorageWrites(t *testing.T) {
 			{Index: 104, Term: 22},
 			{Index: 105, Term: 22},
 		})
+		write("append (103,107] with overlap extending past tail", raftpb.HardState{}, []raftpb.Entry{
+			{Index: 104, Term: 22},
+			{Index: 105, Term: 22},
+			{Index: 106, Term: 22},
+			{Index: 107, Term: 22},
+		})
 		truncate("truncate at 103", kvserverpb.RaftTruncatedState{Index: 103, Term: 22})
-		truncate("truncate all", kvserverpb.RaftTruncatedState{Index: 105, Term: 22})
+		truncate("truncate all", kvserverpb.RaftTruncatedState{Index: 107, Term: 22})
 
 		// TODO(pav-kv): print the engine content as well.
 
@@ -162,7 +168,7 @@ func (h *clearRangeHelper) populate(ctx context.Context, firstIndex uint64, last
 	b := h.eng.NewBatch()
 	defer b.Close()
 	_, err := logAppend(
-		ctx, h.prefixBuf.RaftLogPrefix(), b, RaftState{}, entries, false, /* enginesSeparated */
+		ctx, h.prefixBuf, h.eng, b, RaftState{}, entries, false, /* enginesSeparated */
 	)
 	require.NoError(h.t, err)
 	require.NoError(h.t, b.Commit(false /* sync */))
