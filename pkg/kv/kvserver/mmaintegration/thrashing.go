@@ -111,7 +111,7 @@ func (as *AllocatorSync) BuildMMARebalanceAdvisor(
 	if kvserverbase.GetLoadBasedRebalancingMode(ctx, as.st) != kvserverbase.LBRebalancingMultiMetricAndCount {
 		return mmaprototype.NoopMMARebalanceAdvisor()
 	}
-	return as.mmaAllocator.BuildMMARebalanceAdvisor(existing, cands)
+	return as.mmaAllocator.BuildMMARebalanceAdvisor(ctx, existing, cands)
 }
 
 // IsInConflictWithMMA determines if a candidate conflicts with MMA's goals.
