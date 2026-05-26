@@ -82,6 +82,8 @@ comment_stmt ::=
 	| 'COMMENT' 'ON' 'SCHEMA' qualifiable_schema_name 'IS' comment_text
 	| 'COMMENT' 'ON' 'TYPE' type_name 'IS' comment_text
 	| 'COMMENT' 'ON' 'TABLE' table_name 'IS' comment_text
+	| 'COMMENT' 'ON' 'VIEW' view_name 'IS' comment_text
+	| 'COMMENT' 'ON' 'SEQUENCE' sequence_name 'IS' comment_text
 	| 'COMMENT' 'ON' 'COLUMN' column_path 'IS' comment_text
 	| 'COMMENT' 'ON' 'INDEX' table_index_name 'IS' comment_text
 	| 'COMMENT' 'ON' 'CONSTRAINT' constraint_name 'ON' table_name 'IS' comment_text
@@ -405,6 +407,12 @@ qualifiable_schema_name ::=
 type_name ::=
 	db_object_name
 
+view_name ::=
+	table_name
+
+sequence_name ::=
+	db_object_name
+
 column_path ::=
 	name
 	| prefixed_column_path
@@ -486,9 +494,6 @@ savepoint_name ::=
 opt_concurrently ::=
 	'CONCURRENTLY'
 	| 
-
-view_name ::=
-	table_name
 
 opt_as_of_clause ::=
 	as_of_clause
@@ -2958,9 +2963,6 @@ opt_view_with ::=
 opt_with_data ::=
 	'WITH' 'DATA'
 	| 
-
-sequence_name ::=
-	db_object_name
 
 opt_sequence_option_list ::=
 	sequence_option_list

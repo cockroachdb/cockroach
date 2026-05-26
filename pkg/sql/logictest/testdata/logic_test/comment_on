@@ -637,3 +637,148 @@ SELECT database_name FROM [SHOW DATABASES] WHERE database_name = 'test_db'
 ----
 
 subtest end
+
+# Tests for COMMENT ON VIEW and COMMENT ON SEQUENCE (issue #44135). These
+# are declarative-schema-changer-only, mirroring COMMENT ON TYPE. Views and
+# sequences share the TableCommentType (1) storage with tables.
+subtest comment_on_view_and_sequence
+
+statement ok
+CREATE VIEW comment_view AS SELECT 1 AS x
+
+statement ok
+CREATE SEQUENCE comment_seq
+
+onlyif config local-legacy-schema-changer
+statement error COMMENT ON VIEW is only implemented in the declarative schema changer
+COMMENT ON VIEW comment_view IS 'view_comment'
+
+onlyif config local-legacy-schema-changer
+statement error COMMENT ON SEQUENCE is only implemented in the declarative schema changer
+COMMENT ON SEQUENCE comment_seq IS 'sequence_comment'
+
+skipif config local-legacy-schema-changer
+statement ok
+COMMENT ON VIEW comment_view IS 'view_comment'
+
+skipif config local-legacy-schema-changer
+statement ok
+COMMENT ON SEQUENCE comment_seq IS 'sequence_comment'
+
+# Comments are stored with type=1 (TableCommentType) for table, view, and
+# sequence alike.
+skipif config local-legacy-schema-changer
+query IT rowsort
+SELECT type, comment
+  FROM system.comments
+ WHERE object_id IN ('comment_view'::regclass::oid::int, 'comment_seq'::regclass::oid::int)
+   AND sub_id = 0
+----
+1  sequence_comment
+1  view_comment
+
+# Comments are visible via pg_description / obj_description.
+skipif config local-legacy-schema-changer
+query T
+SELECT obj_description('comment_view'::regclass::oid)
+----
+view_comment
+
+skipif config local-legacy-schema-changer
+query T
+SELECT obj_description('comment_seq'::regclass::oid)
+----
+sequence_comment
+
+# Overwriting an existing comment.
+skipif config local-legacy-schema-changer
+statement ok
+COMMENT ON VIEW comment_view IS 'view_comment_AGAIN';
+COMMENT ON SEQUENCE comment_seq IS 'sequence_comment_AGAIN'
+
+skipif config local-legacy-schema-changer
+query T
+SELECT obj_description('comment_view'::regclass::oid)
+----
+view_comment_AGAIN
+
+skipif config local-legacy-schema-changer
+query T
+SELECT obj_description('comment_seq'::regclass::oid)
+----
+sequence_comment_AGAIN
+
+# Qualified names work.
+skipif config local-legacy-schema-changer
+statement ok
+COMMENT ON VIEW public.comment_view IS 'qualified_view';
+COMMENT ON SEQUENCE public.comment_seq IS 'qualified_sequence'
+
+skipif config local-legacy-schema-changer
+query T rowsort
+SELECT obj_description(oid)
+  FROM (VALUES ('comment_view'::regclass::oid), ('comment_seq'::regclass::oid)) AS v(oid)
+----
+qualified_sequence
+qualified_view
+
+# Setting comment to NULL removes it.
+skipif config local-legacy-schema-changer
+statement ok
+COMMENT ON VIEW comment_view IS NULL;
+COMMENT ON SEQUENCE comment_seq IS NULL
+
+skipif config local-legacy-schema-changer
+query I
+SELECT count(*)
+  FROM system.comments
+ WHERE object_id IN ('comment_view'::regclass::oid::int, 'comment_seq'::regclass::oid::int)
+   AND sub_id = 0
+----
+0
+
+# Wrong object type: COMMENT ON VIEW on a table or sequence, and COMMENT ON
+# SEQUENCE on a table or view, must error rather than silently succeed.
+skipif config local-legacy-schema-changer
+statement error pgcode 42809 .* is not a view
+COMMENT ON VIEW comment_seq IS 'oops'
+
+skipif config local-legacy-schema-changer
+statement error pgcode 42809 .* is not a sequence
+COMMENT ON SEQUENCE comment_view IS 'oops'
+
+# Non-existent objects produce the standard "does not exist" error.
+skipif config local-legacy-schema-changer
+statement error pgcode 42P01 relation "no_such_view" does not exist
+COMMENT ON VIEW no_such_view IS 'oops'
+
+skipif config local-legacy-schema-changer
+statement error pgcode 42P01 relation "no_such_seq" does not exist
+COMMENT ON SEQUENCE no_such_seq IS 'oops'
+
+# Materialized views also work via COMMENT ON VIEW.
+skipif config local-legacy-schema-changer
+statement ok
+CREATE MATERIALIZED VIEW comment_mv AS SELECT 1 AS x
+
+skipif config local-legacy-schema-changer
+statement ok
+COMMENT ON VIEW comment_mv IS 'matview_comment'
+
+skipif config local-legacy-schema-changer
+query T
+SELECT obj_description('comment_mv'::regclass::oid)
+----
+matview_comment
+
+skipif config local-legacy-schema-changer
+statement ok
+DROP MATERIALIZED VIEW comment_mv
+
+statement ok
+DROP VIEW comment_view
+
+statement ok
+DROP SEQUENCE comment_seq
+
+subtest end
