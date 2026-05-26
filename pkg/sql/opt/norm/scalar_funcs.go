@@ -77,17 +77,12 @@ func (c *CustomFuncs) SimplifyCoalesce(args memo.ScalarListExpr) opt.ScalarExpr 
 	return c.simplifyCoalesce(args, opt.ColSet{})
 }
 
-// SimplifyCoalesceWithNotNullCols is like SimplifyCoalesce, but also discards
-// leading operands that are guaranteed to be non-null according to notNullCols.
-func (c *CustomFuncs) SimplifyCoalesceWithNotNullCols(
-	args memo.ScalarListExpr, notNullCols opt.ColSet,
-) opt.ScalarExpr {
-	return c.simplifyCoalesce(args, notNullCols)
-}
-
 func (c *CustomFuncs) simplifyCoalesce(
 	args memo.ScalarListExpr, notNullCols opt.ColSet,
 ) opt.ScalarExpr {
+	// Iterate over all args (including the last) so that ExprIsNeverNull can
+	// fire for any position: once a provably-non-null arg is found, COALESCE
+	// will always return that arg, so we can replace the whole expression.
 	for i := 0; i < len(args); i++ {
 		if memo.ExprIsNeverNull(args[i], notNullCols) {
 			return args[i]
@@ -109,28 +104,72 @@ func (c *CustomFuncs) simplifyCoalesce(
 }
 
 // CanSimplifyCoalesce returns true if simplifyCoalesce would change the given
-// Coalesce expression.
+// Coalesce expression. It mirrors the logic of simplifyCoalesce directly to
+// avoid the cost of constructing a new expression just to compare arg counts.
 func (c *CustomFuncs) CanSimplifyCoalesce(args memo.ScalarListExpr, notNullCols opt.ColSet) bool {
-	simplified := c.simplifyCoalesce(args, notNullCols)
-	if co, ok := simplified.(*memo.CoalesceExpr); ok {
-		return len(co.Args) < len(args)
+	for i, arg := range args {
+		if memo.ExprIsNeverNull(arg, notNullCols) {
+			return true
+		}
+		if !c.IsConstValueOrGroupOfConstValues(arg) {
+			// Non-constant arg at position i blocks further simplification. The
+			// expression changes only if leading nulls (i > 0) were already
+			// stripped.
+			return i > 0
+		}
+		if arg.Op() != opt.NullOp {
+			// Non-null constant: simplifyCoalesce returns it directly.
+			return true
+		}
+		// NullOp constant: will be stripped; continue to next arg.
 	}
-	return true
+	return false
 }
 
 // SimplifyCoalesceInScalar recursively simplifies Coalesce expressions in the
-// given scalar expression tree using the provided not-null columns.
+// given scalar expression tree using the provided not-null columns. It handles
+// nested Coalesce expressions by recursing into the simplified result.
 func (c *CustomFuncs) SimplifyCoalesceInScalar(
 	e opt.ScalarExpr, notNullCols opt.ColSet,
 ) opt.ScalarExpr {
 	var replace ReplaceFunc
 	replace = func(e opt.Expr) opt.Expr {
 		if co, ok := e.(*memo.CoalesceExpr); ok {
-			return c.simplifyCoalesce(co.Args, notNullCols)
+			simplified := c.simplifyCoalesce(co.Args, notNullCols)
+			// Recurse into the simplified result so that nested Coalesce
+			// expressions (e.g. COALESCE(a, COALESCE(b, c))) are also handled
+			// when the outer simplification does not fire.
+			return c.f.Replace(simplified, replace)
 		}
 		return c.f.Replace(e, replace)
 	}
 	return replace(e).(opt.ScalarExpr)
+}
+
+// scalarContainsSimplifiableCoalesce returns true if the scalar expression
+// tree contains any Coalesce expression that can be simplified using
+// notNullCols. It recurses into Coalesce args so that nested Coalesce
+// expressions are not missed when the outer Coalesce is not itself
+// simplifiable.
+func (c *CustomFuncs) scalarContainsSimplifiableCoalesce(
+	e opt.ScalarExpr, notNullCols opt.ColSet,
+) bool {
+	found := false
+	var replace ReplaceFunc
+	replace = func(e opt.Expr) opt.Expr {
+		if co, ok := e.(*memo.CoalesceExpr); ok {
+			if c.CanSimplifyCoalesce(co.Args, notNullCols) {
+				found = true
+				return co
+			}
+			// Even if the outer Coalesce is not simplifiable, recurse into its
+			// args to find simplifiable nested Coalesce expressions.
+			return c.f.Replace(co, replace)
+		}
+		return c.f.Replace(e, replace)
+	}
+	replace(e)
+	return found
 }
 
 // IsConstValueEqual returns whether const1 and const2 are equal.

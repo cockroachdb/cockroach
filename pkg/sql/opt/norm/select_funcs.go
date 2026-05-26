@@ -449,20 +449,3 @@ func (c *CustomFuncs) SimplifyCoalesceInFilters(
 	return newFilters
 }
 
-func (c *CustomFuncs) scalarContainsSimplifiableCoalesce(
-	e opt.ScalarExpr, notNullCols opt.ColSet,
-) bool {
-	found := false
-	var replace ReplaceFunc
-	replace = func(e opt.Expr) opt.Expr {
-		if co, ok := e.(*memo.CoalesceExpr); ok {
-			if c.CanSimplifyCoalesce(co.Args, notNullCols) {
-				found = true
-			}
-			return co
-		}
-		return c.f.Replace(e, replace)
-	}
-	replace(e)
-	return found
-}
