@@ -3643,17 +3643,29 @@ CONFIGURE ZONE USING
 	// transaction overhead and admission control — so the sink is more
 	// likely to be the binding constraint than in the ramp tests. This
 	// is the regime where slack flush cadence should buy throughput by
-	// amortizing per-flush overhead. Three variants:
+	// amortizing per-flush overhead. Variants:
 	//   control: no kafka_sink_config; kgo defaults
 	//   10ms / 100ms: explicit linger cadence
-	for _, flushFreq := range []string{"", "10ms", "100ms"} {
-		flushFreq := flushFreq
-		name := "cdc/linger/initial-scan/control"
-		if flushFreq != "" {
-			name = fmt.Sprintf("cdc/linger/initial-scan/%s", flushFreq)
-		}
+	//   100ms-cap1500 / 100ms-cap10000: 100ms linger with Flush.Messages cap.
+	//     A size cap fires the flush as soon as the batch reaches that many
+	//     events, even if linger hasn't elapsed. At high enough load this
+	//     dominates the linger setting and makes effective cadence ~
+	//     cap/throughput rather than the configured linger.
+	initialScanVariants := []struct {
+		name      string
+		flushFreq string
+		maxMsgs   int
+	}{
+		{name: "control", flushFreq: "", maxMsgs: 0},
+		{name: "10ms", flushFreq: "10ms", maxMsgs: 0},
+		{name: "100ms", flushFreq: "100ms", maxMsgs: 0},
+		{name: "100ms-cap1500", flushFreq: "100ms", maxMsgs: 1500},
+		{name: "100ms-cap10000", flushFreq: "100ms", maxMsgs: 10000},
+	}
+	for _, v := range initialScanVariants {
+		v := v
 		r.Add(registry.TestSpec{
-			Name:             name,
+			Name:             fmt.Sprintf("cdc/linger/initial-scan/%s", v.name),
 			Owner:            registry.OwnerCDC,
 			Benchmark:        true,
 			Cluster:          r.MakeClusterSpec(6, spec.CPU(16), spec.WorkloadNode()),
@@ -3661,7 +3673,7 @@ CONFIGURE ZONE USING
 			CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 			Suites:           registry.Suites(registry.Weekly),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runCDCInitialScanBench(ctx, t, c, flushFreq)
+				runCDCInitialScanBench(ctx, t, c, v.flushFreq, v.maxMsgs)
 			},
 		})
 	}
@@ -3788,13 +3800,15 @@ func runCDCLingerBench(ctx context.Context, t test.Test, c cluster.Cluster, flus
 //
 // Empty flushFrequency means the control: kafka_sink_config omitted entirely
 // (no CDC-level linger, kgo defaults). Non-empty means we explicitly set
-// kafka_sink_config.Flush.Frequency to that value.
+// kafka_sink_config.Flush.Frequency to that value. A non-zero maxMessages
+// adds kafka_sink_config.Flush.Messages as a size-based flush trigger that
+// fires once the batch reaches that many events even if linger hasn't.
 //
 // Throughput is the row count divided by the changefeed's wall-clock
 // duration, logged via t.Status. The Grafana panels span the run for
 // shape-of-the-curve inspection.
 func runCDCInitialScanBench(
-	ctx context.Context, t test.Test, c cluster.Cluster, flushFrequency string,
+	ctx context.Context, t test.Test, c cluster.Cluster, flushFrequency string, maxMessages int,
 ) {
 	// 4 crdb + 1 kafka + 1 workload, all in one zone.
 	ct := newCDCTester(ctx, t, c, withNumSinkNodes(1))
@@ -3823,12 +3837,16 @@ func runCDCInitialScanBench(
 		"initial_scan": "'only'",
 	}
 	if flushFrequency != "" {
-		opts["kafka_sink_config"] = fmt.Sprintf(
-			`'{"Flush": {"Frequency": "%s"}}'`, flushFrequency)
+		flushFields := fmt.Sprintf(`"Frequency": "%s"`, flushFrequency)
+		if maxMessages > 0 {
+			flushFields += fmt.Sprintf(`, "Messages": %d`, maxMessages)
+		}
+		opts["kafka_sink_config"] = fmt.Sprintf(`'{"Flush": {%s}}'`, flushFields)
 	}
 
 	startTime := timeutil.Now()
-	t.Status(fmt.Sprintf("starting initial-scan-only changefeed (Flush.Frequency=%q)", flushFrequency))
+	t.Status(fmt.Sprintf("starting initial-scan-only changefeed (Flush.Frequency=%q, Messages=%d)",
+		flushFrequency, maxMessages))
 	feed := ct.newChangefeed(feedArgs{
 		sinkType: kafkaSink,
 		targets:  []string{"kv.kv"},
