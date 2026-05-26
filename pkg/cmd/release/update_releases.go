@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/version"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
 )
@@ -82,13 +82,13 @@ func updateReleasesFiles(_ *cobra.Command, _ []string) (retErr error) {
 		return fmt.Errorf("failed to validate downloaded data: %w", err)
 	}
 	currentVersion := version.MustParse(build.BinaryVersion())
-	addCurrentRelease(result, currentVersion)
+	addCurrentRelease(result, &currentVersion)
 
 	fmt.Printf("writing results to %s\n", releaseDataFile)
 	if err := saveResultsInYaml(result); err != nil {
 		return err
 	}
-	currentSeries := fmt.Sprintf("%d.%d", currentVersion.Major(), currentVersion.Minor())
+	currentSeries := currentVersion.Format("%X.%Y")
 	predecessor := result[result[currentSeries].Predecessor].Latest
 	if predecessor == "" {
 		return fmt.Errorf("could not determine predecessor version for version %+v", currentVersion)
@@ -126,10 +126,10 @@ func processReleaseData(data []Release) map[string]release.Series {
 			continue
 		}
 
-		// For the purposes of the cockroach_releases file, we are only
-		// interested in beta and rc pre-releases, as we do not support
-		// upgrades from alpha releases.
-		if pre := v.PreRelease(); pre != "" && !strings.HasPrefix(pre, "rc") && !strings.HasPrefix(pre, "beta") {
+		// For the purposes of the cockroach_releases file, we are only interested
+		// in rc pre-releases, as we do not support upgrades from alpha or beta
+		// releases.
+		if v.IsPrerelease() && !strings.HasPrefix(v.Format("%P"), "rc") {
 			continue
 		}
 		// Skip cloud-only releases, because the binaries are not yet publicly available.
@@ -184,15 +184,15 @@ func processReleaseData(data []Release) map[string]release.Series {
 // new entry will have no `Latest` information as, in that case, the
 // current release series is still in development.
 func addCurrentRelease(data map[string]release.Series, currentVersion *version.Version) {
-	name := fmt.Sprintf("%d.%d", currentVersion.Major(), currentVersion.Minor())
+	name := currentVersion.Format("%X.%Y")
 	if _, ok := data[name]; ok {
 		return
 	}
 
-	var latestVersion *version.Version
+	var latestVersion version.Version
 	for _, d := range data {
 		v := version.MustParse("v" + d.Latest)
-		if latestVersion == nil {
+		if latestVersion.Empty() {
 			latestVersion = v
 		}
 
@@ -204,7 +204,7 @@ func addCurrentRelease(data map[string]release.Series, currentVersion *version.V
 	// Assume that the predecessor of the current version is the latest
 	// released series.
 	data[name] = release.Series{
-		Predecessor: fmt.Sprintf("%d.%d", latestVersion.Major(), latestVersion.Minor()),
+		Predecessor: latestVersion.Format("%X.%Y"),
 	}
 }
 
@@ -322,7 +322,7 @@ func releaseName(name string) string {
 }
 
 func generateRepositoriesFile(versions ...string) error {
-	client := httputil.NewClientWithTimeout(15 * time.Second)
+	client := httputil.NewClientWithTimeout(45 * time.Second)
 	cfgKeys := map[string]string{
 		"CONFIG_LINUX_AMD64":  "linux-amd64",
 		"CONFIG_LINUX_ARM64":  "linux-arm64",
@@ -334,6 +334,7 @@ func generateRepositoriesFile(versions ...string) error {
 		versionToCfgToHash[v] = make(map[string]string)
 		for cfgKey, cfg := range cfgKeys {
 			url := fmt.Sprintf("https://binaries.cockroachdb.com/cockroach-v%s.%s.tgz", v, cfg)
+			fmt.Printf("getting %s\n", url)
 			resp, err := client.Get(context.Background(), url)
 			if err != nil {
 				return fmt.Errorf("could not download cockroach release: %w", err)
