@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 const defaultLinkWorkersPerNode = 2
@@ -612,43 +613,41 @@ func (r *restoreResumer) maybeCalculateTotalDownloadSpans(
 }
 
 func (r *restoreResumer) sendDownloadWorker(
-	execCtx sql.JobExecContext, spans roachpb.Spans, completionPoller chan struct{},
-) func(context.Context) error {
-	return func(ctx context.Context) error {
-		ctx, tsp := tracing.ChildSpan(ctx, "backup.sendDownloadWorker")
-		defer tsp.Finish()
+	ctx context.Context, execCtx sql.JobExecContext, spans roachpb.Spans, completionPoller chan struct{},
+) error {
+	ctx, tsp := tracing.ChildSpan(ctx, "backup.sendDownloadWorker")
+	defer tsp.Finish()
 
-		testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
-		for {
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-
-			if testingKnobs != nil && testingKnobs.RunBeforeSendingDownloadSpan != nil {
-				if err := testingKnobs.RunBeforeSendingDownloadSpan(); err != nil {
-					return err
-				}
-			}
-
-			if err := sendDownloadSpan(ctx, execCtx, spans); err != nil {
-				return err
-			}
-
-			// Wait for the completion poller to signal that it has checked our work.
-			select {
-			case _, ok := <-completionPoller:
-				if !ok {
-					return nil
-				}
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-
-			// Sleep a bit before sending download requests again to avoid a hot loop.
-			// This will only be hit if after a successful download request, there are
-			// still spans to download (e.g. because of a rabalancing).
-			time.Sleep(10 * time.Second)
+	testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
 		}
+
+		if testingKnobs != nil && testingKnobs.RunBeforeSendingDownloadSpan != nil {
+			if err := testingKnobs.RunBeforeSendingDownloadSpan(); err != nil {
+				return err
+			}
+		}
+
+		if err := sendDownloadSpan(ctx, execCtx, spans); err != nil {
+			return err
+		}
+
+		// Wait for the completion poller to signal that it has checked our work.
+		select {
+		case _, ok := <-completionPoller:
+			if !ok {
+				return nil
+			}
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+
+		// Sleep a bit before sending download requests again to avoid a hot loop.
+		// This will only be hit if after a successful download request, there are
+		// still spans to download (e.g. because of a rabalancing).
+		time.Sleep(10 * time.Second)
 	}
 }
 
@@ -671,6 +670,12 @@ func sendDownloadSpan(ctx context.Context, execCtx sql.JobExecContext, spans roa
 		err := errors.DecodeError(ctx, encoded)
 		return errors.Wrapf(err,
 			"failed to download spans on %d nodes; n%d err", len(resp.Errors), n)
+	}
+	if testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs; testingKnobs != nil &&
+		testingKnobs.RunAfterSendingDownloadSpan != nil {
+		if err := testingKnobs.RunAfterSendingDownloadSpan(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -941,11 +946,12 @@ func (r *restoreResumer) doDownloadFiles(ctx context.Context, execCtx sql.JobExe
 		return err
 	}
 
-	grp := ctxgroup.WithContext(ctx)
+	var grp errgroup.Group
 	completionPoller := make(chan struct{})
-
-	grp.GoCtx(r.sendDownloadWorker(execCtx, details.DownloadSpans, completionPoller))
-	grp.GoCtx(func(ctx context.Context) error {
+	grp.Go(func() error {
+		return r.sendDownloadWorker(ctx, execCtx, details.DownloadSpans, completionPoller)
+	})
+	grp.Go(func() error {
 		return r.waitForDownloadToComplete(ctx, execCtx, details, completionPoller)
 	})
 

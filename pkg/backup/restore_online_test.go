@@ -1635,3 +1635,71 @@ func TestOnlineRestoreStatusMessages(t *testing.T) {
 	rSQLDB.QueryRow(t, "SELECT count(*) FROM data.bank").Scan(&restoreRowCount)
 	require.Equal(t, numAccounts, restoreRowCount)
 }
+
+// TestOnlineRestoreDownloadSurvivesSendError injects a failure into
+// sendDownloadSpan after the underlying RPC has run, then verifies that
+// the download job still persists progress before the injection is
+// removed and the job completes cleanly.
+func TestOnlineRestoreDownloadSurvivesSendError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	AllowORDownloadBestEffortFailures(t)
+	backuptestutils.EnableFastRestoreForTest(t)
+
+	var forceError atomic.Bool
+	forceError.Store(true)
+
+	args := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				BackupRestore: &sql.BackupRestoreTestingKnobs{
+					RunAfterSendingDownloadSpan: func() error {
+						if forceError.Load() {
+							return errors.New("injected sendDownloadSpan failure")
+						}
+						return nil
+					},
+				},
+			},
+		},
+	}
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(
+		t, 1 /* numNodes */, 1000 /* numAccounts */, InitManualReplication, args,
+	)
+	defer cleanupFn()
+
+	// Cap the retry budget so that if this regresses, the job pauses and
+	// the test fails quickly instead of waiting out the 72h default.
+	sqlDB.Exec(t, "SET CLUSTER SETTING backup.restore.online_download_retry_max_duration = '1m'")
+
+	externalStorage := backuptestutils.GetExternalStorageURI(
+		t, "nodelocal://1/backup", "backup", sqlDB,
+	)
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO '%s'", externalStorage))
+
+	var linkJobID jobspb.JobID
+	sqlDB.QueryRow(t, fmt.Sprintf(
+		`RESTORE DATABASE data FROM LATEST IN '%s'
+		 WITH EXPERIMENTAL DEFERRED COPY, new_db_name=data2, detached`, externalStorage,
+	)).Scan(&linkJobID)
+	jobutils.WaitForJobToSucceed(t, sqlDB, linkJobID)
+
+	var downloadJobID jobspb.JobID
+	sqlDB.QueryRow(t, latestDownloadJobIDQuery).Scan(&downloadJobID)
+
+	testutils.SucceedsWithin(t, func() error {
+		var fraction float64
+		sqlDB.QueryRow(t,
+			`SELECT fraction_completed FROM [SHOW JOB $1]`, downloadJobID,
+		).Scan(&fraction)
+		if fraction == 0 {
+			return errors.New("fraction_completed is still zero")
+		}
+		return nil
+	}, 30*time.Second)
+
+	forceError.Store(false)
+	jobutils.WaitForJobToSucceed(t, sqlDB, downloadJobID)
+	sqlDB.CheckQueryResults(t, jobutils.GetExternalBytesForConnectedTenant, [][]string{{"0"}})
+}
