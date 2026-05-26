@@ -222,6 +222,12 @@ func TestAllRegisteredSetup(t *testing.T) {
 			sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t)).Exec(t, `SET CLUSTER SETTING kv.range_merge.queue.enabled = false`)
 
 			var l workloadsql.InsertsDataLoader
+			if meta.Name == `ycsb` {
+				// YCSB's default 1000-row insert batches fan out to ~11K CPuts
+				// because each column lives in its own family. Under external
+				// process tenants this can starve SQL liveness heartbeats.
+				l.BatchSize = 100
+			}
 			if _, err := workloadsql.Setup(ctx, db, gen, l); err != nil {
 				t.Fatalf(`%+v`, err)
 			}
