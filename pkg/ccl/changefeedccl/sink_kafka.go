@@ -1232,11 +1232,11 @@ func makeKafkaSink(
 	settings *cluster.Settings,
 	mb metricsRecorderBuilder,
 ) (Sink, error) {
-	kafkaTopicPrefix := u.ConsumeParam(changefeedbase.SinkParamTopicPrefix)
-	kafkaTopicName := u.ConsumeParam(changefeedbase.SinkParamTopicName)
 	if schemaTopic := u.ConsumeParam(changefeedbase.SinkParamSchemaTopic); schemaTopic != `` {
 		return nil, errors.Errorf(`%s is not yet supported`, changefeedbase.SinkParamSchemaTopic)
 	}
+	kafkaTopicPrefix := u.ConsumeParam(changefeedbase.SinkParamTopicPrefix)
+	kafkaTopicName := u.ConsumeParam(changefeedbase.SinkParamTopicName)
 
 	jsonStr := sinkOpts.JSONConfig
 	if len(sinkOpts.Headers) > 0 {
@@ -1249,11 +1249,14 @@ func makeKafkaSink(
 	if err != nil {
 		return nil, err
 	}
+	config.Metadata.AllowAutoTopicCreation = true
 
 	topics, err := MakeTopicNamer(
 		targets,
-		WithPrefix(kafkaTopicPrefix), WithSingleName(kafkaTopicName), WithSanitizeFn(changefeedbase.SQLNameToKafkaName))
-
+		WithPrefix(kafkaTopicPrefix),
+		WithSingleName(kafkaTopicName),
+		WithSanitizeFn(changefeedbase.SQLNameToKafkaName),
+	)
 	if err != nil {
 		return nil, err
 	}

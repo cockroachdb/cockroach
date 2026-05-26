@@ -9,17 +9,25 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/IBM/sarama"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/mocks"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -409,6 +417,456 @@ func TestKafkaSinkClientV2_Opts(t *testing.T) {
 	}
 }
 
+func TestKafkaTopicNamesForTargets(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, cleanup := makeServer(t)
+	defer cleanup()
+
+	sqlDB := sqlutils.MakeSQLRunner(s.DB)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING, FAMILY f1 (a, b), FAMILY f2 (c))`)
+
+	execCfg := s.Server.ExecutorConfig().(sql.ExecutorConfig)
+	tableDesc := cdctest.GetHydratedTableDescriptor(t, execCfg, "d", "foo")
+	makeTargets := func(targets ...changefeedbase.Target) changefeedbase.Targets {
+		res := changefeedbase.Targets{}
+		for _, target := range targets {
+			res.Add(target)
+		}
+		return res
+	}
+
+	baseTarget := changefeedbase.Target{
+		DescID:            tableDesc.GetID(),
+		StatementTimeName: changefeedbase.StatementTimeName(tableDesc.GetName()),
+	}
+
+	for _, tc := range []struct {
+		name     string
+		sinkURI  string
+		targets  changefeedbase.Targets
+		expected []string
+	}{
+		{
+			name:    "primary family only",
+			sinkURI: "kafka://localhost:9092?topic_prefix=pre-",
+			targets: makeTargets(changefeedbase.Target{
+				Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
+				DescID:            baseTarget.DescID,
+				StatementTimeName: baseTarget.StatementTimeName,
+			}),
+			expected: []string{"pre-foo"},
+		},
+		{
+			name:    "column family",
+			sinkURI: "kafka://localhost:9092?topic_prefix=pre-",
+			targets: makeTargets(changefeedbase.Target{
+				Type:              jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY,
+				DescID:            baseTarget.DescID,
+				FamilyName:        "f2",
+				StatementTimeName: baseTarget.StatementTimeName,
+			}),
+			expected: []string{"pre-foo.f2"},
+		},
+		{
+			name:    "each family",
+			sinkURI: "kafka://localhost:9092?topic_prefix=pre-",
+			targets: makeTargets(changefeedbase.Target{
+				Type:              jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
+				DescID:            baseTarget.DescID,
+				StatementTimeName: baseTarget.StatementTimeName,
+			}),
+			expected: []string{"pre-foo.f1", "pre-foo.f2"},
+		},
+		{
+			name:    "single topic override",
+			sinkURI: "kafka://localhost:9092?topic_prefix=pre-&topic_name=all",
+			targets: makeTargets(changefeedbase.Target{
+				Type:              jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
+				DescID:            baseTarget.DescID,
+				StatementTimeName: baseTarget.StatementTimeName,
+			}),
+			expected: []string{"pre-all"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			parsedURL, err := url.Parse(tc.sinkURI)
+			require.NoError(t, err)
+
+			topics, err := kafkaTopicNamesForTargets(
+				ctx, &execCfg, tc.targets, &changefeedbase.SinkURL{URL: parsedURL}, s.Server.Clock().Now(),
+			)
+			require.NoError(t, err)
+			require.ElementsMatch(t, tc.expected, topics)
+		})
+	}
+}
+
+// TestMaybeCreateKafkaTopicsPreconditions exercises the early-exit and
+// validation paths of maybeCreateKafkaTopics: it should no-op for non-explicit
+// option values and non-Kafka sinks, and surface a clear error when the v2
+// kafka sink is not enabled.
+func TestMaybeCreateKafkaTopicsPreconditions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, cleanup := makeServer(t)
+	defer cleanup()
+	execCfg := s.Server.ExecutorConfig().(sql.ExecutorConfig)
+
+	// failOnClient ensures we never construct a real kafka client in cases
+	// where maybeCreateKafkaTopics should bail before reaching that point.
+	failOnClient := kafkaSinkV2Knobs{
+		OverrideClient: func(opts []kgo.Opt) (KafkaClientV2, KafkaAdminClientV2) {
+			t.Fatal("unexpected kafka client creation")
+			return nil, nil
+		},
+	}
+
+	explicit := map[string]string{
+		changefeedbase.OptCreateKafkaTopics: string(changefeedbase.CreateKafkaTopicsExplicit),
+	}
+	brokerAuto := map[string]string{
+		changefeedbase.OptCreateKafkaTopics: string(changefeedbase.CreateKafkaTopicsBrokerAuto),
+	}
+	off := map[string]string{
+		changefeedbase.OptCreateKafkaTopics: string(changefeedbase.CreateKafkaTopicsOff),
+	}
+
+	cases := []struct {
+		name           string
+		sinkURI        string
+		opts           map[string]string
+		kafkaV2Enabled bool
+		expectedErr    string
+	}{
+		{
+			name:           "default option is no-op",
+			sinkURI:        "kafka://localhost:9092",
+			kafkaV2Enabled: true,
+		},
+		{
+			name:           "broker_auto option is no-op",
+			sinkURI:        "kafka://localhost:9092",
+			opts:           brokerAuto,
+			kafkaV2Enabled: true,
+		},
+		{
+			name:           "off option is no-op",
+			sinkURI:        "kafka://localhost:9092",
+			opts:           off,
+			kafkaV2Enabled: true,
+		},
+		{
+			name:           "non-kafka sink is no-op",
+			sinkURI:        "null://",
+			opts:           explicit,
+			kafkaV2Enabled: true,
+		},
+		{
+			name:           "kafka v2 disabled is an error",
+			sinkURI:        "kafka://localhost:9092",
+			opts:           explicit,
+			kafkaV2Enabled: false,
+			expectedErr:    "requires the v2 kafka sink",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			KafkaV2Enabled.Override(ctx, &execCfg.Settings.SV, tc.kafkaV2Enabled)
+			err := maybeCreateKafkaTopics(ctx, &execCfg, jobspb.ChangefeedDetails{
+				SinkURI: tc.sinkURI,
+				Opts:    tc.opts,
+			}, changefeedbase.Targets{}, hlc.Timestamp{}, failOnClient)
+			if tc.expectedErr != "" {
+				require.ErrorContains(t, err, tc.expectedErr)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestCreateKafkaTopicsOption(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, tc := range []struct {
+		name        string
+		opts        map[string]string
+		expected    changefeedbase.CreateKafkaTopics
+		expectedErr string
+	}{
+		{
+			name:     "default",
+			expected: changefeedbase.CreateKafkaTopicsBrokerAuto,
+		},
+		{
+			name:     "broker_auto",
+			opts:     map[string]string{changefeedbase.OptCreateKafkaTopics: string(changefeedbase.CreateKafkaTopicsBrokerAuto)},
+			expected: changefeedbase.CreateKafkaTopicsBrokerAuto,
+		},
+		{
+			name:     "explicit",
+			opts:     map[string]string{changefeedbase.OptCreateKafkaTopics: string(changefeedbase.CreateKafkaTopicsExplicit)},
+			expected: changefeedbase.CreateKafkaTopicsExplicit,
+		},
+		{
+			name:     "bare option",
+			opts:     map[string]string{changefeedbase.OptCreateKafkaTopics: ""},
+			expected: changefeedbase.CreateKafkaTopicsExplicit,
+		},
+		{
+			name:     "off",
+			opts:     map[string]string{changefeedbase.OptCreateKafkaTopics: string(changefeedbase.CreateKafkaTopicsOff)},
+			expected: changefeedbase.CreateKafkaTopicsOff,
+		},
+		{
+			name:        "invalid option",
+			opts:        map[string]string{changefeedbase.OptCreateKafkaTopics: "yes"},
+			expectedErr: "unknown create_kafka_topics: yes",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := changefeedbase.MakeStatementOptions(tc.opts)
+			got, err := opts.GetCreateKafkaTopics()
+			if tc.expectedErr != "" {
+				require.ErrorContains(t, err, tc.expectedErr)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, got)
+		})
+	}
+}
+
+func TestCreateMissingKafkaTopics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	knobs := kafkaSinkV2Knobs{SkipCreateTopicVersionCheck: true}
+	existingTopic := func(topic string) kadm.TopicDetail {
+		return kadm.TopicDetail{
+			Topic: topic,
+			Partitions: map[int32]kadm.PartitionDetail{
+				0: {Topic: topic, Partition: 0, Leader: 0, Replicas: []int32{0}, ISR: []int32{0}},
+			},
+		}
+	}
+	unknownTopic := func(topic string) kadm.TopicDetail {
+		return kadm.TopicDetail{Topic: topic, Err: kerr.UnknownTopicOrPartition}
+	}
+
+	t.Run("all topics already exist", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		adminClient := mocks.NewMockKafkaAdminClientV2(ctrl)
+		adminClient.EXPECT().ListTopics(gomock.Any(), "a", "b").Return(kadm.TopicDetails{
+			"a": existingTopic("a"),
+			"b": existingTopic("b"),
+		}, nil)
+
+		require.NoError(t, createMissingKafkaTopics(ctx, adminClient, []string{"a", "b"}, knobs))
+	})
+
+	t.Run("creates only missing topics", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		adminClient := mocks.NewMockKafkaAdminClientV2(ctrl)
+		adminClient.EXPECT().ListTopics(gomock.Any(), "a", "b", "c").Return(kadm.TopicDetails{
+			"a": existingTopic("a"),
+			"b": unknownTopic("b"),
+		}, nil)
+		adminClient.EXPECT().ValidateCreateTopics(gomock.Any(), int32(-1), int16(-1), nil, "b", "c").Return(kadm.CreateTopicResponses{
+			"b": {Topic: "b"},
+			"c": {Topic: "c"},
+		}, nil)
+		adminClient.EXPECT().CreateTopics(gomock.Any(), int32(-1), int16(-1), nil, "b", "c").Return(kadm.CreateTopicResponses{
+			"b": {Topic: "b", NumPartitions: 3, ReplicationFactor: 1},
+			"c": {Topic: "c", NumPartitions: 3, ReplicationFactor: 1},
+		}, nil)
+
+		require.NoError(t, createMissingKafkaTopics(ctx, adminClient, []string{"a", "b", "c"}, knobs))
+	})
+
+	// Each error path simply propagates an error from the admin client. The
+	// table covers both top-level errors (returned directly from the call) and
+	// per-topic errors (returned in the response map).
+	t.Run("error propagation", func(t *testing.T) {
+		cases := []struct {
+			name        string
+			setupMock   func(*mocks.MockKafkaAdminClientV2)
+			expectedErr string
+		}{
+			{
+				name: "list topics top-level error",
+				setupMock: func(m *mocks.MockKafkaAdminClientV2) {
+					m.EXPECT().ListTopics(gomock.Any(), "a").Return(nil, errors.New("list failed"))
+				},
+				expectedErr: "list failed",
+			},
+			{
+				name: "list topics per-topic error",
+				setupMock: func(m *mocks.MockKafkaAdminClientV2) {
+					m.EXPECT().ListTopics(gomock.Any(), "a").Return(kadm.TopicDetails{
+						"a": {Topic: "a", Err: errors.New("topic list failed")},
+					}, nil)
+				},
+				expectedErr: "topic list failed",
+			},
+			{
+				name: "validate top-level error",
+				setupMock: func(m *mocks.MockKafkaAdminClientV2) {
+					m.EXPECT().ListTopics(gomock.Any(), "a").Return(kadm.TopicDetails{"a": unknownTopic("a")}, nil)
+					m.EXPECT().ValidateCreateTopics(gomock.Any(), int32(-1), int16(-1), nil, "a").Return(nil, errors.New("validate failed"))
+				},
+				expectedErr: "validate failed",
+			},
+			{
+				name: "validate per-topic error",
+				setupMock: func(m *mocks.MockKafkaAdminClientV2) {
+					m.EXPECT().ListTopics(gomock.Any(), "a").Return(kadm.TopicDetails{"a": unknownTopic("a")}, nil)
+					m.EXPECT().ValidateCreateTopics(gomock.Any(), int32(-1), int16(-1), nil, "a").Return(kadm.CreateTopicResponses{
+						"a": {Topic: "a", Err: errors.New("topic validate failed")},
+					}, nil)
+				},
+				expectedErr: "topic validate failed",
+			},
+			{
+				name: "create top-level error",
+				setupMock: func(m *mocks.MockKafkaAdminClientV2) {
+					m.EXPECT().ListTopics(gomock.Any(), "a").Return(kadm.TopicDetails{"a": unknownTopic("a")}, nil)
+					m.EXPECT().ValidateCreateTopics(gomock.Any(), int32(-1), int16(-1), nil, "a").Return(kadm.CreateTopicResponses{
+						"a": {Topic: "a"},
+					}, nil)
+					m.EXPECT().CreateTopics(gomock.Any(), int32(-1), int16(-1), nil, "a").Return(nil, errors.New("create failed"))
+				},
+				expectedErr: "create failed",
+			},
+			{
+				name: "create per-topic error",
+				setupMock: func(m *mocks.MockKafkaAdminClientV2) {
+					m.EXPECT().ListTopics(gomock.Any(), "a").Return(kadm.TopicDetails{"a": unknownTopic("a")}, nil)
+					m.EXPECT().ValidateCreateTopics(gomock.Any(), int32(-1), int16(-1), nil, "a").Return(kadm.CreateTopicResponses{
+						"a": {Topic: "a"},
+					}, nil)
+					m.EXPECT().CreateTopics(gomock.Any(), int32(-1), int16(-1), nil, "a").Return(kadm.CreateTopicResponses{
+						"a": {Topic: "a", Err: errors.New("topic create failed")},
+					}, nil)
+				},
+				expectedErr: "topic create failed",
+			},
+		}
+
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				ctrl := gomock.NewController(t)
+				adminClient := mocks.NewMockKafkaAdminClientV2(ctrl)
+				tc.setupMock(adminClient)
+				require.ErrorContains(t, createMissingKafkaTopics(ctx, adminClient, []string{"a"}, knobs), tc.expectedErr)
+			})
+		}
+	})
+
+	t.Run("topic already exists race", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		adminClient := mocks.NewMockKafkaAdminClientV2(ctrl)
+		adminClient.EXPECT().ListTopics(gomock.Any(), "a").Return(kadm.TopicDetails{
+			"a": unknownTopic("a"),
+		}, nil)
+		adminClient.EXPECT().ValidateCreateTopics(gomock.Any(), int32(-1), int16(-1), nil, "a").Return(kadm.CreateTopicResponses{
+			"a": {Topic: "a"},
+		}, nil)
+		adminClient.EXPECT().CreateTopics(gomock.Any(), int32(-1), int16(-1), nil, "a").Return(kadm.CreateTopicResponses{
+			"a": {Topic: "a", Err: kerr.TopicAlreadyExists},
+		}, nil)
+
+		require.NoError(t, createMissingKafkaTopics(ctx, adminClient, []string{"a"}, knobs))
+	})
+}
+
+func TestChangefeedCreateKafkaTopicsExplicit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	kafkaClient := mocks.NewMockKafkaClientV2(ctrl)
+	adminClient := mocks.NewMockKafkaAdminClientV2(ctrl)
+	kafkaClient.EXPECT().Close().AnyTimes()
+
+	const expectedTopic = "pre-foo"
+	var topicsCreated atomic.Bool
+	topicCreatedCh := make(chan struct{})
+	adminClient.EXPECT().ListTopics(gomock.Any(), expectedTopic).DoAndReturn(
+		func(ctx context.Context, topics ...string) (kadm.TopicDetails, error) {
+			require.Equal(t, []string{expectedTopic}, topics)
+			detail := kadm.TopicDetail{
+				Topic: expectedTopic,
+				Partitions: map[int32]kadm.PartitionDetail{
+					0: {Topic: expectedTopic, Partition: 0, Leader: 0, Replicas: []int32{0}, ISR: []int32{0}},
+				},
+			}
+			if !topicsCreated.Load() {
+				detail.Err = kerr.UnknownTopicOrPartition
+				detail.Partitions = nil
+			}
+			return kadm.TopicDetails{expectedTopic: detail}, nil
+		},
+	).AnyTimes()
+	adminClient.EXPECT().ValidateCreateTopics(gomock.Any(), int32(-1), int16(-1), nil, expectedTopic).Return(kadm.CreateTopicResponses{
+		expectedTopic: {Topic: expectedTopic},
+	}, nil)
+	adminClient.EXPECT().CreateTopics(gomock.Any(), int32(-1), int16(-1), nil, expectedTopic).DoAndReturn(
+		func(ctx context.Context, partitions int32, replicationFactor int16, configs map[string]*string, topics ...string) (kadm.CreateTopicResponses, error) {
+			require.Equal(t, []string{expectedTopic}, topics)
+			if topicsCreated.CompareAndSwap(false, true) {
+				close(topicCreatedCh)
+			}
+			return kadm.CreateTopicResponses{
+				expectedTopic: {Topic: expectedTopic, NumPartitions: 1, ReplicationFactor: 1},
+			}, nil
+		},
+	)
+
+	s, cleanup := makeServer(t, feedTestNoTenants, withKnobsFn(func(knobs *base.TestingKnobs) {
+		if knobs.DistSQL == nil {
+			knobs.DistSQL = &execinfra.TestingKnobs{}
+		}
+		if knobs.DistSQL.(*execinfra.TestingKnobs).Changefeed == nil {
+			knobs.DistSQL.(*execinfra.TestingKnobs).Changefeed = &TestingKnobs{}
+		}
+		cfKnobs := knobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
+		cfKnobs.KafkaSinkV2Knobs = kafkaSinkV2Knobs{
+			OverrideClient: func(opts []kgo.Opt) (KafkaClientV2, KafkaAdminClientV2) {
+				return kafkaClient, adminClient
+			},
+			SkipCreateTopicVersionCheck: true,
+		}
+	}))
+	defer cleanup()
+
+	execCfg := s.Server.ExecutorConfig().(sql.ExecutorConfig)
+	KafkaV2Enabled.Override(ctx, &execCfg.Settings.SV, true)
+	sqlDB := sqlutils.MakeSQLRunner(s.DB)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+
+	var jobID int
+	sqlDB.QueryRow(t,
+		`CREATE CHANGEFEED FOR foo INTO 'kafka://localhost:9092?topic_prefix=pre-' WITH initial_scan = 'no', create_kafka_topics = 'explicit'`,
+	).Scan(&jobID)
+	defer sqlDB.Exec(t, `CANCEL JOB $1`, jobID)
+
+	select {
+	case <-topicCreatedCh:
+	case <-time.After(30 * time.Second):
+		t.Fatal("timed out waiting for changefeed resumer to create kafka topics")
+	}
+}
+
 func shallowMerge(a, b map[string]any) map[string]any {
 	res := make(map[string]any, len(a))
 	for k, v := range a {
@@ -661,6 +1119,7 @@ type kafkaSinkV2Fx struct {
 	batchConfig         sinkBatchConfig
 	realClient          bool
 	additionalKOpts     []kgo.Opt
+	createTopics        changefeedbase.CreateKafkaTopics
 	createClientErrorCb func(error)
 	uri                 string
 
@@ -718,6 +1177,12 @@ func withKOptsClient(kOpts []kgo.Opt) fxOpt {
 	}
 }
 
+func withCreateTopics(createTopics changefeedbase.CreateKafkaTopics) fxOpt {
+	return func(fx *kafkaSinkV2Fx) {
+		fx.createTopics = createTopics
+	}
+}
+
 func withCreateClientErrorCb(cb func(error)) fxOpt {
 	return func(fx *kafkaSinkV2Fx) {
 		fx.createClientErrorCb = cb
@@ -733,13 +1198,14 @@ func newKafkaSinkV2Fx(t *testing.T, opts ...fxOpt) *kafkaSinkV2Fx {
 	settings := cluster.MakeTestingClusterSettings()
 
 	fx := &kafkaSinkV2Fx{
-		t:           t,
-		settings:    settings,
-		ctx:         ctx,
-		kc:          kc,
-		ac:          ac,
-		mockCtrl:    ctrl,
-		targetNames: []string{"t"},
+		t:            t,
+		settings:     settings,
+		ctx:          ctx,
+		kc:           kc,
+		ac:           ac,
+		mockCtrl:     ctrl,
+		targetNames:  []string{"t"},
+		createTopics: changefeedbase.CreateKafkaTopicsBrokerAuto,
 	}
 
 	for _, opt := range opts {
@@ -762,7 +1228,7 @@ func newKafkaSinkV2Fx(t *testing.T, opts ...fxOpt) *kafkaSinkV2Fx {
 	var err error
 	fx.sink, err = newKafkaSinkClientV2(ctx, fx.additionalKOpts,
 		fx.batchConfig, uri, settings, knobs, nilMetricsRecorderBuilder,
-		nil, nil, "" /* partitionAlg */)
+		nil, nil, "" /* partitionAlg */, fx.createTopics)
 	if err != nil && fx.createClientErrorCb != nil {
 		fx.createClientErrorCb(err)
 		return fx
@@ -783,7 +1249,9 @@ func newKafkaSinkV2Fx(t *testing.T, opts ...fxOpt) *kafkaSinkV2Fx {
 	}
 	u.RawQuery = q.Encode()
 
-	bs, err := makeKafkaSinkV2(ctx, &changefeedbase.SinkURL{URL: u}, targets, changefeedbase.KafkaSinkOptions{JSONConfig: fx.sinkJSONConfig}, 1, nilPacerFactory, timeutil.DefaultTimeSource{}, settings, nilMetricsRecorderBuilder, knobs)
+	bs, err := makeKafkaSinkV2(ctx, &changefeedbase.SinkURL{URL: u}, targets, changefeedbase.KafkaSinkOptions{
+		JSONConfig: fx.sinkJSONConfig,
+	}, 1, nilPacerFactory, timeutil.DefaultTimeSource{}, settings, nilMetricsRecorderBuilder, knobs, fx.createTopics)
 	if err != nil && fx.createClientErrorCb != nil {
 		fx.createClientErrorCb(err)
 		return fx

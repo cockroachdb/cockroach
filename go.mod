@@ -241,6 +241,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/twmb/franz-go v1.18.0
 	github.com/twmb/franz-go/pkg/kadm v1.11.0
+	github.com/twmb/franz-go/pkg/kmsg v1.9.0
 	github.com/twpayne/go-geom v1.4.2
 	github.com/xdg-go/pbkdf2 v1.0.0
 	github.com/xdg-go/scram v1.1.2
@@ -470,7 +471,6 @@ require (
 	github.com/tklauser/numcpus v0.3.0 // indirect
 	github.com/twitchtv/twirp v8.1.0+incompatible // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
-	github.com/twmb/franz-go/pkg/kmsg v1.9.0 // indirect
 	github.com/twpayne/go-kml v1.5.2 // indirect
 	github.com/ugorji/go/codec v1.2.11 // indirect
 	github.com/urfave/cli/v2 v2.3.0 // indirect

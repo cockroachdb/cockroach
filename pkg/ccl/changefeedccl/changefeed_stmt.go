@@ -1951,6 +1951,13 @@ func (b *changefeedResumer) resumeWithRetries(
 						}
 					}
 				}
+				var kafkaKnobs kafkaSinkV2Knobs
+				if knobs != nil {
+					kafkaKnobs = knobs.KafkaSinkV2Knobs
+				}
+				if err := maybeCreateKafkaTopics(ctx, execCfg, details, targets, schemaTS, kafkaKnobs); err != nil {
+					return errors.Wrap(err, "failed to create kafka topics")
+				}
 				var err error
 				prevResult, err = startDistChangefeed(ctx, jobExec, jobID, schemaTS, details, description,
 					initialHighWater, progress, resolvedSpans, prevResult, startedCh, onTracingEvent, targets)
