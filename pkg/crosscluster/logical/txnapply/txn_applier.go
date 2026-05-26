@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnwriter"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/container/heap"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -128,6 +129,11 @@ type Applier struct {
 	}
 	txnWriters []txnwriter.TransactionWriter
 
+	// newCPUHandle creates a per-goroutine SQLCPUHandle for CPU accounting.
+	// Each writer goroutine calls this to get its own handle, avoiding
+	// cross-writer mutex contention on a shared handle.
+	newCPUHandle func() *admission.SQLCPUHandle
+
 	// TODO(msbutler): consider removing and simply call commited.ResolvedTime().
 	localResolvedTime Latest[hlc.Timestamp]
 }
@@ -144,6 +150,7 @@ func NewApplier(
 	writers []txnwriter.TransactionWriter,
 	depResolver DependencyResolverClient,
 	allApplierIDs []ldrdecoder.ApplierID,
+	newCPUHandle func() *admission.SQLCPUHandle,
 ) (_ *Applier, retErr error) {
 	defer func() {
 		if retErr != nil {
@@ -153,15 +160,19 @@ func NewApplier(
 		}
 	}()
 	if id == 0 {
-		return nil, errors.New("applier ID must be nonzero")
+		return nil, errors.AssertionFailedf("applier ID must be nonzero")
 	}
 	if depResolver == nil {
-		return nil, errors.New("dependency resolver must not be nil")
+		return nil, errors.AssertionFailedf("dependency resolver must not be nil")
+	}
+	if newCPUHandle == nil {
+		return nil, errors.AssertionFailedf("newCPUHandle must not be nil")
 	}
 	a := &Applier{
 		id:                id,
 		depResolver:       depResolver,
 		txnWriters:        writers,
+		newCPUHandle:      newCPUHandle,
 		localResolvedTime: MakeLatest[hlc.Timestamp](),
 	}
 	a.mu.committed = makeCommittedSet()
@@ -364,6 +375,10 @@ func (a *Applier) writer(
 	ready chan ldrdecoder.Transaction,
 	applied chan appliedTransaction,
 ) error {
+	handle := a.newCPUHandle()
+	defer handle.Close()
+	ctx = admission.ContextWithSQLCPUHandle(ctx, handle)
+	defer handle.RegisterGoroutine().Close(ctx)
 	for {
 		select {
 		case <-ctx.Done():

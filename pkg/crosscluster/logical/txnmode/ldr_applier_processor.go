@@ -21,9 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -149,6 +152,13 @@ func (p *ldrApplierProcessor) setup(ctx context.Context) error {
 
 	p.applier, err = txnapply.NewApplier(
 		ctx, applierID, writers, p.depResolver, p.spec.AllApplierIds,
+		func() *admission.SQLCPUHandle {
+			return p.FlowCtx.Cfg.SQLCPUProvider.GetHandle(admission.WorkInfo{
+				TenantID:   p.FlowCtx.Codec().TenantID,
+				Priority:   admissionpb.LowPri,
+				CreateTime: timeutil.Now().UnixNano(),
+			}, false /* atGateway */)
+		},
 	)
 	if err != nil {
 		return errors.Wrap(err, "creating applier")
