@@ -64,7 +64,7 @@ type leaseAcquirer interface {
 	AcquireFreshestFromStore(ctx context.Context, id descpb.ID) error
 	// TODO(yang): Investigate whether the codec can be stored in the schema feed itself.
 	Codec() keys.SQLCodec
-	RegisterLeaseObserver(observer lease.Observer) (unregisterFn func())
+	RegisterLeaseObserver(observer lease.Observer, ids []descpb.ID) (initialVersions map[descpb.ID]descpb.DescriptorVersion, unregisterFn func())
 }
 
 // SchemaFeed is a stream of events corresponding the relevant set of
@@ -282,7 +282,12 @@ func (tf *schemaFeed) Run(ctx context.Context) error {
 		return err
 	}
 
-	unregisterFn := tf.leaseMgr.RegisterLeaseObserver(tf)
+	targetIDs := make([]descpb.ID, 0, tf.targets.NumUniqueTables())
+	_ = tf.targets.EachTableID(func(id descpb.ID) error {
+		targetIDs = append(targetIDs, id)
+		return nil
+	})
+	initialVersions, unregisterFn := tf.leaseMgr.RegisterLeaseObserver(tf, targetIDs)
 	// Make sure the observer unregisters before trying to release leases.
 	defer func() {
 		tf.mu.Lock()
@@ -299,6 +304,21 @@ func (tf *schemaFeed) Run(ctx context.Context) error {
 		tf.mu.staleLeases = false
 	}()
 	defer unregisterFn()
+
+	// Seed each target's latestVersion from the snapshot the lease manager
+	// returned at registration time. Without this, a descriptor version that
+	// had already been broadcast before we registered would be invisible to
+	// us (maybeAddObserverEvent dedups re-broadcasts), and we would happily
+	// store a stale lease on the next Acquire. See #169820.
+	func() {
+		tf.mu.Lock()
+		defer tf.mu.Unlock()
+		for id, v := range initialVersions {
+			if ld, ok := tf.mu.heldLeases[id]; ok && v > ld.latestVersion {
+				ld.latestVersion = v
+			}
+		}
+	}()
 
 	// Fetch the table descs as of the initial frontier and prime the table
 	// history with them. This addresses #41694 where we'd skip the rest of a
@@ -557,6 +577,7 @@ func (tf *schemaFeed) pauseOrResumePolling(ctx context.Context, atOrBefore hlc.T
 			// version could not have changed.
 			heldLease := tf.mu.heldLeases[id]
 			if heldLease.leasedDescriptor == nil {
+				prevLatest := heldLease.latestVersion // captured for V(2) log below
 				// Otherwise, a new version was detected, so acquire it at advanceTo.
 				newLease, err := tf.leaseMgr.Acquire(ctx, lease.TimestampToReadTimestamp(advanceTo), id)
 				if err != nil {
@@ -566,7 +587,11 @@ func (tf *schemaFeed) pauseOrResumePolling(ctx context.Context, atOrBefore hlc.T
 				if newLease.Underlying().GetVersion() >= heldLease.latestVersion {
 					heldLease.latestVersion = newLease.Underlying().GetVersion()
 					tf.mu.heldLeases[id].leasedDescriptor = newLease
+					log.VEventf(ctx, 2, "schemafeed pauseOrResumePolling id=%d: acquired and stored lease version=%d (prevLatest=%d)",
+						id, newLease.Underlying().GetVersion(), prevLatest)
 				} else {
+					log.VEventf(ctx, 2, "schemafeed pauseOrResumePolling id=%d: acquired version=%d but latestVersion=%d is newer; releasing",
+						id, newLease.Underlying().GetVersion(), heldLease.latestVersion)
 					// The latest observed version was not picked up yet.
 					newLease.Release(ctx)
 				}
@@ -1009,10 +1034,16 @@ func (tf *schemaFeed) OnNewVersion(
 		return
 	}
 	// Check if the new version is greater than the latest version we know
-	// about.
+	// about. The initial version snapshot returned by RegisterLeaseObserver
+	// already covers anything broadcast before we registered, so a stale
+	// notification at startup is a no-op here.
 	if ld.latestVersion >= version {
+		log.VEventf(ctx, 2, "schemafeed OnNewVersion id=%d version=%d: already at latestVersion=%d, no-op",
+			id, version, ld.latestVersion)
 		return
 	}
+	prevVersion := ld.latestVersion
+	hadLease := ld.leasedDescriptor != nil
 	ld.latestVersion = version
 	tf.mu.staleLeases = true
 	tf.mu.pollingPaused = false
@@ -1021,6 +1052,8 @@ func (tf *schemaFeed) OnNewVersion(
 		ld.leasedDescriptor.Release(ctx)
 		ld.leasedDescriptor = nil
 	}
+	log.VEventf(ctx, 2, "schemafeed OnNewVersion id=%d: advanced latestVersion %d->%d, releasedLease=%v",
+		id, prevVersion, version, hadLease)
 }
 
 type doNothingSchemaFeed struct{}

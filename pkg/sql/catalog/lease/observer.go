@@ -12,17 +12,34 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
-// Observer is an interface that allows observers to be notified of new
-// versions of descriptors.
+// Observer is notified of new descriptor versions. Versions for a single
+// descriptor are delivered in strictly increasing order. State that existed
+// before registration is returned from Manager.RegisterLeaseObserver instead
+// of being replayed through OnNewVersion.
 type Observer interface {
-	// OnNewVersion Invoked when a new version of a descriptor becomes available.
+	// OnNewVersion is invoked when a new version of a descriptor becomes
+	// available.
 	OnNewVersion(ctx context.Context, descID descpb.ID, newVersion descpb.DescriptorVersion, modificationTime hlc.Timestamp)
 }
 
-// RegisterLeaseObserver registers an observer. An unregisterFn is returned
-// to remove this observer. Note: Observers are buffered, pending events may
-// still fire after unregistering.
-func (m *Manager) RegisterLeaseObserver(observer Observer) (unregisterFn func()) {
+// RegisterLeaseObserver registers an observer and, for each descriptor in
+// ids, returns the most recently notified version that the lease manager
+// knows about. The snapshot is taken atomically with adding the observer to
+// the broadcast list, so a freshly registered observer can detect that a
+// lease it already holds is stale without relying on a re-broadcast that
+// the per-descriptor dedup in maybeAddObserverEvent would otherwise
+// suppress.
+//
+// The returned map only contains entries for descriptors that the lease
+// manager has tracked and broadcast at least once; absent ids mean "no
+// prior broadcast for this descriptor, you'll see future versions via
+// OnNewVersion". Pass nil for ids to skip the snapshot entirely.
+//
+// An unregisterFn is returned to remove the observer. Note: events queued
+// before unregister may still fire afterward.
+func (m *Manager) RegisterLeaseObserver(
+	observer Observer, ids []descpb.ID,
+) (initialVersions map[descpb.ID]descpb.DescriptorVersion, unregisterFn func()) {
 	// Writers will need mutual exclusion to avoid clobbering.
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -36,7 +53,22 @@ func (m *Manager) RegisterLeaseObserver(observer Observer) (unregisterFn func())
 	}
 	newObservers = append(newObservers, observer)
 	m.mu.observers.Store(&newObservers)
-	return func() {
+	if len(ids) > 0 {
+		initialVersions = make(map[descpb.ID]descpb.DescriptorVersion, len(ids))
+		for _, id := range ids {
+			t, ok := m.mu.descriptors[id]
+			if !ok {
+				continue
+			}
+			t.mu.Lock()
+			v := t.mu.maxVersionNotified
+			t.mu.Unlock()
+			if v > 0 {
+				initialVersions[id] = v
+			}
+		}
+	}
+	return initialVersions, func() {
 		m.unregisterLeaseObserver(observer)
 	}
 }
