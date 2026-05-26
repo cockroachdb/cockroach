@@ -9,7 +9,9 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/apache/arrow/go/v11/parquet"
 	"github.com/apache/arrow/go/v11/parquet/file"
 	"github.com/apache/arrow/go/v11/parquet/schema"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -20,7 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
 
@@ -748,7 +753,11 @@ func (c *parquetRowConsumer) FillDatums(
 		} else {
 			targetType := conv.VisibleColTypes[targetColIdx]
 			metadata := c.columnMetadata[parquetColIdx]
-			datum, err = convertWithLogicalType(value, targetType, metadata)
+			if metadata.isList {
+				datum, err = assembleListDatum(value, targetType, metadata)
+			} else {
+				datum, err = convertWithLogicalType(value, targetType, metadata)
+			}
 			if err != nil {
 				return newImportRowError(err, fmt.Sprintf("row %d", rowNum), rowNum)
 			}
@@ -766,4 +775,156 @@ func (c *parquetRowConsumer) FillDatums(
 	}
 
 	return nil
+}
+
+// assembleListDatum converts a slice of Parquet element values into a
+// tree.Datum. The target type determines the output format:
+//   - ArrayFamily: builds a tree.DArray, converting each element via
+//     convertWithLogicalType.
+//   - JsonFamily: builds a JSONB array, converting each element via
+//     parquetElementToJSON.
+func assembleListDatum(
+	value any, targetType *types.T, metadata *parquetColumnMetadata,
+) (tree.Datum, error) {
+	elements, ok := value.([]any)
+	if !ok {
+		return nil, errors.AssertionFailedf("expected []any for LIST column, got %T", value)
+	}
+
+	switch targetType.Family() {
+	case types.ArrayFamily:
+		return assembleListAsArray(elements, targetType, metadata)
+	case types.JsonFamily:
+		return assembleListAsJSON(elements, metadata)
+	default:
+		return nil, errors.AssertionFailedf(
+			"LIST columns can only target ARRAY or JSONB types, got %s; should have been "+
+				"rejected during schema validation", targetType.Family())
+	}
+}
+
+// assembleListAsArray builds a tree.DArray from Parquet element values,
+// converting each element with convertWithLogicalType.
+func assembleListAsArray(
+	elements []any, targetType *types.T, metadata *parquetColumnMetadata,
+) (tree.Datum, error) {
+	elementType := targetType.ArrayContents()
+	arr := tree.NewDArray(elementType)
+	for i, elem := range elements {
+		if elem == nil {
+			if err := arr.Append(tree.DNull); err != nil {
+				return nil, errors.Wrapf(err, "appending LIST element %d", i)
+			}
+			continue
+		}
+		elemDatum, err := convertWithLogicalType(elem, elementType, metadata)
+		if err != nil {
+			return nil, errors.Wrapf(err, "converting LIST element %d", i)
+		}
+		if err := arr.Append(elemDatum); err != nil {
+			return nil, errors.Wrapf(err, "appending LIST element %d", i)
+		}
+	}
+	return arr, nil
+}
+
+// assembleListAsJSON builds a JSONB array datum from Parquet element values,
+// converting each element with parquetElementToJSON.
+func assembleListAsJSON(elements []any, metadata *parquetColumnMetadata) (tree.Datum, error) {
+	ab := json.NewArrayBuilder(len(elements))
+	for i, elem := range elements {
+		if elem == nil {
+			ab.Add(json.NullJSONValue)
+			continue
+		}
+		j, err := parquetElementToJSON(elem, metadata)
+		if err != nil {
+			return nil, errors.Wrapf(err, "converting LIST element %d to JSON", i)
+		}
+		ab.Add(j)
+	}
+	return tree.NewDJSON(ab.Build()), nil
+}
+
+// parquetElementToJSON converts a single raw Parquet element value to a
+// json.JSON value, honoring the element's logical type annotation so that
+// dates, decimals, UUIDs, intervals, and timestamps land in JSON in their
+// human-readable form rather than as raw physical values.
+//
+// The conversion routes through convertWithLogicalType (which interprets the
+// logical-type metadata) and then tree.AsJSON (which knows how to format each
+// datum kind as JSON). EnumLogicalType is short-circuited to a JSON string
+// because convertWithLogicalType's enum path needs an enum-typed target
+// descriptor, which is not available in a JSONB context.
+func parquetElementToJSON(elem any, metadata *parquetColumnMetadata) (json.JSON, error) {
+	// EnumLogicalType: treat the BYTE_ARRAY payload as a plain string.
+	if b, ok := elem.([]byte); ok {
+		if _, isEnum := metadata.logicalType.(schema.EnumLogicalType); isEnum {
+			return json.FromString(string(b)), nil
+		}
+	}
+
+	targetType, err := jsonElementTargetType(elem, metadata)
+	if err != nil {
+		return nil, err
+	}
+	datum, err := convertWithLogicalType(elem, targetType, metadata)
+	if err != nil {
+		return nil, err
+	}
+	return tree.AsJSON(datum, sessiondatapb.DataConversionConfig{}, time.UTC)
+}
+
+// jsonElementTargetType picks a CRDB type to feed convertWithLogicalType when
+// the surrounding LIST is targeting JSONB. The type is chosen so that
+// convertWithLogicalType's logical-type branches fire correctly (e.g. a UUID
+// logical type needs types.Uuid as a hint to pick the convertUuid* path) and
+// its physical-type fallbacks produce a sensible datum (e.g. plain int32 with
+// no logical type becomes DInt rather than DDecimal).
+//
+// Each branch listed below mirrors one of the typed branches inside
+// convertWithLogicalType. Logical-type cases come first so they win over the
+// raw element-type fallback when both would apply.
+func jsonElementTargetType(elem any, metadata *parquetColumnMetadata) (*types.T, error) {
+	switch metadata.logicalType.(type) {
+	case schema.StringLogicalType:
+		return types.String, nil
+	case schema.JSONLogicalType:
+		return types.Jsonb, nil
+	case schema.UUIDLogicalType:
+		return types.Uuid, nil
+	case schema.IntervalLogicalType:
+		return types.Interval, nil
+	case schema.DateLogicalType:
+		return types.Date, nil
+	case *schema.DecimalLogicalType:
+		return types.Decimal, nil
+	case *schema.TimestampLogicalType:
+		return types.TimestampTZ, nil
+	case *schema.TimeLogicalType:
+		return types.Time, nil
+	}
+	switch elem.(type) {
+	case bool:
+		return types.Bool, nil
+	case int32, int64:
+		return types.Int, nil
+	case float32, float64:
+		return types.Float, nil
+	case []byte:
+		// Unannotated BYTE_ARRAY defaults to text, matching the flat-path
+		// behavior in convertBytesBasedOnTargetType. Bytes ride through to
+		// the resulting JSON string verbatim with no UTF-8 validation, so
+		// non-UTF-8 inputs (e.g. {0xff}) reach the target unchanged. Callers
+		// with genuinely binary data should target an ARRAY<BYTES> column
+		// (which routes through convertBytesBasedOnTargetType's BytesFamily
+		// branch) or use FIXED_LEN_BYTE_ARRAY, which defaults to bytes
+		// below.
+		return types.String, nil
+	case parquet.FixedLenByteArray:
+		return types.Bytes, nil
+	case parquet.Int96:
+		return types.TimestampTZ, nil
+	}
+	return nil, errors.AssertionFailedf("unsupported element type %T for JSON conversion", elem)
 }

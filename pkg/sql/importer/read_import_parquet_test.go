@@ -31,8 +31,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1812,4 +1814,360 @@ func TestParquetPlainPrimitivesValidation(t *testing.T) {
 	require.NotNil(t, consumer)
 
 	t.Log("Successfully validated plain primitive types through consumer creation")
+}
+
+// TestParquetElementToJSON pins the JSON output of parquetElementToJSON for
+// every supported physical type and the recognized logical-type annotations.
+// The assertions are coupled to tree.AsJSON's per-datum formatting, so a
+// change to that formatter (e.g. number layout, bytea encoding) will surface
+// here.
+func TestParquetElementToJSON(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	plainMeta := func() *parquetColumnMetadata { return &parquetColumnMetadata{} }
+	withLogical := func(lt schema.LogicalType) *parquetColumnMetadata {
+		return &parquetColumnMetadata{logicalType: lt}
+	}
+	uuidBytes := []byte{0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0,
+		0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}
+	// Parquet INTERVAL: 12 bytes = uint32 months + uint32 days + uint32 millis,
+	// each little-endian. Pin to 1 month, 2 days, 3000 ms.
+	intervalBytes := []byte{
+		0x01, 0x00, 0x00, 0x00,
+		0x02, 0x00, 0x00, 0x00,
+		0xb8, 0x0b, 0x00, 0x00,
+	}
+
+	tests := []struct {
+		name        string
+		elem        any
+		meta        *parquetColumnMetadata
+		expectedStr string
+	}{
+		{name: "bool", elem: true, meta: plainMeta(), expectedStr: "true"},
+		{name: "int32", elem: int32(7), meta: plainMeta(), expectedStr: "7"},
+		{name: "int64", elem: int64(123456789012), meta: plainMeta(), expectedStr: "123456789012"},
+		{name: "float32", elem: float32(1.5), meta: plainMeta(), expectedStr: "1.5"},
+		{name: "float64", elem: 2.25, meta: plainMeta(), expectedStr: "2.25"},
+		{
+			name: "byte array no logical type",
+			elem: []byte("hello"), meta: plainMeta(),
+			expectedStr: `"hello"`,
+		},
+		{
+			name:        "byte array string logical type",
+			elem:        []byte("world"),
+			meta:        withLogical(schema.StringLogicalType{}),
+			expectedStr: `"world"`,
+		},
+		{
+			name:        "byte array enum logical type",
+			elem:        []byte("RED"),
+			meta:        withLogical(schema.EnumLogicalType{}),
+			expectedStr: `"RED"`,
+		},
+		{
+			name:        "byte array JSON logical type",
+			elem:        []byte(`{"a":1}`),
+			meta:        withLogical(schema.JSONLogicalType{}),
+			expectedStr: `{"a": 1}`,
+		},
+		{
+			name: "int32 date logical type",
+			// Days since 1970-01-01: 2023-02-01 = 19389.
+			elem:        int32(19389),
+			meta:        withLogical(schema.DateLogicalType{}),
+			expectedStr: `"2023-02-01"`,
+		},
+		{
+			name:        "fixed len byte array UUID logical type",
+			elem:        parquet.FixedLenByteArray(uuidBytes),
+			meta:        withLogical(schema.UUIDLogicalType{}),
+			expectedStr: `"12345678-9abc-def0-1234-56789abcdef0"`,
+		},
+		{
+			name:        "fixed len byte array interval logical type",
+			elem:        parquet.FixedLenByteArray(intervalBytes),
+			meta:        withLogical(schema.IntervalLogicalType{}),
+			expectedStr: `"1 mon 2 days 00:00:03"`,
+		},
+		{
+			name: "fixed len byte array no logical type",
+			// Unannotated FLBA falls through to types.Bytes, producing the
+			// standard "\x..." hex encoding used by CRDB's bytea_output=hex.
+			elem:        parquet.FixedLenByteArray([]byte{0xde, 0xad, 0xbe, 0xef}),
+			meta:        plainMeta(),
+			expectedStr: `"\\xdeadbeef"`,
+		},
+		{
+			name: "int96 timestamp",
+			// INT96 = nanos within day (8 bytes, little-endian) + Julian day
+			// number (4 bytes, little-endian). 2451545 = 0x256859 is the JD
+			// for 2000-01-01.
+			elem:        parquet.Int96{0, 0, 0, 0, 0, 0, 0, 0, 0x59, 0x68, 0x25, 0x00},
+			meta:        plainMeta(),
+			expectedStr: `"2000-01-01T00:00:00Z"`,
+		},
+		{
+			name: "int32 decimal non-zero scale",
+			// 12345 with scale 2 = 123.45.
+			elem:        int32(12345),
+			meta:        withLogical(schema.NewDecimalLogicalType(5, 2)),
+			expectedStr: `123.45`,
+		},
+		{
+			name: "int64 timestamp micros",
+			// 1675209600000000 micros = 2023-02-01T00:00:00Z.
+			elem:        int64(1675209600000000),
+			meta:        withLogical(schema.NewTimestampLogicalType(true, schema.TimeUnitMicros)),
+			expectedStr: `"2023-02-01T00:00:00Z"`,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			j, err := parquetElementToJSON(tc.elem, tc.meta)
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedStr, j.String())
+		})
+	}
+
+	t.Run("unsupported type fails assertion", func(t *testing.T) {
+		_, err := parquetElementToJSON(struct{}{}, plainMeta())
+		require.ErrorContains(t, err, "unsupported element type")
+		require.True(t, errors.HasAssertionFailure(err),
+			"unsupported element type should be reported as an assertion failure")
+	})
+}
+
+// TestAssembleListDatum covers assembleListDatum directly: interleaved NULL
+// elements for both ARRAY and JSONB targets, and the per-element error wraps
+// emitted when a conversion or append fails.
+func TestAssembleListDatum(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	plainMeta := &parquetColumnMetadata{}
+
+	t.Run("array with null elements", func(t *testing.T) {
+		got, err := assembleListDatum(
+			[]any{[]byte("a"), nil, []byte("b")},
+			types.MakeArray(types.String), plainMeta)
+		require.NoError(t, err)
+
+		want := tree.NewDArray(types.String)
+		require.NoError(t, want.Append(tree.NewDString("a")))
+		require.NoError(t, want.Append(tree.DNull))
+		require.NoError(t, want.Append(tree.NewDString("b")))
+		require.Equal(t, want, got)
+	})
+
+	t.Run("array empty list", func(t *testing.T) {
+		got, err := assembleListDatum(
+			[]any{}, types.MakeArray(types.Int), plainMeta)
+		require.NoError(t, err)
+		require.Equal(t, tree.NewDArray(types.Int), got)
+	})
+
+	t.Run("array string passes through invalid utf-8", func(t *testing.T) {
+		// No UTF-8 validation on this path; matches the flat-path importer.
+		got, err := assembleListDatum(
+			[]any{[]byte{0xff}}, types.MakeArray(types.String), plainMeta)
+		require.NoError(t, err)
+
+		want := tree.NewDArray(types.String)
+		require.NoError(t, want.Append(tree.NewDString("\xff")))
+		require.Equal(t, want, got)
+	})
+
+	t.Run("array conversion error wraps with element index", func(t *testing.T) {
+		// struct{} has no Parquet physical type, so convertWithLogicalType
+		// rejects it; the wrap must name the offending element index.
+		_, err := assembleListDatum(
+			[]any{int32(1), struct{}{}},
+			types.MakeArray(types.Int), plainMeta)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "converting LIST element 1")
+		require.Contains(t, err.Error(), "unsupported Parquet value type")
+	})
+
+	t.Run("array append type mismatch wraps with element index", func(t *testing.T) {
+		// []byte with an INT target produces a DString via the byte-array
+		// fallback path; appending that DString to a DArray(Int) fails the
+		// type check in arr.Append, which is the wrap we want to assert.
+		_, err := assembleListDatum(
+			[]any{int32(1), []byte("not-an-int")},
+			types.MakeArray(types.Int), plainMeta)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "appending LIST element 1")
+	})
+
+	t.Run("json with null elements", func(t *testing.T) {
+		got, err := assembleListDatum(
+			[]any{[]byte("a"), nil, []byte("b")}, types.Jsonb, plainMeta)
+		require.NoError(t, err)
+
+		ab := json.NewArrayBuilder(3)
+		ab.Add(json.FromString("a"))
+		ab.Add(json.NullJSONValue)
+		ab.Add(json.FromString("b"))
+		require.Equal(t, tree.NewDJSON(ab.Build()), got)
+	})
+
+	t.Run("json empty list", func(t *testing.T) {
+		got, err := assembleListDatum(
+			[]any{}, types.Jsonb, plainMeta)
+		require.NoError(t, err)
+		require.Equal(t, tree.NewDJSON(json.NewArrayBuilder(0).Build()), got)
+	})
+
+	t.Run("json with mixed nil and empty bytes", func(t *testing.T) {
+		// Asymmetric with the ARRAY<JSONB> case above: inside a JSONB list,
+		// []byte{} becomes an empty JSON string rather than collapsing to
+		// null.
+		got, err := assembleListDatum(
+			[]any{nil, []byte{}}, types.Jsonb, plainMeta)
+		require.NoError(t, err)
+
+		ab := json.NewArrayBuilder(2)
+		ab.Add(json.NullJSONValue)
+		ab.Add(json.FromString(""))
+		require.Equal(t, tree.NewDJSON(ab.Build()), got)
+	})
+
+	t.Run("json passes through invalid utf-8", func(t *testing.T) {
+		// Same as the ARRAY<STRING> case: the bytes ride through into the
+		// JSON string unchanged.
+		got, err := assembleListDatum(
+			[]any{[]byte{0xff}}, types.Jsonb, plainMeta)
+		require.NoError(t, err)
+
+		ab := json.NewArrayBuilder(1)
+		ab.Add(json.FromString("\xff"))
+		require.Equal(t, tree.NewDJSON(ab.Build()), got)
+	})
+
+	t.Run("json conversion error wraps with element index", func(t *testing.T) {
+		_, err := assembleListDatum(
+			[]any{int32(1), struct{}{}}, types.Jsonb, plainMeta)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "converting LIST element 1 to JSON")
+		require.Contains(t, err.Error(), "unsupported element type")
+	})
+
+	t.Run("unsupported target type fails assertion", func(t *testing.T) {
+		// LIST targeting a scalar type should never make it past schema
+		// validation; if it does, assembleListDatum trips an assertion.
+		_, err := assembleListDatum([]any{int32(1)}, types.Int, plainMeta)
+		require.ErrorContains(t, err, "LIST columns can only target ARRAY or JSONB")
+		require.True(t, errors.HasAssertionFailure(err))
+	})
+
+	t.Run("non-slice value fails assertion", func(t *testing.T) {
+		// The producer is contractually obligated to hand assembleListDatum a
+		// []any; any other shape is a programmer error.
+		_, err := assembleListDatum("not a slice", types.MakeArray(types.String), plainMeta)
+		require.ErrorContains(t, err, "expected []any for LIST column")
+		require.True(t, errors.HasAssertionFailure(err))
+	})
+}
+
+// TestParquetConsumerListRouting verifies that parquetRowConsumer.FillDatums
+// dispatches LIST batches through assembleListDatum and produces the expected
+// DArray or DJSON datum, depending on the target column type. The producer
+// half of the LIST pipeline is mocked by fabricating parquetColumnBatch
+// values directly, so the test exercises the consumer routing in isolation.
+func TestParquetConsumerListRouting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Three Parquet columns: id (flat int32), tags (LIST<string>),
+	// scores (LIST<int32>). The first targets an INT column, the second an
+	// ARRAY(STRING) column, the third a JSONB column. This shape covers
+	// both LIST destinations plus the flat fallthrough.
+	listMeta := func() *parquetColumnMetadata {
+		return &parquetColumnMetadata{isList: true}
+	}
+	flatMeta := func() *parquetColumnMetadata { return &parquetColumnMetadata{} }
+	consumer := &parquetRowConsumer{
+		columnMetadata: map[int]*parquetColumnMetadata{
+			0: flatMeta(),
+			1: listMeta(),
+			2: listMeta(),
+		},
+		colMapping: []int{0, 1, 2},
+	}
+
+	// Two rows. Row 0: id=10, tags=["a","b"], scores=[1,2]. Row 1: id=20,
+	// tags=NULL, scores=[].
+	idBatch := &parquetColumnBatch{
+		physicalType: parquet.Types.Int32,
+		rowCount:     2,
+		isNull:       []bool{false, false},
+		int32Values:  []int32{10, 20},
+	}
+	tagsBatch := &parquetColumnBatch{
+		isList:   true,
+		rowCount: 2,
+		isNull:   []bool{false, true},
+		listRowValues: [][]any{
+			{[]byte("a"), []byte("b")},
+			nil,
+		},
+	}
+	scoresBatch := &parquetColumnBatch{
+		isList:   true,
+		rowCount: 2,
+		isNull:   []bool{false, false},
+		listRowValues: [][]any{
+			{int32(1), int32(2)},
+			{},
+		},
+	}
+
+	conv := &row.DatumRowConverter{
+		VisibleColTypes: []*types.T{
+			types.Int,
+			types.MakeArray(types.String),
+			types.Jsonb,
+		},
+		Datums: make([]tree.Datum, 3),
+	}
+
+	// Row 0.
+	view0 := &parquetRowView{
+		batches:    []*parquetColumnBatch{idBatch, tagsBatch, scoresBatch},
+		numColumns: 3,
+		rowIndex:   0,
+	}
+	require.NoError(t, consumer.FillDatums(ctx, view0, 0, conv))
+
+	wantTags := tree.NewDArray(types.String)
+	require.NoError(t, wantTags.Append(tree.NewDString("a")))
+	require.NoError(t, wantTags.Append(tree.NewDString("b")))
+	wantScoresAb := json.NewArrayBuilder(2)
+	wantScoresAb.Add(json.FromInt(1))
+	wantScoresAb.Add(json.FromInt(2))
+	wantScores := tree.NewDJSON(wantScoresAb.Build())
+
+	require.Equal(t, tree.NewDInt(10), conv.Datums[0])
+	require.Equal(t, wantTags, conv.Datums[1])
+	require.Equal(t, wantScores, conv.Datums[2])
+
+	// Row 1: null list and empty list.
+	conv.Datums = make([]tree.Datum, 3)
+	view1 := &parquetRowView{
+		batches:    []*parquetColumnBatch{idBatch, tagsBatch, scoresBatch},
+		numColumns: 3,
+		rowIndex:   1,
+	}
+	require.NoError(t, consumer.FillDatums(ctx, view1, 1, conv))
+
+	require.Equal(t, tree.NewDInt(20), conv.Datums[0])
+	require.Equal(t, tree.DNull, conv.Datums[1], "null LIST should map to DNull")
+	require.Equal(t, tree.NewDJSON(json.NewArrayBuilder(0).Build()), conv.Datums[2],
+		"empty LIST should map to empty JSONB array")
 }
