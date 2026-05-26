@@ -280,7 +280,7 @@ func (s *ParallelUnorderedSynchronizer) Init(ctx context.Context) {
 				cleanup := ash.SetWorkState(
 					s.flowCtx.Codec().TenantID, ash.WorkloadInfo{
 						WorkloadID:    s.flowCtx.EvalCtx.WorkloadID,
-						AppNameID:     s.flowCtx.EvalCtx.AppNameID,
+						EnrichmentID:  s.flowCtx.EvalCtx.AppNameID,
 						GatewayNodeID: gatewayNodeID,
 						WorkloadType:  s.flowCtx.EvalCtx.WorkloadType,
 					},

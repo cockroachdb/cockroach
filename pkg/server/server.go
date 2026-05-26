@@ -1907,20 +1907,21 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	s.sqlServer.execCfg.DistSQLPlanner.SetGatewaySQLInstanceID(base.SQLInstanceID(state.nodeID))
 	s.sqlServer.execCfg.DistSQLPlanner.ConstructAndSetSpanResolver(ctx, state.nodeID, s.cfg.Locality)
 
-	// Initialize the process-global ASH sampler now that the node ID is
-	// known. The sampler is a process-wide singleton tied to the
-	// process-level stopper. This path handles KV+SQL nodes (the system
-	// tenant). Standalone SQL pods (out-of-process tenants) are handled by
-	// SQLServerWrapper.PreStart in tenant.go.
+	// Initialize the process-global enrichment cache and ASH sampler
+	// now that the node ID is known. The cache must be initialized
+	// before the sampler so GlobalEnrichmentCache() is available.
+	if err := ash.InitGlobalEnrichmentCache(ctx, 1_000_000, s.stopper); err != nil {
+		return err
+	}
 	if _, err := ash.InitGlobalSampler(ctx, state.nodeID, s.st, s.stopper); err != nil {
 		return err
 	}
 	if m := ash.GlobalSamplerMetrics(); m != nil {
 		s.sysRegistry.AddMetricStruct(m)
 	}
-	ash.SetGlobalAppNameResolver(func(
+	ash.SetGlobalEnrichmentResolver(func(
 		ctx context.Context, nodeID roachpb.NodeID, ids []uint64,
-	) (map[uint64]string, error) {
+	) (map[uint64]ash.EnrichmentData, error) {
 		client, err := s.status.dialNode(ctx, nodeID)
 		if err != nil {
 			return nil, err
@@ -1929,7 +1930,11 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		if err != nil {
 			return nil, err
 		}
-		return resp.Mappings, nil
+		result := make(map[uint64]ash.EnrichmentData, len(resp.Mappings))
+		for id, appName := range resp.Mappings {
+			result[id] = ash.EnrichmentData{AppName: appName}
+		}
+		return result, nil
 	})
 
 	// TODO(irfansharif): Now that we have our node ID, we should run another

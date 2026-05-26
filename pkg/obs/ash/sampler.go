@@ -86,6 +86,19 @@ var LogInterval = settings.RegisterDurationSetting(
 	settings.WithPublic,
 )
 
+// MaxEnrichmentRetries controls the maximum number of sampler ticks
+// an unenriched sample will be retried before being emitted with
+// partial data.
+var MaxEnrichmentRetries = settings.RegisterIntSetting(
+	settings.SystemVisible,
+	"obs.ash.max_enrichment_retries",
+	"maximum number of sampler ticks to retry enrichment for a sample "+
+		"before emitting it with partial data",
+	5,
+	settings.NonNegativeInt,
+	settings.WithPublic,
+)
+
 // LogTopN controls the maximum number of workload entries included
 // in each periodic summary. Entries are ranked by sample count
 // (descending), so only the most frequently sampled workloads appear.
@@ -99,12 +112,11 @@ var LogTopN = settings.RegisterIntSetting(
 	settings.WithPublic,
 )
 
-// AppNameResolverFn fetches app name ID-to-string mappings from a
+// EnrichmentResolverFn fetches enrichment ID-to-data mappings from a
 // remote node. The sampler calls this when local resolution fails and
 // the work state has a non-zero GatewayNodeID that differs from the
-// local node. Only the specified IDs are requested; the returned map
-// contains entries for the subset that the remote node could resolve.
-type AppNameResolverFn func(ctx context.Context, nodeID roachpb.NodeID, ids []uint64) (map[uint64]string, error)
+// local node.
+type EnrichmentResolverFn func(ctx context.Context, nodeID roachpb.NodeID, ids []uint64) (map[uint64]EnrichmentData, error)
 
 // globalSampler is the process-wide ASH sampler singleton. It is
 // initialized once by InitGlobalSampler and read by GetSamples.
@@ -124,7 +136,17 @@ type pendingSample struct {
 	gid           int64
 	state         WorkState
 	workloadIDStr string
-	appName       string
+	enrichment    EnrichmentData
+	enriched      bool
+}
+
+// pendingEnrichmentSample holds an unenriched sample that will be
+// retried on subsequent sampler ticks.
+type pendingEnrichmentSample struct {
+	sample        ASHSample
+	enrichmentID  uint64
+	gatewayNodeID roachpb.NodeID
+	retryCount    int
 }
 
 // workloadKey groups samples for the periodic top-N summary.
@@ -148,13 +170,19 @@ type Sampler struct {
 	// workloadIDCache caches workload ID string encodings keyed by
 	// (id, type) to avoid repeated allocations for the same workload.
 	workloadIDCache *cache.UnorderedCache
-	// resolver, when set, fetches app name mappings from remote nodes
-	// for work states whose app name could not be resolved locally.
-	resolver atomic.Pointer[AppNameResolverFn]
+	// resolver, when set, fetches enrichment mappings from remote nodes
+	// for work states whose enrichment could not be resolved locally.
+	resolver atomic.Pointer[EnrichmentResolverFn]
+	// enrichmentCache is the process-wide enrichment cache used to
+	// resolve enrichment IDs to enrichment data.
+	enrichmentCache *EnrichmentCache
 	// pendingSamples is a reusable slice for collecting work state snapshots
 	// during rangeWorkStates. Reused across samples to avoid per-sample
 	// slice allocation.
 	pendingSamples []pendingSample
+	// pendingEnrichment holds samples from prior ticks that could not
+	// be enriched and will be retried.
+	pendingEnrichment []pendingEnrichmentSample
 	// lastLogTime records when the last summary was logged.
 	lastLogTime time.Time
 }
@@ -163,11 +191,12 @@ type Sampler struct {
 func newSampler(nodeID roachpb.NodeID, st *cluster.Settings, stopper *stop.Stopper) *Sampler {
 	bufSize := int(BufferSize.Get(&st.SV))
 	return &Sampler{
-		nodeID:  nodeID,
-		st:      st,
-		buffer:  NewRingBuffer(bufSize),
-		stopper: stopper,
-		metrics: makeMetrics(),
+		nodeID:          nodeID,
+		st:              st,
+		buffer:          NewRingBuffer(bufSize),
+		stopper:         stopper,
+		metrics:         makeMetrics(),
+		enrichmentCache: GlobalEnrichmentCache(),
 		workloadIDCache: cache.NewUnorderedCache(cache.Config{
 			Policy: cache.CacheLRU,
 			ShouldEvict: func(size int, key, value interface{}) bool {
@@ -177,20 +206,20 @@ func newSampler(nodeID roachpb.NodeID, st *cluster.Settings, stopper *stop.Stopp
 	}
 }
 
-// SetAppNameResolver sets the callback used to fetch app name
+// SetEnrichmentResolver sets the callback used to fetch enrichment
 // mappings from remote nodes when local resolution fails.
-func (s *Sampler) SetAppNameResolver(fn AppNameResolverFn) {
+func (s *Sampler) SetEnrichmentResolver(fn EnrichmentResolverFn) {
 	s.resolver.Store(&fn)
 }
 
-// SetGlobalAppNameResolver sets the resolver on the global sampler.
+// SetGlobalEnrichmentResolver sets the resolver on the global sampler.
 // This is a no-op if the global sampler has not been initialized.
-func SetGlobalAppNameResolver(fn AppNameResolverFn) {
+func SetGlobalEnrichmentResolver(fn EnrichmentResolverFn) {
 	s := globalSampler.Load()
 	if s == nil {
 		return
 	}
-	s.SetAppNameResolver(fn)
+	s.SetEnrichmentResolver(fn)
 }
 
 // start begins the background sampling loop. It must be called at most once.
@@ -250,6 +279,9 @@ func (s *Sampler) takeSample(ctx context.Context) {
 
 	sampleTime := start
 
+	// Retry enrichment for samples from prior ticks.
+	s.retryPendingEnrichment(ctx)
+
 	// Collect work states. rangeWorkStates reclaims retired states after
 	// iteration so pooled objects can be reused.
 	s.pendingSamples = s.pendingSamples[:0]
@@ -258,14 +290,12 @@ func (s *Sampler) takeSample(ctx context.Context) {
 		return true
 	})
 
-	// First pass: resolve app names and workload IDs, tracking
-	// indices where local app name resolution fails.
+	// First pass: resolve workload IDs and enrichment data from
+	// the local cache, tracking indices where enrichment fails.
 	var unresolvedIndices []int
 	for i := range s.pendingSamples {
 		ps := &s.pendingSamples[i]
 
-		// Encode the workloadID to a string for the ASHSample.
-		// Note(alyshan): Consider encoding at read time.
 		if ps.state.WorkloadInfo.WorkloadID != 0 {
 			cacheKey := workloadCacheKey{
 				id:  ps.state.WorkloadInfo.WorkloadID,
@@ -282,24 +312,26 @@ func (s *Sampler) takeSample(ctx context.Context) {
 			}
 		}
 
-		// Resolve app name ID to string via the node-local cache.
-		if ps.state.WorkloadInfo.AppNameID != 0 {
-			if name, ok := GetAppName(ps.state.WorkloadInfo.AppNameID); ok {
-				ps.appName = name
+		if ps.state.WorkloadInfo.EnrichmentID != 0 && s.enrichmentCache != nil {
+			if data, ok := s.enrichmentCache.Lookup(ps.state.WorkloadInfo.EnrichmentID); ok {
+				ps.enrichment = data
+				ps.enriched = true
+				s.metrics.EnrichmentHits.Inc(1)
 			} else {
 				unresolvedIndices = append(unresolvedIndices, i)
+				s.metrics.EnrichmentMisses.Inc(1)
 			}
 		}
 	}
 
-	// If there are unresolved app names, try fetching from remote
-	// gateway nodes. Group by gateway node ID to make at most one
-	// RPC per remote node.
+	// If there are unresolved enrichment IDs, try fetching from
+	// remote gateway nodes.
 	if len(unresolvedIndices) > 0 {
-		s.resolveRemoteAppNames(ctx, unresolvedIndices)
+		s.resolveRemoteEnrichment(ctx, unresolvedIndices)
 	}
 
 	// Emit samples.
+	maxRetries := int(MaxEnrichmentRetries.Get(&s.st.SV))
 	for i := range s.pendingSamples {
 		ps := &s.pendingSamples[i]
 		sample := ASHSample{
@@ -308,16 +340,86 @@ func (s *Sampler) takeSample(ctx context.Context) {
 			TenantID:      ps.state.TenantID,
 			WorkloadID:    ps.workloadIDStr,
 			WorkloadType:  ps.state.WorkloadInfo.WorkloadType.String(),
-			AppName:       ps.appName,
 			WorkEventType: ps.state.WorkEventType,
 			WorkEvent:     ps.state.WorkEvent,
 			GoroutineID:   ps.gid,
 		}
-		s.buffer.Add(sample)
+		if ps.enriched {
+			applySampleEnrichment(&sample, &ps.enrichment)
+			s.buffer.Add(sample)
+		} else if ps.state.WorkloadInfo.EnrichmentID != 0 && maxRetries > 0 {
+			s.pendingEnrichment = append(s.pendingEnrichment, pendingEnrichmentSample{
+				sample:        sample,
+				enrichmentID:  ps.state.WorkloadInfo.EnrichmentID,
+				gatewayNodeID: ps.state.WorkloadInfo.GatewayNodeID,
+			})
+		} else {
+			s.buffer.Add(sample)
+		}
 	}
 	s.metrics.SamplesCollected.Inc(int64(len(s.pendingSamples)))
+	s.metrics.EnrichmentPending.Update(int64(len(s.pendingEnrichment)))
+	if s.enrichmentCache != nil {
+		s.metrics.EnrichmentCacheEntries.Update(int64(s.enrichmentCache.Size()))
+	}
 
 	s.maybeLogSummary(ctx)
+}
+
+// applySampleEnrichment populates the enrichment fields on an ASHSample.
+func applySampleEnrichment(sample *ASHSample, data *EnrichmentData) {
+	sample.AppName = data.AppName
+	sample.User = data.User
+	sample.Database = data.Database
+	sample.SessionID = data.SessionID.String()
+	sample.TxnID = data.TxnID.String()
+	sample.PlanHash = data.PlanHash
+}
+
+// retryPendingEnrichment attempts to enrich samples from prior ticks
+// that could not be resolved. Resolved samples are emitted to the
+// ring buffer; samples that exceed max retries are emitted with
+// partial data.
+func (s *Sampler) retryPendingEnrichment(ctx context.Context) {
+	if len(s.pendingEnrichment) == 0 {
+		return
+	}
+
+	// First pass: try local cache.
+	maxRetries := int(MaxEnrichmentRetries.Get(&s.st.SV))
+	var stillUnresolved []int
+	for i := range s.pendingEnrichment {
+		pe := &s.pendingEnrichment[i]
+		pe.retryCount++
+		if s.enrichmentCache != nil {
+			if data, ok := s.enrichmentCache.Lookup(pe.enrichmentID); ok {
+				applySampleEnrichment(&pe.sample, &data)
+				s.buffer.Add(pe.sample)
+				pe.enrichmentID = 0
+				continue
+			}
+		}
+		if pe.retryCount >= maxRetries {
+			s.buffer.Add(pe.sample)
+			pe.enrichmentID = 0
+			continue
+		}
+		stillUnresolved = append(stillUnresolved, i)
+	}
+
+	// Remote resolution for still-unresolved pending samples.
+	if len(stillUnresolved) > 0 {
+		s.resolveRemotePendingEnrichment(ctx, stillUnresolved)
+	}
+
+	// Compact: keep only unresolved entries.
+	remaining := s.pendingEnrichment[:0]
+	for i := range s.pendingEnrichment {
+		if s.pendingEnrichment[i].enrichmentID != 0 {
+			remaining = append(remaining, s.pendingEnrichment[i])
+		}
+	}
+	s.pendingEnrichment = remaining
 }
 
 // workloadCount pairs a workload key with its sample count for sorting.
@@ -393,27 +495,25 @@ func (s *Sampler) maybeLogSummary(ctx context.Context) {
 	}
 }
 
-// resolveRemoteAppNames fetches app name mappings from remote gateway
-// nodes for samples that could not be resolved from the local cache.
-// It deduplicates RPCs by gateway node ID, groups the needed app name
-// IDs per node, and skips the local node (whose cache was already
-// consulted).
-func (s *Sampler) resolveRemoteAppNames(ctx context.Context, unresolvedIndices []int) {
+// resolveRemoteEnrichment fetches enrichment mappings from remote
+// gateway nodes for new samples that could not be resolved from the
+// local cache. It deduplicates RPCs by gateway node ID, groups the
+// needed enrichment IDs per node, and skips the local node.
+func (s *Sampler) resolveRemoteEnrichment(ctx context.Context, unresolvedIndices []int) {
 	resolverPtr := s.resolver.Load()
 	if resolverPtr == nil {
 		return
 	}
 	resolver := *resolverPtr
 
-	// Group unresolved app name IDs by gateway node, skipping node
-	// ID 0 (unknown) and the sampler's own node. Use a map of maps
-	// to deduplicate IDs within each gateway node.
+	// Group unresolved enrichment IDs by gateway node, skipping node
+	// ID 0 (unknown) and the sampler's own node.
 	//
 	// For separate-process SQL pods, GatewayNodeID in the
 	// BatchRequest is 0 (see kvpb.Header.GatewayNodeID), so no
 	// remote resolution is attempted. This is intentional: KV nodes
 	// cannot dial SQL pods, and out-of-process tenants only see
-	// their own SQL-side samples where app names resolve locally.
+	// their own SQL-side samples where enrichment resolves locally.
 	type idSet = map[uint64]struct{}
 	gatewayIDs := make(map[roachpb.NodeID]idSet)
 	for _, idx := range unresolvedIndices {
@@ -427,43 +527,100 @@ func (s *Sampler) resolveRemoteAppNames(ctx context.Context, unresolvedIndices [
 			ids = make(idSet)
 			gatewayIDs[gw] = ids
 		}
-		ids[ps.state.WorkloadInfo.AppNameID] = struct{}{}
+		ids[ps.state.WorkloadInfo.EnrichmentID] = struct{}{}
 	}
 
-	// Fetch mappings from each unique gateway node and store them
-	// in the local cache. Use a short per-node timeout so that a
-	// slow or unreachable node doesn't stall resolution of the
-	// remaining nodes.
+	// TODO(alyshan): Resolve nodes in parallel rather than
+	// sequentially to reduce total resolution latency when multiple
+	// gateway nodes are involved.
+	s.fetchRemoteEnrichment(ctx, resolver, gatewayIDs)
+
+	// Re-resolve previously-unresolved samples from the now-populated
+	// local cache.
+	for _, idx := range unresolvedIndices {
+		ps := &s.pendingSamples[idx]
+		if s.enrichmentCache != nil {
+			if data, ok := s.enrichmentCache.Lookup(ps.state.WorkloadInfo.EnrichmentID); ok {
+				ps.enrichment = data
+				ps.enriched = true
+			}
+		}
+	}
+}
+
+// resolveRemotePendingEnrichment fetches enrichment mappings for
+// pending retry samples.
+func (s *Sampler) resolveRemotePendingEnrichment(ctx context.Context, indices []int) {
+	resolverPtr := s.resolver.Load()
+	if resolverPtr == nil {
+		return
+	}
+	resolver := *resolverPtr
+
+	type idSet = map[uint64]struct{}
+	gatewayIDs := make(map[roachpb.NodeID]idSet)
+	for _, idx := range indices {
+		pe := &s.pendingEnrichment[idx]
+		gw := pe.gatewayNodeID
+		if gw == 0 || gw == s.nodeID {
+			continue
+		}
+		ids, ok := gatewayIDs[gw]
+		if !ok {
+			ids = make(idSet)
+			gatewayIDs[gw] = ids
+		}
+		ids[pe.enrichmentID] = struct{}{}
+	}
+
+	s.fetchRemoteEnrichment(ctx, resolver, gatewayIDs)
+
+	// Re-resolve from the now-populated local cache.
+	for _, idx := range indices {
+		pe := &s.pendingEnrichment[idx]
+		if s.enrichmentCache != nil {
+			if data, ok := s.enrichmentCache.Lookup(pe.enrichmentID); ok {
+				applySampleEnrichment(&pe.sample, &data)
+				s.buffer.Add(pe.sample)
+				pe.enrichmentID = 0
+			}
+		}
+	}
+}
+
+// fetchRemoteEnrichment issues RPCs to remote gateway nodes to fetch
+// enrichment mappings and stores the results in the local enrichment
+// cache. Each node gets a 250ms timeout to avoid stalling the sampler
+// tick.
+func (s *Sampler) fetchRemoteEnrichment(
+	ctx context.Context,
+	resolver EnrichmentResolverFn,
+	gatewayIDs map[roachpb.NodeID]map[uint64]struct{},
+) {
 	for nodeID, ids := range gatewayIDs {
 		idSlice := make([]uint64, 0, len(ids))
 		for id := range ids {
 			idSlice = append(idSlice, id)
 		}
 		if err := timeutil.RunWithTimeout(
-			ctx, "ash-resolve-app-names", 250*time.Millisecond,
+			ctx, "ash-resolve-enrichment", 250*time.Millisecond,
 			func(resolveCtx context.Context) error {
 				mappings, err := resolver(resolveCtx, nodeID, idSlice)
 				if err != nil {
 					return err
 				}
-				for id, name := range mappings {
-					StoreAppNameMapping(id, name)
+				if s.enrichmentCache != nil {
+					s.enrichmentCache.StoreImmediate(mappings)
 				}
+				s.metrics.EnrichmentRemoteResolutions.Inc(int64(len(mappings)))
 				return nil
 			},
 		); err != nil {
 			log.Ops.Warningf(
-				ctx, "ASH: failed to resolve app name mappings from n%d: %v",
+				ctx, "ASH: failed to resolve enrichment mappings from n%d: %v",
 				nodeID, err,
 			)
 		}
-	}
-
-	// Re-resolve the previously-unresolved samples from the
-	// now-populated local cache.
-	for _, idx := range unresolvedIndices {
-		ps := &s.pendingSamples[idx]
-		ps.appName, _ = GetAppName(ps.state.WorkloadInfo.AppNameID)
 	}
 }
 

@@ -273,7 +273,7 @@ func (f *BatchFlowCoordinator) Run(ctx context.Context) {
 			f.flowCtx.Codec().TenantID,
 			ash.WorkloadInfo{
 				WorkloadID:    f.flowCtx.EvalCtx.WorkloadID,
-				AppNameID:     f.flowCtx.EvalCtx.AppNameID,
+				EnrichmentID:  f.flowCtx.EvalCtx.AppNameID,
 				GatewayNodeID: gatewayNodeID,
 				WorkloadType:  f.flowCtx.EvalCtx.WorkloadType,
 			},

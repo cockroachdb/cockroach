@@ -205,7 +205,7 @@ func (r *Replica) maybeBackpressureBatch(ctx context.Context, ba *kvpb.BatchRequ
 			cleanup := ash.SetWorkState(
 				tenantID, ash.WorkloadInfo{
 					WorkloadID:    ba.WorkloadID,
-					AppNameID:     ba.AppNameID,
+					EnrichmentID:  ba.AppNameID,
 					GatewayNodeID: ba.GatewayNodeID,
 					WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
 				},

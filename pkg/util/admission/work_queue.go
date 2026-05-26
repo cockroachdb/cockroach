@@ -1039,7 +1039,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 	cleanup := ash.SetWorkState(
 		info.TenantID, ash.WorkloadInfo{
 			WorkloadID:    info.WorkloadID,
-			AppNameID:     info.AppNameID,
+			EnrichmentID:  info.AppNameID,
 			GatewayNodeID: info.GatewayNodeID,
 			WorkloadType:  info.WorkloadType,
 		},

@@ -33,13 +33,53 @@ var (
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
 	}
+	metaEnrichmentHits = metric.Metadata{
+		Name:        "ash.enrichment.cache.hits",
+		Help:        "Number of enrichment cache lookups that found the entry",
+		Measurement: "Lookups",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
+	metaEnrichmentMisses = metric.Metadata{
+		Name:        "ash.enrichment.cache.misses",
+		Help:        "Number of enrichment cache lookups that missed",
+		Measurement: "Lookups",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
+	metaEnrichmentRemoteResolutions = metric.Metadata{
+		Name:        "ash.enrichment.remote_resolutions",
+		Help:        "Number of enrichment IDs resolved via remote RPC",
+		Measurement: "Resolutions",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
+	metaEnrichmentPending = metric.Metadata{
+		Name:        "ash.enrichment.pending",
+		Help:        "Number of samples awaiting enrichment retry",
+		Measurement: "Samples",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_GAUGE,
+	}
+	metaEnrichmentCacheEntries = metric.Metadata{
+		Name:        "ash.enrichment.cache.entries",
+		Help:        "Number of entries in the enrichment cache",
+		Measurement: "Entries",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_GAUGE,
+	}
 )
 
 // Metrics holds the metrics for the ASH sampler subsystem.
 type Metrics struct {
-	ActiveWorkStates  *metric.FunctionalGauge
-	TakeSampleLatency metric.IHistogram
-	SamplesCollected  *metric.Counter
+	ActiveWorkStates            *metric.FunctionalGauge
+	TakeSampleLatency           metric.IHistogram
+	SamplesCollected            *metric.Counter
+	EnrichmentHits              *metric.Counter
+	EnrichmentMisses            *metric.Counter
+	EnrichmentRemoteResolutions *metric.Counter
+	EnrichmentPending           *metric.Gauge
+	EnrichmentCacheEntries      *metric.Gauge
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -59,6 +99,11 @@ func makeMetrics() Metrics {
 			Duration:     base.DefaultHistogramWindowInterval(),
 			BucketConfig: metric.IOLatencyBuckets,
 		}),
-		SamplesCollected: metric.NewCounter(metaSamplesCollected),
+		SamplesCollected:            metric.NewCounter(metaSamplesCollected),
+		EnrichmentHits:              metric.NewCounter(metaEnrichmentHits),
+		EnrichmentMisses:            metric.NewCounter(metaEnrichmentMisses),
+		EnrichmentRemoteResolutions: metric.NewCounter(metaEnrichmentRemoteResolutions),
+		EnrichmentPending:           metric.NewGauge(metaEnrichmentPending),
+		EnrichmentCacheEntries:      metric.NewGauge(metaEnrichmentCacheEntries),
 	}
 }

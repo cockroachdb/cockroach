@@ -878,37 +878,38 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	// this is the first (and only) initialization point. For
 	// shared-process secondary tenants, the sampler was already
 	// initialized by topLevelServer.PreStart in server.go, so
-	// InitGlobalSampler is a no-op. We only set the resolver when we
-	// actually created the sampler (standalone SQL pod), since the
-	// app name cache is process-global and the system tenant's resolver
-	// (set in server.go) is sufficient for shared-process tenants.
-	initialized, err := ash.InitGlobalSampler(
+	// InitGlobalSampler is a no-op.
+	if err := ash.InitGlobalEnrichmentCache(ctx, 1_000_000, s.stopper); err != nil {
+		return err
+	}
+	if _, err := ash.InitGlobalSampler(
 		ctx,
 		roachpb.NodeID(s.sqlServer.SQLInstanceID()),
 		s.ClusterSettings(),
 		s.stopper,
-	)
-	if err != nil {
+	); err != nil {
 		return err
 	}
 	if m := ash.GlobalSamplerMetrics(); m != nil {
 		s.sysRegistry.AddMetricStruct(m)
 	}
-	if initialized {
-		ash.SetGlobalAppNameResolver(func(
-			ctx context.Context, nodeID roachpb.NodeID, ids []uint64,
-		) (map[uint64]string, error) {
-			client, err := s.tenantStatus.dialNode(ctx, nodeID)
-			if err != nil {
-				return nil, err
-			}
-			resp, err := client.AppNameMappings(ctx, &serverpb.AppNameMappingsRequest{Ids: ids})
-			if err != nil {
-				return nil, err
-			}
-			return resp.Mappings, nil
-		})
-	}
+	ash.SetGlobalEnrichmentResolver(func(
+		ctx context.Context, nodeID roachpb.NodeID, ids []uint64,
+	) (map[uint64]ash.EnrichmentData, error) {
+		client, err := s.tenantStatus.dialNode(ctx, nodeID)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := client.AppNameMappings(ctx, &serverpb.AppNameMappingsRequest{Ids: ids})
+		if err != nil {
+			return nil, err
+		}
+		result := make(map[uint64]ash.EnrichmentData, len(resp.Mappings))
+		for id, appName := range resp.Mappings {
+			result[id] = ash.EnrichmentData{AppName: appName}
+		}
+		return result, nil
+	})
 
 	var apiInternalServer http.Handler
 	var drpcEnabled = false

@@ -301,7 +301,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 	cleanup := ash.SetWorkState(
 		p.extendedEvalCtx.Codec.TenantID, ash.WorkloadInfo{
 			WorkloadID:    p.extendedEvalCtx.WorkloadID,
-			AppNameID:     p.extendedEvalCtx.AppNameID,
+			EnrichmentID:  p.extendedEvalCtx.AppNameID,
 			GatewayNodeID: roachpb.NodeID(p.extendedEvalCtx.NodeID.SQLInstanceID()),
 			WorkloadType:  p.extendedEvalCtx.WorkloadType,
 		},

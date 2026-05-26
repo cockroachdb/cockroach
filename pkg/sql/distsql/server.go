@@ -390,13 +390,19 @@ func (ds *ServerImpl) setupFlow(
 		evalCtx.AppNameID = req.EvalContext.AppNameID
 		evalCtx.WorkloadType = workloadid.WorkloadType(req.EvalContext.WorkloadType)
 
-		// In DistSQL flows, we eagerly store the app name on remote nodes to reduce
-		// cache misses when the local ASH sampler resolves the app name ID.
+		// In DistSQL flows, eagerly pre-warm the enrichment cache on
+		// remote nodes to avoid cache misses during ASH sampling.
 		if req.EvalContext.AppNameID != 0 {
-			ash.StoreAppNameMapping(
-				req.EvalContext.AppNameID,
-				req.EvalContext.SessionData.ApplicationName,
-			)
+			if ec := ash.GlobalEnrichmentCache(); ec != nil {
+				ec.Record(ash.EnrichmentEntry{
+					EnrichmentID: req.EvalContext.AppNameID,
+					EnrichmentData: ash.EnrichmentData{
+						AppName:  req.EvalContext.SessionData.ApplicationName,
+						User:     req.EvalContext.SessionData.UserProto.Decode().Normalized(),
+						Database: req.EvalContext.SessionData.Database,
+					},
+				})
+			}
 		}
 
 		if ds.SQLCPUProvider != nil {

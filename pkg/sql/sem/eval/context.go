@@ -392,12 +392,15 @@ type Context struct {
 	// WorkloadID for ASH sampling.
 	WorkloadID uint64
 
-	// AppNameID is the hash of the application name, for ASH
-	// sampling. Set alongside WorkloadID in the connExecutor.
-	// Note(alyshan): This will eventually be replaced by a general
-	// enrichment_id field which will enable the ASH sampler to
-	// enrich samples with more workload context.
+	// AppNameID carries the enrichment ID through the DistSQL
+	// evaluation context. Named AppNameID for proto wire compatibility
+	// with the BatchRequest header field.
 	AppNameID uint64
+
+	// EnrichmentID is the enrichment cache key for ASH sampling.
+	// Generated per statement execution and used to look up enrichment
+	// data (app_name, user, database, session_id, txn_id, plan_hash).
+	EnrichmentID uint64
 
 	// WorkloadType distinguishes the kind of workload that WorkloadID
 	// represents (statement fingerprint, job ID, system task).

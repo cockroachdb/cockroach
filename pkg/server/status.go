@@ -3513,6 +3513,11 @@ func (s *statusServer) ListLocalActiveSessionHistory(
 			WorkloadID:    sample.WorkloadID,
 			WorkloadType:  sample.WorkloadType,
 			AppName:       sample.AppName,
+			User:          sample.User,
+			Database:      sample.Database,
+			SessionID:     sample.SessionID,
+			TxnID:         sample.TxnID,
+			PlanHash:      sample.PlanHash,
 			WorkEventType: serverpb.WorkEventType(sample.WorkEventType),
 			WorkEvent:     sample.WorkEvent,
 			GoroutineID:   sample.GoroutineID,
@@ -3529,11 +3534,10 @@ func (s *statusServer) ListLocalActiveSessionHistory(
 	}, nil
 }
 
-// AppNameMappings returns app name ID to string mappings from this
-// node's local cache for the requested IDs. This is used by ASH so
-// that nodes can resolve an app_name_id when they perform work for
-// queries that they have not recieved as a gateway node (i.e. they
-// do not have the app name mapping locally).
+// AppNameMappings returns enrichment ID to app name mappings from
+// this node's local enrichment cache for the requested IDs. This is
+// used by the ASH sampler so that nodes can resolve enrichment data
+// for work originating from a different gateway node.
 func (s *statusServer) AppNameMappings(
 	ctx context.Context, req *serverpb.AppNameMappingsRequest,
 ) (*serverpb.AppNameMappingsResponse, error) {
@@ -3543,9 +3547,17 @@ func (s *statusServer) AppNameMappings(
 		return nil, err
 	}
 
-	return &serverpb.AppNameMappingsResponse{
-		Mappings: ash.GetAppNameMappings(req.Ids),
-	}, nil
+	ec := ash.GlobalEnrichmentCache()
+	if ec == nil {
+		return &serverpb.AppNameMappingsResponse{}, nil
+	}
+	mappings := make(map[uint64]string, len(req.Ids))
+	for _, id := range req.Ids {
+		if data, ok := ec.Lookup(id); ok {
+			mappings[id] = data.AppName
+		}
+	}
+	return &serverpb.AppNameMappingsResponse{Mappings: mappings}, nil
 }
 
 // ListActiveSessionHistory returns ASH samples from all nodes in the cluster.

@@ -661,15 +661,19 @@ func (ex *connExecutor) execStmtInOpenState(
 	ctx = ih.Setup(ctx, ex, p, &stmt, os.ImplicitTxn.Get(),
 		ex.state.mu.priority, ex.state.mu.autoRetryCounter)
 
-	// Set workload ID and app name ID for ASH sampling. ih.Setup
+	// Set workload ID and enrichment ID for ASH sampling. ih.Setup
 	// already computed the statement fingerprint ID, so reuse it here.
+	// The enrichment entry is recorded later in dispatchToExecutionEngine
+	// after planning completes (so planHash is available) but before
+	// execution starts (so no WorkStates use this ID yet).
 	p.extendedEvalCtx.WorkloadID = uint64(ih.fingerprintId)
-	appNameID := ash.GetOrStoreAppNameID(p.SessionData().ApplicationName)
-	p.extendedEvalCtx.AppNameID = appNameID
+	enrichmentID := ash.NextEnrichmentID()
+	p.extendedEvalCtx.AppNameID = enrichmentID
 	p.extendedEvalCtx.WorkloadType = workloadid.WorkloadTypeStatement
+	p.extendedEvalCtx.EnrichmentID = enrichmentID
 	if p.txn != nil {
 		p.txn.SetWorkloadInfo(
-			uint64(ih.fingerprintId), appNameID, workloadid.WorkloadTypeStatement,
+			uint64(ih.fingerprintId), enrichmentID, workloadid.WorkloadTypeStatement,
 		)
 	}
 
@@ -1698,18 +1702,17 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	p.semaCtx.Placeholders.Assign(pinfo, vars.stmt.NumPlaceholders)
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 
-	// Set workload ID and app name ID for ASH sampling. ih.Setup
-	// already computed the statement fingerprint ID, so reuse it here.
+	// Set workload ID and enrichment ID for ASH sampling.
 	p.extendedEvalCtx.WorkloadID = uint64(ih.fingerprintId)
-	appNameID2 := ash.GetOrStoreAppNameID(p.SessionData().ApplicationName)
-	p.extendedEvalCtx.AppNameID = appNameID2
+	enrichmentID2 := ash.NextEnrichmentID()
+	p.extendedEvalCtx.AppNameID = enrichmentID2
 	p.extendedEvalCtx.WorkloadType = workloadid.WorkloadTypeStatement
+	p.extendedEvalCtx.EnrichmentID = enrichmentID2
 	if p.txn != nil {
 		p.txn.SetWorkloadInfo(
-			uint64(ih.fingerprintId), appNameID2, workloadid.WorkloadTypeStatement,
+			uint64(ih.fingerprintId), enrichmentID2, workloadid.WorkloadTypeStatement,
 		)
 	}
-
 	if buildutil.CrdbTestBuild {
 		// Ensure that each statement is formatted regardless of logging
 		// settings.
@@ -2625,9 +2628,9 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) (retEr
 	// the last statement's fingerprint which is misleading.
 	if !ex.implicitTxn() {
 		txnFingerprintID := ex.extraTxnState.transactionStatementsHash.Sum()
-		appNameID := ash.GetOrStoreAppNameID(ex.sessionData().ApplicationName)
+		commitEnrichmentID := ash.NextEnrichmentID()
 		ex.state.mu.txn.SetWorkloadInfo(
-			txnFingerprintID, appNameID, workloadid.WorkloadTypeCommit,
+			txnFingerprintID, commitEnrichmentID, workloadid.WorkloadTypeCommit,
 		)
 	}
 
@@ -3100,6 +3103,27 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		err = addPlanningErrorHints(ctx, err, &stmt, ex.server.cfg.Settings, planner)
 		res.SetError(err)
 		return nil
+	}
+
+	// Record the enrichment entry for ASH sampling. This happens
+	// after planning (so planHash is available) but before execution
+	// starts (so no WorkStates use this enrichment ID yet).
+	if ec := ash.GlobalEnrichmentCache(); ec != nil && planner.extendedEvalCtx.EnrichmentID != 0 {
+		var txnID uuid.UUID
+		if planner.txn != nil {
+			txnID = planner.txn.ID()
+		}
+		ec.Record(ash.EnrichmentEntry{
+			EnrichmentID: planner.extendedEvalCtx.EnrichmentID,
+			EnrichmentData: ash.EnrichmentData{
+				AppName:   planner.SessionData().ApplicationName,
+				User:      planner.SessionData().User().Normalized(),
+				Database:  planner.SessionData().Database,
+				SessionID: planner.extendedEvalCtx.SessionID,
+				TxnID:     txnID,
+				PlanHash:  planner.instrumentation.planGist.Hash(),
+			},
+		})
 	}
 
 	var cols colinfo.ResultColumns

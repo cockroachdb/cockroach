@@ -459,7 +459,7 @@ func (m *managerImpl) maybeInterceptReq(ctx context.Context, req Request) (Respo
 		if req.Batch != nil {
 			info = ash.WorkloadInfo{
 				WorkloadID:    req.Batch.WorkloadID,
-				AppNameID:     req.Batch.AppNameID,
+				EnrichmentID:  req.Batch.AppNameID,
 				GatewayNodeID: req.Batch.GatewayNodeID,
 				WorkloadType:  workloadid.WorkloadType(req.Batch.WorkloadType),
 			}
@@ -481,7 +481,7 @@ func (m *managerImpl) maybeInterceptReq(ctx context.Context, req Request) (Respo
 		if req.Batch != nil {
 			info = ash.WorkloadInfo{
 				WorkloadID:    req.Batch.WorkloadID,
-				AppNameID:     req.Batch.AppNameID,
+				EnrichmentID:  req.Batch.AppNameID,
 				GatewayNodeID: req.Batch.GatewayNodeID,
 				WorkloadType:  workloadid.WorkloadType(req.Batch.WorkloadType),
 			}

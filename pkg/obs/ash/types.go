@@ -50,12 +50,11 @@ func (w WorkEventType) String() string {
 type WorkloadInfo struct {
 	// WorkloadID identifies the workload (e.g., statement fingerprint ID).
 	WorkloadID uint64
-	// AppNameID is the hash of the application name. Set when the
-	// workload is from SQL execution.
-	// Note(alyshan): This will eventually be replaced by a general
-	// enrichment_id field which will enable the ASH sampler to
-	// enrich samples with more workload context.
-	AppNameID uint64
+	// EnrichmentID is a unique identifier for the enrichment data
+	// associated with this workload execution. The ASH sampler uses
+	// this to look up attributes like app_name, user, database,
+	// session_id, txn_id, and plan_hash from the enrichment cache.
+	EnrichmentID uint64
 	// GatewayNodeID is the node that initiated the workload.
 	GatewayNodeID roachpb.NodeID
 	// WorkloadType distinguishes the kind of workload that WorkloadID
@@ -80,9 +79,18 @@ type ASHSample struct {
 	// WorkloadType distinguishes the kind of workload (e.g., "STATEMENT",
 	// "JOB", "SYSTEM", "UNKNOWN").
 	WorkloadType string
-	// AppName is the application name string. Set when the workload is from
-	// SQL execution.
+	// AppName is the application name string.
 	AppName string
+	// User is the SQL user that initiated the workload.
+	User string
+	// Database is the current database context.
+	Database string
+	// SessionID is the cluster-unique session identifier.
+	SessionID string
+	// TxnID is the transaction UUID.
+	TxnID string
+	// PlanHash is the hash of the query plan gist.
+	PlanHash uint64
 	// WorkEventType categorizes the work by resource type (e.g., "CPU",
 	// "NETWORK", "LOCK").
 	WorkEventType WorkEventType

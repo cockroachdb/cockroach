@@ -120,7 +120,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 	if req.Batch != nil {
 		info = ash.WorkloadInfo{
 			WorkloadID:    req.Batch.WorkloadID,
-			AppNameID:     req.Batch.AppNameID,
+			EnrichmentID:  req.Batch.AppNameID,
 			GatewayNodeID: req.Batch.GatewayNodeID,
 			WorkloadType:  workloadid.WorkloadType(req.Batch.WorkloadType),
 		}
