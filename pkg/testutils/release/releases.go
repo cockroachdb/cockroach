@@ -1,0 +1,308 @@
+// Copyright 2023 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package release
+
+import (
+	_ "embed"
+	"fmt"
+	"math/rand"
+	"strings"
+
+	"github.com/cockroachdb/version"
+	"gopkg.in/yaml.v2"
+)
+
+// Series contains information about a cockroachdb release
+// series. Specifically, it includes what patch release is the latest
+// for this series, which patch releases were withdrawn, and what is
+// predecessor series.
+type Series struct {
+	Latest      string   `yaml:"latest,omitempty"`
+	Withdrawn   []string `yaml:"withdrawn,omitempty"`
+	Predecessor string   `yaml:"predecessor,omitempty"`
+}
+
+var (
+	//go:embed cockroach_releases.yaml
+	rawReleases []byte
+
+	// releaseData contains the parsed release data as contained in the
+	// cockroach_releases.yaml file embedded in the binary.
+	releaseData = func() map[string]Series {
+		releases, err := parseReleases()
+		if err != nil {
+			panic(err)
+		}
+
+		return releases
+	}()
+)
+
+func parseReleases() (map[string]Series, error) {
+	var result map[string]Series
+	err := yaml.UnmarshalStrict(rawReleases, &result)
+	if err != nil {
+		return nil, fmt.Errorf("invalid cockroach_releases.yaml: %w", err)
+	}
+
+	return result, nil
+}
+
+// WithReleaseData overwrites the release mapping while the function
+// passed runs. Only used for tests and, needless to say, it is not
+// safe for concurrent use.
+func WithReleaseData(data map[string]Series, fn func() error) error {
+	oldReleaseData := releaseData
+	releaseData = data
+	defer func() {
+		releaseData = oldReleaseData
+	}()
+
+	return fn()
+}
+
+// IsWithdrawn returns whether the given version is known to be a
+// withdrawn release. Returns an error for invalid or unknown versions.
+func IsWithdrawn(v *version.Version) (bool, error) {
+	series, ok := releaseData[VersionSeries(v)]
+	if !ok {
+		return false, fmt.Errorf("no release data for version %s", v)
+	}
+
+	for _, w := range series.Withdrawn {
+		if fmt.Sprintf("v%s", w) == v.String() {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// MajorReleasesBetween returns the number of released major versions
+// between any two versions passed, skipping unreleased series (those
+// with empty Latest). Returns an error when there is no predecessor
+// information for a release in the chain (which should only happen if
+// one of the versions passed is very old).
+func MajorReleasesBetween(v1, v2 *version.Version) (int, error) {
+	older, newer := v1, v2
+	if v1.AtLeast(*v2) {
+		older, newer = v2, v1
+	}
+
+	var count int
+	currentSeries := VersionSeries(newer)
+	olderSeries := VersionSeries(older)
+	visited := map[string]bool{}
+
+	for currentSeries != olderSeries {
+		if visited[currentSeries] {
+			return -1, fmt.Errorf("cycle in predecessor chain at series: %s", currentSeries)
+		}
+		visited[currentSeries] = true
+
+		seriesData, ok := releaseData[currentSeries]
+		if !ok {
+			return -1, fmt.Errorf("no release data for release series: %s", currentSeries)
+		}
+
+		// Only count series that have actual releases.
+		if seriesData.Latest != "" {
+			count++
+		}
+
+		currentSeries = seriesData.Predecessor
+	}
+
+	return count, nil
+}
+
+// LatestPatch returns the latest non-withdrawn patch release of
+// the series passed. For example, if the series is "23.1", this
+// will return the latest 23.1 patch release.
+func LatestPatch(seriesStr string) (string, error) {
+	series, ok := releaseData[seriesStr]
+	if !ok {
+		return "", fmt.Errorf("no release information for %q series", seriesStr)
+	}
+	if series.Latest == "" {
+		return "", fmt.Errorf("no releases available for %q series", seriesStr)
+	}
+	activeReleases := activePatchReleases(series)
+	return activeReleases[len(activeReleases)-1], nil
+}
+
+// OlderPatchReleases returns all non-withdrawn patch releases in the
+// same series as v that have a lower patch number than v. For example,
+// if v is "v24.3.12", this returns all active patches from 24.3.0 to
+// 24.3.11 (excluding any withdrawn patches). Returns an empty slice if
+// v is the oldest patch, a pre-release, or if the series has no older
+// active patches.
+func OlderPatchReleases(v *version.Version) ([]string, error) {
+	// Pre-releases don't have enumerable older patches.
+	if v.IsPrerelease() {
+		return nil, nil
+	}
+
+	seriesStr := VersionSeries(v)
+	series, ok := releaseData[seriesStr]
+	if !ok {
+		return nil, fmt.Errorf("no release data for version %s", v)
+	}
+
+	// Get all active (non-withdrawn) patches in this series.
+	activePatches := activePatchReleases(series)
+
+	// Filter to only patches older than v.
+	var olderPatches []string
+	for _, patchStr := range activePatches {
+		patchV := mustParseVersion(patchStr)
+		if patchV.Patch() < v.Patch() {
+			olderPatches = append(olderPatches, patchStr)
+		}
+	}
+
+	return olderPatches, nil
+}
+
+// LatestPredecessor returns the latest non-withdrawn predecessor of
+// the version passed. For example, if the version is "v19.2.0", this
+// will return the latest 19.1 patch release.
+func LatestPredecessor(v *version.Version) (string, error) {
+	history, err := LatestPredecessorHistory(v, 1)
+	if err != nil {
+		return "", err
+	}
+
+	return history[0], nil
+}
+
+// LatestPredecessorHistory returns the last consecutive `k` releases
+// that precede the given version in the upgrade order (as dictated by
+// cockroach_releases.yaml). E.g., if v=22.2.3 and k=2, then this
+// function will return, for example, ["21.2.7", "22.1.6"].
+func LatestPredecessorHistory(v *version.Version, k int) ([]string, error) {
+	return predecessorHistory(v, k, func(releaseSeries Series) string {
+		activeReleases := activePatchReleases(releaseSeries)
+		return activeReleases[len(activeReleases)-1]
+	})
+}
+
+// RandomPredecessor is like LatestPredecessor, but instead of
+// returning the latest patch version, it will return a random one.
+func RandomPredecessor(rng *rand.Rand, v *version.Version) (string, error) {
+	history, err := RandomPredecessorHistory(rng, v, 1)
+	if err != nil {
+		return "", err
+	}
+
+	return history[0], nil
+}
+
+// RandomPredecessorHistory is like `LatestPredecessorHistory`, but
+// instead of returning a list of the latest patch releases, it will
+// return a random non-withdrawn patch release for each release series.
+func RandomPredecessorHistory(rng *rand.Rand, v *version.Version, k int) ([]string, error) {
+	return predecessorHistory(v, k, func(releaseSeries Series) string {
+		activeReleases := activePatchReleases(releaseSeries)
+		return activeReleases[rng.Intn(len(activeReleases))]
+	})
+}
+
+// predecessorHistory computes the history of size `k` for a given
+// version (from least to most recent, using the order an actual
+// upgrade would have to follow). The `releasePicker` function can be
+// used to select which patch release is used at each step.
+func predecessorHistory(
+	v *version.Version, k int, releasePicker func(Series) string,
+) ([]string, error) {
+	history := make([]string, k)
+	currentV := v
+	for i := k - 1; i >= 0; i-- {
+		predecessor, err := predecessorSeries(currentV)
+		if err != nil {
+			return nil, err
+		}
+		history[i] = releasePicker(predecessor)
+		currentV = mustParseVersion(predecessor.Latest)
+	}
+
+	return history, nil
+}
+
+// activePatchReleases returns a list of patch releases for the given
+// release series, filtering out releases that have been withdrawn.
+func activePatchReleases(releaseSeries Series) []string {
+	isWithdrawn := func(r string) bool {
+		for _, w := range releaseSeries.Withdrawn {
+			if r == w {
+				return true
+			}
+		}
+
+		return false
+	}
+
+	latestVersion := mustParseVersion(releaseSeries.Latest)
+	var releases []string
+	if latestVersion.IsPrerelease() {
+		// If the latest version for this series is a pre-release, don't
+		// try to enumerate all releases in this series. Instead, just
+		// return the latest pre-release defined.
+		releases = append(releases, strings.TrimPrefix(latestVersion.String(), "v"))
+	} else {
+		series := latestVersion.Format("%X.%Y")
+		for patch := 0; patch <= latestVersion.Patch(); patch++ {
+			patchVersion := fmt.Sprintf("%s.%d", series, patch)
+			if !isWithdrawn(patchVersion) {
+				releases = append(releases, patchVersion)
+			}
+		}
+	}
+
+	return releases
+}
+
+// predecessorSeries retrieves the corresponding `Series` data for the
+// predecessor of the version passed, skipping unreleased series
+// (those with empty Latest). Returns an error if no released
+// predecessor is found.
+func predecessorSeries(v *version.Version) (Series, error) {
+	var empty Series
+	seriesStr := VersionSeries(v)
+	series, ok := releaseData[seriesStr]
+	if !ok {
+		return empty, fmt.Errorf("no release information for %q (%q series)", v, seriesStr)
+	}
+
+	// Walk the predecessor chain, skipping unreleased series.
+	visited := map[string]bool{seriesStr: true}
+	cur := series.Predecessor
+	for cur != "" && !visited[cur] {
+		visited[cur] = true
+		predSeries, ok := releaseData[cur]
+		if !ok {
+			return empty, fmt.Errorf("no release information for %q (predecessor of %q)", cur, v)
+		}
+		if predSeries.Latest != "" {
+			return predSeries, nil
+		}
+		cur = predSeries.Predecessor
+	}
+
+	if series.Predecessor == "" {
+		return empty, fmt.Errorf("no known predecessor for %q (%q series)", v, seriesStr)
+	}
+	return empty, fmt.Errorf("no released predecessor for %q (%q series)", v, seriesStr)
+}
+
+func mustParseVersion(str string) *version.Version {
+	v := version.MustParse("v" + str)
+	return &v
+}
+
+func VersionSeries(v *version.Version) string {
+	return v.Format("%X.%Y")
+}

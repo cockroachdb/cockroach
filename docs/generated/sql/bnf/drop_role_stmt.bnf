@@ -1,0 +1,5 @@
+drop_role_stmt ::=
+	'DROP' 'ROLE' role_spec_list
+	| 'DROP' 'USER' role_spec_list
+	| 'DROP' 'ROLE' 'IF' 'EXISTS' role_spec_list
+	| 'DROP' 'USER' 'IF' 'EXISTS' role_spec_list

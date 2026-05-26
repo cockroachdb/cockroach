@@ -1,0 +1,146 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/combocid.out --label=/mnt/data1/postgres/src/test/regress/results/combocid.out /mnt/data1/postgres/src/test/regress/expected/combocid.out /mnt/data1/postgres/src/test/regress/results/combocid.out
+--- /mnt/data1/postgres/src/test/regress/expected/combocid.out
++++ /mnt/data1/postgres/src/test/regress/results/combocid.out
+@@ -17,61 +17,35 @@
+ INSERT INTO combocidtest VALUES (1);
+ INSERT INTO combocidtest VALUES (2);
+ SELECT ctid,cmin,* FROM combocidtest;
+- ctid  | cmin | foobar 
+--------+------+--------
+- (0,1) |   10 |      1
+- (0,2) |   11 |      2
+-(2 rows)
+-
++ERROR:  column "ctid" does not exist
+ SAVEPOINT s1;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ UPDATE combocidtest SET foobar = foobar + 10;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- here we should see only updated tuples
+ SELECT ctid,cmin,* FROM combocidtest;
+- ctid  | cmin | foobar 
+--------+------+--------
+- (0,3) |   12 |     11
+- (0,4) |   12 |     12
+-(2 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK TO s1;
++ERROR:  savepoint "s1" does not exist
+ -- now we should see old tuples, but with combo CIDs starting at 0
+ SELECT ctid,cmin,* FROM combocidtest;
+- ctid  | cmin | foobar 
+--------+------+--------
+- (0,1) |    0 |      1
+- (0,2) |    1 |      2
+-(2 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ COMMIT;
+ -- combo data is not there anymore, but should still see tuples
+ SELECT ctid,cmin,* FROM combocidtest;
+- ctid  | cmin | foobar 
+--------+------+--------
+- (0,1) |    0 |      1
+- (0,2) |    1 |      2
+-(2 rows)
+-
++ERROR:  column "ctid" does not exist
+ -- Test combo CIDs with portals
+ BEGIN;
+ INSERT INTO combocidtest VALUES (333);
+ DECLARE c CURSOR FOR SELECT ctid,cmin,* FROM combocidtest;
++ERROR:  column "ctid" does not exist
+ DELETE FROM combocidtest;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH ALL FROM c;
+- ctid  | cmin | foobar 
+--------+------+--------
+- (0,1) |    1 |      1
+- (0,2) |    1 |      2
+- (0,5) |    0 |    333
+-(3 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ SELECT ctid,cmin,* FROM combocidtest;
+- ctid  | cmin | foobar 
+--------+------+--------
+- (0,1) |    1 |      1
+- (0,2) |    1 |      2
+-(2 rows)
+-
++ERROR:  column "ctid" does not exist
+ -- check behavior with locked tuples
+ BEGIN;
+ -- a few dummy ops to push up the CommandId counter
+@@ -87,59 +61,26 @@
+ INSERT INTO combocidtest SELECT 1 LIMIT 0;
+ INSERT INTO combocidtest VALUES (444);
+ SELECT ctid,cmin,* FROM combocidtest;
+- ctid  | cmin | foobar 
+--------+------+--------
+- (0,1) |    1 |      1
+- (0,2) |    1 |      2
+- (0,6) |   10 |    444
+-(3 rows)
+-
++ERROR:  column "ctid" does not exist
+ SAVEPOINT s1;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- this doesn't affect cmin
+ SELECT ctid,cmin,* FROM combocidtest FOR UPDATE;
+- ctid  | cmin | foobar 
+--------+------+--------
+- (0,1) |    1 |      1
+- (0,2) |    1 |      2
+- (0,6) |   10 |    444
+-(3 rows)
+-
+-SELECT ctid,cmin,* FROM combocidtest;
+- ctid  | cmin | foobar 
+--------+------+--------
+- (0,1) |    1 |      1
+- (0,2) |    1 |      2
+- (0,6) |   10 |    444
+-(3 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
++SELECT ctid,cmin,* FROM combocidtest;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- but this does
+ UPDATE combocidtest SET foobar = foobar + 10;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT ctid,cmin,* FROM combocidtest;
+- ctid  | cmin | foobar 
+--------+------+--------
+- (0,7) |   12 |     11
+- (0,8) |   12 |     12
+- (0,9) |   12 |    454
+-(3 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK TO s1;
++ERROR:  savepoint "s1" does not exist
+ SELECT ctid,cmin,* FROM combocidtest;
+- ctid  | cmin | foobar 
+--------+------+--------
+- (0,1) |   12 |      1
+- (0,2) |   12 |      2
+- (0,6) |    0 |    444
+-(3 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ COMMIT;
+ SELECT ctid,cmin,* FROM combocidtest;
+- ctid  | cmin | foobar 
+--------+------+--------
+- (0,1) |   12 |      1
+- (0,2) |   12 |      2
+- (0,6) |    0 |    444
+-(3 rows)
+-
++ERROR:  column "ctid" does not exist
+ -- test for bug reported in
+ -- CABRT9RC81YUf1=jsmWopcKJEro=VoeG2ou6sPwyOUTx_qteRsg@mail.gmail.com
+ CREATE TABLE IF NOT EXISTS testcase(

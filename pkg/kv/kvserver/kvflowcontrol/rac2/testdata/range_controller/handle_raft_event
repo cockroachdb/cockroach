@@ -1,0 +1,364 @@
+# Intialize a range with voters on s1,s2 and s3. The local replica and
+# leaseholder will be s1. The leaseholder is denoted by the '*' suffix.
+init
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=1
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate next=1
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate next=1
+----
+r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
+t1/s1: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+t1/s2: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+t1/s3: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+
+# There should be no tracked entries for the range.
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,1) send_queue=[1,1) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+++++
+(n2,s2):2: state=replicate closed=false inflight=[1,1) send_queue=[1,1) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,1) send_queue=[1,1) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+++++
+
+# Simulate a call to `HandleRaftEventRaftMuLocked` on s1 (leader/local
+# replica). The event will have three entries, each 1MiB in size. Following, we
+# see there are 3MiB of tokens deducted from each replica stream (both elastic
+# and regular, as regular entries deduct from the elastic stream as well).
+raft_event
+range_id=1
+  term=1 index=1 pri=NormalPri size=1MiB
+  term=1 index=2 pri=NormalPri size=1MiB
+  term=1 index=3 pri=NormalPri size=1MiB
+----
+t1/s1: eval reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+       send reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+t1/s2: eval reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+       send reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+t1/s3: eval reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+       send reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+
+# The tracker should be tracking the three entries at indices 1..3, for each
+# replica stream (1,2,3).
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,4) (3.0 MiB) send_queue=[4,4) precise_q_size=+0 B
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+  term=1 index=3  tokens=1048576
+++++
+(n2,s2):2: state=replicate closed=false inflight=[1,4) (3.0 MiB) send_queue=[4,4) precise_q_size=+0 B
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+  term=1 index=3  tokens=1048576
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,4) (3.0 MiB) send_queue=[4,4) precise_q_size=+0 B
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+  term=1 index=3  tokens=1048576
+++++
+
+# Simulate the admitted index advancing to 3 for the same leader term (1) on a
+# quorum of replicas. This should result in all of the tracked tokens (3MiB)
+# being returned for s1,s2 and their trackers emptied.
+admit
+range_id=1
+  store_id=1 term=1 to_index=3 pri=NormalPri
+  store_id=2 term=1 to_index=3 pri=NormalPri
+----
+t1/s1: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+t1/s2: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+t1/s3: eval reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+       send reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+
+# Send an empty event so that replicaSendStreams are aware of the update to
+# match.
+raft_event
+range_id=1
+----
+t1/s1: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+t1/s2: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+t1/s3: eval reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+       send reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[4,4) send_queue=[4,4) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+++++
+(n2,s2):2: state=replicate closed=false inflight=[4,4) send_queue=[4,4) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,4) (3.0 MiB) send_queue=[4,4) precise_q_size=+0 B
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+  term=1 index=3  tokens=1048576
+++++
+
+# Change the tracker state of s3 to be StateProbe, this should trigger token
+# return for s3 and untracking all entries and closing the stream after a 1s
+# delay.
+set_replicas
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=4
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=4 match=3
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate next=4 match=3
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateProbe next=4
+----
+r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
+
+# Tick the clock by less than the probe to close delay, the stream should still
+# be open in state probeRecentlyNoSendQ but all deducted tokens should be
+# returned.
+tick duration=200ms
+----
+now=200ms
+
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[4,4) send_queue=[4,4) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+++++
+(n2,s2):2: state=replicate closed=false inflight=[4,4) send_queue=[4,4) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+++++
+(n3,s3):3: state=probeRecentlyNoSendQ closed=false inflight=[1,4) (3.0 MiB) send_queue=[4,4) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+++++
+
+# Tick the clock by the remaining probe to close delay, the stream should now
+# be closed and all tokens returned.
+tick duration=200ms
+----
+now=400ms
+
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[4,4) send_queue=[4,4) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+++++
+(n2,s2):2: state=replicate closed=false inflight=[4,4) send_queue=[4,4) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+++++
+(n3,s3):3: closed
+++++
+
+# Next, start a WaitForEval operation. We will update the state of s3 to be
+# Replicate, which should trigger the WaitForEval to refresh. First, deduct all
+# the tokens from s2 so that the operation is forced to wait.
+raft_event
+range_id=1
+  term=1 index=4 pri=NormalPri size=16MiB
+----
+t1/s1: eval reg=+0 B/+16 MiB ela=-8.0 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-8.0 MiB/+8.0 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=-8.0 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-8.0 MiB/+8.0 MiB
+t1/s3: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+
+wait_for_eval name=a range_id=1 pri=LowPri
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=low-pri  done=false waited=false err=<nil>
+
+admit
+range_id=1
+  store_id=1 term=1 to_index=4 pri=NormalPri
+----
+t1/s1: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=-8.0 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-8.0 MiB/+8.0 MiB
+t1/s3: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+
+# The operation should still be waiting, as it requires all replicas which are
+# in state replicate to have tokens available, s1 does but s2 doesn't.
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=low-pri  done=false waited=false err=<nil>
+
+# Send an empty event so that replicaSendStreams are aware of the update to
+# match.
+raft_event
+range_id=1
+----
+t1/s1: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=-8.0 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-8.0 MiB/+8.0 MiB
+t1/s3: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[5,5) send_queue=[5,5) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+++++
+(n2,s2):2: state=replicate closed=false inflight=[4,5) (16 MiB) send_queue=[5,5) precise_q_size=+0 B
+eval deducted: reg=+16 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=4  tokens=16777216
+++++
+(n3,s3):3: closed
+++++
+
+# Change the state of s3 to replicate and s2 to StateSnapshot, this should
+# trigger the operation to refresh, ignore s2 now that it is in StateProbe and
+# check s3 for available tokens as it is now in StateReplicate.
+set_replicas
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=5
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=5 match=4
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateSnapshot next=4
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate next=5 match=4
+----
+r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
+
+raft_event
+range_id=1
+  term=1 index=5 pri=NormalPri size=1MiB
+  term=1 index=6 pri=NormalPri size=1MiB
+  term=1 index=7 pri=NormalPri size=1MiB
+----
+t1/s1: eval reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+       send reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+t1/s2: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+t1/s3: eval reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+       send reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+
+# The operation should now be done and have waited for s1 and s3.
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=low-pri  done=true  waited=true  err=<nil>
+
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[5,8) (3.0 MiB) send_queue=[8,8) precise_q_size=+0 B
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=5  tokens=1048576
+  term=1 index=6  tokens=1048576
+  term=1 index=7  tokens=1048576
+++++
+(n2,s2):2: closed
+++++
+(n3,s3):3: state=replicate closed=false inflight=[5,8) (3.0 MiB) send_queue=[8,8) precise_q_size=+0 B
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=5  tokens=1048576
+  term=1 index=6  tokens=1048576
+  term=1 index=7  tokens=1048576
+++++
+
+# Schedule replica 2 for scheduler event. The schedule-controller-event-count becomes 1.
+internal_schedule_replica range_id=1 replica_id=2
+----
+(n1,s1):1: state=replicate closed=false inflight=[5,8) (3.0 MiB) send_queue=[8,8) precise_q_size=+0 B
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=5  tokens=1048576
+  term=1 index=6  tokens=1048576
+  term=1 index=7  tokens=1048576
+++++
+(n2,s2):2: closed
+++++
+(n3,s3):3: state=replicate closed=false inflight=[5,8) (3.0 MiB) send_queue=[8,8) precise_q_size=+0 B
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=5  tokens=1048576
+  term=1 index=6  tokens=1048576
+  term=1 index=7  tokens=1048576
+++++
+schedule-controller-event-count: 1
+scheduled-replicas: 2
+
+# Schedule replica 3 for scheduler event. The schedule-controller-event-count
+# stays 1 since we have already told the scheduler. Both replicas are being
+# tracked in scheduled-replicas.
+internal_schedule_replica range_id=1 replica_id=3
+----
+(n1,s1):1: state=replicate closed=false inflight=[5,8) (3.0 MiB) send_queue=[8,8) precise_q_size=+0 B
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=5  tokens=1048576
+  term=1 index=6  tokens=1048576
+  term=1 index=7  tokens=1048576
+++++
+(n2,s2):2: closed
+++++
+(n3,s3):3: state=replicate closed=false inflight=[5,8) (3.0 MiB) send_queue=[8,8) precise_q_size=+0 B
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=5  tokens=1048576
+  term=1 index=6  tokens=1048576
+  term=1 index=7  tokens=1048576
+++++
+schedule-controller-event-count: 1
+scheduled-replicas: 2 3
+
+# Handle the scheduler event. There are no replicas remaining in
+# scheduled-replicas.
+handle_scheduler_event range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[5,8) (3.0 MiB) send_queue=[8,8) precise_q_size=+0 B
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=5  tokens=1048576
+  term=1 index=6  tokens=1048576
+  term=1 index=7  tokens=1048576
+++++
+(n2,s2):2: closed
+++++
+(n3,s3):3: state=replicate closed=false inflight=[5,8) (3.0 MiB) send_queue=[8,8) precise_q_size=+0 B
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=5  tokens=1048576
+  term=1 index=6  tokens=1048576
+  term=1 index=7  tokens=1048576
+++++
+schedule-controller-event-count: 1

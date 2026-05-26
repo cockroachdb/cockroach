@@ -1,0 +1,11 @@
+# Verify there are no duplicate values in the table.
+query I
+SELECT count(k) - count(DISTINCT k) from T;
+----
+0
+
+# Verify there are no gaps in the table.
+query I
+SELECT max(k) - count(k) from T;
+----
+0

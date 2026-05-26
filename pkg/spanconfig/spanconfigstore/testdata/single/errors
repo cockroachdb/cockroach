@@ -1,0 +1,21 @@
+# Ensure we get an error if updates are over invalid spans.
+
+apply
+set [c,a):A
+----
+err: invalid span
+
+apply
+set [c,c):A
+----
+err: invalid span
+
+apply
+delete [c,a)
+----
+err: invalid span
+
+apply
+delete [c,c)
+----
+err: invalid span

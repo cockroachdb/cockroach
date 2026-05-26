@@ -1,0 +1,1713 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package rewrite
+
+import (
+	"go/constant"
+	"strconv"
+
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	plpgsqlparser "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/walkutil"
+	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
+)
+
+// TableDescs mutates tables to match the ID and privilege specified
+// in descriptorRewrites, as well as adjusting cross-table references to use the
+// new IDs. overrideDB can be specified to set database names in views.
+//
+// If any triggers or policies were removed during processing, this function
+// returns a map of type back-references that need to be cleaned up as a result.
+func TableDescs(
+	tables []*tabledesc.Mutable, descriptorRewrites jobspb.DescRewriteMap, overrideDB string,
+) (typeBackrefsToRemove map[descpb.ID]map[descpb.ID]struct{}, err error) {
+	// relationBackrefRemovalCandidates tracks relations whose back-references may need
+	// to be cleaned up due to dropped triggers or policies. It maps each affected relation ID
+	// to a set of descriptor IDs (all rewritten IDs) that should be considered for removal.
+	relationBackrefRemovalCandidates := make(map[descpb.ID]map[descpb.ID]struct{})
+
+	// typeBackrefsToRemove tracks back-references in types that should be removed
+	// because of trigger or policy related cleanup. This map is returned to the caller for
+	// handling in a later pass.
+	typeBackrefsToRemove = make(map[descpb.ID]map[descpb.ID]struct{})
+
+	for _, table := range tables {
+		tableRewrite, ok := descriptorRewrites[table.ID]
+		if !ok {
+			return nil, errors.Errorf("missing table rewrite for table %d", table.ID)
+		}
+		// Reset the version and modification time on this new descriptor.
+		table.Version = 1
+		table.ModificationTime = hlc.Timestamp{}
+
+		if table.IsView() && overrideDB != "" {
+			// restore checks that all dependencies are also being restored, but if
+			// the restore is overriding the destination database, qualifiers in the
+			// view query string may be wrong. Since the destination override is
+			// applied to everything being restored, anything the view query
+			// references will be in the override DB post-restore, so all database
+			// qualifiers in the view query should be replaced with overrideDB.
+			if err := rewriteViewQueryDBNames(table, overrideDB); err != nil {
+				return nil, err
+			}
+		}
+		if err := rewriteSchemaChangerState(table, descriptorRewrites); err != nil {
+			return nil, err
+		}
+
+		table.ID = tableRewrite.ID
+		table.UnexposedParentSchemaID = tableRewrite.ParentSchemaID
+		table.ParentID = tableRewrite.ParentID
+
+		// Rewrite CHECK constraints before function IDs in expressions are
+		// rewritten. Check constraint mutations are also dropped if any function
+		// referenced are missing.
+		if err := dropCheckConstraintMissingDeps(table, descriptorRewrites); err != nil {
+			return nil, err
+		}
+
+		// Drop column expressions if referenced UDFs not found.
+		if err := dropColumnExpressionsMissingDeps(table, descriptorRewrites); err != nil {
+			return nil, err
+		}
+
+		// Drop policies if referenced UDFs, types, or relations not found.
+		removedPolicyRelationForwardRefs, removedPolicyTypeForwardRefs := dropPolicyMissingDeps(table, descriptorRewrites)
+
+		// Drop triggers if referenced tables, types, or routines not found.
+		removedRelationForwardRefs, removedTypeForwardRefs := dropTriggerMissingDeps(
+			table, descriptorRewrites)
+
+		// Merge policy forward refs with trigger forward refs for unified cleanup.
+		// Use DescriptorIDSet to deduplicate in case the same IDs are referenced by both triggers and policies.
+		relationForwardRefsSet := catalog.MakeDescriptorIDSet(removedRelationForwardRefs...)
+		relationForwardRefsSet = relationForwardRefsSet.Union(catalog.MakeDescriptorIDSet(removedPolicyRelationForwardRefs...))
+		removedRelationForwardRefs = relationForwardRefsSet.Ordered()
+
+		typeForwardRefsSet := catalog.MakeDescriptorIDSet(removedTypeForwardRefs...)
+		typeForwardRefsSet = typeForwardRefsSet.Union(catalog.MakeDescriptorIDSet(removedPolicyTypeForwardRefs...))
+		removedTypeForwardRefs = typeForwardRefsSet.Ordered()
+
+		// Remap type IDs and sequence IDs in all serialized expressions within the
+		// TableDescriptor.
+		// TODO (rohany): This needs tests once partial indexes are ready.
+		if err := tabledesc.ForEachExprStringInTableDesc(table,
+			func(expr *string, typ catalog.DescExprType) error {
+				switch typ {
+				case catalog.SQLExpr:
+					newExpr, err := rewriteTypesInExpr((catpb.Expression)(*expr), descriptorRewrites)
+					if err != nil {
+						return err
+					}
+					*expr = string(newExpr)
+
+					newExpr, err = rewriteSequencesInExpr((catpb.Expression)(*expr), descriptorRewrites)
+					if err != nil {
+						return err
+					}
+					*expr = string(newExpr)
+
+					newExpr, err = rewriteFunctionsInExpr((catpb.Expression)(*expr), descriptorRewrites)
+					if err != nil {
+						return err
+					}
+					*expr = string(newExpr)
+				case catalog.SQLStmt, catalog.PLpgSQLStmt:
+					lang := catpb.Function_SQL
+					if typ == catalog.PLpgSQLStmt {
+						lang = catpb.Function_PLPGSQL
+					}
+					newExpr, err := rewriteRoutineBody(descriptorRewrites, (catpb.RoutineBody)(*expr), overrideDB, lang)
+					if err != nil {
+						return err
+					}
+					*expr = string(newExpr)
+				default:
+					return errors.AssertionFailedf("unexpected expression type")
+				}
+				return nil
+			},
+		); err != nil {
+			return nil, err
+		}
+
+		// Walk view query and remap sequence IDs.
+		if table.IsView() {
+			viewQuery, err := rewriteSequencesInView(table.ViewQuery, descriptorRewrites)
+			if err != nil {
+				return nil, err
+			}
+			viewQuery, err = rewriteTypesInView(viewQuery, descriptorRewrites)
+			if err != nil {
+				return nil, err
+			}
+			table.ViewQuery = viewQuery
+		}
+
+		// Rewrite outbound FKs in both `OutboundFKs` and `Mutations` slice.
+		origFKs := table.OutboundFKs
+		table.OutboundFKs = nil
+		for i := range origFKs {
+			fk := &origFKs[i]
+			to := fk.ReferencedTableID
+			if indexRewrite, ok := descriptorRewrites[to]; ok {
+				fk.ReferencedTableID = indexRewrite.ID
+				fk.OriginTableID = tableRewrite.ID
+			} else {
+				// If indexRewrite doesn't exist, the user has specified
+				// restoreOptSkipMissingFKs. Error checking in the case the user hasn't has
+				// already been done in allocateDescriptorRewrites.
+				continue
+			}
+
+			// TODO(dt): if there is an existing (i.e. non-restoring) table with
+			// a db and name matching the one the FK pointed to at backup, should
+			// we update the FK to point to it?
+			table.OutboundFKs = append(table.OutboundFKs, *fk)
+		}
+
+		// If the table has an RBRUsingConstraint, check that the referenced FK
+		// constraint still exists after dropping FKs with missing referenced tables.
+		if table.RBRUsingConstraint != 0 {
+			found := false
+			for i := range table.OutboundFKs {
+				if table.OutboundFKs[i].ConstraintID == table.RBRUsingConstraint {
+					found = true
+					break
+				}
+			}
+			if !found {
+				table.RBRUsingConstraint = 0
+			}
+		}
+
+		origMutations := table.Mutations
+		table.Mutations = table.Mutations[:0]
+		for idx := range origMutations {
+			if c := origMutations[idx].GetConstraint(); c != nil &&
+				c.ConstraintType == descpb.ConstraintToUpdate_FOREIGN_KEY {
+				fk := &c.ForeignKey
+				if rewriteOfReferencedTable, ok := descriptorRewrites[fk.ReferencedTableID]; ok {
+					fk.ReferencedTableID = rewriteOfReferencedTable.ID
+					fk.OriginTableID = tableRewrite.ID
+				} else {
+					// The referenced table is not being restored. If the user
+					// specified skip_missing_foreign_keys, drop this mutation.
+					// Error checking for the case where the user did not specify
+					// the option has already been done in allocateDescriptorRewrites.
+					continue
+				}
+			}
+			table.Mutations = append(table.Mutations, origMutations[idx])
+		}
+		// Clean up MutationJobs entries for mutation IDs that no longer
+		// have any corresponding mutations (e.g. because we dropped FK
+		// mutations above).
+		if len(table.Mutations) < len(origMutations) {
+			remainingMutIDs := make(map[descpb.MutationID]struct{})
+			for i := range table.Mutations {
+				remainingMutIDs[table.Mutations[i].MutationID] = struct{}{}
+			}
+			origMutJobs := table.MutationJobs
+			table.MutationJobs = table.MutationJobs[:0]
+			for i := range origMutJobs {
+				if _, ok := remainingMutIDs[origMutJobs[i].MutationID]; ok {
+					table.MutationJobs = append(table.MutationJobs, origMutJobs[i])
+				}
+			}
+		}
+
+		origInboundFks := table.InboundFKs
+		table.InboundFKs = nil
+		for i := range origInboundFks {
+			ref := &origInboundFks[i]
+			if refRewrite, ok := descriptorRewrites[ref.OriginTableID]; ok {
+				ref.ReferencedTableID = tableRewrite.ID
+				ref.OriginTableID = refRewrite.ID
+				table.InboundFKs = append(table.InboundFKs, *ref)
+			}
+		}
+
+		for i, dest := range table.DependsOn {
+			if depRewrite, ok := descriptorRewrites[dest]; ok {
+				table.DependsOn[i] = depRewrite.ID
+			} else {
+				// Views with missing dependencies should have been filtered out
+				// or have caused an error in maybeFilterMissingViews().
+				return nil, errors.AssertionFailedf(
+					"cannot restore %q because referenced table %d was not found",
+					table.Name, dest)
+			}
+		}
+		for i, dest := range table.DependsOnTypes {
+			if depRewrite, ok := descriptorRewrites[dest]; ok {
+				table.DependsOnTypes[i] = depRewrite.ID
+			} else {
+				// Views with missing dependencies should have been filtered out
+				// or have caused an error in maybeFilterMissingViews().
+				return nil, errors.AssertionFailedf(
+					"cannot restore %q because referenced type %d was not found",
+					table.Name, dest)
+			}
+		}
+		for i, dest := range table.DependsOnFunctions {
+			if depRewrite, ok := descriptorRewrites[dest]; ok {
+				table.DependsOnFunctions[i] = depRewrite.ID
+			} else {
+				// If skipMissingUDFs is set, views with missing function dependencies
+				// should have been filtered out in maybeFilterMissingViews.
+				return nil, errors.AssertionFailedf(
+					"cannot restore %q because referenced function %d was not found",
+					table.Name, dest)
+			}
+		}
+		origRefs := table.DependedOnBy
+		table.DependedOnBy = nil
+		for _, ref := range origRefs {
+			if refRewrite, ok := descriptorRewrites[ref.ID]; ok {
+				ref.ID = refRewrite.ID
+				table.DependedOnBy = append(table.DependedOnBy, ref)
+			}
+		}
+
+		// Rewrite unique_without_index in both `UniqueWithoutIndexConstraints`
+		// and `Mutations` slice.
+		origUniqueWithoutIndexConstraints := table.UniqueWithoutIndexConstraints
+		table.UniqueWithoutIndexConstraints = nil
+		for _, unique := range origUniqueWithoutIndexConstraints {
+			if rewrite, ok := descriptorRewrites[unique.TableID]; ok {
+				unique.TableID = rewrite.ID
+				table.UniqueWithoutIndexConstraints = append(table.UniqueWithoutIndexConstraints, unique)
+			} else {
+				// A table's UniqueWithoutIndexConstraint.TableID references itself, and
+				// we should always find a rewrite for the table being restored.
+				return nil, errors.AssertionFailedf("cannot restore %q because referenced table ID in "+
+					"UniqueWithoutIndexConstraint %d was not found", table.Name, unique.TableID)
+			}
+		}
+		for idx := range table.Mutations {
+			if c := table.Mutations[idx].GetConstraint(); c != nil &&
+				c.ConstraintType == descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX {
+				uwi := &c.UniqueWithoutIndexConstraint
+				if rewrite, ok := descriptorRewrites[uwi.TableID]; ok {
+					uwi.TableID = rewrite.ID
+				} else {
+					return nil, errors.AssertionFailedf("cannot restore %q because referenced table ID in "+
+						"UniqueWithoutIndexConstraint %d was not found", table.Name, uwi.TableID)
+				}
+			}
+		}
+
+		if table.IsSequence() && table.SequenceOpts.HasOwner() {
+			if ownerRewrite, ok := descriptorRewrites[table.SequenceOpts.SequenceOwner.OwnerTableID]; ok {
+				table.SequenceOpts.SequenceOwner.OwnerTableID = ownerRewrite.ID
+			} else {
+				// The sequence's owner table is not being restored, thus we simply
+				// remove the ownership dependency. To get here, the user must have
+				// specified 'skip_missing_sequence_owners', otherwise we would have
+				// errored out in allocateDescriptorRewrites.
+				table.SequenceOpts.SequenceOwner = descpb.TableDescriptor_SequenceOpts_SequenceOwner{}
+			}
+		}
+
+		// rewriteCol is a closure that performs the ID rewrite logic on a column.
+		rewriteCol := func(col *descpb.ColumnDescriptor) error {
+			// Rewrite the types.T's IDs present in the column.
+			RewriteIDsInTypesT(col.Type, descriptorRewrites)
+			var newUsedSeqRefs []descpb.ID
+			for _, seqID := range col.UsesSequenceIds {
+				if rewrite, ok := descriptorRewrites[seqID]; ok {
+					newUsedSeqRefs = append(newUsedSeqRefs, rewrite.ID)
+				} else {
+					// The referenced sequence isn't being restored.
+					// Strip the DEFAULT expression and sequence references.
+					// To get here, the user must have specified 'skip_missing_sequences' --
+					// otherwise, would have errored out in allocateDescriptorRewrites.
+					newUsedSeqRefs = []descpb.ID{}
+					col.DefaultExpr = nil
+					break
+				}
+			}
+			col.UsesSequenceIds = newUsedSeqRefs
+
+			var newOwnedSeqRefs []descpb.ID
+			for _, seqID := range col.OwnsSequenceIds {
+				// We only add the sequence ownership dependency if the owned sequence
+				// is being restored.
+				// If the owned sequence is not being restored, the user must have
+				// specified 'skip_missing_sequence_owners' to get here, otherwise
+				// we would have errored out in allocateDescriptorRewrites.
+				if rewrite, ok := descriptorRewrites[seqID]; ok {
+					newOwnedSeqRefs = append(newOwnedSeqRefs, rewrite.ID)
+				}
+			}
+			col.OwnsSequenceIds = newOwnedSeqRefs
+
+			for i, fnID := range col.UsesFunctionIds {
+				// We have dropped expressions missing UDF references. so it's safe to
+				// just rewrite ids.
+				col.UsesFunctionIds[i] = descriptorRewrites[fnID].ID
+			}
+
+			return nil
+		}
+
+		// Rewrite sequence and type references in column descriptors.
+		for idx := range table.Columns {
+			if err := rewriteCol(&table.Columns[idx]); err != nil {
+				return nil, err
+			}
+		}
+		for idx := range table.Mutations {
+			if col := table.Mutations[idx].GetColumn(); col != nil {
+				if err := rewriteCol(col); err != nil {
+					return nil, err
+				}
+			}
+		}
+
+		for idx := range table.Triggers {
+			trigger := &table.Triggers[idx]
+
+			// Rewrite trigger function reference.
+			if triggerFnRewrite, ok := descriptorRewrites[trigger.FuncID]; ok {
+				trigger.FuncID = triggerFnRewrite.ID
+			} else {
+				return nil, errors.AssertionFailedf(
+					"cannot restore trigger %s on table %q because referenced function %d was not found",
+					trigger.Name, table.Name, trigger.FuncID,
+				)
+			}
+
+			// Rewrite forward-references.
+			rewriteIDs := func(ids []descpb.ID, refName string) (newIDs []descpb.ID, err error) {
+				newIDs = make([]descpb.ID, len(ids))
+				for i, id := range ids {
+					if depRewrite, ok := descriptorRewrites[id]; ok {
+						newIDs[i] = depRewrite.ID
+					} else {
+						return nil, errors.AssertionFailedf(
+							"cannot restore trigger %s on table %q because referenced %s %d was not found",
+							trigger.Name, table.Name, refName, id,
+						)
+					}
+				}
+				return newIDs, nil
+			}
+			newDependsOn, err := rewriteIDs(trigger.DependsOn, "relation")
+			if err != nil {
+				return nil, err
+			}
+			newDependsOnTypes, err := rewriteIDs(trigger.DependsOnTypes, "type")
+			if err != nil {
+				return nil, err
+			}
+			newDependsOnRoutines, err := rewriteIDs(trigger.DependsOnRoutines, "routine")
+			if err != nil {
+				return nil, err
+			}
+			trigger.DependsOn = newDependsOn
+			trigger.DependsOnTypes = newDependsOnTypes
+			trigger.DependsOnRoutines = newDependsOnRoutines
+		}
+
+		// Rewrite policy function, type, and relation references.
+		if err := rewritePolicyDependencies(table, descriptorRewrites); err != nil {
+			return nil, err
+		}
+
+		// Now that all IDs have been rewritten, we need to see if any type backrefs
+		// should be removed. We remove a type backref if all forward refs on the
+		// table no longer exist.
+		if len(removedTypeForwardRefs) > 0 {
+			for _, typID := range removedTypeForwardRefs {
+				// Check if there are any forward refs remaining.
+				foundForwardRef := false
+				for _, dependsOnID := range table.DependsOnTypes {
+					if typID == dependsOnID {
+						foundForwardRef = true
+						break
+					}
+				}
+				if !foundForwardRef {
+					for i := range table.Triggers {
+						for _, dependsOnID := range table.Triggers[i].DependsOnTypes {
+							if typID == dependsOnID {
+								foundForwardRef = true
+								break
+							}
+						}
+						if foundForwardRef {
+							break
+						}
+					}
+				}
+				if !foundForwardRef {
+					for i := range table.Policies {
+						for _, dependsOnID := range table.Policies[i].DependsOnTypes {
+							if typID == dependsOnID {
+								foundForwardRef = true
+								break
+							}
+						}
+						if foundForwardRef {
+							break
+						}
+					}
+				}
+				if !foundForwardRef {
+					if typeBackrefsToRemove[typID] == nil {
+						typeBackrefsToRemove[typID] = make(map[descpb.ID]struct{})
+					}
+					typeBackrefsToRemove[typID][table.ID] = struct{}{}
+				}
+			}
+		}
+		// Keep track of the backref removal candidates. These are taken from the
+		// forward refs of the triggers and policies that were removed.
+		if len(removedRelationForwardRefs) > 0 {
+			for _, backrefID := range removedRelationForwardRefs {
+				if relationBackrefRemovalCandidates[backrefID] == nil {
+					relationBackrefRemovalCandidates[backrefID] = make(map[descpb.ID]struct{})
+				}
+				relationBackrefRemovalCandidates[backrefID][table.ID] = struct{}{}
+			}
+		}
+	}
+
+	// Do a second pass over the tables to clean up relation backrefs that may no
+	// longer be valid after trigger or policy removal. relationBackrefRemovalCandidates
+	// contains descriptors whose forward references were removed due to dropped
+	// triggers or policies, keyed by the relation ID they originally pointed to.
+	//
+	// For each affected relation, we update its DependedOnBy list, removing
+	// backrefs that are no longer valid.
+	//
+	// Note: Triggers can only exist on tables. When a trigger is removed, its
+	// backreference points back to the table it was defined on. As a result, if a
+	// table or view has dependencies that exist solely due to triggers, those
+	// backrefs can be safely removed. There are no direct table-to-table
+	// dependencies outside of triggers. Table-to-view dependencies do exist
+	// (created when a view is defined), but those are represented as forward
+	// references from the view, which cannot have triggers and thus are not
+	// included in relationBackrefRemovalCandidates.
+	if len(relationBackrefRemovalCandidates) > 0 {
+		// Build a lookup map from rewritten table ID to table descriptor, so we
+		// can check whether a trigger still exists on a referencing table.
+		tablesByID := make(map[descpb.ID]*tabledesc.Mutable, len(tables))
+		for _, t := range tables {
+			tablesByID[t.ID] = t
+		}
+
+		for _, table := range tables {
+			if refsToRemove, ok := relationBackrefRemovalCandidates[table.ID]; ok {
+				newDependedOnBy := table.DependedOnBy[:0]
+				for _, ref := range table.DependedOnBy {
+					if _, remove := refsToRemove[ref.ID]; !remove {
+						newDependedOnBy = append(newDependedOnBy, ref)
+					} else if ref.TriggerID != 0 {
+						// This backref is for a specific trigger. Only remove
+						// it if that trigger no longer exists on the
+						// referencing table (i.e., it was dropped due to
+						// missing dependencies).
+						if refTable, ok := tablesByID[ref.ID]; ok {
+							triggerStillExists := false
+							for i := range refTable.Triggers {
+								if refTable.Triggers[i].ID == ref.TriggerID {
+									triggerStillExists = true
+									break
+								}
+							}
+							if triggerStillExists {
+								newDependedOnBy = append(newDependedOnBy, ref)
+							}
+						}
+						// If the referencing table is not in the restore set,
+						// the backref is stale and can be safely dropped.
+					} else {
+						// Sequences are a special case: we remove only the backref created
+						// by the trigger or policy. This is represented as a
+						// TableDescriptor_Reference with just ID and ByID=true, and
+						// optionally a TriggerID (for trigger-based references). Other
+						// backrefs, such as those created by column usage, are preserved.
+						if table.IsSequence() {
+							seqRefUsedInTriggerOrPolicy := descpb.TableDescriptor_Reference{
+								ID:        ref.ID,
+								ByID:      true,
+								TriggerID: ref.TriggerID,
+							}
+							if !seqRefUsedInTriggerOrPolicy.Equal(ref) {
+								newDependedOnBy = append(newDependedOnBy, ref)
+							}
+						}
+					}
+				}
+				table.DependedOnBy = newDependedOnBy
+			}
+		}
+	}
+
+	return typeBackrefsToRemove, nil
+}
+
+func makeDBNameReplaceFunc(newDB string) func(ctx *tree.FmtCtx, tn *tree.TableName) {
+	return func(ctx *tree.FmtCtx, tn *tree.TableName) {
+		// empty catalog e.g. ``"".information_schema.tables` should stay empty.
+		if tn.CatalogName != "" {
+			tn.CatalogName = tree.Name(newDB)
+		}
+		ctx.WithReformatTableNames(nil, func() {
+			ctx.FormatNode(tn)
+		})
+	}
+}
+
+// rewriteViewQueryDBNames rewrites the passed table's ViewQuery replacing all
+// non-empty db qualifiers with `newDB`.
+func rewriteViewQueryDBNames(table *tabledesc.Mutable, newDB string) error {
+	stmt, err := parser.ParseOne(string(table.ViewQuery))
+	if err != nil {
+		return pgerror.Wrapf(err, pgcode.Syntax,
+			"failed to parse underlying query from view %q", table.Name)
+	}
+	// Re-format to change all DB names to `newDB`.
+	f := tree.NewFmtCtx(
+		tree.FmtParsable,
+		tree.FmtReformatTableNames(makeDBNameReplaceFunc(newDB)),
+	)
+	f.FormatNode(stmt.AST)
+	table.ViewQuery = descpb.Statement(f.CloseAndGetString())
+	return nil
+}
+
+func rewriteFunctionBodyDBNames(
+	fnBody catpb.RoutineBody, newDB string, lang catpb.Function_Language,
+) (catpb.RoutineBody, error) {
+	replaceFunc := makeDBNameReplaceFunc(newDB)
+	switch lang {
+	case catpb.Function_SQL:
+		fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+		stmts, err := parser.Parse(string(fnBody))
+		if err != nil {
+			return "", err
+		}
+		for i, stmt := range stmts {
+			if i > 0 {
+				fmtCtx.WriteString("\n")
+			}
+			f := tree.NewFmtCtx(
+				tree.FmtParsable,
+				tree.FmtReformatTableNames(replaceFunc),
+			)
+			f.FormatNode(stmt.AST)
+			fmtCtx.WriteString(f.CloseAndGetString())
+			fmtCtx.WriteString(";")
+		}
+		return catpb.RoutineBody(fmtCtx.CloseAndGetString()), nil
+
+	case catpb.Function_PLPGSQL:
+		stmt, err := plpgsqlparser.Parse(string(fnBody))
+		if err != nil {
+			return "", err
+		}
+		fmtCtx := tree.NewFmtCtx(
+			tree.FmtParsable,
+			tree.FmtReformatTableNames(replaceFunc),
+		)
+		fmtCtx.FormatNode(stmt.AST)
+		return catpb.RoutineBody(fmtCtx.CloseAndGetString()), nil
+
+	default:
+		return "", errors.AssertionFailedf("unexpected function language %s", lang)
+	}
+}
+
+// rewriteTypesInExpr rewrites all explicit ID type references in the input
+// expression string according to rewrites.
+func rewriteTypesInExpr(
+	expr catpb.Expression, rewrites jobspb.DescRewriteMap,
+) (catpb.Expression, error) {
+	parsed, err := parser.ParseExpr(string(expr))
+	if err != nil {
+		return "", err
+	}
+	ctx := makeTypeReplaceFmtCtx(rewrites)
+	ctx.FormatNode(parsed)
+	return catpb.Expression(ctx.CloseAndGetString()), nil
+}
+
+// rewriteTypesInView rewrites all explicit ID type references in the input view
+// query string according to rewrites.
+func rewriteTypesInView(
+	viewQuery catpb.Statement, rewrites jobspb.DescRewriteMap,
+) (catpb.Statement, error) {
+	stmt, err := parser.ParseOne(string(viewQuery))
+	if err != nil {
+		return "", err
+	}
+	ctx := makeTypeReplaceFmtCtx(rewrites)
+	ctx.FormatNode(stmt.AST)
+	return catpb.Statement(ctx.CloseAndGetString()), nil
+}
+
+func rewriteTypesInRoutine(
+	fnBody catpb.RoutineBody, rewrites jobspb.DescRewriteMap, lang catpb.Function_Language,
+) (catpb.RoutineBody, error) {
+	switch lang {
+	case catpb.Function_SQL:
+		fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+		stmts, err := parser.Parse(string(fnBody))
+		if err != nil {
+			return "", err
+		}
+		for i, stmt := range stmts {
+			if i > 0 {
+				fmtCtx.WriteString("\n")
+			}
+			typeReplaceCtx := makeTypeReplaceFmtCtx(rewrites)
+			typeReplaceCtx.FormatNode(stmt.AST)
+			fmtCtx.WriteString(typeReplaceCtx.CloseAndGetString())
+			fmtCtx.WriteString(";")
+		}
+		return catpb.RoutineBody(fmtCtx.CloseAndGetString()), nil
+
+	case catpb.Function_PLPGSQL:
+		stmt, err := plpgsqlparser.Parse(string(fnBody))
+		if err != nil {
+			return "", err
+		}
+		typeReplaceCtx := makeTypeReplaceFmtCtx(rewrites)
+		typeReplaceCtx.FormatNode(stmt.AST)
+		return catpb.RoutineBody(typeReplaceCtx.CloseAndGetString()), nil
+
+	default:
+		return "", errors.AssertionFailedf("unexpected function language: %v", lang)
+	}
+}
+
+// makeTypeReplaceFmtCtx returns a FmtCtx which rewrites explicit ID references
+// according to the rewrites map.
+func makeTypeReplaceFmtCtx(rewrites jobspb.DescRewriteMap) *tree.FmtCtx {
+	return tree.NewFmtCtx(
+		tree.FmtSerializable,
+		tree.FmtIndexedTypeFormat(func(ctx *tree.FmtCtx, ref *tree.OIDTypeReference) {
+			newRef := ref
+			id := typedesc.UserDefinedTypeOIDToID(ref.OID)
+			if rw, ok := rewrites[id]; ok {
+				newRef = &tree.OIDTypeReference{OID: catid.TypeIDToOID(rw.ID)}
+			}
+			ctx.WriteString(newRef.SQLString())
+		}),
+	)
+}
+
+// rewriteSequencesInExpr rewrites all sequence IDs in the input expression
+// string according to rewrites.
+func rewriteSequencesInExpr(
+	expr catpb.Expression, rewrites jobspb.DescRewriteMap,
+) (catpb.Expression, error) {
+	parsed, err := parser.ParseExpr(string(expr))
+	if err != nil {
+		return "", err
+	}
+
+	newExpr, err := tree.SimpleVisit(parsed, makeSequenceReplaceFunc(rewrites))
+	if err != nil {
+		return "", err
+	}
+	return catpb.Expression(newExpr.String()), nil
+}
+
+func rewriteFunctionsInExpr(
+	expr catpb.Expression, rewrites jobspb.DescRewriteMap,
+) (catpb.Expression, error) {
+	parsed, err := parser.ParseExpr(string(expr))
+	if err != nil {
+		return "", err
+	}
+
+	replaceFunc := func(ex tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		funcExpr, ok := ex.(*tree.FuncExpr)
+		if !ok {
+			return true, ex, nil
+		}
+		oidRef, ok := funcExpr.Func.FunctionReference.(*tree.FunctionOID)
+		if !ok {
+			return true, ex, nil
+		}
+		if !funcdesc.IsOIDUserDefinedFunc(oidRef.OID) {
+			return true, ex, nil
+		}
+		fnID := funcdesc.UserDefinedFunctionOIDToID(oidRef.OID)
+		rewriteID := catid.FuncIDToOID(rewrites[fnID].ID)
+		newFuncExpr := *funcExpr
+		newFuncExpr.Func = tree.ResolvableFunctionReference{
+			FunctionReference: &tree.FunctionOID{OID: rewriteID},
+		}
+		return true, &newFuncExpr, nil
+	}
+
+	newExpr, err := tree.SimpleVisit(parsed, replaceFunc)
+	if err != nil {
+		return "", err
+	}
+	return catpb.Expression(newExpr.String()), nil
+}
+
+func makeSequenceReplaceFunc(
+	rewrites jobspb.DescRewriteMap,
+) func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+	return func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		id, ok := schemaexpr.GetSeqIDFromExpr(expr)
+		if !ok {
+			return true, expr, nil
+		}
+		annotateTypeExpr, ok := expr.(*tree.AnnotateTypeExpr)
+		if !ok {
+			return true, expr, nil
+		}
+		rewrite, ok := rewrites[descpb.ID(id)]
+		if !ok {
+			return true, expr, nil
+		}
+		annotateTypeExpr.Expr = tree.NewNumVal(
+			constant.MakeInt64(int64(rewrite.ID)),
+			strconv.Itoa(int(rewrite.ID)),
+			false, /* negative */
+		)
+		return false, annotateTypeExpr, nil
+	}
+}
+
+// rewriteSequencesInView walks the given viewQuery and
+// rewrites all sequence IDs in it according to rewrites.
+func rewriteSequencesInView(
+	viewQuery catpb.Statement, rewrites jobspb.DescRewriteMap,
+) (catpb.Statement, error) {
+	stmt, err := parser.ParseOne(string(viewQuery))
+	if err != nil {
+		return "", err
+	}
+	newStmt, err := tree.SimpleStmtVisit(stmt.AST, makeSequenceReplaceFunc(rewrites))
+	if err != nil {
+		return "", err
+	}
+	return catpb.Statement(newStmt.String()), nil
+}
+
+func rewriteSequencesInFunction(
+	fnBody catpb.RoutineBody, rewrites jobspb.DescRewriteMap, lang catpb.Function_Language,
+) (catpb.RoutineBody, error) {
+	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+	replaceSeqFunc := makeSequenceReplaceFunc(rewrites)
+	switch lang {
+	case catpb.Function_SQL:
+		stmts, err := parser.Parse(string(fnBody))
+		if err != nil {
+			return "", err
+		}
+		for i, stmt := range stmts {
+			newStmt, err := tree.SimpleStmtVisit(stmt.AST, replaceSeqFunc)
+			if err != nil {
+				return "", err
+			}
+			if i > 0 {
+				fmtCtx.WriteString("\n")
+			}
+			fmtCtx.FormatNode(newStmt)
+			fmtCtx.WriteString(";")
+		}
+
+	case catpb.Function_PLPGSQL:
+		stmt, err := plpgsqlparser.Parse(string(fnBody))
+		if err != nil {
+			return "", err
+		}
+		v := plpgsqltree.SQLStmtVisitor{Fn: replaceSeqFunc}
+		newStmt := plpgsqltree.Walk(&v, stmt.AST)
+		fmtCtx.FormatNode(newStmt)
+
+	default:
+		return "", errors.AssertionFailedf("unexpected function language %s", lang)
+	}
+	return catpb.RoutineBody(fmtCtx.CloseAndGetString()), nil
+}
+
+// RewriteIDsInTypesT rewrites all ID's in the input types.T using the input
+// ID rewrite mapping.
+func RewriteIDsInTypesT(typ *types.T, descriptorRewrites jobspb.DescRewriteMap) {
+	if !typ.UserDefined() {
+		return
+	}
+	tid := typedesc.GetUserDefinedTypeDescID(typ)
+	// Collect potential new OID values.
+	var newOID, newArrayOID oid.Oid
+	if rw, ok := descriptorRewrites[tid]; ok {
+		newOID = catid.TypeIDToOID(rw.ID)
+	}
+	if typ.Family() != types.ArrayFamily {
+		tid = typedesc.GetUserDefinedArrayTypeDescID(typ)
+		if rw, ok := descriptorRewrites[tid]; ok {
+			newArrayOID = catid.TypeIDToOID(rw.ID)
+		}
+	}
+	types.RemapUserDefinedTypeOIDs(typ, newOID, newArrayOID)
+	// If the type is an array, then we need to rewrite the element type as well.
+	if typ.Family() == types.ArrayFamily {
+		RewriteIDsInTypesT(typ.ArrayContents(), descriptorRewrites)
+	}
+}
+
+// rewriteRoutineBody rewrites a set of SQL or PL/pgSQL statements.
+func rewriteRoutineBody(
+	descriptorRewrites jobspb.DescRewriteMap,
+	fnBody catpb.RoutineBody,
+	overrideDB string,
+	fnLang catpb.Function_Language,
+) (catpb.RoutineBody, error) {
+	if overrideDB != "" {
+		dbNameReplaced, err := rewriteFunctionBodyDBNames(fnBody, overrideDB, fnLang)
+		if err != nil {
+			return "", err
+		}
+		fnBody = dbNameReplaced
+	}
+	fnBody, err := rewriteSequencesInFunction(fnBody, descriptorRewrites, fnLang)
+	if err != nil {
+		return "", err
+	}
+	fnBody, err = rewriteTypesInRoutine(fnBody, descriptorRewrites, fnLang)
+	if err != nil {
+		return "", err
+	}
+	return fnBody, nil
+}
+
+// MaybeClearSchemaChangerStateInDescs goes over all mutable descriptors and
+// cleans any state information from descriptors which have no targets associated
+// with the corresponding jobs. The state is used to lock a descriptor to ensure
+// no concurrent schema change jobs can occur, which needs to be cleared if no
+// jobs exist working on *any* targets, since otherwise the descriptor would
+// be left locked.
+func MaybeClearSchemaChangerStateInDescs(descriptors []catalog.MutableDescriptor) error {
+	nonEmptyJobs := make(map[jobspb.JobID]struct{})
+	// Track all the schema changer states that have a non-empty job associated
+	// with them.
+	for _, desc := range descriptors {
+		if state := desc.GetDeclarativeSchemaChangerState(); state != nil &&
+			len(state.Targets) > 0 {
+			nonEmptyJobs[state.JobID] = struct{}{}
+		}
+	}
+	// Clean up any schema changer states that have empty jobs that don't have any
+	// targets associated.
+	for _, desc := range descriptors {
+		if state := desc.GetDeclarativeSchemaChangerState(); state != nil &&
+			len(state.Targets) == 0 {
+			if _, found := nonEmptyJobs[state.JobID]; !found {
+				desc.SetDeclarativeSchemaChangerState(nil)
+			}
+		}
+	}
+	return nil
+}
+
+// TypeDescs rewrites all ID's in the input slice of TypeDescriptors
+// using the input ID rewrite mapping. It also updates or removes type
+// back-references based on the provided typeBackrefsToRemove map, which
+// specifies references that should be omitted during the rewrite. The map is
+// keyed by the type ID being updated, and the corresponding values are the
+// backreferences to remove from that type.
+func TypeDescs(
+	types []*typedesc.Mutable,
+	descriptorRewrites jobspb.DescRewriteMap,
+	typeBackrefsToRemove map[descpb.ID]map[descpb.ID]struct{},
+) error {
+	for _, typ := range types {
+		rewrite, ok := descriptorRewrites[typ.ID]
+		if !ok {
+			return errors.Errorf("missing rewrite for type %d", typ.ID)
+		}
+		// Reset the version and modification time on this new descriptor.
+		typ.Version = 1
+		typ.ModificationTime = hlc.Timestamp{}
+
+		if err := rewriteSchemaChangerState(typ, descriptorRewrites); err != nil {
+			return err
+		}
+
+		typ.ID = rewrite.ID
+		typ.ParentSchemaID = rewrite.ParentSchemaID
+		typ.ParentID = rewrite.ParentID
+		newRefs := typ.ReferencingDescriptorIDs[:0]
+		for _, id := range typ.ReferencingDescriptorIDs {
+			// Skip back-references to descriptors that aren't part of the restore.
+			// This ensures we don't retain references to objects like triggers or tables
+			// that were omitted. Any necessary back-references to existing tables will be
+			// re-established later.
+			if rw, ok := descriptorRewrites[id]; ok {
+				// Check if this rewritten reference is explicitly marked for removal,
+				// e.g., due to a dropped trigger that used the type.
+				if refs, ok := typeBackrefsToRemove[typ.ID]; ok {
+					if _, ok := refs[rw.ID]; ok {
+						continue // Skip this backref
+					}
+				}
+				id = rw.ID
+				newRefs = append(newRefs, id)
+			}
+		}
+		typ.ReferencingDescriptorIDs = newRefs
+
+		switch t := typ.Kind; t {
+		case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_COMPOSITE,
+			descpb.TypeDescriptor_MULTIREGION_ENUM, descpb.TypeDescriptor_DOMAIN:
+			if rw, ok := descriptorRewrites[typ.ArrayTypeID]; ok {
+				typ.ArrayTypeID = rw.ID
+			}
+			if t == descpb.TypeDescriptor_DOMAIN && typ.Domain != nil && typ.Domain.BaseType != nil {
+				RewriteIDsInTypesT(typ.Domain.BaseType, descriptorRewrites)
+			}
+		case descpb.TypeDescriptor_ALIAS:
+			// We need to rewrite any ID's present in the aliased types.T.
+			RewriteIDsInTypesT(typ.Alias, descriptorRewrites)
+		default:
+			return errors.AssertionFailedf("unknown type kind %s", t.String())
+		}
+	}
+	return nil
+}
+
+// SchemaDescs rewrites all ID's in the input slice of SchemaDescriptors
+// using the input ID rewrite mapping.
+func SchemaDescs(schemas []*schemadesc.Mutable, descriptorRewrites jobspb.DescRewriteMap) error {
+	for _, sc := range schemas {
+		rewrite, ok := descriptorRewrites[sc.ID]
+		if !ok {
+			return errors.Errorf("missing rewrite for schema %d", sc.ID)
+		}
+		// Reset the version and modification time on this new descriptor.
+		sc.Version = 1
+		sc.ModificationTime = hlc.Timestamp{}
+
+		sc.ID = rewrite.ID
+		sc.ParentID = rewrite.ParentID
+
+		// Rewrite function ID and types ID in function signatures.
+		newFns := make(map[string]descpb.SchemaDescriptor_Function)
+		for fnName, fn := range sc.GetFunctions() {
+			newSigs := make([]descpb.SchemaDescriptor_FunctionSignature, 0, len(fn.Signatures))
+			for i := range fn.Signatures {
+				sig := &fn.Signatures[i]
+				// If the function is not found in the backup, we just skip. This only
+				// happens when restoring from a backup with `BACKUP TABLE` where the
+				// function descriptors are not backup.
+				fnDesc, ok := descriptorRewrites[sig.ID]
+				if !ok {
+					continue
+				}
+				sig.ID = fnDesc.ID
+				for _, typ := range sig.ArgTypes {
+					RewriteIDsInTypesT(typ, descriptorRewrites)
+				}
+				RewriteIDsInTypesT(sig.ReturnType, descriptorRewrites)
+				for _, typ := range sig.OutParamTypes {
+					RewriteIDsInTypesT(typ, descriptorRewrites)
+				}
+				newSigs = append(newSigs, *sig)
+			}
+			if len(newSigs) > 0 {
+				newFns[fnName] = descpb.SchemaDescriptor_Function{
+					Name:       fnName,
+					Signatures: newSigs,
+				}
+			}
+		}
+		sc.Functions = newFns
+
+		if err := rewriteSchemaChangerState(sc, descriptorRewrites); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// rewriteSchemaChangerState handles rewriting any references to IDs stored in
+// the descriptor's declarative schema changer state.
+func rewriteSchemaChangerState(
+	d catalog.MutableDescriptor, descriptorRewrites jobspb.DescRewriteMap,
+) (err error) {
+	state := d.GetDeclarativeSchemaChangerState()
+	if state == nil {
+		return nil
+	}
+	defer func() {
+		if err != nil {
+			err = errors.Wrap(err, "rewriting declarative schema changer state")
+		}
+	}()
+
+	var droppedConstraints catalog.ConstraintIDSet
+	var droppedTriggers catalog.TriggerIDSet
+	for i := 0; i < len(state.Targets); i++ {
+		t := &state.Targets[i]
+		// Since the parent database ID is never written in the descriptorRewrites
+		// map we need to special case certain elements that need their ParentID
+		// re-written
+		if data := t.GetTableData(); data != nil {
+			rewrite, ok := descriptorRewrites[data.TableID]
+			if !ok {
+				return errors.Errorf("missing rewrite for id %d in %s", data.TableID, screl.ElementString(t.Element()))
+			}
+			data.TableID = rewrite.ID
+			data.DatabaseID = rewrite.ParentID
+			continue
+		} else if data := t.GetNamespace(); data != nil {
+			rewrite, ok := descriptorRewrites[data.DescriptorID]
+			if !ok {
+				return errors.Errorf("missing rewrite for id %d in %s", data.DescriptorID, screl.ElementString(t.Element()))
+			}
+			data.DescriptorID = rewrite.ID
+			data.DatabaseID = rewrite.ParentID
+			data.SchemaID = rewrite.ParentSchemaID
+			continue
+		}
+
+		// removeElementAtCurrentIdx deletes the element at the current index.
+		removeElementAtCurrentIdx := func() {
+			state.Targets = append(state.Targets[:i], state.Targets[i+1:]...)
+			state.CurrentStatuses = append(state.CurrentStatuses[:i], state.CurrentStatuses[i+1:]...)
+			state.TargetRanks = append(state.TargetRanks[:i], state.TargetRanks[i+1:]...)
+			i--
+		}
+
+		missingID := descpb.InvalidID
+		if err := walkutil.Walk(t.Element(), func(id *descpb.ID) error {
+			if *id == descpb.InvalidID {
+				// Some descriptor ID fields in elements may be deliberately unset.
+				// Skip these as they are not subject to rewrite.
+				return nil
+			}
+			rewrite, ok := descriptorRewrites[*id]
+			if !ok {
+				missingID = *id
+				return errors.Errorf("missing rewrite for id %d in %s", *id, screl.ElementString(t.Element()))
+			}
+			*id = rewrite.ID
+			return nil
+		}); err != nil {
+			switch el := t.Element().(type) {
+			case *scpb.SchemaParent:
+				// We'll permit this in the special case of a schema parent element.
+				_, scExists := descriptorRewrites[el.SchemaID]
+				if !scExists && state.CurrentStatuses[i] == scpb.Status_ABSENT {
+					removeElementAtCurrentIdx()
+					continue
+				}
+			case *scpb.ForeignKeyConstraint:
+				// If the referenced table is missing, drop this FK constraint
+				// element. This mirrors the skip_missing_foreign_keys handling
+				// for legacy schema changer mutations in TableDescs.
+				if el.ReferencedTableID == missingID {
+					removeElementAtCurrentIdx()
+					droppedConstraints.Add(el.ConstraintID)
+					continue
+				}
+			case *scpb.ForeignKeyConstraintUnvalidated:
+				// Same handling as ForeignKeyConstraint for unvalidated FKs.
+				if el.ReferencedTableID == missingID {
+					removeElementAtCurrentIdx()
+					droppedConstraints.Add(el.ConstraintID)
+					continue
+				}
+			case *scpb.CheckConstraint:
+				// IF there is any dependency missing for check constraint, we just drop
+				// the target.
+				removeElementAtCurrentIdx()
+				droppedConstraints.Add(el.ConstraintID)
+				continue
+			case *scpb.ColumnDefaultExpression:
+				// IF there is any dependency missing for column default expression, we
+				// just drop the target.
+				removeElementAtCurrentIdx()
+				continue
+			case *scpb.ColumnOnUpdateExpression:
+				// IF there is any dependency missing for column ON UPDATE expression,
+				// we just drop the target.
+				removeElementAtCurrentIdx()
+				continue
+			case *scpb.SequenceOwner:
+				// If a sequence owner is missing the sequence, then the sequence
+				// was already dropped and this element can be safely removed.
+				if el.SequenceID == missingID {
+					removeElementAtCurrentIdx()
+					continue
+				}
+			case *scpb.TriggerFunctionCall:
+				// If there is a missing function dependency, drop this element
+				// and record the trigger ID so sibling trigger elements are also
+				// removed.
+				if el.FuncID == missingID {
+					droppedTriggers.Add(el.TriggerID)
+					removeElementAtCurrentIdx()
+					continue
+				}
+			case *scpb.TriggerDeps:
+				// If there is a missing function dependency, drop this element
+				// and record the trigger ID so sibling trigger elements are also
+				// removed.
+				if catalog.MakeDescriptorIDSet(el.UsesRoutineIDs...).Contains(missingID) {
+					droppedTriggers.Add(el.TriggerID)
+					removeElementAtCurrentIdx()
+					continue
+				}
+			case *scpb.PolicyUsingExpr:
+				// If there is any dependency missing for policy USING expression, we
+				// just drop the target.
+				removeElementAtCurrentIdx()
+				continue
+			case *scpb.PolicyWithCheckExpr:
+				// If there is any dependency missing for policy WITH CHECK expression,
+				// we just drop the target.
+				removeElementAtCurrentIdx()
+				continue
+			case *scpb.PolicyDeps:
+				// If there is a missing function, type, or relation dependency for
+				// policy dependencies, we drop the target.
+				if catalog.MakeDescriptorIDSet(el.UsesFunctionIDs...).Contains(missingID) ||
+					catalog.MakeDescriptorIDSet(el.UsesTypeIDs...).Contains(missingID) ||
+					catalog.MakeDescriptorIDSet(el.UsesRelationIDs...).Contains(missingID) {
+					removeElementAtCurrentIdx()
+					continue
+				}
+			}
+			return errors.Wrap(err, "rewriting descriptor ids")
+		}
+
+		if err := walkutil.Walk(t.Element(), func(expr *catpb.Expression) error {
+			if *expr == "" {
+				return nil
+			}
+			newExpr, err := rewriteTypesInExpr(*expr, descriptorRewrites)
+			if err != nil {
+				return errors.Wrapf(err, "rewriting expression type references: %q", *expr)
+			}
+			newExpr, err = rewriteSequencesInExpr(newExpr, descriptorRewrites)
+			if err != nil {
+				return errors.Wrapf(err, "rewriting expression sequence references: %q", newExpr)
+			}
+			newExpr, err = rewriteFunctionsInExpr(newExpr, descriptorRewrites)
+			if err != nil {
+				return errors.Wrapf(err, "rewriting expression function references: %q", newExpr)
+			}
+			*expr = newExpr
+			return nil
+		}); err != nil {
+			return err
+		}
+		if err := walkutil.Walk(t.Element(), func(t *types.T) error {
+			RewriteIDsInTypesT(t, descriptorRewrites)
+			return nil
+		}); err != nil {
+			return errors.Wrap(err, "rewriting user-defined type references")
+		}
+		// TODO(ajwerner): Remember to rewrite views when the time comes. Currently
+		// views are not handled by the declarative schema changer.
+	}
+
+	// Drop all children targets of dropped CHECK constraint.
+	for i := 0; i < len(state.Targets); i++ {
+		t := &state.Targets[i]
+		if err := walkutil.Walk(t.Element(), func(id *catid.ConstraintID) error {
+			if !droppedConstraints.Contains(*id) {
+				return nil
+			}
+			state.Targets = append(state.Targets[:i], state.Targets[i+1:]...)
+			state.CurrentStatuses = append(state.CurrentStatuses[:i], state.CurrentStatuses[i+1:]...)
+			state.TargetRanks = append(state.TargetRanks[:i], state.TargetRanks[i+1:]...)
+			i--
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+
+	// Drop all sibling targets of triggers with missing dependencies.
+	if !droppedTriggers.Empty() {
+		for i := 0; i < len(state.Targets); i++ {
+			t := &state.Targets[i]
+			if err := walkutil.Walk(t.Element(), func(id *catid.TriggerID) error {
+				if !droppedTriggers.Contains(*id) {
+					return nil
+				}
+				state.Targets = append(state.Targets[:i], state.Targets[i+1:]...)
+				state.CurrentStatuses = append(state.CurrentStatuses[:i], state.CurrentStatuses[i+1:]...)
+				state.TargetRanks = append(state.TargetRanks[:i], state.TargetRanks[i+1:]...)
+				i--
+				return nil
+			}); err != nil {
+				return err
+			}
+		}
+	}
+
+	d.SetDeclarativeSchemaChangerState(state)
+	return nil
+}
+
+func dropCheckConstraintMissingDeps(
+	table *tabledesc.Mutable, descriptorRewrites jobspb.DescRewriteMap,
+) error {
+	var newChecks []*descpb.TableDescriptor_CheckConstraint
+	for i := range table.Checks {
+		fnIDs, err := table.GetAllReferencedFunctionIDsInConstraint(table.Checks[i].ConstraintID)
+		if err != nil {
+			return err
+		}
+		allFnFound := true
+		for _, fnID := range fnIDs.Ordered() {
+			if _, ok := descriptorRewrites[fnID]; !ok {
+				allFnFound = false
+				break
+			}
+		}
+		if allFnFound {
+			newChecks = append(newChecks, table.Checks[i])
+		}
+	}
+	table.Checks = newChecks
+	var newMutations []descpb.DescriptorMutation
+	for i := range table.Mutations {
+		keepMutation := true
+		if c := table.Mutations[i].GetConstraint(); c != nil && c.ConstraintType == descpb.ConstraintToUpdate_CHECK {
+			fnIDs, err := table.GetAllReferencedFunctionIDsInConstraint(c.Check.ConstraintID)
+			if err != nil {
+				return err
+			}
+			for _, fnID := range fnIDs.Ordered() {
+				if _, ok := descriptorRewrites[fnID]; !ok {
+					keepMutation = false
+					break
+				}
+			}
+		}
+		if keepMutation {
+			newMutations = append(newMutations, table.Mutations[i])
+		}
+	}
+	table.Mutations = newMutations
+	return nil
+}
+
+func dropColumnExpressionsMissingDeps(
+	table *tabledesc.Mutable, descriptorRewrites jobspb.DescRewriteMap,
+) error {
+	maybeDropExpressions := func(col *descpb.ColumnDescriptor) error {
+		// Handle DEFAULT expression.
+		if col.DefaultExpr != nil {
+			fnIDs, err := schemaexpr.GetUDFIDsFromExprStr(*col.DefaultExpr)
+			if err != nil {
+				return err
+			}
+			for _, fnID := range fnIDs.Ordered() {
+				if _, ok := descriptorRewrites[fnID]; !ok {
+					col.DefaultExpr = nil
+					break
+				}
+			}
+		}
+
+		// Handle ON UPDATE expression.
+		if col.OnUpdateExpr != nil {
+			fnIDs, err := schemaexpr.GetUDFIDsFromExprStr(*col.OnUpdateExpr)
+			if err != nil {
+				return err
+			}
+			for _, fnID := range fnIDs.Ordered() {
+				if _, ok := descriptorRewrites[fnID]; !ok {
+					col.OnUpdateExpr = nil
+					break
+				}
+			}
+		}
+
+		// Handle computed column expression.
+		if col.ComputeExpr != nil {
+			fnIDs, err := schemaexpr.GetUDFIDsFromExprStr(*col.ComputeExpr)
+			if err != nil {
+				return err
+			}
+			for _, fnID := range fnIDs.Ordered() {
+				if _, ok := descriptorRewrites[fnID]; !ok {
+					// For virtual columns with missing UDFs, return an error even when
+					// skip_missing_udfs is true. We can't simply drop the expression,
+					// since virtual columns don't store any data and don't appear
+					// anywhere in the primary index.
+					if col.Virtual {
+						return errors.Errorf("virtual computed column %q cannot be restored when referenced UDF is missing (even with skip_missing_udfs option)", col.Name)
+					}
+					col.ComputeExpr = nil
+					col.Virtual = false
+					break
+				}
+			}
+		}
+
+		// Rebuild UsesFunctionIds based on remaining expressions.
+		allFnIDs, err := table.GetAllReferencedFunctionIDsInColumnExprs(col.ID)
+		if err != nil {
+			return err
+		}
+		if allFnIDs.Empty() {
+			col.UsesFunctionIds = nil
+		} else {
+			col.UsesFunctionIds = allFnIDs.Ordered()
+		}
+
+		return nil
+	}
+
+	for i := range table.Columns {
+		col := &table.Columns[i]
+		if err := maybeDropExpressions(col); err != nil {
+			return err
+		}
+	}
+	for i := range table.Mutations {
+		if col := table.Mutations[i].GetColumn(); col != nil {
+			if err := maybeDropExpressions(col); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func dropTriggerMissingDeps(
+	table *tabledesc.Mutable, descriptorRewrites jobspb.DescRewriteMap,
+) (removedTriggerRelationForwardRefs, removedTriggerTypeForwardRefs []descpb.ID) {
+	removedTriggerRelationForwardRefs = make([]descpb.ID, 0)
+	removedTriggerTypeForwardRefs = make([]descpb.ID, 0)
+	foundAllDeps := func(ids []descpb.ID) bool {
+		for _, id := range ids {
+			if _, ok := descriptorRewrites[id]; !ok {
+				return false
+			}
+		}
+		return true
+	}
+	newTriggers := make([]descpb.TriggerDescriptor, 0, len(table.Triggers))
+	for i := range table.Triggers {
+		trigger := &table.Triggers[i]
+		if !foundAllDeps(trigger.DependsOn) || !foundAllDeps(trigger.DependsOnTypes) ||
+			!foundAllDeps(trigger.DependsOnRoutines) {
+			// There is a missing dependency, so we are going to remove the trigger.
+			//
+			// Record all relation forward references that we removed as a result of
+			// removing this trigger. This is an indication that we need to evaluate
+			// if any backrefs need to be removed also. This happens when the final
+			// forward ref is removed.
+			for _, oldID := range trigger.DependsOn {
+				if newID, ok := descriptorRewrites[oldID]; ok {
+					removedTriggerRelationForwardRefs = append(removedTriggerRelationForwardRefs, newID.ID)
+				}
+			}
+			// Similarly, record all type forward references for potential update
+			// later in the restore.
+			for _, oldID := range trigger.DependsOnTypes {
+				if newID, ok := descriptorRewrites[oldID]; ok {
+					removedTriggerTypeForwardRefs = append(removedTriggerTypeForwardRefs, newID.ID)
+				}
+			}
+
+			// Note: We do not track removed routine references here. This is
+			// intentional. When a trigger or policy is dropped during restore due
+			// to missing dependencies, any function it referenced either (a) was
+			// not found in descriptorRewrites and is not part of the restore, so
+			// there are no backrefs to clean up, or (b) maps to an existing
+			// function (ToExisting) that does not yet have a backref to the newly
+			// restored table. In case (b), backrefs are added separately in
+			// createImportingDescriptors. In both cases, no backref cleanup is
+			// needed for routines here.
+
+			continue
+		}
+		newTriggers = append(newTriggers, *trigger)
+	}
+	table.Triggers = newTriggers
+	return removedTriggerRelationForwardRefs, removedTriggerTypeForwardRefs
+}
+
+// dropPolicyMissingDeps removes policies from a table that have missing
+// dependencies (functions, types, or relations) during restore operations.
+//
+// For each policy that is dropped, it returns the relation and type IDs that
+// were referenced by the dropped policy. These IDs are used later to determine
+// if back-references in the referenced descriptors should be cleaned up.
+func dropPolicyMissingDeps(
+	table *tabledesc.Mutable, descriptorRewrites jobspb.DescRewriteMap,
+) (removedPolicyRelationForwardRefs, removedPolicyTypeForwardRefs []descpb.ID) {
+	removedPolicyRelationForwardRefs = make([]descpb.ID, 0)
+	removedPolicyTypeForwardRefs = make([]descpb.ID, 0)
+	var newPolicies []descpb.PolicyDescriptor
+	for i := range table.Policies {
+		policy := &table.Policies[i]
+
+		// Check function dependencies
+		fnIDs := table.GetAllReferencedFunctionIDsInPolicy(policy.ID)
+		allFnFound := true
+		for _, fnID := range fnIDs.Ordered() {
+			if _, ok := descriptorRewrites[fnID]; !ok {
+				allFnFound = false
+				break
+			}
+		}
+
+		// Check type dependencies
+		allTypesFound := true
+		for _, typeID := range policy.DependsOnTypes {
+			if _, ok := descriptorRewrites[typeID]; !ok {
+				allTypesFound = false
+				break
+			}
+		}
+
+		// Check relation dependencies
+		allRelationsFound := true
+		for _, relationID := range policy.DependsOnRelations {
+			if _, ok := descriptorRewrites[relationID]; !ok {
+				allRelationsFound = false
+				break
+			}
+		}
+
+		if allFnFound && allTypesFound && allRelationsFound {
+			newPolicies = append(newPolicies, *policy)
+		} else {
+			// Policy is being dropped due to missing dependencies.
+			// Record relation forward references for potential cleanup later.
+			for _, oldID := range policy.DependsOnRelations {
+				if newID, ok := descriptorRewrites[oldID]; ok {
+					removedPolicyRelationForwardRefs = append(removedPolicyRelationForwardRefs, newID.ID)
+				}
+			}
+			// Record type forward references for potential cleanup later.
+			for _, oldID := range policy.DependsOnTypes {
+				if newID, ok := descriptorRewrites[oldID]; ok {
+					removedPolicyTypeForwardRefs = append(removedPolicyTypeForwardRefs, newID.ID)
+				}
+			}
+
+			// Note: We do not track removed routine references here. This is
+			// intentional. When a trigger or policy is dropped during restore due
+			// to missing dependencies, any function it referenced either (a) was
+			// not found in descriptorRewrites and is not part of the restore, so
+			// there are no backrefs to clean up, or (b) maps to an existing
+			// function (ToExisting) that does not yet have a backref to the newly
+			// restored table. In case (b), backrefs are added separately in
+			// createImportingDescriptors. In both cases, no backref cleanup is
+			// needed for routines here.
+		}
+	}
+	table.Policies = newPolicies
+	return removedPolicyRelationForwardRefs, removedPolicyTypeForwardRefs
+}
+
+// DatabaseDescs rewrites all ID's in the input slice of DatabaseDescriptors
+// using the input ID rewrite mapping. The function elides remapping offline schemas,
+// since they will not get restored into the cluster.
+func DatabaseDescs(
+	databases []*dbdesc.Mutable,
+	descriptorRewrites jobspb.DescRewriteMap,
+	offlineSchemas map[descpb.ID]struct{},
+) error {
+	for _, db := range databases {
+		rewrite, ok := descriptorRewrites[db.ID]
+		if !ok {
+			return errors.Errorf("missing rewrite for database %d", db.ID)
+		}
+		db.ID = rewrite.ID
+
+		if rewrite.NewDBName != "" {
+			db.Name = rewrite.NewDBName
+		}
+
+		db.Version = 1
+		db.ModificationTime = hlc.Timestamp{}
+
+		if err := rewriteSchemaChangerState(db, descriptorRewrites); err != nil {
+			return err
+		}
+
+		// Rewrite the name-to-ID mapping for the database's child schemas.
+		newSchemas := make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
+		err := db.ForEachSchema(func(id descpb.ID, name string) error {
+			rewrite, ok := descriptorRewrites[id]
+			if !ok {
+				return errors.Errorf("missing rewrite for schema %d", id)
+			}
+			if _, ok := offlineSchemas[id]; ok {
+				// offline schema should not get added to the database descriptor.
+				return nil
+			}
+			newSchemas[name] = descpb.DatabaseDescriptor_SchemaInfo{ID: rewrite.ID}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		db.Schemas = newSchemas
+	}
+	return nil
+}
+
+// FunctionDescs rewrites all ID's in the input slice of function descriptors
+// using the input ID rewrite mapping.
+func FunctionDescs(
+	functions []*funcdesc.Mutable, descriptorRewrites jobspb.DescRewriteMap, overrideDB string,
+) error {
+	for _, fnDesc := range functions {
+		fnRewrite, ok := descriptorRewrites[fnDesc.ID]
+		if !ok {
+			return errors.Errorf("missing function rewrite for function %d", fnDesc.ID)
+		}
+		// Reset the version and modification time on this new descriptor.
+		fnDesc.Version = 1
+		fnDesc.ModificationTime = hlc.Timestamp{}
+
+		fnDesc.ID = fnRewrite.ID
+		fnDesc.ParentSchemaID = fnRewrite.ParentSchemaID
+		fnDesc.ParentID = fnRewrite.ParentID
+
+		// Rewrite function body.
+		var err error
+		fnDesc.FunctionBody, err = rewriteRoutineBody(
+			descriptorRewrites, fnDesc.FunctionBody, overrideDB, fnDesc.Lang,
+		)
+		if err != nil {
+			return err
+		}
+
+		// Rewrite type IDs.
+		for _, param := range fnDesc.Params {
+			RewriteIDsInTypesT(param.Type, descriptorRewrites)
+		}
+		RewriteIDsInTypesT(fnDesc.ReturnType.Type, descriptorRewrites)
+
+		// Rewrite Dependency IDs.
+		for i, depID := range fnDesc.DependsOn {
+			if depRewrite, ok := descriptorRewrites[depID]; ok {
+				fnDesc.DependsOn[i] = depRewrite.ID
+			} else {
+				return errors.AssertionFailedf(
+					"cannot restore function %q because referenced table %d was not found",
+					fnDesc.Name, depID)
+			}
+		}
+
+		for i, typID := range fnDesc.DependsOnTypes {
+			if typRewrite, ok := descriptorRewrites[typID]; ok {
+				fnDesc.DependsOnTypes[i] = typRewrite.ID
+			} else {
+				return errors.AssertionFailedf(
+					"cannot restore function %q because referenced type %d was not found",
+					fnDesc.Name, typID)
+			}
+		}
+
+		for i, funcID := range fnDesc.DependsOnFunctions {
+			if funcRewrite, ok := descriptorRewrites[funcID]; ok {
+				fnDesc.DependsOnFunctions[i] = funcRewrite.ID
+			} else {
+				return errors.AssertionFailedf(
+					"cannot restore function %q because referenced function %d was not found",
+					fnDesc.Name, funcID)
+			}
+		}
+
+		// Rewrite back reference IDs.
+		for i, dep := range fnDesc.DependedOnBy {
+			if depRewrite, ok := descriptorRewrites[dep.ID]; ok {
+				fnDesc.DependedOnBy[i].ID = depRewrite.ID
+			} else {
+				return errors.AssertionFailedf(
+					"cannot restore function %q because back referenced relation %d was not found",
+					fnDesc.Name, dep.ID)
+			}
+		}
+		if err := rewriteSchemaChangerState(fnDesc, descriptorRewrites); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// rewritePolicyDependencies rewrites all dependency IDs in policy descriptors
+// according to the provided descriptor rewrites mapping.
+func rewritePolicyDependencies(
+	table *tabledesc.Mutable, descriptorRewrites jobspb.DescRewriteMap,
+) error {
+	for idx := range table.Policies {
+		policy := &table.Policies[idx]
+
+		// Rewrite function dependencies.
+		for i, fnID := range policy.DependsOnFunctions {
+			if fnRewrite, ok := descriptorRewrites[fnID]; ok {
+				policy.DependsOnFunctions[i] = fnRewrite.ID
+			} else {
+				return errors.AssertionFailedf(
+					"cannot restore policy %s on table %q because referenced function %d was not found",
+					policy.Name, table.Name, fnID,
+				)
+			}
+		}
+
+		// Rewrite type dependencies.
+		for i, typeID := range policy.DependsOnTypes {
+			if typeRewrite, ok := descriptorRewrites[typeID]; ok {
+				policy.DependsOnTypes[i] = typeRewrite.ID
+			} else {
+				return errors.AssertionFailedf(
+					"cannot restore policy %s on table %q because referenced type %d was not found",
+					policy.Name, table.Name, typeID,
+				)
+			}
+		}
+
+		// Rewrite relation dependencies.
+		for i, relationID := range policy.DependsOnRelations {
+			if relationRewrite, ok := descriptorRewrites[relationID]; ok {
+				policy.DependsOnRelations[i] = relationRewrite.ID
+			} else {
+				return errors.AssertionFailedf(
+					"cannot restore policy %s on table %q because referenced relation %d was not found",
+					policy.Name, table.Name, relationID,
+				)
+			}
+		}
+	}
+	return nil
+}

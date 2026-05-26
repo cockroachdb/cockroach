@@ -1,0 +1,52 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+/**
+ Groupings
+*/
+.crl-form-group {
+  margin-bottom: crl-gutters(2);
+}
+
+.crl-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: crl-gutters(2.5);
+
+  button {
+    margin-left: crl-gutters(1);
+  }
+
+  &--action-column {
+    width: 100px;
+
+    button {
+      /* TODO(celia) - couldn't get "center align" style to work; using this hack for now "*/
+      float: right;
+      margin-right: crl-gutters(2);
+    }
+  }
+
+  &--bottom-padding {
+    margin-bottom: crl-gutters(3);
+  }
+}
+
+.crl-input-list {
+  list-style-type: none;
+  padding-left: 0;
+}
+
+/**
+ Captions
+*/
+.crl-caption {
+  @include crl-type-caption;
+}
+
+.crl-link--inline {
+  @include crl-type-link--small;
+  line-height: crl-gutters(2);
+}

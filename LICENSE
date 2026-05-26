@@ -1,0 +1,166 @@
+CockroachDB Software License
+
+Acceptance
+
+This Agreement sets forth the terms and conditions on which Licensor makes
+the Software available to You. By accessing or using the Software or a
+Modified Version in any manner, You agree to be bound by all the terms and
+conditions of this Agreement. If you are an individual accessing or using the
+Software or a Modified Version on behalf of a legal entity, (i) you represent
+and warrant that you have the authority to enter into this Agreement on
+behalf of such entity and bind such entity to this Agreement, and (ii)
+references to “You” in this Agreement will refer to such entity.
+
+License
+
+Subject to the terms and conditions of this Agreement, Licensor grants You a
+non-exclusive, worldwide, non-sublicensable, non-transferable license to (i)
+use, copy, and distribute the Software, and create Modified Versions (but not
+other modifications or derivative works) of the Software, and (ii) make, have
+made, use, sell, offer for sale and import the Software, where such license
+applies only to those patent claims licensable to You by Licensor that are
+necessarily infringed by the Software as made available to You by Licensor,
+in each of (i) and (ii), for the purposes of operating, evaluating, testing,
+fixing, integrating with, and improving CockroachDB. If You make any written
+claim of patent infringement relating to the Software, Your patent license
+for the Software granted under this Agreement terminates immediately.
+
+Limitations and Obligations
+
+You will not operate the Software or a Modified Version without a License Key
+except for Limited Non-Production Use. You agree to adhere to any limitations
+specified by Licensor regarding use of the License Key at the time it is
+provided to You. You represent and warrant that all information You provide
+to Licensor to obtain a License Key is complete and accurate at the time of
+submission. You must keep any License Key strictly confidential and will not
+share it with any third parties, other than Your affiliates, contractors, and
+agents who are obligated to keep it confidential and use it solely on Your
+behalf. You will ensure that such affiliates, contractors, and agents comply
+with the terms of this Agreement applicable to You, and You will be
+responsible for their acts and omissions as if they were You hereunder. You
+acknowledge that the Software and any Modified Versions may be subject to
+export or import control laws and regulations in the US and other countries,
+and You agree to comply with all such laws and regulations.
+
+You acknowledge that the Software and any Modified Versions share Telemetry
+with Licensor. You will not operate the Software or a Modified Version
+without sharing Telemetry except for Limited Non-Production Use or unless
+Licensor has issued You a License Key that allows Telemetry to be disabled
+and You disable sharing Telemetry. You understand and agree that Licensor may
+use and disclose personal information collected as part of Telemetry in
+accordance with Licensor’s Privacy Policy:
+https://www.cockroachlabs.com/privacy. You acknowledge that the Software and
+Modified Versions include technical countermeasures to limit unauthorized
+use, such as operation without a required License Key or without sending
+required Telemetry. You will not circumvent, remove, disable, block or alter
+any technical countermeasures, Telemetry requirements (except as permitted by
+Your License Key), License Key requirements, or other elements in the
+Software or Modified Versions designed to enforce the terms of this Agreement
+(collectively, the “Protective Measures”). You must include all of the
+Protective Measures in any Modified Version You create.
+
+You will not alter, remove, or obscure any licensing, copyright, trademark,
+or other notices of Licensor in the Software or a Modified Version. You must
+ensure that anyone who receives a copy of any part of the Software or a
+Modified Version from You also receives a copy of this Agreement and if You
+create a Modified Version, You must include in any such Modified Version
+prominent notices stating that You have modified the Software.
+
+You will not perform Benchmarks against any products or services provided
+under terms that restrict performing and disclosing the results of benchmarks
+of such products or services, unless You have the lawful right to waive such
+terms. If You perform or disclose, or direct or permit any third party to
+perform or disclose, any Benchmark, You will include in any disclosure and
+will disclose to Licensor all information necessary to replicate such
+Benchmark, and You agree that Licensor may perform and disclose the results
+of benchmarks of Your products or services, irrespective of any restrictions
+on benchmarks in the terms governing Your products or services.
+
+No Other Rights
+
+Except for the licenses expressly granted to You in this Agreement, Licensor
+grants You no other licenses or rights in the Software or otherwise.
+
+Third-Party Software
+
+The Software may contain or be provided together with Third-Party Software.
+Each item of Third-Party Software is subject to its own license terms, which
+can be found in the documentation accompanying the Software or the source
+code. Copyrights to the Third-Party Software are held by the respective
+copyright holders indicated therein. You agree to fully comply with all such
+Third-Party Software license terms.
+
+Termination
+
+Your licenses to the Software will automatically terminate if You breach any
+term, condition, or restriction of this Agreement; provided that if Your
+breach is capable of being cured and You cure it within 15 days of the breach
+to Licensor’s satisfaction, Your licenses will be reinstated retroactively.
+Notwithstanding the foregoing, intentional or repeated breaches of this
+Agreement by You will cause Your licenses to terminate automatically and
+permanently.
+
+Disclaimer; Liability Limitations
+
+TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE SOFTWARE IS PROVIDED “AS IS”
+AND WITHOUT ANY REPRESENTATION, WARRANTY OR CONDITION, EXPRESS OR IMPLIED,
+INCLUDING WITHOUT LIMITATION ANY REPRESENTATION, WARRANTY OR CONDITION OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE OR NON-INFRINGEMENT
+OR THAT USE OF THE SOFTWARE WILL BE UNINTERRUPTED OR ERROR FREE.
+
+LICENSOR WILL NOT BE LIABLE TO YOU FOR (I) ANY CONSEQUENTIAL, INDIRECT,
+SPECIAL, MULTIPLE, PUNITIVE OR INCIDENTAL DAMAGES, (INCLUDING WITHOUT
+LIMITATION, LOST PROFITS, BUSINESS INTERRUPTION AND LOST DATA) OR (II)
+DAMAGES IN EXCESS OF ONE HUNDRED US DOLLARS ($100), ARISING OUT OF THIS
+AGREEMENT OR THE USE OF THE SOFTWARE, REGARDLESS OF THE TYPE OF LEGAL CLAIM
+AND WHETHER LICENSOR HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+
+Governing Law
+
+This Agreement shall be governed by and construed under the laws of the State
+of New York and the United States without regard to the conflicts of laws
+provisions thereof. The state and federal courts located in New York County,
+New York, have exclusive jurisdiction for all purposes relating to this
+Agreement. The rights and obligations of the parties to this Agreement will
+not be governed by the United Nations Convention on the International Sale of
+Goods
+
+Definitions
+
+Agreement: This CockroachDB Software License.
+
+Benchmark: Any benchmark, comparative test or evaluation of the Software.
+
+CockroachDB: A database application that is created by compiling either the
+source code of the Software in its complete, unmodified form, or the source
+code of a Modified Version.
+
+Introductory Period: A limited time period during which the Software is
+designed by Licensor to be fully functional and not trigger Protective
+Measures without requiring a License Key to be entered.
+
+License Key: A valid unique code or token for use of the Software that is
+provisioned for You by Licensor.
+
+Licensor: Cockroach Labs, Inc.
+
+Limited Non-Production Use: Use for design, prototyping, testing, or
+development purposes in non-production, internal development environments
+either (i) during the Introductory Period (if any) or (ii) in deploying a
+database that runs solely on a single node.
+
+Modified Version: A derivative work of the Software that provides all or
+substantially all of the features and functionality of the unmodified
+Software using all or substantially all of the source code of the unmodified
+Software.
+
+Software: The software provided to You under this Agreement that includes or
+refers to this Agreement, in any form, including any portion of such software.
+
+Telemetry: Data about Your use of the Software and its features that is
+communicated to Licensor by the Software.
+
+Third-Party Software: Third-party software made available under open source
+or other license terms.
+
+You: The individual or entity agreeing to this Agreement.

@@ -1,0 +1,147 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package admission
+
+import "github.com/cockroachdb/redact"
+
+// cpuTimeBurstBucket is a per-group token bucket that determines whether a
+// group qualifies for burst priority. If a group qualifies, two things
+// happen:
+//
+//  1. In the WorkQueue, its work sorts above the work of groups that don't
+//     qualify for burst priority.
+//  2. It has access to more CPU time tokens than groups that don't qualify
+//     (see cpu_time_token_granter.go for more).
+//
+// These two things are related. Since canBurst groups have access to more
+// CPU time than noBurst groups, it is important that work from a
+// canBurst group always sorts before work from a noBurst group -- else
+// available capacity is left on the table.
+//
+// The bucket works as follows:
+//   - Tokens are added periodically via refill(), called by
+//     cpuTimeTokenAllocator.
+//   - Tokens are deducted when work is admitted, etc. via adjust().
+//     1. In serverless, a group qualifies for burst (canBurst) when its bucket
+//     is > 90% full.
+//     2. In resource manager, a resource group qualifies for burst (canBurst)
+//     when it has MAX_CPU = true or when its bucket is > 90% full.
+//   - The bucket is capped at capacity.
+//   - The bucket can go negative (down to -capacity/4) to allow recovery.
+//
+// The bucket capacity is derived from the noBurst refill rate in
+// cpuTimeTokenAllocator (capacity = noBurst_refill_rate / 4).
+// With cluster settings at their default values, this implies that
+// an application tenant can burst, if they are using roughly less
+// than 20% of the CPU on a CRDB node (0.8 * 0.25 = 0.2).
+type cpuTimeBurstBucket struct {
+	tokens   int64
+	capacity int64
+	// disabled is true when mode != usesCPUTimeTokens, causing
+	// burstQualification to always return noBurst. This effectively
+	// disables the burstQualification functionality.
+	disabled bool
+	// maxCPU, when true, forces burstQualification to canBurst regardless
+	// of token level. Set for MAX_CPU resource groups in RM mode. Seeded
+	// at init and rewritten by applyConfigLocked when ResourceGroupConfig
+	// changes.
+	maxCPU bool
+}
+
+// init sets up a fresh burst bucket. tokens and capacity both take the
+// seed, so the seed determines cold-start behavior.
+//
+// Serverless mode seeds with the uniform per-tenant capacity, so a new
+// tenant starts full and can burst immediately.
+//
+// RM mode seeds with zero (see WorkQueue.burstBucketCapacity for why).
+// The cold-start sequence is:
+//
+//   - The first admission drives tokens negative; adjust has no floor,
+//     only refill enforces -capacity/4.
+//   - burstQualification returns noBurst.
+//   - The group is not blocked: it still draws from the granter's
+//     noBurst pool, just ranked below canBurst groups in the groupHeap.
+//   - The next refill (within 1ms) installs the per-group scaled
+//     capacity and toAdd, and floors tokens at -capacity/4. The bucket
+//     then recovers toward canBurst over subsequent refills if the
+//     group stays at or below its allocation.
+//
+// The brief negative excursion is an accounting artifact: the granter's
+// token pool meters actual CPU, this bucket only governs burst
+// qualification.
+func (m *cpuTimeBurstBucket) init(capacity int64, disabled bool, maxCPU bool) {
+	*m = cpuTimeBurstBucket{
+		tokens:   capacity,
+		capacity: capacity,
+		maxCPU:   maxCPU,
+		disabled: disabled,
+	}
+}
+
+// burstQualification returns whether this group qualifies for burst
+// priority. See the cpuTimeBurstBucket comment for qualification rules.
+func (m *cpuTimeBurstBucket) burstQualification() burstQualification {
+	if m.disabled {
+		return noBurst
+	}
+	// MAX_CPU resource groups always qualify for burst.
+	if m.maxCPU {
+		return canBurst
+	}
+	// Note that at CRDB startup time, the capacity that is passed into
+	// cpuTimeBurstBucket.init will be zero, until 1ms passes, and the
+	// first call to refillBurstBuckets is made by cpuTimeTokenAllocator.
+	// So it is important that this code does not assume that m.capacity
+	// is non-zero. (There is a test for this case in
+	// TestCPUTimeTokenBurst.)
+	if m.tokens > (m.capacity*9)/10 {
+		return canBurst
+	}
+	return noBurst
+}
+
+// adjust modifies the token count by delta. A positive delta adds tokens
+// (e.g., when returning unused resources), while a negative delta removes
+// tokens (e.g., when work is admitted). The token count is capped at
+// capacity but has no floor here. The floor is enforced in refill, which
+// is called every 1ms. There is no need to enforce the floor more
+// frequently than that.
+func (m *cpuTimeBurstBucket) adjust(delta int64) {
+	m.tokens += delta
+	m.tokens = min(m.tokens, m.capacity)
+}
+
+// refill adds tokens to the bucket and updates capacity. This is called
+// periodically by cpuTimeTokenAllocator (every 1ms). The token count is capped
+// at capacity and floored at -capacity/4. The negative floor allows groups
+// that have gone into debt (consumed more than their share) to recover over
+// time rather than being disqualified from bursting for arbitrarily long periods
+// of time.
+func (m *cpuTimeBurstBucket) refill(toAdd int64, capacity int64) {
+	m.capacity = capacity
+	m.adjust(toAdd)
+	m.tokens = max(m.tokens, -m.capacity/4)
+}
+
+func (m *cpuTimeBurstBucket) String() string {
+	return redact.StringWithoutMarkers(m)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (m *cpuTimeBurstBucket) SafeFormat(s redact.SafePrinter, _ rune) {
+	var fullness float64
+	if m.capacity > 0 {
+		fullness = float64(m.tokens) / float64(m.capacity) * 100
+	}
+	if m.maxCPU {
+		s.Printf("fullness=%.1f%% tokens=%d capacity=%d maxCPU=true qual=%s",
+			fullness, m.tokens, m.capacity, m.burstQualification())
+	} else {
+		s.Printf("fullness=%.1f%% tokens=%d capacity=%d qual=%s",
+			fullness, m.tokens, m.capacity, m.burstQualification())
+	}
+}

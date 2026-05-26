@@ -1,0 +1,166 @@
+# Initialize a range with three replicas, none of which have send tokens.
+init regular_init=0 elastic_init=0
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=1
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate next=1
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate next=1
+----
+r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
+t1/s1: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+
+# Append entries. Replica 2 has a send-queue.
+raft_event pull-mode
+range_id=1
+  entries
+    term=1 index=1 pri=NormalPri size=1MiB
+    term=1 index=2 pri=LowPri size=1MiB
+----
+t1/s1: eval reg=-1.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+       send reg=-1.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=-2.0 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+t1/s3: eval reg=-1.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+       send reg=-1.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,3) (2.0 MiB) send_queue=[3,3) precise_q_size=+0 B
+eval deducted: reg=+1.0 MiB ela=+1.0 MiB
+eval original in send-q: reg=+0 B ela=+0 B
+LowPri:
+  term=1 index=2  tokens=1048576
+NormalPri:
+  term=1 index=1  tokens=1048576
+++++
+(n2,s2):2: state=replicate closed=false inflight=[1,1) send_queue=[1,3) precise_q_size=+2.0 MiB watching-for-tokens
+eval deducted: reg=+0 B ela=+2.0 MiB
+eval original in send-q: reg=+1.0 MiB ela=+1.0 MiB
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,3) (2.0 MiB) send_queue=[3,3) precise_q_size=+0 B
+eval deducted: reg=+1.0 MiB ela=+1.0 MiB
+eval original in send-q: reg=+0 B ela=+0 B
+LowPri:
+  term=1 index=2  tokens=1048576
+NormalPri:
+  term=1 index=1  tokens=1048576
+++++
+MsgApps sent in pull mode:
+ to: 3, lowPri: false entries: [1 2]
+++++
+
+# Give s2 some send tokens. The watcher will subtract the available tokens, so
+# elastic tokens will continue to be 0.
+adjust_tokens send
+  store_id=2 pri=HighPri tokens=512KiB
+----
+t1/s1: eval reg=-1.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+       send reg=-1.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=-2.0 MiB/+8.0 MiB
+       send reg=+512 KiB/+16 MiB ela=+0 B/+8.0 MiB
+t1/s3: eval reg=-1.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+       send reg=-1.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,3) (2.0 MiB) send_queue=[3,3) precise_q_size=+0 B
+eval deducted: reg=+1.0 MiB ela=+1.0 MiB
+eval original in send-q: reg=+0 B ela=+0 B
+LowPri:
+  term=1 index=2  tokens=1048576
+NormalPri:
+  term=1 index=1  tokens=1048576
+++++
+(n2,s2):2: state=replicate closed=false inflight=[1,1) send_queue=[1,3) precise_q_size=+2.0 MiB deducted=+512 KiB
+eval deducted: reg=+0 B ela=+2.0 MiB
+eval original in send-q: reg=+1.0 MiB ela=+1.0 MiB
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,3) (2.0 MiB) send_queue=[3,3) precise_q_size=+0 B
+eval deducted: reg=+1.0 MiB ela=+1.0 MiB
+eval original in send-q: reg=+0 B ela=+0 B
+LowPri:
+  term=1 index=2  tokens=1048576
+NormalPri:
+  term=1 index=1  tokens=1048576
+++++
+schedule-controller-event-count: 1
+scheduled-replicas: 2
+
+# Scheduler event in push-mode. Replica 2 will switch back to push mode and
+# return the deducted tokens.
+handle_scheduler_event range_id=1 push-mode
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,3) (2.0 MiB) send_queue=[3,3) precise_q_size=+0 B
+eval deducted: reg=+1.0 MiB ela=+1.0 MiB
+eval original in send-q: reg=+0 B ela=+0 B
+LowPri:
+  term=1 index=2  tokens=1048576
+NormalPri:
+  term=1 index=1  tokens=1048576
+++++
+(n2,s2):2: state=replicate closed=false inflight=[1,1) send_queue=[1,3) precise_q_size=+2.0 MiB
+eval deducted: reg=+1.0 MiB ela=+1.0 MiB
+eval original in send-q: reg=+1.0 MiB ela=+1.0 MiB
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,3) (2.0 MiB) send_queue=[3,3) precise_q_size=+0 B
+eval deducted: reg=+1.0 MiB ela=+1.0 MiB
+eval original in send-q: reg=+0 B ela=+0 B
+LowPri:
+  term=1 index=2  tokens=1048576
+NormalPri:
+  term=1 index=1  tokens=1048576
+++++
+schedule-controller-event-count: 1
+
+# Noop, to see the current tokens
+adjust_tokens send
+  store_id=2 pri=HighPri tokens=0
+----
+t1/s1: eval reg=-1.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+       send reg=-1.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+t1/s2: eval reg=-1.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+       send reg=+512 KiB/+16 MiB ela=+512 KiB/+8.0 MiB
+t1/s3: eval reg=-1.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+       send reg=-1.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+
+
+# Raft event in pull-mode. Replica 2 switches back to pull mode, and deducts
+# tokens.
+raft_event pull-mode
+range_id=1
+----
+t1/s1: eval reg=-1.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+       send reg=-1.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=-2.0 MiB/+8.0 MiB
+       send reg=+512 KiB/+16 MiB ela=+0 B/+8.0 MiB
+t1/s3: eval reg=-1.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+       send reg=-1.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,3) (2.0 MiB) send_queue=[3,3) precise_q_size=+0 B
+eval deducted: reg=+1.0 MiB ela=+1.0 MiB
+eval original in send-q: reg=+0 B ela=+0 B
+LowPri:
+  term=1 index=2  tokens=1048576
+NormalPri:
+  term=1 index=1  tokens=1048576
+++++
+(n2,s2):2: state=replicate closed=false inflight=[1,1) send_queue=[1,3) precise_q_size=+2.0 MiB deducted=+512 KiB
+eval deducted: reg=+0 B ela=+2.0 MiB
+eval original in send-q: reg=+1.0 MiB ela=+1.0 MiB
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,3) (2.0 MiB) send_queue=[3,3) precise_q_size=+0 B
+eval deducted: reg=+1.0 MiB ela=+1.0 MiB
+eval original in send-q: reg=+0 B ela=+0 B
+LowPri:
+  term=1 index=2  tokens=1048576
+NormalPri:
+  term=1 index=1  tokens=1048576
+++++
+schedule-controller-event-count: 2
+scheduled-replicas: 2

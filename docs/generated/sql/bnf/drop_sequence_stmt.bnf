@@ -1,0 +1,7 @@
+drop_sequence_stmt ::=
+	'DROP' 'SEQUENCE' sequence_name_list 'CASCADE'
+	| 'DROP' 'SEQUENCE' sequence_name_list 'RESTRICT'
+	| 'DROP' 'SEQUENCE' sequence_name_list 
+	| 'DROP' 'SEQUENCE' 'IF' 'EXISTS' sequence_name_list 'CASCADE'
+	| 'DROP' 'SEQUENCE' 'IF' 'EXISTS' sequence_name_list 'RESTRICT'
+	| 'DROP' 'SEQUENCE' 'IF' 'EXISTS' sequence_name_list 

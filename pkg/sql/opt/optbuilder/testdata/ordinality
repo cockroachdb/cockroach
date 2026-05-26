@@ -1,0 +1,84 @@
+exec-ddl
+CREATE TABLE abcd (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT,
+  INDEX abc (a, b, c)
+)
+----
+
+build
+SELECT * FROM (VALUES ('a'), ('b')) WITH ORDINALITY AS X(name, i)
+----
+ordinality
+ ├── columns: name:1!null i:2!null
+ └── values
+      ├── columns: column1:1!null
+      ├── ('a',)
+      └── ('b',)
+
+build
+SELECT a, ordinality FROM abcd WITH ORDINALITY
+----
+project
+ ├── columns: a:1!null ordinality:7!null
+ └── ordinality
+      ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6 ordinality:7!null
+      └── scan abcd
+           └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+
+build
+SELECT a, ordinality FROM (SELECT * FROM abcd ORDER BY a) WITH ORDINALITY
+----
+project
+ ├── columns: a:1!null ordinality:7!null
+ └── ordinality
+      ├── columns: a:1!null b:2 c:3 d:4 ordinality:7!null
+      └── project
+           ├── columns: a:1!null b:2 c:3 d:4
+           ├── ordering: +1
+           └── scan abcd
+                ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+                └── ordering: +1
+
+build
+SELECT a, ordinality FROM (SELECT * FROM abcd ORDER BY a) WITH ORDINALITY ORDER BY ordinality
+----
+project
+ ├── columns: a:1!null ordinality:7!null
+ ├── ordering: +7
+ └── ordinality
+      ├── columns: a:1!null b:2 c:3 d:4 ordinality:7!null
+      ├── ordering: +7
+      └── project
+           ├── columns: a:1!null b:2 c:3 d:4
+           ├── ordering: +1
+           └── scan abcd
+                ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+                └── ordering: +1
+
+build
+SELECT a FROM abcd WITH ORDINALITY ORDER BY ordinality
+----
+project
+ ├── columns: a:1!null  [hidden: ordinality:7!null]
+ ├── ordering: +7
+ └── ordinality
+      ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6 ordinality:7!null
+      ├── ordering: +7
+      └── scan abcd
+           └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+
+build
+SELECT ordinality FROM abcd WITH ORDINALITY ORDER BY a
+----
+sort
+ ├── columns: ordinality:7!null  [hidden: a:1!null]
+ ├── ordering: +1
+ └── project
+      ├── columns: a:1!null ordinality:7!null
+      └── ordinality
+           ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6 ordinality:7!null
+           └── scan abcd
+                └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6

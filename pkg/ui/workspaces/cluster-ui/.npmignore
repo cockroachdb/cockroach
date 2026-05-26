@@ -1,0 +1,25 @@
+# this file
+.npmignore
+
+# all things git
+.git*
+
+# source
+src/
+.jest
+.storybook
+.eslintrc.json
+
+# source maps
+*/**/*.js.map
+
+# eslint
+.eslintignore
+.eslintrc
+
+# project configs
+*.config.js
+tsconfig.json
+
+# bazel module mappings
+*.module_mappings.json

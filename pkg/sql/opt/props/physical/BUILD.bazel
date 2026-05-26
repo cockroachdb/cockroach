@@ -1,0 +1,48 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "physical",
+    srcs = [
+        "distribution.go",
+        "plangram.go",
+        "provided.go",
+        "required.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/cat",
+        "//pkg/sql/opt/constraint",
+        "//pkg/sql/opt/props",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sqlerrors",
+        "//pkg/util/buildutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "physical_test",
+    size = "small",
+    srcs = [
+        "distribution_test.go",
+        "plangram_test.go",
+        "required_test.go",
+    ],
+    embed = [":physical"],
+    deps = [
+        "//pkg/config/zonepb",
+        "//pkg/roachpb",
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/cat",
+        "//pkg/sql/opt/props",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
+        "@in_gopkg_yaml_v2//:yaml_v2",
+    ],
+)

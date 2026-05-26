@@ -1,0 +1,176 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/boolean.out --label=/mnt/data1/postgres/src/test/regress/results/boolean.out /mnt/data1/postgres/src/test/regress/expected/boolean.out /mnt/data1/postgres/src/test/regress/results/boolean.out
+--- /mnt/data1/postgres/src/test/regress/expected/boolean.out
++++ /mnt/data1/postgres/src/test/regress/results/boolean.out
+@@ -43,9 +43,7 @@
+ (1 row)
+ 
+ SELECT bool 'test' AS error;
+-ERROR:  invalid input syntax for type boolean: "test"
+-LINE 1: SELECT bool 'test' AS error;
+-                    ^
++ERROR:  could not parse "test" as type bool: invalid bool value
+ SELECT bool 'false' AS false;
+  false 
+ -------
+@@ -53,9 +51,7 @@
+ (1 row)
+ 
+ SELECT bool 'foo' AS error;
+-ERROR:  invalid input syntax for type boolean: "foo"
+-LINE 1: SELECT bool 'foo' AS error;
+-                    ^
++ERROR:  could not parse "foo" as type bool: invalid bool value
+ SELECT bool 'y' AS true;
+  true 
+ ------
+@@ -69,9 +65,7 @@
+ (1 row)
+ 
+ SELECT bool 'yeah' AS error;
+-ERROR:  invalid input syntax for type boolean: "yeah"
+-LINE 1: SELECT bool 'yeah' AS error;
+-                    ^
++ERROR:  could not parse "yeah" as type bool: invalid bool value
+ SELECT bool 'n' AS false;
+  false 
+ -------
+@@ -85,9 +79,7 @@
+ (1 row)
+ 
+ SELECT bool 'nay' AS error;
+-ERROR:  invalid input syntax for type boolean: "nay"
+-LINE 1: SELECT bool 'nay' AS error;
+-                    ^
++ERROR:  could not parse "nay" as type bool: invalid bool value
+ SELECT bool 'on' AS true;
+  true 
+ ------
+@@ -107,17 +99,11 @@
+ (1 row)
+ 
+ SELECT bool 'o' AS error;
+-ERROR:  invalid input syntax for type boolean: "o"
+-LINE 1: SELECT bool 'o' AS error;
+-                    ^
++ERROR:  could not parse "o" as type bool: invalid bool value
+ SELECT bool 'on_' AS error;
+-ERROR:  invalid input syntax for type boolean: "on_"
+-LINE 1: SELECT bool 'on_' AS error;
+-                    ^
++ERROR:  could not parse "on_" as type bool: invalid bool value
+ SELECT bool 'off_' AS error;
+-ERROR:  invalid input syntax for type boolean: "off_"
+-LINE 1: SELECT bool 'off_' AS error;
+-                    ^
++ERROR:  could not parse "off_" as type bool: invalid bool value
+ SELECT bool '1' AS true;
+  true 
+ ------
+@@ -125,9 +111,7 @@
+ (1 row)
+ 
+ SELECT bool '11' AS error;
+-ERROR:  invalid input syntax for type boolean: "11"
+-LINE 1: SELECT bool '11' AS error;
+-                    ^
++ERROR:  could not parse "11" as type bool: invalid bool value
+ SELECT bool '0' AS false;
+  false 
+ -------
+@@ -135,32 +119,16 @@
+ (1 row)
+ 
+ SELECT bool '000' AS error;
+-ERROR:  invalid input syntax for type boolean: "000"
+-LINE 1: SELECT bool '000' AS error;
+-                    ^
++ERROR:  could not parse "000" as type bool: invalid bool value
+ SELECT bool '' AS error;
+-ERROR:  invalid input syntax for type boolean: ""
+-LINE 1: SELECT bool '' AS error;
+-                    ^
++ERROR:  could not parse "" as type bool: invalid bool value
+ -- Also try it with non-error-throwing API
+ SELECT pg_input_is_valid('true', 'bool');
+- pg_input_is_valid 
+--------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT pg_input_is_valid('asdf', 'bool');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT * FROM pg_input_error_info('junk', 'bool');
+-                    message                    | detail | hint | sql_error_code 
+------------------------------------------------+--------+------+----------------
+- invalid input syntax for type boolean: "junk" |        |      | 22P02
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ -- and, or, not in qualifications
+ SELECT bool 't' or bool 'f' AS true;
+  true 
+@@ -237,9 +205,9 @@
+ (1 row)
+ 
+ SELECT '  tru e '::text::boolean AS invalid;    -- error
+-ERROR:  invalid input syntax for type boolean: "  tru e "
++ERROR:  could not parse "tru e" as type bool: invalid bool value
+ SELECT ''::text::boolean AS invalid;            -- error
+-ERROR:  invalid input syntax for type boolean: ""
++ERROR:  could not parse "" as type bool: invalid bool value
+ CREATE TABLE BOOLTBL1 (f1 bool);
+ INSERT INTO BOOLTBL1 (f1) VALUES (bool 't');
+ INSERT INTO BOOLTBL1 (f1) VALUES (bool 'True');
+@@ -276,10 +244,7 @@
+ SELECT BOOLTBL1.*
+    FROM BOOLTBL1
+    WHERE booleq(bool 'false', f1);
+- f1 
+-----
+-(0 rows)
+-
++ERROR:  unknown function: booleq()
+ INSERT INTO BOOLTBL1 (f1) VALUES (bool 'f');
+ SELECT BOOLTBL1.*
+    FROM BOOLTBL1
+@@ -298,9 +263,7 @@
+ -- For pre-v6.3 this evaluated to false - thomas 1997-10-23
+ INSERT INTO BOOLTBL2 (f1)
+    VALUES (bool 'XXX');
+-ERROR:  invalid input syntax for type boolean: "XXX"
+-LINE 2:    VALUES (bool 'XXX');
+-                        ^
++ERROR:  could not parse "XXX" as type bool: invalid bool value
+ -- BOOLTBL2 should be full of false's at this point
+ SELECT BOOLTBL2.* FROM BOOLTBL2;
+  f1 
+@@ -333,22 +296,7 @@
+ SELECT BOOLTBL1.*, BOOLTBL2.*
+    FROM BOOLTBL1, BOOLTBL2
+    WHERE boolne(BOOLTBL2.f1,BOOLTBL1.f1);
+- f1 | f1 
+-----+----
+- t  | f
+- t  | f
+- t  | f
+- t  | f
+- t  | f
+- t  | f
+- t  | f
+- t  | f
+- t  | f
+- t  | f
+- t  | f
+- t  | f
+-(12 rows)
+-
++ERROR:  unknown function: boolne()
+ SELECT BOOLTBL1.*, BOOLTBL2.*
+    FROM BOOLTBL1, BOOLTBL2
+    WHERE BOOLTBL2.f1 = BOOLTBL1.f1 and BOOLTBL1.f1 = bool 'false';

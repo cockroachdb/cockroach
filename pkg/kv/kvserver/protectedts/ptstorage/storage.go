@@ -1,0 +1,378 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+// Package ptstorage implements protectedts.Storage.
+package ptstorage
+
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
+)
+
+// TODO(ajwerner): Consider memory accounting.
+// TODO(ajwerner): Add metrics.
+
+// TODO(ajwerner): Provide some sort of reconciliation of metadata in the face
+// of corruption. Not clear how or why such corruption might happen but if it
+// does it might be nice to have an escape hatch. Perhaps another interface
+// method which scans the records and updates the counts in the meta row
+// accordingly.
+
+// TODO(ajwerner): Hook into the alerts infrastructure and metrics to provide
+// visibility into corruption when it is detected.
+
+// Manager interacts with the durable state of the protectedts subsystem.
+type Manager struct {
+	settings *cluster.Settings
+	knobs    *protectedts.TestingKnobs
+	metrics  Metrics
+}
+
+// storage implements protectedts.Storage with a transaction.
+type storage struct {
+	txn      isql.Txn
+	settings *cluster.Settings
+	knobs    *protectedts.TestingKnobs
+	metrics  *Metrics
+}
+
+func (p *storage) Protect(ctx context.Context, r *ptpb.Record) (err error) {
+	defer func() {
+		if err != nil {
+			p.metrics.ProtectFailed.Inc(1)
+		} else {
+			p.metrics.ProtectSuccess.Inc(1)
+		}
+	}()
+
+	if err := validateRecordForProtect(ctx, r, p.knobs); err != nil {
+		return err
+	}
+
+	meta := r.Meta
+	if meta == nil {
+		// v20.1 crashes in rowToRecord and Manager.Release if it finds a NULL
+		// value in system.protected_ts_records.meta. v20.2 and above handle
+		// this correctly, but we need to maintain mixed version compatibility
+		// for at least one release.
+		// TODO(nvanbenschoten): remove this for v21.1.
+		meta = []byte{}
+	}
+
+	// Clear the `DeprecatedSpans` field even if it has been set by the caller.
+	// Once the `AlterSystemProtectedTimestampAddColumn` migration has run, we
+	// only want to persist the `target` on which the pts record applies. We have
+	// already verified that the record has a valid `target`.
+	r.DeprecatedSpans = nil
+	encodedTarget, err := protoutil.Marshal(&ptpb.Target{Union: r.Target.GetUnion(),
+		IgnoreIfExcludedFromBackup: r.Target.IgnoreIfExcludedFromBackup})
+	if err != nil { // how can this possibly fail?
+		return errors.Wrap(err, "failed to marshal target")
+	}
+
+	// Encode an empty Spans message for the spans column for backward compatibility
+	encodedSpans, err := protoutil.Marshal(&Spans{Spans: nil})
+	if err != nil { // how can this possibly fail?
+		return errors.Wrap(err, "failed to marshal spans")
+	}
+
+	s := makeSettings(p.settings)
+	query := protectQuery
+	args := []interface{}{
+		s.maxSpans, s.maxBytes, 0, // num_spans is always 0 now since we use targets
+		r.ID, r.Timestamp.AsOfSystemTime(),
+		r.MetaType, meta,
+		0, encodedSpans, encodedTarget} // num_spans is 0
+
+	it, err := p.txn.QueryIteratorEx(ctx, "protectedts-protect", p.txn.KV(),
+		sessiondata.NodeUserSessionDataOverride,
+		query,
+		args...)
+	if err != nil {
+		return errors.Wrapf(err, "failed to write record %v", r.ID)
+	}
+
+	ok, err := it.Next(ctx)
+	if err != nil {
+		return errors.Wrapf(err, "failed to write record %v", r.ID)
+	}
+	if !ok {
+		return errors.Newf("failed to write record %v", r.ID)
+	}
+
+	defer func() {
+		if err := it.Close(); err != nil {
+			log.KvDistribution.Infof(ctx, "encountered %v when writing record %v", err, r.ID)
+		}
+	}()
+
+	row := it.Cur()
+	if failed := *row[0].(*tree.DBool); failed {
+		return protectedts.ErrExists
+	}
+
+	return nil
+}
+
+func (p *storage) GetRecord(ctx context.Context, id uuid.UUID) (rec *ptpb.Record, err error) {
+	defer func() {
+		if err != nil {
+			p.metrics.GetRecordFailed.Inc(1)
+		} else {
+			p.metrics.GetRecordSuccess.Inc(1)
+		}
+	}()
+
+	row, err := p.txn.QueryRowEx(ctx, "protectedts-GetRecord", p.txn.KV(),
+		sessiondata.NodeUserSessionDataOverride,
+		getRecordQuery, id.GetBytesMut())
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to read record %v", id)
+	}
+	if len(row) == 0 {
+		return nil, protectedts.ErrNotExists
+	}
+	var r ptpb.Record
+	if err := rowToRecord(row, &r); err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+func (p storage) MarkVerified(ctx context.Context, id uuid.UUID) error {
+	numRows, err := p.txn.ExecEx(ctx, "protectedts-MarkVerified", p.txn.KV(),
+		sessiondata.NodeUserSessionDataOverride,
+		markVerifiedQuery, id.GetBytesMut())
+	if err != nil {
+		return errors.Wrapf(err, "failed to mark record %v as verified", id)
+	}
+	if numRows == 0 {
+		return protectedts.ErrNotExists
+	}
+	return nil
+}
+
+func (p storage) Release(ctx context.Context, id uuid.UUID) (err error) {
+	defer func() {
+		if err != nil {
+			p.metrics.ReleaseFailed.Inc(1)
+		} else {
+			p.metrics.ReleaseSuccess.Inc(1)
+		}
+	}()
+
+	query := releaseQueryWithMeta
+	numRows, err := p.txn.ExecEx(ctx, "protectedts-Release", p.txn.KV(),
+		sessiondata.NodeUserSessionDataOverride,
+		query, id.GetBytesMut())
+	if err != nil {
+		return errors.Wrapf(err, "failed to release record %v", id)
+	}
+	if numRows == 0 {
+		return protectedts.ErrNotExists
+	}
+	return nil
+}
+
+func (p storage) GetMetadata(ctx context.Context) (ptpb.Metadata, error) {
+	row, err := p.txn.QueryRowEx(ctx, "protectedts-GetMetadata", p.txn.KV(),
+		sessiondata.NodeUserSessionDataOverride,
+		getMetadataQuery)
+	if err != nil {
+		return ptpb.Metadata{}, errors.Wrap(err, "failed to read metadata")
+	}
+	if row == nil {
+		return ptpb.Metadata{}, errors.New("failed to read metadata")
+	}
+	return ptpb.Metadata{
+		Version:    uint64(*row[0].(*tree.DInt)),
+		NumRecords: uint64(*row[1].(*tree.DInt)),
+		NumSpans:   uint64(*row[2].(*tree.DInt)),
+		TotalBytes: uint64(*row[3].(*tree.DInt)),
+	}, nil
+}
+
+func (p storage) GetState(ctx context.Context) (ptpb.State, error) {
+	md, err := p.GetMetadata(ctx)
+	if err != nil {
+		return ptpb.State{}, err
+	}
+	records, err := p.getRecords(ctx)
+	if err != nil {
+		return ptpb.State{}, err
+	}
+	return ptpb.State{
+		Metadata: md,
+		Records:  records,
+	}, nil
+}
+
+func (p *storage) getRecords(ctx context.Context) ([]ptpb.Record, error) {
+	it, err := p.txn.QueryIteratorEx(ctx, "protectedts-GetRecords", p.txn.KV(),
+		sessiondata.NodeUserSessionDataOverride, getRecordsQuery)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to read records")
+	}
+
+	var ok bool
+	var records []ptpb.Record
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		var record ptpb.Record
+		if err := rowToRecord(it.Cur(), &record); err != nil {
+			log.KvDistribution.Errorf(ctx, "failed to parse row as record: %v", err)
+		}
+		records = append(records, record)
+	}
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to read records")
+	}
+	return records, nil
+}
+
+func (p storage) UpdateTimestamp(
+	ctx context.Context, id uuid.UUID, timestamp hlc.Timestamp,
+) (err error) {
+	defer func() {
+		if err != nil {
+			p.metrics.UpdateTimestampFailed.Inc(1)
+		} else {
+			p.metrics.UpdateTimestampSuccess.Inc(1)
+		}
+	}()
+
+	query := updateTimestampUpsertRecordCTE
+
+	row, err := p.txn.QueryRowEx(ctx, "protectedts-update", p.txn.KV(),
+		sessiondata.NodeUserSessionDataOverride,
+		query, id.GetBytesMut(), timestamp.AsOfSystemTime())
+	if err != nil {
+		return errors.Wrapf(err, "failed to update record %v", id)
+	}
+	if len(row) == 0 {
+		return protectedts.ErrNotExists
+	}
+	return nil
+}
+
+func (p *Manager) WithTxn(txn isql.Txn) protectedts.Storage {
+	return &storage{
+		txn:      txn,
+		settings: p.settings,
+		knobs:    p.knobs,
+		metrics:  &p.metrics,
+	}
+}
+
+var _ protectedts.Manager = (*Manager)(nil)
+
+// New creates a new Storage.
+func New(settings *cluster.Settings, knobs *protectedts.TestingKnobs) *Manager {
+	if knobs == nil {
+		knobs = &protectedts.TestingKnobs{}
+	}
+	return &Manager{
+		settings: settings,
+		knobs:    knobs,
+		metrics:  makeMetrics(),
+	}
+}
+
+// Metrics returns the storage metrics.
+func (p *Manager) Metrics() *Metrics {
+	return &p.metrics
+}
+
+// rowToRecord parses a row as returned from the variants of getRecords and
+// populates the passed *Record. If any errors are encountered during parsing,
+// they are logged but not returned. Returning an error due to malformed data
+// in the protected timestamp subsystem would create more problems than it would
+// solve. Malformed records can still be removed (and hopefully will be).
+func rowToRecord(row tree.Datums, r *ptpb.Record) error {
+	r.ID = row[0].(*tree.DUuid).UUID.GetBytes()
+	tsDecimal := row[1].(*tree.DDecimal)
+	ts, err := hlc.DecimalToHLC(&tsDecimal.Decimal)
+	if err != nil {
+		return errors.Wrapf(err, "failed to parse timestamp for %v", r.ID)
+	}
+	r.Timestamp = ts
+
+	r.MetaType = string(*row[2].(*tree.DString))
+	if row[3] != tree.DNull {
+		if meta := row[3].(*tree.DBytes); len(*meta) > 0 {
+			r.Meta = []byte(*meta)
+		}
+	}
+	var spans Spans
+	if err := protoutil.Unmarshal([]byte(*row[4].(*tree.DBytes)), &spans); err != nil {
+		return errors.Wrapf(err, "failed to unmarshal span for %v", r.ID)
+	}
+	r.DeprecatedSpans = spans.Spans
+	r.Verified = bool(*row[5].(*tree.DBool))
+
+	target := &ptpb.Target{}
+	targetDBytes, ok := row[6].(*tree.DBytes)
+	if !ok {
+		// We are reading a pre-22.1 protected timestamp record that has a NULL
+		// target column, so there is nothing more to do.
+		return nil
+	}
+	if err := protoutil.Unmarshal([]byte(*targetDBytes), target); err != nil {
+		return errors.Wrapf(err, "failed to unmarshal target for %v", r.ID)
+	}
+	r.Target = target
+	return nil
+}
+
+type settings struct {
+	maxSpans int64
+	maxBytes int64
+}
+
+func makeSettings(s *cluster.Settings) settings {
+	return settings{
+		maxSpans: protectedts.MaxSpans.Get(&s.SV),
+		maxBytes: protectedts.MaxBytes.Get(&s.SV),
+	}
+}
+
+var (
+	errZeroTimestamp        = errors.New("invalid zero value timestamp")
+	errZeroID               = errors.New("invalid zero value ID")
+	errNilTarget            = errors.Errorf("invalid nil target")
+	errInvalidMeta          = errors.Errorf("invalid Meta with empty MetaType")
+	errCreateVerifiedRecord = errors.Errorf("cannot create a verified record")
+)
+
+func validateRecordForProtect(
+	ctx context.Context, r *ptpb.Record, knobs *protectedts.TestingKnobs,
+) error {
+	if r.Timestamp.IsEmpty() {
+		return errZeroTimestamp
+	}
+	if r.ID.GetUUID() == uuid.Nil {
+		return errZeroID
+	}
+	if r.Target == nil {
+		return errNilTarget
+	}
+	if len(r.Meta) > 0 && len(r.MetaType) == 0 {
+		return errInvalidMeta
+	}
+	if r.Verified {
+		return errCreateVerifiedRecord
+	}
+	return nil
+}

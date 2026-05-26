@@ -1,0 +1,74 @@
+parse
+SELECT udf()
+----
+SELECT udf()
+SELECT (udf()) -- fully parenthesized
+SELECT udf() -- literals removed
+SELECT _() -- identifiers removed
+
+parse
+SELECT udf('arg1', 2.0, now(), rtrim('abcd'))
+----
+SELECT udf('arg1', 2.0, now(), rtrim('abcd'))
+SELECT (udf(('arg1'), (2.0), (now()), (rtrim(('abcd'))))) -- fully parenthesized
+SELECT udf('_', _, now(), rtrim('_')) -- literals removed
+SELECT _('arg1', 2.0, _(), _('abcd')) -- identifiers removed
+
+parse
+SELECT floor(udf('arg'))
+----
+SELECT floor(udf('arg'))
+SELECT (floor((udf(('arg'))))) -- fully parenthesized
+SELECT floor(udf('_')) -- literals removed
+SELECT _(_('arg')) -- identifiers removed
+
+parse
+SELECT substring(udf(1, 2), 3)
+----
+SELECT substring(udf(1, 2), 3)
+SELECT (substring((udf((1), (2))), (3))) -- fully parenthesized
+SELECT substring(udf(_, _), _) -- literals removed
+SELECT substring(_(1, 2), 3) -- identifiers removed
+
+# This is not a signature for the built-in function btrim.
+parse
+SELECT btrim()
+----
+SELECT btrim()
+SELECT (btrim()) -- fully parenthesized
+SELECT btrim() -- literals removed
+SELECT _() -- identifiers removed
+
+parse
+SELECT * FROM f() AS foo(x INT, y INT);
+----
+SELECT * FROM ROWS FROM (f()) AS foo (x INT8, y INT8) -- normalized!
+SELECT (*) FROM ROWS FROM ((f())) AS foo (x INT8, y INT8) -- fully parenthesized
+SELECT * FROM ROWS FROM (f()) AS foo (x INT8, y INT8) -- literals removed
+SELECT * FROM ROWS FROM (_()) AS _ (_ INT8, _ INT8) -- identifiers removed
+
+parse
+SELECT * FROM f() AS foo(x, y);
+----
+SELECT * FROM ROWS FROM (f()) AS foo (x, y) -- normalized!
+SELECT (*) FROM ROWS FROM ((f())) AS foo (x, y) -- fully parenthesized
+SELECT * FROM ROWS FROM (f()) AS foo (x, y) -- literals removed
+SELECT * FROM ROWS FROM (_()) AS _ (_, _) -- identifiers removed
+
+error
+SELECT * FROM f() AS foo(x, y INT);
+----
+at or near "int": syntax error
+DETAIL: source SQL:
+SELECT * FROM f() AS foo(x, y INT)
+                              ^
+HINT: try \h <SOURCE>
+
+error
+SELECT * FROM f() AS foo(x INT, y);
+----
+at or near ")": syntax error
+DETAIL: source SQL:
+SELECT * FROM f() AS foo(x INT, y)
+                                 ^
+HINT: try \h <SOURCE>

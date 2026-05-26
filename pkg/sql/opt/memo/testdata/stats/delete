@@ -1,0 +1,117 @@
+exec-ddl
+CREATE TABLE abc (
+    a INT NOT NULL,
+    b TEXT DEFAULT ('foo'),
+    c FLOAT AS (a::float) STORED
+)
+----
+
+exec-ddl
+ALTER TABLE abc INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 10
+  }
+]'
+----
+
+exec-ddl
+CREATE TABLE xyz (
+    x TEXT PRIMARY KEY,
+    y INT8 NOT NULL,
+    z FLOAT8
+)
+----
+
+# Statistics should be derived from DELETE input columns and transferred to
+# RETURNING columns.
+build
+SELECT *
+FROM [DELETE FROM xyz WHERE z=5.5 RETURNING *]
+WHERE x > 'foo'
+----
+with &1
+ ├── columns: x:11(string!null) y:12(int!null) z:13(float!null)
+ ├── volatile, mutations
+ ├── stats: [rows=3.33333, distinct(11)=3.33333, null(11)=0]
+ ├── key: (11)
+ ├── fd: ()-->(13), (11)-->(12)
+ ├── delete xyz
+ │    ├── columns: xyz.x:1(string!null) xyz.y:2(int!null) xyz.z:3(float!null)
+ │    ├── fetch columns: xyz.x:6(string) xyz.y:7(int) xyz.z:8(float)
+ │    ├── return-mapping:
+ │    │    ├── xyz.x:6 => xyz.x:1
+ │    │    ├── xyz.y:7 => xyz.y:2
+ │    │    └── xyz.z:8 => xyz.z:3
+ │    ├── volatile, mutations
+ │    ├── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=9.56179, null(2)=0, distinct(3)=1, null(3)=0]
+ │    ├── key: (1)
+ │    ├── fd: ()-->(3), (1)-->(2)
+ │    └── select
+ │         ├── columns: xyz.x:6(string!null) xyz.y:7(int!null) xyz.z:8(float!null) crdb_internal_mvcc_timestamp:9(decimal) tableoid:10(oid)
+ │         ├── stats: [rows=10, distinct(6)=10, null(6)=0, distinct(7)=9.56179, null(7)=0, distinct(8)=1, null(8)=0]
+ │         ├── key: (6)
+ │         ├── fd: ()-->(8), (6)-->(7,9,10)
+ │         ├── scan xyz
+ │         │    ├── columns: xyz.x:6(string!null) xyz.y:7(int!null) xyz.z:8(float) crdb_internal_mvcc_timestamp:9(decimal) tableoid:10(oid)
+ │         │    ├── flags: avoid-full-scan
+ │         │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, distinct(7)=100, null(7)=0, distinct(8)=100, null(8)=10]
+ │         │    ├── key: (6)
+ │         │    └── fd: (6)-->(7-10)
+ │         └── filters
+ │              └── xyz.z:8 = 5.5 [type=bool, outer=(8), constraints=(/8: [/5.5 - /5.5]; tight), fd=()-->(8)]
+ └── select
+      ├── columns: x:11(string!null) y:12(int!null) z:13(float!null)
+      ├── stats: [rows=3.33333, distinct(11)=3.33333, null(11)=0]
+      ├── key: (11)
+      ├── fd: ()-->(13), (11)-->(12)
+      ├── with-scan &1
+      │    ├── columns: x:11(string!null) y:12(int!null) z:13(float!null)
+      │    ├── mapping:
+      │    │    ├──  xyz.x:1(string) => x:11(string)
+      │    │    ├──  xyz.y:2(int) => y:12(int)
+      │    │    └──  xyz.z:3(float) => z:13(float)
+      │    ├── stats: [rows=10, distinct(11)=10, null(11)=0, distinct(12)=9.56179, null(12)=0, distinct(13)=1, null(13)=0]
+      │    ├── key: (11)
+      │    └── fd: ()-->(13), (11)-->(12)
+      └── filters
+           └── x:11 > 'foo' [type=bool, outer=(11), constraints=(/11: [/e'foo\x00' - ]; tight)]
+
+# Cardinality is zero.
+build
+DELETE FROM xyz WHERE False RETURNING *
+----
+delete xyz
+ ├── columns: x:1(string!null) y:2(int!null) z:3(float)
+ ├── fetch columns: x:6(string) y:7(int) z:8(float)
+ ├── return-mapping:
+ │    ├── x:6 => x:1
+ │    ├── y:7 => y:2
+ │    └── z:8 => z:3
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── stats: [rows=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ └── select
+      ├── columns: x:6(string!null) y:7(int!null) z:8(float) crdb_internal_mvcc_timestamp:9(decimal) tableoid:10(oid)
+      ├── cardinality: [0 - 0]
+      ├── stats: [rows=0]
+      ├── key: (6)
+      ├── fd: (6)-->(7-10)
+      ├── scan xyz
+      │    ├── columns: x:6(string!null) y:7(int!null) z:8(float) crdb_internal_mvcc_timestamp:9(decimal) tableoid:10(oid)
+      │    ├── flags: avoid-full-scan
+      │    ├── stats: [rows=1000]
+      │    ├── key: (6)
+      │    └── fd: (6)-->(7-10)
+      └── filters
+           └── false [type=bool, constraints=(contradiction; tight)]

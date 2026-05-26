@@ -1,0 +1,360 @@
+# ------------------------------------------------------------------------------
+# Zigzag join tests on non-inverted indexes.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE a (n INT PRIMARY KEY, a INT, b INT, c STRING, INDEX a_idx(a), INDEX b_idx(b), INDEX bc_idx(b,c));
+INSERT INTO a SELECT a,a,a%3,'foo' FROM generate_series(1,10) AS g(a) ;
+SET enable_zigzag_join = true
+
+query III rowsort
+SELECT n,a,b FROM a WHERE a = 4 AND b = 1
+----
+4  4  1
+
+query III rowsort
+SELECT n,a,b FROM a WHERE a = 5 AND b = 2
+----
+5  5  2
+
+query IIIT rowsort
+SELECT * FROM a WHERE a = 4 AND b = 1
+----
+4  4  1  foo
+
+query IIIT rowsort
+SELECT * FROM a WHERE a = 4 AND b = 2
+----
+
+query IIIT rowsort
+SELECT * FROM a WHERE a = 5 AND b = 2 AND c = 'foo'
+----
+5  5  2  foo
+
+# Turn off zigzag joins and verify output. First with a hint, then with the
+# session variable.
+query III rowsort
+SELECT n,a,b FROM a@{NO_ZIGZAG_JOIN} WHERE a = 4 AND b = 1
+----
+4  4  1
+
+statement ok
+SET enable_zigzag_join = false
+
+query III rowsort
+SELECT n,a,b FROM a WHERE a = 4 AND b = 1
+----
+4  4  1
+
+query III rowsort
+SELECT n,a,b FROM a WHERE a = 5 AND b = 2
+----
+5  5  2
+
+statement ok
+SET enable_zigzag_join = true
+
+# Regression test for 42164 ("invalid indexIdx" error).
+statement ok
+DROP INDEX a@a_idx;
+DROP INDEX a@b_idx;
+
+statement ok
+CREATE INDEX c_idx ON a(c);
+CREATE INDEX a_idx ON a(a);
+CREATE INDEX b_idx ON a(b);
+
+statement ok
+SELECT n,a,b FROM a WHERE a = 4 AND b = 1;
+
+# Regression test for 48003 ("non-values node passed as fixed value to zigzag
+# join" error).
+statement ok
+SELECT n FROM a WHERE b = 1 AND (((a < 1) AND (a > 1)) OR (a >= 2 AND a <= 2))
+
+# Regression test for #71655. Zig-zag joins should only be planned with implicit
+# equality columns that are non-nullable.
+statement ok
+CREATE TABLE t71655 (
+    k INT PRIMARY KEY,
+    a INT,
+    b INT,
+    c INT,
+    d INT NOT NULL,
+    INDEX ac (a, c),
+    INDEX bc (b, c)
+);
+INSERT INTO t71655 VALUES (1, 10, 20, NULL, 11);
+INSERT INTO t71655 VALUES (2, 10, 20, NULL, 12)
+
+# A zig-zag join is not performed here with ac and bc because c is nullable and
+# cannot be an implicit equality column.
+query I rowsort
+SELECT k FROM t71655 WHERE a = 10 AND b = 20
+----
+1
+2
+
+statement ok
+CREATE INDEX ad ON t71655 (a, d);
+CREATE INDEX bd ON t71655 (b, d)
+
+# A zig-zag join is performed here with ad and bd because d is non-nullable and
+# can be an implicit equality column.
+query I rowsort
+SELECT k FROM t71655 WHERE a = 10 AND b = 20
+----
+1
+2
+
+# ------------------------------------------------------------------------------
+# Zigzag join tests on inverted indexes.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE d (
+  a INT PRIMARY KEY,
+  b JSONB
+)
+
+statement ok
+CREATE INVERTED INDEX foo_inv ON d(b)
+
+statement ok
+SHOW INDEX FROM d
+
+statement ok
+INSERT INTO d VALUES(1, '{"a": "b"}')
+
+statement ok
+INSERT INTO d VALUES(2, '[1,2,3,4, "foo"]')
+
+statement ok
+INSERT INTO d VALUES(3, '{"a": {"b": "c"}}')
+
+statement ok
+INSERT INTO d VALUES(4, '{"a": {"b": [1]}}')
+
+statement ok
+INSERT INTO d VALUES(5, '{"a": {"b": [1, [2]]}}')
+
+statement ok
+INSERT INTO d VALUES(6, '{"a": {"b": [[2]]}}')
+
+statement ok
+INSERT INTO d VALUES(7, '{"a": "b", "c": "d"}')
+
+statement ok
+INSERT INTO d VALUES(8, '{"a": {"b":true}}')
+
+statement ok
+INSERT INTO d VALUES(9, '{"a": {"b":false}}')
+
+statement ok
+INSERT INTO d VALUES(10, '"a"')
+
+statement ok
+INSERT INTO d VALUES(11, 'null')
+
+statement ok
+INSERT INTO d VALUES(12, 'true')
+
+statement ok
+INSERT INTO d VALUES(13, 'false')
+
+statement ok
+INSERT INTO d VALUES(14, '1')
+
+statement ok
+INSERT INTO d VALUES(15, '1.23')
+
+statement ok
+INSERT INTO d VALUES(16, '[{"a": {"b": [1, [2]]}}, "d"]')
+
+statement ok
+INSERT INTO d VALUES(17, '{}')
+
+statement ok
+INSERT INTO d VALUES(18, '[]')
+
+statement ok
+INSERT INTO d VALUES (29,  NULL)
+
+statement ok
+INSERT INTO d VALUES (30,  '{"a": []}')
+
+statement ok
+INSERT INTO d VALUES (31,  '{"a": {"b": "c", "d": "e"}, "f": "g"}')
+
+statement ok
+ANALYZE d;
+
+## Multi-path contains queries with zigzag joins enabled.
+
+query IT
+SELECT * from d where b @> '{"a": {"b": "c"}, "f": "g"}'
+----
+31  {"a": {"b": "c", "d": "e"}, "f": "g"}
+
+query IT
+SELECT * from d where b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
+----
+31  {"a": {"b": "c", "d": "e"}, "f": "g"}
+
+query IT
+SELECT * from d where b @> '{"c": "d", "a": "b"}'
+----
+7  {"a": "b", "c": "d"}
+
+query IT
+SELECT * from d where b @> '{"c": "d", "a": "b", "f": "g"}'
+----
+
+query IT
+SELECT * from d where b @> '{"a": "b", "c": "e"}'
+----
+
+query IT
+SELECT * from d where b @> '{"a": "e", "c": "d"}'
+----
+
+query IT
+SELECT * from d where b @> '["d", {"a": {"b": [1]}}]'
+----
+16  [{"a": {"b": [1, [2]]}}, "d"]
+
+query IT
+SELECT * from d where b @> '["d", {"a": {"b": [[2]]}}]'
+----
+16  [{"a": {"b": [1, [2]]}}, "d"]
+
+query IT
+SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
+----
+16  [{"a": {"b": [1, [2]]}}, "d"]
+
+# Zigzag hinting tests, functional tests in opt.xform coster tests, syntax tests
+# in parser select_clauses.
+
+statement error index "foo" not found
+SELECT * FROM a@{FORCE_ZIGZAG=foo} WHERE a = 3 AND b = 7
+
+# c_idx can't be used to zigzag so this is an error.
+statement error could not produce a query plan conforming to the FORCE_ZIGZAG hint
+SELECT * FROM a@{FORCE_ZIGZAG=a_idx,FORCE_ZIGZAG=c_idx} WHERE a = 3 AND b = 7
+
+# Need two equalities to plan a zigzag.
+statement error could not produce a query plan conforming to the FORCE_ZIGZAG hint
+SELECT * FROM a@{FORCE_ZIGZAG=a_idx,FORCE_ZIGZAG=b_idx} WHERE a = 3
+
+# Need two suitable indexes to plan a zigzag.
+statement error could not produce a query plan conforming to the FORCE_ZIGZAG hint
+SELECT * FROM a@{FORCE_ZIGZAG=a_idx,FORCE_ZIGZAG=bc_idx} WHERE a = 3 AND b = 7
+
+# Basic form w/o indexes.
+statement ok
+SELECT * FROM a@{FORCE_ZIGZAG} WHERE a = 3 AND b = 7
+
+# Consider this an error, certainly its a typo.
+statement error FORCE_ZIGZAG hints not distinct
+SELECT * FROM a@{FORCE_ZIGZAG,FORCE_ZIGZAG=a_idx} WHERE a = 3 AND b = 7
+
+# Dupes are an error.
+statement error FORCE_ZIGZAG index duplicated
+SELECT * FROM a@{FORCE_ZIGZAG=a_idx,FORCE_ZIGZAG=a_idx} WHERE a = 3 AND b = 7
+
+# Full indexes specified.
+statement ok
+SELECT * FROM a@{FORCE_ZIGZAG=a_idx,FORCE_ZIGZAG=b_idx} WHERE a = 3 AND b = 7
+
+statement ok
+DROP INDEX a@c_idx
+
+# Check error if no index.
+statement error could not produce a query plan conforming to the FORCE_ZIGZAG hint
+SELECT * FROM a@{FORCE_ZIGZAG} WHERE a = 3 AND c = 'foo'
+
+# Dupes are an error.
+statement error FORCE_ZIGZAG index duplicated
+SELECT * FROM a@{FORCE_ZIGZAG=[1],FORCE_ZIGZAG=[1]} WHERE a = 3 AND b = 7
+
+# Some of the test depend on the IDs of the exact indexes. If this
+# test fails, then the tests below may also need to change.
+query TT rowsort
+WITH indexes AS (
+    SELECT json_array_elements(crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->'indexes') AS idx
+    FROM system.descriptor AS d
+    JOIN system.namespace AS n
+    ON d.id = n.id
+    WHERE n.name = 'a'
+)
+SELECT idx->>'name', idx->>'id' FROM indexes
+----
+bc_idx  4
+a_idx   7
+b_idx   9
+
+# Full indexes specified. 7 is a_idx and 9 is b_idx.
+statement ok
+SELECT * FROM a@{FORCE_ZIGZAG=[7],FORCE_ZIGZAG=[9]} WHERE a = 3 AND b = 7
+
+# Combining name and id is allowed.
+statement ok
+SELECT * FROM a@{FORCE_ZIGZAG=[7],FORCE_ZIGZAG=b_idx} WHERE a = 3 AND b = 7
+
+# Duplicate name and id is not allowed.
+statement error FORCE_ZIGZAG index duplicated
+SELECT * FROM a@{FORCE_ZIGZAG=[7],FORCE_ZIGZAG=a_idx} WHERE a = 3 AND b = 7
+
+statement error FORCE_ZIGZAG cannot be specified in conjunction with NO_ZIGZAG_JOIN
+SELECT * FROM a@{FORCE_ZIGZAG,NO_ZIGZAG_JOIN} WHERE a = 3 AND b = 7
+
+# Regression tests for not fetching columns that are only needed by the ON
+# expression (#71093).
+statement ok
+CREATE TABLE t71093 (a INT, b INT, c INT, d INT, INDEX a_idx(a) STORING (b), INDEX c_idx(c) STORING (d));
+INSERT INTO t71093 VALUES (0, 1, 2, 3)
+
+# ON expr needs the stored column from the left side.
+query I
+SELECT count(*) FROM t71093 WHERE a = 0 AND b = 1 AND c = 2
+----
+1
+
+# ON expr needs the stored column from the right side.
+query I
+SELECT count(*) FROM t71093 WHERE a = 0 AND c = 2 AND d = 3
+----
+1
+
+# ON expr needs the stored columns from both sides.
+query I
+SELECT count(*) FROM t71093 WHERE a = 0 AND b = 1 AND c = 2 AND d = 3
+----
+1
+
+# Regression test for mistakenly attempting to fetch columns not needed by ON
+# expr that are not in the index (#71271).
+statement ok
+CREATE TABLE t71271(a INT, b INT, c INT, d INT, INDEX (c), INDEX (d))
+
+statement ok
+SELECT d FROM t71271 WHERE c = 3 AND d = 4
+
+# Regression test for #97090. We should not plan a zigzag join when the
+# direction of the equality columns doesn't match.
+statement ok
+CREATE TABLE t97090 (
+  c INT NOT NULL,
+  l INT NOT NULL,
+  r INT NOT NULL,
+  INDEX (l ASC, c DESC),
+  INDEX (r ASC, c ASC)
+);
+INSERT INTO t97090 VALUES (1, 1, -1), (2, 1, -2)
+
+# This query should return one row.
+query III
+SELECT * FROM t97090 WHERE l = 1 AND r = -1
+----
+1  1  -1

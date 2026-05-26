@@ -1,0 +1,164 @@
+parse
+DECLARE
+BEGIN
+  IF johnnyGyro THEN
+    NULL;
+    diego := 1 + 2;
+  ELSIF hiHotPants THEN
+    diego := 7 + 7;
+  ELSE
+    diego := 0;
+  END IF;
+END
+----
+DECLARE
+BEGIN
+IF johnnygyro THEN
+	NULL;
+	diego := 1 + 2;
+ELSIF hihotpants THEN
+	diego := 7 + 7;
+ELSE
+	diego := 0;
+END IF;
+END;
+ -- normalized!
+DECLARE
+BEGIN
+IF (johnnygyro) THEN
+	NULL;
+	diego := ((1) + (2));
+ELSIF (hihotpants) THEN
+	diego := ((7) + (7));
+ELSE
+	diego := (0);
+END IF;
+END;
+ -- fully parenthesized
+DECLARE
+BEGIN
+IF johnnygyro THEN
+	NULL;
+	diego := _ + _;
+ELSIF hihotpants THEN
+	diego := _ + _;
+ELSE
+	diego := _;
+END IF;
+END;
+ -- literals removed
+DECLARE
+BEGIN
+IF _ THEN
+	NULL;
+	_ := 1 + 2;
+ELSIF _ THEN
+	_ := 7 + 7;
+ELSE
+	_ := 0;
+END IF;
+END;
+ -- identifiers removed
+
+parse
+DECLARE
+BEGIN
+  IF johnnyGyro THEN
+  END IF;
+END
+----
+DECLARE
+BEGIN
+IF johnnygyro THEN
+END IF;
+END;
+ -- normalized!
+DECLARE
+BEGIN
+IF (johnnygyro) THEN
+END IF;
+END;
+ -- fully parenthesized
+DECLARE
+BEGIN
+IF johnnygyro THEN
+END IF;
+END;
+ -- literals removed
+DECLARE
+BEGIN
+IF _ THEN
+END IF;
+END;
+ -- identifiers removed
+
+feature-count
+DECLARE
+BEGIN
+  IF johnnyGyro THEN
+    NULL;
+    diego := 1 + 2;
+  ELSIF hiHotPants THEN
+    diego := 7 + 7;
+  ELSE
+    diego := 0;
+  END IF;
+END
+----
+stmt_assign: 3
+stmt_block: 1
+stmt_if: 1
+stmt_if_else_if: 1
+stmt_null: 1
+
+feature-count
+DECLARE
+BEGIN
+  IF notNested THEN
+    NULL;
+    nested := 1 + 2;
+  ELSIF nested THEN
+    nested := 7 + 7;
+  ELSIF doubleNested THEN
+    IF notNestedAgain THEN
+      NULL;
+    ELSIF nested THEN
+      nested := 7 + 14;
+    ELSE
+      nonNested := 1;
+    END IF;
+  ELSE
+    nonNested := 0;
+  END IF;
+END
+----
+stmt_assign: 5
+stmt_block: 1
+stmt_if: 2
+stmt_if_else_if: 3
+stmt_null: 2
+
+pretty
+DECLARE
+BEGIN
+IF johnnyGyro THEN
+NULL;
+diego := 1 + 2;
+ELSIF hiHotPants THEN
+diego := 7 + 7;
+ELSE
+diego := 0;
+END IF;
+END
+----
+DECLARE
+BEGIN
+	IF johnnygyro THEN
+		NULL;
+		diego := 1 + 2;
+	ELSIF hihotpants THEN
+		diego := 7 + 7;
+	ELSE
+		diego := 0;
+	END IF;
+END;

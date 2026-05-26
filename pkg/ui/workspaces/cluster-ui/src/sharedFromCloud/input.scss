@@ -1,0 +1,200 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import "./application.module";
+
+.crl-input {
+  outline: none;
+  @include crl-type-body;
+
+  &:not([type="checkbox"]) {
+    display: block;
+    width: 100%;
+    padding: crl-gutters(1);
+    color: $crl-base-text--dark;
+    background-color: $color-base-white;
+    border-width: 1px;
+    border-style: solid;
+    border-color: $color-core-neutral-3;
+    border-radius: $crl-border-radius;
+    @include crl-transition(color, box-shadow, border-color, background-color);
+    resize: none;
+
+    &:not(textarea) {
+      height: $crl-input-height;
+    }
+
+    &::placeholder {
+      color: $color-core-neutral-5;
+      @include crl-transition(color);
+    }
+
+    &:hover {
+      background-color: $color-base-white;
+      border-color: $color-core-neutral-4;
+    }
+
+    &:disabled {
+      background-color: $color-core-neutral-1;
+      color: $color-core-neutral-5;
+      border-color: $color-core-neutral-3;
+    }
+  }
+
+  // box-shadows work for checkboxes
+  // border, color, and background do not
+  &:focus {
+    background-color: $color-base-white;
+    color: $crl-base-text--dark;
+    border-color: $color-core-blue-4;
+    @include crl-box-shadow(0, 0, 4px, 2px, rgba($color-core-blue-4, 0.4));
+  }
+
+  &:invalid,
+  &.crl-input--invalid {
+    background-color: rgba($color-base-red, 0.05);
+    color: $color-base-red;
+    border-color: $color-base-red;
+
+    &:focus {
+      @include crl-box-shadow(0, 0, 4px, 2px, rgba($color-base-red, 0.4));
+    }
+  }
+
+  &--reference:not([type="checkbox"]):disabled {
+    color: $color-core-neutral-7;
+    background-color: $color-core-neutral-1;
+    border-color: $color-core-neutral-1;
+  }
+
+  // For more information on how to style a checkbox, see:
+  // https://developer.mozilla.org/en-US/docs/Learn/Forms/Advanced_form_styling
+  &[type="checkbox"] {
+    margin-right: crl-gutters(1);
+    cursor: pointer;
+  }
+
+  &__container {
+    width: 100%;
+    position: relative;
+
+    &.crl-input--inline {
+      display: inline-block;
+      margin-right: 6%;
+      width: 47%;
+      vertical-align: top;
+    }
+  }
+
+  &__autocomplete-container {
+    position: relative;
+  }
+
+  &__autocomplete {
+    position: absolute;
+    top: crl-gutters(1);
+    display: flex;
+    flex-direction: column;
+    z-index: 10;
+    @include crl-depth(1);
+    background-color: $color-base-white;
+    border-radius: $crl-border-radius;
+    overflow: hidden;
+    list-style: none;
+    padding-left: 0;
+  }
+
+  &__option {
+    height: 40px;
+    display: flex;
+    align-items: center;
+  }
+
+  &__message {
+    &--info,
+    &--error {
+      padding-top: crl-gutters(1);
+    }
+
+    &--info {
+      @include crl-type-caption;
+    }
+
+    &--error {
+      @include crl-type-error;
+
+      & > .crl-icon__container {
+        padding-right: crl-gutters(1);
+      }
+    }
+  }
+
+  &__affix-container {
+    position: relative;
+  }
+
+  &--prefix:not([type="checkbox"]) {
+    padding-left: 30px;
+  }
+
+  &--suffix:not([type="checkbox"]) {
+    padding-right: 50px;
+  }
+
+  &__prefix,
+  &__suffix {
+    display: flex;
+    align-items: center;
+    position: absolute;
+    top: 0;
+    height: $crl-input-height;
+  }
+
+  &__prefix {
+    left: crl-gutters(1.25);
+  }
+
+  &__suffix {
+    right: crl-gutters(1.25);
+  }
+
+  &--required:after {
+    content: " *";
+    color: $color-base-red;
+  }
+
+  &__checkbox-input {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    label {
+      margin-bottom: 0;
+      cursor: pointer;
+    }
+    &--disabled {
+      label {
+        color: $color-font-4;
+      }
+    }
+  }
+
+  &__header {
+    display: flex;
+    justify-content: space-between;
+  }
+
+  &__label {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    margin: 0;
+  }
+}
+
+.crl-form-group {
+  .crl-input--inline:last-child {
+    margin-right: 0;
+  }
+}

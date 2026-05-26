@@ -1,0 +1,1435 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package stats
+
+import (
+	"context"
+	"fmt"
+	"math"
+	"math/rand"
+	"reflect"
+	"sort"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
+)
+
+func insertTableStat(ctx context.Context, ex isql.Executor, stat *TableStatisticProto) error {
+	insertStatStmt := `
+INSERT INTO system.table_statistics ("tableID", "statisticID", name, "columnIDs", "createdAt",
+	"rowCount", "distinctCount", "nullCount", "avgSize", histogram)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+`
+	columnIDs := tree.NewDArray(types.Int)
+	for _, id := range stat.ColumnIDs {
+		if err := columnIDs.Append(tree.NewDInt(tree.DInt(int(id)))); err != nil {
+			return err
+		}
+	}
+
+	args := []interface{}{
+		stat.TableID,
+		stat.StatisticID,
+		nil, // name
+		columnIDs,
+		stat.CreatedAt,
+		stat.RowCount,
+		stat.DistinctCount,
+		stat.NullCount,
+		stat.AvgSize,
+		nil, // histogram
+	}
+	if len(stat.Name) != 0 {
+		args[2] = stat.Name
+	}
+	if stat.HistogramData != nil {
+		histogramBytes, err := protoutil.Marshal(stat.HistogramData)
+		if err != nil {
+			return err
+		}
+		args[9] = histogramBytes
+	}
+
+	var rows int
+	rows, err := ex.Exec(ctx, "insert-stat", nil /* txn */, insertStatStmt, args...)
+	if err != nil {
+		return err
+	}
+	if rows != 1 {
+		return errors.Errorf("%d rows affected by stats insertion; expected exactly one row affected.", rows)
+	}
+	return nil
+
+}
+
+func lookupTableStats(
+	ctx context.Context, sc *TableStatisticsCache, tableID descpb.ID,
+) ([]*TableStatistic, bool) {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	if e, ok := sc.mu.cache.Get(tableID); ok {
+		return e.(*cacheEntry).stats, true
+	}
+	return nil, false
+}
+
+func checkStatsForTable(
+	ctx context.Context,
+	t *testing.T,
+	sc *TableStatisticsCache,
+	expected []*TableStatisticProto,
+	tableID descpb.ID,
+) {
+	t.Helper()
+	// Initially the stats won't be in the cache.
+	if statsList, ok := lookupTableStats(ctx, sc, tableID); ok {
+		t.Fatalf("lookup of missing key %d returned: %s", tableID, statsList)
+	}
+
+	// Perform the lookup and refresh, and confirm the
+	// returned stats match the expected values.
+	statsList, _, _, err := sc.getTableStatsFromCache(ctx, tableID, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
+	if err != nil {
+		t.Fatalf("error retrieving stats: %s", err)
+	}
+	if !checkStats(statsList, expected) {
+		t.Fatalf("for lookup of key %d, expected stats %s, got %s", tableID, expected, statsList)
+	}
+
+	// Now the stats should be in the cache.
+	if _, ok := lookupTableStats(ctx, sc, tableID); !ok {
+		t.Fatalf("for lookup of key %d, expected stats %s", tableID, expected)
+	}
+}
+
+func checkStats(actual []*TableStatistic, expected []*TableStatisticProto) bool {
+	if len(actual) == 0 && len(expected) == 0 {
+		// DeepEqual differentiates between nil and empty slices, we don't.
+		return true
+	}
+	var protoList []*TableStatisticProto
+	for i := range actual {
+		protoList = append(protoList, &actual[i].TableStatisticProto)
+	}
+	return reflect.DeepEqual(protoList, expected)
+}
+
+func initTestData(
+	ctx context.Context, ex isql.Executor,
+) (map[descpb.ID][]*TableStatisticProto, error) {
+	// The expected stats must be ordered by TableID+, CreatedAt- so they can
+	// later be compared with the returned stats using reflect.DeepEqual.
+	expStatsList := []TableStatisticProto{
+		{
+			TableID:       descpb.ID(100),
+			StatisticID:   0,
+			Name:          "table0",
+			ColumnIDs:     []descpb.ColumnID{1},
+			CreatedAt:     time.Date(2010, 11, 20, 11, 35, 24, 0, time.UTC),
+			RowCount:      32,
+			DistinctCount: 30,
+			NullCount:     0,
+			AvgSize:       4,
+			HistogramData: &HistogramData{ColumnType: types.Int, Buckets: []HistogramData_Bucket{
+				{NumEq: 3, NumRange: 30, UpperBound: encoding.EncodeVarintAscending(nil, 3000)}},
+			},
+		},
+		{
+			TableID:       descpb.ID(100),
+			StatisticID:   1,
+			ColumnIDs:     []descpb.ColumnID{2, 3},
+			CreatedAt:     time.Date(2010, 11, 20, 11, 35, 23, 0, time.UTC),
+			RowCount:      32,
+			DistinctCount: 5,
+			NullCount:     5,
+			AvgSize:       4,
+		},
+		{
+			TableID:       descpb.ID(101),
+			StatisticID:   0,
+			ColumnIDs:     []descpb.ColumnID{0},
+			CreatedAt:     time.Date(2017, 11, 20, 11, 35, 23, 0, time.UTC),
+			RowCount:      320000,
+			DistinctCount: 300000,
+			NullCount:     100,
+			AvgSize:       2,
+		},
+		{
+			TableID:       descpb.ID(102),
+			StatisticID:   34,
+			Name:          "table2",
+			ColumnIDs:     []descpb.ColumnID{1, 2, 3},
+			CreatedAt:     time.Date(2001, 1, 10, 5, 25, 14, 0, time.UTC),
+			RowCount:      0,
+			DistinctCount: 0,
+			NullCount:     0,
+			AvgSize:       0,
+		},
+	}
+
+	// Insert the stats into system.table_statistics
+	// and store them in maps for fast retrieval.
+	expectedStats := make(map[descpb.ID][]*TableStatisticProto)
+	for i := range expStatsList {
+		stat := &expStatsList[i]
+
+		if err := insertTableStat(ctx, ex, stat); err != nil {
+			return nil, err
+		}
+
+		if stat.HistogramData != nil {
+			// Match the behavior from TableStatisticsCache.parseStats.
+			stat.HistogramData.Buckets = nil
+		}
+		expectedStats[stat.TableID] = append(expectedStats[stat.TableID], stat)
+	}
+
+	// Add another TableID for which we don't have stats.
+	expectedStats[descpb.ID(103)] = nil
+
+	return expectedStats, nil
+}
+
+func TestCacheEntryEstimateSize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Empty entry should have at least the struct overhead.
+	emptyEntry := &cacheEntry{}
+	emptySize := emptyEntry.estimateSize()
+	require.Greater(t, emptySize, int64(0))
+	require.GreaterOrEqual(t, emptySize, cacheEntryOverhead)
+
+	// Entry with stats but no histograms.
+	noHistEntry := &cacheEntry{
+		stats: []*TableStatistic{
+			{
+				TableStatisticProto: TableStatisticProto{
+					TableID:       1,
+					StatisticID:   1,
+					Name:          "test_stat",
+					ColumnIDs:     []descpb.ColumnID{1, 2, 3},
+					RowCount:      1000,
+					DistinctCount: 100,
+					NullCount:     10,
+				},
+			},
+		},
+	}
+	noHistSize := noHistEntry.estimateSize()
+	require.Greater(t, noHistSize, emptySize,
+		"entry with stats should be larger than empty entry")
+	// Verify the stat's variable-size fields are accounted for.
+	require.Greater(t, noHistSize,
+		cacheEntryOverhead+tableStatOverhead,
+		"should account for Name and ColumnIDs beyond fixed overhead")
+
+	// Entry with histogram buckets containing datums.
+	histEntry := &cacheEntry{
+		stats: []*TableStatistic{
+			{
+				TableStatisticProto: TableStatisticProto{
+					TableID:       1,
+					StatisticID:   1,
+					ColumnIDs:     []descpb.ColumnID{1},
+					RowCount:      1000,
+					DistinctCount: 100,
+				},
+				Histogram: []cat.HistogramBucket{
+					{NumEq: 10, UpperBound: tree.NewDInt(1)},
+					{NumEq: 20, NumRange: 5, UpperBound: tree.NewDInt(100)},
+					{NumEq: 30, NumRange: 10, UpperBound: tree.NewDInt(1000)},
+				},
+			},
+		},
+	}
+	histSize := histEntry.estimateSize()
+	require.Greater(t, histSize, noHistSize,
+		"entry with histogram should be larger than entry without")
+	// 3 buckets * histogramBucketOverhead is a lower bound for the histogram
+	// contribution.
+	require.Greater(t, histSize,
+		cacheEntryOverhead+tableStatOverhead+3*histogramBucketOverhead,
+		"should account for histogram buckets")
+
+	// Entry with string-type histogram to test datum size variation.
+	stringHistEntry := &cacheEntry{
+		stats: []*TableStatistic{
+			{
+				TableStatisticProto: TableStatisticProto{
+					TableID:       1,
+					StatisticID:   1,
+					ColumnIDs:     []descpb.ColumnID{1},
+					RowCount:      1000,
+					DistinctCount: 100,
+				},
+				Histogram: []cat.HistogramBucket{
+					{NumEq: 10, UpperBound: tree.NewDString("a")},
+					{NumEq: 20, UpperBound: tree.NewDString(strings.Repeat("x", 1000))},
+				},
+			},
+		},
+	}
+	stringHistSize := stringHistEntry.estimateSize()
+	// The long string datum should contribute at least 1000 bytes.
+	require.Greater(t, stringHistSize,
+		cacheEntryOverhead+tableStatOverhead+2*histogramBucketOverhead+1000,
+		"should account for string datum sizes")
+
+	// Entry with both stats and stableStats.
+	dualEntry := &cacheEntry{
+		stats: []*TableStatistic{
+			{
+				TableStatisticProto: TableStatisticProto{
+					TableID:       1,
+					StatisticID:   1,
+					ColumnIDs:     []descpb.ColumnID{1},
+					RowCount:      1000,
+					DistinctCount: 100,
+				},
+			},
+		},
+		stableStats: []*TableStatistic{
+			{
+				TableStatisticProto: TableStatisticProto{
+					TableID:       1,
+					StatisticID:   2,
+					ColumnIDs:     []descpb.ColumnID{1},
+					RowCount:      900,
+					DistinctCount: 90,
+				},
+			},
+		},
+	}
+	dualSize := dualEntry.estimateSize()
+	require.Greater(t, dualSize, noHistSize,
+		"entry with both stats and stableStats should be larger")
+
+	// Entry with user-defined types map.
+	udtEntry := &cacheEntry{
+		userDefinedTypes: map[descpb.ColumnID]*types.T{
+			1: types.Int,
+			2: types.String,
+			3: types.Bool,
+		},
+	}
+	udtSize := udtEntry.estimateSize()
+	require.Greater(t, udtSize, emptySize,
+		"entry with UDT map should be larger than empty entry")
+}
+
+// addTestEntry adds a cache entry with the given stats directly and accounts
+// for its memory. The caller must hold sc.mu.
+func addTestEntry(
+	ctx context.Context, sc *TableStatisticsCache, tableID descpb.ID, stats []*TableStatistic,
+) *cacheEntry {
+	e := &cacheEntry{
+		tableID:  tableID,
+		stats:    stats,
+		waitCond: sync.Cond{L: &sc.mu},
+	}
+	sc.mu.cache.Add(tableID, e)
+	sc.adjustEntryMemLocked(ctx, e)
+	return e
+}
+
+func TestCacheCapacitySetting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+
+	sc := NewTableStatisticsCache(ctx, st, nil /* db */, nil /* stopper */, nil /* parentMon */)
+
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+
+	emptyStats := []*TableStatistic{{
+		TableStatisticProto: TableStatisticProto{
+			TableID:     1,
+			StatisticID: 1,
+			ColumnIDs:   []descpb.ColumnID{1},
+		},
+	}}
+
+	// Default capacity is 256; add 5 entries.
+	for i := 1; i <= 5; i++ {
+		addTestEntry(ctx, sc, descpb.ID(i), emptyStats)
+	}
+	require.Equal(t, 5, sc.mu.cache.Len())
+
+	// Lower the capacity to 3. Existing entries remain until new entries
+	// push the cache past the limit.
+	TableStatsCacheSize.Override(ctx, &st.SV, 3)
+
+	// Adding a sixth entry should trigger eviction down to the new limit.
+	addTestEntry(ctx, sc, 6, emptyStats)
+	require.Equal(t, 3, sc.mu.cache.Len())
+
+	// The most recently accessed entries should remain.
+	_, ok := sc.mu.cache.Get(descpb.ID(6))
+	require.True(t, ok, "newest entry should be in cache")
+
+	// Raise the capacity — should allow more entries without eviction.
+	TableStatsCacheSize.Override(ctx, &st.SV, 10)
+	for i := 7; i <= 12; i++ {
+		addTestEntry(ctx, sc, descpb.ID(i), emptyStats)
+	}
+	require.Equal(t, 9, sc.mu.cache.Len())
+}
+
+func TestCacheMemoryEviction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+
+	// Allow many entries by count; memory will be the binding constraint.
+	TableStatsCacheSize.Override(ctx, &st.SV, 100)
+
+	// makeStat creates a TableStatistic with a histogram of the given size.
+	makeStat := func(nBuckets int) []*TableStatistic {
+		hist := make([]cat.HistogramBucket, nBuckets)
+		for i := range hist {
+			hist[i] = cat.HistogramBucket{
+				NumEq: 1, UpperBound: tree.NewDInt(tree.DInt(i)),
+			}
+		}
+		return []*TableStatistic{{
+			TableStatisticProto: TableStatisticProto{
+				TableID:     1,
+				StatisticID: 1,
+				ColumnIDs:   []descpb.ColumnID{1},
+			},
+			Histogram: hist,
+		}}
+	}
+
+	// Compute sizes for small and large entries.
+	smallStats := makeStat(10)
+	largeStats := makeStat(500)
+	smallEntry := &cacheEntry{stats: smallStats}
+	largeEntry := &cacheEntry{stats: largeStats}
+	smallSize := smallEntry.estimateSize()
+	largeSize := largeEntry.estimateSize()
+
+	// newTestCache creates a cache with a memory-limited monitor.
+	newTestCache := func(budget int64) *TableStatisticsCache {
+		parentMon := mon.NewMonitor(mon.Options{
+			Name:      mon.MakeName("test"),
+			Limit:     budget,
+			Increment: 1,
+			Settings:  st,
+		})
+		parentMon.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
+		sc := NewTableStatisticsCache(ctx, st, nil /* db */, nil /* stopper */, parentMon)
+		t.Cleanup(func() {
+			sc.Clear()
+			sc.Stop()
+			parentMon.Stop(ctx)
+		})
+		return sc
+	}
+
+	t.Run("evict LRU to make room", func(t *testing.T) {
+		// Budget fits three small entries but not a fourth.
+		sc := newTestCache(3 * smallSize)
+
+		sc.mu.Lock()
+		defer sc.mu.Unlock()
+
+		// Fill the cache with three small entries.
+		addTestEntry(ctx, sc, 1, makeStat(10))
+		addTestEntry(ctx, sc, 2, makeStat(10))
+		addTestEntry(ctx, sc, 3, makeStat(10))
+		require.Equal(t, 3, sc.mu.cache.Len())
+
+		// Adding a fourth should evict enough LRU entries to make room.
+		addTestEntry(ctx, sc, 4, makeStat(10))
+
+		// Table 4 should be present; at least one older entry should have
+		// been evicted to make room.
+		_, ok := sc.mu.cache.Get(descpb.ID(4))
+		require.True(t, ok, "new entry should be in cache")
+		require.Less(t, sc.mu.cache.Len(), 4,
+			"at least one old entry should have been evicted")
+	})
+
+	t.Run("large entry evicts multiple small entries", func(t *testing.T) {
+		// Budget fits several small entries or one large entry.
+		sc := newTestCache(largeSize + smallSize)
+
+		sc.mu.Lock()
+		defer sc.mu.Unlock()
+
+		// Fill with small entries.
+		nSmall := int((largeSize + smallSize) / smallSize)
+		for i := 0; i < nSmall; i++ {
+			addTestEntry(ctx, sc, descpb.ID(i+1), makeStat(10))
+		}
+		require.Equal(t, nSmall, sc.mu.cache.Len())
+
+		// Add one large entry — should evict enough small ones.
+		addTestEntry(ctx, sc, descpb.ID(100), makeStat(500))
+
+		_, ok := sc.mu.cache.Get(descpb.ID(100))
+		require.True(t, ok, "large entry should be in cache")
+		// Some small entries should have been evicted.
+		require.Less(t, sc.mu.cache.Len(), nSmall+1)
+	})
+
+	t.Run("entry dropped when eviction insufficient", func(t *testing.T) {
+		// Budget is too small for even one large entry.
+		sc := newTestCache(largeSize / 2)
+
+		sc.mu.Lock()
+		defer sc.mu.Unlock()
+
+		// Try to add a large entry that can't fit even after eviction.
+		addTestEntry(ctx, sc, 1, makeStat(500))
+
+		// The entry should have been dropped from the cache.
+		_, ok := sc.mu.cache.Get(descpb.ID(1))
+		require.False(t, ok,
+			"entry should have been dropped when memory couldn't be reserved")
+		// Memory accounting should be clean.
+		require.Equal(t, int64(0), sc.mu.acc.Used(),
+			"no memory should remain allocated after failed entry")
+	})
+
+	t.Run("adjust skipped for evicted entry", func(t *testing.T) {
+		// Verify that adjustEntryMemLocked is a no-op when the entry has
+		// been evicted from the cache. This can happen when the mutex is
+		// released for a DB fetch and the entry is evicted or replaced
+		// before the mutex is re-acquired.
+		sc := newTestCache(math.MaxInt64)
+
+		sc.mu.Lock()
+		defer sc.mu.Unlock()
+
+		e := addTestEntry(ctx, sc, 1, makeStat(10))
+		require.Greater(t, sc.mu.acc.Used(), int64(0))
+
+		// Evict the entry. OnEvictedEntry fires shrinkEntryLocked.
+		sc.mu.cache.Del(descpb.ID(1))
+		require.Equal(t, int64(0), sc.mu.acc.Used())
+
+		// Simulate the post-DB-fetch path: populate the evicted entry
+		// with larger stats and call adjustEntryMemLocked.
+		e.stats = append(e.stats, makeStat(500)...)
+		sc.adjustEntryMemLocked(ctx, e)
+
+		require.Equal(t, int64(0), sc.mu.acc.Used(),
+			"adjustEntryMemLocked should be a no-op for an evicted entry")
+	})
+}
+
+// TestCacheStopperCleanup verifies that the cache's child BytesMonitor and
+// BoundAccount are properly cleaned up when the stopper quiesces, so the
+// parent monitor can be stopped without panicking from leftover bytes.
+func TestCacheStopperCleanup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	stopper := stop.NewStopper()
+
+	parentMon := mon.NewMonitor(mon.Options{
+		Name:      mon.MakeName("test-parent"),
+		Limit:     0, // unlimited
+		Increment: 1,
+		Settings:  st,
+	})
+	parentMon.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
+
+	sc := NewTableStatisticsCache(ctx, st, nil /* db */, stopper, parentMon)
+
+	// Populate the cache with entries so there's memory allocated.
+	sc.mu.Lock()
+	for i := 1; i <= 5; i++ {
+		addTestEntry(ctx, sc, descpb.ID(i), []*TableStatistic{{
+			TableStatisticProto: TableStatisticProto{
+				TableID:     descpb.ID(i),
+				StatisticID: 1,
+				ColumnIDs:   []descpb.ColumnID{1},
+			},
+			Histogram: make([]cat.HistogramBucket, 100),
+		}})
+	}
+	require.Greater(t, sc.mu.acc.Used(), int64(0),
+		"cache should have allocated memory")
+	sc.mu.Unlock()
+
+	// Stop the stopper, which should trigger the cache's cleanup via the
+	// registered closer — releasing the BoundAccount and stopping the
+	// child monitor.
+	stopper.Stop(ctx)
+
+	// If the closer didn't run, the next line would panic because the
+	// parent monitor still has outstanding bytes from the child.
+	parentMon.Stop(ctx)
+}
+
+func TestCacheBasic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	db := s.InternalDB().(descs.DB)
+	expectedStats, err := initTestData(ctx, db.Executor())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Collect the tableIDs and sort them so we can iterate over them in a
+	// consistent order (Go randomizes the order of iteration over maps).
+	var tableIDs descpb.IDs
+	for tableID := range expectedStats {
+		tableIDs = append(tableIDs, tableID)
+	}
+	sort.Sort(tableIDs)
+
+	// Create a cache and iteratively query the cache for each tableID. This
+	// will result in the cache getting populated. When the stats cache size is
+	// exceeded, entries should be evicted according to the LRU policy.
+	TableStatsCacheSize.Override(ctx, &s.ClusterSettings().SV, 2)
+	sc := NewTableStatisticsCache(ctx, s.ClusterSettings(), db, s.AppStopper(), nil /* parentMon */)
+	require.NoError(t, sc.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
+	for _, tableID := range tableIDs {
+		checkStatsForTable(ctx, t, sc, expectedStats[tableID], tableID)
+	}
+
+	tab0 := descpb.ID(100)
+	tab1 := descpb.ID(101)
+	tab2 := descpb.ID(102)
+	tab3 := descpb.ID(103)
+
+	// Table IDs 0 and 1 should have been evicted since the cache size is 2.
+	tableIDs = []descpb.ID{tab0, tab1}
+	for _, tableID := range tableIDs {
+		if statsList, ok := lookupTableStats(ctx, sc, tableID); ok {
+			t.Fatalf("lookup of evicted key %d returned: %s", tableID, statsList)
+		}
+	}
+
+	// Table IDs 2 and 3 should still be in the cache.
+	tableIDs = []descpb.ID{tab2, tab3}
+	for _, tableID := range tableIDs {
+		if _, ok := lookupTableStats(ctx, sc, tableID); !ok {
+			t.Fatalf("for lookup of key %d, expected stats %s", tableID, expectedStats[tableID])
+		}
+	}
+
+	// Insert a new stat for Table ID 2.
+	stat := TableStatisticProto{
+		TableID:       tab2,
+		StatisticID:   35,
+		Name:          "table2",
+		ColumnIDs:     []descpb.ColumnID{1, 2, 3},
+		CreatedAt:     time.Date(2001, 1, 10, 5, 26, 34, 0, time.UTC),
+		RowCount:      10,
+		DistinctCount: 10,
+		NullCount:     0,
+	}
+	if err := insertTableStat(ctx, db.Executor(), &stat); err != nil {
+		t.Fatal(err)
+	}
+
+	// Table ID 2 should be available immediately in the cache for querying, and
+	// eventually should contain the updated stat.
+	if _, ok := lookupTableStats(ctx, sc, tab2); !ok {
+		t.Fatalf("expected lookup of refreshed key %d to succeed", tab2)
+	}
+	expected := append([]*TableStatisticProto{&stat}, expectedStats[tab2]...)
+	testutils.SucceedsSoon(t, func() error {
+		statsList, ok := lookupTableStats(ctx, sc, tab2)
+		if !ok {
+			return errors.Errorf("expected lookup of refreshed key %d to succeed", tab2)
+		}
+		if !checkStats(statsList, expected) {
+			return errors.Errorf(
+				"for lookup of key %d, expected stats %s but found %s", tab2, expected, statsList,
+			)
+		}
+		return nil
+	})
+
+	// After invalidation Table ID 2 should be gone.
+	sc.InvalidateTableStats(ctx, tab2)
+	if statsList, ok := lookupTableStats(ctx, sc, tab2); ok {
+		t.Fatalf("lookup of invalidated key %d returned: %s", tab2, statsList)
+	}
+
+	// Verify that Refresh doesn't count toward the "recently used" policy.
+	checkStatsForTable(ctx, t, sc, expectedStats[tab0], tab0)
+	checkStatsForTable(ctx, t, sc, expectedStats[tab1], tab1)
+
+	// Sleep a bit to give the async refresh process a chance to do something.
+	// Note that this is not flaky - the check below passes even if the refresh is
+	// delayed.
+	time.Sleep(time.Millisecond)
+
+	checkStatsForTable(ctx, t, sc, expectedStats[tab3], tab3)
+	// Verify that tab0 was evicted (despite the refreshes).
+	if statsList, ok := lookupTableStats(ctx, sc, tab0); ok {
+		t.Fatalf("lookup of evicted key %d returned: %s", tab0, statsList)
+	}
+}
+
+func TestCacheUserDefinedTypes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+
+	sqlRunner.Exec(t, `CREATE DATABASE t;`)
+	sqlRunner.Exec(t, `USE t;`)
+	sqlRunner.Exec(t, `CREATE TYPE t AS ENUM ('hello');`)
+	sqlRunner.Exec(t, `CREATE TABLE tt (x t PRIMARY KEY, y INT, INDEX(y));`)
+	sqlRunner.Exec(t, `INSERT INTO tt VALUES ('hello');`)
+	sqlRunner.Exec(t, `CREATE STATISTICS s FROM tt;`)
+
+	insqlDB := s.InternalDB().(descs.DB)
+
+	// Make a stats cache.
+	TableStatsCacheSize.Override(ctx, &s.ClusterSettings().SV, 1)
+	sc := NewTableStatisticsCache(ctx, s.ClusterSettings(), insqlDB, s.AppStopper(), nil /* parentMon */)
+	require.NoError(t, sc.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
+	tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "tt")
+	// Get stats for our table. We are ensuring here that the access to the stats
+	// for tt properly hydrates the user defined type t before access.
+	stats, err := sc.GetFreshTableStats(ctx, tbl, nil /* typeResolver */)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stats) != 2 {
+		t.Errorf("expected two statistics (for x and y), got %d", len(stats))
+	}
+
+	// Drop the table and the type.
+	sqlRunner.Exec(t, `DROP TABLE tt;`)
+	sqlRunner.Exec(t, `DROP TYPE t;`)
+	// Purge the cache.
+	sc.InvalidateTableStats(ctx, tbl.GetID())
+	// Verify that GetFreshTableStats ignores the statistic on the now unknown type and
+	// returns the rest.
+	stats, err = sc.GetFreshTableStats(ctx, tbl, nil /* typeResolver */)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stats) != 1 {
+		t.Errorf("expected one statistic (for y), got %d", len(stats))
+	}
+}
+
+// TestCacheWait verifies that when a table gets invalidated, we only retrieve
+// the stats one time, even if there are multiple callers asking for them.
+func TestCacheWait(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	db := s.InternalDB().(descs.DB)
+
+	expectedStats, err := initTestData(ctx, db.Executor())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Collect the tableIDs and sort them so we can iterate over them in a
+	// consistent order (Go randomizes the order of iteration over maps).
+	var tableIDs descpb.IDs
+	for tableID := range expectedStats {
+		tableIDs = append(tableIDs, tableID)
+	}
+	sort.Sort(tableIDs)
+	TableStatsCacheSize.Override(ctx, &s.ClusterSettings().SV, int64(len(tableIDs)))
+	sc := NewTableStatisticsCache(ctx, s.ClusterSettings(), db, s.AppStopper(), nil /* parentMon */)
+	require.NoError(t, sc.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
+	for _, tableID := range tableIDs {
+		checkStatsForTable(ctx, t, sc, expectedStats[tableID], tableID)
+	}
+
+	for run := 0; run < 10; run++ {
+		before := sc.mu.numInternalQueries
+
+		id := tableIDs[rand.Intn(len(tableIDs))]
+		sc.InvalidateTableStats(ctx, id)
+		// Run GetFreshTableStats multiple times in parallel.
+		var wg sync.WaitGroup
+		for n := 0; n < 10; n++ {
+			wg.Add(1)
+			go func() {
+				stats, _, _, err := sc.getTableStatsFromCache(ctx, id, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
+				if err != nil {
+					t.Error(err)
+				} else if !checkStats(stats, expectedStats[id]) {
+					t.Errorf("for table %d, expected stats %s, got %s", id, expectedStats[id], stats)
+				}
+				wg.Done()
+			}()
+		}
+		wg.Wait()
+
+		if t.Failed() {
+			return
+		}
+
+		// Verify that we only issued one read from the statistics table.
+		if num := sc.mu.numInternalQueries - before; num != 1 {
+			t.Fatalf("expected 1 query, got %d", num)
+		}
+	}
+}
+
+// TestCacheAutoRefresh verifies that the cache gets refreshed automatically
+// when new statistics are added.
+func TestCacheAutoRefresh(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := serverutils.StartCluster(t, 3 /* numNodes */, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	s := tc.ApplicationLayer(0)
+	TableStatsCacheSize.Override(ctx, &s.ClusterSettings().SV, 10)
+	sc := NewTableStatisticsCache(
+		ctx,
+		s.ClusterSettings(),
+		s.InternalDB().(descs.DB),
+		s.AppStopper(),
+		nil, /* parentMon */
+	)
+	require.NoError(t, sc.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
+
+	sr0 := sqlutils.MakeSQLRunner(s.SQLConn(t))
+	sr0.Exec(t, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false")
+	sr0.Exec(t, "CREATE DATABASE test")
+	sr0.Exec(t, "CREATE TABLE test.t (k INT PRIMARY KEY, v INT)")
+	sr0.Exec(t, "INSERT INTO test.t VALUES (1, 1), (2, 2), (3, 3)")
+
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "test", "t")
+
+	expectNStats := func(n int) error {
+		stats, err := sc.GetFreshTableStats(ctx, tableDesc, nil /* typeResolver */)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(stats) != n {
+			return fmt.Errorf("expected %d stats, got: %v", n, stats)
+		}
+		return nil
+	}
+
+	if err := expectNStats(0); err != nil {
+		t.Fatal(err)
+	}
+	sr1 := sqlutils.MakeSQLRunner(tc.ApplicationLayer(1).SQLConn(t))
+	sr1.Exec(t, "CREATE STATISTICS k ON k FROM test.t")
+
+	testutils.SucceedsSoon(t, func() error {
+		return expectNStats(1)
+	})
+
+	sr2 := sqlutils.MakeSQLRunner(tc.ApplicationLayer(2).SQLConn(t))
+	sr2.Exec(t, "CREATE STATISTICS v ON v FROM test.t")
+
+	testutils.SucceedsSoon(t, func() error {
+		return expectNStats(2)
+	})
+}
+
+func TestDecodeHistogramBucketsEnum(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	enumPhysRep := map[string][]byte{
+		"a": {32},
+		"b": {64},
+		"c": {128},
+		"d": {192},
+	}
+
+	// Create a mock enum type.
+	mockEnumType := func(logical []string) *types.T {
+		physical := make([][]byte, len(logical))
+		for i, v := range logical {
+			physical[i] = enumPhysRep[v]
+		}
+		enum := types.MakeEnum(catid.TypeIDToOID(200), catid.TypeIDToOID(201))
+		enum.TypeMeta = types.UserDefinedTypeMetadata{
+			Name: &types.UserDefinedTypeName{
+				Name: "e",
+			},
+			EnumData: &types.EnumMetadata{
+				LogicalRepresentations:  logical,
+				PhysicalRepresentations: physical,
+				IsMemberReadOnly:        make([]bool, len(logical)),
+			},
+		}
+		return enum
+	}
+
+	// Build a map of enum value to key-encoded bytes.
+	enum := mockEnumType([]string{"a", "b", "c", "d"})
+	enumDatums := tree.MakeAllDEnumsInType(enum)
+	enumEncoded := make(map[string][]byte)
+	for _, d := range enumDatums {
+		encoded, err := EncodeUpperBound(HistVersion, d)
+		require.NoError(t, err)
+		enumEncoded[d.(*tree.DEnum).LogicalRep] = encoded
+	}
+
+	testCases := []struct {
+		name    string
+		enum    []string
+		buckets []HistogramData_Bucket
+		// Because each test case could use a slightly different mock enum type, we
+		// write expected buckets as HistogramData_Bucket and then convert to
+		// cat.HistogramBucket after we've created the mock type for the test case.
+		expected []HistogramData_Bucket
+	}{
+		{
+			name: "normal",
+			enum: []string{"a", "b", "c", "d"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 0, 0, enumEncoded["b"]},
+				{1, 0, 0, enumEncoded["c"]},
+				{1, 0, 0, enumEncoded["d"]},
+			},
+			expected: []HistogramData_Bucket{
+				{1, 0, 0, enumPhysRep["a"]},
+				{1, 0, 0, enumPhysRep["b"]},
+				{1, 0, 0, enumPhysRep["c"]},
+				{1, 0, 0, enumPhysRep["d"]},
+			},
+		},
+		{
+			name: "remove-first",
+			enum: []string{"b", "c", "d"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 0, 0, enumEncoded["b"]},
+				{1, 0, 0, enumEncoded["c"]},
+				{1, 0, 0, enumEncoded["d"]},
+			},
+			expected: []HistogramData_Bucket{
+				{1, 0, 0, enumPhysRep["b"]},
+				{1, 0, 0, enumPhysRep["c"]},
+				{1, 0, 0, enumPhysRep["d"]},
+			},
+		},
+		{
+			name: "remove-first-add-min",
+			enum: []string{"b", "c", "d"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 1, 1, enumEncoded["d"]},
+			},
+			expected: []HistogramData_Bucket{
+				{0, 0, 0, enumPhysRep["b"]},
+				{1, 1, 1, enumPhysRep["d"]},
+			},
+		},
+		{
+			name: "remove-first-add-min-steal",
+			enum: []string{"b", "c", "d"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 1, 1, enumEncoded["c"]},
+			},
+			expected: []HistogramData_Bucket{
+				{1, 0, 0, enumPhysRep["b"]},
+				{1, 0, 0, enumPhysRep["c"]},
+			},
+		},
+		{
+			name: "remove-middle-multiple",
+			enum: []string{"a", "d"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 0, 0, enumEncoded["b"]},
+				{1, 0, 0, enumEncoded["c"]},
+				{1, 0, 0, enumEncoded["d"]},
+			},
+			expected: []HistogramData_Bucket{
+				{1, 0, 0, enumPhysRep["a"]},
+				{1, 0, 0, enumPhysRep["d"]},
+			},
+		},
+		{
+			name: "remove-middle-add-min",
+			enum: []string{"a", "c", "d"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["b"]},
+				{1, 1, 1, enumEncoded["d"]},
+			},
+			expected: []HistogramData_Bucket{
+				{0, 0, 0, enumPhysRep["a"]},
+				{1, 1, 1, enumPhysRep["d"]},
+			},
+		},
+		{
+			name: "remove-middle-multiple",
+			enum: []string{"a", "d"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["b"]},
+				{1, 1, 1, enumEncoded["d"]},
+			},
+			expected: []HistogramData_Bucket{
+				{1, 0, 0, enumPhysRep["d"]},
+			},
+		},
+		{
+			name: "remove-middle-carry",
+			enum: []string{"a", "b", "d"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 1, 1, enumEncoded["c"]},
+				{1, 0, 0, enumEncoded["d"]},
+			},
+			expected: []HistogramData_Bucket{
+				{1, 0, 0, enumPhysRep["a"]},
+				{1, 1, 1, enumPhysRep["d"]},
+			},
+		},
+		{
+			name: "remove-middle-carry-add-max",
+			enum: []string{"a", "b", "d"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 1, 1, enumEncoded["c"]},
+			},
+			expected: []HistogramData_Bucket{
+				{1, 0, 0, enumPhysRep["a"]},
+				{0, 1, 1, enumPhysRep["d"]},
+			},
+		},
+		{
+			name: "remove-middle-multiple-add-min-add-max-steal",
+			enum: []string{"b", "d"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 1, 1, enumEncoded["c"]},
+			},
+			expected: []HistogramData_Bucket{
+				{1, 0, 0, enumPhysRep["b"]},
+			},
+		},
+		{
+			name: "remove-last",
+			enum: []string{"a", "b", "c"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 0, 0, enumEncoded["b"]},
+				{1, 0, 0, enumEncoded["c"]},
+				{1, 0, 0, enumEncoded["d"]},
+			},
+			expected: []HistogramData_Bucket{
+				{1, 0, 0, enumPhysRep["a"]},
+				{1, 0, 0, enumPhysRep["b"]},
+				{1, 0, 0, enumPhysRep["c"]},
+			},
+		},
+		{
+			name: "remove-last-carry-add-max",
+			enum: []string{"a", "b", "c"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 1, 1, enumEncoded["d"]},
+			},
+			expected: []HistogramData_Bucket{
+				{1, 0, 0, enumPhysRep["a"]},
+				{0, 1, 1, enumPhysRep["c"]},
+			},
+		},
+		{
+			name: "remove-last-carry-add-max-steal",
+			enum: []string{"a", "b", "c"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 0, 0, enumEncoded["b"]},
+				{1, 1, 1, enumEncoded["d"]},
+			},
+			expected: []HistogramData_Bucket{
+				{1, 0, 0, enumPhysRep["a"]},
+				{1, 0, 0, enumPhysRep["b"]},
+				{1, 0, 0, enumPhysRep["c"]},
+			},
+		},
+		{
+			name: "remove-last-multiple-carry-add-max-steal",
+			enum: []string{"a", "b"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 1, 1, enumEncoded["c"]},
+			},
+			expected: []HistogramData_Bucket{
+				{1, 0, 0, enumPhysRep["a"]},
+				{1, 0, 0, enumPhysRep["b"]},
+			},
+		},
+		{
+			name: "remove-last-multiple-add-min-add-max-steal",
+			enum: []string{"b", "c"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 1, 1, enumEncoded["d"]},
+			},
+			expected: []HistogramData_Bucket{
+				{1, 0, 0, enumPhysRep["b"]},
+			},
+		},
+		{
+			name: "remove-many",
+			enum: []string{"c"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 1, 1, enumEncoded["c"]},
+			},
+			expected: []HistogramData_Bucket{
+				{1, 0, 0, enumPhysRep["c"]},
+			},
+		},
+		{
+			name: "remove-many-steal",
+			enum: []string{"c"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 1, 1, enumEncoded["d"]},
+			},
+			expected: []HistogramData_Bucket{
+				{1, 0, 0, enumPhysRep["c"]},
+			},
+		},
+		{
+			name: "remove-many-steal-2",
+			enum: []string{"b"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 1, 1, enumEncoded["c"]},
+			},
+			expected: []HistogramData_Bucket{
+				{1, 0, 0, enumPhysRep["b"]},
+			},
+		},
+		{
+			name: "remove-all",
+			enum: []string{},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 0, 0, enumEncoded["b"]},
+				{1, 0, 0, enumEncoded["c"]},
+				{1, 0, 0, enumEncoded["d"]},
+			},
+			expected: []HistogramData_Bucket{},
+		},
+		{
+			name: "remove-all-with-ranges",
+			enum: []string{},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 2, 2, enumEncoded["d"]},
+			},
+			expected: []HistogramData_Bucket{},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create mock enum type.
+			enum := mockEnumType(tc.enum)
+
+			// Convert expected buckets to cat.HistogramBucket.
+			expected := make([]cat.HistogramBucket, len(tc.expected))
+			var rowCount, distinctCount uint64
+			for i := range expected {
+				bucket := tc.expected[i]
+				upperBound, err := tree.MakeDEnumFromPhysicalRepresentation(enum, bucket.UpperBound)
+				require.NoError(t, err)
+				expected[i] = cat.HistogramBucket{
+					NumEq:         float64(bucket.NumEq),
+					NumRange:      float64(bucket.NumRange),
+					DistinctRange: bucket.DistinctRange,
+					UpperBound:    tree.NewDEnum(upperBound),
+				}
+				rowCount += uint64(bucket.NumEq) + uint64(bucket.NumRange)
+				distinctCount += uint64(bucket.DistinctRange)
+				if bucket.NumEq > 0 {
+					distinctCount += 1
+				}
+			}
+
+			// Create TableStatistic with the test histogram data.
+			stat := &TableStatistic{
+				TableStatisticProto: TableStatisticProto{
+					TableID:       descpb.ID(202),
+					StatisticID:   1,
+					ColumnIDs:     []descpb.ColumnID{1},
+					RowCount:      rowCount,
+					DistinctCount: distinctCount,
+					HistogramData: &HistogramData{
+						Version:    HistVersion,
+						ColumnType: enum,
+						Buckets:    tc.buckets,
+					},
+				},
+			}
+
+			// Test that DecodeHistogramBuckets produces what we expect.
+			err := DecodeHistogramBuckets(ctx, stat)
+			require.NoError(t, err, tc.name)
+			require.Equal(
+				t, expected, stat.Histogram, "%s: expected buckets %v, got %v",
+				tc.name, expected, stat.Histogram,
+			)
+		})
+	}
+}
+
+// TestCanaryAndStableStatsDiffer exercises the cacheEntry.canaryAndStableStatsDiffer
+// method with a table-driven test covering all edge cases.
+func TestCanaryAndStableStatsDiffer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	now := hlc.Timestamp{WallTime: 1000 * time.Second.Nanoseconds()}
+	latestTS := hlc.Timestamp{WallTime: 999 * time.Second.Nanoseconds()}
+	stableTS := hlc.Timestamp{WallTime: 990 * time.Second.Nanoseconds()}
+	window := 10 * time.Second
+
+	tests := []struct {
+		name                           string
+		canaryWindowSize               time.Duration
+		asOf                           hlc.Timestamp
+		latestFullStatsTimestamp       hlc.Timestamp
+		latestStableFullStatsTimestamp hlc.Timestamp
+		expected                       bool
+	}{
+		{
+			name:             "no canary window",
+			canaryWindowSize: 0,
+			asOf:             now,
+			expected:         false,
+		},
+		{
+			name:                           "within window, two distinct generations",
+			canaryWindowSize:               window,
+			asOf:                           now,
+			latestFullStatsTimestamp:       latestTS,
+			latestStableFullStatsTimestamp: stableTS,
+			expected:                       true,
+		},
+		{
+			name:                           "past canary window",
+			canaryWindowSize:               window,
+			asOf:                           hlc.Timestamp{WallTime: 1100 * time.Second.Nanoseconds()},
+			latestFullStatsTimestamp:       latestTS,
+			latestStableFullStatsTimestamp: stableTS,
+			expected:                       false,
+		},
+		{
+			name:                     "within window, only one generation (stable is empty set)",
+			canaryWindowSize:         window,
+			asOf:                     now,
+			latestFullStatsTimestamp: latestTS,
+			expected:                 true,
+		},
+		{
+			name:             "empty latestFullStatsTimestamp",
+			canaryWindowSize: window,
+			asOf:             now,
+			expected:         false,
+		},
+		{
+			name:                           "exactly at window boundary (window just expired)",
+			canaryWindowSize:               window,
+			asOf:                           hlc.Timestamp{WallTime: (999*time.Second + window).Nanoseconds()},
+			latestFullStatsTimestamp:       latestTS,
+			latestStableFullStatsTimestamp: stableTS,
+			expected:                       false,
+		},
+		{
+			name:                           "one nanosecond before window expires",
+			canaryWindowSize:               window,
+			asOf:                           hlc.Timestamp{WallTime: (999*time.Second + window).Nanoseconds() - 1},
+			latestFullStatsTimestamp:       latestTS,
+			latestStableFullStatsTimestamp: stableTS,
+			expected:                       true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			e := &cacheEntry{
+				latestFullStatsTimestamp:       tc.latestFullStatsTimestamp,
+				latestStableFullStatsTimestamp: tc.latestStableFullStatsTimestamp,
+			}
+			got := e.canaryAndStableStatsDiffer(tc.canaryWindowSize, tc.asOf)
+			require.Equal(t, tc.expected, got)
+		})
+	}
+}
+
+// runStatsCacheDataDriven is the shared datadriven command handler for
+// stats cache tests. It supports the following commands:
+//
+//   - exec: execute SQL statements
+//   - stats-cache: query the stats cache (args: table, forecast)
+//   - stats-differ: check whether canary and stable stats differ
+//     (args: table, canary-window, asof, no-invalidate)
+func runStatsCacheDataDriven(
+	t *testing.T,
+	d *datadriven.TestData,
+	ctx context.Context,
+	sqlRunner *sqlutils.SQLRunner,
+	kvDB *kv.DB,
+	s serverutils.ApplicationLayerInterface,
+	sc *TableStatisticsCache,
+) string {
+	switch d.Cmd {
+	case "exec":
+		sqlRunner.Exec(t, d.Input)
+		return ""
+	case "stats-cache":
+		tableName := "test"
+		forecast := false
+		if d.HasArg("table") {
+			d.ScanArgs(t, "table", &tableName)
+		}
+		if d.HasArg("forecast") {
+			forecast = true
+		}
+
+		tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", tableName)
+		stats, stableStats, _, _, _, err := sc.getTableStatsFromDB(ctx, tbl.GetID(), forecast, s.ClusterSettings(), nil)
+		if err != nil {
+			return fmt.Sprintf("error: %v", err)
+		}
+		var result strings.Builder
+
+		formatStats := func(label string, statsCache []*TableStatistic) {
+			result.WriteString(fmt.Sprintf("%s stats (count=%d):\n", label, len(statsCache)))
+			for _, stat := range statsCache {
+				result.WriteString(fmt.Sprintf("created_at=%s, name=%q, row_count=%d, distinct_count=%d, null_count=%d, delayed_delete=%t\n",
+					stat.CreatedAt.Format("2006-01-02 15:04:05"), stat.Name, stat.RowCount, stat.DistinctCount, stat.NullCount, stat.DelayDelete))
+			}
+		}
+
+		formatStats("fresh", stats)
+		formatStats("stable", stableStats)
+		return result.String()
+
+	case "stats-differ":
+		tableName := "test"
+		if d.HasArg("table") {
+			d.ScanArgs(t, "table", &tableName)
+		}
+		var canaryWindow time.Duration
+		if d.HasArg("canary-window") {
+			var windowStr string
+			d.ScanArgs(t, "canary-window", &windowStr)
+			var err error
+			canaryWindow, err = time.ParseDuration(windowStr)
+			if err != nil {
+				return fmt.Sprintf("error parsing canary-window: %v", err)
+			}
+		}
+		var statsAsOf hlc.Timestamp
+		if d.HasArg("asof") {
+			var asofStr string
+			d.ScanArgs(t, "asof", &asofStr)
+			parsed, _, err := tree.ParseDTimestamp(nil, asofStr, time.Microsecond)
+			if err != nil {
+				return fmt.Sprintf("error parsing asof: %v", err)
+			}
+			statsAsOf = hlc.Timestamp{WallTime: parsed.Time.UnixNano()}
+		}
+
+		tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", tableName)
+		if !d.HasArg("no-invalidate") {
+			sc.InvalidateTableStats(ctx, tbl.GetID())
+		}
+		_, statsDiffer, _, err := sc.GetTableStatsMaybeStable(
+			ctx, tbl, nil /* typeResolver */, false /* stable */, canaryWindow, statsAsOf,
+		)
+		if err != nil {
+			return fmt.Sprintf("error: %v", err)
+		}
+		return fmt.Sprintf("stats_differ: %t\n", statsDiffer)
+
+	default:
+		return fmt.Sprintf("unknown command: %s", d.Cmd)
+	}
+}
+
+// TestCanaryStatsDataDriven uses data-driven tests under testdata/ to exercise
+// canary-related statistics behaviour. See the header of each file for the testing
+// topic.
+func TestCanaryStatsDataDriven(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+
+	db := s.InternalDB().(descs.DB)
+	TableStatsCacheSize.Override(ctx, &s.ClusterSettings().SV, 10)
+	sc := NewTableStatisticsCache(ctx, s.ClusterSettings(), db, s.AppStopper(), nil /* parentMon */)
+	require.NoError(t, sc.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
+
+	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			return runStatsCacheDataDriven(t, d, ctx, sqlRunner, kvDB, s, sc)
+		})
+	})
+}

@@ -1,0 +1,58 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "build",
+    srcs = [
+        "cgo_compiler.go",
+        "cgo_compiler_nocgo.go",
+        "info.go",
+    ],
+    cgo = True,
+    embed = [":build_go_proto"],
+    embedsrcs = ["version.txt"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/build",
+    visibility = ["//visibility:public"],
+    x_defs = {
+        "github.com/cockroachdb/cockroach/pkg/build.buildTagOverride": "{STABLE_BUILD_TAG}",
+        "github.com/cockroachdb/cockroach/pkg/build.cgoTargetTriple": "{STABLE_BUILD_TARGET_TRIPLE}",
+        "github.com/cockroachdb/cockroach/pkg/build.channel": "{STABLE_BUILD_CHANNEL}",
+        "github.com/cockroachdb/cockroach/pkg/build.rev": "{BUILD_REV}",
+        "github.com/cockroachdb/cockroach/pkg/build.typ": "{STABLE_BUILD_TYPE}",
+        "github.com/cockroachdb/cockroach/pkg/build.utcTime": "{BUILD_UTCTIME}",
+    },
+    deps = [
+        "//pkg/util/buildutil",
+        "//pkg/util/envutil",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_cockroachdb_version//:version",
+    ],
+)
+
+proto_library(
+    name = "build_proto",
+    srcs = ["info.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
+)
+
+go_proto_library(
+    name = "build_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/build",
+    proto = ":build_proto",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//gogoproto"],
+)
+
+go_test(
+    name = "build_test",
+    srcs = ["info_test.go"],
+    embed = [":build"],
+    deps = [
+        "@com_github_cockroachdb_version//:version",
+        "@com_github_stretchr_testify//require",
+    ],
+)

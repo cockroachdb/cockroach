@@ -1,0 +1,59 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//build:STRINGER.bzl", "stringer")
+
+go_library(
+    name = "schemachange",
+    srcs = [
+        "alter_column_type.go",
+        ":gen-columnconversionkind-stringer",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachange",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/settings/cluster",
+        "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sqlerrors",
+        "//pkg/sql/types",
+    ],
+)
+
+go_test(
+    name = "schemachange_test",
+    size = "medium",
+    srcs = [
+        "alter_column_type_test.go",
+        "main_test.go",
+    ],
+    embed = [":schemachange"],
+    deps = [
+        "//pkg/base",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/parser",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "//pkg/util/uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+# Keep this genrule and not ussing common string function due to extra flags eg: trimprefix
+
+stringer(
+    name = "gen-columnconversionkind-stringer",
+    src = "alter_column_type.go",
+    additional_args = ["--trimprefix ColumnConversion"],
+    typ = "ColumnConversionKind",
+)

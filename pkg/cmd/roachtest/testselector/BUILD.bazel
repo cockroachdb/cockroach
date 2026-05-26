@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "testselector",
+    srcs = ["selector.go"],
+    embedsrcs = ["snowflake_query.sql"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/testselector",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachtest/spec",
+        "@com_github_snowflakedb_gosnowflake//:gosnowflake",
+    ],
+)
+
+go_test(
+    name = "testselector_test",
+    srcs = ["selector_test.go"],
+    embed = [":testselector"],
+    deps = [
+        "//pkg/cmd/roachtest/spec",
+        "@com_github_data_dog_go_sqlmock//:go-sqlmock",
+        "@com_github_stretchr_testify//require",
+    ],
+)

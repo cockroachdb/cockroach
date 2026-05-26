@@ -1,0 +1,96 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE bx (
+  b INT PRIMARY KEY,
+  x INT
+)
+
+statement ok
+CREATE TABLE cy (
+  c INT PRIMARY KEY,
+  y INT
+)
+
+statement ok
+CREATE TABLE dz (
+  d INT PRIMARY KEY,
+  z INT
+)
+
+statement ok
+CREATE TABLE abc (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT,
+  FAMILY (a, b, c, d)
+)
+
+statement ok
+SET reorder_joins_limit = 0
+
+statement error expected value in range \[0, 63\]
+SET CLUSTER SETTING sql.defaults.reorder_joins_limit = -1
+
+statement error expected value in range \[0, 63\]
+SET CLUSTER SETTING sql.defaults.reorder_joins_limit = 65
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc, bx, cy WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, b, x, c, y)
+│ estimated row count: 1 (missing stats)
+│ table: cy@cy_pkey
+│ equality: (c) = (c)
+│ equality cols are key
+│ parallel
+│
+└── • lookup join (inner)
+    │ columns: (a, b, c, d, b, x)
+    │ estimated row count: 1 (missing stats)
+    │ table: bx@bx_pkey
+    │ equality: (b) = (b)
+    │ equality cols are key
+    │ parallel
+    │
+    └── • scan
+          columns: (a, b, c, d)
+          estimated row count: 1 (missing stats)
+          table: abc@abc_pkey
+          spans: /1/0
+
+statement ok
+SET reorder_joins_limit = 3
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc, bx, cy WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, b, x, c, y)
+│ estimated row count: 1 (missing stats)
+│ table: cy@cy_pkey
+│ equality: (c) = (c)
+│ equality cols are key
+│ parallel
+│
+└── • lookup join (inner)
+    │ columns: (a, b, c, d, b, x)
+    │ estimated row count: 1 (missing stats)
+    │ table: bx@bx_pkey
+    │ equality: (b) = (b)
+    │ equality cols are key
+    │ parallel
+    │
+    └── • scan
+          columns: (a, b, c, d)
+          estimated row count: 1 (missing stats)
+          table: abc@abc_pkey
+          spans: /1/0

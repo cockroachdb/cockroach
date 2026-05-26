@@ -1,0 +1,162 @@
+# LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-tenant multiregion-9node-3region-3azs-no-los
+
+query TTTTT colnames,rowsort
+SHOW REGIONS
+----
+region          zones                   database_names  primary_region_of  secondary_region_of
+ap-southeast-2  {ap-az1,ap-az2,ap-az3}  {}              {}                 {}
+ca-central-1    {ca-az1,ca-az2,ca-az3}  {}              {}                 {}
+us-east-1       {us-az1,us-az2,us-az3}  {}              {}                 {}
+
+query TT colnames,rowsort
+SHOW REGIONS FROM CLUSTER
+----
+region          zones
+ap-southeast-2  {ap-az1,ap-az2,ap-az3}
+ca-central-1    {ca-az1,ca-az2,ca-az3}
+us-east-1       {us-az1,us-az2,us-az3}
+
+# Regression test for #124181: check that we re-load table statistics after
+# running ALTER DATABASE ADD REGION.
+
+statement ok
+CREATE DATABASE db124181 PRIMARY REGION "ap-southeast-2" REGIONS "us-east-1" SURVIVE ZONE FAILURE
+
+statement ok
+USE db124181
+
+query TTTT
+SHOW ENUMS
+----
+public  crdb_internal_region  {ap-southeast-2,us-east-1}  root
+
+statement ok
+CREATE TABLE t124181 (
+  region crdb_internal_region NOT NULL,
+  id UUID NOT NULL DEFAULT gen_random_uuid(),
+  a INT NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE INDEX (a)
+) LOCALITY REGIONAL BY ROW AS region
+
+statement ok
+INSERT INTO t124181 (region, a) VALUES ('ap-southeast-2', 0), ('us-east-1', 1)
+
+statement ok
+ANALYZE t124181
+
+let $hist_id_1
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t124181] WHERE column_names = ARRAY['region']
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound       range_rows  distinct_range_rows  equal_rows
+'ap-southeast-2'  0           0                    1
+'us-east-1'       0           0                    1
+
+query T
+SELECT jsonb_pretty(stat->'histo_buckets')
+FROM (
+  SELECT jsonb_array_elements(statistics) AS stat
+  FROM [SHOW STATISTICS USING JSON FOR TABLE t124181]
+)
+WHERE stat->>'columns' = '["region"]'
+----
+[
+    {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "ap-southeast-2"
+    },
+    {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "us-east-1"
+    }
+]
+
+# Implicitly add a value to the crdb_internal_region enum.
+statement ok
+ALTER DATABASE db124181 ADD REGION "ca-central-1"
+
+query TTTT
+SHOW ENUMS
+----
+public  crdb_internal_region  {ap-southeast-2,ca-central-1,us-east-1}  root
+
+# Make sure we can still SHOW STATISTICS and SHOW HISTOGRAM.
+let $hist_id_2
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t124181] WHERE column_names = ARRAY['region']
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_id_2
+----
+upper_bound       range_rows  distinct_range_rows  equal_rows
+'ap-southeast-2'  0           0                    1
+'us-east-1'       0           0                    1
+
+# Make sure we can still SHOW STATISTICS USING JSON.
+query T
+SELECT jsonb_pretty(stat->'histo_buckets')
+FROM (
+  SELECT jsonb_array_elements(statistics) AS stat
+  FROM [SHOW STATISTICS USING JSON FOR TABLE t124181]
+)
+WHERE stat->>'columns' = '["region"]'
+----
+[
+    {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "ap-southeast-2"
+    },
+    {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "us-east-1"
+    }
+]
+
+# Make sure we can still use the histogram in statistics_builder.
+statement ok
+INSERT INTO t124181 (region, a) VALUES ('ca-central-1', 2)
+
+# Verify that we don't collect partial stats on LOCALITY REGIONAL BY ROW table
+# indexes when columns are unspecified since they are implicitly partitioned
+# by the region column.
+statement ok
+CREATE TABLE multiregion_pstats (a INT PRIMARY KEY, b INT) LOCALITY REGIONAL BY ROW
+
+statement ok
+INSERT INTO multiregion_pstats (a, b, crdb_region) VALUES (1, 1, 'ap-southeast-2'), (2, 2, 'ca-central-1'), (3, 3, 'us-east-1')
+
+statement ok
+CREATE STATISTICS multiregion_full FROM multiregion_pstats
+
+statement ok
+INSERT INTO multiregion_pstats (a, b, crdb_region) VALUES (4, 4, 'ap-southeast-2'), (5, 5, 'ca-central-1')
+
+statement ok
+CREATE STATISTICS multiregion_partial FROM multiregion_pstats USING EXTREMES
+
+query TTIII colnames
+SELECT
+	statistics_name,
+	column_names,
+	row_count,
+	distinct_count,
+	null_count
+FROM
+	[SHOW STATISTICS FOR TABLE multiregion_pstats]
+ORDER BY statistics_name, column_names::STRING
+----
+statistics_name   column_names     row_count  distinct_count  null_count
+multiregion_full  {a,crdb_region}  3          3               0
+multiregion_full  {a}              3          3               0
+multiregion_full  {b}              3          3               0
+multiregion_full  {crdb_region}    3          3               0

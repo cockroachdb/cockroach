@@ -1,0 +1,111 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package sql
+
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsauth"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/errors"
+)
+
+type controlJobsNode struct {
+	singleInputPlanNode
+	rowsAffectedOutputHelper
+	desiredStatus jobs.State
+	reason        string
+}
+
+var jobCommandToDesiredStatus = map[tree.JobCommand]jobs.State{
+	tree.CancelJob: jobs.StateCanceled,
+	tree.ResumeJob: jobs.StateRunning,
+	tree.PauseJob:  jobs.StatePaused,
+}
+
+// startExec implements the planNode interface.
+func (n *controlJobsNode) startExec(params runParams) error {
+	if n.desiredStatus != jobs.StatePaused && len(n.reason) > 0 {
+		return errors.AssertionFailedf("status %v is not %v and thus does not support a reason %v",
+			n.desiredStatus, jobs.StatePaused, n.reason)
+	}
+
+	reg := params.p.ExecCfg().JobRegistry
+	globalPrivileges, err := jobsauth.GetGlobalJobPrivileges(params.ctx, params.p)
+	if err != nil {
+		return err
+	}
+	for {
+		ok, err := n.input.Next(params)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			break
+		}
+
+		jobIDDatum := n.input.Values()[0]
+		if jobIDDatum == tree.DNull {
+			continue
+		}
+
+		jobID, ok := jobIDDatum.(*tree.DInt)
+		if !ok {
+			return errors.AssertionFailedf("%q: expected *DInt, found %T", jobIDDatum, jobIDDatum)
+		}
+
+		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+		if err := reg.DeprecatedUpdateJobWithTxn(params.ctx, jobspb.JobID(*jobID), params.p.InternalSQLTxn(),
+			func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
+				if err := jobsauth.Authorize(params.ctx, params.p,
+					md.ID, md.Payload.UsernameProto.Decode(), jobsauth.ControlAccess, globalPrivileges); err != nil {
+					return err
+				}
+				switch n.desiredStatus {
+				case jobs.StatePaused:
+					return ju.PauseRequested(params.ctx, txn, md, n.reason)
+				case jobs.StateRunning:
+					return ju.Unpaused(params.ctx, md)
+				case jobs.StateCanceled:
+					return ju.CancelRequested(params.ctx, md)
+				default:
+					return errors.AssertionFailedf("unhandled status %v", n.desiredStatus)
+				}
+			}); err != nil {
+			return err
+		}
+
+		n.incAffectedRows()
+	}
+	switch n.desiredStatus {
+	case jobs.StatePaused:
+		telemetry.Inc(sqltelemetry.SchemaJobControlCounter("pause"))
+	case jobs.StateRunning:
+		telemetry.Inc(sqltelemetry.SchemaJobControlCounter("resume"))
+	case jobs.StateCanceled:
+		telemetry.Inc(sqltelemetry.SchemaJobControlCounter("cancel"))
+	}
+	return nil
+}
+
+// Next implements the planNode interface.
+func (n *controlJobsNode) Next(_ runParams) (bool, error) {
+	return n.next(), nil
+}
+
+// Values implements the planNode interface.
+func (n *controlJobsNode) Values() tree.Datums {
+	return n.values()
+}
+
+func (n *controlJobsNode) Close(ctx context.Context) {
+	n.input.Close(ctx)
+}

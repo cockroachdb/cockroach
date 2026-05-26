@@ -1,0 +1,57 @@
+# disabled to run within tenant because multiregion primitives are not supported within tenant
+
+skip-under-duress
+----
+
+new-cluster name=s1 allow-implicit-access disable-tenant localities=us-east-1,us-west-1,eu-central-1
+----
+
+set-cluster-setting setting=sql.multiregion.system_database_multiregion.enabled value=true
+----
+
+exec-sql
+ALTER DATABASE system SET PRIMARY REGION "us-east-1";
+CREATE DATABASE d PRIMARY REGION "us-east-1" REGIONS "us-west-1", "eu-central-1" SURVIVE REGION FAILURE;
+CREATE TABLE d.t (x INT);
+INSERT INTO d.t VALUES (1), (2), (3);
+----
+
+query-sql
+SELECT region FROM [SHOW REGIONS FROM DATABASE d] ORDER BY 1;
+----
+eu-central-1
+us-east-1
+us-west-1
+
+exec-sql
+BACKUP DATABASE d INTO 'nodelocal://1/database_backup/';
+----
+
+exec-sql
+BACKUP INTO 'nodelocal://1/full_cluster_backup/';
+----
+
+# A new cluster with the same locality settings.
+new-cluster name=s2 share-io-dir=s1 allow-implicit-access disable-tenant localities=us-east-1,us-west-1,eu-central-1
+----
+
+exec-sql
+RESTORE FROM LATEST IN 'nodelocal://1/full_cluster_backup/';
+----
+
+exec-sql
+DROP DATABASE d;
+----
+
+exec-sql
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/database_backup/';
+----
+
+query-sql
+SHOW DATABASES;
+----
+d root us-east-1  {eu-central-1,us-east-1,us-west-1} region
+data root <nil> <nil> {} <nil>
+defaultdb root <nil> <nil> {} <nil>
+postgres root <nil> <nil> {} <nil>
+system node <nil> <nil> {} <nil>

@@ -1,0 +1,2 @@
+show_users_stmt ::=
+	'SHOW' 'USERS' opt_with_show_users_options opt_limit_clause

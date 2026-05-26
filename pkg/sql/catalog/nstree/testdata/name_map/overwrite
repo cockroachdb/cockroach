@@ -1,0 +1,68 @@
+add id=1 name=db1
+----
+(0, 0, db1): 1
+
+add parent-id=1 id=51 name=sc1
+----
+(1, 0, sc1): 51
+
+add parent-id=1 parent-schema-id=51 id=52 name=tab1
+----
+(1, 51, tab1): 52
+
+add parent-id=1 parent-schema-id=29 id=53 name=tab2
+----
+(1, 29, tab2): 53
+
+len
+----
+4
+
+iterate-by-id
+----
+(0, 0, db1): 1
+(1, 0, sc1): 51
+(1, 51, tab1): 52
+(1, 29, tab2): 53
+
+
+# Add a table by ID which has a different name (schema) than an
+# existing table with the same ID. Make sure the old name mapping
+# gets removed.
+
+get-by-name parent-id=1 parent-schema-id=51 name=tab1
+----
+(1, 51, tab1): 52
+
+add parent-id=1 parent-schema-id=29 id=52 name=tab1
+----
+(1, 29, tab1): 52
+
+len
+----
+4
+
+get-by-name parent-id=1 parent-schema-id=51 name=tab1
+----
+not found
+
+iterate-by-id
+----
+(0, 0, db1): 1
+(1, 0, sc1): 51
+(1, 29, tab1): 52
+(1, 29, tab2): 53
+
+# Add a table by ID which has a different name (schema) than an existing table
+# with the same ID and the same name as a table with a different ID. Make sure
+# the other descriptor with the conflicting name gets removed.
+
+add parent-id=1 parent-schema-id=29 id=52 name=tab2
+----
+(1, 29, tab2): 52
+
+iterate-by-id
+----
+(0, 0, db1): 1
+(1, 0, sc1): 51
+(1, 29, tab2): 52

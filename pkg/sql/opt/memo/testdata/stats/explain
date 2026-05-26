@@ -1,0 +1,26 @@
+build
+EXPLAIN SELECT 1
+----
+explain
+ ├── columns: info:2(string)
+ ├── stats: [rows=10]
+ └── project
+      ├── columns: "?column?":1(int!null)
+      ├── cardinality: [1 - 1]
+      ├── stats: [rows=1]
+      ├── key: ()
+      ├── fd: ()-->(1)
+      ├── values
+      │    ├── cardinality: [1 - 1]
+      │    ├── stats: [rows=1]
+      │    ├── key: ()
+      │    └── () [type=tuple]
+      └── projections
+           └── 1 [as="?column?":1, type=int]
+
+build
+SHOW TRACE FOR SESSION
+----
+show-trace-for-session &{TRACE false [1 2 3 4 5 6 7]}
+ ├── columns: timestamp:1(timestamptz) age:2(interval) message:3(string) tag:4(string) location:5(string) operation:6(string) span:7(int)
+ └── stats: [rows=10]

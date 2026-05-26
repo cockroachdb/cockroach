@@ -1,0 +1,50 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "cloud",
+    srcs = [
+        "cluster_cloud.go",
+        "gc.go",
+        "gc_aws.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/cloud",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cloud/amazon",
+        "//pkg/roachprod/cloud/types",
+        "//pkg/roachprod/config",
+        "//pkg/roachprod/logger",
+        "//pkg/roachprod/ui",
+        "//pkg/roachprod/vm",
+        "//pkg/roachprod/vm/aws",
+        "//pkg/roachprod/vm/azure",
+        "//pkg/roachprod/vm/gce",
+        "//pkg/roachprod/vm/ibm",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_aws_aws_sdk_go//aws",
+        "@com_github_aws_aws_sdk_go_v2_config//:config",
+        "@com_github_aws_aws_sdk_go_v2_service_ec2//:ec2",
+        "@com_github_aws_aws_sdk_go_v2_service_ec2//types",
+        "@com_github_aws_aws_sdk_go_v2_service_iam//:iam",
+        "@com_github_aws_aws_sdk_go_v2_service_iam//types",
+        "@com_github_aws_aws_sdk_go_v2_service_sts//:sts",
+        "@com_github_aws_aws_sdk_go_v2_service_sts//types",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
+        "@com_github_ibm_go_sdk_core_v5//core",
+        "@com_github_slack_go_slack//:slack",
+        "@org_golang_x_exp//maps",
+    ],
+)
+
+go_test(
+    name = "cloud_test",
+    srcs = ["cloud_test.go"],
+    embed = [":cloud"],
+    deps = [
+        "@com_github_aws_aws_sdk_go_v2_service_ec2//types",
+        "@com_github_stretchr_testify//assert",
+    ],
+)

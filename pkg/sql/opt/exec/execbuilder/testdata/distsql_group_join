@@ -1,0 +1,86 @@
+# LogicTest: 5node
+
+statement ok
+CREATE TABLE data (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b, c, d))
+
+# Split into ten parts.
+statement ok
+ALTER TABLE data SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
+
+# Relocate the ten parts to the five nodes.
+retry
+statement ok
+ALTER TABLE data EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
+
+# Verify data placement.
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE data WITH DETAILS]
+ORDER BY 1
+----
+start_key           end_key       replicas  lease_holder
+<before:/Table/XX>  …/1/1         {1}       1
+…/1/1               …/1/2         {2}       2
+…/1/2               …/1/3         {3}       3
+…/1/3               …/1/4         {4}       4
+…/1/4               …/1/5         {5}       5
+…/1/5               …/1/6         {1}       1
+…/1/6               …/1/7         {2}       2
+…/1/7               …/1/8         {3}       3
+…/1/8               …/1/9         {4}       4
+…/1/9               <after:/Max>  {5}       5
+
+statement ok
+SET experimental_hash_group_join_enabled = true
+
+# Verify the hash group-join planning (at the moment only the DistSQL diagram
+# shows it).
+query T
+EXPLAIN (DISTSQL) SELECT data1.a, sum(data1.d) FROM data AS data1 INNER HASH JOIN data AS data2 ON data1.a = data2.c GROUP BY data1.a
+----
+distribution: full
+·
+• group (hash)
+│ group by: a
+│
+└── • hash join
+    │ equality: (a) = (c)
+    │
+    ├── • scan
+    │     missing stats
+    │     table: data@data_pkey
+    │     spans: FULL SCAN
+    │
+    └── • scan
+          missing stats
+          table: data@data_pkey
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzUmG9P4lgUh9_vp7g5rzS5DNzblj9NJsEd3ZGJFlc02cmGmA69Qnegl21LZo3hu28KOtpee6aniIm8IJaWp-fc09-TK_eQ_DsHF07-ujg7Gnjs4Hgwuhr9eXbIRidnJ5-uWOCnvvjgc5asFgfbg-CQ_XE5PN-cYkej7SVs4Hknl-z0aHTKvgwHXu6sZEPvkcQ-bj_6MGGfL4fXF-z3r4-ngEOkA-X5C5WA-zcI4CCBgwUcbODgwJjDMtYTlSQ6zi6533xhEPwHbotDGC1XafbxmMNExwrce0jDdK7AhSv_21xdKj9QcbMFHAKV-uF8c5vs7v3s7Wb5Xd0Bh096vlpEict8zgLgMFr62VGjKZgfBUwwnc5UDOM1B71KH-75dKtvd2zmJ7P8TfoCxusxhyT1pwpc8ayRwTG4rTWv14tTtZfJfhqRhUac0kaeuKtIx4GKVZAjj7Nv_uqSF1bj1E9mn2O9Wn7RYaTipiiMd65u04O-OPwYh9PZ5i_gkF3LLmL9j5qkoY5c1he8nz1rR97XG294deNdn509XDu6Pj_oy8OdlskqLJMoH3itRTiaTmM19VMdN4VjVEJo66lku1jyLqN9oWRPN_SyKVvFh-DFYpxCMTK_fqJ6YES98DdFoyn3Fn9Rt5t2jfi_bitFAbRLW3kzAYj3IIDyke8sgPaeBJAfraz-lMqamZONprW3zMm63XTqZO5VWylmrlPayptlTr6HzJWPfOfMdfaUufxorepPqVUzc1ajae8tc1bdbrp1MveqrRQz1y1t5c0yZ72HzJWPfOfMdfeUufxo7epPqV0zc3aj6ewtc3bdbnp1MveqrRQz1ytt5c0yZ7-HzJWPfOfM9faUuR7lB5BLlSx1lKhK_zq2CrdqiKxHFUzVdkESvYon6iLWk82128PhBrQJU6CSdHtWbg8G0eOpJI2Vv_j5-011UqecJIgoIcpZkspyylkWldUrZ9kGSxAWXj5HOTRSp5wkiKjCwudYkspyylkWldUrZ9kGS6Isq3yGjjFDHNVFUMSqBBLENrEs0UZYxLpkq5zVMeqyiqzWc5aNoIyybBQl8w9qC_WWU9eAgkbCDEhEoQaksjADUlmYAQ1Wu64B2zQSZkAiCjUglYUZkMrCDGiwOrUNaMwQR2EGJFaFGpBYFmpAYl2oAY26urUNaJTVq6stSSNh2iKiUG1RWZi2qCxMWwZLULbMuSR2iChMXFQWai4yDFMXGYa5y4ThW0FMXuYkcRZmL2pdqL6ohaH-olaGCsyszNgPVjaYWZixH6yqMIuIwhxGZaESI8Mwi5FhmMZMmLGFrqqxLhGFaYzKQjVGhmEaI8MwjZkwfCONacycJM7CNEatC9UYtTBUY9TKUI2ZlRnb6coaMwv7xQYRCSURhWmMykI1RoZhGiPDMI2ZMGNLXVVjPSIK0xiVhWqMDMM0RoZhGjNh-MYa05g5SZyFaYxaF6oxamGoxqiVoRozKpPGzrqyxnrrMYfbuf5xEwbgQuvh1Xjh7fEF2Rf8aQLuPYxm-seGe3W3VAm4t_48URzO_e_qWKUqXoRRmKThBNw0Xqn1-rf_AwAA__8sqh_K
+
+statement ok
+RESET experimental_hash_group_join_enabled
+
+# Same query as above, but with the hash group-join disabled.
+query T
+EXPLAIN (DISTSQL) SELECT data1.a, sum(data1.d) FROM data AS data1 INNER HASH JOIN data AS data2 ON data1.a = data2.c GROUP BY data1.a
+----
+distribution: full
+·
+• group (hash)
+│ group by: a
+│
+└── • hash join
+    │ equality: (a) = (c)
+    │
+    ├── • scan
+    │     missing stats
+    │     table: data@data_pkey
+    │     spans: FULL SCAN
+    │
+    └── • scan
+          missing stats
+          table: data@data_pkey
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEmG9P4lgUh9_vp7g5rzS5TLm3LX-aTII7uisTLa5ospMNMR16BTJA2bZk1hi--wbQkfbaQ8_Fqi_MYMvT37mH8-QMj5D8OwUPzv6-ujjp-uzotNu_6f91ccz6ZxdnX25YGKSB-BRwlixnR9sX4TH747p3ubnETvrbW1jX98-u2flJ_5x97XX9zFXJev4ziX3e_unTkP153bu9Yr9_e74EHOZRqPxgphLw_gEBHCRwsIGDAxxcGHBYxNFQJUkUr2953LyhG_4HXp3DZL5Ypus_DzgMo1iB9wjpJJ0q8OAm-D5V1yoIVWzVgUOo0mAy3Txm_fTO-tfd4od6AA5foulyNk88FnAWAof-Ili_qlmCBfOQCRalYxXDYMUhWqZPz3x51PcHNg6ScfYhHQGD1YBDkgYjBZ7YKaR7Cl59xc1qccvWMqymEJkrxC0s5IW7nEdxqGIVZsiD9Tv33fLKaZwHyfhrNJmr2BK5zk7VfXrUEcef48lovPkXcOgtU491BO_IXOEvRdm5ogSpPSejUaxGQRrFlnC1w-Nw4n-783s3d_7txcVTpv7t5VFHHh_UCScf-pBW4GXJ-iFlvUR2c5Fl8TkbRfajWrSwpJv_nL0appEPkz0_UX4mhZlfLFGzZGWGEabVNAwM87al5B3TKCzlPRwjKnIMqUG7jml8oGMOacUex4iKHJM9Z1l-EKThWMuaZVc21tK0mqbJWL9pKfmxbhaW8h5jLSsaa1KDdse6-YFjfUgr9oy1rGiss-dslx8E23Cs7ZrlVDbWtmk1LZOxftNS8mPdKizlPcbarmisSQ3aHevWB471Ia3YM9Z2RWOdPWen_CA4hmPt1Cy3srF2TKtpm4z1m5aSH-t2YSnvMdZORWNNatDuWLc_cKwPacWesXYqGmuH8oXKtUoW0TxRpf4bX889qibWNapwpLYHkkTLeKiu4mi4uXf7srcBbeY1VEm6vSq3L7rz50tJGqtg9uvruvKkVjFJEFHCLmZJKgvJZRNZEsnlaCxBOHi5i3JppFYxSRBRuYPPsCSVheSyiSyJ5HI0lsyz6rusLKqeOXithzYayyn-OLhaKhwl6sWsBjGWcBEWMZdEcjWJuSSSq6nlctAuIqiWFstFUbJR_InQUA1TmwoaCbMpEYXalMrCbEpkoTbVWE1TmzZoJMymRBRqUyoLsymRhdpUY7XQ4WkjNtV62Da2qZYKR6E2JcZCbUrMhdqUmAu1qZZLaJtNaZ1quQRls8nqhojCLEhloRokwzAPUmGoCHWYtt6UNWGTiMJUSGWhLiTDMBlSYagNdZi24mTmSDiID_VWajtOaSHqwXAWakRqMFSJ1GSoE6nJUCnqyfDFEJOiHsx4M7SJKEyKVBYqRTIMkyIVhkpRhxmvhy0iCpMilYVKkQzDpEiFoVLUYfiOKLAlUW-l-ZaoBztgTaQGQ6VITYZKkZoMlaKWTJpvilowabwpOkQUJkUqC5UiGYZJkQpDpajDjDfFNhGFSZHKQqVIhmFSpMJQKeowfFOU2Kaot9J8U9SDHbApUoOhUqQmQ6VITYZKUU9mvik6qwGH-2n0824Sggf1p5_aK7-ef2D9hmCUgPcI_XH0c8O9eVioBLz7YJooDpfBD3WqUhXPJvNJkk6G4KXxUq1Wv_0fAAD__3lnOR8=

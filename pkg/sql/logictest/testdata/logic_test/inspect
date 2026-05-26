@@ -1,0 +1,949 @@
+# fakedist* configs are skipped because SetupAllNodesPlanning requires a
+# non-nil txn, which is not available in job-based flows like INSPECT. Using
+# them causes a nil pointer panic in the span resolver setup.
+#
+# LogicTest: !fakedist !fakedist-vec-off !fakedist-disk
+# knob-opt: allow-unsafe
+
+
+# Helper view to show the most recent INSPECT job.
+# We order by job ID (not creation time) because jobs run with AS OF SYSTEM
+# TIME use the AOST value as their creation timestamp rather than the current
+# time.
+statement ok
+CREATE VIEW last_inspect_job AS
+SELECT status, jsonb_array_length(
+    crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload)->'inspectDetails'->'checks'
+  ) AS num_checks
+FROM crdb_internal.system_jobs
+WHERE job_type = 'INSPECT'
+ORDER BY id DESC
+LIMIT 1
+
+# Helper view equivalent to `SHOW INSPECT ERRORS WITH DETAILS` but omitting
+# the non-deterministic aost and job_id columns.
+statement ok
+CREATE VIEW last_inspect_errors AS
+SELECT
+  ie.error_type,
+  COALESCE(t.database_name, '<id:' || ie.database_id::TEXT || '>', '<unknown>') AS database_name,
+  COALESCE(t.schema_name, '<id:' || ie.schema_id::TEXT || '>', '<unknown>') AS schema_name,
+  COALESCE(t.object_name, '<id:' || ie.id::TEXT || '>', '<unknown>') AS table_name,
+  ie.primary_key,
+  jsonb_pretty(ie.details) AS details
+FROM crdb_internal.cluster_inspect_errors ie
+LEFT JOIN crdb_internal.fully_qualified_names t ON ie.id = t.object_id
+WHERE ie.job_id = (
+  SELECT id
+  FROM crdb_internal.system_jobs
+  WHERE job_type = 'INSPECT'
+  AND status IN ('failed', 'succeeded', 'canceled', 'revert-failed')
+  ORDER BY id DESC
+  LIMIT 1
+)
+ORDER BY ie.error_type, database_name, schema_name, table_name, ie.primary_key
+LIMIT 10000
+
+statement error pq: "last_inspect_job" is not a table
+INSPECT TABLE last_inspect_job;
+
+# Make job adoption faster. This is needed to speed up DETACHED jobs.
+statement ok
+SET CLUSTER SETTING jobs.registry.interval.adopt = '500ms';
+
+statement ok
+CREATE TABLE foo (c1 INT, c2 INT, INDEX idx_c1 (c1), INDEX idx_c2 (c2));
+
+let $foo_created_ts
+SELECT now()
+
+subtest transaction_behavior
+
+# Test that regular INSPECT cannot run within a transaction.
+statement ok
+BEGIN;
+
+statement error pq: cannot run within a multi-statement transaction
+INSPECT TABLE foo;
+
+statement ok
+ROLLBACK;
+
+statement notice NOTICE: INSPECT job [0-9]+ running in the background
+INSPECT TABLE foo WITH OPTIONS DETACHED
+
+# Wait for the detached job to eventually succeed.
+query T retry
+SELECT status FROM last_inspect_job
+----
+succeeded
+
+# Test that DETACHED INSPECT can run inside a transaction.
+statement ok
+BEGIN;
+
+statement notice NOTICE: INSPECT job [0-9]+ queued; will start after the current transaction commits
+INSPECT TABLE foo WITH OPTIONS DETACHED
+
+# Verify the job isn't committed yet. It will stay in the running stage because we haven't committed it yet.
+query T
+SELECT status FROM last_inspect_job
+----
+running
+
+statement ok
+COMMIT;
+
+# Wait for the new job to eventually succeed.
+query T retry
+SELECT status FROM last_inspect_job
+----
+succeeded
+
+subtest end
+
+subtest inspect_options
+
+# Test DETACHED option validation.
+
+# Failure if both DETACHED and DETACHED = FALSE are specified.
+statement error pq: conflicting INSPECT options: DETACHED specified with different values
+INSPECT TABLE foo WITH OPTIONS DETACHED, DETACHED = FALSE
+
+# DETACHED = TRUE is the same as DETACHED.
+# Both should check all indexes (2 total: idx_c1 and idx_c2).
+statement notice NOTICE: INSPECT job [0-9]+ running in the background
+INSPECT TABLE foo WITH OPTIONS DETACHED = TRUE
+
+query TI retry
+SELECT * FROM last_inspect_job
+----
+succeeded  2
+
+statement notice NOTICE: INSPECT job [0-9]+ running in the background
+INSPECT TABLE foo WITH OPTIONS DETACHED
+
+query TI retry
+SELECT * FROM last_inspect_job
+----
+succeeded  2
+
+# DETACHED = TRUE with a specific index (verify the number of checks).
+statement notice NOTICE: INSPECT job [0-9]+ running in the background
+INSPECT TABLE foo WITH OPTIONS DETACHED = TRUE, INDEX (idx_c1)
+
+query TI retry
+SELECT * FROM last_inspect_job
+----
+succeeded  1
+
+# Test regular (non-detached) inspect operations.
+
+statement notice NOTICE: waiting for INSPECT job to complete: [0-9]+\nIf the statement is canceled, the job will continue in the background.
+INSPECT TABLE foo;
+
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  2
+
+statement ok
+INSPECT TABLE foo WITH OPTIONS INDEX (idx_c1);
+
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  1
+
+# Names are quietly deduplicated.
+statement ok
+INSPECT TABLE foo WITH OPTIONS INDEX (idx_c1, foo@idx_c1);
+
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  1
+
+statement ok
+INSPECT TABLE foo AS OF SYSTEM TIME '$foo_created_ts' WITH OPTIONS INDEX (idx_c1,idx_c2);
+
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  2
+
+statement error pq: index "idx_c3" does not exist
+INSPECT TABLE foo WITH OPTIONS INDEX (idx_c3);
+
+statement ok
+INSPECT TABLE foo WITH OPTIONS INDEX ALL;
+
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  2
+
+statement ok
+INSPECT DATABASE test;
+
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  2
+
+statement error index "idx_c3" does not exist
+INSPECT DATABASE test WITH OPTIONS INDEX (idx_c1, idx_c3);
+
+statement ok
+CREATE TABLE bar (c1 INT, c3 INT);
+
+statement ok
+INSPECT TABLE bar;
+
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  NULL
+
+statement ok
+CREATE INDEX idx_c1 ON bar (c1);
+CREATE INDEX idx_c3 ON bar (c3);
+
+statement error pq: index "bar@idx_c1" is not on table "test.public.foo"
+INSPECT TABLE foo WITH OPTIONS INDEX (bar@idx_c1);
+
+statement error pq: index "dbfake.foo.idx_c1" is not in database "test"
+INSPECT DATABASE test WITH OPTIONS INDEX (dbfake.foo.idx_c1);
+
+statement error pq: index name "idx_c1" is ambiguous \(found in test.public.foo and test.public.bar\)
+INSPECT DATABASE test WITH OPTIONS INDEX (idx_c1, idx_c3);
+
+statement ok
+INSPECT DATABASE test WITH OPTIONS INDEX (foo@idx_c1, test.public.bar@idx_c1, test.idx_c3);
+
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  3
+
+subtest end
+
+subtest permissions
+
+statement ok
+CREATE USER testuser2;
+
+user testuser2
+
+statement error pq: user testuser2 does not have INSPECT privilege
+INSPECT TABLE foo;
+
+statement error pq: user testuser2 does not have INSPECT privilege
+INSPECT DATABASE test;
+
+user root
+
+statement ok
+GRANT SYSTEM INSPECT TO testuser2;
+
+user testuser2
+
+statement ok
+INSPECT TABLE foo;
+
+statement ok
+INSPECT DATABASE test;
+
+subtest end
+
+subtest inspect_unsupported_indexes
+
+user root
+
+# Test that unsupported indexes (hash-sharded, expression) are skipped.
+# Table has both unsupported indexes and two regular indexes.
+statement ok
+CREATE TABLE t2 (
+    x INT, y INT, z INT,
+    j JSONB NULL,
+    INDEX hash_idx (x) USING HASH,
+    INDEX expr_idx ((y + z)),
+    INDEX regular_idx_y (y),
+    INDEX regular_idx_z (z),
+    VECTOR INDEX vector_idx ((CAST(j->>'v' AS VECTOR(3)))),
+    INDEX partial_idx (j) WHERE 1=1,
+    INVERTED INDEX inverted_idx (j)
+);
+
+statement ok
+INSERT INTO t2 (x, y, z) VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
+
+# Should succeed, checking only the regular index.
+statement ok
+INSPECT TABLE t2 AS OF SYSTEM TIME '-1us';
+
+# Verify only two checks were created (for the regular indexes).
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  2
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pq: no supported checks for index "t2_pkey" on table "t2" \(cannot check primary index consistency against itself; uniqueness: check only supported on REGIONAL BY ROW tables\)
+INSPECT TABLE t2 WITH OPTIONS INDEX (t2@t2_pkey);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pq: no supported checks for index "hash_idx" on table "t2" \(hash-sharded index; uniqueness: check only valid on primary index\)
+INSPECT TABLE t2 WITH OPTIONS INDEX (hash_idx);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pq: no supported checks for index "expr_idx" on table "t2" \(expression index; uniqueness: check only valid on primary index\)
+INSPECT TABLE t2 WITH OPTIONS INDEX (expr_idx);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pq: no supported checks for index "vector_idx" on table "t2" \(VECTOR; uniqueness: check only valid on primary index\)
+INSPECT TABLE t2 WITH OPTIONS INDEX (vector_idx);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pq: no supported checks for index "partial_idx" on table "t2" \(partial index; uniqueness: check only valid on primary index\)
+INSPECT TABLE t2 WITH OPTIONS INDEX (partial_idx);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pq: no supported checks for index "inverted_idx" on table "t2" \(INVERTED; uniqueness: check only valid on primary index\)
+INSPECT TABLE t2 WITH OPTIONS INDEX (inverted_idx);
+
+# Confirm no jobs were run.
+skipif config local-mixed-25.4 local-mixed-26.1
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  2
+
+statement ok
+DROP TABLE t2;
+
+subtest end
+
+subtest inspect_virtual_column_indexes
+
+user root
+
+# Test that indexes on virtual columns are not supported for INSPECT.
+statement ok
+CREATE TABLE t_virtual (
+    c1 INT,
+    c2 INT AS (c1 + 1) VIRTUAL,
+    c3 INT,
+    INDEX idx_c2 (c2),
+    INDEX idx_c3 (c3)
+);
+
+statement ok
+INSERT INTO t_virtual (c1, c3) VALUES (1, 10), (2, 20), (3, 30);
+
+# INSPECT TABLE should skip the virtual column index and only check the regular index.
+statement ok
+INSPECT TABLE t_virtual AS OF SYSTEM TIME '-1us';
+
+# Verify only one check was created (for idx_c3, the regular index).
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  1
+
+# Explicitly specifying the virtual column index should fail.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pq: no supported checks for index "idx_c2" on table "t_virtual" \(index on virtual column; uniqueness: check only valid on primary index\)
+INSPECT TABLE t_virtual WITH OPTIONS INDEX (idx_c2);
+
+# Explicitly specifying the regular index should succeed.
+statement ok
+INSPECT TABLE t_virtual WITH OPTIONS INDEX (idx_c3);
+
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  1
+
+# Test with multiple virtual columns in the same index.
+statement ok
+CREATE TABLE t_multi_virtual (
+    c1 INT,
+    c2 INT AS (c1 + 1) VIRTUAL,
+    c3 INT AS (c1 * 2) VIRTUAL,
+    c4 INT,
+    INDEX idx_virtual_combo (c2, c3),
+    INDEX idx_regular (c4)
+);
+
+statement ok
+INSERT INTO t_multi_virtual (c1, c4) VALUES (1, 100);
+
+# Should skip the index with virtual columns and only check the regular index.
+statement ok
+INSPECT TABLE t_multi_virtual AS OF SYSTEM TIME '-1us';
+
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  1
+
+# Explicitly specifying the index with virtual columns should fail.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pq: no supported checks for index "idx_virtual_combo" on table "t_multi_virtual" \(index on virtual column; uniqueness: check only valid on primary index\)
+INSPECT TABLE t_multi_virtual WITH OPTIONS INDEX (idx_virtual_combo);
+
+statement ok
+DROP TABLE t_virtual;
+
+statement ok
+DROP TABLE t_multi_virtual;
+
+subtest end
+
+subtest database_resolve_indexes
+
+statement ok
+CREATE DATABASE dbfoo;
+CREATE TABLE dbfoo.public.t2 (c1 INT, INDEX idx_c1 (c1));
+CREATE TABLE dbfoo.public.t1 (c1 INT, INDEX idx_c1 (c1));
+
+
+statement ok
+INSPECT DATABASE dbfoo WITH OPTIONS INDEX (t1@idx_c1);
+
+statement ok
+INSPECT DATABASE dbfoo WITH OPTIONS INDEX (t2@idx_c1);
+
+statement ok
+INSPECT DATABASE dbfoo WITH OPTIONS INDEX (public.t1@idx_c1);
+
+statement ok
+INSPECT DATABASE dbfoo WITH OPTIONS INDEX (dbfoo.t1@idx_c1);
+
+statement ok
+INSPECT DATABASE dbfoo WITH OPTIONS INDEX (dbfoo.t2@idx_c1);
+
+statement ok
+INSPECT DATABASE dbfoo WITH OPTIONS INDEX (dbfoo.public.t1@idx_c1);
+
+statement error pq: index name "idx_c1" is ambiguous \(found in dbfoo.public.t2 and dbfoo.public.t1\)
+INSPECT DATABASE dbfoo WITH OPTIONS INDEX (idx_c1);
+
+statement error pq: index name "idx_c1" is ambiguous \(found in dbfoo.public.t2 and dbfoo.public.t1\)
+INSPECT DATABASE dbfoo WITH OPTIONS INDEX (public.idx_c1);
+
+statement error pq: index name "idx_c1" is ambiguous \(found in dbfoo.public.t2 and dbfoo.public.t1\)
+INSPECT DATABASE dbfoo WITH OPTIONS INDEX (dbfoo.idx_c1);
+
+statement error pq: index name "idx_c1" is ambiguous \(found in dbfoo.public.t2 and dbfoo.public.t1\)
+INSPECT DATABASE dbfoo WITH OPTIONS INDEX (dbfoo.public.idx_c1);
+
+statement ok
+DROP DATABASE dbfoo;
+
+subtest schema_catalog_collision
+
+statement ok
+CREATE DATABASE ambiguous;
+CREATE SCHEMA ambiguous.ambiguous;
+CREATE TABLE ambiguous.ambiguous.t1 (c1 INT, INDEX idx_c1 (c1));
+
+# The duplicated names of the schema and the catalog means the database parameter doesn't help with resolution.
+statement error pq: index "idx_c1" does not exist
+INSPECT DATABASE ambiguous WITH OPTIONS INDEX (ambiguous.idx_c1);
+
+statement ok
+DROP DATABASE ambiguous;
+subtest end
+
+subtest end
+
+subtest table_resolve_indexes
+
+statement ok
+CREATE DATABASE dbfoo;
+CREATE DATABASE dbbar;
+CREATE SCHEMA dbfoo.s1;
+CREATE TABLE dbfoo.public.t1 (c1 INT, INDEX idx_c1 (c1));
+CREATE TABLE dbfoo.s1.t1 (c1 INT, c2 INT, INDEX idx_c1 (c1), INDEX idx_c2 (c2));
+CREATE TABLE dbbar.public.t1 (c1 INT, c2 INT, INDEX idx_c1 (c1), INDEX idx_c2 (c2));
+CREATE TABLE dbbar.public.t2 (c1 INT, c2 INT, INDEX idx_c1 (c1), INDEX idx_c2 (c2));
+
+subtest all_forms
+
+statement ok
+INSPECT TABLE dbfoo.t1 WITH OPTIONS INDEX (t1@idx_c1);
+
+statement error pq: index "s1.t1@idx_c1" is not on table "dbfoo.public.t1"
+INSPECT TABLE dbfoo.t1 WITH OPTIONS INDEX (s1.t1@idx_c1);
+
+statement ok
+INSPECT TABLE dbfoo.t1 WITH OPTIONS INDEX (dbfoo.t1@idx_c1);
+
+statement error pq: index "dbfoo.s1.t1@idx_c1" is not on table "dbfoo.public.t1"
+INSPECT TABLE dbfoo.t1 WITH OPTIONS INDEX (dbfoo.s1.t1@idx_c1);
+
+statement ok
+INSPECT TABLE dbfoo.t1 WITH OPTIONS INDEX (idx_c1);
+
+statement error pq: index "s1.idx_c1" is not on table "dbfoo.public.t1"
+INSPECT TABLE dbfoo.t1 WITH OPTIONS INDEX (s1.idx_c1);
+
+statement ok
+INSPECT TABLE dbfoo.t1 WITH OPTIONS INDEX (dbfoo.idx_c1);
+
+statement error pq: index "dbfoo.s1.idx_c1" is not on table "dbfoo.public.t1"
+INSPECT TABLE dbfoo.t1 WITH OPTIONS INDEX (dbfoo.s1.idx_c1);
+
+statement ok
+INSPECT TABLE dbfoo.s1.t1 WITH OPTIONS INDEX (t1@idx_c1);
+
+statement ok
+INSPECT TABLE dbfoo.s1.t1 WITH OPTIONS INDEX (s1.t1@idx_c1);
+
+statement ok
+INSPECT TABLE dbfoo.s1.t1 WITH OPTIONS INDEX (dbfoo.t1@idx_c1);
+
+statement ok
+INSPECT TABLE dbfoo.s1.t1 WITH OPTIONS INDEX (dbfoo.s1.t1@idx_c1);
+
+statement ok
+INSPECT TABLE dbfoo.s1.t1 WITH OPTIONS INDEX (idx_c1);
+
+statement ok
+INSPECT TABLE dbfoo.s1.t1 WITH OPTIONS INDEX (s1.idx_c1);
+
+statement ok
+INSPECT TABLE dbfoo.s1.t1 WITH OPTIONS INDEX (dbfoo.idx_c1);
+
+statement ok
+INSPECT TABLE dbfoo.s1.t1 WITH OPTIONS INDEX (dbfoo.s1.idx_c1);
+
+subtest end
+
+statement ok
+DROP DATABASE dbfoo;
+
+subtest end
+
+subtest refcursor_stored_column
+
+statement ok
+CREATE TABLE refcursor_tbl (id INT PRIMARY KEY, a INT, c REFCURSOR, d REFCURSOR[]);
+
+statement ok
+INSERT INTO refcursor_tbl VALUES
+  (1, 10, 'cursor1', ARRAY['c1a', 'c1b']::REFCURSOR[]),
+  (2, 20, 'cursor2', ARRAY['c2a', 'c2b']::REFCURSOR[]);
+
+# Verify that we cannot index the refcursor. They can only be included
+# in an index as stored columns.
+statement error pq: unimplemented: column c has type refcursor, which is not indexable
+CREATE INDEX idx_refcursor ON refcursor_tbl (c);
+
+statement ok
+CREATE INDEX idx_a_c ON refcursor_tbl (a) STORING (c);
+
+statement ok
+CREATE INDEX idx_a_d ON refcursor_tbl (a) STORING (d);
+
+statement ok
+INSPECT TABLE refcursor_tbl WITH OPTIONS INDEX ALL;
+
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  2
+
+# Test with hash optimization disabled to ensure JOIN-based consistency check works.
+statement ok
+SET CLUSTER SETTING sql.inspect.index_consistency_hash.enabled = false;
+
+statement ok
+INSPECT TABLE refcursor_tbl WITH OPTIONS INDEX ALL;
+
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  2
+
+# Re-enable hash optimization.
+statement ok
+SET CLUSTER SETTING sql.inspect.index_consistency_hash.enabled = true;
+
+statement ok
+DROP TABLE refcursor_tbl;
+
+subtest end
+
+subtest inspect_old_aost
+
+let $inspect_old_ts
+SELECT now()
+
+statement ok
+CREATE TABLE t_aost (c1 INT, INDEX idx_c1 (c1));
+
+statement ok
+INSERT INTO t_aost VALUES (1), (2), (3);
+
+# Test INSPECT with an AOST that predates the table.
+# This should fail because the table descriptor doesn't exist at that timestamp.
+statement error pq: relation "t_aost" does not exist
+INSPECT TABLE t_aost AS OF SYSTEM TIME '$inspect_old_ts' WITH OPTIONS INDEX (idx_c1);
+
+# Test INSPECT with an AOST that predates the database.
+statement error pq: database "test" does not exist
+INSPECT TABLE t_aost AS OF SYSTEM TIME '1' WITH OPTIONS INDEX (idx_c1);
+
+statement ok
+DROP TABLE t_aost;
+
+subtest end
+
+subtest inspect_non_key_encodable_types
+
+statement ok
+CREATE TABLE tsvector_tbl (
+  id INT PRIMARY KEY,
+  a INT,
+  tsv TSVECTOR NOT NULL,
+  INDEX idx_a_tsv (a) STORING (tsv)
+);
+
+statement ok
+INSERT INTO tsvector_tbl VALUES
+  (1, 10, 'hello world'::TSVECTOR),
+  (2, 20, 'foo bar'::TSVECTOR);
+
+# First verify that datums_to_bytes does not support TSVECTOR
+skipif config local-vec-off
+statement error pgcode XX000 pq: internal error: unable to encode table key: \*tree.DTSVector
+SELECT crdb_internal.datums_to_bytes(tsv) FROM tsvector_tbl LIMIT 1;
+
+onlyif config local-vec-off
+statement error pq: illegal argument 0 of type tsvector
+SELECT crdb_internal.datums_to_bytes(tsv) FROM tsvector_tbl LIMIT 1;
+
+# TSVECTOR cannot be key-encoded, so the hash precheck will be skipped.
+# The JOIN-based check should work fine.
+statement ok
+INSPECT TABLE tsvector_tbl WITH OPTIONS INDEX (idx_a_tsv);
+
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  1
+
+statement ok
+CREATE TABLE tsquery_tbl (
+  id INT PRIMARY KEY,
+  a INT,
+  tsq TSQUERY NOT NULL,
+  INDEX idx_a_tsq (a) STORING (tsq)
+);
+
+statement ok
+INSERT INTO tsquery_tbl VALUES
+  (1, 10, 'search & term'::TSQUERY),
+  (2, 20, 'another | query'::TSQUERY);
+
+# First verify that datums_to_bytes does not support TSQUERY
+skipif config local-vec-off
+statement error pgcode XX000 pq: internal error: unable to encode table key: \*tree.DTSQuery
+SELECT crdb_internal.datums_to_bytes(tsq) FROM tsquery_tbl LIMIT 1;
+
+onlyif config local-vec-off
+statement error pq: illegal argument 0 of type tsquery
+SELECT crdb_internal.datums_to_bytes(tsq) FROM tsquery_tbl LIMIT 1;
+
+# TSQUERY cannot be key-encoded, so the hash precheck will be skipped.
+# The JOIN-based check should work fine.
+statement ok
+INSPECT TABLE tsquery_tbl WITH OPTIONS INDEX (idx_a_tsq);
+
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  1
+
+statement ok
+CREATE TABLE pgvector_tbl (
+  id INT PRIMARY KEY,
+  a INT,
+  vec VECTOR(3) NOT NULL,
+  INDEX idx_a_vec (a) STORING (vec)
+);
+
+statement ok
+INSERT INTO pgvector_tbl VALUES
+  (1, 10, '[1.0, 2.0, 3.0]'::VECTOR(3)),
+  (2, 20, '[4.0, 5.0, 6.0]'::VECTOR(3));
+
+# First verify that datums_to_bytes does not support VECTOR
+skipif config local-vec-off
+statement error pgcode XX000 pq: internal error: unable to encode table key: \*tree.DPGVector
+SELECT crdb_internal.datums_to_bytes(vec) FROM pgvector_tbl LIMIT 1;
+
+onlyif config local-vec-off
+statement error pq: illegal argument 0 of type vector
+SELECT crdb_internal.datums_to_bytes(vec) FROM pgvector_tbl LIMIT 1;
+
+# VECTOR cannot be key-encoded, so the hash precheck will be skipped.
+# The JOIN-based check should work fine.
+statement ok
+INSPECT TABLE pgvector_tbl WITH OPTIONS INDEX (idx_a_vec);
+
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  1
+
+# Test with multiple problematic types in the same index.
+statement ok
+CREATE TABLE multi_type_tbl (
+  id INT PRIMARY KEY,
+  a INT,
+  tsv TSVECTOR,
+  tsq TSQUERY NOT NULL,
+  vec VECTOR(2),
+  INDEX idx_a_multi (a) STORING (tsv, tsq, vec)
+);
+
+statement ok
+INSERT INTO multi_type_tbl VALUES
+  (1, 10, 'word1 word2'::TSVECTOR, 'search'::TSQUERY, '[1.0, 2.0]'::VECTOR(2)),
+  (2, 20, NULL, 'query'::TSQUERY, NULL);
+
+# Verify that datums_to_bytes fails on each type individually.
+statement error pq: illegal argument 0 of type tsvector
+SELECT crdb_internal.datums_to_bytes('word1 word2'::TSVECTOR);
+
+statement error pq: illegal argument 0 of type tsquery
+SELECT crdb_internal.datums_to_bytes('search'::TSQUERY);
+
+statement error pq: illegal argument 0 of type vector
+SELECT crdb_internal.datums_to_bytes('[1.0, 2.0]'::VECTOR(2));
+
+# Multiple non-key-encodable types: hash precheck will be skipped.
+# The JOIN-based check should work fine.
+statement ok
+INSPECT TABLE multi_type_tbl WITH OPTIONS INDEX (idx_a_multi);
+
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  1
+
+statement ok
+DROP TABLE tsvector_tbl;
+
+statement ok
+DROP TABLE tsquery_tbl;
+
+statement ok
+DROP TABLE pgvector_tbl;
+
+statement ok
+DROP TABLE multi_type_tbl;
+
+subtest end
+
+subtest uniqueness_check
+
+statement ok
+CREATE TYPE test.region_enum AS ENUM ('eu-central1', 'us-east1', 'us-west1', 'us-west4');
+CREATE TABLE uniqueness_check (
+  crdb_region test.region_enum NOT NULL,
+  id INT64 DEFAULT unordered_unique_rowid(),
+  data TEXT,
+  PRIMARY KEY (crdb_region, id)
+);
+
+statement ok
+INSERT INTO uniqueness_check (crdb_region, id, data) VALUES ('us-east1', 100, 'foo');
+INSERT INTO uniqueness_check (crdb_region, id, data) VALUES ('us-west1', 100, 'biz');
+INSERT INTO uniqueness_check (crdb_region, id, data) VALUES ('us-west4', 100, 'toto');
+
+statement ok
+INSERT INTO uniqueness_check (crdb_region, id, data) VALUES ('us-east1', 200, 'bar');
+INSERT INTO uniqueness_check (crdb_region, id, data) VALUES ('us-west1', 200, 'baz');
+
+statement ok
+INSERT INTO uniqueness_check (crdb_region, id, data) VALUES ('us-west1', 300, 'titi');
+INSERT INTO uniqueness_check (crdb_region, id, data) VALUES ('us-west4', 300, 'tata');
+
+onlyif config local
+statement error pq: INSPECT found inconsistencies
+INSPECT TABLE uniqueness_check WITH OPTIONS INDEX (uniqueness_check_pkey);
+
+onlyif config local
+query TI retry
+SELECT * FROM last_inspect_job
+----
+failed  1
+
+statement ok
+DROP TABLE uniqueness_check;
+
+subtest complex_keys
+
+# Build the table
+
+statement ok
+CREATE TABLE uniqueness_check_complex (
+  crdb_region test.region_enum NOT NULL,
+  filler TEXT,
+  id INT64 DEFAULT unordered_unique_rowid(),
+  data TEXT,
+  PRIMARY KEY (crdb_region, filler, id)
+);
+
+statement ok
+INSERT INTO uniqueness_check_complex (crdb_region, filler, id, data) VALUES ('us-east1', 'filler1', 100, 'foo');
+INSERT INTO uniqueness_check_complex (crdb_region, filler, id, data) VALUES ('us-west1', 'filler1', 100, 'biz');
+INSERT INTO uniqueness_check_complex (crdb_region, filler, id, data) VALUES ('us-west4', 'filler1', 100, 'toto');
+
+statement ok
+INSERT INTO uniqueness_check_complex (crdb_region, filler, id, data) VALUES ('us-east1', 'filler1', 200, 'bar');
+INSERT INTO uniqueness_check_complex (crdb_region, filler, id, data) VALUES ('us-west1', 'filler1', 200, 'baz');
+
+statement ok
+INSERT INTO uniqueness_check_complex (crdb_region, filler, id, data) VALUES ('us-west1', 'filler1', 300, 'titi');
+INSERT INTO uniqueness_check_complex (crdb_region, filler, id, data) VALUES ('us-west4', 'filler1', 300, 'tata');
+
+# Run INSPECT which will not use the uniqueness check because it's a complex key.
+
+statement ok
+INSPECT TABLE uniqueness_check_complex;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pq: no supported checks for index "uniqueness_check_complex_pkey" on table "uniqueness_check_complex" \(cannot check primary index consistency against itself; uniqueness: complex key layout requires the cluster setting to opt in to \(expensive\) validation\)
+INSPECT TABLE uniqueness_check_complex WITH OPTIONS INDEX (uniqueness_check_complex_pkey);
+
+# Enable and run again to see the unique validations.
+
+statement ok
+SET CLUSTER SETTING sql.inspect.uniqueness_check.complex_keys.enabled = true;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pq: INSPECT found inconsistencies
+INSPECT TABLE uniqueness_check_complex;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TI retry
+SELECT * FROM last_inspect_job
+----
+failed  1
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TTTTTT nosort
+SELECT * FROM last_inspect_errors
+----
+duplicate_unique_value  test  public  uniqueness_check_complex  e'(\'us-east1\', \'filler1\', 100)'  {
+                                                                                                         "index_name": "uniqueness_check_complex_pkey",
+                                                                                                         "remote_regions": [
+                                                                                                             "us-west1",
+                                                                                                             "us-west4"
+                                                                                                         ]
+                                                                                                     }
+duplicate_unique_value  test  public  uniqueness_check_complex  e'(\'us-east1\', \'filler1\', 200)'  {
+                                                                                                         "index_name": "uniqueness_check_complex_pkey",
+                                                                                                         "remote_regions": [
+                                                                                                             "us-west1"
+                                                                                                         ]
+                                                                                                     }
+duplicate_unique_value  test  public  uniqueness_check_complex  e'(\'us-west1\', \'filler1\', 100)'  {
+                                                                                                         "index_name": "uniqueness_check_complex_pkey",
+                                                                                                         "remote_regions": [
+                                                                                                             "us-west4"
+                                                                                                         ]
+                                                                                                     }
+duplicate_unique_value  test  public  uniqueness_check_complex  e'(\'us-west1\', \'filler1\', 300)'  {
+                                                                                                         "index_name": "uniqueness_check_complex_pkey",
+                                                                                                         "remote_regions": [
+                                                                                                             "us-west4"
+                                                                                                         ]
+                                                                                                     }
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pq: INSPECT found inconsistencies
+INSPECT TABLE uniqueness_check_complex WITH OPTIONS INDEX (uniqueness_check_complex_pkey);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TI retry
+SELECT * FROM last_inspect_job
+----
+failed  1
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TTTTTT nosort
+SELECT * FROM last_inspect_errors
+----
+duplicate_unique_value  test  public  uniqueness_check_complex  e'(\'us-east1\', \'filler1\', 100)'  {
+                                                                                                         "index_name": "uniqueness_check_complex_pkey",
+                                                                                                         "remote_regions": [
+                                                                                                             "us-west1",
+                                                                                                             "us-west4"
+                                                                                                         ]
+                                                                                                     }
+duplicate_unique_value  test  public  uniqueness_check_complex  e'(\'us-east1\', \'filler1\', 200)'  {
+                                                                                                         "index_name": "uniqueness_check_complex_pkey",
+                                                                                                         "remote_regions": [
+                                                                                                             "us-west1"
+                                                                                                         ]
+                                                                                                     }
+duplicate_unique_value  test  public  uniqueness_check_complex  e'(\'us-west1\', \'filler1\', 100)'  {
+                                                                                                         "index_name": "uniqueness_check_complex_pkey",
+                                                                                                         "remote_regions": [
+                                                                                                             "us-west4"
+                                                                                                         ]
+                                                                                                     }
+duplicate_unique_value  test  public  uniqueness_check_complex  e'(\'us-west1\', \'filler1\', 300)'  {
+                                                                                                         "index_name": "uniqueness_check_complex_pkey",
+                                                                                                         "remote_regions": [
+                                                                                                             "us-west4"
+                                                                                                         ]
+                                                                                                     }
+
+statement ok
+DROP TABLE uniqueness_check_complex;
+
+subtest end
+
+subtest end
+
+subtest import_validation_job_description
+
+statement ok
+SET CLUSTER SETTING bulkio.import.row_count_validation.mode = 'async';
+
+statement ok
+CREATE TABLE import_desc_test (k INT PRIMARY KEY, v INT);
+
+let $exp_file
+WITH cte AS (EXPORT INTO CSV 'nodelocal://1/import-desc-test' FROM SELECT i, i*10 FROM generate_series(1, 5) AS g(i)) SELECT filename FROM cte;
+
+statement ok
+IMPORT INTO import_desc_test CSV DATA ('nodelocal://1/import-desc-test/$exp_file');
+
+let $import_job_id
+SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'IMPORT' ORDER BY created DESC LIMIT 1
+
+query B retry
+SELECT
+  crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload)->>'description'
+  = 'Validating IMPORT of test.public.import_desc_test (IMPORT job ' || $import_job_id::STRING || ')'
+FROM crdb_internal.system_jobs
+WHERE job_type = 'INSPECT' ORDER BY id DESC LIMIT 1
+----
+true
+
+statement ok
+DROP TABLE import_desc_test;
+
+statement ok
+RESET CLUSTER SETTING bulkio.import.row_count_validation.mode;
+
+subtest end

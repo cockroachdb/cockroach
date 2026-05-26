@@ -1,0 +1,4 @@
+Bump the version below when changing geos configure flags. Search for "BUILD
+ARTIFACT CACHING" in build/common.mk for rationale.
+
+8

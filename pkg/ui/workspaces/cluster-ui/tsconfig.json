@@ -1,0 +1,37 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "allowJs": false,
+    "emitDeclarationOnly": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "declaration": true,
+    "jsx": "react",
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "noImplicitAny": true,
+    "outDir": "./dist/types",
+    "target": "es6",
+    "skipLibCheck": true,
+    "sourceMap": false,
+    "preserveSymlinks": true,
+    "noEmitOnError": true,
+    "strict": true,
+    "strictNullChecks": false,
+    "paths": {
+      "@cockroachlabs/crdb-protobuf-client": [
+        "../../../../_bazel/bin/pkg/ui/workspaces/db-console/src/js",
+        "./node_modules/@cockroachlabs/crdb-protobuf-client"
+      ],
+      "immer": [
+        "./node_modules/immer"
+      ]
+    }
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.test.*",
+    ".jest"
+  ]
+}

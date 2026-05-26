@@ -1,0 +1,132 @@
+/* setup */
+CREATE TYPE salmon AS ENUM('chinook', 'sockeye');
+----
+...
++object {100 101 salmon} -> 104
++object {100 101 _salmon} -> 105
+
+/* test */
+ALTER TYPE salmon ADD VALUE 'atlantic';
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: ALTER TYPE
+increment telemetry for sql.schema.alter_type.add_value
+increment telemetry for sql.udts.alter_enum
+write *eventpb.AlterType to event log:
+  sql:
+    descriptorId: 104
+    statement: ALTER TYPE ‹defaultdb›.‹public›.‹salmon› ADD VALUE ‹'atlantic'›
+    tag: ALTER TYPE
+    user: root
+  typeName: defaultdb.public.salmon
+## StatementPhase stage 1 of 1 with 1 MutationType op
+upsert descriptor #104
+  ...
+     - logicalRepresentation: sockeye
+       physicalRepresentation: gA==
+  +  - capability: READ_ONLY
+  +    direction: ADD
+  +    logicalRepresentation: atlantic
+  +    physicalRepresentation: wA==
+     id: 104
+     modificationTime: {}
+  ...
+         withGrantOption: "2"
+       version: 3
+  -  version: "1"
+  +  version: "2"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 3 MutationType ops
+upsert descriptor #104
+   type:
+     arrayTypeId: 105
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    nameMapping:
+  +      id: 104
+  +      name: salmon
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: ALTER TYPE ‹defaultdb›.‹public›.‹salmon› ADD VALUE ‹'atlantic'›
+  +        statement: ALTER TYPE salmon ADD VALUE 'atlantic'
+  +        statementTag: ALTER TYPE
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     enumMembers:
+     - logicalRepresentation: chinook
+  ...
+     - logicalRepresentation: sockeye
+       physicalRepresentation: gA==
+  +  - capability: READ_ONLY
+  +    direction: ADD
+  +    logicalRepresentation: atlantic
+  +    physicalRepresentation: wA==
+     id: 104
+     modificationTime: {}
+  ...
+         withGrantOption: "2"
+       version: 3
+  -  version: "1"
+  +  version: "2"
+persist all catalog changes to storage
+create job #1 (non-cancelable: true): "ALTER TYPE defaultdb.public.salmon ADD VALUE 'atlantic'"
+  descriptor IDs: [104]
+# end PreCommitPhase
+commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitNonRevertiblePhase stage 1 of 1 with 3 MutationType ops
+upsert descriptor #104
+   type:
+     arrayTypeId: 105
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      id: 104
+  -      name: salmon
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TYPE ‹defaultdb›.‹public›.‹salmon› ADD VALUE ‹'atlantic'›
+  -        statement: ALTER TYPE salmon ADD VALUE 'atlantic'
+  -        statementTag: ALTER TYPE
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     enumMembers:
+     - logicalRepresentation: chinook
+  ...
+     - logicalRepresentation: sockeye
+       physicalRepresentation: gA==
+  -  - capability: READ_ONLY
+  -    direction: ADD
+  -    logicalRepresentation: atlantic
+  +  - logicalRepresentation: atlantic
+       physicalRepresentation: wA==
+     id: 104
+  ...
+         withGrantOption: "2"
+       version: 3
+  -  version: "2"
+  +  version: "3"
+persist all catalog changes to storage
+update progress of schema change job #1: "all stages completed"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 104
+commit transaction #3
+# end PostCommitPhase

@@ -1,0 +1,5 @@
+SELECT * FROM a WHERE a = $1:::INT8 AND b = $2:::INT8
+
+Arguments:
+  $1: 1
+  $2: 1

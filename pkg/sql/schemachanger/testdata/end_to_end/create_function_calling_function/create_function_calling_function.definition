@@ -1,0 +1,29 @@
+setup
+CREATE TABLE t(
+  a INT PRIMARY KEY,
+  b INT,
+  C INT,
+  INDEX t_idx_b(b),
+  INDEX t_idx_c(c)
+);
+CREATE SEQUENCE sq1;
+CREATE VIEW v AS SELECT a FROM t;
+CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
+CREATE TABLE t2(a notmyworkday);
+CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE SQL AS $$
+  SELECT a FROM t;
+  SELECT b FROM t@t_idx_b;
+  SELECT c FROM t@t_idx_c;
+  SELECT a FROM v;
+  SELECT nextval('sq1');
+$$;
+CREATE FUNCTION f2(a notmyworkday)  RETURNS INT VOLATILE LANGUAGE SQL AS $$
+  SELECT f(a) + f(a);
+$$;
+----
+
+test
+CREATE FUNCTION f3(a notmyworkday)  RETURNS INT VOLATILE LANGUAGE SQL AS $$
+  SELECT f2(a) + f(a);
+$$;
+----

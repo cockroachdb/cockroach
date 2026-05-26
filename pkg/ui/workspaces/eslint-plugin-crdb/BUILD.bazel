@@ -1,0 +1,50 @@
+load("@aspect_rules_js//js:defs.bzl", "js_library")
+load("@aspect_rules_ts//ts:defs.bzl", "ts_project")
+load("@npm//:defs.bzl", "npm_link_all_packages")
+load("@aspect_rules_js//npm:defs.bzl", "npm_package")
+
+npm_link_all_packages(name = "node_modules")
+
+ts_project(
+    name = "ts_project",
+    srcs = glob(
+        ["src/**/*.ts"],
+        exclude = [
+            "src/**/*.test.ts",
+            "src/**/*.spec.ts",
+        ],
+    ),
+    out_dir = "dist",
+    root_dir = "src",
+    tsconfig = "tsconfig.json",
+    validate = False,
+    deps = [":node_modules"],
+)
+
+js_library(
+    name = "eslint-plugin-crdb-lib",
+    srcs = [
+        "package.json",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":ts_project",
+    ],
+)
+
+npm_package(
+    name = "eslint-plugin-crdb",
+    srcs = [
+        "package.json",
+        ":eslint-plugin-crdb-lib",
+    ],
+    package = "@cockroachlabs/eslint-plugin-crdb",
+    visibility = ["//visibility:public"],
+)
+
+# rules_js 2.x expects npm_package targets to be named 'pkg' by default
+alias(
+    name = "pkg",
+    actual = ":eslint-plugin-crdb",
+    visibility = ["//visibility:public"],
+)

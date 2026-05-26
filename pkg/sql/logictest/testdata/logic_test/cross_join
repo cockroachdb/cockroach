@@ -1,0 +1,98 @@
+# Check that the cross join is performed in a streaming fashion with regards to
+# the left input (if it wasn't, the query below would hit the temporary disk
+# storage limit in fakedist-disk config).
+
+statement ok
+CREATE TABLE t (
+    i2    INT2,
+    i4    INT4,
+    i8    INT8,
+    f4    FLOAT4,
+    f8    FLOAT8,
+    s     STRING,
+    c     CHAR,
+    b     BYTES,
+    dc    DECIMAL,
+    ival  INTERVAL,
+    oid   OID,
+    tstz  TIMESTAMPTZ,
+    ts    TIMESTAMP,
+    da    DATE,
+    inet  INET,
+    vb    VARBIT(2)
+);
+INSERT
+  INTO t
+SELECT i::INT2,
+       i::INT4,
+       i::INT8,
+       i::FLOAT4,
+       i::FLOAT8,
+       i::STRING,
+       i::CHAR,
+       i::STRING::BYTES,
+       i::DECIMAL,
+       i::INTERVAL,
+       i::OID,
+       i::TIMESTAMPTZ,
+       i::TIMESTAMP,
+       i::DATE,
+       ('127.0.0.' || i::STRING)::INET,
+       i::VARBIT(2)
+  FROM (
+         SELECT i FROM generate_series(1, 2) as t(i)
+         UNION ALL SELECT NULL
+       );
+SELECT *
+  FROM (
+        SELECT a.i2,
+               b.i4,
+               c.i8,
+               d.f4,
+               e.f8,
+               f.s,
+               g.c,
+               h.b,
+               i.dc,
+               j.ival,
+               k.oid,
+               l.tstz,
+               m.ts,
+               n.da,
+               o.inet,
+               p.vb,
+               random() AS r
+          FROM t AS a,
+               t AS b,
+               t AS c,
+               t AS d,
+               t AS e,
+               t AS f,
+               t AS g,
+               t AS h,
+               t AS i,
+               t AS j,
+               t AS k,
+               t AS l,
+               t AS m,
+               t AS n,
+               t AS o,
+               t AS p
+       )
+ WHERE r < .01
+ LIMIT 1
+
+# Regression test for #105882 - don't infinite loop when the left input has
+# no columns.
+statement ok
+CREATE TABLE t105882 (c0 INT);
+UPSERT INTO t105882 (c0) VALUES(1);
+
+query I
+SELECT (
+  SELECT count(t2.rowid) FROM t105882 t2
+  WHERE ((t1.rowid) IN (SELECT max(t3.rowid) FROM t105882 t3))
+)
+FROM t105882 t1;
+----
+1

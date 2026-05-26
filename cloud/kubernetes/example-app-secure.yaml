@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: example-secure
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loadgen
+  template:
+    metadata:
+      labels:
+        app: loadgen
+    spec:
+      serviceAccountName: cockroachdb
+      volumes:
+      - name: client-certs
+        emptyDir: {}
+      initContainers:
+      # The init-certs container sends a certificate signing request to the
+      # kubernetes cluster.
+      # You can see pending requests using: kubectl get csr
+      # CSRs can be approved using:         kubectl certificate approve <csr name>
+      #
+      # In addition to the client certificate and key, the init-certs entrypoint will symlink
+      # the cluster CA to the certs directory.
+      - name: init-certs
+        image: cockroachdb/cockroach-k8s-request-cert:0.4
+        imagePullPolicy: IfNotPresent
+        command:
+        - "/bin/ash"
+        - "-ecx"
+        - "/request-cert -namespace=${POD_NAMESPACE} -certs-dir=/cockroach-certs -type=client -user=root -symlink-ca-from=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        volumeMounts:
+        - name: client-certs
+          mountPath: /cockroach-certs
+      containers:
+      - name: loadgen
+        image: cockroachdb/loadgen-kv:0.1
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+        - name: client-certs
+          mountPath: /cockroach-certs
+        command:
+          - "/kv"
+          - "postgres://root@cockroachdb-public:26257/kv?sslmode=verify-full&sslcert=/cockroach-certs/client.root.crt&sslkey=/cockroach-certs/client.root.key&sslrootcert=/cockroach-certs/ca.crt"

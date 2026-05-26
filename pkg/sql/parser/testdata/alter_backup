@@ -1,0 +1,71 @@
+parse
+ALTER BACKUP 'foo' ADD NEW_KMS = 'a' WITH OLD_KMS = 'b'
+----
+ALTER BACKUP '*****' ADD NEW_KMS='*****' WITH OLD_KMS='*****' -- normalized!
+ALTER BACKUP ('*****') ADD NEW_KMS=('*****') WITH OLD_KMS=('*****') -- fully parenthesized
+ALTER BACKUP '_' ADD NEW_KMS='_' WITH OLD_KMS='_' -- literals removed
+ALTER BACKUP '*****' ADD NEW_KMS='*****' WITH OLD_KMS='*****' -- identifiers removed
+ALTER BACKUP 'foo' ADD NEW_KMS='a' WITH OLD_KMS='b' -- passwords exposed
+
+parse
+ALTER BACKUP 'foo' ADD NEW_KMS = ('a', 'b') WITH OLD_KMS = ('c', 'd')
+----
+ALTER BACKUP '*****' ADD NEW_KMS=('*****', '*****') WITH OLD_KMS=('*****', '*****') -- normalized!
+ALTER BACKUP ('*****') ADD NEW_KMS=(('*****'), ('*****')) WITH OLD_KMS=(('*****'), ('*****')) -- fully parenthesized
+ALTER BACKUP '_' ADD NEW_KMS=('_', '_') WITH OLD_KMS=('_', '_') -- literals removed
+ALTER BACKUP '*****' ADD NEW_KMS=('*****', '*****') WITH OLD_KMS=('*****', '*****') -- identifiers removed
+ALTER BACKUP 'foo' ADD NEW_KMS=('a', 'b') WITH OLD_KMS=('c', 'd') -- passwords exposed
+
+parse
+ALTER BACKUP 'foo' ADD NEW_KMS = ('a', 'b') WITH OLD_KMS = 'c'
+----
+ALTER BACKUP '*****' ADD NEW_KMS=('*****', '*****') WITH OLD_KMS='*****' -- normalized!
+ALTER BACKUP ('*****') ADD NEW_KMS=(('*****'), ('*****')) WITH OLD_KMS=('*****') -- fully parenthesized
+ALTER BACKUP '_' ADD NEW_KMS=('_', '_') WITH OLD_KMS='_' -- literals removed
+ALTER BACKUP '*****' ADD NEW_KMS=('*****', '*****') WITH OLD_KMS='*****' -- identifiers removed
+ALTER BACKUP 'foo' ADD NEW_KMS=('a', 'b') WITH OLD_KMS='c' -- passwords exposed
+
+parse
+ALTER BACKUP 'foo' ADD NEW_KMS = 'a' WITH OLD_KMS = ('b', 'c')
+----
+ALTER BACKUP '*****' ADD NEW_KMS='*****' WITH OLD_KMS=('*****', '*****') -- normalized!
+ALTER BACKUP ('*****') ADD NEW_KMS=('*****') WITH OLD_KMS=(('*****'), ('*****')) -- fully parenthesized
+ALTER BACKUP '_' ADD NEW_KMS='_' WITH OLD_KMS=('_', '_') -- literals removed
+ALTER BACKUP '*****' ADD NEW_KMS='*****' WITH OLD_KMS=('*****', '*****') -- identifiers removed
+ALTER BACKUP 'foo' ADD NEW_KMS='a' WITH OLD_KMS=('b', 'c') -- passwords exposed
+
+parse
+ALTER BACKUP 'foo' in 'bar' ADD NEW_KMS = 'a' WITH OLD_KMS = 'b'
+----
+ALTER BACKUP 'foo' IN '*****' ADD NEW_KMS='*****' WITH OLD_KMS='*****' -- normalized!
+ALTER BACKUP ('foo') IN ('*****') ADD NEW_KMS=('*****') WITH OLD_KMS=('*****') -- fully parenthesized
+ALTER BACKUP '_' IN '_' ADD NEW_KMS='_' WITH OLD_KMS='_' -- literals removed
+ALTER BACKUP 'foo' IN '*****' ADD NEW_KMS='*****' WITH OLD_KMS='*****' -- identifiers removed
+ALTER BACKUP 'foo' IN 'bar' ADD NEW_KMS='a' WITH OLD_KMS='b' -- passwords exposed
+
+parse
+ALTER BACKUP 'foo' in 'bar' ADD NEW_KMS = ('a', 'b') WITH OLD_KMS = ('c', 'd')
+----
+ALTER BACKUP 'foo' IN '*****' ADD NEW_KMS=('*****', '*****') WITH OLD_KMS=('*****', '*****') -- normalized!
+ALTER BACKUP ('foo') IN ('*****') ADD NEW_KMS=(('*****'), ('*****')) WITH OLD_KMS=(('*****'), ('*****')) -- fully parenthesized
+ALTER BACKUP '_' IN '_' ADD NEW_KMS=('_', '_') WITH OLD_KMS=('_', '_') -- literals removed
+ALTER BACKUP 'foo' IN '*****' ADD NEW_KMS=('*****', '*****') WITH OLD_KMS=('*****', '*****') -- identifiers removed
+ALTER BACKUP 'foo' IN 'bar' ADD NEW_KMS=('a', 'b') WITH OLD_KMS=('c', 'd') -- passwords exposed
+
+parse
+ALTER BACKUP 'foo' in 'bar' ADD NEW_KMS = ('a', 'b') WITH OLD_KMS = 'c'
+----
+ALTER BACKUP 'foo' IN '*****' ADD NEW_KMS=('*****', '*****') WITH OLD_KMS='*****' -- normalized!
+ALTER BACKUP ('foo') IN ('*****') ADD NEW_KMS=(('*****'), ('*****')) WITH OLD_KMS=('*****') -- fully parenthesized
+ALTER BACKUP '_' IN '_' ADD NEW_KMS=('_', '_') WITH OLD_KMS='_' -- literals removed
+ALTER BACKUP 'foo' IN '*****' ADD NEW_KMS=('*****', '*****') WITH OLD_KMS='*****' -- identifiers removed
+ALTER BACKUP 'foo' IN 'bar' ADD NEW_KMS=('a', 'b') WITH OLD_KMS='c' -- passwords exposed
+
+parse
+ALTER BACKUP 'foo' in 'bar' ADD NEW_KMS = 'a' WITH OLD_KMS = ('b', 'c')
+----
+ALTER BACKUP 'foo' IN '*****' ADD NEW_KMS='*****' WITH OLD_KMS=('*****', '*****') -- normalized!
+ALTER BACKUP ('foo') IN ('*****') ADD NEW_KMS=('*****') WITH OLD_KMS=(('*****'), ('*****')) -- fully parenthesized
+ALTER BACKUP '_' IN '_' ADD NEW_KMS='_' WITH OLD_KMS=('_', '_') -- literals removed
+ALTER BACKUP 'foo' IN '*****' ADD NEW_KMS='*****' WITH OLD_KMS=('*****', '*****') -- identifiers removed
+ALTER BACKUP 'foo' IN 'bar' ADD NEW_KMS='a' WITH OLD_KMS=('b', 'c') -- passwords exposed

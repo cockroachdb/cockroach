@@ -1,0 +1,11 @@
+/* setup */
+CREATE TABLE t (
+    i INT,
+    j INT NOT NULL GENERATED ALWAYS AS IDENTITY
+);
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER TABLE t ALTER COLUMN j DROP IDENTITY;
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER COLUMN ‹j› DROP IDENTITY;
+ └── execute 2 system table mutations transactions

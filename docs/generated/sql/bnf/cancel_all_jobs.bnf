@@ -1,0 +1,2 @@
+cancel_all_jobs_stmt ::=
+	'CANCEL' 'ALL' ( 'BACKUP' | 'CHANGEFEED' | 'RESTORE' | 'IMPORT') 'JOBS'

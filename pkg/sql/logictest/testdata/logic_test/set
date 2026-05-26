@@ -1,0 +1,1134 @@
+# LogicTest: local
+
+statement error unrecognized configuration parameter "foo"
+SET foo = bar
+
+statement error unrecognized configuration parameter "foo"
+SHOW foo
+
+statement error database "foo" does not exist
+SET database = foo
+
+# Ensure that the failing SET DATABASE call did not alter the session.
+# The default session.database value is "test".
+statement ok
+SHOW TABLES
+
+statement ok
+CREATE DATABASE foo
+
+statement ok
+SET database = foo
+
+# Create a table in the session database.
+statement ok
+CREATE TABLE bar (k INT PRIMARY KEY)
+
+# Verify that the table is indeed in "foo".
+query TTTTIT
+SHOW TABLES FROM foo
+----
+public  bar  table  root  0  NULL
+
+# Verify set to empty string.
+statement ok
+SET database = ""
+
+query T colnames
+SHOW database
+----
+database
+·
+
+statement error no database or schema specified
+SHOW TABLES
+
+# Verify SHOW TABLES FROM works when there is no current database.
+query TTTTIT
+SHOW TABLES FROM foo
+----
+public  bar  table  root  0  NULL
+
+# SET statement succeeds, CREATE TABLE fails.
+statement error pgcode 42P07 relation \"foo.public.bar\" already exists
+SET database = foo; CREATE TABLE bar (k INT PRIMARY KEY)
+
+query T colnames
+SHOW database
+----
+database
+foo
+
+# SET succeeds
+query TTTTIT
+SHOW TABLES from foo
+----
+public  bar  table  root  0  NULL
+
+statement error invalid variable name: ""
+SET ROW (1, TRUE, NULL)
+
+statement ok
+SET application_name = helloworld
+
+query T colnames
+SHOW application_name
+----
+application_name
+helloworld
+
+# SESSION_USER is a special keyword, check that SHOW knows about it.
+query T
+SHOW session_user
+----
+root
+
+## Test SET ... TO DEFAULT works
+
+statement ok
+SET distsql TO ON
+
+query T colnames
+SHOW distsql
+----
+distsql
+on
+
+statement ok
+SET distsql TO DEFAULT
+
+query T colnames
+SHOW distsql
+----
+distsql
+off
+
+## Test that our no-op compatibility vars work
+
+statement ok
+SET application_name = 'hello'
+
+statement ok
+SET extra_float_digits = 0
+
+statement error 123 is outside the valid range for parameter "extra_float_digits"
+SET extra_float_digits = 123
+
+statement ok
+SET client_min_messages = 'debug1'
+
+statement ok
+SET standard_conforming_strings = 'on'
+
+statement error invalid value for parameter "standard_conforming_strings": "off"
+SET standard_conforming_strings = 'off'
+
+statement ok
+SET client_encoding = 'UTF8'
+
+statement ok
+SET client_encoding = 'UT! '' @#!$%%F------!@!!!8 ''   '
+
+statement ok
+SET client_encoding = 'unicode'
+
+statement error unimplemented client encoding: "other"
+SET client_encoding = 'other'
+
+statement error parameter "server_encoding" cannot be changed
+SET server_encoding = 'UTF8'
+
+statement error parameter "server_encoding" cannot be changed
+SET server_encoding = 'other'
+
+query T
+SHOW ssl
+----
+on
+
+statement error parameter "ssl" cannot be changed
+SET ssl = 'off'
+
+query T
+SHOW authentication_method
+----
+cert-password
+
+statement error parameter "authentication_method" cannot be changed
+SET authentication_method = 'password'
+
+statement ok
+SET escape_string_warning = 'ON'
+
+statement ok
+SET escape_string_warning = 'off'
+
+statement ok
+SET datestyle = 'ISO'
+
+query T
+SHOW datestyle
+----
+ISO, MDY
+
+statement ok
+SET datestyle = 'ISO, MDY'
+
+query T
+SHOW datestyle
+----
+ISO, MDY
+
+statement ok
+SET datestyle = 'mdy, iso'
+
+query T
+SHOW datestyle
+----
+ISO, MDY
+
+statement ok
+SET datestyle = 'ymd'
+
+query T
+SHOW datestyle
+----
+ISO, YMD
+
+statement ok
+SET datestyle = 'DMY,   ISo'
+
+query T
+SHOW datestyle
+----
+ISO, DMY
+
+statement error only ISO style is supported
+SET datestyle = 'postgres'
+
+statement error only ISO style is supported
+SET datestyle = 'german'
+
+statement error only ISO style is supported
+SET datestyle = 'sql'
+
+statement error invalid value for parameter "DateStyle": "other"
+SET datestyle = 'other'
+
+statement ok
+SET intervalstyle = 'postgres'
+
+statement ok
+SET intervalstyle = 'iso_8601'
+
+statement ok
+SET intervalstyle = 'sql_standard'
+
+statement error invalid value for parameter "IntervalStyle": "other"\nHINT: Available values: postgres,iso_8601,sql_standard
+SET intervalstyle = 'other'
+
+statement ok
+SET search_path = 'blah'
+
+statement ok
+SET distsql = always
+
+statement ok
+SET distsql = on
+
+statement ok
+SET distsql = off
+
+statement error invalid value for parameter "distsql": "bogus"
+SET distsql = bogus
+
+statement ok
+SET vectorize = on
+
+statement ok
+SET vectorize = experimental_always
+
+statement ok
+SET vectorize = off
+
+statement error invalid value for parameter "vectorize": "bogus"\nHINT: Available values: off,on,experimental_always
+SET vectorize = bogus
+
+statement ok
+SET optimizer = on
+
+statement error invalid value for parameter "optimizer": "local"
+SET optimizer = local
+
+statement error invalid value for parameter "optimizer": "off"
+SET optimizer = off
+
+statement error invalid value for parameter "optimizer": "bogus"
+SET optimizer = bogus
+
+statement ok
+SET bytea_output = escape
+
+statement ok
+SET bytea_output = hex
+
+statement error invalid value for parameter "bytea_output": "bogus"
+SET bytea_output = bogus
+
+statement ok
+SET default_tablespace = ''
+
+statement error invalid value for parameter "default_tablespace": "bleepis"
+SET default_tablespace = 'bleepis'
+
+query T colnames
+SHOW server_version
+----
+server_version
+18.0.0
+
+query T colnames
+SHOW server_version_num
+----
+server_version_num
+180000
+
+query T
+SHOW log_timezone
+----
+UTC
+
+# Test read-only variables
+statement error parameter "max_index_keys" cannot be changed
+SET max_index_keys = 32
+
+statement error parameter "node_id" cannot be changed
+SET node_id = 123
+
+statement error invalid value for parameter "log_timezone"
+SET log_timezone = 'Australia/South'
+
+query TT
+SELECT name, value FROM system.settings WHERE name = 'testing.str'
+----
+
+# quoted identifiers
+statement ok
+SET "timezone" = 'UTC'
+
+# even quoted in postgres the session variable names are
+# case-insensitive for SET and SHOW.
+statement ok
+SET "TIMEZONE" = 'UTC'
+
+query T
+SHOW "TIMEZONE"
+----
+UTC
+
+# without quoted identifiers
+statement ok
+SET timezone = 'UTC'
+
+query T
+SHOW timezone
+----
+UTC
+
+# TIMEZONE alias - TIME ZONE two words/tokens
+statement ok
+SET TIME ZONE 'UTC'
+
+query T
+SHOW TIME ZONE
+----
+UTC
+
+# Regression test for #19727 - invalid EvalContext used to evaluate arguments to set.
+statement ok
+SET application_name = current_timestamp()::string
+
+# Test statement_timeout on a long-running query.
+statement ok
+SET statement_timeout = 1
+
+statement error query execution canceled due to statement timeout
+SELECT * FROM generate_series(1,1000000)
+
+# Test that statement_timeout can be set with an interval string.
+statement ok
+SET statement_timeout = '0ms'
+
+# Test that statement_timeout can be set with an interval string, defaulting to
+# milliseconds as a unit.
+statement ok
+SET statement_timeout = '10000'
+
+query T
+SHOW statement_timeout
+----
+10000
+
+# Set the statement timeout to something absurdly small, so that no query would
+# presumably be able to go through. It should still be possible to get out of
+# this "bad state" by resetting the statement timeout.
+subtest impossible_statement_timeout_recovery
+
+statement ok
+SET statement_timeout = '1us'
+
+statement error query execution canceled due to statement timeout
+SHOW statement_timeout
+
+statement ok
+SET statement_timeout = 0
+
+query T
+SHOW statement_timeout
+----
+0
+
+statement ok
+SET lock_timeout = '1ms'
+
+query T
+SHOW lock_timeout
+----
+1
+
+statement ok
+SET lock_timeout = 0
+
+query T
+SHOW lock_timeout
+----
+0
+
+statement ok
+SET deadlock_timeout = '1ms'
+
+query T
+SHOW deadlock_timeout
+----
+1
+
+statement ok
+SET deadlock_timeout = 0
+
+query T
+SHOW deadlock_timeout
+----
+0
+
+statement ok
+SET idle_in_session_timeout = 10000
+
+query T
+SHOW idle_in_session_timeout
+----
+10000
+
+query T
+SHOW idle_session_timeout
+----
+10000
+
+statement ok
+SET idle_session_timeout = 100000
+
+query T
+SHOW idle_in_session_timeout
+----
+100000
+
+query T
+SHOW idle_session_timeout
+----
+100000
+
+statement ok
+SET idle_in_session_timeout = 0;
+SET idle_in_transaction_session_timeout = 123456
+
+query T
+SHOW idle_in_transaction_session_timeout
+----
+123456
+
+statement ok
+SET idle_in_transaction_session_timeout = 0
+
+statement error invalid value for parameter "ssl_renegotiation_limit"
+SET ssl_renegotiation_limit = 123
+
+statement ok
+SET SESSION tracing=false
+
+statement error pgcode 42601 expected string or boolean for set tracing argument
+SET SESSION tracing=1
+
+subtest regression_35109_flowable
+
+statement ok
+SET DATESTYLE = ISO;
+  SET INTERVALSTYLE = POSTGRES;
+  SET extra_float_digits TO 3;
+  SET synchronize_seqscans TO off;
+  SET statement_timeout = 0;
+  SET lock_timeout = 0;
+  SET idle_in_transaction_session_timeout = 0;
+  SET row_security = off;
+
+subtest regression_41567_subqueries
+
+statement error subqueries are not allowed in SET
+SET SESSION SCHEMA EXISTS ( TABLE ( ( ( ( ( ( ( ( TABLE error ) ) ) ) ) ) ) ) ORDER BY INDEX FAMILY . IS . MAXVALUE @ OF DESC , INDEX FAMILY . FOR . ident @ ident ASC )
+
+statement error subqueries are not allowed in SET
+USE EXISTS ( TABLE error ) IS NULL
+
+statement error subqueries are not allowed in SET
+PREPARE a AS USE EXISTS ( TABLE error ) IS NULL
+
+subtest bools
+# Ensure that we can set variables to on/off and yes/no.
+statement ok
+SET enable_zigzag_join = 'on';
+SET enable_zigzag_join = 'off';
+SET enable_zigzag_join = 'true';
+SET enable_zigzag_join = 'false';
+SET enable_zigzag_join = 'yes';
+SET enable_zigzag_join = 'no';
+SET enable_zigzag_join = on;
+SET enable_zigzag_join = off;
+SET enable_zigzag_join = true;
+SET enable_zigzag_join = false;
+SET enable_zigzag_join = yes;
+SET enable_zigzag_join = no
+
+# Check error code.
+statement error pgcode 22023 parameter "enable_zigzag_join" requires a Boolean value
+SET enable_zigzag_join = nonsense
+
+statement ok
+SET experimental_distsql_planning = always;
+SET experimental_distsql_planning = on;
+SET experimental_distsql_planning = off
+
+subtest dummy_session_vars
+
+query T noticetrace
+SET synchronous_commit = off; SET enable_seqscan = false
+----
+WARNING: setting session var "synchronous_commit" is a no-op
+WARNING: setting session var "enable_seqscan" is a no-op
+
+query T colnames
+SHOW synchronous_commit
+----
+synchronous_commit
+off
+
+query T colnames
+SHOW enable_seqscan
+----
+enable_seqscan
+off
+
+query T noticetrace
+SET synchronous_commit = on; SET enable_seqscan = true
+----
+WARNING: setting session var "synchronous_commit" is a no-op
+WARNING: setting session var "enable_seqscan" is a no-op
+
+query T colnames
+SHOW synchronous_commit
+----
+synchronous_commit
+on
+
+query T colnames
+SHOW enable_seqscan
+----
+enable_seqscan
+on
+
+statement ok
+BEGIN
+
+statement ok
+SET TRANSACTION NOT DEFERRABLE
+
+statement error pq: unimplemented: DEFERRABLE transactions
+SET TRANSACTION DEFERRABLE
+
+statement ok
+rollback
+
+statement ok
+SET standard_conforming_strings=true
+
+statement ok
+SET standard_conforming_strings='true'
+
+statement ok
+SET standard_conforming_strings='on'
+
+subtest default_table_access_method_test
+
+query T
+SHOW default_table_access_method
+----
+heap
+
+statement ok
+SET default_table_access_method = 'heap'
+
+query T
+SHOW default_table_access_method
+----
+heap
+
+statement error invalid value for parameter "default_table_access_method": "not-heap"
+SET default_table_access_method = 'not-heap'
+
+subtest default_with_oids_test
+
+query T
+SHOW default_with_oids
+----
+off
+
+statement ok
+SET default_with_oids = 'false'
+
+query T
+SHOW default_with_oids
+----
+off
+
+statement error invalid value for parameter "default_with_oids": "true"
+SET default_with_oids = 'true'
+
+subtest xmloption_test
+
+query T
+SHOW xmloption
+----
+content
+
+statement ok
+SET xmloption = 'content'
+
+query T
+SHOW xmloption
+----
+content
+
+statement error invalid value for parameter "xmloption": "document"
+SET xmloption = 'document'
+
+subtest backslash_quote_test
+
+statement ok
+SET backslash_quote = 'safe_encoding';
+
+statement error invalid value for parameter "backslash_quote"
+SET backslash_quote = 'on';
+
+statement error invalid value for parameter "backslash_quote"
+SET backslash_quote = 'off';
+
+statement error invalid value for parameter "backslash_quote"
+SET backslash_quote = '123';
+
+# Regression test for not being able to set sql.trace.txn.enable_threshold
+# cluster setting to non-zero value (#68005).
+statement ok
+SET cluster setting sql.trace.txn.enable_threshold='1s'
+
+statement ok
+SET cluster setting sql.trace.txn.enable_threshold='0s'
+
+statement ok
+SET disable_plan_gists = 'true'
+
+statement ok
+SET disable_plan_gists = 'false'
+
+statement ok
+SET index_recommendations_enabled = 'true'
+
+statement ok
+SET index_recommendations_enabled = 'false'
+
+query T
+SHOW LC_COLLATE
+----
+C.UTF-8
+
+query T
+SHOW LC_CTYPE
+----
+C.UTF-8
+
+query T
+SHOW LC_MESSAGES
+----
+C.UTF-8
+
+query T
+SHOW LC_MONETARY
+----
+C.UTF-8
+
+query T
+SHOW LC_NUMERIC
+----
+C.UTF-8
+
+query T
+SHOW LC_TIME
+----
+C.UTF-8
+
+statement error parameter "lc_collate" cannot be changed
+SET LC_COLLATE = 'C.UTF-8'
+
+statement error parameter "lc_ctype" cannot be changed
+SET LC_CTYPE = 'C.UTF-8'
+
+statement ok
+SET LC_MESSAGES = 'C.UTF-8'
+
+statement ok
+SET LC_MONETARY = 'C.UTF-8'
+
+statement ok
+SET LC_NUMERIC = 'C.UTF-8'
+
+statement ok
+SET LC_TIME = 'C.UTF-8'
+
+statement error invalid value for parameter "lc_messages": "en_US.UTF-8"
+SET LC_MESSAGES = 'en_US.UTF-8'
+
+statement error invalid value for parameter "lc_monetary": "en_US.UTF-8"
+SET LC_MONETARY = 'en_US.UTF-8'
+
+statement error invalid value for parameter "lc_numeric": "en_US.UTF-8"
+SET LC_NUMERIC = 'en_US.UTF-8'
+
+statement error invalid value for parameter "lc_time": "en_US.UTF-8"
+SET LC_TIME = 'en_US.UTF-8'
+
+subtest check_function_bodies_test
+
+statement ok
+SET check_function_bodies = true
+
+query T
+SHOW check_function_bodies
+----
+on
+
+statement ok
+SET check_function_bodies = false
+
+query T
+SHOW check_function_bodies
+----
+off
+
+# Test custom session variables
+
+statement ok
+SET custom_option.set_SQL = 'abc';
+SELECT set_config('custom_option.set_config', 'def', false);
+RESET custom_option.use_default;
+SET tracing.custom = 'ijk'
+
+# Custom options are case insensitive.
+query T colnames
+SHOW Custom_option.set_sql
+----
+custom_option.set_sql
+abc
+
+query T
+SHOW custom_option.set_config
+----
+def
+
+query T
+SELECT current_setting('custom_option.use_default')
+----
+·
+
+statement ok
+RESET custom_option.set_config
+
+query T
+SHOW custom_option.set_config
+----
+·
+
+# Ensure it does not show up on SHOW ALL or pg_settings.
+query T
+SELECT variable FROM [SHOW ALL] WHERE variable LIKE 'custom_option.%'
+----
+
+query T
+SELECT name FROM pg_catalog.pg_settings WHERE name LIKE 'custom_option.%'
+----
+
+query T
+SHOW tracing
+----
+off
+
+query T
+SHOW tracing.custom
+----
+ijk
+
+# Show a notice if a custom session variable has the same name as a cluster setting.
+query T noticetrace
+SET server.shutdown.initial_wait = '10s'
+----
+NOTICE: setting custom variable "server.shutdown.initial_wait"
+HINT: did you mean SET CLUSTER SETTING?
+
+# Test that RESET ALL changes custom options to empty strings.
+statement ok
+RESET ALL
+
+query T
+SHOW tracing.custom
+----
+·
+
+query T
+SHOW custom_option.set_sql
+----
+·
+
+statement error unrecognized configuration parameter "custom_option.does_not_yet_exist"
+SHOW custom_option.does_not_yet_exist
+
+statement error join_reader_ordering_strategy_batch_size can only be set to a positive value
+SET join_reader_ordering_strategy_batch_size = '-1B'
+
+statement ok
+SET join_reader_ordering_strategy_batch_size = '1B'
+
+statement ok
+SET parallelize_multi_key_lookup_joins_enabled = true
+
+statement ok
+SET parallelize_multi_key_lookup_joins_enabled = false
+
+query T
+SHOW opt_split_scan_limit
+----
+2048
+
+statement error pq: cannot set opt_split_scan_limit to a negative value: -1
+SET opt_split_scan_limit = -1
+
+statement error pq: cannot set opt_split_scan_limit to a value greater than 2147483647
+SET opt_split_scan_limit = 2147483648
+
+statement ok
+SET opt_split_scan_limit = 100000
+
+query T
+SHOW opt_split_scan_limit
+----
+100000
+
+statement ok
+RESET opt_split_scan_limit
+
+query T
+SHOW opt_split_scan_limit
+----
+2048
+
+query T
+SHOW enable_auto_rehoming
+----
+off
+
+query T
+SHOW experimental_enable_auto_rehoming
+----
+off
+
+statement ok
+SET enable_auto_rehoming = on
+
+query T
+SHOW enable_auto_rehoming
+----
+on
+
+query T
+SHOW experimental_enable_auto_rehoming
+----
+on
+
+statement ok
+SET experimental_enable_auto_rehoming = off
+
+query T
+SHOW experimental_enable_auto_rehoming
+----
+off
+
+query T
+SHOW enable_auto_rehoming
+----
+off
+
+statement error pq: parameter "enable_auto_rehoming" requires a Boolean value
+SET enable_auto_rehoming = bogus
+
+statement error pq: parameter "enable_auto_rehoming" requires a Boolean value
+SET experimental_enable_auto_rehoming = bogus
+
+statement error cannot set max_retries_for_read_committed to a negative value: -1
+SET max_retries_for_read_committed = -1
+
+statement error cannot set max_retries_for_read_committed to a value greater than 2147483647: 2147483648
+SET max_retries_for_read_committed = 2147483648
+
+statement ok
+SET max_retries_for_read_committed = 5
+
+query T
+SHOW max_retries_for_read_committed
+----
+5
+
+subtest new_session_resets_var
+
+user root nodeidx=0
+
+query T
+SHOW application_name
+----
+·
+
+statement ok
+SET application_name TO '🥭db'
+
+query T
+SHOW application_name
+----
+🥭db
+
+user root nodeidx=0 newsession
+
+query T
+SHOW application_name
+----
+·
+
+subtest end
+
+# Regression test for incorrectly marking this variable as boolean.
+statement ok
+SET copy_num_retries_per_batch = 5;
+
+# Tests for a byte-size setting where integer values are provided (which are
+# treated as number of bytes).
+statement ok
+SET distsql_workmem = 1048576
+
+query T
+SHOW distsql_workmem
+----
+1.0 MiB
+
+statement error distsql_workmem cannot be set to a negative value
+SET distsql_workmem = -1
+
+statement error distsql_workmem can only be set to a value greater than 1
+SET distsql_workmem = 1
+
+statement ok
+RESET distsql_workmem
+
+subtest tcp_keepalive_settings
+
+# tcp_keepalives_idle: stored in seconds, accepts integers (seconds) and
+# duration strings (truncated to whole seconds).
+
+statement ok
+SET tcp_keepalives_idle = 30
+
+query T
+SHOW tcp_keepalives_idle
+----
+30
+
+# Duration string: 1m30s = 90 seconds.
+statement ok
+SET tcp_keepalives_idle = '1m30s'
+
+query T
+SHOW tcp_keepalives_idle
+----
+90
+
+# Duration string: 75ms truncates to 0 seconds (cluster setting default).
+statement ok
+SET tcp_keepalives_idle = '75ms'
+
+query T
+SHOW tcp_keepalives_idle
+----
+0
+
+# Duration string: 2500ms truncates to 2 seconds.
+statement ok
+SET tcp_keepalives_idle = '2500ms'
+
+query T
+SHOW tcp_keepalives_idle
+----
+2
+
+# Reset to default (0).
+statement ok
+SET tcp_keepalives_idle = 0
+
+query T
+SHOW tcp_keepalives_idle
+----
+0
+
+# Negative values are rejected.
+statement error tcp_keepalives_idle cannot be negative
+SET tcp_keepalives_idle = -1
+
+statement error tcp_keepalives_idle cannot be negative
+SET tcp_keepalives_idle = '-5s'
+
+# tcp_keepalives_interval: same behavior as tcp_keepalives_idle.
+
+statement ok
+SET tcp_keepalives_interval = 10
+
+query T
+SHOW tcp_keepalives_interval
+----
+10
+
+statement ok
+SET tcp_keepalives_interval = '45s'
+
+query T
+SHOW tcp_keepalives_interval
+----
+45
+
+statement ok
+SET tcp_keepalives_interval = '500ms'
+
+query T
+SHOW tcp_keepalives_interval
+----
+0
+
+statement error tcp_keepalives_interval cannot be negative
+SET tcp_keepalives_interval = -1
+
+# tcp_keepalives_count: integer only, no duration parsing.
+
+statement ok
+SET tcp_keepalives_count = 5
+
+query T
+SHOW tcp_keepalives_count
+----
+5
+
+statement ok
+SET tcp_keepalives_count = 0
+
+query T
+SHOW tcp_keepalives_count
+----
+0
+
+statement error invalid value for parameter "tcp_keepalives_count"
+SET tcp_keepalives_count = -1
+
+# tcp_user_timeout: stored in milliseconds, accepts integers (ms) and
+# duration strings (truncated to whole milliseconds).
+
+statement ok
+SET tcp_user_timeout = 15000
+
+query T
+SHOW tcp_user_timeout
+----
+15000
+
+# Duration string: 30s = 30000 ms.
+statement ok
+SET tcp_user_timeout = '30s'
+
+query T
+SHOW tcp_user_timeout
+----
+30000
+
+# Duration string: 1m = 60000 ms.
+statement ok
+SET tcp_user_timeout = '1m'
+
+query T
+SHOW tcp_user_timeout
+----
+60000
+
+# Duration string with sub-millisecond precision truncates.
+statement ok
+SET tcp_user_timeout = '100us'
+
+query T
+SHOW tcp_user_timeout
+----
+0
+
+statement ok
+SET tcp_user_timeout = 0
+
+query T
+SHOW tcp_user_timeout
+----
+0
+
+statement error tcp_user_timeout cannot be negative
+SET tcp_user_timeout = -1
+
+statement error tcp_user_timeout cannot be negative
+SET tcp_user_timeout = '-5s'
+
+# Reset all to default.
+statement ok
+RESET tcp_keepalives_idle
+
+statement ok
+RESET tcp_keepalives_interval
+
+statement ok
+RESET tcp_keepalives_count
+
+statement ok
+RESET tcp_user_timeout
+
+subtest end

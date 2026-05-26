@@ -1,0 +1,90 @@
+subtest privileges_mutations
+
+statement ok
+CREATE TABLE t (a INT, b INT);
+CREATE FUNCTION f_insert() RETURNS VOID LANGUAGE SQL AS $$ INSERT INTO t VALUES (1,2); $$;
+CREATE FUNCTION f_select() RETURNS INT LANGUAGE SQL AS $$ SELECT b FROM t WHERE a = 1; $$;
+CREATE FUNCTION f_update() RETURNS VOID LANGUAGE SQL AS $$ UPDATE t SET b = 3 WHERE a = 1; $$;
+CREATE FUNCTION f_delete() RETURNS VOID LANGUAGE SQL AS $$ DELETE FROM t WHERE a = 1; $$;
+CREATE USER test_user;
+
+statement ok
+SET ROLE test_user
+
+statement error pq: user test_user does not have INSERT privilege on relation t
+select f_insert();
+
+statement error pq: user test_user does not have SELECT privilege on relation t
+select f_select();
+
+statement error pq: user test_user does not have UPDATE privilege on relation t
+select f_update();
+
+statement error pq: user test_user does not have DELETE privilege on relation t
+select f_delete();
+
+statement ok
+SET ROLE root
+
+statement ok
+GRANT SELECT, INSERT, DELETE, UPDATE ON t TO test_user;
+
+statement ok
+SET ROLE test_user
+
+
+statement ok
+SELECT f_insert();
+
+query I
+SELECT f_select();
+----
+2
+
+statement ok
+SELECT f_update();
+
+query II
+SELECT * FROM t;
+----
+1 3
+
+statement ok
+SELECT f_delete();
+
+query II
+SELECT * FROM t;
+----
+
+statement ok
+SET ROLE root
+
+statement ok
+REVOKE SELECT, INSERT, DELETE, UPDATE ON t FROM test_user;
+
+statement ok
+SET ROLE test_user
+
+statement error pq: user test_user does not have SELECT privilege on relation t
+select f_select();
+
+statement error pq: user test_user does not have INSERT privilege on relation t
+select f_insert();
+
+statement error pq: user test_user does not have UPDATE privilege on relation t
+select f_update();
+
+statement error pq: user test_user does not have DELETE privilege on relation t
+select f_delete();
+
+statement ok
+SET ROLE root
+
+statement ok
+DROP FUNCTION f_insert;
+DROP FUNCTION f_select;
+DROP FUNCTION f_update;
+DROP FUNCTION f_delete;
+DROP USER test_user;
+
+subtest end

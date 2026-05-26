@@ -1,0 +1,567 @@
+// Copyright 2025 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package inspect
+
+import (
+	"bytes"
+	"context"
+	"slices"
+
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
+)
+
+type inspectResumer struct {
+	job *jobs.Job
+}
+
+var _ jobs.Resumer = &inspectResumer{}
+
+// Resume implements the Resumer interface
+func (c *inspectResumer) Resume(ctx context.Context, execCtx interface{}) error {
+	log.Dev.Infof(ctx, "starting INSPECT job")
+
+	jobExecCtx := execCtx.(sql.JobExecContext)
+	execCfg := jobExecCtx.ExecCfg()
+
+	execCfg.JobRegistry.MetricsStruct().Inspect.(*InspectMetrics).Runs.Inc(1)
+
+	if err := c.maybeRunOnJobStartHook(execCfg); err != nil {
+		return err
+	}
+
+	details := c.job.Details().(jobspb.InspectDetails)
+	if len(details.Checks) == 0 {
+		return nil
+	}
+
+	allSpans, err := c.getSpans(ctx, execCfg)
+	if err != nil {
+		return err
+	}
+
+	if err := c.maybeProtectTimestamp(ctx, execCfg, details); err != nil {
+		return err
+	}
+
+	defer c.maybeCleanupProtectedTimestamp(ctx, execCfg)
+
+	if err := c.maybeRunAfterProtectedTimestampHook(execCfg); err != nil {
+		return err
+	}
+
+	progressTracker, completedSpans, cleanupProgress, err := c.setupProgressTracking(ctx, execCfg)
+	if err != nil {
+		return err
+	}
+	defer cleanupProgress()
+
+	remainingSpans := c.filterCompletedSpans(allSpans, completedSpans)
+
+	if len(remainingSpans) > 0 {
+		plan, planCtx, err := c.planInspectProcessors(ctx, jobExecCtx, remainingSpans)
+		if err != nil {
+			return err
+		}
+
+		// After planning, we have the finalized set of spans to process
+		// (adjacent spans on the same node are merged). Compute the checks to
+		// run and initialize progress tracking from the plan.
+
+		remainingPartitionedSpans := c.extractSpansFromPlan(ctx, plan)
+		if err := c.initProgress(ctx, execCfg, progressTracker, remainingPartitionedSpans, completedSpans); err != nil {
+			return err
+		}
+
+		// Assert that the partitioned spans are non-overlapping. It is checked
+		// explicitly for debugging.
+		//
+		// It has the side effect of sorting the partitioned spans by start key.
+		slices.SortFunc(remainingPartitionedSpans, func(a, b roachpb.Span) int {
+			return bytes.Compare(a.Key, b.Key)
+		})
+		for i := 1; i < len(remainingPartitionedSpans); i++ {
+			if bytes.Compare(remainingPartitionedSpans[i-1].EndKey, remainingPartitionedSpans[i].Key) > 0 {
+				return errors.AssertionFailedf(
+					"inspect spans overlapping: span %d [%q, %q) overlaps span %d [%q, %q)",
+					i-1, remainingPartitionedSpans[i-1].Key, remainingPartitionedSpans[i-1].EndKey,
+					i, remainingPartitionedSpans[i].Key, remainingPartitionedSpans[i].EndKey)
+			}
+		}
+
+		if err := c.runInspectPlan(ctx, jobExecCtx, planCtx, plan, progressTracker); err != nil {
+			return err
+		}
+	} else {
+		// If all spans are completed, planning and processing can be skipped.
+		if err := c.initProgress(ctx, execCfg, progressTracker, nil /* remainingPartitionedSpans */, completedSpans); err != nil {
+			return err
+		}
+		log.Dev.Infof(ctx, "all spans already completed, INSPECT checks on spans finished")
+	}
+
+	// Run any cluster-level checks after all spans have been processed.
+	if err := c.processClusterChecks(ctx, jobExecCtx, progressTracker); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// OnFailOrCancel implements the Resumer interface
+func (c *inspectResumer) OnFailOrCancel(
+	ctx context.Context, execCtx interface{}, jobErr error,
+) error {
+	jobExecCtx := execCtx.(sql.JobExecContext)
+	execCfg := jobExecCtx.ExecCfg()
+	c.maybeCleanupProtectedTimestamp(ctx, execCfg)
+
+	// Record RunsWithIssues metric if the job failed due to finding issues (including internal errors).
+	if errors.Is(jobErr, errInspectFoundInconsistencies) || errors.Is(jobErr, errInspectInternalErrors) {
+		execCfg.JobRegistry.MetricsStruct().Inspect.(*InspectMetrics).RunsWithIssues.Inc(1)
+	}
+	return nil
+}
+
+// CollectProfile implements the Resumer interface
+func (c *inspectResumer) CollectProfile(ctx context.Context, execCtx interface{}) error {
+	return nil
+}
+
+func (c *inspectResumer) maybeRunOnJobStartHook(execCfg *sql.ExecutorConfig) error {
+	if execCfg.InspectTestingKnobs == nil || execCfg.InspectTestingKnobs.OnInspectJobStart == nil {
+		return nil
+	}
+	return execCfg.InspectTestingKnobs.OnInspectJobStart()
+}
+
+func (c *inspectResumer) maybeRunAfterProtectedTimestampHook(execCfg *sql.ExecutorConfig) error {
+	if execCfg.InspectTestingKnobs == nil || execCfg.InspectTestingKnobs.OnInspectAfterProtectedTimestamp == nil {
+		return nil
+	}
+	return execCfg.InspectTestingKnobs.OnInspectAfterProtectedTimestamp()
+}
+
+// getSpans returns the spans for all tables involved in the INSPECT
+// job's checks.
+func (c *inspectResumer) getSpans(
+	ctx context.Context, execCfg *sql.ExecutorConfig,
+) ([]roachpb.Span, error) {
+	details := c.job.Details().(jobspb.InspectDetails)
+
+	// Deduplicate by table ID to avoid processing the same span multiple times
+	// when there are multiple checks on the same table.
+	uniqueTableIDs := make(map[descpb.ID]struct{})
+	for i := range details.Checks {
+		uniqueTableIDs[details.Checks[i].TableID] = struct{}{}
+	}
+
+	// Collect the table descriptors.
+	tableDescs := make([]catalog.TableDescriptor, 0, len(uniqueTableIDs))
+	err := execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		for tableID := range uniqueTableIDs {
+			desc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, tableID)
+			if err != nil {
+				return err
+			}
+			tableDescs = append(tableDescs, desc)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Get the primary index spans. For RBR tables, partition them to region-specific spans.
+	spans := make([]roachpb.Span, 0, len(uniqueTableIDs))
+	for _, desc := range tableDescs {
+		if c.job.Payload().CreationClusterVersion.Less(clusterversion.V26_2_Start.Version()) || !isRegionalByRow(desc) {
+			spans = append(spans, desc.PrimaryIndexSpan(execCfg.Codec))
+		} else {
+			regions, err := getRegionsForTable(ctx, desc)
+			if err != nil {
+				return nil, err
+			}
+			for _, region := range regions {
+				regionSpan, err := spanForFullRegion(&execCfg.DistSQLSrv.ServerConfig, desc, region)
+				if err != nil {
+					return nil, err
+				}
+				spans = append(spans, regionSpan)
+			}
+		}
+	}
+
+	return spans, nil
+}
+
+// planInspectProcessors constructs the physical plan for the INSPECT job by
+// partitioning the given primary index spans across all nodes in the cluster.
+// Each processor will be assigned one or more spans to run their checks on.
+func (c *inspectResumer) planInspectProcessors(
+	ctx context.Context, jobExecCtx sql.JobExecContext, entirePKSpans []roachpb.Span,
+) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
+	distSQLPlanner := jobExecCtx.DistSQLPlanner()
+	planCtx, _, err := distSQLPlanner.SetupAllNodesPlanning(ctx, jobExecCtx.ExtendedEvalContext(), jobExecCtx.ExecCfg())
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if knobs := jobExecCtx.ExecCfg().InspectTestingKnobs; knobs != nil && knobs.OverrideSpans != nil {
+		entirePKSpans = knobs.OverrideSpans(entirePKSpans)
+	}
+
+	spanPartitions, err := distSQLPlanner.PartitionSpans(ctx, planCtx, entirePKSpans, sql.PartitionSpansBoundDefault)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	jobID := c.job.ID()
+	newProcessorSpec := func(spans []roachpb.Span) *execinfrapb.InspectSpec {
+		return &execinfrapb.InspectSpec{
+			JobID:          jobID,
+			InspectDetails: c.job.Details().(jobspb.InspectDetails),
+			Spans:          spans,
+		}
+	}
+
+	// Set up a one-stage plan with one proc per input spec.
+	processorCorePlacements := make([]physicalplan.ProcessorCorePlacement, len(spanPartitions))
+	for i, spanPartition := range spanPartitions {
+		processorCorePlacements[i].SQLInstanceID = spanPartition.SQLInstanceID
+		processorCorePlacements[i].Core.Inspect = newProcessorSpec(spanPartition.Spans)
+	}
+
+	physicalPlan := planCtx.NewPhysicalPlan()
+	physicalPlan.AddNoInputStage(
+		processorCorePlacements,
+		execinfrapb.PostProcessSpec{},
+		[]*types.T{},
+		execinfrapb.Ordering{},
+		nil, /* finalizeLastStageCb */
+	)
+	physicalPlan.PlanToStreamColMap = []int{}
+
+	sql.FinalizePlan(ctx, planCtx, physicalPlan)
+	return physicalPlan, planCtx, nil
+}
+
+// extractSpansFromPlan extracts the finalized set of spans to process (adjacent
+// spans on the same node are merged) from the plan.
+func (c *inspectResumer) extractSpansFromPlan(
+	ctx context.Context, plan *sql.PhysicalPlan,
+) []roachpb.Span {
+	// Extract all spans from the plan processors.
+	var remainingPartitionedSpans []roachpb.Span
+	if plan != nil {
+		for i := range plan.Processors {
+			if plan.Processors[i].Spec.Core.Inspect != nil {
+				remainingPartitionedSpans = append(remainingPartitionedSpans, plan.Processors[i].Spec.Core.Inspect.Spans...)
+			}
+		}
+	}
+	return remainingPartitionedSpans
+}
+
+// runInspectPlan executes the distributed physical plan for the INSPECT job.
+// It sets up a metadata-only DistSQL receiver to collect any execution errors
+// and progress updates, then runs the plan using the provided planning context
+// and evaluation context. This function returns any error surfaced via metadata
+// from the processors.
+func (c *inspectResumer) runInspectPlan(
+	ctx context.Context,
+	jobExecCtx sql.JobExecContext,
+	planCtx *sql.PlanningCtx,
+	plan *sql.PhysicalPlan,
+	progressTracker *inspectProgressTracker,
+) error {
+	execCfg := jobExecCtx.ExecCfg()
+
+	metadataCallbackWriter := sql.NewMetadataOnlyMetadataCallbackWriter(
+		func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
+			if meta.BulkProcessorProgress != nil {
+				return progressTracker.handleProgressUpdate(ctx, meta)
+			}
+			return nil
+		})
+
+	distSQLReceiver := sql.MakeDistSQLReceiver(
+		ctx,
+		metadataCallbackWriter,
+		tree.Rows,
+		execCfg.RangeDescriptorCache,
+		nil, /* txn */
+		nil, /* clockUpdater */
+		jobExecCtx.ExtendedEvalContext().Tracing,
+	)
+	defer distSQLReceiver.Release()
+
+	distSQLPlanner := jobExecCtx.DistSQLPlanner()
+
+	// Copy the eval.Context, as dsp.Run() might change it.
+	evalCtxCopy := jobExecCtx.ExtendedEvalContext().Context.Copy()
+
+	distSQLPlanner.Run(ctx, planCtx, nil /* txn */, plan,
+		distSQLReceiver, evalCtxCopy, nil /* finishedSetupFn */)
+	return metadataCallbackWriter.Err()
+}
+
+// setupProgressTracking initializes progress tracking and returns
+// it, along with a cleanup function.
+func (c *inspectResumer) setupProgressTracking(
+	ctx context.Context, execCfg *sql.ExecutorConfig,
+) (*inspectProgressTracker, []roachpb.Span, func(), error) {
+	// Create and initialize the tracker. We use the completed spans from the job
+	// (if any) to filter out the spans we need to process in this run of the job.
+	progressTracker := newInspectProgressTracker(
+		c.job,
+		&execCfg.Settings.SV,
+		execCfg.InternalDB,
+		execCfg.Codec,
+		execCfg.ProtectedTimestampManager,
+	)
+	completedSpans, err := progressTracker.initTracker(ctx)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	cleanup := func() {
+		progressTracker.terminateTracker(ctx)
+	}
+
+	return progressTracker, completedSpans, cleanup, nil
+}
+
+// initProgressFromPlan initializes job progress based on the actual partitioned
+// spans that will be processed.
+func (c *inspectResumer) initProgress(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	progressTracker *inspectProgressTracker,
+	remainingPartitionedSpans []roachpb.Span,
+	completedPartitionedSpans []roachpb.Span,
+) error {
+	applicabilityCheckers, err := buildApplicabilityCheckers(c.job.Details().(jobspb.InspectDetails))
+	if err != nil {
+		return err
+	}
+
+	// Calculate total applicable checks on ALL spans (not just remaining ones)
+	// This ensures consistent progress calculation across job restarts.
+	completedSpanCheckCount, err := countApplicableSpanChecks(completedPartitionedSpans, applicabilityCheckers, execCfg.Codec)
+	if err != nil {
+		return err
+	}
+	remainingSpanCheckCount, err := countApplicableSpanChecks(remainingPartitionedSpans, applicabilityCheckers, execCfg.Codec)
+	if err != nil {
+		return err
+	}
+
+	clusterCheckCount, err := countApplicableClusterChecks(applicabilityCheckers)
+	if err != nil {
+		return err
+	}
+
+	totalCheckCount := completedSpanCheckCount + remainingSpanCheckCount + clusterCheckCount
+
+	log.Dev.Infof(ctx, "INSPECT progress init: %d partitioned spans, %d total checks (%d completed + %d remaining span + %d cluster)",
+		len(remainingPartitionedSpans), totalCheckCount, completedSpanCheckCount, remainingSpanCheckCount, clusterCheckCount)
+
+	return progressTracker.initJobProgress(ctx, totalCheckCount, completedSpanCheckCount)
+}
+
+// filterCompletedSpans removes spans that are already completed from the list to process.
+func (c *inspectResumer) filterCompletedSpans(
+	allSpans []roachpb.Span, completedSpans []roachpb.Span,
+) []roachpb.Span {
+	if len(completedSpans) == 0 {
+		return allSpans
+	}
+
+	completedGroup := roachpb.SpanGroup{}
+	completedGroup.Add(completedSpans...)
+
+	var remainingSpans []roachpb.Span
+	for _, span := range allSpans {
+		// Check if this span is fully contained in completed spans.
+		// We need to check if the entire span is covered by completed spans.
+		if !completedGroup.Encloses(span) {
+			remainingSpans = append(remainingSpans, span)
+		}
+	}
+
+	return remainingSpans
+}
+
+// buildApplicabilityCheckers creates lightweight applicability checkers from InspectDetails.
+// These are used only for progress calculation and don't require the full check machinery.
+func buildApplicabilityCheckers(
+	details jobspb.InspectDetails,
+) ([]inspectCheckApplicability, error) {
+	checkers := make([]inspectCheckApplicability, 0, len(details.Checks))
+	for _, specCheck := range details.Checks {
+		switch specCheck.Type {
+		case jobspb.InspectCheckIndexConsistency:
+			checkers = append(checkers, &indexConsistencyCheckApplicability{
+				tableID: specCheck.TableID,
+			})
+		case jobspb.InspectCheckRowCount:
+			checkers = append(checkers, &rowCountCheckApplicability{
+				tableID: specCheck.TableID,
+			})
+		case jobspb.InspectCheckUniqueness:
+			checkers = append(checkers, &uniquenessCheckApplicability{
+				tableID: specCheck.TableID,
+			})
+		default:
+			return nil, errors.AssertionFailedf("unsupported inspect check type: %v", specCheck.Type)
+		}
+	}
+	return checkers, nil
+}
+
+// maybeProtectTimestamp creates a protected timestamp record for the AsOf
+// timestamp to prevent garbage collection during the inspect operation.
+// If no AsOf timestamp is specified, this function does nothing.
+// The protection target includes all tables involved in the inspect checks.
+// Uses the jobsprotectedts.Manager to store the PTS ID in job details.
+func (c *inspectResumer) maybeProtectTimestamp(
+	ctx context.Context, execCfg *sql.ExecutorConfig, details jobspb.InspectDetails,
+) error {
+	// If we are not running a historical query, nothing to do here.
+	if details.AsOf.IsEmpty() {
+		return nil
+	}
+
+	// Create a target for the specific tables involved in the inspect checks
+	var tableIDSet catalog.DescriptorIDSet
+	for _, check := range details.Checks {
+		tableIDSet.Add(check.TableID)
+	}
+	target := ptpb.MakeSchemaObjectsTarget(tableIDSet.Ordered())
+
+	// Protect will store the PTS ID in job details.
+	_, err := execCfg.ProtectedTimestampManager.Protect(ctx, c.job, target, details.AsOf)
+	if err != nil {
+		return errors.Wrapf(err, "failed to protect timestamp %s for INSPECT job %d", details.AsOf, c.job.ID())
+	}
+
+	log.Dev.Infof(ctx, "protected timestamp created for INSPECT job %d at %s", c.job.ID(), details.AsOf)
+	return nil
+}
+
+// maybeCleanupProtectedTimestamp cleans up any protected timestamp record
+// associated with this job. If no protected timestamp was created, this
+// function does nothing.
+func (c *inspectResumer) maybeCleanupProtectedTimestamp(
+	ctx context.Context, execCfg *sql.ExecutorConfig,
+) {
+	details := c.job.Details().(jobspb.InspectDetails)
+	if details.ProtectedTimestampRecord != nil {
+		if err := execCfg.ProtectedTimestampManager.Unprotect(ctx, c.job); err != nil {
+			log.Dev.Warningf(ctx, "failed to clean up protected timestamp: %v", err)
+		}
+	}
+}
+
+// ReportResults implements the JobResultsReporter interface.
+func (r *inspectResumer) ReportResults(ctx context.Context, resultsCh chan<- tree.Datums) error {
+	select {
+	case resultsCh <- tree.Datums{
+		tree.NewDInt(tree.DInt(r.job.ID())),
+		tree.NewDString(string(r.job.State())),
+	}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// processClusterChecks runs any cluster-level checks using the accumulated job
+// progress.
+func (c *inspectResumer) processClusterChecks(
+	ctx context.Context, jobExecCtx sql.JobExecContext, progressTracker *inspectProgressTracker,
+) (err error) {
+	details, ok := c.job.Details().(jobspb.InspectDetails)
+	if !ok {
+		return errors.AssertionFailedf("expected inspect details, got %T", c.job.Details())
+	}
+
+	// Build check factories from the job details
+	checkFactories, factoryErr := buildInspectCheckFactories(jobExecCtx.ExecCfg(), details)
+	if factoryErr != nil {
+		return factoryErr
+	}
+
+	// Get the timestamp to use for checks
+	timestamp := jobExecCtx.ExecCfg().DB.Clock().Now()
+	if !details.AsOf.IsEmpty() {
+		timestamp = details.AsOf
+	}
+
+	logger := getInspectLogger(jobExecCtx.ExecCfg(), c.job.ID())
+
+	var clusterChecks []inspectClusterCheck
+	for _, factory := range checkFactories {
+		check := factory(timestamp)
+		if clusterCheck, ok := check.(inspectClusterCheck); ok {
+			clusterChecks = append(clusterChecks, clusterCheck)
+		}
+	}
+
+	if initialClusterCheckCount := len(clusterChecks); initialClusterCheckCount > 0 {
+		runner := clusterRunner{
+			checks:          clusterChecks,
+			logger:          logger,
+			progressTracker: progressTracker,
+		}
+		defer func() {
+			err = errors.CombineErrors(err, runner.Close(ctx))
+		}()
+
+		for {
+			ok, stepErr := runner.Step(ctx)
+			if stepErr != nil {
+				return stepErr
+			}
+
+			if !ok {
+				break
+			}
+		}
+		if err := progressTracker.stepCompletedCheckCount(ctx, initialClusterCheckCount); err != nil {
+			return errors.Wrapf(err, "error updating progress for cluster check")
+		}
+	}
+
+	log.Dev.Infof(ctx, "INSPECT resumer completed clusterIssuesFound=%t", logger.hasIssues())
+	if err := logger.userError(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func init() {
+	createResumerFn := func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
+		return &inspectResumer{job: job}
+	}
+	jobs.RegisterConstructor(jobspb.TypeInspect, createResumerFn, jobs.UsesTenantCostControl)
+}

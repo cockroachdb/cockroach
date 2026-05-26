@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "apiinternal",
+    srcs = ["api_internal.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/apiinternal",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/rpc",
+        "//pkg/rpc/rpcbase",
+        "//pkg/server/apiutil",
+        "//pkg/server/authserver",
+        "//pkg/server/serverpb",
+        "//pkg/ts/tspb",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gorilla_mux//:mux",
+        "@com_github_gorilla_schema//:schema",
+        "@io_storj_drpc//:drpc",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//status",
+    ],
+)

@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "logtestutils",
+    srcs = [
+        "log_spy.go",
+        "log_test_utils.go",
+        "structured_log_spy.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/log/logtestutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/log",
+        "//pkg/util/log/logconfig",
+        "//pkg/util/log/logpb",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)

@@ -1,0 +1,82 @@
+new-cluster name=s1
+----
+
+subtest backup-restore-privileges
+
+exec-sql
+CREATE USER testuser;
+----
+
+exec-sql
+CREATE EXTERNAL CONNECTION root AS 'nodelocal://1/root'
+----
+
+exec-sql user=testuser
+CREATE EXTERNAL CONNECTION "testuser-ec" AS 'userfile:///noprivs'
+----
+pq: only users with the EXTERNALCONNECTION system privilege are allowed to CREATE EXTERNAL CONNECTION
+
+exec-sql
+GRANT SYSTEM EXTERNALCONNECTION TO testuser;
+----
+
+exec-sql user=testuser
+CREATE EXTERNAL CONNECTION "testuser-ec" AS 'nodelocal://1/privs'
+----
+
+exec-sql
+CREATE TABLE foo (id INT);
+----
+
+exec-sql
+GRANT SELECT ON TABLE foo TO testuser
+----
+
+# Since testuser created the External Connection they have `ALL` privileges on the object.
+exec-sql user=testuser
+BACKUP TABLE foo INTO 'external://testuser-ec'
+----
+NOTICE: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/backup.html#required-privileges. In a future release, to run BACKUP TABLE, user testuser will exclusively require the BACKUP privilege on tables: foo.
+
+exec-sql
+GRANT USAGE ON EXTERNAL CONNECTION "testuser-ec" TO testuser;
+----
+
+exec-sql user=testuser
+BACKUP TABLE foo INTO LATEST IN 'external://testuser-ec'
+----
+NOTICE: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/backup.html#required-privileges. In a future release, to run BACKUP TABLE, user testuser will exclusively require the BACKUP privilege on tables: foo.
+
+# Sanity check that the user can't write to any other external connection.
+exec-sql user=testuser
+BACKUP TABLE foo INTO 'external://root'
+----
+pq: user testuser does not have USAGE privilege on external_connection root
+
+# Revoke the USAGE privilege. Note testuser had ALL privileges since they
+# created the External Connection, but revoking USAGE means that they will now
+# only have DROP privileges. Thus, they shouldn't be able to restore.
+exec-sql
+REVOKE USAGE ON EXTERNAL CONNECTION "testuser-ec" FROM testuser;
+----
+
+exec-sql user=testuser
+RESTORE TABLE foo FROM LATEST IN 'external://testuser-ec'
+----
+pq: user testuser does not have USAGE privilege on external_connection testuser-ec
+
+exec-sql
+GRANT USAGE ON EXTERNAL CONNECTION "testuser-ec" TO testuser;
+----
+
+exec-sql
+CREATE DATABASE failsdb;
+GRANT CREATE ON DATABASE failsdb TO testuser;
+----
+
+exec-sql user=testuser
+RESTORE TABLE foo FROM LATEST IN 'external://testuser-ec' WITH into_db=failsdb;
+----
+NOTICE: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/restore.html#required-privileges. In a future release, to run RESTORE TABLE, user testuser will exclusively require the RESTORE privilege on databases failsdb
+
+subtest end

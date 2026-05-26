@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "tinystringer_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/build/bazel/util/tinystringer",
+    visibility = ["//visibility:private"],
+)
+
+go_binary(
+    name = "tinystringer",
+    embed = [":tinystringer_lib"],
+    visibility = ["//visibility:public"],
+)

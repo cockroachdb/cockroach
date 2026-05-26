@@ -1,0 +1,482 @@
+# LogicTest: default-configs 3node-tenant
+# knob-opt: allow-unsafe
+
+subtest lost_table_data
+
+# This test will intentionally corrupt descriptors, so the initial version
+# can *never* be acquired.
+statement ok
+SET CLUSTER SETTING sql.catalog.descriptor_wait_for_initial_version.enabled=false
+
+statement ok
+CREATE TABLE corruptdesc (v INT8)
+
+statement ok
+CREATE TABLE lostdata (v INT8)
+
+statement ok
+INSERT INTO lostdata VALUES (3);
+
+statement ok
+INSERT INTO lostdata VALUES (5);
+
+statement ok
+INSERT INTO lostdata VALUES (23);
+
+let $t_id
+SELECT id FROM system.namespace WHERE name = 'lostdata';
+
+let $corrupt_id
+SELECT id FROM system.namespace WHERE name = 'corruptdesc';
+
+let $parentID
+SELECT pid FROM system.namespace AS n(pid,psid,name,id) WHERE id = $t_id;
+
+let $parentSchemaID
+SELECT psid FROM system.namespace AS n(pid,psid,name,id) WHERE id = $t_id;
+
+query I
+SELECT * FROM crdb_internal.lost_descriptors_with_data;
+----
+
+# Lost descriptor
+let $json_t
+WITH
+	descs
+		AS (
+			SELECT
+				id,
+				crdb_internal.pb_to_json(
+					'cockroach.sql.sqlbase.Descriptor',
+					descriptor
+				)
+					AS descriptor
+			FROM
+				system.descriptor
+		)
+SELECT
+	descriptor
+FROM
+	descs
+WHERE
+	id = $t_id;
+
+# Intentionally corrupt descriptor
+let $json_corrupt
+WITH
+  descs
+    AS (
+      SELECT
+        id,
+        crdb_internal.pb_to_json(
+          'cockroach.sql.sqlbase.Descriptor',
+          descriptor
+        )
+          AS descriptor
+      FROM
+        system.descriptor
+    )
+SELECT
+  descriptor
+FROM
+  descs
+WHERE
+  id = $corrupt_id;
+
+# Delete our corrupt descriptor
+query B
+SELECT * FROM ROWS FROM (crdb_internal.unsafe_delete_descriptor($corrupt_id));
+----
+true
+
+# Force delete the descriptor
+query B
+SELECT * FROM ROWS FROM (crdb_internal.unsafe_delete_descriptor($t_id));
+----
+true
+
+# Corrupt the descriptor with fake ID's
+let $json_t_corrupt
+SELECT CAST(replace('$json_corrupt','"name": "corruptdesc",', '') AS JSONB)
+
+# Inject our corrupt descriptor with the wrong ID
+statement ok
+SELECT * FROM crdb_internal.unsafe_upsert_descriptor($corrupt_id, crdb_internal.json_to_pb( 'cockroach.sql.sqlbase.Descriptor','$json_t_corrupt'), true)
+
+query I
+SELECT count(*) FROM crdb_internal.lost_descriptors_with_data WHERE descid = $t_id;
+----
+1
+
+query I
+SELECT count(*) FROM crdb_internal.lost_descriptors_with_data WHERE descid != $t_id
+----
+0
+
+statement ok
+SELECT * FROM crdb_internal.unsafe_upsert_descriptor($t_id, crdb_internal.json_to_pb( 'cockroach.sql.sqlbase.Descriptor','$json_t'))
+
+# Recover the corrupted descriptor
+statement ok
+SELECT * FROM crdb_internal.unsafe_upsert_descriptor($corrupt_id, crdb_internal.json_to_pb( 'cockroach.sql.sqlbase.Descriptor','$json_corrupt'), true)
+
+statement ok
+SELECT * FROM corruptdesc;
+
+statement ok
+DROP TABLE lostdata
+
+# Test the crdb_internal.force_delete_table_data function
+subtest force_delete_data
+
+statement ok
+CREATE TABLE forcedeletemydata (v int)
+
+statement ok
+INSERT INTO forcedeletemydata VALUES(5)
+
+statement ok
+INSERT INTO forcedeletemydata VALUES(7)
+
+query I
+SELECT * FROM forcedeletemydata ORDER BY v ASC
+----
+5
+7
+
+# Blocked since ID was not used
+statement error descriptor id was never used
+select * from crdb_internal.force_delete_table_data(6666)
+
+
+let $t_id
+select id from system.namespace where name='forcedeletemydata'
+
+# Descriptor exists so operation is blocked
+statement error descriptor still exists force deletion is blocked
+select * from crdb_internal.force_delete_table_data($t_id)
+
+query I
+SELECT * FROM forcedeletemydata ORDER BY v ASC
+----
+5
+7
+
+let $parentID
+SELECT pid FROM system.namespace AS n(pid,psid,name,id) WHERE id = $t_id;
+
+let $parentSchemaID
+SELECT psid FROM system.namespace AS n(pid,psid,name,id) WHERE id = $t_id;
+
+let $json
+WITH descs AS (
+                SELECT id,
+                       crdb_internal.pb_to_json(
+                        'cockroach.sql.sqlbase.Descriptor',
+                        descriptor
+                       ) AS descriptor
+                  FROM system.descriptor
+             )
+select descriptor from descs where id=$t_id;
+
+
+# Force delete the descriptor
+query B
+select * from crdb_internal.unsafe_delete_descriptor($t_id);
+----
+true
+
+query B
+select * from crdb_internal.force_delete_table_data($t_id)
+----
+true
+
+statement ok
+select * from crdb_internal.unsafe_upsert_descriptor($t_id, crdb_internal.json_to_pb( 'cockroach.sql.sqlbase.Descriptor','$json'))
+
+query I
+SELECT * FROM forcedeletemydata ORDER BY v ASC
+----
+
+statement ok
+DROP TABLE forcedeletemydata
+
+# Test that corrupt back-references should not prevent objects from being queried.
+subtest queryable_despite_corrupt_back_refs
+
+statement ok
+CREATE TABLE corrupt_backref_fk (k INT PRIMARY KEY, v STRING);
+INSERT INTO corrupt_backref_fk (k, v) VALUES (1, 'a');
+CREATE TABLE corrupt_fk (k INT NOT NULL, FOREIGN KEY (k) REFERENCES corrupt_backref_fk (k));
+
+query BB
+SELECT
+	crdb_internal.unsafe_delete_descriptor(id),
+	crdb_internal.unsafe_delete_namespace_entry("parentID", "parentSchemaID", name, id)
+FROM
+	system.namespace
+WHERE
+	name = 'corrupt_fk'
+----
+true true
+
+query IT
+SELECT * FROM corrupt_backref_fk
+----
+1 a
+
+statement error (invalid foreign key backreference)*(.*referenced descriptor not found.*)*
+DROP TABLE corrupt_backref_fk
+
+statement ok
+CREATE TABLE corrupt_backref_view (k INT PRIMARY KEY, v STRING);
+INSERT INTO corrupt_backref_view (k, v) VALUES (1, 'a');
+CREATE VIEW corrupt_view AS SELECT k, v FROM corrupt_backref_view
+
+query BB
+SELECT
+	crdb_internal.unsafe_delete_descriptor(id),
+	crdb_internal.unsafe_delete_namespace_entry("parentID", "parentSchemaID", name, id)
+FROM
+	system.namespace
+WHERE
+	name = 'corrupt_view'
+----
+true true
+
+query IT
+SELECT * FROM corrupt_backref_view
+----
+1 a
+
+onlyif config local-legacy-schema-changer
+
+statement error pgcode XX000 invalid depended-on-by relation back reference
+DROP TABLE corrupt_backref_view
+
+skipif config local-legacy-schema-changer
+statement error pgcode XXUUU .*descriptor not found.*
+DROP TABLE corrupt_backref_view
+
+statement ok
+CREATE TYPE corrupt_backref_typ AS ENUM ('a', 'b');
+CREATE TABLE corrupt_typ (k INT PRIMARY KEY, v corrupt_backref_typ);
+
+query BB
+SELECT
+	crdb_internal.unsafe_delete_descriptor(id),
+	crdb_internal.unsafe_delete_namespace_entry("parentID", "parentSchemaID", name, id)
+FROM
+	system.namespace
+WHERE
+	name = 'corrupt_typ'
+----
+true true
+
+query T
+SELECT 'a'::corrupt_backref_typ
+----
+a
+
+statement error pgcode XXUUU referenced descriptor not found
+ALTER TYPE corrupt_backref_typ DROP VALUE 'b'
+
+subtest repairable_catalog_corruptions
+
+# Inject some corruption into the system.namespace table.
+query B
+SELECT crdb_internal.unsafe_upsert_namespace_entry(104,105,'dangling',12345,true)
+UNION ALL
+SELECT crdb_internal.unsafe_upsert_namespace_entry(104,105,'dangling2',12345,true)
+----
+true
+true
+
+query IITIT
+SELECT * FROM "".crdb_internal.kv_repairable_catalog_corruptions ORDER BY 1,2,3,4
+----
+104  105  _corrupt_backref_typ  114    descriptor
+104  105  corrupt_backref_fk    109    descriptor
+104  105  corrupt_backref_typ   113    descriptor
+104  105  corrupt_backref_view  111    descriptor
+104  105  dangling              12345  namespace
+104  105  dangling2             12345  namespace
+
+query ITB
+SELECT id, corruption, crdb_internal.repair_catalog_corruption(id, corruption)
+FROM "".crdb_internal.kv_repairable_catalog_corruptions
+ORDER BY 1
+----
+109    descriptor  true
+111    descriptor  true
+113    descriptor  true
+114    descriptor  true
+12345  namespace   true
+12345  namespace   NULL
+
+# Check that `SET descriptor_validation = off ` disables validation.
+# We do so by corrupting a table descriptor and assert on the successful
+# execution of DDL statements so as to not acquire a lease on the corrupt
+# descriptor, which would complicate things.
+subtest disable_validation
+
+statement ok
+CREATE TABLE kv (k INT PRIMARY KEY, v STRING);
+
+statement ok
+SELECT
+	crdb_internal.unsafe_upsert_descriptor(
+		d.id,
+		crdb_internal.json_to_pb(
+			'cockroach.sql.sqlbase.Descriptor',
+			json_set(
+				crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', d.descriptor),
+				ARRAY['table', 'nextColumnId'],
+				'1'::JSONB
+			)
+		),
+		true
+	)
+FROM
+	system.descriptor AS d INNER JOIN system.namespace AS ns ON d.id = ns.id
+WHERE
+	name = 'kv'
+
+statement error pgcode XX000 internal error:.* relation "kv" \(\d+\): column "k" invalid ID \(1\) >= next column ID \(1\)
+ALTER TABLE kv RENAME TO kv
+
+statement ok
+SET descriptor_validation = off
+
+statement ok
+ALTER TABLE kv RENAME TO kv
+
+statement ok
+SET descriptor_validation = on
+
+# Undo the corruption prior to dropping the table, to clean up.
+statement ok
+SELECT
+	crdb_internal.unsafe_upsert_descriptor(
+		d.id,
+		crdb_internal.json_to_pb(
+			'cockroach.sql.sqlbase.Descriptor',
+			json_set(
+				crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', d.descriptor),
+				ARRAY['table', 'nextColumnId'],
+				'3'::JSONB
+			)
+		),
+		true
+	)
+FROM
+	system.descriptor AS d INNER JOIN system.namespace AS ns ON d.id = ns.id
+WHERE
+	name = 'kv'
+
+statement ok
+DROP TABLE kv
+
+# Check that crdb_internal.descriptor_with_post_deserialization_changes
+# performs as expected.
+subtest post_deserialization_changes
+
+statement ok
+CREATE FUNCTION desc_bytes(desc_name STRING) RETURNS BYTES VOLATILE LANGUAGE SQL AS $$
+SELECT
+	d.descriptor
+FROM
+	system.descriptor AS d INNER JOIN system.namespace AS ns ON d.id = ns.id
+WHERE
+	ns.name = desc_name
+$$;
+CREATE FUNCTION tbl_json(desc_bytes BYTES) RETURNS JSONB STABLE LANGUAGE SQL AS $$
+SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', desc_bytes)->'table'
+$$;
+CREATE FUNCTION stripped(j JSON) RETURNS JSONB STABLE LANGUAGE SQL AS $$
+SELECT jsonb_build_object(
+  'indexNotVisible', (j#>>'{indexes, 0, notVisible}')::BOOL,
+  'indexInvisibility', (j#>>'{indexes, 0, invisibility}')::FLOAT8,
+  'version', (j->>'version')::INT,
+  'modificationTime', j->'modificationTime'
+) $$;
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT, INDEX (b))
+
+query T
+SELECT stripped(tbl_json(desc_bytes('t')))
+----
+{"indexInvisibility": null, "indexNotVisible": null, "modificationTime": {}, "version": 1}
+
+# Post-deserialization changes are idempotent.
+query T
+SELECT stripped(tbl_json(crdb_internal.descriptor_with_post_deserialization_changes(desc_bytes('t'))))
+----
+{"indexInvisibility": null, "indexNotVisible": null, "modificationTime": {}, "version": 1}
+
+# Set the NotVisible flag. This will cause the descriptor post-deserialization
+# changes to set the Invisibility field.
+statement ok
+SELECT
+	crdb_internal.unsafe_upsert_descriptor(
+		d.id,
+		crdb_internal.json_to_pb(
+			'cockroach.sql.sqlbase.Descriptor',
+			json_set(
+				crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', d.descriptor),
+				'{table, indexes, 0, notVisible}',
+				'true'::JSONB
+			)
+		),
+		true
+	)
+FROM
+	system.descriptor AS d INNER JOIN system.namespace AS ns ON d.id = ns.id
+WHERE
+	name = 't'
+
+query T
+SELECT stripped(tbl_json(desc_bytes('t')))
+----
+{"indexInvisibility": null, "indexNotVisible": true, "modificationTime": {}, "version": 2}
+
+query T
+SELECT stripped(tbl_json(crdb_internal.descriptor_with_post_deserialization_changes(desc_bytes('t'))))
+----
+{"indexInvisibility": 1, "indexNotVisible": true, "modificationTime": {}, "version": 2}
+
+# Check that existing modification times (possible for pre-19.2 descriptors) are not affected.
+query T
+SELECT
+	stripped(
+		tbl_json(
+			crdb_internal.descriptor_with_post_deserialization_changes(
+				crdb_internal.json_to_pb(
+					'cockroach.sql.sqlbase.Descriptor',
+					json_set(
+						crdb_internal.pb_to_json(
+							'cockroach.sql.sqlbase.Descriptor',
+							desc_bytes('t')
+						),
+						ARRAY['table', 'modificationTime'],
+						'{"logical": 1, "wallTime": "123456789"}'::JSONB
+					)
+				)
+			)
+		)
+	)
+----
+{"indexInvisibility": 1, "indexNotVisible": true, "modificationTime": {"logical": 1, "wallTime": "123456789"}, "version": 2}
+
+# Perform a schema change to persist post-deserialization changes.
+statement ok
+ALTER TABLE t RENAME TO t_renamed
+
+query T
+SELECT stripped(tbl_json(desc_bytes('t_renamed')))
+----
+{"indexInvisibility": 1, "indexNotVisible": true, "modificationTime": {}, "version": 3}
+
+statement ok
+DROP TABLE t_renamed

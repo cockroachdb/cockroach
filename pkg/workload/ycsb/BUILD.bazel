@@ -1,0 +1,31 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "ycsb",
+    srcs = [
+        "acknowledged_counter.go",
+        "skewed_latest_generator.go",
+        "uniform_generator.go",
+        "ycsb.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/ycsb",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/types",
+        "//pkg/util/bufalloc",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "//pkg/workload",
+        "//pkg/workload/histogram",
+        "//pkg/workload/workloadimpl",
+        "@com_github_cockroachdb_cockroach_go_v2//crdb/crdbpgxv5",
+        "@com_github_cockroachdb_crlib//crrand",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgconn",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_spf13_pflag//:pflag",
+    ],
+)

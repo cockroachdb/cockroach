@@ -1,0 +1,727 @@
+# Legacy flags and --log cannot be used together.
+run
+start
+--logtostderr=INFO
+--log=file-defaults: dir: /tmp
+----
+error: --log is incompatible with legacy discrete logging flags
+
+subtest server_defaults
+
+# Default parameters for server commands.
+run
+start
+----
+config: {<stdFileDefaults(<defaultLogDir>)>,
+<fluentDefaults>,
+<httpDefaults>,
+<otlpDefaults>,
+sinks: {file-groups: {changefeed: <fileCfg(INFO: [CHANGEFEED],<defaultLogDir>,true,crdb-v2)>,
+default: <fileCfg(INFO: [DEV,
+OPS],
+WARNING: [HEALTH,
+STORAGE,
+SESSIONS,
+SQL_SCHEMA,
+USER_ADMIN,
+PRIVILEGES,
+SENSITIVE_ACCESS,
+SQL_EXEC,
+SQL_PERF,
+SQL_INTERNAL_PERF,
+TELEMETRY,
+KV_DISTRIBUTION,
+CHANGEFEED,
+KV_EXEC],<defaultLogDir>,true,crdb-v2)>,
+health: <fileCfg(INFO: [HEALTH],<defaultLogDir>,true,crdb-v2)>,
+kv-distribution: <fileCfg(INFO: [KV_DISTRIBUTION],<defaultLogDir>,true,crdb-v2)>,
+kv-exec: <fileCfg(INFO: [KV_EXEC],<defaultLogDir>,true,crdb-v2)>,
+pebble: <fileCfg(INFO: [STORAGE],<defaultLogDir>,true,crdb-v2)>,
+security: <fileCfg(INFO: [USER_ADMIN,
+PRIVILEGES],<defaultLogDir>,false,crdb-v2)>,
+sql-audit: <fileCfg(INFO: [SENSITIVE_ACCESS],<defaultLogDir>,false,crdb-v2)>,
+sql-auth: <fileCfg(INFO: [SESSIONS],<defaultLogDir>,false,crdb-v2)>,
+sql-exec: <fileCfg(INFO: [SQL_EXEC],<defaultLogDir>,true,crdb-v2)>,
+sql-schema: <fileCfg(INFO: [SQL_SCHEMA],<defaultLogDir>,true,crdb-v2)>,
+sql-slow: <fileCfg(INFO: [SQL_PERF],<defaultLogDir>,true,crdb-v2)>,
+sql-slow-internal-only: <fileCfg(INFO: [SQL_INTERNAL_PERF],<defaultLogDir>,true,crdb-v2)>,
+telemetry: <telemetryCfg(<defaultLogDir>)>},
+<stderrDisabled>},
+<stdCaptureFd2(<defaultLogDir>)>}
+
+
+run
+start-single-node
+----
+config: {<stdFileDefaults(<defaultLogDir>)>,
+<fluentDefaults>,
+<httpDefaults>,
+<otlpDefaults>,
+sinks: {file-groups: {changefeed: <fileCfg(INFO: [CHANGEFEED],<defaultLogDir>,true,crdb-v2)>,
+default: <fileCfg(INFO: [DEV,
+OPS],
+WARNING: [HEALTH,
+STORAGE,
+SESSIONS,
+SQL_SCHEMA,
+USER_ADMIN,
+PRIVILEGES,
+SENSITIVE_ACCESS,
+SQL_EXEC,
+SQL_PERF,
+SQL_INTERNAL_PERF,
+TELEMETRY,
+KV_DISTRIBUTION,
+CHANGEFEED,
+KV_EXEC],<defaultLogDir>,true,crdb-v2)>,
+health: <fileCfg(INFO: [HEALTH],<defaultLogDir>,true,crdb-v2)>,
+kv-distribution: <fileCfg(INFO: [KV_DISTRIBUTION],<defaultLogDir>,true,crdb-v2)>,
+kv-exec: <fileCfg(INFO: [KV_EXEC],<defaultLogDir>,true,crdb-v2)>,
+pebble: <fileCfg(INFO: [STORAGE],<defaultLogDir>,true,crdb-v2)>,
+security: <fileCfg(INFO: [USER_ADMIN,
+PRIVILEGES],<defaultLogDir>,false,crdb-v2)>,
+sql-audit: <fileCfg(INFO: [SENSITIVE_ACCESS],<defaultLogDir>,false,crdb-v2)>,
+sql-auth: <fileCfg(INFO: [SESSIONS],<defaultLogDir>,false,crdb-v2)>,
+sql-exec: <fileCfg(INFO: [SQL_EXEC],<defaultLogDir>,true,crdb-v2)>,
+sql-schema: <fileCfg(INFO: [SQL_SCHEMA],<defaultLogDir>,true,crdb-v2)>,
+sql-slow: <fileCfg(INFO: [SQL_PERF],<defaultLogDir>,true,crdb-v2)>,
+sql-slow-internal-only: <fileCfg(INFO: [SQL_INTERNAL_PERF],<defaultLogDir>,true,crdb-v2)>,
+telemetry: <telemetryCfg(<defaultLogDir>)>},
+<stderrDisabled>},
+<stdCaptureFd2(<defaultLogDir>)>}
+
+subtest end
+
+subtest client_defaults
+
+# Default parameters for client commands.
+run
+sql
+----
+config: {<fileDefaultsNoDir>,
+<fluentDefaults>,
+<httpDefaults>,
+<otlpDefaults>,
+sinks: {<stderrEnabledWarningNoRedaction>}}
+
+run
+init
+----
+config: {<fileDefaultsNoDir>,
+<fluentDefaults>,
+<httpDefaults>,
+<otlpDefaults>,
+sinks: {<stderrEnabledWarningNoRedaction>}}
+
+
+# Special case is "workload" and its sub-commands. It logs to stderr
+# with level INFO by default. (Legacy behavior)
+run
+workload
+run
+bank
+----
+config: {<fileDefaultsNoDir>,
+<fluentDefaults>,
+<httpDefaults>,
+<otlpDefaults>,
+sinks: {<stderrEnabledInfoNoRedaction>}}
+
+
+# Special case is "demo" and its sub-commands. It disables
+# logging to stderr.
+run
+demo
+----
+config: {<fileDefaultsNoDir>,
+<fluentDefaults>,
+<httpDefaults>,
+<otlpDefaults>,
+sinks: {<stderrCfg(FATAL,false)>}}
+
+
+subtest end
+
+subtest server_overrides
+
+# When "start" is used with no on-disk store, derive no file logging.
+# Also for server commands the default stderr level is INFO.
+run
+start
+--store=type=mem,size=3g
+----
+config: {<fileDefaultsNoDir>,
+<fluentDefaults>,
+<httpDefaults>,
+<otlpDefaults>,
+sinks: {<stderrEnabledInfoNoRedaction>}}
+
+
+# If there are multiple on-disk stores, the first one is used;
+# however, the resulting configuration is ambiguous.
+run ambiguous
+start
+--store=path=/pathA
+--store=path=/pathB
+----
+config: {<stdFileDefaults(/pathA/logs)>,
+<fluentDefaults>,
+<httpDefaults>,
+<otlpDefaults>,
+sinks: {file-groups: {changefeed: <fileCfg(INFO: [CHANGEFEED],/pathA/logs,true,crdb-v2)>,
+default: <fileCfg(INFO: [DEV,
+OPS],
+WARNING: [HEALTH,
+STORAGE,
+SESSIONS,
+SQL_SCHEMA,
+USER_ADMIN,
+PRIVILEGES,
+SENSITIVE_ACCESS,
+SQL_EXEC,
+SQL_PERF,
+SQL_INTERNAL_PERF,
+TELEMETRY,
+KV_DISTRIBUTION,
+CHANGEFEED,
+KV_EXEC],/pathA/logs,true,crdb-v2)>,
+health: <fileCfg(INFO: [HEALTH],/pathA/logs,true,crdb-v2)>,
+kv-distribution: <fileCfg(INFO: [KV_DISTRIBUTION],/pathA/logs,true,crdb-v2)>,
+kv-exec: <fileCfg(INFO: [KV_EXEC],/pathA/logs,true,crdb-v2)>,
+pebble: <fileCfg(INFO: [STORAGE],/pathA/logs,true,crdb-v2)>,
+security: <fileCfg(INFO: [USER_ADMIN,
+PRIVILEGES],/pathA/logs,false,crdb-v2)>,
+sql-audit: <fileCfg(INFO: [SENSITIVE_ACCESS],/pathA/logs,false,crdb-v2)>,
+sql-auth: <fileCfg(INFO: [SESSIONS],/pathA/logs,false,crdb-v2)>,
+sql-exec: <fileCfg(INFO: [SQL_EXEC],/pathA/logs,true,crdb-v2)>,
+sql-schema: <fileCfg(INFO: [SQL_SCHEMA],/pathA/logs,true,crdb-v2)>,
+sql-slow: <fileCfg(INFO: [SQL_PERF],/pathA/logs,true,crdb-v2)>,
+sql-slow-internal-only: <fileCfg(INFO: [SQL_INTERNAL_PERF],/pathA/logs,true,crdb-v2)>,
+telemetry: <telemetryCfg(/pathA/logs)>},
+<stderrDisabled>},
+<stdCaptureFd2(/pathA/logs)>}
+
+
+# It is possible to override the output directory also via --log.
+run
+start
+--log=file-defaults: {dir: /mypath}
+----
+config: {<stdFileDefaults(/mypath)>,
+<fluentDefaults>,
+<httpDefaults>,
+<otlpDefaults>,
+sinks: {file-groups: {changefeed: <fileCfg(INFO: [CHANGEFEED],/mypath,true,crdb-v2)>,
+default: <fileCfg(INFO: [DEV,
+OPS],
+WARNING: [HEALTH,
+STORAGE,
+SESSIONS,
+SQL_SCHEMA,
+USER_ADMIN,
+PRIVILEGES,
+SENSITIVE_ACCESS,
+SQL_EXEC,
+SQL_PERF,
+SQL_INTERNAL_PERF,
+TELEMETRY,
+KV_DISTRIBUTION,
+CHANGEFEED,
+KV_EXEC],/mypath,true,crdb-v2)>,
+health: <fileCfg(INFO: [HEALTH],/mypath,true,crdb-v2)>,
+kv-distribution: <fileCfg(INFO: [KV_DISTRIBUTION],/mypath,true,crdb-v2)>,
+kv-exec: <fileCfg(INFO: [KV_EXEC],/mypath,true,crdb-v2)>,
+pebble: <fileCfg(INFO: [STORAGE],/mypath,true,crdb-v2)>,
+security: <fileCfg(INFO: [USER_ADMIN,
+PRIVILEGES],/mypath,false,crdb-v2)>,
+sql-audit: <fileCfg(INFO: [SENSITIVE_ACCESS],/mypath,false,crdb-v2)>,
+sql-auth: <fileCfg(INFO: [SESSIONS],/mypath,false,crdb-v2)>,
+sql-exec: <fileCfg(INFO: [SQL_EXEC],/mypath,true,crdb-v2)>,
+sql-schema: <fileCfg(INFO: [SQL_SCHEMA],/mypath,true,crdb-v2)>,
+sql-slow: <fileCfg(INFO: [SQL_PERF],/mypath,true,crdb-v2)>,
+sql-slow-internal-only: <fileCfg(INFO: [SQL_INTERNAL_PERF],/mypath,true,crdb-v2)>,
+telemetry: <telemetryCfg(/mypath)>},
+<stderrDisabled>},
+<stdCaptureFd2(/mypath)>}
+
+# If there were multiple stores, configuring via --log disambiguates.
+run
+start
+--store=path=/pathA
+--store=path=/pathB
+--log=file-defaults: {dir: /pathA/logs}
+----
+config: {<stdFileDefaults(/pathA/logs)>,
+<fluentDefaults>,
+<httpDefaults>,
+<otlpDefaults>,
+sinks: {file-groups: {changefeed: <fileCfg(INFO: [CHANGEFEED],/pathA/logs,true,crdb-v2)>,
+default: <fileCfg(INFO: [DEV,
+OPS],
+WARNING: [HEALTH,
+STORAGE,
+SESSIONS,
+SQL_SCHEMA,
+USER_ADMIN,
+PRIVILEGES,
+SENSITIVE_ACCESS,
+SQL_EXEC,
+SQL_PERF,
+SQL_INTERNAL_PERF,
+TELEMETRY,
+KV_DISTRIBUTION,
+CHANGEFEED,
+KV_EXEC],/pathA/logs,true,crdb-v2)>,
+health: <fileCfg(INFO: [HEALTH],/pathA/logs,true,crdb-v2)>,
+kv-distribution: <fileCfg(INFO: [KV_DISTRIBUTION],/pathA/logs,true,crdb-v2)>,
+kv-exec: <fileCfg(INFO: [KV_EXEC],/pathA/logs,true,crdb-v2)>,
+pebble: <fileCfg(INFO: [STORAGE],/pathA/logs,true,crdb-v2)>,
+security: <fileCfg(INFO: [USER_ADMIN,
+PRIVILEGES],/pathA/logs,false,crdb-v2)>,
+sql-audit: <fileCfg(INFO: [SENSITIVE_ACCESS],/pathA/logs,false,crdb-v2)>,
+sql-auth: <fileCfg(INFO: [SESSIONS],/pathA/logs,false,crdb-v2)>,
+sql-exec: <fileCfg(INFO: [SQL_EXEC],/pathA/logs,true,crdb-v2)>,
+sql-schema: <fileCfg(INFO: [SQL_SCHEMA],/pathA/logs,true,crdb-v2)>,
+sql-slow: <fileCfg(INFO: [SQL_PERF],/pathA/logs,true,crdb-v2)>,
+sql-slow-internal-only: <fileCfg(INFO: [SQL_INTERNAL_PERF],/pathA/logs,true,crdb-v2)>,
+telemetry: <telemetryCfg(/pathA/logs)>},
+<stderrDisabled>},
+<stdCaptureFd2(/pathA/logs)>}
+
+
+# If the specified log directory is completely different, the
+# configuration is not ambiguous either. We need the different
+# test case because the ambiguity condition is detected
+# differently whether we use the same directory name as the first
+# store or not.
+run
+start
+--store=path=/pathA
+--store=path=/pathB
+--log=file-defaults: {dir: /mypath}
+----
+config: {<stdFileDefaults(/mypath)>,
+<fluentDefaults>,
+<httpDefaults>,
+<otlpDefaults>,
+sinks: {file-groups: {changefeed: <fileCfg(INFO: [CHANGEFEED],/mypath,true,crdb-v2)>,
+default: <fileCfg(INFO: [DEV,
+OPS],
+WARNING: [HEALTH,
+STORAGE,
+SESSIONS,
+SQL_SCHEMA,
+USER_ADMIN,
+PRIVILEGES,
+SENSITIVE_ACCESS,
+SQL_EXEC,
+SQL_PERF,
+SQL_INTERNAL_PERF,
+TELEMETRY,
+KV_DISTRIBUTION,
+CHANGEFEED,
+KV_EXEC],/mypath,true,crdb-v2)>,
+health: <fileCfg(INFO: [HEALTH],/mypath,true,crdb-v2)>,
+kv-distribution: <fileCfg(INFO: [KV_DISTRIBUTION],/mypath,true,crdb-v2)>,
+kv-exec: <fileCfg(INFO: [KV_EXEC],/mypath,true,crdb-v2)>,
+pebble: <fileCfg(INFO: [STORAGE],/mypath,true,crdb-v2)>,
+security: <fileCfg(INFO: [USER_ADMIN,
+PRIVILEGES],/mypath,false,crdb-v2)>,
+sql-audit: <fileCfg(INFO: [SENSITIVE_ACCESS],/mypath,false,crdb-v2)>,
+sql-auth: <fileCfg(INFO: [SESSIONS],/mypath,false,crdb-v2)>,
+sql-exec: <fileCfg(INFO: [SQL_EXEC],/mypath,true,crdb-v2)>,
+sql-schema: <fileCfg(INFO: [SQL_SCHEMA],/mypath,true,crdb-v2)>,
+sql-slow: <fileCfg(INFO: [SQL_PERF],/mypath,true,crdb-v2)>,
+sql-slow-internal-only: <fileCfg(INFO: [SQL_INTERNAL_PERF],/mypath,true,crdb-v2)>,
+telemetry: <telemetryCfg(/mypath)>},
+<stderrDisabled>},
+<stdCaptureFd2(/mypath)>}
+
+# It's possible to override the stderr threshold.
+run
+start
+--log=sinks: {stderr: {filter: ERROR}}
+----
+config: {<stdFileDefaults(<defaultLogDir>)>,
+<fluentDefaults>,
+<httpDefaults>,
+<otlpDefaults>,
+sinks: {file-groups: {changefeed: <fileCfg(INFO: [CHANGEFEED],<defaultLogDir>,true,crdb-v2)>,
+default: <fileCfg(INFO: [DEV,
+OPS],
+WARNING: [HEALTH,
+STORAGE,
+SESSIONS,
+SQL_SCHEMA,
+USER_ADMIN,
+PRIVILEGES,
+SENSITIVE_ACCESS,
+SQL_EXEC,
+SQL_PERF,
+SQL_INTERNAL_PERF,
+TELEMETRY,
+KV_DISTRIBUTION,
+CHANGEFEED,
+KV_EXEC],<defaultLogDir>,true,crdb-v2)>,
+health: <fileCfg(INFO: [HEALTH],<defaultLogDir>,true,crdb-v2)>,
+kv-distribution: <fileCfg(INFO: [KV_DISTRIBUTION],<defaultLogDir>,true,crdb-v2)>,
+kv-exec: <fileCfg(INFO: [KV_EXEC],<defaultLogDir>,true,crdb-v2)>,
+pebble: <fileCfg(INFO: [STORAGE],<defaultLogDir>,true,crdb-v2)>,
+security: <fileCfg(INFO: [USER_ADMIN,
+PRIVILEGES],<defaultLogDir>,false,crdb-v2)>,
+sql-audit: <fileCfg(INFO: [SENSITIVE_ACCESS],<defaultLogDir>,false,crdb-v2)>,
+sql-auth: <fileCfg(INFO: [SESSIONS],<defaultLogDir>,false,crdb-v2)>,
+sql-exec: <fileCfg(INFO: [SQL_EXEC],<defaultLogDir>,true,crdb-v2)>,
+sql-schema: <fileCfg(INFO: [SQL_SCHEMA],<defaultLogDir>,true,crdb-v2)>,
+sql-slow: <fileCfg(INFO: [SQL_PERF],<defaultLogDir>,true,crdb-v2)>,
+sql-slow-internal-only: <fileCfg(INFO: [SQL_INTERNAL_PERF],<defaultLogDir>,true,crdb-v2)>,
+telemetry: <telemetryCfg(<defaultLogDir>)>},
+<stderrCfg(ERROR,true)>},
+<stdCaptureFd2(<defaultLogDir>)>}
+
+# Ensure variable expansion works.
+run
+start
+--log=sinks: {fluent-servers: {health: {channels: [DEV], address: ${HOST_IP}:5170}}}
+--log-config-vars=HOST_IP
+----
+config: {<stdFileDefaults(<defaultLogDir>)>,
+<fluentDefaults>,
+<httpDefaults>,
+<otlpDefaults>,
+sinks: {file-groups: {changefeed: <fileCfg(INFO: [CHANGEFEED],<defaultLogDir>,true,crdb-v2)>,
+default: <fileCfg(INFO: [DEV,
+OPS],
+WARNING: [HEALTH,
+STORAGE,
+SESSIONS,
+SQL_SCHEMA,
+USER_ADMIN,
+PRIVILEGES,
+SENSITIVE_ACCESS,
+SQL_EXEC,
+SQL_PERF,
+SQL_INTERNAL_PERF,
+TELEMETRY,
+KV_DISTRIBUTION,
+CHANGEFEED,
+KV_EXEC],<defaultLogDir>,true,crdb-v2)>,
+health: <fileCfg(INFO: [HEALTH],<defaultLogDir>,true,crdb-v2)>,
+kv-distribution: <fileCfg(INFO: [KV_DISTRIBUTION],<defaultLogDir>,true,crdb-v2)>,
+kv-exec: <fileCfg(INFO: [KV_EXEC],<defaultLogDir>,true,crdb-v2)>,
+pebble: <fileCfg(INFO: [STORAGE],<defaultLogDir>,true,crdb-v2)>,
+security: <fileCfg(INFO: [USER_ADMIN,
+PRIVILEGES],<defaultLogDir>,false,crdb-v2)>,
+sql-audit: <fileCfg(INFO: [SENSITIVE_ACCESS],<defaultLogDir>,false,crdb-v2)>,
+sql-auth: <fileCfg(INFO: [SESSIONS],<defaultLogDir>,false,crdb-v2)>,
+sql-exec: <fileCfg(INFO: [SQL_EXEC],<defaultLogDir>,true,crdb-v2)>,
+sql-schema: <fileCfg(INFO: [SQL_SCHEMA],<defaultLogDir>,true,crdb-v2)>,
+sql-slow: <fileCfg(INFO: [SQL_PERF],<defaultLogDir>,true,crdb-v2)>,
+sql-slow-internal-only: <fileCfg(INFO: [SQL_INTERNAL_PERF],<defaultLogDir>,true,crdb-v2)>,
+telemetry: <telemetryCfg(<defaultLogDir>)>},
+fluent-servers: {health: {channels: {INFO: [DEV]},
+net: tcp,
+address: '1.2.3.4:5170',
+filter: INFO,
+format: json-fluent-compact,
+redactable: true,
+exit-on-error: false,
+buffering: {max-staleness: 5s,
+flush-trigger-size: 1.0MiB,
+max-buffer-size: 50MiB,
+format: newline}}},
+<stderrDisabled>},
+<stdCaptureFd2(<defaultLogDir>)>}
+
+# It's possible to disable the stderr capture.
+run
+start
+--log=capture-stray-errors: {enable: false}
+----
+config: {<stdFileDefaults(<defaultLogDir>)>,
+<fluentDefaults>,
+<httpDefaults>,
+<otlpDefaults>,
+sinks: {file-groups: {changefeed: <fileCfg(INFO: [CHANGEFEED],<defaultLogDir>,true,crdb-v2)>,
+default: <fileCfg(INFO: [DEV,
+OPS],
+WARNING: [HEALTH,
+STORAGE,
+SESSIONS,
+SQL_SCHEMA,
+USER_ADMIN,
+PRIVILEGES,
+SENSITIVE_ACCESS,
+SQL_EXEC,
+SQL_PERF,
+SQL_INTERNAL_PERF,
+TELEMETRY,
+KV_DISTRIBUTION,
+CHANGEFEED,
+KV_EXEC],<defaultLogDir>,true,crdb-v2)>,
+health: <fileCfg(INFO: [HEALTH],<defaultLogDir>,true,crdb-v2)>,
+kv-distribution: <fileCfg(INFO: [KV_DISTRIBUTION],<defaultLogDir>,true,crdb-v2)>,
+kv-exec: <fileCfg(INFO: [KV_EXEC],<defaultLogDir>,true,crdb-v2)>,
+pebble: <fileCfg(INFO: [STORAGE],<defaultLogDir>,true,crdb-v2)>,
+security: <fileCfg(INFO: [USER_ADMIN,
+PRIVILEGES],<defaultLogDir>,false,crdb-v2)>,
+sql-audit: <fileCfg(INFO: [SENSITIVE_ACCESS],<defaultLogDir>,false,crdb-v2)>,
+sql-auth: <fileCfg(INFO: [SESSIONS],<defaultLogDir>,false,crdb-v2)>,
+sql-exec: <fileCfg(INFO: [SQL_EXEC],<defaultLogDir>,true,crdb-v2)>,
+sql-schema: <fileCfg(INFO: [SQL_SCHEMA],<defaultLogDir>,true,crdb-v2)>,
+sql-slow: <fileCfg(INFO: [SQL_PERF],<defaultLogDir>,true,crdb-v2)>,
+sql-slow-internal-only: <fileCfg(INFO: [SQL_INTERNAL_PERF],<defaultLogDir>,true,crdb-v2)>,
+telemetry: <telemetryCfg(<defaultLogDir>)>},
+<stderrDisabled>}}
+
+# Logging to stderr without stderr capture causes an error in the default config.
+run
+start
+--log=capture-stray-errors: {enable: false}, sinks: {stderr: {filter: INFO}}
+----
+error: yaml: did not find expected key
+
+
+# This configuration becomes possible if redactability is explicitly retracted.
+run
+start
+--log=capture-stray-errors: {enable: false}, sinks: {stderr: {filter: INFO, redactable: false}}
+----
+error: yaml: did not find expected key
+
+subtest end
+
+subtest legacy_compat
+
+# Legacy config flags follow.
+# TODO(knz): Deprecated in v21.1. Remove in v21.2.
+
+# Server commands have a logging directory by
+# default. --log-dir="" removes it.
+run
+start
+--log-dir=
+----
+config: {<fileDefaultsNoDir>,
+<fluentDefaults>,
+<httpDefaults>,
+<otlpDefaults>,
+sinks: {<stderrEnabledInfoNoRedaction>}}
+
+
+# For server commands, --log-dir can also override the directory.
+run
+start
+--log-dir=/mypath
+----
+config: {<stdFileDefaults(/mypath)>,
+<fluentDefaults>,
+<httpDefaults>,
+<otlpDefaults>,
+sinks: {file-groups: {changefeed: <fileCfg(INFO: [CHANGEFEED],/mypath,true,crdb-v2)>,
+default: <fileCfg(INFO: [DEV,
+OPS],
+WARNING: [HEALTH,
+STORAGE,
+SESSIONS,
+SQL_SCHEMA,
+USER_ADMIN,
+PRIVILEGES,
+SENSITIVE_ACCESS,
+SQL_EXEC,
+SQL_PERF,
+SQL_INTERNAL_PERF,
+TELEMETRY,
+KV_DISTRIBUTION,
+CHANGEFEED,
+KV_EXEC],/mypath,true,crdb-v2)>,
+health: <fileCfg(INFO: [HEALTH],/mypath,true,crdb-v2)>,
+kv-distribution: <fileCfg(INFO: [KV_DISTRIBUTION],/mypath,true,crdb-v2)>,
+kv-exec: <fileCfg(INFO: [KV_EXEC],/mypath,true,crdb-v2)>,
+pebble: <fileCfg(INFO: [STORAGE],/mypath,true,crdb-v2)>,
+security: <fileCfg(INFO: [USER_ADMIN,
+PRIVILEGES],/mypath,false,crdb-v2)>,
+sql-audit: <fileCfg(INFO: [SENSITIVE_ACCESS],/mypath,false,crdb-v2)>,
+sql-auth: <fileCfg(INFO: [SESSIONS],/mypath,false,crdb-v2)>,
+sql-exec: <fileCfg(INFO: [SQL_EXEC],/mypath,true,crdb-v2)>,
+sql-schema: <fileCfg(INFO: [SQL_SCHEMA],/mypath,true,crdb-v2)>,
+sql-slow: <fileCfg(INFO: [SQL_PERF],/mypath,true,crdb-v2)>,
+sql-slow-internal-only: <fileCfg(INFO: [SQL_INTERNAL_PERF],/mypath,true,crdb-v2)>,
+telemetry: <telemetryCfg(/mypath)>},
+<stderrDisabled>},
+<stdCaptureFd2(/mypath)>}
+
+# If there were multiple stores, this disambiguates.
+run
+start
+--store=path=/pathA
+--store=path=/pathB
+--log-dir=/pathA
+----
+config: {<stdFileDefaults(/pathA)>,
+<fluentDefaults>,
+<httpDefaults>,
+<otlpDefaults>,
+sinks: {file-groups: {changefeed: <fileCfg(INFO: [CHANGEFEED],/pathA,true,crdb-v2)>,
+default: <fileCfg(INFO: [DEV,
+OPS],
+WARNING: [HEALTH,
+STORAGE,
+SESSIONS,
+SQL_SCHEMA,
+USER_ADMIN,
+PRIVILEGES,
+SENSITIVE_ACCESS,
+SQL_EXEC,
+SQL_PERF,
+SQL_INTERNAL_PERF,
+TELEMETRY,
+KV_DISTRIBUTION,
+CHANGEFEED,
+KV_EXEC],/pathA,true,crdb-v2)>,
+health: <fileCfg(INFO: [HEALTH],/pathA,true,crdb-v2)>,
+kv-distribution: <fileCfg(INFO: [KV_DISTRIBUTION],/pathA,true,crdb-v2)>,
+kv-exec: <fileCfg(INFO: [KV_EXEC],/pathA,true,crdb-v2)>,
+pebble: <fileCfg(INFO: [STORAGE],/pathA,true,crdb-v2)>,
+security: <fileCfg(INFO: [USER_ADMIN,
+PRIVILEGES],/pathA,false,crdb-v2)>,
+sql-audit: <fileCfg(INFO: [SENSITIVE_ACCESS],/pathA,false,crdb-v2)>,
+sql-auth: <fileCfg(INFO: [SESSIONS],/pathA,false,crdb-v2)>,
+sql-exec: <fileCfg(INFO: [SQL_EXEC],/pathA,true,crdb-v2)>,
+sql-schema: <fileCfg(INFO: [SQL_SCHEMA],/pathA,true,crdb-v2)>,
+sql-slow: <fileCfg(INFO: [SQL_PERF],/pathA,true,crdb-v2)>,
+sql-slow-internal-only: <fileCfg(INFO: [SQL_INTERNAL_PERF],/pathA,true,crdb-v2)>,
+telemetry: <telemetryCfg(/pathA)>},
+<stderrDisabled>},
+<stdCaptureFd2(/pathA)>}
+
+# Client commands have no logging directory by default.
+# --log-dir adds one. However, the file configurations are not server-like:
+# the max sizes don't apply.
+run
+init
+--log-dir=/mypath
+----
+config: {<fileDefaultsNoMaxSize(/mypath)>,
+<fluentDefaults>,
+<httpDefaults>,
+<otlpDefaults>,
+sinks: {file-groups: {default: {channels: {INFO: all},
+dir: /mypath,
+file-permissions: "0640",
+buffered-writes: true,
+filter: INFO,
+format: crdb-v2,
+redactable: true,
+buffering: NONE}},
+<stderrEnabledWarningNoRedaction>}}
+
+# For servers, --logtostderr overrides the threshold and keeps
+# redaction markers.
+run
+start
+--logtostderr=INFO
+----
+config: {<stdFileDefaults(<defaultLogDir>)>,
+<fluentDefaults>,
+<httpDefaults>,
+<otlpDefaults>,
+sinks: {file-groups: {changefeed: <fileCfg(INFO: [CHANGEFEED],<defaultLogDir>,true,crdb-v2)>,
+default: <fileCfg(INFO: [DEV,
+OPS],
+WARNING: [HEALTH,
+STORAGE,
+SESSIONS,
+SQL_SCHEMA,
+USER_ADMIN,
+PRIVILEGES,
+SENSITIVE_ACCESS,
+SQL_EXEC,
+SQL_PERF,
+SQL_INTERNAL_PERF,
+TELEMETRY,
+KV_DISTRIBUTION,
+CHANGEFEED,
+KV_EXEC],<defaultLogDir>,true,crdb-v2)>,
+health: <fileCfg(INFO: [HEALTH],<defaultLogDir>,true,crdb-v2)>,
+kv-distribution: <fileCfg(INFO: [KV_DISTRIBUTION],<defaultLogDir>,true,crdb-v2)>,
+kv-exec: <fileCfg(INFO: [KV_EXEC],<defaultLogDir>,true,crdb-v2)>,
+pebble: <fileCfg(INFO: [STORAGE],<defaultLogDir>,true,crdb-v2)>,
+security: <fileCfg(INFO: [USER_ADMIN,
+PRIVILEGES],<defaultLogDir>,false,crdb-v2)>,
+sql-audit: <fileCfg(INFO: [SENSITIVE_ACCESS],<defaultLogDir>,false,crdb-v2)>,
+sql-auth: <fileCfg(INFO: [SESSIONS],<defaultLogDir>,false,crdb-v2)>,
+sql-exec: <fileCfg(INFO: [SQL_EXEC],<defaultLogDir>,true,crdb-v2)>,
+sql-schema: <fileCfg(INFO: [SQL_SCHEMA],<defaultLogDir>,true,crdb-v2)>,
+sql-slow: <fileCfg(INFO: [SQL_PERF],<defaultLogDir>,true,crdb-v2)>,
+sql-slow-internal-only: <fileCfg(INFO: [SQL_INTERNAL_PERF],<defaultLogDir>,true,crdb-v2)>,
+telemetry: <telemetryCfg(<defaultLogDir>)>},
+<stderrCfg(INFO,true)>},
+<stdCaptureFd2(<defaultLogDir>)>}
+
+# Default when no severity is specified is WARNING.
+run
+start
+--logtostderr
+----
+config: {<stdFileDefaults(<defaultLogDir>)>,
+<fluentDefaults>,
+<httpDefaults>,
+<otlpDefaults>,
+sinks: {file-groups: {changefeed: <fileCfg(INFO: [CHANGEFEED],<defaultLogDir>,true,crdb-v2)>,
+default: <fileCfg(INFO: [DEV,
+OPS],
+WARNING: [HEALTH,
+STORAGE,
+SESSIONS,
+SQL_SCHEMA,
+USER_ADMIN,
+PRIVILEGES,
+SENSITIVE_ACCESS,
+SQL_EXEC,
+SQL_PERF,
+SQL_INTERNAL_PERF,
+TELEMETRY,
+KV_DISTRIBUTION,
+CHANGEFEED,
+KV_EXEC],<defaultLogDir>,true,crdb-v2)>,
+health: <fileCfg(INFO: [HEALTH],<defaultLogDir>,true,crdb-v2)>,
+kv-distribution: <fileCfg(INFO: [KV_DISTRIBUTION],<defaultLogDir>,true,crdb-v2)>,
+kv-exec: <fileCfg(INFO: [KV_EXEC],<defaultLogDir>,true,crdb-v2)>,
+pebble: <fileCfg(INFO: [STORAGE],<defaultLogDir>,true,crdb-v2)>,
+security: <fileCfg(INFO: [USER_ADMIN,
+PRIVILEGES],<defaultLogDir>,false,crdb-v2)>,
+sql-audit: <fileCfg(INFO: [SENSITIVE_ACCESS],<defaultLogDir>,false,crdb-v2)>,
+sql-auth: <fileCfg(INFO: [SESSIONS],<defaultLogDir>,false,crdb-v2)>,
+sql-exec: <fileCfg(INFO: [SQL_EXEC],<defaultLogDir>,true,crdb-v2)>,
+sql-schema: <fileCfg(INFO: [SQL_SCHEMA],<defaultLogDir>,true,crdb-v2)>,
+sql-slow: <fileCfg(INFO: [SQL_PERF],<defaultLogDir>,true,crdb-v2)>,
+sql-slow-internal-only: <fileCfg(INFO: [SQL_INTERNAL_PERF],<defaultLogDir>,true,crdb-v2)>,
+telemetry: <telemetryCfg(<defaultLogDir>)>},
+<stderrCfg(INFO,true)>},
+<stdCaptureFd2(<defaultLogDir>)>}
+
+# For clients, --logtostderr overrides the threshold.
+run
+init
+--logtostderr=INFO
+----
+config: {<fileDefaultsNoDir>,
+<fluentDefaults>,
+<httpDefaults>,
+<otlpDefaults>,
+sinks: {<stderrEnabledInfoNoRedaction>}}
+
+# Default when no severity is specified is WARNING.
+run
+init
+--logtostderr
+----
+config: {<fileDefaultsNoDir>,
+<fluentDefaults>,
+<httpDefaults>,
+<otlpDefaults>,
+sinks: {<stderrEnabledWarningNoRedaction>}}
+
+
+subtest end

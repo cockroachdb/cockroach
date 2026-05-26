@@ -1,0 +1,364 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package sql
+
+import (
+	"context"
+	"sync"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/optional"
+	"github.com/cockroachdb/errors"
+)
+
+type planNodeToRowSource struct {
+	execinfra.ProcessorBase
+
+	input execinfra.RowSource
+
+	// rowsAffected is true if the wrapped planNode will return a single row with
+	// a single integer column indicating the number of rows affected.
+	rowsAffected bool
+
+	node        planNode
+	params      runParams
+	outputTypes []*types.T
+
+	firstNotWrapped planNode
+
+	// run time state machine values
+	row rowenc.EncDatumRow
+
+	contentionEventsListener  execstats.ContentionEventsListener
+	tenantConsumptionListener execstats.TenantConsumptionListener
+}
+
+var _ execinfra.LocalProcessor = &planNodeToRowSource{}
+var _ execreleasable.Releasable = &planNodeToRowSource{}
+var _ execopnode.OpNode = &planNodeToRowSource{}
+var _ metadataForwarder = &planNodeToRowSource{}
+
+var planNodeToRowSourcePool = sync.Pool{
+	New: func() interface{} {
+		return &planNodeToRowSource{}
+	},
+}
+
+func newPlanNodeToRowSource(
+	source planNode, params runParams, firstNotWrapped planNode,
+) (*planNodeToRowSource, error) {
+	p := planNodeToRowSourcePool.Get().(*planNodeToRowSource)
+	*p = planNodeToRowSource{
+		ProcessorBase:   p.ProcessorBase,
+		rowsAffected:    resultIsRowsAffected(source),
+		node:            source,
+		params:          params,
+		firstNotWrapped: firstNotWrapped,
+		row:             p.row,
+	}
+	if p.rowsAffected {
+		// The node returns a single integer value with the number of rows affected.
+		// TODO(drewk): consider using a global singleton to avoid allocating.
+		p.outputTypes = []*types.T{types.Int}
+	} else {
+		p.outputTypes = getTypesFromResultColumns(planColumns(source))
+	}
+	if p.row != nil && cap(p.row) >= len(p.outputTypes) {
+		// In some cases we might have no output columns, so nil row would have
+		// sufficient width, yet nil row is a special value, so we can only
+		// reuse the old row if it's non-nil.
+		p.row = p.row[:len(p.outputTypes)]
+	} else {
+		p.row = make(rowenc.EncDatumRow, len(p.outputTypes))
+	}
+	// Find any planNodes that need a way to propagate metadata before we get to
+	// the firstNotWrapped - this planNodeToRowSource adapter will be the
+	// forwarder for all of them.
+	var setForwarder func(parent planNode) error
+	setForwarder = func(parent planNode) error {
+		switch t := parent.(type) {
+		case *applyJoinNode:
+			t.forwarder = p
+		case *recursiveCTENode:
+			t.forwarder = p
+		}
+		for i, n := 0, parent.InputCount(); i < n; i++ {
+			child, err := parent.Input(i)
+			if err != nil {
+				return err
+			}
+			if child == p.firstNotWrapped {
+				// Once we get to the firstNotWrapped, we stop the recursion
+				// since all remaining planNodes aren't our responsibility.
+				return nil
+			}
+			if err = setForwarder(child); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	err := setForwarder(p.node)
+	if err != nil {
+		p.Release()
+		return nil, err
+	}
+	return p, nil
+}
+
+// MustBeStreaming implements the execinfra.Processor interface.
+func (p *planNodeToRowSource) MustBeStreaming() bool {
+	switch p.node.(type) {
+	case *hookFnNode, *cdcValuesNode:
+		// hookFnNode is special because it might be blocked forever if we decide to
+		// buffer its output.
+		// cdcValuesNode is a node used by CDC that must stream data row-by-row, and
+		// it may also block forever if the input is buffered.
+		return true
+	default:
+		return false
+	}
+}
+
+// Init implements the execinfra.LocalProcessor interface.
+func (p *planNodeToRowSource) Init(
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	processorID int32,
+	post *execinfrapb.PostProcessSpec,
+) error {
+	if err := p.InitWithEvalCtx(
+		ctx,
+		p,
+		post,
+		p.outputTypes,
+		flowCtx,
+		flowCtx.EvalCtx,
+		processorID,
+		nil, /* memMonitor */
+		execinfra.ProcStateOpts{
+			// Input to drain is added in SetInput.
+			TrailingMetaCallback: p.trailingMetaCallback,
+		},
+	); err != nil {
+		return err
+	}
+	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
+		if txn := p.params.p.Txn(); txn != nil {
+			p.contentionEventsListener.Init(txn.ID())
+		}
+		p.ExecStatsForTrace = p.execStatsForTrace
+	}
+	return nil
+}
+
+// SetInput implements the LocalProcessor interface.
+// input is the first upstream RowSource. When we're done executing, we need to
+// drain this row source of its metadata in case the planNode tree we're
+// wrapping returned an error, since planNodes don't know how to drain trailing
+// metadata.
+func (p *planNodeToRowSource) SetInput(ctx context.Context, input execinfra.RowSource) error {
+	if p.firstNotWrapped == nil {
+		// Short-circuit if we never set firstNotWrapped - indicating this planNode
+		// tree had no DistSQL-plannable subtrees.
+		return nil
+	}
+	p.input = input
+	// Adding the input to drain ensures that the input will be properly closed
+	// by this planNodeToRowSource. This is important since the
+	// rowSourceToPlanNode created below is not responsible for that.
+	p.AddInputToDrain(input)
+	// Search the plan we're wrapping for firstNotWrapped, which is the planNode
+	// that DistSQL planning resumed in. Replace that planNode with input,
+	// wrapped as a planNode.
+	// NB: The root planNode is never replaced.
+	var replaceFirstNotWrapped func(parent planNode) error
+	replaceFirstNotWrapped = func(parent planNode) error {
+		for i, n := 0, parent.InputCount(); i < n; i++ {
+			child, err := parent.Input(i)
+			if err != nil {
+				return err
+			}
+			if child == p.firstNotWrapped {
+				newChild := newRowSourceToPlanNode(input, p, planColumns(p.firstNotWrapped), p.firstNotWrapped)
+				return parent.SetInput(i, newChild)
+			}
+			if err := replaceFirstNotWrapped(child); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return replaceFirstNotWrapped(p.node)
+}
+
+func (p *planNodeToRowSource) Start(ctx context.Context) {
+	ctx = p.StartInternal(ctx, nodeName(p.node), &p.contentionEventsListener, &p.tenantConsumptionListener)
+	p.params.ctx = ctx
+	// This starts all of the nodes below this node.
+	if err := startExec(p.params, p.node); err != nil {
+		p.MoveToDraining(err)
+	}
+}
+
+func init() {
+	colexec.IsRowsAffectedNode = func(rs execinfra.RowSource) bool {
+		p, ok := rs.(*planNodeToRowSource)
+		return ok && p.rowsAffected
+	}
+}
+
+func (p *planNodeToRowSource) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	for p.State == execinfra.StateRunning {
+		valid, err := p.node.Next(p.params)
+		if err != nil || !valid {
+			p.MoveToDraining(err)
+			return nil, p.DrainHelper()
+		}
+
+		for i, datum := range p.node.Values() {
+			if datum != nil {
+				p.row[i], err = rowenc.DatumToEncDatum(p.outputTypes[i], datum)
+				if err != nil {
+					p.MoveToDraining(err)
+					return nil, p.DrainHelper()
+				}
+			}
+		}
+		// ProcessRow here is required to deal with projections, which won't be
+		// pushed into the wrapped plan.
+		if outRow := p.ProcessRowHelper(p.row); outRow != nil {
+			return outRow, nil
+		}
+	}
+	return nil, p.DrainHelper()
+}
+
+// forwardMetadata will be called by any upstream rowSourceToPlanNode processors
+// that need to forward metadata to the end of the flow. They can't pass
+// metadata through local processors, so they instead add the metadata to our
+// trailing metadata and expect us to forward it further.
+func (p *planNodeToRowSource) forwardMetadata(metadata *execinfrapb.ProducerMetadata) {
+	p.ProcessorBase.AppendTrailingMeta(*metadata)
+}
+
+// forEachWrappedMutation invokes fn for each mutationPlanNode in the subtree
+// wrapped by this planNodeToRowSource. The walk descends from p.node and stops
+// at p.firstNotWrapped (exclusive), since beyond that point the subtree is
+// handled by separate DistSQL processors.
+func (p *planNodeToRowSource) forEachWrappedMutation(fn func(mutationPlanNode)) {
+	var visit func(node planNode)
+	visit = func(node planNode) {
+		if node == p.firstNotWrapped {
+			return
+		}
+		if m, ok := node.(mutationPlanNode); ok {
+			fn(m)
+		}
+		for i, n := 0, node.InputCount(); i < n; i++ {
+			child, err := node.Input(i)
+			if err != nil {
+				continue
+			}
+			visit(child)
+		}
+	}
+	visit(p.node)
+}
+
+func (p *planNodeToRowSource) trailingMetaCallback() []execinfrapb.ProducerMetadata {
+	if !p.InternalClose() {
+		return nil
+	}
+	var meta []execinfrapb.ProducerMetadata
+	p.forEachWrappedMutation(func(m mutationPlanNode) {
+		metrics := execinfrapb.GetMetricsMeta()
+		metrics.RowsWritten = m.rowsWritten()
+		metrics.IndexRowsWritten = m.indexRowsWritten()
+		metrics.IndexBytesWritten = m.indexBytesWritten()
+		metrics.KVCPUTime = m.kvCPUTime()
+		metrics.LocalKVCPUTime = m.localKVCPUTime()
+		meta = append(meta, execinfrapb.ProducerMetadata{Metrics: metrics})
+	})
+	return meta
+}
+
+// execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
+func (p *planNodeToRowSource) execStatsForTrace() *execinfrapb.ComponentStats {
+	// Sum the local KV CPU time across any wrapped mutationPlanNodes so that
+	// the per-operator CPU subtraction performed by the vectorized stats
+	// collector (see colflow/stats.go) can isolate SQL CPU above mutations.
+	var localKVCPUTime int64
+	p.forEachWrappedMutation(func(m mutationPlanNode) {
+		localKVCPUTime += m.localKVCPUTime()
+	})
+
+	// Propagate contention time, RUs from IO requests, and local KV CPU time
+	// from mutations.
+	if p.contentionEventsListener.GetContentionTime() == 0 &&
+		p.contentionEventsListener.GetLockWaitTime() == 0 &&
+		p.contentionEventsListener.GetLatchWaitTime() == 0 &&
+		p.tenantConsumptionListener.GetConsumedRU() == 0 &&
+		localKVCPUTime == 0 {
+		return nil
+	}
+	return &execinfrapb.ComponentStats{
+		KV: execinfrapb.KVStats{
+			ContentionTime: optional.MakeTimeValue(p.contentionEventsListener.GetContentionTime()),
+			LockWaitTime:   optional.MakeTimeValue(p.contentionEventsListener.GetLockWaitTime()),
+			LatchWaitTime:  optional.MakeTimeValue(p.contentionEventsListener.GetLatchWaitTime()),
+			LocalKVCPUTime: optional.MakeTimeValue(time.Duration(localKVCPUTime)),
+		},
+		Exec: execinfrapb.ExecStats{
+			ConsumedRU: optional.MakeUint(p.tenantConsumptionListener.GetConsumedRU()),
+		},
+	}
+}
+
+// Release releases this planNodeToRowSource back to the pool.
+func (p *planNodeToRowSource) Release() {
+	p.ProcessorBase.Reset()
+	// Deeply reset the row.
+	for i := range p.row {
+		p.row[i] = rowenc.EncDatum{}
+	}
+	// Note that we don't reuse the outputTypes slice because it is exposed to
+	// the outer physical planning code.
+	*p = planNodeToRowSource{
+		ProcessorBase: p.ProcessorBase,
+		row:           p.row[:0],
+	}
+	planNodeToRowSourcePool.Put(p)
+}
+
+// ChildCount is part of the execopnode.OpNode interface.
+func (p *planNodeToRowSource) ChildCount(verbose bool) int {
+	if _, ok := p.input.(execopnode.OpNode); ok {
+		return 1
+	}
+	return 0
+}
+
+// Child is part of the execopnode.OpNode interface.
+func (p *planNodeToRowSource) Child(nth int, verbose bool) execopnode.OpNode {
+	switch nth {
+	case 0:
+		if n, ok := p.input.(execopnode.OpNode); ok {
+			return n
+		}
+		panic("input to planNodeToRowSource is not an execopnode.OpNode")
+	default:
+		panic(errors.AssertionFailedf("invalid index %d", nth))
+	}
+}

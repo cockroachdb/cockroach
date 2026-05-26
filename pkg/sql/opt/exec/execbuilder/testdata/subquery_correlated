@@ -1,0 +1,47 @@
+# LogicTest: local
+
+# ------------------------------------------------------------------------------
+# Create a simple schema that models customers and orders. Each customer has an
+# id (c_id), and has zero or more orders that are related via a foreign key of
+# the same name. A customer has a billing state and an order has a shipping
+# state, either of which could be NULL. This schema, while simple, is rich
+# enough to provide many interesting correlated subquery variations.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE c (c_id INT PRIMARY KEY, bill TEXT);
+CREATE TABLE o (o_id INT PRIMARY KEY, c_id INT, ship TEXT);
+
+query T
+EXPLAIN SELECT
+  c_id,
+  ARRAY(SELECT (o_id, ship) FROM o WHERE o.c_id = c.c_id ORDER BY o_id)
+FROM c ORDER BY c_id
+----
+distribution: local
+·
+• sort
+│ order: +c_id
+│
+└── • render
+    │
+    └── • group (hash)
+        │ group by: c_id
+        │
+        └── • sort
+            │ order: +o_id
+            │
+            └── • hash join (left outer)
+                │ equality: (c_id) = (c_id)
+                │ left cols are key
+                │
+                ├── • scan
+                │     missing stats
+                │     table: c@c_pkey
+                │     spans: FULL SCAN
+                │
+                └── • render
+                    │
+                    └── • scan
+                          missing stats
+                          table: o@o_pkey
+                          spans: FULL SCAN

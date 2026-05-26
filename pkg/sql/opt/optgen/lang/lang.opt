@@ -1,0 +1,187 @@
+# lang.opt defines the AST expressions used by Optgen's parser, using Optgen's
+# own syntax. This is a form of compiler bootstrapping:
+#   https://en.wikipedia.org/wiki/Bootstrapping_(compilers)
+#
+# The langgen tool generates expr.og.go and operator.og.go from the definitions
+# in this file. See comments at the top of expr.go for instructions on how to
+# regenerate the those files. There are three kinds of nodes in the resulting
+# AST:
+#
+#   Ref: These nodes are referred to by pointer rather than by value. For
+#        example, *DefineExpr and *RuleExpr. If a define statement has no tags,
+#        then it defines a Ref node.
+#
+#   Value: These nodes are represented as a primitive type such as string or
+#          int that are typically passed by value. For example, StringExpr and
+#          TagExpr. Value definitions are marked with a "Value" tag, and have
+#          a Value field that specifies the type of the value. For example:
+#            [Value] define String { Item string }
+#
+#   Slice: These nodes are represented as a slice of some other expression. For
+#          example, []*DefineExpr and []TagExpr. Slice definitions are marked
+#          with a "Slice" tag, and have an Element field that specifies the
+#          type of slice elements. For example:
+#            [Slice] define Slice { Element Expr }
+
+# Root expression is always the top-most node in the AST.
+define Root {
+    Defines DefineSet
+    Rules RuleSet
+}
+
+# type DefineSetExpr []*DefineExpr
+[Slice]
+define DefineSet {
+    Element Define
+}
+
+# type RuleSetExpr []*RuleExpr
+[Slice]
+define RuleSet {
+    Element Rule
+}
+
+define Define {
+    Comments Comments
+    Tags Tags
+    Name String
+    Fields DefineFields
+}
+
+# type CommentsExpr []CommentExpr
+[Slice]
+define Comments {
+    Element Comment
+}
+
+# type CommentExpr string
+[Value]
+define Comment {
+    Value string
+}
+
+# type TagsExpr []TagExpr
+[Slice]
+define Tags {
+    Element Tag
+}
+
+# type TagExpr string
+[Value]
+define Tag {
+    Value string
+}
+
+# type DefineFieldsExpr []*DefineFieldExpr
+[Slice]
+define DefineFields {
+    Element DefineField
+}
+
+define DefineField {
+    Comments Comments
+    Name String
+    Type String
+}
+
+define Rule {
+    Comments Comments
+    Name String
+    Tags Tags
+    Match Func
+    Replace Expr
+}
+
+[HasType]
+define Func {
+    Name Expr
+    Args Slice
+}
+
+# type NamesExpr []NameExpr
+[Slice]
+define Names {
+    Element Name
+}
+
+# type NameExpr string
+[Value]
+define Name {
+    Value string
+}
+
+[HasType]
+define And {
+    Left Expr
+    Right Expr
+}
+
+[HasType]
+define Not {
+    Input Expr
+}
+
+[HasType]
+define List {
+    Items Slice
+}
+
+define ListAny {
+}
+
+[HasType]
+define Bind {
+    Label String
+    Target Expr
+}
+
+[HasType]
+define Let {
+    Labels Strings
+    Target Expr
+    Result Ref
+}
+
+[HasType]
+define Ref {
+    Label String
+}
+
+[HasType]
+define Any {
+}
+
+# type SliceExpr []Expr
+[Slice]
+define Slice {
+    Element Expr
+}
+
+# type StringExpr string
+[Value]
+define String {
+    Value string
+}
+
+# type StringExpr string
+[Slice]
+define Strings {
+    Element String
+}
+
+# type NumberExpr int
+[Value]
+define Number {
+    Value int64
+}
+
+#
+# The below operators are never created by the parser, but are created by the
+# compiler, in order to make further processing of the tree easier.
+#
+
+[HasType]
+define CustomFunc {
+    Name Name
+    Args Slice
+}

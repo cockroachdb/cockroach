@@ -1,0 +1,23 @@
+/* setup */
+CREATE DATABASE db;
+CREATE TABLE db.public.tbl (i INT PRIMARY KEY, k INT);
+CREATE SEQUENCE db.public.sq1;
+
+/* test */
+ALTER TABLE db.public.tbl ADD COLUMN j INT AS (NULL::INT) VIRTUAL NOT NULL;
+EXPLAIN (DDL) rollback at post-commit stage 1 of 2;
+----
+Schema change plan for rolling back ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL AS (‹NULL›::INT8) VIRTUAL;
+ └── PostCommitNonRevertiblePhase
+      └── Stage 1 of 1 in PostCommitNonRevertiblePhase
+           ├── 4 elements transitioning toward ABSENT
+           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 106 (tbl), ColumnID: 3 (j-)}
+           │    ├── PUBLIC      → ABSENT ColumnName:{DescID: 106 (tbl), Name: "j", ColumnID: 3 (j-)}
+           │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 3 (j-), TypeName: "INT8"}
+           │    └── PUBLIC      → ABSENT ColumnComputeExpression:{DescID: 106 (tbl), ColumnID: 3 (j-), Usage: REGULAR}
+           └── 5 Mutation operations
+                ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":106}
+                ├── RemoveColumnComputeExpression {"ColumnID":3,"TableID":106}
+                ├── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":106}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

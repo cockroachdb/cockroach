@@ -1,0 +1,47 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "sessiondata",
+    srcs = [
+        "internal.go",
+        "parse_search_path.go",
+        "search_path.go",
+        "sequence_state.go",
+        "session_data.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sessiondata",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/security/username",
+        "//pkg/sql/lexbase",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/catconstants",
+        "//pkg/sql/sessiondatapb",
+        "//pkg/util/buildutil",
+        "//pkg/util/duration",
+        "//pkg/util/hlc",
+        "//pkg/util/intsets",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "//pkg/util/timeutil/pgdate",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "sessiondata_test",
+    size = "small",
+    srcs = [
+        "search_path_test.go",
+        "session_data_test.go",
+    ],
+    embed = [":sessiondata"],
+    deps = [
+        "//pkg/sql/sessiondatapb",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

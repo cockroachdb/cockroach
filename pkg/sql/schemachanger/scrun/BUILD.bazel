@@ -1,0 +1,53 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "scrun",
+    srcs = [
+        "dependencies.go",
+        "scrun.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/kv/kvpb",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/schemachanger/scerrors",
+        "//pkg/sql/schemachanger/scexec",
+        "//pkg/sql/schemachanger/scop",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/schemachanger/scplan",
+        "//pkg/sql/schemachanger/screl",
+        "//pkg/util/buildutil",
+        "//pkg/util/log/eventpb",
+        "//pkg/util/log/logpb",
+        "//pkg/util/mon",
+        "//pkg/util/protoutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "scrun_test",
+    size = "small",
+    srcs = ["make_state_test.go"],
+    embed = [":scrun"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/jobs/jobspb",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//require",
+    ],
+)

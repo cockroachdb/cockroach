@@ -1,0 +1,311 @@
+exec-ddl
+CREATE TABLE xy (x INT PRIMARY KEY, y INT, j JSON)
+----
+
+# --------------------------------------------------
+# ConvertZipArraysToValues
+# --------------------------------------------------
+
+# Basic unnest case with single unzip and only constants in array.
+norm expect=ConvertZipArraysToValues
+SELECT unnest(ARRAY[1,2,3])
+----
+values
+ ├── columns: unnest:1!null
+ ├── cardinality: [3 - 3]
+ ├── (1,)
+ ├── (2,)
+ └── (3,)
+
+# Case with json_array_elements.
+norm expect=ConvertZipArraysToValues
+SELECT json_array_elements('[{"a": "one", "b": "two"}, {"a": "three", "b": "four"}]'::JSON)
+----
+values
+ ├── columns: json_array_elements:1!null
+ ├── cardinality: [2 - 2]
+ ├── ('{"a": "one", "b": "two"}',)
+ └── ('{"a": "three", "b": "four"}',)
+
+# Case with jsonb_array_elements.
+norm expect=ConvertZipArraysToValues
+SELECT jsonb_array_elements('[{"a": "one", "b": "two"}, {"a": "three", "b": "four"}]'::JSON)
+----
+values
+ ├── columns: jsonb_array_elements:1!null
+ ├── cardinality: [2 - 2]
+ ├── ('{"a": "one", "b": "two"}',)
+ └── ('{"a": "three", "b": "four"}',)
+
+# Case with all three matched function types and different array sizes.
+# Case with json_array_elements.
+norm expect=ConvertZipArraysToValues
+SELECT
+    unnest(ARRAY[1,2,3]),
+    json_array_elements('[{"a": "one", "b": "two"}, {"a": "three", "b": "four"}]'::JSON),
+    jsonb_array_elements('[{"x": "one", "y": "two"}]'::JSON)
+----
+values
+ ├── columns: unnest:1!null json_array_elements:2 jsonb_array_elements:3
+ ├── cardinality: [3 - 3]
+ ├── (1, '{"a": "one", "b": "two"}', '{"x": "one", "y": "two"}')
+ ├── (2, '{"a": "three", "b": "four"}', NULL)
+ └── (3, NULL, NULL)
+
+# Case with subquery in ProjectSet input.
+norm expect=ConvertZipArraysToValues
+SELECT unnest(ARRAY[1,2,3]) FROM unnest(ARRAY[4,5,6])
+----
+inner-join (cross)
+ ├── columns: unnest:2!null
+ ├── cardinality: [9 - 9]
+ ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
+ ├── values
+ │    ├── cardinality: [3 - 3]
+ │    ├── ()
+ │    ├── ()
+ │    └── ()
+ ├── values
+ │    ├── columns: unnest:2!null
+ │    ├── cardinality: [3 - 3]
+ │    ├── (1,)
+ │    ├── (2,)
+ │    └── (3,)
+ └── filters (true)
+
+# Case with correlated array.
+norm expect=ConvertZipArraysToValues
+SELECT unnest(ARRAY[x,y]) FROM xy
+----
+project
+ ├── columns: unnest:6
+ └── inner-join-apply
+      ├── columns: x:1!null y:2 unnest:6
+      ├── fd: (1)-->(2)
+      ├── scan xy
+      │    ├── columns: x:1!null y:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      ├── values
+      │    ├── columns: unnest:6
+      │    ├── outer: (1,2)
+      │    ├── cardinality: [2 - 2]
+      │    ├── (x:1,)
+      │    └── (y:2,)
+      └── filters (true)
+
+# Case with correlated array in a correlated subquery.
+norm expect=ConvertZipArraysToValues
+SELECT * FROM xy
+WHERE EXISTS
+(SELECT t
+  FROM unnest(ARRAY[NULL,2,NULL,4,5,x])
+  AS f(t)
+  WHERE t=y
+)
+----
+semi-join-apply
+ ├── columns: x:1!null y:2!null j:3
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── scan xy
+ │    ├── columns: x:1!null y:2 j:3
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ ├── values
+ │    ├── columns: unnest:6
+ │    ├── outer: (1)
+ │    ├── cardinality: [6 - 6]
+ │    ├── (NULL,)
+ │    ├── (2,)
+ │    ├── (NULL,)
+ │    ├── (4,)
+ │    ├── (5,)
+ │    └── (x:1,)
+ └── filters
+      └── unnest:6 = y:2 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+
+# Case with multiple arrays of different types and different sizes, including an
+# empty array.
+norm expect=ConvertZipArraysToValues
+SELECT
+    unnest(ARRAY['one','two','three']),
+    unnest(ARRAY[1,2,5,6,NULL,8]),
+    unnest(ARRAY[]::BOOL[]),
+    json_array_elements('[{"a": "one", "b": "two"}, {"a": "three", "b": "four"}]'::JSON),
+    jsonb_array_elements('[{"x": "one", "y": "two"}]'::JSON),
+    jsonb_array_elements('[]'::JSON)
+----
+values
+ ├── columns: unnest:1 unnest:2 unnest:3 json_array_elements:4 jsonb_array_elements:5 jsonb_array_elements:6
+ ├── cardinality: [6 - 6]
+ ├── ('one', 1, NULL, '{"a": "one", "b": "two"}', '{"x": "one", "y": "two"}', NULL)
+ ├── ('two', 2, NULL, '{"a": "three", "b": "four"}', NULL, NULL)
+ ├── ('three', 5, NULL, NULL, NULL, NULL)
+ ├── (NULL, 6, NULL, NULL, NULL, NULL)
+ ├── (NULL, NULL, NULL, NULL, NULL, NULL)
+ └── (NULL, 8, NULL, NULL, NULL, NULL)
+
+# unnest case with multiple empty arrays.
+norm expect=ConvertZipArraysToValues
+SELECT unnest(ARRAY[]::STRING[]), unnest(ARRAY[]::REAL[]), unnest(ARRAY[]::INT[])
+----
+values
+ ├── columns: unnest:1!null unnest:2!null unnest:3!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-3)
+
+# json_array_elements case with empty array.
+norm expect=ConvertZipArraysToValues
+SELECT json_array_elements('[]')
+----
+values
+ ├── columns: json_array_elements:1!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+# unnest case with array of arrays.
+norm expect=ConvertZipArraysToValues
+SELECT unnest(ARRAY[[1,2,3],[4,5]])
+----
+values
+ ├── columns: unnest:1!null
+ ├── cardinality: [2 - 2]
+ ├── (ARRAY[1,2,3],)
+ └── (ARRAY[4,5],)
+
+# json_array_elements case with array of arrays.
+norm expect=ConvertZipArraysToValues
+SELECT json_array_elements('[[{"a": "x"}],[{"a": "y"}]]')
+----
+values
+ ├── columns: json_array_elements:1!null
+ ├── cardinality: [2 - 2]
+ ├── ('[{"a": "x"}]',)
+ └── ('[{"a": "y"}]',)
+
+# Case with multiple correlated arrays.
+norm expect=ConvertZipArraysToValues
+SELECT unnest(ARRAY[x,y]), unnest(ARRAY[1,x*100]) FROM xy
+----
+project
+ ├── columns: unnest:6 unnest:7
+ ├── immutable
+ └── inner-join-apply
+      ├── columns: x:1!null y:2 unnest:6 unnest:7
+      ├── immutable
+      ├── fd: (1)-->(2)
+      ├── scan xy
+      │    ├── columns: x:1!null y:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      ├── values
+      │    ├── columns: unnest:6 unnest:7
+      │    ├── outer: (1,2)
+      │    ├── cardinality: [2 - 2]
+      │    ├── immutable
+      │    ├── (x:1, 1)
+      │    └── (y:2, x:1 * 100)
+      └── filters (true)
+
+# No-op case - ConvertZipArraysToValues fires the first time but not the
+# second because the outer zip is over a variable of an array instead of the
+# array itself.
+norm expect=ConvertZipArraysToValues
+SELECT unnest(x) FROM unnest(ARRAY[[1,2,3],[4,5],[6]]) AS x
+----
+project
+ ├── columns: unnest:2
+ ├── immutable
+ └── project-set
+      ├── columns: unnest:1!null unnest:2
+      ├── immutable
+      ├── values
+      │    ├── columns: unnest:1!null
+      │    ├── cardinality: [3 - 3]
+      │    ├── (ARRAY[1,2,3],)
+      │    ├── (ARRAY[4,5],)
+      │    └── (ARRAY[6],)
+      └── zip
+           └── unnest(unnest:1) [outer=(1), immutable]
+
+# No-op case - an unnest with multiple inputs is not matched.
+norm expect-not=ConvertZipArraysToValues
+SELECT unnest(ARRAY[1,2,3], ARRAY[4,5,6])
+----
+project
+ ├── columns: unnest:3
+ ├── immutable
+ ├── project-set
+ │    ├── columns: unnest:1 unnest:2
+ │    ├── immutable
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    └── ()
+ │    └── zip
+ │         └── unnest(ARRAY[1,2,3], ARRAY[4,5,6]) [immutable]
+ └── projections
+      └── ((unnest:1, unnest:2) AS unnest, unnest) [as=unnest:3, outer=(1,2)]
+
+# No-op case because one of the ZipItems is not valid.
+norm expect-not=ConvertZipArraysToValues
+SELECT unnest(ARRAY[1,2,3]), unnest(ARRAY[1,2,3], ARRAY[4,5,6])
+----
+project
+ ├── columns: unnest:1 unnest:4
+ ├── immutable
+ ├── project-set
+ │    ├── columns: unnest:1 unnest:2 unnest:3
+ │    ├── immutable
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    └── ()
+ │    └── zip
+ │         ├── unnest(ARRAY[1,2,3]) [immutable]
+ │         └── unnest(ARRAY[1,2,3], ARRAY[4,5,6]) [immutable]
+ └── projections
+      └── ((unnest:2, unnest:3) AS unnest, unnest) [as=unnest:4, outer=(2,3)]
+
+# No-op case because array_agg can only be determined at runtime.
+norm expect-not=ConvertZipArraysToValues
+SELECT unnest((SELECT array_agg(y) FROM xy))
+----
+project-set
+ ├── columns: unnest:7
+ ├── immutable
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── ()
+ └── zip
+      └── function: unnest [immutable, subquery]
+           └── subquery
+                └── scalar-group-by
+                     ├── columns: array_agg:6
+                     ├── cardinality: [1 - 1]
+                     ├── key: ()
+                     ├── fd: ()-->(6)
+                     ├── scan xy
+                     │    └── columns: y:2
+                     └── aggregations
+                          └── array-agg [as=array_agg:6, outer=(2)]
+                               └── y:2
+
+# No-op case because a JSON column can only be determined at run-time.
+norm expect-not=ConvertZipArraysToValues
+SELECT json_array_elements(j) FROM xy
+----
+project
+ ├── columns: json_array_elements:6
+ ├── immutable
+ └── project-set
+      ├── columns: j:3 json_array_elements:6
+      ├── immutable
+      ├── scan xy
+      │    └── columns: j:3
+      └── zip
+           └── json_array_elements(j:3) [outer=(3), immutable]

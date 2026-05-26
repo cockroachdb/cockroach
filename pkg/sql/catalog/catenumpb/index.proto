@@ -1,0 +1,20 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+
+package cockroach.sql.catalog.catpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb";
+
+// IndexColumn contains an enum used to represent the direction of a column
+// in an index key.
+message IndexColumn {
+
+  // IndexColumn_Direction refers to the direction of a column in an index.
+  enum Direction {
+    ASC = 0;
+    DESC = 1;
+  }
+}

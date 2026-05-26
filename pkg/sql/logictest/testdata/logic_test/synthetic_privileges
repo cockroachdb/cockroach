@@ -1,0 +1,417 @@
+# LogicTest: !local-prepared
+
+# test MODIFYCLUSTERSETTING
+user testuser
+
+statement error pq: only users with MODIFYCLUSTERSETTING, MODIFYSQLCLUSTERSETTING or VIEWCLUSTERSETTING system privileges are allowed to read crdb_internal.cluster_settings
+SELECT * FROM crdb_internal.cluster_settings;
+
+statement error pq: only users with the EXTERNALCONNECTION system privilege are allowed to CREATE EXTERNAL CONNECTION
+CREATE EXTERNAL CONNECTION foo AS 'nodelocal://1/foo';
+
+user root
+
+statement ok
+CREATE USER testuser2
+
+statement ok
+GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser
+
+statement ok
+GRANT SYSTEM EXTERNALCONNECTION TO testuser
+
+user testuser
+
+statement ok
+SELECT * FROM crdb_internal.cluster_settings;
+
+# Without grant option, testuser should not be able to grant to others.
+statement error pq: user testuser missing WITH GRANT OPTION privilege on MODIFYCLUSTERSETTING
+GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser2
+
+statement ok
+CREATE EXTERNAL CONNECTION foo AS 'nodelocal://1/foo';
+
+# Without grant option, testuser should not be able to grant to others.
+statement error pq: user testuser missing WITH GRANT OPTION privilege on EXTERNALCONNECTION
+GRANT SYSTEM EXTERNALCONNECTION TO testuser2
+
+user root
+
+query TTTT
+SELECT username, path, privileges, grant_options FROM system.privileges ORDER BY 1, 2
+----
+testuser  /externalconn/foo  {ALL}                                      {}
+testuser  /global/           {EXTERNALCONNECTION,MODIFYCLUSTERSETTING}  {}
+
+query TT
+SELECT connection_name, connection_type FROM system.external_connections
+----
+foo  STORAGE
+
+statement ok
+REVOKE SYSTEM MODIFYCLUSTERSETTING FROM testuser
+
+statement ok
+REVOKE SYSTEM EXTERNALCONNECTION FROM testuser
+
+# testuser is granted ALL privileges on the External Connection they create,
+# revoke that.
+statement ok
+REVOKE ALL ON EXTERNAL CONNECTION foo FROM testuser
+
+user testuser
+
+statement error pq: only users with MODIFYCLUSTERSETTING, MODIFYSQLCLUSTERSETTING or VIEWCLUSTERSETTING system privileges are allowed to read crdb_internal.cluster_settings
+SELECT * FROM crdb_internal.cluster_settings;
+
+statement error pq: only users with the EXTERNALCONNECTION system privilege are allowed to CREATE EXTERNAL CONNECTION
+CREATE EXTERNAL CONNECTION foo AS 'nodelocal://1/foo';
+
+user root
+
+query TTTT
+SELECT username, path, privileges, grant_options FROM system.privileges ORDER BY 1, 2
+----
+
+user root
+
+statement ok
+GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser
+
+statement ok
+GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser WITH GRANT OPTION
+
+user testuser
+
+statement ok
+GRANT SYSTEM MODIFYCLUSTERSETTING TO root
+
+user root
+
+query TTTT
+SELECT username, path, privileges, grant_options FROM system.privileges ORDER BY 1, 2
+----
+root      /global/  {MODIFYCLUSTERSETTING}  {}
+testuser  /global/  {MODIFYCLUSTERSETTING}  {MODIFYCLUSTERSETTING}
+
+statement ok
+REVOKE GRANT OPTION FOR SYSTEM MODIFYCLUSTERSETTING FROM testuser
+
+query TTTT
+SELECT username, path, privileges, grant_options FROM system.privileges ORDER BY 1, 2
+----
+root      /global/  {MODIFYCLUSTERSETTING}  {}
+testuser  /global/  {MODIFYCLUSTERSETTING}  {}
+
+statement ok
+REVOKE SYSTEM MODIFYCLUSTERSETTING FROM testuser
+
+query TTTT
+SELECT username, path, privileges, grant_options  FROM system.privileges ORDER BY 1, 2
+----
+root  /global/  {MODIFYCLUSTERSETTING}  {}
+
+statement ok
+GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser WITH GRANT OPTION
+
+query TTTT
+SELECT username, path, privileges, grant_options  FROM system.privileges ORDER BY 1, 2
+----
+root      /global/  {MODIFYCLUSTERSETTING}  {}
+testuser  /global/  {MODIFYCLUSTERSETTING}  {MODIFYCLUSTERSETTING}
+
+statement ok
+REVOKE SYSTEM MODIFYCLUSTERSETTING FROM testuser
+
+query TTTT
+SELECT username, path, privileges, grant_options  FROM system.privileges ORDER BY 1, 2
+----
+root  /global/  {MODIFYCLUSTERSETTING}  {}
+
+# test VIEWCLUSTERSETTING
+user testuser
+
+statement error pq: only users with MODIFYCLUSTERSETTING, MODIFYSQLCLUSTERSETTING or VIEWCLUSTERSETTING system privileges are allowed to read crdb_internal.cluster_settings
+SELECT * FROM crdb_internal.cluster_settings;
+
+user root
+
+statement ok
+GRANT SYSTEM VIEWCLUSTERSETTING TO testuser
+
+user testuser
+
+statement ok
+SELECT * FROM crdb_internal.cluster_settings;
+
+user root
+
+query TTTT
+SELECT username, path, privileges, grant_options FROM system.privileges ORDER BY 1, 2
+----
+root      /global/  {MODIFYCLUSTERSETTING}  {}
+testuser  /global/  {VIEWCLUSTERSETTING}    {}
+
+statement ok
+REVOKE SYSTEM VIEWCLUSTERSETTING FROM testuser
+
+user testuser
+
+statement error pq: only users with MODIFYCLUSTERSETTING, MODIFYSQLCLUSTERSETTING or VIEWCLUSTERSETTING system privileges are allowed to read crdb_internal.cluster_settings
+SELECT * FROM crdb_internal.cluster_settings;
+
+user root
+
+query TTTT
+SELECT username, path, privileges, grant_options FROM system.privileges
+----
+root  /global/  {MODIFYCLUSTERSETTING}  {}
+
+# test VIEWACTIVITY
+user testuser
+
+statement error pq: user testuser does not have VIEWACTIVITY or VIEWACTIVITYREDACTED privilege
+SELECT * FROM crdb_internal.node_statement_statistics;
+
+user root
+
+statement ok
+GRANT SYSTEM VIEWACTIVITY TO testuser
+
+user testuser
+
+statement ok
+SELECT * FROM crdb_internal.node_statement_statistics;
+
+user root 
+
+query TTTT
+SELECT username, path, privileges, grant_options FROM system.privileges ORDER BY 1, 2
+----
+root      /global/  {MODIFYCLUSTERSETTING}  {}
+testuser  /global/  {VIEWACTIVITY}          {}
+
+statement ok
+REVOKE SYSTEM VIEWACTIVITY FROM testuser
+
+user testuser
+
+statement error pq: user testuser does not have VIEWACTIVITY or VIEWACTIVITYREDACTED privilege
+SELECT * FROM crdb_internal.node_statement_statistics;
+
+user root
+
+query TTTT
+SELECT username, path, privileges, grant_options FROM system.privileges
+----
+root  /global/  {MODIFYCLUSTERSETTING}  {}
+
+# test VIEWACTIVITYREDACTED
+user testuser
+
+statement error pq: user testuser does not have VIEWACTIVITY or VIEWACTIVITYREDACTED privilege
+SELECT * FROM crdb_internal.node_statement_statistics;
+
+user root
+
+statement ok
+GRANT SYSTEM VIEWACTIVITYREDACTED TO testuser
+
+user testuser
+
+statement ok
+SELECT * FROM crdb_internal.node_statement_statistics;
+
+user root 
+
+query TTTT
+SELECT username, path, privileges, grant_options FROM system.privileges ORDER BY 1, 2
+----
+root      /global/  {MODIFYCLUSTERSETTING}  {}
+testuser  /global/  {VIEWACTIVITYREDACTED}  {}
+
+statement ok
+REVOKE SYSTEM VIEWACTIVITYREDACTED FROM testuser
+
+user testuser
+
+statement error pq: user testuser does not have VIEWACTIVITY or VIEWACTIVITYREDACTED privilege
+SELECT * FROM crdb_internal.node_statement_statistics;
+
+user root
+
+query TTTT
+SELECT username, path, privileges, grant_options FROM system.privileges
+----
+root  /global/  {MODIFYCLUSTERSETTING}  {}
+
+statement ok
+DROP USER testuser
+
+statement ok
+CREATE USER testuser
+
+statement ok
+GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser
+
+statement ok
+GRANT SELECT ON crdb_internal.tables TO testuser
+
+statement ok
+GRANT USAGE ON EXTERNAL CONNECTION foo TO testuser
+
+statement error pq: cannot drop role/user testuser: grants still exist on external_connection foo, virtual_table "crdb_internal.tables"
+DROP USER testuser
+
+statement ok
+GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser2
+
+statement ok
+GRANT USAGE ON EXTERNAL CONNECTION foo TO testuser2
+
+statement error pq: cannot drop roles/users testuser, testuser2: grants still exist on external_connection foo, virtual_table "crdb_internal.tables", external_connection foo
+DROP USER testuser, testuser2
+
+# Check the error message for a combination of global and default privileges.
+statement ok
+CREATE USER testuser3
+
+statement ok
+GRANT SYSTEM MODIFYCLUSTERSETTING, EXTERNALCONNECTION TO testuser3
+
+statement ok
+ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO testuser3
+
+statement error pq: role testuser3 cannot be dropped because some objects depend on it\nprivileges for default privileges on new relations belonging to role root in database test\ntestuser3 has global 'EXTERNALCONNECTION' privilege\ntestuser3 has global 'MODIFYCLUSTERSETTING' privilege
+DROP USER testuser3
+
+# Do not cache privileges if the system.privileges table is uncommitted.
+statement ok
+CREATE USER testuser4
+
+statement ok
+REVOKE SELECT ON crdb_internal.feature_usage FROM public
+
+query B retry
+SELECT has_table_privilege('testuser4', 'crdb_internal.feature_usage', 'SELECT')
+----
+false
+
+# Use a high priority transaction to avoid this transaction being aborted.
+statement ok
+BEGIN TRANSACTION PRIORITY HIGH ISOLATION LEVEL SERIALIZABLE;
+
+statement ok
+SET LOCAL autocommit_before_ddl=off;
+
+statement ok
+GRANT SELECT ON crdb_internal.feature_usage TO testuser4
+
+# This should not cache the uncommitted privilege.
+query B
+SELECT has_table_privilege('testuser4', 'crdb_internal.feature_usage', 'SELECT')
+----
+true
+
+statement ok
+ROLLBACK
+
+query B
+SELECT has_table_privilege('testuser4', 'crdb_internal.feature_usage', 'SELECT')
+----
+false
+
+# Cleanup the privilege that was added.
+statement ok
+REVOKE SYSTEM MODIFYCLUSTERSETTING FROM testuser
+
+# This subtest makes sure that an unknown privilege in the system.privileges
+# table does not break code that is trying to look up other privileges.
+# This situation can happen if a new synthetic privilege is backported to an
+# older branch.
+subtest unknown_privilege
+
+# Add an arbitrary privilege so that we can test manually overriding it.
+statement ok
+GRANT SYSTEM CREATEDB TO testuser
+
+statement ok
+INSERT INTO system.users VALUES ('node', NULL, true, 0);
+
+statement ok
+GRANT node TO root;
+
+statement ok
+UPDATE system.privileges SET privileges = '{FAKE_PRIVILEGE}'
+WHERE username = 'testuser' AND path = '/global/'
+
+query TTTT
+SELECT username, path, privileges, grant_options FROM system.privileges
+WHERE username = 'testuser' AND path = '/global/'
+----
+testuser  /global/  {FAKE_PRIVILEGE}  {}
+
+user testuser
+
+# The error shouldn't be related to FAKE_PRIVILEGE.
+statement error only users with the MODIFYCLUSTERSETTING or MODIFYSQLCLUSTERSETTING privilege are allowed to set cluster setting
+SET CLUSTER SETTING sql.defaults.default_int_size = 8
+
+user root
+
+statement ok
+REVOKE SYSTEM ALL FROM testuser;
+REVOKE node FROM root;
+DELETE FROM system.users WHERE username = 'node';
+
+subtest end
+
+# Verify that ALL privilege does not prevent SQL logins.
+
+subtest all_does_not_include_nosqllogin
+
+statement ok
+GRANT SYSTEM ALL TO testuser
+
+statement ok
+CANCEL SESSION (SELECT session_id FROM [SHOW SESSIONS] WHERE user_name = 'testuser')
+
+# Force a new session to be created, causing a connection attempt.
+user testuser nodeIdx=0 newsession
+
+statement ok
+SELECT 1
+
+user root
+
+statement ok
+REVOKE SYSTEM ALL FROM testuser
+
+subtest end
+
+subtest view_system_table
+
+user testuser
+
+# Make sure testuser does not have privileges first.
+statement error user testuser does not have SELECT privilege on relation users
+SELECT * FROM system.users WHERE username = 'testuser'
+
+user root
+
+statement ok
+GRANT SYSTEM VIEWSYSTEMTABLE TO testuser
+
+user testuser
+
+query TT
+SELECT username, "hashedPassword" FROM system.users WHERE username = 'testuser'
+----
+testuser  NULL
+
+# testuser still should not have write privileges.
+statement error user testuser does not have INSERT privilege on relation users
+INSERT INTO system.users (username, "hashedPassword", "isRole", user_id) VALUES ('cat', null, true, 200)
+
+subtest end

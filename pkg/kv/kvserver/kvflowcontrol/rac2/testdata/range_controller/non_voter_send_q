@@ -1,0 +1,171 @@
+# Initialize a range with three voter replicas, and one non-voter, none of which have send tokens.
+init regular_init=0 elastic_init=0
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=1
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate next=1
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate next=1
+  store_id=4 replica_id=4 type=NON_VOTER  state=StateReplicate next=1
+----
+r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3,(n4,s4):4NON_VOTER]
+t1/s1: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+t1/s4: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+
+# Make replica 3 more overloaded than replica 2 and replica 2 more overloaded
+# than replica 4.
+adjust_tokens send
+  store_id=2 pri=HighPri tokens=-2MiB
+  store_id=3 pri=HighPri tokens=-3MiB
+----
+t1/s1: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=-2.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=-3.0 MiB/+16 MiB ela=-3.0 MiB/+8.0 MiB
+t1/s4: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+
+# Append an entry. Replica 1, 2 are not permitted to form a send-queue, even
+# though they have no send tokens. Replica 4 is not picked since it is a
+# non-voter.
+raft_event pull-mode
+range_id=1
+  entries
+    term=1 index=1 pri=NormalPri size=1MiB
+----
+t1/s1: eval reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+t1/s2: eval reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=-3.0 MiB/+16 MiB ela=-3.0 MiB/+8.0 MiB
+t1/s3: eval reg=+0 B/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=-3.0 MiB/+16 MiB ela=-3.0 MiB/+8.0 MiB
+t1/s4: eval reg=+0 B/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+eval deducted: reg=+1.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+++++
+(n2,s2):2: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+eval deducted: reg=+1.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,1) send_queue=[1,2) precise_q_size=+1.0 MiB watching-for-tokens
+eval deducted: reg=+0 B ela=+1.0 MiB
+eval original in send-q: reg=+1.0 MiB ela=+0 B
+++++
+(n4,s4):4NON_VOTER: state=replicate closed=false inflight=[1,1) send_queue=[1,2) precise_q_size=+1.0 MiB watching-for-tokens
+eval deducted: reg=+0 B ela=+1.0 MiB
+eval original in send-q: reg=+1.0 MiB ela=+0 B
+++++
+MsgApps sent in pull mode:
+ to: 2, lowPri: false entries: [1]
+++++
+
+# Make replica 2 transition to StateSnapshot. Now replica 3 is picked for
+# force-flush instead of replica 4, since the latter is a non-voter.
+set_replicas pull-mode
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=2
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=2
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateSnapshot next=2
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate next=1
+  store_id=4 replica_id=4 type=NON_VOTER state=StateReplicate next=1
+----
+r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3,(n4,s4):4NON_VOTER]
+
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+eval deducted: reg=+1.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+++++
+(n2,s2):2: closed
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,1) send_queue=[1,2) precise_q_size=+1.0 MiB force-flushing
+eval deducted: reg=+0 B ela=+1.0 MiB
+eval original in send-q: reg=+1.0 MiB ela=+0 B
+++++
+(n4,s4):4NON_VOTER: state=replicate closed=false inflight=[1,1) send_queue=[1,2) precise_q_size=+1.0 MiB watching-for-tokens
+eval deducted: reg=+0 B ela=+1.0 MiB
+eval original in send-q: reg=+1.0 MiB ela=+0 B
+++++
+schedule-controller-event-count: 1
+scheduled-replicas: 3
+
+# Give some send tokens to the replica 4, the non-voter.
+adjust_tokens send
+  store_id=4 pri=HighPri tokens=500KiB
+----
+t1/s1: eval reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=-2.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+t1/s3: eval reg=+0 B/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=-3.0 MiB/+16 MiB ela=-3.0 MiB/+8.0 MiB
+t1/s4: eval reg=+0 B/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=+500 KiB/+16 MiB ela=+0 B/+8.0 MiB
+
+# Note the deducted value. Replica 4 is waiting for a scheduler event.
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+eval deducted: reg=+1.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+++++
+(n2,s2):2: closed
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,1) send_queue=[1,2) precise_q_size=+1.0 MiB force-flushing
+eval deducted: reg=+0 B ela=+1.0 MiB
+eval original in send-q: reg=+1.0 MiB ela=+0 B
+++++
+(n4,s4):4NON_VOTER: state=replicate closed=false inflight=[1,1) send_queue=[1,2) precise_q_size=+1.0 MiB deducted=+500 KiB
+eval deducted: reg=+0 B ela=+1.0 MiB
+eval original in send-q: reg=+1.0 MiB ela=+0 B
+++++
+schedule-controller-event-count: 1
+scheduled-replicas: 3 4
+
+# Scheduler event. The non-voter now has an empty send-queue.
+handle_scheduler_event range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+eval deducted: reg=+1.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+++++
+(n2,s2):2: closed
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+1.0 MiB
+eval original in send-q: reg=+0 B ela=+0 B
+LowPri:
+  term=1 index=1  tokens=1048576
+++++
+(n4,s4):4NON_VOTER: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+1.0 MiB
+eval original in send-q: reg=+0 B ela=+0 B
+LowPri:
+  term=1 index=1  tokens=1048576
+++++
+MsgApps sent in pull mode:
+ to: 3, lowPri: true entries: [1]
+ to: 4, lowPri: true entries: [1]
+++++
+schedule-controller-event-count: 1

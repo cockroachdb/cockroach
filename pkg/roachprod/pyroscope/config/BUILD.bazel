@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "config",
+    srcs = ["alloy.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/pyroscope/config",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachprod/install",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_grafana_alloy_syntax//:syntax",
+        "@com_github_grafana_alloy_syntax//parser",
+        "@com_github_grafana_alloy_syntax//vm",
+    ],
+)
+
+go_test(
+    name = "config_test",
+    srcs = ["alloy_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":config"],
+    deps = [
+        "//pkg/roachprod/install",
+        "//pkg/testutils/datapathutils",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
+    ],
+)

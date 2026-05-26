@@ -1,0 +1,94 @@
+# Create a service account for prometheus to run under
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  labels:
+    app: cockroachdb
+---
+# Define the access permissions that prometheus will run with
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus
+  labels:
+    app: cockroachdb
+rules:
+- apiGroups: [""]
+  resources:
+  - nodes
+  - services
+  - endpoints
+  - pods
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources:
+  - configmaps
+  verbs: ["get"]
+- nonResourceURLs: ["/metrics"]
+  verbs: ["get"]
+---
+# Associate the service account with the role
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+  labels:
+    app: cockroachdb
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+- kind: ServiceAccount
+  name: prometheus
+  namespace: default
+---
+# Select any services with the prometheus:cockroachdb label
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: cockroachdb
+  labels:
+    app: cockroachdb
+    prometheus: cockroachdb
+spec:
+  selector:
+    matchLabels:
+      prometheus: cockroachdb
+  endpoints:
+  - port: http
+    path: /_status/vars
+    tlsConfig:
+      ca:
+        secret:
+          key: ca.crt
+          # This is the secret name used by the CockroachDB Kubernetes Operator.
+          # When using a custom CA, replace this with your secret name
+          name: cockroachdb-node
+      serverName: "127.0.0.1"
+---
+# Have prometheus-operator run a replicated Prometheus cluster
+apiVersion: monitoring.coreos.com/v1
+kind: Prometheus
+metadata:
+  name: cockroachdb
+  labels:
+    app: cockroachdb
+spec:
+  serviceAccountName: prometheus
+  alerting:
+    alertmanagers:
+    - namespace: default
+      name: alertmanager-cockroachdb
+      port: web
+  serviceMonitorSelector:
+    matchLabels:
+      prometheus: cockroachdb
+  resources:
+    requests:
+      memory: 400Mi
+  ruleSelector:
+    matchLabels:
+      role: alert-rules
+      prometheus: cockroachdb

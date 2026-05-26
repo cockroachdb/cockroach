@@ -1,0 +1,389 @@
+# Disable SQL Stats flush to prevents stats from being cleared from the
+# in-memory store.
+# LogicTest: local 3node-tenant
+# knob-opt: allow-unsafe
+
+statement ok
+SET CLUSTER SETTING sql.stats.flush.enabled = false;
+
+# Check that node_statement_statistics report per application
+
+statement ok
+SET application_name = hello
+
+statement ok
+SELECT 1
+
+statement ok
+SET application_name = world
+
+statement ok
+SELECT 2
+
+statement ok
+RESET application_name
+
+query B rowsort,retry
+SELECT count > 0 FROM crdb_internal.node_statement_statistics WHERE application_name IN ('hello', 'world')
+----
+true
+true
+true
+true
+
+# Check that node_statement_statistics report per statement
+
+statement ok
+SET application_name = hello;
+
+statement ok
+SELECT 1
+
+statement ok
+SELECT 1,2
+
+statement ok
+SELECT 1
+
+# reset for other tests.
+statement ok
+SET application_name = ''
+
+query TB retry
+SELECT key, count >= 1 FROM crdb_internal.node_statement_statistics WHERE application_name = 'hello' AND key LIKE 'SELECT%' ORDER BY key
+----
+SELECT _     true
+SELECT _, _  true
+
+# Check that multiple stmts in a simple query are executed as one txn.
+
+statement ok
+SET application_name = multi_stmts_test;
+
+statement ok
+select 1, 2; select 1, 2, 3; select 'ok'
+
+statement ok
+SET application_name = ''
+
+query TTT retry
+SELECT statement_id, txn_fingerprint_id, key FROM crdb_internal.node_statement_statistics WHERE application_name = 'multi_stmts_test' ORDER BY key, txn_fingerprint_id
+----
+7928773885180877178   18265961508612229380  SELECT _
+1149870031395497801   18265961508612229380  SELECT _, _
+10182044490880789608  18265961508612229380  SELECT _, _, _
+3003916976115243531   9715306593911631316   SET application_name = _
+
+statement ok
+CREATE TABLE test(x INT, y INT, z INT); INSERT INTO test(x, y, z) VALUES (0,0,0);
+
+# Disable DistSQL for most statements, so that they don't get the "+" flag.
+statement ok
+SET distsql = off
+
+statement ok
+SET application_name = 'valuetest'
+
+# Check that shortening goes through functions.
+
+statement ok
+SELECT sin(1.23)
+
+# Check stats for query errors.
+statement error cannot take square root
+SELECT sqrt(-1.0)
+
+# Check that shortened queries can use virtual tables.
+
+statement ok
+SELECT key FROM test.crdb_internal.node_statement_statistics
+
+# Check that multi-value clauses are shortened.
+
+statement ok
+SELECT x FROM (VALUES (1,2,3), (4,5,6)) AS t(x)
+
+statement ok
+INSERT INTO test VALUES (1, 2, 3), (4, 5, 6)
+
+# Check that the RHS of IN comparisons are shortened.
+
+statement ok
+SELECT x FROM test WHERE y IN (4, 5, 6, 7, 8)
+
+statement ok
+SELECT x FROM test WHERE y NOT IN (4, 5, 6, 7, 8)
+
+# Check that a non-constant prevents shortening.
+
+statement ok
+SELECT x FROM test WHERE y IN (4, 5, 6+x, 7, 8)
+
+# Check that tuples in other positions are not shortened.
+
+statement ok
+SELECT ROW(1,2,3,4,5) FROM test WHERE FALSE
+
+# Make one query run in distsql mode to test the flag
+# and flag combinations
+
+statement ok
+set distsql = on
+
+statement ok
+SELECT x FROM test WHERE y IN (4, 5, 6, 7, 8)
+
+statement error division by zero
+SELECT x FROM test WHERE y = 1/z
+
+# Set a cluster setting to make it show up below. Which one is set
+# does not matter.
+statement ok
+SET CLUSTER SETTING debug.panic_on_failed_assertions.enabled = true;
+
+statement ok
+RESET CLUSTER SETTING debug.panic_on_failed_assertions.enabled
+
+statement ok
+SHOW application_name
+
+statement ok
+SHOW CLUSTER SETTING debug.panic_on_failed_assertions.enabled
+
+statement ok
+SET application_name = '';
+
+statement ok
+RESET distsql
+
+query TT colnames,retry
+SELECT key,flags
+FROM test.crdb_internal.node_statement_statistics
+WHERE application_name = 'valuetest' ORDER BY key, flags
+----
+key                                                                       flags
+INSERT INTO test VALUES (_, __more__), (__more__)                         ·
+SELECT (_, __more__) FROM test WHERE _                                    ·
+SELECT key FROM test.crdb_internal.node_statement_statistics              ·
+SELECT sin(_)                                                             ·
+SELECT sqrt(_)                                                            ·
+SELECT x FROM (VALUES (_, __more__), (__more__)) AS t (x)                 ·
+SELECT x FROM test WHERE y = (_ / z)                                      +
+SELECT x FROM test WHERE y IN (_, _, _ + x, _, _)                         ·
+SELECT x FROM test WHERE y IN (_, __more__)                               +
+SELECT x FROM test WHERE y NOT IN (_, __more__)                           ·
+SET CLUSTER SETTING "debug.panic_on_failed_assertions.enabled" = DEFAULT  ·
+SET CLUSTER SETTING "debug.panic_on_failed_assertions.enabled" = _        ·
+SET application_name = _                                                  ·
+SET distsql = "on"                                                        ·
+SHOW CLUSTER SETTING "debug.panic_on_failed_assertions.enabled"           ·
+SHOW application_name                                                     ·
+
+# Check that the latency measurements looks reasonable, protecting
+# against failure to measure (#22877).
+
+# We use the keys left over by the two unary selects
+# performed at the start of this test above.
+#
+# The latency metrics are expressed in seconds. Check that some time
+# was consumed, but not so much to verify that the computation has not
+# incorrectly overflowed.
+query TBBBBB colnames,nosort
+SELECT key,
+       service_lat_avg > 0 and service_lat_avg < 10 as svc_ok,
+       parse_lat_avg > 0   and parse_lat_avg < 11   as parse_ok,
+       plan_lat_avg > 0    and plan_lat_avg < 10    as plan_ok,
+       run_lat_avg > 0     and run_lat_avg < 10     as run_ok,
+                           overhead_lat_avg < 10    as ovh_ok
+  FROM crdb_internal.node_statement_statistics
+ WHERE key = 'SELECT _'
+----
+key       svc_ok  parse_ok  plan_ok  run_ok  ovh_ok
+SELECT _  true    true      true     true    true
+SELECT _  true    true      true     true    true
+SELECT _  true    true      true     true    true
+
+# Check that statements made in implicit transactions are separated from those
+# that are not.
+
+statement ok
+SET application_name = 'implicit_txn_test'
+
+statement ok
+BEGIN; SELECT x FROM test where y=1; COMMIT;
+
+# Upgraded implicit txn. All statements should be in explicit txn.
+statement ok
+select 1; BEGIN; select 1; select 1; COMMIT
+
+statement ok
+BEGIN;
+SELECT x, z FROM test;
+SELECT x FROM test where y=1;
+COMMIT;
+
+statement ok
+SELECT z FROM test where y=2;
+
+statement ok
+SELECT x FROM test where y=1;
+
+statement ok
+RESET application_name
+
+query TTT colnames,retry
+SELECT statement_id, txn_fingerprint_id, key
+  FROM crdb_internal.node_statement_statistics
+ WHERE application_name = 'implicit_txn_test'
+ORDER BY statement_id, key;
+----
+statement_id          txn_fingerprint_id    key
+17117097960249204097  4823241586483014238   SELECT z FROM test WHERE y = _
+1977265656656236561   16812533780433203757  SELECT x, z FROM test
+7369029475805876519   14494747506112161528  SELECT x FROM test WHERE y = _
+7369029475805876519   16812533780433203757  SELECT x FROM test WHERE y = _
+7928773885180877178   6715634377086715557   SELECT _
+8157382750598442714   16021385425563162885  RESET application_name
+
+
+# Test throttling of storing statistics per application
+
+# Creating some helper views.
+# In-memory stats are partitioned by aggregation window (see
+# sql.stats.aggregation.interval), so a fingerprint executed on either
+# side of an hour boundary appears as separate entries. Aggregate
+# per-window counts in these views so consumers see a stable total
+# regardless of when the test runs.
+statement ok
+CREATE VIEW txn_fingerprint_view
+AS SELECT
+  key, statement_ids, sum(count)::INT AS count
+FROM
+  crdb_internal.node_transaction_statistics
+WHERE application_name = 'throttle_test'
+  AND statement_ids[1] in (
+    SELECT
+      statement_id
+    FROM
+      crdb_internal.node_statement_statistics
+    WHERE
+      key LIKE 'SELECT%'
+  )
+GROUP BY key, statement_ids
+
+statement ok
+CREATE VIEW app_stmts_view
+AS SELECT statement_id, key, sum(count)::INT AS count
+FROM crdb_internal.node_statement_statistics
+WHERE application_name = 'throttle_test'
+GROUP BY statement_id, key, txn_fingerprint_id
+
+statement ok
+SET application_name = throttle_test
+
+# Create 3 distinct fingerprints.
+statement ok
+BEGIN; SELECT 1; SELECT 1, 2; SELECT 1, 2, 3; COMMIT
+
+
+statement ok
+RESET application_name
+
+# Check that we have 3 fingerprints. sum(count) aggregates per-window
+# counts (see comment on the view definitions above).
+query TI retry
+SELECT key, sum(count)::INT FROM crdb_internal.node_statement_statistics
+WHERE application_name = 'throttle_test' AND key LIKE 'SELECT%'
+GROUP BY key ORDER BY key
+----
+SELECT _            1
+SELECT _, _         1
+SELECT _, _, _      1
+
+statement ok
+SET application_name = throttle_test
+
+# Change the limit for unique fingerprint.
+statement ok
+SET CLUSTER SETTING sql.metrics.max_mem_stmt_fingerprints = 0
+
+statement ok
+SET CLUSTER SETTING sql.metrics.max_mem_txn_fingerprints = 0
+
+
+# Run more fingerprints to ensure that we are still updating our existing fingerprint but not creating more
+# fingerprints.
+
+# New transaction - should not be recorded.
+statement ok
+BEGIN; SELECT 1; SELECT 1, 3; SELECT 1, 2, 3, 4; COMMIT
+
+
+# Existing transaction - recorded in existing entry.
+statement ok
+BEGIN; SELECT 1; SELECT 1, 3; SELECT 1, 2, 3; COMMIT
+
+statement ok
+RESET application_name
+
+# In-memory stats are partitioned by aggregation window (see
+# sql.stats.aggregation.interval), so a fingerprint executed on either
+# side of an hour boundary appears as separate entries. Aggregate the
+# per-window counts so the expected total is stable regardless of when
+# the test runs.
+query TI retry
+SELECT key, sum(count)::INT FROM crdb_internal.node_statement_statistics
+WHERE application_name = 'throttle_test' AND key LIKE 'SELECT%'
+GROUP BY key ORDER BY key
+----
+SELECT _            2
+SELECT _, _         2
+SELECT _, _, _      2
+
+statement ok
+SET application_name = throttle_test
+
+
+# Reset cluster setting for fingerprint limit. New fingerprints should be recorded again.
+statement ok
+RESET CLUSTER SETTING sql.metrics.max_mem_stmt_fingerprints
+
+statement ok
+RESET CLUSTER SETTING sql.metrics.max_mem_txn_fingerprints
+
+statement ok
+BEGIN; SELECT 1; SELECT 1, 3; SELECT 1, 2, 3, 4; COMMIT
+
+
+statement ok
+BEGIN; SELECT count(1) AS wombat1; COMMIT
+
+statement ok
+BEGIN; SELECT count(1) AS wombat2; COMMIT
+
+
+statement ok
+RESET application_name
+
+query TTI retry
+SELECT * FROM app_stmts_view ORDER BY 2
+----
+8157382750598442714   RESET application_name                                                 3
+7928773885180877178   SELECT _                                                               2
+7928773885180877178   SELECT _                                                               1
+1149870031395497801   SELECT _, _                                                            2
+1149870031395497801   SELECT _, _                                                            1
+10182044490880789608  SELECT _, _, _                                                         2
+7711936872899816207   SELECT _, _, _, _                                                      1
+17089948394804253633  SELECT count(_) AS wombat1                                             1
+10525193303439383422  SELECT count(_) AS wombat2                                             1
+12054215425236092683  SET CLUSTER SETTING "sql.metrics.max_mem_stmt_fingerprints" = DEFAULT  1
+5956647164099413249   SET CLUSTER SETTING "sql.metrics.max_mem_txn_fingerprints" = DEFAULT   1
+
+query TTI
+SELECT * FROM txn_fingerprint_view ORDER BY 1
+----
+1214631142438135818   {7928773885180877178,1149870031395497801,10182044490880789608}  2
+17766861796794494829  {7928773885180877178,1149870031395497801,7711936872899816207}   1
+4427956285091261601   {10525193303439383422}                                          1
+4776081459034268702   {17089948394804253633}                                          1

@@ -1,0 +1,199 @@
+// Copyright 2014 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto2";
+package cockroach.rpc;
+option go_package = "github.com/cockroachdb/cockroach/pkg/rpc";
+
+import "roachpb/metadata.proto";
+import "gogoproto/gogo.proto";
+
+// RemoteOffset keeps track of this client's estimate of its offset from a
+// remote server. Uncertainty is the maximum error in the reading of this
+// offset, so that the real offset should be in the interval
+// [Offset - Uncertainty, Offset + Uncertainty]. If the last heartbeat timed
+// out, Offset = 0.
+//
+// Offset and Uncertainty are measured using the remote clock reading technique
+// described in http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
+message RemoteOffset {
+  option (gogoproto.goproto_stringer) = false;
+
+  // The estimated offset from the remote server, in nanoseconds.
+  optional int64 offset = 1 [(gogoproto.nullable) = false];
+  // The maximum error of the measured offset, in nanoseconds.
+  optional int64 uncertainty = 2 [(gogoproto.nullable) = false];
+  // Measurement time, in nanoseconds from unix epoch.
+  optional int64 measured_at = 3 [(gogoproto.nullable) = false];
+}
+
+// A PingRequest specifies the string to echo in response.
+// Fields are exported so that they will be serialized in the rpc call.
+message PingRequest {
+  // Echo this string with PingResponse.
+  optional string ping = 1 [(gogoproto.nullable) = false];
+  // The last offset the client measured with the server.
+  optional RemoteOffset offset = 2 [(gogoproto.nullable) = false];
+  // The advertised address of the client.
+  optional string origin_addr = 3 [(gogoproto.nullable) = false];
+  // Cluster ID to prevent connections between nodes in different clusters.
+  optional bytes origin_cluster_id = 5 [
+    (gogoproto.customname) = "ClusterID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+  optional roachpb.Version server_version = 6 [(gogoproto.nullable) = false];
+  // NodeID the originator of the request wishes to connect to.
+  // This helps prevent connections from being misrouted when addresses are reused.
+  optional int32 target_node_id = 7 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "TargetNodeID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  // NodeID of the originator of the PingRequest.
+  optional int32 origin_node_id = 8 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "OriginNodeID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+
+  // The mapping of locality addresses for this node. These are used by the
+  // receiver of the node to initiate a dialback connection. This same
+  // information is also sent over gossip, but the first ping is sent prior to
+  // gossip being available, so it is included here also.
+  repeated cockroach.roachpb.LocalityAddress locality_address = 9 [(gogoproto.nullable) = false];
+
+  // Dialback is used to turn asymmetric partitions between KV nodes into
+  // symmetric partitions. In addition to all the other criteria for making a
+  // connection, this check adds an additional criterion that the node receiving
+  // a connection needs to be able to initiate a reverse connection to the
+  // sender. If this check is not done, then higher-level assumptions in the
+  // code can break. Raft can normally handle asymmetric partitions with
+  // CheckQuorom and PreVote enabled, however, Lease transfers and other Batch
+  // requests will not always work correctly. Rather than fixing all the places
+  // in the code above the network layer, it is easier to handle this scenario
+  // by preventing asymmetric partitions from happening. Note that by breaking
+  // the reverse connection, the asymmetric partition is converted into a
+  // partial partition. Partial partitions are handled better by higher layers
+  // in the code.
+  //
+  // In practice, asymmetric partitions can arise from any of the following
+  // scenarios:
+  //
+  //  * Bad/expired certificate on one side
+  //  * Incorrect NAT rules
+  //  * Incorrect IP address configuration
+  //  * Incorrect network routing
+  //  * DNS misconfigurations
+  //
+  // Dialback is only enabled for connections between KV nodes, not between SQL
+  // pods or other KV clients. It is enabled by setting the NeedsDialback flag
+  // in the construction of an rpc.Context object. Currently, the only place
+  // this flag is set is during Server construction. If the flag is not
+  // explicitly set, then the NeedsDialback parameter on the PingRequest is left
+  // as NONE which disables any checks.
+  //
+  // If the flag is set, there are two different types of dialback verification
+  // the server can do, blocking or non-blocking. This is controlled by the
+  // NeedsDialback parameter PingRequest. Long-lived clients normally send
+  // PingRequests to servers every few seconds. When a server receives the
+  // PingRequest, it will check the NeedsDialback flag, and respond based on the
+  // description below.
+  //
+  // BLOCKING mode requires the receiving server to verify that it can open a
+  // connection to the client before it will allow the connection to proceed. It
+  // delays responding to the PingRequest until the verification is complete. If
+  // there is already an established reverse connection, it can use the
+  // existence of that connection to assume dialback is successful. Otherwise,
+  // it creates a throw-away connection which it uses to validate the reverse
+  // connection. This connection does not send PingRequests, and is closed as
+  // soon as validation is complete. It needs to use a throw-away connection to
+  // avoid creating a cycle where each node is waiting for the other to finish a
+  // BLOCKING connection, and neither one can.
+  //
+  // NON_BLOCKING mode allows the receiving server to respond to a PingRequest
+  // immediately even if there is no reverse connection. If there is an
+  // established reverse connection it returns immediately, similar to blocking
+  // mode. However if there is not a connection, it asynchronously attempts to
+  // create one. Once the outcome of the reverse connection is established, it
+  // will apply that result to future PingResponses. The reverse connection for
+  // non-blocking mode is not a throw-away connection since it can send
+  // PingRequests on it.
+  //
+  // There are four possible ways that a client can connect to a server and use
+  // the NeedsDialback parameger.
+  //
+  // - NeedsDialback set to NONE on all requests,
+  // - NeedsDialback set to BLOCKING on all requests,
+  // - NeedsDialback set to NON_BLOCKING on all requests, and
+  // - NeedsDialback set to BLOCKING for the first request and NON_BLOCKING for
+  //   subsequent requests.
+  //
+  // As mentioned, non-KV nodes always use option 1.
+  //
+  // The drawback of always using BLOCKING mode (option 2) is it can add a delay
+  // in the middle of an open connection if there is a temporary network
+  // disconnection. This happens for instance if the reverse connection times
+  // out or has to be restarted. This adds an unnecessary delay to responding.
+  //
+  // The drawback of always using NON_BLOCKING mode (option 3)  is it allows
+  // communication between the client and the server prior to the server detects
+  // that it can’t establish a connection back. In practice, this can take a few
+  // seconds and during that time, all the problems of not having Dialback in
+  // place can occur.
+  //
+  // Using BLOCKING for only the first connection and NON_BLOCKING for the
+  // remainder (option 4) works around these problems. If a reverse connection
+  // can’t be established, then it will never allow any traffic in either
+  // direction. If the reverse connection breaks later, it will detect it within
+  // a few seconds and stop the traffic. There is a possibility that there will
+  // be a few seconds outage during this network break, but that would have
+  // happened regardless. This is the mode that KV clients use.
+  enum DialbackType {
+    // The recipient should send a PingResponse without checking if there is a
+    // reverse connection.
+    NONE = 0;
+    // If there is already an established reverse connection, respond
+    // immediately, otherwise create a reverse connection and wait until this
+    // connection is successfully established before responding.
+    BLOCKING = 1;
+    // If there is already an established reverse connection, respond
+    // immediately, otherwise if there is no reverse connection, attempt to
+    // create one asynchronously. If that fails to connect, then respond with
+    // failure to the next PingRequest on this connection. This failure is
+    // then permanent (even if a redial would succeed) until the caller
+    // uses a BLOCKING heartbeat to kick off another attempt.
+    //
+    // Due to the above, NON_BLOCKING must only be used following a successful
+    // BLOCKING heartbeat.
+    NON_BLOCKING = 2;
+  }
+  // What type of dialback is requested for the recipient of this PingRequest
+  // NB: A node that receives this request without this field (from a
+  // pre-dialback client) set will treat it as NONE mode and not attempt
+  // dialback.
+  // A node that sets this field to a server that doesn't understand it will
+  // result in it being ignored.
+  // As this is just an additional validation, both these behaviors are OK.
+  optional DialbackType needs_dialback = 10 [(gogoproto.nullable) = false];
+
+  reserved 4;
+}
+
+// A PingResponse contains the echoed ping request string.
+message PingResponse {
+  // An echo of value sent with PingRequest.
+  optional string pong = 1 [(gogoproto.nullable) = false];
+  // A clock reading from the server, in nanos since epoch.
+  optional int64 server_time = 2 [(gogoproto.nullable) = false];
+  optional roachpb.Version server_version = 3 [(gogoproto.nullable) = false];
+  // Cluster name to prevent joining a new node to the wrong cluster.
+  optional string cluster_name = 4 [(gogoproto.nullable) = false];
+  // Skip cluster name check if either side's name is empty / not configured.
+  optional bool disable_cluster_name_verification = 5 [(gogoproto.nullable) = false];
+}
+
+service Heartbeat {
+  rpc Ping (PingRequest) returns (PingResponse) {}
+}
+service TestingHeartbeatStream {
+  rpc PingStream (stream PingRequest) returns (stream PingResponse) {}
+}

@@ -1,0 +1,181 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+
+syntax = "proto3";
+package cockroach.protectedts;
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb";
+
+import "gogoproto/gogo.proto";
+import "roachpb/data.proto";
+import "util/hlc/timestamp.proto";
+
+
+// TODO(ajwerner): Consider splitting up Record into two pieces. It would
+// probably make for a cleaner Client API. Create with a ProtectedTimestamp
+// which returns an ID. This could also be useful if we want to store present
+// the CreatedAt timestamp inside the record itself but wanted to allow for
+// the record to be mutated. I'm not generally in favor of letting the record
+// become mutable but it might be nice to store the verification status
+// on the record one day.
+//
+// message ProtectedTimestamp {
+//     hlc.Timestamp timetamp
+//     ProtectionMode mode
+//     repeated roachpb.Span spans
+// }
+//
+// message Record
+//     uuid.UUID id = 1;
+//     string metadata_type = 2;
+//     bytes  metadata = 3;
+//     ProtectedTimestamp protected_timestamp = 4; // embed
+// }
+
+
+// ProtectionMode defines the semantics of a Record.
+enum ProtectionMode {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  // PROTECT_AFTER ensures that all data values live at or after the specified
+  // timestamp will be protected from GC.
+  PROTECT_AFTER = 0;
+
+  // PROTECT_AT ensures that data values which are live at the specified
+  // timestamp will be protected but newer data which is no longer live
+  // can be GC'd.
+  // 
+  // TODO(ajwerner): Implement PROTECT_AT. This mode will be useful for
+  // incremental GC or for long-running queries. It adds substantial complexity
+  // to the GC heuristic and process. Until there is an understood strategy to
+  // deal with that complexity we leave it unimplemented.
+  // PROTECT_AT = 1;
+}
+
+// Metadata is the system metadata. The metadata is stored explicitly and all
+// operations which create or release Records increment the version and update
+// the metadata fields accordingly.
+//
+// The version provides a mechanism for cheap caching and forms the basis of
+// the implementation of the Tracker. The Tracker needs to provide a recent
+// view of the protectedts subsystem for GC to proceed. The protectedts
+// state changes rarely. The timestamp of cached state can by updated by
+// merely observing that the version has not changed.
+message Metadata {
+
+   // Version is incremented whenever a Record is created or removed.
+   uint64 version = 1 [deprecated=true];
+
+   // NumRecords is the number of records which exist in the subsystem.
+   uint64 num_records = 2 [deprecated=true];
+
+   // NumSpans is the number of spans currently being protected by the
+   // protectedts subsystem.
+   uint64 num_spans = 3 [deprecated=true];
+
+   // TotalBytes is the number of bytes currently in use by records
+   // to store their spans and metadata.
+   uint64 total_bytes = 4 [deprecated=true];
+}
+
+// Record corresponds to a protected timestamp.
+message Record {
+  // ID uniquely identifies this row.
+  bytes id = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.Bytes", (gogoproto.customname) = "ID"];
+
+  // Timestamp is the timestamp which is protected.
+  util.hlc.Timestamp timestamp = 2  [(gogoproto.nullable) = false];
+
+  // Mode specifies whether this record protects all values live at timestamp
+  // or all values live at or after that timestamp.
+  ProtectionMode mode = 3;
+
+  // MetaType is used to interpret the data stored in Meta.
+  // Users of Meta should set a unique value for MetaType which provides enough
+  // information to interpret the data in Meta. See the comment on Meta for how
+  // these two fields should be used in tandem.
+  string meta_type = 4;
+
+  // Meta is client-provided metadata about the record.
+  // This data allows the Record to be correlated with data from another
+  // subsystem. For example, this field may contain the ID of a job which
+  // created this record. The metadata allows an out-of-band reconciliation
+  // process to discover and remove records which no longer correspond to
+  // running jobs. Such a mechanism acts as a failsafe against unreliable
+  // jobs infrastructure.
+  bytes meta = 5;
+
+  // Verified marks that this Record is known to have successfully provided
+  // protection. It is updated after Verification. Updates to this field do not
+  // change the Version of the subsystem.
+  bool verified = 6;
+  
+  // DeprecatedSpans are the spans which this Record protects.
+  repeated roachpb.Span deprecated_spans = 7 [(gogoproto.nullable) = false];
+
+  // Target holds information about what this Record protects. The Record can
+  // either protect the entire cluster, a subset of tenants, or individual
+  // schema objects (database and table).
+  Target target = 8;
+
+  // next ID: 11
+}
+
+// State is the complete system state.
+message State {
+  Metadata metadata = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  repeated Record records = 2 [(gogoproto.nullable) = false];
+}
+
+// Target is the format of the message encoded in the target column of the
+// system.protectedts_records table.
+message Target {
+  option (gogoproto.equal) = true;
+  message SchemaObjectsTarget {
+    option (gogoproto.equal) = true;
+
+    // IDs are the descriptor IDs of the schema objects being protected by this
+    // Record. This field will only contain database and table IDs.
+    repeated uint32 ids = 1 [(gogoproto.customname) = "IDs",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+  }
+
+  message TenantsTarget {
+    option (gogoproto.equal) = true;
+
+    // IDs correspond to the tenant keyspaces being protected by this Record.
+    repeated roachpb.TenantID ids = 1 [(gogoproto.customname) = "IDs",
+      (gogoproto.nullable) = false];
+  }
+
+  message ClusterTarget {
+    option (gogoproto.equal) = true;
+
+    // ClusterTarget indicates that all SQL state in the cluster is being
+    // protected by this Record. This includes all user defined schema objects,
+    // as well as system tables used to configure the cluster. In a system
+    // tenant this target will also protect all secondary tenant keyspaces that
+    // exist in it.
+    //
+    // Today, this target is only used by cluster backups.
+  }
+
+  oneof union {
+    SchemaObjectsTarget schema_objects = 1;
+    TenantsTarget tenants = 2;
+    ClusterTarget cluster = 3;
+  }
+
+  // IgnoreIfExcludedFromBackup is set to true if the Record can be ignored when
+  // making GC decisions on a table that has been marked to be excluded from
+  // backups i.e. the table has `exclude_data_from_backup = true`.
+  //
+  // This field is currently only set to true when a protected timestamp record
+  // has been written by a backup job. This is to ensure that Records written by
+  // non-backup users (CDC, streaming) on spans marked as
+  // `exclude_data_from_backup` are still respected when making GC decisions on
+  // the span.
+  bool ignore_if_excluded_from_backup = 4;
+}

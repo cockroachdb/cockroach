@@ -1,0 +1,195 @@
+send
+Parse {"Name": "s0", "Query": "select $1", "ParameterOIDs":[1043, 1043, 1043]}
+Bind {"DestinationPortal": "p0", "PreparedStatement": "s0", "ParameterFormatCodes": [0], "Parameters": [{"text":"whitebear"}, {"text":"blackbear"}, {"text":"brownbear"}]}
+Execute {"Portal": "p0"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"whitebear"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Bind {"DestinationPortal": "p0", "PreparedStatement": "s0", "ParameterFormatCodes": [0], "Parameters": [{"text":"whitebear"}]}
+Execute {"Portal": "p0"}
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Name": "s1", "Query": "SELECT 3", "ParameterOIDs":[1043, 1043, 1043]}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "s1", "ParameterFormatCodes": [0], "Parameters": [{"text":"whitebear"}, {"text":"blackbear"}, {"text":"brownbear"}]}
+Execute {"Portal": "p1"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"3"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+send
+Parse {"Name": "s2", "Query": "select $1, $2::int", "ParameterOIDs":[1043]}
+Bind {"DestinationPortal": "p2", "PreparedStatement": "s2", "ParameterFormatCodes": [0], "Parameters": [{"text":"winnie"}, {"text":"123"}]}
+Execute {"Portal": "p2"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"winnie"},{"text":"123"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Bind {"DestinationPortal": "p2", "PreparedStatement": "s2", "ParameterFormatCodes": [0], "Parameters": [{"text":"winnie"}]}
+Execute {"Portal": "p2"}
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+send
+Parse {"Name": "s", "Query": "select 3"}
+Bind {"DestinationPortal": "p", "PreparedStatement": "s", "ParameterFormatCodes": [0], "Parameters": [{"text":"foo"}]}
+Describe {"ObjectType": "P", "Name": "p"}
+Execute {"Portal": "p"}
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Name": "e", "Query": "EXPLAIN SELECT generate_series(1,10);"}
+Bind {"DestinationPortal": "pe", "PreparedStatement": "e"}
+Execute {"Portal": "pe"}
+Sync
+----
+
+until ignore=DataRow
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"EXPLAIN"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# "ResultFormatCodes": [1] = binary
+send
+Parse {"Name": "e2", "Query": "EXPLAIN SELECT i, i + 1, i + 2 FROM generate_series(1,10) AS g(i);"}
+Bind {"DestinationPortal": "pe2", "PreparedStatement": "e2", "ResultFormatCodes": [1]}
+Execute {"Portal": "pe2"}
+Sync
+----
+
+until ignore=DataRow
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"EXPLAIN"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Name": "ea", "Query": "EXPLAIN ANALYZE SELECT generate_series(1,10);"}
+Bind {"DestinationPortal": "pea", "PreparedStatement": "ea"}
+Execute {"Portal": "pea"}
+Sync
+----
+
+until ignore=DataRow
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"EXPLAIN"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# "ResultFormatCodes": [1] = binary
+send
+Parse {"Name": "ea2", "Query": "EXPLAIN ANALYZE SELECT i, i + 1, i + 2 FROM generate_series(1,10) AS g(i);"}
+Bind {"DestinationPortal": "pea2", "PreparedStatement": "ea2", "ResultFormatCodes": [1]}
+Execute {"Portal": "pea2"}
+Sync
+----
+
+until ignore=DataRow
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"EXPLAIN"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Regression test for #161382: EXPLAIN ANALYZE EXECUTE of a SQL-level PREPARE
+# with binary format codes. The prepared query returns multiple columns, but
+# EXPLAIN ANALYZE returns only one column. This previously caused an assertion
+# failure when trying to get format codes for the inner query's columns.
+send
+Query {"String": "CREATE TABLE t0 (c0 FLOAT);"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "PREPARE prepare_query (float8, float8, float8) AS SELECT ALL sum($1), stddev($2), avg($3) FROM t0 GROUP BY t0.c0;"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"PREPARE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Execute the prepared statement via EXPLAIN ANALYZE EXECUTE with binary format.
+# This reproduces the bug: EXPLAIN ANALYZE has 1 output column, but the inner
+# query has 3 columns, causing a format code mismatch.
+send
+Parse {"Name": "exec_stmt", "Query": "EXPLAIN ANALYZE EXECUTE prepare_query(1.95573964E8::float8, 0.03965984596601002::float8, 0.4293795941585613::float8)"}
+Bind {"DestinationPortal": "exec_portal", "PreparedStatement": "exec_stmt", "ResultFormatCodes": [1]}
+Execute {"Portal": "exec_portal"}
+Sync
+----
+
+until ignore=DataRow
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"EXPLAIN"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

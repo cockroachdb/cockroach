@@ -1,0 +1,37 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "intsets",
+    srcs = [
+        "bitmap.go",
+        "fast.go",  # keep
+        "fast_large.go",
+        "fast_small.go",
+        "fast_str.go",
+        "fast_testonly.go",
+        "oracle.go",
+        "sparse.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/intsets",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util",
+        "//pkg/util/base64",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "intsets_test",
+    size = "small",
+    srcs = [
+        "fast_test.go",
+        "sparse_test.go",
+    ],
+    embed = [":intsets"],
+    deps = [
+        "//pkg/util",
+        "//pkg/util/base64",
+        "//pkg/util/randutil",
+    ],
+)

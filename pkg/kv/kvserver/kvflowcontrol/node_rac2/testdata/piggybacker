@@ -1,0 +1,63 @@
+# Empty.
+nodes-with-msgs time-sec=1
+----
+map len: 0
+
+# Empty.
+pop node-id=1 time-sec=1
+----
+msgs:
+remaining-msgs: 0
+
+# Add for node 1.
+add node-id=1 store-id=2 range-id=3 from=2 to=1 term=6
+----
+
+# Add for node 11.
+add node-id=11 store-id=12 range-id=13 from=3 to=1 term=14
+----
+
+nodes-with-msgs time-sec=2
+----
+n1 n11
+map len: 2
+
+# Add another for node 11, for a different range.
+add node-id=11 store-id=22 range-id=23 from=2 to=1 term=24
+----
+
+# Pop both for node 11.
+pop node-id=11 time-sec=2
+----
+msgs:
+[r13,s12,3->1] admitted=t14/[]
+[r23,s22,2->1] admitted=t24/[]
+remaining-msgs: 0
+
+# There is still an empty map entry for node 11.
+nodes-with-msgs time-sec=31
+----
+n1
+map len: 2
+
+# The map entry for node 11 is garbage collected.
+nodes-with-msgs time-sec=63
+----
+n1
+map len: 1
+
+# Overwrite the msg for the range at node 1.
+add node-id=1 store-id=2 range-id=3 from=2 to=1 term=25
+----
+
+# Pop for node 1. There was only one msg.
+pop node-id=1 time-sec=64
+----
+msgs:
+[r3,s2,2->1] admitted=t25/[]
+remaining-msgs: 0
+
+# The map entry for node 1 is garbage collected.
+nodes-with-msgs time-sec=125
+----
+map len: 0

@@ -1,0 +1,8 @@
+setup
+CREATE TYPE salmon AS ENUM('chinook', 'sockeye');
+CREATE SCHEMA fish;
+----
+
+test
+ALTER TYPE salmon SET SCHEMA fish;
+----

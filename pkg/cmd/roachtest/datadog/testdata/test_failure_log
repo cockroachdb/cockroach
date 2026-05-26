@@ -1,0 +1,14 @@
+test monitor: EOF [owner=test-eng]
+(1) attached stack trace
+  -- stack trace:
+  | main.(*testMonitorImpl).start.func1
+  | 	pkg/cmd/roachtest/test_monitor.go:35
+  | runtime.goexit
+  | 	src/runtime/asm_amd64.s:1693
+Wraps: (2) secondary error attachment
+  | EOF [owner=test-eng]
+  | (1) EOF [owner=test-eng]
+  | Wraps: (2) EOF
+  | Error types: (1) registry.ErrorWithOwnership (2) *errors.errorString
+Wraps: (3) test monitor: EOF [owner=test-eng]
+Error types: (1) *withstack.withStack (2) *secondary.withSecondaryError (3) *errutil.leafError

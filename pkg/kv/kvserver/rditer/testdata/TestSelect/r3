@@ -1,0 +1,20 @@
+echo
+----
+ReplicatedByRangeID:
+  /Local/RangeID/123/{r""-s""}
+UnreplicatedByRangeID:
+  /Local/RangeID/123/{u""-v""}
+SystemKeys:
+  /Local/Range{"a"-/Max}
+LockTable:
+  /Local/Lock/Local/Range{"a"-/Max}
+  /Local/Lock{"a"-/Max}
+UserKeys:
+  {a-/Max}
+All:
+  /Local/RangeID/123/{r""-s""}
+  /Local/RangeID/123/{u""-v""}
+  /Local/Range{"a"-/Max}
+  /Local/Lock/Local/Range{"a"-/Max}
+  /Local/Lock{"a"-/Max}
+  {a-/Max}

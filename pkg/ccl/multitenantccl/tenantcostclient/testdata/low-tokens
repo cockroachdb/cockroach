@@ -1,0 +1,44 @@
+# This test verifies that after the server does not fully grant a request, the
+# client will not trigger low tokens notifications.
+
+# When throttle = -1, the server will refuse to grant any tokens, either
+# directly or via a trickle.
+configure
+throttle: -1
+----
+
+# Issue 1K RU write to force token bucket request.
+write bytes=1021945
+----
+
+wait-for-event
+token-bucket-response
+----
+
+token-bucket
+----
+4000.00 tokens filling @ 0.00 tokens/s
+
+# Allow server to grant more tokens.
+configure
+throttle: 0
+----
+
+# Issue another 1K RU write and expect no low tokens notification and therefore
+# no call to the server.
+write bytes=1021945
+----
+
+token-bucket
+----
+3000.00 tokens filling @ 0.00 tokens/s
+
+# Advance time and ensure there's no change to the bucket.
+advance wait=true
+1s
+----
+00:00:01.000
+
+token-bucket
+----
+3000.00 tokens filling @ 0.00 tokens/s

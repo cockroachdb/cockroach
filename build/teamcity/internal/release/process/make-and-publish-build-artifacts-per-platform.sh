@@ -1,0 +1,136 @@
+#!/usr/bin/env bash
+
+# Copyright 2023 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
+set -euxo pipefail
+
+dir="$(dirname $(dirname $(dirname $(dirname $(dirname "${0}")))))"
+source "$dir/release/teamcity-support.sh"
+source "$dir/teamcity-bazel-support.sh"  # for run_bazel
+
+#
+tc_start_block "Variable Setup"
+
+platform="${PLATFORM:?PLATFORM must be specified}"
+telemetry_disabled="${TELEMETRY_DISABLED:-false}"
+cockroach_archive_prefix="${COCKROACH_ARCHIVE_PREFIX:-cockroach}"
+if [[ $telemetry_disabled == true && $cockroach_archive_prefix == "cockroach" ]]; then
+  echo "COCKROACH_ARCHIVE_PREFIX must be set to a non-default value when telemetry is disabled"
+  exit 1
+fi
+build_name=$(git describe --tags --dirty --match=v[0-9]* 2> /dev/null || git rev-parse --short HEAD;)
+
+# On no match, `grep -Eo` returns 1. `|| echo""` makes the script not error.
+release_branch="$(echo "$build_name" | grep -Eo "^v[0-9]+\.[0-9]+" || echo"")"
+is_customized_build="$(echo "$TC_BUILD_BRANCH" | grep -Eo "^custombuild-" || echo "")"
+is_release_build="$(echo "$TC_BUILD_BRANCH" | grep -Eo "^((staging|release|rc)-(v)?[0-9][0-9]\.[0-9](\.0)?).*|master$" || echo "")"
+
+if [[ -z "${DRY_RUN}" ]] ; then
+  if [[ -z "${is_release_build}" ]] ; then
+    # export the variable to avoid shell escaping
+    export gcs_credentials="$GOOGLE_CREDENTIALS_CUSTOMIZED"
+    gcs_bucket="cockroach-customized-builds-artifacts-prod"
+    gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb-customized/${cockroach_archive_prefix}-customized"
+  else
+    gcs_bucket="cockroach-builds-artifacts-prod"
+    gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb/${cockroach_archive_prefix}"
+    # export the variable to avoid shell escaping
+    export gcs_credentials="$GCS_CREDENTIALS_PROD"
+  fi
+else
+  gcs_bucket="cockroach-builds-artifacts-dryrun"
+  gcr_repository="us-docker.pkg.dev/releases-dev-356314/cockroachdb-staged-releases/${cockroach_archive_prefix}-test"
+  build_name="${build_name}.dryrun"
+  # export the variable to avoid shell escaping
+  export gcs_credentials="$GCS_CREDENTIALS_DEV"
+fi
+
+cat << EOF
+
+  build_name:          $build_name
+  release_branch:      $release_branch
+  platform:            $platform
+  is_customized_build: $is_customized_build
+  gcs_bucket:          $gcs_bucket
+  gcr_repository:      $gcr_repository
+  is_release_build:    $is_release_build
+
+EOF
+tc_end_block "Variable Setup"
+
+
+# Leaving the tagging part in place to make sure we don't break any scripts
+# relying on the tag.
+tc_start_block "Tag the release"
+git tag "${build_name}"
+tc_end_block "Tag the release"
+
+tc_start_block "Compile and publish artifacts"
+BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e TC_BUILDTYPE_ID -e TC_BUILD_BRANCH=$build_name -e build_name=$build_name -e gcs_credentials -e gcs_bucket=$gcs_bucket -e platform=$platform -e telemetry_disabled=$telemetry_disabled -e cockroach_archive_prefix=$cockroach_archive_prefix" run_bazel << 'EOF'
+bazel build //pkg/cmd/publish-artifacts
+BAZEL_BIN=$(bazel info bazel-bin)
+export google_credentials="$gcs_credentials"
+source "build/teamcity-support.sh"  # For log_into_gcloud
+log_into_gcloud
+export GOOGLE_APPLICATION_CREDENTIALS="$PWD/.google-credentials.json"
+
+cat licenses/THIRD-PARTY-NOTICES.txt > /tmp/THIRD-PARTY-NOTICES.txt.tmp
+echo "================================================================================" >> /tmp/THIRD-PARTY-NOTICES.txt.tmp 
+echo "Additional licenses" >> /tmp/THIRD-PARTY-NOTICES.txt.tmp 
+echo >> /tmp/THIRD-PARTY-NOTICES.txt.tmp
+echo "================================================================================" >> /tmp/THIRD-PARTY-NOTICES.txt.tmp 
+for f in $(cd licenses && ls -1 * | grep -v THIRD-PARTY-NOTICES.txt | sort ); do
+  echo >> /tmp/THIRD-PARTY-NOTICES.txt.tmp
+  echo >> /tmp/THIRD-PARTY-NOTICES.txt.tmp
+  echo >> /tmp/THIRD-PARTY-NOTICES.txt.tmp
+  echo "------------------------------------------------------------------------" >> /tmp/THIRD-PARTY-NOTICES.txt.tmp
+  echo "Notices from $f" >> /tmp/THIRD-PARTY-NOTICES.txt.tmp
+  echo "------------------------------------------------------------------------" >> /tmp/THIRD-PARTY-NOTICES.txt.tmp
+  echo >> /tmp/THIRD-PARTY-NOTICES.txt.tmp
+  echo >> /tmp/THIRD-PARTY-NOTICES.txt.tmp
+  cat "licenses/$f" >> /tmp/THIRD-PARTY-NOTICES.txt.tmp
+done
+
+tr -d '\r' < /tmp/THIRD-PARTY-NOTICES.txt.tmp > /tmp/THIRD-PARTY-NOTICES.txt
+
+$BAZEL_BIN/pkg/cmd/publish-artifacts/publish-artifacts_/publish-artifacts release --gcs-bucket="$gcs_bucket" --build-tag-override="$build_name" --platform $platform --third-party-notices-file=/tmp/THIRD-PARTY-NOTICES.txt --telemetry-disabled=$telemetry_disabled --cockroach-archive-prefix=$cockroach_archive_prefix
+
+EOF
+tc_end_block "Compile and publish artifacts"
+
+
+# Make finding the tag name easy.
+cat << EOF
+
+
+Build ID: ${build_name}
+
+The binaries will be available at:
+  https://storage.googleapis.com/$gcs_bucket/cockroach-$build_name.linux-amd64.tgz
+  https://storage.googleapis.com/$gcs_bucket/cockroach-$build_name.linux-amd64-fips.tgz
+  https://storage.googleapis.com/$gcs_bucket/cockroach-$build_name.linux-arm64.tgz
+  https://storage.googleapis.com/$gcs_bucket/cockroach-$build_name.linux-s390x.tgz
+  https://storage.googleapis.com/$gcs_bucket/cockroach-$build_name.darwin-11.0-arm64.tgz
+  https://storage.googleapis.com/$gcs_bucket/cockroach-$build_name.darwin-10.9-amd64.tgz
+  https://storage.googleapis.com/$gcs_bucket/cockroach-$build_name.windows-6.2-amd64.zip
+
+Pull the docker image by:
+  docker pull $gcr_repository:$build_name
+  docker pull $gcr_repository:$build_name-fips
+
+EOF
+if [[ $telemetry_disabled == true ]]; then
+  cat << EOF
+
+Additionally, the binaries with telemetry disabled will be available at:
+  https://storage.googleapis.com/$gcs_bucket/${cockroach_archive_prefix}-${build_name}.linux-amd64.tgz
+  https://storage.googleapis.com/$gcs_bucket/${cockroach_archive_prefix}-${build_name}.linux-amd64-fips.tgz
+  https://storage.googleapis.com/$gcs_bucket/${cockroach_archive_prefix}-${build_name}.linux-arm64.tgz
+
+EOF
+fi
+

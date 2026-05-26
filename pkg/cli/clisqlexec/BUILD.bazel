@@ -1,0 +1,63 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "clisqlexec",
+    srcs = [
+        "context.go",
+        "doc.go",
+        "format_ascii_table.go",
+        "format_csv_tsv.go",
+        "format_html.go",
+        "format_json.go",
+        "format_raw.go",
+        "format_record.go",
+        "format_sql.go",
+        "format_table.go",
+        "format_value.go",
+        "row_strings.go",
+        "run_query.go",
+        "table_display_format.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cli/clisqlexec",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/build",
+        "//pkg/cli/clicfg",
+        "//pkg/cli/clisqlclient",
+        "//pkg/sql/lexbase",
+        "//pkg/util",
+        "//pkg/util/encoding/csv",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_olekukonko_tablewriter//:tablewriter",
+        "@com_github_spf13_pflag//:pflag",
+    ],
+)
+
+go_test(
+    name = "clisqlexec_test",
+    srcs = [
+        "format_html_test.go",
+        "format_sql_test.go",
+        "format_table_test.go",
+        "format_value_test.go",
+        "main_test.go",
+        "run_query_test.go",
+    ],
+    embed = [":clisqlexec"],
+    deps = [
+        "//pkg/base",
+        "//pkg/build",
+        "//pkg/cli",
+        "//pkg/cli/clisqlclient",
+        "//pkg/security/username",
+        "//pkg/server",
+        "//pkg/sql/lexbase",
+        "//pkg/sql/sem/tree",
+        "//pkg/testutils/pgurlutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+    ],
+)

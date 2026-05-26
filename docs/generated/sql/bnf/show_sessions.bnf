@@ -1,0 +1,5 @@
+show_sessions_stmt ::=
+	'SHOW' 'CLUSTER' 'SESSIONS'
+	| 'SHOW' 'LOCAL' 'SESSIONS'
+	| 'SHOW' 'ALL' 'CLUSTER' 'SESSIONS'
+	| 'SHOW' 'ALL' 'LOCAL' 'SESSIONS'

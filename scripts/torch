@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+if [ $# -eq 0 ]; then
+  cat <<EOF
+A docker-based helper for go-torch.
+
+Example usage:
+
+  A five second profile against a secure cluster:
+
+    $0 -t 5 https+insecure://mysecurehost:8080
+
+  A default (30s) profile against a secure local node:
+
+    $0 https+insecure://\$(hostname):8080
+
+  A default profile against an insecure local node:
+
+    $0 http://\$(hostname):8080
+
+  Benchmarking and viewing the results:
+
+    make bench PKG=./pkg/util/encoding BENCHES=BenchmarkDecodeUint64 TESTFLAGS='-cpuprofile bench.prof'
+    $0 --binaryname encoding.test -b bench.prof
+
+  Viewing the full help for go-torch (\`-p\` is always passed):
+
+    $0 --help
+
+Troubleshooting:
+
+  When profiling a local cluster, make sure you don't use "localhost" but
+  \$(hostname) and that the server was started with a suitable \`--http-addr\`.
+
+  \`https+insecure://\` works properly only when the server was built using
+  go1.9 or later.
+EOF
+  exit 1
+fi
+
+tmpfile="$(mktemp -d)/torch.svg"
+docker run -v $(pwd):/work -w /work uber/go-torch -p "$@" > $tmpfile
+echo "${tmpfile}"
+open ${tmpfile}

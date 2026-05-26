@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "bitmap",
+    srcs = ["bitmap.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/bitmap",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "bitmap_test",
+    srcs = ["bitmap_test.go"],
+    embed = [":bitmap"],
+    deps = [
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)

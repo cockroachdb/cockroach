@@ -1,0 +1,117 @@
+statement ok
+CREATE TABLE kv (
+  k INT PRIMARY KEY,
+  v INT
+)
+
+statement ok
+INSERT INTO kv VALUES (1, 2), (3, 4), (5, 6), (7, 8)
+
+statement ok
+CREATE TABLE kvString (
+  k STRING PRIMARY KEY,
+  v STRING
+)
+
+statement ok
+INSERT INTO kvString VALUES ('like1', 'hell%'), ('like2', 'worl%')
+
+query II rowsort
+SELECT * FROM kv WHERE True
+----
+1 2
+3 4
+5 6
+7 8
+
+query II
+SELECT * FROM kv WHERE False
+----
+
+query II rowsort
+SELECT * FROM kv WHERE k IN (1, 3)
+----
+1 2
+3 4
+
+query II
+SELECT * FROM kv WHERE v IN (6)
+----
+5 6
+
+query II rowsort
+SELECT * FROM kv WHERE k IN (SELECT k FROM kv)
+----
+1 2
+3 4
+5 6
+7 8
+
+query II rowsort
+SELECT * FROM kv WHERE (k,v) IN (SELECT * FROM kv)
+----
+1 2
+3 4
+5 6
+7 8
+
+query error column "nonexistent" does not exist
+SELECT * FROM kv WHERE nonexistent = 1
+
+query B
+SELECT 'hello' LIKE v FROM kvString WHERE k LIKE 'like%' ORDER BY k
+----
+true
+false
+
+query B
+SELECT 'hello' SIMILAR TO v FROM kvString WHERE k SIMILAR TO 'like[1-2]' ORDER BY k
+----
+true
+false
+
+query B
+SELECT 'hello' ~ replace(v, '%', '.*') FROM kvString WHERE k ~ 'like[1-2]' ORDER BY k
+----
+true
+false
+
+# Test mixed type tuple comparison.
+
+query II rowsort
+SELECT * FROM kv WHERE k IN (1, 5.0, 9)
+----
+1 2
+5 6
+
+# Regression tests for #22670.
+statement ok
+CREATE TABLE ab (a INT, b INT)
+
+statement ok
+INSERT INTO ab VALUES (1, 10), (2, 20), (3, 30), (4, NULL), (NULL, 50), (NULL, NULL)
+
+query II rowsort
+SELECT * FROM ab WHERE a IN (1, 3, 4)
+----
+1  10
+3  30
+4  NULL
+
+query II rowsort
+SELECT * FROM ab WHERE a IN (1, 3, 4, NULL)
+----
+1  10
+3  30
+4  NULL
+
+query II rowsort
+SELECT * FROM ab WHERE (a, b) IN ((1, 10), (3, 30), (4, 40))
+----
+1  10
+3  30
+
+query II rowsort
+SELECT * FROM ab WHERE (a, b) IN ((1, 10), (4, NULL), (NULL, 50))
+----
+1  10

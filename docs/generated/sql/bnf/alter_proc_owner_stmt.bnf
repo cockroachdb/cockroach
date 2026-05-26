@@ -1,0 +1,2 @@
+alter_proc_owner_stmt ::=
+	'ALTER' 'PROCEDURE' function_with_paramtypes 'OWNER' 'TO' role_spec

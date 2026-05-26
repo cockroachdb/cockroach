@@ -1,0 +1,59 @@
+new-cluster name=s1 before-version=previous-release disable-tenant localities=us-east-1,us-west-1,eu-central-1
+----
+
+exec-sql
+CREATE DATABASE d PRIMARY REGION "us-east-1" REGIONS "us-west-1", "eu-central-1";
+CREATE TABLE d.t (x INT);
+INSERT INTO d.t VALUES (1), (2), (3);
+----
+
+query-sql
+SELECT region FROM [SHOW REGIONS FROM DATABASE d] ORDER BY 1;
+----
+eu-central-1
+us-east-1
+us-west-1
+
+query-sql
+SHOW DATABASES;
+----
+d root us-east-1  {eu-central-1,us-east-1,us-west-1} zone
+data root <nil> <nil> {} <nil>
+defaultdb root <nil> <nil> {} <nil>
+postgres root <nil> <nil> {} <nil>
+system node <nil> <nil> {} <nil>
+
+# backup a cluster
+exec-sql
+BACKUP INTO 'nodelocal://1/cluster_backup/';
+----
+
+new-cluster name=s2 before-version=previous-release share-io-dir=s1 disable-tenant
+----
+
+# restore fails when cluster is in mixed version state while upgrading
+exec-sql expect-error-regex=(cluster restore not supported during major version upgrade)
+RESTORE FROM LATEST IN 'nodelocal://1/cluster_backup/' WITH remove_regions;
+----
+regex matches error
+
+# upgrade cluster
+upgrade-cluster version=latest
+----
+
+exec-sql
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/cluster_backup/' WITH remove_regions;
+----
+
+exec-sql
+INSERT INTO d.t VALUES (4), (5);
+----
+
+query-sql
+SELECT * FROM d.t
+----
+1
+2
+3
+4
+5

@@ -1,0 +1,8 @@
+statement ok
+CREATE DATABASE parent;
+USE parent;
+CREATE DATABASE pgdatabase;
+USE test;
+
+statement error pq: cannot perform ALTER DATABASE CONVERT TO SCHEMA
+ALTER DATABASE parent CONVERT TO SCHEMA WITH PARENT pgdatabase

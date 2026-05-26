@@ -1,0 +1,29 @@
+### Doc updates
+
+Docs team: Please add these manually.
+
+### Contributors
+
+This release includes 4 merged PRs by 1 author.
+We would like to thank the following contributors from the CockroachDB community:
+
+- test6
+
+### PRs merged by contributors
+
+- test6:
+  - 2018-04-22 [#200  ][#200  ] [5105ca93f][5105ca93f] (+   0 -   0 ~   0/ 0) PR title 2 alternate format
+  - 2018-04-22 [#2    ][#2    ] [38b0488f9][38b0488f9] (+   0 -   0 ~   0/ 0) PR title 2 (2 commits)
+  - 2018-04-22 [#100  ][#100  ] [4279dfba7][4279dfba7] (+   0 -   0 ~   0/ 0) PR title 1 alternate format
+  - 2018-04-22 [#1    ][#1    ] [2ae4772fb][2ae4772fb] (+   0 -   0 ~   0/ 0) PR title 1
+
+
+[#1]: https://github.com/cockroachdb/cockroach/pull/1
+[#100]: https://github.com/cockroachdb/cockroach/pull/100
+[#2]: https://github.com/cockroachdb/cockroach/pull/2
+[#200]: https://github.com/cockroachdb/cockroach/pull/200
+[2ae4772fb]: https://github.com/cockroachdb/cockroach/commit/2ae4772fb
+[38b0488f9]: https://github.com/cockroachdb/cockroach/commit/38b0488f9
+[4279dfba7]: https://github.com/cockroachdb/cockroach/commit/4279dfba7
+[5105ca93f]: https://github.com/cockroachdb/cockroach/commit/5105ca93f
+

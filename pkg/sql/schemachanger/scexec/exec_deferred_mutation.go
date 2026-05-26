@@ -1,0 +1,390 @@
+// Copyright 2023 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package scexec
+
+import (
+	"context"
+	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
+)
+
+type deferredState struct {
+	databaseRoleSettingsToDelete []databaseRoleSettingToDelete
+	schemaChangerJob             *jobs.Record
+	schemaChangerJobUpdates      map[jobspb.JobID]schemaChangerJobUpdate
+	scheduleIDsToDelete          []jobspb.ScheduleID
+	statsToRefresh               catalog.DescriptorIDSet
+	indexesToSplitAndScatter     []indexesToSplitAndScatter
+	ttlScheduleMetadataUpdates   []ttlScheduleMetadataUpdate
+	ttlScheduleCronUpdates       []ttlScheduleCronUpdate
+	ttlSchedulesToCreate         []ttlScheduleToCreate
+	gcJobs
+}
+
+type databaseRoleSettingToDelete struct {
+	dbID catid.DescID
+}
+
+type indexesToSplitAndScatter struct {
+	tableID     catid.DescID
+	indexID     catid.IndexID
+	copyIndexID catid.IndexID
+}
+
+type ttlScheduleMetadataUpdate struct {
+	tableID descpb.ID
+	newName string
+}
+
+type ttlScheduleCronUpdate struct {
+	scheduleID  jobspb.ScheduleID
+	newCronExpr string
+}
+
+type ttlScheduleToCreate struct {
+	tableID descpb.ID
+}
+
+type schemaChangerJobUpdate struct {
+	isNonCancelable       bool
+	runningStatus         redact.RedactableString
+	descriptorIDsToRemove catalog.DescriptorIDSet
+}
+
+var _ scmutationexec.DeferredMutationStateUpdater = (*deferredState)(nil)
+
+func (s *deferredState) DeleteDatabaseRoleSettings(ctx context.Context, dbID descpb.ID) error {
+	s.databaseRoleSettingsToDelete = append(s.databaseRoleSettingsToDelete,
+		databaseRoleSettingToDelete{
+			dbID: dbID,
+		})
+	return nil
+}
+
+func (s *deferredState) AddIndexForMaybeSplitAndScatter(
+	tableID catid.DescID, indexID catid.IndexID, copyIndexID catid.IndexID,
+) {
+	s.indexesToSplitAndScatter = append(s.indexesToSplitAndScatter,
+		indexesToSplitAndScatter{
+			tableID:     tableID,
+			indexID:     indexID,
+			copyIndexID: copyIndexID,
+		})
+}
+
+func (s *deferredState) DeleteSchedule(scheduleID jobspb.ScheduleID) {
+	s.scheduleIDsToDelete = append(s.scheduleIDsToDelete, scheduleID)
+}
+
+func (s *deferredState) RefreshStats(descriptorID descpb.ID) {
+	s.statsToRefresh.Add(descriptorID)
+}
+
+func (s *deferredState) UpdateTTLScheduleMetadata(
+	ctx context.Context, tableID descpb.ID, newName string,
+) error {
+	s.ttlScheduleMetadataUpdates = append(s.ttlScheduleMetadataUpdates, ttlScheduleMetadataUpdate{
+		tableID: tableID,
+		newName: newName,
+	})
+	return nil
+}
+
+func (s *deferredState) UpdateTTLScheduleCron(
+	ctx context.Context, scheduleID jobspb.ScheduleID, cronExpr string,
+) error {
+	s.ttlScheduleCronUpdates = append(s.ttlScheduleCronUpdates, ttlScheduleCronUpdate{
+		scheduleID:  scheduleID,
+		newCronExpr: cronExpr,
+	})
+	return nil
+}
+
+func (s *deferredState) CreateRowLevelTTLSchedule(ctx context.Context, tableID descpb.ID) error {
+	s.ttlSchedulesToCreate = append(s.ttlSchedulesToCreate, ttlScheduleToCreate{
+		tableID: tableID,
+	})
+	return nil
+}
+
+func (s *deferredState) AddNewSchemaChangerJob(
+	jobID jobspb.JobID,
+	stmts []scpb.Statement,
+	isNonCancelable bool,
+	auth scpb.Authorization,
+	descriptorIDs catalog.DescriptorIDSet,
+	runningStatus redact.RedactableString,
+	distributedMergeMode jobspb.IndexBackfillDistributedMergeMode,
+) error {
+	if s.schemaChangerJob != nil {
+		return errors.AssertionFailedf("cannot create more than one new schema change job")
+	}
+	s.schemaChangerJob = MakeDeclarativeSchemaChangeJobRecord(
+		jobID,
+		stmts,
+		isNonCancelable,
+		auth,
+		descriptorIDs,
+		runningStatus,
+		distributedMergeMode,
+	)
+	return nil
+}
+
+// MakeDeclarativeSchemaChangeJobRecord is used to construct a declarative
+// schema change job. The state of the schema change is stored in the descriptors
+// themselves rather than the job state. During execution, the only state which
+// is stored in the job itself pertains to backfill progress.
+//
+// Note that there's no way to construct a job in the reverting state. If the
+// state of the schema change according to the descriptors is InRollback, then
+// at the outset of the job, an error will be returned to move the job into
+// the reverting state.
+func MakeDeclarativeSchemaChangeJobRecord(
+	jobID jobspb.JobID,
+	stmts []scpb.Statement,
+	isNonCancelable bool,
+	auth scpb.Authorization,
+	descriptorIDs catalog.DescriptorIDSet,
+	runningStatus redact.RedactableString,
+	distributedMergeMode jobspb.IndexBackfillDistributedMergeMode,
+) *jobs.Record {
+	stmtStrs := make([]string, len(stmts))
+	for i, stmt := range stmts {
+		// Use the redactable string because it's been normalized and
+		// fully-qualified. The regular statement is exactly the user input
+		// but that's a possibly ambiguous value and not what the old
+		// schema changer used. It's probably that the right thing to use
+		// is the redactable string with the redaction markers.
+		stmtStrs[i] = stmt.RedactedStatement.StripMarkers()
+	}
+	// The description being all the statements might seem a bit suspect, but
+	// it's what the old schema changer does, so it's what we'll do.
+	description := strings.Join(stmtStrs, "; ")
+	rec := &jobs.Record{
+		JobID:         jobID,
+		Description:   description,
+		Statements:    stmtStrs,
+		Username:      username.MakeSQLUsernameFromPreNormalizedString(auth.UserName),
+		DescriptorIDs: descriptorIDs.Ordered(),
+		Details: jobspb.NewSchemaChangeDetails{
+			DistributedMergeMode: distributedMergeMode,
+		},
+		Progress:      jobspb.NewSchemaChangeProgress{},
+		StatusMessage: jobs.StatusMessage(runningStatus),
+		NonCancelable: isNonCancelable,
+	}
+	return rec
+}
+
+func (s *deferredState) UpdateSchemaChangerJob(
+	jobID jobspb.JobID,
+	isNonCancelable bool,
+	runningStatus redact.RedactableString,
+	descriptorIDsToRemove catalog.DescriptorIDSet,
+) error {
+	if s.schemaChangerJobUpdates == nil {
+		s.schemaChangerJobUpdates = make(map[jobspb.JobID]schemaChangerJobUpdate)
+	} else if _, exists := s.schemaChangerJobUpdates[jobID]; exists {
+		return errors.AssertionFailedf("cannot update job %d more than once", jobID)
+	}
+	s.schemaChangerJobUpdates[jobID] = schemaChangerJobUpdate{
+		isNonCancelable:       isNonCancelable,
+		runningStatus:         runningStatus,
+		descriptorIDsToRemove: descriptorIDsToRemove,
+	}
+	return nil
+}
+
+func (s *deferredState) exec(
+	ctx context.Context,
+	c Catalog,
+	tjr TransactionalJobRegistry,
+	m DescriptorMetadataUpdater,
+	q StatsRefreshQueue,
+	iss IndexSpanSplitter,
+) error {
+	dbZoneConfigsToDelete, gcJobRecords := s.gcJobs.makeRecords(tjr.MakeJobID)
+	// Any databases being GCed should have an entry even if none of its tables
+	// are being dropped. This entry will be used to generate the GC jobs below.
+	for _, id := range dbZoneConfigsToDelete.Ordered() {
+		if err := c.DeleteZoneConfig(ctx, id); err != nil {
+			return err
+		}
+	}
+	if err := c.Run(ctx); err != nil {
+		return err
+	}
+	for _, dbRoleSetting := range s.databaseRoleSettingsToDelete {
+		err := m.DeleteDatabaseRoleSettings(ctx, dbRoleSetting.dbID)
+		if err != nil {
+			return err
+		}
+	}
+	for _, scheduleID := range s.scheduleIDsToDelete {
+		if err := m.DeleteSchedule(ctx, scheduleID); err != nil {
+			return err
+		}
+	}
+	for _, ttlUpdate := range s.ttlScheduleMetadataUpdates {
+		descs, err := c.MustReadImmutableDescriptors(ctx, ttlUpdate.tableID)
+		if err != nil {
+			return err
+		}
+		desc := descs[0]
+		// Skip if this isn't a table descriptor
+		tableDesc, ok := desc.(catalog.TableDescriptor)
+		if !ok {
+			continue
+		}
+		if err := m.UpdateTTLScheduleLabel(ctx, tableDesc); err != nil {
+			return err
+		}
+	}
+	for _, cronUpdate := range s.ttlScheduleCronUpdates {
+		if err := m.UpdateTTLScheduleCron(ctx, cronUpdate.scheduleID, cronUpdate.newCronExpr); err != nil {
+			return err
+		}
+	}
+	for _, ttlCreate := range s.ttlSchedulesToCreate {
+		descs, err := c.MustReadImmutableDescriptors(ctx, ttlCreate.tableID)
+		if err != nil {
+			return err
+		}
+		desc := descs[0]
+		tableDesc, ok := desc.(catalog.TableDescriptor)
+		if !ok {
+			continue
+		}
+		if err := m.CreateRowLevelTTLSchedule(ctx, tableDesc); err != nil {
+			return err
+		}
+	}
+	for _, idx := range s.indexesToSplitAndScatter {
+		descs, err := c.MustReadImmutableDescriptors(ctx, idx.tableID)
+		if err != nil {
+			return err
+		}
+		tableDesc := descs[0].(catalog.TableDescriptor)
+		idxDesc, err := catalog.MustFindIndexByID(tableDesc, idx.indexID)
+		if err != nil {
+			return err
+		}
+		var copyIndexSource catalog.Index
+		if idx.copyIndexID != 0 {
+			copyIndexSource, err = catalog.MustFindIndexByID(tableDesc, idx.copyIndexID)
+			if err != nil {
+				return err
+			}
+		}
+		if err := iss.MaybeSplitIndexSpans(ctx, tableDesc, idxDesc, copyIndexSource); err != nil {
+			return err
+		}
+	}
+	s.statsToRefresh.ForEach(q.AddTableForStatsRefresh)
+	// Note that we perform the system.jobs writes last in order to acquire locks
+	// on the job rows in question as late as possible. If a restart is
+	// encountered, these locks will be retained in subsequent epochs (assuming
+	// that the transaction is not aborted due to, say, a deadlock). If we were
+	// to lock the jobs table first, they would not provide any liveness benefit
+	// because their entries are non-deterministic. The jobs writes are
+	// particularly bad because that table is constantly being scanned.
+	return manageJobs(
+		ctx,
+		gcJobRecords,
+		s.schemaChangerJob,
+		s.schemaChangerJobUpdates,
+		tjr,
+	)
+}
+
+func manageJobs(
+	ctx context.Context,
+	gcJobs []jobs.Record,
+	scJob *jobs.Record,
+	scJobUpdates map[jobspb.JobID]schemaChangerJobUpdate,
+	jr TransactionalJobRegistry,
+) error {
+	// TODO(ajwerner): Batch job creation. Should be easy, the registry has
+	// the needed API.
+	for _, j := range gcJobs {
+		if err := jr.CreateJob(ctx, j); err != nil {
+			return err
+		}
+	}
+	if scJob != nil {
+		if err := jr.CreateJob(ctx, *scJob); err != nil {
+			return err
+		}
+	}
+	for id, update := range scJobUpdates {
+		if err := jr.UpdateSchemaChangeJob(ctx, id, func(
+			md jobs.DeprecatedJobMetadata, updateProgress func(*jobspb.Progress), updatePayload func(*jobspb.Payload),
+		) error {
+			s := schemaChangeJobUpdateState{md: md}
+			defer s.doUpdate(updateProgress, updatePayload)
+			s.updatedProgress().StatusMessage = update.runningStatus.StripMarkers() // TODO(150233): should use RedactableString
+			if !md.Payload.Noncancelable && update.isNonCancelable {
+				s.updatedPayload().Noncancelable = true
+			}
+			oldIDs := catalog.MakeDescriptorIDSet(md.Payload.DescriptorIDs...)
+			newIDs := oldIDs.Difference(update.descriptorIDsToRemove)
+			if newIDs.Len() < oldIDs.Len() {
+				s.updatedPayload().DescriptorIDs = newIDs.Ordered()
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// schemaChangeJobUpdateState is a helper struct for managing the state in the
+// callback passed to TransactionalJobRegistry.UpdateSchemaChangeJob in
+// manageJobs.
+type schemaChangeJobUpdateState struct {
+	md                   jobs.DeprecatedJobMetadata
+	maybeUpdatedPayload  *jobspb.Payload
+	maybeUpdatedProgress *jobspb.Progress
+}
+
+func (s *schemaChangeJobUpdateState) updatedProgress() *jobspb.Progress {
+	if s.maybeUpdatedProgress == nil {
+		clone := *s.md.Progress
+		s.maybeUpdatedProgress = &clone
+	}
+	return s.maybeUpdatedProgress
+}
+
+func (s *schemaChangeJobUpdateState) updatedPayload() *jobspb.Payload {
+	if s.maybeUpdatedPayload == nil {
+		clone := *s.md.Payload
+		s.maybeUpdatedPayload = &clone
+	}
+	return s.maybeUpdatedPayload
+}
+
+func (s *schemaChangeJobUpdateState) doUpdate(
+	updateProgress func(*jobspb.Progress), updatePayload func(*jobspb.Payload),
+) {
+	if s.maybeUpdatedProgress != nil {
+		updateProgress(s.maybeUpdatedProgress)
+	}
+	if s.maybeUpdatedPayload != nil {
+		updatePayload(s.maybeUpdatedPayload)
+	}
+}

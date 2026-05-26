@@ -1,0 +1,100 @@
+# By default, the test provider grants all tokens immediately. Test cases where
+# it instead throttles usage to a limited rate.
+
+# Set up throttling at 1K tokens/s.
+configure
+throttle: 1000
+----
+
+# Issue 3K RU write to consume all tokens in the bucket and create 2K debt.
+write bytes=3069945
+----
+
+wait-for-event
+token-bucket-response
+----
+
+token-bucket
+----
+2000.00 tokens filling @ 1000.00 tokens/s (limited to 15000.00 tokens)
+
+# Issue 4K RU write that should block as long as it takes to accumulate 2K RUs
+# with a 1K fill rate.
+write bytes=4093945 label=w1
+----
+
+timers
+----
+00:00:02.000
+00:00:09.000
+
+advance wait=true
+2s
+----
+00:00:02.000
+
+await label=w1
+----
+
+token-bucket
+----
+0.00 tokens filling @ 1000.00 tokens/s (limited to 15000.00 tokens)
+
+# Create 20K debt in bucket.
+pgwire-egress
+22528000
+----
+
+advance wait=true
+1s
+----
+00:00:03.000
+
+advance wait=true
+1s
+----
+00:00:04.000
+
+token-bucket
+----
+-19000.00 tokens filling @ 1000.00 tokens/s (limited to 15000.00 tokens) (1000.00 waiting debt @ 500.00 tokens/s)
+
+# The debt in the token bucket is greater than what one trickle duration can
+# cover. Ensure that another write blocks for entire trickle duration, plus
+# another fetch from the server token bucket.
+write bytes=1024 label=w2
+----
+
+# Wait for 5 more seconds until 90% of the trickle duration is complete and a
+# token bucket request is issued.
+advance
+5s
+----
+00:00:09.000
+
+wait-for-event
+token-bucket-response
+----
+
+# Ensure that fill rate has been updated to include tokens left over from
+# previous trickle, as well as the tokens from the new trickle.
+token-bucket
+----
+-15000.00 tokens filling @ 1100.00 tokens/s (limited to 16000.00 tokens)
+
+timers
+----
+00:00:18.000
+00:00:22.636
+
+advance
+15s
+----
+00:00:24.000
+
+wait-for-event
+token-bucket-response
+----
+
+await label=w2
+----

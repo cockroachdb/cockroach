@@ -1,0 +1,88 @@
+filter
+keywords:
+----
+
+
+subtest standalone_identifier
+
+comp
+Sel
+----
+i'
+ ^
+--
+keywords: completing for "sel" (0,3)
+--sql:
+SELECT upper(word),
+       'keyword' AS category,
+       COALESCE(catdesc,'') AS description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM pg_catalog.pg_get_keywords()
+ WHERE left(word, length($1:::STRING)) = $1:::STRING
+--placeholders: []interface {}{"sel", 0, 3}
+
+comp at=100
+sel
+----
+i_
+ ^
+--
+keywords: completing for "" (100,100)
+--sql:
+SELECT upper(word),
+       'keyword' AS category,
+       COALESCE(catdesc,'') AS description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM pg_catalog.pg_get_keywords()
+ WHERE left(word, length($1:::STRING)) = $1:::STRING
+--placeholders: []interface {}{"", 100, 100}
+
+subtest end
+
+subtest after_period
+
+# no keyword completion after period.
+comp at=12
+select foo.bar
+----
+ii.i'
+    ^
+--
+keywords: not completing after period
+
+comp at=12
+select foo.
+----
+ii._
+   ^
+--
+keywords: not completing after period
+
+
+subtest end
+
+subtest quoted_identifier
+
+comp
+"sel
+----
+i'
+ ^
+--
+keywords: not completing
+
+subtest end
+
+subtest string_literal
+
+comp
+'sel
+----
+s'
+ ^
+--
+keywords: not completing
+
+subtest end

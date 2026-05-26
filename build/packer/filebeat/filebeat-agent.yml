@@ -1,0 +1,33 @@
+# Filebeat config file for the TeamCity agents
+
+# Whenever the 'filebeat-agent.yml' file is updated in the 
+# 'roachsiem' repo, the same edits need to be made here,
+# committed, and a new agent image built and deployed.
+
+filebeat.inputs:
+- type: log
+  paths:
+    - /home/agent/logs/teamcity-build.log
+  # Parses release events. All release logs begin with 'done building <package>: ' and end with a closing brace.
+  multiline:
+    pattern: '(.*(\d{4}\/(0[1-9]|1[012])\/(0[1-9]|[12][0-9]|3[01]))\s*([0-2][0-9]:[0-5][0-9]:[0-5][0-9])\s*(((main\.go:[0-9]+:\s*)?done\s*building\s*.*:\s*main\.opts{\s*)|(Uploading to s3:\/\/[^\s]+libgeos\.)))|(^Build .* \#[0-9]+, branch .*$)|(\[([0-9]{4}\-[0-1][0-9]\-[0-3][0-9] [0-2][0-9]:[0-5][0-9]:[0-5][0-9],[0-9]{3})\]\s*([A-Z]+ \-)?\s*((\+*\s*docker push docker\.io\/)|(upload: [^\s]+index\.yaml to s3:\/\/[^\s]+$)))' 
+    negate: true
+    match: after
+    flush_pattern: '(^\[([0-9]{4}\-[0-1][0-9]\-[0-3][0-9] [0-2][0-9]:[0-5][0-9]:[0-5][0-9],[0-9]{3})\]\s*([A-Z]+ \-)?\s*(}\s*$)|(Process exited with code 0\s*$)|([0-2][0-9]:[0-5][0-9]:[0-5][0-9] main\.go:[0-9]+: Uploading to s3:)|([A-Za-z0-9_\.-]+: digest: sha256:[a-z0-9]+ size: [0-9]+))|(^TeamCity server version is ([0-9]|\.)+ \(build [0-9]+\), server timezone: )|((\d{4}\/(0[1-9]|1[012])\/(0[1-9]|[12][0-9]|3[01]))\s*([0-2][0-9]:[0-5][0-9]:[0-5][0-9])\s*Uploading to s3:\/\/[^\s]+libgeos_c\.)|(##teamcity\[blockClosed name=''Compile and publish S3 artifacts''\])'
+
+processors:
+# Add TeamCity identifier
+- add_fields:
+    target: ''
+    fields:
+      filebeat_source: 'teamcity_agent'
+# Add info about host machine & GCP metadata for TC project
+- add_host_metadata: ~
+- add_cloud_metadata: 
+    providers:
+      - gcp
+
+output.logstash:
+  enabled: true
+  timeout: 15
+  hosts: ["triptolemus.cockroachlabs.com:5044"]

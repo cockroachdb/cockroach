@@ -1,0 +1,848 @@
+statement error pq: invalid locale bad_locale: language: subtag "locale" is well-formed but unknown
+SELECT 'a' COLLATE bad_locale
+
+query B 
+SELECT 'A' COLLATE en = 'a'
+----
+false
+
+statement error pq: unsupported comparison operator: <collatedstring{en}> = <collatedstring{de}>
+SELECT 'A' COLLATE en = 'a' COLLATE de
+
+statement error pq: unsupported comparison operator: 'a' COLLATE en_u_ks_level1 IN \('A' COLLATE en_u_ks_level1, 'b' COLLATE en\): expected 'b' COLLATE en to be of type collatedstring\{en_u_ks_level1\}, found type collatedstring\{en\}
+SELECT ('a' COLLATE en_u_ks_level1) IN ('A' COLLATE en_u_ks_level1, 'b' COLLATE en)
+
+statement error pq: tuples \('a' COLLATE en_u_ks_level1, 'a' COLLATE en\), \('A' COLLATE en, 'B' COLLATE en\) are not comparable at index 1: unsupported comparison operator: <collatedstring\{en_u_ks_level1\}> < <collatedstring\{en\}>
+SELECT ('a' COLLATE en_u_ks_level1, 'a' COLLATE en) < ('A' COLLATE en, 'B' COLLATE en)
+
+
+query T
+SELECT 'A' COLLATE en
+----
+A
+
+query T
+SELECT ('A' COLLATE de) COLLATE en
+----
+A
+
+query T
+SELECT NAME 'A' COLLATE en
+----
+A
+
+query T
+SELECT (NAME 'A' COLLATE de) COLLATE en
+----
+A
+
+query T
+SELECT NULL COLLATE en
+----
+NULL
+
+query B
+SELECT 'a' COLLATE en < ('B' COLLATE de) COLLATE en
+----
+true
+
+
+query B
+SELECT (1, 'a' COLLATE en) < (1, 'B' COLLATE en)
+----
+true
+
+query B
+SELECT ('a' COLLATE en_u_ks_level1, 'a' COLLATE en) < ('A' COLLATE en_u_ks_level1, 'B' COLLATE en)
+----
+true
+
+
+query B
+SELECT 'A' COLLATE en_u_ks_level1 = 'a' COLLATE en_u_ks_level1
+----
+true
+
+query B
+SELECT 'A' COLLATE en_u_ks_level1 <> 'a' COLLATE en_u_ks_level1
+----
+false
+
+query B
+SELECT 'A' COLLATE en_u_ks_level1 < 'a' COLLATE en_u_ks_level1
+----
+false
+
+query B
+SELECT 'A' COLLATE en_u_ks_level1 >= 'a' COLLATE en_u_ks_level1
+----
+true
+
+query B
+SELECT 'A' COLLATE en_u_ks_level1 <= 'a' COLLATE en_u_ks_level1
+----
+true
+
+query B
+SELECT 'A' COLLATE en_u_ks_level1 > 'a' COLLATE en_u_ks_level1
+----
+false
+
+
+query B
+SELECT 'a' COLLATE en_u_ks_level1 = 'B' COLLATE en_u_ks_level1
+----
+false
+
+query B
+SELECT 'a' COLLATE en_u_ks_level1 <> 'B' COLLATE en_u_ks_level1
+----
+true
+
+query B
+SELECT 'a' COLLATE en_u_ks_level1 < 'B' COLLATE en_u_ks_level1
+----
+true
+
+query B
+SELECT 'a' COLLATE en_u_ks_level1 >= 'B' COLLATE en_u_ks_level1
+----
+false
+
+query B
+SELECT 'a' COLLATE en_u_ks_level1 <= 'B' COLLATE en_u_ks_level1
+----
+true
+
+query B
+SELECT 'a' COLLATE en_u_ks_level1 > 'B' COLLATE en_u_ks_level1
+----
+false
+
+
+query B
+SELECT 'B' COLLATE en_u_ks_level1 = 'A' COLLATE en_u_ks_level1
+----
+false
+
+query B
+SELECT 'B' COLLATE en_u_ks_level1 <> 'A' COLLATE en_u_ks_level1
+----
+true
+
+query B
+SELECT 'B' COLLATE en_u_ks_level1 < 'A' COLLATE en_u_ks_level1
+----
+false
+
+query B
+SELECT 'B' COLLATE en_u_ks_level1 >= 'A' COLLATE en_u_ks_level1
+----
+true
+
+query B
+SELECT 'B' COLLATE en_u_ks_level1 <= 'A' COLLATE en_u_ks_level1
+----
+false
+
+query B
+SELECT 'B' COLLATE en_u_ks_level1 > 'A' COLLATE en_u_ks_level1
+----
+true
+
+
+query B
+SELECT ('a' COLLATE en_u_ks_level1) IN ('A' COLLATE en_u_ks_level1, 'b' COLLATE en_u_ks_level1)
+----
+true
+
+query B
+SELECT ('a' COLLATE en_u_ks_level1) NOT IN ('A' COLLATE en_u_ks_level1, 'b' COLLATE en_u_ks_level1)
+----
+false
+
+query B
+SELECT ('a' COLLATE en) IN ('A' COLLATE en, 'b' COLLATE en)
+----
+false
+
+query B
+SELECT ('a' COLLATE en) NOT IN ('A' COLLATE en, 'b' COLLATE en)
+----
+true
+
+
+query B
+SELECT 'Fussball' COLLATE de = 'Fußball' COLLATE de
+----
+false
+
+query B
+SELECT 'Fussball' COLLATE de_u_ks_level1 = 'Fußball' COLLATE de_u_ks_level1
+----
+true
+
+
+query B
+SELECT 'ü' COLLATE da < 'x' COLLATE da
+----
+false
+
+query B
+SELECT 'ü' COLLATE de < 'x' COLLATE de
+----
+true
+
+query B
+SELECT e'\u00E9' COLLATE "en_US" = e'\u0065\u0301' COLLATE "en_US";
+----
+true
+
+query B
+SELECT e'\u00E9' COLLATE "en_US" LIKE e'\u0065\u0301' COLLATE "en_US";
+----
+true
+
+
+statement error syntax error: invalid locale e: language: tag is not well-formed
+CREATE TABLE e1 (
+  a STRING COLLATE e
+)
+
+statement error multiple COLLATE declarations for column "a"
+CREATE TABLE e2 (
+  a STRING COLLATE en COLLATE de
+)
+
+statement error COLLATE declaration for non-string-typed column "a"
+CREATE TABLE e3 (
+  a INT COLLATE en
+)
+
+statement disable-cf-mutator ok
+CREATE TABLE t (
+  a STRING COLLATE en
+)
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE t
+----
+t  CREATE TABLE public.t (
+     a STRING COLLATE en NULL,
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+   );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE t
+----
+t  CREATE TABLE public.t (
+     a STRING COLLATE en NULL,
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+   ) WITH (schema_locked = true);
+
+statement ok
+INSERT INTO t VALUES
+  ('A' COLLATE en),
+  ('B' COLLATE en),
+  ('a' COLLATE en),
+  ('b' COLLATE en),
+  ('x' COLLATE en),
+  ('ü' COLLATE en)
+
+statement ok
+INSERT INTO t VALUES
+  ('X' COLLATE de),
+  ('y' COLLATE de)
+
+query T
+SELECT a FROM t ORDER BY t.a
+----
+a
+A
+b
+B
+ü
+x
+X
+y
+
+query T
+SELECT a FROM t ORDER BY t.a COLLATE da
+----
+a
+A
+b
+B
+x
+X
+y
+ü
+
+query T
+SELECT a FROM t WHERE a = 'A' COLLATE en;
+----
+A
+
+query T
+SELECT 'a' COLLATE en::STRING || 'b'
+----
+ab
+
+query T
+SELECT 'a🐛b🏠c' COLLATE en::VARCHAR(3)
+----
+a🐛b
+
+query B
+SELECT 't' COLLATE en::BOOLEAN
+----
+true
+
+query I
+SELECT '42' COLLATE en::INTEGER
+----
+42
+
+query R
+SELECT '42.0' COLLATE en::FLOAT
+----
+42
+
+query R
+SELECT '42.0' COLLATE en::DECIMAL
+----
+42.0
+
+query T
+SELECT 'a' COLLATE en::BYTES
+----
+a
+
+query T
+SELECT '2017-01-10 16:05:50.734049+00:00' COLLATE en::TIMESTAMP
+----
+2017-01-10 16:05:50.734049 +0000 +0000
+
+query T
+SELECT '2017-01-10 16:05:50.734049+00:00' COLLATE en::TIMESTAMPTZ
+----
+2017-01-10 16:05:50.734049 +0000 UTC
+
+query T
+SELECT '40 days' COLLATE en::INTERVAL
+----
+40 days
+
+statement ok
+CREATE TABLE foo(a STRING COLLATE en_u_ks_level2)
+
+statement ok
+PREPARE x AS INSERT INTO foo VALUES ($1 COLLATE en_u_ks_level2) RETURNING a
+
+query T
+EXECUTE x(NULL)
+----
+NULL
+
+query T
+SELECT a FROM foo
+----
+NULL
+
+# Regression test for #24449
+
+statement ok
+INSERT INTO foo VALUES ('aBcD' COLLATE en_u_ks_level2)
+
+query T
+SELECT * FROM foo WHERE a = 'aBcD' COLLATE en_u_ks_level2
+----
+aBcD
+
+query T
+SELECT * FROM foo WHERE a = 'abcd' COLLATE en_u_ks_level2
+----
+aBcD
+
+# Test quoted collations.
+
+statement ok
+CREATE TABLE quoted_coll (
+  a STRING COLLATE "en",
+  b STRING COLLATE "en_US",
+  c STRING COLLATE "en-Us" DEFAULT ('c' COLLATE "en-Us"),
+  d STRING COLLATE "en-u-ks-level1" DEFAULT ('d'::STRING COLLATE "en-u-ks-level1"),
+  e STRING COLLATE "en-us" AS (a COLLATE "en-us") STORED,
+  FAMILY "primary" (a, b, c, d, e, rowid)
+)
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE quoted_coll
+----
+quoted_coll  CREATE TABLE public.quoted_coll (
+               a STRING COLLATE en NULL,
+               b STRING COLLATE en_US NULL,
+               c STRING COLLATE en_US NULL DEFAULT ('c':::STRING COLLATE en_US),
+               d STRING COLLATE en_u_ks_level1 NULL DEFAULT ('d':::STRING COLLATE en_u_ks_level1),
+               e STRING COLLATE en_US NULL AS (a COLLATE en_US) STORED,
+               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+               CONSTRAINT quoted_coll_pkey PRIMARY KEY (rowid ASC)
+             );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE quoted_coll
+----
+quoted_coll  CREATE TABLE public.quoted_coll (
+               a STRING COLLATE en NULL,
+               b STRING COLLATE en_US NULL,
+               c STRING COLLATE en_US NULL DEFAULT ('c':::STRING COLLATE en_US),
+               d STRING COLLATE en_u_ks_level1 NULL DEFAULT ('d':::STRING COLLATE en_u_ks_level1),
+               e STRING COLLATE en_US NULL AS (a COLLATE en_US) STORED,
+               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+               CONSTRAINT quoted_coll_pkey PRIMARY KEY (rowid ASC)
+             ) WITH (schema_locked = true);
+
+# Regression for #46570.
+statement ok
+CREATE TABLE t46570(c0 BOOL, c1 STRING COLLATE en);
+CREATE INDEX ON t46570(rowid, c1 DESC);
+INSERT INTO t46570(c1, rowid) VALUES('' COLLATE en, 0);
+UPSERT INTO t46570(rowid) VALUES (0), (1)
+
+# Test trailing spaces are truncated for char types.
+subtest regression_50015
+
+query T rowsort
+SELECT
+	t
+FROM
+	(
+		VALUES
+			('hello '::CHAR(100) COLLATE en_US),
+			('hello t'::CHAR(100) COLLATE en_US),
+			('hello '::STRING::CHAR(100) COLLATE en_US),
+			('hello t'::STRING::CHAR(100) COLLATE en_US)
+	) g(t)
+----
+hello
+hello t
+hello
+hello t
+
+statement ok
+CREATE TABLE t50015(id int PRIMARY KEY, a char(100), b char(100) COLLATE en);
+INSERT INTO t50015 VALUES
+  (1, 'hello', 'hello' COLLATE en),
+  (2, 'hello ', 'hello ' COLLATE en),
+  (3, repeat('hello ', 2), repeat('hello ', 2) COLLATE en)
+
+query ITITI
+SELECT id, a, length(a), b, length(b::string) FROM t50015 ORDER BY id ASC
+----
+1  hello                                                                                                 5   hello        5
+2  hello                                                                                                 5   hello        5
+3  hello hello                                                                                           11  hello hello  11
+
+statement ok
+CREATE TABLE t54989(
+  no_collation_str text,
+  no_collation_str_array text[],
+  collated_str text COLLATE en,
+  default_collation text COLLATE "default"
+)
+
+query TT
+SELECT
+    a.attname AS column_name,
+    collname AS collation
+FROM pg_attribute a
+LEFT JOIN pg_collation co ON a.attcollation = co.oid
+JOIN pg_class c ON a.attrelid = c.oid
+JOIN pg_namespace n ON c.relnamespace = n.oid
+WHERE c.relname = 't54989'
+ORDER BY column_name
+----
+collated_str            en
+default_collation       default
+no_collation_str        default
+no_collation_str_array  default
+rowid                   NULL
+
+# "default", "C", and "POSIX" all behave the same as normal strings when
+# used in an expression.
+query BBB
+SELECT 'cat' = ('cat'::text collate "default"), 'cat' = ('cat'::VARCHAR(64) collate "C"), 'cat' = ('cat'::CHAR(3) collate "POSIX")
+----
+true  true  true
+
+statement ok
+INSERT INTO t54989 VALUES ('a', '{b}', 'c', 'd')
+
+query BB
+SELECT default_collation = 'd' COLLATE "C", no_collation_str = 'a' COLLATE "POSIX" FROM t54989
+----
+true  true
+
+# Creating a "C" or "POSIX" column is not allowed. In the future, we may
+# add better support for collations, and it would be hard to do that if we
+# start allowing columns like these.
+statement error invalid locale C: language: tag is not well-formed
+CREATE TABLE disallowed(a text COLLATE "C")
+
+statement error invalid locale POSIX: language: tag is not well-formed
+CREATE TABLE disallowed(a text COLLATE "POSIX")
+
+# Regression test for collated string lowercase and hyphen/underscore equality.
+subtest nocase_strings
+
+statement ok
+CREATE TABLE nocase_strings (s STRING COLLATE "en-US-u-ks-level2");
+
+statement ok
+INSERT INTO nocase_strings VALUES ('Aaa' COLLATE "en-US-u-ks-level2"), ('Bbb' COLLATE "en-US-u-ks-level2");
+
+query T
+SELECT s FROM nocase_strings WHERE s = ('bbb' COLLATE "en-US-u-ks-level2")
+----
+Bbb
+
+query T
+SELECT s FROM nocase_strings WHERE s = ('bbb' COLLATE "en-us-u-ks-level2")
+----
+Bbb
+
+query T
+SELECT s FROM nocase_strings WHERE s = ('bbb' COLLATE "en_US_u_ks_level2")
+----
+Bbb
+
+statement disable-cf-mutator ok
+CREATE TABLE collation_name_case (s STRING COLLATE en_us_u_ks_level2);
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE collation_name_case
+----
+collation_name_case  CREATE TABLE public.collation_name_case (
+                       s STRING COLLATE en_US_u_ks_level2 NULL,
+                       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                       CONSTRAINT collation_name_case_pkey PRIMARY KEY (rowid ASC)
+                     );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE collation_name_case
+----
+collation_name_case  CREATE TABLE public.collation_name_case (
+                       s STRING COLLATE en_US_u_ks_level2 NULL,
+                       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                       CONSTRAINT collation_name_case_pkey PRIMARY KEY (rowid ASC)
+                     ) WITH (schema_locked = true);
+
+statement error invalid locale en-US-u-ks-le"vel2: language: tag is not well-formed
+CREATE TABLE nocase_strings (s STRING COLLATE "en-US-u-ks-le""vel2");
+
+statement error at or near "vel2": syntax error
+CREATE TABLE nocase_strings (s STRING COLLATE "en-US-u-ks-le"vel2");
+
+statement error invalid locale en-us-u-ks-l"evel2: language: tag is not well-formed
+SELECT s FROM nocase_strings WHERE s = ('bbb' COLLATE "en-us-u-ks-l""evel2")
+
+statement error at or near "evel2": syntax error
+SELECT s FROM nocase_strings WHERE s = ('bbb' COLLATE "en-us-u-ks-l"evel2")
+
+statement ok
+CREATE TABLE nocase_strings2 (
+  i INT,
+  s STRING COLLATE "en-US-u-ks-level2"
+);
+
+statement ok
+INSERT INTO nocase_strings2 VALUES (1, 'Aaa' COLLATE "en-US-u-ks-level2"), (2, 'Bbb' COLLATE "en-US-u-ks-level2");
+
+query T
+SELECT s FROM nocase_strings2 WHERE s = ('bbb' COLLATE "en-US-u-ks-level2")
+----
+Bbb
+
+query T
+SELECT s FROM nocase_strings2 WHERE s = ('bbb' COLLATE "en-us-u-ks-level2")
+----
+Bbb
+
+query T
+SELECT s FROM nocase_strings2 WHERE s = ('bbb' COLLATE "en_US_u_ks_level2")
+----
+Bbb
+
+# Test "char" is supposed to truncate long values
+subtest char_long_values
+
+statement ok
+CREATE TABLE t65631(a "char", b "char" COLLATE en)
+
+statement ok
+INSERT INTO t65631 VALUES ('abc', 'abc' COLLATE en)
+
+query TT
+SELECT a, b FROM t65631
+----
+a a
+
+subtest regression_45142
+
+statement ok
+CREATE TABLE t45142(c STRING COLLATE en);
+
+query error unsupported comparison operator
+SELECT * FROM t45142 WHERE c < SOME ('' COLLATE de, '' COLLATE en);
+
+query error unsupported comparison operator
+SELECT * FROM t45142 WHERE c < SOME ('' COLLATE en, '' COLLATE de);
+
+statement ok
+SELECT * FROM t45142 WHERE c < SOME (CASE WHEN true THEN NULL END, '' COLLATE en);
+SELECT * FROM t45142 WHERE c < SOME ('' COLLATE en, CASE WHEN true THEN NULL END);
+
+subtest issue_132867
+
+statement ok
+CREATE TABLE test_collate (
+  id INT8 PRIMARY KEY,
+  "string_field" STRING COLLATE en_US_u_ks_level2 NULL
+)
+
+statement ok
+INSERT INTO test_collate VALUES (1, 'Str_Collate_1')
+
+query IT
+SELECT * FROM test_collate WHERE (("id", "string_field")) = ANY(Array[(1, 'str_collate_1')])
+----
+1  Str_Collate_1
+
+query I
+SELECT id FROM test_collate WHERE "string_field" = 'sTR_cOLLATE_1'
+----
+1
+
+statement ok
+INSERT INTO test_collate VALUES (2, 'Foo'), (3, 'Bar'), (4, 'Baz')
+
+query T
+SELECT string_field FROM test_collate WHERE string_field < 'baz' ORDER BY id
+----
+Bar
+
+query T
+SELECT string_field FROM test_collate WHERE string_field <= 'baz' ORDER BY id
+----
+Bar
+Baz
+
+query T
+SELECT string_field FROM test_collate WHERE string_field > 'baz' ORDER BY id
+----
+Str_Collate_1
+Foo
+
+query T
+SELECT string_field FROM test_collate WHERE string_field >= 'baz' ORDER BY id
+----
+Str_Collate_1
+Foo
+Baz
+
+subtest collate_array
+
+# Test collation of string arrays.
+
+query T
+SELECT NULL COLLATE "en_US_u_ks_level2"
+----
+NULL
+
+query T
+SELECT NULL::STRING[] COLLATE "en_US_u_ks_level2"
+----
+NULL
+
+query T
+SELECT ARRAY['a'] COLLATE "en_US_u_ks_level2"
+----
+{a}
+
+query T
+SELECT ARRAY[]::STRING[] COLLATE "en_US_u_ks_level2"
+----
+{}
+
+query T
+SELECT ARRAY[NULL] COLLATE "en_US_u_ks_level2"
+----
+{NULL}
+
+query T
+SELECT ARRAY[NULL]::STRING[] COLLATE "en_US_u_ks_level2"
+----
+{NULL}
+
+query T
+SELECT ARRAY['a', NULL] COLLATE "en_US_u_ks_level2"
+----
+{a,NULL}
+
+query T
+SELECT ARRAY['a' COLLATE "en_US_u_ks_level2"] COLLATE "en_US_u_ks_level2"
+----
+{a}
+
+query T
+SELECT '{}'::STRING[] COLLATE "en_US_u_ks_level2"
+----
+{}
+
+query T
+SELECT '{a}'::STRING[] COLLATE "en_US_u_ks_level2"
+----
+{a}
+
+query T
+SELECT '{a,b,c}'::STRING[] COLLATE "en_US_u_ks_level2"
+----
+{a,b,c}
+
+query T
+SELECT ARRAY['a' COLLATE "en_US_u_ks_level2", 'b' COLLATE "en_US_u_ks_level2", NULL] COLLATE "en_US_u_ks_level2"
+----
+{a,b,NULL}
+
+# TODO(32552): We don't fully support nested arrays, but we can do a hacky check
+# here by turning off DistSQL and only using the ARRAY scalar constructor. These
+# results don't match PostgreSQL, but we're mostly just checking that we don't
+# error or panic when using this syntax.
+
+statement ok
+SET distsql = off
+
+query T
+SELECT ARRAY[ARRAY['a' COLLATE "en_US_u_ks_level2"]]
+----
+{"{a}"}
+
+query T
+SELECT ARRAY[ARRAY['a'] COLLATE "en_US_u_ks_level2"]
+----
+{"{a}"}
+
+query T
+SELECT ARRAY[ARRAY['a']] COLLATE "en_US_u_ks_level2"
+----
+{"{a}"}
+
+statement ok
+RESET distsql
+
+query T
+SELECT string_to_array('a/b/c', '/') COLLATE "en_US_u_ks_level2"
+----
+{a,b,c}
+
+statement ok
+CREATE TABLE str_arr (a STRING[], b STRING COLLATE "en_US_u_ks_level2")
+
+statement ok
+INSERT INTO str_arr VALUES ('{d,e,f}', 'd'), ('{h,i,j}', 'h'), (NULL, NULL)
+
+query T rowsort
+SELECT a COLLATE "en_US_u_ks_level2" FROM str_arr
+----
+{d,e,f}
+{h,i,j}
+NULL
+
+query T
+SELECT b COLLATE "en_US_u_ks_level2" FROM str_arr ORDER BY 1
+----
+NULL
+d
+h
+
+query error unsupported comparison operator: <collatedstring{en_US}> LIKE <collatedstring{de_DE}>
+SELECT 'TEST' COLLATE "en_US" LIKE 'TEST' COLLATE "de_DE"
+
+query error nondeterministic collations are not supported for LIKE
+SELECT 'TEST' COLLATE "en_US-u-ks-level1" LIKE 'TEST' COLLATE "en_US-u-ks-level1"
+
+# Regression test for attempting to use optimized vectorized operator which
+# doesn't handle collated strings (#147559).
+statement ok
+CREATE TABLE t147559 (
+    a INT,
+    b TEXT COLLATE en_u_ks_level1
+);
+
+statement ok
+INSERT INTO t147559 VALUES (1, 'abc');
+
+query error nondeterministic collations are not supported for LIKE
+SELECT * FROM t147559 WHERE b LIKE 'abc%';
+
+subtest qualified_collation_name
+
+# COLLATE accepts the pg_catalog.<name> qualified form. Every CRDB collation
+# lives in the pg_catalog namespace (see pg_collation), and PostgreSQL emits
+# COLLATE clauses qualified that way; the parser strips the qualifier and uses
+# the trailing locale name.
+
+statement ok
+CREATE TABLE qcn_unquoted (s TEXT COLLATE pg_catalog."en-US")
+
+statement ok
+DROP TABLE qcn_unquoted
+
+statement ok
+CREATE TABLE qcn_mixed_case (s TEXT COLLATE Pg_Catalog."en-US")
+
+statement ok
+DROP TABLE qcn_mixed_case
+
+statement ok
+CREATE TABLE qcn_upper (s TEXT COLLATE PG_CATALOG."en-US")
+
+statement ok
+DROP TABLE qcn_upper
+
+# Quoted lowercase pg_catalog matches.
+statement ok
+CREATE TABLE qcn_quoted_lower (s TEXT COLLATE "pg_catalog"."en-US")
+
+statement ok
+DROP TABLE qcn_quoted_lower
+
+# Quoted identifiers preserve case, so a quoted non-lowercase form is treated
+# as a different schema and rejected, matching PostgreSQL.
+statement error collation "Pg_Catalog\.en-US" does not exist
+CREATE TABLE qcn_quoted_mixed (s TEXT COLLATE "Pg_Catalog"."en-US")
+
+# Any other schema is rejected.
+statement error collation "other_schema\.en-US" does not exist
+CREATE TABLE qcn_other_schema (s TEXT COLLATE other_schema."en-US")
+
+# Qualified form also works in expression context.
+query T
+SELECT 'foo' COLLATE pg_catalog."en-US"
+----
+foo
+
+# An invalid trailing locale still surfaces the BCP47 error after the schema
+# check passes.
+statement error invalid locale bogus
+CREATE TABLE qcn_bogus_locale (s TEXT COLLATE pg_catalog.bogus)
+
+subtest end

@@ -1,0 +1,399 @@
+# Tests for filters and predicates with virtual computed column expressions.
+
+# Atoms with no computed column references.
+#
+# These cases best simulate filter-predicate implication in practice, compared
+# to tests below that contain computed column references. Filters referencing
+# virtual computed columns are rewritten with the computed expression so that
+# they can be pushed into Projects and filter directly above Scans, allowing
+# constrained scans to be generated (see the InlineSelectVirtualColumns
+# normalization rule). Similarly, predicates referencing virtual computed
+# columns are rewritten to reference only non-virtual columns (see
+# buildPartialIndexPredicate in optbuilder).
+
+predtest vars=(a int, b int as (a + 10) virtual)
+a + 10 IS NOT NULL
+=>
+a + 10 IS NOT NULL
+----
+true
+└── remaining filters: none
+
+predtest vars=(a int, b int as (a + 10) virtual, c int)
+c > 4
+=>
+a + 10 IS NOT NULL
+----
+false
+
+predtest vars=(a int, b int as (a + 10) virtual)
+a + 10 > 4
+=>
+a + 10 > 0
+----
+true
+└── remaining filters: a > -6
+
+predtest vars=(a int, b int as (a + 10) virtual)
+a + 10 > 4
+=>
+a + 10 > 4
+----
+true
+└── remaining filters: none
+
+predtest vars=(a int, b int as (a + 10) virtual)
+a + 10 > 0
+=>
+a + 10 > 4
+----
+false
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual)
+(a->>'x')::INT IS NOT NULL
+=>
+(a->>'x')::INT IS NOT NULL
+----
+true
+└── remaining filters: none
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual)
+(a->>'x')::INT > 4
+=>
+(a->>'x')::INT IS NOT NULL
+----
+true
+└── remaining filters: (a->>'x')::INT8 > 4
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual)
+(a->>'y')::INT IS NOT NULL
+=>
+(a->>'x')::INT IS NOT NULL
+----
+false
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual)
+(a->>'x')::INT > 4
+=>
+(a->>'x')::INT > 4
+----
+true
+└── remaining filters: none
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual)
+(a->>'x')::INT > 4
+=>
+(a->>'x')::INT > 0
+----
+true
+└── remaining filters: (a->>'x')::INT8 > 4
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual)
+(a->>'x')::INT >= 4
+=>
+(a->>'x')::INT > 3
+----
+true
+└── remaining filters: (a->>'x')::INT8 >= 4
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual)
+(a->>'x')::INT > 3
+=>
+(a->>'x')::INT >= 4
+----
+true
+└── remaining filters: (a->>'x')::INT8 > 3
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual)
+(a->>'x')::INT > 0
+=>
+(a->>'x')::INT > 4
+----
+false
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual)
+(a->>'x')::INT IN (1, 2, 3)
+=>
+(a->>'x')::INT IN (1, 2, 3)
+----
+true
+└── remaining filters: none
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual)
+(a->>'x')::INT IN (2, 6)
+=>
+(a->>'x')::INT IN (0, 2, 5, 6)
+----
+true
+└── remaining filters: (a->>'x')::INT8 IN (2, 6)
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual)
+(a->>'x')::INT IN (2, 4)
+=>
+(a->>'x')::INT > 1
+----
+true
+└── remaining filters: (a->>'x')::INT8 IN (2, 4)
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual)
+(a->>'x')::INT IN (2, 6)
+=>
+(a->>'x')::INT IN (2, 4)
+----
+false
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual)
+(a->>'x')::INT IN (1, 2, 3)
+=>
+(a->>'x')::INT IN (1, 2)
+----
+false
+
+# Atoms with virtual computed columns referenced in the filter. This should
+# never happen in practice because virtual computed column references should be
+# replaced with their computed expression.
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual)
+b IS NOT NULL
+=>
+(a->>'x')::INT IS NOT NULL
+----
+true
+└── remaining filters: b IS NOT NULL
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual)
+b > 4
+=>
+(a->>'x')::INT IS NOT NULL
+----
+true
+└── remaining filters: b > 4
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual)
+b > 4
+=>
+(a->>'x')::INT > 0
+----
+true
+└── remaining filters: b > 4
+
+# Atoms with virtual computed columns referenced in the predicate. This should
+# never happen in practice because virtual computed column references should be
+# replaced with their computed expression.
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual)
+(a->>'x')::INT IS NOT NULL
+=>
+b IS NOT NULL
+----
+true
+└── remaining filters: (a->>'x')::INT8 IS NOT NULL
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual)
+(a->>'x')::INT > 4
+=>
+b IS NOT NULL
+----
+true
+└── remaining filters: (a->>'x')::INT8 > 4
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual)
+(a->>'x')::INT > 4
+=>
+b > 0
+----
+true
+└── remaining filters: (a->>'x')::INT8 > 4
+
+# Atoms with virtual computed columns referenced in the filter and predicate.
+# This should never happen in practice because virtual computed column
+# references should be replaced with their computed expression.
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual)
+b IS NOT NULL
+=>
+b IS NOT NULL
+----
+true
+└── remaining filters: none
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual)
+b > 4
+=>
+b IS NOT NULL
+----
+true
+└── remaining filters: b > 4
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual)
+b > 4
+=>
+b > 0
+----
+true
+└── remaining filters: b > 4
+
+# Predicates with disjunctions.
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual, c int)
+(a->>'x')::INT > 4
+=>
+(a->>'x')::INT > 0 OR c > 0
+----
+true
+└── remaining filters: (a->>'x')::INT8 > 4
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual, c int)
+(a->>'x')::INT > 4
+=>
+c > 0 OR (a->>'x')::INT > 0
+----
+true
+└── remaining filters: (a->>'x')::INT8 > 4
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual, c int, d int)
+(a->>'x')::INT > 4 AND d > 0
+=>
+(a->>'x')::INT > 0 OR c > 0
+----
+true
+└── remaining filters: ((a->>'x')::INT8 > 4) AND (d > 0)
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual, c int, d int)
+d > 0 AND (a->>'x')::INT > 4
+=>
+(a->>'x')::INT > 0 OR c > 0
+----
+true
+└── remaining filters: (d > 0) AND ((a->>'x')::INT8 > 4)
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual, c int, d int)
+(a->>'x')::INT > 4 OR c > 0
+=>
+(a->>'x')::INT > 0 OR c > 0
+----
+true
+└── remaining filters: ((a->>'x')::INT8 > 4) OR (c > 0)
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual, c int, d int)
+(a->>'x')::INT > 4 OR d > 0
+=>
+(a->>'x')::INT > 0 OR c > 0
+----
+false
+
+# Predicates with conjunctions.
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual, c int)
+(a->>'x')::INT > 4 AND c > 10
+=>
+(a->>'x')::INT > 0 AND c > 0
+----
+true
+└── remaining filters: ((a->>'x')::INT8 > 4) AND (c > 10)
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual, c int)
+c > 10 AND (a->>'x')::INT > 4
+=>
+(a->>'x')::INT > 0 AND c > 0
+----
+true
+└── remaining filters: (c > 10) AND ((a->>'x')::INT8 > 4)
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual, c int)
+(a->>'x')::INT > 4 AND c > 10
+=>
+(a->>'x')::INT> 0 AND c > 0
+----
+true
+└── remaining filters: ((a->>'x')::INT8 > 4) AND (c > 10)
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual, c int, d int)
+(a->>'x')::INT > 0 AND c > 0 AND d > 10
+=>
+(a->>'x')::INT> 0 AND c > 0
+----
+true
+└── remaining filters: d > 10
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual, c int, d int)
+(a->>'x')::INT > 4 AND c > 0 AND d > 10
+=>
+(a->>'x')::INT> 0 AND c > 0
+----
+true
+└── remaining filters: ((a->>'x')::INT8 > 4) AND (d > 10)
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual, c int, d int)
+(a->>'x')::INT > 4 AND d > 10
+=>
+(a->>'x')::INT> 0 AND c > 0
+----
+false
+
+# Combinations.
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual, c int)
+((a->>'x')::INT < 1 OR (a->>'x')::INT > 10) AND (c < 2 OR c > 20)
+=>
+((a->>'x')::INT < 3 OR (a->>'x')::INT > 9) AND (c < 4 OR c > 19)
+----
+true
+└── remaining filters: (((a->>'x')::INT8 < 1) OR ((a->>'x')::INT8 > 10)) AND ((c < 2) OR (c > 20))
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual, c int)
+((a->>'x')::INT < 1 OR (a->>'x')::INT > 10) AND (c < 2 OR c > 20)
+=>
+(c < 4 OR c > 19) AND ((a->>'x')::INT > 9 OR (a->>'x')::INT < 3)
+----
+true
+└── remaining filters: (((a->>'x')::INT8 < 1) OR ((a->>'x')::INT8 > 10)) AND ((c < 2) OR (c > 20))
+
+# Complex computed column expressions.
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual, c int as ((a->>'y')::INT) virtual)
+(a->>'x')::INT > 1 AND (a->>'y')::INT > 2
+=>
+(a->>'x')::INT IS NOT NULL AND (a->>'y')::INT IS NOT NULL
+----
+true
+└── remaining filters: ((a->>'x')::INT8 > 1) AND ((a->>'y')::INT8 > 2)
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual, c int as ((a->>'y')::INT) virtual)
+(a->>'x')::INT > 1 AND (a->>'y')::INT > 2
+=>
+(a->>'x')::INT > 1 AND (a->>'y')::INT > 2
+----
+true
+└── remaining filters: none
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual, c int as ((a->>'y')::INT) virtual)
+(a->>'x')::INT > 1 OR (a->>'y')::INT > 2
+=>
+(a->>'x')::INT > 1 AND (a->>'y')::INT > 2
+----
+false
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual, c int as ((a->>'y')::INT) virtual)
+(a->>'x')::INT > 1 OR (a->>'y')::INT > 2
+=>
+(a->>'x')::INT > 1 OR (a->>'y')::INT > 2
+----
+true
+└── remaining filters: none
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual, c int as ((a->>'y')::INT) virtual)
+(a->>'x')::INT > 10 OR (a->>'y')::INT > 20
+=>
+(a->>'x')::INT > 1 OR (a->>'y')::INT > 2
+----
+true
+└── remaining filters: ((a->>'x')::INT8 > 10) OR ((a->>'y')::INT8 > 20)
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual, c int as ((a->>'y')::INT) virtual)
+(a->>'x')::INT > 1 AND (a->>'y')::INT > 2
+=>
+(a->>'x')::INT > 1 OR (a->>'y')::INT > 2
+----
+true
+└── remaining filters: ((a->>'x')::INT8 > 1) AND ((a->>'y')::INT8 > 2)

@@ -1,0 +1,72 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
+
+go_library(
+    name = "roachprod",
+    srcs = [
+        "clusters_cache.go",
+        "multitenant.go",
+        "node_stability.go",
+        "roachprod.go",
+        "roachprod_pprof.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/roachprod",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/build",
+        "//pkg/cli/exit",
+        "//pkg/cmd/roachprod/grafana",
+        "//pkg/roachprod/agents/fluentbit",
+        "//pkg/roachprod/agents/opentelemetry",
+        "//pkg/roachprod/agents/parca",
+        "//pkg/roachprod/cloud",
+        "//pkg/roachprod/cloud/types",
+        "//pkg/roachprod/config",
+        "//pkg/roachprod/install",
+        "//pkg/roachprod/lock",
+        "//pkg/roachprod/logger",
+        "//pkg/roachprod/prometheus",
+        "//pkg/roachprod/promhelperclient",
+        "//pkg/roachprod/pyroscope",
+        "//pkg/roachprod/ui",
+        "//pkg/roachprod/vm",
+        "//pkg/roachprod/vm/aws",
+        "//pkg/roachprod/vm/azure",
+        "//pkg/roachprod/vm/flagstub",
+        "//pkg/roachprod/vm/gce",
+        "//pkg/roachprod/vm/ibm",
+        "//pkg/roachprod/vm/local",
+        "//pkg/server/debug/replay",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/httputil",
+        "//pkg/util/retry",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
+        "@org_golang_x_sys//unix",
+    ],
+)
+
+go_test(
+    name = "roachprod_test",
+    srcs = [
+        "getpprof_test.go",
+        "roachprod_test.go",
+    ],
+    embed = [":roachprod"],
+    deps = [
+        "//pkg/roachprod/install",
+        "//pkg/roachprod/logger",
+        "//pkg/roachprod/vm",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+disallowed_imports_test(
+    src = "roachprod",
+    disallowed_prefixes = [
+        "pkg/cmd/roachtest",
+    ],
+)

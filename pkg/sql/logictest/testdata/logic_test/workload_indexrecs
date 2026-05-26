@@ -1,0 +1,469 @@
+# Give root role permission to insert into system tables.
+# DO NOT DO THIS IN PRODUCTION.
+statement ok
+INSERT INTO system.users (username, "hashedPassword", "isRole", user_id) VALUES  ('node', NULL, true, 3)
+
+statement ok
+GRANT NODE TO root;
+
+statement ok
+CREATE TABLE t1 (k INT, i INT, f FLOAT, s STRING)
+
+
+# Basic tests for creation
+statement ok
+INSERT INTO system.statement_statistics (
+  index_recommendations,
+  aggregated_ts,
+  fingerprint_id,
+  transaction_fingerprint_id,
+  plan_hash,
+  app_name,
+  node_id,
+  agg_interval,
+  metadata,
+  statistics,
+  plan
+)
+VALUES (
+  ARRAY['creation : CREATE INDEX t1_k ON t1(k)'],
+  '2023-07-05 15:10:11+00:00',
+  x'0000000000000001',
+  x'0000000000000011',
+  'ph_1',
+  'app_1',
+  1,
+  '1 hr',
+  'null',
+  '{"statistics": {"lastExecAt" : "2023-07-05 15:10:10+00:00"}}'::JSONB,
+  'null'
+);
+
+# get workload index-recs
+query TT
+SELECT index_rec, (
+    SELECT array_agg(n ORDER BY n)
+    FROM unnest(fingerprint_ids) AS n
+  ) AS sorted_fp
+FROM workload_index_recs() order by index_rec;
+----
+CREATE INDEX ON t1 (k);  {"\\x0000000000000001"}
+
+
+# get workload index-recs with time filter
+query TT
+SELECT index_rec, (
+    SELECT array_agg(n ORDER BY n)
+    FROM unnest(fingerprint_ids) AS n
+  ) AS sorted_fp
+FROM workload_index_recs('2023-07-05 15:10:10+00:00'::TIMESTAMPTZ - '2 weeks'::interval) order by index_rec;
+----
+CREATE INDEX ON t1 (k);  {"\\x0000000000000001"}
+
+
+# Basic tests for replacement
+statement ok
+CREATE INDEX t1_i ON t1(i);
+
+statement ok
+INSERT INTO system.statement_statistics (
+  index_recommendations,
+  aggregated_ts,
+  fingerprint_id,
+  transaction_fingerprint_id,
+  plan_hash,
+  app_name,
+  node_id,
+  agg_interval,
+  metadata,
+  statistics,
+  plan
+)
+VALUES (
+  ARRAY['replacement : CREATE INDEX t1_i2 ON t1(i) storing (k); DROP INDEX t1_i;'],
+  '2023-07-05 15:10:12+00:00',
+  x'0000000000000002',
+  x'0000000000000012',
+  'ph_2',
+  'app_2',
+  2,
+  '1 hr',
+  'null',
+  '{"statistics": {"lastExecAt" : "2023-06-15 15:10:10+00:00"}}'::JSONB,
+  'null'
+);
+
+# get workload index-recs
+query TT
+SELECT index_rec, (
+    SELECT array_agg(n ORDER BY n)
+    FROM unnest(fingerprint_ids) AS n
+  ) AS sorted_fp
+FROM workload_index_recs() order by index_rec;
+----
+CREATE INDEX ON t1 (i) STORING (k);  {"\\x0000000000000002"}
+CREATE INDEX ON t1 (k);              {"\\x0000000000000001"}
+DROP INDEX t1_i;                     {"\\x0000000000000002"}
+
+
+# index recommendations created before the given time (as shown below) are omitted
+# get workload index-recs with time filter
+query TT
+SELECT index_rec, (
+    SELECT array_agg(n ORDER BY n)
+    FROM unnest(fingerprint_ids) AS n
+  ) AS sorted_fp
+FROM workload_index_recs('2023-07-05 15:10:10+00:00'::TIMESTAMPTZ - '2 weeks'::interval) order by index_rec;
+----
+CREATE INDEX ON t1 (k);  {"\\x0000000000000001"}
+
+
+# Basic tests for alteration to show it is skipped
+statement ok
+INSERT INTO system.statement_statistics (
+  index_recommendations,
+  aggregated_ts,
+  fingerprint_id,
+  transaction_fingerprint_id,
+  plan_hash,
+  app_name,
+  node_id,
+  agg_interval,
+  metadata,
+  statistics,
+  plan
+)
+VALUES (
+  ARRAY['alteration : ALTER INDEX t1_i NOT VISIBLE'],
+  '2023-07-05 15:10:13+00:00',
+  x'0000000000000003',
+  x'0000000000000013',
+  'ph_3',
+  'app_3',
+  3,
+  '1 hr',
+  'null',
+  '{"statistics": {"lastExecAt" : "2023-06-29 15:10:10+00:00"}}'::JSONB,
+  'null'
+);
+
+# get workload index-recs
+query TT
+SELECT index_rec, (
+    SELECT array_agg(n ORDER BY n)
+    FROM unnest(fingerprint_ids) AS n
+  ) AS sorted_fp
+FROM workload_index_recs() order by index_rec;
+----
+CREATE INDEX ON t1 (i) STORING (k);  {"\\x0000000000000002"}
+CREATE INDEX ON t1 (k);              {"\\x0000000000000001"}
+DROP INDEX t1_i;                     {"\\x0000000000000002"}
+
+
+# index recommendations created before the given time (as shown below) are omitted
+# get workload index-recs with time filter
+query TT
+SELECT index_rec, (
+    SELECT array_agg(n ORDER BY n)
+    FROM unnest(fingerprint_ids) AS n
+  ) AS sorted_fp
+FROM workload_index_recs('2023-07-05 15:10:10+00:00'::TIMESTAMPTZ - '2 weeks'::interval) order by index_rec;
+----
+CREATE INDEX ON t1 (k);  {"\\x0000000000000001"}
+
+
+# Test for the new index "t1(k, i)" covering the previous one "t1(k)"
+statement ok
+INSERT INTO system.statement_statistics (
+  index_recommendations,
+  aggregated_ts,
+  fingerprint_id,
+  transaction_fingerprint_id,
+  plan_hash,
+  app_name,
+  node_id,
+  agg_interval,
+  metadata,
+  statistics,
+  plan
+)
+VALUES (
+  ARRAY['creation : CREATE INDEX t1_k_i ON t1(k, i)'],
+  '2023-07-05 15:10:14+00:00',
+  x'0000000000000004',
+  x'0000000000000014',
+  'ph_4',
+  'app_4',
+  4,
+  '1 hr',
+  'null',
+  '{"statistics": {"lastExecAt" : "2023-07-05 15:10:10+00:00"}}'::JSONB,
+  'null'
+);
+
+# get workload index-recs
+query TT
+SELECT index_rec, (
+    SELECT array_agg(n ORDER BY n)
+    FROM unnest(fingerprint_ids) AS n
+  ) AS sorted_fp
+FROM workload_index_recs() order by index_rec;
+----
+CREATE INDEX ON t1 (i) STORING (k);  {"\\x0000000000000002"}
+CREATE INDEX ON t1 (k, i);           {"\\x0000000000000001","\\x0000000000000004"}
+DROP INDEX t1_i;                     {"\\x0000000000000002"}
+
+
+# index recommendations created before the given time (as shown below) are omitted
+# get workload index-recs with time filter
+query TT
+SELECT index_rec, (
+    SELECT array_agg(n ORDER BY n)
+    FROM unnest(fingerprint_ids) AS n
+  ) AS sorted_fp
+FROM workload_index_recs('2023-07-05 15:10:10+00:00'::TIMESTAMPTZ - '2 weeks'::interval) order by index_rec;
+----
+CREATE INDEX ON t1 (k, i);  {"\\x0000000000000001","\\x0000000000000004"}
+
+
+# Test for the storing part "t1(i) storing (k)" covered by one index "t1(i, k)"
+statement ok
+INSERT INTO system.statement_statistics (
+  index_recommendations,
+  aggregated_ts,
+  fingerprint_id,
+  transaction_fingerprint_id,
+  plan_hash,
+  app_name,
+  node_id,
+  agg_interval,
+  metadata,
+  statistics,
+  plan
+)
+VALUES (
+  ARRAY['creation : CREATE INDEX t1_k_i ON t1(i, k)'],
+  '2023-07-05 15:10:15+00:00',
+  x'0000000000000005',
+  x'0000000000000015',
+  'ph_5',
+  'app_5',
+  5,
+  '1 hr',
+  'null',
+  '{"statistics": {"lastExecAt" : "2023-07-05 15:10:10+00:00"}}'::JSONB,
+  'null'
+);
+
+# get workload index-recs
+query TT
+SELECT index_rec, (
+    SELECT array_agg(n ORDER BY n)
+    FROM unnest(fingerprint_ids) AS n
+  ) AS sorted_fp
+FROM workload_index_recs() order by index_rec;
+----
+CREATE INDEX ON t1 (i, k);  {"\\x0000000000000002","\\x0000000000000005"}
+CREATE INDEX ON t1 (k, i);  {"\\x0000000000000001","\\x0000000000000004"}
+DROP INDEX t1_i;            {"\\x0000000000000002"}
+
+
+# index recommendations created before the given time (as shown below) are omitted
+# get workload index-recs with time filter
+query TT
+SELECT index_rec, (
+    SELECT array_agg(n ORDER BY n)
+    FROM unnest(fingerprint_ids) AS n
+  ) AS sorted_fp
+FROM workload_index_recs('2023-07-05 15:10:10+00:00'::TIMESTAMPTZ - '2 weeks'::interval) order by index_rec;
+----
+CREATE INDEX ON t1 (i, k);  {"\\x0000000000000005"}
+CREATE INDEX ON t1 (k, i);  {"\\x0000000000000001","\\x0000000000000004"}
+
+
+# Test for duplicate DROP INDEX t1_i
+statement ok
+INSERT INTO system.statement_statistics (
+  index_recommendations,
+  aggregated_ts,
+  fingerprint_id,
+  transaction_fingerprint_id,
+  plan_hash,
+  app_name,
+  node_id,
+  agg_interval,
+  metadata,
+  statistics,
+  plan
+)
+VALUES (
+  ARRAY['replacement : CREATE INDEX t1_i2 ON t1(i) storing (k); DROP INDEX t1_i;'],
+  '2023-07-05 15:10:16+00:00',
+  x'0000000000000006',
+  x'0000000000000016',
+  'ph_6',
+  'app_6',
+  6,
+  '1 hr',
+  'null',
+  '{"statistics": {"lastExecAt" : "2023-07-05 15:10:10+00:00"}}'::JSONB,
+  'null'
+);
+
+# get workload index-recs
+query TT
+SELECT index_rec, (
+    SELECT array_agg(n ORDER BY n)
+    FROM unnest(fingerprint_ids) AS n
+  ) AS sorted_fp
+FROM workload_index_recs() order by index_rec;
+----
+CREATE INDEX ON t1 (i, k);  {"\\x0000000000000002","\\x0000000000000005","\\x0000000000000006"}
+CREATE INDEX ON t1 (k, i);  {"\\x0000000000000001","\\x0000000000000004"}
+DROP INDEX t1_i;            {"\\x0000000000000002","\\x0000000000000006"}
+
+
+# index recommendations created before the given time (as shown below) are omitted
+# get workload index-recs with time filter
+query TT
+SELECT index_rec, (
+    SELECT array_agg(n ORDER BY n)
+    FROM unnest(fingerprint_ids) AS n
+  ) AS sorted_fp
+FROM workload_index_recs('2023-07-05 15:10:10+00:00'::TIMESTAMPTZ - '2 weeks'::interval) order by index_rec;
+----
+CREATE INDEX ON t1 (i, k);  {"\\x0000000000000005","\\x0000000000000006"}
+CREATE INDEX ON t1 (k, i);  {"\\x0000000000000001","\\x0000000000000004"}
+DROP INDEX t1_i;            {"\\x0000000000000006"}
+
+
+statement ok
+CREATE TABLE t2 (k INT, i INT, f FLOAT, s STRING)
+
+
+# Test for multi-table (t1, t2)
+statement ok
+INSERT INTO system.statement_statistics (
+  index_recommendations,
+  aggregated_ts,
+  fingerprint_id,
+  transaction_fingerprint_id,
+  plan_hash,
+  app_name,
+  node_id,
+  agg_interval,
+  metadata,
+  statistics,
+  plan
+)
+VALUES (
+  ARRAY['creation : CREATE INDEX t2_k ON t2(k) storing (i, f)', 'creation : CREATE INDEX t2_k_f ON t2(k, f)', 'creation : CREATE INDEX t2_k_i_s ON t2(k, i, s)'],
+  '2023-07-05 15:10:17+00:00',
+  x'0000000000000007',
+  x'0000000000000017',
+  'ph_7',
+  'app_7',
+  7,
+  '1 hr',
+  'null',
+  '{"statistics": {"lastExecAt" : "2023-07-05 15:10:10+00:00"}}'::JSONB,
+  'null'
+);
+
+# get workload index-recs
+query TT
+SELECT index_rec, (
+    SELECT array_agg(n ORDER BY n)
+    FROM unnest(fingerprint_ids) AS n
+  ) AS sorted_fp
+FROM workload_index_recs() order by index_rec;
+----
+CREATE INDEX ON t1 (i, k);              {"\\x0000000000000002","\\x0000000000000005","\\x0000000000000006"}
+CREATE INDEX ON t1 (k, i);              {"\\x0000000000000001","\\x0000000000000004"}
+CREATE INDEX ON t2 (k, f) STORING (i);  {"\\x0000000000000007"}
+CREATE INDEX ON t2 (k, i, s);           {"\\x0000000000000007"}
+DROP INDEX t1_i;                        {"\\x0000000000000002","\\x0000000000000006"}
+
+
+# index recommendations created before the given time (as shown below) are omitted
+# get workload index-recs with time filter
+query TT
+SELECT index_rec, (
+    SELECT array_agg(n ORDER BY n)
+    FROM unnest(fingerprint_ids) AS n
+  ) AS sorted_fp
+FROM workload_index_recs('2023-07-05 15:10:10+00:00'::TIMESTAMPTZ - '2 weeks'::interval) order by index_rec;
+----
+CREATE INDEX ON t1 (i, k);              {"\\x0000000000000005","\\x0000000000000006"}
+CREATE INDEX ON t1 (k, i);              {"\\x0000000000000001","\\x0000000000000004"}
+CREATE INDEX ON t2 (k, f) STORING (i);  {"\\x0000000000000007"}
+CREATE INDEX ON t2 (k, i, s);           {"\\x0000000000000007"}
+DROP INDEX t1_i;                        {"\\x0000000000000006"}
+
+
+statement ok
+CREATE TABLE t3 (k INT, i INT, f FLOAT, s STRING)
+
+
+# Test for multi-table (t1, t2, t3)
+statement ok
+INSERT INTO system.statement_statistics (
+  index_recommendations,
+  aggregated_ts,
+  fingerprint_id,
+  transaction_fingerprint_id,
+  plan_hash,
+  app_name,
+  node_id,
+  agg_interval,
+  metadata,
+  statistics,
+  plan
+)
+VALUES (
+  ARRAY['creation : CREATE INDEX t3_k_i_f ON t3(k, i, f)', 'creation : CREATE INDEX t3_k_i_s ON t3(k, i, s)', 'creation : CREATE INDEX t3_k1 ON t3(k) storing (i, f)'],
+  '2023-07-05 15:10:18+00:00',
+  x'0000000000000008',
+  x'0000000000000018',
+  'ph_8',
+  'app_8',
+  8,
+  '1 hr',
+  'null',
+  '{"statistics": {"lastExecAt" : "2023-07-05 15:10:10+00:00"}}'::JSONB,
+  'null'
+);
+
+# get workload index-recs
+query TT
+SELECT index_rec, (
+    SELECT array_agg(n ORDER BY n)
+    FROM unnest(fingerprint_ids) AS n
+  ) AS sorted_fp
+FROM workload_index_recs() order by index_rec;
+----
+CREATE INDEX ON t1 (i, k);              {"\\x0000000000000002","\\x0000000000000005","\\x0000000000000006"}
+CREATE INDEX ON t1 (k, i);              {"\\x0000000000000001","\\x0000000000000004"}
+CREATE INDEX ON t2 (k, f) STORING (i);  {"\\x0000000000000007"}
+CREATE INDEX ON t2 (k, i, s);           {"\\x0000000000000007"}
+CREATE INDEX ON t3 (k, i, f);           {"\\x0000000000000008"}
+CREATE INDEX ON t3 (k, i, s);           {"\\x0000000000000008"}
+DROP INDEX t1_i;                        {"\\x0000000000000002","\\x0000000000000006"}
+
+
+# index recommendations created before the given time (as shown below) are omitted
+# get workload index-recs with time filter
+query TT
+SELECT index_rec, (
+    SELECT array_agg(n ORDER BY n)
+    FROM unnest(fingerprint_ids) AS n
+  ) AS sorted_fp
+FROM workload_index_recs('2023-07-05 15:10:10+00:00'::TIMESTAMPTZ - '2 weeks'::interval) order by index_rec;
+----
+CREATE INDEX ON t1 (i, k);              {"\\x0000000000000005","\\x0000000000000006"}
+CREATE INDEX ON t1 (k, i);              {"\\x0000000000000001","\\x0000000000000004"}
+CREATE INDEX ON t2 (k, f) STORING (i);  {"\\x0000000000000007"}
+CREATE INDEX ON t2 (k, i, s);           {"\\x0000000000000007"}
+CREATE INDEX ON t3 (k, i, f);           {"\\x0000000000000008"}
+CREATE INDEX ON t3 (k, i, s);           {"\\x0000000000000008"}
+DROP INDEX t1_i;                        {"\\x0000000000000006"}

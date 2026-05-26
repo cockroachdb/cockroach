@@ -1,0 +1,114 @@
+# LogicTest: !local-prepared
+query error job with ID 1 does not exist
+PAUSE JOB 1
+
+query error could not parse "foo" as type int
+PAUSE JOB 'foo'
+
+query error could not parse "foo" as type int
+CANCEL JOBS SELECT 'foo'
+
+query error too many columns in CANCEL JOBS data
+CANCEL JOBS VALUES (1,2)
+
+query error pq: CANCEL JOBS data column 1 \(job_id\) must be of type int, not type oid
+CANCEL JOB 1::OID
+
+statement ok
+PAUSE JOB (SELECT id FROM system.jobs LIMIT 0)
+
+statement ok
+PAUSE JOBS SELECT id FROM system.jobs LIMIT 0
+
+query error could not parse "foo" as type int
+PAUSE JOBS SELECT 'foo'
+
+query error too many columns in PAUSE JOBS data
+PAUSE JOBS VALUES (1,2)
+
+query error job with ID 1 does not exist
+RESUME JOB 1
+
+query error could not parse "foo" as type int
+RESUME JOB 'foo'
+
+query error could not parse "foo" as type int
+RESUME JOBS SELECT 'foo'
+
+query error too many columns in RESUME JOBS data
+RESUME JOBS VALUES (1,2)
+
+statement ok
+RESUME JOB (SELECT id FROM system.jobs LIMIT 0)
+
+statement ok
+RESUME JOBS SELECT id FROM system.jobs LIMIT 0
+
+query error job with ID 1 does not exist
+CANCEL JOB 1
+
+query error could not parse "foo" as type int
+CANCEL JOB 'foo'
+
+statement ok
+CANCEL JOB (SELECT id FROM system.jobs LIMIT 0)
+
+statement ok
+CANCEL JOBS SELECT id FROM system.jobs LIMIT 0
+
+query error CANCEL QUERIES data column 1 \(query_id\) must be of type string, not type int
+CANCEL QUERY 1
+
+query error too many columns in CANCEL QUERIES data
+CANCEL QUERIES VALUES (1,2)
+
+query error odd length hex string
+CANCEL QUERY 'f54'
+
+query error not found
+CANCEL QUERY '14d2355b9cccbca50000000000000001'
+
+statement ok
+CANCEL QUERY IF EXISTS '14d2355b9cccbca50000000000000001'
+
+query error CANCEL SESSIONS data column 1 \(session_id\) must be of type string, not type int
+CANCEL SESSION 1
+
+query error too many columns in CANCEL SESSIONS data
+CANCEL SESSIONS VALUES (1,2)
+
+query error odd length hex string
+CANCEL SESSION 'f54'
+
+query error not found
+CANCEL SESSION '14d2355b9cccbca50000000000000001'
+
+statement ok
+CANCEL SESSION IF EXISTS '14d2355b9cccbca50000000000000001'
+
+statement ok
+CANCEL SESSION (SELECT 'a' LIMIT 0)
+
+statement ok
+CANCEL SESSIONS SELECT 'a' LIMIT 0
+
+# Regression test for #25842
+query error odd length hex string
+CANCEL SESSION 'aaa'::NAME
+
+query error odd length hex string
+CANCEL QUERY 'aaa'::NAME
+
+user root
+
+query T rowsort
+SELECT feature_name FROM crdb_internal.feature_usage
+WHERE feature_name IN (
+  'sql.schema.job.control.pause',
+  'sql.schema.job.control.resume',
+  'sql.schema.job.control.cancel'
+)
+----
+sql.schema.job.control.pause
+sql.schema.job.control.cancel
+sql.schema.job.control.resume

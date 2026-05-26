@@ -1,0 +1,830 @@
+# LogicTest: 5node-default-configs
+
+statement ok
+CREATE TABLE data (a INT, b INT, c FLOAT, d DECIMAL, PRIMARY KEY (a, b, c, d))
+
+# Split into ten parts.
+statement ok
+ALTER TABLE data SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
+
+# Relocate the ten parts to the five nodes.
+retry
+statement ok
+ALTER TABLE data EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
+
+# Generate all combinations of values 1 to 10.
+statement ok
+INSERT INTO data SELECT a, b, c::FLOAT, d::DECIMAL FROM
+   generate_series(1, 10) AS a(a),
+   generate_series(1, 10) AS b(b),
+   generate_series(1, 10) AS c(c),
+   generate_series(1, 10) AS d(d)
+
+# Verify data placement.
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE data WITH DETAILS]
+ORDER BY 1
+----
+start_key           end_key       replicas  lease_holder
+<before:/Table/XX>  …/1/1         {1}       1
+…/1/1               …/1/2         {2}       2
+…/1/2               …/1/3         {3}       3
+…/1/3               …/1/4         {4}       4
+…/1/4               …/1/5         {5}       5
+…/1/5               …/1/6         {1}       1
+…/1/6               …/1/7         {2}       2
+…/1/7               …/1/8         {3}       3
+…/1/8               …/1/9         {4}       4
+…/1/9               <after:/Max>  {5}       5
+
+query RI
+SELECT sum(a), sum_int(a) FROM data
+----
+55000 55000
+
+query R
+SELECT sum((a-1)*1000 + (b-1)*100 + (c::INT-1)*10 + (d-1)) FROM data
+----
+49995000
+
+query I
+SELECT sum_int((a-1)*1000 + (b-1)*100 + (c::INT-1)*10 + (d::INT-1)) FROM data
+----
+49995000
+
+query RIII
+SELECT sum(a), sum_int(a), count(a), max(a) FROM data
+----
+55000 55000 10000 10
+
+query RIII
+SELECT sum(a+b), sum_int(a+b), count(a+b), max(a+b) FROM data
+----
+110000 110000 10000 20
+
+query R
+SELECT sum((a-1)*1000) + sum((b-1)*100) + sum((c::INT-1)*10) + sum(d-1) FROM data
+----
+49995000
+
+query I
+SELECT sum_int((a-1)*1000) + sum_int((b-1)*100) + sum_int((c::INT-1)*10) + sum_int(d::INT-1) FROM data
+----
+49995000
+
+query RIRI
+SELECT sum(a), min(b), max(c), count(d) FROM data
+----
+55000 1 10 10000
+
+query R
+SELECT avg(a+b+c::INT+d) FROM data
+----
+22.000000000000000000
+
+query RRR
+SELECT sum(a), round(stddev(b), 1), round(stddev_pop(b), 1) FROM data
+----
+55000  2.9  2.9
+
+query RRR
+SELECT sum(a), round(variance(b), 1), round(var_pop(b), 1) FROM data
+----
+55000  8.3  8.3
+
+query RR
+SELECT stddev(a+b+c::INT+d), stddev_pop(a+b+c::INT+d) FROM data
+----
+5.7448498962142608187  5.7445626465380286599
+
+query RR
+SELECT variance(a+b+c::INT+d), var_pop(a+b+c::INT+d) FROM data
+----
+33.0033003300330033  33
+
+query RIRRRRRRRR
+SELECT sum(a), sum_int(a), avg(b), sum(c), avg(d), stddev(a), stddev_pop(a), variance(b), var_pop(b), sum(a+b+c::INT+d) FROM data
+----
+55000  55000  5.5000000000000000000  55000  5.5000000000000000000  2.8724249481071304094  2.8722813232690143299  8.2508250825082508251  8.25  220000
+
+query RIRIRRRRR
+SELECT sum(a), min(b), max(c), count(d), avg(a+b+c::INT+d), stddev(a+b), stddev_pop(a+b), variance(c::INT+d), var_pop(c::INT+d) FROM data
+----
+55000  1  10  10000  22.000000000000000000  4.0622223185119375800  4.0620192023179801802  16.50165016501650165  16.5
+
+query RRRRIRRRRR
+SELECT sum(a), stddev(a), stddev_pop(a), avg(a) FILTER (WHERE a > 5), count(b), avg(b), variance(b), var_pop(b) FILTER (WHERE b < 8), sum(b) FILTER (WHERE b < 8), stddev(b) FILTER (WHERE b > 2) FROM data
+----
+55000  2.8724249481071304094  2.8722813232690143299  8.0000000000000000000  10000  5.5000000000000000000  8.2508250825082508251  4  28000  2.2914310663953007487
+
+query RRR
+SELECT sum(a), avg(DISTINCT a), variance(a) FILTER (WHERE a > 0) FROM data
+----
+55000  5.5000000000000000000  8.2508250825082508251
+
+query RRIRR
+SELECT sum(a), avg(a), count(a), stddev(a), variance(a) FROM data
+----
+55000  5.5000000000000000000  10000  2.8724249481071304094  8.2508250825082508251
+
+query RRRRR
+SELECT sum(a), avg(b), sum(a), sum(a), avg(b) FROM data
+----
+55000  5.5000000000000000000  55000  55000  5.5000000000000000000
+
+query RRIRR
+SELECT avg(c), sum(c), sum_int(c::INT), avg(d), sum(d) FROM data
+----
+5.5  55000  55000  5.5000000000000000000  55000
+
+query II
+SELECT max(a), min(b) FROM data HAVING min(b) > 2
+----
+
+
+query I rowsort
+SELECT DISTINCT (a) FROM data
+----
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+
+query RI
+SELECT sum(DISTINCT a), sum_int(DISTINCT a) FROM data
+----
+55 55
+
+query RIRI
+SELECT sum(DISTINCT a), sum_int(DISTINCT a), sum(DISTINCT b), sum_int(DISTINCT b) from data
+----
+55 55 55 55
+
+query II
+SELECT DISTINCT a, b FROM data WHERE (a + b + c::INT) = 27 ORDER BY a,b
+----
+7   10
+8   9
+8   10
+9   8
+9   9
+9   10
+10  7
+10  8
+10  9
+10  10
+
+query II
+SELECT DISTINCT a, b FROM data WHERE (a + b + c::INT) = 27 ORDER BY b,a
+----
+10  7
+9   8
+10  8
+8   9
+9   9
+10  9
+7  10
+8  10
+9  10
+10 10
+
+query RRRI
+SELECT c, d, sum(a+c::INT) + avg(b+d), sum_int(a+c::INT) + avg(b+d)::INT FROM data GROUP BY c, d ORDER BY c, d
+----
+1   1   656.5000000000000000000   657
+1   2   657.5000000000000000000   658
+1   3   658.5000000000000000000   659
+1   4   659.5000000000000000000   660
+1   5   660.500000000000000000    661
+1   6   661.500000000000000000    662
+1   7   662.500000000000000000    663
+1   8   663.500000000000000000    664
+1   9   664.500000000000000000    665
+1   10  665.500000000000000000    666
+2   1   756.5000000000000000000   757
+2   2   757.5000000000000000000   758
+2   3   758.5000000000000000000   759
+2   4   759.5000000000000000000   760
+2   5   760.500000000000000000    761
+2   6   761.500000000000000000    762
+2   7   762.500000000000000000    763
+2   8   763.500000000000000000    764
+2   9   764.500000000000000000    765
+2   10  765.500000000000000000    766
+3   1   856.5000000000000000000   857
+3   2   857.5000000000000000000   858
+3   3   858.5000000000000000000   859
+3   4   859.5000000000000000000   860
+3   5   860.500000000000000000    861
+3   6   861.500000000000000000    862
+3   7   862.500000000000000000    863
+3   8   863.500000000000000000    864
+3   9   864.500000000000000000    865
+3   10  865.500000000000000000    866
+4   1   956.5000000000000000000   957
+4   2   957.5000000000000000000   958
+4   3   958.5000000000000000000   959
+4   4   959.5000000000000000000   960
+4   5   960.500000000000000000    961
+4   6   961.500000000000000000    962
+4   7   962.500000000000000000    963
+4   8   963.500000000000000000    964
+4   9   964.500000000000000000    965
+4   10  965.500000000000000000    966
+5   1   1056.5000000000000000000  1057
+5   2   1057.5000000000000000000  1058
+5   3   1058.5000000000000000000  1059
+5   4   1059.5000000000000000000  1060
+5   5   1060.500000000000000000   1061
+5   6   1061.500000000000000000   1062
+5   7   1062.500000000000000000   1063
+5   8   1063.500000000000000000   1064
+5   9   1064.500000000000000000   1065
+5   10  1065.500000000000000000   1066
+6   1   1156.5000000000000000000  1157
+6   2   1157.5000000000000000000  1158
+6   3   1158.5000000000000000000  1159
+6   4   1159.5000000000000000000  1160
+6   5   1160.500000000000000000   1161
+6   6   1161.500000000000000000   1162
+6   7   1162.500000000000000000   1163
+6   8   1163.500000000000000000   1164
+6   9   1164.500000000000000000   1165
+6   10  1165.500000000000000000   1166
+7   1   1256.5000000000000000000  1257
+7   2   1257.5000000000000000000  1258
+7   3   1258.5000000000000000000  1259
+7   4   1259.5000000000000000000  1260
+7   5   1260.500000000000000000   1261
+7   6   1261.500000000000000000   1262
+7   7   1262.500000000000000000   1263
+7   8   1263.500000000000000000   1264
+7   9   1264.500000000000000000   1265
+7   10  1265.500000000000000000   1266
+8   1   1356.5000000000000000000  1357
+8   2   1357.5000000000000000000  1358
+8   3   1358.5000000000000000000  1359
+8   4   1359.5000000000000000000  1360
+8   5   1360.500000000000000000   1361
+8   6   1361.500000000000000000   1362
+8   7   1362.500000000000000000   1363
+8   8   1363.500000000000000000   1364
+8   9   1364.500000000000000000   1365
+8   10  1365.500000000000000000   1366
+9   1   1456.5000000000000000000  1457
+9   2   1457.5000000000000000000  1458
+9   3   1458.5000000000000000000  1459
+9   4   1459.5000000000000000000  1460
+9   5   1460.500000000000000000   1461
+9   6   1461.500000000000000000   1462
+9   7   1462.500000000000000000   1463
+9   8   1463.500000000000000000   1464
+9   9   1464.500000000000000000   1465
+9   10  1465.500000000000000000   1466
+10  1   1556.5000000000000000000  1557
+10  2   1557.5000000000000000000  1558
+10  3   1558.5000000000000000000  1559
+10  4   1559.5000000000000000000  1560
+10  5   1560.500000000000000000   1561
+10  6   1561.500000000000000000   1562
+10  7   1562.500000000000000000   1563
+10  8   1563.500000000000000000   1564
+10  9   1564.500000000000000000   1565
+10  10  1565.500000000000000000   1566
+
+# Test plans with empty streams.
+statement ok
+CREATE TABLE one (k INT PRIMARY KEY, v INT)
+
+statement ok
+ALTER TABLE one SPLIT AT VALUES (0), (99)
+
+retry
+statement ok
+ALTER TABLE one EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 0)
+
+statement ok
+INSERT INTO one VALUES (1,1), (2,2), (3,3), (4,4), (5,5), (6,6), (7,7), (8,8), (9,9), (10,10)
+
+statement ok
+CREATE TABLE two (k INT PRIMARY KEY, v INT);
+
+statement ok
+ALTER TABLE two SPLIT AT VALUES (0), (99)
+
+retry
+statement ok
+ALTER TABLE two EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 0)
+
+statement ok
+INSERT INTO two VALUES (1,1), (2,2), (3,3), (4,4), (5,5), (6,6), (7,7), (8,8), (9,9), (10,10)
+
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE one WITH DETAILS]
+----
+start_key                end_key                replicas  lease_holder
+<before:/Table/106/1/9>  …/1/0                  {5}       5
+…/1/0                    …/1/99                 {1}       1
+…/1/99                   <after:/Table/XX/1/0>  {5}       5
+
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE two WITH DETAILS]
+----
+start_key                 end_key       replicas  lease_holder
+<before:/Table/107/1/99>  …/1/0         {5}       5
+…/1/0                     …/1/99        {2}       2
+…/1/99                    <after:/Max>  {5}       5
+
+query I
+SELECT count(*) FROM one AS a, one AS b, two AS c
+----
+1000
+
+query RRR
+SELECT sum(a), sum(b), sum(c) FROM data GROUP BY d HAVING sum(a+b) > 10
+----
+5500  5500  5500
+5500  5500  5500
+5500  5500  5500
+5500  5500  5500
+5500  5500  5500
+5500  5500  5500
+5500  5500  5500
+5500  5500  5500
+5500  5500  5500
+5500  5500  5500
+
+
+query RR rowsort
+SELECT avg(a+b), c FROM data GROUP BY c, d HAVING c = d
+----
+11.000000000000000000  3
+11.000000000000000000  10
+11.000000000000000000  5
+11.000000000000000000  4
+11.000000000000000000  6
+11.000000000000000000  7
+11.000000000000000000  1
+11.000000000000000000  8
+11.000000000000000000  2
+11.000000000000000000  9
+
+query RRIR rowsort
+SELECT sum(a+b), sum(a+b) FILTER (WHERE a < d), sum_int(a+b) FILTER (WHERE a < d), sum(a+b) FILTER (WHERE a = c) FROM data GROUP BY d
+----
+11000  NULL  NULL 1100
+11000  650   650  1100
+11000  1400  1400 1100
+11000  3200  3200 1100
+11000  2250  2250 1100
+11000  4250  4250 1100
+11000  5400  5400 1100
+11000  6650  6650 1100
+11000  8000  8000 1100
+11000  9450  9450 1100
+
+# Same query but restricted to a single range; no local aggregation stage.
+query RRIR rowsort
+SELECT sum(a+b), sum(a+b) FILTER (WHERE a < d), sum_int(a+b) FILTER (WHERE a < d), sum(a+b) FILTER (WHERE a = c) FROM data WHERE a = 1 GROUP BY d
+----
+650  NULL  NULL 65
+650  650   650  65
+650  650   650  65
+650  650   650  65
+650  650   650  65
+650  650   650  65
+650  650   650  65
+650  650   650  65
+650  650   650  65
+650  650   650  65
+
+query IIRT nosort
+VALUES (1, 2, 1.0, 'string1'), (4, 3, 2.3, 'string2')
+----
+1 2 1.0 string1
+4 3 2.3 string2
+
+query IIR
+SELECT max(t.a), min(t.b), avg(t.c) FROM (VALUES (1, 2, 3), (4, 5, 6), (7, 8, 0)) AS t(a, b, c) WHERE b > 3
+----
+7  5  3.0000000000000000000
+
+query ITIR
+SELECT * FROM (VALUES (1, '222'), (2, '444')) t1(a,b) JOIN (VALUES (1, 100.0), (3, 32.0)) t2(a,b) ON t1.a = t2.a
+----
+1 222 1 100.0
+
+statement ok
+CREATE TABLE nullables (a INT, b INT, c INT, PRIMARY KEY (a))
+
+statement ok
+INSERT INTO nullables VALUES (1,1,1)
+
+statement ok
+INSERT INTO nullables VALUES (2,NULL,1)
+
+query II
+SELECT c, count(*) FROM nullables GROUP BY c;
+----
+1 2
+
+query T
+SELECT array_agg(a) FROM (SELECT a FROM data WHERE b = 1 AND c = 1.0 AND d = 1.0 ORDER BY a)
+----
+{1,2,3,4,5,6,7,8,9,10}
+
+query T
+SELECT array_agg(ab) FROM (SELECT a*b AS ab FROM data WHERE c = 1.0 AND d = 1.0 ORDER BY a*b)
+----
+{1,2,2,3,3,4,4,4,5,5,6,6,6,6,7,7,8,8,8,8,9,9,9,10,10,10,10,12,12,12,12,14,14,15,15,16,16,16,18,18,18,18,20,20,20,20,21,21,24,24,24,24,25,27,27,28,28,30,30,30,30,32,32,35,35,36,36,36,40,40,40,40,42,42,45,45,48,48,49,50,50,54,54,56,56,60,60,63,63,64,70,70,72,72,80,80,81,90,90,100}
+
+query T
+SELECT json_agg(a) FROM (SELECT a FROM data WHERE b = 1 AND c = 1.0 AND d = 1.0 ORDER BY a)
+----
+[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+query T
+SELECT jsonb_agg(a) FROM (SELECT a FROM data WHERE b = 1 AND c = 1.0 AND d = 1.0 ORDER BY a)
+----
+[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+# Test that orderings on GROUP BY columns are propagated through aggregations.
+statement ok
+CREATE TABLE sorted_data (a INT PRIMARY KEY, b INT, c FLOAT, INDEX foo(b))
+
+statement ok
+INSERT INTO sorted_data VALUES
+(1, 4, 5.0),
+(2, 3, 3.4),
+(3, 9, 2.2),
+(4, 13, 1.99),
+(5, 2, 5.7),
+(6, 7, 6.2),
+(7, 9, 8.9),
+(8, 1, 1.22),
+(9, -2, 23.0),
+(10, 100, -3.1)
+
+# Split into ten parts.
+statement ok
+ALTER TABLE sorted_data SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
+
+# Relocate the ten parts to the five nodes.
+retry
+statement ok
+ALTER TABLE sorted_data EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
+
+# The ordering is on all the GROUP BY columns, and isn't preserved after the
+# aggregation.
+query II rowsort
+SELECT a, max(b) FROM sorted_data GROUP BY a
+----
+6   7
+7   9
+10  100
+1   4
+2   3
+3   9
+4   13
+5   2
+8   1
+9   -2
+
+# The ordering is on all the GROUP BY columns, and is preserved after the
+# aggregation.
+query II
+SELECT a, max(b) FROM sorted_data GROUP BY a ORDER BY a
+----
+1   4
+2   3
+3   9
+4   13
+5   2
+6   7
+7   9
+8   1
+9   -2
+10  100
+
+# The ordering is on some of the GROUP BY columns, and isn't preserved after
+# the aggregation.
+query RII rowsort
+SELECT c, min(b), a FROM sorted_data GROUP BY a, c
+----
+8.9   9    7
+1.99  13   4
+1.22  1    8
+3.4   3    2
+2.2   9    3
+-3.1  100  10
+23    -2   9
+5     4    1
+5.7   2    5
+6.2   7    6
+
+# The ordering is on some of the GROUP BY columns, and is preserved after
+# the aggregation.
+query RII
+SELECT c, min(b), a FROM sorted_data GROUP BY a, c ORDER BY a
+----
+5     4    1
+3.4   3    2
+2.2   9    3
+1.99  13   4
+5.7   2    5
+6.2   7    6
+8.9   9    7
+1.22  1    8
+23    -2   9
+-3.1  100  10
+
+# Require some reasonable minimum workmem (necessary for the streamer).
+statement ok
+SET distsql_workmem = '100KiB';
+
+# If the underlying ordering isn't from the primary index, it needs to be hinted
+# for now.
+query IR rowsort
+SELECT b, max(c) FROM sorted_data@foo GROUP BY b
+----
+-2   23
+1    1.22
+2    5.7
+3    3.4
+4    5
+7    6.2
+9    8.9
+13   1.99
+100  -3.1
+
+# Test that a merge join is used on two aggregate subqueries with orderings on
+# the GROUP BY columns. Note that an ORDER BY is not necessary on the
+# subqueries.
+query IRIR rowsort
+SELECT * FROM (SELECT a, max(c) FROM sorted_data GROUP BY a) JOIN (SELECT b, min(c) FROM sorted_data@foo GROUP BY b) ON a = b
+----
+1  5     1  1.22
+2  3.4   2  5.7
+3  2.2   3  3.4
+4  1.99  4  5
+9  23    9  2.2
+7  8.9   7  6.2
+
+# Test that zeroNode is being handled correctly.
+query R
+SELECT sum(a) FROM data WHERE FALSE
+----
+NULL
+
+# Test non distributed statistics aggregate functions.
+statement ok
+CREATE TABLE statistics_agg_test (y INT, x INT)
+
+statement ok
+INSERT INTO statistics_agg_test SELECT y, y%10 FROM generate_series(1, 100) AS y
+
+query FFF
+SELECT corr(y, x)::decimal, covar_pop(y, x)::decimal, covar_samp(y, x)::decimal FROM statistics_agg_test
+----
+0.045228963191363145 3.75 3.787878787878788
+
+query FFF
+SELECT regr_intercept(y, x), regr_r2(y, x), regr_slope(y, x) FROM statistics_agg_test
+----
+48.4545454545455 0.00204565911136568 0.454545454545455
+
+query FFF
+SELECT regr_sxx(y, x), regr_sxy(y, x), regr_syy(y, x) FROM statistics_agg_test
+----
+825 375 83325
+
+query IF
+SELECT regr_count(y, x), sqrdiff(y) FROM statistics_agg_test
+----
+100  83325
+
+query FF
+SELECT regr_avgx(y, x), regr_avgy(y, x) FROM statistics_agg_test
+----
+4.5 50.5
+
+# Test distributed statistics aggregate functions.
+# Split statistics_agg_test in ten parts.
+statement ok
+ALTER TABLE statistics_agg_test SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
+
+# Relocate the ten parts to the five nodes.
+retry
+statement ok
+ALTER TABLE statistics_agg_test EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
+
+query FFF
+SELECT corr(y, x)::decimal, covar_pop(y, x)::decimal, covar_samp(y, x)::decimal FROM statistics_agg_test
+----
+0.045228963191363145 3.75 3.787878787878788
+
+query FFF
+SELECT regr_intercept(y, x), regr_r2(y, x), regr_slope(y, x) FROM statistics_agg_test
+----
+48.4545454545455 0.00204565911136568 0.454545454545455
+
+query FFF
+SELECT regr_sxx(y, x), regr_sxy(y, x), regr_syy(y, x) FROM statistics_agg_test
+----
+825 375 83325
+
+query IF
+SELECT regr_count(y, x), sqrdiff(y) FROM statistics_agg_test
+----
+100  83325
+
+query FF
+SELECT regr_avgx(y, x), regr_avgy(y, x) FROM statistics_agg_test
+----
+4.5 50.5
+
+# Regression test for #37211 (incorrect ordering between aggregator stages).
+statement ok
+CREATE TABLE uv (u INT PRIMARY KEY, v INT);
+INSERT INTO uv SELECT x, x*10 FROM generate_series(2, 8) AS g(x);
+
+query R
+SELECT sum(v) FROM data INNER LOOKUP JOIN uv ON (a=u) GROUP BY u ORDER BY u
+----
+20000
+30000
+40000
+50000
+60000
+70000
+80000
+
+statement ok
+CREATE TABLE t55837 (
+  i  int primary key,
+  y  float,
+  x  float
+);
+INSERT INTO t55837 (i, y, x) VALUES
+  (1, 1.0,   1),
+  (2, 1.0,   1),
+  (3, 2.0,   3),
+  (4, 3.0,   3);
+ALTER TABLE t55837 SPLIT AT VALUES (3);
+
+retry
+statement ok
+ALTER TABLE t55837 EXPERIMENTAL_RELOCATE VALUES (ARRAY[3], 2);
+
+statement ok
+SELECT * FROM t55837 -- make sure that the range cache is populated
+
+# Regression test for incorrectly planning a local distinct stage (#55837).
+query FI
+SELECT corr(DISTINCT y, x), count(y) FROM t55837
+----
+0.866025403784439 4
+
+# Regression test for incorrectly populating the type schema produced by the
+# final stage of aggregators (#58683).
+statement ok
+CREATE TABLE table58683_1 (col1 INT8 PRIMARY KEY);
+INSERT INTO table58683_1 SELECT i FROM generate_series(1, 5) AS g(i);
+ALTER TABLE table58683_1 SPLIT AT SELECT i FROM generate_series(1, 5) AS g(i);
+
+retry
+statement ok
+ALTER TABLE table58683_1 EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 5) AS g(i);
+
+statement ok
+CREATE TABLE table58683_2 (col2 BOOL);
+
+retry
+statement ok
+ALTER TABLE table58683_2 EXPERIMENTAL_RELOCATE SELECT ARRAY[2], 2;
+
+statement ok
+SELECT every(col2) FROM table58683_1 JOIN table58683_2 ON col1 = (table58683_2.tableoid)::INT8 GROUP BY col2 HAVING bool_and(col2);
+
+# Regression test for #74736 - missing Get results when:
+#  - multiple ranges are involved, but the scan is not distributed; and
+#  - we need to paginate; and
+#  - the cardinality of the scan is more than ParallelScanResultThreshold.
+statement ok
+CREATE TABLE table74736 (k INT PRIMARY KEY, blob STRING);
+ALTER TABLE table74736 SPLIT AT VALUES (1000000);
+
+retry
+statement ok
+ALTER TABLE table74736 EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 0), (ARRAY[2], 1000000);
+
+statement ok
+INSERT INTO table74736 SELECT x * 10000, repeat('a', 200000) FROM generate_series(1, 130) AS g(x);
+
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE table74736 WITH DETAILS]
+----
+start_key                end_key       replicas  lease_holder
+<before:/Table/114/1/5>  …/1/1000000   {1}       1
+…/1/1000000              <after:/Max>  {2}       2
+
+statement ok
+SET DISTSQL = OFF
+
+query II
+SELECT count(*), sum_int(length(blob)) FROM table74736 WHERE (k >= 1 AND k <= 900000) OR k = 1200000 OR k = 1250000;
+----
+92  18400000
+
+statement ok
+SET DISTSQL = ON
+
+# Regression test for skipping the evaluation of the render expression that
+# results in an error (#108901).
+statement ok
+CREATE TABLE t108901 AS SELECT g::FLOAT8 AS _float8 FROM generate_series(1, 5) AS g;
+ALTER TABLE t108901 SPLIT AT VALUES (1), (2), (3);
+
+retry
+statement ok
+ALTER TABLE t108901 RELOCATE VOTERS VALUES (ARRAY[1], 1), (ARRAY[2], 2), (ARRAY[3], 3);
+
+statement ok
+SET disable_optimizer_rules = PruneWindowOutputCols;
+
+statement error integer out of range
+SELECT 1 FROM t108901 WHERE
+  EXISTS(
+    SELECT regr_slope(1.2345678901234562e+27:::FLOAT8::INT8,0.968018273253753:::FLOAT8::DECIMAL) OVER ()::FLOAT8
+    FROM t108901
+  );
+
+statement ok
+RESET testing_optimizer_random_seed;
+RESET testing_optimizer_disable_rule_probability;
+
+subtest 109334_regr
+
+# Regression test for #109334
+
+statement ok
+CREATE TABLE IF NOT EXISTS t109334 AS
+        SELECT
+                1.7976931348623157e+308::FLOAT8 AS _float8,
+                1::FLOAT8 AS grouping_col
+        FROM
+                generate_series(1, 1) AS g;
+
+statement ok
+ALTER TABLE t109334 SPLIT AT VALUES (1), (10);
+
+statement ok
+ALTER TABLE t109334 SCATTER;
+
+# Check that var_pop applied to a single value never overflows.
+query FFI
+SELECT
+        _float8,
+        var_pop(_float8::FLOAT8)::FLOAT8,
+        count(*)
+FROM
+        t109334
+GROUP BY
+        _float8;
+----
+1.7976931348623157e+308  0  1
+
+statement ok
+INSERT INTO t109334 SELECT g*1.23456789, 2::FLOAT8 FROM generate_series(1, 50) AS g;
+
+statement ok
+ALTER TABLE t109334 SPLIT AT VALUES (1), (10), (100), (100000), (1000000), (10000000000), (100000000000);
+
+statement ok
+ALTER TABLE t109334 SCATTER;
+
+# Check that applying operations in the calculation of single pass squared
+# difference in a different order results in the same value as before,
+# though this may not be the case for all data sets. Slight precision
+# differences are expected in floating point calculations due to different
+# orders of evaluation.
+query FI rowsort
+SELECT
+        var_pop(_float8::FLOAT8)::FLOAT8,
+        count(*)
+FROM
+        t109334
+GROUP BY
+        grouping_col;
+----
+317.40587747271735  50
+0                   1

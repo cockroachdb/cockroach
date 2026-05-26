@@ -1,0 +1,355 @@
+statement ok
+GRANT CREATE ON DATABASE test TO testuser
+
+statement ok
+CREATE ROLE new_role
+
+user testuser
+
+statement ok
+CREATE TABLE t()
+
+# Even without any privileges, the owner of the table should be able perform
+# any operation on the table.
+statement ok
+REVOKE ALL ON t FROM testuser
+
+statement ok
+ALTER TABLE t RENAME to t2
+
+statement ok
+ALTER TABLE t2 RENAME to t
+
+statement ok
+REVOKE ALL ON t FROM testuser
+
+# Owner should able to grant all privileges to other roles.
+
+statement ok
+GRANT ALL ON t TO new_role WITH GRANT OPTION
+
+# Test ownership of views.
+
+statement ok
+CREATE TABLE for_view(x INT);
+CREATE VIEW v as SELECT x FROM for_view;
+
+# Even without any privileges, the owner of the table should be able perform
+# any operation on the table.
+statement ok
+REVOKE ALL ON v FROM testuser
+
+statement ok
+ALTER VIEW v RENAME to v2
+
+statement ok
+ALTER TABLE v2 RENAME to v
+
+statement ok
+GRANT ALL ON v TO new_role WITH GRANT OPTION
+
+statement ok
+DROP VIEW v
+
+statement ok
+DROP TABLE for_view
+
+# Test ownership of sequences.
+
+statement ok
+CREATE SEQUENCE s;
+
+# Even without any privileges, the owner of the table should be able perform
+# any operation on the table.
+statement ok
+REVOKE ALL ON s FROM testuser
+
+statement ok
+ALTER SEQUENCE s RENAME to s2
+
+statement ok
+ALTER SEQUENCE s2 RENAME to s
+
+statement ok
+GRANT ALL ON s TO new_role WITH GRANT OPTION
+
+statement ok
+DROP SEQUENCE s
+
+# Test ownership of databases.
+
+user root
+
+statement ok
+ALTER USER testuser CREATEDB
+
+user testuser
+
+statement ok
+CREATE DATABASE d
+
+user testuser
+
+# The user does not have admin privilege or CREATE privilege on the db
+# but should be able to create a table due to being the db owner.
+
+statement ok
+CREATE TABLE d.t()
+
+statement ok
+ALTER TABLE d.t RENAME TO d.t2
+
+statement ok
+ALTER TABLE d.t2 RENAME TO d.t
+
+statement ok
+GRANT ALL ON DATABASE d TO new_role WITH GRANT OPTION
+
+statement ok
+DROP TABLE d.t
+
+statement ok
+ALTER DATABASE d RENAME TO d2
+
+statement ok
+DROP DATABASE d2
+
+# Test inheritance of ownership.
+
+user root
+
+statement ok
+CREATE USER testuser2
+
+statement ok
+GRANT admin TO testuser
+
+user testuser
+
+statement ok
+CREATE DATABASE d
+
+user root
+
+statement ok
+REVOKE admin FROM testuser;
+GRANT ALL ON DATABASE d to testuser2
+
+# Remove the following two lines once the GRANT privilege is removed in 22.2
+statement ok
+REVOKE GRANT OPTION FOR ALL PRIVILEGES ON DATABASE d FROM testuser2
+
+user testuser2
+
+# testuser2 has ALL privileges, no grant options, and is not a member of a role,
+# so it cannot GRANT.
+statement error user testuser2 missing WITH GRANT OPTION privilege on ALL
+GRANT ALL ON DATABASE d TO new_role WITH GRANT OPTION
+
+user root
+
+statement ok
+GRANT testuser TO testuser2;
+REVOKE ALL ON DATABASE d FROM testuser2
+
+user testuser2
+
+# testuser2 has no privileges and is a member of testuser with no privileges
+# except ownership of database d.
+# Through this ownership, testuser2 is expected to have all privileges on d
+# through ownership inheritance.
+
+statement ok
+CREATE TABLE d.t()
+
+statement ok
+GRANT ALL ON DATABASE d TO new_role WITH GRANT OPTION
+
+statement ok
+DROP TABLE d.t
+
+# However the CREATEDB privilege is not inherited.
+statement error permission denied to rename database
+ALTER DATABASE d RENAME TO d2
+
+user root
+
+statement ok
+ALTER USER testuser2 WITH CREATEDB
+
+user testuser2
+
+statement ok
+ALTER DATABASE d RENAME TO d2
+
+statement ok
+DROP DATABASE d2
+
+# Ensure role cannot be dropped if it is the owner of an object.
+
+user root
+
+statement ok
+GRANT admin TO testuser
+
+user testuser
+
+statement ok
+CREATE DATABASE d
+
+statement ok
+CREATE TABLE d.t()
+
+user root
+
+# Revoke privileges from testuser so the only dependency left on objects is
+# ownership.
+
+statement ok
+REVOKE ALL ON DATABASE test FROM testuser;
+REVOKE ALL ON TABLE d.t FROM testuser;
+
+statement error pq: role testuser cannot be dropped because some objects depend on it\nowner of database d\nowner of schema d.public\nowner of table d.public.t\nowner of table test.public.t
+DROP ROLE testuser
+
+# Cannot drop object due to owned objects message should only show the owned
+# objects for the first user with owned objects if multiple users have owned
+# objects.
+
+user testuser2
+
+statement ok
+CREATE TABLE t2()
+
+statement ok
+REVOKE ALL ON TABLE t2 FROM testuser2
+
+statement error pq: role testuser2 cannot be dropped because some objects depend on it.*\n.*owner of table test.public.t2
+DROP ROLE testuser2, testuser
+
+# Ensure role cannot be dropped if it is an owner of a schema.
+
+user testuser
+
+statement ok
+USE d
+
+statement ok
+CREATE SCHEMA s
+
+statement ok
+CREATE TYPE typ AS ENUM ()
+
+statement ok
+CREATE TABLE s.t()
+
+user root
+
+statement ok
+REVOKE ALL ON DATABASE test FROM testuser;
+REVOKE ALL ON SCHEMA d.s FROM testuser;
+REVOKE ALL ON TYPE d.typ FROM testuser;
+REVOKE ALL ON TABLE d.s.t FROM testuser;
+
+user testuser
+
+statement error pq: role testuser cannot be dropped because some objects depend on it\nowner of database d\nowner of schema d.public\nowner of schema d.s\nowner of table d.public.t\nowner of table d.s.t\nowner of table test.public.t\nowner of type d.public._typ\nowner of type d.public.typ
+DROP ROLE testuser
+
+user root
+
+let $testuser_job_id
+SELECT id FROM system.jobs WHERE owner = 'testuser' LIMIT 1
+
+let $testuser2_job_id
+SELECT id FROM system.jobs WHERE owner = 'testuser2' LIMIT 1
+
+let $node_job_id
+SELECT id FROM system.jobs WHERE owner = 'node' LIMIT 1
+
+# Verify a simple transfer by an admin from testuser to testuser2 and back.
+statement ok
+ALTER JOB $testuser_job_id OWNER TO testuser2
+
+query T
+SELECT owner FROM system.jobs WHERE id = $testuser_job_id
+----
+testuser2
+
+statement ok
+ALTER JOB $testuser_job_id OWNER TO testuser
+
+query T
+SELECT owner FROM system.jobs WHERE id = $testuser_job_id
+----
+testuser
+
+# Verify that ownership cannot transfer to or from 'node'.
+
+statement error cannot transfer ownership
+ALTER JOB $node_job_id OWNER TO testuser
+
+statement error cannot transfer ownership
+ALTER JOB $testuser_job_id OWNER TO node
+
+# Verify testuser2 can transfer ownership via role testuser to role testrole.
+user testuser2
+
+statement ok
+CREATE ROLE testrole
+
+statement ok
+CREATE ROLE otherrole
+
+statement ok
+CREATE USER testuser3
+
+statement ok
+GRANT testrole TO testuser3
+
+statement ok
+ALTER JOB $testuser_job_id OWNER TO testrole
+
+query T
+SELECT owner FROM system.jobs WHERE id = $testuser_job_id
+----
+testrole
+
+# Verify testuser2 can transfer ownership to themselves and back to testuser.
+statement ok
+ALTER JOB $testuser_job_id OWNER TO testuser2
+
+query T
+SELECT owner FROM system.jobs WHERE id = $testuser_job_id
+----
+testuser2
+
+statement ok
+ALTER JOB $testuser_job_id OWNER TO testuser
+
+query T
+SELECT owner FROM system.jobs WHERE id = $testuser_job_id
+----
+testuser
+
+user testuser3
+
+# Verify testuser3 cannot transfer since they do not own it, including via role.
+statement error testuser3 does not own job
+ALTER JOB $testuser_job_id OWNER TO testuser3
+
+# Now move ownership to testrole so testuser3 can transfer it.
+user testuser2
+
+statement ok
+ALTER JOB $testuser_job_id OWNER TO testrole
+
+user testuser3
+
+statement ok
+ALTER JOB $testuser_job_id OWNER TO testuser3
+
+# Verify testuser3, who is not an admin, cannot transfer to otherrole which they
+# are not a member of.
+statement error testuser3 cannot transfer ownership to otherrole
+ALTER JOB $testuser_job_id OWNER TO otherrole

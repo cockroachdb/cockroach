@@ -1,0 +1,3 @@
+show_columns_stmt ::=
+	'SHOW' 'COLUMNS' 'FROM' table_name 'WITH' 'COMMENT'
+	| 'SHOW' 'COLUMNS' 'FROM' table_name 

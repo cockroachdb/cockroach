@@ -1,0 +1,3172 @@
+new-lock-table maxlocks=10000
+----
+
+new-txn txn=txn1 ts=10,1 epoch=0
+----
+
+# req1 will acquire locks for txn1
+
+new-request r=req1 txn=txn1 ts=10,1 spans=none@a,b+exclusive@c,f
+----
+
+scan r=req1
+----
+start-waiting: false
+
+guard-state r=req1
+----
+new: state=doneWaiting
+
+# Acquire lock on c both replicated and unreplicated. Just to trigger corner cases and since
+# uncontended replicated locks are not tracked by lockTable.
+acquire r=req1 k=c durability=r strength=intent
+----
+num=0
+
+acquire r=req1 k=c durability=u strength=exclusive
+----
+num=1
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+acquire r=req1 k=e durability=u strength=exclusive
+num=2
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
+
+dequeue r=req1
+----
+num=2
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+# 200ms passes between req1 and req2
+time-tick ms=200
+----
+
+# req2 is also for txn1 and will not wait for locks that are held by self.
+
+new-request r=req2 txn=txn1 ts=10,2 spans=exclusive@b,d+none@d,g
+----
+
+scan r=req2
+----
+start-waiting: false
+
+acquire r=req2 k=b durability=u strength=exclusive
+----
+num=3
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+dequeue r=req2
+----
+num=3
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+# 1s passes before txn2 begins
+time-tick s=1
+----
+
+
+# txn1 holds locks on b, c, e.
+# txn2 has a smaller timestamp than txn1.
+new-txn txn=txn2 ts=8,12 epoch=0
+----
+
+# A read request for txn2 does not need to wait for locks held by txn1.
+new-request r=req3 txn=txn2 ts=8,12 spans=none@a,g
+----
+
+scan r=req3
+----
+start-waiting: false
+
+dequeue r=req3
+----
+num=3
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+# 200ms passes between req3 and req4
+time-tick ms=200
+----
+
+
+# req4 from txn2 will conflict with locks on b, c since wants to write to [a, d). But does
+# not conflict with lock on e since wants to read there and the read is at a lower timestamp
+# than the lock.
+new-request r=req4 txn=txn2 ts=8,12 spans=exclusive@a,d+none@d,g
+----
+
+scan r=req4
+----
+start-waiting: true
+
+guard-state r=req4
+----
+new: state=waitFor txn=txn1 key="b" held=true guard-strength=Exclusive
+
+# 3s passes while req4 is waiting on locks on b,c
+time-tick s=3
+----
+
+
+# Release lock on b since epoch of txn1 has changed.
+update txn=txn1 ts=11,1 epoch=1 span=b
+----
+num=3
+ lock: "b"
+   queued locking requests:
+    active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+# Still waiting, but on lock c which has a different ts in the TxnMeta.
+
+guard-state r=req4
+----
+new: state=waitFor txn=txn1 key="c" held=true guard-strength=Exclusive
+
+# 1s passes while req4 continues to wait on c (and only has reservation on b)
+time-tick s=1
+----
+
+# Release lock on c since epoch of txn1 has changed.
+update txn=txn1 ts=11,1 epoch=1 span=c,e
+----
+num=3
+ lock: "b"
+   queued locking requests:
+    active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+ lock: "c"
+   queued locking requests:
+    active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+# No longer waiting since does not conflict with lock on e.
+
+guard-state r=req4
+----
+new: state=doneWaiting
+
+# req4 from txn2 has a reservation on b, c with ts=8,12. And txn1 has a lock on e with ts=10,1
+
+scan r=req4
+----
+start-waiting: false
+
+# req4 proceeds to evaluation and discovers locks on a, f. The lock on a conflicts since req4
+# wants to write and the lock on f conflicts because req4's read has a higher timestamp.
+
+new-txn txn=txn3 ts=6 epoch=0
+----
+
+add-discovered r=req4 k=a txn=txn3
+----
+num=4
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl [Intent]
+   queued locking requests:
+    active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+ lock: "b"
+   queued locking requests:
+    active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+ lock: "c"
+   queued locking requests:
+    active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+add-discovered r=req4 k=f txn=txn3
+----
+num=5
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl [Intent]
+   queued locking requests:
+    active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+ lock: "b"
+   queued locking requests:
+    active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+ lock: "c"
+   queued locking requests:
+    active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "f"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl [Intent]
+
+# Note that guard state has not changed yet. Discovering these locks means the caller has to
+# scan again.
+
+should-wait r=req4
+----
+false
+
+scan r=req4
+----
+start-waiting: true
+
+# 2s passes while req4 continues to wait on a, f after rescanning/enqueueing
+time-tick s=2
+----
+
+
+# req4 from txn2 has a reservation on b, c with ts=8,12. And txn1 has a lock on e with ts=10,1
+# which does not conflict. And txn3 with ts=6 has locks on a, f that do conflict. This is better
+# viewed as:
+# Locks:
+#             a    b    c    d    e    f    g
+#  holder   txn3                 txn1 txn3
+#            6                   10,1  6
+#  res           req4  req4
+#                txn2  txn2
+#                8,12  8,12
+# Requests: * is active wait.
+#  req4      w*     w     w    r   r    r
+
+guard-state r=req4
+----
+new: state=waitFor txn=txn3 key="a" held=true guard-strength=Exclusive
+
+print
+----
+num=5
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl [Intent]
+   queued locking requests:
+    active: true req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+ lock: "b"
+   queued locking requests:
+    active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+ lock: "c"
+   queued locking requests:
+    active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "f"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl [Intent]
+
+query
+----
+num locks: 1, bytes returned: 85, resume reason: RESUME_UNKNOWN, resume span: <nil>
+ locks:
+  range_id=3 key="a" holder=00000000-0000-0000-0000-000000000003 durability=Replicated duration=2s
+   waiters:
+    waiting_txn:00000000-0000-0000-0000-000000000002 active_waiter:true strength:Exclusive wait_duration:2s
+
+metrics
+----
+locks: 5
+locksheld: 3
+totallockholddurationnanos: 11400000000
+lockswithwaitqueues: 3
+waiters: 3
+waitingreaders: 0
+waitingwriters: 3
+totalwaitdurationnanos: 2000000000
+topklocksbywaiters:
+- key:
+  - 97
+  held: true
+  holddurationnanos: 2000000000
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 2000000000
+  maxwaitdurationnanos: 2000000000
+- key:
+  - 98
+  held: false
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
+  - 99
+  held: false
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key:
+  - 101
+  held: true
+  holddurationnanos: 7400000000
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
+  - 97
+  held: true
+  holddurationnanos: 2000000000
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 2000000000
+  maxwaitdurationnanos: 2000000000
+- key:
+  - 102
+  held: true
+  holddurationnanos: 2000000000
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key:
+  - 97
+  held: true
+  holddurationnanos: 2000000000
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 2000000000
+  maxwaitdurationnanos: 2000000000
+- key:
+  - 98
+  held: false
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
+  - 99
+  held: false
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+
+# 300ms passes before req5
+time-tick ms=300
+----
+
+
+# req5 is again from transaction 1. Since it is reading from b, c, and even though txn1
+# conflicts with the reservation holder since txn1.ts > txn2.ts, reads don't wait for
+# reservations.
+new-request r=req5 txn=txn1 ts=11,1 spans=none@b+none@c
+----
+
+scan r=req5
+----
+start-waiting: false
+
+dequeue r=req5
+----
+num=5
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl [Intent]
+   queued locking requests:
+    active: true req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+ lock: "b"
+   queued locking requests:
+    active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+ lock: "c"
+   queued locking requests:
+    active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "f"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl [Intent]
+
+# 100ms passes between req5 and req6
+time-tick ms=100
+----
+
+
+# req6 from txn1 conflicts with lock at f, and reservations at b, c.
+
+new-request r=req6 txn=txn1 ts=11,1 spans=none@f+intent@b,d
+----
+
+scan r=req6
+----
+start-waiting: true
+
+# req6 is a distinguished waiter at b.
+#
+# Locks:
+#             a    b    c    d    e    f    g
+#  holder   txn3                 txn1 txn3
+#            6                   10,1  6
+#  res           req4  req4
+#                txn2  txn2
+#                8,12  8,12
+# Requests: * is active wait.
+#  req4      w*   w     w    r   r    r
+#  req6           w*    w             r
+#   txn1
+#   11,1
+
+print
+----
+num=5
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl [Intent]
+   queued locking requests:
+    active: true req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+ lock: "b"
+   queued locking requests:
+    active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+   queued locking requests:
+    active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "f"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl [Intent]
+
+metrics
+----
+locks: 5
+locksheld: 3
+totallockholddurationnanos: 12600000000
+lockswithwaitqueues: 3
+waiters: 4
+waitingreaders: 0
+waitingwriters: 4
+totalwaitdurationnanos: 2400000000
+topklocksbywaiters:
+- key:
+  - 98
+  held: false
+  holddurationnanos: 0
+  waiters: 2
+  waitingreaders: 0
+  waitingwriters: 2
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
+  - 97
+  held: true
+  holddurationnanos: 2400000000
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 2400000000
+  maxwaitdurationnanos: 2400000000
+- key:
+  - 99
+  held: false
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key:
+  - 101
+  held: true
+  holddurationnanos: 7800000000
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
+  - 97
+  held: true
+  holddurationnanos: 2400000000
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 2400000000
+  maxwaitdurationnanos: 2400000000
+- key:
+  - 102
+  held: true
+  holddurationnanos: 2400000000
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key:
+  - 97
+  held: true
+  holddurationnanos: 2400000000
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 2400000000
+  maxwaitdurationnanos: 2400000000
+- key:
+  - 98
+  held: false
+  holddurationnanos: 0
+  waiters: 2
+  waitingreaders: 0
+  waitingwriters: 2
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
+  - 99
+  held: false
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+
+guard-state r=req6
+----
+new: state=waitFor txn=txn2 key="b" held=false guard-strength=Intent
+
+# 250ms passes between req6 and req7
+time-tick ms=250
+----
+
+
+# req7 from txn3 only wants to write to c
+
+new-request r=req7 txn=txn3 ts=6 spans=intent@c
+----
+
+scan r=req7
+----
+start-waiting: true
+
+# Locks:
+#             a    b    c    d    e    f    g
+#  holder   txn3                 txn1 txn3
+#            6                   10,1  6
+#  res           req4  req4
+#                txn2  txn2
+#                8,12  8,12
+# Requests: * is active wait.
+#  req4      w*    w     w    r   r    r
+#  req6            w*    w             r
+#   txn1
+#   11,1
+#  req7                  w*
+#   txn3
+#   6
+
+guard-state r=req7
+----
+new: state=waitFor txn=txn2 key="c" held=false guard-strength=Intent
+
+print
+----
+num=5
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl [Intent]
+   queued locking requests:
+    active: true req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+ lock: "b"
+   queued locking requests:
+    active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+   queued locking requests:
+    active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 7, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "f"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl [Intent]
+
+metrics
+----
+locks: 5
+locksheld: 3
+totallockholddurationnanos: 13350000000
+lockswithwaitqueues: 3
+waiters: 5
+waitingreaders: 0
+waitingwriters: 5
+totalwaitdurationnanos: 2900000000
+topklocksbywaiters:
+- key:
+  - 98
+  held: false
+  holddurationnanos: 0
+  waiters: 2
+  waitingreaders: 0
+  waitingwriters: 2
+  waitdurationnanos: 250000000
+  maxwaitdurationnanos: 250000000
+- key:
+  - 99
+  held: false
+  holddurationnanos: 0
+  waiters: 2
+  waitingreaders: 0
+  waitingwriters: 2
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
+  - 97
+  held: true
+  holddurationnanos: 2650000000
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 2650000000
+  maxwaitdurationnanos: 2650000000
+topklocksbyholdduration:
+- key:
+  - 101
+  held: true
+  holddurationnanos: 8050000000
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
+  - 97
+  held: true
+  holddurationnanos: 2650000000
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 2650000000
+  maxwaitdurationnanos: 2650000000
+- key:
+  - 102
+  held: true
+  holddurationnanos: 2650000000
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key:
+  - 97
+  held: true
+  holddurationnanos: 2650000000
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 2650000000
+  maxwaitdurationnanos: 2650000000
+- key:
+  - 98
+  held: false
+  holddurationnanos: 0
+  waiters: 2
+  waitingreaders: 0
+  waitingwriters: 2
+  waitdurationnanos: 250000000
+  maxwaitdurationnanos: 250000000
+- key:
+  - 99
+  held: false
+  holddurationnanos: 0
+  waiters: 2
+  waitingreaders: 0
+  waitingwriters: 2
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+
+
+query
+----
+num locks: 3, bytes returned: 282, resume reason: RESUME_UNKNOWN, resume span: <nil>
+ locks:
+  range_id=3 key="a" holder=00000000-0000-0000-0000-000000000003 durability=Replicated duration=2.65s
+   waiters:
+    waiting_txn:00000000-0000-0000-0000-000000000002 active_waiter:true strength:Exclusive wait_duration:2.65s
+  range_id=3 key="b" holder=<nil> durability=Unreplicated duration=0s
+   waiters:
+    waiting_txn:00000000-0000-0000-0000-000000000002 active_waiter:false strength:Exclusive wait_duration:2.65s
+    waiting_txn:00000000-0000-0000-0000-000000000001 active_waiter:true strength:Intent wait_duration:250ms
+  range_id=3 key="c" holder=<nil> durability=Unreplicated duration=0s
+   waiters:
+    waiting_txn:00000000-0000-0000-0000-000000000002 active_waiter:false strength:Exclusive wait_duration:2.65s
+    waiting_txn:00000000-0000-0000-0000-000000000003 active_waiter:true strength:Intent wait_duration:0s
+
+# 100ms passes between before releasing a
+time-tick ms=100
+----
+
+
+# Release a. req4 waits at f.
+release txn=txn3 span=a
+----
+num=5
+ lock: "a"
+   queued locking requests:
+    active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+ lock: "b"
+   queued locking requests:
+    active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+   queued locking requests:
+    active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 7, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "f"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl [Intent]
+
+guard-state r=req4
+----
+new: state=waitFor txn=txn3 key="f" held=true guard-strength=None
+
+guard-state r=req6
+----
+old: state=waitFor txn=txn2 key="b" held=false guard-strength=Intent
+
+print
+----
+num=5
+ lock: "a"
+   queued locking requests:
+    active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+ lock: "b"
+   queued locking requests:
+    active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+   queued locking requests:
+    active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 7, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "f"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl [Intent]
+   waiting readers:
+    req: 4, txn: 00000000-0000-0000-0000-000000000002
+
+metrics
+----
+locks: 5
+locksheld: 2
+totallockholddurationnanos: 10900000000
+lockswithwaitqueues: 4
+waiters: 6
+waitingreaders: 1
+waitingwriters: 5
+totalwaitdurationnanos: 450000000
+topklocksbywaiters:
+- key:
+  - 98
+  held: false
+  holddurationnanos: 0
+  waiters: 2
+  waitingreaders: 0
+  waitingwriters: 2
+  waitdurationnanos: 350000000
+  maxwaitdurationnanos: 350000000
+- key:
+  - 99
+  held: false
+  holddurationnanos: 0
+  waiters: 2
+  waitingreaders: 0
+  waitingwriters: 2
+  waitdurationnanos: 100000000
+  maxwaitdurationnanos: 100000000
+- key:
+  - 97
+  held: false
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key:
+  - 101
+  held: true
+  holddurationnanos: 8150000000
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
+  - 102
+  held: true
+  holddurationnanos: 2750000000
+  waiters: 1
+  waitingreaders: 1
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key:
+  - 98
+  held: false
+  holddurationnanos: 0
+  waiters: 2
+  waitingreaders: 0
+  waitingwriters: 2
+  waitdurationnanos: 350000000
+  maxwaitdurationnanos: 350000000
+- key:
+  - 99
+  held: false
+  holddurationnanos: 0
+  waiters: 2
+  waitingreaders: 0
+  waitingwriters: 2
+  waitdurationnanos: 100000000
+  maxwaitdurationnanos: 100000000
+- key:
+  - 97
+  held: false
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+
+
+query
+----
+num locks: 3, bytes returned: 258, resume reason: RESUME_UNKNOWN, resume span: <nil>
+ locks:
+  range_id=3 key="b" holder=<nil> durability=Unreplicated duration=0s
+   waiters:
+    waiting_txn:00000000-0000-0000-0000-000000000002 active_waiter:false strength:Exclusive wait_duration:0s
+    waiting_txn:00000000-0000-0000-0000-000000000001 active_waiter:true strength:Intent wait_duration:350ms
+  range_id=3 key="c" holder=<nil> durability=Unreplicated duration=0s
+   waiters:
+    waiting_txn:00000000-0000-0000-0000-000000000002 active_waiter:false strength:Exclusive wait_duration:0s
+    waiting_txn:00000000-0000-0000-0000-000000000003 active_waiter:true strength:Intent wait_duration:100ms
+  range_id=3 key="f" holder=00000000-0000-0000-0000-000000000003 durability=Replicated duration=2.75s
+   waiters:
+    waiting_txn:00000000-0000-0000-0000-000000000002 active_waiter:true strength:None wait_duration:0s
+
+# 500ms passes between before releasing f
+time-tick ms=500
+----
+
+
+# Release f. This will cause req4 to be done waiting.
+
+release txn=txn3 span=f
+----
+num=4
+ lock: "a"
+   queued locking requests:
+    active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+ lock: "b"
+   queued locking requests:
+    active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+   queued locking requests:
+    active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 7, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+guard-state r=req4
+----
+new: state=doneWaiting
+
+# Locks:
+#             a    b    c    d    e    f    g
+#  holder                        txn1
+#                                10,1
+#  res     req4  req4  req4
+#          txn2  txn2  txn2
+#          8,12  8,12  8,12
+# Requests: * is active wait.
+#  req4      w     w     w    r   r    r
+#  req6            w*    w             r
+#   txn1
+#   11,1
+#  req7                  w*
+#   txn3
+#   6
+
+scan r=req4
+----
+start-waiting: false
+
+acquire r=req4 k=b durability=r strength=intent
+----
+num=4
+ lock: "a"
+   queued locking requests:
+    active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl [Intent]
+   queued locking requests:
+    active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+   queued locking requests:
+    active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 7, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+acquire r=req4 k=c durability=r strength=intent
+----
+num=4
+ lock: "a"
+   queued locking requests:
+    active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl [Intent]
+   queued locking requests:
+    active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl [Intent]
+   queued locking requests:
+    active: true req: 7, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+guard-state r=req6
+----
+new: state=waitFor txn=txn2 key="b" held=true guard-strength=Intent
+
+guard-state r=req7
+----
+new: state=waitFor txn=txn2 key="c" held=true guard-strength=Intent
+
+print
+----
+num=4
+ lock: "a"
+   queued locking requests:
+    active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl [Intent]
+   queued locking requests:
+    active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl [Intent]
+   queued locking requests:
+    active: true req: 7, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+metrics
+----
+locks: 4
+locksheld: 3
+totallockholddurationnanos: 8650000000
+lockswithwaitqueues: 3
+waiters: 3
+waitingreaders: 0
+waitingwriters: 3
+totalwaitdurationnanos: 1450000000
+topklocksbywaiters:
+- key:
+  - 97
+  held: false
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
+  - 98
+  held: true
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 850000000
+  maxwaitdurationnanos: 850000000
+- key:
+  - 99
+  held: true
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 600000000
+  maxwaitdurationnanos: 600000000
+topklocksbyholdduration:
+- key:
+  - 101
+  held: true
+  holddurationnanos: 8650000000
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
+  - 98
+  held: true
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 850000000
+  maxwaitdurationnanos: 850000000
+- key:
+  - 99
+  held: true
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 600000000
+  maxwaitdurationnanos: 600000000
+topklocksbywaitduration:
+- key:
+  - 98
+  held: true
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 850000000
+  maxwaitdurationnanos: 850000000
+- key:
+  - 99
+  held: true
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 600000000
+  maxwaitdurationnanos: 600000000
+- key:
+  - 97
+  held: false
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+
+dequeue r=req4
+----
+num=3
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl [Intent]
+   queued locking requests:
+    active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl [Intent]
+   queued locking requests:
+    active: true req: 7, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+# Locks:
+#             a    b    c    d    e    f    g
+#  holder        txn2  txn2      txn1
+#                8,12  8,12      10,1
+#  res
+# Requests: * is active wait.
+#  req6            w*    w             r
+#   txn1
+#   11,1
+#  req7                  w*
+#   txn3
+#   6
+
+# 2s passes between before releasing c
+time-tick s=2
+----
+
+
+# Release the lock at c. The lock at e is not held by txn2 so will be ignored.
+# req7 will get the reservation at c and will become doneWaiting.
+release txn=txn2 span=c,f
+----
+num=3
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl [Intent]
+   queued locking requests:
+    active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+   queued locking requests:
+    active: false req: 7, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+guard-state r=req7
+----
+new: state=doneWaiting
+
+guard-state r=req6
+----
+old: state=waitFor txn=txn2 key="b" held=true guard-strength=Intent
+
+print
+----
+num=3
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl [Intent]
+   queued locking requests:
+    active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+   queued locking requests:
+    active: false req: 7, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+metrics
+----
+locks: 3
+locksheld: 2
+totallockholddurationnanos: 12650000000
+lockswithwaitqueues: 2
+waiters: 2
+waitingreaders: 0
+waitingwriters: 2
+totalwaitdurationnanos: 2850000000
+topklocksbywaiters:
+- key:
+  - 98
+  held: true
+  holddurationnanos: 2000000000
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 2850000000
+  maxwaitdurationnanos: 2850000000
+- key:
+  - 99
+  held: false
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key:
+  - 101
+  held: true
+  holddurationnanos: 10650000000
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
+  - 98
+  held: true
+  holddurationnanos: 2000000000
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 2850000000
+  maxwaitdurationnanos: 2850000000
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key:
+  - 98
+  held: true
+  holddurationnanos: 2000000000
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 2850000000
+  maxwaitdurationnanos: 2850000000
+- key:
+  - 99
+  held: false
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+
+# 40ms passes between before releasing b
+time-tick ms=40
+----
+
+
+# Now before req7 can scan again, release the lock at b. This will cause req6 to break the
+# reservation of req7 at c and become doneWaiting too.
+
+release txn=txn2 span=b
+----
+num=3
+ lock: "b"
+   queued locking requests:
+    active: false req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+   queued locking requests:
+    active: false req: 7, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+guard-state r=req6
+----
+new: state=doneWaiting
+
+guard-state r=req7
+----
+old: state=doneWaiting
+
+# Both requests are doneWaiting, but req holds the reservation. The state is
+# Locks:
+#             a    b    c    d    e    f    g
+#  holder                        txn1
+#                                10,1
+#  res            req6 req6
+#                 txn1 txn1
+#                 11,1 11,1
+# Requests: * is active wait.
+#  req6            w    w              r
+#   txn1
+#   11,1
+#  req7                 w*
+#   txn3
+#   6
+
+print
+----
+num=3
+ lock: "b"
+   queued locking requests:
+    active: false req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+   queued locking requests:
+    active: false req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 7, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+metrics
+----
+locks: 3
+locksheld: 1
+totallockholddurationnanos: 10690000000
+lockswithwaitqueues: 2
+waiters: 3
+waitingreaders: 0
+waitingwriters: 3
+totalwaitdurationnanos: 0
+topklocksbywaiters:
+- key:
+  - 99
+  held: false
+  holddurationnanos: 0
+  waiters: 2
+  waitingreaders: 0
+  waitingwriters: 2
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
+  - 98
+  held: false
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key:
+  - 101
+  held: true
+  holddurationnanos: 10690000000
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key:
+  - 98
+  held: false
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
+  - 99
+  held: false
+  holddurationnanos: 0
+  waiters: 2
+  waitingreaders: 0
+  waitingwriters: 2
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+
+scan r=req7
+----
+start-waiting: true
+
+guard-state r=req7
+----
+new: state=waitFor txn=txn1 key="c" held=false guard-strength=Intent
+
+scan r=req6
+----
+start-waiting: false
+
+# Release reservation.
+dequeue r=req6
+----
+num=2
+ lock: "c"
+   queued locking requests:
+    active: false req: 7, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+guard-state r=req7
+----
+new: state=doneWaiting
+
+scan r=req7
+----
+start-waiting: false
+
+dequeue r=req7
+----
+num=1
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+# e is still locked
+
+# 15s passes between before req8
+time-tick s=15
+----
+
+
+new-request r=req8 txn=txn3 ts=6 spans=intent@e
+----
+
+scan r=req8
+----
+start-waiting: true
+
+guard-state r=req8
+----
+new: state=waitFor txn=txn1 key="e" held=true guard-strength=Intent
+
+dequeue r=req8
+----
+num=1
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+# 100ms passes between before releasing c-f
+time-tick ms=100
+----
+
+
+release txn=txn1 span=c,f
+----
+num=0
+
+print
+----
+num=0
+
+metrics
+----
+locks: 0
+locksheld: 0
+totallockholddurationnanos: 0
+lockswithwaitqueues: 0
+waiters: 0
+waitingreaders: 0
+waitingwriters: 0
+totalwaitdurationnanos: 0
+topklocksbywaiters:
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+
+# All requests have been retired and the lock table is empty.
+# The following tests multiple requests from the same transaction.
+
+new-request r=req9 txn=txn1 ts=10,1 spans=exclusive@c
+----
+
+scan r=req9
+----
+start-waiting: false
+
+acquire r=req9 k=c durability=u strength=exclusive
+----
+num=1
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+dequeue r=req9
+----
+num=1
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+print
+----
+num=1
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+metrics
+----
+locks: 1
+locksheld: 1
+totallockholddurationnanos: 0
+lockswithwaitqueues: 0
+waiters: 0
+waitingreaders: 0
+waitingwriters: 0
+totalwaitdurationnanos: 0
+topklocksbywaiters:
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key:
+  - 99
+  held: true
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+
+new-request r=req10 txn=txn2 ts=8,12 spans=exclusive@c
+----
+
+scan r=req10
+----
+start-waiting: true
+
+guard-state r=req10
+----
+new: state=waitFor txn=txn1 key="c" held=true guard-strength=Exclusive
+
+new-request r=req11 txn=txn3 ts=6 spans=intent@c
+----
+
+scan r=req11
+----
+start-waiting: true
+
+guard-state r=req11
+----
+new: state=waitFor txn=txn1 key="c" held=true guard-strength=Intent
+
+new-request r=req12 txn=txn2 ts=8,12 spans=intent@c
+----
+
+scan r=req12
+----
+start-waiting: true
+
+guard-state r=req12
+----
+new: state=waitFor txn=txn1 key="c" held=true guard-strength=Intent
+
+print
+----
+num=1
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 10, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 11, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 12, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+
+metrics
+----
+locks: 1
+locksheld: 1
+totallockholddurationnanos: 0
+lockswithwaitqueues: 1
+waiters: 3
+waitingreaders: 0
+waitingwriters: 3
+totalwaitdurationnanos: 0
+topklocksbywaiters:
+- key:
+  - 99
+  held: true
+  holddurationnanos: 0
+  waiters: 3
+  waitingreaders: 0
+  waitingwriters: 3
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key:
+  - 99
+  held: true
+  holddurationnanos: 0
+  waiters: 3
+  waitingreaders: 0
+  waitingwriters: 3
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key:
+  - 99
+  held: true
+  holddurationnanos: 0
+  waiters: 3
+  waitingreaders: 0
+  waitingwriters: 3
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+
+release txn=txn1 span=c
+----
+num=1
+ lock: "c"
+   queued locking requests:
+    active: false req: 10, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 11, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 12, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+
+guard-state r=req10
+----
+new: state=doneWaiting
+
+guard-state r=req11
+----
+new: state=waitFor txn=txn2 key="c" held=false guard-strength=Intent
+
+guard-state r=req12
+----
+new: state=waitSelf
+
+scan r=req10
+----
+start-waiting: false
+
+print
+----
+num=1
+ lock: "c"
+   queued locking requests:
+    active: false req: 10, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 11, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 12, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+
+metrics
+----
+locks: 1
+locksheld: 0
+totallockholddurationnanos: 0
+lockswithwaitqueues: 1
+waiters: 3
+waitingreaders: 0
+waitingwriters: 3
+totalwaitdurationnanos: 0
+topklocksbywaiters:
+- key:
+  - 99
+  held: false
+  holddurationnanos: 0
+  waiters: 3
+  waitingreaders: 0
+  waitingwriters: 3
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key:
+  - 99
+  held: false
+  holddurationnanos: 0
+  waiters: 3
+  waitingreaders: 0
+  waitingwriters: 3
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+
+acquire r=req10 k=c durability=u strength=exclusive
+----
+num=1
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 11, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+
+guard-state r=req11
+----
+new: state=waitFor txn=txn2 key="c" held=true guard-strength=Intent
+
+# Since req10 that is also txn2 has acquired the lock, req12 does not need to wait here anymore.
+guard-state r=req12
+----
+new: state=doneWaiting
+
+print
+----
+num=1
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 11, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+
+metrics
+----
+locks: 1
+locksheld: 1
+totallockholddurationnanos: 0
+lockswithwaitqueues: 1
+waiters: 1
+waitingreaders: 0
+waitingwriters: 1
+totalwaitdurationnanos: 0
+topklocksbywaiters:
+- key:
+  - 99
+  held: true
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key:
+  - 99
+  held: true
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key:
+  - 99
+  held: true
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+
+dequeue r=req10
+----
+num=1
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 11, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+
+acquire r=req12 k=c durability=r strength=intent
+----
+num=1
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl [Intent], unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 11, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+
+dequeue r=req12
+----
+num=1
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl [Intent], unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 11, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+
+guard-state r=req11
+----
+old: state=waitFor txn=txn2 key="c" held=true guard-strength=Intent
+
+release txn=txn2 span=b,d
+----
+num=1
+ lock: "c"
+   queued locking requests:
+    active: false req: 11, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+
+guard-state r=req11
+----
+new: state=doneWaiting
+
+print
+----
+num=1
+ lock: "c"
+   queued locking requests:
+    active: false req: 11, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+
+metrics
+----
+locks: 1
+locksheld: 0
+totallockholddurationnanos: 0
+lockswithwaitqueues: 1
+waiters: 1
+waitingreaders: 0
+waitingwriters: 1
+totalwaitdurationnanos: 0
+topklocksbywaiters:
+- key:
+  - 99
+  held: false
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key:
+  - 99
+  held: false
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+
+dequeue r=req11
+----
+num=0
+
+# Tests with non-transactional requests that triggered nil pointer
+# dereference bugs.
+
+new-request r=req13 txn=txn2 ts=8,12 spans=exclusive@c
+----
+
+scan r=req13
+----
+start-waiting: false
+
+acquire r=req13 k=c durability=u strength=exclusive
+----
+num=1
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: unrepl [(str: Exclusive seq: 0)]
+
+new-request r=req14 txn=txn1 ts=9,0 spans=intent@c
+----
+
+scan r=req14
+----
+start-waiting: true
+
+new-request r=req15 txn=none ts=10,12 spans=none@c
+----
+
+scan r=req15
+----
+start-waiting: true
+
+release txn=txn2 span=b,d
+----
+num=1
+ lock: "c"
+   queued locking requests:
+    active: false req: 14, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+
+dequeue r=req15
+----
+num=1
+ lock: "c"
+   queued locking requests:
+    active: false req: 14, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+
+new-request r=req16 txn=none ts=10,12 spans=none@c
+----
+
+scan r=req16
+----
+start-waiting: false
+
+dequeue r=req14
+----
+num=0
+
+dequeue r=req16
+----
+num=0
+
+print
+----
+num=0
+
+metrics
+----
+locks: 0
+locksheld: 0
+totallockholddurationnanos: 0
+lockswithwaitqueues: 0
+waiters: 0
+waitingreaders: 0
+waitingwriters: 0
+totalwaitdurationnanos: 0
+topklocksbywaiters:
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+
+# Test with distinguished waiter being a later request from the same
+# transaction that eventually grabs a reservation. Triggered a bug
+# in not replacing the distinguished waiter.
+
+new-request r=req17 txn=txn1 ts=9,0 spans=exclusive@c+exclusive@d
+----
+
+scan r=req17
+----
+start-waiting: false
+
+acquire r=req17 k=c durability=u strength=exclusive
+----
+num=1
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 9.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+acquire r=req17 k=d durability=u strength=exclusive
+----
+num=2
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 9.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 9.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+dequeue r=req17
+----
+num=2
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 9.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 9.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+new-request r=req18 txn=txn2 ts=10,0 spans=exclusive@c+exclusive@d
+----
+
+scan r=req18
+----
+start-waiting: true
+
+new-request r=req19 txn=txn2 ts=10,0 spans=exclusive@d
+----
+
+scan r=req19
+----
+start-waiting: true
+
+print
+----
+num=2
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 9.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 18, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 9.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 19, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+
+metrics
+----
+locks: 2
+locksheld: 2
+totallockholddurationnanos: 0
+lockswithwaitqueues: 2
+waiters: 2
+waitingreaders: 0
+waitingwriters: 2
+totalwaitdurationnanos: 0
+topklocksbywaiters:
+- key:
+  - 99
+  held: true
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
+  - 100
+  held: true
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key:
+  - 99
+  held: true
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
+  - 100
+  held: true
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key:
+  - 99
+  held: true
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
+  - 100
+  held: true
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+
+release txn=txn1 span=c
+----
+num=2
+ lock: "c"
+   queued locking requests:
+    active: false req: 18, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 9.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 19, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+
+guard-state r=req18
+----
+new: state=waitFor txn=txn1 key="d" held=true guard-strength=Exclusive
+
+print
+----
+num=2
+ lock: "c"
+   queued locking requests:
+    active: false req: 18, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 9.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 18, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 19, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+
+metrics
+----
+locks: 2
+locksheld: 1
+totallockholddurationnanos: 0
+lockswithwaitqueues: 2
+waiters: 3
+waitingreaders: 0
+waitingwriters: 3
+totalwaitdurationnanos: 0
+topklocksbywaiters:
+- key:
+  - 100
+  held: true
+  holddurationnanos: 0
+  waiters: 2
+  waitingreaders: 0
+  waitingwriters: 2
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
+  - 99
+  held: false
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key:
+  - 100
+  held: true
+  holddurationnanos: 0
+  waiters: 2
+  waitingreaders: 0
+  waitingwriters: 2
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key:
+  - 99
+  held: false
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
+  - 100
+  held: true
+  holddurationnanos: 0
+  waiters: 2
+  waitingreaders: 0
+  waitingwriters: 2
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+
+release txn=txn1 span=d
+----
+num=2
+ lock: "c"
+   queued locking requests:
+    active: false req: 18, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+ lock: "d"
+   queued locking requests:
+    active: false req: 18, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 19, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+
+scan r=req18
+----
+start-waiting: false
+
+acquire r=req18 k=d durability=u strength=exclusive
+----
+num=2
+ lock: "c"
+   queued locking requests:
+    active: false req: 18, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+guard-state r=req19
+----
+new: state=doneWaiting
+
+scan r=req19
+----
+start-waiting: false
+
+dequeue r=req18
+----
+num=1
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+dequeue r=req19
+----
+num=1
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+release txn=txn2 span=d
+----
+num=0
+
+# Reservation can be broken while holding latches because a different
+# lock is released
+
+new-request r=req20 txn=txn1 ts=10 spans=exclusive@c
+----
+
+scan r=req20
+----
+start-waiting: false
+
+acquire r=req20 k=c durability=u strength=exclusive
+----
+num=1
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+dequeue r=req20
+----
+num=1
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+new-request r=req21 txn=txn1 ts=10 spans=exclusive@d
+----
+
+scan r=req21
+----
+start-waiting: false
+
+acquire r=req21 k=d durability=u strength=exclusive
+----
+num=2
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+dequeue r=req21
+----
+num=2
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+new-request r=req22 txn=txn2 ts=10 spans=intent@c+intent@d
+----
+
+scan r=req22
+----
+start-waiting: true
+
+print
+----
+num=2
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 22, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+metrics
+----
+locks: 2
+locksheld: 2
+totallockholddurationnanos: 0
+lockswithwaitqueues: 1
+waiters: 1
+waitingreaders: 0
+waitingwriters: 1
+totalwaitdurationnanos: 0
+topklocksbywaiters:
+- key:
+  - 99
+  held: true
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key:
+  - 99
+  held: true
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
+  - 100
+  held: true
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key:
+  - 99
+  held: true
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+
+new-request r=req23 txn=txn3 ts=10 spans=exclusive@d
+----
+
+scan r=req23
+----
+start-waiting: true
+
+release txn=txn1 span=d
+----
+num=2
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 22, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+ lock: "d"
+   queued locking requests:
+    active: false req: 23, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000003
+
+guard-state r=req23
+----
+new: state=doneWaiting
+
+scan r=req23
+----
+start-waiting: false
+
+# holds latch on d and proceeds to evaluation, but lock on c
+# is released concurrently allowing req22 to break the reservation
+# at d. Note that reservation breaking is not constrained
+# by latches.
+
+release txn=txn1 span=c
+----
+num=2
+ lock: "c"
+   queued locking requests:
+    active: false req: 22, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+ lock: "d"
+   queued locking requests:
+    active: false req: 23, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000003
+
+guard-state r=req22
+----
+new: state=doneWaiting
+
+print
+----
+num=2
+ lock: "c"
+   queued locking requests:
+    active: false req: 22, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+ lock: "d"
+   queued locking requests:
+    active: false req: 22, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+    active: false req: 23, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000003
+
+metrics
+----
+locks: 2
+locksheld: 0
+totallockholddurationnanos: 0
+lockswithwaitqueues: 2
+waiters: 3
+waitingreaders: 0
+waitingwriters: 3
+totalwaitdurationnanos: 0
+topklocksbywaiters:
+- key:
+  - 100
+  held: false
+  holddurationnanos: 0
+  waiters: 2
+  waitingreaders: 0
+  waitingwriters: 2
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
+  - 99
+  held: false
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key:
+  - 99
+  held: false
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
+  - 100
+  held: false
+  holddurationnanos: 0
+  waiters: 2
+  waitingreaders: 0
+  waitingwriters: 2
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+
+acquire r=req23 k=d durability=u strength=exclusive
+----
+num=2
+ lock: "c"
+   queued locking requests:
+    active: false req: 22, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: false req: 22, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+
+dequeue r=req22
+----
+num=1
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+dequeue r=req23
+----
+num=1
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+release txn=txn3 span=d
+----
+num=0
+
+print
+----
+num=0
+
+metrics
+----
+locks: 0
+locksheld: 0
+totallockholddurationnanos: 0
+lockswithwaitqueues: 0
+waiters: 0
+waitingreaders: 0
+waitingwriters: 0
+totalwaitdurationnanos: 0
+topklocksbywaiters:
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+
+new-txn txn=txn4 ts=11 epoch=0
+----
+
+new-request r=req24 txn=txn4 ts=11 spans=exclusive@a+exclusive@b+exclusive@c+exclusive@d
+----
+
+scan r=req24
+----
+start-waiting: false
+
+guard-state r=req24
+----
+new: state=doneWaiting
+
+
+new-txn txn=txn5 ts=5 epoch=0
+----
+
+add-discovered r=req24 k=a txn=txn5
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000005 epoch: 0, iso: Serializable, ts: 5.000000000,0, info: repl [Intent]
+   queued locking requests:
+    active: false req: 24, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000004
+
+# simulate 5 second wait
+time-tick s=5
+----
+
+metrics
+----
+locks: 1
+locksheld: 1
+totallockholddurationnanos: 5000000000
+lockswithwaitqueues: 1
+waiters: 1
+waitingreaders: 0
+waitingwriters: 1
+totalwaitdurationnanos: 0
+topklocksbywaiters:
+- key:
+  - 97
+  held: true
+  holddurationnanos: 5000000000
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key:
+  - 97
+  held: true
+  holddurationnanos: 5000000000
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key:
+  - 97
+  held: true
+  holddurationnanos: 5000000000
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0

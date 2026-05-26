@@ -1,0 +1,3 @@
+show_external_connections_stmt ::=
+	'SHOW' 'EXTERNAL' 'CONNECTIONS'
+	| 'SHOW' 'EXTERNAL' 'CONNECTION' string_or_placeholder

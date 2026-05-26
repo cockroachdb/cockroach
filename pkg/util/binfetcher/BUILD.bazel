@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "binfetcher",
+    srcs = [
+        "binfetcher.go",
+        "extract.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/binfetcher",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/httputil",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
+    ],
+)
+
+go_test(
+    name = "binfetcher_test",
+    size = "small",
+    srcs = ["binfetcher_test.go"],
+    embed = [":binfetcher"],
+    deps = [
+        "//pkg/testutils",
+        "//pkg/testutils/skip",
+    ],
+)

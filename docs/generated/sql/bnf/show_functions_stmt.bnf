@@ -1,0 +1,4 @@
+show_functions_stmt ::=
+	'SHOW' 'FUNCTIONS' 'FROM' name '.' name
+	| 'SHOW' 'FUNCTIONS' 'FROM' name
+	| 'SHOW' 'FUNCTIONS'

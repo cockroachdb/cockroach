@@ -1,0 +1,29 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "crosscluster",
+    srcs = [
+        "crosscluster_type_resolver.go",
+        "errors.go",
+        "event.go",
+        "settings.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/crosscluster",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvpb",
+        "//pkg/repstream/streampb",
+        "//pkg/roachpb",
+        "//pkg/settings",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/typedesc",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sqlerrors",
+        "//pkg/sql/types",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//oid",
+    ],
+)

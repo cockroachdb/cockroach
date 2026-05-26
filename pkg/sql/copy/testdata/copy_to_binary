@@ -1,0 +1,18 @@
+exec-ddl
+CREATE TABLE t (id int primary key, t text);
+----
+
+exec-ddl
+INSERT INTO t VALUES
+  (1, 'a tab' || chr(9) || ' separates us'),
+  (2, 'some pipe || characters'),
+  (3, 'new line chars!' || chr(10) || ' ok?'),
+  (4, NULL);
+----
+
+copy-to-error
+COPY t TO STDOUT BINARY
+----
+ERROR: unimplemented: binary format for COPY TO not implemented (SQLSTATE 0A000)
+HINT: You have attempted to use a feature that is not yet implemented.
+See: https://go.crdb.dev/issue-v/97180/

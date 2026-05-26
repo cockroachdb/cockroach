@@ -1,0 +1,63 @@
+new-cluster name=s1 nodes=1
+----
+
+subtest restore-retry
+
+exec-sql
+CREATE DATABASE restore;
+CREATE SCHEMA restore.myschema;
+CREATE TABLE foobar (pk int primary key);
+CREATE TABLE restore.myschema.table1 (pk int primary key);
+INSERT INTO restore.myschema.table1 VALUES (1);
+CREATE TYPE data.myenum AS ENUM ('hello');
+----
+
+exec-sql
+BACKUP INTO 'nodelocal://1/cluster_backup';
+----
+
+new-cluster name=s2 nodes=1 share-io-dir=s1
+----
+
+exec-sql
+SELECT crdb_internal.set_vmodule('lease=3');
+----
+
+# Restore's OnFailOrCancel deletes descriptors which requires us to wait for no
+# versions of that descriptor to be leased before proceeding. Since our test fails
+# the job after the descriptors have been published, it's possible for them to be leased
+# somewhere.
+exec-sql
+SET CLUSTER SETTING sql.catalog.descriptor_lease_duration = '1s';
+----
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.after_publishing_descriptors';
+----
+
+restore expect-pausepoint tag=a
+RESTORE FROM LATEST IN 'nodelocal://1/cluster_backup';
+----
+job paused at pausepoint
+
+clear-conn-cache
+----
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = '';
+----
+
+# Cancel the job so that the cleanup hook runs.
+job cancel=a
+----
+
+# TODO(ssd): We sleep via the test runner and not via SQL using pg_sleep because if we try to
+# execute a query too quickly we see failures. https://github.com/cockroachdb/cockroach/issues/88913
+sleep ms=2000
+----
+
+restore
+RESTORE FROM LATEST IN 'nodelocal://1/cluster_backup';
+----
+
+subtest end

@@ -1,0 +1,9 @@
+alter_onetable_stmt ::=
+	'ALTER' 'TABLE' table_name 'ADD' column_name typename ( ( col_qualification ) )*
+	| 'ALTER' 'TABLE' table_name 'ADD' 'IF' 'NOT' 'EXISTS' column_name typename ( ( col_qualification ) )*
+	| 'ALTER' 'TABLE' table_name 'ADD' 'COLUMN' column_name typename ( ( col_qualification ) )*
+	| 'ALTER' 'TABLE' table_name 'ADD' 'COLUMN' 'IF' 'NOT' 'EXISTS' column_name typename ( ( col_qualification ) )*
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ADD' column_name typename ( ( col_qualification ) )*
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ADD' 'IF' 'NOT' 'EXISTS' column_name typename ( ( col_qualification ) )*
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ADD' 'COLUMN' column_name typename ( ( col_qualification ) )*
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ADD' 'COLUMN' 'IF' 'NOT' 'EXISTS' column_name typename ( ( col_qualification ) )*

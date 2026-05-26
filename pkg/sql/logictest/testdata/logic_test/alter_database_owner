@@ -1,0 +1,87 @@
+statement ok
+CREATE DATABASE d;
+CREATE USER testuser2
+
+# Ensure user must exist for set owner.
+statement error role/user "fake_user" does not exist
+ALTER DATABASE d OWNER TO fake_user
+
+# Superusers can alter owner to any user.
+statement ok
+ALTER DATABASE d OWNER TO testuser
+
+statement ok
+ALTER DATABASE d OWNER TO root
+
+# Other users must be owner to alter the owner.
+user testuser
+
+statement error must be owner of database d
+ALTER DATABASE d OWNER TO testuser
+
+# other users must be owner to alter the owner to the current owner again
+statement error must be owner of database d
+ALTER DATABASE d OWNER TO root
+
+# Non-superusers also must be a member of the new owning role.
+user root
+
+statement ok
+ALTER DATABASE d OWNER TO testuser
+
+user testuser
+
+statement error must be member of role "testuser2"
+ALTER DATABASE d OWNER TO testuser2
+
+user root
+
+statement ok
+GRANT testuser2 TO testuser
+
+user testuser
+
+statement error user testuser does not have CREATEDB privilege
+ALTER DATABASE d OWNER TO testuser2
+
+user root
+
+statement ok
+ALTER USER testuser CREATEDB
+
+user testuser
+
+statement ok
+ALTER DATABASE d OWNER TO testuser2
+
+query T
+SELECT r.rolname FROM pg_database d JOIN pg_roles r ON d.datdba = r.oid WHERE d.datname = 'd';
+----
+testuser2
+
+# Test that a user can reassign the owner from one role to another if they are
+# a member of both roles, even if those roles are not members of each other.
+user root
+
+statement ok
+CREATE ROLE a;
+CREATE ROLE b;
+GRANT a, b TO testuser;
+ALTER DATABASE d OWNER TO a
+
+user testuser
+
+statement ok
+ALTER DATABASE d OWNER TO b
+
+query T
+SELECT r.rolname FROM pg_database d JOIN pg_roles r ON d.datdba = r.oid WHERE d.datname = 'd';
+----
+b
+
+user root
+
+# Regression test for #62012
+statement ok
+CREATE DATABASE "order";
+ALTER DATABASE "order" OWNER TO testuser

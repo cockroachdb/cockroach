@@ -1,0 +1,52 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+load("@bazel_skylib//rules:native_binary.bzl", "native_test")
+
+go_binary(
+    name = "mirror_npm_dependencies",
+    args = [
+        "--mirror",
+        "$(location //pkg/ui:pnpm-lock.yaml)",
+    ],
+    data = [
+        "//pkg/ui:pnpm-lock.yaml",
+    ],
+    embed = [":npm_lib"],
+)
+
+go_binary(
+    name = "list_unmirrored_dependencies_bin",
+    embed = [":npm_lib"],
+)
+
+# It's tempting to want to move this target into //pkg/ui and leave the
+# go_binary here. Doing so and attempting to run this test target would cause
+# Bazel to attempt to download NPM dependencies *before* this target executes.
+# Since unmirrored dependencies can't be downloaded, the result is that this
+# target would never actually execute, and no list of unmirrored dependencies
+# could be presented to users.
+native_test(
+    name = "list_unmirrored_dependencies",
+    src = ":list_unmirrored_dependencies_bin",
+    out = "list_unmirrored_dependencies_runner",
+    args = [
+        "$(location //pkg/ui:pnpm-lock.yaml)",
+    ],
+    data = ["//pkg/ui:pnpm-lock.yaml"],
+)
+
+go_library(
+    name = "npm_lib",
+    srcs = [
+        "main.go",
+        "model.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/mirror/npm",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@com_google_cloud_go_storage//:storage",
+        "@in_yaml_go_yaml_v4//:yaml",
+        "@org_golang_google_api//googleapi",
+        "@org_golang_google_api//iterator",
+        "@org_golang_x_sync//errgroup",
+    ],
+)

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -e
+
+[[ ! $GIT_REFLOG_ACTION =~ rebase ]] && exit 0
+
+exec git submodule update --init --recursive

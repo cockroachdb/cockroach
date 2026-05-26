@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "ccl",
+    srcs = ["ccl_init.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/backup",
+        "//pkg/ccl/changefeedccl",
+        "//pkg/ccl/multiregionccl",
+        "//pkg/ccl/multitenantccl",
+        "//pkg/cloud/impl:cloudimpl",
+        "//pkg/crosscluster/logical",
+        "//pkg/crosscluster/physical",
+        "//pkg/crosscluster/producer",
+        "//pkg/security/gssapiauth",
+    ],
+)

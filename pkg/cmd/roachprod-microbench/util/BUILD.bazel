@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "util",
+    srcs = ["util.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/util",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_spf13_cobra//:cobra",
+        "@org_golang_x_exp//maps",
+    ],
+)
+
+go_test(
+    name = "util_test",
+    srcs = ["util_test.go"],
+    embed = [":util"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

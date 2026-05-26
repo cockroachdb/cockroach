@@ -1,0 +1,83 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package jobstest
+
+import (
+	"encoding/json"
+	"math"
+	"regexp"
+	"strings"
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
+)
+
+// CheckEmittedEvents is a helper method used by IMPORT and RESTORE tests to
+// ensure events are emitted deterministically.
+func CheckEmittedEvents(
+	t *testing.T,
+	expectedStatus []string,
+	startTime int64,
+	jobID int64,
+	expectedMessage, expectedJobType string,
+	expectedRecoveryEvent eventpb.RecoveryEvent,
+) {
+	// Check that the structured event was logged.
+	testutils.SucceedsSoon(t, func() error {
+		log.FlushFiles()
+		entries, err := log.FetchEntriesFromFiles(startTime,
+			math.MaxInt64, 10000, cmLogRe, log.WithMarkedSensitiveData)
+		if err != nil {
+			t.Fatal(err)
+		}
+		foundEntry := false
+		var matchingEntryIndex int
+		for _, e := range entries {
+			if !strings.Contains(e.Message, expectedMessage) {
+				continue
+			}
+			foundEntry = true
+			// TODO(knz): Remove this when crdb-v2 becomes the new format.
+			e.Message = strings.TrimPrefix(e.Message, "Structured entry:")
+			// crdb-v2 starts json with an equal sign.
+			e.Message = strings.TrimPrefix(e.Message, "=")
+			jsonPayload := []byte(e.Message)
+
+			if strings.Contains(e.Message, "\"EventType\":\"recovery_event\"") {
+				var re eventpb.RecoveryEvent
+				if err := json.Unmarshal(jsonPayload, &re); err != nil {
+					t.Errorf("unmarshalling %q: %v", e.Message, err)
+				}
+				if re.ResultStatus != "" {
+					require.Equal(t, expectedRecoveryEvent.RecoveryType, re.RecoveryType)
+					require.Equal(t, expectedRecoveryEvent.NumRows, re.NumRows)
+				}
+			} else {
+				var ev eventpb.CommonJobEventDetails
+				if err := json.Unmarshal(jsonPayload, &ev); err != nil {
+					t.Errorf("unmarshalling %q: %v", e.Message, err)
+				}
+				require.Equal(t, expectedJobType, ev.JobType)
+				require.Equal(t, jobID, ev.JobID)
+				if matchingEntryIndex >= len(expectedStatus) {
+					return errors.New("more events found in log than expected")
+				}
+				require.Equal(t, expectedStatus[matchingEntryIndex], ev.Status)
+				matchingEntryIndex++
+			}
+		}
+		if !foundEntry {
+			return errors.New("structured entry for import not found in log")
+		}
+		return nil
+	})
+}
+
+var cmLogRe = regexp.MustCompile(`event_log\.go`)

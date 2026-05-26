@@ -1,0 +1,33 @@
+# Validate that invalid sessionID's are always
+# considered dead.
+subtest invalid_sessions
+
+# Legacy non-RBR format
+query B
+select crdb_internal.sql_liveness_is_alive(x'1f915e98f96145a5baa9f3a42c378eb6');
+----
+false
+
+# Wrong length
+query B
+select crdb_internal.sql_liveness_is_alive(x'deadbeef');
+----
+false
+
+subtest end
+
+
+subtest valid_sessions
+
+# Sanity: All sessions are alive in sqlliveness.
+query I
+SELECT count(*) FROM system.sqlliveness WHERE crdb_internal.sql_liveness_is_alive(session_id) = false;
+----
+0
+
+query B
+SELECT count(*) > 0 FROM system.sqlliveness WHERE crdb_internal.sql_liveness_is_alive(session_id) = true;
+----
+true
+
+subtest end

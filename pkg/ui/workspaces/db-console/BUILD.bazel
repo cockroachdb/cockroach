@@ -1,0 +1,277 @@
+load("@aspect_rules_jest//jest:defs.bzl", "jest_test")
+load("@bazel_skylib//rules:build_test.bzl", "build_test")
+load("@npm//:defs.bzl", "npm_link_all_packages")
+load("@npm//pkg/ui/workspaces/db-console:eslint/package_json.bzl", eslint_bin = "bin")
+load("@npm//pkg/ui/workspaces/db-console:openapi-typescript/package_json.bzl", openapi_typescript_bin = "bin")
+load("@npm//pkg/ui/workspaces/db-console:swagger2openapi/package_json.bzl", swagger2openapi_bin = "bin")
+load("@npm//pkg/ui/workspaces/db-console:typescript/package_json.bzl", typescript_bin = "bin")
+load("@npm//pkg/ui/workspaces/db-console:webpack-cli/package_json.bzl", webpack_bin = "bin")
+
+npm_link_all_packages(name = "node_modules")
+
+WEBPACK_DATA_COMMON = glob(
+    include = [
+        "assets/**",
+        "fonts/**",
+        "src/**",
+        "styl/**",
+    ],
+    exclude = [
+        "src/js/**",
+        "src/**/*.stories.tsx",
+        "src/**/*.spec.tsx",
+        "src/**/*.spec.ts",
+    ],
+)
+
+WEBPACK_SRCS = [
+    "babel.config.js",
+    ".eslintrc.json",
+    "favicon.ico",
+    "tsconfig.json",
+    "webpack.config.js",
+]
+
+WEBPACK_DATA_OSS = WEBPACK_DATA_COMMON
+
+WEBPACK_DATA_CCL = WEBPACK_DATA_COMMON + glob(["ccl/**"])
+
+# We want to perform only type-checking (with absolutely no files emitted).
+# The ts_project rule from rules_ts doesn't support that, and instead recommends
+# calling the generated tsc_test rule directly:
+# https://github.com/aspect-build/rules_ts/blob/34dc4288ff557c002108ca96ee161e2d7d04ce04/examples/typecheck_only/BUILD.bazel
+typescript_bin.tsc_test(
+    name = "typecheck",
+    args = [
+        "--project",
+        "$(location tsconfig.linting.json)",
+    ],
+    data = WEBPACK_SRCS + WEBPACK_DATA_CCL + [
+        "tsconfig.linting.json",
+        ":node_modules",
+    ],
+)
+
+webpack_bin.webpack_cli(
+    name = "db-console-ccl",
+    srcs = WEBPACK_SRCS + WEBPACK_DATA_CCL + [
+        ":node_modules",
+    ],
+    outs = [
+        "db-console-ccl/assets/Inconsolata-Regular.woff",
+        "db-console-ccl/assets/Inconsolata-Regular.woff2",
+        "db-console-ccl/assets/Lato-Bold.woff",
+        "db-console-ccl/assets/Lato-Bold.woff2",
+        "db-console-ccl/assets/Lato-Light.woff",
+        "db-console-ccl/assets/Lato-Light.woff2",
+        "db-console-ccl/assets/Lato-Medium.woff",
+        "db-console-ccl/assets/Lato-Medium.woff2",
+        "db-console-ccl/assets/Lato-Regular.woff",
+        "db-console-ccl/assets/Lato-Regular.woff2",
+        "db-console-ccl/assets/RobotoMono-Bold.woff",
+        "db-console-ccl/assets/RobotoMono-Bold.woff2",
+        "db-console-ccl/assets/RobotoMono-Medium.woff",
+        "db-console-ccl/assets/RobotoMono-Medium.woff2",
+        "db-console-ccl/assets/RobotoMono-Regular.woff",
+        "db-console-ccl/assets/RobotoMono-Regular.woff2",
+        "db-console-ccl/assets/SourceSansPro-Bold.woff",
+        "db-console-ccl/assets/SourceSansPro-Bold.woff2",
+        "db-console-ccl/assets/SourceSansPro-Regular.woff",
+        "db-console-ccl/assets/SourceSansPro-Regular.woff2",
+        "db-console-ccl/assets/SourceSansPro-SemiBold.woff",
+        "db-console-ccl/assets/SourceSansPro-SemiBold.woff2",
+        "db-console-ccl/assets/bundle.js",
+        "db-console-ccl/assets/email_signup_bg.png",
+        "db-console-ccl/assets/favicon.ico",
+        "db-console-ccl/assets/heroBannerLp.png",
+        "db-console-ccl/assets/login-background.png",
+        "db-console-ccl/assets/not-found.svg",
+        "db-console-ccl/assets/questionMap.svg",
+    ],
+    args = [
+        "--config",
+        "webpack.config.js",
+        "--env",
+        "dist=ccl",
+        "--mode",
+        "production",
+        "--env",
+        "output=./db-console-ccl",
+    ],
+    chdir = package_name(),
+    env = {
+        "NODE_OPTIONS": "--max-old-space-size=5000",
+    },
+    exec_properties = {
+        "Pool": "large",
+    },
+    visibility = ["//visibility:public"],
+)
+
+webpack_bin.webpack_cli(
+    name = "db-console-oss",
+    srcs = WEBPACK_SRCS + WEBPACK_DATA_OSS + [
+        ":node_modules",
+    ],
+    outs = [
+        "db-console-oss/assets/Inconsolata-Regular.woff",
+        "db-console-oss/assets/Inconsolata-Regular.woff2",
+        "db-console-oss/assets/Lato-Bold.woff",
+        "db-console-oss/assets/Lato-Bold.woff2",
+        "db-console-oss/assets/Lato-Light.woff",
+        "db-console-oss/assets/Lato-Light.woff2",
+        "db-console-oss/assets/Lato-Medium.woff",
+        "db-console-oss/assets/Lato-Medium.woff2",
+        "db-console-oss/assets/Lato-Regular.woff",
+        "db-console-oss/assets/Lato-Regular.woff2",
+        "db-console-oss/assets/RobotoMono-Bold.woff",
+        "db-console-oss/assets/RobotoMono-Bold.woff2",
+        "db-console-oss/assets/RobotoMono-Medium.woff",
+        "db-console-oss/assets/RobotoMono-Medium.woff2",
+        "db-console-oss/assets/RobotoMono-Regular.woff",
+        "db-console-oss/assets/RobotoMono-Regular.woff2",
+        "db-console-oss/assets/SourceSansPro-Bold.woff",
+        "db-console-oss/assets/SourceSansPro-Bold.woff2",
+        "db-console-oss/assets/SourceSansPro-Regular.woff",
+        "db-console-oss/assets/SourceSansPro-Regular.woff2",
+        "db-console-oss/assets/SourceSansPro-SemiBold.woff",
+        "db-console-oss/assets/SourceSansPro-SemiBold.woff2",
+        "db-console-oss/assets/bundle.js",
+        "db-console-oss/assets/email_signup_bg.png",
+        "db-console-oss/assets/favicon.ico",
+        "db-console-oss/assets/heroBannerLp.png",
+        "db-console-oss/assets/login-background.png",
+        "db-console-oss/assets/not-found.svg",
+    ],
+    args = [
+        "--config",
+        "webpack.config.js",
+        "--env",
+        "dist=oss",
+        "--mode",
+        "production",
+        "--env",
+        "output=./db-console-oss",
+    ],
+    chdir = package_name(),
+    env = {
+        "NODE_OPTIONS": "--max-old-space-size=5000",
+    },
+    exec_properties = {
+        "Pool": "large",
+    },
+    visibility = ["//visibility:public"],
+)
+
+eslint_bin.eslint_test(
+    name = "eslint",
+    args = [
+        "--ext .ts",
+        "--ext .js",
+        "--ext .tsx",
+        "-c .eslintrc.json",
+        "--format=codeframe",
+        "src",
+        "ccl",
+    ],
+    chdir = package_name(),
+    copy_data_to_bin = False,
+    data = [
+        ".eslintrc.json",
+        ".prettierignore",
+        "eslint-local-rules.js",
+        "prettier.config.js",
+        "tsconfig.json",
+        ":node_modules/@cockroachlabs/eslint-config",
+        ":node_modules/@typescript-eslint/eslint-plugin",
+        ":node_modules/@typescript-eslint/parser",
+        ":node_modules/eslint-config-prettier",
+        ":node_modules/eslint-formatter-codeframe",
+        ":node_modules/eslint-plugin-import",
+        ":node_modules/eslint-plugin-local-rules",
+        ":node_modules/eslint-plugin-prettier",
+        ":node_modules/eslint-plugin-react",
+        ":node_modules/eslint-plugin-react-hooks",
+        ":node_modules/prettier",
+        ":node_modules/typescript",
+    ] + glob([
+        "ccl/**",
+        "src/**",
+        "build/eslint/**",
+    ]),
+)
+
+test_suite(
+    name = "lint",
+    tests = [
+        ":eslint",
+        ":typecheck",
+    ],
+)
+
+SRC_NOT_PROTO_CLIENT = glob(
+    ["src/**"],
+    exclude = ["protos.*"],
+)
+
+CCL_NOT_PROTO_CLIENT = glob(
+    ["ccl/**"],
+    exclude = ["protos.*"],
+)
+
+jest_test(
+    name = "jest",
+    size = "enormous",
+    args = [
+        # Increase the JS heap size: https://nodejs.org/docs/latest-v16.x/api/cli.html#--max-old-space-sizesize-in-megabytes
+        "--node_options=--max-old-space-size=8192",
+        # Prevent a v8-internal leak of compiled bytecode: https://github.com/facebook/jest/issues/11956#issuecomment-1401094780
+        "--node_options=--no-compilation-cache",
+        # Populate the global.gc() function during JS execution:
+        # https://github.com/v8/v8/blob/5fe0aa3bc79c0a9d3ad546b79211f07105f09585/src/flags/flag-definitions.h#L1484-L1487
+        "--node_options=--expose-gc",
+        # Force jest workers to collect garbage after each suite: https://jestjs.io/docs/27.x/cli#--logheapusage
+        "--logHeapUsage",
+        "--ci",
+        "--bail",
+    ],
+    chdir = package_name(),
+    config = ":jest.config.js",
+    copy_data_to_bin = False,
+    data = [
+        ".eslintrc.json",
+        "babel.config.js",
+        "jest.config.js",
+        "package.json",
+        "tsconfig.json",
+        "tsconfig.linting.json",
+        ":node_modules",
+    ] + glob([
+        "src/**",
+        "ccl/**",
+    ]),
+    env = {
+        "BAZEL_TARGET": "1",
+    },
+    exec_properties = {
+        "test.Pool": "large",
+    },
+    node_modules = ":node_modules",
+    shard_count = 4,
+)
+
+# HTTP schema generation tools for converting swagger.json to OpenAPI and TypeScript types.
+# Usage:
+#   bazel run //pkg/ui/workspaces/db-console:swagger2openapi -- <input.json> -o <output.json>
+#   bazel run //pkg/ui/workspaces/db-console:openapi-typescript -- <input.json> -o <output.ts>
+swagger2openapi_bin.swagger2openapi_binary(
+    name = "swagger2openapi",
+    data = [":node_modules"],
+    visibility = ["//visibility:public"],
+)
+
+openapi_typescript_bin.openapi_typescript_binary(
+    name = "openapi-typescript",
+    data = [":node_modules"],
+    visibility = ["//visibility:public"],
+)

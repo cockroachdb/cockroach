@@ -1,0 +1,45 @@
+# Test nullability of scalar expressions.
+scalar-is-not-nullable
+true AND false
+----
+true
+
+scalar-is-not-nullable vars=(a int)
+a >= 5
+----
+false
+
+scalar-is-not-nullable vars=(a int not null)
+a >= 5
+----
+true
+
+scalar-is-not-nullable vars=(a int not null, b int not null)
+a >= 5 AND a <= 10 AND b < 4
+----
+true
+
+scalar-is-not-nullable vars=(a int not null, b int)
+a >= 5 AND a <= 10 AND b < 4
+----
+false
+
+scalar-is-not-nullable vars=(a int not null)
+a >= 5 AND a IN (1, 2)
+----
+true
+
+scalar-is-not-nullable vars=(a int not null)
+a >= 5 AND a IN (1, 2, NULL)
+----
+false
+
+scalar-is-not-nullable vars=(a int not null, b int not null)
+CASE WHEN a >= 5 THEN a <= 10 ELSE b < 4 END
+----
+true
+
+scalar-is-not-nullable vars=(a int not null, b int not null)
+CASE WHEN a >= 5 THEN a <= 10 ELSE (b IN (4, NULL)) END
+----
+false

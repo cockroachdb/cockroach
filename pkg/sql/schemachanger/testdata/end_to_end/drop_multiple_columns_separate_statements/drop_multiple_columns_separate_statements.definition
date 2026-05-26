@@ -1,0 +1,70 @@
+# As a part of these tests we will have cascaded drops
+# which will clean up secondary indexes, computed columns
+# since j and k are being dropped. We will concurrently
+# throw DML while we are mutating and dropping dependencies
+# at stage of the schema change plan.
+
+setup
+CREATE TABLE t (i INT PRIMARY KEY, j INT, k INT DEFAULT 32 ON UPDATE 42, INDEX((j+1), k));
+----
+
+# At this point, column j is still public as the computed column
+# and the secondary index is cleaned up first.
+# k has moved to the a non-public phase and so we
+# start getting the "column does not exist" errors
+# for k
+stage-exec phase=PostCommitPhase stage=:
+INSERT INTO t (i, j, k) VALUES($stageKey, $stageKey, $stageKey);
+----
+pq: column "k" does not exist
+
+stage-exec phase=PostCommitPhase stage=:
+INSERT INTO t (i) VALUES($stageKey);
+----
+
+stage-exec phase=PostCommitPhase stage=:
+SELECT j+1, k FROM t
+----
+pq: column "k" does not exist
+
+stage-query phase=PostCommitPhase stage=:
+SELECT count(i)=$successfulStageCount FROM t
+----
+true
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=1:2
+SELECT j+1, k FROM t
+----
+pq: column "k" does not exist
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=1:2
+INSERT INTO t (i, j, k) VALUES($stageKey, $stageKey+1, $stageKey);
+----
+pq: column "k" does not exist
+
+# At this point, the computed column and index have been dropped,
+# and j has moved to a WRITE_ONLY stage. Now, we start seeing
+# the "column j not found" errors
+stage-exec phase=PostCommitNonRevertiblePhase stage=3:
+SELECT j+1, k FROM t
+----
+pq: column "j" does not exist
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=3:
+INSERT INTO t (i, j, k) VALUES($stageKey, $stageKey, $stageKey);
+----
+pq: column "j" does not exist
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+INSERT INTO t (i) VALUES($stageKey);
+----
+
+stage-query phase=PostCommitNonRevertiblePhase stage=:
+SELECT count(i)=$successfulStageCount FROM t
+----
+true
+
+test
+ALTER TABLE t DROP COLUMN j CASCADE;
+ALTER TABLE t DROP COLUMN k CASCADE;
+----

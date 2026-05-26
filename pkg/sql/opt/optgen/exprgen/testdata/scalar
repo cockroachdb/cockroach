@@ -1,0 +1,25 @@
+expr
+(True)
+----
+true [type=bool]
+
+expr
+(Eq (True) (False))
+----
+eq [type=bool]
+ ├── true [type=bool]
+ └── false [type=bool]
+
+expr
+(Plus (Const 1 "int") (Const 2 "int"))
+----
+plus [type=int]
+ ├── const: 1 [type=int]
+ └── const: 2 [type=int]
+
+expr
+(Tuple [ (True) (False) ] "tuple{bool, bool}" )
+----
+tuple [type=tuple{bool, bool}]
+ ├── true [type=bool]
+ └── false [type=bool]

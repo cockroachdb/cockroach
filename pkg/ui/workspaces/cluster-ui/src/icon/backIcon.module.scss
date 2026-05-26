@@ -1,0 +1,13 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+.root {
+  width: 10px;
+  height: 10px;
+  margin-right: 10px;
+  &:focus {
+    border: none;
+  }
+}

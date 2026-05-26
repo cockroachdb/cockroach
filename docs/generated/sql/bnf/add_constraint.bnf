@@ -1,0 +1,3 @@
+alter_onetable_stmt ::=
+	'ALTER' 'TABLE' table_name 'ADD' 'CONSTRAINT' constraint_name constraint_elem opt_validate_behavior
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ADD' 'CONSTRAINT' constraint_name constraint_elem opt_validate_behavior

@@ -1,0 +1,103 @@
+# Try to reconfigure with limit = 50 and current > limit.
+reconfigure
+limit: 50
+rate: 100
+current: 100
+----
+Burst Limit: 50
+Refill Rate: 100
+Current Tokens: 50
+Average Tokens: 0
+
+# Ensure that update respects the limit.
+update
+10s
+----
+Burst Limit: 50
+Refill Rate: 100
+Current Tokens: 50
+Average Tokens: 0
+
+# Request tokens and go into debt.
+request
+tokens: 100
+----
+Granted: 100 tokens
+Trickle duration: 10s
+Fallback rate: 100.0138889 tokens/s
+Burst Limit: 50
+Refill Rate: 100
+Current Tokens: -50
+Average Tokens: 12.5
+
+request
+tokens: 100
+----
+Granted: 100 tokens
+Trickle duration: 10s
+Fallback rate: 100 tokens/s
+Burst Limit: 50
+Refill Rate: 100
+Current Tokens: -150
+Average Tokens: -3.125
+
+# Update limit, but don't update current Tokens.
+reconfigure
+limit: 100
+rate: 100
+current: -1
+----
+Burst Limit: 100
+Refill Rate: 100
+Current Tokens: -150
+Average Tokens: -3.125
+
+# Ensure that update respects the burst limit.
+update
+10s
+----
+Burst Limit: 100
+Refill Rate: 100
+Current Tokens: 100
+Average Tokens: -3.125
+
+# No token refill, set current.
+reconfigure
+limit: 5000000
+rate: 0
+current: 5000000
+----
+Burst Limit: 5000000
+Refill Rate: 0
+Current Tokens: 5000000
+Average Tokens: -3.125
+
+request
+tokens: 1000000
+----
+Granted: 1000000 tokens
+Trickle duration: 0s
+Fallback rate: 1388.888889 tokens/s
+Burst Limit: 5000000
+Refill Rate: 0
+Current Tokens: 4000000
+Average Tokens: 1249997.656
+
+# Limit of 0 = unlimited.
+reconfigure
+limit: 0
+rate: 1000000
+current: -1
+----
+Burst Limit: 0
+Refill Rate: 1000000
+Current Tokens: 4000000
+Average Tokens: 1249997.656
+
+update
+10s
+----
+Burst Limit: 0
+Refill Rate: 1000000
+Current Tokens: 14000000
+Average Tokens: 1249997.656

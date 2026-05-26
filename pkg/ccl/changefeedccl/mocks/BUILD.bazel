@@ -1,0 +1,58 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "gomock")
+
+gomock(
+    name = "tenant_status_server_generated",
+    out = "tenant_status_server_generated.go",
+    interfaces = ["TenantStatusServer"],
+    library = "//pkg/server/serverpb",
+    package = "mocks",
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
+gomock(
+    name = "kafka_client_v2_generated",
+    out = "kafka_client_v2_generated.go",
+    interfaces = ["KafkaClientV2"],
+    library = "//pkg/ccl/changefeedccl",
+    package = "mocks",
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
+gomock(
+    name = "kafka_admin_v2_generated",
+    out = "kafka_admin_v2_generated.go",
+    interfaces = ["KafkaAdminClientV2"],
+    library = "//pkg/ccl/changefeedccl",
+    package = "mocks",
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
+go_library(
+    name = "mocks",
+    srcs = [
+        "empty.go",
+        "kafka_admin_v2_generated.go",  # keep
+        "kafka_client_v2_generated.go",  # keep
+        "tenant_status_server_generated.go",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/mocks",
+    visibility = ["//visibility:public"],
+    # keep
+    deps = [
+        "//pkg/gossip",
+        "//pkg/roachpb",
+        "//pkg/server/serverpb",
+        "@com_github_golang_mock//gomock",
+        "@com_github_twmb_franz_go//pkg/kgo",
+        "@com_github_twmb_franz_go_pkg_kadm//:kadm",
+    ],
+)

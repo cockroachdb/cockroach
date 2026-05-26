@@ -1,0 +1,12 @@
+{
+  "name": "@cockroachlabs/crdb-api-client",
+  "version": "1.0.2",
+  "main": "index.ts",
+  "devDependencies": {
+    "@bufbuild/protoc-gen-es": "^1.7.2",
+    "typescript": "5.1.6"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^1.7.2"
+  }
+}

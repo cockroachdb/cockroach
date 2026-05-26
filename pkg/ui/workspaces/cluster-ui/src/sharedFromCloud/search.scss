@@ -1,0 +1,22 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import "./application.module.scss";
+
+.search {
+  width: 280px;
+  margin: 2px;
+
+  &__button {
+    background-color: transparent;
+    padding: 0;
+    color: $crl-base-text;
+
+    &:focus {
+      box-shadow: none;
+      border: none;
+    }
+  }
+}

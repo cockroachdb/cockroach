@@ -1,0 +1,18 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package histogram;
+
+import "google/protobuf/duration.proto";
+import "gogoproto/gogo.proto";
+
+// Latency records the duration for a single operation.
+message Latency {
+  // A description of the operation.
+  string operation = 1;
+  google.protobuf.Duration duration = 2
+      [ (gogoproto.nullable) = false, (gogoproto.stdduration) = true ];
+}

@@ -1,0 +1,54 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "queue",
+    srcs = [
+        "allocator_replica.go",
+        "lease_queue.go",
+        "pacer.go",
+        "queue.go",
+        "replicate_queue.go",
+        "split_queue.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/queue",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/allocator",
+        "//pkg/kv/kvserver/allocator/allocatorimpl",
+        "//pkg/kv/kvserver/allocator/mmaprototype",
+        "//pkg/kv/kvserver/allocator/plan",
+        "//pkg/kv/kvserver/allocator/storepool",
+        "//pkg/kv/kvserver/asim/config",
+        "//pkg/kv/kvserver/asim/state",
+        "//pkg/kv/kvserver/constraint",
+        "//pkg/kv/kvserver/kvflowcontrol/rac2",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/kv/kvserver/mmaintegration",
+        "//pkg/raft",
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+    ],
+)
+
+go_test(
+    name = "queue_test",
+    srcs = [
+        "lease_queue_test.go",
+        "pacer_test.go",
+        "replicate_queue_test.go",
+        "split_queue_test.go",
+    ],
+    embed = [":queue"],
+    deps = [
+        "//pkg/kv/kvserver/asim/config",
+        "//pkg/kv/kvserver/asim/gossip",
+        "//pkg/kv/kvserver/asim/state",
+        "//pkg/kv/kvserver/asim/workload",
+        "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/roachpb",
+        "@com_github_stretchr_testify//require",
+    ],
+)

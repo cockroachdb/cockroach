@@ -1,0 +1,231 @@
+# Initialize a range with three replicas, none of which have send tokens.
+init regular_init=0 elastic_init=0
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=1
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate next=1
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate next=1
+----
+r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
+t1/s1: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+
+# Give send tokens to replica 3.
+adjust_tokens send
+  store_id=3 pri=HighPri tokens=4MiB
+----
+t1/s1: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+4.0 MiB/+16 MiB ela=+4.0 MiB/+8.0 MiB
+
+# Make replica 2 the leaseholder.
+set_leaseholder range_id=1 replica_id=2
+----
+r1: [(n1,s1):1,(n2,s2):2*,(n3,s3):3]
+
+# Append raft event. Only replica 3 has send tokens so it will not form a
+# send-queue. Replica 1 is the leader and replica 2 is the leaseholder, and so
+# they are not permitted to form a send-queue even though they have no send
+# tokens.
+raft_event pull-mode
+range_id=1
+  entries
+    term=1 index=1 pri=NormalPri size=1MiB
+----
+t1/s1: eval reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+t1/s2: eval reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+t1/s3: eval reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=+3.0 MiB/+16 MiB ela=+3.0 MiB/+8.0 MiB
+
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+eval deducted: reg=+1.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+++++
+(n2,s2):2: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+eval deducted: reg=+1.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+eval deducted: reg=+1.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+++++
+MsgApps sent in pull mode:
+ to: 2, lowPri: false entries: [1]
+ to: 3, lowPri: false entries: [1]
+++++
+
+metrics type=send_queue
+----
+kvflowcontrol.send_queue.count                                    : 0
+kvflowcontrol.send_queue.bytes                                    : 0
+kvflowcontrol.send_queue.scheduled.force_flush                    : 0
+kvflowcontrol.send_queue.scheduled.deducted_bytes                 : 0
+kvflowcontrol.send_queue.prevent.count                            : 0
+kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue : 0
+kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     : 0
+kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     : 0
+
+# Set the leaseholder back to replica 1, which is the leader and append
+# another entry. Now replica 2 has a send-queue.
+set_leaseholder range_id=1 replica_id=1
+----
+r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
+
+raft_event pull-mode
+range_id=1
+  entries
+    term=1 index=2 pri=NormalPri size=1MiB
+----
+t1/s1: eval reg=-2.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+       send reg=-2.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+t1/s2: eval reg=-1.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+       send reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+t1/s3: eval reg=-2.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+       send reg=+2.0 MiB/+16 MiB ela=+2.0 MiB/+8.0 MiB
+
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,3) (2.0 MiB) send_queue=[3,3) precise_q_size=+0 B
+eval deducted: reg=+2.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+++++
+(n2,s2):2: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,3) precise_q_size=+1.0 MiB watching-for-tokens
+eval deducted: reg=+1.0 MiB ela=+1.0 MiB
+eval original in send-q: reg=+1.0 MiB ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,3) (2.0 MiB) send_queue=[3,3) precise_q_size=+0 B
+eval deducted: reg=+2.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+++++
+MsgApps sent in pull mode:
+ to: 3, lowPri: false entries: [2]
+++++
+
+# Make replica 2 the leaseholder again. It is told to force-flush because it
+# is the leaseholder, even though replica 1 and 3 already constitute a quorum
+# without a send-queue.
+set_leaseholder range_id=1 replica_id=2
+----
+r1: [(n1,s1):1,(n2,s2):2*,(n3,s3):3]
+
+raft_event pull-mode
+range_id=1
+----
+t1/s1: eval reg=-2.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+       send reg=-2.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+t1/s2: eval reg=-1.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+       send reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+t1/s3: eval reg=-2.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+       send reg=+2.0 MiB/+16 MiB ela=+2.0 MiB/+8.0 MiB
+
+metrics type=send_queue
+----
+kvflowcontrol.send_queue.count                                    : 1
+kvflowcontrol.send_queue.bytes                                    : 1048576
+kvflowcontrol.send_queue.scheduled.force_flush                    : 1
+kvflowcontrol.send_queue.scheduled.deducted_bytes                 : 0
+kvflowcontrol.send_queue.prevent.count                            : 0
+kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue : 0
+kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     : 0
+kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     : 0
+
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,3) (2.0 MiB) send_queue=[3,3) precise_q_size=+0 B
+eval deducted: reg=+2.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+++++
+(n2,s2):2: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,3) precise_q_size=+1.0 MiB force-flushing
+eval deducted: reg=+1.0 MiB ela=+1.0 MiB
+eval original in send-q: reg=+1.0 MiB ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,3) (2.0 MiB) send_queue=[3,3) precise_q_size=+0 B
+eval deducted: reg=+2.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+++++
+schedule-controller-event-count: 1
+scheduled-replicas: 2
+
+# Another raft event. Replica 2 continues force-flushing.
+raft_event pull-mode
+range_id=1
+----
+t1/s1: eval reg=-2.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+       send reg=-2.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+t1/s2: eval reg=-1.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+       send reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+t1/s3: eval reg=-2.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+       send reg=+2.0 MiB/+16 MiB ela=+2.0 MiB/+8.0 MiB
+
+# Set replica 1 to be the leaseholder. Since replica 2 is no longer the
+# leaseholder, it can stop force-flushing.
+set_leaseholder range_id=1 replica_id=1
+----
+r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
+
+raft_event pull-mode
+range_id=1
+----
+t1/s1: eval reg=-2.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+       send reg=-2.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+t1/s2: eval reg=-1.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+       send reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+t1/s3: eval reg=-2.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+       send reg=+2.0 MiB/+16 MiB ela=+2.0 MiB/+8.0 MiB
+
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,3) (2.0 MiB) send_queue=[3,3) precise_q_size=+0 B
+eval deducted: reg=+2.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+++++
+(n2,s2):2: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,3) precise_q_size=+1.0 MiB watching-for-tokens
+eval deducted: reg=+1.0 MiB ela=+1.0 MiB
+eval original in send-q: reg=+1.0 MiB ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,3) (2.0 MiB) send_queue=[3,3) precise_q_size=+0 B
+eval deducted: reg=+2.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+++++
+schedule-controller-event-count: 1
+scheduled-replicas: 2

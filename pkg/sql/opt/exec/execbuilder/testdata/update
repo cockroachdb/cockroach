@@ -1,0 +1,1889 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE kv2 (
+  k CHAR PRIMARY KEY,
+  v CHAR,
+  UNIQUE INDEX a (v),
+  FAMILY (k),
+  FAMILY (v)
+)
+
+statement count 4
+INSERT INTO kv2 VALUES ('a', 'b'), ('c', 'd'), ('e', 'f'), ('f', 'g')
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM kv2; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
+----
+fetched: /kv2/kv2_pkey/'a':cf=0 -> <undecoded>
+fetched: /kv2/kv2_pkey/'a'/v:cf=1 -> 'b'
+fetched: /kv2/kv2_pkey/'c':cf=0 -> <undecoded>
+fetched: /kv2/kv2_pkey/'c'/v:cf=1 -> 'd'
+fetched: /kv2/kv2_pkey/'e':cf=0 -> <undecoded>
+fetched: /kv2/kv2_pkey/'e'/v:cf=1 -> 'f'
+fetched: /kv2/kv2_pkey/'f':cf=0 -> <undecoded>
+fetched: /kv2/kv2_pkey/'f'/v:cf=1 -> 'g'
+output row: ['a' 'b']
+output row: ['c' 'd']
+output row: ['e' 'f']
+output row: ['f' 'g']
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM kv2@a; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
+----
+fetched: /kv2/a/'b' -> /'a'
+fetched: /kv2/a/'d' -> /'c'
+fetched: /kv2/a/'f' -> /'e'
+fetched: /kv2/a/'g' -> /'f'
+output row: ['a' 'b']
+output row: ['c' 'd']
+output row: ['e' 'f']
+output row: ['f' 'g']
+
+statement error duplicate key value violates unique constraint "a"\nDETAIL: Key \(v\)=\('g'\) already exists\.
+UPDATE kv2 SET v = 'g' WHERE k IN ('a')
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM kv2; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
+----
+fetched: /kv2/kv2_pkey/'a':cf=0 -> <undecoded>
+fetched: /kv2/kv2_pkey/'a'/v:cf=1 -> 'b'
+fetched: /kv2/kv2_pkey/'c':cf=0 -> <undecoded>
+fetched: /kv2/kv2_pkey/'c'/v:cf=1 -> 'd'
+fetched: /kv2/kv2_pkey/'e':cf=0 -> <undecoded>
+fetched: /kv2/kv2_pkey/'e'/v:cf=1 -> 'f'
+fetched: /kv2/kv2_pkey/'f':cf=0 -> <undecoded>
+fetched: /kv2/kv2_pkey/'f'/v:cf=1 -> 'g'
+output row: ['a' 'b']
+output row: ['c' 'd']
+output row: ['e' 'f']
+output row: ['f' 'g']
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM kv2@a; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
+----
+fetched: /kv2/a/'b' -> /'a'
+fetched: /kv2/a/'d' -> /'c'
+fetched: /kv2/a/'f' -> /'e'
+fetched: /kv2/a/'g' -> /'f'
+output row: ['a' 'b']
+output row: ['c' 'd']
+output row: ['e' 'f']
+output row: ['f' 'g']
+
+statement ok
+CREATE TABLE xyz (
+  x INT PRIMARY KEY,
+  y INT,
+  z INT
+)
+
+query T
+EXPLAIN UPDATE xyz SET y = x
+----
+distribution: local
+·
+• update
+│ table: xyz
+│ set: y
+│ auto commit
+│
+└── • scan
+      missing stats
+      table: xyz@xyz_pkey
+      spans: FULL SCAN
+      locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (1, 2)
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: xyz
+│ set: x, y
+│ auto commit
+│
+└── • render
+    │ columns: (x, y, z, x_new, y_new)
+    │ render x_new: 1
+    │ render y_new: 2
+    │ render x: x
+    │ render y: y
+    │ render z: z
+    │
+    └── • scan
+          columns: (x, y, z)
+          estimated row count: 1,000 (missing stats)
+          table: xyz@xyz_pkey
+          spans: FULL SCAN
+          locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (y, x)
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: xyz
+│ set: x, y
+│ auto commit
+│
+└── • project
+    │ columns: (x, y, z, y, x)
+    │
+    └── • scan
+          columns: (x, y, z)
+          estimated row count: 1,000 (missing stats)
+          table: xyz@xyz_pkey
+          spans: FULL SCAN
+          locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (2, 2)
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: xyz
+│ set: x, y
+│ auto commit
+│
+└── • project
+    │ columns: (x, y, z, x_new, x_new)
+    │
+    └── • render
+        │ columns: (x_new, x, y, z)
+        │ render x_new: 2
+        │ render x: x
+        │ render y: y
+        │ render z: z
+        │
+        └── • scan
+              columns: (x, y, z)
+              estimated row count: 1,000 (missing stats)
+              table: xyz@xyz_pkey
+              spans: FULL SCAN
+              locking strength: for update
+
+statement ok
+CREATE INDEX y_idx ON xyz (y)
+
+# Ensure that we can use a hint to avoid a full table scan.
+
+statement ok
+SET avoid_full_table_scans_in_mutations = false
+
+# Without the hint, we plan a full table scan.
+query T
+EXPLAIN (VERBOSE) UPDATE xyz SET x = 5 WHERE (y > 0 AND y < 1000) OR (y > 2000 AND y < 3000)
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: xyz
+│ set: x
+│ auto commit
+│
+└── • render
+    │ columns: (x, y, z, x_new)
+    │ render x_new: 5
+    │ render x: x
+    │ render y: y
+    │ render z: z
+    │
+    └── • filter
+        │ columns: (x, y, z)
+        │ estimated row count: 990 (missing stats)
+        │ filter: ((y > 0) AND (y < 1000)) OR ((y > 2000) AND (y < 3000))
+        │
+        └── • scan
+              columns: (x, y, z)
+              estimated row count: 1,000 (missing stats)
+              table: xyz@xyz_pkey
+              spans: FULL SCAN
+
+# With the hint, we use a constrained scan.
+query T
+EXPLAIN (VERBOSE) UPDATE xyz@{NO_FULL_SCAN} SET x = 5 WHERE (y > 0 AND y < 1000) OR (y > 2000 AND y < 3000)
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: xyz
+│ set: x
+│ auto commit
+│
+└── • render
+    │ columns: (x, y, z, x_new)
+    │ render x_new: 5
+    │ render x: x
+    │ render y: y
+    │ render z: z
+    │
+    └── • index join
+        │ columns: (x, y, z)
+        │ estimated row count: 990 (missing stats)
+        │ table: xyz@xyz_pkey
+        │ key columns: x
+        │ locking strength: for update
+        │ parallel
+        │
+        └── • scan
+              columns: (x, y)
+              estimated row count: 990 (missing stats)
+              table: xyz@y_idx
+              spans: /1-/1000 /2001-/3000
+              locking strength: for update
+
+# AVOID_FULL_SCAN also works to ensure a constrained scan.
+query T
+EXPLAIN (VERBOSE) UPDATE xyz@{AVOID_FULL_SCAN} SET x = 5 WHERE (y > 0 AND y < 1000) OR (y > 2000 AND y < 3000)
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: xyz
+│ set: x
+│ auto commit
+│
+└── • render
+    │ columns: (x, y, z, x_new)
+    │ render x_new: 5
+    │ render x: x
+    │ render y: y
+    │ render z: z
+    │
+    └── • index join
+        │ columns: (x, y, z)
+        │ estimated row count: 990 (missing stats)
+        │ table: xyz@xyz_pkey
+        │ key columns: x
+        │ locking strength: for update
+        │ parallel
+        │
+        └── • scan
+              columns: (x, y)
+              estimated row count: 990 (missing stats)
+              table: xyz@y_idx
+              spans: /1-/1000 /2001-/3000
+              locking strength: for update
+
+# We also avoid the full scan using the session setting
+# avoid_full_table_scans_in_mutations.
+statement ok
+SET avoid_full_table_scans_in_mutations = true
+
+query T
+EXPLAIN (VERBOSE) UPDATE xyz SET x = 5 WHERE (y > 0 AND y < 1000) OR (y > 2000 AND y < 3000)
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: xyz
+│ set: x
+│ auto commit
+│
+└── • render
+    │ columns: (x, y, z, x_new)
+    │ render x_new: 5
+    │ render x: x
+    │ render y: y
+    │ render z: z
+    │
+    └── • index join
+        │ columns: (x, y, z)
+        │ estimated row count: 990 (missing stats)
+        │ table: xyz@xyz_pkey
+        │ key columns: x
+        │ locking strength: for update
+        │ parallel
+        │
+        └── • scan
+              columns: (x, y)
+              estimated row count: 990 (missing stats)
+              table: xyz@y_idx
+              spans: /1-/1000 /2001-/3000
+              locking strength: for update
+
+statement ok
+CREATE TABLE pks (
+  k1 INT,
+  k2 INT,
+  v INT,
+  PRIMARY KEY (k1, k2),
+  UNIQUE INDEX i (k2, v),
+  FAMILY (k1, k2),
+  FAMILY (v)
+)
+
+statement count 2
+INSERT INTO pks VALUES (1, 2, 3), (4, 5, 3)
+
+statement error duplicate key value violates unique constraint "i"\nDETAIL: Key \(k2, v\)=\(5, 3\) already exists\.
+UPDATE pks SET k2 = 5 where k1 = 1
+
+# Test updating only one of the columns of a multi-column primary key.
+
+statement count 1
+UPDATE pks SET k1 = 2 WHERE k1 = 1
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM pks WHERE k1 = 2; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
+----
+fetched: /pks/pks_pkey/2/2:cf=0 -> <undecoded>
+fetched: /pks/pks_pkey/2/2/v:cf=1 -> 3
+output row: [2 2 3]
+
+# Check that UPDATE properly supports ORDER BY (MySQL extension)
+
+statement ok
+CREATE TABLE kv (
+  k INT PRIMARY KEY,
+  v INT,
+  FAMILY (k, v)
+)
+
+query T
+EXPLAIN UPDATE kv SET v = v + 1 ORDER BY v DESC LIMIT 10
+----
+distribution: local
+·
+• update
+│ table: kv
+│ set: v
+│ auto commit
+│
+└── • render
+    │
+    └── • top-k
+        │ order: -v
+        │ k: 10
+        │
+        └── • scan
+              missing stats
+              table: kv@kv_pkey
+              spans: FULL SCAN
+
+# Use case for UPDATE ... ORDER BY: renumbering a PK without unique violation.
+query T
+EXPLAIN UPDATE kv SET v = v - 1 WHERE k < 3 LIMIT 1
+----
+distribution: local
+·
+• update
+│ table: kv
+│ set: v
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: kv@kv_pkey
+          spans: [ - /2]
+          limit: 1
+          locking strength: for update
+
+# Regression test for #35564: make sure we use the Update's input required
+# ordering for the internal projection.
+
+statement ok
+CREATE TABLE abc (a INT, b INT, c INT, INDEX(c) STORING(a,b))
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM [ UPDATE abc SET a=c RETURNING a ] ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: (a)
+│
+├── • sort
+│   │ columns: (a)
+│   │ estimated row count: 1,000 (missing stats)
+│   │ order: +a
+│   │
+│   └── • scan buffer
+│         columns: (a)
+│         estimated row count: 1,000 (missing stats)
+│         label: buffer 1
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: UPDATE abc SET a = c RETURNING a
+    │ exec mode: discard all rows
+    │
+    └── • buffer
+        │ columns: (a)
+        │ label: buffer 1
+        │
+        └── • project
+            │ columns: (a)
+            │
+            └── • update
+                │ columns: (a, rowid)
+                │ estimated row count: 1,000 (missing stats)
+                │ table: abc
+                │ set: a
+                │
+                └── • project
+                    │ columns: (a, b, c, rowid, c)
+                    │
+                    └── • scan
+                          columns: (a, b, c, rowid)
+                          estimated row count: 1,000 (missing stats)
+                          table: abc@abc_pkey
+                          spans: FULL SCAN
+                          locking strength: for update
+
+# ------------------------------------------------------------------------------
+# Regression for #35364. This tests behavior that is different between the CBO
+# and the HP. The CBO will (deliberately) round any input columns *before*
+# evaluating any computed columns, as well as rounding the output.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE t35364(
+    x DECIMAL(10,0) CHECK(round(x) = x) PRIMARY KEY,
+    y DECIMAL(10,0) DEFAULT (1.5),
+    z DECIMAL(10,0) AS (x+y+2.5) STORED CHECK(z >= 7)
+)
+
+query TTT
+INSERT INTO t35364 (x) VALUES (1.5) RETURNING *
+----
+2  2  7
+
+query TTT
+UPDATE t35364 SET x=2.5 RETURNING *
+----
+3  2  8
+
+# Ensure that index hints in UPDATE statements force the choice of a specific index
+# as described in #38799.
+statement ok
+CREATE TABLE t38799 (a INT PRIMARY KEY, b INT, c INT, INDEX foo(b), FAMILY "primary" (a, b, c))
+
+query T
+EXPLAIN (VERBOSE) UPDATE t38799@foo SET c=2 WHERE a=1
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: t38799
+│ set: c
+│ auto commit
+│
+└── • render
+    │ columns: (a, b, c, c_new)
+    │ render c_new: 2
+    │ render a: a
+    │ render b: b
+    │ render c: c
+    │
+    └── • filter
+        │ columns: (a, b, c)
+        │ estimated row count: 1 (missing stats)
+        │ filter: a = 1
+        │
+        └── • index join
+            │ columns: (a, b, c)
+            │ estimated row count: 1,000 (missing stats)
+            │ table: t38799@t38799_pkey
+            │ key columns: a
+            │ parallel
+            │
+            └── • scan
+                  columns: (a, b)
+                  estimated row count: 1,000 (missing stats)
+                  table: t38799@foo
+                  spans: FULL SCAN
+
+# ------------------------------------------------------------------------------
+# Test without implicit SELECT FOR UPDATE.
+# Some cases were all tested earlier in this file with implicit SFU enabled.
+# ------------------------------------------------------------------------------
+
+query T
+EXPLAIN UPDATE kv SET v = 10 WHERE k = 3
+----
+distribution: local
+·
+• update
+│ table: kv
+│ set: v
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: kv@kv_pkey
+          spans: [/3 - /3]
+          locking strength: for update
+
+query T
+EXPLAIN UPDATE kv SET v = k WHERE k > 1 AND k < 10
+----
+distribution: local
+·
+• update
+│ table: kv
+│ set: v
+│ auto commit
+│
+└── • scan
+      missing stats
+      table: kv@kv_pkey
+      spans: [/2 - /9]
+      locking strength: for update
+
+query T
+EXPLAIN UPDATE kv SET v = 10
+----
+distribution: local
+·
+• update
+│ table: kv
+│ set: v
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: kv@kv_pkey
+          spans: FULL SCAN
+          locking strength: for update
+
+statement ok
+CREATE TABLE kv3 (
+  k    INT PRIMARY KEY,
+  v    INT,
+  meta INT,
+  INDEX (v),
+  FAMILY (k, v, meta)
+)
+
+query T
+EXPLAIN UPDATE kv3 SET k = 3 WHERE v = 10
+----
+distribution: local
+·
+• update
+│ table: kv3
+│ set: k
+│ auto commit
+│
+└── • render
+    │
+    └── • index join
+        │ table: kv3@kv3_pkey
+        │ locking strength: for update
+        │
+        └── • scan
+              missing stats
+              table: kv3@kv3_v_idx
+              spans: [/10 - /10]
+              locking strength: for update
+
+query T
+EXPLAIN UPDATE kv3 SET k = v WHERE v > 1 AND v < 10
+----
+distribution: local
+·
+• update
+│ table: kv3
+│ set: k
+│ auto commit
+│
+└── • index join
+    │ table: kv3@kv3_pkey
+    │ locking strength: for update
+    │
+    └── • scan
+          missing stats
+          table: kv3@kv3_v_idx
+          spans: [/2 - /9]
+          locking strength: for update
+
+statement ok
+SET enable_implicit_select_for_update = false
+
+query T
+EXPLAIN UPDATE kv SET v = 10 WHERE k = 3
+----
+distribution: local
+·
+• update
+│ table: kv
+│ set: v
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: kv@kv_pkey
+          spans: [/3 - /3]
+
+query T
+EXPLAIN UPDATE kv SET v = k WHERE k > 1 AND k < 10
+----
+distribution: local
+·
+• update
+│ table: kv
+│ set: v
+│ auto commit
+│
+└── • scan
+      missing stats
+      table: kv@kv_pkey
+      spans: [/2 - /9]
+
+query T
+EXPLAIN UPDATE kv SET v = 10
+----
+distribution: local
+·
+• update
+│ table: kv
+│ set: v
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: kv@kv_pkey
+          spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (1, 2)
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: xyz
+│ set: x, y
+│ auto commit
+│
+└── • render
+    │ columns: (x, y, z, x_new, y_new)
+    │ render x_new: 1
+    │ render y_new: 2
+    │ render x: x
+    │ render y: y
+    │ render z: z
+    │
+    └── • scan
+          columns: (x, y, z)
+          estimated row count: 1,000 (missing stats)
+          table: xyz@xyz_pkey
+          spans: FULL SCAN
+
+query T
+EXPLAIN UPDATE kv SET v = v - 1 WHERE k < 3 LIMIT 1
+----
+distribution: local
+·
+• update
+│ table: kv
+│ set: v
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: kv@kv_pkey
+          spans: [ - /2]
+          limit: 1
+
+query T
+EXPLAIN UPDATE kv3 SET k = 3 WHERE v = 10
+----
+distribution: local
+·
+• update
+│ table: kv3
+│ set: k
+│ auto commit
+│
+└── • render
+    │
+    └── • index join
+        │ table: kv3@kv3_pkey
+        │
+        └── • scan
+              missing stats
+              table: kv3@kv3_v_idx
+              spans: [/10 - /10]
+
+query T
+EXPLAIN UPDATE kv3 SET k = v WHERE v > 1 AND v < 10
+----
+distribution: local
+·
+• update
+│ table: kv3
+│ set: k
+│ auto commit
+│
+└── • index join
+    │ table: kv3@kv3_pkey
+    │
+    └── • scan
+          missing stats
+          table: kv3@kv3_v_idx
+          spans: [/2 - /9]
+
+# Reset for rest of test.
+statement ok
+SET enable_implicit_select_for_update = true
+
+statement ok
+CREATE TABLE computed (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT AS (c+1) STORED,
+  INDEX (b),
+  FAMILY (a),
+  FAMILY (b),
+  FAMILY (c),
+  FAMILY (d)
+)
+
+# Verify that we don't do an index join to recalculate d (#42482).
+query T
+EXPLAIN UPDATE computed SET b=b*2 WHERE b BETWEEN 1 and 10
+----
+distribution: local
+·
+• update
+│ table: computed
+│ set: b
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: computed@computed_b_idx
+          spans: [/1 - /10]
+          locking strength: for update
+
+# Check that updates on tables with multiple column families behave as
+# they should.
+
+statement ok
+CREATE TABLE tu (a INT PRIMARY KEY, b INT, c INT, d INT, FAMILY (a), FAMILY (b), FAMILY (c,d));
+  INSERT INTO tu VALUES (1, 2, 3, 4)
+
+# Update single column family.
+query T
+EXPLAIN (VERBOSE) UPDATE tu SET c=c+1
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: tu
+│ set: c
+│ auto commit
+│
+└── • render
+    │ columns: (a, c, d, c_new)
+    │ render c_new: c + 1
+    │ render a: a
+    │ render c: c
+    │ render d: d
+    │
+    └── • scan
+          columns: (a, c, d)
+          estimated row count: 1,000 (missing stats)
+          table: tu@tu_pkey
+          spans: FULL SCAN
+          locking strength: for update
+
+statement ok
+SET tracing = on,kv,results; UPDATE tu SET c=c+1; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
+ WHERE operation != 'dist sender send'
+----
+Scan /Table/115/{1-2} lock Exclusive (Block, Unreplicated)
+fetched: /tu/tu_pkey/1:cf=0 -> <undecoded>
+fetched: /tu/tu_pkey/1:cf=1 -> <undecoded>
+fetched: /tu/tu_pkey/1/c/d:cf=2 -> /3/4
+Put (locking) /Table/115/1/1/2/1 -> /TUPLE/3:3:Int/4/1:4:Int/4
+rows affected: 1
+
+statement ok
+SET tracing = on,kv,results; UPDATE tu SET b = NULL, c = NULL, d = NULL; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
+ WHERE operation != 'dist sender send'
+----
+Scan /Table/115/{1-2} lock Exclusive (Block, Unreplicated)
+fetched: /tu/tu_pkey/1:cf=0 -> <undecoded>
+fetched: /tu/tu_pkey/1/b:cf=1 -> 2
+fetched: /tu/tu_pkey/1/c/d:cf=2 -> /4/4
+Del (locking) /Table/115/1/1/1/1
+Del (locking) /Table/115/1/1/2/1
+rows affected: 1
+
+# ------------------------------------------------------------------------------
+# Test without implicit SELECT FOR UPDATE.
+# Some cases were all tested earlier in this file with implicit SFU enabled.
+# ------------------------------------------------------------------------------
+
+statement ok
+SET enable_implicit_select_for_update = false
+
+# Update single column family.
+query T
+EXPLAIN UPDATE tu SET c=c+1
+----
+distribution: local
+·
+• update
+│ table: tu
+│ set: c
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: tu@tu_pkey
+          spans: FULL SCAN
+
+# Reset for rest of test.
+statement ok
+SET enable_implicit_select_for_update = true
+
+# Test that implicit SELECT FOR UPDATE doesn't spread to subqueries.
+statement ok
+CREATE TABLE t121322_ab (a int PRIMARY KEY, b int, INDEX (b))
+
+statement ok
+CREATE TABLE t121322_c (c int PRIMARY KEY)
+
+query T
+EXPLAIN UPDATE t121322_ab SET b = (SELECT sum(c) FROM t121322_c) WHERE a = 1
+----
+distribution: local
+·
+• root
+│
+├── • update
+│   │ table: t121322_ab
+│   │ set: b
+│   │ auto commit
+│   │
+│   └── • render
+│       │
+│       └── • scan
+│             missing stats
+│             table: t121322_ab@t121322_ab_pkey
+│             spans: [/1 - /1]
+│             locking strength: for update
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT sum(c) FROM t121322_c)
+    │ exec mode: one row
+    │
+    └── • group (scalar)
+        │
+        └── • scan
+              missing stats
+              table: t121322_c@t121322_c_pkey
+              spans: FULL SCAN
+
+# Test that FOR UPDATE locks are applied to reads in generic query plans.
+
+statement ok
+CREATE TABLE t137352 (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  INDEX (a),
+  INDEX (b),
+  FAMILY (k, a, b)
+)
+
+statement ok
+SET plan_cache_mode = force_generic_plan
+
+statement ok
+PREPARE p AS UPDATE t137352 SET a = a + 1, b = $2 WHERE k = $1
+
+query T
+EXPLAIN ANALYZE EXECUTE p(1, 10)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: generic, re-optimized
+regions: <hidden>
+·
+• update
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ execution time: 0µs
+│ actual row count: 0
+│ table: t137352
+│ set: a, b
+│ auto commit
+│
+└── • render
+    │ execution time: 0µs
+    │ actual row count: 0
+    │
+    └── • scan
+          sql nodes: <hidden>
+          kv nodes: <hidden>
+          regions: <hidden>
+          KV time: 0µs
+          KV rows decoded: 0
+          actual row count: 0
+          missing stats
+          table: t137352@t137352_pkey
+          spans: [/1 - /1]
+          locking strength: for update
+
+statement ok
+INSERT INTO t137352 VALUES (1, 2, 3);
+
+query T kvtrace
+EXECUTE p(1, 10)
+----
+Scan /Table/118/1/1/0 lock Exclusive (Block, Unreplicated)
+Put /Table/118/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/10
+Del /Table/118/2/2/1/0
+Put /Table/118/2/3/1/0 -> /BYTES/
+Del /Table/118/3/3/1/0
+Put /Table/118/3/10/1/0 -> /BYTES/
+
+statement ok
+DEALLOCATE p
+
+statement ok
+PREPARE p AS UPDATE t137352 SET a = a + 1, b = $2 WHERE a = $1
+
+query T
+EXPLAIN ANALYZE EXECUTE p(10, 100)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: generic, re-optimized
+regions: <hidden>
+·
+• update
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ execution time: 0µs
+│ actual row count: 0
+│ table: t137352
+│ set: a, b
+│ auto commit
+│
+└── • render
+    │ execution time: 0µs
+    │ actual row count: 0
+    │
+    └── • lookup join
+        │ sql nodes: <hidden>
+        │ regions: <hidden>
+        │ KV time: 0µs
+        │ KV rows decoded: 0
+        │ execution time: 0µs
+        │ actual row count: 0
+        │ table: t137352@t137352_pkey
+        │ equality: (k) = (k)
+        │ equality cols are key
+        │ locking strength: for update
+        │
+        └── • lookup join
+            │ sql nodes: <hidden>
+            │ kv nodes: <hidden>
+            │ regions: <hidden>
+            │ KV time: 0µs
+            │ KV rows decoded: 0
+            │ execution time: 0µs
+            │ actual row count: 0
+            │ table: t137352@t137352_a_idx
+            │ equality: ($1) = (a)
+            │ locking strength: for update
+            │
+            └── • values
+                  sql nodes: <hidden>
+                  regions: <hidden>
+                  execution time: 0µs
+                  actual row count: 1
+                  size: 1 column, 1 row
+
+statement count 1
+DELETE FROM t137352 WHERE true;
+
+statement ok
+INSERT INTO t137352 VALUES (1, 10, 3);
+
+query T kvtrace
+EXECUTE p(10, 100)
+----
+Scan /Table/118/2/1{0-1} lock Exclusive (Block, Unreplicated)
+Scan /Table/118/1/1/0 lock Exclusive (Block, Unreplicated)
+Put /Table/118/1/1/0 -> /TUPLE/2:2:Int/11/1:3:Int/100
+Del /Table/118/2/10/1/0
+Put /Table/118/2/11/1/0 -> /BYTES/
+Del /Table/118/3/3/1/0
+Put /Table/118/3/100/1/0 -> /BYTES/
+
+statement ok
+DEALLOCATE p
+
+statement ok
+PREPARE p AS UPDATE t137352 SET a = a + 1, b = $2 WHERE k = $1 AND b > 0
+
+# Do not apply implicit FOR UPDATE locks if the lookup join has an ON condition.
+query T
+EXPLAIN ANALYZE EXECUTE p(1, 10)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: generic, re-optimized
+rows decoded from KV: 1 (8 B, 2 KVs, 1 gRPC calls)
+regions: <hidden>
+·
+• update
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ execution time: 0µs
+│ actual row count: 1
+│ table: t137352
+│ set: a, b
+│ auto commit
+│
+└── • render
+    │ execution time: 0µs
+    │ actual row count: 1
+    │
+    └── • lookup join
+        │ sql nodes: <hidden>
+        │ kv nodes: <hidden>
+        │ regions: <hidden>
+        │ KV time: 0µs
+        │ KV rows decoded: 1
+        │ execution time: 0µs
+        │ actual row count: 1
+        │ table: t137352@t137352_pkey
+        │ equality: ($1) = (k)
+        │ equality cols are key
+        │ pred: b > 0
+        │
+        └── • values
+              sql nodes: <hidden>
+              regions: <hidden>
+              execution time: 0µs
+              actual row count: 1
+              size: 1 column, 1 row
+
+statement count 1
+DELETE FROM t137352 WHERE true;
+
+statement ok
+INSERT INTO t137352 VALUES (1, 2, 3);
+
+query T kvtrace
+EXECUTE p(1, 10)
+----
+Scan /Table/118/1/1/0
+Put (locking) /Table/118/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/10
+Del /Table/118/2/2/1/0
+Put /Table/118/2/3/1/0 -> /BYTES/
+Del /Table/118/3/3/1/0
+Put /Table/118/3/10/1/0 -> /BYTES/
+
+statement ok
+DEALLOCATE p
+
+statement ok
+PREPARE p AS UPDATE t137352 t1 SET a = t2.a + 1, b = t2.b + 1 FROM t137352 t2 WHERE t1.k = t2.a AND t1.k = $1
+
+statement ok
+ALTER TABLE t137352 INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 500000,
+    "distinct_count": 500000,
+    "avg_size": 1
+  }
+]'
+
+# TODO(mgartner): Should we add FOR UPDATE locks for any of the reads in a
+# self-join?
+query T
+EXPLAIN ANALYZE EXECUTE p(1)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: generic, re-optimized
+rows decoded from KV: 1 (8 B, 2 KVs, 1 gRPC calls)
+regions: <hidden>
+·
+• update
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ execution time: 0µs
+│ actual row count: 0
+│ table: t137352
+│ set: a, b
+│ auto commit
+│
+└── • render
+    │ execution time: 0µs
+    │ actual row count: 0
+    │
+    └── • limit
+        │ count: 1
+        │
+        └── • cross join
+            │ sql nodes: <hidden>
+            │ regions: <hidden>
+            │ execution time: 0µs
+            │ actual row count: 0
+            │ estimated row count: 10
+            │
+            ├── • lookup join
+            │   │ sql nodes: <hidden>
+            │   │ regions: <hidden>
+            │   │ KV time: 0µs
+            │   │ KV rows decoded: 0
+            │   │ execution time: 0µs
+            │   │ actual row count: 0
+            │   │ estimated row count: 10
+            │   │ table: t137352@t137352_pkey
+            │   │ equality: (k) = (k)
+            │   │ equality cols are key
+            │   │
+            │   └── • lookup join
+            │       │ sql nodes: <hidden>
+            │       │ kv nodes: <hidden>
+            │       │ regions: <hidden>
+            │       │ KV time: 0µs
+            │       │ KV rows decoded: 0
+            │       │ execution time: 0µs
+            │       │ actual row count: 0
+            │       │ estimated row count: 10
+            │       │ table: t137352@t137352_a_idx
+            │       │ equality: ($1) = (a)
+            │       │
+            │       └── • values
+            │             sql nodes: <hidden>
+            │             regions: <hidden>
+            │             execution time: 0µs
+            │             actual row count: 1
+            │             size: 1 column, 1 row
+            │
+            └── • scan
+                  sql nodes: <hidden>
+                  kv nodes: <hidden>
+                  regions: <hidden>
+                  KV time: 0µs
+                  KV rows decoded: 1
+                  actual row count: 1
+                  estimated row count: 1
+                  table: t137352@t137352_pkey
+                  spans: [/1 - /1]
+
+statement count 1
+DELETE FROM t137352 WHERE true;
+
+statement ok
+INSERT INTO t137352 VALUES (1, 1, 1);
+
+query T kvtrace
+EXECUTE p(1)
+----
+Scan /Table/118/1/1/0
+Scan /Table/118/2/{1-2}
+Scan /Table/118/1/1/0
+Put (locking) /Table/118/1/1/0 -> /TUPLE/2:2:Int/2/1:3:Int/2
+Del /Table/118/2/1/1/0
+Put /Table/118/2/2/1/0 -> /BYTES/
+Del /Table/118/3/1/1/0
+Put /Table/118/3/2/1/0 -> /BYTES/
+
+subtest locking_behavior
+
+# Enable the lock elision optimization so that we could put 'w' into a separate
+# column family which allows us to verify the behavior when 'w' is NULL.
+statement ok
+SET optimizer_use_lock_elision_multiple_families = true;
+
+statement ok
+CREATE TABLE t139160 (
+  k INT PRIMARY KEY,
+  i INT,
+  u INT,
+  v INT NOT NULL,
+  w INT,
+  INDEX (i) STORING (u),
+  UNIQUE INDEX (u) STORING (i),
+  UNIQUE INDEX (v),
+  FAMILY (k, i, u, v),
+  FAMILY (w)
+);
+
+statement ok
+INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
+
+# The PK is scanned and locked.
+query T
+EXPLAIN UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE k = 1
+----
+distribution: local
+·
+• update
+│ table: t139160
+│ set: i, u, v, w
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: t139160@t139160_pkey
+          spans: [/1 - /1]
+          locking strength: for update
+
+query T kvtrace
+UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE k = 1
+----
+Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
+Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
+Put /Table/119/1/1/1/1 -> /INT/6
+Del /Table/119/2/2/1/0
+Put /Table/119/2/3/1/0 -> /BYTES/0x3308
+Del (locking) /Table/119/3/3/0
+CPut /Table/119/3/4/0 -> /BYTES/0x892306
+Del (locking) /Table/119/4/4/0
+CPut /Table/119/4/5/0 -> /BYTES/0x89
+
+statement count 1
+DELETE FROM t139160 WHERE true;
+
+statement ok
+INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
+
+# Same as above, but the second column family is set to NULL.
+query T kvtrace
+UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = NULL WHERE k = 1
+----
+Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
+Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
+Del /Table/119/1/1/1/1
+Del /Table/119/2/2/1/0
+Put /Table/119/2/3/1/0 -> /BYTES/0x3308
+Del (locking) /Table/119/3/3/0
+CPut /Table/119/3/4/0 -> /BYTES/0x892306
+Del (locking) /Table/119/4/4/0
+CPut /Table/119/4/5/0 -> /BYTES/0x89
+
+statement count 1
+DELETE FROM t139160 WHERE true;
+
+statement ok
+INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
+
+# Both primary and non-unique secondary indexes are scanned and locked.
+query T
+EXPLAIN UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE i = 2
+----
+distribution: local
+·
+• update
+│ table: t139160
+│ set: i, u, v, w
+│ auto commit
+│
+└── • render
+    │
+    └── • index join
+        │ table: t139160@t139160_pkey
+        │ locking strength: for update
+        │
+        └── • scan
+              missing stats
+              table: t139160@t139160_i_idx
+              spans: [/2 - /2]
+              locking strength: for update
+
+query T kvtrace
+UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE i = 2
+----
+Scan /Table/119/2/{2-3} lock Exclusive (Block, Unreplicated)
+Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
+Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
+Put /Table/119/1/1/1/1 -> /INT/6
+Del /Table/119/2/2/1/0
+Put /Table/119/2/3/1/0 -> /BYTES/0x3308
+Del (locking) /Table/119/3/3/0
+CPut /Table/119/3/4/0 -> /BYTES/0x892306
+Del (locking) /Table/119/4/4/0
+CPut /Table/119/4/5/0 -> /BYTES/0x89
+
+statement count 1
+DELETE FROM t139160 WHERE true;
+
+statement ok
+INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
+
+# Same as above, but the second column family is set to NULL.
+query T kvtrace
+UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = NULL WHERE i = 2
+----
+Scan /Table/119/2/{2-3} lock Exclusive (Block, Unreplicated)
+Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
+Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
+Del /Table/119/1/1/1/1
+Del /Table/119/2/2/1/0
+Put /Table/119/2/3/1/0 -> /BYTES/0x3308
+Del (locking) /Table/119/3/3/0
+CPut /Table/119/3/4/0 -> /BYTES/0x892306
+Del (locking) /Table/119/4/4/0
+CPut /Table/119/4/5/0 -> /BYTES/0x89
+
+statement count 1
+DELETE FROM t139160 WHERE true;
+
+statement ok
+INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
+
+# Both primary and unique secondary (on nullable column) indexes are scanned and
+# locked.
+query T
+EXPLAIN UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE u = 3
+----
+distribution: local
+·
+• update
+│ table: t139160
+│ set: i, u, v, w
+│ auto commit
+│
+└── • render
+    │
+    └── • index join
+        │ table: t139160@t139160_pkey
+        │ locking strength: for update
+        │
+        └── • scan
+              missing stats
+              table: t139160@t139160_u_key
+              spans: [/3 - /3]
+              locking strength: for update
+
+query T kvtrace
+UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE u = 3
+----
+Scan /Table/119/3/3/0 lock Exclusive (Block, Unreplicated)
+Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
+Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
+Put /Table/119/1/1/1/1 -> /INT/6
+Del /Table/119/2/2/1/0
+Put /Table/119/2/3/1/0 -> /BYTES/0x3308
+Del /Table/119/3/3/0
+CPut /Table/119/3/4/0 -> /BYTES/0x892306
+Del (locking) /Table/119/4/4/0
+CPut /Table/119/4/5/0 -> /BYTES/0x89
+
+statement count 1
+DELETE FROM t139160 WHERE true;
+
+statement ok
+INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
+
+# Same as above, but the second column family is set to NULL.
+query T kvtrace
+UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = NULL WHERE u = 3
+----
+Scan /Table/119/3/3/0 lock Exclusive (Block, Unreplicated)
+Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
+Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
+Del /Table/119/1/1/1/1
+Del /Table/119/2/2/1/0
+Put /Table/119/2/3/1/0 -> /BYTES/0x3308
+Del /Table/119/3/3/0
+CPut /Table/119/3/4/0 -> /BYTES/0x892306
+Del (locking) /Table/119/4/4/0
+CPut /Table/119/4/5/0 -> /BYTES/0x89
+
+statement count 1
+DELETE FROM t139160 WHERE true;
+
+statement ok
+INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
+
+# Both primary and unique secondary (on non-nullable column) indexes are scanned
+# and locked.
+query T
+EXPLAIN UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE v = 4
+----
+distribution: local
+·
+• update
+│ table: t139160
+│ set: i, u, v, w
+│ auto commit
+│
+└── • render
+    │
+    └── • index join
+        │ table: t139160@t139160_pkey
+        │ locking strength: for update
+        │
+        └── • scan
+              missing stats
+              table: t139160@t139160_v_key
+              spans: [/4 - /4]
+              locking strength: for update
+
+query T kvtrace
+UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE v = 4
+----
+Scan /Table/119/4/4/0 lock Exclusive (Block, Unreplicated)
+Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
+Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
+Put /Table/119/1/1/1/1 -> /INT/6
+Del /Table/119/2/2/1/0
+Put /Table/119/2/3/1/0 -> /BYTES/0x3308
+Del (locking) /Table/119/3/3/0
+CPut /Table/119/3/4/0 -> /BYTES/0x892306
+Del /Table/119/4/4/0
+CPut /Table/119/4/5/0 -> /BYTES/0x89
+
+statement count 1
+DELETE FROM t139160 WHERE true;
+
+statement ok
+INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
+
+# Same as above, but the second column family is set to NULL.
+query T kvtrace
+UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = NULL WHERE v = 4
+----
+Scan /Table/119/4/4/0 lock Exclusive (Block, Unreplicated)
+Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
+Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
+Del /Table/119/1/1/1/1
+Del /Table/119/2/2/1/0
+Put /Table/119/2/3/1/0 -> /BYTES/0x3308
+Del (locking) /Table/119/3/3/0
+CPut /Table/119/3/4/0 -> /BYTES/0x892306
+Del /Table/119/4/4/0
+CPut /Table/119/4/5/0 -> /BYTES/0x89
+
+statement count 1
+DELETE FROM t139160 WHERE true;
+
+statement ok
+INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
+
+# The filter is not pushed down into the scan, so no index is locked.
+query T
+EXPLAIN UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE w = 5
+----
+distribution: local
+·
+• update
+│ table: t139160
+│ set: i, u, v, w
+│ auto commit
+│
+└── • render
+    │
+    └── • filter
+        │ filter: w = 5
+        │
+        └── • scan
+              missing stats
+              table: t139160@t139160_pkey
+              spans: FULL SCAN
+
+query T kvtrace
+UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE w = 5
+----
+Scan /Table/119/{1-2}
+Put (locking) /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
+Put (locking) /Table/119/1/1/1/1 -> /INT/6
+Del /Table/119/2/2/1/0
+Put /Table/119/2/3/1/0 -> /BYTES/0x3308
+Del (locking) /Table/119/3/3/0
+CPut /Table/119/3/4/0 -> /BYTES/0x892306
+Del (locking) /Table/119/4/4/0
+CPut /Table/119/4/5/0 -> /BYTES/0x89
+
+statement count 1
+DELETE FROM t139160 WHERE true;
+
+statement ok
+INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
+
+# Same as above, but the second column family is set to NULL.
+query T kvtrace
+UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = NULL WHERE w = 5
+----
+Scan /Table/119/{1-2}
+Put (locking) /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
+Del (locking) /Table/119/1/1/1/1
+Del /Table/119/2/2/1/0
+Put /Table/119/2/3/1/0 -> /BYTES/0x3308
+Del (locking) /Table/119/3/3/0
+CPut /Table/119/3/4/0 -> /BYTES/0x892306
+Del (locking) /Table/119/4/4/0
+CPut /Table/119/4/5/0 -> /BYTES/0x89
+
+statement ok
+RESET optimizer_use_lock_elision_multiple_families;
+
+subtest end
+
+subtest locking_behavior_families
+
+# Same tests as above, but now the table has multiple column families. With
+# multiple families we do not use the optimization that elides lock acquisition
+# if the initial scan was locking.
+statement ok
+CREATE TABLE t139160_families (
+  k INT PRIMARY KEY,
+  i INT,
+  u INT,
+  v INT NOT NULL,
+  w INT,
+  INDEX (i) STORING (u),
+  UNIQUE INDEX (u) STORING (i),
+  UNIQUE INDEX (v),
+  FAMILY (k),
+  FAMILY (i),
+  FAMILY (u),
+  FAMILY (v),
+  FAMILY (w)
+);
+
+statement ok
+INSERT INTO t139160_families VALUES (1, 2, 3, 4, 5);
+
+query T kvtrace
+UPDATE t139160_families SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE k = 1
+----
+Scan /Table/120/1/1/{1/1-4/2} lock Exclusive (Block, Unreplicated)
+Put (locking) /Table/120/1/1/1/1 -> /INT/3
+Put (locking) /Table/120/1/1/2/1 -> /INT/4
+Put (locking) /Table/120/1/1/3/1 -> /INT/5
+Put (locking) /Table/120/1/1/4/1 -> /INT/6
+Del /Table/120/2/2/1/0
+Put /Table/120/2/3/1/0 -> /BYTES/
+Del /Table/120/2/2/1/2/1
+Put /Table/120/2/3/1/2/1 -> /TUPLE/3:3:Int/4
+Del (locking) /Table/120/3/3/0
+CPut /Table/120/3/4/0 -> /BYTES/0x89
+Del (locking) /Table/120/3/3/1/1
+CPut /Table/120/3/4/1/1 -> /TUPLE/2:2:Int/3
+Del (locking) /Table/120/4/4/0
+CPut /Table/120/4/5/0 -> /BYTES/0x89
+
+statement count 1
+DELETE FROM t139160_families WHERE true;
+
+statement ok
+INSERT INTO t139160_families VALUES (1, 2, 3, 4, 5);
+
+query T kvtrace
+UPDATE t139160_families SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE i = 2
+----
+Scan /Table/120/2/{2-3} lock Exclusive (Block, Unreplicated)
+Scan /Table/120/1/1/{1/1-4/2} lock Exclusive (Block, Unreplicated)
+Put (locking) /Table/120/1/1/1/1 -> /INT/3
+Put (locking) /Table/120/1/1/2/1 -> /INT/4
+Put (locking) /Table/120/1/1/3/1 -> /INT/5
+Put (locking) /Table/120/1/1/4/1 -> /INT/6
+Del /Table/120/2/2/1/0
+Put /Table/120/2/3/1/0 -> /BYTES/
+Del /Table/120/2/2/1/2/1
+Put /Table/120/2/3/1/2/1 -> /TUPLE/3:3:Int/4
+Del (locking) /Table/120/3/3/0
+CPut /Table/120/3/4/0 -> /BYTES/0x89
+Del (locking) /Table/120/3/3/1/1
+CPut /Table/120/3/4/1/1 -> /TUPLE/2:2:Int/3
+Del (locking) /Table/120/4/4/0
+CPut /Table/120/4/5/0 -> /BYTES/0x89
+
+statement count 1
+DELETE FROM t139160_families WHERE true;
+
+statement ok
+INSERT INTO t139160_families VALUES (1, 2, 3, 4, 5);
+
+query T kvtrace
+UPDATE t139160_families SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE u = 3
+----
+Scan /Table/120/3/3/{0-1/2} lock Exclusive (Block, Unreplicated)
+Scan /Table/120/1/1/{1/1-4/2} lock Exclusive (Block, Unreplicated)
+Put (locking) /Table/120/1/1/1/1 -> /INT/3
+Put (locking) /Table/120/1/1/2/1 -> /INT/4
+Put (locking) /Table/120/1/1/3/1 -> /INT/5
+Put (locking) /Table/120/1/1/4/1 -> /INT/6
+Del /Table/120/2/2/1/0
+Put /Table/120/2/3/1/0 -> /BYTES/
+Del /Table/120/2/2/1/2/1
+Put /Table/120/2/3/1/2/1 -> /TUPLE/3:3:Int/4
+Del (locking) /Table/120/3/3/0
+CPut /Table/120/3/4/0 -> /BYTES/0x89
+Del (locking) /Table/120/3/3/1/1
+CPut /Table/120/3/4/1/1 -> /TUPLE/2:2:Int/3
+Del (locking) /Table/120/4/4/0
+CPut /Table/120/4/5/0 -> /BYTES/0x89
+
+statement count 1
+DELETE FROM t139160_families WHERE true;
+
+statement ok
+INSERT INTO t139160_families VALUES (1, 2, 3, 4, 5);
+
+query T kvtrace
+UPDATE t139160_families SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE v = 4
+----
+Scan /Table/120/4/4/0 lock Exclusive (Block, Unreplicated)
+Scan /Table/120/1/1/{1/1-4/2} lock Exclusive (Block, Unreplicated)
+Put (locking) /Table/120/1/1/1/1 -> /INT/3
+Put (locking) /Table/120/1/1/2/1 -> /INT/4
+Put (locking) /Table/120/1/1/3/1 -> /INT/5
+Put (locking) /Table/120/1/1/4/1 -> /INT/6
+Del /Table/120/2/2/1/0
+Put /Table/120/2/3/1/0 -> /BYTES/
+Del /Table/120/2/2/1/2/1
+Put /Table/120/2/3/1/2/1 -> /TUPLE/3:3:Int/4
+Del (locking) /Table/120/3/3/0
+CPut /Table/120/3/4/0 -> /BYTES/0x89
+Del (locking) /Table/120/3/3/1/1
+CPut /Table/120/3/4/1/1 -> /TUPLE/2:2:Int/3
+Del (locking) /Table/120/4/4/0
+CPut /Table/120/4/5/0 -> /BYTES/0x89
+
+# Sanity check a couple of session variables.
+statement ok
+SET use_cputs_on_non_unique_indexes = true;
+SET optimizer_use_lock_elision_multiple_families = true;
+
+statement count 1
+DELETE FROM t139160_families WHERE true;
+
+statement ok
+INSERT INTO t139160_families VALUES (1, 2, 3, 4, 5);
+
+query T kvtrace
+UPDATE t139160_families SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE k = 1
+----
+Scan /Table/120/1/1/{1/1-4/2} lock Exclusive (Block, Unreplicated)
+Put /Table/120/1/1/1/1 -> /INT/3
+Put /Table/120/1/1/2/1 -> /INT/4
+Put /Table/120/1/1/3/1 -> /INT/5
+Put /Table/120/1/1/4/1 -> /INT/6
+Del /Table/120/2/2/1/0
+CPut /Table/120/2/3/1/0 -> /BYTES/
+Del /Table/120/2/2/1/2/1
+CPut /Table/120/2/3/1/2/1 -> /TUPLE/3:3:Int/4
+Del (locking) /Table/120/3/3/0
+CPut /Table/120/3/4/0 -> /BYTES/0x89
+Del (locking) /Table/120/3/3/1/1
+CPut /Table/120/3/4/1/1 -> /TUPLE/2:2:Int/3
+Del (locking) /Table/120/4/4/0
+CPut /Table/120/4/5/0 -> /BYTES/0x89
+
+statement count 1
+DELETE FROM t139160_families WHERE true;
+
+statement ok
+INSERT INTO t139160_families VALUES (1, 2, 3, 4, 5);
+SET optimizer_enable_lock_elision = false;
+
+query T kvtrace
+UPDATE t139160_families SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE k = 1
+----
+Scan /Table/120/1/1/{1/1-4/2} lock Exclusive (Block, Unreplicated)
+Put (locking) /Table/120/1/1/1/1 -> /INT/3
+Put (locking) /Table/120/1/1/2/1 -> /INT/4
+Put (locking) /Table/120/1/1/3/1 -> /INT/5
+Put (locking) /Table/120/1/1/4/1 -> /INT/6
+Del /Table/120/2/2/1/0
+CPut /Table/120/2/3/1/0 -> /BYTES/
+Del /Table/120/2/2/1/2/1
+CPut /Table/120/2/3/1/2/1 -> /TUPLE/3:3:Int/4
+Del (locking) /Table/120/3/3/0
+CPut /Table/120/3/4/0 -> /BYTES/0x89
+Del (locking) /Table/120/3/3/1/1
+CPut /Table/120/3/4/1/1 -> /TUPLE/2:2:Int/3
+Del (locking) /Table/120/4/4/0
+CPut /Table/120/4/5/0 -> /BYTES/0x89
+
+statement ok
+RESET optimizer_enable_lock_elision;
+RESET optimizer_use_lock_elision_multiple_families;
+RESET use_cputs_on_non_unique_indexes;
+
+subtest end
+
+# Regression test for incorrectly treating a locked index in one table as being
+# locked in another. Furthermore, we shouldn't be locking an index in a
+# different table altogether.
+subtest locking_other_table
+
+statement ok
+CREATE TABLE legal_entity (
+   id TEXT PRIMARY KEY
+);
+INSERT INTO legal_entity VALUES ('foo');
+
+statement ok
+CREATE TABLE entity_address (
+   id TEXT PRIMARY KEY
+);
+INSERT INTO entity_address VALUES ('bar');
+
+# Retry to ensure that referenced tables are visible.
+retry
+statement ok
+CREATE TABLE legal_entity_address (
+    legal_entity_id text NOT NULL REFERENCES legal_entity(id),
+    entity_address_id text NOT NULL REFERENCES entity_address(id),
+    UNIQUE (legal_entity_id, entity_address_id),
+    FAMILY (legal_entity_id, entity_address_id)
+);
+
+statement ok
+INSERT INTO legal_entity_address VALUES ('foo', 'bar');
+
+query T
+EXPLAIN
+UPDATE entity_address SET id = 'bar' WHERE id IN (
+    SELECT entity_address_id FROM legal_entity_address WHERE legal_entity_id = 'foo'
+);
+----
+distribution: local
+·
+• root
+│
+├── • update
+│   │ table: entity_address
+│   │ set: id
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • render
+│               │
+│               └── • scan
+│                     missing stats
+│                     table: legal_entity_address@legal_entity_address_legal_entity_id_entity_address_id_key
+│                     spans: [/'foo' - /'foo']
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (right semi)
+            │ equality: (entity_address_id) = (id)
+            │ right cols are key
+            │
+            ├── • scan
+            │     missing stats
+            │     table: legal_entity_address@legal_entity_address_pkey
+            │     spans: FULL SCAN
+            │
+            └── • except all
+                │
+                ├── • scan buffer
+                │     label: buffer 1
+                │
+                └── • scan buffer
+                      label: buffer 1
+
+query T kvtrace
+UPDATE entity_address SET id = 'bar' WHERE id IN (
+    SELECT entity_address_id FROM legal_entity_address WHERE legal_entity_id = 'foo'
+);
+----
+Scan /Table/123/2/"foo"{-/PrefixEnd}
+Put (locking) /Table/122/1/"bar"/0 -> /TUPLE/
+
+subtest end

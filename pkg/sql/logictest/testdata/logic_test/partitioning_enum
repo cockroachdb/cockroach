@@ -1,0 +1,97 @@
+
+# Enums are supported for partitioning both by list and range.
+# In 20.2 alphas, partitioning by enums was permitted but led to
+# subsequent validation errors upon reading due to the type not
+# being hydrated, hence the reading of crdb_internal.tables.
+
+statement ok
+CREATE TYPE places AS ENUM ('us', 'eu', 'ap');
+
+statement ok
+CREATE TABLE partitioned_table (
+    place places, id INT8,
+    PRIMARY KEY (place, id)
+)
+    PARTITION BY LIST (place)
+        (
+            PARTITION us VALUES IN ('us'),
+            PARTITION eu VALUES IN ('eu')
+        );
+
+statement ok
+SELECT * FROM crdb_internal.tables
+
+statement ok
+CREATE TABLE partitioned_table_2 (
+    place places, id INT8,
+    PRIMARY KEY (place, id)
+);
+
+statement ok
+ALTER TABLE partitioned_table_2 PARTITION BY LIST (place)
+        (
+            PARTITION us VALUES IN ('us'),
+            PARTITION eu VALUES IN ('eu')
+        );
+
+statement ok
+SELECT * FROM crdb_internal.tables
+
+
+statement ok
+CREATE TABLE partitioned_table_3 (
+    place places, id INT8,
+    PRIMARY KEY (place, id)
+);
+
+# Ensure that partition validation occurs at write time.
+
+statement error partitions eu and us overlap
+ALTER TABLE partitioned_table_3 PARTITION BY RANGE (place)
+        (
+            PARTITION eu VALUES FROM (MINVALUE) TO ('eu'),
+            PARTITION us VALUES FROM ('us') TO (MAXVALUE)
+        );
+
+statement ok
+SELECT * FROM crdb_internal.tables
+
+
+subtest drop_enum_partitioning_value
+
+statement ok
+drop table if exists tbl;
+drop type if exists t
+
+statement ok
+create type t as enum('a', 'b', 'c');
+create table tbl (pk t PRIMARY KEY) PARTITION BY LIST (pk) (PARTITION "a" VALUES IN ('a'))
+
+statement error pgcode 2BP01 could not remove enum value "a" as it is being used in the partitioning of index tbl@tbl_pkey
+alter type t drop value 'a'
+
+statement ok
+drop table if exists tbl;
+drop type if exists t
+
+statement ok
+create type t as enum('a', 'b', 'c');
+create table tbl (i INT, k t,  PRIMARY KEY (i, k)) PARTITION BY LIST (i) (PARTITION "one" VALUES IN (1) PARTITION BY RANGE (k) (PARTITION "a" VALUES FROM ('a') TO ('b')))
+
+statement error pgcode 2BP01 could not remove enum value "a" as it is being used in the partitioning of index tbl@tbl_pkey
+alter type t drop value 'a'
+
+statement ok
+drop table if exists tbl;
+drop type if exists t
+
+statement ok
+create type t as enum('a', 'b', 'c');
+create table tbl (i INT, k t,  PRIMARY KEY (i, k), INDEX idx (k) PARTITION BY RANGE (k) (PARTITION "a" VALUES FROM ('a') TO ('b')))
+
+# TODO(#75227): Fix this flaky test.
+# statement error pgcode 2BP01 could not remove enum value "a" as it is being used in the partitioning of index tbl@idx
+# alter type t drop value 'a';
+
+statement ok
+alter type t drop value 'c';

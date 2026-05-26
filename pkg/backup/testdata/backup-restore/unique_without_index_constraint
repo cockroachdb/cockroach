@@ -1,0 +1,45 @@
+new-cluster name=s1
+----
+
+exec-sql
+SET experimental_enable_unique_without_index_constraints = true;
+----
+
+exec-sql
+CREATE TABLE uwi(a INT UNIQUE WITHOUT INDEX);
+----
+
+exec-sql
+CREATE EXTERNAL CONNECTION foo AS 'nodelocal://1/foo';
+----
+
+exec-sql
+BACKUP INTO 'external://foo/cluster';
+----
+
+exec-sql
+BACKUP DATABASE defaultdb INTO 'external://foo/database';
+----
+
+exec-sql
+BACKUP TABLE uwi INTO 'external://foo/table';
+----
+
+new-cluster name=s2 share-io-dir=s1
+----
+
+exec-sql
+RESTORE FROM LATEST IN 'nodelocal://1/foo/cluster';
+----
+
+exec-sql
+RESTORE DATABASE defaultdb FROM LATEST IN 'nodelocal://1/foo/database' WITH new_db_name='newdefaultdb';
+----
+
+exec-sql
+CREATE DATABASE bar;
+----
+
+exec-sql
+RESTORE TABLE uwi FROM LATEST IN 'nodelocal://1/foo/table' WITH into_db='bar';
+----

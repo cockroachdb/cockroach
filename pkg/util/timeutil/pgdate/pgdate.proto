@@ -1,0 +1,31 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.util.timeutil.pgdate;
+option go_package = "github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate";
+
+// DateStyle refers to the PostgreSQL DateStyle allowed variables.
+message DateStyle {
+  // Style refers to the style to print output dates.
+  Style style = 1;
+  // Order refers to the order of day, month and year components.
+  Order order = 2;
+}
+
+// Order refers to the Order component of a DateStyle.
+enum Order {
+  MDY = 0;
+  DMY = 1;
+  YMD = 2;
+}
+
+// Style refers to the Style component of a DateStyle.
+enum Style {
+  ISO = 0;
+  SQL = 1;
+  POSTGRES = 2;
+  GERMAN = 3;
+}

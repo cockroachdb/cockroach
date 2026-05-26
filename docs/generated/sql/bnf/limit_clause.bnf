@@ -1,0 +1,11 @@
+limit_clause ::=
+	'LIMIT' 'ALL'
+	| 'LIMIT' a_expr
+	| 'FETCH' 'FIRST' select_fetch_first_value 'ROW' 'ONLY'
+	| 'FETCH' 'FIRST' select_fetch_first_value 'ROWS' 'ONLY'
+	| 'FETCH' 'NEXT' select_fetch_first_value 'ROW' 'ONLY'
+	| 'FETCH' 'NEXT' select_fetch_first_value 'ROWS' 'ONLY'
+	| 'FETCH' 'FIRST' 'ROW' 'ONLY'
+	| 'FETCH' 'FIRST' 'ROWS' 'ONLY'
+	| 'FETCH' 'NEXT' 'ROW' 'ONLY'
+	| 'FETCH' 'NEXT' 'ROWS' 'ONLY'

@@ -1,0 +1,1280 @@
+sql admin
+{
+  "database": "system",
+  "statements": [{"sql": "SELECT username FROM users where username = $1", "arguments": ["admin"]}]
+}
+----
+{
+ "num_statements": 1,
+ "request": {
+  "application_name": "$ api-v2-sql",
+  "database": "system",
+  "execute": false,
+  "max_result_size": 100000,
+  "separate_txns": false,
+  "statements": [
+   {
+    "arguments": [
+     "admin"
+    ],
+    "sql": "SELECT username FROM users WHERE username = $1"
+   }
+  ],
+  "stop_on_error": false,
+  "timeout": "5s"
+ }
+}
+
+sql admin
+{
+  "database": "system",
+  "execute": true,
+  "statements": [{"sql": "SELECT username FROM users where username = $1", "arguments": ["admin"]}]
+}
+----
+{
+ "execution": {
+  "txn_results": [
+   {
+    "columns": [
+     {
+      "name": "username",
+      "oid": 25,
+      "type": "STRING"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows": [
+     {
+      "username": "admin"
+     }
+    ],
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 1,
+    "tag": "SELECT"
+   }
+  ]
+ },
+ "num_statements": 1
+}
+
+# Regression test for #84385.
+sql admin
+{
+  "database": "system",
+  "execute": true,
+  "statements": [{"sql": "SELECT 1, 2"}]
+}
+----
+{
+ "execution": {
+  "txn_results": [
+   {
+    "columns": [
+     {
+      "name": "?column?",
+      "oid": 20,
+      "type": "INT8"
+     },
+     {
+      "name": "?column?_1",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows": [
+     {
+      "?column?": 1,
+      "?column?_1": 2
+     }
+    ],
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 1,
+    "tag": "SELECT"
+   }
+  ]
+ },
+ "num_statements": 1
+}
+
+
+
+sql non-admin expect-error
+{
+  "database": "system",
+  "execute": true,
+  "statements": [{"sql": "SELECT username FROM users where username = 'admin'"}]
+}
+----
+42501|executing stmt 1: run-query-via-api: user authentic_user_noadmin does not have SELECT privilege on relation users
+
+
+sql admin
+{
+  "database": "system",
+  "execute": true,
+  "statements": [
+    {"sql": "SELECT username FROM users where username = 'admin'"},
+    {"sql": "SELECT \"eventType\" FROM eventlog where \"eventType\" = 'node_restart'"}
+  ]
+}
+----
+{
+ "execution": {
+  "txn_results": [
+   {
+    "columns": [
+     {
+      "name": "username",
+      "oid": 25,
+      "type": "STRING"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows": [
+     {
+      "username": "admin"
+     }
+    ],
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 1,
+    "tag": "SELECT"
+   },
+   {
+    "columns": [
+     {
+      "name": "eventType",
+      "oid": 25,
+      "type": "STRING"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 2,
+    "tag": "SELECT"
+   }
+  ]
+ },
+ "num_statements": 2
+}
+
+sql admin
+{
+  "database": "mydb",
+  "execute": true,
+  "statements": [
+    {"sql": "CREATE database mydb"},
+    {"sql": "CREATE table mydb.test (id int)"},
+    {"sql": "INSERT INTO test VALUES (1)"}
+  ]
+}
+----
+{
+ "execution": {
+  "txn_results": [
+   {
+    "columns": [
+     {
+      "name": "rows_affected",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 1,
+    "tag": "CREATE DATABASE"
+   },
+   {
+    "columns": [
+     {
+      "name": "rows_affected",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 2,
+    "tag": "CREATE TABLE"
+   },
+   {
+    "columns": [
+     {
+      "name": "rows_affected",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows_affected": 1,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 3,
+    "tag": "INSERT"
+   }
+  ]
+ },
+ "num_statements": 3
+}
+
+
+sql admin expect-error
+{
+  "statements": [
+    {"sql": "INSERT INTO WHERE"}
+  ]
+}
+----
+42601|parsing statement 1: at or near "where": syntax error
+
+
+sql admin expect-error
+{
+  "timeout": "abcdef",
+  "statements": [
+    {"sql": "INSERT INTO WHERE"}
+  ]
+}
+----
+XXUUU|time: invalid duration "abcdef"
+
+
+sql admin expect-error
+{
+  "statements": [
+    {"sql": "SELECT username FROM users where username = 'admin'; SELECT username FROM users where username = 'admin'"}
+  ]
+}
+----
+XXUUU|parsing statement 1: expecting 1 statement, found 2
+
+
+sql admin expect-error
+{
+  "statements": [
+    {"sql": "SELECT username FROM users where username = $1"}
+  ]
+}
+----
+XXUUU|parsing statement 1: expected 1 placeholder(s), got 0
+
+
+sql admin expect-error
+{
+  "statements": [
+    {"sql": "SELECT username FROM users where username = $1", "arguments": ["blah", "blah"]}
+  ]
+}
+----
+XXUUU|parsing statement 1: expected 1 placeholder(s), got 2
+
+sql admin
+{
+  "database": "mydb",
+  "execute": true,
+  "statements": [{"sql": "CREATE TABLE foo (i INT PRIMARY KEY, j INT UNIQUE)"}]
+}
+----
+{
+ "execution": {
+  "txn_results": [
+   {
+    "columns": [
+     {
+      "name": "rows_affected",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 1,
+    "tag": "CREATE TABLE"
+   }
+  ]
+ },
+ "num_statements": 1
+}
+
+sql admin
+{
+  "database": "mydb",
+  "execute": true,
+  "timeout": "30s",
+  "statements": [
+    {"sql": "ALTER TABLE foo RENAME TO bar"},
+    {"sql": "INSERT INTO bar (i) VALUES (1), (2)"},
+    {"sql": "ALTER TABLE bar DROP COLUMN j"},
+    {"sql": "ALTER TABLE bar ADD COLUMN k INT DEFAULT 42"}
+  ]
+}
+----
+{
+ "execution": {
+  "txn_results": [
+   {
+    "columns": [
+     {
+      "name": "rows_affected",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 1,
+    "tag": "ALTER TABLE"
+   },
+   {
+    "columns": [
+     {
+      "name": "rows_affected",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows_affected": 2,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 2,
+    "tag": "INSERT"
+   },
+   {
+    "columns": [
+     {
+      "name": "rows_affected",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 3,
+    "tag": "ALTER TABLE"
+   },
+   {
+    "columns": [
+     {
+      "name": "rows_affected",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 4,
+    "tag": "ALTER TABLE"
+   }
+  ]
+ },
+ "num_statements": 4
+}
+
+sql admin
+{
+  "database": "mydb",
+  "execute": true,
+  "statements": [
+    {"sql": "SELECT * FROM bar"}
+  ]
+}
+----
+{
+ "execution": {
+  "txn_results": [
+   {
+    "columns": [
+     {
+      "name": "i",
+      "oid": 20,
+      "type": "INT8"
+     },
+     {
+      "name": "k",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows": [
+     {
+      "i": 1,
+      "k": 42
+     },
+     {
+      "i": 2,
+      "k": 42
+     }
+    ],
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 1,
+    "tag": "SELECT"
+   }
+  ]
+ },
+ "num_statements": 1
+}
+
+
+# Delete defaultdb for the following two tests.
+sql admin
+{
+  "database": "mydb",
+  "execute": true,
+  "statements": [
+    {"sql": "DROP DATABASE defaultdb CASCADE"}
+  ]
+}
+----
+{
+ "execution": {
+  "txn_results": [
+   {
+    "columns": [
+     {
+      "name": "rows_affected",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 1,
+    "tag": "DROP DATABASE"
+   }
+  ]
+ },
+ "num_statements": 1
+}
+
+
+# Not passing any database, should still work for admin with defaultdb deleted.
+sql admin
+{
+  "execute": true,
+  "statements": [
+    {"sql": "SELECT * FROM mydb.bar"}
+  ]
+}
+----
+{
+ "execution": {
+  "txn_results": [
+   {
+    "columns": [
+     {
+      "name": "i",
+      "oid": 20,
+      "type": "INT8"
+     },
+     {
+      "name": "k",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows": [
+     {
+      "i": 1,
+      "k": 42
+     },
+     {
+      "i": 2,
+      "k": 42
+     }
+    ],
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 1,
+    "tag": "SELECT"
+   }
+  ]
+ },
+ "num_statements": 1
+}
+
+
+
+# Not passing any database, should still work for non-admin with defaultdb deleted.
+# The error should be about permission on the table, not permission about executing the query.
+sql non-admin expect-error
+{
+  "execute": true,
+  "statements": [{"sql": "SELECT username FROM users where username = 'admin'"}]
+}
+----
+42501|executing stmt 1: run-query-via-api: user authentic_user_noadmin does not have SELECT privilege on relation users
+
+
+sql admin
+{
+  "database": "mydb",
+  "execute": true,
+  "statements": [
+    {"sql": "DROP TABLE bar"}
+  ]
+}
+----
+{
+ "execution": {
+  "txn_results": [
+   {
+    "columns": [
+     {
+      "name": "rows_affected",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 1,
+    "tag": "DROP TABLE"
+   }
+  ]
+ },
+ "num_statements": 1
+}
+
+# Test that running queries in separate transactions returns expected results
+# for each transaction.
+sql admin
+{
+  "database": "testdb",
+  "execute": true,
+  "separate_txns": true,
+  "statements": [
+        {"sql": "CREATE database testdb"},
+        {"sql": "CREATE table testdb.test (id int)"},
+        {"sql": "INSERT INTO testdb.test VALUES (1)"}
+  ]
+}
+----
+{
+ "execution": {
+  "txn_results": [
+   {
+    "columns": [
+     {
+      "name": "rows_affected",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 1,
+    "tag": "CREATE DATABASE"
+   },
+   {
+    "columns": [
+     {
+      "name": "rows_affected",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 2,
+    "tag": "CREATE TABLE"
+   },
+   {
+    "columns": [
+     {
+      "name": "rows_affected",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows_affected": 1,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 3,
+    "tag": "INSERT"
+   }
+  ]
+ },
+ "num_statements": 3
+}
+
+# Test that errors are localized to their respective transaction
+# (i.e. an error on transaction 2 should not affect transaction 1 and 3).
+# Ensure that the response level error is populated.
+sql non-admin
+{
+  "database": "system",
+  "execute": true,
+  "separate_txns": true,
+  "statements": [
+    {"sql": "SELECT username FROM users where username = 'admin'"},
+    {"sql": "SELECT 1"},
+    {"sql": "SELECT 1"}
+  ]
+}
+----
+{
+ "error": {
+  "code": "XXUUU",
+  "message": "separate transaction payload encountered transaction error(s)",
+  "severity": "ERROR"
+ },
+ "execution": {
+  "txn_results": [
+   {
+    "end": "1970-01-01T00:00:00Z",
+    "error": {
+     "code": "42501",
+     "message": "executing stmt 1: run-query-via-api: user authentic_user_noadmin does not have SELECT privilege on relation users",
+     "severity": "ERROR"
+    },
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 1,
+    "tag": "SELECT"
+   },
+   {
+    "columns": [
+     {
+      "name": "?column?",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows": [
+     {
+      "?column?": 1
+     }
+    ],
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 2,
+    "tag": "SELECT"
+   },
+   {
+    "columns": [
+     {
+      "name": "?column?",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows": [
+     {
+      "?column?": 1
+     }
+    ],
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 3,
+    "tag": "SELECT"
+   }
+  ]
+ },
+ "num_statements": 3
+}
+
+# Test that stop_on_error stops execution of subsequent txns/stmts
+# when separate_txns is true
+sql non-admin
+{
+  "database": "system",
+  "execute": true,
+  "separate_txns": true,
+  "stop_on_error": true,
+  "statements": [
+    {"sql": "SELECT username FROM users where username = 'admin'"},
+    {"sql": "SELECT 1"},
+    {"sql": "SELECT 1"}
+  ]
+}
+----
+{
+ "error": {
+  "code": "XXUUU",
+  "message": "separate transaction payload encountered transaction error(s)",
+  "severity": "ERROR"
+ },
+ "execution": {
+  "txn_results": [
+   {
+    "end": "1970-01-01T00:00:00Z",
+    "error": {
+     "code": "42501",
+     "message": "executing stmt 1: run-query-via-api: user authentic_user_noadmin does not have SELECT privilege on relation users",
+     "severity": "ERROR"
+    },
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 1,
+    "tag": "SELECT"
+   }
+  ]
+ },
+ "num_statements": 3
+}
+
+# Test multiple localized transaction errors.
+sql non-admin
+{
+  "database": "system",
+  "execute": true,
+  "separate_txns": true,
+  "statements": [
+    {"sql": "SELECT username FROM users where username = 'admin'"},
+    {"sql": "SELECT 1"},
+    {"sql": "SELECT field FROM not_exist"}
+  ]
+}
+----
+{
+ "error": {
+  "code": "XXUUU",
+  "message": "separate transaction payload encountered transaction error(s)",
+  "severity": "ERROR"
+ },
+ "execution": {
+  "txn_results": [
+   {
+    "end": "1970-01-01T00:00:00Z",
+    "error": {
+     "code": "42501",
+     "message": "executing stmt 1: run-query-via-api: user authentic_user_noadmin does not have SELECT privilege on relation users",
+     "severity": "ERROR"
+    },
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 1,
+    "tag": "SELECT"
+   },
+   {
+    "columns": [
+     {
+      "name": "?column?",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows": [
+     {
+      "?column?": 1
+     }
+    ],
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 2,
+    "tag": "SELECT"
+   },
+   {
+    "end": "1970-01-01T00:00:00Z",
+    "error": {
+     "code": "42P01",
+     "message": "executing stmt 3: run-query-via-api: relation \"not_exist\" does not exist",
+     "severity": "ERROR"
+    },
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 3,
+    "tag": "SELECT"
+   }
+  ]
+ },
+ "num_statements": 3
+}
+
+# Test that total size is being tracked correctly across multiple transactions
+# "SELECT 1" has a row size of 8. We set the max result size for the request
+# to 23 and request execution of 4 "SELECT 1" statements, totalling a size of 32.
+# We check that we receive a 'max size result exceeded' error on the expected statements (3 & 4)
+# We check that query 4 does not execute as the max size limit is exceeded by query 3, prior to its execution.
+sql admin
+{
+  "database": "system",
+  "execute": true,
+  "max_result_size": 23,
+  "separate_txns": true,
+  "statements": [
+        {"sql": "SELECT 1"},
+        {"sql": "SELECT 1"},
+        {"sql": "SELECT 1"},
+        {"sql": "SELECT 1"}
+  ]
+}
+----
+{
+ "error": {
+  "code": "XXUUU",
+  "message": "separate transaction payload encountered transaction error(s)",
+  "severity": "ERROR"
+ },
+ "execution": {
+  "txn_results": [
+   {
+    "columns": [
+     {
+      "name": "?column?",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows": [
+     {
+      "?column?": 1
+     }
+    ],
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 1,
+    "tag": "SELECT"
+   },
+   {
+    "columns": [
+     {
+      "name": "?column?",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows": [
+     {
+      "?column?": 1
+     }
+    ],
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 2,
+    "tag": "SELECT"
+   },
+   {
+    "columns": [
+     {
+      "name": "?column?",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "error": {
+     "code": "XXUUU",
+     "message": "executing stmt 3: max result size exceeded",
+     "severity": "ERROR"
+    },
+    "rows": [
+     {
+      "?column?": 1
+     }
+    ],
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 3,
+    "tag": "SELECT"
+   },
+   {
+    "end": "1970-01-01T00:00:00Z",
+    "error": {
+     "code": "XXUUU",
+     "message": "executing stmt 4: max result size exceeded",
+     "severity": "ERROR"
+    },
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 4,
+    "tag": "SELECT"
+   }
+  ]
+ },
+ "num_statements": 4
+}
+
+# Test a query with duplicated column names.
+sql admin
+{
+  "database": "system",
+  "execute": true,
+  "max_result_size": 23,
+  "separate_txns": true,
+  "statements": [
+        {"sql": "SELECT 1 as a, 2 as b, 3 as a, 4 as a"}
+  ]
+}
+----
+{
+ "error": {
+  "code": "XXUUU",
+  "message": "separate transaction payload encountered transaction error(s)",
+  "severity": "ERROR"
+ },
+ "execution": {
+  "txn_results": [
+   {
+    "columns": [
+     {
+      "name": "a",
+      "oid": 20,
+      "type": "INT8"
+     },
+     {
+      "name": "b",
+      "oid": 20,
+      "type": "INT8"
+     },
+     {
+      "name": "a_1",
+      "oid": 20,
+      "type": "INT8"
+     },
+     {
+      "name": "a_2",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "error": {
+     "code": "XXUUU",
+     "message": "executing stmt 1: max result size exceeded",
+     "severity": "ERROR"
+    },
+    "rows": [
+     {
+      "a": 1,
+      "a_1": 3,
+      "a_2": 4,
+      "b": 2
+     }
+    ],
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 1,
+    "tag": "SELECT"
+   }
+  ]
+ },
+ "num_statements": 1
+}
+
+sql admin expect-error
+{
+  "database": "system",
+  "execute": true,
+  "statements": [{"sql": "COMMIT"}]
+}
+----
+XXUUU|executing stmt 1: disallowed statement type
+
+sql admin
+{
+  "execute": true,
+  "statements": [
+    {"sql": "ROLLBACK"},
+    {"sql": "SHOW COMMIT TIMESTAMP"},
+    {"sql": "select 1"},
+    {"sql": "SET statement_timeout = '10s';"}
+  ],
+  "separate_txns": true
+}
+----
+{
+ "error": {
+  "code": "XXUUU",
+  "message": "separate transaction payload encountered transaction error(s)",
+  "severity": "ERROR"
+ },
+ "execution": {
+  "txn_results": [
+   {
+    "end": "1970-01-01T00:00:00Z",
+    "error": {
+     "code": "XXUUU",
+     "message": "executing stmt 1: disallowed statement type",
+     "severity": "ERROR"
+    },
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 1,
+    "tag": "ROLLBACK"
+   },
+   {
+    "end": "1970-01-01T00:00:00Z",
+    "error": {
+     "code": "XXUUU",
+     "message": "executing stmt 2: disallowed statement type",
+     "severity": "ERROR"
+    },
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 2,
+    "tag": "SHOW COMMIT TIMESTAMP"
+   },
+   {
+    "columns": [
+     {
+      "name": "?column?",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows": [
+     {
+      "?column?": 1
+     }
+    ],
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 3,
+    "tag": "SELECT"
+   },
+   {
+    "end": "1970-01-01T00:00:00Z",
+    "error": {
+     "code": "XXUUU",
+     "message": "executing stmt 4: disallowed statement type",
+     "severity": "ERROR"
+    },
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 4,
+    "tag": "SET"
+   }
+  ]
+ },
+ "num_statements": 4
+}
+
+# Note that we don't verify the contents of the response because it's not
+# deterministic, so we only check that it didn't result in an error.
+sql admin expect-no-error
+{
+  "execute": true,
+  "statements": [{"sql": "EXPLAIN ANALYZE SELECT 1"}]
+}
+----
+
+# This example is here to contrast with the one below. Without
+# disabling the `"ui.database_locality_metadata.enabled"` cluster
+# setting, we're permitted to query ranges.
+sql admin
+{
+  "database": "testdb",
+  "execute": true,
+  "statements": [
+    {"sql": "INSERT INTO testdb.test VALUES (123)"},
+    {"sql": "SELECT array_agg(DISTINCT unnested_store_ids) AS store_ids FROM [SHOW RANGES FROM DATABASE testdb], unnest(replicas) AS unnested_store_ids"},
+    {"sql": "SELECT * FROM test"},
+    {"sql": "SELECT count(unnested) AS replica_count, array_agg(DISTINCT unnested) AS store_ids FROM [SHOW RANGES FROM TABLE testdb.test], unnest(replicas) AS unnested"}
+  ]
+}
+----
+{
+ "execution": {
+  "txn_results": [
+   {
+    "columns": [
+     {
+      "name": "rows_affected",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows_affected": 1,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 1,
+    "tag": "INSERT"
+   },
+   {
+    "columns": [
+     {
+      "name": "store_ids",
+      "oid": 1016,
+      "type": "INT8[]"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows": [
+     {
+      "store_ids": [
+       1
+      ]
+     }
+    ],
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 2,
+    "tag": "SELECT"
+   },
+   {
+    "columns": [
+     {
+      "name": "id",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows": [
+     {
+      "id": 1
+     },
+     {
+      "id": 123
+     }
+    ],
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 3,
+    "tag": "SELECT"
+   },
+   {
+    "columns": [
+     {
+      "name": "replica_count",
+      "oid": 20,
+      "type": "INT8"
+     },
+     {
+      "name": "store_ids",
+      "oid": 1016,
+      "type": "INT8[]"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows": [
+     {
+      "replica_count": 1,
+      "store_ids": [
+       1
+      ]
+     }
+    ],
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 4,
+    "tag": "SELECT"
+   }
+  ]
+ },
+ "num_statements": 4
+}
+
+# Notice that the output here ends up filtered and the response does
+# not contain and `store_id` columns.
+sql admin disable_database_locality_metadata
+{
+  "database": "testdb",
+  "execute": true,
+  "statements": [
+    {"sql": "INSERT INTO testdb.test VALUES (456)"},
+    {"sql": "SELECT array_agg(DISTINCT unnested_store_ids) AS store_ids FROM [SHOW RANGES FROM DATABASE testdb], unnest(replicas) AS unnested_store_ids"},
+    {"sql": "SELECT * FROM test"},
+    {"sql": "SELECT count(unnested) AS replica_count, array_agg(DISTINCT unnested) AS store_ids FROM [SHOW RANGES FROM TABLE testdb.test], unnest(replicas) AS unnested"}
+  ]
+}
+----
+{
+ "execution": {
+  "txn_results": [
+   {
+    "columns": [
+     {
+      "name": "rows_affected",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows_affected": 1,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 1,
+    "tag": "INSERT"
+   },
+   {
+    "columns": [
+     {
+      "name": "?column?",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows": [
+     {
+      "?column?": 1
+     }
+    ],
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 2,
+    "tag": "SELECT"
+   },
+   {
+    "columns": [
+     {
+      "name": "id",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows": [
+     {
+      "id": 1
+     },
+     {
+      "id": 123
+     },
+     {
+      "id": 456
+     }
+    ],
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 3,
+    "tag": "SELECT"
+   },
+   {
+    "columns": [
+     {
+      "name": "?column?",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows": [
+     {
+      "?column?": 1
+     }
+    ],
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 4,
+    "tag": "SELECT"
+   }
+  ]
+ },
+ "num_statements": 4
+}

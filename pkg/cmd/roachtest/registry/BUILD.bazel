@@ -1,0 +1,46 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "registry",
+    srcs = [
+        "encryption.go",
+        "errors.go",
+        "filter.go",
+        "operation_spec.go",
+        "owners.go",
+        "registry_interface.go",
+        "tag.go",
+        "test_spec.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachtest/cluster",
+        "//pkg/cmd/roachtest/operation",
+        "//pkg/cmd/roachtest/roachtestutil",
+        "//pkg/cmd/roachtest/spec",
+        "//pkg/cmd/roachtest/test",
+        "//pkg/internal/team",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_prometheus_client_golang//prometheus/promauto",
+    ],
+)
+
+go_test(
+    name = "registry_test",
+    srcs = [
+        "errors_test.go",
+        "filter_test.go",
+        "test_spec_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":registry"],
+    deps = [
+        "//pkg/cmd/roachtest/spec",
+        "//pkg/internal/team",
+        "//pkg/roachprod/errors",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

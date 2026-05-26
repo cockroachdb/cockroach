@@ -1,0 +1,99 @@
+#
+# Print out compiled tree.
+#
+optgen compile test.opt
+# Not comment.
+define Not {
+    Input Expr
+}
+
+[EliminateNot, Normalize]
+(Not (Not $input:*)) => $input
+----
+(Compiled
+	(Defines
+		(Define
+			Comments=(Comments # Not comment.)
+			Tags=(Tags)
+			Name="Not"
+			Fields=(DefineFields
+				(DefineField Comments=(Comments) Name="Input" Type="Expr" Src=<test.opt:3:5>)
+			)
+			Src=<test.opt:2:1>
+		)
+	)
+	(Rules
+		(Rule
+			Comments=(Comments)
+			Name="EliminateNot"
+			Tags=(Tags Normalize)
+			Match=(Func
+				Name=Not
+				Args=(Slice
+					(Func
+						Name=Not
+						Args=(Slice
+							(Bind Label="input" Target=(Any Typ=Expr) Typ=Expr Src=<test.opt:7:11>)
+						)
+						Typ=Not
+						Src=<test.opt:7:6>
+					)
+				)
+				Typ=Not
+				Src=<test.opt:7:1>
+			)
+			Replace=(Ref Label="input" Typ=Expr Src=<test.opt:7:25>)
+			Src=<test.opt:6:1>
+		)
+	)
+)
+
+#
+# Test multiple input files from glob pattern.
+#
+optgen compile all
+define Gt {
+    left  Expr
+    right Expr
+}
+----
+(Compiled
+	(Defines
+		(Define
+			Comments=(Comments)
+			Tags=(Tags)
+			Name="Gt"
+			Fields=(DefineFields
+				(DefineField Comments=(Comments) Name="left" Type="Expr" Src=<test.opt:2:5>)
+				(DefineField Comments=(Comments) Name="right" Type="Expr" Src=<test.opt:3:5>)
+			)
+			Src=<test.opt:1:1>
+		)
+	)
+	(Rules
+	)
+)
+
+#
+# Test single compile error.
+#
+optgen compile test.opt
+define Lt {}
+define Lt {}
+----
+test.opt:2:1: duplicate 'Lt' define statement
+
+#
+# Test multiple parse errors.
+#
+optgen compile test.opt
+define {}
+
+[Name, Normalize]
+(Foo) => ()
+
+[Name, Normalize]
+(Foo) =>
+----
+test.opt:1:8: expected define name, found '{'
+... too many errors (2 more)

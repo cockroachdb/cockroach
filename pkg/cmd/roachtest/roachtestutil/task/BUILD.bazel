@@ -1,0 +1,32 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "task",
+    srcs = [
+        "group.go",
+        "manager.go",
+        "options.go",
+        "tasker.go",
+        "utils.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachprod/logger",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "task_test",
+    srcs = ["manager_test.go"],
+    embed = [":task"],
+    deps = [
+        "//pkg/roachprod/logger",
+        "//pkg/util/leaktest",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

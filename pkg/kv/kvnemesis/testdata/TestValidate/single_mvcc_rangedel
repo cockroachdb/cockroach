@@ -1,0 +1,4 @@
+echo
+----
+db0.DelRangeUsingTombstone(ctx, tk(1), tk(2) /* @s1 */) // @0.000000001,0 <nil>
+/Table/100/"000000000000000{1"-2"}/0.000000001,0 @ s1 <nil>

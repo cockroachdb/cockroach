@@ -1,0 +1,63 @@
+statement ok
+CREATE TABLE data (a INT PRIMARY KEY)
+
+statement ok
+INSERT INTO data SELECT generate_series(0, 9)
+
+# Correlated SRF
+query II
+SELECT a, generate_series(a, a + 1) FROM data ORDER BY 1, 2
+----
+0  0
+0  1
+1  1
+1  2
+2  2
+2  3
+3  3
+3  4
+4  4
+4  5
+5  5
+5  6
+6  6
+6  7
+7  7
+7  8
+8  8
+8  9
+9  9
+9  10
+
+# Filter on ProjectSet node
+query II rowsort
+SELECT a, b FROM (SELECT a, generate_series(1, 3) AS b FROM data) WHERE a < 4 AND b = 3
+----
+0  3
+1  3
+2  3
+3  3
+
+# Multiple SRFs with different lengths
+query III
+SELECT a, generate_series(1, 2), generate_series(1, 4) FROM data WHERE a < 2 ORDER BY 1, 2, 3
+----
+0  NULL  3
+0  NULL  4
+0  1     1
+0  2     2
+1  NULL  3
+1  NULL  4
+1  1     1
+1  2     2
+
+statement ok
+CREATE TABLE groups(
+  id SERIAL,
+  data jsonb,
+  primary key (id)
+)
+
+query TT
+SELECT g.data->>'name' AS group_name, jsonb_array_elements(g.data->'members') FROM groups g;
+----

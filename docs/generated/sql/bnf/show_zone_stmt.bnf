@@ -1,0 +1,14 @@
+show_zone_stmt ::=
+	'SHOW' 'ZONE' 'CONFIGURATION' 'FROM' 'RANGE' zone_name
+	| 'SHOW' 'ZONE' 'CONFIGURATION' 'FROM' 'DATABASE' database_name
+	| 'SHOW' 'ZONE' 'CONFIGURATION' 'FROM' 'TABLE' table_name 'PARTITION' partition_name
+	| 'SHOW' 'ZONE' 'CONFIGURATION' 'FROM' 'TABLE' table_name 
+	| 'SHOW' 'ZONE' 'CONFIGURATION' 'FROM' 'PARTITION' partition_name 'OF' 'TABLE' table_name
+	| 'SHOW' 'ZONE' 'CONFIGURATION' 'FROM' 'INDEX' table_name '@' index_name 'PARTITION' partition_name
+	| 'SHOW' 'ZONE' 'CONFIGURATION' 'FROM' 'INDEX' table_name '@' index_name 
+	| 'SHOW' 'ZONE' 'CONFIGURATION' 'FROM' 'INDEX' standalone_index_name 'PARTITION' partition_name
+	| 'SHOW' 'ZONE' 'CONFIGURATION' 'FROM' 'INDEX' standalone_index_name 
+	| 'SHOW' 'ZONE' 'CONFIGURATION' 'FROM' 'PARTITION' partition_name 'OF' 'INDEX' table_name '@' index_name
+	| 'SHOW' 'ZONE' 'CONFIGURATION' 'FROM' 'PARTITION' partition_name 'OF' 'INDEX' standalone_index_name
+	| 'SHOW' 'ZONE' 'CONFIGURATIONS'
+	| 'SHOW' 'ALL' 'ZONE' 'CONFIGURATIONS'

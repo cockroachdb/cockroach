@@ -1,0 +1,19 @@
+new-cluster name=s1
+----
+
+exec-sql
+CREATE USER bigboss
+----
+
+exec-sql
+GRANT admin TO bigboss
+----
+
+exec-sql
+BACKUP INTO 'nodelocal://1/test/'
+----
+
+# Just verify that concurrent privilege checks don't panic.
+exec-sql
+SELECT * FROM [SHOW BACKUPS IN 'nodelocal://1/test'] UNION SELECT * FROM [SHOW BACKUPS IN 'nodelocal://1/test']
+----

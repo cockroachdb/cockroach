@@ -1,0 +1,678 @@
+# Ensure that non-cluster restores appropriately wipes the grants on the
+# restored descriptors. Since we're not restoring the users, the users that
+# the restoring descriptors reference may not be the same users as they
+# referenced in the backed up cluster.
+
+# We allow implicit access to non-admin users so that we can test
+# with nodelocal.
+new-cluster name=s1 allow-implicit-access
+----
+
+# First, let's create some users, a database, a couple of types, some tables,
+# and a schema.
+exec-sql
+CREATE USER user1;
+CREATE USER testuser;
+----
+
+exec-sql
+CREATE DATABASE testdb;
+USE testdb;
+CREATE TYPE testdb.greeting_usage AS ENUM ('howdy');
+CREATE TABLE testdb.testtable_simple (a int);
+CREATE TABLE testdb.testtable_greeting_usage (a greeting_usage);
+CREATE SCHEMA sc;
+CREATE TABLE testdb.sc.othertable (a INT);
+----
+
+# Grant some privileges to user1.
+# testdb               -> ALL WITH GRANT OPTION
+# public               -> ALL WITH GRANT OPTION
+# sc                   -> USAGE
+# testdb.sc.othertable -> SELECT
+exec-sql
+GRANT ALL ON DATABASE testdb TO user1 WITH GRANT OPTION;
+GRANT ALL ON SCHEMA public TO user1 WITH GRANT OPTION;
+GRANT USAGE ON SCHEMA sc TO user1;
+GRANT SELECT ON testdb.sc.othertable TO user1;
+----
+
+# Grant some privileges to testuser.
+# testdb                          -> ALL WITH GRANT OPTION
+# public                          -> ALL WITH GRANT OPTION
+# testdb.greeting_usage           -> USAGE
+# testdb.testtable_greeting_usage -> UPDATE
+exec-sql
+GRANT ALL ON DATABASE testdb TO testuser WITH GRANT OPTION;
+GRANT ALL ON SCHEMA public TO testuser WITH GRANT OPTION;
+GRANT USAGE ON TYPE testdb.greeting_usage TO testuser;
+GRANT UPDATE ON testdb.testtable_greeting_usage TO testuser;
+----
+
+# Create a type and table with testuser as the owner.
+exec-sql user=testuser
+CREATE TYPE testdb.greeting_owner AS ENUM ('howdy');
+CREATE TABLE testdb.testtable_greeting_owner (a testdb.greeting_owner);
+----
+
+# Ensure that testuser is the owner of the type.
+query-sql
+SELECT owner FROM [SHOW TYPES] WHERE name = 'greeting_owner';
+----
+testuser
+
+# Ensure that testuser is the owner of the table.
+query-sql
+SELECT owner FROM [SHOW TABLES] WHERE table_name = 'testtable_greeting_owner';
+----
+testuser
+
+# Check the expected grants on each of the schema objects created above.
+query-sql
+SHOW GRANTS ON DATABASE testdb;
+----
+testdb admin ALL true
+testdb public CONNECT false
+testdb public TEMPORARY false
+testdb root ALL true
+testdb testuser ALL true
+testdb user1 ALL true
+
+query-sql
+SHOW GRANTS ON SCHEMA public;
+----
+testdb public admin ALL true
+testdb public public CREATE false
+testdb public public USAGE false
+testdb public root ALL true
+testdb public testuser ALL true
+testdb public user1 ALL true
+
+query-sql
+SHOW GRANTS ON SCHEMA sc;
+----
+testdb sc admin ALL true
+testdb sc root ALL true
+testdb sc user1 USAGE false
+
+query-sql
+SHOW GRANTS ON TABLE testdb.sc.othertable;
+----
+testdb sc othertable admin ALL true
+testdb sc othertable root ALL true
+testdb sc othertable user1 SELECT false
+
+# None of the users have access to testtable_simple.
+query-sql
+SHOW GRANTS ON TABLE testdb.testtable_simple;
+----
+testdb public testtable_simple admin ALL true
+testdb public testtable_simple root ALL true
+
+query-sql
+SHOW GRANTS ON TYPE testdb.greeting_usage;
+----
+testdb public greeting_usage admin ALL true
+testdb public greeting_usage public USAGE false
+testdb public greeting_usage root ALL true
+testdb public greeting_usage testuser USAGE false
+
+query-sql
+SHOW GRANTS ON TABLE testdb.testtable_greeting_usage;
+----
+testdb public testtable_greeting_usage admin ALL true
+testdb public testtable_greeting_usage root ALL true
+testdb public testtable_greeting_usage testuser UPDATE false
+
+query-sql
+SHOW GRANTS ON TYPE testdb.greeting_owner;
+----
+testdb public greeting_owner admin ALL true
+testdb public greeting_owner public USAGE false
+testdb public greeting_owner root ALL true
+testdb public greeting_owner testuser ALL true
+
+query-sql
+SHOW GRANTS ON TABLE testdb.testtable_greeting_owner;
+----
+testdb public testtable_greeting_owner admin ALL true
+testdb public testtable_greeting_owner root ALL true
+testdb public testtable_greeting_owner testuser ALL true
+
+
+# Let's take a backup of this cluster.
+exec-sql
+BACKUP INTO 'nodelocal://1/test/'
+----
+
+# Let's try a cluster restore and expect all of the same privileges that we had
+# above.
+subtest cluster-restore
+
+new-cluster name=s2 share-io-dir=s1 allow-implicit-access disable-tenant
+----
+
+exec-sql
+RESTORE FROM LATEST IN 'nodelocal://1/test/';
+----
+
+exec-sql
+USE testdb
+----
+
+query-sql
+SHOW GRANTS ON DATABASE testdb;
+----
+testdb admin ALL true
+testdb public CONNECT false
+testdb public TEMPORARY false
+testdb root ALL true
+testdb testuser ALL true
+testdb user1 ALL true
+
+query-sql
+SHOW GRANTS ON SCHEMA public;
+----
+testdb public admin ALL true
+testdb public public CREATE false
+testdb public public USAGE false
+testdb public root ALL true
+testdb public testuser ALL true
+testdb public user1 ALL true
+
+query-sql
+SHOW GRANTS ON SCHEMA sc;
+----
+testdb sc admin ALL true
+testdb sc root ALL true
+testdb sc user1 USAGE false
+
+query-sql
+SHOW GRANTS ON TABLE testdb.sc.othertable;
+----
+testdb sc othertable admin ALL true
+testdb sc othertable root ALL true
+testdb sc othertable user1 SELECT false
+
+# None of the users have access to testtable_simple.
+query-sql
+SHOW GRANTS ON TABLE testdb.testtable_simple;
+----
+testdb public testtable_simple admin ALL true
+testdb public testtable_simple root ALL true
+
+query-sql
+SHOW GRANTS ON TYPE testdb.greeting_usage;
+----
+testdb public greeting_usage admin ALL true
+testdb public greeting_usage public USAGE false
+testdb public greeting_usage root ALL true
+testdb public greeting_usage testuser USAGE false
+
+query-sql
+SHOW GRANTS ON TABLE testdb.testtable_greeting_usage;
+----
+testdb public testtable_greeting_usage admin ALL true
+testdb public testtable_greeting_usage root ALL true
+testdb public testtable_greeting_usage testuser UPDATE false
+
+query-sql
+SHOW GRANTS ON TYPE testdb.greeting_owner;
+----
+testdb public greeting_owner admin ALL true
+testdb public greeting_owner public USAGE false
+testdb public greeting_owner root ALL true
+testdb public greeting_owner testuser ALL true
+
+query-sql
+SHOW GRANTS ON TABLE testdb.testtable_greeting_owner;
+----
+testdb public testtable_greeting_owner admin ALL true
+testdb public testtable_greeting_owner root ALL true
+testdb public testtable_greeting_owner testuser ALL true
+
+subtest end
+
+# Now let's run a table restore as a non-admin (testuser). We should see all the
+# backed up privileges for `testuser` and `user1` wiped, and `testuser` should
+# be the owner of the restored tables, schemas, and types.
+subtest restore-table-as-non-admin
+
+exec-sql
+CREATE DATABASE testuser_db;
+----
+
+# testuser needs CREATE to run the RESTORE.
+exec-sql
+GRANT CREATE ON DATABASE testuser_db TO testuser;
+----
+
+# Restore a table where only `user1` had privileges.
+exec-sql user=testuser
+RESTORE testdb.sc.othertable FROM LATEST IN 'nodelocal://1/test' WITH into_db='testuser_db';
+----
+NOTICE: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/restore.html#required-privileges. In a future release, to run RESTORE TABLE, user testuser will exclusively require the RESTORE privilege on databases testuser_db
+
+# Restore a table where only `testuser` had privileges.
+exec-sql user=testuser
+RESTORE testdb.testtable_greeting_usage FROM LATEST IN 'nodelocal://1/test' WITH into_db='testuser_db';
+----
+NOTICE: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/restore.html#required-privileges. In a future release, to run RESTORE TABLE, user testuser will exclusively require the RESTORE privilege on databases testuser_db
+
+exec-sql
+USE testuser_db
+----
+
+query-sql
+SHOW GRANTS ON DATABASE testuser_db;
+----
+testuser_db admin ALL true
+testuser_db public CONNECT false
+testuser_db public TEMPORARY false
+testuser_db root ALL true
+testuser_db testuser CREATE false
+
+query-sql
+SHOW GRANTS ON SCHEMA testuser_db.public;
+----
+testuser_db public admin ALL true
+testuser_db public public CREATE false
+testuser_db public public USAGE false
+testuser_db public root ALL true
+
+# Observe that none of `user1` privileges on sc or sc.othertable are restored.
+query-sql
+SHOW GRANTS ON SCHEMA testuser_db.sc;
+----
+testuser_db sc admin ALL true
+testuser_db sc root ALL true
+testuser_db sc testuser ALL true
+
+query-sql
+SHOW GRANTS ON testuser_db.sc.othertable
+----
+testuser_db sc othertable admin ALL true
+testuser_db sc othertable root ALL true
+testuser_db sc othertable testuser ALL true
+
+# Observe that none of `testuser` privileges in the backed up cluster are
+# restored.
+query-sql
+SHOW GRANTS ON TYPE testuser_db.greeting_usage;
+----
+testuser_db public greeting_usage admin ALL true
+testuser_db public greeting_usage root ALL true
+testuser_db public greeting_usage testuser ALL true
+
+query-sql
+SHOW GRANTS ON testuser_db.testtable_greeting_usage;
+----
+testuser_db public testtable_greeting_usage admin ALL true
+testuser_db public testtable_greeting_usage root ALL true
+testuser_db public testtable_greeting_usage testuser ALL true
+
+
+# Ensure that testuser is the owner of the restored schema and table.
+query-sql
+SELECT owner FROM [SHOW SCHEMAS] WHERE schema_name = 'sc';
+----
+testuser
+
+# Ensure that testuser is the owner of the table.
+query-sql
+SELECT owner FROM [SHOW TABLES] WHERE table_name = 'othertable';
+----
+testuser
+
+query-sql
+SELECT owner FROM [SHOW TYPES] WHERE name = 'greeting_usage';
+----
+testuser
+
+query-sql
+SELECT owner FROM [SHOW TABLES] WHERE table_name = 'testtable_greeting_usage';
+----
+testuser
+
+subtest end
+
+# Let's restore tables as admin.
+# Check that user1 and testuser don't have any grants anymore, and aren't the
+# owners of any schema objects.
+subtest restore-table-as-admin
+
+exec-sql
+CREATE DATABASE root_db;
+----
+
+exec-sql
+RESTORE testdb.testtable_greeting_usage, testdb.testtable_greeting_owner FROM LATEST IN 'nodelocal://1/test' WITH into_db='root_db';
+----
+
+exec-sql
+USE root_db
+----
+
+query-sql
+SHOW GRANTS ON DATABASE root_db;
+----
+root_db admin ALL true
+root_db public CONNECT false
+root_db public TEMPORARY false
+root_db root ALL true
+
+query-sql
+SHOW GRANTS ON SCHEMA root_db.public;
+----
+root_db public admin ALL true
+root_db public public CREATE false
+root_db public public USAGE false
+root_db public root ALL true
+
+
+# Observe that none of `testuser` privileges in the backed up cluster are
+# restored.
+query-sql
+SHOW GRANTS ON TYPE root_db.greeting_usage;
+----
+root_db public greeting_usage admin ALL true
+root_db public greeting_usage root ALL true
+
+
+query-sql
+SHOW GRANTS ON root_db.testtable_greeting_usage
+----
+root_db public testtable_greeting_usage admin ALL true
+root_db public testtable_greeting_usage root ALL true
+
+
+query-sql
+SHOW GRANTS ON TYPE root_db.greeting_owner;
+----
+root_db public greeting_owner admin ALL true
+root_db public greeting_owner root ALL true
+
+
+query-sql
+SHOW GRANTS ON root_db.testtable_greeting_owner
+----
+root_db public testtable_greeting_owner admin ALL true
+root_db public testtable_greeting_owner root ALL true
+
+# testuser should not be the owner even though that is the case in the backup.
+query-sql
+SELECT owner FROM [SHOW TYPES] WHERE name = 'greeting_owner';
+----
+root
+
+query-sql
+SELECT owner FROM [SHOW TABLES] WHERE table_name = 'testtable_greeting_owner';
+----
+root
+
+subtest end
+
+subtest restore-database-as-admin
+
+# Now let's try a database restore as admin.
+# Check that user1 and testuser don't have any grants anymore.
+exec-sql
+USE defaultdb;
+DROP DATABASE testdb CASCADE;
+----
+
+exec-sql
+RESTORE DATABASE testdb FROM LATEST IN 'nodelocal://1/test/';
+----
+
+exec-sql
+USE testdb
+----
+
+query-sql
+SHOW GRANTS ON DATABASE testdb
+----
+testdb admin ALL true
+testdb public CONNECT false
+testdb public TEMPORARY false
+testdb root ALL true
+
+query-sql
+SHOW GRANTS ON testdb.testtable_simple
+----
+testdb public testtable_simple admin ALL true
+testdb public testtable_simple root ALL true
+
+query-sql
+SHOW GRANTS ON SCHEMA testdb.sc
+----
+testdb sc admin ALL true
+testdb sc root ALL true
+
+query-sql
+SHOW GRANTS ON SCHEMA testdb.public
+----
+testdb public admin ALL true
+testdb public public CREATE false
+testdb public public USAGE false
+testdb public root ALL true
+
+query-sql
+SHOW GRANTS ON testdb.sc.othertable
+----
+testdb sc othertable admin ALL true
+testdb sc othertable root ALL true
+
+query-sql
+SHOW GRANTS ON TYPE greeting_usage;
+----
+testdb public greeting_usage admin ALL true
+testdb public greeting_usage root ALL true
+
+query-sql
+SHOW GRANTS ON testdb.testtable_greeting_usage;
+----
+testdb public testtable_greeting_usage admin ALL true
+testdb public testtable_greeting_usage root ALL true
+
+query-sql
+SHOW GRANTS ON TYPE greeting_owner;
+----
+testdb public greeting_owner admin ALL true
+testdb public greeting_owner root ALL true
+
+query-sql
+SHOW GRANTS ON testdb.testtable_greeting_owner;
+----
+testdb public testtable_greeting_owner admin ALL true
+testdb public testtable_greeting_owner root ALL true
+
+# testuser should not be the owner even though that is the case in the backup.
+query-sql
+SELECT owner FROM [SHOW TYPES] WHERE name = 'greeting_owner';
+----
+root
+
+query-sql
+SELECT owner FROM [SHOW TABLES] WHERE table_name = 'testtable_greeting_owner';
+----
+root
+
+subtest end
+
+# First drop the existing database as admin.
+exec-sql
+USE defaultdb;
+DROP DATABASE testdb CASCADE;
+ALTER USER testuser CREATEDB;
+----
+
+# Lastly, restore the database as a non-admin (testuser). We expect only root
+# and admin to have privileges, but testuser to be the owner of all objects.
+subtest restore-database-as-non-admin
+
+exec-sql user=testuser
+RESTORE DATABASE testdb FROM LATEST IN 'nodelocal://1/test/';
+----
+NOTICE: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/restore.html#required-privileges. In a future release, to run RESTORE DATABASE, user testuser will exclusively require the RESTORE system privilege.
+
+exec-sql
+USE testdb
+----
+
+query-sql
+SHOW GRANTS ON DATABASE testdb
+----
+testdb admin ALL true
+testdb public CONNECT false
+testdb public TEMPORARY false
+testdb root ALL true
+testdb testuser ALL true
+
+query-sql
+SHOW GRANTS ON testdb.testtable_simple
+----
+testdb public testtable_simple admin ALL true
+testdb public testtable_simple root ALL true
+testdb public testtable_simple testuser ALL true
+
+query-sql
+SHOW GRANTS ON SCHEMA testdb.sc
+----
+testdb sc admin ALL true
+testdb sc root ALL true
+testdb sc testuser ALL true
+
+query-sql
+SHOW GRANTS ON SCHEMA testdb.public
+----
+testdb public admin ALL true
+testdb public public CREATE false
+testdb public public USAGE false
+testdb public root ALL true
+testdb public testuser ALL true
+
+query-sql
+SHOW GRANTS ON testdb.sc.othertable
+----
+testdb sc othertable admin ALL true
+testdb sc othertable root ALL true
+testdb sc othertable testuser ALL true
+
+query-sql
+SHOW GRANTS ON TYPE greeting_usage;
+----
+testdb public greeting_usage admin ALL true
+testdb public greeting_usage root ALL true
+testdb public greeting_usage testuser ALL true
+
+query-sql
+SHOW GRANTS ON testdb.testtable_greeting_usage;
+----
+testdb public testtable_greeting_usage admin ALL true
+testdb public testtable_greeting_usage root ALL true
+testdb public testtable_greeting_usage testuser ALL true
+
+query-sql
+SHOW GRANTS ON TYPE greeting_owner;
+----
+testdb public greeting_owner admin ALL true
+testdb public greeting_owner root ALL true
+testdb public greeting_owner testuser ALL true
+
+query-sql
+SHOW GRANTS ON testdb.testtable_greeting_owner;
+----
+testdb public testtable_greeting_owner admin ALL true
+testdb public testtable_greeting_owner root ALL true
+testdb public testtable_greeting_owner testuser ALL true
+
+# Ensure that testuser is the owner of the restored database/schemas.
+query-sql
+SELECT owner FROM [SHOW DATABASES] WHERE database_name = 'testdb'
+----
+testuser
+
+query-sql
+SELECT owner FROM [SHOW SCHEMAS] WHERE schema_name = 'sc'
+----
+testuser
+
+# In postgres, the user "postgres" is the owner of the public schema in a
+# newly created db. In CockroachDB, admin is our substitute for the postgres
+# user.
+query-sql
+SELECT owner FROM [SHOW SCHEMAS] WHERE schema_name = 'public'
+----
+testuser
+
+# Ensure that testuser is the owner of the type.
+query-sql
+SELECT owner FROM [SHOW TYPES] WHERE name = 'greeting_usage';
+----
+testuser
+
+# Ensure that testuser is the owner of the table.
+query-sql
+SELECT owner FROM [SHOW TABLES] WHERE table_name = 'testtable_greeting_usage';
+----
+testuser
+
+# Ensure that testuser is the owner of the type.
+query-sql
+SELECT owner FROM [SHOW TYPES] WHERE name = 'greeting_owner';
+----
+testuser
+
+# Ensure that testuser is the owner of the table.
+query-sql
+SELECT owner FROM [SHOW TABLES] WHERE table_name = 'testtable_greeting_owner';
+----
+testuser
+
+subtest end
+
+subtest show-grants-during-restore
+
+# Ensure that SHOW GRANTS works during a restore.
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_flow';
+----
+
+restore expect-pausepoint tag=restore_bar
+RESTORE DATABASE testdb FROM LATEST IN 'nodelocal://1/test/' WITH new_db_name=bar;
+----
+job paused at pausepoint
+
+# Ensure that SHOW GRANTS works during a restore.
+# https://github.com/cockroachdb/cockroach/issues/106370 was a bug where
+# this would fail with `schema "public" is offline: restoring`.
+query-sql
+SELECT * FROM [SHOW GRANTS] WHERE object_name = 'testtable_simple';
+----
+testdb public testtable_simple table admin ALL true
+testdb public testtable_simple table root ALL true
+testdb public testtable_simple table testuser ALL true
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = ''
+----
+
+job resume=restore_bar
+----
+
+job tag=restore_bar wait-for-state=succeeded
+----
+
+exec-sql
+USE bar;
+----
+
+query-sql
+SELECT * FROM [SHOW GRANTS] WHERE object_name = 'testtable_simple';
+----
+bar public testtable_simple table admin ALL true
+bar public testtable_simple table root ALL true
+
+subtest end

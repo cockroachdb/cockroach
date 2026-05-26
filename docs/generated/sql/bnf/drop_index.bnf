@@ -1,0 +1,25 @@
+drop_index_stmt ::=
+	'DROP' 'INDEX' 'CONCURRENTLY' table_name '@' index_name 'CASCADE'
+	| 'DROP' 'INDEX' 'CONCURRENTLY' table_name '@' index_name 'RESTRICT'
+	| 'DROP' 'INDEX' 'CONCURRENTLY' table_name '@' index_name 
+	| 'DROP' 'INDEX' 'CONCURRENTLY' index_name 'CASCADE'
+	| 'DROP' 'INDEX' 'CONCURRENTLY' index_name 'RESTRICT'
+	| 'DROP' 'INDEX' 'CONCURRENTLY' index_name 
+	| 'DROP' 'INDEX'  table_name '@' index_name 'CASCADE'
+	| 'DROP' 'INDEX'  table_name '@' index_name 'RESTRICT'
+	| 'DROP' 'INDEX'  table_name '@' index_name 
+	| 'DROP' 'INDEX'  index_name 'CASCADE'
+	| 'DROP' 'INDEX'  index_name 'RESTRICT'
+	| 'DROP' 'INDEX'  index_name 
+	| 'DROP' 'INDEX' 'CONCURRENTLY' 'IF' 'EXISTS' table_name '@' index_name 'CASCADE'
+	| 'DROP' 'INDEX' 'CONCURRENTLY' 'IF' 'EXISTS' table_name '@' index_name 'RESTRICT'
+	| 'DROP' 'INDEX' 'CONCURRENTLY' 'IF' 'EXISTS' table_name '@' index_name 
+	| 'DROP' 'INDEX' 'CONCURRENTLY' 'IF' 'EXISTS' index_name 'CASCADE'
+	| 'DROP' 'INDEX' 'CONCURRENTLY' 'IF' 'EXISTS' index_name 'RESTRICT'
+	| 'DROP' 'INDEX' 'CONCURRENTLY' 'IF' 'EXISTS' index_name 
+	| 'DROP' 'INDEX'  'IF' 'EXISTS' table_name '@' index_name 'CASCADE'
+	| 'DROP' 'INDEX'  'IF' 'EXISTS' table_name '@' index_name 'RESTRICT'
+	| 'DROP' 'INDEX'  'IF' 'EXISTS' table_name '@' index_name 
+	| 'DROP' 'INDEX'  'IF' 'EXISTS' index_name 'CASCADE'
+	| 'DROP' 'INDEX'  'IF' 'EXISTS' index_name 'RESTRICT'
+	| 'DROP' 'INDEX'  'IF' 'EXISTS' index_name 

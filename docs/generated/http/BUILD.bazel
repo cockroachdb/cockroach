@@ -1,0 +1,32 @@
+load("//pkg:protos.bzl", "SERVER_PROTOS")
+
+genrule(
+    name = "http",
+    srcs = SERVER_PROTOS,
+    outs = [
+        "full.md",
+        "health-other.md",
+        "health-request.md",
+        "health-response.md",
+        "nodes-other.md",
+        "nodes-request.md",
+        "nodes-response.md",
+    ],
+    cmd = """
+      DESCRIPTOR_SET_IN=$$(echo $(SRCS) | tr -s '[:blank:]' ':')
+      $(location //pkg/cmd/docgen) \
+          http --protoc $(location @com_google_protobuf//:protoc) \
+          --gendoc $(location @com_github_pseudomuto_protoc_gen_doc//cmd/protoc-gen-doc) \
+          --out $(RULEDIR) \
+          --protoc-flags "--descriptor_set_in $$DESCRIPTOR_SET_IN server/serverpb/status.proto server/serverpb/admin.proto server/status/statuspb/status.proto"
+    """,
+    tools = [
+        "//pkg/cmd/docgen",
+        "@com_github_pseudomuto_protoc_gen_doc//cmd/protoc-gen-doc",
+        "@com_google_protobuf//:protoc",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)

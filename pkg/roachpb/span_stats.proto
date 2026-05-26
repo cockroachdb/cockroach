@@ -1,0 +1,103 @@
+// Copyright 2023 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.roachpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/roachpb";
+
+import "storage/enginepb/mvcc.proto";
+import "gogoproto/gogo.proto";
+import "roachpb/data.proto";
+
+// SpanStatsRequest is used to request a SpanStatsResponse for the given key
+// span and node id. A node_id value of 0 indicates that the server should
+// fan-out to all nodes, and the resulting SpanStatsResponse is a cumulative
+// result from across the cluster.
+message SpanStatsRequest {
+  string node_id = 1 [(gogoproto.customname) = "NodeID"];
+
+  // Note: start_key and end_key are legacy fields, safe to deprecate (i.e. reserve) in 23.2.
+  // Callers are intended to use the spans field below.
+  // Field is not reserved as we use it to detect whether a request is being made from a previous
+  // versioned node (i.e. in a mixed-version cluster).
+  // TODO(thomas): reserved these fields in 23.2.
+  bytes start_key = 2 [(gogoproto.casttype) = "RKey"];
+  bytes end_key = 3 [(gogoproto.casttype) = "RKey"];
+
+  repeated Span spans = 4 [(gogoproto.nullable) = false];
+
+  // SkipMvccStats when set will result in nodes only collecting stats on the physical data
+  // from their local stores. Nodes will not make a RangeStats RPC to determine stats on
+  // logical data.
+  bool skip_mvcc_stats = 5;
+
+  // SkipApproxTotalStats when set allows for an optimization for SpanStats calls that perform
+  // fan outs. Specifically, only one node per span will make RangeStats RPCs to determine
+  // stats on the logical data (MVCC stats). When set ApproximateTotalStats will equal
+  // TotalStats since MVCC stats are collected from only one node rather than accumulated
+  // across all replicas.
+  bool skip_approx_total_stats = 6;
+
+  // SpansRequiringMvcc specifies which spans in the request need MVCC stats collected.
+  // When populated, MVCC stats will only be collected for spans in this list.
+  // This facilitates the SkipApproxTotalStats optimization used during fan outs.
+  repeated Span spans_requiring_mvcc = 7 [(gogoproto.nullable) = false];
+}
+
+message SpanStats {
+  // TotalStats are the logical MVCC stats for the requested span.
+  cockroach.storage.enginepb.MVCCStats total_stats = 1 [(gogoproto.nullable) = false];
+
+  // range_count measures the number of ranges that the request span falls within.
+  // A SpanStatsResponse for a span that lies within a range, and whose start
+  // key sorts after the range start, and whose end key sorts before the
+  // range end, will have a range_count value of 1.
+  int32 range_count = 2;
+
+  // ApproximateDiskBytes is the approximate size "on-disk" in all files of the
+  // data in the span. NB; this *includes* files stored remotely, not just on
+  // _local_ disk; see the RemoteFileBytes field below.
+  // It represents a physical value across all replicas.
+  // NB: The explicit jsontag prevents 'omitempty` from being added by default.
+  uint64 approximate_disk_bytes = 3 [(gogoproto.jsontag) = "approximate_disk_bytes"];
+
+  // RemoteFileBytes is the subset of ApproximateDiskBytes which are stored in
+  // "remote" files (i.e. shared files and external files). It represents a
+  // physical value across all replicas.
+  uint64 remote_file_bytes = 5;
+
+  // ExternalFileBytes is the subset of RemoteFileBytes that are in "external"
+  // files (not written/owned by this cluster, such as in restored backups).
+  // It represents a physical value across all replicas.
+  uint64 external_file_bytes = 6;
+
+  // ApproximateTotalStats is the approximate, post-replicated MVCC stats for
+  // the requested span. This is an approximate value as it is constructed by
+  // querying all replicas, which includes followers, and the value can be
+  // stale.
+  cockroach.storage.enginepb.MVCCStats approximate_total_stats = 7 [(gogoproto.nullable) = false];
+
+
+  // Unique store ids for the requested span.
+  repeated int32 store_ids = 8 [(gogoproto.customname) = "StoreIDs", (gogoproto.casttype) = "StoreID"];
+
+  // ReplicaCount is the total number of `voting_replicas` and `non_voting_replicas`
+  // for the span's ranges. It does not include `learner_replicas`.
+  int32 replica_count = 9;
+
+  // NEXT ID: 10.
+}
+
+message SpanStatsResponse {
+  reserved 1;
+  reserved 2;
+  reserved 3;
+
+  map<string, SpanStats> span_to_stats = 4;
+
+  repeated string errors = 5;
+
+  // NEXT ID: 6.
+}

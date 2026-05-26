@@ -1,0 +1,92 @@
+# Test that a cycle between two tables is handled correctly.
+
+sql
+CREATE DATABASE d;
+USE d;
+CREATE TABLE loop_a (
+  id INT PRIMARY KEY
+ ,b_id INT
+ ,INDEX(b_id)
+);
+
+CREATE TABLE loop_b (
+  id INT PRIMARY KEY
+ ,a_id INT REFERENCES loop_a ON DELETE CASCADE
+);
+
+ALTER TABLE loop_a ADD CONSTRAINT b_id_delete_constraint
+  FOREIGN KEY (b_id) REFERENCES loop_b (id) ON DELETE CASCADE;
+
+INSERT INTO loop_a (id, b_id) VALUES (1, NULL);
+INSERT INTO loop_b (id, a_id) VALUES (1, 1);
+INSERT INTO loop_a (id, b_id) VALUES (2, 1);
+INSERT INTO loop_b (id, a_id) VALUES (2, 2);
+INSERT INTO loop_a (id, b_id) VALUES (3, 2);
+INSERT INTO loop_b (id, a_id) VALUES (3, 3);
+UPDATE loop_a SET b_id = 3 WHERE id = 1;
+----
+UPDATE 1
+
+dump d
+----
+----
+CREATE TABLE public.loop_b (
+	id INT8 NOT NULL,
+	a_id INT8 NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC),
+	FAMILY "primary" (id, a_id)
+);
+
+CREATE TABLE public.loop_a (
+	id INT8 NOT NULL,
+	b_id INT8 NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC),
+	INDEX loop_a_b_id_idx (b_id ASC),
+	FAMILY "primary" (id, b_id)
+);
+
+INSERT INTO public.loop_b (id, a_id) VALUES
+	(1, 1),
+	(2, 2),
+	(3, 3);
+
+INSERT INTO public.loop_a (id, b_id) VALUES
+	(1, 3),
+	(2, 1),
+	(3, 2);
+
+ALTER TABLE public.loop_b ADD CONSTRAINT fk_a_id_ref_loop_a FOREIGN KEY (a_id) REFERENCES public.loop_a(id) ON DELETE CASCADE;
+ALTER TABLE public.loop_a ADD CONSTRAINT b_id_delete_constraint FOREIGN KEY (b_id) REFERENCES public.loop_b(id) ON DELETE CASCADE;
+
+-- Validate foreign key constraints. These can fail if there was unvalidated data during the dump.
+ALTER TABLE public.loop_b VALIDATE CONSTRAINT fk_a_id_ref_loop_a;
+ALTER TABLE public.loop_a VALIDATE CONSTRAINT b_id_delete_constraint;
+----
+----
+
+dump d --dump-mode=schema
+----
+----
+CREATE TABLE public.loop_b (
+	id INT8 NOT NULL,
+	a_id INT8 NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC),
+	FAMILY "primary" (id, a_id)
+);
+
+CREATE TABLE public.loop_a (
+	id INT8 NOT NULL,
+	b_id INT8 NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC),
+	INDEX loop_a_b_id_idx (b_id ASC),
+	FAMILY "primary" (id, b_id)
+);
+
+ALTER TABLE public.loop_b ADD CONSTRAINT fk_a_id_ref_loop_a FOREIGN KEY (a_id) REFERENCES public.loop_a(id) ON DELETE CASCADE;
+ALTER TABLE public.loop_a ADD CONSTRAINT b_id_delete_constraint FOREIGN KEY (b_id) REFERENCES public.loop_b(id) ON DELETE CASCADE;
+
+-- Validate foreign key constraints. These can fail if there was unvalidated data during the dump.
+ALTER TABLE public.loop_b VALIDATE CONSTRAINT fk_a_id_ref_loop_a;
+ALTER TABLE public.loop_a VALIDATE CONSTRAINT b_id_delete_constraint;
+----
+----

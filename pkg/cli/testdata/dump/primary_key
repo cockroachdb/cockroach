@@ -1,0 +1,25 @@
+# Test that a primary key with a non-default name works.
+
+sql
+CREATE DATABASE d;
+CREATE TABLE d.t (
+	i int,
+	CONSTRAINT pk_name PRIMARY KEY (i)
+);
+INSERT INTO d.t VALUES (1);
+----
+INSERT 1
+
+dump d t
+----
+----
+CREATE TABLE public.t (
+	i INT8 NOT NULL,
+	CONSTRAINT pk_name PRIMARY KEY (i ASC),
+	FAMILY "primary" (i)
+);
+
+INSERT INTO public.t (i) VALUES
+	(1);
+----
+----

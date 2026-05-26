@@ -1,0 +1,397 @@
+exec-ddl
+CREATE TABLE abc (
+    a INT NOT NULL,
+    b TEXT DEFAULT ('foo'),
+    c FLOAT AS (a::float) STORED
+)
+----
+
+exec-ddl
+ALTER TABLE abc INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 10
+  }
+]'
+----
+
+exec-ddl
+CREATE TABLE xyz (
+    x TEXT PRIMARY KEY,
+    y INT8 NOT NULL,
+    z FLOAT8
+)
+----
+
+# Table with unique secondary index over nullable column.
+exec-ddl
+CREATE TABLE uv (
+    u INT PRIMARY KEY DEFAULT unique_rowid(),
+    v INT,
+    UNIQUE (v)
+)
+----
+
+# Table with multi-column key.
+exec-ddl
+CREATE TABLE mno (
+    m INT PRIMARY KEY,
+    n INT,
+    o INT,
+    UNIQUE (n, o)
+)
+----
+
+exec-ddl
+ALTER TABLE mno INJECT STATISTICS '[
+  {
+    "columns": ["m"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 100
+  },
+  {
+    "columns": ["n"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 100,
+    "null_count": 10
+  },
+  {
+    "columns": ["o"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 1900,
+    "null_count": 100
+  }
+]'
+----
+
+# Statistics should be derived from input columns and transferred to RETURNING
+# columns.
+build
+SELECT *
+FROM
+[
+	INSERT INTO xyz (x, y)
+	SELECT b, a FROM abc WHERE c=1.0
+	ON CONFLICT (x) DO UPDATE SET y=5
+	RETURNING *
+]
+WHERE y=10
+----
+with &1
+ ├── columns: x:22(string!null) y:23(int!null) z:24(float)
+ ├── volatile, mutations
+ ├── stats: [rows=1, distinct(23)=1, null(23)=0]
+ ├── fd: ()-->(23)
+ ├── upsert xyz
+ │    ├── columns: xyz.x:1(string!null) xyz.y:2(int!null) xyz.z:3(float)
+ │    ├── arbiter indexes: xyz_pkey
+ │    ├── canary column: xyz.x:13(string)
+ │    ├── fetch columns: xyz.x:13(string) xyz.y:14(int) xyz.z:15(float)
+ │    ├── insert-mapping:
+ │    │    ├── b:7 => xyz.x:1
+ │    │    ├── a:6 => xyz.y:2
+ │    │    └── z_default:12 => xyz.z:3
+ │    ├── update-mapping:
+ │    │    └── upsert_y:20 => xyz.y:2
+ │    ├── return-mapping:
+ │    │    ├── upsert_x:19 => xyz.x:1
+ │    │    ├── upsert_y:20 => xyz.y:2
+ │    │    └── upsert_z:21 => xyz.z:3
+ │    ├── volatile, mutations
+ │    ├── stats: [rows=9.94975, distinct(1)=9.94975, null(1)=0, distinct(2)=9.94975, null(2)=0]
+ │    └── project
+ │         ├── columns: upsert_x:19(string) upsert_y:20(int!null) upsert_z:21(float) a:6(int!null) b:7(string) z_default:12(float) xyz.x:13(string) xyz.y:14(int) xyz.z:15(float) xyz.crdb_internal_mvcc_timestamp:16(decimal) xyz.tableoid:17(oid) y_new:18(int!null)
+ │         ├── immutable
+ │         ├── stats: [rows=9.94975, distinct(19)=9.94975, null(19)=0, distinct(20)=9.94975, null(20)=0]
+ │         ├── lax-key: (7,13)
+ │         ├── fd: ()-->(12,18), (7)~~>(6), (13)-->(14-17), (7,13)-->(19), (6,13)-->(20), (7,13)~~>(6,20,21)
+ │         ├── project
+ │         │    ├── columns: y_new:18(int!null) a:6(int!null) b:7(string) z_default:12(float) xyz.x:13(string) xyz.y:14(int) xyz.z:15(float) xyz.crdb_internal_mvcc_timestamp:16(decimal) xyz.tableoid:17(oid)
+ │         │    ├── immutable
+ │         │    ├── stats: [rows=9.94975, distinct(7,13)=9.94975, null(7,13)=0, distinct(6,13,18)=9.94975, null(6,13,18)=0]
+ │         │    ├── lax-key: (7,13)
+ │         │    ├── fd: ()-->(12,18), (7)~~>(6), (13)-->(14-17)
+ │         │    ├── left-join (hash)
+ │         │    │    ├── columns: a:6(int!null) b:7(string) z_default:12(float) xyz.x:13(string) xyz.y:14(int) xyz.z:15(float) xyz.crdb_internal_mvcc_timestamp:16(decimal) xyz.tableoid:17(oid)
+ │         │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ │         │    │    ├── immutable
+ │         │    │    ├── stats: [rows=9.94975, distinct(13)=9.94975, null(13)=0, distinct(6,13)=9.94975, null(6,13)=0, distinct(7,13)=9.94975, null(7,13)=0]
+ │         │    │    ├── lax-key: (7,13)
+ │         │    │    ├── fd: ()-->(12), (7)~~>(6), (13)-->(14-17)
+ │         │    │    ├── ensure-upsert-distinct-on
+ │         │    │    │    ├── columns: a:6(int!null) b:7(string) z_default:12(float)
+ │         │    │    │    ├── grouping columns: b:7(string)
+ │         │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
+ │         │    │    │    ├── immutable
+ │         │    │    │    ├── stats: [rows=9.94975, distinct(6)=6.31184, null(6)=0, distinct(7)=9.94975, null(7)=0]
+ │         │    │    │    ├── lax-key: (7)
+ │         │    │    │    ├── fd: ()-->(12), (7)~~>(6,12)
+ │         │    │    │    ├── project
+ │         │    │    │    │    ├── columns: z_default:12(float) a:6(int!null) b:7(string)
+ │         │    │    │    │    ├── immutable
+ │         │    │    │    │    ├── stats: [rows=9.94975, distinct(7)=6.31184, null(7)=0]
+ │         │    │    │    │    ├── fd: ()-->(12)
+ │         │    │    │    │    ├── project
+ │         │    │    │    │    │    ├── columns: a:6(int!null) b:7(string)
+ │         │    │    │    │    │    ├── stats: [rows=9.94975, distinct(7)=6.31184, null(7)=0]
+ │         │    │    │    │    │    └── select
+ │         │    │    │    │    │         ├── columns: a:6(int!null) b:7(string) c:8(float!null) rowid:9(int!null) abc.crdb_internal_mvcc_timestamp:10(decimal) abc.tableoid:11(oid)
+ │         │    │    │    │    │         ├── stats: [rows=9.94975, distinct(7)=6.31184, null(7)=0, distinct(8)=1, null(8)=0]
+ │         │    │    │    │    │         ├── key: (9)
+ │         │    │    │    │    │         ├── fd: ()-->(8), (9)-->(6,7,10,11)
+ │         │    │    │    │    │         ├── scan abc
+ │         │    │    │    │    │         │    ├── columns: a:6(int!null) b:7(string) c:8(float) rowid:9(int!null) abc.crdb_internal_mvcc_timestamp:10(decimal) abc.tableoid:11(oid)
+ │         │    │    │    │    │         │    ├── computed column expressions
+ │         │    │    │    │    │         │    │    └── c:8
+ │         │    │    │    │    │         │    │         └── a:6::FLOAT8 [type=float]
+ │         │    │    │    │    │         │    ├── stats: [rows=2000, distinct(6)=2000, null(6)=0, distinct(7)=10, null(7)=0, distinct(8)=200, null(8)=20, distinct(9)=2000, null(9)=0]
+ │         │    │    │    │    │         │    ├── key: (9)
+ │         │    │    │    │    │         │    └── fd: (9)-->(6-8,10,11), (6)-->(8)
+ │         │    │    │    │    │         └── filters
+ │         │    │    │    │    │              └── c:8 = 1.0 [type=bool, outer=(8), constraints=(/8: [/1.0 - /1.0]; tight), fd=()-->(8)]
+ │         │    │    │    │    └── projections
+ │         │    │    │    │         └── NULL::FLOAT8 [as=z_default:12, type=float, immutable]
+ │         │    │    │    └── aggregations
+ │         │    │    │         ├── first-agg [as=a:6, type=int, outer=(6)]
+ │         │    │    │         │    └── a:6 [type=int]
+ │         │    │    │         └── first-agg [as=z_default:12, type=float, outer=(12)]
+ │         │    │    │              └── z_default:12 [type=float]
+ │         │    │    ├── scan xyz
+ │         │    │    │    ├── columns: xyz.x:13(string!null) xyz.y:14(int!null) xyz.z:15(float) xyz.crdb_internal_mvcc_timestamp:16(decimal) xyz.tableoid:17(oid)
+ │         │    │    │    ├── flags: avoid-full-scan
+ │         │    │    │    ├── stats: [rows=1000, distinct(13)=1000, null(13)=0]
+ │         │    │    │    ├── key: (13)
+ │         │    │    │    └── fd: (13)-->(14-17)
+ │         │    │    └── filters
+ │         │    │         └── b:7 = xyz.x:13 [type=bool, outer=(7,13), constraints=(/7: (/NULL - ]; /13: (/NULL - ]), fd=(7)==(13), (13)==(7)]
+ │         │    └── projections
+ │         │         └── 5 [as=y_new:18, type=int]
+ │         └── projections
+ │              ├── CASE WHEN xyz.x:13 IS NULL THEN b:7 ELSE xyz.x:13 END [as=upsert_x:19, type=string, outer=(7,13)]
+ │              ├── CASE WHEN xyz.x:13 IS NULL THEN a:6 ELSE y_new:18 END [as=upsert_y:20, type=int, outer=(6,13,18)]
+ │              └── CASE WHEN xyz.x:13 IS NULL THEN z_default:12 ELSE xyz.z:15 END [as=upsert_z:21, type=float, outer=(12,13,15)]
+ └── select
+      ├── columns: x:22(string!null) y:23(int!null) z:24(float)
+      ├── stats: [rows=1, distinct(23)=1, null(23)=0]
+      ├── fd: ()-->(23)
+      ├── with-scan &1
+      │    ├── columns: x:22(string!null) y:23(int!null) z:24(float)
+      │    ├── mapping:
+      │    │    ├──  xyz.x:1(string) => x:22(string)
+      │    │    ├──  xyz.y:2(int) => y:23(int)
+      │    │    └──  xyz.z:3(float) => z:24(float)
+      │    └── stats: [rows=9.94975, distinct(22)=9.94975, null(22)=0, distinct(23)=9.94975, null(23)=0]
+      └── filters
+           └── y:23 = 10 [type=bool, outer=(23), constraints=(/23: [/10 - /10]; tight), fd=()-->(23)]
+
+# Cardinality is zero.
+build
+UPSERT INTO xyz SELECT b, a FROM abc WHERE False RETURNING *
+----
+upsert xyz
+ ├── columns: x:1(string!null) y:2(int!null) z:3(float)
+ ├── upsert-mapping:
+ │    ├── b:7 => x:1
+ │    ├── a:6 => y:2
+ │    └── z_default:12 => z:3
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── stats: [rows=0]
+ ├── fd: ()-->(3)
+ └── project
+      ├── columns: z_default:12(float) a:6(int!null) b:7(string)
+      ├── cardinality: [0 - 0]
+      ├── immutable
+      ├── stats: [rows=0]
+      ├── fd: ()-->(12)
+      ├── project
+      │    ├── columns: a:6(int!null) b:7(string)
+      │    ├── cardinality: [0 - 0]
+      │    ├── stats: [rows=0]
+      │    └── select
+      │         ├── columns: a:6(int!null) b:7(string) c:8(float) rowid:9(int!null) abc.crdb_internal_mvcc_timestamp:10(decimal) abc.tableoid:11(oid)
+      │         ├── cardinality: [0 - 0]
+      │         ├── stats: [rows=0]
+      │         ├── key: (9)
+      │         ├── fd: (9)-->(6-8,10,11), (6)-->(8)
+      │         ├── scan abc
+      │         │    ├── columns: a:6(int!null) b:7(string) c:8(float) rowid:9(int!null) abc.crdb_internal_mvcc_timestamp:10(decimal) abc.tableoid:11(oid)
+      │         │    ├── computed column expressions
+      │         │    │    └── c:8
+      │         │    │         └── a:6::FLOAT8 [type=float]
+      │         │    ├── stats: [rows=2000]
+      │         │    ├── key: (9)
+      │         │    └── fd: (9)-->(6-8,10,11), (6)-->(8)
+      │         └── filters
+      │              └── false [type=bool, constraints=(contradiction; tight)]
+      └── projections
+           └── NULL::FLOAT8 [as=z_default:12, type=float, immutable]
+
+# Nullable conflict column. Ensure that ensure-upsert-distinct-on passes through
+# the input's null count.
+build
+INSERT INTO uv (v)
+SELECT z::int FROM xyz
+ON CONFLICT (v) DO UPDATE SET v=1
+----
+upsert uv
+ ├── arbiter indexes: uv_v_key
+ ├── columns: <none>
+ ├── canary column: u:12(int)
+ ├── fetch columns: u:12(int) v:13(int)
+ ├── insert-mapping:
+ │    ├── u_default:11 => u:1
+ │    └── z:10 => v:2
+ ├── update-mapping:
+ │    └── upsert_v:18 => v:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── stats: [rows=0]
+ └── project
+      ├── columns: upsert_u:17(int) upsert_v:18(int) z:10(int) u_default:11(int) u:12(int) v:13(int) uv.crdb_internal_mvcc_timestamp:14(decimal) uv.tableoid:15(oid) v_new:16(int!null)
+      ├── volatile
+      ├── stats: [rows=1000]
+      ├── lax-key: (10,12)
+      ├── fd: ()-->(16), (10)~~>(11), (12)-->(13-15), (13)~~>(12,14,15), (11,12)-->(17), (10,12)-->(18), (10,12)~~>(11,17)
+      ├── project
+      │    ├── columns: v_new:16(int!null) z:10(int) u_default:11(int) u:12(int) v:13(int) uv.crdb_internal_mvcc_timestamp:14(decimal) uv.tableoid:15(oid)
+      │    ├── volatile
+      │    ├── stats: [rows=1000]
+      │    ├── lax-key: (10,12)
+      │    ├── fd: ()-->(16), (10)~~>(11), (12)-->(13-15), (13)~~>(12,14,15)
+      │    ├── left-join (hash)
+      │    │    ├── columns: z:10(int) u_default:11(int) u:12(int) v:13(int) uv.crdb_internal_mvcc_timestamp:14(decimal) uv.tableoid:15(oid)
+      │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+      │    │    ├── volatile
+      │    │    ├── stats: [rows=1000, distinct(13)=991, null(13)=0]
+      │    │    ├── lax-key: (10,12)
+      │    │    ├── fd: (10)~~>(11), (12)-->(13-15), (13)~~>(12,14,15)
+      │    │    ├── ensure-upsert-distinct-on
+      │    │    │    ├── columns: z:10(int) u_default:11(int)
+      │    │    │    ├── grouping columns: z:10(int)
+      │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
+      │    │    │    ├── volatile
+      │    │    │    ├── stats: [rows=1000, distinct(10)=1000, null(10)=0]
+      │    │    │    ├── lax-key: (10)
+      │    │    │    ├── fd: (10)~~>(11)
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: u_default:11(int) z:10(int)
+      │    │    │    │    ├── volatile
+      │    │    │    │    ├── stats: [rows=1000, distinct(10)=100, null(10)=0]
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: z:10(int)
+      │    │    │    │    │    ├── immutable
+      │    │    │    │    │    ├── stats: [rows=1000, distinct(10)=100, null(10)=0]
+      │    │    │    │    │    ├── scan xyz
+      │    │    │    │    │    │    ├── columns: x:5(string!null) y:6(int!null) xyz.z:7(float) xyz.crdb_internal_mvcc_timestamp:8(decimal) xyz.tableoid:9(oid)
+      │    │    │    │    │    │    ├── stats: [rows=1000, distinct(7)=100, null(7)=10]
+      │    │    │    │    │    │    ├── key: (5)
+      │    │    │    │    │    │    └── fd: (5)-->(6-9)
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         └── xyz.z:7::INT8 [as=z:10, type=int, outer=(7), immutable]
+      │    │    │    │    └── projections
+      │    │    │    │         └── unique_rowid() [as=u_default:11, type=int, volatile]
+      │    │    │    └── aggregations
+      │    │    │         └── first-agg [as=u_default:11, type=int, outer=(11)]
+      │    │    │              └── u_default:11 [type=int]
+      │    │    ├── scan uv
+      │    │    │    ├── columns: u:12(int!null) v:13(int) uv.crdb_internal_mvcc_timestamp:14(decimal) uv.tableoid:15(oid)
+      │    │    │    ├── flags: avoid-full-scan
+      │    │    │    ├── stats: [rows=1000, distinct(13)=991, null(13)=10]
+      │    │    │    ├── key: (12)
+      │    │    │    └── fd: (12)-->(13-15), (13)~~>(12,14,15)
+      │    │    └── filters
+      │    │         └── z:10 = v:13 [type=bool, outer=(10,13), constraints=(/10: (/NULL - ]; /13: (/NULL - ]), fd=(10)==(13), (13)==(10)]
+      │    └── projections
+      │         └── 1 [as=v_new:16, type=int]
+      └── projections
+           ├── CASE WHEN u:12 IS NULL THEN u_default:11 ELSE u:12 END [as=upsert_u:17, type=int, outer=(11,12)]
+           └── CASE WHEN u:12 IS NULL THEN z:10 ELSE v_new:16 END [as=upsert_v:18, type=int, outer=(10,12,16)]
+
+# Multiple conflict columns.
+# TODO(andyk): The null counts for the left join are surprisingly high. It's due
+# to the stats code deciding that the left join will only return a tiny number
+# of matches, which then implies all non-matches are NULL (due to null extending
+# behavior of left join). This will get better once we improve multi-column
+# stats.
+build
+INSERT INTO mno
+SELECT * FROM mno
+ON CONFLICT (n, o) DO UPDATE SET o = 5
+----
+upsert mno
+ ├── arbiter indexes: mno_n_o_key
+ ├── columns: <none>
+ ├── canary column: m:11(int)
+ ├── fetch columns: m:11(int) n:12(int) o:13(int)
+ ├── insert-mapping:
+ │    ├── m:6 => m:1
+ │    ├── n:7 => n:2
+ │    └── o:8 => o:3
+ ├── update-mapping:
+ │    └── upsert_o:19 => o:3
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── stats: [rows=0]
+ └── project
+      ├── columns: upsert_m:17(int) upsert_n:18(int) upsert_o:19(int) m:6(int!null) n:7(int) o:8(int) m:11(int) n:12(int) o:13(int) crdb_internal_mvcc_timestamp:14(decimal) tableoid:15(oid) o_new:16(int!null)
+      ├── stats: [rows=2000]
+      ├── key: (6,11)
+      ├── fd: ()-->(16), (6)-->(7,8), (7,8)~~>(6), (11)-->(12-15), (12,13)~~>(11,14,15), (6,11)-->(17), (7,11)-->(18), (8,11)-->(19)
+      ├── project
+      │    ├── columns: o_new:16(int!null) m:6(int!null) n:7(int) o:8(int) m:11(int) n:12(int) o:13(int) crdb_internal_mvcc_timestamp:14(decimal) tableoid:15(oid)
+      │    ├── stats: [rows=2000]
+      │    ├── key: (6,11)
+      │    ├── fd: ()-->(16), (6)-->(7,8), (7,8)~~>(6), (11)-->(12-15), (12,13)~~>(11,14,15)
+      │    ├── left-join (hash)
+      │    │    ├── columns: m:6(int!null) n:7(int) o:8(int) m:11(int) n:12(int) o:13(int) crdb_internal_mvcc_timestamp:14(decimal) tableoid:15(oid)
+      │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+      │    │    ├── stats: [rows=2000, distinct(12)=21.0526, null(12)=1988.95, distinct(13)=21.0526, null(13)=2000]
+      │    │    ├── key: (6,11)
+      │    │    ├── fd: (6)-->(7,8), (7,8)~~>(6), (11)-->(12-15), (12,13)~~>(11,14,15)
+      │    │    ├── ensure-upsert-distinct-on
+      │    │    │    ├── columns: m:6(int!null) n:7(int) o:8(int)
+      │    │    │    ├── grouping columns: n:7(int) o:8(int)
+      │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
+      │    │    │    ├── stats: [rows=2000, distinct(7)=100, null(7)=10, distinct(8)=1900, null(8)=100]
+      │    │    │    ├── key: (6)
+      │    │    │    ├── fd: (6)-->(7,8), (7,8)~~>(6)
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: m:6(int!null) n:7(int) o:8(int)
+      │    │    │    │    ├── stats: [rows=2000, distinct(7)=100, null(7)=10, distinct(8)=1900, null(8)=100]
+      │    │    │    │    ├── key: (6)
+      │    │    │    │    ├── fd: (6)-->(7,8), (7,8)~~>(6)
+      │    │    │    │    └── scan mno
+      │    │    │    │         ├── columns: m:6(int!null) n:7(int) o:8(int) crdb_internal_mvcc_timestamp:9(decimal) tableoid:10(oid)
+      │    │    │    │         ├── stats: [rows=2000, distinct(7)=100, null(7)=10, distinct(8)=1900, null(8)=100]
+      │    │    │    │         ├── key: (6)
+      │    │    │    │         └── fd: (6)-->(7-10), (7,8)~~>(6,9,10)
+      │    │    │    └── aggregations
+      │    │    │         └── first-agg [as=m:6, type=int, outer=(6)]
+      │    │    │              └── m:6 [type=int]
+      │    │    ├── scan mno
+      │    │    │    ├── columns: m:11(int!null) n:12(int) o:13(int) crdb_internal_mvcc_timestamp:14(decimal) tableoid:15(oid)
+      │    │    │    ├── flags: avoid-full-scan
+      │    │    │    ├── stats: [rows=2000, distinct(12)=100, null(12)=10, distinct(13)=1900, null(13)=100]
+      │    │    │    ├── key: (11)
+      │    │    │    └── fd: (11)-->(12-15), (12,13)~~>(11,14,15)
+      │    │    └── filters
+      │    │         ├── n:7 = n:12 [type=bool, outer=(7,12), constraints=(/7: (/NULL - ]; /12: (/NULL - ]), fd=(7)==(12), (12)==(7)]
+      │    │         └── o:8 = o:13 [type=bool, outer=(8,13), constraints=(/8: (/NULL - ]; /13: (/NULL - ]), fd=(8)==(13), (13)==(8)]
+      │    └── projections
+      │         └── 5 [as=o_new:16, type=int]
+      └── projections
+           ├── CASE WHEN m:11 IS NULL THEN m:6 ELSE m:11 END [as=upsert_m:17, type=int, outer=(6,11)]
+           ├── CASE WHEN m:11 IS NULL THEN n:7 ELSE n:12 END [as=upsert_n:18, type=int, outer=(7,11,12)]
+           └── CASE WHEN m:11 IS NULL THEN o:8 ELSE o_new:16 END [as=upsert_o:19, type=int, outer=(8,11,16)]

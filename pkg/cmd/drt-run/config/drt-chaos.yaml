@@ -1,0 +1,50 @@
+workloads:
+  - name: tpcc-main
+    kind: tpcc
+    steps:
+      - command: run
+        args:
+          - --warehouses=12000
+          - --active-warehouses=1700
+          - --db=cct_tpcc
+          - --secure
+          - --ramp=10m
+          - --display-every=5s
+          - --duration=12h
+          - --prometheus-port=2112
+          - --user=cct_tpcc_user
+          - --tolerate-errors
+          - --password=tpcc
+  - name: kv-main
+    kind: kv
+    steps:
+      - command: run
+        args:
+          - --concurrency=8
+          - --histograms=kv/stats.json
+          - --db=kv
+          - --splits=500
+          - --read-percent=50
+          - --cycle-length=100000
+          - --min-block-bytes=100
+          - --max-block-bytes=1000
+          - --max-rate=120
+          - --secure
+          - --prometheus-port=2114
+          - --ramp=10m
+          - --display-every=5s
+          - --duration=12h
+          - --tolerate-errors
+          - --enum
+operations:
+  parallelism: 3
+  sets:
+    - filter: .*
+      cadence: 5m
+cloud: gce
+cluster:
+  nodecount: 6
+cluster_name: drt-chaos
+certs: ./certs
+roachtest_binary: ./roachtest
+workload_binary: ./workload

@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "cloudinfo",
+    srcs = ["cloudinfo.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/cloudinfo",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/util/httputil"],
+)
+
+go_test(
+    name = "cloudinfo_test",
+    size = "small",
+    srcs = ["cloudinfo_test.go"],
+    embed = [":cloudinfo"],
+    deps = [
+        "//pkg/util/httputil",
+        "//pkg/util/leaktest",
+    ],
+)

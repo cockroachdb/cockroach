@@ -1,0 +1,818 @@
+# LogicTest: multiregion-15node-5region-3azs
+
+query TTTTT colnames,rowsort
+SHOW REGIONS
+----
+region          zones                      database_names  primary_region_of  secondary_region_of
+ap-southeast-2  {ap-az1,ap-az2,ap-az3}     {}              {}                 {}
+ca-central-1    {ca-az1,ca-az2,ca-az3}     {}              {}                 {}
+us-central-1    {usc-az1,usc-az2,usc-az3}  {}              {}                 {}
+us-east-1       {us-az1,us-az2,us-az3}     {}              {}                 {}
+us-west-1       {usw-az1,usw-az2,usw-az3}  {}              {}                 {}
+
+statement ok
+CREATE DATABASE non_mr;
+
+statement error database must be multi-region to support a secondary region
+ALTER DATABASE non_mr SET SECONDARY REGION "ap-southeast2"
+
+statement ok
+CREATE DATABASE no_list PRIMARY REGION "ap-southeast-2" SECONDARY REGION "ca-central-1"
+
+# Verify secondry region is added implicitly
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE no_list;
+----
+DATABASE no_list  ALTER DATABASE no_list CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 14400,
+                    num_replicas = 4,
+                    num_voters = 3,
+                    constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1}',
+                    voter_constraints = '[+region=ap-southeast-2]',
+                    lease_preferences = '[[+region=ap-southeast-2], [+region=ca-central-1]]'
+
+statement ok
+CREATE DATABASE db PRIMARY REGION "ap-southeast-2" REGIONS "ca-central-1" SECONDARY REGION "ca-central-1"
+
+# Verify that the zone configuration on the database is expected.
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE db;
+----
+DATABASE db  ALTER DATABASE db CONFIGURE ZONE USING
+               range_min_bytes = 134217728,
+               range_max_bytes = 536870912,
+               gc.ttlseconds = 14400,
+               num_replicas = 4,
+               num_voters = 3,
+               constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1}',
+               voter_constraints = '[+region=ap-southeast-2]',
+               lease_preferences = '[[+region=ap-southeast-2], [+region=ca-central-1]]'
+
+# Secondary region cannot be the current primary region.
+statement error the secondary region cannot be the same as the current primary region
+ALTER DATABASE db SET SECONDARY REGION "ap-southeast-2"
+
+# Secondary region has to be a part of the database.
+statement error region "us-east-1" has not been added to the database
+ALTER DATABASE db SET SECONDARY REGION "us-east-1"
+
+# Create a regional table in the primary region.
+statement ok
+CREATE TABLE db.rbt_in_primary() LOCALITY REGIONAL BY TABLE;
+
+statement ok
+ALTER DATABASE db ADD REGION "us-east-1"
+
+statement error pq: region .* is currently the secondary region
+ALTER DATABASE db SET PRIMARY REGION "ca-central-1"
+
+statement ok
+ALTER DATABASE db SET SECONDARY REGION "us-east-1"
+
+# Create a regional table outside of the primary region.
+statement ok
+CREATE TABLE db.rbt_in_us_east() LOCALITY REGIONAL BY TABLE IN "us-east-1";
+
+# Create a regional table in the secondary region.
+statement ok
+CREATE TABLE db.rbt_in_ca_central() LOCALITY REGIONAL BY TABLE IN "ca-central-1";
+
+statement ok
+CREATE TABLE db.rbr() LOCALITY REGIONAL BY ROW
+
+# Add a secondary region.
+statement ok
+ALTER DATABASE db SET SECONDARY REGION "ca-central-1"
+
+# Verify that the zone configuration on the database is expected.
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE db;
+----
+DATABASE db  ALTER DATABASE db CONFIGURE ZONE USING
+               range_min_bytes = 134217728,
+               range_max_bytes = 536870912,
+               gc.ttlseconds = 14400,
+               num_replicas = 5,
+               num_voters = 3,
+               constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+               voter_constraints = '[+region=ap-southeast-2]',
+               lease_preferences = '[[+region=ap-southeast-2], [+region=ca-central-1]]'
+
+# Verify that the zone configuration on the table is expected.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE db.rbt_in_primary
+----
+TABLE db.public.rbt_in_primary  ALTER TABLE db.public.rbt_in_primary CONFIGURE ZONE USING
+                                  range_min_bytes = 134217728,
+                                  range_max_bytes = 536870912,
+                                  gc.ttlseconds = 14400,
+                                  num_replicas = 5,
+                                  num_voters = 3,
+                                  constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                  voter_constraints = '[+region=ap-southeast-2]',
+                                  lease_preferences = '[[+region=ap-southeast-2], [+region=ca-central-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE db.rbt_in_us_east
+----
+TABLE db.public.rbt_in_us_east  ALTER TABLE db.public.rbt_in_us_east CONFIGURE ZONE USING
+                                  range_min_bytes = 134217728,
+                                  range_max_bytes = 536870912,
+                                  gc.ttlseconds = 14400,
+                                  num_replicas = 5,
+                                  num_voters = 3,
+                                  constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                  voter_constraints = '[+region=us-east-1]',
+                                  lease_preferences = '[[+region=us-east-1], [+region=ca-central-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE db.rbt_in_ca_central
+----
+TABLE db.public.rbt_in_ca_central  ALTER TABLE db.public.rbt_in_ca_central CONFIGURE ZONE USING
+                                     range_min_bytes = 134217728,
+                                     range_max_bytes = 536870912,
+                                     gc.ttlseconds = 14400,
+                                     num_replicas = 5,
+                                     num_voters = 3,
+                                     constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                     voter_constraints = '[+region=ca-central-1]',
+                                     lease_preferences = '[[+region=ca-central-1]]'
+
+# Verify that the zone configuration on a partition is expected.
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" OF TABLE db.rbr
+----
+PARTITION "us-east-1" OF TABLE db.public.rbr  ALTER PARTITION "us-east-1" OF TABLE db.public.rbr CONFIGURE ZONE USING
+                                                range_min_bytes = 134217728,
+                                                range_max_bytes = 536870912,
+                                                gc.ttlseconds = 14400,
+                                                num_replicas = 5,
+                                                num_voters = 3,
+                                                constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                                voter_constraints = '[+region=us-east-1]',
+                                                lease_preferences = '[[+region=us-east-1], [+region=ca-central-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "ap-southeast-2" OF TABLE db.rbr
+----
+PARTITION "ap-southeast-2" OF TABLE db.public.rbr  ALTER PARTITION "ap-southeast-2" OF TABLE db.public.rbr CONFIGURE ZONE USING
+                                                     range_min_bytes = 134217728,
+                                                     range_max_bytes = 536870912,
+                                                     gc.ttlseconds = 14400,
+                                                     num_replicas = 5,
+                                                     num_voters = 3,
+                                                     constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                                     voter_constraints = '[+region=ap-southeast-2]',
+                                                     lease_preferences = '[[+region=ap-southeast-2], [+region=ca-central-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "ca-central-1" OF TABLE db.rbr
+----
+PARTITION "ca-central-1" OF TABLE db.public.rbr  ALTER PARTITION "ca-central-1" OF TABLE db.public.rbr CONFIGURE ZONE USING
+                                                   range_min_bytes = 134217728,
+                                                   range_max_bytes = 536870912,
+                                                   gc.ttlseconds = 14400,
+                                                   num_replicas = 5,
+                                                   num_voters = 3,
+                                                   constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                                   voter_constraints = '[+region=ca-central-1]',
+                                                   lease_preferences = '[[+region=ca-central-1]]'
+
+
+statement ok
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
+statement ok
+ALTER DATABASE db SURVIVE REGION FAILURE
+
+# Update database to region failure with < 5 regions.
+# Verify that the zone configuration on the database is expected.
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE db;
+----
+DATABASE db  ALTER DATABASE db CONFIGURE ZONE USING
+               range_min_bytes = 134217728,
+               range_max_bytes = 536870912,
+               gc.ttlseconds = 14400,
+               num_replicas = 5,
+               num_voters = 5,
+               constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+               voter_constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2}',
+               lease_preferences = '[[+region=ap-southeast-2], [+region=ca-central-1]]'
+
+# All of the table zone configs are the result of an implicit super region. To
+# help make sense of those, dump out the current primary and secondary regions
+# in the database.
+query TT
+SELECT
+  region,
+  CASE
+    WHEN "primary" THEN 'primary'
+    WHEN "secondary" THEN 'secondary'
+    ELSE 'other'
+  END AS role
+FROM [SHOW REGIONS FROM DATABASE db]
+ORDER BY region;
+----
+ap-southeast-2  primary
+ca-central-1    secondary
+us-east-1       other
+
+# Verify that the zone configuration on the table is expected.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE db.rbt_in_primary
+----
+TABLE db.public.rbt_in_primary  ALTER TABLE db.public.rbt_in_primary CONFIGURE ZONE USING
+                                  range_min_bytes = 134217728,
+                                  range_max_bytes = 536870912,
+                                  gc.ttlseconds = 14400,
+                                  num_replicas = 5,
+                                  num_voters = 5,
+                                  constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2, +region=us-east-1: 1}',
+                                  voter_constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2}',
+                                  lease_preferences = '[[+region=ap-southeast-2], [+region=ca-central-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE db.rbt_in_us_east
+----
+TABLE db.public.rbt_in_us_east  ALTER TABLE db.public.rbt_in_us_east CONFIGURE ZONE USING
+                                  range_min_bytes = 134217728,
+                                  range_max_bytes = 536870912,
+                                  gc.ttlseconds = 14400,
+                                  num_replicas = 5,
+                                  num_voters = 5,
+                                  constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 2}',
+                                  voter_constraints = '{+region=ca-central-1: 2, +region=us-east-1: 2}',
+                                  lease_preferences = '[[+region=us-east-1], [+region=ca-central-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE db.rbt_in_ca_central
+----
+TABLE db.public.rbt_in_ca_central  ALTER TABLE db.public.rbt_in_ca_central CONFIGURE ZONE USING
+                                     range_min_bytes = 134217728,
+                                     range_max_bytes = 536870912,
+                                     gc.ttlseconds = 14400,
+                                     num_replicas = 5,
+                                     num_voters = 5,
+                                     constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2, +region=us-east-1: 1}',
+                                     voter_constraints = '{+region=ca-central-1: 2}',
+                                     lease_preferences = '[[+region=ca-central-1]]'
+
+# Verify that the zone configuration on a partition is expected.
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" OF TABLE db.rbr
+----
+PARTITION "us-east-1" OF TABLE db.public.rbr  ALTER PARTITION "us-east-1" OF TABLE db.public.rbr CONFIGURE ZONE USING
+                                                range_min_bytes = 134217728,
+                                                range_max_bytes = 536870912,
+                                                gc.ttlseconds = 14400,
+                                                num_replicas = 5,
+                                                num_voters = 5,
+                                                constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 2}',
+                                                voter_constraints = '{+region=ca-central-1: 2, +region=us-east-1: 2}',
+                                                lease_preferences = '[[+region=us-east-1], [+region=ca-central-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "ap-southeast-2" OF TABLE db.rbr
+----
+PARTITION "ap-southeast-2" OF TABLE db.public.rbr  ALTER PARTITION "ap-southeast-2" OF TABLE db.public.rbr CONFIGURE ZONE USING
+                                                     range_min_bytes = 134217728,
+                                                     range_max_bytes = 536870912,
+                                                     gc.ttlseconds = 14400,
+                                                     num_replicas = 5,
+                                                     num_voters = 5,
+                                                     constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2, +region=us-east-1: 1}',
+                                                     voter_constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2}',
+                                                     lease_preferences = '[[+region=ap-southeast-2], [+region=ca-central-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "ca-central-1" OF TABLE db.rbr
+----
+PARTITION "ca-central-1" OF TABLE db.public.rbr  ALTER PARTITION "ca-central-1" OF TABLE db.public.rbr CONFIGURE ZONE USING
+                                                   range_min_bytes = 134217728,
+                                                   range_max_bytes = 536870912,
+                                                   gc.ttlseconds = 14400,
+                                                   num_replicas = 5,
+                                                   num_voters = 5,
+                                                   constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2, +region=us-east-1: 1}',
+                                                   voter_constraints = '{+region=ca-central-1: 2}',
+                                                   lease_preferences = '[[+region=ca-central-1]]'
+
+# Update DATABASE db ADD REGION "us-central-1";
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE db;
+----
+DATABASE db  ALTER DATABASE db CONFIGURE ZONE USING
+               range_min_bytes = 134217728,
+               range_max_bytes = 536870912,
+               gc.ttlseconds = 14400,
+               num_replicas = 5,
+               num_voters = 5,
+               constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+               voter_constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2}',
+               lease_preferences = '[[+region=ap-southeast-2], [+region=ca-central-1]]'
+
+# Verify that the zone configuration on the table is expected.
+# The number of replicas should be 7.
+# We have 5 regions, the primary and secondary region should
+# each have 2 replicas. The 3 replicas are distributed between the remaining
+# 3 non-primary and non-secondary regions.
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE db.rbt_in_us_east
+----
+TABLE db.public.rbt_in_us_east  ALTER TABLE db.public.rbt_in_us_east CONFIGURE ZONE USING
+                                  range_min_bytes = 134217728,
+                                  range_max_bytes = 536870912,
+                                  gc.ttlseconds = 14400,
+                                  num_replicas = 5,
+                                  num_voters = 5,
+                                  constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 2}',
+                                  voter_constraints = '{+region=ca-central-1: 2, +region=us-east-1: 2}',
+                                  lease_preferences = '[[+region=us-east-1], [+region=ca-central-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE db.rbt_in_ca_central
+----
+TABLE db.public.rbt_in_ca_central  ALTER TABLE db.public.rbt_in_ca_central CONFIGURE ZONE USING
+                                     range_min_bytes = 134217728,
+                                     range_max_bytes = 536870912,
+                                     gc.ttlseconds = 14400,
+                                     num_replicas = 5,
+                                     num_voters = 5,
+                                     constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2, +region=us-east-1: 1}',
+                                     voter_constraints = '{+region=ca-central-1: 2}',
+                                     lease_preferences = '[[+region=ca-central-1]]'
+
+# Verify that the zone configuration on a partition is expected.
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" OF TABLE db.rbr
+----
+PARTITION "us-east-1" OF TABLE db.public.rbr  ALTER PARTITION "us-east-1" OF TABLE db.public.rbr CONFIGURE ZONE USING
+                                                range_min_bytes = 134217728,
+                                                range_max_bytes = 536870912,
+                                                gc.ttlseconds = 14400,
+                                                num_replicas = 5,
+                                                num_voters = 5,
+                                                constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 2}',
+                                                voter_constraints = '{+region=ca-central-1: 2, +region=us-east-1: 2}',
+                                                lease_preferences = '[[+region=us-east-1], [+region=ca-central-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "ap-southeast-2" OF TABLE db.rbr
+----
+PARTITION "ap-southeast-2" OF TABLE db.public.rbr  ALTER PARTITION "ap-southeast-2" OF TABLE db.public.rbr CONFIGURE ZONE USING
+                                                     range_min_bytes = 134217728,
+                                                     range_max_bytes = 536870912,
+                                                     gc.ttlseconds = 14400,
+                                                     num_replicas = 5,
+                                                     num_voters = 5,
+                                                     constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2, +region=us-east-1: 1}',
+                                                     voter_constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2}',
+                                                     lease_preferences = '[[+region=ap-southeast-2], [+region=ca-central-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "ca-central-1" OF TABLE db.rbr
+----
+PARTITION "ca-central-1" OF TABLE db.public.rbr  ALTER PARTITION "ca-central-1" OF TABLE db.public.rbr CONFIGURE ZONE USING
+                                                   range_min_bytes = 134217728,
+                                                   range_max_bytes = 536870912,
+                                                   gc.ttlseconds = 14400,
+                                                   num_replicas = 5,
+                                                   num_voters = 5,
+                                                   constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2, +region=us-east-1: 1}',
+                                                   voter_constraints = '{+region=ca-central-1: 2}',
+                                                   lease_preferences = '[[+region=ca-central-1]]'
+
+
+statement error database must be multi-region to support a secondary region
+ALTER DATABASE non_mr DROP SECONDARY REGION
+
+statement error pq: cannot drop region .*
+ALTER DATABASE db DROP REGION "ca-central-1"
+
+statement ok
+ALTER DATABASE db DROP SECONDARY REGION
+
+statement error pq: database .* doesn't have a secondary region defined
+ALTER DATABASE db DROP SECONDARY REGION
+
+query T noticetrace
+ALTER DATABASE db DROP SECONDARY REGION IF EXISTS
+----
+NOTICE: No secondary region is defined on the database; skipping
+
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE db.rbt_in_us_east
+----
+TABLE db.public.rbt_in_us_east  ALTER TABLE db.public.rbt_in_us_east CONFIGURE ZONE USING
+                                  range_min_bytes = 134217728,
+                                  range_max_bytes = 536870912,
+                                  gc.ttlseconds = 14400,
+                                  num_replicas = 5,
+                                  num_voters = 5,
+                                  constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 2}',
+                                  voter_constraints = '{+region=us-east-1: 2}',
+                                  lease_preferences = '[[+region=us-east-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "ap-southeast-2" OF TABLE db.rbr
+----
+PARTITION "ap-southeast-2" OF TABLE db.public.rbr  ALTER PARTITION "ap-southeast-2" OF TABLE db.public.rbr CONFIGURE ZONE USING
+                                                     range_min_bytes = 134217728,
+                                                     range_max_bytes = 536870912,
+                                                     gc.ttlseconds = 14400,
+                                                     num_replicas = 5,
+                                                     num_voters = 5,
+                                                     constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2, +region=us-east-1: 1}',
+                                                     voter_constraints = '{+region=ap-southeast-2: 2}',
+                                                     lease_preferences = '[[+region=ap-southeast-2]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "ca-central-1" OF TABLE db.rbr
+----
+PARTITION "ca-central-1" OF TABLE db.public.rbr  ALTER PARTITION "ca-central-1" OF TABLE db.public.rbr CONFIGURE ZONE USING
+                                                   range_min_bytes = 134217728,
+                                                   range_max_bytes = 536870912,
+                                                   gc.ttlseconds = 14400,
+                                                   num_replicas = 5,
+                                                   num_voters = 5,
+                                                   constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2, +region=us-east-1: 1}',
+                                                   voter_constraints = '{+region=ca-central-1: 2}',
+                                                   lease_preferences = '[[+region=ca-central-1]]'
+
+# Ensure that the implicit super region is updated now that the secondary region
+# was dropped. We will dump the regions and role so that we can more easily
+# understand the table zone configs that follow.
+query TT
+SELECT
+  region,
+  CASE
+    WHEN "primary" THEN 'primary'
+    WHEN "secondary" THEN 'secondary'
+    ELSE 'other'
+  END AS role
+FROM [SHOW REGIONS FROM DATABASE db]
+ORDER BY region;
+----
+ap-southeast-2  primary
+ca-central-1    other
+us-east-1       other
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE db.rbt_in_us_east
+----
+TABLE db.public.rbt_in_us_east  ALTER TABLE db.public.rbt_in_us_east CONFIGURE ZONE USING
+                                  range_min_bytes = 134217728,
+                                  range_max_bytes = 536870912,
+                                  gc.ttlseconds = 14400,
+                                  num_replicas = 5,
+                                  num_voters = 5,
+                                  constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 2}',
+                                  voter_constraints = '{+region=us-east-1: 2}',
+                                  lease_preferences = '[[+region=us-east-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE db.rbt_in_ca_central
+----
+TABLE db.public.rbt_in_ca_central  ALTER TABLE db.public.rbt_in_ca_central CONFIGURE ZONE USING
+                                     range_min_bytes = 134217728,
+                                     range_max_bytes = 536870912,
+                                     gc.ttlseconds = 14400,
+                                     num_replicas = 5,
+                                     num_voters = 5,
+                                     constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2, +region=us-east-1: 1}',
+                                     voter_constraints = '{+region=ca-central-1: 2}',
+                                     lease_preferences = '[[+region=ca-central-1]]'
+
+# Add a different secondary to confirm zone config adjusts based on the secondary.
+statement ok
+ALTER DATABASE db SET SECONDARY REGION "us-east-1"
+
+# Dump the regions and role so that we can understand table zone configs easier.
+query TT
+SELECT
+  region,
+  CASE
+    WHEN "primary" THEN 'primary'
+    WHEN "secondary" THEN 'secondary'
+    ELSE 'other'
+  END AS role
+FROM [SHOW REGIONS FROM DATABASE db]
+ORDER BY region;
+----
+ap-southeast-2  primary
+ca-central-1    other
+us-east-1       secondary
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE db.rbt_in_us_east
+----
+TABLE db.public.rbt_in_us_east  ALTER TABLE db.public.rbt_in_us_east CONFIGURE ZONE USING
+                                  range_min_bytes = 134217728,
+                                  range_max_bytes = 536870912,
+                                  gc.ttlseconds = 14400,
+                                  num_replicas = 5,
+                                  num_voters = 5,
+                                  constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 2}',
+                                  voter_constraints = '{+region=us-east-1: 2}',
+                                  lease_preferences = '[[+region=us-east-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE db.rbt_in_ca_central
+----
+TABLE db.public.rbt_in_ca_central  ALTER TABLE db.public.rbt_in_ca_central CONFIGURE ZONE USING
+                                     range_min_bytes = 134217728,
+                                     range_max_bytes = 536870912,
+                                     gc.ttlseconds = 14400,
+                                     num_replicas = 5,
+                                     num_voters = 5,
+                                     constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2, +region=us-east-1: 1}',
+                                     voter_constraints = '{+region=ca-central-1: 2, +region=us-east-1: 2}',
+                                     lease_preferences = '[[+region=ca-central-1], [+region=us-east-1]]'
+
+statement ok
+ALTER DATABASE db DROP SECONDARY REGION
+
+# Verify super region interactions
+
+# Primary in super region
+statement ok
+CREATE DATABASE mr1 PRIMARY REGION "us-east-1" REGIONS "ap-southeast-2", "us-central-1","ca-central-1", "us-west-1"
+
+statement ok
+ALTER DATABASE mr1 ADD SUPER REGION "test1" VALUES "us-east-1", "us-west-1"
+
+statement error pq: the secondary region must be in the same super region as the current primary region
+ALTER DATABASE mr1 SET SECONDARY REGION "ap-southeast-2"
+
+statement ok
+ALTER DATABASE mr1 SET SECONDARY REGION "us-west-1"
+
+# Primary outside super region
+statement ok
+CREATE DATABASE mr2 PRIMARY REGION "ap-southeast-2" REGIONS "ap-southeast-2", "us-central-1","ca-central-1", "us-east-1", "us-west-1"
+
+statement ok
+ALTER DATABASE mr2 ADD SUPER REGION "test1" VALUES "us-east-1", "us-west-1"
+
+statement error pq: the secondary region can not be in a super region, unless the primary is also within a super region
+ALTER DATABASE mr2 SET SECONDARY REGION "us-east-1"
+
+statement ok
+ALTER DATABASE mr2 SET SECONDARY REGION "ca-central-1"
+
+# Multiple super region
+statement ok
+CREATE DATABASE mr3 PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-central-1","ca-central-1", "us-east-1", "us-west-1"
+
+statement ok
+ALTER DATABASE mr3 ADD SUPER REGION "test1" VALUES "us-east-1", "us-west-1"
+
+statement ok
+ALTER DATABASE mr3 ADD SUPER REGION "test2" VALUES "us-central-1", "ca-central-1"
+
+statement error pgcode 42710 pq: duplicate region us-central-1 found in super region test3
+ALTER DATABASE mr3 ADD SUPER REGION "test3" VALUES "us-central-1", "ca-central-1", "us-central-1"
+
+statement error pq: the secondary region must be in the same super region as the current primary region
+ALTER DATABASE mr3 SET SECONDARY REGION "us-east-1"
+
+statement ok
+ALTER DATABASE mr3 SET SECONDARY REGION "us-central-1"
+
+
+# Make sure a secondary region can not be removed from a super region
+statement error pq: the secondary region must be in the same super region as the current primary region
+ALTER DATABASE mr1 ALTER SUPER REGION "test1" VALUES "us-east-1"
+
+query TTTTT colnames,rowsort
+SHOW REGIONS
+----
+region          zones                      database_names            primary_region_of  secondary_region_of
+ap-southeast-2  {ap-az1,ap-az2,ap-az3}     {db,mr1,mr2,mr3,no_list}  {db,mr2,no_list}   {}
+ca-central-1    {ca-az1,ca-az2,ca-az3}     {db,mr1,mr2,mr3,no_list}  {mr3}              {mr2,no_list}
+us-central-1    {usc-az1,usc-az2,usc-az3}  {mr1,mr2,mr3}             {}                 {mr3}
+us-east-1       {us-az1,us-az2,us-az3}     {db,mr1,mr2,mr3}          {mr1}              {}
+us-west-1       {usw-az1,usw-az2,usw-az3}  {mr1,mr2,mr3}             {}                 {mr1}
+
+query TTBBT colnames,rowsort
+SHOW REGIONS FROM DATABASE mr1
+----
+database  region          primary  secondary  zones
+mr1       us-east-1       true     false      {us-az1,us-az2,us-az3}
+mr1       us-west-1       false    true       {usw-az1,usw-az2,usw-az3}
+mr1       ap-southeast-2  false    false      {ap-az1,ap-az2,ap-az3}
+mr1       ca-central-1    false    false      {ca-az1,ca-az2,ca-az3}
+mr1       us-central-1    false    false      {usc-az1,usc-az2,usc-az3}
+
+query TTBBT colnames,rowsort
+SHOW REGIONS FROM DATABASE mr2
+----
+database  region          primary  secondary  zones
+mr2       ap-southeast-2  true     false      {ap-az1,ap-az2,ap-az3}
+mr2       ca-central-1    false    true       {ca-az1,ca-az2,ca-az3}
+mr2       us-central-1    false    false      {usc-az1,usc-az2,usc-az3}
+mr2       us-east-1       false    false      {us-az1,us-az2,us-az3}
+mr2       us-west-1       false    false      {usw-az1,usw-az2,usw-az3}
+
+query TTBBT colnames,rowsort
+SHOW REGIONS FROM DATABASE mr3
+----
+database  region          primary  secondary  zones
+mr3       ca-central-1    true     false      {ca-az1,ca-az2,ca-az3}
+mr3       us-central-1    false    true       {usc-az1,usc-az2,usc-az3}
+mr3       ap-southeast-2  false    false      {ap-az1,ap-az2,ap-az3}
+mr3       us-east-1       false    false      {us-az1,us-az2,us-az3}
+mr3       us-west-1       false    false      {usw-az1,usw-az2,usw-az3}
+
+query TTTT colnames,rowsort
+SHOW REGIONS FROM ALL DATABASES
+----
+database_name  regions                                                         primary_region  secondary_region
+db             {ap-southeast-2,ca-central-1,us-east-1}                         ap-southeast-2  ·
+defaultdb      {}                                                              NULL            NULL
+mr1            {ap-southeast-2,ca-central-1,us-central-1,us-east-1,us-west-1}  us-east-1       us-west-1
+mr2            {ap-southeast-2,ca-central-1,us-central-1,us-east-1,us-west-1}  ap-southeast-2  ca-central-1
+mr3            {ap-southeast-2,ca-central-1,us-central-1,us-east-1,us-west-1}  ca-central-1    us-central-1
+no_list        {ap-southeast-2,ca-central-1}                                   ap-southeast-2  ca-central-1
+non_mr         {}                                                              NULL            NULL
+postgres       {}                                                              NULL            NULL
+system         {}                                                              NULL            NULL
+test           {}                                                              NULL            NULL
+
+# Verify that the secondary region does not leak into lease_preferences and
+# voter_constraints for tables/partitions confined to a super region when the
+# secondary region is outside that super region.
+#
+# mr2 was created earlier with:
+#   Primary: ap-southeast-2 (outside any super region)
+#   Secondary: ca-central-1 (set above, also outside any super region)
+#   Super region test1: us-east-1, us-west-1
+subtest secondary_super_region_leak
+
+statement ok
+USE mr2;
+
+# Expand super region test1 to 3 regions so it meets the minimum for SURVIVE
+# REGION FAILURE.
+statement ok
+ALTER DATABASE mr2 ALTER SUPER REGION "test1" VALUES "us-east-1", "us-west-1", "us-central-1"
+
+statement ok
+ALTER DATABASE mr2 SURVIVE REGION FAILURE
+
+# REGIONAL BY TABLE inside super region: the secondary region (ca-central-1)
+# is outside the super region and must NOT appear in lease_preferences or
+# voter_constraints.
+statement ok
+CREATE TABLE mr2.rbt_in_sr() LOCALITY REGIONAL BY TABLE IN "us-east-1"
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE mr2.rbt_in_sr
+----
+TABLE mr2.public.rbt_in_sr  ALTER TABLE mr2.public.rbt_in_sr CONFIGURE ZONE USING
+                               range_min_bytes = 134217728,
+                               range_max_bytes = 536870912,
+                               gc.ttlseconds = 14400,
+                               num_replicas = 5,
+                               num_voters = 5,
+                               constraints = '{+region=us-central-1: 2, +region=us-east-1: 2, +region=us-west-1: 1}',
+                               voter_constraints = '{+region=us-east-1: 2}',
+                               lease_preferences = '[[+region=us-east-1]]'
+
+# Control: REGIONAL BY TABLE outside super region. The secondary region
+# (ca-central-1) SHOULD appear in lease_preferences and voter_constraints.
+statement ok
+CREATE TABLE mr2.rbt_outside_sr() LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE mr2.rbt_outside_sr
+----
+TABLE mr2.public.rbt_outside_sr  ALTER TABLE mr2.public.rbt_outside_sr CONFIGURE ZONE USING
+                                   range_min_bytes = 134217728,
+                                   range_max_bytes = 536870912,
+                                   gc.ttlseconds = 14400,
+                                   num_replicas = 7,
+                                   num_voters = 5,
+                                   constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
+                                   voter_constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2}',
+                                   lease_preferences = '[[+region=ap-southeast-2], [+region=ca-central-1]]'
+
+# REGIONAL BY ROW table to test partitions.
+statement ok
+CREATE TABLE mr2.rbr_sr(k INT PRIMARY KEY) LOCALITY REGIONAL BY ROW
+
+# Partition inside super region: no secondary region leak.
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" OF TABLE mr2.rbr_sr
+----
+PARTITION "us-east-1" OF TABLE mr2.public.rbr_sr  ALTER PARTITION "us-east-1" OF TABLE mr2.public.rbr_sr CONFIGURE ZONE USING
+                                                     range_min_bytes = 134217728,
+                                                     range_max_bytes = 536870912,
+                                                     gc.ttlseconds = 14400,
+                                                     num_replicas = 5,
+                                                     num_voters = 5,
+                                                     constraints = '{+region=us-central-1: 2, +region=us-east-1: 2, +region=us-west-1: 1}',
+                                                     voter_constraints = '{+region=us-east-1: 2}',
+                                                     lease_preferences = '[[+region=us-east-1]]'
+
+# Partition outside super region: secondary region should be present.
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "ap-southeast-2" OF TABLE mr2.rbr_sr
+----
+PARTITION "ap-southeast-2" OF TABLE mr2.public.rbr_sr  ALTER PARTITION "ap-southeast-2" OF TABLE mr2.public.rbr_sr CONFIGURE ZONE USING
+                                                         range_min_bytes = 134217728,
+                                                         range_max_bytes = 536870912,
+                                                         gc.ttlseconds = 14400,
+                                                         num_replicas = 7,
+                                                         num_voters = 5,
+                                                         constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
+                                                         voter_constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2}',
+                                                         lease_preferences = '[[+region=ap-southeast-2], [+region=ca-central-1]]'
+
+statement ok
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
+subtest end
+
+# Verify ALTER PRIMARY REGION is blocked when it would break the
+# primary/secondary super region invariant.
+subtest alter_primary_region_super_region_secondary
+
+statement ok
+CREATE DATABASE pr_sr_test PRIMARY REGION "us-east-1"
+    REGIONS "us-west-1", "us-central-1", "ca-central-1", "ap-southeast-2"
+
+statement ok
+ALTER DATABASE pr_sr_test ADD SUPER REGION "usa"
+    VALUES "us-east-1", "us-west-1", "us-central-1"
+
+statement ok
+ALTER DATABASE pr_sr_test ADD SUPER REGION "other"
+    VALUES "ca-central-1", "ap-southeast-2"
+
+statement ok
+ALTER DATABASE pr_sr_test SET SECONDARY REGION "us-west-1"
+
+statement ok
+SET alter_primary_region_super_region_override = 'on'
+
+# Case 1: Cross-SR move (usa -> other) should fail.
+statement error pq: cannot change primary region to ca-central-1: the primary and secondary regions must be in the same super region
+ALTER DATABASE pr_sr_test SET PRIMARY REGION "ca-central-1"
+
+# Case 2: Within-SR move (us-east-1 -> us-central-1, both in "usa") should succeed.
+statement ok
+ALTER DATABASE pr_sr_test SET PRIMARY REGION "us-central-1"
+
+# Case 3: Escape hatch — drop secondary, move cross-SR, re-establish.
+statement ok
+ALTER DATABASE pr_sr_test DROP SECONDARY REGION
+
+statement ok
+ALTER DATABASE pr_sr_test SET PRIMARY REGION "ca-central-1"
+
+statement ok
+ALTER DATABASE pr_sr_test SET SECONDARY REGION "ap-southeast-2"
+
+# Case 4: Cross-SR move back (other -> usa) should fail.
+statement error pq: cannot change primary region to us-east-1: the primary and secondary regions must be in the same super region
+ALTER DATABASE pr_sr_test SET PRIMARY REGION "us-east-1"
+
+# Case 5: Fix by dropping secondary first, then move.
+statement ok
+ALTER DATABASE pr_sr_test DROP SECONDARY REGION
+
+statement ok
+ALTER DATABASE pr_sr_test SET PRIMARY REGION "us-east-1"
+
+statement ok
+ALTER DATABASE pr_sr_test SET SECONDARY REGION "us-west-1"
+
+# State: P=us-east-1, S=us-west-1, SR "usa"={us-east-1, us-west-1, us-central-1}.
+
+# Case 6: ALTER SUPER REGION dropping the secondary region should fail.
+statement error pq: the secondary region must be in the same super region as the current primary region
+ALTER DATABASE pr_sr_test ALTER SUPER REGION "usa" VALUES "us-east-1", "us-central-1"
+
+# Case 7: ALTER SUPER REGION dropping the primary region should fail.
+statement error pq: the secondary region must be in the same super region as the current primary region
+ALTER DATABASE pr_sr_test ALTER SUPER REGION "usa" VALUES "us-west-1", "us-central-1"
+
+# Case 8: ALTER SUPER REGION dropping both primary and secondary should succeed.
+statement ok
+ALTER DATABASE pr_sr_test ALTER SUPER REGION "usa" VALUES "us-central-1"
+
+# Case 9: ALTER SUPER REGION adding back both primary and secondary should succeed.
+statement ok
+ALTER DATABASE pr_sr_test ALTER SUPER REGION "usa" VALUES "us-east-1", "us-west-1", "us-central-1"
+
+statement ok
+DROP DATABASE pr_sr_test
+
+subtest end

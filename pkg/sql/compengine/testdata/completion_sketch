@@ -1,0 +1,242 @@
+# An example query, for illustration purposes.
+comp at=2
+SELECT * FROM db.myt;
+----
+i	"select"	 	0	6
+'	""	 	2	2
+*	"*"	 	7	8
+i	"from"	 	9	13
+i	"db"	 	14	16
+.	"."	 	16	17
+i	"myt"	 	17	20
+;	";"	 	20	21
+--
+-2	""	 	0	0
+-1	""	 	0	0
+0	"select"	 	0	6
+1	"*"	 	7	8
+2	"from"	 	9	13
+
+
+subtest empty_string
+
+# Base case: zero offset on empty input.
+comp
+----
+_	""	 	0	0
+--
+-2	""	 	0	0
+-1	""	 	0	0
+0	""	 	0	0
+1	""	 	0	0
+2	""	 	0	0
+
+# Large offset on empty input. We clamp the offset in the cursor marker.
+comp at=100
+----
+_	""	 	0	0
+--
+-2	""	 	0	0
+-1	""	 	0	0
+0	""	 	0	0
+1	""	 	0	0
+2	""	 	0	0
+
+
+subtest end
+
+subtest whitespace
+
+# What happens when the cursor is in-between words.
+
+# Space in the middle.
+comp at=10
+SELECT            * FROM foo
+----
+i	"select"	 	0	6
+_	""	 	10	10
+*	"*"	 	18	19
+i	"from"	 	20	24
+i	"foo"	 	25	28
+--
+-2	""	 	0	0
+-1	""	 	0	0
+0	"select"	 	0	6
+1	"*"	 	18	19
+2	"from"	 	20	24
+
+# When the cursor is on space at the beginning.
+comp at=2
+/*comment*/SELECT
+----
+_	""	 	2	2
+i	"select"	 	11	17
+--
+-2	""	 	0	0
+-1	""	 	0	0
+0	""	 	0	0
+1	"select"	 	11	17
+2	""	 	17	17
+
+# Cursor on space at the end.
+comp at=10
+SELECT-- sql comment to the end of line
+----
+i	"select"	 	0	6
+_	""	 	10	10
+--
+-2	""	 	0	0
+-1	""	 	0	0
+0	"select"	 	0	6
+1	""	 	10	10
+2	""	 	10	10
+
+
+subtest end
+
+subtest past_end
+
+# When the cursor is beyond the end.
+# Notice how the cursor position is clamped
+# to the size of the string, but still
+# using the '_' marker to indicate it
+# was outside of the word.
+comp at=200
+SELECT
+----
+i	"select"	 	0	6
+_	""	 	6	6
+--
+-2	""	 	0	0
+-1	""	 	0	0
+0	"select"	 	0	6
+1	""	 	6	6
+2	""	 	6	6
+
+subtest end
+
+subtest after_punct
+
+comp at=9
+select a,
+----
+i	"select"	 	0	6
+i	"a"	 	7	8
+,	","	 	8	9
+'	""	 	9	9
+--
+-2	"select"	 	0	6
+-1	"a"	 	7	8
+0	","	 	8	9
+1	""	 	9	9
+2	""	 	9	9
+
+subtest end
+
+subtest special_idents
+
+# Show when identifiers are quoted.
+comp
+SELECT "PG_CATALOG", "HelloWorld!"
+----
+i	"select"	 	0	6
+'	""	 	0	0
+i	"PG_CATALOG"	q	7	19
+,	","	 	19	20
+i	"HelloWorld!"	q	21	34
+--
+-2	""	 	0	0
+-1	""	 	0	0
+0	"select"	 	0	6
+1	"PG_CATALOG"	q	7	19
+2	","	 	19	20
+
+subtest end
+
+subtest literals
+
+comp
+SELECT 'hello' 123 b'HELLO' B'011001'
+----
+i	"select"	 	0	6
+'	""	 	0	0
+s	"hello"	 	7	15
+0	"123"	 	15	18
+b	"HELLO"	 	19	28
+B	"011001"	 	28	37
+--
+-2	""	 	0	0
+-1	""	 	0	0
+0	"select"	 	0	6
+1	"hello"	 	7	15
+2	"123"	 	15	18
+
+subtest end
+
+subtest casts
+
+comp
+SELECT 0::int  0:::int
+----
+i	"select"	 	0	6
+'	""	 	0	0
+0	"0"	 	7	8
+:	":"	 	8	10
+i	"int"	 	10	13
+0	"0"	 	15	16
+:	":"	 	16	19
+i	"int"	 	19	22
+--
+-2	""	 	0	0
+-1	""	 	0	0
+0	"select"	 	0	6
+1	"0"	 	7	8
+2	":"	 	8	10
+
+subtest end
+
+subtest lex_errors
+
+# We want to complete incomplete quoted identifiers.
+comp at=8
+SELECT "foo
+----
+i	"select"	 	0	6
+i	"foo"	q	7	11
+'	""	 	8	8
+--
+-2	""	 	0	0
+-1	"select"	 	0	6
+0	"foo"	q	7	11
+1	""	 	8	8
+2	""	 	8	8
+
+# We want to avoid completing inside strings.
+comp at=8
+SELECT 'foo
+----
+i	"select"	 	0	6
+s	"unterminated string"	 	7	11
+'	""	 	8	8
+--
+-2	""	 	0	0
+-1	"select"	 	0	6
+0	"unterminated string"	 	7	11
+1	""	 	8	8
+2	""	 	8	8
+
+comp at=8
+SELECT B'21232', foo
+----
+i	"select"	 	0	6
+B	"\"2\" is not a valid binary digit"	 	7	10
+'	""	 	8	8
+--
+-2	""	 	0	0
+-1	"select"	 	0	6
+0	"\"2\" is not a valid binary digit"	 	7	10
+1	""	 	8	8
+2	""	 	8	8
+
+
+subtest end

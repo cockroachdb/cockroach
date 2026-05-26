@@ -1,0 +1,67 @@
+statement ok
+CREATE TABLE xy (x INT, y INT);
+
+statement error pq: unimplemented: RECORD type for PL/pgSQL variables is not yet supported.*
+CREATE OR REPLACE PROCEDURE foo() AS $$
+  DECLARE
+    x RECORD;
+  BEGIN
+    RAISE NOTICE 'x: %', x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+subtest error_detail
+
+# Regression test for #123672 - annotate "unsupported" errors with the
+# unsupported statement type.
+statement ok
+CREATE TABLE mytable (inserted_by TEXT, inserted TIMESTAMP);
+CREATE TABLE c (checked_user TEXT, checked_date TIMESTAMP);
+
+statement error pgcode 0A000 DETAIL: stmt_dyn_exec is not yet supported
+CREATE PROCEDURE test(checked_user TEXT, checked_date TIMESTAMP)
+AS $$
+DECLARE
+  c INT;
+BEGIN
+  EXECUTE 'SELECT count(*) FROM mytable WHERE inserted_by = $1 AND inserted <= $2'
+    INTO c
+    USING checked_user, checked_date;
+END;
+$$ LANGUAGE plpgsql;
+
+statement ok
+CREATE TABLE t6 (a int);
+
+statement error pgcode 0A000 DETAIL: stmt_case is not yet supported
+CREATE PROCEDURE p6(IN i int)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  INSERT INTO t6 VALUES (i);
+  CASE i
+    WHEN 6 THEN
+      COMMIT;
+    WHEN 7 THEN
+      ROLLBACK;
+    WHEN 8 THEN
+      COMMIT;
+    ELSE
+      ROLLBACK;
+  END CASE;
+END;
+$$;
+
+# Add a helpful hint to the error when the user attempts to access an element of
+# a composite-typed variable without parentheses.
+subtest element_access_parens
+
+statement error pgcode 42P01 pq: no data source matches prefix: val in this context\nHINT: to access a field of a composite-typed column or variable, surround the column/variable name in parentheses: \(varName\).fieldName
+CREATE FUNCTION f(val xy) RETURNS xy AS $$
+  BEGIN
+    val.x := val.x + 100;
+    RETURN val;
+  END
+$$ LANGUAGE PLpgSQL;
+
+subtest end

@@ -1,0 +1,228 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_schema.out --label=/mnt/data1/postgres/src/test/regress/results/create_schema.out /mnt/data1/postgres/src/test/regress/expected/create_schema.out /mnt/data1/postgres/src/test/regress/results/create_schema.out
+--- /mnt/data1/postgres/src/test/regress/expected/create_schema.out
++++ /mnt/data1/postgres/src/test/regress/results/create_schema.out
+@@ -3,96 +3,191 @@
+ --
+ -- Schema creation with elements.
+ CREATE ROLE regress_create_schema_role SUPERUSER;
++ERROR:  at or near "superuser": syntax error
++DETAIL:  source SQL:
++CREATE ROLE regress_create_schema_role SUPERUSER
++                                       ^
++HINT:  try \h CREATE ROLE
+ -- Cases where schema creation fails as objects are qualified with a schema
+ -- that does not match with what's expected.
+ -- This checks all the object types that include schema qualifications.
+ CREATE SCHEMA AUTHORIZATION regress_create_schema_role
+   CREATE SEQUENCE schema_not_existing.seq;
+-ERROR:  CREATE specifies a schema (schema_not_existing) different from the one being created (regress_create_schema_role)
++ERROR:  at or near "create": syntax error
++DETAIL:  source SQL:
++CREATE SCHEMA AUTHORIZATION regress_create_schema_role
++  CREATE SEQUENCE schema_not_existing.seq
++  ^
+ CREATE SCHEMA AUTHORIZATION regress_create_schema_role
+   CREATE TABLE schema_not_existing.tab (id int);
+-ERROR:  CREATE specifies a schema (schema_not_existing) different from the one being created (regress_create_schema_role)
++ERROR:  at or near "create": syntax error
++DETAIL:  source SQL:
++CREATE SCHEMA AUTHORIZATION regress_create_schema_role
++  CREATE TABLE schema_not_existing.tab (id int)
++  ^
+ CREATE SCHEMA AUTHORIZATION regress_create_schema_role
+   CREATE VIEW schema_not_existing.view AS SELECT 1;
+-ERROR:  CREATE specifies a schema (schema_not_existing) different from the one being created (regress_create_schema_role)
++ERROR:  at or near "create": syntax error
++DETAIL:  source SQL:
++CREATE SCHEMA AUTHORIZATION regress_create_schema_role
++  CREATE VIEW schema_not_existing.view AS SELECT 1
++  ^
+ CREATE SCHEMA AUTHORIZATION regress_create_schema_role
+   CREATE INDEX ON schema_not_existing.tab (id);
+-ERROR:  CREATE specifies a schema (schema_not_existing) different from the one being created (regress_create_schema_role)
++ERROR:  at or near "create": syntax error
++DETAIL:  source SQL:
++CREATE SCHEMA AUTHORIZATION regress_create_schema_role
++  CREATE INDEX ON schema_not_existing.tab (id)
++  ^
+ CREATE SCHEMA AUTHORIZATION regress_create_schema_role
+   CREATE TRIGGER schema_trig BEFORE INSERT ON schema_not_existing.tab
+   EXECUTE FUNCTION schema_trig.no_func();
+-ERROR:  CREATE specifies a schema (schema_not_existing) different from the one being created (regress_create_schema_role)
++ERROR:  at or near "create": syntax error
++DETAIL:  source SQL:
++CREATE SCHEMA AUTHORIZATION regress_create_schema_role
++  CREATE TRIGGER schema_trig BEFORE INSERT ON schema_not_existing.tab
++  ^
+ -- Again, with a role specification and no schema names.
+ SET ROLE regress_create_schema_role;
++ERROR:  role/user "regress_create_schema_role" does not exist
+ CREATE SCHEMA AUTHORIZATION CURRENT_ROLE
+   CREATE SEQUENCE schema_not_existing.seq;
+-ERROR:  CREATE specifies a schema (schema_not_existing) different from the one being created (regress_create_schema_role)
++ERROR:  at or near "current_role": syntax error
++DETAIL:  source SQL:
++CREATE SCHEMA AUTHORIZATION CURRENT_ROLE
++                            ^
++HINT:  try \h CREATE SCHEMA
+ CREATE SCHEMA AUTHORIZATION CURRENT_ROLE
+   CREATE TABLE schema_not_existing.tab (id int);
+-ERROR:  CREATE specifies a schema (schema_not_existing) different from the one being created (regress_create_schema_role)
++ERROR:  at or near "current_role": syntax error
++DETAIL:  source SQL:
++CREATE SCHEMA AUTHORIZATION CURRENT_ROLE
++                            ^
++HINT:  try \h CREATE SCHEMA
+ CREATE SCHEMA AUTHORIZATION CURRENT_ROLE
+   CREATE VIEW schema_not_existing.view AS SELECT 1;
+-ERROR:  CREATE specifies a schema (schema_not_existing) different from the one being created (regress_create_schema_role)
++ERROR:  at or near "current_role": syntax error
++DETAIL:  source SQL:
++CREATE SCHEMA AUTHORIZATION CURRENT_ROLE
++                            ^
++HINT:  try \h CREATE SCHEMA
+ CREATE SCHEMA AUTHORIZATION CURRENT_ROLE
+   CREATE INDEX ON schema_not_existing.tab (id);
+-ERROR:  CREATE specifies a schema (schema_not_existing) different from the one being created (regress_create_schema_role)
++ERROR:  at or near "current_role": syntax error
++DETAIL:  source SQL:
++CREATE SCHEMA AUTHORIZATION CURRENT_ROLE
++                            ^
++HINT:  try \h CREATE SCHEMA
+ CREATE SCHEMA AUTHORIZATION CURRENT_ROLE
+   CREATE TRIGGER schema_trig BEFORE INSERT ON schema_not_existing.tab
+   EXECUTE FUNCTION schema_trig.no_func();
+-ERROR:  CREATE specifies a schema (schema_not_existing) different from the one being created (regress_create_schema_role)
++ERROR:  at or near "current_role": syntax error
++DETAIL:  source SQL:
++CREATE SCHEMA AUTHORIZATION CURRENT_ROLE
++                            ^
++HINT:  try \h CREATE SCHEMA
+ -- Again, with a schema name and a role specification.
+ CREATE SCHEMA regress_schema_1 AUTHORIZATION CURRENT_ROLE
+   CREATE SEQUENCE schema_not_existing.seq;
+-ERROR:  CREATE specifies a schema (schema_not_existing) different from the one being created (regress_schema_1)
++ERROR:  at or near "current_role": syntax error
++DETAIL:  source SQL:
++CREATE SCHEMA regress_schema_1 AUTHORIZATION CURRENT_ROLE
++                                             ^
++HINT:  try \h CREATE SCHEMA
+ CREATE SCHEMA regress_schema_1 AUTHORIZATION CURRENT_ROLE
+   CREATE TABLE schema_not_existing.tab (id int);
+-ERROR:  CREATE specifies a schema (schema_not_existing) different from the one being created (regress_schema_1)
++ERROR:  at or near "current_role": syntax error
++DETAIL:  source SQL:
++CREATE SCHEMA regress_schema_1 AUTHORIZATION CURRENT_ROLE
++                                             ^
++HINT:  try \h CREATE SCHEMA
+ CREATE SCHEMA regress_schema_1 AUTHORIZATION CURRENT_ROLE
+   CREATE VIEW schema_not_existing.view AS SELECT 1;
+-ERROR:  CREATE specifies a schema (schema_not_existing) different from the one being created (regress_schema_1)
++ERROR:  at or near "current_role": syntax error
++DETAIL:  source SQL:
++CREATE SCHEMA regress_schema_1 AUTHORIZATION CURRENT_ROLE
++                                             ^
++HINT:  try \h CREATE SCHEMA
+ CREATE SCHEMA regress_schema_1 AUTHORIZATION CURRENT_ROLE
+   CREATE INDEX ON schema_not_existing.tab (id);
+-ERROR:  CREATE specifies a schema (schema_not_existing) different from the one being created (regress_schema_1)
++ERROR:  at or near "current_role": syntax error
++DETAIL:  source SQL:
++CREATE SCHEMA regress_schema_1 AUTHORIZATION CURRENT_ROLE
++                                             ^
++HINT:  try \h CREATE SCHEMA
+ CREATE SCHEMA regress_schema_1 AUTHORIZATION CURRENT_ROLE
+   CREATE TRIGGER schema_trig BEFORE INSERT ON schema_not_existing.tab
+   EXECUTE FUNCTION schema_trig.no_func();
+-ERROR:  CREATE specifies a schema (schema_not_existing) different from the one being created (regress_schema_1)
++ERROR:  at or near "current_role": syntax error
++DETAIL:  source SQL:
++CREATE SCHEMA regress_schema_1 AUTHORIZATION CURRENT_ROLE
++                                             ^
++HINT:  try \h CREATE SCHEMA
+ RESET ROLE;
+ -- Cases where the schema creation succeeds.
+ -- The schema created matches the role name.
+ CREATE SCHEMA AUTHORIZATION regress_create_schema_role
+   CREATE TABLE regress_create_schema_role.tab (id int);
++ERROR:  at or near "create": syntax error
++DETAIL:  source SQL:
++CREATE SCHEMA AUTHORIZATION regress_create_schema_role
++  CREATE TABLE regress_create_schema_role.tab (id int)
++  ^
+ \d regress_create_schema_role.tab
+-      Table "regress_create_schema_role.tab"
+- Column |  Type   | Collation | Nullable | Default 
+---------+---------+-----------+----------+---------
+- id     | integer |           |          | 
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(tab)$' COLLATE pg_catalog.default
++                                                                   ^
+ DROP SCHEMA regress_create_schema_role CASCADE;
+-NOTICE:  drop cascades to table regress_create_schema_role.tab
++ERROR:  unknown schema "regress_create_schema_role"
+ -- Again, with a different role specification and no schema names.
+ SET ROLE regress_create_schema_role;
++ERROR:  role/user "regress_create_schema_role" does not exist
+ CREATE SCHEMA AUTHORIZATION CURRENT_ROLE
+   CREATE TABLE regress_create_schema_role.tab (id int);
++ERROR:  at or near "current_role": syntax error
++DETAIL:  source SQL:
++CREATE SCHEMA AUTHORIZATION CURRENT_ROLE
++                            ^
++HINT:  try \h CREATE SCHEMA
+ \d regress_create_schema_role.tab
+-      Table "regress_create_schema_role.tab"
+- Column |  Type   | Collation | Nullable | Default 
+---------+---------+-----------+----------+---------
+- id     | integer |           |          | 
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(tab)$' COLLATE pg_catalog.default
++                                                                   ^
+ DROP SCHEMA regress_create_schema_role CASCADE;
+-NOTICE:  drop cascades to table tab
++ERROR:  unknown schema "regress_create_schema_role"
+ -- Again, with a schema name and a role specification.
+ CREATE SCHEMA regress_schema_1 AUTHORIZATION CURRENT_ROLE
+   CREATE TABLE regress_schema_1.tab (id int);
++ERROR:  at or near "current_role": syntax error
++DETAIL:  source SQL:
++CREATE SCHEMA regress_schema_1 AUTHORIZATION CURRENT_ROLE
++                                             ^
++HINT:  try \h CREATE SCHEMA
+ \d regress_schema_1.tab
+-           Table "regress_schema_1.tab"
+- Column |  Type   | Collation | Nullable | Default 
+---------+---------+-----------+----------+---------
+- id     | integer |           |          | 
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(tab)$' COLLATE pg_catalog.default
++                                                                   ^
+ DROP SCHEMA regress_schema_1 CASCADE;
+-NOTICE:  drop cascades to table regress_schema_1.tab
++ERROR:  unknown schema "regress_schema_1"
+ RESET ROLE;
+ -- Clean up
+ DROP ROLE regress_create_schema_role;
++ERROR:  role/user "regress_create_schema_role" does not exist

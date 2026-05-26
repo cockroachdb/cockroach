@@ -1,0 +1,333 @@
+# =============================================================================
+# comp.opt contains normalization rules for comparison operators.
+# =============================================================================
+
+# CommuteVarInequality is similar to CommuteVar (in scalar.opt), except it
+# handles inequality comparison operators that need special handling to commute
+# operands.
+[CommuteVarInequality, Normalize]
+(Le | Lt | Ge | Gt $left:^(Variable) $right:(Variable))
+=>
+(CommuteInequality (OpName) $left $right)
+
+# CommuteConstInequality is similar to CommuteConst (in scalar.opt), except
+# that it handles inequality comparison operators that need special handling to
+# commute operands.
+[CommuteConstInequality, Normalize]
+(Le | Lt | Ge | Gt $left:(ConstValue) $right:^(ConstValue))
+=>
+(CommuteInequality (OpName) $left $right)
+
+# NormalizeCmpPlusConst builds up constant expression trees on one side of the
+# comparison, in cases like this:
+#       cmp          cmp
+#      /   \        /   \
+#    [+]    2  ->  a   [-]
+#   /   \             /   \
+#  a     1           2     1
+#
+# The rule can only perform this transformation if all of the following criteria
+# are met:
+#
+#   1. The generated Minus expression will error if there is an overflow (see
+#      ArithmeticErrorsOnOverflow).
+#   2. A Minus overload for the given input types exists and has an appropriate
+#      volatility.
+#  2. There is no error when evaluating the new binary expression.
+#
+# NOTE: Ne is not part of the operator choices because it wasn't handled in
+#       normalize.go either. We can add once we've proved it's OK to do so.
+[NormalizeCmpPlusConst, Normalize]
+(Eq | Ge | Gt | Le | Lt
+    (Plus $leftLeft:^(ConstValue) $leftRight:(Const))
+    $right:(Const) &
+        (ArithmeticErrorsOnOverflow
+            (TypeOf $right)
+            (TypeOf $leftRight)
+        ) &
+        (CanConstructBinary Minus $right $leftRight) &
+        (Let
+            ($result $ok):(FoldBinary Minus $right $leftRight)
+            $ok
+        )
+)
+=>
+((OpName) $leftLeft $result)
+
+# NormalizeCmpMinusConst builds up constant expression trees on one side of the
+# comparison, in cases like this:
+#      cmp         cmp
+#      /  \        /  \
+#    [-]   2  ->  a  [+]
+#   /   \           /   \
+#  a     1         2     1
+#
+# See NormalizeCmpPlusConst for more details.
+[NormalizeCmpMinusConst, Normalize]
+(Eq | Ge | Gt | Le | Lt
+    (Minus $leftLeft:^(ConstValue) $leftRight:(Const))
+    $right:(Const) &
+        (ArithmeticErrorsOnOverflow
+            (TypeOf $right)
+            (TypeOf $leftRight)
+        ) &
+        (CanConstructBinary Plus $right $leftRight) &
+        (Let
+            ($result $ok):(FoldBinary Plus $right $leftRight) $ok
+        )
+)
+=>
+((OpName) $leftLeft $result)
+
+# NormalizeCmpConstMinus builds up constant expression trees on one side of the
+# comparison, in cases like this:
+#      cmp          cmp
+#      /  \         /  \
+#    [-]   2  ->  [-]   a
+#   /   \        /   \
+#  1     a      1     2
+#
+# See NormalizeCmpPlusConst for more details.
+[NormalizeCmpConstMinus, Normalize]
+(Eq | Ge | Gt | Le | Lt
+    (Minus $leftLeft:(Const) $leftRight:^(ConstValue))
+    $right:(Const) &
+        (ArithmeticErrorsOnOverflow
+            (TypeOf $leftLeft)
+            (TypeOf $right)
+        ) &
+        (CanConstructBinary Minus $leftLeft $right) &
+        (Let
+            ($result $ok):(FoldBinary Minus $leftLeft $right) $ok
+        )
+)
+=>
+((OpName) $result $leftRight)
+
+# NormalizeTupleEquality breaks up expressions like:
+#   (a, b, c) = (x, y, z)
+# into
+#   (a = x) AND (b = y) AND (c = z)
+#
+# This rule makes it easier to extract constraints from boolean expressions,
+# so that recognition code doesn't have to handle the tuple case separately.
+[NormalizeTupleEquality, Normalize]
+(Eq (Tuple $left:*) (Tuple $right:*))
+=>
+(NormalizeTupleEquality $left $right)
+
+# FoldNullComparisonLeft replaces the comparison operator with null if its
+# left input is null.
+[FoldNullComparisonLeft, Normalize]
+(Eq | Ne | Ge | Gt | Le | Lt | Like | NotLike | ILike | NotILike
+        | SimilarTo | NotSimilarTo | RegMatch | NotRegMatch
+        | RegIMatch | NotRegIMatch | Contains | ContainedBy
+        | Overlaps | JsonExists | JsonSomeExists | JsonAllExists
+    $left:(Null)
+    *
+)
+=>
+(Null (BoolType))
+
+# FoldNullComparisonRight replaces the comparison operator with null if its
+# right input is null.
+[FoldNullComparisonRight, Normalize]
+(Eq | Ne | Ge | Gt | Le | Lt | Like | NotLike | ILike | NotILike
+        | SimilarTo | NotSimilarTo | RegMatch | NotRegMatch
+        | RegIMatch | NotRegIMatch | Contains | ContainedBy
+        | Overlaps | JsonExists | JsonSomeExists | JsonAllExists
+    *
+    $right:(Null)
+)
+=>
+(Null (BoolType))
+
+# FoldIsNull replaces NULL IS NULL with True.
+[FoldIsNull, Normalize]
+(Is (Null) (Null))
+=>
+(True)
+
+# FoldNonNullIsNull replaces x IS NULL with False where x is a non-Null constant.
+[FoldNonNullIsNull, Normalize]
+(Is $left:(IsNeverNull $left) (Null))
+=>
+(False)
+
+# FoldNullTupleIsTupleNull replaces x IS NULL with True if x is a tuple with
+# only constant, null elements.
+[FoldNullTupleIsTupleNull, Normalize]
+(IsTupleNull $input:(Tuple) & (HasAllNullElements $input))
+=>
+(True)
+
+# FoldNonNullTupleIsTupleNull replaces x IS NULL with False if x is a tuple
+# with at least one constant, non-null element.
+[FoldNonNullTupleIsTupleNull, Normalize]
+(IsTupleNull $input:(Tuple) & (HasNonNullElement $input))
+=>
+(False)
+
+# FoldIsNotNull replaces NULL IS NOT NULL with False.
+[FoldIsNotNull, Normalize]
+(IsNot (Null) (Null))
+=>
+(False)
+
+# FoldNonNullIsNotNull replaces x IS NOT NULL with True where x is a non-Null constant.
+[FoldNonNullIsNotNull, Normalize]
+(IsNot $left:(IsNeverNull $left) (Null))
+=>
+(True)
+
+# FoldNonNullTupleIsTupleNotNull replaces x IS NOT NULL with True if x is a
+# tuple with only constant, non-null elements.
+[FoldNonNullTupleIsTupleNotNull, Normalize]
+(IsTupleNotNull $input:(Tuple) & (HasAllNonNullElements $input))
+=>
+(True)
+
+# FoldNullTupleIsTupleNotNull replaces x IS NOT NULL with False if x is a tuple
+# with at least one constant, null element.
+[FoldNullTupleIsTupleNotNull, Normalize]
+(IsTupleNotNull $input:(Tuple) & (HasNullElement $input))
+=>
+(False)
+
+# CommuteNullIs moves a NULL onto the right side of an IS/IS NOT comparison.
+[CommuteNullIs, Normalize]
+(Is | IsNot $left:(Null) $right:^(Null))
+=>
+((OpName) $right $left)
+
+# NormalizeCmpTimeZoneFunction normalizes timezone functions within
+# comparison operators. It only matches expressions when:
+#
+#   1. The left side of the comparison is a timezone() function.
+#   2. The second argument to timezone() is a variable of type TIMESTAMP.
+#   3. The right side of the comparison is a constant value TIMESTAMPTZ.
+#
+# Here's an example:
+#
+#   timezone('America/Denver', ts) = '2020-06-01 12:35:55-07'
+#   =>
+#   ts = timezone('America/Denver', '2020-06-01 12:35:55-07')
+#
+# This normalization is valid because the overloaded function timezone(zone,
+# TIMESTAMP) is the inverse of timezone(zone, TIMESTAMPTZ).
+[NormalizeCmpTimeZoneFunction, Normalize]
+(Eq | Ge | Gt | Le | Lt
+    (Function $args:* $private:(FunctionPrivate "timezone"))
+    $right:(ConstValue) &
+        (IsTimestampTZ $right) &
+        (Let ($zone $ts $ok):(ScalarPair $args) $ok) &
+        (IsTimestamp $ts)
+)
+=>
+((OpName) $ts (MakeTimeZoneFunction $zone $right))
+
+# NormalizeCmpTimeZoneFunctionTZ normalizes timezone functions within
+# comparison operators. It only matches expressions when:
+#
+#   1. The left side of the comparison is a timezone() function.
+#   2. The second argument to timezone() is a variable of type TIMESTAMPTZ.
+#   3. The right side of the comparison is a constant value TIMESTAMP.
+#
+# Here's an example:
+#
+#   timezone('America/Denver', tz) = '2020-06-01 12:35:55'
+#   =>
+#   tz = timezone('America/Denver', '2020-06-01 12:35:55')
+#
+# This normalization is possible because the overloaded function timezone(zone,
+# TIMESTAMPTZ) is the inverse of timezone(zone, TIMESTAMP).
+[NormalizeCmpTimeZoneFunctionTZ, Normalize]
+(Eq | Ge | Gt | Le | Lt
+    (Function $args:* $private:(FunctionPrivate "timezone"))
+    $right:(ConstValue) &
+        (IsTimestamp $right) &
+        (Let ($zone $tz $ok):(ScalarPair $args) $ok) &
+        (IsTimestampTZ $tz) &
+        ^(IsConstValueOrGroupOfConstValues $tz)
+)
+=>
+((OpName) $tz (MakeTimeZoneFunction $zone $right))
+
+# FoldEqTrue replaces x = True with x.
+[FoldEqTrue, Normalize]
+(Eq $left:* (True))
+=>
+$left
+
+# FoldEqFalse replaces x = False with NOT x.
+[FoldEqFalse, Normalize]
+(Eq $left:* (False))
+=>
+(Not $left)
+
+# FoldNeTrue replaces x != True with NOT x.
+[FoldNeTrue, Normalize]
+(Ne $left:* (True))
+=>
+(Not $left)
+
+# FoldNeFalse replaces x != False with x.
+[FoldNeFalse, Normalize]
+(Ne $left:* (False))
+=>
+$left
+
+# CollapseLikePatternWildcards collapses repeated '%' wildcards into a single
+# '%' in the pattern of a LIKE expression.
+[CollapseRepeatedLikePatternWildcards, Normalize]
+(Like | NotLike | ILike | NotILike
+    $input:*
+    $pattern:* &
+        (Let
+            (
+                $collapsed
+                $ok
+            ):(CollapseRepeatedLikePatternWildcards $pattern)
+            $ok
+        )
+)
+=>
+((OpName) $input $collapsed)
+
+# ConvertLevenshteinToLevenshteinLessEqualLeft converts a comparison of an
+# integer and the result of a levenshtein function into a comparison with a
+# levenshtein_less_equal function.
+#
+#   levenshtein('foo', 'bar') < 5
+#   =>
+#   levenshtein_less_equal('foo', 'bar', 5) < 5
+#
+# levenshtein_less_equal is more efficient than levenshtein because it returns
+# early once the distance exceeds the given max distance.
+[ConvertLevenshteinToLevenshteinLessEqualLeft, Normalize]
+(Eq | Ge | Gt | Le | Lt
+    (Function $args:* $private:(FunctionPrivate "levenshtein"))
+    $right:* &
+        (IsInt $right) &
+        (Let ($arg1 $arg2 $ok):(ScalarPair $args) $ok)
+)
+=>
+((OpName)
+    (MakeLevenshteinLessEqualFunction $arg1 $arg2 $right)
+    $right
+)
+
+# ConvertLevenshteinToLevenshteinLessEqualRight is the same as
+# ConvertLevenshteinToLevenshteinLessEqualLeft but matches comparisons with the
+# levenshtein function on the RHS.
+[ConvertLevenshteinToLevenshteinLessEqualRight, Normalize]
+(Eq | Ge | Gt | Le | Lt
+    $left:* & (IsInt $left)
+    (Function $args:* $private:(FunctionPrivate "levenshtein")) &
+        (Let ($arg1 $arg2 $ok):(ScalarPair $args) $ok)
+)
+=>
+((OpName)
+    $left
+    (MakeLevenshteinLessEqualFunction $arg1 $arg2 $left)
+)

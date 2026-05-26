@@ -1,0 +1,530 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE a (a INT, b INT, c INT4, PRIMARY KEY (a, b))
+
+statement ok
+CREATE TABLE c (a INT, b INT, c INT, d INT, PRIMARY KEY (a, c), INDEX sec (b))
+
+statement ok
+CREATE TABLE d (a INT, b INT, PRIMARY KEY (b, a))
+
+statement ok
+INSERT INTO a SELECT g//2, g, g FROM generate_series(0,2000) g(g)
+
+statement ok
+INSERT INTO c VALUES (1, 1, 1, 0), (2, 1, 2, 0)
+
+statement ok
+ALTER TABLE c INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1,
+    "distinct_count": 1
+  }
+]'
+
+statement ok
+INSERT INTO d VALUES (1, 1), (1, 2)
+
+# Test that vectorized stats are collected correctly.
+statement ok
+SET vectorize = on
+
+statement ok
+SET distsql = on
+
+query T
+EXPLAIN ANALYZE (DISTSQL) SELECT a FROM a
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+rows decoded from KV: 2,001 (16 KiB, 4,002 KVs, 2,001 gRPC calls)
+regions: <hidden>
+·
+• scan
+  sql nodes: <hidden>
+  kv nodes: <hidden>
+  regions: <hidden>
+  KV time: 0µs
+  KV rows decoded: 2,001
+  actual row count: 2,001
+  missing stats
+  table: a@a_pkey
+  spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMksFqGz0Qx-_fU4g5fQWZaEPpQadSJwWTugm2yaWYMF5NHGHtaquZxTZmH6sv0CcrWtnQlAaqw7Lzn59m_rOzJ-DvASwsb7_cTlcK1efF_VwhaGijo6_YEIP9BhWsNXQp1sQcU5ZOIzBzB7BGg2-7XrK81lDHRGBPIF4CgYUVbgItCB2lKwMaHAn6MJbFj_jU7egIGqYx9E3Lduy97DC_TkDD3aPKjdiqtiphoq2POS3EUiTxDVllfv7gMxL3rBzV0ZGz6lobc767OQqxSoTOquqDuvOfir5dPExVjSHwK7xDny74e23MNWiYP06nioU6Vce-FfU_HeTKt_LOKjPOVwCi3VtAgwfVUBPTUWEIsUbJLo3KXjYo9Quxir10vViV-XGai1DcrQcNRTl_dBbcEtjqty3NbsCaQf_7ohbEXWyZXu3orU7mj06TalhrILel8ndw7FNNDynWI1vC-7HQKDhiKdmqBLP2kmJJhE2xv9bwHOL-yTuwYM5n8pfH5UC-gFvOgy1f4n4suzp22dYzBiYNc9zRDQmlxreexddgJfU0DP_9CgAA__-pfvP2
+
+query T
+EXPLAIN ANALYZE (DISTSQL) SELECT c.a FROM c JOIN d ON d.b = c.b
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+rows decoded from KV: 3 (24 B, 6 KVs, 3 gRPC calls)
+regions: <hidden>
+·
+• lookup join (streamer)
+│ sql nodes: <hidden>
+│ kv nodes: <hidden>
+│ regions: <hidden>
+│ KV time: 0µs
+│ KV rows decoded: 1
+│ execution time: 0µs
+│ actual row count: 2
+│ table: d@d_pkey
+│ equality: (b) = (b)
+│
+└── • scan
+      sql nodes: <hidden>
+      kv nodes: <hidden>
+      regions: <hidden>
+      KV time: 0µs
+      KV rows decoded: 2
+      actual row count: 2
+      estimated row count: 1 (100% of the table; stats collected <hidden> ago)
+      table: c@sec
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lN9qGz0Qxe-_pxjm6isoye5SShEUTJ0UnCZxcEJuigmyNHFU70pbjZbYBD9WX6BPVrSyQ_7T0lYXhjk6PjOan_Et8rcaJZ4dHB0Mz0HvKvg0GR-DhsPx6AQMjE_A7M7gA-jdGQp03tCJaohRfsESpwLb4DUx-5Ck294wMkuUhUDr2i4meSpQ-0AobzHaWBNKPFezmiakDIW9AgUaisrWfaweMGkUOPR11ziWoASk3metStUOCvx8AakRS3BlLgPNrU_XkThmKdqGJBQ_vvPG4m8YDGlvyEiosjhbRWIIpIyE8h18zOp8cjoEreqa74ytsmFrfIsCjy-GQ-BILWjfuQj_0zLuWRffSCj6F2UD0eIlQ6OW0FDjwwpUXXutYpqr6GeYqaivicF3se2ihOTv598KFU7XAnO1WTFHNSeU5T0mo32UxVr8OpZDb92GSvmQihmYy3ZBKxR45P2ia-Grtw68kzCo7tNKqMZpxEFK6Jv1q8-bzDVHVddPAP0p0vIp0vfPES2fEq3-CtGOyQDHQKqhgAJpSbqL1ruHg_8j8NUj8OXvgJ8Qt94xPYD-UqfiUaedcj0VSGZO-U-AfRc0nQave28ux31QLxjimG_LXIzc9ipv7-53ez-pfDWpei1pKvCq9jeX1qDEYnN2nvnYHkxfUHNOKzq79jd97PmqTQ-8UjWTwGO1oH2KFBrrLEerUcbQ0Xr9388AAAD__ySury8=
+
+# Regression test for using the Streamer API when we have a cast to an Oid type
+# for which DistSQL is prohibited (#122274). (Note that, unlike above, we don't
+# have 'lookup join (streamer)' here - that's the test.)
+query T
+EXPLAIN ANALYZE (DISTSQL) SELECT c.a::REGNAMESPACE FROM c JOIN d ON d.b = c.b
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+rows decoded from KV: 3 (24 B, 6 KVs, 3 gRPC calls)
+regions: <hidden>
+·
+• render
+│ execution time: 0µs
+│ actual row count: 2
+│
+└── • lookup join
+    │ sql nodes: <hidden>
+    │ kv nodes: <hidden>
+    │ regions: <hidden>
+    │ KV time: 0µs
+    │ KV rows decoded: 1
+    │ execution time: 0µs
+    │ actual row count: 2
+    │ table: d@d_pkey
+    │ equality: (b) = (b)
+    │
+    └── • scan
+          sql nodes: <hidden>
+          kv nodes: <hidden>
+          regions: <hidden>
+          KV time: 0µs
+          KV rows decoded: 2
+          actual row count: 2
+          estimated row count: 1 (100% of the table; stats collected <hidden> ago)
+          table: c@sec
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lN9q2zAUxu_3FIdztYHS2u4YQzBIl2YjXZOUpPRmhKJIp6kWWfIkmSaUPNZeYE82bCelSZuy0k0XgXP05Tt_flh3GH4a5DjunnU7FyAPBOej7tfBcb87Pj_udOHLaNgHCafD3gAUDAegDqbwCeTBFBlap2ggcgrIv2OKE4aFd5JCcL5K3dWCnlogTxhqW5SxSk8YSucJ-R1GHQ0hxwsxNTQiocgfJshQURTa1LayHUgiw44zZW4DB8Ggqj0uRBW1kOG3S6gKBQ42bUJPM-2q60ghNqmoc-KQ_P4V1hJ3G0CRdIoUh6xJTpeRAngSikP6AT432dnovANSGBPuhYXQfiN8jwz7l50OhEgFSFfaCG9pEQ-1je84JPVEjYBovk-QiwXklDu_BGGMkyJWfSV1D1MR5Q0FcGUsysih0tf9bxIZTlYMm2i94hDFjJCnD5j0TpAnK_b3WE6dtmsq6TYV1VZXxZyWyPDMuXlZwA-nLTjLoZ09pFWhqkvUC2_218QhCmMeYXktyPQxyI9PcUwfc8z-CUdakCyjdna70f-EN9vBm74E78C1XHGYbZMdkVXkObTT7ZfgJRz37OAVcx7tzJm9ZM4RhcLZQFuD7quU7FRqpasJQ1Izap604Eov6dw7WWubcFgb1QlFITa3aRP07OYqRE8iv_8KHzqlzzpl-53SXafsWaej53qaMLw27vZKK-SYrE_riZ_NweoPYhaqZY9v3G1te7EsqlVdCxOIYV_M6YQi-VxbHaKWyKMvabV68ycAAP__hX4P-Q==
+
+query T
+EXPLAIN (OPT, VERBOSE) SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d.b
+----
+project
+ ├── columns: a:1
+ ├── stats: [rows=10]
+ ├── cost: 1129.989
+ ├── cost-flags: unbounded-cardinality
+ ├── distribution: test
+ ├── prune: (1)
+ └── inner-join (merge)
+      ├── columns: c.a:1 d.b:10
+      ├── flags: force merge join
+      ├── left ordering: +1
+      ├── right ordering: +10
+      ├── stats: [rows=10, distinct(1)=1, null(1)=0, distinct(10)=1, null(10)=0]
+      ├── cost: 1129.869
+      ├── cost-flags: unbounded-cardinality
+      ├── fd: (1)==(10), (10)==(1)
+      ├── distribution: test
+      ├── scan c
+      │    ├── columns: c.a:1
+      │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+      │    ├── cost: 30.12
+      │    ├── cost-flags: unbounded-cardinality
+      │    ├── ordering: +1
+      │    ├── distribution: test
+      │    ├── prune: (1)
+      │    ├── interesting orderings: (+1)
+      │    └── unfiltered-cols: (1-8)
+      ├── scan d
+      │    ├── columns: d.b:10
+      │    ├── stats: [rows=1000, distinct(10)=100, null(10)=0]
+      │    ├── cost: 1088.62
+      │    ├── cost-flags: unbounded-cardinality
+      │    ├── ordering: +10
+      │    ├── distribution: test
+      │    ├── prune: (10)
+      │    ├── interesting orderings: (+10)
+      │    └── unfiltered-cols: (9-14)
+      └── filters (true)
+
+query T
+EXPLAIN ANALYZE (DISTSQL) SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d.b
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+rows decoded from KV: 4 (32 B, 8 KVs, 4 gRPC calls)
+regions: <hidden>
+·
+• merge join
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ execution time: 0µs
+│ actual row count: 2
+│ equality: (a) = (b)
+│
+├── • scan
+│     sql nodes: <hidden>
+│     kv nodes: <hidden>
+│     regions: <hidden>
+│     KV time: 0µs
+│     KV rows decoded: 2
+│     actual row count: 2
+│     estimated row count: 1 (100% of the table; stats collected <hidden> ago)
+│     table: c@c_pkey
+│     spans: FULL SCAN
+│
+└── • scan
+      sql nodes: <hidden>
+      kv nodes: <hidden>
+      regions: <hidden>
+      KV time: 0µs
+      KV rows decoded: 2
+      actual row count: 2
+      missing stats
+      table: d@d_pkey
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsk9FO2zAUhu_3FEfnCjQDSZh2YQmpWummsrVFBXEzVci1D8GqEwfbEa1QH2svsCebnAAjXWFj2uVyUcXn_PnPyf81d-hvDHI8G3wZ9M9B7gv4OJ2MQMJwPB5MYTSYfhrAyWQ4BgWTcSM4ArU_R4alVTQWBXnkXzHFGcPKWUneWxdLd41gqJbIE4a6rOoQyzOG0jpCfodBB0PI8VzMDU1JKHIHCTJUFIQ2ja3syctqQStk2LemLkrPQSDDs0rE2z1k-PkC4iDPoUzbo6Nc29gO5ENbCrogDsn3b_5eYm89KJJWkeKQtcX5KpAHR0JxSN_Dh7aaT0_7IIUx_lFYCe0ehO-Q4eii3wcfqAJp6zLADi3DgS7DLoekeaNWQLR4TlCIJRRUWLcCYYyVIsS9kmaHuQjymjzYOlR14BD1zf4PhQxna4bt6T5iH0ROyNMnTIbHyJM1-zssaReL6qlfsMz_Y_lTLNkGlvRZLD9p1KV1ihypDolZfPJ3ki1sR-RyOrG6JHeQddkaugo7vfTt7pHT-XV7iwwn8ZV6ESUtSdZB27KL76WsYs_fGAhUVKC0X0DtRU7_IMrDjSiz1_zDp-QrW3rajHTrpGRj0l4agyWVUwvK29pJOnVWNtr2OGmMmoIiH9pu1h6GZdNK4wRHonj8QJ86pa9wyp46pZtO2YtOhx2npLvTjOGVsbeXWiHH5P7a2_LzcGF8QOQ-hn12bW8b2_NVFaO6EsYTw5FY0DEFcoUutQ9aIg-upvX6zY8AAAD__2SSFss=
+
+statement ok
+RESET vectorize; RESET distsql
+
+statement ok
+SET tracing=off
+
+# Making sure that colBatchScan operator can parallelize scans.
+# This test is similar to that in testplannerlogic/select
+statement ok
+CREATE TABLE tpar (
+    a INT PRIMARY KEY, item STRING, price FLOAT, FAMILY (a, item, price),
+    UNIQUE INDEX item (item), UNIQUE INDEX p (price)
+)
+
+statement ok
+ALTER TABLE tpar SPLIT AT VALUES(5)
+
+# Run a select to prime the range cache to simplify the trace below.
+statement ok
+SELECT * FROM tpar
+
+# Make sure that the scan actually gets parallelized.
+statement ok
+SET tracing = on; SELECT * FROM tpar WHERE a = 0 OR a = 10
+
+statement ok
+SET tracing = off
+
+# The span "sending partial batch" means that the scan was parallelized.
+#
+# Most of the time we're seeing duplicate "querying next range" entries because
+# we first use the range cache to try to partition the spans in order to have
+# parallel TableReaders (we end up with a single partition though), and then we
+# have a single TableReader performing the scan of two spans in parallel.
+# However, occasionally the duplicate "querying next range at /Table/109/1/10/0"
+# message is either dropped entirely or replaced with another
+# "querying next range at /Table/109/1/0/0". It's not clear why that happens, so
+# we deduplicate the messages to make the test non-flaky.
+query T rowsort
+SELECT DISTINCT CASE WHEN message LIKE '=== operation:%'
+    THEN regexp_replace(
+      message,
+      ' (gid|node|client|user|txn|cockroach\.\w+|implicit|_unfinished):\S*| hostssl:\S*',
+      '', 'g')
+    ELSE message
+  END
+FROM [SHOW TRACE FOR SESSION]
+WHERE message LIKE 'querying next range at %' OR
+      message LIKE '=== operation:kv.DistSender: sending partial batch%'
+----
+querying next range at /Table/109/1/0/0
+=== operation:kv.DistSender: sending partial batch _verbose:1
+querying next range at /Table/109/1/10/0
+
+# Used to be a regression test for #46123 (rowexec.TableReader not implementing
+# execopnode.OpNode interface).
+statement ok
+CREATE TABLE t46123(c0 INT)
+
+query T
+EXPLAIN (VEC) SELECT stddev(0) FROM t46123 WHERE ('' COLLATE en)::BOOL
+----
+│
+└ Node 1
+  └ *colexec.orderedAggregator
+    └ *colexecbase.constInt64Op
+      └ *colexecbase.castDatumBoolOp
+        └ *colexecbase.constDatumOp
+          └ *colfetcher.ColBatchScan
+
+# Regression test for #46122.
+statement ok
+CREATE TABLE t46122_0(c0 STRING); CREATE TABLE t46122_1(c0 STRING)
+
+query T
+EXPLAIN (VEC) SELECT t46122_0.c0 FROM t46122_0, t46122_1
+----
+│
+└ Node 1
+  └ *colexecjoin.crossJoiner
+    ├ *colfetcher.ColBatchScan
+    └ *colfetcher.ColBatchScan
+
+statement ok
+CREATE TABLE t46404_0(c0 INT); CREATE TABLE t46404_1(c0 INT)
+
+query T
+EXPLAIN (VEC) SELECT stddev((t46404_1.c0 > ANY (0, 0))::INT) FROM t46404_0, t46404_1 GROUP BY t46404_0.rowid
+----
+│
+└ Node 1
+  └ *colexec.hashAggregator
+    └ *colexecbase.castBoolIntOp
+      └ *colexecprojconst.defaultCmpRConstProjOp
+        └ *colexecjoin.crossJoiner
+          ├ *colfetcher.ColBatchScan
+          └ *colfetcher.ColBatchScan
+
+statement ok
+CREATE TABLE xyz (
+  x INT,
+  y INT,
+  z TEXT
+)
+
+# Check that we fallback gracefully to row-by-row engine on a join type with
+# ON expression that we don't support.
+query T
+EXPLAIN (VEC) SELECT * FROM xyz AS t1 FULL OUTER JOIN xyz AS t2 ON t1.x = t2.x AND t1.x + t2.x = 0
+----
+│
+└ Node 1
+  └ *rowexec.hashJoiner
+    ├ *colfetcher.ColBatchScan
+    └ *colfetcher.ColBatchScan
+
+# Verify that the vectorized engine is used (there is a mismatch between
+# argument type width and the result).
+query T
+EXPLAIN (VEC) SELECT max(c) FROM a
+----
+│
+└ Node 1
+  └ *colexec.orderedAggregator
+    └ *colfetcher.ColBatchScan
+
+# Verify that binary operations on integers of any width return INT8.
+statement ok
+CREATE TABLE ints (_int2 INT2, _int4 INT4, _int8 INT8);
+INSERT INTO ints VALUES (1, 1, 1), (2, 2, 2)
+
+query T
+EXPLAIN (VEC) SELECT _int2 * _int2 FROM ints WHERE _int4 + _int4 = _int8 + 2
+----
+│
+└ Node 1
+  └ *colexecproj.projMultInt16Int16Op
+    └ *colexecsel.selEQInt64Int64Op
+      └ *colexecprojconst.projPlusInt64Int64ConstOp
+        └ *colexecproj.projPlusInt32Int32Op
+          └ *colfetcher.ColBatchScan
+
+# Check that joinReader core is wrapped into the plan when vectorize is set to
+# `experimental_always` - that core is the only exception to disabling of
+# wrapping.
+
+query T
+EXPLAIN (VEC) SELECT c.a FROM c JOIN d ON d.b = c.b
+----
+│
+└ Node 1
+  └ *rowexec.joinReader
+    └ *colfetcher.ColBatchScan
+
+statement ok
+SET vectorize = experimental_always
+
+statement ok
+SELECT c.a FROM c JOIN d ON d.b = c.b
+
+statement ok
+RESET vectorize
+
+statement ok
+CREATE TABLE bytes_string(_group INT, _bytes BYTES, _string STRING)
+
+query T
+EXPLAIN (VEC) SELECT concat_agg(_bytes), concat_agg(_string) FROM bytes_string GROUP BY _group
+----
+│
+└ Node 1
+  └ *colexec.hashAggregator
+    └ *colfetcher.ColBatchScan
+
+query T
+EXPLAIN (VEC) SELECT concat_agg(_bytes), concat_agg(_string) FROM bytes_string
+----
+│
+└ Node 1
+  └ *colexec.orderedAggregator
+    └ *colfetcher.ColBatchScan
+
+statement ok
+CREATE TABLE t63792 (c INT);
+INSERT INTO t63792 VALUES (NULL), (1), (2)
+
+# Check that casts of constants are pre-evaluated (which allows us to use
+# colexec.isNullProjOp instead of colexecproj.defaultCmpProjOp).
+query T
+EXPLAIN (VEC) SELECT c = c FROM t63792
+----
+│
+└ Node 1
+  └ *colexec.orProjOp
+    ├ *colfetcher.ColBatchScan
+    ├ *colexec.isNullProjOp
+    └ *colexecbase.castOpNullAny
+      └ *colexecbase.constNullOp
+
+# Regression test that we can run EXPLAIN (VEC) on a mutation that utilizes the
+# vectorized engine for some internal operations (#66568).
+statement ok
+CREATE TABLE t66568 (c INT PRIMARY KEY);
+
+query T
+EXPLAIN (VEC) INSERT INTO t66568 VALUES (1) ON CONFLICT DO NOTHING
+----
+│
+└ Node 1
+  └ *sql.planNodeToRowSource
+    └ *colexecjoin.crossJoiner
+      ├ *sql.planNodeToRowSource
+      └ *colfetcher.ColBatchScan
+
+statement ok
+CREATE TABLE t_string (a STRING);
+INSERT INTO t_string VALUES (NULL)
+
+# Check that IN expression with non-constant right-hand side is handled via the
+# default comparison operator.
+query T
+EXPLAIN (VEC) SELECT 'b' IN ('b', a, 'a') FROM t_string
+----
+│
+└ Node 1
+  └ *colexecproj.defaultCmpProjOp
+    └ *colexec.tupleProjOp
+      └ *colexecbase.constBytesOp
+        └ *colexecbase.constBytesOp
+          └ *colexecbase.constBytesOp
+            └ *colfetcher.ColBatchScan
+
+# Regression test for calling Release() before Close() on a vectorized index
+# joiner (#70000).
+statement ok
+CREATE TABLE table70000_1 (i INT PRIMARY KEY);
+CREATE TABLE table70000_2 (f FLOAT, b BOOL, INDEX f_idx(f));
+
+query T
+EXPLAIN (VEC)
+  SELECT
+    CASE WHEN b THEN (SELECT f FROM table70000_1 LIMIT 1) ELSE f END
+  FROM
+    table70000_2@f_idx;
+----
+│
+└ Node 1
+  └ *colexec.caseOp
+    ├ *colexec.bufferOp
+    │ └ *sql.planNodeToRowSource
+    │   └ *colfetcher.ColIndexJoin
+    │     └ *colfetcher.ColBatchScan
+    ├ *colexec.bufferOp
+    └ *colexec.bufferOp
+
+# Regression test for releasing operators before closing them with EXPLAIN (VEC)
+# (#70438).
+statement ok
+CREATE TABLE t70438 (k INT PRIMARY KEY, v INT, UNIQUE INDEX foo (v));
+INSERT INTO t70438 VALUES (1, 2), (3, 4), (5, 6), (7, 8);
+
+query T
+EXPLAIN (VEC) DELETE FROM t70438 WHERE k=3 OR v=6
+----
+│
+└ Node 1
+  └ *sql.planNodeToRowSource
+    └ *colexec.UnorderedDistinct
+      └ *colexec.SerialUnorderedSynchronizer
+        ├ *colfetcher.ColBatchScan
+        └ *colfetcher.ColBatchScan
+
+# Some tests for set-op cross joins.
+statement ok
+CREATE TABLE t ();
+CREATE TABLE u ();
+INSERT INTO t (rowid) VALUES (1), (2);
+INSERT INTO u (rowid) VALUES (1);
+
+query T
+EXPLAIN (VEC) SELECT * FROM t INTERSECT ALL SELECT * FROM u
+----
+│
+└ Node 1
+  └ *colexecjoin.crossJoiner
+    ├ *colfetcher.ColBatchScan
+    └ *colfetcher.ColBatchScan
+
+query T
+EXPLAIN (VEC) SELECT * FROM t EXCEPT ALL SELECT * FROM u
+----
+│
+└ Node 1
+  └ *colexecjoin.crossJoiner
+    ├ *colfetcher.ColBatchScan
+    └ *colfetcher.ColBatchScan
+
+# Regression test for attempting to use optimized vectorized operator which
+# doesn't handle collated strings (#147559).
+statement ok
+CREATE TABLE t147559 (
+    a INT,
+    b TEXT COLLATE en_u_ks_level1
+);
+
+query T
+EXPLAIN (VEC) SELECT * FROM t147559 WHERE b LIKE 'abc%';
+----
+│
+└ Node 1
+  └ *colexecsel.defaultCmpConstSelOp
+    └ *colfetcher.ColBatchScan

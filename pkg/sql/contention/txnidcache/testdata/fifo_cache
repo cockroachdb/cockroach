@@ -1,0 +1,96 @@
+# 24240 bytes is enough for a fifoCache with 3 fully filled eviction block.
+init capacity=24240
+----
+cache_size: 0
+
+newInputBlock name=input1 percentageFilled=0.25
+----
+blockSize: 42
+
+insertBlock name=input1
+----
+
+checkCacheContent presentBlockNames=input1
+----
+ok
+
+show
+----
+cacheSize: 5056
+blockName: input1, blockSize: 42
+
+newInputBlock name=input2 percentageFilled=0.50
+----
+blockSize: 84
+
+insertBlock name=input2
+----
+
+checkCacheContent presentBlockNames=input1,input2
+----
+ok
+
+show
+----
+cacheSize: 11120
+blockName: input1, blockSize: 42
+blockName: input2, blockSize: 84
+
+newInputBlock name=input3 percentageFilled=1.0
+----
+blockSize: 168
+
+insertBlock name=input3
+----
+
+checkCacheContent presentBlockNames=input1,input2,input3
+----
+ok
+
+show
+----
+cacheSize: 19200
+blockName: input1, blockSize: 42
+blockName: input2, blockSize: 84
+blockName: input3, blockSize: 168
+
+# Any subsequent insertion will cause evictions
+
+newInputBlock name=input4 percentageFilled=1.0
+----
+blockSize: 168
+
+insertBlock name=input4
+----
+
+checkCacheContent presentBlockNames=input2,input3,input4 evictedBlockNames=input1
+----
+ok
+
+show
+----
+cacheSize: 22224
+blockName: input2, blockSize: 84
+blockName: input3, blockSize: 168
+blockName: input4, blockSize: 168
+
+
+# Inserting sparse blocks can cause premature eviction.
+
+newInputBlock name=input5 percentageFilled=0.01786
+----
+blockSize: 3
+
+insertBlock name=input5
+----
+
+checkCacheContent presentBlockNames=input3,input4,input5 evictedBlockNames=input1,input2
+----
+ok
+
+show
+----
+cacheSize: 20280
+blockName: input3, blockSize: 168
+blockName: input4, blockSize: 168
+blockName: input5, blockSize: 3

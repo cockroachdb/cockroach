@@ -1,0 +1,63 @@
+index-constraints vars=(a int, b int) index=(a, b)
+a IS NULL AND b = 2
+----
+[/NULL/2 - /NULL/2]
+
+index-constraints vars=(a int, b int) index=(a, b)
+a IS NULL AND b > 2
+----
+[/NULL/3 - /NULL]
+
+index-constraints vars=(a int, b int) index=(a, b)
+a = 1 AND b IS NULL
+----
+[/1/NULL - /1/NULL]
+
+index-constraints vars=(a int, b int) index=(a, b)
+a >= 1 AND b IS NULL
+----
+[/1/NULL - ]
+Remaining filter: b IS NULL
+
+index-constraints vars=(a int) index=(a)
+a IS NOT DISTINCT FROM NULL
+----
+[/NULL - /NULL]
+
+index-constraints vars=(a int) index=(a)
+a IS NOT NULL
+----
+(/NULL - ]
+
+index-constraints vars=(a int) index=(a)
+a IS DISTINCT FROM NULL
+----
+(/NULL - ]
+
+index-constraints vars=(a int) index=(a desc)
+a IS NOT NULL
+----
+[ - /NULL)
+
+index-constraints vars=(a int not null) index=(a)
+a IS NULL
+----
+
+index-constraints vars=(a int not null) index=(a)
+a IS NOT DISTINCT FROM NULL
+----
+
+index-constraints vars=(a int not null) index=(a)
+a IS NOT NULL
+----
+[ - ]
+
+index-constraints vars=(a int not null) index=(a)
+a IS DISTINCT FROM NULL
+----
+[ - ]
+
+index-constraints vars=(a int not null) index=(a desc)
+a IS NOT NULL
+----
+[ - ]

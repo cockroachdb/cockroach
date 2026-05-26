@@ -1,0 +1,1076 @@
+new-lock-table maxlocks=10000
+----
+
+new-txn txn=txn1 ts=12,1 epoch=0
+----
+
+new-txn txn=txn2 ts=10,1 epoch=0
+----
+
+new-txn txn=txn3 ts=11,1 epoch=0
+----
+
+new-txn txn=txn4 ts=11,1 epoch=0
+----
+
+new-txn txn=txn5 ts=11,1 epoch=0
+----
+
+new-txn txn=txn6 ts=11,1 epoch=0
+----
+
+new-txn txn=txn7 ts=11,1 epoch=0
+----
+
+new-txn txn=txn8 ts=11,1 epoch=0
+----
+
+# -----------------------------------------------------------------------------
+# req1 waits for replicated locks held by txn2, txn3, and unreplicated lock
+# held by txn4. When txn2 is finalized and req1 scans, it notices it no longer
+# needs to wait for txn2 locks, but then waits on the lock held by txn4.
+# Finalization of txn3 and explicit release of the lock held by txn3 causes
+# req1 to finish scanning. It needs to resolve the locks held by txn2, txn3.
+# -----------------------------------------------------------------------------
+
+new-request r=req1 txn=txn1 ts=10,1 spans=exclusive@a+exclusive@b+exclusive@c+exclusive@d+exclusive@e
+----
+
+new-request r=req2 txn=txn4 ts=11,1 spans=exclusive@c
+----
+
+scan r=req1
+----
+start-waiting: false
+
+add-discovered r=req1 k=a txn=txn2
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+
+add-discovered r=req1 k=b txn=txn2
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+
+add-discovered r=req1 k=d txn=txn3
+----
+num=3
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+
+add-discovered r=req1 k=e txn=txn3
+----
+num=4
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+
+scan r=req2
+----
+start-waiting: false
+
+acquire r=req2 k=c durability=u strength=exclusive
+----
+num=5
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000004 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+
+dequeue r=req2
+----
+num=5
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000004 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+
+scan r=req1
+----
+start-waiting: true
+
+print
+----
+num=5
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: true req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000004 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+
+pushed-txn-updated txn=txn2 status=aborted
+----
+
+scan r=req1
+----
+start-waiting: true
+
+guard-state r=req1
+----
+new: state=waitFor txn=txn4 key="c" held=true guard-strength=Exclusive
+
+print
+----
+num=5
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent] [holder finalized: aborted]
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent] [holder finalized: aborted]
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000004 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+
+pushed-txn-updated txn=txn3 status=committed
+----
+
+release txn=txn4 span=c
+----
+num=5
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent] [holder finalized: aborted]
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent] [holder finalized: aborted]
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent] [holder finalized: committed]
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent] [holder finalized: committed]
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+
+
+guard-state r=req1
+----
+new: state=doneWaiting
+Intents to resolve:
+ key="a" txn=00000000-0000-0000-0000-000000000002 epoch=0 ts=10.000000000,1 status=ABORTED
+ key="b" txn=00000000-0000-0000-0000-000000000002 epoch=0 ts=10.000000000,1 status=ABORTED
+ key="d" txn=00000000-0000-0000-0000-000000000003 epoch=0 ts=11.000000000,1 status=COMMITTED
+ key="e" txn=00000000-0000-0000-0000-000000000003 epoch=0 ts=11.000000000,1 status=COMMITTED
+
+print
+----
+num=5
+ lock: "a"
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "d"
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "e"
+   queued locking requests:
+    active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+
+dequeue r=req1
+----
+num=0
+
+clear
+----
+num=0
+
+# -----------------------------------------------------------------------------
+# req3 waits for replicated and unreplicated locks held by txn2. When txn2 is
+# finalized, the unreplicated lock is in the list of locks to remove and the
+# replicated locks are in the list of locks to resolve. Requests that are
+# sequencing through the lock table are able to acquire claims on both the
+# replicated and unreplicated locks.
+# -----------------------------------------------------------------------------
+
+new-request r=req3 txn=txn1 ts=10,1 spans=exclusive@a+exclusive@b+exclusive@c
+----
+
+new-request r=req4 txn=txn2 ts=11,1 spans=exclusive@b
+----
+
+scan r=req3
+----
+start-waiting: false
+
+add-discovered r=req3 k=a txn=txn2
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 3, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+
+add-discovered r=req3 k=c txn=txn2
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 3, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 3, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+
+scan r=req4
+----
+start-waiting: false
+
+acquire r=req4 k=b durability=u strength=exclusive
+----
+num=3
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 3, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 3, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+
+dequeue r=req4
+----
+num=3
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 3, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 3, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+
+pushed-txn-updated txn=txn2 status=aborted
+----
+
+scan r=req3
+----
+start-waiting: true
+
+guard-state r=req3
+----
+new: state=doneWaiting
+Intents to resolve:
+ key="a" txn=00000000-0000-0000-0000-000000000002 epoch=0 ts=11.000000000,1 status=ABORTED
+ key="c" txn=00000000-0000-0000-0000-000000000002 epoch=0 ts=11.000000000,1 status=ABORTED
+
+print
+----
+num=3
+ lock: "a"
+   queued locking requests:
+    active: false req: 3, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+   queued locking requests:
+    active: false req: 3, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+   queued locking requests:
+    active: false req: 3, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+
+dequeue r=req3
+----
+num=0
+
+clear
+----
+num=0
+
+# -----------------------------------------------------------------------------
+# req5 waits for replicated locks held by txn2. When txn2 is
+# finalized, it is first noticed by req6, but it has to wait behind req5. Eventually,
+# req5 notices the finalization (via pushing) and scans again and resolves.
+# -----------------------------------------------------------------------------
+
+new-request r=req5 txn=txn1 ts=12,1 spans=exclusive@a+exclusive@b
+----
+
+new-request r=req6 txn=txn3 ts=12,1 spans=exclusive@a
+----
+
+scan r=req5
+----
+start-waiting: false
+
+add-discovered r=req5 k=a txn=txn2
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 5, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+
+add-discovered r=req5 k=b txn=txn2
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 5, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 5, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+
+scan r=req5
+----
+start-waiting: true
+
+print
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: true req: 5, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 5, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+
+pushed-txn-updated txn=txn2 status=aborted
+----
+
+scan r=req6
+----
+start-waiting: true
+
+guard-state r=req6
+----
+new: state=waitFor txn=txn2 key="a" held=true guard-strength=Exclusive
+
+guard-state r=req5
+----
+new: state=waitFor txn=txn2 key="a" held=true guard-strength=Exclusive
+
+print
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent] [holder finalized: aborted]
+   queued locking requests:
+    active: true req: 5, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 6, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000003
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent] [holder finalized: aborted]
+   queued locking requests:
+    active: false req: 5, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+
+release txn=txn2 span=a
+----
+num=2
+ lock: "a"
+   queued locking requests:
+    active: false req: 5, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 6, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000003
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent] [holder finalized: aborted]
+   queued locking requests:
+    active: false req: 5, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+
+guard-state r=req6
+----
+new: state=waitFor txn=txn1 key="a" held=false guard-strength=Exclusive
+
+guard-state r=req5
+----
+new: state=doneWaiting
+Intents to resolve:
+ key="b" txn=00000000-0000-0000-0000-000000000002 epoch=0 ts=11.000000000,1 status=ABORTED
+
+print
+----
+num=2
+ lock: "a"
+   queued locking requests:
+    active: false req: 5, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 6, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000003
+ lock: "b"
+   queued locking requests:
+    active: false req: 5, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+
+dequeue r=req5
+----
+num=1
+ lock: "a"
+   queued locking requests:
+    active: false req: 6, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000003
+
+dequeue r=req6
+----
+num=0
+
+clear
+----
+num=0
+
+# -----------------------------------------------------------------------------
+# req7 waits for replicated locks held by txn2. When txn2 is finalized, it is
+# first noticed by req8, which does not need to wait for req7 since it is a
+# reader.
+# -----------------------------------------------------------------------------
+
+new-request r=req7 txn=txn1 ts=12,1 spans=exclusive@a+exclusive@b
+----
+
+new-request r=req8 txn=txn3 ts=12,1 spans=none@a+none@b
+----
+
+scan r=req7
+----
+start-waiting: false
+
+add-discovered r=req7 k=a txn=txn2
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 7, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+
+add-discovered r=req7 k=b txn=txn2
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 7, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 7, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+
+scan r=req7
+----
+start-waiting: true
+
+guard-state r=req7
+----
+new: state=waitFor txn=txn2 key="a" held=true guard-strength=Exclusive
+
+print
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: true req: 7, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 7, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+
+pushed-txn-updated txn=txn2 status=aborted
+----
+
+scan r=req8
+----
+start-waiting: true
+
+guard-state r=req8
+----
+new: state=doneWaiting
+Intents to resolve:
+ key="a" txn=00000000-0000-0000-0000-000000000002 epoch=0 ts=11.000000000,1 status=ABORTED
+ key="b" txn=00000000-0000-0000-0000-000000000002 epoch=0 ts=11.000000000,1 status=ABORTED
+
+guard-state r=req7
+----
+new: state=doneWaiting
+
+print
+----
+num=2
+ lock: "a"
+   queued locking requests:
+    active: false req: 7, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+   queued locking requests:
+    active: false req: 7, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+
+dequeue r=req7
+----
+num=0
+
+dequeue r=req8
+----
+num=0
+
+clear
+----
+num=0
+
+# -----------------------------------------------------------------------------
+# Replicated locks are held by txn3, txn4. When txn3 is finalized, req9 notices
+# it but is unable to resolve since it has to wait for txn4. req10 comes through
+# and resolves txn3 locks before req9.
+# -----------------------------------------------------------------------------
+
+new-request r=req9 txn=txn1 ts=12,1 spans=none@a+none@b+none@c+none@d
+----
+
+new-request r=req10 txn=txn2 ts=12,1 spans=none@a+none@b
+----
+
+scan r=req9
+----
+start-waiting: false
+
+add-discovered r=req9 k=a txn=txn3
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 12.000000000,1, info: repl [Intent]
+
+add-discovered r=req9 k=b txn=txn3
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 12.000000000,1, info: repl [Intent]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 12.000000000,1, info: repl [Intent]
+
+add-discovered r=req9 k=c txn=txn4
+----
+num=3
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 12.000000000,1, info: repl [Intent]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 12.000000000,1, info: repl [Intent]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000004 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+
+add-discovered r=req9 k=d txn=txn4
+----
+num=4
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 12.000000000,1, info: repl [Intent]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 12.000000000,1, info: repl [Intent]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000004 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000004 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+
+pushed-txn-updated txn=txn3 status=aborted
+----
+
+scan r=req9
+----
+start-waiting: true
+
+guard-state r=req9
+----
+new: state=waitFor txn=txn4 key="c" held=true guard-strength=None
+
+print
+----
+num=4
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 12.000000000,1, info: repl [Intent] [holder finalized: aborted]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 12.000000000,1, info: repl [Intent] [holder finalized: aborted]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000004 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   waiting readers:
+    req: 9, txn: 00000000-0000-0000-0000-000000000001
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000004 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+
+scan r=req10
+----
+start-waiting: true
+
+guard-state r=req10
+----
+new: state=doneWaiting
+Intents to resolve:
+ key="a" txn=00000000-0000-0000-0000-000000000003 epoch=0 ts=12.000000000,1 status=ABORTED
+ key="b" txn=00000000-0000-0000-0000-000000000003 epoch=0 ts=12.000000000,1 status=ABORTED
+
+pushed-txn-updated txn=txn4 status=aborted
+----
+
+release txn=txn4 span=c
+----
+num=1
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000004 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent] [holder finalized: aborted]
+
+guard-state r=req9
+----
+new: state=doneWaiting
+Intents to resolve:
+ key="d" txn=00000000-0000-0000-0000-000000000004 epoch=0 ts=11.000000000,1 status=ABORTED
+
+print
+----
+num=0
+
+# -----------------------------------------------------------------------------
+# req11 is a non-transactional request that finds a lock from a finalized txn
+# when scanning. The removal of the lock before it can do resolution exposed a
+# bug in the code where non-transactional requests were assumed to be active
+# waiters.
+# -----------------------------------------------------------------------------
+
+new-request r=req11 txn=none ts=12,1 spans=intent@a
+----
+
+scan r=req11
+----
+start-waiting: false
+
+add-discovered r=req11 k=a txn=txn2
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 12.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 11, strength: Intent, txn: none
+
+pushed-txn-updated txn=txn2 status=aborted
+----
+
+scan r=req11
+----
+start-waiting: true
+
+print
+----
+num=0
+
+guard-state r=req11
+----
+new: state=doneWaiting
+Intents to resolve:
+ key="a" txn=00000000-0000-0000-0000-000000000002 epoch=0 ts=12.000000000,1 status=ABORTED
+
+dequeue r=req11
+----
+num=0
+
+clear
+----
+num=0
+
+# -----------------------------------------------------------------------------
+# req12 is a read request that finds a lock from a finalized txn
+# when scanning.
+# -----------------------------------------------------------------------------
+
+new-request r=req12 txn=none ts=12,1 spans=none@a
+----
+
+scan r=req12
+----
+start-waiting: false
+
+add-discovered r=req12 k=a txn=txn2
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 12.000000000,1, info: repl [Intent]
+
+pushed-txn-updated txn=txn2 status=aborted
+----
+
+scan r=req12
+----
+start-waiting: true
+
+print
+----
+num=0
+
+guard-state r=req12
+----
+new: state=doneWaiting
+Intents to resolve:
+ key="a" txn=00000000-0000-0000-0000-000000000002 epoch=0 ts=12.000000000,1 status=ABORTED
+
+dequeue r=req12
+----
+num=0
+
+clear
+----
+num=0
+
+# -----------------------------------------------------------------------------
+# Requests that come across unreplicated locks locks that belong to finalized
+# transactions should not wait on them while scanning. They should correctly
+# accumulate their toResolveUnreplicated slice and move on. We check this for
+# locking (transactional) requests, non-locking reads, and non-transactional
+# write requests, using 2 unreplicated locks for each.
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# Setup.
+# -----------------------------------------------------------------------------
+
+# Acquire 6 locks, 1 each for each request types we care about.
+new-request r=req13 txn=txn6 ts=11,0 spans=exclusive@a+exclusive@b+exclusive@c+exclusive@d+exclusive@e+exclusive@f
+----
+
+# Locking, transactional request.
+new-request r=req14 txn=txn5 ts=11,0 spans=exclusive@a+exclusive@b
+----
+
+# Non-locking, transactional request.
+new-request r=req15 txn=txn5 ts=11,0 spans=none@c+none@d
+----
+
+# Non-transactional write request.
+new-request r=req16 txn=none ts=11,0 spans=intent@e+intent@f
+----
+
+acquire r=req13 k=a durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+acquire r=req13 k=b durability=u strength=exclusive
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+acquire r=req13 k=c durability=u strength=exclusive
+----
+num=3
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+acquire r=req13 k=d durability=u strength=exclusive
+----
+num=4
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+acquire r=req13 k=e durability=u strength=exclusive
+----
+num=5
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+acquire r=req13 k=f durability=u strength=exclusive
+----
+num=6
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "f"
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+pushed-txn-updated txn=txn6 status=aborted
+----
+
+# -----------------------------------------------------------------------------
+# Test.
+# -----------------------------------------------------------------------------
+
+scan r=req14
+----
+start-waiting: false
+
+guard-state r=req14
+----
+new: state=doneWaiting
+
+print
+----
+num=6
+ lock: "a"
+   queued locking requests:
+    active: false req: 13, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000005
+ lock: "b"
+   queued locking requests:
+    active: false req: 13, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000005
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)] [holder finalized: aborted]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)] [holder finalized: aborted]
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)] [holder finalized: aborted]
+ lock: "f"
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)] [holder finalized: aborted]
+
+scan r=req15
+----
+start-waiting: false
+
+guard-state r=req15
+----
+new: state=doneWaiting
+
+print
+----
+num=4
+ lock: "a"
+   queued locking requests:
+    active: false req: 13, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000005
+ lock: "b"
+   queued locking requests:
+    active: false req: 13, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000005
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)] [holder finalized: aborted]
+ lock: "f"
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)] [holder finalized: aborted]
+
+print
+----
+num=4
+ lock: "a"
+   queued locking requests:
+    active: false req: 13, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000005
+ lock: "b"
+   queued locking requests:
+    active: false req: 13, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000005
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)] [holder finalized: aborted]
+ lock: "f"
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)] [holder finalized: aborted]
+
+scan r=req16
+----
+start-waiting: false
+
+guard-state r=req16
+----
+new: state=doneWaiting
+
+print
+----
+num=2
+ lock: "a"
+   queued locking requests:
+    active: false req: 13, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000005
+ lock: "b"
+   queued locking requests:
+    active: false req: 13, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000005
+
+# -----------------------------------------------------------------------------
+# Ensure a claimant can never simultaneously be a distinguished waiter as well.
+# -----------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+new-request r=req17 txn=txn5 ts=11,0 spans=exclusive@a+exclusive@b
+----
+
+scan r=req17
+----
+start-waiting: false
+
+add-discovered r=req17 k=a txn=txn7
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000007 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 16, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000005
+
+add-discovered r=req17 k=b txn=txn8
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000007 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 16, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000005
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000008 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 16, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000005
+
+scan r=req17
+----
+start-waiting: true
+
+print
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000007 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: true req: 16, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000005
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000008 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 16, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000005
+
+pushed-txn-updated txn=txn7 status=aborted
+----
+
+scan r=req17
+----
+start-waiting: true
+
+guard-state r=req17
+----
+new: state=waitFor txn=txn8 key="b" held=true guard-strength=Exclusive
+
+# Now that req17 is able to wait on lock "b", and claim the lock on "a", it should
+# no longer be the distinguished waiter on lock "a" anymore.
+print
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000007 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent] [holder finalized: aborted]
+   queued locking requests:
+    active: false req: 16, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000005
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000008 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: true req: 16, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000005
+
+new-request r=req18 txn=txn8 ts=11,0 spans=exclusive@a
+----
+
+scan r=req18
+----
+start-waiting: true
+
+# Consequently, req18 should be able to become a distinguished waiter on lock "a".
+print
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000007 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent] [holder finalized: aborted]
+   queued locking requests:
+    active: false req: 16, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000005
+    active: true req: 17, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000008
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000008 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: true req: 16, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000005

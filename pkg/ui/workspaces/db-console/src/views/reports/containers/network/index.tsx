@@ -1,0 +1,461 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+import {
+  util,
+  Loading,
+  useNodesSummary,
+  useConnectivity,
+  NodesSummary,
+} from "@cockroachlabs/cluster-ui";
+import * as protos from "@cockroachlabs/crdb-protobuf-client";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { deviation as d3Deviation, mean as d3Mean } from "d3-array";
+import capitalize from "lodash/capitalize";
+import filter from "lodash/filter";
+import flatMap from "lodash/flatMap";
+import flow from "lodash/flow";
+import isEmpty from "lodash/isEmpty";
+import isUndefined from "lodash/isUndefined";
+import map from "lodash/map";
+import max from "lodash/max";
+import sortBy from "lodash/sortBy";
+import union from "lodash/union";
+import values from "lodash/values";
+import moment from "moment-timezone";
+import { common } from "protobufjs";
+import React, { Fragment, useState } from "react";
+import { Helmet } from "react-helmet";
+import { useParams, useLocation } from "react-router-dom";
+
+import { InlineAlert } from "src/components";
+import { trackFilter, trackCollapseNodes } from "src/util/analytics";
+import { getDataFromServer } from "src/util/dataFromServer";
+import {
+  getFilters,
+  localityToString,
+  NodeFilterList,
+  NodeFilterListProps,
+} from "src/views/reports/components/nodeFilterList";
+
+import { Latency } from "./latency";
+import { Legend } from "./legend";
+import Sort from "./sort";
+import "./network.scss";
+
+import NodeLivenessStatus = protos.cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus;
+import IConnectivity = cockroach.server.serverpb.NetworkConnectivityResponse.IConnectivity;
+import IPeer = cockroach.server.serverpb.NetworkConnectivityResponse.IPeer;
+import IDuration = common.IDuration;
+
+export type Identity = {
+  nodeID: number;
+  address: string;
+  locality?: string;
+  updatedAt: moment.Moment;
+  livenessStatus: protos.cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus;
+  connectivity: protos.cockroach.server.serverpb.NetworkConnectivityResponse.IConnectivity;
+};
+
+export interface NoConnection {
+  from: Identity;
+  to: Identity;
+}
+
+export interface NetworkFilter {
+  [key: string]: Array<string>;
+}
+
+export interface NetworkSort {
+  id: string;
+  filters: Array<{ name: string; address: string }>;
+}
+
+function contentAvailable(nodesSummary: NodesSummary) {
+  return (
+    !isUndefined(nodesSummary) &&
+    !isEmpty(nodesSummary.nodeStatuses) &&
+    !isEmpty(nodesSummary.nodeStatusByID) &&
+    !isEmpty(nodesSummary.nodeIDs)
+  );
+}
+
+export const isHealthyLivenessStatus = (
+  status: NodeLivenessStatus,
+): boolean => {
+  switch (status) {
+    case cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
+      .NODE_STATUS_LIVE:
+    case cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
+      .NODE_STATUS_DRAINING:
+    case cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
+      .NODE_STATUS_DECOMMISSIONING:
+    case cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
+      .NODE_STATUS_UNKNOWN:
+    case cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
+      .NODE_STATUS_UNAVAILABLE:
+      return true;
+    case cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
+      .NODE_STATUS_DEAD:
+    case cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
+      .NODE_STATUS_DECOMMISSIONED:
+    default:
+      return false;
+  }
+};
+
+export function getValueFromString(
+  key: string,
+  params: string,
+  fullString?: boolean,
+) {
+  if (!params) {
+    return;
+  }
+  const result = params.match(new RegExp(key + "=([^,#]*)"));
+  if (!result) {
+    return;
+  }
+  return fullString ? result[0] : result[1];
+}
+
+/**
+ * Renders the Network Report page.
+ */
+export default function Network(): React.ReactElement {
+  const { node_id: nodeIdParam } = useParams<{ node_id: string }>();
+  const location = useLocation();
+  const {
+    isLoading: nodesSummaryLoading,
+    error: nodesSummaryError,
+    ...nodesSummary
+  } = useNodesSummary();
+  const {
+    connections,
+    isLoading: connectivityLoading,
+    error: connectivityError,
+  } = useConnectivity();
+
+  const [collapsed, setCollapsed] = useState(false);
+  const [networkFilter, setNetworkFilter] = useState<NetworkFilter | null>(
+    null,
+  );
+
+  const onChangeCollapse = (newCollapsed: boolean) => {
+    trackCollapseNodes(newCollapsed);
+    setCollapsed(newCollapsed);
+  };
+
+  const onChangeFilter = (key: string, value: string) => {
+    const currentFilter = networkFilter ? networkFilter : {};
+    const data = currentFilter[key] || [];
+    const newValues =
+      data.indexOf(value) === -1
+        ? [...data, value]
+        : data.length === 1
+          ? null
+          : data.filter((m: string | number) => m !== value);
+    trackFilter(capitalize(key), value);
+    setNetworkFilter({
+      ...currentFilter,
+      [key]: newValues,
+    });
+  };
+
+  const deselectFilterByKey = (key: string) => {
+    const currentFilter = networkFilter ? networkFilter : {};
+    trackFilter(capitalize(key), "deselect all");
+    setNetworkFilter({
+      ...currentFilter,
+      [key]: null,
+    });
+  };
+
+  const filteredDisplayIdentities = (displayIdentities: Identity[]) => {
+    let data: Identity[] = [];
+    let selectedIndex = 0;
+    if (
+      !networkFilter ||
+      Object.keys(networkFilter).length === 0 ||
+      Object.keys(networkFilter).every(x => networkFilter[x] === null)
+    ) {
+      return displayIdentities;
+    }
+    displayIdentities.forEach(identities => {
+      Object.keys(networkFilter).forEach((key, index) => {
+        const value = getValueFromString(
+          key,
+          key === "cluster"
+            ? `cluster=${identities.nodeID.toString()}`
+            : identities.locality,
+        );
+        if (
+          (!data.length || selectedIndex === index) &&
+          networkFilter[key] &&
+          networkFilter[key].indexOf(value) !== -1
+        ) {
+          data.push(identities);
+          selectedIndex = index;
+        } else if (networkFilter[key]) {
+          data = data.filter(
+            identity =>
+              networkFilter[key].indexOf(
+                getValueFromString(
+                  key,
+                  key === "cluster"
+                    ? `cluster=${identity.nodeID.toString()}`
+                    : identity.locality,
+                ),
+              ) !== -1,
+          );
+        }
+      });
+    });
+    return data;
+  };
+
+  // getSortParams builds a list of sorting and filtering options based on provided list of nodes.
+  // It is possible to filter data by: nodes ID, region, or availability zone. For instance this
+  // function returns can return NetworkSort instance { id: "region", filters: [{name: "us-west1", ...}, {name: "us-west2"}]}
+  // that later used to populate Sort and Filter dropdowns with available options.
+  const getSortParams = (data: Identity[]): NetworkSort[] => {
+    const sort: NetworkSort[] = [];
+    const searchQuery = (params: string) => `cluster,${params}`;
+    data
+      .filter(d => !!d.locality) // filter out dead nodes that don't have locality props
+      .forEach(vals => {
+        const localities = searchQuery(vals.locality).split(",");
+        localities.forEach((locality: string) => {
+          if (locality === "") return;
+          const value = locality.match(/^\w+/gi)
+            ? locality.match(/^\w+/gi)[0]
+            : null;
+          if (sort.some(x => x.id === value)) return;
+          const sortValue: NetworkSort = { id: value, filters: [] };
+          data
+            .filter(d => !!d.locality) // filter out dead nodes that don't have locality props
+            .forEach(item => {
+              const valueLocality = searchQuery(vals.locality).split(",");
+              const itemLocality = searchQuery(item.locality);
+              valueLocality.forEach(val => {
+                const address = item.address ?? "";
+                const itemLocalitySplited = val.match(/^\w+/gi)
+                  ? val.match(/^\w+/gi)[0]
+                  : null;
+                if (val === "cluster" && value === "cluster") {
+                  sortValue.filters = [
+                    ...sortValue.filters,
+                    { name: item.nodeID.toString(), address },
+                  ];
+                } else if (
+                  itemLocalitySplited === value &&
+                  !sortValue.filters.some(
+                    f => f.name === getValueFromString(value, itemLocality),
+                  )
+                ) {
+                  sortValue.filters = [
+                    ...sortValue.filters,
+                    { name: getValueFromString(value, itemLocality), address },
+                  ];
+                }
+              });
+            });
+          sort.push(sortValue);
+        });
+      });
+    return sort;
+  };
+
+  const getDisplayIdentities = (
+    identityByID: Map<number, Identity>,
+  ): Identity[] => {
+    const identityContent = sortBy(
+      Array.from(identityByID.values()),
+      identity => identity.nodeID,
+    );
+    const sort = getSortParams(identityContent);
+    if (sort.some(x => x.id === nodeIdParam)) {
+      return sortBy(identityContent, identity =>
+        getValueFromString(nodeIdParam, identity.locality, true),
+      );
+    }
+    return identityContent;
+  };
+
+  const renderLatencyTable = (
+    latencies: number[],
+    displayIdentities: Identity[],
+  ) => {
+    const mean = d3Mean(latencies);
+    const sortParams = getSortParams(displayIdentities);
+    let stddev = d3Deviation(latencies);
+    if (isUndefined(stddev)) {
+      stddev = 0;
+    }
+    // If there is no stddev, we should not display a legend. So there is no
+    // need to set these values.
+    const stddevPlus1 = stddev > 0 ? mean + stddev : 0;
+    const stddevPlus2 = stddev > 0 ? stddevPlus1 + stddev : 0;
+    const stddevMinus1 = stddev > 0 ? max([mean - stddev, 0]) : 0;
+    const stddevMinus2 = stddev > 0 ? max([stddevMinus1 - stddev, 0]) : 0;
+    const latencyTable = (
+      <Latency
+        displayIdentities={filteredDisplayIdentities(displayIdentities)}
+        multipleHeader={nodeIdParam !== "cluster"}
+        node_id={nodeIdParam}
+        collapsed={collapsed}
+        std={{
+          stddev,
+          stddevMinus2,
+          stddevMinus1,
+          stddevPlus1,
+          stddevPlus2,
+        }}
+      />
+    );
+
+    if (stddev === 0) {
+      return latencyTable;
+    }
+
+    // legend is just a quick table showing the standard deviation values.
+    return (
+      <Fragment>
+        <Sort
+          onChangeCollapse={onChangeCollapse}
+          collapsed={collapsed}
+          sort={sortParams}
+          filter={networkFilter}
+          onChangeFilter={onChangeFilter}
+          deselectFilterByKey={deselectFilterByKey}
+        />
+        <div className="section">
+          <Legend
+            stddevMinus2={stddevMinus2}
+            stddevMinus1={stddevMinus1}
+            mean={mean}
+            stddevPlus1={stddevPlus1}
+            stddevPlus2={stddevPlus2}
+          />
+          {latencyTable}
+        </div>
+      </Fragment>
+    );
+  };
+
+  const renderContent = (
+    summary: NodesSummary,
+    filters: NodeFilterListProps,
+    conns: protos.cockroach.server.serverpb.NetworkConnectivityResponse["connections"],
+  ) => {
+    if (!contentAvailable(summary)) {
+      return null;
+    }
+    // Following states can be observed:
+    // 1. live connection
+    // 2. partitioned connection
+
+    // Combine Node Ids known by gossip client (from `connectivity`) and from
+    // Nodes api to make sure we show all known nodes.
+    const knownNodeIds = union(
+      Object.keys(summary.livenessByNodeID),
+      Object.keys(conns),
+    );
+
+    // List of node identities.
+    const identityByID: Map<number, Identity> = new Map();
+
+    knownNodeIds.forEach(nodeId => {
+      const nodeIdInt = parseInt(nodeId);
+      const status = summary.nodeStatusByID[nodeId];
+      identityByID.set(nodeIdInt, {
+        nodeID: nodeIdInt,
+        address: status?.desc.address.address_field,
+        locality: status && localityToString(status.desc.locality),
+        updatedAt: status && util.LongToMoment(status.updated_at),
+        livenessStatus:
+          summary.livenessStatusByNodeID[nodeId] ||
+          protos.cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
+            .NODE_STATUS_UNKNOWN,
+        connectivity: conns[nodeId],
+      });
+    });
+
+    // apply filters to exclude items that don't satisfy filter conditions.
+    identityByID.forEach((identity, nodeId) => {
+      if (
+        (filters.nodeIDs?.size > 0 && !filters.nodeIDs?.has(nodeId)) ||
+        (!!filters.localityRegex &&
+          filters.localityRegex?.test(identity.locality)) ||
+        !isHealthyLivenessStatus(identity.livenessStatus)
+      ) {
+        identityByID.delete(nodeId);
+      }
+    });
+
+    const displayIdentities: Identity[] = getDisplayIdentities(identityByID);
+
+    const latencies = flow([
+      values,
+      (vals: IConnectivity[]) => flatMap(vals, v => Object.values(v.peers)),
+      (vals: IPeer[]) => flatMap(vals, v => v.latency),
+      (vals: IDuration[]) => filter(vals, v => v && v.nanos),
+      (vals: IDuration[]) => map(vals, v => util.NanoToMilli(v.nanos)),
+    ])(conns);
+
+    if (isEmpty(identityByID)) {
+      return <h2 className="base-heading">No nodes match the filters</h2>;
+    }
+    if (knownNodeIds.length < 2) {
+      return (
+        <h2 className="base-heading">
+          Cannot show latency chart for cluster with less than 2 nodes.
+        </h2>
+      );
+    }
+    return renderLatencyTable(latencies, displayIdentities);
+  };
+
+  const filters = getFilters(location);
+  const canShowPage =
+    !getDataFromServer().FeatureFlags.disable_kv_level_advanced_debug;
+  const errors = [nodesSummaryError, connectivityError].filter(Boolean);
+
+  return (
+    <Fragment>
+      <Helmet title="Network" />
+      <h3 className="base-heading">Network</h3>
+      {!canShowPage && (
+        <section className="section">
+          <InlineAlert
+            title="The network page is only available via the system interface."
+            intent="warning"
+          />
+        </section>
+      )}
+      {canShowPage && (
+        <Loading
+          loading={
+            nodesSummaryLoading ||
+            !contentAvailable(nodesSummary) ||
+            (connectivityLoading && isEmpty(connections))
+          }
+          page={"network"}
+          error={errors}
+          className="loading-image loading-image__spinner-left loading-image__spinner-left__padded"
+          render={() => (
+            <div>
+              <NodeFilterList
+                nodeIDs={filters.nodeIDs}
+                localityRegex={filters.localityRegex}
+              />
+              {renderContent(nodesSummary, filters, connections)}
+            </div>
+          )}
+        />
+      )}
+    </Fragment>
+  );
+}

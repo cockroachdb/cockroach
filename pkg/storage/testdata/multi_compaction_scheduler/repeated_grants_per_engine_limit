@@ -1,0 +1,57 @@
+# Repeated grants hitting per-engine limit.
+# State has allowed=2 and accept-count=5 (waiting persists across
+# multiple Schedule calls). tryGrant should grant twice (running
+# reaches allowed=2) then stop despite waiting remaining.
+
+init max-concurrency=3 deprioritization=0.5 log-allowed=2 state-allowed=2
+----
+
+set-allowed engine=state allowed=0
+----
+
+set-allowed engine=log allowed=0
+----
+
+set-waiting engine=state score=1.0 accept-count=5
+----
+
+try-schedule engine=state
+----
+not granted
+
+set-allowed engine=state allowed=2
+----
+
+tick
+----
+state: GetWaitingCompaction
+state: Schedule => accepted: handle=0
+state: GetWaitingCompaction
+state: Schedule => accepted: handle=1
+
+print-state
+----
+totalRunning: 2
+log: running=0 waiting=false registered=true
+state: running=2 waiting=true registered=true
+
+# Clean up.
+
+clear-waiting engine=state
+----
+
+compaction-done engine=state handle=0
+----
+state: GetWaitingCompaction
+
+compaction-done engine=state handle=1
+----
+
+print-state
+----
+totalRunning: 0
+log: running=0 waiting=false registered=true
+state: running=0 waiting=false registered=true
+
+close
+----

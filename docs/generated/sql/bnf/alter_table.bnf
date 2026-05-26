@@ -1,0 +1,20 @@
+alter_table_stmt ::=
+	'ALTER' 'TABLE' table_name alter_table_cmd ( ( ',' alter_table_cmd ) )*
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name alter_table_cmd ( ( ',' alter_table_cmd ) )*
+	| 'ALTER' 'TABLE' table_name 'SPLIT' 'AT' select_stmt
+	| 'ALTER' 'TABLE' table_name 'SPLIT' 'AT' select_stmt 'WITH' 'EXPIRATION' a_expr
+	| 'ALTER' 'TABLE' table_name 'UNSPLIT' 'AT' select_stmt
+	| 'ALTER' 'TABLE' table_name 'UNSPLIT' 'ALL'
+	| alter_scatter_stmt
+	| 'ALTER' 'TABLE' table_name 'CONFIGURE' 'ZONE' 'USING' variable '=' 'COPY' 'FROM' 'PARENT' ( ( ',' variable '=' value | ',' variable '=' 'COPY' 'FROM' 'PARENT' ) )*
+	| 'ALTER' 'TABLE' table_name 'CONFIGURE' 'ZONE' 'USING' variable '=' value ( ( ',' variable '=' value | ',' variable '=' 'COPY' 'FROM' 'PARENT' ) )*
+	| 'ALTER' 'TABLE' table_name 'CONFIGURE' 'ZONE' 'DISCARD'
+	| 'ALTER' 'TABLE' table_name 'RENAME' 'TO' table_new_name
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'RENAME' 'TO' table_new_name
+	| 'ALTER' 'TABLE' table_name 'SET' 'SCHEMA' schema_name
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'SET' 'SCHEMA' schema_name
+	| 'ALTER' 'TABLE' table_name 'SET' locality
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'SET' locality
+	| alter_table_logged_stmt
+	| 'ALTER' 'TABLE' table_name 'OWNER' 'TO' role_spec
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'OWNER' 'TO' role_spec

@@ -1,0 +1,12 @@
+alter_range_stmt ::=
+	'ALTER' 'RANGE' range_id 'CONFIGURE' 'ZONE' 'USING' var_name '=' 'COPY' 'FROM' 'PARENT' ( ( ',' var_name '=' var_value | ',' var_name '=' 'COPY' 'FROM' 'PARENT' ) )*
+	| 'ALTER' 'RANGE' range_id 'CONFIGURE' 'ZONE' 'USING' var_name '=' var_value ( ( ',' var_name '=' var_value | ',' var_name '=' 'COPY' 'FROM' 'PARENT' ) )*
+	| 'ALTER' 'RANGE' range_id 'CONFIGURE' 'ZONE' 'DISCARD'
+	| 'ALTER' 'RANGE' 'RELOCATE' 'LEASE' 'TO' a_expr 'FOR' select_stmt
+	| 'ALTER' 'RANGE' range_id 'RELOCATE' 'LEASE' 'TO' a_expr
+	| 'ALTER' 'RANGE' 'RELOCATE' 'VOTERS' 'FROM' a_expr 'TO' a_expr 'FOR' select_stmt
+	| 'ALTER' 'RANGE' 'RELOCATE'  'FROM' a_expr 'TO' a_expr 'FOR' select_stmt
+	| 'ALTER' 'RANGE' 'RELOCATE' 'NONVOTERS' 'FROM' a_expr 'TO' a_expr 'FOR' select_stmt
+	| 'ALTER' 'RANGE' range_id 'RELOCATE' 'VOTERS' 'FROM' a_expr 'TO' a_expr
+	| 'ALTER' 'RANGE' range_id 'RELOCATE'  'FROM' a_expr 'TO' a_expr
+	| 'ALTER' 'RANGE' range_id 'RELOCATE' 'NONVOTERS' 'FROM' a_expr 'TO' a_expr

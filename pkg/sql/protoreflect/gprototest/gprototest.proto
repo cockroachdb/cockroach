@@ -1,0 +1,17 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.sql.gprototest;
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/protoreflect/gprototest";
+
+message Inner {
+  string value = 1;
+}
+
+message Outer {
+  string value = 1;
+  Inner inner = 2;
+}

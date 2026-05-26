@@ -1,0 +1,18 @@
+# Yaml for creating and configuring operations scripts for drt-scale cluster.
+environment:
+  ROACHPROD_GCE_DEFAULT_SERVICE_ACCOUNT: 622274581499-compute@developer.gserviceaccount.com
+  ROACHPROD_DNS: drt.crdb.io
+  ROACHPROD_GCE_DNS_DOMAIN: drt.crdb.io
+  ROACHPROD_GCE_DNS_ZONE: drt
+  ROACHPROD_GCE_DEFAULT_PROJECT: cockroach-drt
+  CLUSTER: drt-scale
+  WORKLOAD_CLUSTER: workload-scale
+
+targets:
+  - target_name: operations
+    steps:
+      - script: "pkg/cmd/drtprod/scripts/create_run_operation.sh"
+        args:
+          - "grant_revoke,grant-revoke"
+          - "schema_change,add-column|add-index"
+          - "kill_stall,disk-stall|network-partition|node-kill,0 * * * *" # runs every 1 hour

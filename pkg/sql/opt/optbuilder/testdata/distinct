@@ -1,0 +1,319 @@
+# tests adapted from logictest -- aggregate and distinct
+
+exec-ddl
+CREATE TABLE xyz (
+  x INT PRIMARY KEY,
+  y INT,
+  z FLOAT,
+  INDEX xy (x, y),
+  INDEX zyx (z, y, x),
+  FAMILY (x),
+  FAMILY (y),
+  FAMILY (z)
+)
+----
+
+build
+SELECT y, z FROM xyz
+----
+project
+ ├── columns: y:2 z:3
+ └── scan xyz
+      └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+
+build
+SELECT DISTINCT y, z FROM xyz
+----
+distinct-on
+ ├── columns: y:2 z:3
+ ├── grouping columns: y:2 z:3
+ └── project
+      ├── columns: y:2 z:3
+      └── scan xyz
+           └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+
+build
+SELECT y FROM (SELECT DISTINCT y, z FROM xyz)
+----
+project
+ ├── columns: y:2
+ └── distinct-on
+      ├── columns: y:2 z:3
+      ├── grouping columns: y:2 z:3
+      └── project
+           ├── columns: y:2 z:3
+           └── scan xyz
+                └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+
+build
+SELECT DISTINCT y, z FROM xyz ORDER BY z
+----
+sort
+ ├── columns: y:2 z:3
+ ├── ordering: +3
+ └── distinct-on
+      ├── columns: y:2 z:3
+      ├── grouping columns: y:2 z:3
+      └── project
+           ├── columns: y:2 z:3
+           └── scan xyz
+                └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+
+build
+SELECT DISTINCT y, z FROM xyz ORDER BY y
+----
+sort
+ ├── columns: y:2 z:3
+ ├── ordering: +2
+ └── distinct-on
+      ├── columns: y:2 z:3
+      ├── grouping columns: y:2 z:3
+      └── project
+           ├── columns: y:2 z:3
+           └── scan xyz
+                └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+
+build
+SELECT DISTINCT y, z FROM xyz ORDER BY y, z
+----
+distinct-on
+ ├── columns: y:2 z:3
+ ├── grouping columns: y:2 z:3
+ ├── ordering: +2,+3
+ └── sort
+      ├── columns: y:2 z:3
+      ├── ordering: +2,+3
+      └── project
+           ├── columns: y:2 z:3
+           └── scan xyz
+                └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+
+build
+SELECT DISTINCT y + x AS r FROM xyz ORDER by (y + x)
+----
+distinct-on
+ ├── columns: r:6
+ ├── grouping columns: r:6
+ ├── ordering: +6
+ └── sort
+      ├── columns: r:6
+      ├── ordering: +6
+      └── project
+           ├── columns: r:6
+           ├── scan xyz
+           │    └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+           └── projections
+                └── y:2 + x:1 [as=r:6]
+
+build
+SELECT DISTINCT y + x AS r FROM xyz ORDER BY y + x
+----
+distinct-on
+ ├── columns: r:6
+ ├── grouping columns: r:6
+ ├── ordering: +6
+ └── sort
+      ├── columns: r:6
+      ├── ordering: +6
+      └── project
+           ├── columns: r:6
+           ├── scan xyz
+           │    └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+           └── projections
+                └── y:2 + x:1 [as=r:6]
+
+build
+SELECT DISTINCT y + z FROM xyz ORDER BY y + z
+----
+error (22023): unsupported binary operator: <int> + <float>
+
+# This query causes an error in Postgres, and the optimizer has followed
+# that lead.
+build
+SELECT DISTINCT y AS w FROM xyz ORDER by z
+----
+error (42P10): for SELECT DISTINCT, ORDER BY expressions must appear in select list
+
+build
+SELECT DISTINCT y AS w FROM xyz ORDER by y
+----
+sort
+ ├── columns: w:2
+ ├── ordering: +2
+ └── distinct-on
+      ├── columns: y:2
+      ├── grouping columns: y:2
+      └── project
+           ├── columns: y:2
+           └── scan xyz
+                └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+
+build
+SELECT DISTINCT (y,z) AS r FROM xyz
+----
+distinct-on
+ ├── columns: r:6
+ ├── grouping columns: r:6
+ └── project
+      ├── columns: r:6
+      ├── scan xyz
+      │    └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      └── projections
+           └── (y:2, z:3) [as=r:6]
+
+build
+SELECT count(*) FROM (SELECT DISTINCT y FROM xyz)
+----
+scalar-group-by
+ ├── columns: count:6!null
+ ├── project
+ │    └── distinct-on
+ │         ├── columns: y:2
+ │         ├── grouping columns: y:2
+ │         └── project
+ │              ├── columns: y:2
+ │              └── scan xyz
+ │                   └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+ └── aggregations
+      └── count-rows [as=count_rows:6]
+
+build
+SELECT DISTINCT x FROM xyz WHERE x > 0
+----
+distinct-on
+ ├── columns: x:1!null
+ ├── grouping columns: x:1!null
+ └── project
+      ├── columns: x:1!null
+      └── select
+           ├── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+           ├── scan xyz
+           │    └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+           └── filters
+                └── x:1 > 0
+
+build
+SELECT DISTINCT z FROM xyz WHERE x > 0
+----
+distinct-on
+ ├── columns: z:3
+ ├── grouping columns: z:3
+ └── project
+      ├── columns: z:3
+      └── select
+           ├── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+           ├── scan xyz
+           │    └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+           └── filters
+                └── x:1 > 0
+
+build
+SELECT DISTINCT max(x) FROM xyz GROUP BY x
+----
+distinct-on
+ ├── columns: max:6!null
+ ├── grouping columns: max:6!null
+ └── project
+      ├── columns: max:6!null
+      └── group-by (hash)
+           ├── columns: x:1!null max:6!null
+           ├── grouping columns: x:1!null
+           ├── project
+           │    ├── columns: x:1!null
+           │    └── scan xyz
+           │         └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+           └── aggregations
+                └── max [as=max:6]
+                     └── x:1
+
+build
+SELECT DISTINCT x+y AS r FROM xyz
+----
+distinct-on
+ ├── columns: r:6
+ ├── grouping columns: r:6
+ └── project
+      ├── columns: r:6
+      ├── scan xyz
+      │    └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      └── projections
+           └── x:1 + y:2 [as=r:6]
+
+build
+SELECT DISTINCT 3 r FROM xyz
+----
+distinct-on
+ ├── columns: r:6!null
+ ├── grouping columns: r:6!null
+ └── project
+      ├── columns: r:6!null
+      ├── scan xyz
+      │    └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      └── projections
+           └── 3 [as=r:6]
+
+build
+SELECT DISTINCT 3 r
+----
+distinct-on
+ ├── columns: r:1!null
+ ├── grouping columns: r:1!null
+ └── project
+      ├── columns: r:1!null
+      ├── values
+      │    └── ()
+      └── projections
+           └── 3 [as=r:1]
+
+build
+SELECT DISTINCT max(z), x+y AS r, 3 AS s FROM xyz GROUP BY x, y HAVING y > 4
+----
+distinct-on
+ ├── columns: max:6 r:7!null s:8!null
+ ├── grouping columns: max:6 r:7!null s:8!null
+ └── project
+      ├── columns: r:7!null s:8!null max:6
+      ├── select
+      │    ├── columns: x:1!null y:2!null max:6
+      │    ├── group-by (hash)
+      │    │    ├── columns: x:1!null y:2 max:6
+      │    │    ├── grouping columns: x:1!null y:2
+      │    │    ├── project
+      │    │    │    ├── columns: x:1!null y:2 z:3
+      │    │    │    └── scan xyz
+      │    │    │         └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      │    │    └── aggregations
+      │    │         └── max [as=max:6]
+      │    │              └── z:3
+      │    └── filters
+      │         └── y:2 > 4
+      └── projections
+           ├── x:1 + y:2 [as=r:7]
+           └── 3 [as=s:8]
+
+exec-ddl
+CREATE TABLE abcd (
+  a INT,
+  b INT,
+  c INT,
+  d INT NOT NULL,
+  PRIMARY KEY (a, b, c),
+  UNIQUE INDEX (d, b)
+)
+----
+
+build
+SELECT DISTINCT 1 AS x, d, b FROM abcd ORDER BY d, b
+----
+sort
+ ├── columns: x:7!null d:4!null b:2!null
+ ├── ordering: +4,+2
+ └── distinct-on
+      ├── columns: b:2!null d:4!null x:7!null
+      ├── grouping columns: b:2!null d:4!null x:7!null
+      └── project
+           ├── columns: x:7!null b:2!null d:4!null
+           ├── scan abcd
+           │    └── columns: a:1!null b:2!null c:3!null d:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+           └── projections
+                └── 1 [as=x:7]

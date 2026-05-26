@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "cli",
+    srcs = [
+        "handlers.go",
+        "registry.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/drtprod/cli",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/drtprod/cli/commands",
+        "//pkg/cmd/roachprod/cli",
+        "@com_github_spf13_cobra//:cobra",
+    ],
+)

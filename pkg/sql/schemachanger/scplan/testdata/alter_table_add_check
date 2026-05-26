@@ -1,0 +1,103 @@
+setup
+CREATE TABLE t (i INT PRIMARY KEY)
+----
+
+ops
+ALTER TABLE t ADD CHECK (i > 0)
+----
+StatementPhase stage 1 of 1 with 2 MutationType ops
+  transitions:
+    [[CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1]}, PUBLIC], ABSENT] -> WRITE_ONLY
+    [[ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.AddCheckConstraint
+      CheckExpr: i > 0:::INT8
+      ColumnIDs:
+      - 1
+      ConstraintID: 2
+      TableID: 104
+      Validity: 2
+    *scop.SetConstraintName
+      ConstraintID: 2
+      Name: check_i
+      TableID: 104
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1]}, PUBLIC], WRITE_ONLY] -> ABSENT
+    [[ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 4 MutationType ops
+  transitions:
+    [[CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1]}, PUBLIC], ABSENT] -> WRITE_ONLY
+    [[ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.AddCheckConstraint
+      CheckExpr: i > 0:::INT8
+      ColumnIDs:
+      - 1
+      ConstraintID: 2
+      TableID: 104
+      Validity: 2
+    *scop.SetConstraintName
+      ConstraintID: 2
+      Name: check_i
+      TableID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
+      Initialize: true
+    *scop.CreateSchemaChangerJob
+      Authorization:
+        AppName: $ internal-test
+        UserName: root
+      DescriptorIDs:
+      - 104
+      JobID: 1
+      RunningStatus: 'Pending: Validating CHECK constraint (1 operation) — PostCommit phase (stage 1 of 2).'
+      Statements:
+      - statement: ALTER TABLE t ADD CHECK (i > 0)
+        redactedstatement: ALTER TABLE defaultdb.public.t ADD CHECK (i > ‹0›)
+        statementtag: ALTER TABLE
+PostCommitPhase stage 1 of 2 with 1 ValidationType op
+  transitions:
+    [[CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1]}, PUBLIC], WRITE_ONLY] -> VALIDATED
+  ops:
+    *scop.ValidateConstraint
+      ConstraintID: 2
+      TableID: 104
+PostCommitPhase stage 2 of 2 with 3 MutationType ops
+  transitions:
+    [[CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1]}, PUBLIC], VALIDATED] -> PUBLIC
+  ops:
+    *scop.MakeValidatedCheckConstraintPublic
+      ConstraintID: 2
+      TableID: 104
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 104
+      JobID: 1
+    *scop.UpdateSchemaChangerJob
+      DescriptorIDsToRemove:
+      - 104
+      IsNonCancelable: true
+      JobID: 1
+
+deps
+ALTER TABLE t ADD CHECK (i > 0)
+----
+- from: [CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1]}, ABSENT]
+  to:   [CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1]}, WRITE_ONLY]
+  kind: PreviousTransactionPrecedence
+  rule: CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY
+- from: [CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1]}, VALIDATED]
+  to:   [CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1]}, PUBLIC]
+  kind: PreviousTransactionPrecedence
+  rule: CheckConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC
+- from: [CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1]}, WRITE_ONLY]
+  to:   [CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1]}, VALIDATED]
+  kind: PreviousTransactionPrecedence
+  rule: CheckConstraint transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED
+- from: [CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1]}, WRITE_ONLY]
+  to:   [ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}, PUBLIC]
+  kind: Precedence
+  rule: simple constraint visible before name

@@ -1,0 +1,510 @@
+# LogicTest: !local-prepared
+query BB
+SELECT 'foo:1,2 bar:3'::tsvector @@ 'foo <-> bar'::tsquery, 'foo <-> bar'::tsquery @@ 'foo:1,2 bar:3'::tsvector
+----
+true  true
+
+statement ok
+CREATE TABLE a (v tsvector, q tsquery)
+
+statement ok
+INSERT INTO a VALUES('foo:1,2 bar:4B'::tsvector, 'foo <2> bar'::tsquery)
+
+query TT
+SELECT * FROM a
+----
+'bar':4B 'foo':1,2  'foo' <2> 'bar'
+
+query BB
+SELECT 'foo:1,2 bar:4B'::tsvector @@ 'foo <2> bar'::tsquery, 'foo:1,2 bar:4B' @@ 'foo <-> bar'::tsquery
+----
+true  false
+
+query BB
+SELECT v @@ 'foo <2> bar'::tsquery, v @@ 'foo <-> bar'::tsquery FROM a
+----
+true  false
+
+query B
+SELECT v @@ q FROM a
+----
+true
+
+# Test column modifiers.
+
+statement ok
+CREATE TABLE b (a INT PRIMARY KEY DEFAULT 1, v tsvector DEFAULT 'foo:1' ON UPDATE 'bar:2', v2 tsvector AS (v) STORED, v3 tsvector AS (v) VIRTUAL)
+
+statement ok
+CREATE TABLE c (a INT PRIMARY KEY DEFAULT 1, q tsquery DEFAULT 'foo' ON UPDATE 'bar', q2 tsquery AS (q) STORED, q3 tsquery AS (q) VIRTUAL)
+
+statement ok
+INSERT INTO b DEFAULT VALUES
+
+statement ok
+INSERT INTO c DEFAULT VALUES
+
+query ITTT
+SELECT * FROM b
+----
+1  'foo':1  'foo':1  'foo':1
+
+query ITTT
+SELECT * FROM c
+----
+1  'foo'  'foo'  'foo'
+
+statement ok
+UPDATE b SET a = 2 WHERE a = 1
+
+statement ok
+UPDATE c SET a = 2 WHERE a = 1
+
+query ITTT
+SELECT * FROM b
+----
+2  'bar':2  'bar':2  'bar':2
+
+query ITTT
+SELECT * FROM c
+----
+2  'bar'  'bar'  'bar'
+
+statement ok
+INSERT INTO b VALUES (3, 'foo:1,5 zoop:3')
+
+statement error can't order by column type TSVECTOR
+SELECT * FROM b ORDER BY v
+
+statement error can't order by column type TSQUERY
+SELECT * FROM c ORDER BY q
+
+statement error arrays of tsvector not allowed
+CREATE TABLE tsarray(a tsvector[])
+
+statement error arrays of tsquery not allowed
+CREATE TABLE tsarray(a tsquery[])
+
+statement error unsupported comparison operator
+SELECT a, v FROM b WHERE v > 'bar:2'::tsvector
+
+statement error unsupported comparison operator
+SELECT a, q FROM c WHERE q > 'abc'::tsquery
+
+query IT
+SELECT a, v FROM b WHERE v = 'bar:2'::tsvector
+----
+2  'bar':2
+
+query IT
+SELECT a, q FROM c WHERE q = 'bar'::tsquery
+----
+2  'bar'
+
+# Ensure truncation of long position lists.
+query T
+SELECT ('foo:' || string_agg(g::TEXT,','))::tsvector from generate_series(1,280) g(g);
+----
+'foo':1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,156,157,158,159,160,161,162,163,164,165,166,167,168,169,170,171,172,173,174,175,176,177,178,179,180,181,182,183,184,185,186,187,188,189,190,191,192,193,194,195,196,197,198,199,200,201,202,203,204,205,206,207,208,209,210,211,212,213,214,215,216,217,218,219,220,221,222,223,224,225,226,227,228,229,230,231,232,233,234,235,236,237,238,239,240,241,242,243,244,245,246,247,248,249,250,251,252,253,254,255,256
+
+# Ensure truncation of large positions.
+query T
+SELECT 'foo:293847298347'::tsvector
+----
+'foo':16383
+
+query error word is too long \(2047 bytes, max 2046 bytes\)
+SELECT repeat('a', 2047)::tsvector
+
+query error word is too long \(2047 bytes, max 2046 bytes\)
+SELECT repeat('a', 2047)::tsquery
+
+query error could not parse tsquery: distance in phrase operator must be an integer value between zero and 16384 inclusive
+SELECT 'foo <23842937> bar'::tsquery
+
+query error string is too long for tsvector
+SELECT repeat('a', 1<<20)::tsvector
+
+query error string is too long for tsquery
+SELECT repeat('a', 1<<20)::tsquery
+
+# TSVECTOR should convert to a JSON element as a string.
+query T
+VALUES ( json_build_array('''D'':236A,377C,622A ''SDfdZ'' ''aIjQScIT'':213A,418A,827A ''pHhJoarX'':106C,486C ''pjApqSC'' ''qXLpyjUM'':547C ''uWSPY'':10A,822B':::TSVECTOR)::JSONB
+       )
+----
+["'D':236A,377C,622A 'SDfdZ' 'aIjQScIT':213A,418A,827A 'pHhJoarX':106C,486C 'pjApqSC' 'qXLpyjUM':547C 'uWSPY':10A,822B"]
+
+# TSQUERY should convert to a JSON element as a string.
+query T
+VALUES ( json_build_array($$'cat' & 'rat'$$:::TSQUERY)::JSONB)
+----
+["'cat' & 'rat'"]
+
+# Test tsvector inverted indexes.
+statement ok
+DROP TABLE a;
+CREATE TABLE a (
+  a TSVECTOR,
+  b TSQUERY,
+  INVERTED INDEX(a)
+);
+INSERT INTO a VALUES('foo:3 bar:4,5'), ('baz:1'), ('foo:3'), ('bar:2')
+
+query T rowsort
+SELECT a FROM a@a_a_idx WHERE a @@ 'foo'
+----
+'bar':4,5 'foo':3
+'foo':3
+
+statement error index \"a_a_idx\" is inverted and cannot be used for this query
+SELECT a FROM a@a_a_idx WHERE a @@ '!foo'
+
+query T rowsort
+SELECT a FROM a@a_a_idx WHERE a @@ 'foo' OR a @@ 'bar'
+----
+'bar':4,5 'foo':3
+'foo':3
+'bar':2
+
+query T rowsort
+SELECT a FROM a@a_a_idx WHERE a @@ 'foo | bar'
+----
+'bar':4,5 'foo':3
+'foo':3
+'bar':2
+
+query T rowsort
+SELECT a FROM a@a_a_idx WHERE a @@ 'foo | bar' OR a @@ 'baz'
+----
+'bar':4,5 'foo':3
+'baz':1
+'foo':3
+'bar':2
+
+query T
+SELECT a FROM a@a_a_idx WHERE a @@ 'foo & bar'
+----
+'bar':4,5 'foo':3
+
+query T
+SELECT a FROM a@a_a_idx WHERE a @@ 'foo <-> bar'
+----
+'bar':4,5 'foo':3
+
+query T
+SELECT a FROM a@a_a_idx WHERE a @@ 'bar <-> foo'
+----
+
+query T
+SELECT a FROM a@a_a_idx WHERE a @@ 'foo <-> !bar'
+----
+'foo':3
+
+query T rowsort
+SELECT a FROM a@a_a_idx WHERE a @@ '!baz <-> bar'
+----
+'bar':4,5 'foo':3
+'bar':2
+
+query T
+SELECT a FROM a@a_a_idx WHERE a @@ 'foo & !bar'
+----
+'foo':3
+
+query T rowsort
+SELECT a FROM a@a_a_idx WHERE a @@ 'ba:*'
+----
+'bar':4,5 'foo':3
+'baz':1
+'bar':2
+
+query T rowsort
+SELECT a FROM a@a_a_idx WHERE a @@ 'ba:* | foo'
+----
+'bar':4,5 'foo':3
+'baz':1
+'foo':3
+'bar':2
+
+query T
+SELECT a FROM a@a_a_idx WHERE a @@ 'ba:* & foo'
+----
+'bar':4,5 'foo':3
+
+# Test that tsvector indexes can't accelerate the @@ operator with no constant
+# columns.
+statement error index \"a_a_idx\" is inverted and cannot be used for this query
+EXPLAIN SELECT * FROM a@a_a_idx WHERE a @@ b
+
+# Regression test for incorrectly marking TSVector type as composite (#95680).
+statement ok
+CREATE TABLE t95680 (c1 FLOAT NOT NULL, c2 TSVECTOR NOT NULL, INVERTED INDEX (c1 ASC, c2 ASC));
+INSERT INTO t95680 VALUES (1.0::FLOAT, e'\'kCrLZNl\' \'sVDj\' \'yO\' \'z\':54C,440B,519C,794B':::TSVECTOR);
+
+# More tests for these functions live in pkg/util/tsearch/testdata
+query IT nosort
+SELECT * FROM ts_parse('default', 'Hello this is a parsi-ng t.est 1.234 4 case324')
+----
+1  Hello
+1  this
+1  is
+1  a
+1  parsi
+1  ng
+1  t
+1  est
+1  1
+1  234
+1  4
+1  case324
+
+query T
+SELECT * FROM to_tsvector('simple', 'Hello this is a parsi-ng t.est 1.234 4 case324')
+----
+'1':9 '234':10 '4':11 'a':4 'case324':12 'est':8 'hello':1 'is':3 'ng':6 'parsi':5 't':7 'this':2
+
+query T
+SELECT * FROM phraseto_tsquery('simple', 'Hello this is a parsi-ng t.est 1.234 4 case324')
+----
+'hello' <-> 'this' <-> 'is' <-> 'a' <-> 'parsi' <-> 'ng' <-> 't' <-> 'est' <-> '1' <-> '234' <-> '4' <-> 'case324'
+
+
+query T
+SELECT phraseto_tsquery('No hardcoded configuration')
+----
+'hardcod' <-> 'configur'
+
+query T
+SELECT plainto_tsquery('No hardcoded configuration')
+----
+'hardcod' & 'configur'
+
+query T
+SELECT to_tsquery('No | hardcoded | configuration')
+----
+'hardcod' | 'configur'
+
+query T
+SELECT * FROM to_tsquery('simple', 'a | b & c <-> d')
+----
+'a' | 'b' & 'c' <-> 'd'
+
+query error syntax
+SELECT * FROM to_tsquery('simple', 'Hello this is a parsi-ng t.est 1.234 4 case324')
+
+# Test default variants of the to_ts* functions.
+
+query T
+SHOW default_text_search_config
+----
+pg_catalog.english
+
+query T
+SELECT to_tsvector('Hello I am a potato')
+----
+'hello':1 'potato':5
+
+statement error text search configuration \"blah\" does not exist
+SET default_text_search_config = 'blah'
+
+statement ok
+SET default_text_search_config = 'spanish'
+
+query T
+SELECT to_tsvector('Hello I am a potato')
+----
+'am':3 'hell':1 'i':2 'potat':5
+
+query TT
+SELECT to_tsvector('english', ''), to_tsvector('english', 'and the')
+----
+·  ·
+
+statement error doesn't contain lexemes
+SELECT to_tsquery('english', 'the')
+
+statement ok
+CREATE TABLE sentences (sentence text, v TSVECTOR AS (to_tsvector('english', sentence)) STORED, INVERTED INDEX (v));
+INSERT INTO sentences VALUES
+  ('Future users of large data banks must be protected from having to know how the data is organized in the machine (the internal representation).'),
+  ('A prompting service which supplies such information is not a satisfactory solution.'),
+  ('Activities of users at terminals and most application programs should remain unaffected when the internal representation of data is changed and even when some aspects of the external representation
+  are changed.'),
+  ('Changes in data representation will often be needed as a result of changes in query, update, and report traffic and natural growth in the types of stored information.'),
+  ('Existing noninferential, formatted data systems provide users with tree-structured files or slightly more general network models of the data.'),
+  ('In Section 1, inadequacies of these models are discussed.'),
+  ('A model based on n-ary relations, a normal form for data base relations, and the concept of a universal data sublanguage are introduced.'),
+  ('In Section 2, certain operations on relations (other than logical inference) are discussed and applied to the problems of redundancy and consistency in the user’s model.')
+
+query FFFFT
+SELECT
+ts_rank(v, query) AS rank,
+ts_rank(ARRAY[0.2, 0.3, 0.5, 0.9]:::FLOAT[], v, query) AS wrank,
+ts_rank(v, query, 2|8) AS nrank,
+ts_rank(ARRAY[0.3, 0.4, 0.6, 0.95]:::FLOAT[], v, query, 1|2|4|8|16|32) AS wnrank,
+v
+FROM sentences, to_tsquery('english', 'relation') query
+WHERE query @@ v
+ORDER BY rank DESC
+LIMIT 10
+----
+0.075990885  0.15198177  0.00042217158  8.555783e-05  'ari':6 'base':3,13 'concept':17 'data':12,21 'form':10 'introduc':24 'model':2 'n':5 'normal':9 'relat':7,14 'sublanguag':22 'univers':20
+0.06079271   0.12158542  0.0003101669   6.095758e-05  '2':3 'appli':15 'certain':4 'consist':22 'discuss':13 'infer':11 'logic':10 'model':27 'oper':5 'problem':18 'redund':20 'relat':7 'section':2 'user':25
+
+# Regression test for #99334. Truncate arrays longer than 4 elements that are
+# passed to ts_rank to avoid an internal error.
+query F
+SELECT
+	ts_rank(ARRAY[1.0039,2.37098,-0.022,0.4277,0.00387]::FLOAT8[], '''AoS'' ''HXfAX'' ''HeWdr'' ''MIHLoJM'' ''UfIQOM'' ''bw'' ''o'''::TSVECTOR, '''QqJVCgwp'''::TSQUERY)
+LIMIT
+	2
+----
+0
+
+subtest 98804_regression_test
+
+statement ok
+RESET default_text_search_config
+
+statement ok
+CREATE TABLE ab (a TEXT, b TEXT)
+
+statement ok
+INSERT INTO ab VALUES('fat rats', 'fat cats chased fat, out of shape rats');
+
+query B
+SELECT a @@ b FROM ab
+----
+false
+
+query B
+SELECT b @@ a FROM ab
+----
+true
+
+query B
+SELECT 'fat rats' @@ b FROM ab
+----
+false
+
+query B
+SELECT b @@ 'fat rats' FROM ab
+----
+true
+
+query B
+SELECT a @@ 'fat cats ate fat bats' FROM ab
+----
+false
+
+query B
+SELECT 'fat cats ate fat bats' @@ a FROM ab
+----
+false
+
+statement error pgcode 22023 unsupported comparison operator: <string> @@ <tsvector>
+SELECT b @@ a::tsvector FROM ab
+
+statement error pgcode 22023 unsupported comparison operator: <tsvector> @@ <string>
+SELECT a::tsvector @@ b FROM ab
+
+query B
+SELECT 'fat bat cat' @@ 'bats fats'
+----
+true
+
+query B
+SELECT 'bats fats' @@ 'fat bat cat'
+----
+false
+
+query B
+SELECT 'fat' @@ 'fat rats'::tsvector
+----
+true
+
+# TODO(#75101): The error should be "syntax error in TSQuery".
+statement error pgcode 22023 unsupported comparison operator: <string> @@ <tsvector>
+SELECT 'fat cats chased fat, out of shape rats' @@ 'fat rats'::tsvector
+
+query B
+SELECT 'fat rats'::tsvector @@ 'fat'
+----
+true
+
+# TODO(#75101): The error should be "syntax error in TSQuery".
+statement error pgcode 22023 unsupported comparison operator: <tsvector> @@ <string>
+SELECT 'fat rats'::tsvector @@ 'fat cats chased fat, out of shape rats'
+
+# Regression test for incorrectly using key-encoding on tuples that contain
+# TSQueries and TSVectors (which don't have key-encoding available, #118380).
+query T rowsort
+WITH cte1 AS (SELECT * FROM (VALUES
+  (('1':::TSQUERY, 1)),
+  (('2':::TSQUERY, 2))
+) AS tab (col1))
+SELECT * FROM cte1 GROUP BY cte1.col1;
+----
+('1',1)
+('2',2)
+
+query T rowsort
+WITH cte1 AS (SELECT * FROM (VALUES
+  (('':::TSVECTOR, 1)),
+  (('':::TSVECTOR, 2))
+) AS tab (col1))
+SELECT * FROM cte1 GROUP BY cte1.col1;
+----
+("",1)
+("",2)
+
+# Regression test for incorrectly using key-encoding on TSQuery type in the
+# row container infrastructure (we use the row-based windower because json_agg
+# is unsupported as vectorized aggregate function).
+query T rowsort
+WITH
+    cte (col1) AS (VALUES ('foo':::TSQUERY), ('bar':::TSQUERY)),
+    seed AS (SELECT g::INT8 AS _int8, g::STRING::JSONB AS _jsonb FROM generate_series(1, 3) AS g)
+SELECT
+    json_agg(seed._jsonb) OVER (PARTITION BY cte.col1)
+FROM
+    cte, seed;
+----
+[1, 2, 3]
+[1, 2, 3]
+[1, 2, 3]
+[1, 2, 3]
+[1, 2, 3]
+[1, 2, 3]
+
+# Regression test for hitting a nil pointer in the row-by-row engine when
+# attempting to close uninitialized disk row container (#123141).
+statement ok
+SET distsql_workmem = '2B';
+SET vectorize = off;
+
+statement error pgcode 0A000 unimplemented: can't order by column type TSQUERY
+WITH cte (col) AS (VALUES ('foo':::TSQUERY), ('bar':::TSQUERY))
+SELECT count(*) FROM cte AS cte1 JOIN cte AS cte2 ON cte1.col = cte2.col;
+
+statement ok
+RESET vectorize;
+RESET distsql_workmem;
+
+
+# Regression test for tsvector to tsvector assignment cast.
+statement ok
+CREATE TABLE t126773 (pk INT PRIMARY KEY, v TSVECTOR);
+
+statement ok
+INSERT INTO t126773 (pk, v) values (1, tsvector('splendid water fowl'));
+
+statement ok
+SELECT t126773::t126773 FROM t126773;
+
+# Regression test for TSMatch operator producing an internal error with a NULL
+# argument (#132483).
+query T
+WITH cte(s) AS (SELECT NULL::TSQUERY) SELECT a FROM a, cte WHERE a @@ s;
+----

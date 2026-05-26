@@ -1,0 +1,681 @@
+# LogicTest: local
+
+# ------------------------------------------------------------------------------
+# Uncorrelated subqueries.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, FAMILY (a, b, c));
+CREATE TABLE abc2 (a INT PRIMARY KEY, b INT, c INT)
+
+query T
+EXPLAIN ALTER TABLE abc SPLIT AT VALUES ((SELECT 42))
+----
+distribution: local
+·
+• split
+│ index: abc@abc_pkey
+│ expiry: CAST(NULL AS STRING)
+│
+└── • values
+      size: 1 column, 1 row
+
+statement ok
+ALTER TABLE abc SPLIT AT VALUES ((SELECT 1))
+
+query T
+EXPLAIN ALTER RANGE RELOCATE FROM 11 TO 22 FOR VALUES ((SELECT 1))
+----
+distribution: local
+·
+• relocate range
+│ replicas: VOTERS
+│ to: 22
+│ from: 11
+│
+└── • values
+      size: 1 column, 1 row
+
+query T
+EXPLAIN ALTER RANGE 22 RELOCATE FROM ((SELECT 1)) TO ((SELECT 2))
+----
+distribution: local
+·
+• relocate range
+│ replicas: VOTERS
+│ to: 2
+│ from: 1
+│
+└── • values
+      size: 1 column, 1 row
+
+query T
+EXPLAIN SELECT EXISTS (SELECT a FROM abc)
+----
+distribution: local
+·
+• root
+│
+├── • values
+│     size: 1 column, 1 row
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT a FROM abc)
+    │ exec mode: one row
+    │
+    └── • render
+        │
+        └── • scan
+              missing stats
+              table: abc@abc_pkey
+              spans: LIMITED SCAN
+              limit: 1
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc WHERE a = (SELECT max(a) FROM abc WHERE EXISTS(SELECT * FROM abc WHERE c=a+3))
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: (a, b, c)
+│
+├── • project
+│   │ columns: (a, b, c)
+│   │
+│   └── • lookup join (inner)
+│       │ columns: (any_not_null, a, b, c)
+│       │ estimated row count: 1 (missing stats)
+│       │ table: abc@abc_pkey
+│       │ equality: (any_not_null) = (a)
+│       │ equality cols are key
+│       │ parallel
+│       │
+│       └── • group (scalar)
+│           │ columns: (any_not_null)
+│           │ estimated row count: 1 (missing stats)
+│           │ aggregate 0: any_not_null(a)
+│           │
+│           └── • limit
+│               │ columns: (a)
+│               │ count: 1
+│               │
+│               └── • filter
+│                   │ columns: (a)
+│                   │ ordering: -a
+│                   │ estimated row count: 333 (missing stats)
+│                   │ filter: COALESCE(@S1, false)
+│                   │
+│                   └── • revscan
+│                         columns: (a)
+│                         ordering: -a
+│                         estimated row count: 1,000 (missing stats)
+│                         table: abc@abc_pkey
+│                         spans: FULL SCAN (SOFT LIMIT)
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT * FROM abc WHERE c = (a + 3))
+    │ exec mode: one row
+    │
+    └── • render
+        │ columns: (column23)
+        │ render column23: true
+        │
+        └── • limit
+            │ columns: (a, c)
+            │ count: 1
+            │
+            └── • filter
+                │ columns: (a, c)
+                │ estimated row count: 330 (missing stats)
+                │ filter: c = (a + 3)
+                │
+                └── • scan
+                      columns: (a, c)
+                      estimated row count: 1,000 (missing stats)
+                      table: abc@abc_pkey
+                      spans: FULL SCAN (SOFT LIMIT)
+
+# IN expression transformed into semi-join.
+query T
+EXPLAIN (VERBOSE) SELECT a FROM abc WHERE a IN (SELECT a FROM abc2 WHERE b < 0)
+----
+distribution: local
+vectorized: true
+·
+• merge join (semi)
+│ columns: (a)
+│ estimated row count: 333 (missing stats)
+│ equality: (a) = (a)
+│ left cols are key
+│ right cols are key
+│ merge ordering: +"(a=a)"
+│
+├── • scan
+│     columns: (a)
+│     ordering: +a
+│     estimated row count: 1,000 (missing stats)
+│     table: abc@abc_pkey
+│     spans: FULL SCAN
+│
+└── • filter
+    │ columns: (a, b)
+    │ ordering: +a
+    │ estimated row count: 333 (missing stats)
+    │ filter: b < 0
+    │
+    └── • scan
+          columns: (a, b)
+          ordering: +a
+          estimated row count: 1,000 (missing stats)
+          table: abc2@abc2_pkey
+          spans: FULL SCAN
+
+query T
+EXPLAIN SELECT * FROM (SELECT * FROM (VALUES (1, 8, 8), (3, 1, 1), (2, 4, 4)) AS moo (moo1, moo2, moo3) ORDER BY moo2) as foo (foo1) ORDER BY foo1
+----
+distribution: local
+·
+• sort
+│ estimated row count: 3
+│ order: +foo1
+│
+└── • values
+      size: 3 columns, 3 rows
+
+# the subquery's plan must be visible in EXPLAIN
+query T
+EXPLAIN VALUES (1), ((SELECT random()::INT))
+----
+distribution: local
+·
+• root
+│
+├── • values
+│     size: 1 column, 2 rows
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT random()::INT8)
+    │ exec mode: one row
+    │
+    └── • values
+          size: 1 column, 1 row
+
+# This test checks that the double sub-query plan expansion caused by a
+# sub-expression being shared by two or more plan nodes does not
+# error out.
+statement ok
+CREATE TABLE tab4(col0 INTEGER, col1 FLOAT, col3 INTEGER, col4 FLOAT)
+
+statement ok
+CREATE INDEX idx_tab4_0 ON tab4 (col4,col0)
+
+query T
+EXPLAIN (VERBOSE)
+SELECT col0
+FROM tab4
+WHERE
+    (col0 <= 0 AND col4 <= 5.38)
+    OR (col4 IN (SELECT col1 FROM tab4 WHERE col1 > 8.27))
+    AND (col3 <= 5 AND (col3 BETWEEN 7 AND 9))
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (col0)
+│
+└── • project
+    │ columns: (col0, col3, col4)
+    │
+    └── • render
+        │ columns: (col0, col3, col4, rowid)
+        │ render col0: col0
+        │ render col3: col3
+        │ render col4: col4
+        │ render rowid: rowid
+        │
+        └── • filter
+            │ columns: (col0, col3, col4, rowid)
+            │ estimated row count: 311 (missing stats)
+            │ filter: (col0 <= 0) AND (col4 <= 5.38)
+            │
+            └── • scan
+                  columns: (col0, col3, col4, rowid)
+                  estimated row count: 1,000 (missing stats)
+                  table: tab4@tab4_pkey
+                  spans: FULL SCAN
+
+# Subqueries with single, constant values can be inlined for index-acceleration.
+query T
+EXPLAIN (VERBOSE)
+SELECT * FROM abc WHERE a = (SELECT 1)
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b, c)
+  estimated row count: 1 (missing stats)
+  table: abc@abc_pkey
+  spans: /1/0
+
+query T
+EXPLAIN (VERBOSE)
+SELECT * FROM abc WHERE a >= (SELECT 1)
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b, c)
+  estimated row count: 333 (missing stats)
+  table: abc@abc_pkey
+  spans: /1-
+
+# ------------------------------------------------------------------------------
+# Correlated subqueries.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE a (x INT PRIMARY KEY, y INT);
+CREATE TABLE b (x INT PRIMARY KEY, z INT);
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE a.x=b.x)
+----
+distribution: local
+vectorized: true
+·
+• merge join (semi)
+│ columns: (x, y)
+│ estimated row count: 1,000 (missing stats)
+│ equality: (x) = (x)
+│ left cols are key
+│ right cols are key
+│ merge ordering: +"(x=x)"
+│
+├── • scan
+│     columns: (x, y)
+│     ordering: +x
+│     estimated row count: 1,000 (missing stats)
+│     table: a@a_pkey
+│     spans: FULL SCAN
+│
+└── • scan
+      columns: (x)
+      ordering: +x
+      estimated row count: 1,000 (missing stats)
+      table: b@b_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE b.x-1 = a.x)
+----
+distribution: local
+vectorized: true
+·
+• hash join (semi)
+│ columns: (x, y)
+│ estimated row count: 1,000 (missing stats)
+│ equality: (x) = (column14)
+│ left cols are key
+│
+├── • scan
+│     columns: (x, y)
+│     estimated row count: 1,000 (missing stats)
+│     table: a@a_pkey
+│     spans: FULL SCAN
+│
+└── • render
+    │ columns: (column14)
+    │ render column14: x - 1
+    │
+    └── • scan
+          columns: (x)
+          estimated row count: 1,000 (missing stats)
+          table: b@b_pkey
+          spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM b WHERE b.x = a.x)
+----
+distribution: local
+vectorized: true
+·
+• merge join (anti)
+│ columns: (x, y)
+│ estimated row count: 1 (missing stats)
+│ equality: (x) = (x)
+│ left cols are key
+│ right cols are key
+│ merge ordering: +"(x=x)"
+│
+├── • scan
+│     columns: (x, y)
+│     ordering: +x
+│     estimated row count: 1,000 (missing stats)
+│     table: a@a_pkey
+│     spans: FULL SCAN
+│
+└── • scan
+      columns: (x)
+      ordering: +x
+      estimated row count: 1,000 (missing stats)
+      table: b@b_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM b WHERE NOT EXISTS(SELECT * FROM a WHERE x-1 = b.x)
+----
+distribution: local
+vectorized: true
+·
+• hash join (anti)
+│ columns: (x, z)
+│ estimated row count: 1 (missing stats)
+│ equality: (x) = (column14)
+│ left cols are key
+│
+├── • scan
+│     columns: (x, z)
+│     estimated row count: 1,000 (missing stats)
+│     table: b@b_pkey
+│     spans: FULL SCAN
+│
+└── • render
+    │ columns: (column14)
+    │ render column14: x - 1
+    │
+    └── • scan
+          columns: (x)
+          estimated row count: 1,000 (missing stats)
+          table: a@a_pkey
+          spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT ARRAY(SELECT x FROM b)
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: ("array")
+│
+├── • values
+│     columns: ("array")
+│     size: 1 column, 1 row
+│     row 0, expr 0: ARRAY @S1
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT x FROM b)
+    │ exec mode: all rows
+    │
+    └── • scan
+          columns: (x)
+          estimated row count: 1,000 (missing stats)
+          table: b@b_pkey
+          spans: FULL SCAN
+
+# Case where the plan has an apply join.
+query T
+EXPLAIN (verbose) SELECT * FROM abc WHERE EXISTS(SELECT * FROM (VALUES (a), (b)) WHERE column1=a)
+----
+distribution: local
+vectorized: true
+·
+• apply join (semi)
+│ columns: (a, b, c)
+│ estimated row count: 2 (missing stats)
+│ pred: column1 = a
+│
+├── • scan
+│     columns: (a, b, c)
+│     estimated row count: 1,000 (missing stats)
+│     table: abc@abc_pkey
+│     spans: FULL SCAN
+│
+└── • inner loop (unoptimized)
+    │ columns: ()
+    │
+    └── • values
+          columns: ()
+           ├── (a,)
+           └── (b,)
+
+statement ok
+CREATE TABLE corr (
+  k INT PRIMARY KEY,
+  i INT,
+  FAMILY (k, i)
+);
+INSERT INTO corr VALUES (1, 10), (2, 22), (3, 30), (4, 40), (5, 50)
+
+# Case where the subquery in a filter cannot be hoisted into an apply-join.
+query T
+EXPLAIN (VERBOSE)
+SELECT * FROM corr
+WHERE CASE WHEN k < 5 THEN k*10 = (SELECT i FROM corr tmp WHERE k = corr.k) END
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (k, i)
+│ estimated row count: 333 (missing stats)
+│ filter: CASE WHEN k < 5 THEN (k * 10) = subquery(k) ELSE CAST(NULL AS BOOL) END
+│
+└── • scan
+      columns: (k, i)
+      estimated row count: 1,000 (missing stats)
+      table: corr@corr_pkey
+      spans: FULL SCAN
+
+# Case where the subquery in a projection cannot be hoisted into an apply-join.
+query T
+EXPLAIN (VERBOSE)
+SELECT k, i, CASE WHEN k > 1 THEN (SELECT i FROM corr tmp WHERE k = corr.k-1) ELSE 0 END AS prev_i
+FROM corr
+----
+distribution: local
+vectorized: true
+·
+• render
+│ columns: (k, i, prev_i)
+│ render prev_i: CASE WHEN k > 1 THEN subquery(k) ELSE 0 END
+│ render k: k
+│ render i: i
+│
+└── • scan
+      columns: (k, i)
+      estimated row count: 1,000 (missing stats)
+      table: corr@corr_pkey
+      spans: FULL SCAN
+
+# Each invocation of the subquery is re-optimized, so the scans are constrained
+# by constant values substituted for corr.k.
+query T kvtrace
+SELECT k, i, CASE WHEN k > 1 THEN (SELECT i FROM corr tmp WHERE k = corr.k-1) ELSE 0 END AS prev_i
+FROM corr
+----
+Scan /Table/111/{1-2}
+Scan /Table/111/1/1/0
+Scan /Table/111/1/2/0
+Scan /Table/111/1/3/0
+Scan /Table/111/1/4/0
+
+# Case where the EXISTS subquery in a filter cannot be hoisted into an
+# apply-join.
+query T
+EXPLAIN (VERBOSE)
+SELECT * FROM corr
+WHERE CASE WHEN k < 5 THEN EXISTS (SELECT i FROM corr tmp WHERE i = corr.k*10) END
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (k, i)
+│ estimated row count: 333 (missing stats)
+│ filter: CASE WHEN k < 5 THEN COALESCE("exists"(k), false) ELSE CAST(NULL AS BOOL) END
+│
+└── • scan
+      columns: (k, i)
+      estimated row count: 1,000 (missing stats)
+      table: corr@corr_pkey
+      spans: FULL SCAN
+
+# Case where the EXISTS subquery in a projection cannot be hoisted into an
+# apply-join.
+query T
+EXPLAIN (VERBOSE)
+SELECT *,
+  CASE WHEN k < 5 THEN EXISTS (SELECT i FROM corr tmp WHERE i = corr.k*10) END
+FROM corr
+----
+distribution: local
+vectorized: true
+·
+• render
+│ columns: (k, i, "case")
+│ render case: CASE WHEN k < 5 THEN COALESCE("exists"(k), false) ELSE CAST(NULL AS BOOL) END
+│ render k: k
+│ render i: i
+│
+└── • scan
+      columns: (k, i)
+      estimated row count: 1,000 (missing stats)
+      table: corr@corr_pkey
+      spans: FULL SCAN
+
+# Case where a correlated subquery contains an uncorrelated array-flatten
+# subquery.
+statement error could not decorrelate subquery
+SELECT
+  CASE WHEN k < 5 THEN (SELECT array(SELECT 1) FROM corr tmp WHERE k*10 = corr.k) END
+FROM corr
+
+# Regression test for #101980.
+# Case where a correlated exists subquery contains an uncorrelated ANY subquery.
+# We do not currently plan uncorrelated ANY subqueries as lazily-evaluated
+# routines, so this should cause a decorrelation error, not an internal error.
+statement ok
+CREATE TABLE t101980a (a INT);
+CREATE TABLE t101980b (b INT);
+INSERT INTO t101980a VALUES (1);
+INSERT INTO t101980b VALUES (1);
+
+statement error could not decorrelate subquery
+SELECT b FROM t101980a
+FULL JOIN t101980b ON b IN (
+  SELECT b FROM t101980b, t101980a
+  WHERE a = 0
+    OR b IN (SELECT b FROM t101980b)
+);
+
+subtest expressionInSubquery
+
+statement ok
+CREATE TABLE xy (x INT, y INT);
+
+statement ok
+CREATE TABLE ab (a INT, b INT);
+
+# The outer (a, b) is already a tuple, so shouldn't be wrapped in another
+# tuple before comparison.
+query T
+SELECT * FROM [EXPLAIN (VERBOSE)
+SELECT * FROM ab WHERE (a, b) IN (SELECT x+1, y+1 FROM xy)] OFFSET 2;
+----
+·
+• hash join (semi)
+│ columns: (a, b)
+│ estimated row count: 1,000 (missing stats)
+│ equality: (a, b) = (column19, column20)
+│
+├── • scan
+│     columns: (a, b)
+│     estimated row count: 1,000 (missing stats)
+│     table: ab@ab_pkey
+│     spans: FULL SCAN
+│
+└── • render
+    │ columns: (column20, column19)
+    │ render column20: y + 1
+    │ render column19: x + 1
+    │
+    └── • scan
+          columns: (x, y)
+          estimated row count: 1,000 (missing stats)
+          table: xy@xy_pkey
+          spans: FULL SCAN
+
+# The outer (2, 2) is already a tuple, so shouldn't be wrapped in another
+# tuple before comparison.
+query T
+SELECT * FROM [EXPLAIN (VERBOSE)
+SELECT (SELECT 2, 2) IN (SELECT x+1, y+1 FROM xy)] OFFSET 2
+----
+·
+• root
+│ columns: ("?column?")
+│
+├── • values
+│     columns: ("?column?")
+│     size: 1 column, 1 row
+│     row 0, expr 0: @S2 = ANY @S1
+│
+├── • subquery
+│   │ id: @S1
+│   │ original sql: (SELECT x + 1, y + 1 FROM xy)
+│   │ exec mode: any rows
+│   │
+│   └── • render
+│       │ columns: (column11)
+│       │ render column11: (x + 1, y + 1)
+│       │
+│       └── • scan
+│             columns: (x, y)
+│             estimated row count: 1,000 (missing stats)
+│             table: xy@xy_pkey
+│             spans: FULL SCAN
+│
+└── • subquery
+    │ id: @S2
+    │ original sql: (SELECT 2, 2)
+    │ exec mode: one row
+    │
+    └── • values
+          columns: (column12)
+          size: 1 column, 1 row
+          row 0, expr 0: (2, 2)
+
+query T
+SELECT * FROM [EXPLAIN (VERBOSE)
+SELECT (2, 2) IN (SELECT x+1, y+1 FROM xy)] OFFSET 2
+----
+·
+• root
+│ columns: ("?column?")
+│
+├── • values
+│     columns: ("?column?")
+│     size: 1 column, 1 row
+│     row 0, expr 0: (2, 2) = ANY @S1
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT x + 1, y + 1 FROM xy)
+    │ exec mode: any rows
+    │
+    └── • render
+        │ columns: (column10)
+        │ render column10: (x + 1, y + 1)
+        │
+        └── • scan
+              columns: (x, y)
+              estimated row count: 1,000 (missing stats)
+              table: xy@xy_pkey
+              spans: FULL SCAN

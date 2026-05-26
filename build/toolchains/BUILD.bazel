@@ -1,0 +1,655 @@
+load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
+load("@rules_nodejs//nodejs:toolchain.bzl", "node_toolchain")
+
+# We define a number of toolchains, each of which has a name of the form:
+#     cross_HOST_TARGET_toolchain
+# The "HOST" is either x86_64 or arm64. The TARGET is either linux, windows,
+# macos, s390x, linux_arm, or macos_arm. (As you might expect, the targets
+# are x86_64 in general unless they end with "_arm".) You can enable any of
+# these toolchains with `--config crossTARGET` (see .bazelrc).
+
+toolchain(
+    name = "cross_x86_64_linux_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@toolchain_cross_x86_64-unknown-linux-gnu//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+platform(
+    name = "cross_linux",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    exec_properties = {
+        "container-image": "docker://us-east1-docker.pkg.dev/crl-ci-images/cockroach/bazel@sha256:f0ed943695dc15776605c6dc8f91d999e2a3344272a7b48dee9d1a1ca99af461",
+        "dockerReuse": "True",
+    },
+)
+
+toolchain(
+    name = "cross_x86_64_windows_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:windows",
+        "@platforms//cpu:x86_64",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@toolchain_cross_x86_64-w64-mingw32//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+platform(
+    name = "cross_windows",
+    constraint_values = [
+        "@platforms//os:windows",
+        "@platforms//cpu:x86_64",
+    ],
+)
+
+toolchain(
+    name = "cross_x86_64_macos_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:macos",
+        "@platforms//cpu:x86_64",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@cross_x86_64_macos_toolchain//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+platform(
+    name = "cross_macos",
+    constraint_values = [
+        "@platforms//os:macos",
+        "@platforms//cpu:x86_64",
+    ],
+)
+
+toolchain(
+    name = "cross_x86_64_macos_arm_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:macos",
+        "@platforms//cpu:arm64",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@cross_x86_64_macos_arm_toolchain//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+platform(
+    name = "cross_macos_arm",
+    constraint_values = [
+        "@platforms//os:macos",
+        "@platforms//cpu:arm64",
+    ],
+)
+
+toolchain(
+    name = "cross_x86_64_linux_arm_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm64",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@toolchain_cross_aarch64-unknown-linux-gnu//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+platform(
+    name = "cross_linux_arm",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm64",
+    ],
+    exec_properties = {
+        "container-image": "docker://us-east1-docker.pkg.dev/crl-ci-images/cockroach/bazel@sha256:67c21447ee9ab61600a62cc304c5e469aeb36f68a89a3afd7ff404b1985d6087",
+        "dockerReuse": "True",
+    },
+)
+
+platform(
+    name = "cross_linux_s390x",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:s390x",
+    ],
+)
+
+toolchain(
+    name = "cross_x86_64_s390x_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:s390x",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@toolchain_cross_s390x-ibm-linux-gnu//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+platform(
+    name = "cross_linux_ppc64le",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:ppc64le",
+    ],
+)
+
+toolchain(
+    name = "cross_x86_64_ppc64le_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:ppc64le",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@toolchain_cross_powerpc64le-ibm-linux-gnu//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+toolchain(
+    name = "cross_arm64_linux_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@armtoolchain_cross_x86_64-unknown-linux-gnu//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+toolchain(
+    name = "cross_arm64_windows_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:windows",
+        "@platforms//cpu:x86_64",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@armtoolchain_cross_x86_64-w64-mingw32//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+toolchain(
+    name = "cross_arm64_linux_arm_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm64",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@armtoolchain_cross_aarch64-unknown-linux-gnu//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+toolchain(
+    name = "cross_arm64_s390x_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:s390x",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@armtoolchain_cross_s390x-ibm-linux-gnu//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+toolchain(
+    name = "cross_arm64_ppc64le_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:ppc64le",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@armtoolchain_cross_powerpc64le-ibm-linux-gnu//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+toolchain(
+    name = "cross_arm64_macos_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:macos",
+        "@platforms//cpu:x86_64",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@cross_arm64_macos_toolchain//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+toolchain(
+    name = "cross_arm64_macos_arm_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:macos",
+        "@platforms//cpu:arm64",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@cross_arm64_macos_arm_toolchain//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+# There are aliases for each of these flags defined in .bazelrc; for example,
+# --crdb_test instead of --//build/toolchains:crdb_test_flag.
+#
+# crdb_test_flag is set to true for every `bazel test` invocation (see .bazelrc).
+# When building a test executable via `bazel build`, you want to make sure you
+# set this flag (via `--config test` or `--crdb_test`) or else the executable
+# won't be compiled with the appropriate test logic.
+# crdb_test_off_flag is provided as an override to disable this default behavior
+# if desired. It's unnecessary under any other circumstances.
+bool_flag(
+    name = "crdb_test_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+bool_flag(
+    name = "crdb_test_off_flag",
+    build_setting_default = False,
+    visibility = [":__pkg__"],
+)
+
+config_setting(
+    name = "crdb_test",
+    flag_values = {
+        ":crdb_test_flag": "true",
+        ":crdb_test_off_flag": "false",
+    },
+)
+
+bool_flag(
+    name = "crdb_bench_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "crdb_bench",
+    flag_values = {
+        ":crdb_bench_flag": "true",
+    },
+)
+
+bool_flag(
+    name = "dev_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "dev",
+    flag_values = {
+        ":dev_flag": "true",
+    },
+)
+
+bool_flag(
+    name = "bazel_code_coverage_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "bazel_code_coverage",
+    flag_values = {
+        ":bazel_code_coverage_flag": "true",
+    },
+)
+
+bool_flag(
+    name = "cross_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "cross",
+    flag_values = {
+        ":cross_flag": "true",
+    },
+)
+
+config_setting(
+    name = "is_cross_macos",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:darwin",
+    ],
+    flag_values = {
+        ":cross_flag": "true",
+    },
+)
+
+config_setting(
+    name = "is_dev_linux",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:linux",
+    ],
+    flag_values = {
+        ":dev_flag": "true",
+        ":cross_flag": "false",
+    },
+)
+
+config_setting(
+    name = "is_non_dev_macos_arm64",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:darwin",
+        "@platforms//cpu:aarch64",
+    ],
+    flag_values = {
+        ":dev_flag": "false",
+    },
+)
+
+config_setting(
+    name = "is_dev_macos_arm64",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:darwin",
+        "@platforms//cpu:aarch64",
+    ],
+    flag_values = {
+        ":dev_flag": "true",
+    },
+)
+
+config_setting(
+    name = "is_cross_macos_x86_64",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:darwin",
+        "@platforms//cpu:x86_64",
+    ],
+    flag_values = {
+        ":cross_flag": "true",
+    },
+)
+
+config_setting(
+    name = "is_cross_macos_arm64",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:darwin",
+        "@platforms//cpu:arm64",
+    ],
+    flag_values = {
+        ":cross_flag": "true",
+    },
+)
+
+config_setting(
+    name = "is_cross_linux",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:linux",
+    ],
+    flag_values = {
+        ":cross_flag": "true",
+    },
+)
+
+bool_flag(
+    name = "force_build_cdeps_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "force_build_cdeps",
+    flag_values = {
+        ":force_build_cdeps_flag": "true",
+    },
+    visibility = [
+        "//build/bazelutil:__pkg__",
+        "//c-deps:__pkg__",
+    ],
+)
+
+bool_flag(
+    name = "prebuild_cdeps_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "prebuild_cdeps",
+    flag_values = {
+        ":cross_flag": "true",
+        ":prebuild_cdeps_flag": "true",
+    },
+    visibility = ["//c-deps:__pkg__"],
+)
+
+config_setting(
+    name = "is_windows_prebuild_cdeps",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:windows",
+    ],
+    flag_values = {
+        ":cross_flag": "true",
+        ":prebuild_cdeps_flag": "true",
+    },
+    visibility = ["//c-deps:__pkg__"],
+)
+
+config_setting(
+    name = "is_linux_prebuild_cdeps",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:linux",
+    ],
+    flag_values = {
+        ":cross_flag": "true",
+        ":prebuild_cdeps_flag": "true",
+    },
+    visibility = ["//c-deps:__pkg__"],
+)
+
+config_setting(
+    name = "is_macos_prebuild_cdeps",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:darwin",
+    ],
+    flag_values = {
+        ":cross_flag": "true",
+        ":prebuild_cdeps_flag": "true",
+    },
+    visibility = ["//c-deps:__pkg__"],
+)
+
+config_setting(
+    name = "is_linux_amd64_no_force_build_cdeps",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    flag_values = {
+        ":force_build_cdeps_flag": "false",
+    },
+    visibility = [
+        "//build/bazelutil:__pkg__",
+        "//c-deps:__pkg__",
+    ],
+)
+
+config_setting(
+    name = "is_linux_arm64_no_force_build_cdeps",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:linux",
+        "@platforms//cpu:arm64",
+    ],
+    flag_values = {
+        ":force_build_cdeps_flag": "false",
+    },
+    visibility = [
+        "//build/bazelutil:__pkg__",
+        "//c-deps:__pkg__",
+    ],
+)
+
+config_setting(
+    name = "is_darwin_amd64_no_force_build_cdeps",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:darwin",
+        "@platforms//cpu:x86_64",
+    ],
+    flag_values = {
+        ":force_build_cdeps_flag": "false",
+    },
+    visibility = [
+        "//build/bazelutil:__pkg__",
+        "//c-deps:__pkg__",
+    ],
+)
+
+config_setting(
+    name = "is_darwin_arm64_no_force_build_cdeps",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:darwin",
+        "@platforms//cpu:arm64",
+    ],
+    flag_values = {
+        ":force_build_cdeps_flag": "false",
+    },
+    visibility = [
+        "//build/bazelutil:__pkg__",
+        "//c-deps:__pkg__",
+    ],
+)
+
+config_setting(
+    name = "is_windows_amd64_no_force_build_cdeps",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:windows",
+        "@platforms//cpu:x86_64",
+    ],
+    flag_values = {
+        ":force_build_cdeps_flag": "false",
+    },
+    visibility = [
+        "//build/bazelutil:__pkg__",
+        "//c-deps:__pkg__",
+    ],
+)
+
+config_setting(
+    name = "is_linux_amd64",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:linux",
+        "@platforms//cpu:x86_64",
+    ],
+)
+
+config_setting(
+    name = "is_linux_arm64",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:linux",
+        "@platforms//cpu:arm64",
+    ],
+)
+
+config_setting(
+    name = "is_darwin_amd64",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:darwin",
+        "@platforms//cpu:x86_64",
+    ],
+)
+
+config_setting(
+    name = "is_darwin_arm64",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:darwin",
+        "@platforms//cpu:arm64",
+    ],
+)
+
+bool_flag(
+    name = "heavy_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "is_heavy",
+    flag_values = {
+        ":heavy_flag": "true",
+    },
+)

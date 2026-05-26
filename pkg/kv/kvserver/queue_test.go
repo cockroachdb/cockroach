@@ -1,0 +1,1917 @@
+// Copyright 2014 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package kvserver
+
+import (
+	"container/heap"
+	"context"
+	"fmt"
+	"runtime/pprof"
+	"strconv"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
+	"github.com/gogo/protobuf/proto"
+	"github.com/stretchr/testify/require"
+)
+
+// testQueueImpl implements queueImpl with a closure for shouldQueue.
+type testQueueImpl struct {
+	shouldQueueFn func(hlc.ClockTimestamp, *Replica) (bool, float64)
+	processed     int32 // accessed atomically
+	duration      time.Duration
+	blocker       chan struct{} // timer() blocks on this if not nil
+	pChan         chan time.Time
+	err           error // always returns this error on process
+	noop          bool  // if enabled, process will return false
+}
+
+var _ queueImpl = &testQueueImpl{}
+
+func (tq *testQueueImpl) shouldQueue(
+	_ context.Context, now hlc.ClockTimestamp, r *Replica, _ spanconfig.StoreReader,
+) (bool, float64) {
+	return tq.shouldQueueFn(now, r)
+}
+
+func (tq *testQueueImpl) process(
+	_ context.Context, _ *Replica, _ spanconfig.StoreReader, _ float64,
+) (bool, error) {
+	defer atomic.AddInt32(&tq.processed, 1)
+	if tq.err != nil {
+		return false, tq.err
+	}
+	return !tq.noop, nil
+}
+
+func (tq *testQueueImpl) getProcessed() int {
+	return int(atomic.LoadInt32(&tq.processed))
+}
+
+func (*testQueueImpl) postProcessScheduled(
+	ctx context.Context, replica replicaInQueue, priority float64,
+) {
+}
+
+func (tq *testQueueImpl) timer(_ time.Duration) time.Duration {
+	if tq.blocker != nil {
+		<-tq.blocker
+	}
+	if tq.duration != 0 {
+		return tq.duration
+	}
+	return 0
+}
+
+func (tq *testQueueImpl) purgatoryChan() <-chan time.Time {
+	return tq.pChan
+}
+
+func (tq *testQueueImpl) updateChan() <-chan time.Time {
+	return nil
+}
+
+var testQueueEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"testing.queue.enabled",
+	"testing setting for enabling the queue",
+	true,
+)
+
+func makeTestBaseQueue(name string, impl queueImpl, store *Store, cfg queueConfig) *baseQueue {
+	if !cfg.acceptsUnsplitRanges {
+		// Needed in order to pass the validation in newBaseQueue.
+		cfg.needsSpanConfigs = true
+	}
+	cfg.successes = metric.NewCounter(metric.Metadata{Name: "processed"})
+	cfg.failures = metric.NewCounter(metric.Metadata{Name: "failures"})
+	cfg.pending = metric.NewGauge(metric.Metadata{Name: "pending"})
+	cfg.processingNanos = metric.NewCounter(metric.Metadata{Name: "processingnanos"})
+	cfg.purgatory = metric.NewGauge(metric.Metadata{Name: "purgatory"})
+	cfg.enqueueAdd = metric.NewCounter(metric.Metadata{Name: "enqueueadd"})
+	cfg.enqueueUnexpectedError = metric.NewCounter(metric.Metadata{Name: "enqueueunexpectederror"})
+	cfg.disabledConfig = testQueueEnabled
+	return newBaseQueue(name, impl, store, cfg)
+}
+
+func createReplicas(t *testing.T, tc *testContext, num int) []*Replica {
+	t.Helper()
+
+	// Remove replica for range 1 since it encompasses the entire keyspace.
+	repl1, err := tc.store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	require.NoError(t, tc.store.RemoveReplica(context.Background(),
+		repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name())))
+
+	repls := make([]*Replica, num)
+	for i := 0; i < num; i++ {
+		id := roachpb.RangeID(1000 + i)
+		key := roachpb.RKey(strconv.Itoa(int(id)))
+		endKey := roachpb.RKey(string(key) + "/end")
+		r := createReplica(tc.store, id, key, endKey)
+		if err := tc.store.AddReplica(r); err != nil {
+			t.Fatal(err)
+		}
+		repls[i] = r
+	}
+	return repls
+}
+
+// TestQueuePriorityQueue verifies priority queue implementation.
+func TestQueuePriorityQueue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	// Create a priority queue, put the items in it, and
+	// establish the priority queue (heap) invariants.
+	const count = 3
+	expRanges := make([]roachpb.RangeID, count+1)
+	pq := priorityQueue{}
+	pq.sl = make([]*replicaItem, count)
+	for i := 0; i < count; {
+		pq.sl[i] = &replicaItem{
+			rangeID:  roachpb.RangeID(i),
+			priority: float64(i),
+			index:    i,
+		}
+		expRanges[3-i] = pq.sl[i].rangeID
+		i++
+	}
+	heap.Init(&pq)
+
+	// Insert a new item and then modify its priority.
+	priorityItem := &replicaItem{
+		rangeID:  -1,
+		priority: 1.0,
+	}
+	heap.Push(&pq, priorityItem)
+	pq.update(priorityItem, 4.0)
+	expRanges[0] = priorityItem.rangeID
+
+	// Take the items out; they should arrive in decreasing priority order.
+	for i := 0; pq.Len() > 0; i++ {
+		item := heap.Pop(&pq).(*replicaItem)
+		if item.rangeID != expRanges[i] {
+			t.Errorf("%d: unexpected range with priority %f", i, item.priority)
+		}
+	}
+}
+
+// TestBaseQueueAddUpdateAndRemove verifies basic operation with base
+// queue including adding ranges which both should and shouldn't be
+// queued, updating an existing range, and removing a range.
+func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
+
+	repls := createReplicas(t, &tc, 2)
+	r1, r2 := repls[0], repls[1]
+
+	shouldAddMap := map[*Replica]bool{
+		r1: true,
+		r2: true,
+	}
+	priorityMap := map[*Replica]float64{
+		r1: 1.0,
+		r2: 2.0,
+	}
+	testQueue := &testQueueImpl{
+		shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
+			return shouldAddMap[r], priorityMap[r]
+		},
+	}
+	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: 2})
+
+	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
+	bq.maybeAdd(ctx, r2, hlc.ClockTimestamp{})
+	if bq.Length() != 2 {
+		t.Fatalf("expected length 2; got %d", bq.Length())
+	}
+	if v := bq.pending.Value(); v != 2 {
+		t.Errorf("expected 2 pending replicas; got %d", v)
+	}
+	if r, _ := bq.pop(); r != r2 {
+		t.Error("expected r2")
+	} else {
+		bq.finishProcessingReplica(ctx, stopper, r2, nil)
+	}
+	bq.assertInvariants(func(item *replicaItem) {
+		replica, err := bq.getReplica(item.rangeID)
+		require.NoError(t, err)
+		require.Equal(t, priorityMap[replica.(*Replica)], item.priority)
+	})
+	if v := bq.pending.Value(); v != 1 {
+		t.Errorf("expected 1 pending replicas; got %d", v)
+	}
+	if r, _ := bq.pop(); r != r1 {
+		t.Error("expected r1")
+	} else {
+		bq.finishProcessingReplica(ctx, stopper, r1, nil)
+	}
+	if v := bq.pending.Value(); v != 0 {
+		t.Errorf("expected 0 pending replicas; got %d", v)
+	}
+	if r, _ := bq.pop(); r != nil {
+		t.Errorf("expected empty queue; got %v", r)
+	}
+
+	// Add again, but this time r2 shouldn't add.
+	shouldAddMap[r2] = false
+	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
+	bq.maybeAdd(ctx, r2, hlc.ClockTimestamp{})
+	if bq.Length() != 1 {
+		t.Errorf("expected length 1; got %d", bq.Length())
+	}
+
+	// Try adding same replica twice.
+	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
+	if bq.Length() != 1 {
+		t.Errorf("expected length 1; got %d", bq.Length())
+	}
+
+	// Re-add r2 and update priority of r1.
+	shouldAddMap[r2] = true
+	priorityMap[r1] = 3.0
+	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
+	bq.maybeAdd(ctx, r2, hlc.ClockTimestamp{})
+	if bq.Length() != 2 {
+		t.Fatalf("expected length 2; got %d", bq.Length())
+	}
+	if r, _ := bq.pop(); r != r1 {
+		t.Error("expected r1")
+	} else {
+		bq.finishProcessingReplica(ctx, stopper, r1, nil)
+	}
+	if r, _ := bq.pop(); r != r2 {
+		t.Error("expected r2")
+	} else {
+		bq.finishProcessingReplica(ctx, stopper, r2, nil)
+	}
+	if r, _ := bq.pop(); r != nil {
+		t.Errorf("expected empty queue; got %v", r)
+	}
+
+	// Verify that priorities aren't lowered by a later MaybeAdd.
+	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
+	bq.maybeAdd(ctx, r2, hlc.ClockTimestamp{})
+	priorityMap[r1] = 1.0
+	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
+	if bq.Length() != 2 {
+		t.Fatalf("expected length 2; got %d", bq.Length())
+	}
+	if r, _ := bq.pop(); r != r1 {
+		t.Error("expected r1")
+	} else {
+		bq.finishProcessingReplica(ctx, stopper, r1, nil)
+	}
+	if r, _ := bq.pop(); r != r2 {
+		t.Error("expected r2")
+	} else {
+		bq.finishProcessingReplica(ctx, stopper, r2, nil)
+	}
+	if r, _ := bq.pop(); r != nil {
+		t.Errorf("expected empty queue; got %v", r)
+	}
+	bq.assertInvariants(func(item *replicaItem) {
+		replica, err := bq.getReplica(item.rangeID)
+		require.NoError(t, err)
+		require.Equal(t, priorityMap[replica.(*Replica)], item.priority)
+	})
+
+	// Try removing a replica.
+	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
+	bq.maybeAdd(ctx, r2, hlc.ClockTimestamp{})
+	bq.MaybeRemove(r2.RangeID)
+	if bq.Length() != 1 {
+		t.Fatalf("expected length 1; got %d", bq.Length())
+	}
+	if v := bq.pending.Value(); v != 1 {
+		t.Errorf("expected 1 pending replicas; got %d", v)
+	}
+	if r, _ := bq.pop(); r != r1 {
+		t.Errorf("expected r1")
+	} else {
+		bq.finishProcessingReplica(ctx, stopper, r1, nil)
+	}
+	if v := bq.pending.Value(); v != 0 {
+		t.Errorf("expected 0 pending replicas; got %d", v)
+	}
+	bq.assertInvariants(func(item *replicaItem) {
+		replica, err := bq.getReplica(item.rangeID)
+		require.NoError(t, err)
+		require.Equal(t, priorityMap[replica.(*Replica)], item.priority)
+	})
+}
+
+// TestBaseQueueSamePriorityFIFO verifies that if multiple items are queued at
+// the same priority, they will be processes in first-in-first-out order.
+// This avoids starvation scenarios, in particular in the Raft snapshot queue.
+//
+// See:
+// https://github.com/cockroachdb/cockroach/issues/31947#issuecomment-434383267
+func TestBaseQueueSamePriorityFIFO(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
+
+	repls := createReplicas(t, &tc, 5)
+
+	testQueue := &testQueueImpl{
+		shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
+			t.Fatal("unexpected call to shouldQueue")
+			return false, 0.0
+		},
+	}
+
+	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: 100})
+
+	for _, repl := range repls {
+		added, err := bq.testingAdd(ctx, repl, 0.0)
+		if err != nil {
+			t.Fatalf("%s: %v", repl, err)
+		}
+		if !added {
+			t.Fatalf("%v not added", repl)
+		}
+	}
+	for _, expRepl := range repls {
+		actRepl, _ := bq.pop()
+		if actRepl != expRepl {
+			t.Fatalf("expected %v, got %v", expRepl, actRepl)
+		}
+	}
+}
+
+// TestBaseQueueAdd verifies that calling Add() directly overrides the
+// ShouldQueue method.
+func TestBaseQueueAdd(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
+
+	r, err := tc.store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	testQueue := &testQueueImpl{
+		shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
+			return false, 0.0
+		},
+	}
+	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: 1})
+	bq.maybeAdd(context.Background(), r, hlc.ClockTimestamp{})
+	if bq.Length() != 0 {
+		t.Fatalf("expected length 0; got %d", bq.Length())
+	}
+	if added, err := bq.testingAdd(ctx, r, 1.0); err != nil || !added {
+		t.Fatalf("expected Add to succeed: %t, %s", added, err)
+	}
+	// Add again and verify it's not actually added (it's already there).
+	if added, err := bq.testingAdd(ctx, r, 1.0); err != nil || added {
+		t.Fatalf("expected Add to succeed: %t, %s", added, err)
+	}
+	if bq.Length() != 1 {
+		t.Fatalf("expected length 1; got %d", bq.Length())
+	}
+}
+
+// TestBaseQueueNoop verifies that only successful processes
+// are counted as successes, while no-ops are not.
+func TestBaseQueueNoop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tsc := TestStoreConfig(nil)
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
+
+	repls := createReplicas(t, &tc, 2)
+	r1, r2 := repls[0], repls[1]
+
+	testQueue := &testQueueImpl{
+		blocker: make(chan struct{}, 1),
+		shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
+			shouldQueue = true
+			priority = float64(r.RangeID)
+			return
+		},
+		noop: false,
+	}
+	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: 2})
+	bq.Start(stopper)
+	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
+	testQueue.blocker <- struct{}{}
+	testutils.SucceedsSoon(t, func() error {
+		if pc := testQueue.getProcessed(); pc != 1 {
+			return errors.Errorf("expected 1 processed replica; got %d", pc)
+		}
+		if v := bq.successes.Count(); v != 1 {
+			return errors.Errorf("expected 1 successfully processed replicas; got %d", v)
+		}
+		return nil
+	})
+
+	// Ensure that when process is a no-op, the success count
+	// is not incremented
+	testQueue.noop = true
+	bq.maybeAdd(ctx, r2, hlc.ClockTimestamp{})
+	testQueue.blocker <- struct{}{}
+	testutils.SucceedsSoon(t, func() error {
+		if pc := testQueue.getProcessed(); pc != 2 {
+			return errors.Errorf("expected 2 processed replicas; got %d", pc)
+		}
+		if v := bq.successes.Count(); v != 1 {
+			return errors.Errorf("expected 1 successfully processed replica; got %d", v)
+		}
+		return nil
+	})
+	close(testQueue.blocker)
+}
+
+// TestBaseQueueProcess verifies that items from the queue are
+// processed according to the timer function.
+func TestBaseQueueProcess(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tsc := TestStoreConfig(nil)
+	tc := testContext{}
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
+
+	repls := createReplicas(t, &tc, 2)
+	r1, r2 := repls[0], repls[1]
+
+	testQueue := &testQueueImpl{
+		blocker: make(chan struct{}, 1),
+		shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
+			shouldQueue = true
+			priority = float64(r.RangeID)
+			return
+		},
+	}
+	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: 2})
+	bq.Start(stopper)
+
+	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
+	bq.maybeAdd(ctx, r2, hlc.ClockTimestamp{})
+	if pc := testQueue.getProcessed(); pc != 0 {
+		t.Errorf("expected no processed ranges; got %d", pc)
+	}
+	if v := bq.successes.Count(); v != 0 {
+		t.Errorf("expected 0 processed replicas; got %d", v)
+	}
+	if v := bq.pending.Value(); v != 2 {
+		t.Errorf("expected 2 pending replicas; got %d", v)
+	}
+
+	testQueue.blocker <- struct{}{}
+	testutils.SucceedsSoon(t, func() error {
+		if pc := testQueue.getProcessed(); pc != 1 {
+			return errors.Errorf("expected 1 processed replicas; got %d", pc)
+		}
+		if v := bq.successes.Count(); v != 1 {
+			return errors.Errorf("expected 1 processed replicas; got %d", v)
+		}
+		if v := bq.pending.Value(); v != 1 {
+			return errors.Errorf("expected 1 pending replicas; got %d", v)
+		}
+		return nil
+	})
+
+	testQueue.blocker <- struct{}{}
+	testutils.SucceedsSoon(t, func() error {
+		if pc := testQueue.getProcessed(); pc < 2 {
+			return errors.Errorf("expected >= %d processed replicas; got %d", 2, pc)
+		}
+		if v := bq.successes.Count(); v != 2 {
+			return errors.Errorf("expected 2 processed replicas; got %d", v)
+		}
+		if v := bq.pending.Value(); v != 0 {
+			return errors.Errorf("expected 0 pending replicas; got %d", v)
+		}
+		return nil
+	})
+
+	// Ensure the test queue is not blocked on a stray call to
+	// testQueueImpl.timer().
+	close(testQueue.blocker)
+}
+
+// TestBaseQueueAddRemove adds then removes a range; ensure range is
+// not processed.
+func TestBaseQueueAddRemove(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
+
+	r, err := tc.store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const testPriority = 1.0
+	testQueue := &testQueueImpl{
+		blocker: make(chan struct{}, 1),
+		shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
+			shouldQueue = true
+			priority = testPriority
+			return
+		},
+	}
+	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: 2})
+	bq.Start(stopper)
+
+	bq.maybeAdd(ctx, r, hlc.ClockTimestamp{})
+	bq.assertInvariants(func(item *replicaItem) {
+		require.Equal(t, testPriority, item.priority)
+	})
+
+	bq.MaybeRemove(r.RangeID)
+	bq.assertInvariants(func(item *replicaItem) {
+		require.Equal(t, testPriority, item.priority)
+	})
+
+	// Wake the queue
+	close(testQueue.blocker)
+
+	// Make sure the queue has actually run through a few times
+	for i := 0; i < cap(bq.incoming)+1; i++ {
+		bq.incoming <- struct{}{}
+	}
+
+	if pc := testQueue.getProcessed(); pc > 0 {
+		t.Errorf("expected processed count of 0; got %d", pc)
+	}
+}
+
+// BaseQueueLabel verifies that the queue name tag exists during maybeAdd but
+// does not exist before and after maybeAdd.
+func TestBaseQueueLabel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	sc := TestStoreConfig(nil)
+	sc.TestingKnobs.BaseQueueInterceptor = func(ctx context.Context, bq *baseQueue) {
+		_, labelDoesExist := pprof.Label(ctx, bq.name)
+		require.True(t, labelDoesExist)
+	}
+	tc.StartWithStoreConfig(ctx, t, stopper, sc)
+	r, err := tc.store.GetReplica(1)
+	require.NoError(t, err)
+
+	testQueue := &testQueueImpl{
+		shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, _ float64) {
+			shouldQueue = true
+			return
+		},
+	}
+	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{})
+
+	bq.Start(stopper)
+	bq.maybeAdd(ctx, r, hlc.ClockTimestamp{})
+
+	_, labelDoesExist := pprof.Label(ctx, bq.name)
+	require.False(t, labelDoesExist)
+}
+
+// TestNeedsSystemConfig verifies that queues that don't need the system config
+// are able to process replicas when the system config isn't available.
+func TestNeedsSystemConfig(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+
+	tc := testContext{}
+	cfg := TestStoreConfig(nil)
+	// Configure a gossip instance that won't have the system config available in it.
+	cfg.TestingKnobs.MakeSystemConfigSpanUnavailableToQueues = true
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
+
+	{
+		confReader, err := tc.store.GetConfReader(ctx)
+		require.Nil(t, confReader)
+		require.True(t, errors.Is(err, errSpanConfigsUnavailable))
+	}
+
+	r, err := tc.store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	queueFnCalled := 0
+	testQueue := &testQueueImpl{
+		shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (bool, float64) {
+			queueFnCalled++
+			return true, 1.0
+		},
+	}
+
+	// bqNeedsSysCfg will not add the replica or process it without a system config.
+	bqNeedsSysCfg := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{
+		needsSpanConfigs:     true,
+		acceptsUnsplitRanges: true,
+		maxSize:              1,
+	})
+
+	bqNeedsSysCfg.Start(stopper)
+	bqNeedsSysCfg.maybeAdd(ctx, r, hlc.ClockTimestamp{})
+	if queueFnCalled != 0 {
+		t.Fatalf("expected shouldQueueFn not to be called without valid system config, got %d calls", queueFnCalled)
+	}
+
+	// Manually add a replica and ensure that the process method doesn't get run.
+	if added, err := bqNeedsSysCfg.testingAdd(ctx, r, 1.0); err != nil || !added {
+		t.Fatalf("expected Add to succeed: %t, %s", added, err)
+	}
+	// Make sure the queue has actually run through a few times
+	for i := 0; i < cap(bqNeedsSysCfg.incoming)+1; i++ {
+		bqNeedsSysCfg.incoming <- struct{}{}
+	}
+	if pc := testQueue.getProcessed(); pc > 0 {
+		t.Errorf("expected processed count of 0 for queue that needs system config; got %d", pc)
+	}
+
+	// Now check that a queue which doesn't require the system config can
+	// successfully add and process a replica.
+	bqNoSysCfg := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{
+		needsSpanConfigs:     false,
+		acceptsUnsplitRanges: true,
+		maxSize:              1,
+	})
+	bqNoSysCfg.Start(stopper)
+	bqNoSysCfg.maybeAdd(context.Background(), r, hlc.ClockTimestamp{})
+	if queueFnCalled != 1 {
+		t.Fatalf("expected shouldQueueFn to be called even without valid system config, got %d calls", queueFnCalled)
+	}
+	testutils.SucceedsSoon(t, func() error {
+		if pc := testQueue.getProcessed(); pc != 1 {
+			return errors.Errorf("expected 1 processed replica even without system config; got %d", pc)
+		}
+		if v := bqNoSysCfg.successes.Count(); v != 1 {
+			return errors.Errorf("expected 1 processed replica even without system config; got %d", v)
+		}
+		return nil
+	})
+}
+
+// TestAcceptsUnsplitRanges verifies that ranges that need to split are properly
+// rejected when the queue has 'acceptsUnsplitRanges = false'.
+func TestAcceptsUnsplitRanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	s, _ := createTestStore(ctx, t,
+		testStoreOpts{
+			// This test was written before test stores could start with more than one
+			// range and was not adapted.
+			createSystemRanges: false,
+		},
+		stopper)
+
+	maxWontSplitAddr, err := keys.Addr(keys.Meta1KeyMax)
+	require.NoError(t, err)
+
+	minWillSplitAddr, err := keys.Addr(keys.TableDataMin)
+	require.NoError(t, err)
+
+	// Remove replica for range 1 since it encompasses the entire keyspace.
+	repl1, err := s.GetReplica(1)
+	require.NoError(t, err)
+	require.NoError(t, s.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name())))
+
+	// This range can never be split due to zone configs boundaries.
+	neverSplits := createReplica(s, 2, roachpb.RKeyMin, maxWontSplitAddr)
+	require.NoError(t, s.AddReplica(neverSplits))
+
+	// This range will need to be split after user db/table entries are created.
+	willSplit := createReplica(s, 3, minWillSplitAddr, roachpb.RKeyMax)
+	require.NoError(t, s.AddReplica(willSplit))
+
+	testQueue := &testQueueImpl{
+		shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
+			// Always queue ranges if they make it past the base queue's logic.
+			return true, float64(r.RangeID)
+		},
+	}
+
+	bq := makeTestBaseQueue("test", testQueue, s, queueConfig{maxSize: 2})
+	bq.Start(stopper)
+
+	// Check our config.
+	cfg, err := bq.store.GetConfReader(ctx)
+	require.NoError(t, err)
+
+	neverSplitsDesc := neverSplits.Desc()
+	needsSplit, err := cfg.NeedsSplit(ctx, neverSplitsDesc.StartKey, neverSplitsDesc.EndKey)
+	require.NoError(t, err)
+	require.False(t, needsSplit)
+
+	willSplitDesc := willSplit.Desc()
+	needsSplit, err = cfg.NeedsSplit(ctx, willSplitDesc.StartKey, willSplitDesc.EndKey)
+	require.NoError(t, err)
+	require.False(t, needsSplit)
+
+	// There are no user db/table entries, everything should be added and
+	// processed as usual.
+	bq.maybeAdd(ctx, neverSplits, hlc.ClockTimestamp{})
+	bq.maybeAdd(ctx, willSplit, hlc.ClockTimestamp{})
+
+	testutils.SucceedsSoon(t, func() error {
+		if pc := testQueue.getProcessed(); pc != 2 {
+			return errors.Errorf("expected %d processed replicas; got %d", 2, pc)
+		}
+		// Check metrics.
+		if v := bq.successes.Count(); v != 2 {
+			return errors.Errorf("expected 2 processed replicas; got %d", v)
+		}
+		if v := bq.pending.Value(); v != 0 {
+			return errors.Errorf("expected 0 pending replicas; got %d", v)
+		}
+		return nil
+	})
+
+	// Now add a user object, it will trigger a split.
+	// The range willSplit starts at the beginning of the user data range,
+	// which means keys.MaxReservedDescID+1.
+	zoneConfig := zonepb.DefaultZoneConfig()
+	zoneConfig.RangeMaxBytes = proto.Int64(1 << 20)
+	config.TestingSetZoneConfig(config.ObjectID(bootstrap.TestingUserDescID(1)), zoneConfig)
+
+	// Check our config.
+	neverSplitsDesc = neverSplits.Desc()
+	needsSplit, err = cfg.NeedsSplit(ctx, neverSplitsDesc.StartKey, neverSplitsDesc.EndKey)
+	require.NoError(t, err)
+	require.False(t, needsSplit)
+
+	willSplitDesc = willSplit.Desc()
+	needsSplit, err = cfg.NeedsSplit(ctx, willSplitDesc.StartKey, willSplitDesc.EndKey)
+	require.NoError(t, err)
+	require.True(t, needsSplit)
+
+	bq.maybeAdd(ctx, neverSplits, hlc.ClockTimestamp{})
+	bq.maybeAdd(ctx, willSplit, hlc.ClockTimestamp{})
+
+	testutils.SucceedsSoon(t, func() error {
+		if pc := testQueue.getProcessed(); pc != 3 {
+			return errors.Errorf("expected %d processed replicas; got %d", 3, pc)
+		}
+		// Check metrics.
+		if v := bq.successes.Count(); v != 3 {
+			return errors.Errorf("expected 3 processed replicas; got %d", v)
+		}
+		if v := bq.pending.Value(); v != 0 {
+			return errors.Errorf("expected 0 pending replicas; got %d", v)
+		}
+		return nil
+	})
+}
+
+type testPurgatoryError struct{}
+
+func (*testPurgatoryError) Error() string {
+	return "test purgatory error"
+}
+
+func (*testPurgatoryError) PurgatoryErrorMarker() {
+}
+
+// TestBaseQueuePurgatory verifies that if error is set on the test
+// queue, items are added to the purgatory. Verifies that sending on
+// the purgatory channel causes the replicas to be reprocessed.
+func TestBaseQueuePurgatory(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tsc := TestStoreConfig(nil)
+	tc := testContext{}
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
+
+	testQueue := &testQueueImpl{
+		duration: time.Nanosecond,
+		shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
+			shouldQueue = true
+			priority = float64(r.RangeID)
+			return
+		},
+		pChan: make(chan time.Time, 1),
+		err:   &testPurgatoryError{},
+	}
+
+	const replicaCount = 10
+	repls := createReplicas(t, &tc, replicaCount)
+
+	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: replicaCount})
+	bq.Start(stopper)
+
+	for _, r := range repls {
+		bq.maybeAdd(context.Background(), r, hlc.ClockTimestamp{})
+	}
+
+	// Make sure priority is preserved during processing.
+	bq.assertInvariants(func(item *replicaItem) {
+		require.Equal(t, float64(item.rangeID), item.priority)
+	})
+
+	testutils.SucceedsSoon(t, func() error {
+		if pc := testQueue.getProcessed(); pc != replicaCount {
+			return errors.Errorf("expected %d processed replicas; got %d", replicaCount, pc)
+		}
+		// Make sure priorities are preserved with the purgatory queue.
+		bq.assertInvariants(func(item *replicaItem) {
+			require.Equal(t, float64(item.rangeID), item.priority)
+		})
+		// We have to loop checking the following conditions because the increment
+		// of testQueue.processed does not happen atomically with the replica being
+		// placed in purgatory.
+		// Verify that the size of the purgatory map is correct.
+		if l := bq.PurgatoryLength(); l != replicaCount {
+			return errors.Errorf("expected purgatory size of %d; got %d", replicaCount, l)
+		}
+		// ...and priorityQ should be empty.
+		if l := bq.Length(); l != 0 {
+			return errors.Errorf("expected empty priorityQ; got %d", l)
+		}
+		bq.assertInvariants(func(item *replicaItem) {
+			require.Equal(t, float64(item.rangeID), item.priority)
+		})
+		// Check metrics.
+		if v := bq.successes.Count(); v != 0 {
+			return errors.Errorf("expected 0 processed replicas; got %d", v)
+		}
+		if v := bq.failures.Count(); v != int64(replicaCount) {
+			return errors.Errorf("expected %d failed replicas; got %d", replicaCount, v)
+		}
+		if v := bq.pending.Value(); v != 0 {
+			return errors.Errorf("expected 0 pending replicas; got %d", v)
+		}
+		if v := bq.purgatory.Value(); v != int64(replicaCount) {
+			return errors.Errorf("expected %d purgatory replicas; got %d", replicaCount, v)
+		}
+		return nil
+	})
+
+	// Now, signal that purgatoried replicas should retry.
+	testQueue.pChan <- timeutil.Now()
+
+	testutils.SucceedsSoon(t, func() error {
+		if pc := testQueue.getProcessed(); pc != replicaCount*2 {
+			return errors.Errorf("expected %d processed replicas; got %d", replicaCount*2, pc)
+		}
+		// We have to loop checking the following conditions because the increment
+		// of testQueue.processed does not happen atomically with the replica being
+		// placed in purgatory.
+		// Verify the replicas are still in purgatory.
+		if l := bq.PurgatoryLength(); l != replicaCount {
+			return errors.Errorf("expected purgatory size of %d; got %d", replicaCount, l)
+		}
+		// ...and priorityQ should be empty.
+		if l := bq.Length(); l != 0 {
+			return errors.Errorf("expected empty priorityQ; got %d", l)
+		}
+		bq.assertInvariants(func(item *replicaItem) {
+			require.Equal(t, float64(item.rangeID), item.priority)
+		})
+		// Check metrics.
+		if v := bq.successes.Count(); v != 0 {
+			return errors.Errorf("expected 0 processed replicas; got %d", v)
+		}
+		if v := bq.failures.Count(); v != int64(replicaCount*2) {
+			return errors.Errorf("expected %d failed replicas; got %d", replicaCount*2, v)
+		}
+		if v := bq.pending.Value(); v != 0 {
+			return errors.Errorf("expected 0 pending replicas; got %d", v)
+		}
+		if v := bq.purgatory.Value(); v != int64(replicaCount) {
+			return errors.Errorf("expected %d purgatory replicas; got %d", replicaCount, v)
+		}
+		return nil
+	})
+
+	// Change the replicaID of the first the replica and destroy the second
+	// replica. These replicas should not be processed and should be removed from
+	// the replica set. The number of processed replicas will be 2 less.
+	const rmReplCount = 2
+	repls[0].replicaID = 2
+	require.NoError(t, tc.store.RemoveReplica(ctx,
+		repls[1], repls[1].Desc().NextReplicaID, redact.SafeString(t.Name())))
+
+	// Remove error and reprocess.
+	testQueue.err = nil
+	testQueue.pChan <- timeutil.Now()
+
+	testutils.SucceedsSoon(t, func() error {
+		if pc := testQueue.getProcessed(); pc != replicaCount*3-rmReplCount {
+			return errors.Errorf("expected %d processed replicas; got %d", replicaCount*3-rmReplCount, pc)
+		}
+		bq.assertInvariants(func(item *replicaItem) {
+			require.Equal(t, float64(item.rangeID), item.priority)
+		})
+		// Check metrics.
+		if v := bq.successes.Count(); v != int64(replicaCount)-rmReplCount {
+			return errors.Errorf("expected %d processed replicas; got %d", replicaCount-rmReplCount, v)
+		}
+		if v := bq.failures.Count(); v != int64(replicaCount*2) {
+			return errors.Errorf("expected %d failed replicas; got %d", replicaCount*2, v)
+		}
+		if v := bq.pending.Value(); v != 0 {
+			return errors.Errorf("expected 0 pending replicas; got %d", v)
+		}
+		if v := bq.purgatory.Value(); v != 0 {
+			return errors.Errorf("expected 0 purgatory replicas; got %d", v)
+		}
+		// Verify there are no replicas left in the replica set after finishing
+		// processing. This is within the retry loop as the above conditions can
+		// pass without considering the removed replicas.
+		bq.mu.Lock()
+		replicasCount := len(bq.mu.replicas)
+		bq.mu.Unlock()
+		if replicasCount != 0 {
+			return errors.Errorf("expected no replicas in the replica set: got %d", replicasCount)
+		}
+		return nil
+	})
+
+	// Verify the replicas are no longer in purgatory.
+	if l := bq.PurgatoryLength(); l != 0 {
+		t.Errorf("expected purgatory size of 0; got %d", l)
+	}
+	// ...and priorityQ should be empty.
+	if l := bq.Length(); l != 0 {
+		t.Errorf("expected empty priorityQ; got %d", l)
+	}
+
+	// Verify that the replica with a changed replicaID can be processed.
+	beforeProcessCount := testQueue.getProcessed()
+	beforeSuccessCount := bq.successes.Count()
+	beforeFailureCount := bq.failures.Count()
+	bq.maybeAdd(ctx, repls[0], hlc.ClockTimestamp{})
+	testutils.SucceedsSoon(t, func() error {
+		if pc := testQueue.getProcessed(); pc != beforeProcessCount+1 {
+			return errors.Errorf("expected %d processed replicas; got %d", beforeProcessCount+1, pc)
+		}
+		bq.assertInvariants(func(item *replicaItem) {
+			require.Equal(t, float64(item.rangeID), item.priority)
+		})
+		if v := bq.successes.Count(); v != beforeSuccessCount+1 {
+			return errors.Errorf("expected %d processed replicas; got %d", beforeSuccessCount+1, v)
+		}
+		if v := bq.failures.Count(); v != beforeFailureCount {
+			return errors.Errorf("expected %d failed replicas; got %d", beforeFailureCount, v)
+		}
+		if v := bq.pending.Value(); v != 0 {
+			return errors.Errorf("expected 0 pending replicas; got %d", v)
+		}
+		if v := bq.purgatory.Value(); v != 0 {
+			return errors.Errorf("expected 0 purgatory replicas; got %d", v)
+		}
+		return nil
+	})
+}
+
+type processTimeoutQueueImpl struct {
+	testQueueImpl
+}
+
+var _ queueImpl = &processTimeoutQueueImpl{}
+
+func (pq *processTimeoutQueueImpl) process(
+	ctx context.Context, r *Replica, _ spanconfig.StoreReader, _ float64,
+) (processed bool, err error) {
+	<-ctx.Done()
+	atomic.AddInt32(&pq.processed, 1)
+	err = ctx.Err()
+	return err == nil, err
+}
+
+func TestBaseQueueProcessTimeout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
+
+	r, err := tc.store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ptQueue := &processTimeoutQueueImpl{
+		testQueueImpl: testQueueImpl{
+			blocker: make(chan struct{}, 1),
+			shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
+				return true, 1.0
+			},
+		},
+	}
+	bq := makeTestBaseQueue("test", ptQueue, tc.store,
+		queueConfig{
+			maxSize:              1,
+			processTimeoutFunc:   constantTimeoutFunc(time.Millisecond),
+			acceptsUnsplitRanges: true,
+		})
+	bq.Start(stopper)
+	bq.maybeAdd(ctx, r, hlc.ClockTimestamp{})
+
+	if l := bq.Length(); l != 1 {
+		t.Errorf("expected one queued replica; got %d", l)
+	}
+
+	ptQueue.blocker <- struct{}{}
+	testutils.SucceedsSoon(t, func() error {
+		if pc := ptQueue.getProcessed(); pc != 1 {
+			return errors.Errorf("expected 1 processed replicas; got %d", pc)
+		}
+		if v := bq.failures.Count(); v != 1 {
+			return errors.Errorf("expected 1 failed replicas; got %d", v)
+		}
+		return nil
+	})
+}
+
+type mvccStatsReplicaInQueue struct {
+	replicaInQueue
+	size int64
+}
+
+func (r mvccStatsReplicaInQueue) GetMVCCStats() enginepb.MVCCStats {
+	return enginepb.MVCCStats{ValBytes: r.size}
+}
+
+func TestQueueRateLimitedTimeoutFunc(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	type testCase struct {
+		guaranteedProcessingTime time.Duration
+		rebalanceSnapshotRate    int64 // bytes/s
+		replicaSize              int64 // bytes
+		expectedTimeout          time.Duration
+	}
+	makeTest := func(tc testCase) (string, func(t *testing.T)) {
+		return fmt.Sprintf("%+v", tc), func(t *testing.T) {
+			st := cluster.MakeTestingClusterSettings()
+			queueGuaranteedProcessingTimeBudget.Override(ctx, &st.SV, tc.guaranteedProcessingTime)
+			rebalanceSnapshotRate.Override(ctx, &st.SV, tc.rebalanceSnapshotRate)
+			tf := makeRateLimitedTimeoutFunc(rebalanceSnapshotRate)
+			repl := mvccStatsReplicaInQueue{
+				size: tc.replicaSize,
+			}
+			require.Equal(t, tc.expectedTimeout, tf(st, repl))
+		}
+	}
+	for _, tc := range []testCase{
+		{
+			guaranteedProcessingTime: time.Minute,
+			rebalanceSnapshotRate:    1 << 20,
+			replicaSize:              1 << 20,
+			expectedTimeout:          time.Minute, // the minimum timeout (guaranteedProcessingTime).
+		},
+		{
+			guaranteedProcessingTime: time.Minute,
+			rebalanceSnapshotRate:    1 << 20, // minimum rate for timeout calculation.
+			replicaSize:              100 << 20,
+			expectedTimeout:          100 * time.Second * permittedRangeScanSlowdown,
+		},
+		{
+			guaranteedProcessingTime: time.Hour,
+			rebalanceSnapshotRate:    1 << 20, // minimum rate for timeout calculation.
+			replicaSize:              100 << 20,
+			expectedTimeout:          time.Hour, // the minimum timeout (guaranteedProcessingTime).
+		},
+		{
+			guaranteedProcessingTime: time.Minute,
+			rebalanceSnapshotRate:    1 << 10,
+			replicaSize:              100 << 20,
+			expectedTimeout:          100 * (1 << 10) * time.Second * permittedRangeScanSlowdown,
+		},
+		{
+			guaranteedProcessingTime: time.Minute,
+			rebalanceSnapshotRate:    1 << 10, // minimum rate for timeout calculation.
+			replicaSize:              100 << 20,
+			expectedTimeout:          100 * (1 << 10) * time.Second * permittedRangeScanSlowdown,
+		},
+	} {
+		t.Run(makeTest(tc))
+	}
+}
+
+// processTimeQueueImpl spends 5ms on each process request.
+type processTimeQueueImpl struct {
+	testQueueImpl
+}
+
+var _ queueImpl = &processTimeQueueImpl{}
+
+func (pq *processTimeQueueImpl) process(
+	_ context.Context, _ *Replica, _ spanconfig.StoreReader, _ float64,
+) (processed bool, err error) {
+	time.Sleep(5 * time.Millisecond)
+	return true, nil
+}
+
+func TestBaseQueueTimeMetric(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tc := testContext{}
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
+
+	r, err := tc.store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ptQueue := &processTimeQueueImpl{
+		testQueueImpl: testQueueImpl{
+			shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
+				return true, 1.0
+			},
+		},
+	}
+	bq := makeTestBaseQueue("test", ptQueue, tc.store,
+		queueConfig{
+			maxSize:              1,
+			processTimeoutFunc:   constantTimeoutFunc(time.Millisecond),
+			acceptsUnsplitRanges: true,
+		})
+	bq.Start(stopper)
+	bq.maybeAdd(context.Background(), r, hlc.ClockTimestamp{})
+
+	testutils.SucceedsSoon(t, func() error {
+		if v := bq.successes.Count(); v != 1 {
+			return errors.Errorf("expected 1 processed replicas; got %d", v)
+		}
+		if min, v := bq.queueConfig.processTimeoutFunc(nil, nil), bq.processingNanos.Count(); v < min.Nanoseconds() {
+			return errors.Errorf("expected >= %s in processing time; got %s", min, time.Duration(v))
+		}
+		return nil
+	})
+}
+
+func TestBaseQueueShouldQueueAgain(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testCases := []struct {
+		now, last   hlc.Timestamp
+		minInterval time.Duration
+		expQueue    bool
+		expPriority float64
+	}{
+		{makeTS(1, 0), makeTS(1, 0), 0, true, 0},
+		{makeTS(100, 0), makeTS(0, 0), 100, true, 0},
+		{makeTS(100, 0), makeTS(100, 0), 100, false, 0},
+		{makeTS(101, 0), makeTS(100, 0), 100, false, 0},
+		{makeTS(200, 0), makeTS(100, 0), 100, true, 1},
+		{makeTS(200, 1), makeTS(100, 0), 100, true, 1},
+		{makeTS(201, 0), makeTS(100, 0), 100, true, 1.01},
+		{makeTS(201, 0), makeTS(100, 1), 100, true, 1.01},
+		{makeTS(1100, 0), makeTS(100, 1), 100, true, 10},
+	}
+
+	for i, tc := range testCases {
+		sq, pri := shouldQueueAgain(tc.now, tc.last, tc.minInterval)
+		if sq != tc.expQueue {
+			t.Errorf("case %d: expected shouldQueue %t; got %t", i, tc.expQueue, sq)
+		}
+		if pri != tc.expPriority {
+			t.Errorf("case %d: expected priority %f; got %f", i, tc.expPriority, pri)
+		}
+	}
+}
+
+// TestBaseQueueDisable verifies that disabling a queue prevents calls
+// to both shouldQueue and process.
+func TestBaseQueueDisable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
+
+	r, err := tc.store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	shouldQueueCalled := false
+	testQueue := &testQueueImpl{
+		blocker: make(chan struct{}, 1),
+		shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (bool, float64) {
+			shouldQueueCalled = true
+			return true, 1.0
+		},
+	}
+	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: 2})
+	bq.Start(stopper)
+
+	bq.SetDisabled(true)
+	bq.maybeAdd(context.Background(), r, hlc.ClockTimestamp{})
+	if shouldQueueCalled {
+		t.Error("shouldQueue should not have been called")
+	}
+
+	// Add the range directly, bypassing shouldQueue.
+	if _, err := bq.testingAdd(ctx, r, 1.0); !errors.Is(err, errQueueDisabled) {
+		t.Fatal(err)
+	}
+
+	// Wake the queue.
+	close(testQueue.blocker)
+
+	// Make sure the queue has actually run through a few times.
+	for i := 0; i < cap(bq.incoming)+1; i++ {
+		bq.incoming <- struct{}{}
+	}
+
+	if pc := testQueue.getProcessed(); pc > 0 {
+		t.Errorf("expected processed count of 0; got %d", pc)
+	}
+}
+
+// TestBaseQueueCallbackOnEnqueueResult tests the callback onEnqueueResult for
+// 1. successful case: the replica is successfully enqueued.
+// 2. priority update: updates the priority of the replica and not enqueuing
+// again.
+// 3. disabled: queue is disabled and the replica is not enqueued.
+// 4. stopped: queue is stopped and the replica is not enqueued.
+// 5. already queued: the replica is already in the queue and not enqueued
+// again.
+// 6. purgatory: the replica is in purgatory and not enqueued again.
+// 7. processing: the replica is already being processed and not enqueued again.
+// 8. full queue: the queue is full and the replica is not enqueued again.
+func TestBaseQueueCallbackOnEnqueueResult(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
+
+	t.Run("successfuladd", func(t *testing.T) {
+		testQueue := &testQueueImpl{}
+		bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: 1})
+		r, err := tc.store.GetReplica(1)
+		require.NoError(t, err)
+		queued, _ := bq.testingAddWithCallback(ctx, r, 1.0, processCallback{
+			onEnqueueResult: func(indexOnHeap int, err error) {
+				require.Equal(t, 0, indexOnHeap)
+				require.NoError(t, err)
+			},
+			onProcessResult: func(err error) {
+				t.Fatal("unexpected call to onProcessResult")
+			},
+		})
+		require.Equal(t, bq.enqueueAdd.Count(), int64(1))
+		require.True(t, queued)
+	})
+
+	t.Run("priority", func(t *testing.T) {
+		testQueue := &testQueueImpl{}
+		bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: 5})
+		r, err := tc.store.GetReplica(1)
+		require.NoError(t, err)
+		priorities := []float64{5.0, 4.0, 8.0, 1.0, 3.0}
+		expectedIndices := []int{0, 1, 0, 3, 4}
+		// When inserting 5, [5], index 0.
+		// When inserting 4, [5, 4], index 1.
+		// When inserting 8, [8, 4, 5], index 0.
+		// When inserting 1, [8, 4, 5, 1], index 3.
+		// When inserting 3, [8, 4, 5, 1, 3], index 4.
+		for i, priority := range priorities {
+			r.Desc().RangeID = roachpb.RangeID(i + 1)
+			queued, _ := bq.testingAddWithCallback(ctx, r, priority, processCallback{
+				onEnqueueResult: func(indexOnHeap int, err error) {
+					require.Equal(t, expectedIndices[i], indexOnHeap)
+					require.NoError(t, err)
+				},
+				onProcessResult: func(err error) {
+					t.Fatal("unexpected call to onProcessResult")
+				},
+			})
+			require.Equal(t, int64(i+1), bq.enqueueAdd.Count())
+			require.True(t, queued)
+		}
+		// Set range id back to 1.
+		r.Desc().RangeID = 1
+	})
+	t.Run("disabled", func(t *testing.T) {
+		testQueue := &testQueueImpl{}
+		bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: 2})
+		bq.SetDisabled(true)
+		r, err := tc.store.GetReplica(1)
+		require.NoError(t, err)
+		queued, _ := bq.testingAddWithCallback(ctx, r, 1.0, processCallback{
+			onEnqueueResult: func(indexOnHeap int, err error) {
+				require.Equal(t, -1, indexOnHeap)
+				require.ErrorIs(t, err, errQueueDisabled)
+			},
+			onProcessResult: func(err error) {
+				t.Fatal("unexpected call to onProcessResult")
+			},
+		})
+		require.Equal(t, int64(0), bq.enqueueAdd.Count())
+		require.Equal(t, int64(1), bq.enqueueUnexpectedError.Count())
+		require.False(t, queued)
+	})
+	t.Run("stopped", func(t *testing.T) {
+		testQueue := &testQueueImpl{}
+		bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: 2})
+		bq.mu.stopped = true
+		r, err := tc.store.GetReplica(1)
+		require.NoError(t, err)
+		queued, _ := bq.testingAddWithCallback(ctx, r, 1.0, processCallback{
+			onEnqueueResult: func(indexOnHeap int, err error) {
+				require.Equal(t, -1, indexOnHeap)
+				require.ErrorIs(t, err, errQueueStopped)
+			},
+			onProcessResult: func(err error) {
+				t.Fatal("unexpected call to onProcessResult")
+			},
+		})
+		require.False(t, queued)
+		require.Equal(t, int64(0), bq.enqueueAdd.Count())
+		require.Equal(t, int64(1), bq.enqueueUnexpectedError.Count())
+	})
+
+	t.Run("alreadyqueued", func(t *testing.T) {
+		testQueue := &testQueueImpl{}
+		bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: 2})
+		r, err := tc.store.GetReplica(1)
+		require.NoError(t, err)
+		queued, _ := bq.testingAddWithCallback(ctx, r, 1.0, processCallback{
+			onEnqueueResult: func(indexOnHeap int, err error) {
+				require.Equal(t, 0, indexOnHeap)
+				require.NoError(t, err)
+			},
+			onProcessResult: func(err error) {
+				t.Fatal("unexpected call to onProcessResult")
+			},
+		})
+		require.True(t, queued)
+		require.Equal(t, int64(1), bq.enqueueAdd.Count())
+		require.Equal(t, int64(0), bq.enqueueUnexpectedError.Count())
+
+		// Inserting again on the same range id should fail.
+		queued, _ = bq.testingAddWithCallback(ctx, r, 1.0, processCallback{
+			onEnqueueResult: func(indexOnHeap int, err error) {
+				require.Equal(t, -1, indexOnHeap)
+				require.ErrorIs(t, err, errReplicaAlreadyInQueue)
+			},
+			onProcessResult: func(err error) {
+				t.Fatal("unexpected call to onProcessResult")
+			},
+		})
+		require.False(t, queued)
+		require.Equal(t, int64(1), bq.enqueueAdd.Count())
+		require.Equal(t, int64(0), bq.enqueueUnexpectedError.Count())
+	})
+
+	t.Run("purgatory", func(t *testing.T) {
+		testQueue := &testQueueImpl{
+			pChan: make(chan time.Time, 1),
+		}
+		bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: 2})
+		r, err := tc.store.GetReplica(1)
+		require.NoError(t, err)
+		bq.mu.Lock()
+		bq.addToPurgatoryLocked(ctx, stopper, r, &testPurgatoryError{}, 1.0, nil)
+		bq.mu.Unlock()
+		// Inserting a range in purgatory should not enqueue again.
+		queued, _ := bq.testingAddWithCallback(ctx, r, 1.0, processCallback{
+			onEnqueueResult: func(indexOnHeap int, err error) {
+				require.Equal(t, -1, indexOnHeap)
+				require.ErrorIs(t, err, errReplicaAlreadyInPurgatory)
+			},
+			onProcessResult: func(err error) {
+				t.Fatal("unexpected call to onProcessResult")
+			},
+		})
+		require.False(t, queued)
+		require.Equal(t, int64(0), bq.enqueueAdd.Count())
+		require.Equal(t, int64(0), bq.enqueueUnexpectedError.Count())
+	})
+
+	t.Run("processing", func(t *testing.T) {
+		testQueue := &testQueueImpl{}
+		bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: 2})
+		r, err := tc.store.GetReplica(1)
+		require.NoError(t, err)
+		item := &replicaItem{rangeID: r.Desc().RangeID, replicaID: r.ReplicaID(), index: -1}
+		item.setProcessing()
+		bq.addLocked(item)
+		// Inserting a range that is already being processed should not enqueue again.
+		markedAsRequeued, _ := bq.testingAddWithCallback(ctx, r, 1.0, processCallback{
+			onEnqueueResult: func(indexOnHeap int, err error) {
+				require.Equal(t, -1, indexOnHeap)
+				require.ErrorIs(t, err, errReplicaAlreadyProcessing)
+			},
+			onProcessResult: func(err error) {
+				t.Fatal("unexpected call to onProcessResult")
+			},
+		})
+		require.True(t, markedAsRequeued)
+		require.Equal(t, int64(0), bq.enqueueAdd.Count())
+		require.Equal(t, int64(0), bq.enqueueUnexpectedError.Count())
+	})
+	t.Run("fullqueue", func(t *testing.T) {
+		testQueue := &testQueueImpl{}
+		bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: 0})
+		r, err := tc.store.GetReplica(1)
+		require.NoError(t, err)
+		// Max size is 0, so the replica should not be enqueued.
+		queued, _ := bq.testingAddWithCallback(ctx, r, 1.0, processCallback{
+			onEnqueueResult: func(indexOnHeap int, err error) {
+				// It may be called with err = nil.
+				if err != nil {
+					require.ErrorIs(t, err, errDroppedDueToFullQueueSize)
+				}
+			},
+			onProcessResult: func(err error) {
+				t.Fatal("unexpected call to onProcessResult")
+			},
+		})
+		require.True(t, queued)
+		require.Equal(t, int64(1), bq.enqueueAdd.Count())
+		require.Equal(t, int64(0), bq.enqueueUnexpectedError.Count())
+	})
+	t.Run("queuesizeshrinking", func(t *testing.T) {
+		testQueue := &testQueueImpl{}
+		const oldMaxSize = 15
+		const newMaxSize = 5
+		expectedEnqueueErrorCount := oldMaxSize - newMaxSize
+		bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: oldMaxSize})
+		r, err := tc.store.GetReplica(1)
+		require.NoError(t, err)
+		var enqueueErrorCount atomic.Int64
+		// Max size is 10, so the replica should be enqueued.
+		for i := 0; i < oldMaxSize; i++ {
+			r.Desc().RangeID = roachpb.RangeID(i + 1)
+			queued, _ := bq.testingAddWithCallback(ctx, r, 1.0, processCallback{
+				onEnqueueResult: func(indexOnHeap int, err error) {
+					if err != nil {
+						enqueueErrorCount.Add(1)
+					}
+				},
+				onProcessResult: func(err error) {
+					t.Fatal("unexpected call to onProcessResult")
+				},
+			})
+			require.True(t, queued)
+		}
+		require.Equal(t, int64(oldMaxSize), bq.enqueueAdd.Count())
+		require.Equal(t, int64(0), bq.enqueueUnexpectedError.Count())
+
+		// Set max size to 5 and add more replicas.
+		bq.SetMaxSize(newMaxSize)
+		testutils.SucceedsSoon(t, func() error {
+			if enqueueErrorCount.Load() != int64(expectedEnqueueErrorCount) {
+				return errors.Errorf("expected %d enqueue errors; got %d",
+					expectedEnqueueErrorCount, enqueueErrorCount.Load())
+			}
+			return nil
+		})
+	})
+}
+
+// TestBaseQueueCallbackOnProcessResult tests that the processCallback is
+// invoked when the replica is processed and will be invoked again if the
+// replica ends up in the purgatory queue and being processed again.
+func TestBaseQueueCallbackOnProcessResult(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	tsc := TestStoreConfig(nil)
+	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
+
+	testQueue := &testQueueImpl{
+		duration: time.Nanosecond,
+		pChan:    make(chan time.Time, 1),
+		err:      &testPurgatoryError{},
+	}
+
+	const replicaCount = 10
+	repls := createReplicas(t, &tc, replicaCount)
+
+	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: replicaCount})
+	bq.Start(stopper)
+
+	var totalProcessedCalledWithErr atomic.Int32
+	for _, r := range repls {
+		queued, _ := bq.testingAddWithCallback(context.Background(), r, 1.0, processCallback{
+			onEnqueueResult: func(indexOnHeap int, err error) {
+				require.NoError(t, err)
+			},
+			onProcessResult: func(err error) {
+				if err != nil {
+					totalProcessedCalledWithErr.Add(1)
+				}
+			},
+		})
+		require.True(t, queued)
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		if pc := testQueue.getProcessed(); pc != replicaCount {
+			return errors.Errorf("expected %d processed replicas; got %d", replicaCount, pc)
+		}
+
+		if totalProcessedCalledWithErr.Load() != int32(replicaCount) {
+			return errors.Errorf("expected %d processed replicas with err; got %d", replicaCount, totalProcessedCalledWithErr.Load())
+		}
+		return nil
+	})
+
+	// Now, signal that purgatoried replicas should retry.
+	testQueue.pChan <- timeutil.Now()
+
+	testutils.SucceedsSoon(t, func() error {
+		if pc := testQueue.getProcessed(); pc != replicaCount*2 {
+			return errors.Errorf("expected %d processed replicas; got %d", replicaCount, pc)
+		}
+
+		if totalProcessedCalledWithErr.Load() != int32(replicaCount*2) {
+			return errors.Errorf("expected %d processed replicas with err; got %d", replicaCount, totalProcessedCalledWithErr.Load())
+		}
+		return nil
+	})
+}
+
+// TestQueueDisable verifies that setting the set of queue.enabled cluster
+// settings actually disables the base queue. This test works alongside
+// TestBaseQueueDisable to verify the entire disable workflow.
+func TestQueueDisable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
+
+	testCases := []struct {
+		name           string
+		clusterSetting *settings.BoolSetting
+		queue          *baseQueue
+	}{
+		{
+			name:           "Merge Queue",
+			clusterSetting: kvserverbase.MergeQueueEnabled,
+			queue:          tc.store.mergeQueue.baseQueue,
+		},
+		{
+			name:           "Replicate Queue",
+			clusterSetting: kvserverbase.ReplicateQueueEnabled,
+			queue:          tc.store.replicateQueue.baseQueue,
+		},
+		{
+			name:           "Replica GC Queue",
+			clusterSetting: kvserverbase.ReplicaGCQueueEnabled,
+			queue:          tc.store.replicaGCQueue.baseQueue,
+		},
+		{
+			name:           "Raft Log Queue",
+			clusterSetting: kvserverbase.RaftLogQueueEnabled,
+			queue:          tc.store.raftLogQueue.baseQueue,
+		},
+		{
+			name:           "Raft Snapshot Queue",
+			clusterSetting: kvserverbase.RaftSnapshotQueueEnabled,
+			queue:          tc.store.raftSnapshotQueue.baseQueue,
+		},
+		{
+			name:           "Consistency Queue",
+			clusterSetting: kvserverbase.ConsistencyQueueEnabled,
+			queue:          tc.store.consistencyQueue.baseQueue,
+		},
+		{
+			name:           "Split Queue",
+			clusterSetting: kvserverbase.SplitQueueEnabled,
+			queue:          tc.store.splitQueue.baseQueue,
+		},
+		{
+			name:           "MVCC GC Queue",
+			clusterSetting: kvserverbase.MVCCGCQueueEnabled,
+			queue:          tc.store.mvccGCQueue.baseQueue,
+		},
+	}
+
+	if tc.store.tsMaintenanceQueue != nil {
+		testCases = append(testCases, struct {
+			name           string
+			clusterSetting *settings.BoolSetting
+			queue          *baseQueue
+		}{
+			name:           "Timeseries Maintenance Queue",
+			clusterSetting: kvserverbase.TimeSeriesMaintenanceQueueEnabled,
+			queue:          tc.store.tsMaintenanceQueue.baseQueue,
+		})
+	}
+
+	// Disable and verify all queues are disabled
+	for _, testCase := range testCases {
+		testCase.clusterSetting.Override(ctx, &tc.store.ClusterSettings().SV, false)
+		if testCase.queue == nil {
+			continue
+		}
+		testCase.queue.mu.Lock()
+		disabled := testCase.queue.mu.disabled
+		testCase.queue.mu.Unlock()
+		if disabled != true {
+			t.Errorf("%s should be disabled", testCase.name)
+		}
+	}
+}
+
+type parallelQueueImpl struct {
+	testQueueImpl
+	processBlocker chan struct{}
+	processing     int32 // accessed atomically
+}
+
+var _ queueImpl = &parallelQueueImpl{}
+
+func (pq *parallelQueueImpl) process(
+	ctx context.Context, repl *Replica, confReader spanconfig.StoreReader, priority float64,
+) (processed bool, err error) {
+	atomic.AddInt32(&pq.processing, 1)
+	if pq.processBlocker != nil {
+		<-pq.processBlocker
+	}
+	processed, err = pq.testQueueImpl.process(ctx, repl, confReader, priority)
+	atomic.AddInt32(&pq.processing, -1)
+	return processed, err
+}
+
+func (pq *parallelQueueImpl) getProcessing() int {
+	return int(atomic.LoadInt32(&pq.processing))
+}
+
+func TestBaseQueueProcessConcurrently(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
+
+	repls := createReplicas(t, &tc, 3)
+	r1, r2, r3 := repls[0], repls[1], repls[2]
+
+	const testPriority = 1
+	pQueue := &parallelQueueImpl{
+		testQueueImpl: testQueueImpl{
+			blocker: make(chan struct{}, 1),
+			shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
+				return true, testPriority
+			},
+		},
+		processBlocker: make(chan struct{}, 1),
+	}
+	bq := makeTestBaseQueue("test", pQueue, tc.store,
+		queueConfig{
+			maxSize:        3,
+			maxConcurrency: 2,
+		},
+	)
+	bq.Start(stopper)
+
+	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
+	bq.maybeAdd(ctx, r2, hlc.ClockTimestamp{})
+	bq.maybeAdd(ctx, r3, hlc.ClockTimestamp{})
+
+	if exp, l := 3, bq.Length(); l != exp {
+		t.Errorf("expected %d queued replica; got %d", exp, l)
+	}
+
+	assertProcessedAndProcessing := func(expProcessed, expProcessing int) {
+		t.Helper()
+		testutils.SucceedsSoon(t, func() error {
+			if p := pQueue.getProcessed(); p != expProcessed {
+				return errors.Errorf("expected %d processed replicas; got %d", expProcessed, p)
+			}
+			if p := pQueue.getProcessing(); p != expProcessing {
+				return errors.Errorf("expected %d processing replicas; got %d", expProcessing, p)
+			}
+			return nil
+		})
+	}
+
+	close(pQueue.blocker)
+	assertProcessedAndProcessing(0, 2)
+
+	pQueue.processBlocker <- struct{}{}
+	assertProcessedAndProcessing(1, 2)
+
+	pQueue.processBlocker <- struct{}{}
+	assertProcessedAndProcessing(2, 1)
+
+	pQueue.processBlocker <- struct{}{}
+	assertProcessedAndProcessing(3, 0)
+	bq.assertInvariants(func(item *replicaItem) {
+		require.Equal(t, float64(testPriority), item.priority)
+	})
+}
+
+// TestBaseQueueReplicaChange ensures that if a replica is added to the queue
+// with a non-zero replica ID then it is only processed if the retrieved replica
+// from the getReplica() function has the same replica ID.
+func TestBaseQueueChangeReplicaID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	// The testContext exists only to construct the baseQueue.
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
+	testQueue := &testQueueImpl{
+		shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
+			return true, 1.0
+		},
+	}
+	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{
+		maxSize:              defaultQueueMaxSize,
+		acceptsUnsplitRanges: true,
+	})
+	r := &fakeReplica{rangeID: 1, replicaID: 1}
+	bq.mu.Lock()
+	bq.getReplica = func(rangeID roachpb.RangeID) (replicaInQueue, error) {
+		if rangeID != 1 {
+			panic(fmt.Errorf("expected range id 1, got %d", rangeID))
+		}
+		return r, nil
+	}
+	bq.mu.Unlock()
+	require.Equal(t, 0, testQueue.getProcessed())
+	bq.maybeAdd(ctx, r, tc.store.Clock().NowAsClockTimestamp())
+	bq.DrainQueue(ctx, tc.store.Stopper())
+	require.Equal(t, 1, testQueue.getProcessed())
+	bq.maybeAdd(ctx, r, tc.store.Clock().NowAsClockTimestamp())
+	r.replicaID = 2
+	bq.DrainQueue(ctx, tc.store.Stopper())
+	require.Equal(t, 1, testQueue.getProcessed())
+	require.Equal(t, 0, bq.Length())
+	require.Equal(t, 0, bq.PurgatoryLength())
+	bq.mu.Lock()
+	defer bq.mu.Unlock()
+	_, exists := bq.mu.replicas[1]
+	require.False(t, exists, bq.mu.replicas)
+}
+
+func TestBaseQueueRequeue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
+
+	repls := createReplicas(t, &tc, 1)
+	r1 := repls[0]
+
+	var shouldQueueCount int64 // accessed atomically
+	pQueue := &parallelQueueImpl{
+		testQueueImpl: testQueueImpl{
+			blocker: make(chan struct{}, 1),
+			shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
+				if atomic.AddInt64(&shouldQueueCount, 1) <= 4 {
+					return true, 1
+				}
+				return false, 1
+			},
+		},
+		processBlocker: make(chan struct{}, 1),
+	}
+	bq := makeTestBaseQueue("test", pQueue, tc.store,
+		queueConfig{
+			maxSize:        3,
+			maxConcurrency: 2,
+		},
+	)
+	bq.Start(stopper)
+
+	assertShouldQueueCount := func(expShouldQueueCount int) {
+		t.Helper()
+		testutils.SucceedsSoon(t, func() error {
+			if count := int(atomic.LoadInt64(&shouldQueueCount)); count != expShouldQueueCount {
+				return errors.Errorf("expected %d calls to ShouldQueue; found %d",
+					expShouldQueueCount, count)
+			}
+			return nil
+		})
+	}
+	assertProcessedAndProcessing := func(expProcessed, expProcessing int) {
+		t.Helper()
+		testutils.SucceedsSoon(t, func() error {
+			if p := pQueue.getProcessed(); p != expProcessed {
+				return errors.Errorf("expected %d processed replicas; got %d", expProcessed, p)
+			}
+			if p := pQueue.getProcessing(); p != expProcessing {
+				return errors.Errorf("expected %d processing replicas; got %d", expProcessing, p)
+			}
+			return nil
+		})
+	}
+	// MaybeAdd a replica. Should queue after checking ShouldQueue.
+	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
+	assertShouldQueueCount(1)
+	if exp, l := 1, bq.Length(); l != exp {
+		t.Errorf("expected %d queued replica; got %d", exp, l)
+	}
+
+	// Let the first processing attempt run.
+	close(pQueue.blocker)
+	assertProcessedAndProcessing(0, 1)
+
+	// MaybeAdd the same replica. Should requeue after checking ShouldQueue.
+	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
+	assertShouldQueueCount(2)
+
+	// Let the first processing attempt finish.
+	// Should begin processing second attempt after checking ShouldQueue again.
+	pQueue.processBlocker <- struct{}{}
+	assertShouldQueueCount(3)
+	assertProcessedAndProcessing(1, 1)
+
+	// MaybeAdd the same replica. Should requeue after checking ShouldQueue.
+	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
+	assertShouldQueueCount(4)
+
+	// Let the second processing attempt finish.
+	// Should NOT processing third attempt after checking ShouldQueue again.
+	pQueue.processBlocker <- struct{}{}
+	assertShouldQueueCount(5)
+	assertProcessedAndProcessing(2, 0)
+
+	// MaybeAdd the same replica. Should NOT queue after checking ShouldQueue.
+	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
+	assertShouldQueueCount(6)
+	assertProcessedAndProcessing(2, 0)
+}

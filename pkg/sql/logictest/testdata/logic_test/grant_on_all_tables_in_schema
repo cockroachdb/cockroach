@@ -1,0 +1,159 @@
+statement ok
+CREATE USER testuser2
+
+statement ok
+CREATE SCHEMA s;
+CREATE SCHEMA s2;
+
+# Granting in a schema with no tables should be okay.
+statement ok
+GRANT SELECT ON ALL TABLES IN SCHEMA s TO testuser
+
+query TTTTTTB colnames,rowsort
+SHOW GRANTS FOR testuser
+----
+database_name  schema_name  object_name  object_type  grantee  privilege_type  is_grantable
+test           public       NULL         schema       public   CREATE          false
+test           public       NULL         schema       public   USAGE           false
+
+statement ok
+CREATE TABLE s.t();
+CREATE TABLE s2.t();
+
+statement ok
+GRANT SELECT ON ALL TABLES IN SCHEMA s TO testuser
+
+query TTTTTTB colnames,rowsort
+SHOW GRANTS FOR testuser
+----
+database_name  schema_name  object_name  object_type  grantee   privilege_type  is_grantable
+test           public       NULL         schema       public    CREATE          false
+test           public       NULL         schema       public    USAGE           false
+test           s            t            table        testuser  SELECT          false
+
+statement ok
+GRANT SELECT ON ALL TABLES IN SCHEMA s, s2 TO testuser, testuser2
+
+query TTTTTTB colnames,rowsort
+SHOW GRANTS FOR testuser, testuser2
+----
+database_name  schema_name  object_name  object_type  grantee    privilege_type  is_grantable
+test           public       NULL         schema       public     CREATE          false
+test           public       NULL         schema       public     USAGE           false
+test           s            t            table        testuser   SELECT          false
+test           s            t            table        testuser2  SELECT          false
+test           s2           t            table        testuser   SELECT          false
+test           s2           t            table        testuser2  SELECT          false
+
+statement ok
+GRANT ALL ON ALL TABLES IN SCHEMA s, s2 TO testuser, testuser2
+
+query TTTTTTB colnames,rowsort
+SHOW GRANTS FOR testuser, testuser2
+----
+database_name  schema_name  object_name  object_type  grantee    privilege_type  is_grantable
+test           public       NULL         schema       public     CREATE          false
+test           public       NULL         schema       public     USAGE           false
+test           s            t            table        testuser   ALL             false
+test           s            t            table        testuser2  ALL             false
+test           s2           t            table        testuser   ALL             false
+test           s2           t            table        testuser2  ALL             false
+
+statement ok
+REVOKE SELECT ON ALL TABLES IN SCHEMA s, s2 FROM testuser, testuser2
+
+query TTTTTTB colnames,rowsort
+SHOW GRANTS FOR testuser, testuser2
+----
+database_name  schema_name  object_name  object_type  grantee    privilege_type     is_grantable
+test           public       NULL         schema       public     CREATE             false
+test           public       NULL         schema       public     USAGE              false
+test           s            t            table        testuser   BACKUP             false
+test           s            t            table        testuser   CHANGEFEED         false
+test           s            t            table        testuser   CREATE             false
+test           s            t            table        testuser   DELETE             false
+test           s            t            table        testuser   DROP               false
+test           s            t            table        testuser   INSERT             false
+test           s            t            table        testuser   MAINTAIN           false
+test           s            t            table        testuser   REPLICATIONDEST    false
+test           s            t            table        testuser   REPLICATIONSOURCE  false
+test           s            t            table        testuser   TRIGGER            false
+test           s            t            table        testuser   TRUNCATE           false
+test           s            t            table        testuser   UPDATE             false
+test           s            t            table        testuser   ZONECONFIG         false
+test           s            t            table        testuser2  BACKUP             false
+test           s            t            table        testuser2  CHANGEFEED         false
+test           s            t            table        testuser2  CREATE             false
+test           s            t            table        testuser2  DELETE             false
+test           s            t            table        testuser2  DROP               false
+test           s            t            table        testuser2  INSERT             false
+test           s            t            table        testuser2  MAINTAIN           false
+test           s            t            table        testuser2  REPLICATIONDEST    false
+test           s            t            table        testuser2  REPLICATIONSOURCE  false
+test           s            t            table        testuser2  TRIGGER            false
+test           s            t            table        testuser2  TRUNCATE           false
+test           s            t            table        testuser2  UPDATE             false
+test           s            t            table        testuser2  ZONECONFIG         false
+test           s2           t            table        testuser   BACKUP             false
+test           s2           t            table        testuser   CHANGEFEED         false
+test           s2           t            table        testuser   CREATE             false
+test           s2           t            table        testuser   DELETE             false
+test           s2           t            table        testuser   DROP               false
+test           s2           t            table        testuser   INSERT             false
+test           s2           t            table        testuser   MAINTAIN           false
+test           s2           t            table        testuser   REPLICATIONDEST    false
+test           s2           t            table        testuser   REPLICATIONSOURCE  false
+test           s2           t            table        testuser   TRIGGER            false
+test           s2           t            table        testuser   TRUNCATE           false
+test           s2           t            table        testuser   UPDATE             false
+test           s2           t            table        testuser   ZONECONFIG         false
+test           s2           t            table        testuser2  BACKUP             false
+test           s2           t            table        testuser2  CHANGEFEED         false
+test           s2           t            table        testuser2  CREATE             false
+test           s2           t            table        testuser2  DELETE             false
+test           s2           t            table        testuser2  DROP               false
+test           s2           t            table        testuser2  INSERT             false
+test           s2           t            table        testuser2  MAINTAIN           false
+test           s2           t            table        testuser2  REPLICATIONDEST    false
+test           s2           t            table        testuser2  REPLICATIONSOURCE  false
+test           s2           t            table        testuser2  TRIGGER            false
+test           s2           t            table        testuser2  TRUNCATE           false
+test           s2           t            table        testuser2  UPDATE             false
+test           s2           t            table        testuser2  ZONECONFIG         false
+
+statement ok
+REVOKE ALL ON ALL TABLES IN SCHEMA s, s2 FROM testuser, testuser2
+
+query TTTTTTB colnames,rowsort
+SHOW GRANTS FOR testuser, testuser2
+----
+database_name  schema_name  object_name  object_type  grantee  privilege_type  is_grantable
+test           public       NULL         schema       public   CREATE          false
+test           public       NULL         schema       public   USAGE           false
+
+# Verify that the database name is resolved correctly if specified.
+statement ok
+CREATE DATABASE otherdb
+
+statement ok
+CREATE TABLE otherdb.public.tbl (a int)
+
+statement ok
+GRANT SELECT ON ALL TABLES IN SCHEMA otherdb.public TO testuser
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON TABLE otherdb.public.tbl
+----
+database_name  schema_name  table_name  grantee   privilege_type  is_grantable
+otherdb        public       tbl         admin     ALL             true
+otherdb        public       tbl         root      ALL             true
+otherdb        public       tbl         testuser  SELECT          false
+
+statement ok
+CREATE TABLE t131157 (c1 INT)
+
+statement ok
+GRANT ALL ON t131157 TO testuser
+
+statement error t131157 is not a sequence
+REVOKE CREATE ON SEQUENCE t131157 FROM testuser

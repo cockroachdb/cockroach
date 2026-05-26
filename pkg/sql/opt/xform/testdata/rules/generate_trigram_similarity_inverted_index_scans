@@ -1,0 +1,364 @@
+exec-ddl
+CREATE TABLE trgm (
+    k INT PRIMARY KEY,
+    i INT NOT NULL,
+    j INT,
+    s STRING,
+    CHECK (i IN (1, 2, 3)),
+    INVERTED INDEX s_idx (s gin_trgm_ops),
+    INVERTED INDEX i_j_s_idx (i, j, s gin_trgm_ops)
+)
+----
+
+# A single trigram similarity filter can constrain an inverted index. This test
+# projects just the PK column.
+opt expect=GenerateTrigramSimilarityInvertedIndexScans
+SELECT k FROM trgm WHERE s % 'foo'
+----
+project
+ ├── columns: k:1!null
+ ├── stable
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null s:4
+      ├── stable
+      ├── key: (1)
+      ├── fd: (1)-->(4)
+      ├── index-join trgm
+      │    ├── columns: k:1!null s:4
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(4)
+      │    └── distinct-on
+      │         ├── columns: k:1!null
+      │         ├── grouping columns: k:1!null
+      │         ├── key: (1)
+      │         └── scan trgm@s_idx,inverted
+      │              ├── columns: k:1!null
+      │              └── constraint: /7
+      │                   ├── [/" fo" - /" fo"]
+      │                   ├── [/"foo" - /"foo"]
+      │                   └── [/"oo " - /"oo "]
+      └── filters
+           └── s:4 % 'foo' [outer=(4), stable]
+
+# A single trigram similarity filter can constrain an inverted index. This test
+# projects all columns.
+opt expect=GenerateTrigramSimilarityInvertedIndexScans
+SELECT * FROM trgm WHERE s % 'foo'
+----
+select
+ ├── columns: k:1!null i:2!null j:3 s:4
+ ├── stable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── index-join trgm
+ │    ├── columns: k:1!null i:2!null j:3 s:4
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── distinct-on
+ │         ├── columns: k:1!null
+ │         ├── grouping columns: k:1!null
+ │         ├── key: (1)
+ │         └── scan trgm@s_idx,inverted
+ │              ├── columns: k:1!null
+ │              └── constraint: /7
+ │                   ├── [/" fo" - /" fo"]
+ │                   ├── [/"foo" - /"foo"]
+ │                   └── [/"oo " - /"oo "]
+ └── filters
+      └── s:4 % 'foo' [outer=(4), stable]
+
+# When the threshold is set to 1, only one trigram needs to be scanned.
+# TODO(#122225): The distinct-on expression is not necessary because a single
+# value is scanned, so the primary key is already unique in the scan.
+opt expect=GenerateTrigramSimilarityInvertedIndexScans set=(pg_trgm.similarity_threshold=1)
+SELECT * FROM trgm WHERE s % 'foo'
+----
+select
+ ├── columns: k:1!null i:2!null j:3 s:4
+ ├── stable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── index-join trgm
+ │    ├── columns: k:1!null i:2!null j:3 s:4
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── distinct-on
+ │         ├── columns: k:1!null
+ │         ├── grouping columns: k:1!null
+ │         ├── key: (1)
+ │         └── scan trgm@s_idx,inverted
+ │              ├── columns: k:1!null
+ │              └── constraint: /7: [/"foo" - /"foo"]
+ └── filters
+      └── s:4 % 'foo' [outer=(4), stable]
+
+# The RHS of the triage similarity filter can be a non-STRING type.
+opt expect=GenerateTrigramSimilarityInvertedIndexScans
+SELECT * FROM trgm WHERE s % 'foo'::NAME
+----
+select
+ ├── columns: k:1!null i:2!null j:3 s:4
+ ├── stable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── index-join trgm
+ │    ├── columns: k:1!null i:2!null j:3 s:4
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── distinct-on
+ │         ├── columns: k:1!null
+ │         ├── grouping columns: k:1!null
+ │         ├── key: (1)
+ │         └── scan trgm@s_idx,inverted
+ │              ├── columns: k:1!null
+ │              └── constraint: /7
+ │                   ├── [/" fo" - /" fo"]
+ │                   ├── [/"foo" - /"foo"]
+ │                   └── [/"oo " - /"oo "]
+ └── filters
+      └── s:4 % 'foo' [outer=(4), stable]
+
+# The filter can be commuted to constrain the index.
+opt expect=GenerateTrigramSimilarityInvertedIndexScans
+SELECT * FROM trgm WHERE 'foo' % s
+----
+select
+ ├── columns: k:1!null i:2!null j:3 s:4
+ ├── stable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── index-join trgm
+ │    ├── columns: k:1!null i:2!null j:3 s:4
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── distinct-on
+ │         ├── columns: k:1!null
+ │         ├── grouping columns: k:1!null
+ │         ├── key: (1)
+ │         └── scan trgm@s_idx,inverted
+ │              ├── columns: k:1!null
+ │              └── constraint: /7
+ │                   ├── [/" fo" - /" fo"]
+ │                   ├── [/"foo" - /"foo"]
+ │                   └── [/"oo " - /"oo "]
+ └── filters
+      └── 'foo' % s:4 [outer=(4), stable]
+
+# Conjunctions are naively supported by scanning just the trigrams from one of
+# the conjucts.
+opt expect=GenerateTrigramSimilarityInvertedIndexScans
+SELECT * FROM trgm WHERE s % 'foo' AND s % 'bar'
+----
+select
+ ├── columns: k:1!null i:2!null j:3 s:4
+ ├── stable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── index-join trgm
+ │    ├── columns: k:1!null i:2!null j:3 s:4
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── distinct-on
+ │         ├── columns: k:1!null
+ │         ├── grouping columns: k:1!null
+ │         ├── key: (1)
+ │         └── scan trgm@s_idx,inverted
+ │              ├── columns: k:1!null
+ │              └── constraint: /7
+ │                   ├── [/" fo" - /" fo"]
+ │                   ├── [/"foo" - /"foo"]
+ │                   └── [/"oo " - /"oo "]
+ └── filters
+      ├── s:4 % 'foo' [outer=(4), stable]
+      └── s:4 % 'bar' [outer=(4), stable]
+
+# A trigram similarity filter with a longer constant string can constrain an
+# inverted index.
+opt expect=GenerateTrigramSimilarityInvertedIndexScans
+SELECT * FROM trgm WHERE s % 'foobar'
+----
+select
+ ├── columns: k:1!null i:2!null j:3 s:4
+ ├── stable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── index-join trgm
+ │    ├── columns: k:1!null i:2!null j:3 s:4
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── distinct-on
+ │         ├── columns: k:1!null
+ │         ├── grouping columns: k:1!null
+ │         ├── key: (1)
+ │         └── scan trgm@s_idx,inverted
+ │              ├── columns: k:1!null
+ │              └── constraint: /7
+ │                   ├── [/"ar " - /"ar "]
+ │                   ├── [/"bar" - /"bar"]
+ │                   ├── [/"foo" - /"foo"]
+ │                   ├── [/"oba" - /"oba"]
+ │                   └── [/"oob" - /"oob"]
+ └── filters
+      └── s:4 % 'foobar' [outer=(4), stable]
+
+# A multi-column inverted index can be constrained by a trigram similarity
+# filter. Optional filters constrain the first column.
+opt expect=GenerateTrigramSimilarityInvertedIndexScans
+SELECT * FROM trgm WHERE j = 10 AND s % 'foo'
+----
+select
+ ├── columns: k:1!null i:2!null j:3!null s:4
+ ├── stable
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4)
+ ├── index-join trgm
+ │    ├── columns: k:1!null i:2!null j:3 s:4
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── distinct-on
+ │         ├── columns: k:1!null
+ │         ├── grouping columns: k:1!null
+ │         ├── key: (1)
+ │         └── scan trgm@i_j_s_idx,inverted
+ │              ├── columns: k:1!null
+ │              └── constraint: /2/3/8
+ │                   ├── [/1/10/" fo" - /1/10/" fo"]
+ │                   ├── [/1/10/"foo" - /1/10/"foo"]
+ │                   ├── [/1/10/"oo " - /1/10/"oo "]
+ │                   ├── [/2/10/" fo" - /2/10/" fo"]
+ │                   ├── [/2/10/"foo" - /2/10/"foo"]
+ │                   ├── [/2/10/"oo " - /2/10/"oo "]
+ │                   ├── [/3/10/" fo" - /3/10/" fo"]
+ │                   ├── [/3/10/"foo" - /3/10/"foo"]
+ │                   └── [/3/10/"oo " - /3/10/"oo "]
+ └── filters
+      └── s:4 % 'foo' [outer=(4), stable]
+
+# A multi-column inverted index can be constrained by a trigram similarity
+# filter. The second column is constrained by an IN expression.
+opt expect=GenerateTrigramSimilarityInvertedIndexScans
+SELECT * FROM trgm WHERE j IN (10, 20) AND s % 'foo'
+----
+select
+ ├── columns: k:1!null i:2!null j:3!null s:4
+ ├── stable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── index-join trgm
+ │    ├── columns: k:1!null i:2!null j:3 s:4
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── distinct-on
+ │         ├── columns: k:1!null
+ │         ├── grouping columns: k:1!null
+ │         ├── key: (1)
+ │         └── scan trgm@i_j_s_idx,inverted
+ │              ├── columns: k:1!null
+ │              └── constraint: /2/3/8
+ │                   ├── [/1/10/" fo" - /1/10/" fo"]
+ │                   ├── [/1/10/"foo" - /1/10/"foo"]
+ │                   ├── [/1/10/"oo " - /1/10/"oo "]
+ │                   ├── [/1/20/" fo" - /1/20/" fo"]
+ │                   ├── [/1/20/"foo" - /1/20/"foo"]
+ │                   ├── [/1/20/"oo " - /1/20/"oo "]
+ │                   ├── [/2/10/" fo" - /2/10/" fo"]
+ │                   ├── [/2/10/"foo" - /2/10/"foo"]
+ │                   ├── [/2/10/"oo " - /2/10/"oo "]
+ │                   ├── [/2/20/" fo" - /2/20/" fo"]
+ │                   ├── [/2/20/"foo" - /2/20/"foo"]
+ │                   ├── [/2/20/"oo " - /2/20/"oo "]
+ │                   ├── [/3/10/" fo" - /3/10/" fo"]
+ │                   ├── [/3/10/"foo" - /3/10/"foo"]
+ │                   ├── [/3/10/"oo " - /3/10/"oo "]
+ │                   ├── [/3/20/" fo" - /3/20/" fo"]
+ │                   ├── [/3/20/"foo" - /3/20/"foo"]
+ │                   └── [/3/20/"oo " - /3/20/"oo "]
+ └── filters
+      └── s:4 % 'foo' [outer=(4), stable]
+
+# The RHS cannot be NULL.
+opt expect-not=GenerateTrigramSimilarityInvertedIndexScans disable=(FoldNullBinaryRight) format=show-scalars
+SELECT * FROM trgm WHERE s % NULL::STRING
+----
+select
+ ├── columns: k:1!null i:2!null j:3 s:4
+ ├── stable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── scan trgm
+ │    ├── columns: k:1!null i:2!null j:3 s:4
+ │    ├── check constraint expressions
+ │    │    └── in [outer=(2), constraints=(/2: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+ │    │         ├── variable: i:2
+ │    │         └── tuple
+ │    │              ├── const: 1
+ │    │              ├── const: 2
+ │    │              └── const: 3
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      └── mod [outer=(4), stable]
+           ├── variable: s:4
+           └── null
+
+# Do not explore this rule if the threshold is 0.
+opt expect-not=GenerateTrigramSimilarityInvertedIndexScans set=(pg_trgm.similarity_threshold=0)
+SELECT * FROM trgm WHERE s % 'foo'
+----
+select
+ ├── columns: k:1!null i:2!null j:3 s:4
+ ├── stable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── scan trgm
+ │    ├── columns: k:1!null i:2!null j:3 s:4
+ │    ├── check constraint expressions
+ │    │    └── i:2 IN (1, 2, 3) [outer=(2), constraints=(/2: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      └── s:4 % 'foo' [outer=(4), stable]
+
+# The RHS cannot be the empty string.
+opt expect-not=GenerateTrigramSimilarityInvertedIndexScans
+SELECT * FROM trgm WHERE s % ''
+----
+select
+ ├── columns: k:1!null i:2!null j:3 s:4
+ ├── stable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── scan trgm
+ │    ├── columns: k:1!null i:2!null j:3 s:4
+ │    ├── check constraint expressions
+ │    │    └── i:2 IN (1, 2, 3) [outer=(2), constraints=(/2: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      └── s:4 % '' [outer=(4), stable]
+
+# The corresponding session setting must be enabled.
+opt expect-not=GenerateTrigramSimilarityInvertedIndexScans set=(optimizer_use_trigram_similarity_optimization=off) format=hide-all
+SELECT k FROM trgm WHERE s % 'foo'
+----
+project
+ └── select
+      ├── index-join trgm
+      │    └── inverted-filter
+      │         ├── inverted expression: /7
+      │         │    ├── tight: false, unique: false
+      │         │    └── union spans
+      │         │         ├── ["  f", "  f"]
+      │         │         ├── [" fo", " fo"]
+      │         │         ├── ["foo", "foo"]
+      │         │         └── ["oo ", "oo "]
+      │         └── scan trgm@s_idx,inverted
+      │              └── inverted constraint: /7/1
+      │                   └── spans
+      │                        ├── ["  f", "  f"]
+      │                        ├── [" fo", " fo"]
+      │                        ├── ["foo", "foo"]
+      │                        └── ["oo ", "oo "]
+      └── filters
+           └── s % 'foo'

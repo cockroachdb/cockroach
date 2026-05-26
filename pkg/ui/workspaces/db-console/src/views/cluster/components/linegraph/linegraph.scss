@@ -1,0 +1,124 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import "styl/base/palette.scss";
+@import "src/components/core/index.scss";
+
+$viz-bottom: 65px;
+$viz-sides: 62px;
+
+.anchor-light {
+  color: white;
+  text-decoration: underline;
+  &:hover {
+    color: gray;
+    text-decoration: underline;
+  }
+}
+
+.u-legend {
+  max-height: 300px;
+  display: flex;
+  flex-wrap: wrap;
+  flex-direction: row;
+  align-items: flex-start;
+  align-content: flex-start;
+  overflow: auto;
+  > tr {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-end;
+  }
+  > tr:first-child {
+    flex-basis: 100%;
+    text-align: left;
+    color: gray;
+    .u-marker {
+      display: none;
+    }
+  }
+}
+
+.u-tooltip {
+  font-size: 10pt;
+  position: absolute;
+  background: #fff;
+  display: none;
+  border: 1px solid black;
+  padding: 0 0.5em 0 0.5em;
+  pointer-events: none;
+  z-index: 100;
+  white-space: pre;
+  .u-time {
+    color: gray;
+    margin-top: 4px;
+  }
+  .u-series {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+  }
+  .u-label {
+    font-weight: 600;
+  }
+  .u-marker {
+    height: 1em;
+    width: 1em;
+    display: inline-block;
+    vertical-align: middle;
+  }
+}
+
+.no-data {
+  width: 100%;
+  text-align: center;
+}
+
+.linked-guideline__line {
+  stroke: $link-color;
+}
+
+.linegraph-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: inherit;
+  min-height: 300px;
+  position: relative;
+  background-color: #fff;
+  color: $headings-color;
+  border-radius: 5px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  margin-bottom: 10px;
+  .body-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    border-radius: 8px;
+    margin: 6% 0;
+    padding: 5%;
+    box-shadow: 0px 4px 8px rgba(179, 185, 197, 0.3), 0px 0px 1px rgba(179, 185, 197, 0.47);
+    .body-text-empty {
+      padding-top: 3%;
+      font-size: 14px;
+      font-weight: 600;
+      color: $colors--neutral-9;
+    }
+  }
+
+  .header-empty {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 15px 25px 0;
+    .title-empty {
+      font-size: 14px;
+      font-family: $font-family--bold;
+      color: $body-color;
+      border-bottom: 1px dashed $colors--neutral-5;
+    }
+  }
+}

@@ -1,0 +1,16 @@
+# LogicTest: 5node
+
+statement ok
+CREATE TABLE t (
+    k INT PRIMARY KEY,
+    v STRING,
+    INDEX secondary (k) STORING (v)
+);
+
+statement ok
+ALTER INDEX t@secondary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc1]'
+
+# Regression test for #36348
+
+statement ok
+DROP INDEX t@secondary

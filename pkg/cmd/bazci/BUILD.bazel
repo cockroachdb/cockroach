@@ -1,0 +1,38 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
+
+go_library(
+    name = "bazci_lib",
+    srcs = [
+        "bazci.go",
+        "main.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/bazci",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/build/bazel/bes",
+        "//pkg/build/util",
+        "//pkg/cmd/bazci/githubpost",
+        "@com_github_alessio_shellescape//:shellescape",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//types",
+        "@com_github_spf13_cobra//:cobra",
+        "@org_golang_google_genproto//googleapis/devtools/build/v1:build",
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_protobuf//types/known/emptypb",
+    ],
+)
+
+go_binary(
+    name = "bazci",
+    embed = [":bazci_lib"],
+    visibility = ["//visibility:public"],
+)
+
+disallowed_imports_test(
+    "bazci_lib",
+    disallowed_list = [
+        "//pkg/roachprod/logger",
+        "//pkg/util/log",
+    ],
+)

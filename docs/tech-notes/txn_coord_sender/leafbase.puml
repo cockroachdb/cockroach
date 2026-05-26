@@ -1,0 +1,51 @@
+@startuml
+skinparam BoxPadding 10
+
+box "On the gateway node"
+  participant SQL
+  participant RootTxn
+end box
+box "On another node"
+  participant dSQLServer
+  participant LeafTxn
+end box
+participant cluster
+
+create RootTxn
+SQL -> RootTxn : client.NewTxn()
+...
+note left of SQL
+   forking RootTxn
+   into LeafTxn meta
+end note
+SQL -> RootTxn : txn.GetLeafTxnInitialState()
+RootTxn --> SQL : LeafTxnInitialState
+SQL -> dSQLServer : SetupFlow(proc spec, initState)
+note over dSQLServer,LeafTxn: (dSQL proc starts exec)
+note left of SQL: actually instantiating LeafTxn
+create LeafTxn
+dSQLServer -> LeafTxn : client.NewLeafTxn()
+...
+note left of SQL
+   LeafTxn issuing reads
+   on behalf of RootTxn
+end note
+dSQLServer -> LeafTxn : txn.Run(client.Batch)
+LeafTxn -> cluster : txn.sender.Send(roachpb.BatchRequest)
+...
+cluster --> LeafTxn : BatchResponse
+LeafTxn --> dSQLServer : Batch modified in-place
+dSQLServer --> SQL : some results
+...
+note over dSQLServer,LeafTxn: (dSQL proc finishes exec)
+note left of SQL
+   updates to LeafTxn
+   repatriated into RootTxn
+end note
+dSQLServer -> LeafTxn : GetLeafTxnFinalState()
+LeafTxn --> dSQLServer : LeafTxnFinalState
+dSQLServer --> SQL : final results + finalState
+SQL -> RootTxn : txn.UpdateRootFromLeafFinalState(finalState)
+...
+SQL -> RootTxn : Commit/Rollback/CleanupOnError
+@enduml

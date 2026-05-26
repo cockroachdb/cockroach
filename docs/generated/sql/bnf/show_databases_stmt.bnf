@@ -1,0 +1,3 @@
+show_databases_stmt ::=
+	'SHOW' 'DATABASES' 'WITH' 'COMMENT'
+	| 'SHOW' 'DATABASES' 

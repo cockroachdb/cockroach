@@ -1,0 +1,29 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
+
+go_library(
+    name = "skip",
+    srcs = [
+        "constants.go",
+        "skip.go",
+        "stress.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/skip",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/build/bazel",
+        "//pkg/util",
+        "//pkg/util/buildutil",
+        "//pkg/util/envutil",
+        "//pkg/util/metamorphic/metamorphicutil",
+        "//pkg/util/syncutil",
+    ],
+)
+
+disallowed_imports_test(
+    "skip",
+    disallow_cdeps = True,
+    disallowed_list = [
+        "//pkg/util/metamorphic",
+    ],
+)

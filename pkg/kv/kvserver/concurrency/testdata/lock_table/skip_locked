@@ -1,0 +1,720 @@
+new-lock-table maxlocks=10000
+----
+
+new-txn txn=txn1 ts=10,1 epoch=0
+----
+
+new-txn txn=txn2 ts=9,1 epoch=0
+----
+
+new-txn txn=txn3 ts=10,1 epoch=0
+----
+
+# keyspace:
+#  a: unlocked
+#  b: locked by txn1
+#  c: locked by txn2
+#  d: locked by txn1
+#  e: unlocked
+#  f: reservation by txn1
+#  g: locked by txn1 (shared)
+#  h: locked by txn2 (shared)
+#  i: locked by txn2 (shared), (exclusive) request from txn1 actively waiting
+
+new-request r=req1 txn=txn1 ts=10,1 spans=exclusive@b,d
+----
+
+scan r=req1
+----
+start-waiting: false
+
+should-wait r=req1
+----
+false
+
+acquire r=req1 k=b durability=u strength=exclusive
+----
+num=1
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+acquire r=req1 k=d durability=u strength=exclusive
+----
+num=2
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+dequeue r=req1
+----
+num=2
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+new-request r=req2 txn=txn2 ts=9,1 spans=exclusive@c+exclusive@f
+----
+
+scan r=req2
+----
+start-waiting: false
+
+should-wait r=req2
+----
+false
+
+acquire r=req2 k=c durability=u strength=exclusive
+----
+num=3
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+acquire r=req2 k=f durability=u strength=exclusive
+----
+num=4
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "f"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+dequeue r=req2
+----
+num=4
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "f"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+new-request r=req3 txn=txn1 ts=10,1 spans=intent@f
+----
+
+scan r=req3
+----
+start-waiting: true
+
+should-wait r=req3
+----
+true
+
+release txn=txn2 span=f
+----
+num=4
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "f"
+   queued locking requests:
+    active: false req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+
+new-request r=req4 txn=txn1 ts=10,1 spans=shared@g
+----
+
+scan r=req4
+----
+start-waiting: false
+
+should-wait r=req4
+----
+false
+
+acquire r=req4 k=g durability=u strength=shared
+----
+num=5
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "f"
+   queued locking requests:
+    active: false req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "g"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+new-request r=req5 txn=txn2 ts=9,1 spans=shared@h
+----
+
+scan r=req5
+----
+start-waiting: false
+
+should-wait r=req5
+----
+false
+
+acquire r=req5 k=h durability=u strength=shared
+----
+num=6
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "f"
+   queued locking requests:
+    active: false req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "g"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+ lock: "h"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+new-request r=req6 txn=txn2 ts=9,1 spans=shared@i
+----
+
+scan r=req6
+----
+start-waiting: false
+
+should-wait r=req6
+----
+false
+
+acquire r=req6 k=i durability=u strength=shared
+----
+num=7
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "f"
+   queued locking requests:
+    active: false req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "g"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+ lock: "h"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+ lock: "i"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+new-request r=req7 txn=txn1 ts=10,1 spans=exclusive@i
+----
+
+scan r=req7
+----
+start-waiting: true
+
+should-wait r=req7
+----
+true
+
+dequeue r=req6
+----
+num=7
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "f"
+   queued locking requests:
+    active: false req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "g"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+ lock: "h"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+ lock: "i"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: true req: 7, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+
+# ---------------------------------------------------------------------------------
+# req8 will scan the lock table with a Skip wait policy. It will not need to wait.
+# Once it begins evaluating, it will probe into the lock table to determine which
+# keys to skip.
+# ---------------------------------------------------------------------------------
+
+new-request r=req8 txn=txn2 ts=9,1 spans=none@a,j skip-locked
+----
+
+scan r=req8
+----
+start-waiting: false
+
+should-wait r=req8
+----
+false
+
+is-key-locked-by-conflicting-txn r=req8 k=a strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=b strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=c strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=d strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=e strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=f strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=g strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=h strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=i strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=a strength=shared
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=b strength=shared
+----
+locked: true, holder: 00000000-0000-0000-0000-000000000001
+
+is-key-locked-by-conflicting-txn r=req8 k=c strength=shared
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=d strength=shared
+----
+locked: true, holder: 00000000-0000-0000-0000-000000000001
+
+is-key-locked-by-conflicting-txn r=req8 k=e strength=shared
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=f strength=shared
+----
+locked: true, holder: <nil>
+
+is-key-locked-by-conflicting-txn r=req8 k=g strength=shared
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=h strength=shared
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=i strength=shared
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=a strength=exclusive
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=b strength=exclusive
+----
+locked: true, holder: 00000000-0000-0000-0000-000000000001
+
+is-key-locked-by-conflicting-txn r=req8 k=c strength=exclusive
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=d strength=exclusive
+----
+locked: true, holder: 00000000-0000-0000-0000-000000000001
+
+is-key-locked-by-conflicting-txn r=req8 k=e strength=exclusive
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=f strength=exclusive
+----
+locked: true, holder: <nil>
+
+is-key-locked-by-conflicting-txn r=req8 k=g strength=exclusive
+----
+locked: true, holder: 00000000-0000-0000-0000-000000000001
+
+is-key-locked-by-conflicting-txn r=req8 k=h strength=exclusive
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=i strength=exclusive
+----
+locked: false
+
+dequeue r=req8
+----
+num=7
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "f"
+   queued locking requests:
+    active: false req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "g"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+ lock: "h"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+ lock: "i"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: true req: 7, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+
+# ---------------------------------------------------------------------------------
+# req9 is the same as req8, except is has a timestamp equal to txn1's to
+# exercise the strength=none cases again.
+# ---------------------------------------------------------------------------------
+
+new-request r=req9 txn=txn2 ts=10,1 spans=none@a,j skip-locked
+----
+
+scan r=req9
+----
+start-waiting: false
+
+should-wait r=req9
+----
+false
+
+is-key-locked-by-conflicting-txn r=req9 k=a strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req9 k=b strength=none
+----
+locked: true, holder: 00000000-0000-0000-0000-000000000001
+
+is-key-locked-by-conflicting-txn r=req9 k=c strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req9 k=d strength=none
+----
+locked: true, holder: 00000000-0000-0000-0000-000000000001
+
+is-key-locked-by-conflicting-txn r=req9 k=e strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req9 k=f strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req9 k=g strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req9 k=h strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req9 k=i strength=none
+----
+locked: false
+
+dequeue r=req9
+----
+num=7
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "f"
+   queued locking requests:
+    active: false req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "g"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+ lock: "h"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+ lock: "i"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: true req: 7, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+
+# ---------------------------------------------------------------------------------
+# Ensure the case where a locking skip locked request finds another request from
+# its own transaction correctly returns an error.
+# ---------------------------------------------------------------------------------
+
+new-request r=req10 txn=txn1 ts=10,1 spans=exclusive@f skip-locked
+----
+
+scan r=req10
+----
+start-waiting: false
+
+should-wait r=req10
+----
+false
+
+is-key-locked-by-conflicting-txn r=req10 k=f strength=exclusive
+----
+locked: false
+
+# ------------------------------------------------------------------------------
+# Ensure SKIP LOCKED works correctly when a transaction holds one of multiple
+# shared locks on a key, and it tries to use SKIP LOCKED in on the key with a
+# stronger lock strength (i.e. it's trying to promote its lock).
+# ---------------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+new-request r=req11 txn=txn1 ts=10,1 spans=shared@a
+----
+
+scan r=req11
+----
+start-waiting: false
+
+acquire r=req11 k=a durability=u strength=shared
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+new-request r=req12 txn=txn2 ts=10,1 spans=shared@a
+----
+
+scan r=req12
+----
+start-waiting: false
+
+acquire r=req12 k=a durability=u strength=shared
+----
+num=1
+ lock: "a"
+  holders: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+           txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+new-request r=req13 txn=txn2 ts=10,1 spans=exclusive@a skip-locked
+----
+
+scan r=req13
+----
+start-waiting: false
+
+is-key-locked-by-conflicting-txn r=req13 k=a strength=exclusive
+----
+locked: true, holder: 00000000-0000-0000-0000-000000000001
+
+# ------------------------------------------------------------------------------
+# Ensure SKIP LOCKED requests that find other requests belonging to their
+# transaction in a lock's wait queues are handled correctly. They should be
+# treated as non-conflicting.
+# ---------------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+# 1. Simple test where there's only one request in the wait queue, and it
+# belongs to our own transaction.
+
+new-request r=req14 txn=txn1 ts=10,1 spans=exclusive@a
+----
+
+scan r=req14
+----
+start-waiting: false
+
+acquire r=req14 k=a strength=exclusive durability=u
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+new-request r=req15 txn=txn2 ts=10,1 spans=exclusive@a
+----
+
+scan r=req15
+----
+start-waiting: true
+
+release txn=txn1 span=a
+----
+num=1
+ lock: "a"
+   queued locking requests:
+    active: false req: 15, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+
+new-request r=req16 txn=txn2 ts=10,1 spans=exclusive@a skip-locked
+----
+
+scan r=req16
+----
+start-waiting: false
+
+is-key-locked-by-conflicting-txn r=req16 k=a strength=exclusive
+----
+locked: false
+
+clear
+----
+num=0
+
+# 2. Throw in a request from a different transaction in the wait-queue (2
+# variants -- one with strength shared and another with strength exclusive).
+# We'll test skip locked requests with both higher and lower sequence numbers.
+# Again, 2 variants each, one with strength shared and another with strength
+# exclusive.
+
+new-request r=req17 txn=txn1 ts=10,1 spans=exclusive@a,b
+----
+
+scan r=req17
+----
+start-waiting: false
+
+acquire r=req17 k=a strength=exclusive durability=u
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+acquire r=req17 k=b strength=exclusive durability=u
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+new-request r=req18 txn=txn2 ts=9,1 spans=exclusive@a
+----
+
+scan r=req18
+----
+start-waiting: true
+
+new-request r=req19 txn=txn2 ts=9,1 spans=exclusive@b
+----
+
+scan r=req19
+----
+start-waiting: true
+
+# Before adding requests from txn3 in the wait-queue, create 2 SKIP LOCKED
+# requests for txn2 (with lock strength shared and exclusive). This way, they'll
+# have a lower sequence number than the requests from txn3.
+
+new-request r=req20 txn=txn2 ts=9,1 spans=exclusive@a,b skip-locked
+----
+
+scan r=req20
+----
+start-waiting: false
+
+new-request r=req21 txn=txn2 ts=9,1 spans=shared@a,b skip-locked
+----
+
+scan r=req21
+----
+start-waiting: false
+
+# Now, add requests from txn3 to the wait queue.
+new-request r=req22 txn=txn3 ts=10,1 spans=exclusive@a
+----
+
+scan r=req22
+----
+start-waiting: true
+
+new-request r=req23 txn=txn3 ts=10,1 spans=shared@b
+----
+
+scan r=req23
+----
+start-waiting: true
+
+# Setup complete.
+release txn=txn1 span=a,c
+----
+num=2
+ lock: "a"
+   queued locking requests:
+    active: false req: 18, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 22, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000003
+ lock: "b"
+   queued locking requests:
+    active: false req: 19, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 23, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+
+# Lastly, create 2 more SKIP LOCKED requests for txn2, one each for strength
+# shared and exclusive. They'll have a higher sequence number than requests
+# that belong to txn3.
+
+new-request r=req24 txn=txn2 ts=9,1 spans=exclusive@a,b skip-locked
+----
+
+scan r=req24
+----
+start-waiting: false
+
+new-request r=req25 txn=txn2 ts=9,1 spans=shared@a,b skip-locked
+----
+
+scan r=req25
+----
+start-waiting: false
+
+# Now, for the actual tests.
+is-key-locked-by-conflicting-txn r=req20 k=a strength=exclusive
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req20 k=b strength=exclusive
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req21 k=a strength=shared
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req21 k=b strength=shared
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req24 k=a strength=exclusive
+----
+locked: true, holder: <nil>
+
+is-key-locked-by-conflicting-txn r=req24 k=b strength=exclusive
+----
+locked: true, holder: <nil>
+
+is-key-locked-by-conflicting-txn r=req25 k=a strength=shared
+----
+locked: true, holder: <nil>
+
+is-key-locked-by-conflicting-txn r=req25 k=b strength=shared
+----
+locked: false

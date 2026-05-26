@@ -1,0 +1,4008 @@
+# LogicTest: 5node
+
+skip under race
+
+# Speed up job adoption.
+statement ok
+SET CLUSTER SETTING jobs.registry.interval.adopt = '10ms'
+
+# Disable histogram collection.
+statement ok
+SET CLUSTER SETTING sql.stats.histogram_collection.enabled = false
+
+statement ok
+CREATE TABLE data (a INT, b INT, c FLOAT, d DECIMAL, e BOOL, PRIMARY KEY (a, b, c, d), INDEX c_idx (c, d))
+
+let $t_id
+SELECT id FROM system.namespace WHERE name='data'
+
+# Split into ten parts.
+statement ok
+ALTER TABLE data SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
+
+# Relocate the ten parts to the five nodes.
+retry
+statement ok
+ALTER TABLE data EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
+
+# Generate all combinations of values 1 to 4.
+statement ok
+INSERT INTO data SELECT a, b, c::FLOAT, d::DECIMAL, (a+b+c+d) % 2 = 0 FROM
+   generate_series(1, 4) AS a(a),
+   generate_series(1, 4) AS b(b),
+   generate_series(1, 4) AS c(c),
+   generate_series(1, 4) AS d(d)
+
+# Verify data placement.
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE data WITH DETAILS]
+----
+start_key           end_key       replicas  lease_holder
+<before:/Table/XX>  …/1/1         {1}       1
+…/1/1               …/1/2         {2}       2
+…/1/2               …/1/3         {3}       3
+…/1/3               …/1/4         {4}       4
+…/1/4               …/1/5         {5}       5
+…/1/5               …/1/6         {1}       1
+…/1/6               …/1/7         {2}       2
+…/1/7               …/1/8         {3}       3
+…/1/8               …/1/9         {4}       4
+…/1/9               <after:/Max>  {5}       5
+
+# Turn feature flag off and verify errors.
+statement ok
+SET CLUSTER SETTING feature.stats.enabled = FALSE
+
+statement error pq: feature ANALYZE/CREATE STATISTICS was disabled by the database administrator
+CREATE STATISTICS s1 ON a FROM data
+
+statement error pq: feature ANALYZE/CREATE STATISTICS was disabled by the database administrator
+ANALYZE data
+
+statement ok
+SET CLUSTER SETTING feature.stats.enabled = TRUE
+
+statement ok
+CREATE STATISTICS s1 ON a FROM data
+
+query TTIIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count, histogram_id
+FROM [SHOW STATISTICS FOR TABLE data]
+----
+statistics_name  column_names  row_count  distinct_count  null_count  histogram_id
+s1               {a}           256        4               0           NULL
+
+statement ok
+SET CLUSTER SETTING sql.stats.histogram_collection.enabled = true
+
+statement ok
+CREATE STATISTICS s1 ON a FROM data
+
+query TTIIIB colnames
+SELECT
+	statistics_name,
+	column_names,
+	row_count,
+	distinct_count,
+	null_count,
+	histogram_id IS NOT NULL AS has_histogram
+FROM
+	[SHOW STATISTICS FOR TABLE data];
+----
+statistics_name  column_names  row_count  distinct_count  null_count  has_histogram
+s1               {a}           256        4               0           true
+
+let $hist_id_1
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE data] WHERE statistics_name = 's1'
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+1            0           0                    64
+2            0           0                    64
+3            0           0                    64
+4            0           0                    64
+
+statement ok
+CREATE STATISTICS "" ON b FROM data
+
+query TTIIIB colnames
+SELECT
+	statistics_name,
+	column_names,
+	row_count,
+	distinct_count,
+	null_count,
+	histogram_id IS NOT NULL AS has_histogram
+FROM
+	[SHOW STATISTICS FOR TABLE data]
+ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names  row_count  distinct_count  null_count  has_histogram
+NULL             {b}           256        4               0           true
+s1               {a}           256        4               0           true
+
+# Verify that we can package statistics into a json object and later restore them.
+let $json_stats
+SHOW STATISTICS USING JSON FOR TABLE data
+
+# Verify that we can control the number of samples and buckets collected.
+statement ok
+SET CLUSTER SETTING sql.stats.histogram_buckets.count = 2
+
+statement ok
+CREATE STATISTICS s2 ON a FROM data
+
+let $hist_id_2
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE data] WHERE statistics_name = 's2'
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_id_2
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+1            0           0                    64
+4            128         2                    64
+
+# We can also control this with a table setting.
+statement ok
+ALTER TABLE data SET (sql_stats_histogram_buckets_count = 3)
+
+statement ok
+CREATE STATISTICS s3 ON a FROM data
+
+let $hist_id_3
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE data] WHERE statistics_name = 's3'
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_id_3
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+1            0           0                    64
+3            64          1                    64
+4            0           0                    64
+
+statement ok
+ALTER TABLE data RESET (sql_stats_histogram_buckets_count)
+
+# Verify that we dynamically determine the number of samples if
+# unspecified by table and cluster settings.
+
+statement ok
+RESET CLUSTER SETTING sql.stats.histogram_samples.count
+
+# We can verify the number of samples collected based on the number of
+# buckets produced.
+statement ok
+SET CLUSTER SETTING sql.stats.histogram_buckets.count = 20000
+
+statement ok
+CREATE TABLE big (i INT PRIMARY KEY);
+INSERT INTO big SELECT generate_series(1, 20000)
+
+statement ok
+CREATE STATISTICS s_dynamic FROM big
+
+let $hist_id_dynamic
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE big] WHERE statistics_name = 's_dynamic';
+
+# We expect 10000 samples because there are no previous stats collections
+# with table size estimates.
+# Perform integer division by 10 because there may be 2 extra buckets added
+# on either end of the histogram to account for the 20000 distinct values.
+query I
+SELECT (count(*) // 10) * 10 FROM [SHOW HISTOGRAM $hist_id_dynamic]
+----
+10000
+
+statement ok
+CREATE STATISTICS s_dynamic FROM big
+
+let $hist_id_dynamic
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE big] WHERE statistics_name = 's_dynamic';
+
+# Now we can dynamically determine the number of samples because we have
+# a table size estimate from the previous stats collection.
+# Perform integer division by 10 because there may be 2 extra buckets added
+# on either end of the histogram to account for the 20000 distinct values.
+query I
+SELECT (count(*) // 10) * 10 FROM [SHOW HISTOGRAM $hist_id_dynamic]
+----
+10840
+
+# Verify that the row count estimate from injected stats is used to determine
+# the number of samples collected.
+statement ok
+ALTER TABLE big INJECT STATISTICS '[
+      {
+          "columns": [
+              "i"
+          ],
+          "created_at": "1988-08-05 00:00:00",
+          "name": "injected_stats",
+          "row_count": 100000
+      }
+]'
+
+statement ok
+CREATE STATISTICS s_injected FROM big
+
+let $hist_id_injected
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE big] WHERE statistics_name = 's_injected';
+
+query I
+SELECT (count(*) // 10) * 10 FROM [SHOW HISTOGRAM $hist_id_injected]
+----
+17290
+
+statement ok
+ALTER TABLE big INJECT STATISTICS '[
+      {
+          "columns": [
+              "i"
+          ],
+          "created_at": "2024-06-10 00:00:00",
+          "name": "injected_stats",
+          "row_count": 1000000000
+      }
+]'
+
+statement ok
+CREATE STATISTICS s_injected FROM big
+
+let $hist_id_injected
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE big] WHERE statistics_name = 's_injected';
+
+query I
+SELECT (count(*) // 10) * 10 FROM [SHOW HISTOGRAM $hist_id_injected]
+----
+20000
+
+# Verify that we can configure the minimum and maximum automatically-determined
+# sample size.
+
+statement ok
+SET CLUSTER SETTING sql.stats.histogram_samples.min = 15000
+
+statement ok
+CREATE STATISTICS s_dynamic_min FROM big
+
+let $hist_id_dynamic_min
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE big] WHERE statistics_name = 's_dynamic_min';
+
+# Perform integer division by 10 because there may be 2 extra buckets added
+# on either end of the histogram to account for the 20000 distinct values.
+query I
+SELECT (count(*) // 10) * 10 FROM [SHOW HISTOGRAM $hist_id_dynamic_min]
+----
+15000
+
+statement ok
+RESET CLUSTER SETTING sql.stats.histogram_samples.min
+
+statement ok
+SET CLUSTER SETTING sql.stats.histogram_samples.max = 10500
+
+statement ok
+CREATE STATISTICS s_dynamic_max FROM big
+
+let $hist_id_dynamic_max
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE big] WHERE statistics_name = 's_dynamic_max';
+
+# Perform integer division by 10 because there may be 2 extra buckets added
+# on either end of the histogram to account for the 20000 distinct values.
+query I
+SELECT (count(*) // 10) * 10 FROM [SHOW HISTOGRAM $hist_id_dynamic_max]
+----
+10500
+
+# Verify that the default sample size bounds are used if the minimum is
+# greater than the maximum.
+
+statement ok
+SET CLUSTER SETTING sql.stats.histogram_samples.min = 11000
+
+statement ok
+CREATE STATISTICS s_dynamic_default_bounds FROM big
+
+let $hist_id_dynamic_default_bounds
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE big] WHERE statistics_name = 's_dynamic_default_bounds';
+
+# Perform integer division by 10 because there may be 2 extra buckets added
+# on either end of the histogram to account for the 20000 distinct values.
+query I
+SELECT (count(*) // 10) * 10 FROM [SHOW HISTOGRAM $hist_id_dynamic_default_bounds]
+----
+10840
+
+statement ok
+RESET CLUSTER SETTING sql.stats.histogram_samples.min
+
+statement ok
+RESET CLUSTER SETTING sql.stats.histogram_samples.max
+
+# Verify that specifying the number of samples in the cluster setting overrides
+# the dynamically determined number of samples.
+
+statement ok
+SET CLUSTER SETTING sql.stats.histogram_samples.count = 20000
+
+statement ok
+CREATE STATISTICS s20000 FROM big
+
+let $hist_id_20000
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE big] WHERE statistics_name = 's20000'
+
+query I
+SELECT count(*) FROM [SHOW HISTOGRAM $hist_id_20000]
+----
+20000
+
+# We can also control this with a table setting.
+statement ok
+ALTER TABLE big SET (sql_stats_histogram_samples_count = 500)
+
+statement ok
+CREATE STATISTICS s500 FROM big
+
+let $hist_id_500
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE big] WHERE statistics_name = 's500'
+
+# Perform integer division by 10 because there may be 2 extra buckets added
+# on either end of the histogram to account for the 20000 distinct values.
+query I
+SELECT (count(*) // 10) * 10 FROM [SHOW HISTOGRAM $hist_id_500]
+----
+500
+
+statement ok
+RESET CLUSTER SETTING sql.stats.histogram_buckets.count
+
+statement ok
+RESET CLUSTER SETTING sql.stats.histogram_samples.count
+
+# ANALYZE is syntactic sugar for CREATE STATISTICS with default columns.
+statement ok
+ANALYZE data
+
+query TTIIIB colnames
+SELECT
+	statistics_name,
+	column_names,
+	row_count,
+	distinct_count,
+	null_count,
+	histogram_id IS NOT NULL AS has_histogram
+FROM
+	[SHOW STATISTICS FOR TABLE data]
+ORDER BY column_names::STRING
+----
+statistics_name  column_names  row_count  distinct_count  null_count  has_histogram
+NULL             {a,b,c,d}     256        256             0           false
+NULL             {a,b,c}       256        64              0           false
+NULL             {a,b}         256        16              0           false
+NULL             {a}           256        4               0           true
+NULL             {b}           256        4               0           true
+NULL             {c,d}         256        16              0           false
+NULL             {c}           256        4               0           true
+NULL             {d}           256        4               0           true
+NULL             {e}           256        2               0           true
+
+statement count 10
+DELETE FROM system.table_statistics
+
+# Restore the old stats.
+statement ok
+ALTER TABLE data INJECT STATISTICS '$json_stats'
+
+query TTIIIB colnames
+SELECT
+	statistics_name,
+	column_names,
+	row_count,
+	distinct_count,
+	null_count,
+	histogram_id IS NOT NULL AS has_histogram
+FROM
+	[SHOW STATISTICS FOR TABLE data]
+ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names  row_count  distinct_count  null_count  has_histogram
+NULL             {b}           256        4               0           true
+s1               {a}           256        4               0           true
+
+# Verify that any other statistics are blown away when we INJECT.
+statement ok
+CREATE STATISTICS s3 ON c FROM data
+
+query TTIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE data]
+ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+NULL             {b}           256        4               0
+s1               {a}           256        4               0
+s3               {c}           256        4               0
+
+statement ok
+ALTER TABLE data INJECT STATISTICS '$json_stats'
+
+query TTIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE data]
+ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+NULL             {b}           256        4               0
+s1               {a}           256        4               0
+
+# Ignore stats with non-existent columns.
+query T noticetrace
+ALTER TABLE data INJECT STATISTICS '[
+    {
+        "columns": ["z"],
+        "created_at": "2018-05-01 1:00:00.00000+00:00",
+        "row_count": 10,
+        "distinct_count": 2
+    },
+    {
+        "columns": ["a", "z"],
+        "created_at": "2018-05-01 1:00:00.00000+00:00",
+        "row_count": 10,
+        "distinct_count": 2
+    },
+    {
+        "columns": ["a"],
+        "created_at": "2018-05-01 1:00:00.00000+00:00",
+        "row_count": 10,
+        "distinct_count": 2
+    }
+]'
+----
+NOTICE: column "z" does not exist
+NOTICE: column "z" does not exist
+
+query TTIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE data]
+ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+NULL             {a}           10         2               0
+
+# Test AS OF SYSTEM TIME
+
+# We're reading from timestamps that precede the GC thresholds, disable strict
+# enforcement.
+statement ok
+SET CLUSTER SETTING kv.gc_ttl.strict_enforcement.enabled = false
+
+statement error pgcode 3D000 database "test" does not exist
+CREATE STATISTICS s2 ON a FROM data AS OF SYSTEM TIME '2017'
+
+statement ok
+CREATE STATISTICS s2 ON a FROM data AS OF SYSTEM TIME '-1us'
+
+query TTIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE data]
+ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+s2               {a}           256        4               0
+
+#
+# Test default column statistics
+#
+
+# Disable multi-column stats to start.
+statement ok
+SET CLUSTER SETTING sql.stats.multi_column_collection.enabled = false
+
+statement ok
+CREATE STATISTICS s3 FROM data
+
+query TIIIB colnames
+SELECT column_names, row_count, distinct_count, null_count, histogram_id IS NOT NULL AS has_histogram
+FROM [SHOW STATISTICS FOR TABLE data]
+WHERE statistics_name = 's3'
+ORDER BY column_names::STRING
+----
+column_names  row_count  distinct_count  null_count  has_histogram
+{a}           256        4               0           true
+{b}           256        4               0           true
+{c}           256        4               0           true
+{d}           256        4               0           true
+{e}           256        2               0           true
+
+# Re-enable multi-column stats.
+statement ok
+SET CLUSTER SETTING sql.stats.multi_column_collection.enabled = true
+
+# Add indexes, including duplicate index on column c and columns (a, b).
+statement ok
+CREATE INDEX ON data (c DESC, b ASC); CREATE INDEX ON data (b DESC, a);
+
+statement ok
+CREATE STATISTICS s4 FROM data
+
+# Check that stats are only collected once per column.
+query TIII colnames
+SELECT column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE data]
+WHERE statistics_name = 's4'
+ORDER BY column_names::STRING
+----
+column_names  row_count  distinct_count  null_count
+{a,b,c,d}     256        256             0
+{a,b,c}       256        64              0
+{a,b}         256        16              0
+{a}           256        4               0
+{b,c}         256        16              0
+{b}           256        4               0
+{c,d}         256        16              0
+{c}           256        4               0
+{d}           256        4               0
+{e}           256        2               0
+
+statement ok
+DROP INDEX data@c_idx; DROP INDEX data@data_c_b_idx
+
+statement ok
+CREATE STATISTICS s5 FROM [$t_id]
+
+query TIII colnames
+SELECT column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE data]
+WHERE statistics_name = 's5'
+ORDER BY column_names::STRING
+----
+column_names  row_count  distinct_count  null_count
+{a,b,c,d}     256        256             0
+{a,b,c}       256        64              0
+{a,b}         256        16              0
+{a}           256        4               0
+{b}           256        4               0
+{c}           256        4               0
+{d}           256        4               0
+{e}           256        2               0
+
+# Table with a hidden primary key and no other indexes.
+statement ok
+CREATE TABLE simple (x INT, y INT)
+
+statement ok
+CREATE STATISTICS default_stat1 FROM simple
+
+query TTIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE simple]
+ORDER BY column_names::STRING
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+default_stat1    {rowid}       0          0               0
+default_stat1    {x}           0          0               0
+default_stat1    {y}           0          0               0
+
+# Add one null row.
+statement ok
+INSERT INTO simple VALUES (DEFAULT, DEFAULT)
+
+# Add an index.
+statement ok
+CREATE UNIQUE INDEX ON simple (y) STORING (x)
+
+statement ok
+CREATE STATISTICS default_stat2 FROM simple
+
+# Now stats are collected on the index column y before column x.
+query TTIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE simple]
+ORDER BY column_names::STRING
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+default_stat2    {rowid}       1          1               0
+default_stat2    {x}           1          1               1
+default_stat2    {y}           1          1               1
+
+# Add a few more rows.
+statement ok
+INSERT INTO simple VALUES (DEFAULT, DEFAULT);
+INSERT INTO simple VALUES (0, DEFAULT);
+INSERT INTO simple VALUES (DEFAULT, 0);
+INSERT INTO simple VALUES (0, 1);
+
+# Add an index.
+statement ok
+CREATE INDEX ON simple (x, y)
+
+statement ok
+CREATE STATISTICS default_stat3 FROM simple
+
+query TTIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE simple]
+ORDER BY column_names::STRING
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+default_stat3    {rowid}       5          5               0
+default_stat3    {x,y}         5          4               2
+default_stat3    {x}           5          2               3
+default_stat3    {y}           5          3               3
+
+let $hist_id_3
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE simple]
+WHERE statistics_name = 'default_stat3' AND column_names = '{y}'
+
+# The counts in each bucket should not include null values.
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_id_3
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+0            0           0                    1
+1            0           0                    1
+
+#
+# Test numeric references
+#
+
+statement ok
+CREATE STATISTICS s6 ON a FROM [$t_id]
+
+query TTIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE data]
+ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+s4               {b,c}         256        16              0
+s4               {c,d}         256        16              0
+s5               {a,b,c,d}     256        256             0
+s5               {a,b,c}       256        64              0
+s5               {a,b}         256        16              0
+s5               {b}           256        4               0
+s5               {c}           256        4               0
+s5               {d}           256        4               0
+s5               {e}           256        2               0
+s6               {a}           256        4               0
+
+# Combine default columns and numeric reference.
+statement ok
+CREATE STATISTICS __auto__ FROM [$t_id]
+
+query TIII colnames
+SELECT column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE data]
+WHERE statistics_name = '__auto__'
+ORDER BY column_names::STRING
+----
+column_names  row_count  distinct_count  null_count
+{a,b,c,d}     256        256             0
+{a,b,c}       256        64              0
+{a,b}         256        16              0
+{a}           256        4               0
+{b}           256        4               0
+{c}           256        4               0
+{d}           256        4               0
+{e}           256        2               0
+
+#
+# Test delete stats
+#
+
+statement ok
+DROP INDEX data@data_b_a_idx
+
+statement ok
+CREATE STATISTICS __auto__ FROM [$t_id];
+CREATE STATISTICS __auto__ FROM [$t_id];
+CREATE STATISTICS __auto__ FROM [$t_id];
+CREATE STATISTICS __auto__ FROM [$t_id];
+CREATE STATISTICS __auto__ FROM [$t_id];
+CREATE STATISTICS __auto__ FROM [$t_id];
+
+# Only the last 4-5 automatic stats should remain for each column.
+query TT colnames
+SELECT statistics_name, column_names
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a}
+__auto__         {a}
+__auto__         {a}
+__auto__         {a}
+__auto__         {a}
+__auto__         {b}
+__auto__         {b}
+__auto__         {b}
+__auto__         {b}
+__auto__         {b}
+__auto__         {c}
+__auto__         {c}
+__auto__         {c}
+__auto__         {c}
+__auto__         {c}
+__auto__         {d}
+__auto__         {d}
+__auto__         {d}
+__auto__         {d}
+__auto__         {d}
+__auto__         {e}
+__auto__         {e}
+__auto__         {e}
+__auto__         {e}
+__auto__         {e}
+s4               {b,c}
+s4               {c,d}
+
+statement ok
+CREATE STATISTICS s7 ON a FROM [$t_id]
+
+query TT colnames
+SELECT statistics_name, column_names
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a}
+__auto__         {a}
+__auto__         {a}
+__auto__         {a}
+__auto__         {b}
+__auto__         {b}
+__auto__         {b}
+__auto__         {b}
+__auto__         {b}
+__auto__         {c}
+__auto__         {c}
+__auto__         {c}
+__auto__         {c}
+__auto__         {c}
+__auto__         {d}
+__auto__         {d}
+__auto__         {d}
+__auto__         {d}
+__auto__         {d}
+__auto__         {e}
+__auto__         {e}
+__auto__         {e}
+__auto__         {e}
+__auto__         {e}
+s4               {b,c}
+s4               {c,d}
+s7               {a}
+
+statement ok
+CREATE STATISTICS s8 ON a FROM [$t_id]
+
+# s7 is deleted but the automatic stats remain.
+query TT colnames
+SELECT statistics_name, column_names
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a}
+__auto__         {a}
+__auto__         {a}
+__auto__         {a}
+__auto__         {b}
+__auto__         {b}
+__auto__         {b}
+__auto__         {b}
+__auto__         {b}
+__auto__         {c}
+__auto__         {c}
+__auto__         {c}
+__auto__         {c}
+__auto__         {c}
+__auto__         {d}
+__auto__         {d}
+__auto__         {d}
+__auto__         {d}
+__auto__         {d}
+__auto__         {e}
+__auto__         {e}
+__auto__         {e}
+__auto__         {e}
+__auto__         {e}
+s4               {b,c}
+s4               {c,d}
+s8               {a}
+
+# Try forecasting stats.
+query TT colnames
+SELECT statistics_name, column_names
+FROM [SHOW STATISTICS FOR TABLE data WITH FORECAST]
+ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a}
+__auto__         {a}
+__auto__         {a}
+__auto__         {a}
+__auto__         {b}
+__auto__         {b}
+__auto__         {b}
+__auto__         {b}
+__auto__         {b}
+__auto__         {c}
+__auto__         {c}
+__auto__         {c}
+__auto__         {c}
+__auto__         {c}
+__auto__         {d}
+__auto__         {d}
+__auto__         {d}
+__auto__         {d}
+__auto__         {d}
+__auto__         {e}
+__auto__         {e}
+__auto__         {e}
+__auto__         {e}
+__auto__         {e}
+__forecast__     {a,b,c,d}
+__forecast__     {a,b,c}
+__forecast__     {a,b}
+__forecast__     {a}
+__forecast__     {b}
+__forecast__     {c}
+__forecast__     {d}
+__forecast__     {e}
+s4               {b,c}
+s4               {c,d}
+s8               {a}
+
+# Test deletion of old non-default stats.
+
+statement ok
+SET CLUSTER SETTING sql.stats.non_default_columns.min_retention_period = '0s'
+
+statement ok
+CREATE STATISTICS s9 ON e FROM data;
+ALTER TABLE data DROP COLUMN e
+
+# Collecting stats on a specific column should not cause deletion of other stats.
+statement ok
+CREATE STATISTICS s10 ON a FROM data
+
+query TT colnames
+SELECT statistics_name, column_names
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a}
+__auto__         {a}
+__auto__         {a}
+__auto__         {a}
+__auto__         {b}
+__auto__         {b}
+__auto__         {b}
+__auto__         {b}
+__auto__         {b}
+__auto__         {c}
+__auto__         {c}
+__auto__         {c}
+__auto__         {c}
+__auto__         {c}
+__auto__         {d}
+__auto__         {d}
+__auto__         {d}
+__auto__         {d}
+__auto__         {d}
+s10              {a}
+s4               {b,c}
+s4               {c,d}
+
+# Stats for column e still exist. (We cannot use SHOW STATISTICS to see them
+# since stats from deleted columns are filtered out.)
+query T
+SELECT name
+FROM system.table_statistics
+  WHERE NOT EXISTS (
+    SELECT * FROM crdb_internal.table_columns
+    WHERE "tableID" = descriptor_id
+    AND "columnIDs" @> array[column_id]
+    AND descriptor_name = 'data'
+  )
+  AND EXISTS (
+    SELECT * FROM crdb_internal.table_columns
+    WHERE "tableID" = descriptor_id
+    AND descriptor_name = 'data'
+  )
+  ORDER BY name
+----
+__auto__
+__auto__
+__auto__
+__auto__
+s9
+
+# Collecting stats on default columns should cause deletion of other stats.
+statement ok
+ANALYZE data
+
+# Stats for column e no longer exist.
+query T
+SELECT name
+FROM system.table_statistics
+  WHERE NOT EXISTS (
+    SELECT * FROM crdb_internal.table_columns
+    WHERE "tableID" = descriptor_id
+    AND "columnIDs" @> array[column_id]
+    AND descriptor_name = 'data'
+  )
+  AND EXISTS (
+    SELECT * FROM crdb_internal.table_columns
+    WHERE "tableID" = descriptor_id
+    AND descriptor_name = 'data'
+  )
+----
+
+# Stats on {c,b} and {c,d} are also deleted.
+query TT colnames
+SELECT statistics_name, column_names
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names
+NULL             {a,b,c,d}
+NULL             {a,b,c}
+NULL             {a,b}
+NULL             {a}
+NULL             {b}
+NULL             {c}
+NULL             {d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a}
+__auto__         {a}
+__auto__         {a}
+__auto__         {a}
+__auto__         {b}
+__auto__         {b}
+__auto__         {b}
+__auto__         {b}
+__auto__         {c}
+__auto__         {c}
+__auto__         {c}
+__auto__         {c}
+__auto__         {d}
+__auto__         {d}
+__auto__         {d}
+__auto__         {d}
+
+statement ok
+RESET CLUSTER SETTING sql.stats.non_default_columns.min_retention_period
+
+# Regression test for #33195.
+statement ok
+CREATE TABLE t (x int); INSERT INTO t VALUES (1); ALTER TABLE t DROP COLUMN x
+
+# Ensure that creating stats on a table with no columns does not cause a panic.
+statement ok
+CREATE STATISTICS s FROM t
+
+# Arrays are supported.
+statement ok
+CREATE TABLE arr (x INT[])
+
+statement ok
+INSERT INTO arr VALUES (ARRAY[1,2]), (ARRAY[1,2]), (ARRAY[3,4]), (NULL)
+
+statement ok
+CREATE STATISTICS arr_stats FROM arr
+
+query TTIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE arr] ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+arr_stats        {rowid}       4          4               0
+arr_stats        {x}           4          3               1
+
+# Regression test for #46964 (however we have added array histogram
+# support since this).
+statement ok
+CREATE STATISTICS arr_stats_x ON x FROM arr
+
+query TTIIIB colnames
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  distinct_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM [SHOW STATISTICS FOR TABLE arr]
+ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names  row_count  distinct_count  null_count  has_histogram
+arr_stats        {rowid}       4          4               0           true
+arr_stats_x      {x}           4          3               1           true
+
+# Test that enum columns always have histograms collected for them.
+statement ok
+CREATE TYPE e AS ENUM ('hello', 'howdy', 'hi');
+
+statement ok
+CREATE TABLE et (x e, y e, z e[], PRIMARY KEY (x), FAMILY (x, y, z));
+
+statement ok
+INSERT INTO et VALUES ('hello', 'hello', '{hello}'), ('howdy', 'howdy', '{howdy}'), ('hi', 'hi', '{hi}');
+
+statement ok
+CREATE STATISTICS s FROM et
+
+query TTIIB colnames
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE et]
+ORDER BY
+  column_names::STRING, created
+----
+statistics_name  column_names  row_count  null_count  has_histogram
+s                {x}           3          0           true
+s                {y}           3          0           true
+s                {z}           3          0           true
+
+query T
+SELECT jsonb_pretty(
+  regexp_replace(COALESCE(json_agg(stat), '[]')::STRING, '"id": [0-9]+', '"id": 0', 'g')::JSONB
+)
+  FROM (
+SELECT json_array_elements(statistics) - 'created_at' AS stat
+FROM [SHOW STATISTICS USING JSON FOR TABLE et]
+)
+----
+[
+    {
+        "avg_size": 4,
+        "columns": [
+            "x"
+        ],
+        "delay_delete": false,
+        "distinct_count": 3,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "hello"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "howdy"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "hi"
+            }
+        ],
+        "histo_col_type": "test.public.e",
+        "histo_version": 3,
+        "id": 0,
+        "name": "s",
+        "null_count": 0,
+        "row_count": 3
+    },
+    {
+        "avg_size": 3,
+        "columns": [
+            "y"
+        ],
+        "delay_delete": false,
+        "distinct_count": 3,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "hello"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "howdy"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "hi"
+            }
+        ],
+        "histo_col_type": "test.public.e",
+        "histo_version": 3,
+        "id": 0,
+        "name": "s",
+        "null_count": 0,
+        "row_count": 3
+    },
+    {
+        "avg_size": 7,
+        "columns": [
+            "z"
+        ],
+        "delay_delete": false,
+        "distinct_count": 3,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "ARRAY['hello':::test.public.e]"
+            },
+            {
+                "distinct_range": 1,
+                "num_eq": 1,
+                "num_range": 1,
+                "upper_bound": "ARRAY['hi':::test.public.e]"
+            }
+        ],
+        "histo_col_type": "test.public.e[]",
+        "histo_version": 3,
+        "id": 0,
+        "name": "s",
+        "null_count": 0,
+        "row_count": 3
+    }
+]
+
+# Verify that we can inject these stats.
+let $json_stats
+SHOW STATISTICS USING JSON FOR TABLE et
+
+statement count 45
+DELETE FROM system.table_statistics
+
+# Restore the old stats.
+statement ok
+ALTER TABLE et INJECT STATISTICS $$$json_stats$$
+
+query TTIIB colnames
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE et]
+ORDER BY
+  column_names::STRING, created
+----
+statistics_name  column_names  row_count  null_count  has_histogram
+s                {x}           3          0           true
+s                {y}           3          0           true
+s                {z}           3          0           true
+
+# JSON and other inverted-index columns. See also #35150.
+statement ok
+CREATE TABLE groups (data JSON); INSERT INTO groups VALUES ('{"data": {"domain": "github.com"}}')
+
+# JSON can be specified.
+statement ok
+CREATE STATISTICS s ON data FROM groups
+
+query TT colnames
+SELECT statistics_name, column_names
+FROM [SHOW STATISTICS FOR TABLE groups] ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names
+s                {data}
+
+# JSON is auto-included.
+statement ok
+CREATE STATISTICS s FROM groups
+
+query TT colnames
+SELECT statistics_name, column_names
+FROM [SHOW STATISTICS FOR TABLE groups] ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names
+s                {data}
+s                {rowid}
+
+# See #35764
+statement ok
+CREATE TABLE users (
+  profile_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  last_updated TIMESTAMP DEFAULT now(),
+  user_profile JSONB,
+  INVERTED INDEX user_details (user_profile)
+)
+
+statement ok
+INSERT INTO users (user_profile) VALUES
+  ('{"first_name": "Lola", "last_name": "Dog", "location": "NYC", "online" : true, "friends" : 547}'),
+  ('{"first_name": "Ernie", "status": "Looking for treats", "location" : "Brooklyn"}'),
+  ('{"first_name": "Ernie", "status": "Looking for treats", "location" : "Brooklyn"}'),
+  (NULL),
+  ('{"first_name": "Carl", "last_name": "Kimball", "location": "NYC", "breed": "Boston Terrier"}'
+)
+
+# Ensure that trying to create statistics with default columns does not fail
+# when there is an inverted index.
+statement ok
+CREATE STATISTICS s FROM users
+
+query TTIIIB colnames
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  distinct_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE users]
+ORDER BY
+  statistics_name, column_names
+----
+statistics_name  column_names    row_count  distinct_count  null_count  has_histogram
+s                {last_updated}  5          1               0           true
+s                {profile_id}    5          5               0           true
+s                {user_profile}  5          4               1           true
+
+# Test that individual columns in primary keys always have histograms collected
+# for them, with up to 200 buckets.
+
+statement ok
+SET CLUSTER SETTING sql.stats.multi_column_collection.enabled = false
+
+statement ok
+CREATE TABLE prim (a INT, b INT, c INT, PRIMARY KEY (a, b, c));
+
+statement ok
+INSERT INTO prim VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
+
+statement ok
+CREATE STATISTICS s FROM prim
+
+query TTIIB colnames
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE prim]
+ORDER BY
+  column_names::STRING, created
+----
+statistics_name  column_names  row_count  null_count  has_histogram
+s                {a}           3          0           true
+s                {b}           3          0           true
+s                {c}           3          0           true
+
+let $hist_id_1
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE prim]
+WHERE statistics_name = 's' AND column_names = '{a}'
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+1            0           0                    1
+2            0           0                    1
+3            0           0                    1
+
+# Test that individual columns in secondary indexes always have histograms
+# collected for them, with up to 200 buckets.
+statement ok
+CREATE TABLE sec (a INT, b INT, c INT, INDEX (a, b, c));
+
+statement ok
+INSERT INTO sec VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
+
+statement ok
+CREATE STATISTICS s FROM sec
+
+query TTIIB colnames
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE sec]
+ORDER BY
+  column_names::STRING, created
+----
+statistics_name  column_names  row_count  null_count  has_histogram
+s                {a}           3          0           true
+s                {b}           3          0           true
+s                {c}           3          0           true
+s                {rowid}       3          0           true
+
+let $hist_id_1
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE sec]
+WHERE statistics_name = 's' AND column_names = '{a}'
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+1            0           0                    1
+2            0           0                    1
+3            0           0                    1
+
+# Test that columns referenced in partial index predicates always have
+# histograms collected for them, with up to 200 buckets.
+statement ok
+CREATE TABLE partial (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  j JSON,
+  INDEX (a) WHERE b > 0 OR c > 0,
+  INVERTED INDEX (j) WHERE d = 10
+);
+
+statement ok
+INSERT INTO partial VALUES (1, 1, 1, 1, '{"a": "b"}'), (2, 2, 2, 10, '{"c": "d"}'), (3, 3, 3, 1, '{"e": "f"}');
+
+statement ok
+CREATE STATISTICS s FROM partial
+
+query TTIIB colnames
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE partial]
+ORDER BY
+  column_names::STRING, created
+----
+statistics_name  column_names  row_count  null_count  has_histogram
+s                {a}           3          0           true
+s                {b}           3          0           true
+s                {c}           3          0           true
+s                {d}           3          0           true
+s                {j}           3          0           true
+s                {rowid}       3          0           true
+
+let $hist_id_1
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE partial]
+WHERE statistics_name = 's' AND column_names = '{a}'
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+1            0           0                    1
+2            0           0                    1
+3            0           0                    1
+
+# Test that stats are not collected for virtual columns if disabled.
+statement ok
+SET CLUSTER SETTING sql.stats.multi_column_collection.enabled = true
+
+statement ok
+SET CLUSTER SETTING sql.stats.virtual_computed_columns.enabled = false
+
+statement ok
+CREATE TABLE virt (
+  a INT,
+  b INT,
+  v INT AS (a + 10) VIRTUAL,
+  INDEX (v),
+  INDEX (a, v),
+  INDEX (a, v, b),
+  INDEX (a) WHERE v > 0
+)
+
+statement ok
+INSERT INTO virt VALUES (1), (2), (3)
+
+statement ok
+CREATE STATISTICS s FROM virt
+
+query TTIIB colnames
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE virt]
+ORDER BY
+  column_names::STRING, created
+----
+statistics_name  column_names  row_count  null_count  has_histogram
+s                {a,b}         3          0           false
+s                {a}           3          0           true
+s                {b}           3          3           true
+s                {rowid}       3          0           true
+
+# Test that stats are not collect for inaccessible virtual columns that
+# represent expression indexes.
+statement ok
+CREATE TABLE expression (
+  a INT,
+  b INT,
+  j JSON,
+  INDEX a_plus_b ((a + b)),
+  INDEX a_a_plus_b (a, (a + b)),
+  INVERTED INDEX j_a ((j->'a')),
+  INVERTED INDEX a_j_a (a, (j->'a'))
+);
+
+statement ok
+INSERT INTO expression VALUES (1, 1, '{"a": "b"}'), (2, 10, '{"c": "d"}'), (3, 1, '{"e": "f"}');
+
+statement ok
+CREATE STATISTICS s FROM expression
+
+query TTIIB colnames
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE expression]
+ORDER BY
+  column_names::STRING, created
+----
+statistics_name  column_names  row_count  null_count  has_histogram
+s                {a}           3          0           true
+s                {b}           3          0           true
+s                {j}           3          0           false
+s                {rowid}       3          0           true
+
+statement ok
+RESET CLUSTER SETTING sql.stats.virtual_computed_columns.enabled
+
+# Test that non-index columns have histograms collected for them, with
+# up to 2 buckets.
+statement ok
+CREATE TABLE noind (a INT, b INT, c INT);
+
+statement ok
+INSERT INTO noind VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
+
+statement ok
+CREATE STATISTICS s FROM noind
+
+query TTIIB colnames
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE noind]
+ORDER BY
+  column_names::STRING, created
+----
+statistics_name  column_names  row_count  null_count  has_histogram
+s                {a}           3          0           true
+s                {b}           3          0           true
+s                {c}           3          0           true
+s                {rowid}       3          0           true
+
+let $hist_id_1
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE noind]
+WHERE statistics_name = 's' AND column_names = '{a}'
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+1            0           0                    1
+3            1           1                    1
+
+# Verify that having 0, 1, or 2 inverted indexes on geo types works.
+statement ok
+CREATE TABLE geo_table (
+   id INT8 PRIMARY KEY,
+   geog GEOGRAPHY(GEOMETRY,4326) NULL,
+   geom GEOMETRY(GEOMETRY,3857) NULL
+);
+
+statement ok
+INSERT INTO geo_table VALUES (1, 'LINESTRING(0 0, 100 100)', ST_GeomFromText('LINESTRING(0 0, 100 100)', 3857));
+
+statement ok
+CREATE STATISTICS s FROM geo_table;
+
+query TB colnames
+SELECT
+  column_names,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE geo_table]
+ORDER BY
+  column_names::STRING, created
+----
+column_names  has_histogram
+{geog}        false
+{geom}        false
+{id}          true
+
+statement ok
+CREATE INDEX geom_idx_1 ON geo_table USING GIST(geom) WITH (geometry_min_x=0, s2_max_level=15);
+
+statement ok
+CREATE INDEX geog_idx_1 ON geo_table USING GIST(geog) WITH (s2_level_mod=3);
+
+statement ok
+CREATE STATISTICS s FROM geo_table;
+
+query TB colnames
+SELECT
+  column_names,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE geo_table]
+ORDER BY
+  column_names::STRING, created
+----
+column_names  has_histogram
+{geog}        true
+{geom}        true
+{id}          true
+
+statement ok
+CREATE INDEX geom_idx_2 ON geo_table USING GIST(geom) WITH (geometry_min_x=5);
+
+statement ok
+CREATE INDEX geog_idx_2 ON geo_table USING GIST(geog);
+
+statement ok
+CREATE STATISTICS s FROM geo_table;
+
+query TB colnames
+SELECT
+  column_names,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE geo_table]
+ORDER BY
+  column_names::STRING, created
+----
+column_names  has_histogram
+{geog}        true
+{geom}        true
+{id}          true
+
+# Demonstrate that buckets change when the first chosen index is dropped.
+let $hist_id_1
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE geo_table]
+WHERE statistics_name = 's' AND column_names = '{geog}'
+
+# s390x produces slightly different inverted index key for the linestring (among
+# other shapes) because it has architecture support for trigonometric functions
+# (used by s2 library), so we have different expectations for s390x vs other
+# systems. s390x is the only big endian system we support right now, so we abuse
+# the corresponding option a bit.
+skipif bigendian
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound                                                                                 range_rows  distinct_range_rows  equal_rows
+'\x42fd1000000000000000000000000000000000bcc00000000000003ffbecde5da115a83ff661bdc396bcdc'  0           0                    1
+'\x42fd5000000000000000000000000000000000bcc00000000000003ffbecde5da115a83ff661bdc396bcdc'  0           0                    1
+
+skipif littleendian
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound                                                                                 range_rows  distinct_range_rows  equal_rows
+'\x42fd1000000000000000000000000000000000bcc00000000000003ffbecde5da115a93ff661bdc396bcdc'  0           0                    1
+'\x42fd5000000000000000000000000000000000bcc00000000000003ffbecde5da115a93ff661bdc396bcdc'  0           0                    1
+
+statement ok
+DROP INDEX geo_table@geog_idx_1;
+
+statement ok
+CREATE STATISTICS s FROM geo_table;
+
+# Demonstrate that buckets change when the first chosen index is dropped.
+let $hist_id_1
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE geo_table]
+WHERE statistics_name = 's' AND column_names = '{geog}'
+
+skipif bigendian
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound                                                                                 range_rows  distinct_range_rows  equal_rows
+'\x42fd1000000000000000000000000000000000bcc00000000000003ffbecde5da115a83ff661bdc396bcdc'  0           0                    1
+'\x42fd4500000000000000000000000000000000bcc00000000000003ffbecde5da115a83ff661bdc396bcdc'  0           0                    1
+'\x42fd4700000000000000000000000000000000bcc00000000000003ffbecde5da115a83ff661bdc396bcdc'  0           0                    1
+'\x42fd5ad4000000000000000000000000000000bcc00000000000003ffbecde5da115a83ff661bdc396bcdc'  0           0                    1
+
+skipif littleendian
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound                                                                                 range_rows  distinct_range_rows  equal_rows
+'\x42fd1000000000000000000000000000000000bcc00000000000003ffbecde5da115a93ff661bdc396bcdc'  0           0                    1
+'\x42fd4500000000000000000000000000000000bcc00000000000003ffbecde5da115a93ff661bdc396bcdc'  0           0                    1
+'\x42fd4700000000000000000000000000000000bcc00000000000003ffbecde5da115a93ff661bdc396bcdc'  0           0                    1
+'\x42fd5ad4000000000000000000000000000000bcc00000000000003ffbecde5da115a93ff661bdc396bcdc'  0           0                    1
+
+# Stats for multi-column inverted indexes.
+statement ok
+CREATE TABLE multi_col (
+  id INT PRIMARY KEY,
+  s STRING,
+  j JSON,
+  INVERTED INDEX (s, j)
+);
+
+statement ok
+INSERT INTO multi_col VALUES (1, 'foo', '{"a": "b"}');
+
+statement ok
+CREATE STATISTICS s FROM multi_col;
+
+query TB colnames
+SELECT
+  column_names,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE multi_col]
+ORDER BY
+  column_names::STRING, created
+----
+column_names  has_histogram
+{id}          true
+{j}           true
+{s,j}         false
+{s}           true
+
+statement ok
+SET CLUSTER SETTING sql.stats.multi_column_collection.enabled = true
+
+statement ok
+CREATE STATISTICS s FROM multi_col;
+
+# Do not create multi-column stats with an invertable column.
+query TB colnames
+SELECT
+  column_names,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE multi_col]
+ORDER BY
+  column_names::STRING, created
+----
+column_names  has_histogram
+{id}          true
+{j}           true
+{s,j}         false
+{s}           true
+
+statement ok
+SET CLUSTER SETTING sql.stats.multi_column_collection.enabled = false
+
+# Regression test for #56356. Histograms on all-null columns should not cause
+# an error.
+statement ok
+CREATE TABLE all_null (k INT PRIMARY KEY, c INT);
+
+statement ok
+INSERT INTO all_null VALUES (1, NULL);
+
+statement ok
+CREATE STATISTICS s FROM all_null
+
+query T
+SELECT jsonb_pretty(
+  regexp_replace(COALESCE(json_agg(stat), '[]')::STRING, '"id": [0-9]+', '"id": 0', 'g')::JSONB
+)
+  FROM (
+SELECT json_array_elements(statistics) - 'created_at' AS stat
+FROM [SHOW STATISTICS USING JSON FOR TABLE all_null]
+)
+----
+[
+    {
+        "avg_size": 1,
+        "columns": [
+            "k"
+        ],
+        "delay_delete": false,
+        "distinct_count": 1,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "1"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 3,
+        "id": 0,
+        "name": "s",
+        "null_count": 0,
+        "row_count": 1
+    },
+    {
+        "avg_size": 0,
+        "columns": [
+            "c"
+        ],
+        "delay_delete": false,
+        "distinct_count": 1,
+        "histo_col_type": "INT8",
+        "histo_version": 3,
+        "id": 0,
+        "name": "s",
+        "null_count": 1,
+        "row_count": 1
+    }
+]
+
+statement ok
+SELECT * FROM all_null WHERE c IS NOT NULL
+
+# Regression for 58220.
+statement ok
+CREATE TYPE greeting AS ENUM ('hello', 'howdy', 'hi');
+
+statement ok
+CREATE TABLE greeting_stats (x greeting PRIMARY KEY);
+
+statement ok
+INSERT INTO greeting_stats VALUES ('hi');
+
+statement ok
+CREATE STATISTICS s FROM greeting_stats
+
+query T
+SELECT jsonb_pretty(
+  regexp_replace(COALESCE(json_agg(stat), '[]')::STRING, '"id": [0-9]+', '"id": 0', 'g')::JSONB
+)
+  FROM (
+SELECT json_array_elements(statistics) - 'created_at' AS stat
+FROM [SHOW STATISTICS USING JSON FOR TABLE greeting_stats]
+)
+----
+[
+    {
+        "avg_size": 4,
+        "columns": [
+            "x"
+        ],
+        "delay_delete": false,
+        "distinct_count": 1,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "hi"
+            }
+        ],
+        "histo_col_type": "test.public.greeting",
+        "histo_version": 3,
+        "id": 0,
+        "name": "s",
+        "null_count": 0,
+        "row_count": 1
+    }
+]
+
+# Check that we can inject the statistics back into the table as well.
+let $stats
+SHOW STATISTICS USING JSON FOR TABLE greeting_stats
+
+statement ok
+ALTER TABLE greeting_stats INJECT STATISTICS '$stats'
+
+# Validate that the schema_change_successful metric
+query T
+SELECT feature_name FROM crdb_internal.feature_usage
+WHERE feature_name in ('job.typedesc_schema_change.successful',
+'job.new_schema_change.successful',
+'job.create_stats.successful',
+'job.auto_create_stats.successful') AND
+usage_count > 0
+ORDER BY feature_name DESC
+----
+job.typedesc_schema_change.successful
+job.new_schema_change.successful
+job.create_stats.successful
+job.auto_create_stats.successful
+
+# Check that we can inject the statistics back into the table from a different
+# database.
+
+let $db
+SHOW DATABASE
+
+statement ok
+CREATE DATABASE another_db
+
+statement ok
+USE another_db
+
+statement ok
+ALTER TABLE $db.public.greeting_stats INJECT STATISTICS '$stats'
+
+statement ok
+USE $db
+
+# Regression test for #63387. Stats collection should succeed when partial index
+# predicates reference inverted-type columns.
+statement ok
+CREATE TABLE t63387 (
+    i INT,
+    j JSONB,
+    INDEX (i) WHERE j->>'a' = 'b'
+);
+
+statement ok
+INSERT INTO t63387 VALUES (1, '{}');
+
+statement ok
+CREATE STATISTICS s FROM t63387;
+
+# Regression test for #71080. Stats collection should succeed on tables with NOT
+# NULL virtual columns.
+statement ok
+SET CLUSTER SETTING sql.stats.virtual_computed_columns.enabled = false
+
+statement ok
+SET CLUSTER SETTING sql.stats.multi_column_collection.enabled = true
+
+statement ok
+CREATE TABLE t71080 (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT NOT NULL AS (a + 10) VIRTUAL,
+  INDEX (a, b)
+)
+
+statement ok
+INSERT INTO t71080 VALUES (1, 2)
+
+statement ok
+CREATE STATISTICS s FROM t71080
+
+statement error cannot create statistics on virtual column \"b\"
+CREATE STATISTICS s ON b FROM t71080
+
+statement error cannot create statistics on virtual column \"b\"
+CREATE STATISTICS s ON a, b FROM t71080
+
+# Regression test for #76867. Do not attempt to collect empty multi-column stats
+# when there are indexes on columns that are all virtual.
+statement ok
+CREATE TABLE t76867 (
+  a INT,
+  b INT AS (a + 1) VIRTUAL,
+  c INT AS (a + 2) VIRTUAL,
+  INDEX (b, c)
+)
+
+statement ok
+ANALYZE t76867
+
+statement ok
+RESET CLUSTER SETTING sql.stats.virtual_computed_columns.enabled
+
+# Regression tests for #80123. Collecting stats on system tables is allowed.
+statement ok
+ANALYZE system.locations
+
+# EXPLAIN output should indicate stats collected on system.locations.
+query T retry
+SELECT * FROM [EXPLAIN SELECT * FROM system.locations] OFFSET 1
+----
+·
+• scan
+  estimated row count: 5 (100% of the table; stats collected <hidden> ago)
+  table: locations@primary
+  spans: FULL SCAN
+
+# Collecting stats on system.lease is disallowed.
+statement error pq: cannot create statistics on system.lease
+ANALYZE system.lease
+
+# Collecting stats on system.table_statistics is disallowed.
+statement error pq: cannot create statistics on system.table_statistics
+ANALYZE system.table_statistics
+
+# Collecting stats on system.jobs is allowed.
+statement ok
+ANALYZE system.jobs
+
+# Collecting stats on system.scheduled_jobs is disallowed.
+statement error pq: cannot create statistics on system.scheduled_jobs
+ANALYZE system.scheduled_jobs
+
+# Collecting stats on empty tables should result in empty (but not NULL)
+# histograms.
+statement ok
+CREATE TABLE tabula (r INT, a INT, sa INT, PRIMARY KEY (r), INDEX (a, sa))
+
+statement ok
+CREATE STATISTICS aristotle FROM tabula
+
+query TTIB colnames
+SELECT statistics_name, column_names, row_count, histogram_id IS NOT NULL AS has_histogram
+FROM [SHOW STATISTICS FOR TABLE tabula]
+ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names  row_count  has_histogram
+aristotle        {a,sa}        0          false
+aristotle        {a}           0          true
+aristotle        {r}           0          true
+aristotle        {sa}          0          true
+
+let $hist_id_1
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE tabula]
+WHERE statistics_name = 'aristotle' AND column_names = '{a}'
+
+# This histogram should be empty.
+query TIRI colnames
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+
+query T
+SELECT jsonb_pretty(
+  regexp_replace(COALESCE(json_agg(stat), '[]')::STRING, '"id": [0-9]+', '"id": 0', 'g')::JSONB
+)
+  FROM (SELECT json_array_elements(statistics) - 'created_at' AS stat
+        FROM [SHOW STATISTICS USING JSON FOR TABLE tabula])
+----
+[
+    {
+        "avg_size": 0,
+        "columns": [
+            "r"
+        ],
+        "delay_delete": false,
+        "distinct_count": 0,
+        "histo_col_type": "INT8",
+        "histo_version": 3,
+        "id": 0,
+        "name": "aristotle",
+        "null_count": 0,
+        "row_count": 0
+    },
+    {
+        "avg_size": 0,
+        "columns": [
+            "a"
+        ],
+        "delay_delete": false,
+        "distinct_count": 0,
+        "histo_col_type": "INT8",
+        "histo_version": 3,
+        "id": 0,
+        "name": "aristotle",
+        "null_count": 0,
+        "row_count": 0
+    },
+    {
+        "avg_size": 0,
+        "columns": [
+            "a",
+            "sa"
+        ],
+        "delay_delete": false,
+        "distinct_count": 0,
+        "histo_col_type": "",
+        "id": 0,
+        "name": "aristotle",
+        "null_count": 0,
+        "row_count": 0
+    },
+    {
+        "avg_size": 0,
+        "columns": [
+            "sa"
+        ],
+        "delay_delete": false,
+        "distinct_count": 0,
+        "histo_col_type": "INT8",
+        "histo_version": 3,
+        "id": 0,
+        "name": "aristotle",
+        "null_count": 0,
+        "row_count": 0
+    }
+]
+
+# Collecting stats on columns with all NULL values should also result in empty
+# (but not NULL) histograms.
+statement ok
+INSERT INTO tabula VALUES (11, 12, NULL)
+
+statement ok
+CREATE STATISTICS locke FROM tabula
+
+query TTIIB colnames
+SELECT statistics_name, column_names, row_count, null_count, histogram_id IS NOT NULL AS has_histogram
+FROM [SHOW STATISTICS FOR TABLE tabula]
+ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names  row_count  null_count  has_histogram
+locke            {a,sa}        1          0           false
+locke            {a}           1          0           true
+locke            {r}           1          0           true
+locke            {sa}          1          1           true
+
+let $hist_id_1
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE tabula]
+WHERE statistics_name = 'locke' AND column_names = '{a}'
+
+# This histogram should *not* be empty.
+query TIRI colnames
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+12           0           0                    1
+
+let $hist_id_1
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE tabula]
+WHERE statistics_name = 'locke' AND column_names = '{sa}'
+
+# This histogram *should* be empty.
+query TIRI colnames
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+
+query T
+SELECT jsonb_pretty(
+  regexp_replace(COALESCE(json_agg(stat), '[]')::STRING, '"id": [0-9]+', '"id": 0', 'g')::JSONB
+)
+  FROM (SELECT json_array_elements(statistics) - 'created_at' - 'avg_size' AS stat
+        FROM [SHOW STATISTICS USING JSON FOR TABLE tabula])
+----
+[
+    {
+        "columns": [
+            "r"
+        ],
+        "delay_delete": false,
+        "distinct_count": 1,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "11"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 3,
+        "id": 0,
+        "name": "locke",
+        "null_count": 0,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "a"
+        ],
+        "delay_delete": false,
+        "distinct_count": 1,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "12"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 3,
+        "id": 0,
+        "name": "locke",
+        "null_count": 0,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "a",
+            "sa"
+        ],
+        "delay_delete": false,
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "id": 0,
+        "name": "locke",
+        "null_count": 0,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "sa"
+        ],
+        "delay_delete": false,
+        "distinct_count": 1,
+        "histo_col_type": "INT8",
+        "histo_version": 3,
+        "id": 0,
+        "name": "locke",
+        "null_count": 1,
+        "row_count": 1
+    }
+]
+
+# Regression test for #76573
+statement ok
+CREATE TABLE t1 (a INT, b INT, c INT)
+
+statement ok
+ANALYZE t1
+
+statement ok
+CREATE STATISTICS t1_ab ON a,b FROM t1
+
+statement ok
+CREATE STATISTICS t1_ac ON a,c FROM t1
+
+statement ok
+CREATE STATISTICS t1_bc ON b,c FROM t1
+
+statement ok
+ALTER TABLE t1 drop column c
+
+statement ok
+show statistics for table t1
+
+query TTIIIB colnames
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  distinct_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE t1]
+ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names  row_count  distinct_count  null_count  has_histogram
+NULL             {a}           0          0               0           true
+NULL             {b}           0          0               0           true
+NULL             {rowid}       0          0               0           true
+t1_ab            {a,b}         0          0               0           false
+
+query T
+SELECT jsonb_pretty(
+  regexp_replace(COALESCE(json_agg(stat), '[]')::STRING, '"id": [0-9]+', '"id": 0', 'g')::JSONB
+)
+  FROM (
+SELECT json_array_elements(statistics) - 'created_at' AS stat
+FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
+)
+----
+[
+    {
+        "avg_size": 0,
+        "columns": [
+            "a"
+        ],
+        "delay_delete": false,
+        "distinct_count": 0,
+        "histo_col_type": "INT8",
+        "histo_version": 3,
+        "id": 0,
+        "null_count": 0,
+        "row_count": 0
+    },
+    {
+        "avg_size": 0,
+        "columns": [
+            "b"
+        ],
+        "delay_delete": false,
+        "distinct_count": 0,
+        "histo_col_type": "INT8",
+        "histo_version": 3,
+        "id": 0,
+        "null_count": 0,
+        "row_count": 0
+    },
+    {
+        "avg_size": 0,
+        "columns": [
+            "rowid"
+        ],
+        "delay_delete": false,
+        "distinct_count": 0,
+        "histo_col_type": "INT8",
+        "histo_version": 3,
+        "id": 0,
+        "null_count": 0,
+        "row_count": 0
+    },
+    {
+        "avg_size": 0,
+        "columns": [
+            "a",
+            "b"
+        ],
+        "delay_delete": false,
+        "distinct_count": 0,
+        "histo_col_type": "",
+        "id": 0,
+        "name": "t1_ab",
+        "null_count": 0,
+        "row_count": 0
+    }
+]
+
+# Check that column_names of multi-column stats are always sorted the same way.
+statement ok
+CREATE TABLE u (d INT, c INT, b INT, a INT, PRIMARY KEY (a, b), INDEX (c, d, a, b));
+
+statement ok
+CREATE STATISTICS u_defaults FROM u;
+
+statement ok
+CREATE STATISTICS u_a_b ON a, b FROM u;
+
+statement ok
+CREATE STATISTICS u_b_a ON b, a FROM u;
+
+statement ok
+CREATE STATISTICS u_c_d_b ON c, d, b FROM u;
+
+query TT colnames
+SELECT statistics_name, column_names
+FROM [SHOW STATISTICS FOR TABLE u]
+ORDER BY column_names, statistics_name
+----
+statistics_name  column_names
+u_defaults       {a}
+u_defaults       {b}
+u_b_a            {b,a}
+u_defaults       {c}
+u_defaults       {d}
+u_defaults       {d,c}
+u_defaults       {d,c,a}
+u_c_d_b          {d,c,b}
+u_defaults       {d,c,b,a}
+
+# Make sure that we can properly collect statistics on an array column that's
+# both forward and inverted indexable.
+
+statement ok
+CREATE TABLE indexed_arr(a INT[]);
+CREATE INDEX ON indexed_arr(a)
+
+statement ok
+INSERT INTO indexed_arr SELECT ARRAY[g] FROM generate_series(1,10000) g(g)
+
+statement ok
+ANALYZE indexed_arr
+
+query TTIB
+SELECT statistics_name, column_names, row_count, histogram_id IS NOT NULL AS has_histogram
+FROM [SHOW STATISTICS FOR TABLE indexed_arr]
+ORDER BY statistics_name, column_names::STRING
+----
+NULL  {a}      10000  true
+NULL  {rowid}  10000  true
+
+statement ok
+CREATE INDEX ON indexed_arr USING GIN (a)
+
+query T
+SELECT * FROM indexed_arr WHERE a = ARRAY[100]
+----
+{100}
+
+query T
+SELECT * FROM indexed_arr WHERE a @> ARRAY[100]
+----
+{100}
+
+statement ok
+ANALYZE indexed_arr
+
+query TTIB
+SELECT statistics_name, column_names, row_count, histogram_id IS NOT NULL AS has_histogram
+FROM [SHOW STATISTICS FOR TABLE indexed_arr]
+ORDER BY statistics_name, column_names::STRING
+----
+NULL  {a}      10000  true
+NULL  {rowid}  10000  true
+
+query T
+SELECT * FROM indexed_arr WHERE a = ARRAY[100]
+----
+{100}
+
+query T
+SELECT * FROM indexed_arr WHERE a @> ARRAY[100]
+----
+{100}
+
+# Test single column partial statistics USING EXTREMES creation.
+
+statement ok
+CREATE TABLE abcd (a INT PRIMARY KEY, b INT, c INT, d INT, INDEX (c, d));
+
+statement ok
+CREATE TABLE xy (x INT, y INT, INDEX (x, y))
+
+statement ok
+INSERT INTO xy VALUES (0, 10), (1, 11), (2, 12), (3, 13)
+
+statement ok
+INSERT INTO abcd VALUES
+(1, 10, 100, 1000),
+(2, 20, 200, 2000),
+(3, 30, 300, 3000),
+(4, 40, 400, 4000),
+(5, 50, 500, 5000),
+(6, 60, 600, 6000),
+(7, 70, 700, 7000),
+(8, 80, 800, 8000);
+
+statement ok
+CREATE STATISTICS abcd_a ON a FROM abcd;
+
+statement ok
+CREATE STATISTICS abcd_c ON c FROM abcd;
+
+statement ok
+CREATE STATISTICS xy_x ON x FROM xy;
+
+# insert values at the extremes of column a and c.
+statement ok
+INSERT INTO abcd VALUES
+(-2, -20, 900, 9000),
+(-1, -10, 920, 9200),
+(0, -9, 920, 9300);
+
+# insert values at the extremes of column x.
+statement ok
+INSERT INTO xy VALUES (-1, 9), (-2, 8), (5, 15), (6, 16)
+
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
+statement ok
+CREATE STATISTICS abcd_a_partial ON a FROM abcd USING EXTREMES;
+
+statement ok
+CREATE STATISTICS abcd_c_partial ON c FROM abcd USING EXTREMES;
+
+statement ok
+CREATE STATISTICS xy_x_partial ON x FROM xy USING EXTREMES;
+
+let $hist_abcd_a_partial
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE abcd] WHERE statistics_name = 'abcd_a_partial';
+
+let $hist_abcd_c_partial
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE abcd] WHERE statistics_name = 'abcd_c_partial';
+
+let $hist_xy_x_partial
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE xy] WHERE statistics_name = 'xy_x_partial';
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_abcd_a_partial
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+-2           0           0                    1
+-1           0           0                    1
+0            0           0                    1
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_abcd_c_partial
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+900          0           0                    1
+920          0           0                    2
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_xy_x_partial
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+-2           0           0                    1
+-1           0           0                    1
+5            0           0                    1
+6            0           0                    1
+
+query TT colnames
+SELECT "name", "partialPredicate" FROM system.table_statistics WHERE name='abcd_a_partial';
+----
+name            partialPredicate
+abcd_a_partial  (a IS NULL) OR ((a < 1:::INT8) OR (a > 8:::INT8))
+
+query TT colnames
+SELECT "name", "partialPredicate" FROM system.table_statistics WHERE name='abcd_c_partial';
+----
+name            partialPredicate
+abcd_c_partial  (c IS NULL) OR ((c < 100:::INT8) OR (c > 800:::INT8))
+
+query TT colnames
+SELECT "name", "partialPredicate" FROM system.table_statistics WHERE name='xy_x_partial';
+----
+name          partialPredicate
+xy_x_partial  (x IS NULL) OR ((x < 0:::INT8) OR (x > 3:::INT8))
+
+# Test if requesting a partial stat again uses the previous full stat and not the previous partial stat.
+statement ok
+CREATE STATISTICS xy_x_partial_2 ON x FROM xy USING EXTREMES
+
+query TTII colnames
+SELECT "statistics_name", "partial_predicate", "row_count", "null_count"
+FROM [SHOW STATISTICS FOR TABLE xy]
+ORDER BY statistics_name
+----
+statistics_name  partial_predicate                                  row_count  null_count
+xy_x             NULL                                               4          0
+xy_x_partial     (x IS NULL) OR ((x < 0:::INT8) OR (x > 3:::INT8))  4          0
+xy_x_partial_2   (x IS NULL) OR ((x < 0:::INT8) OR (x > 3:::INT8))  4          0
+
+# Verify that the full_histogram_id of the partial statistic
+# is the statistics_id (or the histogram_id which is the same
+# as the statistics_id) of the full statistic it was built from.
+let $statistics_id
+SELECT "histogram_id" FROM [SHOW STATISTICS FOR TABLE xy] WHERE "statistics_name" = 'xy_x'
+
+query TTII colnames
+SELECT "statistics_name", "partial_predicate", "row_count", "null_count"
+FROM [SHOW STATISTICS FOR TABLE xy]
+WHERE full_histogram_id = '$statistics_id'
+ORDER BY statistics_name
+----
+statistics_name  partial_predicate                                  row_count  null_count
+xy_x_partial     (x IS NULL) OR ((x < 0:::INT8) OR (x > 3:::INT8))  4          0
+xy_x_partial_2   (x IS NULL) OR ((x < 0:::INT8) OR (x > 3:::INT8))  4          0
+
+query T
+SELECT jsonb_pretty(stat->'name')
+FROM (
+  SELECT jsonb_array_elements(statistics) AS stat
+  FROM [SHOW STATISTICS USING JSON FOR TABLE xy]
+)
+WHERE stat->>'full_statistic_id' = '$statistics_id'
+ORDER BY stat->>'name';
+----
+"xy_x_partial"
+"xy_x_partial_2"
+
+# Test null values.
+statement ok
+CREATE TABLE a_null (a INT, INDEX (a));
+
+statement ok
+INSERT INTO a_null VALUES (NULL), (1), (2);
+
+statement ok
+CREATE STATISTICS a_null_stat ON a FROM a_null;
+
+statement ok
+INSERT INTO a_null VALUES (NULL), (NULL), (NULL);
+
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
+statement ok
+CREATE STATISTICS a_null_stat_partial ON a FROM a_null USING EXTREMES;
+
+let $hist_a_null_stat_partial
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE a_null] WHERE statistics_name = 'a_null_stat_partial';
+
+query TIRI colnames
+SHOW HISTOGRAM $hist_a_null_stat_partial
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+
+query TTII colnames
+SELECT "statistics_name", "partial_predicate", "row_count", "null_count"
+FROM [SHOW STATISTICS FOR TABLE a_null]
+ORDER BY statistics_name
+----
+statistics_name      partial_predicate                                  row_count  null_count
+a_null_stat          NULL                                               3          1
+a_null_stat_partial  (a IS NULL) OR ((a < 1:::INT8) OR (a > 2:::INT8))  4          4
+
+# Test descending indexes.
+statement ok
+CREATE TABLE d_desc (a INT, b INT, index (a DESC, b));
+
+statement ok
+INSERT INTO d_desc VALUES (1, 10), (2, 20), (3, 30), (4, 40);
+
+statement ok
+CREATE STATISTICS sd ON a FROM d_desc;
+
+statement ok
+INSERT INTO d_desc VALUES (0, 0), (5, 50);
+
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
+statement ok
+CREATE STATISTICS sdp ON a FROM d_desc USING EXTREMES;
+
+let $hist_d_desc
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE d_desc] WHERE statistics_name = 'sdp';
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_d_desc
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+0            0           0                    1
+5            0           0                    1
+
+query TTII colnames
+SELECT "statistics_name", "partial_predicate", "row_count", "null_count"
+FROM [SHOW STATISTICS FOR TABLE d_desc]
+ORDER BY statistics_name
+----
+statistics_name  partial_predicate                                  row_count  null_count
+sd               NULL                                               4          0
+sdp              (a IS NULL) OR ((a < 1:::INT8) OR (a > 4:::INT8))  2          0
+
+# Test descending index with NULL
+statement ok
+INSERT INTO d_desc VALUES (NULL, NULL), (NULL, 2);
+
+statement ok
+CREATE STATISTICS sdn ON a FROM d_desc;
+
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
+statement ok
+CREATE STATISTICS sdnp ON a FROM d_desc USING EXTREMES;
+
+query TTII colnames
+SELECT "statistics_name", "partial_predicate", "row_count", "null_count"
+FROM [SHOW STATISTICS FOR TABLE d_desc]
+ORDER BY statistics_name
+----
+statistics_name  partial_predicate                                  row_count  null_count
+sdn              NULL                                               8          2
+sdnp             (a IS NULL) OR ((a < 0:::INT8) OR (a > 5:::INT8))  2          2
+
+# Verify errors.
+statement ok
+SET enable_create_stats_using_extremes = off
+
+statement error creating partial statistics at extremes is disabled
+CREATE STATISTICS abcd_defaults ON a FROM abcd USING EXTREMES;
+
+statement ok
+RESET enable_create_stats_using_extremes
+
+statement error pq: multi-column partial statistics are not currently supported
+CREATE STATISTICS abcd_a_b ON a, c FROM abcd USING EXTREMES;
+
+statement ok
+SET CLUSTER SETTING sql.stats.histogram_collection.enabled = false
+
+statement error pq: partial statistics without histograms are not supported
+CREATE STATISTICS abcd_a_b ON a FROM abcd USING EXTREMES;
+
+statement error pq: partial statistics without histograms are not supported
+CREATE STATISTICS abcd_a_b ON a FROM abcd WHERE a > 5;
+
+statement ok
+RESET CLUSTER SETTING sql.stats.histogram_collection.enabled
+
+# Verify that a non-inverted index string column with a string histogram
+# can have partial statistics
+statement ok
+CREATE TABLE s (s STRING, INDEX (s));
+
+statement ok
+INSERT INTO s VALUES ('c'), ('d'), ('e');
+
+statement ok
+CREATE STATISTICS str ON s FROM s;
+
+statement ok
+INSERT INTO s VALUES ('a'), ('b'), ('f');
+
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
+statement ok
+CREATE STATISTICS s_partial ON s FROM s USING EXTREMES;
+
+query TTII colnames
+SELECT "statistics_name", "partial_predicate", "row_count", "null_count"
+FROM [SHOW STATISTICS FOR TABLE s]
+ORDER BY statistics_name
+----
+statistics_name  partial_predicate                                          row_count  null_count
+s_partial        (s IS NULL) OR ((s < 'c':::STRING) OR (s > 'e':::STRING))  3          0
+str              NULL                                                       3          0
+
+# Verify that inverted index columns return an error.
+statement ok
+CREATE TABLE j (j JSONB, INVERTED INDEX (j));
+
+statement ok
+INSERT INTO j VALUES ('{"1":"10"}'), ('{"2":"20"}'),  ('{"3":"30"}');
+
+statement ok
+CREATE STATISTICS j_full ON j FROM j;
+
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
+statement error pq: table j does not contain a non-partial forward index with j as a prefix column
+CREATE STATISTICS j_partial ON j FROM j USING EXTREMES;
+
+statement ok
+CREATE TABLE xyz (x INT, y INT, z INT, INDEX (x, y));
+
+statement error pq: column x does not have a prior statistic
+EXPLAIN ANALYZE CREATE STATISTICS xyz_x ON x FROM xyz USING EXTREMES;
+
+statement error pq: column x does not have a prior statistic
+EXPLAIN ANALYZE CREATE STATISTICS xyz_x ON x FROM xyz WHERE x > 5;
+
+statement error pq: the latest full statistic for column a has no histogram
+EXPLAIN ANALYZE CREATE STATISTICS u_partial ON a FROM u USING EXTREMES;
+
+statement error pq: the latest full statistic for column a has no histogram
+EXPLAIN ANALYZE CREATE STATISTICS u_partial ON a FROM u WHERE a > 5;
+
+statement error pq: table xy does not contain a non-partial forward index with y as a prefix column
+CREATE STATISTICS xy_y_partial ON y FROM xy USING EXTREMES;
+
+statement ok
+CREATE TABLE only_null (a INT, INDEX (a));
+
+statement ok
+INSERT INTO only_null VALUES (NULL), (NULL), (NULL);
+
+statement ok
+CREATE STATISTICS only_null_stat ON a FROM only_null;
+
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
+statement error pq: the latest full statistic histogram for column a has only NULL values
+EXPLAIN ANALYZE CREATE STATISTICS only_null_partial ON a FROM only_null USING EXTREMES;
+
+statement error pq: the latest full statistic histogram for column a has only NULL values
+EXPLAIN ANALYZE CREATE STATISTICS only_null_partial ON a FROM only_null WHERE a > 5;
+
+statement ok
+CREATE INDEX ON xy (y) WHERE y > 5;
+
+statement error pq: table xy does not contain a non-partial forward index with y as a prefix column
+CREATE STATISTICS xy_partial_idx ON y FROM xy USING EXTREMES;
+
+# Regression test for #100909. Ensure enum is hydrated in SHOW HISTOGRAM.
+statement ok
+CREATE TYPE enum1 as ENUM ('hello', 'hi');
+CREATE TABLE t100909 (x int, y enum1);
+INSERT INTO t100909 VALUES (1, 'hello'), (2, 'hello'), (3, 'hi');
+
+statement ok
+CREATE STATISTICS s1 ON y FROM t100909;
+
+let $hist_id_1
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t100909] WHERE statistics_name = 's1'
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+'hello'      0           0                    2
+'hi'         0           0                    1
+
+# Test that SHOW STATISTICS displays created_at in the session timezone.
+
+statement ok
+CREATE TABLE t107651 (i INT PRIMARY KEY)
+
+statement ok
+SET TIME ZONE -7
+
+statement ok
+ALTER TABLE t107651 INJECT STATISTICS '[
+    {
+        "avg_size": 0,
+        "columns": [
+            "i"
+        ],
+        "created_at": "2023-09-15 21:00:00.000000",
+        "distinct_count": 0,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 0
+    }
+]'
+
+query TT
+SELECT statistics_name, created FROM
+[SHOW STATISTICS FOR TABLE t107651]
+----
+__auto__  2023-09-15 14:00:00 -0700 -0700
+
+statement ok
+SET TIME ZONE -4
+
+query TT
+SELECT statistics_name, created FROM
+[SHOW STATISTICS FOR TABLE t107651]
+----
+__auto__  2023-09-15 17:00:00 -0400 -0400
+
+# Test that a non-admin can use SHOW STATISTICS.
+
+statement ok
+CREATE TABLE tab_test_privileges (a INT PRIMARY KEY);
+
+statement ok
+INSERT INTO tab_test_privileges VALUES (1);
+
+statement ok
+CREATE STATISTICS tab_test_privileges_stat ON a FROM tab_test_privileges;
+
+user testuser
+
+query error testuser has no privileges on relation tab_test_privileges
+SELECT statistics_name, created FROM [SHOW STATISTICS FOR TABLE tab_test_privileges]
+
+user root
+
+statement ok
+GRANT SELECT ON tab_test_privileges TO testuser
+
+user testuser
+
+query T
+SELECT statistics_name FROM [SHOW STATISTICS FOR TABLE tab_test_privileges]
+----
+tab_test_privileges_stat
+
+user root
+
+# Test stats collection on virtual computed columns.
+
+statement ok
+CREATE TABLE t68254 (
+  a INT PRIMARY KEY,
+  b STRING,
+  c JSONB,
+  d STRING AS (b || repeat('a', a)) VIRTUAL,
+  e STRING AS ((c->'foo')->>'bar') VIRTUAL,
+  f JSONB AS (c->'foo'->'bar') VIRTUAL,
+  INDEX (d),
+  INDEX (e),
+  INDEX (b, e),
+  INDEX (f)
+)
+
+statement ok
+INSERT INTO t68254 (a, b, c)
+SELECT i, i::STRING, json_build_object('foo', json_build_object('bar', json_build_object('baz', i)))
+FROM generate_series(0, 3) s(i)
+
+statement ok
+INSERT INTO t68254 (a, b, c) VALUES (4, NULL, NULL)
+
+statement ok
+CREATE STATISTICS j1 FROM t68254
+
+query TTIIIB colnames
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  distinct_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE t68254]
+ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names  row_count  distinct_count  null_count  has_histogram
+j1               {a}           5          5               0           true
+j1               {b,e}         5          5               1           false
+j1               {b}           5          5               1           true
+j1               {c}           5          5               1           false
+j1               {d}           5          5               1           true
+j1               {e}           5          5               1           true
+j1               {f}           5          5               1           true
+
+statement ok
+CREATE STATISTICS j2 ON d FROM t68254
+
+statement ok
+CREATE STATISTICS j3 ON e FROM t68254
+
+statement ok
+CREATE STATISTICS j4 ON f FROM t68254
+
+let $hist_d
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t68254] WHERE statistics_name = 'j2'
+
+let $hist_e
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t68254] WHERE statistics_name = 'j3'
+
+let $hist_f
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t68254] WHERE statistics_name = 'j4'
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_d
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+'0'          0           0                    1
+'1a'         0           0                    1
+'2aa'        0           0                    1
+'3aaa'       0           0                    1
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_e
+----
+upper_bound   range_rows  distinct_range_rows  equal_rows
+'{"baz": 0}'  0           0                    1
+'{"baz": 1}'  0           0                    1
+'{"baz": 2}'  0           0                    1
+'{"baz": 3}'  0           0                    1
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_f
+----
+upper_bound   range_rows  distinct_range_rows  equal_rows
+'{"baz": 0}'  0           0                    1
+'{"baz": 1}'  0           0                    1
+'{"baz": 2}'  0           0                    1
+'{"baz": 3}'  0           0                    1
+
+query T
+EXPLAIN SELECT * FROM t68254 WHERE e IN ('{"baz": 2}', '{"baz": 3}', '{"baz": 4}')
+----
+distribution: local
+·
+• render
+│
+└── • index join
+    │ estimated row count: 2
+    │ table: t68254@t68254_pkey
+    │
+    └── • scan
+          estimated row count: 2 (40% of the table; stats collected <hidden> ago)
+          table: t68254@t68254_e_idx
+          spans: [/'{"baz": 2}' - /'{"baz": 2}'] [/'{"baz": 3}' - /'{"baz": 3}'] [/'{"baz": 4}' - /'{"baz": 4}']
+
+query T
+EXPLAIN SELECT * FROM t68254 WHERE f IN ('{"baz": 2}', '{"baz": 3}', '{"baz": 4}')
+----
+distribution: local
+·
+• render
+│
+└── • index join
+    │ estimated row count: 2
+    │ table: t68254@t68254_pkey
+    │
+    └── • scan
+          estimated row count: 2 (40% of the table; stats collected <hidden> ago)
+          table: t68254@t68254_f_idx
+          spans: [/'{"baz": 2}' - /'{"baz": 2}'] [/'{"baz": 3}' - /'{"baz": 3}'] [/'{"baz": 4}' - /'{"baz": 4}']
+
+query T
+EXPLAIN SELECT * FROM t68254 WHERE c->'foo'->'bar' > '{"baz": 0}'
+----
+distribution: local
+·
+• render
+│
+└── • index join
+    │ estimated row count: 3
+    │ table: t68254@t68254_pkey
+    │
+    └── • scan
+          estimated row count: 3 (60% of the table; stats collected <hidden> ago)
+          table: t68254@t68254_f_idx
+          spans: (/'{"baz": 0}' - ]
+
+# Check that we also collect stats on the hidden expression index virt column.
+statement ok
+CREATE INDEX ON t68254 ((c->'foo'))
+
+statement ok
+CREATE STATISTICS j4 FROM t68254
+
+query TTIIIB colnames
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  distinct_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE t68254]
+ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names              row_count  distinct_count  null_count  has_histogram
+j4               {a}                       5          5               0           true
+j4               {b,e}                     5          5               1           false
+j4               {b}                       5          5               1           true
+j4               {crdb_internal_idx_expr}  5          5               1           true
+j4               {c}                       5          5               1           false
+j4               {d}                       5          5               1           true
+j4               {e}                       5          5               1           true
+j4               {f}                       5          5               1           true
+
+statement ok
+CREATE STATISTICS j5 ON crdb_internal_idx_expr FROM t68254
+
+let $hist_crdb_internal_idx_expr
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t68254] WHERE statistics_name = 'j5'
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_crdb_internal_idx_expr
+----
+upper_bound            range_rows  distinct_range_rows  equal_rows
+'{"bar": {"baz": 0}}'  0           0                    1
+'{"bar": {"baz": 1}}'  0           0                    1
+'{"bar": {"baz": 2}}'  0           0                    1
+'{"bar": {"baz": 3}}'  0           0                    1
+
+# Regression test for collecting stats on a table only with virtual computed
+# columns (#130817).
+statement ok
+CREATE TABLE t130817 (k INT PRIMARY KEY AS (NULL) VIRTUAL);
+
+statement ok
+ANALYZE t130817;
+
+# Test partial stats using extremes on indexed virtual computed columns.
+statement ok
+INSERT INTO t68254 (a, b, c) VALUES (5, '5', '{"foo": {"bar": {"baz": 5}}}')
+
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
+statement ok
+CREATE STATISTICS j6 ON d FROM t68254 USING EXTREMES
+
+statement ok
+CREATE STATISTICS j7 ON e FROM t68254 USING EXTREMES
+
+statement ok
+CREATE STATISTICS j8 ON crdb_internal_idx_expr FROM t68254 USING EXTREMES
+
+let $hist_d
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t68254] WHERE statistics_name = 'j6'
+
+let $hist_e
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t68254] WHERE statistics_name = 'j7'
+
+let $hist_crdb_internal_idx_expr
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t68254] WHERE statistics_name = 'j8'
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_d
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+'5aaaaa'     0           0                    1
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_e
+----
+upper_bound   range_rows  distinct_range_rows  equal_rows
+'{"baz": 5}'  0           0                    1
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_crdb_internal_idx_expr
+----
+upper_bound            range_rows  distinct_range_rows  equal_rows
+'{"bar": {"baz": 5}}'  0           0                    1
+
+# Verify that the correct partial predicate is used for partial stats using
+# extremes when outer buckets exist (int column type).
+statement ok
+CREATE TABLE int_outer_buckets (a INT PRIMARY KEY)
+
+# Inject a full stats collection with 2 outer buckets with upper bounds of
+# MaxInt64 and MinInt64.
+statement ok
+ALTER TABLE int_outer_buckets INJECT STATISTICS '[
+  {
+    "name": "int_outer_buckets_full",
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000,
+    "null_count": 0,
+    "avg_size": 2,
+    "histo_col_type": "int",
+    "histo_version": 3,
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "-9223372036854775808"},
+      {"num_eq": 1, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 1, "num_range": 9998, "distinct_range": 9998, "upper_bound": "9999"},
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "9223372036854775807"}
+    ]
+  }
+]'
+
+statement ok
+INSERT INTO int_outer_buckets SELECT generate_series(-10, -1) UNION ALL SELECT generate_series(10000, 10009);
+
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
+statement ok
+CREATE STATISTICS int_outer_buckets_partial ON a FROM int_outer_buckets USING EXTREMES;
+
+# The partial stat predicate should not include MaxInt64 and MinInt64 from the
+# outer buckets and should count 20 rows beyond the extremes.
+query TTII colnames
+SELECT "statistics_name", "partial_predicate", "row_count", "null_count"
+FROM [SHOW STATISTICS FOR TABLE int_outer_buckets]
+WHERE statistics_name = 'int_outer_buckets_partial'
+----
+statistics_name            partial_predicate                                     row_count  null_count
+int_outer_buckets_partial  (a IS NULL) OR ((a < 0:::INT8) OR (a > 9999:::INT8))  20         0
+
+# Verify that we don't ignore buckets with actual max and min values when
+# creating partial stats using extremes.
+statement ok
+INSERT INTO int_outer_buckets VALUES (-9223372036854775808), (9223372036854775807);
+
+statement ok
+SET CLUSTER SETTING sql.stats.histogram_samples.count = 10050;
+
+statement ok
+CREATE STATISTICS int_outer_buckets_full ON a FROM int_outer_buckets;
+
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
+statement ok
+CREATE STATISTICS int_outer_buckets_partial ON a FROM int_outer_buckets USING EXTREMES;
+
+# The partial stat predicate should include MaxInt64 and MinInt64 and should
+# count no rows beyond the extremes.
+query TTII colnames
+SELECT "statistics_name", "partial_predicate", "row_count", "null_count"
+FROM [SHOW STATISTICS FOR TABLE int_outer_buckets]
+WHERE statistics_name = 'int_outer_buckets_partial'
+----
+statistics_name            partial_predicate                                                                         row_count  null_count
+int_outer_buckets_partial  (a IS NULL) OR ((a < (-9223372036854775808):::INT8) OR (a > 9223372036854775807:::INT8))  0          0
+
+# Verify that the correct partial predicate is used for partial stats using
+# extremes when outer buckets exist (timestamp column type).
+statement ok
+CREATE TABLE timestamp_outer_buckets (a TIMESTAMP PRIMARY KEY);
+
+statement ok
+INSERT INTO timestamp_outer_buckets VALUES
+  ('2024-06-26 01:00:00'),
+  ('2024-06-26 02:00:00'),
+  ('2024-06-27 01:30:00'),
+  ('2024-06-27 02:30:00');
+
+statement ok
+CREATE STATISTICS timestamp_outer_buckets_full ON a FROM timestamp_outer_buckets;
+
+let $hist_id_timestamp_outer_buckets_full
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE timestamp_outer_buckets] WHERE statistics_name = 'timestamp_outer_buckets_full'
+
+# The full stats collection should not have added outer buckets.
+query I
+SELECT count(*) FROM [SHOW HISTOGRAM $hist_id_timestamp_outer_buckets_full]
+----
+4
+
+statement ok
+INSERT INTO timestamp_outer_buckets VALUES
+  ('2024-06-26 00:00:00'),
+  ('2024-06-27 03:30:00');
+
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
+statement ok
+CREATE STATISTICS timestamp_outer_buckets_partial ON a FROM timestamp_outer_buckets USING EXTREMES;
+
+# The partial stat should not ignore any buckets and have the correct predicate.
+query TTII colnames
+SELECT "statistics_name", "partial_predicate", "row_count", "null_count"
+FROM [SHOW STATISTICS FOR TABLE timestamp_outer_buckets]
+WHERE statistics_name = 'timestamp_outer_buckets_partial'
+----
+statistics_name                  partial_predicate                                                                                    row_count  null_count
+timestamp_outer_buckets_partial  (a IS NULL) OR ((a < '2024-06-26 01:00:00':::TIMESTAMP) OR (a > '2024-06-27 02:30:00':::TIMESTAMP))  2          0
+
+# Inject a full statistic with outer buckets, overriding the previous stats.
+statement ok
+ALTER TABLE timestamp_outer_buckets INJECT STATISTICS '[
+    {
+        "avg_size": 7,
+        "columns": [
+            "a"
+        ],
+        "created_at": "2024-06-27 19:00:16.450303",
+        "distinct_count": 4,
+        "histo_buckets": [
+            {
+                "distinct_range": 0.000001,
+                "num_eq": 0,
+                "num_range": 0,
+                "upper_bound": "4714-11-24 00:00:00 BC"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "2024-06-26 01:00:00"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "2024-06-26 02:00:00"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "2024-06-27 01:30:00"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "2024-06-27 02:30:00"
+            },
+            {
+                "distinct_range": 0.000001,
+                "num_eq": 0,
+                "num_range": 0,
+                "upper_bound": "294276-12-31 23:59:59.999999"
+            }
+        ],
+        "histo_col_type": "TIMESTAMP",
+        "histo_version": 3,
+        "name": "timestamp_outer_buckets_full",
+        "null_count": 0,
+        "row_count": 4
+    }
+]'
+
+statement ok
+INSERT INTO timestamp_outer_buckets VALUES ('2024-06-28 01:00:00');
+
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
+statement ok
+CREATE STATISTICS timestamp_outer_buckets_partial ON a FROM timestamp_outer_buckets USING EXTREMES;
+
+# The partial stat predicate should not include MaxSupportedTime and
+# MinSupportedTime from the outer buckets and should count 3 rows beyond the
+# extremes.
+query TTII colnames
+SELECT "statistics_name", "partial_predicate", "row_count", "null_count"
+FROM [SHOW STATISTICS FOR TABLE timestamp_outer_buckets]
+WHERE statistics_name = 'timestamp_outer_buckets_partial'
+----
+statistics_name                  partial_predicate                                                                                    row_count  null_count
+timestamp_outer_buckets_partial  (a IS NULL) OR ((a < '2024-06-26 01:00:00':::TIMESTAMP) OR (a > '2024-06-27 02:30:00':::TIMESTAMP))  3          0
+
+# Verify that we can't create partial stats using extremes on bool/enums columns
+# by default.
+statement ok
+CREATE TABLE bool_table (a bool PRIMARY KEY)
+
+statement ok
+INSERT INTO bool_table VALUES (true), (false)
+
+statement ok
+CREATE STATISTICS bool_table_full ON a FROM bool_table
+
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
+statement error pgcode 0A000 creating partial statistics at extremes on bool and enum columns is disabled
+CREATE STATISTICS bool_table_partial ON a FROM bool_table USING EXTREMES;
+
+statement ok
+CREATE TABLE enum_table (a e PRIMARY KEY)
+
+statement ok
+INSERT INTO enum_table VALUES ('hello'), ('howdy'), ('hi')
+
+statement ok
+CREATE STATISTICS enum_table_full ON a FROM enum_table
+
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
+statement error pgcode 0A000 creating partial statistics at extremes on bool and enum columns is disabled
+CREATE STATISTICS enum_table_full ON a FROM enum_table USING EXTREMES
+
+statement ok
+SET enable_create_stats_using_extremes_bool_enum = on
+
+statement ok
+CREATE STATISTICS bool_table_full ON a FROM bool_table USING EXTREMES
+
+statement ok
+CREATE STATISTICS enum_table_partial ON a FROM bool_table USING EXTREMES
+
+statement ok
+RESET enable_create_stats_using_extremes_bool_enum
+
+# Regression test for #118537. Do not create stats on non-public mutation
+# columns.
+statement ok
+CREATE TABLE t118537 (
+  a INT,
+  PRIMARY KEY (a) USING HASH WITH (bucket_count = 3)
+)
+
+statement ok
+INSERT INTO t118537 SELECT generate_series(0, 9)
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = 'newschemachanger.before.exec'
+
+skipif config local-legacy-schema-changer
+statement error job \d+ was paused before it completed with reason: pause point "newschemachanger.before.exec" hit
+ALTER TABLE t118537 ALTER PRIMARY KEY USING COLUMNS (a) USING HASH
+
+statement ok
+CREATE STATISTICS mutation FROM t118537
+
+query TTIB colnames
+SELECT statistics_name, column_names, row_count, histogram_id IS NOT NULL AS has_histogram
+FROM [SHOW STATISTICS FOR TABLE t118537]
+ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names                 row_count  has_histogram
+mutation         {a,crdb_internal_a_shard_3}  10         false
+mutation         {a}                          10         true
+mutation         {crdb_internal_a_shard_3}    10         true
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = ''
+
+let $job
+SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'ALTER TABLE %t118537 ALTER PRIMARY KEY USING COLUMNS (a) USING HASH' AND status LIKE 'pause%' FETCH FIRST 1 ROWS ONLY
+
+statement ok
+RESUME JOB $job
+
+statement ok
+SHOW JOB WHEN COMPLETE $job
+
+# Test optimizer_use_virtual_computed_column_stats.
+
+statement ok
+CREATE TABLE mno (
+  m int NOT NULL,
+  n int,
+  o int AS (sqrt(m::float)::int) VIRTUAL,
+  PRIMARY KEY (m),
+  INDEX (n),
+  INDEX (o) STORING (n)
+)
+
+statement ok
+INSERT INTO mno (m, n) SELECT i, i % 50 FROM generate_series(0, 999) s(i)
+
+statement ok
+ANALYZE mno
+
+query TTIIB
+SELECT statistics_name, column_names, row_count, distinct_count, histogram_id IS NOT NULL AS has_histogram
+FROM [SHOW STATISTICS FOR TABLE mno]
+ORDER BY statistics_name, column_names::STRING
+----
+NULL  {m}  1000  1000  true
+NULL  {n}  1000  50    true
+NULL  {o}  1000  33    true
+
+# All we care about is the row counts, so don't error if other parts of the explain output change
+query T retry
+SELECT info FROM [EXPLAIN SELECT * FROM mno WHERE n = 1 AND o = 9] WHERE info LIKE '%estimated row count:%'
+----
+    │ estimated row count: 1
+          estimated row count: 18 (1.8% of the table; stats collected <hidden> ago)
+
+# All we care about is the row counts, so don't error if other parts of the explain output change
+query T
+SELECT info FROM [EXPLAIN SELECT * FROM mno WHERE n = 1 AND o = 11] WHERE info LIKE '%estimated row count:%'
+----
+    │ estimated row count: 1
+          estimated row count: 20 (2.0% of the table; stats collected <hidden> ago)
+
+statement ok
+SET optimizer_use_virtual_computed_column_stats = false
+
+# All we care about is the row counts, so don't error if other parts of the explain output change
+query T
+SELECT info FROM [EXPLAIN SELECT * FROM mno WHERE n = 1 AND o = 9] WHERE info LIKE '%estimated row count:%'
+----
+    │ estimated row count: 7
+          estimated row count: 10 (1.0% of the table; stats collected <hidden> ago)
+
+# All we care about is the row counts, so don't error if other parts of the explain output change
+query T
+SELECT info FROM [EXPLAIN SELECT * FROM mno WHERE n = 1 AND o = 11] WHERE info LIKE '%estimated row count:%'
+----
+    │ estimated row count: 7
+          estimated row count: 10 (1.0% of the table; stats collected <hidden> ago)
+
+# Regression for not setting the TypeResolver on the SemaContext when dealing
+# with stats on virtual computed columns (#122312).
+statement ok
+CREATE TABLE t122312 (s STRING, g greeting AS (s::greeting) VIRTUAL)
+
+statement ok
+ANALYZE t122312
+
+# Regression for not setting the txn of the schemaResolver when type checking
+# stats on virtual computed columns.
+statement ok
+CREATE TYPE order_status AS ENUM ('pending', 'paid', 'dispatched', 'delivered')
+
+statement ok
+CREATE TABLE orders (
+  "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  "customer_id" UUID NOT NULL,
+  "total" DECIMAL NOT NULL,
+  "balance" DECIMAL NOT NULL,
+  "order_ts" TIMESTAMPTZ(0) NOT NULL DEFAULT now(),
+  "dispatch_ts" TIMESTAMPTZ(0),
+  "delivery_ts" TIMESTAMPTZ(0),
+  "status" order_status AS (
+    CASE
+      WHEN "delivery_ts" IS NOT NULL THEN 'delivered'
+      WHEN "dispatch_ts" IS NOT NULL THEN 'dispatched'
+      WHEN "balance" = 0 THEN 'paid'
+      ELSE 'pending'
+    END) VIRTUAL,
+  INDEX ("status")
+)
+
+statement ok
+INSERT INTO orders ("customer_id", "total", "balance", "dispatch_ts", "delivery_ts") VALUES
+  ('bdeb232e-12e9-4a33-9dd5-7bb9b694291a', 100, 100, NULL, NULL),
+  ('0dc59725-d20b-4370-a05d-11db025a0064', 200, 0, NULL, NULL),
+  ('d53d4021-9390-4b3a-9e5a-4bf1ff3e5a4c', 300, 0, now(), NULL),
+  ('d53d4021-9390-4b3a-9e5a-4bf1ff3e5a4c', 400, 0, now(), now())
+
+statement ok
+ANALYZE orders
+
+query TIIIIB colnames
+SELECT column_names, row_count, null_count, distinct_count, avg_size, histogram_id IS NOT NULL AS has_histogram
+FROM [SHOW STATISTICS FOR TABLE orders]
+ORDER BY column_names::STRING
+----
+column_names   row_count  null_count  distinct_count  avg_size  has_histogram
+{balance}      4          0           2               32        true
+{customer_id}  4          0           3               16        true
+{delivery_ts}  4          3           2               6         true
+{dispatch_ts}  4          2           2               12        true
+{id}           4          0           4               16        true
+{order_ts}     4          0           1               24        true
+{status}       4          0           4               48        true
+{total}        4          0           4               32        true
+
+let $hist_status
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE orders] WHERE column_names = ARRAY['status']
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_status
+----
+upper_bound   range_rows  distinct_range_rows  equal_rows
+'pending'     0           0                    1
+'paid'        0           0                    1
+'dispatched'  0           0                    1
+'delivered'   0           0                    1
+
+# Regression test for #138809: check that we can still use stats on virtual
+# computed columns after dropping the column.
+
+statement ok
+CREATE TABLE t138809 (
+  a INT PRIMARY KEY,
+  b INT AS (a + 1) VIRTUAL,
+  c INT AS (a + 2) VIRTUAL
+)
+
+statement ok
+INSERT INTO t138809 (a) VALUES (1), (2)
+
+statement ok
+ANALYZE t138809
+
+query TIIIIB colnames
+SELECT column_names, row_count, null_count, distinct_count, avg_size, histogram_id IS NOT NULL AS has_histogram
+FROM [SHOW STATISTICS FOR TABLE t138809]
+ORDER BY column_names::STRING
+----
+column_names  row_count  null_count  distinct_count  avg_size  has_histogram
+{a}           2          0           2               8         true
+{b}           2          0           2               8         true
+{c}           2          0           2               8         true
+
+# All we care about is the row counts, so don't error if other parts of the explain output change
+query T retry
+SELECT info FROM [EXPLAIN SELECT count(*) FROM t138809 WHERE b > 1] WHERE info LIKE '%estimated row count:%'
+----
+│ estimated row count: 1
+      estimated row count: 2 (100% of the table; stats collected <hidden> ago)
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.root..1'
+
+statement error job \d+ was paused before it completed with reason: pause point "schemachanger\.root\.\.1" hit
+ALTER TABLE t138809 DROP COLUMN c
+
+# All we care about is the row counts, so don't error if other parts of the explain output change
+query T
+SELECT info FROM [EXPLAIN SELECT count(*) FROM t138809 WHERE b > 1] WHERE info LIKE '%estimated row count:%'
+----
+│ estimated row count: 1
+      estimated row count: 2 (100% of the table; stats collected <hidden> ago)
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = DEFAULT
+
+let $job
+SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'ALTER TABLE %t138809 DROP COLUMN c' AND status LIKE 'pause%' FETCH FIRST 1 ROWS ONLY
+
+statement ok
+RESUME JOB $job
+
+statement ok
+SHOW JOB WHEN COMPLETE $job
+
+# Verify that partial stats are collected on single column prefixes of forward
+# indexes and skips over partial, sharded, and implicitly partitioned indexes
+# when columns are unspecified.
+statement ok
+CREATE TABLE pstat_allindex (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  e INT,
+  f INT,
+  j JSONB,
+  PRIMARY KEY (a),
+  INDEX(b, c),
+  INDEX(b, c, d),
+  INDEX(d),
+  INVERTED INDEX (j),
+  INDEX (c) USING HASH,
+  INDEX (e) WHERE e > 2,
+  INDEX ((f + 1))
+);
+
+statement ok
+INSERT INTO pstat_allindex VALUES
+  (1, 1, 1, 1, 1, 1, '{"1": "1"}'),
+  (2, 2, 2, 2, 2, 2, '{"2": "2"}'),
+  (3, 3, 3, 3, 3, 3, '{"3": "3"}'),
+  (4, 4, 4, 4, 4, 4, '{"4": "4"}');
+
+statement ok
+CREATE STATISTICS pstat_allindex_full FROM pstat_allindex;
+
+statement ok
+INSERT INTO pstat_allindex VALUES
+  (5, 5, 5, 5, 5, 5,'{"5": "5"}'),
+  (6, 6, 6, 6, 6, 6, '{"6": "6"}'),
+  (7, 7, 7, 7, 7, 7, '{"7": "7"}');
+
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
+statement ok
+CREATE STATISTICS pstat_allindex_partial FROM pstat_allindex USING EXTREMES;
+
+query TTIII colnames
+SELECT
+	statistics_name,
+	column_names,
+	row_count,
+	distinct_count,
+	null_count
+FROM
+	[SHOW STATISTICS FOR TABLE pstat_allindex]
+WHERE statistics_name = 'pstat_allindex_partial'
+ORDER BY statistics_name, column_names::STRING
+----
+statistics_name         column_names              row_count  distinct_count  null_count
+pstat_allindex_partial  {a}                       3          3               0
+pstat_allindex_partial  {b}                       3          3               0
+pstat_allindex_partial  {crdb_internal_idx_expr}  3          3               0
+pstat_allindex_partial  {d}                       3          3               0
+
+# Regression test for #134031. Check that we still have a valid, forecast-able
+# histogram after merging partial stats with full stats that have been modified
+# by addOuterBucket.
+
+statement ok
+CREATE TABLE t134031 (
+  a INT PRIMARY KEY
+) WITH (sql_stats_automatic_collection_enabled = false, sql_stats_histogram_buckets_count = 4)
+
+# These stats were created with the following statements:
+#
+#   INSERT INTO t134031 SELECT 2 * i * i FROM generate_series(0, 1000) s(i);
+#   CREATE STATISTICS __auto__ FROM t134031;
+#
+#   INSERT INTO t134031 VALUES (2000002);
+#   SELECT pg_sleep(1);
+#   CREATE STATISTICS __auto__ FROM t134031;
+#
+#   INSERT INTO t134031 VALUES (2000004);
+#   SELECT pg_sleep(1);
+#   CREATE STATISTICS __auto__ FROM t134031;
+#
+#   INSERT INTO t134031 VALUES (3000000);
+#   SELECT pg_sleep(2);
+#   CREATE STATISTICS __auto_partial__ FROM t134031 USING EXTREMES;
+
+statement ok
+ALTER TABLE t134031 INJECT STATISTICS '[
+    {
+        "avg_size": 4,
+        "columns": [
+            "a"
+        ],
+        "created_at": "2024-11-15 17:38:35.191236",
+        "distinct_count": 1001,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "0"
+            },
+            {
+                "distinct_range": 331.79445036468786,
+                "num_eq": 1,
+                "num_range": 332,
+                "upper_bound": "221778"
+            },
+            {
+                "distinct_range": 332.043798577731,
+                "num_eq": 1,
+                "num_range": 332,
+                "upper_bound": "887112"
+            },
+            {
+                "distinct_range": 333.16175105758106,
+                "num_eq": 1,
+                "num_range": 333,
+                "upper_bound": "2000000"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 3,
+        "id": 1021122691703046145,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 1001
+    },
+    {
+        "avg_size": 4,
+        "columns": [
+            "a"
+        ],
+        "created_at": "2024-11-15 17:38:36.240863",
+        "distinct_count": 1002,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "0"
+            },
+            {
+                "distinct_range": 331.7944820909316,
+                "num_eq": 1,
+                "num_range": 332,
+                "upper_bound": "221778"
+            },
+            {
+                "distinct_range": 333.0442332658522,
+                "num_eq": 1,
+                "num_range": 333,
+                "upper_bound": "889778"
+            },
+            {
+                "distinct_range": 333.16128464321633,
+                "num_eq": 1,
+                "num_range": 333,
+                "upper_bound": "2000002"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 3,
+        "id": 1021122695141097473,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 1002
+    },
+    {
+        "avg_size": 4,
+        "columns": [
+            "a"
+        ],
+        "created_at": "2024-11-15 17:38:37.296779",
+        "distinct_count": 1003,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 0,
+                "num_range": 0,
+                "upper_bound": "-9223372036854775808"
+            },
+            {
+                "distinct_range": 5.684341886080802E-14,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "0"
+            },
+            {
+                "distinct_range": 332.7947242432267,
+                "num_eq": 1,
+                "num_range": 333,
+                "upper_bound": "223112"
+            },
+            {
+                "distinct_range": 333.0446396262168,
+                "num_eq": 1,
+                "num_range": 333,
+                "upper_bound": "892448"
+            },
+            {
+                "distinct_range": 333.16063613055655,
+                "num_eq": 1,
+                "num_range": 333,
+                "upper_bound": "2000004"
+            },
+            {
+                "distinct_range": 5.684341886080185E-14,
+                "num_eq": 0,
+                "num_range": 0,
+                "upper_bound": "9223372036854775807"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 3,
+        "id": 1021122698602217473,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 1003
+    },
+    {
+        "avg_size": 4,
+        "columns": [
+            "a"
+        ],
+        "created_at": "2024-11-15 17:38:39.337031",
+        "distinct_count": 1,
+        "full_statistic_id": 1021122698602217473,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "3000000"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 3,
+        "id": 1021122705285644289,
+        "name": "__auto_partial__",
+        "null_count": 0,
+        "partial_predicate": "(a IS NULL) OR ((a \u003c 0:::INT8) OR (a \u003e 2000004:::INT8))",
+        "row_count": 1
+    }
+]'
+
+# Make sure the first bucket of both merged and forecast histograms has 0 for
+# distinct_range and num_range.
+query TT
+SELECT stat->>'name', stat->'histo_buckets'->0
+FROM (
+  SELECT jsonb_array_elements(statistics) AS stat
+  FROM [SHOW STATISTICS USING JSON FOR TABLE t134031 WITH MERGE, FORECAST]
+)
+WHERE stat->'name' <@ '["__merged__", "__forecast__"]'
+ORDER BY stat->>'name' DESC
+----
+__merged__    {"distinct_range": 0, "num_eq": 1, "num_range": 0, "upper_bound": "0"}
+__forecast__  {"distinct_range": 0, "num_eq": 1, "num_range": 0, "upper_bound": "0"}
+
+# Regression test for #67050: make sure we skip over enum values that have been
+# dropped when decoding histograms.
+
+statement ok
+CREATE TYPE e67050 AS ENUM ('a', 'b', 'c')
+
+statement ok
+CREATE TABLE t67050 (x e67050 PRIMARY KEY)
+
+statement ok
+INSERT INTO t67050 VALUES ('a'), ('b'), ('c')
+
+statement ok
+ANALYZE t67050
+
+statement count 1
+DELETE FROM t67050 WHERE x = 'a'
+
+statement ok
+ALTER TYPE e67050 DROP VALUE 'a'
+
+query T
+SELECT jsonb_pretty(statistics->0->'histo_buckets') FROM
+[SHOW STATISTICS USING JSON FOR TABLE t67050]
+----
+[
+    {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "b"
+    },
+    {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "c"
+    }
+]
+
+# Ensure that stripOuterBuckets doesn't overwrite statistics (see #155184).
+
+statement ok
+CREATE TABLE t155184 (
+  a INT PRIMARY KEY
+) WITH (sql_stats_automatic_collection_enabled = false, sql_stats_histogram_samples_count = 2)
+
+# These stats were created with the following statements:
+#
+#   INSERT INTO t155184 SELECT generate_series(1,10)
+#   ANALYZE t155184
+
+statement ok
+ALTER TABLE t155184 INJECT STATISTICS '[
+    {
+        "avg_size": 1,
+        "columns": [
+            "a"
+        ],
+        "created_at": "2025-10-10 13:41:08.711908",
+        "distinct_count": 10,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 0,
+                "num_range": 0,
+                "upper_bound": "-9223372036854775808"
+            },
+            {
+                "distinct_range": 3.5,
+                "num_eq": 1,
+                "num_range": 4,
+                "upper_bound": "8"
+            },
+            {
+                "distinct_range": 1,
+                "num_eq": 1,
+                "num_range": 1,
+                "upper_bound": "10"
+            },
+            {
+                "distinct_range": 3.5,
+                "num_eq": 0,
+                "num_range": 4,
+                "upper_bound": "9223372036854775807"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 3,
+        "id": 1114221014922133505,
+        "null_count": 0,
+        "row_count": 10
+    }
+]'
+
+# All we care about is the row counts, so don't error if other parts of the explain output change
+query T
+SELECT info FROM [EXPLAIN SELECT * FROM t155184 WHERE a < 8] WHERE info LIKE '%estimated row count:%'
+----
+  estimated row count: 4 (36% of the table; stats collected <hidden> ago)
+
+# Testcase for issue #125620: check that we can use histograms after a
+# metadata-only type conversion from TIMESTAMPTZ to TIMESTAMP.
+# The histogram should still provide accurate cardinality estimates because
+# TIMESTAMP and TIMESTAMPTZ have identical binary encodings.
+
+statement ok
+CREATE TABLE t125620 (ts TIMESTAMPTZ PRIMARY KEY)
+
+# Insert 100 rows with timestamps spanning a year.
+statement ok
+INSERT INTO t125620 SELECT '2020-01-01 00:00:00+00'::TIMESTAMPTZ + (i * INTERVAL '3 days') FROM generate_series(1, 100) AS g(i)
+
+statement ok
+ANALYZE t125620
+
+# Verify the histogram is being used before the ALTER.
+query T retry
+SELECT info FROM [EXPLAIN SELECT * FROM t125620 WHERE ts < '2020-04-01'::TIMESTAMPTZ] WHERE info LIKE '%estimated row count:%'
+----
+  estimated row count: 30 (30% of the table; stats collected <hidden> ago)
+
+statement ok
+ALTER TABLE t125620 ALTER COLUMN ts SET DATA TYPE TIMESTAMP
+
+# After the ALTER, the histogram (which stores TIMESTAMPTZ bucket bounds) should
+# still work correctly with TIMESTAMP comparisons because both types use
+# identical encoding. The optimizer should use the histogram for estimation.
+query T retry
+SELECT info FROM [EXPLAIN SELECT * FROM t125620 WHERE ts < '2020-04-01'::TIMESTAMP] WHERE info LIKE '%estimated row count:%'
+----
+  estimated row count: 30 (30% of the table; stats collected <hidden> ago)
+
+# Verify the query still returns correct results.
+query I
+SELECT count(*) FROM t125620 WHERE ts < '2020-04-01'::TIMESTAMP
+----
+30

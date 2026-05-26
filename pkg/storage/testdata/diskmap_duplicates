@@ -1,0 +1,67 @@
+
+new-map dups duplicates=true
+----
+
+batch dups
+put a 1
+put b 2
+put a 3
+----
+
+iter dups
+rewind
+next
+next
+next
+----
+a:3
+a:1
+b:2
+.
+
+batch dups
+put d3 3
+put cd 2
+put c 1
+----
+
+iter dups
+rewind
+next
+next
+next
+next
+next
+next
+----
+a:3
+a:1
+b:2
+c:1
+cd:2
+d3:3
+.
+
+iter dups
+rewind
+next
+next
+rewind
+next
+seek c
+next
+next
+next
+----
+a:3
+a:1
+b:2
+a:3
+a:1
+c:1
+cd:2
+d3:3
+.
+
+close-map dups
+----

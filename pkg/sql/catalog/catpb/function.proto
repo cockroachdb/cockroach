@@ -1,0 +1,77 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto2";
+
+package cockroach.sql.catalog.catpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb";
+
+import "gogoproto/gogo.proto";
+
+// Function contains a few enum types of function properties
+message Function {
+  enum Volatility {
+    UNKNOWN_VOLATILITY = 0;
+    VOLATILE = 1;
+    IMMUTABLE = 2;
+    STABLE = 3;
+  }
+
+  enum NullInputBehavior {
+    UNKNOWN_NULL_INPUT_BEHAVIOR = 0;
+    CALLED_ON_NULL_INPUT = 1;
+    RETURNS_NULL_ON_NULL_INPUT = 2;
+    STRICT = 3;
+  }
+
+  enum Language {
+    UNKNOWN_LANGUAGE = 0;
+    SQL = 1;
+    PLPGSQL = 2;
+  }
+
+  message Param {
+    enum Class {
+      DEFAULT = 0;
+      IN = 1;
+      OUT = 2;
+      IN_OUT = 3;
+      VARIADIC = 4;
+    }
+  }
+
+  enum Security {
+    INVOKER = 0;
+    DEFINER = 1;
+  }
+}
+
+// These wrappers are for the convenience of referencing the enum types from a
+// proto3 definition.
+message FunctionVolatility {
+  option (gogoproto.equal) = true;
+  optional Function.Volatility volatility = 1 [(gogoproto.nullable) = false];
+}
+
+message FunctionNullInputBehavior {
+  option (gogoproto.equal) = true;
+  optional Function.NullInputBehavior nullInputBehavior = 1 [(gogoproto.nullable) = false];
+}
+
+message FunctionLanguage {
+  option (gogoproto.equal) = true;
+  optional Function.Language lang = 1 [(gogoproto.nullable) = false];
+}
+
+message FunctionParamClass {
+  option (gogoproto.equal) = true;
+  optional Function.Param.Class class = 1 [(gogoproto.nullable) = false];
+}
+
+message FunctionSecurity {
+  option (gogoproto.equal) = true;
+  // If security is not explicitly set, the default security mode is INVOKER.
+  optional Function.Security security = 1 [(gogoproto.nullable) = false];
+}

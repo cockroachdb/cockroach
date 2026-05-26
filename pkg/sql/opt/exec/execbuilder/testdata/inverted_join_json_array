@@ -1,0 +1,898 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE json_tab (
+  a INT PRIMARY KEY,
+  b JSONB
+)
+
+statement ok
+CREATE INVERTED INDEX foo_inv ON json_tab(b)
+
+statement ok
+CREATE TABLE array_tab (
+  a INT PRIMARY KEY,
+  b INT[]
+)
+
+statement ok
+CREATE INVERTED INDEX foo_inv ON array_tab(b)
+
+# This query performs an inverted join.
+query T
+EXPLAIN SELECT * FROM json_tab@foo_inv AS j1, json_tab AS j2 WHERE j1.b @> j2.b ORDER BY j1.a, j2.a
+----
+distribution: local
+·
+• sort
+│ order: +a,+a
+│
+└── • lookup join
+    │ table: json_tab@json_tab_pkey
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: b @> b
+    │
+    └── • inverted join
+        │ table: json_tab@foo_inv
+        │
+        └── • scan
+              missing stats
+              table: json_tab@json_tab_pkey
+              spans: FULL SCAN
+
+# This query performs a cross join followed by a filter.
+query T
+EXPLAIN SELECT * FROM json_tab@json_tab_pkey AS j1, json_tab AS j2 WHERE j1.b @> j2.b ORDER BY j1.a, j2.a
+----
+distribution: local
+·
+• sort
+│ order: +a,+a
+│
+└── • cross join
+    │ pred: b @> b
+    │
+    ├── • scan
+    │     missing stats
+    │     table: json_tab@json_tab_pkey
+    │     spans: FULL SCAN
+    │
+    └── • scan
+          missing stats
+          table: json_tab@json_tab_pkey
+          spans: FULL SCAN
+
+# This query performs an inverted join.
+query T
+EXPLAIN SELECT * FROM json_tab@foo_inv AS j1, json_tab AS j2 WHERE j1.b <@ j2.b ORDER BY j1.a, j2.a
+----
+distribution: local
+·
+• sort
+│ order: +a,+a
+│
+└── • lookup join
+    │ table: json_tab@json_tab_pkey
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: b <@ b
+    │
+    └── • inverted join
+        │ table: json_tab@foo_inv
+        │
+        └── • scan
+              missing stats
+              table: json_tab@json_tab_pkey
+              spans: FULL SCAN
+
+# This query performs a cross join followed by a filter.
+query T
+EXPLAIN SELECT * FROM json_tab@json_tab_pkey AS j1 CROSS HASH JOIN json_tab AS j2 WHERE j1.b <@ j2.b ORDER BY j1.a, j2.a
+----
+distribution: local
+·
+• sort
+│ order: +a,+a
+│
+└── • cross join
+    │ pred: b <@ b
+    │
+    ├── • scan
+    │     missing stats
+    │     table: json_tab@json_tab_pkey
+    │     spans: FULL SCAN
+    │
+    └── • scan
+          missing stats
+          table: json_tab@json_tab_pkey
+          spans: FULL SCAN
+
+# This query performs an inverted join with an additional filter.
+query T
+EXPLAIN SELECT * FROM json_tab AS j2 INNER INVERTED JOIN json_tab AS j1
+ON j1.b @> j2.b AND j1.b @> '{"a": {}}' AND j2.a < 20
+ORDER BY j1.a, j2.a
+----
+distribution: local
+·
+• sort
+│ order: +a,+a
+│
+└── • lookup join
+    │ table: json_tab@json_tab_pkey
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: (b @> b) AND (b @> '{"a": {}}')
+    │
+    └── • inverted join
+        │ table: json_tab@foo_inv
+        │
+        └── • scan
+              missing stats
+              table: json_tab@json_tab_pkey
+              spans: [ - /19]
+
+# This query performs a cross join followed by a filter.
+query T
+EXPLAIN SELECT * FROM json_tab@json_tab_pkey AS j1, json_tab AS j2
+WHERE j1.b @> j2.b AND j1.b @> '{"a": {}}' AND j2.a < 20
+ORDER BY j1.a, j2.a
+----
+distribution: local
+·
+• sort
+│ order: +a,+a
+│
+└── • cross join
+    │ pred: b @> b
+    │
+    ├── • scan
+    │     missing stats
+    │     table: json_tab@json_tab_pkey
+    │     spans: [ - /19]
+    │
+    └── • filter
+        │ filter: b @> '{"a": {}}'
+        │
+        └── • scan
+              missing stats
+              table: json_tab@json_tab_pkey
+              spans: FULL SCAN
+
+# This query performs an inverted join with an additional filter.
+query T
+EXPLAIN SELECT * FROM json_tab AS j2 INNER INVERTED JOIN json_tab AS j1
+ON j1.b <@ j2.b AND j1.b <@ '{"a": {}}' AND j2.a < 20
+ORDER BY j1.a, j2.a
+----
+distribution: local
+·
+• sort
+│ order: +a,+a
+│
+└── • lookup join
+    │ table: json_tab@json_tab_pkey
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: (b <@ b) AND (b <@ '{"a": {}}')
+    │
+    └── • inverted join
+        │ table: json_tab@foo_inv
+        │
+        └── • scan
+              missing stats
+              table: json_tab@json_tab_pkey
+              spans: [ - /19]
+
+# This query performs an inverted join with jsonExists (?) operator.
+query T
+EXPLAIN SELECT * FROM json_tab AS j2 INNER INVERTED JOIN json_tab AS j1
+ON j1.b ? (j2.b ->> 'a')
+ORDER BY j1.a, j2.a
+----
+distribution: local
+·
+• sort
+│ order: +a,+a
+│
+└── • lookup join
+    │ table: json_tab@json_tab_pkey
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: b ? (b->>'a')
+    │
+    └── • inverted join
+        │ table: json_tab@foo_inv
+        │
+        └── • scan
+              missing stats
+              table: json_tab@json_tab_pkey
+              spans: FULL SCAN
+
+# This query performs an inverted join with jsonExists (?) operator, also with an additional filter.
+query T
+EXPLAIN SELECT * FROM json_tab AS j2 INNER INVERTED JOIN json_tab AS j1
+ON j1.b ? (j2.b ->> 'a') AND j2.a < 20
+ORDER BY j1.a, j2.a
+----
+distribution: local
+·
+• sort
+│ order: +a,+a
+│
+└── • lookup join
+    │ table: json_tab@json_tab_pkey
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: b ? (b->>'a')
+    │
+    └── • inverted join
+        │ table: json_tab@foo_inv
+        │
+        └── • scan
+              missing stats
+              table: json_tab@json_tab_pkey
+              spans: [ - /19]
+
+# This query performs an inverted join with both jsonExists (?) operator and the jsonContainsBy (@>) operator.
+query T
+EXPLAIN SELECT * FROM json_tab AS j2 INNER INVERTED JOIN json_tab AS j1
+ON j1.b @> j2.b AND j1.b ? (j2.b ->> 'a')
+ORDER BY j1.a, j2.a
+----
+distribution: local
+·
+• sort
+│ order: +a,+a
+│
+└── • lookup join
+    │ table: json_tab@json_tab_pkey
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: (b @> b) AND (b ? (b->>'a'))
+    │
+    └── • inverted join
+        │ table: json_tab@foo_inv
+        │
+        └── • scan
+              missing stats
+              table: json_tab@json_tab_pkey
+              spans: FULL SCAN
+
+statement ok
+CREATE TABLE text_array_tab (
+  a INT PRIMARY KEY,
+  b TEXT[]
+);
+
+query T
+EXPLAIN SELECT * FROM text_array_tab AS t INNER INVERTED JOIN json_tab AS j
+ON j.b ?| t.b ORDER BY t.a, j.a
+----
+distribution: local
+·
+• sort
+│ order: +a,+a
+│ already ordered: +a
+│
+└── • lookup join
+    │ table: json_tab@json_tab_pkey
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: b ?| b
+    │
+    └── • inverted join
+        │ table: json_tab@foo_inv
+        │
+        └── • scan
+              missing stats
+              table: text_array_tab@text_array_tab_pkey
+              spans: FULL SCAN
+
+query T
+EXPLAIN SELECT * FROM text_array_tab AS t INNER INVERTED JOIN json_tab AS j
+ON j.b ?& t.b ORDER BY j.a
+----
+distribution: local
+·
+• sort
+│ order: +a
+│
+└── • lookup join
+    │ table: json_tab@json_tab_pkey
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: b ?& b
+    │
+    └── • inverted join
+        │ table: json_tab@foo_inv
+        │
+        └── • scan
+              missing stats
+              table: text_array_tab@text_array_tab_pkey
+              spans: FULL SCAN
+
+# This query performs a cross join followed by a filter.
+query T
+EXPLAIN SELECT * FROM json_tab@json_tab_pkey AS j1, json_tab AS j2
+WHERE j1.b <@ j2.b AND j1.b <@ '{"a": {}}' AND j2.a < 20
+ORDER BY j1.a, j2.a
+----
+distribution: local
+·
+• sort
+│ order: +a,+a
+│
+└── • cross join
+    │ pred: b <@ b
+    │
+    ├── • scan
+    │     missing stats
+    │     table: json_tab@json_tab_pkey
+    │     spans: [ - /19]
+    │
+    └── • filter
+        │ filter: b <@ '{"a": {}}'
+        │
+        └── • scan
+              missing stats
+              table: json_tab@json_tab_pkey
+              spans: FULL SCAN
+
+# This query performs a left inverted join with an additional filter.
+query T
+EXPLAIN SELECT * FROM json_tab AS j2 LEFT INVERTED JOIN json_tab AS j1
+ON j1.b @> j2.b AND j1.b @> '{"a": {}}' AND j2.a < 20
+ORDER BY j1.a, j2.a
+----
+distribution: local
+·
+• sort
+│ order: +a,+a
+│
+└── • lookup join (left outer)
+    │ table: json_tab@json_tab_pkey
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: (b @> b) AND (b @> '{"a": {}}')
+    │
+    └── • inverted join (left outer)
+        │ table: json_tab@foo_inv
+        │ on: a < 20
+        │
+        └── • scan
+              missing stats
+              table: json_tab@json_tab_pkey
+              spans: FULL SCAN
+
+# This query performs a left inverted join with an additional filter.
+query T
+EXPLAIN SELECT * FROM json_tab AS j2 LEFT INVERTED JOIN json_tab AS j1
+ON j1.b <@ j2.b AND j1.b <@ '{"a": {}}' AND j2.a < 20
+ORDER BY j1.a, j2.a
+----
+distribution: local
+·
+• sort
+│ order: +a,+a
+│
+└── • lookup join (left outer)
+    │ table: json_tab@json_tab_pkey
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: (b <@ b) AND (b <@ '{"a": {}}')
+    │
+    └── • inverted join (left outer)
+        │ table: json_tab@foo_inv
+        │ on: a < 20
+        │
+        └── • scan
+              missing stats
+              table: json_tab@json_tab_pkey
+              spans: FULL SCAN
+
+# This query performs a semi inverted join with an additional filter.
+query T
+EXPLAIN SELECT * FROM json_tab AS j2 WHERE EXISTS (
+  SELECT * FROM json_tab@foo_inv AS j1
+  WHERE j1.b @> j2.b AND j2.a < 20
+)
+ORDER BY j2.a
+----
+distribution: local
+·
+• lookup join (semi)
+│ table: json_tab@json_tab_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│ pred: b @> b
+│
+└── • inverted join
+    │ table: json_tab@foo_inv
+    │
+    └── • scan
+          missing stats
+          table: json_tab@json_tab_pkey
+          spans: [ - /19]
+
+# This query performs a semi inverted join with an additional filter.
+query T
+EXPLAIN SELECT * FROM json_tab AS j2 WHERE EXISTS (
+  SELECT * FROM json_tab@foo_inv AS j1
+  WHERE j1.b <@ j2.b AND j2.a < 20
+)
+ORDER BY j2.a
+----
+distribution: local
+·
+• lookup join (semi)
+│ table: json_tab@json_tab_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│ pred: b <@ b
+│
+└── • inverted join
+    │ table: json_tab@foo_inv
+    │
+    └── • scan
+          missing stats
+          table: json_tab@json_tab_pkey
+          spans: [ - /19]
+
+# This query performs an anti inverted join with an additional filter.
+query T
+EXPLAIN SELECT * FROM json_tab AS j2 WHERE NOT EXISTS (
+  SELECT * FROM json_tab@foo_inv AS j1
+  WHERE j1.b @> j2.b AND j2.a < 20
+)
+ORDER BY j2.a
+----
+distribution: local
+·
+• lookup join (anti)
+│ table: json_tab@json_tab_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│ pred: b @> b
+│
+└── • inverted join (left outer)
+    │ table: json_tab@foo_inv
+    │ on: a < 20
+    │
+    └── • scan
+          missing stats
+          table: json_tab@json_tab_pkey
+          spans: FULL SCAN
+
+# This query performs an anti inverted join with an additional filter.
+query T
+EXPLAIN SELECT * FROM json_tab AS j2 WHERE NOT EXISTS (
+  SELECT * FROM json_tab@foo_inv AS j1
+  WHERE j1.b <@ j2.b AND j2.a < 20
+)
+ORDER BY j2.a
+----
+distribution: local
+·
+• lookup join (anti)
+│ table: json_tab@json_tab_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│ pred: b <@ b
+│
+└── • inverted join (left outer)
+    │ table: json_tab@foo_inv
+    │ on: a < 20
+    │
+    └── • scan
+          missing stats
+          table: json_tab@json_tab_pkey
+          spans: FULL SCAN
+
+# This query performs an inverted join.
+query T
+EXPLAIN SELECT * FROM array_tab@foo_inv AS a1, array_tab AS a2 WHERE a1.b @> a2.b ORDER BY a1.a, a2.a
+----
+distribution: local
+·
+• sort
+│ order: +a,+a
+│
+└── • lookup join
+    │ table: array_tab@array_tab_pkey
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: b @> b
+    │
+    └── • inverted join
+        │ table: array_tab@foo_inv
+        │
+        └── • scan
+              missing stats
+              table: array_tab@array_tab_pkey
+              spans: FULL SCAN
+
+# This query performs a cross join followed by a filter.
+query T
+EXPLAIN SELECT * FROM array_tab@array_tab_pkey AS a1, array_tab AS a2 WHERE a1.b @> a2.b ORDER BY a1.a, a2.a
+----
+distribution: local
+·
+• sort
+│ order: +a,+a
+│
+└── • cross join
+    │ pred: b @> b
+    │
+    ├── • scan
+    │     missing stats
+    │     table: array_tab@array_tab_pkey
+    │     spans: FULL SCAN
+    │
+    └── • scan
+          missing stats
+          table: array_tab@array_tab_pkey
+          spans: FULL SCAN
+
+# This query performs an inverted join.
+query T
+EXPLAIN SELECT * FROM array_tab@foo_inv AS a1, array_tab AS a2 WHERE a1.b <@ a2.b ORDER BY a1.a, a2.a
+----
+distribution: local
+·
+• sort
+│ order: +a,+a
+│
+└── • lookup join
+    │ table: array_tab@array_tab_pkey
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: b <@ b
+    │
+    └── • inverted join
+        │ table: array_tab@foo_inv
+        │
+        └── • scan
+              missing stats
+              table: array_tab@array_tab_pkey
+              spans: FULL SCAN
+
+# This query performs a cross join followed by a filter.
+query T
+EXPLAIN SELECT * FROM array_tab@array_tab_pkey AS a1 CROSS HASH JOIN array_tab AS a2 WHERE a1.b <@ a2.b ORDER BY a1.a, a2.a
+----
+distribution: local
+·
+• sort
+│ order: +a,+a
+│
+└── • cross join
+    │ pred: b <@ b
+    │
+    ├── • scan
+    │     missing stats
+    │     table: array_tab@array_tab_pkey
+    │     spans: FULL SCAN
+    │
+    └── • scan
+          missing stats
+          table: array_tab@array_tab_pkey
+          spans: FULL SCAN
+
+# This query performs an inverted join with an additional filter.
+query T
+EXPLAIN SELECT * FROM array_tab@array_tab_pkey AS a2
+INNER INVERTED JOIN array_tab@foo_inv AS a1
+ON a1.b @> a2.b AND a1.b @> '{1}' AND a2.a < 5
+ORDER BY a1.a, a2.a
+----
+distribution: local
+·
+• sort
+│ order: +a,+a
+│
+└── • lookup join
+    │ table: array_tab@array_tab_pkey
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: (b @> b) AND (b @> ARRAY[1])
+    │
+    └── • inverted join
+        │ table: array_tab@foo_inv
+        │
+        └── • scan
+              missing stats
+              table: array_tab@array_tab_pkey
+              spans: [ - /4]
+
+# This query performs a cross join followed by a filter.
+query T
+EXPLAIN SELECT * FROM array_tab@array_tab_pkey AS a1, array_tab AS a2
+WHERE a1.b @> a2.b AND a1.b @> '{1}' AND a2.a < 5
+ORDER BY a1.a, a2.a
+----
+distribution: local
+·
+• sort
+│ order: +a,+a
+│
+└── • cross join
+    │ pred: b @> b
+    │
+    ├── • scan
+    │     missing stats
+    │     table: array_tab@array_tab_pkey
+    │     spans: [ - /4]
+    │
+    └── • filter
+        │ filter: b @> ARRAY[1]
+        │
+        └── • scan
+              missing stats
+              table: array_tab@array_tab_pkey
+              spans: FULL SCAN
+
+# This query performs an inverted join with an additional filter.
+query T
+EXPLAIN SELECT * FROM array_tab@array_tab_pkey AS a2
+INNER INVERTED JOIN array_tab@foo_inv AS a1
+ON a1.b <@ a2.b AND a1.b <@ '{1}' AND a2.a < 5
+ORDER BY a1.a, a2.a
+----
+distribution: local
+·
+• sort
+│ order: +a,+a
+│
+└── • lookup join
+    │ table: array_tab@array_tab_pkey
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: (b <@ b) AND (b <@ ARRAY[1])
+    │
+    └── • inverted join
+        │ table: array_tab@foo_inv
+        │
+        └── • scan
+              missing stats
+              table: array_tab@array_tab_pkey
+              spans: [ - /4]
+
+# This query performs an inverted join with && (overlaps) operator in the
+# join condition. We limit it to a2.a > 1 AND a2.a < 7 to avoid empty and
+# null arrays.
+query T
+EXPLAIN SELECT * FROM array_tab@array_tab_pkey AS a2
+INNER INVERTED JOIN array_tab@foo_inv AS a1
+ON a1.b && a2.b AND a2.a > 1 AND a2.a < 7
+ORDER BY a1.a, a2.a
+----
+distribution: local
+·
+• sort
+│ order: +a,+a
+│
+└── • lookup join
+    │ table: array_tab@array_tab_pkey
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: b && b
+    │
+    └── • inverted join
+        │ table: array_tab@foo_inv
+        │
+        └── • scan
+              missing stats
+              table: array_tab@array_tab_pkey
+              spans: [/2 - /6]
+
+statement ok
+CREATE TABLE array_tab_not_idx (
+  a INT PRIMARY KEY,
+  b INT[]
+);
+
+# Ensure that join confition with not-index-array && index-array will be
+# normalized to index-array && not-index-array.
+query T
+EXPLAIN SELECT * FROM array_tab_not_idx@array_tab_not_idx_pkey AS a2
+INNER INVERTED JOIN array_tab@foo_inv AS a1
+ON a2.b && a1.b AND a2.a > 1 AND a2.a < 7
+ORDER BY a1.a, a2.a
+----
+distribution: local
+·
+• sort
+│ order: +a,+a
+│
+└── • lookup join
+    │ table: array_tab@array_tab_pkey
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: b && b
+    │
+    └── • inverted join
+        │ table: array_tab@foo_inv
+        │
+        └── • scan
+              missing stats
+              table: array_tab_not_idx@array_tab_not_idx_pkey
+              spans: [/2 - /6]
+
+# This query performs a cross join followed by a filter.
+query T
+EXPLAIN SELECT * FROM array_tab@array_tab_pkey AS a1, array_tab AS a2
+WHERE a1.b <@ a2.b AND a1.b <@ '{1}' AND a2.a < 5
+ORDER BY a1.a, a2.a
+----
+distribution: local
+·
+• sort
+│ order: +a,+a
+│
+└── • cross join
+    │ pred: b <@ b
+    │
+    ├── • scan
+    │     missing stats
+    │     table: array_tab@array_tab_pkey
+    │     spans: [ - /4]
+    │
+    └── • filter
+        │ filter: b <@ ARRAY[1]
+        │
+        └── • scan
+              missing stats
+              table: array_tab@array_tab_pkey
+              spans: FULL SCAN
+
+# This query performs a left inverted join with an additional filter.
+query T
+EXPLAIN SELECT a1.*, a2.* FROM array_tab@array_tab_pkey AS a2
+LEFT INVERTED JOIN array_tab@foo_inv AS a1
+ON a1.b @> a2.b AND a1.b @> '{1}' AND a2.a < 5
+ORDER BY a1.a, a2.a
+----
+distribution: local
+·
+• sort
+│ order: +a,+a
+│
+└── • lookup join (left outer)
+    │ table: array_tab@array_tab_pkey
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: (b @> b) AND (b @> ARRAY[1])
+    │
+    └── • inverted join (left outer)
+        │ table: array_tab@foo_inv
+        │ on: a < 5
+        │
+        └── • scan
+              missing stats
+              table: array_tab@array_tab_pkey
+              spans: FULL SCAN
+
+# This query performs a left inverted join with an additional filter.
+query T
+EXPLAIN SELECT a1.*, a2.* FROM array_tab@array_tab_pkey AS a2
+LEFT INVERTED JOIN array_tab@foo_inv AS a1
+ON a1.b <@ a2.b AND a1.b <@ '{1}' AND a2.a < 5
+ORDER BY a1.a, a2.a
+----
+distribution: local
+·
+• sort
+│ order: +a,+a
+│
+└── • lookup join (left outer)
+    │ table: array_tab@array_tab_pkey
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: (b <@ b) AND (b <@ ARRAY[1])
+    │
+    └── • inverted join (left outer)
+        │ table: array_tab@foo_inv
+        │ on: a < 5
+        │
+        └── • scan
+              missing stats
+              table: array_tab@array_tab_pkey
+              spans: FULL SCAN
+
+# This query performs a semi inverted join.
+query T
+EXPLAIN SELECT a2.* FROM array_tab@array_tab_pkey AS a2 WHERE EXISTS (
+  SELECT * FROM array_tab@foo_inv AS a1
+  WHERE a1.b @> a2.b
+)
+ORDER BY a2.a
+----
+distribution: local
+·
+• lookup join (semi)
+│ table: array_tab@array_tab_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│ pred: b @> b
+│
+└── • inverted join
+    │ table: array_tab@foo_inv
+    │
+    └── • scan
+          missing stats
+          table: array_tab@array_tab_pkey
+          spans: FULL SCAN
+
+# This query performs a semi inverted join.
+query T
+EXPLAIN SELECT a2.* FROM array_tab@array_tab_pkey AS a2 WHERE EXISTS (
+  SELECT * FROM array_tab@foo_inv AS a1
+  WHERE a1.b <@ a2.b
+)
+ORDER BY a2.a
+----
+distribution: local
+·
+• lookup join (semi)
+│ table: array_tab@array_tab_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│ pred: b <@ b
+│
+└── • inverted join
+    │ table: array_tab@foo_inv
+    │
+    └── • scan
+          missing stats
+          table: array_tab@array_tab_pkey
+          spans: FULL SCAN
+
+# This query performs an anti inverted join.
+query T
+EXPLAIN SELECT a2.* FROM array_tab@array_tab_pkey AS a2 WHERE NOT EXISTS (
+  SELECT * FROM array_tab@foo_inv AS a1
+  WHERE a1.b @> a2.b
+)
+ORDER BY a2.a
+----
+distribution: local
+·
+• lookup join (anti)
+│ table: array_tab@array_tab_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│ pred: b @> b
+│
+└── • inverted join (left outer)
+    │ table: array_tab@foo_inv
+    │
+    └── • scan
+          missing stats
+          table: array_tab@array_tab_pkey
+          spans: FULL SCAN
+
+# This query performs an anti inverted join.
+query T
+EXPLAIN SELECT a2.* FROM array_tab@array_tab_pkey AS a2 WHERE NOT EXISTS (
+  SELECT * FROM array_tab@foo_inv AS a1
+  WHERE a1.b <@ a2.b
+)
+ORDER BY a2.a
+----
+distribution: local
+·
+• lookup join (anti)
+│ table: array_tab@array_tab_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│ pred: b <@ b
+│
+└── • inverted join (left outer)
+    │ table: array_tab@foo_inv
+    │
+    └── • scan
+          missing stats
+          table: array_tab@array_tab_pkey
+          spans: FULL SCAN

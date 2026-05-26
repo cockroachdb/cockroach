@@ -1,0 +1,36 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import "../core/index.module";
+
+.root {
+  max-width: 100%;
+}
+
+.full-width {
+  min-width: 100%;
+}
+
+.radio-offset {
+  padding-left: $spacing-medium;
+}
+
+.modal-body {
+  padding: $spacing-medium;
+}
+
+.compact {
+  width: 80px;
+}
+
+.trim-text {
+  text-overflow: ellipsis;
+  overflow: hidden;
+  width: 228px;
+}
+
+.space-bottom {
+  margin-bottom: $spacing-base;
+}

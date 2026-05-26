@@ -1,0 +1,38 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "confchange",
+    srcs = [
+        "confchange.go",
+        "restore.go",
+        "validate.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/raft/confchange",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/raft/quorum",
+        "//pkg/raft/raftpb",
+        "//pkg/raft/tracker",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "confchange_test",
+    srcs = [
+        "datadriven_test.go",
+        "quick_test.go",
+        "restore_test.go",
+        "validate_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":confchange"],
+    deps = [
+        "//pkg/raft/quorum",
+        "//pkg/raft/raftpb",
+        "//pkg/raft/tracker",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

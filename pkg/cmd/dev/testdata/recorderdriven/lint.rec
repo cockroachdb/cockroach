@@ -1,0 +1,23 @@
+echo $HOME
+----
+/home/user
+
+bazel run @go_sdk//:bin/go --run_under=//build/bazelutil/whereis
+----
+/path/to/go/sdk/bin/go
+
+bazel run //pkg/gen:code
+----
+
+bazel run //pkg/cmd/generate-cgo:generate-cgo '--run_under=cd crdb-checkout && '
+----
+
+which cc
+----
+/usr/bin/cc
+
+bazel test //pkg/testutils/lint:lint_test --nocache_test_results --test_arg -test.v --test_env=COCKROACH_WORKSPACE=crdb-checkout --test_env=HOME=/home/user --sandbox_writable_path=/home/user --test_output streamed --test_env=GO_SDK=/path/to/go/sdk --test_env=CC=/usr/bin/cc --test_env=CXX=/usr/bin/cc
+----
+
+bazel build //pkg/cmd/cockroach-short //pkg/cmd/dev //pkg/cmd/roachprod //pkg/cmd/roachtest --run_validations
+----

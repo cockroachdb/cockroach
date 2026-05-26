@@ -1,0 +1,26 @@
+{
+    "name": "optgen",
+    "displayName": "Optgen Language Support",
+    "description": "Language support for optimizer generator (optgen) files containing operator definitions and matching/replace rules.",
+    "version": "0.0.1",
+    "publisher": "andy-kimball",
+    "engines": {
+        "vscode": "^1.19.0"
+    },
+    "categories": [
+        "Languages"
+    ],
+    "contributes": {
+        "languages": [{
+            "id": "optgen",
+            "aliases": ["Optgen", "optgen"],
+            "extensions": [".opt"],
+            "configuration": "./language-configuration.json"
+        }],
+        "grammars": [{
+            "language": "optgen",
+            "scopeName": "source.optgen",
+            "path": "./syntaxes/optgen.tmLanguage"
+        }]
+    }
+}

@@ -1,0 +1,42 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "idxusage",
+    srcs = [
+        "cluster_settings.go",
+        "index_usage_stats_controller.go",
+        "index_usage_stats_rec.go",
+        "local_idx_usage_stats.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/idxusage",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/server/serverpb",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/sql/sem/catconstants",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "idxusage_test",
+    srcs = [
+        "index_usage_stats_rec_test.go",
+        "local_index_usage_stats_test.go",
+    ],
+    embed = [":idxusage"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/server/serverpb",
+        "//pkg/settings/cluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)

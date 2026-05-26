@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("\x98\x1a\x800000000d\xfe\xfe\xfe\xfe\x000")
+[]byte("\xf6")
+int(86)

@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "smithcmp_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/smithcmp",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/cmd/cmpconn",
+        "//pkg/internal/sqlsmith",
+        "//pkg/sql/randgen",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/timeutil",
+        "@com_github_burntsushi_toml//:toml",
+        "@com_github_lib_pq//oid",
+    ],
+)
+
+go_binary(
+    name = "smithcmp",
+    embed = [":smithcmp_lib"],
+    visibility = ["//visibility:public"],
+)

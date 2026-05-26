@@ -1,0 +1,2397 @@
+# LogicTest: local
+
+# We will test the fast path later.
+statement ok
+SET enable_insert_fast_path = false
+
+# -- Tests with INSERT --
+
+statement ok
+CREATE TABLE parent (p INT PRIMARY KEY, other INT UNIQUE, FAMILY (p, other))
+
+statement ok
+CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p), FAMILY (c, p), INDEX (p))
+
+query T
+EXPLAIN INSERT INTO child VALUES (1,1), (2,2)
+----
+distribution: local
+·
+• root
+│
+├── • insert
+│   │ into: child(c, p)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 2 columns, 2 rows
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: parent@parent_pkey
+            │ equality: (column2) = (p)
+            │ equality cols are key
+            │
+            └── • scan buffer
+                  estimated row count: 2
+                  label: buffer 1
+
+# Try again with implicit locking of the parent row.
+statement ok
+SET enable_implicit_fk_locking_for_serializable = true
+
+# We need to enable shared locks for serializable transactions for this to have
+# a meaningful effect.
+statement ok
+SET enable_shared_locking_for_serializable=true
+
+query T
+EXPLAIN INSERT INTO child VALUES (1,1), (2,2)
+----
+distribution: local
+·
+• root
+│
+├── • insert
+│   │ into: child(c, p)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 2 columns, 2 rows
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: parent@parent_pkey
+            │ equality: (column2) = (p)
+            │ equality cols are key
+            │ locking strength: for share
+            │
+            └── • scan buffer
+                  estimated row count: 2
+                  label: buffer 1
+
+# Try again with durable locking enabled.
+statement ok
+SET enable_durable_locking_for_serializable = true
+
+# TODO(michae2, 100194): Change this from EXPLAIN (OPT) to EXPLAIN.
+query T
+EXPLAIN (OPT) INSERT INTO child VALUES (1,1), (2,2)
+----
+insert child
+ ├── values
+ │    ├── (1, 1)
+ │    └── (2, 2)
+ └── f-k-checks
+      └── f-k-checks-item: child(p) -> parent(p)
+           └── anti-join (lookup parent)
+                ├── lookup columns are key
+                ├── locking: for-share,durability-guaranteed
+                ├── with-scan &1
+                └── filters (true)
+
+statement ok
+RESET enable_durable_locking_for_serializable
+
+statement ok
+RESET enable_implicit_fk_locking_for_serializable
+
+# Use data from a different table as input.
+statement ok
+CREATE TABLE xy (x INT, y INT)
+
+query T
+EXPLAIN INSERT INTO child SELECT x,y FROM xy
+----
+distribution: local
+·
+• root
+│
+├── • insert
+│   │ into: child(c, p)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • scan
+│             missing stats
+│             table: xy@xy_pkey
+│             spans: FULL SCAN
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: parent@parent_pkey
+            │ equality: (y) = (p)
+            │ equality cols are key
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+# Try again with implicit locking of the parent row.
+statement ok
+SET enable_implicit_fk_locking_for_serializable = true
+
+query T
+EXPLAIN INSERT INTO child SELECT x,y FROM xy
+----
+distribution: local
+·
+• root
+│
+├── • insert
+│   │ into: child(c, p)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • scan
+│             missing stats
+│             table: xy@xy_pkey
+│             spans: FULL SCAN
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: parent@parent_pkey
+            │ equality: (y) = (p)
+            │ equality cols are key
+            │ locking strength: for share
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+statement ok
+RESET enable_implicit_fk_locking_for_serializable
+
+statement ok
+CREATE TABLE child_nullable (c INT PRIMARY KEY, p INT REFERENCES parent(p), INDEX (p));
+
+# Because the input column can be NULL (in which case it requires no FK match),
+# we have to add an extra filter.
+query T
+EXPLAIN INSERT INTO child_nullable VALUES (100, 1), (200, NULL)
+----
+distribution: local
+·
+• root
+│
+├── • insert
+│   │ into: child_nullable(c, p)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 2 columns, 2 rows
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: parent@parent_pkey
+            │ equality: (column2) = (p)
+            │ equality cols are key
+            │
+            └── • filter
+                │ estimated row count: 1
+                │ filter: column2 IS NOT NULL
+                │
+                └── • scan buffer
+                      estimated row count: 2
+                      label: buffer 1
+
+# Try again with implicit locking of the parent row.
+statement ok
+SET enable_implicit_fk_locking_for_serializable = true
+
+query T
+EXPLAIN INSERT INTO child_nullable VALUES (100, 1), (200, NULL)
+----
+distribution: local
+·
+• root
+│
+├── • insert
+│   │ into: child_nullable(c, p)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 2 columns, 2 rows
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: parent@parent_pkey
+            │ equality: (column2) = (p)
+            │ equality cols are key
+            │ locking strength: for share
+            │
+            └── • filter
+                │ estimated row count: 1
+                │ filter: column2 IS NOT NULL
+                │
+                └── • scan buffer
+                      estimated row count: 2
+                      label: buffer 1
+
+statement ok
+RESET enable_implicit_fk_locking_for_serializable
+
+# Tests with multicolumn FKs.
+statement ok
+CREATE TABLE multi_col_parent (p INT, q INT, r INT, other INT, PRIMARY KEY (p, q, r))
+
+statement ok
+CREATE TABLE multi_col_child  (
+  c INT PRIMARY KEY,
+  p INT, q INT, r INT,
+  CONSTRAINT fk FOREIGN KEY (p,q,r) REFERENCES multi_col_parent(p,q,r) MATCH SIMPLE
+)
+
+# Only p and q are nullable.
+query T
+EXPLAIN INSERT INTO multi_col_child VALUES (2, NULL, 20, 20), (3, 20, NULL, 20)
+----
+distribution: local
+·
+• root
+│
+├── • insert
+│   │ into: multi_col_child(c, p, q, r)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 4 columns, 2 rows
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: multi_col_parent@multi_col_parent_pkey
+            │ equality: (column2, column3, column4) = (p, q, r)
+            │ equality cols are key
+            │
+            └── • filter
+                │ estimated row count: 1
+                │ filter: (column2 IS NOT NULL) AND (column3 IS NOT NULL)
+                │
+                └── • scan buffer
+                      estimated row count: 2
+                      label: buffer 1
+
+statement ok
+CREATE TABLE multi_ref_parent_a (a INT PRIMARY KEY, other INT)
+
+statement ok
+CREATE TABLE multi_ref_parent_bc (b INT, c INT, PRIMARY KEY (b,c), other INT)
+
+statement ok
+CREATE TABLE multi_ref_child (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c INT,
+  CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES multi_ref_parent_a(a),
+  CONSTRAINT fk2 FOREIGN KEY (b,c) REFERENCES multi_ref_parent_bc(b,c)
+)
+
+query T
+EXPLAIN INSERT INTO multi_ref_child VALUES (1, NULL, NULL, NULL), (2, 3, 4, 5)
+----
+distribution: local
+·
+• root
+│
+├── • insert
+│   │ into: multi_ref_child(k, a, b, c)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 4 columns, 2 rows
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (anti)
+│           │ table: multi_ref_parent_a@multi_ref_parent_a_pkey
+│           │ equality: (column2) = (a)
+│           │ equality cols are key
+│           │
+│           └── • filter
+│               │ estimated row count: 1
+│               │ filter: column2 IS NOT NULL
+│               │
+│               └── • scan buffer
+│                     estimated row count: 2
+│                     label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: multi_ref_parent_bc@multi_ref_parent_bc_pkey
+            │ equality: (column3, column4) = (b, c)
+            │ equality cols are key
+            │
+            └── • filter
+                │ estimated row count: 1
+                │ filter: (column3 IS NOT NULL) AND (column4 IS NOT NULL)
+                │
+                └── • scan buffer
+                      estimated row count: 2
+                      label: buffer 1
+
+# FK check can be omitted when we are inserting only NULLs.
+query T
+EXPLAIN INSERT INTO multi_ref_child VALUES (1, NULL, NULL, NULL)
+----
+distribution: local
+·
+• insert
+│ into: multi_ref_child(k, a, b, c)
+│ auto commit
+│
+└── • values
+      size: 4 columns, 1 row
+
+# -- Tests with DELETE --
+
+query T
+EXPLAIN DELETE FROM parent WHERE p = 3
+----
+distribution: local
+·
+• root
+│
+├── • delete
+│   │ from: parent
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • scan
+│             missing stats
+│             table: parent@parent_pkey
+│             spans: [/3 - /3]
+│             locking strength: for update
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: child@child_p_idx
+│           │ equality: (p) = (p)
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ table: child_nullable@child_nullable_p_idx
+            │ equality: (p) = (p)
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+# Even with implicit locking enabled, we should not acquire any shared locks
+# when checking a delete from the parent.
+statement ok
+SET enable_implicit_fk_locking_for_serializable = true
+
+query T
+EXPLAIN DELETE FROM parent WHERE p = 3
+----
+distribution: local
+·
+• root
+│
+├── • delete
+│   │ from: parent
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • scan
+│             missing stats
+│             table: parent@parent_pkey
+│             spans: [/3 - /3]
+│             locking strength: for update
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: child@child_p_idx
+│           │ equality: (p) = (p)
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ table: child_nullable@child_nullable_p_idx
+            │ equality: (p) = (p)
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+statement ok
+RESET enable_implicit_fk_locking_for_serializable
+
+statement ok
+CREATE TABLE child2 (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(other), INDEX (p))
+
+query T
+EXPLAIN DELETE FROM parent WHERE p = 3
+----
+distribution: local
+·
+• root
+│
+├── • delete
+│   │ from: parent
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • scan
+│             missing stats
+│             table: parent@parent_pkey
+│             spans: [/3 - /3]
+│             locking strength: for update
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: child@child_p_idx
+│           │ equality: (p) = (p)
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: child_nullable@child_nullable_p_idx
+│           │ equality: (p) = (p)
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ table: child2@child2_p_idx
+            │ equality: (other) = (p)
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+statement ok
+CREATE TABLE doubleparent (p1 INT, p2 INT, other INT, PRIMARY KEY (p1, p2))
+
+statement ok
+CREATE TABLE doublechild (
+  c INT8 PRIMARY KEY,
+  p1 INT8,
+  p2 INT8,
+  FOREIGN KEY (p1, p2) REFERENCES doubleparent (p1, p2),
+  INDEX (p1, p2)
+)
+
+query T
+EXPLAIN DELETE FROM doubleparent WHERE p1 = 10
+----
+distribution: local
+·
+• root
+│
+├── • delete
+│   │ from: doubleparent
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • scan
+│             missing stats
+│             table: doubleparent@doubleparent_pkey
+│             spans: [/10 - /10]
+│             locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ table: doublechild@doublechild_p1_p2_idx
+            │ equality: (p1, p2) = (p1, p2)
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+# -- Tests with UPDATE --
+
+query T
+EXPLAIN UPDATE child SET p = 4
+----
+distribution: local
+·
+• root
+│
+├── • update
+│   │ table: child
+│   │ set: p
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: child@child_pkey
+│                 spans: FULL SCAN
+│                 locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: parent@parent_pkey
+            │ equality: (p_new) = (p)
+            │ equality cols are key
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+# Try again with implicit locking of the parent row.
+statement ok
+SET enable_implicit_fk_locking_for_serializable = true
+
+query T
+EXPLAIN UPDATE child SET p = 4
+----
+distribution: local
+·
+• root
+│
+├── • update
+│   │ table: child
+│   │ set: p
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: child@child_pkey
+│                 spans: FULL SCAN
+│                 locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: parent@parent_pkey
+            │ equality: (p_new) = (p)
+            │ equality cols are key
+            │ locking strength: for share
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+# Try again with durable locking enabled.
+statement ok
+SET enable_durable_locking_for_serializable = true
+
+# TODO(michae2, 100194): Change this from EXPLAIN (OPT) to EXPLAIN.
+query T
+EXPLAIN (OPT) UPDATE child SET p = 4
+----
+update child
+ ├── project
+ │    ├── scan child
+ │    │    └── flags: avoid-full-scan
+ │    └── projections
+ │         └── 4
+ └── f-k-checks
+      └── f-k-checks-item: child(p) -> parent(p)
+           └── anti-join (lookup parent)
+                ├── lookup columns are key
+                ├── locking: for-share,durability-guaranteed
+                ├── with-scan &1
+                └── filters (true)
+
+statement ok
+RESET enable_durable_locking_for_serializable
+
+statement ok
+RESET enable_implicit_fk_locking_for_serializable
+
+query T
+EXPLAIN UPDATE child SET p = 4 WHERE c = 10
+----
+distribution: local
+·
+• root
+│
+├── • update
+│   │ table: child
+│   │ set: p
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: child@child_pkey
+│                 spans: [/10 - /10]
+│                 locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: parent@parent_pkey
+            │ equality: (p_new) = (p)
+            │ equality cols are key
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+# Try again with implicit locking of the parent row.
+statement ok
+SET enable_implicit_fk_locking_for_serializable = true
+
+query T
+EXPLAIN UPDATE child SET p = 4 WHERE c = 10
+----
+distribution: local
+·
+• root
+│
+├── • update
+│   │ table: child
+│   │ set: p
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: child@child_pkey
+│                 spans: [/10 - /10]
+│                 locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: parent@parent_pkey
+            │ equality: (p_new) = (p)
+            │ equality cols are key
+            │ locking strength: for share
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+statement ok
+RESET enable_implicit_fk_locking_for_serializable
+
+query T
+EXPLAIN UPDATE parent SET p = p+1
+----
+distribution: local
+·
+• root
+│
+├── • update
+│   │ table: parent
+│   │ set: p
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: parent@parent_pkey
+│                 spans: FULL SCAN
+│                 locking strength: for update
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: child@child_p_idx
+│           │ equality: (p) = (p)
+│           │
+│           └── • except all
+│               │
+│               ├── • scan buffer
+│               │     label: buffer 1
+│               │
+│               └── • scan buffer
+│                     label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ table: child_nullable@child_nullable_p_idx
+            │ equality: (p) = (p)
+            │
+            └── • except all
+                │
+                ├── • scan buffer
+                │     label: buffer 1
+                │
+                └── • scan buffer
+                      label: buffer 1
+
+query T
+EXPLAIN UPDATE parent SET p = p+1 WHERE other = 10
+----
+distribution: local
+·
+• root
+│
+├── • update
+│   │ table: parent
+│   │ set: p
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: parent@parent_other_key
+│                 spans: [/10 - /10]
+│                 locking strength: for update
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: child@child_p_idx
+│           │ equality: (p) = (p)
+│           │
+│           └── • except all
+│               │
+│               ├── • scan buffer
+│               │     label: buffer 1
+│               │
+│               └── • scan buffer
+│                     label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ table: child_nullable@child_nullable_p_idx
+            │ equality: (p) = (p)
+            │
+            └── • except all
+                │
+                ├── • scan buffer
+                │     label: buffer 1
+                │
+                └── • scan buffer
+                      label: buffer 1
+
+statement ok
+CREATE TABLE grandchild (g INT PRIMARY KEY, c INT NOT NULL REFERENCES child(c))
+
+query T
+EXPLAIN UPDATE child SET c = 4
+----
+distribution: local
+·
+• root
+│
+├── • update
+│   │ table: child
+│   │ set: c
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: child@child_pkey
+│                 spans: FULL SCAN
+│                 locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join
+            │ equality: (c) = (c)
+            │ left cols are key
+            │ right cols are key
+            │
+            ├── • except all
+            │   │
+            │   ├── • scan buffer
+            │   │     label: buffer 1
+            │   │
+            │   └── • scan buffer
+            │         label: buffer 1
+            │
+            └── • distinct
+                │ distinct on: c
+                │
+                └── • scan
+                      missing stats
+                      table: grandchild@grandchild_pkey
+                      spans: FULL SCAN
+
+# Even with implicit locking enabled, we should not acquire any shared locks
+# when checking an update of the parent (in this case the child is parent of the
+# grandchild).
+statement ok
+SET enable_implicit_fk_locking_for_serializable = true
+
+query T
+EXPLAIN UPDATE child SET c = 4
+----
+distribution: local
+·
+• root
+│
+├── • update
+│   │ table: child
+│   │ set: c
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: child@child_pkey
+│                 spans: FULL SCAN
+│                 locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join
+            │ equality: (c) = (c)
+            │ left cols are key
+            │ right cols are key
+            │
+            ├── • except all
+            │   │
+            │   ├── • scan buffer
+            │   │     label: buffer 1
+            │   │
+            │   └── • scan buffer
+            │         label: buffer 1
+            │
+            └── • distinct
+                │ distinct on: c
+                │
+                └── • scan
+                      missing stats
+                      table: grandchild@grandchild_pkey
+                      spans: FULL SCAN
+
+statement ok
+RESET enable_implicit_fk_locking_for_serializable
+
+# This update shouldn't emit checks for c, since it's unchanged.
+query T
+EXPLAIN UPDATE child SET p = 4
+----
+distribution: local
+·
+• root
+│
+├── • update
+│   │ table: child
+│   │ set: p
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: child@child_pkey
+│                 spans: FULL SCAN
+│                 locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: parent@parent_pkey
+            │ equality: (p_new) = (p)
+            │ equality cols are key
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+# Try again with implicit locking of the parent row.
+statement ok
+SET enable_implicit_fk_locking_for_serializable = true
+
+query T
+EXPLAIN UPDATE child SET p = 4
+----
+distribution: local
+·
+• root
+│
+├── • update
+│   │ table: child
+│   │ set: p
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: child@child_pkey
+│                 spans: FULL SCAN
+│                 locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: parent@parent_pkey
+            │ equality: (p_new) = (p)
+            │ equality cols are key
+            │ locking strength: for share
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+statement ok
+RESET enable_implicit_fk_locking_for_serializable
+
+query T
+EXPLAIN UPDATE child SET p = p
+----
+distribution: local
+·
+• root
+│
+├── • update
+│   │ table: child
+│   │ set: p
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • scan
+│             missing stats
+│             table: child@child_pkey
+│             spans: FULL SCAN
+│             locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: parent@parent_pkey
+            │ equality: (p) = (p)
+            │ equality cols are key
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+query T
+EXPLAIN UPDATE child SET p = p+1, c = c+1
+----
+distribution: local
+·
+• root
+│
+├── • update
+│   │ table: child
+│   │ set: c, p
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: child@child_pkey
+│                 spans: FULL SCAN
+│                 locking strength: for update
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (anti)
+│           │ table: parent@parent_pkey
+│           │ equality: (p_new) = (p)
+│           │ equality cols are key
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join
+            │ equality: (c) = (c)
+            │ left cols are key
+            │ right cols are key
+            │
+            ├── • except all
+            │   │
+            │   ├── • scan buffer
+            │   │     label: buffer 1
+            │   │
+            │   └── • scan buffer
+            │         label: buffer 1
+            │
+            └── • distinct
+                │ distinct on: c
+                │
+                └── • scan
+                      missing stats
+                      table: grandchild@grandchild_pkey
+                      spans: FULL SCAN
+
+# Try again with implicit locking of the parent row.
+statement ok
+SET enable_implicit_fk_locking_for_serializable = true
+
+query T
+EXPLAIN UPDATE child SET p = p+1, c = c+1
+----
+distribution: local
+·
+• root
+│
+├── • update
+│   │ table: child
+│   │ set: c, p
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: child@child_pkey
+│                 spans: FULL SCAN
+│                 locking strength: for update
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (anti)
+│           │ table: parent@parent_pkey
+│           │ equality: (p_new) = (p)
+│           │ equality cols are key
+│           │ locking strength: for share
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join
+            │ equality: (c) = (c)
+            │ left cols are key
+            │ right cols are key
+            │
+            ├── • except all
+            │   │
+            │   ├── • scan buffer
+            │   │     label: buffer 1
+            │   │
+            │   └── • scan buffer
+            │         label: buffer 1
+            │
+            └── • distinct
+                │ distinct on: c
+                │
+                └── • scan
+                      missing stats
+                      table: grandchild@grandchild_pkey
+                      spans: FULL SCAN
+
+statement ok
+RESET enable_implicit_fk_locking_for_serializable
+
+# Multiple grandchild tables
+statement ok
+CREATE TABLE grandchild2 (g INT PRIMARY KEY, c INT NOT NULL REFERENCES child(c))
+
+query T
+EXPLAIN UPDATE child SET p = 4
+----
+distribution: local
+·
+• root
+│
+├── • update
+│   │ table: child
+│   │ set: p
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: child@child_pkey
+│                 spans: FULL SCAN
+│                 locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: parent@parent_pkey
+            │ equality: (p_new) = (p)
+            │ equality cols are key
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+statement ok
+CREATE TABLE self (x INT PRIMARY KEY, y INT NOT NULL REFERENCES self(x))
+
+query T
+EXPLAIN UPDATE self SET y = 3
+----
+distribution: local
+·
+• root
+│
+├── • update
+│   │ table: self
+│   │ set: y
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: self@self_pkey
+│                 spans: FULL SCAN
+│                 locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: self@self_pkey
+            │ equality: (y_new) = (x)
+            │ equality cols are key
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+# Try again with implicit locking of the parent row.
+statement ok
+SET enable_implicit_fk_locking_for_serializable = true
+
+query T
+EXPLAIN UPDATE self SET y = 3
+----
+distribution: local
+·
+• root
+│
+├── • update
+│   │ table: self
+│   │ set: y
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: self@self_pkey
+│                 spans: FULL SCAN
+│                 locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: self@self_pkey
+            │ equality: (y_new) = (x)
+            │ equality cols are key
+            │ locking strength: for share
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+statement ok
+RESET enable_implicit_fk_locking_for_serializable
+
+query T
+EXPLAIN UPDATE self SET x = 3
+----
+distribution: local
+·
+• root
+│
+├── • update
+│   │ table: self
+│   │ set: x
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: self@self_pkey
+│                 spans: FULL SCAN
+│                 locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join
+            │ equality: (x) = (y)
+            │ left cols are key
+            │ right cols are key
+            │
+            ├── • except all
+            │   │
+            │   ├── • scan buffer
+            │   │     label: buffer 1
+            │   │
+            │   └── • scan buffer
+            │         label: buffer 1
+            │
+            └── • distinct
+                │ distinct on: y
+                │
+                └── • scan
+                      missing stats
+                      table: self@self_pkey
+                      spans: FULL SCAN
+
+# Even with implicit locking enabled, we should not acquire any shared locks
+# when checking an update of the parent.
+statement ok
+SET enable_implicit_fk_locking_for_serializable = true
+
+query T
+EXPLAIN UPDATE self SET x = 3
+----
+distribution: local
+·
+• root
+│
+├── • update
+│   │ table: self
+│   │ set: x
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: self@self_pkey
+│                 spans: FULL SCAN
+│                 locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join
+            │ equality: (x) = (y)
+            │ left cols are key
+            │ right cols are key
+            │
+            ├── • except all
+            │   │
+            │   ├── • scan buffer
+            │   │     label: buffer 1
+            │   │
+            │   └── • scan buffer
+            │         label: buffer 1
+            │
+            └── • distinct
+                │ distinct on: y
+                │
+                └── • scan
+                      missing stats
+                      table: self@self_pkey
+                      spans: FULL SCAN
+
+statement ok
+RESET enable_implicit_fk_locking_for_serializable
+
+# Tests for the insert fast path.
+statement ok
+SET enable_insert_fast_path = true
+
+# Simple insert with VALUES should use the fast path.
+query T
+EXPLAIN (VERBOSE) INSERT INTO child VALUES (1,1), (2,2)
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  columns: ()
+  estimated row count: 0 (missing stats)
+  into: child(c, p)
+  auto commit
+  FK check: parent@parent_pkey
+  size: 2 columns, 2 rows
+  row 0, expr 0: 1
+  row 0, expr 1: 1
+  row 1, expr 0: 2
+  row 1, expr 1: 2
+
+# Try again with implicit locking of the parent row.
+statement ok
+SET enable_implicit_fk_locking_for_serializable = true
+
+query T
+EXPLAIN (VERBOSE) INSERT INTO child VALUES (1,1), (2,2)
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  columns: ()
+  estimated row count: 0 (missing stats)
+  into: child(c, p)
+  auto commit
+  FK check: parent@parent_pkey
+  FK check locking strength: for share
+  size: 2 columns, 2 rows
+  row 0, expr 0: 1
+  row 0, expr 1: 1
+  row 1, expr 0: 2
+  row 1, expr 1: 2
+
+statement ok
+RESET enable_implicit_fk_locking_for_serializable
+
+# We shouldn't use the fast path if the VALUES columns are not in order.
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN INSERT INTO child (SELECT b, a FROM (VALUES (1,2)) AS v(a,b))
+] WHERE info LIKE '%insert-fast-path'
+----
+false
+
+# Multiple mutations shouldn't use the fast-path.
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN WITH cte AS (INSERT INTO child VALUES (1, 1) RETURNING p)
+  INSERT INTO parent VALUES (2, 3)
+] WHERE info LIKE '%insert-fast-path'
+----
+false
+
+# Self-referencing FKs should not use the fast-path.
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN INSERT INTO self VALUES (1, 1)
+] WHERE info LIKE '%insert-fast-path'
+----
+false
+
+# We should not use the fast path If the best FK check plan is not a lookup
+# join. We do this by adding statistics that make a hash join more desirable.
+statement ok
+ALTER TABLE parent INJECT STATISTICS '[
+  {
+    "columns": ["p"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1,
+    "distinct_count": 1
+  }
+]'
+
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) INSERT INTO child VALUES (1,1), (2,2), (3,3), (4,4)
+] WHERE info LIKE '%insert-fast-path'
+----
+false
+
+# Test FK check that is using a non-unique index (#43969). In this case the
+# index on k2 is preferred because it doesn't contain unnecessary column v.
+statement ok
+CREATE TABLE nonunique_idx_parent (
+  k1 INT,
+  k2 INT,
+  v INT,
+  CONSTRAINT "primary" PRIMARY KEY (k1, k2),
+  INDEX (k2)
+)
+
+statement ok
+CREATE TABLE nonunique_idx_child (
+  k INT PRIMARY KEY,
+  ref1 INT,
+  ref2 INT,
+  CONSTRAINT "fk" FOREIGN KEY (ref1, ref2) REFERENCES nonunique_idx_parent (k1, k2)
+)
+
+query T
+EXPLAIN INSERT INTO nonunique_idx_child VALUES (0, 1, 10)
+----
+distribution: local
+·
+• insert fast path
+  into: nonunique_idx_child(k, ref1, ref2)
+  auto commit
+  FK check: nonunique_idx_parent@nonunique_idx_parent_k2_idx
+  size: 3 columns, 1 row
+
+# Regression test for #46397: upserter was looking at the incorrect ordinal for
+# the check because of an extra input column used by the FK check.
+statement ok
+CREATE TABLE t46397_parent(p INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE t46397_child (
+  c INT PRIMARY KEY,
+  p INT DEFAULT 0 REFERENCES t46397_parent (p),
+  CONSTRAINT foo CHECK (c != 1)
+)
+
+statement error failed to satisfy CHECK constraint
+UPSERT INTO t46397_child(c) VALUES (1)
+
+statement error upsert on table "t46397_child" violates foreign key constraint "t46397_child_p_fkey"
+UPSERT INTO t46397_child(c) VALUES (2)
+
+statement ok
+INSERT INTO t46397_parent VALUES (0)
+
+statement ok
+UPSERT INTO t46397_child(c) VALUES (2)
+
+
+# Verify that cascade information shows up in EXPLAIN.
+statement ok
+CREATE TABLE cascadeparent (p INT PRIMARY KEY, data INT);
+CREATE TABLE cascadechild (
+  c INT PRIMARY KEY,
+  p INT NOT NULL REFERENCES cascadeparent(p) ON DELETE CASCADE
+)
+
+query T
+EXPLAIN (VERBOSE) DELETE FROM cascadeparent WHERE p > 1
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: ()
+│
+├── • delete range
+│     columns: ()
+│     estimated row count: 0 (missing stats)
+│     from: cascadeparent
+│     spans: /2-
+│
+└── • fk-cascade
+    │ fk: cascadechild_p_fkey
+    │
+    └── • delete
+        │ columns: ()
+        │ estimated row count: 0 (missing stats)
+        │ from: cascadechild
+        │
+        └── • project
+            │ columns: (c)
+            │
+            └── • filter
+                │ columns: (c, p)
+                │ estimated row count: 333 (missing stats)
+                │ filter: p > 1
+                │
+                └── • scan
+                      columns: (c, p)
+                      estimated row count: 1,000 (missing stats)
+                      table: cascadechild@cascadechild_pkey
+                      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) DELETE FROM cascadeparent WHERE p > 1 AND data > 0
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: ()
+│
+├── • delete
+│   │ columns: ()
+│   │ estimated row count: 0 (missing stats)
+│   │ from: cascadeparent
+│   │
+│   └── • buffer
+│       │ columns: (p, data)
+│       │ label: buffer 1
+│       │
+│       └── • filter
+│           │ columns: (p, data)
+│           │ estimated row count: 311 (missing stats)
+│           │ filter: data > 0
+│           │
+│           └── • scan
+│                 columns: (p, data)
+│                 estimated row count: 333 (missing stats)
+│                 table: cascadeparent@cascadeparent_pkey
+│                 spans: /2-
+│
+└── • fk-cascade
+    │ fk: cascadechild_p_fkey
+    │
+    └── • delete
+        │ columns: ()
+        │ estimated row count: 0 (missing stats)
+        │ from: cascadechild
+        │
+        └── • project
+            │ columns: (c)
+            │
+            └── • project
+                │ columns: (c, p)
+                │
+                └── • hash join (inner)
+                    │ columns: (c, p, p)
+                    │ estimated row count: 90 (missing stats)
+                    │ equality: (p) = (p)
+                    │ right cols are key
+                    │
+                    ├── • scan
+                    │     columns: (c, p)
+                    │     estimated row count: 1,000 (missing stats)
+                    │     table: cascadechild@cascadechild_pkey
+                    │     spans: FULL SCAN
+                    │
+                    └── • distinct
+                        │ columns: (p)
+                        │ estimated row count: 10
+                        │ distinct on: p
+                        │
+                        └── • project
+                            │ columns: (p)
+                            │
+                            └── • scan buffer
+                                  columns: (p, data)
+                                  estimated row count: 100
+                                  label: buffer 1000000
+
+statement ok
+CREATE TABLE a (
+  x STRING NULL,
+  y STRING NULL,
+  z STRING NULL,
+  CONSTRAINT "primary" PRIMARY KEY (z, y, x)
+)
+
+statement ok
+CREATE TABLE b (
+  a_y STRING NULL,
+  a_x STRING NULL,
+  a_z STRING NULL,
+  INDEX idx (a_z, a_y, a_x)
+)
+
+statement ok
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) NOT VALID
+
+# Verify that the optimizer doesn't use an unvalidated constraint to simplify plans.
+query T
+EXPLAIN SELECT
+  s.a_z, s.a_y, s.a_x
+FROM
+  (SELECT * FROM b WHERE a_z IS NOT NULL AND a_y IS NOT NULL AND a_x IS NOT NULL) AS s
+  LEFT JOIN a AS t ON s.a_z = t.z AND s.a_y = t.y AND s.a_x = t.x
+WHERE
+  t.z IS NULL
+----
+distribution: local
+·
+• filter
+│ filter: z IS NULL
+│
+└── • merge join (right outer)
+    │ equality: (z, y, x) = (a_z, a_y, a_x)
+    │ left cols are key
+    │
+    ├── • scan
+    │     missing stats
+    │     table: a@primary
+    │     spans: FULL SCAN
+    │
+    └── • filter
+        │ filter: (a_y IS NOT NULL) AND (a_x IS NOT NULL)
+        │
+        └── • scan
+              missing stats
+              table: b@idx
+              spans: (/NULL - ]
+
+statement ok
+ALTER TABLE b VALIDATE CONSTRAINT fk_ref
+
+# Now the plan should be simplified.
+query T
+EXPLAIN SELECT
+  s.a_z, s.a_y, s.a_x
+FROM
+  (SELECT * FROM b WHERE a_z IS NOT NULL AND a_y IS NOT NULL AND a_x IS NOT NULL) AS s
+  LEFT JOIN a AS t ON s.a_z = t.z AND s.a_y = t.y AND s.a_x = t.x
+WHERE
+  t.z IS NULL
+----
+distribution: local
+·
+• norows
+
+# Verify that prefer_lookup_joins_for_fks works as expected.
+statement ok
+CREATE TABLE p (p INT PRIMARY KEY);
+CREATE TABLE c (c INT PRIMARY KEY, p INT REFERENCES p(p), INDEX(p));
+
+statement ok
+ALTER TABLE p INJECT STATISTICS '[
+  {
+    "columns": ["p"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1,
+    "distinct_count": 1
+  }
+]'
+
+statement ok
+ALTER TABLE c INJECT STATISTICS '[
+  {
+    "columns": ["c"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 100
+  }
+]'
+
+# This query should use a lookup join, even if the parent table is small.
+query T
+EXPLAIN INSERT INTO c VALUES (1,1), (2,2)
+----
+distribution: local
+·
+• insert fast path
+  into: c(c, p)
+  auto commit
+  FK check: p@p_pkey
+  size: 2 columns, 2 rows
+
+# These queries should not be using lookup joins (we're inserting more rows
+# than exist in the tables).
+query T
+EXPLAIN INSERT INTO c VALUES (1,1), (2,2), (3,3), (4,4), (5,5), (6,6), (7,7), (8,8), (9,9), (10,10)
+----
+distribution: local
+·
+• insert fast path
+  into: c(c, p)
+  auto commit
+  FK check: p@p_pkey
+  size: 2 columns, 10 rows
+
+query T
+EXPLAIN UPDATE c SET p=p+c WHERE c > 0
+----
+distribution: local
+·
+• root
+│
+├── • update
+│   │ table: c
+│   │ set: p
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 estimated row count: 33 (33% of the table; stats collected <hidden> ago)
+│                 table: c@c_pkey
+│                 spans: [/1 - ]
+│                 locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ estimated row count: 32
+            │ table: p@p_pkey
+            │ equality: (p_new) = (p)
+            │ equality cols are key
+            │
+            └── • filter
+                │ estimated row count: 33
+                │ filter: p_new IS NOT NULL
+                │
+                └── • scan buffer
+                      estimated row count: 33
+                      label: buffer 1
+
+
+query T
+EXPLAIN DELETE FROM p WHERE p > 0
+----
+distribution: local
+·
+• root
+│
+├── • delete
+│   │ from: p
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • scan
+│             estimated row count: 1 (100% of the table; stats collected <hidden> ago)
+│             table: p@p_pkey
+│             spans: [/1 - ]
+│             locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ estimated row count: 1
+            │ table: c@c_p_idx
+            │ equality: (p) = (p)
+            │
+            └── • scan buffer
+                  estimated row count: 1
+                  label: buffer 1
+
+statement ok
+SET prefer_lookup_joins_for_fks = true
+
+# Now we should be using lookup joins.
+query T
+EXPLAIN INSERT INTO c VALUES (1,1), (2,2), (3,3), (4,4), (5,5), (6,6), (7,7), (8,8), (9,9), (10,10)
+----
+distribution: local
+·
+• insert fast path
+  into: c(c, p)
+  auto commit
+  FK check: p@p_pkey
+  size: 2 columns, 10 rows
+
+query T
+EXPLAIN UPDATE c SET p=p+c WHERE c > 0
+----
+distribution: local
+·
+• root
+│
+├── • update
+│   │ table: c
+│   │ set: p
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 estimated row count: 33 (33% of the table; stats collected <hidden> ago)
+│                 table: c@c_pkey
+│                 spans: [/1 - ]
+│                 locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ estimated row count: 32
+            │ table: p@p_pkey
+            │ equality: (p_new) = (p)
+            │ equality cols are key
+            │
+            └── • filter
+                │ estimated row count: 33
+                │ filter: p_new IS NOT NULL
+                │
+                └── • scan buffer
+                      estimated row count: 33
+                      label: buffer 1
+
+query T
+EXPLAIN DELETE FROM p WHERE p > 0
+----
+distribution: local
+·
+• root
+│
+├── • delete
+│   │ from: p
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • scan
+│             estimated row count: 1 (100% of the table; stats collected <hidden> ago)
+│             table: p@p_pkey
+│             spans: [/1 - ]
+│             locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ estimated row count: 1
+            │ table: c@c_p_idx
+            │ equality: (p) = (p)
+            │
+            └── • scan buffer
+                  estimated row count: 1
+                  label: buffer 1
+
+statement ok
+SET prefer_lookup_joins_for_fks = false
+
+# Verify that we're using a hash anti-join when performing the FK check in case
+# when the parent table is much smaller than the number of rows being inserted
+# into the child table.
+statement ok
+CREATE TABLE small_parent (p INT PRIMARY KEY);
+
+statement ok
+ALTER TABLE small_parent INJECT STATISTICS '[
+  {
+    "columns": ["p"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10,
+    "distinct_count": 10
+  }
+]'
+
+statement ok
+CREATE TABLE large_child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES small_parent(p))
+
+query T
+EXPLAIN INSERT INTO large_child SELECT i, i % 10 + 1 FROM generate_series(1, 10000) AS i
+----
+distribution: local
+·
+• root
+│
+├── • insert
+│   │ into: large_child(c, p)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • project set
+│               │ estimated row count: 10
+│               │
+│               └── • emptyrow
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ estimated row count: 1
+            │ table: small_parent@small_parent_pkey
+            │ equality: (?column?) = (p)
+            │ equality cols are key
+            │
+            └── • scan buffer
+                  estimated row count: 10
+                  label: buffer 1
+
+# Test that partial indexes with IS NOT NULL predicates are used for performing
+# FK checks.
+subtest partial_index
+
+statement ok
+CREATE TABLE partial_parent (
+  id INT PRIMARY KEY
+)
+
+statement ok
+CREATE TABLE partial_child (
+  id INT PRIMARY KEY,
+  parent_id INT,
+  CONSTRAINT fk FOREIGN KEY (parent_id) REFERENCES partial_parent(id),
+  INDEX partial_idx (parent_id) WHERE parent_id IS NOT NULL
+)
+
+query T
+EXPLAIN DELETE FROM partial_parent WHERE id = 1
+----
+distribution: local
+·
+• root
+│
+├── • delete
+│   │ from: partial_parent
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • scan
+│             missing stats
+│             table: partial_parent@partial_parent_pkey
+│             spans: [/1 - /1]
+│             locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ table: partial_child@partial_idx (partial index)
+            │ equality: (id) = (parent_id)
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+query T
+EXPLAIN UPDATE partial_parent SET id = 2 WHERE id = 1
+----
+distribution: local
+·
+• root
+│
+├── • update
+│   │ table: partial_parent
+│   │ set: id
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: partial_parent@partial_parent_pkey
+│                 spans: [/1 - /1]
+│                 locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ table: partial_child@partial_idx (partial index)
+            │ equality: (id) = (parent_id)
+            │
+            └── • except all
+                │
+                ├── • scan buffer
+                │     label: buffer 1
+                │
+                └── • scan buffer
+                      label: buffer 1
+
+subtest end
+
+# Foreign keys backed by a unique constraint covering only a subset of the
+# referenced columns (CockroachDB extension; see require_fk_unique_constraint_on_all_columns).
+# The optimizer plans the FK check as a lookup-anti-join with a residual
+# equality filter on the columns not covered by the unique backing. This
+# disqualifies the insert fast path because the lookup is no longer a clean
+# point-get on a unique-index entry.
+subtest subset_unique_fk
+
+statement disable-cf-mutator ok
+CREATE TABLE subset_p (a INT PRIMARY KEY, b INT, c INT)
+
+# FK cols are NOT NULL so the optimizer doesn't add an IS-NOT-NULL filter,
+# which would disqualify the fast path for unrelated reasons. With NOT NULL,
+# the only thing keeping subset_c off the fast path is the residual equality
+# filter on the non-unique-backed (b, c) columns.
+statement disable-cf-mutator ok
+CREATE TABLE subset_c (
+  c INT PRIMARY KEY,
+  a INT NOT NULL, b INT NOT NULL, sc INT NOT NULL,
+  FOREIGN KEY (a, b, sc) REFERENCES subset_p (a, b, c)
+)
+
+# Subset FK insert should NOT use the insert fast path because the FK check
+# requires a residual equality filter on the non-unique-backed columns.
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN INSERT INTO subset_c VALUES (1, 1, 10, 100)
+] WHERE info LIKE '%insert fast path%'
+----
+false
+
+# Verify the plan shape is a lookup-anti-join with a residual filter on the
+# non-unique-backed columns (b, c). The lookup is keyed on the unique col (a).
+query T
+EXPLAIN (VERBOSE) INSERT INTO subset_c VALUES (1, 1, 10, 100)
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: ()
+│
+├── • insert
+│   │ columns: ()
+│   │ estimated row count: 0 (missing stats)
+│   │ into: subset_c(c, a, b, sc)
+│   │
+│   └── • buffer
+│       │ columns: (column1, column2, column3, column4)
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             columns: (column1, column2, column3, column4)
+│             size: 4 columns, 1 row
+│             row 0, expr 0: 1
+│             row 0, expr 1: 1
+│             row 0, expr 2: 10
+│             row 0, expr 3: 100
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │ columns: ()
+        │
+        └── • lookup join (anti)
+            │ columns: (column2, column3, column4)
+            │ estimated row count: 1 (missing stats)
+            │ table: subset_p@subset_p_pkey
+            │ equality: (column2) = (a)
+            │ equality cols are key
+            │ pred: (column3 = b) AND (column4 = c)
+            │ parallel
+            │
+            └── • project
+                │ columns: (column2, column3, column4)
+                │
+                └── • scan buffer
+                      columns: (column1, column2, column3, column4)
+                      estimated row count: 1
+                      label: buffer 1
+
+# Exact-match FKs should still use the insert fast path (regression check). The
+# FK columns are NOT NULL to avoid the IS-NOT-NULL filter that the optimizer
+# inserts for nullable FK cols, which would otherwise disqualify the fast path
+# for unrelated reasons.
+statement disable-cf-mutator ok
+CREATE TABLE exact_p (a INT, b INT, c INT, PRIMARY KEY (a, b, c))
+
+statement disable-cf-mutator ok
+CREATE TABLE exact_c (
+  c INT PRIMARY KEY,
+  a INT NOT NULL, b INT NOT NULL, ec INT NOT NULL,
+  FOREIGN KEY (a, b, ec) REFERENCES exact_p (a, b, c)
+)
+
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN INSERT INTO exact_c VALUES (1, 1, 10, 100)
+] WHERE info LIKE '%insert fast path%'
+----
+true
+
+# Verify the plan uses the insert fast path with FK checks inlined as a
+# uniqueness scan on the parent's PK (no separate lookup-anti-join).
+query T
+EXPLAIN (VERBOSE) INSERT INTO exact_c VALUES (1, 1, 10, 100)
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  columns: ()
+  estimated row count: 0 (missing stats)
+  into: exact_c(c, a, b, ec)
+  auto commit
+  FK check: exact_p@exact_p_pkey
+  size: 4 columns, 1 row
+  row 0, expr 0: 1
+  row 0, expr 1: 1
+  row 0, expr 2: 10
+  row 0, expr 3: 100
+
+# Subset backed by a secondary unique index without STORING. The FK
+# enforcement plan must do a lookup on the unique index AND an additional
+# index-join back to the PK to fetch the un-stored col for the residual
+# equality check. Two KV ops per FK check; still no fast path.
+statement disable-cf-mutator ok
+CREATE TABLE sub_secidx_p (id INT PRIMARY KEY, b INT, c INT, UNIQUE (c))
+
+statement disable-cf-mutator ok
+CREATE TABLE sub_secidx_c (
+  cid INT PRIMARY KEY,
+  b INT NOT NULL, c INT NOT NULL,
+  FOREIGN KEY (b, c) REFERENCES sub_secidx_p (b, c)
+)
+
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN INSERT INTO sub_secidx_c VALUES (1, 10, 100)
+] WHERE info LIKE '%insert fast path%'
+----
+false
+
+# Verify the plan does a lookup on the unique index followed by an index-join
+# to the PK (to fetch b for the residual equality check). The two-stage
+# lookup is the cost STORING(b) would eliminate.
+query T
+EXPLAIN INSERT INTO sub_secidx_c VALUES (1, 10, 100)
+----
+distribution: local
+·
+• root
+│
+├── • insert
+│   │ into: sub_secidx_c(cid, b, c)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 3 columns, 1 row
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: sub_secidx_p@sub_secidx_p_pkey
+            │ equality: (id) = (id)
+            │ equality cols are key
+            │ pred: column2 = b
+            │
+            └── • lookup join (left outer)
+                │ table: sub_secidx_p@sub_secidx_p_c_key
+                │ equality: (column3) = (c)
+                │ equality cols are key
+                │
+                └── • scan buffer
+                      estimated row count: 1
+                      label: buffer 1
+
+# Subset backed by a secondary unique index WITH STORING of the missing FK
+# col. The FK lookup is a single op (the stored b is available from the
+# index entry directly), avoiding the index-join. Still no fast path because
+# the residual filter remains.
+statement disable-cf-mutator ok
+CREATE TABLE sub_storing_p (id INT PRIMARY KEY, b INT, c INT, UNIQUE (c) STORING (b))
+
+statement disable-cf-mutator ok
+CREATE TABLE sub_storing_c (
+  cid INT PRIMARY KEY,
+  b INT NOT NULL, c INT NOT NULL,
+  FOREIGN KEY (b, c) REFERENCES sub_storing_p (b, c)
+)
+
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN INSERT INTO sub_storing_c VALUES (1, 10, 100)
+] WHERE info LIKE '%insert fast path%'
+----
+false
+
+# Verify the plan is a single-stage lookup on the unique index (with b
+# available from STORING) with no index-join back to the PK.
+query T
+EXPLAIN INSERT INTO sub_storing_c VALUES (1, 10, 100)
+----
+distribution: local
+·
+• root
+│
+├── • insert
+│   │ into: sub_storing_c(cid, b, c)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 3 columns, 1 row
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: sub_storing_p@sub_storing_p_c_key
+            │ equality: (column3) = (c)
+            │ equality cols are key
+            │ pred: column2 = b
+            │
+            └── • scan buffer
+                  estimated row count: 1
+                  label: buffer 1
+
+# UPDATE on child setting an FK column also triggers FK enforcement, planned
+# as a lookup-anti-join with residual equality on the non-unique-backed
+# columns. UPDATE has no fast-path equivalent (only INSERT does), so there's
+# no fast-path check to assert; this just documents the plan shape for
+# regression purposes.
+query T
+EXPLAIN (VERBOSE) UPDATE subset_c SET a = 2 WHERE c = 0
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: ()
+│
+├── • update
+│   │ columns: ()
+│   │ estimated row count: 0 (missing stats)
+│   │ table: subset_c
+│   │ set: a
+│   │
+│   └── • buffer
+│       │ columns: (c, a, b, sc, a_new)
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │ columns: (c, a, b, sc, a_new)
+│           │ render a_new: 2
+│           │ render c: c
+│           │ render a: a
+│           │ render b: b
+│           │ render sc: sc
+│           │
+│           └── • scan
+│                 columns: (c, a, b, sc)
+│                 estimated row count: 1 (missing stats)
+│                 table: subset_c@subset_c_pkey
+│                 spans: /0/0
+│                 locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │ columns: ()
+        │
+        └── • lookup join (anti)
+            │ columns: (a_new, b, sc)
+            │ estimated row count: 1 (missing stats)
+            │ table: subset_p@subset_p_pkey
+            │ equality: (a_new) = (a)
+            │ equality cols are key
+            │ pred: (b = b) AND (sc = c)
+            │ parallel
+            │
+            └── • project
+                │ columns: (a_new, b, sc)
+                │
+                └── • scan buffer
+                      columns: (c, a, b, sc, a_new)
+                      estimated row count: 1 (missing stats)
+                      label: buffer 1
+
+subtest end

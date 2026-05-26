@@ -1,0 +1,74 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
+
+go_library(
+    name = "geo",
+    srcs = [
+        "bbox.go",
+        "encode.go",
+        "errors.go",
+        "geo.go",
+        "hilbert.go",
+        "iterator.go",
+        "latlng.go",
+        "parse.go",
+        "polyline.go",
+        "summary.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/geo",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo/geopb",
+        "//pkg/geo/geoprojbase",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/util",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_golang_geo//r1",
+        "@com_github_golang_geo//s1",
+        "@com_github_golang_geo//s2",
+        "@com_github_pierrre_geohash//:geohash",
+        "@com_github_twpayne_go_geom//:go-geom",
+        "@com_github_twpayne_go_geom//encoding/ewkb",
+        "@com_github_twpayne_go_geom//encoding/ewkbhex",
+        "@com_github_twpayne_go_geom//encoding/geojson",
+        "@com_github_twpayne_go_geom//encoding/kml",
+        "@com_github_twpayne_go_geom//encoding/wkb",
+        "@com_github_twpayne_go_geom//encoding/wkbcommon",
+        "@com_github_twpayne_go_geom//encoding/wkbhex",
+        "@com_github_twpayne_go_geom//encoding/wkt",
+    ],
+)
+
+go_test(
+    name = "geo_test",
+    size = "small",
+    srcs = [
+        "bbox_test.go",
+        "encode_test.go",
+        "geo_test.go",
+        "iterator_test.go",
+        "latlng_test.go",
+        "parse_test.go",
+    ],
+    embed = [":geo"],
+    deps = [
+        "//pkg/geo/geographiclib",
+        "//pkg/geo/geopb",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_golang_geo//s2",
+        "@com_github_pierrre_geohash//:geohash",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+        "@com_github_twpayne_go_geom//:go-geom",
+    ],
+)
+
+disallowed_imports_test(
+    "geo",
+    [
+        "//pkg/geo/geographiclib",
+        "//pkg/geo/geoproj",
+    ],
+)

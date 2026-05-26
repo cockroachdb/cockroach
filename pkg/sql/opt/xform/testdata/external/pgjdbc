@@ -1,0 +1,372 @@
+# Reconstructed from:
+# https://github.com/jordanlewis/pgjdbc/blob/462d505f01ec6180b30eaffabe51839dd126b90c/pgjdbc/src/main/java/org/postgresql/jdbc/PgDatabaseMetaData.java#L2391-L2408
+opt
+SELECT
+    NULL AS type_cat,
+    n.nspname AS type_schem,
+    t.typname AS type_name,
+    NULL AS class_name,
+    CASE
+    WHEN t.typtype = 'c' THEN 'STRUCT'
+    ELSE 'DISTINCT'
+    END
+        AS data_type,
+    pg_catalog.obj_description(t.oid, 'pg_type') AS remarks,
+    CASE
+    WHEN t.typtype = 'd'
+    THEN (
+        SELECT
+            CASE
+            WHEN typname = 'pgType' THEN 'sqlType'
+            ELSE 'OTHER'
+            END
+        FROM
+            pg_catalog.pg_type
+        WHERE
+            oid = t.typbasetype
+    )
+    ELSE NULL
+    END
+        AS base_type
+FROM
+    pg_catalog.pg_type AS t, pg_catalog.pg_namespace AS n
+WHERE
+    t.typnamespace = n.oid AND n.nspname != 'pg_catalog';
+----
+project
+ ├── columns: type_cat:73 type_schem:36!null type_name:3!null class_name:73 data_type:74 remarks:136 base_type:137
+ ├── stable
+ ├── fd: ()-->(73)
+ ├── ensure-distinct-on
+ │    ├── columns: t.typname:3!null t.typtype:8 nspname:36!null case:72 description:92 rownum:138!null
+ │    ├── grouping columns: rownum:138!null
+ │    ├── error: "more than one row returned by a subquery used as an expression"
+ │    ├── stable
+ │    ├── key: (138)
+ │    ├── fd: (138)-->(3,8,36,72,92)
+ │    ├── left-join (hash)
+ │    │    ├── columns: t.typname:3!null t.typtype:8 t.typbasetype:27 nspname:36!null pg_catalog.pg_type.oid:40 case:72 description:92 rownum:138!null
+ │    │    ├── stable
+ │    │    ├── fd: (138)-->(3,8,27,36,92)
+ │    │    ├── distinct-on
+ │    │    │    ├── columns: t.typname:3!null t.typtype:8 t.typbasetype:27 nspname:36!null description:92 rownum:138!null
+ │    │    │    ├── grouping columns: rownum:138!null
+ │    │    │    ├── stable
+ │    │    │    ├── key: (138)
+ │    │    │    ├── fd: (138)-->(3,8,27,36,92)
+ │    │    │    ├── left-join (hash)
+ │    │    │    │    ├── columns: t.oid:2!null t.typname:3!null t.typnamespace:4!null t.typtype:8 t.typbasetype:27 n.oid:35!null nspname:36!null objoid:89 classoid:90 description:92 c.oid:94 relname:95 relnamespace:96 n.oid:132 nspname:133 rownum:138!null
+ │    │    │    │    ├── stable
+ │    │    │    │    ├── fd: (138)-->(2-4,8,27,35,36), (4)==(35), (35)==(4), (90)==(94), (94)==(90), (96)==(132), (132)==(96)
+ │    │    │    │    ├── ordinality
+ │    │    │    │    │    ├── columns: t.oid:2!null t.typname:3!null t.typnamespace:4!null t.typtype:8 t.typbasetype:27 n.oid:35!null nspname:36!null rownum:138!null
+ │    │    │    │    │    ├── key: (138)
+ │    │    │    │    │    ├── fd: (138)-->(2-4,8,27,35,36), (4)==(35), (35)==(4)
+ │    │    │    │    │    └── inner-join (hash)
+ │    │    │    │    │         ├── columns: t.oid:2!null t.typname:3!null t.typnamespace:4!null t.typtype:8 t.typbasetype:27 n.oid:35!null nspname:36!null
+ │    │    │    │    │         ├── fd: (4)==(35), (35)==(4)
+ │    │    │    │    │         ├── scan pg_type [as=t]
+ │    │    │    │    │         │    └── columns: t.oid:2!null t.typname:3!null t.typnamespace:4 t.typtype:8 t.typbasetype:27
+ │    │    │    │    │         ├── select
+ │    │    │    │    │         │    ├── columns: n.oid:35 nspname:36!null
+ │    │    │    │    │         │    ├── scan pg_namespace [as=n]
+ │    │    │    │    │         │    │    └── columns: n.oid:35 nspname:36!null
+ │    │    │    │    │         │    └── filters
+ │    │    │    │    │         │         └── nspname:36 != 'pg_catalog' [outer=(36), constraints=(/36: (/NULL - /'pg_catalog') [/e'pg_catalog\x00' - ]; tight)]
+ │    │    │    │    │         └── filters
+ │    │    │    │    │              └── t.typnamespace:4 = n.oid:35 [outer=(4,35), constraints=(/4: (/NULL - ]; /35: (/NULL - ]), fd=(4)==(35), (35)==(4)]
+ │    │    │    │    ├── inner-join (hash)
+ │    │    │    │    │    ├── columns: objoid:89!null classoid:90!null description:92!null c.oid:94!null relname:95!null relnamespace:96!null n.oid:132!null nspname:133!null
+ │    │    │    │    │    ├── stable
+ │    │    │    │    │    ├── fd: ()-->(95,133), (90)==(94), (94)==(90), (96)==(132), (132)==(96)
+ │    │    │    │    │    ├── union-all
+ │    │    │    │    │    │    ├── columns: objoid:89!null classoid:90 description:92!null
+ │    │    │    │    │    │    ├── left columns: cc.objoid:79 compat_classoid:82 cc.description:81
+ │    │    │    │    │    │    ├── right columns: crdb_internal.kv_builtin_function_comments.oid:84 classoid:86 crdb_internal.kv_builtin_function_comments.description:85
+ │    │    │    │    │    │    ├── stable
+ │    │    │    │    │    │    ├── project
+ │    │    │    │    │    │    │    ├── columns: cc.objoid:79!null cc.description:81!null compat_classoid:82!null
+ │    │    │    │    │    │    │    ├── immutable
+ │    │    │    │    │    │    │    └── select
+ │    │    │    │    │    │    │         ├── columns: cc.objoid:79!null cc.description:81!null compat_classoid:82!null objsubid:88!null
+ │    │    │    │    │    │    │         ├── immutable
+ │    │    │    │    │    │    │         ├── fd: ()-->(88)
+ │    │    │    │    │    │    │         ├── project
+ │    │    │    │    │    │    │         │    ├── columns: objsubid:88!null cc.objoid:79!null cc.description:81!null compat_classoid:82!null
+ │    │    │    │    │    │    │         │    ├── immutable
+ │    │    │    │    │    │    │         │    ├── select
+ │    │    │    │    │    │    │         │    │    ├── columns: cc.classoid:78!null cc.objoid:79!null cc.objsubid:80!null cc.description:81!null compat_classoid:82!null
+ │    │    │    │    │    │    │         │    │    ├── scan kv_catalog_comments [as=cc]
+ │    │    │    │    │    │    │         │    │    │    └── columns: cc.classoid:78!null cc.objoid:79!null cc.objsubid:80!null cc.description:81!null compat_classoid:82!null
+ │    │    │    │    │    │    │         │    │    └── filters
+ │    │    │    │    │    │    │         │    │         └── cc.classoid:78 != <vtable-oid> [outer=(78), constraints=(/78: (/NULL - /<vtable-oid>] [/<vtable-oid> - ]; tight)]
+ │    │    │    │    │    │    │         │    └── projections
+ │    │    │    │    │    │    │         │         └── cc.objsubid:80::INT8 [as=objsubid:88, outer=(80), immutable]
+ │    │    │    │    │    │    │         └── filters
+ │    │    │    │    │    │    │              └── objsubid:88 = 0 [outer=(88), constraints=(/88: [/0 - /0]; tight), fd=()-->(88)]
+ │    │    │    │    │    │    └── project
+ │    │    │    │    │    │         ├── columns: classoid:86 crdb_internal.kv_builtin_function_comments.oid:84!null crdb_internal.kv_builtin_function_comments.description:85!null
+ │    │    │    │    │    │         ├── stable
+ │    │    │    │    │    │         ├── fd: ()-->(86)
+ │    │    │    │    │    │         ├── scan kv_builtin_function_comments
+ │    │    │    │    │    │         │    └── columns: crdb_internal.kv_builtin_function_comments.oid:84!null crdb_internal.kv_builtin_function_comments.description:85!null
+ │    │    │    │    │    │         └── projections
+ │    │    │    │    │    │              └── CASE current_setting('pg_dump_compatibility') WHEN 'off' THEN <vtable-oid> ELSE 1255 END [as=classoid:86, stable]
+ │    │    │    │    │    ├── inner-join (hash)
+ │    │    │    │    │    │    ├── columns: c.oid:94!null relname:95!null relnamespace:96!null n.oid:132!null nspname:133!null
+ │    │    │    │    │    │    ├── fd: ()-->(95,133), (96)==(132), (132)==(96)
+ │    │    │    │    │    │    ├── select
+ │    │    │    │    │    │    │    ├── columns: c.oid:94!null relname:95!null relnamespace:96
+ │    │    │    │    │    │    │    ├── fd: ()-->(95)
+ │    │    │    │    │    │    │    ├── scan pg_class [as=c]
+ │    │    │    │    │    │    │    │    └── columns: c.oid:94!null relname:95!null relnamespace:96
+ │    │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │    │         └── relname:95 = 'pg_type' [outer=(95), constraints=(/95: [/'pg_type' - /'pg_type']; tight), fd=()-->(95)]
+ │    │    │    │    │    │    ├── select
+ │    │    │    │    │    │    │    ├── columns: n.oid:132 nspname:133!null
+ │    │    │    │    │    │    │    ├── fd: ()-->(133)
+ │    │    │    │    │    │    │    ├── scan pg_namespace [as=n]
+ │    │    │    │    │    │    │    │    └── columns: n.oid:132 nspname:133!null
+ │    │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │    │         └── nspname:133 = 'pg_catalog' [outer=(133), constraints=(/133: [/'pg_catalog' - /'pg_catalog']; tight), fd=()-->(133)]
+ │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │         └── relnamespace:96 = n.oid:132 [outer=(96,132), constraints=(/96: (/NULL - ]; /132: (/NULL - ]), fd=(96)==(132), (132)==(96)]
+ │    │    │    │    │    └── filters
+ │    │    │    │    │         └── classoid:90 = c.oid:94 [outer=(90,94), constraints=(/90: (/NULL - ]; /94: (/NULL - ]), fd=(90)==(94), (94)==(90)]
+ │    │    │    │    └── filters
+ │    │    │    │         └── objoid:89 = t.oid:2 [outer=(2,89), constraints=(/2: (/NULL - ]; /89: (/NULL - ]), fd=(2)==(89), (89)==(2)]
+ │    │    │    └── aggregations
+ │    │    │         ├── const-agg [as=t.typname:3, outer=(3)]
+ │    │    │         │    └── t.typname:3
+ │    │    │         ├── const-agg [as=t.typtype:8, outer=(8)]
+ │    │    │         │    └── t.typtype:8
+ │    │    │         ├── const-agg [as=t.typbasetype:27, outer=(27)]
+ │    │    │         │    └── t.typbasetype:27
+ │    │    │         ├── const-agg [as=nspname:36, outer=(36)]
+ │    │    │         │    └── nspname:36
+ │    │    │         └── first-agg [as=description:92, outer=(92)]
+ │    │    │              └── description:92
+ │    │    ├── project
+ │    │    │    ├── columns: case:72!null pg_catalog.pg_type.oid:40!null
+ │    │    │    ├── scan pg_type
+ │    │    │    │    └── columns: pg_catalog.pg_type.oid:40!null pg_catalog.pg_type.typname:41!null
+ │    │    │    └── projections
+ │    │    │         └── CASE WHEN pg_catalog.pg_type.typname:41 = 'pgType' THEN 'sqlType' ELSE 'OTHER' END [as=case:72, outer=(41)]
+ │    │    └── filters
+ │    │         └── pg_catalog.pg_type.oid:40 = t.typbasetype:27 [outer=(27,40), constraints=(/27: (/NULL - ]; /40: (/NULL - ]), fd=(27)==(40), (40)==(27)]
+ │    └── aggregations
+ │         ├── const-agg [as=t.typname:3, outer=(3)]
+ │         │    └── t.typname:3
+ │         ├── const-agg [as=t.typtype:8, outer=(8)]
+ │         │    └── t.typtype:8
+ │         ├── const-agg [as=nspname:36, outer=(36)]
+ │         │    └── nspname:36
+ │         ├── const-agg [as=case:72, outer=(72)]
+ │         │    └── case:72
+ │         └── const-agg [as=description:92, outer=(92)]
+ │              └── description:92
+ └── projections
+      ├── NULL [as=type_cat:73]
+      ├── CASE WHEN t.typtype:8 = 'c' THEN 'STRUCT' ELSE 'DISTINCT' END [as=data_type:74, outer=(8)]
+      ├── description:92 [as=remarks:136, outer=(92)]
+      └── CASE WHEN t.typtype:8 = 'd' THEN case:72 ELSE CAST(NULL AS STRING) END [as=base_type:137, outer=(8,72)]
+
+
+# Regression test for #55140. Avoid lookup joins for virtual tables.
+opt
+SELECT
+  *
+FROM
+  (
+    SELECT
+      n.nspname,
+      c.relname,
+      a.attname,
+      a.atttypid,
+      a.attnotnull
+      OR ((t.typtype = 'd') AND t.typnotnull)
+        AS attnotnull,
+      a.atttypmod,
+      a.attlen,
+      t.typtypmod,
+      row_number() OVER (
+        PARTITION BY a.attrelid ORDER BY a.attnum
+      )
+        AS attnum,
+      NULL AS attidentity,
+      pg_get_expr(def.adbin, def.adrelid) AS adsrc,
+      dsc.description,
+      t.typbasetype,
+      t.typtype
+    FROM
+      pg_catalog.pg_namespace AS n
+      JOIN pg_catalog.pg_class AS c ON (c.relnamespace = n.oid)
+      JOIN pg_catalog.pg_attribute AS a ON (a.attrelid = c.oid)
+      JOIN pg_catalog.pg_type AS t ON (a.atttypid = t.oid)
+      LEFT JOIN pg_catalog.pg_attrdef AS def ON
+          (
+            (a.attrelid = def.adrelid)
+            AND (a.attnum = def.adnum)
+          )
+      LEFT JOIN pg_catalog.pg_description AS dsc ON
+          ((c.oid = dsc.objoid) AND (a.attnum = dsc.objsubid))
+      LEFT JOIN pg_catalog.pg_class AS dc ON
+          (
+            (dc.oid = dsc.classoid)
+            AND (dc.relname = 'pg_class')
+          )
+      LEFT JOIN pg_catalog.pg_namespace AS dn ON
+          (
+            (dc.relnamespace = dn.oid)
+            AND (dn.nspname = 'pg_catalog')
+          )
+    WHERE
+      (
+        (
+          (
+            (c.relkind IN ('r', 'p', 'v', 'f', 'm'))
+            AND (a.attnum > 0)
+          )
+          AND (NOT a.attisdropped)
+        )
+        AND (n.nspname LIKE 'public')
+      )
+      AND (c.relname LIKE '%')
+  )
+    AS c
+WHERE
+  true AND (attname LIKE '%')
+ORDER BY
+  nspname, c.relname, attnum;
+----
+sort
+ ├── columns: nspname:3!null relname:8!null attname:46!null atttypid:47!null attnotnull:171 atttypmod:53 attlen:49 typtypmod:99 attnum:170 attidentity:172 adsrc:173 description:126 typbasetype:98 typtype:79
+ ├── stable
+ ├── fd: ()-->(3,172)
+ ├── ordering: +8,+170 opt(3,172) [actual: +8,+170]
+ └── project
+      ├── columns: attnotnull:171 attidentity:172 adsrc:173 n.nspname:3!null c.relname:8!null attname:46!null atttypid:47!null attlen:49 atttypmod:53 typtype:79 typbasetype:98 typtypmod:99 description:126 row_number:170
+      ├── stable
+      ├── fd: ()-->(3,172)
+      ├── select
+      │    ├── columns: n.nspname:3!null c.relname:8!null attrelid:45!null attname:46!null atttypid:47!null attlen:49 attnum:50!null atttypmod:53 a.attnotnull:58 typtype:79 typnotnull:97 typbasetype:98 typtypmod:99 adrelid:107 adbin:109 description:126 row_number:170
+      │    ├── immutable
+      │    ├── fd: ()-->(3)
+      │    ├── window partition=(45) ordering=+50 opt(3,7,45,62)
+      │    │    ├── columns: n.nspname:3!null c.relname:8!null attrelid:45!null attname:46 atttypid:47!null attlen:49 attnum:50!null atttypmod:53 a.attnotnull:58 typtype:79 typnotnull:97 typbasetype:98 typtypmod:99 adrelid:107 adbin:109 description:126 row_number:170
+      │    │    ├── immutable
+      │    │    ├── fd: ()-->(3)
+      │    │    ├── project
+      │    │    │    ├── columns: description:126 n.nspname:3!null c.relname:8!null attrelid:45!null attname:46 atttypid:47!null attlen:49 attnum:50!null atttypmod:53 a.attnotnull:58 typtype:79 typnotnull:97 typbasetype:98 typtypmod:99 adrelid:107 adbin:109
+      │    │    │    ├── immutable
+      │    │    │    ├── fd: ()-->(3)
+      │    │    │    ├── inner-join (hash)
+      │    │    │    │    ├── columns: n.oid:2!null n.nspname:3!null c.oid:7!null c.relname:8!null c.relnamespace:9!null c.relkind:25!null attrelid:45!null attname:46 atttypid:47!null attlen:49 attnum:50!null atttypmod:53 a.attnotnull:58 attisdropped:62!null t.oid:73!null typtype:79 typnotnull:97 typbasetype:98 typtypmod:99 adrelid:107 adnum:108 adbin:109 cc.objoid:113 cc.description:115 compat_classoid:116 objsubid:122 dc.oid:128 dc.relname:129 dc.relnamespace:130 dn.oid:166 dn.nspname:167
+      │    │    │    │    ├── immutable
+      │    │    │    │    ├── fd: ()-->(3,62), (2)==(9), (9)==(2), (7)==(45), (45)==(7), (47)==(73), (73)==(47)
+      │    │    │    │    ├── scan pg_type [as=t]
+      │    │    │    │    │    └── columns: t.oid:73!null typtype:79 typnotnull:97 typbasetype:98 typtypmod:99
+      │    │    │    │    ├── left-join (hash)
+      │    │    │    │    │    ├── columns: n.oid:2!null n.nspname:3!null c.oid:7!null c.relname:8!null c.relnamespace:9!null c.relkind:25!null attrelid:45!null attname:46 atttypid:47 attlen:49 attnum:50!null atttypmod:53 a.attnotnull:58 attisdropped:62!null adrelid:107 adnum:108 adbin:109 cc.objoid:113 cc.description:115 compat_classoid:116 objsubid:122 dc.oid:128 dc.relname:129 dc.relnamespace:130 dn.oid:166 dn.nspname:167
+      │    │    │    │    │    ├── immutable
+      │    │    │    │    │    ├── fd: ()-->(3,62), (7)==(45), (45)==(7), (2)==(9), (9)==(2)
+      │    │    │    │    │    ├── right-join (hash)
+      │    │    │    │    │    │    ├── columns: n.oid:2!null n.nspname:3!null c.oid:7!null c.relname:8!null c.relnamespace:9!null c.relkind:25!null attrelid:45!null attname:46 atttypid:47 attlen:49 attnum:50!null atttypmod:53 a.attnotnull:58 attisdropped:62!null adrelid:107 adnum:108 adbin:109 cc.objoid:113 cc.description:115 compat_classoid:116 objsubid:122
+      │    │    │    │    │    │    ├── immutable
+      │    │    │    │    │    │    ├── fd: ()-->(3,62), (7)==(45), (45)==(7), (2)==(9), (9)==(2)
+      │    │    │    │    │    │    ├── select
+      │    │    │    │    │    │    │    ├── columns: adrelid:107!null adnum:108!null adbin:109
+      │    │    │    │    │    │    │    ├── scan pg_attrdef [as=def]
+      │    │    │    │    │    │    │    │    └── columns: adrelid:107!null adnum:108 adbin:109
+      │    │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │    │         └── adnum:108 > 0 [outer=(108), constraints=(/108: [/1 - ]; tight)]
+      │    │    │    │    │    │    ├── right-join (hash)
+      │    │    │    │    │    │    │    ├── columns: n.oid:2!null n.nspname:3!null c.oid:7!null c.relname:8!null c.relnamespace:9!null c.relkind:25!null attrelid:45!null attname:46 atttypid:47 attlen:49 attnum:50!null atttypmod:53 a.attnotnull:58 attisdropped:62!null cc.objoid:113 cc.description:115 compat_classoid:116 objsubid:122
+      │    │    │    │    │    │    │    ├── immutable
+      │    │    │    │    │    │    │    ├── fd: ()-->(3,62), (7)==(45), (45)==(7), (2)==(9), (9)==(2)
+      │    │    │    │    │    │    │    ├── select
+      │    │    │    │    │    │    │    │    ├── columns: cc.objoid:113!null cc.description:115!null compat_classoid:116!null objsubid:122!null
+      │    │    │    │    │    │    │    │    ├── immutable
+      │    │    │    │    │    │    │    │    ├── project
+      │    │    │    │    │    │    │    │    │    ├── columns: objsubid:122!null cc.objoid:113!null cc.description:115!null compat_classoid:116!null
+      │    │    │    │    │    │    │    │    │    ├── immutable
+      │    │    │    │    │    │    │    │    │    ├── select
+      │    │    │    │    │    │    │    │    │    │    ├── columns: cc.classoid:112!null cc.objoid:113!null cc.objsubid:114!null cc.description:115!null compat_classoid:116!null
+      │    │    │    │    │    │    │    │    │    │    ├── scan kv_catalog_comments [as=cc]
+      │    │    │    │    │    │    │    │    │    │    │    └── columns: cc.classoid:112!null cc.objoid:113!null cc.objsubid:114!null cc.description:115!null compat_classoid:116!null
+      │    │    │    │    │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │    │    │    │    │         └── cc.classoid:112 != <vtable-oid> [outer=(112), constraints=(/112: (/NULL - /<vtable-oid>] [/<vtable-oid> - ]; tight)]
+      │    │    │    │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │    │    │    │         └── cc.objsubid:114::INT8 [as=objsubid:122, outer=(114), immutable]
+      │    │    │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │    │    │         └── objsubid:122 > 0 [outer=(122), constraints=(/122: [/1 - ]; tight)]
+      │    │    │    │    │    │    │    ├── inner-join (hash)
+      │    │    │    │    │    │    │    │    ├── columns: n.oid:2!null n.nspname:3!null c.oid:7!null c.relname:8!null c.relnamespace:9!null c.relkind:25!null attrelid:45!null attname:46 atttypid:47 attlen:49 attnum:50!null atttypmod:53 a.attnotnull:58 attisdropped:62!null
+      │    │    │    │    │    │    │    │    ├── fd: ()-->(3,62), (2)==(9), (9)==(2), (7)==(45), (45)==(7)
+      │    │    │    │    │    │    │    │    ├── select
+      │    │    │    │    │    │    │    │    │    ├── columns: attrelid:45!null attname:46 atttypid:47 attlen:49 attnum:50!null atttypmod:53 a.attnotnull:58 attisdropped:62!null
+      │    │    │    │    │    │    │    │    │    ├── fd: ()-->(62)
+      │    │    │    │    │    │    │    │    │    ├── scan pg_attribute [as=a]
+      │    │    │    │    │    │    │    │    │    │    └── columns: attrelid:45!null attname:46 atttypid:47 attlen:49 attnum:50 atttypmod:53 a.attnotnull:58 attisdropped:62
+      │    │    │    │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │    │    │    │         ├── attnum:50 > 0 [outer=(50), constraints=(/50: [/1 - ]; tight)]
+      │    │    │    │    │    │    │    │    │         └── NOT attisdropped:62 [outer=(62), constraints=(/62: [/false - /false]; tight), fd=()-->(62)]
+      │    │    │    │    │    │    │    │    ├── inner-join (hash)
+      │    │    │    │    │    │    │    │    │    ├── columns: n.oid:2!null n.nspname:3!null c.oid:7!null c.relname:8!null c.relnamespace:9!null c.relkind:25!null
+      │    │    │    │    │    │    │    │    │    ├── fd: ()-->(3), (2)==(9), (9)==(2)
+      │    │    │    │    │    │    │    │    │    ├── select
+      │    │    │    │    │    │    │    │    │    │    ├── columns: c.oid:7!null c.relname:8!null c.relnamespace:9 c.relkind:25!null
+      │    │    │    │    │    │    │    │    │    │    ├── scan pg_class [as=c]
+      │    │    │    │    │    │    │    │    │    │    │    └── columns: c.oid:7!null c.relname:8!null c.relnamespace:9 c.relkind:25
+      │    │    │    │    │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │    │    │    │    │         └── c.relkind:25 IN ('f', 'm', 'p', 'r', 'v') [outer=(25), constraints=(/25: [/'f' - /'f'] [/'m' - /'m'] [/'p' - /'p'] [/'r' - /'r'] [/'v' - /'v']; tight)]
+      │    │    │    │    │    │    │    │    │    ├── select
+      │    │    │    │    │    │    │    │    │    │    ├── columns: n.oid:2 n.nspname:3!null
+      │    │    │    │    │    │    │    │    │    │    ├── fd: ()-->(3)
+      │    │    │    │    │    │    │    │    │    │    ├── scan pg_namespace [as=n]
+      │    │    │    │    │    │    │    │    │    │    │    └── columns: n.oid:2 n.nspname:3!null
+      │    │    │    │    │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │    │    │    │    │         └── n.nspname:3 LIKE 'public' [outer=(3), constraints=(/3: [/'public' - /'public']; tight), fd=()-->(3)]
+      │    │    │    │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │    │    │    │         └── c.relnamespace:9 = n.oid:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+      │    │    │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │    │    │         └── attrelid:45 = c.oid:7 [outer=(7,45), constraints=(/7: (/NULL - ]; /45: (/NULL - ]), fd=(7)==(45), (45)==(7)]
+      │    │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │    │         ├── c.oid:7 = cc.objoid:113 [outer=(7,113), constraints=(/7: (/NULL - ]; /113: (/NULL - ]), fd=(7)==(113), (113)==(7)]
+      │    │    │    │    │    │    │         └── attnum:50 = objsubid:122 [outer=(50,122), constraints=(/50: (/NULL - ]; /122: (/NULL - ]), fd=(50)==(122), (122)==(50)]
+      │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │         ├── attrelid:45 = adrelid:107 [outer=(45,107), constraints=(/45: (/NULL - ]; /107: (/NULL - ]), fd=(45)==(107), (107)==(45)]
+      │    │    │    │    │    │         └── attnum:50 = adnum:108 [outer=(50,108), constraints=(/50: (/NULL - ]; /108: (/NULL - ]), fd=(50)==(108), (108)==(50)]
+      │    │    │    │    │    ├── left-join (hash)
+      │    │    │    │    │    │    ├── columns: dc.oid:128!null dc.relname:129!null dc.relnamespace:130 dn.oid:166 dn.nspname:167
+      │    │    │    │    │    │    ├── fd: ()-->(129)
+      │    │    │    │    │    │    ├── select
+      │    │    │    │    │    │    │    ├── columns: dc.oid:128!null dc.relname:129!null dc.relnamespace:130
+      │    │    │    │    │    │    │    ├── fd: ()-->(129)
+      │    │    │    │    │    │    │    ├── scan pg_class [as=dc]
+      │    │    │    │    │    │    │    │    └── columns: dc.oid:128!null dc.relname:129!null dc.relnamespace:130
+      │    │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │    │         └── dc.relname:129 = 'pg_class' [outer=(129), constraints=(/129: [/'pg_class' - /'pg_class']; tight), fd=()-->(129)]
+      │    │    │    │    │    │    ├── select
+      │    │    │    │    │    │    │    ├── columns: dn.oid:166 dn.nspname:167!null
+      │    │    │    │    │    │    │    ├── fd: ()-->(167)
+      │    │    │    │    │    │    │    ├── scan pg_namespace [as=dn]
+      │    │    │    │    │    │    │    │    └── columns: dn.oid:166 dn.nspname:167!null
+      │    │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │    │         └── dn.nspname:167 = 'pg_catalog' [outer=(167), constraints=(/167: [/'pg_catalog' - /'pg_catalog']; tight), fd=()-->(167)]
+      │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │         └── dc.relnamespace:130 = dn.oid:166 [outer=(130,166), constraints=(/130: (/NULL - ]; /166: (/NULL - ]), fd=(130)==(166), (166)==(130)]
+      │    │    │    │    │    └── filters
+      │    │    │    │    │         └── dc.oid:128 = compat_classoid:116 [outer=(116,128), constraints=(/116: (/NULL - ]; /128: (/NULL - ]), fd=(116)==(128), (128)==(116)]
+      │    │    │    │    └── filters
+      │    │    │    │         └── atttypid:47 = t.oid:73 [outer=(47,73), constraints=(/47: (/NULL - ]; /73: (/NULL - ]), fd=(47)==(73), (73)==(47)]
+      │    │    │    └── projections
+      │    │    │         └── cc.description:115 [as=description:126, outer=(115)]
+      │    │    └── windows
+      │    │         └── row-number [as=row_number:170]
+      │    └── filters
+      │         └── attname:46 IS NOT NULL [outer=(46), constraints=(/46: (/NULL - ]; tight)]
+      └── projections
+           ├── a.attnotnull:58 OR ((typtype:79 = 'd') AND typnotnull:97) [as=attnotnull:171, outer=(58,79,97)]
+           ├── NULL [as=attidentity:172]
+           └── pg_get_expr(adbin:109, adrelid:107) [as=adsrc:173, outer=(107,109), stable]

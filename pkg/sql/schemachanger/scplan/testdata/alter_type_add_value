@@ -1,0 +1,64 @@
+setup
+CREATE TYPE defaultdb.salmon AS ENUM('sockeye', 'king');
+----
+
+ops
+ALTER TYPE defaultdb.salmon ADD VALUE 'atlantic'
+----
+StatementPhase stage 1 of 1 with 1 MutationType op
+  transitions:
+    [[EnumTypeValue:{DescID: 104, Name: atlantic}, PUBLIC], ABSENT] -> WRITE_ONLY
+  ops:
+    *scop.AddEnumTypeValue
+      LogicalRepresentation: atlantic
+      PhysicalRepresentation:
+      - 192
+      TypeID: 104
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[EnumTypeValue:{DescID: 104, Name: atlantic}, PUBLIC], WRITE_ONLY] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 3 MutationType ops
+  transitions:
+    [[EnumTypeValue:{DescID: 104, Name: atlantic}, PUBLIC], ABSENT] -> WRITE_ONLY
+  ops:
+    *scop.AddEnumTypeValue
+      LogicalRepresentation: atlantic
+      PhysicalRepresentation:
+      - 192
+      TypeID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
+      Initialize: true
+    *scop.CreateSchemaChangerJob
+      Authorization:
+        AppName: $ internal-test
+        UserName: root
+      DescriptorIDs:
+      - 104
+      JobID: 1
+      NonCancelable: true
+      RunningStatus: 'Pending: Updating schema metadata (1 operation) — PostCommitNonRevertible phase (stage 1 of 1).'
+      Statements:
+      - statement: ALTER TYPE defaultdb.salmon ADD VALUE 'atlantic'
+        redactedstatement: ALTER TYPE defaultdb.public.salmon ADD VALUE ‹'atlantic'›
+        statementtag: ALTER TYPE
+PostCommitNonRevertiblePhase stage 1 of 1 with 3 MutationType ops
+  transitions:
+    [[EnumTypeValue:{DescID: 104, Name: atlantic}, PUBLIC], WRITE_ONLY] -> PUBLIC
+  ops:
+    *scop.PromoteEnumTypeValue
+      LogicalRepresentation: atlantic
+      PhysicalRepresentation:
+      - 192
+      TypeID: 104
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 104
+      JobID: 1
+    *scop.UpdateSchemaChangerJob
+      DescriptorIDsToRemove:
+      - 104
+      IsNonCancelable: true
+      JobID: 1

@@ -1,0 +1,320 @@
+# Initialize a range with three replicas, none of which have send tokens.
+init regular_init=0 elastic_init=0
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=1
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate next=1
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate next=1
+----
+r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
+t1/s1: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+
+# Append an entry that is not subject to AC.
+raft_event pull-mode
+range_id=1
+  entries
+    term=1 index=1 pri=None size=1MiB
+----
+t1/s1: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+
+# Since it needs no tokens, it is sent, even though there are no tokens
+# available.
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+++++
+(n2,s2):2: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+++++
+MsgApps sent in pull mode:
+ to: 2, lowPri: false entries: [1]
+ to: 3, lowPri: false entries: [1]
+++++
+
+# Make replica 3 fall behind, so it has a send-queue.
+set_replicas pull-mode
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=4
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=2
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate next=2
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate next=1
+----
+r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
+
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+++++
+(n2,s2):2: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,1) send_queue=[1,2) precise_q_size=+0 B watching-for-tokens
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+++++
+
+# Give s3 10KiB of tokens. 4KiB are immediately deducted.
+adjust_tokens send
+  store_id=3 pri=HighPri tokens=10KiB
+----
+t1/s1: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+10 KiB/+16 MiB ela=+6.0 KiB/+8.0 MiB
+
+# Note the deducted value of 4KiB. Replica 3 is waiting for a scheduler event.
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+++++
+(n2,s2):2: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,1) send_queue=[1,2) precise_q_size=+0 B deducted=+4.0 KiB
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+++++
+schedule-controller-event-count: 1
+scheduled-replicas: 3
+
+# Scheduler event. Replica 3 sends the entry that was not subject to AC, and
+# returns 4KiB.
+handle_scheduler_event range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+++++
+(n2,s2):2: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+++++
+MsgApps sent in pull mode:
+ to: 3, lowPri: true entries: [1]
+++++
+schedule-controller-event-count: 1
+
+# s3 again has 10KiB of send tokens.
+adjust_tokens send
+  store_id=2 pri=HighPri tokens=0
+----
+t1/s1: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+10 KiB/+16 MiB ela=+10 KiB/+8.0 MiB
+
+# Append two more entries, the second of which is not subject to AC.
+raft_event pull-mode
+range_id=1
+  entries
+    term=1 index=2 pri=NormalPri size=1MiB
+    term=1 index=3 pri=None size=1MiB
+----
+t1/s1: eval reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+t1/s3: eval reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=-1014 KiB/+16 MiB ela=-1014 KiB/+8.0 MiB
+
+# Replica 2 forms a send-queue. It has precise stats for all the entries in
+# the send-queue.
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,4) (3.0 MiB) send_queue=[4,4) precise_q_size=+0 B
+eval deducted: reg=+1.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=2  tokens=1048576
+++++
+(n2,s2):2: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,4) precise_q_size=+1.0 MiB watching-for-tokens
+eval deducted: reg=+0 B ela=+1.0 MiB
+eval original in send-q: reg=+1.0 MiB ela=+0 B
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,4) (3.0 MiB) send_queue=[4,4) precise_q_size=+0 B
+eval deducted: reg=+1.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=2  tokens=1048576
+++++
+MsgApps sent in pull mode:
+ to: 3, lowPri: false entries: [2 3]
+++++
+schedule-controller-event-count: 1
+
+# s1 and s3 had 1MiB of tokens deducted since the second entry was not subject
+# to AC.
+adjust_tokens send
+  store_id=2 pri=HighPri tokens=0
+----
+t1/s1: eval reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+t1/s3: eval reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=-1014 KiB/+16 MiB ela=-1014 KiB/+8.0 MiB
+
+# Give s2 10KiB of send tokens. The elastic send tokens are immediately
+# deducted, to service the send-queue.
+adjust_tokens send
+  store_id=2 pri=HighPri tokens=10KiB
+----
+t1/s1: eval reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=+10 KiB/+16 MiB ela=+0 B/+8.0 MiB
+t1/s3: eval reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=-1014 KiB/+16 MiB ela=-1014 KiB/+8.0 MiB
+
+# Replica 2 has 10KiB of send tokens and is waiting for a scheduler event.
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,4) (3.0 MiB) send_queue=[4,4) precise_q_size=+0 B
+eval deducted: reg=+1.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=2  tokens=1048576
+++++
+(n2,s2):2: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,4) precise_q_size=+1.0 MiB deducted=+10 KiB
+eval deducted: reg=+0 B ela=+1.0 MiB
+eval original in send-q: reg=+1.0 MiB ela=+0 B
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,4) (3.0 MiB) send_queue=[4,4) precise_q_size=+0 B
+eval deducted: reg=+1.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=2  tokens=1048576
+++++
+schedule-controller-event-count: 2
+scheduled-replicas: 2
+
+# Scheduler event. Replica 2 sends the first entry that needed 1MiB of tokens.
+# The second entry, that needs 0 tokens, is still queued. The code makes a
+# deliberate choice to wait for non-zero tokens even though the send-queue is
+# only composed of entries that need 0 tokens.
+handle_scheduler_event range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,4) (3.0 MiB) send_queue=[4,4) precise_q_size=+0 B
+eval deducted: reg=+1.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=2  tokens=1048576
+++++
+(n2,s2):2: state=replicate closed=false inflight=[1,3) (2.0 MiB) send_queue=[3,4) precise_q_size=+0 B watching-for-tokens
+eval deducted: reg=+0 B ela=+1.0 MiB
+eval original in send-q: reg=+0 B ela=+0 B
+LowPri:
+  term=1 index=2  tokens=1048576
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,4) (3.0 MiB) send_queue=[4,4) precise_q_size=+0 B
+eval deducted: reg=+1.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=2  tokens=1048576
+++++
+MsgApps sent in pull mode:
+ to: 2, lowPri: true entries: [2]
+++++
+schedule-controller-event-count: 2
+
+# Add some tokens to s2, so it has positive tokens. 4KiB of tokens are
+# immediately deducted, since that is the minimum we deduct.
+adjust_tokens send
+  store_id=2 pri=HighPri tokens=1MiB
+----
+t1/s1: eval reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=+1.0 MiB/+16 MiB ela=+6.0 KiB/+8.0 MiB
+t1/s3: eval reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=-1014 KiB/+16 MiB ela=-1014 KiB/+8.0 MiB
+
+# Replica 2 is waiting for a scheduler event.
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,4) (3.0 MiB) send_queue=[4,4) precise_q_size=+0 B
+eval deducted: reg=+1.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=2  tokens=1048576
+++++
+(n2,s2):2: state=replicate closed=false inflight=[1,3) (2.0 MiB) send_queue=[3,4) precise_q_size=+0 B deducted=+4.0 KiB
+eval deducted: reg=+0 B ela=+1.0 MiB
+eval original in send-q: reg=+0 B ela=+0 B
+LowPri:
+  term=1 index=2  tokens=1048576
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,4) (3.0 MiB) send_queue=[4,4) precise_q_size=+0 B
+eval deducted: reg=+1.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=2  tokens=1048576
+++++
+schedule-controller-event-count: 3
+scheduled-replicas: 2
+
+# Scheduler event. Replica 2 sends the entry that is not subject to AC and
+# returns the 4KiB of tokens it deducted.
+handle_scheduler_event range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,4) (3.0 MiB) send_queue=[4,4) precise_q_size=+0 B
+eval deducted: reg=+1.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=2  tokens=1048576
+++++
+(n2,s2):2: state=replicate closed=false inflight=[1,4) (3.0 MiB) send_queue=[4,4) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+1.0 MiB
+eval original in send-q: reg=+0 B ela=+0 B
+LowPri:
+  term=1 index=2  tokens=1048576
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,4) (3.0 MiB) send_queue=[4,4) precise_q_size=+0 B
+eval deducted: reg=+1.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=2  tokens=1048576
+++++
+MsgApps sent in pull mode:
+ to: 2, lowPri: true entries: [3]
+++++
+schedule-controller-event-count: 3
+
+adjust_tokens send
+  store_id=2 pri=HighPri tokens=0
+----
+t1/s1: eval reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=+1.0 MiB/+16 MiB ela=+10 KiB/+8.0 MiB
+t1/s3: eval reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=-1014 KiB/+16 MiB ela=-1014 KiB/+8.0 MiB

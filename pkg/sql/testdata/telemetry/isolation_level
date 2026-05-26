@@ -1,0 +1,184 @@
+exec
+SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = false
+----
+
+exec
+SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = false
+----
+
+feature-list
+sql.txn.isolation.*
+----
+
+feature-usage
+SET default_transaction_isolation = 'read uncommitted'
+----
+sql.txn.isolation.upgraded_from.read_uncommitted
+
+feature-usage
+SET default_transaction_isolation = 'read committed'
+----
+sql.txn.isolation.upgraded_from.read_committed
+
+feature-usage
+SET default_transaction_isolation = 'repeatable read'
+----
+sql.txn.isolation.upgraded_from.repeatable_read
+
+feature-usage
+SET default_transaction_isolation = 'snapshot'
+----
+sql.txn.isolation.upgraded_from.snapshot
+
+feature-usage
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ UNCOMMITTED
+----
+sql.txn.isolation.upgraded_from.read_uncommitted
+
+feature-usage
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+----
+sql.txn.isolation.upgraded_from.read_committed
+
+feature-usage
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL REPEATABLE READ
+----
+sql.txn.isolation.upgraded_from.repeatable_read
+
+feature-usage
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SNAPSHOT
+----
+sql.txn.isolation.upgraded_from.snapshot
+
+feature-usage
+BEGIN TRANSACTION ISOLATION LEVEL READ UNCOMMITTED; COMMIT
+----
+sql.txn.isolation.upgraded_from.read_uncommitted
+
+feature-usage
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED; COMMIT
+----
+sql.txn.isolation.upgraded_from.read_committed
+
+feature-usage
+BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ; COMMIT
+----
+sql.txn.isolation.upgraded_from.repeatable_read
+
+feature-usage
+BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT; COMMIT
+----
+sql.txn.isolation.upgraded_from.snapshot
+
+feature-usage
+BEGIN; SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED; COMMIT
+----
+sql.txn.isolation.upgraded_from.read_uncommitted
+
+feature-usage
+BEGIN; SET TRANSACTION ISOLATION LEVEL READ COMMITTED; COMMIT
+----
+sql.txn.isolation.upgraded_from.read_committed
+
+feature-usage
+BEGIN; SET TRANSACTION ISOLATION LEVEL REPEATABLE READ; COMMIT
+----
+sql.txn.isolation.upgraded_from.repeatable_read
+
+feature-usage
+BEGIN; SET TRANSACTION ISOLATION LEVEL SNAPSHOT; COMMIT
+----
+sql.txn.isolation.upgraded_from.snapshot
+
+exec
+SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true
+----
+
+exec
+SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = true
+----
+
+feature-usage
+SET default_transaction_isolation = 'read uncommitted'
+----
+sql.txn.isolation.upgraded_from.read_uncommitted
+
+feature-usage
+SET default_transaction_isolation = 'read committed'
+----
+sql.txn.isolation.executed_at.read_committed
+
+feature-usage
+SET default_transaction_isolation = 'repeatable read'
+----
+sql.txn.isolation.executed_at.read_committed
+
+feature-usage
+SET default_transaction_isolation = 'snapshot'
+----
+sql.txn.isolation.executed_at.snapshot
+
+feature-usage
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ UNCOMMITTED
+----
+sql.txn.isolation.executed_at.snapshot
+sql.txn.isolation.upgraded_from.read_uncommitted
+
+feature-usage
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+----
+sql.txn.isolation.executed_at.read_committed
+
+feature-usage
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL REPEATABLE READ
+----
+sql.txn.isolation.executed_at.read_committed
+
+feature-usage
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SNAPSHOT
+----
+sql.txn.isolation.executed_at.snapshot
+
+feature-usage
+BEGIN TRANSACTION ISOLATION LEVEL READ UNCOMMITTED; COMMIT
+----
+sql.txn.isolation.executed_at.read_committed
+sql.txn.isolation.upgraded_from.read_uncommitted
+
+feature-usage
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED; COMMIT
+----
+sql.txn.isolation.executed_at.read_committed
+
+feature-usage
+BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ; COMMIT
+----
+sql.txn.isolation.executed_at.snapshot
+
+feature-usage
+BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT; COMMIT
+----
+sql.txn.isolation.executed_at.snapshot
+
+feature-usage
+BEGIN; SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED; COMMIT
+----
+sql.txn.isolation.executed_at.read_committed
+sql.txn.isolation.executed_at.snapshot
+sql.txn.isolation.upgraded_from.read_uncommitted
+
+feature-usage
+BEGIN; SET TRANSACTION ISOLATION LEVEL READ COMMITTED; COMMIT
+----
+sql.txn.isolation.executed_at.read_committed
+sql.txn.isolation.executed_at.snapshot
+
+feature-usage
+BEGIN; SET TRANSACTION ISOLATION LEVEL REPEATABLE READ; COMMIT
+----
+sql.txn.isolation.executed_at.snapshot
+
+feature-usage
+BEGIN; SET TRANSACTION ISOLATION LEVEL SNAPSHOT; COMMIT
+----
+sql.txn.isolation.executed_at.snapshot

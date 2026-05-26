@@ -1,0 +1,26 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "multitenant",
+    srcs = [
+        "constants.go",
+        "cost_controller.go",
+        "doc.go",
+        "tenant_config.go",
+        "tenant_usage.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/multitenant",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/kv/kvpb",
+        "//pkg/multitenant/tenantcostmodel",
+        "//pkg/roachpb",
+        "//pkg/settings",
+        "//pkg/sql/isql",
+        "//pkg/sql/sem/catconstants",
+        "//pkg/sql/sqlliveness",
+        "//pkg/util/metric",
+        "//pkg/util/stop",
+    ],
+)

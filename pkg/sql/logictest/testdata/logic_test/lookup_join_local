@@ -1,0 +1,42 @@
+# LogicTest: local !metamorphic-batch-sizes
+
+skip under race
+
+# This test verifies that the row container used by the join reader spills to
+# disk in order to make room for the non-spillable internal state of the
+# processor.
+
+# Lower the workmem limit so that less data needs to be inserted. The join
+# reader overrides it to be at least 8MiB, so we cannot go lower than that.
+statement ok
+SET distsql_workmem = '8MiB';
+
+# Populate two tables such that there will be very large input:output lookup
+# ratio.
+statement ok
+CREATE TABLE small (n INT PRIMARY KEY);
+INSERT INTO small SELECT generate_series(0, 6);
+CREATE TABLE large (n INT, v STRING, INDEX (n) STORING (v));
+
+# The data set has been carefully constructed so that the memory limit in the
+# join reader is reached when accounting for some internal state and not when
+# adding looked up rows into the row container.
+statement ok
+INSERT INTO large SELECT g % 7, repeat('a', 52) FROM generate_series(0, 69999) as g;
+
+# Read from the small table and perform the lookup join into the large table.
+# We want to make sure that the query succeeds and doesn't run into "budget
+# exceeded" error - the row container will have to spill to disk.
+query II
+SELECT small.n, sum_int(length(large.v)) FROM small
+INNER LOOKUP JOIN large ON small.n = large.n
+GROUP BY small.n
+ORDER BY small.n
+----
+0  520000
+1  520000
+2  520000
+3  520000
+4  520000
+5  520000
+6  520000

@@ -1,0 +1,61 @@
+# Overflow
+
+eval
+0:::int * 0:::int
+----
+0
+
+eval
+0:::int * 1:::int
+----
+0
+
+eval
+1:::int * 0:::int
+----
+0
+
+eval
+1:::int * 1:::int
+----
+1
+
+eval
+4611686018427387904:::int * 1:::int
+----
+4611686018427387904
+
+eval
+-4611686018427387905:::int * 1:::int
+----
+-4611686018427387905
+
+# Although int64 can express this value, using it like this produces an
+# error in Postgres.
+eval
+-9223372036854775808:::int8
+----
+numeric constant out of int64 range
+
+eval
+9223372036854775808:::int8
+----
+numeric constant out of int64 range
+
+eval
+-9223372036854775807:::int8
+----
+-9223372036854775807
+
+eval
+9223372036854775807:::int8
+----
+9223372036854775807
+
+# We would expect that this expression has the same result as
+# -9223372036854775808:::int8, but in both Postgres and Cockroach it
+# is valid.
+eval
+-9223372036854775807:::int8 - 1
+----
+-9223372036854775808

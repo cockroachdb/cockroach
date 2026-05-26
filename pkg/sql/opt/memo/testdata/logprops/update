@@ -1,0 +1,323 @@
+exec-ddl
+CREATE TABLE abcde (
+    a INT NOT NULL,
+    b INT,
+    c INT NOT NULL DEFAULT (10),
+    d INT AS (b + c + 1) STORED,
+    "e:write-only" INT NOT NULL
+)
+----
+
+exec-ddl
+CREATE TABLE xyz (
+    x TEXT PRIMARY KEY,
+    y INT8 NOT NULL,
+    z FLOAT8
+)
+----
+
+# Properties with no RETURNING clause.
+build
+UPDATE abcde SET b=10 WHERE a=1
+----
+update abcde
+ ├── columns: <none>
+ ├── fetch columns: a:9(int) b:10(int) c:11(int) d:12(int) rowid:13(int) e:14(int)
+ ├── update-mapping:
+ │    ├── b_new:17 => b:2
+ │    ├── d_comp:19 => d:4
+ │    └── e_default:18 => e:6
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: d_comp:19(int!null) a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid) b_new:17(int!null) e_default:18(int!null)
+      ├── immutable
+      ├── key: (13)
+      ├── fd: ()-->(9,17,18), (13)-->(10-12,14-16), (10,11)-->(12), (11)-->(19)
+      ├── prune: (9-19)
+      ├── interesting orderings: (+13 opt(9,17,18))
+      ├── project
+      │    ├── columns: e_default:18(int!null) a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid) b_new:17(int!null)
+      │    ├── key: (13)
+      │    ├── fd: ()-->(9,17,18), (13)-->(10-12,14-16), (10,11)-->(12)
+      │    ├── prune: (9-18)
+      │    ├── interesting orderings: (+13 opt(9,17,18))
+      │    ├── project
+      │    │    ├── columns: b_new:17(int!null) a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid)
+      │    │    ├── key: (13)
+      │    │    ├── fd: ()-->(9,17), (13)-->(10-12,14-16), (10,11)-->(12)
+      │    │    ├── prune: (9-17)
+      │    │    ├── interesting orderings: (+13 opt(9,17))
+      │    │    ├── select
+      │    │    │    ├── columns: a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid)
+      │    │    │    ├── key: (13)
+      │    │    │    ├── fd: ()-->(9), (13)-->(10-12,14-16), (10,11)-->(12)
+      │    │    │    ├── prune: (10-16)
+      │    │    │    ├── interesting orderings: (+13 opt(9))
+      │    │    │    ├── scan abcde
+      │    │    │    │    ├── columns: a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid)
+      │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    └── d:12
+      │    │    │    │    │         └── plus [type=int]
+      │    │    │    │    │              ├── plus [type=int]
+      │    │    │    │    │              │    ├── variable: b:10 [type=int]
+      │    │    │    │    │              │    └── variable: c:11 [type=int]
+      │    │    │    │    │              └── const: 1 [type=int]
+      │    │    │    │    ├── flags: avoid-full-scan
+      │    │    │    │    ├── key: (13)
+      │    │    │    │    ├── fd: (13)-->(9-12,14-16), (10,11)-->(12)
+      │    │    │    │    ├── prune: (9-16)
+      │    │    │    │    └── interesting orderings: (+13)
+      │    │    │    └── filters
+      │    │    │         └── eq [type=bool, outer=(9), constraints=(/9: [/1 - /1]; tight), fd=()-->(9)]
+      │    │    │              ├── variable: a:9 [type=int]
+      │    │    │              └── const: 1 [type=int]
+      │    │    └── projections
+      │    │         └── const: 10 [as=b_new:17, type=int]
+      │    └── projections
+      │         └── const: 0 [as=e_default:18, type=int]
+      └── projections
+           └── plus [as=d_comp:19, type=int, outer=(11,17), immutable]
+                ├── plus [type=int]
+                │    ├── variable: b_new:17 [type=int]
+                │    └── variable: c:11 [type=int]
+                └── const: 1 [type=int]
+
+# Properties with RETURNING clause.
+build
+UPDATE abcde SET b=10 WHERE a=1 RETURNING *
+----
+project
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
+ ├── volatile, mutations
+ ├── fd: ()-->(1,2), (3)-->(4)
+ ├── prune: (1-4)
+ └── update abcde
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null) rowid:5(int!null)
+      ├── fetch columns: a:9(int) b:10(int) c:11(int) d:12(int) rowid:13(int) e:14(int)
+      ├── update-mapping:
+      │    ├── b_new:17 => b:2
+      │    ├── d_comp:19 => d:4
+      │    └── e_default:18 => e:6
+      ├── return-mapping:
+      │    ├── a:9 => a:1
+      │    ├── b_new:17 => b:2
+      │    ├── c:11 => c:3
+      │    ├── d_comp:19 => d:4
+      │    └── rowid:13 => rowid:5
+      ├── volatile, mutations
+      ├── key: (5)
+      ├── fd: ()-->(1,2), (5)-->(3,4), (3)-->(4)
+      └── project
+           ├── columns: d_comp:19(int!null) a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid) b_new:17(int!null) e_default:18(int!null)
+           ├── immutable
+           ├── key: (13)
+           ├── fd: ()-->(9,17,18), (13)-->(10-12,14-16), (10,11)-->(12), (11)-->(19)
+           ├── prune: (9-19)
+           ├── interesting orderings: (+13 opt(9,17,18))
+           ├── project
+           │    ├── columns: e_default:18(int!null) a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid) b_new:17(int!null)
+           │    ├── key: (13)
+           │    ├── fd: ()-->(9,17,18), (13)-->(10-12,14-16), (10,11)-->(12)
+           │    ├── prune: (9-18)
+           │    ├── interesting orderings: (+13 opt(9,17,18))
+           │    ├── project
+           │    │    ├── columns: b_new:17(int!null) a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid)
+           │    │    ├── key: (13)
+           │    │    ├── fd: ()-->(9,17), (13)-->(10-12,14-16), (10,11)-->(12)
+           │    │    ├── prune: (9-17)
+           │    │    ├── interesting orderings: (+13 opt(9,17))
+           │    │    ├── select
+           │    │    │    ├── columns: a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid)
+           │    │    │    ├── key: (13)
+           │    │    │    ├── fd: ()-->(9), (13)-->(10-12,14-16), (10,11)-->(12)
+           │    │    │    ├── prune: (10-16)
+           │    │    │    ├── interesting orderings: (+13 opt(9))
+           │    │    │    ├── scan abcde
+           │    │    │    │    ├── columns: a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid)
+           │    │    │    │    ├── computed column expressions
+           │    │    │    │    │    └── d:12
+           │    │    │    │    │         └── plus [type=int]
+           │    │    │    │    │              ├── plus [type=int]
+           │    │    │    │    │              │    ├── variable: b:10 [type=int]
+           │    │    │    │    │              │    └── variable: c:11 [type=int]
+           │    │    │    │    │              └── const: 1 [type=int]
+           │    │    │    │    ├── flags: avoid-full-scan
+           │    │    │    │    ├── key: (13)
+           │    │    │    │    ├── fd: (13)-->(9-12,14-16), (10,11)-->(12)
+           │    │    │    │    ├── prune: (9-16)
+           │    │    │    │    └── interesting orderings: (+13)
+           │    │    │    └── filters
+           │    │    │         └── eq [type=bool, outer=(9), constraints=(/9: [/1 - /1]; tight), fd=()-->(9)]
+           │    │    │              ├── variable: a:9 [type=int]
+           │    │    │              └── const: 1 [type=int]
+           │    │    └── projections
+           │    │         └── const: 10 [as=b_new:17, type=int]
+           │    └── projections
+           │         └── const: 0 [as=e_default:18, type=int]
+           └── projections
+                └── plus [as=d_comp:19, type=int, outer=(11,17), immutable]
+                     ├── plus [type=int]
+                     │    ├── variable: b_new:17 [type=int]
+                     │    └── variable: c:11 [type=int]
+                     └── const: 1 [type=int]
+
+# Input is cardinality 0-1 expression.
+build
+UPDATE abcde SET b=10 WHERE rowid=1 RETURNING *
+----
+project
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
+ ├── cardinality: [0 - 1]
+ ├── volatile, mutations
+ ├── key: ()
+ ├── fd: ()-->(1-4)
+ ├── prune: (1-4)
+ └── update abcde
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null) rowid:5(int!null)
+      ├── fetch columns: a:9(int) b:10(int) c:11(int) d:12(int) rowid:13(int) e:14(int)
+      ├── update-mapping:
+      │    ├── b_new:17 => b:2
+      │    ├── d_comp:19 => d:4
+      │    └── e_default:18 => e:6
+      ├── return-mapping:
+      │    ├── a:9 => a:1
+      │    ├── b_new:17 => b:2
+      │    ├── c:11 => c:3
+      │    ├── d_comp:19 => d:4
+      │    └── rowid:13 => rowid:5
+      ├── cardinality: [0 - 1]
+      ├── volatile, mutations
+      ├── key: ()
+      ├── fd: ()-->(1-5)
+      └── project
+           ├── columns: d_comp:19(int!null) a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid) b_new:17(int!null) e_default:18(int!null)
+           ├── cardinality: [0 - 1]
+           ├── immutable
+           ├── key: ()
+           ├── fd: ()-->(9-19)
+           ├── prune: (9-19)
+           ├── project
+           │    ├── columns: e_default:18(int!null) a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid) b_new:17(int!null)
+           │    ├── cardinality: [0 - 1]
+           │    ├── key: ()
+           │    ├── fd: ()-->(9-18)
+           │    ├── prune: (9-18)
+           │    ├── project
+           │    │    ├── columns: b_new:17(int!null) a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid)
+           │    │    ├── cardinality: [0 - 1]
+           │    │    ├── key: ()
+           │    │    ├── fd: ()-->(9-17)
+           │    │    ├── prune: (9-17)
+           │    │    ├── select
+           │    │    │    ├── columns: a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid)
+           │    │    │    ├── cardinality: [0 - 1]
+           │    │    │    ├── key: ()
+           │    │    │    ├── fd: ()-->(9-16)
+           │    │    │    ├── prune: (9-12,14-16)
+           │    │    │    ├── scan abcde
+           │    │    │    │    ├── columns: a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid)
+           │    │    │    │    ├── computed column expressions
+           │    │    │    │    │    └── d:12
+           │    │    │    │    │         └── plus [type=int]
+           │    │    │    │    │              ├── plus [type=int]
+           │    │    │    │    │              │    ├── variable: b:10 [type=int]
+           │    │    │    │    │              │    └── variable: c:11 [type=int]
+           │    │    │    │    │              └── const: 1 [type=int]
+           │    │    │    │    ├── flags: avoid-full-scan
+           │    │    │    │    ├── key: (13)
+           │    │    │    │    ├── fd: (13)-->(9-12,14-16), (10,11)-->(12)
+           │    │    │    │    ├── prune: (9-16)
+           │    │    │    │    └── interesting orderings: (+13)
+           │    │    │    └── filters
+           │    │    │         └── eq [type=bool, outer=(13), constraints=(/13: [/1 - /1]; tight), fd=()-->(13)]
+           │    │    │              ├── variable: rowid:13 [type=int]
+           │    │    │              └── const: 1 [type=int]
+           │    │    └── projections
+           │    │         └── const: 10 [as=b_new:17, type=int]
+           │    └── projections
+           │         └── const: 0 [as=e_default:18, type=int]
+           └── projections
+                └── plus [as=d_comp:19, type=int, outer=(11,17), immutable]
+                     ├── plus [type=int]
+                     │    ├── variable: b_new:17 [type=int]
+                     │    └── variable: c:11 [type=int]
+                     └── const: 1 [type=int]
+
+# Filter FD set.
+build
+UPDATE abcde SET a=1 WHERE b=c RETURNING *;
+----
+project
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int)
+ ├── volatile, mutations
+ ├── fd: ()-->(1), (2)-->(4), (2)==(3), (3)==(2)
+ ├── prune: (1-4)
+ └── update abcde
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) rowid:5(int!null)
+      ├── fetch columns: a:9(int) b:10(int) c:11(int) d:12(int) rowid:13(int) e:14(int)
+      ├── update-mapping:
+      │    ├── a_new:17 => a:1
+      │    └── e_default:18 => e:6
+      ├── return-mapping:
+      │    ├── a_new:17 => a:1
+      │    ├── b:10 => b:2
+      │    ├── c:11 => c:3
+      │    ├── d:12 => d:4
+      │    └── rowid:13 => rowid:5
+      ├── volatile, mutations
+      ├── key: (5)
+      ├── fd: ()-->(1), (5)-->(2-4), (2)-->(4), (2)==(3), (3)==(2)
+      └── project
+           ├── columns: d_comp:19(int!null) a:9(int!null) b:10(int!null) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid) a_new:17(int!null) e_default:18(int!null)
+           ├── immutable
+           ├── key: (13)
+           ├── fd: ()-->(17,18), (13)-->(9-12,14-16), (10,11)-->(12), (11)-->(19), (10)==(11), (11)==(10)
+           ├── prune: (9-19)
+           ├── interesting orderings: (+13 opt(17,18))
+           ├── project
+           │    ├── columns: e_default:18(int!null) a:9(int!null) b:10(int!null) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid) a_new:17(int!null)
+           │    ├── key: (13)
+           │    ├── fd: ()-->(17,18), (13)-->(9-12,14-16), (10,11)-->(12), (10)==(11), (11)==(10)
+           │    ├── prune: (9-18)
+           │    ├── interesting orderings: (+13 opt(17,18))
+           │    ├── project
+           │    │    ├── columns: a_new:17(int!null) a:9(int!null) b:10(int!null) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid)
+           │    │    ├── key: (13)
+           │    │    ├── fd: ()-->(17), (13)-->(9-12,14-16), (10,11)-->(12), (10)==(11), (11)==(10)
+           │    │    ├── prune: (9-17)
+           │    │    ├── interesting orderings: (+13 opt(17))
+           │    │    ├── select
+           │    │    │    ├── columns: a:9(int!null) b:10(int!null) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid)
+           │    │    │    ├── key: (13)
+           │    │    │    ├── fd: (13)-->(9-12,14-16), (10,11)-->(12), (10)==(11), (11)==(10)
+           │    │    │    ├── prune: (9,12-16)
+           │    │    │    ├── interesting orderings: (+13)
+           │    │    │    ├── scan abcde
+           │    │    │    │    ├── columns: a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid)
+           │    │    │    │    ├── computed column expressions
+           │    │    │    │    │    └── d:12
+           │    │    │    │    │         └── plus [type=int]
+           │    │    │    │    │              ├── plus [type=int]
+           │    │    │    │    │              │    ├── variable: b:10 [type=int]
+           │    │    │    │    │              │    └── variable: c:11 [type=int]
+           │    │    │    │    │              └── const: 1 [type=int]
+           │    │    │    │    ├── flags: avoid-full-scan
+           │    │    │    │    ├── key: (13)
+           │    │    │    │    ├── fd: (13)-->(9-12,14-16), (10,11)-->(12)
+           │    │    │    │    ├── prune: (9-16)
+           │    │    │    │    └── interesting orderings: (+13)
+           │    │    │    └── filters
+           │    │    │         └── eq [type=bool, outer=(10,11), constraints=(/10: (/NULL - ]; /11: (/NULL - ]), fd=(10)==(11), (11)==(10)]
+           │    │    │              ├── variable: b:10 [type=int]
+           │    │    │              └── variable: c:11 [type=int]
+           │    │    └── projections
+           │    │         └── const: 1 [as=a_new:17, type=int]
+           │    └── projections
+           │         └── const: 0 [as=e_default:18, type=int]
+           └── projections
+                └── plus [as=d_comp:19, type=int, outer=(10,11), immutable]
+                     ├── plus [type=int]
+                     │    ├── variable: b:10 [type=int]
+                     │    └── variable: c:11 [type=int]
+                     └── const: 1 [type=int]

@@ -1,0 +1,1658 @@
+{
+    "_base": {
+	"description": "Base config that all subsequent analyzers, even unspecified will inherit.",
+	"exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "github.com/shirou/gopsutil": "third-party code"
+	}
+    },
+    "assign": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "roachtestgo": {
+        "exclude_files": {
+            "pkg/cmd/roachtest/roachtestutil/task": "task manager implements goroutine management",
+            "pkg/cmd/roachtest/roachtestutil/mixedversion": "part of the roachtest framework",
+            "pkg/cmd/roachtest/operations": "operations do not run under the managed roachtest framework",
+            "pkg/cmd/roachtest/[^/]+\\.go$": "roachtest framework",
+            "_test\\.go$": "tests"
+        }
+    },
+    "benchdoc": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers"
+        },
+        "only_files": {
+            "_test\\.go$": "only run on test files"
+        }
+    },
+    "deepequalerrors": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "_test\\.go$": "tests"
+        }
+    },
+    "deferunlockcheck": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "github.com/shirou/gopsutil": "third-party code",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code",
+            "_test\\.go$": "tests",
+            "pkg/backup/backupinfo/manifest_handling.go": "flagged by linter, should be evaluated",
+            "pkg/backup/restore_job.go": "flagged by linter, should be evaluated",
+            "pkg/backup/restore_progress.go": "flagged by linter, should be evaluated",
+            "pkg/ccl/changefeedccl/cdctest/mock_webhook_sink.go": "flagged by linter, should be evaluated",
+            "pkg/ccl/changefeedccl/changefeed_processors.go": "flagged by linter, should be evaluated",
+            "pkg/ccl/changefeedccl/event_processing.go": "flagged by linter, should be evaluated",
+            "pkg/ccl/changefeedccl/kvevent/blocking_buffer.go": "flagged by linter, should be evaluated",
+            "pkg/ccl/changefeedccl/metrics.go": "flagged by linter, should be evaluated",
+            "pkg/ccl/changefeedccl/schemafeed/schema_feed.go": "flagged by linter, should be evaluated",
+            "pkg/ccl/changefeedccl/schema_registry.go": "flagged by linter, should be evaluated",
+            "pkg/ccl/changefeedccl/sink_kafka.go": "flagged by linter, should be evaluated",
+            "pkg/ccl/changefeedccl/sink_pubsub_v2.go": "flagged by linter, should be evaluated",
+            "pkg/ccl/multitenantccl/tenantcostclient/tenant_side.go": "flagged by linter, should be evaluated",
+            "pkg/ccl/sqlproxyccl/acl/watcher.go": "flagged by linter, should be evaluated",
+            "pkg/ccl/sqlproxyccl/tenantdirsvr/test_directory_svr.go": "flagged by linter, should be evaluated",
+            "pkg/crosscluster/streamclient/random_stream_client.go": "flagged by linter, should be evaluated",
+            "pkg/cli/clisqlexec/format_csv_tsv.go": "flagged by linter, should be evaluated",
+            "pkg/cli/clisqlshell/sql.go": "flagged by linter, should be evaluated",
+            "pkg/cli/syncbench/syncbench.go": "flagged by linter, should be evaluated",
+            "pkg/cmd/roachtest/cluster.go": "flagged by linter, should be evaluated",
+            "pkg/cmd/roachtest/test_runner.go": "flagged by linter, should be evaluated",
+            "pkg/gossip/client.go": "flagged by linter, should be evaluated",
+            "pkg/gossip/gossip.go": "flagged by linter, should be evaluated",
+            "pkg/config/system.go": "flagged by linter, should be evaluated",
+            "pkg/gossip/infostore.go": "flagged by linter, should be evaluated",
+            "pkg/gossip/server.go": "flagged by linter, should be evaluated",
+            "pkg/internal/rsg/rsg.go": "flagged by linter, should be evaluated",
+            "pkg/internal/sqlsmith/bulkio.go": "flagged by linter, should be evaluated",
+            "pkg/internal/sqlsmith/relational.go": "flagged by linter, should be evaluated",
+            "pkg/internal/sqlsmith/sampler.go": "flagged by linter, should be evaluated",
+            "pkg/internal/sqlsmith/scalar.go": "flagged by linter, should be evaluated",
+            "pkg/jobs/adopt.go": "flagged by linter, should be evaluated",
+            "pkg/jobs/job_scheduler.go": "flagged by linter, should be evaluated",
+            "pkg/jobs/progress.go": "flagged by linter, should be evaluated",
+            "pkg/kv/bulk/buffering_adder.go": "flagged by linter, should be evaluated",
+            "pkg/kv/bulk/sst_batcher.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvclient/kvcoord/txn_coord_sender.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvclient/kvstreamer/streamer.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvclient/kvtenant/connector.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvclient/rangecache/range_cache.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvclient/rangefeed/rangefeedcache/watcher.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/allocator/allocatorimpl/allocator_scorer.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/allocator/storepool/store_pool.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/closedts/sidetransport/debug.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/closedts/sidetransport/receiver.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/closedts/sidetransport/sender.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/concurrency/lock_table.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/concurrency/lock_table_waiter.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/intentresolver/intent_resolver.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/liveness/liveness.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/kvflowcontrol/kvflowcontroller/kvflowcontroller.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/kvflowcontrol/kvflowhandle/kvflowhandle.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/liveness/cache.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/metrics.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/queue.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/raftentry/cache.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/raft_log_queue.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/raft_log_truncator.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/raft_transport.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/rangefeed/budget.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/rangefeed/scheduler.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/replica.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/replica_app_batch.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/replica_raft.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/replica_raft_quiesce.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/replica_raftstorage.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/replica_rangefeed.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/replica_write.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/scheduler.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/spanlatch/manager.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/store.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/store_create_replica.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/store_gossip.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/store_raft.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/store_remove_replica.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvserver/txnwait/queue.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvnemesis/applier.go": "flagged by linter, should be evaluated",
+            "pkg/kv/kvnemesis/watcher.go": "flagged by linter, should be evaluated",
+            "pkg/kv/txn.go": "flagged by linter, should be evaluated",
+            "pkg/obs/event_exporter.go": "flagged by linter, should be evaluated",
+            "pkg/raft/.*": "imported third-party package",
+            "pkg/roachprod/install/cluster_synced.go": "flagged by linter, should be evaluated",
+            "pkg/roachprod/install/services.go": "flagged by linter, should be evaluated",
+            "pkg/roachprod/roachprod.go": "flagged by linter, should be evaluated",
+            "pkg/roachprod/vm/aws/aws.go": "flagged by linter, should be evaluated",
+            "pkg/roachprod/vm/azure/azure.go": "flagged by linter, should be evaluated",
+            "pkg/rpc/clock_offset.go": "flagged by linter, should be evaluated",
+            "pkg/rpc/peer.go": "flagged by linter, should be evaluated",
+            "pkg/settings/values.go": "flagged by linter, should be evaluated",
+            "pkg/server/node.go": "flagged by linter, should be evaluated",
+            "pkg/server/settings_cache.go": "flagged by linter, should be evaluated",
+            "pkg/server/telemetry/features": "flagged by linter, should be evaluated",
+            "pkg/spanconfig/spanconfigjob/job.go": "flagged by linter, should be evaluated",
+            "pkg/spanconfig/spanconfigkvsubscriber/kvsubscriber.go": "flagged by linter, should be evaluated",
+            "pkg/sql/catalog/lease/name_cache.go": "flagged by linter, should be evaluated",
+            "pkg/sql/colfetcher/colbatch_direct_scan.go": "flagged by linter, should be evaluated",
+            "pkg/sql/colfetcher/colbatch_scan.go": "flagged by linter, should be evaluated",
+            "pkg/sql/colfetcher/index_join.go": "flagged by linter, should be evaluated",
+            "pkg/sql/colflow/routers.go": "flagged by linter, should be evaluated",
+            "pkg/sql/colflow/stats.go": "flagged by linter, should be evaluated",
+            "pkg/sql/contention/contentionutils/concurrent_buffer_guard.go": "flagged by linter, should be evaluated",
+            "pkg/sql/contention/event_store.go": "flagged by linter, should be evaluated",
+            "pkg/sql/distsql_running.go": "flagged by linter, should be evaluated",
+            "pkg/sql/flowinfra/flow_registry.go": "flagged by linter, should be evaluated",
+            "pkg/sql/hints/hint_cache.go": "flagged by linter, should be evaluated",
+            "pkg/sql/idxusage/local_idx_usage_stats.go": "flagged by linter, should be evaluated",
+            "pkg/sql/importer/import_processor.go": "flagged by linter, should be evaluated",
+            "pkg/sql/importer/import_processor_planning.go": "flagged by linter, should be evaluated",
+            "pkg/sql/pgwire/server.go": "flagged by linter, should be evaluated",
+            "pkg/sql/rowexec/indexbackfiller.go": "flagged by linter, should be evaluated",
+            "pkg/sql/rowflow/routers.go": "flagged by linter, should be evaluated",
+            "pkg/sql/schemachanger/corpus/corpus.go": "flagged by linter, should be evaluated",
+            "pkg/sql/sqlliveness/slinstance/slinstance.go": "flagged by linter, should be evaluated",
+            "pkg/sql/sqlstats/ssmemstorage/ss_mem_iterator.go": "flagged by linter, should be evaluated",
+            "pkg/sql/stats/stats_cache.go": "flagged by linter, should be evaluated",
+            "pkg/sql/stmtdiagnostics/statement_diagnostics.go": "flagged by linter, should be evaluated",
+            "pkg/sql/vecindex/manager.go": "flagged by linter, should be evaluated",
+            "pkg/storage/metamorphic/deck.go": "flagged by linter, should be evaluated",
+            "pkg/storage/pebble.go": "flagged by linter, should be evaluated",
+            "pkg/util/admission/work_queue.go": "flagged by linter, should be evaluated",
+            "pkg/util/circuit/circuitbreaker.go": "flagged by linter, should be evaluated",
+            "pkg/util/every_n.go": "flagged by linter, should be evaluated",
+            "pkg/util/hlc/hlc.go": "flagged by linter, should be evaluated",
+            "pkg/util/interval/btree_based_interval.go": "flagged by linter, should be evaluated",
+            "pkg/util/log/buffered_sink.go": "flagged by linter, should be evaluated",
+            "pkg/util/log/channels.go": "flagged by linter, should be evaluated",
+            "pkg/util/log/clog.go": "flagged by linter, should be evaluated",
+            "pkg/util/log/file.go": "flagged by linter, should be evaluated",
+            "pkg/util/log/flags.go": "flagged by linter, should be evaluated",
+            "pkg/util/log/registry.go": "flagged by linter, should be evaluated",
+            "pkg/util/log/trace.go": "flagged by linter, should be evaluated",
+            "pkg/util/log/vmodule.go": "flagged by linter, should be evaluated",
+            "pkg/util/metric/hdrhistogram.go": "flagged by linter, should be evaluated",
+            "pkg/util/metric/metric.go": "flagged by linter, should be evaluated",
+            "pkg/util/mon/bytes_usage.go": "flagged by linter, should be evaluated",
+            "pkg/util/randutil/rand.go": "flagged by linter, should be evaluated",
+            "pkg/util/schedulerlatency/sampler.go": "flagged by linter, should be evaluated",
+            "pkg/util/stop/stopper.go": "flagged by linter, should be evaluated",
+            "pkg/util/startup/retry.go": "flagged by linter, should be evaluated",
+            "pkg/util/syncutil/int_map.go": "flagged by linter, should be evaluated",
+            "pkg/util/syncutil/mutex_sync_race.go": "flagged by linter, should be evaluated",
+            "pkg/util/syncutil/singleflight/singleflight.go": "flagged by linter, should be evaluated",
+            "pkg/util/tracing/crdbspan.go": "flagged by linter, should be evaluated",
+            "pkg/util/tracing/span.go": "flagged by linter, should be evaluated",
+            "pkg/util/tracing/tracer.go": "flagged by linter, should be evaluated",
+            "pkg/util/unique/unique.go": "flagged by linter, should be evaluated",
+            "pkg/testutils/net.go": "flagged by linter, should be evaluated",
+            "pkg/testutils/storageutils/mocking.go": "flagged by linter, should be evaluated",
+            "pkg/testutils/testfixtures/test_fixtures.go": "flagged by linter, should be evaluated",
+            "pkg/workload/histogram/histogram.go": "flagged by linter, should be evaluated",
+            "pkg/workload/schemachange/deck.go": "flagged by linter, should be evaluated",
+            "pkg/workload/schemachange/schemachange.go": "flagged by linter, should be evaluated",
+            "pkg/workload/tpcc/generate.go": "flagged by linter, should be evaluated"
+        }
+    },
+    "errcheck": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "github.com/elastic/gosigar": "third-party",
+            "github.com/shirou/gopsutil": "third-party",
+            "bazel-out/.*/testmain\\.go$": "generated test main file by rules_go",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code",
+            "pkg/raft/.*": "imported third-party package"
+        }
+    },
+    "errcmp": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "github.com/elastic/gosigar": "third-party",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code",
+            "bazel-out/.*/testmain\\.go$": "generated test main file by rules_go",
+            "pkg/cmd/github-pull-request-make/main.go": "invalid direct cast on error object",
+            "pkg/kv/kvclient/kvcoord/lock_spans_over_budget_error\\.go$": "invalid direct cast on error object",
+            "pkg/kv/kvpb/batch_generated-gen\\.go$": "invalid direct cast on error object",
+            "pkg/kv/kvpb/errors\\.go$": "invalid direct cast on error object",
+            "pkg/raft/.*": "imported third-party package",
+            "pkg/sql/pgwire/pgerror/constraint_name\\.go$": "invalid direct cast on error object",
+            "pkg/sql/pgwire/pgerror/pgcode\\.go$": "invalid direct cast on error object",
+            "pkg/testutils/lint/lint_test\\.go$": "invalid direct cast on error object",
+            "pkg/util/timeutil/timeout_error\\.go$": "invalid direct cast on error object",
+            "pkg/util/sysutil/sysutil_.*": "type can change by system",
+            "pkg/cloud/gcp/gcs_retry\\.go$": "invalid direct cast on error object"
+        }
+    },
+    "errwrap": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "external/": "exclude all third-party code for all analyzers"
+        }
+    },
+    "fmtsafe": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            "pkg/raft/.*": "imported third-party package",
+            "pkg/roachprod/logger/log\\.go$": "format argument is not a constant expression",
+            "pkg/util/log/channels\\.go$": "format argument is not a constant expression",
+            "pkg/util/log/log_channels_generated\\.go$": "format argument is not a constant expression"
+        }
+    },
+    "grpcconnclose": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "nilness": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "github.com/shirou/gopsutil": "third-party code",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code",
+            "/_cgo_gotypes.go$": "cgo generated code",
+            "_test\\.go$": "tests"
+        }
+    },
+    "printf": {
+        "analyzer_flags": {
+            "funcs": "ErrEvent,ErrEventf,Error,Errorf,ErrorfDepth,Event,Eventf,Fatal,Fatalf,FatalfDepth,Info,Infof,InfofDepth,AssertionFailedf,AssertionFailedWithDepthf,NewAssertionErrorWithWrappedErrf,DangerousStatementf,pgerror.New,pgerror.NewWithDepthf,pgerror.Newf,SetDetailf,SetHintf,Unimplemented,Unimplementedf,UnimplementedWithDepthf,UnimplementedWithIssueDetailf,UnimplementedWithIssuef,VEvent,VEventf,Warning,Warningf,WarningfDepth,Wrapf,WrapWithDepthf,redact.Fprint,redact.Fprintf,redact.Sprint,redact.Sprintf"
+        }
+    },
+    "returncheck": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/kv/kvclient/kvcoord/txn_interceptor_span_refresher_test.go": "existing failure",
+            "pkg/kv/txn_external_test.go": "existing failure"
+        }
+    },
+    "S1000": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "S1001": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "S1002": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "S1003": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "S1004": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "S1005": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "S1006": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "S1007": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "S1008": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "S1009": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "S1010": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "S1011": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code",
+            "pkg/sql/sem/builtins/aggregate_builtins_test\\.go": "false positive, apparently"
+        }
+    },
+    "S1012": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "S1016": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "S1017": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "S1018": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "S1019": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code",
+            "pkg/raft/.*": "imported third-party package"
+        }
+    },
+    "S1020": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "S1021": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "S1023": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "S1024": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "S1025": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "S1028": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "S1029": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "S1030": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "S1031": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "S1032": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "S1033": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "S1034": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "S1035": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "S1036": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "S1037": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "S1038": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "S1039": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "S1040": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA1000": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA1001": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA1002": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA1003": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA1004": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA1005": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA1006": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA1007": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA1008": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA1010": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA1011": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA1012": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA1013": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA1014": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA1015": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA1016": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA1017": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA1018": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA1019": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "github.com/shirou/gopsutil": "third-party code",
+            "pkg/kv/kvpb/api_test.go$": "same package that grpc-go imports",
+            "pkg/rpc/codec.go$": "rpc/codec.go imports the same proto package that grpc-go imports (as of crdb@dd87d1145 and grpc-go@7b167fd6).",
+            "pkg/rpc/stats_handler.go$": "Using deprecated WireLength call",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code",
+            "pkg/roachprod/vm/aws/embedded\\.go$": "generated code",
+            "pkg/security/securitytest/embedded\\.go$": "generated code",
+            "pkg/util/bulk/tracing_aggregator.go$":"temporary exclusion until #100438 is resolved",
+            "pkg/util/log/file_api.go$": "excluded until all uses of io/ioutil are replaced",
+            "pkg/build/bazel/bazel\\.go$": "Runfile function deprecated"
+        }
+    },
+    "SA1020": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA1021": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA1023": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA1024": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA1025": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA1026": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA1027": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA1028": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA1029": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA1030": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA2000": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA2001": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA2002": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA2003": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA3000": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA3001": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code",
+            "pkg/raft/.*": "imported third-party package"
+        }
+    },
+    "SA4000": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA4001": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA4003": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA4004": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA4005": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA4006": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "github.com/shirou/gopsutil": "third-party code",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA4008": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA4009": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA4010": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA4011": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA4012": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA4013": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA4014": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA4015": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA4016": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA4017": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA4018": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA4019": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA4020": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA4021": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA4022": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA4023": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA4024": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA4025": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA4026": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA4027": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA4028": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA4029": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA4030": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA4031": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA5000": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA5001": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA5002": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA5003": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA5004": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA5005": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA5007": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA5008": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA5009": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA5010": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA5011": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "_test\\.go$": "tests",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA5012": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA6000": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA6001": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA6002": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA6003": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA6005": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA9001": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA9002": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA9003": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA9004": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA9005": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA9006": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA9007": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "SA9008": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "ST1000": {
+        "exclude_files": {
+            ".*": "skipped in default staticcheck config",
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code",
+            "pkg/raft/.*": "imported third-party package",
+            "pkg/sql/roleoption": "generated code"
+        }
+    },
+    "ST1001": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code",
+            "pkg/sql/schemachanger/scplan/internal/rules/.*/.*.go$":  "schema changer rules"
+        }
+    },
+    "ST1003": {
+        "exclude_files": {
+            ".*": "skipped in default staticcheck config",
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "ST1005": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "ST1006": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "github.com/elastic/gosigar": "third-party",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "ST1008": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "ST1011": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "ST1011": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "ST1012": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "ST1013": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "ST1015": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "ST1016": {
+        "exclude_files": {
+            ".*": "skipped in default staticcheck config",
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "ST1017": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "ST1018": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "ST1019": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "ST1020": {
+        "exclude_files": {
+            ".*": "skipped in default staticcheck config",
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "ST1021": {
+        "exclude_files": {
+            ".*": "skipped in default staticcheck config",
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "ST1022": {
+        "exclude_files": {
+            ".*": "skipped in default staticcheck config",
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "ST1023": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "shadow": {
+	"exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            "pkg/.*\\.og\\.go$": "generated code",
+            "pkg/raft/.*": "imported third-party package"
+	}
+    },
+    "structtag": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "testinggoroutine": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "_test\\.go$": "tests"
+        }
+    },
+    "unconvert": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "github.com/elastic/gosigar": "third-party",
+            "github.com/shirou/gopsutil": "third-party code",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb(_[0-9]+)?\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code"
+        }
+    },
+    "U1000": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/util/goschedstats/runtime_go.*.go$": "patch code"
+        }
+    },
+    "unsafeptr": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers",
+            "pkg/sql/colexec/colexechash/hash\\.go$": "re-implements runtime.noescape for efficient hashing"
+        }
+    }
+}

@@ -1,0 +1,239 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.kv.kvserver.concurrency.lock;
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock";
+
+import "kv/kvserver/concurrency/isolation/levels.proto";
+import "gogoproto/gogo.proto";
+import "util/hlc/timestamp.proto";
+
+// Strength represents the different locking strengths that determines how
+// key-values can be accessed by concurrent transactions.
+//
+// Strength applies to locks that are held with a per-key granularity. It is
+// up to the users of the key-value layer to decide on which keys to acquire
+// locks for when imposing structure that can span multiple keys, such as SQL
+// rows (see column families and secondary indexes).
+//
+// Lock strengths grow from "weakest" to "strongest" in the order that the
+// variants are presented in the enumeration. The "stronger" a lock's strength,
+// the more restrictive it is to concurrent transactions attempting to access
+// the same keys. The strength compatibility detailing these interactions is
+// illustrated below.
+enum Strength {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  // None represents the absence of a lock or the intention to acquire locks.
+  // It corresponds to the behavior of transactions performing key-value reads
+  // under optimistic concurrency control. No locks are acquired on the keys
+  // read by these requests when they evaluate. However, the reads do respect
+  // Exclusive locks already held by other transactions at timestamps equal to
+  // or less than their read timestamp.
+  //
+  // Optimistic concurrency control (OCC) can improve performance under some
+  // workloads because it avoids the need to perform any locking during reads.
+  // This can increase the amount of concurrency that the system can permit
+  // between ongoing transactions. However, OCC does mandate a read validation
+  // phase if/when transactions need to commit at a different timestamp than
+  // they performed all reads at. CockroachDB calls this a "read refresh",
+  // which is implemented by the txnSpanRefresher. If a read refresh fails due
+  // to new key-value writes that invalidate what was previously read,
+  // transactions are forced to restart. See the comment on txnSpanRefresher
+  // for more.
+  None = 0;
+
+  // Shared (S) locks are used by read-only operations and allow concurrent
+  // transactions to read under pessimistic concurrency control. Shared locks
+  // are compatible with each other but are not compatible with Update or
+  // Exclusive locks. This means that multiple transactions can hold a Shared
+  // lock on the same key at the same time, but no other transaction can
+  // modify the key at the same time. A holder of a Shared lock on a key is
+  // only permitted to read the key's value while the lock is held.
+  //
+  // Share locks are currently unused, as all KV reads are currently performed
+  // optimistically (see None).
+  Shared = 1;
+
+  // Update (U) locks are a hybrid of Shared and Exclusive locks which are
+  // used to prevent a common form of deadlock. When a transaction intends to
+  // modify existing KVs, it is often the case that it reads the KVs first and
+  // then attempts to modify them. Under pessimistic concurrency control, this
+  // would correspond to first acquiring a Shared lock on the keys and then
+  // converting the lock to an Exclusive lock when modifying the keys. If two
+  // transactions were to acquire the Shared lock initially and then attempt
+  // to update the keys concurrently, both transactions would get stuck
+  // waiting for the other to release its Shared lock and a deadlock would
+  // occur. To resolve the deadlock, one of the two transactions would need to
+  // be aborted.
+  //
+  // To avoid this potential deadlock problem, an Update lock can be used in
+  // place of a Shared lock. Update locks are only compatible with other Shared
+  // locks. This means that unlike Shared locks, there may only be a single
+  // Update lock holder for a given key. As with Shared locks, the lock holder
+  // of an Update lock on a key is only allowed to read from the key while the
+  // lock is held. These two requirements help resolve the deadlock scenario
+  // presented above because only one of the transactions would be able to
+  // acquire an Update lock at a time while reading the initial state of the
+  // KVs. This means only one transaction is allowed to upgrade its lock to
+  // Exclusive. It may have to wait for concurrent transactions to release their
+  // Shared locks, however, there is no deadlock hazard here as the Shared lock
+  // holders are not waiting on the Update lock in any way.
+  Update = 2;
+
+  // Exclusive (X) locks are used by read-write and read-only operations to
+  // provide transactions with (potential) exclusive write access to a key. When
+  // an Exclusive lock is held by a transaction on a given key, no other
+  // transaction can write to that key.
+  //
+  // Exclusive locks may provide the lock holder exclusive read access to the
+  // key as well. This is a vestige of a time when there was no distinction
+  // between exclusive locks and intents; this behavior is configurable, using
+  // a cluster setting, and detailed under the compatibility matrix below.
+  //
+  // Unlike Intents, a transaction can only hold an Exclusive lock on keys that
+  // it has not yet modified. This allows optimistic reads to not conflict with
+  // Exclusive locks, and improves concurrency between read and write
+  // transactions. Note that for this to be meaningful, the write transaction
+  // must acquire Exclusive locks as it is executing and only lay down Intents
+  // once it is ready to commit.
+  //
+  // Configuring whether optimistic reads block or do not on Exclusive locks
+  // presents a twofold trade-off. First, if the Exclusive lock holder lays down
+  // an intent on a key after an optimistic read has observed the state of the
+  // key, the transaction that performed the optimistic read may be unable to
+  // perform a successful read refresh if it attempts to refresh to a timestamp
+  // at or past the timestamp of the Intent. Second, the optimistic read
+  // permitted while the Exclusive lock is held will bump the timestamp cache.
+  // This may result in the Exclusive lock holder being forced to increase its
+  // write timestamp when laying down an Intent, which in turn may force it to
+  // restart if its read refresh fails.
+  Exclusive = 3;
+
+  // Intent (I) locks are are used by read-write operations to provide
+  // transactions sole access to a key. When an Intent lock is held by a
+  // transaction on a given key, no other transaction can read from or write to
+  // that key. The lock holder is free to read from and write to the key as
+  // frequently as it would like.
+  Intent = 4;
+}
+
+// Mode determines the level of protection a lock provides to the lock holder.
+// All locks that are held with a per-key granularity have an associated Mode.
+//
+// The protection a lock offers is primarily determined by the Strength it is
+// held with. However, lock Modes also contain auxiliary information (eg. the
+// timestamp at which the lock was acquired, the isolation level associated with
+// a non-locking read), which may be used in conjunction with a lock's Strength
+// to resolve conflicts between a lock holder and a concurrent overlapping
+// request. This allows us to codify conflict rules as a pure function of 2 lock
+// Modes.
+//
+// Users of the key-value layer are expected to indicate locking intentions
+// using lock Strengths; lock Mode is an internal concept for the concurrency
+// package for conflict resolution.
+//
+// Compatibility Matrix
+//
+// The following matrix presents the compatibility of lock Modes with one
+// another. A cell with an X means that the two strengths are incompatible with
+// each other and that they can not both be held on a given key by different
+// transactions, concurrently. A cell without an X means that the two lock Modes
+// are compatible with each other and that they can be held on a given key by
+// different transactions, concurrently.
+//
+//  +------------+---------+-----------+-----------+-------------+----------+
+//  |            |   None  |  Shared   |  Update   |  Exclusive  |  Intent  |
+//  +------------+---------+-----------+-----------+-------------+----------+
+//  | None       |         |           |           |      X^*    |    X^†   |
+//  +------------+---------+-----------+-----------+-------------+----------+
+//  | Shared     |         |           |           |      X      |    X     |
+//  +------------+---------+-----------+-----------+-------------+----------+
+//  | Update     |         |           |     X     |      X      |    X     |
+//  +------------+---------+-----------+-----------+-------------+----------+
+//  | Exclusive  |   X^*   |     X     |     X     |      X      |    X     |
+//  +------------+---------+-----------+-----------+-------------+----------+
+//  | Intent     |   X^†   |     X     |     X     |      X      |    X     |
+//  +------------+---------+-----------+-----------+-------------+----------+
+//
+// [†] reads under optimistic concurrency control in CockroachDB only conflict
+// with Intent locks if the read's timestamp is equal to or greater than the
+// lock's timestamp. If the read's timestamp is below the Intent lock's
+// timestamp then the two are compatible.
+//
+// [*] until the re-introduction of weaker isolation levels, all transactions in
+// CockroachDB used serializable isolation. Historically, CockroachDB did not
+// make a strength distinction between Exclusive locks and Intents. As such,
+// reads under concurrency control would conflict with Exclusive locks if the
+// read's timestamp was at or above the Exclusive lock's timestamp. Now that
+// there is such a distinction, non-locking reads from serializable transactions
+// do not block on Exclusive locks, regardless of their timestamp. However,
+// there is a desire to let users opt into the old behavior using the
+// ExclusiveLocksBlockNonLockingReads cluster setting. Note that this only
+// applies when both the non-locking read and Exclusive lock belong to
+// serializable  transactions, as that's the only "old" behavior to speak of
+// here.
+message Mode {
+  // Strength in which the lock is held.
+  Strength strength = 1;
+
+  // Timestamp at which the lock was/is being acquired. This field must (and
+  // only) be set for None, Exclusive, and Intent locking strengths.
+  util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable)=false];
+
+  // IsoLevel is the isolation level of the associated transaction. This field
+  // is only set for None and Exclusive locking strength.
+  cockroach.kv.kvserver.concurrency.isolation.Level iso_level = 3;
+}
+
+// Durability represents the different durability properties of a lock acquired
+// by a transaction. Durability levels provide varying degrees of survivability,
+// often in exchange for the cost of lock acquisition.
+enum Durability {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  // Unreplicated locks are held only on a single Replica in a Range, which is
+  // typically the leaseholder. Unreplicated locks are very fast to acquire
+  // and release because they are held in memory or on fast local storage and
+  // require no cross-node coordination to update. In exchange, Unreplicated
+  // locks provide no guarantee of survivability across lease transfers or
+  // leaseholder crashes. They should therefore be thought of as best-effort
+  // and should not be relied upon for correctness.
+  Unreplicated = 0;
+
+  // Replicated locks are held on at least a quorum of Replicas in a Range.
+  // They are slower to acquire and release than Unreplicated locks because
+  // updating them requires both cross-node coordination and interaction with
+  // durable storage. In exchange, Replicated locks provide a guarantee of
+  // survivability across lease transfers, leaseholder crashes, and other
+  // forms of failure events. They will remain available as long as their
+  // Range remains available and they will never be lost.
+  Replicated = 1;
+}
+
+// WaitPolicy specifies the behavior of a request when it encounters conflicting
+// locks held by other active transactions. The default behavior is to block
+// until the conflicting lock is released, but other policies can make sense in
+// special situations.
+enum WaitPolicy {
+  // Block indicates that if a request encounters a conflicting lock held by
+  // another active transaction, it should wait for the conflicting lock to be
+  // released before proceeding.
+  Block = 0;
+
+  // Error indicates that if a request encounters a conflicting lock held by
+  // another active transaction, it should raise an error instead of blocking.
+  // If the request encounters a conflicting lock that was abandoned by an
+  // inactive transaction, which is likely due to a transaction coordinator
+  // crash, the lock is removed and no error is raised.
+  Error = 1;
+
+  // SkipLocked indicates that if a request encounters a conflicting lock held
+  // by another transaction while scanning, it should skip over the key that is
+  // locked instead of blocking and later acquiring a lock on that key. The
+  // locked key will not be included in the scan result.
+  SkipLocked = 2;
+}

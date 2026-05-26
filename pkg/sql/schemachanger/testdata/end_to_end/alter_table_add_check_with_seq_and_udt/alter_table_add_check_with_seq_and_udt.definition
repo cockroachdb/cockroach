@@ -1,0 +1,9 @@
+setup
+CREATE SEQUENCE s;
+CREATE TYPE typ AS ENUM ('a', 'b');
+CREATE TABLE t (i INT PRIMARY KEY, j STRING);
+----
+
+test
+ALTER TABLE t ADD CHECK (i > nextval('s') OR j::typ = 'a')
+----

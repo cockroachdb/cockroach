@@ -1,0 +1,78 @@
+# Inputs map to StoreCapacity fields:
+#   logical-bytes: LogicalBytes (uncompressed MVCC live bytes across all replicas)
+#   total:         Capacity (total filesystem capacity at store path)
+#   used:          Used (store files: pebble data + auxiliary dir + ballast)
+#   available:     Available (free space remaining on the filesystem)
+#
+# Outputs show both fraction-used formulas:
+#   "via Used":           Used / (Used + Available)  — includes ballast, excludes
+#                          reserved blocks and other non-CRDB files
+#   "via Total-Available": (Total - Available) / Total — includes reserved blocks,
+#                          ballast, other non-CRDB files under the mount point
+
+# Normal case: 1TiB disk, store is 50% full, no significant non-store overhead.
+# Used ≈ Total - Available, so both fraction formulas agree.
+compute logical-bytes=500GiB total=1000GiB used=500GiB available=500GiB
+----
+fraction-used: 0.5000 (via Used) vs 0.5000 (via Total-Available)
+kv-capacity: 1000 GiB (kv-util: 50.00%, available: 500 GiB)
+kv-capacity(wrong): 1000 GiB (kv-util: 50.00%, available: 500 GiB)
+
+# Space amplification: logical=100GiB but physical Used=500GiB (5x amplification
+# from compression ratio, tombstones, LSM overhead, WAL, auxiliary).
+# capacity = 100GiB / 0.5 = 200GiB — correctly reflects that the store can
+# hold ~200GiB of logical data at this amplification ratio.
+compute logical-bytes=100GiB total=1000GiB used=500GiB available=500GiB
+----
+fraction-used: 0.5000 (via Used) vs 0.5000 (via Total-Available)
+kv-capacity: 200 GiB (kv-util: 50.00%, available: 500 GiB)
+kv-capacity(wrong): 200 GiB (kv-util: 50.00%, available: 500 GiB)
+
+# Almost empty store (fraction-used < 1%). Falls back to available.
+compute logical-bytes=1MiB total=1000GiB used=1MiB available=999GiB
+----
+fraction-used: 0.0000 (via Used) vs 0.0010 (via Total-Available)
+kv-capacity: 999 GiB (kv-util: 0.00%, available: 999 GiB)
+kv-capacity(wrong): 999 GiB (kv-util: 0.00%, available: 999 GiB)
+
+# New store: no ranges yet (logicalBytes = 0). Falls back to available.
+compute logical-bytes=0B total=1000GiB used=0B available=1000GiB
+----
+fraction-used: 0.0000 (via Used) vs 0.0000 (via Total-Available)
+kv-capacity: 1000 GiB (kv-util: 0.00%, available: 1000 GiB)
+kv-capacity(wrong): 1000 GiB (kv-util: 0.00%, available: 1000 GiB)
+
+# ---------------------------------------------------------------------------
+# Problems with (Total-Available)/Total
+# ---------------------------------------------------------------------------
+# Total - Available includes reserved blocks, ballast, and other non-CRDB
+# files on the same mount. Since Total-Available >= Used, the wrong fraction
+# is always >= the correct one, and kv-capacity (= LogicalBytes / fraction)
+# is always <= the correct capacity. The wrong model always underestimates
+# how much data the store can hold, making stores look fuller than they are.
+# This triggers premature rebalancing away from stores that actually have
+# plenty of disk space.
+#
+# FractionUsed() avoids this by using Used/(Used+Available), which includes
+# ballast but excludes reserved blocks and other non-CRDB files.
+
+# 10GiB ext4 reserved blocks on a 196GiB disk, no ballast, store barely used.
+# Total - Available = 10GiB (all reserved blocks), Used = 100MiB (store metadata).
+# Naive: (196-186)/196 = 5.1% -> capacity = 4.8MiB/0.051 = 94MiB (way too small).
+# Used-based: 100MiB/(100MiB+186GiB) ≈ 0.05% -> almost-empty fallback -> 186GiB.
+compute logical-bytes=4.8MiB total=196GiB used=100MiB available=186GiB
+----
+fraction-used: 0.0005 (via Used) vs 0.0510 (via Total-Available)
+kv-capacity: 186 GiB (kv-util: 0.00%, available: 186 GiB)
+kv-capacity(wrong): 94 MiB (kv-util: 5.10%, available: 186 GiB)
+
+# Store has 10GiB of logical data but only 5GiB physical (0.5x amplification
+# due to compression). Still on the 196GiB disk with 10GiB reserved blocks.
+# Used-based: 5/(5+181) = 2.69% -> capacity = 10GiB/0.0269 = 372GiB.
+# Wrong: (196-181)/196 = 7.65% -> capacity = 10GiB/0.0765 = 131GiB.
+# The wrong formula shrinks capacity by ~3x due to reserved blocks.
+compute logical-bytes=10GiB total=196GiB used=5GiB available=181GiB
+----
+fraction-used: 0.0269 (via Used) vs 0.0765 (via Total-Available)
+kv-capacity: 372 GiB (kv-util: 2.69%, available: 181 GiB)
+kv-capacity(wrong): 131 GiB (kv-util: 7.65%, available: 181 GiB)

@@ -1,0 +1,84 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE data (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b, c, d))
+
+statement ok
+SET experimental_hash_group_join_enabled = true
+
+# Verify the hash group-join planning (at the moment only the DistSQL diagram
+# shows it).
+query T
+EXPLAIN (DISTSQL) SELECT data1.a, sum(data1.d) FROM data AS data1 INNER HASH JOIN data AS data2 ON data1.a = data2.c GROUP BY data1.a
+----
+distribution: local
+·
+• group (hash)
+│ group by: a
+│
+└── • hash join
+    │ equality: (a) = (c)
+    │
+    ├── • scan
+    │     missing stats
+    │     table: data@data_pkey
+    │     spans: FULL SCAN
+    │
+    └── • scan
+          missing stats
+          table: data@data_pkey
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJycUmFv2jAQ_b5fYd0nkEwbp98sVYIVVlJBwghIqyaEvPiArCHObEddhfjvk5OyQkS3tv5gcXfv3nt-ZAfmVwYcBt8mo14QklY_iGfx11GbxIPR4GZGpLCCXQhKTLlt1YVsky_TaFyNSC-uISQIw8GUDHvxkNxFQXgy9UkUHpjIdd26SMjtNJpPyOf7wwgo5EpiKLZogH8HBgsKhVYJGqO0a-0qQCB_A_copHlRWtdeUEiURuA7sKnNEDjMxI8Mpygk6ksPKEi0Is0qWqfWddeyeMAnoHCjsnKbG04EJRIoxIVwVQcWewqqtC8qxoo1AmdHtoI-cG9PP-aMvdVZ8hZbfsMWe9XWi5syV1qiRnniZOE2_wc587ahMJtbrcriTqU56kv_9H0Zrmyry9rXOl1vql9AwUHJRKufmNhU5Zx0Ge26xV54vwyj2TKcj0bP2Hg-bnX99qsJXDUS8N_zx0zRFCo32EzirJLXUOowlwfKNdb5GlXqBCdaJRW2LqOKqGpINLae-nUR5NWIOQWNYvv3uzpmYu9g8o-ZWJPJ_yfT1QmTd-ppQWGVqcdlKoGD93w6Z67DAbcg1saFHW_UY0U7eypcVCuRGaQwFg_YR4t6m-apsWkC3OoS9_tPfwIAAP__ptt65w==
+
+statement ok
+RESET experimental_hash_group_join_enabled
+
+# Same query as above, but with the hash group-join disabled.
+query T
+EXPLAIN (DISTSQL) SELECT data1.a, sum(data1.d) FROM data AS data1 INNER HASH JOIN data AS data2 ON data1.a = data2.c GROUP BY data1.a
+----
+distribution: local
+·
+• group (hash)
+│ group by: a
+│
+└── • hash join
+    │ equality: (a) = (c)
+    │
+    ├── • scan
+    │     missing stats
+    │     table: data@data_pkey
+    │     spans: FULL SCAN
+    │
+    └── • scan
+          missing stats
+          table: data@data_pkey
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckt9u2jAUxu_3FNa5AsmUJPQqUqWwwkYqSBgBadWEkBcfQtQQZ7ajrkK8--SkrBBBV5YLi_PHv_Odz-xA_crAheH36bjvB6Q18KN59G3cJtFwPLyfE840s28YJarctuqAt8mXWTipSqQf1S3ED4LhjIz60Yg8hH5wUnVIGBxI5K5O3cTk6yxcTMnnx0MJKOSCY8C2qMD9ATYsKRRSxKiUkCa1qxp8_htci0KaF6U26SWFWEgEdwc61RmCC3P2M8MZMo6yawEFjpqlWYU10zxzrIonfAEK9yIrt7lyCaOEA4WoYCbqwHJPQZT6bYrSLEFw7SNZ_gBca0__T5n9UWXxR2Q5DVn2RVlvaspcSI4S-YmSpbn5r5Yzu42Y2jyINEfZdU5Xy3CtW57dvpNpsql-AYWw1C7xbOo5F3fqNXZyrrG6nyQSE6aF7PZO5XjG-X7wuArC-SpYjMeviqLFpOU57YtybhtyetfImaEqRK6wafXZSVZjUsc2hiNPsH5AJUoZ41SKuOqtw7ACVQmOStdVpw78vCrZZoJEtv37xz0m2VeQnGOS3SQ575J6JyTrmOQ0Sb13SbeXSZZxbJ2J51XKwQXr9eucOQ4fmAssUebZoo14rrDzl8KYvmaZQgoT9oQD1Ci3aZ4qncbgalnifv_pTwAAAP__f4yx4Q==
+
+statement ok
+SET experimental_hash_group_join_enabled = true
+
+query T
+EXPLAIN (VEC) SELECT data1.a, sum(data1.d) FROM data AS data1 INNER HASH JOIN data AS data2 ON data1.a = data2.c GROUP BY data1.a
+----
+│
+└ Node 1
+  └ *colexec.hashGroupJoiner
+    ├ *colfetcher.ColBatchScan
+    └ *colfetcher.ColBatchScan
+
+statement ok
+RESET experimental_hash_group_join_enabled
+
+query T
+EXPLAIN (VEC) SELECT data1.a, sum(data1.d) FROM data AS data1 INNER HASH JOIN data AS data2 ON data1.a = data2.c GROUP BY data1.a
+----
+│
+└ Node 1
+  └ *colexec.hashAggregator
+    └ *colexecjoin.hashJoiner
+      ├ *colfetcher.ColBatchScan
+      └ *colfetcher.ColBatchScan

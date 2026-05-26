@@ -1,0 +1,159 @@
+# Test a few instances where the kvaccessor validation should prevent us from #
+# violating table invariants (installed spans are non-overlapping).
+# Specifically when updates partially overlap with what's already present.
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state
+# set        [-----X--------)
+# ====================================
+# result     [-----X--------)
+kvaccessor-update
+upsert [b,g):X
+----
+ok
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-----X--------)
+# set     [--A--)
+kvaccessor-update
+upsert [a,c):A
+----
+err: expected to find single row containing upserted spans
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-----X--------)
+# set     [--A--)              [--B--)
+kvaccessor-update
+upsert [a,c):A
+upsert [h,j):B
+----
+err: expected to find single row containing upserted spans
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-----X--------)
+# set     [--A--)        [--B--)
+kvaccessor-update
+upsert [a,c):A
+upsert [f,h):B
+----
+err: expected to find single row containing upserted spans
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-----X--------)
+# set     [--A--)     [--B--)
+kvaccessor-update
+upsert [a,c):A
+upsert [e,g):B
+----
+err: expected to find single row containing upserted spans
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-----X--------)
+# set     [--A--)  [--B--)
+kvaccessor-update
+upsert [a,c):A
+upsert [d,f):B
+----
+err: expected to find single row containing upserted spans
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-----X--------)
+# set           [--A--|--B--)
+kvaccessor-update
+upsert [c,e):A
+upsert [e,g):B
+----
+err: expected to find single row containing upserted spans
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-----X--------)
+# set     [--A--)  [-B)  [--C--)
+kvaccessor-update
+upsert [a,c):A
+upsert [d,e):B
+upsert [f,h):C
+----
+err: expected to find single row containing upserted spans
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-----X--------)
+# set     [--A--)  [-B)  [-C)
+kvaccessor-update
+upsert [a,c):A
+upsert [d,e):B
+upsert [f,g):C
+----
+err: expected to find single row containing upserted spans
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-----X--------)
+# set              [-B)
+kvaccessor-update
+upsert [d,e):B
+----
+err: expected to find single row containing upserted spans
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-----X--------)
+# set                    [-C)
+kvaccessor-update
+upsert [f,g):C
+----
+err: expected to find single row containing upserted spans
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-----X--------)
+# set     [--A--)  [-B|-C|--D--)
+kvaccessor-update
+upsert [a,c):A
+upsert [d,e):B
+upsert [e,f):C
+upsert [f,h):D
+----
+err: expected to find single row containing upserted spans
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-----X--------)
+# set     [--A--)              [--B--)
+kvaccessor-update
+upsert [a,c):A
+upsert [h,j):B
+----
+err: expected to find single row containing upserted spans
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-----X--------)
+# set     [--A--)        [--B--)
+kvaccessor-update
+upsert [a,c):A
+upsert [f,h):B
+----
+err: expected to find single row containing upserted spans
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-----X--------)
+# set     [--A--)     [--B--)
+# ====================================
+# result         [-X--|--B--)
+kvaccessor-update
+upsert [a,c):A
+upsert [e,g):B
+----
+err: expected to find single row containing upserted spans
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-----X--------)
+# set     [--A--)  [-B)  [--C--)
+kvaccessor-update
+upsert [a,c):A
+upsert [d,e):B
+upsert [f,h):C
+----
+err: expected to find single row containing upserted spans
+
+# All of the attempts above should've errored out -- expect to find the actual
+# state unchanged.
+kvaccessor-get
+span [a,j)
+----
+[b,g):X

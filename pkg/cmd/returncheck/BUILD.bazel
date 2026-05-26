@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "returncheck_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/returncheck",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@com_github_cockroachdb_returncheck//:returncheck",
+        "@com_github_kisielk_gotool//:gotool",
+    ],
+)
+
+go_binary(
+    name = "returncheck",
+    embed = [":returncheck_lib"],
+    visibility = ["//visibility:public"],
+)

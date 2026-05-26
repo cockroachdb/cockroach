@@ -1,0 +1,215 @@
+exec-ddl
+CREATE TABLE a (x INT PRIMARY KEY, y INT, s STRING)
+----
+
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 5000
+  },
+  {
+    "columns": ["y"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 400
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 10
+  },
+  {
+    "columns": ["y","s"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 1000
+  }
+]'
+----
+
+build colstat=6 colstat=7 colstat=8 disable=InlineWith
+WITH foo AS (SELECT * FROM a) SELECT * FROM foo
+----
+with &1 (foo)
+ ├── columns: x:6(int!null) y:7(int) s:8(string)
+ ├── stats: [rows=5000]
+ ├── key: (6)
+ ├── fd: (6)-->(7,8)
+ ├── project
+ │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0, distinct(3)=10, null(3)=0]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── scan a
+ │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
+ │         ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0, distinct(3)=10, null(3)=0]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2-5)
+ └── with-scan &1 (foo)
+      ├── columns: x:6(int!null) y:7(int) s:8(string)
+      ├── mapping:
+      │    ├──  a.x:1(int) => x:6(int)
+      │    ├──  a.y:2(int) => y:7(int)
+      │    └──  a.s:3(string) => s:8(string)
+      ├── stats: [rows=5000, distinct(6)=5000, null(6)=0, distinct(7)=400, null(7)=0, distinct(8)=10, null(8)=0]
+      ├── key: (6)
+      └── fd: (6)-->(7,8)
+
+# Regression test for #40296.
+opt disable=InlineWith
+WITH
+  t0 AS ((VALUES (0, 0:::OID, NULL, '')) UNION (VALUES (NULL, 0:::OID,'1970-09-08'::DATE, NULL)))
+SELECT
+  NULL
+FROM
+  a, t0
+WHERE
+  EXISTS(
+    WITH
+      t1 AS (SELECT NULL)
+    SELECT
+      t0.column2, a.y
+  );
+----
+with &1 (t0)
+ ├── columns: "?column?":30(unknown)
+ ├── stats: [rows=10000]
+ ├── fd: ()-->(30)
+ ├── union
+ │    ├── columns: column1:10(int) column2:11(oid!null) column3:12(date) column4:13(string)
+ │    ├── left columns: column1:1(int) column2:2(oid) column3:9(date) column4:4(string)
+ │    ├── right columns: column1:5(int) column2:6(oid) column3:7(date) column4:8(string)
+ │    ├── cardinality: [1 - 2]
+ │    ├── stats: [rows=2, distinct(10-13)=2, null(10-13)=0]
+ │    ├── key: (10-13)
+ │    ├── values
+ │    │    ├── columns: column1:1(int!null) column2:2(oid!null) column4:4(string!null) column3:9(date)
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── stats: [rows=1, distinct(1,2,4,9)=1, null(1,2,4,9)=0]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1,2,4,9)
+ │    │    └── (0, 0, '', NULL) [type=tuple{int, oid, string, date}]
+ │    └── values
+ │         ├── columns: column1:5(int) column2:6(oid!null) column3:7(date!null) column4:8(string)
+ │         ├── cardinality: [1 - 1]
+ │         ├── stats: [rows=1, distinct(5-8)=1, null(5-8)=0]
+ │         ├── key: ()
+ │         ├── fd: ()-->(5-8)
+ │         └── (NULL, 0, '1970-09-08', NULL) [type=tuple{int, oid, date, string}]
+ └── with &2 (t1)
+      ├── columns: "?column?":30(unknown)
+      ├── stats: [rows=10000]
+      ├── fd: ()-->(30)
+      ├── values
+      │    ├── columns: "?column?":23(unknown)
+      │    ├── cardinality: [1 - 1]
+      │    ├── stats: [rows=1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(23)
+      │    └── (NULL,) [type=tuple{unknown}]
+      └── project
+           ├── columns: "?column?":30(unknown)
+           ├── stats: [rows=10000]
+           ├── fd: ()-->(30)
+           ├── inner-join (cross)
+           │    ├── columns: canary_agg:28(bool!null)
+           │    ├── stats: [rows=10000]
+           │    ├── fd: ()-->(28)
+           │    ├── scan a
+           │    │    └── stats: [rows=5000]
+           │    ├── inner-join (cross)
+           │    │    ├── columns: canary_agg:28(bool!null)
+           │    │    ├── cardinality: [0 - 2]
+           │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(one-or-more)
+           │    │    ├── stats: [rows=2]
+           │    │    ├── fd: ()-->(28)
+           │    │    ├── with-scan &1 (t0)
+           │    │    │    ├── mapping:
+           │    │    │    ├── cardinality: [1 - 2]
+           │    │    │    └── stats: [rows=2]
+           │    │    ├── select
+           │    │    │    ├── columns: canary_agg:28(bool!null)
+           │    │    │    ├── cardinality: [0 - 1]
+           │    │    │    ├── stats: [rows=1, distinct(28)=1, null(28)=0]
+           │    │    │    ├── key: ()
+           │    │    │    ├── fd: ()-->(28)
+           │    │    │    ├── scalar-group-by
+           │    │    │    │    ├── columns: canary_agg:28(bool)
+           │    │    │    │    ├── cardinality: [1 - 1]
+           │    │    │    │    ├── stats: [rows=1, distinct(28)=1, null(28)=0]
+           │    │    │    │    ├── key: ()
+           │    │    │    │    ├── fd: ()-->(28)
+           │    │    │    │    ├── values
+           │    │    │    │    │    ├── columns: canary:27(bool!null)
+           │    │    │    │    │    ├── cardinality: [1 - 1]
+           │    │    │    │    │    ├── stats: [rows=1]
+           │    │    │    │    │    ├── key: ()
+           │    │    │    │    │    ├── fd: ()-->(27)
+           │    │    │    │    │    └── (true,) [type=tuple{bool}]
+           │    │    │    │    └── aggregations
+           │    │    │    │         └── const-agg [as=canary_agg:28, type=bool, outer=(27)]
+           │    │    │    │              └── canary:27 [type=bool]
+           │    │    │    └── filters
+           │    │    │         └── canary_agg:28 IS NOT NULL [type=bool, outer=(28), constraints=(/28: (/NULL - ]; tight)]
+           │    │    └── filters (true)
+           │    └── filters (true)
+           └── projections
+                └── NULL [as="?column?":30, type=unknown]
+
+exec-ddl
+CREATE TABLE test (
+  id string
+)
+----
+
+# Regression test for #49911. Make sure there is no error if the left side of
+# a recursive CTE has cardinality=0.
+norm
+WITH RECURSIVE hierarchy(id) as
+  (SELECT id FROM test WHERE id = 'foo' AND 1 != 1 UNION ALL SELECT c.id FROM test AS c, hierarchy AS p WHERE c.id = 'bar')
+SELECT * FROM hierarchy
+----
+project
+ ├── columns: id:11(string)
+ ├── stats: [rows=10]
+ ├── recursive-c-t-e
+ │    ├── columns: id:5(string)
+ │    ├── working table binding: &1
+ │    ├── initial columns: test.id:1(string)
+ │    ├── recursive columns: c.id:6(string)
+ │    ├── stats: [rows=10]
+ │    ├── fake-rel
+ │    │    ├── columns: id:5(string)
+ │    │    ├── cardinality: [1 - ]
+ │    │    └── stats: [rows=1]
+ │    ├── values
+ │    │    ├── columns: test.id:1(string!null)
+ │    │    ├── cardinality: [0 - 0]
+ │    │    ├── stats: [rows=0]
+ │    │    ├── key: ()
+ │    │    └── fd: ()-->(1)
+ │    └── inner-join (cross)
+ │         ├── columns: c.id:6(string!null)
+ │         ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │         ├── stats: [rows=10]
+ │         ├── fd: ()-->(6)
+ │         ├── select
+ │         │    ├── columns: c.id:6(string!null)
+ │         │    ├── stats: [rows=10, distinct(6)=1, null(6)=0]
+ │         │    ├── fd: ()-->(6)
+ │         │    ├── scan test [as=c]
+ │         │    │    ├── columns: c.id:6(string)
+ │         │    │    └── stats: [rows=1000, distinct(6)=100, null(6)=10]
+ │         │    └── filters
+ │         │         └── c.id:6 = 'bar' [type=bool, outer=(6), constraints=(/6: [/'bar' - /'bar']; tight), fd=()-->(6)]
+ │         ├── with-scan &1 (hierarchy)
+ │         │    ├── mapping:
+ │         │    ├── cardinality: [1 - ]
+ │         │    └── stats: [rows=1]
+ │         └── filters (true)
+ └── projections
+      └── id:5 [as=id:11, type=string, outer=(5)]

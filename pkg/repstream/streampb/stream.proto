@@ -1,0 +1,329 @@
+
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+
+syntax = "proto3";
+package cockroach.repstream.streampb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/repstream/streampb";
+
+
+import "kv/kvpb/api.proto";
+import "roachpb/data.proto";
+import "jobs/jobspb/jobs.proto";
+import "roachpb/metadata.proto";
+import "util/hlc/timestamp.proto";
+import "util/rangescanstats/rangescanstatspb/stats.proto";
+import "util/unresolved_addr.proto";
+import "gogoproto/gogo.proto";
+import "google/protobuf/duration.proto";
+import "roachpb/span_config.proto";
+import "sql/catalog/descpb/structured.proto";
+import "sql/catalog/externalcatalog/externalpb/external.proto";
+
+// ReplicationProducerSpec is the specification returned by the replication
+// producer job when it is created.
+message ReplicationProducerSpec {
+  reserved 5, 6;
+
+  int64 stream_id = 1 [(gogoproto.customname) = "StreamID", (gogoproto.casttype) = "StreamID"];
+
+  // ReplicationStartTime is the initial timestamp from which the replication
+  // producer job will begin streaming MVCC revisions. This timestamp is picked
+  // once when the replication producer job is created, and is never updated
+  // through the lifetime of a replication stream. This will be the timestamp as
+  // of which each partition will perform its initial rangefeed scan.
+  util.hlc.Timestamp replication_start_time = 2 [(gogoproto.nullable) = false];
+
+  bytes source_cluster_id = 3 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "SourceClusterID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
+
+  roachpb.TenantID source_tenant_id = 4 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "SourceTenantID"
+  ];
+  
+  reserved 7;
+  reserved 8;
+  sql.catalog.externalcatalog.externalpb.ExternalCatalog external_catalog = 9 [(gogoproto.nullable) = false];
+}
+
+// ReplicationProducerRequest is sent by the consuming cluster when
+// starting a replication stream on an existing tenant.
+message ReplicationProducerRequest {
+  // ReplicationStartTime is the initial timestamp from which the replication
+  // producer job will begin streaming MVCC revisions. This timestamp is picked
+  // once when the replication producer job is created, and is never updated
+  // through the lifetime of a replication stream. This will be the timestamp as
+  // of which each partition will perform its initial rangefeed scan.
+  util.hlc.Timestamp replication_start_time = 1 [(gogoproto.nullable) = false];
+
+
+  // ClusterID identifies the requesting cluster. If set, this is
+  // compared to the ClusterID in the tenant record's
+  // PreviousSourceTenant.
+  bytes cluster_id = 2 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "ClusterID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
+
+  // TenantID identifies the requesting cluster's destination
+  // tenant. If set, this is compared to the TenantID in the tenant
+  // record's PreviousSourceTenant.
+  roachpb.TenantID tenant_id = 3 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "TenantID"
+  ];
+
+
+  // TableNames, if set, are the names of the individual tables that a
+  // logical replication ingestion processor are interested in.
+  repeated string table_names = 4;
+
+  bool allow_offline = 5;
+  
+  // Sent during bidirectional LDR setup to validate the reverse stream URI.
+  string unvalidated_reverse_stream_uri = 6 [(gogoproto.customname) = "UnvalidatedReverseStreamURI"];
+}
+
+enum ReplicationType {
+  PHYSICAL = 0;
+  LOGICAL = 1;
+}
+
+// StreamPartitionSpec is the stream partition specification used to init an
+// eventStream.
+message StreamPartitionSpec {
+  // PreviousReplicatedTimestamp specifies the timestamp from which spans will
+  // start ingesting data in the replication job. This timestamp is empty unless
+  // the replication job resumes after a progress checkpoint has been recorded.
+  // While it is empty we use the InitialScanTimestamp described below.
+  util.hlc.Timestamp previous_replicated_timestamp = 1 [(gogoproto.nullable) = false];
+
+  // InitialScanTimestamp is the timestamp at which the partition will run the
+  // initial rangefeed scan before replicating further changes to the target
+  // spans. This timestamp is always non-empty, but a partition will only run an
+  // initial scan if no progress has been recorded prior to the current
+  // resumption of the replication job. Otherwise, all spans will start
+  // ingesting data from the PreviousReplicatedTimestamp described above.
+  util.hlc.Timestamp initial_scan_timestamp = 4 [(gogoproto.nullable) = false];
+
+  // List of spans to stream.
+  repeated roachpb.Span spans = 2 [(gogoproto.nullable) = false];
+
+  // ExecutionConfig describes various knobs to control execution behavior
+  // of the stream.  If unspecified, reasonable defaults will be set.
+  message ExecutionConfig {
+    reserved 1;
+
+    // Controls how often checkpoint records are published.
+    google.protobuf.Duration min_checkpoint_frequency = 2
+       [(gogoproto.nullable) = false, (gogoproto.stdduration) = true];
+
+    // Controls the batch size, in bytes, sent over pgwire to the consumer.
+    int64 batch_byte_size = 3;
+  }
+
+  ExecutionConfig config = 3 [(gogoproto.nullable) = false];
+
+  int32 consumer_node = 5;
+  int32 consumer_proc = 9;
+
+  // Progress describes previous progress made towards replicating these spans.
+  repeated cockroach.sql.jobs.jobspb.ResolvedSpan progress = 6  [(gogoproto.nullable) = false];
+
+  bool compressed = 7;
+
+  // WithFiltering controls whether the rangefeed started for this
+  // partition should filter datums where OmitInRangefeeds should be
+  // set.
+  bool with_filtering = 8;
+
+  bool with_diff = 10;
+
+  bool wrapped_events = 11;
+
+  ReplicationType type = 12;
+
+  // When true and type is LOGICAL (LDR), the producer buffers rangefeed KVs and
+  // emits in (timestamp, key) order on frontier advancement.
+  bool with_mvcc_ordering = 13;
+
+  // NEXT ID: 14.
+}
+
+// SpanConfigEventStreamSpec is the span config event stream specification.
+message SpanConfigEventStreamSpec {
+  roachpb.Span span = 1 [(gogoproto.nullable) = false];
+
+  roachpb.TenantID tenant_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "TenantID"];
+
+  // Controls how often checkpoint records are published.
+  google.protobuf.Duration min_checkpoint_frequency = 3
+  [(gogoproto.nullable) = false, (gogoproto.stdduration) = true];
+  bool wrapped_events = 4;
+}
+
+message LogicalReplicationPlanRequest {
+    // TableIDs are the destination table IDs that the caller would like a plan for.
+    repeated int32 table_ids = 1 [(gogoproto.customname) = "TableIDs"];
+    // PlanAsOf is the time as of which the plan should be produced.
+    util.hlc.Timestamp plan_as_of = 2 [(gogoproto.nullable) = false];
+    bool use_table_span = 3;
+    int64 stream_id = 4 [(gogoproto.customname) = "StreamID", (gogoproto.casttype) = "StreamID"];
+}
+
+// SourcePartition contains per partition information for a replication plan.
+message SourcePartition {
+  // To maintain compatibility with the StreamPartitionSpec proto, reserve all
+  // wire types it uses.
+  reserved 1, 3, 4, 5, 6, 7, 8, 9, 10, 11;
+  // List of spans to stream.
+  repeated roachpb.Span spans = 2 [(gogoproto.nullable) = false];
+}
+
+message ReplicationStreamSpec {
+  message Partition {
+    // ID of the node this partition resides
+    int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+
+    // The SQL address of the node.
+    util.UnresolvedAddr sql_address = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "SQLAddress"];
+
+    // Locality of the node
+    roachpb.Locality locality = 3 [(gogoproto.nullable) = false];
+
+    SourcePartition source_partition = 4; 
+  }
+
+  repeated Partition partitions = 1 [(gogoproto.nullable) = false];
+
+  roachpb.TenantID source_tenant_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "SourceTenantID"];
+
+  int64 span_config_stream_id = 3 [(gogoproto.customname) = "SpanConfigStreamID", (gogoproto
+    .casttype) = "StreamID"];
+
+  // TableSpans is the set of spans that cover the requested tables if
+  // this is in response to a LogicalReplicationPlanRequest.
+  repeated roachpb.Span table_spans = 4 [(gogoproto.nullable) = false];
+  repeated cockroach.sql.sqlbase.TableDescriptor table_descriptors = 5 [(gogoproto.nullable) = false];
+  repeated cockroach.sql.sqlbase.TypeDescriptor type_descriptors = 6 [(gogoproto.nullable) = false];
+}
+
+// StreamedSpanConfigEntry holds a span config update and its source side commit timestamp
+message StreamedSpanConfigEntry {
+  roachpb.SpanConfigEntry span_config = 1 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+  bool from_full_scan = 3;
+}
+
+// StreamEvent describes a replication stream event
+message StreamEvent {
+
+  message KV {
+    roachpb.KeyValue key_value = 1 [(gogoproto.nullable) = false];
+    roachpb.Value prev_value = 2 [(gogoproto.nullable) = false];
+  }
+
+  message Batch {
+    repeated roachpb.KeyValue deprecated_key_values = 1 [(gogoproto.nullable) = false];
+    repeated roachpb.RangeFeedSSTable ssts = 2 [(gogoproto.nullable) = false];
+    repeated roachpb.RangeFeedDeleteRange del_ranges = 3 [(gogoproto.nullable) = false];
+    repeated StreamedSpanConfigEntry span_configs = 4 [(gogoproto.nullable) = false];
+    repeated bytes split_points = 5 [(gogoproto.casttype) =  "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+    repeated KV kvs = 6 [(gogoproto.nullable) = false, (gogoproto.customname) = "KVs"];
+  }
+
+  // RangeStats contains statistics about ranges being scanned during initial
+  // and catchup scans. This message is kept for mixed-version compatibility
+  // with 26.1 nodes which marshal this type via MarshalAny/UnmarshalAny in
+  // DistSQL progress metadata. The canonical definition has moved to
+  // rangescanstatspb.RangeStats; this copy must remain until all nodes in
+  // the cluster are running 26.2.
+  //
+  // TODO(kev-cao): Remove when deleting the 26.2 version gates.
+  message RangeStats {
+    int64 range_count = 1;
+    int64 scanning_range_count = 2;
+    int64 lagging_range_count = 3;
+  }
+
+  // Checkpoint represents stream checkpoint.
+  message StreamCheckpoint {
+    reserved 1;
+    repeated cockroach.sql.jobs.jobspb.ResolvedSpan resolved_spans = 2  [(gogoproto.nullable) = false];
+    cockroach.util.rangescanstatspb.RangeStats range_stats = 3;
+  }
+
+  // Only 1 field ought to be set.
+  Batch batch = 1;
+  StreamCheckpoint checkpoint = 2;
+
+  uint64 stream_seq = 3;
+  int64 emit_unix_nanos = 4;
+}
+
+message StreamReplicationStatus {
+  enum StreamStatus {
+    // Stream is running. Consumers should continue to heartbeat.
+    STREAM_ACTIVE = 0;
+    // Stream stopped running. Consumers should stop heartbeating and
+    // optionally start a new replication stream.
+    STREAM_INACTIVE = 1;
+    // Stream replication is paused. Consumers can resume the job and start heartbeating.
+    STREAM_PAUSED = 2;
+    // Stream status is unknown. Consumers should retry heartbeating.
+    UNKNOWN_STREAM_STATUS_RETRY = 4;
+  }
+
+  StreamStatus stream_status = 1;
+
+  // Current protected timestamp for spans being replicated. It is absent
+  // when the replication stream is 'STOPPED'.
+  util.hlc.Timestamp protected_timestamp = 2;
+}
+
+message StreamIngestionStats {
+  reserved 1;
+  reserved 2;
+
+  // Stream ingestion details.
+  cockroach.sql.jobs.jobspb.StreamIngestionDetails ingestion_details = 3;
+
+  // Stream ingestion progress, including each partition ingestion progress.
+  cockroach.sql.jobs.jobspb.StreamIngestionProgress ingestion_progress = 4;
+
+  message ReplicationLagInfo {
+    // The timestamp at which we have confirmed all partitions have ingested to.
+    // The cutover can only happen when this timestamp is not less than the
+    // above cutover timestamp, i.e., this is max timestamp we can cut over.
+    util.hlc.Timestamp min_ingested_timestamp = 1 [(gogoproto.nullable) = false];
+
+    // The difference between destination cluster's current time and
+    // the ingestion high watermark.
+    google.protobuf.Duration replication_lag = 2
+    [(gogoproto.nullable) = false, (gogoproto.stdduration) = true];
+
+    util.hlc.Timestamp latest_checkpointed_timestamp = 3 [(gogoproto.nullable) = false];
+    util.hlc.Timestamp earliest_checkpointed_timestamp = 4 [(gogoproto.nullable) = false];
+    reserved 5;
+    reserved 6;
+
+    // Lag between the slowest ingested timestamp to the fastest ingested timestamp
+    // among all partitions.
+    google.protobuf.Duration slowest_fastest_ingestion_lag = 7
+    [(gogoproto.nullable) = false, (gogoproto.stdduration) = true];
+  }
+
+  // Current replication lag information. It is absent if no ingestion progress
+  // has been recorded yet.
+  ReplicationLagInfo replication_lag_info = 5;
+}

@@ -1,0 +1,479 @@
+template
+package main
+
+func a() {
+  x := b(true)
+  x = b(false)
+}
+
+
+// execgen:template<t>
+func b(t bool) int {
+  if t {
+    x = 3
+  } else {
+    x = 4
+  }
+  return x
+}
+----
+----
+package main
+
+func a() {
+	x := b_true()
+	x = b_false()
+}
+
+const _ = "template_b"
+
+func b_true() int {
+	x = 3
+	return x
+}
+
+func b_false() int {
+	x = 4
+	return x
+}
+----
+----
+
+template
+package main
+
+func a() {
+  x := b(3, true, true)
+  x = b(6, true, false)
+  b(4, false, true)
+  b(5, false, false)
+}
+
+
+// execgen:inline
+// execgen:template<t, u>
+func b(a int, t bool, u bool) int {
+  var x int
+  if t {
+    x = 3
+  } else {
+    x = 4
+    if u {
+      x += 1
+    }
+  }
+  return x
+}
+----
+----
+package main
+
+func a() {
+	x := b_true_true(3)
+	x = b_true_false(6)
+	b_false_true(4)
+	b_false_false(5)
+}
+
+// execgen:inline
+const _ = "template_b"
+
+// execgen:inline
+func b_true_true(a int) int {
+	var x int
+	x = 3
+	return x
+}
+
+// execgen:inline
+func b_true_false(a int) int {
+	var x int
+	x = 3
+	return x
+}
+
+// execgen:inline
+func b_false_true(a int) int {
+	var x int
+	x = 4
+	x += 1
+	return x
+}
+
+// execgen:inline
+func b_false_false(a int) int {
+	var x int
+	x = 4
+	return x
+}
+----
+----
+
+# Test templates calling each other.
+template
+package main
+
+func main() {
+  a(1, true)
+  a(1, false)
+}
+
+// execgen:inline
+// execgen:template<y>
+func a(x int, y bool) {
+  b(x, y, true)
+  b(x, y, false)
+}
+
+
+// execgen:inline
+// execgen:template<y, z>
+func b(x int, y bool, z bool) int {
+  if y {
+    if z {
+      fmt.Println("y and z")
+    } else {
+      fmt.Println("y not z")
+    }
+  } else {
+    if z {
+      fmt.Println("not y and z")
+    } else {
+      fmt.Println("not y not z")
+    }
+  }
+}
+----
+----
+package main
+
+func main() {
+	a_true(1)
+	a_false(1)
+}
+
+// execgen:inline
+const _ = "template_a"
+
+// execgen:inline
+const _ = "template_b"
+
+// execgen:inline
+func a_true(x int) {
+	b_true_true(x)
+	b_true_false(x)
+}
+
+// execgen:inline
+func a_false(x int) {
+	b_false_true(x)
+	b_false_false(x)
+}
+
+// execgen:inline
+func b_true_true(x int) int {
+	fmt.Println("y and z")
+}
+
+// execgen:inline
+func b_true_false(x int) int {
+	fmt.Println("y not z")
+}
+
+// execgen:inline
+func b_false_true(x int) int {
+	fmt.Println("not y and z")
+}
+
+// execgen:inline
+func b_false_false(x int) int {
+	fmt.Println("not y not z")
+}
+----
+----
+
+# Test templates calling each other in reverse order.
+template
+package main
+
+func main() {
+  a(1, true)
+  a(1, false)
+}
+
+// execgen:inline
+// execgen:template<y, z>
+func b(x int, y bool, z bool) int {
+  if y {
+    if z {
+      fmt.Println("y and z")
+    } else {
+      fmt.Println("y not z")
+    }
+  } else {
+    if z {
+      fmt.Println("not y and z")
+    } else {
+      fmt.Println("not y not z")
+    }
+  }
+}
+
+// execgen:inline
+// execgen:template<y>
+func a(x int, y bool) {
+  b(x, y, true)
+  b(x, y, false)
+}
+----
+----
+package main
+
+func main() {
+	a_true(1)
+	a_false(1)
+}
+
+// execgen:inline
+const _ = "template_b"
+
+// execgen:inline
+const _ = "template_a"
+
+// execgen:inline
+func a_true(x int) {
+	b_true_true(x)
+	b_true_false(x)
+}
+
+// execgen:inline
+func a_false(x int) {
+	b_false_true(x)
+	b_false_false(x)
+}
+
+// execgen:inline
+func b_true_true(x int) int {
+	fmt.Println("y and z")
+}
+
+// execgen:inline
+func b_true_false(x int) int {
+	fmt.Println("y not z")
+}
+
+// execgen:inline
+func b_false_true(x int) int {
+	fmt.Println("not y and z")
+}
+
+// execgen:inline
+func b_false_false(x int) int {
+	fmt.Println("not y not z")
+}
+----
+----
+
+# Test non-bool templates and execgen:switch
+template
+package main
+
+func main() {
+  a(1, blah.Foo)
+  a(1, *blah.Bar)
+  a(1, *blah.Bar)
+}
+
+// execgen:inline
+// execgen:template<y>
+func a(x int, y blah.Derp) {
+  // execgen:switch
+  switch y {
+  case blah.Foo:
+    fmt.Println("foo")
+    b(x, true, y)
+  case *blah.Bar:
+    fmt.Println("bar")
+    b(x, false, y)
+  }
+}
+
+// execgen:template<b, y>
+func b(x int, b bool, y blah.Derp) {
+  if !b {
+    switch y {
+      case blah.Foo:
+        fmt.Println("foo false")
+      case *blah.Bar:
+        fmt.Println("bar false")
+    }
+  } else {
+    switch y {
+      case blah.Foo:
+        fmt.Println("foo true")
+      case *blah.Bar:
+        fmt.Println("bar true")
+    }
+  }
+}
+----
+----
+package main
+
+func main() {
+	a_blahDOTFoo(1)
+	a_STARblahDOTBar(1)
+	a_STARblahDOTBar(1)
+}
+
+// execgen:inline
+const _ = "template_a"
+
+const _ = "template_b"
+
+// execgen:inline
+func a_blahDOTFoo(x int) {
+	fmt.Println("foo")
+	b_true_blahDOTFoo(x)
+}
+
+// execgen:inline
+func a_STARblahDOTBar(x int) {
+	fmt.Println("bar")
+	b_false_STARblahDOTBar(x)
+}
+
+func b_true_blahDOTFoo(x int) {
+	fmt.Println("foo true")
+}
+
+func b_false_STARblahDOTBar(x int) {
+	fmt.Println("bar false")
+}
+----
+----
+
+# Test an example type template
+template
+package main
+// execgen:template<family, width>
+func frobnicateColumn(col coldata.Vec, family types.Family, width int32) {
+   switch family {
+   case types.Int:
+     switch width {
+       case 32:
+         fmt.Println("i'm an int32!", col.Int32()[0])
+     }
+   case types.Interval, types.Interval2:
+     fmt.Println("I'm an interval!", col.Interval()[0])
+   }
+}
+
+func otherFunc(col coldata.Vec) {
+  frobnicateColumn(col, types.Int, 32)
+  frobnicateColumn(col, types.Interval, 0)
+  frobnicateColumn(col, types.Interval2, 0)
+}
+----
+----
+package main
+
+const _ = "template_frobnicateColumn"
+
+func otherFunc(col coldata.Vec) {
+	frobnicateColumn_typesDOTInt_32(col)
+	frobnicateColumn_typesDOTInterval_0(col)
+	frobnicateColumn_typesDOTInterval2_0(col)
+}
+
+func frobnicateColumn_typesDOTInt_32(col coldata.Vec) {
+	fmt.Println("i'm an int32!", col.Int32()[0])
+}
+
+func frobnicateColumn_typesDOTInterval_0(col coldata.Vec) {
+	fmt.Println("I'm an interval!", col.Interval()[0])
+}
+
+func frobnicateColumn_typesDOTInterval2_0(col coldata.Vec) {
+	fmt.Println("I'm an interval!", col.Interval()[0])
+}
+----
+----
+
+# Don't drop comments.
+template
+package main
+
+func a() {
+  b(true)
+  b(false)
+}
+
+
+// execgen:template<t>
+// execgen:inline
+func b(t bool) int {
+  if t {
+    //gcassert:bce
+  }
+  col[i] = 20
+}
+----
+----
+package main
+
+func a() {
+	b_true()
+	b_false()
+}
+
+// execgen:inline
+const _ = "template_b"
+
+// execgen:inline
+func b_true() int {
+	//gcassert:bce
+	col[i] = 20
+}
+
+// execgen:inline
+func b_false() int {
+	col[i] = 20
+}
+----
+----
+
+# Do not include comment decoration in template function names.
+template
+package main
+
+func a() {
+	b(true /* t */)
+}
+
+// execgen:inline
+// execgen:template<t>
+func b(t bool) int {
+	if t {
+	    return 0
+	} else {
+	    return 1
+	}
+}
+----
+----
+package main
+
+func a() {
+	b_true()
+}
+
+// execgen:inline
+const _ = "template_b"
+
+// execgen:inline
+func b_true() int {
+	return 0
+}
+----
+----

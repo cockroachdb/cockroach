@@ -1,0 +1,319 @@
+# tenant-cluster-setting-override-opt: sql.zone_configs.allow_for_secondary_tenant.enabled=true sql.multi_region.allow_abstractions_for_secondary_tenants.enabled=true
+# LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-vec-off multiregion-9node-3region-3azs-tenant multiregion-9node-3region-3azs-no-los
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+statement ok
+CREATE DATABASE multi_region_test_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1" SURVIVE REGION FAILURE
+
+statement ok
+USE multi_region_test_db
+
+# Create a table with a computed region column.
+
+statement ok
+CREATE TABLE university (
+  name STRING NOT NULL,
+  mascot STRING NOT NULL,
+  postal_code STRING NOT NULL,
+  region crdb_internal_region NOT NULL AS (
+    CASE
+      WHEN left(postal_code, 2) = '97' THEN 'ca-central-1'   -- Oregon
+      WHEN left(postal_code, 2) = '98' THEN 'ap-southeast-2' -- Washington
+      ELSE 'us-east-1'                                       -- British Columbia
+    END
+  ) STORED,
+  PRIMARY KEY (name),
+  UNIQUE INDEX (mascot),
+  FAMILY (name, mascot, postal_code, region)
+)
+LOCALITY REGIONAL BY ROW AS region
+
+# Create a table with a non-computed region column.
+
+statement ok
+CREATE TABLE volcano (
+  name STRING NOT NULL,
+  origin STRING NOT NULL,
+  location GEOGRAPHY NOT NULL,
+  region crdb_internal_region NOT NULL,
+  PRIMARY KEY (name),
+  UNIQUE INDEX (origin),
+  INVERTED INDEX (location),
+  FAMILY (name, origin, location, region)
+)
+LOCALITY REGIONAL BY ROW AS region
+
+# Create a table without a unique constraint.
+
+statement ok
+CREATE TABLE city (
+  name STRING NOT NULL,
+  nickname STRING NOT NULL,
+  state_or_province CHAR(2) NOT NULL,
+  region crdb_internal_region NOT NULL AS (
+    CASE
+      WHEN lower(state_or_province) = 'or' THEN 'ca-central-1'   -- Oregon
+      WHEN lower(state_or_province) = 'wa' THEN 'ap-southeast-2' -- Washington
+      ELSE 'us-east-1'                                           -- British Columbia
+    END
+  ) STORED,
+  PRIMARY KEY (name, state_or_province),
+  FAMILY (name, nickname, state_or_province, region)
+)
+LOCALITY REGIONAL BY ROW AS region
+
+# Create a table with region included in all unique constraints.
+
+statement ok
+CREATE TABLE river (
+  region crdb_internal_region NOT NULL,
+  name STRING NOT NULL,
+  outlet STRING NOT NULL,
+  PRIMARY KEY (region, name),
+  UNIQUE INDEX (region, outlet),
+  FAMILY (region, name, outlet)
+)
+LOCALITY REGIONAL BY ROW AS region
+
+statement ok
+GRANT INSERT, UPDATE, SELECT ON TABLE university TO testuser
+
+# Test non-conflicting INSERT.
+
+statement ok
+INSERT INTO university (name, mascot, postal_code) VALUES ('Western Oregon', 'wolves', '97361')
+
+statement ok
+INSERT INTO volcano
+VALUES ('Mount Hood', 'Fought over Loowit and was transformed by Saghalie.', 'POINT(-121.695833 45.373611)', 'ca-central-1')
+
+statement ok
+INSERT INTO city VALUES ('Vancouver', 'Hollywood North', 'BC')
+
+statement ok
+INSERT INTO river VALUES ('ap-southeast-2', 'Skykomish', 'Snohomish')
+
+# Test conflicting INSERT.
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "university_mascot_key"
+INSERT INTO university (name, mascot, postal_code) VALUES ('Thompson Rivers', 'wolves', 'V2C 0C8')
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "volcano_origin_key"
+INSERT INTO volcano VALUES
+('Mount Adams', 'Fought over Loowit and was transformed by Saghalie.', 'POINT(-121.490895 46.202412)', 'ap-southeast-2')
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "city_pkey"\nDETAIL: Key \(name, state_or_province\)=\('Vancouver', 'BC'\) already exists\.
+INSERT INTO city VALUES ('Vancouver', 'The ''Couve', 'BC')
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "river_pkey"\nDETAIL: Key \(region, name\)=\('ap-southeast-2', 'Skykomish'\) already exists\.
+INSERT INTO river VALUES ('ap-southeast-2', 'Skykomish', 'Snoqualmie')
+
+# Test conflicting INSERT ON CONFLICT DO NOTHING.
+
+statement ok
+INSERT INTO university (name, mascot, postal_code)
+VALUES ('Thompson Rivers', 'wolves', 'V2C 0C8'), ('Evergreen State', 'geoducks', '98505')
+ON CONFLICT (mascot) DO NOTHING
+
+query TTT
+SELECT name, mascot, postal_code FROM university ORDER BY name
+----
+Evergreen State  geoducks  98505
+Western Oregon   wolves    97361
+
+statement ok
+INSERT INTO volcano VALUES
+('Mount Adams', 'Fought over Loowit and was transformed by Saghalie.', 'POINT(-121.490895 46.202412)', 'ap-southeast-2'),
+('Mount St. Helens', 'Fair maiden Loowit could not choose between Wyeast and Pahto and was transformed by Saghalie.', 'POINT(-122.1944 46.1912)', 'ap-southeast-2')
+ON CONFLICT (origin) DO NOTHING
+
+query TTT
+SELECT name, origin, location FROM volcano ORDER BY name
+----
+Mount Hood        Fought over Loowit and was transformed by Saghalie.                                            0101000020E6100000909E2287886C5EC08236397CD2AF4640
+Mount St. Helens  Fair maiden Loowit could not choose between Wyeast and Pahto and was transformed by Saghalie.  0101000020E6100000EA95B20C718C5EC0637FD93D79184740
+
+statement ok
+INSERT INTO city VALUES ('Vancouver', 'The Big Smoke', 'BC'), ('Salem', 'Cherry City', 'OR')
+ON CONFLICT (name, state_or_province) DO NOTHING
+
+query TTT
+SELECT name, nickname, state_or_province FROM city ORDER BY name
+----
+Salem      Cherry City      OR
+Vancouver  Hollywood North  BC
+
+statement ok
+INSERT INTO river VALUES ('ap-southeast-2', 'Snoqualmie', 'Snohomish'), ('us-east-1', 'Fraser', 'Strait of Georgia')
+ON CONFLICT (region, outlet) DO NOTHING
+
+query TTT
+SELECT region, name, outlet FROM river ORDER BY region, name
+----
+ap-southeast-2  Skykomish  Snohomish
+us-east-1       Fraser     Strait of Georgia
+
+# Test conflicting UPSERT.
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "university_mascot_key"
+UPSERT INTO university (name, mascot, postal_code) VALUES ('Thompson Rivers', 'wolves', 'V2C 0C8')
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "volcano_origin_key"
+UPSERT INTO volcano VALUES
+('Mount Adams', 'Fought over Loowit and was transformed by Saghalie.', 'POINT(-121.490895 46.202412)', 'ap-southeast-2')
+
+statement ok
+UPSERT INTO city VALUES ('Vancouver', 'The Big Smoke', 'BC')
+
+statement ok
+UPSERT INTO river VALUES ('us-east-1', 'Fraser', 'Salish Sea')
+
+# Test conflicting UPDATE.
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "university_mascot_key"
+UPDATE university SET mascot = 'wolves' WHERE name = 'Evergreen State'
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "volcano_origin_key"
+UPDATE volcano SET origin = 'Fought over Loowit and was transformed by Saghalie.' WHERE name = 'Mount St. Helens'
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "city_pkey"\nDETAIL: Key \(name, state_or_province\)=\('Vancouver', 'BC'\) already exists\.
+UPDATE city SET name = 'Vancouver', state_or_province = 'BC' WHERE name = 'Salem'
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "river_region_outlet_key"\nDETAIL: Key \(region, outlet\)=\('us-east-1', 'Salish Sea'\) already exists\.
+UPDATE river SET region = 'us-east-1', outlet = 'Salish Sea' WHERE name = 'Skykomish'
+
+# Test conflicting INSERT ON CONFLICT DO UPDATE.
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "university_pkey"
+INSERT INTO university (name, mascot, postal_code)
+VALUES ('Thompson Rivers', 'wolves', 'V2C 0C8'), ('Oregon Tech', 'owls', '97601')
+ON CONFLICT (mascot) DO UPDATE SET name = 'Evergreen State', mascot = 'banana slugs'
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "volcano_pkey"
+INSERT INTO volcano VALUES
+('Mount Adams', 'Fought over Loowit and was transformed by Saghalie.', 'POINT(-121.490895 46.202412)', 'ap-southeast-2'),
+('Mount Garibaldi', 'Lightning from thunderbird eyes struck the ground.', 'POINT(-123.004722 49.850278)', 'us-east-1')
+ON CONFLICT (origin) DO UPDATE SET name = 'Mount St. Helens', origin = 'Discovered by the Vancouver expedition in 1792.', region = 'us-east-1'
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "city_pkey"\nDETAIL: Key \(name, state_or_province\)=\('Vancouver', 'BC'\) already exists\.
+INSERT INTO city VALUES ('Seattle', 'The Emerald City', 'WA'), ('Salem', 'The Witch City', 'OR')
+ON CONFLICT (name, state_or_province) DO UPDATE SET name = 'Vancouver', nickname = 'Land of the mud-turtles', state_or_province = 'BC'
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "river_pkey"\nDETAIL: Key \(region, name\)=\('ap-southeast-2', 'Skykomish'\) already exists\.
+INSERT INTO river VALUES ('us-east-1', 'Squamish', 'Salish Sea'), ('ca-central-1', 'Rogue', 'Pacific Ocean')
+ON CONFLICT (region, outlet) DO UPDATE SET region = 'ap-southeast-2', name = 'Skykomish', outlet = 'Puget Sound'
+
+# Test predicate locks by writing into multiple regions concurrently
+
+statement ok
+BEGIN
+
+statement ok
+INSERT INTO university VALUES ('CMU', 'Scottie Dog', '15213');
+
+user testuser newsession
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+statement ok
+USE multi_region_test_db
+
+statement async conflict error pgcode 23505 pq: duplicate key value violates unique constraint "university_pkey"
+INSERT INTO university VALUES ('CMU', 'Chippewas', '97858');
+
+user root
+
+statement ok
+COMMIT
+
+awaitstatement conflict
+
+query TTT
+SELECT name, mascot, postal_code FROM university ORDER BY name
+----
+CMU              Scottie Dog  15213
+Evergreen State  geoducks     98505
+Western Oregon   wolves       97361
+
+statement ok
+INSERT INTO university VALUES ('Central Michigan University', 'Chippewas', '97858');
+
+statement ok
+UPDATE university SET name = 'Carnegie Mellon University' WHERE name = 'CMU';
+
+statement ok
+BEGIN
+
+statement ok
+UPDATE university SET name = 'CMU' WHERE name = 'Carnegie Mellon University';
+
+user testuser
+
+statement async conflict error pgcode 23505 pq: duplicate key value violates unique constraint "university_pkey"
+UPDATE university SET name = 'CMU' WHERE name = 'Central Michigan University'
+
+user root
+
+statement ok
+COMMIT
+
+awaitstatement conflict
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "university_mascot_key"
+UPDATE university SET mascot = 'wolves' WHERE name = 'CMU'
+
+query TTT
+SELECT name, mascot, postal_code FROM university ORDER BY name
+----
+CMU                          Scottie Dog  15213
+Central Michigan University  Chippewas    97858
+Evergreen State              geoducks     98505
+Western Oregon               wolves       97361
+
+#
+# Reproduction for #137341
+#
+statement ok
+CREATE TABLE t137341 (
+  region crdb_internal_region NOT NULL,
+  id STRING,
+  u1 STRING,
+  u2 STRING,
+  s STRING,
+  PRIMARY KEY (id),
+  UNIQUE INDEX (u1),
+  INDEX (s),
+  UNIQUE INDEX (u2)
+) LOCALITY REGIONAL BY ROW AS region
+
+statement ok
+INSERT INTO t137341 (region, id, u1, u2, s) VALUES ('ca-central-1', 'a', 'u1-a', 'u2-a', 'common')
+
+statement ok
+CREATE TABLE t137341b (
+  region crdb_internal_region NOT NULL,
+  id STRING,
+  u1 STRING,
+  u2 STRING,
+  s STRING,
+  PRIMARY KEY (id),
+  INDEX (s)
+) LOCALITY REGIONAL BY ROW AS region
+
+statement ok
+INSERT INTO t137341b (region, id, u1, u2, s) VALUES ('ca-central-1', 'a', 'u1-a', 'u2-a', 'common')
+
+statement ok
+INSERT INTO t137341b (region, id, u1, u2, s) VALUES ('us-east-1', 'b', 'u1-b', 'u2-b', 'common')
+
+statement ok
+CREATE UNIQUE INDEX ON t137341b(u1)
+
+statement ok
+CREATE UNIQUE INDEX ON t137341b(u2)
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "t137341b_u2_key"
+UPDATE t137341b SET u2 = 'u2-a' WHERE u2 = 'u2-b'

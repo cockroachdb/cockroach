@@ -1,0 +1,27 @@
+# This is a contrived scenario which makes sure NextKey() handles range
+# tombstones starting at key.Next() correctly.
+run ok
+put k=a ts=2 v=a2
+put k=a ts=3 v=a3
+put k=b ts=1 v=b1
+del_range_ts k=a end=+a ts=5
+del_range_ts k=+a end=b ts=4
+----
+>> at end:
+rangekey: a{-\x00}/[5.000000000,0=/<empty>]
+rangekey: {a\x00-b}/[4.000000000,0=/<empty>]
+data: "a"/3.000000000,0 -> /BYTES/a3
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/1.000000000,0 -> /BYTES/b1
+
+run ok
+iter_new types=pointsAndRanges
+iter_seek_ge k=a
+iter_next_key
+iter_next_key
+iter_next_key
+----
+iter_seek_ge: a{-\x00}/[5.000000000,0=/<empty>] !
+iter_next_key: {a\x00-b}/[4.000000000,0=/<empty>] !
+iter_next_key: "b"/1.000000000,0=/BYTES/b1 !
+iter_next_key: .

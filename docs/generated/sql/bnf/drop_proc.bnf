@@ -1,0 +1,3 @@
+drop_proc_stmt ::=
+	'DROP' 'PROCEDURE' ( ( ( proc_name ( '(' ( ( routine_param ) ( ( ',' routine_param ) )* ) ')' | '(' ')' ) | proc_name ) ) ( ( ',' ( proc_name ( '(' ( ( routine_param ) ( ( ',' routine_param ) )* ) ')' | '(' ')' ) | proc_name ) ) )* ) ( 'CASCADE' | 'RESTRICT' |  )
+	| 'DROP' 'PROCEDURE' 'IF' 'EXISTS' ( ( ( proc_name ( '(' ( ( routine_param ) ( ( ',' routine_param ) )* ) ')' | '(' ')' ) | proc_name ) ) ( ( ',' ( proc_name ( '(' ( ( routine_param ) ( ( ',' routine_param ) )* ) ')' | '(' ')' ) | proc_name ) ) )* ) ( 'CASCADE' | 'RESTRICT' |  )

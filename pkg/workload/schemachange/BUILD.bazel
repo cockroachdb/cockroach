@@ -1,0 +1,82 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//build:STRINGER.bzl", "stringer")
+
+go_library(
+    name = "schemachange",
+    srcs = [
+        "deck.go",
+        "error_code_set.go",
+        "error_screening.go",
+        "generate.go",
+        "operation_generator.go",
+        "optype.go",
+        "query_util.go",
+        "schemachange.go",
+        "tracing.go",
+        "type_resolver.go",
+        "validation.go",
+        "watch_dog.go",
+        "workload_result.go",
+        ":gen-optype-stringer",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/schemachange",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/roachpb",
+        "//pkg/security/username",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/lexbase",
+        "//pkg/sql/oidext",
+        "//pkg/sql/parser",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/randgen",
+        "//pkg/sql/sem/catconstants",
+        "//pkg/sql/sem/idxtype",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util",
+        "//pkg/util/encoding",
+        "//pkg/util/randutil",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "//pkg/workload",
+        "//pkg/workload/histogram",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgconn",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_lib_pq//oid",
+        "@com_github_prometheus_client_golang//prometheus",
+        "@com_github_prometheus_client_golang//prometheus/promauto",
+        "@com_github_spf13_pflag//:pflag",
+        "@io_opentelemetry_go_otel//attribute",
+        "@io_opentelemetry_go_otel//codes",
+        "@io_opentelemetry_go_otel_exporters_otlp_otlptrace//:otlptrace",
+        "@io_opentelemetry_go_otel_sdk//trace",
+        "@io_opentelemetry_go_otel_trace//:trace",
+        "@io_opentelemetry_go_proto_otlp//collector/trace/v1:trace",
+        "@io_opentelemetry_go_proto_otlp//trace/v1:trace",
+    ],
+)
+
+stringer(
+    name = "gen-optype-stringer",
+    src = "optype.go",
+    typ = "opType",
+)
+
+go_test(
+    name = "schemachange_test",
+    srcs = ["generate_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":schemachange"],
+    deps = [
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/sem/tree",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,142 @@
+# This file contains telemetry tests for CCL-related generic query plan
+# counters.
+
+exec
+CREATE TABLE kv (
+  k INT PRIMARY KEY,
+  v INT,
+  INDEX (v)
+)
+----
+
+exec
+CREATE TABLE ab (
+  a INT PRIMARY KEY,
+  b INT
+)
+----
+
+exec
+PREPARE p_pk AS
+SELECT * FROM kv WHERE k = $1
+----
+
+exec
+PREPARE p_join AS
+SELECT * FROM kv
+JOIN ab ON a = k
+WHERE v = $1
+----
+
+feature-list
+sql.plan.type.force-custom
+----
+
+exec
+SET plan_cache_mode = force_custom_plan
+----
+
+exec
+SET index_recommendations_enabled = false
+----
+
+exec
+SET application_name = 'testuser'
+----
+
+feature-usage
+EXECUTE p_pk(100)
+----
+sql.plan.type.force-custom
+
+feature-usage
+EXECUTE p_join(1)
+----
+sql.plan.type.force-custom
+
+feature-list
+sql.plan.type.force-generic
+----
+
+exec
+SET plan_cache_mode = force_generic_plan
+----
+
+feature-usage
+EXECUTE p_pk(100)
+----
+sql.plan.type.force-generic
+
+feature-usage
+EXECUTE p_join(0)
+----
+sql.plan.type.force-generic
+
+# Non-prepared statements do not increment plan type counters.
+feature-usage
+SELECT * FROM kv WHERE v = 100
+----
+
+feature-usage
+SELECT * FROM kv WHERE v = 100
+----
+
+exec
+SET plan_cache_mode = auto
+----
+
+feature-list
+sql.plan.type.auto-generic
+----
+
+# If the placeholder fast-path is used, the plan is always generic.
+feature-usage
+EXECUTE p_pk(100)
+----
+sql.plan.type.auto-generic
+
+feature-list
+sql.plan.type.auto-custom
+----
+
+# The first five executions of p_join have custom plans while establishing an
+# average cost. One of the custom executions occurred above.
+feature-usage
+EXECUTE p_join(2)
+----
+sql.plan.type.auto-custom
+
+feature-usage
+EXECUTE p_join(3)
+----
+sql.plan.type.auto-custom
+
+feature-usage
+EXECUTE p_join(4)
+----
+sql.plan.type.auto-custom
+
+feature-usage
+EXECUTE p_join(5)
+----
+sql.plan.type.auto-custom
+
+
+feature-list
+sql.plan.type.auto-generic
+----
+
+# The sixth execution uses a generic plan.
+feature-usage
+EXECUTE p_join(6)
+----
+sql.plan.type.auto-generic
+
+# Non-prepared statements do not increment plan type counters.
+feature-usage
+SELECT * FROM kv WHERE v = 100
+----
+
+feature-usage
+SELECT * FROM kv WHERE v = 100
+----

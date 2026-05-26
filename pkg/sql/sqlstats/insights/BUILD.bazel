@@ -1,0 +1,62 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "insights",
+    srcs = [
+        "causes.go",
+        "detector.go",
+        "insights.go",
+        "pool.go",
+        "provider.go",
+        "registry.go",
+        "store.go",
+        "util.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/sql/appstatspb",
+        "//pkg/sql/clusterunique",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sqlcommenter",
+        "//pkg/sql/sqlstats",
+        "//pkg/sql/sqlstats/insightspb",
+        "//pkg/util/cache",
+        "//pkg/util/intsets",
+        "//pkg/util/metric",
+        "//pkg/util/quantile",
+        "//pkg/util/syncutil",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_prometheus_client_model//go",
+    ],
+)
+
+go_test(
+    name = "insights_test",
+    srcs = [
+        "causes_test.go",
+        "detector_test.go",
+        "insights_test.go",
+        "registry_test.go",
+        "store_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":insights"],
+    deps = [
+        "//pkg/settings/cluster",
+        "//pkg/sql/appstatspb",
+        "//pkg/sql/clusterunique",
+        "//pkg/sql/execstats",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sqlstats",
+        "//pkg/sql/sqlstats/insightspb",
+        "//pkg/util/stop",
+        "//pkg/util/uint128",
+        "//pkg/util/uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

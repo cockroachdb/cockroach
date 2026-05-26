@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "workload",
+    srcs = ["workload.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "workload_test",
+    srcs = ["workload_test.go"],
+    embed = [":workload"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

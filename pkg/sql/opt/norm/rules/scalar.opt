@@ -1,0 +1,505 @@
+# =============================================================================
+# scalar.opt contains scalar normalization rules that aren't handled elsewhere.
+# =============================================================================
+
+# CommuteVar ensures that variable references are on the left side of
+# commutative comparison and binary operators. Other patterns don't need to
+# handle both combinations.
+[CommuteVar, Normalize]
+(Eq | Ne | Is | IsNot | Plus | Mult | Bitand | Bitor | Bitxor
+        | VectorDistance | VectorCosDistance
+        | VectorNegInnerProduct
+    $left:^(Variable)
+    $right:(Variable)
+)
+=>
+((OpName) $right $left)
+
+# CommuteConst ensures that "constant expression trees" are on the right side
+# of commutative comparison and binary operators. A constant expression tree
+# has no unbound variables that refer to outer columns. It therefore always
+# evaluates to the same result. Note that this is possible even if the tree
+# contains variable expressions, as long as they are bound, such as in
+# uncorrelated subqueries:
+#
+#   SELECT * FROM a WHERE a.x = (SELECT SUM(b.x) FROM b)
+#
+# The right side of the equality expression is a constant expression tree, even
+# though it contains an entire subquery, because it always evaluates to the same
+# result. The left side is not a constant expression tree, even though it
+# contains just a single variable, because its value can be different for each
+# row in the table "a".
+#
+# The goal of this and related patterns is to push constant expression trees to
+# the right side until only a Variable remains on the left (if possible). Other
+# patterns can rely on this normal form and only handle one combination.
+[CommuteConst, Normalize]
+(Eq | Ne | Is | IsNot | Plus | Mult | Bitand | Bitor | Bitxor
+    $left:(ConstValue)
+    $right:^(ConstValue)
+)
+=>
+((OpName) $right $left)
+
+# EliminateCoalesce discards the Coalesce operator if it has a single operand.
+[EliminateCoalesce, Normalize]
+(Coalesce [ $item:* ])
+=>
+$item
+
+# SimplifyCoalesce discards any leading null operands, and then if the next
+# operand is a constant, replaces with that constant. Note that ConstValue
+# matches nulls as well as other constants.
+[SimplifyCoalesce, Normalize]
+(Coalesce
+    $args:[
+        $arg:* & (IsConstValueOrGroupOfConstValues $arg)
+        ...
+    ]
+)
+=>
+(SimplifyCoalesce $args)
+
+# EliminateCast discards a cast if its input already has a type that's identical
+# to the desired static type.
+#
+# Note that CastExpr removes unnecessary casts during type-checking; this rule
+# can still be helpful if some other rule creates an unnecessary CastExpr.
+#
+# EliminateCast is marked as high-priority so that it matches before FoldCast.
+[EliminateCast, Normalize, HighPriority]
+(Cast $input:* $targetTyp:* & (HasColType $input $targetTyp))
+=>
+$input
+
+# InlineAnyWithScanOfValues matches on an ANY or NOT ANY expression which was
+# generated from expressions like `column IN (WithScan)` or `column NOT IN
+# (WithScan)`, where the WITH clause definition was normalized into a VALUES
+# clause with constants or placeholders. Inlining the Values expression allows
+# other optimizations to trigger.
+[InlineAnyWithScanOfValues, Normalize]
+(Any
+    (WithScan $withScanPrivate:*)
+    $scalar:* &
+        (Let ($values $ok):(BoundValues $withScanPrivate) $ok) &
+        (CanInlineWithScanOfValues
+            $values
+            $withScanPrivate
+            $scalar
+        )
+    $anyPrivate:*
+)
+=>
+(Any
+    (InlineWithScanOfValues $values $withScanPrivate)
+    $scalar
+    $anyPrivate
+)
+
+# NormalizeInConst ensures that the In operator's tuple operand is sorted with
+# duplicates removed (since duplicates do not change the result).
+[NormalizeInConst, Normalize]
+(In | NotIn
+    $left:*
+    $right:(Tuple $elems:*) & (NeedSortedUniqueList $elems)
+)
+=>
+((OpName) $left (Tuple (ConstructSortedUniqueList $elems)))
+
+# FoldInNull replaces the In/Not operator with Null when the tuple only
+# contains null. The NormalizeInConst pattern will reduce multiple nulls to a
+# single null when it removes duplicates, so this pattern will match that.
+[FoldInNull, Normalize]
+(In | NotIn $left:* (Tuple [ (Null) ]))
+=>
+(Null (BoolType))
+
+[SimplifyInSingleElement, Normalize]
+(In $left:* (Tuple [ $right:* ]))
+=>
+(Eq $left $right)
+
+[SimplifyNotInSingleElement, Normalize]
+(NotIn $left:* (Tuple [ $right:* ]))
+=>
+(Ne $left $right)
+
+# UnifyComparisonTypes takes a mixed-type comparison between a non-constant and
+# a constant and, if appropriate, converts the constant to the type of the
+# non-constant to allow constraints to be generated.
+[UnifyComparisonTypes, Normalize]
+(Comparison
+    $left:(Variable)
+    $right:(Const) &
+        (Let ($result $ok):(UnifyComparison $left $right) $ok)
+)
+=>
+((OpName) $left $result)
+
+# EliminateExistsZeroRows converts an Exists subquery to False when it's known
+# that the input produces zero rows.
+[EliminateExistsZeroRows, Normalize]
+(Exists $input:* & (HasZeroRows $input))
+=>
+(False)
+
+# EliminateExistsProject discards a Project input to the Exists operator. The
+# Project operator never changes the row cardinality of its input, and row
+# cardinality is the only thing that Exists cares about, so Project is a no-op.
+[EliminateExistsProject, Normalize]
+(Exists (Project $input:*) $existsPrivate:*)
+=>
+(Exists $input $existsPrivate)
+
+# EliminateExistsGroupBy discards a non-scalar GroupBy input to the Exists
+# operator. While non-scalar GroupBy (or DistinctOn) can change row cardinality,
+# it always returns a non-empty set if its input is non-empty. Similarly, if its
+# input is empty, then it returns the empty set. Therefore, it's a no-op for
+# Exists.
+#
+# NOTE: EnsureDistinctOn has the side effect of error'ing if the input has
+# duplicates, so do not eliminate it.
+[EliminateExistsGroupBy, Normalize]
+(Exists (GroupBy | DistinctOn $input:*) $existsPrivate:*)
+=>
+(Exists $input $existsPrivate)
+
+# InlineExistsSelectTuple splits a tuple equality filter into multiple
+# (per-column) equalities, in the case where the tuple on one side is being
+# projected.
+#
+# We are specifically handling the case when this is under Exists because we
+# don't have to keep the same output columns for the Select. This case is
+# important because it is produced for an IN subquery:
+#
+#   SELECT * FROM ab WHERE (a, b) IN (SELECT c, d FROM cd)
+#
+# Without this rule, we would not be able to produce a lookup join plan for such
+# a query.
+#
+[InlineExistsSelectTuple, Normalize]
+(Exists
+    (Select
+        (Project
+            $input:*
+            [
+                ...
+                (ProjectionsItem $tuple:(Tuple) $tupleCol:*)
+                ...
+            ]
+        )
+        $filters:[
+            ...
+            $item:(FiltersItem
+                (Eq
+                    # CommuteVar ensures that the variable is on the left.
+                    (Variable
+                        $varCol:* &
+                            (EqualsColumn $varCol $tupleCol)
+                    )
+                    $rhs:(Tuple) &
+                        (TuplesHaveSameLength $tuple $rhs)
+                )
+            )
+            ...
+        ]
+    )
+    $existsPrivate:*
+)
+=>
+(Exists
+    (Select
+        $input
+        (ConcatFilters
+            (RemoveFiltersItem $filters $item)
+            (SplitTupleEq $tuple $rhs)
+        )
+    )
+    $existsPrivate
+)
+
+# ConvertUncorrelatedExistsToCoalesceSubquery converts an uncorrelated Exists
+# expression to a Coalesce expression with a Subquery. For example:
+#
+#   SELECT EXISTS (
+#     SELECT * FROM b
+#   ) FROM a
+#   =>
+#   SELECT COALESCE(
+#     (SELECT true FROM (SELECT * FROM b) LIMIT 1),
+#     false
+#   ) FROM a
+#
+# This transformation simplifies execbuilder and execution code - we do not need
+# a special execution mode for uncorrelated Exists.
+#
+# Note: We can use an empty ordering for the Limit because Exists never have an
+# ordering.
+[ConvertUncorrelatedExistsToCoalesceSubquery, Normalize]
+(Exists $input:* & ^(HasOuterCols $input) $existsPrivate:*)
+=>
+(Coalesce
+    [
+        (Subquery
+            (Project
+                (Limit
+                    $input
+                    (IntConst (DInt 1))
+                    (EmptyOrdering)
+                )
+                [ (ProjectionsItem (True) (MakeBoolCol)) ]
+                (MakeEmptyColSet)
+            )
+            (EmbeddedSubqueryPrivate $existsPrivate)
+        )
+        (False)
+    ]
+)
+
+# EliminateExistsLimit discards a Limit operator with a positive limit inside an
+# Exist operator.
+#
+# The Limit operator prevents decorrelation rules from being applied. By
+# discarding the Limit, which is a no-op inside of Exist operators, the query
+# can be decorrelated into a more efficient SemiJoin or AntiJoin.
+#
+# Note that this rule uses HasOuterCols to ensure that it only matches
+# correlated Exists subqueries. There is no need to discard limits from
+# non-correlated Exists subqueries. Limits are preferred for non-correlated
+# Exists subqueries. See ConvertUncorrelatedExistsToCoalesceSubquery above for
+# details.
+[EliminateExistsLimit, Normalize]
+(Exists
+    (Limit
+        $input:* & (HasOuterCols $input)
+        (Const $limit:*) & (IsPositiveInt $limit)
+    )
+    $existsPrivate:*
+)
+=>
+(Exists $input $existsPrivate)
+
+# EliminateConstValueSubquery replaces a subquery with a constant value if the
+# subquery's input is a single-row, single-column Values expression with a
+# constant value.
+[EliminateConstValueSubquery, Normalize]
+(Subquery (Values [ (Tuple [ $value:(Const) ]) ]))
+=>
+$value
+
+# EliminateUDFCallSubquery replaces a subquery with a udf call if the subquery's
+# input is a single-row, single-column Values expression with a udf call.
+[EliminateUDFCallSubquery, Normalize]
+(Subquery (Values [ (Tuple [ $udf:(UDFCall) ]) ]))
+=>
+$udf
+
+# SimplifyCaseWhenConstValue removes branches known to not match. Any
+# branch known to match is used as the ELSE and further WHEN conditions
+# are skipped. If all WHEN conditions have been removed, the ELSE
+# expression is used.
+# This transforms
+#
+#   CASE WHEN v THEN 1 WHEN false THEN a WHEN true THEN b ELSE c END
+#
+# to
+#
+#   CASE WHEN v THEN 1 ELSE b END
+#
+[SimplifyCaseWhenConstValue, Normalize]
+(Case
+    $condition:(ConstValue)
+    $whens:[ ... (When (ConstValue)) ... ]
+    $orElse:*
+)
+=>
+(SimplifyWhens $condition $whens $orElse)
+
+# InlineAnyValuesSingleCol converts Any with Values input to AnyScalar.
+# This version handles the case where there is a single column.
+[InlineAnyValuesSingleCol, Normalize]
+(Any $values:(Values) $scalar:* $private:*)
+=>
+(AnyScalar $scalar (InlineValues $values) (SubqueryCmp $private))
+
+# InlineAnyValuesMultiCol converts Any with Values input to AnyScalar.
+# This version handles the case where there are multiple columns; in this case,
+# the Values is wrapped into a Project that converts each row to a tuple.
+[InlineAnyValuesMultiCol, Normalize]
+(Any
+    (Project
+        $values:(Values * $valuesPrivate:*)
+        [ (ProjectionsItem $tuple:(Tuple)) ] &
+            (IsTupleOfVars $tuple (ValuesCols $valuesPrivate))
+        $passthrough:* & (ColsAreEmpty $passthrough)
+    )
+    $scalar:*
+    $private:*
+)
+=>
+(AnyScalar $scalar (InlineValues $values) (SubqueryCmp $private))
+
+# InlineAnyProjectSet replaces an "unnest" subquery used for an ANY comparison
+# with the "unnest" argument. We only match when the ProjectSet has an empty
+# input and only projects the result of a single unnest function.
+#
+# There is some subtlety if the unnest argument evaluates to NULL. In that case,
+# the result of unnest is empty, and the Any filter evaluates to false. However,
+# AnyScalar with a NULL second argument evaluates to NULL. To handle this, we
+# AND the result of AnyScalar with an IsNot NULL check on the argument.
+[InlineAnyProjectSet, Normalize]
+(Any
+    (ProjectSet
+            (Values [ (Tuple []) ])
+            [
+                (ZipItem
+                    (Function
+                        [ $arg:* ]
+                        $fnPrivate:(FunctionPrivate "unnest")
+                    )
+                )
+            ]
+        ) &
+        (CanInlineAnyUnnestSubquery)
+    $scalar:*
+    $private:*
+)
+=>
+(And
+    (AnyScalar $scalar $arg (SubqueryCmp $private))
+    (IsNot $arg (Null (TypeOf $arg)))
+)
+
+# SimplifyEqualsAnyTuple converts a scalar ANY operation to an IN comparison.
+# It transforms
+#
+#   x = ANY (...)
+#
+# to
+#
+#   x IN (...)
+#
+# Which allows scans to be constrained.
+[SimplifyEqualsAnyTuple, Normalize]
+(AnyScalar $input:* $tuple:(Tuple) $cmp:* & (OpsAreSame $cmp Eq))
+=>
+(In $input $tuple)
+
+# SimplifyAnyScalarArray converts a scalar ANY operation on a constant ARRAY to a scalar
+# ANY operation on a tuple. In particular, this allows SimplifyEqualsAnyTuple to be
+# triggered, which allows constraints to be generated.
+[SimplifyAnyScalarArray, Normalize]
+(AnyScalar $input:* $ary:(Const) & (IsConstArray $ary) $cmp:*)
+=>
+(AnyScalar $input (ConvertConstArrayToTuple $ary) $cmp)
+
+# FoldCollate converts a Collate expr over an uncollated string into a collated
+# string constant.
+[FoldCollate, Normalize]
+(Collate $input:(Const) $locale:*)
+=>
+(CastToCollatedString $input $locale)
+
+# ArrayFlattenToAgg converts a correlated ArrayFlatten to an aggregation.
+# This rule exists because:
+#
+#     1. We cannot do the aggregation method if we don't have a scalar type
+#        (for instance, if we have a tuple type).
+#     2. We cannot decorrelate an ArrayFlatten directly (but we can decorrelate
+#        an aggregation). So it's desirable to perform this conversion in the
+#        interest of decorrelation.
+#
+# So the outcome is that we can perform uncorrelated ARRAY(...)s over any
+# datatype, and correlated ones only over the types that array_agg supports.
+#
+# Note that optbuilder should have already verified that if the input is
+# correlated, then we can array_agg over the input type.
+[NormalizeArrayFlattenToAgg, Normalize]
+(ArrayFlatten
+    $input:*
+    $private:* & (CanNormalizeArrayFlatten $input $private)
+)
+=>
+(Coalesce
+    [
+        (Subquery
+            (ScalarGroupBy
+                $input
+                [
+                    (AggregationsItem
+                        (ArrayAgg
+                            (Variable
+                                $requestedCol:(SubqueryRequestedCol
+                                    $private
+                                )
+                            )
+                        )
+                        (MakeArrayAggCol
+                            (ArrayType $requestedCol)
+                        )
+                    )
+                ]
+                (MakeGrouping
+                    (MakeEmptyColSet)
+                    (SubqueryOrdering $private)
+                )
+            )
+            (MakeUnorderedSubquery)
+        )
+        (Array [] (ArrayType $requestedCol))
+    ]
+)
+
+# SimplifySameVarEqualities converts `x = x` and other equality
+# comparisons into `x IS NOT NULL OR NULL`. The `OR NULL` is necessary
+# when x is NULL.
+[SimplifySameVarEqualities, Normalize]
+(Eq | Le | Ge
+    $left:(Variable)
+    $right:(Variable) & (VarsAreSame $left $right)
+)
+=>
+(Or (IsNot $left (Null (TypeOf $left))) (Null (BoolType)))
+
+# SimplifySameVarInequalities converts `x != x` and other inequality
+# comparisons into `x IS NULL AND NULL`. The `AND NULL` is necessary
+# when x is NULL.
+[SimplifySameVarInequalities, Normalize]
+(Ne | Lt | Gt
+    $left:(Variable)
+    $right:(Variable) & (VarsAreSame $left $right)
+)
+=>
+(And (Is $left (Null (TypeOf $left))) (Null (BoolType)))
+
+# SimplifyNotDisjoint converts !st_disjoint to st_intersects so that
+# the query can be index-accelerated if a suitable inverted index exists.
+[SimplifyNotDisjoint, Normalize]
+(Not (Function $args:* $private:(FunctionPrivate "st_disjoint")))
+=>
+(MakeIntersectionFunction $args)
+
+# ConvertJSONSubscriptToFetchValue converts json subscripting
+# `[...]` into a fetch value operator `->`.
+[ConvertJSONSubscriptToFetchValue, Normalize]
+(Indirection $input:* $index:* & (IsJSON $input))
+=>
+(FetchVal $input $index)
+
+# ConvertLikeEscapeToLike converts a LIKE x ESCAPE '\' expression, which is
+# parsed as a like_escape function call, to a LIKE expression. This is valid
+# because the default escape character is '\'.
+#
+# Note that the FunctionExpr match pattern is enough to ensure that we are not
+# transforming a UDF because UDF invocations are always built as UDFCallExprs.
+[ConvertLikeEscapeToLike, Normalize]
+(Function
+    $args:*
+    $private:(FunctionPrivate "like_escape") &
+        (Let ($input $iOk):(ScalarExprAt $args 0) $iOk) &
+        (Let ($pattern $pOk):(ScalarExprAt $args 1) $pOk) &
+        (Let ($escape $eOk):(ScalarExprAt $args 2) $eOk) &
+        (ConstStringEquals $escape "\\")
+)
+=>
+(Like $input $pattern)

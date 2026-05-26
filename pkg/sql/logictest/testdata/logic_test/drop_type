@@ -1,0 +1,577 @@
+statement ok
+SET sql_safe_updates = false;
+
+onlyif config local-legacy-schema-changer
+statement ok
+SET enable_experimental_alter_column_type_general = true;
+
+# Basic test -- create and drop a type.
+statement ok
+CREATE TYPE t AS ENUM ('hello');
+
+statement ok
+DROP TYPE t
+
+statement error type \"t\" does not exist
+SELECT 'hello'::t
+
+# The array type should be deleted as well.
+statement error type \"_t\" does not exist
+SELECT ARRAY['hello']::_t
+
+# Try dropping a type within a transaction.
+statement ok
+CREATE TYPE t AS ENUM ('hello');
+
+statement ok
+SET autocommit_before_ddl = false
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+DROP TYPE t;
+
+statement error pq: type \"t\" does not exist
+DROP TYPE t
+
+statement ok
+ROLLBACK
+
+statement ok
+RESET autocommit_before_ddl
+
+# We should be able to drop a type multiple times in the same statement.
+statement ok
+DROP TYPE t, t
+
+# Try IF EXISTS.
+statement ok
+DROP TYPE IF EXISTS t
+
+# Try explicitly dropping an array type, which should fail.
+statement ok
+CREATE TYPE t AS ENUM ('hello')
+
+statement error pq: \"_t\" is an implicit array type and cannot be modified
+DROP TYPE _t
+
+# Now check all of the fun cases around object dependencies.
+# Test a simple column dependency.
+statement ok
+CREATE TABLE t1 (x t)
+
+statement error pq: cannot drop type "t" because other objects \(\[test.public.t1\]\) still depend on it
+DROP TYPE t
+
+# Now add a column with the using the type.
+statement ok
+ALTER TABLE t1 ADD COLUMN y t
+
+statement error pq: cannot drop type "t" because other objects \(\[test.public.t1\]\) still depend on it
+DROP TYPE t
+
+# If we drop the original column x, t1 should still depend on t.
+statement ok
+ALTER TABLE t1 DROP COLUMN x
+
+statement error pq: cannot drop type "t" because other objects \(\[test.public.t1\]\) still depend on it
+DROP TYPE t
+
+# Now remove the other column.
+statement ok
+ALTER TABLE t1 DROP COLUMN y
+
+statement ok
+DROP TYPE t
+
+# Ensure that references to the array type are tracked.
+statement ok
+CREATE TYPE t AS ENUM ('hello');
+
+statement ok
+ALTER TABLE t1 ADD COLUMN x t[]
+
+statement error pq: cannot drop type "t" because other objects \(\[test.public.t1\]\) still depend on it
+DROP TYPE t
+
+statement ok
+ALTER TABLE t1 DROP COLUMN x;
+
+statement ok
+DROP TYPE t
+
+# Altering a column's type to a UDT should pick up the reference.
+statement ok
+CREATE TYPE t AS ENUM ('hello');
+
+statement ok
+ALTER TABLE t1 ADD COLUMN x STRING;
+
+# This is skipped for the legacy schema changer because in that mode there isn't
+# any support for alter column types that require a backfill.
+skipif config local-legacy-schema-changer
+statement ok
+ALTER TABLE t1 ALTER COLUMN x SET DATA TYPE t USING x::t
+
+skipif config local-legacy-schema-changer
+statement error pq: cannot drop type "t" because other objects \(\[test.public.t1\]\) still depend on it
+DROP TYPE t
+
+statement ok
+DROP TABLE t1
+
+# Dropping a table should remove the dependency on the type.
+statement ok
+DROP TYPE t
+
+# Ensure that views track their type dependencies.
+statement ok
+CREATE TYPE t AS ENUM ('hello');
+
+statement ok
+CREATE VIEW v AS SELECT 'hello':::t
+
+statement error pq: cannot drop type "t" because other objects \(\[test.public.v\]\) still depend on it
+DROP TYPE t
+
+statement ok
+DROP VIEW v
+
+statement ok
+DROP TYPE t
+
+# Ensure that we catch references to types living in expressions -- checks,
+# default, computed and partial index predicates.
+statement ok
+CREATE TYPE t1 AS ENUM ('hello');
+
+statement ok
+CREATE TYPE t2 AS ENUM ('howdy');
+
+statement ok
+CREATE TYPE t3 AS ENUM ('hi');
+
+statement ok
+CREATE TYPE t4 AS ENUM ('cheers')
+
+# First, add all of those expressions in the CREATE statement.
+statement ok
+CREATE TABLE expr (
+  x BOOL DEFAULT ('hello'::t1 = 'hello'::t1),
+  y STRING AS ('howdy'::t2::STRING) STORED,
+  CHECK ('hi'::t3::string = 'hi'),
+  INDEX i(y) WHERE ('cheers'::t4 = 'cheers'::t4)
+)
+
+statement error pq: cannot drop type "t1" because other objects \(\[test.public.expr\]\) still depend on it
+DROP TYPE t1
+
+statement error pq: cannot drop type "t2" because other objects \(\[test.public.expr\]\) still depend on it
+DROP TYPE t2
+
+statement error pq: cannot drop type "t3" because other objects \(\[test.public.expr\]\) still depend on it
+DROP TYPE t3
+
+statement error pq: cannot drop type "t4" because other objects \(\[test.public.expr\]\) still depend on it
+DROP TYPE t4
+
+# Now remove the schema elements and drop the types.
+statement ok
+DROP INDEX expr@i;
+
+statement ok
+DROP TYPE t4
+
+statement ok
+ALTER TABLE expr DROP CONSTRAINT "check";
+
+statement ok
+DROP TYPE t3
+
+statement ok
+ALTER TABLE expr DROP COLUMN y;
+
+statement ok
+DROP TYPE t2
+
+statement ok
+ALTER TABLE expr DROP COLUMN x;
+
+statement ok
+DROP TYPE t1
+
+statement ok
+DROP TABLE expr
+
+# Now add all of these schema elements via ALTER commands.
+statement ok
+CREATE TABLE expr ();
+
+statement ok
+CREATE TYPE t1 AS ENUM ('hello');
+
+statement ok
+CREATE TYPE t2 AS ENUM ('howdy');
+
+statement ok
+CREATE TYPE t3 AS ENUM ('hi');
+
+statement ok
+CREATE TYPE t4 AS ENUM ('cheers')
+
+# First try adding all of the schema elements in transactions and ensure that
+# the dependencies are picked up.
+
+statement ok
+SET autocommit_before_ddl = false;
+
+skipif config schema-locked-disabled
+statement ok
+ALTER TABLE expr SET (schema_locked=false)
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+ALTER TABLE expr ADD COLUMN x BOOL DEFAULT ('hello'::t1 = 'hello'::t1)
+
+statement error pq: cannot drop type "t1" because other objects \(\[test.public.expr\]\) still depend on it
+DROP TYPE t1
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+ALTER TABLE expr ADD COLUMN y STRING AS ('howdy'::t2::STRING) STORED
+
+statement error pq: cannot drop type "t2" because other objects \(\[test.public.expr\]\) still depend on it
+DROP TYPE t2
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+ALTER TABLE expr ADD CONSTRAINT "check" CHECK ('hi'::t3::string = 'hi')
+
+statement error pq: cannot drop type "t3" because other objects \(\[test.public.expr\]\) still depend on it
+DROP TYPE t3
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+CREATE INDEX i ON expr (rowid) WHERE ('cheers'::t4 = 'cheers'::t4)
+
+statement error pq: cannot drop type "t4" because other objects \(\[test.public.expr\]\) still depend on it
+DROP TYPE t4
+
+statement ok
+ROLLBACK
+
+statement ok
+RESET autocommit_before_ddl
+
+skipif config schema-locked-disabled
+statement ok
+ALTER TABLE expr RESET (schema_locked)
+
+# Now add all of the schema elements.
+statement ok
+ALTER TABLE expr ADD COLUMN x BOOL DEFAULT ('hello'::t1 = 'hello'::t1);
+
+statement ok
+ALTER TABLE expr ADD COLUMN y STRING AS ('howdy'::t2::STRING) STORED;
+
+statement ok
+ALTER TABLE expr ADD CONSTRAINT "check" CHECK ('hi'::t3::string = 'hi');
+
+statement ok
+CREATE INDEX i ON expr (y) WHERE ('cheers'::t4 = 'cheers'::t4)
+
+statement error pq: cannot drop type "t1" because other objects \(\[test.public.expr\]\) still depend on it
+DROP TYPE t1
+
+statement error pq: cannot drop type "t2" because other objects \(\[test.public.expr\]\) still depend on it
+DROP TYPE t2
+
+statement error pq: cannot drop type "t3" because other objects \(\[test.public.expr\]\) still depend on it
+DROP TYPE t3
+
+statement error pq: cannot drop type "t4" because other objects \(\[test.public.expr\]\) still depend on it
+DROP TYPE t4
+
+# Now remove the schema elements and drop the types.
+statement ok
+DROP INDEX expr@i;
+
+statement ok
+DROP TYPE t4
+
+statement ok
+ALTER TABLE expr DROP CONSTRAINT "check";
+
+statement ok
+DROP TYPE t3
+
+statement ok
+ALTER TABLE expr DROP COLUMN y;
+
+statement ok
+DROP TYPE t2
+
+statement ok
+ALTER TABLE expr DROP COLUMN x;
+
+statement ok
+DROP TYPE t1
+
+# Check that truncated tables maintain their backreference.
+statement ok
+CREATE TYPE ty AS ENUM ('hello');
+
+statement ok
+CREATE TABLE tab (x ty);
+
+statement ok
+INSERT INTO tab VALUES ('hello');
+
+statement ok
+ALTER TABLE tab SET (schema_locked=false);
+
+statement ok
+TRUNCATE TABLE tab
+
+statement ok
+ALTER TABLE tab RESET (schema_locked);
+
+statement error pq: cannot drop type "ty" because other objects \(\[test.public.tab\]\) still depend on it
+DROP TYPE ty
+
+# Ensure that we can drop a table then a type in the same txn.
+statement ok
+CREATE TYPE t AS ENUM ('hello');
+
+statement ok
+CREATE TABLE tt (x t)
+
+statement ok
+BEGIN;
+DROP TABLE tt;
+DROP TYPE t;
+COMMIT
+
+# Tests for dropping a database that contains types.
+statement ok
+CREATE DATABASE d;
+
+statement ok
+CREATE TYPE d.d_t AS ENUM ()
+
+statement error pq: database \"d\" is not empty and RESTRICT was specified
+DROP DATABASE d RESTRICT
+
+let $t_id
+SELECT id FROM system.namespace WHERE name = 'd_t'
+
+# Default is CASCADE.
+statement ok
+DROP DATABASE d
+
+# Ensure that the namespace entries are deleted.
+query I
+SELECT id FROM system.namespace WHERE name = 'd_t' or name = '_d_t'
+
+# Ensure that the system.descriptor entries are deleted too.
+query IT
+SELECT * FROM system.descriptor WHERE id = $t_id OR id = $t_id + 1
+
+# Test when some objects in the database use the types.
+statement ok
+CREATE DATABASE d;
+
+statement ok
+CREATE TYPE d.d_t AS ENUM ('hello');
+
+statement ok
+CREATE TABLE d.t1 (x d.d_t);
+
+statement ok
+CREATE TABLE d.t2 (y d.d_t[])
+
+let $t_id
+SELECT id FROM system.namespace WHERE name = 'd_t'
+
+statement ok
+DROP DATABASE d
+
+# Ensure that the namespace entries are deleted.
+query I
+SELECT id FROM system.namespace WHERE name = 'd_t' or name = '_d_t'
+
+# Ensure that the system.descriptor entries are deleted too.
+query IT
+SELECT * FROM system.descriptor WHERE id = $t_id OR id = $t_id + 1
+
+# Create a database with a large number of types.
+statement ok
+CREATE DATABASE d;
+
+statement ok
+CREATE TYPE d.d_type_1 AS ENUM ('hello');
+
+statement ok
+CREATE TYPE d.d_type_2 AS ENUM ('hello');
+
+statement ok
+CREATE TYPE d.d_type_3 AS ENUM ('hello');
+
+statement ok
+CREATE TYPE d.d_type_4 AS ENUM ('hello');
+
+statement ok
+CREATE TYPE d.d_type_5 AS ENUM ('hello')
+
+statement ok
+DROP DATABASE d
+
+query I
+SELECT id FROM system.namespace WHERE name LIKE 'd_type%'
+
+subtest regression_57187
+
+statement ok
+CREATE DATABASE d;
+
+statement ok
+CREATE TYPE d."a<b" AS ENUM('hello');
+
+statement ok
+CREATE TYPE d."b+c" AS ENUM('hello')
+
+statement ok
+DROP TYPE d."b+c"
+
+statement ok
+DROP DATABASE d
+
+# Check IF EXISTS with one type that exists, one that does not.
+subtest regression_58461
+
+statement ok
+CREATE TYPE pet AS ENUM('cat');
+
+statement ok
+DROP TYPE IF EXISTS pet, alien;
+
+# Test that dropping a schema which contains a type which refers to things
+# outside of that schema works.
+
+subtest drop_schema_cascade
+
+statement ok
+CREATE SCHEMA schema_to_drop;
+
+statement ok
+CREATE TYPE schema_to_drop.typ AS ENUM ('a');
+
+statement ok
+CREATE TABLE t (k schema_to_drop.typ PRIMARY KEY);
+
+statement ok
+CREATE TABLE schema_to_drop.t (k schema_to_drop.typ PRIMARY KEY);
+
+statement error pgcode 0A000 unimplemented: cannot drop type "test.schema_to_drop.(_)?typ" because other objects \(\[test\.public\.t\]\) still depend on it
+DROP SCHEMA schema_to_drop CASCADE;
+
+statement ok
+DROP TABLE t;
+
+statement ok
+DROP SCHEMA schema_to_drop CASCADE;
+
+# Test that dropping a table via a DROP SCHEMA CASCADE properly removes
+# back-references to types in different schemas which are not being dropped.
+
+statement ok
+CREATE SCHEMA sc1;
+
+statement ok
+CREATE SCHEMA sc2;
+
+statement ok
+CREATE TYPE sc2.typ AS ENUM ('a');
+
+statement ok
+CREATE TABLE sc1.table (k sc2.typ);
+
+statement ok
+DROP SCHEMA sc1 CASCADE;
+
+
+# If the backreference to the type had not been properly removed
+# for sc1.table above, the below statement would fail.
+statement ok
+DROP TYPE sc2.typ;
+
+# This is just cleanup.
+statement ok
+DROP SCHEMA sc2 CASCADE;
+
+# Concurrent DROP TYPE and other ALTER TYPE statements can potentially
+# collide with each other, since the code used to as a part of TYPE SCHEMA
+# CHANGER jobs clean up the descriptor if it was marked as dropped. This
+# should no longer happen, if a declarative schema changer state exists.
+# Without the fix this test would hang.
+subtest concurrent_declarative_89831
+
+statement ok
+CREATE DATABASE db1 OWNER testuser;
+CREATE SCHEMA db1.sc1 AUTHORIZATION testuser;
+
+statement ok
+CREATE TYPE db1.sc1.typ AS ENUM ('a');
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints="typeschemachanger.before.exec"
+
+onlyif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement error job \d+ was paused before it completed with reason: pause point "typeschemachanger.before.exec" hit
+ALTER TYPE db1.sc1.typ OWNER TO testuser
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints=""
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints="newschemachanger.before.exec"
+
+skipif config local-legacy-schema-changer
+statement error job \d+ was paused before it completed with reason: pause point "newschemachanger.before.exec" hit
+DROP SCHEMA db1.sc1 CASCADE
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints=""
+
+onlyif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'ALTER TYPE%' AND status='paused' FETCH FIRST 1 ROWS ONLY);
+
+onlyif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'ALTER TYPE%' AND status='paused' FETCH FIRST 1 ROWS ONLY);
+
+statement ok
+RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'DROP SCHEMA%' AND status='paused' FETCH FIRST 1 ROWS ONLY);
+
+# Regression test for #64398: Test both schemachangers error on the built-in rather than the bad schema.
+subtest regression_64398
+
+statement error pgcode 42809 type "geometry" is a built-in type
+DROP TYPE noexist.geometry
+
+statement error pgcode 42809 type "geometry" is a built-in type
+DROP TYPE noexist.public.geometry
+
+statement ok
+DROP TYPE IF EXISTS noexist.geometry
+
+subtest end

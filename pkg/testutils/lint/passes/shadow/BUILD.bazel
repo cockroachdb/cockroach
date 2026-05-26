@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "shadow",
+    srcs = ["shadow.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/shadow",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@org_golang_x_tools//go/analysis",
+        "@org_golang_x_tools//go/analysis/passes/shadow",
+    ],
+)

@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "srvtestutils",
+    srcs = ["testutils.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/srvtestutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/server/apiconstants",
+        "//pkg/testutils/serverutils",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

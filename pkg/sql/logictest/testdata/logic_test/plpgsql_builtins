@@ -1,0 +1,656 @@
+statement ok
+CREATE TABLE xy (x INT, y INT);
+INSERT INTO xy VALUES (1, 2), (3, 4), (5, 6);
+
+# Testing crdb_internal.plpgsql_gen_cursor_name.
+query T
+SELECT crdb_internal.plpgsql_gen_cursor_name(NULL);
+----
+<unnamed portal 1>
+
+query T
+SELECT crdb_internal.plpgsql_gen_cursor_name(NULL);
+----
+<unnamed portal 2>
+
+statement ok
+BEGIN;
+DECLARE "<unnamed portal 3>" CURSOR FOR SELECT 1;
+
+query T
+SELECT name FROM pg_cursors;
+----
+<unnamed portal 3>
+
+# Skip manually generated duplicate names.
+query T
+SELECT crdb_internal.plpgsql_gen_cursor_name(NULL);
+----
+<unnamed portal 4>
+
+query T
+SELECT crdb_internal.plpgsql_gen_cursor_name(NULL);
+----
+<unnamed portal 5>
+
+statement ok
+CLOSE "<unnamed portal 3>";
+
+# Keep incrementing after a "gap" opens.
+query T
+SELECT crdb_internal.plpgsql_gen_cursor_name(NULL);
+----
+<unnamed portal 6>
+
+statement ok
+ABORT;
+
+# Continue incrementing over transaction boundaries.
+query T
+SELECT crdb_internal.plpgsql_gen_cursor_name(NULL);
+----
+<unnamed portal 7>
+
+# If the name is already set, don't generate a new one.
+query T
+SELECT crdb_internal.plpgsql_gen_cursor_name('foo');
+----
+foo
+
+query T
+SELECT crdb_internal.plpgsql_gen_cursor_name('bar');
+----
+bar
+
+query T
+SELECT crdb_internal.plpgsql_gen_cursor_name('');
+----
+·
+
+query T
+SELECT crdb_internal.plpgsql_gen_cursor_name(NULL);
+----
+<unnamed portal 8>
+
+# Starting a new session restarts the counter.
+user testuser
+
+query T
+SELECT crdb_internal.plpgsql_gen_cursor_name(NULL);
+----
+<unnamed portal 1>
+
+query T
+SELECT crdb_internal.plpgsql_gen_cursor_name(NULL);
+----
+<unnamed portal 2>
+
+# Returning to the old session continues the old counter.
+user root
+
+query T
+SELECT crdb_internal.plpgsql_gen_cursor_name(NULL);
+----
+<unnamed portal 9>
+
+query T
+SELECT crdb_internal.plpgsql_gen_cursor_name(NULL);
+----
+<unnamed portal 10>
+
+# Testing crdb_internal.plpgsql_close.
+statement ok
+BEGIN;
+DECLARE foo CURSOR FOR SELECT generate_series(1, 5);
+
+query T
+SELECT name FROM pg_cursors;
+----
+foo
+
+statement ok
+SELECT crdb_internal.plpgsql_close('foo');
+
+query T
+SELECT name FROM pg_cursors;
+----
+
+statement ok
+ABORT;
+
+statement error pgcode 34000 pq: cursor \"foo\" does not exist
+SELECT crdb_internal.plpgsql_close('foo');
+
+# Testing crdb_internal.plpgsql_raise.
+#
+# Parameters:
+#   Severity: String
+#   Message:  String
+#   Hint:     String
+#   Detail:   String
+#   Code:     String
+#
+# Test different log levels.
+query T noticetrace
+SELECT crdb_internal.plpgsql_raise('DEBUG1', 'foo', '', '', '');
+----
+
+query T noticetrace
+SELECT crdb_internal.plpgsql_raise('LOG', 'foo', '', '', '');
+----
+
+query T noticetrace
+SELECT crdb_internal.plpgsql_raise('INFO', 'foo', '', '', '');
+----
+INFO: foo
+SQLSTATE: XXUUU
+
+query T noticetrace
+SELECT crdb_internal.plpgsql_raise('NOTICE', 'foo', '', '', '');
+----
+NOTICE: foo
+SQLSTATE: XXUUU
+
+query T noticetrace
+SELECT crdb_internal.plpgsql_raise('WARNING', 'foo', '', '', '');
+----
+WARNING: foo
+SQLSTATE: XXUUU
+
+statement ok
+SET client_min_messages = 'debug1';
+
+query T noticetrace
+SELECT crdb_internal.plpgsql_raise('DEBUG1', 'foo', '', '', '');
+----
+DEBUG1: foo
+SQLSTATE: XXUUU
+
+query T noticetrace
+SELECT crdb_internal.plpgsql_raise('LOG', 'foo', '', '', '');
+----
+LOG: foo
+SQLSTATE: XXUUU
+
+query T noticetrace
+SELECT crdb_internal.plpgsql_raise('INFO', 'foo', '', '', '');
+----
+INFO: foo
+SQLSTATE: XXUUU
+
+query T noticetrace
+SELECT crdb_internal.plpgsql_raise('NOTICE', 'foo', '', '', '');
+----
+NOTICE: foo
+SQLSTATE: XXUUU
+
+query T noticetrace
+SELECT crdb_internal.plpgsql_raise('WARNING', 'foo', '', '', '');
+----
+WARNING: foo
+SQLSTATE: XXUUU
+
+statement ok
+SET client_min_messages = 'WARNING';
+
+query T noticetrace
+SELECT crdb_internal.plpgsql_raise('DEBUG1', 'foo', '', '', '');
+----
+
+query T noticetrace
+SELECT crdb_internal.plpgsql_raise('LOG', 'foo', '', '', '');
+----
+
+# INFO-level notices are always sent to the client.
+query T noticetrace
+SELECT crdb_internal.plpgsql_raise('INFO', 'foo', '', '', '');
+----
+INFO: foo
+SQLSTATE: XXUUU
+
+query T noticetrace
+SELECT crdb_internal.plpgsql_raise('NOTICE', 'foo', '', '', '');
+----
+
+query T noticetrace
+SELECT crdb_internal.plpgsql_raise('WARNING', 'foo', '', '', '');
+----
+WARNING: foo
+SQLSTATE: XXUUU
+
+statement ok
+RESET client_min_messages;
+
+# Test RAISE options.
+query T noticetrace
+SELECT crdb_internal.plpgsql_raise('NOTICE', 'bar', 'this is a detail', '', '');
+----
+NOTICE: bar
+DETAIL: this is a detail
+SQLSTATE: XXUUU
+
+query T noticetrace
+SELECT crdb_internal.plpgsql_raise('NOTICE', 'baz', '', 'this is a hint', '');
+----
+NOTICE: baz
+HINT: this is a hint
+SQLSTATE: XXUUU
+
+query T noticetrace
+SELECT crdb_internal.plpgsql_raise('NOTICE', 'division by zero', '', '', '22012');
+----
+NOTICE: division by zero
+SQLSTATE: 22012
+
+query T noticetrace
+SELECT crdb_internal.plpgsql_raise('WARNING', 'invalid password', '', '', '28P01');
+----
+WARNING: invalid password
+SQLSTATE: 28P01
+
+query T noticetrace
+SELECT crdb_internal.plpgsql_raise('NOTICE', 'this is a message', 'this is a detail', 'this is a hint', 'P0001');
+----
+NOTICE: this is a message
+DETAIL: this is a detail
+HINT: this is a hint
+SQLSTATE: P0001
+
+query T noticetrace
+SELECT crdb_internal.plpgsql_raise('NOTICE', 'division by zero msg', '', '', 'division_by_zero');
+----
+NOTICE: division by zero msg
+SQLSTATE: 22012
+
+query T noticetrace
+SELECT crdb_internal.plpgsql_raise('NOTICE', '', 'message is empty', '', 'P0001');
+----
+NOTICE:
+DETAIL: message is empty
+SQLSTATE: P0001
+
+query T noticetrace
+SELECT crdb_internal.plpgsql_raise('NOTICE', '', '', '', '');
+----
+NOTICE:
+SQLSTATE: XXUUU
+
+query error pgcode 42704 pq: unrecognized exception condition: \"this_is_not_valid\"
+SELECT crdb_internal.plpgsql_raise('NOTICE', '', '', '', 'this_is_not_valid');
+
+query error pgcode 42704 pq: unrecognized exception condition: \"-50\"
+SELECT crdb_internal.plpgsql_raise('NOTICE', '', '', '', '-50');
+
+query error pgcode 22023 pq: severity NOTE is invalid
+SELECT crdb_internal.plpgsql_raise('NOTE', '', '', '', '-50');
+
+# Test severity ERROR.
+query error pgcode XXUUU pq: foo
+SELECT crdb_internal.plpgsql_raise('ERROR', 'foo', '', '', '');
+
+query error pgcode 12345 pq: foo
+SELECT crdb_internal.plpgsql_raise('ERROR', 'foo', '', '', '12345');
+
+query error pgcode 12345 pq: msg\nHINT: hint\nDETAIL: detail
+SELECT crdb_internal.plpgsql_raise('ERROR', 'msg', 'detail', 'hint', '12345');
+
+query error pgcode XXUUU pq:
+SELECT crdb_internal.plpgsql_raise('ERROR', '', '', '', '');
+
+# Testing crdb_internal.plpgsql_fetch.
+#
+# Parameters:
+#   Name:         RefCursor
+#   Direction:    Int
+#   Count:        Int
+#   Result Types: Tuple
+#
+# Codes for FETCH directions:
+#   0: FORWARD, BACKWARD, NEXT, PRIOR
+#   1: RELATIVE
+#   2: ABSOLUTE
+#   3: FIRST
+#   4: LAST
+#   5: ALL
+#   6: BACKWARD ALL
+#
+statement error pgcode 34000 pq: cursor \"foo\" does not exist
+SELECT crdb_internal.plpgsql_fetch('foo', 0, 1, (NULL::INT, NULL::INT));
+
+# Retrieve rows in descending order.
+statement ok
+BEGIN;
+DECLARE foo CURSOR FOR SELECT * FROM xy ORDER BY x DESC;
+
+query T
+SELECT crdb_internal.plpgsql_fetch('foo', 0, 1, (NULL::INT, NULL::INT));
+----
+(5,6)
+
+query T
+SELECT crdb_internal.plpgsql_fetch('foo', 0, 1, (NULL::INT, NULL::INT));
+----
+(3,4)
+
+query T
+SELECT crdb_internal.plpgsql_fetch('foo', 0, 1, (NULL::INT, NULL::INT));
+----
+(1,2)
+
+# The cursor has been exhausted.
+query T
+SELECT crdb_internal.plpgsql_fetch('foo', 0, 1, (NULL::INT, NULL::INT));
+----
+(,)
+
+# Try different types.
+statement ok
+ABORT;
+BEGIN;
+DECLARE foo CURSOR FOR SELECT 'abc'::STRING, 'a'::CHAR, True, 1.1::FLOAT, 1.1::DECIMAL, NULL::BIT;
+
+query T
+SELECT crdb_internal.plpgsql_fetch('foo', 0, 1, (NULL::TEXT, NULL::TEXT, NULL::BOOL, NULL::FLOAT, NULL::DECIMAL, NULL::BIT));
+----
+(abc,a,t,1.1,1.1,)
+
+# Try types that require coercion.
+statement ok
+ABORT;
+BEGIN;
+DECLARE foo CURSOR FOR SELECT * FROM (VALUES ('abc'), ('100'), ('1.01'), ('1.01'), ('t'), ('1'), ('a'));
+
+# String -> Bytes
+query T
+SELECT (crdb_internal.plpgsql_fetch('foo', 0, 1, (NULL::BYTES,))).*;
+----
+abc
+
+# String -> Int
+query I
+SELECT (crdb_internal.plpgsql_fetch('foo', 0, 1, (NULL::INT,))).*;
+----
+100
+
+# String -> Float
+query R
+SELECT (crdb_internal.plpgsql_fetch('foo', 0, 1, (NULL::FLOAT,))).*;
+----
+1.01
+
+# String -> Decimal
+query R
+SELECT (crdb_internal.plpgsql_fetch('foo', 0, 1, (NULL::DECIMAL,))).*;
+----
+1.01
+
+# String -> Bool
+query B
+SELECT (crdb_internal.plpgsql_fetch('foo', 0, 1, (NULL::BOOL,))).*;
+----
+true
+
+# String -> Bit
+query T
+SELECT (crdb_internal.plpgsql_fetch('foo', 0, 1, (NULL::BIT,))).*;
+----
+1
+
+# String -> Char
+query T
+SELECT (crdb_internal.plpgsql_fetch('foo', 0, 1, (NULL::CHAR,))).*;
+----
+a
+
+statement ok
+ABORT;
+BEGIN;
+DECLARE foo CURSOR FOR SELECT generate_series(0, 10);
+
+# Int -> Bool
+query B
+SELECT (crdb_internal.plpgsql_fetch('foo', 0, 1, (NULL::BOOL,))).*;
+----
+false
+
+# Int -> Bit
+query R
+SELECT (crdb_internal.plpgsql_fetch('foo', 0, 1, (NULL::BIT,))).*;
+----
+1
+
+# Int -> String
+query T
+SELECT (crdb_internal.plpgsql_fetch('foo', 0, 1, (NULL::STRING,))).*;
+----
+2
+
+# Int -> Char
+query T
+SELECT (crdb_internal.plpgsql_fetch('foo', 0, 1, (NULL::CHAR,))).*;
+----
+3
+
+# Int -> Float
+query R
+SELECT (crdb_internal.plpgsql_fetch('foo', 0, 1, (NULL::FLOAT,))).*;
+----
+4
+
+# Int -> Decimal
+query R
+SELECT (crdb_internal.plpgsql_fetch('foo', 0, 1, (NULL::DECIMAL,))).*;
+----
+5
+
+statement ok
+ABORT;
+BEGIN;
+DECLARE foo CURSOR FOR SELECT 5.0101::FLOAT FROM generate_series(1, 5);
+
+# Float -> Decimal
+query R
+SELECT (crdb_internal.plpgsql_fetch('foo', 0, 1, (NULL::DECIMAL,))).*;
+----
+5.0101
+
+# Float -> INT
+query I
+SELECT (crdb_internal.plpgsql_fetch('foo', 0, 1, (NULL::INT,))).*;
+----
+5
+
+# Float -> String
+query T
+SELECT (crdb_internal.plpgsql_fetch('foo', 0, 1, (NULL::STRING,))).*;
+----
+5.0101
+
+statement ok
+ABORT;
+BEGIN;
+DECLARE foo CURSOR FOR SELECT 5.0101::DECIMAL FROM generate_series(1, 5);
+
+# Decimal -> Float
+query R
+SELECT (crdb_internal.plpgsql_fetch('foo', 0, 1, (NULL::FLOAT,))).*;
+----
+5.0101
+
+# Decimal -> INT
+query I
+SELECT (crdb_internal.plpgsql_fetch('foo', 0, 1, (NULL::INT,))).*;
+----
+5
+
+# Decimal -> String
+query T
+SELECT (crdb_internal.plpgsql_fetch('foo', 0, 1, (NULL::STRING,))).*;
+----
+5.0101
+
+# Try types that can't be coerced.
+statement ok
+ABORT;
+BEGIN;
+DECLARE foo CURSOR FOR SELECT 'abc';
+
+# String -> Char
+statement error pgcode 22001 pq: value too long for type CHAR
+SELECT (crdb_internal.plpgsql_fetch('foo', 0, 1, (NULL::CHAR,))).*;
+
+statement ok
+ABORT;
+BEGIN;
+DECLARE foo CURSOR FOR SELECT '101';
+
+# String -> Bit
+statement error pgcode 22026 pq: bit string length 3 does not match type BIT
+SELECT (crdb_internal.plpgsql_fetch('foo', 0, 1, (NULL::BIT,))).*;
+
+statement ok
+ABORT;
+BEGIN;
+DECLARE foo CURSOR FOR SELECT 10000000;
+
+# Int8 -> Int2
+statement error pgcode 22003 pq: integer out of range for type int2
+SELECT (crdb_internal.plpgsql_fetch('foo', 0, 1, (NULL::INT2,))).*;
+
+# Try different directions.
+statement ok
+ABORT;
+BEGIN;
+INSERT INTO xy VALUES (7, 8), (9, 10), (11, 12), (13, 14), (15, 16);
+DECLARE foo CURSOR FOR SELECT * FROM xy ORDER BY x DESC;
+
+# FIRST
+query T
+SELECT crdb_internal.plpgsql_fetch('foo', 3, 0, (NULL::INT, NULL::INT));
+----
+(15,16)
+
+# FORWARD/NEXT 2
+query T
+SELECT crdb_internal.plpgsql_fetch('foo', 0, 2, (NULL::INT, NULL::INT));
+----
+(11,12)
+
+# RELATIVE 3
+query T
+SELECT crdb_internal.plpgsql_fetch('foo', 1, 3, (NULL::INT, NULL::INT));
+----
+(5,6)
+
+# ABSOLUTE 7
+query T
+SELECT crdb_internal.plpgsql_fetch('foo', 2, 7, (NULL::INT, NULL::INT));
+----
+(3,4)
+
+# ALL
+query T
+SELECT crdb_internal.plpgsql_fetch('foo', 5, 0, (NULL::INT, NULL::INT));
+----
+(1,2)
+
+# Invalid directions.
+statement ok
+ABORT;
+BEGIN;
+DECLARE foo CURSOR FOR SELECT * FROM xy ORDER BY x DESC;
+
+# BACKWARD 3
+statement error pgcode 55000 pq: cursor can only scan forward
+SELECT crdb_internal.plpgsql_fetch('foo', 0, -3, (NULL::INT, NULL::INT));
+
+statement ok
+ABORT;
+BEGIN;
+DECLARE foo CURSOR FOR SELECT * FROM xy ORDER BY x DESC;
+
+# RELATIVE -3
+statement error pgcode 55000 pq: cursor can only scan forward
+SELECT crdb_internal.plpgsql_fetch('foo', 1, -3, (NULL::INT, NULL::INT));
+
+statement ok
+ABORT;
+BEGIN;
+DECLARE foo CURSOR FOR SELECT * FROM xy ORDER BY x DESC;
+MOVE FORWARD 3 foo;
+
+# ABSOLUTE 2 with cursor position beyond 2.
+statement error pgcode 55000 pq: cursor can only scan forward
+SELECT crdb_internal.plpgsql_fetch('foo', 2, 2, (NULL::INT, NULL::INT));
+
+statement ok
+ABORT;
+BEGIN;
+DECLARE foo CURSOR FOR SELECT * FROM xy ORDER BY x DESC;
+MOVE FORWARD 3 foo;
+
+# FIRST with cursor position beyond 1.
+statement error pgcode 55000 pq: cursor can only scan forward
+SELECT crdb_internal.plpgsql_fetch('foo', 3, 0, (NULL::INT, NULL::INT));
+
+statement ok
+ABORT;
+BEGIN;
+DECLARE foo CURSOR FOR SELECT * FROM xy ORDER BY x DESC;
+
+# LAST
+statement error pgcode 55000 pq: cursor can only scan forward
+SELECT crdb_internal.plpgsql_fetch('foo', 4, 0, (NULL::INT, NULL::INT));
+
+statement ok
+ABORT;
+BEGIN;
+DECLARE foo CURSOR FOR SELECT * FROM xy ORDER BY x DESC;
+
+# BACKWARD ALL
+statement error pgcode 55000 pq: cursor can only scan forward
+SELECT crdb_internal.plpgsql_fetch('foo', 6, 0, (NULL::INT, NULL::INT));
+
+statement ok
+ABORT;
+BEGIN;
+DECLARE foo CURSOR FOR SELECT * FROM xy ORDER BY x DESC;
+
+# Invalid directions.
+statement error pgcode 22023 pq: invalid fetch/move direction: -1
+SELECT crdb_internal.plpgsql_fetch('foo', -1, 0, (NULL::INT, NULL::INT));
+
+statement ok
+ABORT;
+BEGIN;
+DECLARE foo CURSOR FOR SELECT * FROM xy ORDER BY x DESC;
+
+statement error pgcode 22023 pq: invalid fetch/move direction: 10
+SELECT crdb_internal.plpgsql_fetch('foo', 10, 0, (NULL::INT, NULL::INT));
+
+statement ok
+ABORT;
+
+# Regression test for 112895. The plpgsql_close and plpgsql_fetch builtin
+# functions should return an expected error for NULL arguments.
+subtest null_error
+
+statement error pgcode 22004 pq: FETCH statement option cannot be null
+SELECT crdb_internal.plpgsql_fetch(NULL, 0, 1, (NULL::INT, NULL::INT));
+
+statement error pgcode 22004 pq: FETCH statement option cannot be null
+SELECT crdb_internal.plpgsql_fetch('foo', NULL, 1, (NULL::INT, NULL::INT));
+
+statement error pgcode 22004 pq: FETCH statement option cannot be null
+SELECT crdb_internal.plpgsql_fetch('foo', 0, NULL, (NULL::INT, NULL::INT));
+
+statement error pgcode 22004 pq: FETCH statement option cannot be null
+SELECT crdb_internal.plpgsql_fetch('foo', 0, 1, NULL);
+
+statement error pgcode 22004 pq: FETCH statement option cannot be null
+SELECT crdb_internal.plpgsql_fetch(NULL, NULL, NULL, NULL);
+
+statement error pgcode 22004 pq: cursor name for CLOSE statement cannot be null
+SELECT crdb_internal.plpgsql_close(NULL);
+
+subtest end

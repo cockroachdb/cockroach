@@ -1,0 +1,103 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "metric",
+    srcs = [
+        "doc.go",
+        "graphite_exporter.go",
+        "hdrhistogram.go",
+        "histogram_buckets.go",
+        "histogram_snapshot.go",
+        "label_slice_cache.go",
+        "metric.go",
+        "prometheus_exporter.go",
+        "prometheus_rule_exporter.go",
+        "registry.go",
+        "rule.go",
+        "rule_registry.go",
+        "test_helpers.go",
+        "vec_snapshot.go",
+    ],
+    embed = [":metric_go_proto"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/metric",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/settings",
+        "//pkg/util/buildutil",
+        "//pkg/util/cache",
+        "//pkg/util/envutil",
+        "//pkg/util/log",
+        "//pkg/util/metamorphic",
+        "//pkg/util/metric/tick",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_axiomhq_hyperloglog//:hyperloglog",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_codahale_hdrhistogram//:hdrhistogram",
+        "@com_github_gogo_protobuf//proto",
+        "@com_github_prometheus_client_golang//prometheus",
+        "@com_github_prometheus_client_golang//prometheus/graphite",
+        "@com_github_prometheus_client_model//go",
+        "@com_github_prometheus_common//expfmt",
+        "@com_github_prometheus_common//model",
+        "@com_github_prometheus_prometheus//promql/parser",
+        "@in_yaml_go_yaml_v4//:yaml",
+    ],
+)
+
+go_test(
+    name = "metric_test",
+    size = "small",
+    srcs = [
+        "histogram_buckets_test.go",
+        "label_slice_cache_test.go",
+        "metric_ext_test.go",
+        "metric_test.go",
+        "prometheus_exporter_test.go",
+        "prometheus_rule_exporter_test.go",
+        "registry_test.go",
+        "rule_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":metric"],
+    deps = [
+        "//pkg/testutils/datapathutils",
+        "//pkg/testutils/echotest",
+        "//pkg/util/buildutil",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_gogo_protobuf//proto",
+        "@com_github_kr_pretty//:pretty",
+        "@com_github_prometheus_client_golang//prometheus",
+        "@com_github_prometheus_client_model//go",
+        "@com_github_prometheus_common//expfmt",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_google_protobuf//proto",
+    ],
+)
+
+proto_library(
+    name = "metric_proto",
+    srcs = ["metric.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+        "@com_github_prometheus_client_model//io/prometheus/client:io_prometheus_client_proto",
+    ],
+)
+
+go_proto_library(
+    name = "metric_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/metric",
+    proto = ":metric_proto",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_gogo_protobuf//gogoproto",
+        "@com_github_prometheus_client_model//go",
+    ],
+)

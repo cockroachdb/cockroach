@@ -1,0 +1,1183 @@
+# Disable transaction pushes through this test. Synchronous transaction pushes
+# are not immediately terminated when the concurrency manager's lock-table is
+# cleared. This is fine from a correctness perspective because it doesn't matter
+# which lock-table is initiating a synchronous transaction push, but it makes it
+# harder to observe requests responding to lock-table state transitions.
+debug-disable-txn-pushes
+----
+
+# -------------------------------------------------------------
+# OnRangeLeaseUpdated - losing this lease disables the
+# lock-table and acquiring the lease enables the lock-table.
+#
+# Setup: txn1 acquires locks on k and k2
+#
+# Test:  txn2 enters lock's wait-queue
+#        replica loses lease
+#        txn2 proceeds
+#        txn2 discovers and ignores txn1's lock on k while writing
+#        txn2 re-sequences
+#
+#        txn2 redirected to leaseholder (i.e. replica acquires lease)
+#        txn2 re-sequences
+#        txn1 lock is released
+#        txn2 proceeds and acquires lock
+#
+#        txn3 sequences
+#        replica loses and re-acquires lease
+#        txn3 discovers and ignores txn1's lock under old lease
+#        txn3 re-sequences
+#        txn3 discovers txn2's lock
+#        txn3 queue's on txn2's lock
+#        txn2's lock is released
+#        txn3 proceeds and acquires lock
+# -------------------------------------------------------------
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=10,1 epoch=0
+----
+
+new-txn name=txn3 ts=10,1 epoch=0
+----
+
+new-request name=req1 txn=txn1 ts=10,1
+  put key=k  value=v
+  put key=k2 value=v
+----
+
+new-request name=req2 txn=txn2 ts=10,1
+  put key=k  value=v
+  get key=k2
+----
+
+new-request name=req3 txn=txn3 ts=10,1
+  put key=k value=v
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+on-lock-acquired req=req1 key=k
+----
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"k"›
+
+on-lock-acquired req=req1 key=k2
+----
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"k2"›
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+debug-lock-table
+----
+num=2
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "k2"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+# --------------------------------
+# Setup complete, test starts here
+# --------------------------------
+
+sequence req=req2
+----
+[2] sequence req2: sequencing request
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: waiting in lock wait-queues
+[2] sequence req2: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
+[2] sequence req2: pushing after 1h0m0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[2] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
+
+debug-lock-table
+----
+num=2
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 2, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
+ lock: "k2"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+# Replica should inform command evaluation of locks to replicate
+on-lease-transfer-eval
+----
+[-] eval transfer lease: locks to propose as replicated: 2
+
+# Replica loses lease.
+on-lease-updated leaseholder=false lease-seq=2
+----
+[-] transfer lease: released
+[2] sequence req2: lock wait-queue event: done waiting
+[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: sequencing complete, returned guard
+
+debug-lock-table
+----
+num=0
+
+handle-lock-conflict-error req=req2 lease-seq=1
+  lock txn=txn1 key=k
+----
+[3] handle lock conflict error req2: discovered lock on ‹"k"› not added to disabled lock table
+
+debug-lock-table
+----
+num=0
+
+sequence req=req2
+----
+[4] sequence req2: re-sequencing request
+[4] sequence req2: acquiring latches
+[4] sequence req2: scanning lock table for conflicting locks
+[4] sequence req2: sequencing complete, returned guard
+
+# NotLeaseHolderError redirect to new leaseholder.
+finish req=req2
+----
+[-] finish req2: finishing request
+
+on-lease-updated leaseholder=true lease-seq=2
+----
+[-] transfer lease: acquired
+
+sequence req=req2
+----
+[5] sequence req2: sequencing request
+[5] sequence req2: acquiring latches
+[5] sequence req2: scanning lock table for conflicting locks
+[5] sequence req2: sequencing complete, returned guard
+
+handle-lock-conflict-error req=req2 lease-seq=2
+  lock txn=txn1 key=k
+----
+[6] handle lock conflict error req2: added 1 discovered lock(s) to lock table: conflicting locks on ‹"k"›
+
+debug-lock-table
+----
+num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 3, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
+
+sequence req=req2
+----
+[7] sequence req2: re-sequencing request
+[7] sequence req2: acquiring latches
+[7] sequence req2: scanning lock table for conflicting locks
+[7] sequence req2: waiting in lock wait-queues
+[7] sequence req2: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
+[7] sequence req2: pushing after 1h0m0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[7] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
+
+new-request name=reqRes1 txn=none ts=10,1
+  resolve-intent txn=txn1 key=k  status=committed
+  resolve-intent txn=txn1 key=k2 status=committed
+----
+
+sequence req=reqRes1
+----
+[8] sequence reqRes1: sequencing request
+[8] sequence reqRes1: acquiring latches
+[8] sequence reqRes1: sequencing complete, returned guard
+
+on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
+----
+[-] update lock: committing txn 00000001 @ ‹k›
+[7] sequence req2: lock wait-queue event: done waiting
+[7] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[7] sequence req2: acquiring latches
+[7] sequence req2: waiting to acquire read latch ‹k2›@10.000000000,1 for request Put [‹"k"›], Get [‹"k2"›], [txn: 00000002], held by write latch ‹k2›@10.000000000,1 for request ResolveIntent [‹"k"›], ResolveIntent [‹"k2"›]
+[7] sequence req2: blocked on select in spanlatch.(*Manager).waitForSignal
+
+on-lock-updated req=reqRes1 txn=txn1 key=k2 status=committed
+----
+[-] update lock: committing txn 00000001 @ ‹k2›
+
+debug-advance-clock ts=123
+----
+
+finish req=reqRes1
+----
+[-] finish reqRes1: finishing request
+[7] sequence req2: latch conflict with 00000000-0000-0000-0000-000000000000 on ‹"k2"› for 123.000s
+[7] sequence req2: scanning lock table for conflicting locks
+[7] sequence req2: sequencing complete, returned guard
+
+debug-lock-table
+----
+num=1
+ lock: "k"
+   queued locking requests:
+    active: false req: 3, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
+
+on-lock-acquired req=req2 key=k
+----
+[-] acquire lock: txn 00000002 acquiring Unreplicated Exclusive lock on ‹"k"›
+
+debug-lock-table
+----
+num=1
+ lock: "k"
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+finish req=req2
+----
+[-] finish req2: finishing request
+
+# Replica loses and re-acquires leases.
+on-lease-updated leaseholder=false lease-seq=3
+----
+[-] transfer lease: released
+
+on-lease-updated leaseholder=true lease-seq=4
+----
+[-] transfer lease: acquired
+
+debug-lock-table
+----
+num=0
+
+sequence req=req3
+----
+[9] sequence req3: sequencing request
+[9] sequence req3: acquiring latches
+[9] sequence req3: scanning lock table for conflicting locks
+[9] sequence req3: sequencing complete, returned guard
+
+# Discover the initial intent, as if this request had been in-flight
+# this entire time. This isn't quite realistic, given the setup of this
+# test, but it is possible (see discover_lock_after_lease_race) and the
+# discovery should be ignored.
+handle-lock-conflict-error req=req3 lease-seq=2
+  lock txn=txn1 key=k
+----
+[10] handle lock conflict error req3: discovered lock on ‹"k"› not added to disabled lock table
+
+debug-lock-table
+----
+num=0
+
+sequence req=req3
+----
+[11] sequence req3: re-sequencing request
+[11] sequence req3: acquiring latches
+[11] sequence req3: scanning lock table for conflicting locks
+[11] sequence req3: sequencing complete, returned guard
+
+handle-lock-conflict-error req=req3 lease-seq=4
+  lock txn=txn2 key=k
+----
+[12] handle lock conflict error req3: added 1 discovered lock(s) to lock table: conflicting locks on ‹"k"›
+
+debug-lock-table
+----
+num=1
+ lock: "k"
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 4, strength: Intent, txn: 00000003-0000-0000-0000-000000000000
+
+sequence req=req3
+----
+[13] sequence req3: re-sequencing request
+[13] sequence req3: acquiring latches
+[13] sequence req3: scanning lock table for conflicting locks
+[13] sequence req3: waiting in lock wait-queues
+[13] sequence req3: lock wait-queue event: wait for txn 00000002 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
+[13] sequence req3: pushing after 1h0m0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[13] sequence req3: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
+
+new-request name=reqRes2 txn=none ts=10,1
+  resolve-intent txn=txn2 key=k status=committed
+----
+
+sequence req=reqRes2
+----
+[14] sequence reqRes2: sequencing request
+[14] sequence reqRes2: acquiring latches
+[14] sequence reqRes2: sequencing complete, returned guard
+
+on-lock-updated req=reqRes2 txn=txn2 key=k status=committed
+----
+[-] update lock: committing txn 00000002 @ ‹k›
+[13] sequence req3: lock wait-queue event: done waiting
+[13] sequence req3: conflicted with 00000002-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[13] sequence req3: acquiring latches
+[13] sequence req3: waiting to acquire write latch ‹k›@10.000000000,1 for request Put [‹"k"›], [txn: 00000003], held by write latch ‹k›@10.000000000,1 for request ResolveIntent [‹"k"›]
+[13] sequence req3: blocked on select in spanlatch.(*Manager).waitForSignal
+
+debug-advance-clock ts=223
+----
+
+finish req=reqRes2
+----
+[-] finish reqRes2: finishing request
+[13] sequence req3: latch conflict with 00000000-0000-0000-0000-000000000000 on ‹"k"› for 223.000s
+[13] sequence req3: scanning lock table for conflicting locks
+[13] sequence req3: sequencing complete, returned guard
+
+debug-lock-table
+----
+num=1
+ lock: "k"
+   queued locking requests:
+    active: false req: 4, strength: Intent, txn: 00000003-0000-0000-0000-000000000000
+
+on-lock-acquired req=req3 key=k
+----
+[-] acquire lock: txn 00000003 acquiring Unreplicated Exclusive lock on ‹"k"›
+
+debug-lock-table
+----
+num=1
+ lock: "k"
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+finish req=req3
+----
+[-] finish req3: finishing request
+
+reset namespace
+----
+
+# -------------------------------------------------------------
+# OnRangeSplit - a Range split clears the lock-table but does
+# not disable it.
+#
+# Setup: txn1 acquires lock
+#
+# Test:  txn2 enters lock's wait-queue
+#        range is split
+#        txn2 proceeds
+#        txn2 discovers txn1's lock
+#        txn2 queue's on txn1's lock
+#        txn1 lock is released
+#        txn2 proceeds and acquires lock
+# -------------------------------------------------------------
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=10,1 epoch=0
+----
+
+new-request name=req1 txn=txn1 ts=10,1
+  put key=k value=v
+----
+
+new-request name=req2 txn=txn2 ts=10,1
+  put key=k value=v
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+on-lock-acquired req=req1 key=k
+----
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"k"›
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+debug-lock-table
+----
+num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+# --------------------------------
+# Setup complete, test starts here
+# --------------------------------
+
+sequence req=req2
+----
+[2] sequence req2: sequencing request
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: waiting in lock wait-queues
+[2] sequence req2: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
+[2] sequence req2: pushing after 1h0m0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[2] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
+
+debug-lock-table
+----
+num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 6, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
+
+# Split with all keys on the RHS
+on-split key=a
+----
+[-] split range: complete
+[-] split range: range split returned 1 locks for re-acquistion
+[2] sequence req2: lock wait-queue event: done waiting
+[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: sequencing complete, returned guard
+
+debug-lock-table
+----
+num=0
+
+handle-lock-conflict-error req=req2 lease-seq=1
+  lock txn=txn1 key=k
+----
+[3] handle lock conflict error req2: added 1 discovered lock(s) to lock table: conflicting locks on ‹"k"›
+
+debug-lock-table
+----
+num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 6, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
+
+sequence req=req2
+----
+[4] sequence req2: re-sequencing request
+[4] sequence req2: acquiring latches
+[4] sequence req2: scanning lock table for conflicting locks
+[4] sequence req2: waiting in lock wait-queues
+[4] sequence req2: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
+[4] sequence req2: pushing after 1h0m0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[4] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
+
+new-request name=reqRes1 txn=none ts=10,1
+  resolve-intent txn=txn1 key=k status=committed
+----
+
+sequence req=reqRes1
+----
+[5] sequence reqRes1: sequencing request
+[5] sequence reqRes1: acquiring latches
+[5] sequence reqRes1: sequencing complete, returned guard
+
+on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
+----
+[-] update lock: committing txn 00000001 @ ‹k›
+[4] sequence req2: lock wait-queue event: done waiting
+[4] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[4] sequence req2: acquiring latches
+[4] sequence req2: waiting to acquire write latch ‹k›@10.000000000,1 for request Put [‹"k"›], [txn: 00000002], held by write latch ‹k›@10.000000000,1 for request ResolveIntent [‹"k"›]
+[4] sequence req2: blocked on select in spanlatch.(*Manager).waitForSignal
+
+debug-advance-clock ts=323
+----
+
+finish req=reqRes1
+----
+[-] finish reqRes1: finishing request
+[4] sequence req2: latch conflict with 00000000-0000-0000-0000-000000000000 on ‹"k"› for 323.000s
+[4] sequence req2: scanning lock table for conflicting locks
+[4] sequence req2: sequencing complete, returned guard
+
+debug-lock-table
+----
+num=1
+ lock: "k"
+   queued locking requests:
+    active: false req: 6, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
+
+on-lock-acquired req=req2 key=k
+----
+[-] acquire lock: txn 00000002 acquiring Unreplicated Exclusive lock on ‹"k"›
+
+debug-lock-table
+----
+num=1
+ lock: "k"
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+finish req=req2
+----
+[-] finish req2: finishing request
+
+reset namespace
+----
+
+# -------------------------------------------------------------
+# OnRangeSplit2 - A range split should not lose locks on the LHS of
+# the split.
+#
+# Setup: txn1 acquires lock k1
+#        txn2 acquires lock k3
+#
+# Test:  txn3 enters lock k1s wait-queue
+#        txn4 enters lock k3s wait-queue
+#        range is split at k2
+#        txn3 continues to wait
+#        txn4 proceeds
+# -------------------------------------------------------------
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=10,1 epoch=0
+----
+
+new-txn name=txn3 ts=10,1 epoch=0
+----
+
+new-txn name=txn4 ts=10,1 epoch=0
+----
+
+new-request name=req1 txn=txn1 ts=10,1
+  put key=k1 value=v
+----
+
+new-request name=req2 txn=txn2 ts=10,1
+  put key=k3 value=v
+----
+
+new-request name=req3 txn=txn3 ts=10,1
+  put key=k1 value=v
+----
+
+new-request name=req4 txn=txn4 ts=10,1
+  put key=k3 value=v
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+sequence req=req2
+----
+[2] sequence req2: sequencing request
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: sequencing complete, returned guard
+
+on-lock-acquired req=req1 key=k1
+----
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"k1"›
+
+on-lock-acquired req=req2 key=k3
+----
+[-] acquire lock: txn 00000002 acquiring Unreplicated Exclusive lock on ‹"k3"›
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+finish req=req2
+----
+[-] finish req2: finishing request
+
+debug-lock-table
+----
+num=2
+ lock: "k1"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "k3"
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+# --------------------------------
+# Setup complete, test starts here
+# --------------------------------
+
+sequence req=req3
+----
+[3] sequence req3: sequencing request
+[3] sequence req3: acquiring latches
+[3] sequence req3: scanning lock table for conflicting locks
+[3] sequence req3: waiting in lock wait-queues
+[3] sequence req3: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"k1"› (queuedLockingRequests: 1, queuedReaders: 0)
+[3] sequence req3: pushing after 1h0m0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[3] sequence req3: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
+
+debug-lock-table
+----
+num=2
+ lock: "k1"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 9, strength: Intent, txn: 00000003-0000-0000-0000-000000000000
+ lock: "k3"
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+sequence req=req4
+----
+[4] sequence req4: sequencing request
+[4] sequence req4: acquiring latches
+[4] sequence req4: scanning lock table for conflicting locks
+[4] sequence req4: waiting in lock wait-queues
+[4] sequence req4: lock wait-queue event: wait for txn 00000002 holding lock @ key ‹"k3"› (queuedLockingRequests: 1, queuedReaders: 0)
+[4] sequence req4: pushing after 1h0m0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[4] sequence req4: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
+
+
+debug-lock-table
+----
+num=2
+ lock: "k1"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 9, strength: Intent, txn: 00000003-0000-0000-0000-000000000000
+ lock: "k3"
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 10, strength: Intent, txn: 00000004-0000-0000-0000-000000000000
+
+# Split with k1 on LHS and k3 on RHS.
+#
+# Request 4 is allowed to proceed. Note that in a real world this
+# request would be be rejected because of the new range bounds.
+on-split key=k2
+----
+[-] split range: complete
+[-] split range: range split returned 1 locks for re-acquistion
+[4] sequence req4: lock wait-queue event: done waiting
+[4] sequence req4: conflicted with 00000002-0000-0000-0000-000000000000 on ‹"k3"› for 0.000s
+[4] sequence req4: acquiring latches
+[4] sequence req4: scanning lock table for conflicting locks
+[4] sequence req4: sequencing complete, returned guard
+
+finish req=req4
+----
+[-] finish req4: finishing request
+
+debug-lock-table
+----
+num=1
+ lock: "k1"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 9, strength: Intent, txn: 00000003-0000-0000-0000-000000000000
+
+
+new-request name=reqRes1 txn=none ts=10,1
+  resolve-intent txn=txn1 key=k1 status=committed
+----
+
+sequence req=reqRes1
+----
+[5] sequence reqRes1: sequencing request
+[5] sequence reqRes1: acquiring latches
+[5] sequence reqRes1: sequencing complete, returned guard
+
+on-lock-updated req=reqRes1 txn=txn1 key=k1 status=committed
+----
+[-] update lock: committing txn 00000001 @ ‹k1›
+[3] sequence req3: lock wait-queue event: done waiting
+[3] sequence req3: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k1"› for 0.000s
+[3] sequence req3: acquiring latches
+[3] sequence req3: waiting to acquire write latch ‹k1›@10.000000000,1 for request Put [‹"k1"›], [txn: 00000003], held by write latch ‹k1›@10.000000000,1 for request ResolveIntent [‹"k1"›]
+[3] sequence req3: blocked on select in spanlatch.(*Manager).waitForSignal
+
+
+finish req=reqRes1
+----
+[-] finish reqRes1: finishing request
+[3] sequence req3: latch conflict with 00000000-0000-0000-0000-000000000000 on ‹"k1"› for 0.000s
+[3] sequence req3: scanning lock table for conflicting locks
+[3] sequence req3: sequencing complete, returned guard
+
+finish req=req3
+----
+[-] finish req3: finishing request
+
+reset namespace
+----
+
+# -------------------------------------------------------------
+# OnRangeMerge - a Range merge clears the lock-table and
+# disables it.
+#
+# Setup: txn1 acquires lock on k
+#
+# Test:  txn2 enters lock's wait-queue
+#        txn3 sequences
+#        range is merged
+#        txn3 proceeds and acquires lock (ignored)
+#        txn2 proceeds
+#        txn2 discovers and ignores txn1's lock on k while writing
+#        txn2 re-sequences
+#
+#        txn2 redirected to left-hand side (i.e. replica acquires lease)
+#        txn2 re-sequences
+#        txn2 discovers txn1's lock on k while reading
+#        txn2 re-sequences
+#        txn1 lock is released
+#        txn2 proceeds and acquires lock
+# -------------------------------------------------------------
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=10,1 epoch=0
+----
+
+new-txn name=txn3 ts=10,1 epoch=0
+----
+
+new-request name=req1 txn=txn1 ts=10,1
+  put key=k  value=v
+----
+
+new-request name=req2 txn=txn2 ts=10,1
+  put key=k  value=v
+----
+
+new-request name=req3 txn=txn3 ts=10,1
+  put key=k2  value=v
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+on-lock-acquired req=req1 key=k
+----
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"k"›
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+debug-lock-table
+----
+num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+# --------------------------------
+# Setup complete, test starts here
+# --------------------------------
+
+sequence req=req2
+----
+[2] sequence req2: sequencing request
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: waiting in lock wait-queues
+[2] sequence req2: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
+[2] sequence req2: pushing after 1h0m0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[2] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
+
+sequence req=req3
+----
+[3] sequence req3: sequencing request
+[3] sequence req3: acquiring latches
+[3] sequence req3: scanning lock table for conflicting locks
+[3] sequence req3: sequencing complete, returned guard
+
+debug-lock-table
+----
+num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 12, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
+
+on-merge
+----
+[-] merge range: complete
+[2] sequence req2: lock wait-queue event: done waiting
+[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: sequencing complete, returned guard
+
+debug-lock-table
+----
+num=0
+
+on-lock-acquired req=req3 key=k2
+----
+
+debug-lock-table
+----
+num=0
+
+finish req=req3
+----
+[-] finish req3: finishing request
+
+handle-lock-conflict-error req=req2 lease-seq=1
+  lock txn=txn1 key=k
+----
+[4] handle lock conflict error req2: discovered lock on ‹"k"› not added to disabled lock table
+
+sequence req=req2
+----
+[5] sequence req2: re-sequencing request
+[5] sequence req2: acquiring latches
+[5] sequence req2: scanning lock table for conflicting locks
+[5] sequence req2: sequencing complete, returned guard
+
+# RangeKeyMismatchError redirect to left-hand side range.
+finish req=req2
+----
+[-] finish req2: finishing request
+
+on-lease-updated leaseholder=true lease-seq=2
+----
+[-] transfer lease: acquired
+
+sequence req=req2
+----
+[6] sequence req2: sequencing request
+[6] sequence req2: acquiring latches
+[6] sequence req2: scanning lock table for conflicting locks
+[6] sequence req2: sequencing complete, returned guard
+
+handle-lock-conflict-error req=req2 lease-seq=2
+  lock txn=txn1 key=k
+----
+[7] handle lock conflict error req2: added 1 discovered lock(s) to lock table: conflicting locks on ‹"k"›
+
+debug-lock-table
+----
+num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 14, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
+
+sequence req=req2
+----
+[8] sequence req2: re-sequencing request
+[8] sequence req2: acquiring latches
+[8] sequence req2: scanning lock table for conflicting locks
+[8] sequence req2: waiting in lock wait-queues
+[8] sequence req2: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
+[8] sequence req2: pushing after 1h0m0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[8] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
+
+new-request name=reqRes1 txn=none ts=10,1
+  resolve-intent txn=txn1 key=k status=committed
+----
+
+sequence req=reqRes1
+----
+[9] sequence reqRes1: sequencing request
+[9] sequence reqRes1: acquiring latches
+[9] sequence reqRes1: sequencing complete, returned guard
+
+on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
+----
+[-] update lock: committing txn 00000001 @ ‹k›
+[8] sequence req2: lock wait-queue event: done waiting
+[8] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[8] sequence req2: acquiring latches
+[8] sequence req2: waiting to acquire write latch ‹k›@10.000000000,1 for request Put [‹"k"›], [txn: 00000002], held by write latch ‹k›@10.000000000,1 for request ResolveIntent [‹"k"›]
+[8] sequence req2: blocked on select in spanlatch.(*Manager).waitForSignal
+
+debug-advance-clock ts=423
+----
+
+finish req=reqRes1
+----
+[-] finish reqRes1: finishing request
+[8] sequence req2: latch conflict with 00000000-0000-0000-0000-000000000000 on ‹"k"› for 423.000s
+[8] sequence req2: scanning lock table for conflicting locks
+[8] sequence req2: sequencing complete, returned guard
+
+debug-lock-table
+----
+num=1
+ lock: "k"
+   queued locking requests:
+    active: false req: 14, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
+
+on-lock-acquired req=req2 key=k
+----
+[-] acquire lock: txn 00000002 acquiring Unreplicated Exclusive lock on ‹"k"›
+
+debug-lock-table
+----
+num=1
+ lock: "k"
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+finish req=req2
+----
+[-] finish req2: finishing request
+
+reset namespace
+----
+
+# -------------------------------------------------------------
+# OnReplicaSnapshotApplied - applying a snapshot clears the
+# lock-table but does not disable it.
+#
+# Setup: txn1 acquires lock
+#
+# Test:  txn2 enters lock's wait-queue
+#        replica applies snapshot
+#        txn2 proceeds
+#        txn2 discovers txn1's lock
+#        txn2 queue's on txn1's lock
+#        txn1 lock is released
+#        txn2 proceeds and acquires lock
+# -------------------------------------------------------------
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=10,1 epoch=0
+----
+
+new-request name=req1 txn=txn1 ts=10,1
+  put key=k value=v
+----
+
+new-request name=req2 txn=txn2 ts=10,1
+  put key=k value=v
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+on-lock-acquired req=req1 key=k
+----
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"k"›
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+debug-lock-table
+----
+num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+# --------------------------------
+# Setup complete, test starts here
+# --------------------------------
+
+sequence req=req2
+----
+[2] sequence req2: sequencing request
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: waiting in lock wait-queues
+[2] sequence req2: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
+[2] sequence req2: pushing after 1h0m0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[2] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
+
+debug-lock-table
+----
+num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 16, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
+
+on-snapshot-applied
+----
+[-] snapshot replica: applied
+[2] sequence req2: lock wait-queue event: done waiting
+[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: sequencing complete, returned guard
+
+debug-lock-table
+----
+num=0
+
+handle-lock-conflict-error req=req2 lease-seq=1
+  lock txn=txn1 key=k
+----
+[3] handle lock conflict error req2: added 1 discovered lock(s) to lock table: conflicting locks on ‹"k"›
+
+debug-lock-table
+----
+num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 16, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
+
+sequence req=req2
+----
+[4] sequence req2: re-sequencing request
+[4] sequence req2: acquiring latches
+[4] sequence req2: scanning lock table for conflicting locks
+[4] sequence req2: waiting in lock wait-queues
+[4] sequence req2: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
+[4] sequence req2: pushing after 1h0m0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[4] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
+
+new-request name=reqRes1 txn=none ts=10,1
+  resolve-intent txn=txn1 key=k status=committed
+----
+
+sequence req=reqRes1
+----
+[5] sequence reqRes1: sequencing request
+[5] sequence reqRes1: acquiring latches
+[5] sequence reqRes1: sequencing complete, returned guard
+
+on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
+----
+[-] update lock: committing txn 00000001 @ ‹k›
+[4] sequence req2: lock wait-queue event: done waiting
+[4] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[4] sequence req2: acquiring latches
+[4] sequence req2: waiting to acquire write latch ‹k›@10.000000000,1 for request Put [‹"k"›], [txn: 00000002], held by write latch ‹k›@10.000000000,1 for request ResolveIntent [‹"k"›]
+[4] sequence req2: blocked on select in spanlatch.(*Manager).waitForSignal
+
+debug-advance-clock ts=1023
+----
+
+finish req=reqRes1
+----
+[-] finish reqRes1: finishing request
+[4] sequence req2: latch conflict with 00000000-0000-0000-0000-000000000000 on ‹"k"› for 1023.000s
+[4] sequence req2: scanning lock table for conflicting locks
+[4] sequence req2: sequencing complete, returned guard
+
+debug-lock-table
+----
+num=1
+ lock: "k"
+   queued locking requests:
+    active: false req: 16, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
+
+on-lock-acquired req=req2 key=k
+----
+[-] acquire lock: txn 00000002 acquiring Unreplicated Exclusive lock on ‹"k"›
+
+debug-lock-table
+----
+num=1
+ lock: "k"
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+finish req=req2
+----
+[-] finish req2: finishing request
+
+reset namespace
+----
+
+# -------------------------------------------------------------
+# OnReplicaRemoval - removing a replica clears the lock-table
+# and disables it, just like OnRangeMerge. This is critical for
+# the dangling subsume path where OnRangeMerge is never called.
+# See #167995.
+#
+# Setup: txn1 acquires lock on k
+#
+# Test:  txn2 enters lock's wait-queue
+#        replica is removed
+#        txn2 proceeds (lock table cleared)
+#        lock-table is disabled
+# -------------------------------------------------------------
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=10,1 epoch=0
+----
+
+new-request name=req1 txn=txn1 ts=10,1
+  put key=k value=v
+----
+
+new-request name=req2 txn=txn2 ts=10,1
+  put key=k value=v
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+on-lock-acquired req=req1 key=k
+----
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"k"›
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+debug-lock-table
+----
+num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+# --------------------------------
+# Setup complete, test starts here
+# --------------------------------
+
+sequence req=req2
+----
+[2] sequence req2: sequencing request
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: waiting in lock wait-queues
+[2] sequence req2: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
+[2] sequence req2: pushing after 1h0m0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[2] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
+
+debug-lock-table
+----
+num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 18, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
+
+on-replica-removal
+----
+[-] remove replica: complete
+[2] sequence req2: lock wait-queue event: done waiting
+[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: sequencing complete, returned guard
+
+debug-lock-table
+----
+num=0
+
+# Verify that the lock table is disabled: discovered locks are ignored.
+handle-lock-conflict-error req=req2 lease-seq=1
+  lock txn=txn1 key=k
+----
+[3] handle lock conflict error req2: discovered lock on ‹"k"› not added to disabled lock table
+
+finish req=req2
+----
+[-] finish req2: finishing request
+
+reset namespace
+----

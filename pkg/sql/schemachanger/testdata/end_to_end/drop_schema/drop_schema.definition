@@ -1,0 +1,8 @@
+setup
+CREATE DATABASE db;
+CREATE SCHEMA db.sc;
+----
+
+test
+DROP SCHEMA db.sc;
+----

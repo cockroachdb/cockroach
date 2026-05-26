@@ -1,0 +1,34 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "cidr",
+    srcs = ["cidr.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/cidr",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/settings",
+        "//pkg/util/envutil",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/metric/aggmetric",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_lib_pq//:pq",
+    ],
+)
+
+go_test(
+    name = "cidr_test",
+    srcs = ["cidr_test.go"],
+    embed = [":cidr"],
+    deps = [
+        "//pkg/settings/cluster",
+        "//pkg/testutils",
+        "//pkg/testutils/skip",
+        "//pkg/util/metric",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)

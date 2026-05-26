@@ -1,0 +1,39 @@
+setup
+CREATE TABLE bittab (c1 INT);
+----
+
+# Insert is blocked prior to setting the NULL attribute on the column due to a
+# temporary constraint.
+stage-exec phase=PostCommitPhase stage=4
+INSERT INTO bittab(c1) VALUES (1);
+----
+pq: failed to satisfy CHECK constraint .*
+
+# At this stage, the NULL attribute is now added to the column and temp
+# constraint is dropped. We allow the INSERT. A suitable value for the new
+# column is selected in tree.NewDefaultDatum.
+stage-exec phase=PostCommitPhase stage=5
+INSERT INTO bittab(c1) VALUES (1);
+----
+
+stage-query phase=PostCommitPhase stage=6
+SELECT count(*) FROM bittab
+----
+1
+
+# Confirm that we can delete the new column value.
+stage-exec phase=PostCommitPhase stage=7
+DELETE FROM bittab
+----
+
+# At this stage the column is now public. The code in tree.NewDefaultDatum was
+# only called when adding or dropping a column. So, the missing column values
+# are NULL.
+stage-exec phase=PostCommitNonRevertiblePhase stage=2
+INSERT INTO bittab(c1) VALUES (2);
+----
+pq: null value in column "vb" violates not-null constraint
+
+test
+ALTER TABLE bittab ADD COLUMN vb VARBIT(25) NOT NULL UNIQUE, ADD COLUMN fb BIT(25) NOT NULL
+----

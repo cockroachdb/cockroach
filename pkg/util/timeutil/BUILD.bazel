@@ -1,0 +1,83 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "timeutil",
+    srcs = [
+        "cpustopwatch.go",
+        "manual_time.go",
+        "stopwatch.go",
+        "synctest.go",
+        "ticker.go",
+        "time.go",
+        "time_source.go",
+        "time_zone_util.go",
+        "timeout.go",
+        "timeout_error.go",
+        "timer.go",
+        "timeutil.go",
+        "zoneinfo.go",
+        ":gen-lowercase-timezones",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/timeutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/grunning",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_crlib//crtime",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//errorspb",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_gogo_protobuf//proto",
+    ],
+)
+
+go_test(
+    name = "timeutil_test",
+    size = "medium",
+    srcs = [
+        "cpustopwatch_test.go",
+        "main_test.go",
+        "manual_time_test.go",
+        "now_test.go",
+        "stopwatch_test.go",
+        "synctest_test.go",
+        "ticker_test.go",
+        "time_test.go",
+        "time_zone_util_test.go",
+        "timeout_error_test.go",
+        "timer_test.go",
+    ],
+    embed = [":timeutil"],
+    deps = [
+        "//pkg/testutils/skip",
+        "//pkg/util/grunning",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//errbase",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+genrule(
+    name = "gen-lowercase-timezones",
+    srcs = [
+        "@go_sdk//:lib/time/zoneinfo.zip",
+    ],
+    outs = ["lowercase_timezones_generated.go"],
+    cmd = """
+    $(location //pkg/util/timeutil/gen) \
+      --filename=$(location lowercase_timezones_generated.go) \
+      --zoneinfo=$(location @go_sdk//:lib/time/zoneinfo.zip) \
+      --crlfmt=$(location @com_github_cockroachdb_crlfmt//:crlfmt)
+       """,
+    tools = [
+        "//pkg/util/timeutil/gen",
+        "@com_github_cockroachdb_crlfmt//:crlfmt",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)

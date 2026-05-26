@@ -1,0 +1,607 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package kvserver
+
+import (
+	"context"
+	"sync"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/limit"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/tokenbucket"
+)
+
+// StoreWorkStats embeds admission.StoreWorkDoneInfo to record information
+// relevant to admission control. It also contains an instance of kvpb.ScanStats
+// to keep track of low-level pebble statistics.
+type StoreWorkStats struct {
+	admission.StoreWorkDoneInfo
+	scanStats kvpb.ScanStats
+}
+
+var storeWorkStatsPool = sync.Pool{
+	New: func() any { return &StoreWorkStats{} },
+}
+
+// NewStoreWorkStats returns a new empty StoreWorkStats from the pool.
+func NewStoreWorkStats() *StoreWorkStats {
+	return storeWorkStatsPool.Get().(*StoreWorkStats)
+}
+
+// Release returns the *StoreWorkStats to the pool.
+func (ws *StoreWorkStats) Release() {
+	if ws == nil {
+		return
+	}
+	*ws = StoreWorkStats{}
+	storeWorkStatsPool.Put(ws)
+}
+
+// ScanStats returns a pointer to the underlying kvpb.ScanStats.
+func (ws *StoreWorkStats) ScanStats() *kvpb.ScanStats {
+	if ws == nil {
+		return nil
+	}
+	return &ws.scanStats
+}
+
+// SenderWithWorkStats is implemented by Store, Stores, and Replica. It extends
+// the kv.Sender.Send signature with an additional StoreWorkStats parameter that
+// tracks statistics during request evaluation that is used to perform admission
+// control and tracing.
+type SenderWithWorkStats interface {
+	SendWithWorkStats(
+		ctx context.Context,
+		ba *kvpb.BatchRequest,
+		stats *StoreWorkStats,
+		admissionInfo kvadmission.AdmissionInfo,
+	) (*kvpb.BatchResponse, *kvpb.Error)
+}
+
+// ToSenderForTesting wraps a SenderWithWorkStats as a kv.Sender.
+func ToSenderForTesting(sws SenderWithWorkStats) kv.Sender {
+	return kv.SenderFunc(func(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		br, pErr := sws.SendWithWorkStats(ctx, ba, nil /* stats */, kvadmission.AdmissionInfo{})
+		return br, pErr
+	})
+}
+
+// SendWithWorkStats fetches a range based on the header's replica, assembles
+// method, args & reply into a Raft Cmd struct and executes the command using
+// the fetched range.
+//
+// An incoming request may be transactional or not. If it is not transactional,
+// the timestamp at which it executes may be higher than that optionally
+// specified through the incoming BatchRequest, and it is not guaranteed that
+// all operations are written at the same timestamp. If it is transactional, a
+// timestamp must not be set - it is deduced automatically from the
+// transaction. In particular, the read timestamp will be used for
+// all reads and the write (provisional commit) timestamp will be used for
+// all writes. See the comments on txn.TxnMeta.Timestamp and txn.ReadTimestamp
+// for more details.
+//
+// Should a transactional operation be forced to a higher timestamp (for
+// instance due to the timestamp cache or finding a committed value in the path
+// of one of its writes), the response will have a transaction set which should
+// be used to update the client transaction object.
+func (s *Store) SendWithWorkStats(
+	ctx context.Context,
+	ba *kvpb.BatchRequest,
+	stats *StoreWorkStats,
+	admissionInfo kvadmission.AdmissionInfo,
+) (br *kvpb.BatchResponse, pErr *kvpb.Error) {
+	// Attach any log tags from the store to the context (which normally
+	// comes from gRPC).
+	ctx = s.AnnotateCtx(ctx)
+	for _, union := range ba.Requests {
+		arg := union.GetInner()
+		header := arg.Header()
+		if err := verifyKeys(header.Key, header.EndKey, kvpb.IsRange(arg)); err != nil {
+			return nil, kvpb.NewError(errors.Wrapf(err,
+				"failed to verify keys for %s", arg.Method()))
+		}
+	}
+
+	if throttled, err := s.maybeThrottleBatch(ctx, ba, stats); err != nil {
+		return nil, kvpb.NewError(err)
+	} else {
+		defer throttled.performAccounting(stats)
+	}
+
+	if ba.BoundedStaleness != nil {
+		newBa, pErr := s.executeServerSideBoundedStalenessNegotiation(ctx, ba)
+		if pErr != nil {
+			return nil, pErr
+		}
+		ba = newBa
+	}
+
+	if err := ba.SetActiveTimestamp(s.Clock()); err != nil {
+		return nil, kvpb.NewError(err)
+	}
+
+	// Update our clock with the incoming request timestamp. This advances the
+	// local node's clock to a high water mark from all nodes with which it has
+	// interacted.
+	if !ba.Now.IsEmpty() {
+		if s.cfg.TestingKnobs.DisableMaxOffsetCheck {
+			s.cfg.Clock.Update(ba.Now)
+		} else {
+			// If the command appears to come from a node with a bad clock,
+			// reject it instead of updating the local clock and proceeding.
+			if err := s.cfg.Clock.UpdateAndCheckMaxOffset(ctx, ba.Now); err != nil {
+				return nil, kvpb.NewError(err)
+			}
+		}
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			// On panic, don't run the defer. It's probably just going to panic
+			// again due to undefined state.
+			panic(r)
+		}
+		if ba.Txn != nil {
+			// We're in a Txn, so we can reduce uncertainty restarts by attaching
+			// the above timestamp to the returned response or error. The caller
+			// can use it to shorten its uncertainty interval when it comes back to
+			// this node.
+			if pErr != nil {
+				pErr.OriginNode = s.NodeID()
+				if txn := pErr.GetTxn(); txn == nil {
+					pErr.SetTxn(ba.Txn)
+				}
+			} else {
+				if br.Txn == nil {
+					br.Txn = ba.Txn
+				}
+			}
+		}
+
+		// We get the latest timestamp - we know that any
+		// write with a higher timestamp we run into later must
+		// have started after this point in (absolute) time.
+		now := s.cfg.Clock.NowAsClockTimestamp()
+		if pErr != nil {
+			pErr.Now = now
+		} else {
+			br.Now = now
+		}
+	}()
+
+	if ba.Txn != nil {
+		// We make our transaction aware that no other operation that causally
+		// precedes it could have started after `now`. This is important: If we
+		// wind up pushing a value, it will be in our immediate future, and not
+		// updating the top end of our uncertainty timestamp would lead to a
+		// restart (at least in the absence of a prior observed timestamp from
+		// this node, in which case the following is a no-op).
+		if _, ok := ba.Txn.GetObservedTimestamp(s.NodeID()); !ok {
+			txnClone := ba.Txn.Clone()
+			txnClone.UpdateObservedTimestamp(s.NodeID(), s.Clock().NowAsClockTimestamp())
+			ba.Txn = txnClone
+		}
+	}
+
+	if log.ExpensiveLogEnabled(ctx, 1) {
+		log.Eventf(ctx, "executing %s", ba)
+	}
+
+	// Tracks suggested ranges to return to the caller. Suggested ranges are aggregated from
+	// two sources.
+	// (1): On a RangeKeyMismatchError that is retriable.
+	// (2): On a successful batch request, where suggested ranges are returned
+	//      by the replica to update the client with. This is appended before returning.
+	var rangeInfos []roachpb.RangeInfo
+
+	// Run a retry loop on retriable RangeKeyMismatchErrors, where the requested RangeID does
+	// not match any Range on this store. A BatchRequest is retriable when the correct Range
+	// for the request exists within this store.
+	for {
+		// Get range and add command to the range for execution.
+		repl, err := s.GetReplica(ba.RangeID)
+		if err != nil {
+			return nil, kvpb.NewError(err)
+		}
+		if !repl.IsInitialized() {
+			// If we have an uninitialized copy of the range, then we are probably a
+			// valid member of the range, we're just in the process of getting our
+			// snapshot. If we returned RangeNotFoundError, the client would
+			// invalidate its cache. Instead, we return a NLHE error to indicate to
+			// the client that it should move on and try the next replica. Very
+			// likely, the next replica the client tries will be initialized and will
+			// have useful leaseholder information for the client.
+			return nil, kvpb.NewError(&kvpb.NotLeaseHolderError{
+				RangeID: ba.RangeID,
+				// The replica doesn't have a range descriptor yet, so we have to build
+				// a ReplicaDescriptor manually.
+				Replica: roachpb.ReplicaDescriptor{
+					NodeID:    repl.store.nodeDesc.NodeID,
+					StoreID:   repl.store.StoreID(),
+					ReplicaID: repl.replicaID,
+				},
+			})
+		}
+
+		br, pErr = repl.SendWithWorkStats(ctx, ba, stats, admissionInfo)
+		if pErr == nil {
+			// If any retries occurred, we should include the RangeInfos accumulated
+			// and pass these to the client, to invalidate their cache. This is
+			// otherwise empty. The order is kept in LILO, such that the most recent data
+			// is considered last by the RangeCache.
+			if len(rangeInfos) > 0 {
+				br.RangeInfos = append(rangeInfos, br.RangeInfos...)
+			}
+
+			return br, nil
+		}
+
+		// Augment error if necessary and return.
+		switch t := pErr.GetDetail().(type) {
+		case *kvpb.RangeKeyMismatchError:
+			// TODO(andrei): It seems silly that, if the client specified a RangeID that
+			// doesn't match the keys it wanted to access, but this node can serve those
+			// keys anyway, we still return a RangeKeyMismatchError to the client
+			// instead of serving the request. Particularly since we have the mechanism
+			// to communicate correct range information to the client when returning a
+			// successful response (i.e. br.RangeInfos).
+
+			// On a RangeKeyMismatchError where the batch didn't even overlap
+			// the start of the mismatched Range, try to suggest a more suitable
+			// Range from this Store.
+			rSpan, err := keys.Range(ba.Requests)
+			if err != nil {
+				return nil, kvpb.NewError(err)
+			}
+
+			// The kvclient thought that a particular range id covers rSpans. It was
+			// wrong; the respective range doesn't cover all of rSpan, or perhaps it
+			// doesn't even overlap it. Clearly the client has a stale range cache.
+			// We'll return info on the range that the request ended up being routed to
+			// and, to the extent that we have the info, the ranges containing the keys
+			// that the client requested, and all the ranges in between.
+			ri, err := t.MismatchedRange()
+			if err != nil {
+				return nil, kvpb.NewError(err)
+			}
+			skipRID := ri.Desc.RangeID // We already have info on one range, so don't add it again below.
+			startKey := ri.Desc.StartKey
+			if rSpan.Key.Less(startKey) {
+				startKey = rSpan.Key
+			}
+			endKey := ri.Desc.EndKey
+			if endKey.Less(rSpan.EndKey) {
+				endKey = rSpan.EndKey
+			}
+			var ris []roachpb.RangeInfo
+			if err := s.visitReplicasByKey(ctx, startKey, endKey, AscendingKeyOrder, func(ctx context.Context, repl *Replica) error {
+				// Note that we return the lease even if it's expired. The kvclient can use it as it sees fit.
+				ri := repl.GetRangeInfo(ctx)
+				if ri.Desc.RangeID == skipRID {
+					return nil
+				}
+				ris = append(ris, ri)
+				return nil
+			}); err != nil {
+				// Errors here should not be possible, but if there is one, it is ignored
+				// as attaching RangeInfo is optional.
+				log.KvExec.Warningf(ctx, "unexpected error visiting replicas: %s", err)
+				ris = nil // just to be safe
+			}
+
+			// Update the suggested ranges, if returned from the replica. Note here that newer ranges are
+			// always appended, so that the oldest RangeInfo is processed by the Client's RangeCache first,
+			// which is then invalidated on conflict by newer data (LILO).
+			t.AppendRangeInfo(ctx, ris...)
+
+			isRetriableMismatch := false
+			for _, ri := range ris {
+				// Check if the original batch request rSpan exists entirely within any known
+				// ranges stored on this replica, if so update repl and set retriable to true.
+				if ri.Desc.RSpan().ContainsKeyRange(rSpan.Key, rSpan.EndKey) {
+					// Retry this request: Update BatchRequest to reflect re-routing the request
+					// to ri. ClientRangeInfo is also updated here to avoid the replica providing
+					// duplicate BatchResponse.RangeInfos upon a successful retry for the client
+					// to invalidate their RangeCache with.
+					ba.RangeID = ri.Desc.RangeID
+					ba.ClientRangeInfo = roachpb.ClientRangeInfo{
+						ClosedTimestampPolicy: ri.ClosedTimestampPolicy,
+						DescriptorGeneration:  ri.Desc.Generation,
+						LeaseSequence:         ri.Lease.Sequence,
+					}
+
+					rangeInfos = append(rangeInfos, t.Ranges...)
+					isRetriableMismatch = true
+					break
+				}
+			}
+
+			if isRetriableMismatch {
+				continue
+			}
+
+			// The request is not retriable and an error will be returned to the client,
+			// to invalidate their RangeCache and update the request headers. Include all
+			// RangeInfos that have been accumulated so far first, so that stale data is
+			// resolved by later entries; as the header is processes in a last-in-last-out
+			// manner.
+			t.Ranges = append(rangeInfos, t.Ranges...)
+
+			// We have to write `t` back to `pErr` so that it picks up the changes.
+			pErr = kvpb.NewError(t)
+		case *kvpb.RaftGroupDeletedError:
+			// This error needs to be converted appropriately so that clients
+			// will retry.
+			err := kvpb.NewRangeNotFoundError(repl.RangeID, repl.store.StoreID())
+			pErr = kvpb.NewError(err)
+		}
+
+		// Unable to retry, exit the retry loop and return an error.
+		break
+	}
+	return nil, pErr
+}
+
+// batchThrottleCallback is returned from the maybeThrottleBatch function and is
+// used to perform accounting and cleanup of any rate limiting related state
+// after a SendWithWorkStats call completes.
+type batchThrottleCallback struct {
+	// reservation is the reservation from a ConcurrentRequestLimiter.
+	reservation limit.Reservation
+	// limiters is a reference to the store's limiters struct. This field is
+	// set whenever a request for low-priority bulk reads was throttled and
+	// needs to account for tokens corresponding to actually read data.
+	limiters *batcheval.Limiters
+	// baseline contains the number of bytes accumulated into ScanStats before
+	// request evaluation. This is tracked so we can correctly attribute the
+	// statistics for this instance of evaluation.
+	baseline uint64
+}
+
+// maybeThrottleBatch inspects the provided batch and determines whether
+// throttling should be applied to avoid overloading the Store. If so, the
+// method blocks and returns a struct containing the information needed to
+// perform accounting for rate limiters. The caller must call
+// (batchThrottleCallback).performAccounting with the StoreWorkStats after the
+// evaluation completes.
+//
+// Of note is that request throttling is all performed above evaluation and
+// before a request acquires latches on a range. Otherwise, the request could
+// inadvertently block others while being throttled.
+func (s *Store) maybeThrottleBatch(
+	ctx context.Context, ba *kvpb.BatchRequest, stats *StoreWorkStats,
+) (batchThrottleCallback, error) {
+	if !ba.IsSingleRequest() {
+		return batchThrottleCallback{}, nil
+	}
+
+	if t := ba.Requests[0].GetAddSstable(); t != nil {
+		limiter := s.limiters.ConcurrentAddSSTableRequests
+		if t.IngestAsWrites {
+			limiter = s.limiters.ConcurrentAddSSTableAsWritesRequests
+		}
+		before := timeutil.Now()
+		res, err := limiter.Begin(ctx)
+		if err != nil {
+			return batchThrottleCallback{}, err
+		}
+		waited := timeutil.Since(before)
+
+		s.metrics.AddSSTableProposalTotalDelay.Inc(waited.Nanoseconds())
+		if waited > time.Second {
+			log.KvExec.Infof(ctx, "SST ingestion was delayed by %v", waited)
+		}
+		return batchThrottleCallback{reservation: res}, nil
+	}
+
+	if ba.IsBulkLowPriorityRead() {
+		before := timeutil.Now()
+
+		// Throttle based on concurrent requests limiter first.
+		res, err := s.limiters.ConcurrentBulkReadRequests.Begin(ctx)
+		if err != nil {
+			return batchThrottleCallback{}, err
+		}
+
+		// Helper function to try to obtain tokens from this bucket under
+		// the lock.
+		obtainTokens := func() (bool, time.Duration) {
+			s.limiters.BulkIOReadRate.Lock()
+			defer s.limiters.BulkIOReadRate.Unlock()
+			return s.limiters.BulkIOReadRate.TryToFulfill(1)
+		}
+
+		// Throttle based on rate-limiter token bucket. If the context is
+		// canceled then we need to release the reservation.
+		ok, delay := obtainTokens()
+		var timer timeutil.Timer
+		defer timer.Stop()
+		for !ok {
+			timer.Reset(delay)
+			select {
+			case <-ctx.Done():
+				res.Release()
+				return batchThrottleCallback{}, errors.Wrap(ctx.Err(), "context ended while throttling bulk read request")
+			case <-timer.C:
+				ok, delay = obtainTokens()
+			}
+		}
+
+		waited := timeutil.Since(before)
+		s.metrics.BulkLowPriReadRequestTotalDelay.Inc(waited.Nanoseconds())
+		if waited > time.Second {
+			log.KvExec.Infof(ctx, "bulk low-priority read operation was delayed by %v", waited)
+		}
+
+		// Calculate the baseline stats from the given parameters.
+		var baseline uint64
+		if ss := stats.ScanStats(); ss != nil {
+			baseline = ss.BlockBytes - ss.BlockBytesInCache
+		}
+
+		return batchThrottleCallback{reservation: res, limiters: &s.limiters, baseline: baseline}, nil
+	}
+
+	return batchThrottleCallback{}, nil
+}
+
+// performAccounting must be called after maybeThrottleBatch with the returned
+// batchThrottleCallback and the StoreWorkStats.
+func (b batchThrottleCallback) performAccounting(stats *StoreWorkStats) {
+	if b.reservation != nil {
+		b.reservation.Release()
+	}
+	if b.limiters == nil {
+		return
+	}
+
+	// Calculate the actual token adjustment needed from the BatchResponse. We
+	// get the number of bytes that were read, and then deduct them (less one,
+	// for the token we already got) from the bucket. We don't care about the
+	// token bucket falling too much into -ve, because we have pagination in the
+	// TTL layer and also a ConcurrentRequestLimiter to ensure the bucket
+	// doesn't fall arbitrarily into debt.
+	var bytesRead uint64
+	if ss := stats.ScanStats(); ss != nil {
+		bytesRead = (ss.BlockBytes - ss.BlockBytesInCache) - b.baseline
+	}
+
+	b.limiters.BulkIOReadRate.Lock()
+	defer b.limiters.BulkIOReadRate.Unlock()
+	b.limiters.BulkIOReadRate.Adjust(1 - tokenbucket.Tokens(bytesRead))
+}
+
+// executeServerSideBoundedStalenessNegotiation performs the server-side
+// negotiation fast-path for bounded staleness read requests. This fast-path
+// allows a bounded staleness read request that lands on a single range to
+// perform its negotiation phase and execution phase in a single RPC.
+//
+// The server-side negotiation fast-path provides two benefits:
+//  1. it avoids two network hops in the common-case where a bounded staleness
+//     read is targeting a single range. This in an important performance
+//     optimization for single-row point lookups.
+//  2. it provides stronger guarantees around minimizing staleness during bounded
+//     staleness reads. Bounded staleness reads that hit the server-side
+//     fast-path use their target replica's most up-to-date resolved timestamp,
+//     so they are as fresh as possible. Bounded staleness reads that miss the
+//     fast-path and perform explicit negotiation (see below) consult a cache, so
+//     they may use an out-of-date, suboptimal resolved timestamp, as long as it
+//     is fresh enough to satisfy the staleness bound of the request.
+//
+// The method should be called for requests that have their MinTimestampBound
+// field set, which indicates that the request wants a dynamic timestamp equal
+// to the resolved timestamp over its key span on the local replica. Setting the
+// request timestamp to the local resolved timestamp ensures that the request
+// will not block on replication or on conflicting transactions when executed.
+// If the method returns successfully, the new request will have its
+// MinTimestampBound field unset and its Timestamp field set to the negotiated
+// timestamp.
+//
+// If the local resolved timestamp is below the request's MinTimestampBound,
+// then a MinTimestampBoundUnsatisfiableError will be returned if the request
+// has its MinTimestampBoundStrict flag set to true. Otherwise, the request's
+// timestamp will be set to the MinTimestampBound and allowed to execute.
+//
+// For more information, see the "Server-side negotiation fast-path" section of
+// docs/RFCS/20210519_bounded_staleness_reads.md.
+func (s *Store) executeServerSideBoundedStalenessNegotiation(
+	ctx context.Context, ba *kvpb.BatchRequest,
+) (*kvpb.BatchRequest, *kvpb.Error) {
+	if ba.BoundedStaleness == nil {
+		log.KvExec.Fatal(ctx, "BoundedStaleness header required for server-side negotiation fast-path")
+	}
+	cfg := ba.BoundedStaleness
+	if cfg.MinTimestampBound.IsEmpty() {
+		return ba, kvpb.NewError(errors.AssertionFailedf(
+			"MinTimestampBound must be set in batch"))
+	}
+	if !cfg.MaxTimestampBound.IsEmpty() && cfg.MaxTimestampBound.LessEq(cfg.MinTimestampBound) {
+		return ba, kvpb.NewError(errors.AssertionFailedf(
+			"MaxTimestampBound, if set in batch, must be greater than MinTimestampBound"))
+	}
+	if !ba.Timestamp.IsEmpty() {
+		return ba, kvpb.NewError(errors.AssertionFailedf(
+			"MinTimestampBound and Timestamp cannot both be set in batch"))
+	}
+	if ba.Txn != nil {
+		return ba, kvpb.NewError(errors.AssertionFailedf(
+			"MinTimestampBound and Txn cannot both be set in batch"))
+	}
+
+	// Use one or more QueryResolvedTimestampRequests to compute a resolved
+	// timestamp over the read spans on the local replica.
+	queryResBa := &kvpb.BatchRequest{}
+	queryResBa.RangeID = ba.RangeID
+	queryResBa.Replica = ba.Replica
+	queryResBa.ClientRangeInfo = ba.ClientRangeInfo
+	queryResBa.ReadConsistency = kvpb.INCONSISTENT
+	for _, ru := range ba.Requests {
+		span := ru.GetInner().Header().Span()
+		if len(span.EndKey) == 0 {
+			// QueryResolvedTimestamp is a ranged operation.
+			span.EndKey = span.Key.Next()
+		}
+		queryResBa.Add(&kvpb.QueryResolvedTimestampRequest{
+			RequestHeader: kvpb.RequestHeaderFromSpan(span),
+		})
+	}
+
+	// Pass empty AdmissionInfo since this is an internal request that bypasses
+	// admission control.
+	br, pErr := s.SendWithWorkStats(ctx, queryResBa, nil /* stats */, kvadmission.AdmissionInfo{})
+	if pErr != nil {
+		return ba, pErr
+	}
+
+	// Merge the resolved timestamps together and verify that the bounded
+	// staleness read can be satisfied by the local replica, according to
+	// its minimum timestamp bound.
+	var resTS hlc.Timestamp
+	for _, ru := range br.Responses {
+		ts := ru.GetQueryResolvedTimestamp().ResolvedTS
+		if resTS.IsEmpty() {
+			resTS = ts
+		} else {
+			resTS.Backward(ts)
+		}
+	}
+	if resTS.Less(cfg.MinTimestampBound) {
+		// The local resolved timestamp was below the request's minimum timestamp
+		// bound. If the minimum timestamp bound should be strictly obeyed, reject
+		// the batch. Otherwise, consider the minimum timestamp bound to be the
+		// request timestamp and let the request proceed. On follower replicas, this
+		// may result in the request being redirected (with a NotLeaseholderError)
+		// to the current leaseholder. On the leaseholder, this may result in the
+		// request blocking on conflicting transactions.
+		if cfg.MinTimestampBoundStrict {
+			return ba, kvpb.NewError(kvpb.NewMinTimestampBoundUnsatisfiableError(
+				cfg.MinTimestampBound, resTS,
+			))
+		}
+		resTS = cfg.MinTimestampBound
+	}
+	if !cfg.MaxTimestampBound.IsEmpty() && cfg.MaxTimestampBound.LessEq(resTS) {
+		// The local resolved timestamp was above the request's maximum timestamp
+		// bound. Drop the request timestamp to the maximum timestamp bound.
+		resTS = cfg.MaxTimestampBound.Prev()
+	}
+
+	ba = ba.ShallowCopy()
+	ba.Timestamp = resTS
+	ba.BoundedStaleness = nil
+	return ba, nil
+}

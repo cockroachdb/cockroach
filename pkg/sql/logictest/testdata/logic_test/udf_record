@@ -1,0 +1,713 @@
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT);
+INSERT INTO t VALUES (1, 5), (2, 6), (3, 7);
+
+statement ok
+CREATE FUNCTION f_one() RETURNS RECORD AS
+$$
+  SELECT 1;
+$$ LANGUAGE SQL;
+
+query T
+SELECT f_one();
+----
+(1)
+
+statement error pgcode 42601 pq: a column definition list is required for functions returning \"record\"
+SELECT * FROM f_one();
+
+query I
+SELECT * FROM f_one() AS foo (a INT);
+----
+1
+
+statement ok
+CREATE FUNCTION f_const() RETURNS RECORD AS
+$$
+  SELECT 1, 2.0, 'welcome roacher', '2021-07-12 09:02:10-08:00'::TIMESTAMPTZ;
+$$ LANGUAGE SQL;
+
+query T
+SELECT f_const();
+----
+(1,2.0,"welcome roacher","2021-07-12 17:02:10+00")
+
+statement ok
+CREATE FUNCTION f_arr() RETURNS RECORD STABLE AS
+$$
+  SELECT ARRAY[1, 2, 3];
+$$ LANGUAGE SQL;
+
+query T
+SELECT f_arr();
+----
+("{1,2,3}")
+
+statement ok
+CREATE FUNCTION f_tuple() RETURNS RECORD AS
+$$
+  SELECT (4, 5, (6, 7, 8));
+$$ LANGUAGE SQL;
+
+query T
+SELECT f_tuple();
+----
+(4,5,"(6,7,8)")
+
+statement ok
+CREATE FUNCTION f_multituple() RETURNS RECORD AS
+$$
+  SELECT (1, 2), (3, 4);
+$$ LANGUAGE SQL;
+
+query T
+SELECT f_multituple();
+----
+("(1,2)","(3,4)")
+
+statement ok
+CREATE FUNCTION f_table() RETURNS RECORD AS
+$$
+  SELECT * FROM t ORDER BY a LIMIT 1;
+$$ LANGUAGE SQL;
+
+query TT
+SHOW CREATE FUNCTION f_table;
+----
+f_table  CREATE FUNCTION public.f_table()
+           RETURNS RECORD
+           VOLATILE
+           NOT LEAKPROOF
+           CALLED ON NULL INPUT
+           LANGUAGE SQL
+           SECURITY INVOKER
+           AS $$
+           SELECT t.a, t.b FROM public.t ORDER BY a LIMIT 1;
+         $$
+
+query T
+SELECT f_table();
+----
+(1,5)
+
+statement ok
+CREATE FUNCTION f_multitable() RETURNS RECORD STABLE AS
+$$
+  SELECT t1.*, t2.* FROM t as t1 JOIN t as t2 on t1.a = t2.a ORDER BY t1.a LIMIT 1;
+$$ LANGUAGE SQL;
+
+query T
+SELECT f_multitable();
+----
+(1,5,1,5)
+
+statement ok
+CREATE FUNCTION f_setof() RETURNS SETOF RECORD AS
+$$
+  SELECT * FROM t
+$$ LANGUAGE SQL;
+
+query T rowsort
+SELECT f_setof();
+----
+(1,5)
+(2,6)
+(3,7)
+
+statement ok
+CREATE FUNCTION f_row() RETURNS RECORD IMMUTABLE LEAKPROOF LANGUAGE SQL AS 'SELECT ROW(1.1)';
+
+query T
+SELECT f_row();
+----
+(1.1)
+
+statement ok
+ALTER TABLE t ADD COLUMN c INT DEFAULT 0;
+
+query T
+SELECT f_table();
+----
+(1,5)
+
+subtest unqualifying_table_names
+# test case-sensitive and unicode database names
+
+statement ok
+CREATE DATABASE "interesting⨄DbName";
+USE "interesting⨄DbName";
+CREATE TABLE t1 (c1 int);
+
+statement ok
+CREATE FUNCTION f() RETURNS INT VOLATILE LANGUAGE SQL AS 
+$$
+  SELECT * FROM t1;
+$$;
+
+query TT
+SHOW CREATE FUNCTION f;
+----
+f  CREATE FUNCTION public.f()
+     RETURNS INT8
+     VOLATILE
+     NOT LEAKPROOF
+     CALLED ON NULL INPUT
+     LANGUAGE SQL
+     SECURITY INVOKER
+     AS $$
+     SELECT t1.c1 FROM public.t1;
+   $$
+
+
+statement ok
+USE test;
+
+subtest end
+
+subtest datasource
+
+statement ok
+CREATE FUNCTION f_tup() RETURNS RECORD AS
+$$
+  SELECT ROW(1, 2, 3);
+$$ LANGUAGE SQL;
+
+query T
+SELECT f_tup();
+----
+(1,2,3)
+
+statement error pgcode 42601 pq: a column definition list is required for functions returning \"record\"
+SELECT * FROM f_tup();
+
+query III colnames
+SELECT * FROM f_tup() as foo(a int, b int, c int);
+----
+a b c
+1 2 3
+
+statement ok
+CREATE FUNCTION f_col() RETURNS RECORD AS
+$$
+  SELECT 1, 2, 3;
+$$ LANGUAGE SQL;
+
+query T
+SELECT f_col();
+----
+(1,2,3)
+
+query III colnames
+SELECT * FROM f_col() as foo(a int, b int, c int);
+----
+a b c
+1 2 3
+
+query T
+SELECT * FROM (VALUES (f_col())) as foo;
+----
+(1,2,3)
+
+statement ok
+CREATE TABLE t_imp (a INT PRIMARY KEY, b INT);
+INSERT INTO t_imp VALUES (1, 10), (2, 4), (3, 32);
+
+statement ok
+CREATE FUNCTION f_imp() RETURNS t_imp AS
+$$
+  SELECT * FROM t_imp ORDER BY a LIMIT 1;
+$$ LANGUAGE SQL;
+
+query II colnames
+SELECT * FROM f_imp();
+----
+a b
+1 10
+
+statement ok
+CREATE TYPE udt AS ENUM ('a', 'b', 'c');
+
+statement ok
+CREATE FUNCTION f_udt() RETURNS udt AS
+$$
+  SELECT 'a'::udt;
+$$ LANGUAGE SQL;
+
+query T
+SELECT * FROM f_udt();
+----
+a
+
+statement ok
+CREATE FUNCTION f_udt_record() RETURNS RECORD AS
+$$
+  SELECT 'a'::udt;
+$$ LANGUAGE SQL;
+
+query T
+SELECT * FROM f_udt();
+----
+a
+
+query II rowsort
+SELECT * FROM f_setof() AS foo(a INT, b INT);
+----
+1 5
+2 6
+3 7
+
+statement ok
+CREATE FUNCTION f_setof_imp() RETURNS SETOF t_imp STABLE AS
+$$
+  SELECT * FROM t_imp;
+$$ LANGUAGE SQL;
+
+query II rowsort
+SELECT * FROM f_setof_imp()
+----
+1 10
+2 4
+3 32
+
+statement ok
+CREATE FUNCTION f_strict() RETURNS RECORD STRICT AS
+$$
+  SELECT 1, 2, 3;
+$$ LANGUAGE SQL;
+
+query III
+SELECT * FROM f_strict() AS foo(a INT, b INT, c INT);
+----
+1 2 3
+
+statement ok
+CREATE FUNCTION f_setof_strict() RETURNS SETOF RECORD STRICT STABLE AS
+$$
+  SELECT * FROM t_imp;
+$$ LANGUAGE SQL;
+
+query II rowsort
+SELECT * FROM f_setof_strict() AS foo(a INT, b INT);
+----
+1 10
+2 4
+3 32
+
+statement ok
+CREATE FUNCTION f_strict_arg(IN a INT, IN b INT) RETURNS RECORD STRICT STABLE AS
+$$
+  SELECT a, b;
+$$ LANGUAGE SQL;
+
+query II colnames
+SELECT * FROM f_strict_arg(1,2) AS foo(a INT, b INT);
+----
+a b
+1 2
+
+query II colnames
+SELECT * FROM f_strict_arg(NULL, 2) AS foo(a INT, b INT);
+----
+a    b
+NULL NULL
+
+query T
+SELECT * FROM (SELECT f_strict_arg(1, 2));
+----
+(1,2)
+
+statement ok
+CREATE FUNCTION f_strict_arg_setof(IN a INT, IN b INT) RETURNS SETOF RECORD STRICT AS
+$$
+  SELECT a, b FROM generate_series(1,3);
+$$ LANGUAGE SQL;
+
+query II colnames
+SELECT * FROM f_strict_arg_setof(1,2) AS foo(a INT, b INT);
+----
+a b
+1 2
+1 2
+1 2
+
+# Strict SETOF UDF with NULL input returns 0 rows.
+query II colnames
+SELECT * FROM f_strict_arg_setof(NULL,2) AS foo(a INT, b INT);
+----
+a b
+
+statement ok
+CREATE TABLE n (a INT PRIMARY KEY, b INT);
+INSERT INTO n VALUES (1, 5), (2, NULL);
+
+query III colnames
+WITH narg AS (SELECT b AS input FROM n WHERE a = 2) SELECT * FROM narg, f_strict_arg(narg.input, 2) AS foo(a INT, b INT);
+----
+input a    b
+NULL NULL NULL
+
+query III colnames
+WITH narg AS (SELECT b AS input FROM n WHERE a = 2) SELECT * FROM narg, f_strict_arg_SETOF(narg.input, 2) AS foo(a INT, b INT);
+----
+input a b
+
+statement ok
+CREATE FUNCTION f_arg(IN a INT8, IN b INT8) RETURNS RECORD AS
+$$
+  SELECT a, b;
+$$ LANGUAGE SQL;
+
+query II
+SELECT * FROM f_arg(1,2) AS foo(a INT, b INT);
+----
+1 2
+
+# Test ambiguous function signatures with records
+subtest end
+
+subtest ambiguity
+
+# setof
+statement ok
+CREATE FUNCTION f_amb_setof(a INT8, b INT8) RETURNS SETOF RECORD STRICT AS
+$$
+  SELECT a, b;
+$$ LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION f_amb_setof(a INT8, b STRING) RETURNS SETOF RECORD STRICT AS
+$$
+  SELECT a, b;
+$$ LANGUAGE SQL;
+
+# TODO(#100928): In postgres, calls to f_amb_setof should succeed and return 0 rows.
+statement error pgcode 42725 pq: ambiguous call: f_amb_setof\(int, unknown\), candidates are
+SELECT f_amb_setof(1, NULL);
+
+statement error pgcode 42725 pq: ambiguous call: f_amb_setof\(int, unknown\), candidates are
+SELECT * FROM f_amb_setof(1, NULL) as foo(a int, b int);
+
+statement ok
+CREATE FUNCTION f_amb(a INT, b INT) RETURNS RECORD STRICT AS
+$$
+  SELECT a, b;
+$$ LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION f_amb(a INT, b STRING) RETURNS RECORD STRICT AS
+$$
+  SELECT a, b;
+$$ LANGUAGE SQL;
+
+# TODO(#100928): In postgres, calls to f_amb should succeed and return NULL.
+statement error pgcode 42725 pq: ambiguous call: f_amb\(int, unknown\), candidates are
+SELECT f_amb(1, NULL);
+
+# TODO(#100928): In postgres, calls to f_amb as a data source should succeed
+# and return NULL NULL.
+statement error pgcode 42725 pq: ambiguous call: f_amb\(int, unknown\), candidates are
+SELECT * FROM f_amb(1, NULL) as foo(a int, b int);
+
+subtest end
+
+subtest repro_102718
+
+statement ok
+CREATE OR REPLACE FUNCTION f_102718()
+	RETURNS RECORD
+	IMMUTABLE
+	LANGUAGE SQL
+	AS $$
+SELECT ('a',)
+$$;
+
+query TT
+SELECT
+	*
+FROM
+	(VALUES (f_102718())) AS t1 (a),
+	(VALUES ('foo'), ('bar')) AS t2 (b)
+ORDER BY
+	t1.a DESC NULLS FIRST;
+----
+(a) foo
+(a) bar
+
+
+subtest end
+
+subtest implicit_record_types
+
+statement ok
+CREATE TABLE imp(k INT PRIMARY KEY, a INT, b TEXT);
+INSERT INTO imp VALUES (1, 2, 'a');
+
+statement ok
+CREATE FUNCTION imp_const_tup() RETURNS imp LANGUAGE SQL AS $$
+  SELECT (11, 22, 'b')
+$$
+
+query TBT
+SELECT imp_const_tup(), (11,22,'b')::imp = imp_const_tup(), pg_typeof(imp_const_tup())
+----
+(11,22,b)  true  public.imp
+
+statement ok
+CREATE FUNCTION imp_const_cast() RETURNS imp LANGUAGE SQL AS $$
+  SELECT (11, 22, 'b')::imp
+$$
+
+query TBT
+SELECT imp_const_cast(), (11,22,'b')::imp = imp_const_cast(), pg_typeof(imp_const_cast())
+----
+(11,22,b)  true  public.imp
+
+statement ok
+CREATE FUNCTION imp_const() RETURNS imp LANGUAGE SQL AS $$
+  SELECT 11 AS k, 22 AS a, 'b' AS b
+$$
+
+query TBT
+SELECT imp_const(), (11,22,'b')::imp = imp_const(), pg_typeof(imp_const())
+----
+(11,22,b)  true  public.imp
+
+statement ok
+CREATE FUNCTION imp_const_unnamed() RETURNS imp LANGUAGE SQL AS $$
+  SELECT 11, 22, 'b'
+$$
+
+query TBT
+SELECT imp_const_unnamed(), (11,22,'b')::imp = imp_const_unnamed(), pg_typeof(imp_const_unnamed())
+----
+(11,22,b)  true  public.imp
+
+statement ok
+CREATE FUNCTION imp_tup() RETURNS imp LANGUAGE SQL AS $$
+  SELECT (k, a, b) FROM imp
+$$
+
+# TODO(mgartner): pg_typeof(imp_tup()) is omitted because we get different
+# results for different configurations, due to #58252.
+query TB
+SELECT imp_tup(), (1,2,'a')::imp = imp_tup()
+----
+(1,2,a)  true
+
+statement ok
+CREATE FUNCTION imp() RETURNS imp LANGUAGE SQL AS $$
+  SELECT k, a, b FROM imp
+$$
+
+# TODO(#58252): pg_typeof(imp_tup_ordered()) is omitted because we get
+# different results for different configurations.
+query TB
+SELECT imp(), (1,2,'a')::imp = imp()
+----
+(1,2,a)  true
+
+statement ok
+CREATE FUNCTION imp_star() RETURNS imp LANGUAGE SQL AS $$
+  SELECT * FROM imp
+$$
+
+# TODO(#58252): pg_typeof(imp_tup_ordered()) is omitted because we get
+# different results for different configurations.
+query TB
+SELECT imp_star(), (1,2,'a')::imp = imp_star()
+----
+(1,2,a)  true
+
+statement ok
+INSERT INTO imp VALUES (100, 200, 'z')
+
+statement ok
+CREATE FUNCTION imp_tup_ordered() RETURNS imp LANGUAGE SQL AS $$
+  SELECT (k, a, b) FROM imp ORDER BY b DESC
+$$
+
+# TODO(#58252): pg_typeof(imp_tup_ordered()) is omitted because we get
+# different results for different configurations.
+query TB
+SELECT imp_tup_ordered(), (100,200,'z')::imp = imp_tup_ordered()
+----
+(100,200,z)  true
+
+statement ok
+CREATE FUNCTION imp_ordered() RETURNS imp LANGUAGE SQL AS $$
+  SELECT k, a, b FROM imp ORDER BY b DESC
+$$
+
+# TODO(#58252): pg_typeof(imp_ordered()) is omitted because we get
+# different results for different configurations.
+query TB
+SELECT imp_ordered(), (100,200,'z')::imp = imp_ordered()
+----
+(100,200,z)  true
+
+statement ok
+CREATE FUNCTION imp_identity(i imp) RETURNS imp LANGUAGE SQL AS $$
+  SELECT i
+$$
+
+query TT
+SELECT imp_identity((1,2,'a')), imp_identity((1,2,'a')::imp)
+----
+(1,2,a)  (1,2,a)
+
+statement ok
+CREATE FUNCTION imp_a(i imp) RETURNS INT LANGUAGE SQL AS $$
+  SELECT (i).a
+$$
+
+query II
+SELECT imp_a((1,2,'a')), imp_a((1,2,'a')::imp)
+----
+2  2
+
+statement ok
+CREATE FUNCTION imp_cast() RETURNS imp LANGUAGE SQL AS $$
+  SELECT (1, 2, 3)
+$$
+
+query TBT
+SELECT imp_cast(), (1,2,'3') = imp_cast(), pg_typeof(imp_cast())
+----
+(1,2,3)  true  public.imp
+
+# Note: postgres returns error code 42846 (cannot cast type) here instead due to
+# implementation differences.
+statement error pgcode 42P13 return type mismatch in function declared to return imp
+CREATE FUNCTION err() RETURNS imp LANGUAGE SQL AS $$
+  SELECT (1, 2)
+$$
+
+statement error pgcode 42P13 return type mismatch in function declared to return imp
+CREATE FUNCTION err() RETURNS imp LANGUAGE SQL AS $$
+  SELECT k, a FROM imp
+$$
+
+# Note: This function can be successfully created in postgres, but will fail
+# when called.
+statement error pgcode 42P13 return type mismatch in function declared to return imp
+CREATE FUNCTION err() RETURNS imp LANGUAGE SQL AS $$
+  SELECT k, a, b::INT FROM imp
+$$
+
+statement error pgcode 42P13 return type mismatch in function declared to return int
+CREATE FUNCTION err(i imp) RETURNS INT LANGUAGE SQL AS $$
+  SELECT i
+$$
+
+# Test errors related to a UDF called with a column-definition list.
+subtest column_definition_errors
+
+statement ok
+CREATE TYPE foo_typ AS (x INT, y INT);
+CREATE TYPE bar_typ AS (x INT, y INT);
+
+# Column-definition list cannot be used with a composite UDT.
+statement ok
+CREATE FUNCTION f() RETURNS foo_typ LANGUAGE SQL AS $$ SELECT ROW(1, 2); $$;
+
+statement error pgcode 42601 pq: a column definition list is redundant for a function returning a named composite type
+SELECT * FROM f() AS g(bar bar_typ);
+
+# Column-definition list cannot be used with a scalar type.
+statement ok
+DROP FUNCTION f;
+
+statement ok
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement error pgcode 42601 pq: a column definition list is only allowed for functions returning \"record\"
+SELECT * FROM f() AS g(bar FLOAT);
+
+# Column-definition list cannot be used with OUT-parameters.
+statement ok
+DROP FUNCTION f;
+
+statement ok
+CREATE FUNCTION f(OUT x INT, OUT y INT) RETURNS RECORD LANGUAGE SQL AS $$ SELECT ROW(1, 2); $$;
+
+statement error pgcode 42601 pq: a column definition list is redundant for a function with OUT parameters
+SELECT * FROM f() AS g(bar bar_typ);
+
+# The number of result columns must match the number of entries in the column
+# definition list.
+statement ok
+DROP FUNCTION f;
+
+statement ok
+CREATE FUNCTION f() RETURNS RECORD LANGUAGE SQL AS $$ SELECT 1, 2; $$;
+
+statement error pgcode 42804 pq: function return row and query-specified return row do not match
+SELECT * FROM f() AS g(bar INT);
+
+statement error pgcode 42804 pq: function return row and query-specified return row do not match
+SELECT * FROM f() AS g(foo INT, bar INT, baz INT);
+
+# RECORD-returning UDF requires a column-definition list.
+statement ok
+DROP FUNCTION f;
+
+statement ok
+CREATE FUNCTION f() RETURNS RECORD LANGUAGE SQL AS $$ SELECT ROW(1, 2); $$;
+
+statement error pgcode 42601 pq: a column definition list is required for functions returning \"record\"
+SELECT * FROM f();
+
+# A column alias list is insufficient.
+statement error pgcode 42601 pq: a column definition list is required for functions returning \"record\"
+SELECT * FROM f() AS g(bar, baz);
+
+# The result column(s) must be assignment-cast compatible with the
+# column-definition list.
+statement ok
+DROP FUNCTION f;
+
+statement ok
+CREATE FUNCTION f() RETURNS RECORD LANGUAGE SQL AS $$ SELECT True; $$;
+
+statement error pgcode 42P13 pq: return type mismatch in function declared to return record
+SELECT * FROM f() AS g(bar INT);
+
+subtest regression_113186
+
+# Check whether the actual function result types are identical to the types in
+# the column definition, and correctly resolve differences.
+statement ok
+CREATE FUNCTION f113186() RETURNS RECORD LANGUAGE SQL AS $$ SELECT 1.99; $$;
+
+query R colnames
+SELECT * FROM f113186() AS foo(x FLOAT);
+----
+x
+1.99
+
+query I colnames
+SELECT * FROM f113186() AS foo(x INT);
+----
+x
+2
+
+statement error pgcode 42P13 pq: return type mismatch in function declared to return record
+SELECT * FROM f113186() AS foo(x TIMESTAMP);
+
+subtest regression_114846
+
+# Function creation and execution should succeed without internal error due to
+# mismatched types.
+statement ok
+CREATE FUNCTION array_to_set(ANYARRAY) RETURNS SETOF RECORD AS $$
+  SELECT i AS "index", $1[i] AS "value" FROM generate_subscripts($1, 1) i;
+$$ LANGUAGE SQL STRICT IMMUTABLE;
+
+query RT colnames,rowsort
+SELECT * FROM array_to_set(ARRAY['one', 'two']) AS t(f1 NUMERIC(4,2), f2 TEXT);
+----
+f1    f2
+1.00  one
+2.00  two
+
+subtest end

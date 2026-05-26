@@ -1,0 +1,199 @@
+# Show how waiting work ends up getting admitted choppily if the flow tokens
+# being returned are being done so in a similarly choppy way. This is showing
+# that we're shaping incoming writes to exactly the rate of flow token returns,
+# i.e. we're controlling the flow tightly.
+init
+----
+
+# Set up an open-loop thread issuing 2MiB/s of regular writes from t=0s to
+# t=25s.
+timeline
+t=[0s,25s)  class=regular stream=t1/s1 adjust=-2MiB/s   rate=10/s
+----
+
+# Set up choppy flow token returns starting at t=15s. The average rate of
+# returns is lower than 2MiB/s, so we should always have some waiting work.
+timeline
+t=[15s,16s) class=regular stream=t1/s1 adjust=+0.9MiB/s rate=10/s
+t=[16s,17s) class=regular stream=t1/s1 adjust=+2.1MiB/s rate=10/s
+t=[17s,18s) class=regular stream=t1/s1 adjust=+0.1MiB/s rate=10/s
+t=[18s,19s) class=regular stream=t1/s1 adjust=+0.9MiB/s rate=10/s
+t=[19s,20s) class=regular stream=t1/s1 adjust=+2.1MiB/s rate=10/s
+t=[20s,21s) class=regular stream=t1/s1 adjust=+0.1MiB/s rate=10/s
+t=[21s,22s) class=regular stream=t1/s1 adjust=+0.9MiB/s rate=10/s
+t=[22s,23s) class=regular stream=t1/s1 adjust=+2.1MiB/s rate=10/s
+t=[23s,24s) class=regular stream=t1/s1 adjust=+0.1MiB/s rate=10/s
+t=[24s,25s) class=regular stream=t1/s1 adjust=+0.9MiB/s rate=10/s
+----
+
+simulate
+----
+
+# Observe the initial smooth rate of flow token deductions, and later the
+# choppier rate of flow token returns which we induced above. Notice that the
+# rate of flow token deductions exactly mirrors the flow token returns, so
+# traffic shaping is happening.
+plot
+
+kvflowcontrol.tokens.eval.regular.{deducted,returned}  unit=MiB/s rate=true
+kvflowcontrol.tokens.eval.regular.{deducted,returned}  unit=MiB
+kvflowcontrol.tokens.eval.regular.available            unit=MiB
+----
+----
+ 2.0 ┤ ╭──────────╮                 ╭╮   ╭╮
+ 1.9 ┤ │          │                 ││   ╭╮
+ 1.7 ┤ │          │            ╭╮╮  ││   ││
+ 1.6 ┤ │          │            │││  ││   ││
+ 1.5 ┤ │          ╰╮           │╰╮  ││  ╭╯│
+ 1.3 ┤ │           │           │ │  ││  │╯│
+ 1.2 ┤ │           │           │ │ ╭╯│╮ │ │
+ 1.1 ┤ │           │           │ │ │ ╰╮ │ │
+ 0.9 ┤ │           │          ╭╯ │ │  │ │ │╮╭
+ 0.8 ┤ │           │          │╯ │ │  │╭╯ │││
+ 0.7 ┤ │           │          │  │ │  ││  ╰╮│
+ 0.5 ┤ │           │          │  │╭╯  ││   ││
+ 0.4 ┤ │           │         ╭╯  ││╯  ││   ╰╯
+ 0.3 ┤ │           │         │╯  ││   ╰╯   ╰╯
+ 0.1 ┤ │           ╰╮        │   ╰╯   ╰╯
+ 0.0 ┼───────────────────────╯
+      rate(tokens.eval.regular.{deducted,returned}) (MiB/s)
+
+
+ 26.2 ┤                                    ╭──
+ 24.5 ┤                                  ╭─╯
+ 22.7 ┤                               ╭──╯
+ 21.0 ┤                             ╭─╯
+ 19.2 ┤                          ╭──╯
+ 17.5 ┤                        ╭─╯
+ 15.7 ┤           ╭────────────╯
+ 14.0 ┤          ╭╯
+ 12.2 ┤        ╭─╯
+ 10.5 ┤       ╭╯                            ╭─
+  8.7 ┤     ╭─╯                          ╭──╯
+  7.0 ┤    ╭╯                         ╭──╯
+  5.2 ┤   ╭╯                        ╭─╯
+  3.5 ┤ ╭─╯                      ╭──╯
+  1.7 ┤╭╯                      ╭─╯
+  0.0 ┼────────────────────────╯
+       tokens.eval.regular.{deducted,returned} (MiB)
+
+
+ 15.8 ┼╮
+ 14.7 ┤╰╮
+ 13.7 ┤ │
+ 12.6 ┤ ╰╮
+ 11.5 ┤  ╰╮
+ 10.5 ┤   ╰╮
+  9.4 ┤    ╰╮
+  8.3 ┤     ╰╮
+  7.3 ┤      │
+  6.2 ┤      ╰╮
+  5.1 ┤       ╰╮
+  4.1 ┤        ╰╮
+  3.0 ┤         ╰╮
+  1.9 ┤          ╰╮
+  0.9 ┤           │
+ -0.2 ┤           ╰───────────────────────────
+         tokens.eval.regular.available (MiB)
+----
+----
+
+
+# Zoom into the more interesting second half of the graph, where flow tokens
+# are being returned choppily. Given the average rate of returns is lower
+# than what's being requested (2MiB/s), the total flow tokens available bounces
+# off of zero.
+plot t=[15s,30s)
+kvflowcontrol.tokens.eval.regular.available unit=MiB
+----
+  0.2 ┤                              ╭╮
+  0.2 ┤      ╭╮                     ╭╯│
+  0.1 ┤     ╭╯│                    ╭╯ │
+  0.1 ┤    ╭╯ │                   ╭╯  │
+  0.1 ┤   ╭╯  │       ╭╮ ╭╮       │   │
+  0.1 ┤   │   │       ││╭╯│       │   │
+  0.0 ┤   │   │    ╭╮ │╰╯ │       │   │
+  0.0 ┤   │   │   ╭╯│ │   │     ╭╮│   │   ╭╮
+ -0.0 ┤╭╮ │   │   │ │ │   │  ╭──╯││   │   ││ ╭
+ -0.0 ┤││╭╯   │   │ ╰╮│   │ ╭╯   ││   │   ││╭╯
+ -0.1 ┤│╰╯    │   │  ││   │╭╯    ╰╯   │   │╰╯
+ -0.1 ┤│      │   │  ╰╯   ╰╯          │   │
+ -0.1 ┼╯      │  ╭╯                   │  ╭╯
+ -0.1 ┤       │ ╭╯                    │ ╭╯
+ -0.2 ┤       │╭╯                     │╭╯
+ -0.2 ┤       ╰╯                      ╰╯
+         tokens.eval.regular.available (MiB)
+
+
+# Note again the mirroring between token returns which immediately allows
+# admission, followed by token deductions.
+plot t=[15s,30s)
+kvflowcontrol.tokens.eval.regular.{deducted,returned}  unit=MiB/s rate=true
+----
+ 2.1 ┤       ╭╮
+ 2.0 ┤      ╭╮│         ╭╮          ╭╮╮
+ 1.9 ┤      │╰╮         ││╮         │││
+ 1.7 ┤     ╭╯╯│        ╭╯╰╮        ╭╯╰╮
+ 1.6 ┤     ││ │╮       │╯ │        │╯ │
+ 1.4 ┤     │╯ ││      ╭╯  │       ╭╯  │╮
+ 1.3 ┤    ╭╯  ╰╮      │   ╰╮      │╯  ││
+ 1.1 ┤    │╯   │╮    ╭╯    │     ╭╯   ╰╮
+ 1.0 ┤   ╭╯    ││    │╯    │     │╯    │╮
+ 0.9 ┤   │╯    ╰╮   ╭╯     │╮   ╭╯     ││   ╭
+ 0.7 ┤  ╭╯      │   │      ╰╮  ╭╯      ││  ╭╯
+ 0.6 ┤ ╭╯╯      │╮ ╭╯       │  │╯      ╰╮  │╯
+ 0.4 ┤ │╯       ││╭╯        │ ╭╯        │╮╭╯
+ 0.3 ┤╭╯        ╰─╯│        ╰─╯         │╭╯
+ 0.1 ┼╯╯         │╭╯         ╰╯         ╰╯╯
+-0.0 ┼╯          ╰╯
+      rate(tokens.eval.regular.{deducted,returned}) (MiB/s)
+
+
+# So we're still admitting work choppily, and observe corresponding deductions
+# in the waiting request rate. But given the open-loop thread above, the # of
+# waiting request is still growing unboundedly.
+plot t=[15s,30s)
+kvflowcontrol.eval_wait.regular.requests.{admitted,waiting} unit=reqs/s rate=true
+kvflowcontrol.eval_wait.regular.requests.waiting            unit=reqs
+----
+----
+ 10.7 ┤       ╭╮
+  9.9 ┼╮      ││  ╭╮                  ╭╮  ╭╮
+  9.2 ┤╰╮    ╭╯│  │╰╮    ╭─╮  ╭╮     ╭╯│  ││
+  8.4 ┤ │    │ ╰╮ │ │   ╭╯ │ ╭╯╰╮   ╭╯ │  │╰╮
+  7.7 ┤ │   ╭╯  │ │ ╰╮  │  │ │  │   │  ╰╮╭╯ │
+  6.9 ┤ ╰╮  │   │╭╯  │ ╭╯  ╰╮│  ╰╮ ╭╯   ││  ╰╮
+  6.1 ┤  ╰╮╭╯   ││   ╰╮│    ╭╯   │ │    ││   ╰
+  5.4 ┤   ││    ╰│    │╯    │    ╰╮╯    ╭╯
+  4.6 ┤   ╰╮    ╭╯    ╰╮    │    ╭╰╮    │╮
+  3.9 ┤   ╭╰╮   ││   ╭╯│    │╮   │ │    ││   ╭
+  3.1 ┤  ╭╯ ╰╮  │╰╮  │ ╰╮  ╭╯│  ╭╯ ╰╮  ╭╯│  ╭╯
+  2.3 ┤ ╭╯   │  │ │ ╭╯  ╰╮ │ │ ╭╯   ╰╮ │ ╰╮╭╯
+  1.6 ┤ │    ╰╮╭╯ │ │    │ │ ╰╮│     │ │  ││
+  0.8 ┤╭╯     ││  │╭╯    ╰─╯  ╰╯     ╰╮│  ╰╯
+  0.1 ┼╯      ││  ╰╯                  ╰╯
+ -0.7 ┤       ╰╯
+       rate(eval_wait.regular.requests.{admitted,waiting}) (reqs/s)
+
+
+ 118 ┤                                      ╭
+ 115 ┤                                   ╭──╯
+ 112 ┤                                  ╭╯
+ 108 ┤                                 ╭╯
+ 105 ┤                           ╭─────╯
+ 102 ┤                         ╭─╯
+  99 ┤                       ╭─╯
+  96 ┤                     ╭─╯
+  92 ┤                    ╭╯
+  89 ┤              ╭─────╯
+  86 ┤            ╭─╯
+  83 ┤          ╭─╯
+  80 ┤         ╭╯
+  76 ┤        ╭╯
+  73 ┤ ╭──────╯
+  70 ┼─╯
+      eval_wait.regular.requests.waiting (reqs)
+----
+----
+
+# vim:ft=conf

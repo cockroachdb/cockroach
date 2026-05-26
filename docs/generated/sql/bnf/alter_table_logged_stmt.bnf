@@ -1,0 +1,5 @@
+alter_table_logged_stmt ::=
+	'ALTER' 'TABLE' relation_expr 'SET' 'LOGGED'
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' relation_expr 'SET' 'LOGGED'
+	| 'ALTER' 'TABLE' relation_expr 'SET' 'UNLOGGED'
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' relation_expr 'SET' 'UNLOGGED'

@@ -1,0 +1,66 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
+
+go_library(
+    name = "json",
+    srcs = [
+        "config.go",
+        "contains.go",
+        "contains_testers.go",
+        "encode.go",
+        "encoded.go",
+        "encoded_format.go",
+        "iterator.go",
+        "jentry.go",
+        "json.go",
+        "parser.go",
+        "random.go",
+        "tables.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/json",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keysbase",
+        "//pkg/sql/inverted",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/util/buildutil",
+        "//pkg/util/deduplicate",
+        "//pkg/util/encoding",
+        "//pkg/util/intsets",
+        "//pkg/util/json/tokenizer",
+        "//pkg/util/metamorphic",
+        "//pkg/util/randutil",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_apd_v3//:apd",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "json_test",
+    size = "small",
+    srcs = [
+        "encode_test.go",
+        "json_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":json"],
+    deps = [
+        "//pkg/sql/inverted",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/testutils/datapathutils",
+        "//pkg/util/deduplicate",
+        "//pkg/util/encoding",
+        "//pkg/util/randutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_apd_v3//:apd",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+disallowed_imports_test(
+    "json",
+    ["//pkg/roachpb"],
+)

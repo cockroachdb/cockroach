@@ -1,0 +1,668 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE xyz (
+  x INT,
+  y INT,
+  z INT,
+  pk1 INT,
+  pk2 INT,
+  PRIMARY KEY (pk1, pk2)
+)
+
+statement ok
+CREATE TABLE abc (
+  a STRING,
+  b STRING,
+  c STRING,
+  PRIMARY KEY (a, b, c)
+)
+
+##################
+# Simple queries #
+##################
+
+# 3/3 columns
+
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (x, y, z) x, y, z FROM xyz
+----
+distribution: local
+vectorized: true
+·
+• distinct
+│ columns: (x, y, z)
+│ estimated row count: 1,000 (missing stats)
+│ distinct on: x, y, z
+│
+└── • scan
+      columns: (x, y, z)
+      estimated row count: 1,000 (missing stats)
+      table: xyz@xyz_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (z, x, y) x FROM xyz
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (x)
+│
+└── • distinct
+    │ columns: (x, y, z)
+    │ estimated row count: 1,000 (missing stats)
+    │ distinct on: x, y, z
+    │
+    └── • scan
+          columns: (x, y, z)
+          estimated row count: 1,000 (missing stats)
+          table: xyz@xyz_pkey
+          spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (b, c, a) a, c, b FROM abc
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, c, b)
+  estimated row count: 1,000 (missing stats)
+  table: abc@abc_pkey
+  spans: FULL SCAN
+
+# Distinct node should be elided since we have a strong key.
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (b, c, a) a FROM abc
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a)
+  estimated row count: 1,000 (missing stats)
+  table: abc@abc_pkey
+  spans: FULL SCAN
+
+# Distinct node should be elided since we have a strong key.
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (c, a, b) b FROM abc ORDER BY b
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ columns: (b)
+│ estimated row count: 1,000 (missing stats)
+│ order: +b
+│
+└── • scan
+      columns: (b)
+      estimated row count: 1,000 (missing stats)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+
+# 2/3 columns
+
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (x, y) y, x FROM xyz
+----
+distribution: local
+vectorized: true
+·
+• distinct
+│ columns: (y, x)
+│ estimated row count: 1,000 (missing stats)
+│ distinct on: x, y
+│
+└── • scan
+      columns: (x, y)
+      estimated row count: 1,000 (missing stats)
+      table: xyz@xyz_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (y, x) x FROM xyz
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (x)
+│
+└── • distinct
+    │ columns: (x, y)
+    │ estimated row count: 1,000 (missing stats)
+    │ distinct on: x, y
+    │
+    └── • scan
+          columns: (x, y)
+          estimated row count: 1,000 (missing stats)
+          table: xyz@xyz_pkey
+          spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (y, x, x, y, x) x, y FROM xyz
+----
+distribution: local
+vectorized: true
+·
+• distinct
+│ columns: (x, y)
+│ estimated row count: 1,000 (missing stats)
+│ distinct on: x, y
+│
+└── • scan
+      columns: (x, y)
+      estimated row count: 1,000 (missing stats)
+      table: xyz@xyz_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT ON(pk1, x) pk1, x FROM xyz ORDER BY pk1
+----
+distribution: local
+vectorized: true
+·
+• distinct
+│ columns: (pk1, x)
+│ ordering: +pk1
+│ estimated row count: 1,000 (missing stats)
+│ distinct on: x, pk1
+│ order key: pk1
+│
+└── • scan
+      columns: (x, pk1)
+      ordering: +pk1
+      estimated row count: 1,000 (missing stats)
+      table: xyz@xyz_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (a, c) a, b FROM abc
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b)
+│
+└── • distinct
+    │ columns: (a, b, c)
+    │ estimated row count: 1,000 (missing stats)
+    │ distinct on: a, c
+    │
+    └── • scan
+          columns: (a, b, c)
+          estimated row count: 1,000 (missing stats)
+          table: abc@abc_pkey
+          spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (c, a) b, c, a FROM abc
+----
+distribution: local
+vectorized: true
+·
+• distinct
+│ columns: (b, c, a)
+│ estimated row count: 1,000 (missing stats)
+│ distinct on: a, c
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 1,000 (missing stats)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+
+# 1/3 columns
+
+# Check that distinct propagates the smaller, tighter key (pk1) as opposed to
+# the original key (pk1, pk2).
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (pk1) pk1, pk2 FROM xyz
+----
+distribution: local
+vectorized: true
+·
+• distinct
+│ columns: (pk1, pk2)
+│ estimated row count: 100 (missing stats)
+│ distinct on: pk1
+│ order key: pk1
+│
+└── • scan
+      columns: (pk1, pk2)
+      ordering: +pk1
+      estimated row count: 1,000 (missing stats)
+      table: xyz@xyz_pkey
+      spans: FULL SCAN
+
+# Ensure the distinctNode advertises an a+ ordering.
+# TODO(radu): set the ordering in the render node to fix this.
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (a) a, c FROM abc ORDER BY a, c DESC, b
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, c)
+│ ordering: +a
+│
+└── • distinct
+    │ columns: (a, b, c)
+    │ ordering: +a
+    │ estimated row count: 100 (missing stats)
+    │ distinct on: a
+    │ order key: a
+    │
+    └── • sort
+        │ columns: (a, b, c)
+        │ estimated row count: 1,000 (missing stats)
+        │ order: +a,-c,+b
+        │ already ordered: +a
+        │
+        └── • scan
+              columns: (a, b, c)
+              ordering: +a
+              estimated row count: 1,000 (missing stats)
+              table: abc@abc_pkey
+              spans: FULL SCAN
+
+#################
+# With ORDER BY #
+#################
+
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (x) x FROM xyz ORDER BY x DESC
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ columns: (x)
+│ estimated row count: 100 (missing stats)
+│ order: -x
+│
+└── • distinct
+    │ columns: (x)
+    │ estimated row count: 100 (missing stats)
+    │ distinct on: x
+    │
+    └── • scan
+          columns: (x)
+          estimated row count: 1,000 (missing stats)
+          table: xyz@xyz_pkey
+          spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (x, z) y, z, x FROM xyz ORDER BY z
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ columns: (y, z, x)
+│ estimated row count: 1,000 (missing stats)
+│ order: +z
+│
+└── • distinct
+    │ columns: (x, y, z)
+    │ estimated row count: 1,000 (missing stats)
+    │ distinct on: x, z
+    │
+    └── • scan
+          columns: (x, y, z)
+          estimated row count: 1,000 (missing stats)
+          table: xyz@xyz_pkey
+          spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (x) y, z, x FROM xyz ORDER BY x ASC, z DESC, y DESC
+----
+distribution: local
+vectorized: true
+·
+• distinct
+│ columns: (y, z, x)
+│ ordering: +x
+│ estimated row count: 100 (missing stats)
+│ distinct on: x
+│ order key: x
+│
+└── • sort
+    │ columns: (x, y, z)
+    │ estimated row count: 1,000 (missing stats)
+    │ order: +x,-z,-y
+    │
+    └── • scan
+          columns: (x, y, z)
+          estimated row count: 1,000 (missing stats)
+          table: xyz@xyz_pkey
+          spans: FULL SCAN
+
+#####################
+# With aggregations #
+#####################
+
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (max(y)) max(x) FROM xyz
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (max)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: max(x)
+│
+└── • scan
+      columns: (x)
+      estimated row count: 1,000 (missing stats)
+      table: xyz@xyz_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT ON(min(a), max(b), min(c)) max(a) FROM abc
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (max)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: any_not_null(a)
+│
+└── • revscan
+      columns: (a)
+      estimated row count: 1 (missing stats)
+      table: abc@abc_pkey
+      spans: LIMITED SCAN
+      limit: 1
+
+#################
+# With GROUP BY #
+#################
+
+# We can elide the DISTINCT ON since its key is equivalent to the group key.
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT ON(y) min(x) FROM xyz GROUP BY y
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (min)
+│
+└── • group (hash)
+    │ columns: (y, min)
+    │ estimated row count: 100 (missing stats)
+    │ aggregate 0: min(x)
+    │ group by: y
+    │
+    └── • scan
+          columns: (x, y)
+          estimated row count: 1,000 (missing stats)
+          table: xyz@xyz_pkey
+          spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT ON(min(x)) min(x) FROM xyz GROUP BY y HAVING min(x) = 1
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (min)
+│
+└── • limit
+    │ columns: (y, min)
+    │ count: 1
+    │
+    └── • filter
+        │ columns: (y, min)
+        │ estimated row count: 1 (missing stats)
+        │ filter: min = 1
+        │
+        └── • group (hash)
+            │ columns: (y, min)
+            │ estimated row count: 100 (missing stats)
+            │ aggregate 0: min(x)
+            │ group by: y
+            │
+            └── • scan
+                  columns: (x, y)
+                  estimated row count: 1,000 (missing stats)
+                  table: xyz@xyz_pkey
+                  spans: FULL SCAN
+
+#########################
+# With window functions #
+#########################
+
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT ON(row_number() OVER()) y FROM xyz
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (y)
+│
+└── • distinct
+    │ columns: (y, row_number)
+    │ estimated row count: 1,000 (missing stats)
+    │ distinct on: row_number
+    │
+    └── • window
+        │ columns: (y, row_number)
+        │ estimated row count: 1,000 (missing stats)
+        │ window 0: row_number() OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+        │
+        └── • scan
+              columns: (y)
+              estimated row count: 1,000 (missing stats)
+              table: xyz@xyz_pkey
+              spans: FULL SCAN
+
+###########################
+# With ordinal references #
+###########################
+
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (1) x, y, z FROM xyz
+----
+distribution: local
+vectorized: true
+·
+• distinct
+│ columns: (x, y, z)
+│ estimated row count: 100 (missing stats)
+│ distinct on: x
+│
+└── • scan
+      columns: (x, y, z)
+      estimated row count: 1,000 (missing stats)
+      table: xyz@xyz_pkey
+      spans: FULL SCAN
+
+# Distinct node elided because of strong key.
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (1,2,3) a, b, c FROM abc
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b, c)
+  estimated row count: 1,000 (missing stats)
+  table: abc@abc_pkey
+  spans: FULL SCAN
+
+#########################
+# With alias references #
+#########################
+
+# This should priortize alias (use 'x' as the key).
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT ON(y) x AS y, y AS x FROM xyz
+----
+distribution: local
+vectorized: true
+·
+• distinct
+│ columns: (y, x)
+│ estimated row count: 100 (missing stats)
+│ distinct on: x
+│
+└── • scan
+      columns: (x, y)
+      estimated row count: 1,000 (missing stats)
+      table: xyz@xyz_pkey
+      spans: FULL SCAN
+
+# Ignores the alias.
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT ON(x) x AS y FROM xyz
+----
+distribution: local
+vectorized: true
+·
+• distinct
+│ columns: (y)
+│ estimated row count: 100 (missing stats)
+│ distinct on: x
+│
+└── • scan
+      columns: (x)
+      estimated row count: 1,000 (missing stats)
+      table: xyz@xyz_pkey
+      spans: FULL SCAN
+
+##################################
+# With nested parentheses/tuples #
+##################################
+
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT ON(((x)), (x, y)) x, y FROM xyz
+----
+distribution: local
+vectorized: true
+·
+• distinct
+│ columns: (x, y)
+│ estimated row count: 1,000 (missing stats)
+│ distinct on: x, y
+│
+└── • scan
+      columns: (x, y)
+      estimated row count: 1,000 (missing stats)
+      table: xyz@xyz_pkey
+      spans: FULL SCAN
+
+################################
+# Hybrid PK and non-PK queries #
+################################
+
+# Distinct elided because of strong key presence.
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT ON(pk1, pk2, x, y) x, y, z FROM xyz ORDER BY x, y
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ columns: (x, y, z)
+│ estimated row count: 1,000 (missing stats)
+│ order: +x,+y
+│
+└── • scan
+      columns: (x, y, z)
+      estimated row count: 1,000 (missing stats)
+      table: xyz@xyz_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (x, y, z) pk1 FROM xyz ORDER BY x
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (pk1)
+│
+└── • sort
+    │ columns: (x, y, z, pk1)
+    │ estimated row count: 1,000 (missing stats)
+    │ order: +x
+    │
+    └── • distinct
+        │ columns: (x, y, z, pk1)
+        │ estimated row count: 1,000 (missing stats)
+        │ distinct on: x, y, z
+        │
+        └── • scan
+              columns: (x, y, z, pk1)
+              estimated row count: 1,000 (missing stats)
+              table: xyz@xyz_pkey
+              spans: FULL SCAN
+
+# Regression tests for #34112: distinct on constant column.
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (x) x, y FROM xyz WHERE x = 1 ORDER BY x, y
+----
+distribution: local
+vectorized: true
+·
+• top-k
+│ columns: (x, y)
+│ estimated row count: 1 (missing stats)
+│ order: +y
+│ k: 1
+│
+└── • filter
+    │ columns: (x, y)
+    │ estimated row count: 10 (missing stats)
+    │ filter: x = 1
+    │
+    └── • scan
+          columns: (x, y)
+          estimated row count: 1,000 (missing stats)
+          table: xyz@xyz_pkey
+          spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT count(*) FROM (SELECT DISTINCT ON (x) x, y FROM xyz WHERE x = 1 ORDER BY x, y)
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (count)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: count_rows()
+│
+└── • project
+    │ columns: ()
+    │
+    └── • top-k
+        │ columns: (x, y)
+        │ estimated row count: 1 (missing stats)
+        │ order: +y
+        │ k: 1
+        │
+        └── • filter
+            │ columns: (x, y)
+            │ estimated row count: 10 (missing stats)
+            │ filter: x = 1
+            │
+            └── • scan
+                  columns: (x, y)
+                  estimated row count: 1,000 (missing stats)
+                  table: xyz@xyz_pkey
+                  spans: FULL SCAN

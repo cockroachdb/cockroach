@@ -1,0 +1,66 @@
+/* setup */
+CREATE DATABASE db;
+----
+...
++database {0 0 db} -> 104
++schema {104 0 public} -> 105
+
+/* test */
+ALTER DATABASE db CONFIGURE ZONE USING num_replicas = 7;
+ALTER DATABASE db CONFIGURE ZONE USING gc.ttlseconds = 10000;
+ALTER DATABASE db CONFIGURE ZONE USING num_replicas = 10;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: CONFIGURE ZONE
+write *eventpb.SetZoneConfig to event log:
+  config:
+    options:
+    - num_replicas = 7
+    target: DATABASE db
+  resolvedOldConfig: 'range_min_bytes:134217728 range_max_bytes:536870912 gc:<ttl_seconds:14400 > num_replicas:5 inherited_constraints:false null_voter_constraints_is_empty:true inherited_lease_preferences:false '
+  sql:
+    descriptorId: 104
+    statement: ALTER DATABASE ‹db› CONFIGURE ZONE USING ‹num_replicas› = ‹7›
+    tag: CONFIGURE ZONE
+    user: root
+## StatementPhase stage 1 of 1 with 1 MutationType op
+upsert zone config for #104
+checking for feature: CONFIGURE ZONE
+write *eventpb.SetZoneConfig to event log:
+  config:
+    options:
+    - '"gc.ttlseconds" = 10000'
+    target: DATABASE db
+  resolvedOldConfig: 'num_replicas:7 inherited_constraints:true null_voter_constraints_is_empty:false inherited_lease_preferences:true '
+  sql:
+    descriptorId: 104
+    statement: ALTER DATABASE ‹db› CONFIGURE ZONE USING ‹"gc.ttlseconds"› = ‹10000›
+    tag: CONFIGURE ZONE
+    user: root
+## StatementPhase stage 1 of 1 with 1 MutationType op
+upsert zone config for #104
+checking for feature: CONFIGURE ZONE
+write *eventpb.SetZoneConfig to event log:
+  config:
+    options:
+    - num_replicas = 10
+    target: DATABASE db
+  resolvedOldConfig: 'gc:<ttl_seconds:10000 > num_replicas:7 inherited_constraints:true null_voter_constraints_is_empty:false inherited_lease_preferences:true '
+  sql:
+    descriptorId: 104
+    statement: ALTER DATABASE ‹db› CONFIGURE ZONE USING ‹num_replicas› = ‹10›
+    tag: CONFIGURE ZONE
+    user: root
+## StatementPhase stage 1 of 1 with 1 MutationType op
+upsert zone config for #104
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 3 MutationType ops
+upsert zone config for #104
+persist all catalog changes to storage
+# end PreCommitPhase
+commit transaction #1

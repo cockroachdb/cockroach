@@ -1,0 +1,669 @@
+# =============================================================================
+# groupby.opt contains normalization rules for the GroupBy operator.
+# =============================================================================
+
+# ConvertGroupByToDistinct converts a GroupBy operator that has no aggregations
+# to an equivalent DistinctOn operator.
+[ConvertGroupByToDistinct, Normalize]
+(GroupBy $input:* $aggregations:[] $groupingPrivate:*)
+=>
+(DistinctOn $input $aggregations $groupingPrivate)
+
+# EliminateGroupByProject discards a nested Project operator that is only
+# removing columns from its input (and not synthesizing new ones). That's
+# something the GroupBy operators can do on their own. This rule does not match
+# UpsertDistinctOn expressions because they are not built with a Project as a
+# child, so there is no Project to eliminate.
+#
+# Note: EliminateGroupByProject should be located above
+# EliminateJoinUnderGroupByLeft so that it can remove any interfering Projects.
+[EliminateGroupByProject, Normalize]
+(GroupBy | ScalarGroupBy | DistinctOn | EnsureDistinctOn
+        | EnsureUpsertDistinctOn
+    $input:(Project $innerInput:*) &
+        (ColsAreSubset
+            (OutputCols $input)
+            (OutputCols $innerInput)
+        )
+    $aggregations:*
+    $groupingPrivate:*
+)
+=>
+((OpName) $innerInput $aggregations $groupingPrivate)
+
+# EliminateJoinUnderGroupByLeft removes a Join operator and its right input if
+# it can be proven that the removal does not affect the output of the parent
+# grouping operator. This is the case if:
+#
+# 1. Only columns from the left input are being used by the grouping operator.
+#
+# 2. It can be proven that removal of the Join does not affect the result of the
+#    grouping operator's aggregate functions.
+#
+# 3. The OrderingChoice of the grouping operator can be expressed with only
+#    columns from the left input. Or in other words, at least one column in
+#    every ordering group is one of the left output columns.
+#
+# Condition #2 is only true when the following are all true:
+#
+# 1. All left rows are included in the output of the join. See the comment above
+#    filtersMatchAllLeftRows in multiplicity_builder.go for more information on
+#    when this is the case.
+# 2. Either the join does not duplicate any left rows, or the join duplicates
+#    left rows but the grouping operator's aggregate functions ignore duplicate
+#    values. See the comment above filtersMatchLeftRowsAtMostOnce in
+#    multiplicity_builder.go for more information on when rows are duplicated.
+# 3. The join does not null-extend the left columns.
+#
+# EliminateJoinUnderGroupByLeft should stay at the top of the file so that it
+# has a chance to fire before rules like EliminateDistinctOn that might prevent
+# matching.
+#
+# Similar to the join-elimination rules that match on Project operators,
+# EliminateJoinUnderGroupByLeft can remap references to the right input of the
+# join to refer to equivalent columns on the left input.
+[EliminateJoinUnderGroupByLeft, Normalize]
+(GroupBy | ScalarGroupBy | DistinctOn
+    $input:(InnerJoin | LeftJoin $left:*)
+    $aggs:*
+    $private:(GroupingPrivate $groupingCols:* $ordering:*) &
+        (OrderingCanProjectCols
+            $ordering
+            $leftCols:(OutputCols $left)
+        ) &
+        (CanRemapCols
+            $toRemap:(UnionCols
+                $groupingCols
+                (AggregationOuterCols $aggs)
+            )
+            $leftCols
+            $fds:(FuncDeps $input)
+        ) &
+        (CanUseImprovedJoinElimination $toRemap $leftCols) &
+        (CanEliminateJoinUnderGroupByLeft $input $aggs)
+)
+=>
+((OpName)
+    (Project
+        $left
+        (ProjectRemappedCols $toRemap $leftCols $fds)
+        $leftCols
+    )
+    $aggs
+    (MakeGrouping
+        $groupingCols
+        (PruneOrdering $ordering $leftCols)
+    )
+)
+
+# EliminateJoinUnderGroupByRight is symmetric with
+# EliminateJoinUnderGroupByLeft, except that it matches on InnerJoins.
+[EliminateJoinUnderGroupByRight, Normalize]
+(GroupBy | ScalarGroupBy | DistinctOn
+    $input:(InnerJoin * $right:*)
+    $aggs:*
+    $private:(GroupingPrivate $groupingCols:* $ordering:*) &
+        (OrderingCanProjectCols
+            $ordering
+            $rightCols:(OutputCols $right)
+        ) &
+        (CanRemapCols
+            $toRemap:(UnionCols
+                $groupingCols
+                (AggregationOuterCols $aggs)
+            )
+            $rightCols
+            $fds:(FuncDeps $input)
+        ) &
+        (CanUseImprovedJoinElimination $toRemap $rightCols) &
+        (CanEliminateJoinUnderGroupByRight $input $aggs)
+)
+=>
+((OpName)
+    (Project
+        $right
+        (ProjectRemappedCols $toRemap $rightCols $fds)
+        $rightCols
+    )
+    $aggs
+    (MakeGrouping
+        $groupingCols
+        (PruneOrdering $ordering $rightCols)
+    )
+)
+
+# EliminateDistinct discards a DistinctOn operator that is eliminating duplicate
+# rows by using grouping columns that are statically known to form a strict key.
+# By definition, a strict key does not allow duplicate values, so the GroupBy is
+# redundant and can be eliminated.
+#
+# Since a DistinctOn operator can serve as a projection operator, we need to
+# replace it with a Project so that the correct columns are projected. The
+# project itself may be eliminated later by other rules.
+[EliminateDistinct, Normalize]
+(DistinctOn | EnsureDistinctOn
+    $input:*
+    $aggs:*
+    $groupingPrivate:* &
+        (ColsAreStrictKey (GroupingCols $groupingPrivate) $input)
+)
+=>
+(Project $input [] (GroupingOutputCols $groupingPrivate $aggs))
+
+# EliminateUpsertDistinct is similar to EliminateDistinct, but it only checks if
+# the grouping columns are a lax key because UpsertDistinctOn considers NULL
+# values to be distinct from one another for the purposes of grouping.
+[EliminateUpsertDistinct, Normalize]
+(UpsertDistinctOn | EnsureUpsertDistinctOn
+    $input:*
+    $aggs:*
+    $groupingPrivate:* &
+        (ColsAreLaxKey (GroupingCols $groupingPrivate) $input)
+)
+=>
+(Project $input [] (GroupingOutputCols $groupingPrivate $aggs))
+
+# EliminateGroupBy is similar to EliminateDistinct, but it operates on GroupBy
+# expressions where the grouping columns are statically known to form a strict
+# key in the GroupBy's input.
+#
+# It only applies if all the aggregate functions are ConstAgg, ConstNotNullAgg,
+# or AnyNotNullAgg. These aggregate functions all evaluate to the first non-NULL
+# value encountered, and NULL if there are no such values. Because the input is
+# guaranteed to produce one row per group, these aggregate functions are
+# equivalent to projecting their input column.
+[EliminateGroupBy, Normalize]
+(GroupBy
+    $input:*
+    $aggs:* & (AreAllAnyNotNullAggs $aggs)
+    $groupingPrivate:* &
+        (ColsAreStrictKey (GroupingCols $groupingPrivate) $input)
+)
+=>
+(Project
+    $input
+    (ConvertAnyNotNullAggsToProjections $aggs)
+    (IntersectionCols
+        (GroupingOutputCols $groupingPrivate $aggs)
+        (OutputCols $input)
+    )
+)
+
+# ReduceGroupingCols eliminates redundant grouping columns from the GroupBy
+# operator and replaces them by ConstAgg aggregate functions. A grouping
+# column is redundant if it is functionally determined by the other grouping
+# columns. If that's true, then its value must be constant within a group.
+# Therefore, it has no effect on the grouping and can instead be represented as
+# an ConstAgg aggregate, since all rows in the group have the same value for
+# that column.
+#
+# Note: Doesn't match EnsureDistinctOn because test cases were too difficult to
+# find. If a test case for EnsureDistinctOn is found, it should be added to the
+# match pattern.
+[ReduceGroupingCols, Normalize]
+(GroupBy | DistinctOn
+    $input:*
+    $aggregations:*
+    $groupingPrivate:* &
+        ^(ColsAreEmpty
+            $redundantCols:(RedundantCols
+                $input
+                (GroupingCols $groupingPrivate)
+            )
+        )
+)
+=>
+((OpName)
+    $input
+    (AppendAggCols $aggregations ConstAgg $redundantCols)
+    (RemoveGroupingCols $groupingPrivate $redundantCols)
+)
+
+# ReduceNotNullGroupingCols is similar to ReduceGroupingCols, but with the
+# additional restriction that nullable columns cannot be removed from the set of
+# grouping columns. This is because the UpsertDistinctOn operator treats NULL
+# values as not equal to one another, and therefore will not group them
+# together. Since removing a grouping column is equivalent to grouping all
+# values of that column together, this would be incorrect in the case where all
+# input rows are NULL for that column:
+#
+#   SELECT c FROM t WHERE c IS NULL
+#
+[ReduceNotNullGroupingCols, Normalize]
+(UpsertDistinctOn | EnsureUpsertDistinctOn
+    $input:*
+    $aggregations:*
+    $groupingPrivate:* &
+        ^(ColsAreEmpty
+            $redundantCols:(IntersectionCols
+                (RedundantCols
+                    $input
+                    (GroupingCols $groupingPrivate)
+                )
+                (NotNullCols $input)
+            )
+        )
+)
+=>
+((OpName)
+    $input
+    (AppendAggCols $aggregations ConstAgg $redundantCols)
+    (RemoveGroupingCols $groupingPrivate $redundantCols)
+)
+
+# EliminateAggDistinctForKeys eliminates unnecessary AggDistinct modifiers when
+# it is known that the aggregation argument is unique within each group.
+[EliminateAggDistinctForKeys, Normalize]
+(GroupBy | ScalarGroupBy
+    $input:* & (HasStrictKey $input)
+    $aggregations:[
+        ...
+        $item:(AggregationsItem (AggDistinct $agg:*))
+        ...
+    ]
+    $groupingPrivate:* &
+        (CanRemoveAggDistinctForKeys
+            $input
+            $groupingPrivate
+            $agg
+        )
+)
+=>
+((OpName)
+    $input
+    (ReplaceAggregationsItem $aggregations $item $agg)
+    $groupingPrivate
+)
+
+# EliminateAggFilteredDistinctForKeys is similar to EliminateAggDistinctForKeys,
+# except that it works when an AggFilter operator is also present.
+[EliminateAggFilteredDistinctForKeys, Normalize]
+(GroupBy | ScalarGroupBy
+    $input:* & (HasStrictKey $input)
+    $aggregations:[
+        ...
+        $item:(AggregationsItem
+            (AggFilter (AggDistinct $agg:*) $filter:*)
+        )
+        ...
+    ]
+    $groupingPrivate:* &
+        (CanRemoveAggDistinctForKeys
+            $input
+            $groupingPrivate
+            $agg
+        )
+)
+=>
+((OpName)
+    $input
+    (ReplaceAggregationsItem
+        $aggregations
+        $item
+        (AggFilter $agg $filter)
+    )
+    $groupingPrivate
+)
+
+# EliminateDistinctNoColumns eliminates a distinct operator with no grouping
+# columns, replacing it with a projection and a LIMIT 1. For example:
+#   SELECT DISTINCT ON (a) a, b FROM ab WHERE a=1
+# is equivalent to:
+#   SELECT a, b FROM ab WHERE a=1 LIMIT 1
+#
+# Note that this rule does not apply to EnsureDistinctOn or
+# EnsureUpsertDistinctOn, since they will raise an error if there are duplicate
+# rows.
+[EliminateDistinctNoColumns, Normalize]
+(DistinctOn | UpsertDistinctOn
+    $input:*
+    $aggregations:*
+    $groupingPrivate:* & (HasNoGroupingCols $groupingPrivate)
+)
+=>
+(ConstructProjectionFromDistinctOn
+    (Limit
+        $input
+        (IntConst (DInt 1))
+        (GroupingInputOrdering $groupingPrivate)
+    )
+    (MakeEmptyColSet)
+    $aggregations
+)
+
+# EliminateEnsureDistinctNoColumns is similar to EliminateDistinctNoColumns,
+# except that Max1Row will raise an error if there are no grouping columns and
+# the input has more than one row. No grouping columns means there is at most
+# one group. And the Max1Row operator is needed to raise an error if that group
+# has more than one row, which is a requirement of the EnsureDistinct and
+# EnsureUpsertDistinct operators.
+[EliminateEnsureDistinctNoColumns, Normalize]
+(EnsureDistinctOn | EnsureUpsertDistinctOn
+    $input:*
+    $aggregations:*
+    $groupingPrivate:* & (HasNoGroupingCols $groupingPrivate)
+)
+=>
+(ConstructProjectionFromDistinctOn
+    (Max1Row $input (ErrorOnDup $groupingPrivate))
+    (MakeEmptyColSet)
+    $aggregations
+)
+
+# EliminateDistinctOnValues eliminates a distinct operator that has a constant
+# input Values operator that is already distinct with respect to the grouping
+# columns. The Values operator may be the immediate input, or it may be wrapped
+# by Select, Project, LeftJoin, and/or other operators. These are common
+# patterns that are generated by the optbuilder's upsert construction code,
+# which must ensure the same row cannot be updated twice. See the comment for
+# UpsertDistinctOn for more detail on NullsAreDistinct behavior.
+#
+# Note: Doesn't match EnsureDistinctOn because test cases were too difficult to
+# find. If a test case for EnsureDistinctOn is found, it should be added to the
+# match pattern.
+[EliminateDistinctOnValues, Normalize]
+(DistinctOn | UpsertDistinctOn | EnsureUpsertDistinctOn
+    $input:*
+    $aggregations:*
+    $groupingPrivate:* &
+        (AreValuesDistinct
+            $input
+            (GroupingCols $groupingPrivate)
+            (NullsAreDistinct $groupingPrivate)
+        )
+)
+=>
+(ConstructProjectionFromDistinctOn
+    $input
+    (GroupingCols $groupingPrivate)
+    $aggregations
+)
+
+# PushAggDistinctIntoGroupBy pushes an aggregate function DISTINCT modifier into
+# the input of a GroupBy or ScalarGroupBy operator. This allows the optimizer to
+# take advantage of an index on the column(s) subject to the DISTINCT operation.
+# PushAggDistinctIntoGroupBy can match any single aggregate function, including
+# those that have multiple input arguments.
+[PushAggDistinctIntoGroupBy, Normalize]
+(GroupBy | ScalarGroupBy
+    $input:*
+    $aggregations:[
+        $item:(AggregationsItem (AggDistinct $agg:*) $aggColID:*)
+    ]
+    $groupingPrivate:*
+)
+=>
+((OpName)
+    (DistinctOn
+        $input
+        (MakeAggCols
+            FirstAgg
+            (OrderingCols
+                (ExtractGroupingOrdering $groupingPrivate)
+            )
+        )
+        (MakeGrouping
+            (UnionCols
+                (GroupingCols $groupingPrivate)
+                (ExtractAggInputColumns $agg)
+            )
+            (EmptyOrdering)
+        )
+    )
+    [ (AggregationsItem $agg $aggColID) ]
+    $groupingPrivate
+)
+
+# PushAggFilterIntoScalarGroupBy pushes an aggregate function FILTER
+# modifier into the input of the ScalarGroupBy operator. This allows the
+# optimizer to take advantage of an index on the column(s) subject to the
+# FILTER operation. PushAggFilterIntoScalarGroupBy can match any single
+# aggregate function, including those that have multiple input arguments.
+[PushAggFilterIntoScalarGroupBy, Normalize]
+(ScalarGroupBy
+    $input:*
+    $aggregations:[
+        $item:(AggregationsItem
+            (AggFilter $agg:* $condition:*)
+            $aggColID:*
+        )
+    ]
+    $groupingPrivate:*
+)
+=>
+(ScalarGroupBy
+    (Select $input [ (FiltersItem $condition) ])
+    [ (AggregationsItem $agg $aggColID) ]
+    $groupingPrivate
+)
+
+# ConvertCountToCountRows replaces a Count operator performed on a non-null
+# expression with a CountRows operator. CountRows is significantly faster to
+# execute than Count.
+[ConvertCountToCountRows, Normalize]
+(GroupBy | ScalarGroupBy
+    $input:*
+    $aggregations:[
+        ...
+        $item:(AggregationsItem (Count $arg:*)) &
+            (ExprIsNeverNull $arg (NotNullCols $input))
+        ...
+    ]
+    $groupingPrivate:*
+)
+=>
+((OpName)
+    $input
+    (ReplaceAggregationsItem $aggregations $item (CountRows))
+    $groupingPrivate
+)
+
+# ConvertRegressionCountToCount replaces a RegressionCount operator
+# performed on a non-null expression with a Count operator. Count can be
+# normalized again to CountRows which is significantly faster to execute
+# than RegressionCount.
+[ConvertRegressionCountToCount, Normalize]
+(GroupBy | ScalarGroupBy
+    $input:*
+    $aggregations:[
+        ...
+        $item:(AggregationsItem
+                (RegressionCount $arg1:* $arg2:*)
+            ) &
+            (Let
+                ($newArg $ok):(SingleRegressionCountArgument
+                    $arg1
+                    $arg2
+                    $input
+                )
+                $ok
+            )
+        ...
+    ]
+    $groupingPrivate:*
+)
+=>
+((OpName)
+    $input
+    (ReplaceAggregationsItem $aggregations $item (Count $newArg))
+    $groupingPrivate
+)
+
+# FoldGroupingOperators folds two grouping operators into one equivalent
+# operator. As an example, the following pairs of queries are equivalent:
+#
+#   SELECT sum(t) FROM (SELECT sum(b) FROM ab GROUP BY a) AS g(t);
+#   =>
+#   SELECT sum(b) FROM ab;
+#
+#   SELECT max(t) FROM (SELECT max(b) FROM ab GROUP BY a) AS g(t);
+#   =>
+#   SELECT max(b) FROM ab;
+#
+#   SELECT sum_int(t) FROM (SELECT count(b) FROM ab GROUP BY a) AS g(t);
+#   =>
+#   SELECT count(b) FROM ab;
+#
+#   SELECT DISTINCT ON (x), x, y
+#   FROM (SELECT DISTINCT ON (a, b) a, b FROM ab) AS f(x y)
+#   =>
+#   SELECT DISTINCT ON (a) a, b FROM ab;
+#
+# This transformation is possible when the following conditions are met:
+#
+# 1. All of the outer aggregates either aggregate on:
+#      A. the output columns of the inner aggregates
+#      B. a grouping column of the inner grouping operator.
+# 2. All of the inner-outer aggregate pairs can be replaced with an equivalent
+#    single aggregate. (See the AggregatesCanMerge comment in operator.go).
+# 3. All of the outer aggregates that aggregate on inner grouping columns ignore
+#    duplicate values (See AggregateIgnoresDuplicates comment in operator.go).
+# 4. The grouping columns of the inner operator functionally determine the
+#    grouping columns of the outer operator according to the functional
+#    dependencies of the input of the inner operator.
+# 5. Both grouping operators are unordered.
+#
+# Why is it sufficient for the inner grouping columns to functionally determine
+# the outer grouping columns?
+# * Duplicate values in the determinant ("from" side) imply duplicate values in
+#   the dependent ("to" side).
+# * Grouping on the determinant will not remove unique values from the
+#   determinant. Therefore, the grouping will not remove unique values from the
+#   dependent, by the properties of functional dependencies.
+# * Grouping on the dependent will simply reduce the dependent to its unique
+#   values.
+# * Therefore, grouping on the dependent produces the same final groups as
+#   grouping on the dependent after grouping on the determinant.
+# * The conditions guarantee that the aggregates produce the same result
+#   regardless of how the grouping is accomplished, as long as the same groups
+#   result in the end.
+#
+# Take the following table as an example:
+#
+#   r a b
+#   -----
+#   1 4 3
+#   2 4 3
+#   3 2 3
+#   4 2 3
+#   5 6 5
+#   6 6 5
+#
+# Its functional dependencies: key(r), r-->(a, b), a-->(b)
+#
+# Here are some examples of possible groupings taking the sum over the "r"
+# column:
+#
+# Grouping by a: SUM(1, 2), SUM(3, 4), SUM(5, 6)
+# Grouping by b: SUM(1, 2, 3, 4), SUM(5, 6)
+# Grouping by a then b: SUM(SUM(1, 2), SUM(3, 4)), SUM(SUM(5, 6))
+#
+# Rows can always be grouped together by subsequent groupings, but they can
+# never be "ungrouped". Grouping on a does not group any rows together that
+# would not also be grouped by b.
+#
+# This situation is rare in direct SQL queries, but can arise when composing
+# views and queries.
+[FoldGroupingOperators, Normalize]
+(GroupBy | ScalarGroupBy | DistinctOn
+    (GroupBy | DistinctOn
+        $innerInput:*
+        $innerAggs:*
+        $innerGrouping:* & (IsUnorderedGrouping $innerGrouping)
+    )
+    $outerAggs:*
+    $outerGrouping:* &
+        (IsUnorderedGrouping $outerGrouping) &
+        (ColsAreDeterminedBy
+            $outerGroupingCols:(GroupingCols $outerGrouping)
+            $innerGroupingCols:(GroupingCols $innerGrouping)
+            $innerInput
+        ) &
+        (CanMergeAggs $innerAggs $outerAggs $innerGroupingCols)
+)
+=>
+((OpName)
+    $innerInput
+    (MergeAggs $innerAggs $outerAggs $innerGroupingCols)
+    (MakeGrouping $outerGroupingCols (EmptyOrdering))
+)
+
+# FoldGroupByAndWindow merges a GroupBy operator with an input Window operator.
+# This is possible when the following conditions are satisfied:
+#
+#   1. The GroupBy is unordered. This may not technically be necessary, but
+#      avoids complication in determining the correctness of ordering-sensitive
+#      aggregations.
+#
+#   2. The window function output cols are functionally determined by the
+#      partition-by cols. This means that the window function outputs the
+#      same value for every row in the partition (group).
+#
+#   3. The Window operator partition-by cols and grouping cols are the same.
+#      This ensures that an aggregate operator will act on the same set of rows,
+#      whether it is part of the Window operator or the GroupBy operator.
+#
+#   4. The window functions are all aggregate functions. This ensures they are
+#      compatible with GroupBy operators.
+#
+#   5. Finally, all of the GroupBy's aggregations must satisfy one of two cases:
+#      a. The aggregate only references cols from the Window operator's input.
+#      b. The aggregate is a ConstAgg (or ConstNotNull, AnyNotNull, or FirstAgg)
+#         that passes through the result of a window function.
+#
+# Assuming all of the above are satisfied, each GroupBy aggregate that only
+# references the Window's input can be left alone (5a). Then, each ConstAgg
+# referencing a window function can be replaced by that function (5b).
+#
+# Here's an example with slightly altered SQL syntax:
+#
+#   SELECT max(b), const_agg(foo), const_agg(bar)
+#   FROM
+#     (
+#       SELECT *, count(c) OVER w AS foo, array_agg(d) OVER w AS bar
+#       FROM abcd
+#       WINDOW w AS (
+#         PARTITION BY a ORDER BY d
+#         RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+#       )
+#     )
+#   GROUP BY a;
+#   =>
+#   SELECT max(b), count(c), array_agg(d ORDER BY d) FROM abcd GROUP BY a;
+#
+# Note also that the Window's ordering should be preserved by the GroupBy to
+# ensure that ordering-sensitive aggregates produce correct results.
+[FoldGroupByAndWindow, Normalize]
+(GroupBy | ScalarGroupBy
+    $window:(Window
+            $input:*
+            $windows:* & (WindowsAreAggregations $windows)
+            $windowPrivate:*
+        ) &
+        (ColsAreDeterminedBy
+            (WindowFuncOutputCols $windows)
+            $partitionByCols:(WindowPartition $windowPrivate)
+            $window
+        )
+    $aggs:* &
+        (CanMergeAggsAndWindow
+            $aggs
+            $windows
+            $inputCols:(OutputCols $input)
+        )
+    $groupingPrivate:* &
+        (IsUnorderedGrouping $groupingPrivate) &
+        (ColsAreEqual
+            $groupingCols:(GroupingCols $groupingPrivate)
+            $partitionByCols
+        )
+)
+=>
+((OpName)
+    $input
+    (MergeAggsAndWindow $aggs $windows $inputCols)
+    (MakeGrouping
+        (GroupingCols $groupingPrivate)
+        (WindowOrdering $windowPrivate)
+    )
+)

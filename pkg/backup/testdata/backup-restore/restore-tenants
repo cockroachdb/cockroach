@@ -1,0 +1,169 @@
+# disabled to probabilistically run within a tenant because the test always runs from the host
+# tenant
+
+new-cluster name=s1 disable-tenant
+----
+
+# Create a few tenants.
+exec-sql
+SELECT crdb_internal.create_tenant(5);
+----
+
+exec-sql
+SELECT crdb_internal.create_tenant(6);
+----
+
+# Drop one of them.
+exec-sql
+ALTER TENANT [5] STOP SERVICE;
+----
+
+exec-sql
+DROP TENANT [5]
+----
+
+exec-sql
+CREATE TABLE tab1 (pk int primary key)
+----
+
+exec-sql
+CREATE DATABASE db1;
+----
+
+query-sql
+SELECT id,name,data_state,service_mode,active,json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'deprecatedDataState'),json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'droppedName') FROM system.tenants;
+----
+1 system 1 2 true READY 
+5 <nil> 2 0 false DROP cluster-5
+6 cluster-6 1 1 true READY 
+
+exec-sql
+BACKUP INTO 'nodelocal://1/cluster_without_tenants'
+----
+
+exec-sql
+BACKUP INTO 'nodelocal://1/cluster_with_tenants' WITH include_all_virtual_clusters
+----
+
+exec-sql expect-error-regex=(the include_all_virtual_clusters option is only supported for full cluster backups)
+BACKUP TABLE tab1 INTO 'nodelocal://1/table_backup' WITH include_all_virtual_clusters
+----
+regex matches error
+
+exec-sql expect-error-regex=(the include_all_virtual_clusters option is only supported for full cluster backups)
+BACKUP DATABASE db1 INTO 'nodelocal://1/database_backup' WITH include_all_virtual_clusters
+----
+regex matches error
+
+exec-sql expect-error-regex=(tenant 5 is not active)
+BACKUP TENANT 5 INTO 'nodelocal://1/tenant5'
+----
+regex matches error
+
+exec-sql
+BACKUP TENANT 6 INTO 'nodelocal://1/tenant6'
+----
+
+new-cluster name=s2 share-io-dir=s1 disable-tenant
+----
+
+exec-sql
+USE system;
+----
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_flow'
+----
+
+restore expect-pausepoint tag=a
+RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/cluster_with_tenants'
+----
+job paused at pausepoint
+
+# Application tenants backed up in an ACTIVE state should be moved to an ADD
+# state during restore.
+query-sql
+SELECT id,active,json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'deprecatedDataState'),json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'droppedName') FROM system.tenants;
+----
+1 true READY 
+6 false ADD 
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = ''
+----
+
+job resume=a
+----
+
+job tag=a wait-for-state=succeeded
+----
+
+exec-sql
+USE defaultdb;
+----
+
+# A dropped tenant should be restored as an inactive tenant.
+query-sql
+SELECT id,name,data_state,service_mode,active,json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'deprecatedDataState'),json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'droppedName') FROM system.tenants;
+----
+1 system 1 2 true READY 
+6 cluster-6 1 1 true READY 
+
+
+exec-sql expect-error-regex=(tenant 6 not in backup)
+RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/cluster_without_tenants'
+----
+regex matches error
+
+exec-sql expect-error-regex=(tenant 6 already exists)
+RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6';
+----
+regex matches error
+
+exec-sql expect-error-regex=(invalid tenant name)
+RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH virtual_cluster_name = 'invalid_name';
+----
+regex matches error
+
+exec-sql expect-error-regex=(tenant with name "cluster-6" already exists)
+RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH virtual_cluster_name = 'cluster-6';
+----
+regex matches error
+
+exec-sql
+RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH virtual_cluster_name = 'newname';
+----
+
+query-sql
+SELECT id,name,data_state,service_mode,active,json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'deprecatedDataState'),json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'droppedName') FROM system.tenants;
+----
+1 system 1 2 true READY 
+2 newname 1 1 true READY 
+6 cluster-6 1 1 true READY 
+
+# Check that another service mode is also preserved.
+exec-sql
+ALTER TENANT newname STOP SERVICE;
+----
+
+exec-sql
+ALTER TENANT newname START SERVICE SHARED;
+----
+
+query-sql
+SELECT id,name,service_mode FROM system.tenants WHERE name = 'newname';
+----
+2 newname 2
+
+exec-sql
+BACKUP TENANT 2 INTO 'nodelocal://1/tenant2'
+----
+
+exec-sql
+RESTORE TENANT 2 FROM LATEST IN 'nodelocal://1/tenant2' WITH virtual_cluster_name = 'another-name';
+----
+
+query-sql
+SELECT id,name,service_mode FROM system.tenants WHERE name = 'another-name';
+----
+3 another-name 2

@@ -1,0 +1,119 @@
+define
+lock k=a str=intent    txn=1
+lock k=b str=exclusive txn=2
+lock k=c str=shared    txn=1
+lock k=c str=shared    txn=2
+lock k=d str=intent    txn=3
+lock k=d str=exclusive txn=3
+lock k=d str=shared    txn=3
+----
+
+# forward iteration
+iter upper=z match-min-str=shared
+seek-ge k=a
+next
+next
+next
+next
+next
+next
+next
+stats
+----
+seek-ge k=a: output: k=a str=intent txn=1
+next: output: k=b str=exclusive txn=2
+next: output: k=c str=shared txn=2
+next: output: k=c str=shared txn=1
+next: output: k=d str=intent txn=3
+next: output: k=d str=exclusive txn=3
+next: output: k=d str=shared txn=3
+next: output: . (exhausted)
+stats: seeked 1 times (1 internal); stepped 7 times (7 internal)
+
+# reverse iteration
+iter lower=a match-min-str=shared
+seek-lt k=z
+prev
+prev
+prev
+prev
+prev
+prev
+prev
+stats
+----
+seek-lt k=z: output: k=d str=shared txn=3
+prev: output: k=d str=exclusive txn=3
+prev: output: k=d str=intent txn=3
+prev: output: k=c str=shared txn=1
+prev: output: k=c str=shared txn=2
+prev: output: k=b str=exclusive txn=2
+prev: output: k=a str=intent txn=1
+prev: output: . (exhausted)
+stats: seeked 1 times (0 fwd/1 rev, internal: 0 fwd/1 rev); stepped 7 times (0 fwd/7 rev, internal: 0 fwd/7 rev)
+
+# prefix iteration
+iter prefix=true match-min-str=shared
+seek-ge k=d
+next
+next
+next
+stats
+----
+seek-ge k=d: output: k=d str=intent txn=3
+next: output: k=d str=exclusive txn=3
+next: output: k=d str=shared txn=3
+next: output: . (exhausted)
+stats: seeked 1 times (1 internal); stepped 3 times (3 internal)
+
+define
+lock k=b str=shared txn=1
+lock k=d str=shared txn=3
+lock k=f str=shared txn=3
+----
+
+# forward iteration with limit
+iter upper=z match-min-str=shared
+seek-ge-with-limit k=a limit=a
+seek-ge-with-limit k=a limit=b
+seek-ge-with-limit k=a limit=c
+next-with-limit limit=c
+next-with-limit limit=d
+next-with-limit limit=e
+next-with-limit limit=f
+next-with-limit limit=g
+next-with-limit limit=h
+stats
+----
+seek-ge-with-limit k=a limit=a: output: . (at limit)
+seek-ge-with-limit k=a limit=b: output: . (at limit)
+seek-ge-with-limit k=a limit=c: output: k=b str=shared txn=1
+next-with-limit limit=c: output: . (at limit)
+next-with-limit limit=d: output: . (at limit)
+next-with-limit limit=e: output: k=d str=shared txn=3
+next-with-limit limit=f: output: . (at limit)
+next-with-limit limit=g: output: k=f str=shared txn=3
+next-with-limit limit=h: output: . (exhausted)
+stats: seeked 3 times (1 internal); stepped 6 times (3 internal)
+
+# reverse iteration with limit
+iter lower=a match-min-str=shared
+seek-lt-with-limit k=g limit=g
+seek-lt-with-limit k=g limit=f
+prev-with-limit limit=f
+prev-with-limit limit=e
+prev-with-limit limit=d
+prev-with-limit limit=c
+prev-with-limit limit=b
+prev-with-limit limit=a
+stats
+----
+seek-lt-with-limit k=g limit=g: output: . (at limit)
+seek-lt-with-limit k=g limit=f: output: k=f str=shared txn=3
+prev-with-limit limit=f: output: . (at limit)
+prev-with-limit limit=e: output: . (at limit)
+prev-with-limit limit=d: output: k=d str=shared txn=3
+prev-with-limit limit=c: output: . (at limit)
+prev-with-limit limit=b: output: k=b str=shared txn=1
+prev-with-limit limit=a: output: . (exhausted)
+stats: seeked 2 times (0 fwd/2 rev, internal: 0 fwd/1 rev); stepped 6 times (0 fwd/6 rev, internal: 0 fwd/3 rev)

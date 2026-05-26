@@ -1,0 +1,60 @@
+# LogicTest: local
+
+statement ok
+CREATE EXTERNAL CONNECTION conn_1 AS 'nodelocal://1/conn_1';
+CREATE EXTERNAL CONNECTION conn_2 AS 'nodelocal://1/conn_2';
+
+query TTT colnames,rowsort
+SHOW EXTERNAL CONNECTIONS
+----
+connection_name connection_uri       connection_type
+conn_1          nodelocal://1/conn_1 STORAGE
+conn_2          nodelocal://1/conn_2 STORAGE
+
+
+user testuser
+
+statement error pq: user testuser does not have UPDATE privilege on external_connection conn_1
+ALTER EXTERNAL CONNECTION conn_1 AS 'nodelocal://1/conn_update';
+
+user root
+
+statement ok
+GRANT UPDATE ON EXTERNAL CONNECTION conn_1 TO testuser;
+GRANT USAGE ON EXTERNAL CONNECTION conn_1 TO testuser;
+
+user testuser
+
+statement ok
+ALTER EXTERNAL CONNECTION conn_1 AS 'nodelocal://1/conn_update_with_privilege';
+
+query TTT colnames
+SHOW EXTERNAL CONNECTION conn_1
+----
+connection_name connection_uri                connection_type
+conn_1   nodelocal://1/conn_update_with_privilege STORAGE
+
+
+
+statement error pq: user testuser does not have UPDATE privilege on external_connection conn_2
+ALTER EXTERNAL CONNECTION conn_2 AS 'nodelocal://1/conn_update';
+
+user root
+
+statement ok
+GRANT UPDATE ON EXTERNAL CONNECTION conn_2 TO testuser;
+GRANT USAGE ON EXTERNAL CONNECTION conn_2 TO testuser;
+
+user testuser
+
+statement error pq: user testuser does not have UPDATE privilege on external_connection conn_not_exist
+ALTER EXTERNAL CONNECTION IF EXISTS conn_not_exist AS 'nodelocal://1/not_exist';
+
+statement ok
+ALTER EXTERNAL CONNECTION conn_2 AS 'nodelocal://1/connection_2_alter';
+
+query TTT colnames
+SHOW EXTERNAL CONNECTION conn_2
+----
+connection_name connection_uri                   connection_type
+conn_2          nodelocal://1/connection_2_alter STORAGE

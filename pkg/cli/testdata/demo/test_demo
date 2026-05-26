@@ -1,0 +1,109 @@
+exec
+demo
+--execute=show database
+----
+database
+movr
+
+exec
+demo
+--execute=show database
+--no-example-database
+----
+database
+defaultdb
+
+exec
+demo
+--execute=show application_name
+----
+application_name
+$ cockroach demo
+
+exec
+demo
+--format=table
+--execute=show database
+----
+  database
+------------
+  movr
+(1 row)
+
+exec
+demo
+--execute=select 1 as "1"
+--execute=select 3 as "3"
+----
+1
+1
+3
+3
+
+exec
+demo
+--echo-sql
+--execute=select 1 as "1"
+----
+> select 1 as "1"
+1
+1
+
+exec
+demo
+--set=errexit=0
+--execute=select nonexistent
+--execute=select 123 as "123"
+----
+ERROR: column "nonexistent" does not exist
+SQLSTATE: 42703
+123
+123
+
+exec
+demo
+startrek
+--execute=SELECT database_name, owner FROM [show databases]
+----
+database_name	owner
+defaultdb	root
+postgres	root
+startrek	demo
+system	node
+
+exec
+demo
+startrek
+--execute=SELECT database_name, owner FROM [show databases]
+--format=table
+----
+  database_name | owner
+----------------+--------
+  defaultdb     | root
+  postgres      | root
+  startrek      | demo
+  system        | node
+(4 rows)
+
+# Test that if we start with --insecure we cannot perform
+# commands that require a secure cluster.
+exec
+demo
+--execute=CREATE USER test WITH PASSWORD 'testpass'
+----
+CREATE ROLE
+
+exec
+demo
+--insecure
+--execute=CREATE USER test WITH PASSWORD 'testpass'
+----
+ERROR: setting or updating a password is not supported in insecure mode
+SQLSTATE: 28P01
+
+exec
+demo
+--geo-partitioned-replicas
+--disable-demo-license
+----
+ERROR: enterprise features are needed for this demo (--geo-partitioned-replicas)

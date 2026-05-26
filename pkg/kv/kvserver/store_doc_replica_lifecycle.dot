@@ -1,0 +1,40 @@
+digraph finite_state_machine {
+
+/*
+This is the source file for the diagram on the `type Store`
+comment.
+
+Generated via:
+
+docker run -i tsub/graph-easy --from=dot --as=ascii < \
+  store_doc_replica_lifecycle.dot
+*/
+
+Absent -> Uninitialized [label = "Raft msg"];
+Absent -> Initialized [label = "Store.Start"];
+
+Uninitialized -> Uninitialized [label = "Raft msg"];
+
+Uninitialized -> Initialized [label = "applySnapshot"];
+Initialized -> Initialized [label = "applySnapshot"];
+
+Absent -> Uninitialized [label = "pre-split "];
+Uninitialized -> Initialized [label = "post-split"];
+
+Initialized -> Initialized [label = "Subsume"];
+
+Initialized -> Initialized [label = "Crash"];
+Initialized -> Uninitialized [label = "Crash"];
+
+Initialized -> Removed [label = "Replica GC"];
+Initialized -> Removed [label = "apply removal"];
+Initialized -> Removed [label = "ReplicaTooOld"];
+Initialized -> Removed [label = "Merged (snapshot)"];
+Initialized -> Removed [label = "apply Merge"];
+Initialized -> Removed [label = "higher ReplicaID"];
+
+Uninitialized -> Removed [label = "ReplicaTooOldError"];
+Uninitialized -> Removed [label = "higher ReplicaID"];
+
+}
+

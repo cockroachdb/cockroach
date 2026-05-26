@@ -1,0 +1,319 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package scbuildstmt
+
+import (
+	"math"
+	"reflect"
+
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/walkutil"
+	"github.com/cockroachdb/errors"
+)
+
+type supportedAlterTableCommand = supportedStatement
+
+// supportedAlterTableStatements tracks alter table operations fully supported
+// by the declarative schema changer. Operations marked as non-fully supported
+// can only be with the use_declarative_schema_changer session variable.
+var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
+	reflect.TypeOf((*tree.AlterTableAddColumn)(nil)):          {fn: alterTableAddColumn, on: true, checks: nil},
+	reflect.TypeOf((*tree.AlterTableDropColumn)(nil)):         {fn: alterTableDropColumn, on: true, checks: nil},
+	reflect.TypeOf((*tree.AlterTableAlterPrimaryKey)(nil)):    {fn: alterTableAlterPrimaryKey, on: true, checks: nil},
+	reflect.TypeOf((*tree.AlterTableSetNotNull)(nil)):         {fn: alterTableSetNotNull, on: true, checks: nil},
+	reflect.TypeOf((*tree.AlterTableAddConstraint)(nil)):      {fn: alterTableAddConstraint, on: true, checks: nil},
+	reflect.TypeOf((*tree.AlterTableDropConstraint)(nil)):     {fn: alterTableDropConstraint, on: true, checks: nil},
+	reflect.TypeOf((*tree.AlterTableValidateConstraint)(nil)): {fn: alterTableValidateConstraint, on: true, checks: nil},
+	reflect.TypeOf((*tree.AlterTableSetDefault)(nil)):         {fn: alterTableSetDefault, on: true, checks: nil},
+	reflect.TypeOf((*tree.AlterTableAlterColumnType)(nil)):    {fn: alterTableAlterColumnType, on: true, checks: nil},
+	reflect.TypeOf((*tree.AlterTableSetRLSMode)(nil)):         {fn: alterTableSetRLSMode, on: true, checks: nil},
+	reflect.TypeOf((*tree.AlterTableDropNotNull)(nil)):        {fn: alterTableDropNotNull, on: true, checks: nil},
+	reflect.TypeOf((*tree.AlterTableSetOnUpdate)(nil)):        {fn: alterTableSetOnUpdate, on: true, checks: isV254Active},
+	reflect.TypeOf((*tree.AlterTableRenameColumn)(nil)):       {fn: alterTableRenameColumn, on: true, checks: isV254Active},
+	reflect.TypeOf((*tree.AlterTableDropStored)(nil)):         {fn: alterTableDropStored, on: true, checks: isV261Active},
+	reflect.TypeOf((*tree.AlterTableRenameConstraint)(nil)):   {fn: alterTableRenameConstraint, on: true, checks: isV261Active},
+	reflect.TypeOf((*tree.AlterTableSetIdentity)(nil)):        {fn: alterTableSetIdentity, on: true, checks: isV261Active},
+	reflect.TypeOf((*tree.AlterTableAddIdentity)(nil)):        {fn: alterTableAddIdentity, on: true, checks: isV261Active},
+	reflect.TypeOf((*tree.AlterTableSetVisible)(nil)):         {fn: alterTableAlterColumnSetVisible, on: true, checks: isV261Active},
+	reflect.TypeOf((*tree.AlterTableIdentity)(nil)):           {fn: alterTableAlterColumnIdentity, on: true, checks: isV261Active},
+	reflect.TypeOf((*tree.AlterTableDropIdentity)(nil)):       {fn: alterTableDropIdentity, on: true, checks: isV263Active},
+	reflect.TypeOf((*tree.AlterTableSetStorageParams)(nil)):   {fn: AlterTableSetStorageParams, on: true, checks: isV261Active},
+	reflect.TypeOf((*tree.AlterTableResetStorageParams)(nil)): {fn: AlterTableResetStorageParams, on: true, checks: isV261Active},
+	reflect.TypeOf((*tree.AlterTableSetTrigger)(nil)):         {fn: alterTableSetTrigger, on: true, checks: isV262Active},
+}
+
+// alterTableSubcommandNames maps ALTER TABLE command types to their subcommand
+// tag names (e.g., "ADD COLUMN"). Every entry in supportedAlterTableStatements
+// must have a corresponding entry here. Note that we need to define this map
+// explicitly rather than relying on TelemetryName() to get the name, since
+// TelemetryName() may depend on the static fields of the command struct.
+var alterTableSubcommandNames = map[reflect.Type]string{
+	reflect.TypeOf((*tree.AlterTableAddColumn)(nil)):          "ADD COLUMN",
+	reflect.TypeOf((*tree.AlterTableDropColumn)(nil)):         "DROP COLUMN",
+	reflect.TypeOf((*tree.AlterTableAlterPrimaryKey)(nil)):    "ALTER PRIMARY KEY",
+	reflect.TypeOf((*tree.AlterTableSetNotNull)(nil)):         "SET NOT NULL",
+	reflect.TypeOf((*tree.AlterTableAddConstraint)(nil)):      "ADD CONSTRAINT",
+	reflect.TypeOf((*tree.AlterTableDropConstraint)(nil)):     "DROP CONSTRAINT",
+	reflect.TypeOf((*tree.AlterTableValidateConstraint)(nil)): "VALIDATE CONSTRAINT",
+	reflect.TypeOf((*tree.AlterTableSetDefault)(nil)):         "SET DEFAULT",
+	reflect.TypeOf((*tree.AlterTableAlterColumnType)(nil)):    "ALTER COLUMN TYPE",
+	reflect.TypeOf((*tree.AlterTableSetRLSMode)(nil)):         "SET RLS MODE",
+	reflect.TypeOf((*tree.AlterTableDropNotNull)(nil)):        "DROP NOT NULL",
+	reflect.TypeOf((*tree.AlterTableSetOnUpdate)(nil)):        "SET ON UPDATE",
+	reflect.TypeOf((*tree.AlterTableRenameColumn)(nil)):       "RENAME COLUMN",
+	reflect.TypeOf((*tree.AlterTableDropStored)(nil)):         "DROP STORED",
+	reflect.TypeOf((*tree.AlterTableRenameConstraint)(nil)):   "RENAME CONSTRAINT",
+	reflect.TypeOf((*tree.AlterTableSetIdentity)(nil)):        "SET IDENTITY",
+	reflect.TypeOf((*tree.AlterTableAddIdentity)(nil)):        "ADD IDENTITY",
+	reflect.TypeOf((*tree.AlterTableSetVisible)(nil)):         "SET VISIBLE",
+	reflect.TypeOf((*tree.AlterTableIdentity)(nil)):           "ALTER IDENTITY",
+	reflect.TypeOf((*tree.AlterTableDropIdentity)(nil)):       "DROP IDENTITY",
+	reflect.TypeOf((*tree.AlterTableSetStorageParams)(nil)):   "SET STORAGE PARAM",
+	reflect.TypeOf((*tree.AlterTableResetStorageParams)(nil)): "RESET STORAGE PARAM",
+	reflect.TypeOf((*tree.AlterTableSetTrigger)(nil)):         "SET TRIGGER",
+}
+
+func init() {
+	// Check function signatures inside the supportedAlterTableStatements map.
+	for statementType, statementEntry := range supportedAlterTableStatements {
+		callBackType := reflect.TypeOf(statementEntry.fn)
+		if callBackType.Kind() != reflect.Func {
+			panic(errors.AssertionFailedf("%v entry for statement is "+
+				"not a function", statementType))
+		}
+		if callBackType.NumIn() != 5 ||
+			!callBackType.In(0).Implements(reflect.TypeOf((*BuildCtx)(nil)).Elem()) ||
+			callBackType.In(1) != reflect.TypeOf((*tree.TableName)(nil)) ||
+			callBackType.In(2) != reflect.TypeOf((*scpb.Table)(nil)) ||
+			!callBackType.In(3).Implements(reflect.TypeOf((*tree.Statement)(nil)).Elem()) ||
+			callBackType.In(4) != statementType {
+			panic(errors.AssertionFailedf("%v entry for alter table statement "+
+				"does not have a valid signature; got %v", statementType, callBackType))
+		}
+		if statementEntry.checks != nil {
+			if _, ok := statementEntry.checks.(isVersionActiveFunc); !ok {
+				panic(errors.AssertionFailedf(
+					"%v checks is not an isVersionActiveFunc; got %T",
+					statementType, statementEntry.checks))
+			}
+		}
+		// Validate that every entry in supportedAlterTableStatements has a
+		// corresponding entry in alterTableCommandNames, and populate
+		// supportedAlterTableSubcommandTags with the subcommand tag.
+		subcommandName, ok := alterTableSubcommandNames[statementType]
+		if !ok {
+			panic(errors.AssertionFailedf(
+				"ALTER TABLE command type %v is missing from alterTableSubcommandNames map",
+				statementType))
+		}
+		tag := "ALTER TABLE " + subcommandName
+		supportedAlterTableSubcommandTags[tag] = struct{}{}
+	}
+}
+
+// alterTableChecks determines if the entire set of alter table commands
+// are supported.
+// One side-effect is that this function will modify `n` when it hoists
+// add column constraints.
+func alterTableChecks(
+	n *tree.AlterTable,
+	mode sessiondatapb.NewSchemaChangerMode,
+	activeVersion clusterversion.ClusterVersion,
+) bool {
+	// For ALTER TABLE stmt, we will need to further check whether each
+	// individual command is fully supported.
+	n.HoistAddColumnConstraints(func() {
+		telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "add_column.references"))
+	})
+	for _, cmd := range n.Cmds {
+		if !isFullySupportedWithFalsePositiveInternal(supportedAlterTableStatements,
+			reflect.TypeOf(cmd), reflect.ValueOf(cmd), mode, activeVersion) {
+			return false
+		}
+	}
+	return true
+}
+
+// AlterTable implements ALTER TABLE.
+func AlterTable(b BuildCtx, n *tree.AlterTable) {
+	tn := n.Table.ToTableName()
+	elts := b.ResolveTable(n.Table, ResolveParams{
+		IsExistenceOptional: n.IfExists,
+		RequiredPrivilege:   privilege.CREATE,
+	})
+	_, target, tbl := scpb.FindTable(elts)
+	if tbl == nil {
+		// Mark all table names (`tn` and others) in this ALTER TABLE stmt as non-existent.
+		tree.NewFmtCtx(tree.FmtSimple, tree.FmtReformatTableNames(func(
+			ctx *tree.FmtCtx, name *tree.TableName,
+		) {
+			b.MarkNameAsNonExistent(name)
+		})).FormatNode(n)
+		return
+	}
+	if target != scpb.ToPublic {
+		panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+			"table %q is being dropped, try again later", n.Table.Object()))
+	}
+	defer checkTableSchemaChangePrerequisites(b, elts, n)()
+	tn.ObjectNamePrefix = b.NamePrefix(tbl)
+	b.SetUnresolvedNameAnnotation(n.Table, &tn)
+	b.IncrementSchemaChangeAlterCounter("table")
+	for _, cmd := range n.Cmds {
+		// Invoke the callback function for each command.
+		b.IncrementSchemaChangeAlterCounter("table", cmd.TelemetryName())
+		info := supportedAlterTableStatements[reflect.TypeOf(cmd)]
+		fn := reflect.ValueOf(info.fn)
+		fn.Call([]reflect.Value{
+			reflect.ValueOf(b),
+			reflect.ValueOf(&tn),
+			reflect.ValueOf(tbl),
+			reflect.ValueOf(n),
+			reflect.ValueOf(cmd),
+		})
+		b.IncrementSubWorkID()
+	}
+	finalizePrimaryIndexChanges(b, tbl, n.String())
+}
+
+func finalizePrimaryIndexChanges(b BuildCtx, tbl *scpb.Table, stmtSQLString string) {
+	maybeDropRedundantPrimaryIndexes(b, tbl.TableID)
+	maybeRewriteTempIDsInPrimaryIndexes(b, tbl.TableID)
+	disallowDroppingPrimaryIndexReferencedInUDFOrView(b, tbl.TableID, stmtSQLString)
+}
+
+// disallowDroppingPrimaryIndexReferencedInUDFOrView prevents dropping old (current)
+// primary index that is referenced explicitly via index hinting in UDF or View body.
+func disallowDroppingPrimaryIndexReferencedInUDFOrView(
+	b BuildCtx, tableID catid.DescID, stmtSQLString string,
+) {
+	chain := getPrimaryIndexChain(b, tableID)
+	if !chain.isInflatedAtAll() {
+		// No new primary index needs to be added at all, which means old/current
+		// primary index does not need to be dropped.
+		return
+	}
+
+	toBeDroppedIndexID := chain.oldSpec.primary.IndexID
+	toBeDroppedIndexName := chain.oldSpec.name.Name
+	b.BackReferences(tableID).Filter(publicTargetFilter).ForEachTarget(func(target scpb.TargetStatus, e scpb.Element) {
+		switch el := e.(type) {
+		case *scpb.FunctionBody:
+			for _, ref := range el.UsesTables {
+				if ref.TableID == tableID && ref.IndexID == toBeDroppedIndexID {
+					fnName := b.QueryByID(el.FunctionID).FilterFunctionName().MustGetOneElement().Name
+					panic(errors.WithDetail(
+						sqlerrors.NewDependentBlocksOpError("drop", "index", toBeDroppedIndexName, "function", fnName),
+						sqlerrors.PrimaryIndexSwapDetail))
+				}
+			}
+		case *scpb.View:
+			for _, ref := range el.ForwardReferences {
+				if ref.ToID == tableID && ref.IndexID == toBeDroppedIndexID {
+					viewName := b.QueryByID(el.ViewID).FilterNamespace().MustGetOneElement().Name
+					panic(errors.WithDetail(
+						sqlerrors.NewDependentBlocksOpError("drop", "index", toBeDroppedIndexName, "view", viewName),
+						sqlerrors.PrimaryIndexSwapDetail))
+				}
+			}
+		}
+	})
+}
+
+// maybeRewriteTempIDsInPrimaryIndexes is part of the post-processing
+// invoked at the end of building each ALTER TABLE statement to replace temporary
+// IDs with real, actual IDs. If any replaced temporary IDs had any subzone
+// configs, we also ensure those references get updated.
+func maybeRewriteTempIDsInPrimaryIndexes(b BuildCtx, tableID catid.DescID) {
+	chain := getPrimaryIndexChain(b, tableID)
+	hasRewrittenPrimaryID := false
+	for i, spec := range chain.allPrimaryIndexSpecs(nonNilPrimaryIndexSpecSelector) {
+		if i == 0 {
+			continue
+		}
+		hasRewrittenPrimaryID = maybeRewriteIndexAndConstraintID(b, tableID, spec.primary.IndexID, spec.primary.ConstraintID)
+		tempIndexSpec := chain.mustGetIndexSpecByID(spec.primary.TemporaryIndexID)
+		maybeRewriteIndexAndConstraintID(b, tableID, tempIndexSpec.temporary.IndexID, tempIndexSpec.temporary.ConstraintID)
+	}
+	chain.validate()
+	currPrimaryIndexID := getCurrentPrimaryIndexID(b, tableID)
+	if hasRewrittenPrimaryID {
+		if err := configureZoneConfigForNewIndexBackfill(b, tableID, currPrimaryIndexID); err != nil {
+			panic(errors.Wrapf(
+				err,
+				"error while updating zone configs for indexID %d of tableID %d",
+				currPrimaryIndexID,
+				tableID))
+		}
+	}
+}
+
+// maybeRewriteIndexAndConstraintID attempts to replace index which currently
+// has a temporary index ID `indexID` with an actual index ID. It also updates
+// all elements that references this index with the actual index ID. It returns
+// a boolean indicating if any work has been done.
+func maybeRewriteIndexAndConstraintID(
+	b BuildCtx, tableID catid.DescID, indexID catid.IndexID, constraintID catid.ConstraintID,
+) bool {
+	if indexID < catid.IndexID(TableTentativeIdsStart) || constraintID < catid.ConstraintID(TableTentativeIdsStart) {
+		// Nothing to do if it's already an actual index ID.
+		return false
+	}
+
+	actualIndexID := b.NextTableIndexID(tableID)
+	actualConstraintID := b.NextTableConstraintID(tableID)
+	b.QueryByID(tableID).ForEach(func(
+		_ scpb.Status, _ scpb.TargetStatus, e scpb.Element,
+	) {
+		_ = walkutil.Walk(e, func(id *catid.IndexID) error {
+			if id != nil && *id == indexID {
+				*id = actualIndexID
+			}
+			return nil
+		})
+		_ = walkutil.Walk(e, func(id *catid.ConstraintID) error {
+			if id != nil && *id == constraintID {
+				*id = actualConstraintID
+			}
+			return nil
+		})
+		// If there are references to the indexID in the subzones,
+		// then we should rewrite.
+		if zoneConfig, ok := e.(*scpb.TableZoneConfig); ok {
+			for subzoneIdx := range zoneConfig.ZoneConfig.Subzones {
+				if zoneConfig.ZoneConfig.Subzones[subzoneIdx].IndexID == uint32(indexID) {
+					zoneConfig.ZoneConfig.Subzones[subzoneIdx].IndexID = uint32(actualIndexID)
+				}
+			}
+		}
+	})
+
+	return true
+}
+
+// maybeDropRedundantPrimaryIndexes is part of the post-processing invoked at
+// the end of building each ALTER TABLE statement to remove possibly redundant
+// primary indexes.
+func maybeDropRedundantPrimaryIndexes(b BuildCtx, tableID catid.DescID) {
+	chain := getPrimaryIndexChain(b, tableID)
+	chain.deflate(b)
+}
+
+// TableTentativeIdsStart is the beginning of a sequence of increasing
+// IDs for builder internal use for each table.
+// Table IDs are uint32 and for those internal use, temporary IDs we
+// start from MaxInt32, halfway of MaxUint32.
+const TableTentativeIdsStart = math.MaxInt32

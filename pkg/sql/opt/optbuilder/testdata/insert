@@ -1,0 +1,1762 @@
+exec-ddl
+CREATE TABLE abcde (
+    a INT NOT NULL,
+    b INT,
+    c INT DEFAULT (10),
+    d INT AS (b + c + 1) STORED,
+    e INT AS (a) STORED
+)
+----
+
+exec-ddl
+CREATE TABLE xyz (
+    x TEXT PRIMARY KEY,
+    y INT8,
+    z FLOAT8
+)
+----
+
+exec-ddl
+CREATE TABLE uv (
+    u DECIMAL,
+    v BYTES
+)
+----
+
+exec-ddl
+CREATE TABLE mutation (
+    m INT PRIMARY KEY,
+    n INT,
+    "o:write-only" INT DEFAULT(10),
+    "p:write-only" INT AS (o + n) STORED,
+    "q:delete-only" INT AS (m * p) STORED,
+    CHECK (m > 0)
+)
+----
+
+exec-ddl
+CREATE TABLE checks (
+    a INT PRIMARY KEY CHECK (a > 0),
+    b INT,
+    c INT,
+    d INT AS (c + 1) STORED,
+    CHECK (b < d)
+)
+----
+
+exec-ddl
+CREATE TABLE decimals (
+    a DECIMAL(10,0) PRIMARY KEY CHECK (round(a) = a),
+    b DECIMAL(5,1)[] CHECK (b[0] > 1),
+    c DECIMAL(10,1) DEFAULT (1.23),
+    d DECIMAL(10,1) AS (a+c) STORED
+)
+----
+
+exec-ddl
+CREATE TABLE assn_cast (
+    c CHAR,
+    qc "char",
+    i INT,
+    s STRING
+)
+----
+
+exec-ddl
+CREATE TABLE on_update_bare (
+    a INT NOT NULL,
+    v INT ON UPDATE 5
+)
+----
+
+exec-ddl
+CREATE TABLE on_update_with_default (
+    a INT NOT NULL,
+    v INT DEFAULT 3 ON UPDATE 10
+)
+----
+
+# Unknown target table.
+build
+INSERT INTO unknown VALUES (1, 2, 3)
+----
+error (42P01): no data source matches prefix: "unknown"
+
+# ------------------------------------------------------------------------------
+# Tests without target column names.
+# ------------------------------------------------------------------------------
+
+# Specify values for all non-hidden columns.
+build
+INSERT INTO abcde VALUES (1, 2, 3)
+----
+insert abcde
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:9 => a:1
+ │    ├── column2:10 => b:2
+ │    ├── column3:11 => c:3
+ │    ├── d_comp:13 => d:4
+ │    ├── column1:9 => e:5
+ │    └── rowid_default:12 => rowid:6
+ └── project
+      ├── columns: d_comp:13!null column1:9!null column2:10!null column3:11!null rowid_default:12
+      ├── project
+      │    ├── columns: rowid_default:12 column1:9!null column2:10!null column3:11!null
+      │    ├── values
+      │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    │    └── (1, 2, 3)
+      │    └── projections
+      │         └── unique_rowid() [as=rowid_default:12]
+      └── projections
+           └── (column2:10 + column3:11) + 1 [as=d_comp:13]
+
+# Don't specify values for null or default columns.
+build
+INSERT INTO abcde VALUES (1)
+----
+insert abcde
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:9 => a:1
+ │    ├── b_default:10 => b:2
+ │    ├── c_default:11 => c:3
+ │    ├── d_comp:13 => d:4
+ │    ├── column1:9 => e:5
+ │    └── rowid_default:12 => rowid:6
+ └── project
+      ├── columns: d_comp:13 column1:9!null b_default:10 c_default:11!null rowid_default:12
+      ├── project
+      │    ├── columns: b_default:10 c_default:11!null rowid_default:12 column1:9!null
+      │    ├── values
+      │    │    ├── columns: column1:9!null
+      │    │    └── (1,)
+      │    └── projections
+      │         ├── NULL::INT8 [as=b_default:10]
+      │         ├── 10 [as=c_default:11]
+      │         └── unique_rowid() [as=rowid_default:12]
+      └── projections
+           └── (b_default:10 + c_default:11) + 1 [as=d_comp:13]
+
+# Ordered input.
+build
+INSERT INTO abcde SELECT y FROM xyz ORDER BY y, z LIMIT 10
+----
+insert abcde
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── y:10 => a:1
+ │    ├── b_default:14 => b:2
+ │    ├── c_default:15 => c:3
+ │    ├── d_comp:17 => d:4
+ │    ├── y:10 => e:5
+ │    └── rowid_default:16 => rowid:6
+ └── project
+      ├── columns: d_comp:17 y:10 b_default:14 c_default:15!null rowid_default:16
+      ├── project
+      │    ├── columns: b_default:14 c_default:15!null rowid_default:16 y:10
+      │    ├── limit
+      │    │    ├── columns: y:10 z:11
+      │    │    ├── internal-ordering: +10,+11
+      │    │    ├── sort
+      │    │    │    ├── columns: y:10 z:11
+      │    │    │    ├── ordering: +10,+11
+      │    │    │    ├── limit hint: 10.00
+      │    │    │    └── project
+      │    │    │         ├── columns: y:10 z:11
+      │    │    │         └── scan xyz
+      │    │    │              └── columns: x:9!null y:10 z:11 xyz.crdb_internal_mvcc_timestamp:12 xyz.tableoid:13
+      │    │    └── 10
+      │    └── projections
+      │         ├── NULL::INT8 [as=b_default:14]
+      │         ├── 10 [as=c_default:15]
+      │         └── unique_rowid() [as=rowid_default:16]
+      └── projections
+           └── (b_default:14 + c_default:15) + 1 [as=d_comp:17]
+
+# Ignore ORDER BY without LIMIT.
+build
+INSERT INTO abcde SELECT y FROM xyz ORDER BY y, z
+----
+insert abcde
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── y:10 => a:1
+ │    ├── b_default:14 => b:2
+ │    ├── c_default:15 => c:3
+ │    ├── d_comp:17 => d:4
+ │    ├── y:10 => e:5
+ │    └── rowid_default:16 => rowid:6
+ └── project
+      ├── columns: d_comp:17 y:10 b_default:14 c_default:15!null rowid_default:16
+      ├── project
+      │    ├── columns: b_default:14 c_default:15!null rowid_default:16 y:10
+      │    ├── project
+      │    │    ├── columns: y:10 z:11
+      │    │    └── scan xyz
+      │    │         └── columns: x:9!null y:10 z:11 xyz.crdb_internal_mvcc_timestamp:12 xyz.tableoid:13
+      │    └── projections
+      │         ├── NULL::INT8 [as=b_default:14]
+      │         ├── 10 [as=c_default:15]
+      │         └── unique_rowid() [as=rowid_default:16]
+      └── projections
+           └── (b_default:14 + c_default:15) + 1 [as=d_comp:17]
+
+# Use placeholders.
+build
+INSERT INTO xyz VALUES ($1, $2, $3)
+----
+insert xyz
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => x:1
+ │    ├── column2:7 => y:2
+ │    └── column3:8 => z:3
+ └── values
+      ├── columns: column1:6 column2:7 column3:8
+      └── ($1, $2, $3)
+
+# Null expressions.
+build
+INSERT INTO abcde VALUES (2, null, null)
+----
+insert abcde
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:9 => a:1
+ │    ├── column2:10 => b:2
+ │    ├── column3:11 => c:3
+ │    ├── d_comp:13 => d:4
+ │    ├── column1:9 => e:5
+ │    └── rowid_default:12 => rowid:6
+ └── project
+      ├── columns: d_comp:13 column1:9!null column2:10 column3:11 rowid_default:12
+      ├── project
+      │    ├── columns: rowid_default:12 column1:9!null column2:10 column3:11
+      │    ├── values
+      │    │    ├── columns: column1:9!null column2:10 column3:11
+      │    │    └── (2, NULL::INT8, NULL::INT8)
+      │    └── projections
+      │         └── unique_rowid() [as=rowid_default:12]
+      └── projections
+           └── (column2:10 + column3:11) + 1 [as=d_comp:13]
+
+# Duplicate expressions.
+build
+INSERT INTO abcde SELECT 2, $1 + 1, $1 + 1
+----
+insert abcde
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── "?column?":9 => a:1
+ │    ├── "?column?":10 => b:2
+ │    ├── "?column?":10 => c:3
+ │    ├── d_comp:12 => d:4
+ │    ├── "?column?":9 => e:5
+ │    └── rowid_default:11 => rowid:6
+ └── project
+      ├── columns: d_comp:12 "?column?":9!null "?column?":10 rowid_default:11
+      ├── project
+      │    ├── columns: rowid_default:11 "?column?":9!null "?column?":10
+      │    ├── project
+      │    │    ├── columns: "?column?":9!null "?column?":10
+      │    │    ├── values
+      │    │    │    └── ()
+      │    │    └── projections
+      │    │         ├── 2 [as="?column?":9]
+      │    │         └── $1 + 1 [as="?column?":10]
+      │    └── projections
+      │         └── unique_rowid() [as=rowid_default:11]
+      └── projections
+           └── ("?column?":10 + "?column?":10) + 1 [as=d_comp:12]
+
+# Use DEFAULT VALUES.
+build
+INSERT INTO uv DEFAULT VALUES
+----
+insert uv
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── u_default:6 => u:1
+ │    ├── v_default:7 => v:2
+ │    └── rowid_default:8 => rowid:3
+ └── project
+      ├── columns: u_default:6 v_default:7 rowid_default:8
+      ├── values
+      │    └── ()
+      └── projections
+           ├── NULL::DECIMAL [as=u_default:6]
+           ├── NULL::BYTES [as=v_default:7]
+           └── unique_rowid() [as=rowid_default:8]
+
+# Use DEFAULT expressions in VALUES expression.
+build
+INSERT INTO abcde ((VALUES (1, DEFAULT, 2), (2, 3, 4), (3, 2, DEFAULT), (4, DEFAULT, DEFAULT)))
+----
+insert abcde
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:9 => a:1
+ │    ├── column2:10 => b:2
+ │    ├── column3:11 => c:3
+ │    ├── d_comp:13 => d:4
+ │    ├── column1:9 => e:5
+ │    └── rowid_default:12 => rowid:6
+ └── project
+      ├── columns: d_comp:13 column1:9!null column2:10 column3:11!null rowid_default:12
+      ├── project
+      │    ├── columns: rowid_default:12 column1:9!null column2:10 column3:11!null
+      │    ├── values
+      │    │    ├── columns: column1:9!null column2:10 column3:11!null
+      │    │    ├── (1, NULL::INT8, 2)
+      │    │    ├── (2, 3, 4)
+      │    │    ├── (3, 2, 10)
+      │    │    └── (4, NULL::INT8, 10)
+      │    └── projections
+      │         └── unique_rowid() [as=rowid_default:12]
+      └── projections
+           └── (column2:10 + column3:11) + 1 [as=d_comp:13]
+
+# Use DEFAULT expressions in VALUES expression wrapped by WITH clause (error).
+build
+INSERT INTO abcde WITH a AS (SELECT 1) VALUES (1, DEFAULT, 2)
+----
+error (42601): DEFAULT can only appear in a VALUES list within INSERT or on the right side of a SET
+
+# Too many values.
+build
+INSERT INTO xyz VALUES ('foo', 2, 3, 4)
+----
+error (42601): INSERT has more expressions than target columns, 4 expressions for 3 targets
+
+# Return values from insert.
+build
+INSERT INTO abcde SELECT 1 RETURNING *
+----
+project
+ ├── columns: a:1!null b:2 c:3!null d:4 e:5!null
+ └── insert abcde
+      ├── columns: a:1!null b:2 c:3!null d:4 e:5!null rowid:6!null
+      ├── insert-mapping:
+      │    ├── "?column?":9 => a:1
+      │    ├── b_default:10 => b:2
+      │    ├── c_default:11 => c:3
+      │    ├── d_comp:13 => d:4
+      │    ├── "?column?":9 => e:5
+      │    └── rowid_default:12 => rowid:6
+      ├── return-mapping:
+      │    ├── "?column?":9 => a:1
+      │    ├── b_default:10 => b:2
+      │    ├── c_default:11 => c:3
+      │    ├── d_comp:13 => d:4
+      │    ├── "?column?":9 => e:5
+      │    └── rowid_default:12 => rowid:6
+      └── project
+           ├── columns: d_comp:13 "?column?":9!null b_default:10 c_default:11!null rowid_default:12
+           ├── project
+           │    ├── columns: b_default:10 c_default:11!null rowid_default:12 "?column?":9!null
+           │    ├── project
+           │    │    ├── columns: "?column?":9!null
+           │    │    ├── values
+           │    │    │    └── ()
+           │    │    └── projections
+           │    │         └── 1 [as="?column?":9]
+           │    └── projections
+           │         ├── NULL::INT8 [as=b_default:10]
+           │         ├── 10 [as=c_default:11]
+           │         └── unique_rowid() [as=rowid_default:12]
+           └── projections
+                └── (b_default:10 + c_default:11) + 1 [as=d_comp:13]
+
+# Return values from aliased table.
+build
+INSERT INTO abcde AS foo SELECT 1 RETURNING foo.a + 1, foo.b * foo.c
+----
+project
+ ├── columns: "?column?":14!null "?column?":15
+ ├── insert abcde [as=foo]
+ │    ├── columns: a:1!null b:2 c:3!null d:4 e:5!null rowid:6!null
+ │    ├── insert-mapping:
+ │    │    ├── "?column?":9 => a:1
+ │    │    ├── b_default:10 => b:2
+ │    │    ├── c_default:11 => c:3
+ │    │    ├── d_comp:13 => d:4
+ │    │    ├── "?column?":9 => e:5
+ │    │    └── rowid_default:12 => rowid:6
+ │    ├── return-mapping:
+ │    │    ├── "?column?":9 => a:1
+ │    │    ├── b_default:10 => b:2
+ │    │    ├── c_default:11 => c:3
+ │    │    ├── d_comp:13 => d:4
+ │    │    ├── "?column?":9 => e:5
+ │    │    └── rowid_default:12 => rowid:6
+ │    └── project
+ │         ├── columns: d_comp:13 "?column?":9!null b_default:10 c_default:11!null rowid_default:12
+ │         ├── project
+ │         │    ├── columns: b_default:10 c_default:11!null rowid_default:12 "?column?":9!null
+ │         │    ├── project
+ │         │    │    ├── columns: "?column?":9!null
+ │         │    │    ├── values
+ │         │    │    │    └── ()
+ │         │    │    └── projections
+ │         │    │         └── 1 [as="?column?":9]
+ │         │    └── projections
+ │         │         ├── NULL::INT8 [as=b_default:10]
+ │         │         ├── 10 [as=c_default:11]
+ │         │         └── unique_rowid() [as=rowid_default:12]
+ │         └── projections
+ │              └── (b_default:10 + c_default:11) + 1 [as=d_comp:13]
+ └── projections
+      ├── a:1 + 1 [as="?column?":14]
+      └── b:2 * c:3 [as="?column?":15]
+
+# Use returning INSERT as a FROM expression.
+build
+SELECT * FROM [INSERT INTO abcde VALUES (1) RETURNING *]
+----
+with &1
+ ├── columns: a:14!null b:15 c:16!null d:17 e:18!null
+ ├── project
+ │    ├── columns: abcde.a:1!null abcde.b:2 abcde.c:3!null abcde.d:4 abcde.e:5!null
+ │    └── insert abcde
+ │         ├── columns: abcde.a:1!null abcde.b:2 abcde.c:3!null abcde.d:4 abcde.e:5!null rowid:6!null
+ │         ├── insert-mapping:
+ │         │    ├── column1:9 => abcde.a:1
+ │         │    ├── b_default:10 => abcde.b:2
+ │         │    ├── c_default:11 => abcde.c:3
+ │         │    ├── d_comp:13 => abcde.d:4
+ │         │    ├── column1:9 => abcde.e:5
+ │         │    └── rowid_default:12 => rowid:6
+ │         ├── return-mapping:
+ │         │    ├── column1:9 => abcde.a:1
+ │         │    ├── b_default:10 => abcde.b:2
+ │         │    ├── c_default:11 => abcde.c:3
+ │         │    ├── d_comp:13 => abcde.d:4
+ │         │    ├── column1:9 => abcde.e:5
+ │         │    └── rowid_default:12 => rowid:6
+ │         └── project
+ │              ├── columns: d_comp:13 column1:9!null b_default:10 c_default:11!null rowid_default:12
+ │              ├── project
+ │              │    ├── columns: b_default:10 c_default:11!null rowid_default:12 column1:9!null
+ │              │    ├── values
+ │              │    │    ├── columns: column1:9!null
+ │              │    │    └── (1,)
+ │              │    └── projections
+ │              │         ├── NULL::INT8 [as=b_default:10]
+ │              │         ├── 10 [as=c_default:11]
+ │              │         └── unique_rowid() [as=rowid_default:12]
+ │              └── projections
+ │                   └── (b_default:10 + c_default:11) + 1 [as=d_comp:13]
+ └── with-scan &1
+      ├── columns: a:14!null b:15 c:16!null d:17 e:18!null
+      └── mapping:
+           ├──  abcde.a:1 => a:14
+           ├──  abcde.b:2 => b:15
+           ├──  abcde.c:3 => c:16
+           ├──  abcde.d:4 => d:17
+           └──  abcde.e:5 => e:18
+
+# Try to use aggregate function in RETURNING clause.
+build
+INSERT INTO abcde VALUES (1) RETURNING sum(a)
+----
+error (42803): sum(): aggregate functions are not allowed in RETURNING
+
+# Try to use SRF in RETURNING clause.
+build
+INSERT INTO abcde VALUES (1) RETURNING generate_series(1, 10)
+----
+error (0A000): generate_series(): set-returning functions are not allowed in RETURNING
+
+# Try to use non-returning INSERT as expression.
+build
+SELECT * FROM [INSERT INTO abcde VALUES (1)]
+----
+error (42703): statement source "INSERT INTO abcde VALUES (1)" does not return any columns
+
+# Use CTE with multiple variables.
+build
+WITH a AS (SELECT y, y+1 FROM xyz) INSERT INTO abcde SELECT * FROM a
+----
+with &1 (a)
+ ├── project
+ │    ├── columns: "?column?":6 xyz.y:2
+ │    ├── scan xyz
+ │    │    └── columns: x:1!null xyz.y:2 z:3 xyz.crdb_internal_mvcc_timestamp:4 xyz.tableoid:5
+ │    └── projections
+ │         └── xyz.y:2 + 1 [as="?column?":6]
+ └── insert abcde
+      ├── columns: <none>
+      ├── insert-mapping:
+      │    ├── y:15 => a:7
+      │    ├── "?column?":16 => b:8
+      │    ├── c_default:17 => c:9
+      │    ├── d_comp:19 => d:10
+      │    ├── y:15 => e:11
+      │    └── rowid_default:18 => rowid:12
+      └── project
+           ├── columns: d_comp:19 y:15 "?column?":16 c_default:17!null rowid_default:18
+           ├── project
+           │    ├── columns: c_default:17!null rowid_default:18 y:15 "?column?":16
+           │    ├── with-scan &1 (a)
+           │    │    ├── columns: y:15 "?column?":16
+           │    │    └── mapping:
+           │    │         ├──  xyz.y:2 => y:15
+           │    │         └──  "?column?":6 => "?column?":16
+           │    └── projections
+           │         ├── 10 [as=c_default:17]
+           │         └── unique_rowid() [as=rowid_default:18]
+           └── projections
+                └── ("?column?":16 + c_default:17) + 1 [as=d_comp:19]
+
+# Use CTE with multiple variables.
+build
+WITH a AS (SELECT y, y+1 FROM xyz), b AS (SELECT y+1, y FROM xyz)
+INSERT INTO abcde TABLE a UNION TABLE b
+----
+with &1 (a)
+ ├── project
+ │    ├── columns: "?column?":6 xyz.y:2
+ │    ├── scan xyz
+ │    │    └── columns: x:1!null xyz.y:2 z:3 xyz.crdb_internal_mvcc_timestamp:4 xyz.tableoid:5
+ │    └── projections
+ │         └── xyz.y:2 + 1 [as="?column?":6]
+ └── with &2 (b)
+      ├── project
+      │    ├── columns: "?column?":12 xyz.y:8
+      │    ├── scan xyz
+      │    │    └── columns: x:7!null xyz.y:8 z:9 xyz.crdb_internal_mvcc_timestamp:10 xyz.tableoid:11
+      │    └── projections
+      │         └── xyz.y:8 + 1 [as="?column?":12]
+      └── insert abcde
+           ├── columns: <none>
+           ├── insert-mapping:
+           │    ├── y:25 => a:13
+           │    ├── "?column?":26 => b:14
+           │    ├── c_default:27 => c:15
+           │    ├── d_comp:29 => d:16
+           │    ├── y:25 => e:17
+           │    └── rowid_default:28 => rowid:18
+           └── project
+                ├── columns: d_comp:29 y:25 "?column?":26 c_default:27!null rowid_default:28
+                ├── project
+                │    ├── columns: c_default:27!null rowid_default:28 y:25 "?column?":26
+                │    ├── union
+                │    │    ├── columns: y:25 "?column?":26
+                │    │    ├── left columns: y:21 "?column?":22
+                │    │    ├── right columns: "?column?":23 y:24
+                │    │    ├── with-scan &1 (a)
+                │    │    │    ├── columns: y:21 "?column?":22
+                │    │    │    └── mapping:
+                │    │    │         ├──  xyz.y:2 => y:21
+                │    │    │         └──  "?column?":6 => "?column?":22
+                │    │    └── with-scan &2 (b)
+                │    │         ├── columns: "?column?":23 y:24
+                │    │         └── mapping:
+                │    │              ├──  "?column?":12 => "?column?":23
+                │    │              └──  xyz.y:8 => y:24
+                │    └── projections
+                │         ├── 10 [as=c_default:27]
+                │         └── unique_rowid() [as=rowid_default:28]
+                └── projections
+                     └── ("?column?":26 + c_default:27) + 1 [as=d_comp:29]
+
+# Non-referenced CTE with mutation.
+build
+WITH cte AS (SELECT b FROM [INSERT INTO abcde VALUES (1) RETURNING *]) INSERT INTO abcde VALUES (1)
+----
+with &1
+ ├── project
+ │    ├── columns: abcde.a:1!null abcde.b:2 abcde.c:3!null abcde.d:4 abcde.e:5!null
+ │    └── insert abcde
+ │         ├── columns: abcde.a:1!null abcde.b:2 abcde.c:3!null abcde.d:4 abcde.e:5!null rowid:6!null
+ │         ├── insert-mapping:
+ │         │    ├── column1:9 => abcde.a:1
+ │         │    ├── b_default:10 => abcde.b:2
+ │         │    ├── c_default:11 => abcde.c:3
+ │         │    ├── d_comp:13 => abcde.d:4
+ │         │    ├── column1:9 => abcde.e:5
+ │         │    └── rowid_default:12 => rowid:6
+ │         ├── return-mapping:
+ │         │    ├── column1:9 => abcde.a:1
+ │         │    ├── b_default:10 => abcde.b:2
+ │         │    ├── c_default:11 => abcde.c:3
+ │         │    ├── d_comp:13 => abcde.d:4
+ │         │    ├── column1:9 => abcde.e:5
+ │         │    └── rowid_default:12 => rowid:6
+ │         └── project
+ │              ├── columns: d_comp:13 column1:9!null b_default:10 c_default:11!null rowid_default:12
+ │              ├── project
+ │              │    ├── columns: b_default:10 c_default:11!null rowid_default:12 column1:9!null
+ │              │    ├── values
+ │              │    │    ├── columns: column1:9!null
+ │              │    │    └── (1,)
+ │              │    └── projections
+ │              │         ├── NULL::INT8 [as=b_default:10]
+ │              │         ├── 10 [as=c_default:11]
+ │              │         └── unique_rowid() [as=rowid_default:12]
+ │              └── projections
+ │                   └── (b_default:10 + c_default:11) + 1 [as=d_comp:13]
+ └── with &2 (cte)
+      ├── project
+      │    ├── columns: b:15
+      │    └── with-scan &1
+      │         ├── columns: a:14!null b:15 c:16!null d:17 e:18!null
+      │         └── mapping:
+      │              ├──  abcde.a:1 => a:14
+      │              ├──  abcde.b:2 => b:15
+      │              ├──  abcde.c:3 => c:16
+      │              ├──  abcde.d:4 => d:17
+      │              └──  abcde.e:5 => e:18
+      └── insert abcde
+           ├── columns: <none>
+           ├── insert-mapping:
+           │    ├── column1:27 => abcde.a:19
+           │    ├── b_default:28 => abcde.b:20
+           │    ├── c_default:29 => abcde.c:21
+           │    ├── d_comp:31 => abcde.d:22
+           │    ├── column1:27 => abcde.e:23
+           │    └── rowid_default:30 => rowid:24
+           └── project
+                ├── columns: d_comp:31 column1:27!null b_default:28 c_default:29!null rowid_default:30
+                ├── project
+                │    ├── columns: b_default:28 c_default:29!null rowid_default:30 column1:27!null
+                │    ├── values
+                │    │    ├── columns: column1:27!null
+                │    │    └── (1,)
+                │    └── projections
+                │         ├── NULL::INT8 [as=b_default:28]
+                │         ├── 10 [as=c_default:29]
+                │         └── unique_rowid() [as=rowid_default:30]
+                └── projections
+                     └── (b_default:28 + c_default:29) + 1 [as=d_comp:31]
+
+# Insert CTE that returns no columns.
+build
+WITH cte AS (INSERT INTO abcde VALUES (1)) SELECT * FROM cte
+----
+error (0A000): WITH clause "cte" does not return any columns
+
+# Use SRF in RETURNING clause.
+build
+INSERT INTO abcde VALUES (1) RETURNING generate_series(1, 100)
+----
+error (0A000): generate_series(): set-returning functions are not allowed in RETURNING
+
+# ------------------------------------------------------------------------------
+# Tests with target column names.
+# ------------------------------------------------------------------------------
+
+# Specify values for all non-computed columns.
+build
+INSERT INTO abcde (c, b, a) VALUES (1, 2, 3)
+----
+insert abcde
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column3:11 => a:1
+ │    ├── column2:10 => b:2
+ │    ├── column1:9 => c:3
+ │    ├── d_comp:13 => d:4
+ │    ├── column3:11 => e:5
+ │    └── rowid_default:12 => rowid:6
+ └── project
+      ├── columns: d_comp:13!null column1:9!null column2:10!null column3:11!null rowid_default:12
+      ├── project
+      │    ├── columns: rowid_default:12 column1:9!null column2:10!null column3:11!null
+      │    ├── values
+      │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    │    └── (1, 2, 3)
+      │    └── projections
+      │         └── unique_rowid() [as=rowid_default:12]
+      └── projections
+           └── (column2:10 + column1:9) + 1 [as=d_comp:13]
+
+# Don't specify values for null or default columns.
+build
+INSERT INTO abcde (a) VALUES (1)
+----
+insert abcde
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:9 => a:1
+ │    ├── b_default:10 => b:2
+ │    ├── c_default:11 => c:3
+ │    ├── d_comp:13 => d:4
+ │    ├── column1:9 => e:5
+ │    └── rowid_default:12 => rowid:6
+ └── project
+      ├── columns: d_comp:13 column1:9!null b_default:10 c_default:11!null rowid_default:12
+      ├── project
+      │    ├── columns: b_default:10 c_default:11!null rowid_default:12 column1:9!null
+      │    ├── values
+      │    │    ├── columns: column1:9!null
+      │    │    └── (1,)
+      │    └── projections
+      │         ├── NULL::INT8 [as=b_default:10]
+      │         ├── 10 [as=c_default:11]
+      │         └── unique_rowid() [as=rowid_default:12]
+      └── projections
+           └── (b_default:10 + c_default:11) + 1 [as=d_comp:13]
+
+# Insert value into hidden rowid column.
+build
+INSERT INTO abcde (a, rowid) VALUES (1, 2) RETURNING *
+----
+project
+ ├── columns: a:1!null b:2 c:3!null d:4 e:5!null
+ └── insert abcde
+      ├── columns: a:1!null b:2 c:3!null d:4 e:5!null rowid:6!null
+      ├── insert-mapping:
+      │    ├── column1:9 => a:1
+      │    ├── b_default:11 => b:2
+      │    ├── c_default:12 => c:3
+      │    ├── d_comp:13 => d:4
+      │    ├── column1:9 => e:5
+      │    └── column2:10 => rowid:6
+      ├── return-mapping:
+      │    ├── column1:9 => a:1
+      │    ├── b_default:11 => b:2
+      │    ├── c_default:12 => c:3
+      │    ├── d_comp:13 => d:4
+      │    ├── column1:9 => e:5
+      │    └── column2:10 => rowid:6
+      └── project
+           ├── columns: d_comp:13 column1:9!null column2:10!null b_default:11 c_default:12!null
+           ├── project
+           │    ├── columns: b_default:11 c_default:12!null column1:9!null column2:10!null
+           │    ├── values
+           │    │    ├── columns: column1:9!null column2:10!null
+           │    │    └── (1, 2)
+           │    └── projections
+           │         ├── NULL::INT8 [as=b_default:11]
+           │         └── 10 [as=c_default:12]
+           └── projections
+                └── (b_default:11 + c_default:12) + 1 [as=d_comp:13]
+
+# Use DEFAULT expressions in VALUES expression.
+build
+INSERT INTO abcde (c, b, a, rowid)
+VALUES (DEFAULT, DEFAULT, 1, DEFAULT), (3, 2, 1, DEFAULT), (DEFAULT, DEFAULT, 2, 100)
+RETURNING *, rowid
+----
+insert abcde
+ ├── columns: a:1!null b:2 c:3!null d:4 e:5!null rowid:6!null
+ ├── insert-mapping:
+ │    ├── column3:11 => a:1
+ │    ├── column2:10 => b:2
+ │    ├── column1:9 => c:3
+ │    ├── d_comp:13 => d:4
+ │    ├── column3:11 => e:5
+ │    └── column4:12 => rowid:6
+ ├── return-mapping:
+ │    ├── column3:11 => a:1
+ │    ├── column2:10 => b:2
+ │    ├── column1:9 => c:3
+ │    ├── d_comp:13 => d:4
+ │    ├── column3:11 => e:5
+ │    └── column4:12 => rowid:6
+ └── project
+      ├── columns: d_comp:13 column1:9!null column2:10 column3:11!null column4:12
+      ├── values
+      │    ├── columns: column1:9!null column2:10 column3:11!null column4:12
+      │    ├── (10, NULL::INT8, 1, unique_rowid())
+      │    ├── (3, 2, 1, unique_rowid())
+      │    └── (10, NULL::INT8, 2, 100)
+      └── projections
+           └── (column2:10 + column1:9) + 1 [as=d_comp:13]
+
+# Verify that there is no compile-time error when trying to insert a NULL
+# DEFAULT value into a not-null column (it will fail at runtime).
+build
+INSERT INTO abcde (a) VALUES (DEFAULT)
+----
+insert abcde
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:9 => a:1
+ │    ├── b_default:10 => b:2
+ │    ├── c_default:11 => c:3
+ │    ├── d_comp:13 => d:4
+ │    ├── column1:9 => e:5
+ │    └── rowid_default:12 => rowid:6
+ └── project
+      ├── columns: d_comp:13 column1:9 b_default:10 c_default:11!null rowid_default:12
+      ├── project
+      │    ├── columns: b_default:10 c_default:11!null rowid_default:12 column1:9
+      │    ├── values
+      │    │    ├── columns: column1:9
+      │    │    └── (NULL::INT8,)
+      │    └── projections
+      │         ├── NULL::INT8 [as=b_default:10]
+      │         ├── 10 [as=c_default:11]
+      │         └── unique_rowid() [as=rowid_default:12]
+      └── projections
+           └── (b_default:10 + c_default:11) + 1 [as=d_comp:13]
+
+# Mismatched type.
+build
+INSERT INTO xyz (x) VALUES (10)
+----
+insert xyz
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── x_cast:7 => x:1
+ │    ├── y_default:8 => y:2
+ │    └── z_default:9 => z:3
+ └── project
+      ├── columns: y_default:8 z_default:9 x_cast:7!null
+      ├── project
+      │    ├── columns: x_cast:7!null
+      │    ├── values
+      │    │    ├── columns: column1:6!null
+      │    │    └── (10,)
+      │    └── projections
+      │         └── assignment-cast: STRING [as=x_cast:7]
+      │              └── column1:6
+      └── projections
+           ├── NULL::INT8 [as=y_default:8]
+           └── NULL::FLOAT8 [as=z_default:9]
+
+# Try to insert into computed column.
+build
+INSERT INTO abcde (a, b, c, d) VALUES (1, 2, 3, 4)
+----
+error (55000): cannot write directly to computed column "d"
+
+# Try to insert DEFAULT expression into computed column.
+build
+INSERT INTO abcde (a, d) VALUES (1, DEFAULT)
+----
+error (55000): cannot write directly to computed column "d"
+
+# Too many values.
+build
+INSERT INTO abcde (a, b) VALUES (1, 2, 3)
+----
+error (42601): INSERT has more expressions than target columns, 3 expressions for 2 targets
+
+# Too few values.
+build
+INSERT INTO abcde (a, b) VALUES (1)
+----
+error (42601): INSERT has more target columns than expressions, 1 expressions for 2 targets
+
+# Duplicate column name.
+build
+INSERT INTO abcde (a, b, a) VALUES (1, 2, 3)
+----
+error (42601): multiple assignments to the same column "a"
+
+# Undefined column name.
+build
+INSERT INTO abcde (a, unk) VALUES (1, 2)
+----
+error (42703): column "unk" does not exist
+
+# Return values from insert.
+build
+INSERT INTO abcde (b, a) SELECT x::int, y FROM xyz RETURNING *
+----
+project
+ ├── columns: a:1!null b:2!null c:3!null d:4!null e:5
+ └── insert abcde
+      ├── columns: a:1!null b:2!null c:3!null d:4!null e:5 rowid:6!null
+      ├── insert-mapping:
+      │    ├── y:10 => a:1
+      │    ├── x:14 => b:2
+      │    ├── c_default:15 => c:3
+      │    ├── d_comp:17 => d:4
+      │    ├── y:10 => e:5
+      │    └── rowid_default:16 => rowid:6
+      ├── return-mapping:
+      │    ├── y:10 => a:1
+      │    ├── x:14 => b:2
+      │    ├── c_default:15 => c:3
+      │    ├── d_comp:17 => d:4
+      │    ├── y:10 => e:5
+      │    └── rowid_default:16 => rowid:6
+      └── project
+           ├── columns: d_comp:17!null y:10 x:14!null c_default:15!null rowid_default:16
+           ├── project
+           │    ├── columns: c_default:15!null rowid_default:16 y:10 x:14!null
+           │    ├── project
+           │    │    ├── columns: x:14!null y:10
+           │    │    ├── scan xyz
+           │    │    │    └── columns: xyz.x:9!null y:10 z:11 xyz.crdb_internal_mvcc_timestamp:12 xyz.tableoid:13
+           │    │    └── projections
+           │    │         └── xyz.x:9::INT8 [as=x:14]
+           │    └── projections
+           │         ├── 10 [as=c_default:15]
+           │         └── unique_rowid() [as=rowid_default:16]
+           └── projections
+                └── (x:14 + c_default:15) + 1 [as=d_comp:17]
+
+# Return hidden column.
+build
+INSERT INTO abcde (rowid, a) VALUES (1, 2) RETURNING *, rowid
+----
+insert abcde
+ ├── columns: a:1!null b:2 c:3!null d:4 e:5!null rowid:6!null
+ ├── insert-mapping:
+ │    ├── column2:10 => a:1
+ │    ├── b_default:11 => b:2
+ │    ├── c_default:12 => c:3
+ │    ├── d_comp:13 => d:4
+ │    ├── column2:10 => e:5
+ │    └── column1:9 => rowid:6
+ ├── return-mapping:
+ │    ├── column2:10 => a:1
+ │    ├── b_default:11 => b:2
+ │    ├── c_default:12 => c:3
+ │    ├── d_comp:13 => d:4
+ │    ├── column2:10 => e:5
+ │    └── column1:9 => rowid:6
+ └── project
+      ├── columns: d_comp:13 column1:9!null column2:10!null b_default:11 c_default:12!null
+      ├── project
+      │    ├── columns: b_default:11 c_default:12!null column1:9!null column2:10!null
+      │    ├── values
+      │    │    ├── columns: column1:9!null column2:10!null
+      │    │    └── (1, 2)
+      │    └── projections
+      │         ├── NULL::INT8 [as=b_default:11]
+      │         └── 10 [as=c_default:12]
+      └── projections
+           └── (b_default:11 + c_default:12) + 1 [as=d_comp:13]
+
+# Use returning INSERT as a FROM expression.
+build
+SELECT * FROM [INSERT INTO abcde (a, b) SELECT y+1, y FROM xyz RETURNING *]
+----
+with &1
+ ├── columns: a:18!null b:19 c:20!null d:21 e:22
+ ├── project
+ │    ├── columns: abcde.a:1!null abcde.b:2 abcde.c:3!null abcde.d:4 abcde.e:5
+ │    └── insert abcde
+ │         ├── columns: abcde.a:1!null abcde.b:2 abcde.c:3!null abcde.d:4 abcde.e:5 rowid:6!null
+ │         ├── insert-mapping:
+ │         │    ├── "?column?":14 => abcde.a:1
+ │         │    ├── y:10 => abcde.b:2
+ │         │    ├── c_default:15 => abcde.c:3
+ │         │    ├── d_comp:17 => abcde.d:4
+ │         │    ├── "?column?":14 => abcde.e:5
+ │         │    └── rowid_default:16 => rowid:6
+ │         ├── return-mapping:
+ │         │    ├── "?column?":14 => abcde.a:1
+ │         │    ├── y:10 => abcde.b:2
+ │         │    ├── c_default:15 => abcde.c:3
+ │         │    ├── d_comp:17 => abcde.d:4
+ │         │    ├── "?column?":14 => abcde.e:5
+ │         │    └── rowid_default:16 => rowid:6
+ │         └── project
+ │              ├── columns: d_comp:17 y:10 "?column?":14 c_default:15!null rowid_default:16
+ │              ├── project
+ │              │    ├── columns: c_default:15!null rowid_default:16 y:10 "?column?":14
+ │              │    ├── project
+ │              │    │    ├── columns: "?column?":14 y:10
+ │              │    │    ├── scan xyz
+ │              │    │    │    └── columns: x:9!null y:10 z:11 xyz.crdb_internal_mvcc_timestamp:12 xyz.tableoid:13
+ │              │    │    └── projections
+ │              │    │         └── y:10 + 1 [as="?column?":14]
+ │              │    └── projections
+ │              │         ├── 10 [as=c_default:15]
+ │              │         └── unique_rowid() [as=rowid_default:16]
+ │              └── projections
+ │                   └── (y:10 + c_default:15) + 1 [as=d_comp:17]
+ └── with-scan &1
+      ├── columns: a:18!null b:19 c:20!null d:21 e:22
+      └── mapping:
+           ├──  abcde.a:1 => a:18
+           ├──  abcde.b:2 => b:19
+           ├──  abcde.c:3 => c:20
+           ├──  abcde.d:4 => d:21
+           └──  abcde.e:5 => e:22
+
+# ------------------------------------------------------------------------------
+# Propagate desired INSERT types.
+# ------------------------------------------------------------------------------
+
+# Propagate types to VALUES.
+build
+INSERT INTO xyz VALUES ($1, $2 + 1, $3 + 1)
+----
+insert xyz
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => x:1
+ │    ├── column2:7 => y:2
+ │    └── column3:8 => z:3
+ └── values
+      ├── columns: column1:6 column2:7 column3:8
+      └── ($1, $2 + 1, $3 + 1.0)
+
+# Propagate types to VALUES (named columns).
+build
+INSERT INTO xyz (z, y, x) VALUES ($1 + 1, $2 + 1, $3)
+----
+insert xyz
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column3:8 => x:1
+ │    ├── column2:7 => y:2
+ │    └── column1:6 => z:3
+ └── values
+      ├── columns: column1:6 column2:7 column3:8
+      └── ($1 + 1.0, $2 + 1, $3)
+
+# Propagate types to projection list.
+build
+INSERT INTO xyz ((SELECT $1, $2 + 1, $3 + 1))
+----
+insert xyz
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── "?column?":6 => x:1
+ │    ├── "?column?":7 => y:2
+ │    └── "?column?":8 => z:3
+ └── project
+      ├── columns: "?column?":6 "?column?":7 "?column?":8
+      ├── values
+      │    └── ()
+      └── projections
+           ├── $1 [as="?column?":6]
+           ├── $2 + 1 [as="?column?":7]
+           └── $3 + 1.0 [as="?column?":8]
+
+# Propagate types to projection list (named columns).
+build
+INSERT INTO xyz (x, y, z) SELECT $1, $2 + 1, $3 + 1
+----
+insert xyz
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── "?column?":6 => x:1
+ │    ├── "?column?":7 => y:2
+ │    └── "?column?":8 => z:3
+ └── project
+      ├── columns: "?column?":6 "?column?":7 "?column?":8
+      ├── values
+      │    └── ()
+      └── projections
+           ├── $1 [as="?column?":6]
+           ├── $2 + 1 [as="?column?":7]
+           └── $3 + 1.0 [as="?column?":8]
+
+# Propagate types to UNION.
+build
+INSERT INTO xyz (SELECT $1, $2 + 1, $3 + 1) UNION ALL (SELECT $1, $2 + 1, $3 + 1)
+----
+insert xyz
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── "?column?":12 => x:1
+ │    ├── "?column?":13 => y:2
+ │    └── "?column?":14 => z:3
+ └── union-all
+      ├── columns: "?column?":12 "?column?":13 "?column?":14
+      ├── left columns: "?column?":6 "?column?":7 "?column?":8
+      ├── right columns: "?column?":9 "?column?":10 "?column?":11
+      ├── project
+      │    ├── columns: "?column?":6 "?column?":7 "?column?":8
+      │    ├── values
+      │    │    └── ()
+      │    └── projections
+      │         ├── $1 [as="?column?":6]
+      │         ├── $2 + 1 [as="?column?":7]
+      │         └── $3 + 1.0 [as="?column?":8]
+      └── project
+           ├── columns: "?column?":9 "?column?":10 "?column?":11
+           ├── values
+           │    └── ()
+           └── projections
+                ├── $1 [as="?column?":9]
+                ├── $2 + 1 [as="?column?":10]
+                └── $3 + 1.0 [as="?column?":11]
+
+# Propagate types to UNION (named columns).
+build
+INSERT INTO xyz (x, z, y) SELECT $1, $2 + 1, $3 + 1 UNION ALL SELECT $1, $2 + 1, $3 + 1
+----
+insert xyz
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── "?column?":12 => x:1
+ │    ├── "?column?":14 => y:2
+ │    └── "?column?":13 => z:3
+ └── union-all
+      ├── columns: "?column?":12 "?column?":13 "?column?":14
+      ├── left columns: "?column?":6 "?column?":7 "?column?":8
+      ├── right columns: "?column?":9 "?column?":10 "?column?":11
+      ├── project
+      │    ├── columns: "?column?":6 "?column?":7 "?column?":8
+      │    ├── values
+      │    │    └── ()
+      │    └── projections
+      │         ├── $1 [as="?column?":6]
+      │         ├── $2 + 1.0 [as="?column?":7]
+      │         └── $3 + 1 [as="?column?":8]
+      └── project
+           ├── columns: "?column?":9 "?column?":10 "?column?":11
+           ├── values
+           │    └── ()
+           └── projections
+                ├── $1 [as="?column?":9]
+                ├── $2 + 1.0 [as="?column?":10]
+                └── $3 + 1 [as="?column?":11]
+
+# ------------------------------------------------------------------------------
+# Tests with mutation columns.
+# ------------------------------------------------------------------------------
+
+# Test mutation columns with default and computed values.
+build
+INSERT INTO mutation (m, n) VALUES (1, 2)
+----
+insert mutation
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:8 => m:1
+ │    ├── column2:9 => n:2
+ │    ├── o_default:10 => o:3
+ │    └── p_comp:11 => p:4
+ ├── check columns: check1:12
+ └── project
+      ├── columns: check1:12!null column1:8!null column2:9!null o_default:10!null p_comp:11!null
+      ├── project
+      │    ├── columns: p_comp:11!null column1:8!null column2:9!null o_default:10!null
+      │    ├── project
+      │    │    ├── columns: o_default:10!null column1:8!null column2:9!null
+      │    │    ├── values
+      │    │    │    ├── columns: column1:8!null column2:9!null
+      │    │    │    └── (1, 2)
+      │    │    └── projections
+      │    │         └── 10 [as=o_default:10]
+      │    └── projections
+      │         └── o_default:10 + column2:9 [as=p_comp:11]
+      └── projections
+           └── column1:8 > 0 [as=check1:12]
+
+# Use RETURNING clause and ensure that mutation columns aren't projected.
+build
+INSERT INTO mutation (m, n) VALUES (1, 2) RETURNING *
+----
+insert mutation
+ ├── columns: m:1!null n:2!null
+ ├── insert-mapping:
+ │    ├── column1:8 => m:1
+ │    ├── column2:9 => n:2
+ │    ├── o_default:10 => o:3
+ │    └── p_comp:11 => p:4
+ ├── return-mapping:
+ │    ├── column1:8 => m:1
+ │    └── column2:9 => n:2
+ ├── check columns: check1:12
+ └── project
+      ├── columns: check1:12!null column1:8!null column2:9!null o_default:10!null p_comp:11!null
+      ├── project
+      │    ├── columns: p_comp:11!null column1:8!null column2:9!null o_default:10!null
+      │    ├── project
+      │    │    ├── columns: o_default:10!null column1:8!null column2:9!null
+      │    │    ├── values
+      │    │    │    ├── columns: column1:8!null column2:9!null
+      │    │    │    └── (1, 2)
+      │    │    └── projections
+      │    │         └── 10 [as=o_default:10]
+      │    └── projections
+      │         └── o_default:10 + column2:9 [as=p_comp:11]
+      └── projections
+           └── column1:8 > 0 [as=check1:12]
+
+# Try to reference write-only mutation column in RETURNING clause.
+build
+INSERT INTO mutation (m, n) VALUES (1, 2) RETURNING o
+----
+error (42703): column "o" does not exist
+
+# Try to reference delete-only mutation column in RETURNING clause.
+build
+INSERT INTO mutation (m, n) VALUES (1, 2) RETURNING p
+----
+error (42703): column "p" does not exist
+
+# Try to insert into mutation column.
+build
+INSERT INTO mutation (m, n, p) VALUES (1, 2, 3)
+----
+error (42703): column "p" does not exist
+
+# ------------------------------------------------------------------------------
+# Test check constraints.
+# ------------------------------------------------------------------------------
+
+# Insert constants.
+build
+INSERT INTO checks (a, b, c) VALUES (1, 2, 3)
+----
+insert checks
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:7 => a:1
+ │    ├── column2:8 => b:2
+ │    ├── column3:9 => c:3
+ │    └── d_comp:10 => d:4
+ ├── check columns: check1:11 check2:12
+ └── project
+      ├── columns: check1:11!null check2:12!null column1:7!null column2:8!null column3:9!null d_comp:10!null
+      ├── project
+      │    ├── columns: d_comp:10!null column1:7!null column2:8!null column3:9!null
+      │    ├── values
+      │    │    ├── columns: column1:7!null column2:8!null column3:9!null
+      │    │    └── (1, 2, 3)
+      │    └── projections
+      │         └── column3:9 + 1 [as=d_comp:10]
+      └── projections
+           ├── column2:8 < d_comp:10 [as=check1:11]
+           └── column1:7 > 0 [as=check2:12]
+
+# Insert results of SELECT.
+build
+INSERT INTO checks SELECT a, b, c FROM abcde
+----
+insert checks
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── abcde.a:7 => checks.a:1
+ │    ├── abcde.b:8 => checks.b:2
+ │    ├── abcde.c:9 => checks.c:3
+ │    └── d_comp:15 => checks.d:4
+ ├── check columns: check1:16 check2:17
+ └── project
+      ├── columns: check1:16 check2:17!null abcde.a:7!null abcde.b:8 abcde.c:9 d_comp:15
+      ├── project
+      │    ├── columns: d_comp:15 abcde.a:7!null abcde.b:8 abcde.c:9
+      │    ├── project
+      │    │    ├── columns: abcde.a:7!null abcde.b:8 abcde.c:9
+      │    │    └── scan abcde
+      │    │         ├── columns: abcde.a:7!null abcde.b:8 abcde.c:9 abcde.d:10 e:11 rowid:12!null abcde.crdb_internal_mvcc_timestamp:13 abcde.tableoid:14
+      │    │         └── computed column expressions
+      │    │              ├── abcde.d:10
+      │    │              │    └── (abcde.b:8 + abcde.c:9) + 1
+      │    │              └── e:11
+      │    │                   └── abcde.a:7
+      │    └── projections
+      │         └── abcde.c:9 + 1 [as=d_comp:15]
+      └── projections
+           ├── abcde.b:8 < d_comp:15 [as=check1:16]
+           └── abcde.a:7 > 0 [as=check2:17]
+
+# ------------------------------------------------------------------------------
+# Test assignment casts.
+# ------------------------------------------------------------------------------
+
+build
+INSERT INTO decimals (a, b) VALUES (1.1, ARRAY[0.95, NULL, 15])
+----
+insert decimals
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── a_cast:9 => a:1
+ │    ├── b_cast:10 => b:2
+ │    ├── c_cast:12 => c:3
+ │    └── d_cast:14 => d:4
+ ├── check columns: check1:15 check2:16
+ └── project
+      ├── columns: check1:15 check2:16 a_cast:9!null b_cast:10 c_cast:12!null d_cast:14!null
+      ├── project
+      │    ├── columns: d_cast:14!null a_cast:9!null b_cast:10 c_cast:12!null
+      │    ├── project
+      │    │    ├── columns: d_comp:13!null a_cast:9!null b_cast:10 c_cast:12!null
+      │    │    ├── project
+      │    │    │    ├── columns: c_cast:12!null a_cast:9!null b_cast:10
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: c_default:11!null a_cast:9!null b_cast:10
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: a_cast:9!null b_cast:10
+      │    │    │    │    │    ├── values
+      │    │    │    │    │    │    ├── columns: column1:7!null column2:8
+      │    │    │    │    │    │    └── (1.1, ARRAY[0.95,NULL,15])
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         ├── assignment-cast: DECIMAL(10) [as=a_cast:9]
+      │    │    │    │    │         │    └── column1:7
+      │    │    │    │    │         └── assignment-cast: DECIMAL(5,1)[] [as=b_cast:10]
+      │    │    │    │    │              └── column2:8
+      │    │    │    │    └── projections
+      │    │    │    │         └── 1.23 [as=c_default:11]
+      │    │    │    └── projections
+      │    │    │         └── assignment-cast: DECIMAL(10,1) [as=c_cast:12]
+      │    │    │              └── c_default:11
+      │    │    └── projections
+      │    │         └── a_cast:9 + c_cast:12 [as=d_comp:13]
+      │    └── projections
+      │         └── assignment-cast: DECIMAL(10,1) [as=d_cast:14]
+      │              └── d_comp:13
+      └── projections
+           ├── round(a_cast:9) = a_cast:9 [as=check1:15]
+           └── b_cast:10[0] > 1 [as=check2:16]
+
+assign-placeholders-build query-args=(1.1, (ARRAY[0.95, NULL, 15]))
+INSERT INTO decimals (a, b) VALUES ($1, $2)
+----
+insert decimals
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── a_cast:9 => a:1
+ │    ├── b_cast:10 => b:2
+ │    ├── c_cast:12 => c:3
+ │    └── d_cast:14 => d:4
+ ├── check columns: check1:15 check2:16
+ └── project
+      ├── columns: check1:15 check2:16 a_cast:9!null b_cast:10!null c_cast:12!null d_cast:14!null
+      ├── project
+      │    ├── columns: d_cast:14!null a_cast:9!null b_cast:10!null c_cast:12!null
+      │    ├── project
+      │    │    ├── columns: d_comp:13!null a_cast:9!null b_cast:10!null c_cast:12!null
+      │    │    ├── project
+      │    │    │    ├── columns: c_cast:12!null a_cast:9!null b_cast:10!null
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: c_default:11!null a_cast:9!null b_cast:10!null
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: a_cast:9!null b_cast:10!null
+      │    │    │    │    │    ├── values
+      │    │    │    │    │    │    ├── columns: column1:7!null column2:8!null
+      │    │    │    │    │    │    └── (1.1, ARRAY[0.95,NULL,15])
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         ├── assignment-cast: DECIMAL(10) [as=a_cast:9]
+      │    │    │    │    │         │    └── column1:7
+      │    │    │    │    │         └── assignment-cast: DECIMAL(5,1)[] [as=b_cast:10]
+      │    │    │    │    │              └── column2:8
+      │    │    │    │    └── projections
+      │    │    │    │         └── 1.23 [as=c_default:11]
+      │    │    │    └── projections
+      │    │    │         └── assignment-cast: DECIMAL(10,1) [as=c_cast:12]
+      │    │    │              └── c_default:11
+      │    │    └── projections
+      │    │         └── a_cast:9 + c_cast:12 [as=d_comp:13]
+      │    └── projections
+      │         └── assignment-cast: DECIMAL(10,1) [as=d_cast:14]
+      │              └── d_comp:13
+      └── projections
+           ├── round(a_cast:9) = a_cast:9 [as=check1:15]
+           └── b_cast:10[0] > 1 [as=check2:16]
+
+build
+INSERT INTO assn_cast (c, qc, i, s) VALUES (' ', 'foo', '1', 2)
+----
+insert assn_cast
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── c_cast:12 => c:1
+ │    ├── qc_cast:13 => qc:2
+ │    ├── column3:10 => i:3
+ │    ├── s_cast:14 => s:4
+ │    └── rowid_default:15 => rowid:5
+ └── project
+      ├── columns: rowid_default:15 column3:10!null c_cast:12!null qc_cast:13!null s_cast:14!null
+      ├── project
+      │    ├── columns: c_cast:12!null qc_cast:13!null s_cast:14!null column3:10!null
+      │    ├── values
+      │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null
+      │    │    └── ('', 'foo', 1, 2)
+      │    └── projections
+      │         ├── assignment-cast: CHAR [as=c_cast:12]
+      │         │    └── column1:8
+      │         ├── assignment-cast: "char" [as=qc_cast:13]
+      │         │    └── column2:9
+      │         └── assignment-cast: STRING [as=s_cast:14]
+      │              └── column4:11
+      └── projections
+           └── unique_rowid() [as=rowid_default:15]
+
+assign-placeholders-build query-args=(' ', 'foo', '1')
+INSERT INTO assn_cast (c, qc, i) VALUES ($1, $2, $3)
+----
+insert assn_cast
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── c_cast:11 => c:1
+ │    ├── qc_cast:12 => qc:2
+ │    ├── column3:10 => i:3
+ │    ├── s_default:13 => s:4
+ │    └── rowid_default:14 => rowid:5
+ └── project
+      ├── columns: s_default:13 rowid_default:14 column3:10!null c_cast:11!null qc_cast:12!null
+      ├── project
+      │    ├── columns: c_cast:11!null qc_cast:12!null column3:10!null
+      │    ├── values
+      │    │    ├── columns: column1:8!null column2:9!null column3:10!null
+      │    │    └── ('', 'foo', 1)
+      │    └── projections
+      │         ├── assignment-cast: CHAR [as=c_cast:11]
+      │         │    └── column1:8
+      │         └── assignment-cast: "char" [as=qc_cast:12]
+      │              └── column2:9
+      └── projections
+           ├── NULL::STRING [as=s_default:13]
+           └── unique_rowid() [as=rowid_default:14]
+
+exec-ddl
+CREATE TABLE assn_cast_default (
+    k INT PRIMARY KEY,
+    i2 INT2 DEFAULT 10::INT,
+    i3 INT DEFAULT 1.0::FLOAT,
+    c1 CHAR DEFAULT 'foo',
+    c2 CHAR DEFAULT 'bar'::TEXT,
+    d1 DECIMAL(10, 0) DEFAULT 1.23,
+    d2 DECIMAL(10, 0) DEFAULT 4.56::DECIMAL(10, 2),
+    b BOOL DEFAULT 1.0::FLOAT,
+    s TEXT DEFAULT NULL
+)
+----
+
+build
+INSERT INTO assn_cast_default (k, b) VALUES (1, true)
+----
+insert assn_cast_default
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:12 => k:1
+ │    ├── i2_cast:21 => i2:2
+ │    ├── i3_cast:22 => i3:3
+ │    ├── c1_cast:23 => c1:4
+ │    ├── c2_cast:24 => c2:5
+ │    ├── d1_cast:25 => d1:6
+ │    ├── d2_cast:26 => d2:7
+ │    ├── column2:13 => b:8
+ │    └── s_default:20 => s:9
+ └── project
+      ├── columns: i2_cast:21!null i3_cast:22!null c1_cast:23!null c2_cast:24!null d1_cast:25!null d2_cast:26!null column1:12!null column2:13!null s_default:20
+      ├── project
+      │    ├── columns: i2_default:14!null i3_default:15!null c1_default:16!null c2_default:17!null d1_default:18!null d2_default:19!null s_default:20 column1:12!null column2:13!null
+      │    ├── values
+      │    │    ├── columns: column1:12!null column2:13!null
+      │    │    └── (1, true)
+      │    └── projections
+      │         ├── 10 [as=i2_default:14]
+      │         ├── 1.0 [as=i3_default:15]
+      │         ├── 'foo' [as=c1_default:16]
+      │         ├── 'bar' [as=c2_default:17]
+      │         ├── 1.23 [as=d1_default:18]
+      │         ├── 4.56::DECIMAL(10,2) [as=d2_default:19]
+      │         └── NULL::STRING [as=s_default:20]
+      └── projections
+           ├── assignment-cast: INT2 [as=i2_cast:21]
+           │    └── i2_default:14
+           ├── assignment-cast: INT8 [as=i3_cast:22]
+           │    └── i3_default:15
+           ├── assignment-cast: CHAR [as=c1_cast:23]
+           │    └── c1_default:16
+           ├── assignment-cast: CHAR [as=c2_cast:24]
+           │    └── c2_default:17
+           ├── assignment-cast: DECIMAL(10) [as=d1_cast:25]
+           │    └── d1_default:18
+           └── assignment-cast: DECIMAL(10) [as=d2_cast:26]
+                └── d2_default:19
+
+# This fails because the cast from FLOAT to BOOL is not a valid assignment cast.
+build
+INSERT INTO assn_cast_default (k) VALUES (1)
+----
+error (42804): value type float doesn't match type bool of column "b"
+
+exec-ddl
+CREATE TABLE assn_cast_comp (
+    k INT PRIMARY KEY,
+    i INT,
+    i_comp INT2 AS (i + 10) STORED,
+    t TEXT,
+    c_comp CHAR AS (t) STORED,
+    d DECIMAL(10, 0),
+    d_comp DECIMAL(10, 0) AS (d + 2.5) STORED
+)
+----
+
+build
+INSERT INTO assn_cast_comp (k, i, t, d) VALUES (1, 2, 'foo', 1.56)
+----
+insert assn_cast_comp
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:10 => k:1
+ │    ├── column2:11 => i:2
+ │    ├── i_comp_cast:17 => i_comp:3
+ │    ├── column3:12 => t:4
+ │    ├── c_comp_cast:18 => c_comp:5
+ │    ├── d_cast:14 => d:6
+ │    └── d_comp_cast:19 => d_comp:7
+ └── project
+      ├── columns: i_comp_cast:17!null c_comp_cast:18!null d_comp_cast:19!null column1:10!null column2:11!null column3:12!null d_cast:14!null
+      ├── project
+      │    ├── columns: i_comp_comp:15!null d_comp_comp:16!null column1:10!null column2:11!null column3:12!null d_cast:14!null
+      │    ├── project
+      │    │    ├── columns: d_cast:14!null column1:10!null column2:11!null column3:12!null
+      │    │    ├── values
+      │    │    │    ├── columns: column1:10!null column2:11!null column3:12!null column4:13!null
+      │    │    │    └── (1, 2, 'foo', 1.56)
+      │    │    └── projections
+      │    │         └── assignment-cast: DECIMAL(10) [as=d_cast:14]
+      │    │              └── column4:13
+      │    └── projections
+      │         ├── column2:11 + 10 [as=i_comp_comp:15]
+      │         └── d_cast:14 + 2.5 [as=d_comp_comp:16]
+      └── projections
+           ├── assignment-cast: INT2 [as=i_comp_cast:17]
+           │    └── i_comp_comp:15
+           ├── assignment-cast: CHAR [as=c_comp_cast:18]
+           │    └── column3:12
+           └── assignment-cast: DECIMAL(10) [as=d_comp_cast:19]
+                └── d_comp_comp:16
+
+# Regression test for #38293; the default values should be separate projections.
+exec-ddl
+CREATE TABLE defvals (
+    id SERIAL NOT NULL PRIMARY KEY,
+    arr1 STRING(100) ARRAY NOT NULL DEFAULT ARRAY[],
+    arr2 INT ARRAY NOT NULL DEFAULT ARRAY[]
+)
+----
+
+build
+INSERT INTO defvals(id) VALUES (1)
+----
+insert defvals
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => id:1
+ │    ├── arr1_default:7 => arr1:2
+ │    └── arr2_default:8 => arr2:3
+ └── project
+      ├── columns: arr1_default:7!null arr2_default:8!null column1:6!null
+      ├── values
+      │    ├── columns: column1:6!null
+      │    └── (1,)
+      └── projections
+           ├── ARRAY[] [as=arr1_default:7]
+           └── ARRAY[] [as=arr2_default:8]
+
+exec-ddl
+CREATE TABLE defvals2 (
+    id SERIAL NOT NULL PRIMARY KEY,
+    arr1 STRING(100) ARRAY NOT NULL DEFAULT ARRAY[NULL],
+    arr2 INT ARRAY NOT NULL DEFAULT ARRAY[NULL]
+)
+----
+
+build
+INSERT INTO defvals2(id) VALUES (1)
+----
+insert defvals2
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => id:1
+ │    ├── arr1_default:7 => arr1:2
+ │    └── arr2_default:8 => arr2:3
+ └── project
+      ├── columns: arr1_default:7 arr2_default:8 column1:6!null
+      ├── values
+      │    ├── columns: column1:6!null
+      │    └── (1,)
+      └── projections
+           ├── ARRAY[NULL] [as=arr1_default:7]
+           └── ARRAY[NULL] [as=arr2_default:8]
+
+# Regression test for #67100. Do not prune check columns for INSERTs even if the
+# expression does not reference any mutating columns.
+
+exec-ddl
+CREATE TABLE t67100 (
+  a INT,
+  CHECK (false),
+  CHECK (0 > 1),
+  CHECK (true AND 0 > 1)
+)
+----
+
+build
+INSERT INTO t67100 VALUES (1)
+----
+insert t67100
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:5 => a:1
+ │    └── rowid_default:6 => rowid:2
+ ├── check columns: check1:7 check2:8 check3:9
+ └── project
+      ├── columns: check1:7!null check2:8!null check3:9!null column1:5!null rowid_default:6
+      ├── project
+      │    ├── columns: rowid_default:6 column1:5!null
+      │    ├── values
+      │    │    ├── columns: column1:5!null
+      │    │    └── (1,)
+      │    └── projections
+      │         └── unique_rowid() [as=rowid_default:6]
+      └── projections
+           ├── false [as=check1:7]
+           ├── 0 > 1 [as=check2:8]
+           └── true AND (0 > 1) [as=check3:9]
+
+# ------------------------------------------------------------------------------
+# ON UPDATE tests.
+# ------------------------------------------------------------------------------
+
+build
+INSERT INTO on_update_bare VALUES (1, 2)
+----
+insert on_update_bare
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => a:1
+ │    ├── column2:7 => v:2
+ │    └── rowid_default:8 => rowid:3
+ └── project
+      ├── columns: rowid_default:8 column1:6!null column2:7!null
+      ├── values
+      │    ├── columns: column1:6!null column2:7!null
+      │    └── (1, 2)
+      └── projections
+           └── unique_rowid() [as=rowid_default:8]
+
+build
+INSERT INTO on_update_bare VALUES (1)
+----
+insert on_update_bare
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => a:1
+ │    ├── v_default:7 => v:2
+ │    └── rowid_default:8 => rowid:3
+ └── project
+      ├── columns: v_default:7 rowid_default:8 column1:6!null
+      ├── values
+      │    ├── columns: column1:6!null
+      │    └── (1,)
+      └── projections
+           ├── NULL::INT8 [as=v_default:7]
+           └── unique_rowid() [as=rowid_default:8]
+
+
+build
+INSERT INTO on_update_with_default VALUES (1, 2)
+----
+insert on_update_with_default
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => a:1
+ │    ├── column2:7 => v:2
+ │    └── rowid_default:8 => rowid:3
+ └── project
+      ├── columns: rowid_default:8 column1:6!null column2:7!null
+      ├── values
+      │    ├── columns: column1:6!null column2:7!null
+      │    └── (1, 2)
+      └── projections
+           └── unique_rowid() [as=rowid_default:8]
+
+
+build
+INSERT INTO on_update_with_default VALUES (1)
+----
+insert on_update_with_default
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => a:1
+ │    ├── v_default:7 => v:2
+ │    └── rowid_default:8 => rowid:3
+ └── project
+      ├── columns: v_default:7!null rowid_default:8 column1:6!null
+      ├── values
+      │    ├── columns: column1:6!null
+      │    └── (1,)
+      └── projections
+           ├── 3 [as=v_default:7]
+           └── unique_rowid() [as=rowid_default:8]
+
+# With GENERATED AS IDENTITY syntax
+exec-ddl
+CREATE TABLE generated_as_identity (
+  a INT UNIQUE,
+  b INT GENERATED ALWAYS AS IDENTITY,
+  c INT GENERATED BY DEFAULT AS IDENTITY
+)
+----
+
+build
+INSERT INTO generated_as_identity (a, b) VALUES (1, 10)
+----
+error (428C9): cannot insert into column "b"
+
+build
+INSERT INTO generated_as_identity (a, b) VALUES (1, 10) ON CONFLICT DO NOTHING
+----
+error (428C9): cannot insert into column "b"
+
+build
+INSERT INTO generated_as_identity (a, b) VALUES (1, 10)
+ON CONFLICT (b) DO UPDATE SET b = (1+1)
+----
+error (428C9): cannot insert into column "b"
+
+build
+INSERT INTO generated_as_identity (a, c) VALUES (1, 10)
+----
+insert generated_as_identity
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:7 => a:1
+ │    ├── b_default:9 => b:2
+ │    ├── column2:8 => c:3
+ │    └── rowid_default:10 => rowid:4
+ └── project
+      ├── columns: b_default:9 rowid_default:10 column1:7!null column2:8!null
+      ├── values
+      │    ├── columns: column1:7!null column2:8!null
+      │    └── (1, 10)
+      └── projections
+           ├── nextval('t.public.generated_as_identity_b_seq') [as=b_default:9]
+           └── unique_rowid() [as=rowid_default:10]
+
+build
+INSERT INTO generated_as_identity (a) VALUES (2)
+----
+insert generated_as_identity
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:7 => a:1
+ │    ├── b_default:8 => b:2
+ │    ├── c_default:9 => c:3
+ │    └── rowid_default:10 => rowid:4
+ └── project
+      ├── columns: b_default:8 c_default:9 rowid_default:10 column1:7!null
+      ├── values
+      │    ├── columns: column1:7!null
+      │    └── (2,)
+      └── projections
+           ├── nextval('t.public.generated_as_identity_b_seq') [as=b_default:8]
+           ├── nextval('t.public.generated_as_identity_c_seq') [as=c_default:9]
+           └── unique_rowid() [as=rowid_default:10]
+
+# With SERIAL syntax
+exec-ddl
+CREATE TABLE serial_t (
+  a SERIAL,
+  b INT
+)
+----
+
+build
+INSERT INTO serial_t (b) VALUES (2)
+----
+insert serial_t
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── a_default:7 => a:1
+ │    ├── column1:6 => b:2
+ │    └── rowid_default:8 => rowid:3
+ └── project
+      ├── columns: a_default:7 rowid_default:8 column1:6!null
+      ├── values
+      │    ├── columns: column1:6!null
+      │    └── (2,)
+      └── projections
+           ├── unique_rowid() [as=a_default:7]
+           └── unique_rowid() [as=rowid_default:8]

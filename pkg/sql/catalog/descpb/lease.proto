@@ -1,0 +1,38 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.sql.sqlbase;
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb";
+
+import "gogoproto/gogo.proto";
+
+// WaitStats is a message that tracks stats related to waiting for expired
+// descriptor leases to expire. Used in WaitForOneVersion and WaitForNoVersion.
+message WaitStats {
+  // Number of retry attempts made
+  int32 num_retries = 1;
+  // The number of expired descriptors that still exist in the last call. This
+  // will be set to zero when the wait is finished.
+  int32 last_count = 2;
+  // This is the number of distinct SQL instances that still have unexpired leases.
+  int32 num_sql_instances = 3;
+  // If we are waiting on at least one lease, this is one of the sql_instance_id
+  // values we are waiting on. If the count is 0, this value will be 0.
+  int32 sample_sql_instance_id = 4;
+  // The elapsed time, in milliseconds, spent waiting for the expired leased
+  // descriptors to leave.
+  int64 elapsed_time_in_ms = 5;
+  // UUID to identify these stats for a specific invocation of the wait. The
+  // stats can be included in the trace multiple times if it's a long retry.
+  bytes uuid = 6 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customtype) =
+      "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
+  // TargetCount the number of leases we expected to observe, which will be
+  // non-zero for wait for initial version.
+  int32 target_count  = 7;
+}

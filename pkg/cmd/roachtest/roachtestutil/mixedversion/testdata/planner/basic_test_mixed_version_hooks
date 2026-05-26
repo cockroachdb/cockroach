@@ -1,0 +1,65 @@
+# Test that we are able to create a basic mixedversion test, and that
+# the pretty printing functionality works as expected.
+
+in-mixed-version name=(mixed-version 1)
+----
+ok
+
+in-mixed-version name=(mixed-version 2)
+----
+ok
+
+workload name=bank
+----
+ok
+
+workload name=rand
+----
+ok
+
+background-command name=(csv server)
+----
+ok
+
+plan
+----
+Seed:               12345
+Upgrades:           v24.2.2 → v24.3.0 (<current>)
+Deployment mode:    system-only
+Hooks:              bank workload, csv server, initialize bank workload, initialize rand workload, mixed-version 1, mixed-version 2, rand workload
+Plan:
+├── start cluster at version "v24.2.2" (1)
+├── wait for all nodes (:1-4) to acknowledge cluster version '24.2' on system tenant (2)
+├── run startup hooks concurrently
+│   ├── run "initialize bank workload", after 0s delay (3)
+│   └── run "initialize rand workload", after 30s delay (4)
+├── start background hooks concurrently
+│   ├── run "bank workload", after 0s delay (5)
+│   ├── run "rand workload", after 0s delay (6)
+│   └── run "csv server", after 3m0s delay (7)
+└── upgrade cluster from "v24.2.2" to "v24.3.0 (<current>)"
+   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (8)
+   ├── upgrade nodes :1-4 from "v24.2.2" to "v24.3.0 (<current>)"
+   │   ├── restart node 4 with binary version v24.3.0 (<current>) (9)
+   │   ├── run "mixed-version 1" (10)
+   │   ├── restart node 3 with binary version v24.3.0 (<current>) (11)
+   │   ├── restart node 2 with binary version v24.3.0 (<current>) (12)
+   │   ├── run "mixed-version 2" (13)
+   │   └── restart node 1 with binary version v24.3.0 (<current>) (14)
+   ├── downgrade nodes :1-4 from "v24.3.0 (<current>)" to "v24.2.2"
+   │   ├── restart node 3 with binary version v24.2.2 (15)
+   │   ├── run "mixed-version 1" (16)
+   │   ├── restart node 2 with binary version v24.2.2 (17)
+   │   ├── restart node 4 with binary version v24.2.2 (18)
+   │   ├── run "mixed-version 2" (19)
+   │   └── restart node 1 with binary version v24.2.2 (20)
+   ├── upgrade nodes :1-4 from "v24.2.2" to "v24.3.0 (<current>)"
+   │   ├── restart node 1 with binary version v24.3.0 (<current>) (21)
+   │   ├── restart node 2 with binary version v24.3.0 (<current>) (22)
+   │   ├── restart node 4 with binary version v24.3.0 (<current>) (23)
+   │   ├── run "mixed-version 1" (24)
+   │   ├── restart node 3 with binary version v24.3.0 (<current>) (25)
+   │   └── run "mixed-version 2" (26)
+   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (27)
+   ├── run "mixed-version 2" (28)
+   └── wait for all nodes (:1-4) to acknowledge cluster version <current> on system tenant (29)

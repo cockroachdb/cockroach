@@ -1,0 +1,116 @@
+statement ok
+CREATE PROCEDURE a() LANGUAGE SQL AS $$
+  SELECT 1;
+$$
+
+statement ok
+CREATE PROCEDURE b() LANGUAGE SQL AS $$
+  CALL a();
+$$
+
+# Mutual recursion is not currently allowed.
+statement error pgcode 42P13 cannot add dependency from descriptor \d+ to function b \(\d+\) because there will be a dependency cycle
+CREATE OR REPLACE PROCEDURE a() LANGUAGE SQL AS $$
+  CALL b();
+$$
+
+statement error pgcode 2BP01 cannot drop function \"a\" because other objects \(\[test.public.b\]\) still depend on it
+DROP PROCEDURE a
+
+statement ok
+DROP PROCEDURE b;
+DROP PROCEDURE a;
+
+statement ok
+CREATE TYPE e AS ENUM ('foo', 'bar');
+
+statement ok
+CREATE PROCEDURE a() LANGUAGE SQL AS $$
+  SELECT 'foo'::e;
+$$
+
+statement ok
+CREATE PROCEDURE b() LANGUAGE SQL AS $$
+  CALL a();
+$$
+
+statement error pgcode 2BP01 cannot drop type \"e\" because other objects \(\[test.public.a\]\) still depend on it
+DROP TYPE e
+
+statement ok
+DROP PROCEDURE b;
+DROP PROCEDURE a;
+DROP TYPE e;
+
+statement ok
+CREATE TABLE ab (
+  a INT PRIMARY KEY,
+  b INT
+)
+
+statement ok
+CREATE PROCEDURE ins_ab(new_a INT, new_b INT) LANGUAGE SQL AS $$
+  INSERT INTO ab VALUES (new_a, new_b);
+$$
+
+statement ok
+CREATE PROCEDURE ins3() LANGUAGE SQL AS $$
+  CALL ins_ab(1, 10);
+  CALL ins_ab(2, 20);
+  CALL ins_ab(3, 30);
+$$
+
+statement ok
+CALL ins_ab(4, 40)
+
+statement ok
+CALL ins3()
+
+statement error pgcode 23505 duplicate key value violates unique constraint \"ab_pkey\"
+CALL ins3()
+
+query II rowsort
+SELECT * FROM ab
+----
+1  10
+2  20
+3  30
+4  40
+
+# TODO(#102771): Add dependency tracking that causes this to error.
+# statement error pgcode 2BP01 cannot drop table ab because other objects depend on it
+# DROP TABLE ab;
+
+statement error pgcode 2BP01 cannot drop function \"ins_ab\" because other objects \(\[test.public.ins3\]\) still depend on it
+DROP PROCEDURE ins_ab
+
+statement ok
+DROP PROCEDURE ins3;
+DROP PROCEDURE ins_ab;
+DROP TABLE ab;
+
+statement ok
+CREATE TABLE i (i INT);
+
+statement ok
+CREATE PROCEDURE insert1(n INT) LANGUAGE SQL AS $$
+  INSERT INTO i VALUES (n);
+$$
+
+statement ok
+CREATE PROCEDURE insert2(n INT) LANGUAGE SQL AS $$
+  CALL insert1(n);
+$$
+
+statement ok
+CALL insert2(11)
+
+query I
+SELECT * FROM i
+----
+11
+
+statement ok
+DROP PROCEDURE insert2;
+DROP PROCEDURE insert1;
+DROP TABLE i;

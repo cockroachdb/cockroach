@@ -1,0 +1,5 @@
+alter_onetable_stmt ::=
+	'ALTER' 'TABLE' table_name 'EXPERIMENTAL_AUDIT' 'SET' 'READ' 'WRITE'
+	| 'ALTER' 'TABLE' table_name 'EXPERIMENTAL_AUDIT' 'SET' 'OFF'
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'EXPERIMENTAL_AUDIT' 'SET' 'READ' 'WRITE'
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'EXPERIMENTAL_AUDIT' 'SET' 'OFF'

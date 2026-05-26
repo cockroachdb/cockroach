@@ -1,0 +1,186 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "status",
+    srcs = [
+        "disk_counters.go",
+        "disk_counters_darwin.go",
+        "health_check.go",
+        "recorder.go",
+        "runtime.go",
+        "runtime_generic.go",
+        "runtime_jemalloc.go",
+        "runtime_jemalloc_darwin.go",
+        "runtime_linux.go",
+        "runtime_log.go",
+    ],
+    # keep
+    cdeps = [
+        "//c-deps:libjemalloc",
+    ],
+    cgo = True,
+    # keep
+    clinkopts = select({
+        "@io_bazel_rules_go//go/platform:android": [
+            "-lrt -lm -lpthread -ldl",
+        ],
+        "@io_bazel_rules_go//go/platform:dragonfly": [
+            "-lm",
+        ],
+        "@io_bazel_rules_go//go/platform:freebsd": [
+            "-lm",
+        ],
+        "@io_bazel_rules_go//go/platform:linux": [
+            "-lrt -lm -lpthread -ldl",
+        ],
+        "//conditions:default": [],
+    }),
+    # keep
+    cppopts = [
+        "-DJEMALLOC_NO_DEMANGLE",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/status",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/build",
+        "//pkg/internal/metricscan",
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/kv/kvbase",
+        "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/liveness",
+        "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/multitenant",
+        "//pkg/obs/clustermetrics/cmmetrics",
+        "//pkg/roachpb",
+        "//pkg/rpc",
+        "//pkg/server/status/statuspb",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/sql/sem/catconstants",
+        "//pkg/ts/tspb",
+        "//pkg/ts/tsutil",
+        "//pkg/util/cgroups",
+        "//pkg/util/envutil",
+        "//pkg/util/gcassist",
+        "//pkg/util/goschedstats",
+        "//pkg/util/hlc",
+        "//pkg/util/humanizeutil",
+        "//pkg/util/log",
+        "//pkg/util/log/eventpb",
+        "//pkg/util/log/logmetrics",
+        "//pkg/util/log/severity",
+        "//pkg/util/metric",
+        "//pkg/util/metric/aggmetric",
+        "//pkg/util/syncutil",
+        "//pkg/util/system",
+        "@com_github_cockroachdb_crlib//crtime",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_dustin_go_humanize//:go-humanize",
+        "@com_github_elastic_gosigar//:gosigar",
+        "@com_github_prometheus_client_model//go",
+        "@com_github_prometheus_common//expfmt",
+        "@com_github_shirou_gopsutil_v3//cpu",
+        "@com_github_shirou_gopsutil_v3//net",
+    ] + select({
+        "@io_bazel_rules_go//go/platform:aix": [
+            "@com_github_shirou_gopsutil_v3//disk",
+        ],
+        "@io_bazel_rules_go//go/platform:android": [
+            "@com_github_shirou_gopsutil_v3//disk",
+        ],
+        "@io_bazel_rules_go//go/platform:darwin": [
+            "@com_github_lufia_iostat//:iostat",
+        ],
+        "@io_bazel_rules_go//go/platform:dragonfly": [
+            "@com_github_shirou_gopsutil_v3//disk",
+        ],
+        "@io_bazel_rules_go//go/platform:freebsd": [
+            "@com_github_shirou_gopsutil_v3//disk",
+        ],
+        "@io_bazel_rules_go//go/platform:illumos": [
+            "@com_github_shirou_gopsutil_v3//disk",
+        ],
+        "@io_bazel_rules_go//go/platform:ios": [
+            "@com_github_lufia_iostat//:iostat",
+        ],
+        "@io_bazel_rules_go//go/platform:js": [
+            "@com_github_shirou_gopsutil_v3//disk",
+        ],
+        "@io_bazel_rules_go//go/platform:linux": [
+            "@com_github_shirou_gopsutil_v3//disk",
+        ],
+        "@io_bazel_rules_go//go/platform:netbsd": [
+            "@com_github_shirou_gopsutil_v3//disk",
+        ],
+        "@io_bazel_rules_go//go/platform:openbsd": [
+            "@com_github_shirou_gopsutil_v3//disk",
+        ],
+        "@io_bazel_rules_go//go/platform:osx": [
+            "@com_github_shirou_gopsutil_v3//disk",
+        ],
+        "@io_bazel_rules_go//go/platform:plan9": [
+            "@com_github_shirou_gopsutil_v3//disk",
+        ],
+        "@io_bazel_rules_go//go/platform:qnx": [
+            "@com_github_shirou_gopsutil_v3//disk",
+        ],
+        "@io_bazel_rules_go//go/platform:solaris": [
+            "@com_github_shirou_gopsutil_v3//disk",
+        ],
+        "@io_bazel_rules_go//go/platform:windows": [
+            "@com_github_shirou_gopsutil_v3//disk",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+go_test(
+    name = "status_test",
+    size = "small",
+    srcs = [
+        "health_check_test.go",
+        "jemalloc_test.go",
+        "main_test.go",
+        "recorder_test.go",
+        "runtime_linux_test.go",
+        "runtime_stats_test.go",
+        "runtime_test.go",
+    ],
+    embed = [":status"],
+    deps = [
+        "//pkg/base",
+        "//pkg/build",
+        "//pkg/internal/metricscan",
+        "//pkg/multitenant",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/server/status/statuspb",
+        "//pkg/settings/cluster",
+        "//pkg/sql/sem/catconstants",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/ts/tspb",
+        "//pkg/ts/tsutil",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/log/eventpb",
+        "//pkg/util/metric",
+        "//pkg/util/metric/aggmetric",
+        "//pkg/util/syncutil",
+        "//pkg/util/system",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_kr_pretty//:pretty",
+        "@com_github_prometheus_client_model//go",
+        "@com_github_prometheus_common//expfmt",
+        "@com_github_shirou_gopsutil_v3//net",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

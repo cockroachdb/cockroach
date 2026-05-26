@@ -1,0 +1,308 @@
+name: Claude Code PR Review
+
+on:
+  pull_request_target:
+    types: [synchronize, ready_for_review, reopened, labeled]
+
+jobs:
+  claude-code-pr-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # Skip release branches, opted-out PRs, merged/draft PRs, and unrelated label events.
+    # Author verification (org membership) is handled by the "Verify author" step below
+    # using usermapper, because GitHub webhook payloads can misreport author_association
+    # (e.g. CONTRIBUTOR instead of MEMBER) for some org members working from forks.
+    if: |
+      !startsWith(github.base_ref, 'release-') &&
+      !contains(github.event.pull_request.labels.*.name, 'O-No-AI-Review') &&
+      !github.event.pull_request.merged &&
+      !github.event.pull_request.draft &&
+      (
+        github.event.action != 'labeled' ||
+        github.event.label.name == 'O-AI-Review'
+      )
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          fetch-depth: 1
+
+      - name: Authenticate to Google Cloud
+        uses: 'google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093' # v3
+        with:
+          project_id: 'vertex-model-runners'
+          service_account: 'ai-review@dev-inf-prod.iam.gserviceaccount.com'
+          workload_identity_provider: 'projects/72497726731/locations/global/workloadIdentityPools/ai-review/providers/ai-review'
+
+      - name: Get usermapper token
+        id: usermapper_auth
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: 'dev-inf-prod'
+          service_account: 'ai-review@dev-inf-prod.iam.gserviceaccount.com'
+          workload_identity_provider: 'projects/72497726731/locations/global/workloadIdentityPools/ai-review/providers/ai-review'
+          token_format: 'id_token'
+          id_token_audience: 'https://us-east4-dev-inf-prod.cloudfunctions.net/usermapper-api'
+
+      - name: Verify author
+        id: verify_author
+        run: |
+          # Check if the PR has the O-AI-Review label (allows external contributors).
+          LABELS='${{ toJSON(github.event.pull_request.labels.*.name) }}'
+          if echo "$LABELS" | jq -e 'index("O-AI-Review")' > /dev/null 2>&1; then
+            echo "authorized=true" >> "$GITHUB_OUTPUT"
+            echo "Author authorized via O-AI-Review label"
+            exit 0
+          fi
+
+          # Verify org membership via usermapper. GitHub webhook payloads can
+          # misreport author_association for org members working from forks.
+          AUTHOR="${{ github.event.pull_request.user.login }}"
+          RESP=$(curl -sf -H "Authorization: bearer ${{ steps.usermapper_auth.outputs.id_token }}" \
+            "https://us-east4-dev-inf-prod.cloudfunctions.net/usermapper-api?v2_github=${AUTHOR}" || true)
+          if [ -n "$RESP" ] && echo "$RESP" | jq -e '.activeOrgs | index("cockroachdb")' > /dev/null 2>&1; then
+            echo "authorized=true" >> "$GITHUB_OUTPUT"
+            echo "Author '${AUTHOR}' verified as cockroachdb org member via usermapper"
+          else
+            echo "authorized=false" >> "$GITHUB_OUTPUT"
+            echo "Author '${AUTHOR}' is not a cockroachdb org member"
+          fi
+
+      - name: Stage 1 - Initial Bug Screening
+        id: stage1
+        if: steps.verify_author.outputs.authorized == 'true'
+        uses: cockroachdb/claude-code-action@v1
+        env:
+          ANTHROPIC_VERTEX_PROJECT_ID: vertex-model-runners
+          CLOUD_ML_REGION: global
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # External contributor PRs are gated by the O-AI-Review label at the job level,
+          # so it's safe to allow non-write users through the action's permission check.
+          allowed_non_write_users: "*"
+          use_vertex: "true"
+          claude_args: |
+            --model claude-opus-4-6
+            --allowedTools "Read,Grep,Glob,Bash(gh pr diff:*),Bash(gh pr view:*)"
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            Examine each line of code in this PR for potential bugs that could negatively impact
+            CockroachDB users. Focus on:
+            - Basic logic errors
+            - Obvious security vulnerabilities
+            - Clear error handling problems
+            - Type safety issues
+
+            When performing your analysis, be conservative but thorough. You should think:
+            "would I be willing to go to jail if my analysis is incorrect?"
+
+            **CRITICAL**: You must respond with EXACTLY one of these formats:
+            1. 'POTENTIAL_BUG_DETECTED - [brief description]' if you find a definite bug
+            2. 'NO_BUG_FOUND' if no obvious bugs are found
+
+            If you detect bugs, clearly explain what you found and why it's problematic.
+
+            **OUTPUT REQUIREMENT**: End your response with a single line containing only:
+            - `STAGE1_RESULT - POTENTIAL_BUG_DETECTED` or
+            - `STAGE1_RESULT - NO_BUG_FOUND`
+
+      - name: Extract Stage 1 Result
+        id: stage1_result
+        if: steps.stage1.conclusion == 'success'
+        run: |
+          RESULT=$(jq -r '.[] | select(.type == "result") | .result' "${{ steps.stage1.outputs.execution_file }}")
+          {
+            echo 'result<<EOF'
+            echo "$RESULT"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+          echo "Stage 1 result extracted (${#RESULT} characters)"
+
+      - name: Stage 2 - Database Expert Review
+        id: stage2
+        if: contains(steps.stage1_result.outputs.result, 'STAGE1_RESULT - POTENTIAL_BUG_DETECTED')
+        uses: cockroachdb/claude-code-action@v1
+        env:
+          ANTHROPIC_VERTEX_PROJECT_ID: vertex-model-runners
+          CLOUD_ML_REGION: global
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          allowed_non_write_users: "*"
+          use_vertex: "true"
+          claude_args: |
+            --model claude-opus-4-6
+            --allowedTools "Read,Grep,Glob,Bash(gh pr diff:*),Bash(gh pr view:*)"
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            You are a database systems expert providing a second opinion. Stage 1 analysis
+            found potential issues. Your job is to confirm or reject those findings.
+
+            **Stage 1 Results**:
+            ${{ steps.stage1_result.outputs.result }}
+
+            Review the Stage 1 findings and perform your own analysis. Do not identify
+            new bugs unless they're glaringly obvious.
+
+            Be very thorough and conservative. Ask yourself: "would I risk losing my job
+            over falsely identifying a bug?" If there's doubt, err on the side of
+            NO_BUG_DETECTED.
+
+            **CRITICAL**: You must respond with EXACTLY one of these formats:
+            1. 'POTENTIAL_BUG_DETECTED - [detailed description of confirmed bugs]'
+            2. 'NO_BUG_FOUND' if bugs are not confirmed
+
+            **OUTPUT REQUIREMENT**: End your response with a single line containing only:
+            - `STAGE2_RESULT - POTENTIAL_BUG_DETECTED [detailed description of confirmed bugs]` or
+            - `STAGE2_RESULT - NO_BUG_FOUND`
+
+      - name: Extract Stage 2 Result
+        id: stage2_result
+        if: steps.stage2.conclusion == 'success'
+        run: |
+          RESULT=$(jq -r '.[] | select(.type == "result") | .result' "${{ steps.stage2.outputs.execution_file }}")
+          {
+            echo 'result<<EOF'
+            echo "$RESULT"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+          echo "Stage 2 result extracted (${#RESULT} characters)"
+
+      - name: Stage 3 - Principal Engineer Final Review
+        id: stage3
+        if: contains(steps.stage2_result.outputs.result, 'STAGE2_RESULT - POTENTIAL_BUG_DETECTED')
+        uses: cockroachdb/claude-code-action@v1
+        env:
+          ANTHROPIC_VERTEX_PROJECT_ID: vertex-model-runners
+          CLOUD_ML_REGION: global
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          allowed_non_write_users: "*"
+          use_vertex: "true"
+          claude_args: |
+            --model claude-opus-4-6
+            --allowedTools "Read,Grep,Glob,Bash(gh pr diff:*),Bash(gh pr view:*)"
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            You are a principal engineer performing the final, most critical analysis.
+            Two previous stages have found potential issues that need final validation.
+
+            **Stage 1 Results**:
+            ${{ steps.stage1_result.outputs.result }}
+
+            **Stage 2 Results**:
+            ${{ steps.stage2_result.outputs.result }}
+
+            This is the final gate before flagging this PR as having critical bugs.
+            Only confirm bugs that could cause:
+            - Data loss or corruption
+            - Incorrect errors, traps or panics
+            - Security breaches
+            - Cluster instability
+            - Production outages
+
+            Be extremely conservative - only flag truly critical issues. If you're wrong,
+            it could mean serious consequences for the project.
+
+            Use conservative language and minimize superlatives. Assume the reader has
+            a heart condition - just articulate facts without emotion.
+
+            **CRITICAL**: You must respond with EXACTLY one of these formats:
+            1. 'BUG_DETECTED: [description, line numbers and suggested fix]'
+            2. 'NO_BUG_DETECTED' if issues are not critical enough
+
+            For each issue found, provide:
+            1. The specific file and line(s) where the issue occurs
+            2. A clear description of what is wrong
+            3. A suggested fix
+
+            **OUTPUT REQUIREMENT**: End your response with a single line containing only:
+            - `STAGE3_RESULT - POTENTIAL_BUG_CONFIRMED` or
+            - `STAGE3_RESULT - NO_BUG_FOUND`
+
+      - name: Extract Stage 3 Result
+        id: stage3_result
+        if: steps.stage3.conclusion == 'success'
+        run: |
+          RESULT=$(jq -r '.[] | select(.type == "result") | .result' "${{ steps.stage3.outputs.execution_file }}")
+          {
+            echo 'result<<EOF'
+            echo "$RESULT"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+          echo "Stage 3 result extracted (${#RESULT} characters)"
+
+      - name: Final Analysis Report
+        if: always() && steps.verify_author.outputs.authorized == 'true'
+        uses: cockroachdb/claude-code-action@v1
+        env:
+          ANTHROPIC_VERTEX_PROJECT_ID: vertex-model-runners
+          CLOUD_ML_REGION: global
+          PR_NUM: ${{ github.event.pull_request.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          allowed_non_write_users: "*"
+          use_vertex: "true"
+          claude_args: |
+            --model claude-opus-4-6
+            --allowedTools "Read,Grep,Glob,Bash(gh pr diff:*),Bash(gh pr view:*),mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr edit:*)"
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+            RUN URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            ## Three-Stage Analysis Summary
+
+            Generate a final summary report based on the completed analysis stages:
+
+            **Stage 1 Result**: ${{ steps.stage1_result.outputs.result || 'Not completed' }}
+            **Stage 2 Result**: ${{ steps.stage2_result.outputs.result || 'Skipped - Stage 1 found no bugs' }}
+            **Stage 3 Result**: ${{ steps.stage3_result.outputs.result || 'Skipped - Stage 2 did not confirm bugs' }}
+
+            **Analysis Process**:
+            - Stage 1 (Initial Screening): ${{ steps.stage1.conclusion }}
+            - Stage 2 (Database Expert): ${{ steps.stage2.conclusion || 'Skipped' }}
+            - Stage 3 (Principal Engineer): ${{ steps.stage3.conclusion || 'Skipped' }}
+
+            Provide a clear, concise summary of:
+            1. How many stages were executed
+            2. The final determination (critical bug found or no critical bugs)
+            3. If bugs were found, what actions are recommended
+
+            ## Actions
+
+            ### If Stage 3 confirmed bugs (STAGE3_RESULT - POTENTIAL_BUG_CONFIRMED):
+
+            1. For each specific bug identified in the Stage 3 results, use
+               mcp__github_inline_comment__create_inline_comment to post a concise inline
+               comment on the exact file and line where the issue occurs. Each comment should
+               state the issue and suggest a fix in 2-3 sentences.
+
+            2. Post a summary PR comment using:
+               gh pr comment $PR_NUM --body "<body>"
+
+               The summary body should contain:
+               - A heading: "## AI Review: Potential Issue(s) Detected"
+               - A note that inline comments have been added to the relevant lines
+               - A link: [View full analysis]($RUN_URL)
+               - Feedback instructions:
+                 "If helpful: add `O-AI-Review-Real-Issue-Found` label.
+                  If not helpful: add `O-AI-Review-Not-Helpful` label."
+
+            3. Add a label to the PR:
+               gh pr edit $PR_NUM --add-label "o-AI-Review-Potential-Issue-Detected"
+
+            ### If no bugs were confirmed:
+
+            Provide a brief textual summary only. Do NOT post any PR comments or labels.

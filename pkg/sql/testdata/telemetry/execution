@@ -1,0 +1,32 @@
+# This file contains telemetry tests for sql.exec.* counters.
+
+# Tests for vectorization counters.
+feature-list
+sql.exec.vectorized-setting.on
+sql.exec.vectorized-setting.off
+----
+
+feature-usage
+SET CLUSTER SETTING sql.defaults.vectorize='on'
+----
+sql.exec.vectorized-setting.on
+
+feature-usage
+SET CLUSTER SETTING sql.defaults.vectorize='off'
+----
+sql.exec.vectorized-setting.off
+
+# Test for the hash aggregation disk spilling counter. Note that it is
+# incremented only when changing the setting to `false`.
+feature-list
+sql.exec.hash-agg-spilling-disabled
+----
+
+feature-counters
+SET CLUSTER SETTING sql.distsql.temp_storage.hash_agg.enabled=false
+----
+sql.exec.hash-agg-spilling-disabled  1
+
+feature-counters
+SET CLUSTER SETTING sql.distsql.temp_storage.hash_agg.enabled=true
+----

@@ -1,0 +1,19 @@
+drop_func_stmt ::=
+	'DROP' 'FUNCTION' func_name '(' func_params_list ')' ( ( ',' ( func_name ( '(' func_params_list ')' | '(' ')' ) | func_name ) ) )* 'CASCADE'
+	| 'DROP' 'FUNCTION' func_name '(' func_params_list ')' ( ( ',' ( func_name ( '(' func_params_list ')' | '(' ')' ) | func_name ) ) )* 'RESTRICT'
+	| 'DROP' 'FUNCTION' func_name '(' func_params_list ')' ( ( ',' ( func_name ( '(' func_params_list ')' | '(' ')' ) | func_name ) ) )* 
+	| 'DROP' 'FUNCTION' func_name '(' ')' ( ( ',' ( func_name ( '(' func_params_list ')' | '(' ')' ) | func_name ) ) )* 'CASCADE'
+	| 'DROP' 'FUNCTION' func_name '(' ')' ( ( ',' ( func_name ( '(' func_params_list ')' | '(' ')' ) | func_name ) ) )* 'RESTRICT'
+	| 'DROP' 'FUNCTION' func_name '(' ')' ( ( ',' ( func_name ( '(' func_params_list ')' | '(' ')' ) | func_name ) ) )* 
+	| 'DROP' 'FUNCTION' func_name ( ( ',' ( func_name ( '(' func_params_list ')' | '(' ')' ) | func_name ) ) )* 'CASCADE'
+	| 'DROP' 'FUNCTION' func_name ( ( ',' ( func_name ( '(' func_params_list ')' | '(' ')' ) | func_name ) ) )* 'RESTRICT'
+	| 'DROP' 'FUNCTION' func_name ( ( ',' ( func_name ( '(' func_params_list ')' | '(' ')' ) | func_name ) ) )* 
+	| 'DROP' 'FUNCTION' 'IF' 'EXISTS' func_name '(' func_params_list ')' ( ( ',' ( func_name ( '(' func_params_list ')' | '(' ')' ) | func_name ) ) )* 'CASCADE'
+	| 'DROP' 'FUNCTION' 'IF' 'EXISTS' func_name '(' func_params_list ')' ( ( ',' ( func_name ( '(' func_params_list ')' | '(' ')' ) | func_name ) ) )* 'RESTRICT'
+	| 'DROP' 'FUNCTION' 'IF' 'EXISTS' func_name '(' func_params_list ')' ( ( ',' ( func_name ( '(' func_params_list ')' | '(' ')' ) | func_name ) ) )* 
+	| 'DROP' 'FUNCTION' 'IF' 'EXISTS' func_name '(' ')' ( ( ',' ( func_name ( '(' func_params_list ')' | '(' ')' ) | func_name ) ) )* 'CASCADE'
+	| 'DROP' 'FUNCTION' 'IF' 'EXISTS' func_name '(' ')' ( ( ',' ( func_name ( '(' func_params_list ')' | '(' ')' ) | func_name ) ) )* 'RESTRICT'
+	| 'DROP' 'FUNCTION' 'IF' 'EXISTS' func_name '(' ')' ( ( ',' ( func_name ( '(' func_params_list ')' | '(' ')' ) | func_name ) ) )* 
+	| 'DROP' 'FUNCTION' 'IF' 'EXISTS' func_name ( ( ',' ( func_name ( '(' func_params_list ')' | '(' ')' ) | func_name ) ) )* 'CASCADE'
+	| 'DROP' 'FUNCTION' 'IF' 'EXISTS' func_name ( ( ',' ( func_name ( '(' func_params_list ')' | '(' ')' ) | func_name ) ) )* 'RESTRICT'
+	| 'DROP' 'FUNCTION' 'IF' 'EXISTS' func_name ( ( ',' ( func_name ( '(' func_params_list ')' | '(' ')' ) | func_name ) ) )* 

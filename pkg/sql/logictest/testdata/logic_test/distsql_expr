@@ -1,0 +1,12 @@
+statement ok
+CREATE TABLE t (c int PRIMARY KEY)
+
+statement ok
+INSERT INTO t VALUES (1), (2), (3)
+
+# Verify we serialize the negative constant correctly (see #15617).
+query I rowsort
+SELECT c FROM t WHERE (c, c) > (2, -9223372036854775808)
+----
+2
+3

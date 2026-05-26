@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "dd",
+    srcs = ["dd.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/dd",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_cockroachdb_datadriven//:datadriven"],
+)

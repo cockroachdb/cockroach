@@ -1,0 +1,71 @@
+# Tests that the user can issue a cutover command while the stream ingestion job is paused, and that
+# the stream ingestion job eagerly completes on resumption.
+
+create-replication-clusters
+----
+
+start-replication-stream
+----
+
+let $start as=source-system
+SELECT clock_timestamp()::timestamp::string
+----
+
+exec-sql as=source-tenant
+CREATE TABLE d.x (id INT PRIMARY KEY, n INT);
+----
+
+exec-sql as=source-tenant
+EXPORT INTO CSV 'userfile:///dx' FROM SELECT 42, 42 UNION ALL SELECT 43, 43;
+----
+
+exec-sql as=source-tenant
+IMPORT INTO d.x CSV DATA ('userfile:///dx/export*-n*.0.csv');
+----
+
+let $afterImport as=source-system
+SELECT clock_timestamp()::timestamp::string
+----
+
+wait-until-replicated-time ts=$afterImport
+----
+
+job as=destination-system pause
+----
+
+job as=destination-system wait-for-state=paused
+----
+
+# Ensure the consumer job can complete even if the producer job is paused. This works because on
+# consumer job resumption, we take the cutover fast path: no stream ingestion dist sql processors
+# get set up, which would require an unpaused producer job.
+job as=source-system pause
+----
+
+job as=source-system wait-for-state=paused
+----
+
+# the cutover command automatically resumes the ingestion job.
+cutover ts=$afterImport async
+----
+
+job as=destination-system wait-for-state=succeeded
+----
+
+start-replicated-tenant
+----
+
+compare-tenant-fingerprints from=$start to=$afterImport with_revisions
+----
+
+compare-replication-results
+SELECT * FROM d.t1;
+----
+
+compare-replication-results
+SELECT * FROM d.t2;
+----
+
+compare-replication-results
+SELECT * FROM d.x;
+----

@@ -1,0 +1,185 @@
+# disabled to run within tenant because multiregion primitives are not supported within tenant
+subtest mrbackup
+new-cluster name=s1 allow-implicit-access disable-tenant localities=us-east-1,us-west-1,eu-central-1
+----
+
+exec-sql
+CREATE DATABASE d PRIMARY REGION "us-east-1" REGIONS "us-west-1", "eu-central-1";
+CREATE TABLE d.t (x INT);
+INSERT INTO d.t VALUES (1), (2), (3);
+----
+
+query-sql
+SELECT region FROM [SHOW REGIONS FROM DATABASE d] ORDER BY 1;
+----
+eu-central-1
+us-east-1
+us-west-1
+
+query-sql
+SHOW DATABASES;
+----
+d root us-east-1  {eu-central-1,us-east-1,us-west-1} zone
+data root <nil> <nil> {} <nil>
+defaultdb root <nil> <nil> {} <nil>
+postgres root <nil> <nil> {} <nil>
+system node <nil> <nil> {} <nil>
+
+# backup a MR database, table, and cluster
+exec-sql
+BACKUP DATABASE d INTO 'nodelocal://1/database_backup/';
+----
+
+exec-sql
+BACKUP TABLE d.t INTO 'nodelocal://1/table_backup/';
+----
+
+exec-sql
+BACKUP INTO 'nodelocal://1/cluster_backup/';
+----
+
+subtest end
+
+# create a regionless cluster
+new-cluster name=s2 share-io-dir=s1 allow-implicit-access
+----
+
+# test cluster restore with remove_regions
+subtest restore_regionless_on_regionless_cluster
+
+query-sql
+SHOW DATABASES;
+----
+defaultdb root <nil> <nil> {} <nil>
+postgres root <nil> <nil> {} <nil>
+system node <nil> <nil> {} <nil>
+
+exec-sql
+RESTORE FROM LATEST IN 'nodelocal://1/cluster_backup/' WITH remove_regions;
+----
+
+# check cluster's regions
+query-sql
+SHOW REGIONS FROM CLUSTER;
+----
+test {}
+
+query-sql
+SHOW DATABASES;
+----
+d root <nil> <nil> {} <nil>
+data root <nil> <nil> {} <nil>
+defaultdb root <nil> <nil> {} <nil>
+postgres root <nil> <nil> {} <nil>
+system node <nil> <nil> {} <nil>
+
+# ensure that database d is regionless
+query-sql
+SELECT region FROM [SHOW REGIONS FROM DATABASE d] ORDER BY 1;
+----
+
+# show tables - make sure these are regionless as well
+query-sql
+SELECT table_name, locality FROM [SHOW TABLES FROM d] ORDER BY 1;
+----
+t <nil>
+
+# ensure that tables belonging to d can be modified & have the correct values
+exec-sql
+INSERT INTO d.t VALUES (4), (5);
+----
+
+query-sql
+SELECT * FROM d.t;
+----
+1
+2
+3
+4
+5
+
+subtest end
+
+# test db restore with remove_regions
+subtest restore_regionless_on_regionless_db
+
+exec-sql
+DROP DATABASE d;
+----
+
+exec-sql
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/database_backup/' WITH remove_regions;
+----
+
+# check to see if restored database, d, shows up
+query-sql
+SHOW DATABASES;
+----
+d root <nil> <nil> {} <nil>
+data root <nil> <nil> {} <nil>
+defaultdb root <nil> <nil> {} <nil>
+postgres root <nil> <nil> {} <nil>
+system node <nil> <nil> {} <nil>
+
+# ensure that database d is regionless
+query-sql
+SELECT region FROM [SHOW REGIONS FROM DATABASE d] ORDER BY 1;
+----
+
+# show tables - make sure these are regionless as well
+query-sql
+SELECT table_name, locality FROM [SHOW TABLES FROM d] ORDER BY 1;
+----
+t <nil>
+
+# ensure that tables belonging to d can be modified & have the correct values
+exec-sql
+INSERT INTO d.t VALUES (4), (5);
+----
+
+query-sql
+SELECT * FROM d.t;
+----
+1
+2
+3
+4
+5
+
+subtest end
+
+# test table restore with remove_regions
+subtest restore_regionless_on_regionless_table
+
+exec-sql
+DROP DATABASE d;
+----
+
+exec-sql
+CREATE DATABASE d;
+----
+
+exec-sql
+RESTORE TABLE d.t FROM LATEST IN 'nodelocal://1/table_backup/' WITH remove_regions;
+----
+
+query-sql
+SELECT table_name, locality FROM [SHOW TABLES FROM d] ORDER BY 1;
+----
+t <nil>
+
+# ensure that tables belonging to d can be modified & have the correct values
+exec-sql
+INSERT INTO d.t VALUES (4), (5);
+----
+
+query-sql
+SELECT * FROM d.t;
+----
+1
+2
+3
+4
+5
+
+subtest end

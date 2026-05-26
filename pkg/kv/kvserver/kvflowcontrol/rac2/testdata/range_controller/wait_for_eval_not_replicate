@@ -1,0 +1,113 @@
+# Initialize a range with voters on s1,s2 and s3. The local replica and
+# leaseholder will be s1. The leaseholder is denoted by the '*' suffix. Also
+# set all streams to initially have 1 tokens and a limit of 1 token to
+# simplify the test, as evaluation requests only wait for positive tokens.
+# Replicas 2 and 3 are not in StateReplicate.
+init regular_limit=1 regular_init=1 elastic_limit=1 elastic_init=1
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=1
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateProbe next=1
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateSnapshot next=1
+----
+r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s3: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+
+# Start a high priority evaluation. It should not complete due to lack of
+# quorum in StateReplicate.
+wait_for_eval name=a range_id=1 pri=HighPri
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=false waited=false err=<nil>
+
+# Same for a low priority evaluation.
+wait_for_eval name=b range_id=1 pri=LowPri
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=false waited=false err=<nil>
+  name=b pri=low-pri  done=false waited=false err=<nil>
+
+# Transition replica 2 to StateReplicate. Now there is a quorum in
+# StateReplicate.
+set_replicas
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=1
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate next=1
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateSnapshot next=1
+----
+r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
+
+# Both evaluations succeed. NB: the elastic eval does not wait for the replica
+# that is in StateSnapshot.
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=true  err=<nil>
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+
+# s2 has no tokens. Replica 2 has no tokens and replica 3 is not in
+# StateReplicate, so no quorum.
+adjust_tokens
+  store_id=2 pri=HighPri tokens=-1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s2: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s3: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+
+# Request c waits.
+wait_for_eval name=c range_id=1 pri=HighPri
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=true  err=<nil>
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=false waited=false err=<nil>
+
+# Transition replica 2 to StateSnapshot.
+set_replicas
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=1
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateSnapshot next=1
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateSnapshot next=1
+----
+r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
+
+# Replica 2 now has tokens, but still can't participate in quorum.
+adjust_tokens
+  store_id=2 pri=HighPri tokens=1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s3: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=true  err=<nil>
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=false waited=false err=<nil>
+
+# Transition replica 3 to StateReplicate. Now there is quorum.
+set_replicas
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=1
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateSnapshot next=1
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate next=1
+----
+r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
+
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=true  err=<nil>
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=true  waited=true  err=<nil>

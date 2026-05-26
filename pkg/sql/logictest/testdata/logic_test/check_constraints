@@ -1,0 +1,526 @@
+#### column CHECK constraints
+
+statement ok
+CREATE TABLE t1 (a INT CHECK (a > 0), to_delete INT, b INT CHECK (b < 0) CHECK (b > -100))
+
+statement error could not parse "3.3" as type int
+INSERT INTO t1 VALUES ('3.3', 0, -1)
+
+statement ok
+INSERT INTO t1 VALUES ('3', 0, -1)
+
+statement ok
+INSERT INTO t1 VALUES (3, 0, -1)
+
+statement ok
+ALTER TABLE t1 DROP COLUMN to_delete
+
+statement ok
+INSERT INTO t1 (a, b) VALUES (4, -2)
+
+statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(a > 0:::INT8\)
+INSERT INTO t1 VALUES (-3, -1)
+
+statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(b < 0:::INT8\)
+INSERT INTO t1 VALUES (3, 1)
+
+statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(b > \(-100\):::INT8\)
+INSERT INTO t1 VALUES (3, -101)
+
+statement ok
+INSERT INTO t1 (b, a) VALUES (-2, 4)
+
+statement ok
+INSERT INTO t1 (a) VALUES (10)
+
+statement ok
+INSERT INTO t1 (b) VALUES (-1)
+
+statement ok
+CREATE TABLE t2 (a INT DEFAULT -1 CHECK (a >= 0), b INT CHECK (b <= 0), CHECK (b < a))
+
+statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(a >= 0:::INT8\)
+INSERT INTO t2 (b) VALUES (-2)
+
+### Rename column with check constraint
+
+statement ok
+ALTER TABLE t2 RENAME COLUMN b TO c
+
+statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(c <= 0:::INT8\)
+INSERT INTO t2 (a, c) VALUES (2, 1)
+
+statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(c < a\)
+INSERT INTO t2 (a, c) VALUES (0, 0)
+
+statement ok
+INSERT INTO t2 (a, c) VALUES (2, -1)
+
+statement ok
+CREATE TABLE t3 (a INT, b INT CHECK (b < a), FAMILY f1 (a), FAMILY f2 (b))
+
+statement ok
+INSERT INTO t3 (a, b) VALUES (3, 2)
+
+statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(b < a\)
+INSERT INTO t3 (a, b) VALUES (2, 3)
+
+# Verify we don't accept count(*)
+statement error variable sub-expressions are not allowed in CHECK
+CREATE TABLE t4 (a INT, b INT CHECK (count(*) = 1))
+
+# no subqueries either.
+statement error variable sub-expressions are not allowed in CHECK
+CREATE TABLE t4 (a INT, b INT CHECK (EXISTS (SELECT * FROM t2)))
+
+# non-boolean expressions are errors
+statement error pq: expected CHECK expression to have type bool, but '1' has type int
+CREATE TABLE t4 (a INT CHECK(1))
+
+statement error pq: expected CHECK expression to have type bool, but 'a' has type int
+CREATE TABLE t4 (a INT CHECK(a))
+
+# Function calls in CHECK are okay.
+statement ok
+CREATE TABLE calls_func (a INT CHECK(abs(a) < 2))
+
+statement ok
+INSERT INTO calls_func VALUES (1), (-1)
+
+statement error failed to satisfy CHECK
+INSERT INTO calls_func VALUES (-5)
+
+# Aggregate function calls in CHECK are not ok.
+statement error aggregate functions are not allowed in CHECK
+CREATE TABLE bad (a INT CHECK(sum(a) > 1))
+
+# Window function calls in CHECK are not ok.
+statement error window functions are not allowed in CHECK
+CREATE TABLE bad (a INT CHECK(sum(a) OVER () > 1))
+
+# fail on bad check types
+statement error pq: unsupported binary operator: <bool> - <bool>
+CREATE TABLE t4 (a INT CHECK (false - true))
+
+statement error pgcode 42703 column "b" does not exist, referenced in "a < b"
+CREATE TABLE t4 (a INT, CHECK (a < b), CHECK (a+b+c+d < 20))
+
+statement ok
+CREATE TABLE t4 (
+  a INT, b INT DEFAULT 5, c INT, d INT,
+  CHECK (a < b),
+  CONSTRAINT "all" CHECK (a+b+c+d < 20),
+  FAMILY f1 (a, b, c, d)
+)
+
+statement ok
+INSERT INTO t4 (a, b) VALUES (2, 3)
+
+statement error pgcode 23514 failed to satisfy CHECK constraint
+INSERT INTO t4 (a) VALUES (6)
+
+statement ok
+INSERT INTO t4 VALUES (1, 2, 3, 4)
+
+statement ok
+INSERT INTO t4 VALUES (NULL, 2, 22, NULL)
+
+statement error pgcode 23514 failed to satisfy CHECK constraint
+INSERT INTO t4 VALUES (1, 2, 3, 19)
+
+query II
+SELECT * from t3
+----
+3 2
+
+skipif config #112488 weak-iso-level-configs
+statement error pgcode 23514 failed to satisfy CHECK constraint
+UPDATE t3 SET b = 3 WHERE a = 3
+
+onlyif config #112488 weak-iso-level-configs
+statement error multi-column-family check constraints are not yet supported under read committed isolation
+UPDATE t3 SET b = 3 WHERE a = 3
+
+skipif config #112488 weak-iso-level-configs
+statement ok
+UPDATE t3 SET b = 1 WHERE a = 3
+
+statement error pgcode 23514 failed to satisfy CHECK constraint
+UPDATE t4 SET a = 2 WHERE c = 3
+
+statement ok
+UPDATE t4 SET a = 0 WHERE c = 3
+
+statement ok
+CREATE TABLE t5 (
+  k INT PRIMARY KEY,
+  a INT,
+  b int CHECK (a > b),
+  FAMILY f1 (k, a, b)
+)
+
+statement error pgcode 23514 failed to satisfy CHECK constraint
+INSERT INTO t5 VALUES (1, 10, 20) ON CONFLICT (k) DO NOTHING
+
+statement ok
+INSERT INTO t5 VALUES (1, 10, 9) ON CONFLICT (k) DO NOTHING
+
+# We only check constraints if an insert or update actually occurs.
+statement ok
+INSERT INTO t5 VALUES (1, 10, 20) ON CONFLICT (k) DO NOTHING
+
+# n.b. the fully-qualified name below is required, as there are two providers of
+# the column named `k` here, the original table and the `excluded` pseudo-table.
+statement error pgcode 23514 failed to satisfy CHECK constraint
+INSERT INTO t5 VALUES (2, 11, 12) ON CONFLICT (k) DO UPDATE SET b = 12 WHERE t5.k = 2
+
+statement error pgcode 23514 failed to satisfy CHECK constraint
+UPSERT INTO t5 VALUES (2, 11, 12)
+
+statement ok
+UPSERT INTO t5 VALUES (2, 11, 10)
+
+query III rowsort
+SELECT * FROM t5
+----
+1 10  9
+2 11  10
+
+statement ok
+UPSERT INTO t5 VALUES (2, 11, 9)
+
+query III rowsort
+SELECT * FROM t5
+----
+1 10  9
+2 11  9
+
+statement error pgcode 23514 failed to satisfy CHECK constraint
+INSERT INTO t5 VALUES (2, 11, 12) ON CONFLICT (k) DO UPDATE SET b = 12 WHERE t5.k = 2
+
+statement error pgcode 23514 failed to satisfy CHECK constraint
+UPSERT INTO t5 VALUES (2, 11, 12)
+
+statement error pgcode 23514 failed to satisfy CHECK constraint
+INSERT INTO t5 VALUES (2, 11, 12) ON CONFLICT (k) DO UPDATE SET b = t5.a + 1 WHERE t5.k = 2
+
+query III rowsort
+SELECT * FROM t5
+----
+1 10  9
+2 11  9
+
+statement error variable sub-expressions are not allowed in CHECK
+CREATE TABLE t6 (x INT CHECK (x = (SELECT 1)))
+
+# Check auto-generated constraint names.
+
+statement ok
+CREATE TABLE t7 (
+  x INT,
+  y INT,
+  z INT,
+  CHECK (x > 0),
+  CHECK (x + y > 0),
+  CHECK (y + z > 0),
+  CHECK (y + z = 0),
+  CONSTRAINT named_constraint CHECK (z = 1),
+  FAMILY "primary" (x, y, z, rowid)
+)
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE t7
+----
+t7  CREATE TABLE public.t7 (
+      x INT8 NULL,
+      y INT8 NULL,
+      z INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t7_pkey PRIMARY KEY (rowid ASC),
+      CONSTRAINT check_x CHECK (x > 0:::INT8),
+      CONSTRAINT check_x_y CHECK ((x + y) > 0:::INT8),
+      CONSTRAINT check_y_z CHECK ((y + z) > 0:::INT8),
+      CONSTRAINT check_y_z1 CHECK ((y + z) = 0:::INT8),
+      CONSTRAINT named_constraint CHECK (z = 1:::INT8)
+    );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE t7
+----
+t7  CREATE TABLE public.t7 (
+      x INT8 NULL,
+      y INT8 NULL,
+      z INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t7_pkey PRIMARY KEY (rowid ASC),
+      CONSTRAINT check_x CHECK (x > 0:::INT8),
+      CONSTRAINT check_x_y CHECK ((x + y) > 0:::INT8),
+      CONSTRAINT check_y_z CHECK ((y + z) > 0:::INT8),
+      CONSTRAINT check_y_z1 CHECK ((y + z) = 0:::INT8),
+      CONSTRAINT named_constraint CHECK (z = 1:::INT8)
+    ) WITH (schema_locked = true);
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE t7 WITH REDACT
+----
+t7  CREATE TABLE public.t7 (
+      x INT8 NULL,
+      y INT8 NULL,
+      z INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t7_pkey PRIMARY KEY (rowid ASC),
+      CONSTRAINT check_x CHECK (x > ‹×›:::INT8),
+      CONSTRAINT check_x_y CHECK ((x + y) > ‹×›:::INT8),
+      CONSTRAINT check_y_z CHECK ((y + z) > ‹×›:::INT8),
+      CONSTRAINT check_y_z1 CHECK ((y + z) = ‹×›:::INT8),
+      CONSTRAINT named_constraint CHECK (z = ‹×›:::INT8)
+    );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE t7 WITH REDACT
+----
+t7  CREATE TABLE public.t7 (
+      x INT8 NULL,
+      y INT8 NULL,
+      z INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t7_pkey PRIMARY KEY (rowid ASC),
+      CONSTRAINT check_x CHECK (x > ‹×›:::INT8),
+      CONSTRAINT check_x_y CHECK ((x + y) > ‹×›:::INT8),
+      CONSTRAINT check_y_z CHECK ((y + z) > ‹×›:::INT8),
+      CONSTRAINT check_y_z1 CHECK ((y + z) = ‹×›:::INT8),
+      CONSTRAINT named_constraint CHECK (z = ‹×›:::INT8)
+    ) WITH (schema_locked = true);
+
+# Check that table references are dequalified in their stored representation.
+
+statement error no data source matches prefix: different_table
+CREATE TABLE t8 (
+  a INT,
+  CHECK (different_table.a > 0)
+)
+
+statement error no data source matches prefix: different_database.t8
+CREATE TABLE t8 (
+  a INT,
+  CHECK (different_database.t8.a > 0)
+)
+
+statement disable-cf-mutator ok
+CREATE TABLE t8 (
+  a INT,
+  CHECK (a > 0),
+  CHECK (t8.a > 0),
+  CHECK (test.t8.a > 0)
+)
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE t8
+----
+t8  CREATE TABLE public.t8 (
+      a INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t8_pkey PRIMARY KEY (rowid ASC),
+      CONSTRAINT check_a CHECK (a > 0:::INT8),
+      CONSTRAINT check_a1 CHECK (a > 0:::INT8),
+      CONSTRAINT check_a2 CHECK (a > 0:::INT8)
+    );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE t8
+----
+t8  CREATE TABLE public.t8 (
+      a INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t8_pkey PRIMARY KEY (rowid ASC),
+      CONSTRAINT check_a CHECK (a > 0:::INT8),
+      CONSTRAINT check_a1 CHECK (a > 0:::INT8),
+      CONSTRAINT check_a2 CHECK (a > 0:::INT8)
+    ) WITH (schema_locked = true);
+
+statement ok
+CREATE DATABASE test2
+
+statement ok
+CREATE TABLE test2.t (
+  a INT,
+  CHECK (a > 0),
+  CHECK (t.a > 0),
+  CHECK (test2.t.a > 0)
+)
+
+# Use multiple column families.
+
+statement ok
+CREATE TABLE t9 (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT,
+  e INT,
+  FAMILY (a),
+  FAMILY (b),
+  FAMILY (c),
+  FAMILY (d, e),
+  CHECK (a > b),
+  CHECK (d IS NULL)
+)
+
+statement ok
+INSERT INTO t9 VALUES (5, 3)
+
+statement error pgcode 23514 failed to satisfy CHECK constraint \(a > b\)
+INSERT INTO t9 VALUES (6, 7)
+
+skipif config #112488 weak-iso-level-configs
+statement ok
+UPDATE t9 SET b = 4 WHERE a = 5
+
+skipif config #112488 weak-iso-level-configs
+statement error pgcode 23514 failed to satisfy CHECK constraint \(a > b\)
+UPDATE t9 SET b = 6 WHERE a = 5
+
+skipif config #112488 weak-iso-level-configs
+statement ok
+UPDATE t9 SET a = 7 WHERE a = 4
+
+skipif config #112488 weak-iso-level-configs
+statement error pgcode 23514 failed to satisfy CHECK constraint \(a > b\)
+UPDATE t9 SET a = 2 WHERE a = 5
+
+onlyif config #112488 weak-iso-level-configs
+statement error multi-column-family check constraints are not yet supported under read committed isolation
+UPDATE t9 SET b = 4 WHERE a = 5
+
+# Check constraints on computed columns.
+
+statement ok
+CREATE TABLE t10 (
+  a INT,
+  b INT AS (a - 1) STORED,
+  CHECK (b > 0)
+);
+
+statement error failed to satisfy CHECK constraint \(b > 0:::INT8\)
+INSERT INTO t10 VALUES (1)
+
+statement error failed to satisfy CHECK constraint \(b > 0:::INT8\)
+UPSERT INTO t10 VALUES (1)
+
+statement ok
+INSERT INTO t10 VALUES (2)
+
+statement ok
+UPSERT INTO t10 VALUES (2)
+
+statement error failed to satisfy CHECK constraint \(b > 0:::INT8\)
+UPDATE t10 SET a = 1
+
+statement ok
+UPDATE t10 SET a = 3
+
+# Regression test for #36293. Make sure we don't panic with a false check
+# constraint.
+statement ok
+CREATE TABLE t36293 (x bool)
+
+statement ok
+ALTER TABLE t36293
+  ADD COLUMN y INT
+  CHECK (
+    CASE
+    WHEN false
+    THEN x
+    ELSE false
+    END
+  )
+
+# Regression tests for #46675.
+statement ok
+CREATE TABLE t46675isnull (k int, a int, CHECK ((k, a) IS NULL))
+
+# IS NULL is true when the operand is a tuple with all NULL values.
+statement ok
+INSERT INTO t46675isnull VALUES (NULL, NULL)
+
+statement ok
+CREATE TABLE t46675isnotnull (k int, a int, CHECK ((k, a) IS NOT NULL))
+
+# IS NOT NULL is false when the operand is a tuple with at least one NULL
+# value.
+statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(\(k, a\) IS NOT NULL\)
+INSERT INTO t46675isnotnull VALUES (1, NULL)
+
+# Regression test for #51690. Make sure we don't panic when a check constraint
+# errors during an insert using the fast path.
+statement ok
+CREATE TABLE t51690(x INT, y INT, CHECK(x / y = 1));
+
+statement error pq: division by zero
+INSERT INTO t51690 VALUES (1, 0)
+
+# Regression test for #67100. Inserts should fail when a check constraint always
+# evaluates to false.
+
+statement ok
+CREATE TABLE t67100a (a INT, CHECK (false));
+CREATE TABLE t67100b (a INT, CHECK (true AND 0 > 1));
+
+statement error failed to satisfy CHECK constraint \(false\)
+INSERT INTO t67100a VALUES (1)
+
+statement error failed to satisfy CHECK constraint \(false\)
+UPSERT INTO t67100a VALUES (1)
+
+statement error failed to satisfy CHECK constraint \(true AND \(0:::INT8 > 1:::INT8\)\)
+INSERT INTO t67100b VALUES (1)
+
+statement error failed to satisfy CHECK constraint \(true AND \(0:::INT8 > 1:::INT8\)\)
+UPSERT INTO t67100b VALUES (1)
+
+subtest regression_91697
+
+statement ok
+CREATE TABLE t_91697(a OID);
+
+statement ok
+ALTER TABLE t_91697 ADD CHECK (a < 123);
+
+statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(a < 'public.t67100a'::REGCLASS\)
+INSERT INTO t_91697 VALUES (321);
+
+# Regression test for #158154. Don't add transitive column dependencies to
+# routines that build check constraints.
+subtest regression_158154
+
+statement ok
+CREATE TABLE t158154 (a INT, b INT, CONSTRAINT foo CHECK (b > 0));
+
+statement ok
+CREATE PROCEDURE p158154() LANGUAGE SQL AS $$
+  INSERT INTO t158154 (a) VALUES (1);
+  UPDATE t158154 SET a = a + 1;
+$$;
+
+statement ok
+CALL p158154();
+
+# The procedure does not directly depend on column b, so dropping column b
+# should be allowed after dropping the check constraint.
+statement ok
+ALTER TABLE t158154 DROP CONSTRAINT foo, DROP COLUMN b;
+
+statement ok
+CALL p158154();
+
+statement ok
+DROP PROCEDURE p158154;
+DROP TABLE t158154;
+
+subtest end

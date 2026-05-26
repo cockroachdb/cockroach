@@ -1,0 +1,21 @@
+# Yaml for destroying the drt-large and workload-large clusters.
+environment:
+  ROACHPROD_GCE_DEFAULT_SERVICE_ACCOUNT: 622274581499-compute@developer.gserviceaccount.com
+  ROACHPROD_DNS: drt.crdb.io
+  ROACHPROD_GCE_DNS_DOMAIN: drt.crdb.io
+  ROACHPROD_GCE_DNS_ZONE: drt
+  ROACHPROD_GCE_DEFAULT_PROJECT: cockroach-drt
+  CLUSTER: drt-large
+  WORKLOAD_CLUSTER: workload-large
+
+targets:
+  - target_name: $CLUSTER
+    steps:
+    - command: destroy
+      args:
+        - $CLUSTER
+  - target_name: $WORKLOAD_CLUSTER
+    steps:
+    - command: destroy
+      args:
+        - $WORKLOAD_CLUSTER

@@ -1,0 +1,208 @@
+#!/usr/bin/env bash
+#
+# Prepare the commit message by adding a release note.
+
+require_justification=0
+set -euo pipefail
+
+if [[ "${2-}" = "message" ]]; then
+  # This git command is non-interactive so it will not filter out any comments
+  # we add. There is nothing more for us to do.
+  exit 0
+fi
+
+give_up() {
+  echo "prepare-commit-msg: $@" >&2
+  exit 0  # exit with successful status to allow the commit to proceed
+}
+
+if ! test -e "$1" -o -z "$1"; then
+	give_up "$1: commit message file does not exist or is empty"
+fi
+
+# Git can be configured to use any character as the comment indicator. See the
+# core.commentChar Git option. We can deduce what comment character is in effect
+# by looking for text that we know will be preceded by the comment character.
+if ! cchar=$(grep "^. Please enter the commit message for your changes." "$1" | head -c1); then
+  give_up "unable to determine comment char"
+fi
+
+if ! tempfile=$(mktemp); then
+  give_up "failed to create temporary file"
+fi
+trap "rm -f $tempfile" EXIT
+
+sed_script=''
+
+# If the setting 'cockroachdb.disable-commit-template' is set and
+# true, all the template recommendations will be commented out as
+# opposed to be filled in.
+tchar=''
+tdisable=$(git config --bool --get cockroachdb.disable-commit-template || echo false)
+if test x"$tdisable" != xfalse; then
+	tchar="$cchar "
+fi
+
+if [ "$require_justification" = 1 ]; then
+  # Add an explicit "Release justification: None" if no release justification was specified.
+  if ! grep -q '^Release justification' "$1"; then
+  	sed_script+="/$cchar Please enter the commit message for your changes./i\\
+\\
+${tchar}Release justification:
+;
+"
+  fi
+fi
+
+# Add a commit message template if the commit message is empty.
+if ! grep -q -E -v "^$cchar|^$" "$1"; then
+	sed_script+="/^$/i\\
+${tchar}<pkg>: <short description - lowercase, no final period>\\
+\\
+${tchar}<what was there before: Previously, ...>\\
+${tchar}<why it needed to change: This was inadequate because ...>\\
+${tchar}<what you did about it: To address this, this patch ...>
+;
+"
+	if test x"$tchar" = x; then
+		sed_script+="/^$/i\\
+$cchar Note: to disable this commit template, run: git config --global --add cockroachdb.disable-commit-template true
+;
+"
+	fi
+fi
+
+ghIssuePart="(#\d+)"
+ghIssueRepoPart="([\w.-]+[/][\w.-]+#\d+)"
+ghURLPart="(https://github.com/[-a-z0-9]+/[-._a-z0-9/]+/issues/\d+)"
+jiraIssuePart="([[:alpha:]]+-\d+)"
+jiraURLPart="https://cockroachlabs.atlassian.net/browse/${jiraIssuePart}"
+issueRefPart="${ghIssuePart}|${ghIssueRepoPart}|${ghURLPart}|${jiraIssuePart}|${jiraURLPart}"
+afterRefPart="[,.;]?(?:[ \t\n\r]+|\$)"
+fixIssueRefRE="(?i:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+(?:(?:${issueRefPart})${afterRefPart})+"
+informIssueRefRE="(?:part of|see also|informs):?\s+(?:(?:${issueRefPart})${afterRefPart})+"
+epicRefRE="epic:?\s+(?:(?:${jiraIssuePart}|${jiraURLPart})${afterRefPart})+"
+epicNoneRE="epic:?\s+(?:(none)${afterRefPart})+"
+
+# Add an issue or epic reference.
+if ! grep -q -i -E "^${fixIssueRefRE}|${informIssueRefRE}|${epicRefRE}|${epicNoneRE}" "$1"; then
+	sed_script+="/$cchar Please enter the commit message for your changes./i\\
+$cchar Please enter a valid issue or epic reference:\\
+${cchar}Epic: none\\
+${cchar}      ^-- not related to an issue or an epic\\
+${cchar}Fixes: #77376\\
+${cchar}Part of: https://cockroachlabs.atlassian.net/browse/DOC-1355\\
+${cchar}Informs: https://github.com/cockroachdb/cockroach/issues/33316\\
+${cchar}Epic: CRDB-8035\\
+
+;
+"
+fi
+
+# Add an explicit "Release note: None" if no release note was specified.
+if ! grep -q '^Release note' "$1"; then
+	sed_script+="/$cchar Please enter the commit message for your changes./i\\
+${cchar}Release note: None\\
+${cchar}              ^-- no user-visible change\\
+${cchar}Release note (cli change): \\
+${cchar}Release note (ops change): \\
+${cchar}Release note (sql change): \\
+${cchar}Release note (ui change): \\
+${cchar}Release note (security update): \\
+${cchar}Release note (general change): \\
+${cchar}              ^-- e.g., change of required Go version\\
+${cchar}Release note (build change): \\
+${cchar}              ^-- e.g., compatibility with older CPUs\\
+${cchar}Release note (enterprise change): \\
+${cchar}              ^-- e.g., change to backup/restore\\
+${cchar}Release note (backwards-incompatible change): \\
+${cchar}Release note (performance improvement): \\
+${cchar}Release note (cluster virtualization): \\
+${cchar}Release note (bug fix): \\
+${cchar}              ^-- ensure there is a corresponding GitHub issue labeled \\
+${cchar}                  with C-bug and all known affected release branches \\
+
+;
+"
+fi
+
+# Inject commit message recommendations into the commit message help text.
+sed_script+="/$cchar.*an empty message aborts the commit./a\\
+$cchar\\
+$cchar Commit message recommendation:\\
+$cchar\\
+$cchar     ---\\
+$cchar     <pkg>: <short description>\\
+"
+
+if [ "$require_justification" = 1 ]; then
+  sed_script+="$cchar\\
+$cchar     Release justification: <release justification>\\
+"
+fi
+sed_script+="$cchar\\
+$cchar     <what was there before: Previously, ...>\\
+$cchar     <why it needed to change: This was inadequate because ...>\\
+$cchar     <what you did about it: To address this, this patch ...>\\
+$cchar\\
+$cchar     Fixes <GH/Jira issue ID/URL to GH/Jira issue>\\
+$cchar     ---\\
+$cchar\\
+$cchar     Release note (<category>): <what> <show> <why>\\
+$cchar     ---\\
+$cchar\\
+$cchar Wrap long lines! 72 columns is best.\\
+$cchar See also: https://wiki.crdb.io/wiki/spaces/CRDB/pages/73072807/Git+Commit+Messages\\
+$cchar\\
+"
+
+if [ "$require_justification" = 1 ]; then
+  sed_script+="$cchar\\
+$cchar Categories for release justification:\\
+$cchar     - non-production code changes\\
+$cchar     - bug fixes and low-risk updates to new functionality\\
+$cchar     - fixes for high-priority or high-severity bugs in existing functionality\\
+$cchar     - low risk, high benefit changes to existing functionality\\
+$cchar\\
+"
+fi
+
+sed_script+="$cchar An issue or epic reference must be in the PR body or each commit message\\
+$cchar if the PR or commit is part of an issue or epic. Use \\\`Epic: none\\\` otherwise.\\
+$cchar See also: https://wiki.crdb.io/wiki/spaces/CRDB/pages/2009039063/\\
+$cchar\\
+$cchar The release note must be present if your commit has user-facing\\
+$cchar or backward-incompatible changes. Use 'Release note: None' otherwise.\\
+$cchar\\
+$cchar Things to keep in mind for release notes:\\
+$cchar   - past tense (this was changed...) or present tense (now possible to...)\\
+$cchar   - what has changed: narrow down the product area / feature\\
+$cchar     Note: for bug fixes, indicate since when the bug was present\\
+$cchar   - show what changed: how a user can see the change for themselves\\
+$cchar     Note: for bug fixes, show the symptom(s) to recognize the bug\\
+$cchar   - why the change: who does this impact, how and why should they care\\
+$cchar\\
+$cchar See also: https://wiki.crdb.io/wiki/spaces/CRDB/pages/186548364/Release+notes\\
+$cchar\\
+$cchar Example release notes:\\
+$cchar\\
+$cchar   Release note (sql change): The IMPLEMENT statement was extended\\
+$cchar   to support the new STEP clause. This can be used to\\
+$cchar   implement more gradually, as often required by teams of two\\
+$cchar   or more.\\
+$cchar\\
+$cchar   Release note (bug fix): The system.replication_stats report no longer\\
+$cchar   erroneously considers some ranges belonging to table partitions to be\\
+$cchar   over-replicated. This bug was present since version 19.2.\\
+$cchar\\
+$cchar Categories for release notes: see template above.
+;
+"
+
+if ! sed "$sed_script" "$1" > "$tempfile"; then
+  give_up "unable to inject commit message recommendations"
+fi
+
+if ! mv "$tempfile" "$1"; then
+  give_up "failed overwriting commit message file"
+fi

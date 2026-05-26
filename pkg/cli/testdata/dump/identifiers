@@ -1,0 +1,23 @@
+# Test dumping a table with a semicolon in the table, index, and
+# column names properly escapes.
+
+sql
+CREATE DATABASE d;
+CREATE TABLE d.";" (";" int, index (";"));
+INSERT INTO d.";" VALUES (1);
+----
+INSERT 1
+
+dump d
+----
+----
+CREATE TABLE public.";" (
+	";" INT8 NULL,
+	INDEX ";_;_idx" (";" ASC),
+	FAMILY "primary" (";", rowid)
+);
+
+INSERT INTO public.";" (";") VALUES
+	(1);
+----
+----

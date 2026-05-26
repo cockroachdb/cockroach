@@ -1,0 +1,23 @@
+statement ok
+CREATE TABLE a (a int, b int)
+
+# Issue #6092 - table aliases in returning clauses.
+
+query II
+INSERT INTO a AS alias VALUES(1, 2) RETURNING alias.a, alias.b
+----
+1 2
+
+query II
+UPDATE a AS alias SET b = 1 RETURNING alias.a, alias.b
+----
+1 1
+
+# Can't mix aliases and non-aliases.
+query error no data source matches prefix: a
+UPDATE a AS alias SET b = 1 RETURNING alias.a, a.b
+
+query II
+DELETE FROM a AS alias RETURNING alias.a, alias.b
+----
+1 1

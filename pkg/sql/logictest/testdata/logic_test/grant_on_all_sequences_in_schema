@@ -1,0 +1,156 @@
+statement ok
+CREATE USER testuser2
+
+statement ok
+CREATE SCHEMA s;
+CREATE SCHEMA s2;
+
+# Granting in a schema with no sequences should be okay.
+statement ok
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA s TO testuser
+
+query TTTTTTB colnames,rowsort
+SHOW GRANTS FOR testuser
+----
+database_name  schema_name  object_name  object_type  grantee  privilege_type  is_grantable
+test           public       NULL         schema       public   CREATE          false
+test           public       NULL         schema       public   USAGE           false
+
+statement ok
+CREATE SEQUENCE s.q;
+CREATE SEQUENCE s2.q;
+CREATE TABLE s.t();
+CREATE TABLE s2.t();
+
+statement ok
+SET ROLE testuser
+
+statement error pq: user testuser does not have USAGE privilege on schema s
+SELECT * FROM s.q;
+
+statement ok
+SET ROLE root
+
+statement ok
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA s TO testuser
+
+# This should be a no-op, since backup privellege is not
+# supported on sequences.
+skipif config weak-iso-level-configs
+query T noticetrace
+GRANT BACKUP ON ALL TABLES IN SCHEMA S TO testuser
+----
+NOTICE: some privileges have no effect on sequences: [BACKUP]
+
+onlyif config weak-iso-level-configs
+query T noticetrace
+GRANT BACKUP ON ALL TABLES IN SCHEMA S TO testuser
+----
+NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
+NOTICE: some privileges have no effect on sequences: [BACKUP]
+
+statement error pgcode 0LP01 invalid privilege type BACKUP for sequence
+GRANT BACKUP ON ALL SEQUENCES IN SCHEMA S TO testuser
+
+query TTTTTTB colnames,rowsort
+SHOW GRANTS FOR testuser
+----
+database_name  schema_name  object_name  object_type  grantee   privilege_type  is_grantable
+test           public       NULL         schema       public    CREATE          false
+test           public       NULL         schema       public    USAGE           false
+test           s            q            sequence     testuser  SELECT          false
+test           s            t            table        testuser  BACKUP          false
+
+statement ok
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA s TO testuser
+
+query TTTTTTB colnames,rowsort
+SHOW GRANTS FOR testuser
+----
+database_name  schema_name  object_name  object_type  grantee   privilege_type  is_grantable
+test           public       NULL         schema       public    CREATE          false
+test           public       NULL         schema       public    USAGE           false
+test           s            q            sequence     testuser  SELECT          false
+test           s            q            sequence     testuser  USAGE           false
+test           s            t            table        testuser  BACKUP          false
+
+statement ok
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA s, s2 TO testuser, testuser2
+
+query TTTTTTB colnames,rowsort
+SHOW GRANTS FOR testuser, testuser2
+----
+database_name  schema_name  object_name  object_type  grantee    privilege_type  is_grantable
+test           public       NULL         schema       public     CREATE          false
+test           public       NULL         schema       public     USAGE           false
+test           s            q            sequence     testuser   SELECT          false
+test           s            q            sequence     testuser   USAGE           false
+test           s            q            sequence     testuser2  SELECT          false
+test           s            t            table        testuser   BACKUP          false
+test           s2           q            sequence     testuser   SELECT          false
+test           s2           q            sequence     testuser2  SELECT          false
+
+statement ok
+GRANT ALL ON ALL SEQUENCES IN SCHEMA s, s2 TO testuser, testuser2
+
+query TTTTTTB colnames,rowsort
+SHOW GRANTS FOR testuser, testuser2
+----
+database_name  schema_name  object_name  object_type  grantee    privilege_type  is_grantable
+test           public       NULL         schema       public     CREATE          false
+test           public       NULL         schema       public     USAGE           false
+test           s            q            sequence     testuser   ALL             false
+test           s            q            sequence     testuser2  ALL             false
+test           s            t            table        testuser   BACKUP          false
+test           s2           q            sequence     testuser   ALL             false
+test           s2           q            sequence     testuser2  ALL             false
+
+statement ok
+CREATE USER testuser3
+
+# Sequences are treated as a subset of tables.
+statement ok
+GRANT ALL ON ALL TABLES IN SCHEMA s2 TO testuser3
+
+query TTTTTTB colnames,rowsort
+SHOW GRANTS FOR testuser3
+----
+database_name  schema_name  object_name  object_type  grantee    privilege_type  is_grantable
+test           public       NULL         schema       public     CREATE          false
+test           public       NULL         schema       public     USAGE           false
+test           s2           q            sequence     testuser3  ALL             false
+test           s2           t            table        testuser3  ALL             false
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT USAGE ON SEQUENCES TO testuser3;
+
+statement ok
+CREATE SCHEMA s3;
+CREATE SCHEMA s4;
+CREATE SEQUENCE s3.q;
+CREATE SEQUENCE s4.q;
+
+query TTTTTTB colnames,rowsort
+SHOW GRANTS FOR testuser, testuser2
+----
+database_name  schema_name  object_name  object_type  grantee    privilege_type  is_grantable
+test           public       NULL         schema       public     CREATE          false
+test           public       NULL         schema       public     USAGE           false
+test           s            q            sequence     testuser   ALL             false
+test           s            q            sequence     testuser2  ALL             false
+test           s            t            table        testuser   BACKUP          false
+test           s2           q            sequence     testuser   ALL             false
+test           s2           q            sequence     testuser2  ALL             false
+
+
+
+query TTTTTTB colnames,rowsort
+SHOW GRANTS FOR testuser3
+----
+database_name  schema_name  object_name  object_type  grantee    privilege_type  is_grantable
+test           public       NULL         schema       public     CREATE          false
+test           public       NULL         schema       public     USAGE           false
+test           s2           q            sequence     testuser3  ALL             false
+test           s2           t            table        testuser3  ALL             false
+test           s3           q            sequence     testuser3  USAGE           false
+test           s4           q            sequence     testuser3  USAGE           false

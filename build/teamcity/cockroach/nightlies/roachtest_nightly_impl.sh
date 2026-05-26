@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+
+# Copyright 2021 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
+set -exuo pipefail
+
+dir="$(dirname $(dirname $(dirname $(dirname "${0}"))))"
+
+# N.B. export variables like `root` s.t. they can be used by scripts called below.
+set -a
+source "$dir/teamcity-support.sh"
+set +a
+
+if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
+  ssh-keygen -q -C "roachtest-nightly-bazel $(date)" -N "" -f ~/.ssh/id_rsa
+fi
+
+arm_probability="${ARM_PROBABILITY:-0.5}"
+fips_probability="${FIPS_PROBABILITY:-0.02}"
+
+arch=amd64
+if [[ ${CLOUD} == "ibm" ]]; then
+  arch=s390x
+fi
+$root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh $arch
+if [[ $arch != "s390x" ]]; then
+  # Do not build arm64 if the probability is 0.
+  # Using `awk` because bash only supports integer comparison, and `bc` is not installed.
+  if awk -v n="$arm_probability" 'BEGIN { exit (n+0 > 0) ? 0 : 1 }'; then
+    $root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh arm64
+  fi
+  # N.B. FIPS is metamoprhically always on as of PR#139510
+  # Do not build fips if the probability is 0.
+  # Using `awk` because bash only supports integer comparison, and `bc` is not installed.
+  if awk -v n="$fips_probability" 'BEGIN { exit (n+0 > 0) ? 0 : 1 }'; then
+    $root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh amd64-fips
+  fi
+fi
+
+artifacts=/artifacts
+source $root/build/teamcity/util/roachtest_util.sh
+
+# Standard release branches are in the format `release-24.1` for the
+# 24.1 release, for example.
+release_branch_regex="^release-[0-9][0-9]\.[0-9]"
+# Test selection is enabled only on release branches.
+selective_tests="false"
+
+if [[ "${TC_BUILD_BRANCH}" == "master" ]]; then
+  # We default to using test selection on master, unless explicitly
+  # overriden in the TeamCity UI.
+  selective_tests="${SELECTIVE_TESTS:-true}"
+elif [[ "${TC_BUILD_BRANCH}" =~ ${release_branch_regex}$ ]]; then
+  # Same for release branches.
+  selective_tests="${SELECTIVE_TESTS:-true}"
+elif [[ "${TC_BUILD_BRANCH}" =~ ${release_branch_regex}\.[0-9]{1,2}-rc$ ]]; then
+  # If we are running an `-rc` branch for a specific patch release
+  # (for instance, `release-24.1.1-rc`), then only run 40% of the test
+  # suite by default. This is to avoid a high volume of concurrent
+  # cluster creation attempts across all existing release branches.
+  #
+  # NOTE: in the future, instead of choosing the tests randomly as we
+  # do here, we plan to utilize a smarter test selection strategy (see
+  # #119630).
+  select_probability="--select-probability=0.4"
+elif [[ "${TC_BUILD_BRANCH}" =~ ^release- && "${ROACHTEST_FORCE_RUN_INVALID_RELEASE_BRANCH}" != "true" ]]; then
+  # The only valid release branches are the ones handled above. That
+  # said, from time to time we might have cases where a branch with
+  # the `release-` prefix is created by accident, activating the
+  # TeamCity trigger for the Roachtest Nightly build. We abort
+  # execution in these cases to avoid unnecessarily running a test
+  # suite on these branches.
+  echo "Refusing to run roachtest nightly suite on invalid release branch: ${TC_BUILD_BRANCH}."
+  exit 1
+else
+  # Use a 0.1 default in all other branches, to reduce the chances of
+  # an accidental full-suite run on feature branches.
+  select_probability="--select-probability=0.1"
+fi
+
+# Special handling for the select-probability is needed because it is
+# incompatible with the selective-tests flag. If it isn't overriden in the
+# TeamCity UI or set by the logic above, we need to omit the flag entirely.
+if [[ "${SELECT_PROBABILITY:-}"  != "" ]]; then
+  select_probability=--select-probability="${SELECT_PROBABILITY}"
+fi
+
+# Fail early if both selective-tests=true and select-probability are set.
+if [[ "${selective_tests}" == "true" && "${select_probability:-}" != "" ]]; then
+  echo "SELECTIVE_TESTS=true and SELECT_PROBABILITY are incompatible. Disable one of them."
+  exit 1
+fi
+#
+# N.B. Recall, the conditional probability of FIPS is P(fips) * (1 - P(arm64)).
+# Hence, with the given defaults, FIPS is effectively enabled with probability 0.01 (= 0.02 * 0.5)
+#
+build/teamcity-roachtest-invoke.sh \
+  --metamorphic-encryption-probability=0.5 \
+  --metamorphic-arm64-probability="$arm_probability" \
+  --metamorphic-fips-probability="$fips_probability" \
+  --metamorphic-cockroach-ea-probability="${COCKROACH_EA_PROBABILITY:-0.2}" \
+  ${select_probability:-} \
+  --always-collect-artifacts="${ALWAYS_COLLECT_ARTIFACTS:-false}" \
+  --use-spot="${USE_SPOT:-auto}" \
+  --cloud="${CLOUD}" \
+  --count="${COUNT-1}" \
+  --clear-cluster-cache="${CLEAR_CLUSTER_CACHE:-true}" \
+  --auto-kill-threshold="${AUTO_KILL_THRESHOLD:-0.10}" \
+  --parallelism="${PARALLELISM}" \
+  --cpu-quota="${CPUQUOTA}" \
+  --cluster-id="${TC_BUILD_ID}" \
+  --artifacts=/artifacts \
+  --artifacts-literal="${LITERAL_ARTIFACTS_DIR:-}" \
+  --slack-token="${SLACK_TOKEN}" \
+  --suite nightly \
+  --selective-tests="${selective_tests:-false}" \
+  --export-openmetrics="${EXPORT_OPENMETRICS:-false}" \
+  --openmetrics-labels="branch=$(tc_build_branch), goarch=${arch}, goos=linux, commit=${COMMIT_SHA}, suite=nightly" \
+  ${EXTRA_ROACHTEST_ARGS:+$EXTRA_ROACHTEST_ARGS} \
+  "${TESTS}"

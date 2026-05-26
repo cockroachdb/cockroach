@@ -1,0 +1,442 @@
+# LogicTest: local 3node-tenant
+
+query T
+SHOW is_superuser
+----
+on
+
+query TTT colnames,rowsort
+select username, options, member_of from [SHOW USERS]
+----
+username  options  member_of
+admin     {}       {}
+root      {}       {admin}
+testuser  {}       {}
+
+statement ok
+CREATE USER user1
+
+query TTT colnames,rowsort
+select username, options, member_of from [SHOW USERS]
+----
+username  options  member_of
+admin     {}       {}
+root      {}       {admin}
+testuser  {}       {}
+user1     {}       {}
+
+query T noticetrace
+SHOW USERS
+----
+NOTICE: estimated_last_login_time is computed on a best effort basis; it is not guaranteed to capture every login event
+
+statement error pgcode 42710 a role/user named admin already exists
+CREATE USER admin
+
+statement ok
+CREATE USER IF NOT EXISTS admin
+
+statement error pgcode 42710 a role/user named user1 already exists
+CREATE USER user1
+
+statement ok
+CREATE USER IF NOT EXISTS user1
+
+statement error pgcode 42710 a role/user named user1 already exists
+CREATE USER UsEr1
+
+statement ok
+CREATE USER Ομηρος
+
+statement error pgcode 42939 role name "node" is reserved
+CREATE USER node
+
+statement error pgcode 42939 role name "public" is reserved
+CREATE USER public
+
+statement error pgcode 42939 role name "none" is reserved
+CREATE USER "none"
+
+statement error empty passwords are not permitted
+CREATE USER test WITH PASSWORD ''
+
+statement ok
+CREATE USER uSEr2 WITH PASSWORD 'cockroach'
+
+statement ok
+CREATE USER user3 WITH PASSWORD '蟑螂'
+
+statement error pq: "foo☂": username is invalid
+CREATE USER foo☂
+
+statement error pq: "-foo": username is invalid
+CREATE USER "-foo"
+
+statement error at or near "-": syntax error
+CREATE USER foo-bar
+
+statement ok
+CREATE USER "foo-bar"
+
+statement ok
+PREPARE pcu AS CREATE USER foo WITH PASSWORD $1;
+  EXECUTE pcu('bar')
+
+statement ok
+ALTER USER foo WITH PASSWORD 'somepass'
+
+statement ok
+PREPARE chpw AS ALTER USER foo WITH PASSWORD $1;
+  EXECUTE chpw('bar')
+
+statement error user "blix" does not exist
+PREPARE chpw2 AS ALTER USER blix WITH PASSWORD $1;
+  EXECUTE chpw2('baz')
+
+query TTT colnames,rowsort
+select username, options, member_of from [SHOW USERS]
+----
+username  options  member_of
+admin     {}       {}
+foo       {}       {}
+foo-bar   {}       {}
+root      {}       {admin}
+testuser  {}       {}
+user1     {}       {}
+user2     {}       {}
+user3     {}       {}
+ομηρος    {}       {}
+
+statement error "": username is empty
+CREATE USER ""
+
+query TTTTT
+SELECT current_user, current_user(), session_user, session_user(), user
+----
+root  root  root  root  root
+
+statement ok
+CREATE USER testuser2;
+GRANT admin TO testuser2
+
+user testuser2
+
+query T
+SHOW is_superuser
+----
+on
+
+user testuser
+
+query T
+SHOW is_superuser
+----
+off
+
+statement error pq: user testuser does not have CREATEROLE privilege
+CREATE USER user4
+
+statement error pq: user testuser does not have INSERT privilege on relation users
+UPSERT INTO system.users (username, "hashedPassword", "isRole") VALUES (user1, 'newpassword', false)
+
+statement error pq: user testuser does not have SELECT privilege on relation user
+SHOW USERS
+
+query TTTTT
+SELECT current_user, current_user(), session_user, session_user(), user
+----
+testuser  testuser  testuser  testuser  testuser
+
+statement ok
+SET SESSION AUTHORIZATION DEFAULT
+
+query T
+SHOW session_user
+----
+testuser
+
+user root
+
+statement ok
+SET SESSION AUTHORIZATION DEFAULT
+
+query T
+SHOW session_user
+----
+root
+
+# Test CREATEROLE privilege.
+
+statement ok
+ALTER USER testuser CREATEROLE
+
+user testuser
+
+statement ok
+CREATE ROLE user4 CREATEROLE
+
+statement ok
+CREATE USER user5 NOLOGIN
+
+user root
+
+query TTT rowsort,colnames
+SELECT username, option, value FROM system.role_options
+----
+username  option      value
+testuser  CREATEROLE  NULL
+user4     CREATEROLE  NULL
+user4     NOLOGIN     NULL
+user5     NOLOGIN     NULL
+
+user testuser
+
+query T
+SHOW is_superuser
+----
+off
+
+statement ok
+DROP ROLE user4
+
+statement ok
+DROP ROLE user5
+
+subtest min_password_length
+
+user root
+
+statement ok
+SET CLUSTER SETTING server.user_login.min_password_length = 12
+
+statement error password too short
+CREATE USER baduser WITH PASSWORD 'abc'
+
+statement error password too short
+ALTER USER testuser WITH PASSWORD 'abc'
+
+statement ok
+CREATE USER userlongpassword WITH PASSWORD '012345678901'
+
+statement ok
+ALTER USER userlongpassword WITH PASSWORD '987654321021'
+
+statement ok
+DROP USER userlongpassword
+
+subtest end
+
+subtest user_provisioning_gating_latest_version
+
+user root
+
+statement ok
+set cluster setting security.provisioning.ldap.enabled = true;
+
+statement ok
+DROP user testuser
+
+user testuser nodeidx=0 newsession
+
+# The logictest suite currently doesn't work for external authentication methods
+# as the register auth method for "ldap" is invoked outside of the sql package.
+# For the purpose of validating the release flags for provisioning, test only
+# auth method "cert-password" has been enabled which hasn't been provided with a
+# provisioner(handler for provisioning) which is the obtained error here.
+statement error pq: user identity unknown for identity provider
+SHOW session_user
+
+user root
+
+statement ok
+CREATE user IF NOT EXISTS testuser
+
+subtest end
+
+subtest show_users_provisioning_filters
+
+user root
+
+# Create users with provisioning source for filter testing.
+statement ok
+CREATE USER prov_user1 PROVISIONSRC 'ldap:ldap.example.com'
+
+statement ok
+CREATE USER prov_user2 PROVISIONSRC 'ldap:ldap.example.com'
+
+statement ok
+CREATE USER prov_user3 PROVISIONSRC 'oidc:okta.example.com'
+
+# SHOW USERS WITH SOURCE filters to only users with matching PROVISIONSRC.
+query TTT colnames,rowsort
+select username, options, member_of from [SHOW USERS WITH SOURCE = 'ldap:ldap.example.com']
+----
+username    options                                member_of
+prov_user1  {PROVISIONSRC=ldap:ldap.example.com}   {}
+prov_user2  {PROVISIONSRC=ldap:ldap.example.com}   {}
+
+query TTT colnames,rowsort
+select username, options, member_of from [SHOW USERS WITH SOURCE = 'oidc:okta.example.com']
+----
+username    options                                member_of
+prov_user3  {PROVISIONSRC=oidc:okta.example.com}   {}
+
+# No users with this source.
+query TTT colnames
+select username, options, member_of from [SHOW USERS WITH SOURCE = 'nonexistent']
+----
+username  options  member_of
+
+# SHOW USERS WITH LIMIT restricts the number of returned rows.
+query TTT colnames
+select username, options, member_of from [SHOW USERS WITH SOURCE = 'ldap:ldap.example.com' LIMIT 1]
+----
+username    options                                member_of
+prov_user1  {PROVISIONSRC=ldap:ldap.example.com}   {}
+
+# SHOW USERS LIMIT (without WITH) limits from all users.
+query T nosort
+select username from [SHOW USERS LIMIT 2]
+----
+admin
+foo
+
+# SHOW USERS notice is still emitted with the extended form.
+query T noticetrace
+SHOW USERS WITH SOURCE = 'ldap:ldap.example.com'
+----
+NOTICE: estimated_last_login_time is computed on a best effort basis; it is not guaranteed to capture every login event
+
+# SHOW ROLES WITH SOURCE returns the same results as SHOW USERS WITH SOURCE.
+query TTT colnames,rowsort
+select username, options, member_of from [SHOW ROLES WITH SOURCE = 'ldap:ldap.example.com']
+----
+username    options                                member_of
+prov_user1  {PROVISIONSRC=ldap:ldap.example.com}   {}
+prov_user2  {PROVISIONSRC=ldap:ldap.example.com}   {}
+
+# SHOW ROLES LIMIT works the same as SHOW USERS LIMIT.
+query TTT colnames
+select username, options, member_of from [SHOW ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 1]
+----
+username    options                                member_of
+prov_user1  {PROVISIONSRC=ldap:ldap.example.com}   {}
+
+# Clean up provisioned users.
+statement ok
+DROP USER prov_user1
+
+statement ok
+DROP USER prov_user2
+
+statement ok
+DROP USER prov_user3
+
+subtest end
+
+subtest validate_estimated_last_login_time
+
+user testuser2
+
+# Since the logictest framework does not connect with the user until a command
+# is executed, we need to run a command before checking estimated_last_login_time.
+query T
+SHOW session_user
+----
+testuser2
+
+user root
+
+# The estimated_last_login_time is not guaranteed to be populated synchronously,
+# so we poll until testuser's entry was updated with the last login time.
+query I retry
+SELECT count(*) FROM system.users WHERE estimated_last_login_time IS NOT NULL AND username = 'testuser2'
+----
+1
+
+subtest end
+
+subtest show_users_last_login_before
+
+user testuser2
+
+# Connect as testuser2 to populate estimated_last_login_time.
+query T
+SHOW session_user
+----
+testuser2
+
+user root
+
+# The estimated_last_login_time is not guaranteed to be populated synchronously,
+# so we poll until testuser2's entry was updated with the last login time.
+query I retry
+SELECT count(*) FROM system.users WHERE estimated_last_login_time IS NOT NULL AND username = 'testuser2'
+----
+1
+
+let $login_time
+SELECT estimated_last_login_time FROM system.users WHERE username = 'testuser2'
+
+# SHOW USERS WITH LAST LOGIN BEFORE should include testuser2 when the threshold
+# is after their login time.
+query TTT colnames
+SELECT username, options, member_of FROM [SHOW USERS WITH LAST LOGIN BEFORE ('$login_time'::timestamptz + '1 minute'::interval)] WHERE username = 'testuser2'
+----
+username   options  member_of
+testuser2  {}       {admin}
+
+# SHOW USERS WITH LAST LOGIN BEFORE should exclude testuser2 when the threshold
+# is before their login time.
+query TTT colnames
+SELECT username, options, member_of FROM [SHOW USERS WITH LAST LOGIN BEFORE ('$login_time'::timestamptz - '1 minute'::interval)] WHERE username = 'testuser2'
+----
+username  options  member_of
+
+# SHOW ROLES WITH LAST LOGIN BEFORE behaves the same as SHOW USERS.
+query TTT colnames
+SELECT username, options, member_of FROM [SHOW ROLES WITH LAST LOGIN BEFORE ('$login_time'::timestamptz + '1 minute'::interval)] WHERE username = 'testuser2'
+----
+username   options  member_of
+testuser2  {}       {admin}
+
+subtest end
+
+subtest show_users_combined_options
+
+user root
+
+# Reuse testuser2 who already has an estimated_last_login_time from the
+# earlier subtest. Add a provisioning source so we can test combined filters.
+statement ok
+ALTER USER testuser2 PROVISIONSRC 'ldap:ldap.example.com'
+
+let $combined_login_time
+SELECT estimated_last_login_time FROM system.users WHERE username = 'testuser2'
+
+# SHOW USERS with both SOURCE and LAST LOGIN BEFORE filters combined.
+query TTT colnames
+SELECT username, options, member_of FROM [SHOW USERS WITH SOURCE = 'ldap:ldap.example.com', LAST LOGIN BEFORE ('$combined_login_time'::timestamptz + '1 minute'::interval)] WHERE username = 'testuser2'
+----
+username   options                                member_of
+testuser2  {PROVISIONSRC=ldap:ldap.example.com}   {admin}
+
+# Same combined query with SHOW ROLES.
+query TTT colnames
+SELECT username, options, member_of FROM [SHOW ROLES WITH SOURCE = 'ldap:ldap.example.com', LAST LOGIN BEFORE ('$combined_login_time'::timestamptz + '1 minute'::interval)] WHERE username = 'testuser2'
+----
+username   options                                member_of
+testuser2  {PROVISIONSRC=ldap:ldap.example.com}   {admin}
+
+# Excluding by login time should filter out even when source matches.
+query TTT colnames
+SELECT username, options, member_of FROM [SHOW USERS WITH SOURCE = 'ldap:ldap.example.com', LAST LOGIN BEFORE ('$combined_login_time'::timestamptz - '1 minute'::interval)] WHERE username = 'testuser2'
+----
+username  options  member_of
+
+# Clean up: drop testuser2 since we cannot ALTER PROVISIONSRC on a
+# provisioned user (setting it to NULL is also blocked).
+statement ok
+DROP USER testuser2
+
+subtest end

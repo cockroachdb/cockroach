@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "fwgen_lib",
+    srcs = ["gen.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/serverutils/fwgen",
+    visibility = ["//visibility:private"],
+    deps = ["@com_github_cockroachdb_errors//:errors"],
+)
+
+go_binary(
+    name = "fwgen",
+    embed = [":fwgen_lib"],
+    visibility = ["//visibility:public"],
+)

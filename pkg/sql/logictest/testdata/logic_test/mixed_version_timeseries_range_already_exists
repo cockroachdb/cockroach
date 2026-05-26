@@ -1,0 +1,28 @@
+# LogicTest: cockroach-go-testserver-configs
+
+# This test verifies that if the timeseries range already has a zone config
+# before upgrading to the current version, then that zone config is preserved
+# during the upgrade.
+
+statement ok
+ALTER RANGE timeseries CONFIGURE ZONE USING gc.ttlseconds = 12345, num_replicas = 5
+
+query TT
+SELECT target, raw_config_sql FROM [SHOW ZONE CONFIGURATIONS] WHERE target = 'RANGE timeseries'
+----
+RANGE timeseries  ALTER RANGE timeseries CONFIGURE ZONE USING
+                    gc.ttlseconds = 12345,
+                    num_replicas = 5
+
+upgrade all
+
+statement ok
+SET CLUSTER SETTING version = crdb_internal.node_executable_version()
+
+# The zone config should exist after upgrading.
+query TT
+SELECT target, raw_config_sql FROM [SHOW ZONE CONFIGURATIONS] WHERE target = 'RANGE timeseries'
+----
+RANGE timeseries  ALTER RANGE timeseries CONFIGURE ZONE USING
+                    gc.ttlseconds = 12345,
+                    num_replicas = 5

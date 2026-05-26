@@ -1,0 +1,2045 @@
+// Copyright 2015 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+// Cannot be proto3 because we use nullable primitives.
+syntax = "proto2";
+package cockroach.sql.sqlbase;
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb";
+
+import "config/zonepb/zone.proto";
+import "util/hlc/timestamp.proto";
+import "sql/catalog/catenumpb/index.proto";
+import "sql/catalog/catpb/catalog.proto";
+import "sql/catalog/catpb/enum.proto";
+import "sql/sem/idxtype/idxtype.proto";
+import "sql/sem/semenumpb/constraint.proto";
+import "sql/sem/semenumpb/trigger.proto";
+import "sql/catalog/catpb/privilege.proto";
+import "sql/catalog/catpb/function.proto";
+import "sql/schemachanger/scpb/scpb.proto";
+import "sql/types/types.proto";
+import "sql/vecindex/vecpb/vec.proto";
+import "geo/geopb/config.proto";
+import "gogoproto/gogo.proto";
+import "roachpb/metadata.proto";
+import "roachpb/data.proto";
+
+enum ConstraintValidity {
+  // The constraint is valid for all rows.
+  Validated = 0;
+  // The constraint has not yet been validated for all rows (and will not be
+  // validated until VALIDATE CONSTRAINT is used).
+  Unvalidated = 1;
+  // The constraint was just added, but the validation for existing rows is not
+  // yet complete. If validation fails, the constraint will be dropped.
+  Validating = 2;
+  // The constraint is being dropped in the schema changer.
+  Dropping = 3;
+}
+
+// ForeignKeyReference is deprecated, replaced by ForeignKeyConstraint in v19.2
+// (though it is still possible for table descriptors on disk to have
+// ForeignKeyReferences).
+//
+// It is still used to describe interleavings (see
+// IndexDescriptor.InterleavedBy), for which it is a poor choice: only the Table
+// and Index fields are used, and the interleaving has nothing to do with
+// traditional foreign key references.
+message ForeignKeyReference {
+  option (gogoproto.equal) = true;
+  optional uint32 table = 1 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ID"];
+  optional uint32 index = 2 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID"];
+  optional string name = 3 [(gogoproto.nullable) = false];
+  optional ConstraintValidity validity = 4 [(gogoproto.nullable) = false];
+  // If this FK only uses a prefix of the columns in its index, we record how
+  // many to avoid spuriously counting the additional cols as used by this FK.
+  optional int32 shared_prefix_len = 5 [(gogoproto.nullable) = false];
+  optional cockroach.sql.sem.semenumpb.ForeignKeyAction on_delete = 6 [(gogoproto.nullable) = false];
+  optional cockroach.sql.sem.semenumpb.ForeignKeyAction on_update = 7 [(gogoproto.nullable) = false];
+  // This is only important for composite keys. For all prior matches before
+  // the addition of this value, MATCH SIMPLE will be used.
+  optional cockroach.sql.sem.semenumpb.Match match = 8 [(gogoproto.nullable) = false];
+}
+
+// ForeignKeyConstraint is the new (as of 19.2 and VersionTopLevelForeignKeys)
+// representation for foreign keys. It's stored on the TableDescriptor and is
+// designed to be agnostic to which indexes are available on both the origin
+// and referenced tables, so that the optimizer can have full freedom to choose
+// the best possible index to satisfy constraint checks at runtime.
+message ForeignKeyConstraint {
+  option (gogoproto.equal) = true;
+  optional uint32 origin_table_id = 1 [(gogoproto.nullable) = false,
+                                      (gogoproto.customname) = "OriginTableID",
+                                      (gogoproto.casttype) = "ID"];
+  repeated uint32 origin_column_ids = 2 [(gogoproto.customname) = "OriginColumnIDs",
+                                        (gogoproto.casttype) = "ColumnID"];
+  repeated uint32 referenced_column_ids = 3 [(gogoproto.customname) = "ReferencedColumnIDs",
+                                            (gogoproto.casttype) = "ColumnID"];
+  optional uint32 referenced_table_id = 4 [(gogoproto.nullable) = false,
+                                          (gogoproto.customname) = "ReferencedTableID",
+                                          (gogoproto.casttype) = "ID"];
+  optional string name = 5 [(gogoproto.nullable) = false];
+  optional ConstraintValidity validity = 6 [(gogoproto.nullable) = false];
+  optional cockroach.sql.sem.semenumpb.ForeignKeyAction on_delete = 7 [(gogoproto.nullable) = false];
+  optional cockroach.sql.sem.semenumpb.ForeignKeyAction on_update = 8 [(gogoproto.nullable) = false];
+  // This is only important for composite keys. For all prior matches before
+  // the addition of this value, MATCH SIMPLE will be used.
+  optional cockroach.sql.sem.semenumpb.Match match = 9 [(gogoproto.nullable) = false];
+
+  // These fields were used for foreign keys until 20.1.
+  reserved 10, 11, 12, 13;
+
+  // Used within the table descriptor to uniquely identify individual
+  // constraints.
+  optional uint32 constraint_id = 14 [(gogoproto.customname) = "ConstraintID",
+    (gogoproto.casttype) = "ConstraintID", (gogoproto.nullable) = false];
+}
+
+// UniqueWithoutIndexConstraint is the representation of a unique constraint
+// that is not enforced by an index. It is stored on the TableDescriptor.
+message UniqueWithoutIndexConstraint {
+  option (gogoproto.equal) = true;
+  optional uint32 table_id = 1 [(gogoproto.nullable) = false,
+                                      (gogoproto.customname) = "TableID",
+                                      (gogoproto.casttype) = "ID"];
+  repeated uint32 column_ids = 2 [(gogoproto.customname) = "ColumnIDs",
+                                        (gogoproto.casttype) = "ColumnID"];
+  optional string name = 3 [(gogoproto.nullable) = false];
+  optional ConstraintValidity validity = 4 [(gogoproto.nullable) = false];
+
+  // Predicate, if it's not empty, indicates that the constraint is a partial
+  // unique constraint with Predicate as the expression. Columns are referred to
+  // in the expression by their name.
+  optional string predicate = 5 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "Expression"];
+
+  // Used within the table descriptor to uniquely identify individual
+  // constraints.
+  optional uint32 constraint_id = 6 [(gogoproto.customname) = "ConstraintID",
+    (gogoproto.casttype) = "ConstraintID", (gogoproto.nullable) = false];
+}
+
+message ColumnDescriptor {
+  option (gogoproto.equal) = true;
+  optional string name = 1 [(gogoproto.nullable) = false];
+  optional uint32 id = 2 [(gogoproto.nullable) = false,
+                          (gogoproto.customname) = "ID",
+                          (gogoproto.casttype) = "ColumnID"];
+  optional sql.sem.types.T type = 3;
+  optional bool nullable = 4 [(gogoproto.nullable) = false];
+  reserved 8;
+  // Default expression to use to populate the column on insert if no
+  // value is provided. Note that it is not correct to use DefaultExpr
+  // as output to display to a user. User defined types within DefaultExpr
+  // have been serialized in a internal format. Instead, use one of the
+  // schemaexpr.FormatExpr* functions.
+  optional string default_expr = 5 [(gogoproto.casttype) = "Expression"];
+  reserved 9;
+
+  // On update expression to use to populate the column on update if no
+  // value is provided. Note that it is not correct to use OnUpdateExpr
+  // as output to display to a user. User defined types within OnUpdateExpr
+  // have been serialized in a internal format. Instead, use one of the
+  // schemaexpr.FormatExpr* functions.
+  optional string on_update_expr = 18 [(gogoproto.casttype) = "Expression"];
+
+  // A hidden column does not appear in star expansion, but can be referenced in
+  // queries and can be viewed when inspecting a table via SHOW CREATE TABLE. A
+  // column cannot be both hidden and inaccessible.
+  optional bool hidden = 6 [(gogoproto.nullable) = false];
+
+  // An inaccessible column does not appear in star expansion and cannot be
+  // referenced in queries. It cannot be viewed when inspecting a table via SHOW
+  // CREATE TABLE and is not shown as an attribute of its table in
+  // pg_catalog.pg_attribute. A column cannot be both hidden and inaccessible.
+  optional bool inaccessible = 17 [(gogoproto.nullable) = false];
+
+  // GeneratedAsIdentityType is an enum that represents how the creation of the
+  // column is associated with the GENERATED ... AS IDENTITY syntax.
+  // If the column is created with GENERATED ALWAYS AS IDENTITY syntax,
+  // GeneratedAsIdentityType for this column will be set to GENERATED_ALWAYS.
+  // If the column is created with GENERATED BY DEFAULT AS IDENTITY syntax,
+  // GeneratedAsIdentityType for this column will be set to GENERATED_BY_DEFAULT.
+  // If the column is created without using GENERATED ... AS IDENTITY syntax,
+  // GeneratedAsIdentityType for this column will be set to the default
+  // NOT_IDENTITY_COLUMN.
+  optional cockroach.sql.catalog.catpb.GeneratedAsIdentityType generated_as_identity_type = 19 [(gogoproto.nullable) = false];
+
+  // Expression to specify the sequence option for a `GENERATED AS IDENTITY`
+  // column.
+  optional string generated_as_identity_sequence_option = 20;
+
+  reserved 7;
+  // Ids of sequences used in this column's DEFAULT and ON UPDATE expressions,
+  // in calls to nextval().
+  repeated uint32 uses_sequence_ids = 10 [(gogoproto.casttype) = "ID"];
+  // Ids of sequences that the column owns.
+  repeated uint32 owns_sequence_ids = 12 [(gogoproto.casttype) = "ID"];
+  // Ids of functions used in the column's DEFAULT and ON UPDATE expressions.
+  repeated uint32 uses_function_ids = 21 [(gogoproto.casttype) = "ID"];
+  // Expression to use to compute the value of this column if this is a
+  // computed column. Note that it is not correct to use ComputeExpr
+  // as output to display to a user. User defined types within ComputeExpr
+  // have been serialized in a internal format. Instead, use one of the
+  // schemaexpr.FormatExpr* functions.
+  optional string compute_expr = 11 [(gogoproto.casttype) = "Expression"];
+
+  // A computed column can be stored or virtual.
+  // Virtual can only be true if there is a compute expression.
+  optional bool virtual = 16 [(gogoproto.nullable) = false];
+
+  // PGAttributeNum must be accessed through the accessor, since it is set
+  // lazily, it is incorrect to access it directly.
+  // PGAttributeNum represents a column's number in catalog tables.
+  // This only differs from ID when the Column order is swapped or
+  // the ColumnDescriptor must be remade while remaining visual ordering.
+  // This does not exist in TableDescriptors pre 20.2.
+  optional uint32 pg_attribute_num = 13 [(gogoproto.nullable) = false,
+                                         (gogoproto.customname) = "PGAttributeNum",
+                                         (gogoproto.casttype) = "PGAttributeNum"];
+  // Used to indicate column is used and dropped for ALTER COLUMN TYPE mutation.
+  optional bool alter_column_type_in_progress = 14 [(gogoproto.nullable) = false];
+
+  // SystemColumnKind represents what kind of system column this column
+  // descriptor represents, if any.
+  optional cockroach.sql.catalog.catpb.SystemColumnKind system_column_kind = 15 [(gogoproto.nullable) = false];
+
+  // Next id: 22
+}
+
+// ColumnFamilyDescriptor is set of columns stored together in one kv entry.
+// For more information, look at `docs/tech-notes/encoding.md#value-encoding`.
+message ColumnFamilyDescriptor {
+  option (gogoproto.equal) = true;
+  optional string name = 1 [(gogoproto.nullable) = false];
+  // Column family 0 is *always* included in k/v pairs for a row. This makes
+  // sure that rows will all NULL values still have a k/v pair. When performing
+  // optimizations involving column families, ensure that column family 0
+  // is scanned if the row may have nulls.
+  optional uint32 id = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ID", (gogoproto.casttype) = "FamilyID"];
+
+  // A list of column names of which the family is comprised. This list
+  // parallels the column_ids list. If duplicating the storage of the column
+  // names here proves to be prohibitive, we could clear this field before
+  // saving and reconstruct it after loading.
+  repeated string column_names = 3;
+  // A list of column ids of which the family is comprised. This list parallels
+  // the column_names list.
+  repeated uint32 column_ids = 4 [(gogoproto.customname) = "ColumnIDs",
+      (gogoproto.casttype) = "ColumnID"];
+
+  // If nonzero, the column involved in the single column optimization.
+  //
+  // Families store columns in a ValueType_TUPLE as repeated <columnID><data>
+  // entries. As a space optimization and for backward compatibility, a single
+  // column is written without the column id prefix. Because more columns could
+  // be added, it would be ambiguous which column was stored when read back in,
+  // so this field supplies it.
+  optional uint32 default_column_id = 5 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "DefaultColumnID", (gogoproto.casttype) = "ColumnID"];
+}
+
+// InterleaveDescriptor represents an index (either primary or secondary) that
+// is interleaved into another table's data.
+//
+// Example:
+// Table 1 -> /a/b
+// Table 2 -> /a/b/c
+// Table 3 -> /a/b/c/d
+//
+// There are two components (table 2 is the parent and table 1 is the
+// grandparent) with shared lengths 2 and 1.
+message InterleaveDescriptor {
+  option (gogoproto.equal) = true;
+  message Ancestor {
+    option (gogoproto.equal) = true;
+    // TableID is the ID of the table being interleaved into.
+    optional uint32 table_id = 1 [(gogoproto.nullable) = false,
+        (gogoproto.customname) = "TableID", (gogoproto.casttype) = "ID"];
+    // IndexID is the ID of the parent index being interleaved into.
+    optional uint32 index_id = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "IndexID", (gogoproto.casttype) = "IndexID"];
+    // SharedPrefixLen is how many fields are shared between a parent and child
+    // being interleaved, excluding any fields shared between parent and
+    // grandparent. Thus, the sum of SharedPrefixLens in the components of an
+    // InterleaveDescriptor is never more than the number of fields in the index
+    // being interleaved.
+    // In cockroach 1.0, this value did not exist and thus a check for > 0
+    // must be performed prior to its use.
+    optional uint32 shared_prefix_len = 3 [(gogoproto.nullable) = false,
+        (gogoproto.customname) = "SharedPrefixLen"];
+  }
+
+  // Ancestors contains the nesting of interleaves in the order they appear in
+  // an encoded key. This means they are always in the far-to-near ancestor
+  // order (e.g. grand-grand-parent, grand-parent, parent).
+  repeated Ancestor ancestors = 1 [(gogoproto.nullable) = false];
+}
+
+// IndexDescriptor describes an index (primary or secondary).
+//
+// Sample field values on the following table:
+//
+//   CREATE TABLE t (
+//     k1 INT NOT NULL,   // column ID: 1
+//     k2 INT NOT NULL,   // column ID: 2
+//     u INT NULL,        // column ID: 3
+//     v INT NULL,        // column ID: 4
+//     w INT NULL,        // column ID: 5
+//     CONSTRAINT "primary" PRIMARY KEY (k1, k2),
+//     INDEX k1v (k1, v) STORING (w),
+//     FAMILY "primary" (k1, k2, u, v, w)
+//   )
+//
+// Primary index:
+//   name:                   primary
+//   id:                     1
+//   unique:                 true
+//   key_column_names:       k1, k2
+//   key_column_directions:  ASC, ASC
+//   key_column_ids:         1, 2   // k1, k2
+//
+// [old STORING encoding] Index k1v (k1, v) STORING (w):
+//   name:                   k1v
+//   id:                     2
+//   unique:                 false
+//   key_column_names:       k1, v
+//   key_column_directions:  ASC, ASC
+//   store_column_names:     w
+//   key_column_ids:         1, 4   // k1, v
+//   key_suffix_column_ids:  2, 5   // k2, w
+//
+// [new STORING encoding] Index k1v (k1, v) STORING (w):
+//   name:                   k1v
+//   id:                     2
+//   unique:                 false
+//   key_column_names:       k1, v
+//   key_column_directions:  ASC, ASC
+//   store_column_names:     w
+//   key_column_ids:         1, 4   // k1, v
+//   key_suffix_column_ids:  2      // k2
+//   store_column_ids:       5      // w
+message IndexDescriptor {
+  option (gogoproto.equal) = true;
+
+  optional string name = 1 [(gogoproto.nullable) = false];
+  optional uint32 id = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ID", (gogoproto.casttype) = "IndexID"];
+  optional bool unique = 3 [(gogoproto.nullable) = false];
+
+  optional uint32 version = 18 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexDescriptorVersion"];
+
+  // An ordered list of column names of which the index is comprised; these
+  // columns do not include any additional stored columns (which are in
+  // stored_column_names). This list parallels the key_column_ids list.
+  //
+  // If the index is an inverted index, the last column in the list is
+  // inverted and all others are not.
+  //
+  // Note: if duplicating the storage of the column names here proves to be
+  // prohibitive, we could clear this field before saving and reconstruct it
+  // after loading.
+  repeated string key_column_names = 4;
+
+  // The sort direction of each column in key_column_names.
+  repeated cockroach.sql.catalog.catpb.IndexColumn.Direction key_column_directions = 8;
+
+  // An ordered list of column names which the index stores in addition to the
+  // columns which are explicitly part of the index (STORING clause).
+  repeated string store_column_names = 5;
+
+  // An ordered list of opclasses that parallels each of the inverted columns
+  // in the index. n.b.: currently, there can only be a single inverted column
+  // in an index, so this list will always be of size 0 or 1.
+  repeated cockroach.sql.catalog.catpb.InvertedIndexColumnKind inverted_column_kinds = 27;
+
+  // An ordered list of column IDs of which the index key is comprised. This
+  // list parallels the key_column_names list and does not include any
+  // additional stored columns. If the index is an inverted index, the last
+  // column in the list is inverted and all others are not.
+  repeated uint32 key_column_ids = 6 [(gogoproto.customname) = "KeyColumnIDs",
+      (gogoproto.casttype) = "ColumnID"];
+
+  // An ordered list of IDs for the additional columns associated with the
+  // index:
+  //  - implicit columns, which are all the primary key columns that are not
+  //    already part of the index, in other words
+  //        PrimaryIndex.key_column_ids - key_column_ids.
+  //  - stored columns (the columns in store_column_names) if this index uses the
+  //    old STORING encoding (key-encoded data).
+  //
+  // Only used for secondary indexes.
+  // For non-unique indexes, these columns are appended to the key.
+  // For unique indexes, these columns are stored in the value (unless the key
+  // contains a NULL value: then the extra columns are appended to the key to
+  // unique-ify it).
+  // This distinction exists because we want to be able to insert an entry using
+  // a single conditional put on the key.
+  repeated uint32 key_suffix_column_ids = 7 [(gogoproto.customname) = "KeySuffixColumnIDs",
+      (gogoproto.casttype) = "ColumnID"];
+
+  // An ordered list of column IDs that parallels store_column_names if this
+  // index uses the new STORING encoding (value-encoded data, always in the KV
+  // value).
+  repeated uint32 store_column_ids = 14
+      [(gogoproto.customname) = "StoreColumnIDs", (gogoproto.casttype) = "ColumnID"];
+
+  // CompositeColumnIDs contains an ordered list of IDs of columns that appear
+  // in the index and have a composite encoding. Includes IDs from both
+  // key_column_ids and key_suffix_column_ids.
+  repeated uint32 composite_column_ids = 13
+      [(gogoproto.customname) = "CompositeColumnIDs", (gogoproto.casttype) = "ColumnID"];
+
+  // ForeignKey and ReferencedBy are deprecated and not stored from 19.2 onward.
+  optional ForeignKeyReference foreign_key = 9 [(gogoproto.nullable) = false, deprecated = true];
+  repeated ForeignKeyReference referenced_by = 10 [(gogoproto.nullable) = false, deprecated = true];
+
+  // Interleave, if it's not the zero value, describes how this index's data is
+  // interleaved into another index's data.
+  optional InterleaveDescriptor interleave = 11 [(gogoproto.nullable) = false, deprecated = true];
+
+  // InterleavedBy contains a reference to every table/index that is interleaved
+  // into this one.
+  //
+  // Note that any of these indexes can themselves be interleaved by other
+  // tables but this list contains only those for which this index is a direct
+  // interleave parent.
+  //
+  // Only the Table and Index fields of the ForeignKeyReference are used. And
+  // despite the message used here, interleavings don't have to have
+  // corresponding foreign key references (and whether they do or not is
+  // irrelevant for this field).
+  repeated ForeignKeyReference interleaved_by = 12 [(gogoproto.nullable) = false, deprecated = true];
+
+  // Partitioning, if it's not the zero value, describes how this index's data
+  // is partitioned into spans of keys each addressable by zone configs.
+  optional cockroach.sql.catalog.catpb.PartitioningDescriptor partitioning = 15 [(gogoproto.nullable) = false];
+
+  // Type is the type of index, forward, inverted, vector, etc.
+  optional cockroach.sql.sem.idxtype.T type = 16 [(gogoproto.nullable)=false];
+
+  // CreatedExplicitly specifies whether this index was created explicitly
+  // (i.e. via 'CREATE INDEX' statement).
+  optional bool created_explicitly = 17 [(gogoproto.nullable) = false];
+
+  // EncodingType represents what sort of k/v encoding is used to store this descriptor on disk.
+  // As of now, this includes the existing secondary index encoding, or the primary index encoding.
+  // N.B. This field is only recognized on secondary indexes.
+  optional uint32 encoding_type = 19 [(gogoproto.nullable) = false,
+                                      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb.IndexDescriptorEncodingType"];
+
+  // Sharded, if it's not the zero value, describes how this index is sharded.
+  optional cockroach.sql.catalog.catpb.ShardedDescriptor sharded = 20 [(gogoproto.nullable) = false];
+
+  // Disabled is used by the DROP PRIMARY KEY command to mark
+  // that this index is disabled for further use.
+  optional bool disabled = 21 [(gogoproto.nullable) = false];
+
+  // GeoConfig, if it's not the zero value, describes configuration for
+  // this geospatial inverted index.
+  optional geo.geoindex.Config geo_config = 22 [(gogoproto.nullable) = false];
+
+  // Predicate, if it's not empty, indicates that the index is a partial index
+  // with Predicate as the expression. If Predicate is empty, the index is not
+  // a partial index. Columns are referred to in the expression by their name.
+  // TODO(mgartner): Update the comment to explain that columns are referenced
+  // by their ID once #49766 is addressed.
+  optional string predicate = 23 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "Expression"];
+
+  // UseDeletePreservingEncoding, if true, causes the index to be encoded with
+  // an additional bit that indicates whether or not the value has been deleted.
+  // Index key-values that are deleted in this way are not actually deleted, but
+  // remain in the index with a value which has the delete bit set to true.
+  //
+  // The encoding with the additional delete bit was chosen over a separate
+  // index encoding type because there would have to be a separate type for each
+  // encoding that we already have for indexes. The alternative would get harder
+  // to maintain if we added more index encodings in the future.
+  //
+  // This is necessary to preserve the delete history for the MVCC-compatible
+  // index backfiller
+  // docs/RFCS/20211004_incremental_index_backfiller.md#new-index-encoding-for-deletions-vs-mvcc
+  //
+  // We only use the delete preserving encoding if the index is
+  // writable. Otherwise, we may preserve a delete when in DELETE_ONLY but never
+  // see a subsequent write that replaces it. This a problem for the
+  // MVCC-compatible index backfiller which merges entries from a
+  // delete-preserving index into a newly-added index. A delete preserved in
+  // DELETE_ONLY could result in a value being erroneously deleted during the
+  // merge process. While we could filter such deletes, the filtering would
+  // require more data being stored in each deleted entry and further complicate
+  // the merge process. See #75720 for further details.
+  optional bool use_delete_preserving_encoding = 24 [(gogoproto.nullable) = false];
+
+  // CreatedAtNanos, if non-zero, represents an approximate time at which the
+  // index was created.
+  optional int64 created_at_nanos = 25 [(gogoproto.nullable) = false];
+
+  // Used within the table descriptor to uniquely identify individual
+  // constraints, which is only set for primary keys and unique secondary
+  // indexes.
+  optional uint32 constraint_id = 26 [(gogoproto.customname) = "ConstraintID",
+    (gogoproto.casttype) = "ConstraintID", (gogoproto.nullable) = false];
+
+  // NotVisible specifies whether the index is not visible to the optimizer.
+  // A not visible index is ignored by the optimizer unless it is used for
+  // constraint check or is explicitly selected with index hinting (force
+  // index). By default, an index should be visible.
+  // NOTE: THIS FIELD IS DEPRECATED in favor of invisibility.
+  optional bool not_visible = 28 [(gogoproto.nullable) = false, deprecated = true];
+
+  // Invisibility specifies the invisibility of an index to the optimizer and
+  // can be any float64 between [0.0, 1.0]. An index with invisibility 0.0 means
+  // that the index is visible. An index with invisibility 1.0 means that the
+  // index is fully not visible. By default, an index should be visible or
+  // invisibility 0.0 (This is also why invisibility is used instead of
+  // visibility here). An index with invisibility 1.0 is ignored by the
+  // optimizer unless it is used for constraint check or is explicitly selected
+  // with index hinting. An index with invisibility between (0.0, 1.0) would be
+  // made fully not visible to a corresponding fraction of the queries. By
+  // convention, we will refer any indexes with invisibility == 0.0 as visible,
+  // any indexes with invisibility == 1.0 as fully not visible, and any indexes
+  // with index visibility in-between as partially not visible.
+  optional double invisibility = 29 [(gogoproto.nullable) = false];
+
+  // VecConfig, if it's not the zero value, describes configuration for
+  // this vector index.
+  optional vecindex.vecpb.Config vec_config = 30 [(gogoproto.nullable) = false];
+
+  // HideForPrimaryKeyRecreate, if set this index is not usable for reads until the
+  // new primary index becomes public.
+  optional bool hide_for_primary_key_recreate = 31  [(gogoproto.nullable) = false];
+
+  // SkipUniqueChecks, if set to true, disables unique constraint checks for
+  // this index in the optimizer. This is an unsafe optimization that should
+  // only be used when the application guarantees uniqueness externally (e.g.,
+  // through application-level logic or regional isolation). When enabled, the
+  // optimizer will not plan unique checks for mutations that could violate
+  // this index's uniqueness constraint.
+  optional bool skip_unique_checks = 32 [(gogoproto.nullable) = false];
+
+  // Next ID: 33
+}
+
+// TriggerDescriptor describes a trigger on a table.
+message TriggerDescriptor {
+  option (gogoproto.equal) = true;
+
+  // Used within the table descriptor to uniquely identify individual
+  // constraints.
+  optional uint32 id = 1 [(gogoproto.customname) = "ID",
+    (gogoproto.casttype) = "TriggerID", (gogoproto.nullable) = false];
+
+  // The name of the trigger. Unique within a table, and cannot be qualified.
+  optional string name = 2 [(gogoproto.nullable) = false];
+
+  // The timing of the trigger: before, after, or instead of the event.
+  optional cockroach.sql.sem.semenumpb.TriggerActionTime action_time = 3 [(gogoproto.nullable) = false];
+
+  message Event {
+    option (gogoproto.equal) = true;
+    optional cockroach.sql.sem.semenumpb.TriggerEventType type = 1 [(gogoproto.nullable) = false];
+    repeated string column_names = 2;
+  }
+  // The set of events that cause the trigger to fire: insert, update, delete,
+  // truncate, or upsert. For update, a list of target columns may be specified.
+  repeated Event events = 4;
+
+  // Optional alias for the mutated set of rows before the mutation. Empty if
+  // an alias was not specified.
+  optional string new_transition_alias = 5 [(gogoproto.nullable) = false];
+
+  // Optional alias for the mutated set of rows after the mutation. Empty if
+  // an alias was not specified.
+  optional string old_transition_alias = 6 [(gogoproto.nullable) = false];
+
+  // If true, indicates that the trigger is executed for each mutated row.
+  // Otherwise, the trigger is executed once for the entire statement.
+  optional bool for_each_row = 7 [(gogoproto.nullable) = false];
+
+  // An optional boolean condition that must be satisfied for the trigger to
+  // execute. Empty if a WHEN clause was not specified.
+  optional string when_expr = 8 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "Expression"];
+
+  // The ID of the function that is executed when the trigger is fired.
+  optional uint32 func_id = 9 [(gogoproto.customname) = "FuncID", (gogoproto.nullable) = false,(gogoproto.casttype) = "ID"];
+
+  // String constant arguments for the trigger function.
+  repeated string func_args = 10;
+
+  // The PL/pgSQL statements that make up the body of the trigger function. This
+  // is stored with the trigger descriptor with by-name references to
+  // user-defined objects replaced with ID references.
+  optional string func_body = 11 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "RoutineBody"];
+
+  // If true, indicates that the trigger is active.
+  optional bool enabled = 12 [(gogoproto.nullable) = false];
+
+  // The IDs of all relations that this trigger depends on.
+  repeated uint32 depends_on = 13 [(gogoproto.casttype) = "ID"];
+
+  // The IDs of all user defined types that this trigger depends on.
+  repeated uint32 depends_on_types = 14 [(gogoproto.casttype) = "ID"];
+
+  // DependsOnRoutines are the IDs of the user-defined routines that this
+  // trigger depends on.
+  repeated uint32 depends_on_routines = 15  [(gogoproto.casttype) = "ID"];
+}
+
+// ConstraintToUpdate represents a constraint to be added to the table and
+// validated for existing rows. More generally, in the future, when we support
+// adding constraints that are unvalidated for existing rows and can be
+// validated later using VALIDATE CONSTRAINT, this mutation will also represent
+// either adding an unvalidated constraint or validating an existing constraint.
+//
+// This mutation effects changes only in the backfill step of the schema
+// changer: First, a new version of the table descriptor with the constraint
+// added is published, after all columns being added have been backfilled. After
+// waiting for the constraint to be enforced for writes on all nodes, the
+// constraint is then validated for all existing rows. This ensures that
+// constraints added to columns that are being added are correctly enforced
+// before the column becomes public.
+message ConstraintToUpdate {
+  option (gogoproto.equal) = true;
+  enum ConstraintType {
+    CHECK = 0;
+    FOREIGN_KEY = 1;
+    // NOT NULL constraints being added are represented by a dummy check
+    // constraint so that a multi-state schema change, including a bulk
+    // validation step, can occur. The check field contains the dummy
+    // constraint.
+    NOT_NULL = 2;
+    UNIQUE_WITHOUT_INDEX = 3;
+  }
+  required ConstraintType constraint_type = 1 [(gogoproto.nullable) = false];
+  required string name = 2 [(gogoproto.nullable) = false];
+  optional TableDescriptor.CheckConstraint check = 3 [(gogoproto.nullable) = false];
+  // All fields past 3 haven't been persisted before 19.2.
+  optional ForeignKeyConstraint foreign_key = 4 [(gogoproto.nullable) = false];
+  reserved 5;
+  optional uint32 not_null_column = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ColumnID"];
+  optional UniqueWithoutIndexConstraint unique_without_index_constraint = 7 [(gogoproto.nullable) = false];
+}
+
+// PrimaryKeySwap is a mutation corresponding to the atomic swap phase
+// during a primary key change where old versions of indexes are exchanged for
+// updated versions, and the table's new primary key is written into the descriptor.
+message PrimaryKeySwap {
+  option (gogoproto.equal) = true;
+  // old_primary_index_id is the ID of the old primary index for the table.
+  optional uint32 old_primary_index_id = 4 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID"];
+  // new_primary_index_id is the ID of the new primary index for the table.
+  optional uint32 new_primary_index_id = 1 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID"];
+  // old_indexes and new_indexes are lists of IndexID's where the i'th index in old_indexes will be
+  // swapped out with the i'th index in new_indexes.
+  repeated uint32 old_indexes = 2 [(gogoproto.casttype) = "IndexID"];
+  repeated uint32 new_indexes = 3 [(gogoproto.casttype) = "IndexID"];
+  // new_primary_index_name is the name of the primary key when added as a
+  // new constraint to a table without a primary key. In other cases, it is
+  // the empty string.
+  optional string new_primary_index_name = 5 [(gogoproto.nullable) = false];
+
+  message LocalityConfigSwap {
+    option (gogoproto.equal) = true;
+    optional cockroach.sql.catalog.catpb.LocalityConfig old_locality_config = 1 [(gogoproto.nullable) = false];
+    optional cockroach.sql.catalog.catpb.LocalityConfig new_locality_config = 2 [(gogoproto.nullable) = false];
+
+    // NewRegionalByRowColumnID is set when we are creating a new column for a
+    // REGIONAL BY ROW table. It is used by NewRegionalByRowColumnDefaultExpr
+    // to identify the column we may have to change DefaultExpr for.
+    optional uint32 new_regional_by_row_column_id = 3 [(gogoproto.casttype) = "ColumnID", (gogoproto.customname) = "NewRegionalByRowColumnID"];
+    // NewRegionalByRowColumnDefaultExpr is the default expression to set when a
+    // REGIONAL BY ROW involving a new crdb_region column is required.
+    // This is required so that the backfill uses a well-known value, but after
+    // the backfill is complete we can set it to use the gateway_region.
+    //
+    // This must be set at mutation creation time, as the schema changer loses
+    // context on what the database is. The default expression should be already
+    // serialized in the same internal format as default_expr on the
+    // ColumnDescriptor.
+    optional string new_regional_by_row_column_default_expr = 4 [(gogoproto.casttype) = "Expression"];
+  }
+  // LocalityConfigSwap is set for ALTER TABLE SET LOCALITY when the command
+  // requires PK changes. If set, additional zone configurations are set to
+  // match the new locality config.
+  optional LocalityConfigSwap locality_config_swap = 6;
+}
+
+// ModifyRowLevelTTL is a mutation corresponding to adding or dropping a TTL
+// from a table. This accompanies an ADD or DROP column.
+message ModifyRowLevelTTL {
+  option (gogoproto.equal) = true;
+
+  optional cockroach.sql.catalog.catpb.RowLevelTTL row_level_ttl = 1 [(gogoproto.customname) = "RowLevelTTL"];
+}
+
+// ComputedColumnSwap is a mutation corresponding to the atomic swap phase
+// where Column a' that is computed using Column a is swapped to replace
+// Column a while Column a becomes computed using a'.
+message ComputedColumnSwap {
+  option (gogoproto.equal) = true;
+  optional uint32 new_column_id = 1 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ColumnID"];
+  optional uint32 old_column_id = 2 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ColumnID"];
+  // inverse_expr is the expression used to compute values for the old column
+  // once it is swapped for the new column.
+  optional string inverse_expr = 3 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "Expression"];
+}
+
+// MaterializedViewRefresh is a mutation corresponding to a request to
+// refresh a materialized view. The mutation operates by backfilling the
+// result of the view query into the indexes specified by the mutation.
+message MaterializedViewRefresh {
+  option (gogoproto.equal) = true;
+  // NewPrimaryIndex is the new primary index of the view to backfill into.
+  // NewPrimaryIndex and NewIndexes below are copies of the existing indexes on
+  // the view, but with different ID's.
+  optional IndexDescriptor new_primary_index = 1 [(gogoproto.nullable) = false];
+  // NewIndexes are the new set of indexes to backfill the view into.
+  repeated IndexDescriptor new_indexes = 2 [(gogoproto.nullable) = false];
+  // AsOf is the timestamp to perform the view query at.
+  optional util.hlc.Timestamp as_of = 3 [(gogoproto.nullable) = false];
+  // ShouldBackfill indicates whether or not the schema changer should backfill
+  // the query into the new indexes. This can be false if the `WITH NO DATA` flag
+  // was specified for the `REFRESH MATERIALIZED VIEW` statement. `WITH NO DATA`
+  // indicates that the user just wants the space used by the view to be reclaimed.
+  optional bool should_backfill = 4 [(gogoproto.nullable) = false];
+}
+
+// PolicyDescriptor is a representation of a row-level security policy. It's
+// stored in the TableDescriptor.
+message PolicyDescriptor {
+  option (gogoproto.equal) = true;
+
+  // ID is used within the table descriptor to uniquely identify policies.
+  optional uint32 id = 1 [(gogoproto.customname) = "ID",
+    (gogoproto.casttype) = "PolicyID", (gogoproto.nullable) = false];
+
+  // The name of the policy. Unique within a table, and cannot be qualified.
+  optional string name = 2 [(gogoproto.nullable) = false];
+
+  // Type indicates whether the policy is permissive or restrictive.
+  optional cockroach.sql.catalog.catpb.PolicyType type = 3 [(gogoproto.nullable) = false];
+
+  // Command specifies the SQL commands to which the policy applies.
+  optional cockroach.sql.catalog.catpb.PolicyCommand command = 4 [(gogoproto.nullable) = false];
+
+  // RoleNames is a list of roles that this policy applies to.
+  repeated string role_names = 5;
+
+  // The next two fields are the expressions to use for the policy. It is not
+  // correct to use either expression as output to display to a user. User
+  // defined types within the expressions have been serialized in a internal
+  // format. Instead, use one of the schemaexpr.FormatExpr* functions.
+
+  // UsingExpr defines the condition applied to read existing rows. If this
+  // field is omitted, the policy will not be used for reads.
+  optional string using_expr = 6 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "Expression"];
+
+  // UsingColumnIDs is an ordered list of column IDs used by the USING expression.
+  repeated uint32 using_column_ids = 11 [(gogoproto.customname) = "UsingColumnIDs",
+    (gogoproto.casttype) = "ColumnID"];
+
+  // WithCheck defines the condition applied to validate new rows during
+  // write operations (e.g., INSERT or UPDATE). If omitted, the UsingExpr
+  // will serve as a fallback, provided it is defined.
+  optional string with_check_expr = 7 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "Expression"];
+
+  // WithCheckColumnIDs is an ordered list of column IDs used by the WITH CHECK
+  // expression.
+  repeated uint32 with_check_column_ids = 12 [(gogoproto.customname) = "WithCheckColumnIDs",
+    (gogoproto.casttype) = "ColumnID"];
+
+  // DependsOnTypes are the IDs of all user defined types that the policy
+  // expressions depend on.
+  repeated uint32 depends_on_types = 8 [(gogoproto.casttype) = "ID"];
+
+  // DependsOnFunctions are the IDs of the function that the policy expressions
+  // depend on.
+  repeated uint32 depends_on_functions = 9 [(gogoproto.casttype) = "ID"];
+
+  // DependsOnRelations are the IDs of the tables, views and sequences that the
+  // policy expressions depend on.
+  repeated uint32 depends_on_relations = 10 [(gogoproto.casttype) = "ID"];
+
+  // Next ID: 13
+}
+
+// A DescriptorMutation represents a column or an index that
+// has either been added or dropped and hasn't yet transitioned
+// into a stable state: completely backfilled and visible, or
+// completely deleted. A table descriptor in the middle of a
+// schema change will have a DescriptorMutation FIFO queue
+// containing each column/index descriptor being added or dropped.
+// Mutations for constraints work differently from columns and
+// indexes; see the documentation for ConstraintToUpdate.
+message DescriptorMutation {
+  option (gogoproto.equal) = true;
+  oneof descriptor {
+    ColumnDescriptor column = 1;
+    IndexDescriptor index = 2;
+    ConstraintToUpdate constraint = 8;
+    PrimaryKeySwap primaryKeySwap = 9;
+    ComputedColumnSwap computedColumnSwap = 10;
+    MaterializedViewRefresh materializedViewRefresh = 11;
+    ModifyRowLevelTTL modify_row_level_ttl = 12 [(gogoproto.customname)="ModifyRowLevelTTL"];
+  }
+  // A descriptor within a mutation is unavailable for reads, writes
+  // and deletes. It is only available for implicit (internal to
+  // the database) writes and deletes depending on the state of the mutation.
+  enum State {
+    // Not used.
+    UNKNOWN = 0;
+    // Operations can use this invisible descriptor to implicitly
+    // delete entries.
+    // Column: A descriptor in this state is invisible to
+    // INSERT and UPDATE. DELETE must delete a column in this state.
+    // Index: A descriptor in this state is invisible to an INSERT.
+    // UPDATE must delete the old value of the index but doesn't write
+    // the new value. DELETE must delete the index.
+    //
+    // When deleting a descriptor, all descriptor related data
+    // (column or index data) can only be mass deleted once
+    // all the nodes have transitioned to the DELETE_ONLY state.
+    DELETE_ONLY = 1;
+    // Operations can use this invisible descriptor to implicitly
+    // write and delete entries.
+    // Column: INSERT will populate this column with the default
+    // value. UPDATE ignores this descriptor. DELETE must delete
+    // the column.
+    // Index: INSERT, UPDATE and DELETE treat this index like any
+    // other index.
+    //
+    // When adding a descriptor, all descriptor related data
+    // (column default or index data) can only be backfilled once
+    // all nodes have transitioned into the WRITE_ONLY state.
+    WRITE_ONLY = 2;
+
+    // Operations other than non-transactional backfilling must not
+    // use this descriptor.
+    //
+    // Column: Columns do not use this state. A column descriptor in
+    // this state is a programming error.
+    //
+    // Index: A descriptor in this state is invisible to an INSERT,
+    // UPDATE, and DELETE.
+    //
+    BACKFILLING = 3;
+
+    // Operations can use this invisible descriptor to implicitly
+    // write and delete entries. This is used by the MVCC-compatible
+    // index backfiller to ensure that unique indexes do not produce
+    // erroneous conflicts.
+    //
+    // Columns: Columns do not use this state. A column descriptor in
+    // this state is a programming error.
+    //
+    // Index: INSERT, UPDATE and DELETE treat this index like a
+    // WRITE_ONLY index, but use Put in instead of CPut, effectively
+    // ignoring unique constraints.
+    MERGING = 4;
+
+  }
+  optional State state = 3 [(gogoproto.nullable) = false];
+
+  // Direction of mutation.
+  enum Direction {
+    // Not used.
+    NONE = 0;
+    // Descriptor is being added.
+    ADD = 1;
+    // Descriptor is being dropped.
+    DROP = 2;
+  }
+  optional Direction direction = 4 [(gogoproto.nullable) = false];
+
+  // The mutation id used to group mutations that should be applied together.
+  // This is used for situations like creating a unique column, which
+  // involve adding two mutations: one for the column, and another for the
+  // unique constraint index.
+  optional uint32 mutation_id = 5 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "MutationID", (gogoproto.casttype) = "MutationID"];
+  reserved 6;
+
+  // Indicates that this mutation is a rollback.
+  optional bool rollback = 7 [(gogoproto.nullable) = false];
+}
+
+// A table descriptor is named through a name map stored in the
+// system.namespace table: a map from {parent_id, table_name} -> id.
+// This name map can be cached for performance on a node in the cluster
+// making reassigning a name complicated. In particular, since a
+// name cannot be withdrawn across a cluster in a transaction at
+// timestamp T, we have to worry about the following:
+//
+// 1. A table is dropped at T, and the name and descriptor are still
+// cached and used by transactions at timestamps >= T.
+// 2. A table is renamed from foo to bar at T, and both names foo and bar
+// can be used by transactions at timestamps >= T.
+// 3. A name foo is reassigned from one table to another at T, and the name
+// foo can reference two different tables at timestamps >= T.
+//
+// The system ensures that a name can be resolved only to a single
+// descriptor at a timestamp thereby permitting 1 and 2, but not 3
+// (the name references two tables).
+//
+// The transaction at T is followed by a time period when names no longer
+// a part of the namespace are drained from the system. Once the old name
+// is drained from the system another transaction at timestamp S is
+// executed to release the name for future use. The interval from T to S
+// is called the name drain interval: If the T transaction is removing
+// the name foo then, at timestamps above S, foo can no longer be resolved.
+//
+// Consider a transaction at T in which name B is dropped, a new name C is
+// created. Name C is viable as soon as the transaction commits.
+// When the transaction at S commits, the name B is released for reuse.
+//
+// The transaction at S runs through the schema changer, with the system
+// returning a response to the client initiating transaction T only after
+// transaction at S is committed. So effectively the SQL transaction once
+// it returns can be followed by SQL transactions that do not observe
+// old name mappings.
+//
+// Note: an exception to this is #19925 which needs to be fixed.
+//
+// In order for transaction at S to act properly the system.namespace
+// table entry for an old name references the descriptor who was the
+// prior owner of the name requiring draining.
+//
+// Before T:   B -> Desc B
+//
+// After T and before S: B -> Desc B, C -> Desc C
+//
+// After S: C -> Desc C
+//
+// Between T and S the name B is drained and the system is unable
+// to assign it to another descriptor.
+//
+// BEGIN;
+// RENAME foo TO bar;
+// CREATE foo;
+//
+// will fail because CREATE foo is executed at T.
+//
+// RENAME foo TO bar;
+// CREATE foo;
+//
+// will succeed because the RENAME returns after S and CREATE foo is
+// executed after S.
+//
+// The above scheme suffers from the problem that a transaction can observe
+// the partial effect of a committed transaction during the drain interval.
+// For instance during the drain interval a transaction can see the correct
+// assignment for C, and the old assignments for B.
+//
+message NameInfo {
+  option (gogoproto.equal) = true;
+  // The database that the table belonged to before the rename (tables can be
+  // renamed from one db to another).
+  optional uint32 parent_id = 1 [(gogoproto.nullable) = false,
+                                (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
+  // The schemaID of the schema the table belongs to before the rename/drop.
+  // Required to correctly identify which namespace entry to reclaim.
+  optional uint32 parent_schema_id = 3 [(gogoproto.nullable) = false,
+                                       (gogoproto.customname) = "ParentSchemaID", (gogoproto.casttype) = "ID"];
+  optional string name = 2 [(gogoproto.nullable) = false];
+}
+
+// State indicates whether a descriptor is public (i.e., normally visible,
+// resolvable, etc.) or in some other state subject to restrictions.
+// A non-public table descriptor cannot be leased.
+// A schema changer observing DROP set will truncate the table and delete the
+// descriptor.
+// It is illegal to transition DROP to any other state.
+enum DescriptorState {
+  // Descriptor is visible and can be leased.
+  PUBLIC = 0;
+  // Descriptor is being added.
+  ADD = 1;
+  // Descriptor is being dropped.
+  DROP = 2;
+  // Descriptor is offline (e.g. for bulk-ingestion). See offline_reason.
+  OFFLINE = 3;
+}
+
+// A TableDescriptor represents a table or view and is stored in a
+// structured metadata key. The TableDescriptor has a globally-unique ID,
+// while its member {Column,Index}Descriptors have locally-unique IDs.
+message TableDescriptor {
+  option (gogoproto.equal) = true;
+  // Needed for the descriptorProto interface.
+  option (gogoproto.goproto_getters) = true;
+
+  // The following 4 fields: name, id, version and modification_time
+  // are metadata fields required by all descriptors to be leaseable
+  // The reason that they do not exist in a message of their own is
+  // to ease the migration burden as not all descriptors initially
+  // had all of these fields but many had some.
+
+  // The table name. It should be normalized using NormalizeName() before
+  // comparing it.
+  optional string name = 1 [(gogoproto.nullable) = false];
+  optional uint32 id = 3 [(gogoproto.nullable) = false,
+                         (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
+  // Monotonically increasing version of the table descriptor.
+  //
+  // The design maintains two invariants:
+  // 1. Two safe versions: A transaction at a particular timestamp is
+  //    allowed to use one of two versions of a table descriptor:
+  //    the one that would be read from the store at that timestamp,
+  //    and the one behind it in version.
+  // 2. Two leased versions: There can be valid leases on at most the 2
+  //    latest versions of a table in the cluster at any time. New leases
+  //    are only granted on the latest version.
+  //
+  // The database must maintain correctness in light of there being two
+  // versions of a descriptor that can be used.
+  //
+  // Multiple schema change mutations can be grouped together on a
+  // particular version increment.
+  optional uint64 version = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
+  // Last modification time of the table descriptor.
+  // Starting in 19.2 this field's value may sometime be zero-valued in which
+  // case the MVCC timestamp of the row containing the value should be used to
+  // populate it. This dance allows us to avoid observing the commit timestamp
+  // for transactions which increment the descriptor version.
+  // Encoded TableDescriptor structs should not be stored directly but rather
+  // should live inside of a Descriptor. The Descriptor.Table() method takes an
+  // hlc timestamp to ensure that this field is set properly when extracted from
+  // a Descriptor.
+  optional util.hlc.Timestamp modification_time = 7 [(gogoproto.nullable) = false];
+
+  reserved 21; // draining_names
+
+  // ID of the parent database.
+  optional uint32 parent_id = 4 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
+  // ID of the parent schema. For backwards compatibility, 0 means the table is
+  // scoped under the public physical schema (id 29). Because of this backward
+  // compatibility issue, this field should not be accessed directly or through
+  // the generated getter. Instead, use GetParentSchemaID() which is defined in
+  // structured.go.
+  optional uint32 unexposed_parent_schema_id = 40 [(gogoproto.nullable) = false,
+        (gogoproto.customname) = "UnexposedParentSchemaID", (gogoproto.casttype) = "ID"];
+
+
+  reserved 6;
+
+  repeated ColumnDescriptor columns = 8 [(gogoproto.nullable) = false];
+  // next_column_id is used to ensure that deleted column ids are not reused.
+  optional uint32 next_column_id = 9 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "NextColumnID", (gogoproto.casttype) = "ColumnID"];
+  // families holds information about the column families of this table.
+  // This list has at least length 1, in which case all columns are stored in the same family.
+  // families is stored in sorted order by family ID.
+  repeated ColumnFamilyDescriptor families = 22 [(gogoproto.nullable) = false];
+  // next_family_id is used to ensure that deleted family ids are not reused.
+  optional uint32 next_family_id = 23 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "NextFamilyID", (gogoproto.casttype) = "FamilyID"];
+  optional IndexDescriptor primary_index = 10 [(gogoproto.nullable) = false];
+  // indexes are all the secondary indexes.
+  repeated IndexDescriptor indexes = 11 [(gogoproto.nullable) = false];
+  // next_index_id is used to ensure that deleted index ids are not reused.
+  optional uint32 next_index_id = 12 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "NextIndexID", (gogoproto.casttype) = "IndexID"];
+  optional PrivilegeDescriptor privileges = 13;
+  // Columns or indexes being added or deleted in a FIFO order.
+  repeated DescriptorMutation mutations = 14 [(gogoproto.nullable) = false];
+  reserved  15;
+  // An id for the next group of mutations to be applied together.
+  optional uint32 next_mutation_id = 16 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "NextMutationID", (gogoproto.casttype) = "MutationID"];
+
+  // format_version declares which sql to key:value mapping is being used to
+  // represent the data in this table.
+  optional uint32 format_version = 17 [(gogoproto.nullable) = false,
+      (gogoproto.casttype) = "FormatVersion"];
+
+  reserved 18;
+
+  optional DescriptorState state = 19 [(gogoproto.nullable) = false];
+  optional string offline_reason = 38 [(gogoproto.nullable) = false];
+
+  message CheckConstraint {
+    option (gogoproto.equal) = true;
+    // Expr is the expression that this check constraint represents.
+    // Note that it is not correct to use Expr as output to display
+    // to a user. User defined types within Expr have been serialized
+    // in a internal format. Instead, use one of the schemaexpr.FormatExpr*
+    // functions.
+    optional string expr = 1 [(gogoproto.nullable) = false,
+      (gogoproto.casttype) = "Expression"];
+    optional string name = 2 [(gogoproto.nullable) = false];
+    optional ConstraintValidity validity = 3 [(gogoproto.nullable) = false];
+    reserved 4;
+    // An ordered list of column IDs used by the check constraint.
+    repeated uint32 column_ids = 5 [(gogoproto.customname) = "ColumnIDs",
+      (gogoproto.casttype) = "ColumnID"];
+    optional bool is_non_null_constraint = 6 [(gogoproto.nullable) = false];
+    // FromHashShardedColumn is set to true for hash-sharded column check
+    // constraints.
+    // Previously, this field was used to hide these constraints in the output
+    // of SHOW CREATE TABLE. We no longer them in order to make the output to be
+    // round-trippable, but we still set this field for now. See #68031.
+    optional bool from_hash_sharded_column = 7 [(gogoproto.nullable) = false];
+    // Used within the table descriptor to uniquely identify individual
+    // constraints.
+    optional uint32 constraint_id = 8 [(gogoproto.customname) = "ConstraintID",
+      (gogoproto.casttype) = "ConstraintID", (gogoproto.nullable) = false];
+  }
+
+  repeated CheckConstraint checks = 20;
+
+  // The TableDescriptor is used for views in addition to tables. Views
+  // use mostly the same fields as tables, but need to track the actual
+  // query from the view definition as well.
+  //
+  // For now we only track a string representation of the query. This prevents
+  // us from easily supporting things like renames of the dependencies of a
+  // view. Eventually we'll want to switch to a semantic encoding of the query
+  // that relies on IDs rather than names so that we can support renames of
+  // fields relied on by the query, as Postgres does.
+  //
+  // Note: The presence of this field is used to determine whether or not
+  // a TableDescriptor represents a view.
+  optional string view_query = 24 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "Statement"];
+  // IsMaterializedView indicates whether this view is materialized or not.
+  // A materialized view has the view query results stored durably on disk
+  // as a table. The data on disk is refreshed with the REFRESH MATERIALIZED
+  // VIEW command. This flag is only set when ViewQuery != "".
+  optional bool is_materialized_view = 41 [(gogoproto.nullable) = false];
+  // RefreshViewRequired indicates if the materialized view needs to be refreshed
+  // prior to access.
+  optional bool refresh_view_required = 53 [(gogoproto.nullable) = false];
+  // SecurityInvoker indicates whether the view uses SECURITY INVOKER semantics.
+  // When true, the view executes with the privileges and the RLS of the user
+  // invoking it rather than the view definer. The field is optional to match
+  // PostgreSQL behavior. `SHOW CREATE VIEW` and `pg_catalog` only show this
+  // option when it's explicitly set by the user.
+  optional bool security_invoker = 72 [(gogoproto.nullable) = true];
+  // The IDs of all relations that this depends on.
+  // Only ever populated if this descriptor is for a view.
+  repeated uint32 dependsOn = 25 [(gogoproto.customname) = "DependsOn",
+           (gogoproto.casttype) = "ID"];
+
+  // The IDs of all types that this depends on.
+  // Only ever populated if this descriptor is for a view.
+  repeated uint32 dependsOnTypes = 45 [(gogoproto.customname) = "DependsOnTypes",
+    (gogoproto.casttype) = "ID"];
+
+  // The IDs of all functions that this depends on.
+  // Only ever populated if this descriptor is for a view.
+  repeated uint32 depends_on_functions = 55 [(gogoproto.customname) = "DependsOnFunctions",
+    (gogoproto.casttype) = "ID"];
+
+  message Reference {
+    option (gogoproto.equal) = true;
+    // The ID of the relation that depends on this one.
+    optional uint32 id = 1 [(gogoproto.nullable) = false,
+             (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
+    // If applicable, the ID of this table's index that is referenced by the
+    // dependent relation.
+    optional uint32 index_id = 2 [(gogoproto.nullable) = false,
+             (gogoproto.customname) = "IndexID", (gogoproto.casttype) = "IndexID"];
+    // The IDs of this table's columns that are referenced by the dependent
+    // relation.
+    repeated uint32 column_ids = 3 [(gogoproto.customname) = "ColumnIDs",
+             (gogoproto.casttype) = "ColumnID"];
+    // ByID indicates whether the relation is referenced via its name or its ID.
+    // For example, nextval('foo.public.seq') vs. nextval(12345::REGCLASS),
+    // where 12345 is the ID of foo.public.seq
+    // Sequences referenced only by its ID have the ability to be renamed.
+    optional bool by_id = 4 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ByID"];
+    // TriggerID is set when this dependency originates from a trigger on the
+    // dependent relation. A value of 0 indicates no trigger.
+    optional uint32 trigger_id = 5 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "TriggerID", (gogoproto.casttype) = "TriggerID"];
+  }
+
+  // All references to this table/view from other views and sequences in the system,
+  // tracked down to the column/index so that we can restrict changes to them while
+  // they're still being referred to.
+  repeated Reference dependedOnBy = 26 [(gogoproto.nullable) = false,
+           (gogoproto.customname) = "DependedOnBy"];
+
+  message MutationJob {
+    option (gogoproto.equal) = true;
+    // The mutation id of this mutation job.
+    optional uint32 mutation_id = 1 [(gogoproto.nullable) = false,
+             (gogoproto.customname) = "MutationID", (gogoproto.casttype) = "MutationID"];
+
+    // The job id for a mutation job is the id in the system.jobs table of the
+    // schema change job executing the mutation referenced by mutation_id.
+    // This is not a jobspb.JobID to avoid a dependency cycle.
+    optional int64 job_id = 2 [
+      (gogoproto.nullable) = false,
+      (gogoproto.customname) = "JobID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.JobID"];
+  }
+
+  // Mutation jobs queued for execution in a FIFO order. Remains synchronized
+  // with the mutations list.
+  repeated MutationJob mutationJobs = 27 [(gogoproto.nullable) = false];
+
+  reserved 46;
+
+  // DeclarativeSchemaChangerState contains the state corresponding to the
+  // descriptor being changed as part of a declarative schema change.
+  optional cockroach.sql.schemachanger.scpb.DescriptorState declarative_schema_changer_state = 50;
+
+  message SequenceOpts {
+    option (gogoproto.equal) = true;
+    // How much to increment the sequence by when nextval() is called.
+    optional int64 increment = 1 [(gogoproto.nullable) = false];
+    // Minimum value of the sequence.
+    optional int64 min_value = 2 [(gogoproto.nullable) = false];
+    // Maximum value of the sequence.
+    optional int64 max_value = 3 [(gogoproto.nullable) = false];
+    // Start value of the sequence.
+    optional int64 start = 4 [(gogoproto.nullable) = false];
+    // Whether the sequence is virtual.
+    optional bool virtual = 5 [(gogoproto.nullable) = false];
+
+    message SequenceOwner {
+      option (gogoproto.equal) = true;
+      // Sequence Owner's Column ID
+      optional uint32 owner_column_id = 1 [(gogoproto.nullable) = false,
+                                          (gogoproto.customname) = "OwnerColumnID",
+                                          (gogoproto.casttype) = "ColumnID"];
+      // Sequence Owner's Table ID
+      optional uint32 owner_table_id = 2 [(gogoproto.nullable) = false,
+                                         (gogoproto.customname) = "OwnerTableID",
+                                         (gogoproto.casttype) = "ID"];
+    }
+
+    optional SequenceOwner sequence_owner = 6 [(gogoproto.nullable) = false];
+
+    // The number of values (which have already been created in KV)
+    // that a session can cache locally.
+    optional int64 session_cache_size = 7 [(gogoproto.nullable) = false];
+    // AS option value for CREATE SEQUENCE, which specifies the default
+    // min and max values a sequence can take on.
+    optional string as_integer_type = 8 [(gogoproto.nullable) = false];
+    // The number of values that a node can cache.
+    optional int64 node_cache_size = 9 [(gogoproto.nullable) = false];
+  }
+
+  // The presence of sequence_opts indicates that this descriptor is for a sequence.
+  optional SequenceOpts sequence_opts = 28;
+
+  // The drop time is set when a table is truncated or dropped,
+  // based on the current time in nanoseconds since the epoch.
+  // Use this timestamp + GC TTL to start deleting the table's
+  // contents.
+  //
+  // TODO(vivek): Replace with the ModificationTime. This has been
+  // added only for migration purposes.
+  optional int64 drop_time = 29 [(gogoproto.nullable) = false];
+
+  message Replacement {
+    option (gogoproto.equal) = true;
+    optional uint32 id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
+    // Time is just used for debugging purposes. It is not used in business
+    // logic. It is an HLC rather than just wall time only for historical
+    // reasons. Prior to 20.1 it was populated with the commit timestamp of the
+    // transaction which created this replacement. In 20.1 and after it is
+    // populated with the read timestamp at which the descriptor being
+    // replaced was read.
+    optional util.hlc.Timestamp time = 2 [(gogoproto.nullable) = false];
+  }
+
+  // ReplacementOf tracks prior IDs by which this table went -- e.g. when
+  // TRUNCATE creates a replacement of a table and swaps it in for the the old
+  // one, it should note on the new table the ID of the table it replaced. This
+  // can be used when trying to track a table's history across truncatations.
+  optional Replacement replacement_of = 30 [(gogoproto.nullable) = false];
+
+  // AuditMode indicates which auditing actions to take when this table is used.
+  enum AuditMode {
+    DISABLED = 0;
+    READWRITE = 1;
+  }
+  optional AuditMode audit_mode = 31 [(gogoproto.nullable) = false];
+
+  // The job id for a drop job is the id in the system.jobs table of the
+  // dropping of this table.
+  optional int64 drop_job_id = 32 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "DropJobID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.JobID"];
+
+  reserved 33;
+
+  optional string create_query = 34 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "Statement"];
+
+  // Starting in 19.2 CreateAsOfTime is initialized to zero for the first
+  // version of a table and is populated from the MVCC timestamp of the read
+  // like ModificationTime. See Descriptor.Table().
+  // CreateAsOfSystemTime is used for CREATE TABLE ... AS ... and was
+  // added in 19.1.
+  optional util.hlc.Timestamp create_as_of_time = 35 [(gogoproto.nullable) = false];
+
+  // outbound_fks contains all foreign key constraints that have this table as
+  // the origin table.
+  repeated ForeignKeyConstraint outbound_fks = 36 [(gogoproto.nullable) = false, (gogoproto.customname) = "OutboundFKs"];
+  // inbound_fks contains all foreign key constraints that have this table as
+  // the referenced table.
+  repeated ForeignKeyConstraint inbound_fks = 37 [(gogoproto.nullable) = false, (gogoproto.customname) = "InboundFKs"];
+
+  // UniqueWithoutIndexConstraints contains all the unique constraints defined
+  // on this table that are not enforced by an index.
+  repeated UniqueWithoutIndexConstraint unique_without_index_constraints = 43 [(gogoproto.nullable) = false];
+
+  // Temporary table support will be added to CRDB starting from 20.1. The temporary
+  // flag is set to true for all temporary tables. All table descriptors created
+  // before 20.1 refer to persistent tables, so lack of the flag being set implies
+  // the table is persistent.
+  optional bool temporary = 39 [(gogoproto.nullable) = false];
+
+  optional cockroach.sql.catalog.catpb.LocalityConfig locality_config = 42;
+
+  // PartitionAllBy is set if PARTITION ALL BY or LOCALITY REGIONAL BY ROW is
+  // set on the table. This means that all indexes implicitly inherit all
+  // partitioning from the PARTITION ALL BY clause or region configuration.
+  optional bool partition_all_by = 44 [(gogoproto.nullable)=false];
+
+  // RowLevelTTL is set if there is a TTL set on the table.
+  optional cockroach.sql.catalog.catpb.RowLevelTTL row_level_ttl = 47 [(gogoproto.customname)="RowLevelTTL"];
+
+  // ExcludeDataFromBackup specifies if the table's row data can be excluded
+  // from a backup targeting this table. This in turn means that the protected
+  // timestamp record written during the backup will exclude this table as a
+  // target, thereby not holding up GC on this table for the runtime of the
+  // backup. This is particularly useful for table's with high-churn that can
+  // then be configured with a low GC-TTL.
+  //
+  // It is important to note that we will still backup the table descriptor, and
+  // all other objects that reference this table egs: jobs, and so restoring
+  // such a table will result in an empty table on the restoring cluster.
+  optional bool exclude_data_from_backup = 48 [(gogoproto.nullable) = false];
+
+  // Constraint ID for the next constraint.
+  optional uint32 next_constraint_id = 49 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "NextConstraintID", (gogoproto.casttype) = "ConstraintID"];
+
+  // AutoStatsSettings are table settings related to auto stats collection.
+  optional cockroach.sql.catalog.catpb.AutoStatsSettings auto_stats_settings = 51 [(gogoproto.customname)="AutoStatsSettings"];
+
+  // ForecastStats is set to true or false if statistics forecasts have been
+  // explicitly enabled or disabled for this table. It is null if unset for
+  // this table, in which case the global setting is used.
+  optional bool forecast_stats = 52 [(gogoproto.nullable) = true, (gogoproto.customname) = "ForecastStats"];
+
+  // HistogramSamples indicates the number of rows to sample when building a
+  // histogram for this table. It is null if unset for this table, in which case
+  // the global setting is used.
+  optional uint32 histogram_samples = 56 [(gogoproto.nullable) = true, (gogoproto.customname) = "HistogramSamples"];
+
+  // HistogramBuckets indicates the number of buckets to build when constructing
+  // a histogram for this table. It is null if unset for this table, in which
+  // case the global setting is used.
+  optional uint32 histogram_buckets = 57 [(gogoproto.nullable) = true, (gogoproto.customname) = "HistogramBuckets"];
+
+  // ImportStartWallTime contains the start wall time of an in-progress import.
+  // This field is non zero if this table is offline during an import.
+  optional int64 import_start_wall_time = 54 [(gogoproto.nullable) = false, (gogoproto.customname) = "ImportStartWallTime"];
+
+  // SchemaLocked, if set, disallows schema change to this table.
+  optional bool schema_locked = 58 [(gogoproto.nullable) = false, (gogoproto.customname) = "SchemaLocked"];
+
+  // ImportEpoch is the count of IMPORT INTO jobs that have been attempted on
+  // this table. The ImportEpoch can include an in progress import, as the field
+  // gets incremented while preparing the table for ingestion.
+  optional uint32 import_epoch = 59 [(gogoproto.nullable) = false, (gogoproto.customname) = "ImportEpoch"];
+
+  // ImportType is the type of import that is running if
+  // ImportStartWallTime is set.
+  optional ImportType import_type = 60 [(gogoproto.nullable) = false, (gogoproto.customname) = "ImportType"];
+
+  // External indicates where the row data for this object is stored if it is
+  // stored outside the span of the object.
+  optional ExternalRowData external = 61 [(gogoproto.nullable) = true];
+
+  // LDRJobIDs is a list of logical data replication job IDs which reference
+  // this table as a destination for the replication stream.
+  repeated int64 ldr_job_ids = 62 [(gogoproto.customname) = "LDRJobIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.JobID"];
+
+  // ReplicatedPCRVersion  tracks the original version from the source tenant
+  // that this descriptor was created from.
+  optional uint32 replicated_pcr_version = 63 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "ReplicatedPCRVersion", (gogoproto.casttype) = "DescriptorVersion"];
+
+  // Triggers is the unordered list of triggers defined for this table.
+  repeated TriggerDescriptor triggers = 64 [(gogoproto.nullable) = false];
+
+  // Trigger ID for the next trigger.
+  optional uint32 next_trigger_id = 65 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "NextTriggerID", (gogoproto.casttype) = "TriggerID"];
+
+  // Policies are the row-level security policies that are defined on this table.
+  repeated PolicyDescriptor policies = 66 [(gogoproto.nullable) = false];
+
+  // NextPolicyID is the ID for the next policy created.
+  optional uint32 next_policy_id = 67 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "NextPolicyID", (gogoproto.casttype) = "PolicyID"];
+
+  // row_level_security_enabled indicates whether row level security is enabled on this table.
+  optional bool row_level_security_enabled = 68 [(gogoproto.nullable) = false];
+
+  // row_level_security_forced indicates whether row level security is forced on this table.
+  // When forced is set the table's RLS policies are enforced even on the table owner.
+  optional bool row_level_security_forced = 69 [(gogoproto.nullable) = false];
+
+  // RBRUsingConstraint is the ID of the foreign-key constraint that is used to
+  // look up values for the region column of a REGIONAL BY ROW table.
+  optional uint32 rbr_using_constraint = 70 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "RBRUsingConstraint", (gogoproto.casttype) = "ConstraintID"];
+
+  // StatsCanaryWindow specifies the duration for which newly collected statistics
+  // remain in "canary" state before being promoted to stable. During this
+  // window, the cluster setting sql.stats.canary_fraction determines what
+  // percentage of queries use the new canary statistics vs. the previous stable
+  // statistics. This provides a buffer period for observation and intervention
+  // before new statistics are fully deployed to all queries throughout the
+  // cluster.
+  optional int64 stats_canary_window = 71 [(gogoproto.nullable) = false, (gogoproto.casttype)="time.Duration"];
+  // Next ID: 73
+}
+
+// ExternalRowData indicates that the row data for this object is stored outside
+// the span of the object, either in some other span (such as a different
+// tenant) or in wholly different storage (such as a backup).
+message ExternalRowData {
+  option (gogoproto.equal) = true;
+  optional util.hlc.Timestamp as_of = 1 [(gogoproto.nullable) = false];
+  optional roachpb.TenantID tenant_id = 2 [(gogoproto.nullable) = false,  (gogoproto.customname) = "TenantID"];
+  optional uint32 table_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "TableID", (gogoproto.casttype) = "ID"];
+}
+
+// ImportType indicates the type of IMPORT that is in progress for a
+// TableDescriptor.
+enum ImportType {
+  // IMPORT_WITH_START_TIME_ONLY indicates that this import set the
+  // ImportStartWallTime on the descriptor but did not set increment
+  // the ImportEpoch. Such imports cannot be rolled back without MVCC
+  // timestamp filtering.
+  //
+  // Note this is purposefuly 0 since in progress imports from before
+  // this field was added won't have this set.
+  IMPORT_WITH_START_TIME_ONLY = 0;
+  // IMPORT_WITH_IMPORT_EPOCH indicates that the running import did
+  // increment the import epoch. Such imports can be rolled back using
+  // an ImportEpoch deletion predicate.
+  IMPORT_WITH_IMPORT_EPOCH = 1;
+}
+
+// SurvivalGoal is the survival goal for a database.
+enum SurvivalGoal {
+  // Survive a zone failure. This is the default.
+  ZONE_FAILURE = 0;
+  // Survive a region failure.
+  REGION_FAILURE = 1;
+}
+
+// DataPlacement is the data placement strategy for a database.
+enum DataPlacement {
+  // Default placement - use non-voters.
+  DEFAULT = 0;
+  // Restricted placement - contain data strictly inside assigned region.
+  RESTRICTED = 1;
+}
+
+// DatabaseDescriptor represents a namespace (aka database) and is stored
+// in a structured metadata key. The DatabaseDescriptor has a globally-unique ID
+// shared with other Descriptors.
+// Permissions are applied to all tables in the namespace.
+message DatabaseDescriptor {
+  option (gogoproto.equal) = true;
+  // Needed for the descriptorProto interface.
+  option (gogoproto.goproto_getters) = true;
+
+  // Shared descriptor fields. See the discussion at the top of TableDescriptor.
+
+  optional string name = 1 [(gogoproto.nullable) = false];
+  optional uint32 id = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
+  // Last modification time of the descriptor.
+  optional util.hlc.Timestamp modification_time = 4 [(gogoproto.nullable) = false];
+  optional uint64 version = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
+
+  reserved 6; // draining_names
+
+  optional PrivilegeDescriptor privileges = 3;
+
+  // SchemaInfo represents the state of a child user defined schema.
+  message SchemaInfo {
+    option (gogoproto.equal) = true;
+    // ID is the ID of the schema.
+    optional uint32 id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
+
+    reserved 2; // dropped
+  }
+
+  // schemas is a mapping from child schema name to ID. It is used during
+  // name resolution to know without a KV lookup whether a database has a
+  // child schema with a target name. Temporary schemas are not stored here.
+  map<string, SchemaInfo> schemas = 7 [(gogoproto.nullable) = false];
+
+  optional DescriptorState state = 8 [(gogoproto.nullable) = false];
+  optional string offline_reason = 9 [(gogoproto.nullable) = false];
+
+  // RegionConfig stores region configuration for a given database.
+  message RegionConfig {
+    option (gogoproto.equal) = true;
+
+    reserved 1;
+    optional SurvivalGoal survival_goal = 2 [(gogoproto.nullable)=false];
+    optional string primary_region = 3 [(gogoproto.nullable)=false,(gogoproto.casttype)="github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.RegionName"];
+
+    // RegionEnumID represents ID of the type descriptor corresponding to the
+    // region enum for a multi-region database. If the database is not a
+    // multi-region database then this field is 0 and no such region enum exists.
+    optional uint32 region_enum_id = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "RegionEnumID", (gogoproto.casttype) = "ID"];
+
+    // DataPlacement dictates whether or not to use a restricted data placement
+    // policy.
+    optional DataPlacement placement = 5 [(gogoproto.nullable) = false];
+
+    optional string secondary_region = 6 [(gogoproto.nullable)=false,(gogoproto.casttype)="github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.RegionName"];
+  }
+  // RegionConfig is only set if multi-region controls are set on the database.
+  optional RegionConfig region_config = 10;
+
+  // DefaultPrivileges contains the default privileges for the database.
+  optional DefaultPrivilegeDescriptor default_privileges = 11;
+
+  // DeclarativeSchemaChangerState contains the state corresponding to the
+  // descriptor being changed as part of a declarative schema change.
+  optional cockroach.sql.schemachanger.scpb.DescriptorState declarative_schema_changer_state = 12;
+
+  // SystemDatabaseSchemaVersion denotes the version of the system
+  // database's schema.
+  //
+  // Note: It should only be set for the system database.
+  optional roachpb.Version system_database_schema_version = 13;
+
+  // ReplicatedPCRVersion tracks the original version from the source tenant
+  // that this descriptor was created from.
+  optional uint32 replicated_pcr_version = 14 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "ReplicatedPCRVersion", (gogoproto.casttype) = "DescriptorVersion"];
+
+  // Next field is 15.
+}
+
+// SuperRegion stores a super region configuration.
+message SuperRegion {
+  option (gogoproto.equal) = true;
+
+  optional string super_region_name = 1 [(gogoproto.nullable)=false];
+  repeated string regions = 2 [(gogoproto.casttype)="github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.RegionName"];
+  // Overrides the database-level survival goal for this super region.
+  // Only meaningful when has_survival_goal is true.
+  optional SurvivalGoal survival_goal = 3 [(gogoproto.nullable)=false];
+  // When true, survival_goal is an explicit override. When false (default),
+  // the super region inherits the database-level survival goal. Needed because
+  // SurvivalGoal's zero value (ZONE_FAILURE) is also a valid explicit setting.
+  optional bool has_survival_goal = 4 [(gogoproto.nullable)=false];
+}
+
+// ZoneConfigExtensions represents per-locality zone configurations that
+// influence the zone configurations derived for corresponding objects. A
+// locality type's associated extension acts as a targeted set of rewrite rules
+// for its associated objects' (database, table, partition) derived zone
+// configurations.
+//
+// "extending" a zone config means having the extension inherit any missing
+// fields from the zone config while replacing any set fields. This uses the
+// existing zone configuration inheritance rules.
+//
+// Rules (implemented in pkg/sql/region_util.go):
+// 1. database-level zone configs are extended first using the regional zone
+//    config extension, then with the super_region[<super_region_name>] zone
+//    config extension (if the primary region belongs to a super region), and
+//    then with the regional_in[<primary_region>] zone config extension. In
+//    doing so, REGIONAL [ IN PRIMARY REGION ] tables can continue to inherit
+//    from the database level zone config.
+// 2. table-level zone configs use the extension associated with their locality
+//    type.
+//  2a. GLOBAL tables are extended with the global zone config extension.
+//  2b. REGIONAL IN <region> tables are extended first using the regional zone
+//      config extension, then with the super_region[<super_region_name>] zone
+//      config extension (if the affinity region belongs to a super region), and
+//      then with the regional_in[<affinity_region>] zone config extension.
+// 3. partition-level zone configs are extended first using the regional zone
+//    config extension, then with the super_region[<super_region_name>] zone
+//    config extension (if the partition region belongs to a super region), and
+//    then with the regional_in[<partition_region>] zone config extension.
+message ZoneConfigExtensions {
+  option (gogoproto.equal) = true;
+
+  // Global extends the zone config applied to GLOBAL tables.
+  optional config.zonepb.ZoneConfig global = 1;
+  // Regional extends the zone config applied to REGIONAL [ BY ROW ] tables and
+  // partitions, regardless of affinity region.
+  optional config.zonepb.ZoneConfig regional = 2;
+  // RegionalIn further extends the zone configs applied to REGIONAL [ BY ROW ]
+  // tables and partitions, according to affinity region.
+  map<string, config.zonepb.ZoneConfig> regional_in = 3 [(gogoproto.nullable) = false,
+    (gogoproto.castkey)="github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.RegionName"];
+  // SuperRegion extends the zone config for partitions and REGIONAL BY TABLE
+  // tables whose affinity region belongs to the named super region. Applied
+  // after the regional extension and before the regional_in extension.
+  map<string, config.zonepb.ZoneConfig> super_region = 4 [(gogoproto.nullable) = false];
+}
+
+// TypeDescriptor represents a user defined type and is stored in a structured
+// metadata key. The TypeDescriptor has a globally-unique ID shared with other
+// Descriptors.
+message TypeDescriptor {
+  option (gogoproto.equal) = true;
+  // Needed for the descriptorProto interface.
+  option (gogoproto.goproto_getters) = true;
+
+  // Shared descriptor fields. See the discussion at the top of TableDescriptor.
+
+  // name is the current name of this user defined type.
+  optional string name = 3 [(gogoproto.nullable) = false];
+
+  // id is the globally unique ID for this type.
+  optional uint32 id = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
+
+
+  optional uint64 version = 9 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
+  // Last modification time of the descriptor.
+  optional util.hlc.Timestamp modification_time = 10 [(gogoproto.nullable) = false];
+
+  reserved 11; // draining_names
+
+  // privileges contains the privileges for the type.
+  optional PrivilegeDescriptor privileges = 14;
+
+  // Fields that are shared among all kinds of user defined types.
+
+  // parent_id represents the ID of the database that this type resides in.
+  optional uint32 parent_id = 1
+  [(gogoproto.nullable) = false, (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
+
+  // parent_schema_id represents the ID of the schema that this type resides in.
+  optional uint32 parent_schema_id = 2
+  [(gogoproto.nullable) = false, (gogoproto.customname) = "ParentSchemaID", (gogoproto.casttype) = "ID"];
+
+  // array_type_id is the globally unique ID for the implicitly created array
+  // type for this type. It is only set when the type descriptor points to a
+  // non-array type.
+  optional uint32 array_type_id = 8
+    [(gogoproto.nullable) = false, (gogoproto.customname) = "ArrayTypeID", (gogoproto.casttype) = "ID"];
+
+  optional DescriptorState state = 13 [(gogoproto.nullable) = false];
+  optional string offline_reason = 15 [(gogoproto.nullable) = false];
+
+  // Represents the kind of type that this type descriptor represents.
+  enum Kind {
+    // Represents a user defined enum type.
+    ENUM = 0;
+    // Represents a user defined type that is just an alias for another type.
+    // As of now, it is used only internally.
+    ALIAS = 1;
+    // Represents a special multi-region enum type which tracks available regions
+    // as its enum values.
+    MULTIREGION_ENUM = 2;
+    // Represents the implicit record type created on behalf of each table. This
+    // kind of TypeDescriptor is *never* persisted to disk! If you are here,
+    // thinking about using or persisting this value, you should *not* do that!
+    TABLE_IMPLICIT_RECORD_TYPE = 3;
+    // Represents a user-defined composite type.
+    COMPOSITE = 4;
+    // Represents a user-defined domain type (a base type with constraints).
+    DOMAIN = 5;
+  }
+  optional Kind kind = 5 [(gogoproto.nullable) = false];
+
+  // referencing_descriptor_ids is a set of descriptors that reference this type.
+  repeated uint32 referencing_descriptor_ids = 12
+    [(gogoproto.casttype) = "ID", (gogoproto.customname) = "ReferencingDescriptorIDs"];
+
+  // The fields below are used only when this type is an ENUM or a
+  // MULTIREGION_ENUM.
+
+  // EnumMember represents a value in an enum.
+  message EnumMember {
+    option (gogoproto.equal) = true;
+    optional bytes physical_representation = 1;
+    optional string logical_representation = 2 [(gogoproto.nullable) = false];
+
+    // Represents what operations are allowed on this ENUM member.
+    enum Capability {
+      // A member in the ALL state can be both read and written.
+      ALL = 0;
+      // A member in the READ_ONLY state can be only read from the bytes
+      // representation of the member. Creation of this member from the logical
+      // representation is disallowed, which prevents writes of the member.
+      READ_ONLY = 1;
+    }
+
+    enum Direction {
+      // Not used. Corresponds to the ALL capability.
+      NONE = 0;
+      // Enum value is being added.
+      ADD = 1;
+      // Enum value is being removed.
+      REMOVE= 2;
+    }
+    optional Capability capability = 3 [(gogoproto.nullable) = false];
+    optional Direction direction = 4 [(gogoproto.nullable) = false];
+  }
+  // enum_members is the set of values in an enum.
+  repeated EnumMember enum_members = 6 [(gogoproto.nullable) = false];
+
+  // The fields below are used only when this type is an ALIAS.
+
+  // alias is the types.T that this descriptor is an alias for.
+  optional sql.sem.types.T alias = 7;
+
+
+  // The fields below are used only when this type is a MULTIREGION_ENUM.
+
+  // RegionConfig stores the multi-region configuration for a type descriptor of
+  // MULTIREGION_ENUM kind.
+  message RegionConfig {
+    option (gogoproto.equal) = true;
+
+    // PrimaryRegion represents the PrimaryRegion for a multi-region enum.
+    optional string primary_region = 1 [(gogoproto.nullable) = false, (gogoproto.casttype)="github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.RegionName"];
+
+    // SuperRegions represents the super regions defined on the database.
+    repeated SuperRegion super_regions = 2 [(gogoproto.nullable) = false];
+
+    // ZoneConfigExtensions represents per-locality zone configurations that
+    // influence the zone configurations derived for corresponding objects.
+    optional ZoneConfigExtensions zone_config_extensions = 3 [(gogoproto.nullable) = false];
+
+    optional string secondary_region = 4 [(gogoproto.nullable) = false, (gogoproto.casttype)="github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.RegionName"];
+  }
+
+  optional RegionConfig region_config = 16;
+
+  // DeclarativeSchemaChangerState contains the state corresponding to the
+  // descriptor being changed as part of a declarative schema change.
+  optional cockroach.sql.schemachanger.scpb.DescriptorState declarative_schema_changer_state = 17;
+
+  // Composite describes a composite type, which is just a stored, labeled tuple
+  // type, like a struct in Go.
+  message Composite {
+    option (gogoproto.equal) = true;
+
+    // CompositeElement describes one element of a composite type.
+    message CompositeElement {
+      option (gogoproto.equal) = true;
+
+      // ElementType is the type of this composite element.
+      optional sql.sem.types.T element_type = 1;
+      // ElementLabel is the label of this composite element.
+      optional string element_label = 2 [(gogoproto.nullable) = false];
+    }
+
+    // Elements is a slice of the fields within this composite type, including
+    // the type and the label.
+    repeated CompositeElement elements = 1 [(gogoproto.nullable) = false];
+  }
+
+  // Composite is the list of fields if this is a composite type.
+  optional Composite composite = 18;
+
+  // Domain describes a domain type, which is a base type with optional
+  // constraints (CHECK, NOT NULL) and a default expression.
+  message Domain {
+    option (gogoproto.equal) = true;
+
+    // BaseType is the underlying type this domain is built on.
+    optional sql.sem.types.T base_type = 1;
+    // NotNull is true if the domain has a NOT NULL constraint.
+    optional bool not_null = 2 [(gogoproto.nullable) = false];
+    // DefaultExpr is the default expression for the domain, serialized as a
+    // string. Empty if no default is specified.
+    optional string default_expr = 3 [(gogoproto.nullable) = false];
+
+    // CheckConstraint represents a single CHECK constraint on the domain.
+    message CheckConstraint {
+      option (gogoproto.equal) = true;
+      // Name is the constraint name. May be auto-generated.
+      optional string name = 1 [(gogoproto.nullable) = false];
+      // Expr is the CHECK expression, serialized as a string.
+      optional string expr = 2 [(gogoproto.nullable) = false];
+      // ConstraintID uniquely identifies individual constraints within the domain.
+      optional uint32 constraint_id = 3 [(gogoproto.customname) = "ConstraintID",
+        (gogoproto.casttype) = "ConstraintID", (gogoproto.nullable) = false];
+      // Validity indicates whether the constraint has been validated for all
+      // existing data.
+      optional ConstraintValidity validity = 4 [(gogoproto.nullable) = false];
+    }
+    // CheckConstraints is the list of CHECK constraints on this domain.
+    repeated CheckConstraint check_constraints = 4 [(gogoproto.nullable) = false];
+
+    // NotNullConstraintName is the name of the NOT NULL constraint. Empty if
+    // there is no NOT NULL constraint.
+    optional string not_null_constraint_name = 5 [(gogoproto.nullable) = false];
+    // NotNullConstraintID uniquely identifies the NOT NULL constraint within
+    // the domain. Zero if there is no NOT NULL constraint.
+    optional uint32 not_null_constraint_id = 6 [(gogoproto.customname) = "NotNullConstraintID",
+      (gogoproto.casttype) = "ConstraintID", (gogoproto.nullable) = false];
+  }
+
+  // Domain is the domain definition if this is a domain type.
+  optional Domain domain = 21;
+
+  // ReplicatedPCRVersion tracks the original version from the source tenant
+  // that this descriptor was created from.
+  optional uint32 replicated_pcr_version = 20 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "ReplicatedPCRVersion", (gogoproto.casttype) = "DescriptorVersion"];
+
+  // Next field is 22.
+}
+
+// SchemaDescriptor represents a physical schema and is stored in a structured
+// metadata key.
+message SchemaDescriptor {
+  option (gogoproto.equal) = true;
+  // Needed for the descriptorProto interface.
+  option (gogoproto.goproto_getters) = true;
+
+  // Shared descriptor fields. See the discussion at the top of TableDescriptor.
+
+  // name is the name of the schema.
+  optional string name = 2 [(gogoproto.nullable) = false];
+
+  // id is the schema ID, globally unique across all descriptors.
+  optional uint32 id = 3
+  [(gogoproto.nullable) = false, (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
+
+  optional DescriptorState state = 8 [(gogoproto.nullable) = false];
+  optional string offline_reason = 9 [(gogoproto.nullable) = false];
+
+  // Last modification time of the descriptor.
+  optional util.hlc.Timestamp modification_time = 5 [(gogoproto.nullable) = false];
+  optional uint64 version = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
+
+  reserved 7; // draining_names
+
+  // parent_id refers to the database the schema is in.
+  optional uint32 parent_id = 1
+  [(gogoproto.nullable) = false, (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
+
+  // privileges contains the privileges for the schema.
+  optional PrivilegeDescriptor privileges = 4;
+
+  // DefaultPrivileges contains the default privileges for the database.
+  optional DefaultPrivilegeDescriptor default_privileges = 10;
+
+  // DeclarativeSchemaChangerState contains the state corresponding to the
+  // descriptor being changed as part of a declarative schema change.
+  optional cockroach.sql.schemachanger.scpb.DescriptorState declarative_schema_changer_state = 11;
+
+  // FunctionSignature represent a UDF signature and its descriptor ID.
+  message FunctionSignature {
+    option (gogoproto.equal) = true;
+
+    optional uint32 id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
+
+    // ArgTypes contains only input parameters.
+    repeated sql.sem.types.T arg_types = 2;
+
+    optional sql.sem.types.T return_type = 3;
+
+    optional bool return_set = 4 [(gogoproto.nullable) = false];
+
+    optional bool is_procedure = 5 [(gogoproto.nullable) = false];
+
+    // OutParamOrdinals contains all ordinals of OUT parameters among all
+    // parameters in the function definition. For example, if the function /
+    // procedure has a definition like
+    //   (IN p0, INOUT p1, OUT p2, INOUT p3, OUT p4),
+    // then OutParamOrdinals will contain [2, 4] (while ArgTypes will contain
+    // types of [p0, p1, p3]).
+    repeated int32 out_param_ordinals = 6;
+    // OutParamTypes contains types of all OUT parameters (it has 1-to-1 match
+    // with OutParamOrdinals).
+    repeated sql.sem.types.T out_param_types = 7;
+
+    // DefaultExprs specifies all DEFAULT expressions for input parameters.
+    // Since the arguments can only be omitted from the end of the actual
+    // argument list, we know exactly which input parameter each DEFAULT
+    // expression corresponds to.
+    repeated string default_exprs = 8;
+  }
+
+  // Function contains a group of UDFs with the same name.
+  message Function {
+    option (gogoproto.equal) = true;
+    optional string name = 1 [(gogoproto.nullable) = false];
+    repeated FunctionSignature signatures = 2 [(gogoproto.nullable) = false];
+  }
+
+  // functions contains all UDFs created in this schema.
+  map<string, Function> functions = 13 [(gogoproto.nullable) = false];
+
+  // ReplicatedPCRVersion tracks the original version from the source tenant
+  // that this descriptor was created from.
+  optional uint32 replicated_pcr_version = 14 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "ReplicatedPCRVersion", (gogoproto.casttype) = "DescriptorVersion"];
+
+  // Next field is 15.
+}
+
+// FunctionDescriptor represent a User Defined Function (UDF).
+message FunctionDescriptor {
+  option (gogoproto.equal) = true;
+  // Needed for the descriptorProto interface.
+  option (gogoproto.goproto_getters) = true;
+
+  message Parameter {
+    option (gogoproto.equal) = true;
+    optional cockroach.sql.catalog.catpb.Function.Param.Class class = 1 [(gogoproto.nullable) = false];
+    optional string name = 2 [(gogoproto.nullable) = false];
+    optional sql.sem.types.T type = 3;
+    optional string default_expr = 4;
+  }
+
+  message ReturnType {
+    option (gogoproto.equal) = true;
+    optional sql.sem.types.T type = 1;
+    // Whether it is returning a set of values
+    optional bool return_set = 2 [(gogoproto.nullable) = false];
+  }
+
+  message Reference {
+    option (gogoproto.equal) = true;
+    // The ID of the relation that depends on this function.
+    optional uint32 id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
+    // If applicable, IDs of the inbound reference table's index.
+    repeated uint32 index_ids = 2 [(gogoproto.customname) = "IndexIDs",
+      (gogoproto.casttype) = "IndexID"];
+    // If applicable, IDs of the inbound reference table's column.
+    repeated uint32 column_ids = 3 [(gogoproto.customname) = "ColumnIDs",
+      (gogoproto.casttype) = "ColumnID"];
+    // If applicable, IDs of the inbound reference table's constraint.
+    repeated uint32 constraint_ids = 4 [(gogoproto.customname) = "ConstraintIDs",
+      (gogoproto.casttype) = "ConstraintID"];
+    repeated uint32 trigger_ids = 5 [(gogoproto.customname) = "TriggerIDs",
+      (gogoproto.casttype) = "TriggerID"];
+    repeated uint32 policy_ids = 6 [(gogoproto.customname) = "PolicyIDs",
+      (gogoproto.casttype) = "PolicyID"];
+    // ViewQuery indicates that this function is referenced in the query of a
+    // view.
+    optional bool view_query = 7 [(gogoproto.nullable) = false];
+  }
+
+  optional string name = 1 [(gogoproto.nullable) = false];
+  optional uint32 id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
+
+  // parent_id represents the ID of the database that this type resides in.
+  optional uint32 parent_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
+
+  // parent_schema_id represents the ID of the schema that this type resides in.
+  optional uint32 parent_schema_id = 4 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "ParentSchemaID", (gogoproto.casttype) = "ID"];
+
+  // params represents the list of parameters, regardless of the parameter
+  // class, of the UDF signature.
+  repeated Parameter params = 5 [(gogoproto.nullable) = false];
+
+  // return_type represents the return type of the UDF signature.
+  optional ReturnType return_type = 6 [(gogoproto.nullable) = false];
+
+  // lang represent the language of the function body.
+  optional cockroach.sql.catalog.catpb.Function.Language lang = 7 [(gogoproto.nullable) = false];
+
+  // function_body contains all statements/expression in specified languages in one string.
+  // SQL statements in this string are rewritten with fully qualified table names.
+  optional string function_body = 8 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "RoutineBody"];
+
+  optional cockroach.sql.catalog.catpb.Function.Volatility volatility = 9 [(gogoproto.nullable) = false];
+  optional bool leak_proof = 10 [(gogoproto.nullable) = false];
+
+  // null_input_behavior indicates executor behavior on this UDF when called with `NULL` inputs.
+  optional cockroach.sql.catalog.catpb.Function.NullInputBehavior null_input_behavior = 11 [(gogoproto.nullable) = false];
+
+  optional PrivilegeDescriptor privileges = 12;
+
+  // The IDs of all relations that this function depends on.
+  // For example, in function body, there is a `SELECT` on table `t`, then table
+  // `t`'s descriptor id will be in this list.
+  repeated uint32 depends_on = 13 [(gogoproto.casttype) = "ID"];
+
+  // The IDs of all user defined types that this depends on.
+  // For example, in function's signature, a user defined enum `t` is used as an
+  // argument type, then type `T`'s descriptor id will be in this list.
+  repeated uint32 depends_on_types = 14 [(gogoproto.casttype) = "ID"];
+
+  // All references to this UDF.
+  repeated Reference depended_on_by = 15 [(gogoproto.nullable) = false];
+
+  optional DescriptorState state = 16 [(gogoproto.nullable) = false];
+  optional string offline_reason = 17 [(gogoproto.nullable) = false];
+  optional uint32 version = 18 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
+  optional util.hlc.Timestamp modification_time = 19 [(gogoproto.nullable) = false];
+
+  // DeclarativeSchemaChangerState contains the state corresponding to the
+  // descriptor being changed as part of a declarative schema change.
+  optional cockroach.sql.schemachanger.scpb.DescriptorState declarative_schema_changer_state = 20;
+
+  // IsProcedure is true if the descriptor represents a procedure.
+  optional bool is_procedure = 21 [(gogoproto.nullable) = false];
+
+  // DependsOnFunctions are the user defined functions that this function
+  // depends on.
+  repeated uint32 depends_on_functions = 22  [(gogoproto.casttype) = "ID"];
+
+  // Security contains the security mode that this function gets executed with.
+  // The default mode is INVOKER.
+  optional cockroach.sql.catalog.catpb.Function.Security security = 23 [(gogoproto.nullable) = false];
+
+  // ReplicatedPCRVersion tracks the original version from the source tenant
+  // that this descriptor was created from.
+  optional uint32 replicated_pcr_version = 24 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "ReplicatedPCRVersion", (gogoproto.casttype) = "DescriptorVersion"];
+
+  // Next field id is 25
+}
+
+// Descriptor is a union type for descriptors for tables, schemas, databases,
+// and types.
+message Descriptor {
+  option (gogoproto.equal) = true;
+  oneof union {
+    TableDescriptor table = 1;
+    DatabaseDescriptor database = 2;
+    TypeDescriptor type = 3;
+    SchemaDescriptor schema = 4;
+    FunctionDescriptor function = 5;
+  }
+}
+
+// DescriptorUpdates tracks updates to descriptors within a transaction, which
+// will be written to a special key.
+message DescriptorUpdates {
+  option (gogoproto.equal) = true;
+  // Needed for the descriptorProto interface.
+  option (gogoproto.goproto_getters) = true;
+
+  repeated uint32 descriptor_ids = 1 [(gogoproto.customname) = "DescriptorIDs", (gogoproto.casttype) = "ID"];
+  repeated uint32 descriptor_versions = 2  [(gogoproto.customname) = "DescriptorVersions", (gogoproto.casttype) = "DescriptorVersion"];
+}

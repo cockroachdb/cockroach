@@ -1,0 +1,42 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//build:STRINGER.bzl", "stringer")
+
+go_library(
+    name = "catalogkeys",
+    srcs = [
+        "keys.go",
+        ":gen-comment-type-stringer",  #keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catenumpb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/sem/catconstants",
+        "//pkg/util/encoding",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "catalogkeys_test",
+    size = "small",
+    srcs = ["keys_test.go"],
+    embed = [":catalogkeys"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/util/leaktest",
+    ],
+)
+
+stringer(
+    name = "gen-comment-type-stringer",
+    src = "keys.go",
+    typ = "CommentType",
+)

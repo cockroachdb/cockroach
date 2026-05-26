@@ -1,0 +1,1402 @@
+# tests adapted from logictest -- srfs
+
+# generate_series
+
+build
+SELECT * FROM generate_series(1, 3)
+----
+project-set
+ ├── columns: generate_series:1
+ ├── values
+ │    └── ()
+ └── zip
+      └── generate_series(1, 3)
+
+# Duplicate SRF names in FROM without aliases now correctly errors,
+# matching Postgres behavior (#150532).
+build
+SELECT * FROM generate_series(1, 2), generate_series(1, 2)
+----
+error (42712): source name "generate_series" specified more than once (missing AS clause)
+
+build
+SELECT * FROM generate_series(1, 2) AS a, generate_series(1, 2) AS b
+----
+inner-join-apply
+ ├── columns: a:1 b:2
+ ├── project-set
+ │    ├── columns: generate_series:1
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── generate_series(1, 2)
+ ├── project-set
+ │    ├── columns: generate_series:2
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── generate_series(1, 2)
+ └── filters (true)
+
+build
+SELECT * FROM pg_catalog.generate_series(1, 3)
+----
+project-set
+ ├── columns: generate_series:1
+ ├── values
+ │    └── ()
+ └── zip
+      └── generate_series(1, 3)
+
+build
+SELECT * FROM generate_series(1, 1) AS c(x)
+----
+project-set
+ ├── columns: x:1
+ ├── values
+ │    └── ()
+ └── zip
+      └── generate_series(1, 1)
+
+build
+SELECT * FROM generate_series(1, 1) WITH ORDINALITY AS c(x, y)
+----
+ordinality
+ ├── columns: x:1 y:2!null
+ └── project-set
+      ├── columns: generate_series:1
+      ├── values
+      │    └── ()
+      └── zip
+           └── generate_series(1, 1)
+
+build
+SELECT * FROM (VALUES (1)) LIMIT generate_series(1, 3)
+----
+error (0A000): generate_series(): set-returning functions are not allowed in LIMIT
+
+# multiple_SRFs
+
+build
+SELECT generate_series(1, 2), generate_series(3, 4)
+----
+project-set
+ ├── columns: generate_series:1 generate_series:2
+ ├── values
+ │    └── ()
+ └── zip
+      ├── generate_series(1, 2)
+      └── generate_series(3, 4)
+
+exec-ddl
+CREATE TABLE t (a string)
+----
+
+exec-ddl
+CREATE TABLE u (b string)
+----
+
+build
+SELECT t.*, u.*, a.*, b.* FROM t, u, generate_series(1, 2) AS a, generate_series(3, 4) AS b
+----
+project
+ ├── columns: a:1 b:5 a:9 b:10
+ └── inner-join-apply
+      ├── columns: a:1 t.rowid:2!null t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 b:5 u.rowid:6!null u.crdb_internal_mvcc_timestamp:7 u.tableoid:8 generate_series:9 generate_series:10
+      ├── inner-join-apply
+      │    ├── columns: a:1 t.rowid:2!null t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 b:5 u.rowid:6!null u.crdb_internal_mvcc_timestamp:7 u.tableoid:8 generate_series:9
+      │    ├── inner-join-apply
+      │    │    ├── columns: a:1 t.rowid:2!null t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 b:5 u.rowid:6!null u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
+      │    │    ├── scan t
+      │    │    │    └── columns: a:1 t.rowid:2!null t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
+      │    │    ├── scan u
+      │    │    │    └── columns: b:5 u.rowid:6!null u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
+      │    │    └── filters (true)
+      │    ├── project-set
+      │    │    ├── columns: generate_series:9
+      │    │    ├── values
+      │    │    │    └── ()
+      │    │    └── zip
+      │    │         └── generate_series(1, 2)
+      │    └── filters (true)
+      ├── project-set
+      │    ├── columns: generate_series:10
+      │    ├── values
+      │    │    └── ()
+      │    └── zip
+      │         └── generate_series(3, 4)
+      └── filters (true)
+
+build
+SELECT 3 + x FROM generate_series(1,2) AS a(x)
+----
+project
+ ├── columns: "?column?":2
+ ├── project-set
+ │    ├── columns: generate_series:1
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── generate_series(1, 2)
+ └── projections
+      └── 3 + generate_series:1 [as="?column?":2]
+
+build
+SELECT 3 + (3 * generate_series(1,3))
+----
+project
+ ├── columns: "?column?":2
+ ├── project-set
+ │    ├── columns: generate_series:1
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── generate_series(1, 3)
+ └── projections
+      └── 3 + (3 * generate_series:1) [as="?column?":2]
+
+# unnest
+
+build
+SELECT * from unnest(ARRAY[1,2])
+----
+project-set
+ ├── columns: unnest:1
+ ├── values
+ │    └── ()
+ └── zip
+      └── unnest(ARRAY[1,2])
+
+build
+SELECT unnest(ARRAY[1,2]), unnest(ARRAY['a', 'b'])
+----
+project-set
+ ├── columns: unnest:1 unnest:2
+ ├── values
+ │    └── ()
+ └── zip
+      ├── unnest(ARRAY[1,2])
+      └── unnest(ARRAY['a','b'])
+
+build
+SELECT unnest(ARRAY[3,4]) - 2
+----
+project
+ ├── columns: "?column?":2
+ ├── project-set
+ │    ├── columns: unnest:1
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── unnest(ARRAY[3,4])
+ └── projections
+      └── unnest:1 - 2 [as="?column?":2]
+
+build
+SELECT 1 + generate_series(0, 1), unnest(ARRAY[2, 4]) - 1
+----
+project
+ ├── columns: "?column?":3 "?column?":4
+ ├── project-set
+ │    ├── columns: generate_series:1 unnest:2
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         ├── generate_series(0, 1)
+ │         └── unnest(ARRAY[2,4])
+ └── projections
+      ├── 1 + generate_series:1 [as="?column?":3]
+      └── unnest:2 - 1 [as="?column?":4]
+
+build
+SELECT ascii(unnest(ARRAY['a', 'b', 'c']));
+----
+project
+ ├── columns: ascii:2
+ ├── project-set
+ │    ├── columns: unnest:1
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── unnest(ARRAY['a','b','c'])
+ └── projections
+      └── ascii(unnest:1) [as=ascii:2]
+
+# Regression test for #36501: don't rename the SRF column because of a
+# higher-level table alias.
+build
+SELECT * FROM (SELECT unnest(ARRAY[1])) AS tablealias
+----
+project-set
+ ├── columns: unnest:1
+ ├── values
+ │    └── ()
+ └── zip
+      └── unnest(ARRAY[1])
+
+build
+SELECT * FROM (SELECT unnest(ARRAY[1]) AS colalias) AS tablealias
+----
+project-set
+ ├── columns: colalias:1
+ ├── values
+ │    └── ()
+ └── zip
+      └── unnest(ARRAY[1])
+
+build
+SELECT * FROM
+  (SELECT unnest(ARRAY[1]) AS filter_id2) AS uq
+JOIN
+  (SELECT unnest(ARRAY[1]) AS filter_id) AS ab
+ON uq.filter_id2 = ab.filter_id
+----
+inner-join (hash)
+ ├── columns: filter_id2:1!null filter_id:2!null
+ ├── project-set
+ │    ├── columns: unnest:1
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── unnest(ARRAY[1])
+ ├── project-set
+ │    ├── columns: unnest:2
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── unnest(ARRAY[1])
+ └── filters
+      └── unnest:1 = unnest:2
+
+
+# nested_SRF
+# See #20511
+
+build
+SELECT generate_series(generate_series(1, 3), 3)
+----
+error (0A000): generate_series(): unimplemented: nested set-returning functions
+
+build
+SELECT generate_series(1, 3) + generate_series(1, 3)
+----
+project
+ ├── columns: "?column?":3
+ ├── project-set
+ │    ├── columns: generate_series:1 generate_series:2
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         ├── generate_series(1, 3)
+ │         └── generate_series(1, 3)
+ └── projections
+      └── generate_series:1 + generate_series:2 [as="?column?":3]
+
+build
+SELECT generate_series(1, 3) FROM t WHERE generate_series > 3
+----
+error (42703): column "generate_series" does not exist
+
+# Regressions for #15900: ensure that null parameters to generate_series don't
+# cause issues.
+
+build
+SELECT * from generate_series(1, (select * from generate_series(1, 0)))
+----
+project-set
+ ├── columns: generate_series:2
+ ├── values
+ │    └── ()
+ └── zip
+      └── function: generate_series
+           ├── 1
+           └── subquery
+                └── max1-row
+                     ├── columns: generate_series:1
+                     └── project-set
+                          ├── columns: generate_series:1
+                          ├── values
+                          │    └── ()
+                          └── zip
+                               └── generate_series(1, 0)
+
+# The following query is designed to produce a null array argument to unnest
+# in a way that the type system can't detect before evaluation.
+build
+SELECT unnest((SELECT current_schemas((SELECT isnan((SELECT round(3.4, (SELECT generate_series(1, 0)))))))));
+----
+project-set
+ ├── columns: unnest:5
+ ├── values
+ │    └── ()
+ └── zip
+      └── function: unnest
+           └── subquery
+                └── max1-row
+                     ├── columns: current_schemas:4
+                     └── project
+                          ├── columns: current_schemas:4
+                          ├── values
+                          │    └── ()
+                          └── projections
+                               └── function: current_schemas [as=current_schemas:4]
+                                    └── subquery
+                                         └── max1-row
+                                              ├── columns: isnan:3
+                                              └── project
+                                                   ├── columns: isnan:3
+                                                   ├── values
+                                                   │    └── ()
+                                                   └── projections
+                                                        └── function: isnan [as=isnan:3]
+                                                             └── subquery
+                                                                  └── max1-row
+                                                                       ├── columns: round:2
+                                                                       └── project
+                                                                            ├── columns: round:2
+                                                                            ├── values
+                                                                            │    └── ()
+                                                                            └── projections
+                                                                                 └── function: round [as=round:2]
+                                                                                      ├── 3.4
+                                                                                      └── subquery
+                                                                                           └── max1-row
+                                                                                                ├── columns: generate_series:1
+                                                                                                └── project-set
+                                                                                                     ├── columns: generate_series:1
+                                                                                                     ├── values
+                                                                                                     │    └── ()
+                                                                                                     └── zip
+                                                                                                          └── generate_series(1, 0)
+
+# pg_get_keywords
+
+# pg_get_keywords for compatibility (#10291)
+build
+SELECT * FROM pg_get_keywords() WHERE word IN ('alter', 'and', 'between', 'cross') ORDER BY word
+----
+sort
+ ├── columns: word:1!null catcode:2 catdesc:3
+ ├── ordering: +1
+ └── select
+      ├── columns: word:1!null catcode:2 catdesc:3
+      ├── project-set
+      │    ├── columns: word:1 catcode:2 catdesc:3
+      │    ├── values
+      │    │    └── ()
+      │    └── zip
+      │         └── pg_get_keywords()
+      └── filters
+           └── word:1 IN ('alter', 'and', 'between', 'cross')
+
+# Postgres enables renaming both the source and the column name for
+# single-column generators, but not for multi-column generators.
+build
+SELECT a.*, b.*, c.* FROM generate_series(1,1) a, unnest(ARRAY[1]) b, pg_get_keywords() c LIMIT 0
+----
+limit
+ ├── columns: a:1 b:2 word:3 catcode:4 catdesc:5
+ ├── inner-join-apply
+ │    ├── columns: generate_series:1 unnest:2 word:3 catcode:4 catdesc:5
+ │    ├── limit hint: 1.00
+ │    ├── inner-join-apply
+ │    │    ├── columns: generate_series:1 unnest:2
+ │    │    ├── project-set
+ │    │    │    ├── columns: generate_series:1
+ │    │    │    ├── values
+ │    │    │    │    └── ()
+ │    │    │    └── zip
+ │    │    │         └── generate_series(1, 1)
+ │    │    ├── project-set
+ │    │    │    ├── columns: unnest:2
+ │    │    │    ├── values
+ │    │    │    │    └── ()
+ │    │    │    └── zip
+ │    │    │         └── unnest(ARRAY[1])
+ │    │    └── filters (true)
+ │    ├── project-set
+ │    │    ├── columns: word:3 catcode:4 catdesc:5
+ │    │    ├── values
+ │    │    │    └── ()
+ │    │    └── zip
+ │    │         └── pg_get_keywords()
+ │    └── filters (true)
+ └── 0
+
+# Beware of multi-valued SRFs in render position (#19149)
+build
+SELECT 'a', pg_get_keywords(), 'c' LIMIT 1
+----
+limit
+ ├── columns: "?column?":4!null pg_get_keywords:5 "?column?":6!null
+ ├── project
+ │    ├── columns: "?column?":4!null pg_get_keywords:5 "?column?":6!null
+ │    ├── limit hint: 1.00
+ │    ├── project-set
+ │    │    ├── columns: word:1 catcode:2 catdesc:3
+ │    │    ├── limit hint: 1.00
+ │    │    ├── values
+ │    │    │    ├── limit hint: 1.00
+ │    │    │    └── ()
+ │    │    └── zip
+ │    │         └── pg_get_keywords()
+ │    └── projections
+ │         ├── 'a' [as="?column?":4]
+ │         ├── ((word:1, catcode:2, catdesc:3) AS word, catcode, catdesc) [as=pg_get_keywords:5]
+ │         └── 'c' [as="?column?":6]
+ └── 1
+
+build
+SELECT 'a', pg_get_keywords() b, 'c' LIMIT 1
+----
+limit
+ ├── columns: "?column?":4!null b:5 "?column?":6!null
+ ├── project
+ │    ├── columns: "?column?":4!null b:5 "?column?":6!null
+ │    ├── limit hint: 1.00
+ │    ├── project-set
+ │    │    ├── columns: word:1 catcode:2 catdesc:3
+ │    │    ├── limit hint: 1.00
+ │    │    ├── values
+ │    │    │    ├── limit hint: 1.00
+ │    │    │    └── ()
+ │    │    └── zip
+ │    │         └── pg_get_keywords()
+ │    └── projections
+ │         ├── 'a' [as="?column?":4]
+ │         ├── ((word:1, catcode:2, catdesc:3) AS word, catcode, catdesc) [as=b:5]
+ │         └── 'c' [as="?column?":6]
+ └── 1
+
+# unary_table
+
+build
+SELECT 'a', crdb_internal.unary_table() b, 'c' LIMIT 1
+----
+limit
+ ├── columns: "?column?":1!null b:2!null "?column?":3!null
+ ├── project
+ │    ├── columns: "?column?":1!null b:2!null "?column?":3!null
+ │    ├── limit hint: 1.00
+ │    ├── project-set
+ │    │    ├── limit hint: 1.00
+ │    │    ├── values
+ │    │    │    ├── limit hint: 1.00
+ │    │    │    └── ()
+ │    │    └── zip
+ │    │         └── crdb_internal.unary_table()
+ │    └── projections
+ │         ├── 'a' [as="?column?":1]
+ │         ├── () [as=b:2]
+ │         └── 'c' [as="?column?":3]
+ └── 1
+
+# upper
+
+# Regular scalar functions can be used as functions too. #22312
+build
+SELECT * FROM upper('abc')
+----
+project-set
+ ├── columns: upper:1
+ ├── values
+ │    └── ()
+ └── zip
+      └── upper('abc')
+
+# current_schema
+
+build
+SELECT * FROM current_schema() WITH ORDINALITY AS a(b)
+----
+ordinality
+ ├── columns: b:1 ordinality:2!null
+ └── project-set
+      ├── columns: current_schema:1
+      ├── values
+      │    └── ()
+      └── zip
+           └── current_schema()
+
+# expandArray
+
+build
+SELECT information_schema._pg_expandarray(ARRAY['b', 'a'])
+----
+project
+ ├── columns: information_schema._pg_expandarray:3
+ ├── project-set
+ │    ├── columns: x:1 n:2
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── information_schema._pg_expandarray(ARRAY['b','a'])
+ └── projections
+      └── ((x:1, n:2) AS x, n) [as=information_schema._pg_expandarray:3]
+
+build
+SELECT * FROM information_schema._pg_expandarray(ARRAY['b', 'a'])
+----
+project-set
+ ├── columns: x:1 n:2
+ ├── values
+ │    └── ()
+ └── zip
+      └── information_schema._pg_expandarray(ARRAY['b','a'])
+
+# srf_accessor
+
+build
+SELECT (1).*
+----
+error (42809): type int is not composite
+
+build
+SELECT ('a').*
+----
+error (42809): type string is not composite
+
+build
+SELECT (unnest(ARRAY[]:::INT[])).*
+----
+error (42809): type int is not composite
+
+build
+SELECT (information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])).*
+----
+project
+ ├── columns: x:3 n:4
+ ├── project-set
+ │    ├── columns: x:1 n:2
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── information_schema._pg_expandarray(ARRAY['c','b','a'])
+ └── projections
+      ├── (((x:1, n:2) AS x, n)).x [as=x:3]
+      └── (((x:1, n:2) AS x, n)).n [as=n:4]
+
+build
+SELECT (information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])).x
+----
+project
+ ├── columns: x:3
+ ├── project-set
+ │    ├── columns: x:1 n:2
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── information_schema._pg_expandarray(ARRAY['c','b','a'])
+ └── projections
+      └── (((x:1, n:2) AS x, n)).x [as=x:3]
+
+build
+SELECT (information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])).@2
+----
+project
+ ├── columns: "?column?":3
+ ├── project-set
+ │    ├── columns: x:1 n:2
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── information_schema._pg_expandarray(ARRAY['c','b','a'])
+ └── projections
+      └── (((x:1, n:2) AS x, n)).n [as="?column?":3]
+
+build
+SELECT (information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])).other
+----
+error (42703): could not identify column "other" in tuple{string AS x, int AS n}
+
+build
+SELECT (information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])).@4
+----
+error (42601): tuple column 4 does not exist
+
+build
+SELECT temp.n from information_schema._pg_expandarray(ARRAY['c','b','a']) AS temp;
+----
+project
+ ├── columns: n:2
+ └── project-set
+      ├── columns: x:1 n:2
+      ├── values
+      │    └── ()
+      └── zip
+           └── information_schema._pg_expandarray(ARRAY['c','b','a'])
+
+build
+SELECT temp.* from information_schema._pg_expandarray(ARRAY['c','b','a']) AS temp;
+----
+project-set
+ ├── columns: x:1 n:2
+ ├── values
+ │    └── ()
+ └── zip
+      └── information_schema._pg_expandarray(ARRAY['c','b','a'])
+
+build
+SELECT * from information_schema._pg_expandarray(ARRAY['c','b','a']) AS temp;
+----
+project-set
+ ├── columns: x:1 n:2
+ ├── values
+ │    └── ()
+ └── zip
+      └── information_schema._pg_expandarray(ARRAY['c','b','a'])
+
+# generate_subscripts
+
+build
+SELECT * FROM generate_subscripts(ARRAY[3,2,1])
+----
+project-set
+ ├── columns: generate_subscripts:1
+ ├── values
+ │    └── ()
+ └── zip
+      └── generate_subscripts(ARRAY[3,2,1])
+
+# Zip with multiple SRFs.
+build
+SELECT * FROM
+ROWS FROM (generate_series(0, 1), generate_series(1, 3), pg_get_keywords(), unnest(ARRAY['a', 'b', 'c']))
+----
+project-set
+ ├── columns: generate_series:1 generate_series:2 word:3 catcode:4 catdesc:5 unnest:6
+ ├── values
+ │    └── ()
+ └── zip
+      ├── generate_series(0, 1)
+      ├── generate_series(1, 3)
+      ├── pg_get_keywords()
+      └── unnest(ARRAY['a','b','c'])
+
+# Don't rename columns if the zip contains two functions.
+build
+SELECT a.*, b.*, c.* FROM upper('abc') a
+JOIN ROWS FROM (upper('def'), generate_series(1, 3)) b ON true
+JOIN generate_series(1, 4) c ON true
+----
+inner-join-apply
+ ├── columns: a:1 upper:2 generate_series:3 c:4
+ ├── inner-join-apply
+ │    ├── columns: upper:1 upper:2 generate_series:3
+ │    ├── project-set
+ │    │    ├── columns: upper:1
+ │    │    ├── values
+ │    │    │    └── ()
+ │    │    └── zip
+ │    │         └── upper('abc')
+ │    ├── project-set
+ │    │    ├── columns: upper:2 generate_series:3
+ │    │    ├── values
+ │    │    │    └── ()
+ │    │    └── zip
+ │    │         ├── upper('def')
+ │    │         └── generate_series(1, 3)
+ │    └── filters
+ │         └── true
+ ├── project-set
+ │    ├── columns: generate_series:4
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── generate_series(1, 4)
+ └── filters
+      └── true
+
+build
+SELECT * FROM ROWS FROM (generate_series(generate_series(1,2),3))
+----
+error (0A000): generate_series(): generate_series(): set-returning functions must appear at the top level of FROM
+
+# SRFs not allowed in HAVING, unless they are part of a subquery.
+build
+SELECT max(a) FROM t HAVING max(a::int) > generate_series(0, a::int)
+----
+error (0A000): generate_series(): set-returning functions are not allowed in HAVING
+
+build
+SELECT max(a) FROM t HAVING max(a::int) > (SELECT generate_series(0, b::int) FROM u limit 1)
+----
+project
+ ├── columns: max:5
+ └── select
+      ├── columns: max:5 max:7!null
+      ├── scalar-group-by
+      │    ├── columns: max:5 max:7
+      │    ├── project
+      │    │    ├── columns: column6:6 a:1
+      │    │    ├── scan t
+      │    │    │    └── columns: a:1 t.rowid:2!null t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
+      │    │    └── projections
+      │    │         └── a:1::INT8 [as=column6:6]
+      │    └── aggregations
+      │         ├── max [as=max:5]
+      │         │    └── a:1
+      │         └── max [as=max:7]
+      │              └── column6:6
+      └── filters
+           └── gt
+                ├── max:7
+                └── subquery
+                     └── max1-row
+                          ├── columns: generate_series:12
+                          └── limit
+                               ├── columns: generate_series:12
+                               ├── project
+                               │    ├── columns: generate_series:12
+                               │    ├── limit hint: 1.00
+                               │    └── project-set
+                               │         ├── columns: b:8 u.rowid:9!null u.crdb_internal_mvcc_timestamp:10 u.tableoid:11 generate_series:12
+                               │         ├── limit hint: 1.00
+                               │         ├── scan u
+                               │         │    ├── columns: b:8 u.rowid:9!null u.crdb_internal_mvcc_timestamp:10 u.tableoid:11
+                               │         │    └── limit hint: 1.00
+                               │         └── zip
+                               │              └── generate_series(0, b:8::INT8)
+                               └── 1
+
+build
+SELECT generate_series((SELECT generate_subscripts(ARRAY[a, a||b]) FROM t, u), 100) FROM t
+----
+project
+ ├── columns: generate_series:14
+ └── project-set
+      ├── columns: a:1 t.rowid:2!null t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 generate_series:14
+      ├── scan t
+      │    └── columns: a:1 t.rowid:2!null t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
+      └── zip
+           └── function: generate_series
+                ├── subquery
+                │    └── max1-row
+                │         ├── columns: generate_subscripts:13
+                │         └── project
+                │              ├── columns: generate_subscripts:13
+                │              └── project-set
+                │                   ├── columns: a:5 t.rowid:6!null t.crdb_internal_mvcc_timestamp:7 t.tableoid:8 b:9 u.rowid:10!null u.crdb_internal_mvcc_timestamp:11 u.tableoid:12 generate_subscripts:13
+                │                   ├── inner-join (cross)
+                │                   │    ├── columns: a:5 t.rowid:6!null t.crdb_internal_mvcc_timestamp:7 t.tableoid:8 b:9 u.rowid:10!null u.crdb_internal_mvcc_timestamp:11 u.tableoid:12
+                │                   │    ├── scan t
+                │                   │    │    └── columns: a:5 t.rowid:6!null t.crdb_internal_mvcc_timestamp:7 t.tableoid:8
+                │                   │    ├── scan u
+                │                   │    │    └── columns: b:9 u.rowid:10!null u.crdb_internal_mvcc_timestamp:11 u.tableoid:12
+                │                   │    └── filters (true)
+                │                   └── zip
+                │                        └── generate_subscripts(ARRAY[a:5, a:5 || b:9])
+                └── 100
+
+exec-ddl
+CREATE TABLE a (x INT PRIMARY KEY, j JSON, k JSON, m JSON, n JSON)
+----
+
+build
+SELECT
+  json_array_elements(j),
+  (SELECT jsonb_each(k)),
+  (SELECT jsonb_object_keys(m) FROM a),
+  (SELECT generate_series((SELECT generate_series(x, 100) FROM jsonb_array_elements_text(n)), 1000))
+FROM a
+----
+project
+ ├── columns: json_array_elements:8 jsonb_each:23 jsonb_object_keys:24 generate_series:25
+ ├── project-set
+ │    ├── columns: x:1!null j:2 k:3 m:4 n:5 crdb_internal_mvcc_timestamp:6 tableoid:7 json_array_elements:8
+ │    ├── scan a
+ │    │    └── columns: x:1!null j:2 k:3 m:4 n:5 crdb_internal_mvcc_timestamp:6 tableoid:7
+ │    └── zip
+ │         └── json_array_elements(j:2)
+ └── projections
+      ├── subquery [as=jsonb_each:23]
+      │    └── max1-row
+      │         ├── columns: jsonb_each:11
+      │         └── project
+      │              ├── columns: jsonb_each:11
+      │              ├── project-set
+      │              │    ├── columns: key:9 value:10
+      │              │    ├── values
+      │              │    │    └── ()
+      │              │    └── zip
+      │              │         └── jsonb_each(k:3)
+      │              └── projections
+      │                   └── ((key:9, value:10) AS key, value) [as=jsonb_each:11]
+      ├── subquery [as=jsonb_object_keys:24]
+      │    └── max1-row
+      │         ├── columns: jsonb_object_keys:19
+      │         └── project
+      │              ├── columns: jsonb_object_keys:19
+      │              └── project-set
+      │                   ├── columns: x:12!null j:13 k:14 m:15 n:16 crdb_internal_mvcc_timestamp:17 tableoid:18 jsonb_object_keys:19
+      │                   ├── scan a
+      │                   │    └── columns: x:12!null j:13 k:14 m:15 n:16 crdb_internal_mvcc_timestamp:17 tableoid:18
+      │                   └── zip
+      │                        └── jsonb_object_keys(m:15)
+      └── subquery [as=generate_series:25]
+           └── max1-row
+                ├── columns: generate_series:22
+                └── project-set
+                     ├── columns: generate_series:22
+                     ├── values
+                     │    └── ()
+                     └── zip
+                          └── function: generate_series
+                               ├── subquery
+                               │    └── max1-row
+                               │         ├── columns: generate_series:21
+                               │         └── project
+                               │              ├── columns: generate_series:21
+                               │              └── project-set
+                               │                   ├── columns: value:20 generate_series:21
+                               │                   ├── project-set
+                               │                   │    ├── columns: value:20
+                               │                   │    ├── values
+                               │                   │    │    └── ()
+                               │                   │    └── zip
+                               │                   │         └── jsonb_array_elements_text(n:5)
+                               │                   └── zip
+                               │                        └── generate_series(x:1, 100)
+                               └── 1000
+
+# Regression test for #30412.
+build
+SELECT 0, unnest(ARRAY[0]) GROUP BY 1
+----
+error (42803): column "unnest" must appear in the GROUP BY clause or be used in an aggregate function
+
+build
+SELECT 0, unnest(ARRAY[0]) GROUP BY 1, 2
+----
+error (0A000): unnest(): set-returning functions are not allowed in GROUP BY
+
+build
+SELECT 0, information_schema._pg_expandarray(ARRAY[0]) GROUP BY 1
+----
+error (42803): column "x" must appear in the GROUP BY clause or be used in an aggregate function
+
+# Regression test for #31755.
+exec-ddl
+CREATE TABLE tab31755 (a STRING)
+----
+
+build
+SELECT * FROM ROWS FROM (CAST((SELECT a FROM tab31755 LIMIT 1) AS SERIAL2[])) AS ident
+----
+project-set
+ ├── columns: ident:5
+ ├── values
+ │    └── ()
+ └── zip
+      └── cast: INT2[]
+           └── subquery
+                └── max1-row
+                     ├── columns: tab31755.a:1
+                     └── limit
+                          ├── columns: tab31755.a:1
+                          ├── project
+                          │    ├── columns: tab31755.a:1
+                          │    ├── limit hint: 1.00
+                          │    └── scan tab31755
+                          │         ├── columns: tab31755.a:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+                          │         └── limit hint: 1.00
+                          └── 1
+
+# Regression test for #70342.
+exec-ddl
+CREATE TABLE t70342 (i INT PRIMARY KEY);
+----
+
+# Verify that an SRF is implicitly lateral.
+build
+WITH data AS (SELECT row_to_json(t70342) AS row FROM t70342)
+SELECT count(*)
+FROM data, json_each_text(data.row);
+----
+with &1 (data)
+ ├── columns: count:8!null
+ ├── project
+ │    ├── columns: row:4
+ │    ├── scan t70342
+ │    │    └── columns: i:1!null crdb_internal_mvcc_timestamp:2 tableoid:3
+ │    └── projections
+ │         └── row_to_json(((i:1,) AS i)) [as=row:4]
+ └── scalar-group-by
+      ├── columns: count_rows:8!null
+      ├── project
+      │    └── inner-join-apply
+      │         ├── columns: row:5 key:6 value:7
+      │         ├── with-scan &1 (data)
+      │         │    ├── columns: row:5
+      │         │    └── mapping:
+      │         │         └──  row:4 => row:5
+      │         ├── project-set
+      │         │    ├── columns: key:6 value:7
+      │         │    ├── values
+      │         │    │    └── ()
+      │         │    └── zip
+      │         │         └── json_each_text(row:5)
+      │         └── filters (true)
+      └── aggregations
+           └── count-rows [as=count_rows:8]
+
+# Verify that an SRF is implicitly lateral when using the JOIN syntax.
+build
+WITH data AS (SELECT row_to_json(t70342) AS row FROM t70342)
+SELECT count(*)
+FROM data CROSS JOIN json_each_text(data.row);
+----
+with &1 (data)
+ ├── columns: count:8!null
+ ├── project
+ │    ├── columns: row:4
+ │    ├── scan t70342
+ │    │    └── columns: i:1!null crdb_internal_mvcc_timestamp:2 tableoid:3
+ │    └── projections
+ │         └── row_to_json(((i:1,) AS i)) [as=row:4]
+ └── scalar-group-by
+      ├── columns: count_rows:8!null
+      ├── project
+      │    └── inner-join-apply
+      │         ├── columns: row:5 key:6 value:7
+      │         ├── with-scan &1 (data)
+      │         │    ├── columns: row:5
+      │         │    └── mapping:
+      │         │         └──  row:4 => row:5
+      │         ├── project-set
+      │         │    ├── columns: key:6 value:7
+      │         │    ├── values
+      │         │    │    └── ()
+      │         │    └── zip
+      │         │         └── json_each_text(row:5)
+      │         └── filters (true)
+      └── aggregations
+           └── count-rows [as=count_rows:8]
+
+# Regression test for #58438 - handle the case when unnest outputs a tuple with
+# labels. The unnest should not panic.
+exec-ddl
+CREATE TABLE t58438(a INT, b INT);
+----
+
+build
+SELECT unnest(ARRAY[t58438.*]) FROM t58438;
+----
+project
+ ├── columns: unnest:6
+ └── project-set
+      ├── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5 unnest:6
+      ├── scan t58438
+      │    └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      └── zip
+           └── unnest(ARRAY[((a:1, b:2) AS a, b)])
+
+build
+SELECT (x).* FROM (SELECT unnest(ARRAY[t58438.*]) FROM t58438) v(x);
+----
+project
+ ├── columns: a:7 b:8
+ ├── project
+ │    ├── columns: unnest:6
+ │    └── project-set
+ │         ├── columns: t58438.a:1 t58438.b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5 unnest:6
+ │         ├── scan t58438
+ │         │    └── columns: t58438.a:1 t58438.b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ │         └── zip
+ │              └── unnest(ARRAY[((t58438.a:1, t58438.b:2) AS a, b)])
+ └── projections
+      ├── (unnest:6).a [as=a:7]
+      └── (unnest:6).b [as=b:8]
+
+# Test record-returning SRFs, which need to keep track of the most recently set
+# AS clause above them.
+
+exec-ddl
+CREATE TABLE j (j json)
+----
+
+build
+SELECT t.a, t.z FROM j, json_to_record(j.j) AS t(a text, z int)
+----
+project
+ ├── columns: a:5 z:6
+ └── inner-join-apply
+      ├── columns: j:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4 a:5 z:6
+      ├── scan j
+      │    └── columns: j:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── project-set
+      │    ├── columns: a:5 z:6
+      │    ├── values
+      │    │    └── ()
+      │    └── zip
+      │         └── json_to_record(j:1)
+      └── filters (true)
+
+# Test that outer AS clauses don't get incorrectly propagated down into
+# json_to_record.
+build
+SELECT blah.x || 'foo' FROM (SELECT t.a, t.z FROM j, json_to_record(j.j) AS t(a text, z int)) AS blah(x)
+----
+project
+ ├── columns: "?column?":7
+ ├── project
+ │    ├── columns: a:5 z:6
+ │    └── inner-join-apply
+ │         ├── columns: j:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4 a:5 z:6
+ │         ├── scan j
+ │         │    └── columns: j:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+ │         ├── project-set
+ │         │    ├── columns: a:5 z:6
+ │         │    ├── values
+ │         │    │    └── ()
+ │         │    └── zip
+ │         │         └── json_to_record(j:1)
+ │         └── filters (true)
+ └── projections
+      └── a:5 || 'foo' [as="?column?":7]
+
+# Test that outer AS clauses don't get incorrectly propagated down into
+# json_to_record, even if an inner one is missing.
+build
+SELECT * FROM (SELECT t.a, t.z FROM j, json_to_record(j.j)) AS blah(a)
+----
+error (42601): a column definition list is required for functions returning "record"
+
+# Test that nested AS clauses and json_to_record statements work okay.
+build
+SELECT blah.a || 'foo', * FROM
+(SELECT t.a, t.z, j.x FROM (SELECT * FROM j, json_to_record('{"foo": "bar"}') AS x(foo text)) j(j, x),
+                      json_to_record(j.j) AS t(a text, z int)) AS blah(a, z, x)
+----
+project
+ ├── columns: "?column?":8 a:6 z:7 x:5
+ ├── project
+ │    ├── columns: foo:5 a:6 z:7
+ │    └── inner-join-apply
+ │         ├── columns: j:1 foo:5 a:6 z:7
+ │         ├── project
+ │         │    ├── columns: j:1 foo:5
+ │         │    └── inner-join-apply
+ │         │         ├── columns: j:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4 foo:5
+ │         │         ├── scan j
+ │         │         │    └── columns: j:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+ │         │         ├── project-set
+ │         │         │    ├── columns: foo:5
+ │         │         │    ├── values
+ │         │         │    │    └── ()
+ │         │         │    └── zip
+ │         │         │         └── json_to_record('{"foo": "bar"}')
+ │         │         └── filters (true)
+ │         ├── project-set
+ │         │    ├── columns: a:6 z:7
+ │         │    ├── values
+ │         │    │    └── ()
+ │         │    └── zip
+ │         │         └── json_to_record(j:1)
+ │         └── filters (true)
+ └── projections
+      └── a:6 || 'foo' [as="?column?":8]
+
+exec-ddl
+CREATE TABLE t95615 (c1 INET PRIMARY KEY);
+----
+
+# Only a single hostmask function should be added as a zip expression.
+build
+SELECT * FROM t95615, LATERAL ROWS FROM (hostmask(c1), hostmask(c1)) WITH ORDINALITY;
+----
+project
+ ├── columns: c1:1!null hostmask:4 hostmask:4 ordinality:5!null
+ └── inner-join-apply
+      ├── columns: c1:1!null crdb_internal_mvcc_timestamp:2 tableoid:3 hostmask:4 ordinality:5!null
+      ├── scan t95615
+      │    └── columns: c1:1!null crdb_internal_mvcc_timestamp:2 tableoid:3
+      ├── ordinality
+      │    ├── columns: hostmask:4 ordinality:5!null
+      │    └── project-set
+      │         ├── columns: hostmask:4
+      │         ├── values
+      │         │    └── ()
+      │         └── zip
+      │              └── hostmask(c1:1)
+      └── filters (true)
+
+exec-ddl
+CREATE FUNCTION f95615() RETURNS FLOAT IMMUTABLE LEAKPROOF LANGUAGE SQL AS 'SELECT 1.1'
+----
+
+# A redundant UDF call should not be added as a zip expression.
+build
+SELECT * FROM t95615, LATERAL ROWS FROM (f95615(), f95615()) WITH ORDINALITY
+----
+project
+ ├── columns: c1:1!null f95615:6 f95615:6 ordinality:9!null
+ └── inner-join-apply
+      ├── columns: c1:1!null crdb_internal_mvcc_timestamp:2 tableoid:3 f95615:6 ordinality:9!null
+      ├── scan t95615
+      │    └── columns: c1:1!null crdb_internal_mvcc_timestamp:2 tableoid:3
+      ├── ordinality
+      │    ├── columns: f95615:6 ordinality:9!null
+      │    └── project-set
+      │         ├── columns: f95615:6
+      │         ├── values
+      │         │    └── ()
+      │         └── zip
+      │              └── f95615()
+      └── filters (true)
+
+# Regression test for issue #95315.
+exec-ddl
+CREATE TABLE t95315 (c1 INT, c2 FLOAT)
+----
+
+# Regression test for issue #95315.
+# A query which uses a project set involving simple column expressions does
+# not error out.
+build
+SELECT 1,c1,c2 FROM t95315 JOIN
+       ROWS FROM (CAST(c1 AS INT), CAST(c2 AS INT)) USING (c1, c2)
+----
+project
+ ├── columns: "?column?":8!null c1:1 c2:2
+ ├── inner-join-apply
+ │    ├── columns: t95315.c1:1 t95315.c2:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5 c1:6 c2:7
+ │    ├── scan t95315
+ │    │    └── columns: t95315.c1:1 t95315.c2:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ │    ├── project-set
+ │    │    ├── columns: c1:6 c2:7
+ │    │    ├── values
+ │    │    │    └── ()
+ │    │    └── zip
+ │    │         ├── t95315.c1:1
+ │    │         └── t95315.c2:2::INT8
+ │    └── filters
+ │         ├── t95315.c1:1 = c1:6
+ │         └── t95315.c2:2 = c2:7
+ └── projections
+      └── 1 [as="?column?":8]
+
+# Regression test for #119612.
+build
+SELECT unnest(ARRAY[ROW(),ROW(),ROW()]);
+----
+project-set
+ ├── columns: unnest:1
+ ├── values
+ │    └── ()
+ └── zip
+      └── unnest(ARRAY[(),(),()])
+
+# Regression test for #150532. Columns produced by set-returning functions
+# should have data source names matching the function name, like Postgres.
+
+# Single-column SRF: qualified reference using the function name.
+build
+SELECT generate_series.generate_series FROM generate_series(1, 3)
+----
+project-set
+ ├── columns: generate_series:1
+ ├── values
+ │    └── ()
+ └── zip
+      └── generate_series(1, 3)
+
+# Multi-column SRF: qualified reference using the function name.
+build
+SELECT pg_get_keywords.word FROM pg_get_keywords() LIMIT 1
+----
+limit
+ ├── columns: word:1
+ ├── project
+ │    ├── columns: word:1
+ │    ├── limit hint: 1.00
+ │    └── project-set
+ │         ├── columns: word:1 catcode:2 catdesc:3
+ │         ├── limit hint: 1.00
+ │         ├── values
+ │         │    ├── limit hint: 1.00
+ │         │    └── ()
+ │         └── zip
+ │              └── pg_get_keywords()
+ └── 1
+
+# Multi-column SRF with star: qualified star using the function name.
+build
+SELECT pg_get_keywords.* FROM pg_get_keywords() LIMIT 1
+----
+limit
+ ├── columns: word:1 catcode:2 catdesc:3
+ ├── project-set
+ │    ├── columns: word:1 catcode:2 catdesc:3
+ │    ├── limit hint: 1.00
+ │    ├── values
+ │    │    ├── limit hint: 1.00
+ │    │    └── ()
+ │    └── zip
+ │         └── pg_get_keywords()
+ └── 1
+
+# Schema-qualified invocation: the data source is the unqualified function name.
+build
+SELECT generate_series.generate_series FROM pg_catalog.generate_series(1, 3)
+----
+project-set
+ ├── columns: generate_series:1
+ ├── values
+ │    └── ()
+ └── zip
+      └── generate_series(1, 3)
+
+# Same for a function whose def.Name is schema-qualified (non-pg_catalog builtin).
+build
+SELECT _pg_expandarray.x FROM information_schema._pg_expandarray(ARRAY['a','b'])
+----
+project
+ ├── columns: x:1
+ └── project-set
+      ├── columns: x:1 n:2
+      ├── values
+      │    └── ()
+      └── zip
+           └── information_schema._pg_expandarray(ARRAY['a','b'])
+
+# Explicit alias overrides function name as the data source.
+build
+SELECT t.word FROM pg_get_keywords() AS t LIMIT 1
+----
+limit
+ ├── columns: word:1
+ ├── project
+ │    ├── columns: word:1
+ │    ├── limit hint: 1.00
+ │    └── project-set
+ │         ├── columns: word:1 catcode:2 catdesc:3
+ │         ├── limit hint: 1.00
+ │         ├── values
+ │         │    ├── limit hint: 1.00
+ │         │    └── ()
+ │         └── zip
+ │              └── pg_get_keywords()
+ └── 1
+
+# Duplicate function names without aliases should error, matching Postgres.
+build
+SELECT * FROM unnest(ARRAY[1]), unnest(ARRAY[2])
+----
+error (42712): source name "unnest" specified more than once (missing AS clause)
+
+# Different SRFs in FROM can be referenced by their function names.
+build
+SELECT generate_series.generate_series, unnest.unnest
+FROM generate_series(1, 2), unnest(ARRAY[10, 20])
+----
+inner-join-apply
+ ├── columns: generate_series:1 unnest:2
+ ├── project-set
+ │    ├── columns: generate_series:1
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── generate_series(1, 2)
+ ├── project-set
+ │    ├── columns: unnest:2
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── unnest(ARRAY[10,20])
+ └── filters (true)
+
+# Single-column SRF with AS alias: alias overrides function name for both
+# column and table name.
+build
+SELECT gs FROM generate_series(1, 3) AS gs ORDER BY 1
+----
+sort
+ ├── columns: gs:1
+ ├── ordering: +1
+ └── project-set
+      ├── columns: generate_series:1
+      ├── values
+      │    └── ()
+      └── zip
+           └── generate_series(1, 3)
+
+# ROWS FROM with qualified reference using the function name.
+build
+SELECT generate_series.generate_series FROM ROWS FROM(generate_series(1, 2))
+----
+project-set
+ ├── columns: generate_series:1
+ ├── values
+ │    └── ()
+ └── zip
+      └── generate_series(1, 2)
+
+# Table and SRF with the same name don't conflict in the join (the table's
+# columns carry schema qualification), but qualified references are ambiguous.
+exec-ddl
+CREATE TABLE unnest (x INT)
+----
+
+build
+SELECT unnest.x, unnest.unnest FROM unnest, unnest(ARRAY[1])
+----
+error (42P09): ambiguous source name: "unnest"
+
+# Aliasing the table resolves the ambiguity.
+build
+SELECT u.x, unnest.unnest FROM unnest AS u, unnest(ARRAY[1])
+----
+project
+ ├── columns: x:1 unnest:5
+ └── inner-join-apply
+      ├── columns: x:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4 unnest:5
+      ├── scan unnest [as=u]
+      │    └── columns: x:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── project-set
+      │    ├── columns: unnest:5
+      │    ├── values
+      │    │    └── ()
+      │    └── zip
+      │         └── unnest(ARRAY[1])
+      └── filters (true)
+
+exec-ddl
+DROP TABLE unnest
+----
+
+# Subquery referencing SRF columns by function name.
+exec-ddl
+CREATE TABLE jt (j JSONB)
+----
+
+build
+SELECT (SELECT jt.j) FROM jt, jsonb_each_text(jt.j) WHERE jsonb_each_text.key = 'foo'
+----
+project
+ ├── columns: j:8
+ ├── select
+ │    ├── columns: jt.j:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4 key:5!null value:6
+ │    ├── inner-join-apply
+ │    │    ├── columns: jt.j:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4 key:5 value:6
+ │    │    ├── scan jt
+ │    │    │    └── columns: jt.j:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+ │    │    ├── project-set
+ │    │    │    ├── columns: key:5 value:6
+ │    │    │    ├── values
+ │    │    │    │    └── ()
+ │    │    │    └── zip
+ │    │    │         └── jsonb_each_text(jt.j:1)
+ │    │    └── filters (true)
+ │    └── filters
+ │         └── key:5 = 'foo'
+ └── projections
+      └── subquery [as=j:8]
+           └── max1-row
+                ├── columns: j:7
+                └── project
+                     ├── columns: j:7
+                     ├── values
+                     │    └── ()
+                     └── projections
+                          └── jt.j:1 [as=j:7]

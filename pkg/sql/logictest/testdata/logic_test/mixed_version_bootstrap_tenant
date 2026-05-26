@@ -1,0 +1,55 @@
+# LogicTest: cockroach-go-testserver-configs
+
+# Create tenant using old binary.
+statement ok
+SELECT crdb_internal.create_tenant(1000)
+
+upgrade 0
+
+# Create tenant using new binary.
+query I nodeidx=0
+SELECT crdb_internal.create_tenant(1001)
+----
+1001
+
+upgrade 1
+
+upgrade 2
+
+
+statement ok
+CREATE TABLE bootstrapped_tenant_data AS
+SELECT
+  CASE WHEN count(*) = 2 THEN 'both' ELSE string_agg(executable_name, ' ') END is_present_in,
+  crdb_internal.pretty_key(key, 1) AS k, -- strip the tenant prefix
+  substring(encode(val, 'hex') from 9) AS v -- strip the checksum
+FROM (
+  SELECT 'old_executable' AS executable_name, key, val
+  FROM crdb_internal.scan(crdb_internal.tenant_span(1000)) AS t0(key, val)
+  UNION ALL
+  SELECT 'new_executable' AS executable_name, key, val
+  FROM crdb_internal.scan(crdb_internal.tenant_span(1001)) AS t1(key, val)
+)
+GROUP BY 2, 3
+
+# Check that the bootstrapped data for tenants remains the same in a
+# mixed-version cluster regardless of whether the old or the new executable
+# was used to create them. Only the 'version' value in system.settings are
+# allowed to differ due to the "lastUpdated" column which is time-dependent.
+#
+# Note: the version KV is volatile due to the "lastUpdated" column.
+# Note: the system database descriptor (/Table/3/1/1/2/1) may differ between
+# versions due to schema evolution of the system database.
+query TTT
+SELECT k, is_present_in, v FROM bootstrapped_tenant_data
+WHERE is_present_in <> 'both'
+  AND k NOT IN ('/Table/6/1/"version"/0', '/Table/3/1/1/2/1')
+ORDER BY 1, 2
+----
+
+# This is the same test as above, deliberately expressed as a statement error
+# assertion to prevent accidental rewrites.
+statement error pgcode 22012 division by zero
+SELECT 1/count(*) FROM bootstrapped_tenant_data
+WHERE is_present_in <> 'both'
+  AND k NOT IN ('/Table/6/1/"version"/0', '/Table/3/1/1/2/1')

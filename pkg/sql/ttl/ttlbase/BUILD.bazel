@@ -1,0 +1,33 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "ttlbase",
+    srcs = [
+        "ttl_helpers.go",
+        "ttl_test_util.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/settings",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catenumpb",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/spanutils",
+        "//pkg/sql/types",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "ttlbase_test",
+    srcs = ["ttl_helpers_test.go"],
+    embed = [":ttlbase"],
+    deps = [
+        "//pkg/sql/catalog/catenumpb",
+        "//pkg/sql/types",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
+    ],
+)

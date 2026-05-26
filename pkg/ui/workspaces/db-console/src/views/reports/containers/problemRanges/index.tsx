@@ -1,0 +1,223 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+import { Loading, util } from "@cockroachlabs/cluster-ui";
+import filter from "lodash/filter";
+import flatMap from "lodash/flatMap";
+import flow from "lodash/flow";
+import isEmpty from "lodash/isEmpty";
+import isNil from "lodash/isNil";
+import keys from "lodash/keys";
+import map from "lodash/map";
+import pickBy from "lodash/pickBy";
+import sortBy from "lodash/sortBy";
+import sortedUniq from "lodash/sortedUniq";
+import values from "lodash/values";
+import Long from "long";
+import React from "react";
+import { Helmet } from "react-helmet";
+import { Link, RouteComponentProps, withRouter } from "react-router-dom";
+
+import * as protos from "src/js/protos";
+import { getProblemRanges } from "src/util/api";
+import { nodeIDAttr } from "src/util/constants";
+import { FixLong } from "src/util/fixLong";
+import { getMatchParamByName } from "src/util/query";
+import ConnectionsTable from "src/views/reports/containers/problemRanges/connectionsTable";
+import { BackToAdvanceDebug } from "src/views/reports/containers/util";
+
+type NodeProblems$Properties =
+  protos.cockroach.server.serverpb.ProblemRangesResponse.INodeProblems;
+
+function ProblemRangeList(props: {
+  name: string;
+  problems: NodeProblems$Properties[];
+  extract: (p: NodeProblems$Properties) => Long[];
+  description?: string;
+}) {
+  const ids = flow(
+    (problems: NodeProblems$Properties[]) =>
+      filter(problems, problem => isEmpty(problem.error_message)),
+    (problems: NodeProblems$Properties[]) =>
+      flatMap(problems, problem => props.extract(problem)),
+    ids => map(ids, id => FixLong(id)),
+    ids => sortBy(ids, id => id.toNumber()),
+    ids => map(ids, id => id.toString()),
+    sortedUniq,
+  )(props.problems);
+  if (isEmpty(ids)) {
+    return null;
+  }
+  return (
+    <div>
+      <h2 className="base-heading">{props.name}</h2>
+      {props.description && (
+        <div className="problems-description">{props.description}</div>
+      )}
+      <div className="problems-list">
+        {map(ids, id => {
+          return (
+            <Link
+              key={id}
+              className="problems-link"
+              to={`/reports/range/${id}`}
+            >
+              {id}
+            </Link>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Renders the Problem Ranges page.
+ *
+ * The problem ranges endpoint returns a list of known ranges with issues on a
+ * per node basis. This page aggregates those lists together and displays all
+ * unique range IDs that have problems.
+ */
+export function ProblemRanges({
+  match,
+  history,
+}: RouteComponentProps): React.ReactElement {
+  const nodeId = getMatchParamByName(match, nodeIDAttr);
+
+  const { data, error, isLoading } = util.useSwrWithClusterId(
+    ["problemRanges", nodeId ?? "all"],
+    () =>
+      getProblemRanges(
+        new protos.cockroach.server.serverpb.ProblemRangesRequest({
+          node_id: nodeId,
+        }),
+      ),
+    { revalidateOnFocus: false },
+  );
+
+  const renderReportBody = () => {
+    if (!data) {
+      return null;
+    }
+
+    const validIDs = keys(
+      pickBy(data.problems_by_node_id, d => {
+        return isEmpty(d.error_message);
+      }),
+    );
+    if (validIDs.length === 0) {
+      if (nodeId === null) {
+        return <h2 className="base-heading">No nodes returned any results</h2>;
+      } else {
+        return (
+          <h2 className="base-heading">
+            No results reported for node n{nodeId}
+          </h2>
+        );
+      }
+    }
+
+    let titleText: string;
+    if (validIDs.length === 1) {
+      const singleNodeID = keys(data.problems_by_node_id)[0];
+      titleText = `Problem Ranges on Node n${singleNodeID}`;
+    } else {
+      titleText = "Problem Ranges on the Cluster";
+    }
+
+    const problems = values(data.problems_by_node_id);
+    return (
+      <div>
+        <h2 className="base-heading">{titleText}</h2>
+        <ProblemRangeList
+          name="Unavailable"
+          problems={problems}
+          extract={problem => problem.unavailable_range_ids}
+        />
+        <ProblemRangeList
+          name="No Raft Leader"
+          problems={problems}
+          extract={problem => problem.no_raft_leader_range_ids}
+        />
+        <ProblemRangeList
+          name="Expired Lease"
+          problems={problems}
+          extract={problem => problem.no_lease_range_ids}
+          description="Note that having expired leases is unlikely to be a problem. They can occur after node restarts and will clear on its own in up to 24 hours."
+        />
+        <ProblemRangeList
+          name="Raft Leader but not Lease Holder"
+          problems={problems}
+          extract={problem => problem.raft_leader_not_lease_holder_range_ids}
+        />
+        <ProblemRangeList
+          name="Underreplicated (or slow)"
+          problems={problems}
+          extract={problem => problem.underreplicated_range_ids}
+        />
+        <ProblemRangeList
+          name="Overreplicated"
+          problems={problems}
+          extract={problem => problem.overreplicated_range_ids}
+        />
+        <ProblemRangeList
+          name="Quiescent equals ticking"
+          problems={problems}
+          extract={problem => problem.quiescent_equals_ticking_range_ids}
+        />
+        <ProblemRangeList
+          name="Circuit breaker error"
+          problems={problems}
+          extract={problem => problem.circuit_breaker_error_range_ids}
+        />
+        <ProblemRangeList
+          name="Paused Replicas"
+          problems={problems}
+          extract={problem => problem.paused_replica_ids}
+        />
+        <ProblemRangeList
+          name="Range Too Large"
+          problems={problems}
+          extract={problem => problem.too_large_range_ids}
+        />
+      </div>
+    );
+  };
+
+  const renderError = () => {
+    if (isNil(error)) return null;
+    const target = nodeId === null ? "the Cluster" : `node n${nodeId}`;
+    return (
+      <div>
+        <h2 className="base-heading">
+          Error loading Problem Ranges for {target}
+        </h2>
+        {error.toString()}
+      </div>
+    );
+  };
+
+  return (
+    <div className="section">
+      <Helmet title="Problem Ranges | Debug" />
+      <BackToAdvanceDebug history={history} />
+      <h1 className="base-heading">Problem Ranges Report</h1>
+      {renderError() || (
+        <Loading
+          loading={isLoading}
+          page={"problems range"}
+          render={() => (
+            <div>
+              {renderReportBody()}
+              <ConnectionsTable data={data} error={error} />
+            </div>
+          )}
+        />
+      )}
+    </div>
+  );
+}
+
+export default withRouter(ProblemRanges);

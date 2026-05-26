@@ -1,0 +1,188 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto2";
+package cockroach.multitenant;
+option go_package = "github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb";
+
+import "gogoproto/gogo.proto";
+import "kv/kvpb/api.proto";
+import "roachpb/data.proto";
+import "multitenant/tenantcapabilitiespb/capabilities.proto";
+import "util/hlc/timestamp.proto";
+
+// ProtoInfo represents the metadata for a tenant as
+// stored in the "info" column of the "system.tenants" table.
+message ProtoInfo {
+  option (gogoproto.equal) = true;
+
+  // The state of the tenant's logical keyspace (DEPRECATED).
+  // This enum is only used when the data_state column is NULL.
+  enum DeprecatedDataState {
+    // Tenant data is ready and SQL servers can access it.
+    // DEPRECATED. Use DataStateReady.
+    READY = 0;
+    // Tenant data is being added. Not available for SQL sessions.
+    // DEPRECATED. Use DataStateAdd.
+    ADD = 1;
+    // Tenant data is being dropped. Not available for SQL sessions.
+    // DEPRECATED. Use DataStateDrop.
+    DROP = 2;
+  }
+
+  // ID is the internal numeric identifier of the tenant (DEPRECATED).
+  // This field is redundant with the id column in system.tenants.
+  optional uint64 deprecated_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "DeprecatedID"];
+
+  // DeprecatedDataState is the state of the tenant's keyspace (DEPRECATED).
+  optional DeprecatedDataState deprecated_data_state = 2 [(gogoproto.nullable) = false];
+
+  // DroppedName is the name the tenant had before DROP VIRTUAL
+  // CLUSTER was run on the tenant. It should be empty for active or
+  // adding tenants.
+  optional string dropped_name = 3 [
+    (gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TenantName"];
+
+  // PhysicalReplicationConsumerJobID is set if this tenant is the target tenant
+  // of a running tenant replication job.
+  optional int64 physical_replication_consumer_job_id = 4 [
+     (gogoproto.nullable) = false,
+     (gogoproto.customname) = "PhysicalReplicationConsumerJobID",
+     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.JobID"];
+
+  // PhysicalReplicationProducerJobIDs contains any physical
+  // replication producer jobs that are using this tenant as a source.
+  repeated int64 physical_replication_producer_job_ids = 6 [
+     (gogoproto.customname) = "PhysicalReplicationProducerJobIDs",
+     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.JobID"];
+
+  // Capabilities encapsulate a set of capabilities that a specific tenant
+  // possesses.
+  optional cockroach.multitenant.tenantcapabilitiespb.TenantCapabilities capabilities = 5 [
+    (gogoproto.nullable) = false
+  ];
+
+  // If this tenant was previously a physical replication target that
+  // was promoted, PreviousSourceTenant holds information about the
+  // source cluster of that replication stream.
+  optional PreviousSourceTenant previous_source_tenant = 7;
+
+  // LastReverTenantTimestamp is the timestamp at which we last called
+  // RevertRange in preparation for a stream resumption into this
+  // tenant.
+  //
+  // This is cleared on ALTER VIRTUAL CLUSTER START SERVICE and CREATE
+  // VIRTUAL CLUSTER FROM REPLICATION STREAM.
+  optional util.hlc.Timestamp last_revert_tenant_timestamp = 8 [(gogoproto.nullable) = false];
+
+  // ReadFromTenant is the ID, if any, of another tenant from which this tenant
+  // should be configured to serve read-only SQL requests (by configuring and
+  // maintaining its catalog accordingly).
+  optional roachpb.TenantID read_from_tenant = 9 ;
+
+  // Next ID: 10.
+}
+
+message PreviousSourceTenant {
+  option (gogoproto.equal) = true;
+
+  // TODO(ssd): It would be nice to store something here that
+  // identified a particular MVCC history so that we could also use
+  // this to compare against things like restored tenants.
+  optional bytes cluster_id = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "ClusterID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
+
+  optional roachpb.TenantID tenant_id = 2 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "TenantID"
+  ];
+
+  // CutoverTimestamp is the time at which we cutover from the source
+  // tenant.
+  optional util.hlc.Timestamp cutover_timestamp = 3 [(gogoproto.nullable) = false];
+
+  // CutoverAsOf, if set is a timestamp, later than cutover timestamp, as of
+  // which the data was known to be in a state equal to the state as of the time
+  // in CutoverTimestamp. For example, if a backup as of time X is restored at
+  // time Y, then at time Y the data is equal to what it was at time X, so a
+  // resumption of replication could revert to Y, rather than X, to resume, as
+  // this revert would have the same effect, while a revert to X might not be
+  // possible since replica GC could be above X when the restore runs.
+  optional util.hlc.Timestamp cutover_as_of = 4 [(gogoproto.nullable) = false];
+}
+
+
+
+// SQLInfo contain the additional tenant metadata from the other
+// columns in system.tenants not otherwise encoded in ProtoInfo.
+message SQLInfo {
+  option (gogoproto.equal) = true;
+
+  optional uint64 id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID"];
+
+  // Copy of the name column in system.tenants.
+  optional string name = 2 [
+        (gogoproto.nullable) = false,
+        (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TenantName"];
+
+  // Copy of the data_state column in system.tenants.
+  optional uint32 data_state = 3 [
+        (gogoproto.nullable) = false,
+        (gogoproto.casttype) = "TenantDataState"];
+
+  // Copy of the service_mode column in system.tenants.
+  optional uint32 service_mode = 4 [
+        (gogoproto.nullable) = false,
+        (gogoproto.casttype) = "TenantServiceMode"];
+
+  // Next ID: 5
+}
+
+// UsageInfo contains metadata related to cost control and consumption. In a
+// running cluster, this data is stored in the system.tenant_usage table.
+// Each field corresponds has a corresponding column in that table.
+message UsageInfo {
+  option (gogoproto.equal) = true;
+
+  optional double ru_burst_limit = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "RUBurstLimit"];
+  optional double ru_refill_rate = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "RURefillRate"];
+  optional double ru_current = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "RUCurrent"];
+
+  // All-time consumption for this tenant. Each field has a corresponding column
+  // in system.tenant_usage.
+  optional roachpb.TenantConsumption consumption = 4 [(gogoproto.nullable) = false];
+
+  // Next ID: 5
+}
+
+// SettingOverride represents a cluster setting override for one tenant.
+message SettingOverride {
+  option (gogoproto.equal) = true;
+
+  optional string name = 1 [(gogoproto.nullable) = false];
+  optional string value = 2 [(gogoproto.nullable) = false];
+  optional string value_type = 3 [(gogoproto.nullable) = false];
+  optional string reason = 4;
+  // Next ID: 5
+}
+
+// TenantInfoWithUsage contains the information for a tenant in a multi-tenant
+// cluster plus metadata related to cost control and consumption and setting overrides.
+message TenantInfoWithUsage {
+  option (gogoproto.equal) = true;
+
+  optional ProtoInfo info = 1 [(gogoproto.embed) = true, (gogoproto.nullable) = false];
+  optional UsageInfo usage = 2;
+
+  optional SQLInfo extra_columns = 3 [(gogoproto.embed) = true, (gogoproto.nullable) = false];
+
+  repeated SettingOverride setting_overrides = 4;
+
+  // Next ID: 5
+}

@@ -1,0 +1,210 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package ptstorage
+
+const (
+
+	// currentMetaCTE reads the meta row, returning a default zero row if
+	// none exists yet. At the time of writing, there will never be a
+	// physical row in the meta table with version zero.
+	//
+	// This is the read-only variant, used by getMetadataQuery. Mutating
+	// queries (protect, release) use currentMetaCTEForUpdate to avoid the
+	// WriteTooOld retry storm that concurrent writers would otherwise
+	// trigger on the shared meta row.
+	currentMetaCTE = `
+SELECT
+    version, num_records, num_spans, total_bytes
+FROM
+    system.protected_ts_meta
+UNION ALL
+    SELECT 0 AS version, 0 AS num_records, 0 AS num_spans, 0 AS total_bytes
+ORDER BY
+    version DESC
+LIMIT
+    1
+`
+
+	// currentMetaCTEForUpdate is the locking variant of currentMetaCTE used by
+	// the protect and release queries. Both are read-modify-writes against
+	// the singleton meta row: every concurrent caller reads the same row,
+	// then upserts a new version. Without serialization the writers race,
+	// producing a storm of WriteTooOld retries on the shared key. Acquiring
+	// an exclusive lock on the real meta row during the read forces those
+	// callers to queue rather than collide. The FOR UPDATE clause is bound
+	// to the real-table leg only; the synthetic zero-row fallback (used when
+	// no meta row exists yet) does not lock anything.
+	currentMetaCTEForUpdate = `
+SELECT
+    version, num_records, num_spans, total_bytes
+FROM
+    (
+        SELECT version, num_records, num_spans, total_bytes
+        FROM system.protected_ts_meta
+        FOR UPDATE
+    )
+UNION ALL
+    SELECT 0 AS version, 0 AS num_records, 0 AS num_spans, 0 AS total_bytes
+ORDER BY
+    version DESC
+LIMIT
+    1
+`
+
+	protectQuery = `
+WITH
+    current_meta AS (` + currentMetaCTEForUpdate + `),
+    checks AS (` + protectChecksCTE + `),
+    updated_meta AS (` + protectUpsertMetaCTE + `),
+    new_record AS (` + protectInsertRecordCTEWithChecks + `)
+SELECT
+    failed,
+    total_bytes AS prev_total_bytes,
+    version AS prev_version
+FROM
+    checks, current_meta;`
+
+	protectChecksCTE = `
+SELECT
+    new_version, 
+    new_num_records,
+    new_num_spans, 
+    new_total_bytes,
+    (
+       ($1 > 0 AND new_num_spans > $1)
+       OR ($2 > 0 AND new_total_bytes > $2)
+       OR EXISTS(SELECT * FROM system.protected_ts_records WHERE id = $4)
+    ) AS failed
+FROM (
+    SELECT
+        version + 1 AS new_version,
+        num_records + 1 AS new_num_records, 
+        num_spans + $3 AS new_num_spans, 
+        total_bytes + length($9) + length($6) + coalesce(length($7:::BYTES),0) AS new_total_bytes
+    FROM
+        current_meta
+)
+`
+
+	protectUpsertMetaCTE = `
+UPSERT
+INTO
+    system.protected_ts_meta
+(version, num_records, num_spans, total_bytes)
+(
+    SELECT
+        new_version, new_num_records, new_num_spans, new_total_bytes
+    FROM
+        checks
+    WHERE
+        NOT failed
+)
+RETURNING
+    version, num_records, num_spans, total_bytes
+`
+
+	protectInsertRecordCTEWithChecks = `
+INSERT
+INTO
+    system.protected_ts_records (id, ts, meta_type, meta, num_spans, spans, target)
+(
+    SELECT
+        $4, $5, $6, $7, $8, $9, $10
+    WHERE
+        NOT EXISTS(SELECT * FROM checks WHERE failed)
+)
+RETURNING
+    id
+`
+
+	getRecordsQueryBase = `
+SELECT
+    id, ts, meta_type, meta, spans, verified, target
+FROM
+    system.protected_ts_records`
+
+	getRecordsQuery = getRecordsQueryBase + ";"
+	getRecordQuery  = getRecordsQueryBase + `
+WHERE
+    id = $1;`
+
+	markVerifiedQuery = `
+UPDATE
+    system.protected_ts_records
+SET
+    verified = true
+WHERE
+    id = $1
+RETURNING
+    true
+`
+
+	releaseQueryWithMeta = `
+WITH
+    current_meta AS (` + currentMetaCTEForUpdate + `),
+    record AS (` + releaseSelectRecordCTE + `),
+    updated_meta AS (` + releaseUpsertMetaCTE + `)
+DELETE FROM
+    system.protected_ts_records AS r
+WHERE
+    EXISTS(SELECT NULL FROM record WHERE r.id = record.id)
+RETURNING
+    NULL;`
+
+	// Collect the number of spans for the record identified by $1.
+	releaseSelectRecordCTE = `
+SELECT
+    id,
+    num_spans AS record_spans,
+    length(spans) + length(meta_type) + coalesce(length(meta),0) AS record_bytes
+FROM
+    system.protected_ts_records
+WHERE
+    id = $1
+`
+
+	// Updates the meta row if there was a record.
+	releaseUpsertMetaCTE = `
+UPSERT
+INTO
+    system.protected_ts_meta (version, num_records, num_spans, total_bytes)
+(
+    SELECT
+        version, num_records, num_spans, total_bytes
+    FROM
+        (
+            SELECT
+                version + 1 AS version,
+                num_records - 1 AS num_records,
+                num_spans - record_spans AS num_spans,
+                total_bytes - record_bytes AS total_bytes
+            FROM
+                current_meta RIGHT JOIN record ON true
+        )
+)
+RETURNING
+    1
+`
+
+	updateTimestampUpsertRecordCTE = `
+UPDATE
+    system.protected_ts_records
+SET
+    ts = $2
+WHERE
+    id = $1
+RETURNING
+    id
+`
+
+	getMetadataQuery = `
+WITH
+    current_meta AS (` + currentMetaCTE + `)
+SELECT
+    version, num_records, num_spans, total_bytes
+FROM
+    current_meta;`
+)

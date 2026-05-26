@@ -1,0 +1,144 @@
+# LogicTest: 3node-tenant-multiregion
+skip under duress #118627
+
+user host-cluster-root
+
+statement ok
+ALTER TENANT [10] GRANT CAPABILITY can_admin_relocate_range=true
+
+user root
+
+# Create a table on the secondary tenant.
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY, v INT, FAMILY (k, v))
+
+# Upreplicate the table's range. We need a retry to guarantee that the
+# capability has been picked up.
+retry
+statement ok
+ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1, 2, 3], 0)
+
+# Split the ranges in the table.
+statement ok
+ALTER TABLE t SPLIT AT SELECT generate_series(1, 6)
+
+# Relocate ranges so that
+# - [1-2) and [2-3) are on node 2
+# - [3-4) and [4-5) are on node 3
+# - [5-6) and [6-7) are on node 1.
+statement ok
+ALTER RANGE RELOCATE LEASE TO 2 FOR SELECT range_id FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%1';
+ALTER RANGE RELOCATE LEASE TO 2 FOR SELECT range_id FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%2';
+ALTER RANGE RELOCATE LEASE TO 3 FOR SELECT range_id FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%3';
+ALTER RANGE RELOCATE LEASE TO 3 FOR SELECT range_id FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%4';
+ALTER RANGE RELOCATE LEASE TO 1 FOR SELECT range_id FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%5';
+ALTER RANGE RELOCATE LEASE TO 1 FOR SELECT range_id FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%6';
+
+# Check range lease holders.
+query TI rowsort,retry
+SELECT start_pretty, lease_holder FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%Table%/1/%'
+----
+/Tenant/10/Table/106/1/1  2
+/Tenant/10/Table/106/1/2  2
+/Tenant/10/Table/106/1/3  3
+/Tenant/10/Table/106/1/4  3
+/Tenant/10/Table/106/1/5  1
+/Tenant/10/Table/106/1/6  1
+
+# Populate the range cache.
+statement ok
+SELECT * FROM t
+
+# Check sql instance locality in the secondary tenant.
+query IT
+SELECT id, locality FROM system.sql_instances WHERE locality IS NOT NULL ORDER BY id
+----
+1  {"Tiers": "region=test"}
+2  {"Tiers": "region=test1"}
+3  {"Tiers": "region=test2"}
+
+# Ensure that we plan TableReaders in the regions according to the leaseholder
+# of each range, namely we want
+# - TableReader on SQL Instance 2 to scan Span /106/1/1/0
+# - TableReader on SQL Instance 3 to scan Span /106/1/3/0
+# - TableReader on SQL Instance 1 to scan Span /106/1/5/0.
+query T
+EXPLAIN (DISTSQL) SELECT * FROM t WHERE k IN (1, 3, 5)
+----
+distribution: full
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [/1 - /1] [/3 - /3] [/5 - /5]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJycklFv0zAQgN_5FdY9MeQqdsJ48BNoDSJS142mEkiomkx8K1HTONgOY6ry35FdYG3IUBs_RDrf5btPd96B_V6BgPTz7exdNicvp1m-zD_OLkieztKrJXlF3i9urokjnz6ki5RsiC_ilCSUXF4AhVornMstWhBfgAOFGCgksKLQGF2gtdr41C4UZuonCEahrJvW-esVhUIbBLEDV7oKQcBSfq1wgVKhiTxLoZNlFfDurbtrNvgIFK501W5rK8iGkh9AIW-kjyLO3kQ8uowYrDoKunVPjayTawTBD8yyKYi4o8_IPTm1tTYKDaojn1U3oD_XE91ESa9wWCXuqSRHKvz0ObGRc-JnzIkdycWny_GRcskZcvzZJQ7ILdA2urZ40o5Yr9OE-62jWuP-iVjdmgJvjS5C7T68CaBwodC6fZbvg6wOKe47GJTbv2_wkMT_S3p9RGKHJNYnxWOd_iElY0lhYveVfrgrFQhgv89k4PPngP9Brq1fW_5NPwTs8rHxQ7-XlUUK13KDU3RotmVdWlcWIJxpsete_AoAAP__yB-H8A==
+
+# Ensure that a single scan that touches multiple ranges is represented by a
+# single span after physical planning. We expect to only have a single
+# TableReader on node 3.
+query T
+EXPLAIN (DISTSQL) SELECT * FROM t WHERE k >= 3 AND k < 5
+----
+distribution: full
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [/3 - /4]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMUe9r2zAQ_b6_QrxPzVCw1NB9EAxWGo8Z0rSLDRtspmj2NTP-IU-S15Xg_33Ybrs0bFnvg9C9u3vv6bSD-1FBIfx8vTqP1uxkGcVJ_HE1Y3G4Ci8S9pq931xdMs8-fQg3ITsp2ddOiAW9ZYsZO18vn5CMnc3A0Zic1romB_UFEhwLpBytNRk5Z-wA78amKP8FJTiKpu38AKccmbEEtYMvfEVQWJu5aYOBJSevi2ps6zlM5_8MOa-3BHW6pxItoWTP94TkcaFEf6toQzonG4hncvDv_E1b0j04LkzV1Y1TrOTsJzjiVg9ZIMWbQAaL-cPlDP_yKA88imce_7OMDbnWNI5etA1xoDSXfcpB-ZamH3CmsxldW5ONvVN6NRKNQE7OT9XTKYmax5LzlnT9ZH-fSR5lEseYUo7bytzdFDkUxEPM_3I8BoYBvXXDiuLv5m6kTe7b4YG3unLEcalLWpInWxdN4XyRQXnbUd-_-h0AAP__pWPszQ==
+
+# Ensure that a query with a LIMIT is planned on the instance that is the
+# "leaseholder" of the first range touched by the scan. We expect to only have a
+# single TableReader on node 2.
+query T
+EXPLAIN (DISTSQL) SELECT * FROM t WHERE k >= 1 LIMIT 10
+----
+distribution: full
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [/1 - ]
+  limit: 10
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMUV2L1DAUffdXhPOkkqHJCD4EBGWnYqEzu04LCjossb07hmmbmqSuy9D_Lum4OjvouPch5H6dc3Kyh__WQCH9eJW_yVbs6SIryuJ9_owVaZ5elOw5e7u-XLLAPrxL1ynbsc-DEC_oFZMsz5ZZyaQAR2drWumWPNQnSHDMseHona3Ie-tieT8NZfUPKMFhun4IsbzhqKwjqD2CCQ1BYWVntk8iSk1Bm2YaGznsEP4s-aC3BDU_YskWUHLkR0TyPFGpvzS0Jl2TS8QDOoTX4brf0R04LmwztJ1XbMfZd3AUvY5ZIsXLRCZyNl3m4MhNa0L0419i5YlY8UDsf1xZk-9t5-lRtogTppkcNxxUb-nwFd4OrqIrZ6tp9pBeTkBToSYfDt35Icm6-5YPjnT7W_4xkjyLJM4hbThuGnt7bWooiF8x-8txH4gLeuujRcVXezvBlnd9fOCNbjxxLPWOFhTItaYzPpgKKriBxvHJzwAAAP__psbtGQ==
+
+
+# Regression test for #93887 - don't panic when generating index recommendations
+# with a mix of local and remote partitions.
+statement ok
+CREATE TABLE t93887 (x INT PRIMARY KEY, y INT) PARTITION BY LIST (x) (
+    PARTITION p1 VALUES IN (1),
+    PARTITION p2 VALUES IN (2),
+    PARTITION p3 VALUES IN (3)
+)
+
+statement ok
+ALTER PARTITION p1 OF TABLE t93887 CONFIGURE ZONE USING constraints='[+region=test]';
+ALTER PARTITION p2 OF TABLE t93887 CONFIGURE ZONE USING constraints='[+region=test1]';
+ALTER PARTITION p3 OF TABLE t93887 CONFIGURE ZONE USING constraints='[+region=test2]'
+
+statement ok
+SET index_recommendations_enabled = true;
+
+query T retry
+EXPLAIN SELECT * FROM t93887 WHERE y = 1
+----
+distribution: local
+·
+• filter
+│ filter: y = 1
+│
+└── • scan
+      missing stats
+      table: t93887@t93887_pkey
+      spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON test.public.t93887 (y);
+
+statement ok
+RESET index_recommendations_enabled;

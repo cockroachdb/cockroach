@@ -1,0 +1,57 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import "src/core/index.module";
+
+.insight-type {
+  color: $colors--functional-orange-4;
+  font-weight: $font-weight--bold;
+}
+
+.insights-type-failed {
+  color: $colors--functional-red-4;
+  font-weight: $font-weight--bold;
+}
+
+.label-bold {
+  font-family: $font-family--semi-bold;
+  font-size: $font-size--medium;
+  line-height: $line-height--x-small;
+  color: $colors--neutral-7;
+}
+
+.description-item {
+  margin-bottom: 5px;
+
+  .table-link {
+    color: $colors--link
+  }
+  a {
+    color: $colors--link
+  }
+}
+
+.table-area {
+  overflow-x: scroll;
+  padding-bottom: 30px;
+}
+
+.margin-bottom {
+  margin-bottom: 20px;
+}
+
+.margin-bottom-large {
+  margin-bottom: 30px;
+}
+
+.inline {
+  display: inline-flex;
+}
+
+.sorted-table {
+  border-radius: 3px;
+  box-shadow: 0 0 1px 0 rgba(67, 90, 111, 0.41);
+  width: 100%;
+}

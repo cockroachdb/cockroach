@@ -1,0 +1,27 @@
+// Copyright 2014 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.util.hlc;
+option go_package = "github.com/cockroachdb/cockroach/pkg/util/hlc";
+
+import "gogoproto/gogo.proto";
+
+// Timestamp represents a state of the hybrid logical clock.
+message Timestamp {
+  option (gogoproto.equal) = true;
+
+  option (gogoproto.goproto_stringer) = false;
+  option (gogoproto.populate) = true;
+
+  // Holds a wall time, typically a unix epoch time expressed in
+  // nanoseconds.
+  int64 wall_time = 1;
+  // The logical component captures causality for events whose wall times
+  // are equal. It is effectively bounded by (maximum clock skew)/(minimal
+  // ns between events) and nearly impossible to overflow.
+  int32 logical = 2;
+  reserved 3;
+}

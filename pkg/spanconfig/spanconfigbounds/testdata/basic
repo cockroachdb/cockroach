@@ -1,0 +1,47 @@
+bounds name=foo
+gc_ttl_seconds: <start: 123, end: 7000>
+range_max_bytes: <start: 10, end: 20>
+num_voters: <start: 3, end: 5>
+num_replicas: <start: 3, end: 11>
+----
+
+config name=bar
+gc_policy: <ttl_seconds: 122>
+range_min_bytes: 5
+range_max_bytes: 5
+num_voters: 7
+num_replicas: 7
+----
+
+conforms bounds=foo config=bar
+----
+false
+
+check bounds=foo config=bar
+----
+span config bounds violated for fields: range_max_bytes, num_voters, gc.ttlseconds
+span config bounds violated for fields: range_max_bytes, num_voters, gc.ttlseconds
+(1) span config bounds violated for fields: range_max_bytes, num_voters, gc.ttlseconds
+  | range_max_bytes: 5 does not conform to [10, 20], will be clamped to 10
+  | num_voters: 7 does not conform to [3, 5], will be clamped to 5
+  | gc.ttlseconds: 122 does not conform to [123, 7000], will be clamped to 123
+Error types: (1) *spanconfigbounds.ViolationError
+
+
+clamp bounds=foo config=bar
+----
+----
+@@ -1,8 +1,8 @@
+ range_min_bytes: 5
+-range_max_bytes: 5
++range_max_bytes: 10
+ gc_policy: <
+-  ttl_seconds: 122
++  ttl_seconds: 123
+ >
+ num_replicas: 7
+-num_voters: 7
++num_voters: 5
+ 
+----
+----

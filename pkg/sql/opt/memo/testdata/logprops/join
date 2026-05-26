@@ -1,0 +1,3434 @@
+exec-ddl
+CREATE TABLE xysd (x INT PRIMARY KEY, y INT, s STRING, d DECIMAL NOT NULL, UNIQUE (s DESC, d))
+----
+
+exec-ddl
+CREATE TABLE uv (u INT, v INT NOT NULL)
+----
+
+exec-ddl
+CREATE TABLE mn (m INT PRIMARY KEY, n INT, UNIQUE (n))
+----
+
+exec-ddl
+CREATE TABLE fk (
+    k INT PRIMARY KEY,
+    v INT,
+    r1 INT NOT NULL REFERENCES xysd(x),
+    r2 INT REFERENCES xysd(x)
+)
+----
+
+exec-ddl
+CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, b, c))
+----
+
+exec-ddl
+CREATE TABLE xyz (x INT, y INT, z INT, PRIMARY KEY (x, y))
+----
+
+exec-ddl
+CREATE TABLE ref (
+    r1 INT NOT NULL,
+    r2 INT,
+    r3 INT NOT NULL,
+    FOREIGN KEY (r1, r2, r3) REFERENCES abc(a, b, c)
+)
+----
+
+# Inner-join.
+build
+SELECT *, rowid FROM xysd INNER JOIN uv ON x=u
+----
+project
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int!null) v:8(int!null) rowid:9(int!null)
+ ├── key: (9)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2,7), (9)-->(1-4,7,8), (1)==(7), (7)==(1)
+ ├── prune: (1-4,7-9)
+ ├── interesting orderings: (+(1|7)) (-3,+4,+(1|7)) (+9)
+ └── inner-join (hash)
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int!null) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+      ├── key: (9)
+      ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11), (1)==(7), (7)==(1)
+      ├── prune: (2-6,8-11)
+      ├── interesting orderings: (+1) (-3,+4,+1) (+9)
+      ├── scan xysd
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      │    ├── prune: (1-6)
+      │    ├── interesting orderings: (+1) (-3,+4,+1)
+      │    └── unfiltered-cols: (1-6)
+      ├── scan uv
+      │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      │    ├── key: (9)
+      │    ├── fd: (9)-->(7,8,10,11)
+      │    ├── prune: (7-11)
+      │    ├── interesting orderings: (+9)
+      │    └── unfiltered-cols: (7-11)
+      └── filters
+           └── eq [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+                ├── variable: x:1 [type=int]
+                └── variable: u:7 [type=int]
+
+# Inner-join-apply.
+opt
+SELECT (SELECT (VALUES (x), (y))) FROM xysd
+----
+project
+ ├── columns: column1:9(int)
+ ├── prune: (9)
+ ├── ensure-distinct-on
+ │    ├── columns: x:1(int!null) column1:7(int)
+ │    ├── grouping columns: x:1(int!null)
+ │    ├── error: "more than one row returned by a subquery used as an expression"
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(7)
+ │    ├── prune: (7)
+ │    ├── inner-join-apply
+ │    │    ├── columns: x:1(int!null) y:2(int) column1:7(int)
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── prune: (7)
+ │    │    ├── interesting orderings: (+1)
+ │    │    ├── scan xysd
+ │    │    │    ├── columns: x:1(int!null) y:2(int)
+ │    │    │    ├── key: (1)
+ │    │    │    ├── fd: (1)-->(2)
+ │    │    │    ├── prune: (1,2)
+ │    │    │    └── interesting orderings: (+1)
+ │    │    ├── values
+ │    │    │    ├── columns: column1:7(int)
+ │    │    │    ├── outer: (1,2)
+ │    │    │    ├── cardinality: [2 - 2]
+ │    │    │    ├── prune: (7)
+ │    │    │    ├── tuple [type=tuple{int}]
+ │    │    │    │    └── variable: x:1 [type=int]
+ │    │    │    └── tuple [type=tuple{int}]
+ │    │    │         └── variable: y:2 [type=int]
+ │    │    └── filters (true)
+ │    └── aggregations
+ │         └── const-agg [as=column1:7, type=int, outer=(7)]
+ │              └── variable: column1:7 [type=int]
+ └── projections
+      └── variable: column1:7 [as=column1:9, type=int, outer=(7)]
+
+# Inner-join-apply nested in inner-join-apply with outer column references to
+# each parent.
+opt disable=TryDecorrelateMax1Row
+SELECT * FROM xysd WHERE (SELECT v FROM uv WHERE (SELECT n FROM mn WHERE n=v)=x)=x
+----
+project
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (1-4)
+ ├── interesting orderings: (+1) (-3,+4,+1)
+ └── inner-join-apply
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) v:8(int!null)
+      ├── key: (1)
+      ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (1)==(8), (8)==(1)
+      ├── prune: (2-4)
+      ├── interesting orderings: (+1) (-3,+4,+1)
+      ├── scan xysd
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      │    ├── prune: (1-4)
+      │    └── interesting orderings: (+1) (-3,+4,+1)
+      ├── max1-row
+      │    ├── columns: v:8(int!null)
+      │    ├── error: "more than one row returned by a subquery used as an expression"
+      │    ├── outer: (1)
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(8)
+      │    └── project
+      │         ├── columns: v:8(int!null)
+      │         ├── outer: (1)
+      │         ├── fd: ()-->(8)
+      │         ├── prune: (8)
+      │         └── inner-join (hash)
+      │              ├── columns: v:8(int!null) n:13(int!null)
+      │              ├── outer: (1)
+      │              ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │              ├── fd: ()-->(8,13), (8)==(13), (13)==(8)
+      │              ├── interesting orderings: (+13)
+      │              ├── scan uv
+      │              │    ├── columns: v:8(int!null)
+      │              │    ├── prune: (8)
+      │              │    └── unfiltered-cols: (7-11)
+      │              ├── scan mn
+      │              │    ├── columns: n:13(int)
+      │              │    ├── lax-key: (13)
+      │              │    ├── prune: (13)
+      │              │    ├── interesting orderings: (+13)
+      │              │    └── unfiltered-cols: (12-15)
+      │              └── filters
+      │                   ├── eq [type=bool, outer=(8,13), constraints=(/8: (/NULL - ]; /13: (/NULL - ]), fd=(8)==(13), (13)==(8)]
+      │                   │    ├── variable: n:13 [type=int]
+      │                   │    └── variable: v:8 [type=int]
+      │                   └── eq [type=bool, outer=(1,13), constraints=(/1: (/NULL - ]; /13: (/NULL - ]), fd=(1)==(13), (13)==(1)]
+      │                        ├── variable: x:1 [type=int]
+      │                        └── variable: n:13 [type=int]
+      └── filters
+           └── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+                ├── variable: x:1 [type=int]
+                └── variable: v:8 [type=int]
+
+# Inner-join nested in inner-join-apply with outer column reference to top-level
+# inner-join-apply.
+opt
+SELECT * FROM xysd WHERE (SELECT v FROM uv WHERE (SELECT m FROM mn WHERE m=y)=x)=x
+----
+project
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (1-4)
+ └── select
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) v:8(int!null)
+      ├── key: (1)
+      ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (1)==(8), (8)==(1)
+      ├── prune: (2-4)
+      ├── ensure-distinct-on
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) v:8(int)
+      │    ├── grouping columns: x:1(int!null)
+      │    ├── error: "more than one row returned by a subquery used as an expression"
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-4,8), (3,4)~~>(1,2)
+      │    ├── prune: (2-4,8)
+      │    ├── right-join (hash)
+      │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) v:8(int) m:12(int)
+      │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      │    │    ├── prune: (3,4,8)
+      │    │    ├── reject-nulls: (8,12)
+      │    │    ├── interesting orderings: (+1) (-3,+4,+1) (+12)
+      │    │    ├── inner-join (cross)
+      │    │    │    ├── columns: v:8(int!null) m:12(int!null)
+      │    │    │    ├── prune: (8,12)
+      │    │    │    ├── interesting orderings: (+12)
+      │    │    │    ├── scan uv
+      │    │    │    │    ├── columns: v:8(int!null)
+      │    │    │    │    ├── prune: (8)
+      │    │    │    │    └── unfiltered-cols: (7-11)
+      │    │    │    ├── scan mn
+      │    │    │    │    ├── columns: m:12(int!null)
+      │    │    │    │    ├── key: (12)
+      │    │    │    │    ├── prune: (12)
+      │    │    │    │    ├── interesting orderings: (+12)
+      │    │    │    │    └── unfiltered-cols: (12-15)
+      │    │    │    └── filters (true)
+      │    │    ├── scan xysd
+      │    │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+      │    │    │    ├── key: (1)
+      │    │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      │    │    │    ├── prune: (1-4)
+      │    │    │    ├── interesting orderings: (+1) (-3,+4,+1)
+      │    │    │    └── unfiltered-cols: (1-6)
+      │    │    └── filters
+      │    │         ├── eq [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+      │    │         │    ├── variable: x:1 [type=int]
+      │    │         │    └── variable: y:2 [type=int]
+      │    │         └── eq [type=bool, outer=(1,12), constraints=(/1: (/NULL - ]; /12: (/NULL - ]), fd=(1)==(12), (12)==(1)]
+      │    │              ├── variable: x:1 [type=int]
+      │    │              └── variable: m:12 [type=int]
+      │    └── aggregations
+      │         ├── const-agg [as=y:2, type=int, outer=(2)]
+      │         │    └── variable: y:2 [type=int]
+      │         ├── const-agg [as=s:3, type=string, outer=(3)]
+      │         │    └── variable: s:3 [type=string]
+      │         ├── const-agg [as=d:4, type=decimal, outer=(4)]
+      │         │    └── variable: d:4 [type=decimal]
+      │         └── const-agg [as=v:8, type=int, outer=(8)]
+      │              └── variable: v:8 [type=int]
+      └── filters
+           └── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+                ├── variable: x:1 [type=int]
+                └── variable: v:8 [type=int]
+
+# Left-join.
+build
+SELECT *, rowid FROM xysd LEFT JOIN uv ON x=u
+----
+project
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int) v:8(int) rowid:9(int)
+ ├── key: (1,9)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (9)-->(7,8)
+ ├── prune: (1-4,7-9)
+ ├── reject-nulls: (7-9)
+ ├── interesting orderings: (+1) (-3,+4,+1) (+9)
+ └── left-join (hash)
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) v:8(int) rowid:9(int) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
+      ├── key: (1,9)
+      ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11)
+      ├── prune: (2-6,8-11)
+      ├── reject-nulls: (7-11)
+      ├── interesting orderings: (+1) (-3,+4,+1) (+9)
+      ├── scan xysd
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      │    ├── prune: (1-6)
+      │    ├── interesting orderings: (+1) (-3,+4,+1)
+      │    └── unfiltered-cols: (1-6)
+      ├── scan uv
+      │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      │    ├── key: (9)
+      │    ├── fd: (9)-->(7,8,10,11)
+      │    ├── prune: (7-11)
+      │    ├── interesting orderings: (+9)
+      │    └── unfiltered-cols: (7-11)
+      └── filters
+           └── eq [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+                ├── variable: x:1 [type=int]
+                └── variable: u:7 [type=int]
+
+# Left-join with single row left input: column u should be constant.
+build
+SELECT * FROM (SELECT * FROM xysd WHERE x=123) AS xysd1 LEFT JOIN uv ON y=u
+----
+project
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int) v:8(int)
+ ├── fd: ()-->(1-4,7)
+ ├── prune: (1-4,7,8)
+ ├── reject-nulls: (7,8)
+ └── left-join (hash)
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int) v:8(int) rowid:9(int) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
+      ├── key: (9)
+      ├── fd: ()-->(1-4,7), (9)-->(8,10,11)
+      ├── prune: (1,3,4,8-11)
+      ├── reject-nulls: (7-11)
+      ├── interesting orderings: (+9)
+      ├── project
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(1-4)
+      │    ├── prune: (1-4)
+      │    └── select
+      │         ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
+      │         ├── cardinality: [0 - 1]
+      │         ├── key: ()
+      │         ├── fd: ()-->(1-6)
+      │         ├── prune: (2-6)
+      │         ├── scan xysd
+      │         │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
+      │         │    ├── key: (1)
+      │         │    ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      │         │    ├── prune: (1-6)
+      │         │    └── interesting orderings: (+1) (-3,+4,+1)
+      │         └── filters
+      │              └── eq [type=bool, outer=(1), constraints=(/1: [/123 - /123]; tight), fd=()-->(1)]
+      │                   ├── variable: x:1 [type=int]
+      │                   └── const: 123 [type=int]
+      ├── scan uv
+      │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      │    ├── key: (9)
+      │    ├── fd: (9)-->(7,8,10,11)
+      │    ├── prune: (7-11)
+      │    ├── interesting orderings: (+9)
+      │    └── unfiltered-cols: (7-11)
+      └── filters
+           └── eq [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+                ├── variable: y:2 [type=int]
+                └── variable: u:7 [type=int]
+
+# Left-join with single row left input: columns u and v should be constant.
+# Note: we need norm here so that the AND gets normalized to multiple filter items.
+norm
+SELECT * FROM (SELECT * FROM xysd WHERE x=123) AS xysd1 LEFT JOIN uv ON y=u AND v=x+y
+----
+project
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int) v:8(int)
+ ├── immutable
+ ├── fd: ()-->(1-4,7,8)
+ ├── prune: (1-4,7,8)
+ ├── reject-nulls: (7,8)
+ └── left-join (hash)
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int) v:8(int) column12:12(int)
+      ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
+      ├── immutable
+      ├── fd: ()-->(1-4,7,8,12)
+      ├── prune: (1,3,4)
+      ├── reject-nulls: (7,8)
+      ├── project
+      │    ├── columns: column12:12(int) x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+      │    ├── cardinality: [0 - 1]
+      │    ├── immutable
+      │    ├── key: ()
+      │    ├── fd: ()-->(1-4,12)
+      │    ├── prune: (1-4,12)
+      │    ├── select
+      │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(1-4)
+      │    │    ├── prune: (2-4)
+      │    │    ├── scan xysd
+      │    │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+      │    │    │    ├── key: (1)
+      │    │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      │    │    │    ├── prune: (1-4)
+      │    │    │    └── interesting orderings: (+1) (-3,+4,+1)
+      │    │    └── filters
+      │    │         └── eq [type=bool, outer=(1), constraints=(/1: [/123 - /123]; tight), fd=()-->(1)]
+      │    │              ├── variable: x:1 [type=int]
+      │    │              └── const: 123 [type=int]
+      │    └── projections
+      │         └── plus [as=column12:12, type=int, outer=(1,2), immutable]
+      │              ├── variable: x:1 [type=int]
+      │              └── variable: y:2 [type=int]
+      ├── scan uv
+      │    ├── columns: u:7(int) v:8(int!null)
+      │    ├── prune: (7,8)
+      │    └── unfiltered-cols: (7-11)
+      └── filters
+           ├── eq [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+           │    ├── variable: y:2 [type=int]
+           │    └── variable: u:7 [type=int]
+           └── eq [type=bool, outer=(8,12), constraints=(/8: (/NULL - ]; /12: (/NULL - ]), fd=(8)==(12), (12)==(8)]
+                ├── variable: column12:12 [type=int]
+                └── variable: v:8 [type=int]
+
+# Left-join-apply.
+opt
+SELECT * FROM xysd WHERE (SELECT u FROM uv WHERE u=x) IS NULL
+----
+project
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (1-4)
+ └── select
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int)
+      ├── key: (1)
+      ├── fd: ()-->(7), (1)-->(2-4), (3,4)~~>(1,2)
+      ├── prune: (2-4)
+      ├── ensure-distinct-on
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int)
+      │    ├── grouping columns: x:1(int!null)
+      │    ├── error: "more than one row returned by a subquery used as an expression"
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-4,7), (3,4)~~>(1,2)
+      │    ├── prune: (2-4,7)
+      │    ├── left-join (hash)
+      │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int)
+      │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
+      │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      │    │    ├── prune: (2-4)
+      │    │    ├── reject-nulls: (7)
+      │    │    ├── interesting orderings: (+1) (-3,+4,+1)
+      │    │    ├── scan xysd
+      │    │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+      │    │    │    ├── key: (1)
+      │    │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      │    │    │    ├── prune: (1-4)
+      │    │    │    ├── interesting orderings: (+1) (-3,+4,+1)
+      │    │    │    └── unfiltered-cols: (1-6)
+      │    │    ├── scan uv
+      │    │    │    ├── columns: u:7(int)
+      │    │    │    ├── prune: (7)
+      │    │    │    └── unfiltered-cols: (7-11)
+      │    │    └── filters
+      │    │         └── eq [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+      │    │              ├── variable: u:7 [type=int]
+      │    │              └── variable: x:1 [type=int]
+      │    └── aggregations
+      │         ├── const-agg [as=y:2, type=int, outer=(2)]
+      │         │    └── variable: y:2 [type=int]
+      │         ├── const-agg [as=s:3, type=string, outer=(3)]
+      │         │    └── variable: s:3 [type=string]
+      │         ├── const-agg [as=d:4, type=decimal, outer=(4)]
+      │         │    └── variable: d:4 [type=decimal]
+      │         └── const-agg [as=u:7, type=int, outer=(7)]
+      │              └── variable: u:7 [type=int]
+      └── filters
+           └── is [type=bool, outer=(7), constraints=(/7: [/NULL - /NULL]; tight), fd=()-->(7)]
+                ├── variable: u:7 [type=int]
+                └── null [type=unknown]
+
+# Right-join.
+build
+SELECT *, rowid FROM xysd RIGHT JOIN uv ON x=u
+----
+project
+ ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:7(int) v:8(int!null) rowid:9(int!null)
+ ├── key: (9)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (9)-->(1-4,7,8)
+ ├── prune: (1-4,7-9)
+ ├── reject-nulls: (1-4)
+ ├── interesting orderings: (+1) (-3,+4,+1) (+9)
+ └── right-join (hash)
+      ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      ├── key: (9)
+      ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(1-8,10,11)
+      ├── prune: (2-6,8-11)
+      ├── reject-nulls: (1-6)
+      ├── interesting orderings: (+1) (-3,+4,+1) (+9)
+      ├── scan xysd
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      │    ├── prune: (1-6)
+      │    └── interesting orderings: (+1) (-3,+4,+1)
+      ├── scan uv
+      │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      │    ├── key: (9)
+      │    ├── fd: (9)-->(7,8,10,11)
+      │    ├── prune: (7-11)
+      │    └── interesting orderings: (+9)
+      └── filters
+           └── eq [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+                ├── variable: x:1 [type=int]
+                └── variable: u:7 [type=int]
+
+# Full-join.
+build
+SELECT *, rowid FROM xysd FULL JOIN uv ON x=u
+----
+project
+ ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:7(int) v:8(int) rowid:9(int)
+ ├── key: (1,9)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (9)-->(7,8)
+ ├── prune: (1-4,7-9)
+ ├── reject-nulls: (1-4,7-9)
+ ├── interesting orderings: (+1) (-3,+4,+1) (+9)
+ └── full-join (hash)
+      ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) v:8(int) rowid:9(int) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
+      ├── key: (1,9)
+      ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11)
+      ├── prune: (2-6,8-11)
+      ├── reject-nulls: (1-11)
+      ├── interesting orderings: (+1) (-3,+4,+1) (+9)
+      ├── scan xysd
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      │    ├── prune: (1-6)
+      │    ├── interesting orderings: (+1) (-3,+4,+1)
+      │    └── unfiltered-cols: (1-6)
+      ├── scan uv
+      │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      │    ├── key: (9)
+      │    ├── fd: (9)-->(7,8,10,11)
+      │    ├── prune: (7-11)
+      │    ├── interesting orderings: (+9)
+      │    └── unfiltered-cols: (7-11)
+      └── filters
+           └── eq [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+                ├── variable: x:1 [type=int]
+                └── variable: u:7 [type=int]
+
+# Semi-join.
+opt
+SELECT * FROM xysd WHERE EXISTS(SELECT * FROM uv WHERE x=u)
+----
+project
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (2-4)
+ ├── interesting orderings: (+1) (-3,+4,+1)
+ └── inner-join (lookup xysd)
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int!null)
+      ├── key columns: [7] = [1]
+      ├── lookup columns are key
+      ├── key: (7)
+      ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (1)==(7), (7)==(1)
+      ├── prune: (2-4)
+      ├── interesting orderings: (+1) (-3,+4,+1)
+      ├── distinct-on
+      │    ├── columns: u:7(int)
+      │    ├── grouping columns: u:7(int)
+      │    ├── key: (7)
+      │    └── scan uv
+      │         ├── columns: u:7(int)
+      │         ├── prune: (7)
+      │         └── unfiltered-cols: (7-11)
+      └── filters (true)
+
+# Semi-join with empty right input. The cardinality should be zero.
+expr
+(SemiJoin
+  (Values
+    [
+      (Tuple [ (Const 1 "int") (Const 10 "int") ] "tuple{int}" )
+      (Tuple [ (Const 2 "int") (Const 20 "int") ] "tuple{int}" )
+      (Tuple [ (Const 3 "int") (Const 30 "int") ] "tuple{int}" )
+    ]
+    [ (Cols [ (NewColumn "x" "int") (NewColumn "y" "int") ]) ]
+  )
+  (Select (Scan [ (Table "uv") (Cols "u,v") ]) [ (False) ])
+  [ (Eq (Var "x") (Var "u")) ]
+  []
+)
+----
+semi-join (hash)
+ ├── columns: x:1(int!null) y:2(int!null)
+ ├── cardinality: [0 - 0]
+ ├── prune: (2)
+ ├── values
+ │    ├── columns: x:1(int!null) y:2(int!null)
+ │    ├── cardinality: [3 - 3]
+ │    ├── prune: (1,2)
+ │    ├── tuple [type=tuple{int}]
+ │    │    ├── const: 1 [type=int]
+ │    │    └── const: 10 [type=int]
+ │    ├── tuple [type=tuple{int}]
+ │    │    ├── const: 2 [type=int]
+ │    │    └── const: 20 [type=int]
+ │    └── tuple [type=tuple{int}]
+ │         ├── const: 3 [type=int]
+ │         └── const: 30 [type=int]
+ ├── select
+ │    ├── columns: u:3(int) v:4(int!null)
+ │    ├── cardinality: [0 - 0]
+ │    ├── prune: (3,4)
+ │    ├── scan uv
+ │    │    ├── columns: u:3(int) v:4(int!null)
+ │    │    └── prune: (3,4)
+ │    └── filters
+ │         └── false [type=bool, constraints=(contradiction; tight)]
+ └── filters
+      └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+           ├── variable: x:1 [type=int]
+           └── variable: u:3 [type=int]
+
+# Semi-join with False filters. The cardinality should be zero.
+expr
+(SemiJoin
+  (Values
+    [
+      (Tuple [ (Const 1 "int") (Const 10 "int") ] "tuple{int}" )
+      (Tuple [ (Const 2 "int") (Const 20 "int") ] "tuple{int}" )
+      (Tuple [ (Const 3 "int") (Const 30 "int") ] "tuple{int}" )
+    ]
+    [ (Cols [ (NewColumn "x" "int") (NewColumn "y" "int") ]) ]
+  )
+  (Scan [ (Table "uv") (Cols "u,v") ])
+  [ (False) ]
+  []
+)
+----
+semi-join (cross)
+ ├── columns: x:1(int!null) y:2(int!null)
+ ├── cardinality: [0 - 0]
+ ├── prune: (1,2)
+ ├── values
+ │    ├── columns: x:1(int!null) y:2(int!null)
+ │    ├── cardinality: [3 - 3]
+ │    ├── prune: (1,2)
+ │    ├── tuple [type=tuple{int}]
+ │    │    ├── const: 1 [type=int]
+ │    │    └── const: 10 [type=int]
+ │    ├── tuple [type=tuple{int}]
+ │    │    ├── const: 2 [type=int]
+ │    │    └── const: 20 [type=int]
+ │    └── tuple [type=tuple{int}]
+ │         ├── const: 3 [type=int]
+ │         └── const: 30 [type=int]
+ ├── scan uv
+ │    ├── columns: u:3(int) v:4(int!null)
+ │    ├── prune: (3,4)
+ │    └── unfiltered-cols: (3-7)
+ └── filters
+      └── false [type=bool, constraints=(contradiction; tight)]
+
+# Semi-join-apply.
+opt
+SELECT * FROM xysd WHERE EXISTS(SELECT * FROM uv WHERE v=x OFFSET 1)
+----
+semi-join-apply
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (2-4)
+ ├── interesting orderings: (+1) (-3,+4,+1)
+ ├── scan xysd
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    ├── interesting orderings: (+1) (-3,+4,+1)
+ │    └── unfiltered-cols: (1-6)
+ ├── offset
+ │    ├── columns: v:8(int!null)
+ │    ├── outer: (1)
+ │    ├── fd: ()-->(8)
+ │    ├── select
+ │    │    ├── columns: v:8(int!null)
+ │    │    ├── outer: (1)
+ │    │    ├── fd: ()-->(8)
+ │    │    ├── scan uv
+ │    │    │    ├── columns: v:8(int!null)
+ │    │    │    └── prune: (8)
+ │    │    └── filters
+ │    │         └── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+ │    │              ├── variable: v:8 [type=int]
+ │    │              └── variable: x:1 [type=int]
+ │    └── const: 1 [type=int]
+ └── filters (true)
+
+# Semi-join nested in semi-join with outer column reference to top-level join.
+opt
+SELECT * FROM xysd WHERE EXISTS(SELECT * FROM uv WHERE EXISTS(SELECT * FROM mn WHERE x=m AND x=v))
+----
+semi-join-apply
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (2-4)
+ ├── interesting orderings: (+1) (-3,+4,+1)
+ ├── scan xysd
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    ├── interesting orderings: (+1) (-3,+4,+1)
+ │    └── unfiltered-cols: (1-6)
+ ├── semi-join (cross)
+ │    ├── columns: v:8(int!null)
+ │    ├── outer: (1)
+ │    ├── fd: ()-->(8)
+ │    ├── scan uv
+ │    │    ├── columns: v:8(int!null)
+ │    │    ├── prune: (8)
+ │    │    └── unfiltered-cols: (7-11)
+ │    ├── scan mn
+ │    │    ├── columns: m:12(int!null)
+ │    │    ├── key: (12)
+ │    │    ├── prune: (12)
+ │    │    ├── interesting orderings: (+12)
+ │    │    └── unfiltered-cols: (12-15)
+ │    └── filters
+ │         ├── eq [type=bool, outer=(1,12), constraints=(/1: (/NULL - ]; /12: (/NULL - ]), fd=(1)==(12), (12)==(1)]
+ │         │    ├── variable: x:1 [type=int]
+ │         │    └── variable: m:12 [type=int]
+ │         └── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+ │              ├── variable: x:1 [type=int]
+ │              └── variable: v:8 [type=int]
+ └── filters (true)
+
+# Anti-join.
+opt
+SELECT * FROM xysd WHERE NOT EXISTS(SELECT * FROM uv WHERE x=u)
+----
+anti-join (hash)
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (2-4)
+ ├── interesting orderings: (+1) (-3,+4,+1)
+ ├── scan xysd
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    ├── interesting orderings: (+1) (-3,+4,+1)
+ │    └── unfiltered-cols: (1-6)
+ ├── scan uv
+ │    ├── columns: u:7(int)
+ │    ├── prune: (7)
+ │    └── unfiltered-cols: (7-11)
+ └── filters
+      └── eq [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+           ├── variable: x:1 [type=int]
+           └── variable: u:7 [type=int]
+
+# Anti-join with empty right input. The cardinality of the left input should be
+# passed through.
+expr
+(AntiJoin
+  (Values
+    [
+      (Tuple [ (Const 1 "int") (Const 10 "int") ] "tuple{int}" )
+      (Tuple [ (Const 2 "int") (Const 20 "int") ] "tuple{int}" )
+      (Tuple [ (Const 3 "int") (Const 30 "int") ] "tuple{int}" )
+    ]
+    [ (Cols [ (NewColumn "x" "int") (NewColumn "y" "int") ]) ]
+  )
+  (Select (Scan [ (Table "uv") (Cols "u,v") ]) [ (False) ])
+  [ (Eq (Var "x") (Var "u")) ]
+  []
+)
+----
+anti-join (hash)
+ ├── columns: x:1(int!null) y:2(int!null)
+ ├── cardinality: [3 - 3]
+ ├── prune: (2)
+ ├── values
+ │    ├── columns: x:1(int!null) y:2(int!null)
+ │    ├── cardinality: [3 - 3]
+ │    ├── prune: (1,2)
+ │    ├── tuple [type=tuple{int}]
+ │    │    ├── const: 1 [type=int]
+ │    │    └── const: 10 [type=int]
+ │    ├── tuple [type=tuple{int}]
+ │    │    ├── const: 2 [type=int]
+ │    │    └── const: 20 [type=int]
+ │    └── tuple [type=tuple{int}]
+ │         ├── const: 3 [type=int]
+ │         └── const: 30 [type=int]
+ ├── select
+ │    ├── columns: u:3(int) v:4(int!null)
+ │    ├── cardinality: [0 - 0]
+ │    ├── prune: (3,4)
+ │    ├── scan uv
+ │    │    ├── columns: u:3(int) v:4(int!null)
+ │    │    └── prune: (3,4)
+ │    └── filters
+ │         └── false [type=bool, constraints=(contradiction; tight)]
+ └── filters
+      └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+           ├── variable: x:1 [type=int]
+           └── variable: u:3 [type=int]
+
+# Anti-join with False filters. The cardinality of the left input should be
+# passed through.
+expr
+(AntiJoin
+  (Values
+    [
+      (Tuple [ (Const 1 "int") (Const 10 "int") ] "tuple{int}" )
+      (Tuple [ (Const 2 "int") (Const 20 "int") ] "tuple{int}" )
+      (Tuple [ (Const 3 "int") (Const 30 "int") ] "tuple{int}" )
+    ]
+    [ (Cols [ (NewColumn "x" "int") (NewColumn "y" "int") ]) ]
+  )
+  (Scan [ (Table "uv") (Cols "u,v") ])
+  [ (False) ]
+  []
+)
+----
+anti-join (cross)
+ ├── columns: x:1(int!null) y:2(int!null)
+ ├── cardinality: [3 - 3]
+ ├── prune: (1,2)
+ ├── values
+ │    ├── columns: x:1(int!null) y:2(int!null)
+ │    ├── cardinality: [3 - 3]
+ │    ├── prune: (1,2)
+ │    ├── tuple [type=tuple{int}]
+ │    │    ├── const: 1 [type=int]
+ │    │    └── const: 10 [type=int]
+ │    ├── tuple [type=tuple{int}]
+ │    │    ├── const: 2 [type=int]
+ │    │    └── const: 20 [type=int]
+ │    └── tuple [type=tuple{int}]
+ │         ├── const: 3 [type=int]
+ │         └── const: 30 [type=int]
+ ├── scan uv
+ │    ├── columns: u:3(int) v:4(int!null)
+ │    ├── prune: (3,4)
+ │    └── unfiltered-cols: (3-7)
+ └── filters
+      └── false [type=bool, constraints=(contradiction; tight)]
+
+# Anti-join-apply.
+opt
+SELECT * FROM xysd WHERE NOT EXISTS(SELECT * FROM uv WHERE v=x OFFSET 1)
+----
+anti-join-apply
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (2-4)
+ ├── interesting orderings: (+1) (-3,+4,+1)
+ ├── scan xysd
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
+ ├── offset
+ │    ├── columns: v:8(int!null)
+ │    ├── outer: (1)
+ │    ├── fd: ()-->(8)
+ │    ├── select
+ │    │    ├── columns: v:8(int!null)
+ │    │    ├── outer: (1)
+ │    │    ├── fd: ()-->(8)
+ │    │    ├── scan uv
+ │    │    │    ├── columns: v:8(int!null)
+ │    │    │    └── prune: (8)
+ │    │    └── filters
+ │    │         └── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+ │    │              ├── variable: v:8 [type=int]
+ │    │              └── variable: x:1 [type=int]
+ │    └── const: 1 [type=int]
+ └── filters (true)
+
+# Cross-join.
+build
+SELECT * FROM xysd, uv
+----
+project
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int) v:8(int!null)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (1-4,7,8)
+ ├── interesting orderings: (+1) (-3,+4,+1)
+ └── inner-join (cross)
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      ├── key: (1,9)
+      ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11)
+      ├── prune: (1-11)
+      ├── interesting orderings: (+1) (-3,+4,+1) (+9)
+      ├── scan xysd
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      │    ├── prune: (1-6)
+      │    ├── interesting orderings: (+1) (-3,+4,+1)
+      │    └── unfiltered-cols: (1-6)
+      ├── scan uv
+      │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      │    ├── key: (9)
+      │    ├── fd: (9)-->(7,8,10,11)
+      │    ├── prune: (7-11)
+      │    ├── interesting orderings: (+9)
+      │    └── unfiltered-cols: (7-11)
+      └── filters (true)
+
+# Self-join.
+build
+SELECT * FROM xysd, xysd AS xysd
+----
+project
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ ├── key: (1,7)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(8-10), (9,10)~~>(7,8)
+ ├── prune: (1-4,7-10)
+ ├── interesting orderings: (+1) (-3,+4,+1) (+7) (-9,+10,+7)
+ └── inner-join (cross)
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid) x:7(int!null) y:8(int) s:9(string) d:10(decimal!null) crdb_internal_mvcc_timestamp:11(decimal) tableoid:12(oid)
+      ├── key: (1,7)
+      ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (7)-->(8-12), (9,10)~~>(7,8,11,12)
+      ├── prune: (1-12)
+      ├── interesting orderings: (+1) (-3,+4,+1) (+7) (-9,+10,+7)
+      ├── scan xysd
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      │    ├── prune: (1-6)
+      │    ├── interesting orderings: (+1) (-3,+4,+1)
+      │    └── unfiltered-cols: (1-6)
+      ├── scan xysd
+      │    ├── columns: x:7(int!null) y:8(int) s:9(string) d:10(decimal!null) crdb_internal_mvcc_timestamp:11(decimal) tableoid:12(oid)
+      │    ├── key: (7)
+      │    ├── fd: (7)-->(8-12), (9,10)~~>(7,8,11,12)
+      │    ├── prune: (7-12)
+      │    ├── interesting orderings: (+7) (-9,+10,+7)
+      │    └── unfiltered-cols: (7-12)
+      └── filters (true)
+
+# Propagate outer columns.
+build
+SELECT * FROM xysd WHERE EXISTS(SELECT * FROM (SELECT x) INNER JOIN (SELECT y) ON x::string = s)
+----
+project
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (1-4)
+ ├── interesting orderings: (+1) (-3,+4,+1)
+ └── select
+      ├── columns: xysd.x:1(int!null) xysd.y:2(int) s:3(string) d:4(decimal!null) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      ├── prune: (4-6)
+      ├── interesting orderings: (+1) (-3,+4,+1)
+      ├── scan xysd
+      │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) s:3(string) d:4(decimal!null) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      │    ├── prune: (1-6)
+      │    └── interesting orderings: (+1) (-3,+4,+1)
+      └── filters
+           └── exists [type=bool, outer=(1-3), immutable, correlated-subquery]
+                └── inner-join (cross)
+                     ├── columns: x:7(int) y:8(int)
+                     ├── outer: (1-3)
+                     ├── cardinality: [0 - 1]
+                     ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+                     ├── immutable
+                     ├── key: ()
+                     ├── fd: ()-->(7,8)
+                     ├── prune: (8)
+                     ├── project
+                     │    ├── columns: x:7(int)
+                     │    ├── outer: (1)
+                     │    ├── cardinality: [1 - 1]
+                     │    ├── key: ()
+                     │    ├── fd: ()-->(7)
+                     │    ├── prune: (7)
+                     │    ├── values
+                     │    │    ├── cardinality: [1 - 1]
+                     │    │    ├── key: ()
+                     │    │    └── tuple [type=tuple]
+                     │    └── projections
+                     │         └── variable: xysd.x:1 [as=x:7, type=int, outer=(1)]
+                     ├── project
+                     │    ├── columns: y:8(int)
+                     │    ├── outer: (2)
+                     │    ├── cardinality: [1 - 1]
+                     │    ├── key: ()
+                     │    ├── fd: ()-->(8)
+                     │    ├── prune: (8)
+                     │    ├── values
+                     │    │    ├── cardinality: [1 - 1]
+                     │    │    ├── key: ()
+                     │    │    └── tuple [type=tuple]
+                     │    └── projections
+                     │         └── variable: xysd.y:2 [as=y:8, type=int, outer=(2)]
+                     └── filters
+                          └── eq [type=bool, outer=(3,7), immutable]
+                               ├── cast: STRING [type=string]
+                               │    └── variable: x:7 [type=int]
+                               └── variable: s:3 [type=string]
+
+# Calculate semi-join cardinality when left side has non-zero cardinality.
+opt
+SELECT * FROM (SELECT count(*) cnt FROM xysd) WHERE EXISTS(SELECT * FROM uv WHERE cnt=1)
+----
+select
+ ├── columns: cnt:7(int!null)
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(7)
+ ├── scalar-group-by
+ │    ├── columns: count_rows:7(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(7)
+ │    ├── prune: (7)
+ │    ├── scan xysd@xysd_s_d_key
+ │    └── aggregations
+ │         └── count-rows [as=count_rows:7, type=int]
+ └── filters
+      ├── coalesce [type=bool, subquery]
+      │    ├── subquery [type=bool]
+      │    │    └── project
+      │    │         ├── columns: column14:14(bool!null)
+      │    │         ├── cardinality: [0 - 1]
+      │    │         ├── key: ()
+      │    │         ├── fd: ()-->(14)
+      │    │         ├── prune: (14)
+      │    │         ├── scan uv
+      │    │         │    ├── limit: 1
+      │    │         │    └── key: ()
+      │    │         └── projections
+      │    │              └── true [as=column14:14, type=bool]
+      │    └── false [type=bool]
+      └── eq [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+           ├── variable: count_rows:7 [type=int]
+           └── const: 1 [type=int]
+
+# Maximum cardinality of the right input is propagated to the SemiJoin when
+# right rows are guaranteed at most one match each over the join filters.
+norm
+SELECT * FROM mn WHERE m IN (SELECT u FROM uv WHERE v > 20 LIMIT 10)
+----
+semi-join (hash)
+ ├── columns: m:1(int!null) n:2(int)
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(2), (2)~~>(1)
+ ├── prune: (2)
+ ├── interesting orderings: (+1) (+2,+1)
+ ├── scan mn
+ │    ├── columns: m:1(int!null) n:2(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2), (2)~~>(1)
+ │    ├── prune: (1,2)
+ │    ├── interesting orderings: (+1) (+2,+1)
+ │    └── unfiltered-cols: (1-4)
+ ├── limit
+ │    ├── columns: u:5(int) v:6(int!null)
+ │    ├── cardinality: [0 - 10]
+ │    ├── prune: (5)
+ │    ├── select
+ │    │    ├── columns: u:5(int) v:6(int!null)
+ │    │    ├── limit hint: 10.00
+ │    │    ├── prune: (5)
+ │    │    ├── scan uv
+ │    │    │    ├── columns: u:5(int) v:6(int!null)
+ │    │    │    ├── limit hint: 30.00
+ │    │    │    └── prune: (5,6)
+ │    │    └── filters
+ │    │         └── gt [type=bool, outer=(6), constraints=(/6: [/21 - ]; tight)]
+ │    │              ├── variable: v:6 [type=int]
+ │    │              └── const: 20 [type=int]
+ │    └── const: 10 [type=int]
+ └── filters
+      └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+           ├── variable: m:1 [type=int]
+           └── variable: u:5 [type=int]
+
+# Calculate semi-join-apply cardinality.
+expr
+(SemiJoinApply
+    (FakeRel
+        [
+            (OutputCols [ (NewColumn "a" "int") ])
+            (Cardinality "0-10")
+        ]
+    )
+    (FakeRel
+        [
+            (OutputCols [ (NewColumn "a" "int") ])
+        ]
+    )
+    [ ]
+    [ ]
+)
+----
+semi-join-apply
+ ├── columns: a:1(int)
+ ├── cardinality: [0 - 0]
+ ├── fake-rel
+ │    ├── columns: a:1(int)
+ │    └── cardinality: [0 - 10]
+ ├── fake-rel
+ │    ├── columns: a:2(int)
+ │    └── cardinality: [0 - 0]
+ └── filters (true)
+
+# Calculate anti-join cardinality when left side has non-zero cardinality.
+opt
+SELECT * FROM (SELECT * FROM (VALUES (1), (2))) WHERE NOT EXISTS(SELECT * FROM uv WHERE u=column1)
+----
+anti-join (hash)
+ ├── columns: column1:1(int!null)
+ ├── cardinality: [0 - 2]
+ ├── values
+ │    ├── columns: column1:1(int!null)
+ │    ├── cardinality: [2 - 2]
+ │    ├── prune: (1)
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 2 [type=int]
+ ├── scan uv
+ │    ├── columns: u:2(int)
+ │    ├── prune: (2)
+ │    └── unfiltered-cols: (2-6)
+ └── filters
+      └── eq [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+           ├── variable: u:2 [type=int]
+           └── variable: column1:1 [type=int]
+
+# Calculate anti-join-apply cardinality.
+expr
+(AntiJoinApply
+    (FakeRel
+        [
+            (OutputCols [ (NewColumn "a" "int") ])
+            (Cardinality "0-10")
+        ]
+    )
+    (FakeRel
+        [
+            (OutputCols [ (NewColumn "a" "int") ])
+        ]
+    )
+    [ ]
+    [ ]
+)
+----
+anti-join-apply
+ ├── columns: a:1(int)
+ ├── cardinality: [0 - 10]
+ ├── fake-rel
+ │    ├── columns: a:1(int)
+ │    └── cardinality: [0 - 10]
+ ├── fake-rel
+ │    ├── columns: a:2(int)
+ │    └── cardinality: [0 - 0]
+ └── filters (true)
+
+# Calculate inner-join cardinality.
+build
+SELECT * FROM (VALUES (1), (2)) INNER JOIN (SELECT * FROM uv LIMIT 2) ON True
+----
+inner-join (cross)
+ ├── columns: column1:1(int!null) u:2(int) v:3(int!null)
+ ├── cardinality: [0 - 4]
+ ├── prune: (1-3)
+ ├── values
+ │    ├── columns: column1:1(int!null)
+ │    ├── cardinality: [2 - 2]
+ │    ├── prune: (1)
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 2 [type=int]
+ ├── limit
+ │    ├── columns: u:2(int) v:3(int!null)
+ │    ├── cardinality: [0 - 2]
+ │    ├── prune: (2,3)
+ │    ├── project
+ │    │    ├── columns: u:2(int) v:3(int!null)
+ │    │    ├── limit hint: 2.00
+ │    │    ├── prune: (2,3)
+ │    │    └── scan uv
+ │    │         ├── columns: u:2(int) v:3(int!null) rowid:4(int!null) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+ │    │         ├── key: (4)
+ │    │         ├── fd: (4)-->(2,3,5,6)
+ │    │         ├── limit hint: 2.00
+ │    │         ├── prune: (2-6)
+ │    │         └── interesting orderings: (+4)
+ │    └── const: 2 [type=int]
+ └── filters
+      └── true [type=bool]
+
+# Calculate left-join cardinality.
+build
+SELECT * FROM (VALUES (1), (2), (3)) LEFT JOIN (SELECT * FROM uv LIMIT 2) ON True
+----
+left-join (cross)
+ ├── columns: column1:1(int!null) u:2(int) v:3(int)
+ ├── cardinality: [3 - 6]
+ ├── prune: (1-3)
+ ├── reject-nulls: (2,3)
+ ├── values
+ │    ├── columns: column1:1(int!null)
+ │    ├── cardinality: [3 - 3]
+ │    ├── prune: (1)
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 2 [type=int]
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 3 [type=int]
+ ├── limit
+ │    ├── columns: u:2(int) v:3(int!null)
+ │    ├── cardinality: [0 - 2]
+ │    ├── prune: (2,3)
+ │    ├── project
+ │    │    ├── columns: u:2(int) v:3(int!null)
+ │    │    ├── limit hint: 2.00
+ │    │    ├── prune: (2,3)
+ │    │    └── scan uv
+ │    │         ├── columns: u:2(int) v:3(int!null) rowid:4(int!null) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+ │    │         ├── key: (4)
+ │    │         ├── fd: (4)-->(2,3,5,6)
+ │    │         ├── limit hint: 2.00
+ │    │         ├── prune: (2-6)
+ │    │         └── interesting orderings: (+4)
+ │    └── const: 2 [type=int]
+ └── filters
+      └── true [type=bool]
+
+# Calculate right-join cardinality.
+build
+SELECT * FROM (SELECT * FROM uv LIMIT 2) RIGHT JOIN (VALUES (1), (2), (3)) ON True
+----
+right-join (cross)
+ ├── columns: u:1(int) v:2(int) column1:6(int!null)
+ ├── cardinality: [3 - 6]
+ ├── prune: (1,2,6)
+ ├── reject-nulls: (1,2)
+ ├── limit
+ │    ├── columns: u:1(int) v:2(int!null)
+ │    ├── cardinality: [0 - 2]
+ │    ├── prune: (1,2)
+ │    ├── project
+ │    │    ├── columns: u:1(int) v:2(int!null)
+ │    │    ├── limit hint: 2.00
+ │    │    ├── prune: (1,2)
+ │    │    └── scan uv
+ │    │         ├── columns: u:1(int) v:2(int!null) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
+ │    │         ├── key: (3)
+ │    │         ├── fd: (3)-->(1,2,4,5)
+ │    │         ├── limit hint: 2.00
+ │    │         ├── prune: (1-5)
+ │    │         └── interesting orderings: (+3)
+ │    └── const: 2 [type=int]
+ ├── values
+ │    ├── columns: column1:6(int!null)
+ │    ├── cardinality: [3 - 3]
+ │    ├── prune: (6)
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 2 [type=int]
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 3 [type=int]
+ └── filters
+      └── true [type=bool]
+
+# Calculate full-join cardinality.
+build
+SELECT * FROM (VALUES (NULL), (NULL)) a FULL JOIN (VALUES (NULL), (NULL)) b ON True
+----
+full-join (cross)
+ ├── columns: column1:1(unknown) column1:2(unknown)
+ ├── cardinality: [2 - 4]
+ ├── prune: (1,2)
+ ├── reject-nulls: (1,2)
+ ├── values
+ │    ├── columns: column1:1(unknown)
+ │    ├── cardinality: [2 - 2]
+ │    ├── prune: (1)
+ │    ├── tuple [type=tuple{unknown}]
+ │    │    └── null [type=unknown]
+ │    └── tuple [type=tuple{unknown}]
+ │         └── null [type=unknown]
+ ├── values
+ │    ├── columns: column1:2(unknown)
+ │    ├── cardinality: [2 - 2]
+ │    ├── prune: (2)
+ │    ├── tuple [type=tuple{unknown}]
+ │    │    └── null [type=unknown]
+ │    └── tuple [type=tuple{unknown}]
+ │         └── null [type=unknown]
+ └── filters
+      └── true [type=bool]
+
+# Calculate full-join cardinality when both sides have an empty key (#44029).
+build
+SELECT * FROM (VALUES (1, 2)) a(a1,a2) FULL JOIN (VALUES (3, 4)) b(b1,b2) ON a1=b1
+----
+full-join (hash)
+ ├── columns: a1:1(int) a2:2(int) b1:3(int) b2:4(int)
+ ├── cardinality: [1 - 2]
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+ ├── prune: (2,4)
+ ├── reject-nulls: (1-4)
+ ├── values
+ │    ├── columns: column1:1(int!null) column2:2(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1,2)
+ │    ├── prune: (1,2)
+ │    └── tuple [type=tuple{int, int}]
+ │         ├── const: 1 [type=int]
+ │         └── const: 2 [type=int]
+ ├── values
+ │    ├── columns: column1:3(int!null) column2:4(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(3,4)
+ │    ├── prune: (3,4)
+ │    └── tuple [type=tuple{int, int}]
+ │         ├── const: 3 [type=int]
+ │         └── const: 4 [type=int]
+ └── filters
+      └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+           ├── variable: column1:1 [type=int]
+           └── variable: column1:3 [type=int]
+
+# Calculate full-join cardinality with false filter.
+build
+SELECT * FROM (VALUES (NULL), (NULL)) a FULL JOIN (VALUES (NULL), (NULL)) b ON a.column1=b.column1
+----
+full-join (cross)
+ ├── columns: column1:1(unknown) column1:2(unknown)
+ ├── cardinality: [2 - 4]
+ ├── immutable
+ ├── prune: (1,2)
+ ├── reject-nulls: (1,2)
+ ├── values
+ │    ├── columns: column1:1(unknown)
+ │    ├── cardinality: [2 - 2]
+ │    ├── prune: (1)
+ │    ├── tuple [type=tuple{unknown}]
+ │    │    └── null [type=unknown]
+ │    └── tuple [type=tuple{unknown}]
+ │         └── null [type=unknown]
+ ├── values
+ │    ├── columns: column1:2(unknown)
+ │    ├── cardinality: [2 - 2]
+ │    ├── prune: (2)
+ │    ├── tuple [type=tuple{unknown}]
+ │    │    └── null [type=unknown]
+ │    └── tuple [type=tuple{unknown}]
+ │         └── null [type=unknown]
+ └── filters
+      └── cast: BOOL [type=bool, immutable]
+           └── null [type=unknown]
+
+# Calculate full-join cardinality of one input with unknown cardinality.
+build
+SELECT * FROM xysd FULL JOIN (SELECT * FROM (VALUES (1), (2))) ON True
+----
+project
+ ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) column1:7(int)
+ ├── cardinality: [2 - ]
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (1-4,7)
+ ├── reject-nulls: (1-4,7)
+ ├── interesting orderings: (+1) (-3,+4,+1)
+ └── full-join (cross)
+      ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid) column1:7(int)
+      ├── cardinality: [2 - ]
+      ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      ├── prune: (1-7)
+      ├── reject-nulls: (1-7)
+      ├── interesting orderings: (+1) (-3,+4,+1)
+      ├── scan xysd
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      │    ├── prune: (1-6)
+      │    ├── interesting orderings: (+1) (-3,+4,+1)
+      │    └── unfiltered-cols: (1-6)
+      ├── values
+      │    ├── columns: column1:7(int!null)
+      │    ├── cardinality: [2 - 2]
+      │    ├── prune: (7)
+      │    ├── tuple [type=tuple{int}]
+      │    │    └── const: 1 [type=int]
+      │    └── tuple [type=tuple{int}]
+      │         └── const: 2 [type=int]
+      └── filters
+           └── true [type=bool]
+
+# Keys on both sides of full-join.
+build
+SELECT * FROM (SELECT * FROM xysd LIMIT 1) FULL JOIN (SELECT * FROM xysd LIMIT 1) ON True
+----
+full-join (cross)
+ ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) x:7(int) y:8(int) s:9(string) d:10(decimal)
+ ├── cardinality: [0 - 2]
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+ ├── prune: (1-4,7-10)
+ ├── reject-nulls: (1-4,7-10)
+ ├── interesting orderings: (+1) (-3,+4,+1) (+7) (-9,+10,+7)
+ ├── limit
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1-4)
+ │    ├── prune: (1-4)
+ │    ├── interesting orderings: (+1) (-3,+4,+1)
+ │    ├── project
+ │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    │    ├── limit hint: 1.00
+ │    │    ├── prune: (1-4)
+ │    │    ├── interesting orderings: (+1) (-3,+4,+1)
+ │    │    └── scan xysd
+ │    │         ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+ │    │         ├── key: (1)
+ │    │         ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+ │    │         ├── limit hint: 1.00
+ │    │         ├── prune: (1-6)
+ │    │         └── interesting orderings: (+1) (-3,+4,+1)
+ │    └── const: 1 [type=int]
+ ├── limit
+ │    ├── columns: x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(7-10)
+ │    ├── prune: (7-10)
+ │    ├── interesting orderings: (+7) (-9,+10,+7)
+ │    ├── project
+ │    │    ├── columns: x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ │    │    ├── key: (7)
+ │    │    ├── fd: (7)-->(8-10), (9,10)~~>(7,8)
+ │    │    ├── limit hint: 1.00
+ │    │    ├── prune: (7-10)
+ │    │    ├── interesting orderings: (+7) (-9,+10,+7)
+ │    │    └── scan xysd
+ │    │         ├── columns: x:7(int!null) y:8(int) s:9(string) d:10(decimal!null) crdb_internal_mvcc_timestamp:11(decimal) tableoid:12(oid)
+ │    │         ├── key: (7)
+ │    │         ├── fd: (7)-->(8-12), (9,10)~~>(7,8,11,12)
+ │    │         ├── limit hint: 1.00
+ │    │         ├── prune: (7-12)
+ │    │         └── interesting orderings: (+7) (-9,+10,+7)
+ │    └── const: 1 [type=int]
+ └── filters
+      └── true [type=bool]
+
+# Nullable FD determinant on right side of left-join becomes lax.
+build
+SELECT * FROM xysd LEFT JOIN (SELECT u, sum(v) FROM uv GROUP BY u) ON u IS NOT NULL
+----
+project
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int) sum:12(decimal)
+ ├── key: (1,7)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)~~>(12), (1,7)-->(12)
+ ├── prune: (1-4,7,12)
+ ├── reject-nulls: (7,12)
+ ├── interesting orderings: (+1) (-3,+4,+1)
+ └── left-join (cross)
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) sum:12(decimal)
+      ├── key: (1,7)
+      ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (7)~~>(12), (1,7)-->(12)
+      ├── prune: (1-6,12)
+      ├── reject-nulls: (7,12)
+      ├── interesting orderings: (+1) (-3,+4,+1)
+      ├── scan xysd
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      │    ├── prune: (1-6)
+      │    ├── interesting orderings: (+1) (-3,+4,+1)
+      │    └── unfiltered-cols: (1-6)
+      ├── group-by (hash)
+      │    ├── columns: u:7(int) sum:12(decimal!null)
+      │    ├── grouping columns: u:7(int)
+      │    ├── key: (7)
+      │    ├── fd: (7)-->(12)
+      │    ├── prune: (12)
+      │    ├── project
+      │    │    ├── columns: u:7(int) v:8(int!null)
+      │    │    ├── prune: (7,8)
+      │    │    └── scan uv
+      │    │         ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      │    │         ├── key: (9)
+      │    │         ├── fd: (9)-->(7,8,10,11)
+      │    │         ├── prune: (7-11)
+      │    │         └── interesting orderings: (+9)
+      │    └── aggregations
+      │         └── sum [as=sum:12, type=decimal, outer=(8)]
+      │              └── variable: v:8 [type=int]
+      └── filters
+           └── is-not [type=bool, outer=(7), constraints=(/7: (/NULL - ]; tight)]
+                ├── variable: u:7 [type=int]
+                └── null [type=unknown]
+
+# Not-null FD determinant on right side of left-join stays strict.
+build
+SELECT * FROM xysd LEFT JOIN (SELECT u, sum(v) FROM uv WHERE u IS NOT NULL GROUP BY u) ON True
+----
+project
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int) sum:12(decimal)
+ ├── key: (1,7)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(12)
+ ├── prune: (1-4,7,12)
+ ├── reject-nulls: (7,12)
+ ├── interesting orderings: (+1) (-3,+4,+1)
+ └── left-join (cross)
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) sum:12(decimal)
+      ├── key: (1,7)
+      ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (7)-->(12)
+      ├── prune: (1-6,12)
+      ├── reject-nulls: (7,12)
+      ├── interesting orderings: (+1) (-3,+4,+1)
+      ├── scan xysd
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      │    ├── prune: (1-6)
+      │    ├── interesting orderings: (+1) (-3,+4,+1)
+      │    └── unfiltered-cols: (1-6)
+      ├── group-by (hash)
+      │    ├── columns: u:7(int!null) sum:12(decimal!null)
+      │    ├── grouping columns: u:7(int!null)
+      │    ├── key: (7)
+      │    ├── fd: (7)-->(12)
+      │    ├── prune: (12)
+      │    ├── project
+      │    │    ├── columns: u:7(int!null) v:8(int!null)
+      │    │    ├── prune: (7,8)
+      │    │    └── select
+      │    │         ├── columns: u:7(int!null) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      │    │         ├── key: (9)
+      │    │         ├── fd: (9)-->(7,8,10,11)
+      │    │         ├── prune: (8-11)
+      │    │         ├── interesting orderings: (+9)
+      │    │         ├── scan uv
+      │    │         │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      │    │         │    ├── key: (9)
+      │    │         │    ├── fd: (9)-->(7,8,10,11)
+      │    │         │    ├── prune: (7-11)
+      │    │         │    └── interesting orderings: (+9)
+      │    │         └── filters
+      │    │              └── is-not [type=bool, outer=(7), constraints=(/7: (/NULL - ]; tight)]
+      │    │                   ├── variable: u:7 [type=int]
+      │    │                   └── null [type=unknown]
+      │    └── aggregations
+      │         └── sum [as=sum:12, type=decimal, outer=(8)]
+      │              └── variable: v:8 [type=int]
+      └── filters
+           └── true [type=bool]
+
+# Nullable FD determinant on left side of right-join becomes lax.
+build
+SELECT * FROM (SELECT u, sum(v) FROM uv GROUP BY u) RIGHT JOIN xysd ON u IS NOT NULL
+----
+project
+ ├── columns: u:1(int) sum:6(decimal) x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ ├── key: (1,7)
+ ├── fd: (7)-->(8-10), (9,10)~~>(7,8), (1)~~>(6), (1,7)-->(6)
+ ├── prune: (1,6-10)
+ ├── reject-nulls: (1,6)
+ ├── interesting orderings: (+7) (-9,+10,+7)
+ └── right-join (cross)
+      ├── columns: u:1(int) sum:6(decimal) x:7(int!null) y:8(int) s:9(string) d:10(decimal!null) xysd.crdb_internal_mvcc_timestamp:11(decimal) xysd.tableoid:12(oid)
+      ├── key: (1,7)
+      ├── fd: (7)-->(8-12), (9,10)~~>(7,8,11,12), (1)~~>(6), (1,7)-->(6)
+      ├── prune: (6-12)
+      ├── reject-nulls: (1,6)
+      ├── interesting orderings: (+7) (-9,+10,+7)
+      ├── group-by (hash)
+      │    ├── columns: u:1(int) sum:6(decimal!null)
+      │    ├── grouping columns: u:1(int)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(6)
+      │    ├── prune: (6)
+      │    ├── project
+      │    │    ├── columns: u:1(int) v:2(int!null)
+      │    │    ├── prune: (1,2)
+      │    │    └── scan uv
+      │    │         ├── columns: u:1(int) v:2(int!null) rowid:3(int!null) uv.crdb_internal_mvcc_timestamp:4(decimal) uv.tableoid:5(oid)
+      │    │         ├── key: (3)
+      │    │         ├── fd: (3)-->(1,2,4,5)
+      │    │         ├── prune: (1-5)
+      │    │         └── interesting orderings: (+3)
+      │    └── aggregations
+      │         └── sum [as=sum:6, type=decimal, outer=(2)]
+      │              └── variable: v:2 [type=int]
+      ├── scan xysd
+      │    ├── columns: x:7(int!null) y:8(int) s:9(string) d:10(decimal!null) xysd.crdb_internal_mvcc_timestamp:11(decimal) xysd.tableoid:12(oid)
+      │    ├── key: (7)
+      │    ├── fd: (7)-->(8-12), (9,10)~~>(7,8,11,12)
+      │    ├── prune: (7-12)
+      │    └── interesting orderings: (+7) (-9,+10,+7)
+      └── filters
+           └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+                ├── variable: u:1 [type=int]
+                └── null [type=unknown]
+
+# Not-null FD determinant on left side of right-join stays strict.
+build
+SELECT * FROM (SELECT u, sum(v) FROM uv WHERE u IS NOT NULL GROUP BY u) RIGHT JOIN xysd ON True
+----
+project
+ ├── columns: u:1(int) sum:6(decimal) x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ ├── key: (1,7)
+ ├── fd: (1)-->(6), (7)-->(8-10), (9,10)~~>(7,8)
+ ├── prune: (1,6-10)
+ ├── reject-nulls: (1,6)
+ ├── interesting orderings: (+7) (-9,+10,+7)
+ └── right-join (cross)
+      ├── columns: u:1(int) sum:6(decimal) x:7(int!null) y:8(int) s:9(string) d:10(decimal!null) xysd.crdb_internal_mvcc_timestamp:11(decimal) xysd.tableoid:12(oid)
+      ├── key: (1,7)
+      ├── fd: (1)-->(6), (7)-->(8-12), (9,10)~~>(7,8,11,12)
+      ├── prune: (6-12)
+      ├── reject-nulls: (1,6)
+      ├── interesting orderings: (+7) (-9,+10,+7)
+      ├── group-by (hash)
+      │    ├── columns: u:1(int!null) sum:6(decimal!null)
+      │    ├── grouping columns: u:1(int!null)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(6)
+      │    ├── prune: (6)
+      │    ├── project
+      │    │    ├── columns: u:1(int!null) v:2(int!null)
+      │    │    ├── prune: (1,2)
+      │    │    └── select
+      │    │         ├── columns: u:1(int!null) v:2(int!null) rowid:3(int!null) uv.crdb_internal_mvcc_timestamp:4(decimal) uv.tableoid:5(oid)
+      │    │         ├── key: (3)
+      │    │         ├── fd: (3)-->(1,2,4,5)
+      │    │         ├── prune: (2-5)
+      │    │         ├── interesting orderings: (+3)
+      │    │         ├── scan uv
+      │    │         │    ├── columns: u:1(int) v:2(int!null) rowid:3(int!null) uv.crdb_internal_mvcc_timestamp:4(decimal) uv.tableoid:5(oid)
+      │    │         │    ├── key: (3)
+      │    │         │    ├── fd: (3)-->(1,2,4,5)
+      │    │         │    ├── prune: (1-5)
+      │    │         │    └── interesting orderings: (+3)
+      │    │         └── filters
+      │    │              └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+      │    │                   ├── variable: u:1 [type=int]
+      │    │                   └── null [type=unknown]
+      │    └── aggregations
+      │         └── sum [as=sum:6, type=decimal, outer=(2)]
+      │              └── variable: v:2 [type=int]
+      ├── scan xysd
+      │    ├── columns: x:7(int!null) y:8(int) s:9(string) d:10(decimal!null) xysd.crdb_internal_mvcc_timestamp:11(decimal) xysd.tableoid:12(oid)
+      │    ├── key: (7)
+      │    ├── fd: (7)-->(8-12), (9,10)~~>(7,8,11,12)
+      │    ├── prune: (7-12)
+      │    └── interesting orderings: (+7) (-9,+10,+7)
+      └── filters
+           └── true [type=bool]
+
+# Nullable FD determinant on right side of full-join becomes lax.
+build
+SELECT * FROM xysd FULL JOIN (SELECT u, sum(v) FROM uv GROUP BY u) ON u IS NOT NULL
+----
+project
+ ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:7(int) sum:12(decimal)
+ ├── key: (1,7)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)~~>(12), (1,7)-->(12)
+ ├── prune: (1-4,7,12)
+ ├── reject-nulls: (1-4,7,12)
+ ├── interesting orderings: (+1) (-3,+4,+1)
+ └── full-join (cross)
+      ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) sum:12(decimal)
+      ├── key: (1,7)
+      ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (7)~~>(12), (1,7)-->(12)
+      ├── prune: (1-6,12)
+      ├── reject-nulls: (1-7,12)
+      ├── interesting orderings: (+1) (-3,+4,+1)
+      ├── scan xysd
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      │    ├── prune: (1-6)
+      │    ├── interesting orderings: (+1) (-3,+4,+1)
+      │    └── unfiltered-cols: (1-6)
+      ├── group-by (hash)
+      │    ├── columns: u:7(int) sum:12(decimal!null)
+      │    ├── grouping columns: u:7(int)
+      │    ├── key: (7)
+      │    ├── fd: (7)-->(12)
+      │    ├── prune: (12)
+      │    ├── project
+      │    │    ├── columns: u:7(int) v:8(int!null)
+      │    │    ├── prune: (7,8)
+      │    │    └── scan uv
+      │    │         ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      │    │         ├── key: (9)
+      │    │         ├── fd: (9)-->(7,8,10,11)
+      │    │         ├── prune: (7-11)
+      │    │         └── interesting orderings: (+9)
+      │    └── aggregations
+      │         └── sum [as=sum:12, type=decimal, outer=(8)]
+      │              └── variable: v:8 [type=int]
+      └── filters
+           └── is-not [type=bool, outer=(7), constraints=(/7: (/NULL - ]; tight)]
+                ├── variable: u:7 [type=int]
+                └── null [type=unknown]
+
+# Nullable FD determinant on left side of full-join becomes lax.
+build
+SELECT * FROM (SELECT u, sum(v) FROM uv GROUP BY u) FULL JOIN xysd ON u IS NOT NULL
+----
+project
+ ├── columns: u:1(int) sum:6(decimal) x:7(int) y:8(int) s:9(string) d:10(decimal)
+ ├── key: (1,7)
+ ├── fd: (7)-->(8-10), (9,10)~~>(7,8), (1)~~>(6), (1,7)-->(6)
+ ├── prune: (1,6-10)
+ ├── reject-nulls: (1,6-10)
+ ├── interesting orderings: (+7) (-9,+10,+7)
+ └── full-join (cross)
+      ├── columns: u:1(int) sum:6(decimal) x:7(int) y:8(int) s:9(string) d:10(decimal) xysd.crdb_internal_mvcc_timestamp:11(decimal) xysd.tableoid:12(oid)
+      ├── key: (1,7)
+      ├── fd: (7)-->(8-12), (9,10)~~>(7,8,11,12), (1)~~>(6), (1,7)-->(6)
+      ├── prune: (6-12)
+      ├── reject-nulls: (1,6-12)
+      ├── interesting orderings: (+7) (-9,+10,+7)
+      ├── group-by (hash)
+      │    ├── columns: u:1(int) sum:6(decimal!null)
+      │    ├── grouping columns: u:1(int)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(6)
+      │    ├── prune: (6)
+      │    ├── project
+      │    │    ├── columns: u:1(int) v:2(int!null)
+      │    │    ├── prune: (1,2)
+      │    │    └── scan uv
+      │    │         ├── columns: u:1(int) v:2(int!null) rowid:3(int!null) uv.crdb_internal_mvcc_timestamp:4(decimal) uv.tableoid:5(oid)
+      │    │         ├── key: (3)
+      │    │         ├── fd: (3)-->(1,2,4,5)
+      │    │         ├── prune: (1-5)
+      │    │         └── interesting orderings: (+3)
+      │    └── aggregations
+      │         └── sum [as=sum:6, type=decimal, outer=(2)]
+      │              └── variable: v:2 [type=int]
+      ├── scan xysd
+      │    ├── columns: x:7(int!null) y:8(int) s:9(string) d:10(decimal!null) xysd.crdb_internal_mvcc_timestamp:11(decimal) xysd.tableoid:12(oid)
+      │    ├── key: (7)
+      │    ├── fd: (7)-->(8-12), (9,10)~~>(7,8,11,12)
+      │    ├── prune: (7-12)
+      │    ├── interesting orderings: (+7) (-9,+10,+7)
+      │    └── unfiltered-cols: (7-12)
+      └── filters
+           └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+                ├── variable: u:1 [type=int]
+                └── null [type=unknown]
+
+# Merge join (inner).
+expr
+(MergeJoin
+    (Scan [ (Table "xysd") (Cols "x,y,s,d") ])
+    (Sort (Scan [ (Table "uv") (Cols "u,v,rowid") ]))
+    [ ]
+    [
+        (JoinType "inner-join")
+        (LeftEq "+x")
+        (RightEq "+u")
+        (LeftOrdering "+x")
+        (RightOrdering "+u")
+    ]
+)
+----
+inner-join (merge)
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int!null) v:8(int!null) rowid:9(int!null)
+ ├── left ordering: +1
+ ├── right ordering: +7
+ ├── key: (9)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (9)-->(7,8), (1)==(7), (7)==(1)
+ ├── scan xysd
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── ordering: +1
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
+ ├── sort
+ │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null)
+ │    ├── key: (9)
+ │    ├── fd: (9)-->(7,8)
+ │    ├── ordering: +7
+ │    ├── prune: (7-9)
+ │    ├── interesting orderings: (+9)
+ │    └── scan uv
+ │         ├── columns: u:7(int) v:8(int!null) rowid:9(int!null)
+ │         ├── key: (9)
+ │         ├── fd: (9)-->(7,8)
+ │         ├── prune: (7-9)
+ │         └── interesting orderings: (+9)
+ └── filters (true)
+
+# Merge join (left).
+expr
+(MergeJoin
+    (Scan [ (Table "xysd") (Cols "x,y,s,d") ])
+    (Sort (Scan [ (Table "uv") (Cols "u,v,rowid") ]))
+    [ ]
+    [
+        (JoinType "left-join")
+        (LeftEq "+x")
+        (RightEq "+u")
+        (LeftOrdering "+x")
+        (RightOrdering "+u")
+    ]
+)
+----
+left-join (merge)
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int) v:8(int) rowid:9(int)
+ ├── left ordering: +1
+ ├── right ordering: +7
+ ├── key: (1,9)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (9)-->(7,8)
+ ├── scan xysd
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── ordering: +1
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
+ ├── sort
+ │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null)
+ │    ├── key: (9)
+ │    ├── fd: (9)-->(7,8)
+ │    ├── ordering: +7
+ │    ├── prune: (7-9)
+ │    ├── interesting orderings: (+9)
+ │    └── scan uv
+ │         ├── columns: u:7(int) v:8(int!null) rowid:9(int!null)
+ │         ├── key: (9)
+ │         ├── fd: (9)-->(7,8)
+ │         ├── prune: (7-9)
+ │         └── interesting orderings: (+9)
+ └── filters (true)
+
+# Merge join (right) with remaining ON condition.
+expr
+(MergeJoin
+    (Scan [ (Table "xysd") (Cols "x,y,s,d") ])
+    (Sort (Scan [ (Table "uv") (Cols "u,v,rowid") ]))
+    [ (Gt (Var "y") (Var "v")) ]
+    [
+        (JoinType "right-join")
+        (LeftEq "+x")
+        (RightEq "+u")
+        (LeftOrdering "+x")
+        (RightOrdering "+u")
+    ]
+)
+----
+right-join (merge)
+ ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:7(int) v:8(int!null) rowid:9(int!null)
+ ├── left ordering: +1
+ ├── right ordering: +7
+ ├── key: (9)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (9)-->(1-4,7,8)
+ ├── scan xysd
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── ordering: +1
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
+ ├── sort
+ │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null)
+ │    ├── key: (9)
+ │    ├── fd: (9)-->(7,8)
+ │    ├── ordering: +7
+ │    ├── prune: (7-9)
+ │    ├── interesting orderings: (+9)
+ │    └── scan uv
+ │         ├── columns: u:7(int) v:8(int!null) rowid:9(int!null)
+ │         ├── key: (9)
+ │         ├── fd: (9)-->(7,8)
+ │         ├── prune: (7-9)
+ │         └── interesting orderings: (+9)
+ └── filters
+      └── gt [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
+           ├── variable: y:2 [type=int]
+           └── variable: v:8 [type=int]
+
+# Regression test #36183.
+opt
+SELECT (SELECT m FROM
+  (SELECT * FROM (SELECT * FROM [INSERT INTO uv VALUES (1, 2) RETURNING *] WHERE false) JOIN (SELECT * FROM uv WHERE false) ON true)
+  JOIN (SELECT * FROM mn WHERE uv.u IN (SELECT n FROM mn)) ON true
+) FROM uv
+----
+with &1
+ ├── columns: m:30(int)
+ ├── volatile, mutations
+ ├── prune: (30)
+ ├── project
+ │    ├── columns: uv.u:6(int!null) uv.v:7(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── volatile, mutations
+ │    ├── key: ()
+ │    ├── fd: ()-->(6,7)
+ │    ├── prune: (6,7)
+ │    └── insert uv
+ │         ├── columns: uv.u:6(int!null) uv.v:7(int!null) rowid:8(int!null)
+ │         ├── insert-mapping:
+ │         │    ├── column1:11 => uv.u:6
+ │         │    ├── column2:12 => uv.v:7
+ │         │    └── rowid_default:13 => rowid:8
+ │         ├── return-mapping:
+ │         │    ├── column1:11 => uv.u:6
+ │         │    ├── column2:12 => uv.v:7
+ │         │    └── rowid_default:13 => rowid:8
+ │         ├── cardinality: [1 - 1]
+ │         ├── volatile, mutations
+ │         ├── key: ()
+ │         ├── fd: ()-->(6-8)
+ │         └── values
+ │              ├── columns: column1:11(int!null) column2:12(int!null) rowid_default:13(int)
+ │              ├── cardinality: [1 - 1]
+ │              ├── volatile
+ │              ├── key: ()
+ │              ├── fd: ()-->(11-13)
+ │              ├── prune: (11-13)
+ │              └── tuple [type=tuple{int, int, int}]
+ │                   ├── const: 1 [type=int]
+ │                   ├── const: 2 [type=int]
+ │                   └── function: unique_rowid [type=int]
+ └── project
+      ├── columns: m:30(int)
+      ├── prune: (30)
+      ├── scan uv
+      └── projections
+           └── subquery [as=m:30, type=int, subquery]
+                └── values
+                     ├── columns: mn.m:21(int!null)
+                     ├── cardinality: [0 - 0]
+                     ├── key: ()
+                     ├── fd: ()-->(21)
+                     └── prune: (21)
+
+# Regression test #40456.
+opt
+SELECT NULL
+FROM uv
+WHERE NOT EXISTS(SELECT uv.u);
+----
+values
+ ├── columns: "?column?":8(unknown!null)
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ ├── fd: ()-->(8)
+ └── prune: (8)
+
+# Regression test #43651: outer join with empty key.
+opt
+SELECT a FROM
+    (VALUES (NULL)) AS t1(a)
+  FULL JOIN
+    (VALUES ('23:59:59.999999':::TIME)) AS t2(b)
+  ON false
+----
+full-join (cross)
+ ├── columns: a:1(unknown)
+ ├── cardinality: [2 - 2]
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+ ├── prune: (1)
+ ├── reject-nulls: (1)
+ ├── values
+ │    ├── columns: column1:1(unknown)
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    ├── prune: (1)
+ │    └── tuple [type=tuple{unknown}]
+ │         └── null [type=unknown]
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── filters
+      └── false [type=bool, constraints=(contradiction; tight)]
+
+exec-ddl
+CREATE TABLE t1 (x INT, y INT)
+----
+
+exec-ddl
+CREATE TABLE t2 (x INT, y INT)
+----
+
+# Outer join when both sides have a key. Because x can still have NULL values,
+# we cannot say that the outer join has a strict key. For example, this is a
+# possible valid result for this query:
+#   t1.x | t1.y | t2.x | t2.y
+#   -----+------+------+------
+#      1 |    1 |    1 |    2
+#   NULL |    1 | NULL | NULL
+#   NULL | NULL | NULL |    2
+# Here (t1.x, t2.x) is a lax key but not a strict key.
+opt
+SELECT * FROM
+  (SELECT * FROM (SELECT DISTINCT ON (x) x, y FROM t1) WHERE y IS NOT NULL) AS t1
+FULL JOIN
+  (SELECT * FROM (SELECT DISTINCT ON (x) x, y FROM t2) WHERE y IS NOT NULL) AS t2
+ON t1.x = t2.x
+----
+full-join (hash)
+ ├── columns: x:1(int) y:2(int) x:6(int) y:7(int)
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+ ├── lax-key: (1,6)
+ ├── fd: (1)~~>(2), (6)~~>(7), (1,6)~~>(2,7)
+ ├── prune: (2,7)
+ ├── reject-nulls: (1,2,6,7)
+ ├── distinct-on
+ │    ├── columns: t1.x:1(int) t1.y:2(int!null)
+ │    ├── grouping columns: t1.x:1(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── prune: (2)
+ │    ├── select
+ │    │    ├── columns: t1.x:1(int) t1.y:2(int!null)
+ │    │    ├── prune: (1)
+ │    │    ├── scan t1
+ │    │    │    ├── columns: t1.x:1(int) t1.y:2(int)
+ │    │    │    └── prune: (1,2)
+ │    │    └── filters
+ │    │         └── is-not [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+ │    │              ├── variable: t1.y:2 [type=int]
+ │    │              └── null [type=unknown]
+ │    └── aggregations
+ │         └── first-agg [as=t1.y:2, type=int, outer=(2)]
+ │              └── variable: t1.y:2 [type=int]
+ ├── distinct-on
+ │    ├── columns: t2.x:6(int) t2.y:7(int!null)
+ │    ├── grouping columns: t2.x:6(int)
+ │    ├── key: (6)
+ │    ├── fd: (6)-->(7)
+ │    ├── prune: (7)
+ │    ├── select
+ │    │    ├── columns: t2.x:6(int) t2.y:7(int!null)
+ │    │    ├── prune: (6)
+ │    │    ├── scan t2
+ │    │    │    ├── columns: t2.x:6(int) t2.y:7(int)
+ │    │    │    └── prune: (6,7)
+ │    │    └── filters
+ │    │         └── is-not [type=bool, outer=(7), constraints=(/7: (/NULL - ]; tight)]
+ │    │              ├── variable: t2.y:7 [type=int]
+ │    │              └── null [type=unknown]
+ │    └── aggregations
+ │         └── first-agg [as=t2.y:7, type=int, outer=(7)]
+ │              └── variable: t2.y:7 [type=int]
+ └── filters
+      └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+           ├── variable: t1.x:1 [type=int]
+           └── variable: t2.x:6 [type=int]
+
+# InnerJoin with an equality between one key column and one non-key column.
+# Neither input is guaranteed a match for every row. Rows from uv will not be
+# duplicated because the x column is unique. Rows from xysd may be duplicated
+# because the v column is not unique.
+norm
+SELECT * FROM xysd INNER JOIN uv ON x=v
+----
+inner-join (hash)
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int) v:8(int!null)
+ ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (1)==(8), (8)==(1)
+ ├── prune: (2-4,7)
+ ├── interesting orderings: (+1) (-3,+4,+1)
+ ├── scan xysd
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    ├── interesting orderings: (+1) (-3,+4,+1)
+ │    └── unfiltered-cols: (1-6)
+ ├── scan uv
+ │    ├── columns: u:7(int) v:8(int!null)
+ │    ├── prune: (7,8)
+ │    └── unfiltered-cols: (7-11)
+ └── filters
+      └── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+           ├── variable: x:1 [type=int]
+           └── variable: v:8 [type=int]
+
+# InnerJoin with a not-null foreign key equality. Since the foreign key is
+# not-null, rows from the fk table are guaranteed a match. Since x is a key
+# column, rows from the fk table will not be duplicated.
+norm
+SELECT * FROM fk INNER JOIN xysd ON x = r1
+----
+inner-join (hash)
+ ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (7)-->(8-10), (9,10)~~>(7,8), (3)==(7), (7)==(3)
+ ├── prune: (1,2,4,8-10)
+ ├── interesting orderings: (+1) (+7) (-9,+10,+7)
+ ├── scan fk
+ │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    ├── interesting orderings: (+1)
+ │    └── unfiltered-cols: (1-6)
+ ├── scan xysd
+ │    ├── columns: x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ │    ├── key: (7)
+ │    ├── fd: (7)-->(8-10), (9,10)~~>(7,8)
+ │    ├── prune: (7-10)
+ │    ├── interesting orderings: (+7) (-9,+10,+7)
+ │    └── unfiltered-cols: (7-12)
+ └── filters
+      └── eq [type=bool, outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+           ├── variable: x:7 [type=int]
+           └── variable: r1:3 [type=int]
+
+# Foreign keys should be ignored when the referenced table uses SKIP LOCKED.
+norm
+SELECT * FROM fk INNER JOIN xysd ON x = r1 FOR UPDATE SKIP LOCKED
+----
+inner-join (hash)
+ ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (7)-->(8-10), (9,10)~~>(7,8), (3)==(7), (7)==(3)
+ ├── prune: (1,2,4,8-10)
+ ├── interesting orderings: (+1) (+7) (-9,+10,+7)
+ ├── scan fk
+ │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
+ │    ├── locking: for-update,skip-locked
+ │    ├── volatile
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1)
+ ├── scan xysd
+ │    ├── columns: x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ │    ├── locking: for-update,skip-locked
+ │    ├── volatile
+ │    ├── key: (7)
+ │    ├── fd: (7)-->(8-10), (9,10)~~>(7,8)
+ │    ├── prune: (7-10)
+ │    └── interesting orderings: (+7) (-9,+10,+7)
+ └── filters
+      └── eq [type=bool, outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+           ├── variable: x:7 [type=int]
+           └── variable: r1:3 [type=int]
+
+norm set=enable_shared_locking_for_serializable=true
+SELECT * FROM fk INNER JOIN xysd ON x = r1 FOR SHARE OF xysd SKIP LOCKED
+----
+inner-join (hash)
+ ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (7)-->(8-10), (9,10)~~>(7,8), (3)==(7), (7)==(3)
+ ├── prune: (1,2,4,8-10)
+ ├── interesting orderings: (+1) (+7) (-9,+10,+7)
+ ├── scan fk
+ │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    ├── interesting orderings: (+1)
+ │    └── unfiltered-cols: (1-6)
+ ├── scan xysd
+ │    ├── columns: x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ │    ├── locking: for-share,skip-locked
+ │    ├── volatile
+ │    ├── key: (7)
+ │    ├── fd: (7)-->(8-10), (9,10)~~>(7,8)
+ │    ├── prune: (7-10)
+ │    └── interesting orderings: (+7) (-9,+10,+7)
+ └── filters
+      └── eq [type=bool, outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+           ├── variable: x:7 [type=int]
+           └── variable: r1:3 [type=int]
+
+# Foreign keys are valid when only the referencing table uses SKIP LOCKED.
+norm
+SELECT * FROM fk INNER JOIN xysd ON x = r1 FOR UPDATE OF fk SKIP LOCKED
+----
+inner-join (hash)
+ ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (7)-->(8-10), (9,10)~~>(7,8), (3)==(7), (7)==(3)
+ ├── prune: (1,2,4,8-10)
+ ├── interesting orderings: (+1) (+7) (-9,+10,+7)
+ ├── scan fk
+ │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
+ │    ├── locking: for-update,skip-locked
+ │    ├── volatile
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1)
+ ├── scan xysd
+ │    ├── columns: x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ │    ├── key: (7)
+ │    ├── fd: (7)-->(8-10), (9,10)~~>(7,8)
+ │    ├── prune: (7-10)
+ │    ├── interesting orderings: (+7) (-9,+10,+7)
+ │    └── unfiltered-cols: (7-12)
+ └── filters
+      └── eq [type=bool, outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+           ├── variable: x:7 [type=int]
+           └── variable: r1:3 [type=int]
+
+# InnerJoin with a nullable foreign key equality condition.
+norm
+SELECT * FROM fk INNER JOIN xysd ON x = r2
+----
+inner-join (hash)
+ ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int!null) x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (7)-->(8-10), (9,10)~~>(7,8), (4)==(7), (7)==(4)
+ ├── prune: (1-3,8-10)
+ ├── interesting orderings: (+1) (+7) (-9,+10,+7)
+ ├── scan fk
+ │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    ├── interesting orderings: (+1)
+ │    └── unfiltered-cols: (1-6)
+ ├── scan xysd
+ │    ├── columns: x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ │    ├── key: (7)
+ │    ├── fd: (7)-->(8-10), (9,10)~~>(7,8)
+ │    ├── prune: (7-10)
+ │    ├── interesting orderings: (+7) (-9,+10,+7)
+ │    └── unfiltered-cols: (7-12)
+ └── filters
+      └── eq [type=bool, outer=(4,7), constraints=(/4: (/NULL - ]; /7: (/NULL - ]), fd=(4)==(7), (7)==(4)]
+           ├── variable: x:7 [type=int]
+           └── variable: r2:4 [type=int]
+
+# Cross join. Rows from fk are guaranteed matches because the not-null foreign
+# key implies that xysd has at least one row whenever fk does.
+norm
+SELECT * FROM fk CROSS JOIN xysd
+----
+inner-join (cross)
+ ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ ├── key: (1,7)
+ ├── fd: (1)-->(2-4), (7)-->(8-10), (9,10)~~>(7,8)
+ ├── prune: (1-4,7-10)
+ ├── interesting orderings: (+1) (+7) (-9,+10,+7)
+ ├── scan fk
+ │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    ├── interesting orderings: (+1)
+ │    └── unfiltered-cols: (1-6)
+ ├── scan xysd
+ │    ├── columns: x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ │    ├── key: (7)
+ │    ├── fd: (7)-->(8-10), (9,10)~~>(7,8)
+ │    ├── prune: (7-10)
+ │    ├── interesting orderings: (+7) (-9,+10,+7)
+ │    └── unfiltered-cols: (7-12)
+ └── filters (true)
+
+# LeftJoin case with a not-null foreign key. Since fk rows are all guaranteed
+# exactly one match, xysd will not be null-extended and the LeftJoin can
+# therefore be simplified.
+norm
+SELECT * FROM fk LEFT JOIN xysd ON x = r1
+----
+inner-join (hash)
+ ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (7)-->(8-10), (9,10)~~>(7,8), (3)==(7), (7)==(3)
+ ├── prune: (1,2,4,8-10)
+ ├── interesting orderings: (+1) (+7) (-9,+10,+7)
+ ├── scan fk
+ │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    ├── interesting orderings: (+1)
+ │    └── unfiltered-cols: (1-6)
+ ├── scan xysd
+ │    ├── columns: x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ │    ├── key: (7)
+ │    ├── fd: (7)-->(8-10), (9,10)~~>(7,8)
+ │    ├── prune: (7-10)
+ │    ├── interesting orderings: (+7) (-9,+10,+7)
+ │    └── unfiltered-cols: (7-12)
+ └── filters
+      └── eq [type=bool, outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+           ├── variable: x:7 [type=int]
+           └── variable: r1:3 [type=int]
+
+# LeftJoin case with a not-null foreign key and a constant equality filter. The
+# filter pushed down on both sides of the join is redundant, so all rows on the
+# left side of the join will be preserved.
+norm
+SELECT * FROM fk LEFT JOIN xysd ON x = r1 WHERE r1 = 10
+----
+inner-join (hash)
+ ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ ├── key: (1)
+ ├── fd: ()-->(3,7-10), (1)-->(2,4), (3)==(7), (7)==(3)
+ ├── prune: (1,2,4,8-10)
+ ├── interesting orderings: (+1 opt(3))
+ ├── select
+ │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
+ │    ├── key: (1)
+ │    ├── fd: ()-->(3), (1)-->(2,4)
+ │    ├── prune: (1,2,4)
+ │    ├── interesting orderings: (+1 opt(3))
+ │    ├── scan fk
+ │    │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2-4)
+ │    │    ├── prune: (1-4)
+ │    │    ├── interesting orderings: (+1)
+ │    │    └── unfiltered-cols: (1-6)
+ │    └── filters
+ │         └── eq [type=bool, outer=(3), constraints=(/3: [/10 - /10]; tight), fd=()-->(3)]
+ │              ├── variable: r1:3 [type=int]
+ │              └── const: 10 [type=int]
+ ├── select
+ │    ├── columns: x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(7-10)
+ │    ├── prune: (8-10)
+ │    ├── scan xysd
+ │    │    ├── columns: x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ │    │    ├── key: (7)
+ │    │    ├── fd: (7)-->(8-10), (9,10)~~>(7,8)
+ │    │    ├── prune: (7-10)
+ │    │    ├── interesting orderings: (+7) (-9,+10,+7)
+ │    │    └── unfiltered-cols: (7-12)
+ │    └── filters
+ │         └── eq [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
+ │              ├── variable: x:7 [type=int]
+ │              └── const: 10 [type=int]
+ └── filters
+      └── eq [type=bool, outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+           ├── variable: x:7 [type=int]
+           └── variable: r1:3 [type=int]
+
+# LeftJoin case with a nullable foreign key. The LeftJoin cannot be simplified
+# because a nullable foreign key is not guaranteed matches.
+norm
+SELECT * FROM fk LEFT JOIN xysd ON x = r2
+----
+left-join (hash)
+ ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) x:7(int) y:8(int) s:9(string) d:10(decimal)
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4,7-10), (7)-->(8-10), (9,10)~~>(7,8)
+ ├── prune: (1-3,8-10)
+ ├── reject-nulls: (7-10)
+ ├── interesting orderings: (+1) (+7) (-9,+10,+7)
+ ├── scan fk
+ │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    ├── interesting orderings: (+1)
+ │    └── unfiltered-cols: (1-6)
+ ├── scan xysd
+ │    ├── columns: x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ │    ├── key: (7)
+ │    ├── fd: (7)-->(8-10), (9,10)~~>(7,8)
+ │    ├── prune: (7-10)
+ │    ├── interesting orderings: (+7) (-9,+10,+7)
+ │    └── unfiltered-cols: (7-12)
+ └── filters
+      └── eq [type=bool, outer=(4,7), constraints=(/4: (/NULL - ]; /7: (/NULL - ]), fd=(4)==(7), (7)==(4)]
+           ├── variable: x:7 [type=int]
+           └── variable: r2:4 [type=int]
+
+# FullJoin with equality between key columns. The FullJoin adds back any rows
+# that are filtered out, and the equality between key columns ensures that no
+# rows are duplicated. Note that both sides may be null-extended.
+norm
+SELECT * FROM mn FULL JOIN xysd ON m = x
+----
+full-join (hash)
+ ├── columns: m:1(int) n:2(int) x:5(int) y:6(int) s:7(string) d:8(decimal)
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+ ├── key: (1,5)
+ ├── fd: (1)-->(2), (2)~~>(1), (5)-->(6-8), (7,8)~~>(5,6)
+ ├── prune: (2,6-8)
+ ├── reject-nulls: (1,2,5-8)
+ ├── interesting orderings: (+1) (+2,+1) (+5) (-7,+8,+5)
+ ├── scan mn
+ │    ├── columns: m:1(int!null) n:2(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2), (2)~~>(1)
+ │    ├── prune: (1,2)
+ │    ├── interesting orderings: (+1) (+2,+1)
+ │    └── unfiltered-cols: (1-4)
+ ├── scan xysd
+ │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
+ │    ├── key: (5)
+ │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
+ │    ├── prune: (5-8)
+ │    ├── interesting orderings: (+5) (-7,+8,+5)
+ │    └── unfiltered-cols: (5-10)
+ └── filters
+      └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+           ├── variable: m:1 [type=int]
+           └── variable: x:5 [type=int]
+
+# Self-join case. Since the condition is equating a key column with itself,
+# every row from both inputs is guaranteed to be included in the join output
+# exactly once.
+norm disable=(EliminateJoinUnderProjectLeft,EliminateJoinUnderProjectRight)
+SELECT * FROM xysd INNER JOIN xysd AS a ON xysd.x = a.x
+----
+inner-join (hash)
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+ ├── key: (7)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(8-10), (9,10)~~>(7,8), (1)==(7), (7)==(1), (2)==(8), (8)==(2), (3)==(9), (9)==(3), (4)==(10), (10)==(4)
+ ├── prune: (2-4,8-10)
+ ├── interesting orderings: (+1) (-3,+4,+1) (+7) (-9,+10,+7)
+ ├── scan xysd
+ │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    ├── interesting orderings: (+1) (-3,+4,+1)
+ │    └── unfiltered-cols: (1-6)
+ ├── scan xysd [as=a]
+ │    ├── columns: a.x:7(int!null) a.y:8(int) a.s:9(string) a.d:10(decimal!null)
+ │    ├── key: (7)
+ │    ├── fd: (7)-->(8-10), (9,10)~~>(7,8)
+ │    ├── prune: (7-10)
+ │    ├── interesting orderings: (+7) (-9,+10,+7)
+ │    └── unfiltered-cols: (7-12)
+ └── filters
+      └── eq [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+           ├── variable: xysd.x:1 [type=int]
+           └── variable: a.x:7 [type=int]
+
+# Self-join case with a constant equality filter. The filter pushed down on both
+# sides of the join is redundant, so all rows on the left side of the join will
+# be preserved.
+norm disable=(EliminateJoinUnderProjectLeft,EliminateJoinUnderProjectRight)
+SELECT * FROM xysd INNER JOIN xysd AS a ON xysd.x = a.x WHERE xysd.x = 10
+----
+inner-join (hash)
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ ├── cardinality: [0 - 1]
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+ ├── key: ()
+ ├── fd: ()-->(1-4,7-10), (1)==(7), (7)==(1), (2)==(8), (8)==(2), (3)==(9), (9)==(3), (4)==(10), (10)==(4)
+ ├── prune: (2-4,8-10)
+ ├── select
+ │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1-4)
+ │    ├── prune: (2-4)
+ │    ├── scan xysd
+ │    │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    │    ├── prune: (1-4)
+ │    │    ├── interesting orderings: (+1) (-3,+4,+1)
+ │    │    └── unfiltered-cols: (1-6)
+ │    └── filters
+ │         └── eq [type=bool, outer=(1), constraints=(/1: [/10 - /10]; tight), fd=()-->(1)]
+ │              ├── variable: xysd.x:1 [type=int]
+ │              └── const: 10 [type=int]
+ ├── select
+ │    ├── columns: a.x:7(int!null) a.y:8(int) a.s:9(string) a.d:10(decimal!null)
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(7-10)
+ │    ├── prune: (8-10)
+ │    ├── scan xysd [as=a]
+ │    │    ├── columns: a.x:7(int!null) a.y:8(int) a.s:9(string) a.d:10(decimal!null)
+ │    │    ├── key: (7)
+ │    │    ├── fd: (7)-->(8-10), (9,10)~~>(7,8)
+ │    │    ├── prune: (7-10)
+ │    │    ├── interesting orderings: (+7) (-9,+10,+7)
+ │    │    └── unfiltered-cols: (7-12)
+ │    └── filters
+ │         └── eq [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
+ │              ├── variable: a.x:7 [type=int]
+ │              └── const: 10 [type=int]
+ └── filters
+      └── eq [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+           ├── variable: xysd.x:1 [type=int]
+           └── variable: a.x:7 [type=int]
+
+# Case with duplicated referenced columns.
+norm
+SELECT * FROM
+fk INNER JOIN (SELECT * FROM xysd FULL JOIN (VALUES (1), (2)) ON True) ON r1 = x
+----
+inner-join (cross)
+ ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) x:7(int!null) y:8(int) s:9(string) d:10(decimal!null) column1:13(int!null)
+ ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ ├── fd: (1)-->(2-4), (7)-->(8-10), (9,10)~~>(7,8), (3)==(7), (7)==(3)
+ ├── prune: (1,2,4,8-10,13)
+ ├── interesting orderings: (+1) (+7) (-9,+10,+7)
+ ├── inner-join (hash)
+ │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (7)-->(8-10), (9,10)~~>(7,8), (3)==(7), (7)==(3)
+ │    ├── prune: (1,2,4,8-10)
+ │    ├── interesting orderings: (+1) (+7) (-9,+10,+7)
+ │    ├── unfiltered-cols: (1-6)
+ │    ├── scan fk
+ │    │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2-4)
+ │    │    ├── prune: (1-4)
+ │    │    ├── interesting orderings: (+1)
+ │    │    └── unfiltered-cols: (1-6)
+ │    ├── scan xysd
+ │    │    ├── columns: x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ │    │    ├── key: (7)
+ │    │    ├── fd: (7)-->(8-10), (9,10)~~>(7,8)
+ │    │    ├── prune: (7-10)
+ │    │    ├── interesting orderings: (+7) (-9,+10,+7)
+ │    │    └── unfiltered-cols: (7-12)
+ │    └── filters
+ │         └── eq [type=bool, outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+ │              ├── variable: r1:3 [type=int]
+ │              └── variable: x:7 [type=int]
+ ├── values
+ │    ├── columns: column1:13(int!null)
+ │    ├── cardinality: [2 - 2]
+ │    ├── prune: (13)
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 2 [type=int]
+ └── filters (true)
+
+# Case with a self-join in the input of an InnerJoin.
+norm disable=(EliminateJoinUnderProjectLeft,EliminateJoinUnderProjectRight)
+SELECT * FROM fk
+INNER JOIN (SELECT * FROM xysd INNER JOIN xysd AS a ON xysd.x = a.x) f(x) ON r1 = f.x
+----
+inner-join (hash)
+ ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) x:7(int!null) y:8(int) s:9(string) d:10(decimal!null) x:13(int!null) y:14(int) s:15(string) d:16(decimal!null)
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (7)-->(8-10), (9,10)~~>(7,8), (13)-->(14-16), (15,16)~~>(13,14), (3)==(7,13), (7)==(3,13), (13)==(3,7), (8)==(14), (14)==(8), (9)==(15), (15)==(9), (10)==(16), (16)==(10)
+ ├── prune: (1,2,4,8-10,14-16)
+ ├── interesting orderings: (+1) (+7) (-9,+10,+7) (+13) (-15,+16,+13)
+ ├── scan fk
+ │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    ├── interesting orderings: (+1)
+ │    └── unfiltered-cols: (1-6)
+ ├── inner-join (hash)
+ │    ├── columns: xysd.x:7(int!null) xysd.y:8(int) xysd.s:9(string) xysd.d:10(decimal!null) a.x:13(int!null) a.y:14(int) a.s:15(string) a.d:16(decimal!null)
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+ │    ├── key: (13)
+ │    ├── fd: (7)-->(8-10), (9,10)~~>(7,8), (13)-->(14-16), (15,16)~~>(13,14), (7)==(13), (13)==(7), (8)==(14), (14)==(8), (9)==(15), (15)==(9), (10)==(16), (16)==(10)
+ │    ├── prune: (8-10,14-16)
+ │    ├── interesting orderings: (+7) (-9,+10,+7) (+13) (-15,+16,+13)
+ │    ├── unfiltered-cols: (7-18)
+ │    ├── scan xysd
+ │    │    ├── columns: xysd.x:7(int!null) xysd.y:8(int) xysd.s:9(string) xysd.d:10(decimal!null)
+ │    │    ├── key: (7)
+ │    │    ├── fd: (7)-->(8-10), (9,10)~~>(7,8)
+ │    │    ├── prune: (7-10)
+ │    │    ├── interesting orderings: (+7) (-9,+10,+7)
+ │    │    └── unfiltered-cols: (7-12)
+ │    ├── scan xysd [as=a]
+ │    │    ├── columns: a.x:13(int!null) a.y:14(int) a.s:15(string) a.d:16(decimal!null)
+ │    │    ├── key: (13)
+ │    │    ├── fd: (13)-->(14-16), (15,16)~~>(13,14)
+ │    │    ├── prune: (13-16)
+ │    │    ├── interesting orderings: (+13) (-15,+16,+13)
+ │    │    └── unfiltered-cols: (13-18)
+ │    └── filters
+ │         └── eq [type=bool, outer=(7,13), constraints=(/7: (/NULL - ]; /13: (/NULL - ]), fd=(7)==(13), (13)==(7)]
+ │              ├── variable: xysd.x:7 [type=int]
+ │              └── variable: a.x:13 [type=int]
+ └── filters
+      └── eq [type=bool, outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+           ├── variable: r1:3 [type=int]
+           └── variable: xysd.x:7 [type=int]
+
+norm
+SELECT * FROM fk
+INNER JOIN (SELECT xysd.x, a.x AS t FROM xysd INNER JOIN xysd AS a ON xysd.x = a.x) ON r1 = t
+----
+project
+ ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) x:7(int!null) t:13(int!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3)==(7,13), (7)==(3,13), (13)==(3,7)
+ ├── prune: (1-4,7,13)
+ ├── interesting orderings: (+1)
+ ├── scan fk
+ │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1)
+ └── projections
+      ├── variable: r1:3 [as=a.x:13, type=int, outer=(3)]
+      └── variable: r1:3 [as=xysd.x:7, type=int, outer=(3)]
+
+# Case with an equality with a synthesized column.
+norm
+SELECT * FROM mn LEFT JOIN xysd ON y = (n * 2)
+----
+project
+ ├── columns: m:1(int!null) n:2(int) x:5(int) y:6(int) s:7(string) d:8(decimal)
+ ├── immutable
+ ├── key: (1,5)
+ ├── fd: (1)-->(2), (2)~~>(1), (5)-->(6-8), (7,8)~~>(5,6)
+ ├── prune: (1,2,5-8)
+ ├── reject-nulls: (5-8)
+ ├── interesting orderings: (+1) (+2,+1) (+5) (-7,+8,+5)
+ └── left-join (hash)
+      ├── columns: m:1(int!null) n:2(int) x:5(int) y:6(int) s:7(string) d:8(decimal) column11:11(int)
+      ├── immutable
+      ├── key: (1,5)
+      ├── fd: (1)-->(2), (2)~~>(1), (2)-->(11), (5)-->(6-8), (7,8)~~>(5,6)
+      ├── prune: (1,2,5,7,8)
+      ├── reject-nulls: (5-8)
+      ├── interesting orderings: (+1) (+2,+1) (+5) (-7,+8,+5)
+      ├── project
+      │    ├── columns: column11:11(int) m:1(int!null) n:2(int)
+      │    ├── immutable
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2), (2)~~>(1), (2)-->(11)
+      │    ├── prune: (1,2,11)
+      │    ├── interesting orderings: (+1) (+2,+1)
+      │    ├── unfiltered-cols: (1-4)
+      │    ├── scan mn
+      │    │    ├── columns: m:1(int!null) n:2(int)
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2), (2)~~>(1)
+      │    │    ├── prune: (1,2)
+      │    │    ├── interesting orderings: (+1) (+2,+1)
+      │    │    └── unfiltered-cols: (1-4)
+      │    └── projections
+      │         └── mult [as=column11:11, type=int, outer=(2), immutable]
+      │              ├── variable: n:2 [type=int]
+      │              └── const: 2 [type=int]
+      ├── scan xysd
+      │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
+      │    ├── key: (5)
+      │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
+      │    ├── prune: (5-8)
+      │    ├── interesting orderings: (+5) (-7,+8,+5)
+      │    └── unfiltered-cols: (5-10)
+      └── filters
+           └── eq [type=bool, outer=(6,11), constraints=(/6: (/NULL - ]; /11: (/NULL - ]), fd=(6)==(11), (11)==(6)]
+                ├── variable: column11:11 [type=int]
+                └── variable: y:6 [type=int]
+
+# Case with columns that don't come from base tables.
+norm
+SELECT * FROM (SELECT * FROM uv UNION (SELECT * FROM uv)) f(v1, v2) INNER JOIN xysd ON v2 = x
+----
+inner-join (hash)
+ ├── columns: v1:11(int) v2:12(int!null) x:13(int!null) y:14(int) s:15(string) d:16(decimal!null)
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ ├── key: (11,13)
+ ├── fd: (13)-->(14-16), (15,16)~~>(13,14), (12)==(13), (13)==(12)
+ ├── prune: (14-16)
+ ├── interesting orderings: (+13) (-15,+16,+13)
+ ├── union
+ │    ├── columns: u:11(int) v:12(int!null)
+ │    ├── left columns: uv.u:1(int) uv.v:2(int)
+ │    ├── right columns: uv.u:6(int) uv.v:7(int)
+ │    ├── key: (11,12)
+ │    ├── scan uv
+ │    │    ├── columns: uv.u:1(int) uv.v:2(int!null)
+ │    │    └── prune: (1,2)
+ │    └── scan uv
+ │         ├── columns: uv.u:6(int) uv.v:7(int!null)
+ │         └── prune: (6,7)
+ ├── scan xysd
+ │    ├── columns: x:13(int!null) y:14(int) s:15(string) d:16(decimal!null)
+ │    ├── key: (13)
+ │    ├── fd: (13)-->(14-16), (15,16)~~>(13,14)
+ │    ├── prune: (13-16)
+ │    ├── interesting orderings: (+13) (-15,+16,+13)
+ │    └── unfiltered-cols: (13-18)
+ └── filters
+      └── eq [type=bool, outer=(12,13), constraints=(/12: (/NULL - ]; /13: (/NULL - ]), fd=(12)==(13), (13)==(12)]
+           ├── variable: v:12 [type=int]
+           └── variable: x:13 [type=int]
+
+# Self-join case with different columns.
+norm
+SELECT * FROM xysd INNER JOIN xysd AS a ON xysd.x = a.y
+----
+inner-join (hash)
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) x:7(int!null) y:8(int!null) s:9(string) d:10(decimal!null)
+ ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+ ├── key: (7)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(8-10), (9,10)~~>(7,8), (1)==(8), (8)==(1)
+ ├── prune: (2-4,7,9,10)
+ ├── interesting orderings: (+1) (-3,+4,+1) (+7) (-9,+10,+7)
+ ├── scan xysd
+ │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    ├── interesting orderings: (+1) (-3,+4,+1)
+ │    └── unfiltered-cols: (1-6)
+ ├── scan xysd [as=a]
+ │    ├── columns: a.x:7(int!null) a.y:8(int) a.s:9(string) a.d:10(decimal!null)
+ │    ├── key: (7)
+ │    ├── fd: (7)-->(8-10), (9,10)~~>(7,8)
+ │    ├── prune: (7-10)
+ │    ├── interesting orderings: (+7) (-9,+10,+7)
+ │    └── unfiltered-cols: (7-12)
+ └── filters
+      └── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+           ├── variable: xysd.x:1 [type=int]
+           └── variable: a.y:8 [type=int]
+
+# Case with an equality between a not-null foreign key and an unreferenced
+# column.
+norm
+SELECT * FROM fk INNER JOIN xysd ON r1 = y
+----
+inner-join (hash)
+ ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) x:7(int!null) y:8(int!null) s:9(string) d:10(decimal!null)
+ ├── key: (1,7)
+ ├── fd: (1)-->(2-4), (7)-->(8-10), (9,10)~~>(7,8), (3)==(8), (8)==(3)
+ ├── prune: (1,2,4,7,9,10)
+ ├── interesting orderings: (+1) (+7) (-9,+10,+7)
+ ├── scan fk
+ │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    ├── interesting orderings: (+1)
+ │    └── unfiltered-cols: (1-6)
+ ├── scan xysd
+ │    ├── columns: x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ │    ├── key: (7)
+ │    ├── fd: (7)-->(8-10), (9,10)~~>(7,8)
+ │    ├── prune: (7-10)
+ │    ├── interesting orderings: (+7) (-9,+10,+7)
+ │    └── unfiltered-cols: (7-12)
+ └── filters
+      └── eq [type=bool, outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
+           ├── variable: r1:3 [type=int]
+           └── variable: y:8 [type=int]
+
+# Case where left table has a foreign key that references a table that isn't
+# from the right input.
+norm
+SELECT * FROM fk INNER JOIN mn ON k = m
+----
+inner-join (hash)
+ ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) m:7(int!null) n:8(int)
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ ├── key: (7)
+ ├── fd: (1)-->(2-4), (7)-->(8), (8)~~>(7), (1)==(7), (7)==(1)
+ ├── prune: (2-4,8)
+ ├── interesting orderings: (+1) (+7) (+8,+7)
+ ├── scan fk
+ │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    ├── interesting orderings: (+1)
+ │    └── unfiltered-cols: (1-6)
+ ├── scan mn
+ │    ├── columns: m:7(int!null) n:8(int)
+ │    ├── key: (7)
+ │    ├── fd: (7)-->(8), (8)~~>(7)
+ │    ├── prune: (7,8)
+ │    ├── interesting orderings: (+7) (+8,+7)
+ │    └── unfiltered-cols: (7-10)
+ └── filters
+      └── eq [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+           ├── variable: k:1 [type=int]
+           └── variable: m:7 [type=int]
+
+# Case with a match-simple foreign key with one nullable column.
+norm
+SELECT *
+FROM ref
+INNER JOIN abc
+ON (r1, r2, r3) = (a, b, c)
+----
+inner-join (hash)
+ ├── columns: r1:1(int!null) r2:2(int!null) r3:3(int!null) a:7(int!null) b:8(int!null) c:9(int!null)
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ ├── fd: (1)==(7), (7)==(1), (2)==(8), (8)==(2), (3)==(9), (9)==(3)
+ ├── interesting orderings: (+7,+8,+9)
+ ├── scan ref
+ │    ├── columns: r1:1(int!null) r2:2(int) r3:3(int!null)
+ │    ├── prune: (1-3)
+ │    └── unfiltered-cols: (1-6)
+ ├── scan abc
+ │    ├── columns: a:7(int!null) b:8(int!null) c:9(int!null)
+ │    ├── key: (7-9)
+ │    ├── prune: (7-9)
+ │    ├── interesting orderings: (+7,+8,+9)
+ │    └── unfiltered-cols: (7-11)
+ └── filters
+      ├── eq [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+      │    ├── variable: r1:1 [type=int]
+      │    └── variable: a:7 [type=int]
+      ├── eq [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+      │    ├── variable: r2:2 [type=int]
+      │    └── variable: b:8 [type=int]
+      └── eq [type=bool, outer=(3,9), constraints=(/3: (/NULL - ]; /9: (/NULL - ]), fd=(3)==(9), (9)==(3)]
+           ├── variable: r3:3 [type=int]
+           └── variable: c:9 [type=int]
+
+# Case with a not-null multi-column foreign key.
+norm
+SELECT *
+FROM (SELECT r1, r2, r3 FROM ref WHERE r2 IS NOT NULL)
+INNER JOIN abc
+ON (r1, r2, r3) = (a, b, c)
+----
+project
+ ├── columns: r1:1(int!null) r2:2(int!null) r3:3(int!null) a:7(int!null) b:8(int!null) c:9(int!null)
+ ├── fd: (1)==(7), (7)==(1), (2)==(8), (8)==(2), (3)==(9), (9)==(3)
+ ├── prune: (1-3,7-9)
+ ├── select
+ │    ├── columns: r1:1(int!null) r2:2(int!null) r3:3(int!null)
+ │    ├── prune: (1,3)
+ │    ├── scan ref
+ │    │    ├── columns: r1:1(int!null) r2:2(int) r3:3(int!null)
+ │    │    └── prune: (1-3)
+ │    └── filters
+ │         └── is-not [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+ │              ├── variable: r2:2 [type=int]
+ │              └── null [type=unknown]
+ └── projections
+      ├── variable: r1:1 [as=a:7, type=int, outer=(1)]
+      ├── variable: r2:2 [as=b:8, type=int, outer=(2)]
+      └── variable: r3:3 [as=c:9, type=int, outer=(3)]
+
+# Case with a not-null multi-column foreign key and an equality on only one of
+# the foreign key columns.
+norm
+SELECT *
+FROM (SELECT r2 FROM ref WHERE r2 IS NOT NULL)
+INNER JOIN abc
+ON r2 = b
+----
+inner-join (hash)
+ ├── columns: r2:2(int!null) a:7(int!null) b:8(int!null) c:9(int!null)
+ ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ ├── fd: (2)==(8), (8)==(2)
+ ├── prune: (7,9)
+ ├── interesting orderings: (+7,+8,+9)
+ ├── select
+ │    ├── columns: r2:2(int!null)
+ │    ├── scan ref
+ │    │    ├── columns: r2:2(int)
+ │    │    └── prune: (2)
+ │    └── filters
+ │         └── is-not [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+ │              ├── variable: r2:2 [type=int]
+ │              └── null [type=unknown]
+ ├── scan abc
+ │    ├── columns: a:7(int!null) b:8(int!null) c:9(int!null)
+ │    ├── key: (7-9)
+ │    ├── prune: (7-9)
+ │    ├── interesting orderings: (+7,+8,+9)
+ │    └── unfiltered-cols: (7-11)
+ └── filters
+      └── eq [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+           ├── variable: r2:2 [type=int]
+           └── variable: b:8 [type=int]
+
+exec-ddl
+CREATE TABLE trade_type (tt_id INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE exchange (ex_id INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE status_type (st_id INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE security (
+    s_symb  INT PRIMARY KEY,
+    s_st_id INT NOT NULL,
+    s_ex_id INT NOT NULL,
+    FOREIGN KEY (s_st_id) REFERENCES status_type (st_id),
+    FOREIGN KEY (s_ex_id) REFERENCES exchange (ex_id)
+)
+----
+
+exec-ddl
+CREATE TABLE trade (
+    t_st_id  INT NOT NULL,
+    t_tt_id  INT NOT NULL,
+    t_s_symb INT NOT NULL,
+    FOREIGN KEY (t_st_id) REFERENCES status_type (st_id),
+    FOREIGN KEY (t_tt_id) REFERENCES trade_type (tt_id),
+    FOREIGN KEY (t_s_symb) REFERENCES security (s_symb)
+)
+----
+
+# Regression test for #49821.
+opt format=show-ruleprops disable=(RightAssociateJoinsLeft,RightAssociateJoinsRight,ReorderJoins)
+SELECT *
+FROM trade, status_type, trade_type, security, exchange
+WHERE st_id = t_st_id
+  AND tt_id = t_tt_id
+  AND s_symb = t_s_symb
+  AND ex_id = s_ex_id
+LIMIT 50;
+----
+project
+ ├── columns: t_st_id:1(int!null) t_tt_id:2(int!null) t_s_symb:3(int!null) st_id:7(int!null) tt_id:10(int!null) s_symb:13(int!null) s_st_id:14(int!null) s_ex_id:15(int!null) ex_id:18(int!null)
+ ├── cardinality: [0 - 50]
+ ├── fd: (13)-->(14,15), (1)==(7), (7)==(1), (2)==(10), (10)==(2), (3)==(13), (13)==(3), (15)==(18), (18)==(15)
+ ├── prune: (1-3,7,10,13-15,18)
+ ├── interesting orderings: (+(1|7)) (+(2|10)) (+(3|13))
+ ├── limit
+ │    ├── columns: t_st_id:1(int!null) t_tt_id:2(int!null) t_s_symb:3(int!null) st_id:7(int!null) tt_id:10(int!null) s_symb:13(int!null) s_st_id:14(int!null) s_ex_id:15(int!null)
+ │    ├── cardinality: [0 - 50]
+ │    ├── fd: (13)-->(14,15), (1)==(7), (7)==(1), (2)==(10), (10)==(2), (3)==(13), (13)==(3)
+ │    ├── prune: (14,15)
+ │    ├── interesting orderings: (+7) (+10) (+13)
+ │    ├── inner-join (hash)
+ │    │    ├── columns: t_st_id:1(int!null) t_tt_id:2(int!null) t_s_symb:3(int!null) st_id:7(int!null) tt_id:10(int!null) s_symb:13(int!null) s_st_id:14(int!null) s_ex_id:15(int!null)
+ │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │    │    ├── fd: (13)-->(14,15), (1)==(7), (7)==(1), (2)==(10), (10)==(2), (3)==(13), (13)==(3)
+ │    │    ├── limit hint: 50.00
+ │    │    ├── prune: (14,15)
+ │    │    ├── interesting orderings: (+7) (+10) (+13)
+ │    │    ├── scan trade
+ │    │    │    ├── columns: t_st_id:1(int!null) t_tt_id:2(int!null) t_s_symb:3(int!null)
+ │    │    │    ├── prune: (1-3)
+ │    │    │    └── unfiltered-cols: (1-6)
+ │    │    ├── inner-join (cross)
+ │    │    │    ├── columns: st_id:7(int!null) tt_id:10(int!null) s_symb:13(int!null) s_st_id:14(int!null) s_ex_id:15(int!null)
+ │    │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(one-or-more)
+ │    │    │    ├── key: (7,10,13)
+ │    │    │    ├── fd: (13)-->(14,15)
+ │    │    │    ├── prune: (7,10,13-15)
+ │    │    │    ├── interesting orderings: (+7) (+10) (+13)
+ │    │    │    ├── scan status_type
+ │    │    │    │    ├── columns: st_id:7(int!null)
+ │    │    │    │    ├── key: (7)
+ │    │    │    │    ├── prune: (7)
+ │    │    │    │    ├── interesting orderings: (+7)
+ │    │    │    │    └── unfiltered-cols: (7-9)
+ │    │    │    ├── inner-join (cross)
+ │    │    │    │    ├── columns: tt_id:10(int!null) s_symb:13(int!null) s_st_id:14(int!null) s_ex_id:15(int!null)
+ │    │    │    │    ├── key: (10,13)
+ │    │    │    │    ├── fd: (13)-->(14,15)
+ │    │    │    │    ├── prune: (10,13-15)
+ │    │    │    │    ├── interesting orderings: (+10) (+13)
+ │    │    │    │    ├── scan trade_type
+ │    │    │    │    │    ├── columns: tt_id:10(int!null)
+ │    │    │    │    │    ├── key: (10)
+ │    │    │    │    │    ├── prune: (10)
+ │    │    │    │    │    ├── interesting orderings: (+10)
+ │    │    │    │    │    └── unfiltered-cols: (10-12)
+ │    │    │    │    ├── scan security
+ │    │    │    │    │    ├── columns: s_symb:13(int!null) s_st_id:14(int!null) s_ex_id:15(int!null)
+ │    │    │    │    │    ├── key: (13)
+ │    │    │    │    │    ├── fd: (13)-->(14,15)
+ │    │    │    │    │    ├── prune: (13-15)
+ │    │    │    │    │    ├── interesting orderings: (+13)
+ │    │    │    │    │    └── unfiltered-cols: (13-17)
+ │    │    │    │    └── filters (true)
+ │    │    │    └── filters (true)
+ │    │    └── filters
+ │    │         ├── eq [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+ │    │         │    ├── variable: st_id:7 [type=int]
+ │    │         │    └── variable: t_st_id:1 [type=int]
+ │    │         ├── eq [type=bool, outer=(2,10), constraints=(/2: (/NULL - ]; /10: (/NULL - ]), fd=(2)==(10), (10)==(2)]
+ │    │         │    ├── variable: tt_id:10 [type=int]
+ │    │         │    └── variable: t_tt_id:2 [type=int]
+ │    │         └── eq [type=bool, outer=(3,13), constraints=(/3: (/NULL - ]; /13: (/NULL - ]), fd=(3)==(13), (13)==(3)]
+ │    │              ├── variable: s_symb:13 [type=int]
+ │    │              └── variable: t_s_symb:3 [type=int]
+ │    └── const: 50 [type=int]
+ └── projections
+      └── variable: s_ex_id:15 [as=ex_id:18, type=int, outer=(15)]
+
+# Regression test for #50059.
+exec-ddl
+CREATE TABLE parent (a INT NOT NULL UNIQUE, b INT NOT NULL UNIQUE)
+----
+
+exec-ddl
+CREATE TABLE child (
+  r_a INT NOT NULL REFERENCES parent(a),
+  r_b INT NOT NULL REFERENCES parent(b)
+)
+----
+
+# LeftJoin shouldn't be simplified.
+norm
+SELECT * FROM child LEFT JOIN parent ON r_a = a AND r_b = b
+----
+left-join (hash)
+ ├── columns: r_a:1(int!null) r_b:2(int!null) a:6(int) b:7(int)
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ ├── fd: (6)-->(7), (7)-->(6)
+ ├── reject-nulls: (6,7)
+ ├── interesting orderings: (+6) (+7)
+ ├── scan child
+ │    ├── columns: r_a:1(int!null) r_b:2(int!null)
+ │    ├── prune: (1,2)
+ │    └── unfiltered-cols: (1-5)
+ ├── scan parent
+ │    ├── columns: a:6(int!null) b:7(int!null)
+ │    ├── key: (7)
+ │    ├── fd: (6)-->(7), (7)-->(6)
+ │    ├── prune: (6,7)
+ │    ├── interesting orderings: (+6) (+7)
+ │    └── unfiltered-cols: (6-10)
+ └── filters
+      ├── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      │    ├── variable: r_a:1 [type=int]
+      │    └── variable: a:6 [type=int]
+      └── eq [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+           ├── variable: r_b:2 [type=int]
+           └── variable: b:7 [type=int]
+
+# It is possible to infer equality filters for a self-join on key columns.
+norm disable=(EliminateJoinUnderProjectLeft,EliminateJoinUnderProjectRight)
+SELECT * FROM xyz INNER JOIN xyz foo ON xyz.x = foo.x AND xyz.y = foo.y
+----
+inner-join (hash)
+ ├── columns: x:1(int!null) y:2(int!null) z:3(int) x:6(int!null) y:7(int!null) z:8(int)
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+ ├── key: (6,7)
+ ├── fd: (1,2)-->(3), (6,7)-->(8), (1)==(6), (6)==(1), (2)==(7), (7)==(2), (3)==(8), (8)==(3)
+ ├── prune: (3,8)
+ ├── interesting orderings: (+1,+2) (+6,+7)
+ ├── scan xyz
+ │    ├── columns: xyz.x:1(int!null) xyz.y:2(int!null) xyz.z:3(int)
+ │    ├── key: (1,2)
+ │    ├── fd: (1,2)-->(3)
+ │    ├── prune: (1-3)
+ │    ├── interesting orderings: (+1,+2)
+ │    └── unfiltered-cols: (1-5)
+ ├── scan xyz [as=foo]
+ │    ├── columns: foo.x:6(int!null) foo.y:7(int!null) foo.z:8(int)
+ │    ├── key: (6,7)
+ │    ├── fd: (6,7)-->(8)
+ │    ├── prune: (6-8)
+ │    ├── interesting orderings: (+6,+7)
+ │    └── unfiltered-cols: (6-10)
+ └── filters
+      ├── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      │    ├── variable: xyz.x:1 [type=int]
+      │    └── variable: foo.x:6 [type=int]
+      └── eq [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+           ├── variable: xyz.y:2 [type=int]
+           └── variable: foo.y:7 [type=int]
+
+# Self-join filters cannot be inferred if not joining on a key.
+norm
+SELECT * FROM xyz INNER JOIN xyz foo ON xyz.x = foo.x
+----
+inner-join (hash)
+ ├── columns: x:1(int!null) y:2(int!null) z:3(int) x:6(int!null) y:7(int!null) z:8(int)
+ ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
+ ├── key: (2,6,7)
+ ├── fd: (1,2)-->(3), (6,7)-->(8), (1)==(6), (6)==(1)
+ ├── prune: (2,3,7,8)
+ ├── interesting orderings: (+1,+2) (+6,+7)
+ ├── scan xyz
+ │    ├── columns: xyz.x:1(int!null) xyz.y:2(int!null) xyz.z:3(int)
+ │    ├── key: (1,2)
+ │    ├── fd: (1,2)-->(3)
+ │    ├── prune: (1-3)
+ │    ├── interesting orderings: (+1,+2)
+ │    └── unfiltered-cols: (1-5)
+ ├── scan xyz [as=foo]
+ │    ├── columns: foo.x:6(int!null) foo.y:7(int!null) foo.z:8(int)
+ │    ├── key: (6,7)
+ │    ├── fd: (6,7)-->(8)
+ │    ├── prune: (6-8)
+ │    ├── interesting orderings: (+6,+7)
+ │    └── unfiltered-cols: (6-10)
+ └── filters
+      └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+           ├── variable: xyz.x:1 [type=int]
+           └── variable: foo.x:6 [type=int]
+
+# TODO(#39054): if the optimizer could see that the same row is being selected
+# from each input, we could still infer equalities.
+norm
+SELECT * FROM xyz INNER JOIN xyz foo ON xyz.x = foo.x AND xyz.y = 1 AND foo.y = 1
+----
+inner-join (hash)
+ ├── columns: x:1(int!null) y:2(int!null) z:3(int) x:6(int!null) y:7(int!null) z:8(int)
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ ├── key: (6)
+ ├── fd: ()-->(2,7), (1)-->(3), (6)-->(8), (1)==(6), (6)==(1)
+ ├── prune: (3,8)
+ ├── interesting orderings: (+1 opt(2)) (+6 opt(7))
+ ├── select
+ │    ├── columns: xyz.x:1(int!null) xyz.y:2(int!null) xyz.z:3(int)
+ │    ├── key: (1)
+ │    ├── fd: ()-->(2), (1)-->(3)
+ │    ├── prune: (1,3)
+ │    ├── interesting orderings: (+1 opt(2))
+ │    ├── scan xyz
+ │    │    ├── columns: xyz.x:1(int!null) xyz.y:2(int!null) xyz.z:3(int)
+ │    │    ├── key: (1,2)
+ │    │    ├── fd: (1,2)-->(3)
+ │    │    ├── prune: (1-3)
+ │    │    ├── interesting orderings: (+1,+2)
+ │    │    └── unfiltered-cols: (1-5)
+ │    └── filters
+ │         └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+ │              ├── variable: xyz.y:2 [type=int]
+ │              └── const: 1 [type=int]
+ ├── select
+ │    ├── columns: foo.x:6(int!null) foo.y:7(int!null) foo.z:8(int)
+ │    ├── key: (6)
+ │    ├── fd: ()-->(7), (6)-->(8)
+ │    ├── prune: (6,8)
+ │    ├── interesting orderings: (+6 opt(7))
+ │    ├── scan xyz [as=foo]
+ │    │    ├── columns: foo.x:6(int!null) foo.y:7(int!null) foo.z:8(int)
+ │    │    ├── key: (6,7)
+ │    │    ├── fd: (6,7)-->(8)
+ │    │    ├── prune: (6-8)
+ │    │    ├── interesting orderings: (+6,+7)
+ │    │    └── unfiltered-cols: (6-10)
+ │    └── filters
+ │         └── eq [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+ │              ├── variable: foo.y:7 [type=int]
+ │              └── const: 1 [type=int]
+ └── filters
+      └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+           ├── variable: xyz.x:1 [type=int]
+           └── variable: foo.x:6 [type=int]
+
+# Self-join filters cannot be inferred here because different rows are selected
+# from each input.
+norm
+SELECT * FROM xyz INNER JOIN xyz foo ON xyz.x = foo.x AND xyz.y = 1 AND foo.y = 2
+----
+inner-join (hash)
+ ├── columns: x:1(int!null) y:2(int!null) z:3(int) x:6(int!null) y:7(int!null) z:8(int)
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ ├── key: (6)
+ ├── fd: ()-->(2,7), (1)-->(3), (6)-->(8), (1)==(6), (6)==(1)
+ ├── prune: (3,8)
+ ├── interesting orderings: (+1 opt(2)) (+6 opt(7))
+ ├── select
+ │    ├── columns: xyz.x:1(int!null) xyz.y:2(int!null) xyz.z:3(int)
+ │    ├── key: (1)
+ │    ├── fd: ()-->(2), (1)-->(3)
+ │    ├── prune: (1,3)
+ │    ├── interesting orderings: (+1 opt(2))
+ │    ├── scan xyz
+ │    │    ├── columns: xyz.x:1(int!null) xyz.y:2(int!null) xyz.z:3(int)
+ │    │    ├── key: (1,2)
+ │    │    ├── fd: (1,2)-->(3)
+ │    │    ├── prune: (1-3)
+ │    │    ├── interesting orderings: (+1,+2)
+ │    │    └── unfiltered-cols: (1-5)
+ │    └── filters
+ │         └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+ │              ├── variable: xyz.y:2 [type=int]
+ │              └── const: 1 [type=int]
+ ├── select
+ │    ├── columns: foo.x:6(int!null) foo.y:7(int!null) foo.z:8(int)
+ │    ├── key: (6)
+ │    ├── fd: ()-->(7), (6)-->(8)
+ │    ├── prune: (6,8)
+ │    ├── interesting orderings: (+6 opt(7))
+ │    ├── scan xyz [as=foo]
+ │    │    ├── columns: foo.x:6(int!null) foo.y:7(int!null) foo.z:8(int)
+ │    │    ├── key: (6,7)
+ │    │    ├── fd: (6,7)-->(8)
+ │    │    ├── prune: (6-8)
+ │    │    ├── interesting orderings: (+6,+7)
+ │    │    └── unfiltered-cols: (6-10)
+ │    └── filters
+ │         └── eq [type=bool, outer=(7), constraints=(/7: [/2 - /2]; tight), fd=()-->(7)]
+ │              ├── variable: foo.y:7 [type=int]
+ │              └── const: 2 [type=int]
+ └── filters
+      └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+           ├── variable: xyz.x:1 [type=int]
+           └── variable: foo.x:6 [type=int]
+
+# Regression tests for #116943.
+
+# Semi-joins with right side cardinality of 0 have cardinality of 0.
+norm disable=(EliminateExistsZeroRows,SimplifyZeroCardinalitySemiJoin,EliminateZeroCardSelect,EliminateZeroCardProject)
+SELECT * FROM mn WHERE m = 5 AND n::FLOAT IN (SELECT x::FLOAT FROM xysd WHERE false)
+----
+project
+ ├── columns: m:1(int!null) n:2(int)
+ ├── cardinality: [0 - 0]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── prune: (1,2)
+ └── semi-join (hash)
+      ├── columns: m:1(int!null) n:2(int) column13:13(float)
+      ├── cardinality: [0 - 0]
+      ├── immutable
+      ├── key: ()
+      ├── fd: ()-->(1,2,13)
+      ├── prune: (1,2)
+      ├── project
+      │    ├── columns: column13:13(float) m:1(int!null) n:2(int)
+      │    ├── cardinality: [0 - 1]
+      │    ├── immutable
+      │    ├── key: ()
+      │    ├── fd: ()-->(1,2,13)
+      │    ├── prune: (1,2,13)
+      │    ├── select
+      │    │    ├── columns: m:1(int!null) n:2(int)
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(1,2)
+      │    │    ├── prune: (2)
+      │    │    ├── scan mn
+      │    │    │    ├── columns: m:1(int!null) n:2(int)
+      │    │    │    ├── key: (1)
+      │    │    │    ├── fd: (1)-->(2), (2)~~>(1)
+      │    │    │    ├── prune: (1,2)
+      │    │    │    └── interesting orderings: (+1) (+2,+1)
+      │    │    └── filters
+      │    │         └── eq [type=bool, outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
+      │    │              ├── variable: m:1 [type=int]
+      │    │              └── const: 5 [type=int]
+      │    └── projections
+      │         └── cast: FLOAT8 [as=column13:13, type=float, outer=(2), immutable]
+      │              └── variable: n:2 [type=int]
+      ├── project
+      │    ├── columns: x:11(float!null)
+      │    ├── cardinality: [0 - 0]
+      │    ├── immutable
+      │    ├── key: ()
+      │    ├── fd: ()-->(11)
+      │    ├── prune: (11)
+      │    ├── values
+      │    │    ├── columns: xysd.x:5(int!null)
+      │    │    ├── cardinality: [0 - 0]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(5)
+      │    │    └── prune: (5)
+      │    └── projections
+      │         └── cast: FLOAT8 [as=x:11, type=float, outer=(5), immutable]
+      │              └── variable: xysd.x:5 [type=int]
+      └── filters
+           └── eq [type=bool, outer=(11,13), constraints=(/11: (/NULL - ]; /13: (/NULL - ]), fd=(11)==(13), (13)==(11)]
+                ├── variable: column13:13 [type=float]
+                └── variable: x:11 [type=float]
+
+# Anti-joins with right side cardinality of 0 have cardinality equal to left side cardinality.
+norm disable=(EliminateExistsZeroRows,EliminateAntiJoin,EliminateZeroCardSelect,EliminateZeroCardProject)
+SELECT * FROM mn WHERE m = 5 AND n::FLOAT NOT IN (SELECT x::FLOAT FROM xysd WHERE false)
+----
+anti-join (cross)
+ ├── columns: m:1(int!null) n:2(int)
+ ├── cardinality: [0 - 1]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── select
+ │    ├── columns: m:1(int!null) n:2(int)
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1,2)
+ │    ├── prune: (2)
+ │    ├── scan mn
+ │    │    ├── columns: m:1(int!null) n:2(int)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2), (2)~~>(1)
+ │    │    ├── prune: (1,2)
+ │    │    └── interesting orderings: (+1) (+2,+1)
+ │    └── filters
+ │         └── eq [type=bool, outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
+ │              ├── variable: m:1 [type=int]
+ │              └── const: 5 [type=int]
+ ├── project
+ │    ├── columns: x:11(float!null)
+ │    ├── cardinality: [0 - 0]
+ │    ├── immutable
+ │    ├── key: ()
+ │    ├── fd: ()-->(11)
+ │    ├── prune: (11)
+ │    ├── values
+ │    │    ├── columns: xysd.x:5(int!null)
+ │    │    ├── cardinality: [0 - 0]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(5)
+ │    │    └── prune: (5)
+ │    └── projections
+ │         └── cast: FLOAT8 [as=x:11, type=float, outer=(5), immutable]
+ │              └── variable: xysd.x:5 [type=int]
+ └── filters
+      └── is-not [type=bool, outer=(2,11), immutable]
+           ├── eq [type=bool]
+           │    ├── variable: x:11 [type=float]
+           │    └── cast: FLOAT8 [type=float]
+           │         └── variable: n:2 [type=int]
+           └── false [type=bool]
+
+# Regression test for #119441 - marking a set of columns constant should not
+# remove equalities among them.
+exec-ddl
+CREATE TABLE table1_119441 (col1_5 REGTYPE NULL, col1_8 BYTES, col1_11 STRING, col1_12 STRING, INDEX (col1_11));
+----
+
+exec-ddl
+CREATE TABLE table2_119441 (col2_1 INT4, col2_2 STRING, col2_3 BYTES);
+----
+
+exec-ddl
+CREATE TABLE table3_119441 (col3_5 VARCHAR NOT NULL, col3_11 CHAR, col3_16 INT8);
+----
+
+opt
+SELECT (
+  SELECT baz.col3_5 FROM table1_119441
+  JOIN table2_119441 ON (table1_119441.col1_8) = (table2_119441.col2_3) AND (table1_119441.col1_12) = (table2_119441.col2_2) AND (table1_119441.col1_11) = (table2_119441.col2_2)
+  JOIN (SELECT baz.col3_11, table3_119441.col3_16 FROM table3_119441 ORDER BY table3_119441.col3_16 LIMIT 6) AS t(foo, bar)
+  ON table1_119441.col1_11 = foo AND table2_119441.col2_1 = bar AND table1_119441.col1_12 = foo
+  LIMIT 1
+)
+FROM table3_119441 AS baz;
+----
+project
+ ├── columns: col3_5:28(varchar)
+ ├── prune: (28)
+ ├── reject-nulls: (28)
+ ├── left-join-apply
+ │    ├── columns: baz.col3_5:1(varchar!null) baz.col3_11:2(char) col3_5:27(varchar)
+ │    ├── prune: (27)
+ │    ├── reject-nulls: (27)
+ │    ├── scan table3_119441 [as=baz]
+ │    │    ├── columns: baz.col3_5:1(varchar!null) baz.col3_11:2(char)
+ │    │    ├── prune: (1,2)
+ │    │    └── unfiltered-cols: (1-6)
+ │    ├── project
+ │    │    ├── columns: col3_5:27(varchar)
+ │    │    ├── outer: (1,2)
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(27)
+ │    │    ├── prune: (27)
+ │    │    ├── limit
+ │    │    │    ├── columns: col1_8:8(bytes!null) col1_11:9(string!null) col1_12:10(string!null) col2_1:14(int4!null) col2_2:15(string!null) col2_3:16(bytes!null) table3_119441.col3_16:22(int!null)
+ │    │    │    ├── outer: (2)
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(8-10,14-16,22), (9)==(10,15), (10)==(9,15), (15)==(9,10), (8)==(16), (16)==(8), (14)==(22), (22)==(14)
+ │    │    │    ├── interesting orderings: (+(9|10)) (+22)
+ │    │    │    ├── inner-join (hash)
+ │    │    │    │    ├── columns: col1_8:8(bytes!null) col1_11:9(string!null) col1_12:10(string!null) col2_1:14(int4!null) col2_2:15(string!null) col2_3:16(bytes!null) table3_119441.col3_16:22(int!null)
+ │    │    │    │    ├── outer: (2)
+ │    │    │    │    ├── fd: ()-->(9,10,15), (9)==(10,15), (10)==(9,15), (15)==(9,10), (8)==(16), (16)==(8), (14)==(22), (22)==(14)
+ │    │    │    │    ├── limit hint: 1.00
+ │    │    │    │    ├── interesting orderings: (+(9|10)) (+22)
+ │    │    │    │    ├── top-k
+ │    │    │    │    │    ├── columns: table3_119441.col3_16:22(int)
+ │    │    │    │    │    ├── internal-ordering: +22
+ │    │    │    │    │    ├── k: 6
+ │    │    │    │    │    ├── cardinality: [0 - 6]
+ │    │    │    │    │    ├── interesting orderings: (+22)
+ │    │    │    │    │    └── scan table3_119441
+ │    │    │    │    │         ├── columns: table3_119441.col3_16:22(int)
+ │    │    │    │    │         └── prune: (22)
+ │    │    │    │    ├── inner-join (hash)
+ │    │    │    │    │    ├── columns: col1_8:8(bytes!null) col1_11:9(string!null) col1_12:10(string!null) col2_1:14(int4) col2_2:15(string!null) col2_3:16(bytes!null)
+ │    │    │    │    │    ├── fd: (9)==(10,15), (10)==(9,15), (15)==(9,10), (8)==(16), (16)==(8)
+ │    │    │    │    │    ├── prune: (14)
+ │    │    │    │    │    ├── interesting orderings: (+(9|10))
+ │    │    │    │    │    ├── scan table2_119441
+ │    │    │    │    │    │    ├── columns: col2_1:14(int4) col2_2:15(string) col2_3:16(bytes)
+ │    │    │    │    │    │    ├── prune: (14-16)
+ │    │    │    │    │    │    └── unfiltered-cols: (14-19)
+ │    │    │    │    │    ├── select
+ │    │    │    │    │    │    ├── columns: col1_8:8(bytes) col1_11:9(string!null) col1_12:10(string!null)
+ │    │    │    │    │    │    ├── fd: (9)==(10), (10)==(9)
+ │    │    │    │    │    │    ├── prune: (8)
+ │    │    │    │    │    │    ├── interesting orderings: (+(9|10))
+ │    │    │    │    │    │    ├── scan table1_119441
+ │    │    │    │    │    │    │    ├── columns: col1_8:8(bytes) col1_11:9(string) col1_12:10(string)
+ │    │    │    │    │    │    │    ├── prune: (8-10)
+ │    │    │    │    │    │    │    └── interesting orderings: (+9)
+ │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │         └── eq [type=bool, outer=(9,10), constraints=(/9: (/NULL - ]; /10: (/NULL - ]), fd=(9)==(10), (10)==(9)]
+ │    │    │    │    │    │              ├── variable: col1_11:9 [type=string]
+ │    │    │    │    │    │              └── variable: col1_12:10 [type=string]
+ │    │    │    │    │    └── filters
+ │    │    │    │    │         ├── eq [type=bool, outer=(8,16), constraints=(/8: (/NULL - ]; /16: (/NULL - ]), fd=(8)==(16), (16)==(8)]
+ │    │    │    │    │         │    ├── variable: col1_8:8 [type=bytes]
+ │    │    │    │    │         │    └── variable: col2_3:16 [type=bytes]
+ │    │    │    │    │         └── eq [type=bool, outer=(9,15), constraints=(/9: (/NULL - ]; /15: (/NULL - ]), fd=(9)==(15), (15)==(9)]
+ │    │    │    │    │              ├── variable: col1_11:9 [type=string]
+ │    │    │    │    │              └── variable: col2_2:15 [type=string]
+ │    │    │    │    └── filters
+ │    │    │    │         ├── eq [type=bool, outer=(14,22), constraints=(/14: (/NULL - ]; /22: (/NULL - ]), fd=(14)==(22), (22)==(14)]
+ │    │    │    │         │    ├── variable: col2_1:14 [type=int4]
+ │    │    │    │         │    └── variable: table3_119441.col3_16:22 [type=int]
+ │    │    │    │         └── eq [type=bool, outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+ │    │    │    │              ├── variable: col1_11:9 [type=string]
+ │    │    │    │              └── variable: baz.col3_11:2 [type=char]
+ │    │    │    └── const: 1 [type=int]
+ │    │    └── projections
+ │    │         └── variable: baz.col3_5:1 [as=col3_5:27, type=varchar, outer=(1)]
+ │    └── filters (true)
+ └── projections
+      └── variable: col3_5:27 [as=col3_5:28, type=varchar, outer=(27)]

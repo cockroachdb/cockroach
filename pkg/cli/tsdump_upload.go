@@ -1,0 +1,1428 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package cli
+
+import (
+	"archive/zip"
+	"bytes"
+	"compress/gzip"
+	"context"
+	_ "embed"
+	"encoding/gob"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/DataDog/datadog-api-client-go/v2/api/datadog"
+	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/ts"
+	"github.com/cockroachdb/cockroach/pkg/ts/tsdumpmeta"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
+	"github.com/cockroachdb/errors"
+	"github.com/klauspost/compress/zstd"
+	"go.yaml.in/yaml/v4"
+)
+
+const (
+	UploadStatusSuccess        = "Success"
+	UploadStatusPartialSuccess = "Partial Success"
+	UploadStatusFailure        = "Failed"
+	nodeKey                    = "node_id"
+	regionKey                  = "region"
+)
+
+var (
+	// each site in datadog has a different host name. ddSiteToHostMap
+	// holds the mapping of site name to the host name.
+	ddSiteToHostMap = map[string]string{
+		"us1":     "datadoghq.com",
+		"us3":     "us3.datadoghq.com",
+		"us5":     "us5.datadoghq.com",
+		"eu1":     "datadoghq.eu",
+		"ap1":     "ap1.datadoghq.com",
+		"us1-fed": "ddog-gov.com",
+	}
+
+	datadogDashboardURLFormat = "https://us5.datadoghq.com/dashboard/zx7-9yt-dz9?" +
+		"tpl_var_cluster=%s&tpl_var_upload_id=%s&tpl_var_upload_day=%d&tpl_var_upload_month=%d&tpl_var_upload_year=%d&from_ts=%d&to_ts=%d"
+	zipFileSignature            = []byte{0x50, 0x4B, 0x03, 0x04}
+	gzipFileSignature           = []byte{0x1f, 0x8b}
+	zstdFileSignature           = []byte{0x28, 0xB5, 0x2F, 0xFD}
+	logMessageFormat            = "tsdump upload to datadog is partially failed for metric: %s"
+	partialFailureMessageFormat = "The Tsdump upload to Datadog succeeded but %d metrics partially failed to upload." +
+		" These failures can be due to transient network errors.\nMetrics:\n%s\n" +
+		"If any of these metrics are critical for your investigation," +
+		" Failed requests have been saved to '%s'. You can retry uploading only the failed requests using the --retry-failed-requests flag\n"
+
+	datadogLogsURLFormat         = "https://us5.datadoghq.com/logs?query=cluster_label:%s+upload_id:%s"
+	failedRequestsFileNameFormat = "tsdump_failed_requests_%s.json"
+
+	translateMetricType = map[string]*datadogV2.MetricIntakeType{
+		"GAUGE":   datadogV2.METRICINTAKETYPE_GAUGE.Ptr(),
+		"COUNTER": datadogV2.METRICINTAKETYPE_COUNT.Ptr(),
+	}
+	prometheusNameReplaceRE = regexp.MustCompile("^[^a-zA-Z_:]|[^a-zA-Z0-9_:]")
+
+	// tsdumpMetricNameOverrides provides name overrides for metrics whose
+	// Datadog name from the auto-generated mapping conflicts with the same
+	// metric emitted through a different ingestion pipeline. For example,
+	// sys.uptime is emitted as a gauge via OTel but as a count via tsdump;
+	// Datadog requires a single type per metric name, so tsdump renames it
+	// to sys.uptime.count.
+	tsdumpMetricNameOverrides = map[string]string{
+		"sys_uptime": "sys.uptime.count",
+	}
+
+	// Skip patterns - metrics that we haven't included for historical reasons
+	skipPatterns = []*regexp.Regexp{
+		regexp.MustCompile(`^auth_`),
+		regexp.MustCompile(`^distsender_rpc_err_errordetailtype_`),
+		regexp.MustCompile(`^gossip_callbacks_`),
+		regexp.MustCompile(`^jobs_auto_config_env_runner_`),
+		regexp.MustCompile(`^jobs_update_table_`),
+		regexp.MustCompile(`^logical_replication_`),
+		regexp.MustCompile(`^sql_crud_`),
+		regexp.MustCompile(`^storage_l\d_`),
+		regexp.MustCompile(`^storage_sstable_compression_`),
+	}
+)
+
+//go:embed files/cockroachdb_metrics_base.yaml
+var cockroachdbMetricsBaseYAMLBytes []byte
+
+//go:embed files/cockroachdb_datadog_metrics.yaml
+var cockroachdbMetricsYAMLBytes []byte
+
+// FailedRequest represents a failed metric upload request that can be retried
+type FailedRequest struct {
+	MetricSeries []datadogV2.MetricSeries `json:"metric_series"`
+	UploadID     string                   `json:"upload_id"`
+	Timestamp    time.Time                `json:"timestamp"`
+	Error        string                   `json:"error,omitempty"`
+}
+
+// FailedRequestsFile represents the structure of the failed requests file
+type FailedRequestsFile struct {
+	Requests []FailedRequest `json:"requests"`
+}
+
+// GapFillProcessor interpolates higher-resolution counter metrics to 10-second resolution
+// by filling gaps with zero values while preserving the original data points.
+// Supports both 30-minute (1800s) and 1-minute (60s) resolution metrics.
+type GapFillProcessor struct{}
+
+func NewGapFillProcessor() *GapFillProcessor {
+	return &GapFillProcessor{}
+}
+
+// BaseMappingsYAML represents the structure of cockroachdb_metrics_base.yaml
+type BaseMappingsYAML struct {
+	RuntimeConditionalMetrics []MetricInfo      `yaml:"runtime_conditional_metrics"`
+	LegacyMetrics             map[string]string `yaml:"legacy_metrics"`
+}
+
+// processCounterMetric interpolates counter metrics to 10-second resolution.
+// It checks if the metric is a counter type with 30-minute (1800s) or 1-minute (60s) interval
+// and converts it to 10-second resolution by filling gaps with zero values between data points.
+func (gfp *GapFillProcessor) processCounterMetric(series *datadogV2.MetricSeries) error {
+	// Only process counter metrics
+	if series.Type == nil || *series.Type != datadogV2.METRICINTAKETYPE_COUNT {
+		return nil
+	}
+
+	// Skip if interval is nil or already at 10-second target resolution.
+	// Only 60-second (child metrics) and 1800-second (30-min rollups) need gap-filling.
+	if series.Interval == nil || *series.Interval == 10 {
+		return nil
+	}
+
+	interval := *series.Interval
+
+	// Calculate the number of 10-second intervals to fill (e.g. 6 points for 60s, 180 points for 1800s)
+	pointsPerInterval := int(interval / 10)
+
+	// If no points or only one point, nothing to interpolate
+	if len(series.Points) <= 1 {
+		// Still update interval to 10 seconds for consistency
+		series.Interval = datadog.PtrInt64(10)
+		return nil
+	}
+
+	// Create new points array with interpolated values
+	var newPoints []datadogV2.MetricPoint
+
+	for i := 0; i < len(series.Points); i++ {
+		currentValue := *series.Points[i].Value
+		currentTimestamp := *series.Points[i].Timestamp
+
+		// For COUNT metrics: distribute the value across all points in the interval
+		distributedValue := currentValue / float64(pointsPerInterval)
+
+		newPoints = append(newPoints, datadogV2.MetricPoint{
+			Timestamp: datadog.PtrInt64(currentTimestamp),
+			Value:     datadog.PtrFloat64(distributedValue),
+		})
+
+		// Add (pointsPerInterval - 1) zero points (10-second intervals) between current and next
+		for j := 1; j < pointsPerInterval; j++ {
+			// We are adding delta of 0 so that same distributed value is getting published
+			// across all points. This would help us to perform roll ups with 10 seconds
+			// for metrics with higher intervals.
+			// metric value = (metric value/pointsPerInterval) * pointsPerInterval
+			interpolatedTimestamp := currentTimestamp + int64(j*10)
+			newPoints = append(newPoints, datadogV2.MetricPoint{
+				Timestamp: datadog.PtrInt64(interpolatedTimestamp),
+				Value:     datadog.PtrFloat64(0.0),
+			})
+		}
+	}
+
+	// Update the series with new points and 10-second interval
+	series.Points = newPoints
+	series.Interval = datadog.PtrInt64(10)
+
+	return nil
+}
+
+var newTsdumpUploadID = func(uploadTime time.Time) string {
+	clusterTagValue := "cluster-debug"
+	if debugTimeSeriesDumpOpts.clusterLabel != "" {
+		clusterTagValue = debugTimeSeriesDumpOpts.clusterLabel
+	}
+	return newUploadID(clusterTagValue, uploadTime)
+}
+
+// datadogWriter can convert our metrics to Datadog format and send
+// them via HTTP to the public DD endpoint, assuming an API key is set
+// in the CLI flags.
+type datadogWriter struct {
+	sync.Once
+	uploadID       string
+	init           bool
+	apiClient      *datadog.APIClient
+	apiKey         string
+	datadogContext context.Context
+	// namePrefix sets the string to prepend to all metric names. The
+	// names are kept with `.` delimiters.
+	namePrefix        string
+	threshold         int
+	uploadTime        time.Time
+	storeToNodeMap    map[string]string
+	nodeToRegionMap   map[string]string
+	metricTypeMap     map[string]string
+	noOfUploadWorkers int
+	// isPartialUploadOfFailedRequests indicates whether are we retrying failed requests
+	isPartialUploadOfFailedRequests bool
+	// failedRequestsFileName which captures failed requests.
+	failedRequestsFileName string
+	// fileMutex protects concurrent access to file which captures failed requests.
+	fileMutex syncutil.Mutex
+	// hasFailedRequestsInUpload tracks if any failed requests were saved during upload
+	hasFailedRequestsInUpload bool
+	// cumulativeToDeltaProcessor is used to convert cumulative counter metrics to delta metrics
+	cumulativeToDeltaProcessor *CumulativeToDeltaProcessor
+	// gapFillProcessor is used to interpolate 30-minute resolution counter metrics to 10-second resolution
+	gapFillProcessor *GapFillProcessor
+	// metricsNameMap maps metric names to their Datadog format
+	metricsNameMap map[string]string
+	// minDataTimestamp and maxDataTimestamp track the actual time range of the
+	// tsdump data. These are used to generate a dashboard URL that reflects the
+	// real data window rather than a generic "now - 30 days".
+	// minDataTimestamp is offset by the smallest observed interval so the
+	// dashboard starts just past the first data point, whose cumulative counter
+	// value would otherwise appear as a misleading spike.
+	minDataTimestamp time.Time
+	maxDataTimestamp time.Time
+	// minInterval tracks the smallest data resolution seen across all series,
+	// used to offset the dashboard from_ts past the initial spike.
+	minInterval time.Duration
+}
+
+func makeDatadogWriter(
+	ddSite string,
+	init bool,
+	apiKey string,
+	threshold int,
+	hostNameOverride string,
+	noOfUploadWorkers int,
+	isPartialUploadOfFailedRequests bool,
+) (*datadogWriter, error) {
+	currentTime := getCurrentTime()
+
+	metricTypeMap, err := loadMetricTypesMap(context.Background())
+	if err != nil {
+		fmt.Printf(
+			"error loading metric types map: %v\nThis may lead to some metrics not behaving correctly on Datadog.\n", err)
+	}
+
+	metricsNameMap, err := generateMetricsNameMap(context.Background())
+	if err != nil {
+		fmt.Printf(
+			"error loading metrics name map: %v\nThis will affect metric naming consistency.\n", err)
+		return nil, err
+	}
+
+	ctx := context.WithValue(
+		context.Background(),
+		datadog.ContextAPIKeys,
+		map[string]datadog.APIKey{
+			"apiKeyAuth": {
+				Key: apiKey,
+			},
+		},
+	)
+	host, ok := ddSiteToHostMap[ddSite]
+	if !ok {
+		return nil, fmt.Errorf("unsupported datadog site '%s'", ddSite)
+	}
+	ctx = context.WithValue(ctx, datadog.ContextServerVariables, map[string]string{
+		"site": host,
+	})
+
+	// The Datadog retry configuration is used when we receive error codes
+	// 429 and >= 500 from the Datadog.
+	configuration := datadog.NewConfiguration()
+	configuration.RetryConfiguration.EnableRetry = true
+	configuration.RetryConfiguration.BackOffMultiplier = 1
+	configuration.RetryConfiguration.BackOffBase = 0.2 // 200ms
+	configuration.RetryConfiguration.MaxRetries = 100
+	apiClient := datadog.NewAPIClient(configuration)
+	if hostNameOverride != "" {
+		apiClient.Cfg.Host = hostNameOverride
+		apiClient.Cfg.Scheme = "http"
+	}
+
+	return &datadogWriter{
+		datadogContext:                  ctx,
+		apiClient:                       apiClient,
+		apiKey:                          apiKey,
+		uploadID:                        newTsdumpUploadID(currentTime),
+		init:                            init,
+		namePrefix:                      "cockroachdb.",
+		threshold:                       threshold,
+		uploadTime:                      currentTime,
+		storeToNodeMap:                  make(map[string]string),
+		nodeToRegionMap:                 make(map[string]string),
+		metricTypeMap:                   metricTypeMap,
+		noOfUploadWorkers:               noOfUploadWorkers,
+		isPartialUploadOfFailedRequests: isPartialUploadOfFailedRequests,
+		cumulativeToDeltaProcessor:      NewCumulativeToDeltaProcessor(),
+		gapFillProcessor:                NewGapFillProcessor(),
+		metricsNameMap:                  metricsNameMap,
+	}, nil
+}
+
+var getCurrentTime = func() time.Time {
+	return timeutil.Now()
+}
+
+var getHostname = func() string {
+	hostname, err := os.Hostname()
+	if err != nil {
+		return "unknown"
+	}
+	return hostname
+}
+
+// appendTag appends a formatted tag to the series tags.
+func appendTag(series *datadogV2.MetricSeries, tagKey, tagValue string) {
+	series.Tags = append(series.Tags, fmt.Sprintf("%s:%s", tagKey, tagValue))
+}
+
+// parseChildLabels parses a Prometheus-style label string and converts to Datadog tags.
+// Input format: `label1="value1", label2="value2"`
+// Output format: []string{"label1:value1", "label2:value2"}
+func parseChildLabels(labelsStr string) []string {
+	var tags []string
+	if labelsStr == "" {
+		return tags
+	}
+
+	// Split by comma and process each label
+	// Handle format: label="value", label2="value2"
+	parts := strings.Split(labelsStr, ", ")
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		// Split by = to get key and value
+		eqIdx := strings.IndexByte(part, '=')
+		if eqIdx == -1 {
+			continue
+		}
+
+		key := part[:eqIdx]
+		value := part[eqIdx+1:]
+
+		// Remove quotes from value if present
+		value = strings.Trim(value, "\"")
+
+		if key != "" && value != "" {
+			tags = append(tags, fmt.Sprintf("%s:%s", key, value))
+		}
+	}
+
+	return tags
+}
+
+// hasTagKey checks if a tag with the given key already exists in the tags slice.
+// Tags are in format "key:value", so we check for "key:" prefix.
+func hasTagKey(tags []string, key string) bool {
+	prefix := key + ":"
+	for _, tag := range tags {
+		if strings.HasPrefix(tag, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func (d *datadogWriter) dump(kv *roachpb.KeyValue) (*datadogV2.MetricSeries, error) {
+	name, source, res, _, err := ts.DecodeDataKey(kv.Key)
+	if err != nil {
+		return nil, err
+	}
+	var idata roachpb.InternalTimeSeriesData
+	if err := kv.Value.GetProto(&idata); err != nil {
+		return nil, err
+	}
+
+	// Check if this is a child metric with labels (format: metric_name{label1="value1", label2="value2"}[-suffix])
+	// Histogram metrics may have suffixes like -p50, -p99, -avg, -count after the closing brace
+	var childLabels []string
+	isChildMetric := false
+	typeResolutionName := name
+	braceIdx := strings.IndexByte(name, '{')
+	if braceIdx != -1 {
+		// Find the closing brace explicitly
+		closeBraceIdx := strings.IndexByte(name, '}')
+		if closeBraceIdx == -1 {
+			closeBraceIdx = len(name) - 1
+		}
+
+		// Extract base metric name, labels, and any suffix after the closing brace
+		baseName := name[:braceIdx]
+		labelsStr := name[braceIdx+1 : closeBraceIdx]
+		suffix := ""
+
+		// Extract suffix like -p50, -avg, -count, etc.
+		if closeBraceIdx < len(name)-1 {
+			suffix = name[closeBraceIdx+1:]
+		}
+
+		childLabels = parseChildLabels(labelsStr)
+
+		// Use base metric name (with suffix for histograms) for type resolution
+		typeResolutionName = baseName + suffix
+
+		// Append .child suffix to create a separate metric name for child metrics.
+		// This avoids double-counting in aggregations (parent already contains the
+		// aggregate of all children) and maintains backward compatibility with
+		// existing dashboards that query parent metrics.
+		name = baseName + suffix + ".child"
+		isChildMetric = true
+	}
+
+	series := &datadogV2.MetricSeries{
+		Metric:   name,
+		Tags:     childLabels,
+		Type:     d.resolveMetricType(typeResolutionName),
+		Points:   make([]datadogV2.MetricPoint, idata.SampleCount()),
+		Interval: datadog.PtrInt64(int64(res.Duration().Seconds())), // convert from time.Duration to number of seconds.
+	}
+
+	// shouldAddTag returns true if the tag should be added. For parent metrics,
+	// tags are always added. For child metrics, skip adding if the tag already
+	// exists in childLabels to avoid duplicates.
+	shouldAddTag := func(tagKey string) bool {
+		return !isChildMetric || !hasTagKey(childLabels, tagKey)
+	}
+
+	sl := reCrStoreNode.FindStringSubmatch(name)
+	if len(sl) >= 3 {
+		key := sl[1]
+		series.Metric = sl[2]
+
+		// Resolve the node ID and tag accordingly. For "node" metrics the
+		// source is the node ID itself; for "store" metrics it is looked up
+		// via the store-to-node mapping.
+		var nodeID string
+		switch key {
+		case "node":
+			nodeID = source
+		case "store":
+			if shouldAddTag(key) {
+				appendTag(series, key, source)
+			}
+			nodeID = d.storeToNodeMap[source]
+		default:
+			if shouldAddTag(key) {
+				appendTag(series, key, source)
+			}
+		}
+
+		if nodeID != "" {
+			if shouldAddTag(nodeKey) {
+				appendTag(series, nodeKey, nodeID)
+			}
+			if region, ok := d.nodeToRegionMap[nodeID]; ok && shouldAddTag(regionKey) {
+				appendTag(series, regionKey, region)
+			}
+		}
+	} else if shouldAddTag(nodeKey) {
+		// No regex match - add default node_id:0
+		appendTag(series, nodeKey, "0")
+	}
+
+	// Convert metric name to Prometheus format and lookup in metricsNameMap
+	promName := prometheusNameReplaceRE.ReplaceAllString(series.Metric, "_")
+	if override, ok := tsdumpMetricNameOverrides[promName]; ok {
+		series.Metric = override
+	} else if datadogName, ok := d.metricsNameMap[promName]; ok {
+		series.Metric = datadogName
+	}
+
+	isSorted := true
+	var previousTimestamp int64
+	for i := 0; i < idata.SampleCount(); i++ {
+		if idata.IsColumnar() {
+			series.Points[i].Timestamp = datadog.PtrInt64(idata.TimestampForOffset(idata.Offset[i]) / 1_000_000_000)
+			series.Points[i].Value = datadog.PtrFloat64(idata.Last[i])
+		} else {
+			series.Points[i].Timestamp = datadog.PtrInt64(idata.TimestampForOffset(idata.Samples[i].Offset) / 1_000_000_000)
+			series.Points[i].Value = datadog.PtrFloat64(idata.Samples[i].Sum)
+		}
+
+		// Track the actual time range of the tsdump data for the dashboard URL.
+		pointTS := *series.Points[i].Timestamp
+		pointTime := timeutil.Unix(pointTS, 0)
+		if d.minDataTimestamp.IsZero() || pointTime.Before(d.minDataTimestamp) {
+			d.minDataTimestamp = pointTime
+		}
+		if pointTime.After(d.maxDataTimestamp) {
+			d.maxDataTimestamp = pointTime
+		}
+
+		if !isSorted {
+			// if we already found a point out of order, we can skip further checks
+			continue
+		}
+
+		// Check if timestamps are in ascending order. We cannot assume time series
+		// data is sorted because:
+		// 1. pkg/ts/tspb/timeseries.go ToInternal() explicitly states "returned slice will not be sorted"
+		// 2. pkg/storage/pebble_merge.go sortAndDeduplicateRows/Columns shows storage merge
+		//    operations can result in out-of-order data before final sorting
+		// 3. Data from different storage slabs may be interleaved during tsdump reads
+		if i > 0 && previousTimestamp > pointTS {
+			isSorted = false
+		}
+		previousTimestamp = pointTS
+	}
+
+	// Track the smallest resolution interval across all series so we can
+	// offset the dashboard from_ts past the initial cumulative counter spike.
+	interval := res.Duration()
+	if interval > 0 && (d.minInterval == 0 || interval < d.minInterval) {
+		d.minInterval = interval
+	}
+
+	if !debugTimeSeriesDumpOpts.disableDeltaProcessing {
+		if err := d.cumulativeToDeltaProcessor.processCounterMetric(series, isSorted); err != nil {
+			return nil, err
+		}
+	}
+
+	// Process gap-filling for 30-minute and 1-minute resolution counter metrics
+	if err := d.gapFillProcessor.processCounterMetric(series); err != nil {
+		return nil, err
+	}
+
+	return series, nil
+}
+
+// saveFailedRequest saves a failed request to the failed requests file
+func (d *datadogWriter) saveFailedRequest(data []datadogV2.MetricSeries, err error) {
+	failedRequest := FailedRequest{
+		MetricSeries: data,
+		UploadID:     d.uploadID,
+		Timestamp:    getCurrentTime(),
+		Error:        err.Error(),
+	}
+
+	// Append to file using streaming JSON
+	if appendErr := d.appendFailedRequestToFile(failedRequest); appendErr != nil {
+		fmt.Printf("Warning: Failed to save failed request to file: %v\n", appendErr)
+		return
+	}
+
+	// mark that we have saved requests
+	sync.OnceFunc(func() {
+		d.hasFailedRequestsInUpload = true
+	})()
+
+}
+
+// appendFailedRequestToFile appends a single failed request to the file
+func (d *datadogWriter) appendFailedRequestToFile(request FailedRequest) error {
+	d.fileMutex.Lock()
+	defer d.fileMutex.Unlock()
+
+	fileName := d.failedRequestsFileName
+	file, err := os.OpenFile(fileName, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			fmt.Printf("Warning: Failed to close failed requests file %s: %v\n", file.Name(), err)
+		}
+	}(file)
+
+	// Write each failed request as a single JSON line (JSONL format)
+	requestJSON, err := json.Marshal(request)
+	if err != nil {
+		return err
+	}
+
+	// Append newline to make it proper JSONL format
+	_, err = file.Write(append(requestJSON, '\n'))
+	return err
+}
+
+// streamFailedRequests streams failed requests from file to a channel without loading all into memory
+func streamFailedRequests(
+	filePath string, ch chan<- *FailedRequest, wg *sync.WaitGroup,
+) (int, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return 0, err
+	}
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			fmt.Printf("failed to close file %s: %v\n", file.Name(), err)
+		}
+	}(file)
+
+	decoder := json.NewDecoder(file)
+	count := 0
+
+	for {
+		var request FailedRequest
+		err := decoder.Decode(&request)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			fmt.Printf("failed to parse failed request line: %v\n", err)
+			continue
+		}
+
+		// Add to wait group as soon as we read a valid request
+		wg.Add(1)
+		// Send request to channel for processing
+		ch <- &request
+		count++
+
+	}
+	return count, nil
+}
+
+// retryFailedRequests attempts to re-upload failed requests using streaming approach with channels
+func (d *datadogWriter) retryFailedRequests(fileName string) error {
+
+	// Create temporary file for requests which are still failing in re-upload.
+	tempFile := fileName + ".tmp"
+	d.failedRequestsFileName = tempFile
+
+	// Create channel for streaming requests
+	requestCh := make(chan *FailedRequest, 100)
+	defer close(requestCh)
+	var wg sync.WaitGroup
+
+	// State to track retry results
+	var retryState struct {
+		syncutil.Mutex
+		successCount int
+		failedCount  int
+	}
+
+	// Start workers to retry failed requests
+	for i := 0; i < d.noOfUploadWorkers; i++ {
+		go func() {
+			for failedReq := range requestCh {
+				_, err := d.emitDataDogMetrics(failedReq.MetricSeries)
+				func() {
+					retryState.Lock()
+					defer retryState.Unlock()
+					if err != nil {
+						retryState.failedCount++
+					} else {
+						retryState.successCount++
+					}
+				}()
+				wg.Done()
+			}
+		}()
+	}
+
+	_, err := streamFailedRequests(fileName, requestCh, &wg)
+	if err != nil {
+		fmt.Printf("error streaming failed requests: %v\n", err)
+	}
+
+	// Wait for all requests to be processed
+	wg.Wait()
+	fmt.Printf("\nretry completed: %d succeeded, %d still failed\n", retryState.successCount, retryState.failedCount)
+
+	// Replace original file with temp file if there are still failing requests
+	if d.hasFailedRequestsInUpload {
+		if err := os.Rename(tempFile, fileName); err != nil {
+			return fmt.Errorf("failed to update failed requests file: %w", err)
+		}
+		fmt.Printf("%d requests still failed and have been saved to %s\n", retryState.failedCount, fileName)
+		return nil
+	}
+
+	// All retries succeeded, remove the original failed requests file
+	if err := os.Remove(fileName); err != nil {
+		fmt.Printf("failed to remove failed requests file: %v\n", err)
+	} else {
+		fmt.Println("All retry requests succeeded. Failed requests file has been removed.")
+	}
+	return nil
+}
+
+func (d *datadogWriter) resolveMetricType(metricName string) *datadogV2.MetricIntakeType {
+	typeLookupKey := strings.TrimPrefix(metricName, "cr.store.")
+	typeLookupKey = strings.TrimPrefix(typeLookupKey, "cr.node.")
+	metricType := d.metricTypeMap[typeLookupKey]
+	if t, ok := translateMetricType[metricType]; ok {
+		return t
+	}
+
+	if strings.HasSuffix(metricName, "-count") {
+		return datadogV2.METRICINTAKETYPE_COUNT.Ptr()
+	}
+
+	if strings.HasSuffix(metricName, "-avg") ||
+		strings.HasSuffix(metricName, "-max") ||
+		strings.HasSuffix(metricName, "-sum") ||
+		strings.HasSuffix(metricName, "-p50") ||
+		strings.HasSuffix(metricName, "-p75") ||
+		strings.HasSuffix(metricName, "-p90") ||
+		strings.HasSuffix(metricName, "-p99") ||
+		strings.HasSuffix(metricName, "-p99.9") ||
+		strings.HasSuffix(metricName, "-p99.99") ||
+		strings.HasSuffix(metricName, "-p99.999") {
+		return datadogV2.METRICINTAKETYPE_GAUGE.Ptr()
+	}
+
+	return datadogV2.METRICINTAKETYPE_UNSPECIFIED.Ptr()
+}
+
+var printLock syncutil.Mutex
+
+func (d *datadogWriter) emitDataDogMetrics(data []datadogV2.MetricSeries) ([]string, error) {
+	tags := getUploadTags(d)
+
+	emittedMetrics := make([]string, len(data))
+	for i := 0; i < len(data); i++ {
+		// If we are retrying failed requests, we don't want to append prefix again to the metrics
+		// as initial upload has done that already.
+		if !d.isPartialUploadOfFailedRequests {
+			data[i].Tags = append(data[i].Tags, tags...)
+			data[i].Metric = d.namePrefix + data[i].Metric
+		}
+		emittedMetrics[i] = data[i].Metric
+	}
+
+	// When running in init mode, we insert zeros with the current
+	// timestamp in order to populate Datadog's metrics list. Then the
+	// user can enable these metrics for historic ingest and load the
+	// full dataset. This should only be necessary once globally.
+	if d.init {
+		for i := 0; i < len(data); i++ {
+			data[i].Points = []datadogV2.MetricPoint{{
+				Value:     datadog.PtrFloat64(0),
+				Timestamp: datadog.PtrInt64(getCurrentTime().Unix()),
+			}}
+		}
+	}
+
+	// Because the log below resets and overwrites the print line in
+	// order to avoid an explosion of logs filling the screen, it's
+	// necessary to wrap it in a mutex since `emitDataDogMetrics` is
+	// called concurrently.
+	func() {
+		printLock.Lock()
+		defer printLock.Unlock()
+		if len(data) > 0 {
+			fmt.Printf(
+				"\033[G\033[Ktsdump datadog upload: uploading metrics containing %d series including %s",
+				len(data),
+				data[0].Metric,
+			)
+		} else {
+			fmt.Printf(
+				"\033[G\033[Ktsdump datadog upload: uploading metrics containing 0 series",
+			)
+		}
+	}()
+
+	err := d.flush(data)
+	if err != nil {
+		// save failed request for potential retry.
+		d.saveFailedRequest(data, err)
+	}
+
+	return emittedMetrics, err
+}
+
+func getUploadTags(d *datadogWriter) []string {
+	var tags []string
+	// Hardcoded values
+	tags = append(tags, "cluster_type:SELF_HOSTED")
+
+	if debugTimeSeriesDumpOpts.clusterLabel != "" {
+		tags = append(tags, makeDDTag("cluster_label", debugTimeSeriesDumpOpts.clusterLabel))
+	}
+	if debugTimeSeriesDumpOpts.clusterID != "" {
+		tags = append(tags, makeDDTag("cluster_id", debugTimeSeriesDumpOpts.clusterID))
+	}
+	if debugTimeSeriesDumpOpts.zendeskTicket != "" {
+		tags = append(tags, makeDDTag("zendesk_ticket", debugTimeSeriesDumpOpts.zendeskTicket))
+	}
+	if debugTimeSeriesDumpOpts.organizationName != "" {
+		tags = append(tags, makeDDTag("org_name", debugTimeSeriesDumpOpts.organizationName))
+	}
+	if debugTimeSeriesDumpOpts.userName != "" {
+		tags = append(tags, makeDDTag("user_name", debugTimeSeriesDumpOpts.userName))
+	}
+
+	tags = append(tags, makeDDTag(uploadIDTag, d.uploadID))
+
+	year, month, day := d.uploadTime.Date()
+	tags = append(tags, makeDDTag("upload_timestamp", d.uploadTime.Format("2006-01-02 15:04:05")))
+	tags = append(tags, makeDDTag("upload_year", strconv.Itoa(year)))
+	tags = append(tags, makeDDTag("upload_month", strconv.Itoa(int(month))))
+	tags = append(tags, makeDDTag("upload_day", strconv.Itoa(day)))
+	return tags
+}
+
+func (d *datadogWriter) flush(data []datadogV2.MetricSeries) error {
+	if debugTimeSeriesDumpOpts.dryRun {
+		return nil
+	}
+
+	api := datadogV2.NewMetricsApi(d.apiClient)
+	// The retry configuration is used when we receive any error code from upload.
+	// We have seen 408 error codes from Datadog when the upload is too large which
+	// is not handled by the default retry configuration that Datadog API client provides.
+	retryOpts := base.DefaultRetryOptions()
+	retryOpts.MaxBackoff = 20 * time.Millisecond
+	retryOpts.MaxRetries = 100
+	err := error(nil)
+
+	for retryAttempts := retry.Start(retryOpts); retryAttempts.Next(); {
+		_, _, err = api.SubmitMetrics(d.datadogContext, datadogV2.MetricPayload{
+			Series: data,
+		}, datadogV2.SubmitMetricsOptionalParameters{
+			ContentEncoding: datadogV2.METRICCONTENTENCODING_GZIP.Ptr(),
+		})
+
+		if err == nil {
+			return nil
+		}
+	}
+	if err != nil {
+		fmt.Printf("error submitting metrics to datadog: %v\n", err)
+	}
+	return err
+}
+
+func (d *datadogWriter) upload(fileName string) error {
+	f, err := getFileReader(fileName)
+	if err != nil {
+		return err
+	}
+
+	// Extract directory from input fileName and attach it to failed requests filename
+	inputDir := filepath.Dir(fileName)
+	failedRequestsBaseName := fmt.Sprintf(failedRequestsFileNameFormat, d.uploadID)
+	d.failedRequestsFileName = filepath.Join(inputDir, failedRequestsBaseName)
+
+	if debugTimeSeriesDumpOpts.dryRun {
+		fmt.Println("Dry-run mode enabled. Not actually uploading data to Datadog.")
+	}
+
+	dec := gob.NewDecoder(f)
+
+	// Try to read embedded metadata first
+	embeddedMetadata, metadataErr := tsdumpmeta.Read(dec)
+	if metadataErr == nil && embeddedMetadata != nil {
+		d.storeToNodeMap = embeddedMetadata.StoreToNodeMap
+		fmt.Printf("Using embedded store-to-node mapping with %d entries\n", len(d.storeToNodeMap))
+		if len(embeddedMetadata.NodeToRegionMap) > 0 {
+			d.nodeToRegionMap = embeddedMetadata.NodeToRegionMap
+			fmt.Printf("Using embedded node-to-region mapping with %d entries\n", len(d.nodeToRegionMap))
+		}
+	} else {
+		// Reset the reader since we tried to read metadata. Close the file and
+		// reopen a fresh reader.
+		if closer, ok := f.(io.Closer); ok {
+			if err := closer.Close(); err != nil {
+				return errors.Wrap(err, "error closing file after reading possible metadata")
+			}
+		}
+		f, err = getFileReader(fileName)
+		if err != nil {
+			return err
+		}
+		dec = gob.NewDecoder(f)
+		// Fall back to external YAML file if provided
+		storeToNodeYamlFile := debugTimeSeriesDumpOpts.storeToNodeMapYAMLFile
+		if storeToNodeYamlFile != "" {
+			fmt.Println("Using external store-to-node mapping from YAML file")
+			d.populateNodeAndStoreMap(storeToNodeYamlFile)
+		}
+	}
+	allMetrics := make(map[string]struct{})
+	decodeOne := func() ([]datadogV2.MetricSeries, error) {
+		var ddSeries []datadogV2.MetricSeries
+
+		for i := 0; i < d.threshold; i++ {
+			var v roachpb.KeyValue
+			err := dec.Decode(&v)
+			if err != nil {
+				return ddSeries, err
+			}
+
+			datadogSeries, err := d.dump(&v)
+			if err != nil {
+				return nil, err
+			}
+			ddSeries = append(ddSeries, *datadogSeries)
+			tags := datadogSeries.Tags
+			sort.Strings(tags)
+			tagsStr := strings.Join(tags, ",")
+			metricCtx := datadogSeries.Metric + "|" + tagsStr
+			allMetrics[metricCtx] = struct{}{}
+		}
+
+		return ddSeries, nil
+	}
+
+	var wg sync.WaitGroup
+	ch := make(chan []datadogV2.MetricSeries, 4000)
+
+	// metricsUploadState wraps the failed metrics collection in a mutex since
+	// they're collected concurrently.
+	var metricsUploadState struct {
+		syncutil.Mutex
+		// we are taking map here as we want unique metric names which were failed across all tsdump upload requests.
+		uploadFailedMetrics     map[string]struct{}
+		isSingleUploadSucceeded bool
+	}
+	metricsUploadState.uploadFailedMetrics = make(map[string]struct{})
+	metricsUploadState.isSingleUploadSucceeded = false
+
+	markSuccessOnce := sync.OnceFunc(func() {
+		metricsUploadState.isSingleUploadSucceeded = true
+	})
+
+	for i := 0; i < d.noOfUploadWorkers; i++ {
+		go func() {
+			for data := range ch {
+				emittedMetrics, err := d.emitDataDogMetrics(data)
+				if err != nil {
+					func() {
+						metricsUploadState.Lock()
+						defer metricsUploadState.Unlock()
+						for _, metric := range emittedMetrics {
+							metricsUploadState.uploadFailedMetrics[metric] = struct{}{}
+						}
+					}()
+				} else {
+					func() {
+						markSuccessOnce()
+					}()
+				}
+				wg.Done()
+			}
+		}()
+	}
+
+	seriesUploaded := 0
+	for {
+		data, err := decodeOne()
+		seriesUploaded += len(data)
+		if err == io.EOF {
+			if len(data) != 0 {
+				wg.Add(1)
+				ch <- data
+			}
+			break
+		}
+		if err != nil {
+			fmt.Println("failed to decode time series data", err)
+			continue
+		}
+		wg.Add(1)
+		ch <- data
+	}
+
+	wg.Wait()
+
+	dashboardLink := d.buildDashboardLink()
+
+	var uploadStatus string
+	if metricsUploadState.isSingleUploadSucceeded && d.hasFailedRequestsInUpload {
+		uploadStatus = UploadStatusPartialSuccess
+	} else if metricsUploadState.isSingleUploadSucceeded {
+		uploadStatus = UploadStatusSuccess
+	} else {
+		uploadStatus = UploadStatusFailure
+	}
+	fmt.Printf("\nUpload status: %s!\n", uploadStatus)
+	fmt.Printf("Uploaded %d series overall\n", seriesUploaded)
+	fmt.Printf("Uploaded %d unique series overall\n", len(allMetrics))
+
+	// Estimate cost. The cost of historical metrics ingest is based on how many
+	// metrics were active during the upload window. Assuming the entire upload
+	// happens during a given hour, that means the cost will be equal to the count
+	// of uploaded series times $4.55/100 custom metrics (our rate) divided by
+	// 730 hours per month.
+	// For a single node upload that has 6500 unique series, that's about $.40
+	// per upload.
+	estimatedCost := float64(len(allMetrics)) * 4.55 / 100 / 730
+	fmt.Printf("Estimated cost of this upload: $%.2f\n", estimatedCost)
+
+	tags := getUploadTags(d)
+	api := datadogV2.NewLogsApi(d.apiClient)
+
+	success := metricsUploadState.isSingleUploadSucceeded
+	if metricsUploadState.isSingleUploadSucceeded {
+		var isDatadogUploadFailed = false
+		markDatadogUploadFailedOnce := sync.OnceFunc(func() {
+			isDatadogUploadFailed = true
+		})
+		if len(metricsUploadState.uploadFailedMetrics) != 0 {
+			success = false
+			// Print capture message if any failed requests were saved
+			fmt.Printf(partialFailureMessageFormat, len(metricsUploadState.uploadFailedMetrics), strings.Join(func() []string {
+				var failedMetricsList []string
+				index := 1
+				for metric := range metricsUploadState.uploadFailedMetrics {
+					metric = fmt.Sprintf("%d) %s", index, metric)
+					failedMetricsList = append(failedMetricsList, metric)
+					index++
+				}
+				return failedMetricsList
+			}(), "\n"), d.failedRequestsFileName)
+
+			tags := strings.Join(tags, ",")
+			fmt.Println("\nPushing logs of metric upload failures to datadog...")
+			for metric := range metricsUploadState.uploadFailedMetrics {
+				wg.Add(1)
+				go func(metric string) {
+					logMessage := fmt.Sprintf(logMessageFormat, metric)
+
+					hostName := getHostname()
+					_, _, err := api.SubmitLog(d.datadogContext, []datadogV2.HTTPLogItem{
+						{
+							Ddsource: datadog.PtrString("tsdump_upload"),
+							Ddtags:   datadog.PtrString(tags),
+							Message:  logMessage,
+							Service:  datadog.PtrString("tsdump_upload"),
+							Hostname: datadog.PtrString(hostName),
+						},
+					}, datadogV2.SubmitLogOptionalParameters{
+						ContentEncoding: datadogV2.CONTENTENCODING_GZIP.Ptr(),
+					})
+					if err != nil {
+						markDatadogUploadFailedOnce()
+					}
+					wg.Done()
+				}(metric)
+			}
+
+			wg.Wait()
+			if isDatadogUploadFailed {
+				fmt.Println("Failed to pushed some metrics to datadog logs. Please refer CLI output for all failed metrics.")
+			} else {
+				fmt.Println("Pushing logs of metric upload failures to datadog...done")
+				fmt.Printf("datadog logs for metric upload failures link: %s\n", fmt.Sprintf(datadogLogsURLFormat, debugTimeSeriesDumpOpts.clusterLabel, d.uploadID))
+			}
+		}
+		fmt.Println("\nupload id:", d.uploadID)
+		fmt.Printf("datadog dashboard link: %s\n", dashboardLink)
+	} else {
+		fmt.Println("All metric upload is failed. Please re-upload the Tsdump.")
+	}
+
+	eventTags := append(tags, makeDDTag("series_uploaded", strconv.Itoa(seriesUploaded)))
+	hostName := getHostname()
+	_, _, err = api.SubmitLog(d.datadogContext, []datadogV2.HTTPLogItem{
+		{
+			Ddsource: datadog.PtrString("tsdump_upload"),
+			Ddtags:   datadog.PtrString(strings.Join(eventTags, ",")),
+			Message:  fmt.Sprintf("tsdump upload completed: uploaded %d series overall", seriesUploaded),
+			Service:  datadog.PtrString("tsdump_upload"),
+			Hostname: datadog.PtrString(hostName),
+			AdditionalProperties: map[string]string{
+				"series_uploaded": strconv.Itoa(seriesUploaded),
+				"estimated_cost":  fmt.Sprintf("%g", estimatedCost),
+				"duration":        strconv.Itoa(int(getCurrentTime().Sub(d.uploadTime).Nanoseconds())),
+				"dry_run":         strconv.FormatBool(debugTimeSeriesDumpOpts.dryRun),
+				"success":         strconv.FormatBool(success),
+			},
+		},
+	}, datadogV2.SubmitLogOptionalParameters{
+		ContentEncoding: datadogV2.CONTENTENCODING_GZIP.Ptr(),
+	})
+	if err != nil {
+		fmt.Printf("error submitting log to datadog: %v\n", err)
+	}
+
+	close(ch)
+	return nil
+}
+
+// buildDashboardLink returns the Datadog dashboard URL using the actual tsdump
+// data time range. from_ts is offset by the smallest observed data interval so
+// the dashboard view starts just past each metric's first data point (whose raw
+// cumulative counter value would otherwise appear as a misleading spike).
+// Falls back to a 30-day window ending at the current time when no data points
+// were processed.
+func (d *datadogWriter) buildDashboardLink() string {
+	var fromUnixTimestamp, toUnixTimestamp int64
+	if !d.minDataTimestamp.IsZero() {
+		offset := d.minInterval
+		if offset <= 0 {
+			offset = 10 * time.Second
+		}
+		fromUnixTimestamp = d.minDataTimestamp.Add(offset).UnixMilli()
+		toUnixTimestamp = d.maxDataTimestamp.UnixMilli()
+	} else {
+		now := getCurrentTime()
+		toUnixTimestamp = now.UnixMilli()
+		fromUnixTimestamp = now.Add(-30 * 24 * time.Hour).UnixMilli()
+	}
+	year, month, day := d.uploadTime.Date()
+	return fmt.Sprintf(datadogDashboardURLFormat,
+		debugTimeSeriesDumpOpts.clusterLabel, d.uploadID,
+		day, int(month), year, fromUnixTimestamp, toUnixTimestamp)
+}
+
+func (d *datadogWriter) populateNodeAndStoreMap(fileName string) {
+	file, err := os.Open(fileName)
+	if err != nil {
+		fmt.Printf("error in opening store to node mapping YAML file: %v\n", err)
+		return
+	}
+
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			fmt.Printf("error in clsoing store to node mapping YAML: %v\n", err)
+		}
+	}(file)
+
+	decoder := yaml.NewDecoder(file)
+	if err := decoder.Decode(&d.storeToNodeMap); err != nil {
+		fmt.Printf("error decoding store to node mapping file YAML: %v\n", err)
+		return
+	}
+}
+
+// getFileReader returns an io.Reader based on the file type.
+func getFileReader(fileName string) (io.Reader, error) {
+	file, err := os.Open(fileName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Read magic number to detect file type
+	buf := make([]byte, 4)
+	if _, err := file.Read(buf); err != nil {
+		return nil, err
+	}
+
+	// Reset the file pointer to the beginning
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
+
+	switch {
+	case bytes.HasPrefix(buf, zipFileSignature):
+		zipReader, err := zip.NewReader(file, fileSize(file))
+		if err != nil {
+			return nil, err
+		}
+
+		if len(zipReader.File) == 0 {
+			return nil, fmt.Errorf("zip archive is empty")
+		}
+
+		if len(zipReader.File) > 1 {
+			fmt.Printf("tsdump datadog upload: warning: more than one file in zip archive, using the first file %s\n", zipReader.File[0].Name)
+		}
+
+		firstFile, err := zipReader.File[0].Open()
+		if err != nil {
+			return nil, err
+		}
+		return firstFile, nil
+
+	case bytes.HasPrefix(buf, gzipFileSignature):
+		gzipReader, err := gzip.NewReader(file)
+		if err != nil {
+			return nil, err
+		}
+		return gzipReader, nil
+
+	case bytes.HasPrefix(buf, zstdFileSignature):
+		zstdReader, err := zstd.NewReader(file)
+		if err != nil {
+			return nil, err
+		}
+		return zstdReader, nil
+
+	default:
+		return file, nil
+	}
+}
+
+// fileSize returns the size of the file.
+func fileSize(file *os.File) int64 {
+	info, err := file.Stat()
+	if err != nil {
+		return 0
+	}
+	return info.Size()
+}
+
+func loadMetricTypesMap(ctx context.Context) (map[string]string, error) {
+	metricLayers, err := generateMetricList(ctx, true /* skipFiltering */)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to generate metric list")
+	}
+
+	metricTypeMap := make(map[string]string)
+	for _, metric := range metricLayers {
+		for _, catagory := range metric.Categories {
+			for _, m := range catagory.Metrics {
+				metricTypeMap[m.Name] = m.Type
+			}
+		}
+	}
+
+	return metricTypeMap, nil
+}
+
+// generateMetricsNameMap creates a comprehensive metrics name map by:
+// 1. Getting all metrics from gen metric-list output
+// 2. Appending runtime conditional metrics from base YAML
+// 3. Mapping them to Datadog format
+// 4. Mapping with legacy mappings
+func generateMetricsNameMap(ctx context.Context) (map[string]string, error) {
+	// Get all metrics from gen metric-list
+	metricLayers, err := generateMetricList(ctx, true /* skipFiltering */)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to generate metric list")
+	}
+
+	// Load base mappings (runtime conditional + legacy metrics)
+	baseMappings, err := loadBaseMappingsFromFile()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to load base mappings")
+	}
+
+	// Load Datadog mappings
+	datadogMappings, err := loadDatadogMappingsFromFile()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to load Datadog mappings")
+	}
+
+	// Collect all metrics from metric-list and runtime conditional metrics
+	allMetrics := make([]MetricInfo, 0)
+
+	// Process metrics from gen metric-list
+	for _, layer := range metricLayers {
+		for _, category := range layer.Categories {
+			allMetrics = append(allMetrics, category.Metrics...)
+		}
+	}
+	allMetrics = append(allMetrics, baseMappings.RuntimeConditionalMetrics...)
+	metricNameMap := mapMetricsToDatadog(allMetrics, datadogMappings)
+	metricNameMap = mergeLegacyMappings(baseMappings.LegacyMetrics, metricNameMap)
+
+	return metricNameMap, nil
+}
+
+// mapMetricsToDatadog processes the CRDB metrics and maps them to Datadog names
+func mapMetricsToDatadog(
+	metrics []MetricInfo, datadogMappings map[string]string,
+) map[string]string {
+	result := make(map[string]string)
+
+	for _, metric := range metrics {
+		// Convert to prometheus format (replace non-alphanumeric with underscore)
+		promName := prometheusNameReplaceRE.ReplaceAllString(metric.Name, "_")
+
+		if shouldSkipMetric(promName) {
+			continue
+		}
+
+		// Get Datadog name from mapping, default to normalized CRDB name
+		var datadogName = ""
+		if ddName, exists := datadogMappings[strings.ToLower(promName)]; exists {
+			datadogName = ddName
+		} else {
+			// Normalize metric name for Datadog by replacing hyphens with underscores
+			// Datadog metric names should not contain hyphens
+			datadogName = strings.ReplaceAll(metric.Name, "-", "_")
+		}
+
+		result[promName] = datadogName
+
+		// Add histogram variants if applicable
+		if metric.Type == "HISTOGRAM" {
+			result[promName+"_bucket"] = datadogName + ".bucket"
+			result[promName+"_count"] = datadogName + ".count"
+			result[promName+"_sum"] = datadogName + ".sum"
+		}
+	}
+
+	return result
+}
+
+// shouldSkipMetric checks if a metric name matches any skip patterns
+func shouldSkipMetric(promName string) bool {
+	for _, pattern := range skipPatterns {
+		if pattern.MatchString(promName) {
+			return true
+		}
+	}
+	return false
+}
+
+// mergeLegacyMappings combines legacy mappings with new mappings, giving priority to new mappings
+func mergeLegacyMappings(legacyMappings, newMappings map[string]string) map[string]string {
+	result := make(map[string]string)
+
+	for k, v := range legacyMappings {
+		result[k] = v
+	}
+
+	for k, v := range newMappings {
+		result[k] = v
+	}
+
+	return result
+}
+
+// loadBaseMappingsFromFile loads the base mappings YAML file
+func loadBaseMappingsFromFile() (*BaseMappingsYAML, error) {
+	var baseMappings BaseMappingsYAML
+	if err := yamlutil.UnmarshalStrict(cockroachdbMetricsBaseYAMLBytes, &baseMappings); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal cockroachdb_metrics_base.yaml")
+	}
+
+	return &baseMappings, nil
+}
+
+// loadDatadogMappingsFromFile loads the Datadog mappings YAML file
+func loadDatadogMappingsFromFile() (map[string]string, error) {
+	var datadogMappings map[string]string
+	if err := yamlutil.UnmarshalStrict(cockroachdbMetricsYAMLBytes, &datadogMappings); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal cockroachdb_datadog_metrics.yaml")
+	}
+
+	return datadogMappings, nil
+}
+
+// uploadInitMetrics uploads all available metrics with zero values and current timestamp
+// This eliminates the need for a tsdump file in init mode
+func (d *datadogWriter) uploadInitMetrics() error {
+	if debugTimeSeriesDumpOpts.dryRun {
+		fmt.Println("Dry-run mode enabled. Not actually uploading data to Datadog.")
+	}
+
+	// get list of all metrics
+	metricLayers, err := generateMetricList(context.Background(), true /* skipFiltering */)
+	if err != nil {
+		return errors.Wrap(err, "failed to generate metric list for init upload")
+	}
+
+	currentTimestamp := getCurrentTime().Unix()
+	var successfulUploads, skippedMetrics int
+
+	// batch metrics based on threshold
+	currentBatch := make([]datadogV2.MetricSeries, 0, d.threshold)
+	for _, layer := range metricLayers {
+		for _, category := range layer.Categories {
+			for _, metric := range category.Metrics {
+				series := datadogV2.MetricSeries{
+					Metric: metric.Name,
+					Tags:   []string{},
+					Type:   d.resolveMetricType(metric.Name),
+					Points: []datadogV2.MetricPoint{{
+						Value:     datadog.PtrFloat64(0),
+						Timestamp: datadog.PtrInt64(currentTimestamp),
+					}},
+					Interval: datadog.PtrInt64(debugTimeSeriesDumpOpts.ddMetricInterval),
+				}
+
+				currentBatch = append(currentBatch, series)
+
+				// flush batch when threshold is reached
+				if len(currentBatch) >= d.threshold {
+					_, err := d.emitDataDogMetrics(currentBatch)
+					if err != nil {
+						fmt.Printf("Warning: Failed to upload batch of %d metrics: %v\n", len(currentBatch), err)
+						skippedMetrics += len(currentBatch)
+					} else {
+						successfulUploads += len(currentBatch)
+					}
+					currentBatch = make([]datadogV2.MetricSeries, 0, d.threshold)
+				}
+			}
+		}
+	}
+
+	// flush remaining metrics in the last batch
+	if len(currentBatch) > 0 {
+		_, err := d.emitDataDogMetrics(currentBatch)
+		if err != nil {
+			fmt.Printf("Warning: Failed to upload final batch of %d metrics: %v\n", len(currentBatch), err)
+			skippedMetrics += len(currentBatch)
+		} else {
+			successfulUploads += len(currentBatch)
+		}
+	}
+
+	fmt.Printf("Init upload completed: successfully uploaded %d metrics, skipped %d metrics\n", successfulUploads, skippedMetrics)
+	return nil
+}

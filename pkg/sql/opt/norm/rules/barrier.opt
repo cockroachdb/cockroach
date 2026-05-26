@@ -1,0 +1,19 @@
+# =============================================================================
+# barrier.opt contains normalization rules for Barrier operators.
+# =============================================================================
+
+# EliminateRedundantBarrier removes a Barrier operator when it wraps another
+# identical Barrier. This deduplication avoids unnecessary nesting of
+# equivalent Barriers. The rule applies only when both Barrier operators have
+# the same configuration.
+[EliminateRedundantBarrier, Normalize]
+(Barrier
+    (Barrier $input:* $innerLeakproofPermeable:*)
+    $outerLeakproofPermeable:* &
+        (EqualsBool
+            $innerLeakproofPermeable
+            $outerLeakproofPermeable
+        )
+)
+=>
+(Barrier $input $outerLeakproofPermeable)

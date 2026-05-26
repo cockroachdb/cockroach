@@ -1,0 +1,63 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "raftlog",
+    srcs = [
+        "command.go",
+        "encoding.go",
+        "entry.go",
+        "iterator.go",
+        "payload.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/apply",
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
+        "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/raft/raftpb",
+        "//pkg/roachpb",
+        "//pkg/storage",
+        "//pkg/storage/enginepb",
+        "//pkg/storage/fs",
+        "//pkg/util/buildutil",
+        "//pkg/util/encoding",
+        "//pkg/util/iterutil",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "raftlog_test",
+    srcs = [
+        "encoding_test.go",
+        "entry_bench_test.go",
+        "entry_test.go",
+        "iter_bench_test.go",
+        "iter_test.go",
+    ],
+    embed = [":raftlog"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
+        "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/raft/raftpb",
+        "//pkg/roachpb",
+        "//pkg/storage",
+        "//pkg/storage/enginepb",
+        "//pkg/util/admission/admissionpb",
+        "//pkg/util/hlc",
+        "//pkg/util/humanizeutil",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)

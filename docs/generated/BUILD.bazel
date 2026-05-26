@@ -1,0 +1,71 @@
+load(
+    "//pkg/util/log/eventpb:PROTOS.bzl",
+    _EVENTPB_PROTO_LOCATIONS = "EVENTPB_PROTO_LOCATIONS",
+    _EVENTPB_PROTO_SRCS = "EVENTPB_PROTO_SRCS",
+)
+
+genrule(
+    name = "gen-logging-md",
+    srcs = [
+        "//pkg/util/log/logpb:log.proto",
+    ],
+    outs = ["logging.md"],
+    cmd = """
+        $(location //pkg/util/log/gen) $(location //pkg/util/log/logpb:log.proto) \
+          logging.md $(location logging.md)
+       """,
+    tools = [
+        "//pkg/util/log/gen",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
+genrule(
+    name = "gen-logsinks-md",
+    srcs = [
+        "//pkg/util/log/logconfig:config.go",
+    ],
+    outs = ["logsinks.md"],
+    cmd = """
+    $(location //pkg/util/log/logconfig:gen) < $(location //pkg/util/log/logconfig:config.go) > $(location logsinks.md)
+    """,
+    tools = [
+        "//pkg/util/log/logconfig:gen",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
+genrule(
+    name = "gen-eventlog-md",
+    srcs = _EVENTPB_PROTO_SRCS,
+    outs = ["eventlog.md"],
+    cmd = """
+    $(location //pkg/util/log/eventpb/eventpbgen:eventpbgen) eventlog.md \
+        {} \
+        >$(location eventlog.md)
+    """.format(_EVENTPB_PROTO_LOCATIONS),
+    tools = [
+        "//pkg/util/log/eventpb/eventpbgen",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
+genrule(
+    name = "gen-logformats-md",
+    outs = ["logformats.md"],
+    cmd = "$(location //pkg/cmd/docgen) logformats $(location logformats.md)",
+    tools = ["//pkg/cmd/docgen"],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)

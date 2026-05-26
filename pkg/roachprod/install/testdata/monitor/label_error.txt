@@ -1,0 +1,15 @@
+monitor nodes=1
+----
+
+write node=1
+cockroach-system=40
+status=unknown
+cockroach-tenant0_a=50
+status=unknown
+<\n>
+----
+
+events count=2
+----
+n1: cockroach process for system interface is running (PID: 40)
+n1: error: failed to parse virtual cluster label: invalid virtual cluster label: cockroach-tenant0_a

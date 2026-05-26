@@ -1,0 +1,34 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "spanconfigptsreader",
+    srcs = ["adapter.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/spanconfig",
+        "//pkg/util/hlc",
+        "//pkg/util/retry",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "spanconfigptsreader_test",
+    srcs = ["adapter_test.go"],
+    embed = [":spanconfigptsreader"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/spanconfig",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/stop",
+        "@com_github_stretchr_testify//require",
+    ],
+)

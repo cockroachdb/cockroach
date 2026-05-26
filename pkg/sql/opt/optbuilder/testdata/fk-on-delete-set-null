@@ -1,0 +1,251 @@
+exec-ddl
+CREATE TABLE parent (p INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE child (c INT PRIMARY KEY, p INT REFERENCES parent(p) ON DELETE SET NULL)
+----
+
+build-post-queries
+DELETE FROM parent WHERE p > 1
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:4
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── child_p_fkey
+ │    └── select
+ │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── scan parent
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── p:4 > 1
+ └── cascade
+      └── update child
+           ├── columns: <none>
+           ├── fetch columns: c:11 child.p:12
+           ├── update-mapping:
+           │    └── p_new:16 => child.p:8
+           └── project
+                ├── columns: p_new:16 c:11!null child.p:12
+                ├── semi-join (hash)
+                │    ├── columns: c:11!null child.p:12
+                │    ├── scan child
+                │    │    ├── columns: c:11!null child.p:12
+                │    │    └── flags: avoid-full-scan disabled not visible index feature
+                │    ├── with-scan &1
+                │    │    ├── columns: p:15!null
+                │    │    └── mapping:
+                │    │         └──  parent.p:4 => p:15
+                │    └── filters
+                │         └── child.p:12 = p:15
+                └── projections
+                     └── NULL::INT8 [as=p_new:16]
+
+exec-ddl
+CREATE TABLE parent_multicol (p INT, q INT, r INT, PRIMARY KEY (p, q, r))
+----
+
+exec-ddl
+CREATE TABLE child_multicol (
+  c INT PRIMARY KEY,
+  p INT, q INT, r INT,
+  x INT AS (p+q+r) STORED,
+  CONSTRAINT fk FOREIGN KEY (p,q,r) REFERENCES parent_multicol(p,q,r) ON DELETE SET NULL,
+  CONSTRAINT ch CHECK (c > 100 OR p IS NOT NULL)
+)
+----
+
+# Verify that:
+#  - multiple FK columns are handled correctly;
+#  - we recalculate the stored column;
+#  - we verify the CHECK expression.
+build-post-queries
+DELETE FROM parent_multicol WHERE p > 1
+----
+root
+ ├── delete parent_multicol
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:6 q:7 r:8
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── fk
+ │    └── select
+ │         ├── columns: p:6!null q:7!null r:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+ │         ├── scan parent_multicol
+ │         │    ├── columns: p:6!null q:7!null r:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── p:6 > 1
+ └── cascade
+      └── update child_multicol
+           ├── columns: <none>
+           ├── fetch columns: c:18 child_multicol.p:19 child_multicol.q:20 child_multicol.r:21 x:22
+           ├── update-mapping:
+           │    ├── p_new:28 => child_multicol.p:12
+           │    ├── p_new:28 => child_multicol.q:13
+           │    ├── p_new:28 => child_multicol.r:14
+           │    └── x_comp:29 => x:15
+           ├── check columns: check1:30
+           └── project
+                ├── columns: check1:30!null c:18!null child_multicol.p:19 child_multicol.q:20 child_multicol.r:21 x:22 p_new:28 x_comp:29
+                ├── project
+                │    ├── columns: x_comp:29 c:18!null child_multicol.p:19 child_multicol.q:20 child_multicol.r:21 x:22 p_new:28
+                │    ├── project
+                │    │    ├── columns: p_new:28 c:18!null child_multicol.p:19 child_multicol.q:20 child_multicol.r:21 x:22
+                │    │    ├── semi-join (hash)
+                │    │    │    ├── columns: c:18!null child_multicol.p:19 child_multicol.q:20 child_multicol.r:21 x:22
+                │    │    │    ├── scan child_multicol
+                │    │    │    │    ├── columns: c:18!null child_multicol.p:19 child_multicol.q:20 child_multicol.r:21 x:22
+                │    │    │    │    ├── check constraint expressions
+                │    │    │    │    │    └── (c:18 > 100) OR (child_multicol.p:19 IS NOT NULL)
+                │    │    │    │    ├── computed column expressions
+                │    │    │    │    │    └── x:22
+                │    │    │    │    │         └── (child_multicol.p:19 + child_multicol.q:20) + child_multicol.r:21
+                │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+                │    │    │    ├── with-scan &1
+                │    │    │    │    ├── columns: p:25!null q:26!null r:27!null
+                │    │    │    │    └── mapping:
+                │    │    │    │         ├──  parent_multicol.p:6 => p:25
+                │    │    │    │         ├──  parent_multicol.q:7 => q:26
+                │    │    │    │         └──  parent_multicol.r:8 => r:27
+                │    │    │    └── filters
+                │    │    │         ├── child_multicol.p:19 = p:25
+                │    │    │         ├── child_multicol.q:20 = q:26
+                │    │    │         └── child_multicol.r:21 = r:27
+                │    │    └── projections
+                │    │         └── NULL::INT8 [as=p_new:28]
+                │    └── projections
+                │         └── (p_new:28 + p_new:28) + p_new:28 [as=x_comp:29]
+                └── projections
+                     └── (c:18 > 100) OR (p_new:28 IS NOT NULL) [as=check1:30]
+
+# Test a cascade to a child with a partial index.
+exec-ddl
+CREATE TABLE parent_partial (p INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE child_partial (
+  c INT PRIMARY KEY,
+  p INT REFERENCES parent_partial(p) ON DELETE SET NULL,
+  i INT,
+  INDEX (p) WHERE i > 0,
+  INDEX (i) WHERE p > 0
+)
+----
+
+build-post-queries
+DELETE FROM parent_partial WHERE p > 1
+----
+root
+ ├── delete parent_partial
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:4
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── child_partial_p_fkey
+ │    └── select
+ │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── scan parent_partial
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── p:4 > 1
+ └── cascade
+      └── update child_partial
+           ├── columns: <none>
+           ├── fetch columns: c:12 child_partial.p:13 i:14
+           ├── update-mapping:
+           │    └── p_new:18 => child_partial.p:8
+           ├── partial index put columns: partial_index_put1:19 partial_index_put2:20
+           ├── partial index del columns: partial_index_put1:19 partial_index_del2:21
+           └── project
+                ├── columns: partial_index_put1:19 partial_index_put2:20 partial_index_del2:21 c:12!null child_partial.p:13 i:14 p_new:18
+                ├── project
+                │    ├── columns: p_new:18 c:12!null child_partial.p:13 i:14
+                │    ├── semi-join (hash)
+                │    │    ├── columns: c:12!null child_partial.p:13 i:14
+                │    │    ├── scan child_partial
+                │    │    │    ├── columns: c:12!null child_partial.p:13 i:14
+                │    │    │    ├── partial index predicates
+                │    │    │    │    ├── child_partial_p_idx: filters
+                │    │    │    │    │    └── i:14 > 0
+                │    │    │    │    └── child_partial_i_idx: filters
+                │    │    │    │         └── child_partial.p:13 > 0
+                │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+                │    │    ├── with-scan &1
+                │    │    │    ├── columns: p:17!null
+                │    │    │    └── mapping:
+                │    │    │         └──  parent_partial.p:4 => p:17
+                │    │    └── filters
+                │    │         └── child_partial.p:13 = p:17
+                │    └── projections
+                │         └── NULL::INT8 [as=p_new:18]
+                └── projections
+                     ├── i:14 > 0 [as=partial_index_put1:19]
+                     ├── p_new:18 > 0 [as=partial_index_put2:20]
+                     └── child_partial.p:13 > 0 [as=partial_index_del2:21]
+
+# Test cascades to a child with a virtual column that references the FK.
+exec-ddl
+CREATE TABLE parent_virt (p INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE child_virt (
+  c INT PRIMARY KEY,
+  p INT REFERENCES parent_virt(p) ON DELETE SET NULL,
+  v INT AS (p) VIRTUAL
+)
+----
+
+build-post-queries
+DELETE FROM parent_virt WHERE p > 1
+----
+root
+ ├── delete parent_virt
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:4
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── child_virt_p_fkey
+ │    └── select
+ │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── scan parent_virt
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── p:4 > 1
+ └── cascade
+      └── update child_virt
+           ├── columns: <none>
+           ├── fetch columns: c:12 child_virt.p:13 v:14
+           ├── update-mapping:
+           │    ├── p_new:18 => child_virt.p:8
+           │    └── p_new:18 => v:9
+           └── project
+                ├── columns: p_new:18 c:12!null child_virt.p:13 v:14
+                ├── semi-join (hash)
+                │    ├── columns: c:12!null child_virt.p:13 v:14
+                │    ├── project
+                │    │    ├── columns: v:14 c:12!null child_virt.p:13
+                │    │    ├── scan child_virt
+                │    │    │    ├── columns: c:12!null child_virt.p:13
+                │    │    │    ├── computed column expressions
+                │    │    │    │    └── v:14
+                │    │    │    │         └── child_virt.p:13
+                │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+                │    │    └── projections
+                │    │         └── child_virt.p:13 [as=v:14]
+                │    ├── with-scan &1
+                │    │    ├── columns: p:17!null
+                │    │    └── mapping:
+                │    │         └──  parent_virt.p:4 => p:17
+                │    └── filters
+                │         └── child_virt.p:13 = p:17
+                └── projections
+                     └── NULL::INT8 [as=p_new:18]

@@ -1,0 +1,53 @@
+statement ok
+CREATE TABLE sums (
+  i INT PRIMARY KEY,
+  sum INT
+)
+
+statement ok
+CREATE FUNCTION sum_1_to_n(n INT) RETURNS INT LANGUAGE SQL AS $$
+  SELECT sum(i) FROM generate_series(1, n) g(i);
+$$
+
+# A procedure can invoke a UDF.
+statement ok
+CREATE PROCEDURE insert_sum(n INT) LANGUAGE SQL AS $$
+  INSERT INTO sums VALUES (n, sum_1_to_n(n)) ON CONFLICT DO NOTHING;
+$$
+
+statement ok
+CALL insert_sum(1);
+CALL insert_sum(4);
+CALL insert_sum(10);
+
+query II rowsort
+SELECT * FROM sums
+----
+1   1
+4   10
+10  55
+
+# A UDF can invoke a procedure.
+statement ok
+CREATE FUNCTION fetch_sum_1_to_n(n INT) RETURNS INT LANGUAGE SQL AS $$
+  CALL insert_sum(n);
+  SELECT sum FROM sums WHERE i = n;
+$$
+
+query I
+SELECT fetch_sum_1_to_n(4)
+----
+10
+
+query I
+SELECT fetch_sum_1_to_n(9)
+----
+45
+
+query II rowsort
+SELECT * FROM sums
+----
+1   1
+4   10
+9   45
+10  55

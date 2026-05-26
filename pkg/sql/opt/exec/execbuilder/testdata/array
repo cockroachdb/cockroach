@@ -1,0 +1,74 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE t (x INT[] PRIMARY KEY)
+
+# Test some scans of constrained spans on arrays.
+
+query T
+EXPLAIN SELECT x FROM t WHERE x = ARRAY[1,4,6]
+----
+distribution: local
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [/ARRAY[1,4,6] - /ARRAY[1,4,6]]
+
+query T
+EXPLAIN SELECT x FROM t WHERE x < ARRAY[1, 4, 3]
+----
+distribution: local
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [ - /ARRAY[1,4,3])
+
+query T
+EXPLAIN SELECT x FROM t WHERE x > ARRAY [1, NULL]
+----
+distribution: local
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [/ARRAY[1,NULL,NULL] - ]
+
+query T
+EXPLAIN SELECT x FROM t WHERE x > ARRAY[1, 3] AND x < ARRAY[1, 4, 10] ORDER BY x
+----
+distribution: local
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [/ARRAY[1,3,NULL] - /ARRAY[1,4,10])
+
+query T
+EXPLAIN SELECT x FROM t WHERE x > ARRAY[1, 3] AND x < ARRAY[1, 4, 10] ORDER BY x DESC
+----
+distribution: local
+·
+• revscan
+  missing stats
+  table: t@t_pkey
+  spans: [/ARRAY[1,3,NULL] - /ARRAY[1,4,10])
+
+statement ok
+DROP TABLE t
+
+# Multicolumn index, including arrays.
+
+statement ok
+CREATE TABLE t (x INT, y INT[], z INT, INDEX i (x, y, z))
+
+query T
+EXPLAIN SELECT x, y, z FROM t WHERE x = 2 AND y < ARRAY[10] ORDER BY y
+----
+distribution: local
+·
+• scan
+  missing stats
+  table: t@i
+  spans: (/2/NULL - /2/ARRAY[10])

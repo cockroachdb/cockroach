@@ -1,0 +1,48 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "collector",
+    srcs = ["collector.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/tracing/collector",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/roachpb",
+        "//pkg/rpc/nodedialer",
+        "//pkg/rpc/rpcbase",
+        "//pkg/sql/sqlinstance",
+        "//pkg/util/log",
+        "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
+        "//pkg/util/tracing/tracingservicepb",
+    ],
+)
+
+go_test(
+    name = "collector_test",
+    srcs = [
+        "collector_test.go",
+        "main_test.go",
+    ],
+    deps = [
+        ":collector",
+        "//pkg/base",
+        "//pkg/roachpb",
+        "//pkg/rpc/nodedialer",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/sqlinstance",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//types",
+        "@com_github_stretchr_testify//require",
+    ],
+)

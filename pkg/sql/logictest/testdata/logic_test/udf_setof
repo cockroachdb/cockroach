@@ -1,0 +1,438 @@
+# Tests for set-returning user-defined functions.
+
+statement ok
+CREATE TABLE ab (
+  a INT PRIMARY KEY,
+  b INT
+)
+
+statement ok
+INSERT INTO ab SELECT i, i*10 FROM generate_series(1, 4) g(i)
+
+statement ok
+CREATE FUNCTION empty() RETURNS SETOF INT LANGUAGE SQL AS $$
+  SELECT a FROM ab WHERE a < 0
+$$
+
+query I
+SELECT * FROM empty()
+----
+
+query II rowsort
+SELECT b, empty() FROM ab
+----
+
+statement ok
+CREATE FUNCTION all_a() RETURNS SETOF INT LANGUAGE SQL AS $$
+  SELECT a FROM ab ORDER BY a
+$$
+
+query I rowsort
+SELECT * FROM all_a()
+----
+1
+2
+3
+4
+
+query II rowsort
+select b, all_a() from ab
+----
+10  1
+10  2
+10  3
+10  4
+20  1
+20  2
+20  3
+20  4
+30  1
+30  2
+30  3
+30  4
+40  1
+40  2
+40  3
+40  4
+
+statement ok
+CREATE FUNCTION some_a() RETURNS SETOF INT LANGUAGE SQL AS $$
+  SELECT a FROM ab WHERE a < 3 ORDER BY a
+$$
+
+query III rowsort
+select b, all_a(), some_a() from ab
+----
+10  1  1
+10  2  2
+10  3  NULL
+10  4  NULL
+20  1  1
+20  2  2
+20  3  NULL
+20  4  NULL
+30  1  1
+30  2  2
+30  3  NULL
+30  4  NULL
+40  1  1
+40  2  2
+40  3  NULL
+40  4  NULL
+
+# Note: This query errors in Postgres with "ERROR: 42804: argument of IN must
+# not return a set". We've allowed built-in, set-returning functions as
+# arguments to IN, so we allow set-returning UDFs as well.
+query B rowsort
+SELECT 1 IN (all_a())
+----
+true
+false
+false
+false
+
+statement ok
+CREATE FUNCTION all_a_lt(i INT) RETURNS SETOF INT LANGUAGE SQL AS $$
+  SELECT a FROM ab WHERE a < i ORDER BY a
+$$
+
+query I rowsort
+SELECT * FROM all_a_lt(3)
+----
+1
+2
+
+query II rowsort
+SELECT a, all_a_lt(a) FROM ab
+----
+2  1
+3  1
+3  2
+4  1
+4  2
+4  3
+
+statement ok
+CREATE FUNCTION all_a_desc() RETURNS SETOF INT STABLE LANGUAGE SQL AS $$
+  SELECT a FROM ab ORDER BY a DESC
+$$
+
+# The order of a set-returning UDF should be maintained.
+query T
+SELECT array_agg(a) FROM all_a_desc() g(a)
+----
+{4,3,2,1}
+
+# Nested set-returning functions are not yet supported.
+statement error pgcode 0A000 unimplemented: nested set-returning functions
+SELECT all_a_lt(all_a())
+
+statement ok
+CREATE FUNCTION all_a_strict(INT) RETURNS SETOF INT STRICT LANGUAGE SQL AS $$
+  SELECT a FROM ab
+$$
+
+query I
+SELECT * FROM all_a_strict(NULL)
+----
+
+query I rowsort
+SELECT * FROM all_a_strict(3)
+----
+1
+2
+3
+4
+
+statement ok
+CREATE TABLE n (n INT);
+INSERT INTO n VALUES (NULL), (3);
+
+query I rowsort
+SELECT all_a_strict(n) FROM n
+----
+1
+2
+3
+4
+
+statement error pgcode 42P13 return type mismatch in function declared to return int\nDETAIL: Actual return type is record
+CREATE FUNCTION err(INT) RETURNS SETOF INT STRICT LANGUAGE SQL AS $$
+  SELECT a, b FROM ab ORDER BY a
+$$
+
+statement ok
+CREATE FUNCTION all_ab() RETURNS SETOF ab LANGUAGE SQL AS $$
+  SELECT a, b FROM ab
+$$
+
+query II rowsort
+SELECT * FROM all_ab()
+----
+1 10
+2 20
+3 30
+4 40
+
+statement ok
+CREATE FUNCTION all_ab_tuple() RETURNS SETOF ab LANGUAGE SQL AS $$
+  SELECT (a, b) FROM ab
+$$
+
+query II rowsort
+SELECT * FROM all_ab_tuple()
+----
+1 10
+2 20
+3 30
+4 40
+
+statement ok
+CREATE FUNCTION all_ab_record() RETURNS SETOF RECORD LANGUAGE SQL AS $$
+  SELECT a, b FROM ab
+$$
+
+query II rowsort
+SELECT * FROM all_ab_tuple()
+----
+1 10
+2 20
+3 30
+4 40
+
+# OUT parameters should not cause a set-returning UDF to return a single row.
+subtest regression_128403
+
+statement ok
+CREATE FUNCTION f128403(OUT x INT, OUT y TEXT) RETURNS SETOF RECORD AS $$
+  SELECT t, t::TEXT FROM generate_series(1, 10) g(t);
+$$ LANGUAGE SQL;
+
+query T rowsort
+select f128403();
+----
+(1,1)
+(2,2)
+(3,3)
+(4,4)
+(5,5)
+(6,6)
+(7,7)
+(8,8)
+(9,9)
+(10,10)
+
+query IT rowsort
+SELECT * FROM f128403();
+----
+1   1
+2   2
+3   3
+4   4
+5   5
+6   6
+7   7
+8   8
+9   9
+10  10
+
+subtest end
+
+# RETURNS TABLE is syntactic sugar for RETURNS SETOF with:
+# - RECORD if there are multiple TABLE parameters, or
+# - the type of the single TABLE parameter.
+subtest returns_table
+
+statement error pgcode 42601 pq: OUT and INOUT arguments aren't allowed in TABLE functions
+CREATE FUNCTION f_table1(OUT x INT, OUT y TEXT) RETURNS TABLE(x INT, y TEXT) AS $$
+  SELECT t, t::TEXT FROM generate_series(1, 10) g(t);
+$$ LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION f_table1() RETURNS TABLE(x INT, y TEXT) AS $$
+  SELECT t, t::TEXT FROM generate_series(1, 10) g(t);
+$$ LANGUAGE SQL;
+
+query T rowsort
+select f_table1();
+----
+(1,1)
+(2,2)
+(3,3)
+(4,4)
+(5,5)
+(6,6)
+(7,7)
+(8,8)
+(9,9)
+(10,10)
+
+query IT rowsort
+SELECT * FROM f_table1();
+----
+1   1
+2   2
+3   3
+4   4
+5   5
+6   6
+7   7
+8   8
+9   9
+10  10
+
+# Case with a single TABLE parameter.
+statement ok
+CREATE FUNCTION f_table2() RETURNS TABLE(x INT) AS $$
+  SELECT t FROM generate_series(1, 10) g(t);
+$$ LANGUAGE SQL;
+
+query I rowsort
+select f_table2();
+----
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+
+statement error pgcode 42P13 return type mismatch in function declared to return int\nDETAIL: Actual return type is record
+CREATE FUNCTION err() RETURNS TABLE (x INT) STRICT LANGUAGE SQL AS $$
+  SELECT a, b FROM ab ORDER BY a
+$$
+
+subtest end
+
+# Do not panic when the column definition list for a generator function does
+# not define types for all columns.
+subtest regression_145414
+
+statement ok
+CREATE FUNCTION f145414() RETURNS SETOF RECORD LANGUAGE SQL AS $$ SELECT 1, 2; $$;
+
+statement error pgcode 42601 pq: at or near "int": syntax error
+SELECT * FROM f145414() AS foo(x, y INT);
+
+statement error pgcode 42601 pq: at or near "\)": syntax error
+SELECT * FROM f145414() AS foo(x INT, y);
+
+statement ok
+DROP FUNCTION f145414;
+
+subtest end
+
+# Test that ORDER BY is preserved in SQL UDFs with OUT parameters
+subtest out_params_ordering
+
+statement ok
+CREATE TABLE test_ordering (x INT PRIMARY KEY, y INT);
+
+statement ok
+INSERT INTO test_ordering VALUES (1, 10), (2, 20), (3, 30), (4, 40);
+
+statement ok
+CREATE FUNCTION f_out_desc(OUT a INT, OUT b INT) RETURNS SETOF RECORD AS $$
+  SELECT x, y FROM test_ordering ORDER BY x DESC;
+$$ LANGUAGE SQL;
+
+query T nosort
+SELECT f_out_desc();
+----
+(4,40)
+(3,30)
+(2,20)
+(1,10)
+
+query II nosort
+SELECT * FROM f_out_desc();
+----
+4  40
+3  30
+2  20
+1  10
+
+statement ok
+DROP FUNCTION f_out_desc;
+
+statement ok
+CREATE FUNCTION f_out_asc(OUT a INT, OUT b INT) RETURNS SETOF RECORD AS $$
+  SELECT x, y FROM test_ordering ORDER BY x ASC;
+$$ LANGUAGE SQL;
+
+query T nosort
+SELECT f_out_asc();
+----
+(1,10)
+(2,20)
+(3,30)
+(4,40)
+
+query II nosort
+SELECT * FROM f_out_asc();
+----
+1  10
+2  20
+3  30
+4  40
+
+statement ok
+DROP FUNCTION f_out_asc;
+
+# Test with assignment casts using RETURNS SETOF RECORD and column definition list.
+# The function returns INT columns, but the column definition list specifies
+# FLOAT, which triggers assignment casts at query time.
+statement ok
+CREATE FUNCTION f_record_cast() RETURNS SETOF RECORD AS $$
+  SELECT x, y FROM test_ordering ORDER BY x DESC;
+$$ LANGUAGE SQL;
+
+query RR nosort
+SELECT * FROM f_record_cast() AS f(a FLOAT, b FLOAT);
+----
+4  40
+3  30
+2  20
+1  10
+
+statement ok
+DROP FUNCTION f_record_cast;
+
+# Test that ordering is preserved with array_agg
+statement ok
+CREATE FUNCTION f_out_for_agg(OUT a INT, OUT b INT) RETURNS SETOF RECORD AS $$
+  SELECT x, y FROM test_ordering ORDER BY x DESC;
+$$ LANGUAGE SQL;
+
+query T
+SELECT array_agg(f) FROM f_out_for_agg() AS f;
+----
+{"(4,40)","(3,30)","(2,20)","(1,10)"}
+
+statement ok
+DROP FUNCTION f_out_for_agg;
+
+# Test that ordering is preserved when a UDF returns a tuple and is used as a
+# data source. This exercises the expandRoutineTupleIntoCols code path.
+statement ok
+CREATE FUNCTION f_tuple() RETURNS SETOF RECORD AS $$
+  SELECT ROW(x, y) FROM test_ordering ORDER BY x DESC;
+$$ LANGUAGE SQL;
+
+query II nosort
+SELECT * FROM f_tuple() AS f(a INT, b INT);
+----
+4  40
+3  30
+2  20
+1  10
+
+statement ok
+DROP FUNCTION f_tuple;
+DROP TABLE test_ordering;
+
+subtest end

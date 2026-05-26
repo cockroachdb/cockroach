@@ -1,0 +1,37 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "tenantcapabilities",
+    srcs = [
+        "capability.go",
+        "interfaces.go",
+        "testingknobs.go",
+        "value.go",
+        "values.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/kv/kvpb",
+        "//pkg/multitenant/mtinfopb",
+        "//pkg/multitenant/tenantcapabilitiespb",
+        "//pkg/roachpb",
+        "//pkg/spanconfig/spanconfigbounds",
+        "//pkg/util/hlc",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_cockroachdb_redact//interfaces",
+    ],
+)
+
+go_test(
+    name = "tenantcapabilities_test",
+    srcs = ["values_test.go"],
+    embed = [":tenantcapabilities"],
+    deps = [
+        "//pkg/multitenant/tenantcapabilitiespb",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

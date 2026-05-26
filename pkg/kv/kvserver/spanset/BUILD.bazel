@@ -1,0 +1,54 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "spanset",
+    srcs = [
+        "batch.go",
+        "engine.go",
+        "merge.go",
+        "spanset.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/storage",
+        "//pkg/storage/enginepb",
+        "//pkg/storage/fs",
+        "//pkg/util",
+        "//pkg/util/debugutil",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_pebble//:pebble",
+        "@com_github_cockroachdb_pebble//metrics",
+        "@com_github_cockroachdb_pebble//rangekey",
+        "@com_github_cockroachdb_pebble//vfs",
+    ],
+)
+
+go_test(
+    name = "spanset_test",
+    size = "small",
+    srcs = [
+        "batch_test.go",
+        "engine_test.go",
+        "merge_test.go",
+        "spanset_test.go",
+    ],
+    embed = [":spanset"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv/kvserver/concurrency/lock",
+        "//pkg/roachpb",
+        "//pkg/storage",
+        "//pkg/storage/fs",
+        "//pkg/testutils",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

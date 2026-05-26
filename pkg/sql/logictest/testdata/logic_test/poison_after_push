@@ -1,0 +1,101 @@
+# This example session documents that a SERIALIZABLE transaction is
+# not immediately poisoned when it revisits a Range on which one of
+# its intents has had its timestamp pushed. This allows it to continue
+# laying down intents in a single pass, despite the possibility that it
+# will restart on commit. A REPEATABLE READ transaction can always
+# proceed and commit with its new timestamp.
+#
+# Note that ORDER BY id is done on selects which expect more than a
+# single result, to account for the distsql config, which randomly
+# splits ranges. This can cause table scans to return tuples in any
+# arbitrary order.
+
+# Disable transaction write pipelining. Pipelining is not incompatible
+# with this test. However, disabling it is the easiest way to remove a
+# degree of non-determinism from the test where variants that use
+# DistSQL (e.g. fakedist) hear about a transaction retry error due to a
+# transaction timestamp push and are unable to refresh it away due to
+# the limitation described in #24798. Variants that do not use DistSQL
+# transparently refresh this error away.
+statement ok
+SET CLUSTER SETTING kv.transaction.write_pipelining.enabled = false
+
+statement ok
+CREATE TABLE t (id INT PRIMARY KEY)
+
+statement ok
+INSERT INTO t VALUES (1)
+
+statement ok
+GRANT ALL ON t TO testuser
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY LOW
+
+statement ok
+INSERT INTO t VALUES (2)
+
+# Switch users and push the above insert to a higher timestamp.
+user testuser
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY HIGH
+
+# This pushes the intent.
+query I
+SELECT * FROM t
+----
+1
+
+statement ok
+COMMIT
+
+# Switch back and observe that we can still read our data - the txn is still
+# operational and will continue to lay down its intents in the first pass.
+user root
+
+query I
+SELECT * FROM t ORDER BY id
+----
+1
+2
+
+# On commit, there were no key spans that require updating, so the txn
+# coordinator should handle the retry automatically and succeed.
+statement ok
+COMMIT
+
+# The same type of session for a REPEATABLE READ transaction shouldn't be
+# poisoned.
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ, PRIORITY LOW
+
+statement ok
+INSERT INTO t VALUES (3)
+
+user testuser
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY HIGH
+
+# This pushes the intent.
+query I
+SELECT * FROM t ORDER BY id
+----
+1
+2
+
+statement ok
+COMMIT
+
+user root
+
+query I
+SELECT * FROM t ORDER BY id
+----
+1
+2
+3
+
+statement ok
+COMMIT

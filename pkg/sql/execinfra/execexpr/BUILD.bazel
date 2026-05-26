@@ -1,0 +1,34 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "execexpr",
+    srcs = ["expr.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/execinfra/execexpr",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/typedesc",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/parser",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/normalize",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "execexpr_test",
+    srcs = ["expr_test.go"],
+    embed = [":execexpr"],
+    deps = [
+        "//pkg/settings/cluster",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/leaktest",
+    ],
+)

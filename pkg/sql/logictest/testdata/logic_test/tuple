@@ -1,0 +1,1334 @@
+statement ok
+CREATE TABLE tb(unused INT); INSERT INTO tb VALUES (1)
+
+subtest empty_tuple
+
+query B
+SELECT 1 IN (SELECT * FROM tb LIMIT 0)
+----
+false
+
+query B
+SELECT 1 IN ()
+----
+false
+
+query B
+SELECT 1 = ANY ()
+----
+false
+
+subtest unlabeled_tuple
+
+# TODO(bram): We don't pretty print tuples the same way as postgres. See #25522.
+query TT colnames
+SELECT (1, 2, 'hello', NULL, NULL) AS t, (true, NULL, (false, 6.6, false)) AS u FROM tb
+----
+t              u
+(1,2,hello,,)  (t,,"(f,6.6,f)")
+
+query T
+SELECT (1, e'hello\nworld')
+----
+(1,"hello
+world")
+
+query BBBBBBBBB colnames
+SELECT
+  (2, 2) < (1, 1) AS a,
+  (2, 2) < (1, 2) AS b,
+  (2, 2) < (1, 3) AS c,
+  (2, 2) < (2, 1) AS d,
+  (2, 2) < (2, 2) AS e,
+  (2, 2) < (2, 3) AS f,
+  (2, 2) < (3, 1) AS g,
+  (2, 2) < (3, 2) AS h,
+  (2, 2) < (3, 3) AS i
+  FROM tb
+----
+a      b      c      d      e      f     g     h     i
+false  false  false  false  false  true  true  true  true
+
+query BBBBBBBBB colnames
+SELECT
+  (2, 2) > (1, 1) AS a,
+  (2, 2) > (1, 2) AS b,
+  (2, 2) > (1, 3) AS c,
+  (2, 2) > (2, 1) AS d,
+  (2, 2) > (2, 2) AS e,
+  (2, 2) > (2, 3) AS f,
+  (2, 2) > (3, 1) AS g,
+  (2, 2) > (3, 2) AS h,
+  (2, 2) > (3, 3) AS i
+  FROM tb
+----
+a     b     c     d     e      f      g      h      i
+true  true  true  true  false  false  false  false  false
+
+query BBBBBBBBB colnames
+SELECT
+  (2, 2) <= (1, 1) AS a,
+  (2, 2) <= (1, 2) AS b,
+  (2, 2) <= (1, 3) AS c,
+  (2, 2) <= (2, 1) AS d,
+  (2, 2) <= (2, 2) AS e,
+  (2, 2) <= (2, 3) AS f,
+  (2, 2) <= (3, 1) AS g,
+  (2, 2) <= (3, 2) AS h,
+  (2, 2) <= (3, 3) AS i
+  FROM tb
+----
+a      b      c      d      e     f     g     h     i
+false  false  false  false  true  true  true  true  true
+
+query BBBBBBBBB colnames
+SELECT
+  (2, 2) >= (1, 1) AS a,
+  (2, 2) >= (1, 2) AS b,
+  (2, 2) >= (1, 3) AS c,
+  (2, 2) >= (2, 1) AS d,
+  (2, 2) >= (2, 2) AS e,
+  (2, 2) >= (2, 3) AS f,
+  (2, 2) >= (3, 1) AS g,
+  (2, 2) >= (3, 2) AS h,
+  (2, 2) >= (3, 3) AS i
+  FROM tb
+----
+a     b     c     d     e     f      g      h      i
+true  true  true  true  true  false  false  false  false
+
+query BBBBBBBBB colnames
+SELECT
+  (2, 2) = (1, 1) AS a,
+  (2, 2) = (1, 2) AS b,
+  (2, 2) = (1, 3) AS c,
+  (2, 2) = (2, 1) AS d,
+  (2, 2) = (2, 2) AS e,
+  (2, 2) = (2, 3) AS f,
+  (2, 2) = (3, 1) AS g,
+  (2, 2) = (3, 2) AS h,
+  (2, 2) = (3, 3) AS i
+  FROM tb
+----
+a      b      c      d      e     f      g      h      i
+false  false  false  false  true  false  false  false  false
+
+query BBBBBBBBB colnames
+SELECT
+  (2, 2) != (1, 1) AS a,
+  (2, 2) != (1, 2) AS b,
+  (2, 2) != (1, 3) AS c,
+  (2, 2) != (2, 1) AS d,
+  (2, 2) != (2, 2) AS e,
+  (2, 2) != (2, 3) AS f,
+  (2, 2) != (3, 1) AS g,
+  (2, 2) != (3, 2) AS h,
+  (2, 2) != (3, 3) AS i
+  FROM tb
+----
+a     b     c     d     e      f     g     h     i
+true  true  true  true  false  true  true  true  true
+
+query BBBB colnames
+SELECT
+  (1, 1) > (0, NULL) AS a,
+  (1, 1) > (1, NULL) AS b,
+  (1, 1) > (2, NULL) AS c,
+  (1, 1) > (NULL, 0) AS d
+  FROM tb
+----
+a     b     c      d
+true  NULL  false  NULL
+
+statement error pq: tuples \(1, 2\), \(1, 'hi'\) are not comparable at index 2: unsupported comparison operator
+SELECT (1, 2) > (1, 'hi') FROM tb
+
+statement error pq: expected tuple \(1, 2, 3\) to have a length of 2
+SELECT (1, 2) > (1, 2, 3) FROM tb
+
+statement ok
+CREATE TABLE t (a int, b int, c int)
+
+statement ok
+INSERT INTO t VALUES (1, 2, 3), (2, 3, 1), (3, 1, 2)
+
+query III colnames
+SELECT * FROM t ORDER BY a, b, c
+----
+a b c
+1 2 3
+2 3 1
+3 1 2
+
+query III colnames
+SELECT * FROM t WHERE (a, b, c) > (1, 2, 3) AND (a, b, c) < (8, 9, 10) ORDER BY a, b, c
+----
+a b c
+2 3 1
+3 1 2
+
+query T colnames,rowsort
+SELECT (t.*) AS a FROM t
+----
+a
+(2,3,1)
+(3,1,2)
+(1,2,3)
+
+query BB colnames
+SELECT ((1, 2), 'equal') = ((1, 2.0), 'equal') AS a,
+       ((1, 2), 'equal') = ((1, 2.0), 'not equal') AS b
+	   FROM tb
+----
+a     b
+true  false
+
+query B colnames
+SELECT ((1, 2), 'equal') = ((1, 2.1), 'equal') AS a
+  FROM tb
+----
+a
+false
+
+query B colnames
+SELECT (ROW(pow(1, 10.0) + 9), 'a' || 'b') = (ROW(sqrt(100.0)), 'ab') AS a
+  FROM tb
+----
+a
+true
+
+query B colnames
+SELECT (ROW(sqrt(100.0)), 'ab') = (ROW(pow(1, 10.0) + 9), 'a' || 'b') AS a
+  FROM tb
+----
+a
+true
+
+query error pq: tuples \(\(1, 2\), 'equal'\), \(\(1, 'huh'\), 'equal'\) are not comparable at index 1: tuples \(1, 2\), \(1, 'huh'\) are not comparable at index 2: unsupported comparison operator
+SELECT ((1, 2), 'equal') = ((1, 'huh'), 'equal') FROM tb
+
+# Issue #3568
+
+statement ok
+CREATE TABLE kv (
+  k INT PRIMARY KEY,
+  v INT
+)
+
+statement ok
+INSERT INTO kv VALUES (1, 2)
+
+query II colnames
+SELECT k, v FROM kv WHERE (k, v) = (1, 100)
+----
+k  v
+
+query II colnames
+SELECT k, v FROM kv WHERE (k, v) IN ((1, 100))
+----
+k  v
+
+statement ok
+DROP TABLE kv
+
+# Issue #12295
+
+query B colnames
+SELECT 'foo' IN (x, 'aaa') AS r FROM (SELECT 'foo' AS x FROM tb)
+----
+r
+true
+
+query B colnames
+SELECT 'foo' IN (x, 'zzz') AS r FROM (SELECT 'foo' AS x FROM tb)
+----
+r
+true
+
+# Subquery tuples are already sorted
+
+query B colnames
+SELECT 3 IN (SELECT c FROM t ORDER BY 1 ASC) AS r
+----
+r
+true
+
+query B colnames
+SELECT 4 IN (SELECT c FROM t ORDER BY 1 DESC) AS r
+----
+r
+false
+
+query B colnames
+SELECT (1, 2) IN (SELECT a, b FROM t ORDER BY 1 ASC, 2 ASC) AS r
+----
+r
+true
+
+query B colnames
+SELECT (1, 2) IN (SELECT a, b FROM t ORDER BY 1 DESC, 2 DESC) AS r
+----
+r
+true
+
+statement ok
+DROP TABLE t
+
+# Issue #12302
+
+query B colnames
+SELECT 1 IN (2, NULL) AS r
+  FROM tb
+----
+r
+NULL
+
+query B colnames
+SELECT 1 IN (2, x) AS r FROM (SELECT NULL AS x FROM tb)
+----
+r
+NULL
+
+# Issue 10407: tuple comparisons should not require homogeneous types
+query B colnames
+SELECT (now(), 2) = (now() :: timestamp, 2) AS r
+  FROM tb
+----
+r
+true
+
+query B colnames
+SELECT (1, 2) > (1.0, 2.0) AS r
+  FROM tb
+----
+r
+false
+
+statement ok
+CREATE TABLE uvw (
+  u INT,
+  v INT,
+  w INT,
+  INDEX (u,v,w)
+)
+
+statement ok
+INSERT INTO uvw SELECT u, v, w FROM
+  generate_series(0, 3) AS u,
+  generate_series(0, 3) AS v,
+  generate_series(0, 3) AS w;
+UPDATE uvw SET u = NULL WHERE u = 0;
+UPDATE uvw SET v = NULL WHERE v = 0;
+UPDATE uvw SET w = NULL WHERE w = 0
+
+query III colnames
+SELECT * FROM uvw ORDER BY u, v, w
+----
+u     v     w
+NULL  NULL  NULL
+NULL  NULL  1
+NULL  NULL  2
+NULL  NULL  3
+NULL  1     NULL
+NULL  1     1
+NULL  1     2
+NULL  1     3
+NULL  2     NULL
+NULL  2     1
+NULL  2     2
+NULL  2     3
+NULL  3     NULL
+NULL  3     1
+NULL  3     2
+NULL  3     3
+1     NULL  NULL
+1     NULL  1
+1     NULL  2
+1     NULL  3
+1     1     NULL
+1     1     1
+1     1     2
+1     1     3
+1     2     NULL
+1     2     1
+1     2     2
+1     2     3
+1     3     NULL
+1     3     1
+1     3     2
+1     3     3
+2     NULL  NULL
+2     NULL  1
+2     NULL  2
+2     NULL  3
+2     1     NULL
+2     1     1
+2     1     2
+2     1     3
+2     2     NULL
+2     2     1
+2     2     2
+2     2     3
+2     3     NULL
+2     3     1
+2     3     2
+2     3     3
+3     NULL  NULL
+3     NULL  1
+3     NULL  2
+3     NULL  3
+3     1     NULL
+3     1     1
+3     1     2
+3     1     3
+3     2     NULL
+3     2     1
+3     2     2
+3     2     3
+3     3     NULL
+3     3     1
+3     3     2
+3     3     3
+
+query III colnames
+SELECT * FROM uvw WHERE (u, v, w) >= (1, 2, 3) ORDER BY u, v, w
+----
+u  v     w
+1  2     3
+1  3     NULL
+1  3     1
+1  3     2
+1  3     3
+2  NULL  NULL
+2  NULL  1
+2  NULL  2
+2  NULL  3
+2  1     NULL
+2  1     1
+2  1     2
+2  1     3
+2  2     NULL
+2  2     1
+2  2     2
+2  2     3
+2  3     NULL
+2  3     1
+2  3     2
+2  3     3
+3  NULL  NULL
+3  NULL  1
+3  NULL  2
+3  NULL  3
+3  1     NULL
+3  1     1
+3  1     2
+3  1     3
+3  2     NULL
+3  2     1
+3  2     2
+3  2     3
+3  3     NULL
+3  3     1
+3  3     2
+3  3     3
+
+query III colnames
+SELECT * FROM uvw WHERE (u, v, w) > (2, 1, 1) ORDER BY u, v, w
+----
+u  v     w
+2  1     2
+2  1     3
+2  2     NULL
+2  2     1
+2  2     2
+2  2     3
+2  3     NULL
+2  3     1
+2  3     2
+2  3     3
+3  NULL  NULL
+3  NULL  1
+3  NULL  2
+3  NULL  3
+3  1     NULL
+3  1     1
+3  1     2
+3  1     3
+3  2     NULL
+3  2     1
+3  2     2
+3  2     3
+3  3     NULL
+3  3     1
+3  3     2
+3  3     3
+
+query III colnames
+SELECT * FROM uvw WHERE (u, v, w) <= (2, 3, 1) ORDER BY u, v, w
+----
+u  v     w
+1  NULL  NULL
+1  NULL  1
+1  NULL  2
+1  NULL  3
+1  1     NULL
+1  1     1
+1  1     2
+1  1     3
+1  2     NULL
+1  2     1
+1  2     2
+1  2     3
+1  3     NULL
+1  3     1
+1  3     2
+1  3     3
+2  1     NULL
+2  1     1
+2  1     2
+2  1     3
+2  2     NULL
+2  2     1
+2  2     2
+2  2     3
+2  3     1
+
+query III colnames
+SELECT * FROM uvw WHERE (u, v, w) < (2, 2, 2) ORDER BY u, v, w
+----
+u  v     w
+1  NULL  NULL
+1  NULL  1
+1  NULL  2
+1  NULL  3
+1  1     NULL
+1  1     1
+1  1     2
+1  1     3
+1  2     NULL
+1  2     1
+1  2     2
+1  2     3
+1  3     NULL
+1  3     1
+1  3     2
+1  3     3
+2  1     NULL
+2  1     1
+2  1     2
+2  1     3
+2  2     1
+
+query III colnames
+SELECT * FROM uvw WHERE (u, v, w) != (1, 2, 3) ORDER BY u, v, w
+----
+u     v     w
+NULL  NULL  1
+NULL  NULL  2
+NULL  1     NULL
+NULL  1     1
+NULL  1     2
+NULL  1     3
+NULL  2     1
+NULL  2     2
+NULL  3     NULL
+NULL  3     1
+NULL  3     2
+NULL  3     3
+1     NULL  1
+1     NULL  2
+1     1     NULL
+1     1     1
+1     1     2
+1     1     3
+1     2     1
+1     2     2
+1     3     NULL
+1     3     1
+1     3     2
+1     3     3
+2     NULL  NULL
+2     NULL  1
+2     NULL  2
+2     NULL  3
+2     1     NULL
+2     1     1
+2     1     2
+2     1     3
+2     2     NULL
+2     2     1
+2     2     2
+2     2     3
+2     3     NULL
+2     3     1
+2     3     2
+2     3     3
+3     NULL  NULL
+3     NULL  1
+3     NULL  2
+3     NULL  3
+3     1     NULL
+3     1     1
+3     1     2
+3     1     3
+3     2     NULL
+3     2     1
+3     2     2
+3     2     3
+3     3     NULL
+3     3     1
+3     3     2
+3     3     3
+
+query III colnames
+SELECT * FROM uvw WHERE (u, v, w) >= (1, NULL, 3) ORDER BY u, v, w
+----
+u  v     w
+2  NULL  NULL
+2  NULL  1
+2  NULL  2
+2  NULL  3
+2  1     NULL
+2  1     1
+2  1     2
+2  1     3
+2  2     NULL
+2  2     1
+2  2     2
+2  2     3
+2  3     NULL
+2  3     1
+2  3     2
+2  3     3
+3  NULL  NULL
+3  NULL  1
+3  NULL  2
+3  NULL  3
+3  1     NULL
+3  1     1
+3  1     2
+3  1     3
+3  2     NULL
+3  2     1
+3  2     2
+3  2     3
+3  3     NULL
+3  3     1
+3  3     2
+3  3     3
+
+query III colnames
+SELECT * FROM uvw WHERE (u, v, w) < (2, NULL, 3) ORDER BY u, v, w
+----
+u  v     w
+1  NULL  NULL
+1  NULL  1
+1  NULL  2
+1  NULL  3
+1  1     NULL
+1  1     1
+1  1     2
+1  1     3
+1  2     NULL
+1  2     1
+1  2     2
+1  2     3
+1  3     NULL
+1  3     1
+1  3     2
+1  3     3
+
+statement ok
+DROP TABLE uvw
+
+subtest tuple_placeholders
+
+statement ok
+PREPARE x AS SELECT $1 = (1,2) AS r FROM tb
+
+statement ok
+PREPARE y AS SELECT (1,2) = $1 AS r FROM tb
+
+query B colnames
+EXECUTE x((1,2))
+----
+r
+true
+
+query B colnames
+EXECUTE y((1,2))
+----
+r
+true
+
+query error expected EXECUTE parameter expression to have type tuple\{int, int\}, but '\(1, 2, 3\)' has type tuple\{int, int, int\}
+EXECUTE x((1,2,3))
+
+subtest labeled_tuple
+
+# Selecting two tuples
+query TT colnames
+SELECT ((1, 2, 'hello', NULL, NULL) AS a1, b2, c3, d4, e5) AS r,
+       ((true, NULL, (false, 6.6, false)) AS a1, b2, c3) AS s
+  FROM tb
+----
+r              s
+(1,2,hello,,)  (t,,"(f,6.6,f)")
+
+# Duplicate tuple labels are allowed (but access fails when a duplicated label is accessed,
+# see the labeled_tuple_column_access_errors subtest)
+query T colnames
+SELECT ((1, '2') AS a, a) FROM tb
+----
+?column?
+(1,2)
+
+query T
+SELECT ((1, '2', true) AS a, a, b) FROM tb
+----
+(1,2,t)
+
+query T
+SELECT ((1, '2', true) AS a, b, a) FROM tb
+----
+(1,2,t)
+
+query T
+SELECT ((1, 'asd', true) AS b, a, a) FROM tb
+----
+(1,asd,t)
+
+query TT colnames
+SELECT ((1, 2, 'hello', NULL, NULL) AS a, a, a, a, a) AS r,
+       ((true, NULL, (false, 6.6, false)) AS a, a, a) AS s
+  FROM tb
+----
+r              s
+(1,2,hello,,)  (t,,"(f,6.6,f)")
+
+# Comparing tuples
+query BBB colnames
+SELECT ((2, 2) AS a, b) < ((1, 1) AS c, d) AS r
+      ,((2, 2) AS a, b) < (1, 2) AS s
+      ,(2, 2) < ((1, 3) AS c, d) AS t
+ FROM tb
+----
+r      s      t
+false  false  false
+
+statement error pq: tuples \(\(1, 2\) AS a, b\), \(\(1, 'hi'\) AS c, d\) are not comparable at index 2: unsupported comparison operator: <int> > <string>
+SELECT ((1, 2) AS a, b) > ((1, 'hi') AS c, d) FROM tb
+
+statement error pq: expected tuple \(\(1, 2, 3\) AS a, b, c\) to have a length of 2
+SELECT ((1, 2) AS a, b, c) > ((1, 2, 3) AS a, b, c) FROM tb
+
+query BBBBBBBBBBBBBBBB colnames
+SELECT ((((1, 2) AS a, b), 'value') AS c, d) = ((((1, 2) AS e, f), 'value') AS g, h) AS nnnn
+      ,((((1, 2) AS a, b), 'value') AS c, d) = (((1, 2) AS e, f), 'value')           AS nnnu
+      ,((((1, 2) AS a, b), 'value') AS c, d) = (((1, 2), 'value') AS g, h)           AS nnun
+      ,((((1, 2) AS a, b), 'value') AS c, d) = ((1, 2), 'value')                     AS nnuu
+      ,(((1, 2) AS a, b), 'value')           = ((((1, 2) AS e, f), 'value') AS g, h) AS nunn
+      ,(((1, 2) AS a, b), 'value')           = (((1, 2) AS e, f), 'value')           AS nunu
+      ,(((1, 2) AS a, b), 'value')           = (((1, 2), 'value') AS g, h)           AS nuun
+      ,(((1, 2) AS a, b), 'value')           = ((1, 2), 'value')                     AS nuuu
+      ,(((1, 2), 'value') AS c, d)           = ((((1, 2) AS e, f), 'value') AS g, h) AS unnn
+      ,(((1, 2), 'value') AS c, d)           = (((1, 2) AS e, f), 'value')           AS unnu
+      ,(((1, 2), 'value') AS c, d)           = (((1, 2), 'value') AS g, h)           AS unun
+      ,(((1, 2), 'value') AS c, d)           = ((1, 2), 'value')                     AS unuu
+      ,((1, 2), 'value')                     = ((((1, 2) AS e, f), 'value') AS g, h) AS uunn
+      ,((1, 2), 'value')                     = (((1, 2) AS e, f), 'value')           AS uunu
+      ,((1, 2), 'value')                     = (((1, 2), 'value') AS g, h)           AS uuun
+      ,((1, 2), 'value')                     = ((1, 2), 'value')                     AS uuuu
+ FROM tb
+----
+nnnn  nnnu  nnun  nnuu  nunn  nunu  nuun  nuuu  unnn  unnu  unun  unuu  uunn  uunu  uuun  uuuu
+true  true  true  true  true  true  true  true  true  true  true  true  true  true  true  true
+
+query BB colnames
+SELECT (((ROW(pow(1, 10.0) + 9) AS t1), 'a' || 'b') AS t2, t3) = (((ROW(sqrt(100.0)) AS t4), 'ab') AS t5, t6) AS a
+      ,(ROW(pow(1, 10.0) + 9), 'a' || 'b') = (((ROW(sqrt(100.0)) AS t4), 'ab') AS t5, t6) AS b
+ FROM tb
+----
+a     b
+true  true
+
+subtest labeled_tuple_errors
+
+query error pq: tuples \(\(\(\(1, 2\) AS a, b\), 'equal'\) AS c, d\), \(\(\(\(1, 'huh'\) AS e, f\), 'equal'\) AS g, h\) are not comparable at index 1: tuples \(\(1, 2\) AS a, b\), \(\(1, 'huh'\) AS e, f\) are not comparable at index 2: unsupported comparison operator: <int> = <string>
+SELECT ((((1, 2) AS a, b), 'equal') AS c, d) = ((((1, 'huh') AS e, f), 'equal') AS g, h) FROM tb
+
+# Ensure the number of labels matches the number of expressions
+query error pq: mismatch in tuple definition: 2 expressions, 1 labels
+SELECT ((1, '2') AS a) FROM tb
+
+query error pq: mismatch in tuple definition: 1 expressions, 2 labels
+SELECT (ROW(1) AS a, b) FROM tb
+
+# But inner tuples can reuse labels
+query T colnames
+SELECT ((
+         (
+          (((1, '2', 3) AS a, b, c),
+           ((4,'5') AS a, b),
+		   (ROW(6) AS a))
+		   AS a, b, c),
+		 ((7, 8) AS a, b),
+		 (ROW('9') AS a))
+		 AS a, b, c
+		) AS r
+ FROM tb
+----
+r
+("(""(1,2,3)"",""(4,5)"",""(6)"")","(7,8)","(9)")
+
+subtest labeled_tuple_column_access
+
+## base working case
+
+# Accessing a specific column
+query error pq: could not identify column "x" in tuple{int AS a, int AS b, int AS c}
+SELECT (((1,2,3) AS a,b,c)).x FROM tb
+
+query ITBITB colnames
+SELECT (((1,'2',true) AS a,b,c)).a
+      ,(((1,'2',true) AS a,b,c)).b
+      ,(((1,'2',true) AS a,b,c)).c
+      ,((ROW(1,'2',true) AS a,b,c)).a
+      ,((ROW(1,'2',true) AS a,b,c)).b
+      ,((ROW(1,'2',true) AS a,b,c)).c
+ FROM tb
+----
+a  b  c     a  b  c
+1  2  true  1  2  true
+
+subtest labeled_tuple_column_access_errors
+
+# column doesn't exist
+query error pq: could not identify column "x" in tuple{int AS a, int AS b, int AS c}
+SELECT (((1,2,3) AS a,b,c)).x FROM tb
+
+# Missing extra parentheses
+query error at or near ".": syntax error
+SELECT ((1,2,3) AS a,b,c).x FROM tb
+
+query error at or near ".": syntax error
+SELECT ((1,2,3) AS a,b,c).* FROM tb
+
+# Accessing duplicate labels
+query error pq: column reference "a" is ambiguous
+SELECT (((1,2,3) AS a,b,a)).a FROM tb
+
+query error pq: column reference "unnest" is ambiguous
+SELECT ((unnest(ARRAY[1,2], ARRAY[1,2]))).unnest;
+
+# No labels
+query error pq: could not identify column "x" in record data type
+SELECT ((1,2,3)).x FROM tb
+
+query I colnames
+SELECT ((1,2,3)).@2 FROM tb
+----
+?column?
+2
+
+query III colnames
+SELECT ((1,2,3)).* FROM tb
+----
+?column?  ?column?  ?column?
+1         2         3
+
+# Accessing all the columns
+
+query ITB colnames
+SELECT (((1,'2',true) AS a,b,c)).* FROM tb
+----
+a  b  c
+1  2  true
+
+query ITB colnames
+SELECT ((ROW(1,'2',true) AS a,b,c)).* FROM tb
+----
+a  b  c
+1  2  true
+
+query T
+SELECT (((ROW(1,'2',true) AS a,b,c)).*, 456) FROM tb
+----
+("(1,2,t)",456)
+
+query I colnames
+SELECT ((ROW(1) AS a)).* FROM tb
+----
+a
+1
+
+
+subtest literal_labeled_tuple_in_subquery
+
+query ITB colnames
+SELECT (x).e, (x).f, (x).g
+FROM (
+  SELECT ((1,'2',true) AS e,f,g) AS x FROM tb
+)
+----
+e  f  g
+1  2  true
+
+query ITB colnames
+SELECT (x).*
+FROM (
+  SELECT ((1,'2',true) AS e,f,g) AS x FROM tb
+)
+----
+e  f  g
+1  2  true
+
+subtest labeled_tuples_derived_from_relational_subquery_schema
+
+query IT
+  SELECT (x).a, (x).b
+    FROM (SELECT (ROW(a, b) AS a, b) AS x FROM (VALUES (1, 'one')) AS t(a, b))
+----
+1 one
+
+statement ok
+CREATE TABLE t (a int, b string)
+
+statement ok
+INSERT INTO t VALUES (1, 'one'), (2, 'two')
+
+query IT
+  SELECT (x).a, (x).b
+    FROM (SELECT (ROW(a, b) AS a, b) AS x FROM t)
+ORDER BY 1
+   LIMIT 1
+----
+1 one
+
+subtest labeled_column_access_from_table
+
+query IT colnames
+SELECT (t.*).* FROM t ORDER BY 1,2
+----
+a  b
+1  one
+2  two
+
+query I rowsort
+SELECT (t).a FROM t
+----
+1
+2
+
+query T rowsort
+SELECT t FROM t
+----
+(1,one)
+(2,two)
+
+query T rowsort
+SELECT row_to_json(t) FROM t
+----
+{"a": 1, "b": "one"}
+{"a": 2, "b": "two"}
+
+statement ok
+DROP TABLE t
+
+query B
+SELECT (1, 2, 3) IS NULL AS r
+----
+false
+
+subtest regression_for_34262
+
+query B
+SELECT () = ()
+----
+true
+
+# Regression tests for #58439. Ensure there are no errors when accessing columns
+# of a null tuple.
+subtest regression_58439
+
+statement ok
+CREATE TABLE t58439 (a INT, b INT);
+INSERT INTO t58439 VALUES (1, 10), (2, 20), (3, 30);
+
+query II
+SELECT (ARRAY[t58439.*][0]).* FROM t58439
+----
+NULL  NULL
+NULL  NULL
+NULL  NULL
+
+query II
+SELECT (ARRAY[t58439.*][2]).* FROM t58439
+----
+NULL  NULL
+NULL  NULL
+NULL  NULL
+
+# Regression test for #68308. Do not internally error with a cast of unknown to
+# unknown in a tuple.
+subtest regression_68308
+
+query T
+SELECT (1::INT2, NULL)
+UNION
+SELECT (1::INT, NULL)
+----
+(1,)
+
+# Regression test for #40297: make sure tuples and nulls type-check when
+# used together in a "same-typed expression" such as function arguments.
+subtest regression_40297
+
+statement ok
+CREATE TABLE t(x INT);
+CREATE TABLE t40297 AS SELECT g FROM generate_series(NULL, NULL) AS g
+
+query I
+SELECT COALESCE((SELECT ()), NULL) FROM t40297
+----
+
+# Adding a cast shouldn't affect the type-checking.
+query I
+SELECT COALESCE((SELECT ())::record, NULL) FROM t40297
+----
+
+# Tuples must be the same length.
+statement error incompatible COALESCE expressions: expected \(SELECT \(1,\)\) to be of type tuple, found type tuple{int}
+SELECT COALESCE((SELECT ()), (SELECT ROW (1))) FROM t40297
+
+# Adding a cast here should still work too.
+statement error incompatible COALESCE expressions: expected \(SELECT \(1,\)\)::t to be of type tuple, found type tuple{int AS x}
+SELECT COALESCE((SELECT ()), (SELECT ROW (1))::t) FROM t40297
+
+# If a NULL is casted, then it no longer can be coerced to the right type.
+statement error incompatible COALESCE expressions: expected NULL::t to be of type tuple, found type tuple{int AS x}
+SELECT COALESCE((SELECT ()), NULL::t) FROM t40297
+
+# Type-checking should still work for non-empty tuples.
+query I
+SELECT COALESCE((SELECT '(1)'::t), NULL::t) FROM t40297
+----
+
+# (SELECT (1)) is interpreted as an INT.
+statement error incompatible COALESCE expressions: expected NULL::t to be of type int, found type tuple{int AS x}
+SELECT COALESCE((SELECT (1)), NULL::t) FROM t40297
+
+# Adding ROW allows it to be interpreted as a tuple.
+query I
+SELECT COALESCE((SELECT ROW (1)), NULL::t) FROM t40297
+----
+
+# An anonymous tuple type only works if it is used with a tuple of the correct length.
+statement error incompatible COALESCE expressions: expected NULL::t to be of type tuple{int, int}, found type tuple{int AS x}
+SELECT COALESCE((SELECT ROW (1, 2)), NULL::t) FROM t40297
+
+# It should still type-check correctly without using a subquery.
+statement error incompatible COALESCE expressions: expected NULL::t to be of type tuple{int, int}, found type tuple{int AS x}
+SELECT COALESCE(ROW (1, 2), NULL::t) FROM t40297
+
+# Regression test for #70767. Make sure we avoid encoding arrays where the
+# array content type is AnyTuple.
+subtest regression_70767
+
+query T
+SELECT
+  col
+FROM
+  (VALUES ((ARRAY[]::RECORD[])), ((ARRAY[()])))
+    AS t(col)
+ORDER BY
+  col ASC
+----
+{}
+{()}
+
+query T
+SELECT
+  col
+FROM
+  (VALUES (NULL), ((ARRAY[]::RECORD[])), ((ARRAY[()])))
+    AS t(col)
+ORDER BY
+  col ASC
+----
+NULL
+{}
+{()}
+
+# ARRAY[(1)] is type-checked as an int[] -- this also matches Postgres.
+statement error VALUES types int\[\] and tuple\[\] cannot be matched
+SELECT
+  col
+FROM
+  (VALUES ((ARRAY[]::RECORD[])), ((ARRAY[(1)])))
+    AS t(col)
+ORDER BY
+  col ASC
+
+statement error VALUES types tuple{int, string}\[\] and tuple{int, int}\[\] cannot be matched
+SELECT
+  col
+FROM
+  (VALUES ((ARRAY[]::RECORD[])), ((ARRAY[(1,2)])), ((ARRAY[(1,'cat')])))
+    AS t(col)
+ORDER BY
+  col ASC
+
+query T
+SELECT
+  col
+FROM
+  (VALUES ((ARRAY[]::RECORD[])), ((ARRAY[(1,2)])))
+    AS t(col)
+ORDER BY
+  col ASC
+----
+{}
+{"(1,2)"}
+
+query T
+SELECT
+  col
+FROM
+  (VALUES ((ARRAY[(1,2)])), ((ARRAY[]::RECORD[])))
+    AS t(col)
+ORDER BY
+  col ASC
+----
+{}
+{"(1,2)"}
+
+query T
+SELECT
+  col
+FROM
+  (VALUES ((ARRAY[]::RECORD[])),  ((ARRAY[(1,2), (3,4)])))
+    AS t(col)
+ORDER BY
+  col ASC
+----
+{}
+{"(1,2)","(3,4)"}
+
+statement error expected tuple \(3, 4, 5\) to have a length of 2
+SELECT
+  col
+FROM
+  (VALUES ((ARRAY[]::RECORD[])),  ((ARRAY[(1,2), (3,4), (3,4,5)])))
+    AS t(col)
+ORDER BY
+  col ASC
+
+query T
+SELECT
+  col
+FROM
+  (VALUES ((ARRAY[]::RECORD[])), ((ARRAY[(1,'cat')])))
+    AS t(col)
+ORDER BY
+  col ASC
+----
+{}
+{"(1,cat)"}
+
+query T nosort
+SELECT
+  t2.c4
+FROM
+  (
+    VALUES
+      (NULL, (1:::DECIMAL, ARRAY[]:::record[])),
+      (NULL, (2:::DECIMAL, ARRAY[(1::INT8, 2::INT8)]))
+  )
+    AS t2 (c3, c4)
+----
+(1,{})
+(2,"{""(1,2)""}")
+
+statement error VALUES types tuple\{decimal, tuple\{int, int\}\[\]\} and tuple\{decimal, tuple\{int, int, int\}\[\]\} cannot be matched
+SELECT
+  t2.c4
+FROM
+  (
+    VALUES
+      (NULL, (1:::DECIMAL, ARRAY[]:::record[])),
+      (NULL, (2:::DECIMAL, ARRAY[(1::INT8, 2::INT8, 3::INT8)])),
+      (NULL, (2:::DECIMAL, ARRAY[(1::INT8, 2::INT8)]))
+  )
+    AS t2 (c3, c4)
+
+statement error VALUES types tuple\{decimal, tuple\{int, int, int\}\[\]\} and tuple\{decimal, tuple\{int, int\}\[\]\} cannot be matched
+SELECT
+  t2.c4
+FROM
+  (
+    VALUES
+      (NULL, (1:::DECIMAL, ARRAY[]:::record[])),
+      (NULL, (2:::DECIMAL, ARRAY[(1::INT8, 2::INT8)])),
+      (NULL, (2:::DECIMAL, ARRAY[(1::INT8, 2::INT8, 3::INT8)]))
+  )
+    AS t2 (c3, c4)
+
+# Regression test #74729. Correctly handle NULLs annotated as a tuple type.
+subtest regression_74729
+
+statement ok
+SELECT CASE WHEN true THEN ('a', 2) ELSE NULL:::RECORD END
+
+statement ok
+CREATE TABLE t74729 AS SELECT g % 2 = 1 AS _bool FROM generate_series(1, 5) AS g
+
+statement ok
+SELECT CASE WHEN _bool THEN (1, ('a', 2)) ELSE (3, NULL) END FROM t74729
+
+# Regression test for #78159. Column access of NULL should not cause an internal
+# error.
+subtest 78159
+
+statement ok
+CREATE TABLE t78159 (b BOOL)
+
+statement ok
+INSERT INTO t78159 VALUES (false)
+
+query I
+SELECT (CASE WHEN b THEN NULL ELSE ((ROW(1) AS a)) END).a from t78159
+----
+1
+
+query B
+SELECT (CASE WHEN b THEN ((ROW(1) AS a)) ELSE NULL END).a from t78159
+----
+NULL
+
+# Regression test for #78515. Propagate tuple labels when type-checking
+# expressions with multiple matching tuple types.
+subtest 78515
+
+statement ok
+SELECT (CASE WHEN false THEN (ROW(1) AS a) ELSE (ROW(2) AS a) END).a;
+
+# The label of the last tuple is used in the type of the CASE expression. This
+# matches Postgres behavior.
+statement error could not identify column \"a\" in tuple{int AS b}
+SELECT (CASE WHEN false THEN (ROW(1) AS a) ELSE (ROW(2) AS b) END).a;
+
+statement ok
+SELECT (CASE WHEN false THEN (ROW(1) AS a) ELSE (ROW(2) AS b) END).b;
+
+subtest end
+
+# Regression test for #79484. Verify that type-checking is smart enough
+# to handle tuples of arrays of tuples in the VALUES clause.
+subtest 79484
+
+query T nosort
+SELECT * FROM (
+  VALUES
+    ((ARRAY[15181:::INT8], ARRAY[]:::RECORD[])),
+    (
+      (ARRAY[1534:::INT8], ARRAY[('infinity':::DATE, 'cat':::TEXT)])
+    ),
+    (NULL)
+) AS tab(col)
+----
+({15181},{})
+({1534},"{""(infinity,cat)""}")
+NULL
+
+subtest end
+
+# Regression test for incorrect handling of tree.ParenExprs during type-checking
+# (#94092).
+statement ok
+CREATE TABLE t94092 (c INT);
+INSERT INTO t94092 VALUES (1);
+
+query error expected tuple \(\) to have a length of 2
+SELECT (c, 1) != (()) FROM t94092;
+
+# Regression test for #106303.
+statement error pgcode 42601 mismatch in tuple definition: 0 expressions, 1 labels
+SELECT (ROW() AS a) IS NOT UNKNOWN
+
+statement error pgcode 42601 mismatch in tuple definition: 0 expressions, 1 labels
+SELECT CASE WHEN False THEN ROW() ELSE (ROW() AS a) END
+
+subtest 109105
+
+statement ok
+CREATE TABLE t109105 (a int);
+
+statement ok
+INSERT INTO t109105 VALUES (1),(2),(3),(4),(5),(6);
+
+# This should CAST the nulls in the rows to the types of the constant values
+# instead of erroring out.
+query T
+SELECT (CASE WHEN a = 1 THEN NULL
+             WHEN a = 2 THEN ROW(NULL, NULL, 1.1e3::FLOAT)
+             WHEN a = 3 THEN ROW(NULL, 1.1::DECIMAL, NULL)
+             WHEN a = 4 THEN ROW(1::INT, null, NULL)
+             WHEN a = 5 THEN NULL
+             ELSE NULL END) FROM t109105 ORDER BY 1;
+----
+NULL
+NULL
+NULL
+(,,1100)
+(,1.1,)
+(1,,)
+
+# Regression test for incorrectly spilling tuples to disk which produces
+# "encoding corruption" of other columns (#125367).
+statement ok
+CREATE TABLE t125367 AS SELECT
+    g AS _int8, g * '1 day'::INTERVAL AS _interval, g::DECIMAL AS _decimal
+    FROM generate_series(1, 5) AS g;
+UPDATE t125367 SET _interval = '7 years 1 mon 887 days 18:22:39.99567';
+SET testing_optimizer_random_seed = 1481092000980190599;
+SET testing_optimizer_disable_rule_probability = 1.000000;
+SET vectorize = off;
+SET distsql_workmem = '2B';
+
+statement error pgcode 0A000 unimplemented: can't spill column type RECORD to disk
+SELECT tab_1._interval AS col_1, (NULL:::STRING, NULL:::JSONB, NULL:::TIME) AS col_2
+    FROM t125367 AS tab_2 JOIN t125367 AS tab_1 ON (tab_2._int8) = (tab_1._int8)
+    ORDER BY col_2, tab_2._interval, tab_2._decimal, col_1 DESC
+    LIMIT 1000;
+
+statement ok
+RESET testing_optimizer_random_seed;
+RESET testing_optimizer_disable_rule_probability;
+RESET vectorize;
+RESET distsql_workmem;
+
+# Regression test for incorrect handling of IS NOT NULL filter in the vectorized
+# engine (#126769).
+query T
+SELECT * FROM (SELECT (NULL, NULL) AS a) AS b WHERE a IS NOT NULL;
+----
+
+query T
+SELECT * FROM (SELECT (1, NULL) AS a) AS b WHERE a IS NOT NULL;
+----
+
+query T
+SELECT * FROM (SELECT (1, 2) AS a) AS b WHERE a IS NOT NULL;
+----
+(1,2)
+
+query B
+SELECT ROW() IS NULL;
+----
+true
+
+query B
+SELECT ROW() IS NOT NULL;
+----
+true

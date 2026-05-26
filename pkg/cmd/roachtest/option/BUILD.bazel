@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "option",
+    srcs = [
+        "cluster_options.go",
+        "node_list_option.go",
+        "node_lister.go",
+        "option_interface.go",
+        "options.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachprod",
+        "//pkg/roachprod/install",
+    ],
+)
+
+go_test(
+    name = "option_test",
+    srcs = ["cluster_options_test.go"],
+    embed = [":option"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

@@ -1,0 +1,821 @@
+// Copyright 2014 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto2";
+// NB: this file (along with most things in api.proto and metadata.proto)
+// really ought to live in a ./pkg/kv/kvpb package. However, moving them
+// there is a larger undertaking because import cycles require a large
+// amount of refactoring. Essentially, all references to `kvpb` from the
+// `roachpb` package will need to be avoided, and it takes time to make
+// these changes. Second, proto renames are tricky as the paths leak into
+// uses of protobuf.Any.
+//
+// It is for this second reason that this package was renamed preemptively
+// (but not moved yet for the first reason): we use EncodedError in Error,
+// and once that is released in even an alpha version, migration concerns
+// arise that are not trivial to address. Since the package already has the
+// correct name, the files can be moved into a newly created `kvpb` package
+// at leisure.
+package cockroach.kv.kvpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvpb";
+
+import "errorspb/errors.proto";
+import "roachpb/data.proto";
+import "roachpb/metadata.proto";
+import "storage/enginepb/mvcc3.proto";
+import "util/hlc/timestamp.proto";
+import "gogoproto/gogo.proto";
+
+// Issue #1246. Commented out because
+// https://github.com/golang/protobuf/commit/d3d78384b82d449651d2435ed3
+// requires that all messages implement Message, which includes
+// `String() string`.
+// option (gogoproto.goproto_stringer_all) = false;
+
+// A NotLeaseHolderError indicates that the current range is not the lease
+// holder. If the lease holder is known, its Replica is set in the error.
+message NotLeaseHolderError {
+  // The replica the error originated from. Used in the error's string
+  // representation, if known.
+  optional roachpb.ReplicaDescriptor replica = 1 [(gogoproto.nullable) = false];
+  // The current lease, if known.
+  //
+  // It's possible for leases returned here to represent speculative leases, not
+  // actual committed leases. In this case, the lease will not have its Sequence
+  // set.
+  optional roachpb.Lease lease = 4;
+  optional int64 range_id = 3 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "RangeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  // The range descriptor from the replica the error originated from.
+  // The generation of the descriptor is used by the DistSender's RangeCache to
+  // determine whether the error was returned because the replica had a stale
+  // understanding of who the leaseholder is.
+  optional roachpb.RangeDescriptor range_desc = 6 [(gogoproto.nullable)=false];
+  // If set, the Error() method will return this instead of composing its
+  // regular spiel. Useful because we reuse this error when rejecting a command
+  // because the lease under which its application was attempted is different
+  // than the lease under which it had been proposed.
+  optional string custom_msg = 5 [(gogoproto.nullable) = false];
+
+  reserved 2;
+}
+
+// A NodeUnavailableError indicates that the sending gateway can
+// not process requests at the time, and that the client should
+// retry the request with another peer.
+message NodeUnavailableError {
+}
+
+// A NodeDecommissionedError is returned when trying to connect from or to a
+// peer that is known to have been decommissioned.
+message NodeDecommissionedError {
+}
+
+// An UnsupportedRequestError indicates that the recipient node
+// does not know how to handle the type of request received.
+message UnsupportedRequestError {
+}
+
+// A RangeNotFoundError indicates that a command was sent to a range
+// which is not hosted on this store.
+message RangeNotFoundError {
+  optional int64 range_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "RangeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  // store_id is nonzero only if the error originated on a Store.
+  optional int64 store_id = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "StoreID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
+}
+
+// A RangeKeyMismatchError indicates that a command was sent to a
+// range which did not contain the key(s) specified by the command.
+message RangeKeyMismatchError {
+  optional bytes request_start_key = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+  optional bytes request_end_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+
+  // Ranges contains information intended for the client's range cache. The
+  // server populates it with info on the range with the ID addressed by the
+  // client (always the first in the array) and then all other ranges
+  // overlapping the requested key range, or in between the addressed range and
+  // the requested key range.
+  //
+  // The slice should always have a length of at least 1. However, users should
+  // call MismatchedRange instead of relying on this in cases where they require
+  // at least one entry.
+  repeated roachpb.RangeInfo ranges = 5 [(gogoproto.nullable) = false];
+
+  reserved 3, 4;
+}
+
+// A ReadWithinUncertaintyIntervalError indicates that a read at timestamp
+// encountered a write within the uncertainty interval of the reader.
+// The read should be retried at a higher timestamp; the timestamps contained
+// within are purely informational, though typically value_timestamp is a
+// lower bound for a new timestamp at which at least the read producing
+// this error would succeed on retry.
+message ReadWithinUncertaintyIntervalError {
+  option (gogoproto.goproto_stringer) = false;
+
+  // This data below is purely informational and used to tailor the
+  // error message.
+
+  // Information about the reader.
+  optional util.hlc.Timestamp read_timestamp = 1 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp local_uncertainty_limit = 5 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+  optional util.hlc.Timestamp global_uncertainty_limit = 3 [(gogoproto.nullable) = false];
+  repeated roachpb.ObservedTimestamp observed_timestamps = 4 [(gogoproto.nullable) = false];
+
+  // Information about the uncertain value.
+  optional util.hlc.Timestamp value_timestamp = 2 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp local_timestamp = 6 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+}
+
+// TransactionAbortedReason specifies what caused a TransactionAbortedError.
+// The reasons below are not necessarily disjoint - they describe where the
+// error was generated, but generally it's possible that a
+// TransactionAbortedError would have been generated somewhere else if the
+// client would have performed different operations.
+enum TransactionAbortedReason {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  // For backwards compatibility.
+  ABORT_REASON_UNKNOWN = 0;
+
+  // A HeartbeatTxn or EndTxn(commit=true) request found an aborted transaction
+  // record. Another txn must have written this record - that other txn probably
+  // ran into one of our intents and pushed our transaction record successfully.
+  // Either a high-priority transaction simply pushed us or we failed to
+  // heartbeat for a while and another txn (of any priority) considered us
+  // abandoned and pushed us.
+  ABORT_REASON_ABORTED_RECORD_FOUND = 1;
+
+  // The client is trying to use a transaction that's already been aborted. The
+  // TxnCoordSender detects this. Either the client is misusing a txn, or the
+  // TxnCoordSender found out about the transaction being aborted async through
+  // the heartbeat loop.
+  ABORT_REASON_CLIENT_REJECT = 3;
+
+  // The txn was trying to push another and found out that it itself got aborted
+  // somehow while waiting for the push.
+  ABORT_REASON_PUSHER_ABORTED = 4;
+
+  // The txn ran into the "abort span" - it was trying to read from a range
+  // where it had previously laid down intents that have been cleaned up in the
+  // meantime because the transaction was aborted.
+  ABORT_REASON_ABORT_SPAN = 5;
+
+	// A request attempting to create a transaction record encountered a write
+	// timestamp cache entry for the txn key, and the entry identifies this
+	// transaction. This means that the transaction already wrote a transaction
+	// record previously, which may or may not have been removed since. So, this
+	// request is either a delayed replay of some sort, or it raced with an async
+	// abort and lost. If a client gets this TransactionAbortedError (without it
+	// being wrapped in an ambiguous error), it must be the latter case, and the
+	// transaction can be retried.
+	ABORT_REASON_RECORD_ALREADY_WRITTEN_POSSIBLE_REPLAY = 6;
+
+  // A request attempting to create a transaction record is not allowed to
+  // proceed by the timestamp cache because it cannot be verified that the
+  // respective transaction record did not previously exist. As opposed to the
+  // case above, the timestamp cache does not have a txn id in it, but the lease
+  // under which the request is evaluated is newer than the transaction's
+  // minimum timestamp (see CanCreateTxnRecord()). A new lease wipes the
+  // timestamp cache, so transaction record creation is bound to fail for
+  // transactions that spanned a lease acquisition.
+  // As above, if the error has not been converted by the time it reaches a
+  // client, then it's not a replay.
+  ABORT_REASON_NEW_LEASE_PREVENTS_TXN = 8;
+
+  // Like the above, the timestamp cache rejects the creation of a transaction
+  // record. But there's no txn id in the ts cache, and also the lease is not
+  // new. The timestamp cache has lost accuracy because of a range merge or
+  // because of its memory limit.
+  // As above, if the error has not been converted by the time it reaches a
+  // client, then it's not a replay.
+  //
+  // TODO(andrei): We should be able to identify the range merge case by saving
+  // a bit more info in the timestamp cache.
+  ABORT_REASON_TIMESTAMP_CACHE_REJECTED = 7;
+
+  reserved 2;
+}
+
+// A TransactionAbortedError indicates that the client should retry the
+// transaction (and use a different txn id, as opposed to
+// TransactionRetryError). This most often happens when the transaction was
+// aborted by another concurrent transaction. Upon seeing this error, the client
+// is supposed to reset its Transaction proto and try the transaction again.
+//
+// In contrast with other errors, the Transaction that the client gets in the
+// pErr carrying this ErrorDetail is not supposed to be used as is by the
+// client; the ID should be checked and then attributes like the timestamp
+// should be used in creating a new txn.
+message TransactionAbortedError {
+  optional TransactionAbortedReason reason = 1 [(gogoproto.nullable) = false];
+}
+
+// A TransactionPushError indicates that the transaction could not
+// continue because it encountered a write intent from another
+// transaction which it was unable to push.
+message TransactionPushError {
+  optional roachpb.Transaction pushee_txn = 1 [(gogoproto.nullable) = false];
+}
+
+// TransactionRetryReason specifies what caused a transaction retry.
+enum TransactionRetryReason {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  // For backwards compatibility.
+  RETRY_REASON_UNKNOWN = 0;
+  // A concurrent writer finished first, causing restart.
+  RETRY_WRITE_TOO_OLD = 1;
+  // A SERIALIZABLE transaction had its timestamp moved forward.
+  RETRY_SERIALIZABLE = 3;
+  // An asynchronous write was observed to have failed.
+  RETRY_ASYNC_WRITE_FAILURE = 5;
+  // The transaction exceeded its deadline.
+  RETRY_COMMIT_DEADLINE_EXCEEDED = 6;
+}
+
+// A TransactionRetryError indicates that the transaction must be
+// retried, usually with an increased transaction timestamp.
+message TransactionRetryError {
+  optional TransactionRetryReason reason = 1 [(gogoproto.nullable) = false];
+  // Note: Deprecated. `extra_msg_redactable` takes precedence if present.
+  // Both fields will be populated in 23.1.
+  // TODO(davidh): Remove in 23.2
+  optional string extra_msg = 2 [(gogoproto.nullable) = false];
+  optional string extra_msg_redactable = 3 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
+  // The conflicting transaction's TxnMeta. This is bubbled up from a
+  // RefreshFailedError. This field is only set if the retry error is
+  // constructed in response to a RefreshFailedError. In all other cases, or if
+  // the RefreshFailedError does not contain conflicting transaction
+  // information, this field is unset.
+  optional storage.enginepb.TxnMeta conflicting_txn = 4;
+
+  // The key that the transaction conflicted on. This is distinct from the
+  // conflicting_txn.key field, which is the anchor key of the conflicting
+  // transaction (used for transaction record placement), not the key where the
+  // actual conflict occurred. This field is bubbled up from a RefreshFailedError.
+  optional bytes conflict_key = 5 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+}
+
+// A TransactionStatusError indicates that the transaction status is
+// incompatible with the requested operation. This might mean the
+// transaction has already been committed. It might also be the case
+// that the request to modify the transaction failed due to a
+// regression in transaction epoch or timestamp, both of which may
+// only monotonically increase.
+message TransactionStatusError {
+  // Note: Deprecated. `msg_redactable` takes precedence if present.
+  // Both fields will be populated in 23.1.
+  // TODO(davidh): Remove in 23.2
+  optional string msg = 1 [(gogoproto.nullable) = false];
+
+  // Reason specifies what caused the error.
+  enum Reason {
+    // For backwards compatibility.
+    REASON_UNKNOWN = 0;
+    // A committed transaction record was found.
+    REASON_TXN_COMMITTED = 2;
+
+    reserved 1;
+  }
+  optional Reason reason = 2 [(gogoproto.nullable) = false];
+  optional string msg_redactable = 3 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
+}
+
+// A LockConflictError indicates that one or more locks belonging to
+// another transaction were encountered, leading to a read/write or
+// write/write lock conflict which prevented kvserver-local request
+// evaluation from completing. The keys at which the locks were
+// encountered are set, as are the txn metas for the locks'
+// transactions.
+//
+// LockConflictErrors are returned from MVCC during request evaluation
+// when a request finds a conflicting lock. A LockConflictError is
+// propagated up through the Replica to the corresponding lock table and
+// passed to its AddDiscoveredLock method. This informs the lock table
+// about the lock(s) and allows the request to handle the conflicts
+// through a combination of waiting and pushing in the concurrency
+// manager. See concurrency_control.go for an explanation and diagram of
+// the flow.
+//
+// Unlike WriteIntentError, LockConflictError is never returned from the
+// kvserver. Instead, it is only used internally by concurrency control.
+message LockConflictError {
+  repeated roachpb.Lock locks = 1 [(gogoproto.nullable) = false];
+  reserved 2;
+  // The sequence of the lease that the operation which hit this error was
+  // operating under. Used on the server to avoid adding discovered locks
+  // which were discovered under old leases to the lock table.
+  optional int64 lease_sequence = 3 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.LeaseSequence"];
+  reserved 4;
+}
+
+// A WriteIntentError indicates that one or more locks belonging to
+// another transaction were encountered, leading to a read/write or
+// write/write lock conflict which prevented the kvserver from handling
+// a request and returning a response to the kvclient. The keys at which
+// the locks were encountered are set, as are the txn metas for the
+// locks' transactions.
+//
+// WriteIntentErrors are returned from the concurrency manager to the
+// kvclient for intents/locks that conflict with a request and are not
+// handled by the kvserver. This is typically because the request was
+// configured with an Error wait policy instead of a Block wait policy,
+// so it is opting to fail fast on conflicting locks instead of waiting
+// for a lock to be released. Alternatively, the error may be because of
+// a lock timeout or a lock wait-queue length limit. These errors make
+// their way back up from KV to SQL, where they are converted to a
+// LockNotAvailable error.
+//
+// Note that the KV client is free to send more requests after a
+// WriteIntentError. This is not generally allowed after other errors
+// because of fears over the ambiguity of the side-effects of failed
+// requests (in particular, the timestamps at which intents might have
+// been written). WriteIntentError is a special case as we ensure
+// there's no ambiguity; the error carries a WriteTimestamp that's the
+// upper bound of the timestamps intents were written at.
+//
+// NOTE: the name of the error refers to "intents", but the error is
+// returned for any conflicting lock, regardless of locking strength.
+// The naming is an artifact of a time when intents were the only form
+// of lock, and renames have proven difficult (see #113271). One day
+// we'll be smart enough to pull it off.
+message WriteIntentError {
+  repeated roachpb.Lock locks = 1 [(gogoproto.nullable) = false];
+  reserved 2, 3;
+  enum Reason {
+    // The reason for the WriteIntentError is unspecified.
+    REASON_UNSPECIFIED = 0;
+    // The request used an Error wait policy because it did not want to
+    // wait on locks and it encountered a conflicting lock.
+    REASON_WAIT_POLICY = 1;
+    // The request used a Block wait policy and specified a lock timeout
+    // which expired while waiting for a conflicting lock.
+    REASON_LOCK_TIMEOUT = 2;
+    // The request attempted to wait in a lock wait-queue whose length was
+    // already equal to or exceeding the configured maximum.
+    REASON_LOCK_WAIT_QUEUE_MAX_LENGTH_EXCEEDED = 3;
+  }
+  // The reason for the error.
+  optional Reason reason = 4 [(gogoproto.nullable) = false];
+}
+
+// A WriteTooOldError indicates that a write encountered a versioned
+// value newer than its timestamp, making it impossible to rewrite
+// history. The write must instead be done at or later than actual
+// timestamp, which is the timestamp of the existing version+1.
+message WriteTooOldError {
+  optional util.hlc.Timestamp timestamp = 1 [(gogoproto.nullable) = false];
+  // TODO(nvanbenschoten): now that WriteTooOld errors no longer accompany
+  // successful writes, this name is confusing. Rename the field.
+  optional util.hlc.Timestamp actual_timestamp = 2 [(gogoproto.nullable) = false];
+  // One of the keys at which this error was encountered. There's
+  // no need to return new WriteTooOldErrors for each colliding key; the key
+  // is just present for investigation / logging purposes, and is not expected
+  // to be used in any transaction logic. As a result, it's not even necessary
+  // for this key to be at actual_timestamp; it could be at any timestamp in
+  // between timestamp and actual_timestamp.
+  optional bytes key = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+}
+
+// An OpRequiresTxnError indicates that a command required to be
+// carried out in a transactional context but was not.
+// For example, a Scan which spans ranges requires a transaction.
+// The operation should be retried inside of a transaction.
+message OpRequiresTxnError {
+}
+
+// A ConditionFailedError indicates that the expected value
+// of a ConditionalPutRequest was not found, either
+// because it was missing or was not equal. The error will
+// contain the actual value found.
+message ConditionFailedError {
+  optional roachpb.Value actual_value = 1;
+  // HadNewerOriginTimestamp is returned when an OriginTimestamp was
+  // sent in the conditional put, the origin timestamp was newer than
+  // the existing value's "comparison timestamp" (see comment for
+  // OriginTimestampOlderThan) but the expected value was
+  // mismatched. The caller may choose to try again using the returned
+  // ActualValue as the expected value.
+  optional bool had_newer_origin_timestamp = 2 [(gogoproto.nullable) = false];
+  // OriginTimestampOlderThan is returned when an OriginTimestamp was
+  // sent in the conditional put and it was older than the existing
+  // value's OriginTimestamp (if it exists) or MVCC timestamp.
+  //
+  // See the comment on the OriginTimestamp field of
+  // kvpb.ConditionalPutRequest for more details.
+  optional util.hlc.Timestamp origin_timestamp_older_than = 3 [(gogoproto.nullable) = false];
+}
+
+// A LeaseRejectedError indicates that the requested replica could
+// not acquire the desired lease because of an existing range lease.
+message LeaseRejectedError {
+  optional string message = 1 [(gogoproto.nullable) = false];
+  optional roachpb.Lease requested = 2 [(gogoproto.nullable) = false];
+  optional roachpb.Lease existing = 3 [(gogoproto.nullable) = false];
+}
+
+// An AmbiguousResultError indicates that a request may have succeeded or
+// failed, but the response was not received and the final result is ambiguous.
+message AmbiguousResultError {
+  // The error that caused the ambiguous result.
+  optional errorspb.EncodedError encoded_error = 3 [(gogoproto.nullable) = false];
+  reserved 2;
+}
+
+// A ProxyFailedError is used to transmit a send error over the wire between a
+// proxy node and its final destination. The originator needs to handle
+// different types of SendErrors differently depending on both the type of the
+// error (specifically whether the error happened after the request started but
+// before we received a response) and the type of request (specifically whether
+// the request included a commit).
+message ProxyFailedError {
+  // The error that caused the proxy failure.
+  optional errorspb.EncodedError cause = 1 [(gogoproto.nullable) = false];
+}
+
+message ReplicaUnavailableError {
+
+  optional roachpb.RangeDescriptor desc = 2 [(gogoproto.nullable) = false];
+  optional roachpb.ReplicaDescriptor replica = 4 [(gogoproto.nullable) = false];
+  optional errorspb.EncodedError cause = 5 [(gogoproto.nullable) = false];
+}
+
+// A RaftGroupDeletedError indicates a raft group has been deleted for
+// the replica.
+message RaftGroupDeletedError {
+}
+
+// ReplicaTooOldError is sent in response to a raft message when the
+// recipient of the raft message believes the sender of the raft
+// message to have been removed from the raft group
+message ReplicaTooOldError {
+  // replica_id is the ID of the replica that is too old.
+  optional int32 replica_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ReplicaID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID"];
+}
+
+// A StoreNotFoundError indicates that a command was sent to a store
+// which is not hosted on this node.
+message StoreNotFoundError {
+  optional int64 store_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "StoreID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
+}
+
+// UnhandledRetryableError tells the recipient that a KV request must be
+// retried. In case the request was transactional, the whole transaction needs
+// to be retried. This is returned generally as a result of a transaction
+// conflict.
+//
+// This error is generated by pErr.GoError() in case of a retryable
+// error (other than TransactionRetryWithProtoRefreshError). For transactional
+// requests, the TxnCoordSender handles retryable pErrs and transforms
+// them into TransactionRetryWithProtoRefreshError. For non-transactional requests,
+// this error will be observed by layers above the TxnCoordSender.
+message UnhandledRetryableError {
+  option (gogoproto.goproto_stringer) = false;
+
+  // The underlying storage error that is being marshaled.
+  // pErr.TransactionRestart is expected to be set, and the error
+  // detail is one of the retryable ones.
+  optional Error pErr = 1 [(gogoproto.nullable) = false];
+}
+
+// TransactionRetryWithProtoRefreshError is an error detail representing a retryable error
+// that has been "handled" by the TxnCoordSender. This error is produced by the
+// TxnCoordSender and is only produced for transactional requests.
+//
+// It contains the final form of the Transaction proto that should be used on
+// next attempts. After being produced by the TxnCoordSender, this error is
+// handled first by the kv.Txn, which uses the Transaction inside to update
+// its state, and then passed along to SQL in a pErr (through the
+// client.Sender() interface).
+message TransactionRetryWithProtoRefreshError {
+  // A user-readable message.
+  // Note: Deprecated in favor of `msg_redactable` below. Both fields will be
+  // populated in 23.1. Presence of `msg_redactable` will take precedence.
+  // TODO(davidh): Remove in 23.2
+  optional string msg = 1 [(gogoproto.nullable) = false];
+
+  // The ID of the transaction being retried. The client can compare this ID
+  // that of the new transaction (below) to check whether the transaction was
+  // aborted and will restart from the beginning with a new identity.
+  optional bytes prev_txn_id = 2 [
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.customname) = "PrevTxnID",
+    (gogoproto.nullable) = false];
+
+  // The epoch of the transaction being retried. The client can compare this
+  // epoch that of the new transaction (below) to check whether the transaction
+  // is being restarted from the beginning with all writes discarded.
+  optional int32 prev_txn_epoch = 5 [
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnEpoch",
+    (gogoproto.nullable) = false];
+
+  // The Transaction that should be used by next attempts. Depending on the
+  // original cause of this method and the isolation level of the transaction,
+  // this can be:
+  //
+  // - the same Transaction as before (same ID), but with an incremented epoch
+  // and read timestamp. The transaction must start again from the beginning,
+  // with all writes discarded. This case applies to isolation levels that do
+  // not use a per-statement read snapshot, and must therefore start from the
+  // beginning if the read snapshot must be adjusted.
+  //
+  // - the same Transaction as before (same ID) with the same epoch as before,
+  // but with an incremented read timestamp. The transaction can proceed without
+  // the loss of any of its writes, although clients may employ savepoints to
+  // selectively discard the writes from the read snapshot scope (i.e. the
+  // statement) being retried. This case applies to isolation levels that use a
+  // per-statement read snapshot, and can therefore retry select portions of the
+  // transaction if the read snapshot must be adjusted, without starting from
+  // the beginning.
+  //
+  // - a completely new Transaction (different ID). The transaction must start
+  // again from the beginning with all writes discarded and with a new identity.
+  // This case applies to all isolation levels. Transaction aborts are typically
+  // associated with locking deadlocks where the previous transaction's locks
+  // were discarded to break a deadlock between transactions and also with cases
+  // where the kv layer determines that it has lost information cannot process a
+  // certain transaction.
+  optional roachpb.Transaction next_transaction = 3 [(gogoproto.nullable) = false];
+
+  // A user-readable message containing redaction markers.
+  optional string msg_redactable = 4 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
+
+  // The conflicting transaction's TxnMeta. This field is bubbled up from a
+  // RefreshFailedError. This field is only set when a
+  // TransactionRetryWithProtoRefreshError is constructed in response to a
+  // RefreshFailedError which includes information about the conflicting
+  // transaction that caused the refresh to fail. In all other cases this field
+  // is unset
+  optional storage.enginepb.TxnMeta conflicting_txn = 6;
+
+  // The key that the transaction conflicted on. This is distinct from the
+  // conflicting_txn.key field, which is the anchor key of the conflicting
+  // transaction (used for transaction record placement), not the key where the
+  // actual conflict occurred. This field is bubbled up from a RefreshFailedError.
+  optional bytes conflict_key = 7 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+}
+
+// TxnAlreadyEncounteredErrorError indicates that an operation tried to use a
+// transaction that already received an error from a previous request. Once that
+// happens, kv.Txn rejects future requests.
+message TxnAlreadyEncounteredErrorError{
+  // prev_error is the message from the error that the txn encountered
+  // previously.
+  optional string prev_error = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
+}
+
+// An IntegerOverflowError indicates that an operation was aborted because
+// it would have caused an integer overflow.
+message IntegerOverflowError {
+  optional bytes key = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+  optional int64 current_value = 2 [(gogoproto.nullable) = false];
+  optional int64 increment_value = 3 [(gogoproto.nullable) = false];
+}
+
+// A BatchTimestampBeforeGCError indicates that a request's timestamp was
+// before the GC threshold.
+message BatchTimestampBeforeGCError {
+  optional util.hlc.Timestamp Timestamp = 1 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp Threshold = 2 [(gogoproto.nullable) = false];
+  // DataExcludedFromBackup is set to true if the request is targeting a range
+  // that has been marked as excluded from a backup via
+  // `ALTER TABLE ... SET (exclude_data_from_backup = true)`.
+  optional bool data_excluded_from_backup = 3 [(gogoproto.nullable) = false];
+  optional int64 range_id = 4 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "RangeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  optional bytes start_key = 5 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+  optional bytes end_key = 6 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+}
+
+// A MVCCHistoryMutationError indicates that MVCC history was unexpectedly
+// mutated.
+message MVCCHistoryMutationError {
+  optional roachpb.Span span = 1 [(gogoproto.nullable) = false];
+}
+
+// An IntentMissingError indicates that a QueryIntent request expected
+// an intent to be present at its specified key but the intent was
+// not there.
+message IntentMissingError {
+  // The non-matching intent that was found at that key, if any.
+  optional roachpb.Lock wrong_intent = 1;
+  // The key where the intent was expected.
+  optional bytes key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+}
+
+// A MergeInProgressError indicates that the request could not be completed
+// because the replica is being merged into its left-hand neighbor. The request
+// should be resubmitted after the merge completes.
+//
+// This error is handled by the Store and should not escape to higher levels.
+message MergeInProgressError {
+}
+
+// A RangeFeedRetryError indicates that a rangefeed was disconnected, often
+// because of a range lifecycle event, and can be retried.
+message RangeFeedRetryError {
+  // Reason specifies what caused the error.
+  // NB: reason names should be stable because they are
+  // exposed as rangefeed error counters.
+  // NB: *never* delete enum values; if retry reason needs to be retired,
+  // reserve reason value.
+  enum Reason {
+    // The replica was removed from its store.
+    REASON_REPLICA_REMOVED = 0;
+    // The range was split in two.
+    REASON_RANGE_SPLIT = 1;
+    // The range was merged into another.
+    REASON_RANGE_MERGED = 2;
+    // A Raft snapshot applied on the replica.
+    REASON_RAFT_SNAPSHOT = 3;
+    // A Raft command was missing a logical operation log.
+    REASON_LOGICAL_OPS_MISSING = 4;
+    // The consumer was processing events too slowly to keep up with live raft
+    // events.
+    REASON_SLOW_CONSUMER = 5;
+    // No leaseholder exists or could be created, so closed timestamps won't be emitted.
+    REASON_NO_LEASEHOLDER = 6;
+    // Replica decided that rangefeed is no longer used and closed it. This
+    // should not happen unless it was explicitly requested by client and in
+    // that case client is free not to retry.
+    REASON_RANGEFEED_CLOSED = 7;
+    // The range was manually split in two.
+    REASON_MANUAL_RANGE_SPLIT = 8;
+  }
+  optional Reason reason = 1 [(gogoproto.nullable) = false];
+}
+
+// A IndeterminateCommitError indicates that a transaction was encountered with
+// a STAGING status. In this state, it is unclear by observing the transaction
+// record alone whether the transaction should be committed or aborted. To make
+// this determination, the transaction recovery process must be initiated. This
+// process makes a ruling on the final state of the transaction based on the
+// outcome of its in-flight writes at the time of staging.
+message IndeterminateCommitError {
+  optional roachpb.Transaction staging_txn = 1 [(gogoproto.nullable) = false];
+}
+
+// An InvalidLeaseError indicates that the request could not be completed
+// because the replica does not have a valid lease. The request should be
+// resubmitted on the current replica after a lease is acquired or should be
+// redirected (using a NotLeaseHolderError) to the current leaseholder if one
+// already exists.
+//
+// This error is handled by the Store and should not escape to higher levels.
+message InvalidLeaseError {
+}
+
+// OptimisticEvalConflictsError indicates that the optimistic evaluation of a
+// BatchRequest failed when checking locks or latches after evaluation. This
+// is never sent over-the-wire, and is a proto only to fit the existing
+// plumbing that passes a roachpb.Error.
+message OptimisticEvalConflictsError {
+}
+
+// MinTimestampBoundUnsatisfiableError indicates that a bounded staleness read
+// could not be satisfied because the latest timestamp at which it could have
+// been evaluated (the resolved timestamp over its key span) was below the
+// read's minimum timestamp bound.
+message MinTimestampBoundUnsatisfiableError {
+  optional util.hlc.Timestamp min_timestamp_bound = 1 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp resolved_timestamp  = 2 [(gogoproto.nullable) = false];
+}
+
+// A RefreshFailedError indicates that a refresh or a range refresh failed because
+// of a recently written key or intent.
+message RefreshFailedError {
+  enum Reason {
+    REASON_COMMITTED_VALUE = 0;
+    REASON_INTENT = 1;
+  }
+  optional Reason reason = 1 [(gogoproto.nullable) = false];
+  optional bytes key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+
+  // The timestamp the key was last updated.
+  optional util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
+
+  // The conflicting transaction's TxnMeta, if available. This field is used
+  // when the refresh fails with REASON_INTENT and is bubbled up for
+  // observability purposes to track the conflicting transaction. This field is
+  // not set if the refresh fails because of REASON_COMMITTED_VALUE.
+  optional storage.enginepb.TxnMeta conflicting_txn = 4;
+}
+
+// TransactionRestart indicates how an error should be handled in a
+// transactional context.
+enum TransactionRestart {
+  // NONE (the default) is used for errors which have no effect on the
+  // transaction state. That is, a transactional operation which receives such
+  // an error is still PENDING and does not need to restart (at least not as a
+  // result of the error). Examples are a CPut whose condition wasn't met, or
+  // a spurious RPC error.
+  NONE = 0;
+
+  // BACKOFF is for errors that can retried by restarting the transaction
+  // after an exponential backoff.
+  // Note: Deprecated.
+  BACKOFF = 1;
+
+  // IMMEDIATE is for errors that can be retried by restarting the
+  // transaction immediately.
+  IMMEDIATE = 2;
+}
+
+// ErrPosition describes the position of an error in a Batch. A simple nullable
+// primitive field would break compatibility with proto3, where primitive fields
+// are no longer allowed to be nullable.
+message ErrPosition {
+  optional int32 index = 1 [(gogoproto.nullable) = false];
+}
+
+// Error is a generic representation including a string message
+// and information about retryability.
+message Error {
+  option (gogoproto.goproto_stringer) = false;
+
+  // An optional updated transaction. This is to be used by the client in case
+  // of retryable errors.
+  //
+  // Not to be accessed directly - use Error.GetTxn() and Error.SetTxn().
+  optional roachpb.Transaction unexposed_txn = 4;
+
+  // Node at which the error was generated (zero if does not apply).
+  optional int32 origin_node = 5 [(gogoproto.nullable) = false,
+                                  (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+
+  // encoded_error is the Go error that caused this Error.
+  optional errorspb.EncodedError encoded_error = 9 [(gogoproto.nullable) = false];
+
+  // The index, if given, contains the index of the request (in the batch)
+  // whose execution caused the error.
+  optional ErrPosition index = 7;
+
+  // now is the current time at the node sending the response,
+  // which can be used by the receiver to update its local HLC.
+  optional util.hlc.Timestamp now = 8 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+
+  reserved 1, 2, 3, 6 ;
+}
+
+
+// InsufficientSpaceError is an error due to insufficient space remaining.
+message InsufficientSpaceError {
+   // StoreID is the store that had insufficient space.
+   optional int64 store_id = 1 [(gogoproto.nullable) = false,
+   (gogoproto.customname) = "StoreID",
+   (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
+
+  // Op is the operaton that was unable to be performed.
+  optional string op = 2 [(gogoproto.nullable) = false];
+
+   // Available is remaining capacity.
+   optional int64 available = 3 [(gogoproto.nullable) = false];
+
+   // Capacity is total capacity.
+   optional int64 capacity = 4 [(gogoproto.nullable) = false];
+
+   // RequiredFraction is the required remaining capacity fraction.
+   optional double required = 5 [(gogoproto.nullable) = false];
+}
+
+
+// PebbleCorruptionError indicates that pebble thinks that there is a data
+// corruption.
+message PebbleCorruptionError {
+  optional int64 store_id = 1 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "StoreID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
+  optional string path = 2 [(gogoproto.nullable) = false];
+  optional bool is_remote = 3 [(gogoproto.nullable) = false];
+  optional string extra_msg = 4 [(gogoproto.nullable) = false];
+}
+
+// ExclusionViolationError indicates that a key was written to at a timestamp at
+// which a caller assumed it had an exclusive lock on the key.
+message ExclusionViolationError {
+  // ExclusionTimestamp is the timestamp at which the request expected its
+  // exclusive access started.
+  optional util.hlc.Timestamp expected_exclusion_since_timestamp = 1 [(gogoproto.nullable) = false];
+  // ViolationTimestamp is the timestamp at which the request found a write that
+  // violated its exclusive access.
+  optional util.hlc.Timestamp violation_timestamp = 2 [(gogoproto.nullable) = false];
+  // Key is the key on which exclusion was violated.
+  optional bytes key = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+}

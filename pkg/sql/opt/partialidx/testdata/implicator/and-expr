@@ -1,0 +1,249 @@
+# Tests for predicates with AND expressions.
+
+# Atom filters
+
+predtest vars=(a bool)
+a
+=>
+a AND a
+----
+true
+└── remaining filters: none
+
+predtest vars=(a bool)
+NOT a
+=>
+a AND a
+----
+false
+
+predtest vars=(a bool, b bool)
+a
+=>
+a AND b
+----
+false
+
+predtest vars=(a int, b int, c int)
+a = b
+=>
+a IS NOT NULL AND c > 0
+----
+false
+
+# Conjunction filters
+
+predtest vars=(a bool)
+a AND true
+=>
+true AND a
+----
+true
+└── remaining filters: none
+
+predtest vars=(a bool, b bool)
+a AND b
+=>
+a AND a
+----
+true
+└── remaining filters: b
+
+predtest vars=(a bool, b bool)
+a AND b
+=>
+a AND b
+----
+true
+└── remaining filters: none
+
+predtest vars=(a bool, b bool)
+a AND b
+=>
+b AND a
+----
+true
+└── remaining filters: none
+
+predtest vars=(a bool, b bool, c bool)
+a AND b AND c
+=>
+a AND b
+----
+true
+└── remaining filters: c
+
+predtest vars=(a bool, b bool, c bool)
+a AND b AND c
+=>
+a AND c
+----
+true
+└── remaining filters: b
+
+predtest vars=(a bool, b bool, c bool)
+a AND b AND c
+=>
+c AND a AND b
+----
+true
+└── remaining filters: none
+
+# Regression for #51177. The InlineConstVars normalization rule must be applied
+# to the predicate if it is applied to the filters.
+predtest vars=(a string, b string)
+a = 'foo' and a = b
+=>
+a = 'foo' and a = b
+----
+true
+└── remaining filters: none
+
+predtest vars=(a bool, b bool)
+a AND NOT b
+=>
+a AND b
+----
+false
+
+predtest vars=(a bool, b bool, c bool)
+a AND b
+=>
+a AND c
+----
+false
+
+predtest vars=(a int, b int, c int)
+c > 0 AND a = b
+=>
+a IS NOT NULL AND c > 0
+----
+true
+└── remaining filters: a = b
+
+# Range filters
+
+predtest vars=(a int)
+a > 10 AND a < 100
+=>
+a > 10 AND a < 100
+----
+true
+└── remaining filters: none
+
+predtest vars=(a int)
+a > 10 AND a < 100
+=>
+a < 100 AND a > 10
+----
+true
+└── remaining filters: none
+
+predtest vars=(a int)
+a > 20 AND a < 80
+=>
+a > 10 AND a < 100
+----
+true
+└── remaining filters: (a > 20) AND (a < 80)
+
+predtest vars=(a int, b bool)
+a > 10 AND b AND a < 100
+=>
+a > 10 AND a < 100
+----
+true
+└── remaining filters: b
+
+predtest vars=(a int, b bool)
+a > 20 AND b AND a < 80
+=>
+a > 10 AND a < 100
+----
+true
+└── remaining filters: ((a > 20) AND (a < 80)) AND b
+
+predtest vars=(a int)
+a > 10 AND a < 90
+=>
+a > 0 AND a < 100
+----
+true
+└── remaining filters: (a > 10) AND (a < 90)
+
+predtest vars=(a int)
+a > 10 AND a < 100
+=>
+a > 20 AND a < 80
+----
+false
+
+predtest vars=(a int, b bool)
+a > 10 AND b AND a < 100
+=>
+a > 20 AND a < 80
+----
+false
+
+predtest vars=(a int, b bool)
+a > 10 AND NOT b AND a < 100
+=>
+a > 10 AND a < 100 AND b
+----
+false
+
+# Disjunction Filters
+
+predtest vars=(a bool)
+a OR a
+=>
+a AND a
+----
+true
+└── remaining filters: none
+
+predtest vars=(a int)
+a > 15 OR a > 10
+=>
+a > 10 AND a > 5
+----
+true
+└── remaining filters: (a > 15) OR (a > 10)
+
+predtest vars=(a bool, b bool)
+a OR b
+=>
+a AND b
+----
+false
+
+predtest vars=(a bool, b bool)
+a OR b
+=>
+b AND a
+----
+false
+
+predtest vars=(a int, b int, c int)
+c > 0 OR a = b
+=>
+a IS NOT NULL AND c > 0
+----
+false
+
+# Combination conjunction and disjunction filters
+
+predtest vars=(a bool, b bool, c bool, d bool)
+a AND (c OR d) AND b
+=>
+a AND b
+----
+true
+└── remaining filters: c OR d
+
+predtest vars=(a bool, b bool, c bool, d bool)
+(a OR b) AND (c OR d)
+=>
+a AND c
+----
+false

@@ -1,0 +1,618 @@
+## Test opts.TargetBytes.
+
+# First, put some old data that we'll shadow.
+run ok
+with ts=1,0
+  put      k=a v=nevergoingtobeseen
+  put      k=e v=sameasabove
+  put      k=aa v=willbetombstoned
+del        k=aa ts=250,1
+----
+del: "aa": found key true
+>> at end:
+data: "a"/1.000000000,0 -> /BYTES/nevergoingtobeseen
+data: "aa"/250.000000000,1 -> /<empty>
+data: "aa"/1.000000000,0 -> /BYTES/willbetombstoned
+data: "e"/1.000000000,0 -> /BYTES/sameasabove
+
+run ok
+with ts=123,45
+  put      k=a v=abcdef
+  put      k=c v=ghijkllkjihg
+  put      k=e v=mnopqr
+  put      k=/row1/0 v=r1a
+  put      k=/row1/1 v=r1b
+  put      k=/row1/4 v=r1e # column family 2-3 omitted (i.e. if all NULLs)
+  put      k=/row2 v=r2a
+  put      k=/row3 v=r3a
+  put      k=/row3/1 v=r3b
+----
+>> at end:
+data: "a"/123.000000000,45 -> /BYTES/abcdef
+data: "a"/1.000000000,0 -> /BYTES/nevergoingtobeseen
+data: "aa"/250.000000000,1 -> /<empty>
+data: "aa"/1.000000000,0 -> /BYTES/willbetombstoned
+data: "c"/123.000000000,45 -> /BYTES/ghijkllkjihg
+data: "e"/123.000000000,45 -> /BYTES/mnopqr
+data: "e"/1.000000000,0 -> /BYTES/sameasabove
+data: /Table/1/1/"row1"/0/123.000000000,45 -> /BYTES/r1a
+data: /Table/1/1/"row1"/1/1/123.000000000,45 -> /BYTES/r1b
+data: /Table/1/1/"row1"/4/1/123.000000000,45 -> /BYTES/r1e
+data: /Table/1/1/"row2"/0/123.000000000,45 -> /BYTES/r2a
+data: /Table/1/1/"row3"/0/123.000000000,45 -> /BYTES/r3a
+data: /Table/1/1/"row3"/1/1/123.000000000,45 -> /BYTES/r3b
+
+# Scans without or with a large target size return all results.
+
+run ok
+with ts=300,0 k=a end=z
+  scan
+  scan reverse=true
+----
+scan: "a" -> /BYTES/abcdef @123.000000000,45
+scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
+scan: "e" -> /BYTES/mnopqr @123.000000000,45
+scan: "e" -> /BYTES/mnopqr @123.000000000,45
+scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
+scan: "a" -> /BYTES/abcdef @123.000000000,45
+
+run ok
+with ts=300,0 k=a end=z targetbytes=0
+  scan
+  scan reverse=true
+----
+scan: "a" -> /BYTES/abcdef @123.000000000,45
+scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
+scan: "e" -> /BYTES/mnopqr @123.000000000,45
+scan: "e" -> /BYTES/mnopqr @123.000000000,45
+scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
+scan: "a" -> /BYTES/abcdef @123.000000000,45
+
+run ok
+with ts=300,0 k=a end=z targetbytes=10000000
+  scan
+  scan reverse=true
+----
+scan: "a" -> /BYTES/abcdef @123.000000000,45
+scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
+scan: "e" -> /BYTES/mnopqr @123.000000000,45
+scan: 108 bytes (target 10000000)
+scan: "e" -> /BYTES/mnopqr @123.000000000,45
+scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
+scan: "a" -> /BYTES/abcdef @123.000000000,45
+scan: 108 bytes (target 10000000)
+
+# Scans with target size -1 return no results.
+run ok
+with ts=300,0 k=a end=z targetbytes=-1
+  scan
+  scan allowEmpty
+  scan reverse=true
+  scan reverse=true allowEmpty
+----
+scan: resume span ["a","z") RESUME_BYTE_LIMIT nextBytes=0
+scan: "a"-"z" -> <no data>
+scan: resume span ["a","z") RESUME_BYTE_LIMIT nextBytes=0
+scan: "a"-"z" -> <no data>
+scan: resume span ["a","z") RESUME_BYTE_LIMIT nextBytes=0
+scan: "a"-"z" -> <no data>
+scan: resume span ["a","z") RESUME_BYTE_LIMIT nextBytes=0
+scan: "a"-"z" -> <no data>
+
+run ok
+# Target size one byte returns one result (overshooting instead of returning
+# nothing), unless allowempty is enabled. Upping the target size
+# accordingly results in more rows. In all cases, we're seeing resume spans iff
+# the byte target had an effect.
+#
+# a@123,45 -> abcdef clocks in at 34 bytes as follows:
+#
+#    8 bytes size buf
+# + 14 key timestamp component
+# +  6 key bytes component
+# +  6 value bytes
+#
+# c@123,45 similarly accounts for 40 bytes.
+
+scan     k=a end=z ts=300,0 targetbytes=1
+scan     k=a end=z ts=300,0 targetbytes=1 allowEmpty
+----
+scan: "a" -> /BYTES/abcdef @123.000000000,45
+scan: resume span ["c","z") RESUME_BYTE_LIMIT nextBytes=40
+scan: 34 bytes (target 1)
+scan: resume span ["a","z") RESUME_BYTE_LIMIT nextBytes=34
+scan: 0 bytes (target 1)
+scan: "a"-"z" -> <no data>
+
+run ok
+scan     k=a end=z ts=300,0 targetbytes=34
+scan     k=a end=z ts=300,0 targetbytes=34 allowEmpty
+----
+scan: "a" -> /BYTES/abcdef @123.000000000,45
+scan: resume span ["c","z") RESUME_BYTE_LIMIT nextBytes=40
+scan: 34 bytes (target 34)
+scan: "a" -> /BYTES/abcdef @123.000000000,45
+scan: resume span ["c","z") RESUME_BYTE_LIMIT nextBytes=40
+scan: 34 bytes (target 34)
+
+run ok
+scan     k=a end=z ts=300,0 targetbytes=35
+scan     k=a end=z ts=300,0 targetbytes=35 allowEmpty
+----
+scan: "a" -> /BYTES/abcdef @123.000000000,45
+scan: resume span ["c","z") RESUME_BYTE_LIMIT nextBytes=40
+scan: 34 bytes (target 35)
+scan: "a" -> /BYTES/abcdef @123.000000000,45
+scan: resume span ["c","z") RESUME_BYTE_LIMIT nextBytes=40
+scan: 34 bytes (target 35)
+
+run ok
+scan     k=a end=z ts=300,0 targetbytes=74
+----
+scan: "a" -> /BYTES/abcdef @123.000000000,45
+scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
+scan: resume span ["e","z") RESUME_BYTE_LIMIT nextBytes=34
+scan: 74 bytes (target 74)
+
+run ok
+scan     k=a end=z ts=300,0 targetbytes=75
+----
+scan: "a" -> /BYTES/abcdef @123.000000000,45
+scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
+scan: resume span ["e","z") RESUME_BYTE_LIMIT nextBytes=34
+scan: 74 bytes (target 75)
+
+run ok
+scan     k=a end=z ts=300,0 targetbytes=108
+----
+scan: "a" -> /BYTES/abcdef @123.000000000,45
+scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
+scan: "e" -> /BYTES/mnopqr @123.000000000,45
+scan: 108 bytes (target 108)
+
+# Works just the same when not starting on an existing key.
+run ok
+scan     k=b end=z ts=300 targetbytes=1
+scan     k=b end=z ts=300 targetbytes=1 allowEmpty
+----
+scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
+scan: resume span ["e","z") RESUME_BYTE_LIMIT nextBytes=34
+scan: 40 bytes (target 1)
+scan: resume span ["c","z") RESUME_BYTE_LIMIT nextBytes=40
+scan: 0 bytes (target 1)
+scan: "b"-"z" -> <no data>
+
+run ok
+scan     k=b end=z ts=300,0 targetbytes=41
+scan     k=b end=z ts=300,0 targetbytes=41 allowEmpty
+----
+scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
+scan: resume span ["e","z") RESUME_BYTE_LIMIT nextBytes=34
+scan: 40 bytes (target 41)
+scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
+scan: resume span ["e","z") RESUME_BYTE_LIMIT nextBytes=34
+scan: 40 bytes (target 41)
+
+# Reverse scans.
+
+run ok
+scan     k=a end=z ts=300,0 targetbytes=1 reverse=true
+scan     k=a end=z ts=300,0 targetbytes=1 reverse=true allowEmpty
+----
+scan: "e" -> /BYTES/mnopqr @123.000000000,45
+scan: resume span ["a","c\x00") RESUME_BYTE_LIMIT nextBytes=40
+scan: 34 bytes (target 1)
+scan: resume span ["a","e\x00") RESUME_BYTE_LIMIT nextBytes=34
+scan: 0 bytes (target 1)
+scan: "a"-"z" -> <no data>
+
+run ok
+scan     k=a end=z ts=300,0 targetbytes=34 reverse=true
+scan     k=a end=z ts=300,0 targetbytes=34 reverse=true allowEmpty
+----
+scan: "e" -> /BYTES/mnopqr @123.000000000,45
+scan: resume span ["a","c\x00") RESUME_BYTE_LIMIT nextBytes=40
+scan: 34 bytes (target 34)
+scan: "e" -> /BYTES/mnopqr @123.000000000,45
+scan: resume span ["a","c\x00") RESUME_BYTE_LIMIT nextBytes=40
+scan: 34 bytes (target 34)
+
+run ok
+scan     k=a end=z ts=300,0 targetbytes=35 reverse=true
+scan     k=a end=z ts=300,0 targetbytes=35 reverse=true allowEmpty
+----
+scan: "e" -> /BYTES/mnopqr @123.000000000,45
+scan: resume span ["a","c\x00") RESUME_BYTE_LIMIT nextBytes=40
+scan: 34 bytes (target 35)
+scan: "e" -> /BYTES/mnopqr @123.000000000,45
+scan: resume span ["a","c\x00") RESUME_BYTE_LIMIT nextBytes=40
+scan: 34 bytes (target 35)
+
+run ok
+scan     k=a end=z ts=300,0 targetbytes=74 reverse=true
+----
+scan: "e" -> /BYTES/mnopqr @123.000000000,45
+scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
+scan: resume span ["a","a\x00") RESUME_BYTE_LIMIT nextBytes=34
+scan: 74 bytes (target 74)
+
+run ok
+scan     k=a end=z ts=300,0 targetbytes=75 reverse=true
+----
+scan: "e" -> /BYTES/mnopqr @123.000000000,45
+scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
+scan: resume span ["a","a\x00") RESUME_BYTE_LIMIT nextBytes=34
+scan: 74 bytes (target 75)
+
+run ok
+scan     k=a end=z ts=300,0 targetbytes=108 reverse=true
+----
+scan: "e" -> /BYTES/mnopqr @123.000000000,45
+scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
+scan: "a" -> /BYTES/abcdef @123.000000000,45
+scan: 108 bytes (target 108)
+
+run ok
+with k=a end=z ts=300,0 targetbytes=108 reverse=true
+  scan
+  scan allowempty=true
+----
+scan: "e" -> /BYTES/mnopqr @123.000000000,45
+scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
+scan: "a" -> /BYTES/abcdef @123.000000000,45
+scan: 108 bytes (target 108)
+scan: "e" -> /BYTES/mnopqr @123.000000000,45
+scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
+scan: "a" -> /BYTES/abcdef @123.000000000,45
+scan: 108 bytes (target 108)
+
+
+# Scans that return the tombstone (at aa@250,1). The kv pair at a has 34 bytes,
+# aa has 24 (just a key).
+
+run ok
+scan     k=aa end=z ts=300,0 targetbytes=1 tombstones=true
+scan     k=aa end=z ts=300,0 targetbytes=1 tombstones=true allowEmpty
+----
+scan: "aa" -> /<empty> @250.000000000,1
+scan: resume span ["c","z") RESUME_BYTE_LIMIT nextBytes=40
+scan: 24 bytes (target 1)
+scan: resume span ["aa","z") RESUME_BYTE_LIMIT nextBytes=24
+scan: 0 bytes (target 1)
+scan: "aa"-"z" -> <no data>
+
+run ok
+scan     k=a end=z ts=300,0 targetbytes=34 tombstones=true
+----
+scan: "a" -> /BYTES/abcdef @123.000000000,45
+scan: resume span ["aa","z") RESUME_BYTE_LIMIT nextBytes=24
+scan: 34 bytes (target 34)
+
+run ok
+scan     k=a end=z ts=300,0 targetbytes=35 tombstones=true
+----
+scan: "a" -> /BYTES/abcdef @123.000000000,45
+scan: resume span ["aa","z") RESUME_BYTE_LIMIT nextBytes=24
+scan: 34 bytes (target 35)
+
+run ok
+scan     k=a end=z ts=300,0 targetbytes=58 tombstones=true
+----
+scan: "a" -> /BYTES/abcdef @123.000000000,45
+scan: "aa" -> /<empty> @250.000000000,1
+scan: resume span ["c","z") RESUME_BYTE_LIMIT nextBytes=40
+scan: 58 bytes (target 58)
+
+run ok
+scan     k=a end=z ts=300,0 targetbytes=59 tombstones=true
+----
+scan: "a" -> /BYTES/abcdef @123.000000000,45
+scan: "aa" -> /<empty> @250.000000000,1
+scan: resume span ["c","z") RESUME_BYTE_LIMIT nextBytes=40
+scan: 58 bytes (target 59)
+
+run ok
+scan     k=a end=z ts=300,0 targetbytes=98 tombstones=true
+----
+scan: "a" -> /BYTES/abcdef @123.000000000,45
+scan: "aa" -> /<empty> @250.000000000,1
+scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
+scan: resume span ["e","z") RESUME_BYTE_LIMIT nextBytes=34
+scan: 98 bytes (target 98)
+
+run ok
+with k=a end=z ts=300,0 targetbytes=98 tombstones=true
+  scan
+----
+scan: "a" -> /BYTES/abcdef @123.000000000,45
+scan: "aa" -> /<empty> @250.000000000,1
+scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
+scan: resume span ["e","z") RESUME_BYTE_LIMIT nextBytes=34
+scan: 98 bytes (target 98)
+
+
+# ... and similarly in reverse.
+
+run ok
+scan     k=a end=b ts=300,0 targetbytes=1 tombstones=true reverse=true
+scan     k=a end=b ts=300,0 targetbytes=1 tombstones=true reverse=true allowEmpty
+----
+scan: "aa" -> /<empty> @250.000000000,1
+scan: resume span ["a","a\x00") RESUME_BYTE_LIMIT nextBytes=34
+scan: 24 bytes (target 1)
+scan: resume span ["a","aa\x00") RESUME_BYTE_LIMIT nextBytes=24
+scan: 0 bytes (target 1)
+scan: "a"-"b" -> <no data>
+
+run ok
+scan    k=a end=d ts=300,0 targetbytes=40 reverse=true tombstones=true
+----
+scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
+scan: resume span ["a","aa\x00") RESUME_BYTE_LIMIT nextBytes=24
+scan: 40 bytes (target 40)
+
+run ok
+scan    k=a end=d ts=300,0 targetbytes=41 reverse=true tombstones=true
+----
+scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
+scan: resume span ["a","aa\x00") RESUME_BYTE_LIMIT nextBytes=24
+scan: 40 bytes (target 41)
+
+run ok
+scan    k=a end=d ts=300,0 targetbytes=64 reverse=true tombstones=true
+----
+scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
+scan: "aa" -> /<empty> @250.000000000,1
+scan: resume span ["a","a\x00") RESUME_BYTE_LIMIT nextBytes=34
+scan: 64 bytes (target 64)
+
+run ok
+scan    k=a end=d ts=300,0 targetbytes=65 reverse=true tombstones=true
+----
+scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
+scan: "aa" -> /<empty> @250.000000000,1
+scan: resume span ["a","a\x00") RESUME_BYTE_LIMIT nextBytes=34
+scan: 64 bytes (target 65)
+
+run ok
+scan    k=a end=d ts=300,0 targetbytes=98 reverse=true tombstones=true
+----
+scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
+scan: "aa" -> /<empty> @250.000000000,1
+scan: "a" -> /BYTES/abcdef @123.000000000,45
+scan: 98 bytes (target 98)
+
+# Whole SQL rows.
+run ok
+with ts=300,0
+  scan k=/ end=/z targetbytes=1
+  scan k=/ end=/z targetbytes=1 wholeRows
+  scan k=/ end=/z targetbytes=1 wholeRows allowEmpty
+----
+scan: /Table/1/1/"row1"/0 -> /BYTES/r1a @123.000000000,45
+scan: resume span [/Table/1/1/"row1"/1/1,/Table/1/1/"z"/0) RESUME_BYTE_LIMIT nextBytes=41
+scan: 40 bytes (target 1)
+scan: /Table/1/1/"row1"/0 -> /BYTES/r1a @123.000000000,45
+scan: /Table/1/1/"row1"/1/1 -> /BYTES/r1b @123.000000000,45
+scan: /Table/1/1/"row1"/4/1 -> /BYTES/r1e @123.000000000,45
+scan: resume span [/Table/1/1/"row2"/0,/Table/1/1/"z"/0) RESUME_BYTE_LIMIT nextBytes=40
+scan: 122 bytes (target 1)
+scan: resume span [/Table/1/1/"row1"/0,/Table/1/1/"z"/0) RESUME_BYTE_LIMIT nextBytes=40
+scan: 0 bytes (target 1)
+scan: /Table/1/1/""/0-/Table/1/1/"z"/0 -> <no data>
+
+run ok
+with ts=300,0 allowEmpty wholeRows
+  scan k=/ end=/z targetbytes=121
+  scan k=/ end=/z targetbytes=122
+  scan k=/ end=/z targetbytes=123
+----
+scan: resume span [/Table/1/1/"row1"/0,/Table/1/1/"z"/0) RESUME_BYTE_LIMIT nextBytes=41
+scan: 0 bytes (target 121)
+scan: /Table/1/1/""/0-/Table/1/1/"z"/0 -> <no data>
+scan: /Table/1/1/"row1"/0 -> /BYTES/r1a @123.000000000,45
+scan: /Table/1/1/"row1"/1/1 -> /BYTES/r1b @123.000000000,45
+scan: /Table/1/1/"row1"/4/1 -> /BYTES/r1e @123.000000000,45
+scan: resume span [/Table/1/1/"row2"/0,/Table/1/1/"z"/0) RESUME_BYTE_LIMIT nextBytes=40
+scan: 122 bytes (target 122)
+scan: /Table/1/1/"row1"/0 -> /BYTES/r1a @123.000000000,45
+scan: /Table/1/1/"row1"/1/1 -> /BYTES/r1b @123.000000000,45
+scan: /Table/1/1/"row1"/4/1 -> /BYTES/r1e @123.000000000,45
+scan: resume span [/Table/1/1/"row2"/0,/Table/1/1/"z"/0) RESUME_BYTE_LIMIT nextBytes=40
+scan: 122 bytes (target 123)
+
+run ok
+with ts=300,0 allowEmpty wholeRows
+  scan k=/ end=/z targetbytes=161
+  scan k=/ end=/z targetbytes=162
+  scan k=/ end=/z targetbytes=163
+----
+scan: /Table/1/1/"row1"/0 -> /BYTES/r1a @123.000000000,45
+scan: /Table/1/1/"row1"/1/1 -> /BYTES/r1b @123.000000000,45
+scan: /Table/1/1/"row1"/4/1 -> /BYTES/r1e @123.000000000,45
+scan: resume span [/Table/1/1/"row2"/0,/Table/1/1/"z"/0) RESUME_BYTE_LIMIT nextBytes=40
+scan: 122 bytes (target 161)
+scan: /Table/1/1/"row1"/0 -> /BYTES/r1a @123.000000000,45
+scan: /Table/1/1/"row1"/1/1 -> /BYTES/r1b @123.000000000,45
+scan: /Table/1/1/"row1"/4/1 -> /BYTES/r1e @123.000000000,45
+scan: /Table/1/1/"row2"/0 -> /BYTES/r2a @123.000000000,45
+scan: resume span [/Table/1/1/"row3"/0,/Table/1/1/"z"/0) RESUME_BYTE_LIMIT nextBytes=40
+scan: 162 bytes (target 162)
+scan: /Table/1/1/"row1"/0 -> /BYTES/r1a @123.000000000,45
+scan: /Table/1/1/"row1"/1/1 -> /BYTES/r1b @123.000000000,45
+scan: /Table/1/1/"row1"/4/1 -> /BYTES/r1e @123.000000000,45
+scan: /Table/1/1/"row2"/0 -> /BYTES/r2a @123.000000000,45
+scan: resume span [/Table/1/1/"row3"/0,/Table/1/1/"z"/0) RESUME_BYTE_LIMIT nextBytes=40
+scan: 162 bytes (target 163)
+
+run ok
+with ts=300,0 allowEmpty wholeRows
+  scan k=/ end=/z targetbytes=242
+  scan k=/ end=/z targetbytes=243
+----
+scan: /Table/1/1/"row1"/0 -> /BYTES/r1a @123.000000000,45
+scan: /Table/1/1/"row1"/1/1 -> /BYTES/r1b @123.000000000,45
+scan: /Table/1/1/"row1"/4/1 -> /BYTES/r1e @123.000000000,45
+scan: /Table/1/1/"row2"/0 -> /BYTES/r2a @123.000000000,45
+scan: resume span [/Table/1/1/"row3"/0,/Table/1/1/"z"/0) RESUME_BYTE_LIMIT nextBytes=41
+scan: 162 bytes (target 242)
+scan: /Table/1/1/"row1"/0 -> /BYTES/r1a @123.000000000,45
+scan: /Table/1/1/"row1"/1/1 -> /BYTES/r1b @123.000000000,45
+scan: /Table/1/1/"row1"/4/1 -> /BYTES/r1e @123.000000000,45
+scan: /Table/1/1/"row2"/0 -> /BYTES/r2a @123.000000000,45
+scan: /Table/1/1/"row3"/0 -> /BYTES/r3a @123.000000000,45
+scan: /Table/1/1/"row3"/1/1 -> /BYTES/r3b @123.000000000,45
+scan: 243 bytes (target 243)
+
+# Whole SQL rows in reverse.
+run ok
+with ts=300,0
+  scan k=/ end=/z targetbytes=1 reverse
+  scan k=/ end=/z targetbytes=1 reverse wholeRows
+  scan k=/ end=/z targetbytes=1 reverse wholeRows allowEmpty
+----
+scan: /Table/1/1/"row3"/1/1 -> /BYTES/r3b @123.000000000,45
+scan: resume span [/Table/1/1/""/0,/Table/1/1/"row3"/0/NULL) RESUME_BYTE_LIMIT nextBytes=40
+scan: 41 bytes (target 1)
+scan: /Table/1/1/"row3"/1/1 -> /BYTES/r3b @123.000000000,45
+scan: /Table/1/1/"row3"/0 -> /BYTES/r3a @123.000000000,45
+scan: resume span [/Table/1/1/""/0,/Table/1/1/"row2"/0/NULL) RESUME_BYTE_LIMIT nextBytes=40
+scan: 81 bytes (target 1)
+scan: resume span [/Table/1/1/""/0,/Table/1/1/"row3"/1/1/NULL) RESUME_BYTE_LIMIT nextBytes=41
+scan: 0 bytes (target 1)
+scan: /Table/1/1/""/0-/Table/1/1/"z"/0 -> <no data>
+
+run ok
+with ts=300,0 reverse allowEmpty wholeRows
+  scan k=/ end=/z targetbytes=80
+  scan k=/ end=/z targetbytes=81
+  scan k=/ end=/z targetbytes=82
+----
+scan: resume span [/Table/1/1/""/0,/Table/1/1/"row3"/1/1/NULL) RESUME_BYTE_LIMIT nextBytes=40
+scan: 0 bytes (target 80)
+scan: /Table/1/1/""/0-/Table/1/1/"z"/0 -> <no data>
+scan: /Table/1/1/"row3"/1/1 -> /BYTES/r3b @123.000000000,45
+scan: /Table/1/1/"row3"/0 -> /BYTES/r3a @123.000000000,45
+scan: resume span [/Table/1/1/""/0,/Table/1/1/"row2"/0/NULL) RESUME_BYTE_LIMIT nextBytes=40
+scan: 81 bytes (target 81)
+scan: /Table/1/1/"row3"/1/1 -> /BYTES/r3b @123.000000000,45
+scan: /Table/1/1/"row3"/0 -> /BYTES/r3a @123.000000000,45
+scan: resume span [/Table/1/1/""/0,/Table/1/1/"row2"/0/NULL) RESUME_BYTE_LIMIT nextBytes=40
+scan: 81 bytes (target 82)
+
+run ok
+with ts=300,0 reverse allowEmpty wholeRows
+  scan k=/ end=/z targetbytes=120
+  scan k=/ end=/z targetbytes=121
+  scan k=/ end=/z targetbytes=122
+----
+scan: /Table/1/1/"row3"/1/1 -> /BYTES/r3b @123.000000000,45
+scan: /Table/1/1/"row3"/0 -> /BYTES/r3a @123.000000000,45
+scan: resume span [/Table/1/1/""/0,/Table/1/1/"row2"/0/NULL) RESUME_BYTE_LIMIT nextBytes=40
+scan: 81 bytes (target 120)
+scan: /Table/1/1/"row3"/1/1 -> /BYTES/r3b @123.000000000,45
+scan: /Table/1/1/"row3"/0 -> /BYTES/r3a @123.000000000,45
+scan: /Table/1/1/"row2"/0 -> /BYTES/r2a @123.000000000,45
+scan: resume span [/Table/1/1/""/0,/Table/1/1/"row1"/4/1/NULL) RESUME_BYTE_LIMIT nextBytes=41
+scan: 121 bytes (target 121)
+scan: /Table/1/1/"row3"/1/1 -> /BYTES/r3b @123.000000000,45
+scan: /Table/1/1/"row3"/0 -> /BYTES/r3a @123.000000000,45
+scan: /Table/1/1/"row2"/0 -> /BYTES/r2a @123.000000000,45
+scan: resume span [/Table/1/1/""/0,/Table/1/1/"row1"/4/1/NULL) RESUME_BYTE_LIMIT nextBytes=41
+scan: 121 bytes (target 122)
+
+run ok
+with ts=300,0 reverse allowEmpty wholeRows
+  scan k=/ end=/z targetbytes=242
+  scan k=/ end=/z targetbytes=243
+----
+scan: /Table/1/1/"row3"/1/1 -> /BYTES/r3b @123.000000000,45
+scan: /Table/1/1/"row3"/0 -> /BYTES/r3a @123.000000000,45
+scan: /Table/1/1/"row2"/0 -> /BYTES/r2a @123.000000000,45
+scan: resume span [/Table/1/1/""/0,/Table/1/1/"row1"/4/1/NULL) RESUME_BYTE_LIMIT nextBytes=40
+scan: 121 bytes (target 242)
+scan: /Table/1/1/"row3"/1/1 -> /BYTES/r3b @123.000000000,45
+scan: /Table/1/1/"row3"/0 -> /BYTES/r3a @123.000000000,45
+scan: /Table/1/1/"row2"/0 -> /BYTES/r2a @123.000000000,45
+scan: /Table/1/1/"row1"/4/1 -> /BYTES/r1e @123.000000000,45
+scan: /Table/1/1/"row1"/1/1 -> /BYTES/r1b @123.000000000,45
+scan: /Table/1/1/"row1"/0 -> /BYTES/r1a @123.000000000,45
+scan: 243 bytes (target 243)
+
+# WholeRows on non-SQL row data.
+run ok
+with ts=300,0
+  scan k=a end=/z targetbytes=110 wholeRows
+----
+scan: "a" -> /BYTES/abcdef @123.000000000,45
+scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
+scan: "e" -> /BYTES/mnopqr @123.000000000,45
+scan: resume span [/Table/1/1/"row1"/0,/Table/1/1/"z"/0) RESUME_BYTE_LIMIT nextBytes=40
+scan: 108 bytes (target 110)
+
+# Regression test for a bug simiar to #46652: Test appropriate termination when
+# the TargetBytes-th kv pair is in the intent history.
+
+run ok
+with t=A ts=11,0 targetbytes=32
+  txn_begin
+  txn_step  seq=10
+  put       k=k  v=a
+  put       k=l  v=a
+  put       k=m  v=a
+  put       k=n  v=a
+  txn_step  seq=20
+  put       k=k  v=b
+  put       k=l  v=b
+  put       k=m  v=b
+  put       k=n  v=b
+  txn_step  seq=30
+  put       k=k  v=c
+  put       k=l  v=c
+  put       k=m  v=c
+  put       k=n  v=c
+  txn_step  seq=20
+  scan      k=k end=o
+  scan      k=k end=o reverse=true
+----
+put: lock acquisition = {span=k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {span=l id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {span=m id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {span=n id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {span=k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {span=l id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {span=m id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {span=n id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {span=k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {span=l id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {span=m id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {span=n id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30 durability=Replicated strength=Intent ignored=[]}
+scan: "k" -> /BYTES/b @11.000000000,0
+scan: resume span ["l","o") RESUME_BYTE_LIMIT nextBytes=25
+scan: 25 bytes (target 32)
+scan: "n" -> /BYTES/b @11.000000000,0
+scan: resume span ["k","m\x00") RESUME_BYTE_LIMIT nextBytes=25
+scan: 25 bytes (target 32)
+>> at end:
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=11.000000000,0 gul=0,0
+data: "a"/123.000000000,45 -> /BYTES/abcdef
+data: "a"/1.000000000,0 -> /BYTES/nevergoingtobeseen
+data: "aa"/250.000000000,1 -> /<empty>
+data: "aa"/1.000000000,0 -> /BYTES/willbetombstoned
+data: "c"/123.000000000,45 -> /BYTES/ghijkllkjihg
+data: "e"/123.000000000,45 -> /BYTES/mnopqr
+data: "e"/1.000000000,0 -> /BYTES/sameasabove
+meta: "k"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k"/11.000000000,0 -> /BYTES/c
+meta: "l"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "l"/11.000000000,0 -> /BYTES/c
+meta: "m"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "m"/11.000000000,0 -> /BYTES/c
+meta: "n"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "n"/11.000000000,0 -> /BYTES/c
+data: /Table/1/1/"row1"/0/123.000000000,45 -> /BYTES/r1a
+data: /Table/1/1/"row1"/1/1/123.000000000,45 -> /BYTES/r1b
+data: /Table/1/1/"row1"/4/1/123.000000000,45 -> /BYTES/r1e
+data: /Table/1/1/"row2"/0/123.000000000,45 -> /BYTES/r2a
+data: /Table/1/1/"row3"/0/123.000000000,45 -> /BYTES/r3a
+data: /Table/1/1/"row3"/1/1/123.000000000,45 -> /BYTES/r3b

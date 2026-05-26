@@ -1,0 +1,299 @@
+<form version="1.1" theme="dark">
+  <label>CockroachDB TTL</label>
+  <fieldset submitButton="false" autoRun="false">
+    <input type="time" token="Time_range">
+      <label>Time Range</label>
+      <default>
+        <earliest>-10m@m</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="text" token="index_name" searchWhenChanged="true">
+      <label>Splunk Index</label>
+      <default>metrics_idx</default>
+    </input>
+    <input type="dropdown" token="cluster_id" searchWhenChanged="true">
+      <label>Cluster ID</label>
+      <fieldForLabel>cluster_id</fieldForLabel>
+      <fieldForValue>cluster_id</fieldForValue>
+      <search>
+        <query>|mstats count(*) where index=$index_name$  earliest=$Time_range.earliest$  by cluster_id  | table cluster_id</query>
+        <earliest>-1m@m</earliest>
+        <latest>now</latest>
+      </search>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <title>Processing Rate</title>
+      <chart>
+        <search>
+          <query>| mstats rate_sum(jobs_row_level_ttl_rows_selected) as rows_selected
+rate_sum(jobs_row_level_ttl_rows_deleted) as rows_deleted 
+where index=$index_name$ span=10s</query>
+          <earliest>$Time_range.earliest$</earliest>
+          <latest>$Time_range.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+          <refresh>10s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">rows per second</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">auto</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Estimated Rows</title>
+      <chart>
+        <search>
+          <query>| mstats rate_sum(jobs_row_level_ttl_total_rows) as total_rows
+rate_sum(jobs_row_level_ttl_total_expired_rows) as expired_rows
+where index=$index_name$ span=10s</query>
+          <earliest>$Time_range.earliest$</earliest>
+          <latest>$Time_range.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+          <refresh>10s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">row count</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">auto</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Job Latency</title>
+      <chart>
+        <title>Latency of scanning and deleting within the job.</title>
+        <search>
+          <query>| mstats rate_sum(jobs_row_level_ttl_select_duration_bucket) as x 
+              where index=$index_name$ AND cluster_id=$cluster_id$ 
+              by _timeseries, le span=10s
+            | stats sum(x) as x by _time, le,
+            | `histperc(0.99, x, le, "_time")`
+            | eval scan_lateny_p99=histperc
+            | union [
+              | mstats rate_sum(jobs_row_level_ttl_delete_duration_bucket) as x 
+                where index=$index_name$ AND cluster_id=$cluster_id$ 
+                by _timeseries, le span=10s
+              | stats sum(x) as x by _time, le,
+              | `histperc(0.99, x, le, "_time")`
+              | eval delete_latency_p99=histperc
+            ]
+
+            | union [
+              | mstats rate_sum(jobs_row_level_ttl_select_duration_bucket) as x 
+                where index=$index_name$ AND cluster_id=$cluster_id$ 
+                by _timeseries, le span=10s
+              | stats sum(x) as x by _time, le,
+              | `histperc(0.9, x, le, "_time")`
+              | eval scan_lateny_p90=histperc
+            ]
+            | union [
+              | mstats rate_sum(jobs_row_level_ttl_delete_duration_bucket) as x 
+                where index=$index_name$ AND cluster_id=$cluster_id$ 
+                by _timeseries, le span=10s
+              | stats sum(x) as x by _time, le,
+              | `histperc(0.9, x, le, "_time")`
+              | eval delete_latency_p90=histperc
+            ]
+
+            | union [
+              | mstats rate_sum(jobs_row_level_ttl_select_duration_bucket) as x 
+                where index=$index_name$ AND cluster_id=$cluster_id$ 
+                by _timeseries, le span=10s
+              | stats sum(x) as x by _time, le,
+              | `histperc(0.75, x, le, "_time")`
+              | eval scan_lateny_p75=histperc
+            ]
+            | union [
+              | mstats rate_sum(jobs_row_level_ttl_delete_duration_bucket) as x 
+                where index=$index_name$ AND cluster_id=$cluster_id$ 
+                by _timeseries, le span=10s
+              | stats sum(x) as x by _time, le,
+              | `histperc(0.75, x, le, "_time")`
+              | eval delete_latency_p75=histperc
+            ]
+
+            | union [
+              | mstats rate_sum(jobs_row_level_ttl_select_duration_bucket) as x 
+                where index=$index_name$ AND cluster_id=$cluster_id$ 
+                by _timeseries, le span=10s
+              | stats sum(x) as x by _time, le,
+              | `histperc(0.5, x, le, "_time")`
+              | eval scan_lateny_p50=histperc
+            ]
+            | union [
+              | mstats rate_sum(jobs_row_level_ttl_delete_duration_bucket) as x 
+                where index=$index_name$ AND cluster_id=$cluster_id$ 
+                by _timeseries, le span=10s
+              | stats sum(x) as x by _time, le,
+              | `histperc(0.5, x, le, "_time")`
+              | eval delete_latency_p50=histperc
+            ]
+
+            | timechart span=10s 
+              latest(scan_latency_p99) as scan_latency_p99, 
+              latest(delete_latency_p99) as delete_latency_p99,
+              latest(scan_latency_p90) as scan_latency_p90, 
+              latest(delete_latency_p90) as delete_latency_p90, 
+              latest(scan_latency_p75) as scan_latency_p75, 
+              latest(delete_latency_p75) as delete_latency_p75, 
+              latest(scan_latency_p50) as scan_latency_p50, 
+              latest(delete_latency_p50) as delete_latency_p50</query>
+          <earliest>$Time_range.earliest$</earliest>
+          <latest>$Time_range.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+          <refresh>10s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">latency (nanos)</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">auto</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Spans in Progress</title>
+      <chart>
+        <title>Number of active spans being processed by TTL.</title>
+        <search>
+          <query>| mstats rate_sum(jobs_row_level_ttl_num_active_spans) as active_spans
+  where index=$index_name$ span=10s</query>
+          <earliest>$Time_range.earliest$</earliest>
+          <latest>$Time_range.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+          <refresh>10s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">span count</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">auto</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+      </chart>
+    </panel>
+  </row>
+</form>

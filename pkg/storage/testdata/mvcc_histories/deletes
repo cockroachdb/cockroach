@@ -1,0 +1,243 @@
+## A simple txn that deletes.
+## The delete tombstone is placed alongside the previous value, at the newer timestamp.
+
+run stats ok
+with t=A
+  txn_begin  ts=44
+  del   k=a resolve
+  txn_remove
+----
+>> del k=a resolve t=A
+del: "a": found key false
+del: lock acquisition = {span=a id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=44.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
+resolve_intent: "a" -> resolved key = true
+stats: key_count=+1 key_bytes=+14 val_count=+1 gc_bytes_age=+784
+>> at end:
+data: "a"/44.000000000,0 -> /<empty>
+stats: key_count=1 key_bytes=14 val_count=1 gc_bytes_age=784
+
+# Show the value disappears from gets.
+
+run ok
+with t=A
+  txn_begin ts=45
+  get k=a
+  txn_remove
+----
+get: "a" -> <no data>
+>> at end:
+
+# Show the tombstone.
+
+run ok
+with t=A
+  txn_begin ts=45
+  get k=a tombstones
+  txn_remove
+----
+get: "a" -> /<empty> @44.000000000,0
+>> at end:
+
+## Check delete with returnKey option.
+
+# Put a value.
+
+run ok
+with ts=46  v=abc
+  put  k=a
+----
+>> at end:
+data: "a"/46.000000000,0 -> /BYTES/abc
+data: "a"/44.000000000,0 -> /<empty>
+
+# Delete the key and check that the correct key was found.
+
+run ok
+del k=a ts=47
+----
+del: "a": found key true
+>> at end:
+data: "a"/47.000000000,0 -> /<empty>
+data: "a"/46.000000000,0 -> /BYTES/abc
+data: "a"/44.000000000,0 -> /<empty>
+
+# Try deleting the same key again and check that no key was found this time.
+
+run ok
+del k=a ts=48
+----
+del: "a": found key false
+>> at end:
+data: "a"/48.000000000,0 -> /<empty>
+data: "a"/47.000000000,0 -> /<empty>
+data: "a"/46.000000000,0 -> /BYTES/abc
+data: "a"/44.000000000,0 -> /<empty>
+
+# Try deleting a key that never existed and ensure that the value is still
+# written.
+
+run ok
+del k=b ts=49
+----
+del: "b": found key false
+>> at end:
+data: "a"/48.000000000,0 -> /<empty>
+data: "a"/47.000000000,0 -> /<empty>
+data: "a"/46.000000000,0 -> /BYTES/abc
+data: "a"/44.000000000,0 -> /<empty>
+data: "b"/49.000000000,0 -> /<empty>
+
+
+# Try deleting historical versions using a txn with an old read timestamp, and
+# ensure "found key" is reported correctly for various timestamps along with the
+# WriteTooOldError (which may be deferred).
+run error
+with t=A
+  txn_begin ts=43
+  txn_advance ts=50
+  del k=a
+----
+del: "a": found key false
+>> at end:
+txn: "A" meta={id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=43.000000000,0 gul=0,0
+data: "a"/48.000000000,0 -> /<empty>
+data: "a"/47.000000000,0 -> /<empty>
+data: "a"/46.000000000,0 -> /BYTES/abc
+data: "a"/44.000000000,0 -> /<empty>
+data: "b"/49.000000000,0 -> /<empty>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 43.000000000,0 too old; must write at or above 50.000000000,0
+
+run ok
+with t=A
+  resolve_intent k=a status=ABORTED
+  txn_remove
+----
+resolve_intent: "a" -> resolved key = false
+>> at end:
+data: "a"/48.000000000,0 -> /<empty>
+data: "a"/47.000000000,0 -> /<empty>
+data: "a"/46.000000000,0 -> /BYTES/abc
+data: "a"/44.000000000,0 -> /<empty>
+data: "b"/49.000000000,0 -> /<empty>
+
+run error
+with t=A
+  txn_begin ts=44
+  txn_advance ts=50
+  del k=a
+----
+del: "a": found key false
+>> at end:
+txn: "A" meta={id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=44.000000000,0 gul=0,0
+data: "a"/48.000000000,0 -> /<empty>
+data: "a"/47.000000000,0 -> /<empty>
+data: "a"/46.000000000,0 -> /BYTES/abc
+data: "a"/44.000000000,0 -> /<empty>
+data: "b"/49.000000000,0 -> /<empty>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 44.000000000,0 too old; must write at or above 50.000000000,0
+
+run ok
+with t=A
+  resolve_intent k=a status=ABORTED
+  txn_remove
+----
+resolve_intent: "a" -> resolved key = false
+>> at end:
+data: "a"/48.000000000,0 -> /<empty>
+data: "a"/47.000000000,0 -> /<empty>
+data: "a"/46.000000000,0 -> /BYTES/abc
+data: "a"/44.000000000,0 -> /<empty>
+data: "b"/49.000000000,0 -> /<empty>
+
+run error
+with t=A
+  txn_begin ts=46
+  txn_advance ts=50
+  del k=a
+----
+del: "a": found key false
+>> at end:
+txn: "A" meta={id=00000006 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=46.000000000,0 gul=0,0
+data: "a"/48.000000000,0 -> /<empty>
+data: "a"/47.000000000,0 -> /<empty>
+data: "a"/46.000000000,0 -> /BYTES/abc
+data: "a"/44.000000000,0 -> /<empty>
+data: "b"/49.000000000,0 -> /<empty>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 46.000000000,0 too old; must write at or above 50.000000000,0
+
+run ok
+with t=A
+  resolve_intent k=a status=ABORTED
+  txn_remove
+----
+resolve_intent: "a" -> resolved key = false
+>> at end:
+data: "a"/48.000000000,0 -> /<empty>
+data: "a"/47.000000000,0 -> /<empty>
+data: "a"/46.000000000,0 -> /BYTES/abc
+data: "a"/44.000000000,0 -> /<empty>
+data: "b"/49.000000000,0 -> /<empty>
+
+run error
+with t=A
+  txn_begin ts=47
+  txn_advance ts=50
+  del k=a
+----
+del: "a": found key false
+>> at end:
+txn: "A" meta={id=00000007 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=47.000000000,0 gul=0,0
+data: "a"/48.000000000,0 -> /<empty>
+data: "a"/47.000000000,0 -> /<empty>
+data: "a"/46.000000000,0 -> /BYTES/abc
+data: "a"/44.000000000,0 -> /<empty>
+data: "b"/49.000000000,0 -> /<empty>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 47.000000000,0 too old; must write at or above 50.000000000,0
+
+run ok
+with t=A
+  resolve_intent k=a status=ABORTED
+  txn_remove
+----
+resolve_intent: "a" -> resolved key = false
+>> at end:
+data: "a"/48.000000000,0 -> /<empty>
+data: "a"/47.000000000,0 -> /<empty>
+data: "a"/46.000000000,0 -> /BYTES/abc
+data: "a"/44.000000000,0 -> /<empty>
+data: "b"/49.000000000,0 -> /<empty>
+
+run ok
+with t=A
+  txn_begin ts=49
+  txn_advance ts=50
+  del k=a
+----
+del: "a": found key false
+del: lock acquisition = {span=a id=00000008 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
+>> at end:
+txn: "A" meta={id=00000008 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=49.000000000,0 gul=0,0
+meta: "a"/0,0 -> txn={id=00000008 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} ts=50.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/50.000000000,0 -> /<empty>
+data: "a"/48.000000000,0 -> /<empty>
+data: "a"/47.000000000,0 -> /<empty>
+data: "a"/46.000000000,0 -> /BYTES/abc
+data: "a"/44.000000000,0 -> /<empty>
+data: "b"/49.000000000,0 -> /<empty>
+
+# Delete an inline value, both missing and existing.
+run ok
+del k=i
+put k=i v=inline
+del k=i
+----
+del: "i": found key false
+del: "i": found key true
+>> at end:
+meta: "a"/0,0 -> txn={id=00000008 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} ts=50.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/50.000000000,0 -> /<empty>
+data: "a"/48.000000000,0 -> /<empty>
+data: "a"/47.000000000,0 -> /<empty>
+data: "a"/46.000000000,0 -> /BYTES/abc
+data: "a"/44.000000000,0 -> /<empty>
+data: "b"/49.000000000,0 -> /<empty>

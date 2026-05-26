@@ -1,0 +1,76 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import "src/core/index.module";
+
+.cockroach--tabs {
+  overflow: visible !important;
+  :global(.crdb-ant-tabs-bar) {
+    border-bottom: 1px solid $grey2;
+  }
+
+  :global(.crdb-ant-tabs-tab) {
+    font-family: $font-family--base;
+    letter-spacing: normal;
+    color: $colors--neutral-7;
+  }
+
+  :global(.crdb-ant-tabs-nav .crdb-ant-tabs-tab-active) {
+    color: $colors--link;
+  }
+
+  :global(.crdb-ant-tabs-nav .crdb-ant-tabs-tab:hover) {
+    color: $colors--link;
+  }
+
+  :global(.crdb-ant-tabs-ink-bar) {
+    height: 3px;
+    border-radius: 40px;
+    background-color: $blue;
+  }
+}
+
+h1.base-heading {
+  font-size: 24px;
+  font-family: $font-family--base;
+}
+
+h2.base-heading {
+  padding: 12px 0;
+  font-size: 24px;
+  font-family: $font-family--base;
+}
+
+h3.base-heading {
+  color: $colors--neutral-7;
+  font-family: $font-family--semi-bold;
+  font-style: normal;
+  font-stretch: normal;
+  font-size: $font-size--large;
+  padding-bottom: 12px;
+}
+
+h5.base-heading {
+  color: $colors--neutral-7;
+  font-family: $font-family--semi-bold;
+  font-style: normal;
+  font-stretch: normal;
+  font-size: $font-size--tall;
+  font-weight: 500;
+  padding-bottom: 12px;
+}
+
+.no-margin-bottom {
+  margin-bottom: 0px;
+}
+
+.separator {
+  border-left: 1px solid #c0c6d9;
+  padding-left: 12px;
+}
+
+.link {
+  color: $colors--link;
+}

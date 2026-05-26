@@ -1,0 +1,23 @@
+exec-ddl
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
+----
+
+build
+SELECT * FROM xy WITH ORDINALITY
+----
+project
+ ├── columns: x:1(int!null) y:2(int) ordinality:5(int!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2,5), (5)-->(1,2)
+ ├── prune: (1,2,5)
+ └── ordinality
+      ├── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid) ordinality:5(int!null)
+      ├── key: (1)
+      ├── fd: (1)-->(2-5), (5)-->(1-4)
+      ├── prune: (1-4)
+      └── scan xy
+           ├── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+           ├── key: (1)
+           ├── fd: (1)-->(2-4)
+           ├── prune: (1-4)
+           └── interesting orderings: (+1)

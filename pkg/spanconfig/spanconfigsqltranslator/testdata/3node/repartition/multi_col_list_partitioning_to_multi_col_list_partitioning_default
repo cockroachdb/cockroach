@@ -1,0 +1,2 @@
+repartition from=../partition/multi_col_list_partitioning_default to=../partition/multi_col_list_partitioning
+----

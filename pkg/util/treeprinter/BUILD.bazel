@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "treeprinter",
+    srcs = ["tree_printer.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/treeprinter",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "treeprinter_test",
+    size = "small",
+    srcs = ["tree_printer_test.go"],
+    embed = [":treeprinter"],
+)

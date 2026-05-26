@@ -1,0 +1,29 @@
+# These tests validate the DROP SCHEDULE command for dropping the incremental scheduled
+# backup when the full scheduled backup is dropped.
+
+new-cluster name=s1
+----
+
+exec-sql
+CREATE DATABASE foo;
+CREATE TABLE foo.t (x INT);
+INSERT INTO foo.t VALUES (1), (2), (3);
+----
+
+exec-sql
+CREATE SCHEDULE 'hello' FOR BACKUP DATABASE foo INTO 'userfile:///newbackup' WITH revision_history RECURRING '@daily';
+----
+
+query-sql
+SELECT recurrence FROM [SHOW SCHEDULES] WHERE label='hello';
+----
+@daily
+@weekly
+
+exec-sql
+DROP SCHEDULES WITH x AS (SHOW SCHEDULES) SELECT id FROM x WHERE label='hello' AND recurrence='@weekly';
+----
+
+query-sql
+SELECT * FROM [SHOW SCHEDULES] WHERE label='hello';
+----

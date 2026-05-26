@@ -1,0 +1,879 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.sql.sessiondatapb;
+
+import "gogoproto/gogo.proto";
+import "util/hlc/timestamp.proto";
+
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb";
+
+// LocalOnlySessionData contains the serializable components of session
+// parameters that only influence execution on the gateway nodes.
+message LocalOnlySessionData {
+  // SaveTablesPrefix indicates that a table should be created with the
+  // given prefix for the output of each subexpression in a query. If
+  // SaveTablesPrefix is empty, no tables are created.
+  string save_tables_prefix = 1;
+  // OptimizerFKCascadesLimit is the maximum number of cascading operations that
+  // are run for a single query.
+  int64 optimizer_fk_cascades_limit = 2 [(gogoproto.customname) = "OptimizerFKCascadesLimit"];
+  // StmtTimeout is the duration a query is permitted to run before it is
+  // canceled by the session. If set to 0, there is no timeout.
+  int64 stmt_timeout = 3 [(gogoproto.casttype) = "time.Duration"];
+  // IdleInSessionTimeout is the duration a session is permitted to idle before
+  // the session is canceled. If set to 0, there is no timeout.
+  int64 idle_in_session_timeout = 4 [(gogoproto.casttype) = "time.Duration"];
+  // IdleInTransactionSessionTimeout is the duration a session is permitted to
+  // idle in a transaction before the session is canceled.
+  // If set to 0, there is no timeout.
+  int64 idle_in_transaction_session_timeout = 5 [(gogoproto.casttype) = "time.Duration"];
+  // NoticeDisplaySeverity indicates the level of Severity to send notices for the given
+  // session. This should ideally be of type pgnotice.DisplaySeverity, but cannot be done
+  // due to a circular dependency.
+  uint32 notice_display_severity = 6;
+  // ReorderJoinsLimit indicates the number of joins at which the optimizer should
+  // stop attempting to reorder.
+  int64 reorder_joins_limit = 7;
+  // DefaultTxnPriority indicates the default priority of newly created
+  // transactions.
+  // NOTE: we'd prefer to use tree.UserPriority here, but doing so would
+  // introduce a package dependency cycle.
+  int64 default_txn_priority = 8;
+  // DefaultTxnReadOnly indicates the default read-only status of newly
+  // created transactions.
+  bool default_txn_read_only = 9;
+  // DefaultTxnUseFollowerReads indicates whether transactions should be
+  // created by default using an AS OF SYSTEM TIME clause far enough in the
+  // past to facilitate reads against followers. If true, transactions will
+  // also default to being read-only.
+  bool default_txn_use_follower_reads = 10;
+  // PartiallyDistributedPlansDisabled indicates whether the partially
+  // distributed plans produced by distSQLSpecExecFactory are disabled. It
+  // should be set to 'true' only in tests that verify that the old and the
+  // new factories return exactly the same physical plans.
+  // TODO(yuzefovich): remove it when deleting old sql.execFactory.
+  bool partially_distributed_plans_disabled = 11;
+  // OptimizerUseHistograms indicates whether we should use histograms for
+  // cardinality estimation in the optimizer.
+  bool optimizer_use_histograms = 12;
+  // OptimizerUseMultiColStats indicates whether we should use multi-column
+  // statistics for cardinality estimation in the optimizer.
+  bool optimizer_use_multi_col_stats = 13;
+  // LocalityOptimizedSearch indicates that the optimizer will try to plan scans
+  // and lookup joins in which local nodes (i.e., nodes in the gateway region)
+  // are searched for matching rows before remote nodes, in the hope that the
+  // execution engine can avoid visiting remote nodes.
+  bool locality_optimized_search = 14;
+  // SafeUpdates causes errors when the client
+  // sends syntax that may have unwanted side effects.
+  bool safe_updates = 15;
+  // PreferLookupJoinsForFKs causes foreign key operations to prefer lookup
+  // joins.
+  bool prefer_lookup_joins_for_fks = 16 [(gogoproto.customname) = "PreferLookupJoinsForFKs"];
+  // ZigzagJoinEnabled indicates whether the optimizer should try and plan a
+  // zigzag join.
+  bool zigzag_join_enabled = 17;
+  // RequireExplicitPrimaryKeys indicates whether CREATE TABLE statements should
+  // error out if no primary key is provided.
+  bool require_explicit_primary_keys = 18;
+  // ForceSavepointRestart overrides the default SAVEPOINT behavior
+  // for compatibility with certain ORMs. When this flag is set,
+  // the savepoint name will no longer be compared against the magic
+  // identifier `cockroach_restart` in order use a restartable
+  // transaction.
+  bool force_savepoint_restart = 19;
+  // AllowPrepareAsOptPlan must be set to allow use of
+  //   PREPARE name AS OPT PLAN '...'
+  bool allow_prepare_as_opt_plan = 20;
+  // TempTablesEnabled indicates whether temporary tables can be created or not.
+  bool temp_tables_enabled = 21;
+  // ImplicitPartitioningEnabled indicates whether implicit column partitioning
+  // can be created.
+  bool implicit_column_partitioning_enabled = 22;
+  reserved 23;
+  // OverrideMultiRegionZoneConfigEnabled indicates whether zone configurations can be
+  // modified for multi-region databases and tables/indexes/partitions.
+  bool override_multi_region_zone_config_enabled = 24;
+  reserved 25;
+  // DisallowFullTableScans indicates whether queries that plan full table scans
+  // should be rejected.
+  bool disallow_full_table_scans = 26;
+  // ImplicitSelectForUpdate is true if FOR UPDATE locking may be used during
+  // the row-fetch phase of mutation statements.
+  bool implicit_select_for_update = 27;
+  // InsertFastPath is true if the fast path for insert (with VALUES input) may
+  // be used.
+  bool insert_fast_path = 28;
+  // AlterColumnTypeGeneralEnabled is true if ALTER TABLE ... ALTER COLUMN ...
+  // TYPE x may be used for general conversions requiring online schema change/
+  bool alter_column_type_general_enabled = 29;
+  // SynchronousCommit is a dummy setting for the synchronous_commit var.
+  bool synchronous_commit = 30;
+  // EnableSeqScan is a dummy setting for the enable_seqscan var.
+  bool enable_seq_scan = 31;
+  reserved 32;
+  // EnableUniqueWithoutIndexConstraints indicates whether creating unique
+  // constraints without an index is allowed.
+  // TODO(rytaft): remove this once unique without index constraints are fully
+  // supported.
+  bool enable_unique_without_index_constraints = 33;
+  // StubCatalogTablesEnabled allows queries against virtual
+  // tables that are not yet implemented.
+  bool stub_catalog_tables_enabled = 34;
+  // ExperimentalComputedColumnRewrites allows automatic rewriting of computed
+  // column expressions in CREATE TABLE and ALTER TABLE statements. See the
+  // experimentalComputedColumnRewrites cluster setting for a description of the
+  // format.
+  string experimental_computed_column_rewrites = 35;
+  reserved 36;
+  // EnableStreamReplication indicates whether to allow setting up a replication
+  // stream.
+  bool enable_stream_replication = 37;
+  // ResultsBufferSize specifies the size at which the pgwire results buffer
+  // will self-flush.
+  int64 results_buffer_size = 38;
+  // PropagateInputOrdering indicates that when planning a subquery or CTE, the
+  // inner ordering should be propagated to the outer scope if the outer scope
+  // is unordered. PropagateInputOrdering is currently experimental.
+  bool propagate_input_ordering = 39;
+  // ExperimentalDistSQLPlanningMode indicates whether the experimental
+  // DistSQL planning driven by the optimizer is enabled.
+  int64 experimental_distsql_planning_mode = 40 [
+    (gogoproto.customname) = "ExperimentalDistSQLPlanningMode",
+    (gogoproto.casttype) = "ExperimentalDistSQLPlanningMode"
+  ];
+  // DistSQLMode indicates whether to run queries using the distributed
+  // execution engine.
+  int64 dist_sql_mode = 41 [
+    (gogoproto.customname) = "DistSQLMode",
+    (gogoproto.casttype) = "DistSQLExecMode"
+  ];
+  // SerialNormalizationMode indicates how to handle the SERIAL pseudo-type.
+  int64 serial_normalization_mode = 42 [(gogoproto.casttype) = "SerialNormalizationMode"];
+  // NewSchemaChangerMode indicates whether to use the new schema changer.
+  int64 new_schema_changer_mode = 43 [(gogoproto.casttype) = "NewSchemaChangerMode"];
+  // SequenceCache stores sequence values which have been cached using the
+  // CACHE sequence option.
+  map<uint32, sessiondatapb.SequenceCacheEntry> sequence_cache = 44 [(gogoproto.casttype) = "SequenceCache"];
+  // PlacementEnabled indicates whether PLACEMENT can be used or not.
+  bool placement_enabled = 45;
+  // SessionUserProto is the name of the user which has performed a SET ROLE
+  // command. In other words, it is the name of the user which originally
+  // established the connection before SET ROLE was first performed.
+  // This is only populated when SET ROLE is used, otherwise the session_user
+  // is the same as the UserProto in SessionData.
+  // Postgres allows the SessionUser to be changed with SET SESSION AUTHORIZATION
+  // but CockroachDB doesn't allow that at the time of this writing.
+  string session_user_proto = 46 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
+  // TxnRowsWrittenLog is the threshold for the number of rows written by a SQL
+  // transaction which - once exceeded - will trigger a logging event to SQL_PERF
+  // (or SQL_INTERNAL_PERF for internal transactions); 0 means disabled.
+  int64 txn_rows_written_log = 47;
+  // TxnRowsWrittenErr is the limit for the number of rows written by a SQL
+  // transaction which - once exceeded - will fail the transaction (or will
+  // trigger a logging event to SQL_INTERNAL_PERF for internal transactions); 0
+  // means disabled.
+  int64 txn_rows_written_err = 48;
+  // TxnRowsReadLog is the threshold for the number of rows read by a SQL
+  // transaction which - once exceeded - will trigger a logging event to SQL_PERF
+  // (or SQL_INTERNAL_PERF for internal transactions); 0 means disabled.
+  int64 txn_rows_read_log = 49;
+  // TxnRowsReadErr is the limit for the number of rows read by a SQL
+  // transaction which - once exceeded - will fail the transaction (or will
+  // trigger a logging event to SQL_INTERNAL_PERF for internal transactions); 0
+  // means disabled.
+  int64 txn_rows_read_err = 50;
+  // AutoRehomingEnabled indicates whether or not REGIONAL BY ROW tables should
+  // have a rehoming ON UPDATE clause added to them.
+  bool auto_rehoming_enabled = 51;
+  // IsSuperuser returns whether the user is a "superuser", which is defined
+  // to be a user with an admin role.
+  bool is_superuser = 52;
+  // LargeFullScanRows is the estimated row count at which a full scan is
+  // considered large, and worthy of logging and/or disabling depending on other
+  // settings.
+  double large_full_scan_rows = 53;
+  // InjectRetryErrorsEnabled causes statements inside an explicit
+  // transaction to return a transaction retry error. It is intended for
+  // developers to test their app's retry logic.
+  //
+  // Note that this session variable is **not** propagated to the internal
+  // executors - use InternalExecutorOverride for that.
+  bool inject_retry_errors_enabled = 54;
+  // NullOrderedLast controls whether NULL is ordered last. We default to
+  // NULLS FIRST for ascending order by default, whereas postgres defaults
+  // to NULLS LAST.
+  bool null_ordered_last = 55;
+  // DisablePlanGists indicates whether we should disable automatic gists.
+  bool disable_plan_gists = 56;
+  // CustomOptions contains a map of all custom session settings.
+  // These session variables have at least one period in their name.
+  map<string, string> custom_options = 57;
+  // IndexRecommendationsEnabled controls whether or not we display index
+  // recommendations below the plan in EXPLAIN.
+  bool index_recommendations_enabled = 58;
+  // AvoidBuffering indicates that the returned data should not be
+  // buffered by conn executor.  This is currently used by replication primitives
+  // to ensure the data is flushed to the consumer immediately.
+  //
+  // Does not apply to the InternalExecutor.
+  bool avoid_buffering = 59;
+  // CheckFunctionBodies indicates whether functions are validated during
+  // creation.
+  bool check_function_bodies = 60;
+  // CostScansWithDefaultColSize is true when the optimizer should cost scans
+  // and joins using the same default number of bytes per column instead of
+  // column sizes from the AvgSize table statistic.
+  bool cost_scans_with_default_col_size = 61;
+  // DefaultTxnQualityOfService indicates the default QoSLevel/WorkPriority of
+  // newly created transactions.
+  int32 default_txn_quality_of_service = 62 [(gogoproto.casttype) = "QoSLevel"];
+  // OptSplitScanLimit indicates the maximum number of UNION ALL statements a
+  // Scan may be split into during query optimization to avoid a sort.
+  int32 opt_split_scan_limit = 63;
+  // EnableSuperRegions is true when super region functionality is enabled.
+  bool enable_super_regions = 64;
+  // OverrideAlterPrimaryRegionInSuperRegion is true when the user is allowed
+  // to modify a primary region that is part of a super region.
+  bool override_alter_primary_region_in_super_region = 65;
+  // EnableImplicitTransactionForBatchStatements configures the handling of
+  // multiple statements in a single query. If enabled, then an implicit
+  // transaction is used when multiple statements are sent in a single query.
+  // Setting this to false is a divergence from the pgwire protocol, but
+  // matches the behavior of CockroachDB v21.2 and earlier.
+  bool enable_implicit_transaction_for_batch_statements = 66;
+  // ExpectAndIgnoreNotVisibleColumnsInCopy changes behaviour for COPY t FROM ...
+  // (with no column name specifiers) to expect and ignore not visible column
+  // fields.
+  bool expect_and_ignore_not_visible_columns_in_copy = 67;
+  // MultipleModificationsOfTable allows statements containing multiple INSERT
+  // ON CONFLICT, UPSERT, UPDATE, or DELETE subqueries modifying the same table,
+  // at the risk of data corruption if the same row is modified multiple times.
+  bool multiple_modifications_of_table = 68;
+  // ShowPrimaryKeyConstraintOnNotVisibleColumns controls whether SHOW
+  // CONSTRAINTS and pg_catalog.pg_constraint will include primary key
+  // constraints that only include hidden columns.
+  bool show_primary_key_constraint_on_not_visible_columns = 69;
+  // TestingOptimizerRandomSeed is non-zero when we are testing the optimizer by
+  // randomly perturbing costs or disabling rules. This will initialize a rng
+  // seeded to the given integer. This should only be used in test scenarios and
+  // is very much a non-production setting.
+  int64 testing_optimizer_random_seed = 70;
+  // UnconstrainedNonCoveringIndexScanEnabled controls whether unconstrained
+  // non-covering index scan access paths are explored by the optimizer.
+  bool unconstrained_non_covering_index_scan_enabled = 71;
+  // TestingOptimizerCostPerturbation is non-zero when the coster should
+  // randomly perturb costs to produce a non-optimal query plan. This should
+  // only be used in test scenarios and is very much a non-production setting.
+  double testing_optimizer_cost_perturbation = 72;
+  // TestingOptimizerDisableRuleProbability is non-zero when the optimizer
+  // should randomly disable every non-essential transformation rule with the
+  // given probability. This should only be used in test scenarios and is very
+  // much a non-production setting.
+  double testing_optimizer_disable_rule_probability = 73;
+  // OptimizerUseNotVisibleIndexes indicates whether the optimizer can still
+  // choose to use visible indexes for query plans.
+  bool optimizer_use_not_visible_indexes = 74;
+  // CopyFastPathEnabled controls whether the optimized copy mode is enabled.
+  bool copy_fast_path_enabled = 75;
+  // disable_hoist_projection_in_join_limitation disables the restrictions
+  // placed on projection hoisting during query planning in the optimizer.
+  bool disable_hoist_projection_in_join_limitation = 76;
+  // CopyFromAtomicEnabled controls whether implicit txn copy from operations
+  // are atomic or segmented.
+  bool copy_from_atomic_enabled = 77;
+  // EnforceHomeRegion, when true, causes queries which scan rows from multiple
+  // regions, or which scan rows from a single home region, but initiated from
+  // a gateway region which differs from that home region, to error out.
+  bool enforce_home_region = 78;
+  // OptimizerUseForecasts indicates whether we should use statistics forecasts
+  // for cardinality estimation in the optimizer.
+  bool optimizer_use_forecasts = 79;
+  // VariableInequalityLookupJoinEnabled indicates whether the optimizer should
+  // be allowed to consider lookup joins with inequality conditions, in
+  // addition to the other restrictions on when they are planned.
+  bool variable_inequality_lookup_join_enabled = 80;
+  // TransactionSessionTimeout is the duration a transaction is permitted to
+  // run before the transaction is canceled. If set to 0, there is no timeout.
+  int64 transaction_timeout = 81 [(gogoproto.casttype) = "time.Duration"];
+  // SystemIdentityProto is the original name of the client presented to pgwire
+  // before it was mapped to a SQL identifier.
+  string system_identity_proto = 82;
+  // DescriptorValidationMode indicates whether to validate the descriptors at
+  // read and write time, at read time only, or never.
+  int64 descriptor_validation_mode = 83 [(gogoproto.casttype) = "DescriptorValidationMode"];
+  // ExperimentalHashGroupJoinEnabled indicates whether the physical planner
+  // will attempt to convert a hash join followed by a hash aggregator into a
+  // single hash group-join operation. At the moment, there is no optimizer
+  // support for this, so some things can be incorrect (e.g. EXPLAIN plans).
+  bool experimental_hash_group_join_enabled = 84;
+  // AllowOrdinalColumnReferences indicates whether the deprecated ordinal
+  // column reference syntax (e.g., `SELECT @1 FROM t`) is allowed.
+  bool allow_ordinal_column_references = 85;
+  // OptimizerUseImprovedDisjunctionStats, when true, indicates that the
+  // optimizer should use improved statistics calculations for disjunctive
+  // filters.
+  bool optimizer_use_improved_disjunction_stats = 86;
+  // OptimizerUseLimitOrderingForStreamingGroupBy enables the exploration rule
+  // which optimizes 'SELECT ... GROUP BY ... ORDER BY ... LIMIT n' queries.
+  // The rule uses the required ordering in the limit expression to inform an
+  // interesting ordering to require from the input to the group-by expression.
+  // This can potentially eliminate a top-k operation.
+  bool optimizer_use_limit_ordering_for_streaming_group_by = 88;
+  // CopyFromRetriesEnabled controls whether retries should be internally
+  // attempted for retriable errors.
+  bool copy_from_retries_enabled = 89;
+  // DeclareCursorStatementTimeoutEnabled controls whether statement timeouts
+  // apply during DECLARE CURSOR.
+  bool declare_cursor_statement_timeout_enabled = 90;
+  // OptimizerUseImprovedSplitDisjunctionForJoins enables the optimizer to split
+  // disjunctions (OR expressions) in more cases in join conditions by building a
+  // UNION of two join expressions. If this setting is true, all disjunctions in
+  // inner, semi, and anti joins will be split. If false, only disjunctions
+  // potentially containing an equijoin condition will be split.
+  bool optimizer_use_improved_split_disjunction_for_joins = 91;
+  // InjectRetryErrorsOnCommitEnabled causes statements inside an explicit
+  // transaction to return a transaction retry error just before transcation commit.
+  // It is intended for developers to test their app's retry logic.
+  bool inject_retry_errors_on_commit_enabled = 92;
+  reserved 93;
+  // OptimizerAlwaysUseHistograms, when true, ensures that the optimizer
+  // always uses histograms to calculate statistics if available.
+  bool optimizer_always_use_histograms = 94;
+  // EnableCreateStatsUsingExtremes, when true, allows the use of CREATE
+  // STATISTICS .. USING EXTREMES.
+  bool enable_create_stats_using_extremes = 95;
+  // AllowRoleMembershipsToChangeDuringTransaction, when true, means that
+  // operations which consult the role membership cache do not retain their
+  // lease on that version of the cache throughout the transaction. The
+  // consequence of this is that the transaction may not experience a singular
+  // view of role membership, and it may be able to commit after the revocation
+  // of a role membership which the transaction relied on has successfully been
+  // committed and acknowledged to the user.
+  bool allow_role_memberships_to_change_during_transaction = 96;
+  // PreparedStatementsCacheSize, when not equal to 0, causes the LRU prepared
+  // statements in a session to be automatically deallocated when total prepared
+  // statement memory usage for that session is more than the cache size.
+  // Execution of these deallocated prepared statements will fail until they are
+  // prepared again.
+  int64 prepared_statements_cache_size = 97;
+  reserved 98;
+  reserved 99;
+  // MultipleActivePortalEnabled determines if the pgwire portal execution
+  // for certain queries can be paused. If true, portals with read-only SELECT
+  // query without sub/post queries can be executed in interleaving manner, but
+  // with a local execution plan.
+  bool multiple_active_portals_enabled = 100;
+  // UnboundedParallelScans, when true, indicates that the TableReader DistSQL
+  // processors should parallelize scans across ranges. Note that the
+  // parallelization will still be disabled for queries with LIMITs, and it can
+  // lead to increased likelihood of OOMs.
+  bool unbounded_parallel_scans = 101;
+  // OptimizerHoistUncorrelatedEqualitySubqueries, when true, causes the
+  // optimizer to hoist uncorrelated subqueries that are part of an equality
+  // expression with a column reference, which can produce more efficient query
+  // plans.
+  bool optimizer_hoist_uncorrelated_equality_subqueries = 102;
+  // TestingOptimizerInjectPanics indicates whether random panics are injected
+  // during optimization. The goal of this setting is to flush out cases where
+  // panics used for error-propagation are uncaught.
+  bool testing_optimizer_inject_panics = 103;
+  // OptimizerUseImprovedComputedColumnFiltersDerivation, when true, causes the
+  // optimizer to derive filters on computed columns in more cases. Previously,
+  // filters could only be derived when the expression defining the computed
+  // column involved a single column and that column was equated with a single
+  // constant value in a WHERE clause filter.
+  bool optimizer_use_improved_computed_column_filters_derivation = 104;
+  // DefaultTxnIsolationLevel indicates the default isolation level of newly
+  // created transactions.
+  // NOTE: we'd prefer to use tree.IsolationLevel here, but doing so would
+  // introduce a package dependency cycle.
+  int64 default_txn_isolation_level = 105;
+  // ReplicationMode represents the replication parameter passed in during
+  // connection time.
+  ReplicationMode replication_mode = 106;
+  // OptimizerUseImprovedJoinElimination, when true, allows the optimizer to
+  // eliminate joins in more cases by remapping columns from the eliminated
+  // input of the join to equivalent columns from the preserved input.
+  bool optimizer_use_improved_join_elimination = 107;
+  // ImplicitFKLockingForSerializable is true if FOR SHARE locking may be used
+  // while checking the referenced table during an insert or update to a table
+  // with a foreign key under serializable isolation. (Under weaker isolation
+  // levels foreign key checks of the parent table always use FOR SHARE
+  // locking.)
+  bool implicit_fk_locking_for_serializable = 108 [(gogoproto.customname) = "ImplicitFKLockingForSerializable"];
+  // DurableLockingForSerializable is true if we should use durable locking for
+  // SELECT FOR UPDATE statements, SELECT FOR SHARE statements, and constraint
+  // checks under serializable isolation. (Serializable isolation does not
+  // require locking for correctness, so by default we use best-effort locks for
+  // better performance.) Weaker isolation levels always use durable locking.
+  bool durable_locking_for_serializable = 109;
+  // SharedLockingForSerializable, if set to true, means SELECT FOR SHARE and
+  // SELECT FOR KEY SHARE statements issued by transactions that run with
+  // serializable isolation will acquire shared locks; otherwise, they'll
+  // perform non-locking reads.
+  //
+  // Weaker isolation levels always acquire shared locks for SELECT FOR SHARE
+  // and SELECT FOR KEY SHARE statements, regardless of this session setting.
+  bool shared_locking_for_serializable = 112;
+  // MaxRetriesForReadCommitted indicates the maximum number of
+  // automatic retries to perform for statements in explicit READ COMMITTED
+  // transactions that see a transaction retry error.
+  int32 max_retries_for_read_committed = 110;
+  // StrictDDLAtomicity causes errors when the client attempts DDL
+  // operations inside an explicit txn and CockroachDB cannot
+  // guarantee the DDL to be performed atomically.
+  //
+  // When this is not set, a transaction may commit its DML
+  // statements but fail its DDL statements, resulting
+  // in error XXA00 - TransactionCommittedWithSchemaChangeFailure.
+  //
+  // When this is set, that particular atomicity violation should
+  // not occur any more (at the expense of disabling certain
+  // forms of DDL inside explicit txns).
+  bool strict_ddl_atomicity = 111 [(gogoproto.customname) = "StrictDDLAtomicity"];
+  // UnsafeSettingInterlockKey needs to be set to a special string
+  // before SET CLUSTER SETTING is allowed on an unsafe setting.
+  string unsafe_setting_interlock_key = 113;
+  // OptimizerUseLockOpForSerializable, when true, instructs the optimizer to
+  // implement SELECT FOR UPDATE and SELECT FOR SHARE statements using the Lock
+  // operator under serializable isolation.
+  //
+  // For correctness, under weaker isolation levels the optimizer always
+  // implements SELECT FOR UPDATE and SELECT FOR SHARE using the Lock operator,
+  // regardless of this setting.
+  bool optimizer_use_lock_op_for_serializable = 114;
+  // OptimizerUseProvidedOrderingFix, when true, causes the optimizer to
+  // reconcile provided orderings with required ordering choices. This prevents
+  // internal errors due to incomplete functional dependencies, and also
+  // fixes a bug that incorrectly truncated the provided ordering (see #113072).
+  bool optimizer_use_provided_ordering_fix = 115;
+  // DisableChangefeedReplication, when true, disables changefeed events from
+  // being emitted for changes to data made in a session. This will apply only
+  // to new txns created in the session.
+  bool disable_changefeed_replication = 116;
+  // CopyTxnQualityOfService indicates the default QoSLevel/WorkPriority of the
+  // transactions used to evaluate COPY commands.
+  int32 copy_txn_quality_of_service = 117 [(gogoproto.casttype) = "QoSLevel"];
+  // CopyWritePipeliningEnabled indicates whether the write pipelining is
+  // enabled for implicit txns used by COPY.
+  bool copy_write_pipelining_enabled = 118;
+  // OptimizerMergeJoinsEnabled, when true, instructs the optimizer to explore
+  // query plans with merge joins. When false, the optimizer does not attempt
+  // to plan merge joins.
+  bool optimizer_merge_joins_enabled = 119;
+  // CopyNumRetriesPerBatch determines the number of times a single batch of
+  // rows can be retried for non-atomic COPY.
+  int32 copy_num_retries_per_batch = 120;
+  // AutoCommitBeforeDDL will cause any DDL statement received during a
+  // multi-statement transaction to make the transaction auto-commit before
+  // executing the DDL statement. After the auto-commit, any other statements
+  // that are in the transaction block will instead be executed in their own
+  // implicit transaction.
+  bool autocommit_before_ddl = 121 [(gogoproto.customname) = "AutoCommitBeforeDDL"];
+  // CloseCursorsAtCommit determines whether cursors remain open after their
+  // parent transaction closes. This is useful for oracle compatibility.
+  bool close_cursors_at_commit = 122;
+  // PLpgSQLUseStrictInto causes PL/pgSQL "SELECT ... INTO" and "RETURNING INTO"
+  // syntax to always behave as if they were specified with the STRICT option,
+  // which throws a runtime error when the SQL statement doesn't return exactly
+  // one row. This is useful for oracle compatibility.
+  bool plpgsql_use_strict_into = 123 [(gogoproto.customname) = "PLpgSQLUseStrictInto"];
+  // OptimizerUseVirtualComputedColumnStats indicates whether we should use
+  // statistics on virtual computed columns for cardinality estimation in the
+  // optimizer.
+  bool optimizer_use_virtual_computed_column_stats = 124;
+  // OptimizerUseTrigramSimilarityOptimization indicates whether the optimizer
+  // should generate improved plans for queries with trigram similarity filters.
+  bool optimizer_use_trigram_similarity_optimization = 125;
+  // OptimizerUseImprovedDistinctOnLimitHintCosting indicates whether the
+  // optimizer should use an improved costing estimate for DistinctOn operators
+  // with limit hints.
+  bool optimizer_use_improved_distinct_on_limit_hint_costing = 126;
+  // OptimizerUseImprovedTrigramSimilaritySelectivity indicates whether the
+  // optimizer should use an improved selectivitiy estimate for trigram
+  // similarity filters.
+  bool optimizer_use_improved_trigram_similarity_selectivity = 127;
+  // OptimizerUseImprovedZigzagJoinCosting, when true, indicates that the
+  // optimizer should use improved logic in the cost model for zigzag joins.
+  bool optimizer_use_improved_zigzag_join_costing = 128;
+  // OptimizerUseImprovedMultiColumnSelectivityEstimate, when true, indicates
+  // that the optimizer should use an improved selectivity estimate for
+  // multi-column predicates.
+  bool optimizer_use_improved_multi_column_selectivity_estimate = 129;
+  // OptimizerProveImplicationWithVirtualComputedColumns, when true, indicates
+  // that the optimizer should use virtual computed columns to prove partial
+  // index implication.
+  bool optimizer_prove_implication_with_virtual_computed_columns = 130;
+  reserved 131;
+  // OptimizerPushOffsetIntoIndexJoin, when true, indicates that the optimizer
+  // should push offset expressions into index joins.
+  bool optimizer_push_offset_into_index_join = 132;
+  // PlanCacheMode indicates the method that the optimizer should use to choose
+  // between a custom and generic query plan.
+  PlanCacheMode plan_cache_mode = 133;
+  // OptimizerUsePolymorphicParameterFix, when true, causes the optimizer to
+  // validate a routine's polymorphic parameters during overload resolution
+  // and type-checking.
+  bool optimizer_use_polymorphic_parameter_fix = 134;
+  // OriginIDForLogicalDataReplication is an identifier for the cluster that
+  // originally wrote the data that are being written in this session. An
+  // originID of 0 (the default) identifies a local write, 1 identifies a remote
+  // write of unspecified origin, and 2+ are reserved to identify remote writes
+  // from specific clusters.
+  uint32 origin_id_for_logical_data_replication = 135 [(gogoproto.customname) = "OriginIDForLogicalDataReplication"];
+  // EnableCreateStatsUsingExtremesBoolEnum, when true, allows the use of CREATE
+  // STATISTICS .. USING EXTREMES on bool and enum columns.
+  bool enable_create_stats_using_extremes_bool_enum = 136;
+  // OptimizerUseMergedPartialStatistics indicates whether we should use
+  // statistics merged from partial and full statistics for cardinality
+  // estimation in the optimizer.
+  bool optimizer_use_merged_partial_statistics = 137;
+  // OptimizerUseConditionalHoistFix, when true, prevents the optimizer from
+  // hoisting a volatile expression that is conditionally executed by a CASE,
+  // COALESCE, or IFERR expression.
+  bool optimizer_use_conditional_hoist_fix = 138;
+  // OptimizerPushLimitIntoProjectFilteredScan, when true, indicates that the
+  // optimizer should push limit expressions into projects of filtered scans.
+  bool optimizer_push_limit_into_project_filtered_scan = 139;
+  // OriginTimestampForLogicalDataReplication is the mvcc timestamp the data
+  // written in this session were originally written with before being
+  // replicated via Logical Data Replication.
+  util.hlc.Timestamp origin_timestamp_for_logical_data_replication = 140 [(gogoproto.nullable) = false];
+  // BypassPCRReaderCatalogAOST disables the AOST used by all user queries on
+  // the PCR reader catalog.
+  bool bypass_pcr_reader_catalog_aost = 141 [(gogoproto.customname) = "BypassPCRReaderCatalogAOST"];
+  // UnsafeAllowTriggersModifyingCascades, when true, allows row-level BEFORE
+  // triggers to modify or filter rows that are being updated or deleted as
+  // part of a cascading foreign key action. This is unsafe because it can
+  // lead to constraint violations.
+  bool unsafe_allow_triggers_modifying_cascades = 142;
+  // DisableVecUnionEagerCancellation disables the eager cancellation that is
+  // performed by the vectorized engine when transitioning into the draining
+  // state in some cases.
+  bool disable_vec_union_eager_cancellation = 143;
+  // RecursionDepthLimit is the maximum depth that nested trigger-function calls
+  // can reach.
+  int64 recursion_depth_limit = 144;
+  // DistributeGroupByRowCountThreshold is the minimum number of rows estimated
+  // to be processed by the GroupBy operator so that we choose to distribute the
+  // plan because of this aggregator stage of DistSQL processors.
+  uint64 distribute_group_by_row_count_threshold = 145;
+  // DistributeSortRowCountThreshold is the minimum number of rows estimated
+  // to be processed by the Sort operator so that we choose to distribute the
+  // plan because of this sorter stage of DistSQL processors.
+  uint64 distribute_sort_row_count_threshold = 146;
+  // DistributeScanRowCountThreshold is the minimum number of rows estimated to
+  // be read by the Scan operator so that we choose to distribute the plan
+  // because of this TableReader stage of DistSQL processors.
+  uint64 distribute_scan_row_count_threshold = 147;
+  // AlwaysDistributeFullScans determines whether full table scans always force
+  // the plan to be distributed, regardless of the estimated row count.
+  bool always_distribute_full_scans = 148;
+  // DistributeJoinRowCountThreshold is the minimum number of rows estimated to
+  // be processed from both inputs by the hash or merge join so that we choose
+  // to distribute the plan because of this joiner stage of DistSQL processors.
+  uint64 distribute_join_row_count_threshold = 149;
+  // LegacyVarcharTyping controls the legacy behavior of allowing some invalid
+  // mix-typed comparisons with VARCHAR types. See #137837, #133037, and
+  // #132268.
+  bool legacy_varchar_typing = 150;
+  // AvoidFullTableScansInMutations indicates whether mutation queries that plan
+  // full table scans should be avoided.
+  bool avoid_full_table_scans_in_mutations = 151;
+  reserved 152;
+  // CatalogDigestStalenessCheckEnabled is used to enable using the catalog
+  // digest information to do fast memo checks.
+  bool catalog_digest_staleness_check_enabled = 153;
+  // OptimizerPreferBoundedCardinality instructs the optimizer to prefer query
+  // plans in which every expression has a bounded cardinality over plans with
+  // one or more expressions with unbounded cardinality.
+  bool optimizer_prefer_bounded_cardinality = 154;
+  // OptimizerMinRowCount sets a lower bound on row count estimates for
+  // relational expressions during query planning. A value of zero indicates no
+  // lower bound. Note that if this is set to a value greater than zero, a row
+  // count of zero can still be estimated for expressions with a cardinality of
+  // zero, e.g., for a contradictory filter.
+  double optimizer_min_row_count = 155;
+  // BufferedWritesEnabled controls whether the buffered writes KV transaction
+  // protocol is used for user queries on the current session. If this variable
+  // is modified in an explicit txn, then the change will be applied only to
+  // future txns on the session.
+  bool buffered_writes_enabled = 156;
+  // OptimizerCheckInputMinRowCount sets a lower bound on row count estimates
+  // for the buffer scan of FK and uniqueness checks. A value of zero indicates
+  // no lower bound.
+  double optimizer_check_input_min_row_count = 157;
+  // OptimizerPlanLookupJoinsWithReverseScans enables planning for lookup joins
+  // that use reverse scans to get results in reverse index order on each
+  // lookup.
+  bool optimizer_plan_lookup_joins_with_reverse_scans = 158;
+  // RegisterLatchWaitContentionEvents, when true, causes latch wait contention
+  // events to be registered with the *.contention_events virtual tables. It
+  // defaults to false in order to avoid registering a large number of
+  // uninformative latch wait events.
+  bool register_latch_wait_contention_events = 159;
+  // UseCPutsOnNonUniqueIndexes, when true, indicates that CPuts should be used
+  // when writing new KVs into the non-unique indexes. It is an escape hatch in
+  // case our thinking that we don't need the CPut in such a scenario is wrong.
+  //
+  // This will have impact regardless of the buffered writes.
+  bool use_cputs_on_non_unique_indexes = 160 [(gogoproto.customname) = "UseCPutsOnNonUniqueIndexes"];
+  // BufferedWritesUseLockingOnNonUniqueIndexes, when true, indicates that
+  // locking Puts and Dels should be used when writing into the non-unique
+  // indexes.
+  //
+  // This will only have impact when BufferedWritesEnabled is set.
+  bool buffered_writes_use_locking_on_non_unique_indexes = 161;
+  // OptimizerUseLockElisionMultipleFamilies, when true, indicates that the lock
+  // eliding optimization should be enabled for tables with multiple column
+  // families.
+  //
+  // This will only have impact when BufferedWritesEnabled is set.
+  bool optimizer_use_lock_elision_multiple_families = 162;
+  // OptimizerEnableLockElision, when false, indicates that the lock eliding
+  // optimization should be disabled for tables with any number of column
+  // families. It takes precedence over OptimizerUseLockElisionMultipleFamilies.
+  //
+  // This will only have impact when BufferedWritesEnabled is set.
+  bool optimizer_enable_lock_elision = 163;
+  // OptimizerUseDeleteRangeFastPath, when true, indicates that the optimizer
+  // should try to use the delete range fast-path when possible.
+  bool optimizer_use_delete_range_fast_path = 164;
+  reserved 165;
+  // CreateTableWithSchemaLocked, when true will create tables as schema_locked
+  // by default.
+  bool create_table_with_schema_locked = 166;
+  // UsePre_25_2VariadicBuiltins, when true, will treat variadic builtins with a
+  // types.Any variadic argument as types.AnyElement (the pre-25.2 behavior)
+  bool use_pre_25_2_variadic_builtins = 167;
+  // VectorSearchBeamSize controls the number of candidates examined during
+  // vector index searches. It represents the number of vector partitions that
+  // are considered at each level of the search tree. Higher values increase
+  // search accuracy but require more processing resources.
+  int32 vector_search_beam_size = 168;
+  // PropagateAdmissionHeaderToLeafTransactions, when true, causes leaf
+  // transactions to inherit the admission header from the root transaction.
+  bool propagate_admission_header_to_leaf_transactions = 169;
+  // OptimizerUseExistsFilterHoistRule, when true, causes the optimizer to apply
+  // the HoistUnboundFilterFromExistsSubquery rule to EXISTS conditions.
+  bool optimizer_use_exists_filter_hoist_rule = 170;
+  // InitialRetryBackoffForReadCommitted controls the initial backoff
+  // duration for automatic retries of statements in explicit READ COMMITTED
+  // transactions that see a transaction retry error. 0 disables backoff.
+  int64 initial_retry_backoff_for_read_committed = 171 [(gogoproto.casttype) = "time.Duration"];
+  // UseImprovedRoutineDependencyTracking, when true, causes newly-created
+  // routines to only consider user-specified target columns when determining the
+  // dependencies of an INSERT statement in a routine.
+  bool use_improved_routine_dependency_tracking = 172;
+  // OptimizerDisableCrossRegionCascadeFastPathForRBRTables, when true, causes the optimizer
+  // to unconditionally attempt to apply the fast path for cascading deletes.
+  // See also #146705.
+  bool optimizer_disable_cross_region_cascade_fast_path_for_rbr_tables = 173 [(gogoproto.customname) = "OptimizerDisableCrossRegionCascadeFastPathForRBRTables"];
+  // DistSQLUseReducedLeafWriteSets, when true, indicates that the DistSQL
+  // runner should use the reduced write sets when constructing LeafTxns.
+  bool distsql_use_reduced_leaf_write_sets = 174 [(gogoproto.customname) = "DistSQLUseReducedLeafWriteSets"];
+  // UseProcTxnControlExtendedProtocolFix, when true, enables the fix for
+  // PL/pgSQL transaction control statements (COMMIT, ROLLBACK) when the stored
+  // procedure is executed via a portal in the extended wire protocol.
+  bool use_proc_txn_control_extended_protocol_fix = 175;
+  reserved 176;
+  reserved 177;
+  // VectorSearchRerankMultiplier controls how many of the initial search results
+  // can be reranked using exact distance calculations with the original
+  // full-size vectors. It acts as a multiplier on a base limit derived from the
+  // search beam size and the top-k results requested by the query.
+  int32 vector_search_rerank_multiplier = 178;
+  // ParallelizeMultiKeyLookupJoinsAvgLookupRatio controls the average lookup
+  // ratio of the lookup join (i.e. the number of looked up rows we get for each
+  // input row) that we consider "safe" for parallelization across ranges. If
+  // the estimated average lookup ratio exceeds this, then the parallelization
+  // is disabled. Setting it to zero disables this parallelization heuristic.
+  // This setting only has impact on multi-key lookup joins that are not powered
+  // by the streamer.
+  double parallelize_multi_key_lookup_joins_avg_lookup_ratio = 179;
+  // ParallelizeMultiKeyLookupJoinsMaxLookupRatio adds a guardrail to the
+  // heuristic of ParallelizeMultiKeyLookupJoinsAvgLookupRatio so that if the
+  // estimated maximum lookup ratio for a single input row exceeds this, then
+  // the heuristic is disabled. In other words, if the lookup table has some
+  // "heavy hitters", this setting controls their frequency at which we still
+  // consider the heuristic "safe". Setting it to zero disables the guardrail.
+  double parallelize_multi_key_lookup_joins_max_lookup_ratio = 180;
+  // ParallelizeMultiKeyLookupJoinsAvgLookupRowSize adds a guardrail to the
+  // heuristic of ParallelizeMultiKeyLookupJoinsAvgLookupRatio so that if the
+  // estimated average lookup row size exceeds this, then the heuristic is
+  // disabled. In other words, since the looked up rows could be very large in
+  // size, this setting controls the size threshold that we still consider to be
+  // "safe" for parallelization heuristic. Setting it to zero disables the
+  // guardrail.
+  int64 parallelize_multi_key_lookup_joins_avg_lookup_row_size = 181;
+  // ParallelizeMultiKeyLookupJoinsOnlyOnMRMutations, if set, indicates that the
+  // "average lookup ratio" parallelization heuristic (as controlled via 3 knobs
+  // above) should only apply to mutations of multi-region tables. If false,
+  // then the heuristic applies to all statements (both read-only and
+  // mutations), regardless of the table being multi-region.
+  bool parallelize_multi_key_lookup_joins_only_on_mr_mutations = 182 [(gogoproto.customname) = "ParallelizeMultiKeyLookupJoinsOnlyOnMRMutations"];
+  // AllowUnsafeInternals allows the caller to access the crdb_internal
+  // or system databases within queries.
+  bool allow_unsafe_internals = 183;
+  // DisableOptimizerRules is a list of optimizer rules that should be disabled
+  // during query optimization. The names of the rules can be found in the
+  // opt/rule_name.og.go file.
+  repeated string disable_optimizer_rules = 184;
+  // UseSoftLimitForDistributeScan, if set, means that we'll use the soft limit
+  // hint - if available - when comparing against
+  // DistributeScanRowCountThreshold.
+  bool use_soft_limit_for_distribute_scan = 185;
+  // OptimizerUseImprovedHoistJoinProject controls whether the
+  // HoistJoinProjectLeft normalization rule hoists more kinds of projections
+  // above joins.
+  bool optimizer_use_improved_hoist_join_project = 186;
+  reserved 187;
+  // RowSecurity controls whether row-level security is enabled.
+  bool row_security = 188;
+  // OptimizerClampLowHistogramSelectivity, when true, causes the optimizer to
+  // fall back to more pessimistic distinct-count-based estimates when the
+  // histogram-based estimate is smaller than a certain threshold.
+  bool optimizer_clamp_low_histogram_selectivity = 189;
+  // OptimizerClampInequalitySelectivity, when true, causes the optimizer to
+  // clamp the selectivity of open-ended inequality filters (e.g. <, >, !=)
+  // but not (=, BETWEEN etc.) to a minimum threshold.
+  bool optimizer_clamp_inequality_selectivity = 190;
+  // OptimizerUseMaxFrequencySelectivity, when true, indicates that the
+  // optimizer should use max frequency for selectivity estimation.
+  bool optimizer_use_max_frequency_selectivity = 191;
+  // DisableWaitForJobsNotice, if set, disables the notice that is sent whenever
+  // some jobs were created in the txn.
+  bool disable_wait_for_jobs_notice = 192;
+  // CanaryStatsMode controls whether queries in the session use
+  // canary statistics (mode == force_canary), stable statistics
+  // (mode == force_stable), or let the system decide based on
+  // the canary fraction cluster setting (mode == auto).
+  int64 canary_stats_mode = 193 [(gogoproto.casttype) = "CanaryStatsMode"];
+  // UseSwapMutations, when true, enables use of the update swap and delete swap
+  // operators.
+  bool use_swap_mutations = 194;
+  // PreventUpdateSetColumnDrop, when true, enables a fix to ensure that columns
+  // referenced only as target columns in an UPDATE statement within a routine
+  // are correctly tracked, preventing a drop that breaks the routine.
+  bool prevent_update_set_column_drop = 195;
+  // UseImprovedRoutineDepsTriggersAndComputedCols, when true, enables improved
+  // dependency tracking for routines that perform mutations involving BEFORE
+  // triggers or computed columns. The fix applies at routine creation time and
+  // prevents unnecessary column dependencies from being recorded.
+  bool use_improved_routine_deps_triggers_and_computed_cols = 196;
+  // DistSQLPreventPartitioningSoftLimitedScans, when true, prevents the distsql
+  // physical planner from partitioning scans with soft limits into multiple
+  // TableReaders. When true, this matches the behavior for hard limits.
+  bool distsql_prevent_partitioning_soft_limited_scans = 197 [(gogoproto.customname) = "DistSQLPreventPartitioningSoftLimitedScans"];
+  // OptimizerInlineAnyUnnestSubquery, when true, enables the InlineAnyProjectSet
+  // normalization rule that inlines unnest subqueries in ANY comparisons.
+  bool optimizer_inline_any_unnest_subquery = 198;
+  // TcpKeepalivesIdle is the time (in seconds) with no network activity before
+  // sending a TCP keepalive probe. 0 means use the cluster setting default.
+  // Corresponds to PostgreSQL's tcp_keepalives_idle.
+  int32 tcp_keepalives_idle = 199;
+  // TcpKeepalivesInterval is the time (in seconds) between TCP keepalive
+  // retransmissions. 0 means use the cluster setting default.
+  // Corresponds to PostgreSQL's tcp_keepalives_interval.
+  int32 tcp_keepalives_interval = 200;
+  // TcpKeepalivesCount is the maximum number of TCP keepalive probes before
+  // the connection is dropped. 0 means use the cluster setting default.
+  // Corresponds to PostgreSQL's tcp_keepalives_count.
+  int32 tcp_keepalives_count = 201;
+  // TcpUserTimeout is the maximum time (in milliseconds) that transmitted data
+  // may remain unacknowledged before the connection is dropped. 0 means use the
+  // cluster setting default. Corresponds to PostgreSQL's tcp_user_timeout.
+  int32 tcp_user_timeout = 202;
+  // OptimizerUseMinRowCountAntiJoinFix, when true, causes the
+  // optimizer_min_row_count setting to be applied correctly to anti-joins.
+  bool optimizer_use_min_row_count_anti_join_fix = 203;
+  // StatsAsOf is an optional timestamp that, when set, causes
+  // statistics selection to be based on the age gap between the stats
+  // creation timestamp and the StatsAsOf timestamp, rather than the
+  // current time. This is primarily intended for debugging, testing,
+  // and historical analysis. Should not be used in production
+  // environments.
+  // Note the time-traveling only takes effect if the timestamp is later
+  // than or equal to the latest full stats in the stable stats cache --
+  // we don't support traveling way too back in the history at this
+  // moment. If the asOf timestamp is earlier than the latest full stats
+  // in the stable stats cache, a trace message would be logged, and
+  // still the whole stable stats cache will be used for planning.
+  util.hlc.Timestamp stats_as_of = 204 [(gogoproto.nullable) = false];
+  // BufferedWritesImplicitTxnsEnabled, if set, will make it so that the
+  // buffered writes feature is used for implicit txns.
+  bool buffered_writes_implicit_txns_enabled = 205;
+  // PgDumpCompatibility controls how CockroachDB presents its metadata to
+  // external tools. Valid values are "off" (default), "postgres" (suppress
+  // CRDB-specific syntax for pg_dump compatibility), and "cockroachdb"
+  // (show CRDB syntax explicitly).
+  string pg_dump_compatibility = 206;
+  // OptimizerSpanLimit sets the maximum number of constraint spans allowed in
+  // a scan during query optimization. 0 means no limit. Default: 131072.
+  int32 optimizer_span_limit = 207;
+  // DistSQLPlanLocalityFilter restricts the set of SQL instances that the
+  // DistSQL physical planner will consider when assigning flow components for
+  // queries from this session. The value is a CockroachDB locality string
+  // (e.g. "region=us-east1,zone=us-east1-a"); only instances whose locality
+  // matches every key/value pair in the filter are eligible. The empty string
+  // disables the filter and is the default. The filter is consumed only on the
+  // gateway during physical planning, so it does not need to be propagated to
+  // remote nodes.
+  string distsql_plan_locality_filter = 208 [(gogoproto.customname) = "DistSQLPlanLocalityFilter"];
+  // DistSQLPlanLocalityFilterStrict, when true, causes physical planning to
+  // return an error if no SQL instance matches DistSQLPlanLocalityFilter
+  // instead of falling back to the gateway / random instance selection.
+  bool distsql_plan_locality_filter_strict = 209 [(gogoproto.customname) = "DistSQLPlanLocalityFilterStrict"];
+
+  ///////////////////////////////////////////////////////////////////////////
+  // WARNING: consider whether a session parameter you're adding needs to  //
+  // be propagated to the remote nodes. If so, that parameter should live  //
+  // in the SessionData message instead.                                   //
+  ///////////////////////////////////////////////////////////////////////////
+}
+
+// ReplicationMode represents the replication={0,1,on,off,database} connection
+// parameter in PostgreSQL.
+enum ReplicationMode {
+  REPLICATION_MODE_DISABLED = 0;
+  REPLICATION_MODE_ENABLED = 1;
+  REPLICATION_MODE_DATABASE = 2;
+}
+
+// PlanCacheMode controls the optimizer's decision to use a custom or generic
+// query plan.
+enum PlanCacheMode {
+  option (gogoproto.goproto_enum_prefix) = false;
+  option (gogoproto.goproto_enum_stringer) = false;
+
+  // PlanCacheModeForceCustom forces the optimizer to use a custom query plan.
+  force_custom_plan = 0 [(gogoproto.enumvalue_customname) = "PlanCacheModeForceCustom"];
+
+  // PlanCacheModeForceCustom forces the optimizer to use a generic query plan.
+  force_generic_plan = 1 [(gogoproto.enumvalue_customname) = "PlanCacheModeForceGeneric"];
+
+  // PlanCacheModeAuto allows the optimizer to automatically choose between a
+  // custom and generic query plan.
+  auto = 2 [(gogoproto.enumvalue_customname) = "PlanCacheModeAuto"];
+}
+
+// SequenceCacheEntry is an entry in a SequenceCache.
+message SequenceCacheEntry {
+  // CachedVersion stores the descpb.DescriptorVersion that cached values are associated with.
+  // The version is checked to determine if cache needs to be invalidated. The version is stored as
+  // a uint32 to prevent an import cycle with the descpb package.
+  uint32 cached_version = 1;
+  // CurrentValue stores the present value of the sequence to be given out.
+  int64 current_value = 2;
+  // Increment stores the amount to Increment the currentVal by each time the
+  // currentVal is used. This value corresponds to descpb.TableDescriptor_SequenceOpts.Increment.
+  int64 increment = 3;
+  // NumValues represents the number of values to cache. The cache is considered
+  // to be empty when NumValues is 0.
+  int64 num_values = 4;
+}

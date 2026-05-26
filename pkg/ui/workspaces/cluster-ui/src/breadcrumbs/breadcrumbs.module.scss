@@ -1,0 +1,23 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import "src/core/index.module";
+
+.breadcrumbs {
+  align-items: center;
+  display: flex;
+  margin-bottom: 22px;
+
+  &__item {
+    &--link {
+      color: $colors--link;
+    }
+
+    &--link,
+    &--divider {
+      margin-right: 10px;
+    }
+  }
+}

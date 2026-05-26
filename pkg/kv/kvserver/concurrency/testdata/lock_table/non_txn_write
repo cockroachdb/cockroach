@@ -1,0 +1,307 @@
+new-lock-table maxlocks=10000
+----
+
+new-txn txn=txn1 ts=10 epoch=0
+----
+
+new-txn txn=txn2 ts=10 epoch=0
+----
+
+new-txn txn=txn3 ts=10 epoch=0
+----
+
+# First locks at a, b, c are acquired by txn1
+new-request r=req1 txn=txn1 ts=10 spans=exclusive@a+exclusive@b+exclusive@c
+----
+
+scan r=req1
+----
+start-waiting: false
+
+acquire r=req1 k=a durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+acquire r=req1 k=b durability=u strength=exclusive
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+acquire r=req1 k=c durability=u strength=exclusive
+----
+num=3
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+dequeue r=req1
+----
+num=3
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+# Next, two different transactional requests wait at a and b.
+new-request r=req2 txn=txn2 ts=10 spans=intent@a
+----
+
+scan r=req2
+----
+start-waiting: true
+
+new-request r=req3 txn=txn3 ts=10 spans=intent@b
+----
+
+scan r=req3
+----
+start-waiting: true
+
+# Next, a non-transactional request that wants to write a, b, c waits at a.
+
+new-request r=req4 txn=none ts=10 spans=intent@a+intent@b+intent@c
+----
+
+scan r=req4
+----
+start-waiting: true
+
+# Next, a transactional request that arrives later than the non-transactional request waits at c
+
+new-request r=req5 txn=txn3 ts=10 spans=intent@c
+----
+
+scan r=req5
+----
+start-waiting: true
+
+print
+----
+num=3
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 4, strength: Intent, txn: none
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+
+# The locks at a, b, c are released. The non-transactional request waits behind
+# the reservation holder at a.
+
+release txn=txn1 span=a,d
+----
+num=3
+ lock: "a"
+   queued locking requests:
+    active: false req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 4, strength: Intent, txn: none
+ lock: "b"
+   queued locking requests:
+    active: false req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+ lock: "c"
+   queued locking requests:
+    active: false req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+
+guard-state r=req2
+----
+new: state=doneWaiting
+
+guard-state r=req3
+----
+new: state=doneWaiting
+
+guard-state r=req4
+----
+new: state=waitFor txn=txn2 key="a" held=false guard-strength=Intent
+
+guard-state r=req5
+----
+new: state=doneWaiting
+
+# Add another transactional request at a. It will wait behind the non-transactional request.
+
+new-request r=req6 txn=txn1 ts=10 spans=intent@a
+----
+
+scan r=req6
+----
+start-waiting: true
+
+print
+----
+num=3
+ lock: "a"
+   queued locking requests:
+    active: false req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 4, strength: Intent, txn: none
+    active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+   queued locking requests:
+    active: false req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+ lock: "c"
+   queued locking requests:
+    active: false req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+
+# Release the reservation at a. The first waiter is non-transactional so it will not acquire the
+# reservation. The second waiter will acquire the reservation. The non-transactional request will
+# wait behind the reservation holder at b.
+
+dequeue r=req2
+----
+num=3
+ lock: "a"
+   queued locking requests:
+    active: false req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+   queued locking requests:
+    active: false req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+ lock: "c"
+   queued locking requests:
+    active: false req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+
+guard-state r=req4
+----
+new: state=waitFor txn=txn3 key="b" held=false guard-strength=Intent
+
+guard-state r=req6
+----
+new: state=doneWaiting
+
+print
+----
+num=3
+ lock: "a"
+   queued locking requests:
+    active: false req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+   queued locking requests:
+    active: false req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 4, strength: Intent, txn: none
+ lock: "c"
+   queued locking requests:
+    active: false req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+
+# Release the reservation at b. The non-transactional waiter will be done at b, and when it gets
+# to c it will see a reservation holder with a higher sequence num and ignore it.
+
+dequeue r=req3
+----
+num=2
+ lock: "a"
+   queued locking requests:
+    active: false req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+   queued locking requests:
+    active: false req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+
+guard-state r=req4
+----
+new: state=doneWaiting
+
+guard-state r=req5
+----
+old: state=doneWaiting
+
+print
+----
+num=2
+ lock: "a"
+   queued locking requests:
+    active: false req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+   queued locking requests:
+    active: false req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+
+# Non-transactional request scans again and proceeds to evaluation and discovers a lock at c
+
+scan r=req4
+----
+start-waiting: false
+
+add-discovered r=req4 k=c txn=txn2
+----
+num=2
+ lock: "a"
+   queued locking requests:
+    active: false req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
+   queued locking requests:
+    active: false req: 4, strength: Intent, txn: none
+    active: false req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+
+scan r=req4
+----
+start-waiting: true
+
+scan r=req5
+----
+start-waiting: true
+
+guard-state r=req4
+----
+new: state=waitFor txn=txn2 key="c" held=true guard-strength=Intent
+
+guard-state r=req5
+----
+new: state=waitFor txn=txn2 key="c" held=true guard-strength=Intent
+
+# Release the lock. The non-transactional request does not acquire the reservation.
+
+release txn=txn2 span=c
+----
+num=2
+ lock: "a"
+   queued locking requests:
+    active: false req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+   queued locking requests:
+    active: false req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+
+guard-state r=req4
+----
+new: state=doneWaiting
+
+guard-state r=req5
+----
+new: state=doneWaiting
+
+# Make all requests done.
+
+dequeue r=req4
+----
+num=2
+ lock: "a"
+   queued locking requests:
+    active: false req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+   queued locking requests:
+    active: false req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+
+dequeue r=req5
+----
+num=1
+ lock: "a"
+   queued locking requests:
+    active: false req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+
+dequeue r=req6
+----
+num=0

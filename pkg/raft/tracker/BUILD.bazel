@@ -1,0 +1,48 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "tracker",
+    srcs = [
+        "electiontracker.go",
+        "fortificationtracker.go",
+        "inflights.go",
+        "progress.go",
+        "progresstracker.go",
+        "state.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/raft/tracker",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/raft/quorum",
+        "//pkg/raft/raftlogger",
+        "//pkg/raft/raftpb",
+        "//pkg/raft/raftstoreliveness",
+        "//pkg/util/container/ring",
+        "//pkg/util/hlc",
+        "@com_github_cockroachdb_redact//:redact",
+        "@org_golang_x_exp//maps",
+    ],
+)
+
+go_test(
+    name = "tracker_test",
+    srcs = [
+        "fortificationtracker_test.go",
+        "inflights_test.go",
+        "progress_test.go",
+    ],
+    embed = [":tracker"],
+    deps = [
+        "//pkg/raft/quorum",
+        "//pkg/raft/raftlogger",
+        "//pkg/raft/raftpb",
+        "//pkg/raft/raftstoreliveness",
+        "//pkg/util/container/ring",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

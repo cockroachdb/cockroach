@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "whoownsit_lib",
+    srcs = ["whoownsit.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/whoownsit",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/internal/codeowners",
+        "//pkg/internal/reporoot",
+    ],
+)
+
+go_binary(
+    name = "whoownsit",
+    embed = [":whoownsit_lib"],
+    visibility = ["//visibility:public"],
+)

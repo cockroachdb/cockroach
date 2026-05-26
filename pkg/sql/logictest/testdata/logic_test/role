@@ -1,0 +1,1971 @@
+# LogicTest: local local-mixed-25.4 3node-tenant
+
+statement error a role/user named admin already exists
+CREATE ROLE admin
+
+statement error a role/user named root already exists
+CREATE ROLE root
+
+statement ok
+CREATE ROLE IF NOT EXISTS root
+
+statement ok
+CREATE ROLE IF NOT EXISTS admin
+
+statement error pq: cannot drop role/user admin: grants still exist on .*
+DROP ROLE admin
+
+statement error pq: cannot drop role/user root: grants still exist on .*
+DROP ROLE root
+
+statement error pq: cannot drop roles/users admin, root: grants still exist on .*
+DROP ROLE admin, root
+
+statement ok
+CREATE ROLE myrole
+
+query TTT colnames,rowsort
+select username, options, member_of from [SHOW ROLES]
+----
+username  options   member_of
+admin     {}        {}
+myrole    {NOLOGIN} {}
+root      {}        {admin}
+testuser  {}        {}
+
+statement error a role/user named myrole already exists
+CREATE ROLE myrole
+
+statement ok
+CREATE ROLE IF NOT EXISTS myrole
+
+statement error a role/user named myrole already exists
+CREATE USER myrole
+
+statement ok
+DROP USER myrole
+
+statement ok
+CREATE ROLE myrole
+
+statement ok
+CREATE USER IF NOT EXISTS myrole
+
+statement error pq: cannot drop roles/users admin, myrole: grants still exist on .*
+DROP ROLE admin, myrole
+
+query TTT colnames,rowsort
+select username, options, member_of from [SHOW ROLES]
+----
+username  options   member_of
+admin     {}        {}
+myrole    {NOLOGIN} {}
+root      {}        {admin}
+testuser  {}        {}
+
+statement ok
+DROP ROLE myrole
+
+query TTT colnames,rowsort
+select username, options, member_of from [SHOW ROLES]
+----
+username  options  member_of
+admin     {}       {}
+root      {}       {admin}
+testuser  {}       {}
+
+statement error pq: role/user "myrole" does not exist
+DROP ROLE myrole
+
+statement ok
+DROP ROLE IF EXISTS myrole
+
+statement ok
+CREATE ROLE rolea
+
+statement ok
+CREATE ROLE roleb
+
+statement ok
+CREATE ROLE rolec
+
+statement ok
+CREATE ROLE roled
+
+statement error pq: role/user "rolee" does not exist
+DROP ROLE rolea, roleb, rolec, roled, rolee
+
+statement ok
+DROP ROLE IF EXISTS rolec, roled, rolee
+
+statement ok
+DROP ROLE rolea, roleb
+
+query TTT colnames,rowsort
+select username, options, member_of from [SHOW ROLES]
+----
+username  options  member_of
+admin     {}       {}
+root      {}       {admin}
+testuser  {}       {}
+
+query T noticetrace
+SHOW ROLES
+----
+NOTICE: estimated_last_login_time is computed on a best effort basis; it is not guaranteed to capture every login event
+
+statement ok
+CREATE USER testuser2
+
+statement ok
+CREATE ROLE testrole
+
+query TTB colnames
+SHOW GRANTS ON ROLE
+----
+role_name  member  is_admin
+admin      root    true
+
+query TTT colnames,rowsort
+SELECT * FROM information_schema.administrable_role_authorizations
+----
+grantee  role_name  is_grantable
+root     admin      YES
+
+query TTT colnames,rowsort
+SELECT * FROM information_schema.applicable_roles
+----
+grantee  role_name  is_grantable
+root     admin      YES
+
+query T colnames,rowsort
+SELECT * FROM information_schema.enabled_roles
+----
+role_name
+admin
+root
+
+statement error pq: role/user "unknownuser" does not exist
+GRANT testrole TO unknownuser
+
+statement error pq: role/user "unknownrole" does not exist
+GRANT unknownrole TO testuser
+
+# Test role "grant" and WITH ADMIN option.
+user testuser
+
+statement error testuser must have CREATEROLE or have admin option on role "testrole"
+GRANT testrole TO testuser2
+
+user root
+
+statement ok
+GRANT testrole TO testuser
+
+query TTB colnames,rowsort
+SELECT role, member, "isAdmin" FROM system.role_members
+----
+role      member    isAdmin
+admin     root      true
+testrole  testuser  false
+
+query TTB colnames,rowsort
+SHOW GRANTS ON ROLE
+----
+role_name  member    is_admin
+admin      root      true
+testrole   testuser  false
+
+user testuser
+
+statement error testuser must have CREATEROLE or have admin option on role "testrole"
+GRANT testrole TO testuser2
+
+user root
+
+statement ok
+GRANT testrole TO testuser WITH ADMIN OPTION
+
+statement ok
+CREATE ROLE child_role;
+
+statement ok
+GRANT testrole to child_role;
+
+statement ok
+GRANT testuser TO child_role;
+
+query TTB colnames,rowsort
+SELECT role, member, "isAdmin" FROM system.role_members
+----
+role      member      isAdmin
+admin     root        true
+testrole  child_role  false
+testrole  testuser    true
+testuser  child_role  false
+
+query TTBB colnames,rowsort
+SELECT * FROM "".crdb_internal.kv_inherited_role_members
+----
+role      inheriting_member  member_is_explicit  member_is_admin
+testrole  child_role         true                true
+testuser  child_role         true                false
+admin     root               true                true
+testrole  testuser           true                true
+
+query TTB colnames,rowsort
+SHOW GRANTS ON ROLE FOR child_role
+----
+role_name  member      is_admin
+testrole   child_role  true
+testrole   testuser    true
+testuser   child_role  false
+
+statement ok
+SET ROLE child_role
+
+# ADMIN OPTION should be inherited, so this should succeed.
+statement ok
+GRANT testrole TO testuser2 WITH ADMIN OPTION
+
+# And we should be able to introspect for ADMIN option. The grantee is
+# the parent role that was given ADMIN OPTION.
+query TTT colnames,rowsort
+SELECT * FROM information_schema.administrable_role_authorizations
+----
+grantee   role_name  is_grantable
+testuser  testrole   YES
+
+statement ok
+RESET ROLE;
+DROP ROLE child_role
+
+user testuser
+
+query TTT colnames,rowsort
+SELECT * FROM information_schema.administrable_role_authorizations
+----
+grantee   role_name  is_grantable
+testuser  testrole   YES
+
+query TTT colnames,rowsort
+SELECT * FROM information_schema.applicable_roles
+----
+grantee   role_name  is_grantable
+testuser  testrole   YES
+
+query T colnames,rowsort
+SELECT * FROM information_schema.enabled_roles
+----
+role_name
+testrole
+testuser
+
+user root
+
+statement ok
+GRANT admin TO testuser
+
+# Dropping users/roles deletes all their memberships.
+query TTB colnames,rowsort
+SELECT role, member, "isAdmin" FROM system.role_members
+----
+role      member     isAdmin
+admin     root       true
+admin     testuser   false
+testrole  testuser   true
+testrole  testuser2  true
+
+query TTB colnames,rowsort
+SHOW GRANTS ON ROLE
+----
+role_name  member     is_admin
+admin      root       true
+admin      testuser   false
+testrole   testuser   true
+testrole   testuser2  true
+
+query TTB colnames,rowsort
+SHOW GRANTS ON ROLE admin
+----
+role_name  member    is_admin
+admin      root      true
+admin      testuser  false
+
+query TTB colnames,rowsort
+SHOW GRANTS ON ROLE FOR testuser
+----
+role_name  member    is_admin
+admin      testuser  false
+testrole   testuser  true
+
+query TTB colnames
+SHOW GRANTS ON ROLE testrole FOR testuser2
+----
+role_name  member     is_admin
+testrole   testuser2  true
+
+query TTB colnames,rowsort
+SHOW GRANTS ON ROLE foo,testrole
+----
+role_name  member     is_admin
+testrole   testuser   true
+testrole   testuser2  true
+
+query TTB colnames,rowsort
+SHOW GRANTS ON ROLE FOR testuser, testuser2
+----
+role_name  member     is_admin
+admin      testuser   false
+testrole   testuser   true
+testrole   testuser2  true
+
+query TTB colnames,rowsort
+SHOW GRANTS ON ROLE admin, testrole FOR root, testuser2
+----
+role_name  member     is_admin
+admin      root       true
+testrole   testuser2  true
+
+statement ok
+DROP USER testuser
+
+statement ok
+CREATE USER testuser
+
+query TTB colnames,rowsort
+SELECT role, member, "isAdmin" FROM system.role_members
+----
+role      member     isAdmin
+admin     root       true
+testrole  testuser2  true
+
+statement ok
+DROP ROLE testrole
+
+query TTB colnames
+SELECT role, member, "isAdmin" FROM system.role_members
+----
+role   member  isAdmin
+admin  root    true
+
+# Test cycle detection.
+statement error pq: admin cannot be a member of itself
+GRANT admin TO admin
+
+statement ok
+CREATE ROLE rolea
+
+statement ok
+CREATE ROLE roleb
+
+statement ok
+CREATE ROLE rolec
+
+statement ok
+CREATE ROLE roled
+
+statement ok
+GRANT rolea TO roleb
+
+statement error pq: making rolea a member of roleb would create a cycle
+GRANT roleb TO rolea
+
+statement ok
+GRANT roleb TO rolec
+
+statement ok
+GRANT rolec TO roled
+
+statement error pq: rolea cannot be a member of itself
+GRANT rolea TO rolea
+
+statement error pq: making rolea a member of roleb would create a cycle
+GRANT roleb TO rolea
+
+statement error pq: making rolea a member of rolec would create a cycle
+GRANT rolec TO rolea
+
+statement error pq: making rolea a member of roled would create a cycle
+GRANT roled TO rolea
+
+statement ok
+CREATE ROLE rolee
+
+# Test inherited ADMIN OPTION.
+statement ok
+GRANT roled TO testuser
+
+# Make sure role hierarchy doesn't end up with duplicate rows.
+statement ok
+GRANT rolec TO testuser
+
+statement ok
+GRANT rolea TO roleb WITH ADMIN OPTION
+
+user testuser
+
+query TTT colnames,rowsort
+SELECT * FROM information_schema.administrable_role_authorizations
+----
+grantee  role_name  is_grantable
+roleb    rolea      YES
+
+query TTT colnames,rowsort
+SELECT * FROM information_schema.applicable_roles
+----
+grantee   role_name  is_grantable
+roleb     rolea      YES
+rolec     roleb      NO
+roled     rolec      NO
+testuser  rolec      NO
+testuser  roled      NO
+
+query T colnames,rowsort
+SELECT * FROM information_schema.enabled_roles
+----
+role_name
+rolea
+roleb
+rolec
+roled
+testuser
+
+statement error testuser must have CREATEROLE or have admin option on role "roled"
+GRANT roled TO rolee
+
+statement error testuser must have CREATEROLE or have admin option on role "rolec"
+GRANT rolec TO rolee
+
+statement error testuser must have CREATEROLE or have admin option on role "roleb"
+GRANT roleb TO rolee
+
+statement ok
+GRANT rolea TO rolee
+
+query TTT colnames,rowsort
+SELECT * FROM information_schema.administrable_role_authorizations
+----
+grantee  role_name  is_grantable
+roleb    rolea      YES
+
+query TTT colnames,rowsort
+SELECT * FROM information_schema.applicable_roles
+----
+grantee   role_name  is_grantable
+roleb     rolea      YES
+rolec     roleb      NO
+roled     rolec      NO
+testuser  rolec      NO
+testuser  roled      NO
+
+query T colnames,rowsort
+SELECT * FROM information_schema.enabled_roles
+----
+role_name
+rolea
+roleb
+rolec
+roled
+testuser
+
+user root
+
+query TTB colnames,rowsort
+SELECT role, member, "isAdmin" FROM system.role_members
+----
+role   member    isAdmin
+admin  root      true
+rolea  roleb     true
+rolea  rolee     false
+roleb  rolec     false
+rolec  roled     false
+rolec  testuser  false
+roled  testuser  false
+
+statement ok
+DROP ROLE rolea
+
+statement ok
+DROP ROLE rolec
+
+query TTB colnames,rowsort
+SELECT role, member, "isAdmin" FROM system.role_members
+----
+role   member    isAdmin
+admin  root      true
+roled  testuser  false
+
+query TTT rowsort
+select username, options, member_of from [SHOW ROLES]
+----
+admin      {}         {}
+roleb      {NOLOGIN}  {}
+roled      {NOLOGIN}  {}
+rolee      {NOLOGIN}  {}
+root       {}         {admin}
+testuser   {}         {roled}
+testuser2  {}         {}
+
+statement ok
+DROP ROLE roleb
+
+statement ok
+DROP ROLE roled
+
+statement ok
+DROP ROLE rolee
+
+statement error pq: role/user root cannot be removed from role admin or lose the ADMIN OPTION
+REVOKE admin FROM root
+
+statement error pq: role/user root cannot be removed from role admin or lose the ADMIN OPTION
+REVOKE ADMIN OPTION FOR admin FROM root
+
+statement error pq: role/user "unknownuser" does not exist
+REVOKE ADMIN OPTION FOR admin FROM unknownuser
+
+statement error pq: role/user "unknownrole" does not exist
+REVOKE ADMIN OPTION FOR unknownrole FROM root
+
+statement error pgcode 42939 CURRENT_USER cannot be used as a role name here
+CREATE ROLE CURRENT_USER
+
+statement error pgcode 42939 SESSION_USER cannot be used as a role name here
+CREATE ROLE SESSION_USER
+
+statement ok
+CREATE ROLE rolea
+
+statement ok
+CREATE ROLE roleb
+
+statement ok
+GRANT rolea,roleb TO testuser WITH ADMIN OPTION
+
+statement error role/user "" does not exist
+GRANT rolea TO ""
+
+statement error role/user "" does not exist
+REVOKE rolea FROM ""
+
+statement error role/user "" does not exist
+GRANT "" TO rolea
+
+statement error role/user "" does not exist
+REVOKE "" FROM rolea
+
+query TTB colnames,rowsort
+SELECT role, member, "isAdmin" FROM system.role_members
+----
+role   member    isAdmin
+admin  root      true
+rolea  testuser  true
+roleb  testuser  true
+
+user testuser
+
+statement ok
+GRANT rolea,roleb TO root WITH ADMIN OPTION
+
+user root
+
+query TTB colnames,rowsort
+SELECT role, member, "isAdmin" FROM system.role_members
+----
+role   member    isAdmin
+admin  root      true
+rolea  root      true
+rolea  testuser  true
+roleb  root      true
+roleb  testuser  true
+
+query TTT colnames,rowsort
+SELECT * FROM information_schema.administrable_role_authorizations
+----
+grantee  role_name  is_grantable
+root     admin      YES
+root     rolea      YES
+root     roleb      YES
+
+query TTT colnames,rowsort
+SELECT * FROM information_schema.applicable_roles
+----
+grantee  role_name  is_grantable
+root     admin      YES
+root     rolea      YES
+root     roleb      YES
+
+query T colnames,rowsort
+SELECT * FROM information_schema.enabled_roles
+----
+role_name
+admin
+rolea
+roleb
+root
+
+user testuser
+
+query TTT colnames,rowsort
+SELECT * FROM information_schema.administrable_role_authorizations
+----
+grantee   role_name  is_grantable
+testuser  rolea      YES
+testuser  roleb      YES
+
+query TTT colnames,rowsort
+SELECT * FROM information_schema.applicable_roles
+----
+grantee   role_name  is_grantable
+testuser  rolea      YES
+testuser  roleb      YES
+
+query T colnames,rowsort
+SELECT * FROM information_schema.enabled_roles
+----
+role_name
+rolea
+roleb
+testuser
+
+statement ok
+REVOKE ADMIN OPTION FOR rolea FROM testuser
+
+statement error testuser must have CREATEROLE or have admin option on role "rolea"
+REVOKE ADMIN OPTION FOR rolea FROM root
+
+statement ok
+REVOKE roleb FROM root
+
+user root
+
+query TTB colnames,rowsort
+SELECT role, member, "isAdmin" FROM system.role_members
+----
+role   member    isAdmin
+admin  root      true
+rolea  root      true
+rolea  testuser  false
+roleb  testuser  true
+
+statement ok
+REVOKE rolea, roleb FROM testuser, root
+
+query TTB colnames
+SELECT role, member, "isAdmin" FROM system.role_members
+----
+role   member  isAdmin
+admin  root    true
+
+# Verify that GRANT/REVOKE are not sensitive to the case of role names.
+
+statement ok
+GRANT roLea,rOleB TO tEstUSER WITH ADMIN OPTION
+
+query TTB colnames,rowsort
+SELECT role, member, "isAdmin" FROM system.role_members
+----
+role   member    isAdmin
+admin  root      true
+rolea  testuser  true
+roleb  testuser  true
+
+statement ok
+REVOKE roleA, roleB FROM TestUser
+
+query TTB colnames
+SELECT role, member, "isAdmin" FROM system.role_members
+----
+role   member  isAdmin
+admin  root    true
+
+# Test privilege checks.
+
+statement ok
+CREATE DATABASE db1
+
+user testuser
+
+statement error permission denied to create database
+CREATE DATABASE db2
+
+statement error user testuser does not have DROP privilege on database db1
+DROP DATABASE db1
+
+statement error testuser must have admin option on role "admin"
+GRANT admin TO testuser
+
+user root
+
+statement ok
+CREATE ROLE newgroup
+
+statement ok
+GRANT newgroup TO testuser
+
+statement ok
+GRANT admin TO newgroup
+
+user testuser
+
+query TTB colnames,rowsort
+SELECT role, member, "isAdmin" FROM system.role_members
+----
+role      member    isAdmin
+admin     newgroup  false
+admin     root      true
+newgroup  testuser  false
+
+
+user root
+statement ok
+CREATE DATABASE db2
+
+user testuser
+statement ok
+DROP DATABASE db1
+
+# Revoke admin privileges. 'newgroup' does not have any privileges.
+user root
+
+statement ok
+REVOKE admin FROM newgroup
+
+statement ok
+CREATE SCHEMA db2.s1;
+
+user testuser
+
+statement error user testuser does not have SELECT privilege on relation role_members
+SELECT * FROM system.role_members
+
+# This doesn't error because testuser has CREATE privilege on db2.public.
+statement ok
+CREATE TABLE db2.foo (k int);
+
+statement error pq: user testuser does not have CREATE privilege on schema s1
+CREATE TABLE db2.s1.foo (k int);
+
+user root
+
+query TTB colnames,rowsort
+SELECT role, member, "isAdmin" FROM system.role_members
+----
+role      member    isAdmin
+admin     root      true
+newgroup  testuser  false
+
+statement ok
+GRANT ALL ON DATABASE db2 TO newgroup
+
+user testuser
+
+query TTTB colnames,rowsort
+SHOW GRANTS ON DATABASE db2
+----
+database_name  grantee   privilege_type  is_grantable
+db2            admin     ALL             true
+db2            newgroup  ALL             false
+db2            public    CONNECT         false
+db2            public    TEMPORARY       false
+db2            root      ALL             true
+
+statement ok
+INSERT INTO db2.foo VALUES (1),(2),(3);
+
+statement ok
+SELECT * FROM db2.foo
+
+# We may be in the 'newgroup', but we don't have the admin option.
+statement error testuser must have CREATEROLE or have admin option on role "newgroup"
+GRANT newgroup TO testuser2
+
+statement error testuser must have CREATEROLE or have admin option on role "newgroup"
+REVOKE newgroup FROM testuser
+
+statement error testuser must have CREATEROLE or have admin option on role "newgroup"
+GRANT newgroup TO testuser WITH ADMIN OPTION
+
+# Regression for #31784
+user root
+
+# grant admin to testuser without ADMIN OPTION
+statement ok
+CREATE USER user1;
+GRANT admin TO testuser
+
+user testuser
+
+statement error testuser must have admin option on role "admin"
+GRANT admin TO user1
+
+statement error testuser must have admin option on role "admin"
+REVOKE admin FROM user1
+
+user root
+
+# WITH ADMIN OPTION means that testuser now has permission to add to the admin role
+statement ok
+GRANT admin TO testuser WITH ADMIN OPTION
+
+user testuser
+
+statement ok
+GRANT admin TO user1
+
+statement ok
+REVOKE admin FROM user1
+
+user root
+
+statement ok
+DROP USER user1
+
+user root
+
+# Remove owned table to prepare testuser for dropping.
+statement ok
+REVOKE ALL ON db2.foo FROM newgroup
+
+statement ok
+DROP TABLE db2.foo
+
+# The user does not have direct privileges on anything, so we can drop it.
+statement ok
+DROP USER testuser
+
+query TTB colnames
+SELECT role, member, "isAdmin" FROM system.role_members
+----
+role   member  isAdmin
+admin  root    true
+
+statement error cannot drop role/user newgroup: grants still exist on db2
+DROP ROLE newgroup
+
+statement ok
+REVOKE ALL ON DATABASE db2 FROM newgroup
+
+statement ok
+DROP ROLE newgroup
+
+# Test the "public" pseudo-role.
+
+statement error role name "public" is reserved
+CREATE USER public
+
+statement error role name "public" is reserved
+CREATE ROLE public
+
+statement error role name "none" is reserved
+CREATE ROLE "none"
+
+statement error role name "pg_otan" is reserved
+CREATE ROLE pg_otan
+
+statement error role name "crdb_internal_otan" is reserved
+CREATE ROLE crdb_internal_otan
+
+statement error "foo☂": username is invalid
+CREATE ROLE foo☂
+
+statement error role name "public" is reserved
+DROP USER public
+
+statement error role name "public" is reserved
+DROP ROLE public
+
+statement error role/user "public" does not exist
+GRANT public TO testuser
+
+statement error role/user "public" does not exist
+GRANT admin TO public
+
+statement error role/user "public" does not exist
+REVOKE public FROM testuser
+
+statement error role/user "public" does not exist
+REVOKE admin FROM public
+
+# Test "WITH CREATEROLE" option
+
+statement ok
+CREATE USER testuser
+
+query TTB colnames
+SELECT role, member, "isAdmin" FROM system.role_members
+----
+role   member  isAdmin
+admin  root    true
+
+
+user testuser
+
+statement error pq: user testuser does not have CREATEROLE privilege
+CREATE ROLE rolef
+
+user root
+
+statement ok
+ALTER ROLE testuser CREATEROLE
+
+user testuser
+
+statement ok
+CREATE ROLE rolef
+
+statement ok
+DROP ROLE rolef
+
+# Testing invalid CREATEROLE combinations
+user root
+
+statement ok
+ALTER ROLE testuser NOCREATEROLE
+
+statement error pq: conflicting role options
+CREATE ROLE rolewithcreate WITH NOCREATEROLE CREATEROLE
+
+statement error pq: conflicting role options
+CREATE ROLE rolewithcreate NOCREATEROLE CREATEROLE
+
+statement error pq: conflicting role options
+CREATE ROLE rolewithcreate REPLICATION NOREPLICATION
+
+statement error pq: conflicting role options
+ALTER ROLE testrole WITH CREATEROLE NOCREATEROLE
+
+statement error pq: conflicting role options
+ALTER ROLE testrole CREATEROLE NOCREATEROLE
+
+statement error pq: conflicting role options
+ALTER ROLE testrole CONTROLJOB NOCONTROLJOB
+
+statement error pq: redundant role options
+CREATE ROLE rolewithcreate WITH CREATEROLE CREATEROLE
+
+statement error pq: redundant role options
+CREATE ROLE rolewithcreate WITH NOCREATEROLE NOCREATEROLE
+
+statement error pq: redundant role options
+ALTER ROLE testrole WITH CREATEROLE CREATEROLE
+
+statement error pq: redundant role options
+ALTER ROLE testrole WITH NOCREATEROLE NOCREATEROLE
+
+statement ok
+CREATE ROLE rolewithcreate WITH CREATEROLE
+
+statement ok
+CREATE ROLE anotherrolewithcreate CREATEROLE
+
+statement ok
+CREATE ROLE rolewithoutcreate WITH NOCREATEROLE
+
+statement ok
+CREATE ROLE IF NOT EXISTS rolewithcreate2 WITH CREATEROLE
+
+statement ok
+CREATE ROLE IF NOT EXISTS anotherrolewithcreate2 CREATEROLE
+
+statement ok
+CREATE ROLE IF NOT EXISTS rolewithoutcreate2 WITH NOCREATEROLE
+
+query TTB colnames
+SELECT role, member, "isAdmin" FROM system.role_members
+----
+role   member  isAdmin
+admin  root    true
+
+user testuser
+
+# User should not have permissions to CREATE / ALTER role without CREATEROLE privilege
+statement error pq: user testuser does not have CREATEROLE privilege
+CREATE ROLE rolewithcreate3 WITH CREATEROLE
+
+statement error pq: user testuser does not have CREATEROLE privilege
+ALTER ROLE rolewithcreate WITH NOCREATEROLE
+
+user root
+
+statement ok
+ALTER USER testuser CREATEROLE CREATELOGIN
+
+user testuser
+
+statement ok
+CREATE ROLE roleg WITH CREATEROLE
+
+statement ok
+ALTER ROLE roleg WITH NOCREATEROLE
+
+statement ok
+DROP ROLE roleg
+
+statement ok
+CREATE ROLE IF NOT EXISTS roleg
+
+statement ok
+CREATE ROLE IF NOT EXISTS roleg
+
+statement ok
+CREATE USER testuser3
+
+statement error testuser must have admin option on role "admin"
+GRANT admin to testuser3
+
+# CREATEROLE should give GRANT role privilege for other roles.
+statement ok
+GRANT roleg to testuser3
+
+user root
+
+statement ok
+ALTER ROLE rolewithcreate WITH NOCREATEROLE
+
+statement ok
+ALTER USER testuser NOCREATEROLE
+
+statement error pq: cannot edit admin role
+ALTER ROLE admin with NOCREATEROLE
+
+# testuser should no longer have CREATEROLE privileges
+
+user testuser
+
+statement error pq: user testuser does not have CREATEROLE privilege
+CREATE ROLE roleh WITH CREATEROLE
+
+statement error pq: user testuser does not have CREATEROLE privilege
+ALTER ROLE roleg with NOCREATEROLE
+
+statement error pq: user testuser does not have CREATEROLE privilege
+DROP ROLE roleg
+
+statement error pq: user testuser does not have CREATEROLE privilege
+CREATE ROLE IF NOT EXISTS rolewithcreate WITH CREATEROLE
+
+statement error pq: user testuser does not have CREATEROLE privilege
+CREATE USER testuser4
+
+statement error pq: user testuser does not have CREATEROLE privilege
+ALTER USER testuser3 WITH PASSWORD 'ilov3beefjerky'
+
+user root
+
+statement error pq: role/user "rolek" does not exist
+ALTER ROLE rolek CREATEROLE
+
+statement ok
+ALTER ROLE IF EXISTS rolek CREATEROLE
+
+statement ok
+ALTER USER IF EXISTS rolek NOCREATEROLE
+
+# Role options should not be inherited.
+user root
+
+statement ok
+CREATE ROLE parentrole WITH CREATEROLE
+
+statement ok
+ALTER USER testuser WITH NOCREATEROLE
+
+statement ok
+GRANT parentrole TO testuser
+
+user testuser
+
+statement error pq: user testuser does not have CREATEROLE privilege
+CREATE ROLE rolej
+
+# Testing LOGIN and VALID UNTIL role privilege
+user root
+
+statement count 15
+DELETE FROM system.role_options WHERE NOT username in ('root', 'admin')
+
+statement ok
+CREATE ROLE rolewithlogin LOGIN
+
+query TTT
+SELECT username, option, value FROM system.role_options
+----
+
+statement ok
+CREATE ROLE rolewithnologin NOLOGIN
+
+query TTT
+SELECT username, option, value FROM system.role_options
+----
+rolewithnologin  NOLOGIN  NULL
+
+statement ok
+ALTER ROLE rolewithlogin VALID UNTIL '2020-01-01'
+
+query TTT
+SELECT username, option, value FROM system.role_options ORDER BY username
+----
+rolewithlogin    VALID UNTIL  2020-01-01 00:00:00+00
+rolewithnologin  NOLOGIN      NULL
+
+statement ok
+ALTER ROLE rolewithlogin VALID UNTIL NULL
+
+query TTT
+SELECT username, option, value FROM system.role_options ORDER BY username
+----
+rolewithlogin    VALID UNTIL  NULL
+rolewithnologin  NOLOGIN      NULL
+
+statement ok
+DROP ROLE rolewithlogin
+
+query TTT
+SELECT username, option, value FROM system.role_options
+----
+rolewithnologin  NOLOGIN  NULL
+
+statement error pq: conflicting role options
+CREATE ROLE thisshouldntwork LOGIN NOLOGIN
+
+statement error pq: redundant role options
+CREATE ROLE thisshouldntwork LOGIN LOGIN
+
+statement ok
+DROP ROLE parentrole
+
+query TTB colnames,rowsort
+SHOW GRANTS ON ROLE
+----
+role_name  member     is_admin
+admin      root       true
+roleg      testuser3  false
+
+query TTB colnames
+SHOW GRANTS ON ROLE admin
+----
+role_name  member  is_admin
+admin      root    true
+
+query TTB colnames
+SHOW GRANTS ON ROLE FOR root
+----
+role_name  member  is_admin
+admin      root    true
+
+query TTB colnames
+SHOW GRANTS ON ROLE admin FOR root
+----
+role_name  member  is_admin
+admin      root    true
+
+query TTB colnames
+SHOW GRANTS ON ROLE FOR testuser
+----
+role_name  member  is_admin
+
+query TTB colnames
+SHOW GRANTS ON ROLE testuser,admin FOR testuser,admin
+----
+role_name  member  is_admin
+
+# Test the "public" pseudo-role.
+
+statement error role name "public" is reserved
+CREATE USER public
+
+statement error role name "public" is reserved
+DROP USER public
+
+statement ok
+CREATE DATABASE publicdb
+
+statement ok
+CREATE DATABASE privatedb;
+REVOKE CONNECT ON DATABASE privatedb FROM public
+
+statement ok
+CREATE TABLE publicdb.publictable (k int)
+
+statement ok
+CREATE TABLE publicdb.privatetable (k int)
+
+statement ok
+CREATE TABLE privatedb.publictable (k int)
+
+statement ok
+CREATE TABLE privatedb.privatetable (k int)
+
+statement ok
+GRANT CONNECT ON DATABASE publicdb TO public
+
+statement ok
+GRANT SELECT ON publicdb.publictable TO public
+
+statement ok
+GRANT SELECT ON privatedb.publictable TO public
+
+user testuser
+
+query TTTTTT rowsort
+SHOW DATABASES
+----
+db2        root  NULL  NULL  {}  NULL
+defaultdb  root  NULL  NULL  {}  NULL
+postgres   root  NULL  NULL  {}  NULL
+privatedb  root  NULL  NULL  {}  NULL
+publicdb   root  NULL  NULL  {}  NULL
+test       root  NULL  NULL  {}  NULL
+
+query TTTTIT rowsort
+SHOW TABLES FROM publicdb
+----
+public  privatetable  table  root  0  NULL
+public  publictable   table  root  0  NULL
+
+query TTTTIT
+SHOW TABLES FROM privatedb
+----
+public  publictable  table  root  0  NULL
+
+statement ok
+SELECT * FROM publicdb.publictable
+
+statement error user testuser does not have SELECT privilege on relation privatetable
+SELECT * FROM publicdb.privatetable
+
+statement ok
+SELECT * FROM privatedb.publictable
+
+statement error user testuser does not have SELECT privilege on relation privatetable
+SELECT * FROM privatedb.privatetable
+
+statement error user testuser does not have INSERT privilege on relation publictable
+INSERT INTO publicdb.publictable VALUES (1)
+
+user root
+
+statement ok
+GRANT INSERT ON publicdb.publictable TO public
+
+user testuser
+
+statement ok
+INSERT INTO publicdb.publictable VALUES (1)
+
+user root
+
+# Revoke public access.
+statement ok
+REVOKE ALL ON publicdb.publictable FROM public
+
+user testuser
+
+statement error user testuser does not have SELECT privilege on relation publictable
+SELECT * FROM publicdb.publictable
+
+statement error user testuser does not have INSERT privilege on relation publictable
+INSERT INTO publicdb.publictable VALUES (1)
+
+query TTTTIT rowsort
+SHOW TABLES FROM publicdb
+----
+public  privatetable  table  root  0  NULL
+public  publictable   table  root  0  NULL
+
+# Test that non-admin users cannot drop admins.
+user root
+
+statement ok
+CREATE USER myadmin;
+GRANT admin TO myadmin;
+ALTER USER testuser CREATEROLE
+
+user testuser
+
+statement error must be superuser to drop superusers
+DROP USER myadmin
+
+subtest createlogin_privilege
+
+user root
+
+statement ok
+ALTER USER testuser CREATEROLE;
+  DROP USER testuser2;
+  DROP USER testuser3;
+
+user testuser
+
+# By default, a new role does not have privilege CREATELOGIN.
+
+statement error user testuser does not have CREATELOGIN privilege
+CREATE USER testuser3 WITH PASSWORD 'abc'
+
+statement error user testuser does not have CREATELOGIN privilege
+CREATE USER testuser3 LOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+CREATE ROLE testrole3 LOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+CREATE USER testuser2
+
+# CREATE ROLE implies NOLOGIN, which is OK
+statement ok
+CREATE ROLE testuser4
+
+# It's also possible to create a user/role with NOLOGIN.
+statement ok
+CREATE USER testuser2 NOLOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER USER testuser2 WITH PASSWORD 'abc'
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER USER testuser2 LOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER USER testuser2 NOLOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER USER testuser2 CREATELOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER USER testuser2 NOCREATELOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER USER testuser2 VALID UNTIL '2021-01-01'
+
+statement ok
+CREATE ROLE otherrole
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER ROLE otherrole CREATELOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER ROLE otherrole NOCREATELOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER ROLE otherrole LOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER ROLE otherrole NOLOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+CREATE ROLE otherrole2 CREATELOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+CREATE ROLE otherrole2 NOCREATELOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+CREATE ROLE otherrole2 LOGIN
+
+user root
+
+statement ok
+ALTER ROLE testuser CREATELOGIN
+
+user testuser
+
+statement ok
+ALTER USER testuser PASSWORD NULL
+
+statement ok
+CREATE USER testuser3 WITH PASSWORD 'abc'
+
+statement ok
+ALTER USER testuser3 WITH PASSWORD 'xyz'
+
+statement ok
+ALTER USER testuser3 VALID UNTIL '2021-01-01'
+
+statement ok
+ALTER USER testuser3 LOGIN
+
+statement ok
+ALTER USER testuser3 NOLOGIN
+
+statement ok
+ALTER USER testuser3 CREATELOGIN
+
+statement ok
+ALTER USER testuser3 NOCREATELOGIN
+
+statement ok
+ALTER ROLE otherrole CREATELOGIN
+
+statement ok
+ALTER ROLE otherrole NOCREATELOGIN
+
+
+statement ok
+ALTER ROLE otherrole LOGIN
+
+statement ok
+ALTER ROLE otherrole NOLOGIN
+
+statement ok
+CREATE ROLE otherrole2 CREATELOGIN
+
+statement ok
+CREATE ROLE otherrole3 NOCREATELOGIN
+
+statement ok
+CREATE ROLE otherrole4 LOGIN
+
+# If CREATELOGIN is revoked, the changes are prevented again.
+
+user root
+
+statement ok
+ALTER USER testuser NOCREATELOGIN
+
+# Verify default setting for sql.auth.change_own_password.enabled.
+query B
+SHOW CLUSTER SETTING sql.auth.change_own_password.enabled
+----
+false
+
+user testuser
+
+statement error user testuser does not have CREATELOGIN privilege
+CREATE USER testuser5
+
+statement ok
+CREATE ROLE testuser6
+
+statement error user testuser does not have CREATELOGIN privilege
+CREATE USER testuser5 WITH PASSWORD 'abc'
+
+# Verify that testuser cannot change its own password.
+statement error user testuser does not have CREATELOGIN privilege
+ALTER USER testuser PASSWORD 'xyz'
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER USER CURRENT_USER PASSWORD '123'
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER USER testuser2 WITH PASSWORD 'abc'
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER USER testuser2 VALID UNTIL '2021-01-01'
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER USER testuser2 LOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER USER testuser2 NOLOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER ROLE otherrole CREATELOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER ROLE otherrole NOCREATELOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER ROLE otherrole LOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER ROLE otherrole NOLOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+CREATE ROLE otherrole4 CREATELOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+CREATE ROLE otherrole4 NOCREATELOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+CREATE ROLE otherrole4 LOGIN
+
+user root
+
+subtest change_own_password
+
+statement ok
+SET CLUSTER SETTING sql.auth.change_own_password.enabled = true
+
+user testuser
+
+# Verify that testuser can change its own password now.
+statement ok
+ALTER USER testuser PASSWORD 'xyz'
+
+statement ok
+ALTER USER CURRENT_USER PASSWORD '123'
+
+# Verify that testuser cannot *remove* its own password.
+statement error user testuser does not have CREATELOGIN privilege
+ALTER USER testuser PASSWORD NULL
+
+# testuser still cannot change another user's password.
+statement error user testuser does not have CREATELOGIN privilege
+ALTER USER testuser2 WITH PASSWORD 'abc'
+
+# Verify that testuser cannot modify other role options of itself.
+statement error user testuser does not have CREATELOGIN privilege
+ALTER USER testuser PASSWORD 'abc' VALID UNTIL '4044-10-31'
+
+user root
+
+statement ok
+SET ROLE testuser
+
+# Changing users with SET ROLE should allow self-password change.
+statement ok
+ALTER USER testuser PASSWORD 'cat'
+
+# Changing users with SET ROLE should still mean that changing other users
+# is disallowed.
+statement error user testuser does not have CREATELOGIN privilege
+ALTER USER testuser2 WITH PASSWORD 'abc'
+
+statement ok
+RESET ROLE
+
+subtest end
+
+subtest validate_alter_provisioned_user_restrictions
+
+# Changing PROVISIONSRC privilege for provisioned users is disallowed even for
+# ADMIN users, they can only be dropped.
+statement ok
+DROP ROLE testuser
+
+statement ok
+CREATE USER testuser with PROVISIONSRC 'ldap:example.com'
+
+statement error pq: cannot alter PASSWORD/PROVISIONSRC option for provisioned user testuser
+ALTER ROLE testuser WITH PROVISIONSRC 'ldap:example.com'
+
+statement ok
+SET ROLE testuser
+
+# Changing users with SET ROLE should now disallow self-password/provisionsrc
+# change as role has a PROVISIONSRC privilege.
+statement error pq: cannot alter PASSWORD/PROVISIONSRC option for provisioned user testuser
+ALTER USER testuser PASSWORD 'cat'
+
+statement error pq: cannot alter PASSWORD/PROVISIONSRC option for provisioned user testuser
+ALTER USER testuser PROVISIONSRC 'ldap:example2.com'
+
+statement ok
+RESET ROLE
+
+user testuser
+
+# Verify that now provisioned testuser can't change its own password or provisionsrc.
+statement error pq: cannot alter PASSWORD/PROVISIONSRC option for provisioned user testuser
+ALTER USER testuser PASSWORD 'xyz'
+
+statement error pq: cannot alter PASSWORD/PROVISIONSRC option for provisioned user testuser
+ALTER USER CURRENT_USER PASSWORD '123'
+
+statement error pq: cannot alter PASSWORD/PROVISIONSRC option for provisioned user testuser
+ALTER USER testuser PROVISIONSRC 'ldap:example2.com'
+
+# Verify that provisioned testuser still cannot *remove* its own password.
+statement error pq: cannot alter PASSWORD/PROVISIONSRC option for provisioned user testuser
+ALTER USER testuser PASSWORD NULL
+
+# testuser still cannot change another user's password.
+statement error pq: user testuser does not have CREATEROLE privilege
+ALTER USER testuser2 WITH PASSWORD 'abc'
+
+# Verify that testuser still cannot modify other role options of itself.
+statement error pq: cannot alter PASSWORD/PROVISIONSRC option for provisioned user testuser
+ALTER USER testuser PASSWORD 'abc' VALID UNTIL '4044-10-31'
+
+user root
+
+
+statement ok
+DROP user testuser;
+CREATE user testuser CREATEROLE;
+
+subtest end
+
+subtest replication
+
+statement ok
+CREATE ROLE repluser NOREPLICATION LOGIN
+
+query TT rowsort
+SELECT option, value FROM system.role_options WHERE username = 'repluser'
+----
+
+statement ok
+ALTER ROLE repluser REPLICATION
+
+query TT rowsort
+SELECT  option, value FROM system.role_options WHERE username = 'repluser'
+----
+REPLICATION  NULL
+
+statement ok
+DROP ROLE repluser; CREATE ROLE repluser REPLICATION LOGIN
+
+query TT rowsort
+SELECT  option, value FROM system.role_options WHERE username = 'repluser'
+----
+REPLICATION  NULL
+
+statement ok
+ALTER ROLE repluser NOREPLICATION
+
+query TT rowsort
+SELECT option, value FROM system.role_options WHERE username = 'repluser'
+----
+
+subtest end
+
+# Verify that root is allowed to edit some other role that has ADMIN.
+statement ok
+CREATE ROLE other_admin;
+GRANT admin TO other_admin;
+ALTER ROLE other_admin CREATEDB
+
+user testuser
+
+# Verify that testuser is not allowed to edit some other role that has ADMIN.
+# The error message is important for this test -- we want to make sure it fails
+# because of a missing ADMIN power, not because of a missing CREATEROLE option.
+statement error only users with the admin role are allowed to alter another admin
+ALTER ROLE other_admin NOCREATEDB
+
+subtest pw_hashes
+
+user root
+
+statement ok
+SET CLUSTER SETTING server.user_login.password_encryption = 'crdb-bcrypt'
+
+let $bcrypt_pw
+SELECT 'CRDB-BCRYPT$'||'2a$'||'10$'||'vcmoIBvgeHjgScVHWRMWI.Z3v03WMixAw2bBS6qZihljSUuwi88Yq'
+
+statement ok
+CREATE USER hash1 WITH PASSWORD '$bcrypt_pw'
+
+# Refers to https://github.com/cockroachdb/cockroach/issues/73337
+statement error pgcode 0A000 hash scheme "md5" is not supported.*\nHINT.*\n.*73337
+CREATE USER hash2 WITH PASSWORD 'md5aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+let $scram_pw
+SELECT 'SCRAM-SHA-256$'||'4096:B5VaTCvCLDzZxSYL829oVA==$'||'3Ako3mNxNtdsaSOJl0Av3i6vyV2OiSP9Ly7famdFSbw=:d7BfSmrtjwbF74mSoOhQiDSpoIvlakXKdpBNb3Meunc='
+
+statement ok
+CREATE USER hash3 WITH PASSWORD '$scram_pw'
+
+
+statement ok
+SET CLUSTER SETTING server.user_login.store_client_pre_hashed_passwords.enabled = false
+
+# Password hash not recognized: hash considered as password input.
+statement error pgcode 28P01 bcrypt: password length exceeds 72 bytes
+CREATE USER hash4 WITH PASSWORD '$bcrypt_pw'
+
+# Password hash not recognized: hash considered as password input.
+statement ok
+CREATE USER hash5 WITH PASSWORD 'md5aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+# Password hash not recognized: hash considered as password input.
+statement error pgcode 28P01 bcrypt: password length exceeds 72 bytes
+CREATE USER hash6 WITH PASSWORD '$scram_pw'
+
+query TTB
+SELECT username, substr("hashedPassword", 1, 7), 'CRDB-BCRYPT'||"hashedPassword" = '$bcrypt_pw' FROM system.users WHERE username LIKE 'hash%' ORDER BY 1
+----
+hash1  $2a$10$  true
+hash3  SCRAM-S  false
+hash5  $2a$10$  false
+
+# Reset cluster setting after test completion.
+statement ok
+RESET CLUSTER SETTING server.user_login.store_client_pre_hashed_passwords.enabled;
+
+subtest bcrypt_cost
+
+statement ok
+SET CLUSTER SETTING server.user_login.password_hashes.default_cost.crdb_bcrypt = 8
+
+statement ok
+CREATE USER hash7 WITH PASSWORD 'hello'
+
+# Check that the configured cost was embedded in the setting.
+query TT
+SELECT username, substr("hashedPassword", 1, 7) FROM system.users WHERE username = 'hash7'
+----
+hash7  $2a$08$
+
+statement ok
+RESET CLUSTER SETTING server.user_login.password_hashes.default_cost.crdb_bcrypt;
+
+subtest scram_gen_hash
+
+statement ok
+SET CLUSTER SETTING server.user_login.password_encryption = 'scram-sha-256'
+
+statement ok
+CREATE USER hash8 WITH PASSWORD 'hello world'
+
+query TT
+SELECT username, substr("hashedPassword", 1, 20) FROM system.users WHERE username = 'hash8'
+----
+hash8  SCRAM-SHA-256$10610:
+
+statement ok
+ALTER USER hash8 WITH PASSWORD 'hello universe'
+
+query TT
+SELECT username, substr("hashedPassword", 1, 20) FROM system.users WHERE username = 'hash8'
+----
+hash8  SCRAM-SHA-256$10610:
+
+subtest scram_cost
+
+statement ok
+SET CLUSTER SETTING server.user_login.password_hashes.default_cost.scram_sha_256 = 200000
+
+statement ok
+ALTER USER hash8 WITH PASSWORD 'hai'
+
+query TT
+SELECT username, substr("hashedPassword", 1, 20) FROM system.users WHERE username = 'hash8'
+----
+hash8  SCRAM-SHA-256$200000
+
+# Reset cluster setting after test completion.
+statement ok
+RESET CLUSTER SETTING server.user_login.password_encryption;
+
+statement ok
+RESET CLUSTER SETTING server.user_login.password_hashes.default_cost.scram_sha_256
+
+subtest end
+
+subtest create_role_priv
+
+user root
+
+# Revoke the CREATEROLE role option granted in an earlier subtest.
+statement ok
+ALTER ROLE testuser NOCREATEROLE
+
+user testuser
+
+statement error user testuser does not have CREATEROLE privilege
+CREATE ROLE u_create_role_priv
+
+user root
+
+statement ok
+GRANT SYSTEM CREATEROLE TO testuser
+
+user testuser
+
+statement ok
+CREATE ROLE u_create_role_priv
+
+user root
+
+statement ok
+REVOKE SYSTEM CREATEROLE FROM testuser
+
+user testuser
+
+statement error user testuser does not have CREATEROLE privilege
+DROP ROLE u_create_role_priv
+
+user root
+
+statement ok
+CREATE ROLE parent_with_createrole
+
+statement ok
+GRANT parent_with_createrole TO testuser
+
+statement ok
+GRANT SYSTEM CREATEROLE TO parent_with_createrole
+
+user testuser
+
+statement ok
+DROP ROLE u_create_role_priv
+
+user root
+
+statement ok
+REVOKE SYSTEM CREATEROLE FROM parent_with_createrole
+
+statement ok
+DROP ROLE parent_with_createrole
+
+subtest end
+
+subtest create_login_priv
+
+user root
+
+statement ok
+ALTER ROLE testuser CREATEROLE NOCREATELOGIN
+
+user testuser
+
+statement error user testuser does not have CREATELOGIN privilege
+CREATE USER u_create_login_priv WITH PASSWORD 'roacher4lyfe'
+
+user root
+
+statement ok
+GRANT SYSTEM CREATELOGIN TO testuser
+
+user testuser
+
+statement ok
+CREATE USER u_create_login_priv WITH PASSWORD 'roacher4lyfe'
+
+statement ok
+DROP USER u_create_login_priv
+
+user root
+
+statement ok
+REVOKE SYSTEM CREATELOGIN FROM testuser
+
+user testuser
+
+statement error user testuser does not have CREATELOGIN privilege
+CREATE USER u_create_login_priv WITH PASSWORD 'roacher4lyfe'
+
+user root
+
+statement ok
+CREATE ROLE creator_of_logins
+
+statement ok
+GRANT SYSTEM CREATELOGIN TO creator_of_logins
+
+statement ok
+GRANT creator_of_logins TO testuser
+
+user testuser
+
+statement ok
+CREATE USER u_create_login_priv WITH PASSWORD 'roacher4lyfe'
+
+statement ok
+DROP USER u_create_login_priv
+
+user root
+
+statement ok
+REVOKE SYSTEM CREATELOGIN FROM creator_of_logins
+
+statement ok
+DROP ROLE creator_of_logins
+
+statement ok
+ALTER ROLE testuser NOCREATEROLE
+
+subtest end
+
+subtest create_db_priv
+
+user root
+
+statement ok
+ALTER ROLE testuser NOCREATEDB
+
+user testuser
+
+statement error permission denied to create database
+CREATE DATABASE db_create_db_priv
+
+user root
+
+statement ok
+GRANT SYSTEM CREATEDB TO testuser
+
+user testuser
+
+statement ok
+CREATE DATABASE db_create_db_priv
+
+user root
+
+statement ok
+REVOKE SYSTEM CREATEDB FROM testuser
+
+user testuser
+
+statement error permission denied to rename database
+ALTER DATABASE db_create_db_priv RENAME TO renamed_db_create_db_priv
+
+user root
+
+statement ok
+CREATE ROLE creator_of_databases
+
+statement ok
+GRANT creator_of_databases TO testuser
+
+statement ok
+GRANT SYSTEM CREATEDB TO creator_of_databases
+
+user testuser
+
+statement ok
+ALTER DATABASE db_create_db_priv RENAME TO renamed_db_create_db_priv
+
+user root
+
+statement ok
+DROP DATABASE renamed_db_create_db_priv
+
+statement ok
+REVOKE SYSTEM CREATEDB FROM creator_of_databases
+
+statement ok
+DROP ROLE creator_of_databases
+
+subtest end
+
+subtest provisionsrc
+
+skipif config 3node-tenant
+statement ok
+CREATE ROLE role_with_provisioning PROVISIONSRC 'ldap:ldap.example.com'
+
+skipif config 3node-tenant
+statement ok
+ALTER ROLE testuser PROVISIONSRC 'ldap:ldap.example.com'
+
+subtest end
+
+# Validates that drop role will be prevented if the role is in use by
+# any schema objects. This is validates and prevents the regression found
+# in #124441
+subtest drop_role_block_validation
+
+statement ok
+CREATE DATABASE block_db;
+USE block_db;
+CREATE TABLE t(n int);
+CREATE TYPE  typ AS ENUM ('open', 'closed', 'inactive');
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE ROLE block_user;
+GRANT ALL ON DATABASE block_db to block_user;
+GRANT ALL ON SCHEMA public to block_user;
+GRANT ALL ON TABLE t to block_user;
+GRANT ALL ON TYPE typ to block_user;
+GRANT ALL ON FUNCTION f to block_user;
+
+statement error pgcode 2BP01 cannot drop role/user block_user: grants still exist on block_db, block_db.public.t, block_db.public, block_db.public.typ, block_db.public.f
+DROP ROLE block_user
+
+statement ok
+USE defaultdb;
+
+subtest end

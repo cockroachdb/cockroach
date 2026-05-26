@@ -1,0 +1,65 @@
+setup
+CREATE DATABASE db;
+CREATE TABLE db.public.tbl (i INT PRIMARY KEY, k INT);
+CREATE SEQUENCE db.public.sq1;
+----
+
+# Each insert will be injected twice per stage, plus 1 extra.
+stage-query phase=PostCommitNonRevertiblePhase stage=: rollback=true
+SELECT count(*)=($successfulStageCount*2)+1 FROM db.public.tbl;
+----
+true
+
+# On the first and second stages all IUD operations will be allowed because the
+# not null constraint is not yet enforced.
+stage-exec phase=PostCommitPhase stage=1:2 schemaChangeExecError=(.*validation of column "j" NOT NULL failed on row:.*)
+INSERT INTO db.public.tbl VALUES($stageKey, 1);
+INSERT INTO db.public.tbl VALUES($stageKey + 1, 1);
+UPDATE db.public.tbl SET k=$stageKey WHERE i <> -7;
+UPDATE db.public.tbl SET k=i WHERE i <> -7;
+DELETE FROM db.public.tbl WHERE i=-1;
+DELETE FROM db.public.tbl WHERE i=$stageKey;
+INSERT INTO db.public.tbl VALUES($stageKey, 1);
+INSERT INTO db.public.tbl VALUES(-1, -1);
+----
+
+# We expect 5 rows, 2 from each of the stages above and the one extra
+# -1, -1.
+stage-query phase=PostCommitPhase stage=1:2
+SELECT count(*)=($successfulStageCount*2)+1 FROM db.public.tbl;
+----
+true
+
+# On any later stages the not null constraint is enforced, hence
+# all insert operations should fail.
+stage-exec phase=PostCommitPhase stage=3:
+INSERT INTO db.public.tbl VALUES($stageKey, 1);
+----
+.*pq: failed to satisfy CHECK constraint \(j IS NOT NULL\).*
+
+
+# Only the third stage inserts will be executed, which will get blocked by
+# the not null constraint
+stage-query phase=PostCommitPhase stage=3:
+SELECT count(*)=0 FROM db.public.tbl;
+----
+true
+
+# On any later stages the not null constraint is enforced, hence
+# all insert operations should fail.
+# The NULL violation can be caught in different places, so there are two
+# acceptable error messages.
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+INSERT INTO db.public.tbl VALUES($stageKey, 1);
+----
+(null value in column "j" violates not-null constraint|failed to satisfy CHECK constraint \(j IS NOT NULL\).*)
+
+# No inserts before this will succeed because of the not null constraint.
+stage-query phase=PostCommitNonRevertiblePhase stage=:
+SELECT count(*)=0 FROM db.public.tbl;
+----
+true
+
+test
+ALTER TABLE db.public.tbl ADD COLUMN j INT AS (NULL::INT) VIRTUAL NOT NULL;
+----

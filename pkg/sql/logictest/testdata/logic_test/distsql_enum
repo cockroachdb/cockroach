@@ -1,0 +1,103 @@
+# LogicTest: 5node-default-configs
+
+# Regression test for nested tuple enum hydration (#74189)
+statement ok
+CREATE TYPE greeting AS ENUM ('hello')
+
+statement ok
+CREATE TABLE IF NOT EXISTS seed AS
+	SELECT
+		enum_range('hello'::greeting)[g] as _enum
+	FROM
+		generate_series(1, 1) AS g
+
+query TT nodeidx=3
+WITH w (col)
+				AS (
+					SELECT
+						*
+					FROM
+						(
+							VALUES
+								(
+									((('hello':::greeting, 0), 0))
+								)
+						)
+				)
+		SELECT
+			seed._enum, w.col
+		FROM
+			w, seed
+----
+hello     ("(hello,0)",0)
+
+# Regression test for nested tuple enum hydration (#74189)
+statement ok
+CREATE TABLE t1 (x INT PRIMARY KEY, y greeting); INSERT INTO t1(x, y) VALUES (0,'hello');
+CREATE TABLE t2 (x INT PRIMARY KEY, y greeting); INSERT INTO t2(x, y) VALUES (0,'hello');
+
+# split into ranges
+
+statement ok
+ALTER TABLE t1 SPLIT AT VALUES(0),(10),(20);
+ALTER TABLE t2 SPLIT AT VALUES(0),(10),(20);
+
+retry
+statement ok
+ALTER TABLE t1 EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 0), (ARRAY[2], 10), (ARRAY[3], 20);
+
+retry
+statement ok
+ALTER TABLE t2 EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 0), (ARRAY[2], 10), (ARRAY[3], 20);
+
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE t1 WITH DETAILS] ORDER BY lease_holder, start_key
+----
+start_key           end_key                replicas  lease_holder
+<before:/Table/XX>  …/1/0                  {1}       1
+…/1/0               …/1/10                 {1}       1
+…/1/10              …/1/20                 {2}       2
+…/1/20              <after:/Table/XX/1/0>  {3}       3
+
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE t2 WITH DETAILS] ORDER BY lease_holder, start_key
+----
+start_key                 end_key       replicas  lease_holder
+…/1/0                     …/1/10        {1}       1
+…/1/10                    …/1/20        {2}       2
+<before:/Table/109/1/20>  …/1/0         {3}       3
+…/1/20                    <after:/Max>  {3}       3
+
+# Always disable the direct columnar scans to make the output below
+# deterministic.
+statement ok
+SET direct_columnar_scans_enabled = false
+
+# Ensure that the join readers are planned on the remote nodes.
+query T
+EXPLAIN (VEC)
+SELECT t1.x from t1 INNER LOOKUP JOIN t2 ON t1.x=t2.x WHERE t2.y='hello'
+----
+│
+├ Node 1
+│ └ *colexec.ParallelUnorderedSynchronizer
+│   ├ *rowexec.joinReader
+│   │ └ *colfetcher.ColBatchScan
+│   ├ *colrpc.Inbox
+│   └ *colrpc.Inbox
+├ Node 2
+│ └ *colrpc.Outbox
+│   └ *rowexec.joinReader
+│     └ *colfetcher.ColBatchScan
+└ Node 3
+  └ *colrpc.Outbox
+    └ *rowexec.joinReader
+      └ *colfetcher.ColBatchScan
+
+query I
+SELECT t1.x from t1 INNER LOOKUP JOIN t2 ON t1.x=t2.x WHERE t2.y='hello'
+----
+0
+
+statement ok
+RESET direct_columnar_scans_enabled

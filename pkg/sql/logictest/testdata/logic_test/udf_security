@@ -1,0 +1,313 @@
+subtest basic_owner
+
+statement ok
+CREATE ROLE owner;
+CREATE ROLE invoker;
+
+statement ok
+CREATE TABLE top_secret_data (id INT, secret STRING);
+INSERT INTO top_secret_data VALUES (1, 'Top Secret');
+GRANT SELECT ON TABLE top_secret_data TO owner;
+
+statement ok
+SET ROLE owner;
+
+statement ok
+CREATE FUNCTION get_top_secret_data() RETURNS STRING LANGUAGE SQL SECURITY DEFINER AS $$
+    SELECT secret FROM top_secret_data;
+$$;
+
+statement ok
+SET ROLE invoker;
+
+# The invoker can execute the function, but not access the table directly.
+statement error pgcode 42501 user invoker does not have SELECT privilege on relation top_secret_data
+SELECT * FROM top_secret_data;
+
+query T
+SELECT get_top_secret_data();
+----
+Top Secret
+
+subtest end
+
+subtest alter_security
+
+# To change any invoker's ability to execute the function, we can alter the
+# function to be SECURITY INVOKER.
+statement ok
+SET ROLE owner;
+
+statement ok
+ALTER FUNCTION get_top_secret_data() SECURITY INVOKER;
+
+statement ok
+SET ROLE invoker;
+
+statement error pgcode 42501 user invoker does not have SELECT privilege on relation top_secret_data
+SELECT get_top_secret_data();
+
+subtest end
+
+subtest change_owner_privs
+
+# Ensure that the invoker inherits from the owner's privileges if the
+# privileges change.
+statement ok
+SET ROLE root;
+
+statement ok
+REVOKE SELECT ON TABLE top_secret_data FROM owner;
+
+statement ok
+ALTER FUNCTION get_top_secret_data() SECURITY DEFINER;
+
+statement ok
+SET ROLE invoker;
+
+statement error pgcode 42501 user owner does not have SELECT privilege on relation top_secret_data
+SELECT get_top_secret_data();
+
+subtest end
+
+subtest creator_owner
+
+statement ok
+SET ROLE owner;
+
+statement ok
+CREATE TABLE secret_data (id INT, secret STRING);
+INSERT INTO secret_data VALUES (1, 'Secret');
+
+statement ok
+CREATE FUNCTION get_secret_data() RETURNS STRING LANGUAGE SQL SECURITY DEFINER AS $$
+    SELECT secret FROM secret_data;
+$$;
+
+# The creator still has implicit privileges on the table. This deviates from
+# postgres, but we can change the ownership of the table.
+statement ok
+REVOKE ALL ON TABLE secret_data FROM owner;
+
+query TTTTTB colnames
+SELECT * FROM [SHOW GRANTS ON TABLE secret_data] WHERE grantee = 'owner';
+----
+database_name  schema_name  table_name   grantee  privilege_type  is_grantable
+test           public       secret_data  owner  ALL             true
+
+statement ok
+SET ROLE root;
+
+statement ok
+ALTER TABLE secret_data OWNER TO testuser;
+
+query TTTTTB colnames
+SELECT * FROM [SHOW GRANTS ON TABLE secret_data] WHERE grantee = 'owner';
+----
+database_name  schema_name  table_name   grantee  privilege_type  is_grantable
+
+statement ok
+SET ROLE invoker;
+
+statement error pgcode 42501 user owner does not have SELECT privilege on relation top_secret_data
+SELECT get_top_secret_data();
+
+subtest end
+
+subtest change_owner
+
+statement ok
+SET ROLE root;
+
+statement ok
+ALTER FUNCTION get_secret_data() OWNER TO testuser;
+GRANT SELECT ON secret_data TO testuser;
+SET ROLE invoker;
+
+query T
+SELECT get_secret_data();
+----
+Secret
+
+subtest end
+
+subtest revoke_execute
+
+# Despite SECURITY DEFINER being set, the invoker can't execute the function
+# if it does not have proper privileges.
+statement ok
+SET ROLE testuser;
+
+statement ok
+REVOKE ALL ON FUNCTION get_secret_data() FROM PUBLIC;
+SET ROLE invoker;
+
+statement error pgcode 42501 user invoker does not have EXECUTE privilege on function get_secret_data
+SELECT get_secret_data();
+
+subtest end
+
+subtest security_unsupported
+
+# We currently don't allow for routines to create roles. If we did, we would
+# likely want some createrole_self_grant session variable like postgres has.
+# https://www.postgresql.org/docs/current/runtime-config-client.html#GUC-CREATEROLE-SELF-GRANT.
+statement error pgcode 0A000 unimplemented: CREATE ROLE usage inside a function definition
+CREATE FUNCTION create_secret_role() RETURNS VOID LANGUAGE SQL SECURITY DEFINER AS $$
+    CREATE ROLE secret_role;
+$$;
+
+statement error pgcode 0A000 unimplemented: SET usage inside a function definition
+CREATE FUNCTION create_secret_role() RETURNS VOID LANGUAGE SQL SECURITY DEFINER AS $$
+    SET ROLE testuser;
+$$;
+
+subtest end
+
+subtest nested_udfs
+
+statement ok
+SET ROLE root;
+
+statement ok
+CREATE ROLE owner1;
+
+statement ok
+CREATE TABLE t (id INT, secret STRING);
+INSERT INTO t VALUES (1, 'Confidential');
+GRANT SELECT ON TABLE t TO owner;
+
+# Owner creates a SECURITY DEFINER function accessing the table.
+statement ok
+SET ROLE owner;
+
+statement ok
+CREATE FUNCTION get_t() RETURNS STRING LANGUAGE SQL SECURITY DEFINER AS $$
+    SELECT secret FROM t;
+$$;
+
+statement ok
+SET ROLE owner1;
+
+# Another owner creates a SECURITY DEFINER function calling get_t.
+statement ok
+CREATE FUNCTION get_t_nested() RETURNS STRING LANGUAGE SQL SECURITY DEFINER AS $$
+    SELECT get_t();
+$$;
+
+statement ok
+SET ROLE invoker;
+
+# Invoker cannot directly access the table.
+statement error pgcode 42501 user invoker does not have SELECT privilege on relation t
+SELECT * FROM t;
+
+# Nested SECURITY DEFINER functions use the proper owner's privileges, allowing
+# the invoker to have special access of the table.
+query T
+SELECT get_t_nested();
+----
+Confidential
+
+# If we set get_t's security mode back to INVOKER...
+statement ok
+SET ROLE owner;
+
+statement ok
+ALTER FUNCTION get_t() SECURITY INVOKER;
+
+statement ok
+SET ROLE invoker;
+
+# ...the invoker can no longer access the table used in get_t.
+statement error pgcode 42501 user owner1 does not have SELECT privilege on relation t
+SELECT get_t_nested();
+
+statement ok
+SET ROLE owner;
+
+statement ok
+ALTER FUNCTION get_t() SECURITY DEFINER;
+
+statement ok
+SET ROLE root;
+
+# If we revoke owner1's access to get_t...
+statement ok
+REVOKE EXECUTE ON FUNCTION get_t FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION get_t TO invoker;
+
+statement ok
+SET ROLE invoker;
+
+# ...the invoker can no longer access get_t as well.
+statement error pgcode 42501 user owner1 does not have EXECUTE privilege on function get_t
+SELECT get_t_nested();
+
+query T
+SELECT get_t();
+----
+Confidential
+
+statement ok
+SET ROLE root;
+
+statement ok
+GRANT EXECUTE ON FUNCTION get_t TO owner1;
+
+statement ok
+SET ROLE invoker;
+
+# The invoker can access the nested function again. Issue a select to cache
+# this query plan.
+query T
+SELECT get_t_nested();
+----
+Confidential
+
+# Changing the ownership of get_t should invalidate our cached query plan and
+# reflect privileges properly.
+statement ok
+SET ROLE root;
+
+statement ok
+CREATE ROLE owner2;
+
+statement ok
+ALTER FUNCTION get_t() OWNER TO owner2;
+
+statement ok
+SET ROLE invoker;
+
+statement error pgcode 42501 user owner2 does not have SELECT privilege on relation t
+SELECT get_t_nested();
+
+subtest end
+
+subtest invoker_and_definer
+
+statement ok
+SET ROLE root;
+
+# Reset some privileges so that owner will be the owner of get_top_secret_data
+# with proper select privileges on secret_data again.
+statement ok
+GRANT SELECT ON TABLE secret_data TO owner;
+
+statement ok
+ALTER FUNCTION get_secret_data() OWNER TO owner;
+
+statement ok
+GRANT EXECUTE ON FUNCTION get_secret_data TO invoker;
+
+statement ok
+SET ROLE invoker;
+
+# Ensure that the user we perform privilege checks against is reset between
+# building.
+statement error pgcode 42501 user invoker does not have SELECT privilege on relation secret_data
+SELECT get_secret_data()
+UNION
+SELECT id FROM secret_data;
+
+subtest end

@@ -1,0 +1,129 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON);
+
+statement ok
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
+
+statement ok
+INSERT INTO a VALUES (1, 1, 1, 'foo', '{"x": "one"}');
+INSERT INTO xy VALUES (1, 2);
+
+statement error pgcode 22012 pq: division by zero
+SELECT CASE WHEN f = (SELECT 1 // 0 FROM xy WHERE x = i) THEN 100 ELSE 200 END FROM a;
+
+query I
+SELECT CASE WHEN f = 0 THEN (SELECT 1 // 0 FROM xy WHERE x = i) ELSE 200 END FROM a;
+----
+200
+
+statement error pgcode 22012 pq: division by zero
+SELECT CASE WHEN f = 1 THEN (SELECT 1 // 0 FROM xy WHERE x = i) ELSE 200 END FROM a;
+
+query I
+SELECT CASE WHEN f = 1 THEN 100 ELSE (SELECT 1 // 0 FROM xy WHERE x = i) END FROM a;
+----
+100
+
+statement error pgcode 22012 pq: division by zero
+SELECT CASE WHEN f = 0 THEN 100 ELSE (SELECT 1 // 0 FROM xy WHERE x = i) END FROM a;
+
+# Regression test for #97432 - respect CASE branch evaluation order for
+# non-leakproof expressions.
+subtest volatile-subquery
+
+query I
+SELECT CASE WHEN f = 1
+  THEN (SELECT y FROM xy WHERE x = i)
+  ELSE (SELECT 1 // 0 FROM xy WHERE x = i) END
+FROM a;
+----
+2
+
+statement error pgcode 22012 pq: division by zero
+SELECT CASE WHEN f = 0
+  THEN (SELECT y FROM xy WHERE x = i)
+  ELSE (SELECT 1 // 0 FROM xy WHERE x = i) END
+FROM a;
+
+subtest end
+
+# Regression test for #127889. CASE-like expressions should not impose type
+# widths of one branch on other branches.
+subtest regression_127889
+
+query T
+SELECT CASE WHEN true THEN 'foo'::TEXT ELSE 'b'::CHAR END
+----
+foo
+
+query T
+SELECT COALESCE(NULL::CHAR, 'bar'::CHAR(2))
+----
+ba
+
+query T
+SELECT IF(false, 'foo'::CHAR, 'bar'::CHAR(2))
+----
+ba
+
+query T
+SELECT CASE WHEN false THEN 'b'::CHAR ELSE 'foo'::TEXT END
+----
+foo
+
+query T
+SELECT (CASE WHEN false THEN 'b'::CHAR ELSE 'foo'::TEXT END)::CHAR
+----
+f
+
+query T
+SELECT (CASE WHEN false THEN 'b'::CHAR ELSE 'foo'::TEXT END)::BPCHAR
+----
+foo
+
+query R
+SELECT CASE WHEN true THEN 1.2345::DECIMAL(5, 4) ELSE NULL::DECIMAL(10, 2) END
+----
+1.2345
+
+query R
+SELECT CASE WHEN false THEN NULL::DECIMAL(10, 2) ELSE 1.2345::DECIMAL(5, 4) END
+----
+1.2345
+
+subtest end
+
+# Regression test for #136167. Tuple labels should be preserved through CASE
+# expressions.
+subtest regression_136167
+
+query I rowsort
+SELECT (t2.c).foo FROM (
+    SELECT CASE WHEN foo IS NULL THEN NULL ELSE t.* END
+    FROM (VALUES (1, 'a'), (3, 'b')) AS t(foo, bar)
+) AS t2(c)
+----
+1
+3
+
+query T rowsort
+SELECT to_jsonb(CASE WHEN foo IS NULL THEN NULL ELSE t.* END)
+FROM (VALUES (1, 'a'), (3, 'b')) AS t(foo, bar)
+----
+{"bar": "a", "foo": 1}
+{"bar": "b", "foo": 3}
+
+statement ok
+CREATE TABLE t136167 (id UUID PRIMARY KEY, s TEXT)
+
+statement ok
+INSERT INTO t136167 VALUES ('2b740de9-cd33-449a-9c0e-44ea16150f99', 'string')
+
+query T
+SELECT to_jsonb(CASE WHEN t.s IS NULL THEN NULL ELSE t.* END) FROM t136167 AS t
+----
+{"id": "2b740de9-cd33-449a-9c0e-44ea16150f99", "s": "string"}
+
+subtest end

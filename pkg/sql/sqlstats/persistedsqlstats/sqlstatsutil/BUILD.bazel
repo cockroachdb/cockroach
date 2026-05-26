@@ -1,0 +1,39 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "sqlstatsutil",
+    srcs = [
+        "json_decoding.go",
+        "json_encoding.go",
+        "json_impl.go",
+        "testutils.go",
+        "utils.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/appstatspb",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/encoding",
+        "//pkg/util/json",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_apd_v3//:apd",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_x_text//cases",
+        "@org_golang_x_text//language",
+    ],
+)
+
+go_test(
+    name = "sqlstatsutil_test",
+    srcs = ["json_encoding_test.go"],
+    embed = [":sqlstatsutil"],
+    deps = [
+        "//pkg/sql/appstatspb",
+        "//pkg/util/json",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
+    ],
+)

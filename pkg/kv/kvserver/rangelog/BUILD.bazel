@@ -1,0 +1,62 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "rangelog",
+    srcs = ["rangelog.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/bootstrap",
+        "//pkg/sql/catalog/systemschema",
+        "//pkg/sql/sem/tree",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "rangelog_test",
+    srcs = [
+        "helpers_test.go",
+        "internal_executor_writer_test.go",
+        "main_test.go",
+        "rangelog_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":rangelog"],
+    embedsrcs = ["testdata/rangelog.bin"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
+        "//conditions:default": {"test.Pool": "default"},
+    }),
+    deps = [
+        "//pkg/base",
+        "//pkg/kv",
+        "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/kv/kvserver/rangelog/internal/rangelogtestpb",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/systemschema",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/isql",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

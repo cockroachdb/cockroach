@@ -1,0 +1,18 @@
+# LogicTest: local-mixed-26.1
+
+# Verify that skip_unique_checks is blocked before V26_2_SkipUniqueChecks.
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT)
+
+statement ok
+CREATE UNIQUE INDEX idx_b ON t(b)
+
+statement error pgcode 0A000 skip_unique_checks is not supported until the cluster is fully upgraded to 26.2
+CREATE UNIQUE INDEX idx_b2 ON t(b) WITH (skip_unique_checks = true)
+
+statement error pgcode 0A000 skip_unique_checks is not supported until the cluster is fully upgraded to 26.2
+ALTER INDEX t@idx_b SET (skip_unique_checks = true)
+
+statement error pgcode 0A000 skip_unique_checks is not supported until the cluster is fully upgraded to 26.2
+ALTER INDEX t@idx_b RESET (skip_unique_checks)

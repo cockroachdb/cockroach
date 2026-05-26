@@ -1,0 +1,287 @@
+# Load the components that lets us use cmake/make in third party deps.
+load("@rules_foreign_cc//foreign_cc:cmake.bzl", "cmake")
+load("@rules_foreign_cc//foreign_cc:configure.bzl", "configure_make")
+load("archived.bzl", "LIBKRB5_LIBS", "archived_cdeps", "cdep_alias")
+
+exports_files([
+    "archived.bzl",
+    "REPOSITORIES.bzl",
+])
+
+archived_cdeps()
+
+configure_make(
+    name = "libjemalloc_foreign",
+    autoconf = True,
+    configure_in_place = True,
+    configure_options = [
+        "--enable-prof",
+    ] + select({
+        "@io_bazel_rules_go//go/platform:windows": ["--host=x86_64-w64-mingw32"],
+        "@io_bazel_rules_go//go/platform:darwin_amd64": ["--host=x86_64-apple-darwin21.2"],
+        "//build/toolchains:is_non_dev_macos_arm64": [
+            "--host=aarch64-apple-darwin21.2",
+            "--with-lg-page=14",
+        ],
+        "@io_bazel_rules_go//go/platform:linux_amd64": ["--host=x86_64-unknown-linux-gnu"],
+        "@io_bazel_rules_go//go/platform:linux_arm64": [
+            "--host=aarch64-unknown-linux-gnu",
+            "--with-lg-page=16",
+        ],
+        "@io_bazel_rules_go//go/platform:linux_ppc64le": [
+            "--host=powerpc64le-unknown-linux-gnu",
+            "--with-lg-page=16",
+        ],
+        "@io_bazel_rules_go//go/platform:linux_s390x": ["--host=s390x-unknown-linux-gnu"],
+        # NB: Normally host detection is handled by configure, but the version
+        # of jemalloc we have vendored is pretty ancient and can't handle some
+        # of the newer M1 Macs. This arm of the select() can probably be deleted
+        # when we bump the vendored version.
+        "//build/toolchains:is_dev_macos_arm64": [
+            "--host=aarch64-apple-darwin19",
+            "--build=aarch64-apple-darwin19",
+        ],
+        "//conditions:default": [],
+    }),
+    copts = select({
+        "//build/toolchains:prebuild_cdeps": ["-fPIC"],
+        "//conditions:default": [],
+    }),
+    env = select({
+        "//build/toolchains:dev": {
+            "AR": "",
+            # NOTE: we disable MADV_FREE; see https://github.com/cockroachdb/cockroach/issues/83790
+            "je_cv_madv_free": "no",
+        },
+        "//conditions:default": {
+            "je_cv_madv_free": "no",
+        },
+    }),
+    lib_source = "@jemalloc//:all",
+    out_static_libs = select({
+        "@io_bazel_rules_go//go/platform:windows": ["jemalloc.lib"],
+        "//conditions:default": ["libjemalloc.a"],
+    }),
+    targets = [
+        "build_lib_static",
+        "install_lib",
+        "install_include",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+cdep_alias("libjemalloc")
+
+cmake(
+    name = "libproj_foreign",
+    cache_entries = select({
+        # TODO(ricky): The repetition here is dumb, but I don't know a cleaner
+        # way to do it?
+        # https://github.com/bazelbuild/bazel/issues/12457 would help.
+        "//build/toolchains:is_windows_prebuild_cdeps": {
+            "BUILD_CS2CS": "OFF",
+            "BUILD_GEOD": "OFF",
+            "BUILD_LIBPROJ_SHARED": "OFF",
+            "BUILD_NAD2BIN": "OFF",
+            "BUILD_PROJ": "OFF",
+            "CMAKE_BUILD_TYPE": "Release",
+            "CMAKE_C_FLAGS": "-fPIC",
+            "CMAKE_CXX_FLAGS": "-fPIC",
+            "CMAKE_SYSTEM_NAME": "Generic",
+            "PROJ4_TESTS": "OFF",
+        },
+        "@io_bazel_rules_go//go/platform:windows": {
+            "BUILD_CS2CS": "OFF",
+            "BUILD_GEOD": "OFF",
+            "BUILD_LIBPROJ_SHARED": "OFF",
+            "BUILD_NAD2BIN": "OFF",
+            "BUILD_PROJ": "OFF",
+            "CMAKE_BUILD_TYPE": "Release",
+            "CMAKE_SYSTEM_NAME": "Generic",
+            "PROJ4_TESTS": "OFF",
+        },
+        "//build/toolchains:is_macos_prebuild_cdeps": {
+            "BUILD_LIBPROJ_SHARED": "OFF",
+            "CMAKE_BUILD_TYPE": "Release",
+            "CMAKE_C_FLAGS": "-fPIC",
+            "CMAKE_CXX_FLAGS": "-fPIC",
+            "CMAKE_SYSTEM_NAME": "Generic",
+        },
+        "@io_bazel_rules_go//go/platform:darwin": {
+            "BUILD_LIBPROJ_SHARED": "OFF",
+            "CMAKE_BUILD_TYPE": "Release",
+            "CMAKE_SYSTEM_NAME": "Generic",
+        },
+        "//build/toolchains:is_linux_prebuild_cdeps": {
+            "BUILD_LIBPROJ_SHARED": "OFF",
+            "CMAKE_BUILD_TYPE": "Release",
+            "CMAKE_C_FLAGS": "-fPIC",
+            "CMAKE_CXX_FLAGS": "-fPIC",
+        },
+        "//conditions:default": {
+            "BUILD_LIBPROJ_SHARED": "OFF",
+            "CMAKE_BUILD_TYPE": "Release",
+        },
+    }),
+    generate_args = ["-GUnix Makefiles"],
+    lib_source = "@proj//:all",
+    out_static_libs = ["libproj.a"],
+    visibility = ["//visibility:public"],
+)
+
+cdep_alias("libproj")
+
+cmake(
+    name = "libgeos_foreign",
+    cache_entries = select({
+        "@io_bazel_rules_go//go/platform:windows": {
+            "CMAKE_BUILD_TYPE": "Release",
+            "CMAKE_C_FLAGS": "-fPIC",
+            "CMAKE_CXX_FLAGS": "-fPIC",
+            "CMAKE_SYSTEM_NAME": "Windows",
+            "BUILD_GEOSOP": "OFF",
+            "BUILD_TESTING": "OFF",
+            "GEOS_BUILD_DEVELOPER": "OFF",
+        },
+        "@io_bazel_rules_go//go/platform:darwin": {
+            "CMAKE_BUILD_TYPE": "Release",
+            "CMAKE_C_FLAGS": "-fPIC",
+            "CMAKE_CXX_FLAGS": "-fPIC",
+            "CMAKE_SYSTEM_NAME": "Darwin",
+            "BUILD_GEOSOP": "OFF",
+            "BUILD_TESTING": "OFF",
+            "GEOS_BUILD_DEVELOPER": "OFF",
+        },
+        "//conditions:default": {
+            "CMAKE_BUILD_TYPE": "Release",
+            "CMAKE_C_FLAGS": "-fPIC",
+            "CMAKE_CXX_FLAGS": "-fPIC",
+            "BUILD_GEOSOP": "OFF",
+            "BUILD_TESTING": "OFF",
+            "GEOS_BUILD_DEVELOPER": "OFF",
+        },
+    }),
+    data = select({
+        # TODO: This select needs 4 cases to handle the differing host platforms,
+        # not just these 2 based on the target.
+        "//build/toolchains:is_cross_macos_x86_64": [
+            "@cross_x86_64_macos_toolchain//:bin/x86_64-apple-darwin21.2-install_name_tool",
+            "@cross_x86_64_macos_toolchain//:bin/x86_64-apple-darwin21.2-otool",
+        ],
+        "//build/toolchains:is_cross_macos_arm64": [
+            "@cross_x86_64_macos_arm_toolchain//:bin/arm64-apple-darwin21.2-install_name_tool",
+            "@cross_x86_64_macos_arm_toolchain//:bin/arm64-apple-darwin21.2-otool",
+        ],
+        "//conditions:default": [],
+    }),
+    env = select({
+        "//build/toolchains:is_cross_macos_x86_64": {
+            "CMAKE_INSTALL_NAME_TOOL": "$(execpath @cross_x86_64_macos_toolchain//:bin/x86_64-apple-darwin21.2-install_name_tool)",
+            "OTOOL": "$(execpath @cross_x86_64_macos_toolchain//:bin/x86_64-apple-darwin21.2-otool)",
+        },
+        "//build/toolchains:is_cross_macos_arm64": {
+            "CMAKE_INSTALL_NAME_TOOL": "$(execpath @cross_x86_64_macos_arm_toolchain//:bin/arm64-apple-darwin21.2-install_name_tool)",
+            "OTOOL": "$(execpath @cross_x86_64_macos_arm_toolchain//:bin/arm64-apple-darwin21.2-otool)",
+        },
+        "//conditions:default": {},
+    }),
+    generate_args = ["-GUnix Makefiles"],
+    lib_source = "@geos//:all",
+    out_lib_dir = select({
+        "@io_bazel_rules_go//go/platform:windows": "bin",
+        "//conditions:default": "lib",
+    }),
+    out_shared_libs = select({
+        "@io_bazel_rules_go//go/platform:darwin": [
+            "libgeos_c.dylib",
+            "libgeos.dylib",
+        ],
+        "@io_bazel_rules_go//go/platform:windows": [
+            "libgeos_c.dll",
+            "libgeos.dll",
+        ],
+        "//conditions:default": [
+            "libgeos_c.so",
+            "libgeos.so",
+        ],
+    }),
+    postfix_script = "mkdir -p libgeos/lib\n" + select({
+        "//build/toolchains:is_cross_macos": (
+            "cp -L lib/libgeos.3.14.1.dylib $INSTALLDIR/lib/libgeos.dylib\n" +
+            "PREFIX=$($OTOOL -D $INSTALLDIR/lib/libgeos_c.dylib | tail -n1 | rev | cut -d/ -f2- | rev)\n" +
+            "$CMAKE_INSTALL_NAME_TOOL -id @rpath/libgeos.3.14.1.dylib $INSTALLDIR/lib/libgeos.dylib\n" +
+            "$CMAKE_INSTALL_NAME_TOOL -id @rpath/libgeos_c.1.dylib $INSTALLDIR/lib/libgeos_c.dylib\n" +
+            "$CMAKE_INSTALL_NAME_TOOL -change $PREFIX/libgeos.3.14.1.dylib @rpath/libgeos.3.14.1.dylib $INSTALLDIR/lib/libgeos_c.dylib\n"
+        ),
+        "@io_bazel_rules_go//go/platform:darwin": "cp -L lib/libgeos.3.14.1.dylib $INSTALLDIR/lib/libgeos.dylib",
+        "@io_bazel_rules_go//go/platform:windows": "",
+        "//build/toolchains:is_cross_linux": (
+            "cp -L lib/libgeos.so.3.14.1 $INSTALLDIR/lib/libgeos.so\n" +
+            "patchelf --set-rpath /usr/local/lib/cockroach/ $INSTALLDIR/lib/libgeos_c.so\n" +
+            "patchelf --set-soname libgeos.so $INSTALLDIR/lib/libgeos.so\n" +
+            "patchelf --replace-needed libgeos.so.3.14.1 libgeos.so $INSTALLDIR/lib/libgeos_c.so\n"
+        ),
+        "//conditions:default": "cp -L lib/libgeos.so.3.14.1 $INSTALLDIR/lib/libgeos.so",
+    }),
+    targets = ["geos_c"],
+    visibility = ["//visibility:public"],
+)
+
+cdep_alias("libgeos")
+
+configure_make(
+    name = "libkrb5_foreign",
+    autoreconf = True,
+    autoreconf_directory = "src",
+    autoreconf_options = [
+        "-Wno-obsolete",
+    ],
+    configure_command = "src/configure",
+    configure_in_place = True,
+    configure_options = [
+        "--sysconfdir=/etc",
+        "--enable-static",
+        "--disable-shared",
+    ] + select({
+        "@io_bazel_rules_go//go/platform:linux_amd64": ["--host=x86_64-unknown-linux-gnu"],
+        "@io_bazel_rules_go//go/platform:linux_arm64": ["--host=aarch64-unknown-linux-gnu"],
+        "@io_bazel_rules_go//go/platform:linux_ppc64le": ["--host=powerpc64le-unknown-linux-gnu"],
+        "@io_bazel_rules_go//go/platform:linux_s390x": ["--host=s390x-unknown-linux-gnu"],
+        "//conditions:default": [],
+    }),
+    copts = select({
+        # NB: We specify -fcommon to get around duplicate definition errors in recent gcc.
+        "//build/toolchains:prebuild_cdeps": [
+            "-fPIC",
+            "-fcommon",
+        ],
+        "//conditions:default": [
+            "-fcommon",
+        ],
+    }),
+    data = [":autom4te"],
+    env = select({
+        "//build/toolchains:cross": {
+            "AUTOM4TE": "$(execpath :autom4te)",
+            "krb5_cv_attr_constructor_destructor": "yes",
+            "ac_cv_func_regcomp": "yes",
+            "ac_cv_printf_positional": "yes",
+        },
+        "//conditions:default": {
+            "AUTOM4TE": "$(execpath :autom4te)",
+        },
+    }),
+    lib_source = "@krb5//:all",
+    out_static_libs = LIBKRB5_LIBS,
+    postfix_script = """mkdir -p libkrb5/lib
+cp lib/libcom_err.a libkrb5/lib
+cp lib/libgssapi_krb5.a libkrb5/lib
+cp lib/libkrb5.a libkrb5/lib
+cp lib/libkrb5support.a libkrb5/lib
+cp lib/libk5crypto.a libkrb5/lib
+mkdir -p libkrb5/include/gssapi
+cp include/gssapi/gssapi.h libkrb5/include/gssapi""",
+    visibility = ["//visibility:public"],
+)
+
+cdep_alias("libkrb5")

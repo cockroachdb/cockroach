@@ -1,0 +1,54 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import "src/components/core/index";
+
+.hotranges-heading-container {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 16px;
+  margin-bottom: 8px;
+}
+
+.light-anchor {
+  color: $colors--primary-blue-2;
+  &:hover {
+    color: $colors--primary-blue-2;
+  }
+}
+
+.hotranges-dropdown-filter {
+  width: max-content;
+  margin-top: $line-height--x-small;
+}
+
+.hotranges-node-selector {
+  min-width: 200px;
+  margin-right: 16px;
+}
+
+.checkbox-option-input {
+  margin-right: 5px;
+}
+.checkbox-option-label {
+  display: inline-block;
+}
+
+.filters-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.warning-all-nodes  {
+  padding-left: 24px;
+}
+
+.warning-all-text  {
+  padding: 0 8px 0 4px;
+}
+
+.warning-icon {
+  color: #b26000;
+}

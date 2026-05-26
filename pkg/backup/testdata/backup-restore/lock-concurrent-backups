@@ -1,0 +1,114 @@
+new-cluster name=s1
+----
+
+# Test that a backup job does not read its own lock file on resumption,
+# effectively locking itself out. We pause the job after it has written its
+# BACKUP-LOCK file and then resume it to ensure we don't read our own write.
+subtest backup-does-not-read-its-own-lock
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.after.write_lock';
+----
+
+backup expect-pausepoint tag=a
+BACKUP INTO 'userfile://defaultdb.public.foo/foo';
+----
+job paused at pausepoint
+
+# The job should have written a `BACKUP-LOCK` file suffixed with a job ID and a
+# timestamp.
+query-sql
+SELECT regexp_replace(filename, '.*BACKUP-LOCK-[0-9]+$', 'BACKUP-LOCK') FROM defaultdb.public.foo_upload_files;
+----
+BACKUP-LOCK
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = '';
+----
+
+# Resume the job and expect it to succeed.
+job resume=a
+----
+
+job tag=a wait-for-state=succeeded
+----
+
+subtest end
+
+
+# Test that a backup job on resume will not rewrite the `BACKUP-LOCK` file if it
+# already sees one, thus maintaining write-once semantics.
+subtest backup-lock-is-write-once
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.before.write_first_checkpoint';
+----
+
+backup expect-pausepoint tag=b
+BACKUP INTO 'userfile://defaultdb.public.bar/bar';
+----
+job paused at pausepoint
+
+# The job should have written a `BACKUP-LOCK` file suffixed with a job ID and a
+# timestamp.
+query-sql
+SELECT regexp_replace(filename, '.*BACKUP-LOCK-[0-9]+$', 'BACKUP-LOCK') FROM defaultdb.public.bar_upload_files;
+----
+BACKUP-LOCK
+
+# Resume the job and expect it to pause again after writing `BACKUP-LOCK` again.
+job resume=b
+----
+
+job tag=b wait-for-state=paused
+----
+
+# We expect to see only one lock file since the resumed job would see the
+# previously written one.
+query-sql
+SELECT regexp_replace(filename, '.*BACKUP-LOCK-[0-9]+$', 'BACKUP-LOCK') FROM defaultdb.public.bar_upload_files;
+----
+BACKUP-LOCK
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = '';
+----
+
+# Resume the job and expect it to succeed.
+job resume=b
+----
+
+job tag=b wait-for-state=succeeded
+----
+
+subtest end
+
+# For mixed version compatability the backup job also checks for a
+# `BACKUP-CHECKPOINT` file when ensuring that there are no concurrent backups
+# writing to the same bucket.
+#
+# This test ensures that a backup job does not check for a `BACKUP-CHECKPOINT`
+# lock file after writing its own `BACKUP-CHECKPOINT`.
+subtest backup-does-not-read-its-own-checkpoint
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.after.write_first_checkpoint';
+----
+
+backup expect-pausepoint tag=d
+BACKUP INTO 'userfile://defaultdb.public.bat/bat';
+----
+job paused at pausepoint
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = '';
+----
+
+# Resume the job and expect it to succeed.
+job resume=d
+----
+
+job tag=d wait-for-state=succeeded
+----
+
+subtest end

@@ -1,0 +1,159 @@
+# Test binding calls which reference names via either types or oid casts work.
+# Before the changes made in the commit adding this test, this test would result
+# in a nil pointer panic, since the txn was not initialized correctly.
+
+# TODO(richardjcai): Support let command similar to logic tests to
+# programmatically get the table id.
+# The first table created has id 54.
+
+send
+Query {"String": "CREATE TABLE t (a INT PRIMARY KEY)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+# 'S' for Statement
+# 84 = ASCII 'T'
+# ParameterFormatCodes = [0] for text format
+send
+Parse {"Name": "s7", "Query": "SELECT $1::REGCLASS::INT8"}
+Describe {"ObjectType": "S", "Name": "s7"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[2205]}
+{"Type":"RowDescription","Fields":[{"Name":"int8","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# The below incantation used to trigger a code path which would nil the
+# planner transaction but never set it. This was pretty much the only
+# way you could do such a thing.
+
+# This is crdb_only because Postgres does not support AS OF SYSTEM TIME.
+send crdb_only
+Query {"String": "BEGIN AS OF SYSTEM TIME '0s'"}
+Sync
+----
+
+# There are two ReadyForQuerys because a simple query was followed by Sync.
+until crdb_only
+ErrorResponse
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"22023"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Bind {"DestinationPortal": "p7", "PreparedStatement": "s7", "ParameterFormatCodes": [0], "Parameters": [{"text":"T"}]}
+Execute {"Portal": "p7"}
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"104"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "DROP TABLE IF EXISTS tab"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "BEGIN"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Parse {"Name": "s8", "Query": "SELECT relname FROM pg_class WHERE oid = $1::regclass"}
+Bind {"DestinationPortal": "p8", "PreparedStatement": "s8", "ResultFormatCodes": [0], "Parameters": [{"text":"t"}]}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# Disable autocommit to prevent the DDL below from committing the
+# transaction and closing the portal. The test queries portal p8 after
+# the DDL, so it must remain open.
+send
+Query {"String": "SET LOCAL autocommit_before_ddl=off"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "ALTER TABLE t RENAME TO tab"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ALTER TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Execute {"Portal": "p8"}
+Sync
+----
+
+until noncrdb_only
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"t"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# Currently, CRDB differs in that it returns the new table name here, but the
+# important part of this test is that it asserts that binding the placeholder
+# parameter occurred before the table rename, which matches the Postgres
+# behavior.
+# TODO(rafi): To be fully correct, we still should return table name 't' here.
+until crdb_only
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"tab"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "COMMIT"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

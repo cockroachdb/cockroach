@@ -1,0 +1,62 @@
+# This test checks that restore automatically detects a corrupt restoring
+# descriptor and enters the reverting state (i.e. an infinite OnFailOrCancel
+# loop with exponential back off, as Restore's OnFailOrCancel implementation
+# cannot fix this specific corrupt descriptor problem automatically) and does
+# not publish restoring database with the corrupt descriptor.
+
+new-cluster name=s1
+----
+
+exec-sql
+CREATE DATABASE testdb;
+CREATE TABLE testdb.parent (k INT PRIMARY KEY, v STRING);
+INSERT INTO testdb.parent (k, v) VALUES (1, 'a');
+CREATE TABLE testdb.child (k INT NOT NULL, FOREIGN KEY (k) REFERENCES testdb.parent (k))
+----
+
+exec-sql
+BACKUP INTO 'nodelocal://1/full_cluster_backup/';
+----
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_publishing_descriptors';
+----
+
+# Rename the original testdb.child table to make it easier to invalidate the restoring child table.
+exec-sql
+ALTER TABLE testdb.child RENAME TO cool_cousin;
+----
+
+restore expect-pausepoint tag=a
+RESTORE DATABASE testdb FROM LATEST IN 'nodelocal://1/full_cluster_backup/' with new_db_name='d2'
+----
+job paused at pausepoint
+
+# Corrupt the child, the restoring table descriptor that has been written but not published
+exec-sql
+SELECT crdb_internal.unsafe_delete_descriptor(id) FROM system.namespace WHERE name = 'child'
+----
+
+exec-sql
+SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", "parentSchemaID", name, id) FROM system.namespace WHERE name = 'child'
+----
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = '';
+----
+
+
+job resume=a
+----
+
+job tag=a wait-for-state=reverting
+----
+
+query-sql regex=(prefetch descriptors: referenced descriptor ID .*: descriptor not found)
+SELECT error FROM crdb_internal.jobs WHERE job_type = 'RESTORE';
+----
+true
+
+query-sql
+SELECT * FROM [SHOW DATABASES] WHERE database_name='d2';
+----

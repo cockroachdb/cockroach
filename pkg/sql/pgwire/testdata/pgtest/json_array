@@ -1,0 +1,582 @@
+send crdb_only
+Query {"String": "SELECT ARRAY['{\"a\":{}}']::JSON[]"}
+----
+
+# JSON[] is implicitly treated as JSONB[].
+until crdb_only
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"array","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":3807,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"{\"{\\\"a\\\": {}}\"}"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+# Array value must be of `{}` form.
+send
+Parse {"Query": "SELECT $1::JSON[]"}
+Bind {"ParameterFormatCodes": [0], "ResultFormatCodes": [1], "Parameters": [{"text":""}]}
+Execute
+Sync
+----
+
+until ignore=BindComplete
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"22P02"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Test text output encoding for JSON array.
+send crdb_only
+Parse {"Query": "SELECT $1::JSON[]"}
+Bind {"ParameterFormatCodes": [0], "Parameters": [{"text":"{}"}]}
+Describe {"ObjectType": "S"}
+Execute
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[3807]}
+{"Type":"RowDescription","Fields":[{"Name":"jsonb","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":3807,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"{}"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Parse {"Query": "SELECT $1::JSON[]"}
+Bind {"ParameterFormatCodes": [0], "Parameters": [{"text":"{\"{\\\"a\\\": {}}\"}"}]}
+Describe {"ObjectType": "S"}
+Execute
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[3807]}
+{"Type":"RowDescription","Fields":[{"Name":"jsonb","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":3807,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"{\"{\\\"a\\\": {}}\"}"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Test binary output encoding for JSON array text.
+send
+Parse {"Query": "SELECT $1::JSON[]"}
+Bind {"ParameterFormatCodes": [0], "ResultFormatCodes": [1], "Parameters": [{"text":"{}"}]}
+Describe {"ObjectType": "S"}
+Execute
+Sync
+----
+
+# CRDB currently only supports decoding JSON values. Encoding will always be in
+# JSONB format.
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[3807]}
+{"Type":"RowDescription","Fields":[{"Name":"jsonb","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":3807,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"binary":"000000000000000000000eda"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+until noncrdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[199]}
+{"Type":"RowDescription","Fields":[{"Name":"json","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":199,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"binary":"000000000000000000000072"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "SELECT $1::JSON[]"}
+Bind {"ParameterFormatCodes": [0], "ResultFormatCodes": [1], "Parameters": [{"text":"{\"{\\\"a\\\": {}}\"}"}]}
+Describe {"ObjectType": "S"}
+Execute
+Sync
+----
+
+# CRDB currently only supports decoding JSON values. Encoding will always be in
+# JSONB format.
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[3807]}
+{"Type":"RowDescription","Fields":[{"Name":"jsonb","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":3807,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"binary":"000000010000000000000eda00000001000000010000000a017b2261223a207b7d7d"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+until noncrdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[199]}
+{"Type":"RowDescription","Fields":[{"Name":"json","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":199,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"binary":"0000000100000000000000720000000100000001000000097b2261223a207b7d7d"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Check that we can handle JSON parameters.
+# Text to Text.
+send
+Parse {"Query": "SELECT $1::JSON[]", "ParameterOIDs": [199]}
+Describe {"ObjectType": "S"}
+Bind {"ParameterFormatCodes": [0], "Parameters": [{"text":"{\"{\\\"a\\\": {}}\"}"}]}
+Execute
+Sync
+----
+
+until noncrdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[199]}
+{"Type":"RowDescription","Fields":[{"Name":"json","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":199,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"{\"{\\\"a\\\": {}}\"}"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# CRDB currently only supports decoding JSON values. Encoding will always be in
+# JSONB format.
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[199]}
+{"Type":"RowDescription","Fields":[{"Name":"jsonb","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":3807,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"{\"{\\\"a\\\": {}}\"}"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Text to binary.
+send
+Parse {"Query": "SELECT $1::JSON[]", "ParameterOIDs":[199]}
+Bind {"ParameterFormatCodes": [0], "ResultFormatCodes": [1], "Parameters": [{"text":"{}"}]}
+Describe {"ObjectType": "S"}
+Execute
+Sync
+----
+
+# CRDB currently only supports decoding JSON values. Encoding will always be in
+# JSONB format.
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[199]}
+{"Type":"RowDescription","Fields":[{"Name":"jsonb","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":3807,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"binary":"000000000000000000000eda"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+until noncrdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[199]}
+{"Type":"RowDescription","Fields":[{"Name":"json","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":199,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"binary":"000000000000000000000072"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "SELECT $1::JSON[]", "ParameterOIDs":[199]}
+Bind {"ParameterFormatCodes": [0], "ResultFormatCodes": [1], "Parameters": [{"text":"{\"{\\\"a\\\": {}}\"}"}]}
+Describe {"ObjectType": "S"}
+Execute
+Sync
+----
+
+# CRDB currently only supports decoding JSON values. Encoding will always be in
+# JSONB format.
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[199]}
+{"Type":"RowDescription","Fields":[{"Name":"jsonb","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":3807,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"binary":"000000010000000000000eda00000001000000010000000a017b2261223a207b7d7d"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+until noncrdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[199]}
+{"Type":"RowDescription","Fields":[{"Name":"json","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":199,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"binary":"0000000100000000000000720000000100000001000000097b2261223a207b7d7d"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Binary to Text.
+# `000000000000000000000eda` is the binary representation of `{}` in
+# type JSONB[].
+send
+Parse {"Query": "SELECT $1::JSON[]", "ParameterOIDs":[199]}
+Bind {"ParameterFormatCodes": [1], "Parameters": [{"binary":"000000000000000000000eda"}]}
+Execute
+Sync
+----
+
+# PG returns 42804 (data type mismatch) while CRDB returns 08P01
+# (protocol violation), but both are acceptable.
+until mapError=(42804, 08P01)
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "SELECT $1::JSONB[]", "ParameterOIDs":[3807]}
+Bind {"ParameterFormatCodes": [1], "Parameters": [{"binary":"000000000000000000000eda"}]}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"{}"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# `000000000000000000000072` is the binary representation of `{}` in
+# type JSON[].
+send
+Parse {"Query": "SELECT $1::JSON[]", "ParameterOIDs":[199]}
+Describe {"ObjectType": "S"}
+Bind {"ParameterFormatCodes": [1], "Parameters": [{"binary":"000000000000000000000072"}]}
+Execute
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[199]}
+{"Type":"RowDescription","Fields":[{"Name":"jsonb","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":3807,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"{}"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+until noncrdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[199]}
+{"Type":"RowDescription","Fields":[{"Name":"json","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":199,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"{}"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# `000000010000000000000eda00000001000000010000000a017b2261223a207b7d7d`
+# is the binary representation of `{\"{\\\"a\\\": {}}\"}` in type JSONB[].
+send
+Parse {"Query": "SELECT $1::JSON[]", "ParameterOIDs":[199]}
+Bind {"ParameterFormatCodes": [1], "Parameters": [{"binary":"000000010000000000000eda00000001000000010000000a017b2261223a207b7d7d"}]}
+Execute
+Sync
+----
+
+# PG returns 42804 (data type mismatch) while CRDB returns 08P01
+# (protocol violation), but both are acceptable.
+until mapError=(42804, 08P01)
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "SELECT $1::JSONB[]", "ParameterOIDs":[3807]}
+Bind {"ParameterFormatCodes": [1], "Parameters": [{"binary":"000000010000000000000eda00000001000000010000000a017b2261223a207b7d7d"}]}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"{\"{\\\"a\\\": {}}\"}"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# `0000000100000000000000720000000100000001000000097b2261223a207b7d7d`
+# is the binary representation of `{\"{\\\"a\\\": {}}\"}` in type JSON[].
+send
+Parse {"Query": "SELECT $1::JSON[]", "ParameterOIDs":[199]}
+Bind {"ParameterFormatCodes": [1], "Parameters": [{"binary":"0000000100000000000000720000000100000001000000097b2261223a207b7d7d"}]}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"{\"{\\\"a\\\": {}}\"}"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Binary to Binary.
+# `000000000000000000000eda` is the binary representation of `{}` in
+# type JSONB[].
+send
+Parse {"Query": "SELECT $1::JSON[]", "ParameterOIDs":[199]}
+Bind {"ParameterFormatCodes": [1], "ResultFormatCodes": [1], "Parameters": [{"binary":"000000000000000000000eda"}]}
+Describe {"ObjectType": "S"}
+Execute
+Sync
+----
+
+# PG returns 42804 (data type mismatch) while CRDB returns 08P01
+# (protocol violation), but both are acceptable.
+until mapError=(42804, 08P01)
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "SELECT $1::JSONB[]", "ParameterOIDs":[3807]}
+Bind {"ParameterFormatCodes": [1], "ResultFormatCodes": [1], "Parameters": [{"binary":"000000000000000000000eda"}]}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"binary":"000000000000000000000eda"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# `000000000000000000000072` is the binary representation of `{}` in
+# type JSON[].
+send
+Parse {"Query": "SELECT $1::JSON[]", "ParameterOIDs":[199]}
+Describe {"ObjectType": "S"}
+Bind {"ParameterFormatCodes": [1], "ResultFormatCodes": [1], "Parameters": [{"binary":"000000000000000000000072"}]}
+Execute
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[199]}
+{"Type":"RowDescription","Fields":[{"Name":"jsonb","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":3807,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"binary":"000000000000000000000072"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+until noncrdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[199]}
+{"Type":"RowDescription","Fields":[{"Name":"json","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":199,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"binary":"000000000000000000000072"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# `000000010000000000000eda00000001000000010000000a017b2261223a207b7d7d`
+# is the binary representation of `{\"{\\\"a\\\": {}}\"}` in type JSONB[].
+send
+Parse {"Query": "SELECT $1::JSON[]", "ParameterOIDs":[199]}
+Bind {"ParameterFormatCodes": [1], "ResultFormatCodes": [1], "Parameters": [{"binary":"000000010000000000000eda00000001000000010000000a017b2261223a207b7d7d"}]}
+Execute
+Sync
+----
+
+# PG returns 42804 (data type mismatch) while CRDB returns 08P01
+# (protocol violation), but both are acceptable.
+until mapError=(42804, 08P01)
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "SELECT $1::JSONB[]", "ParameterOIDs":[3807]}
+Bind {"ParameterFormatCodes": [1], "ResultFormatCodes": [1], "Parameters": [{"binary":"000000010000000000000eda00000001000000010000000a017b2261223a207b7d7d"}]}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"binary":"000000010000000000000eda00000001000000010000000a017b2261223a207b7d7d"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# `0000000100000000000000720000000100000001000000097b2261223a207b7d7d`
+# is the binary representation of `{\"{\\\"a\\\": {}}\"}` in type JSON[].
+send
+Parse {"Query": "SELECT $1::JSON[]", "ParameterOIDs":[199]}
+Bind {"ParameterFormatCodes": [1], "ResultFormatCodes": [1], "Parameters": [{"binary":"0000000100000000000000720000000100000001000000097b2261223a207b7d7d"}]}
+Describe {"ObjectType": "S"}
+Execute
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[199]}
+{"Type":"RowDescription","Fields":[{"Name":"jsonb","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":3807,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"binary":"0000000100000000000000720000000100000001000000097b2261223a207b7d7d"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+until noncrdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[199]}
+{"Type":"RowDescription","Fields":[{"Name":"json","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":199,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"binary":"0000000100000000000000720000000100000001000000097b2261223a207b7d7d"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Test with nested JSON.
+send
+Parse {"Query": "SELECT $1::JSON[]", "ParameterOIDs": [199]}
+Describe {"ObjectType": "S"}
+Bind {"ParameterFormatCodes": [0], "Parameters": [{"text":"{\"{\\\"a\\\":{\\\"b\\\": \\\"c\\\"}}\"}"}]}
+Execute
+Sync
+----
+
+until noncrdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[199]}
+{"Type":"RowDescription","Fields":[{"Name":"json","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":199,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"{\"{\\\"a\\\":{\\\"b\\\": \\\"c\\\"}}\"}"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[199]}
+{"Type":"RowDescription","Fields":[{"Name":"jsonb","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":3807,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"{\"{\\\"a\\\": {\\\"b\\\": \\\"c\\\"}}\"}"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# PG's binary stores the space between kv, while crdb does not.
+# https://github.com/cockroachdb/cockroach/issues/95434.
+send
+Parse {"Query": "SELECT $1::JSON[]", "ParameterOIDs":[199]}
+Bind {"ParameterFormatCodes": [0], "ResultFormatCodes": [1], "Parameters": [{"text":"{\"{\\\"a\\\":      {}}\"}"}]}
+Describe {"ObjectType": "S"}
+Execute
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[199]}
+{"Type":"RowDescription","Fields":[{"Name":"jsonb","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":3807,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"binary":"000000010000000000000eda00000001000000010000000a017b2261223a207b7d7d"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+until noncrdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[199]}
+{"Type":"RowDescription","Fields":[{"Name":"json","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":199,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"binary":"00000001000000000000007200000001000000010000000e7b2261223a2020202020207b7d7d"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "SELECT $1::JSON[]", "ParameterOIDs":[199]}
+Bind {"ParameterFormatCodes": [0], "ResultFormatCodes": [1], "Parameters": [{"text":"{\"{\\\"a\\\":{}}\"}"}]}
+Describe {"ObjectType": "S"}
+Execute
+Sync
+----
+
+until noncrdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[199]}
+{"Type":"RowDescription","Fields":[{"Name":"json","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":199,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"binary":"0000000100000000000000720000000100000001000000087b2261223a7b7d7d"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[199]}
+{"Type":"RowDescription","Fields":[{"Name":"jsonb","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":3807,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"binary":"000000010000000000000eda00000001000000010000000a017b2261223a207b7d7d"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

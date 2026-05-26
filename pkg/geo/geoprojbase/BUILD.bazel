@@ -1,0 +1,32 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "geoprojbase",
+    srcs = [
+        "geoprojbase.go",
+        "projections.go",
+    ],
+    embedsrcs = ["data/proj.json.gz"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/geo/geoprojbase",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo/geopb",
+        "//pkg/geo/geoprojbase/embeddedproj",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_golang_geo//s1",
+        "@com_github_golang_geo//s2",
+    ],
+)
+
+go_test(
+    name = "geoprojbase_test",
+    size = "small",
+    srcs = ["projections_test.go"],
+    deps = [
+        ":geoprojbase",
+        "//pkg/geo/geographiclib",
+        "@com_github_stretchr_testify//require",
+    ],
+)

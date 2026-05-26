@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "logger",
+    srcs = ["logger.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/raft/logger",
+    visibility = ["//visibility:public"],
+)
+
+go_library(
+    name = "raftlogger",
+    srcs = ["logger.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/raft/raftlogger",
+    visibility = ["//visibility:public"],
+)

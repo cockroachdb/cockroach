@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "shuffle",
+    srcs = ["shuffle.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/shuffle",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "shuffle_test",
+    size = "small",
+    srcs = ["shuffle_test.go"],
+    embed = [":shuffle"],
+    deps = ["//pkg/util/leaktest"],
+)

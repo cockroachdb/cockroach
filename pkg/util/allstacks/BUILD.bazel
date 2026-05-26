@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "allstacks",
+    srcs = ["allstacks.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/allstacks",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/util/debugutil"],
+)
+
+go_test(
+    name = "allstacks_test",
+    srcs = ["allstacks_test.go"],
+    embed = [":allstacks"],
+)

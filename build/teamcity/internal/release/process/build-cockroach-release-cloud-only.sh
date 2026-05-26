@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+
+# Copyright 2023 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
+set -euo pipefail
+
+dir="$(dirname $(dirname $(dirname $(dirname $(dirname "${0}")))))"
+source "$dir/release/teamcity-support.sh"
+
+tc_start_block "Variable Setup"
+version=$(grep -v "^#" "$dir/../pkg/build/version.txt" | head -n1)
+if [[ -z "${DRY_RUN}" ]] ; then
+  gcr_staged_repository="us-docker.pkg.dev/releases-prod/cockroachdb-staged-releases/cockroach"
+  gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb/cockroach"
+else
+  gcr_staged_repository="us-docker.pkg.dev/releases-dev-356314/cockroachdb-staged-releases/cockroach"
+  gcr_repository="us-docker.pkg.dev/releases-dev-356314/cockroachdb-staged-releases/cockroach-cloud-only"
+fi
+
+# With WIF (GitHub Actions), credentials are handled via the environment.
+# With TeamCity, use the JSON key env vars.
+gcr_staged_credentials=""
+gcr_credentials=""
+if [[ -z "${CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE:-}" ]]; then
+  if [[ -z "${DRY_RUN}" ]] ; then
+    gcr_staged_credentials="$GCS_CREDENTIALS_PROD"
+    gcr_credentials="$GOOGLE_COCKROACH_CLOUD_IMAGES_COCKROACHDB_CREDENTIALS"
+  else
+    gcr_staged_credentials="$GCS_CREDENTIALS_DEV"
+    gcr_credentials="$GCS_CREDENTIALS_DEV"
+  fi
+fi
+tc_end_block "Variable Setup"
+
+docker_login_gcr "$gcr_repository" "$gcr_credentials"
+
+cloud_release=
+for i in $(seq 1 10); do
+  maybe_manifest="${gcr_repository}:$version-cloudonly.$i"
+  if ! docker buildx imagetools inspect "$maybe_manifest" > /dev/null 2>&1; then
+    echo "$maybe_manifest not found, assuming this is what we need"
+    cloud_release="$i"
+    break
+  else
+    echo "$maybe_manifest already exist, trying next..."
+  fi
+done
+
+if [[ -z $cloud_release ]]; then
+  echo "cannot find available cloud_release, did we generate 10 of them?"
+  exit 1
+fi
+
+version_cloudonly="${version}-cloudonly.${cloud_release}"
+manifest="${gcr_repository}:${version_cloudonly}"
+
+# Copy the multi-arch manifest from the staged repo to the cloud-only repo
+# server-side using docker buildx imagetools.
+docker buildx imagetools create \
+  -t "$manifest" \
+  "${gcr_staged_repository}:${version}"
+echo "==========="
+echo "published to"
+echo "$manifest"
+echo "==========="
+
+tc_start_block "Verify docker images"
+error=0
+for arch in amd64 arm64 s390x; do
+    tc_start_block "Verify $manifest on $arch"
+    if ! verify_docker_image "$manifest" "linux/$arch" "$BUILD_VCS_NUMBER" "$version" false false; then
+      error=1
+    fi
+    tc_end_block "Verify $manifest on $arch"
+done
+
+if [ $error = 1 ]; then
+  echo "ERROR: Docker image verification failed, see logs above"
+  exit 1
+fi
+tc_end_block "Verify docker images"
+
+tc_start_block "Metadata"
+timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+metadata_file="artifacts/metadata.json"
+mkdir -p artifacts
+cat > "$metadata_file" << EOF
+{
+  "sha": "$BUILD_VCS_NUMBER",
+  "timestamp": "$timestamp",
+  "tag": "$TC_BUILD_BRANCH",
+  "version": "$version",
+  "cloud_release": "$cloud_release",
+  "image": "$manifest"
+}
+EOF
+# Run jq to pretty print and validate JSON
+jq . "$metadata_file"
+tc_end_block "Metadata"

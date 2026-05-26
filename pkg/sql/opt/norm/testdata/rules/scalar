@@ -1,0 +1,3153 @@
+exec-ddl
+CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, arr int[])
+----
+
+exec-ddl
+CREATE TABLE ij (i INT NOT NULL, j INT)
+----
+
+exec-ddl
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
+----
+
+exec-ddl
+CREATE TABLE abcd (a INT, b INT, c INT, d INT)
+----
+
+exec-ddl
+CREATE TABLE u (u UUID PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE c (c CHAR PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE t (k INT PRIMARY KEY, v VECTOR(3))
+----
+
+exec-ddl
+CREATE TABLE b
+(
+    k INT PRIMARY KEY,
+    j JSONB,
+    i INT,
+    s STRING,
+    arr STRING[]
+)
+----
+
+# --------------------------------------------------
+# CommuteVar
+# --------------------------------------------------
+
+# Put variables on both sides of comparison operator to avoid matching constant
+# patterns.
+norm expect=CommuteVar
+SELECT
+    (1+i) = k AS r,
+    (2-k) <> i AS s,
+    (i+1) IS NOT DISTINCT FROM k AS t,
+    (i-1) IS DISTINCT FROM k AS u,
+
+    (i*2) + k AS v,
+    (i+2) * k AS w,
+    (i^2) & k AS x,
+    (i^2) | k AS y,
+    (i*i) # k AS z
+FROM a
+----
+project
+ ├── columns: r:8 s:9 t:10!null u:11!null v:12 w:13 x:14 y:15 z:16
+ ├── immutable
+ ├── scan a
+ │    ├── columns: k:1!null i:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── projections
+      ├── k:1 = (i:2 + 1) [as=r:8, outer=(1,2), immutable]
+      ├── i:2 != (2 - k:1) [as=s:9, outer=(1,2), immutable]
+      ├── k:1 IS NOT DISTINCT FROM (i:2 + 1) [as=t:10, outer=(1,2), immutable]
+      ├── k:1 IS DISTINCT FROM (i:2 - 1) [as=u:11, outer=(1,2), immutable]
+      ├── k:1 + (i:2 * 2) [as=v:12, outer=(1,2), immutable]
+      ├── k:1 * (i:2 + 2) [as=w:13, outer=(1,2), immutable]
+      ├── k:1 & (i:2 ^ 2) [as=x:14, outer=(1,2), immutable]
+      ├── k:1 | (i:2 ^ 2) [as=y:15, outer=(1,2), immutable]
+      └── k:1 # (i:2 * i:2) [as=z:16, outer=(1,2), immutable]
+
+# Commute vector distance operators so that the variable is on the left.
+norm expect=CommuteVar
+SELECT
+    '[1,2,3]' <-> v AS r,
+    '[1,2,3]' <=> v AS s,
+    '[1,2,3]' <#> v AS t
+FROM t
+----
+project
+ ├── columns: r:5 s:6 t:7
+ ├── immutable
+ ├── scan t
+ │    └── columns: v:2
+ └── projections
+      ├── v:2 <-> '[1,2,3]' [as=r:5, outer=(2), immutable]
+      ├── v:2 <=> '[1,2,3]' [as=s:6, outer=(2), immutable]
+      └── v:2 <#> '[1,2,3]' [as=t:7, outer=(2), immutable]
+
+# --------------------------------------------------
+# CommuteConst
+# --------------------------------------------------
+norm expect=CommuteConst
+SELECT
+    (length('foo')+1) = (i+k) AS r,
+    length('bar') <> (i*2) AS s,
+    5 IS NOT DISTINCT FROM (1-k) AS t,
+    (10::decimal+1::int) IS DISTINCT FROM k AS u,
+
+    1 + f AS v,
+    (5*length('foo')) * (i*i) AS w,
+    (100 ^ 2) & (i+i) AS x,
+    length('foo')+1 | (i+i) AS y,
+    1-length('foo') # (k^2) AS z
+FROM a
+----
+project
+ ├── columns: r:8 s:9 t:10!null u:11!null v:12 w:13 x:14 y:15 z:16!null
+ ├── immutable
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── projections
+      ├── (i:2 + k:1) = 4 [as=r:8, outer=(1,2), immutable]
+      ├── (i:2 * 2) != 3 [as=s:9, outer=(2), immutable]
+      ├── (1 - k:1) IS NOT DISTINCT FROM 5 [as=t:10, outer=(1), immutable]
+      ├── k:1 IS DISTINCT FROM 11 [as=u:11, outer=(1)]
+      ├── f:3 + 1.0 [as=v:12, outer=(3), immutable]
+      ├── (i:2 * i:2) * 15 [as=w:13, outer=(2), immutable]
+      ├── (i:2 + i:2) & 10000 [as=x:14, outer=(2), immutable]
+      ├── (i:2 + i:2) | 4 [as=y:15, outer=(2), immutable]
+      └── (k:1 ^ 2) # -2 [as=z:16, outer=(1), immutable]
+
+# --------------------------------------------------
+# EliminateCoalesce
+# --------------------------------------------------
+norm expect=EliminateCoalesce
+SELECT COALESCE(i) FROM a
+----
+project
+ ├── columns: coalesce:8
+ ├── scan a
+ │    └── columns: i:2
+ └── projections
+      └── i:2 [as=coalesce:8, outer=(2)]
+
+norm expect=EliminateCoalesce
+SELECT COALESCE(NULL) FROM a
+----
+project
+ ├── columns: coalesce:8
+ ├── fd: ()-->(8)
+ ├── scan a
+ └── projections
+      └── NULL [as=coalesce:8]
+
+# --------------------------------------------------
+# SimplifyCoalesce
+# --------------------------------------------------
+
+norm expect=SimplifyCoalesce
+SELECT COALESCE(NULL, 'foo', s) FROM a
+----
+project
+ ├── columns: coalesce:8!null
+ ├── fd: ()-->(8)
+ ├── scan a
+ └── projections
+      └── 'foo' [as=coalesce:8]
+
+norm expect=SimplifyCoalesce
+SELECT COALESCE(NULL, NULL, s, s || 'foo') FROM a
+----
+project
+ ├── columns: coalesce:8
+ ├── immutable
+ ├── scan a
+ │    └── columns: s:4
+ └── projections
+      └── COALESCE(s:4, s:4 || 'foo') [as=coalesce:8, outer=(4), immutable]
+
+# Trailing null can't be removed when leading arg is a non-constant (nullable
+# variable): the original SimplifyCoalesce rule only fires when the leading arg
+# is a constant, so no folding happens here.
+norm
+SELECT COALESCE(i, NULL, NULL) FROM a
+----
+project
+ ├── columns: coalesce:8
+ ├── scan a
+ │    └── columns: i:2
+ └── projections
+      └── COALESCE(i:2, CAST(NULL AS INT8), CAST(NULL AS INT8)) [as=coalesce:8, outer=(2)]
+
+# All-null COALESCE collapses to a single null via SimplifyCoalesce (the scalar
+# rule fires when the leading arg is constant). CanSimplifyCoalesce correctly
+# returns true when the loop exhausts all-null args, matching simplifyCoalesce's
+# behaviour of returning args[last] (unwrapping the COALESCE).
+norm expect=SimplifyCoalesce
+SELECT COALESCE(NULL::INT, NULL::INT) FROM a
+----
+project
+ ├── columns: coalesce:8
+ ├── fd: ()-->(8)
+ ├── scan a
+ └── projections
+      └── CAST(NULL AS INT8) [as=coalesce:8]
+
+# --------------------------------------------------
+# SimplifyCoalesceProject
+# --------------------------------------------------
+
+norm expect=SimplifyCoalesceProject
+SELECT COALESCE(i, j) FROM ij
+----
+project
+ ├── columns: coalesce:6!null
+ ├── scan ij
+ │    └── columns: i:1!null
+ └── projections
+      └── i:1 [as=coalesce:6, outer=(1)]
+
+norm expect=SimplifyCoalesceProject
+SELECT COALESCE(i, NULL, NULL) FROM ij
+----
+project
+ ├── columns: coalesce:6!null
+ ├── scan ij
+ │    └── columns: i:1!null
+ └── projections
+      └── i:1 [as=coalesce:6, outer=(1)]
+
+norm expect=SimplifyCoalesce
+SELECT COALESCE((1, 2, 3), (2, 3, 4)) FROM a
+----
+project
+ ├── columns: coalesce:8!null
+ ├── fd: ()-->(8)
+ ├── scan a
+ └── projections
+      └── (1, 2, 3) [as=coalesce:8]
+
+# Negative test: should not fire when no arg is provably non-null.
+norm expect-not=SimplifyCoalesceProject
+SELECT COALESCE(i, f) FROM a
+----
+project
+ ├── columns: coalesce:8
+ ├── immutable
+ ├── scan a
+ │    └── columns: i:2 f:3
+ └── projections
+      └── COALESCE(i:2::FLOAT8, f:3) [as=coalesce:8, outer=(2,3), immutable]
+
+# Middle argument is provably non-null: leading NULLs are stripped, then the
+# NOT NULL arg is returned directly.
+norm expect=SimplifyCoalesceProject
+SELECT COALESCE(NULL::INT, i, j) FROM ij
+----
+project
+ ├── columns: coalesce:6!null
+ ├── scan ij
+ │    └── columns: i:1!null
+ └── projections
+      └── i:1 [as=coalesce:6, outer=(1)]
+
+# Nested COALESCE: outer is not directly simplifiable, but the inner
+# COALESCE(i, j) can be simplified to i (since i is NOT NULL). The fix
+# ensures the inner Coalesce is not missed.
+norm expect=SimplifyCoalesceProject
+SELECT COALESCE(j, COALESCE(i, j)) FROM ij
+----
+project
+ ├── columns: coalesce:6
+ ├── scan ij
+ │    └── columns: i:1!null j:2
+ └── projections
+      └── COALESCE(j:2, i:1) [as=coalesce:6, outer=(1,2)]
+
+# COALESCE inside an IF expression: the inner nested Coalesce is simplified
+# via SimplifyCoalesceProject even though the outer Coalesce is not itself
+# directly simplifiable.
+norm expect=SimplifyCoalesceProject
+SELECT IF(j > 0, COALESCE(j, COALESCE(i, j)), j) FROM ij
+----
+project
+ ├── columns: if:6
+ ├── scan ij
+ │    └── columns: i:1!null j:2
+ └── projections
+      └── CASE j:2 > 0 WHEN true THEN COALESCE(j:2, i:1) ELSE j:2 END [as=if:6, outer=(1,2)]
+
+# SimplifyCoalesceProject does not fire when the first arg is a non-constant
+# nullable variable: CanSimplifyCoalesce exits early with false because i is
+# not a constant, and no leading nulls were stripped (i > 0 = false).
+norm expect-not=SimplifyCoalesceProject
+SELECT COALESCE(i, NULL, NULL) FROM a
+----
+project
+ ├── columns: coalesce:8
+ ├── scan a
+ │    └── columns: i:2
+ └── projections
+      └── COALESCE(i:2, CAST(NULL AS INT8), CAST(NULL AS INT8)) [as=coalesce:8, outer=(2)]
+
+
+# --------------------------------------------------
+# EliminateCast
+# --------------------------------------------------
+
+# It's hard to write a SQL test for EliminateCast because tree.CastExpr removes
+# unnecessary casts during type-checking. We still want the rule because it's
+# still conceivable that some other rule may create an unnecessary CastExpr.
+exprnorm expect=EliminateCast
+(Root
+  (Project
+    (Scan [ (Table "a") (Cols "i,s,arr") ])
+    [
+      (ProjectionsItem (Cast (Var "i") "int")                                  (NewColumn "c1" "int"))
+      (ProjectionsItem (Cast (Var "arr") "int[]")                              (NewColumn "c2" "int[]"))
+      (ProjectionsItem (Cast (Cast (Const "[1, 2]" "string") "jsonb") "json")  (NewColumn "c3" "json"))
+      (ProjectionsItem (Cast (Null "char(2)") "bit")                           (NewColumn "c4" "bit"))
+      (ProjectionsItem (Cast (Cast (Var "s") "string") "text")                 (NewColumn "c5" "text"))
+    ]
+    ""
+  )
+  (Presentation "c1,c2,c3,c4,c5")
+  (NoOrdering)
+)
+----
+project
+ ├── columns: c1:8 c2:9 c3:10!null c4:11 c5:12
+ ├── fd: ()-->(10,11)
+ ├── scan a
+ │    └── columns: i:2 s:4 arr:5
+ └── projections
+      ├── i:2 [as=c1:8, outer=(2)]
+      ├── arr:5 [as=c2:9, outer=(5)]
+      ├── '[1, 2]' [as=c3:10]
+      ├── CAST(NULL AS BIT) [as=c4:11]
+      └── s:4 [as=c5:12, outer=(4)]
+
+# Shouldn't eliminate these casts.
+norm expect-not=EliminateCast
+SELECT
+    i::float,
+    arr::decimal[],
+    s::json,
+    s::varchar(2),
+    i::smallint::int8,
+    s::char::varchar,
+    ARRAY[i, 2]::OIDVECTOR,
+    ARRAY[i, 2]::INT2VECTOR
+FROM a
+----
+project
+ ├── columns: i:8 arr:9 s:10 s:11 i:12 s:13 array:14 array:15
+ ├── immutable
+ ├── scan a
+ │    └── columns: a.i:2 a.s:4 a.arr:5
+ └── projections
+      ├── a.i:2::FLOAT8 [as=i:8, outer=(2), immutable]
+      ├── a.arr:5::DECIMAL[] [as=arr:9, outer=(5), immutable]
+      ├── a.s:4::JSONB [as=s:10, outer=(4), immutable]
+      ├── a.s:4::VARCHAR(2) [as=s:11, outer=(4), immutable]
+      ├── a.i:2::INT2::INT8 [as=i:12, outer=(2), immutable]
+      ├── a.s:4::CHAR::VARCHAR [as=s:13, outer=(4), immutable]
+      ├── ARRAY[a.i:2, 2]::OIDVECTOR [as=array:14, outer=(2), immutable]
+      └── ARRAY[a.i:2, 2]::INT2VECTOR [as=array:15, outer=(2), immutable]
+
+# --------------------------------------------------
+# NormalizeInConst
+# --------------------------------------------------
+norm expect=NormalizeInConst
+SELECT i IN (2, 1, 1, null, 3, 4.00, 4.0, null, 3.0) AS r FROM a
+----
+project
+ ├── columns: r:8
+ ├── scan a
+ │    └── columns: i:2
+ └── projections
+      └── i:2 IN (NULL, 1, 2, 3, 4) [as=r:8, outer=(2)]
+
+# Single value.
+norm expect-not=NormalizeInConst
+SELECT s NOT IN ('foo') AS r FROM a
+----
+project
+ ├── columns: r:8
+ ├── scan a
+ │    └── columns: s:4
+ └── projections
+      └── s:4 != 'foo' [as=r:8, outer=(4)]
+
+# Don't sort, since the list is not constant.
+norm expect-not=NormalizeInConst
+SELECT s NOT IN ('foo', s || 'foo', 'bar', length(s)::string, NULL) AS r FROM a
+----
+project
+ ├── columns: r:8
+ ├── immutable
+ ├── scan a
+ │    └── columns: s:4
+ └── projections
+      └── s:4 NOT IN ('foo', s:4 || 'foo', 'bar', length(s:4)::STRING, NULL) [as=r:8, outer=(4), immutable]
+
+# Regression test #36031.
+norm expect-not=NormalizeInConst
+SELECT
+    true
+    IN (
+            NULL,
+            NULL,
+            (
+                '201.249.149.90/18':::INET::INET
+                & '97a7:3650:3dd8:d4e9:35fe:6cfb:a714:1c17/61':::INET::INET
+            )::INET
+            << 'e22f:2067:2ed2:7b07:b167:206f:f17b:5b7d/82':::INET::INET
+        )
+----
+values
+ ├── columns: "?column?":1
+ ├── cardinality: [1 - 1]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (true IN (NULL, NULL, ('201.249.149.90/18' & '97a7:3650:3dd8:d4e9:35fe:6cfb:a714:1c17/61') << 'e22f:2067:2ed2:7b07:b167:206f:f17b:5b7d/82'),)
+
+# --------------------------------------------------
+# SimplifyInSingleElement
+# --------------------------------------------------
+norm expect=SimplifyInSingleElement
+SELECT * FROM a WHERE k IN (1)
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+
+norm expect=SimplifyInSingleElement
+SELECT 1 IN (k) FROM a
+----
+project
+ ├── columns: "?column?":8!null
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── projections
+      └── k:1 = 1 [as="?column?":8, outer=(1)]
+
+norm expect=SimplifyInSingleElement
+SELECT k+1 IN (i*2) FROM a
+----
+project
+ ├── columns: "?column?":8
+ ├── immutable
+ ├── scan a
+ │    ├── columns: k:1!null i:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── projections
+      └── (k:1 + 1) = (i:2 * 2) [as="?column?":8, outer=(1,2), immutable]
+
+norm expect-not=SimplifyInSingleElement
+SELECT k IN (1,2) FROM a
+----
+project
+ ├── columns: "?column?":8!null
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── projections
+      └── k:1 IN (1, 2) [as="?column?":8, outer=(1)]
+
+# --------------------------------------------------
+# SimplifyNotInSingleElement
+# --------------------------------------------------
+norm expect=SimplifyNotInSingleElement
+SELECT * FROM a WHERE k NOT IN (1)
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── k:1 != 1 [outer=(1), constraints=(/1: (/NULL - /0] [/2 - ]; tight)]
+
+norm expect=SimplifyNotInSingleElement
+SELECT 1 NOT IN (k) FROM a
+----
+project
+ ├── columns: "?column?":8!null
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── projections
+      └── k:1 != 1 [as="?column?":8, outer=(1)]
+
+norm expect=SimplifyNotInSingleElement
+SELECT k+1 NOT IN (i*2) FROM a
+----
+project
+ ├── columns: "?column?":8
+ ├── immutable
+ ├── scan a
+ │    ├── columns: k:1!null i:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── projections
+      └── (k:1 + 1) != (i:2 * 2) [as="?column?":8, outer=(1,2), immutable]
+
+norm expect-not=SimplifyNotInSingleElement
+SELECT k NOT IN (1,2) FROM a
+----
+project
+ ├── columns: "?column?":8!null
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── projections
+      └── k:1 NOT IN (1, 2) [as="?column?":8, outer=(1)]
+
+# --------------------------------------------------
+# EliminateExistsZeroRows
+# --------------------------------------------------
+
+norm expect=EliminateExistsZeroRows
+SELECT EXISTS(SELECT * FROM (VALUES (1)) WHERE false)
+----
+values
+ ├── columns: exists:3!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(3)
+ └── (false,)
+
+# --------------------------------------------------
+# EliminateExistsProject
+# --------------------------------------------------
+norm expect=EliminateExistsProject
+SELECT * FROM a WHERE EXISTS(SELECT i+1, i*k FROM a)
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── coalesce [subquery]
+           ├── subquery
+           │    └── project
+           │         ├── columns: column18:18!null
+           │         ├── cardinality: [0 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(18)
+           │         ├── limit
+           │         │    ├── cardinality: [0 - 1]
+           │         │    ├── key: ()
+           │         │    ├── scan a
+           │         │    │    └── limit hint: 1.00
+           │         │    └── 1
+           │         └── projections
+           │              └── true [as=column18:18]
+           └── false
+
+# --------------------------------------------------
+# EliminateExistsGroupBy
+# --------------------------------------------------
+
+# Scalar group by shouldn't get eliminated.
+norm expect-not=EliminateExistsGroupBy
+SELECT * FROM a WHERE EXISTS(SELECT max(s) FROM a WHERE False)
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── coalesce [subquery]
+           ├── subquery
+           │    └── project
+           │         ├── columns: column17:17!null
+           │         ├── cardinality: [1 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(17)
+           │         ├── scalar-group-by
+           │         │    ├── cardinality: [1 - 1]
+           │         │    ├── key: ()
+           │         │    └── values
+           │         │         ├── cardinality: [0 - 0]
+           │         │         └── key: ()
+           │         └── projections
+           │              └── true [as=column17:17]
+           └── false
+
+norm expect=EliminateExistsGroupBy
+SELECT * FROM a WHERE EXISTS(SELECT DISTINCT s FROM a)
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── coalesce [subquery]
+           ├── subquery
+           │    └── project
+           │         ├── columns: column16:16!null
+           │         ├── cardinality: [0 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(16)
+           │         ├── limit
+           │         │    ├── cardinality: [0 - 1]
+           │         │    ├── key: ()
+           │         │    ├── scan a
+           │         │    │    └── limit hint: 1.00
+           │         │    └── 1
+           │         └── projections
+           │              └── true [as=column16:16]
+           └── false
+
+norm expect=EliminateExistsGroupBy
+SELECT * FROM a WHERE EXISTS(SELECT DISTINCT ON (i) s FROM a)
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── coalesce [subquery]
+           ├── subquery
+           │    └── project
+           │         ├── columns: column16:16!null
+           │         ├── cardinality: [0 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(16)
+           │         ├── limit
+           │         │    ├── cardinality: [0 - 1]
+           │         │    ├── key: ()
+           │         │    ├── scan a
+           │         │    │    └── limit hint: 1.00
+           │         │    └── 1
+           │         └── projections
+           │              └── true [as=column16:16]
+           └── false
+
+# Ensure that EliminateExistsGroupBy does not activate for an EnsureDistinctOn.
+norm expect-not=EliminateExistsGroupBy
+SELECT * FROM a WHERE EXISTS(SELECT (SELECT y FROM xy WHERE y=k) FROM a)
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── coalesce [subquery]
+           ├── subquery
+           │    └── project
+           │         ├── columns: column21:21!null
+           │         ├── cardinality: [0 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(21)
+           │         ├── limit
+           │         │    ├── columns: k:8!null
+           │         │    ├── cardinality: [0 - 1]
+           │         │    ├── key: ()
+           │         │    ├── fd: ()-->(8)
+           │         │    ├── ensure-distinct-on
+           │         │    │    ├── columns: k:8!null
+           │         │    │    ├── grouping columns: k:8!null
+           │         │    │    ├── error: "more than one row returned by a subquery used as an expression"
+           │         │    │    ├── key: (8)
+           │         │    │    ├── limit hint: 1.00
+           │         │    │    └── left-join (hash)
+           │         │    │         ├── columns: k:8!null xy.y:16
+           │         │    │         ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
+           │         │    │         ├── scan a
+           │         │    │         │    ├── columns: k:8!null
+           │         │    │         │    └── key: (8)
+           │         │    │         ├── scan xy
+           │         │    │         │    └── columns: xy.y:16
+           │         │    │         └── filters
+           │         │    │              └── xy.y:16 = k:8 [outer=(8,16), constraints=(/8: (/NULL - ]; /16: (/NULL - ]), fd=(8)==(16), (16)==(8)]
+           │         │    └── 1
+           │         └── projections
+           │              └── true [as=column21:21]
+           └── false
+
+# --------------------------------------------------
+# EliminateExistsGroupBy + EliminateExistsProject
+# --------------------------------------------------
+norm expect=(EliminateExistsGroupBy,EliminateExistsProject)
+SELECT * FROM a WHERE EXISTS(SELECT max(s) FROM a GROUP BY i)
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── coalesce [subquery]
+           ├── subquery
+           │    └── project
+           │         ├── columns: column17:17!null
+           │         ├── cardinality: [0 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(17)
+           │         ├── limit
+           │         │    ├── cardinality: [0 - 1]
+           │         │    ├── key: ()
+           │         │    ├── scan a
+           │         │    │    └── limit hint: 1.00
+           │         │    └── 1
+           │         └── projections
+           │              └── true [as=column17:17]
+           └── false
+
+# --------------------------------------------------
+# InlineExistsSelectTuple
+# --------------------------------------------------
+norm expect=InlineExistsSelectTuple
+SELECT * FROM a WHERE (k, i) IN (SELECT x, y FROM xy)
+----
+semi-join (hash)
+ ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── scan xy
+ │    ├── columns: x:8!null y:9
+ │    ├── key: (8)
+ │    └── fd: (8)-->(9)
+ └── filters
+      ├── x:8 = k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+      └── y:9 = i:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+
+norm expect=InlineExistsSelectTuple
+SELECT * FROM a WHERE (k, i) IN (SELECT x, 2 FROM xy)
+----
+semi-join (hash)
+ ├── columns: k:1!null i:2!null f:3 s:4 arr:5
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3-5)
+ ├── select
+ │    ├── columns: k:1!null i:2!null f:3 s:4 arr:5
+ │    ├── key: (1)
+ │    ├── fd: ()-->(2), (1)-->(3-5)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-5)
+ │    └── filters
+ │         └── i:2 = 2 [outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
+ ├── scan xy
+ │    ├── columns: x:8!null
+ │    └── key: (8)
+ └── filters
+      └── x:8 = k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+
+norm expect=InlineExistsSelectTuple
+SELECT * FROM a WHERE f>1 AND (k, i) IN (SELECT x, 2 FROM xy) AND s = 'foo'
+----
+semi-join (hash)
+ ├── columns: k:1!null i:2!null f:3!null s:4!null arr:5
+ ├── key: (1)
+ ├── fd: ()-->(2,4), (1)-->(3,5)
+ ├── select
+ │    ├── columns: k:1!null i:2!null f:3!null s:4!null arr:5
+ │    ├── key: (1)
+ │    ├── fd: ()-->(2,4), (1)-->(3,5)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-5)
+ │    └── filters
+ │         ├── f:3 > 1.0 [outer=(3), constraints=(/3: [/1.0000000000000002 - ]; tight)]
+ │         ├── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+ │         └── i:2 = 2 [outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
+ ├── scan xy
+ │    ├── columns: x:8!null
+ │    └── key: (8)
+ └── filters
+      └── x:8 = k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+
+# Verify that we handle multiple tuples.
+norm expect=InlineExistsSelectTuple
+SELECT * FROM abcd WHERE (a, b) IN (SELECT x, y FROM xy) AND (c, d) IN (SELECT k, i FROM a)
+----
+semi-join (hash)
+ ├── columns: a:1 b:2 c:3 d:4
+ ├── semi-join (hash)
+ │    ├── columns: a:1 b:2 c:3 d:4
+ │    ├── scan abcd
+ │    │    └── columns: a:1 b:2 c:3 d:4
+ │    ├── scan a
+ │    │    ├── columns: k:12!null i:13
+ │    │    ├── key: (12)
+ │    │    └── fd: (12)-->(13)
+ │    └── filters
+ │         ├── k:12 = c:3 [outer=(3,12), constraints=(/3: (/NULL - ]; /12: (/NULL - ]), fd=(3)==(12), (12)==(3)]
+ │         └── i:13 = d:4 [outer=(4,13), constraints=(/4: (/NULL - ]; /13: (/NULL - ]), fd=(4)==(13), (13)==(4)]
+ ├── scan xy
+ │    ├── columns: x:8!null y:9
+ │    ├── key: (8)
+ │    └── fd: (8)-->(9)
+ └── filters
+      ├── x:8 = a:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+      └── y:9 = b:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+
+# Make sure we check that the left-hand side is the correct tuple; the result
+# would be bad if we didn't check that the variable is for the tuple in the
+# projection.
+norm expect=InlineExistsSelectTuple
+SELECT * FROM abcd WHERE EXISTS(SELECT * FROM (SELECT (x, y), (x+1,y+1) FROM xy) AS v(tup1,tup2) WHERE tup2 = (a, b))
+----
+semi-join (hash)
+ ├── columns: a:1 b:2 c:3 d:4
+ ├── immutable
+ ├── scan abcd
+ │    └── columns: a:1 b:2 c:3 d:4
+ ├── project
+ │    ├── columns: column16:16 column15:15!null
+ │    ├── immutable
+ │    ├── scan xy
+ │    │    ├── columns: x:8!null y:9
+ │    │    ├── key: (8)
+ │    │    └── fd: (8)-->(9)
+ │    └── projections
+ │         ├── y:9 + 1 [as=column16:16, outer=(9), immutable]
+ │         └── x:8 + 1 [as=column15:15, outer=(8), immutable]
+ └── filters
+      ├── a:1 = column15:15 [outer=(1,15), constraints=(/1: (/NULL - ]; /15: (/NULL - ]), fd=(1)==(15), (15)==(1)]
+      └── b:2 = column16:16 [outer=(2,16), constraints=(/2: (/NULL - ]; /16: (/NULL - ]), fd=(2)==(16), (16)==(2)]
+
+# --------------------------------------------------
+# ConvertUncorrelatedExistsToCoalesceSubquery
+# --------------------------------------------------
+
+norm expect=ConvertUncorrelatedExistsToCoalesceSubquery
+SELECT * FROM a WHERE EXISTS(SELECT i FROM a)
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── coalesce [subquery]
+           ├── subquery
+           │    └── project
+           │         ├── columns: column16:16!null
+           │         ├── cardinality: [0 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(16)
+           │         ├── limit
+           │         │    ├── cardinality: [0 - 1]
+           │         │    ├── key: ()
+           │         │    ├── scan a
+           │         │    │    └── limit hint: 1.00
+           │         │    └── 1
+           │         └── projections
+           │              └── true [as=column16:16]
+           └── false
+
+norm expect=ConvertUncorrelatedExistsToCoalesceSubquery
+SELECT EXISTS(SELECT * FROM (VALUES (1))) FROM a
+----
+project
+ ├── columns: exists:11
+ ├── scan a
+ └── projections
+      └── coalesce [as=exists:11, subquery]
+           ├── subquery
+           │    └── values
+           │         ├── columns: column10:10!null
+           │         ├── cardinality: [1 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(10)
+           │         └── (true,)
+           └── false
+
+norm expect=ConvertUncorrelatedExistsToCoalesceSubquery
+SELECT * FROM a a1 JOIN a a2 ON EXISTS(SELECT * FROM (VALUES (1)))
+----
+inner-join (cross)
+ ├── columns: k:1!null i:2 f:3 s:4 arr:5 k:8!null i:9 f:10 s:11 arr:12
+ ├── key: (1,8)
+ ├── fd: (1)-->(2-5), (8)-->(9-12)
+ ├── select
+ │    ├── columns: a1.k:1!null a1.i:2 a1.f:3 a1.s:4 a1.arr:5
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    ├── scan a [as=a1]
+ │    │    ├── columns: a1.k:1!null a1.i:2 a1.f:3 a1.s:4 a1.arr:5
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-5)
+ │    └── filters
+ │         └── coalesce [subquery]
+ │              ├── subquery
+ │              │    └── values
+ │              │         ├── columns: column17:17!null
+ │              │         ├── cardinality: [1 - 1]
+ │              │         ├── key: ()
+ │              │         ├── fd: ()-->(17)
+ │              │         └── (true,)
+ │              └── false
+ ├── select
+ │    ├── columns: a2.k:8!null a2.i:9 a2.f:10 a2.s:11 a2.arr:12
+ │    ├── key: (8)
+ │    ├── fd: (8)-->(9-12)
+ │    ├── scan a [as=a2]
+ │    │    ├── columns: a2.k:8!null a2.i:9 a2.f:10 a2.s:11 a2.arr:12
+ │    │    ├── key: (8)
+ │    │    └── fd: (8)-->(9-12)
+ │    └── filters
+ │         └── coalesce [subquery]
+ │              ├── subquery
+ │              │    └── values
+ │              │         ├── columns: column17:17!null
+ │              │         ├── cardinality: [1 - 1]
+ │              │         ├── key: ()
+ │              │         ├── fd: ()-->(17)
+ │              │         └── (true,)
+ │              └── false
+ └── filters (true)
+
+# Don't convert Exists if it is correlated.
+norm expect-not=ConvertUncorrelatedExistsToCoalesceSubquery
+SELECT * FROM a a1 WHERE EXISTS(SELECT i FROM a a2 where a1.i = a2.i)
+----
+semi-join (hash)
+ ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a [as=a1]
+ │    ├── columns: a1.k:1!null a1.i:2 a1.f:3 a1.s:4 a1.arr:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── scan a [as=a2]
+ │    └── columns: a2.i:9
+ └── filters
+      └── a1.i:2 = a2.i:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+
+# --------------------------------------------------
+# EliminateExistsLimit
+# --------------------------------------------------
+norm expect=EliminateExistsLimit
+SELECT * FROM a a1 WHERE EXISTS(SELECT i FROM a a2 where a1.i = a2.i LIMIT 1)
+----
+semi-join (hash)
+ ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a [as=a1]
+ │    ├── columns: a1.k:1!null a1.i:2 a1.f:3 a1.s:4 a1.arr:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── scan a [as=a2]
+ │    └── columns: a2.i:9
+ └── filters
+      └── a1.i:2 = a2.i:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+
+norm expect=EliminateExistsLimit
+SELECT * FROM a a1 WHERE NOT EXISTS(SELECT i FROM a a2 where a1.i = a2.i LIMIT 1)
+----
+anti-join (hash)
+ ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a [as=a1]
+ │    ├── columns: a1.k:1!null a1.i:2 a1.f:3 a1.s:4 a1.arr:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── scan a [as=a2]
+ │    └── columns: a2.i:9
+ └── filters
+      └── a1.i:2 = a2.i:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+
+# Don't eliminate a non-positive limit.
+norm expect-not=EliminateExistsLimit
+SELECT * FROM a a1 WHERE EXISTS(SELECT i FROM a a2 where a1.i = a2.i LIMIT 0)
+----
+values
+ ├── columns: k:1!null i:2!null f:3!null s:4!null arr:5!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-5)
+
+# Don't eliminate a limit from an uncorrelated subquery.
+norm expect-not=EliminateExistsLimit disable=ConvertUncorrelatedExistsToCoalesceSubquery
+SELECT * FROM a WHERE EXISTS(SELECT * FROM a LIMIT 1)
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── exists [subquery]
+           └── limit
+                ├── columns: k:8!null i:9 f:10 s:11 arr:12
+                ├── cardinality: [0 - 1]
+                ├── key: ()
+                ├── fd: ()-->(8-12)
+                ├── scan a
+                │    ├── columns: k:8!null i:9 f:10 s:11 arr:12
+                │    ├── key: (8)
+                │    ├── fd: (8)-->(9-12)
+                │    └── limit hint: 1.00
+                └── 1
+
+# --------------------------------------------------
+# EliminateConstValueSubquery
+# --------------------------------------------------
+
+norm expect=EliminateConstValueSubquery
+SELECT (SELECT 1)
+----
+values
+ ├── columns: "?column?":2!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(2)
+ └── (1,)
+
+norm expect=EliminateConstValueSubquery
+SELECT * FROM a WHERE k = (SELECT 1)
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+
+norm expect=EliminateConstValueSubquery
+SELECT * FROM a WHERE k >= (SELECT 1)
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── k:1 >= 1 [outer=(1), constraints=(/1: [/1 - ]; tight)]
+
+# Cannot eliminate multi-row values subquery.
+norm expect-not=EliminateConstValueSubquery
+SELECT (VALUES (1), (2))
+----
+values
+ ├── columns: column1:2
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(2)
+ └── tuple
+      └── subquery
+           └── max1-row
+                ├── columns: column1:1!null
+                ├── error: "more than one row returned by a subquery used as an expression"
+                ├── cardinality: [1 - 1]
+                ├── key: ()
+                ├── fd: ()-->(1)
+                └── values
+                     ├── columns: column1:1!null
+                     ├── cardinality: [2 - 2]
+                     ├── (1,)
+                     └── (2,)
+
+# Cannot eliminate multi-column values subquery.
+norm expect-not=EliminateConstValueSubquery
+SELECT (1, 2) = (SELECT 1, 2)
+----
+values
+ ├── columns: "?column?":4
+ ├── cardinality: [1 - 1]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(4)
+ └── tuple
+      └── eq
+           ├── (1, 2)
+           └── subquery
+                └── values
+                     ├── columns: column3:3
+                     ├── cardinality: [1 - 1]
+                     ├── key: ()
+                     ├── fd: ()-->(3)
+                     └── ((1, 2),)
+
+# Cannot eliminate non-constant values subquery.
+norm expect-not=EliminateConstValueSubquery
+SELECT (SELECT gen_random_uuid())
+----
+values
+ ├── columns: gen_random_uuid:2
+ ├── cardinality: [1 - 1]
+ ├── volatile
+ ├── key: ()
+ ├── fd: ()-->(2)
+ └── tuple
+      └── subquery
+           └── values
+                ├── columns: gen_random_uuid:1
+                ├── cardinality: [1 - 1]
+                ├── volatile
+                ├── key: ()
+                ├── fd: ()-->(1)
+                └── (gen_random_uuid(),)
+
+
+# --------------------------------------------------
+# EliminateUDFCallSubquery
+# --------------------------------------------------
+
+exec-ddl
+CREATE FUNCTION f1(i INT) RETURNS INT AS $$
+  SELECT i
+$$ LANGUAGE SQL
+----
+
+opt expect=EliminateUDFCallSubquery format=show-scalars
+SELECT (VALUES (f1(0)))
+----
+values
+ ├── columns: column1:4
+ ├── cardinality: [1 - 1]
+ ├── volatile
+ ├── key: ()
+ ├── fd: ()-->(4)
+ └── tuple
+      └── udf: f1
+           ├── args
+           │    └── const: 0
+           ├── params: i:1
+           └── body
+                └── values
+                     ├── columns: i:2
+                     ├── outer: (1)
+                     ├── cardinality: [1 - 1]
+                     ├── key: ()
+                     ├── fd: ()-->(2)
+                     └── tuple
+                          └── variable: i:1
+
+
+opt expect=EliminateUDFCallSubquery format=show-scalars
+SELECT (SELECT f1(0))
+----
+values
+ ├── columns: f1:4
+ ├── cardinality: [1 - 1]
+ ├── volatile
+ ├── key: ()
+ ├── fd: ()-->(4)
+ └── tuple
+      └── udf: f1
+           ├── args
+           │    └── const: 0
+           ├── params: i:1
+           └── body
+                └── values
+                     ├── columns: i:2
+                     ├── outer: (1)
+                     ├── cardinality: [1 - 1]
+                     ├── key: ()
+                     ├── fd: ()-->(2)
+                     └── tuple
+                          └── variable: i:1
+
+opt expect=EliminateUDFCallSubquery format=show-scalars
+SELECT (SELECT v FROM (VALUES (f1(0))) AS v(v))
+----
+values
+ ├── columns: v:4
+ ├── cardinality: [1 - 1]
+ ├── volatile
+ ├── key: ()
+ ├── fd: ()-->(4)
+ └── tuple
+      └── udf: f1
+           ├── args
+           │    └── const: 0
+           ├── params: i:1
+           └── body
+                └── values
+                     ├── columns: i:2
+                     ├── outer: (1)
+                     ├── cardinality: [1 - 1]
+                     ├── key: ()
+                     ├── fd: ()-->(2)
+                     └── tuple
+                          └── variable: i:1
+
+
+# Cannot eliminate multi-row values subquery.
+opt expect-not=EliminateUDFCallSubquery format=show-scalars
+SELECT (VALUES (f1(0)), (f1(1)))
+----
+values
+ ├── columns: column1:6
+ ├── cardinality: [1 - 1]
+ ├── volatile
+ ├── key: ()
+ ├── fd: ()-->(6)
+ └── tuple
+      └── subquery
+           └── max1-row
+                ├── columns: column1:5
+                ├── error: "more than one row returned by a subquery used as an expression"
+                ├── cardinality: [1 - 1]
+                ├── volatile
+                ├── key: ()
+                ├── fd: ()-->(5)
+                └── values
+                     ├── columns: column1:5
+                     ├── cardinality: [2 - 2]
+                     ├── volatile
+                     ├── tuple
+                     │    └── udf: f1
+                     │         ├── args
+                     │         │    └── const: 0
+                     │         ├── params: i:1
+                     │         └── body
+                     │              └── values
+                     │                   ├── columns: i:2
+                     │                   ├── outer: (1)
+                     │                   ├── cardinality: [1 - 1]
+                     │                   ├── key: ()
+                     │                   ├── fd: ()-->(2)
+                     │                   └── tuple
+                     │                        └── variable: i:1
+                     └── tuple
+                          └── udf: f1
+                               ├── args
+                               │    └── const: 1
+                               ├── params: i:3
+                               └── body
+                                    └── values
+                                         ├── columns: i:4
+                                         ├── outer: (3)
+                                         ├── cardinality: [1 - 1]
+                                         ├── key: ()
+                                         ├── fd: ()-->(4)
+                                         └── tuple
+                                              └── variable: i:3
+
+# Cannot eliminate multi-column values subquery.
+opt expect-not=EliminateUDFCallSubquery format=show-scalars
+SELECT (f1(0), f1(1)) = (SELECT f1(0), f1(1))
+----
+values
+ ├── columns: "?column?":12
+ ├── cardinality: [1 - 1]
+ ├── volatile
+ ├── key: ()
+ ├── fd: ()-->(12)
+ └── tuple
+      └── eq
+           ├── tuple
+           │    ├── udf: f1
+           │    │    ├── args
+           │    │    │    └── const: 0
+           │    │    ├── params: i:7
+           │    │    └── body
+           │    │         └── values
+           │    │              ├── columns: i:8
+           │    │              ├── outer: (7)
+           │    │              ├── cardinality: [1 - 1]
+           │    │              ├── key: ()
+           │    │              ├── fd: ()-->(8)
+           │    │              └── tuple
+           │    │                   └── variable: i:7
+           │    └── udf: f1
+           │         ├── args
+           │         │    └── const: 1
+           │         ├── params: i:9
+           │         └── body
+           │              └── values
+           │                   ├── columns: i:10
+           │                   ├── outer: (9)
+           │                   ├── cardinality: [1 - 1]
+           │                   ├── key: ()
+           │                   ├── fd: ()-->(10)
+           │                   └── tuple
+           │                        └── variable: i:9
+           └── subquery
+                └── project
+                     ├── columns: column11:11
+                     ├── cardinality: [1 - 1]
+                     ├── volatile
+                     ├── key: ()
+                     ├── fd: ()-->(11)
+                     ├── values
+                     │    ├── columns: f1:3 f1:6
+                     │    ├── cardinality: [1 - 1]
+                     │    ├── volatile
+                     │    ├── key: ()
+                     │    ├── fd: ()-->(3,6)
+                     │    └── tuple
+                     │         ├── udf: f1
+                     │         │    ├── args
+                     │         │    │    └── const: 0
+                     │         │    ├── params: i:1
+                     │         │    └── body
+                     │         │         └── values
+                     │         │              ├── columns: i:2
+                     │         │              ├── outer: (1)
+                     │         │              ├── cardinality: [1 - 1]
+                     │         │              ├── key: ()
+                     │         │              ├── fd: ()-->(2)
+                     │         │              └── tuple
+                     │         │                   └── variable: i:1
+                     │         └── udf: f1
+                     │              ├── args
+                     │              │    └── const: 1
+                     │              ├── params: i:4
+                     │              └── body
+                     │                   └── values
+                     │                        ├── columns: i:5
+                     │                        ├── outer: (4)
+                     │                        ├── cardinality: [1 - 1]
+                     │                        ├── key: ()
+                     │                        ├── fd: ()-->(5)
+                     │                        └── tuple
+                     │                             └── variable: i:4
+                     └── projections
+                          └── tuple [as=column11:11, outer=(3,6)]
+                               ├── variable: f1:3
+                               └── variable: f1:6
+
+
+# Cannot eliminate non-udf call subquery.
+opt expect-not=EliminateUDFCallSubquery format=show-scalars
+SELECT (SELECT gen_random_uuid())
+----
+values
+ ├── columns: gen_random_uuid:2
+ ├── cardinality: [1 - 1]
+ ├── volatile
+ ├── key: ()
+ ├── fd: ()-->(2)
+ └── tuple
+      └── subquery
+           └── values
+                ├── columns: gen_random_uuid:1
+                ├── cardinality: [1 - 1]
+                ├── volatile
+                ├── key: ()
+                ├── fd: ()-->(1)
+                └── tuple
+                     └── function: gen_random_uuid
+
+
+# --------------------------------------------------
+# SimplifyCaseWhenConstValue
+# --------------------------------------------------
+
+norm expect=SimplifyCaseWhenConstValue
+SELECT CASE 1 WHEN 1 THEN 'one' END
+----
+values
+ ├── columns: case:1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── ('one',)
+
+norm expect=SimplifyCaseWhenConstValue
+SELECT CASE WHEN 1 = 1 THEN 'one' END
+----
+values
+ ├── columns: case:1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── ('one',)
+
+norm expect=SimplifyCaseWhenConstValue
+SELECT CASE false WHEN 0 = 1 THEN 'one' END
+----
+values
+ ├── columns: case:1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── ('one',)
+
+norm expect=SimplifyCaseWhenConstValue
+SELECT CASE 1 WHEN 2 THEN 'one' END
+----
+values
+ ├── columns: case:1
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (NULL,)
+
+norm expect=SimplifyCaseWhenConstValue
+SELECT CASE 1 WHEN 2 THEN 'one' ELSE NULL END
+----
+values
+ ├── columns: case:1
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (NULL,)
+
+# Regression test for #34930.
+norm expect=SimplifyCaseWhenConstValue
+SELECT
+    CASE
+    WHEN true THEN NULL
+    ELSE -0.41697856420581636
+    END
+    - CASE WHEN NULL THEN 1.4034371360919229 ELSE ln(NULL) END
+----
+values
+ ├── columns: "?column?":1
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (NULL,)
+
+# Regression test for #35246.
+norm expect=SimplifyCaseWhenConstValue
+SELECT
+    CASE WHEN true THEN NULL ELSE 'foo' END ||
+    CASE WHEN true THEN NULL ELSE 'bar' END
+----
+values
+ ├── columns: "?column?":1
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (NULL,)
+
+# Verify that a true condition does not remove non-constant expressions
+# proceeding it.
+norm expect=SimplifyCaseWhenConstValue
+SELECT
+    CASE 1
+    WHEN k THEN 'one'
+    WHEN 1 THEN 'two'
+    WHEN 1 THEN 'three'
+    ELSE 'four'
+    END
+FROM
+    a
+----
+project
+ ├── columns: case:8!null
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── projections
+      └── CASE 1 WHEN k:1 THEN 'one' ELSE 'two' END [as=case:8, outer=(1)]
+
+norm expect=SimplifyCaseWhenConstValue
+SELECT
+    CASE WHEN k = 1 THEN 'one' WHEN true THEN 'two' END
+FROM
+    a
+----
+project
+ ├── columns: case:8!null
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── projections
+      └── CASE WHEN k:1 = 1 THEN 'one' ELSE 'two' END [as=case:8, outer=(1)]
+
+norm expect=SimplifyCaseWhenConstValue
+SELECT CASE 1 WHEN 2 THEN 'one' ELSE 'three' END
+----
+values
+ ├── columns: case:1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── ('three',)
+
+norm expect=SimplifyCaseWhenConstValue
+SELECT
+    CASE 1
+    WHEN 2 THEN 'one'
+    WHEN k THEN 'two'
+    WHEN 1 THEN 'three'
+    WHEN 1 THEN 'four'
+    END
+FROM
+    a
+----
+project
+ ├── columns: case:8!null
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── projections
+      └── CASE 1 WHEN k:1 THEN 'two' ELSE 'three' END [as=case:8, outer=(1)]
+
+norm expect=SimplifyCaseWhenConstValue
+SELECT
+    CASE 1
+    WHEN 2 THEN 'one'
+    WHEN 1 THEN 'three'
+    WHEN 1 THEN 'four'
+    ELSE 'five'
+    END
+----
+values
+ ├── columns: case:1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── ('three',)
+
+norm expect=SimplifyCaseWhenConstValue
+SELECT
+    CASE NULL
+    WHEN true THEN 'one'
+    WHEN false THEN 'two'
+    WHEN NULL THEN 'three'
+    ELSE 'four'
+    END
+----
+values
+ ├── columns: case:1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── ('four',)
+
+norm expect=SimplifyCaseWhenConstValue
+SELECT CASE WHEN false THEN 'one' WHEN true THEN 'two' END
+----
+values
+ ├── columns: case:1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── ('two',)
+
+# Verify that the type of the Case stays integer when we remove the first
+# branch; to ensure this, all branches must have strongly typed values so the
+# type of the Case cannot change when we remove branches. Regression test for
+# #47299.
+norm expect=SimplifyCaseWhenConstValue format=show-all
+SELECT CASE WHEN NULL THEN 0 WHEN random() > 0.5 THEN NULL END
+----
+values
+ ├── columns: case:1(int)
+ ├── cardinality: [1 - 1]
+ ├── volatile
+ ├── stats: [rows=1]
+ ├── cost: 0.02
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── prune: (1)
+ └── tuple [type=tuple{int}]
+      └── case [type=int]
+           ├── true [type=bool]
+           ├── when [type=int]
+           │    ├── gt [type=bool]
+           │    │    ├── function: random [type=float]
+           │    │    └── const: 0.5 [type=float]
+           │    └── null [type=int]
+           └── null [type=int]
+
+# --------------------------------------------------
+# UnifyComparisonTypes
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE e
+(
+    k INT PRIMARY KEY,
+    i INT,
+    t TIMESTAMP,
+    tz TIMESTAMPTZ,
+    d DATE,
+    INDEX (i),
+    INDEX (t),
+    INDEX (tz),
+    INDEX (d)
+)
+----
+
+## --------------------------------------------------
+## INT / FLOAT / DECIMAL
+## --------------------------------------------------
+
+# Compare how we can generate spans with and without the rule enabled.
+opt expect=UnifyComparisonTypes
+SELECT * FROM e WHERE k > '1.0'::FLOAT
+----
+scan e
+ ├── columns: k:1!null i:2 t:3 tz:4 d:5
+ ├── constraint: /1: [/2 - ]
+ ├── key: (1)
+ └── fd: (1)-->(2-5)
+
+opt disable=UnifyComparisonTypes
+SELECT * FROM e WHERE k > '1.0'::FLOAT
+----
+select
+ ├── columns: k:1!null i:2 t:3 tz:4 d:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan e
+ │    ├── columns: k:1!null i:2 t:3 tz:4 d:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── k:1 > 1.0 [outer=(1), constraints=(/1: (/NULL - ])]
+
+# Ensure the rest of normalization does its work and we move things around appropriately.
+opt expect=UnifyComparisonTypes
+SELECT * FROM e WHERE '1.0'::FLOAT > k
+----
+scan e
+ ├── columns: k:1!null i:2 t:3 tz:4 d:5
+ ├── constraint: /1: [ - /0]
+ ├── key: (1)
+ └── fd: (1)-->(2-5)
+
+opt expect=UnifyComparisonTypes
+SELECT * FROM e WHERE k - 1 = 2::DECIMAL
+----
+scan e
+ ├── columns: k:1!null i:2 t:3 tz:4 d:5
+ ├── constraint: /1: [/3 - /3]
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ └── fd: ()-->(1-5)
+
+# TODO(justin): we should theoretically be able to generate constraints in this
+# case.
+opt expect-not=UnifyComparisonTypes
+SELECT * FROM e WHERE k > '1.1'::FLOAT
+----
+select
+ ├── columns: k:1!null i:2 t:3 tz:4 d:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan e
+ │    ├── columns: k:1!null i:2 t:3 tz:4 d:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── k:1 > 1.1 [outer=(1), constraints=(/1: (/NULL - ])]
+
+# -0 can generate spans
+opt expect=UnifyComparisonTypes
+SELECT * FROM e WHERE k > '-0'::FLOAT
+----
+scan e
+ ├── columns: k:1!null i:2 t:3 tz:4 d:5
+ ├── constraint: /1: [/1 - ]
+ ├── key: (1)
+ └── fd: (1)-->(2-5)
+
+# NaN cannot generate spans.
+opt expect-not=UnifyComparisonTypes
+SELECT * FROM e WHERE k > 'NaN'::FLOAT
+----
+select
+ ├── columns: k:1!null i:2 t:3 tz:4 d:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan e
+ │    ├── columns: k:1!null i:2 t:3 tz:4 d:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── k:1 > NaN [outer=(1), constraints=(/1: (/NULL - ])]
+
+# IS/IS NOT
+# We do not do the unification here (the rule matches on Const and NULL is its
+# own operator), but this is fine because when an explicit NULL is involved we
+# can generate spans anyway.
+opt expect-not=UnifyComparisonTypes format=show-all
+SELECT k FROM e WHERE i IS NOT DISTINCT FROM NULL::FLOAT
+----
+project
+ ├── columns: k:1(int!null)
+ ├── stats: [rows=10]
+ ├── cost: 28.5400002
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── prune: (1)
+ ├── interesting orderings: (+1)
+ └── scan t.public.e@e_i_idx
+      ├── columns: t.public.e.k:1(int!null) t.public.e.i:2(int)
+      ├── constraint: /2/1: [/NULL - /NULL]
+      ├── stats: [rows=10, distinct(2)=1, null(2)=10]
+      ├── cost: 28.4200002
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      ├── fd: ()-->(2)
+      ├── prune: (1)
+      └── interesting orderings: (+1 opt(2))
+
+opt expect-not=UnifyComparisonTypes format=show-all
+SELECT k FROM e WHERE i IS DISTINCT FROM NULL::FLOAT
+----
+project
+ ├── columns: k:1(int!null)
+ ├── stats: [rows=990]
+ ├── cost: 1057.54
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── prune: (1)
+ ├── interesting orderings: (+1)
+ └── scan t.public.e@e_i_idx
+      ├── columns: t.public.e.k:1(int!null) t.public.e.i:2(int!null)
+      ├── constraint: /2/1: (/NULL - ]
+      ├── stats: [rows=990, distinct(2)=100, null(2)=0]
+      ├── cost: 1047.62
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── prune: (1)
+      └── interesting orderings: (+1) (+2,+1)
+
+opt expect=UnifyComparisonTypes
+SELECT * FROM e WHERE k IS NOT DISTINCT FROM '1.0'::FLOAT
+----
+scan e
+ ├── columns: k:1!null i:2 t:3 tz:4 d:5
+ ├── constraint: /1: [/1 - /1]
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ └── fd: ()-->(1-5)
+
+## --------------------------------------------------
+## TIMESTAMP / TIMESTAMPTZ / DATE
+## --------------------------------------------------
+
+opt disable=UnifyComparisonTypes
+SELECT k FROM e WHERE tz > '2017-11-12 07:35:01+00:00'::TIMESTAMP
+----
+project
+ ├── columns: k:1!null
+ ├── stable
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null tz:4!null
+      ├── stable
+      ├── key: (1)
+      ├── fd: (1)-->(4)
+      ├── scan e@e_tz_idx
+      │    ├── columns: k:1!null tz:4!null
+      │    ├── constraint: /4/1: (/NULL - ]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(4)
+      └── filters
+           └── tz:4 > '2017-11-12 07:35:01' [outer=(4), stable, constraints=(/4: (/NULL - ])]
+
+opt expect=UnifyComparisonTypes
+SELECT k FROM e WHERE tz > '2017-11-12 07:35:01+00:00'::TIMESTAMP
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── scan e@e_tz_idx
+      ├── columns: k:1!null tz:4!null
+      ├── constraint: /4/1: [/'2017-11-12 07:35:01.000001+00' - ]
+      ├── key: (1)
+      └── fd: (1)-->(4)
+
+# Common case arising from constant folding: the folding here results in a
+# TIMESTAMP, but we would still like to be able to generate DATE spans.
+opt
+SELECT k FROM e WHERE d > '2018-07-01' AND d < '2018-07-01'::DATE + '1w'::INTERVAL
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── scan e@e_d_idx
+      ├── columns: k:1!null d:5!null
+      ├── constraint: /5/1: [/'2018-07-02' - /'2018-07-07']
+      ├── key: (1)
+      └── fd: (1)-->(5)
+
+# A case where we can theoretically generate a tight index span, but do not.
+# TODO(justin): modify the logic to allow us to create spans in this case.
+opt
+SELECT k FROM e WHERE d > '2018-07-01' AND d < '2018-07-01'::DATE + '1w1s'::INTERVAL
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null d:5!null
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(5)
+      ├── scan e@e_d_idx
+      │    ├── columns: k:1!null d:5!null
+      │    ├── constraint: /5/1: [/'2018-07-02' - ]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(5)
+      └── filters
+           └── d:5 < '2018-07-08 00:00:01' [outer=(5), immutable, constraints=(/5: (/NULL - ])]
+
+# NULL value.
+opt
+SELECT k FROM e WHERE tz IS NOT NULL
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── scan e@e_tz_idx
+      ├── columns: k:1!null tz:4!null
+      ├── constraint: /4/1: (/NULL - ]
+      ├── key: (1)
+      └── fd: (1)-->(4)
+
+# Working in concert with other norm rules
+opt
+SELECT k FROM e WHERE i - 10 > 100
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── scan e@e_i_idx
+      ├── columns: k:1!null i:2!null
+      ├── constraint: /2/1: [/111 - ]
+      ├── key: (1)
+      └── fd: (1)-->(2)
+
+# --------------------------------------------------
+# InlineAnyValuesSingleCol
+# --------------------------------------------------
+
+norm expect=InlineAnyValuesSingleCol
+SELECT k FROM a WHERE k IN (VALUES (1), (2), (3))
+----
+select
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 3]
+ ├── key: (1)
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── filters
+      └── k:1 IN (1, 2, 3) [outer=(1), constraints=(/1: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+
+norm expect=InlineAnyValuesSingleCol
+SELECT k FROM a WHERE k IN (VALUES ((SELECT k*i FROM a)), (2), (3))
+----
+select
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── filters
+      └── in [outer=(1), immutable, subquery]
+           ├── k:1
+           └── tuple
+                ├── subquery
+                │    └── max1-row
+                │         ├── columns: "?column?":15
+                │         ├── error: "more than one row returned by a subquery used as an expression"
+                │         ├── cardinality: [0 - 1]
+                │         ├── immutable
+                │         ├── key: ()
+                │         ├── fd: ()-->(15)
+                │         └── project
+                │              ├── columns: "?column?":15
+                │              ├── immutable
+                │              ├── scan a
+                │              │    ├── columns: k:8!null i:9
+                │              │    ├── key: (8)
+                │              │    └── fd: (8)-->(9)
+                │              └── projections
+                │                   └── k:8 * i:9 [as="?column?":15, outer=(8,9), immutable]
+                ├── 2
+                └── 3
+
+# --------------------------------------------------
+# InlineAnyValuesMultiCol
+# --------------------------------------------------
+
+norm expect=InlineAnyValuesMultiCol
+SELECT k FROM a WHERE (k, i) IN (VALUES (1, 1), (2, 2), (3, 3))
+----
+project
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 3]
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2!null
+      ├── cardinality: [0 - 3]
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan a
+      │    ├── columns: k:1!null i:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── (k:1, i:2) IN ((1, 1), (2, 2), (3, 3)) [outer=(1,2), constraints=(/1/2: [/1/1 - /1/1] [/2/2 - /2/2] [/3/3 - /3/3]; /2: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+
+# The rule should not fire if the columns are not in the right order.
+norm expect-not=InlineAnyValuesMultiCol
+SELECT k FROM a WHERE (k, i) IN (SELECT b, a FROM (VALUES (1, 1), (2, 2), (3, 3)) AS v(a,b))
+----
+project
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 3]
+ ├── key: (1)
+ └── semi-join (hash)
+      ├── columns: k:1!null i:2
+      ├── cardinality: [0 - 3]
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan a
+      │    ├── columns: k:1!null i:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      ├── values
+      │    ├── columns: column1:8!null column2:9!null
+      │    ├── cardinality: [3 - 3]
+      │    ├── (1, 1)
+      │    ├── (2, 2)
+      │    └── (3, 3)
+      └── filters
+           ├── column2:9 = k:1 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+           └── column1:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+
+# --------------------------------------------------
+# SimplifyEqualsAnyTuple
+# --------------------------------------------------
+
+norm expect=SimplifyEqualsAnyTuple
+SELECT k FROM a WHERE k = ANY (1, 2, 3)
+----
+select
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 3]
+ ├── key: (1)
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── filters
+      └── k:1 IN (1, 2, 3) [outer=(1), constraints=(/1: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+
+norm expect=SimplifyEqualsAnyTuple
+SELECT k FROM a WHERE k = ANY ()
+----
+values
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+# --------------------------------------------------
+# SimplifyAnyScalarArray
+# --------------------------------------------------
+
+norm expect=SimplifyAnyScalarArray
+SELECT k FROM a WHERE k > ANY ARRAY[1, 2, 3]
+----
+select
+ ├── columns: k:1!null
+ ├── key: (1)
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── filters
+      └── k:1 > ANY (1, 2, 3) [outer=(1)]
+
+norm expect-not=SimplifyAnyScalarArray
+SELECT k FROM a WHERE k > ANY ARRAY[1, 2, 3, i]
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan a
+      │    ├── columns: k:1!null i:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── k:1 > ANY ARRAY[1, 2, 3, i:2] [outer=(1,2)]
+
+norm expect=SimplifyAnyScalarArray
+SELECT k FROM a WHERE k > ANY ARRAY[]:::INT[]
+----
+select
+ ├── columns: k:1!null
+ ├── key: (1)
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── filters
+      └── k:1 > ANY () [outer=(1)]
+
+# DTuples should be converted to TupleExprs. This allows constraints to be built
+# for the resulting IN expression because the constraint builder requires
+# TupleExprs on the RHS of IN expressions.
+norm expect=SimplifyAnyScalarArray
+SELECT k FROM a WHERE (k, s) = ANY(ARRAY[(1, 'foo'), (2, 'bar')])
+----
+project
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 2]
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null s:4!null
+      ├── cardinality: [0 - 2]
+      ├── key: (1)
+      ├── fd: (1)-->(4)
+      ├── scan a
+      │    ├── columns: k:1!null s:4
+      │    ├── key: (1)
+      │    └── fd: (1)-->(4)
+      └── filters
+           └── (k:1, s:4) IN ((1, 'foo'), (2, 'bar')) [outer=(1,4), constraints=(/1/4: [/1/'foo' - /1/'foo'] [/2/'bar' - /2/'bar']; /4: [/'bar' - /'bar'] [/'foo' - /'foo']; tight)]
+
+# --------------------------------------------------
+# SimplifyEqualsAnyTuple + SimplifyAnyScalarArray
+# --------------------------------------------------
+
+norm expect=(SimplifyAnyScalarArray,SimplifyEqualsAnyTuple)
+SELECT k FROM a WHERE k = ANY ARRAY[1, 2, 3]
+----
+select
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 3]
+ ├── key: (1)
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── filters
+      └── k:1 IN (1, 2, 3) [outer=(1), constraints=(/1: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+
+norm expect=(SimplifyAnyScalarArray,SimplifyEqualsAnyTuple)
+SELECT k FROM a WHERE k = ANY ARRAY[]:::INT[]
+----
+values
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+# TODO(justin): fold casts.
+norm
+SELECT k FROM a WHERE k = ANY '{1,2,3}'::INT[]
+----
+select
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 3]
+ ├── key: (1)
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── filters
+      └── k:1 IN (1, 2, 3) [outer=(1), constraints=(/1: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+
+# --------------------------------------------------
+# InlineAnyProjectSet
+# --------------------------------------------------
+
+# Basic equality case with unnest.
+norm expect=InlineAnyProjectSet
+SELECT k FROM a WHERE k = ANY(SELECT * FROM unnest($1:::INT[]))
+----
+select
+ ├── columns: k:1!null
+ ├── has-placeholder
+ ├── key: (1)
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── filters
+      ├── k:1 = ANY $1 [outer=(1)]
+      └── $1 IS DISTINCT FROM CAST(NULL AS INT8[])
+
+# Different comparison operator.
+norm expect=InlineAnyProjectSet
+SELECT k FROM a WHERE k > ANY(SELECT * FROM unnest($1:::INT[]))
+----
+select
+ ├── columns: k:1!null
+ ├── has-placeholder
+ ├── key: (1)
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── filters
+      ├── k:1 > ANY $1 [outer=(1)]
+      └── $1 IS DISTINCT FROM CAST(NULL AS INT8[])
+
+# String array.
+norm expect=InlineAnyProjectSet
+SELECT s FROM a WHERE s = ANY(SELECT * FROM unnest($1:::STRING[]))
+----
+select
+ ├── columns: s:4
+ ├── has-placeholder
+ ├── scan a
+ │    └── columns: s:4
+ └── filters
+      ├── s:4 = ANY $1 [outer=(4)]
+      └── $1 IS DISTINCT FROM CAST(NULL AS STRING[])
+
+# Using a column reference for the array.
+norm expect=InlineAnyProjectSet
+SELECT k FROM a WHERE k = ANY(SELECT * FROM unnest(arr))
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null arr:5!null
+      ├── key: (1)
+      ├── fd: (1)-->(5)
+      ├── scan a
+      │    ├── columns: k:1!null arr:5
+      │    ├── key: (1)
+      │    └── fd: (1)-->(5)
+      └── filters
+           ├── k:1 = ANY arr:5 [outer=(1,5)]
+           └── arr:5 IS DISTINCT FROM CAST(NULL AS INT8[]) [outer=(5), constraints=(/5: (/NULL - ]; tight)]
+
+# Case with an array-returning expression inside other than a placeholder.
+norm expect=InlineAnyProjectSet
+SELECT k FROM a WHERE k = ANY(SELECT * FROM unnest(ARRAY[1]::int[] || array_remove($1::int[], 5)))
+----
+select
+ ├── columns: k:1!null
+ ├── immutable, has-placeholder
+ ├── key: (1)
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── filters
+      ├── k:1 = ANY (ARRAY[1] || array_remove($1, 5)) [outer=(1), immutable]
+      └── (ARRAY[1] || array_remove($1, 5)) IS DISTINCT FROM CAST(NULL AS INT8[]) [immutable]
+
+# Case with an array containing NULL.
+norm expect=InlineAnyProjectSet
+SELECT k FROM a WHERE k = ANY(SELECT unnest(array_append($1::int[], NULL)::int[]))
+----
+select
+ ├── columns: k:1!null
+ ├── immutable, has-placeholder
+ ├── key: (1)
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── filters
+      ├── k:1 = ANY array_append($1, NULL) [outer=(1), immutable]
+      └── array_append($1, NULL) IS DISTINCT FROM CAST(NULL AS INT8[]) [immutable]
+
+# Case with a NULL array.
+norm expect=InlineAnyProjectSet
+SELECT k FROM a WHERE k = ANY(SELECT unnest(NULL::int[]))
+----
+values
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+# No-op case that is instead handled by constant folding.
+norm expect-not=InlineAnyProjectSet
+SELECT k FROM a WHERE k = ANY(SELECT unnest(ARRAY[$1::int, NULL]::int[]))
+----
+select
+ ├── columns: k:1!null
+ ├── has-placeholder
+ ├── key: (1)
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── filters
+      └── k:1 IN ($1, NULL) [outer=(1)]
+
+# Rule should not fire when the session variable is disabled.
+norm set=optimizer_inline_any_unnest_subquery=false expect-not=InlineAnyProjectSet
+SELECT k FROM a WHERE k = ANY(SELECT * FROM unnest($1:::INT[]))
+----
+semi-join (hash)
+ ├── columns: k:1!null
+ ├── immutable, has-placeholder
+ ├── key: (1)
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ ├── project-set
+ │    ├── columns: unnest:8
+ │    ├── immutable, has-placeholder
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    └── ()
+ │    └── zip
+ │         └── unnest($1) [immutable]
+ └── filters
+      └── k:1 = unnest:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+
+# Rule should not fire when ProjectSet has multiple zip items.
+norm expect-not=InlineAnyProjectSet
+SELECT k FROM a WHERE (k, i) = ANY(SELECT * FROM ROWS FROM (unnest($1:::INT[]), unnest($2:::INT[])))
+----
+project
+ ├── columns: k:1!null
+ ├── immutable, has-placeholder
+ ├── key: (1)
+ └── semi-join (hash)
+      ├── columns: k:1!null i:2
+      ├── immutable, has-placeholder
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan a
+      │    ├── columns: k:1!null i:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      ├── project-set
+      │    ├── columns: unnest:8 unnest:9
+      │    ├── immutable, has-placeholder
+      │    ├── values
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── key: ()
+      │    │    └── ()
+      │    └── zip
+      │         ├── unnest($1) [immutable]
+      │         └── unnest($2) [immutable]
+      └── filters
+           ├── unnest:8 = k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+           └── unnest:9 = i:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+
+# Rule should not fire when unnest function has multiple arguments.
+norm expect-not=InlineAnyProjectSet
+SELECT k FROM a WHERE (k, i) = ANY(SELECT * FROM unnest($1:::INT[], $2:::INT[]))
+----
+project
+ ├── columns: k:1!null
+ ├── immutable, has-placeholder
+ ├── key: (1)
+ └── semi-join (hash)
+      ├── columns: k:1!null i:2
+      ├── immutable, has-placeholder
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan a
+      │    ├── columns: k:1!null i:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      ├── project-set
+      │    ├── columns: unnest:8 unnest:9
+      │    ├── immutable, has-placeholder
+      │    ├── values
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── key: ()
+      │    │    └── ()
+      │    └── zip
+      │         └── unnest($1, $2) [immutable]
+      └── filters
+           ├── unnest:8 = k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+           └── unnest:9 = i:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+
+# Rule should not fire when Values has columns (not empty tuple).
+norm expect-not=InlineAnyProjectSet
+SELECT k FROM a WHERE k = ANY(SELECT unnest(array_append($1:::INT[], x)) FROM (VALUES (1)) v(x))
+----
+semi-join (hash)
+ ├── columns: k:1!null
+ ├── immutable, has-placeholder
+ ├── key: (1)
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ ├── project-set
+ │    ├── columns: column1:8!null unnest:9
+ │    ├── immutable, has-placeholder
+ │    ├── fd: ()-->(8)
+ │    ├── values
+ │    │    ├── columns: column1:8!null
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(8)
+ │    │    └── (1,)
+ │    └── zip
+ │         └── unnest(array_append($1, column1:8)) [outer=(8), immutable]
+ └── filters
+      └── k:1 = unnest:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+
+# Rule should not fire when Values has multiple rows.
+norm expect-not=InlineAnyProjectSet
+SELECT k FROM a WHERE k = ANY(SELECT unnest($1:::INT[]) FROM (VALUES (1), (2)))
+----
+semi-join (hash)
+ ├── columns: k:1!null
+ ├── immutable, has-placeholder
+ ├── key: (1)
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ ├── project-set
+ │    ├── columns: unnest:9
+ │    ├── immutable, has-placeholder
+ │    ├── values
+ │    │    ├── cardinality: [2 - 2]
+ │    │    ├── ()
+ │    │    └── ()
+ │    └── zip
+ │         └── unnest($1) [immutable]
+ └── filters
+      └── k:1 = unnest:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+
+# Rule should not fire when using a different set-returning function.
+norm expect-not=InlineAnyProjectSet
+SELECT k FROM a WHERE k = ANY(SELECT * FROM generate_series(1, 10))
+----
+semi-join (hash)
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ ├── project-set
+ │    ├── columns: generate_series:8
+ │    ├── immutable
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    └── ()
+ │    └── zip
+ │         └── generate_series(1, 10) [immutable]
+ └── filters
+      └── k:1 = generate_series:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+
+# --------------------------------------------------
+# FoldCollate
+# --------------------------------------------------
+
+norm expect=FoldCollate
+SELECT 'hello' COLLATE en_u_ks_level1
+----
+values
+ ├── columns: "?column?":1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── ('hello' COLLATE en_u_ks_level1,)
+
+norm expect=FoldCollate
+SELECT ('hello' COLLATE en_u_ks_level1) COLLATE en_u_ks_level1
+----
+values
+ ├── columns: "?column?":1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── ('hello' COLLATE en_u_ks_level1,)
+
+norm expect=FoldCollate
+SELECT ('hello' COLLATE en) COLLATE en_u_ks_level1
+----
+values
+ ├── columns: "?column?":1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── ('hello' COLLATE en_u_ks_level1,)
+
+norm expect-not=FoldCollate
+SELECT s COLLATE en_u_ks_level1 FROM a
+----
+project
+ ├── columns: s:8
+ ├── scan a
+ │    └── columns: a.s:4
+ └── projections
+      └── a.s:4 COLLATE en_u_ks_level1 [as=s:8, outer=(4)]
+
+# --------------------------------------------------
+# NormalizeArrayFlattenToAgg
+# --------------------------------------------------
+
+norm expect=NormalizeArrayFlattenToAgg
+SELECT ARRAY(SELECT k FROM a WHERE a.k = b.k) FROM a AS b
+----
+project
+ ├── columns: array:16
+ ├── group-by (hash)
+ │    ├── columns: b.k:1!null a.k:8!null array_agg:17!null
+ │    ├── grouping columns: b.k:1!null
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(8,17), (1)==(8), (8)==(1)
+ │    ├── project
+ │    │    ├── columns: a.k:8!null b.k:1!null
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)==(8), (8)==(1)
+ │    │    ├── scan a [as=b]
+ │    │    │    ├── columns: b.k:1!null
+ │    │    │    └── key: (1)
+ │    │    └── projections
+ │    │         └── b.k:1 [as=a.k:8, outer=(1)]
+ │    └── aggregations
+ │         ├── array-agg [as=array_agg:17, outer=(8)]
+ │         │    └── a.k:8
+ │         └── any-not-null-agg [as=a.k:8, outer=(8)]
+ │              └── a.k:8
+ └── projections
+      └── COALESCE(CASE WHEN a.k:8 IS NOT NULL THEN array_agg:17 ELSE CAST(NULL AS INT8[]) END, ARRAY[]) [as=array:16, outer=(8,17)]
+
+# Ensure ordering is maintained.
+norm expect=NormalizeArrayFlattenToAgg
+SELECT ARRAY(SELECT k FROM a WHERE a.i = b.i ORDER BY a.k) FROM a AS b
+----
+project
+ ├── columns: array:16
+ ├── group-by (hash)
+ │    ├── columns: b.k:1!null a.k:8 array_agg:17
+ │    ├── grouping columns: b.k:1!null
+ │    ├── internal-ordering: +8 opt(9)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(8,17)
+ │    ├── sort
+ │    │    ├── columns: b.k:1!null b.i:2 a.k:8 a.i:9
+ │    │    ├── key: (1,8)
+ │    │    ├── fd: (1)-->(2), (8)-->(9)
+ │    │    ├── ordering: +8 opt(9) [actual: +8]
+ │    │    └── left-join (hash)
+ │    │         ├── columns: b.k:1!null b.i:2 a.k:8 a.i:9
+ │    │         ├── key: (1,8)
+ │    │         ├── fd: (1)-->(2), (8)-->(9)
+ │    │         ├── scan a [as=b]
+ │    │         │    ├── columns: b.k:1!null b.i:2
+ │    │         │    ├── key: (1)
+ │    │         │    └── fd: (1)-->(2)
+ │    │         ├── scan a
+ │    │         │    ├── columns: a.k:8!null a.i:9
+ │    │         │    ├── key: (8)
+ │    │         │    └── fd: (8)-->(9)
+ │    │         └── filters
+ │    │              └── a.i:9 = b.i:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+ │    └── aggregations
+ │         ├── array-agg [as=array_agg:17, outer=(8)]
+ │         │    └── a.k:8
+ │         └── any-not-null-agg [as=a.k:8, outer=(8)]
+ │              └── a.k:8
+ └── projections
+      └── COALESCE(CASE WHEN a.k:8 IS NOT NULL THEN array_agg:17 ELSE CAST(NULL AS INT8[]) END, ARRAY[]) [as=array:16, outer=(8,17)]
+
+norm expect=NormalizeArrayFlattenToAgg
+SELECT ARRAY(SELECT generate_series(1, a.k) ORDER BY 1 DESC) FROM a
+----
+project
+ ├── columns: array:10
+ ├── immutable
+ ├── group-by (hash)
+ │    ├── columns: k:1!null canary:11 array_agg:12
+ │    ├── grouping columns: k:1!null
+ │    ├── internal-ordering: -8
+ │    ├── immutable
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(11,12)
+ │    ├── sort
+ │    │    ├── columns: k:1!null generate_series:8 canary:11
+ │    │    ├── immutable
+ │    │    ├── ordering: -8
+ │    │    └── left-join-apply
+ │    │         ├── columns: k:1!null generate_series:8 canary:11
+ │    │         ├── immutable
+ │    │         ├── scan a
+ │    │         │    ├── columns: k:1!null
+ │    │         │    └── key: (1)
+ │    │         ├── project
+ │    │         │    ├── columns: canary:11!null generate_series:8
+ │    │         │    ├── outer: (1)
+ │    │         │    ├── immutable
+ │    │         │    ├── fd: ()-->(11)
+ │    │         │    ├── project-set
+ │    │         │    │    ├── columns: generate_series:8
+ │    │         │    │    ├── outer: (1)
+ │    │         │    │    ├── immutable
+ │    │         │    │    ├── values
+ │    │         │    │    │    ├── cardinality: [1 - 1]
+ │    │         │    │    │    ├── key: ()
+ │    │         │    │    │    └── ()
+ │    │         │    │    └── zip
+ │    │         │    │         └── generate_series(1, k:1) [outer=(1), immutable]
+ │    │         │    └── projections
+ │    │         │         └── true [as=canary:11]
+ │    │         └── filters (true)
+ │    └── aggregations
+ │         ├── array-agg [as=array_agg:12, outer=(8)]
+ │         │    └── generate_series:8
+ │         └── any-not-null-agg [as=canary:11, outer=(11)]
+ │              └── canary:11
+ └── projections
+      └── COALESCE(CASE WHEN canary:11 IS NOT NULL THEN array_agg:12 ELSE CAST(NULL AS INT8[]) END, ARRAY[]) [as=array:10, outer=(11,12)]
+
+# Uncorrelated ArrayFlatten inside a correlated ArrayFlatten.
+norm expect=NormalizeArrayFlattenToAgg
+SELECT ARRAY(SELECT ARRAY(SELECT k FROM a)[1] FROM a as b WHERE b.k = c.k) FROM a AS c
+----
+project
+ ├── columns: array:24
+ ├── group-by (hash)
+ │    ├── columns: c.k:1!null canary:25!null array_agg:26
+ │    ├── grouping columns: c.k:1!null
+ │    ├── key: (1)
+ │    ├── fd: ()-->(25), (1)-->(25,26)
+ │    ├── project
+ │    │    ├── columns: c.k:1!null canary:25!null array:22
+ │    │    ├── key: (1,22)
+ │    │    ├── fd: ()-->(25)
+ │    │    ├── scan a [as=b]
+ │    │    │    ├── columns: b.k:8!null
+ │    │    │    └── key: (8)
+ │    │    └── projections
+ │    │         ├── b.k:8 [as=c.k:1, outer=(8)]
+ │    │         ├── true [as=canary:25]
+ │    │         └── indirection [as=array:22, subquery]
+ │    │              ├── array-flatten
+ │    │              │    └── scan a
+ │    │              │         ├── columns: k:15!null
+ │    │              │         └── key: (15)
+ │    │              └── 1
+ │    └── aggregations
+ │         ├── array-agg [as=array_agg:26, outer=(22)]
+ │         │    └── array:22
+ │         └── any-not-null-agg [as=canary:25, outer=(25)]
+ │              └── canary:25
+ └── projections
+      └── COALESCE(CASE WHEN canary:25 IS NOT NULL THEN array_agg:26 ELSE CAST(NULL AS INT8[]) END, ARRAY[]) [as=array:24, outer=(25,26)]
+
+# Correlated ArrayFlatten inside another correlated ArrayFlatten.
+norm expect=NormalizeArrayFlattenToAgg
+SELECT ARRAY(SELECT ARRAY(SELECT k FROM a WHERE a.k = b.k)[1] FROM a as b WHERE b.k = c.k) FROM a AS c
+----
+project
+ ├── columns: array:26
+ ├── group-by (hash)
+ │    ├── columns: c.k:1!null canary:27 array_agg:28
+ │    ├── grouping columns: c.k:1!null
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(27,28)
+ │    ├── left-join-apply
+ │    │    ├── columns: c.k:1!null array:23 canary:27
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(23,27)
+ │    │    ├── scan a [as=c]
+ │    │    │    ├── columns: c.k:1!null
+ │    │    │    └── key: (1)
+ │    │    ├── project
+ │    │    │    ├── columns: canary:27!null array:23
+ │    │    │    ├── outer: (1)
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(23,27)
+ │    │    │    ├── group-by (streaming)
+ │    │    │    │    ├── columns: a.k:15!null array_agg:24!null
+ │    │    │    │    ├── outer: (1)
+ │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    ├── key: ()
+ │    │    │    │    ├── fd: ()-->(15,24)
+ │    │    │    │    ├── project
+ │    │    │    │    │    ├── columns: a.k:15!null
+ │    │    │    │    │    ├── outer: (1)
+ │    │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    │    ├── key: ()
+ │    │    │    │    │    ├── fd: ()-->(15)
+ │    │    │    │    │    ├── select
+ │    │    │    │    │    │    ├── columns: b.k:8!null
+ │    │    │    │    │    │    ├── outer: (1)
+ │    │    │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    │    │    ├── key: ()
+ │    │    │    │    │    │    ├── fd: ()-->(8)
+ │    │    │    │    │    │    ├── scan a [as=b]
+ │    │    │    │    │    │    │    ├── columns: b.k:8!null
+ │    │    │    │    │    │    │    └── key: (8)
+ │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │         └── b.k:8 = c.k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+ │    │    │    │    │    └── projections
+ │    │    │    │    │         └── b.k:8 [as=a.k:15, outer=(8)]
+ │    │    │    │    └── aggregations
+ │    │    │    │         ├── array-agg [as=array_agg:24, outer=(15)]
+ │    │    │    │         │    └── a.k:15
+ │    │    │    │         └── any-not-null-agg [as=a.k:15, outer=(15)]
+ │    │    │    │              └── a.k:15
+ │    │    │    └── projections
+ │    │    │         ├── true [as=canary:27]
+ │    │    │         └── COALESCE(CASE WHEN a.k:15 IS NOT NULL THEN array_agg:24 ELSE CAST(NULL AS INT8[]) END, ARRAY[])[1] [as=array:23, outer=(15,24)]
+ │    │    └── filters (true)
+ │    └── aggregations
+ │         ├── array-agg [as=array_agg:28, outer=(23)]
+ │         │    └── array:23
+ │         └── any-not-null-agg [as=canary:27, outer=(27)]
+ │              └── canary:27
+ └── projections
+      └── COALESCE(CASE WHEN canary:27 IS NOT NULL THEN array_agg:28 ELSE CAST(NULL AS INT8[]) END, ARRAY[]) [as=array:26, outer=(27,28)]
+
+# Shouldn't trigger if there's no correlation.
+norm expect-not=NormalizeArrayFlattenToAgg
+SELECT ARRAY(SELECT k FROM a) FROM a
+----
+project
+ ├── columns: array:15
+ ├── scan a
+ └── projections
+      └── array-flatten [as=array:15, subquery]
+           └── scan a
+                ├── columns: k:8!null
+                └── key: (8)
+
+exec-ddl
+CREATE FUNCTION arr() RETURNS INT[] LANGUAGE SQL AS $$
+  SELECT ARRAY(VALUES (1), (2));
+$$
+----
+
+# Should trigger for uncorrelated ArrayFlatten subqueries within a UDF
+norm expect=NormalizeArrayFlattenToAgg format=show-scalars
+SELECT arr()
+----
+values
+ ├── columns: arr:4
+ ├── cardinality: [1 - 1]
+ ├── volatile
+ ├── key: ()
+ ├── fd: ()-->(4)
+ └── tuple
+      └── udf: arr
+           └── body
+                └── values
+                     ├── columns: array:3
+                     ├── cardinality: [1 - 1]
+                     ├── key: ()
+                     ├── fd: ()-->(3)
+                     └── tuple
+                          └── coalesce
+                               ├── subquery
+                               │    └── scalar-group-by
+                               │         ├── columns: array_agg:2
+                               │         ├── cardinality: [1 - 1]
+                               │         ├── key: ()
+                               │         ├── fd: ()-->(2)
+                               │         ├── values
+                               │         │    ├── columns: column1:1!null
+                               │         │    ├── cardinality: [2 - 2]
+                               │         │    ├── tuple
+                               │         │    │    └── const: 1
+                               │         │    └── tuple
+                               │         │         └── const: 2
+                               │         └── aggregations
+                               │              └── array-agg [as=array_agg:2, outer=(1)]
+                               │                   └── variable: column1:1
+                               └── const: ARRAY[]
+
+exec-ddl
+CREATE TABLE pg_class (
+     oid OID NULL,
+     relname NAME NOT NULL,
+     relnamespace OID NULL,
+     reltype OID NULL,
+     reloftype OID NULL,
+     relowner OID NULL,
+     relam OID NULL,
+     relfilenode OID NULL,
+     reltablespace OID NULL,
+     relpages INT4 NULL,
+     reltuples FLOAT4 NULL,
+     relallvisible INT4 NULL,
+     reltoastrelid OID NULL,
+     relhasindex BOOL NULL,
+     relisshared BOOL NULL,
+     relpersistence CHAR NULL,
+     relistemp BOOL NULL,
+     relkind CHAR NULL,
+     relnatts INT2 NULL,
+     relchecks INT2 NULL,
+     relhasoids BOOL NULL,
+     relhaspkey BOOL NULL,
+     relhasrules BOOL NULL,
+     relhastriggers BOOL NULL,
+     relhassubclass BOOL NULL,
+     relfrozenxid INT8 NULL,
+     relacl STRING[] NULL,
+     reloptions STRING[] NULL
+)
+----
+
+exec-ddl
+CREATE TABLE pg_inherits (
+      inhrelid OID NULL,
+      inhparent OID NULL,
+      inhseqno INT4 NULL
+)
+----
+
+# Regression test for #38867.
+norm expect=NormalizeArrayFlattenToAgg
+SELECT (
+		SELECT
+			ARRAY (
+			  SELECT c.relname
+			  FROM pg_inherits AS i JOIN pg_class AS c ON c.oid = i.inhparent
+			  WHERE i.inhrelid = rel.oid
+			  ORDER BY inhseqno
+			)
+)
+FROM pg_class AS rel
+----
+project
+ ├── columns: array:72
+ ├── inner-join-apply
+ │    ├── columns: rel.oid:1 inhrelid:32 array_agg:71
+ │    ├── scan pg_class [as=rel]
+ │    │    └── columns: rel.oid:1
+ │    ├── group-by (streaming)
+ │    │    ├── columns: inhrelid:32 array_agg:71
+ │    │    ├── internal-ordering: +34 opt(32)
+ │    │    ├── outer: (1)
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(32,71)
+ │    │    ├── sort
+ │    │    │    ├── columns: inhrelid:32 inhparent:33 inhseqno:34 c.oid:38 c.relname:39
+ │    │    │    ├── outer: (1)
+ │    │    │    ├── cardinality: [1 - ]
+ │    │    │    ├── fd: (33)==(38), (38)==(33)
+ │    │    │    ├── ordering: +34 opt(32) [actual: +34]
+ │    │    │    └── left-join (cross)
+ │    │    │         ├── columns: inhrelid:32 inhparent:33 inhseqno:34 c.oid:38 c.relname:39
+ │    │    │         ├── outer: (1)
+ │    │    │         ├── cardinality: [1 - ]
+ │    │    │         ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
+ │    │    │         ├── fd: (33)==(38), (38)==(33)
+ │    │    │         ├── values
+ │    │    │         │    ├── cardinality: [1 - 1]
+ │    │    │         │    ├── key: ()
+ │    │    │         │    └── ()
+ │    │    │         ├── inner-join (hash)
+ │    │    │         │    ├── columns: inhrelid:32 inhparent:33!null inhseqno:34 c.oid:38!null c.relname:39!null
+ │    │    │         │    ├── fd: (33)==(38), (38)==(33)
+ │    │    │         │    ├── scan pg_inherits [as=i]
+ │    │    │         │    │    └── columns: inhrelid:32 inhparent:33 inhseqno:34
+ │    │    │         │    ├── scan pg_class [as=c]
+ │    │    │         │    │    └── columns: c.oid:38 c.relname:39!null
+ │    │    │         │    └── filters
+ │    │    │         │         └── c.oid:38 = inhparent:33 [outer=(33,38), constraints=(/33: (/NULL - ]; /38: (/NULL - ]), fd=(33)==(38), (38)==(33)]
+ │    │    │         └── filters
+ │    │    │              └── inhrelid:32 = rel.oid:1 [outer=(1,32), constraints=(/1: (/NULL - ]; /32: (/NULL - ]), fd=(1)==(32), (32)==(1)]
+ │    │    └── aggregations
+ │    │         ├── array-agg [as=array_agg:71, outer=(39)]
+ │    │         │    └── c.relname:39
+ │    │         └── any-not-null-agg [as=inhrelid:32, outer=(32)]
+ │    │              └── inhrelid:32
+ │    └── filters (true)
+ └── projections
+      └── COALESCE(CASE WHEN inhrelid:32 IS NOT NULL THEN array_agg:71 ELSE CAST(NULL AS NAME[]) END, ARRAY[]) [as=array:72, outer=(32,71)]
+
+# --------------------------------------------------
+# SimplifySameVarEqualities
+# --------------------------------------------------
+
+norm expect=(SimplifySameVarEqualities,SimplifySelectFilters)
+SELECT k FROM a WHERE k = k
+----
+scan a
+ ├── columns: k:1!null
+ └── key: (1)
+
+norm expect=(SimplifySameVarEqualities,SimplifySelectFilters)
+SELECT k FROM a WHERE k >= k
+----
+scan a
+ ├── columns: k:1!null
+ └── key: (1)
+
+norm expect=(SimplifySameVarEqualities,SimplifySelectFilters)
+SELECT k FROM a WHERE k <= k
+----
+scan a
+ ├── columns: k:1!null
+ └── key: (1)
+
+norm expect=(SimplifySameVarEqualities,SimplifyJoinFilters)
+SELECT a.k FROM a FULL OUTER JOIN xy ON a.k = a.k
+----
+full-join (cross)
+ ├── columns: k:1
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ ├── scan xy
+ └── filters (true)
+
+norm expect=(SimplifySameVarEqualities,SimplifyJoinFilters)
+SELECT a.k FROM a FULL OUTER JOIN xy ON a.k >= a.k
+----
+full-join (cross)
+ ├── columns: k:1
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ ├── scan xy
+ └── filters (true)
+
+norm expect=(SimplifySameVarEqualities,SimplifyJoinFilters)
+SELECT a.k FROM a FULL OUTER JOIN xy ON a.k <= a.k
+----
+full-join (cross)
+ ├── columns: k:1
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ ├── scan xy
+ └── filters (true)
+
+norm expect=SimplifySameVarEqualities
+SELECT k = k FROM a
+----
+project
+ ├── columns: "?column?":8
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── projections
+      └── (k:1 IS DISTINCT FROM CAST(NULL AS INT8)) OR CAST(NULL AS BOOL) [as="?column?":8, outer=(1)]
+
+# --------------------------------------------------
+# SimplifySameVarInequalities
+# --------------------------------------------------
+
+norm expect=(SimplifySameVarInequalities,SimplifySelectFilters)
+SELECT k FROM a WHERE k != k
+----
+values
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+norm expect=(SimplifySameVarInequalities,SimplifySelectFilters)
+SELECT k FROM a WHERE k > k
+----
+values
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+norm expect=(SimplifySameVarInequalities,SimplifySelectFilters)
+SELECT k FROM a WHERE k < k
+----
+values
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+norm expect=(SimplifySameVarInequalities,DetectJoinContradiction)
+SELECT a.k FROM a FULL OUTER JOIN xy ON a.k != a.k
+----
+full-join (cross)
+ ├── columns: k:1
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ ├── scan xy
+ └── filters
+      └── false [constraints=(contradiction; tight)]
+
+norm expect=(SimplifySameVarInequalities,DetectJoinContradiction)
+SELECT a.k FROM a FULL OUTER JOIN xy ON a.k > a.k
+----
+full-join (cross)
+ ├── columns: k:1
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ ├── scan xy
+ └── filters
+      └── false [constraints=(contradiction; tight)]
+
+norm expect=(SimplifySameVarInequalities,DetectJoinContradiction)
+SELECT a.k FROM a FULL OUTER JOIN xy ON a.k < a.k
+----
+full-join (cross)
+ ├── columns: k:1
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ ├── scan xy
+ └── filters
+      └── false [constraints=(contradiction; tight)]
+
+norm expect=SimplifySameVarInequalities
+SELECT k != k FROM a
+----
+project
+ ├── columns: "?column?":8
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── projections
+      └── (k:1 IS NOT DISTINCT FROM CAST(NULL AS INT8)) AND CAST(NULL AS BOOL) [as="?column?":8, outer=(1)]
+
+# --------------------------------------------------
+# SimplifyNotDisjoint
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE g
+(
+    id1 INT PRIMARY KEY,
+    geom1 GEOMETRY,
+    geom2 GEOMETRY,
+    INVERTED INDEX (geom1),
+    INVERTED INDEX (geom2)
+)
+----
+
+norm expect=SimplifyNotDisjoint
+SELECT NOT st_disjoint(geom1, geom2) FROM g;
+----
+project
+ ├── columns: "?column?":8
+ ├── immutable
+ ├── scan g
+ │    └── columns: geom1:2 geom2:3
+ └── projections
+      └── st_intersects(geom1:2, geom2:3) [as="?column?":8, outer=(2,3), immutable]
+
+norm expect-not=SimplifyNotDisjoint
+SELECT st_disjoint(geom1, geom2) FROM g;
+----
+project
+ ├── columns: st_disjoint:8
+ ├── immutable
+ ├── scan g
+ │    └── columns: geom1:2 geom2:3
+ └── projections
+      └── st_disjoint(geom1:2, geom2:3) [as=st_disjoint:8, outer=(2,3), immutable]
+
+norm expect-not=SimplifyNotDisjoint
+SELECT NOT st_intersects(geom1, geom2) FROM g;
+----
+project
+ ├── columns: "?column?":8
+ ├── immutable
+ ├── scan g
+ │    └── columns: geom1:2 geom2:3
+ └── projections
+      └── NOT st_intersects(geom1:2, geom2:3) [as="?column?":8, outer=(2,3), immutable]
+
+# --------------------------------------------------
+# ConvertJSONSubscriptToFetchValue
+# --------------------------------------------------
+
+norm expect=ConvertJSONSubscriptToFetchValue
+SELECT j['c'] FROM b WHERE j['a'] = '"b"'
+----
+project
+ ├── columns: j:8
+ ├── immutable
+ ├── select
+ │    ├── columns: b.j:2
+ │    ├── immutable
+ │    ├── scan b
+ │    │    └── columns: b.j:2
+ │    └── filters
+ │         └── (b.j:2->'a') = '"b"' [outer=(2), immutable]
+ └── projections
+      └── b.j:2->'c' [as=j:8, outer=(2), immutable]
+
+norm expect=ConvertJSONSubscriptToFetchValue
+SELECT j['a']['b'] FROM b WHERE j['c'] = '1'
+----
+project
+ ├── columns: j:8
+ ├── immutable
+ ├── select
+ │    ├── columns: b.j:2
+ │    ├── immutable
+ │    ├── scan b
+ │    │    └── columns: b.j:2
+ │    └── filters
+ │         └── (b.j:2->'c') = '1' [outer=(2), immutable]
+ └── projections
+      └── (b.j:2->'a')->'b' [as=j:8, outer=(2), immutable]
+
+norm expect=ConvertJSONSubscriptToFetchValue
+SELECT j[0] FROM b WHERE j[0][1] = '1'
+----
+project
+ ├── columns: j:8
+ ├── immutable
+ ├── select
+ │    ├── columns: b.j:2
+ │    ├── immutable
+ │    ├── scan b
+ │    │    └── columns: b.j:2
+ │    └── filters
+ │         └── ((b.j:2->0)->1) = '1' [outer=(2), immutable]
+ └── projections
+      └── b.j:2->0 [as=j:8, outer=(2), immutable]
+
+norm expect=ConvertJSONSubscriptToFetchValue
+SELECT j[i], j[s] FROM b
+----
+project
+ ├── columns: j:8 j:9
+ ├── immutable
+ ├── scan b
+ │    └── columns: b.j:2 i:3 s:4
+ └── projections
+      ├── b.j:2->i:3 [as=j:8, outer=(2,3), immutable]
+      └── b.j:2->s:4 [as=j:9, outer=(2,4), immutable]
+
+norm expect-not=ConvertJSONSubscriptToFetchValue
+SELECT arr[1] FROM b WHERE arr[2] = 'a'
+----
+project
+ ├── columns: arr:8
+ ├── select
+ │    ├── columns: b.arr:5
+ │    ├── scan b
+ │    │    └── columns: b.arr:5
+ │    └── filters
+ │         └── b.arr:5[2] = 'a' [outer=(5)]
+ └── projections
+      └── b.arr:5[1] [as=arr:8, outer=(5)]
+
+norm expect-not=ConvertJSONSubscriptToFetchValue
+SELECT arr[1], arr[2] FROM b;
+----
+project
+ ├── columns: arr:8 arr:9
+ ├── scan b
+ │    └── columns: b.arr:5
+ └── projections
+      ├── b.arr:5[1] [as=arr:8, outer=(5)]
+      └── b.arr:5[2] [as=arr:9, outer=(5)]
+
+# --------------------------------------------------
+# ConvertLikeEscapeToLike
+# --------------------------------------------------
+
+norm expect=ConvertLikeEscapeToLike
+SELECT s LIKE 'foo%' ESCAPE '\' FROM a
+----
+project
+ ├── columns: like_escape:8
+ ├── scan a
+ │    └── columns: s:4
+ └── projections
+      └── s:4 LIKE 'foo%' [as=like_escape:8, outer=(4)]
+
+norm expect=ConvertLikeEscapeToLike
+SELECT like_escape(s, 'foo%', '\') FROM a
+----
+project
+ ├── columns: like_escape:8
+ ├── scan a
+ │    └── columns: s:4
+ └── projections
+      └── s:4 LIKE 'foo%' [as=like_escape:8, outer=(4)]
+
+norm expect-not=ConvertLikeEscapeToLike
+SELECT s LIKE 'foo%' ESCAPE '/' FROM a
+----
+project
+ ├── columns: like_escape:8
+ ├── immutable
+ ├── scan a
+ │    └── columns: s:4
+ └── projections
+      └── like_escape(s:4, 'foo%', '/') [as=like_escape:8, outer=(4), immutable]
+
+norm expect-not=ConvertLikeEscapeToLike
+SELECT s LIKE 'foo%' ESCAPE 'f' FROM a
+----
+project
+ ├── columns: like_escape:8
+ ├── immutable
+ ├── scan a
+ │    └── columns: s:4
+ └── projections
+      └── like_escape(s:4, 'foo%', 'f') [as=like_escape:8, outer=(4), immutable]
+
+norm expect-not=ConvertLikeEscapeToLike
+SELECT not_like_escape(s, 'foo%', '\') FROM a
+----
+project
+ ├── columns: not_like_escape:8
+ ├── immutable
+ ├── scan a
+ │    └── columns: s:4
+ └── projections
+      └── not_like_escape(s:4, 'foo%', e'\\') [as=not_like_escape:8, outer=(4), immutable]

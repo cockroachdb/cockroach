@@ -1,0 +1,104 @@
+parse
+DECLARE
+BEGIN
+  EXIT some_label;
+  EXIT some_label WHEN some_condition;
+END
+----
+DECLARE
+BEGIN
+EXIT some_label;
+EXIT some_label WHEN some_condition;
+END;
+ -- normalized!
+DECLARE
+BEGIN
+EXIT some_label;
+EXIT some_label WHEN (some_condition);
+END;
+ -- fully parenthesized
+DECLARE
+BEGIN
+EXIT some_label;
+EXIT some_label WHEN some_condition;
+END;
+ -- literals removed
+DECLARE
+BEGIN
+EXIT _;
+EXIT _ WHEN _;
+END;
+ -- identifiers removed
+
+parse
+DECLARE
+BEGIN
+  CONTINUE some_label;
+  CONTINUE some_label WHEN some_condition;
+END
+----
+DECLARE
+BEGIN
+CONTINUE some_label;
+CONTINUE some_label WHEN some_condition;
+END;
+ -- normalized!
+DECLARE
+BEGIN
+CONTINUE some_label;
+CONTINUE some_label WHEN (some_condition);
+END;
+ -- fully parenthesized
+DECLARE
+BEGIN
+CONTINUE some_label;
+CONTINUE some_label WHEN some_condition;
+END;
+ -- literals removed
+DECLARE
+BEGIN
+CONTINUE _;
+CONTINUE _ WHEN _;
+END;
+ -- identifiers removed
+
+pretty
+DECLARE
+BEGIN
+EXIT some_label;
+EXIT some_label WHEN some_condition;
+END
+----
+DECLARE
+BEGIN
+	EXIT some_label;
+	EXIT some_label WHEN some_condition;
+END;
+
+pretty
+DECLARE
+BEGIN
+EXIT some_label WHEN some_long_variable > some_function(first_argument, second_argument) AND another_condition;
+END
+----
+DECLARE
+BEGIN
+	EXIT some_label
+		WHEN some_long_variable
+		> some_function(first_argument, second_argument)
+		AND another_condition;
+END;
+
+pretty
+DECLARE
+BEGIN
+CONTINUE some_label WHEN some_long_variable > some_function(first_argument, second_argument) AND another_condition;
+END
+----
+DECLARE
+BEGIN
+	CONTINUE some_label
+		WHEN some_long_variable
+		> some_function(first_argument, second_argument)
+		AND another_condition;
+END;

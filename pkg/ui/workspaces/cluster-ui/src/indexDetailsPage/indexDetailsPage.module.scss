@@ -1,0 +1,149 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import "src/core/index.module";
+
+.icon {
+  &__container {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  &--md {
+    height: 24px;
+    width: 24px;
+    margin-right: 12px;
+  }
+
+  &--s {
+    height: 16px;
+    width: 16px;
+    margin-right: 10px;
+  }
+
+  &--xxs {
+    height: 8px;
+    width: 8px;
+  }
+
+  &--title {
+    fill: $colors--title;
+  }
+
+  &--primary {
+    fill: $colors--primary-text;
+  }
+
+  &--warning {
+    fill: $colors--functional-orange-3;
+  }
+}
+
+.page-container {
+  padding-right: $spacing-medium;
+}
+
+.header-container {
+  align-items: baseline;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  width: 75%;
+  padding: 0 9px 12px;
+}
+
+.reset-info {
+  display: flex;
+  flex-direction: row;
+}
+
+.last-reset {
+  color: $colors--neutral-6;
+  margin-right: 6px;
+}
+
+.summary-card {
+  &--row {
+    background-color: $adminui-white;
+    letter-spacing: 0.33px;
+    margin-left: 1px;
+  }
+  &--label {
+    font-family: $font-family--semi-bold;
+    font-size: $font-size--medium;
+    line-height: $line-height--medium-small;
+    letter-spacing: 0.1px;
+    color: $colors--neutral-7;
+    margin-right: 5px;
+    margin-bottom: 0;
+  }
+  &--label-cell {
+    width: 200px;
+  }
+  &--value {
+    font-family: $font-family--base;
+    font-size: $font-size--medium;
+    font-weight: $font-weight--light;
+    line-height: $line-height--medium-small;
+    letter-spacing: 0.1px;
+    color: $popover-color;
+    margin-bottom: 0;
+  }
+}
+
+.index-recommendations {
+  &-rows {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 16px;
+
+    &__header {
+      font-family: $font-family--semi-bold;
+      flex-basis: 20%;
+      flex-shrink: 0;
+    }
+
+    &__content {
+      font-family: $font-family--base;
+      width: 65%;
+      flex-grow: 0;
+    }
+  }
+  &__tooltip-anchor {
+    a {
+      &:hover {
+        opacity: 0.8;
+        text-decoration: underline;
+      }
+    }
+  }
+}
+
+.index-stats__reset-btn {
+  color: $colors--primary-blue-3;
+  font-size: $font-size--medium;
+  line-height: $line-height--small;
+
+  &:hover {
+    color: $colors--primary-blue-3;
+    text-decoration: underline;
+  }
+}
+
+.row-spaced {
+  margin-top: 20px;
+}
+
+.bottom-space {
+  margin-bottom: 40px;
+}
+
+.table-scroll {
+  width: calc(100% - -23px);
+  overflow-x: scroll;
+  padding-left: 0;
+}
+

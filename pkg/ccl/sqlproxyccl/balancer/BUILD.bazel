@@ -1,0 +1,52 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "balancer",
+    srcs = [
+        "assignment.go",
+        "balancer.go",
+        "conn.go",
+        "conn_tracker.go",
+        "metrics.go",
+        "pod.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/balancer",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/ccl/sqlproxyccl/tenant",
+        "//pkg/roachpb",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_marusama_semaphore//:semaphore",
+    ],
+)
+
+go_test(
+    name = "balancer_test",
+    srcs = [
+        "assignment_test.go",
+        "balancer_test.go",
+        "conn_test.go",
+        "conn_tracker_test.go",
+        "pod_test.go",
+    ],
+    embed = [":balancer"],
+    deps = [
+        "//pkg/ccl/sqlproxyccl/tenant",
+        "//pkg/ccl/testutilsccl",
+        "//pkg/roachpb",
+        "//pkg/testutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

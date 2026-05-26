@@ -1,0 +1,36 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
+
+go_library(
+    name = "colexecop",
+    srcs = [
+        "constants.go",
+        "operator.go",
+        "testutils.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexecop",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/sql/colexecerror",
+        "//pkg/sql/colmem",
+        "//pkg/sql/execinfra/execopnode",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/execstats",
+        "//pkg/sql/types",
+        "//pkg/util/buildutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+disallowed_imports_test(
+    "colexecop",
+    [
+        "//pkg/sql/colcontainer",
+        "//pkg/sql/colexec",
+        "//pkg/sql/colflow",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/rowexec",
+        "//pkg/sql/rowflow",
+    ],
+)

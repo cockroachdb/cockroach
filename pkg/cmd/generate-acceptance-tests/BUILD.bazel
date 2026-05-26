@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "generate-acceptance-tests_lib",
+    srcs = [
+        "cli_test_template.go",
+        "main.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/generate-acceptance-tests",
+    visibility = ["//visibility:private"],
+    deps = ["//pkg/build/bazel"],
+)
+
+go_binary(
+    name = "generate-acceptance-tests",
+    data = [
+        "//pkg/cli:interactive_tests",
+    ],
+    embed = [":generate-acceptance-tests_lib"],
+    visibility = ["//visibility:public"],
+)

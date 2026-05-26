@@ -1,0 +1,2 @@
+fetch_cursor_stmt ::=
+	'FETCH' cursor_movement_specifier

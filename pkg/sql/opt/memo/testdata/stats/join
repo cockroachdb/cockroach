@@ -1,0 +1,2406 @@
+exec-ddl
+CREATE TABLE xysd (x INT PRIMARY KEY, y INT, s STRING, d DECIMAL NOT NULL, UNIQUE (s DESC, d))
+----
+
+exec-ddl
+CREATE TABLE uv (u INT, v INT NOT NULL)
+----
+
+exec-ddl
+ALTER TABLE xysd INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 5000,
+    "avg_size": 2
+  },
+  {
+    "columns": ["y"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 400,
+    "avg_size": 3
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE uv INJECT STATISTICS '[
+  {
+    "columns": ["u"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 500,
+    "avg_size": 5
+  },
+  {
+    "columns": ["v"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 100,
+    "avg_size": 6
+  },
+  {
+    "columns": ["rowid"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+----
+
+norm
+SELECT * FROM xysd JOIN uv ON true
+----
+inner-join (cross)
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int) v:8(int!null)
+ ├── stats: [rows=5e+07]
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── scan xysd
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── stats: [rows=5000]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── scan uv
+ │    ├── columns: u:7(int) v:8(int!null)
+ │    └── stats: [rows=10000]
+ └── filters (true)
+
+norm colstat=1 colstat=2 colstat=3 colstat=4 colstat=7 colstat=8 colstat=(2,7,8)
+SELECT * FROM xysd JOIN uv ON true
+----
+inner-join (cross)
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int) v:8(int!null)
+ ├── stats: [rows=5e+07, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0, distinct(3)=500, null(3)=500000, distinct(4)=500, null(4)=0, distinct(7)=500, null(7)=0, distinct(8)=100, null(8)=0, distinct(2,7,8)=4e+06, null(2,7,8)=0]
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── scan xysd
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0, distinct(3)=500, null(3)=50, distinct(4)=500, null(4)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── scan uv
+ │    ├── columns: u:7(int) v:8(int!null)
+ │    └── stats: [rows=10000, distinct(7)=500, null(7)=0, distinct(8)=100, null(8)=0, distinct(7,8)=10000, null(7,8)=0]
+ └── filters (true)
+
+norm
+SELECT * FROM xysd JOIN uv ON false
+----
+values
+ ├── columns: x:1(int!null) y:2(int!null) s:3(string!null) d:4(decimal!null) u:7(int!null) v:8(int!null)
+ ├── cardinality: [0 - 0]
+ ├── stats: [rows=0]
+ ├── key: ()
+ └── fd: ()-->(1-4,7,8)
+
+build colstat=2
+SELECT *, rowid FROM xysd INNER JOIN uv ON x=u
+----
+project
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int!null) v:8(int!null) rowid:9(int!null)
+ ├── stats: [rows=10000, distinct(2)=400, null(2)=0]
+ ├── key: (9)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2,7), (9)-->(1-4,7,8), (1)==(7), (7)==(1)
+ └── inner-join (hash)
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int!null) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+      ├── stats: [rows=10000, distinct(1)=500, null(1)=0, distinct(2)=400, null(2)=0, distinct(7)=500, null(7)=0]
+      ├── key: (9)
+      ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11), (1)==(7), (7)==(1)
+      ├── scan xysd
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
+      │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      ├── scan uv
+      │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=0]
+      │    ├── key: (9)
+      │    └── fd: (9)-->(7,8,10,11)
+      └── filters
+           └── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+
+build
+SELECT *, rowid FROM xysd LEFT JOIN uv ON x=u
+----
+project
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int) v:8(int) rowid:9(int)
+ ├── stats: [rows=10000]
+ ├── key: (1,9)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (9)-->(7,8)
+ └── left-join (hash)
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) v:8(int) rowid:9(int) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
+      ├── stats: [rows=10000, distinct(7)=500, null(7)=0]
+      ├── key: (1,9)
+      ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11)
+      ├── scan xysd
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
+      │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      ├── scan uv
+      │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=0]
+      │    ├── key: (9)
+      │    └── fd: (9)-->(7,8,10,11)
+      └── filters
+           └── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+
+build
+SELECT *, rowid FROM xysd RIGHT JOIN uv ON x=u
+----
+project
+ ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:7(int) v:8(int!null) rowid:9(int!null)
+ ├── stats: [rows=10000]
+ ├── key: (9)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (9)-->(1-4,7,8)
+ └── right-join (hash)
+      ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      ├── stats: [rows=10000, distinct(1)=500, null(1)=0]
+      ├── key: (9)
+      ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(1-8,10,11)
+      ├── scan xysd
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
+      │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      ├── scan uv
+      │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=0]
+      │    ├── key: (9)
+      │    └── fd: (9)-->(7,8,10,11)
+      └── filters
+           └── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+
+build
+SELECT *, rowid FROM xysd FULL JOIN uv ON x=u
+----
+project
+ ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:7(int) v:8(int) rowid:9(int)
+ ├── stats: [rows=10000]
+ ├── key: (1,9)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (9)-->(7,8)
+ └── full-join (hash)
+      ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) v:8(int) rowid:9(int) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
+      ├── stats: [rows=10000]
+      ├── key: (1,9)
+      ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11)
+      ├── scan xysd
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
+      │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      ├── scan uv
+      │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=0]
+      │    ├── key: (9)
+      │    └── fd: (9)-->(7,8,10,11)
+      └── filters
+           └── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+
+build
+SELECT * FROM xysd, uv
+----
+project
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int) v:8(int!null)
+ ├── stats: [rows=5e+07]
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ └── inner-join (cross)
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      ├── stats: [rows=5e+07]
+      ├── key: (1,9)
+      ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11)
+      ├── scan xysd
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
+      │    ├── stats: [rows=5000]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      ├── scan uv
+      │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      │    ├── stats: [rows=10000]
+      │    ├── key: (9)
+      │    └── fd: (9)-->(7,8,10,11)
+      └── filters (true)
+
+build
+SELECT * FROM xysd, xysd AS xysd
+----
+project
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ ├── stats: [rows=2.5e+07]
+ ├── key: (1,7)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(8-10), (9,10)~~>(7,8)
+ └── inner-join (cross)
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid) x:7(int!null) y:8(int) s:9(string) d:10(decimal!null) crdb_internal_mvcc_timestamp:11(decimal) tableoid:12(oid)
+      ├── stats: [rows=2.5e+07]
+      ├── key: (1,7)
+      ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (7)-->(8-12), (9,10)~~>(7,8,11,12)
+      ├── scan xysd
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+      │    ├── stats: [rows=5000]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      ├── scan xysd
+      │    ├── columns: x:7(int!null) y:8(int) s:9(string) d:10(decimal!null) crdb_internal_mvcc_timestamp:11(decimal) tableoid:12(oid)
+      │    ├── stats: [rows=5000]
+      │    ├── key: (7)
+      │    └── fd: (7)-->(8-12), (9,10)~~>(7,8,11,12)
+      └── filters (true)
+
+build
+SELECT * FROM xysd, uv WHERE v = 5
+----
+project
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int) v:8(int!null)
+ ├── stats: [rows=500000]
+ ├── fd: ()-->(8), (1)-->(2-4), (3,4)~~>(1,2)
+ └── select
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      ├── stats: [rows=500000, distinct(8)=1, null(8)=0]
+      ├── key: (1,9)
+      ├── fd: ()-->(8), (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,10,11)
+      ├── inner-join (cross)
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      │    ├── stats: [rows=5e+07, distinct(1)=5000, null(1)=0, distinct(4)=500, null(4)=0, distinct(8)=100, null(8)=0, distinct(9)=10000, null(9)=0]
+      │    ├── key: (1,9)
+      │    ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11)
+      │    ├── scan xysd
+      │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
+      │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(4)=500, null(4)=0]
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      │    ├── scan uv
+      │    │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      │    │    ├── stats: [rows=10000, distinct(8)=100, null(8)=0, distinct(9)=10000, null(9)=0]
+      │    │    ├── key: (9)
+      │    │    └── fd: (9)-->(7,8,10,11)
+      │    └── filters (true)
+      └── filters
+           └── v:8 = 5 [type=bool, outer=(8), constraints=(/8: [/5 - /5]; tight), fd=()-->(8)]
+
+# Force calculation of the distinct count for the column set spanning both
+# tables in the join.
+build
+SELECT sum(v), x, v FROM xysd, uv GROUP BY x, v
+----
+group-by (hash)
+ ├── columns: sum:12(decimal!null) x:1(int!null) v:8(int!null)
+ ├── grouping columns: x:1(int!null) v:8(int!null)
+ ├── stats: [rows=500000, distinct(1,8)=500000, null(1,8)=0]
+ ├── key: (1,8)
+ ├── fd: (1,8)-->(12)
+ ├── project
+ │    ├── columns: x:1(int!null) v:8(int!null)
+ │    ├── stats: [rows=5e+07, distinct(1,8)=500000, null(1,8)=0]
+ │    └── inner-join (cross)
+ │         ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+ │         ├── stats: [rows=5e+07, distinct(1,8)=500000, null(1,8)=0]
+ │         ├── key: (1,9)
+ │         ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11)
+ │         ├── scan xysd
+ │         │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
+ │         │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0]
+ │         │    ├── key: (1)
+ │         │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+ │         ├── scan uv
+ │         │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+ │         │    ├── stats: [rows=10000, distinct(8)=100, null(8)=0]
+ │         │    ├── key: (9)
+ │         │    └── fd: (9)-->(7,8,10,11)
+ │         └── filters (true)
+ └── aggregations
+      └── sum [as=sum:12, type=decimal, outer=(8)]
+           └── v:8 [type=int]
+
+# Join selectivity: 1/max(distinct(x), distinct(u)) = 1/5000.
+norm
+SELECT sum(v), x, v FROM xysd, uv WHERE x=u GROUP BY x, v
+----
+group-by (hash)
+ ├── columns: sum:12(decimal!null) x:1(int!null) v:8(int!null)
+ ├── grouping columns: x:1(int!null) v:8(int!null)
+ ├── stats: [rows=10000, distinct(1,8)=10000, null(1,8)=0]
+ ├── key: (1,8)
+ ├── fd: (1,8)-->(12)
+ ├── inner-join (hash)
+ │    ├── columns: x:1(int!null) u:7(int!null) v:8(int!null)
+ │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+ │    ├── stats: [rows=10000, distinct(1)=500, null(1)=0, distinct(7)=500, null(7)=0, distinct(1,8)=10000, null(1,8)=0]
+ │    ├── fd: (1)==(7), (7)==(1)
+ │    ├── scan xysd
+ │    │    ├── columns: x:1(int!null)
+ │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0]
+ │    │    └── key: (1)
+ │    ├── scan uv
+ │    │    ├── columns: u:7(int) v:8(int!null)
+ │    │    └── stats: [rows=10000, distinct(7)=500, null(7)=0, distinct(8)=100, null(8)=0]
+ │    └── filters
+ │         └── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+ └── aggregations
+      └── sum [as=sum:12, type=decimal, outer=(8)]
+           └── v:8 [type=int]
+
+# Semi-join.
+norm
+SELECT * FROM xysd WHERE EXISTS (SELECT * FROM uv WHERE x=u)
+----
+semi-join (hash)
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── stats: [rows=500, distinct(1)=500, null(1)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── scan xysd
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── scan uv
+ │    ├── columns: u:7(int)
+ │    └── stats: [rows=10000, distinct(7)=500, null(7)=0]
+ └── filters
+      └── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+
+# Anti-join.
+norm
+SELECT * FROM xysd WHERE NOT EXISTS (SELECT * FROM uv WHERE x=u)
+----
+anti-join (hash)
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── stats: [rows=4500]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── scan xysd
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── scan uv
+ │    ├── columns: u:7(int)
+ │    └── stats: [rows=10000, distinct(7)=500, null(7)=0]
+ └── filters
+      └── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+
+# Multiple equality conditions.
+norm
+SELECT * FROM xysd JOIN uv ON x=u AND y=v
+----
+inner-join (hash)
+ ├── columns: x:1(int!null) y:2(int!null) s:3(string) d:4(decimal!null) u:7(int!null) v:8(int!null)
+ ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+ ├── stats: [rows=25, distinct(1)=25, null(1)=0, distinct(2)=25, null(2)=0, distinct(7)=25, null(7)=0, distinct(8)=25, null(8)=0]
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (1)==(7), (7)==(1), (2)==(8), (8)==(2)
+ ├── scan xysd
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── scan uv
+ │    ├── columns: u:7(int) v:8(int!null)
+ │    └── stats: [rows=10000, distinct(7)=500, null(7)=0, distinct(8)=100, null(8)=0]
+ └── filters
+      ├── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+      └── y:2 = v:8 [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+
+# Equality condition + extra filters.
+norm
+SELECT * FROM xysd JOIN uv ON x=u AND y+v=5 AND y > 0 AND y < 300
+----
+inner-join (hash)
+ ├── columns: x:1(int!null) y:2(int!null) s:3(string) d:4(decimal!null) u:7(int!null) v:8(int!null)
+ ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+ ├── immutable
+ ├── stats: [rows=3333.33, distinct(1)=500, null(1)=0, distinct(7)=500, null(7)=0]
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (1)==(7), (7)==(1)
+ ├── select
+ │    ├── columns: x:1(int!null) y:2(int!null) s:3(string) d:4(decimal!null)
+ │    ├── stats: [rows=3737.5, distinct(1)=3737.5, null(1)=0, distinct(2)=299, null(2)=0]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── scan xysd
+ │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0, distinct(4)=500, null(4)=0]
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    └── filters
+ │         └── (y:2 > 0) AND (y:2 < 300) [type=bool, outer=(2), constraints=(/2: [/1 - /299]; tight)]
+ ├── scan uv
+ │    ├── columns: u:7(int) v:8(int!null)
+ │    └── stats: [rows=10000, distinct(7)=500, null(7)=0]
+ └── filters
+      ├── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+      └── (y:2 + v:8) = 5 [type=bool, outer=(2,8), immutable]
+
+# Force column statistics calculation for semi-join.
+norm
+SELECT count(*)
+FROM (SELECT * FROM xysd WHERE EXISTS (SELECT * FROM uv WHERE x=u AND y+v=5)) AS a
+GROUP BY y
+----
+project
+ ├── columns: count:13(int!null)
+ ├── immutable
+ ├── stats: [rows=138.17]
+ └── group-by (hash)
+      ├── columns: y:2(int) count_rows:13(int!null)
+      ├── grouping columns: y:2(int)
+      ├── immutable
+      ├── stats: [rows=138.17, distinct(2)=138.17, null(2)=0]
+      ├── key: (2)
+      ├── fd: (2)-->(13)
+      ├── semi-join (hash)
+      │    ├── columns: x:1(int!null) y:2(int)
+      │    ├── immutable
+      │    ├── stats: [rows=166.667, distinct(1)=166.667, null(1)=0, distinct(2)=138.17, null(2)=0]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    ├── scan xysd
+      │    │    ├── columns: x:1(int!null) y:2(int)
+      │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0]
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2)
+      │    ├── scan uv
+      │    │    ├── columns: u:7(int) v:8(int!null)
+      │    │    └── stats: [rows=10000, distinct(7)=500, null(7)=0]
+      │    └── filters
+      │         ├── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+      │         └── (y:2 + v:8) = 5 [type=bool, outer=(2,8), immutable]
+      └── aggregations
+           └── count-rows [as=count_rows:13, type=int]
+
+# Force column statistics calculation for anti-join.
+norm
+SELECT count(*)
+FROM (SELECT * FROM xysd WHERE NOT EXISTS (SELECT * FROM uv WHERE x=u AND y+v=5)) AS a
+GROUP BY y
+----
+project
+ ├── columns: count:13(int!null)
+ ├── immutable
+ ├── stats: [rows=400]
+ └── group-by (hash)
+      ├── columns: y:2(int) count_rows:13(int!null)
+      ├── grouping columns: y:2(int)
+      ├── immutable
+      ├── stats: [rows=400, distinct(2)=400, null(2)=0]
+      ├── key: (2)
+      ├── fd: (2)-->(13)
+      ├── anti-join (hash)
+      │    ├── columns: x:1(int!null) y:2(int)
+      │    ├── immutable
+      │    ├── stats: [rows=4833.33, distinct(2)=400, null(2)=0]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    ├── scan xysd
+      │    │    ├── columns: x:1(int!null) y:2(int)
+      │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0]
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2)
+      │    ├── scan uv
+      │    │    ├── columns: u:7(int) v:8(int!null)
+      │    │    └── stats: [rows=10000, distinct(7)=500, null(7)=0]
+      │    └── filters
+      │         ├── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+      │         └── (y:2 + v:8) = 5 [type=bool, outer=(2,8), immutable]
+      └── aggregations
+           └── count-rows [as=count_rows:13, type=int]
+
+# Force column statistics calculation for left join.
+norm
+SELECT count(*)
+FROM (SELECT * FROM xysd LEFT OUTER JOIN uv ON x=u AND y+v=5) AS a
+GROUP BY y
+----
+project
+ ├── columns: count:12(int!null)
+ ├── immutable
+ ├── stats: [rows=400]
+ └── group-by (hash)
+      ├── columns: y:2(int) count_rows:12(int!null)
+      ├── grouping columns: y:2(int)
+      ├── immutable
+      ├── stats: [rows=400, distinct(2)=400, null(2)=0]
+      ├── key: (2)
+      ├── fd: (2)-->(12)
+      ├── left-join (hash)
+      │    ├── columns: x:1(int!null) y:2(int) u:7(int) v:8(int)
+      │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
+      │    ├── immutable
+      │    ├── stats: [rows=5000, distinct(2)=400, null(2)=0, distinct(7)=500, null(7)=1666.67]
+      │    ├── fd: (1)-->(2)
+      │    ├── scan xysd
+      │    │    ├── columns: x:1(int!null) y:2(int)
+      │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0]
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2)
+      │    ├── scan uv
+      │    │    ├── columns: u:7(int) v:8(int!null)
+      │    │    └── stats: [rows=10000, distinct(7)=500, null(7)=0]
+      │    └── filters
+      │         ├── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+      │         └── (y:2 + v:8) = 5 [type=bool, outer=(2,8), immutable]
+      └── aggregations
+           └── count-rows [as=count_rows:12, type=int]
+
+# Force column statistics calculation for right join.
+norm
+SELECT count(*)
+FROM (SELECT * FROM xysd RIGHT OUTER JOIN uv ON x=u AND y+v=5) AS a
+GROUP BY y
+----
+project
+ ├── columns: count:12(int!null)
+ ├── immutable
+ ├── stats: [rows=399.904]
+ └── group-by (hash)
+      ├── columns: y:2(int) count_rows:12(int!null)
+      ├── grouping columns: y:2(int)
+      ├── immutable
+      ├── stats: [rows=399.904, distinct(2)=399.904, null(2)=1]
+      ├── key: (2)
+      ├── fd: (2)-->(12)
+      ├── left-join (hash)
+      │    ├── columns: x:1(int) y:2(int) u:7(int) v:8(int!null)
+      │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+      │    ├── immutable
+      │    ├── stats: [rows=10000, distinct(1)=500, null(1)=6666.67, distinct(2)=399.904, null(2)=6666.67]
+      │    ├── fd: (1)-->(2)
+      │    ├── scan uv
+      │    │    ├── columns: u:7(int) v:8(int!null)
+      │    │    └── stats: [rows=10000, distinct(7)=500, null(7)=0]
+      │    ├── scan xysd
+      │    │    ├── columns: x:1(int!null) y:2(int)
+      │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0]
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2)
+      │    └── filters
+      │         ├── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+      │         └── (y:2 + v:8) = 5 [type=bool, outer=(2,8), immutable]
+      └── aggregations
+           └── count-rows [as=count_rows:12, type=int]
+
+# Force column statistics calculation for outer join.
+norm
+SELECT count(*)
+FROM (SELECT * FROM xysd FULL OUTER JOIN uv ON x=u AND y+v=5) AS a
+GROUP BY y
+----
+project
+ ├── columns: count:12(int!null)
+ ├── immutable
+ ├── stats: [rows=400]
+ └── group-by (hash)
+      ├── columns: y:2(int) count_rows:12(int!null)
+      ├── grouping columns: y:2(int)
+      ├── immutable
+      ├── stats: [rows=400, distinct(2)=400, null(2)=1]
+      ├── key: (2)
+      ├── fd: (2)-->(12)
+      ├── full-join (hash)
+      │    ├── columns: x:1(int) y:2(int) u:7(int) v:8(int)
+      │    ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
+      │    ├── immutable
+      │    ├── stats: [rows=11666.7, distinct(2)=400, null(2)=6666.67]
+      │    ├── fd: (1)-->(2)
+      │    ├── scan xysd
+      │    │    ├── columns: x:1(int!null) y:2(int)
+      │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0]
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2)
+      │    ├── scan uv
+      │    │    ├── columns: u:7(int) v:8(int!null)
+      │    │    └── stats: [rows=10000, distinct(7)=500, null(7)=0]
+      │    └── filters
+      │         ├── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+      │         └── (y:2 + v:8) = 5 [type=bool, outer=(2,8), immutable]
+      └── aggregations
+           └── count-rows [as=count_rows:12, type=int]
+
+exec-ddl
+CREATE TABLE uvw (u INT, v INT, w INT)
+----
+
+exec-ddl
+CREATE TABLE xyz (x INT, y INT, z INT)
+----
+
+# Verify that two equivalent formulations of a join lead to similar statistics.
+# In the first case, x=10 is pushed down; in the second case it is part of the
+# ON condition. The latter formulation happens in practice when we convert to
+# lookup join (we incorporate the filter back into the ON condition).
+
+norm disable=(PushFilterIntoJoinLeftAndRight,PushFilterIntoJoinLeft,PushFilterIntoJoinRight,MapFilterIntoJoinLeft,MapFilterIntoJoinRight)
+SELECT * FROM (SELECT * FROM uvw WHERE w=1) JOIN (SELECT * FROM xyz WHERE x=10) ON u=x
+----
+inner-join (hash)
+ ├── columns: u:1(int!null) v:2(int) w:3(int!null) x:7(int!null) y:8(int) z:9(int)
+ ├── stats: [rows=10.3537, distinct(1)=1, null(1)=0, distinct(7)=1, null(7)=0]
+ ├── fd: ()-->(1,3,7), (1)==(7), (7)==(1)
+ ├── select
+ │    ├── columns: u:1(int) v:2(int) w:3(int!null)
+ │    ├── stats: [rows=10, distinct(1)=9.56179, null(1)=0.1, distinct(3)=1, null(3)=0]
+ │    ├── fd: ()-->(3)
+ │    ├── scan uvw
+ │    │    ├── columns: u:1(int) v:2(int) w:3(int)
+ │    │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(3)=100, null(3)=10]
+ │    └── filters
+ │         └── w:3 = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
+ ├── select
+ │    ├── columns: x:7(int!null) y:8(int) z:9(int)
+ │    ├── stats: [rows=10, distinct(7)=1, null(7)=0]
+ │    ├── fd: ()-->(7)
+ │    ├── scan xyz
+ │    │    ├── columns: x:7(int) y:8(int) z:9(int)
+ │    │    └── stats: [rows=1000, distinct(7)=100, null(7)=10]
+ │    └── filters
+ │         └── x:7 = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
+ └── filters
+      └── u:1 = x:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+
+norm disable=(PushFilterIntoJoinLeftAndRight,PushFilterIntoJoinLeft,PushFilterIntoJoinRight,MapFilterIntoJoinLeft,MapFilterIntoJoinRight)
+SELECT * FROM (SELECT * FROM uvw WHERE w=1) JOIN xyz ON u=x AND x=10
+----
+inner-join (hash)
+ ├── columns: u:1(int!null) v:2(int) w:3(int!null) x:7(int!null) y:8(int) z:9(int)
+ ├── stats: [rows=10.3537, distinct(1)=1, null(1)=0, distinct(7)=1, null(7)=0]
+ ├── fd: ()-->(1,3,7), (1)==(7), (7)==(1)
+ ├── select
+ │    ├── columns: u:1(int) v:2(int) w:3(int!null)
+ │    ├── stats: [rows=10, distinct(1)=9.56179, null(1)=0.1, distinct(3)=1, null(3)=0]
+ │    ├── fd: ()-->(3)
+ │    ├── scan uvw
+ │    │    ├── columns: u:1(int) v:2(int) w:3(int)
+ │    │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(3)=100, null(3)=10]
+ │    └── filters
+ │         └── w:3 = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
+ ├── scan xyz
+ │    ├── columns: x:7(int) y:8(int) z:9(int)
+ │    └── stats: [rows=1000, distinct(7)=100, null(7)=10]
+ └── filters
+      ├── u:1 = x:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+      └── x:7 = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
+
+# Bump up null counts.
+exec-ddl
+ALTER TABLE xysd INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 5000,
+    "avg_size": 2
+  },
+  {
+    "columns": ["y"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 400,
+    "null_count": 2500,
+    "avg_size": 3
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE uv INJECT STATISTICS '[
+  {
+    "columns": ["u"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 500,
+    "null_count": 5000,
+    "avg_size": 5
+  },
+  {
+    "columns": ["v"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 100,
+    "avg_size": 6
+  },
+  {
+    "columns": ["rowid"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+----
+
+build colstat=2 colstat=(1,2,9) colstat=(2,3) colstat=3 colstat=(3,7) colstat=7
+SELECT *, rowid FROM xysd INNER JOIN uv ON x=u
+----
+project
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int!null) v:8(int!null) rowid:9(int!null)
+ ├── stats: [rows=5000, distinct(2)=399.999, null(2)=2500, distinct(3)=499.977, null(3)=50, distinct(7)=499, null(7)=0, distinct(2,3)=3160.69, null(2,3)=25, distinct(3,7)=5000, null(3,7)=0, distinct(1,2,9)=5000, null(1,2,9)=0]
+ ├── key: (9)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2,7), (9)-->(1-4,7,8), (1)==(7), (7)==(1)
+ └── inner-join (hash)
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int!null) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+      ├── stats: [rows=5000, distinct(1)=499, null(1)=0, distinct(2)=399.999, null(2)=2500, distinct(3)=499.977, null(3)=50, distinct(7)=499, null(7)=0, distinct(2,3)=3160.69, null(2,3)=25, distinct(3,7)=5000, null(3,7)=0, distinct(1,2,9)=5000, null(1,2,9)=0]
+      ├── key: (9)
+      ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11), (1)==(7), (7)==(1)
+      ├── scan xysd
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
+      │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      ├── scan uv
+      │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, distinct(9)=10000, null(9)=0]
+      │    ├── key: (9)
+      │    └── fd: (9)-->(7,8,10,11)
+      └── filters
+           └── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+
+build colstat=2 colstat=(1,2,9) colstat=(2,3) colstat=3 colstat=(3,7) colstat=7
+SELECT *, rowid FROM xysd LEFT JOIN uv ON x=u
+----
+project
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int) v:8(int) rowid:9(int)
+ ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, distinct(3)=500, null(3)=100, distinct(7)=500, null(7)=0, distinct(2,3)=5000, null(2,3)=50, distinct(3,7)=10000, null(3,7)=50, distinct(1,2,9)=10000, null(1,2,9)=0]
+ ├── key: (1,9)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (9)-->(7,8)
+ └── left-join (hash)
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) v:8(int) rowid:9(int) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
+      ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, distinct(3)=500, null(3)=100, distinct(7)=500, null(7)=0, distinct(2,3)=5000, null(2,3)=50, distinct(3,7)=10000, null(3,7)=50, distinct(1,2,9)=10000, null(1,2,9)=0]
+      ├── key: (1,9)
+      ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11)
+      ├── scan xysd
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
+      │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      ├── scan uv
+      │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, distinct(9)=10000, null(9)=0]
+      │    ├── key: (9)
+      │    └── fd: (9)-->(7,8,10,11)
+      └── filters
+           └── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+
+build colstat=2 colstat=(1,2,9) colstat=(2,3) colstat=3 colstat=(3,7) colstat=7
+SELECT *, rowid FROM xysd RIGHT JOIN uv ON x=u
+----
+project
+ ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:7(int) v:8(int!null) rowid:9(int!null)
+ ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, distinct(3)=500, null(3)=100, distinct(7)=500, null(7)=5000, distinct(2,3)=4323.46, null(2,3)=50, distinct(3,7)=10000, null(3,7)=50, distinct(1,2,9)=10000, null(1,2,9)=0]
+ ├── key: (9)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (9)-->(1-4,7,8)
+ └── right-join (hash)
+      ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      ├── stats: [rows=10000, distinct(1)=500, null(1)=0, distinct(2)=400, null(2)=5000, distinct(3)=500, null(3)=100, distinct(7)=500, null(7)=5000, distinct(2,3)=4323.46, null(2,3)=50, distinct(3,7)=10000, null(3,7)=50, distinct(1,2,9)=10000, null(1,2,9)=0]
+      ├── key: (9)
+      ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(1-8,10,11)
+      ├── scan xysd
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
+      │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      ├── scan uv
+      │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, distinct(9)=10000, null(9)=0]
+      │    ├── key: (9)
+      │    └── fd: (9)-->(7,8,10,11)
+      └── filters
+           └── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+
+build colstat=2 colstat=(1,2,9) colstat=(2,3) colstat=3 colstat=(3,7) colstat=7
+SELECT *, rowid FROM xysd FULL JOIN uv ON x=u
+----
+project
+ ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:7(int) v:8(int) rowid:9(int)
+ ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, distinct(3)=500, null(3)=100, distinct(7)=500, null(7)=5000, distinct(2,3)=5000, null(2,3)=50, distinct(3,7)=10000, null(3,7)=50, distinct(1,2,9)=10000, null(1,2,9)=0]
+ ├── key: (1,9)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (9)-->(7,8)
+ └── full-join (hash)
+      ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) v:8(int) rowid:9(int) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
+      ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, distinct(3)=500, null(3)=100, distinct(7)=500, null(7)=5000, distinct(2,3)=5000, null(2,3)=50, distinct(3,7)=10000, null(3,7)=50, distinct(1,2,9)=10000, null(1,2,9)=0]
+      ├── key: (1,9)
+      ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11)
+      ├── scan xysd
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
+      │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      ├── scan uv
+      │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, distinct(9)=10000, null(9)=0]
+      │    ├── key: (9)
+      │    └── fd: (9)-->(7,8,10,11)
+      └── filters
+           └── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+
+# Set one of the columns to non-nullable and see impact on multi-column null counts.
+build colstat=2 colstat=(1,2,9) colstat=(2,3) colstat=3 colstat=(3,7) colstat=7
+SELECT *, rowid FROM xysd FULL JOIN uv ON x=u WHERE s IS NOT NULL
+----
+project
+ ├── columns: x:1(int) y:2(int) s:3(string!null) d:4(decimal) u:7(int) v:8(int) rowid:9(int)
+ ├── stats: [rows=9900, distinct(2)=400, null(2)=4950, distinct(3)=500, null(3)=0, distinct(7)=500, null(7)=4950, distinct(2,3)=4999.5, null(2,3)=0, distinct(3,7)=9900, null(3,7)=0, distinct(1,2,9)=9900, null(1,2,9)=0]
+ ├── key: (1,9)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (9)-->(7,8)
+ └── select
+      ├── columns: x:1(int) y:2(int) s:3(string!null) d:4(decimal) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) v:8(int) rowid:9(int) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      ├── stats: [rows=9900, distinct(2)=400, null(2)=4950, distinct(3)=500, null(3)=0, distinct(7)=500, null(7)=4950, distinct(2,3)=4999.5, null(2,3)=0, distinct(3,7)=9900, null(3,7)=0, distinct(1,2,9)=9900, null(1,2,9)=0]
+      ├── key: (1,9)
+      ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11)
+      ├── full-join (hash)
+      │    ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) v:8(int) rowid:9(int) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      │    ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
+      │    ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, distinct(3)=500, null(3)=100, distinct(7)=500, null(7)=5000, distinct(2,3)=5000, null(2,3)=50, distinct(3,7)=10000, null(3,7)=50, distinct(1,2,9)=10000, null(1,2,9)=0]
+      │    ├── key: (1,9)
+      │    ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11)
+      │    ├── scan xysd
+      │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
+      │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      │    ├── scan uv
+      │    │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      │    │    ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, distinct(9)=10000, null(9)=0]
+      │    │    ├── key: (9)
+      │    │    └── fd: (9)-->(7,8,10,11)
+      │    └── filters
+      │         └── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+      └── filters
+           └── s:3 IS NOT NULL [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+
+# Do a full join on a condition that results in 0 rows on one side. All null counts
+# on the right side should be greater due to expected null-extension of columns.
+build colstat=2 colstat=(1,2,9) colstat=(2,3) colstat=3 colstat=(3,7) colstat=7
+SELECT *, rowid FROM xysd FULL JOIN uv ON u > 4 AND u < 2
+----
+project
+ ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:7(int) v:8(int) rowid:9(int)
+ ├── stats: [rows=5e+07, distinct(2)=400, null(2)=2.5e+07, distinct(3)=500, null(3)=500000, distinct(7)=500, null(7)=2.5e+07, distinct(2,3)=5000, null(2,3)=250000, distinct(3,7)=250000, null(3,7)=250000, distinct(1,2,9)=5e+07, null(1,2,9)=0]
+ ├── key: (1,9)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (9)-->(7,8)
+ └── full-join (cross)
+      ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) v:8(int) rowid:9(int) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      ├── stats: [rows=5e+07, distinct(2)=400, null(2)=2.5e+07, distinct(3)=500, null(3)=500000, distinct(7)=500, null(7)=2.5e+07, distinct(2,3)=5000, null(2,3)=250000, distinct(3,7)=250000, null(3,7)=250000, distinct(1,2,9)=5e+07, null(1,2,9)=0]
+      ├── key: (1,9)
+      ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11)
+      ├── scan xysd
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
+      │    ├── stats: [rows=5000, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      ├── scan uv
+      │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, distinct(9)=10000, null(9)=0]
+      │    ├── key: (9)
+      │    └── fd: (9)-->(7,8,10,11)
+      └── filters
+           └── (u:7 > 4) AND (u:7 < 2) [type=bool, outer=(7), constraints=(contradiction; tight)]
+
+build colstat=2 colstat=(1,2,9)
+SELECT * FROM xysd, uv
+----
+project
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int) v:8(int!null)
+ ├── stats: [rows=5e+07, distinct(2)=400, null(2)=2.5e+07, distinct(1,2,9)=5e+07, null(1,2,9)=0]
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ └── inner-join (cross)
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      ├── stats: [rows=5e+07, distinct(2)=400, null(2)=2.5e+07, distinct(1,2,9)=5e+07, null(1,2,9)=0]
+      ├── key: (1,9)
+      ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11)
+      ├── scan xysd
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
+      │    ├── stats: [rows=5000, distinct(2)=400, null(2)=2500, distinct(1,2)=5000, null(1,2)=0]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      ├── scan uv
+      │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
+      │    ├── stats: [rows=10000, distinct(9)=10000, null(9)=0]
+      │    ├── key: (9)
+      │    └── fd: (9)-->(7,8,10,11)
+      └── filters (true)
+
+norm
+SELECT * FROM xysd WHERE EXISTS(SELECT * FROM uv WHERE x=u)
+----
+semi-join (hash)
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── stats: [rows=500, distinct(1)=500, null(1)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── scan xysd
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── scan uv
+ │    ├── columns: u:7(int)
+ │    └── stats: [rows=10000, distinct(7)=500, null(7)=5000]
+ └── filters
+      └── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+
+norm
+SELECT * FROM uv WHERE EXISTS(SELECT * FROM xysd WHERE x=u)
+----
+semi-join (hash)
+ ├── columns: u:1(int) v:2(int!null)
+ ├── stats: [rows=10000, distinct(1)=500, null(1)=0]
+ ├── scan uv
+ │    ├── columns: u:1(int) v:2(int!null)
+ │    └── stats: [rows=10000, distinct(1)=500, null(1)=5000]
+ ├── scan xysd
+ │    ├── columns: x:6(int!null)
+ │    ├── stats: [rows=5000, distinct(6)=5000, null(6)=0]
+ │    └── key: (6)
+ └── filters
+      └── x:6 = u:1 [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+
+# Merge join (inner).
+expr colstat=2 colstat=(1,2,8) colstat=(2,3) colstat=3 colstat=(3,7) colstat=7
+(MergeJoin
+    (Scan [ (Table "xysd") (Cols "x,y,s,d") ])
+    (Sort (Scan [ (Table "uv") (Cols "u,v,rowid") ]))
+    [ ]
+    [
+        (JoinType "inner-join")
+        (LeftEq "+x")
+        (RightEq "+u")
+        (LeftOrdering "+x")
+        (RightOrdering "+u")
+    ]
+)
+----
+inner-join (merge)
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int!null) v:8(int!null) rowid:9(int!null)
+ ├── left ordering: +1
+ ├── right ordering: +7
+ ├── stats: [rows=5000, distinct(1)=499, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(7)=499, null(7)=0, distinct(2,3)=5000, null(2,3)=25, distinct(3,7)=5000, null(3,7)=0, distinct(1,2,8)=5000, null(1,2,8)=0]
+ ├── key: (9)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (9)-->(7,8), (1)==(7), (7)==(1)
+ ├── scan xysd
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    └── ordering: +1
+ ├── sort
+ │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null)
+ │    ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, distinct(8)=100, null(8)=0]
+ │    ├── key: (9)
+ │    ├── fd: (9)-->(7,8)
+ │    ├── ordering: +7
+ │    └── scan uv
+ │         ├── columns: u:7(int) v:8(int!null) rowid:9(int!null)
+ │         ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, distinct(8)=100, null(8)=0]
+ │         ├── key: (9)
+ │         └── fd: (9)-->(7,8)
+ └── filters (true)
+
+# Merge join (left) with extra ON condition.
+expr colstat=2 colstat=(1,2,9) colstat=(2,3) colstat=3 colstat=(3,7) colstat=7
+(MergeJoin
+    (Scan [ (Table "xysd") (Cols "x,y,s,d") ])
+    (Sort (Scan [ (Table "uv") (Cols "u,v,rowid") ]))
+    [ (Gt (Var "y") (Var "v")) ]
+    [
+        (JoinType "left-join")
+        (LeftEq "+x")
+        (RightEq "+u")
+        (LeftOrdering "+x")
+        (RightOrdering "+u")
+    ]
+)
+----
+left-join (merge)
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int) v:8(int) rowid:9(int)
+ ├── left ordering: +1
+ ├── right ordering: +7
+ ├── stats: [rows=5000, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(7)=500, null(7)=1666.67, distinct(8)=100, null(8)=1666.67, distinct(2,3)=5000, null(2,3)=25, distinct(3,7)=5000, null(3,7)=25, distinct(1,2,9)=5000, null(1,2,9)=0]
+ ├── key: (1,9)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (9)-->(7,8)
+ ├── scan xysd
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    └── ordering: +1
+ ├── sort
+ │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null)
+ │    ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, distinct(8)=100, null(8)=0, distinct(9)=10000, null(9)=0]
+ │    ├── key: (9)
+ │    ├── fd: (9)-->(7,8)
+ │    ├── ordering: +7
+ │    └── scan uv
+ │         ├── columns: u:7(int) v:8(int!null) rowid:9(int!null)
+ │         ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, distinct(8)=100, null(8)=0, distinct(9)=10000, null(9)=0]
+ │         ├── key: (9)
+ │         └── fd: (9)-->(7,8)
+ └── filters
+      └── y:2 > v:8 [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
+
+# Check that true filters are handled correctly for all join types.
+build
+SELECT * FROM (SELECT 1) JOIN (SELECT 1 WHERE false) ON true
+----
+inner-join (cross)
+ ├── columns: "?column?":1(int!null) "?column?":2(int!null)
+ ├── cardinality: [0 - 0]
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ ├── stats: [rows=0]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── project
+ │    ├── columns: "?column?":1(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── stats: [rows=1]
+ │    │    ├── key: ()
+ │    │    └── () [type=tuple]
+ │    └── projections
+ │         └── 1 [as="?column?":1, type=int]
+ ├── project
+ │    ├── columns: "?column?":2(int!null)
+ │    ├── cardinality: [0 - 0]
+ │    ├── stats: [rows=0]
+ │    ├── key: ()
+ │    ├── fd: ()-->(2)
+ │    ├── select
+ │    │    ├── cardinality: [0 - 0]
+ │    │    ├── stats: [rows=0]
+ │    │    ├── key: ()
+ │    │    ├── values
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── stats: [rows=1]
+ │    │    │    ├── key: ()
+ │    │    │    └── () [type=tuple]
+ │    │    └── filters
+ │    │         └── false [type=bool, constraints=(contradiction; tight)]
+ │    └── projections
+ │         └── 1 [as="?column?":2, type=int]
+ └── filters
+      └── true [type=bool]
+
+build
+SELECT * FROM (SELECT 1) LEFT JOIN (SELECT 1 WHERE false) ON true
+----
+left-join (cross)
+ ├── columns: "?column?":1(int!null) "?column?":2(int)
+ ├── cardinality: [1 - 1]
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ ├── stats: [rows=1]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── project
+ │    ├── columns: "?column?":1(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── stats: [rows=1]
+ │    │    ├── key: ()
+ │    │    └── () [type=tuple]
+ │    └── projections
+ │         └── 1 [as="?column?":1, type=int]
+ ├── project
+ │    ├── columns: "?column?":2(int!null)
+ │    ├── cardinality: [0 - 0]
+ │    ├── stats: [rows=0]
+ │    ├── key: ()
+ │    ├── fd: ()-->(2)
+ │    ├── select
+ │    │    ├── cardinality: [0 - 0]
+ │    │    ├── stats: [rows=0]
+ │    │    ├── key: ()
+ │    │    ├── values
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── stats: [rows=1]
+ │    │    │    ├── key: ()
+ │    │    │    └── () [type=tuple]
+ │    │    └── filters
+ │    │         └── false [type=bool, constraints=(contradiction; tight)]
+ │    └── projections
+ │         └── 1 [as="?column?":2, type=int]
+ └── filters
+      └── true [type=bool]
+
+build
+SELECT * FROM (SELECT 1) RIGHT JOIN (SELECT 1 WHERE false) ON true
+----
+right-join (cross)
+ ├── columns: "?column?":1(int) "?column?":2(int!null)
+ ├── cardinality: [0 - 0]
+ ├── stats: [rows=0]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── project
+ │    ├── columns: "?column?":1(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── stats: [rows=1]
+ │    │    ├── key: ()
+ │    │    └── () [type=tuple]
+ │    └── projections
+ │         └── 1 [as="?column?":1, type=int]
+ ├── project
+ │    ├── columns: "?column?":2(int!null)
+ │    ├── cardinality: [0 - 0]
+ │    ├── stats: [rows=0]
+ │    ├── key: ()
+ │    ├── fd: ()-->(2)
+ │    ├── select
+ │    │    ├── cardinality: [0 - 0]
+ │    │    ├── stats: [rows=0]
+ │    │    ├── key: ()
+ │    │    ├── values
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── stats: [rows=1]
+ │    │    │    ├── key: ()
+ │    │    │    └── () [type=tuple]
+ │    │    └── filters
+ │    │         └── false [type=bool, constraints=(contradiction; tight)]
+ │    └── projections
+ │         └── 1 [as="?column?":2, type=int]
+ └── filters
+      └── true [type=bool]
+
+build
+SELECT * FROM (SELECT 1) FULL JOIN (SELECT 1 WHERE false) ON true
+----
+full-join (cross)
+ ├── columns: "?column?":1(int) "?column?":2(int)
+ ├── cardinality: [1 - 1]
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+ ├── stats: [rows=1]
+ ├── project
+ │    ├── columns: "?column?":1(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── stats: [rows=1]
+ │    │    ├── key: ()
+ │    │    └── () [type=tuple]
+ │    └── projections
+ │         └── 1 [as="?column?":1, type=int]
+ ├── project
+ │    ├── columns: "?column?":2(int!null)
+ │    ├── cardinality: [0 - 0]
+ │    ├── stats: [rows=0]
+ │    ├── key: ()
+ │    ├── fd: ()-->(2)
+ │    ├── select
+ │    │    ├── cardinality: [0 - 0]
+ │    │    ├── stats: [rows=0]
+ │    │    ├── key: ()
+ │    │    ├── values
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── stats: [rows=1]
+ │    │    │    ├── key: ()
+ │    │    │    └── () [type=tuple]
+ │    │    └── filters
+ │    │         └── false [type=bool, constraints=(contradiction; tight)]
+ │    └── projections
+ │         └── 1 [as="?column?":2, type=int]
+ └── filters
+      └── true [type=bool]
+
+build
+SELECT * FROM (SELECT 1 WHERE false) JOIN (SELECT 1) ON true
+----
+inner-join (cross)
+ ├── columns: "?column?":1(int!null) "?column?":2(int!null)
+ ├── cardinality: [0 - 0]
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ ├── stats: [rows=0]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── project
+ │    ├── columns: "?column?":1(int!null)
+ │    ├── cardinality: [0 - 0]
+ │    ├── stats: [rows=0]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    ├── select
+ │    │    ├── cardinality: [0 - 0]
+ │    │    ├── stats: [rows=0]
+ │    │    ├── key: ()
+ │    │    ├── values
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── stats: [rows=1]
+ │    │    │    ├── key: ()
+ │    │    │    └── () [type=tuple]
+ │    │    └── filters
+ │    │         └── false [type=bool, constraints=(contradiction; tight)]
+ │    └── projections
+ │         └── 1 [as="?column?":1, type=int]
+ ├── project
+ │    ├── columns: "?column?":2(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(2)
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── stats: [rows=1]
+ │    │    ├── key: ()
+ │    │    └── () [type=tuple]
+ │    └── projections
+ │         └── 1 [as="?column?":2, type=int]
+ └── filters
+      └── true [type=bool]
+
+build
+SELECT * FROM (SELECT 1 WHERE false) LEFT JOIN (SELECT 1) ON true
+----
+left-join (cross)
+ ├── columns: "?column?":1(int!null) "?column?":2(int)
+ ├── cardinality: [0 - 0]
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ ├── stats: [rows=0]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── project
+ │    ├── columns: "?column?":1(int!null)
+ │    ├── cardinality: [0 - 0]
+ │    ├── stats: [rows=0]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    ├── select
+ │    │    ├── cardinality: [0 - 0]
+ │    │    ├── stats: [rows=0]
+ │    │    ├── key: ()
+ │    │    ├── values
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── stats: [rows=1]
+ │    │    │    ├── key: ()
+ │    │    │    └── () [type=tuple]
+ │    │    └── filters
+ │    │         └── false [type=bool, constraints=(contradiction; tight)]
+ │    └── projections
+ │         └── 1 [as="?column?":1, type=int]
+ ├── project
+ │    ├── columns: "?column?":2(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(2)
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── stats: [rows=1]
+ │    │    ├── key: ()
+ │    │    └── () [type=tuple]
+ │    └── projections
+ │         └── 1 [as="?column?":2, type=int]
+ └── filters
+      └── true [type=bool]
+
+build
+SELECT * FROM (SELECT 1 WHERE false) RIGHT JOIN (SELECT 1) ON true
+----
+right-join (cross)
+ ├── columns: "?column?":1(int) "?column?":2(int!null)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── project
+ │    ├── columns: "?column?":1(int!null)
+ │    ├── cardinality: [0 - 0]
+ │    ├── stats: [rows=0]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    ├── select
+ │    │    ├── cardinality: [0 - 0]
+ │    │    ├── stats: [rows=0]
+ │    │    ├── key: ()
+ │    │    ├── values
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── stats: [rows=1]
+ │    │    │    ├── key: ()
+ │    │    │    └── () [type=tuple]
+ │    │    └── filters
+ │    │         └── false [type=bool, constraints=(contradiction; tight)]
+ │    └── projections
+ │         └── 1 [as="?column?":1, type=int]
+ ├── project
+ │    ├── columns: "?column?":2(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(2)
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── stats: [rows=1]
+ │    │    ├── key: ()
+ │    │    └── () [type=tuple]
+ │    └── projections
+ │         └── 1 [as="?column?":2, type=int]
+ └── filters
+      └── true [type=bool]
+
+build
+SELECT * FROM (SELECT 1 WHERE false) FULL JOIN (SELECT 1) ON true
+----
+full-join (cross)
+ ├── columns: "?column?":1(int) "?column?":2(int)
+ ├── cardinality: [1 - 1]
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+ ├── stats: [rows=1]
+ ├── project
+ │    ├── columns: "?column?":1(int!null)
+ │    ├── cardinality: [0 - 0]
+ │    ├── stats: [rows=0]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    ├── select
+ │    │    ├── cardinality: [0 - 0]
+ │    │    ├── stats: [rows=0]
+ │    │    ├── key: ()
+ │    │    ├── values
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── stats: [rows=1]
+ │    │    │    ├── key: ()
+ │    │    │    └── () [type=tuple]
+ │    │    └── filters
+ │    │         └── false [type=bool, constraints=(contradiction; tight)]
+ │    └── projections
+ │         └── 1 [as="?column?":1, type=int]
+ ├── project
+ │    ├── columns: "?column?":2(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(2)
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── stats: [rows=1]
+ │    │    ├── key: ()
+ │    │    └── () [type=tuple]
+ │    └── projections
+ │         └── 1 [as="?column?":2, type=int]
+ └── filters
+      └── true [type=bool]
+
+build
+SELECT * FROM (SELECT 1 UNION SELECT 2) FULL JOIN (VALUES (1), (2)) ON true
+----
+full-join (cross)
+ ├── columns: "?column?":3(int) column1:4(int)
+ ├── cardinality: [2 - 4]
+ ├── stats: [rows=2.66667]
+ ├── union
+ │    ├── columns: "?column?":3(int!null)
+ │    ├── left columns: "?column?":1(int)
+ │    ├── right columns: "?column?":2(int)
+ │    ├── cardinality: [1 - 2]
+ │    ├── stats: [rows=2, distinct(3)=2, null(3)=0]
+ │    ├── key: (3)
+ │    ├── project
+ │    │    ├── columns: "?column?":1(int!null)
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1)
+ │    │    ├── values
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── stats: [rows=1]
+ │    │    │    ├── key: ()
+ │    │    │    └── () [type=tuple]
+ │    │    └── projections
+ │    │         └── 1 [as="?column?":1, type=int]
+ │    └── project
+ │         ├── columns: "?column?":2(int!null)
+ │         ├── cardinality: [1 - 1]
+ │         ├── stats: [rows=1, distinct(2)=1, null(2)=0]
+ │         ├── key: ()
+ │         ├── fd: ()-->(2)
+ │         ├── values
+ │         │    ├── cardinality: [1 - 1]
+ │         │    ├── stats: [rows=1]
+ │         │    ├── key: ()
+ │         │    └── () [type=tuple]
+ │         └── projections
+ │              └── 2 [as="?column?":2, type=int]
+ ├── values
+ │    ├── columns: column1:4(int!null)
+ │    ├── cardinality: [2 - 2]
+ │    ├── stats: [rows=2]
+ │    ├── (1,) [type=tuple{int}]
+ │    └── (2,) [type=tuple{int}]
+ └── filters
+      └── true [type=bool]
+
+exec-ddl
+CREATE TABLE table0 (
+    col0 INT4,
+    col1 BOOL NULL,
+    col2 BIT(40) NOT NULL
+)
+----
+
+exec-ddl
+CREATE TABLE table1 (
+    col0 BIT(23) NULL,
+    col1 INET NULL
+)
+----
+
+# Regression test for #38091.
+norm disable=(EliminateJoinUnderProjectLeft,SimplifyLeftJoinWithZeroRowsRight)
+SELECT (
+        SELECT 1
+          FROM table1
+               LEFT JOIN table1 AS t1
+                INNER JOIN table0 ON false ON t0.col1
+       )
+  FROM table0 AS t0
+----
+project
+ ├── columns: "?column?":24(int)
+ ├── stats: [rows=1e+06]
+ ├── ensure-distinct-on
+ │    ├── columns: t0.rowid:4(int!null) "?column?":23(int)
+ │    ├── grouping columns: t0.rowid:4(int!null)
+ │    ├── error: "more than one row returned by a subquery used as an expression"
+ │    ├── stats: [rows=1e+06]
+ │    ├── key: (4)
+ │    ├── fd: (4)-->(23)
+ │    ├── left-join-apply
+ │    │    ├── columns: t0.col1:2(bool) t0.rowid:4(int!null) "?column?":23(int)
+ │    │    ├── stats: [rows=1e+06]
+ │    │    ├── fd: (4)-->(2)
+ │    │    ├── scan table0 [as=t0]
+ │    │    │    ├── columns: t0.col1:2(bool) t0.rowid:4(int!null)
+ │    │    │    ├── stats: [rows=1000]
+ │    │    │    ├── key: (4)
+ │    │    │    └── fd: (4)-->(2)
+ │    │    ├── project
+ │    │    │    ├── columns: "?column?":23(int!null)
+ │    │    │    ├── outer: (2)
+ │    │    │    ├── stats: [rows=1000]
+ │    │    │    ├── fd: ()-->(23)
+ │    │    │    ├── left-join (cross)
+ │    │    │    │    ├── outer: (2)
+ │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ │    │    │    │    ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
+ │    │    │    │    ├── scan table1
+ │    │    │    │    │    └── stats: [rows=1000]
+ │    │    │    │    ├── values
+ │    │    │    │    │    ├── cardinality: [0 - 0]
+ │    │    │    │    │    ├── stats: [rows=0]
+ │    │    │    │    │    └── key: ()
+ │    │    │    │    └── filters
+ │    │    │    │         └── t0.col1:2 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
+ │    │    │    └── projections
+ │    │    │         └── 1 [as="?column?":23, type=int]
+ │    │    └── filters (true)
+ │    └── aggregations
+ │         └── const-agg [as="?column?":23, type=int, outer=(23)]
+ │              └── "?column?":23 [type=int]
+ └── projections
+      └── "?column?":23 [as="?column?":24, type=int, outer=(23)]
+
+norm colstat=1 colstat=2 disable=SimplifyLeftJoinWithZeroRowsRight
+SELECT * FROM (SELECT 1) AS a(x) LEFT JOIN (SELECT 2) AS b(x) ON a.x = b.x
+----
+left-join (cross)
+ ├── columns: x:1(int!null) x:2(int)
+ ├── cardinality: [1 - 1]
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=1]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── values
+ │    ├── columns: "?column?":1(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    └── (1,) [type=tuple{int}]
+ ├── values
+ │    ├── columns: "?column?":2(int!null)
+ │    ├── cardinality: [0 - 0]
+ │    ├── stats: [rows=0, distinct(2)=0, null(2)=0]
+ │    ├── key: ()
+ │    └── fd: ()-->(2)
+ └── filters (true)
+
+exec-ddl
+CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, b));
+----
+
+exec-ddl
+CREATE TABLE def (d INT, e INT, f INT, PRIMARY KEY (d, e));
+----
+
+exec-ddl
+ALTER TABLE abc INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 100,
+    "avg_size": 1
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 10,
+    "avg_size": 2
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE def INJECT STATISTICS '[
+  {
+    "columns": ["d"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["e"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+----
+
+# TODO(rytaft): The cardinality estimates here are unrealistically low.
+# Maybe revisit this? I doubt there's anything we can do there though.
+expr format=show-all colstat=7 colstat=8 colstat=(7, 8) colstat=1 colstat=2 colstat=3 colstat=(1, 2, 3)
+(MakeLookupJoin
+  (Scan [ (Table "abc") (Cols "a,b,c") ])
+  [ (JoinType "inner-join") (Table "def") (Index "def@def_pkey") (KeyCols "a,b") (Cols "a,b,c,d,f,e") ]
+  [ ]
+)
+----
+inner-join (lookup t.public.def)
+ ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int) t.public.def.d:6(int!null) t.public.def.e:7(int!null) t.public.def.f:8(int)
+ ├── key columns: [1 2] = [6 7]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=0.951626, null(3)=0.01, distinct(6)=1, null(6)=0, distinct(7)=1, null(7)=0, distinct(8)=0.999501, null(8)=0.01, distinct(7,8)=0.999951, null(7,8)=0, distinct(1-3)=0.995017, null(1-3)=0]
+ ├── cost: 2137.96
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (6,7)
+ ├── fd: (1,2)-->(3), (6,7)-->(8), (1)==(6), (6)==(1), (2)==(7), (7)==(2)
+ ├── interesting orderings: (+(1|6),+(2|7))
+ ├── scan t.public.abc
+ │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(1-3)=100, null(1-3)=0]
+ │    ├── cost: 131.87
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1,2)
+ │    ├── fd: (1,2)-->(3)
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+1,+2)
+ └── filters (true)
+
+# TODO(rytaft): The cardinality estimates for the semi-join are the same as the table.
+# The semi-join currently ignores the selectivities of the filters in the On condition.
+# We should fix this.
+expr format=show-all colstat=7 colstat=8 colstat=(7, 8) colstat=1 colstat=2 colstat=3 colstat=(1, 2, 3)
+(MakeLookupJoin
+  (Scan [ (Table "abc") (Cols "a,b,c") ])
+  [ (JoinType "semi-join") (Table "def") (Index "def@def_pkey") (KeyCols "a,b") (Cols "a,b,c,d,e") ]
+  [ ]
+)
+----
+semi-join (lookup t.public.def)
+ ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
+ ├── key columns: [1 2] = [6 7]
+ ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(7,8)=1, null(7,8)=0, distinct(1-3)=100, null(1-3)=0]
+ ├── cost: 2137.95
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(3)
+ ├── interesting orderings: (+1,+2)
+ ├── scan t.public.abc
+ │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(1-3)=100, null(1-3)=0]
+ │    ├── cost: 131.87
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1,2)
+ │    ├── fd: (1,2)-->(3)
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+1,+2)
+ └── filters (true)
+
+expr format=show-all colstat=7 colstat=8 colstat=(7, 8) colstat=1 colstat=2 colstat=3 colstat=(1, 2, 3)
+(MakeLookupJoin
+  (Scan [ (Table "abc") (Cols "a,b,c") ])
+  [ (JoinType "anti-join") (Table "def") (Index "def@def_pkey") (KeyCols "a,b") (Cols "a,b,c,d,e") ]
+  [ ]
+)
+----
+anti-join (lookup t.public.def)
+ ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
+ ├── key columns: [1 2] = [6 7]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=0.956179, null(2)=0, distinct(3)=0.956179, null(3)=0.01, distinct(7)=0.633968, null(7)=0, distinct(8)=0.633968, null(8)=0, distinct(7,8)=0.633968, null(7,8)=0, distinct(1-3)=1, null(1-3)=0]
+ ├── cost: 2137.95
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(3)
+ ├── interesting orderings: (+1,+2)
+ ├── scan t.public.abc
+ │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(1-3)=100, null(1-3)=0]
+ │    ├── cost: 131.87
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1,2)
+ │    ├── fd: (1,2)-->(3)
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+1,+2)
+ └── filters (true)
+
+expr format=show-all colstat=7 colstat=8 colstat=(7, 8) colstat=1 colstat=2 colstat=3 colstat=(1, 2, 3)
+(MakeLookupJoin
+  (Scan [ (Table "abc") (Cols "a,b,c") ])
+  [ (JoinType "semi-join") (Table "def") (Index "def@def_pkey") (KeyCols "a,b") (Cols "a,b,c,d,e") ]
+  [ (False) ]
+)
+----
+semi-join (lookup t.public.def)
+ ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
+ ├── key columns: [1 2] = [6 7]
+ ├── cardinality: [0 - 0]
+ ├── stats: [rows=0, distinct(1)=0, null(1)=0, distinct(2)=0, null(2)=0, distinct(3)=0, null(3)=0, distinct(7)=0, null(7)=0, distinct(8)=0, null(8)=0, distinct(7,8)=0, null(7,8)=0, distinct(1-3)=0, null(1-3)=0]
+ ├── cost: 2137.95
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(3)
+ ├── interesting orderings: (+1,+2)
+ ├── scan t.public.abc
+ │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(1-3)=100, null(1-3)=0]
+ │    ├── cost: 131.87
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1,2)
+ │    ├── fd: (1,2)-->(3)
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+1,+2)
+ └── filters
+      └── false [type=bool, constraints=(contradiction; tight)]
+
+expr format=show-all colstat=7 colstat=8 colstat=(7, 8) colstat=1 colstat=2 colstat=3 colstat=(1, 2, 3)
+(MakeLookupJoin
+  (Scan [ (Table "abc") (Cols "a,b,c") ])
+  [ (JoinType "anti-join") (Table "def") (Index "def@def_pkey") (KeyCols "a,b") (Cols "a,b,c,d,e") ]
+  [ (False) ]
+)
+----
+anti-join (lookup t.public.def)
+ ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
+ ├── key columns: [1 2] = [6 7]
+ ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(7,8)=1, null(7,8)=0, distinct(1-3)=100, null(1-3)=0]
+ ├── cost: 2137.96
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(3)
+ ├── interesting orderings: (+1,+2)
+ ├── scan t.public.abc
+ │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(1-3)=100, null(1-3)=0]
+ │    ├── cost: 131.87
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1,2)
+ │    ├── fd: (1,2)-->(3)
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+1,+2)
+ └── filters
+      └── false [type=bool, constraints=(contradiction; tight)]
+
+# Regression test for #40460.
+opt disable=SimplifyJoinFilters
+SELECT
+    *
+FROM
+    abc
+    FULL JOIN (SELECT * FROM abc WHERE false) ON
+            false
+            IS NOT DISTINCT FROM not_like_escape(
+                    '',
+                    NULL::STRING,
+                    (SELECT NULL)::STRING
+                );
+----
+full-join (cross)
+ ├── columns: a:1(int) b:2(int) c:3(int) a:6(int) b:7(int) c:8(int)
+ ├── multiplicity: left-rows(exactly-one), right-rows(one-or-more)
+ ├── stats: [rows=100]
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(3,6-8)
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int)
+ │    ├── stats: [rows=100]
+ │    ├── key: (1,2)
+ │    └── fd: (1,2)-->(3)
+ ├── values
+ │    ├── columns: a:6(int!null) b:7(int!null) c:8(int!null)
+ │    ├── cardinality: [0 - 0]
+ │    ├── stats: [rows=0]
+ │    ├── key: ()
+ │    └── fd: ()-->(6-8)
+ └── filters
+      └── false [type=bool, constraints=(contradiction; tight)]
+
+expr
+(SemiJoin
+    (Values
+      [ (Tuple [ (Const 1 "int") (Const 2 "int") ] "tuple{int}" ) ]
+      [ (Cols [ (NewColumn "a" "int") (NewColumn "b" "int") ]) ]
+    )
+    (Scan [ (Table "uv") (Cols "u,v,rowid") ])
+    []
+    []
+)
+----
+semi-join (cross)
+ ├── columns: a:1(int!null) b:2(int!null)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── values
+ │    ├── columns: a:1(int!null) b:2(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1,2)
+ │    └── (1, 2) [type=tuple{int}]
+ ├── scan uv
+ │    ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
+ │    ├── stats: [rows=10000]
+ │    ├── key: (5)
+ │    └── fd: (5)-->(3,4)
+ └── filters (true)
+
+expr
+(AntiJoin
+    (Values
+      [ (Tuple [ (Const 1 "int") (Const 2 "int") ] "tuple{int}" ) ]
+      [ (Cols [ (NewColumn "a" "int") (NewColumn "b" "int") ]) ]
+    )
+    (Scan [ (Table "uv") (Cols "u,v,rowid") ])
+    []
+    []
+)
+----
+anti-join (cross)
+ ├── columns: a:1(int!null) b:2(int!null)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1e-10]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── values
+ │    ├── columns: a:1(int!null) b:2(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1,2)
+ │    └── (1, 2) [type=tuple{int}]
+ ├── scan uv
+ │    ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
+ │    ├── stats: [rows=10000]
+ │    ├── key: (5)
+ │    └── fd: (5)-->(3,4)
+ └── filters (true)
+
+exec-ddl
+ALTER TABLE xysd INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 5000,
+    "avg_size": 2
+  },
+  {
+    "columns": ["y"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 400,
+    "avg_size": 3
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 10,
+    "avg_size": 9
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE uv INJECT STATISTICS '[
+  {
+    "columns": ["u"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 500,
+    "avg_size": 5
+  },
+  {
+    "columns": ["v"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 100,
+    "avg_size": 6
+  },
+  {
+    "columns": ["u","v"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 550
+  },
+  {
+    "columns": ["rowid"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+----
+
+# We use multi-column stats split across the join to estimate the selectivity
+# here.
+opt
+SELECT * FROM xysd, uv WHERE (s = 'foo' AND u = 3 AND v = 4) OR (s = 'bar' AND u = 5 AND v = 6)
+----
+project
+ ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) u:7(int!null) v:8(int!null)
+ ├── stats: [rows=59372.7, distinct(3)=2, null(3)=0, distinct(7)=2, null(7)=0, distinct(8)=2, null(8)=0, distinct(7,8)=2.18365, null(7,8)=0]
+ ├── fd: (1)-->(2-4), (3,4)-->(1,2)
+ └── distinct-on
+      ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) u:7(int!null) v:8(int!null) rowid:9(int!null)
+      ├── grouping columns: x:1(int!null) rowid:9(int!null)
+      ├── stats: [rows=16247.2, distinct(1,9)=16247.2, null(1,9)=0]
+      ├── key: (1,9)
+      ├── fd: (1,9)-->(2-4,7,8)
+      ├── union-all
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) u:7(int!null) v:8(int!null) rowid:9(int!null)
+      │    ├── left columns: x:12(int) y:13(int) s:14(string) d:15(decimal) u:18(int) v:19(int) rowid:20(int)
+      │    ├── right columns: x:23(int) y:24(int) s:25(string) d:26(decimal) u:29(int) v:30(int) rowid:31(int)
+      │    ├── stats: [rows=16247.2, distinct(1,9)=16247.2, null(1,9)=0]
+      │    ├── inner-join (cross)
+      │    │    ├── columns: x:12(int!null) y:13(int) s:14(string!null) d:15(decimal!null) u:18(int!null) v:19(int!null) rowid:20(int!null)
+      │    │    ├── stats: [rows=8123.58, distinct(12,20)=8123.58, null(12,20)=0]
+      │    │    ├── key: (12,20)
+      │    │    ├── fd: ()-->(14,18,19), (12)-->(13,15), (15)-->(12,13)
+      │    │    ├── index-join xysd
+      │    │    │    ├── columns: x:12(int!null) y:13(int) s:14(string!null) d:15(decimal!null)
+      │    │    │    ├── stats: [rows=500, distinct(12)=500, null(12)=0, distinct(14)=1, null(14)=0]
+      │    │    │    ├── key: (12)
+      │    │    │    ├── fd: ()-->(14), (12)-->(13,15), (15)-->(12,13)
+      │    │    │    └── scan xysd@xysd_s_d_key
+      │    │    │         ├── columns: x:12(int!null) s:14(string!null) d:15(decimal!null)
+      │    │    │         ├── constraint: /-14/15: [/'foo' - /'foo']
+      │    │    │         ├── stats: [rows=500, distinct(14)=1, null(14)=0]
+      │    │    │         ├── key: (12)
+      │    │    │         └── fd: ()-->(14), (12)-->(15), (15)-->(12)
+      │    │    ├── select
+      │    │    │    ├── columns: u:18(int!null) v:19(int!null) rowid:20(int!null)
+      │    │    │    ├── stats: [rows=16.2472, distinct(18)=1, null(18)=0, distinct(19)=1, null(19)=0, distinct(20)=16.2472, null(20)=0, distinct(18,19)=1, null(18,19)=0]
+      │    │    │    ├── key: (20)
+      │    │    │    ├── fd: ()-->(18,19)
+      │    │    │    ├── scan uv
+      │    │    │    │    ├── columns: u:18(int) v:19(int!null) rowid:20(int!null)
+      │    │    │    │    ├── stats: [rows=10000, distinct(18)=500, null(18)=0, distinct(19)=100, null(19)=0, distinct(20)=10000, null(20)=0, distinct(18,19)=550, null(18,19)=0]
+      │    │    │    │    ├── key: (20)
+      │    │    │    │    └── fd: (20)-->(18,19)
+      │    │    │    └── filters
+      │    │    │         ├── u:18 = 3 [type=bool, outer=(18), constraints=(/18: [/3 - /3]; tight), fd=()-->(18)]
+      │    │    │         └── v:19 = 4 [type=bool, outer=(19), constraints=(/19: [/4 - /4]; tight), fd=()-->(19)]
+      │    │    └── filters (true)
+      │    └── inner-join (cross)
+      │         ├── columns: x:23(int!null) y:24(int) s:25(string!null) d:26(decimal!null) u:29(int!null) v:30(int!null) rowid:31(int!null)
+      │         ├── stats: [rows=8123.58, distinct(23,31)=8123.58, null(23,31)=0]
+      │         ├── key: (23,31)
+      │         ├── fd: ()-->(25,29,30), (23)-->(24,26), (26)-->(23,24)
+      │         ├── index-join xysd
+      │         │    ├── columns: x:23(int!null) y:24(int) s:25(string!null) d:26(decimal!null)
+      │         │    ├── stats: [rows=500, distinct(23)=500, null(23)=0, distinct(25)=1, null(25)=0]
+      │         │    ├── key: (23)
+      │         │    ├── fd: ()-->(25), (23)-->(24,26), (26)-->(23,24)
+      │         │    └── scan xysd@xysd_s_d_key
+      │         │         ├── columns: x:23(int!null) s:25(string!null) d:26(decimal!null)
+      │         │         ├── constraint: /-25/26: [/'bar' - /'bar']
+      │         │         ├── stats: [rows=500, distinct(25)=1, null(25)=0]
+      │         │         ├── key: (23)
+      │         │         └── fd: ()-->(25), (23)-->(26), (26)-->(23)
+      │         ├── select
+      │         │    ├── columns: u:29(int!null) v:30(int!null) rowid:31(int!null)
+      │         │    ├── stats: [rows=16.2472, distinct(29)=1, null(29)=0, distinct(30)=1, null(30)=0, distinct(31)=16.2472, null(31)=0, distinct(29,30)=1, null(29,30)=0]
+      │         │    ├── key: (31)
+      │         │    ├── fd: ()-->(29,30)
+      │         │    ├── scan uv
+      │         │    │    ├── columns: u:29(int) v:30(int!null) rowid:31(int!null)
+      │         │    │    ├── stats: [rows=10000, distinct(29)=500, null(29)=0, distinct(30)=100, null(30)=0, distinct(31)=10000, null(31)=0, distinct(29,30)=550, null(29,30)=0]
+      │         │    │    ├── key: (31)
+      │         │    │    └── fd: (31)-->(29,30)
+      │         │    └── filters
+      │         │         ├── u:29 = 5 [type=bool, outer=(29), constraints=(/29: [/5 - /5]; tight), fd=()-->(29)]
+      │         │         └── v:30 = 6 [type=bool, outer=(30), constraints=(/30: [/6 - /6]; tight), fd=()-->(30)]
+      │         └── filters (true)
+      └── aggregations
+           ├── const-agg [as=y:2, type=int, outer=(2)]
+           │    └── y:2 [type=int]
+           ├── const-agg [as=s:3, type=string, outer=(3)]
+           │    └── s:3 [type=string]
+           ├── const-agg [as=d:4, type=decimal, outer=(4)]
+           │    └── d:4 [type=decimal]
+           ├── const-agg [as=u:7, type=int, outer=(7)]
+           │    └── u:7 [type=int]
+           └── const-agg [as=v:8, type=int, outer=(8)]
+                └── v:8 [type=int]
+
+# Test selectivity of ORed join predicates
+# Estimate of # rows should be low, and nowhere near the no-stats
+# cartesian join estimate of 1,000,000 rows.
+
+exec-ddl
+CREATE TABLE classes (classID int, description varchar(50))
+----
+
+exec-ddl
+CREATE TABLE classRequest (studentID int, firstChoiceClassID int, secondChoiceClassID int, thirdChoiceClassID int, primary key(studentID))
+----
+
+norm
+SELECT * FROM classes, classRequest WHERE classRequest.firstChoiceClassID = classes.classID OR
+                                          classRequest.secondChoiceClassID = classes.classID
+----
+inner-join (cross)
+ ├── columns: classid:1(int!null) description:2(varchar) studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ ├── stats: [rows=19701, distinct(1)=100, null(1)=0]
+ ├── fd: (6)-->(7-9)
+ ├── scan classes
+ │    ├── columns: classid:1(int) description:2(varchar)
+ │    └── stats: [rows=1000, distinct(1)=100, null(1)=10]
+ ├── scan classrequest
+ │    ├── columns: studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ │    ├── stats: [rows=1000, distinct(7)=100, null(7)=10, distinct(8)=100, null(8)=10]
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7-9)
+ └── filters
+      └── (firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = classid:1) [type=bool, outer=(1,7,8), constraints=(/1: (/NULL - ])]
+
+norm
+SELECT * FROM classes, classRequest WHERE classRequest.firstChoiceClassID = classes.classID OR
+                                          classRequest.secondChoiceClassID = classes.classID OR
+                                          classRequest.thirdChoiceClassID = classes.classID
+----
+inner-join (cross)
+ ├── columns: classid:1(int!null) description:2(varchar) studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ ├── stats: [rows=29404, distinct(1)=100, null(1)=0]
+ ├── fd: (6)-->(7-9)
+ ├── scan classes
+ │    ├── columns: classid:1(int) description:2(varchar)
+ │    └── stats: [rows=1000, distinct(1)=100, null(1)=10]
+ ├── scan classrequest
+ │    ├── columns: studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ │    ├── stats: [rows=1000, distinct(7)=100, null(7)=10, distinct(8)=100, null(8)=10, distinct(9)=100, null(9)=10]
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7-9)
+ └── filters
+      └── ((firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = classid:1)) OR (thirdchoiceclassid:9 = classid:1) [type=bool, outer=(1,7-9), constraints=(/1: (/NULL - ])]
+
+norm
+SELECT * FROM classes LEFT OUTER JOIN classRequest ON
+                      classRequest.firstChoiceClassID = classes.classID OR
+                      classRequest.secondChoiceClassID = classes.classID
+----
+left-join (cross)
+ ├── columns: classid:1(int) description:2(varchar) studentid:6(int) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ ├── stats: [rows=19900]
+ ├── fd: (6)-->(7-9)
+ ├── scan classes
+ │    ├── columns: classid:1(int) description:2(varchar)
+ │    └── stats: [rows=1000, distinct(1)=100, null(1)=10]
+ ├── scan classrequest
+ │    ├── columns: studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ │    ├── stats: [rows=1000, distinct(7)=100, null(7)=10, distinct(8)=100, null(8)=10]
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7-9)
+ └── filters
+      └── (firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = classid:1) [type=bool, outer=(1,7,8), constraints=(/1: (/NULL - ])]
+
+# Presence of a single-table join term brings the estimate back up to cartesian join territory.
+# Currently only ORed equijoin terms are handled. Otherwise we give up on trying to get accurate estimates.
+norm
+SELECT * FROM classes LEFT OUTER JOIN classRequest ON
+                      classRequest.firstChoiceClassID = classes.classID OR
+                      classRequest.secondChoiceClassID = 1
+----
+left-join (cross)
+ ├── columns: classid:1(int) description:2(varchar) studentid:6(int) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ ├── stats: [rows=333333]
+ ├── fd: (6)-->(7-9)
+ ├── scan classes
+ │    ├── columns: classid:1(int) description:2(varchar)
+ │    └── stats: [rows=1000]
+ ├── scan classrequest
+ │    ├── columns: studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ │    ├── stats: [rows=1000, distinct(8)=100, null(8)=10]
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7-9)
+ └── filters
+      └── (firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = 1) [type=bool, outer=(1,7,8)]
+
+# Selectivity of each term is 1, so combined selectivity is 1 and 1000 rows
+# estimate is expected.
+norm
+SELECT * FROM classes WHERE EXISTS (SELECT * FROM classRequest WHERE
+                      classRequest.firstChoiceClassID = classes.classID OR
+                      classRequest.secondChoiceClassID = classes.classID)
+----
+semi-join (cross)
+ ├── columns: classid:1(int) description:2(varchar)
+ ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
+ ├── scan classes
+ │    ├── columns: classid:1(int) description:2(varchar)
+ │    └── stats: [rows=1000, distinct(1)=100, null(1)=10]
+ ├── scan classrequest
+ │    ├── columns: firstchoiceclassid:7(int) secondchoiceclassid:8(int)
+ │    └── stats: [rows=1000, distinct(7)=100, null(7)=10, distinct(8)=100, null(8)=10]
+ └── filters
+      └── (firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = classid:1) [type=bool, outer=(1,7,8), constraints=(/1: (/NULL - ])]
+
+norm
+SELECT * FROM classes WHERE EXISTS (SELECT * FROM classRequest WHERE
+                      classRequest.firstChoiceClassID = classes.classID  OR
+                      classRequest.secondChoiceClassID = classes.classID  OR
+                      classRequest.thirdChoiceClassID = classes.classID)
+----
+semi-join (cross)
+ ├── columns: classid:1(int) description:2(varchar)
+ ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
+ ├── scan classes
+ │    ├── columns: classid:1(int) description:2(varchar)
+ │    └── stats: [rows=1000, distinct(1)=100, null(1)=10]
+ ├── scan classrequest
+ │    ├── columns: firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ │    └── stats: [rows=1000, distinct(7)=100, null(7)=10, distinct(8)=100, null(8)=10, distinct(9)=100, null(9)=10]
+ └── filters
+      └── ((firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = classid:1)) OR (thirdchoiceclassid:9 = classid:1) [type=bool, outer=(1,7-9), constraints=(/1: (/NULL - ])]
+
+norm
+SELECT * FROM classes WHERE NOT EXISTS (SELECT * FROM classRequest WHERE
+                      classRequest.firstChoiceClassID = classes.classID OR
+                      classRequest.secondChoiceClassID = classes.classID)
+----
+anti-join (cross)
+ ├── columns: classid:1(int) description:2(varchar)
+ ├── stats: [rows=1]
+ ├── scan classes
+ │    ├── columns: classid:1(int) description:2(varchar)
+ │    └── stats: [rows=1000, distinct(1)=100, null(1)=10]
+ ├── scan classrequest
+ │    ├── columns: firstchoiceclassid:7(int) secondchoiceclassid:8(int)
+ │    └── stats: [rows=1000, distinct(7)=100, null(7)=10, distinct(8)=100, null(8)=10]
+ └── filters
+      └── (firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = classid:1) [type=bool, outer=(1,7,8), constraints=(/1: (/NULL - ])]
+
+norm
+SELECT * FROM classes WHERE EXISTS (SELECT * FROM classRequest WHERE
+                      classRequest.firstChoiceClassID = classes.classID OR
+                      classRequest.secondChoiceClassID = 5)
+----
+semi-join (cross)
+ ├── columns: classid:1(int) description:2(varchar)
+ ├── stats: [rows=333.333]
+ ├── scan classes
+ │    ├── columns: classid:1(int) description:2(varchar)
+ │    └── stats: [rows=1000]
+ ├── scan classrequest
+ │    ├── columns: firstchoiceclassid:7(int) secondchoiceclassid:8(int)
+ │    └── stats: [rows=1000, distinct(8)=100, null(8)=10]
+ └── filters
+      └── (firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = 5) [type=bool, outer=(1,7,8)]
+
+# Tests with real stats
+exec-ddl
+ALTER TABLE classes INJECT STATISTICS '[
+  {
+    "columns": ["classid"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 5000
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE classRequest INJECT STATISTICS '[
+  {
+    "columns": ["firstchoiceclassid"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 500
+  },
+  {
+    "columns": ["secondchoiceclassid"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 50
+  },
+  {
+    "columns": ["thirdchoiceclassid"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 10
+  }
+]'
+----
+
+# Like the no-stats tests, these should show cardinalities much smaller than
+# the cross cardinality.
+norm
+SELECT * FROM classes, classRequest WHERE classRequest.firstChoiceClassID = classes.classID OR
+                                          classRequest.secondChoiceClassID = classes.classID
+----
+inner-join (cross)
+ ├── columns: classid:1(int!null) description:2(varchar) studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ ├── stats: [rows=1999.8, distinct(1)=1999.8, null(1)=0]
+ ├── fd: (6)-->(7-9)
+ ├── scan classes
+ │    ├── columns: classid:1(int) description:2(varchar)
+ │    └── stats: [rows=5000, distinct(1)=5000, null(1)=0]
+ ├── scan classrequest
+ │    ├── columns: studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ │    ├── stats: [rows=1000, distinct(7)=500, null(7)=0, distinct(8)=50, null(8)=0]
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7-9)
+ └── filters
+      └── (firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = classid:1) [type=bool, outer=(1,7,8), constraints=(/1: (/NULL - ])]
+
+norm
+SELECT * FROM classes, classRequest WHERE classRequest.firstChoiceClassID = classes.classID OR
+                                          classRequest.thirdChoiceClassID = classes.classID
+----
+inner-join (cross)
+ ├── columns: classid:1(int!null) description:2(varchar) studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ ├── stats: [rows=1999.8, distinct(1)=1999.8, null(1)=0]
+ ├── fd: (6)-->(7-9)
+ ├── scan classes
+ │    ├── columns: classid:1(int) description:2(varchar)
+ │    └── stats: [rows=5000, distinct(1)=5000, null(1)=0]
+ ├── scan classrequest
+ │    ├── columns: studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ │    ├── stats: [rows=1000, distinct(7)=500, null(7)=0, distinct(9)=10, null(9)=0]
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7-9)
+ └── filters
+      └── (firstchoiceclassid:7 = classid:1) OR (thirdchoiceclassid:9 = classid:1) [type=bool, outer=(1,7,9), constraints=(/1: (/NULL - ])]
+
+norm
+SELECT * FROM classes, classRequest WHERE classRequest.firstChoiceClassID = classes.classID OR
+                                          classRequest.secondChoiceClassID = classes.classID OR
+                                          classRequest.thirdChoiceClassID = classes.classID
+----
+inner-join (cross)
+ ├── columns: classid:1(int!null) description:2(varchar) studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ ├── stats: [rows=2999.4, distinct(1)=2999.4, null(1)=0]
+ ├── fd: (6)-->(7-9)
+ ├── scan classes
+ │    ├── columns: classid:1(int) description:2(varchar)
+ │    └── stats: [rows=5000, distinct(1)=5000, null(1)=0]
+ ├── scan classrequest
+ │    ├── columns: studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ │    ├── stats: [rows=1000, distinct(7)=500, null(7)=0, distinct(8)=50, null(8)=0, distinct(9)=10, null(9)=0]
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7-9)
+ └── filters
+      └── ((firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = classid:1)) OR (thirdchoiceclassid:9 = classid:1) [type=bool, outer=(1,7-9), constraints=(/1: (/NULL - ])]
+
+norm
+SELECT * FROM classes LEFT OUTER JOIN classRequest ON
+                      classRequest.firstChoiceClassID = classes.classID OR
+                      classRequest.secondChoiceClassID = classes.classID
+----
+left-join (cross)
+ ├── columns: classid:1(int) description:2(varchar) studentid:6(int) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ ├── stats: [rows=5000]
+ ├── fd: (6)-->(7-9)
+ ├── scan classes
+ │    ├── columns: classid:1(int) description:2(varchar)
+ │    └── stats: [rows=5000, distinct(1)=5000, null(1)=0]
+ ├── scan classrequest
+ │    ├── columns: studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ │    ├── stats: [rows=1000, distinct(7)=500, null(7)=0, distinct(8)=50, null(8)=0]
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7-9)
+ └── filters
+      └── (firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = classid:1) [type=bool, outer=(1,7,8), constraints=(/1: (/NULL - ])]
+
+norm
+SELECT * FROM classes WHERE EXISTS (SELECT * FROM classRequest WHERE
+                      classRequest.firstChoiceClassID = classes.classID  OR
+                      classRequest.secondChoiceClassID = classes.classID)
+----
+semi-join (cross)
+ ├── columns: classid:1(int) description:2(varchar)
+ ├── stats: [rows=545, distinct(1)=545, null(1)=0]
+ ├── scan classes
+ │    ├── columns: classid:1(int) description:2(varchar)
+ │    └── stats: [rows=5000, distinct(1)=5000, null(1)=0]
+ ├── scan classrequest
+ │    ├── columns: firstchoiceclassid:7(int) secondchoiceclassid:8(int)
+ │    └── stats: [rows=1000, distinct(7)=500, null(7)=0, distinct(8)=50, null(8)=0]
+ └── filters
+      └── (firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = classid:1) [type=bool, outer=(1,7,8), constraints=(/1: (/NULL - ])]
+
+norm
+SELECT * FROM classes WHERE NOT EXISTS (SELECT * FROM classRequest WHERE
+                      classRequest.firstChoiceClassID = classes.classID OR
+                      classRequest.secondChoiceClassID = classes.classID)
+----
+anti-join (cross)
+ ├── columns: classid:1(int) description:2(varchar)
+ ├── stats: [rows=4455]
+ ├── scan classes
+ │    ├── columns: classid:1(int) description:2(varchar)
+ │    └── stats: [rows=5000, distinct(1)=5000, null(1)=0]
+ ├── scan classrequest
+ │    ├── columns: firstchoiceclassid:7(int) secondchoiceclassid:8(int)
+ │    └── stats: [rows=1000, distinct(7)=500, null(7)=0, distinct(8)=50, null(8)=0]
+ └── filters
+      └── (firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = classid:1) [type=bool, outer=(1,7,8), constraints=(/1: (/NULL - ])]
+
+# Regression test for #84236. Don't calculate selectivity as NaN.
+exec-ddl
+CREATE TABLE t84236_1 (
+  col1_0 DATE NOT NULL,
+  col1_1 FLOAT4 NOT NULL,
+  col1_2 INT NOT NULL,
+  col1_4 INT NOT NULL,
+  col1_5 BOOL,
+  col1_6 STRING NOT NULL,
+  PRIMARY KEY (col1_4 ASC, col1_1, col1_6, col1_2 ASC)
+);
+----
+
+exec-ddl
+CREATE TABLE t84236_2 (col2_0 BIT(27), col2_2 TIMETZ NOT NULL);
+----
+
+norm
+SELECT
+        t2.col2_0, '1971-10-24':::DATE
+FROM
+        t84236_2 AS t2
+        FULL JOIN t84236_2 AS t2_2
+                INNER JOIN t84236_1 AS t1 ON NULL ON t1.col1_5
+ORDER BY
+        t2.col2_2 DESC
+LIMIT
+        82;
+----
+project
+ ├── columns: col2_0:1(bit) date:19(date!null)  [hidden: t2.col2_2:2(timetz)]
+ ├── cardinality: [0 - 82]
+ ├── stats: [rows=82]
+ ├── fd: ()-->(19)
+ ├── ordering: -2 opt(19) [actual: -2]
+ ├── limit
+ │    ├── columns: t2.col2_0:1(bit) t2.col2_2:2(timetz) col1_5:15(bool)
+ │    ├── internal-ordering: -2
+ │    ├── cardinality: [0 - 82]
+ │    ├── stats: [rows=82]
+ │    ├── ordering: -2
+ │    ├── sort
+ │    │    ├── columns: t2.col2_0:1(bit) t2.col2_2:2(timetz) col1_5:15(bool)
+ │    │    ├── stats: [rows=1000]
+ │    │    ├── ordering: -2
+ │    │    ├── limit hint: 82.00
+ │    │    └── full-join (cross)
+ │    │         ├── columns: t2.col2_0:1(bit) t2.col2_2:2(timetz) col1_5:15(bool)
+ │    │         ├── multiplicity: left-rows(exactly-one), right-rows(one-or-more)
+ │    │         ├── stats: [rows=1000]
+ │    │         ├── scan t84236_2 [as=t2]
+ │    │         │    ├── columns: t2.col2_0:1(bit) t2.col2_2:2(timetz!null)
+ │    │         │    └── stats: [rows=1000]
+ │    │         ├── values
+ │    │         │    ├── columns: col1_5:15(bool!null)
+ │    │         │    ├── cardinality: [0 - 0]
+ │    │         │    ├── stats: [rows=0, distinct(15)=0, null(15)=0]
+ │    │         │    ├── key: ()
+ │    │         │    └── fd: ()-->(15)
+ │    │         └── filters
+ │    │              └── col1_5:15 [type=bool, outer=(15), constraints=(/15: [/true - /true]; tight), fd=()-->(15)]
+ │    └── 82 [type=int]
+ └── projections
+      └── '1971-10-24' [as=date:19, type=date]
+
+# Regression test for #88455 - don't double-count selectivity for OR expressions
+# with tight constraints in join ON conditions.
+exec-ddl
+CREATE TABLE t0_88455 (c0 INT);
+----
+
+exec-ddl
+CREATE TABLE t1_88455 (c0 INT);
+----
+
+exec-ddl
+ALTER TABLE t0_88455 INJECT STATISTICS '[
+  {
+    "columns": [
+    "c0"
+    ],
+    "created_at": "2022-08-09 09:00:00.00000",
+    "distinct_count": 13,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 13
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE t1_88455 INJECT STATISTICS '[
+  {
+    "columns": [
+    "c0"
+    ],
+    "created_at": "2022-08-09 09:00:00.00000",
+    "distinct_count": 5,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 5
+  }
+]'
+----
+
+opt format=show-stats
+SELECT * FROM t0_88455 LEFT OUTER JOIN t1_88455 ON t0_88455.c0<1 OR t0_88455.c0>1;
+----
+left-join (cross)
+ ├── columns: c0:1(int) c0:5(int)
+ ├── stats: [rows=21.6667]
+ ├── scan t0_88455
+ │    ├── columns: t0_88455.c0:1(int)
+ │    └── stats: [rows=13, distinct(1)=13, null(1)=0]
+ ├── scan t1_88455
+ │    ├── columns: t1_88455.c0:5(int)
+ │    └── stats: [rows=5]
+ └── filters
+      └── (t0_88455.c0:1 < 1) OR (t0_88455.c0:1 > 1) [type=bool, outer=(1), constraints=(/1: (/NULL - /0] [/2 - ]; tight)]

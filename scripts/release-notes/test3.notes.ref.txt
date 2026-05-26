@@ -1,0 +1,43 @@
+### Bug fixes
+
+- Feature A [#1][#1] [6a84145e9][6a84145e9]
+- Feature C [#1][#1] [0ac9dc576][0ac9dc576]
+- Feature B [#1][#1] [93ba1ab8f][93ba1ab8f]
+- Feature D [#1][#1] [5fc640e17][5fc640e17]
+
+### Miscellaneous
+
+#### Changes without release note annotation
+
+- [#unknown][#unknown] [4f4329fdc][4f4329fdc] master update (test3 <test3@example.com>)
+
+### Doc updates
+
+Docs team: Please add these manually.
+
+### Contributors
+
+This release includes 2 merged PRs by 1 author.
+We would like to thank the following contributors from the CockroachDB community:
+
+- test3
+
+### PRs merged by contributors
+
+- test3:
+  - 2018-04-22 [#unknown][#unknown] [4f4329fdc][4f4329fdc] (+   0 -   0 ~   0/ 0) master update
+  - 2018-04-22 [#100  ][#100  ] [b719cfe9e][b719cfe9e] (+   0 -   0 ~   0/ 0) PR title alternate format
+  - 2018-04-22 [#1    ][#1    ] [ef634455e][ef634455e] (+   0 -   0 ~   0/ 0) PR title (4 commits)
+
+
+[#1]: https://github.com/cockroachdb/cockroach/pull/1
+[#100]: https://github.com/cockroachdb/cockroach/pull/100
+[#unknown]: https://github.com/cockroachdb/cockroach/pull/unknown
+[0ac9dc576]: https://github.com/cockroachdb/cockroach/commit/0ac9dc576
+[4f4329fdc]: https://github.com/cockroachdb/cockroach/commit/4f4329fdc
+[5fc640e17]: https://github.com/cockroachdb/cockroach/commit/5fc640e17
+[6a84145e9]: https://github.com/cockroachdb/cockroach/commit/6a84145e9
+[93ba1ab8f]: https://github.com/cockroachdb/cockroach/commit/93ba1ab8f
+[b719cfe9e]: https://github.com/cockroachdb/cockroach/commit/b719cfe9e
+[ef634455e]: https://github.com/cockroachdb/cockroach/commit/ef634455e
+

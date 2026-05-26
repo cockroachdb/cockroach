@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+genrule(
+    name = "genassets",
+    srcs = ["//pkg/ui/workspaces/db-console:db-console-ccl"],
+    outs = ["assets.tar.zst"],
+    cmd = """$(location //pkg/util/assetbundle/gen) $@ $(SRCS)""",
+    tools = ["//pkg/util/assetbundle/gen"],
+    visibility = ["//pkg/gen:__subpackages__"],
+)
+
+go_library(
+    name = "distccl",
+    srcs = ["distccl.go"],
+    embedsrcs = [":genassets"],  # keep
+    importpath = "github.com/cockroachdb/cockroach/pkg/ui/distccl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/ui",
+        "//pkg/util/assetbundle",
+    ],
+)

@@ -1,0 +1,7 @@
+# This directory contains patches for third-party vendored code in the Bazel build.
+
+filegroup(
+    name = "all_patches",
+    srcs = glob(["*.patch"]),
+    visibility = ["//visibility:public"],
+)

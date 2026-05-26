@@ -1,0 +1,253 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.kv.kvserver.loqrecovery.loqrecoverypb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb";
+
+import "roachpb/data.proto";
+import "roachpb/metadata.proto";
+import "gogoproto/gogo.proto";
+import "google/protobuf/timestamp.proto";
+
+enum DescriptorChangeType {
+  Split = 0;
+  Merge = 1;
+  ReplicaChange = 2;
+}
+
+// DescriptorChangeInfo future descriptor change info extracted from commit
+// triggers in raft log.
+message DescriptorChangeInfo {
+  // Change type.
+  DescriptorChangeType changeType = 1;
+  // Range descriptor containing new state of for replica change updates and
+  // LHS for split and merge operations.
+  roachpb.RangeDescriptor desc = 2;
+  // Optional range descriptor with is populated for split and merge changes
+  // and contains RHS descriptor for the operation.
+  roachpb.RangeDescriptor otherDesc = 3;
+}
+
+// ReplicaInfo contains info about state of range replica for the purpose of range
+// recovery. This information should be enough for recovery algorithm to pick a
+// survivor replica in when not replicas are available.
+// Information includes range descriptor as well as parts of raft state.
+// When changing this structure, care must be exercised to keep it compatible
+// with previous versions when serializing to json. See
+// loqrecovery/marshalling.go for details how format is preserved and
+// loqrecovery/collect.go on how replica info is generated with respect of
+// active cluster version.
+message ReplicaInfo {
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  int32 store_id = 2 [(gogoproto.customname) = "StoreID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
+  roachpb.RangeDescriptor desc = 3 [(gogoproto.nullable) = false];
+  uint64 raft_applied_index = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.RaftIndex"] ;
+  uint64 raft_committed_index = 5 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.RaftIndex"];
+  repeated DescriptorChangeInfo raft_log_descriptor_changes = 6 [(gogoproto.nullable) = false,
+    (gogoproto.jsontag) = "raft_log_descriptor_changes,omitempty"];
+  bool local_assumes_leaseholder = 7 [
+    (gogoproto.jsontag) = "local_assumes_leaseholder,omitempty"];
+}
+
+// ClusterMetadata contains info about cluster that planner can use when
+// creating a plan.
+message ClusterMetadata {
+  // ClusterID contains id of the cluster from which info was collected.
+  string cluster_id = 1 [(gogoproto.customname) = "ClusterID"];
+  // Version contains effective cluster version of the cluster from which
+  // info was collected.
+  roachpb.Version version = 2 [(gogoproto.nullable) = false];
+}
+
+// Collection of replica information gathered in a collect-info run.
+// ReplicaInfo in Replicas does not have to be constrained to a single node,
+// but in practice info collected from remote cluster will contain info per
+// node. In case of offline collection, replicas will belong to all stores
+// provided to the command regardless of owning node.
+message NodeReplicaInfo {
+  repeated ReplicaInfo replicas = 1 [(gogoproto.nullable) = false];
+}
+
+// Replica info collected from one or more nodes of a cluster.
+// When changing this structure, care must be exercised to keep it compatible
+// with previous versions when serializing to json. See
+// loqrecovery/marshalling.go for details how format is preserved.
+message ClusterReplicaInfo {
+  // ClusterID contains id of the cluster from which info was collected.
+  string cluster_id = 1 [(gogoproto.customname) = "ClusterID"];
+  // Descriptors contains range descriptors collected from meta ranges.
+  // Descriptors are optional and only present in collected info if system
+  // ranges didn't lose quorum. It could also be partial in some cases.
+  repeated roachpb.RangeDescriptor descriptors = 2 [(gogoproto.nullable) = false,
+    (gogoproto.jsontag) = "descriptors,omitempty"];
+  // LocalInfo contains one or more NodeReplicaInfo structs each containing a
+  // subset of full info. They are not guaranteed to be split by node, each
+  // element should contain disjoint subset of replica infos.
+  repeated NodeReplicaInfo local_info = 3 [(gogoproto.nullable) = false];
+  // Version contains effective cluster version of the cluster from which
+  // info was collected.
+  roachpb.Version version = 4 [(gogoproto.nullable) = false];
+}
+
+// ReplicaUpdate contains information that needs to be updated on replica on the node
+// to make it a designated survivor so that replica could act as a source of truth when
+// doing loss of quorum recovery.
+// When changing this structure, care must be exercised to keep it compatible
+// with previous versions when serializing to json. See
+// loqrecovery/marshalling.go for details how format is preserved.
+message ReplicaUpdate {
+  option (gogoproto.goproto_stringer) = false;
+
+  int64 range_id = 1 [(gogoproto.customname) = "RangeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID",
+    (gogoproto.moretags) = 'yaml:"RangeID"'];
+  bytes start_key = 2 [
+    (gogoproto.casttype) = "RecoveryKey",
+    (gogoproto.moretags) = 'yaml:"StartKey"'];
+  int32 old_replica_id = 3 [(gogoproto.customname) = "OldReplicaID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID",
+    (gogoproto.moretags) = 'yaml:"OldReplicaID"'];
+  roachpb.ReplicaDescriptor new_replica = 4 [(gogoproto.nullable) = false,
+    (gogoproto.moretags) = 'yaml:"NewReplica"'];
+  int32 next_replica_id = 5 [(gogoproto.customname) = "NextReplicaID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID",
+    (gogoproto.moretags) = 'yaml:"NextReplicaID"'];
+}
+
+// ReplicaUpdatePlan Collection of updates for all recoverable replicas in the cluster.
+// When changing this structure, care must be exercised to keep it compatible
+// with previous versions when serializing to json. See
+// loqrecovery/marshalling.go for details how format is preserved.
+message ReplicaUpdatePlan {
+  repeated ReplicaUpdate updates = 1 [(gogoproto.nullable) = false];
+  // PlanID contains ID generated by cli when generating recovery plan and is subsequently
+  // used for status checks and auditing purposes.
+  bytes plan_id = 2 [(gogoproto.customname) = "PlanID",
+    (gogoproto.nullable) = false,
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+  // DecommissionedNodeIDs is a set of node IDs that need to be marked as decommissioned as a
+  // part of loss of quorum recovery process.
+  repeated int32 decommissioned_node_ids = 3 [(gogoproto.customname) = "DecommissionedNodeIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  // ClusterID contains id of the cluster from which info was collected.
+  string cluster_id = 4 [(gogoproto.customname) = "ClusterID"];
+  // StaleLeaseholderNodeIDs is a set of node IDs that need to be restarted even
+  // they have no scheduled changes. This is needed to get rid of range leases
+  // that they hold and that can't be shed because quorum is lost on the ranges.
+  repeated int32 stale_leaseholder_node_ids = 5 [(gogoproto.customname) = "StaleLeaseholderNodeIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  // Version contains version of the plan which is equal to the active cluster
+  // version of the data that this plan is based on. Plan could only be applied
+  // to the cluster of the same version.
+  roachpb.Version version = 6 [(gogoproto.nullable) = false];
+}
+
+// ReplicaRecoveryRecord is a struct that loss of quorum recovery commands
+// write to the store locally when replicas are rewritten to preserve information
+// about changes. This records are then consumed on startup to post data to
+// appropriate destinations like log, rangelog etc.
+// This struct is a union of all necessary information that is needed by all
+// downstream destinations.
+message ReplicaRecoveryRecord {
+  // Timestamp of loss of quorum recovery application phase. Timestamp is chosen by process
+  // rewriting changes before any replica is rewritten. All events created by single process
+  // will share the same timestamp. Different processes updating different stores will
+  // produce different timestamps even if updates originated from the same recovery plan.
+  // Expressed as nanoseconds since the Unix epoch.
+  int64 timestamp = 1;
+  int64 range_id = 2 [(gogoproto.customname) = "RangeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID",
+    (gogoproto.moretags) = 'yaml:"RangeID"'];
+  bytes start_key = 3 [
+    (gogoproto.casttype) = "RecoveryKey",
+    (gogoproto.moretags) = 'yaml:"StartKey"'];
+  bytes end_key = 4 [
+    (gogoproto.casttype) = "RecoveryKey",
+    (gogoproto.moretags) = 'yaml:"StartKey"'];
+  int32 old_replica_id = 5 [(gogoproto.customname) = "OldReplicaID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID",
+    (gogoproto.moretags) = 'yaml:"OldReplicaID"'];
+  roachpb.ReplicaDescriptor new_replica = 6 [(gogoproto.nullable) = false,
+    (gogoproto.moretags) = 'yaml:"NewReplica"'];
+  roachpb.RangeDescriptor range_descriptor = 7 [(gogoproto.nullable) = false,
+    (gogoproto.moretags) = 'yaml:"RangeDescriptor"'];
+}
+
+// NodeRecoveryStatus contains information about loss of quorum recovery
+// operations of a node.
+message NodeRecoveryStatus {
+  // NodeID contains id of the node that status belongs to.
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  // PendingPlanID contains an ID or recovery plan that is staged on the node for
+  // application on the next restart.
+  bytes pending_plan_id = 2 [
+    (gogoproto.customname) = "PendingPlanID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+  // AppliedPlanID contains an ID of recovery plan that was processed last.
+  // If plan application succeeded, then ApplyError will be nil, otherwise it will
+  // contain an error message.
+  bytes applied_plan_id = 3 [
+    (gogoproto.customname) = "AppliedPlanID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+  // ApplyTimestamp is a node wall clock time when last recovery plan was applied.
+  google.protobuf.Timestamp apply_timestamp = 4 [(gogoproto.stdtime) = true];
+  // If most recent recovery plan application failed, Error will contain
+  // aggregated error messages containing all encountered errors.
+  string error = 5;
+}
+
+// PlanApplicationResult is a value stored inside node local storage whenever
+// loss of quorum recovery plan is applied for the purpose of tracking recovery
+// progress.
+message PlanApplicationResult {
+  bytes applied_plan_id = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "AppliedPlanID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+  // LastProcessingTime is a node wall clock time when last recovery plan was applied.
+  google.protobuf.Timestamp apply_timestamp = 2 [
+    (gogoproto.nullable) = false,
+    (gogoproto.stdtime) = true];
+  // If most recent recovery plan application failed, Error will contain
+  // aggregated error messages containing all encountered errors.
+  string error = 3;
+}
+
+// RangeHealth is a state of a range availability from loss of quorum recovery
+// perspective.
+enum RangeHealth {
+  UNKNOWN = 0;
+  // Healthy indicates that range is available.
+  HEALTHY = 1;
+  // WaitingForMeta means that range is not yet readable according to meta
+  // descriptor, but has a recovered replica that is waiting to be up-replicated.
+  WAITING_FOR_META = 2;
+  // LossOfQuorum means that range is unavailable because it lost quorum and
+  // no replicas are fixed to act as a designated survivor (yet).
+  LOSS_OF_QUORUM = 3;
+}
+
+// RangeRecoveryStatus contains recovery status of a single range.
+message RangeRecoveryStatus {
+  int64 range_id = 1 [(gogoproto.customname) = "RangeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  roachpb.Span span = 2 [(gogoproto.nullable) = false];
+  RangeHealth health = 3;
+}
+
+// DeferredRecoveryActions contains data for recovery actions that need to be
+// performed after node restarts if it applied a recovery plan.
+message DeferredRecoveryActions {
+  // DecommissionedNodeIDs is a set of node IDs that need to be decommissioned
+  // when a node restarts. Those nodes were marked as decommissioned in the
+  // local node tombstone storage as a part of plan application, but are pending
+  // liveness info update.
+  repeated int32 decommissioned_node_ids = 1 [(gogoproto.customname) = "DecommissionedNodeIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+}

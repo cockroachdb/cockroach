@@ -1,0 +1,8 @@
+
+		CREATE TABLE t (
+			a int8 primary key,
+			b string,
+			index (b),
+			index (a, b)
+		)
+	

@@ -1,0 +1,44 @@
+# disabled to run within tenant because ALTER SPLIT cmd is not supported within tenant
+
+new-cluster name=s1 disable-tenant localities=us-east-1,us-west-1,us-west-2,eu-central-1
+----
+
+exec-sql
+CREATE DATABASE orig;
+----
+
+exec-sql
+USE orig;
+----
+
+exec-sql
+CREATE TABLE cfs (a INT PRIMARY KEY, b STRING, c STRING, d STRING, FAMILY (b), FAMILY (c));
+----
+
+exec-sql
+INSERT INTO cfs SELECT x, repeat('abc', 100), repeat('abc', 100) FROM generate_series(0, 3) AS x;
+----
+
+exec-sql
+ALTER TABLE cfs SPLIT AT SELECT a FROM cfs;
+----
+
+
+# Split the output files very small to catch output SSTs mid-row.
+set-cluster-setting setting=bulkio.backup.file_size value=1
+----
+
+set-cluster-setting setting=kv.bulk_sst.target_size value=1
+----
+
+exec-sql
+BACKUP cfs INTO 'nodelocal://1/foo';
+----
+
+exec-sql
+CREATE DATABASE r1;
+----
+
+exec-sql
+RESTORE cfs FROM LATEST IN 'nodelocal://1/foo' WITH into_db='r1';
+----

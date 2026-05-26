@@ -1,0 +1,7 @@
+joined_table ::=
+	'(' joined_table ')'
+	| table_ref 'CROSS' opt_join_hint 'JOIN' table_ref
+	| table_ref ( 'FULL' ( 'OUTER' |  ) | 'LEFT' ( 'OUTER' |  ) | 'RIGHT' ( 'OUTER' |  ) | 'INNER' ) opt_join_hint 'JOIN' table_ref ( 'USING' '(' ( ( name ) ( ( ',' name ) )* ) ')' | 'ON' a_expr )
+	| table_ref 'JOIN' table_ref ( 'USING' '(' ( ( name ) ( ( ',' name ) )* ) ')' | 'ON' a_expr )
+	| table_ref 'NATURAL' ( 'FULL' ( 'OUTER' |  ) | 'LEFT' ( 'OUTER' |  ) | 'RIGHT' ( 'OUTER' |  ) | 'INNER' ) opt_join_hint 'JOIN' table_ref
+	| table_ref 'NATURAL' 'JOIN' table_ref

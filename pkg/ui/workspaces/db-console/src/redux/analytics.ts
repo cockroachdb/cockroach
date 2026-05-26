@@ -1,0 +1,314 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+import { Analytics } from "@segment/analytics-node";
+import { Location } from "history";
+import each from "lodash/each";
+import isEmpty from "lodash/isEmpty";
+
+import * as protos from "src/js/protos";
+import { history } from "src/redux/history";
+import { COCKROACHLABS_ADDR } from "src/util/cockroachlabsAPI";
+
+type ClusterResponse = protos.cockroach.server.serverpb.IClusterResponse;
+
+interface TrackMessage {
+  event: string;
+  properties?: Object;
+  timestamp?: Date;
+  context?: Object;
+}
+
+/**
+ * List of current redactions needed for pages tracked by the Admin UI.
+ * TODO(mrtracy): It this list becomes more extensive, it might benefit from a
+ * set of tests as a double-check.
+ */
+export const defaultRedactions = [
+  // When viewing a specific database, the database name and table are part of
+  // the URL path.
+  {
+    match: new RegExp("/databases/database/.+/table/.+"),
+    replace: "/databases/database/[db]/table/[tbl]",
+  },
+  {
+    match: new RegExp("/database/.+/table/.+"),
+    replace: "/database/[db]/table/[tbl]",
+  },
+  {
+    match: new RegExp("/database/.+/tables"),
+    replace: "/database/[db]/tables",
+  },
+  {
+    match: new RegExp("/database/.+/table"),
+    replace: "/database/[db]/table",
+  },
+  {
+    match: new RegExp("/database/.+/grants"),
+    replace: "/database/[db]/grants",
+  },
+  {
+    match: new RegExp("/database/.+"),
+    replace: "/database/[db]",
+  },
+  // The clusterviz map page, which puts localities in the URL.
+  {
+    match: new RegExp("/overview/map((/.+)+)"),
+    useFunction: true, // I hate TypeScript.
+    replace: function countTiers(original: string, localities: string) {
+      const tierCount = localities.match(new RegExp("/", "g")).length;
+      let redactedLocalities = "";
+      for (let i = 0; i < tierCount; i++) {
+        redactedLocalities += "/[locality]";
+      }
+      return original.replace(localities, redactedLocalities);
+    },
+  },
+  // The statement details page, with a full SQL statement in the URL.
+  {
+    match: new RegExp("/statement/.*"),
+    replace: "/statement/[statement]",
+  },
+];
+
+type PageTrackReplacementFunction = (match: string, ...args: any[]) => string;
+type PageTrackReplacement = string | PageTrackReplacementFunction;
+
+/**
+ * A PageTrackRedaction describes a regular expression used to identify PII
+ * in strings that are being sent to analytics. If a string matches the given
+ * "match" RegExp, it will be replaced with the "replace" string before being
+ * sent to analytics.
+ */
+interface PageTrackRedaction {
+  match: RegExp;
+  replace: PageTrackReplacement;
+  useFunction?: boolean; // I hate Typescript.
+}
+
+/**
+ * AnalyticsSync is used to dispatch analytics events from the Admin UI to an
+ * analytics service (currently Segment). Cluster and version data are provided
+ * externally via updateCluster/updateVersions, typically by the
+ * AnalyticsProvider component.
+ */
+export class AnalyticsSync {
+  /**
+   * queuedPages are used to store pages visited before the cluster ID
+   * is available. Once the cluster ID is available, the next call to page()
+   * will dispatch all queued locations to the underlying analytics API.
+   */
+  private queuedPages: Location[] = [];
+
+  /**
+   * sentIdentifyEvent tracks whether the identification event has already
+   * been sent for this session. This event is not sent until all necessary
+   * information has been retrieved (current version of cockroachDB,
+   * cluster settings).
+   */
+  private identifyEventSent = false;
+
+  /**
+   * cluster holds the current cluster response data, updated externally
+   * via updateCluster().
+   */
+  private cluster: ClusterResponse | null = null;
+
+  /**
+   * versions holds the current set of build version tags across nodes,
+   * updated externally via updateVersions().
+   */
+  private versions: string[] = [];
+
+  /**
+   * Construct a new AnalyticsSync object.
+   * @param analyticsService Underlying interface to push to the analytics service.
+   * @param redactions A list of redaction regular expressions, used to
+   * scrub any potential personally-identifying information from the data
+   * being tracked.
+   */
+  constructor(
+    private analyticsService: Analytics,
+    private redactions: PageTrackRedaction[],
+  ) {}
+
+  /**
+   * updateCluster sets the current cluster response data.
+   */
+  updateCluster(cluster: ClusterResponse | null) {
+    this.cluster = cluster;
+  }
+
+  /**
+   * updateVersions sets the current set of build version tags.
+   */
+  updateVersions(versions: string[]) {
+    this.versions = versions;
+  }
+
+  /**
+   * page should be called whenever the user moves to a new page in the
+   * application.
+   * @param location The location (URL information) of the page.
+   */
+  page(location: Location) {
+    // If the cluster ID is not yet available, queue the location to be
+    // pushed later.
+    if (this.cluster === null) {
+      this.queuedPages.push(location);
+      return;
+    }
+
+    const { cluster_id, reporting_enabled } = this.cluster;
+
+    // A cluster setting determines if diagnostic reporting is enabled. If
+    // it is not explicitly enabled, do nothing.
+    if (!reporting_enabled) {
+      if (this.queuedPages.length > 0) {
+        this.queuedPages = [];
+      }
+      return;
+    }
+
+    // If there are any queued pages, push them.
+    each(this.queuedPages, l => this.pushPage(cluster_id, l));
+    this.queuedPages = [];
+
+    // Push the page that was just accessed.
+    this.pushPage(cluster_id, location);
+  }
+
+  /**
+   * identify attempts to send an "identify" event to the analytics service.
+   * The identify event will only be sent once per session; if it has already
+   * been sent, it will be a no-op whenever called afterwards.
+   */
+  identify() {
+    if (this.identifyEventSent) {
+      return;
+    }
+
+    // Do nothing if Cluster information is not yet available.
+    const cluster = this.cluster;
+    if (cluster === null) {
+      return;
+    }
+
+    const { cluster_id, reporting_enabled, enterprise_enabled } = cluster;
+    if (!reporting_enabled) {
+      return;
+    }
+
+    // Do nothing if version information is not yet available.
+    if (isEmpty(this.versions)) {
+      return;
+    }
+
+    this.analyticsService.identify({
+      userId: cluster_id,
+      traits: {
+        version: this.versions[0],
+        userAgent: window.navigator.userAgent,
+        enterprise: enterprise_enabled,
+      },
+    });
+    this.identifyEventSent = true;
+  }
+
+  /** Analytics Track for Segment: https://segment.com/docs/connections/spec/track/ */
+  track(msg: TrackMessage) {
+    if (this.cluster === null) {
+      return;
+    }
+
+    // get cluster_id to id the event
+    const { cluster_id } = this.cluster;
+    const pagePath = this.redact(history.location.pathname);
+
+    // break down properties from message
+    const { properties, ...rest } = msg;
+    const props = {
+      pagePath,
+      ...properties,
+    };
+
+    const message = {
+      userId: cluster_id,
+      properties: { ...props },
+      ...rest,
+    };
+
+    this.analyticsService.track(message);
+  }
+
+  /**
+   * pushPage pushes a single "page" event to the analytics service.
+   */
+  private pushPage = (userID: string, location: Location) => {
+    // Loop through redactions, if any matches return the appropriate
+    // redacted string.
+    const path = this.redact(location.pathname);
+    let search = "";
+
+    if (location.search && location.search.length > 1) {
+      const query = location.search.slice(1);
+      const params = new URLSearchParams(query);
+
+      params.forEach((value, key) => {
+        params.set(key, this.redact(value));
+      });
+      search = "?" + params.toString();
+    }
+
+    this.analyticsService.page({
+      userId: userID,
+      name: path,
+      properties: {
+        path,
+        search,
+      },
+    });
+  };
+
+  private redact(path: string): string {
+    each(this.redactions, r => {
+      if (r.match.test(path)) {
+        // Apparently TypeScript doesn't know how to dispatch functions.
+        // If there are two function overloads defined (as with
+        // String.prototype.replace), it is unable to recognize that
+        // a union of the two types can be successfully passed in as a
+        // parameter of that function.  We have to explicitly
+        // disambiguate the types for it.
+        // See https://github.com/Microsoft/TypeScript/issues/14107
+        if (r.useFunction) {
+          path = path.replace(
+            r.match,
+            r.replace as PageTrackReplacementFunction,
+          );
+        } else {
+          path = path.replace(r.match, r.replace as string);
+        }
+        return false;
+      }
+    });
+    return path;
+  }
+}
+
+export let analytics: AnalyticsSync | undefined;
+
+/**
+ * createAnalytics creates the global AnalyticsSync singleton. Data is fed
+ * into the instance externally via updateCluster/updateVersions (see
+ * AnalyticsProvider).
+ */
+export function createAnalytics(): AnalyticsSync {
+  const analyticsInstance = new Analytics({
+    writeKey: "5Vbp8WMYDmZTfCwE0uiUqEdAcTiZWFDb",
+    host: COCKROACHLABS_ADDR + "/api/segment",
+  });
+  analytics = new AnalyticsSync(analyticsInstance, defaultRedactions);
+  return analytics;
+}

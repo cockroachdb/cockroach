@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "ssremote",
+    srcs = ["ssremote_provider.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssremote",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/server/serverpb",
+        "//pkg/sql/appstatspb",
+        "//pkg/sql/sqlstats",
+        "//pkg/util/log",
+    ],
+)
+
+go_test(
+    name = "ssremote_test",
+    srcs = ["ssremote_provider_test.go"],
+    embed = [":ssremote"],
+    deps = [
+        "//pkg/server/serverpb",
+        "//pkg/sql/appstatspb",
+        "//pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
+    ],
+)

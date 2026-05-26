@@ -1,0 +1,424 @@
+statement ok
+CREATE TABLE t()
+
+# Ensure old role must exist.
+statement error pq: role/user "fake_old_role" does not exist
+REASSIGN OWNED BY fake_old_role TO new_role
+
+statement ok
+CREATE ROLE old_role;
+
+statement ok
+GRANT CREATE ON DATABASE test TO old_role;
+
+statement ok
+ALTER TABLE t OWNER TO old_role
+
+user testuser
+
+# Ensure the current user is a member of the old roles.
+statement error pq: permission denied to reassign objects\nHINT: user must be a member of the old roles
+REASSIGN OWNED BY old_role TO testuser
+
+statement error pq: permission denied to reassign objects\nHINT: user must be a member of the old roles
+REASSIGN OWNED BY testuser, old_role TO testuser
+
+user root
+
+# Make testuser a member of old_role.
+statement ok
+GRANT old_role TO testuser
+
+user testuser
+
+# Ensure new role must exist.
+statement error pq: role/user "fake_new_role" does not exist
+REASSIGN OWNED BY old_role TO fake_new_role
+
+user root
+
+statement ok
+CREATE ROLE new_role;
+
+statement ok
+GRANT CREATE ON DATABASE test TO new_role
+
+user testuser
+
+# Ensure the current user is a member of the role we are setting to.
+statement error pq: permission denied to reassign objects\nHINT: user must be a member of the new role
+REASSIGN OWNED BY old_role TO new_role
+
+statement error pq: permission denied to reassign objects\nHINT: user must be a member of the new role
+REASSIGN OWNED BY old_role, testuser TO new_role
+
+user root
+
+# Make testuser a member of new_role.
+statement ok
+GRANT new_role TO testuser
+
+user testuser
+
+# All checks passed - reassign table.
+statement ok
+REASSIGN OWNED BY old_role TO new_role
+
+statement ok
+DROP TABLE t
+
+user root
+
+statement ok
+CREATE ROLE testuser2 WITH LOGIN;
+
+# Create database for old role
+statement ok
+CREATE DATABASE d;
+
+statement ok
+ALTER DATABASE d OWNER TO testuser
+
+# Check ownership - testuser should own all objects just created
+query TT
+SELECT database_name, owner FROM [SHOW DATABASES] WHERE database_name='d'
+----
+d  testuser
+
+# Switch to database d so it can reassign from current db
+statement ok
+use d
+
+statement ok
+REASSIGN OWNED BY testuser TO testuser2
+
+# Check ownership - testuser2 should now own all objects just created
+query TT
+SELECT database_name, owner FROM [SHOW DATABASES] WHERE database_name='d'
+----
+d  testuser2
+
+user testuser2
+
+# Ensure new_role is owner by dropping db as testuser2.
+statement ok
+DROP DATABASE d
+
+user root
+
+# Ensure old_role no longer owns anything.
+statement ok
+DROP ROLE testuser
+
+# ------------------------------------------------------------------------------
+# Can reassign from more than one old role to new role.
+statement ok
+use test;
+
+statement ok
+CREATE ROLE testuser;
+
+# Create schema for testuser and one for root.
+statement ok
+CREATE SCHEMA s1;
+
+statement ok
+ALTER SCHEMA s1 OWNER TO testuser
+
+statement ok
+CREATE SCHEMA s2
+
+# Check ownership for testuser and root
+query TT rowsort
+SELECT schema_name, owner FROM [SHOW SCHEMAS] WHERE schema_name IN ('s1', 's2', 'public')
+----
+public  root
+s2      root
+s1      testuser
+
+# root / superusers can always perform REASSIGN OWNED BY.
+user root
+
+statement ok
+REASSIGN OWNED BY testuser, root TO testuser2
+
+user testuser2
+
+# Check ownership - testuser2 should own all objects
+query TT rowsort
+SELECT schema_name, owner FROM [SHOW SCHEMAS] WHERE schema_name IN ('s1', 's2', 'public')
+----
+public  testuser2
+s2      testuser2
+s1      testuser2
+
+# Ensure testuser2 is new owner by dropping.
+statement ok
+DROP SCHEMA s1;
+
+statement ok
+DROP SCHEMA s2
+
+user root
+
+statement ok
+ALTER DATABASE test OWNER TO root
+
+# Ensure testuser no longer owns anything.
+statement ok
+DROP ROLE testuser
+
+# ------------------------------------------------------------------------------
+# Confirm tables, schemas, types are reassigned together.
+
+user root
+
+statement ok
+use test
+
+statement ok
+CREATE ROLE testuser
+
+statement ok
+GRANT CREATE ON DATABASE test TO testuser, testuser2
+
+statement ok
+CREATE SCHEMA s;
+ALTER SCHEMA s OWNER TO testuser
+
+statement ok
+CREATE TABLE s.t();
+ALTER TABLE s.t OWNER TO testuser
+
+statement ok
+CREATE TYPE s.typ AS ENUM ();
+ALTER TYPE s.typ OWNER to testuser
+
+# Check ownership - testuser should own all objects just created
+query TT rowsort
+SELECT schema_name, owner FROM [SHOW SCHEMAS] WHERE schema_name IN ('s', 'public')
+----
+s       testuser
+public  testuser2
+
+query TT
+SELECT tablename, tableowner FROM pg_tables WHERE tablename='t'
+----
+t  testuser
+
+query TT rowsort
+SELECT name, owner FROM [SHOW TYPES] WHERE name = 'typ'
+----
+typ  testuser
+
+statement ok
+REASSIGN OWNED BY testuser TO testuser2
+
+# testuser2 should own everything now
+query TT rowsort
+SELECT schema_name, owner FROM [SHOW SCHEMAS] WHERE schema_name IN ('s', 'public')
+----
+public  testuser2
+s       testuser2
+
+query TT
+SELECT tablename, tableowner FROM pg_tables WHERE tablename='t'
+----
+t  testuser2
+
+query TT rowsort
+SELECT name, owner FROM [SHOW TYPES] WHERE name = 'typ'
+----
+typ  testuser2
+
+# Ensure testuser2 is owner by dropping as member of testuser2.
+user testuser2
+
+statement ok
+DROP TABLE s.t;
+DROP TYPE s.typ;
+DROP SCHEMA s;
+
+# Ensure testuser no longer owns anything.
+user root
+
+statement ok
+REVOKE CREATE ON DATABASE test FROM testuser, testuser2;
+DROP ROLE testuser;
+
+# Ownership of the public schema was transferred to testuser2.
+
+statement error role testuser2 cannot be dropped because some objects depend on it\nowner of schema test.public
+DROP ROLE testuser2
+
+statement ok
+REASSIGN OWNED BY testuser2 TO root
+
+statement ok
+DROP ROLE testuser2
+
+
+# ------------------------------------------------------------------------------
+# Make sure only objects in the current database are reassigned
+
+user root
+
+statement ok
+CREATE ROLE testuser;
+GRANT CREATE ON DATABASE test TO testuser;
+
+statement ok
+CREATE DATABASE d;
+ALTER DATABASE d OWNER TO testuser
+
+# Create table t in test database
+statement ok
+CREATE TABLE t1();
+ALTER TABLE t1 OWNER TO testuser
+
+# Create table t2 in d database
+statement ok
+CREATE TABLE d.t2();
+ALTER TABLE d.t2 OWNER TO testuser
+
+# Confirm ownership - testuser should own all objects just created
+query TT rowsort
+SELECT database_name, owner FROM [SHOW DATABASES] WHERE database_name IN ('d', 'test')
+----
+d     testuser
+test  root
+
+query TT
+SELECT tablename, tableowner FROM pg_tables WHERE tablename='t1'
+----
+t1  testuser
+
+statement ok
+use d
+
+query TT
+SELECT tablename, tableowner FROM pg_tables WHERE tablename='t2'
+----
+t2  testuser
+
+statement ok
+CREATE ROLE testuser2;
+GRANT CREATE ON DATABASE test TO testuser2
+
+statement ok
+use test
+
+# Only reassign objects in test database to testuser2
+statement ok
+REASSIGN OWNED BY testuser TO testuser2
+
+# Confirm ownership - testuser2 should own just table t1
+query TT rowsort
+SELECT database_name, owner FROM [SHOW DATABASES] WHERE database_name IN ('d', 'test')
+----
+d     testuser
+test  root
+
+query TT
+SELECT tablename, tableowner FROM pg_tables WHERE tablename='t1'
+----
+t1  testuser2
+
+statement ok
+use d
+
+query TT
+SELECT tablename, tableowner FROM pg_tables WHERE tablename='t2'
+----
+t2  testuser
+
+# Confirm d, d.t2 still belongs to testuser
+user testuser
+
+statement ok
+DROP TABLE d.t2;
+DROP DATABASE d;
+
+# Confirm test.t1 was reassigned to testuser2
+user testuser2
+
+statement ok
+DROP TABLE t1;
+
+# In issue #90238 we noticed that reassign owned by does not skip
+# over dropped descriptor as it scans the entire descriptors table
+# to determine which ones to update ownership on. This can lead be
+# problematic scenarios since it will attempt to modify ownership
+# on descriptors that may have had their parents cleaned up.
+subtest reassign_owned_by_with_dropped_descriptors
+user root
+statement ok
+CREATE DATABASE db1;
+ALTER DATABASE db1 OWNER TO testuser;
+CREATE SCHEMA db1.sc1;
+ALTER SCHEMA db1.sc1 OWNER TO testuser;
+CREATE TABLE db1.sc1.table(n int);
+ALTER TABLE db1.sc1.table OWNER TO testuser;
+
+statement ok
+DROP SCHEMA db1.sc1 CASCADE;
+
+statement ok
+USE db1;
+
+statement ok
+REASSIGN OWNED BY testuser TO testuser2;
+
+user root
+statement ok
+USE test;
+
+statement ok
+DROP DATABASE db1 CASCADE;
+
+# Also validate the reverse, where the REASSIGN OWNED BY job
+# is created, but paused before a DROP DATABASE occurs. The job
+# should be re-slient in this scenario.
+user root
+statement ok
+CREATE DATABASE db1;
+ALTER DATABASE db1 OWNER TO testuser;
+CREATE SCHEMA db1.sc1;
+ALTER SCHEMA db1.sc1 OWNER TO testuser;
+CREATE TABLE db1.sc1.table(n int);
+ALTER TABLE db1.sc1.table OWNER TO testuser;
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec';
+
+statement ok
+use db1;
+
+skipif config local-legacy-schema-changer
+statement error job \d+ was paused before it completed with reason: pause point "schemachanger.before.exec" hit
+REASSIGN OWNED BY testuser TO testuser2;
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = 'newschemachanger.before.exec';
+
+user root
+
+skipif config local-legacy-schema-changer
+statement error job \d+ was paused before it completed with reason: pause point "newschemachanger.before.exec" hit
+DROP DATABASE db1 CASCADE;
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = '';
+
+# There will be 3 jobs for the schema, database and table
+skipif config local-legacy-schema-changer
+statement ok
+USE test;
+RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'REASSIGN OWNED BY%' AND status='paused' FETCH FIRST 1 ROWS ONLY);
+RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'REASSIGN OWNED BY%' AND status='paused' FETCH FIRST 1 ROWS ONLY);
+RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'REASSIGN OWNED BY%' AND status='paused' FETCH FIRST 1 ROWS ONLY);
+
+# Next allow the post commit phase of the declarative schema changer to resume.
+skipif config local-legacy-schema-changer
+statement ok
+RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE  'DROP DATABASE%' AND status='paused' FETCH FIRST 1 ROWS ONLY);

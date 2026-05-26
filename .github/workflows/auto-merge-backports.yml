@@ -1,0 +1,115 @@
+name: Auto-Merge Test Backport PRs
+
+on:
+  schedule:
+    - cron: "0 * * * *"  # Every hour
+
+jobs:
+  auto-merge:
+    if: github.repository == 'cockroachdb/cockroach'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Merge qualifying PRs
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            // Get timestamp for 24 hours ago in ISO format
+            const now = new Date();
+            const iso24HoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+            const query = `
+              query SearchPRs() {
+                search(query: "repo:${context.repo.owner}/${context.repo.repo} is:pr is:open label:backport label:backport-test-only", type: ISSUE, first: 100) {
+                  nodes {
+                    ... on PullRequest {
+                      number
+                      createdAt
+                      baseRefName
+                      labels(first: 10) {
+                        nodes {
+                          name
+                        }
+                      }
+                      reviews(last: 50) {
+                        nodes {
+                          state
+                          author {
+                            login
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            `;
+
+            const result = await github.graphql(query);
+            const prs = result.search.nodes;
+
+            if (prs.length === 0) {
+              console.log('No backport PRs found matching criteria');
+            } else {
+              console.log(`Found ${prs.length} backport PR(s) to evaluate`);
+            }
+
+            for (const pr of prs) {
+              const createdAt = new Date(pr.createdAt);
+              const isOldEnough = createdAt <= iso24HoursAgo;
+
+              if (!isOldEnough) {
+                console.log(`Skipping PR #${pr.number}: not old enough, only created at ${pr.createdAt}`);
+                continue;
+              }
+
+              const approved = pr.reviews.nodes.some(
+                r =>
+                  r.state === 'APPROVED' &&
+                  r.author?.login === 'blathers-crl'
+              );
+
+              if (!approved) {
+                console.log(`Skipping PR #${pr.number}: not approved`);
+                continue;
+              }
+
+              const labels = pr.labels.nodes.map(l => l.name).join(', ');
+              const baseRef = pr.baseRefName;
+              console.log(`Processing PR #${pr.number}, Created at: ${pr.createdAt}, Approved: ${approved}, Target: ${baseRef}, Labels: ${labels}`);
+
+              const nonTrunkBranches = ['release-24.1', 'release-25.1', 'release-25.3'];
+              const useTrunk = !nonTrunkBranches.includes(baseRef);
+              if (useTrunk) {
+                // Use comment to trigger trunk merge for trunk-enabled branches
+                console.log(`Adding /trunk merge comment for PR #${pr.number} (target: ${baseRef})`);
+                try {
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: pr.number,
+                    body: '/trunk merge'
+                  });
+                } catch (err) {
+                  console.warn(`Failed to comment on PR #${pr.number}: ${err.message}`);
+                }
+              } else {
+                // Direct merge for all other branches
+                console.log(`Directly merging PR #${pr.number} (target: ${baseRef})`);
+                try {
+                  await github.rest.pulls.merge({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    pull_number: pr.number,
+                    merge_method: "merge",
+                  });
+                } catch (err) {
+                  console.warn(`Failed to merge PR #${pr.number}: ${err.message}`);
+                }
+              }
+            }

@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "testshout_test",
+    size = "small",
+    srcs = ["shout_test.go"],
+    deps = [
+        "//pkg/util/log",
+        "//pkg/util/log/logconfig",
+        "//pkg/util/log/severity",
+    ],
+)

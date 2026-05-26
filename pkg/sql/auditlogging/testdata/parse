@@ -1,0 +1,259 @@
+
+subtest not_enough_inputs
+
+line
+test_role
+----
+error: end-of-line before statement filter specification
+
+subtest end
+
+subtest too_many_inputs
+
+line
+test_role ALL unexpected
+----
+error: too many fields specified
+
+# Multi-role input
+line
+test_role,test_role2 ALL
+----
+error: multiple values specified for role
+
+# Multi-filter input
+line
+test_role ALL,NONE
+----
+error: multiple values specified for statement filter
+
+subtest end
+
+subtest invalid_role_inputs
+
+# 'public' reserved role input
+line
+public ALL
+----
+error: cannot use reserved role name: 'public'
+
+# 'none' reserved role input
+line
+none ALL
+----
+error: cannot use reserved role name: 'none'
+
+# 'node' reserved role input
+line
+node ALL
+----
+error: cannot use reserved username: 'node'
+
+# 'pg_' prefix reserved role input
+line
+pg_test_role ALL
+----
+error: cannot use 'pg_' prefix in role name: 'pg_test_role'
+
+# 'crdb_internal_' prefix reserved role input
+line
+crdb_internal_test_role ALL
+----
+error: cannot use 'crdb_internal_' prefix in role name: 'crdb_internal_test_role'
+
+subtest end
+
+subtest inputs_normalized
+
+line
+TeSt_ROLe aLl
+----
+# Original configuration:
+# TeSt_ROLe aLl
+#
+# Interpreted configuration:
+# ROLE    STATEMENT_FILTER
+test_role ALL
+
+subtest end
+
+subtest invalid_statement_types
+
+# Single unknown statement type
+line
+test_role not_a_statement_type
+----
+error: unknown statement filter: "not_a_statement_type" (valid filters include: "ALL", "NONE")
+
+subtest end
+
+subtest quoted_columns
+
+# Quote role.
+line
+"test_role" ALL
+----
+# Original configuration:
+# "test_role" ALL
+#
+# Interpreted configuration:
+# ROLE    STATEMENT_FILTER
+test_role ALL
+
+# Quote statement filter.
+line
+"test_role" "ALL"
+----
+# Original configuration:
+# "test_role" "ALL"
+#
+# Interpreted configuration:
+# ROLE    STATEMENT_FILTER
+test_role ALL
+
+# Single quoted statement filter is not recognized.
+line
+test_role 'ALL'
+----
+error: unknown statement filter: "'ALL'" (valid filters include: "ALL", "NONE")
+
+subtest end
+
+subtest special_character_role
+
+# Role with "." character.
+line
+"test.role" ALL
+----
+# Original configuration:
+# "test.role" ALL
+#
+# Interpreted configuration:
+# ROLE    STATEMENT_FILTER
+test.role ALL
+
+subtest end
+
+subtest none_statement_type
+
+line
+test_role NONE
+----
+# Original configuration:
+# test_role NONE
+#
+# Interpreted configuration:
+# ROLE    STATEMENT_FILTER
+test_role NONE
+
+subtest end
+
+subtest all_role
+
+line
+all ALL
+----
+# Original configuration:
+# all ALL
+#
+# Interpreted configuration:
+# ROLE STATEMENT_FILTER
+all    ALL
+
+subtest end
+
+subtest multiline_entries
+
+# no duplicate role entries
+multiline
+test_role NONE
+test_role ALL
+----
+error: duplicate role listed: test_role
+
+multiline
+test_role ALL
+anotherRole ALL
+thirddRole "NONE"
+----
+# String render check:
+# Original configuration:
+# test_role ALL
+# anotherRole ALL
+# thirddRole "NONE"
+#
+# Interpreted configuration:
+# ROLE      STATEMENT_FILTER
+test_role   ALL
+anotherrole ALL
+thirddrole  NONE
+# Detail:
+&auditlogging.AuditConfig{
+    Settings: {
+        {
+            input:             "test_role ALL",
+            Role:              username.SQLUsername{u:"test_role"},
+            IncludeStatements: true,
+        },
+        {
+            input:             "anotherRole ALL",
+            Role:              username.SQLUsername{u:"anotherrole"},
+            IncludeStatements: true,
+        },
+        {
+            input:             "thirddRole \"NONE\"",
+            Role:              username.SQLUsername{u:"thirddrole"},
+            IncludeStatements: false,
+        },
+    },
+    allRoleAuditSettingIdx: -1,
+}
+
+# Test ALL role
+multiline
+test_role NONE
+anotherRole ALL
+all ALL
+thirddRole "ALL"
+----
+# String render check:
+# Original configuration:
+# test_role NONE
+# anotherRole ALL
+# all ALL
+# thirddRole "ALL"
+#
+# Interpreted configuration:
+# ROLE      STATEMENT_FILTER
+test_role   NONE
+anotherrole ALL
+all         ALL
+thirddrole  ALL
+# Detail:
+&auditlogging.AuditConfig{
+    Settings: {
+        {
+            input:             "test_role NONE",
+            Role:              username.SQLUsername{u:"test_role"},
+            IncludeStatements: false,
+        },
+        {
+            input:             "anotherRole ALL",
+            Role:              username.SQLUsername{u:"anotherrole"},
+            IncludeStatements: true,
+        },
+        {
+            input:             "all ALL",
+            Role:              username.SQLUsername{u:"all"},
+            IncludeStatements: true,
+        },
+        {
+            input:             "thirddRole \"ALL\"",
+            Role:              username.SQLUsername{u:"thirddrole"},
+            IncludeStatements: true,
+        },
+    },
+    allRoleAuditSettingIdx: 2,
+}
+
+subtest end

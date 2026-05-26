@@ -1,0 +1,273 @@
+pretty
+#
+# Generate code for interesting rule.
+#
+[Relational]
+define Select {
+    # Input comment.
+    Input   RelExpr
+    Filters FiltersExpr
+}
+
+[Relational, Join, JoinNonApply]
+define InnerJoin {
+    Left  RelExpr
+    Right RelExpr
+    On    FiltersExpr
+}
+
+[Scalar, Bool, List]
+define Filters {
+}
+
+[Scalar, Bool, ListItem, ScalarProps]
+define FiltersItem {
+    Condition ScalarExpr
+}
+
+# ---
+# Unattached comment.
+# ---
+
+[PushSelectIntoJoinLeft, Normalize]
+(Select | Other
+    $input:(InnerJoin | InnerJoinApply | SomethingElse | Many | Things | LooooooooongLine | Much | More | Than | EightyChars
+        $left:3
+        $right:*
+        $on:*
+    )
+    $filters:[
+        ...
+        $item:* & (IsBoundBy $item $leftCols:(OutputCols $left))
+        ...
+    ]
+)
+=>
+(Select
+    ((OpName $input)
+        (Select
+            $left
+            (ExtractBoundConditions $filters $leftCols)
+        )
+        $right
+        $on
+    )
+    (ExtractUnboundConditions $filters $leftCols)
+)
+
+[TestSingleLine]
+(Select $input:(InnerJoin | InnerJoinApply $left:* $right:* $on:*))
+=>
+(False)
+
+[TestNestedAnd]
+(Select
+	$right:* &
+	(HasOuterCols $right) &
+	^(GroupBy | DistinctOn $input:* $aggregations:* $groupingPrivate:*) &
+	(IsUnorderedGrouping $groupingPrivate)
+
+	$left: * & (Blah)
+)
+=>
+(False)
+
+[TestLet]
+(Select
+	$input:*
+	$filters:* &
+	    (Let ($a):(Foo $input) $a) &
+	    (Let ($a $b $c $ok):(SplitFilters $input $filters) $ok) &
+	    (Let ($filtersA $filtersB $filtersC $filtersD $filtersE $ok):(SplitFilters $input $filters) $ok) &
+	    (Let ($a $b $c $ok):(SplitFilters $input $filters $long $arg $list) $ok) &
+	    (Let ($filtersA $filtersB $filtersC $ok):(SplitFilters $input $filters $long $arg $list $longer) $ok) &
+	    (IsValid (Let ($filtersX $filtersY):(SplitFilters $input $filters) $filtersX)) &
+	    (OuterFunc (InnerFunc (Let ($foo $bar):(SplitFilters $input $filters) $foo))) &
+	    (Let ($foo $bar $baz):(Split (Let ($foo $bar $baz):(SplitAgain $a $b $c) $a)) $foo)
+)
+=>
+(False)
+
+----
+----
+#
+# Generate code for interesting rule.
+#
+[Relational]
+define Select {
+    # Input comment.
+    Input RelExpr
+    Filters FiltersExpr
+}
+
+[Relational, Join, JoinNonApply]
+define InnerJoin {
+    Left RelExpr
+    Right RelExpr
+    On FiltersExpr
+}
+
+[Scalar, Bool, List]
+define Filters {
+}
+
+[Scalar, Bool, ListItem, ScalarProps]
+define FiltersItem {
+    Condition ScalarExpr
+}
+
+# ---
+# Unattached comment.
+# ---
+
+[PushSelectIntoJoinLeft, Normalize]
+(Select | Other
+    $input:(InnerJoin | InnerJoinApply | SomethingElse | Many
+            | Things | LooooooooongLine | Much | More | Than
+            | EightyChars
+        $left:3
+        $right:*
+        $on:*
+    )
+    $filters:[
+        ...
+        $item:* & (IsBoundBy $item $leftCols:(OutputCols $left))
+        ...
+    ]
+)
+=>
+(Select
+    ((OpName $input)
+        (Select
+            $left
+            (ExtractBoundConditions $filters $leftCols)
+        )
+        $right
+        $on
+    )
+    (ExtractUnboundConditions $filters $leftCols)
+)
+
+[TestSingleLine]
+(Select
+    $input:(InnerJoin | InnerJoinApply $left:* $right:* $on:*)
+)
+=>
+(False)
+
+[TestNestedAnd]
+(Select
+    $right:* &
+        (HasOuterCols $right) &
+        ^(GroupBy | DistinctOn
+            $input:*
+            $aggregations:*
+            $groupingPrivate:*
+        ) &
+        (IsUnorderedGrouping $groupingPrivate)
+    $left:* & (Blah)
+)
+=>
+(False)
+
+[TestLet]
+(Select
+    $input:*
+    $filters:* &
+        (Let ($a):(Foo $input) $a) &
+        (Let ($a $b $c $ok):(SplitFilters $input $filters) $ok) &
+        (Let
+            (
+                $filtersA
+                $filtersB
+                $filtersC
+                $filtersD
+                $filtersE
+                $ok
+            ):(SplitFilters $input $filters)
+            $ok
+        ) &
+        (Let
+            ($a $b $c $ok):(SplitFilters
+                $input
+                $filters
+                $long
+                $arg
+                $list
+            )
+            $ok
+        ) &
+        (Let
+            ($filtersA $filtersB $filtersC $ok):(SplitFilters
+                $input
+                $filters
+                $long
+                $arg
+                $list
+                $longer
+            )
+            $ok
+        ) &
+        (IsValid
+            (Let
+                ($filtersX $filtersY):(SplitFilters
+                    $input
+                    $filters
+                )
+                $filtersX
+            )
+        ) &
+        (OuterFunc
+            (InnerFunc
+                (Let
+                    ($foo $bar):(SplitFilters $input $filters)
+                    $foo
+                )
+            )
+        ) &
+        (Let
+            ($foo $bar $baz):(Split
+                (Let ($foo $bar $baz):(SplitAgain $a $b $c) $a)
+            )
+            $foo
+        )
+)
+=>
+(False)
+----
+----
+
+pretty
+[Short]
+(R) => (O)
+----
+[Short]
+(R)
+=>
+(O)
+
+# The closing ")" should not be printed on it's own line if the result, "$ok",
+# is not printed on it's own line.
+pretty
+[FoldBinary, Normalize]
+(Binary
+    $left:* & (IsConstValueOrGroupOfConstValues $left)
+    $right:* &
+        (IsConstValueOrGroupOfConstValues $right) &
+        (Let ($result $ok):(FoldBinary (OpName) $left $right) $ok
+        )
+)
+=>
+$result
+----
+[FoldBinary, Normalize]
+(Binary
+    $left:* & (IsConstValueOrGroupOfConstValues $left)
+    $right:* &
+        (IsConstValueOrGroupOfConstValues $right) &
+        (Let
+            ($result $ok):(FoldBinary (OpName) $left $right) $ok
+        )
+)
+=>
+$result

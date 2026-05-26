@@ -1,0 +1,81 @@
+# Tests in this file verify the enacting of the fallback rate when token bucket
+# requests start erroring out while we are being throttled.
+
+configure
+throttle: 100
+fallback_rate: 1000
+----
+
+# Issue a 3K write that triggers fetch of more tokens and also sets fallback
+# rate.
+write bytes=3069945
+----
+
+wait-for-event
+low-tokens
+----
+
+wait-for-event
+token-bucket-response
+----
+
+# Response sets up throttled rate of 100 tokens/s.
+token-bucket
+----
+2000.00 tokens filling @ 100.00 tokens/s (limited to 6000.00 tokens)
+
+# Force error on next fetch.
+configure
+error: true
+----
+
+# Advance time to 90% of the trickle rate duration (10s), which will trigger a
+# token bucket request (which will fail).
+advance
+9s
+----
+00:00:09.000
+
+# Expect failure of the token bucket request.
+wait-for-event
+token-bucket-response-error
+----
+
+# The fallback rate can take up to two ticks to be applied.
+advance wait=true
+2s
+----
+00:00:11.000
+
+token-bucket
+----
+3100.00 tokens filling @ 1000.00 tokens/s (limited to 15000.00 tokens)
+
+# Advance 1 second and ensure bucket is replenished at fallback rate.
+advance wait=true
+1s
+----
+00:00:12.000
+
+token-bucket
+----
+4100.00 tokens filling @ 1000.00 tokens/s (limited to 15000.00 tokens)
+
+wait-for-event
+token-bucket-response-error
+----
+
+# Clear token bucket errors and ensure we eventually get a successful response.
+configure
+throttle: 100
+fallback_rate: 1000
+----
+
+advance
+10s
+----
+00:00:22.000
+
+wait-for-event
+token-bucket-response
+----

@@ -1,0 +1,451 @@
+subtest simple_return
+
+# Infer return type for a single return statement.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS RECORD AS $$
+  BEGIN
+    RETURN ROW(0);
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+(0)
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS RECORD AS $$
+  BEGIN
+    RETURN ROW(0.0124::DECIMAL);
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+(0.0124)
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS RECORD AS $$
+  BEGIN
+    RETURN ROW(False);
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+(f)
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS RECORD AS $$
+  BEGIN
+    RETURN ROW('abcdef');
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+(abcdef)
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS RECORD AS $$
+  BEGIN
+    RETURN ROW('2001-01-01'::TIMESTAMP);
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+("2001-01-01 00:00:00")
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS RECORD AS $$
+  BEGIN
+    RETURN ROW(NULL);
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+()
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS RECORD AS $$
+  BEGIN
+    RETURN NULL;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+NULL
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS RECORD AS $$
+  BEGIN
+    RETURN ROW(1, NULL, 1.01, 'abcd', True);
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+(1,,1.01,abcd,t)
+
+subtest non_constant
+
+# Infer type for non-constant expressions.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS RECORD AS $$
+  DECLARE
+    x INT := 100;
+  BEGIN
+    RETURN ROW(x);
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+(100)
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS RECORD AS $$
+  DECLARE
+    x INT := 100;
+    y INT := 200;
+  BEGIN
+    RETURN ROW(x+y);
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+(300)
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS RECORD AS $$
+  DECLARE
+    x INT := 100;
+    y INT := 200;
+  BEGIN
+    RETURN ROW(format('%L + %L', x, y));
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+("'100' + '200'")
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS RECORD AS $$
+  DECLARE
+    x INT := 100;
+    y INT := 200;
+  BEGIN
+    RETURN ROW(x, y);
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+(100,200)
+
+subtest multiple_returns
+
+# Infer return type for multiple returns.
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS RECORD AS $$
+  BEGIN
+    IF n = 0 THEN
+      RETURN ROW(1);
+    ELSE
+      RETURN ROW(2);
+    END IF;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query TT
+SELECT f(0), f(1);
+----
+(1)  (2)
+
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS RECORD AS $$
+  BEGIN
+    IF n = 0 THEN
+      RETURN ROW(True);
+    ELSE
+      RETURN ROW(False);
+    END IF;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query TT
+SELECT f(0), f(1);
+----
+(t)  (f)
+
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS RECORD AS $$
+  BEGIN
+    IF n = 0 THEN
+      RETURN ROW(True, 100, 'abc');
+    ELSE
+      RETURN ROW(False, 200, 'def');
+    END IF;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query TT
+SELECT f(0), f(1);
+----
+(t,100,abc)  (f,200,def)
+
+# Infer type with one NULL branch.
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS RECORD AS $$
+  BEGIN
+    IF n = 0 THEN
+      RETURN ROW(100);
+    ELSE
+      RETURN NULL;
+    END IF;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query TT
+SELECT f(0), f(1);
+----
+(100)  NULL
+
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS RECORD AS $$
+  BEGIN
+    IF n = 0 THEN
+      RETURN NULL;
+    ELSE
+      RETURN ROW(100);
+    END IF;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query TT
+SELECT f(0), f(1);
+----
+NULL  (100)
+
+subtest infer_loops
+
+# Test interaction with loops.
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS RECORD AS $$
+  DECLARE
+    i INT := 0;
+  BEGIN
+    WHILE i < 5 LOOP
+      IF i = n THEN
+        RETURN ROW(i);
+      END IF;
+      i := i + 1;
+    END LOOP;
+    RETURN ROW(100);
+  END
+$$ LANGUAGE PLpgSQL;
+
+query TTTTT
+SELECT f(0), f(1), f(3), f(5), f(10);
+----
+(0)  (1)  (3)  (100)  (100)
+
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS RECORD AS $$
+  DECLARE
+    i INT := 0;
+  BEGIN
+    WHILE i < 5 LOOP
+      IF i = n THEN
+        RETURN ROW(i::TEXT);
+      END IF;
+      i := i + 1;
+    END LOOP;
+    RETURN ROW('f');
+  END
+$$ LANGUAGE PLpgSQL;
+
+query TTTTT
+SELECT f(0), f(1), f(3), f(5), f(10);
+----
+(0)  (1)  (3)  (f)  (f)
+
+# Record-returning routine as a data source.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS RECORD AS $$
+  BEGIN
+    RETURN ROW(0);
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42601 pq: a column definition list is required for functions returning \"record\"
+SELECT * FROM f();
+
+query I
+SELECT * FROM f() AS foo(x INT);
+----
+0
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS RECORD AS $$
+  BEGIN
+    RETURN ROW(1, NULL, 1.01, 'abcd', True);
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42601 pq: a column definition list is required for functions returning \"record\"
+SELECT * FROM f();
+
+query ITRTB
+SELECT * FROM f() AS bar(a INT, b TEXT, c DECIMAL, d TEXT, e BOOL);
+----
+1  NULL  1.01  abcd  true
+
+subtest failure
+
+statement error pgcode 42804 pq: cannot return non-composite value from function returning composite type
+CREATE OR REPLACE FUNCTION f() RETURNS RECORD AS $$
+  BEGIN
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42804 pq: cannot return non-composite value from function returning composite type
+CREATE OR REPLACE FUNCTION f() RETURNS RECORD AS $$
+  BEGIN
+    RETURN 'abcdef';
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 0A000 pq: unimplemented: returning different types from a RECORD-returning function is not yet supported
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS RECORD AS $$
+  BEGIN
+    IF n = 0 THEN
+      RETURN ROW(True);
+    ELSE
+      RETURN ROW(100);
+    END IF;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 0A000 pq: unimplemented: returning different types from a RECORD-returning function is not yet supported
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS RECORD AS $$
+  BEGIN
+    IF n = 0 THEN
+      RETURN ROW(100);
+    ELSE
+      RETURN ROW(NULL::TIMESTAMP);
+    END IF;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# Test errors related to a UDF called with a column-definition list.
+subtest column_definition_errors
+
+statement ok
+CREATE TYPE one_typ AS (x INT);
+CREATE TYPE foo_typ AS (x INT, y INT);
+CREATE TYPE bar_typ AS (x INT, y INT);
+
+# Column-definition list cannot be used with a composite UDT.
+statement ok
+DROP FUNCTION f(INT);
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS foo_typ LANGUAGE PLpgSQL AS $$ BEGIN RETURN ROW(1, 2); END $$;
+
+statement error pgcode 42601 pq: a column definition list is redundant for a function returning a named composite type
+SELECT * FROM f() AS g(bar bar_typ);
+
+# Column-definition list cannot be used with a scalar type.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$ BEGIN RETURN 1; END $$;
+
+statement error pgcode 42601 pq: a column definition list is only allowed for functions returning \"record\"
+SELECT * FROM f() AS g(bar FLOAT);
+
+# Column-definition list cannot be used with OUT-parameters.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(OUT x INT, OUT y INT) RETURNS RECORD LANGUAGE PLpgSQL AS $$ BEGIN x := 1; y := 2; RETURN; END $$;
+
+statement error pgcode 42601 pq: a column definition list is redundant for a function with OUT parameters
+SELECT * FROM f() AS g(bar bar_typ);
+
+# The number of result columns must match the number of entries in the column
+# definition list.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS RECORD LANGUAGE PLpgSQL AS $$ BEGIN RETURN (1, 2); END $$;
+
+statement error pgcode 42804 pq: returned record type does not match expected record type
+SELECT * FROM f() AS g(bar INT);
+
+statement error pgcode 42804 pq: returned record type does not match expected record type
+SELECT * FROM f() AS g(foo INT, bar INT, baz INT);
+
+# RECORD-returning UDF requires a column-definition list.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS RECORD LANGUAGE PLpgSQL AS $$ BEGIN RETURN ROW(1, 2); END $$;
+
+statement error pgcode 42601 pq: a column definition list is required for functions returning \"record\"
+SELECT * FROM f();
+
+# A column alias list is insufficient.
+statement error pgcode 42601 pq: a column definition list is required for functions returning \"record\"
+SELECT * FROM f() AS g(bar, baz);
+
+# The result column(s) must be assignment-cast compatible with the
+# column-definition list.
+statement ok
+DROP FUNCTION f;
+
+# Note: postgres doesn't throw this error until executing the UDF.
+statement error pgcode 42804 pq: cannot return non-composite value from function returning composite type
+CREATE FUNCTION f() RETURNS RECORD LANGUAGE PLpgSQL AS $$ BEGIN RETURN True; END $$;
+
+statement ok
+CREATE FUNCTION f() RETURNS RECORD LANGUAGE PLpgSQL AS $$ BEGIN RETURN ROW(True); END $$;
+
+statement error pgcode 42P13 pq: return type mismatch in function declared to return record
+SELECT * FROM f() AS g(bar one_typ);
+
+subtest regression_113186
+
+# Check whether the actual function result types are identical to the types in
+# the column definition, and correctly resolve differences.
+# Regression test for #113186.
+statement ok
+CREATE FUNCTION f113186() RETURNS RECORD LANGUAGE PLpgSQL AS $$ BEGIN RETURN ROW(1.99); END; $$;
+
+query R
+SELECT * FROM f113186() AS foo(x FLOAT);
+----
+1.99
+
+query I
+SELECT * FROM f113186() AS foo(x INT);
+----
+2
+
+statement error pgcode 42P13 pq: return type mismatch in function declared to return record
+SELECT * FROM f113186() AS foo(x TIMESTAMP);
+
+subtest end

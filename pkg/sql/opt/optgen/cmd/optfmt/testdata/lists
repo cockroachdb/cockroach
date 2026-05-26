@@ -1,0 +1,22 @@
+pretty n=30
+[Rule]
+(Name
+	[]
+	[ $item ]
+	[ ... $item ]
+	[ $item ... ]
+	[ ... $item ... ]
+)
+=>
+(Name)
+----
+[Rule]
+(Name
+    []
+    [ $item ]
+    [ ... $item ]
+    [ $item ... ]
+    [ ... $item ... ]
+)
+=>
+(Name)

@@ -1,0 +1,8 @@
+setup
+CREATE TYPE roach_legs AS (legs INT);
+COMMENT ON TYPE roach_legs IS 'Second-CRDB-comment-on-types';
+----
+
+test
+COMMENT ON TYPE roach_legs IS NULL;
+----

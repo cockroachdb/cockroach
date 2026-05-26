@@ -1,0 +1,4 @@
+resume_jobs_stmt ::=
+	'RESUME' 'JOB' job_id
+	| 'RESUME' 'JOBS' select_stmt
+	| 'RESUME' 'JOBS' for_schedules_clause

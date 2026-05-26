@@ -1,0 +1,455 @@
+statement ok
+CREATE TABLE t (x INT, y INT);
+INSERT INTO t VALUES (1, 2), (3, 4), (5, 6)
+
+statement ok
+CREATE MATERIALIZED VIEW v AS SELECT x, y FROM t
+
+# Ensure that materialized views show up in SHOW TABLES.
+query T
+SELECT table_name FROM [SHOW TABLES] WHERE type = 'materialized view'
+----
+v
+
+query II rowsort
+SELECT * FROM v
+----
+1 2
+3 4
+5 6
+
+# If we update t, the view shouldn't change.
+statement ok
+INSERT INTO t VALUES (7, 8)
+
+query II rowsort
+SELECT * FROM v
+----
+1 2
+3 4
+5 6
+
+let $orig_crdb_timestamp
+SELECT max(crdb_internal_mvcc_timestamp) FROM v
+
+# Now refresh the view.
+statement ok
+REFRESH MATERIALIZED VIEW v
+
+# The update should be visible now, as v has been recomputed.
+query II rowsort
+SELECT * FROM v
+----
+1 2
+3 4
+5 6
+7 8
+
+# Verify that crdb_internal_mvcc_timestamp is updated for all rows.
+query I
+SELECT count(*) FROM v WHERE crdb_internal_mvcc_timestamp > $orig_crdb_timestamp
+----
+4
+
+# Now add an index to the view, and use it.
+statement ok
+CREATE INDEX i ON v (y)
+
+query I rowsort
+SELECT y FROM v@i WHERE y > 4
+----
+6
+8
+
+# Now update t and refresh the view -- the index should be updated as well.
+statement ok
+INSERT INTO t VALUES (9, 10)
+
+statement ok
+REFRESH MATERIALIZED VIEW v
+
+query I rowsort
+SELECT y FROM v WHERE y > 4
+----
+6
+8
+10
+
+# Drop the index now.
+statement ok
+DROP INDEX v@i
+
+query I rowsort
+SELECT y FROM v WHERE y > 4
+----
+6
+8
+10
+
+# We can't refresh with an explicit txn.
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+
+statement ok
+SET LOCAL autocommit_before_ddl=off;
+
+statement error  pq: cannot refresh view in a multi-statement transaction
+REFRESH MATERIALIZED VIEW v
+
+statement ok
+ROLLBACK
+
+statement error pq: cannot mutate materialized view "v"
+INSERT INTO v VALUES (1, 2)
+
+statement error pq: cannot mutate materialized view "v"
+UPDATE v SET x = 1 WHERE y = 1
+
+statement error pq: cannot mutate materialized view "v"
+DELETE FROM v WHERE x = 1
+
+statement error pq: "v" is not a table
+TRUNCATE v
+
+# Test that a materialized view with a unique index errors out if the refresh
+# runs into a uniqueness constraint violation.
+statement ok
+CREATE TABLE dup (x INT);
+
+statement ok
+CREATE MATERIALIZED VIEW v_dup AS SELECT x FROM dup;
+
+statement ok
+CREATE UNIQUE INDEX i ON v_dup (x);
+
+statement ok
+INSERT INTO dup VALUES (1), (1);
+
+statement error (duplicate key value violates unique constraint "i"\nDETAIL: Key \(x\)=\(1\) already exists\.|ingested key collides with an existing one)
+REFRESH MATERIALIZED VIEW v_dup
+
+# We shouldn't be able to mix materialized and non materialized views in DDLs.
+statement ok
+CREATE VIEW normal_view AS SELECT 1;
+CREATE MATERIALIZED VIEW materialized_view AS SELECT 1;
+
+statement error pq: "materialized_view" is a materialized view
+ALTER VIEW materialized_view RENAME TO newname
+
+statement error pq: "normal_view" is not a materialized view
+ALTER MATERIALIZED VIEW normal_view RENAME TO newname
+
+statement error pq: "materialized_view" is a materialized view
+ALTER VIEW materialized_view SET SCHEMA public
+
+statement error pq: "normal_view" is not a materialized view
+ALTER MATERIALIZED VIEW normal_view SET SCHEMA public
+
+statement error pq: "materialized_view" is a materialized view
+DROP VIEW materialized_view
+
+statement error pq: "normal_view" is not a materialized view
+DROP MATERIALIZED VIEW normal_view
+
+# Using REFRESH MATERIALIZED VIEW ... WITH NO DATA should result in
+# an empty view.
+statement ok
+CREATE MATERIALIZED VIEW with_options AS SELECT 1;
+
+statement ok
+REFRESH MATERIALIZED VIEW with_options WITH DATA
+
+query I
+SELECT * FROM with_options
+----
+1
+
+statement ok
+REFRESH MATERIALIZED VIEW with_options WITH NO DATA
+
+query I
+SELECT * FROM with_options
+
+# Regression test for null data in materialized views.
+statement ok
+CREATE TABLE t57108 (id INT PRIMARY KEY, a INT);
+INSERT INTO t57108 VALUES(1, 1), (2, NULL);
+CREATE MATERIALIZED VIEW t57108_v AS SELECT t57108.a from t57108;
+
+query I rowsort
+SELECT * FROM t57108_v
+----
+NULL
+1
+
+user testuser
+
+# testuser should not be able to refresh the materialized view without
+# ownership or MAINTAIN privilege.
+statement error pq: user testuser does not have MAINTAIN privilege on relation with_options
+REFRESH MATERIALIZED VIEW with_options WITH NO DATA
+
+user root
+
+statement ok
+GRANT root TO testuser
+
+user testuser
+
+# testuser should now be able to refresh the materialized view as a member of
+# root.
+statement ok
+REFRESH MATERIALIZED VIEW with_options WITH NO DATA
+
+statement ok
+REVOKE root FROM testuser
+
+user root
+
+statement ok
+GRANT CREATE ON DATABASE test TO testuser
+
+statement ok
+ALTER MATERIALIZED VIEW with_options OWNER TO testuser
+
+# root should still be able to refresh the view.
+statement ok
+REFRESH MATERIALIZED VIEW with_options WITH NO DATA
+
+user testuser
+
+# testuser should now be able to refresh the materialized view as the owner.
+statement ok
+REFRESH MATERIALIZED VIEW with_options WITH NO DATA
+
+# Test CREATE MATERIALIZED VIEW referring to a sequence.
+statement ok
+CREATE SEQUENCE seq;
+CREATE MATERIALIZED VIEW view_from_seq AS (SELECT nextval('seq'))
+
+query I
+SELECT * FROM view_from_seq
+----
+1
+
+# Regression test for #79015.
+user testuser
+
+statement ok
+BEGIN
+
+user root
+
+statement ok
+SELECT * FROM system.descriptor;
+
+user testuser
+
+statement ok
+CREATE SEQUENCE seq_2;
+CREATE MATERIALIZED VIEW view_from_seq_2 AS (SELECT nextval('seq_2'));
+COMMIT
+
+subtest create_materialized_view_as_of
+
+let $ts_before_create
+SELECT now()
+
+statement ok
+CREATE TABLE tab_as_of (a INT PRIMARY KEY, b INT, c INT);
+INSERT INTO tab_as_of VALUES (0, 0);
+
+let $ts_before_drop_b
+SELECT now()
+
+statement ok
+ALTER TABLE tab_as_of DROP COLUMN b
+
+let $ts_before_insert_1
+SELECT now()
+
+statement ok
+INSERT INTO tab_as_of VALUES (1);
+
+statement error is before the most recent modification time of the tables the view depends on
+CREATE MATERIALIZED VIEW mat_view_as_of_too_old AS SELECT a, b FROM tab_as_of AS OF SYSTEM TIME '$ts_before_drop_b'
+
+statement ok
+CREATE MATERIALIZED VIEW mat_view_as_of AS SELECT a FROM tab_as_of AS OF SYSTEM TIME '$ts_before_insert_1'
+
+query I
+SELECT a FROM mat_view_as_of ORDER BY a
+----
+0
+
+let $ts_before_insert_2
+SELECT now()
+
+statement ok
+INSERT INTO tab_as_of VALUES (2);
+
+statement ok
+CREATE MATERIALIZED VIEW mat_view_as_of_no_data AS
+SELECT a FROM tab_as_of AS OF SYSTEM TIME '$ts_before_insert_2' WITH NO DATA
+
+let $ts_before_insert_3
+SELECT now()
+
+statement ok
+INSERT INTO tab_as_of VALUES (3);
+
+statement ok
+REFRESH MATERIALIZED VIEW mat_view_as_of AS OF SYSTEM TIME '$ts_before_insert_2'
+
+query I
+SELECT a FROM mat_view_as_of ORDER BY a
+----
+0
+1
+
+statement ok
+REFRESH MATERIALIZED VIEW mat_view_as_of AS OF SYSTEM TIME '$ts_before_insert_3'
+
+query I
+SELECT a FROM mat_view_as_of ORDER BY a
+----
+0
+1
+2
+
+statement ok
+REFRESH MATERIALIZED VIEW mat_view_as_of AS OF SYSTEM TIME '$ts_before_insert_2'
+
+query I
+SELECT a FROM mat_view_as_of ORDER BY a
+----
+0
+1
+
+statement ok
+ALTER TABLE tab_as_of DROP COLUMN c
+
+let $ts_after_drop_c
+SELECT now()
+
+statement ok
+REFRESH MATERIALIZED VIEW mat_view_as_of AS OF SYSTEM TIME '$ts_after_drop_c'
+
+query I
+SELECT a FROM mat_view_as_of ORDER BY a
+----
+0
+1
+2
+3
+
+statement error relation "mat_view_as_of" does not exist
+REFRESH MATERIALIZED VIEW mat_view_as_of AS OF SYSTEM TIME '$ts_before_create'
+
+statement error relation "mat_view_as_of" does not exist
+REFRESH MATERIALIZED VIEW mat_view_as_of AS OF SYSTEM TIME '$ts_before_insert_1'
+
+statement error materialized view "mat_view_as_of_no_data" has not been populated
+SELECT a FROM mat_view_as_of_no_data ORDER BY a
+
+statement ok
+REFRESH MATERIALIZED VIEW mat_view_as_of_no_data AS OF SYSTEM TIME '$ts_before_insert_3'
+
+query I
+SELECT a FROM mat_view_as_of_no_data ORDER BY a
+----
+0
+1
+2
+
+# Refreshing WITH NO DATA should clear the materialized view.
+statement ok
+REFRESH MATERIALIZED VIEW mat_view_as_of_no_data AS OF SYSTEM TIME '$ts_after_drop_c' WITH NO DATA
+
+query I
+SELECT a FROM mat_view_as_of_no_data ORDER BY a
+----
+
+statement ok
+REFRESH MATERIALIZED VIEW mat_view_as_of_no_data AS OF SYSTEM TIME '$ts_after_drop_c'
+
+query I
+SELECT a FROM mat_view_as_of_no_data ORDER BY a
+----
+0
+1
+2
+3
+
+subtest maintain_privilege
+
+user root
+
+statement ok
+CREATE TABLE maintain_t (a INT PRIMARY KEY);
+INSERT INTO maintain_t VALUES (1), (2), (3);
+CREATE MATERIALIZED VIEW maintain_mv AS SELECT * FROM maintain_t
+
+# Grant SELECT so testuser can query the view and its underlying table.
+statement ok
+GRANT SELECT ON maintain_mv TO testuser;
+GRANT SELECT ON maintain_t TO testuser
+
+user testuser
+
+# Without MAINTAIN or ownership, refresh should fail.
+statement error pq: user testuser does not have MAINTAIN privilege on relation maintain_mv
+REFRESH MATERIALIZED VIEW maintain_mv
+
+user root
+
+# Grant MAINTAIN to testuser.
+statement ok
+GRANT MAINTAIN ON maintain_mv TO testuser
+
+# SHOW GRANTS should display MAINTAIN.
+query TTTTTB rowsort
+SELECT * FROM [SHOW GRANTS ON maintain_mv] WHERE grantee = 'testuser' ORDER BY privilege_type
+----
+test  public  maintain_mv  testuser  MAINTAIN  false
+test  public  maintain_mv  testuser  SELECT    false
+
+user testuser
+
+# With MAINTAIN privilege, refresh should succeed.
+statement ok
+REFRESH MATERIALIZED VIEW maintain_mv
+
+user root
+
+# Revoke MAINTAIN.
+statement ok
+REVOKE MAINTAIN ON maintain_mv FROM testuser
+
+user testuser
+
+# After revoking MAINTAIN, refresh should fail again.
+statement error pq: user testuser does not have MAINTAIN privilege on relation maintain_mv
+REFRESH MATERIALIZED VIEW maintain_mv
+
+user root
+
+# MAINTAIN on a regular table is valid but does not make it a refreshable matview.
+statement ok
+GRANT MAINTAIN ON maintain_t TO testuser
+
+user testuser
+
+statement error pq: "maintain_t" is not a view
+REFRESH MATERIALIZED VIEW maintain_t
+
+user root
+
+# Cleanup.
+statement ok
+REVOKE ALL ON maintain_mv FROM testuser;
+REVOKE ALL ON maintain_t FROM testuser;
+DROP MATERIALIZED VIEW maintain_mv;
+DROP TABLE maintain_t
+
+subtest end

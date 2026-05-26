@@ -1,0 +1,515 @@
+exec-ddl
+CREATE TABLE kv (
+    k INT PRIMARY KEY,
+    v INT
+)
+----
+
+exec-ddl
+SHOW CREATE kv
+----
+TABLE kv
+ ├── k int not null
+ ├── v int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ └── PRIMARY INDEX kv_pkey
+      └── k int not null
+
+exec-ddl
+CREATE TABLE abcdef (
+    a INT NOT NULL,
+    b INT,
+    c INT DEFAULT (10),
+    d INT AS (b + c + 1) STORED,
+    e INT AS (a) STORED,
+    f INT CHECK (f > 2),
+    g INT AS (a+b) VIRTUAL,
+    h INT ON UPDATE 3
+)
+----
+
+exec-ddl
+SHOW CREATE abcdef
+----
+TABLE abcdef
+ ├── a int not null
+ ├── b int
+ ├── c int default ((10))
+ ├── d int as ((b + c) + 1) stored
+ ├── e int as (a) stored
+ ├── f int
+ ├── g int as (a + b) virtual
+ ├── h int on update (3)
+ ├── rowid int not null default (unique_rowid()) [hidden]
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── CHECK (f > 2)
+ └── PRIMARY INDEX abcdef_pkey
+      └── rowid int not null default (unique_rowid()) [hidden]
+
+exec-ddl
+CREATE TABLE uvwxy (
+    u INT,
+    v INT,
+    w INT,
+    x INT,
+    y INT,
+    PRIMARY KEY (u,v),
+    FAMILY (u,v,w),
+    FAMILY (x),
+    FAMILY (y)
+)
+----
+
+
+exec-ddl
+SHOW CREATE uvwxy
+----
+TABLE uvwxy
+ ├── u int not null
+ ├── v int not null
+ ├── w int
+ ├── x int
+ ├── y int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── FAMILY family1 (u, v, w, crdb_internal_mvcc_timestamp, tableoid)
+ ├── FAMILY family2 (x)
+ ├── FAMILY family3 (y)
+ └── PRIMARY INDEX uvwxy_pkey
+      ├── u int not null
+      └── v int not null
+
+exec-ddl
+CREATE TABLE a (a INT UNIQUE)
+----
+
+exec-ddl
+SHOW CREATE a
+----
+TABLE a
+ ├── a int
+ ├── rowid int not null default (unique_rowid()) [hidden]
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── PRIMARY INDEX a_pkey
+ │    └── rowid int not null default (unique_rowid()) [hidden]
+ └── UNIQUE INDEX a_a_key
+      ├── a int
+      └── rowid int not null default (unique_rowid()) [hidden] (storing)
+
+exec-ddl
+CREATE TABLE part1 (a INT PRIMARY KEY, b INT) PARTITION BY LIST (a) (
+  PARTITION p1 VALUES IN (1),
+  PARTITION p2 VALUES IN (3, 4, 5),
+  PARTITION p3 VALUES IN (DEFAULT)
+)
+----
+
+exec-ddl
+SHOW CREATE part1
+----
+TABLE part1
+ ├── a int not null
+ ├── b int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ └── PRIMARY INDEX part1_pkey
+      ├── a int not null
+      └── partitions
+           ├── p1
+           │    └── partition by list prefixes
+           │         └── (1)
+           ├── p2
+           │    └── partition by list prefixes
+           │         ├── (3)
+           │         ├── (4)
+           │         └── (5)
+           └── p3
+                └── partition by list prefixes
+
+exec-ddl
+CREATE TABLE part2 (
+  a STRING,
+  b STRING,
+  c INT,
+  PRIMARY KEY(a,b,c),
+  INDEX (c) PARTITION BY LIST (c) (
+    PARTITION pi1 VALUES IN (1),
+    PARTITION pi2 VALUES IN (3, 4)
+  )
+) PARTITION BY LIST (a, b) (
+  PARTITION p1 VALUES IN (('foo', 'bar'), ('foo', 'baz'), ('qux', 'qux')),
+  PARTITION p2 VALUES IN (('waldo', DEFAULT)),
+  PARTITION p3 VALUES IN (DEFAULT)
+)
+----
+
+exec-ddl
+SHOW CREATE part2
+----
+TABLE part2
+ ├── a string not null
+ ├── b string not null
+ ├── c int not null
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── PRIMARY INDEX part2_pkey
+ │    ├── a string not null
+ │    ├── b string not null
+ │    ├── c int not null
+ │    └── partitions
+ │         ├── p1
+ │         │    └── partition by list prefixes
+ │         │         ├── ('foo', 'bar')
+ │         │         ├── ('foo', 'baz')
+ │         │         └── ('qux', 'qux')
+ │         ├── p2
+ │         │    └── partition by list prefixes
+ │         │         └── ('waldo')
+ │         └── p3
+ │              └── partition by list prefixes
+ └── INDEX part2_c_idx
+      ├── c int not null
+      ├── a string not null
+      ├── b string not null
+      └── partitions
+           ├── pi1
+           │    └── partition by list prefixes
+           │         └── (1)
+           └── pi2
+                └── partition by list prefixes
+                     ├── (3)
+                     └── (4)
+
+exec-ddl
+CREATE TABLE inv (
+  k INT PRIMARY KEY,
+  a INT,
+  j JSONB,
+  g GEOMETRY,
+  INVERTED INDEX(j),
+  INVERTED INDEX(g)
+)
+----
+
+exec-ddl
+SHOW CREATE inv
+----
+TABLE inv
+ ├── k int not null
+ ├── a int
+ ├── j jsonb
+ ├── g geometry
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── j_inverted_key encodedkey not null [inverted]
+ ├── g_inverted_key encodedkey not null [inverted]
+ ├── PRIMARY INDEX inv_pkey
+ │    └── k int not null
+ ├── INVERTED INDEX inv_j_idx
+ │    ├── j_inverted_key encodedkey not null [inverted]
+ │    └── k int not null
+ └── INVERTED INDEX inv_g_idx
+      ├── g_inverted_key encodedkey not null [inverted]
+      └── k int not null
+
+# Table with inverted indexes and implicit primary index.
+exec-ddl
+CREATE TABLE inv2 (
+  a INT,
+  j JSONB,
+  g GEOMETRY,
+  INVERTED INDEX(j),
+  INVERTED INDEX(g)
+)
+----
+
+exec-ddl
+SHOW CREATE inv2
+----
+TABLE inv2
+ ├── a int
+ ├── j jsonb
+ ├── g geometry
+ ├── rowid int not null default (unique_rowid()) [hidden]
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── j_inverted_key encodedkey not null [inverted]
+ ├── g_inverted_key encodedkey not null [inverted]
+ ├── PRIMARY INDEX inv2_pkey
+ │    └── rowid int not null default (unique_rowid()) [hidden]
+ ├── INVERTED INDEX inv2_j_idx
+ │    ├── j_inverted_key encodedkey not null [inverted]
+ │    └── rowid int not null default (unique_rowid()) [hidden]
+ └── INVERTED INDEX inv2_g_idx
+      ├── g_inverted_key encodedkey not null [inverted]
+      └── rowid int not null default (unique_rowid()) [hidden]
+
+# Table with unique constraints.
+exec-ddl
+CREATE TABLE uniq (
+  i INT UNIQUE,
+  j STRING UNIQUE WITHOUT INDEX,
+  k STRING CHECK (k IN ('foo', 'bar', 'baz')),
+  l INT,
+  m STRING,
+  UNIQUE INDEX (k, j),
+  UNIQUE WITHOUT INDEX (l, m),
+  UNIQUE WITHOUT INDEX (m, l),
+  UNIQUE WITHOUT INDEX (l) WHERE l > 0
+)
+----
+
+exec-ddl
+SHOW CREATE uniq
+----
+TABLE uniq
+ ├── i int
+ ├── j string
+ ├── k string
+ ├── l int
+ ├── m string
+ ├── rowid int not null default (unique_rowid()) [hidden]
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── CHECK (k IN ('foo', 'bar', 'baz'))
+ ├── PRIMARY INDEX uniq_pkey
+ │    └── rowid int not null default (unique_rowid()) [hidden]
+ ├── UNIQUE INDEX uniq_i_key
+ │    ├── i int
+ │    └── rowid int not null default (unique_rowid()) [hidden] (storing)
+ ├── UNIQUE INDEX uniq_k_j_key
+ │    ├── k string
+ │    ├── j string
+ │    └── rowid int not null default (unique_rowid()) [hidden] (storing)
+ ├── UNIQUE WITHOUT INDEX (j)
+ ├── UNIQUE WITHOUT INDEX (l, m)
+ └── UNIQUE WITHOUT INDEX (l)
+      └── WHERE l > 0
+
+exec-ddl
+CREATE TABLE mutations (
+  a INT,
+  "b:inaccessible" INT,
+  "c:write-only" INT,
+  "d:delete-only" INT,
+  "v:inaccessible" INT AS (a+1) VIRTUAL,
+  INDEX "idxa:write-only" (a),
+  INDEX "idxb:delete-only" (b)
+)
+----
+
+exec-ddl
+SHOW CREATE mutations
+----
+TABLE mutations
+ ├── a int
+ ├── b int [inaccessible]
+ ├── v int as (a + 1) virtual [inaccessible]
+ ├── rowid int not null default (unique_rowid()) [hidden]
+ ├── c int [write-only]
+ ├── d int [delete-only]
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── PRIMARY INDEX mutations_pkey
+ │    └── rowid int not null default (unique_rowid()) [hidden]
+ ├── INDEX idxa (mutation)
+ │    ├── a int
+ │    └── rowid int not null default (unique_rowid()) [hidden]
+ └── INDEX idxb (mutation)
+      ├── b int [inaccessible]
+      └── rowid int not null default (unique_rowid()) [hidden]
+
+# Table with temporary backfill mutation indexes. The +temp suffix marks an
+# index as a temporary index used during an in-progress index backfill.
+exec-ddl
+CREATE TABLE temp_mutations (
+  a INT PRIMARY KEY,
+  b INT,
+  c STRING,
+  INDEX "idx_partial:write-only+temp" (b) WHERE c IS NOT NULL,
+  INDEX "idx_regular:delete-only+temp" (c)
+)
+----
+
+exec-ddl
+SHOW CREATE temp_mutations
+----
+TABLE temp_mutations
+ ├── a int not null
+ ├── b int
+ ├── c string
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── PRIMARY INDEX temp_mutations_pkey
+ │    └── a int not null
+ ├── INDEX idx_partial (mutation, temp)
+ │    ├── b int
+ │    ├── a int not null
+ │    └── WHERE c IS NOT NULL
+ └── INDEX idx_regular (mutation, temp)
+      ├── c string
+      └── a int not null
+
+# Table with generated_as_identity constraints.
+exec-ddl
+CREATE TABLE generated_as_identity (
+  a INT,
+  b INT GENERATED ALWAYS AS IDENTITY,
+  c INT GENERATED BY DEFAULT AS IDENTITY
+)
+----
+
+exec-ddl
+SHOW CREATE generated_as_identity
+----
+TABLE generated_as_identity
+ ├── a int
+ ├── b int not null generated always as identity
+ ├── c int not null generated by default as identity
+ ├── rowid int not null default (unique_rowid()) [hidden]
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ └── PRIMARY INDEX generated_as_identity_pkey
+      └── rowid int not null default (unique_rowid()) [hidden]
+
+# Table with generated_as_identity constraints and sequence option.
+exec-ddl
+CREATE TABLE generated_as_identity_seq_opt (
+  a INT,
+  b INT GENERATED ALWAYS AS IDENTITY (START 2 INCREMENT 3 CACHE 10),
+  c INT GENERATED BY DEFAULT AS IDENTITY (START 3 INCREMENT 4 CACHE 11)
+)
+----
+
+exec-ddl
+SHOW CREATE generated_as_identity_seq_opt
+----
+TABLE generated_as_identity_seq_opt
+ ├── a int
+ ├── b int not null generated always as identity (START 2 INCREMENT 3 PER NODE CACHE 10)
+ ├── c int not null generated by default as identity (START 3 INCREMENT 4 PER NODE CACHE 11)
+ ├── rowid int not null default (unique_rowid()) [hidden]
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ └── PRIMARY INDEX generated_as_identity_seq_opt_pkey
+      └── rowid int not null default (unique_rowid()) [hidden]
+
+# Virtual column in primary key is treated as a stored column in the optimizer.
+exec-ddl
+CREATE TABLE virtpk (
+    a INT,
+    v INT AS (a + 10) VIRTUAL,
+    PRIMARY KEY (v, a)
+)
+----
+
+exec-ddl
+SHOW CREATE virtpk
+----
+TABLE virtpk
+ ├── a int not null
+ ├── v int not null as (a + 10) stored
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ └── PRIMARY INDEX virtpk_pkey
+      ├── v int not null as (a + 10) stored
+      └── a int not null
+
+# Tables are implicit record types.
+exec-ddl
+CREATE TABLE typ1 (
+  a INT PRIMARY KEY,
+  b STRING
+)
+----
+
+exec-ddl
+CREATE TABLE typ2 (
+  a INT PRIMARY KEY
+)
+----
+
+exec-ddl
+CREATE TABLE tab_with_types (
+  k INT PRIMARY KEY,
+  t1 typ1,
+  t2 typ2
+)
+----
+
+exec-ddl
+SHOW CREATE tab_with_types
+----
+TABLE tab_with_types
+ ├── k int not null
+ ├── t1 tuple{int AS a, string AS b}
+ ├── t2 tuple{int AS a}
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ └── PRIMARY INDEX tab_with_types_pkey
+      └── k int not null
+
+# Regression test for #76994. Only unique constraints with the same columns and
+# predicates should be deduplicated.
+exec-ddl
+CREATE TABLE t76994 (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  UNIQUE WITHOUT INDEX (a) WHERE b < 0,
+  UNIQUE WITHOUT INDEX (a) WHERE b < 0,
+  UNIQUE WITHOUT INDEX (a) WHERE b > 0
+)
+----
+
+exec-ddl
+SHOW CREATE t76994
+----
+TABLE t76994
+ ├── k int not null
+ ├── a int
+ ├── b int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── PRIMARY INDEX t76994_pkey
+ │    └── k int not null
+ ├── UNIQUE WITHOUT INDEX (a)
+ │    └── WHERE b < 0
+ └── UNIQUE WITHOUT INDEX (a)
+      └── WHERE b > 0
+
+# Table implicit types should not include hidden columns.
+exec-ddl
+CREATE TABLE hidden_columns (
+  a INT,
+  b INT NOT VISIBLE,
+  c INT
+)
+----
+
+build
+SELECT ROW(1, 2)::hidden_columns;
+----
+project
+ ├── columns: row:1(tuple{int AS a, int AS c}!null)
+ ├── cardinality: [1 - 1]
+ ├── immutable
+ ├── stats: [rows=1]
+ ├── cost: 0.05
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── prune: (1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── cost: 0.02
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── cast: RECORD [as=row:1, type=tuple{int AS a, int AS c}, immutable]
+           └── tuple [type=tuple{int, int}]
+                ├── const: 1 [type=int]
+                └── const: 2 [type=int]

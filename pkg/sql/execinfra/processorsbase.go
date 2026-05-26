@@ -1,0 +1,1092 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package execinfra
+
+import (
+	"context"
+	"math"
+
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/optional"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
+	"github.com/cockroachdb/redact/interfaces"
+	"go.opentelemetry.io/otel/attribute"
+)
+
+// Processor is a common interface implemented by all processors, used by the
+// higher-level flow orchestration code.
+type Processor interface {
+	// OutputTypes returns the column types of the results (that are to be fed
+	// through an output router).
+	OutputTypes() []*types.T
+
+	// MustBeStreaming indicates whether this processor is of "streaming" nature
+	// and is expected to emit the output one row at a time (in both row-by-row
+	// and the vectorized engines).
+	MustBeStreaming() bool
+
+	// Run is the main loop of the processor. It can be called only once
+	// throughout the processor's lifetime.
+	Run(context.Context, RowReceiver)
+
+	// Resume resumes the execution of the processor with the new receiver. It
+	// can be called many times but after Run() has already been called.
+	//
+	// Currently only used by the pausable portals.
+	//
+	// NB: this method doesn't take the context as parameter because the context
+	// was already captured on Run().
+	Resume(output RowReceiver)
+
+	// Close releases the resources of the processor and possibly its inputs.
+	// Must be called at least once on a given Processor and can be called
+	// multiple times.
+	Close(context.Context)
+}
+
+// DoesNotUseTxn is an interface implemented by some processors to mark that
+// they do not use a txn. The DistSQLPlanner forbids multiple processors in a
+// local flow from running in parallel if this is unknown since concurrent use
+// of the RootTxn is forbidden (in a distributed flow these are leaf txns, so
+// it doesn't matter).
+// Implementing this interface lets the DistSQLPlanner know that it is ok to
+// run this processor in an additional goroutine.
+type DoesNotUseTxn interface {
+	DoesNotUseTxn() bool
+}
+
+// ProcOutputHelper is a helper type that performs filtering and projection on
+// the output of a processor.
+type ProcOutputHelper struct {
+	// eh only contains expressions if we have at least one rendering. It will
+	// not be used if outputCols is set.
+	eh execexpr.MultiHelper
+	// outputCols is non-nil if we have a projection. Only one of renderExprs and
+	// outputCols can be set. Note that 0-length projections are possible, in
+	// which case outputCols will be 0-length but non-nil.
+	outputCols []uint32
+
+	outputRow rowenc.EncDatumRow
+
+	// OutputTypes is the schema of the rows produced by the processor after
+	// post-processing (i.e. the rows that are pushed through a router).
+	//
+	// If renderExprs is set, these types correspond to the types of those
+	// expressions.
+	// If outputCols is set, these types correspond to the types of
+	// those columns.
+	// If neither is set, this is the internal schema of the processor.
+	OutputTypes []*types.T
+
+	// offset is the number of rows that are suppressed.
+	offset uint64
+	// maxRowIdx is the number of rows after which we can stop (offset + limit),
+	// or MaxUint64 if there is no limit.
+	maxRowIdx uint64
+
+	rowIdx uint64
+}
+
+// Reset resets this ProcOutputHelper, retaining allocated memory in its slices.
+func (h *ProcOutputHelper) Reset() {
+	// Deeply reset the render expressions and the output row. Note that we
+	// don't bother deeply resetting the types slice since the types are small
+	// objects.
+	h.eh.Reset()
+	for i := range h.outputRow {
+		h.outputRow[i] = rowenc.EncDatum{}
+	}
+	*h = ProcOutputHelper{
+		eh:          h.eh,
+		outputRow:   h.outputRow[:0],
+		OutputTypes: h.OutputTypes[:0],
+	}
+}
+
+// Init sets up a ProcOutputHelper. The types describe the internal schema of
+// the processor (as described for each processor core spec); they can be
+// omitted if there is no filtering expression.
+// Note that the types slice may be stored directly; the caller should not
+// modify it.
+//
+// If the provided evalCtx is the same as flowCtx.EvalCtx, then a copy will be
+// made internally when there are render expressions.
+func (h *ProcOutputHelper) Init(
+	ctx context.Context,
+	post *execinfrapb.PostProcessSpec,
+	coreOutputTypes []*types.T,
+	semaCtx *tree.SemaContext,
+	evalCtx *eval.Context,
+	flowCtx *FlowCtx,
+) error {
+	if !post.Projection && len(post.OutputColumns) > 0 {
+		return errors.Errorf("post-processing has projection unset but output columns set: %s", post)
+	}
+	if post.Projection && len(post.RenderExprs) > 0 {
+		return errors.Errorf("post-processing has both projection and rendering: %s", post)
+	}
+	if post.Projection {
+		for _, col := range post.OutputColumns {
+			if int(col) >= len(coreOutputTypes) {
+				return errors.Errorf("invalid output column %d (only %d available)", col, len(coreOutputTypes))
+			}
+		}
+		h.outputCols = post.OutputColumns
+		if h.outputCols == nil {
+			// nil indicates no projection; use an empty slice.
+			h.outputCols = make([]uint32, 0)
+		}
+		nOutputCols := len(h.outputCols)
+		if cap(h.OutputTypes) >= nOutputCols {
+			h.OutputTypes = h.OutputTypes[:nOutputCols]
+		} else {
+			h.OutputTypes = make([]*types.T, nOutputCols)
+		}
+		for i, c := range h.outputCols {
+			h.OutputTypes[i] = coreOutputTypes[c]
+		}
+	} else if nRenders := len(post.RenderExprs); nRenders > 0 {
+		if evalCtx == flowCtx.EvalCtx {
+			// We haven't created a copy of the eval context, and we have some
+			// renders, then we'll need to create a copy ourselves since we're
+			// going to use the execexpr.Helper which might mutate the eval
+			// context.
+			evalCtx = flowCtx.NewEvalCtx()
+		}
+		if cap(h.OutputTypes) >= nRenders {
+			h.OutputTypes = h.OutputTypes[:nRenders]
+		} else {
+			h.OutputTypes = make([]*types.T, nRenders)
+		}
+		if err := h.eh.Init(ctx, nRenders, coreOutputTypes, semaCtx, evalCtx); err != nil {
+			return err
+		}
+		for i, expr := range post.RenderExprs {
+			var err error
+			if err = h.eh.AddExpr(ctx, expr, i); err != nil {
+				return err
+			}
+			h.OutputTypes[i] = h.eh.Expr(i).ResolvedType()
+		}
+	} else {
+		// No rendering or projection.
+		if cap(h.OutputTypes) >= len(coreOutputTypes) {
+			h.OutputTypes = h.OutputTypes[:len(coreOutputTypes)]
+		} else {
+			h.OutputTypes = make([]*types.T, len(coreOutputTypes))
+		}
+		copy(h.OutputTypes, coreOutputTypes)
+	}
+	if h.outputCols != nil || h.eh.ExprCount() > 0 {
+		// We're rendering or projecting, so allocate an output row.
+		if h.outputRow != nil && cap(h.outputRow) >= len(h.OutputTypes) {
+			// In some cases we might have no output columns, so nil outputRow
+			// would have sufficient width, yet nil row is a special value, so
+			// we can only reuse the old outputRow if it's non-nil.
+			h.outputRow = h.outputRow[:len(h.OutputTypes)]
+		} else {
+			h.outputRow = make(rowenc.EncDatumRow, len(h.OutputTypes))
+		}
+	}
+
+	h.offset = post.Offset
+	if post.Limit == 0 || post.Limit >= math.MaxUint64-h.offset {
+		h.maxRowIdx = math.MaxUint64
+	} else {
+		h.maxRowIdx = h.offset + post.Limit
+	}
+
+	return nil
+}
+
+// EmitRow sends a row through the post-processing stage. The same row can be
+// reused.
+//
+// It returns the consumer's status that was observed when pushing this row. If
+// an error is returned, it's coming from the ProcOutputHelper's filtering or
+// rendering processing; the output has not been closed and it's the caller's
+// responsibility to push the error to the output.
+//
+// Note: check out rowexec.emitHelper() for a useful wrapper.
+func (h *ProcOutputHelper) EmitRow(
+	ctx context.Context, row rowenc.EncDatumRow, output RowReceiver,
+) (ConsumerStatus, error) {
+	if output == nil {
+		panic("output RowReceiver is not set for emitting rows")
+	}
+
+	outRow, ok, err := h.ProcessRow(ctx, row)
+	if err != nil {
+		// The status doesn't matter.
+		return NeedMoreRows, err
+	}
+	if outRow == nil {
+		if ok {
+			return NeedMoreRows, nil
+		}
+		return DrainRequested, nil
+	}
+
+	// TODO(yuzefovich): consider removing this logging since the verbosity
+	// check is not exactly free.
+	if log.V(3) {
+		log.Dev.InfofDepth(ctx, 1, "pushing row %s", outRow.String(h.OutputTypes))
+	}
+	if r := output.Push(outRow, nil); r != NeedMoreRows {
+		log.VEventf(ctx, 1, "no more rows required. drain requested: %t",
+			r == DrainRequested)
+		return r, nil
+	}
+	if h.rowIdx == h.maxRowIdx {
+		log.VEventf(ctx, 1, "hit row limit; asking producer to drain")
+		return DrainRequested, nil
+	}
+	status := NeedMoreRows
+	if !ok {
+		status = DrainRequested
+	}
+	return status, nil
+}
+
+// ProcessRow sends the invoked row through the post-processing stage and returns
+// the post-processed row. Results from ProcessRow aren't safe past the next call
+// to ProcessRow.
+//
+// The moreRowsOK retval is true if more rows can be processed, false if the
+// limit has been reached (if there's a limit). Upon seeing a false value, the
+// caller is expected to start draining. Note that both a row and
+// moreRowsOK=false can be returned at the same time: the row that satisfies the
+// limit is returned at the same time as a DrainRequested status. In that case,
+// the caller is supposed to both deal with the row and start draining.
+func (h *ProcOutputHelper) ProcessRow(
+	ctx context.Context, row rowenc.EncDatumRow,
+) (_ rowenc.EncDatumRow, moreRowsOK bool, _ error) {
+	if h.rowIdx >= h.maxRowIdx {
+		return nil, false, nil
+	}
+
+	h.rowIdx++
+	if h.rowIdx <= h.offset {
+		// Suppress row.
+		return nil, true, nil
+	}
+
+	if h.eh.ExprCount() > 0 {
+		// Rendering.
+		for i, n := 0, h.eh.ExprCount(); i < n; i++ {
+			datum, err := h.eh.EvalExpr(ctx, i, row)
+			if err != nil {
+				return nil, false, err
+			}
+			h.outputRow[i], err = rowenc.DatumToEncDatum(h.OutputTypes[i], datum)
+			if err != nil {
+				return nil, false, err
+			}
+		}
+	} else if h.outputCols != nil {
+		// Projection.
+		for i, col := range h.outputCols {
+			h.outputRow[i] = row[col]
+		}
+	} else {
+		// No rendering or projection.
+		return row, h.rowIdx < h.maxRowIdx, nil
+	}
+
+	// If this row satisfies the limit, the caller is told to drain.
+	return h.outputRow, h.rowIdx < h.maxRowIdx, nil
+}
+
+// Stats returns output statistics.
+func (h *ProcOutputHelper) Stats() execinfrapb.OutputStats {
+	return execinfrapb.OutputStats{
+		NumTuples: optional.MakeUint(h.rowIdx),
+	}
+}
+
+// ProcessorConstructor is a function that creates a Processor. It is
+// abstracted away so that we could create mixed flows (i.e. a vectorized flow
+// with wrapped processors) without bringing a dependency on sql/rowexec
+// package into sql/colexec package.
+type ProcessorConstructor func(
+	ctx context.Context,
+	flowCtx *FlowCtx,
+	processorID int32,
+	stageID int32,
+	core *execinfrapb.ProcessorCoreUnion,
+	post *execinfrapb.PostProcessSpec,
+	inputs []RowSource,
+	localProcessors []LocalProcessor,
+) (Processor, error)
+
+// ProcessorBase is supposed to be embedded by Processors. It provides
+// facilities for dealing with filtering and projection (through a
+// ProcOutputHelper) and for implementing the RowSource interface (draining,
+// trailing metadata).
+type ProcessorBase struct {
+	ProcessorBaseNoHelper
+
+	// OutputHelper is used to handle the post-processing spec.
+	OutputHelper ProcOutputHelper
+
+	// MemMonitor is the processor's memory monitor.
+	MemMonitor *mon.BytesMonitor
+
+	// SemaCtx is used to avoid allocating a new SemaCtx during processor setup.
+	SemaCtx tree.SemaContext
+}
+
+// ProcessorBaseNoHelper is slightly reduced version of ProcessorBase that
+// should be used by the processors that don't need to handle the
+// post-processing spec.
+type ProcessorBaseNoHelper struct {
+	self RowSource
+
+	ProcessorID int32
+
+	FlowCtx *FlowCtx
+
+	// Closed is set by InternalClose(). Once set, the processor's tracing span
+	// has been closed.
+	Closed bool
+
+	// ctx and span contain the tracing state while the processor is active
+	// (i.e. hasn't been closed). Initialized using flowCtx.Ctx (which should not be otherwise
+	// used).
+	ctx  context.Context
+	span *tracing.Span
+	// origCtx is the context from which ctx was derived. InternalClose() resets
+	// ctx to this.
+	origCtx context.Context
+
+	State procState
+
+	// ExecStatsForTrace, if set, will be called before getting the trace data from
+	// the span and adding the recording to the trailing metadata. The returned
+	// ComponentStats are associated with the processor's span. The Component
+	// field of the returned stats will be set by the calling code.
+	//
+	// Can return nil.
+	ExecStatsForTrace func() *execinfrapb.ComponentStats
+	// trailingMetaCallback, if set, will be called by moveToTrailingMeta(). The
+	// callback is expected to close all inputs, do other cleanup on the processor
+	// (including calling InternalClose()) and generate the trailing meta that
+	// needs to be returned to the consumer. As a special case,
+	// moveToTrailingMeta() handles getting the tracing information into
+	// trailingMeta, so the callback doesn't need to worry about that.
+	//
+	// If no callback is specified, InternalClose() will be called automatically.
+	// So, if no trailing metadata other than the trace needs to be returned (and
+	// other than what has otherwise been manually put in trailingMeta) and no
+	// closing other than InternalClose is needed, then no callback needs to be
+	// specified.
+	trailingMetaCallback func() []execinfrapb.ProducerMetadata
+	// trailingMeta is scratch space where metadata is stored to be returned
+	// later.
+	trailingMeta []execinfrapb.ProducerMetadata
+
+	// inputsToDrain, if not empty, contains inputs to be drained by
+	// DrainHelper(). MoveToDraining() calls ConsumerDone() on them,
+	// InternalClose() calls ConsumerClosed() on then.
+	//
+	// ConsumerDone() is called on all inputs at once and then inputs are drained
+	// one by one (in StateDraining, inputsToDrain[curInputToDrain] is the one
+	// currently being drained).
+	inputsToDrain []RowSource
+
+	// curInputToDrain is the index into inputsToDrain that needs to be drained
+	// next.
+	curInputToDrain int
+
+	// ashCleanup clears the ASH work state set during StartInternal.
+	ashCleanup func()
+}
+
+// MustBeStreaming implements the Processor interface.
+func (pb *ProcessorBaseNoHelper) MustBeStreaming() bool {
+	return false
+}
+
+// Reset resets this ProcessorBaseNoHelper, retaining allocated memory in
+// slices.
+func (pb *ProcessorBaseNoHelper) Reset() {
+	// Deeply reset the slices so that we don't hold onto the old objects.
+	for i := range pb.trailingMeta {
+		pb.trailingMeta[i] = execinfrapb.ProducerMetadata{}
+	}
+	for i := range pb.inputsToDrain {
+		pb.inputsToDrain[i] = nil
+	}
+	*pb = ProcessorBaseNoHelper{
+		trailingMeta:  pb.trailingMeta[:0],
+		inputsToDrain: pb.inputsToDrain[:0],
+	}
+}
+
+// Reset resets this ProcessorBase, retaining allocated memory in slices.
+func (pb *ProcessorBase) Reset() {
+	pb.ProcessorBaseNoHelper.Reset()
+	pb.OutputHelper.Reset()
+	*pb = ProcessorBase{
+		ProcessorBaseNoHelper: pb.ProcessorBaseNoHelper,
+		OutputHelper:          pb.OutputHelper,
+	}
+}
+
+// procState represents the standard states that a processor can be in. These
+// states are relevant when the processor is using the draining utilities in
+// ProcessorBase.
+type procState int
+
+func (i procState) SafeFormat(s interfaces.SafePrinter, verb rune) {
+	switch i {
+	case StateRunning:
+		s.SafeString("StateRunning")
+	case StateDraining:
+		s.SafeString("StateDraining")
+	case StateTrailingMeta:
+		s.SafeString("StateTrailingMeta")
+	case StateExhausted:
+		s.SafeString("StateExhausted")
+	}
+}
+
+var _ redact.SafeFormatter = procState(0)
+
+//go:generate stringer -type=procState
+const (
+	// StateRunning is the common state of a processor: it's producing rows for
+	// its consumer and forwarding metadata from its input. Different processors
+	// might have sub-states internally.
+	//
+	// If the consumer calls ConsumerDone or if the ProcOutputHelper.maxRowIdx is
+	// reached, then the processor will transition to StateDraining. If the input
+	// is exhausted, then the processor can transition to StateTrailingMeta
+	// directly, although most always go through StateDraining.
+	StateRunning procState = iota
+
+	// StateDraining is the state in which the processor is forwarding metadata
+	// from its input and otherwise ignoring all rows. Once the input is
+	// exhausted, the processor will transition to StateTrailingMeta.
+	//
+	// In StateDraining, processors are required to swallow
+	// ReadWithinUncertaintyIntervalErrors received from its sources. We're
+	// already draining, so we don't care about whatever data generated this
+	// uncertainty error. Besides generally seeming like a good idea, doing this
+	// allows us to offer a nice guarantee to SQL clients: a read-only query that
+	// produces at most one row, run as an implicit txn, never produces retriable
+	// errors, regardless of the size of the row being returned (in relation to
+	// the size of the result buffer on the connection). One would naively expect
+	// that to be true: either the error happens before any rows have been
+	// delivered to the client, in which case the auto-retries kick in, or, if a
+	// row has been delivered, then the query is done and so how can there be an
+	// error? What our naive friend is ignoring is that, if it weren't for this
+	// code, it'd be possible for a retriable error to sneak in after the query's
+	// limit has been satisfied but while processors are still draining. Note
+	// that uncertainty errors are not retried automatically by the leaf
+	// TxnCoordSenders (i.e. by refresh txn interceptor).
+	//
+	// Other categories of errors might be safe to ignore too; however we
+	// can't ignore all of them. Generally, we need to ensure that all the
+	// trailing metadata (e.g. LeafTxnFinalState's) make it to the gateway for
+	// successful flows. If an error is telling us that some metadata might
+	// have been dropped, we can't ignore that.
+	StateDraining
+
+	// StateTrailingMeta is the state in which the processor is outputting final
+	// metadata such as the tracing information or the LeafTxnFinalState. Once all the
+	// trailing metadata has been produced, the processor transitions to
+	// StateExhausted.
+	StateTrailingMeta
+
+	// StateExhausted is the state of a processor that has no more rows or
+	// metadata to produce.
+	StateExhausted
+)
+
+// MoveToDraining switches the processor to the StateDraining. Only metadata is
+// returned from now on. In this state, the processor is expected to drain its
+// inputs (commonly by using DrainHelper()).
+//
+// If the processor has no input (ProcStateOpts.inputToDrain was not specified
+// at init() time), then we move straight to the StateTrailingMeta.
+//
+// An error can be optionally passed. It will be the first piece of metadata
+// returned by DrainHelper(), unless the processor's context has already been
+// canceled, in which case the context's error is returned instead (as often an
+// error passed to MoveToDraining() is a consequence of context cancellation).
+//
+// MoveToDraining should only be called from the main goroutine of the
+// processor.
+func (pb *ProcessorBaseNoHelper) MoveToDraining(err error) {
+	if pb.State != StateRunning {
+		// Calling MoveToDraining in any state is allowed in order to facilitate the
+		// ConsumerDone() implementations that just call this unconditionally.
+		// However, calling it with an error in states other than StateRunning is
+		// not permitted.
+		if err != nil {
+			logcrash.ReportOrPanic(
+				pb.Ctx(),
+				&pb.FlowCtx.Cfg.Settings.SV,
+				"MoveToDraining called in state %s with err: %+v",
+				pb.State, err)
+		}
+		return
+	}
+
+	if err != nil {
+		// If processor ctx was canceled, reply with that err rather than whatever
+		// error was passed to MoveToDraining by a processor running on top of a
+		// canceled context, which is expected to error. Generally the error passed
+		// in this case will be context.Canceled anyway, but doing this ensures that
+		// distsql can promise that if it cancels a context, the emitted error will
+		// reflect that, making cancellation detectable by callers.
+		if pb.Ctx().Err() != nil {
+			if !errors.Is(err, pb.Ctx().Err()) {
+				log.Dev.Warningf(pb.Ctx(), "overriding non-cancellation emitted after context cancellation: %+v", err)
+			}
+			err = pb.Ctx().Err()
+		}
+		pb.trailingMeta = append(pb.trailingMeta, execinfrapb.ProducerMetadata{Err: err})
+	}
+	if pb.curInputToDrain < len(pb.inputsToDrain) {
+		// We go to StateDraining here. DrainHelper() will transition to
+		// StateTrailingMeta when the inputs are drained (including if the inputs
+		// are already drained).
+		pb.State = StateDraining
+		for _, input := range pb.inputsToDrain[pb.curInputToDrain:] {
+			input.ConsumerDone()
+		}
+	} else {
+		pb.moveToTrailingMeta()
+	}
+}
+
+// DrainHelper is supposed to be used in states draining and trailingMetadata.
+// It deals with optionally draining an input and returning trailing meta. It
+// also moves from StateDraining to StateTrailingMeta when appropriate.
+func (pb *ProcessorBaseNoHelper) DrainHelper() *execinfrapb.ProducerMetadata {
+	if pb.State == StateRunning {
+		logcrash.ReportOrPanic(
+			pb.Ctx(),
+			&pb.FlowCtx.Cfg.Settings.SV,
+			"drain helper called in StateRunning",
+		)
+	}
+
+	// trailingMeta always has priority; it seems like a good idea because it
+	// causes metadata to be sent quickly after it is produced (e.g. the error
+	// passed to MoveToDraining()).
+	if len(pb.trailingMeta) > 0 {
+		return pb.popTrailingMeta()
+	}
+
+	if pb.State != StateDraining {
+		return nil
+	}
+
+	// Ignore all rows; only return meta.
+	for {
+		input := pb.inputsToDrain[pb.curInputToDrain]
+
+		row, meta := input.Next()
+		if row == nil && meta == nil {
+			pb.curInputToDrain++
+			if pb.curInputToDrain >= len(pb.inputsToDrain) {
+				pb.moveToTrailingMeta()
+				return pb.popTrailingMeta()
+			}
+			continue
+		}
+		if meta != nil {
+			// Swallow ReadWithinUncertaintyIntervalErrors. See comments on
+			// StateDraining.
+			if ShouldSwallowReadWithinUncertaintyIntervalError(meta) {
+				continue
+			}
+			return meta
+		}
+	}
+}
+
+// ShouldSwallowReadWithinUncertaintyIntervalError examines meta and returns
+// true if it should be swallowed and not propagated further. It is the case if
+// meta contains kvpb.ReadWithinUncertaintyIntervalError.
+func ShouldSwallowReadWithinUncertaintyIntervalError(meta *execinfrapb.ProducerMetadata) bool {
+	if err := meta.Err; err != nil {
+		// We only look for UnhandledRetryableErrors. Local reads (which would
+		// be transformed by the Root TxnCoordSender into
+		// TransactionRetryWithProtoRefreshErrors) don't have any uncertainty.
+		if ure := (*kvpb.UnhandledRetryableError)(nil); errors.As(err, &ure) {
+			if _, uncertain := ure.PErr.GetDetail().(*kvpb.ReadWithinUncertaintyIntervalError); uncertain {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// popTrailingMeta peels off one piece of trailing metadata or advances to
+// StateExhausted if there's no more trailing metadata.
+func (pb *ProcessorBaseNoHelper) popTrailingMeta() *execinfrapb.ProducerMetadata {
+	if len(pb.trailingMeta) > 0 {
+		meta := &pb.trailingMeta[0]
+		pb.trailingMeta = pb.trailingMeta[1:]
+		return meta
+	}
+	pb.State = StateExhausted
+	return nil
+}
+
+// ExecStatsForTraceHijacker is an interface that allows us to hijack
+// ExecStatsForTrace function from the ProcessorBase.
+type ExecStatsForTraceHijacker interface {
+	// HijackExecStatsForTrace returns ExecStatsForTrace function, if set, and
+	// sets it to nil. The caller becomes responsible for collecting and
+	// propagating the execution statistics.
+	HijackExecStatsForTrace() func() *execinfrapb.ComponentStats
+}
+
+var _ ExecStatsForTraceHijacker = &ProcessorBase{}
+
+// HijackExecStatsForTrace is a part of the ExecStatsForTraceHijacker interface.
+func (pb *ProcessorBase) HijackExecStatsForTrace() func() *execinfrapb.ComponentStats {
+	if pb.ExecStatsForTrace == nil {
+		return nil
+	}
+	execStatsForTrace := pb.ExecStatsForTrace
+	pb.ExecStatsForTrace = nil
+	return execStatsForTrace
+}
+
+// moveToTrailingMeta switches the processor to the "trailing meta" state: only
+// trailing metadata is returned from now on. For simplicity, processors are
+// encouraged to always use MoveToDraining() instead of this method, even when
+// there's nothing to drain. moveToDrain() or DrainHelper() will internally call
+// moveToTrailingMeta().
+//
+// trailingMetaCallback, if any, is called; it is expected to close the
+// processor's inputs.
+//
+// This method is to be called when the processor is done producing rows and
+// draining its inputs (if it wants to drain them).
+func (pb *ProcessorBaseNoHelper) moveToTrailingMeta() {
+	if pb.State == StateTrailingMeta || pb.State == StateExhausted {
+		logcrash.ReportOrPanic(
+			pb.Ctx(),
+			&pb.FlowCtx.Cfg.Settings.SV,
+			"moveToTrailingMeta called in state: %s",
+			pb.State,
+		)
+	}
+
+	pb.State = StateTrailingMeta
+	if pb.span != nil {
+		if pb.ExecStatsForTrace != nil {
+			if stats := pb.ExecStatsForTrace(); stats != nil {
+				stats.Component = pb.FlowCtx.ProcessorComponentID(pb.ProcessorID)
+				pb.span.RecordStructured(stats)
+			}
+		}
+		// Note that we need to propagate the trace only from the remote nodes
+		// because there we create spans with the detached option (see
+		// ProcessorSpan). If we're on the gateway, then the recording of this
+		// span is already included into the parent, thus, we don't generate the
+		// metadata for it.
+		if !pb.FlowCtx.Gateway {
+			if trace := pb.span.GetConfiguredRecording(); trace != nil {
+				pb.trailingMeta = append(pb.trailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})
+			}
+		}
+	}
+
+	if buildutil.CrdbTestBuild && pb.ctx == nil {
+		panic(
+			errors.AssertionFailedf(
+				"unexpected nil ProcessorBase.ctx when draining. Was StartInternal called?",
+			),
+		)
+	}
+
+	// trailingMetaCallback is called after reading the tracing data because it
+	// generally calls InternalClose, indirectly, which switches the context and
+	// the span.
+	if pb.trailingMetaCallback != nil {
+		pb.trailingMeta = append(pb.trailingMeta, pb.trailingMetaCallback()...)
+	} else {
+		pb.InternalClose()
+	}
+}
+
+// ProcessRowHelper is a wrapper on top of ProcOutputHelper.ProcessRow(). It
+// takes care of handling errors and drain requests by moving the processor to
+// StateDraining.
+//
+// It takes a row and returns the row after processing. The return value can be
+// nil, in which case the caller shouldn't return anything to its consumer; it
+// should continue processing other rows, with the awareness that the processor
+// might have been transitioned to the draining phase.
+func (pb *ProcessorBase) ProcessRowHelper(row rowenc.EncDatumRow) rowenc.EncDatumRow {
+	outRow, ok, err := pb.OutputHelper.ProcessRow(pb.Ctx(), row)
+	if err != nil {
+		pb.MoveToDraining(err)
+		return nil
+	}
+	if !ok {
+		pb.MoveToDraining(nil /* err */)
+	}
+	return outRow
+}
+
+// OutputTypes is part of the Processor interface.
+func (pb *ProcessorBase) OutputTypes() []*types.T {
+	return pb.OutputHelper.OutputTypes
+}
+
+// Run is part of the Processor interface.
+func (pb *ProcessorBaseNoHelper) Run(ctx context.Context, output RowReceiver) {
+	if output == nil {
+		panic("processor output is not provided for emitting rows")
+	}
+	pb.self.Start(ctx)
+	Run(pb.ctx, pb.self, output)
+}
+
+// Resume is part of the Processor interface.
+func (pb *ProcessorBaseNoHelper) Resume(output RowReceiver) {
+	if output == nil {
+		panic("processor output is not provided for emitting rows")
+	}
+	Run(pb.ctx, pb.self, output)
+}
+
+// Close is part of the Processor interface.
+func (pb *ProcessorBaseNoHelper) Close(context.Context) {
+	pb.self.ConsumerClosed()
+}
+
+// ProcStateOpts contains fields used by the ProcessorBase's family of functions
+// that deal with draining and trailing metadata: the ProcessorBase implements
+// generic useful functionality that needs to call back into the Processor.
+type ProcStateOpts struct {
+	// TrailingMetaCallback, if specified, is a callback to be called by
+	// moveToTrailingMeta(). See ProcessorBase.TrailingMetaCallback.
+	TrailingMetaCallback func() []execinfrapb.ProducerMetadata
+	// InputsToDrain, if specified, will be drained by DrainHelper().
+	// MoveToDraining() calls ConsumerDone() on them, InternalClose() calls
+	// ConsumerClosed() on them.
+	InputsToDrain []RowSource
+}
+
+// Init initializes the ProcessorBase.
+// - coreOutputTypes are the type schema of the rows output by the processor
+// core (i.e. the "internal schema" of the processor, see
+// execinfrapb.ProcessorSpec for more details).
+//
+// NB: it is assumed that the caller will not modify the eval context.
+func (pb *ProcessorBase) Init(
+	ctx context.Context,
+	self RowSource,
+	post *execinfrapb.PostProcessSpec,
+	coreOutputTypes []*types.T,
+	flowCtx *FlowCtx,
+	processorID int32,
+	memMonitor *mon.BytesMonitor,
+	opts ProcStateOpts,
+) error {
+	return pb.InitWithEvalCtx(
+		ctx, self, post, coreOutputTypes, flowCtx, flowCtx.EvalCtx, processorID, memMonitor, opts,
+	)
+}
+
+// InitWithEvalCtx initializes the ProcessorBase with a given EvalContext.
+// - coreOutputTypes are the type schema of the rows output by the processor
+// core (i.e. the "internal schema" of the processor, see
+// execinfrapb.ProcessorSpec for more details).
+func (pb *ProcessorBase) InitWithEvalCtx(
+	ctx context.Context,
+	self RowSource,
+	post *execinfrapb.PostProcessSpec,
+	coreOutputTypes []*types.T,
+	flowCtx *FlowCtx,
+	evalCtx *eval.Context,
+	processorID int32,
+	memMonitor *mon.BytesMonitor,
+	opts ProcStateOpts,
+) error {
+	pb.ProcessorBaseNoHelper.Init(self, flowCtx, processorID, opts)
+	pb.MemMonitor = memMonitor
+
+	// Hydrate all types used in the processor.
+	resolver := flowCtx.NewTypeResolver(flowCtx.Txn)
+	if err := resolver.HydrateTypeSlice(ctx, coreOutputTypes); err != nil {
+		return err
+	}
+
+	pb.SemaCtx = tree.MakeSemaContext(&resolver)
+	return pb.OutputHelper.Init(ctx, post, coreOutputTypes, &pb.SemaCtx, evalCtx, flowCtx)
+}
+
+// Init initializes the ProcessorBaseNoHelper.
+func (pb *ProcessorBaseNoHelper) Init(
+	self RowSource, flowCtx *FlowCtx, processorID int32, opts ProcStateOpts,
+) {
+	pb.self = self
+	pb.FlowCtx = flowCtx
+	pb.ProcessorID = processorID
+	pb.trailingMetaCallback = opts.TrailingMetaCallback
+	if opts.InputsToDrain != nil {
+		// Only initialize this if non-nil, because we cache the slice of inputs
+		// to drain in our object pool, and overwriting the slice in Init would
+		// be horribly counterproductive.
+		pb.inputsToDrain = opts.InputsToDrain
+	}
+}
+
+// AddInputToDrain adds an input to drain when moving the processor to a
+// draining state.
+func (pb *ProcessorBaseNoHelper) AddInputToDrain(input RowSource) {
+	pb.inputsToDrain = append(pb.inputsToDrain, input)
+}
+
+// AppendTrailingMeta appends metadata to the trailing metadata without changing
+// the state to draining (as opposed to MoveToDraining).
+func (pb *ProcessorBase) AppendTrailingMeta(meta execinfrapb.ProducerMetadata) {
+	pb.trailingMeta = append(pb.trailingMeta, meta)
+}
+
+// ProcessorSpan creates a child span for a processor (if we are doing any
+// tracing). The returned span needs to be finished using tracing.FinishSpan.
+func ProcessorSpan(
+	ctx context.Context,
+	flowCtx *FlowCtx,
+	name string,
+	processorID int32,
+	eventListeners ...tracing.EventListener,
+) (context.Context, *tracing.Span) {
+	sp := tracing.SpanFromContext(ctx)
+	if sp == nil {
+		return ctx, nil
+	}
+	var listenersOpt tracing.SpanOption
+	if len(eventListeners) > 0 {
+		listenersOpt = tracing.WithEventListeners(eventListeners...)
+	}
+	var retCtx context.Context
+	var retSpan *tracing.Span
+	if flowCtx.Gateway {
+		retCtx, retSpan = sp.Tracer().StartSpanCtx(
+			ctx, name, tracing.WithParent(sp), listenersOpt,
+		)
+	} else {
+		// The trace from each processor will be imported into the span of the
+		// flow on the gateway, in DistSQLReceiver.pushMeta, so we use the
+		// detached option.
+		// TODO(yuzefovich): only use the detached recording for the root
+		// components of the remote flows.
+		retCtx, retSpan = sp.Tracer().StartSpanCtx(
+			ctx, name, tracing.WithParent(sp), tracing.WithDetachedRecording(), listenersOpt,
+		)
+	}
+	if retSpan.IsVerbose() {
+		retSpan.SetTag(execinfrapb.FlowIDTagKey, attribute.StringValue(flowCtx.ID.String()))
+		retSpan.SetTag(execinfrapb.ProcessorIDTagKey, attribute.IntValue(int(processorID)))
+	}
+	return retCtx, retSpan
+}
+
+// StartInternal prepares the ProcessorBase for execution. It returns the
+// annotated context that's also stored in pb.Ctx.
+//
+// It is likely that this method is called from RowSource.Start implementation,
+// and the recommended layout is the following:
+//
+//	ctx = pb.StartInternal(ctx, name)
+//	< inputs >.Start(ctx) // if there are any inputs-RowSources to pb
+//	< other initialization >
+//
+// so that the caller doesn't mistakenly use old ctx object.
+func (pb *ProcessorBaseNoHelper) StartInternal(
+	ctx context.Context, name string, eventListeners ...tracing.EventListener,
+) context.Context {
+	pb.origCtx = ctx
+	pb.ctx = ctx
+	noSpan := pb.FlowCtx != nil && pb.FlowCtx.Cfg != nil &&
+		pb.FlowCtx.Cfg.TestingKnobs.ProcessorNoTracingSpan
+	if !noSpan {
+		pb.ctx, pb.span = ProcessorSpan(ctx, pb.FlowCtx, name, pb.ProcessorID, eventListeners...)
+	}
+	if pb.FlowCtx != nil && pb.FlowCtx.EvalCtx != nil {
+		var gatewayNodeID roachpb.NodeID
+		if pb.FlowCtx.NodeID != nil {
+			gatewayNodeID = roachpb.NodeID(pb.FlowCtx.NodeID.SQLInstanceID())
+		}
+		pb.ashCleanup = ash.SetWorkState(
+			pb.FlowCtx.Codec().TenantID,
+			ash.WorkloadInfo{
+				WorkloadID:    pb.FlowCtx.EvalCtx.WorkloadID,
+				AppNameID:     pb.FlowCtx.EvalCtx.AppNameID,
+				GatewayNodeID: gatewayNodeID,
+				WorkloadType:  pb.FlowCtx.EvalCtx.WorkloadType,
+			},
+			ash.WorkCPU, name)
+	}
+	return pb.ctx
+}
+
+// Ctx is an accessor method for ctx which is guaranteed to return non-nil
+// context even if StartInternal() hasn't been called.
+func (pb *ProcessorBaseNoHelper) Ctx() context.Context {
+	if pb.ctx == nil {
+		return context.Background()
+	}
+	return pb.ctx
+}
+
+// InternalClose helps processors implement the RowSource interface, performing
+// common close functionality. Returns true iff the processor was not already
+// closed.
+//
+// Notably, it calls ConsumerClosed() on all the inputsToDrain and updates
+// pb.Ctx to the context passed into StartInternal() call.
+//
+//	if pb.InternalClose() {
+//	  // Perform processor specific close work.
+//	}
+func (pb *ProcessorBaseNoHelper) InternalClose() bool {
+	// Protection around double closing is useful for allowing ConsumerClosed() to
+	// be called on processors that have already closed themselves by moving to
+	// StateTrailingMeta.
+	if pb.Closed {
+		return false
+	}
+	for _, input := range pb.inputsToDrain[pb.curInputToDrain:] {
+		input.ConsumerClosed()
+	}
+
+	if pb.ashCleanup != nil {
+		pb.ashCleanup()
+		pb.ashCleanup = nil
+	}
+	pb.Closed = true
+	pb.span.Finish()
+	pb.span = nil
+	// Reset the context so that any incidental uses after this point do not
+	// access the finished span.
+	pb.ctx = pb.origCtx
+	return true
+}
+
+// ConsumerDone is part of the RowSource interface.
+func (pb *ProcessorBaseNoHelper) ConsumerDone() {
+	pb.MoveToDraining(nil /* err */)
+}
+
+// ConsumerClosed is part of the RowSource interface.
+func (pb *ProcessorBaseNoHelper) ConsumerClosed() {
+	// The consumer is done, Next() will not be called again.
+	pb.InternalClose()
+}
+
+// NewMonitor is a utility function used by processors to create a new
+// memory monitor with the given name and start it. The returned monitor must
+// be closed.
+func NewMonitor(ctx context.Context, parent *mon.BytesMonitor, name mon.Name) *mon.BytesMonitor {
+	monitor := mon.NewMonitorInheritWithLimit(name, 0 /* limit */, parent, false /* longLiving */)
+	monitor.StartNoReserved(ctx, parent)
+	return monitor
+}
+
+// NewLimitedMonitor is a utility function used by processors to create a new
+// limited memory monitor with the given name and start it. The returned monitor
+// must be closed. The limit is determined by SessionData.WorkMemLimit (stored
+// inside of the flowCtx) but overridden to 1 if
+// ServerConfig.TestingKnobs.ForceDiskSpill is set or
+// ServerConfig.TestingKnobs.MemoryLimitBytes if not.
+func NewLimitedMonitor(
+	ctx context.Context, parent *mon.BytesMonitor, flowCtx *FlowCtx, name mon.Name,
+) *mon.BytesMonitor {
+	limitedMon := mon.NewMonitorInheritWithLimit(name, GetWorkMemLimit(flowCtx), parent, false /* longLiving */)
+	limitedMon.StartNoReserved(ctx, parent)
+	return limitedMon
+}
+
+// NewLimitedMonitorWithLowerBound is similar to NewLimitedMonitor but
+// guarantees that the monitor's limit is at least minMemoryLimit bytes.
+// flowCtx.Mon is used as the parent for the new monitor.
+func NewLimitedMonitorWithLowerBound(
+	ctx context.Context, flowCtx *FlowCtx, name redact.SafeString, minMemoryLimit int64,
+) *mon.BytesMonitor {
+	memoryLimit := GetWorkMemLimit(flowCtx)
+	if memoryLimit < minMemoryLimit {
+		memoryLimit = minMemoryLimit
+	}
+	limitedMon := mon.NewMonitorInheritWithLimit(mon.MakeName(name), memoryLimit, flowCtx.Mon,
+		false /* longLiving */)
+	limitedMon.StartNoReserved(ctx, flowCtx.Mon)
+	return limitedMon
+}
+
+// NewLimitedMonitorNoFlowCtx is the same as NewLimitedMonitor and should be
+// used when the caller doesn't have an access to *FlowCtx.
+func NewLimitedMonitorNoFlowCtx(
+	ctx context.Context,
+	parent *mon.BytesMonitor,
+	config *ServerConfig,
+	sd *sessiondata.SessionData,
+	name mon.Name,
+) *mon.BytesMonitor {
+	// Create a fake FlowCtx populating only the required fields.
+	flowCtx := &FlowCtx{
+		Cfg: config,
+		EvalCtx: &eval.Context{
+			SessionDataStack: sessiondata.NewStack(sd),
+		},
+	}
+	return NewLimitedMonitor(ctx, parent, flowCtx, name)
+}
+
+// LocalProcessor is a RowSourcedProcessor that needs to be initialized with its
+// processorID and post-processing spec. Most processors can accept these
+// objects at creation time.
+type LocalProcessor interface {
+	RowSourcedProcessor
+	// Init initializes this processor.
+	Init(ctx context.Context, flowCtx *FlowCtx, processorID int32, post *execinfrapb.PostProcessSpec) error
+	// SetInput initializes this LocalProcessor with an input RowSource. Not all
+	// LocalProcessors need inputs, but this needs to be called if a
+	// LocalProcessor expects to get its data from another RowSource.
+	SetInput(ctx context.Context, input RowSource) error
+}
+
+// HasParallelProcessors returns whether flow contains multiple processors in
+// the same stage.
+func HasParallelProcessors(flow *execinfrapb.FlowSpec) bool {
+	var seen intsets.Fast
+	for _, p := range flow.Processors {
+		if seen.Contains(int(p.StageID)) {
+			return true
+		}
+		seen.Add(int(p.StageID))
+	}
+	return false
+}

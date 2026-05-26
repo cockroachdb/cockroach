@@ -1,0 +1,173 @@
+exec-ddl
+CREATE TABLE ab (a INT PRIMARY KEY, b INT, INDEX idx(b))
+----
+
+exec-ddl
+CREATE SEQUENCE s
+----
+
+exec-ddl
+CREATE TYPE workday AS ENUM ('MON', 'TUE')
+----
+
+exec-ddl
+CREATE TABLE workdays (w workday)
+----
+
+build
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$
+----
+create-function
+ ├── CREATE FUNCTION f()
+ │   	RETURNS INT8
+ │   	LANGUAGE SQL
+ │   	AS $$SELECT 1;$$
+ └── no dependencies
+
+build
+CREATE FUNCTION f(a workday) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$
+----
+create-function
+ ├── CREATE FUNCTION f(a workday)
+ │   	RETURNS INT8
+ │   	LANGUAGE SQL
+ │   	AS $$SELECT 1;$$
+ └── dependencies
+      └── workday
+
+build
+CREATE FUNCTION f() RETURNS workday LANGUAGE SQL AS $$SELECT w FROM workdays$$
+----
+create-function
+ ├── CREATE FUNCTION f()
+ │   	RETURNS workday
+ │   	LANGUAGE SQL
+ │   	AS $$SELECT w FROM t.public.workdays;$$
+ └── dependencies
+      ├── workdays [columns: w]
+      └── workday
+
+build
+CREATE FUNCTION f() RETURNS STRING LANGUAGE SQL AS $$ SELECT 'MON'::workday::STRING $$
+----
+create-function
+ ├── CREATE FUNCTION f()
+ │   	RETURNS STRING
+ │   	LANGUAGE SQL
+ │   	AS $$SELECT 'MON':::workday::STRING;$$
+ └── dependencies
+      └── workday
+
+build
+CREATE FUNCTION f() RETURNS STRING LANGUAGE SQL AS $$SELECT w::STRING FROM workdays$$
+----
+create-function
+ ├── CREATE FUNCTION f()
+ │   	RETURNS STRING
+ │   	LANGUAGE SQL
+ │   	AS $$SELECT w::STRING FROM t.public.workdays;$$
+ └── dependencies
+      └── workdays [columns: w]
+
+build
+CREATE FUNCTION f(a INT) RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM ab $$
+----
+create-function
+ ├── CREATE FUNCTION f(a INT8)
+ │   	RETURNS INT8
+ │   	LANGUAGE SQL
+ │   	AS $$SELECT a FROM t.public.ab;$$
+ └── dependencies
+      └── ab [columns: a]
+
+build
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT b FROM ab@idx $$
+----
+create-function
+ ├── CREATE FUNCTION f()
+ │   	RETURNS INT8
+ │   	LANGUAGE SQL
+ │   	AS $$SELECT b FROM t.public.ab@idx;$$
+ └── dependencies
+      └── ab@idx [columns: b]
+
+build
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$
+  SELECT a FROM ab;
+  SELECT nextval('s');
+$$
+----
+create-function
+ ├── CREATE FUNCTION f()
+ │   	RETURNS INT8
+ │   	LANGUAGE SQL
+ │   	AS $$SELECT a FROM t.public.ab;
+ │   SELECT nextval('s':::STRING);$$
+ └── dependencies
+      ├── ab [columns: a]
+      └── s
+
+build
+CREATE FUNCTION f() RETURNS ab LANGUAGE SQL AS $$ SELECT * FROM ab $$
+----
+create-function
+ ├── CREATE FUNCTION f()
+ │   	RETURNS ab
+ │   	LANGUAGE SQL
+ │   	AS $$SELECT ab.a, ab.b FROM t.public.ab;$$
+ └── dependencies
+      └── ab [columns: a b]
+
+build
+CREATE FUNCTION f() RETURNS ab LANGUAGE SQL AS $$ SELECT * FROM (SELECT * from ab) $$
+----
+create-function
+ ├── CREATE FUNCTION f()
+ │   	RETURNS ab
+ │   	LANGUAGE SQL
+ │   	AS $$SELECT "?subquery1?".a, "?subquery1?".b FROM (SELECT ab.a, ab.b FROM t.public.ab) AS "?subquery1?";$$
+ └── dependencies
+      └── ab [columns: a b]
+
+build
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL BEGIN ATOMIC SELECT 1; END;
+----
+error (0A000): unimplemented: CREATE FUNCTION...sql_body unimplemented
+
+build
+CREATE FUNCTION f() RETURNS UNKNOWN LANGUAGE SQL AS $$ SELECT NULL; $$;
+----
+error (42P13): SQL functions cannot return type unknown
+
+# Regression test for #138273 - correctly build CTEs in SQL expressions
+# embedded in a PL/pgSQL routine.
+build
+CREATE FUNCTION f138273_1() RETURNS TIMESTAMP LANGUAGE PLpgSQL AS $$
+  DECLARE
+    decl TIMESTAMP;
+  BEGIN
+    WHILE false LOOP
+      IF true THEN
+      ELSIF EXISTS (WITH cte(col) AS (SELECT * FROM (VALUES (random())) AS foo) SELECT 1 FROM cte) THEN
+        RETURN decl;
+      END IF;
+    END LOOP;
+  END;
+$$;
+----
+create-function
+ ├── CREATE FUNCTION f138273_1()
+ │   	RETURNS TIMESTAMP
+ │   	LANGUAGE plpgsql
+ │   	AS $$DECLARE
+ │   decl TIMESTAMP;
+ │   BEGIN
+ │   WHILE false LOOP
+ │   IF true THEN
+ │   ELSIF EXISTS (WITH cte (col) AS (SELECT foo.column1 FROM (VALUES (random())) AS foo) SELECT 1 FROM cte) THEN
+ │   	RETURN decl;
+ │   END IF;
+ │   END LOOP;
+ │   END;
+ │   $$
+ └── no dependencies

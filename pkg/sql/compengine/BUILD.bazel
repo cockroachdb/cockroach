@@ -1,0 +1,33 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "compengine",
+    srcs = [
+        "api.go",
+        "engine.go",
+        "sketch.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/compengine",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/lexbase",
+        "//pkg/sql/scanner",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "compengine_test",
+    srcs = ["sketch_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":compengine"],
+    deps = [
+        "//pkg/util/leaktest",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+    ],
+)

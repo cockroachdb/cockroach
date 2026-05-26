@@ -1,0 +1,41 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "pprofui",
+    srcs = [
+        "fakeflags.go",
+        "response_writer.go",
+        "server.go",
+        "storage.go",
+        "storage_mem.go",
+        "ui.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/debug/pprofui",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/server/serverpb",
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_google_pprof//driver",
+        "@com_github_google_pprof//profile",
+        "@com_github_spf13_pflag//:pflag",
+    ],
+)
+
+go_test(
+    name = "pprofui_test",
+    size = "small",
+    srcs = ["server_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":pprofui"],
+    deps = [
+        "//pkg/build/bazel",
+        "//pkg/server/serverpb",
+        "//pkg/testutils/datapathutils",
+        "//pkg/testutils/skip",
+        "@com_github_stretchr_testify//require",
+    ],
+)

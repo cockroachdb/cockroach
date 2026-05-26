@@ -1,0 +1,1666 @@
+# knob-opt: disable-corpus-generation sync-event-log
+
+skip_on_retry
+
+subtest add_column
+
+statement ok
+SET use_declarative_schema_changer = 'on'
+
+statement ok
+CREATE TABLE foo (i INT PRIMARY KEY)
+
+statement ok
+EXPLAIN (DDL) ALTER TABLE foo ADD COLUMN j INT
+
+statement ok
+SET use_declarative_schema_changer = 'unsafe'
+
+statement ok
+ALTER TABLE foo ADD COLUMN j INT
+
+statement ok
+INSERT INTO foo VALUES (1, 1)
+
+query II rowsort
+SELECT * FROM foo
+----
+1  1
+
+statement ok
+DROP TABLE foo;
+
+subtest multi_add_column
+
+statement ok
+CREATE TABLE foo (i INT PRIMARY KEY)
+
+statement ok
+SET use_declarative_schema_changer = 'unsafe_always'
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+
+statement ok
+ALTER TABLE foo ADD COLUMN j INT
+
+statement ok
+ALTER TABLE foo ADD COLUMN k INT
+
+statement ok
+COMMIT
+
+statement ok
+INSERT INTO foo VALUES (1, 2, 3)
+
+query III rowsort
+SELECT * FROM foo
+----
+1  2  3
+
+statement ok
+SET use_declarative_schema_changer = 'unsafe'
+
+statement ok
+DROP TABLE foo;
+
+subtest add_column_default
+
+statement ok
+CREATE TABLE foo (i INT PRIMARY KEY)
+
+statement ok
+INSERT INTO foo(i) VALUES (0)
+
+query I rowsort
+SELECT * FROM foo
+----
+0
+
+statement ok
+ALTER TABLE foo ADD COLUMN j INT DEFAULT 1
+
+statement ok
+INSERT INTO foo VALUES (1, 1)
+
+statement ok
+INSERT INTO foo(i) VALUES (2)
+
+query II rowsort
+SELECT * FROM foo
+----
+0  1
+1  1
+2  1
+
+statement ok
+DROP TABLE foo
+
+subtest add_column_computed
+
+statement ok
+CREATE TABLE foo (i INT PRIMARY KEY)
+
+statement ok
+INSERT INTO foo VALUES (0);
+
+statement ok
+ALTER TABLE foo ADD COLUMN j INT AS (i+1) STORED
+
+statement ok
+INSERT INTO foo(i) VALUES (1)
+
+query II rowsort
+SELECT * FROM foo
+----
+0  1
+1  2
+
+statement ok
+DROP TABLE foo
+
+subtest add_column_families
+
+statement ok
+CREATE TABLE foo (i INT PRIMARY KEY)
+
+statement ok
+ALTER TABLE foo ADD COLUMN j INT CREATE FAMILY f2
+
+statement ok
+ALTER TABLE foo ADD COLUMN k INT FAMILY f2
+
+statement ok
+INSERT INTO foo VALUES (1, 2, 3)
+
+query III rowsort
+SELECT * FROM foo
+----
+1  2  3
+
+statement ok
+DROP TABLE foo
+
+subtest multi_table
+
+statement ok
+CREATE TABLE foo (i INT PRIMARY KEY);
+CREATE TABLE bar (j INT PRIMARY KEY);
+
+statement ok
+SET use_declarative_schema_changer = 'unsafe_always'
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+
+statement ok
+ALTER TABLE foo ADD COLUMN a INT
+
+statement ok
+ALTER TABLE bar ADD COLUMN b INT
+
+statement ok
+COMMIT
+
+statement ok
+INSERT INTO foo VALUES (1, 2)
+
+query II colnames,rowsort
+SELECT * FROM foo
+----
+i  a
+1  2
+
+statement ok
+INSERT INTO bar VALUES (3, 4)
+
+query II colnames,rowsort
+SELECT * FROM bar
+----
+j  b
+3  4
+
+statement ok
+SET use_declarative_schema_changer = 'unsafe'
+
+statement ok
+DROP TABLE foo, bar
+
+# Sequence sanity tests
+statement ok
+CREATE SEQUENCE sq1;
+
+statement ok
+CREATE TABLE blog_posts (id INT PRIMARY KEY, val int DEFAULT nextval('sq1'), title text);
+
+statement ok
+CREATE TABLE blog_posts2 (id INT PRIMARY KEY, val int DEFAULT nextval('sq1'), title text);
+
+# Failure without cascade
+statement error pq: cannot drop sequence sq1 because other objects depend on it
+EXPLAIN (DDL) DROP SEQUENCE sq1;
+
+statement ok
+EXPLAIN (DDL) DROP SEQUENCE sq1 CASCADE;
+
+# Success with cascade
+statement ok
+DROP SEQUENCE IF EXISTS doesnotexist, sq1 CASCADE;
+
+# Tables should be safe to drop since references are fixed.
+statement ok
+DROP TABLE blog_posts;
+
+statement ok
+DROP TABLE blog_posts2;
+
+# Test that user defined types used in views are tracked.
+subtest view_user_defined_types
+
+statement ok
+CREATE TYPE typ AS ENUM('a')
+
+statement ok
+CREATE VIEW v AS (SELECT 'a'::typ::string AS k)
+
+statement error cannot drop type "typ" because other objects \(\[test.public.v\]\) still depend on it
+DROP TYPE typ
+
+statement ok
+DROP VIEW v
+
+statement ok
+CREATE VIEW v AS (WITH r AS (SELECT 'a'::typ < 'a'::typ AS k) SELECT k FROM r)
+
+statement error cannot drop type "typ" because other objects \(\[test.public.v\]\) still depend on it
+DROP TYPE typ
+
+statement ok
+DROP VIEW v
+
+statement ok
+CREATE TABLE t (i INT, k STRING AS ('a'::typ::string) STORED)
+
+statement ok
+CREATE VIEW v AS (SELECT i FROM t)
+
+# Note that v does not depend on typ since it does not use column k.
+statement error cannot drop type "typ" because other objects \(\[test.public.t\]\) still depend on it
+DROP TYPE typ
+
+statement ok
+CREATE VIEW v_dep AS (SELECT k FROM t)
+
+# Since v_dep depends on t.k which uses type typ, v_dep has a dependency to typ.
+statement error cannot drop type "typ" because other objects \(\[test.public.t test.public.v_dep\]\) still depend on it
+DROP TYPE typ
+
+statement ok
+CREATE TYPE typ2 AS ENUM('a')
+
+statement ok
+CREATE VIEW v3 AS (SELECT 'a'::typ2::string AS k)
+
+statement error cannot drop type "typ2" because other objects \(\[test.public.v3\]\) still depend on it
+DROP TYPE typ2
+
+statement ok
+CREATE OR REPLACE VIEW v3 AS (SELECT 'a' AS k)
+
+statement ok
+DROP TYPE typ2
+
+statement ok
+CREATE TYPE typ2 AS ENUM('a')
+
+statement ok
+CREATE OR REPLACE VIEW v3 AS (SELECT 'a'::typ2::string AS k)
+
+statement error cannot drop type "typ2" because other objects \(\[test.public.v3\]\) still depend on it
+DROP TYPE typ2
+
+statement ok
+ALTER TYPE typ2 RENAME TO typ3
+
+statement error cannot drop type "typ3" because other objects \(\[test.public.v3\]\) still depend on it
+DROP TYPE typ3
+
+statement ok
+CREATE TYPE typ4 AS ENUM('a')
+
+statement ok
+CREATE TABLE t4 (i INT, j typ4)
+
+statement ok
+CREATE VIEW v4 AS (SELECT i FROM t4)
+
+# Note that v4 does not depend on typ4.
+statement error cannot drop type "typ4" because other objects \(\[test.public.t4\]\) still depend on it
+DROP TYPE typ4
+
+statement ok
+ALTER TABLE t4 DROP COLUMN j
+
+statement ok
+DROP TYPE typ4
+
+statement ok
+CREATE TYPE typ4 AS ENUM('a')
+
+statement ok
+ALTER TABLE t4 ADD COLUMN j typ4
+
+statement ok
+CREATE VIEW v4_dep AS (SELECT j FROM t4)
+
+# Since v4_dep depends on t4.j which is of type typ4, v4_dep has a dependency to typ4.
+statement error cannot drop type "typ4" because other objects \(\[test.public.t4 test.public.v4_dep\]\) still depend on it
+DROP type typ4
+
+statement ok
+CREATE TYPE typ5 AS ENUM('a')
+
+statement ok
+CREATE TABLE t5 (i INT, j STRING DEFAULT 'a'::typ5::string)
+
+# Note that v5 does not depend on typ5.
+statement ok
+CREATE VIEW v5 AS (SELECT i FROM t5)
+
+statement error cannot drop type "typ5" because other objects \(\[test.public.t5\]\) still depend on it
+DROP TYPE typ5
+
+statement ok
+CREATE VIEW v5_dep AS (SELECT j FROM t5)
+
+# Since v5_dep depends on t5.j which uses type typ5, v5_dep has a dependency to typ5.
+statement error cannot drop type "typ5" because other objects \(\[test.public.t5 test.public.v5_dep\]\) still depend on it
+DROP TYPE typ5
+
+statement ok
+CREATE VIEW v6 AS (SELECT j FROM v4_dep)
+
+# v6 depends on v4_dep.j, which depends on t4.j, which depends on typ4, so v6 also depends on typ4.
+statement error cannot drop type "typ4" because other objects \(\[test.public.t4 test.public.v4_dep test.public.v6\]\) still depend on it
+DROP TYPE typ4
+
+statement ok
+CREATE TYPE typ6 AS ENUM('a');
+CREATE TABLE t6 (i INT, k typ6);
+CREATE INDEX idx ON t6 (i) WHERE k < 'a'::typ6
+
+statement ok
+CREATE VIEW v7 AS (SELECT i FROM t6)
+
+# Note that v7 does not depend on t6.
+statement error cannot drop type "typ6" because other objects \(\[test.public.t6\]\) still depend on it
+DROP TYPE typ6
+
+statement ok
+CREATE VIEW v7_dep AS (SELECT i FROM t6@idx WHERE k < 'a'::typ6)
+
+# v7_dep depends on typ6 now.
+statement error annot drop type "typ6" because other objects \(\[test.public.t6 test.public.v7_dep\]\) still depend on it
+DROP TYPE typ6
+
+
+subtest view_sanity
+
+statement ok
+CREATE TABLE t1 (id INT PRIMARY KEY, name varchar(256));
+
+statement ok
+CREATE VIEW v1Dep AS (SELECT name FROM t1);
+
+statement ok
+CREATE VIEW v2Dep AS (SELECT name AS N1, name AS N2 FROM v1Dep);
+
+statement ok
+CREATE VIEW v3Dep AS (SELECT name, n1 FROM v1Dep, v2Dep);
+
+statement ok
+CREATE VIEW v4Dep AS (SELECT n2, n1 FROM v2Dep);
+
+statement ok
+EXPLAIN (DDL) DROP VIEW v1Dep CASCADE;
+
+statement error pq: cannot drop relation "v1dep" because view "v2dep" depends on it
+DROP VIEW v1Dep RESTRICT;
+
+statement error pq: "v1dep" is not a materialized view
+DROP MATERIALIZED VIEW v1Dep
+
+statement ok
+DROP VIEW v1Dep CASCADE;
+
+statement error pq: relation "v4dep" does not exist
+SELECT * FROM v4Dep;
+
+statement error pq: relation "v3dep" does not exist
+SELECT * FROM v3Dep;
+
+statement error pq: relation "v2dep" does not exist
+SELECT * FROM v2Dep;
+
+statement error pq: relation "v1dep" does not exist
+SELECT * FROM v1Dep;
+
+statement ok
+CREATE MATERIALIZED VIEW mv AS SELECT name FROM t1
+
+statement error pq: "mv" is a materialized view
+DROP VIEW mv
+
+statement ok
+DROP MATERIALIZED VIEW mv
+
+statement ok
+CREATE TABLE defaultdb.customers (id INT PRIMARY KEY, email STRING UNIQUE);
+
+statement ok
+CREATE TABLE IF NOT EXISTS defaultdb.orders (
+    id INT PRIMARY KEY,
+    customer INT UNIQUE NOT NULL REFERENCES defaultdb.customers (id),
+    orderTotal DECIMAL(9,2),
+    INDEX (customer)
+  );
+
+statement ok
+CREATE SEQUENCE defaultdb.sq2;
+
+statement ok
+CREATE TABLE defaultdb.shipments (
+    tracking_number UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    carrier STRING,
+    status STRING,
+    customer_id INT,
+    rand_col INT DEFAULT nextval('defaultdb.sq2'),
+    CONSTRAINT fk_customers FOREIGN KEY (customer_id) REFERENCES defaultdb.customers(id),
+    CONSTRAINT fk_orders FOREIGN KEY (customer_id) REFERENCES defaultdb.orders(customer)
+ );
+
+statement error "customers" is referenced by foreign key from table "orders"
+DROP TABLE defaultdb.customers;
+
+statement ok
+CREATE SEQUENCE defaultdb.sq1 OWNED BY defaultdb.shipments.carrier;
+
+statement ok
+CREATE TABLE defaultdb.sq1dep (
+	rand_col INT8 DEFAULT nextval('defaultdb.sq1')
+);
+
+statement error cannot drop table shipments because other objects depend on it
+DROP TABLE defaultdb.shipments;
+
+statement ok
+DROP TABLE defaultdb.sq1dep;
+DROP TABLE defaultdb.shipments;
+
+statement ok
+CREATE TABLE defaultdb.shipments (
+    tracking_number UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    carrier STRING,
+    status STRING,
+    customer_id INT,
+    rand_col INT DEFAULT nextval('defaultdb.sq2'),
+    CONSTRAINT fk_customers FOREIGN KEY (customer_id) REFERENCES defaultdb.customers(id),
+    CONSTRAINT fk_orders FOREIGN KEY (customer_id) REFERENCES defaultdb.orders(customer)
+ );
+
+statement ok
+CREATE VIEW defaultdb.v1 as (select customer_id, carrier from defaultdb.shipments);
+
+statement error pq: cannot drop relation "shipments" because view "v1" depends on it
+DROP TABLE defaultdb.shipments;
+
+statement ok
+DROP TABLE defaultdb.shipments CASCADE;
+
+# Back references for shipments should be cleaned up for any foreign
+# keys so dropping customers and orders should be safe.
+statement ok
+DROP TABLE defaultdb.customers CASCADE;
+
+statement ok
+CREATE TABLE p2 (i INT PRIMARY KEY, s STRING)
+
+statement ok
+SET use_declarative_schema_changer = 'unsafe_always'
+
+statement ok
+SET use_declarative_schema_changer = 'unsafe'
+
+# Basic test -- create and drop a type.
+statement ok
+CREATE TYPE typ8 AS ENUM ('hello');
+DROP TYPE typ8
+
+statement ok
+CREATE TYPE typ8 AS ENUM ('hello');
+
+# Now check all of the fun cases around object dependencies.
+# Test a simple column dependency.
+statement ok
+CREATE TABLE t8 (x typ8)
+
+statement error cannot drop type "typ8" because other objects \(\[test.public.t8\]\) still depend on it
+DROP TYPE typ8
+
+# Now add a column with the using the type.
+statement ok
+ALTER TABLE t8 ADD COLUMN y typ8
+
+statement error cannot drop type "typ8" because other objects \(\[test.public.t8\]\) still depend on it
+DROP TYPE typ8
+
+# If we drop the original column x, t8 should still depend on t.
+statement ok
+ALTER TABLE t8 DROP COLUMN x
+
+statement error cannot drop type "typ8" because other objects \(\[test.public.t8\]\) still depend on it
+DROP TYPE typ8
+
+# Now remove the other column.
+statement ok
+ALTER TABLE t8 DROP COLUMN y
+
+statement ok
+DROP TYPE typ8
+
+# Ensure that references to the array type are tracked.
+statement ok
+CREATE TYPE typ8 AS ENUM ('hello');
+ALTER TABLE t8 ADD COLUMN x typ8[]
+
+statement error cannot drop type "typ8" because other objects \(\[test.public.t8\]\) still depend on it
+DROP TYPE typ8
+
+statement ok
+ALTER TABLE t8 DROP COLUMN x;
+
+statement ok
+DROP TYPE typ8
+
+subtest drop_type_in_single_transaction
+
+statement ok
+CREATE TYPE defaultdb.typ AS ENUM('a');
+
+statement ok
+CREATE TABLE defaultdb.ttyp (id INT PRIMARY KEY, name varchar(256), x defaultdb.typ);
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+
+statement ok
+DROP TABLE defaultdb.ttyp;
+
+statement ok
+DROP TYPE defaultdb.typ;
+
+# Demonstrate that descriptors dropped in a transaction figure appropriately
+# into virtual tables. Most virtual tables omit the dropped descriptors, some
+# show their status.
+
+query I
+SELECT count(*)
+  FROM information_schema.tables
+ WHERE table_schema = 'public'
+   AND table_name LIKE '%typ%';
+----
+0
+
+query TT
+   SELECT name, state
+     FROM crdb_internal.tables
+    WHERE schema_name = 'public'
+      AND name LIKE '%typ%'
+ ORDER BY name;
+----
+ttyp  DROP
+
+statement ok
+COMMIT;
+
+# Drop schema testing
+subtest drop_schema
+
+statement ok
+CREATE DATABASE db1;
+
+statement ok
+CREATE SCHEMA db1.sc1
+
+statement ok
+CREATE SEQUENCE db1.sc1.sq1
+
+statement ok
+CREATE TABLE db1.sc1.t1 (id INT PRIMARY KEY, name varchar(256), val int DEFAULT nextval('db1.sc1.sq1'))
+
+statement ok
+CREATE VIEW db1.sc1.v1 AS (SELECT name FROM db1.sc1.t1)
+
+statement ok
+CREATE VIEW db1.sc1.v2 AS (SELECT name AS n1, name AS n2 FROM db1.sc1.v1)
+
+statement ok
+CREATE VIEW db1.sc1.v3 AS (SELECT name, n1 FROM db1.sc1.v1, db1.sc1.v2);
+
+statement ok
+CREATE VIEW db1.sc1.v4 AS (SELECT n2, n1 FROM db1.sc1.v2);
+
+statement ok
+CREATE TYPE db1.sc1.typ AS ENUM('a')
+
+statement ok
+CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1.sc1.v4)
+
+statement ok
+CREATE SCHEMA sc2
+
+statement ok
+CREATE TYPE sc2.typ AS ENUM('a')
+
+# Cross-database type references are not allowed.
+statement error cross database type references are not supported: test.sc2.typ
+CREATE VIEW db1.sc1.v6 AS (SELECT 'a'::sc2.typ::string AS k, n2, n1 from db1.sc1.v4)
+
+statement ok
+DROP SCHEMA db1.sc1 CASCADE
+
+statement ok
+DROP SCHEMA sc2 CASCADE
+
+statement ok
+DROP DATABASE db1 CASCADE
+
+# Drop database testing
+subtest drop_database
+
+statement ok
+CREATE ROLE test_set_role;
+
+statement ok
+CREATE DATABASE db1;
+
+statement ok
+ALTER ROLE test_set_role SET application_name = 'a';
+ALTER ROLE test_set_role IN DATABASE db1 SET application_name = 'b';
+ALTER ROLE ALL IN DATABASE db1 SET application_name = 'c';
+ALTER ROLE ALL SET application_name = 'd';
+ALTER ROLE test_set_role SET custom_option.setting = 'e'
+
+statement ok
+CREATE SCHEMA db1.sc1
+
+statement ok
+CREATE SEQUENCE db1.public.sq1
+
+statement ok
+CREATE SEQUENCE db1.sc1.sq1
+
+statement ok
+CREATE TABLE db1.sc1.t1 (id INT PRIMARY KEY, name varchar(256), val int DEFAULT nextval('db1.sc1.sq1'))
+
+statement ok
+CREATE TABLE db1.public.t1 (id INT PRIMARY KEY, name varchar(256), val int DEFAULT nextval('db1.public.sq1'))
+
+statement ok
+CREATE VIEW db1.sc1.v1 AS (SELECT name FROM db1.sc1.t1)
+
+statement ok
+CREATE VIEW db1.sc1.v2 AS (SELECT name AS n1, name AS n2 FROM db1.sc1.v1)
+
+statement ok
+CREATE VIEW db1.sc1.v3 AS (SELECT name, n1 FROM db1.sc1.v1, db1.sc1.v2);
+
+statement ok
+CREATE VIEW db1.sc1.v4 AS (SELECT n2, n1 FROM db1.sc1.v2);
+
+statement ok
+CREATE INDEX tmp_idx ON db1.sc1.t1(name)
+
+statement ok
+use db1;
+
+statement ok
+COMMENT ON DATABASE db1 IS 'BLAH';
+COMMENT ON SCHEMA sc1 IS 'BLAH2';
+COMMENT ON TABLE db1.sc1.t1 IS 'BLAH3';
+COMMENT ON COLUMN db1.sc1.t1.id IS 'BLAH4';
+COMMENT ON INDEX db1.sc1.tmp_idx IS 'BLAH5';
+use test;
+
+statement ok
+CREATE TYPE db1.sc1.typ AS ENUM('a')
+
+statement ok
+CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1.sc1.v4)
+
+statement ok
+CREATE SCHEMA sc2
+
+statement ok
+CREATE TYPE sc2.typ AS ENUM('a')
+
+# Cross-database type references are not allowed.
+statement error cross database type references are not supported: test.sc2.typ
+CREATE VIEW db1.sc1.v6 AS (SELECT 'a'::sc2.typ::string AS k, n2, n1 from db1.sc1.v4)
+
+# Confirm comments exist.
+query T
+SELECT comment FROM system.comments ORDER BY comment ASC
+----
+BLAH
+BLAH2
+BLAH3
+BLAH4
+BLAH5
+
+# Verify that the current set of role settings.
+# Note that the NULL name corresponds the ALL DATABASES configurations.
+query TTT colnames
+  SELECT name, role_name, settings
+    FROM system.database_role_settings
+         LEFT JOIN system.namespace AS ns ON database_id = ns.id
+ORDER BY name, role_name;
+----
+name  role_name      settings
+NULL  ·              {application_name=d}
+NULL  test_set_role  {application_name=a,custom_option.setting=e}
+db1   ·              {application_name=c}
+db1   test_set_role  {application_name=b}
+
+statement error schema "sc1" is not empty and CASCADE was not specified
+DROP SCHEMA db1.sc1
+
+statement error database "db1" is not empty and RESTRICT was specified
+DROP DATABASE db1 RESTRICT
+
+statement ok
+SET use_declarative_schema_changer = 'unsafe_always'
+
+# Sanity check: Things are properly executed in post rollback. We should
+# be able to select from tables/views/sequences still
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+
+statement ok
+SET LOCAL autocommit_before_ddl=off;
+
+statement ok
+DROP DATABASE db1 CASCADE
+
+statement error pgcode 3D000 database "db1" does not exist
+SELECT * from db1.sc1.v1
+
+statement ok
+ROLLBACK
+
+statement ok
+SELECT * from db1.sc1.v1
+
+statement ok
+SELECT * from db1.sc1.t1
+
+statement ok
+SELECT * from db1.sc1.sq1
+
+statement ok
+SELECT 'a'::db1.sc1.typ::string
+
+statement ok
+SET use_declarative_schema_changer = 'unsafe'
+
+let $db1_id
+SELECT id FROM system.namespace WHERE name = 'db1' AND "parentID" = 0 LIMIT 1
+
+# Only look at IDs greater than or equal to $db1_id so objects that were dropped
+# earlier in the test don't interfere with this count.
+let $desc_count_pre_drop
+select count(*) from system.descriptor WHERE id >= $db1_id
+
+# Actually drop the database now.
+statement ok
+DROP DATABASE db1 CASCADE
+
+statement ok
+DROP SCHEMA sc2 CASCADE
+
+# No comments should be left after.
+query T
+SELECT comment FROM system.comments ORDER BY comment ASC
+----
+
+# Verify that the remaining set of role settings
+query OTT colnames
+SELECT database_id, role_name, settings FROM system.database_role_settings ORDER BY 1, 2
+----
+database_id  role_name      settings
+0            ·              {application_name=d}
+0            test_set_role  {application_name=a,custom_option.setting=e}
+
+# Only look at IDs greater than or equal to $db1_id so objects that were dropped
+# earlier in the test don't interfere with this count.
+let $desc_count_post_drop
+select count(*) from system.descriptor WHERE id >= $db1_id
+
+# Excluding anything that needs GC, we should drop by 13 (4 types [array and
+# normal], 4 schemas, and 5 views). The tables and sequences will be GC'd later.
+# This is a regression test for an issue where descriptors were not cleaned up
+# properly (https://github.com/cockroachdb/cockroach/pull/73356).
+query I
+select $desc_count_pre_drop-$desc_count_post_drop
+----
+13
+
+# Tests for computed column rewrites.
+statement ok
+CREATE TABLE trewrite(k INT PRIMARY KEY, ts TIMESTAMPTZ, FAMILY (k,ts))
+
+statement error timestamptz::string: context-dependent operators are not allowed in STORED COMPUTED COLUMN
+ALTER TABLE trewrite ADD COLUMN c STRING AS (ts::STRING) STORED
+
+statement ok
+SET experimental_computed_column_rewrites = "(ts :: STRING) -> (to_char(ts AT TIME ZONE 'utc'))";
+
+statement ok
+ALTER TABLE trewrite ADD COLUMN c STRING AS (ts::STRING) STORED
+
+onlyif config schema-locked-disabled
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE trewrite]
+----
+CREATE TABLE public.trewrite (
+  k INT8 NOT NULL,
+  ts TIMESTAMPTZ NULL,
+  c STRING NULL AS (to_char(timezone('utc':::STRING, ts))) STORED,
+  CONSTRAINT trewrite_pkey PRIMARY KEY (k ASC),
+  FAMILY fam_0_k_ts (k, ts, c)
+);
+
+skipif config schema-locked-disabled
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE trewrite]
+----
+CREATE TABLE public.trewrite (
+  k INT8 NOT NULL,
+  ts TIMESTAMPTZ NULL,
+  c STRING NULL AS (to_char(timezone('utc':::STRING, ts))) STORED,
+  CONSTRAINT trewrite_pkey PRIMARY KEY (k ASC),
+  FAMILY fam_0_k_ts (k, ts, c)
+) WITH (schema_locked = true);
+
+subtest create-index
+
+statement ok
+CREATE TABLE tIndex (
+  a INT PRIMARY KEY,
+  b INT,
+  FAMILY (a),
+  FAMILY (b)
+)
+
+statement ok
+INSERT INTO tIndex VALUES (1,1)
+
+user root
+
+statement ok
+CREATE INDEX foo ON tIndex (b)
+
+statement error index with name "foo" already exists
+CREATE INDEX foo ON tIndex (a)
+
+statement error column "c" does not exist
+CREATE INDEX bar ON tIndex (c)
+
+statement error index \"bar\" contains duplicate column \"b\"
+CREATE INDEX bar ON tIndex (b, b);
+
+statement ok
+CREATE INDEX bar ON tIndex ((a+b))
+
+statement ok
+CREATE INDEX bar2 ON tIndex (abs(b))
+
+statement ok
+CREATE UNIQUE INDEX bar3 ON tIndex (abs(b))
+
+statement ok
+CREATE INVERTED INDEX bar4 ON tIndex ((ARRAY[a,b]))
+
+statement ok
+CREATE TABLE tIndx2 (a INT PRIMARY KEY, b INT, INDEX ((a+b)))
+
+statement ok
+CREATE TABLE tIndx3 (a INT PRIMARY KEY, b INT, INVERTED INDEX ((ARRAY[a,b])))
+
+query TTBITTTBBBF colnames,nosort
+SHOW INDEXES FROM tIndex
+----
+table_name  index_name   non_unique  seq_in_index  column_name               definition     direction  storing  implicit  visible  visibility
+tindex      bar          true        1             crdb_internal_idx_expr    (a + b)        ASC        false    false     true     1
+tindex      bar          true        2             a                         a              ASC        false    true      true     1
+tindex      bar2         true        1             crdb_internal_idx_expr_1  (abs(b))       ASC        false    false     true     1
+tindex      bar2         true        2             a                         a              ASC        false    true      true     1
+tindex      bar3         false       1             crdb_internal_idx_expr_1  (abs(b))       ASC        false    false     true     1
+tindex      bar3         false       2             a                         a              ASC        true     true      true     1
+tindex      bar4         true        1             crdb_internal_idx_expr_2  (ARRAY[a, b])  ASC        false    false     true     1
+tindex      bar4         true        2             a                         a              ASC        false    true      true     1
+tindex      foo          true        1             b                         b              ASC        false    false     true     1
+tindex      foo          true        2             a                         a              ASC        false    true      true     1
+tindex      tindex_pkey  false       1             a                         a              ASC        false    false     true     1
+tindex      tindex_pkey  false       2             b                         b              N/A        true     false     true     1
+
+statement error  duplicate key value violates unique constraint "bar3"
+INSERT INTO tIndex VALUES (2,1)
+
+statement ok
+INSERT INTO tIndex VALUES (20000,10000)
+
+# FIXME: Disabled until rollback is supported
+#statement error pgcode 23505 violates unique constraint "bar"
+#CREATE UNIQUE INDEX bar ON tIndex (b)
+
+query TTBITTTBBBF colnames,nosort
+SHOW INDEXES FROM tIndex
+----
+table_name  index_name   non_unique  seq_in_index  column_name               definition     direction  storing  implicit  visible  visibility
+tindex      bar          true        1             crdb_internal_idx_expr    (a + b)        ASC        false    false     true     1
+tindex      bar          true        2             a                         a              ASC        false    true      true     1
+tindex      bar2         true        1             crdb_internal_idx_expr_1  (abs(b))       ASC        false    false     true     1
+tindex      bar2         true        2             a                         a              ASC        false    true      true     1
+tindex      bar3         false       1             crdb_internal_idx_expr_1  (abs(b))       ASC        false    false     true     1
+tindex      bar3         false       2             a                         a              ASC        true     true      true     1
+tindex      bar4         true        1             crdb_internal_idx_expr_2  (ARRAY[a, b])  ASC        false    false     true     1
+tindex      bar4         true        2             a                         a              ASC        false    true      true     1
+tindex      foo          true        1             b                         b              ASC        false    false     true     1
+tindex      foo          true        2             a                         a              ASC        false    true      true     1
+tindex      tindex_pkey  false       1             a                         a              ASC        false    false     true     1
+tindex      tindex_pkey  false       2             b                         b              N/A        true     false     true     1
+
+# test for DESC index
+
+statement ok
+DROP TABLE tIndex
+
+statement ok
+CREATE TABLE tIndx (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT
+)
+
+statement ok
+INSERT INTO tIndx VALUES (1,1,1), (2,2,2)
+
+statement ok
+CREATE INDEX b_desc ON tIndx (b DESC)
+
+statement ok
+CREATE INDEX b_asc ON tIndx (b ASC, c DESC)
+
+query TTBITTTBBBF colnames,rowsort
+SHOW INDEXES FROM tIndx
+----
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
+tindx       b_asc       true        1             b            b           ASC        false    false     true     1
+tindx       b_asc       true        2             c            c           DESC       false    false     true     1
+tindx       b_asc       true        3             a            a           ASC        false    true      true     1
+tindx       b_desc      true        1             b            b           DESC       false    false     true     1
+tindx       b_desc      true        2             a            a           ASC        false    true      true     1
+tindx       tindx_pkey  false       1             a            a           ASC        false    false     true     1
+tindx       tindx_pkey  false       2             b            b           N/A        true     false     true     1
+tindx       tindx_pkey  false       3             c            c           N/A        true     false     true     1
+
+statement error pgcode 42P01 relation "foo" does not exist
+CREATE INDEX fail ON foo (b DESC)
+
+statement ok
+CREATE VIEW vIndx AS SELECT a,b FROM tIndx
+
+statement error pgcode 42809 "vindx" is not a table or materialized view
+CREATE INDEX failview ON vIndx (b DESC)
+
+statement ok
+CREATE TABLE privs (a INT PRIMARY KEY, b INT)
+
+user testuser
+
+skipif config local-legacy-schema-changer
+statement error  must be owner of table privs or have CREATE privilege on table privs
+CREATE INDEX foo ON privs (b)
+
+onlyif config local-legacy-schema-changer
+statement error user testuser does not have CREATE privilege on relation privs
+CREATE INDEX foo ON privs (b)
+
+user root
+
+query TTBITTTBBBF colnames,rowsort
+SHOW INDEXES FROM privs
+----
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
+privs       privs_pkey  false       1             a            a           ASC        false    false     true     1
+privs       privs_pkey  false       2             b            b           N/A        true     false     true     1
+
+statement ok
+GRANT CREATE ON privs TO testuser
+
+user testuser
+
+statement ok
+CREATE INDEX foo ON privs (b)
+
+query TTBITTTBBBF colnames,rowsort
+SHOW INDEXES FROM privs
+----
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
+privs       foo         true        1             b            b           ASC        false    false     true     1
+privs       foo         true        2             a            a           ASC        false    true      true     1
+privs       privs_pkey  false       1             a            a           ASC        false    false     true     1
+privs       privs_pkey  false       2             b            b           N/A        true     false     true     1
+
+user root
+
+statement ok
+CREATE TABLE telemetry (
+  x INT PRIMARY KEY,
+  y INT,
+  z JSONB
+)
+
+# Test that creating an index on a column which is currently being dropped
+# causes an error.
+subtest create_index_on_dropping_column
+
+statement ok
+CREATE TABLE create_idx_drop_column (c0 INT PRIMARY KEY, c1 INT);
+
+statement ok
+begin; ALTER TABLE create_idx_drop_column DROP COLUMN c1;
+
+statement error column "c1" does not exist
+CREATE INDEX idx_create_idx_drop_column ON create_idx_drop_column (c1);
+
+statement ok
+ROLLBACK;
+
+statement ok
+DROP TABLE create_idx_drop_column;
+
+# Sanity test that dropping table descriptors
+# with the wrong type specified is correctly blocked.
+subtest drop-type-sanity
+
+statement ok
+CREATE TABLE t1dr(name varchar(256));
+
+statement ok
+CREATE VIEW v1dr as (select name from t1dr);
+
+statement ok
+CREATE SEQUENCE s1dr;
+
+statement error pq: "t1dr" is not a view
+DROP VIEW t1dr;
+
+statement error pq: "t1dr" is not a sequence
+DROP SEQUENCE t1dr;
+
+statement error pq: "v1dr" is not a table
+DROP TABLE v1dr
+
+statement error pq: "v1dr" is not a sequence
+DROP SEQUENCE v1dr;
+
+statement error pq: "s1dr" is not a view
+DROP VIEW s1dr
+
+statement error pq: "s1dr" is not a table
+DROP TABLE s1dr;
+
+# Event log related subtest
+subtest event-log
+
+statement ok
+SET use_declarative_schema_changer = 'unsafe'
+
+statement ok
+set sql_safe_updates=false;
+
+statement ok
+CREATE TABLE t1ev(name varchar(256));
+
+statement ok
+CREATE TABLE t2ev(name varchar(256));
+
+statement ok
+CREATE VIEW v1ev AS (SELECT name FROM t1ev);
+
+statement ok
+CREATE VIEW v2ev AS (SELECT name FROM t2ev);
+
+statement ok
+CREATE VIEW v4ev AS (SELECT name FROM V1EV);
+
+statement ok
+CREATE VIEW v3ev AS (SELECT name FROM V2EV);
+
+statement nocount ok
+DELETE FROM system.eventlog;
+
+statement ok
+DROP VIEW v1ev CASCADE;
+
+query IT
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnReadTimestamp' - 'LatencyNanos'
+FROM system.eventlog
+ORDER BY "timestamp", info DESC
+----
+1  {"CascadeDroppedViews": ["test.public.v4ev"], "EventType": "drop_view", "Statement": "DROP VIEW test.public.v1ev CASCADE", "Tag": "DROP VIEW", "User": "root", "ViewName": "test.public.v1ev"}
+1  {"EventType": "finish_schema_change", "InstanceID": 1}
+
+# Verify that LatencyNanos is populated.
+statement ok
+SELECT 1 / coalesce((info::JSONB->'LatencyNanos')::INT, 0) FROM system.eventlog
+WHERE "eventType" = 'finish_schema_change'
+
+statement ok
+CREATE VIEW v1ev AS (SELECT name FROM T1EV);
+
+statement ok
+CREATE VIEW v4ev AS (SELECT name FROM V1EV);
+
+statement nocount ok
+DELETE FROM system.eventlog;
+
+statement ok
+DROP TABLE t1ev,t2ev CASCADE;
+
+query IT
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnReadTimestamp' - 'LatencyNanos'
+FROM system.eventlog
+ORDER BY timestamp, info DESC;
+----
+1  {"CascadeDroppedViews": ["test.public.v1ev", "test.public.v4ev"], "EventType": "drop_table", "Statement": "DROP TABLE test.public.t1ev, test.public.t2ev CASCADE", "TableName": "test.public.t1ev", "Tag": "DROP TABLE", "User": "root"}
+1  {"CascadeDroppedViews": ["test.public.v2ev", "test.public.v3ev"], "EventType": "drop_table", "Statement": "DROP TABLE test.public.t1ev, test.public.t2ev CASCADE", "TableName": "test.public.t2ev", "Tag": "DROP TABLE", "User": "root"}
+1  {"EventType": "finish_schema_change", "InstanceID": 1}
+1  {"EventType": "finish_schema_change", "InstanceID": 1}
+
+statement ok
+CREATE TABLE fooev (i INT PRIMARY KEY);
+
+statement nocount ok
+DELETE FROM system.eventlog;
+
+statement ok
+ALTER TABLE fooev ADD COLUMN j INT
+
+query IT
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnReadTimestamp' - 'LatencyNanos'
+FROM system.eventlog
+ORDER BY timestamp, info DESC;
+----
+1  {"EventType": "alter_table", "MutationID": 1, "Statement": "ALTER TABLE test.public.fooev ADD COLUMN j INT8", "TableName": "test.public.fooev", "Tag": "ALTER TABLE", "User": "root"}
+1  {"EventType": "finish_schema_change", "InstanceID": 1}
+
+subtest names-with-escaped-chars
+
+# We are intentionally injecting characters that might get escaped due to
+# incorrect string conversion functions. As a result if descriptors look
+# ups use these incorrectly escaped strings we would be in trouble.
+statement ok
+CREATE DATABASE "'db1-a'";
+
+statement ok
+CREATE SCHEMA "'db1-a'".sc1;
+
+statement ok
+CREATE SCHEMA "'db1-a'".sc2;
+
+statement ok
+CREATE DATABASE db2;
+
+statement ok
+CREATE SCHEMA db2.sc3;
+
+# Similarly try using special characters making an index for a new table, we
+# will attempt to recreate it and expect the look up to find the old one.
+statement ok
+CREATE TABLE "'db1-a'"."'t1-esc'"(name int);
+
+statement ok
+CREATE INDEX "'t1-esc-index'" ON "'db1-a'"."'t1-esc'"(name)
+
+statement error index with name "'t1-esc-index'" already exists
+CREATE INDEX "'t1-esc-index'" ON "'db1-a'"."'t1-esc'"(name)
+
+statement nocount ok
+delete from system.eventlog;
+
+statement ok
+DROP DATABASE "'db1-a'" cascade;
+
+statement ok
+DROP DATABASE db2 cascade;
+
+query IT
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnReadTimestamp' - 'LatencyNanos'
+FROM system.eventlog
+ORDER BY timestamp, info DESC;
+----
+1  {"DatabaseName": "'db1-a'", "DroppedSchemaObjects": ["\"'db1-a'\".public.\"'t1-esc'\""], "EventType": "drop_database", "Statement": "DROP DATABASE \"'db1-a'\" CASCADE", "Tag": "DROP DATABASE", "User": "root"}
+1  {"EventType": "finish_schema_change", "InstanceID": 1}
+1  {"DatabaseName": "db2", "EventType": "drop_database", "Statement": "DROP DATABASE db2 CASCADE", "Tag": "DROP DATABASE", "User": "root"}
+1  {"EventType": "finish_schema_change", "InstanceID": 1}
+
+# Sanity: Dropping multiple objects in the builder or resolving any dependencies
+# should function fine.
+subtest drop-multiple-in-builder
+
+statement ok
+CREATE TABLE multi_t1 (name INTEGER PRIMARY KEY);
+CREATE TABLE multi_t2 (name INTEGER, other INTEGER, FOREIGN KEY (other) REFERENCES multi_t1(name));
+CREATE VIEW multi_v1 AS (SELECT name FROM multi_t1);
+CREATE VIEW multi_v2 AS (SELECT name FROM multi_v1);
+
+statement ok
+CREATE SEQUENCE multi_sq1
+
+statement ok
+DROP VIEW multi_v1, multi_v2
+
+statement ok
+DROP TABLE multi_t1,multi_t2
+
+statement ok
+DROP SEQUENCE multi_sq1, multi_sq1
+
+# Sequence related back ref test
+subtest seq-back-ref
+
+statement ok
+CREATE SEQUENCE sqbf1;
+
+statement ok
+CREATE TABLE sbt1 (test INT not null, value INT not null DEFAULT nextval('sqbf1'))
+
+statement ok
+CREATE VIEW sbv1 AS SELECT  nextval('sqbf1')
+
+statement ok
+INSERT into sbt1 VALUES(1)
+
+statement ok
+select * from sbv1
+
+statement ok
+DROP SEQUENCE sqbf1 CASCADE
+
+# Default expression is dropped so this should error out.
+statement error null value in column "value" violates not-null constraint
+INSERT into sbt1 VALUES(1)
+
+# View referencing it should also be cleaned up.
+statement error relation "sbv1" does not exist
+select * from sbv1
+
+subtest fk-backref-cleanup
+statement ok
+CREATE TABLE IF NOT EXISTS defaultdb.orders (
+    id INT PRIMARY KEY,
+    customer INT UNIQUE NOT NULL REFERENCES defaultdb.customers (id),
+    orderTotal DECIMAL(9,2),
+    INDEX (customer)
+  );
+
+statement ok
+CREATE TABLE defaultdb.customers (id INT PRIMARY KEY, email STRING UNIQUE);
+
+statement ok
+CREATE TABLE defaultdb.shipments (
+    tracking_number UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    carrier STRING,
+    status STRING,
+    customer_id INT,
+    rand_col INT DEFAULT nextval('defaultdb.sq2'),
+    CONSTRAINT fk_customers FOREIGN KEY (customer_id) REFERENCES defaultdb.customers(id),
+    CONSTRAINT fk_orders FOREIGN KEY (customer_id) REFERENCES defaultdb.orders(customer)
+ );
+
+ statement ok
+ DROP TABLE defaultdb.customers CASCADE;
+
+ statement ok
+ DROP TABLE defaultdb.orders CASCADE;
+
+ # Foreign key back constraints should be cleaned up.
+ statement ok
+INSERT into  defaultdb.shipments values ( gen_random_uuid(), 'a', 'b', 10842)
+
+statement ok
+DROP TABLE defaultdb.shipments CASCADE;
+
+subtest validate-drops-with-multiple-constraints
+
+# When decomposing and dropping this table we will have multiple
+# constraints that need to be cleaned up.
+statement ok
+CREATE TABLE const (a INT, b INT,
+CONSTRAINT id_unique UNIQUE (a),
+CONSTRAINT b_unique UNIQUE (b)
+);
+
+statement ok
+DROP TABLE const
+
+subtest schema-dep-sanity
+
+# Test that we can drop multiple schemas as part of a single DROP statement,with
+# interleaved dependencies between schemas. As a result some child elements will
+# be added by a different schema due to cascaded drop behavior. i.e. Cross
+# schema behavior for views and tables.
+statement ok
+CREATE SCHEMA scdrop1;
+CREATE SCHEMA scdrop2;
+CREATE SCHEMA scdrop3;
+CREATE TABLE scdrop1.scdrop1_t1 (x INT);
+CREATE TABLE scdrop1.scdrop1_t2 (x INT);
+CREATE TABLE scdrop2.scdrop2_t1 (x INT);
+CREATE VIEW scdrop2.scdrop2_v1 AS SELECT x FROM scdrop1.scdrop1_t1;
+CREATE VIEW scdrop3.scdrop3_v1 AS SELECT x FROM scdrop2.scdrop2_v1;
+
+statement ok
+DROP SCHEMA scdrop1, scdrop2, scdrop3 CASCADE
+
+# Validates that if an owned by sequence is dropped, then the back reference
+# inside the table gets cleaned up.
+subtest validate-sequence-owner
+
+statement ok
+CREATE TABLE seqowner(name int);
+
+statement ok
+CREATE SEQUENCE seqowned OWNED BY seqowner.name;
+
+statement ok
+DROP SEQUENCE seqowned;
+
+# Reference to the sequences should have been removed.
+statement ok
+DROP TABLE seqowner;
+
+subtest drop-type-closure
+
+# Tables with expressions and different varieties of type
+# referecnes.
+statement ok
+CREATE TYPE d_tc AS ENUM ('hello');
+CREATE TYPE d2_tc AS ENUM ('howdy');
+CREATE TABLE ttc1 (x d_tc);
+CREATE TABLE ttc2 (y d_tc[]);
+CREATE TABLE ttc3 (
+  x BOOL DEFAULT ('hello'::d_tc = 'hello'::d_tc),
+  y STRING AS ('howdy'::d2_tc::STRING) STORED,
+  CHECK ('hello'::d_tc::string = 'hello'),
+  INDEX i(y) WHERE ('hello'::d_tc = 'hello'::d_tc)
+);
+
+statement error cannot drop type "d_tc" because other objects \(\[test.public.ttc1 test.public.ttc2 test.public.ttc3\]\) still depend on it
+DROP TYPE d_tc;
+
+statement ok
+DROP TABLE ttc1;
+
+statement error cannot drop type "d_tc" because other objects \(\[test.public.ttc2 test.public.ttc3\]\) still depend on it
+DROP TYPE d_tc;
+
+statement ok
+DROP TABLE ttc2;
+
+statement error cannot drop type "d_tc" because other objects \(\[test.public.ttc3\]\) still depend on it
+DROP TYPE d_tc;
+
+statement ok
+DROP TABLE ttc3;
+
+statement ok
+DROP TYPE d_tc;
+
+subtest empty-database
+
+statement error empty database name
+DROP DATABASE ""
+
+subtest schema-permission-error
+
+user root
+
+statement ok
+CREATE SCHEMA sc1;
+
+statement ok
+CREATE DATABASE db1;
+
+user testuser
+
+statement ok
+SET use_declarative_schema_changer = 'on'
+
+statement error must be owner of schema sc1
+DROP SCHEMA sc1;
+
+statement error user testuser does not have DROP privilege on database db1
+DROP DATABASE db1;
+
+subtest sc-job-eager-descriptor-id-removal
+
+statement ok
+CREATE TABLE parent (k INT PRIMARY KEY, v STRING NOT NULL);
+
+statement ok
+CREATE UNIQUE INDEX idx ON parent (v)
+
+statement ok
+CREATE VIEW child AS SELECT count(*) FROM parent@idx
+
+statement ok
+SET use_declarative_schema_changer = 'unsafe'
+
+statement error pgcode 2BP01 cannot drop index "idx" because view "child" depends on it
+DROP INDEX parent@idx
+
+statement ok
+EXPLAIN (DDL) DROP INDEX parent@idx CASCADE;
+
+statement ok
+SET use_declarative_schema_changer = 'on'
+
+subtest drop-database-cascade
+
+user root
+
+statement ok
+DROP DATABASE test CASCADE
+
+statement ok
+CREATE DATABASE test;
+USE test
+
+subtest add_multiple_columns_in_transaction
+
+statement ok
+CREATE TABLE t (i INT PRIMARY KEY);
+INSERT INTO t VALUES (1), (2), (3)
+
+statement ok
+SET use_declarative_schema_changer = 'unsafe_always';
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+
+statement ok
+ALTER TABLE t ADD COLUMN k INT AS (i + 3) STORED NOT NULL UNIQUE;
+ALTER TABLE t ADD COLUMN j INT DEFAULT 42;
+
+statement ok
+COMMIT
+
+onlyif config schema-locked-disabled
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+  i INT8 NOT NULL,
+  k INT8 NOT NULL AS (i + 3:::INT8) STORED,
+  j INT8 NULL DEFAULT 42:::INT8,
+  CONSTRAINT t_pkey PRIMARY KEY (i ASC),
+  UNIQUE INDEX t_k_key (k ASC)
+);
+
+skipif config schema-locked-disabled
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+  i INT8 NOT NULL,
+  k INT8 NOT NULL AS (i + 3:::INT8) STORED,
+  j INT8 NULL DEFAULT 42:::INT8,
+  CONSTRAINT t_pkey PRIMARY KEY (i ASC),
+  UNIQUE INDEX t_k_key (k ASC)
+) WITH (schema_locked = true);
+
+query III rowsort
+SELECT * FROM t
+----
+1  4  42
+2  5  42
+3  6  42
+
+subtest create-schema
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+
+statement ok
+CREATE SCHEMA sc
+
+query TT rowsort
+SHOW SCHEMAS
+----
+crdb_internal       node
+information_schema  node
+pg_catalog          node
+pg_extension        node
+public              root
+sc                  root
+
+statement ok
+DROP SCHEMA sc
+
+query TT rowsort
+SHOW SCHEMAS
+----
+crdb_internal       node
+information_schema  node
+pg_catalog          node
+pg_extension        node
+public              root
+
+statement ok
+COMMIT
+
+
+subtest statement-control
+
+# Disable ALTER table completely and validate it works
+statement ok
+SET use_declarative_schema_changer = 'on'
+
+statement ok
+SET CLUSTER SETTING sql.schema.force_declarative_statements='!ALTER TABLE'
+
+statement ok
+CREATE TABLE stmt_ctrl(n int primary key) WITH (schema_locked = false)
+
+statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
+EXPLAIN (DDL) ALTER TABLE stmt_ctrl ADD COLUMN j BOOL
+
+statement ok
+ALTER TABLE stmt_ctrl ADD COLUMN fallback_works BOOL
+
+statement ok
+SET CLUSTER SETTING sql.schema.force_declarative_statements='!CREATE SCHEMA'
+
+# Validate that CREATE SCHEMA can be disabled and can be re-enabled with the same flag.
+statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
+EXPLAIN (DDL) CREATE SCHEMA schema1
+
+statement ok
+SET CLUSTER SETTING sql.schema.force_declarative_statements='+CREATE SCHEMA'
+
+statement ok
+EXPLAIN (DDL) CREATE SCHEMA sc1
+
+# Test ALTER TABLE subcommand-level control.
+# Disable just ADD COLUMN subcommand.
+statement ok
+SET CLUSTER SETTING sql.schema.force_declarative_statements='!ALTER TABLE ADD COLUMN'
+
+statement ok
+CREATE TABLE stmt_ctrl_sub(n int primary key) WITH (schema_locked = false)
+
+# ADD COLUMN should be disabled (fall back to legacy).
+statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
+EXPLAIN (DDL) ALTER TABLE stmt_ctrl_sub ADD COLUMN disabled_col BOOL
+
+# DROP COLUMN should still use declarative (not disabled).
+statement ok
+ALTER TABLE stmt_ctrl_sub ADD COLUMN to_drop BOOL
+
+statement ok
+EXPLAIN (DDL) ALTER TABLE stmt_ctrl_sub DROP COLUMN to_drop
+
+# Test that statement-level disable can be overridden by subcommand-level enable.
+statement ok
+SET CLUSTER SETTING sql.schema.force_declarative_statements='!ALTER TABLE, +ALTER TABLE DROP COLUMN'
+
+# ADD COLUMN should be disabled (inherits from !ALTER TABLE).
+statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
+EXPLAIN (DDL) ALTER TABLE stmt_ctrl_sub ADD COLUMN still_disabled BOOL
+
+# DROP COLUMN should use declarative (overridden by +ALTER TABLE DROP COLUMN).
+statement ok
+ALTER TABLE stmt_ctrl_sub ADD COLUMN another_to_drop BOOL
+
+statement ok
+EXPLAIN (DDL) ALTER TABLE stmt_ctrl_sub DROP COLUMN another_to_drop
+
+# Test mixed subcommand statement - any disabled subcommand disables the whole statement.
+statement ok
+SET CLUSTER SETTING sql.schema.force_declarative_statements='!ALTER TABLE ADD COLUMN'
+
+# This statement has ADD COLUMN which is disabled, so the whole thing should fall back.
+statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
+EXPLAIN (DDL) ALTER TABLE stmt_ctrl_sub ADD COLUMN mixed_col BOOL, DROP COLUMN another_to_drop
+
+# Test invalid subcommand tag validation.
+statement error ALTER TABLE subcommand tag "ALTER TABLE NONEXISTENT CMD" is not controlled
+SET CLUSTER SETTING sql.schema.force_declarative_statements='!ALTER TABLE NONEXISTENT CMD'
+
+# Clean up.
+statement ok
+SET CLUSTER SETTING sql.schema.force_declarative_statements=''
+
+statement ok
+DROP TABLE stmt_ctrl_sub
+
+subtest end
+
+
+subtest multiple_primary_key
+
+statement ok
+CREATE TABLE multiple_pk_attempt(n INT PRIMARY KEY, j INT)
+
+let $use_decl_sc
+SHOW use_declarative_schema_changer
+
+statement ok
+SET use_declarative_schema_changer = 'unsafe_always'
+
+statement error pgcode 42611 multiple primary keys for table \"multiple_pk_attempt\" are not allowed
+ALTER TABLE multiple_pk_attempt ADD PRIMARY KEY (j);
+
+statement ok
+SET use_declarative_schema_changer = $use_decl_sc
+
+subtest end
+
+subtest create_table_unsafe_always
+
+let $use_decl_sc
+SHOW use_declarative_schema_changer
+
+statement ok
+SET use_declarative_schema_changer = 'unsafe_always'
+
+statement error pq: \*tree.CreateTable not implemented in the new schema changer
+EXPLAIN (DDL) CREATE TABLE test_table(log int)
+
+statement error pq: \*tree.CreateTable not implemented in the new schema changer
+CREATE TABLE test_table(log int)
+
+statement error pq: \*tree.CreateTable not implemented in the new schema changer
+CREATE TABLE test_table_as AS SELECT 1 AS log
+
+statement error pq: \*tree.CreateView not implemented in the new schema changer
+CREATE VIEW test_view AS SELECT 1 AS log
+
+statement ok
+SET use_declarative_schema_changer = $use_decl_sc
+
+subtest end

@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "twkb",
+    srcs = ["twkb.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/geo/twkb",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "@com_github_twpayne_go_geom//:go-geom",
+    ],
+)
+
+go_test(
+    name = "twkb_test",
+    srcs = ["twkb_test.go"],
+    embed = [":twkb"],
+    deps = [
+        "@com_github_stretchr_testify//require",
+        "@com_github_twpayne_go_geom//:go-geom",
+    ],
+)

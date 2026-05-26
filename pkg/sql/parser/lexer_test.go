@@ -1,0 +1,55 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package parser
+
+import (
+	"reflect"
+	"testing"
+)
+
+func TestLexer(t *testing.T) {
+	// Test the lookahead logic in Lex.
+	testData := []struct {
+		sql      string
+		expected []int
+	}{
+		{`WITH TIME`, []int{WITH_LA, TIME}},
+		{`WITH ORDINALITY`, []int{WITH_LA, ORDINALITY}},
+		{`NOT BETWEEN`, []int{NOT_LA, BETWEEN}},
+		{`NOT IN`, []int{NOT_LA, IN}},
+		{`NOT SIMILAR`, []int{NOT_LA, SIMILAR}},
+		{`AS OF SYSTEM TIME`, []int{AS_LA, OF, SYSTEM, TIME}},
+		{`AS OF`, []int{AS, OF}},
+	}
+	for i, d := range testData {
+		s := makeSQLScanner(d.sql)
+		var scanTokens []sqlSymType
+		for {
+			var lval sqlSymType
+			s.Scan(&lval)
+			if lval.id == 0 {
+				break
+			}
+			scanTokens = append(scanTokens, lval)
+		}
+		var l lexer
+		l.init(d.sql, scanTokens, defaultNakedIntType, 0 /* numAnnotations */)
+		var lexTokens []int
+		for {
+			var lval sqlSymType
+			id := l.Lex(&lval)
+			if id == 0 {
+				break
+			}
+			lexTokens = append(lexTokens, id)
+		}
+
+		if !reflect.DeepEqual(d.expected, lexTokens) {
+			t.Errorf("%d: %q: expected %d, but found %d", i, d.sql, d.expected, lexTokens)
+		}
+	}
+
+}

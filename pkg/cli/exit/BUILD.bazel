@@ -1,0 +1,13 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "exit",
+    srcs = [
+        "codes.go",
+        "doc.go",
+        "exit.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cli/exit",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_cockroachdb_redact//:redact"],
+)

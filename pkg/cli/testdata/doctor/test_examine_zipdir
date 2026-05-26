@@ -1,0 +1,11 @@
+debug doctor examine zipdir testdata/doctor/debugzip-wth
+----
+debug doctor examine zipdir testdata/doctor/debugzip 21.1-52
+Examining 62 descriptors and 58 namespace entries...
+  ParentID   1, ParentSchemaID 29: relation "users" (4): expected matching namespace entry, found none
+  ParentID   1, ParentSchemaID 29: relation "ui" (14): expected matching namespace entry, found none
+  ParentID   1, ParentSchemaID 29: relation "web_sessions" (19): expected matching namespace entry, found none
+  ParentID 102, ParentSchemaID  0: schema "public" (103): expected matching namespace entry, found none
+  ParentID 100, ParentSchemaID 101: relation "t" (104): expected matching namespace entry, found none
+Examining 54 jobs...
+ERROR: validation failed

@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//build:STRINGER.bzl", "stringer")
+
+go_library(
+    name = "roleoption",
+    srcs = [
+        "role_option.go",
+        ":gen-option-stringer",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/roleoption",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cli/cliflags",
+        "//pkg/security/distinguishedname",
+        "//pkg/security/provisioning",
+        "//pkg/security/username",
+        "//pkg/settings/cluster",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/tree",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+stringer(
+    name = "gen-option-stringer",
+    src = "role_option.go",
+    additional_args = ["-linecomment"],
+    typ = "Option",
+)

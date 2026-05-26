@@ -1,0 +1,166 @@
+# Test permissions checks for non-admin users running BACKUP.
+new-cluster name=s1
+----
+
+exec-sql
+CREATE DATABASE d;
+REVOKE CONNECT ON DATABASE d FROM public;
+CREATE TABLE d.t (x INT);
+INSERT INTO d.t VALUES (1), (2), (3);
+----
+
+# BACKUP is not allowed in a batch-statement.
+exec-sql
+BACKUP INTO 'nodelocal://1/test-root/';
+SELECT 1;
+----
+pq: BACKUP cannot be used inside a multi-statement transaction without DETACHED option
+
+# Cluster backup should succeed as a root user.
+exec-sql
+BACKUP INTO 'nodelocal://1/test-root/'
+----
+
+# Backups should succeed as a non-root user with admin role.
+exec-sql
+CREATE USER testuser;
+GRANT ADMIN TO testuser;
+----
+
+exec-sql user=testuser
+BACKUP INTO 'nodelocal://1/test-nonroot-cluster';
+----
+
+exec-sql user=testuser
+BACKUP DATABASE d INTO 'nodelocal://1/test-nonroot-db';
+----
+
+exec-sql user=testuser
+BACKUP TABLE d.t INTO 'nodelocal://1/test-nonroot-table';
+----
+
+# Start a new cluster with the same IO dir.
+# nodelocal IO is a form of implicit access (since it is accessed as the node,
+# so we require the allow-implicit-access flag.
+new-cluster name=s2 allow-implicit-access
+----
+
+exec-sql
+CREATE DATABASE d2;
+USE d2;
+REVOKE CONNECT ON DATABASE d2 FROM public;
+CREATE TABLE d2.t (x INT);
+INSERT INTO d2.t VALUES (1), (2), (3);
+----
+
+exec-sql
+CREATE USER testuser
+----
+
+# Cluster backup as a non-admin user should fail.
+exec-sql user=testuser
+BACKUP INTO 'nodelocal://1/test2'
+----
+pq: only users with the admin role or the BACKUP system privilege are allowed to perform full cluster backups: user testuser does not have BACKUP system privilege
+
+# Database backup as a non-admin user should have CONNECT on database and SELECT on tables.
+exec-sql user=testuser
+BACKUP DATABASE d2 INTO 'nodelocal://1/d2'
+----
+pq: user testuser does not have CONNECT privilege on database d2
+HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/backup.html#required-privileges. In a future release, to run BACKUP DATABASE, user testuser will exclusively require the BACKUP privilege on database d2.
+
+exec-sql
+GRANT CONNECT ON DATABASE d2 TO testuser;
+----
+
+# Table backup as a non-admin user should have SELECT privileges.
+exec-sql user=testuser
+BACKUP TABLE d2.t INTO 'nodelocal://1/d2-table'
+----
+pq: user testuser does not have SELECT privilege on relation t
+HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/backup.html#required-privileges. In a future release, to run BACKUP TABLE, user testuser will exclusively require the BACKUP privilege on tables: t.
+
+exec-sql
+GRANT SELECT ON TABLE d2.t TO testuser;
+----
+
+# Add user defined schema to the database.
+exec-sql
+CREATE SCHEMA sc2;
+----
+
+# Schema backup as a non-admin user should have USAGE privileges.
+exec-sql user=testuser
+BACKUP DATABASE d2 INTO 'nodelocal://1/d2-schema';
+----
+pq: user testuser does not have USAGE privilege on schema sc2
+HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/backup.html#required-privileges. In a future release, to run BACKUP DATABASE, user testuser will exclusively require the BACKUP privilege on database d2.
+
+exec-sql
+GRANT USAGE ON SCHEMA sc2 TO testuser;
+----
+
+# Add user defined type to the database.
+# By default `public` is given USAGE privilege on a UDT so we revoke it to
+# test our BACKUP checks.
+exec-sql
+CREATE TYPE d2.greeting AS ENUM ('hello', 'hiya');
+REVOKE USAGE ON TYPE d2.greeting FROM public;
+----
+
+# Type backup as a non-admin user should have USAGE privileges.
+exec-sql user=testuser
+BACKUP DATABASE d2 INTO 'nodelocal://1/d2-schema';
+----
+pq: user testuser does not have USAGE privilege on type greeting
+HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/backup.html#required-privileges. In a future release, to run BACKUP DATABASE, user testuser will exclusively require the BACKUP privilege on database d2.
+
+exec-sql
+GRANT USAGE ON TYPE d2.greeting TO testuser;
+----
+
+# testuser should now have all the required privileges.
+exec-sql cluster=s2 user=testuser
+BACKUP DATABASE d2 INTO 'nodelocal://1/d2';
+----
+NOTICE: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/backup.html#required-privileges. In a future release, to run BACKUP DATABASE, user testuser will exclusively require the BACKUP privilege on database d2.
+
+exec-sql cluster=s2 user=testuser
+BACKUP TABLE d2.t INTO 'nodelocal://1/d2-table';
+----
+NOTICE: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/backup.html#required-privileges. In a future release, to run BACKUP TABLE, user testuser will exclusively require the BACKUP privilege on tables: t.
+
+# Test that implicit access is disallowed when the testing knob is not set.
+new-cluster name=s3 share-io-dir=s1
+----
+
+exec-sql
+CREATE DATABASE d;
+REVOKE CONNECT ON DATABASE d FROM public;
+CREATE USER testuser;
+GRANT CONNECT ON DATABASE d TO testuser;
+----
+
+exec-sql cluster=s3 user=testuser
+SHOW BACKUP FROM LATEST IN 'http://COCKROACH_TEST_HTTP_SERVER/'
+----
+pq: only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified http URI
+
+exec-sql user=testuser
+BACKUP DATABASE d INTO 'nodelocal://1/test3'
+----
+pq: only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified nodelocal URI
+
+# Test that http access is disallowed by disable http even if allow-non-admin is on.
+new-cluster name=s4 allow-implicit-access disable-http
+----
+
+exec-sql cluster=s4
+CREATE USER testuser
+----
+
+exec-sql cluster=s4 user=testuser
+SHOW BACKUP FROM LATEST IN 'http://COCKROACH_TEST_HTTP_SERVER/'
+----
+pq: read LATEST path: external http access disabled

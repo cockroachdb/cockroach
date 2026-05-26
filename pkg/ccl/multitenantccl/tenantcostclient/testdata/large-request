@@ -1,0 +1,99 @@
+# This test verifies the following condition:
+#  - we have a large request blocked, requiring more tokens than the "low
+#    tokens" notification threshold.
+#  - the bucket has more tokens available than the notification threshold.
+
+configure
+throttle: 1000
+----
+
+# Fire off a write that needs significantly more than the initial tokens.
+write bytes=15357945 label=w1
+----
+
+timers
+----
+00:00:09.000
+00:00:10.000
+
+# Ensure that low tokens notification is sent even though the token bucket still
+# has 10K tokens (waiting tokens need to be taken into account).
+wait-for-event
+low-tokens
+----
+
+wait-for-event
+token-bucket-response
+----
+
+not-completed label=w1
+----
+
+token-bucket
+----
+5000.00 tokens filling @ 1000.00 tokens/s (limited to 15000.00 tokens) (15000.00 waiting tokens)
+
+# Advance time to just short of trickle renewal and trigger tick event.
+advance wait=true
+8.75s
+----
+00:00:08.750
+
+token-bucket
+----
+13750.00 tokens filling @ 1000.00 tokens/s (limited to 15000.00 tokens) (15000.00 waiting tokens)
+
+# Now advance time to trigger trickle renewal (but do not trigger tick in order
+# to avoid a race that makes test non-deterministic).
+advance
+0.25s
+----
+00:00:09.000
+
+wait-for-event
+token-bucket-response
+----
+
+timers
+----
+00:00:09.909
+00:00:18.000
+
+token-bucket
+----
+14000.00 tokens filling @ 1100.00 tokens/s (limited to 16000.00 tokens) (15000.00 waiting tokens)
+
+# One more second to fulfill waiting write.
+advance
+1s
+----
+00:00:10.000
+
+await label=w1
+----
+
+token-bucket
+----
+100.00 tokens filling @ 1100.00 tokens/s (limited to 16000.00 tokens)
+
+# Un-throttle central token bucket and ensure that another large write goes
+# through after requesting more tokens.
+configure
+----
+
+write bytes=20477952 label=w2
+----
+
+timers
+----
+00:00:18.000
+00:00:28.090
+
+# Advance another 8 seconds to trigger trickle renewal and reconfigure bucket.
+advance
+8s
+----
+00:00:18.000
+
+await label=w2
+----

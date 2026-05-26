@@ -1,0 +1,233 @@
+# -------------------------------------------------------------
+# In this test a store (n1, s1) acts as a requester of
+# support from another store (n2, s2).
+# -------------------------------------------------------------
+
+support-from node-id=2 store-id=2
+----
+epoch: 0, expiration: 0,0
+
+# -------------------------------------------------------------
+# Store (n1, s1) successfully establishes support.
+# -------------------------------------------------------------
+
+send-heartbeats now=100 support-duration=10s
+----
+heartbeats:
+{Type:MsgHeartbeat From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:1 Expiration:110.000000000,0}
+
+handle-messages
+  msg type=MsgHeartbeatResp from-node-id=2 from-store-id=2 epoch=1 expiration=110
+----
+
+support-from node-id=2 store-id=2
+----
+epoch: 1, expiration: 110.000000000,0
+
+debug-requester-state
+----
+meta:
+{MaxEpoch:1 MaxRequested:110.000000000,0}
+support from:
+{Target:{NodeID:2 StoreID:2} Epoch:1 Expiration:110.000000000,0}
+
+
+# -------------------------------------------------------------
+# Store (n1, s1) successfully extends support.
+# -------------------------------------------------------------
+
+send-heartbeats now=200 support-duration=10s
+----
+heartbeats:
+{Type:MsgHeartbeat From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:1 Expiration:210.000000000,0}
+
+handle-messages
+  msg type=MsgHeartbeatResp from-node-id=2 from-store-id=2 epoch=1 expiration=210
+----
+
+support-from node-id=2 store-id=2
+----
+epoch: 1, expiration: 210.000000000,0
+
+
+# -------------------------------------------------------------
+# Store (n1, s1) loses support.
+# -------------------------------------------------------------
+
+send-heartbeats now=300 support-duration=10s
+----
+heartbeats:
+{Type:MsgHeartbeat From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:1 Expiration:310.000000000,0}
+
+handle-messages
+  msg type=MsgHeartbeatResp from-node-id=2 from-store-id=2 epoch=2 expiration=0
+----
+
+support-from node-id=2 store-id=2
+----
+epoch: 2, expiration: 0,0
+
+debug-requester-state
+----
+meta:
+{MaxEpoch:2 MaxRequested:310.000000000,0}
+support from:
+{Target:{NodeID:2 StoreID:2} Epoch:2 Expiration:0,0}
+
+
+# -------------------------------------------------------------
+# Store (n1, s1) re-establishes support at a higher epoch.
+# -------------------------------------------------------------
+
+send-heartbeats now=400 support-duration=10s
+----
+heartbeats:
+{Type:MsgHeartbeat From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:2 Expiration:410.000000000,0}
+
+handle-messages
+  msg type=MsgHeartbeatResp from-node-id=2 from-store-id=2 epoch=2 expiration=410
+----
+
+support-from node-id=2 store-id=2
+----
+epoch: 2, expiration: 410.000000000,0
+
+
+# -------------------------------------------------------------
+# Store (n1, s1) does not regress support epoch or expiration.
+# -------------------------------------------------------------
+
+handle-messages
+  msg type=MsgHeartbeatResp from-node-id=2 from-store-id=2 epoch=1 expiration=500
+----
+
+support-from node-id=2 store-id=2
+----
+epoch: 2, expiration: 410.000000000,0
+
+handle-messages
+  msg type=MsgHeartbeatResp from-node-id=2 from-store-id=2 epoch=1 expiration=0
+----
+
+support-from node-id=2 store-id=2
+----
+epoch: 2, expiration: 410.000000000,0
+
+handle-messages
+  msg type=MsgHeartbeatResp from-node-id=2 from-store-id=2 epoch=2 expiration=400
+----
+
+support-from node-id=2 store-id=2
+----
+epoch: 2, expiration: 410.000000000,0
+
+handle-messages
+  msg type=MsgHeartbeatResp from-node-id=2 from-store-id=2 epoch=2 expiration=0
+----
+
+support-from node-id=2 store-id=2
+----
+epoch: 2, expiration: 410.000000000,0
+
+
+# -------------------------------------------------------------
+# Store (n1, s1) requests support but receives no response.
+# -------------------------------------------------------------
+
+send-heartbeats now=500 support-duration=10s
+----
+heartbeats:
+{Type:MsgHeartbeat From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:2 Expiration:510.000000000,0}
+
+support-from node-id=2 store-id=2
+----
+epoch: 2, expiration: 410.000000000,0
+
+debug-requester-state
+----
+meta:
+{MaxEpoch:2 MaxRequested:510.000000000,0}
+support from:
+{Target:{NodeID:2 StoreID:2} Epoch:2 Expiration:410.000000000,0}
+
+
+# -------------------------------------------------------------
+# Store (n1, s1) stops requesting support after no recent calls
+# to SupportFrom for (n2, s2).
+#
+# SupportFrom was already called above, so the first call to
+# mark-idle-stores will set recentlyQueried to inactive, and
+# the second call to mark-idle-stores will set it to idle.
+# -------------------------------------------------------------
+
+mark-idle-stores
+----
+
+debug-requester-state
+----
+meta:
+{MaxEpoch:2 MaxRequested:510.000000000,0}
+support from:
+{Target:{NodeID:2 StoreID:2} Epoch:2 Expiration:410.000000000,0}
+
+send-heartbeats now=550 support-duration=10s
+----
+heartbeats:
+{Type:MsgHeartbeat From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:2 Expiration:560.000000000,0}
+
+mark-idle-stores
+----
+
+debug-requester-state
+----
+meta:
+{MaxEpoch:2 MaxRequested:560.000000000,0}
+support from:
+{Target:{NodeID:2 StoreID:2} Epoch:2 Expiration:410.000000000,0}
+
+send-heartbeats now=600 support-duration=10s
+----
+heartbeats:
+
+support-from node-id=2 store-id=2
+----
+epoch: 2, expiration: 410.000000000,0
+
+send-heartbeats now=700 support-duration=10s
+----
+heartbeats:
+{Type:MsgHeartbeat From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:2 Expiration:710.000000000,0}
+
+
+# -------------------------------------------------------------
+# Store (n1, s1) requests support but fails to write meta.
+# -------------------------------------------------------------
+
+error-on-write on=true
+----
+
+send-heartbeats now=800 support-duration=10s
+----
+heartbeats:
+
+debug-requester-state
+----
+meta:
+{MaxEpoch:2 MaxRequested:710.000000000,0}
+support from:
+{Target:{NodeID:2 StoreID:2} Epoch:2 Expiration:410.000000000,0}
+
+error-on-write on=false
+----
+
+send-heartbeats now=900 support-duration=10s
+----
+heartbeats:
+{Type:MsgHeartbeat From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:2 Expiration:910.000000000,0}
+
+debug-metrics
+----
+HeartbeatSuccess: 8, HeartbeatFailure: 1
+MessageHandleSuccess: 8, MessageHandleFailure: 0
+SupportWithdrawSuccess: 0, SupportWithdrawFailure: 0
+SupportFromStores: 1, SupportForStores: 0

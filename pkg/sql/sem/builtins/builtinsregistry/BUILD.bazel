@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "builtinsregistry",
+    srcs = ["builtins_registry.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/sql/sem/tree"],
+)

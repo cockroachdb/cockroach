@@ -1,0 +1,411 @@
+statement ok
+SET CLUSTER SETTING sql.cross_db_views.enabled = TRUE
+
+statement ok
+SET CLUSTER SETTING sql.cross_db_sequence_references.enabled = TRUE
+
+statement ok
+CREATE DATABASE "foo-bar"
+
+query TTTTTT rowsort
+SHOW DATABASES
+----
+defaultdb  root  NULL  NULL  {}  NULL
+foo-bar    root  NULL  NULL  {}  NULL
+postgres   root  NULL  NULL  {}  NULL
+system     node  NULL  NULL  {}  NULL
+test       root  NULL  NULL  {}  NULL
+
+statement ok
+CREATE TABLE "foo-bar".t(x INT)
+
+statement error database.*is not empty and RESTRICT was specified
+DROP DATABASE "foo-bar" RESTRICT
+
+statement ok
+DROP DATABASE "foo-bar" CASCADE
+
+query TTT
+SELECT name, database_name, state FROM crdb_internal.tables WHERE name = 't'
+----
+t  [106]  DROP
+
+query TTTTTT rowsort
+SHOW DATABASES
+----
+defaultdb  root  NULL  NULL  {}  NULL
+postgres   root  NULL  NULL  {}  NULL
+system     node  NULL  NULL  {}  NULL
+test       root  NULL  NULL  {}  NULL
+
+skipif config local-legacy-schema-changer
+query TT
+  SELECT job_type, status
+    FROM [SHOW JOBS]
+   WHERE user_name = 'root' AND job_type != 'MIGRATION'
+   AND description NOT LIKE 'updating version%'
+ORDER BY job_type DESC
+----
+NEW SCHEMA CHANGE  succeeded
+
+statement ok
+CREATE DATABASE "foo bar"
+
+query TTTTTT
+SELECT * FROM [SHOW DATABASES] ORDER BY database_name
+----
+defaultdb  root  NULL  NULL  {}  NULL
+foo bar    root  NULL  NULL  {}  NULL
+postgres   root  NULL  NULL  {}  NULL
+system     node  NULL  NULL  {}  NULL
+test       root  NULL  NULL  {}  NULL
+
+statement ok
+DROP DATABASE "foo bar" CASCADE
+
+query TTTTTT rowsort
+SHOW DATABASES
+----
+defaultdb  root  NULL  NULL  {}  NULL
+postgres   root  NULL  NULL  {}  NULL
+system     node  NULL  NULL  {}  NULL
+test       root  NULL  NULL  {}  NULL
+
+statement ok
+CREATE DATABASE d1
+
+statement ok
+CREATE DATABASE d2
+
+statement ok
+CREATE TABLE d1.t1 (k STRING PRIMARY KEY, v STRING)
+
+statement ok
+CREATE TABLE d2.t1 (k STRING PRIMARY KEY, v STRING)
+
+statement ok
+CREATE VIEW d1.v1 AS SELECT k,v FROM d1.t1
+
+statement ok
+CREATE VIEW d1.v2 AS SELECT k,v FROM d1.v1
+
+statement ok
+CREATE VIEW d2.v1 AS SELECT k,v FROM d2.t1
+
+statement ok
+CREATE VIEW d2.v2 AS SELECT k,v FROM d1.t1
+
+statement ok
+CREATE VIEW d2.v3 AS SELECT k,v FROM d1.v2
+
+statement ok
+CREATE VIEW d2.v4 AS SELECT count(*) FROM d1.t1 as x JOIN d2.t1 as y ON x.k = y.k
+
+statement ok
+GRANT ALL ON DATABASE d1 TO testuser
+
+statement ok
+GRANT ALL ON d1.t1 TO testuser
+
+statement ok
+GRANT ALL ON d1.v1 TO testuser
+
+statement ok
+GRANT ALL ON d1.v2 TO testuser
+
+statement ok
+GRANT ALL ON d2.v2 TO testuser
+
+statement ok
+GRANT ALL ON d2.v3 TO testuser
+
+user testuser
+
+statement error user testuser does not have DROP privilege on relation v4
+DROP DATABASE d1 CASCADE
+
+user root
+
+query TT
+SELECT * FROM d1.v2
+----
+
+query TT
+SELECT * FROM d2.v1
+----
+
+query TT
+SELECT * FROM d2.v2
+----
+
+query TT
+SELECT * FROM d2.v3
+----
+
+query I
+SELECT * FROM d2.v4
+----
+0
+
+query TTTTTT rowsort
+SHOW DATABASES
+----
+d1         root  NULL  NULL  {}  NULL
+d2         root  NULL  NULL  {}  NULL
+defaultdb  root  NULL  NULL  {}  NULL
+postgres   root  NULL  NULL  {}  NULL
+system     node  NULL  NULL  {}  NULL
+test       root  NULL  NULL  {}  NULL
+
+statement ok
+DROP DATABASE d1 CASCADE
+
+query TTTTTT rowsort
+SHOW DATABASES
+----
+d2         root  NULL  NULL  {}  NULL
+defaultdb  root  NULL  NULL  {}  NULL
+postgres   root  NULL  NULL  {}  NULL
+system     node  NULL  NULL  {}  NULL
+test       root  NULL  NULL  {}  NULL
+
+query error pgcode 42P01 relation "d1.v2" does not exist
+SELECT * FROM d1.v2
+
+query error pgcode 42P01 relation "d2.v2" does not exist
+SELECT * FROM d2.v2
+
+query error pgcode 42P01 relation "d2.v3" does not exist
+SELECT * FROM d2.v3
+
+query error pgcode 42P01 relation "d2.v4" does not exist
+SELECT * FROM d2.v4
+
+query TT
+SELECT * FROM d2.v1
+----
+
+statement ok
+DROP DATABASE d2 CASCADE
+
+query TTTTTT rowsort
+SHOW DATABASES
+----
+defaultdb  root  NULL  NULL  {}  NULL
+postgres   root  NULL  NULL  {}  NULL
+system     node  NULL  NULL  {}  NULL
+test       root  NULL  NULL  {}  NULL
+
+query error pgcode 42P01 relation "d2.v1" does not exist
+SELECT * FROM d2.v1
+
+## drop a database containing tables with foreign key constraints, e.g. #8497
+
+statement ok
+CREATE DATABASE constraint_db
+
+statement ok
+CREATE TABLE constraint_db.t1 (
+  p FLOAT PRIMARY KEY,
+  a INT UNIQUE CHECK (a > 4),
+  CONSTRAINT c2 CHECK (a < 99)
+)
+
+statement ok
+CREATE TABLE constraint_db.t2 (
+    t1_ID INT,
+    CONSTRAINT fk FOREIGN KEY (t1_ID) REFERENCES constraint_db.t1(a),
+    INDEX (t1_ID)
+)
+
+statement ok
+DROP DATABASE constraint_db CASCADE
+
+skipif config local-legacy-schema-changer
+query TT
+WITH cte AS (
+  SELECT job_type, description
+  FROM crdb_internal.jobs
+  WHERE (job_type = 'NEW SCHEMA CHANGE' OR job_type = 'SCHEMA CHANGE GC')
+  AND (status = 'succeeded' OR status = 'running')
+  AND (description LIKE '%DROP%')
+  ORDER BY created DESC
+) SELECT * FROM cte ORDER BY job_type, description
+----
+NEW SCHEMA CHANGE  DROP DATABASE "foo bar" CASCADE
+NEW SCHEMA CHANGE  DROP DATABASE "foo-bar" CASCADE
+NEW SCHEMA CHANGE  DROP DATABASE constraint_db CASCADE
+NEW SCHEMA CHANGE  DROP DATABASE d1 CASCADE
+NEW SCHEMA CHANGE  DROP DATABASE d2 CASCADE
+SCHEMA CHANGE GC   GC for DROP DATABASE "foo-bar" CASCADE
+SCHEMA CHANGE GC   GC for DROP DATABASE constraint_db CASCADE
+SCHEMA CHANGE GC   GC for DROP DATABASE d1 CASCADE
+SCHEMA CHANGE GC   GC for DROP DATABASE d2 CASCADE
+
+query TTTTTT rowsort
+SHOW DATABASES
+----
+defaultdb  root  NULL  NULL  {}  NULL
+postgres   root  NULL  NULL  {}  NULL
+system     node  NULL  NULL  {}  NULL
+test       root  NULL  NULL  {}  NULL
+
+query error pgcode 42P01 relation "constraint_db.t1" does not exist
+SELECT * FROM constraint_db.t1
+
+# Check that the default option is CASCADE, but that safe_updates blocks it
+
+statement ok
+CREATE DATABASE foo; CREATE TABLE foo.bar(x INT);
+
+statement ok
+SET sql_safe_updates = TRUE;
+
+statement error DROP DATABASE on current database
+DROP DATABASE test
+
+statement error DROP DATABASE on non-empty database without explicit CASCADE
+DROP DATABASE foo
+
+statement ok
+SET sql_safe_updates = FALSE
+
+statement ok
+DROP DATABASE foo
+
+# Check that the default databases can be dropped and re-created like any other.
+statement ok
+DROP DATABASE defaultdb;
+
+statement ok
+DROP DATABASE postgres
+
+statement ok
+CREATE DATABASE defaultdb;
+
+statement ok
+CREATE DATABASE postgres
+
+# Test that an empty database doesn't get a GC job.
+statement ok
+CREATE DATABASE empty
+
+statement ok
+DROP DATABASE empty
+
+query TT
+SELECT replace(job_type, 'NEW SCHEMA CHANGE', 'SCHEMA CHANGE'), status
+  FROM [SHOW JOBS]
+ WHERE description LIKE '%empty%'
+    OR job_type = 'NEW SCHEMA CHANGE'
+ LIMIT 1
+----
+SCHEMA CHANGE       succeeded
+
+subtest bug_50997
+
+statement ok
+CREATE DATABASE db50997
+
+statement ok
+CREATE SEQUENCE db50997.seq50997
+
+statement ok
+CREATE SEQUENCE db50997.useq50997
+
+statement ok
+CREATE TABLE db50997.t50997(a INT DEFAULT nextval('db50997.seq50997'))
+
+statement ok
+CREATE TABLE db50997.t250997(a INT DEFAULT nextval('db50997.seq50997'))
+
+statement ok
+DROP DATABASE db50997 CASCADE
+
+query I
+SELECT count(*) FROM system.namespace WHERE name = 'seq50997'
+----
+0
+
+query I
+SELECT count(*) FROM system.namespace WHERE name = 'useq50997'
+----
+0
+
+# Similar to the test above, except now the "sequence use" relationship
+# is cross database. In this case the sequence should be simply unlinked
+# (and not dropped). This wasn't broken before, but it is nice to have a test
+# that checks things behave as expected.
+statement ok
+CREATE DATABASE db50997
+
+statement ok
+CREATE SEQUENCE seq50997
+
+statement ok
+CREATE TABLE db50997.t50997(a INT DEFAULT nextval('seq50997'))
+
+statement ok
+DROP DATABASE db50997 CASCADE
+
+query I
+SELECT count(*) FROM system.namespace WHERE name LIKE 'seq50997'
+----
+1
+
+subtest regression_73323
+
+statement ok
+CREATE DATABASE db_73323
+
+statement ok
+DROP DATABASE db_73323 RESTRICT
+
+subtest regression_51782
+
+statement ok
+CREATE DATABASE db_51782
+
+statement ok
+CREATE TABLE db_51782.t_51782(a int, b int);
+
+statement ok
+CREATE VIEW db_51782.v_51782 AS SELECT a, b FROM db_51782.t_51782
+
+statement ok
+CREATE VIEW db_51782.w_51782 AS SELECT a FROM db_51782.v_51782
+
+statement ok
+DROP DATABASE db_51782 CASCADE
+
+query I
+SELECT count(*) FROM system.namespace WHERE name LIKE 'v_51782'
+----
+0
+
+query I
+SELECT count(*) FROM system.namespace WHERE name LIKE 'w_51782'
+----
+0
+
+subtest end
+
+# Regression test to make sure a database owner can drop the database.
+subtest regression_121808
+
+statement ok
+CREATE USER db_owner WITH CREATEDB
+
+statement ok
+SET ROLE db_owner
+
+statement ok
+CREATE DATABASE db_121808
+
+statement ok
+DROP DATABASE db_121808 RESTRICT
+
+statement ok
+RESET role
+
+subtest end

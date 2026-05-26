@@ -1,0 +1,1558 @@
+# Adapted from the window logic test.
+
+exec-ddl
+CREATE TABLE kv (
+  k INT PRIMARY KEY,
+  v INT,
+  w INT,
+  f FLOAT,
+  d DECIMAL,
+  s STRING,
+  b BOOL,
+  FAMILY (k, v, w, f, b),
+  FAMILY (d),
+  FAMILY (s)
+)
+----
+
+build
+SELECT * FROM kv GROUP BY v, rank() OVER ()
+----
+error (42P20): rank(): window functions are not allowed in GROUP BY
+
+build
+SELECT sum(rank() over ()) FROM kv
+----
+error (42P20): sum(): rank(): window functions are not allowed in aggregate
+
+build
+SELECT rank() OVER () FROM kv GROUP BY 1
+----
+error (42P20): rank(): window functions are not allowed in GROUP BY
+
+build
+SELECT count(w) OVER () FROM kv GROUP BY 1
+----
+error (42P20): count(): window functions are not allowed in GROUP BY
+
+build
+SELECT avg(avg(k) OVER ()) OVER () FROM kv
+----
+error (42P20): avg(): avg(): window function calls cannot be nested
+
+build
+INSERT INTO kv (k, v) VALUES (99, 100) RETURNING sum(v) OVER ()
+----
+error (42P20): sum(): window functions are not allowed in RETURNING
+
+build
+SELECT sum(v) FROM kv GROUP BY k LIMIT sum(v) OVER ()
+----
+error (42703): column "v" does not exist
+
+build
+SELECT sum(v) FROM kv GROUP BY k LIMIT 1 OFFSET sum(v) OVER ()
+----
+error (42703): column "v" does not exist
+
+build
+INSERT INTO kv (k, v) VALUES (99, count(1) OVER ())
+----
+error (42P20): count(): window functions are not allowed in VALUES
+
+build
+SELECT k FROM kv WHERE avg(k) OVER () > 1
+----
+error (42P20): avg(): window functions are not allowed in WHERE
+
+build
+SELECT avg(DISTINCT k) OVER () FROM kv
+----
+error (0A000): DISTINCT is not implemented for window functions
+
+build
+SELECT 1 FROM kv GROUP BY 1 HAVING sum(1) OVER (PARTITION BY 1) > 1
+----
+error (42P20): sum(): window functions are not allowed in HAVING
+
+build
+SELECT lag('foo'::string) OVER (), lag(1) OVER () FROM kv
+----
+project
+ ├── columns: lag:10 lag:11
+ └── window partition=()
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 lag:10 lag:11 lag_1_arg1:12!null lag_1_arg2:13!null lag_1_arg3:14 lag_2_arg3:15
+      ├── project
+      │    ├── columns: lag_1_arg1:12!null lag_1_arg2:13!null lag_1_arg3:14 lag_2_arg3:15 k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    ├── scan kv
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    └── projections
+      │         ├── 'foo' [as=lag_1_arg1:12]
+      │         ├── 1 [as=lag_1_arg2:13]
+      │         ├── NULL::STRING [as=lag_1_arg3:14]
+      │         └── NULL::INT8 [as=lag_2_arg3:15]
+      └── windows
+           ├── lag [as=lag:10]
+           │    ├── lag_1_arg1:12
+           │    ├── lag_1_arg2:13
+           │    └── lag_1_arg3:14
+           └── lag [as=lag:11]
+                ├── lag_1_arg2:13
+                ├── lag_1_arg2:13
+                └── lag_2_arg3:15
+
+build
+SELECT count(*) OVER () FROM kv
+----
+project
+ ├── columns: count:10
+ └── window partition=()
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 count_rows:10
+      ├── scan kv
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      └── windows
+           └── count-rows [as=count_rows:10]
+
+build
+SELECT lag((SELECT k FROM kv kv2 WHERE kv2.k = kv.k)) OVER () FROM kv
+----
+project
+ ├── columns: lag:19
+ └── window partition=()
+      ├── columns: kv.k:1!null kv.v:2 kv.w:3 kv.f:4 kv.d:5 kv.s:6 kv.b:7 kv.crdb_internal_mvcc_timestamp:8 kv.tableoid:9 lag:19 lag_1_arg1:20 lag_1_arg2:21!null lag_1_arg3:22
+      ├── project
+      │    ├── columns: lag_1_arg1:20 lag_1_arg2:21!null lag_1_arg3:22 kv.k:1!null kv.v:2 kv.w:3 kv.f:4 kv.d:5 kv.s:6 kv.b:7 kv.crdb_internal_mvcc_timestamp:8 kv.tableoid:9
+      │    ├── scan kv
+      │    │    └── columns: kv.k:1!null kv.v:2 kv.w:3 kv.f:4 kv.d:5 kv.s:6 kv.b:7 kv.crdb_internal_mvcc_timestamp:8 kv.tableoid:9
+      │    └── projections
+      │         ├── subquery [as=lag_1_arg1:20]
+      │         │    └── max1-row
+      │         │         ├── columns: kv2.k:10!null
+      │         │         └── project
+      │         │              ├── columns: kv2.k:10!null
+      │         │              └── select
+      │         │                   ├── columns: kv2.k:10!null kv2.v:11 kv2.w:12 kv2.f:13 kv2.d:14 kv2.s:15 kv2.b:16 kv2.crdb_internal_mvcc_timestamp:17 kv2.tableoid:18
+      │         │                   ├── scan kv [as=kv2]
+      │         │                   │    └── columns: kv2.k:10!null kv2.v:11 kv2.w:12 kv2.f:13 kv2.d:14 kv2.s:15 kv2.b:16 kv2.crdb_internal_mvcc_timestamp:17 kv2.tableoid:18
+      │         │                   └── filters
+      │         │                        └── kv2.k:10 = kv.k:1
+      │         ├── 1 [as=lag_1_arg2:21]
+      │         └── NULL::INT8 [as=lag_1_arg3:22]
+      └── windows
+           └── lag [as=lag:19]
+                ├── lag_1_arg1:20
+                ├── lag_1_arg2:21
+                └── lag_1_arg3:22
+
+build
+SELECT lag(1) OVER (), lead(1) OVER () FROM kv
+----
+project
+ ├── columns: lag:10 lead:11
+ └── window partition=()
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 lag:10 lead:11 lag_1_arg1:12!null lag_1_arg3:13
+      ├── project
+      │    ├── columns: lag_1_arg1:12!null lag_1_arg3:13 k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    ├── scan kv
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    └── projections
+      │         ├── 1 [as=lag_1_arg1:12]
+      │         └── NULL::INT8 [as=lag_1_arg3:13]
+      └── windows
+           ├── lag [as=lag:10]
+           │    ├── lag_1_arg1:12
+           │    ├── lag_1_arg1:12
+           │    └── lag_1_arg3:13
+           └── lead [as=lead:11]
+                ├── lag_1_arg1:12
+                ├── lag_1_arg1:12
+                └── lag_1_arg3:13
+
+build
+SELECT
+    lag(1) OVER (PARTITION BY k, v),
+    lag(1) OVER (PARTITION BY k),
+    lag(1) OVER (PARTITION BY v),
+    lead(1) OVER (PARTITION BY k),
+    lead(1) OVER (PARTITION BY v)
+FROM kv
+----
+project
+ ├── columns: lag:10 lag:11 lag:12 lead:13 lead:14
+ └── window partition=(2)
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 lag:10 lag:11 lag:12 lead:13 lead:14 lag_1_arg1:15!null lag_1_arg3:16
+      ├── window partition=(1)
+      │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 lag:10 lag:11 lead:13 lag_1_arg1:15!null lag_1_arg3:16
+      │    ├── window partition=(1,2)
+      │    │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 lag:10 lag_1_arg1:15!null lag_1_arg3:16
+      │    │    ├── project
+      │    │    │    ├── columns: lag_1_arg1:15!null lag_1_arg3:16 k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    │    │    ├── scan kv
+      │    │    │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    │    │    └── projections
+      │    │    │         ├── 1 [as=lag_1_arg1:15]
+      │    │    │         └── NULL::INT8 [as=lag_1_arg3:16]
+      │    │    └── windows
+      │    │         └── lag [as=lag:10]
+      │    │              ├── lag_1_arg1:15
+      │    │              ├── lag_1_arg1:15
+      │    │              └── lag_1_arg3:16
+      │    └── windows
+      │         ├── lag [as=lag:11]
+      │         │    ├── lag_1_arg1:15
+      │         │    ├── lag_1_arg1:15
+      │         │    └── lag_1_arg3:16
+      │         └── lead [as=lead:13]
+      │              ├── lag_1_arg1:15
+      │              ├── lag_1_arg1:15
+      │              └── lag_1_arg3:16
+      └── windows
+           ├── lag [as=lag:12]
+           │    ├── lag_1_arg1:15
+           │    ├── lag_1_arg1:15
+           │    └── lag_1_arg3:16
+           └── lead [as=lead:14]
+                ├── lag_1_arg1:15
+                ├── lag_1_arg1:15
+                └── lag_1_arg3:16
+
+build
+SELECT
+    lag(1) OVER (PARTITION BY k, v),
+    lag(1) OVER (PARTITION BY k ORDER BY v),
+    lag(1) OVER (PARTITION BY v ORDER BY f),
+    lead(1) OVER (PARTITION BY k ORDER BY v),
+    lead(1) OVER (PARTITION BY v)
+FROM kv
+----
+project
+ ├── columns: lag:10 lag:11 lag:12 lead:13 lead:14
+ └── window partition=(2)
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 lag:10 lag:11 lag:12 lead:13 lead:14 lag_1_arg1:15!null lag_1_arg3:16
+      ├── window partition=(2) ordering=+4
+      │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 lag:10 lag:11 lag:12 lead:13 lag_1_arg1:15!null lag_1_arg3:16
+      │    ├── window partition=(1) ordering=+2
+      │    │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 lag:10 lag:11 lead:13 lag_1_arg1:15!null lag_1_arg3:16
+      │    │    ├── window partition=(1,2)
+      │    │    │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 lag:10 lag_1_arg1:15!null lag_1_arg3:16
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: lag_1_arg1:15!null lag_1_arg3:16 k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    │    │    │    ├── scan kv
+      │    │    │    │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    │    │    │    └── projections
+      │    │    │    │         ├── 1 [as=lag_1_arg1:15]
+      │    │    │    │         └── NULL::INT8 [as=lag_1_arg3:16]
+      │    │    │    └── windows
+      │    │    │         └── lag [as=lag:10]
+      │    │    │              ├── lag_1_arg1:15
+      │    │    │              ├── lag_1_arg1:15
+      │    │    │              └── lag_1_arg3:16
+      │    │    └── windows
+      │    │         ├── lag [as=lag:11]
+      │    │         │    ├── lag_1_arg1:15
+      │    │         │    ├── lag_1_arg1:15
+      │    │         │    └── lag_1_arg3:16
+      │    │         └── lead [as=lead:13]
+      │    │              ├── lag_1_arg1:15
+      │    │              ├── lag_1_arg1:15
+      │    │              └── lag_1_arg3:16
+      │    └── windows
+      │         └── lag [as=lag:12]
+      │              ├── lag_1_arg1:15
+      │              ├── lag_1_arg1:15
+      │              └── lag_1_arg3:16
+      └── windows
+           └── lead [as=lead:14]
+                ├── lag_1_arg1:15
+                ├── lag_1_arg1:15
+                └── lag_1_arg3:16
+
+build
+SELECT lag(1, 2) OVER (), lead(1, 2) OVER () FROM kv
+----
+project
+ ├── columns: lag:10 lead:11
+ └── window partition=()
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 lag:10 lead:11 lag_1_arg1:12!null lag_1_arg2:13!null lag_1_arg3:14
+      ├── project
+      │    ├── columns: lag_1_arg1:12!null lag_1_arg2:13!null lag_1_arg3:14 k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    ├── scan kv
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    └── projections
+      │         ├── 1 [as=lag_1_arg1:12]
+      │         ├── 2 [as=lag_1_arg2:13]
+      │         └── NULL::INT8 [as=lag_1_arg3:14]
+      └── windows
+           ├── lag [as=lag:10]
+           │    ├── lag_1_arg1:12
+           │    ├── lag_1_arg2:13
+           │    └── lag_1_arg3:14
+           └── lead [as=lead:11]
+                ├── lag_1_arg1:12
+                ├── lag_1_arg2:13
+                └── lag_1_arg3:14
+
+build
+SELECT lag(1, 2, 3) OVER (), lead(1, 2, 3) OVER () FROM kv
+----
+project
+ ├── columns: lag:10 lead:11
+ └── window partition=()
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 lag:10 lead:11 lag_1_arg1:12!null lag_1_arg2:13!null lag_1_arg3:14!null
+      ├── project
+      │    ├── columns: lag_1_arg1:12!null lag_1_arg2:13!null lag_1_arg3:14!null k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    ├── scan kv
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    └── projections
+      │         ├── 1 [as=lag_1_arg1:12]
+      │         ├── 2 [as=lag_1_arg2:13]
+      │         └── 3 [as=lag_1_arg3:14]
+      └── windows
+           ├── lag [as=lag:10]
+           │    ├── lag_1_arg1:12
+           │    ├── lag_1_arg2:13
+           │    └── lag_1_arg3:14
+           └── lead [as=lead:11]
+                ├── lag_1_arg1:12
+                ├── lag_1_arg2:13
+                └── lag_1_arg3:14
+
+build
+SELECT avg(k) OVER () FROM kv
+----
+project
+ ├── columns: avg:10
+ └── window partition=()
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10
+      ├── scan kv
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      └── windows
+           └── avg [as=avg:10]
+                └── k:1
+
+build
+SELECT x FROM (SELECT avg(k) OVER () AS x FROM kv)
+----
+project
+ ├── columns: x:10
+ └── window partition=()
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10
+      ├── scan kv
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      └── windows
+           └── avg [as=avg:10]
+                └── k:1
+
+build
+SELECT avg(DISTINCT k) OVER () FROM kv
+----
+error (0A000): DISTINCT is not implemented for window functions
+
+build
+SELECT avg(k) FILTER (WHERE k > 5) OVER () FROM kv
+----
+project
+ ├── columns: avg:10
+ └── window partition=()
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10 avg_1_filter:11!null
+      ├── project
+      │    ├── columns: avg_1_filter:11!null k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    ├── scan kv
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    └── projections
+      │         └── k:1 > 5 [as=avg_1_filter:11]
+      └── windows
+           └── agg-filter [as=avg:10]
+                ├── avg
+                │    └── k:1
+                └── avg_1_filter:11
+
+build
+SELECT avg(k), max(v) OVER () FROM kv ORDER BY 1
+----
+error (42803): column "v" must appear in the GROUP BY clause or be used in an aggregate function
+
+build
+SELECT avg(k) OVER () FROM kv ORDER BY 1
+----
+sort
+ ├── columns: avg:10
+ ├── ordering: +10
+ └── project
+      ├── columns: avg:10
+      └── window partition=()
+           ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10
+           ├── scan kv
+           │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+           └── windows
+                └── avg [as=avg:10]
+                     └── k:1
+
+build
+SELECT k, v, rank() OVER w FROM kv WINDOW w AS ()
+----
+project
+ ├── columns: k:1!null v:2 rank:10
+ └── window partition=()
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10
+      ├── scan kv
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      └── windows
+           └── rank [as=rank:10]
+
+build
+SELECT k, v, first_value(v) OVER () FROM kv
+----
+project
+ ├── columns: k:1!null v:2 first_value:10
+ └── window partition=()
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 first_value:10
+      ├── scan kv
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      └── windows
+           └── first-value [as=first_value:10]
+                └── v:2
+
+build
+SELECT avg(k), max(v), min(w), 2 + row_number() OVER () FROM kv ORDER BY 1
+----
+project
+ ├── columns: avg:10 max:11 min:12 "?column?":14
+ ├── ordering: +10
+ ├── window partition=()
+ │    ├── columns: avg:10 max:11 min:12 row_number:13
+ │    ├── scalar-group-by
+ │    │    ├── columns: avg:10 max:11 min:12
+ │    │    ├── project
+ │    │    │    ├── columns: k:1!null v:2 w:3
+ │    │    │    └── scan kv
+ │    │    │         └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+ │    │    └── aggregations
+ │    │         ├── avg [as=avg:10]
+ │    │         │    └── k:1
+ │    │         ├── max [as=max:11]
+ │    │         │    └── v:2
+ │    │         └── min [as=min:12]
+ │    │              └── w:3
+ │    └── windows
+ │         └── row-number [as=row_number:13]
+ └── projections
+      └── 2 + row_number:13 [as="?column?":14]
+
+build
+SELECT k, rank() OVER (), dense_rank() OVER (), percent_rank() OVER (), cume_dist() OVER () FROM kv
+----
+project
+ ├── columns: k:1!null rank:10 dense_rank:11 percent_rank:12 cume_dist:13
+ └── window partition=()
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10 dense_rank:11 percent_rank:12 cume_dist:13
+      ├── scan kv
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      └── windows
+           ├── rank [as=rank:10]
+           ├── dense-rank [as=dense_rank:11]
+           ├── percent-rank [as=percent_rank:12]
+           └── cume-dist [as=cume_dist:13]
+
+build
+SELECT k, rank() OVER (), rank() OVER () FROM kv
+----
+project
+ ├── columns: k:1!null rank:10 rank:10
+ └── window partition=()
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10
+      ├── scan kv
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      └── windows
+           └── rank [as=rank:10]
+
+build
+SELECT k, rank() OVER (), row_number() OVER () FROM kv
+----
+project
+ ├── columns: k:1!null rank:10 row_number:11
+ └── window partition=()
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10 row_number:11
+      ├── scan kv
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      └── windows
+           ├── rank [as=rank:10]
+           └── row-number [as=row_number:11]
+
+build
+SELECT k, rank() OVER (), row_number() OVER () FROM kv ORDER BY 1
+----
+sort
+ ├── columns: k:1!null rank:10 row_number:11
+ ├── ordering: +1
+ └── project
+      ├── columns: k:1!null rank:10 row_number:11
+      └── window partition=()
+           ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10 row_number:11
+           ├── scan kv
+           │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+           └── windows
+                ├── rank [as=rank:10]
+                └── row-number [as=row_number:11]
+
+build
+SELECT k, v, rank() OVER (PARTITION BY v) FROM kv ORDER BY 1
+----
+sort
+ ├── columns: k:1!null v:2 rank:10
+ ├── ordering: +1
+ └── project
+      ├── columns: k:1!null v:2 rank:10
+      └── window partition=(2)
+           ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10
+           ├── scan kv
+           │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+           └── windows
+                └── rank [as=rank:10]
+
+build
+SELECT k, row_number() OVER (PARTITION BY v), rank() OVER (PARTITION BY v) FROM kv ORDER BY 1
+----
+sort
+ ├── columns: k:1!null row_number:10 rank:11
+ ├── ordering: +1
+ └── project
+      ├── columns: k:1!null row_number:10 rank:11
+      └── window partition=(2)
+           ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 row_number:10 rank:11
+           ├── scan kv
+           │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+           └── windows
+                ├── row-number [as=row_number:10]
+                └── rank [as=rank:11]
+
+build
+SELECT k, v, ntile(1) OVER () FROM kv
+----
+project
+ ├── columns: k:1!null v:2 ntile:10
+ └── window partition=()
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 ntile:10 ntile_1_arg1:11!null
+      ├── project
+      │    ├── columns: ntile_1_arg1:11!null k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    ├── scan kv
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    └── projections
+      │         └── 1 [as=ntile_1_arg1:11]
+      └── windows
+           └── ntile [as=ntile:10]
+                └── ntile_1_arg1:11
+
+build
+SELECT k, v, ntile(1) OVER (), ntile(50) OVER () FROM kv
+----
+project
+ ├── columns: k:1!null v:2 ntile:10 ntile:11
+ └── window partition=()
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 ntile:10 ntile:11 ntile_1_arg1:12!null ntile_2_arg1:13!null
+      ├── project
+      │    ├── columns: ntile_1_arg1:12!null ntile_2_arg1:13!null k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    ├── scan kv
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    └── projections
+      │         ├── 1 [as=ntile_1_arg1:12]
+      │         └── 50 [as=ntile_2_arg1:13]
+      └── windows
+           ├── ntile [as=ntile:10]
+           │    └── ntile_1_arg1:12
+           └── ntile [as=ntile:11]
+                └── ntile_2_arg1:13
+
+build
+SELECT k, v, nth_value('foo', 1) OVER () FROM kv
+----
+project
+ ├── columns: k:1!null v:2 nth_value:10
+ └── window partition=()
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 nth_value:10 nth_value_1_arg1:11!null nth_value_1_arg2:12!null
+      ├── project
+      │    ├── columns: nth_value_1_arg1:11!null nth_value_1_arg2:12!null k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    ├── scan kv
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    └── projections
+      │         ├── 'foo' [as=nth_value_1_arg1:11]
+      │         └── 1 [as=nth_value_1_arg2:12]
+      └── windows
+           └── nth-value [as=nth_value:10]
+                ├── nth_value_1_arg1:11
+                └── nth_value_1_arg2:12
+
+build
+SELECT k, v, nth_value(1, k) OVER () FROM kv
+----
+project
+ ├── columns: k:1!null v:2 nth_value:10
+ └── window partition=()
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 nth_value:10 nth_value_1_arg1:11!null
+      ├── project
+      │    ├── columns: nth_value_1_arg1:11!null k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    ├── scan kv
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    └── projections
+      │         └── 1 [as=nth_value_1_arg1:11]
+      └── windows
+           └── nth-value [as=nth_value:10]
+                ├── nth_value_1_arg1:11
+                └── k:1
+
+# Partitions
+
+build
+SELECT row_number() OVER (PARTITION BY rank() OVER ()) FROM kv
+----
+error (42P20): rank(): window function calls cannot be nested
+
+build
+SELECT row_number() OVER (PARTITION BY rank() OVER () + 1) FROM kv
+----
+error (42P20): rank(): window function calls cannot be nested
+
+build
+SELECT row_number() OVER (PARTITION BY v) FROM kv
+----
+project
+ ├── columns: row_number:10
+ └── window partition=(2)
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 row_number:10
+      ├── scan kv
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      └── windows
+           └── row-number [as=row_number:10]
+
+build
+SELECT v, row_number() OVER (PARTITION BY v) FROM kv
+----
+project
+ ├── columns: v:2 row_number:10
+ └── window partition=(2)
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 row_number:10
+      ├── scan kv
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      └── windows
+           └── row-number [as=row_number:10]
+
+build
+SELECT v, row_number() OVER (PARTITION BY v+1) FROM kv
+----
+project
+ ├── columns: v:2 row_number:10
+ └── window partition=(11)
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 row_number:10 row_number_1_partition_1:11
+      ├── project
+      │    ├── columns: row_number_1_partition_1:11 k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    ├── scan kv
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    └── projections
+      │         └── v:2 + 1 [as=row_number_1_partition_1:11]
+      └── windows
+           └── row-number [as=row_number:10]
+
+build
+SELECT v, row_number() OVER (PARTITION BY avg(k)) FROM kv GROUP BY v
+----
+project
+ ├── columns: v:2 row_number:11
+ └── window partition=(10)
+      ├── columns: v:2 avg:10!null row_number:11
+      ├── group-by (hash)
+      │    ├── columns: v:2 avg:10!null
+      │    ├── grouping columns: v:2
+      │    ├── project
+      │    │    ├── columns: k:1!null v:2
+      │    │    └── scan kv
+      │    │         └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    └── aggregations
+      │         └── avg [as=avg:10]
+      │              └── k:1
+      └── windows
+           └── row-number [as=row_number:11]
+
+# TODO(justin): expand these tuples.
+build
+SELECT k, row_number() OVER (PARTITION BY (k, v)) FROM kv
+----
+project
+ ├── columns: k:1!null row_number:10
+ └── window partition=(1,2)
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 row_number:10
+      ├── scan kv
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      └── windows
+           └── row-number [as=row_number:10]
+
+build
+SELECT k, row_number() OVER (PARTITION BY kv.*) FROM kv
+----
+project
+ ├── columns: k:1!null row_number:10
+ └── window partition=(1-7)
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 row_number:10
+      ├── scan kv
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      └── windows
+           └── row-number [as=row_number:10]
+
+build
+SELECT row_number() OVER (PARTITION BY v), rank() OVER (PARTITION BY v, f) FROM kv
+----
+project
+ ├── columns: row_number:10 rank:11
+ └── window partition=(2,4)
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 row_number:10 rank:11
+      ├── window partition=(2)
+      │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 row_number:10
+      │    ├── scan kv
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    └── windows
+      │         └── row-number [as=row_number:10]
+      └── windows
+           └── rank [as=rank:11]
+
+# Ordering
+
+build
+SELECT row_number() OVER (ORDER BY v) FROM kv
+----
+project
+ ├── columns: row_number:10
+ └── window partition=() ordering=+2
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 row_number:10
+      ├── scan kv
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      └── windows
+           └── row-number [as=row_number:10]
+
+build
+SELECT k, v, rank() OVER (ORDER BY k) FROM kv ORDER BY 1
+----
+sort
+ ├── columns: k:1!null v:2 rank:10
+ ├── ordering: +1
+ └── project
+      ├── columns: k:1!null v:2 rank:10
+      └── window partition=() ordering=+1
+           ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10
+           ├── scan kv
+           │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+           └── windows
+                └── rank [as=rank:10]
+
+# Ensure tuples in orderings get expanded.
+
+build
+SELECT
+  k,
+  v,
+  rank() OVER (ORDER BY (v, w)),
+  row_number() OVER (ORDER BY (v, w), f),
+  dense_rank() OVER (ORDER BY f, (v, w))
+FROM kv ORDER BY 1
+----
+sort
+ ├── columns: k:1!null v:2 rank:10 row_number:11 dense_rank:12
+ ├── ordering: +1
+ └── project
+      ├── columns: k:1!null v:2 rank:10 row_number:11 dense_rank:12
+      └── window partition=() ordering=+4,+2,+3
+           ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10 row_number:11 dense_rank:12
+           ├── window partition=() ordering=+2,+3,+4
+           │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10 row_number:11
+           │    ├── window partition=() ordering=+2,+3
+           │    │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10
+           │    │    ├── scan kv
+           │    │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+           │    │    └── windows
+           │    │         └── rank [as=rank:10]
+           │    └── windows
+           │         └── row-number [as=row_number:11]
+           └── windows
+                └── dense-rank [as=dense_rank:12]
+
+build
+SELECT k, v, w, v - w + 2 + row_number() OVER (PARTITION BY v, k ORDER BY w) FROM kv ORDER BY 1
+----
+sort
+ ├── columns: k:1!null v:2 w:3 "?column?":11
+ ├── ordering: +1
+ └── project
+      ├── columns: "?column?":11 k:1!null v:2 w:3
+      ├── window partition=(1,2) ordering=+3
+      │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 row_number:10
+      │    ├── scan kv
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    └── windows
+      │         └── row-number [as=row_number:10]
+      └── projections
+           └── ((v:2 - w:3) + 2) + row_number:10 [as="?column?":11]
+
+build
+SELECT
+    DISTINCT ON (row_number() OVER (ORDER BY (k, v))) w
+FROM
+    kv
+ORDER BY
+    row_number() OVER (ORDER BY (k, v)) DESC
+----
+distinct-on
+ ├── columns: w:3  [hidden: row_number:10]
+ ├── grouping columns: row_number:10
+ ├── ordering: -10
+ ├── sort
+ │    ├── columns: w:3 row_number:10
+ │    ├── ordering: -10
+ │    └── project
+ │         ├── columns: w:3 row_number:10
+ │         └── window partition=() ordering=+1,+2
+ │              ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 row_number:10
+ │              ├── scan kv
+ │              │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+ │              └── windows
+ │                   └── row-number [as=row_number:10]
+ └── aggregations
+      └── first-agg [as=w:3]
+           └── w:3
+
+# Frames
+
+# Default is unbounded to current-row
+build
+SELECT avg(k) OVER () FROM kv
+----
+project
+ ├── columns: avg:10
+ └── window partition=()
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10
+      ├── scan kv
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      └── windows
+           └── avg [as=avg:10]
+                └── k:1
+
+build
+SELECT avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED PRECEDING) FROM kv
+----
+error (42601): at or near "preceding": syntax error: frame end cannot be UNBOUNDED PRECEDING
+
+build
+SELECT avg(k) OVER (RANGE BETWEEN UNBOUNDED FOLLOWING AND UNBOUNDED FOLLOWING) FROM kv
+----
+error (42601): at or near "following": syntax error: frame start cannot be UNBOUNDED FOLLOWING
+
+build
+SELECT
+  avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+  avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
+  avg(k) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING),
+  avg(k) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW)
+FROM kv
+----
+project
+ ├── columns: avg:10 avg:11 avg:12 avg:13
+ └── window partition=()
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10 avg:11 avg:12 avg:13
+      ├── scan kv
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      └── windows
+           ├── avg [as=avg:10, frame="range from unbounded to unbounded"]
+           │    └── k:1
+           ├── avg [as=avg:11]
+           │    └── k:1
+           ├── avg [as=avg:12, frame="range from current-row to unbounded"]
+           │    └── k:1
+           └── avg [as=avg:13, frame="range from current-row to current-row"]
+                └── k:1
+
+build
+SELECT
+  avg(k) OVER (ORDER BY v RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+  avg(k) OVER (ORDER BY v RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
+  avg(k) OVER (ORDER BY v RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING),
+  avg(k) OVER (ORDER BY v RANGE BETWEEN CURRENT ROW AND CURRENT ROW)
+FROM kv
+----
+project
+ ├── columns: avg:10 avg:11 avg:12 avg:13
+ └── window partition=() ordering=+2
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10 avg:11 avg:12 avg:13
+      ├── scan kv
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      └── windows
+           ├── avg [as=avg:10, frame="range from unbounded to unbounded"]
+           │    └── k:1
+           ├── avg [as=avg:11]
+           │    └── k:1
+           ├── avg [as=avg:12, frame="range from current-row to unbounded"]
+           │    └── k:1
+           └── avg [as=avg:13, frame="range from current-row to current-row"]
+                └── k:1
+
+build
+SELECT
+  avg(k) OVER (RANGE UNBOUNDED PRECEDING),
+  avg(k) OVER (RANGE CURRENT ROW)
+FROM kv
+----
+project
+ ├── columns: avg:10 avg:11
+ └── window partition=()
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10 avg:11
+      ├── scan kv
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      └── windows
+           ├── avg [as=avg:10]
+           │    └── k:1
+           └── avg [as=avg:11, frame="range from current-row to current-row"]
+                └── k:1
+
+# TODO(justin): add support for offset expressions.
+build
+SELECT avg(k) OVER (ORDER BY v RANGE BETWEEN k - 10 PRECEDING AND CURRENT ROW) FROM kv
+----
+error (42P10): argument of RANGE must not contain variables
+
+build
+SELECT avg(k) OVER (ORDER BY v RANGE BETWEEN UNBOUNDED PRECEDING AND 10 FOLLOWING) FROM kv
+----
+project
+ ├── columns: avg:10
+ └── window partition=() ordering=+2
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10
+      ├── scan kv
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      └── windows
+           └── window-to-offset [as=avg:10, frame="range from unbounded to offset"]
+                ├── avg
+                │    └── k:1
+                └── 10
+
+build
+SELECT
+    avg(v) OVER (PARTITION BY w ORDER BY f RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS avg_price
+FROM kv
+----
+project
+ ├── columns: avg_price:10
+ └── window partition=(3) ordering=+4
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10
+      ├── scan kv
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      └── windows
+           └── window-to-offset [as=avg:10, frame="range from offset to offset"]
+                ├── window-from-offset
+                │    ├── avg
+                │    │    └── v:2
+                │    └── 1.0
+                └── 1.0
+
+build
+SELECT
+    avg(v) OVER (PARTITION BY w ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS avg_price
+FROM kv
+----
+project
+ ├── columns: avg_price:10
+ └── window partition=(3)
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10
+      ├── scan kv
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      └── windows
+           └── window-to-offset [as=avg:10, frame="rows from offset to offset"]
+                ├── window-from-offset
+                │    ├── avg
+                │    │    └── v:2
+                │    └── 1
+                └── 1
+
+build
+SELECT
+    avg(v) OVER (
+        PARTITION BY
+            w
+        ROWS
+            BETWEEN (SELECT count(*) FROM kv) PRECEDING AND 1 FOLLOWING
+    )
+FROM
+    kv
+----
+project
+ ├── columns: avg:20
+ └── window partition=(3)
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:20
+      ├── scan kv
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      └── windows
+           └── window-to-offset [as=avg:20, frame="rows from offset to offset"]
+                ├── window-from-offset
+                │    ├── avg
+                │    │    └── v:2
+                │    └── subquery
+                │         └── max1-row
+                │              ├── columns: count_rows:19!null
+                │              └── scalar-group-by
+                │                   ├── columns: count_rows:19!null
+                │                   ├── project
+                │                   │    └── scan kv
+                │                   │         └── columns: k:10!null v:11 w:12 f:13 d:14 s:15 b:16 crdb_internal_mvcc_timestamp:17 tableoid:18
+                │                   └── aggregations
+                │                        └── count-rows [as=count_rows:19]
+                └── 1
+
+# TODO(justin): consider adding rules to hoist correlated subqueries in the
+# OFFSET positions.
+build
+SELECT
+    avg(v) OVER (
+        PARTITION BY
+            w
+        ROWS
+            BETWEEN (SELECT count(*) FROM kv inner_table WHERE inner_table.k = outer_table.v) PRECEDING AND 1 FOLLOWING
+    )
+FROM
+    kv outer_table
+----
+error (42P10): argument of ROWS must not contain variables
+
+build
+SELECT
+    avg(v) OVER (ORDER BY v GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
+FROM kv
+----
+project
+ ├── columns: avg:10
+ └── window partition=() ordering=+2
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10
+      ├── scan kv
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      └── windows
+           └── window-to-offset [as=avg:10, frame="groups from offset to offset"]
+                ├── window-from-offset
+                │    ├── avg
+                │    │    └── v:2
+                │    └── 1
+                └── 1
+
+build
+SELECT
+    avg(v) OVER (ORDER BY k GROUPS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING)
+FROM kv
+----
+project
+ ├── columns: avg:10
+ └── window partition=() ordering=+1
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10
+      ├── scan kv
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      └── windows
+           └── window-from-offset [as=avg:10, frame="groups from offset to unbounded"]
+                ├── avg
+                │    └── v:2
+                └── 1
+
+build
+SELECT avg(v) OVER (ORDER BY f RANGE BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) FROM kv
+----
+project
+ ├── columns: avg:10
+ └── window partition=() ordering=+4
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10
+      ├── scan kv
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      └── windows
+           └── window-from-offset [as=avg:10, frame="range from offset to unbounded"]
+                ├── avg
+                │    └── v:2
+                └── 1.0
+
+build
+SELECT
+  avg(v) OVER (ORDER BY f RANGE BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING),
+  avg(v) OVER (ORDER BY d RANGE BETWEEN 2 FOLLOWING AND UNBOUNDED FOLLOWING)
+FROM kv
+----
+project
+ ├── columns: avg:10 avg:11
+ └── window partition=() ordering=+5
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10 avg:11
+      ├── window partition=() ordering=+4
+      │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10
+      │    ├── scan kv
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    └── windows
+      │         └── window-from-offset [as=avg:10, frame="range from offset to unbounded"]
+      │              ├── avg
+      │              │    └── v:2
+      │              └── 1.0
+      └── windows
+           └── window-from-offset [as=avg:11, frame="range from offset to unbounded"]
+                ├── avg
+                │    └── v:2
+                └── 2
+
+# Ensure window functions get appropriately deduplicated.
+
+build
+SELECT
+    avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+    avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
+    avg(k) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING),
+    avg(k) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW),
+    avg(k) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+    avg(k) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
+    avg(k) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING),
+    avg(k) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW),
+    avg(k) OVER (ORDER BY v GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+    avg(k) OVER (ORDER BY v GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
+    avg(k) OVER (ORDER BY v GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING),
+    avg(k) OVER (ORDER BY v GROUPS BETWEEN CURRENT ROW AND CURRENT ROW),
+    1 + avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+    1 + avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
+    1 + avg(k) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING),
+    1 + avg(k) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW),
+    1 + avg(k) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+    1 + avg(k) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
+    1 + avg(k) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING),
+    1 + avg(k) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW),
+    1 + avg(k) OVER (ORDER BY v GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+    1 + avg(k) OVER (ORDER BY v GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
+    1 + avg(k) OVER (ORDER BY v GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING),
+    1 + avg(k) OVER (ORDER BY v GROUPS BETWEEN CURRENT ROW AND CURRENT ROW)
+FROM
+    kv
+----
+project
+ ├── columns: avg:10 avg:11 avg:12 avg:13 avg:14 avg:15 avg:16 avg:17 avg:18 avg:19 avg:20 avg:21 "?column?":22 "?column?":23 "?column?":24 "?column?":25 "?column?":26 "?column?":27 "?column?":28 "?column?":29 "?column?":30 "?column?":31 "?column?":32 "?column?":33
+ ├── window partition=() ordering=+2
+ │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10 avg:11 avg:12 avg:13 avg:14 avg:15 avg:16 avg:17 avg:18 avg:19 avg:20 avg:21
+ │    ├── window partition=()
+ │    │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10 avg:11 avg:12 avg:13 avg:14 avg:15 avg:16 avg:17
+ │    │    ├── scan kv
+ │    │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+ │    │    └── windows
+ │    │         ├── avg [as=avg:10, frame="range from unbounded to unbounded"]
+ │    │         │    └── k:1
+ │    │         ├── avg [as=avg:11]
+ │    │         │    └── k:1
+ │    │         ├── avg [as=avg:12, frame="range from current-row to unbounded"]
+ │    │         │    └── k:1
+ │    │         ├── avg [as=avg:13, frame="range from current-row to current-row"]
+ │    │         │    └── k:1
+ │    │         ├── avg [as=avg:14, frame="rows from unbounded to unbounded"]
+ │    │         │    └── k:1
+ │    │         ├── avg [as=avg:15, frame="rows from unbounded to current-row"]
+ │    │         │    └── k:1
+ │    │         ├── avg [as=avg:16, frame="rows from current-row to unbounded"]
+ │    │         │    └── k:1
+ │    │         └── avg [as=avg:17, frame="rows from current-row to current-row"]
+ │    │              └── k:1
+ │    └── windows
+ │         ├── avg [as=avg:18, frame="groups from unbounded to unbounded"]
+ │         │    └── k:1
+ │         ├── avg [as=avg:19, frame="groups from unbounded to current-row"]
+ │         │    └── k:1
+ │         ├── avg [as=avg:20, frame="groups from current-row to unbounded"]
+ │         │    └── k:1
+ │         └── avg [as=avg:21, frame="groups from current-row to current-row"]
+ │              └── k:1
+ └── projections
+      ├── 1 + avg:10 [as="?column?":22]
+      ├── 1 + avg:11 [as="?column?":23]
+      ├── 1 + avg:12 [as="?column?":24]
+      ├── 1 + avg:13 [as="?column?":25]
+      ├── 1 + avg:14 [as="?column?":26]
+      ├── 1 + avg:15 [as="?column?":27]
+      ├── 1 + avg:16 [as="?column?":28]
+      ├── 1 + avg:17 [as="?column?":29]
+      ├── 1 + avg:18 [as="?column?":30]
+      ├── 1 + avg:19 [as="?column?":31]
+      ├── 1 + avg:20 [as="?column?":32]
+      └── 1 + avg:21 [as="?column?":33]
+
+build
+SELECT
+    avg(k) OVER (ORDER BY v RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+    avg(k) OVER (ORDER BY v RANGE BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING),
+    avg(k) OVER (ORDER BY v RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING),
+    avg(k) OVER (ORDER BY v RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING),
+    1 + avg(k) OVER (ORDER BY v RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+    1 + avg(k) OVER (ORDER BY v RANGE BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING),
+    1 + avg(k) OVER (ORDER BY v RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING),
+    1 + avg(k) OVER (ORDER BY v RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)
+FROM
+    kv
+----
+project
+ ├── columns: avg:10 avg:11 avg:12 avg:13 "?column?":14 "?column?":15 "?column?":16 "?column?":17
+ ├── window partition=() ordering=+2
+ │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10 avg:11 avg:12 avg:13
+ │    ├── scan kv
+ │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+ │    └── windows
+ │         ├── avg [as=avg:10, frame="range from unbounded to unbounded"]
+ │         │    └── k:1
+ │         ├── window-from-offset [as=avg:11, frame="range from offset to unbounded"]
+ │         │    ├── avg
+ │         │    │    └── k:1
+ │         │    └── 1
+ │         ├── window-to-offset [as=avg:12, frame="range from offset to offset"]
+ │         │    ├── window-from-offset
+ │         │    │    ├── avg
+ │         │    │    │    └── k:1
+ │         │    │    └── 1
+ │         │    └── 1
+ │         └── window-to-offset [as=avg:13, frame="range from unbounded to offset"]
+ │              ├── avg
+ │              │    └── k:1
+ │              └── 1
+ └── projections
+      ├── 1 + avg:10 [as="?column?":14]
+      ├── 1 + avg:11 [as="?column?":15]
+      ├── 1 + avg:12 [as="?column?":16]
+      └── 1 + avg:13 [as="?column?":17]
+
+# Filter.
+
+build
+SELECT rank() FILTER (WHERE k = 1) OVER () FROM kv
+----
+error (42809): FILTER specified but rank() is not an aggregate function
+
+build
+SELECT avg(f) FILTER (WHERE k = 1) OVER () FROM kv
+----
+project
+ ├── columns: avg:10
+ └── window partition=()
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10 avg_1_filter:11!null
+      ├── project
+      │    ├── columns: avg_1_filter:11!null k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    ├── scan kv
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    └── projections
+      │         └── k:1 = 1 [as=avg_1_filter:11]
+      └── windows
+           └── agg-filter [as=avg:10]
+                ├── avg
+                │    └── f:4
+                └── avg_1_filter:11
+
+build
+SELECT count(*) FILTER (WHERE true) OVER (), count(*) FILTER (WHERE false) OVER () FROM kv
+----
+project
+ ├── columns: count:10 count:11
+ └── window partition=()
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 count:10 count:11 count_1_arg1:12!null count_2_filter:13!null
+      ├── project
+      │    ├── columns: count_1_arg1:12!null count_2_filter:13!null k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    ├── scan kv
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    └── projections
+      │         ├── true [as=count_1_arg1:12]
+      │         └── false [as=count_2_filter:13]
+      └── windows
+           ├── agg-filter [as=count:10]
+           │    ├── count
+           │    │    └── count_1_arg1:12
+           │    └── count_1_arg1:12
+           └── agg-filter [as=count:11]
+                ├── count
+                │    └── count_1_arg1:12
+                └── count_2_filter:13
+
+build
+SELECT
+    count(*) FILTER (WHERE false) OVER (),
+    count(*) FILTER (WHERE false) OVER (),
+    avg(k) FILTER (WHERE false) OVER ()
+FROM
+    kv
+----
+project
+ ├── columns: count:10 count:10 avg:11
+ └── window partition=()
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 count:10 avg:11 count_1_arg1:12!null count_1_filter:13!null
+      ├── project
+      │    ├── columns: count_1_arg1:12!null count_1_filter:13!null k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    ├── scan kv
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    └── projections
+      │         ├── true [as=count_1_arg1:12]
+      │         └── false [as=count_1_filter:13]
+      └── windows
+           ├── agg-filter [as=count:10]
+           │    ├── count
+           │    │    └── count_1_arg1:12
+           │    └── count_1_filter:13
+           └── agg-filter [as=avg:11]
+                ├── avg
+                │    └── k:1
+                └── count_1_filter:13
+
+# Named windows.
+
+build
+SELECT
+  rank() OVER (w)
+FROM kv WINDOW w as (ORDER BY v)
+----
+project
+ ├── columns: rank:10
+ └── window partition=() ordering=+2
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10
+      ├── scan kv
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      └── windows
+           └── rank [as=rank:10]
+
+build
+SELECT
+  rank() OVER (w)
+FROM kv WINDOW w as (ORDER BY v)
+----
+project
+ ├── columns: rank:10
+ └── window partition=() ordering=+2
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10
+      ├── scan kv
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      └── windows
+           └── rank [as=rank:10]
+
+build
+SELECT
+  rank() OVER (w),
+  rank() OVER w,
+  row_number() OVER (w2),
+  row_number() OVER (w2 ORDER BY f),
+  row_number() OVER w2
+FROM kv WINDOW w as (ORDER BY v), w2 as (PARTITION BY v)
+----
+project
+ ├── columns: rank:10 rank:11 row_number:12 row_number:13 row_number:14
+ └── window partition=() ordering=+2
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10 rank:11 row_number:12 row_number:13 row_number:14
+      ├── window partition=(2) ordering=+4
+      │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 row_number:12 row_number:13 row_number:14
+      │    ├── window partition=(2)
+      │    │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 row_number:12 row_number:14
+      │    │    ├── scan kv
+      │    │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    │    └── windows
+      │    │         ├── row-number [as=row_number:12]
+      │    │         └── row-number [as=row_number:14]
+      │    └── windows
+      │         └── row-number [as=row_number:13]
+      └── windows
+           ├── rank [as=rank:10]
+           └── rank [as=rank:11]
+
+build
+SELECT
+  rank() OVER w
+FROM kv WINDOW w as (ORDER BY v), w2 as (PARTITION BY v)
+----
+project
+ ├── columns: rank:10
+ └── window partition=() ordering=+2
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10
+      ├── scan kv
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      └── windows
+           └── rank [as=rank:10]
+
+build
+SELECT
+  rank() OVER w
+FROM kv WINDOW w as (ORDER BY v)
+ORDER BY rank() OVER w
+----
+sort
+ ├── columns: rank:10
+ ├── ordering: +10
+ └── project
+      ├── columns: rank:10
+      └── window partition=() ordering=+2
+           ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10
+           ├── scan kv
+           │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+           └── windows
+                └── rank [as=rank:10]
+
+build
+SELECT
+  rank() OVER w
+FROM kv
+WHERE rank() OVER w < 4
+WINDOW w as (ORDER BY v)
+----
+error (42P20): rank(): window functions are not allowed in WHERE
+
+# Window names don't descend through scopes.
+build
+SELECT
+  (SELECT rank() OVER w)
+FROM kv WINDOW w as (ORDER BY v)
+----
+error (42704): window "w" does not exist
+
+# Window names may only be used a single time.
+build
+SELECT
+  rank() OVER (w)
+FROM kv WINDOW w as (ORDER BY v), w as (PARTITION BY v)
+----
+error (42P20): window "w" is already defined
+
+# Rules for overriding a window definition.
+build
+SELECT rank() OVER (w ORDER BY f) FROM kv WINDOW w as (ORDER BY v)
+----
+error (42P20): cannot override ORDER BY clause of window "w"
+
+build
+SELECT rank() OVER (w PARTITION BY f) FROM kv WINDOW w as (ORDER BY v)
+----
+error (42P20): cannot override PARTITION BY clause of window "w"
+
+build
+SELECT rank() OVER (w) FROM kv WINDOW w as (ORDER BY v RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+----
+error (42P20): cannot copy window "w" because it has a frame clause
+
+build
+SELECT rank() OVER (ORDER BY k GROUPS k PRECEDING) FROM kv
+----
+error (42P10): argument of GROUPS must not contain variables
+
+build
+SELECT
+  rank() OVER (RANGE UNBOUNDED PRECEDING EXCLUDE CURRENT ROW),
+  rank() OVER (RANGE UNBOUNDED PRECEDING EXCLUDE GROUP),
+  rank() OVER (RANGE UNBOUNDED PRECEDING EXCLUDE TIES),
+  rank() OVER (RANGE UNBOUNDED PRECEDING EXCLUDE NO OTHERS)
+FROM kv
+----
+project
+ ├── columns: rank:10 rank:11 rank:12 rank:13
+ └── window partition=()
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10 rank:11 rank:12 rank:13
+      ├── scan kv
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      └── windows
+           ├── rank [as=rank:10, frame="range from unbounded to current-row exclude current row"]
+           ├── rank [as=rank:11, frame="range from unbounded to current-row exclude group"]
+           ├── rank [as=rank:12, frame="range from unbounded to current-row exclude ties"]
+           └── rank [as=rank:13]
+
+exec-ddl
+CREATE TABLE table1 (col5 CHAR, col8 INT2);
+----
+
+build
+SELECT
+    min(tab_536191.col5) OVER (
+        ROWS BETWEEN tab_536191.col8 FOLLOWING AND 1 FOLLOWING
+    )
+FROM
+    table1 AS tab_536191
+GROUP BY
+    tab_536191.col8, tab_536191.col5
+----
+error (42P10): argument of ROWS must not contain variables
+
+# Regression test for #57441.
+build
+SELECT rank() OVER w FROM kv WINDOW w AS (ORDER BY v)
+UNION ALL SELECT rank() OVER w FROM kv WINDOW w AS (ORDER BY v)
+ORDER BY
+  rank() OVER()
+----
+error (42P20): rank(): window functions are not allowed in ORDER BY
+
+# Regression test for incorrectly ignoring NULLS LAST in window functions (#91295).
+exec-ddl
+CREATE TABLE nulls_last_test (
+    id INT NULL,
+    k INT NULL,
+    v STRING NULL
+)
+----
+
+build
+SELECT
+  id,
+  row_number() OVER (ORDER BY id NULLS LAST),
+  rank() OVER (ORDER BY k NULLS FIRST, v NULLS LAST),
+  row_number() OVER (ORDER BY (k, v) NULLS LAST)
+FROM
+  nulls_last_test
+----
+project
+ ├── columns: id:1 row_number:7 rank:8 row_number:9
+ └── window partition=() ordering=+12,+2,+11,+3
+      ├── columns: id:1 k:2 v:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6 row_number:7 rank:8 row_number:9 row_number_1_nulls_ordering_1_1:10!null rank_2_nulls_ordering_2_1:11!null row_number_3_nulls_ordering_1_1:12!null
+      ├── window partition=() ordering=+2,+11,+3
+      │    ├── columns: id:1 k:2 v:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6 row_number:7 rank:8 row_number_1_nulls_ordering_1_1:10!null rank_2_nulls_ordering_2_1:11!null row_number_3_nulls_ordering_1_1:12!null
+      │    ├── window partition=() ordering=+10,+1
+      │    │    ├── columns: id:1 k:2 v:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6 row_number:7 row_number_1_nulls_ordering_1_1:10!null rank_2_nulls_ordering_2_1:11!null row_number_3_nulls_ordering_1_1:12!null
+      │    │    ├── project
+      │    │    │    ├── columns: row_number_1_nulls_ordering_1_1:10!null rank_2_nulls_ordering_2_1:11!null row_number_3_nulls_ordering_1_1:12!null id:1 k:2 v:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      │    │    │    ├── scan nulls_last_test
+      │    │    │    │    └── columns: id:1 k:2 v:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      │    │    │    └── projections
+      │    │    │         ├── id:1 IS NULL [as=row_number_1_nulls_ordering_1_1:10]
+      │    │    │         ├── v:3 IS NULL [as=rank_2_nulls_ordering_2_1:11]
+      │    │    │         └── k:2 IS NULL [as=row_number_3_nulls_ordering_1_1:12]
+      │    │    └── windows
+      │    │         └── row-number [as=row_number:7]
+      │    └── windows
+      │         └── rank [as=rank:8]
+      └── windows
+           └── row-number [as=row_number:9]
+
+build
+SELECT
+  rank() OVER w
+FROM nulls_last_test WINDOW w as (PARTITION BY k ORDER BY v NULLS LAST)
+ORDER BY rank() OVER w
+----
+sort
+ ├── columns: rank:7
+ ├── ordering: +7
+ └── project
+      ├── columns: rank:7
+      └── window partition=(2) ordering=+8,+3
+           ├── columns: id:1 k:2 v:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6 rank:7 rank_1_nulls_ordering_1_1:8!null
+           ├── project
+           │    ├── columns: rank_1_nulls_ordering_1_1:8!null id:1 k:2 v:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+           │    ├── scan nulls_last_test
+           │    │    └── columns: id:1 k:2 v:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+           │    └── projections
+           │         └── v:3 IS NULL [as=rank_1_nulls_ordering_1_1:8]
+           └── windows
+                └── rank [as=rank:7]
+
+# Regression test for an internal error with RANGE mode with offsets and NULLS
+# LAST.
+# TODO(yuzefovich): teach the execution engine to support this special case
+# (#94032).
+build
+SELECT avg(k) OVER (ORDER BY id NULLS LAST RANGE 0 PRECEDING) FROM nulls_last_test
+----
+error: NULLS LAST with RANGE mode with OFFSET is currently unsupported
+
+# Regression test for incorrectly using temporary nulls-last-handling column for
+# first window function in the second window function (#119188).
+build
+SELECT
+  variance(1) OVER (PARTITION BY id ORDER BY id ASC NULLS LAST),
+  min(v) OVER (PARTITION BY v, id ORDER BY id DESC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING)
+FROM
+  nulls_last_test;
+----
+error: NULLS LAST with RANGE mode with OFFSET is currently unsupported

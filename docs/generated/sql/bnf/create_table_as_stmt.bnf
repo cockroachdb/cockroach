@@ -1,0 +1,5 @@
+create_table_as_stmt ::=
+	'CREATE' opt_persistence_temp_table 'TABLE' table_name '(' column_name create_as_col_qual_list ( ( ',' column_name create_as_col_qual_list | ',' family_def | ',' create_as_constraint_def ) )* ')' opt_with_storage_parameter_list 'AS' select_stmt 'ON' 'COMMIT' 'PRESERVE' 'ROWS'
+	| 'CREATE' opt_persistence_temp_table 'TABLE' table_name  opt_with_storage_parameter_list 'AS' select_stmt 'ON' 'COMMIT' 'PRESERVE' 'ROWS'
+	| 'CREATE' opt_persistence_temp_table 'TABLE' 'IF' 'NOT' 'EXISTS' table_name '(' column_name create_as_col_qual_list ( ( ',' column_name create_as_col_qual_list | ',' family_def | ',' create_as_constraint_def ) )* ')' opt_with_storage_parameter_list 'AS' select_stmt 'ON' 'COMMIT' 'PRESERVE' 'ROWS'
+	| 'CREATE' opt_persistence_temp_table 'TABLE' 'IF' 'NOT' 'EXISTS' table_name  opt_with_storage_parameter_list 'AS' select_stmt 'ON' 'COMMIT' 'PRESERVE' 'ROWS'

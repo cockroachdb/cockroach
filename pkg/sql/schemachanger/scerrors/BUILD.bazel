@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "scerrors",
+    srcs = ["errors.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_gogo_protobuf//proto",
+    ],
+)
+
+go_test(
+    name = "scerrors_test",
+    srcs = ["errors_test.go"],
+    deps = [
+        ":scerrors",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//errbase",
+        "@com_github_stretchr_testify//require",
+    ],
+)

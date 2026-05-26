@@ -1,0 +1,7 @@
+<svg version="1.1" xmlns="http://www.w3.org/2000/svg"  x="0px" y="0px" viewBox="0 0 24 24" xml:space="preserve" width="24" height="24">
+  <g class="nc-icon-wrapper" fill="#5f6c87">
+    <polyline fill="none" stroke="#5f6c87" stroke-width="2" stroke-linecap="round" stroke-miterlimit="10" points="19,13 19,23
+	14,23 14,18 10,18 10,23 5,23 5,13 " stroke-linejoin="round"/>
+    <polyline data-cap="butt" data-color="color-2" fill="none" stroke="#5f6c87" stroke-width="2" stroke-miterlimit="10" points="1,12 12,2 23,12 " stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

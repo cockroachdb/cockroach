@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "pgrepltree",
+    srcs = [
+        "base_backup.go",
+        "create_replication_slot.go",
+        "drop_replication_slot.go",
+        "identify_system.go",
+        "option.go",
+        "pgrepltree.go",
+        "read_replication_slot.go",
+        "replication_slot.go",
+        "start_replication.go",
+        "timeline_history.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/pgrepl/pgrepltree",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/pgrepl/lsn",
+        "//pkg/sql/sem/tree",
+    ],
+)

@@ -1,0 +1,396 @@
+exec-ddl
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
+----
+
+exec-ddl
+CREATE TABLE uv (u INT, v INT NOT NULL)
+----
+
+exec-ddl
+CREATE TABLE sf (s STRING, f FLOAT)
+----
+
+build
+SELECT * FROM xy WHERE x < 5
+----
+project
+ ├── columns: x:1(int!null) y:2(int)
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── prune: (1,2)
+ ├── interesting orderings: (+1)
+ └── select
+      ├── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+      ├── key: (1)
+      ├── fd: (1)-->(2-4)
+      ├── prune: (2-4)
+      ├── interesting orderings: (+1)
+      ├── scan xy
+      │    ├── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-4)
+      │    ├── prune: (1-4)
+      │    └── interesting orderings: (+1)
+      └── filters
+           └── lt [type=bool, outer=(1), constraints=(/1: (/NULL - /4]; tight)]
+                ├── variable: x:1 [type=int]
+                └── const: 5 [type=int]
+
+build
+SELECT xy.x + 1 = length('foo') + xy.y AS a, uv.rowid * xy.x AS b FROM xy, uv
+----
+project
+ ├── columns: a:10(bool) b:11(int!null)
+ ├── immutable
+ ├── prune: (10,11)
+ ├── inner-join (cross)
+ │    ├── columns: x:1(int!null) y:2(int) xy.crdb_internal_mvcc_timestamp:3(decimal) xy.tableoid:4(oid) u:5(int) v:6(int!null) rowid:7(int!null) uv.crdb_internal_mvcc_timestamp:8(decimal) uv.tableoid:9(oid)
+ │    ├── key: (1,7)
+ │    ├── fd: (1)-->(2-4), (7)-->(5,6,8,9)
+ │    ├── prune: (1-9)
+ │    ├── interesting orderings: (+1) (+7)
+ │    ├── scan xy
+ │    │    ├── columns: x:1(int!null) y:2(int) xy.crdb_internal_mvcc_timestamp:3(decimal) xy.tableoid:4(oid)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2-4)
+ │    │    ├── prune: (1-4)
+ │    │    ├── interesting orderings: (+1)
+ │    │    └── unfiltered-cols: (1-4)
+ │    ├── scan uv
+ │    │    ├── columns: u:5(int) v:6(int!null) rowid:7(int!null) uv.crdb_internal_mvcc_timestamp:8(decimal) uv.tableoid:9(oid)
+ │    │    ├── key: (7)
+ │    │    ├── fd: (7)-->(5,6,8,9)
+ │    │    ├── prune: (5-9)
+ │    │    ├── interesting orderings: (+7)
+ │    │    └── unfiltered-cols: (5-9)
+ │    └── filters (true)
+ └── projections
+      ├── eq [as=a:10, type=bool, outer=(1,2), immutable]
+      │    ├── plus [type=int]
+      │    │    ├── variable: x:1 [type=int]
+      │    │    └── const: 1 [type=int]
+      │    └── plus [type=int]
+      │         ├── function: length [type=int]
+      │         │    └── const: 'foo' [type=string]
+      │         └── variable: y:2 [type=int]
+      └── mult [as=b:11, type=int, outer=(1,7), immutable]
+           ├── variable: rowid:7 [type=int]
+           └── variable: x:1 [type=int]
+
+build
+SELECT * FROM xy WHERE EXISTS(SELECT * FROM uv WHERE u=x)
+----
+project
+ ├── columns: x:1(int!null) y:2(int)
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── prune: (1,2)
+ ├── interesting orderings: (+1)
+ └── select
+      ├── columns: x:1(int!null) y:2(int) xy.crdb_internal_mvcc_timestamp:3(decimal) xy.tableoid:4(oid)
+      ├── key: (1)
+      ├── fd: (1)-->(2-4)
+      ├── prune: (2-4)
+      ├── interesting orderings: (+1)
+      ├── scan xy
+      │    ├── columns: x:1(int!null) y:2(int) xy.crdb_internal_mvcc_timestamp:3(decimal) xy.tableoid:4(oid)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-4)
+      │    ├── prune: (1-4)
+      │    └── interesting orderings: (+1)
+      └── filters
+           └── exists [type=bool, outer=(1), correlated-subquery]
+                └── project
+                     ├── columns: u:5(int!null) v:6(int!null)
+                     ├── outer: (1)
+                     ├── fd: ()-->(5)
+                     ├── prune: (5,6)
+                     └── select
+                          ├── columns: u:5(int!null) v:6(int!null) rowid:7(int!null) uv.crdb_internal_mvcc_timestamp:8(decimal) uv.tableoid:9(oid)
+                          ├── outer: (1)
+                          ├── key: (7)
+                          ├── fd: ()-->(5), (7)-->(6,8,9)
+                          ├── prune: (6-9)
+                          ├── interesting orderings: (+7 opt(5))
+                          ├── scan uv
+                          │    ├── columns: u:5(int) v:6(int!null) rowid:7(int!null) uv.crdb_internal_mvcc_timestamp:8(decimal) uv.tableoid:9(oid)
+                          │    ├── key: (7)
+                          │    ├── fd: (7)-->(5,6,8,9)
+                          │    ├── prune: (5-9)
+                          │    └── interesting orderings: (+7)
+                          └── filters
+                               └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+                                    ├── variable: u:5 [type=int]
+                                    └── variable: x:1 [type=int]
+
+build
+SELECT * FROM xy WHERE y IN (SELECT v FROM uv WHERE u=x)
+----
+project
+ ├── columns: x:1(int!null) y:2(int)
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── prune: (1,2)
+ ├── interesting orderings: (+1)
+ └── select
+      ├── columns: x:1(int!null) y:2(int) xy.crdb_internal_mvcc_timestamp:3(decimal) xy.tableoid:4(oid)
+      ├── key: (1)
+      ├── fd: (1)-->(2-4)
+      ├── prune: (3,4)
+      ├── interesting orderings: (+1)
+      ├── scan xy
+      │    ├── columns: x:1(int!null) y:2(int) xy.crdb_internal_mvcc_timestamp:3(decimal) xy.tableoid:4(oid)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-4)
+      │    ├── prune: (1-4)
+      │    └── interesting orderings: (+1)
+      └── filters
+           └── any: eq [type=bool, outer=(1,2), correlated-subquery]
+                ├── project
+                │    ├── columns: v:6(int!null)
+                │    ├── outer: (1)
+                │    ├── prune: (6)
+                │    └── select
+                │         ├── columns: u:5(int!null) v:6(int!null) rowid:7(int!null) uv.crdb_internal_mvcc_timestamp:8(decimal) uv.tableoid:9(oid)
+                │         ├── outer: (1)
+                │         ├── key: (7)
+                │         ├── fd: ()-->(5), (7)-->(6,8,9)
+                │         ├── prune: (6-9)
+                │         ├── interesting orderings: (+7 opt(5))
+                │         ├── scan uv
+                │         │    ├── columns: u:5(int) v:6(int!null) rowid:7(int!null) uv.crdb_internal_mvcc_timestamp:8(decimal) uv.tableoid:9(oid)
+                │         │    ├── key: (7)
+                │         │    ├── fd: (7)-->(5,6,8,9)
+                │         │    ├── prune: (5-9)
+                │         │    └── interesting orderings: (+7)
+                │         └── filters
+                │              └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+                │                   ├── variable: u:5 [type=int]
+                │                   └── variable: x:1 [type=int]
+                └── variable: y:2 [type=int]
+
+# Regression for 36137: need to detect correlation in 2nd Any operator argument.
+build
+SELECT * FROM xy WHERE x=1 OR y IN (SELECT v FROM uv)
+----
+project
+ ├── columns: x:1(int!null) y:2(int)
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── prune: (1,2)
+ ├── interesting orderings: (+1)
+ └── select
+      ├── columns: x:1(int!null) y:2(int) xy.crdb_internal_mvcc_timestamp:3(decimal) xy.tableoid:4(oid)
+      ├── key: (1)
+      ├── fd: (1)-->(2-4)
+      ├── prune: (3,4)
+      ├── interesting orderings: (+1)
+      ├── scan xy
+      │    ├── columns: x:1(int!null) y:2(int) xy.crdb_internal_mvcc_timestamp:3(decimal) xy.tableoid:4(oid)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-4)
+      │    ├── prune: (1-4)
+      │    └── interesting orderings: (+1)
+      └── filters
+           └── or [type=bool, outer=(1,2), correlated-subquery]
+                ├── eq [type=bool]
+                │    ├── variable: x:1 [type=int]
+                │    └── const: 1 [type=int]
+                └── any: eq [type=bool]
+                     ├── project
+                     │    ├── columns: v:6(int!null)
+                     │    ├── prune: (6)
+                     │    └── scan uv
+                     │         ├── columns: u:5(int) v:6(int!null) rowid:7(int!null) uv.crdb_internal_mvcc_timestamp:8(decimal) uv.tableoid:9(oid)
+                     │         ├── key: (7)
+                     │         ├── fd: (7)-->(5,6,8,9)
+                     │         ├── prune: (5-9)
+                     │         └── interesting orderings: (+7)
+                     └── variable: y:2 [type=int]
+
+# Side-effects: test DivOp and impure FuncOp.
+build
+SELECT sum(x), div
+FROM (SELECT x, y, x/y AS div FROM xy)
+INNER JOIN (SELECT * FROM uv WHERE now() > '2018-01-01')
+ON x=u
+GROUP BY div
+----
+group-by (hash)
+ ├── columns: sum:11(decimal!null) div:5(decimal)
+ ├── grouping columns: div:5(decimal)
+ ├── stable
+ ├── key: (5)
+ ├── fd: (5)-->(11)
+ ├── prune: (11)
+ ├── project
+ │    ├── columns: x:1(int!null) div:5(decimal)
+ │    ├── stable
+ │    ├── fd: (1)-->(5)
+ │    ├── prune: (1,5)
+ │    ├── interesting orderings: (+1)
+ │    └── inner-join (hash)
+ │         ├── columns: x:1(int!null) y:2(int) div:5(decimal) u:6(int!null) v:7(int!null)
+ │         ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+ │         ├── stable
+ │         ├── fd: (1)-->(2,5), (1)==(6), (6)==(1)
+ │         ├── prune: (2,5,7)
+ │         ├── interesting orderings: (+1)
+ │         ├── project
+ │         │    ├── columns: div:5(decimal) x:1(int!null) y:2(int)
+ │         │    ├── immutable
+ │         │    ├── key: (1)
+ │         │    ├── fd: (1)-->(2,5)
+ │         │    ├── prune: (1,2,5)
+ │         │    ├── interesting orderings: (+1)
+ │         │    ├── unfiltered-cols: (1-4)
+ │         │    ├── scan xy
+ │         │    │    ├── columns: x:1(int!null) y:2(int) xy.crdb_internal_mvcc_timestamp:3(decimal) xy.tableoid:4(oid)
+ │         │    │    ├── key: (1)
+ │         │    │    ├── fd: (1)-->(2-4)
+ │         │    │    ├── prune: (1-4)
+ │         │    │    ├── interesting orderings: (+1)
+ │         │    │    └── unfiltered-cols: (1-4)
+ │         │    └── projections
+ │         │         └── div [as=div:5, type=decimal, outer=(1,2), immutable]
+ │         │              ├── variable: x:1 [type=int]
+ │         │              └── variable: y:2 [type=int]
+ │         ├── project
+ │         │    ├── columns: u:6(int) v:7(int!null)
+ │         │    ├── stable
+ │         │    ├── prune: (6,7)
+ │         │    └── select
+ │         │         ├── columns: u:6(int) v:7(int!null) rowid:8(int!null) uv.crdb_internal_mvcc_timestamp:9(decimal) uv.tableoid:10(oid)
+ │         │         ├── stable
+ │         │         ├── key: (8)
+ │         │         ├── fd: (8)-->(6,7,9,10)
+ │         │         ├── prune: (6-10)
+ │         │         ├── interesting orderings: (+8)
+ │         │         ├── scan uv
+ │         │         │    ├── columns: u:6(int) v:7(int!null) rowid:8(int!null) uv.crdb_internal_mvcc_timestamp:9(decimal) uv.tableoid:10(oid)
+ │         │         │    ├── key: (8)
+ │         │         │    ├── fd: (8)-->(6,7,9,10)
+ │         │         │    ├── prune: (6-10)
+ │         │         │    └── interesting orderings: (+8)
+ │         │         └── filters
+ │         │              └── gt [type=bool, stable]
+ │         │                   ├── function: now [type=timestamptz]
+ │         │                   └── cast: TIMESTAMPTZ [type=timestamptz]
+ │         │                        └── const: '2018-01-01' [type=string]
+ │         └── filters
+ │              └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │                   ├── variable: x:1 [type=int]
+ │                   └── variable: u:6 [type=int]
+ └── aggregations
+      └── sum [as=sum:11, type=decimal, outer=(1)]
+           └── variable: x:1 [type=int]
+
+# Verify that we don't mark the division as side-effecting when the right-hand
+# side is a constant.
+build
+SELECT x / 1, x::float / 2.0, x::decimal / 3.0 FROM xy
+----
+project
+ ├── columns: "?column?":5(decimal!null) "?column?":6(float!null) "?column?":7(decimal!null)
+ ├── immutable
+ ├── prune: (5-7)
+ ├── scan xy
+ │    ├── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1)
+ └── projections
+      ├── div [as="?column?":5, type=decimal, outer=(1)]
+      │    ├── variable: x:1 [type=int]
+      │    └── const: 1 [type=int]
+      ├── div [as="?column?":6, type=float, outer=(1), immutable]
+      │    ├── cast: FLOAT8 [type=float]
+      │    │    └── variable: x:1 [type=int]
+      │    └── const: 2.0 [type=float]
+      └── div [as="?column?":7, type=decimal, outer=(1), immutable]
+           ├── cast: DECIMAL [type=decimal]
+           │    └── variable: x:1 [type=int]
+           └── const: 3.0 [type=decimal]
+
+# Verify that we take into account the volatility of casts.
+build
+SELECT s::TIMESTAMP FROM sf
+----
+project
+ ├── columns: s:6(timestamp)
+ ├── stable
+ ├── prune: (6)
+ ├── scan sf
+ │    ├── columns: sf.s:1(string) f:2(float) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
+ │    ├── key: (3)
+ │    ├── fd: (3)-->(1,2,4,5)
+ │    ├── prune: (1-5)
+ │    └── interesting orderings: (+3)
+ └── projections
+      └── cast: TIMESTAMP [as=s:6, type=timestamp, outer=(1), stable]
+           └── variable: sf.s:1 [type=string]
+
+build
+SELECT f::STRING FROM sf
+----
+project
+ ├── columns: f:6(string)
+ ├── stable
+ ├── prune: (6)
+ ├── scan sf
+ │    ├── columns: s:1(string) sf.f:2(float) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
+ │    ├── key: (3)
+ │    ├── fd: (3)-->(1,2,4,5)
+ │    ├── prune: (1-5)
+ │    └── interesting orderings: (+3)
+ └── projections
+      └── cast: STRING [as=f:6, type=string, outer=(2), stable]
+           └── variable: sf.f:2 [type=float]
+
+build
+SELECT ARRAY(SELECT f FROM sf)::STRING[]
+----
+project
+ ├── columns: array:6(string[])
+ ├── cardinality: [1 - 1]
+ ├── stable
+ ├── key: ()
+ ├── fd: ()-->(6)
+ ├── prune: (6)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── cast: STRING[] [as=array:6, type=string[], stable, subquery]
+           └── array-flatten [type=float[]]
+                └── project
+                     ├── columns: f:2(float)
+                     ├── prune: (2)
+                     └── scan sf
+                          ├── columns: s:1(string) f:2(float) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
+                          ├── key: (3)
+                          ├── fd: (3)-->(1,2,4,5)
+                          ├── prune: (1-5)
+                          └── interesting orderings: (+3)
+
+# Regression test for #50258: cast from unknown to tuple.
+expr
+(Values
+  [
+    (Tuple [ (Cast (Null "unknown") "tuple{string}") ] "tuple{string}" )
+  ]
+  [ (Cols [ (NewColumn "a" "tuple{string}") ]) ]
+)
+----
+values
+ ├── columns: a:1(tuple{string})
+ ├── cardinality: [1 - 1]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── prune: (1)
+ └── tuple [type=tuple{string}]
+      └── cast: RECORD [type=tuple{string}]
+           └── null [type=unknown]

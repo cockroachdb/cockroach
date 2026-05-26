@@ -1,0 +1,61 @@
+sql
+CREATE DATABASE d;
+CREATE TYPE d.t AS ENUM ('dump', 'cli');
+CREATE TABLE d.tt (
+  x d.t,
+  y d._t,
+  z INT
+);
+
+INSERT INTO d.tt VALUES ('dump', ARRAY['dump'], 1), ('cli', ARRAY['cli'], 2)
+----
+INSERT 2
+
+# Test basic dumping of a database.
+dump d
+----
+----
+CREATE TYPE public.t AS ENUM ('dump', 'cli');
+
+CREATE TABLE public.tt (
+	x public.t NULL,
+	y public.t[] NULL,
+	z INT8 NULL,
+	FAMILY "primary" (x, y, z, rowid)
+);
+
+INSERT INTO public.tt (x, y, z) VALUES
+	('dump', ARRAY['dump'], 1),
+	('cli', ARRAY['cli'], 2);
+----
+----
+
+# Test dumping just a table. Aligned with pg_dump, we don't output the
+# create type statements if a particular table is requested.
+dump d tt
+noroundtrip
+----
+----
+CREATE TABLE public.tt (
+	x public.t NULL,
+	y public.t[] NULL,
+	z INT8 NULL,
+	FAMILY "primary" (x, y, z, rowid)
+);
+
+INSERT INTO public.tt (x, y, z) VALUES
+	('dump', ARRAY['dump'], 1),
+	('cli', ARRAY['cli'], 2);
+----
+----
+
+dump d tt --dump-mode=data
+noroundtrip
+----
+----
+
+INSERT INTO public.tt (x, y, z) VALUES
+	('dump', ARRAY['dump'], 1),
+	('cli', ARRAY['cli'], 2);
+----
+----

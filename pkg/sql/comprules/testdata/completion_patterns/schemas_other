@@ -1,0 +1,129 @@
+filter
+xsch:
+----
+
+subtest at_ident
+
+comp at=8
+select xor
+----
+ii'
+  ^
+--
+xsch: not completing
+
+comp at=12
+select xor
+----
+ii_
+  ^
+--
+xsch: not completing
+
+subtest end
+
+subtest after_period
+
+comp at=10
+select a.xor
+----
+ii.i'
+    ^
+--
+xsch: completing for "xor" (9,12) in db "a"
+--sql:
+SELECT schema_name AS completion,
+       'schema' AS category,
+       '' as description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM "".information_schema.schemata
+ WHERE catalog_name = $4:::STRING
+   AND left(schema_name, length($1:::STRING)) = $1:::STRING
+ORDER BY 1,3,4,5
+--placeholders: []interface {}{"xor", 9, 12, "a"}
+
+comp at=10
+select a.
+----
+ii._
+   ^
+--
+xsch: completing for "" (10,10) in db "a"
+--sql:
+SELECT schema_name AS completion,
+       'schema' AS category,
+       '' as description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM "".information_schema.schemata
+ WHERE catalog_name = $4:::STRING
+   AND left(schema_name, length($1:::STRING)) = $1:::STRING
+ORDER BY 1,3,4,5
+--placeholders: []interface {}{"", 10, 10, "a"}
+
+comp at=9
+select a.
+----
+ii.'
+   ^
+--
+xsch: completing for "" (9,9) in db "a"
+--sql:
+SELECT schema_name AS completion,
+       'schema' AS category,
+       '' as description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM "".information_schema.schemata
+ WHERE catalog_name = $4:::STRING
+   AND left(schema_name, length($1:::STRING)) = $1:::STRING
+ORDER BY 1,3,4,5
+--placeholders: []interface {}{"", 9, 9, "a"}
+
+
+subtest end
+
+subtest quoted_ident
+
+comp at=16
+select mydb."pg_
+----
+ii.i'
+    ^
+--
+xsch: completing for "pg_" (12,16) in db "mydb"
+--sql:
+SELECT schema_name AS completion,
+       'schema' AS category,
+       '' as description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM "".information_schema.schemata
+ WHERE catalog_name = $4:::STRING
+   AND left(schema_name, length($1:::STRING)) = $1:::STRING
+ORDER BY 1,3,4,5
+--placeholders: []interface {}{"pg_", 12, 16, "mydb"}
+
+# Quoted uppercase is an entire schema entirely.
+comp at=16
+select mydb."PG_
+----
+ii.i'
+    ^
+--
+xsch: completing for "PG_" (12,16) in db "mydb"
+--sql:
+SELECT schema_name AS completion,
+       'schema' AS category,
+       '' as description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM "".information_schema.schemata
+ WHERE catalog_name = $4:::STRING
+   AND left(schema_name, length($1:::STRING)) = $1:::STRING
+ORDER BY 1,3,4,5
+--placeholders: []interface {}{"PG_", 12, 16, "mydb"}
+
+
+subtest end

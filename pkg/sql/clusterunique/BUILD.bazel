@@ -1,0 +1,26 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "clusterunique",
+    srcs = ["id.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/clusterunique",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/util/hlc",
+        "//pkg/util/uint128",
+        "@com_github_biogo_store//llrb",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "clusterunique_test",
+    srcs = ["id_test.go"],
+    embed = [":clusterunique"],
+    deps = [
+        "//pkg/util/uint128",
+        "@com_github_stretchr_testify//require",
+    ],
+)

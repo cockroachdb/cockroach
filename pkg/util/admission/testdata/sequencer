@@ -1,0 +1,105 @@
+# Walk through the basics of how the below-raft replicated work sequencer
+# works. The log-position= parameter is not actually used in the
+# implementation, but in typical usage we'd be sequencing work in log position
+# order, and it's instructive to understand how sequencing timestamps are
+# generated.
+#
+# -----------------------------------------------------------------------------
+# 1. Observe how the sequence numbers change with changing log positions (and
+#    static create-times).
+init
+----
+
+sequence create-time=0ms log-position=1/0
+----
+seq=1 ≈1ns (advanced)
+
+# If the log index is incremented, so does the sequence number. So we're
+# issuing "create times" that are higher than ones issued before for lower log
+# indexes.
+sequence create-time=0ms log-position=1/1
+----
+seq=2 ≈2ns (advanced)
+
+# Bump the log index by 19, and observe a higher sequence number. Since the
+# create-time is static (0ms now and earlier), and we try to stay as close to
+# the max observed create-time as possible, we increment the sequence number by
+# the smallest possible amount -- 1ns.
+sequence create-time=0ms log-position=1/20
+----
+seq=3 ≈3ns (advanced)
+
+# Regressions in log indexes (indicating buggy usage) doesn't cause regressions
+# in the sequence number. As before, we simply issue monotonically increasing
+# timestamps. With such buggy use, at worst we'd be over-admitting work when
+# releasing tokens for higher log positions but lower sequencing timestamps.
+sequence create-time=0ms log-position=1/10
+----
+seq=4 ≈4ns (advanced)
+
+# Try again with a large bump in the log index.
+sequence create-time=0ms log-position=1/500
+----
+seq=5 ≈5ns (advanced)
+
+# Increases in the raft term also increases the sequence number.
+sequence create-time=0ms log-position=2/0
+----
+seq=6 ≈6ns (advanced)
+
+# Regressions in the raft term (indicating buggy usage) doesn't cause
+# regressions in the sequence number. This is the same as the buggy use case
+# above.
+sequence create-time=0ms log-position=1/0
+----
+seq=7 ≈7ns (advanced)
+
+# Try another (large) bump in the raft term, observing a delta in the sequence
+# number.
+sequence create-time=0ms log-position=5/0
+----
+seq=8 ≈8ns (advanced)
+
+
+# -----------------------------------------------------------------------------
+# 2. Observe how the sequence numbers change with changing create-times and/or
+#    log positions.
+init
+----
+
+sequence create-time=0ms log-position=1/1
+----
+seq=1 ≈1ns
+
+# Create time advancing to 1us also advances the sequence numbers -- they're
+# kept closely tied to the largest observed create time.
+sequence create-time=1us log-position=1/1
+----
+seq=1000 ≈1µs (advanced)
+
+# Ditto for subsequent increases in max observed create times.
+sequence create-time=2us log-position=1/1
+----
+seq=2000 ≈2µs (advanced)
+
+# Regressions in create-time don't cause regressions in the sequence number.
+# We'll still produce sequencing timestamps that monotonically increase and
+# close to the maximum observed create-time.
+sequence create-time=1us log-position=1/1
+----
+seq=2001 ≈2.001µs (advanced)
+
+
+# Advance both the create-time and log position. We should see the sequence
+# number ratchet up accordingly.
+sequence create-time=3us log-position=1/2
+----
+seq=3000 ≈3µs (advanced)
+
+# Advance just the log position. We should see the sequence number ratchet up
+# accordingly.
+sequence create-time=3us log-position=1/3
+----
+seq=3001 ≈3.001µs (advanced)
+
+# vim:ft=sh

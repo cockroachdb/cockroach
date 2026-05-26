@@ -1,0 +1,82 @@
+{"Time":"2018-09-08T10:18:02.418188667-04:00","Action":"output","Output":"Running make with -j4\n"}
+{"Time":"2018-09-08T10:18:02.427982566-04:00","Action":"output","Output":"GOPATH set to /Users/andrei/work\n"}
+{"Time":"2018-09-08T10:18:02.865794706-04:00","Action":"output","Output":"go test  -tags ' make x86_64_apple_darwin17.7.0' -ldflags '-X github.com/cockroachdb/cockroach/pkg/build.typ=development -extldflags \"\" -X \"github.com/cockroachdb/cockroach/pkg/build.tag=v2.2.0-alpha.00000000-607-geca01b0f19-dirty\" -X \"github.com/cockroachdb/cockroach/pkg/build.rev=eca01b0f1989ab46e2410389e59fa84ff37f694d\" -X \"github.com/cockroachdb/cockroach/pkg/build.cgoTargetTriple=x86_64-apple-darwin17.7.0\"  ' -run \"(TeTestReadOnlyTxnObeysDeadline|stTxnCoordSenderPipelining|TestAnchorKey|TestAbortReadOnlyTransaction)\"  -timeout 6s ./pkg/kv -v -count=1 -short\n"}
+{"Time":"2018-09-08T10:18:07.807898694-04:00","Action":"run","Test":"TestTxnCoordSenderPipelining"}
+{"Time":"2018-09-08T10:18:07.807965468-04:00","Action":"output","Test":"TestTxnCoordSenderPipelining","Output":"=== RUN   TestTxnCoordSenderPipelining\n"}
+{"Time":"2018-09-08T10:18:08.813034661-04:00","Action":"output","Test":"TestTxnCoordSenderPipelining","Output":"--- FAIL: TestTxnCoordSenderPipelining (1.00s)\n"}
+{"Time":"2018-09-08T10:18:08.813133801-04:00","Action":"output","Test":"TestTxnCoordSenderPipelining","Output":"\ttxn_coord_sender_test.go:2296: injected failure\n"}
+{"Time":"2018-09-08T10:18:08.813184234-04:00","Action":"fail","Test":"TestTxnCoordSenderPipelining","Elapsed":1}
+{"Time":"2018-09-08T10:18:08.813238981-04:00","Action":"run","Test":"TestAnchorKey"}
+{"Time":"2018-09-08T10:18:08.813263147-04:00","Action":"output","Test":"TestAnchorKey","Output":"=== RUN   TestAnchorKey\n"}
+{"Time":"2018-09-08T10:18:09.819652007-04:00","Action":"output","Test":"TestAnchorKey","Output":"I180908 14:18:09.819536 23 util/stop/stopper.go:537  quiescing; tasks left:\n"}
+{"Time":"2018-09-08T10:18:09.819763107-04:00","Action":"output","Test":"TestAnchorKey","Output":"1      [async] kv.TxnCoordSender: heartbeat loop\n"}
+{"Time":"2018-09-08T10:18:09.819968499-04:00","Action":"output","Test":"TestAnchorKey","Output":"--- PASS: TestAnchorKey (1.01s)\n"}
+{"Time":"2018-09-08T10:18:09.819998764-04:00","Action":"pass","Test":"TestAnchorKey","Elapsed":1.01}
+{"Time":"2018-09-08T10:18:09.820037787-04:00","Action":"run","Test":"TestAbortReadOnlyTransaction"}
+{"Time":"2018-09-08T10:18:09.820058803-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"=== RUN   TestAbortReadOnlyTransaction\n"}
+{"Time":"2018-09-08T10:18:13.813206258-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"panic: test timed out after 6s\n"}
+{"Time":"2018-09-08T10:18:13.817238726-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"\n"}
+{"Time":"2018-09-08T10:18:13.817287334-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"goroutine 38 [running]:\n"}
+{"Time":"2018-09-08T10:18:13.817301492-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"testing.(*M).startAlarm.func1()\n"}
+{"Time":"2018-09-08T10:18:13.817319462-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"\t/Users/andrei/work/src/go/src/testing/testing.go:1240 +0xfc\n"}
+{"Time":"2018-09-08T10:18:13.817332319-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"created by time.goFunc\n"}
+{"Time":"2018-09-08T10:18:13.817344376-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"\t/Users/andrei/work/src/go/src/time/sleep.go:172 +0x44\n"}
+{"Time":"2018-09-08T10:18:13.817356101-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"\n"}
+{"Time":"2018-09-08T10:18:13.817377185-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"goroutine 1 [chan receive]:\n"}
+{"Time":"2018-09-08T10:18:13.817390929-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"testing.(*T).Run(0xc42067c000, 0x5fb0cd3, 0x1a, 0x60ba318, 0x408d901)\n"}
+{"Time":"2018-09-08T10:18:13.81740308-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"\t/Users/andrei/work/src/go/src/testing/testing.go:825 +0x301\n"}
+{"Time":"2018-09-08T10:18:13.817433181-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"testing.runTests.func1(0xc42021d4a0)\n"}
+{"Time":"2018-09-08T10:18:13.81744475-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"\t/Users/andrei/work/src/go/src/testing/testing.go:1063 +0x64\n"}
+{"Time":"2018-09-08T10:18:13.817458968-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"testing.tRunner(0xc42021d4a0, 0xc4205c7dd8)\n"}
+{"Time":"2018-09-08T10:18:13.817469016-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"\t/Users/andrei/work/src/go/src/testing/testing.go:777 +0xd0\n"}
+{"Time":"2018-09-08T10:18:13.817479068-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"testing.runTests(0xc4202bd580, 0x734e700, 0x94, 0x94, 0x0)\n"}
+{"Time":"2018-09-08T10:18:13.817488241-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"\t/Users/andrei/work/src/go/src/testing/testing.go:1061 +0x2c4\n"}
+{"Time":"2018-09-08T10:18:13.817497604-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"testing.(*M).Run(0xc42014e900, 0x0)\n"}
+{"Time":"2018-09-08T10:18:13.817510049-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"\t/Users/andrei/work/src/go/src/testing/testing.go:978 +0x171\n"}
+{"Time":"2018-09-08T10:18:13.817520009-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"github.com/cockroachdb/cockroach/pkg/kv_test.TestMain(0xc42014e900)\n"}
+{"Time":"2018-09-08T10:18:13.817529423-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"\t/Users/andrei/work/src/github.com/cockroachdb/cockroach/pkg/kv/main_test.go:51 +0x51\n"}
+{"Time":"2018-09-08T10:18:13.817538939-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"main.main()\n"}
+{"Time":"2018-09-08T10:18:13.817548206-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"\t_testmain.go:340 +0x151\n"}
+{"Time":"2018-09-08T10:18:13.817557516-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"\n"}
+{"Time":"2018-09-08T10:18:13.817566587-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"goroutine 6 [syscall]:\n"}
+{"Time":"2018-09-08T10:18:13.81757933-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"os/signal.signal_recv(0x0)\n"}
+{"Time":"2018-09-08T10:18:13.817589066-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"\t/Users/andrei/work/src/go/src/runtime/sigqueue.go:139 +0xa7\n"}
+{"Time":"2018-09-08T10:18:13.817598535-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"os/signal.loop()\n"}
+{"Time":"2018-09-08T10:18:13.817607995-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"\t/Users/andrei/work/src/go/src/os/signal/signal_unix.go:22 +0x22\n"}
+{"Time":"2018-09-08T10:18:13.817617224-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"created by os/signal.init.0\n"}
+{"Time":"2018-09-08T10:18:13.817626424-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"\t/Users/andrei/work/src/go/src/os/signal/signal_unix.go:28 +0x41\n"}
+{"Time":"2018-09-08T10:18:13.817647853-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"\n"}
+{"Time":"2018-09-08T10:18:13.817658394-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"goroutine 50 [chan receive]:\n"}
+{"Time":"2018-09-08T10:18:13.817668027-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"github.com/cockroachdb/cockroach/pkg/util/log.flushDaemon()\n"}
+{"Time":"2018-09-08T10:18:13.817677524-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"\t/Users/andrei/work/src/github.com/cockroachdb/cockroach/pkg/util/log/clog.go:1178 +0xf1\n"}
+{"Time":"2018-09-08T10:18:13.817690356-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"created by github.com/cockroachdb/cockroach/pkg/util/log.init.0\n"}
+{"Time":"2018-09-08T10:18:13.81771569-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"\t/Users/andrei/work/src/github.com/cockroachdb/cockroach/pkg/util/log/clog.go:596 +0x126\n"}
+{"Time":"2018-09-08T10:18:13.817726477-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"\n"}
+{"Time":"2018-09-08T10:18:13.817735901-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"goroutine 51 [chan receive]:\n"}
+{"Time":"2018-09-08T10:18:13.817745153-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"github.com/cockroachdb/cockroach/pkg/util/log.signalFlusher()\n"}
+{"Time":"2018-09-08T10:18:13.817754671-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"\t/Users/andrei/work/src/github.com/cockroachdb/cockroach/pkg/util/log/clog.go:603 +0xab\n"}
+{"Time":"2018-09-08T10:18:13.817769715-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"created by github.com/cockroachdb/cockroach/pkg/util/log.init.0\n"}
+{"Time":"2018-09-08T10:18:13.817779608-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"\t/Users/andrei/work/src/github.com/cockroachdb/cockroach/pkg/util/log/clog.go:597 +0x13e\n"}
+{"Time":"2018-09-08T10:18:13.81779344-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"\n"}
+{"Time":"2018-09-08T10:18:13.817802838-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"goroutine 20 [select, locked to thread]:\n"}
+{"Time":"2018-09-08T10:18:13.817812256-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"runtime.gopark(0x60bfdd8, 0x0, 0x5f8da03, 0x6, 0x18, 0x1)\n"}
+{"Time":"2018-09-08T10:18:13.817821779-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"\t/Users/andrei/work/src/go/src/runtime/proc.go:291 +0x11a\n"}
+{"Time":"2018-09-08T10:18:13.817831166-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"runtime.selectgo(0xc420485f50, 0xc4202a4060)\n"}
+{"Time":"2018-09-08T10:18:13.817841753-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"\t/Users/andrei/work/src/go/src/runtime/select.go:392 +0xe50\n"}
+{"Time":"2018-09-08T10:18:13.817857751-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"runtime.ensureSigM.func1()\n"}
+{"Time":"2018-09-08T10:18:13.817874251-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"\t/Users/andrei/work/src/go/src/runtime/signal_unix.go:549 +0x1c6\n"}
+{"Time":"2018-09-08T10:18:13.817890152-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"runtime.goexit()\n"}
+{"Time":"2018-09-08T10:18:13.817910404-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"\t/Users/andrei/work/src/go/src/runtime/asm_amd64.s:2361 +0x1\n"}
+{"Time":"2018-09-08T10:18:13.817927394-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"\n"}
+{"Time":"2018-09-08T10:18:13.817949031-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"goroutine 37 [sleep]:\n"}
+{"Time":"2018-09-08T10:18:13.817965746-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"time.Sleep(0x12a05f200)\n"}
+{"Time":"2018-09-08T10:18:13.817982345-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"\t/Users/andrei/work/src/go/src/runtime/time.go:102 +0x166\n"}
+{"Time":"2018-09-08T10:18:13.818005804-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"github.com/cockroachdb/cockroach/pkg/kv.TestAbortReadOnlyTransaction(0xc42067c000)\n"}
+{"Time":"2018-09-08T10:18:13.818023557-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"\t/Users/andrei/work/src/github.com/cockroachdb/cockroach/pkg/kv/txn_coord_sender_test.go:2415 +0x80\n"}
+{"Time":"2018-09-08T10:18:13.818055669-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"testing.tRunner(0xc42067c000, 0x60ba318)\n"}
+{"Time":"2018-09-08T10:18:13.818075695-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"\t/Users/andrei/work/src/go/src/testing/testing.go:777 +0xd0\n"}
+{"Time":"2018-09-08T10:18:13.818118815-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"created by testing.(*T).Run\n"}
+{"Time":"2018-09-08T10:18:13.818139188-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"\t/Users/andrei/work/src/go/src/testing/testing.go:824 +0x2e0\n"}
+{"Time":"2018-09-08T10:18:13.818157815-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"FAIL\tgithub.com/cockroachdb/cockroach/pkg/kv\t6.061s\n"}
+{"Time":"2018-09-08T10:18:13.826196214-04:00","Action":"output","Test":"TestAbortReadOnlyTransaction","Output":"make: *** [testshort] Error 1\n"}
+{"Time":"2018-09-08T10:18:13.826692477-04:00","Action":"fail","Test":"TestAbortReadOnlyTransaction","Elapsed":11.408}

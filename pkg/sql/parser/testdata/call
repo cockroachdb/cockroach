@@ -1,0 +1,31 @@
+parse
+CALL p()
+----
+CALL p()
+CALL p() -- fully parenthesized
+CALL p() -- literals removed
+CALL _() -- identifiers removed
+
+parse
+CALL p(1, 'foo', 1.234, true, NULL)
+----
+CALL p(1, 'foo', 1.234, true, NULL)
+CALL p((1), ('foo'), (1.234), (true), (NULL)) -- fully parenthesized
+CALL p(_, '_', _, _, _) -- literals removed
+CALL _(1, 'foo', 1.234, true, NULL) -- identifiers removed
+
+error
+CALL p
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+CALL p
+      ^
+
+error
+CALL
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+CALL
+    ^

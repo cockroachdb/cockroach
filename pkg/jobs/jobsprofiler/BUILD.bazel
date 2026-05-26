@@ -1,0 +1,60 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "jobsprofiler",
+    srcs = ["profiler.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/jobs/jobsprofiler/profilerconstants",
+        "//pkg/sql",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/isql",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+    ],
+)
+
+go_test(
+    name = "jobsprofiler_test",
+    srcs = [
+        "main_test.go",
+        "profiler_test.go",
+    ],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"test.Pool": "large"},
+        "//conditions:default": {"test.Pool": "default"},
+    }),
+    deps = [
+        ":jobsprofiler",
+        "//pkg/base",
+        "//pkg/ccl",
+        "//pkg/cloud/impl:cloudimpl",
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/jobs/jobsprofiler/profilerconstants",
+        "//pkg/kv/kvserver",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/isql",
+        "//pkg/sql/physicalplan",
+        "//pkg/testutils",
+        "//pkg/testutils/jobutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "//pkg/util/randutil",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

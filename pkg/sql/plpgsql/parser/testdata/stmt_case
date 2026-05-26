@@ -1,0 +1,103 @@
+feature-count
+DECLARE
+BEGIN
+CASE hello
+WHEN world THEN
+END CASE;
+END
+----
+stmt_block: 1
+stmt_case: 1
+stmt_when: 1
+
+feature-count
+DECLARE
+BEGIN
+CASE order_cnt
+WHEN 1, 2, 3 THEN
+END CASE;
+END
+----
+stmt_block: 1
+stmt_case: 1
+stmt_when: 1
+
+feature-count
+DECLARE
+BEGIN
+CASE order_cnt
+WHEN 1, 2, 3 THEN
+WHEN 5 THEN
+END CASE;
+END
+----
+stmt_block: 1
+stmt_case: 1
+stmt_when: 2
+
+feature-count
+DECLARE
+BEGIN
+CASE
+WHEN true THEN
+END CASE;
+END
+----
+stmt_block: 1
+stmt_case: 1
+stmt_when: 1
+
+feature-count
+DECLARE
+  order_cnt integer := 10;
+BEGIN
+CASE
+WHEN order_cnt BETWEEN 0 AND 100 THEN
+WHEN order_cnt > 100 THEN
+END CASE;
+END
+----
+decl_stmt: 1
+stmt_block: 1
+stmt_case: 1
+stmt_when: 2
+
+feature-count
+DECLARE
+  order_cnt integer := 10;
+BEGIN
+  CASE
+  WHEN order_cnt BETWEEN 0 AND 100 THEN
+    CALL fn(1);
+  WHEN order_cnt > 100 THEN
+    CALL fn(2);
+  ELSE
+    CALL fn(3);
+END CASE;
+END
+----
+decl_stmt: 1
+stmt_block: 1
+stmt_call: 3
+stmt_case: 1
+stmt_when: 2
+
+feature-count
+DECLARE
+  order_cnt integer := 10;
+BEGIN
+  CASE
+  WHEN order_cnt BETWEEN 0 AND 100 THEN
+    CALL fn(1);
+  WHEN order_cnt > 100 THEN
+    CALL fn(2);
+  ELSE
+    CALL fn(3);
+END CASE;
+END
+----
+decl_stmt: 1
+stmt_block: 1
+stmt_call: 3
+stmt_case: 1
+stmt_when: 2

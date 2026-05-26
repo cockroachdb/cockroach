@@ -1,0 +1,768 @@
+statement ok
+SET DATABASE = ""
+
+statement error no database or schema specified
+CREATE TABLE a (id INT PRIMARY KEY)
+
+statement error invalid table name: test.""
+CREATE TABLE test."" (id INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE test.a (id INT PRIMARY KEY)
+
+statement error pgcode 42P07 relation "test.public.a" already exists
+CREATE TABLE test.a (id INT PRIMARY KEY)
+
+statement ok
+SET DATABASE = test
+
+statement error invalid table name: ""
+CREATE TABLE "" (id INT PRIMARY KEY)
+
+statement error pgcode 42P07 relation "test.public.a" already exists
+CREATE TABLE a (id INT PRIMARY KEY)
+
+statement error duplicate column name: "id"
+CREATE TABLE b (id INT PRIMARY KEY, id INT)
+
+statement error multiple primary keys for table "b" are not allowed
+CREATE TABLE b (id INT PRIMARY KEY, id2 INT PRIMARY KEY)
+
+statement error index \"dup_primary_pkey\" contains duplicate column \"a\"
+CREATE TABLE dup_primary (a int, primary key (a,a))
+
+statement error index \"dup_unique_a_a_key\" contains duplicate column \"a\"
+CREATE TABLE dup_unique (a int, unique (a,a))
+
+statement ok
+CREATE TABLE IF NOT EXISTS a (id INT PRIMARY KEY)
+
+statement ok
+COMMENT ON TABLE a IS 'a_comment'
+
+query TTTTIT colnames
+SHOW TABLES FROM test
+----
+schema_name  table_name  type   owner  estimated_row_count  locality
+public       a           table  root   0                    NULL
+
+statement ok
+CREATE TABLE b (id INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE c (
+  id INT PRIMARY KEY,
+  foo INT CONSTRAINT foo_positive CHECK (foo > 0),
+  bar INT,
+  INDEX c_foo_idx (foo),
+  INDEX (foo),
+  INDEX c_foo_bar_idx (foo ASC, bar DESC),
+  UNIQUE (bar)
+)
+
+statement ok
+COMMENT ON INDEX c_foo_idx IS 'index_comment'
+
+query TTBITTTBBBF colnames,rowsort
+SHOW INDEXES FROM c
+----
+table_name  index_name     non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
+c           c_bar_key      false       1             bar          bar         ASC        false    false     true     1
+c           c_bar_key      false       2             id           id          ASC        true     true      true     1
+c           c_foo_bar_idx  true        1             foo          foo         ASC        false    false     true     1
+c           c_foo_bar_idx  true        2             bar          bar         DESC       false    false     true     1
+c           c_foo_bar_idx  true        3             id           id          ASC        false    true      true     1
+c           c_foo_idx      true        1             foo          foo         ASC        false    false     true     1
+c           c_foo_idx      true        2             id           id          ASC        false    true      true     1
+c           c_foo_idx1     true        1             foo          foo         ASC        false    false     true     1
+c           c_foo_idx1     true        2             id           id          ASC        false    true      true     1
+c           c_pkey         false       1             id           id          ASC        false    false     true     1
+c           c_pkey         false       2             foo          foo         N/A        true     false     true     1
+c           c_pkey         false       3             bar          bar         N/A        true     false     true     1
+
+query TTBITTTBBBFT colnames,rowsort
+SHOW INDEXES FROM c WITH COMMENT
+----
+table_name  index_name     non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility  comment
+c           c_bar_key      false       1             bar          bar         ASC        false    false     true     1           NULL
+c           c_bar_key      false       2             id           id          ASC        true     true      true     1           NULL
+c           c_foo_bar_idx  true        1             foo          foo         ASC        false    false     true     1           NULL
+c           c_foo_bar_idx  true        2             bar          bar         DESC       false    false     true     1           NULL
+c           c_foo_bar_idx  true        3             id           id          ASC        false    true      true     1           NULL
+c           c_foo_idx      true        1             foo          foo         ASC        false    false     true     1           index_comment
+c           c_foo_idx      true        2             id           id          ASC        false    true      true     1           index_comment
+c           c_foo_idx1     true        1             foo          foo         ASC        false    false     true     1           NULL
+c           c_foo_idx1     true        2             id           id          ASC        false    true      true     1           NULL
+c           c_pkey         false       1             id           id          ASC        false    false     true     1           NULL
+c           c_pkey         false       2             foo          foo         N/A        true     false     true     1           NULL
+c           c_pkey         false       3             bar          bar         N/A        true     false     true     1           NULL
+
+# primary keys can never be null
+
+query TTTTBT colnames
+SELECT * FROM [SHOW CONSTRAINTS FROM c WITH COMMENT] ORDER BY constraint_name
+----
+table_name  constraint_name  constraint_type  details               validated  comment
+c           c_bar_key        UNIQUE           UNIQUE (bar ASC)      true       NULL
+c           c_id_not_null    NOT NULL         NOT NULL              true       NULL
+c           c_pkey           PRIMARY KEY      PRIMARY KEY (id ASC)  true       NULL
+c           foo_positive     CHECK            CHECK ((foo > 0))     true       NULL
+
+statement ok
+CREATE TABLE d (
+  id    INT PRIMARY KEY NULL
+)
+
+query TTBTTTB colnames
+SHOW COLUMNS FROM d
+----
+column_name  data_type  is_nullable  column_default  generation_expression  indices   is_hidden
+id           INT8       false        NULL            ·                      {d_pkey}  false
+
+statement ok
+CREATE TABLE e (
+  id    INT NULL PRIMARY KEY
+)
+
+query TTBTTTB colnames
+SHOW COLUMNS FROM e
+----
+column_name  data_type  is_nullable  column_default  generation_expression  indices   is_hidden
+id           INT8       false        NULL            ·                      {e_pkey}  false
+
+statement ok
+CREATE TABLE f (
+  a INT,
+  b INT,
+  c INT,
+  PRIMARY KEY (a, b, c)
+)
+
+query TTBTTTB colnames,rowsort
+SHOW COLUMNS FROM f
+----
+column_name  data_type  is_nullable  column_default  generation_expression  indices   is_hidden
+a            INT8       false        NULL            ·                      {f_pkey}  false
+b            INT8       false        NULL            ·                      {f_pkey}  false
+c            INT8       false        NULL            ·                      {f_pkey}  false
+
+query TTTTITT colnames,rowsort
+SHOW TABLES FROM test WITH COMMENT
+----
+schema_name  table_name  type   owner  estimated_row_count  locality  comment
+public       a           table  root   0                    NULL      a_comment
+public       b           table  root   0                    NULL      ·
+public       c           table  root   0                    NULL      ·
+public       d           table  root   0                    NULL      ·
+public       e           table  root   0                    NULL      ·
+public       f           table  root   0                    NULL      ·
+
+statement ok
+SET DATABASE = ""
+
+query error pgcode 42P01 relation "users" does not exist
+SHOW COLUMNS FROM users
+
+query error pgcode 42P01 relation "test.users" does not exist
+SHOW COLUMNS FROM test.users
+
+query error pgcode 42P01 relation "users" does not exist
+SHOW INDEXES FROM users
+
+query error pgcode 42P01 relation "test.users" does not exist
+SHOW INDEXES FROM test.users
+
+statement ok
+CREATE TABLE test.users (
+  id        INT PRIMARY KEY,
+  name      VARCHAR NOT NULL,
+  title     VARCHAR,
+  nickname  STRING CHECK (length(nickname) < 10),
+  username  STRING(10),
+  email     VARCHAR(100) NULL,
+  INDEX foo (name),
+  CHECK (length(nickname) < length(name)),
+  UNIQUE INDEX bar (id, name),
+  FAMILY "primary" (id, name),
+  FAMILY fam_1_title (title),
+  FAMILY fam_2_nickname (nickname),
+  FAMILY fam_3_username_email (username, email)
+)
+
+query TTBTTTB colnames,rowsort
+SHOW COLUMNS FROM test.users
+----
+column_name  data_type     is_nullable  column_default  generation_expression  indices               is_hidden
+id           INT8          false        NULL            ·                      {bar,foo,users_pkey}  false
+name         VARCHAR       false        NULL            ·                      {bar,foo,users_pkey}  false
+title        VARCHAR       true         NULL            ·                      {users_pkey}          false
+nickname     STRING        true         NULL            ·                      {users_pkey}          false
+username     STRING(10)    true         NULL            ·                      {users_pkey}          false
+email        VARCHAR(100)  true         NULL            ·                      {users_pkey}          false
+
+query TTBITTTBBBF colnames,rowsort
+SHOW INDEXES FROM test.users
+----
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
+users       bar         false       1             id           id          ASC        false    false     true     1
+users       bar         false       2             name         name        ASC        false    false     true     1
+users       foo         true        1             name         name        ASC        false    false     true     1
+users       foo         true        2             id           id          ASC        false    true      true     1
+users       users_pkey  false       1             id           id          ASC        false    false     true     1
+users       users_pkey  false       2             name         name        N/A        true     false     true     1
+users       users_pkey  false       3             title        title       N/A        true     false     true     1
+users       users_pkey  false       4             nickname     nickname    N/A        true     false     true     1
+users       users_pkey  false       5             username     username    N/A        true     false     true     1
+users       users_pkey  false       6             email        email       N/A        true     false     true     1
+
+statement error precision for type float must be at least 1 bit
+CREATE TABLE test.precision (x FLOAT(0))
+
+statement error at or near "\)": syntax error: scale \(2\) must be between 0 and precision \(0\)
+CREATE TABLE test.precision (x DECIMAL(0, 2))
+
+statement error at or near "\)": syntax error: scale \(4\) must be between 0 and precision \(2\)
+CREATE TABLE test.precision (x DECIMAL(2, 4))
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE test.users
+----
+test.public.users  CREATE TABLE public.users (
+                     id INT8 NOT NULL,
+                     name VARCHAR NOT NULL,
+                     title VARCHAR NULL,
+                     nickname STRING NULL,
+                     username STRING(10) NULL,
+                     email VARCHAR(100) NULL,
+                     CONSTRAINT users_pkey PRIMARY KEY (id ASC),
+                     INDEX foo (name ASC),
+                     UNIQUE INDEX bar (id ASC, name ASC),
+                     FAMILY "primary" (id, name),
+                     FAMILY fam_1_title (title),
+                     FAMILY fam_2_nickname (nickname),
+                     FAMILY fam_3_username_email (username, email),
+                     CONSTRAINT check_nickname_name CHECK (length(nickname) < length(name)),
+                     CONSTRAINT check_nickname CHECK (length(nickname) < 10:::INT8)
+                   );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE test.users
+----
+test.public.users  CREATE TABLE public.users (
+                     id INT8 NOT NULL,
+                     name VARCHAR NOT NULL,
+                     title VARCHAR NULL,
+                     nickname STRING NULL,
+                     username STRING(10) NULL,
+                     email VARCHAR(100) NULL,
+                     CONSTRAINT users_pkey PRIMARY KEY (id ASC),
+                     INDEX foo (name ASC),
+                     UNIQUE INDEX bar (id ASC, name ASC),
+                     FAMILY "primary" (id, name),
+                     FAMILY fam_1_title (title),
+                     FAMILY fam_2_nickname (nickname),
+                     FAMILY fam_3_username_email (username, email),
+                     CONSTRAINT check_nickname_name CHECK (length(nickname) < length(name)),
+                     CONSTRAINT check_nickname CHECK (length(nickname) < 10:::INT8)
+                   ) WITH (schema_locked = true);
+
+statement ok
+CREATE TABLE test.dupe_generated (
+  foo INT CHECK (foo > 1),
+  bar INT CHECK (bar > 2),
+  CHECK (foo > 2),
+  CHECK (foo < 10)
+)
+
+query TTTTB colnames
+SELECT * FROM [SHOW CONSTRAINTS FROM test.dupe_generated] ORDER BY constraint_name
+----
+table_name      constraint_name                constraint_type  details                  validated
+dupe_generated  check_bar                      CHECK            CHECK ((bar > 2))        true
+dupe_generated  check_foo                      CHECK            CHECK ((foo > 2))        true
+dupe_generated  check_foo1                     CHECK            CHECK ((foo < 10))       true
+dupe_generated  check_foo2                     CHECK            CHECK ((foo > 1))        true
+dupe_generated  dupe_generated_pkey            PRIMARY KEY      PRIMARY KEY (rowid ASC)  true
+dupe_generated  dupe_generated_rowid_not_null  NOT NULL         NOT NULL                 true
+
+statement ok
+CREATE TABLE test.named_constraints (
+  id        INT CONSTRAINT pk PRIMARY KEY,
+  name      VARCHAR CONSTRAINT nn NOT NULL,
+  title     VARCHAR  CONSTRAINT def DEFAULT 'VP of Something',
+  nickname  STRING CONSTRAINT ck1 CHECK (length(nickname) < 10),
+  username  STRING(10) CONSTRAINT nl NULL,
+  email     VARCHAR(100) CONSTRAINT uq UNIQUE,
+  INDEX foo (name),
+  CONSTRAINT uq2 UNIQUE (username),
+  CONSTRAINT ck2 CHECK (length(nickname) < length(name)),
+  UNIQUE INDEX bar (id, name),
+  FAMILY "primary" (id, name),
+  FAMILY fam_1_title (title),
+  FAMILY fam_2_nickname (nickname),
+  FAMILY fam_3_username_email (username, email)
+)
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE test.named_constraints
+----
+test.public.named_constraints  CREATE TABLE public.named_constraints (
+                                 id INT8 NOT NULL,
+                                 name VARCHAR NOT NULL,
+                                 title VARCHAR NULL DEFAULT 'VP of Something':::STRING,
+                                 nickname STRING NULL,
+                                 username STRING(10) NULL,
+                                 email VARCHAR(100) NULL,
+                                 CONSTRAINT pk PRIMARY KEY (id ASC),
+                                 UNIQUE INDEX uq (email ASC),
+                                 INDEX foo (name ASC),
+                                 UNIQUE INDEX uq2 (username ASC),
+                                 UNIQUE INDEX bar (id ASC, name ASC),
+                                 FAMILY "primary" (id, name),
+                                 FAMILY fam_1_title (title),
+                                 FAMILY fam_2_nickname (nickname),
+                                 FAMILY fam_3_username_email (username, email),
+                                 CONSTRAINT ck2 CHECK (length(nickname) < length(name)),
+                                 CONSTRAINT ck1 CHECK (length(nickname) < 10:::INT8)
+                               );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE test.named_constraints
+----
+test.public.named_constraints  CREATE TABLE public.named_constraints (
+                                 id INT8 NOT NULL,
+                                 name VARCHAR NOT NULL,
+                                 title VARCHAR NULL DEFAULT 'VP of Something':::STRING,
+                                 nickname STRING NULL,
+                                 username STRING(10) NULL,
+                                 email VARCHAR(100) NULL,
+                                 CONSTRAINT pk PRIMARY KEY (id ASC),
+                                 UNIQUE INDEX uq (email ASC),
+                                 INDEX foo (name ASC),
+                                 UNIQUE INDEX uq2 (username ASC),
+                                 UNIQUE INDEX bar (id ASC, name ASC),
+                                 FAMILY "primary" (id, name),
+                                 FAMILY fam_1_title (title),
+                                 FAMILY fam_2_nickname (nickname),
+                                 FAMILY fam_3_username_email (username, email),
+                                 CONSTRAINT ck2 CHECK (length(nickname) < length(name)),
+                                 CONSTRAINT ck1 CHECK (length(nickname) < 10:::INT8)
+                               ) WITH (schema_locked = true);
+
+query TTTTB colnames
+SELECT * FROM [SHOW CONSTRAINTS FROM test.named_constraints] ORDER BY constraint_name
+----
+table_name         constraint_name                  constraint_type  details                                    validated
+named_constraints  bar                              UNIQUE           UNIQUE (id ASC, name ASC)                  true
+named_constraints  ck1                              CHECK            CHECK ((length(nickname) < 10))            true
+named_constraints  ck2                              CHECK            CHECK ((length(nickname) < length(name)))  true
+named_constraints  named_constraints_id_not_null    NOT NULL         NOT NULL                                   true
+named_constraints  named_constraints_name_not_null  NOT NULL         NOT NULL                                   true
+named_constraints  pk                               PRIMARY KEY      PRIMARY KEY (id ASC)                       true
+named_constraints  uq                               UNIQUE           UNIQUE (email ASC)                         true
+named_constraints  uq2                              UNIQUE           UNIQUE (username ASC)                      true
+
+statement error duplicate constraint name: "pk"
+CREATE TABLE test.dupe_named_constraints (
+  id        INT CONSTRAINT pk PRIMARY KEY,
+  title     VARCHAR CONSTRAINT one CHECK (1>1),
+  name      VARCHAR CONSTRAINT pk UNIQUE
+)
+
+statement error duplicate constraint name: "one"
+CREATE TABLE test.dupe_named_constraints (
+  id        INT CONSTRAINT pk PRIMARY KEY,
+  title     VARCHAR CONSTRAINT one CHECK (1>1),
+  name      VARCHAR CONSTRAINT one UNIQUE
+)
+
+statement error duplicate constraint name: "one"
+CREATE TABLE test.dupe_named_constraints (
+  id        INT CONSTRAINT pk PRIMARY KEY,
+  title     VARCHAR CONSTRAINT one CHECK (1>1),
+  name      VARCHAR CONSTRAINT one REFERENCES test.named_constraints (username),
+  INDEX (name)
+)
+
+statement error duplicate constraint name: "one"
+CREATE TABLE test.dupe_named_constraints (
+  id        INT CONSTRAINT pk PRIMARY KEY,
+  title     VARCHAR CONSTRAINT one CHECK (1>1) CONSTRAINT one CHECK (1<1)
+)
+
+statement ok
+SET database = test
+
+statement ok
+CREATE TABLE alltypes (
+  cbigint BIGINT,
+  cbigserial BIGSERIAL,
+  cblob BLOB,
+  cbool BOOL,
+  cbit BIT,
+  cbit12 BIT(12),
+  cvarbit VARBIT,
+  cvarbit12 VARBIT(12),
+  cbytea BYTEA,
+  cbytes BYTES,
+  cchar CHAR,
+  cchar12 CHAR(12),
+  cdate DATE,
+  cdec DEC,
+  cdec1 DEC(1),
+  cdec21 DEC(2,1),
+  cdecimal DECIMAL,
+  cdecimal1 DECIMAL(1),
+  cdecimal21 DECIMAL(2,1),
+  cdoubleprecision DOUBLE PRECISION,
+  cfloat FLOAT,
+  cfloat4 FLOAT4,
+  cfloat8 FLOAT8,
+  cint INT,
+  cint2 INT2,
+  cint4 INT4,
+  cint64 INT64,
+  cint8 INT8,
+  cinteger INTEGER,
+  cinterval INTERVAL,
+  cjson JSONB,
+  cnumeric NUMERIC,
+  cnumeric1 NUMERIC(1),
+  cnumeric21 NUMERIC(2,1),
+  cqchar "char",
+  creal REAL,
+  cserial SERIAL,
+  csmallint SMALLINT,
+  csmallserial SMALLSERIAL,
+  cstring STRING,
+  cstring12 STRING(12),
+  ctext TEXT,
+  ctimestamp TIMESTAMP,
+  ctimestampwtz TIMESTAMPTZ,
+  cvarchar VARCHAR,
+  cvarchar12 VARCHAR(12)
+  )
+
+query TTBTTTB colnames,rowsort
+SHOW COLUMNS FROM alltypes
+----
+column_name       data_type     is_nullable  column_default  generation_expression  indices          is_hidden
+cbigint           INT8          true         NULL            ·                      {alltypes_pkey}  false
+cbigserial        INT8          false        unique_rowid()  ·                      {alltypes_pkey}  false
+cblob             BYTES         true         NULL            ·                      {alltypes_pkey}  false
+cbool             BOOL          true         NULL            ·                      {alltypes_pkey}  false
+cbit              BIT           true         NULL            ·                      {alltypes_pkey}  false
+cbit12            BIT(12)       true         NULL            ·                      {alltypes_pkey}  false
+cvarbit           VARBIT        true         NULL            ·                      {alltypes_pkey}  false
+cvarbit12         VARBIT(12)    true         NULL            ·                      {alltypes_pkey}  false
+cbytea            BYTES         true         NULL            ·                      {alltypes_pkey}  false
+cbytes            BYTES         true         NULL            ·                      {alltypes_pkey}  false
+cchar             CHAR          true         NULL            ·                      {alltypes_pkey}  false
+cchar12           CHAR(12)      true         NULL            ·                      {alltypes_pkey}  false
+cdate             DATE          true         NULL            ·                      {alltypes_pkey}  false
+cdec              DECIMAL       true         NULL            ·                      {alltypes_pkey}  false
+cdec1             DECIMAL(1)    true         NULL            ·                      {alltypes_pkey}  false
+cdec21            DECIMAL(2,1)  true         NULL            ·                      {alltypes_pkey}  false
+cdecimal          DECIMAL       true         NULL            ·                      {alltypes_pkey}  false
+cdecimal1         DECIMAL(1)    true         NULL            ·                      {alltypes_pkey}  false
+cdecimal21        DECIMAL(2,1)  true         NULL            ·                      {alltypes_pkey}  false
+cdoubleprecision  FLOAT8        true         NULL            ·                      {alltypes_pkey}  false
+cfloat            FLOAT8        true         NULL            ·                      {alltypes_pkey}  false
+cfloat4           FLOAT4        true         NULL            ·                      {alltypes_pkey}  false
+cfloat8           FLOAT8        true         NULL            ·                      {alltypes_pkey}  false
+cint              INT8          true         NULL            ·                      {alltypes_pkey}  false
+cint2             INT2          true         NULL            ·                      {alltypes_pkey}  false
+cint4             INT4          true         NULL            ·                      {alltypes_pkey}  false
+cint64            INT8          true         NULL            ·                      {alltypes_pkey}  false
+cint8             INT8          true         NULL            ·                      {alltypes_pkey}  false
+cinteger          INT8          true         NULL            ·                      {alltypes_pkey}  false
+cinterval         INTERVAL      true         NULL            ·                      {alltypes_pkey}  false
+cjson             JSONB         true         NULL            ·                      {alltypes_pkey}  false
+cnumeric          DECIMAL       true         NULL            ·                      {alltypes_pkey}  false
+cnumeric1         DECIMAL(1)    true         NULL            ·                      {alltypes_pkey}  false
+cnumeric21        DECIMAL(2,1)  true         NULL            ·                      {alltypes_pkey}  false
+cqchar            "char"        true         NULL            ·                      {alltypes_pkey}  false
+creal             FLOAT4        true         NULL            ·                      {alltypes_pkey}  false
+cserial           INT8          false        unique_rowid()  ·                      {alltypes_pkey}  false
+csmallint         INT2          true         NULL            ·                      {alltypes_pkey}  false
+csmallserial      INT8          false        unique_rowid()  ·                      {alltypes_pkey}  false
+cstring           STRING        true         NULL            ·                      {alltypes_pkey}  false
+cstring12         STRING(12)    true         NULL            ·                      {alltypes_pkey}  false
+ctext             STRING        true         NULL            ·                      {alltypes_pkey}  false
+ctimestamp        TIMESTAMP     true         NULL            ·                      {alltypes_pkey}  false
+ctimestampwtz     TIMESTAMPTZ   true         NULL            ·                      {alltypes_pkey}  false
+cvarchar          VARCHAR       true         NULL            ·                      {alltypes_pkey}  false
+cvarchar12        VARCHAR(12)   true         NULL            ·                      {alltypes_pkey}  false
+rowid             INT8          false        unique_rowid()  ·                      {alltypes_pkey}  true
+
+statement ok
+CREATE DATABASE IF NOT EXISTS smtng
+
+statement ok
+CREATE TABLE IF NOT EXISTS smtng.something (
+ID SERIAL PRIMARY KEY
+)
+
+statement ok
+ALTER TABLE smtng.something ADD COLUMN IF NOT EXISTS OWNER_ID INT
+
+statement ok
+ALTER TABLE smtng.something ADD COLUMN IF NOT EXISTS MODEL_ID INT
+
+statement ok
+ALTER TABLE smtng.something ADD COLUMN IF NOT EXISTS NAME STRING
+
+statement ok
+CREATE DATABASE IF NOT EXISTS smtng
+
+statement ok
+CREATE TABLE IF NOT EXISTS smtng.something (
+ID SERIAL PRIMARY KEY
+)
+
+statement ok
+ALTER TABLE smtng.something ADD COLUMN IF NOT EXISTS OWNER_ID INT
+
+statement ok
+ALTER TABLE smtng.something ADD COLUMN IF NOT EXISTS MODEL_ID INT
+
+statement ok
+ALTER TABLE smtng.something ADD COLUMN IF NOT EXISTS NAME STRING
+
+# Regression test for #13725
+statement ok
+CREATE TABLE test.empty ()
+
+statement ok
+SELECT * FROM test.empty
+
+# Issue #14308: support tables with DEFAULT NULL columns.
+statement disable-cf-mutator ok
+CREATE TABLE test.null_default (
+  ts timestamp NULL DEFAULT NULL
+)
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE test.null_default
+----
+test.public.null_default  CREATE TABLE public.null_default (
+                            ts TIMESTAMP NULL,
+                            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                            CONSTRAINT null_default_pkey PRIMARY KEY (rowid ASC)
+                         );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE test.null_default
+----
+test.public.null_default  CREATE TABLE public.null_default (
+                            ts TIMESTAMP NULL,
+                            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                            CONSTRAINT null_default_pkey PRIMARY KEY (rowid ASC)
+                          ) WITH (schema_locked = true);
+
+# Issue #13873: don't permit invalid default columns
+statement error could not parse "blah" as type decimal
+CREATE TABLE test.t1 (a DECIMAL DEFAULT (DECIMAL 'blah'));
+
+statement error could not parse "blah" as type decimal
+create table test.t1 (c decimal default if(false, 1, 'blah'::decimal));
+
+statement ok
+CREATE DATABASE a; CREATE TABLE a.c(d INT); INSERT INTO a.public.c(d) VALUES (1)
+
+query I
+SELECT a.public.c.d FROM a.public.c
+----
+1
+
+statement ok
+CREATE TABLE t0 (a INT)
+
+statement ok
+GRANT ALL ON t0 to testuser
+
+statement ok
+CREATE DATABASE rowtest
+
+statement ok
+GRANT ALL ON DATABASE rowtest TO testuser
+
+user testuser
+
+statement ok
+SET DATABASE = rowtest
+
+statement ok
+CREATE TABLE t1 (a INT)
+
+statement ok
+INSERT INTO t1 SELECT a FROM generate_series(1, 1024) AS a(a)
+
+# only tables from current database
+query TTTTIT
+SHOW TABLES
+----
+public  t1  table  testuser  0  NULL
+
+# see only virtual tables (estimated_row_count is NULL)
+# and tables testuser has access to (estimated_row_count >= 0); restrict the 
+# virtual tables (very large IDs) to just table_row_statistics to avoid
+# enumerating the whole set.
+query TI rowsort
+select table_name, estimated_row_count from crdb_internal.table_row_statistics
+  WHERE table_id < 1000 OR table_name = 'table_row_statistics'; 
+----
+table_row_statistics  NULL
+t1                    0
+
+statement ok
+ANALYZE t1
+
+query I
+SELECT estimated_row_count FROM [SHOW TABLES] where table_name = 't1'
+----
+1024
+
+statement count 24
+DELETE FROM rowtest.t1 WHERE a > 1000;
+
+statement ok
+ANALYZE rowtest.t1
+
+query I
+SELECT estimated_row_count FROM [SHOW TABLES from rowtest] where table_name = 't1'
+----
+1000
+
+# Tests that the collections cache is properly invalidated when uncommitted
+# descriptors are added as observed in #75825.
+subtest collection-improper-release
+
+statement ok
+BEGIN;
+CREATE TABLE tblmodified (price INT8, quantity INT8);
+ALTER TABLE tblmodified ADD CONSTRAINT quan_check CHECK (quantity > 0);
+ALTER TABLE tblmodified ADD CONSTRAINT pr_check CHECK (price > 0);
+
+# Check out the descriptor for tblmodified under the all descriptors cache,
+query TTB
+SELECT conname,
+       pg_get_constraintdef(c.oid) AS constraintdef,
+       c.convalidated AS valid
+  FROM pg_constraint AS c JOIN pg_class AS t ON c.conrelid = t.oid
+ WHERE c.contype = 'c' AND t.relname = 'tblmodified' ORDER BY conname ASC;
+----
+pr_check    CHECK ((price > 0))     true
+quan_check  CHECK ((quantity > 0))  true
+
+# Descriptor is modified, so the cache should be invalidated.
+statement ok
+ALTER TABLE tblmodified DROP CONSTRAINT quan_check;
+
+# If the cache is properly invalidated then we should only see a single
+# constraint.
+query TTB
+SELECT conname,
+       pg_get_constraintdef(c.oid) AS constraintdef,
+       c.convalidated AS valid
+  FROM pg_constraint AS c JOIN pg_class AS t ON c.conrelid = t.oid
+ WHERE c.contype = 'c' AND t.relname = 'tblmodified' ORDER BY conname ASC;
+----
+pr_check    CHECK ((price > 0))     true
+
+statement ok
+COMMIT;
+
+subtest end
+
+# Test that partial statistics are filtered out from table_row_statistics
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY)
+
+statement ok
+INSERT INTO t SELECT generate_series(0, 9)
+
+statement ok
+ANALYZE t
+
+statement ok
+CREATE STATISTICS partial FROM t USING EXTREMES
+
+query I
+SELECT estimated_row_count FROM crdb_internal.table_row_statistics WHERE table_name = 't'
+----
+10
+
+subtest lock_table
+
+# LOCK TABLE is not supported by default.
+statement error pgcode 0A000 LOCK TABLE is not supported
+LOCK TABLE t IN ACCESS SHARE MODE
+
+# Bare LOCK (without IN ... MODE) is also not supported by default.
+statement error pgcode 0A000 LOCK TABLE is not supported
+LOCK t
+
+statement ok
+SET pg_dump_compatibility = 'postgres'
+
+# LOCK TABLE is a no-op when pg_dump_compatibility is enabled.
+statement ok
+LOCK TABLE t IN ACCESS SHARE MODE
+
+# Multiple tables work too (pg_dump batches locks).
+statement ok
+LOCK TABLE t, pg_class IN ACCESS SHARE MODE
+
+# NOWAIT variant also works.
+statement ok
+LOCK TABLE t IN ACCESS SHARE MODE NOWAIT
+
+# All lock modes are accepted.
+statement ok
+LOCK TABLE t IN ROW SHARE MODE
+
+statement ok
+LOCK TABLE t IN ROW EXCLUSIVE MODE
+
+statement ok
+LOCK TABLE t IN SHARE UPDATE EXCLUSIVE MODE
+
+statement ok
+LOCK TABLE t IN SHARE MODE
+
+statement ok
+LOCK TABLE t IN SHARE ROW EXCLUSIVE MODE
+
+statement ok
+LOCK TABLE t IN EXCLUSIVE MODE
+
+statement ok
+LOCK TABLE t IN ACCESS EXCLUSIVE MODE
+
+# Bare LOCK (no IN ... MODE) defaults to ACCESS EXCLUSIVE.
+statement ok
+LOCK t
+
+# Bare LOCK with NOWAIT.
+statement ok
+LOCK t NOWAIT
+
+# TABLE keyword is optional.
+statement ok
+LOCK TABLE t
+
+statement ok
+SET pg_dump_compatibility = 'off'
+
+# Verify LOCK TABLE is rejected again after disabling compat mode.
+statement error pgcode 0A000 LOCK TABLE is not supported
+LOCK TABLE t IN ACCESS SHARE MODE
+
+subtest end

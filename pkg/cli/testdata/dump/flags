@@ -1,0 +1,38 @@
+sql
+create database t;
+create table t.f (x int, y int);
+insert into t.f values (42, 69)
+----
+INSERT 1
+
+dump t f --dump-mode=both
+----
+----
+CREATE TABLE public.f (
+	x INT8 NULL,
+	y INT8 NULL,
+	FAMILY "primary" (x, y, rowid)
+);
+
+INSERT INTO public.f (x, y) VALUES
+	(42, 69);
+----
+----
+
+dump t f --dump-mode=schema
+----
+CREATE TABLE public.f (
+	x INT8 NULL,
+	y INT8 NULL,
+	FAMILY "primary" (x, y, rowid)
+);
+
+dump t f --dump-mode=data
+noroundtrip
+----
+----
+
+INSERT INTO public.f (x, y) VALUES
+	(42, 69);
+----
+----

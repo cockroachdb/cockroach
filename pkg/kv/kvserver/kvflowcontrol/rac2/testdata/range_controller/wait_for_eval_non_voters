@@ -1,0 +1,364 @@
+# This test exercises calling WaitForEval with a variety of replica sets which
+# include non-voters in various states.
+#
+# Initialize the test state with a single range, holding two voters and one
+# non-voter, all in StateReplicate. All streams will start with positive (1)
+# tokens.
+init regular_limit=1 regular_init=1 elastic_limit=1 elastic_init=1
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=1
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate next=1
+  store_id=3 replica_id=3 type=NON_VOTER  state=StateReplicate next=1
+----
+r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3NON_VOTER]
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s3: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+
+# Start a low priority evaluation 'a'. This should complete immediately as all
+# replicas have tokens.
+wait_for_eval name=a range_id=1 pri=LowPri
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=low-pri  done=true  waited=true  err=<nil>
+
+# Next, remove the elastic tokens from the non-voter and start another low
+# priority evaluation 'b'. This should not complete until the non-voter has
+# available tokens.
+adjust_tokens
+  store_id=3 pri=LowPri tokens=-1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s3: eval reg=+1 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+
+wait_for_eval name=b range_id=1 pri=LowPri
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=low-pri  done=true  waited=true  err=<nil>
+  name=b pri=low-pri  done=false waited=false err=<nil>
+
+# Now, add the elastic tokens back to the non-voter, the evaluation 'b' should
+# complete.
+adjust_tokens
+  store_id=3 pri=LowPri tokens=1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s3: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=low-pri  done=true  waited=true  err=<nil>
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+
+# Next, ensure that WaitForEval correctly waits for a quorum of voting replicas
+# to have tokens, non-voting replicas should not count towards the quourum. 
+#
+# Add three more replicas to have 3 voters {s1,s2,s3} and 3 non-voters
+# {s4,s5,s6}. The voters, aside from the local replica, will be in
+# StateSnapshot and therefore not required to wait on for elastic work class
+# requests.
+set_replicas
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=1
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateSnapshot next=1
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateSnapshot next=1
+  store_id=4 replica_id=4 type=NON_VOTER  state=StateReplicate next=1
+  store_id=5 replica_id=5 type=NON_VOTER  state=StateReplicate next=1
+  store_id=6 replica_id=6 type=NON_VOTER  state=StateReplicate next=1
+----
+r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3,(n4,s4):4NON_VOTER,(n5,s5):5NON_VOTER,(n6,s6):6NON_VOTER]
+
+# Remove elastic tokens from all the replica streams.
+adjust_tokens
+  store_id=1 pri=LowPri tokens=-1
+  store_id=2 pri=LowPri tokens=-1
+  store_id=3 pri=LowPri tokens=-1
+  store_id=4 pri=LowPri tokens=-1
+  store_id=5 pri=LowPri tokens=-1
+  store_id=6 pri=LowPri tokens=-1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s2: eval reg=+1 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s3: eval reg=+1 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s4: eval reg=+1 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s5: eval reg=+1 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s6: eval reg=+1 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+
+# Start a low priority evaluation 'c'. This should not complete until: 
+# (1) The leader has elastic tokens (already true)
+# (2) The leaseholder has elastic tokens (already true)
+# (3) A quorum of voting replicas have elastic tokens and are in
+#     StateReplicate e.g., s1 + (s2|s3)
+# (4) All non-voting replicas in StateReplicate have elastic tokens
+wait_for_eval name=c range_id=1 pri=LowPri
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=low-pri  done=true  waited=true  err=<nil>
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=low-pri  done=false waited=false err=<nil>
+
+# Add the tokens back to the leader and leaseholder. This should not complete
+# the evaluation 'c'.
+adjust_tokens
+  store_id=1 pri=LowPri tokens=1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s2: eval reg=+1 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s3: eval reg=+1 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s4: eval reg=+1 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s5: eval reg=+1 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s6: eval reg=+1 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=low-pri  done=true  waited=true  err=<nil>
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=low-pri  done=false waited=false err=<nil>
+
+# Add tokens to the non-voting replicas. This shouldn't complete evaluation
+# 'c', because the range still lacks a quorum of voting replicas with available
+# tokens.
+adjust_tokens
+  store_id=4 pri=LowPri tokens=1
+  store_id=5 pri=LowPri tokens=1
+  store_id=6 pri=LowPri tokens=1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s2: eval reg=+1 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s3: eval reg=+1 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s4: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s5: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s6: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=low-pri  done=true  waited=true  err=<nil>
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=low-pri  done=false waited=false err=<nil>
+
+# Switch one of non-leader/leaseholder voting replicas to StateReplicate. The
+# evaluation 'c' should still not complete, because the switched voting replica
+# stream doesn't have tokens still.
+set_replicas
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=1
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate next=1
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateSnapshot next=1
+  store_id=4 replica_id=4 type=NON_VOTER  state=StateReplicate next=1
+  store_id=5 replica_id=5 type=NON_VOTER  state=StateReplicate next=1
+  store_id=6 replica_id=6 type=NON_VOTER  state=StateReplicate next=1
+----
+r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3,(n4,s4):4NON_VOTER,(n5,s5):5NON_VOTER,(n6,s6):6NON_VOTER]
+
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=low-pri  done=true  waited=true  err=<nil>
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=low-pri  done=false waited=false err=<nil>
+
+
+# Finally, add the tokens back to the voter and the evaluation 'c' should now
+# complete as there is a quorum of voting replicas with tokens.
+adjust_tokens
+  store_id=2 pri=LowPri tokens=1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s3: eval reg=+1 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s4: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s5: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s6: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=low-pri  done=true  waited=true  err=<nil>
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=low-pri  done=true  waited=true  err=<nil>
+
+# Next, we check that non-elastic work class requests are not blocked by the
+# presence of non-voting replicas in any way. Remove all tokens and start a high priority
+# evaluation 'd'.
+adjust_tokens
+  store_id=1 pri=HighPri tokens=-1
+  store_id=2 pri=HighPri tokens=-1
+  store_id=3 pri=LowPri  tokens=1
+  store_id=3 pri=HighPri tokens=-1
+  store_id=4 pri=HighPri tokens=-1
+  store_id=5 pri=HighPri tokens=-1
+  store_id=6 pri=HighPri tokens=-1
+----
+t1/s1: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s2: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s3: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s4: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s5: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s6: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+
+wait_for_eval name=d range_id=1 pri=HighPri
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=low-pri  done=true  waited=true  err=<nil>
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=low-pri  done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=false waited=false err=<nil>
+
+# Add the tokens back to the leader and leaseholder. This should not complete
+# the evaluation 'd'.
+adjust_tokens
+  store_id=1 pri=HighPri tokens=1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s2: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s3: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s4: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s5: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s6: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=low-pri  done=true  waited=true  err=<nil>
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=low-pri  done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=false waited=false err=<nil>
+
+# Add tokens back to all of the non-voting replicas. This should not complete
+# the evaluation 'd' because the non-voting replicas don't count towards
+# quorum.
+adjust_tokens
+  store_id=4 pri=HighPri tokens=1
+  store_id=5 pri=HighPri tokens=1
+  store_id=6 pri=HighPri tokens=1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s2: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s3: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s4: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s5: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s6: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=low-pri  done=true  waited=true  err=<nil>
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=low-pri  done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=false waited=false err=<nil>
+
+# Add tokens back the voting replica in StateSnapshot. Being in StateSnapshot,
+# it is not allowed to be part of the quorum.
+adjust_tokens
+  store_id=3 pri=HighPri tokens=1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s2: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s3: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s4: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s5: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s6: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=low-pri  done=true  waited=true  err=<nil>
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=low-pri  done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=false waited=false err=<nil>
+
+# Add tokens back to the voting replica in StateReplicate. This is sufficient
+# to complete evaluation 'd', as it completes a quorum (s1+s2/3).
+adjust_tokens
+  store_id=2 pri=HighPri tokens=1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s3: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s4: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s5: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s6: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=low-pri  done=true  waited=true  err=<nil>
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=low-pri  done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=true  waited=true  err=<nil>
+
+close_rcs
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=low-pri  done=true  waited=true  err=<nil>
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=low-pri  done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=true  waited=true  err=<nil>

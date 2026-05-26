@@ -1,0 +1,69 @@
+simple
+v1
+----
+voters=(1)
+1: StateProbe match=0 next=1 sentCommit=0 matchCommit=0
+
+simple
+v1
+----
+voters=(1)
+1: StateProbe match=0 next=1 sentCommit=0 matchCommit=0
+
+simple
+v2
+----
+voters=(1 2)
+1: StateProbe match=0 next=1 sentCommit=0 matchCommit=0
+2: StateProbe match=0 next=2 sentCommit=0 matchCommit=0
+
+simple
+l1
+----
+voters=(2) learners=(1)
+1: StateProbe match=0 next=1 sentCommit=0 matchCommit=0 learner
+2: StateProbe match=0 next=2 sentCommit=0 matchCommit=0
+
+simple
+l1
+----
+voters=(2) learners=(1)
+1: StateProbe match=0 next=1 sentCommit=0 matchCommit=0 learner
+2: StateProbe match=0 next=2 sentCommit=0 matchCommit=0
+
+simple
+r1
+----
+voters=(2)
+2: StateProbe match=0 next=2 sentCommit=0 matchCommit=0
+
+simple
+r1
+----
+voters=(2)
+2: StateProbe match=0 next=2 sentCommit=0 matchCommit=0
+
+simple
+v3
+----
+voters=(2 3)
+2: StateProbe match=0 next=2 sentCommit=0 matchCommit=0
+3: StateProbe match=0 next=7 sentCommit=0 matchCommit=0
+
+simple
+r3
+----
+voters=(2)
+2: StateProbe match=0 next=2 sentCommit=0 matchCommit=0
+
+simple
+r3
+----
+voters=(2)
+2: StateProbe match=0 next=2 sentCommit=0 matchCommit=0
+
+simple
+r4
+----
+voters=(2)
+2: StateProbe match=0 next=2 sentCommit=0 matchCommit=0

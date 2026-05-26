@@ -1,0 +1,257 @@
+# Tests MVCC gets where point/range keys have the same timestamp. This
+# shouldn't happen, but it's been seen to happen in randomized tests due to
+# faulty conflict checks.
+#
+#  T
+#  5                                                  o-----------o
+#  4                                          k4  l4  m4  n4
+#  3  a3 b3   oc3-d3--e3--f3--g3--h3--i3--j3--k3--l3--m3--n3--o3--op3 q3  r3
+#  2                  e2  f2  g2  h2
+#  1          o---------------o
+#     a   b   c   d   e   f   g   h   i   j   k   l   m   n   o   p   q   r
+run ok
+put k=e ts=2 v=e2
+put k=f ts=2 v=f2
+put k=g ts=2 v=g2
+put k=h ts=2 v=h2
+put k=a ts=3 v=a3
+put k=b ts=3 v=b3
+put k=c ts=3 v=c3
+put k=d ts=3 v=d3
+put k=e ts=3 v=e3
+put k=f ts=3 v=f3
+put k=g ts=3 v=g3
+put k=h ts=3 v=h3
+put k=i ts=3 v=i3
+put k=j ts=3 v=j3
+put k=k ts=3 v=k3
+put k=l ts=3 v=l3
+put k=m ts=3 v=m3
+put k=n ts=3 v=n3
+put k=o ts=3 v=o3
+put k=p ts=3 v=p3
+put k=q ts=3 v=q3
+put k=r ts=3 v=r3
+put k=k ts=4 v=k4
+put k=l ts=4 v=l4
+put k=m ts=4 v=m4
+put k=n ts=4 v=n4
+put_rangekey k=c end=g ts=1
+put_rangekey k=c end=p ts=3
+put_rangekey k=m end=p ts=5
+----
+>> at end:
+rangekey: {c-g}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {g-m}/[3.000000000,0=/<empty>]
+rangekey: {m-p}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+data: "a"/3.000000000,0 -> /BYTES/a3
+data: "b"/3.000000000,0 -> /BYTES/b3
+data: "c"/3.000000000,0 -> /BYTES/c3
+data: "d"/3.000000000,0 -> /BYTES/d3
+data: "e"/3.000000000,0 -> /BYTES/e3
+data: "e"/2.000000000,0 -> /BYTES/e2
+data: "f"/3.000000000,0 -> /BYTES/f3
+data: "f"/2.000000000,0 -> /BYTES/f2
+data: "g"/3.000000000,0 -> /BYTES/g3
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/3.000000000,0 -> /BYTES/h3
+data: "h"/2.000000000,0 -> /BYTES/h2
+data: "i"/3.000000000,0 -> /BYTES/i3
+data: "j"/3.000000000,0 -> /BYTES/j3
+data: "k"/4.000000000,0 -> /BYTES/k4
+data: "k"/3.000000000,0 -> /BYTES/k3
+data: "l"/4.000000000,0 -> /BYTES/l4
+data: "l"/3.000000000,0 -> /BYTES/l3
+data: "m"/4.000000000,0 -> /BYTES/m4
+data: "m"/3.000000000,0 -> /BYTES/m3
+data: "n"/4.000000000,0 -> /BYTES/n4
+data: "n"/3.000000000,0 -> /BYTES/n3
+data: "o"/3.000000000,0 -> /BYTES/o3
+data: "p"/3.000000000,0 -> /BYTES/p3
+data: "q"/3.000000000,0 -> /BYTES/q3
+data: "r"/3.000000000,0 -> /BYTES/r3
+
+# Run non-tombstone gets at all keys.
+run ok
+get k=c ts=5
+----
+get: "c" -> <no data>
+
+# Run tombstone gets at all keys.
+run ok
+get k=a ts=5 tombstones
+get k=b ts=5 tombstones
+get k=c ts=5 tombstones
+get k=d ts=5 tombstones
+get k=e ts=5 tombstones
+get k=f ts=5 tombstones
+get k=g ts=5 tombstones
+get k=h ts=5 tombstones
+get k=i ts=5 tombstones
+get k=j ts=5 tombstones
+get k=k ts=5 tombstones
+get k=l ts=5 tombstones
+get k=m ts=5 tombstones
+get k=n ts=5 tombstones
+get k=o ts=5 tombstones
+get k=p ts=5 tombstones
+get k=q ts=5 tombstones
+get k=r ts=5 tombstones
+----
+get: "a" -> /BYTES/a3 @3.000000000,0
+get: "b" -> /BYTES/b3 @3.000000000,0
+get: "c" -> /<empty> @3.000000000,0
+get: "d" -> /<empty> @3.000000000,0
+get: "e" -> /<empty> @3.000000000,0
+get: "f" -> /<empty> @3.000000000,0
+get: "g" -> /<empty> @3.000000000,0
+get: "h" -> /<empty> @3.000000000,0
+get: "i" -> /<empty> @3.000000000,0
+get: "j" -> /<empty> @3.000000000,0
+get: "k" -> /BYTES/k4 @4.000000000,0
+get: "l" -> /BYTES/l4 @4.000000000,0
+get: "m" -> /<empty> @5.000000000,0
+get: "n" -> /<empty> @5.000000000,0
+get: "o" -> /<empty> @5.000000000,0
+get: "p" -> /BYTES/p3 @3.000000000,0
+get: "q" -> /BYTES/q3 @3.000000000,0
+get: "r" -> /BYTES/r3 @3.000000000,0
+
+# Run tombstone gets at all keys and timestamps.
+run ok
+get k=c ts=3 tombstones
+get k=c ts=2 tombstones
+get k=c ts=1 tombstones
+----
+get: "c" -> /<empty> @3.000000000,0
+get: "c" -> /<empty> @1.000000000,0
+get: "c" -> /<empty> @1.000000000,0
+
+run ok
+get k=d ts=3 tombstones
+get k=d ts=2 tombstones
+get k=d ts=1 tombstones
+----
+get: "d" -> /<empty> @3.000000000,0
+get: "d" -> /<empty> @1.000000000,0
+get: "d" -> /<empty> @1.000000000,0
+
+run ok
+get k=e ts=3 tombstones
+get k=e ts=2 tombstones
+get k=e ts=1 tombstones
+----
+get: "e" -> /<empty> @3.000000000,0
+get: "e" -> /BYTES/e2 @2.000000000,0
+get: "e" -> /<empty> @1.000000000,0
+
+run ok
+get k=f ts=3 tombstones
+get k=f ts=2 tombstones
+get k=f ts=1 tombstones
+----
+get: "f" -> /<empty> @3.000000000,0
+get: "f" -> /BYTES/f2 @2.000000000,0
+get: "f" -> /<empty> @1.000000000,0
+
+run ok
+get k=g ts=3 tombstones
+get k=g ts=2 tombstones
+get k=g ts=1 tombstones
+----
+get: "g" -> /<empty> @3.000000000,0
+get: "g" -> /BYTES/g2 @2.000000000,0
+get: "g" -> <no data>
+
+run ok
+get k=h ts=3 tombstones
+get k=h ts=2 tombstones
+get k=h ts=1 tombstones
+----
+get: "h" -> /<empty> @3.000000000,0
+get: "h" -> /BYTES/h2 @2.000000000,0
+get: "h" -> <no data>
+
+run ok
+get k=i ts=3 tombstones
+get k=i ts=2 tombstones
+get k=i ts=1 tombstones
+----
+get: "i" -> /<empty> @3.000000000,0
+get: "i" -> <no data>
+get: "i" -> <no data>
+
+run ok
+get k=j ts=3 tombstones
+get k=j ts=2 tombstones
+get k=j ts=1 tombstones
+----
+get: "j" -> /<empty> @3.000000000,0
+get: "j" -> <no data>
+get: "j" -> <no data>
+
+run ok
+get k=k ts=5 tombstones
+get k=k ts=4 tombstones
+get k=k ts=3 tombstones
+get k=k ts=2 tombstones
+----
+get: "k" -> /BYTES/k4 @4.000000000,0
+get: "k" -> /BYTES/k4 @4.000000000,0
+get: "k" -> /<empty> @3.000000000,0
+get: "k" -> <no data>
+
+run ok
+get k=l ts=5 tombstones
+get k=l ts=4 tombstones
+get k=l ts=3 tombstones
+get k=l ts=2 tombstones
+----
+get: "l" -> /BYTES/l4 @4.000000000,0
+get: "l" -> /BYTES/l4 @4.000000000,0
+get: "l" -> /<empty> @3.000000000,0
+get: "l" -> <no data>
+
+run ok
+get k=m ts=5 tombstones
+get k=m ts=4 tombstones
+get k=m ts=3 tombstones
+get k=m ts=2 tombstones
+----
+get: "m" -> /<empty> @5.000000000,0
+get: "m" -> /BYTES/m4 @4.000000000,0
+get: "m" -> /<empty> @3.000000000,0
+get: "m" -> <no data>
+
+run ok
+get k=n ts=5 tombstones
+get k=n ts=4 tombstones
+get k=n ts=3 tombstones
+get k=n ts=2 tombstones
+----
+get: "n" -> /<empty> @5.000000000,0
+get: "n" -> /BYTES/n4 @4.000000000,0
+get: "n" -> /<empty> @3.000000000,0
+get: "n" -> <no data>
+
+run ok
+get k=o ts=5 tombstones
+get k=o ts=4 tombstones
+get k=o ts=3 tombstones
+get k=o ts=2 tombstones
+----
+get: "o" -> /<empty> @5.000000000,0
+get: "o" -> /<empty> @3.000000000,0
+get: "o" -> /<empty> @3.000000000,0
+get: "o" -> <no data>
+
+run ok
+get k=p ts=5 tombstones
+get k=p ts=4 tombstones
+get k=p ts=3 tombstones
+get k=p ts=2 tombstones
+----
+get: "p" -> /BYTES/p3 @3.000000000,0
+get: "p" -> /BYTES/p3 @3.000000000,0
+get: "p" -> /BYTES/p3 @3.000000000,0
+get: "p" -> <no data>

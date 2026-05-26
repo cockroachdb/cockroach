@@ -1,0 +1,19 @@
+run ok
+put k=k v=v ts=1
+----
+>> at end:
+data: "k"/1.000000000,0 -> /BYTES/v
+
+run error
+get k=k ts=-1
+----
+get: "k" -> <no data>
+error: (*withstack.withStack:) cannot write to "k" at timestamp -1.000000000,0
+
+
+run error
+put k=k v=v ts=-1
+----
+>> at end:
+data: "k"/1.000000000,0 -> /BYTES/v
+error: (*withstack.withStack:) cannot write to "k" at timestamp -1.000000000,0

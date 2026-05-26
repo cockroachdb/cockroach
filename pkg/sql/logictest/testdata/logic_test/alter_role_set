@@ -1,0 +1,433 @@
+statement ok
+CREATE ROLE test_set_role;
+CREATE DATABASE test_set_db
+
+query OTT
+SELECT database_id, role_name, settings FROM system.database_role_settings
+----
+
+statement ok
+ALTER ROLE test_set_role SET application_name = 'a';
+ALTER ROLE test_set_role IN DATABASE test_set_db SET application_name = 'b';
+ALTER ROLE ALL IN DATABASE test_set_db SET application_name = 'c';
+ALTER ROLE ALL SET application_name = 'd';
+ALTER ROLE test_set_role SET custom_option.setting = 'e'
+
+# Verify that the defaults were stored.
+query OTT colnames
+SELECT database_id, role_name, settings FROM system.database_role_settings ORDER BY 1, 2
+----
+database_id  role_name      settings
+0            ·              {application_name=d}
+0            test_set_role  {application_name=a,custom_option.setting=e}
+106          ·              {application_name=c}
+106          test_set_role  {application_name=b}
+
+# Defaults should be in pg_catalog too.
+query OOTTT colnames
+SELECT setdatabase, setrole, d.datname, r.rolname, setconfig
+FROM pg_catalog.pg_db_role_setting
+LEFT JOIN pg_catalog.pg_database d ON setdatabase = d.oid
+LEFT JOIN pg_catalog.pg_roles r ON setrole = r.oid
+ORDER BY 1, 2
+----
+setdatabase  setrole    datname      rolname        setconfig
+0            0          NULL         NULL           {application_name=d}
+0            265380634  NULL         test_set_role  {application_name=a,custom_option.setting=e}
+106          0          test_set_db  NULL           {application_name=c}
+106          265380634  test_set_db  test_set_role  {application_name=b}
+
+statement ok
+ALTER ROLE test_set_role SET backslash_quote = 'safe_encoding'
+
+# Verify that a new setting was added in the array.
+query T
+SELECT settings FROM system.database_role_settings
+WHERE database_id = 0 AND role_name = 'test_set_role'
+----
+{application_name=a,custom_option.setting=e,backslash_quote=safe_encoding}
+
+statement ok
+ALTER ROLE test_set_role SET application_name = 'f'
+
+# Verify that the existing setting was updated in the array.
+query T
+SELECT settings FROM system.database_role_settings
+WHERE database_id = 0 AND role_name = 'test_set_role'
+----
+{custom_option.setting=e,backslash_quote=safe_encoding,application_name=f}
+
+statement ok
+ALTER ROLE test_set_role SET serial_normalization = 'sql_sequence';
+ALTER ROLE test_set_role RESET application_name
+
+# Verify that the existing setting was removed from the array.
+query T
+SELECT settings FROM system.database_role_settings
+WHERE database_id = 0 AND role_name = 'test_set_role'
+----
+{custom_option.setting=e,backslash_quote=safe_encoding,serial_normalization=sql_sequence}
+
+# Resetting something that isn't there anymore is fine.
+statement ok
+ALTER ROLE test_set_role RESET application_name
+
+# Setting for a role that does not exist should error
+statement error "fake_role" does not exist
+ALTER ROLE fake_role SET application_name = 'e';
+
+# Setting for a role that does not exist works with IF EXISTS,
+statement ok
+ALTER ROLE IF EXISTS fake_role SET application_name = 'e';
+
+# Setting for a database that does not exist should error.
+statement error database "fake_database" does not exist
+ALTER ROLE IF EXISTS fake_role IN DATABASE fake_database SET application_name = 'e';
+
+# Test setting a variable that does not exist.
+statement error unrecognized configuration parameter "potato"
+ALTER ROLE test_set_role SET potato = 'potato'
+
+# Test *resetting* a variable that does not exist; it should work
+statement ok
+ALTER ROLE test_set_role RESET potato;
+ALTER ROLE test_set_role SET potato TO DEFAULT;
+
+# Test setting a variable to an invalid value.
+statement error invalid value for parameter "serial_normalization": "potato"
+ALTER ROLE test_set_role SET serial_normalization = 'potato'
+
+# Test setting a compat-only variable to an invalid value.
+statement error invalid value for parameter "backslash_quote": "off"
+ALTER ROLE test_set_role SET backslash_quote = 'off'
+
+# Test a setting that does not have a `Set` function defined.
+statement error parameter "integer_datetimes" cannot be changed
+ALTER ROLE test_set_role SET integer_datetimes = 'on'
+
+# Test a setting that does not have a `Set` function defined, but does have
+# `RuntimeSet` defined.
+statement error parameter "transaction_isolation" cannot be changed
+ALTER ROLE test_set_role SET transaction_isolation = 'serializable'
+
+# Verify that the `database` and `role` variables cannot be set.
+statement error parameter "database" cannot be changed
+ALTER ROLE test_set_role SET database = 'd'
+
+statement error parameter "role" cannot be changed
+ALTER ROLE test_set_role SET role = 'd'
+
+# Test setting with a name of "".
+statement error invalid variable name: ""
+ALTER ROLE test_set_role SET "" = 'foo'
+
+query T
+SELECT current_user()
+----
+root
+
+# Verify that the admin role can't be edited, even as root.
+statement error cannot edit admin role
+ALTER ROLE admin SET application_name = 'g'
+
+# Verify that the root user can't be edited, even as root.
+statement error cannot edit root user
+ALTER ROLE root SET application_name = 'g'
+
+# Verify that the public role can't be edited.
+statement error cannot edit public role
+ALTER ROLE public SET application_name = 'g'
+
+# Verify that the "" role can't be edited.
+statement error no username specified
+ALTER ROLE "" SET application_name = 'g'
+
+# Verify that root is allowed to edit some other role that has ADMIN.
+statement ok
+CREATE ROLE other_admin;
+GRANT admin TO other_admin;
+ALTER ROLE other_admin SET application_name = 'g';
+ALTER ROLE other_admin RESET application_name
+
+user testuser
+
+# Verify that testuser can't edit their own defaults.
+statement error pq: ALTER ROLE ... SET requires MODIFYCLUSTERSETTING, MODIFYSQLCLUSTERSETTING or CREATEROLE
+ALTER ROLE testuser RESET application_name
+
+# Verify users with MODIFYCLUSTERSETTING can ALTER ROLE SET
+user root
+
+statement ok
+GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser
+
+user testuser
+
+statement ok
+ALTER ROLE testuser RESET application_name
+
+user root
+
+statement ok
+REVOKE SYSTEM MODIFYCLUSTERSETTING FROM testuser
+
+# Verify users with MODIFYSQLCLUSTERSETTING can ALTER ROLE SET
+statement ok
+GRANT SYSTEM MODIFYSQLCLUSTERSETTING TO testuser
+
+user testuser
+
+statement ok
+ALTER ROLE testuser RESET application_name
+
+user root
+
+statement ok
+REVOKE SYSTEM MODIFYSQLCLUSTERSETTING FROM testuser
+
+
+# Verify users with the MODIFYCLUSTERSETTING role option can also ALTER ROLE SET
+statement ok
+ALTER ROLE testuser with MODIFYCLUSTERSETTING
+
+user testuser
+
+statement ok
+ALTER ROLE testuser RESET application_name
+
+user root
+
+statement ok
+ALTER ROLE testuser WITH NOMODIFYCLUSTERSETTING
+
+statement ok
+ALTER ROLE testuser WITH CREATEROLE
+
+user testuser
+
+# Now that testuser has CREATEROLE, it can edit itself.
+statement ok
+ALTER ROLE testuser RESET application_name
+
+# Now that testuser has CREATEROLE, it can also edit test_set_role.
+statement ok
+ALTER ROLE test_set_role RESET application_name
+
+# However, even with CREATEROLE, testuser cannot do RESET ALL.
+statement error only users with the admin role or the owner of the database is allowed to ALTER ROLE ALL IN DATABASE SET ..
+ALTER ROLE ALL IN DATABASE test_set_db RESET application_name
+
+# Verify that testuser can't edit an ADMIN, even after getting CREATEROLE.
+statement error only users with the admin role are allowed to alter another admin
+ALTER ROLE other_admin SET application_name = 'abc'
+
+user root
+
+statement ok
+ALTER ROLE ALL RESET ALL
+
+# Verify that defaults were removed for (db_id=0, role_name="") but nothing else.
+query OTT colnames
+SELECT database_id, role_name, settings FROM system.database_role_settings ORDER BY 1, 2
+----
+database_id  role_name      settings
+0            test_set_role  {custom_option.setting=e,backslash_quote=safe_encoding,serial_normalization=sql_sequence}
+106          ·              {application_name=c}
+106          test_set_role  {application_name=b}
+
+statement ok
+DROP DATABASE test_set_db
+
+# Verify that the defaults were removed for the dropped database.
+query OTT colnames
+SELECT database_id, role_name, settings FROM system.database_role_settings ORDER BY 1, 2
+----
+database_id  role_name      settings
+0            test_set_role  {custom_option.setting=e,backslash_quote=safe_encoding,serial_normalization=sql_sequence}
+
+statement ok
+DROP ROLE test_set_role
+
+# Verify that the defaults were removed for the dropped role.
+query OTT colnames
+SELECT database_id, role_name, settings FROM system.database_role_settings ORDER BY 1, 2
+----
+database_id  role_name  settings
+
+# Regression test for the special "tracing" variable.
+query error parameter \"tracing\" cannot be changed
+ALTER ROLE ALL SET tracing = 'off'
+
+# Test that no-op alter role set command is actually no-op (i.e. does not perform schema change)
+subtest no_op_alter_role_set
+
+statement ok
+CREATE user roach
+
+statement ok
+ALTER ROLE roach SET timezone = 'America/New_York'
+
+statement ok
+ALTER ROLE roach SET use_declarative_schema_changer = 'off'
+
+statement ok
+ALTER ROLE roach SET statement_timeout = '10s'
+
+# Remember the current table version for `system.database_role_settings`.
+let $database_role_setttings_version
+SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->>'version' FROM system.descriptor WHERE id = 'system.public.database_role_settings'::REGCLASS
+
+# Issue a bunch no-op alter role set commands
+statement ok
+ALTER ROLE roach SET timezone = 'America/New_York'
+
+statement ok
+ALTER ROLE roach SET use_declarative_schema_changer = 'off'
+
+statement ok
+ALTER ROLE roach SET statement_timeout = '10s'
+
+statement ok
+ALTER ROLE roach RESET search_path
+
+# Check that the above no-op 'ALTER ROLE ... SET/RESET ...' commands did not incur schema change on
+# the 'database_role_settings' table by asserting its version remains unchanged.
+query B
+SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->>'version' = $database_role_setttings_version::STRING FROM system.descriptor WHERE id = 'system.public.database_role_settings'::REGCLASS
+----
+true
+
+# Test permissions for using SHOW DEFAULT SESSION VARIABLES FOR ROLE command
+user testuser
+
+statement error pq: only users with CREATEROLE, MODIFYCLUSTERSETTING or MODIFYSQLCLUSTERSETTING privileges are allowed to SHOW DEFAULT SESSION VARIABLES FOR ROLE
+SHOW DEFAULT SESSION VARIABLES FOR ROLE roach
+
+# Test that show default session variables for role works when role is specified
+user root
+
+statement ok
+ALTER USER testuser MODIFYCLUSTERSETTING
+
+statement ok
+GRANT admin TO testuser
+
+user testuser
+
+statement ok
+ALTER ROLE ALL SET application_name = 'c'
+
+query TTTB
+SELECT * FROM [SHOW DEFAULT SESSION VARIABLES FOR ROLE roach] ORDER BY 1, 2
+----
+application_name                c                 NULL  true
+statement_timeout               10s               NULL  true
+timezone                        America/New_York  NULL  true
+use_declarative_schema_changer  off               NULL  true
+
+# Test that show default session variables for role works for global default session variables
+statement ok
+CREATE DATABASE test_db
+
+statement ok
+ALTER ROLE ALL IN DATABASE test_db SET application_name = 'd'
+
+query TTT
+SELECT * FROM [SHOW DEFAULT SESSION VARIABLES FOR ROLE ALL] ORDER BY 1, 2
+----
+application_name   c   NULL
+application_name   d   test_db
+
+# Test that show default session variables for role woks for per-database defaults, as well as variable precedence
+query TTTB
+SELECT * FROM [SHOW DEFAULT SESSION VARIABLES FOR ROLE roach] ORDER BY 1, 2
+----
+application_name                c                  NULL     true
+application_name                d                  test_db  true
+statement_timeout               10s                NULL     true
+timezone                        America/New_York   NULL     true
+use_declarative_schema_changer  off                NULL     true
+
+statement ok
+ALTER ROLE roach SET application_name = 'e'
+
+query TTTB
+SELECT * FROM [SHOW DEFAULT SESSION VARIABLES FOR ROLE roach] ORDER BY 1, 2
+----
+application_name                e                  NULL     true
+statement_timeout               10s                NULL     true
+timezone                        America/New_York   NULL     true
+use_declarative_schema_changer  off                NULL     true
+
+statement ok
+ALTER ROLE roach IN DATABASE test_db SET application_name = 'f'
+
+query TTTB
+SELECT * FROM [SHOW DEFAULT SESSION VARIABLES FOR ROLE roach] ORDER BY 1, 2
+----
+application_name                e                  NULL     true
+application_name                f                  test_db  false
+statement_timeout               10s                NULL     true
+timezone                        America/New_York   NULL     true
+use_declarative_schema_changer  off                NULL     true
+
+# We shouldn't be able to leave the role unspecified
+statement error pq: at or near "]": syntax error
+SELECT * FROM [SHOW DEFAULT SESSION VARIABLES FOR ROLE]
+
+statement ok
+CREATE USER testuser2
+
+# Set owner to a user that is not admin.
+statement ok
+ALTER DATABASE test_db OWNER TO testuser2
+
+user testuser2
+
+# Verify that owner can set default session variables for a database.
+statement ok
+ALTER ROLE ALL IN DATABASE test_db SET application_name = 'abc'
+
+user root
+
+query TTT
+SELECT * FROM [SHOW DEFAULT SESSION VARIABLES FOR ROLE ALL] WHERE database='test_db' ORDER BY 1, 2
+----
+application_name    abc     test_db
+
+user testuser2
+
+# Verify that DB owner can reset default session variables for a database.
+statement ok
+ALTER ROLE ALL IN DATABASE test_db RESET application_name
+
+user root
+
+query TTT colnames
+SELECT * FROM [SHOW DEFAULT SESSION VARIABLES FOR ROLE ALL] WHERE database='test_db' ORDER BY 1, 2
+----
+session_variables  default_values  database
+
+statement ok
+CREATE DATABASE test_db2
+
+user testuser2
+
+# Verify that DB owner cannot set default session variables for a database that they do not own.
+statement error only users with the admin role or the owner of the database is allowed to ALTER ROLE ALL IN DATABASE SET
+ALTER ROLE ALL IN DATABASE test_db2 SET application_name = 'abc'
+
+user root
+
+statement ok
+DROP DATABASE test_db2
+
+user testuser2
+
+# Verify that DB owner cannot alter a specific role.
+statement error pq: ALTER ROLE ... SET requires MODIFYCLUSTERSETTING, MODIFYSQLCLUSTERSETTING or CREATEROLE
+ALTER ROLE roach IN DATABASE test_db SET application_name = 'abc'
+
+# Verify that DB owner cannot ALTER ROLE ALL.
+statement error pq: only users with the admin role are allowed to ALTER ROLE ALL ... SET
+ALTER ROLE ALL SET application_name = 'abc'

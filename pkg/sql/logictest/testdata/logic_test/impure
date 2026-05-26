@@ -1,0 +1,83 @@
+# This file contains tests for handling of duplicate impure projections.  See
+# #44865.
+
+query I
+WITH cte (a, b) AS (SELECT random(), random())
+SELECT count(*) FROM cte WHERE a = b
+----
+0
+
+query I
+WITH cte (x, a, b) AS (SELECT x, random(), random() FROM (VALUES (1), (2), (3)) AS v(x))
+SELECT count(*) FROM cte WHERE a = b
+----
+0
+
+statement ok
+CREATE TABLE kab (k INT PRIMARY KEY, a UUID, b UUID)
+
+statement ok
+INSERT INTO kab VALUES (1, gen_random_uuid(), gen_random_uuid())
+
+statement ok
+INSERT INTO kab VALUES (2, gen_random_uuid(), gen_random_uuid())
+
+statement ok
+INSERT INTO kab VALUES (3, gen_random_uuid(), gen_random_uuid()),
+                       (4, gen_random_uuid(), gen_random_uuid()),
+                       (5, gen_random_uuid(), gen_random_uuid()),
+                       (6, gen_random_uuid(), gen_random_uuid())
+
+query I
+SELECT count(*) FROM kab WHERE a=b
+----
+0
+
+statement ok
+CREATE TABLE kabc (k INT PRIMARY KEY, a UUID, b UUID)
+
+statement ok
+INSERT INTO kabc VALUES (1, uuid_generate_v4(), uuid_generate_v4())
+
+statement ok
+INSERT INTO kabc VALUES (2, uuid_generate_v4(), uuid_generate_v4())
+
+statement ok
+INSERT INTO kabc VALUES (3, uuid_generate_v4(), uuid_generate_v4()),
+                       (4, uuid_generate_v4(), uuid_generate_v4()),
+                       (5, uuid_generate_v4(), uuid_generate_v4()),
+                       (6, uuid_generate_v4(), uuid_generate_v4())
+
+query I
+SELECT count(*) FROM kabc WHERE a=b
+----
+0
+
+statement ok
+CREATE TABLE kabcd (
+  k INT PRIMARY KEY,
+  a UUID,
+  b UUID,
+  c UUID DEFAULT gen_random_uuid(),
+  d UUID DEFAULT gen_random_uuid(),
+  e UUID DEFAULT uuid_generate_v4(),
+  f UUID DEFAULT uuid_generate_v4()
+)
+
+statement ok
+INSERT INTO kabcd VALUES (1, gen_random_uuid(), uuid_generate_v4())
+
+statement ok
+INSERT INTO kabcd VALUES (2, gen_random_uuid(), uuid_generate_v4())
+
+statement ok
+INSERT INTO kabcd VALUES (3, gen_random_uuid(), uuid_generate_v4()),
+                         (4, gen_random_uuid(), uuid_generate_v4()),
+                         (5, gen_random_uuid(), uuid_generate_v4()),
+                         (6, gen_random_uuid(), uuid_generate_v4())
+
+query I
+SELECT count(*) FROM kabcd WHERE a=b OR a=c OR a=d OR a=e OR a=f
+OR b=c OR b=d OR b=e OR b=f OR c=d OR c=e OR c=f OR d=e OR d=f OR e=f
+----
+0

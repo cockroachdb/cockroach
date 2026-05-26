@@ -1,0 +1,39 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
+
+go_library(
+    name = "kvclient",
+    srcs = [
+        "node_store.go",
+        "placeholder.go",
+        "scan_meta.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvclient",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/roachpb",
+    ],
+)
+
+go_test(
+    name = "kvclient_test",
+    srcs = ["main_test.go"],
+    deps = [
+        "//pkg/base",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/randutil",
+    ],
+)
+
+disallowed_imports_test(
+    "kvclient",
+    disallowed_list = [
+        "//pkg/storage",
+    ],
+)

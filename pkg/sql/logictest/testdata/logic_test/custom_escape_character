@@ -1,0 +1,96 @@
+query B
+SELECT '%' LIKE 't%' ESCAPE CASE WHEN (SELECT '-A' SIMILAR TO '--A' ESCAPE '-') THEN 't' ELSE 'f' END
+----
+true
+
+query B
+SELECT '%' LIKE 't%' ESCAPE CASE WHEN (SELECT 'A' SIMILAR TO '-A' ESCAPE '') THEN 't' ELSE 'f' END
+----
+false
+
+query B
+SELECT '%bC' ILIKE 't%Bc' ESCAPE CASE WHEN (SELECT 'A' ILIKE '-a' ESCAPE '-') THEN 't' ELSE 'f' END
+----
+true
+
+query B
+SELECT 'A' LIKE '\A' ESCAPE '\'
+----
+true
+
+query B
+SELECT 'A' LIKE '\A' ESCAPE ''
+----
+false
+
+query B
+SELECT '%A' LIKE '_A' ESCAPE '%'
+----
+true
+
+query B
+SELECT '%A' LIKE '%A' ESCAPE '%'
+----
+false
+
+query B
+SELECT '%A' LIKE '%%A' ESCAPE '%'
+----
+true
+
+query B
+SELECT '春A' LIKE '春春_' ESCAPE '春'
+----
+true
+
+query error invalid escape string
+SELECT 'A' LIKE 'AA' ESCAPE 'AA'
+
+query error invalid escape string
+SELECT '春A' LIKE '春春_' ESCAPE '春春'
+
+query B
+SELECT 'A' SIMILAR TO '\A' ESCAPE '\'
+----
+false
+
+query B
+SELECT '\A' SIMILAR TO '\A' ESCAPE ''
+----
+true
+
+query B
+SELECT '%A' SIMILAR TO '_A' ESCAPE '%'
+----
+true
+
+query B
+SELECT '%A' SIMILAR TO '%A' ESCAPE '%'
+----
+false
+
+query B
+SELECT '123A_' SIMILAR TO '%A_' ESCAPE '_'
+----
+false
+
+query B
+SELECT '123A_' SIMILAR TO '%A__' ESCAPE '_'
+----
+true
+
+query B
+SELECT '春A' SIMILAR TO '春春_' ESCAPE '春'
+----
+true
+
+query B
+SELECT '春A_春春' SIMILAR TO '%_春_%' ESCAPE '春'
+----
+true
+
+query error invalid escape string
+SELECT 'A' SIMILAR TO 'AA' ESCAPE 'AA'
+
+query error invalid escape string
+SELECT '春A' SIMILAR TO '春春_' ESCAPE '春春'

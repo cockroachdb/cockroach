@@ -1,0 +1,22 @@
+# LogicTest: 3node-tenant
+
+# tenant-cluster-setting-override-opt: sql.virtual_cluster.feature_access.zone_configs_unrestricted.enabled=false
+
+# 'sql.zone_configs.allow_for_secondary_tenant.enabled' is enabled, but
+# 'sql.virtual_cluster.feature_access.zone_configs_unrestricted.enabled' is not,
+# so we should be able to modify zone configs except when modifying constraints
+# other than regions and zones.
+
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY);
+
+statement ok
+ALTER TABLE t CONFIGURE ZONE USING num_replicas = 5;
+
+# This statement was correctly allowed, but it failed during validation because
+# 3node-tenant config doesn't define locality information.
+statement error region "us-east1" not found
+ALTER TABLE t CONFIGURE ZONE USING constraints = '[+region=us-east1]';
+
+statement error operation is disabled within a virtual cluster
+ALTER TABLE t CONFIGURE ZONE USING constraints = '[+ssd]';

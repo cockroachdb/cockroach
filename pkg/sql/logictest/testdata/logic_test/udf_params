@@ -1,0 +1,978 @@
+subtest types
+
+statement error pgcode 42P13 pq: function result type must be specified
+CREATE FUNCTION f() AS $$ SELECT 1; $$ LANGUAGE SQL;
+
+statement error pgcode 42P13 pq: function result type must be int because of OUT parameters
+CREATE FUNCTION f(OUT param INT) RETURNS FLOAT AS $$ SELECT 1; $$ LANGUAGE SQL;
+
+statement error pgcode 42P13 pq: function result type must be record because of OUT parameters
+CREATE FUNCTION f(OUT param1 INT, OUT param2 INT) RETURNS INT AS $$ SELECT 1, 2; $$ LANGUAGE SQL;
+
+statement error pgcode 42P13 pq: function result type must be int because of OUT parameters
+CREATE FUNCTION f(OUT param INT) RETURNS VOID AS $$ SELECT 1; $$ LANGUAGE SQL;
+
+statement error pgcode 42P13 pq: function result type must be int because of OUT parameters
+CREATE FUNCTION f(OUT param INT) RETURNS RECORD AS $$ SELECT 1; $$ LANGUAGE SQL;
+
+statement error pgcode 42P13 SQL functions cannot have arguments of type VOID
+CREATE FUNCTION f(param VOID) RETURNS UUID LANGUAGE SQL AS $$ SELECT NULL $$;
+
+statement ok
+CREATE FUNCTION f(OUT param INT) RETURNS INT AS $$ SELECT 1; $$ LANGUAGE SQL;
+
+statement error pgcode 42809 f\(unknown\) is not a procedure
+CALL f(NULL);
+
+statement error pgcode 42809 f\(int\) is not a procedure
+CALL f(NULL::INT);
+
+statement error pgcode 42809 f\(int\) is not a procedure
+CALL f(1);
+
+statement ok
+DROP FUNCTION f;
+
+statement ok
+CREATE FUNCTION f(INOUT param1 INT, OUT param2 INT) RETURNS RECORD AS $$ SELECT 1, 2; $$ LANGUAGE SQL;
+
+statement ok
+DROP FUNCTION f;
+
+statement error pgcode 42P13 pq: return type mismatch in function declared to return record
+CREATE FUNCTION f(INOUT param1 INT, OUT param2 INT) AS $$ SELECT 1, 2, 3; $$ LANGUAGE SQL;
+
+statement error pgcode 42P13 pq: return type mismatch in function declared to return int
+CREATE FUNCTION f(INOUT param INT) AS $$ SELECT 'hello'; $$ LANGUAGE SQL;
+
+# Verify that function resolution works correctly when dropping functions (OUT
+# arguments are ignored).
+statement ok
+CREATE FUNCTION f(OUT param INT) AS $$ SELECT 1; $$ LANGUAGE SQL;
+
+statement ok
+DROP FUNCTION f;
+
+statement ok
+CREATE FUNCTION f(OUT param INT) AS $$ SELECT 1; $$ LANGUAGE SQL;
+
+statement ok
+DROP FUNCTION f(OUT INT);
+
+statement ok
+CREATE FUNCTION f(OUT param1 INT, OUT param2 INT) AS $$ SELECT 1, 2; $$ LANGUAGE SQL;
+
+statement ok
+DROP FUNCTION f(OUT INT);
+
+statement ok
+CREATE FUNCTION f(OUT param1 INT, OUT param2 INT) AS $$ SELECT 1, 2; $$ LANGUAGE SQL;
+
+statement error pq: function f\(int\) does not exist
+DROP FUNCTION f(INT);
+
+statement ok
+DROP FUNCTION f;
+
+statement ok
+CREATE FUNCTION f() RETURNS INT AS $$ SELECT 1; $$ LANGUAGE SQL;
+
+statement ok
+DROP FUNCTION f(OUT INT, OUT text, OUT INT);
+
+subtest end
+
+subtest show_create
+
+statement ok
+CREATE FUNCTION f_param_types(IN p1 INT, INOUT p2 INT, IN OUT p3 INT, OUT p4 INT) AS $$
+SELECT p2, p3, p1;
+$$ LANGUAGE SQL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_param_types];
+----
+CREATE FUNCTION public.f_param_types(
+  IN p1 INT8,
+  INOUT p2 INT8,
+  INOUT p3 INT8,
+  OUT p4 INT8
+)
+  RETURNS RECORD
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  SECURITY INVOKER
+  AS $$
+    SELECT p2, p3, p1;
+  $$
+
+statement ok
+DROP FUNCTION f_param_types;
+
+statement ok
+CREATE FUNCTION f_param_types(OUT param INT) AS $$
+SELECT 1;
+$$ LANGUAGE SQL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_param_types];
+----
+CREATE FUNCTION public.f_param_types(OUT param INT8)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  SECURITY INVOKER
+  AS $$
+  SELECT 1;
+$$
+
+statement ok
+DROP FUNCTION f_param_types;
+
+subtest end
+
+subtest parameter_names
+
+# Sharing of parameter names is only allowed across two different "parameter
+# namespaces" (IN vs OUT).
+
+statement error pgcode 42P13 pq: parameter name "a" used more than once
+CREATE FUNCTION f_same_name(IN a INT, IN a INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pgcode 42P13 pq: parameter name "a" used more than once
+CREATE FUNCTION f_same_name(IN a INT, INOUT a INT) IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pgcode 42P13 pq: parameter name "a" used more than once
+CREATE FUNCTION f_same_name(OUT a INT, INOUT a INT) IMMUTABLE LANGUAGE SQL AS $$ SELECT 1, 1 $$;
+
+statement ok
+CREATE FUNCTION f_same_name(IN a INT, OUT a INT) IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
+
+query I colnames
+SELECT f_same_name(2);
+----
+f_same_name
+1
+
+query I colnames
+SELECT * FROM f_same_name(2);
+----
+a
+1
+
+statement ok
+CREATE OR REPLACE FUNCTION f_same_name(IN a INT, OUT a INT) IMMUTABLE LANGUAGE SQL AS $$ SELECT a $$;
+
+query I colnames
+SELECT f_same_name(2);
+----
+f_same_name
+2
+
+query I colnames
+SELECT * FROM f_same_name(2);
+----
+a
+2
+
+statement error pgcode 42703 pq: column "param_out" does not exist
+CREATE FUNCTION f_names(IN param_in INT, OUT param_out INT) IMMUTABLE LANGUAGE SQL AS $$ SELECT param_out $$;
+
+statement ok
+CREATE FUNCTION f_names(IN param_in INT, OUT param_out INT) IMMUTABLE LANGUAGE SQL AS $$ SELECT param_in $$;
+
+query I colnames
+SELECT f_names(2);
+----
+f_names
+2
+
+query I colnames
+SELECT * FROM f_names(2);
+----
+param_out
+2
+
+statement ok
+CREATE FUNCTION f_out_int(OUT param INT) RETURNS INT AS $$ SELECT 1; $$ LANGUAGE SQL;
+
+query I colnames
+SELECT f_out_int();
+----
+f_out_int
+1
+
+query I colnames
+SELECT * FROM f_out_int();
+----
+param
+1
+
+statement ok
+CREATE FUNCTION f_in_int(IN param INT) RETURNS INT AS $$ SELECT param; $$ LANGUAGE SQL;
+
+query I colnames
+SELECT f_in_int(2);
+----
+f_in_int
+2
+
+query I colnames
+SELECT * FROM f_in_int(2);
+----
+f_in_int
+2
+
+statement ok
+CREATE FUNCTION f_inout_int(INOUT param INT) RETURNS INT AS $$ SELECT param; $$ LANGUAGE SQL;
+
+query I colnames
+SELECT f_inout_int(2);
+----
+f_inout_int
+2
+
+query I colnames
+SELECT * FROM f_inout_int(2);
+----
+param
+2
+
+# Changing OUT parameter name is ok.
+statement ok
+CREATE OR REPLACE FUNCTION f_out_int(OUT param_new INT) RETURNS INT AS $$ SELECT 1; $$ LANGUAGE SQL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_out_int];
+----
+CREATE FUNCTION public.f_out_int(OUT param_new INT8)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  SECURITY INVOKER
+  AS $$
+  SELECT 1;
+$$
+
+query I colnames
+SELECT f_out_int();
+----
+f_out_int
+1
+
+query I colnames
+SELECT * FROM f_out_int();
+----
+param_new
+1
+
+# But changing IN or INOUT parameter name is not allowed.
+statement error pgcode 42P13 pq: cannot change name of input parameter "param"
+CREATE OR REPLACE FUNCTION f_in_int(IN param_new INT) RETURNS INT AS $$ SELECT 1; $$ LANGUAGE SQL;
+
+statement error pgcode 42P13 pq: cannot change name of input parameter "param"
+CREATE OR REPLACE FUNCTION f_inout_int(INOUT param_new INT) RETURNS INT AS $$ SELECT 1; $$ LANGUAGE SQL;
+
+subtest end
+
+subtest changing_parameters
+
+statement ok
+CREATE FUNCTION f_int(IN param INT) RETURNS INT AS $$ SELECT param; $$ LANGUAGE SQL;
+
+query I colnames
+SELECT * FROM f_int(2);
+----
+f_int
+2
+
+# We can change the parameter class from IN to INOUT without introducing new
+# overload.
+statement ok
+CREATE OR REPLACE FUNCTION f_int(INOUT param INT) RETURNS INT AS $$ SELECT param; $$ LANGUAGE SQL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_int];
+----
+CREATE FUNCTION public.f_int(INOUT param INT8)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  SECURITY INVOKER
+  AS $$
+  SELECT param;
+$$
+
+query I colnames
+SELECT * FROM f_int(2);
+----
+param
+2
+
+# We can add and remove an OUT parameter too without introducing another
+# overload (but must preserve the original parameter name for IN / INOUT
+# parameter).
+statement error pgcode 42P13 pq: cannot change name of input parameter "param"
+CREATE OR REPLACE FUNCTION f_int(IN param_in INT, OUT param_out INT) RETURNS INT AS $$ SELECT 1; $$ LANGUAGE SQL;
+
+statement ok
+CREATE OR REPLACE FUNCTION f_int(IN param INT, OUT param_out INT) RETURNS INT AS $$ SELECT param; $$ LANGUAGE SQL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_int];
+----
+CREATE FUNCTION public.f_int(
+  IN param INT8,
+  OUT param_out INT8
+)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  SECURITY INVOKER
+  AS $$
+    SELECT param;
+  $$
+
+query I colnames
+SELECT * FROM f_int(2);
+----
+param_out
+2
+
+statement ok
+CREATE OR REPLACE FUNCTION f_int(OUT param_out INT, IN param INT) RETURNS INT AS $$ SELECT param; $$ LANGUAGE SQL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_int];
+----
+CREATE FUNCTION public.f_int(
+  OUT param_out INT8,
+  IN param INT8
+)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  SECURITY INVOKER
+  AS $$
+    SELECT param;
+  $$
+
+query I colnames
+SELECT * FROM f_int(2);
+----
+param_out
+2
+
+statement ok
+CREATE OR REPLACE FUNCTION f_int(INOUT param INT) RETURNS INT AS $$ SELECT param; $$ LANGUAGE SQL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_int];
+----
+CREATE FUNCTION public.f_int(INOUT param INT8)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  SECURITY INVOKER
+  AS $$
+  SELECT param;
+$$
+
+query I colnames
+SELECT * FROM f_int(2);
+----
+param
+2
+
+# We can change the order of parameters across IN and OUT "namespaces" as long
+# as we preserve the right ordering within each "namespace".
+statement ok
+CREATE FUNCTION f_3_in_2_out(IN param1 INT, IN param2 INT, IN param3 INT, OUT param1 INT, OUT param2 INT) AS $$ SELECT (param1, param2 + param3); $$ LANGUAGE SQL;
+
+query II colnames
+SELECT * FROM f_3_in_2_out(2, 2, 2);
+----
+param1 param2
+2 4
+
+query TIITTTTT
+SELECT proname, pronargs, pronargdefaults, proargtypes, proallargtypes, proargmodes, proargnames, proargdefaults
+FROM pg_catalog.pg_proc WHERE proname = 'f_3_in_2_out';
+----
+f_3_in_2_out  3  0  20 20 20  {20,20,20,20,20}  {i,i,i,o,o}  {param1,param2,param3,param1,param2}  NULL
+
+statement ok
+CREATE OR REPLACE FUNCTION f_3_in_2_out(IN param1 INT, OUT param1 INT, IN param2 INT, IN param3 INT, OUT param2 INT) AS $$ SELECT (param1, param2 + param3); $$ LANGUAGE SQL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_3_in_2_out];
+----
+CREATE FUNCTION public.f_3_in_2_out(
+  IN param1 INT8,
+  OUT param1 INT8,
+  IN param2 INT8,
+  IN param3 INT8,
+  OUT param2 INT8
+)
+  RETURNS RECORD
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  SECURITY INVOKER
+  AS $$
+    SELECT (param1, param2 + param3);
+  $$
+
+query II colnames
+SELECT * FROM f_3_in_2_out(2, 2, 2);
+----
+param1 param2
+2 4
+
+# We can also merge some parameters as long as they have the same names.
+statement error pgcode 42P13 pq: cannot change return type of existing function
+CREATE OR REPLACE FUNCTION f_3_in_2_out(INOUT param1 INT, IN param2 INT, INOUT param3 INT) AS $$ SELECT (1, 1); $$ LANGUAGE SQL;
+
+statement ok
+CREATE OR REPLACE FUNCTION f_3_in_2_out(INOUT param1 INT, INOUT param2 INT, IN param3 INT) AS $$ SELECT (param1, param2 + param3); $$ LANGUAGE SQL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_3_in_2_out];
+----
+CREATE FUNCTION public.f_3_in_2_out(
+  INOUT param1 INT8,
+  INOUT param2 INT8,
+  IN param3 INT8
+)
+  RETURNS RECORD
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  SECURITY INVOKER
+  AS $$
+    SELECT (param1, param2 + param3);
+  $$
+
+query II colnames
+SELECT * FROM f_3_in_2_out(2, 2, 2);
+----
+param1 param2
+2 4
+
+subtest end
+
+subtest default_parameter_names
+
+# Parameter names are optional. Whenever a UDF returns RECORD type, each unnamed
+# OUT parameter with ordinal 'i' (among all OUT parameters) gets the default
+# name that is "column" || i.
+
+statement ok
+CREATE FUNCTION f_default_names(OUT INT, OUT param2 INT, IN INT, OUT INT) RETURNS RECORD AS $$ SELECT (1, 2, 3); $$ LANGUAGE SQL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_default_names];
+----
+CREATE FUNCTION public.f_default_names(
+  OUT INT8,
+  OUT param2 INT8,
+  IN INT8,
+  OUT INT8
+)
+  RETURNS RECORD
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  SECURITY INVOKER
+  AS $$
+    SELECT (1:::INT8, 2:::INT8, 3:::INT8);
+  $$
+
+query T colnames
+SELECT f_default_names(0);
+----
+f_default_names
+(1,2,3)
+
+query III colnames
+SELECT * FROM f_default_names(0);
+----
+column1 param2 column3
+1 2 3
+
+query I colnames
+SELECT column1 FROM f_default_names(0);
+----
+column1
+1
+
+query I colnames
+SELECT param2 FROM f_default_names(0);
+----
+param2
+2
+
+query I colnames
+SELECT column3 FROM f_default_names(0);
+----
+column3
+3
+
+query TIITTTTT
+SELECT proname, pronargs, pronargdefaults, proargtypes, proallargtypes, proargmodes, proargnames, proargdefaults
+FROM pg_catalog.pg_proc WHERE proname = 'f_default_names';
+----
+f_default_names  1  0  20  {20,20,20,20}  {o,o,i,o}  {"",param2,"",""}  NULL
+
+# Introducing the OUT parameter name is disallowed because it'd change the
+# return type.
+statement error cannot change return type of existing function
+CREATE OR REPLACE FUNCTION f_default_names(OUT INT, OUT param2 INT, IN INT, OUT param3 INT) RETURNS RECORD AS $$ SELECT (1, 2, 3); $$ LANGUAGE SQL;
+
+# Introducing the name that matches the default OUT parameter name is allowed.
+statement ok
+CREATE OR REPLACE FUNCTION f_default_names(OUT INT, OUT param2 INT, IN INT, OUT column3 INT) RETURNS RECORD AS $$ SELECT (1, 2, 3); $$ LANGUAGE SQL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_default_names];
+----
+CREATE FUNCTION public.f_default_names(
+  OUT INT8,
+  OUT param2 INT8,
+  IN INT8,
+  OUT column3 INT8
+)
+  RETURNS RECORD
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  SECURITY INVOKER
+  AS $$
+    SELECT (1:::INT8, 2:::INT8, 3:::INT8);
+  $$
+
+# Then we can omit the default OUT parameter name again.
+statement ok
+CREATE OR REPLACE FUNCTION f_default_names(OUT INT, OUT param2 INT, IN INT, OUT INT) RETURNS RECORD AS $$ SELECT (1, 2, 3); $$ LANGUAGE SQL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_default_names];
+----
+CREATE FUNCTION public.f_default_names(
+  OUT INT8,
+  OUT param2 INT8,
+  IN INT8,
+  OUT INT8
+)
+  RETURNS RECORD
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  SECURITY INVOKER
+  AS $$
+    SELECT (1:::INT8, 2:::INT8, 3:::INT8);
+  $$
+
+# Introducing the IN parameter name is ok.
+statement ok
+CREATE OR REPLACE FUNCTION f_default_names(OUT INT, OUT param2 INT, IN in_param INT, OUT INT) RETURNS RECORD AS $$ SELECT (in_param, 2, 3); $$ LANGUAGE SQL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_default_names];
+----
+CREATE FUNCTION public.f_default_names(
+  OUT INT8,
+  OUT param2 INT8,
+  IN in_param INT8,
+  OUT INT8
+)
+  RETURNS RECORD
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  SECURITY INVOKER
+  AS $$
+    SELECT (in_param, 2, 3);
+  $$
+
+# But then the IN parameter name cannot be changed anymore.
+statement error cannot change name of input parameter "in_param"
+CREATE OR REPLACE FUNCTION f_default_names(OUT INT, OUT param2 INT, IN in_param_new INT, OUT INT) RETURNS RECORD AS $$ SELECT (1, 2, 3); $$ LANGUAGE SQL;
+
+query T colnames
+SELECT f_default_names(0);
+----
+f_default_names
+(0,2,3)
+
+query III colnames
+SELECT * FROM f_default_names(0);
+----
+column1 param2 column3
+0 2 3
+
+subtest end
+
+statement ok
+CREATE TYPE typ AS (a INT, b INT);
+CREATE FUNCTION f_udt(OUT typ) LANGUAGE SQL AS $$ SELECT 1 AS x, 2 AS y; $$;
+
+query T colnames
+SELECT f_udt()
+----
+f_udt
+(1,2)
+
+query II colnames
+SELECT * FROM f_udt()
+----
+a  b
+1  2
+
+query I colnames
+SELECT a FROM f_udt()
+----
+a
+1
+
+query I colnames
+SELECT b FROM f_udt()
+----
+b
+2
+
+statement error pgcode 2BP01 cannot drop type "typ" because other objects \(\[test.public.f_udt\]\) still depend on it
+DROP TYPE typ;
+
+statement ok
+DROP FUNCTION f_udt;
+
+statement ok
+CREATE TYPE greeting AS ENUM('hello', 'hi', 'yo');
+CREATE FUNCTION f_enum(OUT greeting greeting) LANGUAGE SQL AS $$ SELECT 'hi'::greeting; $$;
+
+query T colnames
+SELECT * FROM f_enum()
+----
+greeting
+hi
+
+statement error pgcode 2BP01 cannot drop type "greeting" because other objects \(\[test.public.f_enum\]\) still depend on it
+DROP TYPE greeting;
+
+statement ok
+DROP FUNCTION f_enum;
+
+subtest default_exprs
+
+statement error pgcode 22P02 could not parse "a" as type int
+CREATE FUNCTION my_sum(a INT, b INT DEFAULT 2, c INT DEFAULT 'a') RETURNS INT LANGUAGE SQL AS $$ SELECT a + b + c; $$;
+
+statement error pgcode 42P13 input parameters after one with a default value must also have defaults
+CREATE FUNCTION my_sum(a INT, b INT DEFAULT 2, c INT) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b + c; $$;
+
+statement error pgcode 42P13 input parameters after one with a default value must also have defaults
+CREATE FUNCTION my_sum(a INT, b INT DEFAULT 2, INOUT c INT) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b + c; $$;
+
+statement error pgcode 42P13 only input parameters can have default values
+CREATE FUNCTION my_sum(a INT, b INT DEFAULT 2, OUT c INT = 3) LANGUAGE SQL AS $$ SELECT a + b; $$;
+
+statement error pgcode 42703 column "b" does not exist
+CREATE FUNCTION my_sum(a INT, b INT, c INT = b + 1) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b + c; $$;
+
+statement error pgcode 42703 column "b" does not exist
+CREATE FUNCTION my_sum(a INT, b INT DEFAULT 2, c INT = b + 1) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b + c; $$;
+
+statement error pgcode 42703 column "d" does not exist
+CREATE FUNCTION my_sum(a INT, b INT DEFAULT 2, c INT = d + 1) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b + c; $$;
+
+statement error pgcode 42804 argument of DEFAULT must be type int, not type bool
+CREATE FUNCTION my_sum(a INT, b INT DEFAULT true) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b; $$;
+
+statement error pgcode 0A000 subqueries are not allowed in DEFAULT expressions
+CREATE FUNCTION my_sum(a INT, b INT DEFAULT (SELECT 1)) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b; $$;
+
+statement error pgcode 0A000 subqueries are not allowed in DEFAULT expressions
+CREATE FUNCTION my_sum(a INT, b INT DEFAULT 1 + (SELECT 2 FROM (VALUES (NULL)))) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b; $$;
+
+# Verify that 'NaN' can be used as a default.
+statement ok
+CREATE FUNCTION f_nan(a INT, b INT DEFAULT 2, c FLOAT DEFAULT 'NaN':::FLOAT) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b; $$;
+
+statement ok
+CREATE FUNCTION my_sum(a INT, b INT, c INT) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b + c; $$;
+
+statement error pgcode 42P13 input parameters after one with a default value must also have defaults
+CREATE OR REPLACE FUNCTION my_sum(a INT = 1, b INT, c INT = 3) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b + c; $$;
+
+# Adding a default expression to a parameter is ok.
+statement ok
+CREATE OR REPLACE FUNCTION my_sum(a INT, b INT DEFAULT 2, c INT = 3) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b + c; $$;
+
+query TIITTTTT
+SELECT proname, pronargs, pronargdefaults, proargtypes, proallargtypes, proargmodes, proargnames, proargdefaults
+FROM pg_catalog.pg_proc WHERE proname = 'my_sum';
+----
+my_sum  3  2  20 20 20  NULL  NULL  {a,b,c}  ({2:::INT8}, {3:::INT8})
+
+# But removing an existing default expression is not ok.
+statement error pgcode 42P13 cannot remove parameter defaults from existing function
+CREATE OR REPLACE FUNCTION my_sum(a INT, b INT, c INT = 3) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b + c; $$;
+
+statement error pgcode 22P02 could not parse "a" as type int
+CREATE OR REPLACE FUNCTION my_sum(a INT = 'a', b INT DEFAULT 2, c INT = 3) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b + c; $$;
+
+query I
+SELECT my_sum(1);
+----
+6
+
+query I
+SELECT my_sum(1, 1);
+----
+5
+
+query I
+SELECT my_sum(1, 1, 1);
+----
+3
+
+# Note that postgres returns "function my_sum() does not exist".
+statement error pgcode 42883 unknown signature: public.my_sum\(\)
+SELECT my_sum();
+
+# Note that postgres returns "function my_sum(int, int, int, int) does not exist".
+statement error pgcode 42883 unknown signature: public.my_sum\(int, int, int, int\)
+SELECT my_sum(1, 1, 1, 1);
+
+# Same as above, but the default value needs to be coerced from numeric to int
+# (becoming 4).
+statement ok
+CREATE OR REPLACE FUNCTION my_sum(a INT, b INT DEFAULT 2, c INT = 3.5) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b + c; $$;
+
+query I
+SELECT my_sum(1);
+----
+7
+
+query I
+SELECT my_sum(1, 1);
+----
+6
+
+# Add another overload that creates ambiguity for some number of input
+# arguments.
+statement ok
+CREATE FUNCTION my_sum(a INT) RETURNS INT LANGUAGE SQL AS $$ SELECT a; $$;
+
+# In local-prepared, function resolution produces an "ambiguous call" error
+# instead of "function name is not unique".
+skipif config local-prepared
+statement error pgcode 42725 function name "my_sum" is not unique
+SELECT my_sum(1);
+
+onlyif config local-prepared
+statement error pgcode 42725 ambiguous call: my_sum
+SELECT my_sum(1);
+
+statement ok
+DROP FUNCTION my_sum(INT);
+
+statement ok
+DROP FUNCTION my_sum;
+
+# Create a new function with the same name as the one we just dropped and then
+# invoke in the same way as above - the optimizer should realize that the cached
+# memo is stale.
+statement ok
+CREATE FUNCTION my_sum(OUT sum INT, INOUT a INT, INOUT b INT = 3) AS $$ SELECT (a + b, a, b); $$ LANGUAGE SQL;
+
+query T
+SELECT my_sum(1);
+----
+(4,1,3)
+
+query III
+SELECT * FROM my_sum(1);
+----
+4  1  3
+
+query T
+SELECT my_sum(1, 1);
+----
+(2,1,1)
+
+query III
+SELECT * FROM my_sum(1, 1);
+----
+2  1  1
+
+statement ok
+DROP FUNCTION my_sum;
+
+# Test for a narrowing type coercion.
+statement ok
+CREATE FUNCTION f(x CHAR DEFAULT 'foo') RETURNS CHAR LANGUAGE SQL AS $$ SELECT x; $$;
+
+# Note that postgres doesn't actually truncate the value and returns 'foo' here
+# (this difference is tracked by #115385).
+query T
+SELECT f();
+----
+f
+
+statement ok
+DROP FUNCTION f;
+
+# Test case when DEFAULT expression uses a UDF.
+
+statement ok
+CREATE FUNCTION f1(a INT, b INT = 2) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b; $$;
+
+statement ok
+CREATE FUNCTION f2(a INT, b INT = f1(1)) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b; $$;
+
+query III
+SELECT f1(1), f2(1), f2(1, 1);
+----
+3  4  2
+
+statement ok
+CREATE OR REPLACE FUNCTION f1 (a INT, b INT = 2) RETURNS INT LANGUAGE SQL AS $$ SELECT a * b; $$;
+
+query III
+SELECT f1(1), f2(1), f2(1, 1);
+----
+2  3  2
+
+statement error pgcode 2BP01 cannot drop function "f1" because other objects \(\[test.public.f2\]\) still depend on it
+DROP FUNCTION f1;
+
+statement ok
+DROP FUNCTION f2;
+
+statement ok
+DROP FUNCTION f1;
+
+# Test that dropping UDTs or enum members used in the DEFAULT expression is not
+# allowed.
+
+statement ok
+CREATE FUNCTION f(p1 typ DEFAULT (1, 2), p2 greeting = 'yo') RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement error pgcode 2BP01 cannot drop type "typ" because other objects \(\[test.public.f\]\) still depend on it
+DROP TYPE typ;
+
+statement error pgcode 2BP01 could not remove enum value "yo" as it is being used in a routine "f"
+ALTER TYPE greeting DROP VALUE 'yo';
+
+# Dropping enum value not used in the DEFAULT expression should be ok.
+statement ok
+ALTER TYPE greeting DROP VALUE 'hello';
+
+# Using a different enum value in the DEFAULT expression should allow us to drop
+# the original enum value.
+statement ok
+CREATE OR REPLACE FUNCTION f(p1 typ DEFAULT (1, 2), p2 greeting = 'hi') RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement ok
+ALTER TYPE greeting DROP VALUE 'yo';
+
+statement error pgcode 2BP01 could not remove enum value "hi" as it is being used in a routine "f"
+ALTER TYPE greeting DROP VALUE 'hi';
+
+statement ok
+DROP FUNCTION f;
+
+# Test having sequences in the DEFAULT expression.
+
+statement ok
+CREATE SEQUENCE seq;
+
+statement ok
+CREATE FUNCTION f(a INT = nextval('seq')) RETURNS INT AS $$ SELECT a; $$ LANGUAGE SQL;
+
+query I
+SELECT f();
+----
+1
+
+query I
+SELECT f(1);
+----
+1
+
+query I
+SELECT f();
+----
+2
+
+statement error pgcode 2BP01 cannot drop sequence seq because other objects depend on it
+DROP SEQUENCE seq;
+
+statement ok
+CREATE OR REPLACE FUNCTION f(a INT = 3) RETURNS INT AS $$ SELECT a; $$ LANGUAGE SQL;
+
+# DEFAULT expression no longer uses the sequence.
+statement ok
+DROP SEQUENCE seq;
+
+statement ok
+DROP FUNCTION f;
+
+# Try doing the same when the sequence is added in the replacement.
+
+statement ok
+CREATE SEQUENCE seq;
+
+statement ok
+CREATE FUNCTION f(a INT = 3) RETURNS INT AS $$ SELECT a; $$ LANGUAGE SQL;
+
+statement ok
+CREATE OR REPLACE FUNCTION f(a INT = nextval('seq')) RETURNS INT AS $$ SELECT a; $$ LANGUAGE SQL;
+
+statement error pgcode 2BP01 cannot drop sequence seq because other objects depend on it
+DROP SEQUENCE seq;
+
+statement ok
+DROP FUNCTION f;
+
+statement ok
+DROP SEQUENCE seq;
+
+# Regression test for not type-checking all default expressions when replacing
+# the UDF (#155859).
+statement ok
+CREATE FUNCTION f (s STRING(1) DEFAULT NULL, d DECIMAL(1, 1) DEFAULT NULL) RETURNS INT AS $$
+  SELECT 1;
+$$ LANGUAGE SQL;
+
+statement ok
+CREATE OR REPLACE FUNCTION f (s STRING(2) DEFAULT NULL, d DECIMAL(2, 2) DEFAULT NULL) RETURNS INT AS $$
+  SELECT 1;
+$$ LANGUAGE SQL;
+
+statement ok
+DROP FUNCTION f;
+
+subtest end

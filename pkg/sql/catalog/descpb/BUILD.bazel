@@ -1,0 +1,113 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//build:STRINGER.bzl", "stringer")
+load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
+
+go_library(
+    name = "descpb",
+    srcs = [
+        "column.go",
+        "descriptor.go",
+        "extract.go",
+        "index.go",
+        "join_type.go",
+        "locking.go",
+        "structured.go",
+        ":gen-formatversion-stringer",  # keep
+    ],
+    embed = [":descpb_go_proto"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/sql/catalog/catenumpb",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/protoreflect",
+        "//pkg/sql/sem/catconstants",
+        "//pkg/sql/sem/catid",
+        "//pkg/sql/sem/idxtype",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/errorutil/unimplemented",
+        "//pkg/util/hlc",
+        "//pkg/util/intsets",
+        "//pkg/util/uuid",  # keep
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "descpb_test",
+    size = "small",
+    srcs = [
+        "extract_test.go",
+        "structured_test.go",
+    ],
+    embed = [":descpb"],
+    deps = [
+        "//pkg/util/protoutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+proto_library(
+    name = "descpb_proto",
+    srcs = [
+        "join_type.proto",
+        "lease.proto",
+        "locking.proto",
+        "structured.proto",
+    ],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/config/zonepb:zonepb_proto",
+        "//pkg/geo/geopb:geopb_proto",
+        "//pkg/roachpb:roachpb_proto",
+        "//pkg/sql/catalog/catenumpb:catenumpb_proto",
+        "//pkg/sql/catalog/catpb:catpb_proto",
+        "//pkg/sql/schemachanger/scpb:scpb_proto",
+        "//pkg/sql/sem/idxtype:idxtype_proto",
+        "//pkg/sql/sem/semenumpb:semenumpb_proto",
+        "//pkg/sql/types:types_proto",
+        "//pkg/sql/vecindex/vecpb:vecpb_proto",
+        "//pkg/util/hlc:hlc_proto",
+        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+    ],
+)
+
+go_proto_library(
+    name = "descpb_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb",
+    proto = ":descpb_proto",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/config/zonepb",
+        "//pkg/geo/geopb",
+        "//pkg/roachpb",  # keep
+        "//pkg/sql/catalog/catenumpb",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/sem/idxtype",
+        "//pkg/sql/sem/semenumpb",
+        "//pkg/sql/types",
+        "//pkg/sql/vecindex/vecpb",
+        "//pkg/util/hlc",
+        "@com_github_gogo_protobuf//gogoproto",
+    ],
+)
+
+stringer(
+    name = "gen-formatversion-stringer",
+    src = "structured.go",
+    typ = "FormatVersion",
+)
+
+disallowed_imports_test(
+    "descpb",
+    disallowed_list = ["//pkg/sql/parser"],
+)

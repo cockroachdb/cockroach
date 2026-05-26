@@ -1,0 +1,178 @@
+# LogicTest: local
+
+statement ok
+CREATE SCHEMA schema_a
+
+statement ok
+CREATE USER user1
+
+statement ok
+CREATE TYPE public.enum_a AS ENUM ('hello', 'goodbye');
+GRANT USAGE ON TYPE public.enum_a TO user1
+
+statement ok
+CREATE TYPE public."enum_a+b" AS ENUM ('hello', 'goodbye');
+GRANT USAGE ON TYPE public."enum_a+b" TO user1
+
+statement ok
+CREATE TYPE schema_a.enum_b AS ENUM ('hi', 'bye');
+GRANT ALL ON TYPE schema_a.enum_b TO user1
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON TYPE schema_a.enum_b, "enum_a+b", enum_a, int4
+----
+database_name  schema_name  type_name  grantee  privilege_type  is_grantable
+test           pg_catalog   int4       admin    ALL             false
+test           pg_catalog   int4       public   USAGE           false
+test           pg_catalog   int4       root     ALL             false
+test           public       enum_a     admin    ALL             true
+test           public       enum_a     public   USAGE           false
+test           public       enum_a     root     ALL             true
+test           public       enum_a     user1    USAGE           false
+test           public       enum_a+b   admin    ALL             true
+test           public       enum_a+b   public   USAGE           false
+test           public       enum_a+b   root     ALL             true
+test           public       enum_a+b   user1    USAGE           false
+test           schema_a     enum_b     admin    ALL             true
+test           schema_a     enum_b     public   USAGE           false
+test           schema_a     enum_b     root     ALL             true
+test           schema_a     enum_b     user1    ALL             false
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON TYPE schema_a.enum_b, enum_a, int4 FOR user1
+----
+database_name  schema_name  type_name  grantee  privilege_type  is_grantable
+test           public       enum_a     public   USAGE           false
+test           public       enum_a     user1    USAGE           false
+test           schema_a     enum_b     public   USAGE           false
+test           schema_a     enum_b     user1    ALL             false
+
+query TTTTTTB colnames,rowsort
+SHOW GRANTS FOR user1
+----
+database_name  schema_name  object_name  object_type  grantee  privilege_type  is_grantable
+test           public       NULL         schema       public   CREATE          false
+test           public       NULL         schema       public   USAGE           false
+test           public       _enum_a      type         public   USAGE           false
+test           public       _enum_a+b    type         public   USAGE           false
+test           public       enum_a       type         public   USAGE           false
+test           public       enum_a       type         user1    USAGE           false
+test           public       enum_a+b     type         public   USAGE           false
+test           public       enum_a+b     type         user1    USAGE           false
+test           schema_a     _enum_b      type         public   USAGE           false
+test           schema_a     enum_b       type         public   USAGE           false
+test           schema_a     enum_b       type         user1    ALL             false
+
+statement error type "non_existent" does not exist
+SHOW GRANTS ON TYPE non_existent
+
+# Regression test for #67512: should be able to see grants for a type in a
+# different database.
+statement ok
+CREATE DATABASE other;
+CREATE TYPE other.typ AS ENUM();
+GRANT ALL ON TYPE other.typ TO user1
+
+query TTTTTB rowsort
+SHOW GRANTS ON TYPE other.typ
+----
+other  public  typ  admin   ALL    true
+other  public  typ  public  USAGE  false
+other  public  typ  root    ALL    true
+other  public  typ  user1   ALL    false
+
+query TTTTTB rowsort
+SHOW GRANTS ON TYPE other.typ FOR user1
+----
+other  public  typ  public  USAGE  false
+other  public  typ  user1   ALL    false
+
+# Verify that owner and child of owner have is_grantable implicitly.
+
+user root
+
+statement ok
+CREATE USER owner_grant_option_child
+
+statement ok
+GRANT testuser to owner_grant_option_child
+
+statement ok
+GRANT CREATE ON DATABASE test TO testuser
+
+user testuser
+
+statement ok
+CREATE TYPE owner_grant_option AS ENUM('a')
+
+statement ok
+GRANT USAGE ON TYPE owner_grant_option TO owner_grant_option_child
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON TYPE owner_grant_option
+----
+database_name  schema_name  type_name           grantee                   privilege_type  is_grantable
+test           public       owner_grant_option  admin                     ALL             true
+test           public       owner_grant_option  owner_grant_option_child  USAGE           true
+test           public       owner_grant_option  public                    USAGE           false
+test           public       owner_grant_option  root                      ALL             true
+test           public       owner_grant_option  testuser                  ALL             true
+
+# Verify that is_grantable moves to the new owner.
+
+user root
+
+statement ok
+CREATE ROLE other_owner
+
+statement ok
+ALTER TYPE owner_grant_option OWNER TO other_owner
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON TYPE owner_grant_option
+----
+database_name  schema_name  type_name           grantee                   privilege_type  is_grantable
+test           public       owner_grant_option  admin                     ALL             true
+test           public       owner_grant_option  other_owner               ALL             true
+test           public       owner_grant_option  owner_grant_option_child  USAGE           false
+test           public       owner_grant_option  public                    USAGE           false
+test           public       owner_grant_option  root                      ALL             true
+
+statement ok
+CREATE USER roach;
+CREATE TYPE custom_type1 AS ENUM ('roach1', 'roach2', 'roach3');
+CREATE TYPE custom_type2 AS ENUM ('roachA', 'roachB', 'roachC');
+CREATE TYPE custom_type3 AS ENUM ('roachI', 'roachII', 'roachIII');
+BEGIN;
+GRANT ALL ON TYPE custom_type1 TO roach;
+GRANT ALL ON TYPE custom_type2 TO roach;
+GRANT ALL ON TYPE custom_type3 TO roach;
+COMMIT
+
+query T
+select description from [show jobs] where description LIKE '%type%'
+----
+
+query TTTTTTB colnames,rowsort
+SHOW GRANTS FOR roach
+----
+database_name  schema_name  object_name          object_type  grantee  privilege_type  is_grantable
+test           public       NULL                 schema       public   CREATE          false
+test           public       NULL                 schema       public   USAGE           false
+test           public       _custom_type1        type         public   USAGE           false
+test           public       _custom_type2        type         public   USAGE           false
+test           public       _custom_type3        type         public   USAGE           false
+test           public       _enum_a              type         public   USAGE           false
+test           public       _enum_a+b            type         public   USAGE           false
+test           public       _owner_grant_option  type         public   USAGE           false
+test           public       custom_type1         type         public   USAGE           false
+test           public       custom_type1         type         roach    ALL             false
+test           public       custom_type2         type         public   USAGE           false
+test           public       custom_type2         type         roach    ALL             false
+test           public       custom_type3         type         public   USAGE           false
+test           public       custom_type3         type         roach    ALL             false
+test           public       enum_a               type         public   USAGE           false
+test           public       enum_a+b             type         public   USAGE           false
+test           public       owner_grant_option   type         public   USAGE           false
+test           schema_a     _enum_b              type         public   USAGE           false
+test           schema_a     enum_b               type         public   USAGE           false

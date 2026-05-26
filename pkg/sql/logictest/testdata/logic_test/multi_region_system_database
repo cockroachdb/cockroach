@@ -1,0 +1,65 @@
+# LogicTest: 3node-tenant-multiregion
+
+# Only the root user can modify the system database's regions.
+user root
+
+# Create a database before transforming the system database into a multi-region
+# database.
+statement ok
+CREATE DATABASE "non-mr-system-database"
+
+query TTBBT colnames
+SHOW REGIONS FROM DATABASE "non-mr-system-database"
+----
+database  region  primary  secondary  zones
+
+# Configure the regions on the system database
+statement ok
+ALTER DATABASE system PRIMARY REGION "test"
+
+statement ok
+ALTER DATABASE system ADD REGION "test1"
+
+query TTBBT colnames,rowsort
+SHOW REGIONS FROM DATABASE system
+----
+database  region  primary  secondary  zones
+system    test    true     false      {}
+system    test1   false    false      {}
+
+# A database with no primary region should have the same regions as the system
+# database.
+statement ok
+CREATE DATABASE "defaults-to-system";
+
+query TTBBT colnames,rowsort
+SHOW REGIONS FROM DATABASE "defaults-to-system"
+----
+database            region  primary  secondary  zones
+defaults-to-system  test    true     false      {}
+defaults-to-system  test1   false    false      {}
+
+# If any regions are provided when creating the region, then those regions are
+# used instead of the system database's regions.
+statement ok
+CREATE DATABASE "with-custom-primary" WITH PRIMARY REGION 'test1'
+
+query TTBBT colnames
+SHOW REGIONS FROM DATABASE "with-custom-primary"
+----
+database             region  primary  secondary  zones
+with-custom-primary  test1   true     false      {}
+
+# If sql.defaults.primary_region is set, then the database is created with the
+# setting's region as the only region.
+statement ok
+SET CLUSTER SETTING sql.defaults.primary_region TO 'test1';
+
+statement ok
+CREATE DATABASE "with-primary-setting"
+
+query TTBBT colnames
+SHOW REGIONS FROM DATABASE "with-primary-setting"
+----
+database              region  primary  secondary  zones
+with-primary-setting  test1   true     false      {}

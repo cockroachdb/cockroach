@@ -1,0 +1,245 @@
+// Copyright 2016 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package kvserver
+
+import (
+	"context"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/errors"
+)
+
+// Server implements PerReplicaServer.
+type Server struct {
+	stores *Stores
+}
+
+var _ PerReplicaServer = Server{}
+var _ PerStoreServer = Server{}
+
+// MakeServer returns a new instance of Server.
+func MakeServer(descriptor *roachpb.NodeDescriptor, stores *Stores) Server {
+	return Server{stores}
+}
+
+func (is Server) execStoreCommand(
+	ctx context.Context, h StoreRequestHeader, f func(context.Context, *Store) error,
+) error {
+	store, err := is.stores.GetStore(h.StoreID)
+	if err != nil {
+		return err
+	}
+	// NB: we use a task here to prevent errant RPCs that arrive after stopper shutdown from
+	// causing crashes. See #56085 for an example of such a crash.
+	return store.stopper.RunTaskWithErr(ctx, "store command", func(ctx context.Context) error {
+		return f(ctx, store)
+	})
+}
+
+// CollectChecksum implements PerReplicaServer.
+func (is Server) CollectChecksum(
+	ctx context.Context, req *CollectChecksumRequest,
+) (*CollectChecksumResponse, error) {
+	var resp *CollectChecksumResponse
+	err := is.execStoreCommand(ctx, req.StoreRequestHeader,
+		func(ctx context.Context, s *Store) error {
+			ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
+			defer cancel()
+			r, err := s.GetReplica(req.RangeID)
+			if err != nil {
+				return err
+			}
+			ccr, err := r.getChecksum(ctx, req.ChecksumID)
+			if err != nil {
+				return err
+			}
+			resp = &ccr
+			return nil
+		})
+	return resp, err
+}
+
+// WaitForApplication implements PerReplicaServer.
+//
+// It is the caller's responsibility to cancel or set a timeout on the context.
+// If the context is never canceled, WaitForApplication will retry forever.
+//
+// TODO(erikgrinaker): consider using Replica.WaitForLeaseAppliedIndex().
+func (is Server) WaitForApplication(
+	ctx context.Context, req *WaitForApplicationRequest,
+) (*WaitForApplicationResponse, error) {
+	resp := &WaitForApplicationResponse{}
+	err := is.execStoreCommand(ctx, req.StoreRequestHeader, func(ctx context.Context, s *Store) error {
+		// TODO(benesch): Once Replica changefeeds land, see if we can implement
+		// this request handler without polling.
+		retryOpts := retry.Options{InitialBackoff: 10 * time.Millisecond}
+		for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+			// Long-lived references to replicas are frowned upon, so re-fetch the
+			// replica on every turn of the loop.
+			repl, err := s.GetReplica(req.RangeID)
+			if err != nil {
+				return err
+			}
+			repl.mu.RLock()
+			leaseAppliedIndex := repl.shMu.state.LeaseAppliedIndex
+			repl.mu.RUnlock()
+			if leaseAppliedIndex >= req.LeaseIndex {
+				// Merging relies on the applied index monotonicity, so before returning
+				// ensure that the state machine synced everything up to this point.
+				// https://github.com/cockroachdb/cockroach/issues/33120
+				return syncAppliedState(repl)
+			}
+		}
+		if ctx.Err() == nil {
+			log.KvExec.Fatal(ctx, "infinite retry loop exited but context has no error")
+		}
+		return ctx.Err()
+	})
+	return resp, err
+}
+
+// syncAppliedState syncs the applied state of the given replica, with a
+// guarantee that it will never regress.
+//
+// NB: for performance reasons, we otherwise don't sync the state machine when
+// applying raft commands. This means that if a node restarts after applying but
+// before the next sync, its applied index could temporarily regress (until it
+// reapplies its latest raft log entries).
+func syncAppliedState(r *Replica) error {
+	s := r.store
+	// If engines are not separated, sync the entire engine.
+	if !s.EnginesSeparated() {
+		return storage.WriteSyncNoop(s.internalEngines.Engine())
+	}
+	// With separated engines, durably write a WAG node to the LogEngine
+	// instructing the replay to apply the replica up to its current index.
+	b := s.internalEngines.LogEngine().NewWriteBatch()
+	defer b.Close()
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
+	if r.shMu.destroyStatus.Removed() {
+		// Skip the replica if it has already been destroyed. There is already a WAG
+		// node committing to its removal.
+		return nil
+	}
+	if err := wag.Write(b, s.wagSeq.Next(), wagpb.Node{
+		Events: []wagpb.Event{{
+			Addr:     wagpb.MakeAddr(r.ID(), r.shMu.state.RaftAppliedIndex),
+			Type:     wagpb.EventApply,
+			StartKey: r.shMu.state.Desc.StartKey,
+		}},
+	}); err != nil {
+		return errors.Wrapf(err, "writing WAG node")
+	}
+	return b.Commit(true /* sync */)
+}
+
+// WaitForReplicaInit implements PerReplicaServer.
+//
+// It is the caller's responsibility to cancel or set a timeout on the context.
+// If the context is never canceled, WaitForReplicaInit will retry forever.
+func (is Server) WaitForReplicaInit(
+	ctx context.Context, req *WaitForReplicaInitRequest,
+) (*WaitForReplicaInitResponse, error) {
+	resp := &WaitForReplicaInitResponse{}
+	err := is.execStoreCommand(ctx, req.StoreRequestHeader, func(ctx context.Context, s *Store) error {
+		retryOpts := retry.Options{InitialBackoff: 10 * time.Millisecond}
+		for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+			// Long-lived references to replicas are frowned upon, so re-fetch the
+			// replica on every turn of the loop.
+			if repl, err := s.GetReplica(req.RangeID); err == nil && repl.IsInitialized() {
+				return nil
+			}
+		}
+		if ctx.Err() == nil {
+			log.KvExec.Fatal(ctx, "infinite retry loop exited but context has no error")
+		}
+		return ctx.Err()
+	})
+	return resp, err
+}
+
+// CompactEngineSpan implements PerStoreServer. It blocks until the compaction
+// is done, so it can be a long-lived RPC.
+func (is Server) CompactEngineSpan(
+	ctx context.Context, req *CompactEngineSpanRequest,
+) (*CompactEngineSpanResponse, error) {
+	resp := &CompactEngineSpanResponse{}
+	err := is.execStoreCommand(ctx, req.StoreRequestHeader,
+		func(ctx context.Context, s *Store) error {
+			// TODO(sep-raft-log): this is likely only needed for StateEngine, but the
+			// API seems to be generic and may need to support both.
+			return s.TODOBothEngines().CompactRange(ctx, req.Span.Key, req.Span.EndKey)
+		})
+	return resp, err
+}
+
+// GetTableMetrics implements PerStoreServer. It retrieves metrics
+// SSTables for a given node and store id.
+func (is Server) GetTableMetrics(
+	ctx context.Context, req *GetTableMetricsRequest,
+) (*GetTableMetricsResponse, error) {
+	resp := &GetTableMetricsResponse{}
+	err := is.execStoreCommand(ctx, req.StoreRequestHeader,
+		func(ctx context.Context, s *Store) error {
+			metricsInfo, err := s.TODOBothEngines().GetTableMetrics(req.Span.Key, req.Span.EndKey)
+
+			if err != nil {
+				return err
+			}
+
+			resp.TableMetrics = metricsInfo
+			return nil
+		})
+	return resp, err
+}
+
+func (is Server) ScanStorageInternalKeys(
+	ctx context.Context, req *ScanStorageInternalKeysRequest,
+) (*ScanStorageInternalKeysResponse, error) {
+	resp := &ScanStorageInternalKeysResponse{}
+	err := is.execStoreCommand(ctx, req.StoreRequestHeader,
+		func(ctx context.Context, s *Store) error {
+			metrics, err := s.TODOBothEngines().ScanStorageInternalKeys(req.Span.Key, req.Span.EndKey, req.MegabytesPerSecond)
+
+			if err != nil {
+				return err
+			}
+
+			resp.AdvancedPebbleMetrics = metrics
+			return nil
+		})
+	return resp, err
+}
+
+// SetCompactionConcurrency implements PerStoreServer. It changes the compaction
+// concurrency of a store. While SetCompactionConcurrency is safe for concurrent
+// use, it adds uncertainty about the compaction concurrency actually set on
+// the store. We do guarantee that once all SetCompactionConcurrency requests
+// are finished (cancelled), the override is removed and the original
+// concurrency is restored.
+func (is Server) SetCompactionConcurrency(
+	ctx context.Context, req *CompactionConcurrencyRequest,
+) (*CompactionConcurrencyResponse, error) {
+	resp := &CompactionConcurrencyResponse{}
+	err := is.execStoreCommand(ctx, req.StoreRequestHeader,
+		func(ctx context.Context, s *Store) error {
+			s.TODOBothEngines().SetCompactionConcurrency(req.CompactionConcurrency)
+
+			// Wait for cancellation, and once cancelled, reset the compaction
+			// concurrency.
+			<-ctx.Done()
+			s.TODOBothEngines().SetCompactionConcurrency(0)
+			return nil
+		})
+	return resp, err
+}

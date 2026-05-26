@@ -1,0 +1,36 @@
+# This test verifies allocator behavior in a heterogeneous cluster where nodes
+# have different CPU capacities and there are no placement constraints. The test
+# sets up a 3-node cluster with nodes n1 and n2 having 8vCPU capacity each, and
+# node n3 having 16vCPU capacity. It creates 200 ranges evenly distributed across
+# all stores and generates a read-only workload.
+#
+# Expected outcome: MMA balances on CPU utilization (not absolute nanos), so
+# the higher-capacity node n3 takes on proportionally more load.
+gen_cluster nodes=3 node_cpu_cores=(8,8,16)
+----
+
+gen_ranges ranges=200 min_key=1 max_key=10000 placement_type=even
+{s1,s2,s3}:1
+----
+
+# Read-only workload on first 30 ranges. 20 cores (out of 24 total in the cluster).
+# Because the ranges are placed evenly, initially each node will have about the same
+# CPU nanos per second.
+gen_load rate=40000 rw_ratio=1 request_cpu_per_access=500000 min_key=1 max_key=10000
+----
+20.00 access-vcpus
+
+# CPU utilization should be balanced across stores within 10%.
+assertion stat=cpu_util type=balance ticks=6 upper_bound=1.1
+----
+asserting: max_{stores}(cpu_util)/mean_{stores}(cpu_util) ≤ 1.10 at each of last 6 ticks
+
+eval cfgs=(mma-count) duration=3m metrics=(cpu,cpu_util)
+----
+mma-count:
+cpu#1: last:  [s1=5494008333, s2=5488055555, s3=9004024799] (stddev=1656042496.50, mean=6662029562.33, sum=19986088687)
+cpu#1: thrash_pct: [s1=6%, s2=8%, s3=11%]  (sum=25%)
+cpu_util#1: last:  [s1=0.69, s2=0.69, s3=0.56] (stddev=0.06, mean=0.65, sum=2)
+cpu_util#1: thrash_pct: [s1=7%, s2=8%, s3=6%]  (sum=20%)
+hash: 5db3bc1238dc03b7
+==========================

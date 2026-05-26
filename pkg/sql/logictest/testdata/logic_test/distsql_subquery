@@ -1,0 +1,55 @@
+# LogicTest: 5node-default-configs
+
+# Regression test for #32652: make sure subqueries that have extra columns for
+# stream merges don't crash when executed.
+
+statement ok
+CREATE TABLE ab (a INT, b INT)
+
+statement ok
+INSERT INTO ab VALUES (1, 1), (1, 3), (2, 2)
+
+statement ok
+SET CLUSTER SETTING kv.range_merge.queue.enabled = false
+
+statement ok
+ALTER TABLE ab SPLIT AT VALUES (2)
+
+retry
+statement ok
+ALTER TABLE ab EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 2)
+
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE ab WITH DETAILS]
+ORDER BY 1
+----
+start_key           end_key       replicas  lease_holder
+<before:/Table/XX>  …/1/2         {1}       1
+…/1/2               <after:/Max>  {2}       2
+
+query T
+SELECT ARRAY(SELECT a FROM ab ORDER BY b)
+----
+{1,2,1}
+
+# Regression tests for distributing a query which involves a subquery resulting
+# in an OID type (#86075).
+statement ok
+CREATE TABLE t86075 (k INT PRIMARY KEY, c REGPROCEDURE, a REGPROCEDURE[]);
+INSERT INTO t86075 VALUES (1, 1, ARRAY[1]);
+
+retry
+statement ok
+ALTER TABLE t86075 EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1)
+
+statement ok
+SELECT (SELECT c FROM t86075) FROM t86075
+
+statement ok
+SELECT (SELECT a FROM t86075) FROM t86075
+
+statement ok
+SELECT (SELECT (c, c) FROM t86075) FROM t86075
+
+statement ok
+SELECT k FROM t86075 WHERE c = (SELECT c FROM t86075 LIMIT 1)

@@ -1,0 +1,547 @@
+# Tests with variable IN tuple.
+
+index-constraints vars=(a int) index=(a)
+a IN (1, 2, 3)
+----
+[/1 - /3]
+
+index-constraints vars=(a int) index=(a desc)
+a IN (1, 2, 3)
+----
+[/3 - /1]
+
+index-constraints vars=(a int) index=(a)
+a IN (1, 5, 1, 4)
+----
+[/1 - /1]
+[/4 - /5]
+
+index-constraints vars=(a int) index=(a desc)
+a IN (1, 5, 1, 4)
+----
+[/5 - /4]
+[/1 - /1]
+
+index-constraints vars=(a int) index=(a)
+a IN (1, 2, 3, NULL)
+----
+[/1 - /3]
+
+index-constraints vars=(a int, b int) index=(a, b)
+a = 1 AND b IN (1, 2, 3)
+----
+[/1/1 - /1/3]
+
+index-constraints vars=(a int, b int) index=(a, b desc)
+a = 1 AND b IN (1, 2, 3)
+----
+[/1/3 - /1/1]
+
+index-constraints vars=(a int, b int) index=(a, b)
+a IN (1, 2) AND b IN (1, 2, 3)
+----
+[/1/1 - /1/3]
+[/2/1 - /2/3]
+
+index-constraints vars=(a int, b int) index=(a desc, b desc)
+a IN (1, 2) AND b IN (1, 2, 3)
+----
+[/2/3 - /2/1]
+[/1/3 - /1/1]
+
+index-constraints vars=(a int, b int) index=(a, b)
+a >= 2 AND a <= 4 AND b IN (1, 2, 3)
+----
+[/2/1 - /4/3]
+Remaining filter: b IN (1, 2, 3)
+
+index-constraints vars=(a int, b int) index=(a desc, b desc)
+a >= 2 AND a <= 4 AND b IN (1, 2, 3)
+----
+[/4/3 - /2/1]
+Remaining filter: b IN (1, 2, 3)
+
+
+index-constraints vars=(a int, b int) index=(a, b)
+a IN (1, 2, 3) AND b = 4
+----
+[/1/4 - /1/4]
+[/2/4 - /2/4]
+[/3/4 - /3/4]
+
+index-constraints vars=(a int, b int) index=(a desc, b)
+a IN (1, 2, 3) AND b = 4
+----
+[/3/4 - /3/4]
+[/2/4 - /2/4]
+[/1/4 - /1/4]
+
+index-constraints vars=(a int, b int) index=(a, b desc)
+a IN (1, 2, 3) AND b = 4
+----
+[/1/4 - /1/4]
+[/2/4 - /2/4]
+[/3/4 - /3/4]
+
+index-constraints vars=(a int, b int) index=(a, b)
+a IN (1, 2, 3) AND b >= 2 AND b <= 4
+----
+[/1/2 - /1/4]
+[/2/2 - /2/4]
+[/3/2 - /3/4]
+
+# Tests with tuple equality.
+
+index-constraints vars=(a int, b int, c int) index=(a, b, c)
+(a, b, c) = (1, 2, 3)
+----
+[/1/2/3 - /1/2/3]
+
+index-constraints vars=(a int, b int, c int) index=(a, c)
+(a, b, c) = (1, 2, 3)
+----
+[/1/3 - /1/3]
+Remaining filter: b = 2
+
+index-constraints vars=(a int, b int, c int) index=(c, b)
+(a, b, c) = (1, 2, 3)
+----
+[/3/2 - /3/2]
+Remaining filter: a = 1
+
+index-constraints vars=(a int, b int, c int, d int, e int) index=(a, b, c, d, e)
+(a, b, 3, (4, e)) = (1, 2, c, (d, 5))
+----
+[/1/2/3/4/5 - /1/2/3/4/5]
+
+index-constraints vars=(a int, b int, c int, d int) index=(a, b, c, d)
+(a, b, c) = (1, 2, 3) AND d > 4
+----
+[/1/2/3/5 - /1/2/3]
+
+index-constraints vars=(a int, b int, c int, d int) index=(a, b, c, d)
+a > 5 AND a < 10 AND (b, c, d) = (2, 3, 4)
+----
+[/6/2/3/4 - /9/2/3/4]
+Remaining filter: ((b = 2) AND (c = 3)) AND (d = 4)
+
+index-constraints \
+  vars=(a int, b int, c int, d int) \
+  index=(a desc, b desc, c desc, d desc)
+a > 5 AND a < 10 AND (b, c, d) = (2, 3, 4)
+----
+[/9/2/3/4 - /6/2/3/4]
+Remaining filter: ((b = 2) AND (c = 3)) AND (d = 4)
+
+# Tests with tuple inequalities.
+
+index-constraints vars=(a int, b int, c int) index=(a, b, c)
+(a, b, c) >= (1, 2, 3)
+----
+[/1/2/3 - ]
+
+index-constraints vars=(a int, b int, c int) index=(a, b, c)
+(a, b, c) >= (1, 2, a)
+----
+[/1/2 - ]
+Remaining filter: (a, b, c) >= (1, 2, a)
+
+index-constraints vars=(a int, b int, c int) index=(a, b, c)
+(a, b, c) > (1, 2, 3)
+----
+[/1/2/4 - ]
+
+index-constraints vars=(a int, b int, c int) index=(a, b)
+(a, b, c) > (1, 2, 3)
+----
+[/1/2 - ]
+Remaining filter: (a, b, c) > (1, 2, 3)
+
+index-constraints vars=(a int, b int, c int) index=(a, b)
+(a, b, c) < (1, 2, 3)
+----
+(/NULL - /1/2]
+Remaining filter: (a, b, c) < (1, 2, 3)
+
+index-constraints vars=(a int, b int, c int) index=(a, b, c)
+(a, b, c) <= (1, 2, 3)
+----
+(/NULL - /1/2/3]
+Remaining filter: (a, b, c) <= (1, 2, 3)
+
+index-constraints vars=(a int, b int, c int) index=(a, b, c)
+(a, b, c) <= (1, 2, a)
+----
+(/NULL - /1/2]
+Remaining filter: (a, b, c) <= (1, 2, a)
+
+index-constraints vars=(a int, b int, c int) index=(a, b, c)
+(a, b, c) < (1, 2, 3)
+----
+(/NULL - /1/2/2]
+Remaining filter: (a, b, c) < (1, 2, 3)
+
+index-constraints vars=(a int, b int, c int) index=(a, b, c)
+(a, b, c) < (1, 2, a)
+----
+(/NULL - /1/2]
+Remaining filter: (a, b, c) < (1, 2, a)
+
+index-constraints vars=(a int, b int, c int) index=(a, b, c)
+(a, b, c) != (1, 2, 3)
+----
+[ - /1/2/2]
+[/1/2/4 - ]
+Remaining filter: (a, b, c) != (1, 2, 3)
+
+index-constraints vars=(a int, b int, c int) index=(a desc, b desc, c desc)
+(a, b, c) != (1, 2, 3)
+----
+[ - /1/2/4]
+[/1/2/2 - ]
+Remaining filter: (a, b, c) != (1, 2, 3)
+
+index-constraints vars=(a int, b int, c int) index=(a desc, b, c)
+(a, b, c) != (1, 2, 3)
+----
+[ - /1/2/2]
+[/1/2/4 - ]
+Remaining filter: (a, b, c) != (1, 2, 3)
+
+index-constraints vars=(a int not null, b int, c int) index=(a, b, c)
+(a, b, c) != (1, 2, 3)
+----
+[ - /1/2/2]
+[/1/2/4 - ]
+Remaining filter: (a, b, c) != (1, 2, 3)
+
+index-constraints vars=(a int not null, b int not null, c int not null) index=(a, b, c)
+(a, b, c) != (1, 2, 3)
+----
+[ - /1/2/2]
+[/1/2/4 - ]
+
+index-constraints vars=(a int, b int not null, c int not null) index=(a, b, c)
+(a, b, c) != (1, 2, 3)
+----
+[ - /1/2/2]
+[/1/2/4 - ]
+Remaining filter: (a, b, c) != (1, 2, 3)
+
+index-constraints vars=(a int, b int, c int) index=(a, b, c)
+(a, b, c) != (1, 2, a)
+----
+[ - ]
+Remaining filter: (a, b, c) != (1, 2, a)
+
+index-constraints vars=(a int, b int, c int) index=(a desc, b desc, c desc)
+(a, b, c) >= (1, 2, 3)
+----
+[ - /1/2/3]
+Remaining filter: (a, b, c) >= (1, 2, 3)
+
+index-constraints vars=(a int, b int, c int) index=(a desc, b desc, c)
+(a, b, c) > (1, 2, 3)
+----
+[ - /1/2]
+Remaining filter: (a, b, c) > (1, 2, 3)
+
+index-constraints vars=(a int, b int, c int) index=(a, b, c desc)
+(a, b, c) > (1, 2, 3)
+----
+[/1/2 - ]
+Remaining filter: (a, b, c) > (1, 2, 3)
+
+index-constraints vars=(a int, b int, c int) index=(a, b, c desc)
+(b, c) > (1, 2)
+----
+[ - ]
+Remaining filter: (b, c) > (1, 2)
+
+index-constraints vars=(a int, b int) index=(a, b)
+(a, b) >= (1, 2) AND (a, b) <= (3, 4)
+----
+[/1/2 - /3/4]
+Remaining filter: (a, b) <= (3, 4)
+
+index-constraints vars=(a int, b int) index=(a, b)
+(a, b) BETWEEN (1, 2) AND (3, 4)
+----
+[/1/2 - /3/4]
+Remaining filter: (a, b) <= (3, 4)
+
+index-constraints vars=(a int, b int, c int, d int) index=(a, b, c, d)
+(a, b, d) BETWEEN (1, 2, 3) AND (4, 5, 6)
+----
+[/1/2 - /4/5]
+Remaining filter: ((a, b, d) >= (1, 2, 3)) AND ((a, b, d) <= (4, 5, 6))
+
+index-constraints vars=(a int, b bool) index=(a, b)
+(a, b) > (1, true)
+----
+(/1/true - ]
+
+index-constraints vars=(a int, b bool) index=(a, b)
+(a, b) < (1, false)
+----
+(/NULL - /1/false)
+Remaining filter: (a, b) < (1, false)
+
+index-constraints vars=(a int not null, b int not null, c int not null) index=(a, b, c)
+(a, b, c) <= (1, 2, 3)
+----
+[ - /1/2/3]
+
+index-constraints vars=(a int not null, b int not null, c int not null) index=(a, b, c)
+(a, b, c) >= (1, 2, 3)
+----
+[/1/2/3 - ]
+
+index-constraints vars=(a int not null, b int not null, c int not null) index=(a, b, c)
+(a, b, c) < (1, 2, 3)
+----
+[ - /1/2/2]
+
+index-constraints vars=(a int not null, b int not null, c int not null) index=(a, b, c)
+(a, b, c) > (1, 2, 3)
+----
+[/1/2/4 - ]
+
+index-constraints vars=(a int, b int not null, c int not null) index=(a, b, c)
+(a, b, c) <= (1, 2, 3)
+----
+(/NULL - /1/2/3]
+
+index-constraints vars=(a int, b int not null, c int) index=(a, b, c)
+(a, b, c) <= (1, 2, 3)
+----
+(/NULL - /1/2/3]
+Remaining filter: (a, b, c) <= (1, 2, 3)
+
+index-constraints vars=(a int, b int, c int not null) index=(a, b, c)
+(a, b, c) <= (1, 2, 3)
+----
+(/NULL - /1/2/3]
+Remaining filter: (a, b, c) <= (1, 2, 3)
+
+index-constraints \
+  vars=(a int not null, b int not null, c int not null) \
+  index=(a desc, b desc, c desc)
+(a, b, c) > (1, 2, 3)
+----
+[ - /1/2/4]
+
+index-constraints vars=(a int, b int not null, c int) index=(a desc, b desc, c desc)
+(a, b, c) > (1, 2, 3)
+----
+[ - /1/2/4]
+Remaining filter: (a, b, c) > (1, 2, 3)
+
+index-constraints vars=(a int, b int, c int not null) index=(a desc, b desc, c desc)
+(a, b, c) > (1, 2, 3)
+----
+[ - /1/2/4]
+Remaining filter: (a, b, c) > (1, 2, 3)
+
+index-constraints vars=(a int, b int, c int) index=(a, b, c)
+(a, c, b) != (1, NULL, 2)
+----
+[ - ]
+Remaining filter: (a, c, b) != (1, NULL, 2)
+
+index-constraints vars=(a int not null, b int not null, c int) index=(a, b)
+(a, b, c) > (1, 2, 3)
+----
+[/1/2 - ]
+Remaining filter: (a, b, c) > (1, 2, 3)
+
+index-constraints vars=(a int not null, b int not null, c int) index=(a, b)
+(a, b, c) <= (1, 2, 3)
+----
+[ - /1/2]
+Remaining filter: (a, b, c) <= (1, 2, 3)
+
+# Cases with NULLs in tuple inequalities. These conditions are true only when
+# they don't depend on the NULL value, i.e. when the inequality holds true for
+# the prefix up to the first NULL.
+
+index-constraints vars=(a int, b int) index=(a, b)
+(a, b) > (1, NULL)
+----
+[/2 - ]
+
+index-constraints vars=(a int, b int) index=(a, b)
+(a, b) >= (1, NULL)
+----
+[/2 - ]
+
+index-constraints vars=(a int, b int) index=(a, b)
+(a, b) < (1, NULL)
+----
+(/NULL - /0]
+
+index-constraints vars=(a int not null, b int) index=(a, b)
+(a, b) < (1, NULL)
+----
+[ - /0]
+
+index-constraints vars=(a int, b int) index=(a, b)
+(a, b) <= (1, NULL)
+----
+(/NULL - /0]
+
+index-constraints vars=(a int, b int, c int) index=(a, b, c)
+(a, b, c) < (1, NULL, 1)
+----
+(/NULL - /0]
+
+index-constraints vars=(a int, b int, c int) index=(a, b, c)
+(a, b, c) >= (1, NULL, 1)
+----
+[/2 - ]
+
+# TODO(radu): here we could be smarter - the condition below is equivalent to
+# (a, c) != (1, 3).
+index-constraints vars=(a int, b int, c int) index=(a, b, c)
+(a, b, c) != (1, NULL, 3)
+----
+[ - ]
+Remaining filter: (a, b, c) != (1, NULL, 3)
+
+# Tests with tuple IN tuple.
+
+index-constraints vars=(a int, b int, c int) index=(a, b, c)
+(a, b, c) IN ((1, 2, 3), (4, 5, 6))
+----
+[/1/2/3 - /1/2/3]
+[/4/5/6 - /4/5/6]
+
+index-constraints vars=(a int, b int, c int) index=(a, b, c)
+(a, b, c) IN ((4, 5, 6), (1, 2, 3))
+----
+[/1/2/3 - /1/2/3]
+[/4/5/6 - /4/5/6]
+
+index-constraints vars=(a int, b int, c int) index=(a, b, c)
+(a, b, c) IN ((1, 2, 3), (1, 2, 3))
+----
+[/1/2/3 - /1/2/3]
+
+index-constraints vars=(a int, b int, c int) index=(a, b, c)
+(a, b, c) IN ((1, 2, 3), (4, 5, 6), (1, 2, 3))
+----
+[/1/2/3 - /1/2/3]
+[/4/5/6 - /4/5/6]
+
+index-constraints vars=(a int, b int, c int) index=(a, b, c)
+(a+5, a, a+b, b) IN ((1, 5, 1, 6), (2, 7, 2, 8), (3, 9, 3, 10))
+----
+[/5/6 - /5/6]
+[/7/8 - /7/8]
+[/9/10 - /9/10]
+Remaining filter: (a + 5, a, a + b, b) IN ((1, 5, 1, 6), (2, 7, 2, 8), (3, 9, 3, 10))
+
+# Test that we properly handle NULLs inside IN tuples.
+index-constraints vars=(a int, b int) index=(a, b)
+(a, b) IN ((1, 2), (3, NULL))
+----
+[/1/2 - /1/2]
+
+index-constraints vars=(a int, b int) index=(a, b)
+(a, b) IN ((3, NULL))
+----
+
+index-constraints vars=(a int, b int) index=(a, b)
+(a, b) IN ((1, 2), (NULL, 4))
+----
+[/1/2 - /1/2]
+
+index-constraints vars=(a int, b int, c int) index=(a, b, c)
+(a, b, c) IN ((1, 2, 3), (4, 5, 6), (NULL, 8, 9))
+----
+[/1/2/3 - /1/2/3]
+[/4/5/6 - /4/5/6]
+
+# Verify that we sort and de-duplicate if we "project" the tuples;
+# in this case the expression becomes:
+#   (a, b) IN ((5, 5), (4, 4), (5, 5))
+index-constraints vars=(a int, b int, c int, d int) index=(b, d)
+(a, b, c, d) IN ((1, 5, 1, 5), (2, 4, 2, 4), (3, 5, 3, 5))
+----
+[/4/4 - /4/4]
+[/5/5 - /5/5]
+Remaining filter: (a, b, c, d) IN ((1, 5, 1, 5), (2, 4, 2, 4), (3, 5, 3, 5))
+
+index-constraints vars=(a int, b int, c int, d int) index=(b)
+(a, b, c, d) IN ((1, 5, 1, 5), (2, 4, 2, 4), (3, 5, 3, 5))
+----
+[/4 - /5]
+Remaining filter: (a, b, c, d) IN ((1, 5, 1, 5), (2, 4, 2, 4), (3, 5, 3, 5))
+
+index-constraints vars=(a int, b int) index=(a, b)
+(b, a) IN ((1, 5), (2, 1), (3, 4), (4, 1))
+----
+[/1/2 - /1/2]
+[/1/4 - /1/4]
+[/4/3 - /4/3]
+[/5/1 - /5/1]
+
+index-constraints vars=(a int, b int) index=(a desc, b)
+(b, a) IN ((1, 5), (2, 1), (3, 4), (4, 1))
+----
+[/5/1 - /5/1]
+[/4/3 - /4/3]
+[/1/2 - /1/2]
+[/1/4 - /1/4]
+
+index-constraints vars=(a int, b int) index=(a, b desc)
+(b, a) IN ((1, 5), (2, 1), (3, 4), (4, 1))
+----
+[/1/4 - /1/4]
+[/1/2 - /1/2]
+[/4/3 - /4/3]
+[/5/1 - /5/1]
+
+index-constraints vars=(a int, b int) index=(a desc, b desc)
+(b, a) IN ((1, 5), (2, 1), (3, 4), (4, 1))
+----
+[/5/1 - /5/1]
+[/4/3 - /4/3]
+[/1/4 - /1/4]
+[/1/2 - /1/2]
+
+index-constraints vars=(a int, b int, c int) index=(a, b, c)
+a = 1 AND (b, c) IN ((2, 3), (4, 5), (6, 7))
+----
+[/1/2/3 - /1/2/3]
+[/1/4/5 - /1/4/5]
+[/1/6/7 - /1/6/7]
+
+index-constraints vars=(a int, b int, c int) index=(a, b, c)
+c = 1 AND (a, b) IN ((2, 3), (4, 5), (6, 7))
+----
+[/2/3/1 - /2/3/1]
+[/4/5/1 - /4/5/1]
+[/6/7/1 - /6/7/1]
+
+# Here the best we can do is to effectively break up the IN constraint into
+# constraints on a and on c, which results in more spans than we need.
+index-constraints vars=(a int, b int, c int) index=(a, b, c)
+b = 1 AND (a, c) IN ((2, 3), (4, 5), (6, 7))
+----
+[/2/1/3 - /2/1/3]
+[/2/1/5 - /2/1/5]
+[/2/1/7 - /2/1/7]
+[/4/1/3 - /4/1/3]
+[/4/1/5 - /4/1/5]
+[/4/1/7 - /4/1/7]
+[/6/1/3 - /6/1/3]
+[/6/1/5 - /6/1/5]
+[/6/1/7 - /6/1/7]
+Remaining filter: (a, c) IN ((2, 3), (4, 5), (6, 7))
+
+index-constraints vars=(a int, b int, c int) index=(a, b, c)
+a > 1 AND (b, c) IN ((2, 3), (4, 5), (6, 7))
+----
+[/2/2/3 - ]
+Remaining filter: (b, c) IN ((2, 3), (4, 5), (6, 7))

@@ -1,0 +1,2757 @@
+# LogicTest: 5node
+
+statement ok
+CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, c))
+
+statement ok
+CREATE TABLE def (d INT, e INT, f INT, PRIMARY KEY (f, e), INDEX desc_idx (f, e DESC) STORING (d))
+
+statement ok
+CREATE TABLE def_e_decimal (d INT, e DECIMAL, f INT, PRIMARY KEY (f, e), INDEX desc_idx (f, e DESC) STORING (d))
+
+# Set up the statistics as if the first table is much smaller than the second.
+# This will make lookup join into the second table be the best plan.
+statement ok
+ALTER TABLE abc INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 100
+  }
+]'
+
+statement ok
+ALTER TABLE def INJECT STATISTICS '[
+  {
+    "columns": ["f"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000,
+    "avg_size": 3,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 1, "num_range": 0, "distinct_range": 0, "upper_bound": "1"},
+      {"num_eq": 1, "num_range": 9998, "distinct_range": 9998, "upper_bound": "10000"}
+    ]
+  }
+]'
+
+statement ok
+ALTER TABLE def_e_decimal INJECT STATISTICS '[
+  {
+    "columns": ["f"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+
+subtest parallelization_decision
+
+# By default, this lookup join is considered to be safe to parallelize (based on
+# the average lookup ratio).
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ estimated row count: 99
+│ table: def@def_pkey
+│ equality: (b) = (f)
+│ parallel
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+# Now disable the average lookup ratio heuristic but verify that override still
+# applies.
+statement ok
+SET parallelize_multi_key_lookup_joins_avg_lookup_ratio = 0;
+
+statement ok
+SET parallelize_multi_key_lookup_joins_enabled = true;
+
+query I
+SELECT count(*) FROM [EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b] WHERE info LIKE '%parallel%'
+----
+1
+
+statement ok
+RESET parallelize_multi_key_lookup_joins_enabled;
+
+# Same as the first case but with reduced allowed avg lookup ratio
+# (parallelization should be disabled).
+statement ok
+SET parallelize_multi_key_lookup_joins_avg_lookup_ratio = 0.001;
+
+query I
+SELECT count(*) FROM [EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b] WHERE info LIKE '%parallel%'
+----
+0
+
+statement ok
+RESET parallelize_multi_key_lookup_joins_avg_lookup_ratio;
+
+# Now parallelization should be disabled due to max lookup ratio being exceeded.
+statement ok
+SET parallelize_multi_key_lookup_joins_max_lookup_ratio = 0.001;
+
+query I
+SELECT count(*) FROM [EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b] WHERE info LIKE '%parallel%'
+----
+0
+
+statement ok
+RESET parallelize_multi_key_lookup_joins_max_lookup_ratio;
+
+# Now parallelization should be disabled due to avg lookup row size being
+# exceeded.
+statement ok
+SET parallelize_multi_key_lookup_joins_avg_lookup_row_size = 1;
+
+query I
+SELECT count(*) FROM [EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b] WHERE info LIKE '%parallel%'
+----
+0
+
+statement ok
+RESET parallelize_multi_key_lookup_joins_avg_lookup_row_size;
+
+subtest end
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b AND e = c
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ estimated row count: 1
+│ table: def@def_pkey
+│ equality: (b, c) = (f, e)
+│ equality cols are key
+│ parallel
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a > 1 AND e > 1
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ estimated row count: 33
+│ table: def@def_pkey
+│ lookup condition: (e > 1) AND (b = f)
+│ parallel
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 33 (33% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: /2-
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def@desc_idx ON f = b WHERE a > 1 AND e > 1
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ estimated row count: 33
+│ table: def@desc_idx
+│ lookup condition: (e > 1) AND (b = f)
+│ parallel
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 33 (33% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: /2-
+
+# The filter on 'e' is a contradiction. The optimizer should be smart enough to
+# avoid execution altogether, #80402.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a > 1 AND e > 9223372036854775807
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ estimated row count: 33
+│ table: def@def_pkey
+│ lookup condition: (e > 9223372036854775807) AND (b = f)
+│ parallel
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 33 (33% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: /2-
+
+# Decimals don't support Next / Prev calls, but the index column is ASC so
+# we can still use the (e > 1) filter in the lookup condition.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal ON f = b WHERE a > 1 AND e > 1
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ estimated row count: 33
+│ table: def_e_decimal@def_e_decimal_pkey
+│ lookup condition: (e > 1) AND (b = f)
+│ parallel
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 33 (33% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: /2-
+
+# Decimals don't support Next / Prev calls, but the inequality is inclusive so
+# we can still use the (e >= 1) filter in the lookup condition.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal@desc_idx ON f = b WHERE a > 1 AND e >= 1
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ estimated row count: 33
+│ table: def_e_decimal@desc_idx
+│ lookup condition: (e >= 1) AND (b = f)
+│ parallel
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 33 (33% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: /2-
+
+# Decimals don't support Next / Prev calls and the index column is DESC so
+# we handle the (e < 1) filter in the ON expression.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal@desc_idx ON f = b WHERE a > 1 AND e < 1
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ estimated row count: 33
+│ table: def_e_decimal@desc_idx
+│ equality: (b) = (f)
+│ pred: e < 1
+│ parallel
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 33 (33% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: /2-
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = a WHERE f > 1
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ estimated row count: 33
+│ table: def@def_pkey
+│ equality: (a) = (f)
+│ pred: f > 1
+│ parallel
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 33 (33% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: /2-
+
+# Inclusive inequality referencing an input column.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a >= e
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ estimated row count: 33
+│ table: def@def_pkey
+│ lookup condition: (a >= e) AND (b = f)
+│ parallel
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+# Inclusive inequality on a descending index column referencing an input column.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def@desc_idx ON f = b WHERE a >= e
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ estimated row count: 33
+│ table: def@desc_idx
+│ lookup condition: (a >= e) AND (b = f)
+│ parallel
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+# Exclusive inequality referencing an input column.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b AND a > e
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ estimated row count: 33
+│ table: def@def_pkey
+│ lookup condition: (a > e) AND (b = f)
+│ parallel
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+# Exclusive inequality on a descending index column referencing an input column.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def@desc_idx ON f = b AND a > e
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ estimated row count: 33
+│ table: def@desc_idx
+│ lookup condition: (a > e) AND (b = f)
+│ parallel
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+# Inequality on a decimal column.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal ON f = b AND a::DECIMAL >= e
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c, d, e, f)
+│
+└── • lookup join (inner)
+    │ columns: (column15, a, b, c, d, e, f)
+    │ estimated row count: 33
+    │ table: def_e_decimal@def_e_decimal_pkey
+    │ lookup condition: (column15 >= e) AND (b = f)
+    │ parallel
+    │
+    └── • render
+        │ columns: (column15, a, b, c)
+        │ render column15: a::DECIMAL
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │
+        └── • scan
+              columns: (a, b, c)
+              estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+              table: abc@abc_pkey
+              spans: FULL SCAN
+
+# Inequality on a descending decimal index column.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal@desc_idx ON f = b AND a::DECIMAL >= e
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c, d, e, f)
+│
+└── • lookup join (inner)
+    │ columns: (column15, a, b, c, d, e, f)
+    │ estimated row count: 33
+    │ table: def_e_decimal@desc_idx
+    │ lookup condition: (column15 >= e) AND (b = f)
+    │ parallel
+    │
+    └── • render
+        │ columns: (column15, a, b, c)
+        │ render column15: a::DECIMAL
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │
+        └── • scan
+              columns: (a, b, c)
+              estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+              table: abc@abc_pkey
+              spans: FULL SCAN
+
+# The inequality has to be in the ON condition because the columns are
+# different types.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal ON f = b AND a >= e
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ estimated row count: 33
+│ table: def_e_decimal@def_e_decimal_pkey
+│ equality: (b) = (f)
+│ pred: a >= e
+│ parallel
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+# The inequality has to be in the ON condition because decimals don't support
+# Prev calls.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal@desc_idx ON f = b AND a::DECIMAL > e
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c, d, e, f)
+│
+└── • lookup join (inner)
+    │ columns: (column15, a, b, c, d, e, f)
+    │ estimated row count: 33
+    │ table: def_e_decimal@desc_idx
+    │ equality: (b) = (f)
+    │ pred: column15 > e
+    │ parallel
+    │
+    └── • render
+        │ columns: (column15, a, b, c)
+        │ render column15: a::DECIMAL
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │
+        └── • scan
+              columns: (a, b, c)
+              estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+              table: abc@abc_pkey
+              spans: FULL SCAN
+
+# Verify a distsql plan.
+statement ok
+CREATE TABLE data (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b, c, d))
+
+# Split into ten parts.
+statement ok
+ALTER TABLE data SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
+
+statement ok
+ALTER TABLE data INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100000,
+    "distinct_count": 100000
+  }
+]'
+
+# Relocate the ten parts to the five nodes.
+retry
+statement ok
+ALTER TABLE data EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
+
+# Verify data placement.
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE data WITH DETAILS]
+ORDER BY 1
+----
+start_key           end_key       replicas  lease_holder
+<before:/Table/XX>  …/1/1         {1}       1
+…/1/1               …/1/2         {2}       2
+…/1/2               …/1/3         {3}       3
+…/1/3               …/1/4         {4}       4
+…/1/4               …/1/5         {5}       5
+…/1/5               …/1/6         {1}       1
+…/1/6               …/1/7         {2}       2
+…/1/7               …/1/8         {3}       3
+…/1/8               …/1/9         {4}       4
+…/1/9               <after:/Max>  {5}       5
+
+query T
+EXPLAIN (VERBOSE)
+SELECT *
+FROM (SELECT * FROM data WHERE c = 1) AS l
+NATURAL JOIN (SELECT * FROM data WHERE c > 0) AS r
+----
+distribution: full
+vectorized: true
+·
+• project
+│ columns: (a, b, c, d)
+│
+└── • lookup join (inner)
+    │ columns: (a, b, c, d, a, b, c, d)
+    │ estimated row count: 1
+    │ table: data@data_pkey
+    │ equality: (a, b, c, d) = (a, b, c, d)
+    │ equality cols are key
+    │ pred: c > 0
+    │ parallel
+    │
+    └── • filter
+        │ columns: (a, b, c, d)
+        │ estimated row count: 10
+        │ filter: c = 1
+        │
+        └── • scan
+              columns: (a, b, c, d)
+              estimated row count: 100,000 (100% of the table; stats collected <hidden> ago)
+              table: data@data_pkey
+              spans: FULL SCAN
+
+query T
+EXPLAIN (DISTSQL)
+SELECT *
+FROM (SELECT * FROM data WHERE c = 1) AS l
+NATURAL JOIN (SELECT * FROM data WHERE c > 0) AS r
+----
+distribution: full
+·
+• lookup join
+│ estimated row count: 1
+│ table: data@data_pkey
+│ equality: (a, b, c, d) = (a, b, c, d)
+│ equality cols are key
+│ pred: c > 0
+│
+└── • filter
+    │ estimated row count: 10
+    │ filter: c = 1
+    │
+    └── • scan
+          estimated row count: 100,000 (100% of the table; stats collected <hidden> ago)
+          table: data@data_pkey
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlt1u2jAYhs93FdZ31E6OEueHH0uTQC3VqCh0wLRJG6pS4rZZQ5w5jrqq4t6nQEtJ0hgCHMABUkz85vleHkV-gfhvABQ6P6977W4fnZx3R-PRt94pGnV6nbMx-owuhoMrdJK99Fzpoh9fO8MOmqIviJyi9ggFqN8efx-2e-hykEYptvxODMNiyFjsE4Ah5B7ruzMWA_0FBDCYgMECDDZgcGCCIRJ8yuKYi_SWl8WGrvcPqIHBD6NEpssTDFMuGNAXkL4MGFAYu7cBGzLXY0I3AIPHpOsHi8ekRK306yZ6ZM-A4YwHySyMKXIxusVoipEHGEaRm65pOkFu6CGCuHxgAiZzDDyR70-OpXvPgJI11O45UGOOt6e98APJBBO6k0VdrlPUstK2KaXd_rhRimDmEJwqCJfcD1_7IpsK63H-mEToD_dDxEOKWgS3TNyycCv92wZ91Kqv_uo36LKaB4nMBpRNZ-WmI-UNv0-VhFx4TDAvM9Fk_kEBfa7xSCdO7s6PYew8TLZrsr2cZB85daLp5k56kiq8Kz1rh9SzVgVhXc9NlR2HntmGze2NMPcywtR0aycjzCq8KyPqhzSiXgVh3YhNlR2HEdmGre2NsPYywtJ0eycjrCq8KyMahzSiUQVh3YhNlR2HEdmG7e2NsPcywtZ0Zycj7Cq8KyOahzSiWQVh3YhNlR2HEXaVM9uQxREPY7bVkcXIPUoj6SmIefdseWSKeSKm7Frw6eLe5eVgEbRY8Fgsl7-S5UU3fPsploK5s9Wpdz2JKJPM8iQnn2Qqk6xMEllPIgUoSz1ercJ8tjLKKU8i-SRHmaRgquWTajs3VYCqK6Ma5VBmPqmhTGqWJ9XzSc2dxytAkQ2iK0y3Cllq1YnC9UYha3fZi1wbbLfLuexCllp3ovC9WchSC6-a0U7fXHcBf7rxPaBgvH60D77ePpBucO_j9PU5euBPi9zxc5S-_O7cIGYYrtxHds4kEzM_9GPpT4FKkbD5_NP_AAAA___qRmiI
+
+statement ok
+CREATE TABLE books (title STRING, edition INT, shelf INT, PRIMARY KEY (title, edition))
+
+statement ok
+CREATE TABLE books2 (title STRING, edition INT, shelf INT, PRIMARY KEY (title, edition))
+
+statement ok
+ALTER TABLE books INJECT STATISTICS '[
+  {
+    "columns": ["title"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 100
+  }
+]'
+
+statement ok
+ALTER TABLE books2 INJECT STATISTICS '[
+  {
+    "columns": ["title"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 1000
+  }
+]'
+
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT b1.title FROM books as b1 JOIN books2 as b2 ON b1.title = b2.title WHERE b1.shelf <> b2.shelf
+----
+distribution: local
+vectorized: true
+·
+• distinct
+│ columns: (title)
+│ estimated row count: 100
+│ distinct on: title
+│ order key: title
+│
+└── • project
+    │ columns: (title)
+    │ ordering: +title
+    │
+    └── • lookup join (inner)
+        │ columns: (title, shelf, title, shelf)
+        │ ordering: +title
+        │ estimated row count: 327
+        │ table: books2@books2_pkey
+        │ equality: (title) = (title)
+        │ pred: shelf != shelf
+        │ parallel
+        │
+        └── • scan
+              columns: (title, shelf)
+              ordering: +title
+              estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+              table: books@books_pkey
+              spans: FULL SCAN
+
+statement ok
+CREATE TABLE authors (name STRING, book STRING)
+
+statement ok
+ALTER TABLE authors INJECT STATISTICS '[
+  {
+    "columns": ["name"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 100
+  }
+]'
+
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf
+----
+distribution: local
+vectorized: true
+·
+• distinct
+│ columns: (name)
+│ estimated row count: 96
+│ distinct on: name
+│
+└── • project
+    │ columns: (name)
+    │
+    └── • lookup join (inner)
+        │ columns: (title, shelf, name, book, title, shelf)
+        │ estimated row count: 323
+        │ table: books2@books2_pkey
+        │ equality: (book) = (title)
+        │ pred: shelf != shelf
+        │ parallel
+        │
+        └── • hash join (inner)
+            │ columns: (title, shelf, name, book)
+            │ estimated row count: 99
+            │ equality: (title) = (book)
+            │
+            ├── • scan
+            │     columns: (title, shelf)
+            │     estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+            │     table: books@books_pkey
+            │     spans: FULL SCAN
+            │
+            └── • scan
+                  columns: (name, book)
+                  estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+                  table: authors@authors_pkey
+                  spans: FULL SCAN
+
+# Verify data placement.
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE books WITH DETAILS]
+----
+start_key                end_key       replicas  lease_holder
+<before:/Table/109/1/9>  <after:/Max>  {5}       5
+
+query T
+EXPLAIN (DISTSQL) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf
+----
+distribution: local
+·
+• distinct
+│ estimated row count: 96
+│ distinct on: name
+│
+└── • lookup join
+    │ estimated row count: 323
+    │ table: books2@books2_pkey
+    │ equality: (book) = (title)
+    │ pred: shelf != shelf
+    │
+    └── • hash join
+        │ estimated row count: 99
+        │ equality: (title) = (book)
+        │
+        ├── • scan
+        │     estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+        │     table: books@books_pkey
+        │     spans: FULL SCAN
+        │
+        └── • scan
+              estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+              table: authors@authors_pkey
+              spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyck19v2jwUxu_fT-H3XIHktrETehGpUqrCVCZKO0DapAlVhhwgI8SZ7airEN99sgMrZISV5iLEf87veY79sAb9M4UQOt-eerfdPmm0u8PR8EuvSYadXuduROy4278bEVGYhVT6MhMrJJ8Gjw9kIuVSk9shmTBaDrgbcbrbTL7edwYd0mhM2KVJTIrkhkx4-dkkt_02aeywtt6ubjc2t8sTdqkXmM7I_67SfTeBQiZj7IsVagi_A4MxhVzJKWotlZ1auw3d-BeEHoUkywtjp8cUplIhhGtwKhDCSExSHKCIUV15QCFGI5LUYV1LkXs_50t8BQp3Mi1WmQ6JK6fE-QEKw1zY2QsYbyjIwrzpaSPmCCHbM9htQ-ht6Mc8skOP2-OLtr9_-bS3VV7Oe1zyiktW6_LNXJFJFaPC-MDY2Fb-a8uRVu-FXnyWSYbqih92muLMNCLWvFHJfGEaEbcxeCxMSCJGI04jn0ZBbWd-pTN-zvlbQ9vj949EhJcZ4bvD70m5LHLyQyYZkVlIosA67ZOI2xRH1ydyVPbj17YRVNrwz2mjnWiTZFNzFRw2EbFavVZFL_iQXuvdetcVvdY5egPUucw0VoN4VMmrKF0wG0eM51jGW8tCTfFJyanbWw4fHchNxKhNucrLQTdzS8wqKBSrP__yfRI7g8T3SaxK4idJ_gHJ2yfxKsk_SQrqSX6VFJwktepJQZXUOkm6rid59hZnqXx5TmIIwds-F0deuwdsgZhrG6XhQr447Og1t0GYiVQjhQexxDYaVKsks6GeQmhUgZvNf78DAAD__zBpWE8=
+
+query T
+EXPLAIN (VERBOSE) SELECT a.name FROM authors AS a JOIN books2 AS b2 ON a.book = b2.title ORDER BY a.name
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (name)
+│ ordering: +name
+│
+└── • lookup join (inner)
+    │ columns: (name, book, title)
+    │ ordering: +name
+    │ estimated row count: 990
+    │ table: books2@books2_pkey
+    │ equality: (book) = (title)
+    │ parallel
+    │
+    └── • sort
+        │ columns: (name, book)
+        │ estimated row count: 100
+        │ order: +name
+        │
+        └── • scan
+              columns: (name, book)
+              estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+              table: authors@authors_pkey
+              spans: FULL SCAN
+
+# Cross joins should not be planned as lookup joins.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM books CROSS JOIN books2
+----
+distribution: local
+vectorized: true
+·
+• cross join (inner)
+│ columns: (title, edition, shelf, title, edition, shelf)
+│ estimated row count: 1,000,000
+│
+├── • scan
+│     columns: (title, edition, shelf)
+│     estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
+│     table: books2@books2_pkey
+│     spans: FULL SCAN
+│
+└── • scan
+      columns: (title, edition, shelf)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: books@books_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (DISTSQL) SELECT * FROM authors INNER JOIN books2 ON books2.edition = 1 WHERE books2.title = authors.book
+----
+distribution: local
+·
+• lookup join
+│ estimated row count: 99
+│ table: books2@books2_pkey
+│ equality: (book, lookup_join_const_col_@9) = (title, edition)
+│ equality cols are key
+│
+└── • render
+    │
+    └── • scan
+          estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+          table: authors@authors_pkey
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkm9r2zAQxt_vUxz3ahtKG7nbGIKCR-sxl9TpnMAGIxQ1viZeHJ0nyXQl5LsP_9vSsIRWL6LoJP2e5zl5g-5XgQqj7zejT3ECry_jyXTydfQGJtEoupjCW_icjq9BV37J1kGcJFEKV-M4gTvmlQtg3P87oSz3ORs4BwnfvkRp1G_43BcE5z3kpC6jQMMZJXpNDtUPlDgTWFqek3Ns69KmORBnv1ENBeamrHxdngmcsyVUG2y4qHCq7wpKSWdkT4coMCOv86LBdpJhN9-WK3pEgRdcVGvjFBi9JgGdoUmp69oABaZkMrIKpFIqTqYfBYRSQBjgbCuQK__PjPN6Qajkjvv4EtVwK54f4Ipz0_mXT_23HQzbqXc_Yl5VJfzk3AAbBeGZCOVuqoYroHsQAW5JxT0KHFdeQRiI-sI7Eb4X4YeDgYK9QPIlgRIecHkaPMlySOhsTyh4iVBKrmTj6FlKwz2lgdzOBFK2oPZ7c1zZOd1Ynjdn2-W4ATWFjJxvd2W7iE2_5bwlvf778LskeZQUHCbJfVJwlHR2zNNM4H3BD7d5hgqH3Rj856cfWF_QC1c3e7LkhwY7fSzrVt3rwpHAa72iS_Jk17nJnc_nqLytaLt99ScAAP__SEVkcw==
+
+####################################
+#  LOOKUP JOIN ON SECONDARY INDEX  #
+####################################
+
+statement ok
+CREATE TABLE small (a INT PRIMARY KEY, b INT, c INT, d INT)
+
+statement ok
+CREATE TABLE large (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b), INDEX bc (b) STORING (c))
+
+statement ok
+ALTER TABLE small SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
+
+retry
+statement ok
+ALTER TABLE small EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
+
+statement ok
+INSERT INTO small SELECT x, 2*x, 3*x, 4*x FROM
+  generate_series(1, 10) AS a(x)
+
+statement ok
+ALTER TABLE small INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 100
+  }
+]'
+
+statement ok
+ALTER TABLE large INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+
+# Lookup join on covering secondary index
+query T
+EXPLAIN (VERBOSE) SELECT small.a, large.c FROM small JOIN large ON small.a = large.b
+----
+distribution: full
+vectorized: true
+·
+• project
+│ columns: (a, c)
+│
+└── • lookup join (inner)
+    │ columns: (a, b, c)
+    │ estimated row count: 1,000
+    │ table: large@bc
+    │ equality: (a) = (b)
+    │ parallel
+    │
+    └── • scan
+          columns: (a)
+          estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+          table: small@small_pkey
+          spans: FULL SCAN
+
+# Lookup join on non-covering secondary index
+query T
+EXPLAIN (VERBOSE) SELECT small.a, large.d FROM small JOIN large ON small.a = large.b
+----
+distribution: full
+vectorized: true
+·
+• project
+│ columns: (a, d)
+│
+└── • project
+    │ columns: (a, b, d)
+    │
+    └── • lookup join (inner)
+        │ columns: (a, a, b, d)
+        │ estimated row count: 1,000
+        │ table: large@large_pkey
+        │ equality: (a, b) = (a, b)
+        │ equality cols are key
+        │ parallel
+        │
+        └── • lookup join (inner)
+            │ columns: (a, a, b)
+            │ estimated row count: 1,000
+            │ table: large@bc
+            │ equality: (a) = (b)
+            │ parallel
+            │
+            └── • scan
+                  columns: (a)
+                  estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+                  table: small@small_pkey
+                  spans: FULL SCAN
+
+############################
+#  LEFT OUTER LOOKUP JOIN  #
+############################
+
+# Left join against primary index
+query T
+EXPLAIN (VERBOSE) SELECT small.b, large.a FROM small LEFT JOIN large ON small.b = large.a
+----
+distribution: full
+vectorized: true
+·
+• lookup join (left outer)
+│ columns: (b, a)
+│ estimated row count: 100
+│ table: large@large_pkey
+│ equality: (b) = (a)
+│ parallel
+│
+└── • scan
+      columns: (b)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: small@small_pkey
+      spans: FULL SCAN
+
+# Left join should preserve input order.
+query T
+EXPLAIN (VERBOSE) SELECT t1.a, t2.b FROM small t1 LEFT JOIN large t2 ON t1.a = t2.a AND t2.b % 6 = 0 ORDER BY t1.a
+----
+distribution: full
+vectorized: true
+·
+• project
+│ columns: (a, b)
+│ ordering: +a
+│
+└── • lookup join (left outer)
+    │ columns: (a, a, b)
+    │ ordering: +a
+    │ estimated row count: 100
+    │ table: large@large_pkey
+    │ equality: (a) = (a)
+    │ pred: (b % 6) = 0
+    │ parallel
+    │
+    └── • scan
+          columns: (a)
+          ordering: +a
+          estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+          table: small@small_pkey
+          spans: FULL SCAN
+
+query T
+EXPLAIN (DISTSQL) SELECT t1.a, t2.b FROM small t1 LEFT JOIN large t2 ON t1.a = t2.a AND t2.b % 6 = 0 ORDER BY t1.a
+----
+distribution: full
+·
+• lookup join (left outer)
+│ estimated row count: 100
+│ table: large@large_pkey
+│ equality: (a) = (a)
+│ pred: (b % 6) = 0
+│
+└── • scan
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: small@small_pkey
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzUlm9r4koUxt_fT3E4cEG5k8ZJ4r-Bgr3VgsVqr3phl0VKaqY225jJZka6pfjdlxnbrck2QfPOvAjJJPPM7znPieMryh8RMhx8uR1dDMdQ6w9n89l_ozrMBqPB5RwUPfMJKOfsHq6mkxuQaz-K4GIGisJocDWH68lwDJGfrrgZdWAyhpqeBed6ml-Hi3EfajUj8Te06nAOjTpMpv3BFP79ahZAgrEI-Nhfc4nsG1Ik6CBBFwl6SLCJC4JJKpZcSpHqV17NhGHwE1mDYBgnG6WHFwSXIuXIXlGFKuLIcO7fR3zK_YCndgMJBlz5YWSWMV565nyXPPEXJHgpos06lgw00yzx9aVlU_DjACgI9chTXGwJio36WFIqf8WR0T3GYR9ZY0sOx7wWYfxG2cxSzl8Szna1nvw_H0xNxZGgqXnPnN_pR0I8bRL4LsIYRMygpwup8-i5uvSMseF43jEJvF1nLBO4LzTn5Mw1C819eBJpwFMeZO306D-42H5SgbGwRGLTXEaTjdI-SM8tRHNzaDRbeHp4f9BK_WFTy3YqdQg9BnSvQ1qn0CGtjDnn8BScaik4lu1WSsE5BnQvhfYppNDOmHMPT8GtloJr2V6lFNxjQPdS6JxCCp2MOe_wFLxqKXiW3ayUgncM6F4K3VNIoXvMhjzlMhGx5BljRSs1citZVO9wPFjx3Y4oxSZd8ttULM27u9uJETIDAZdq95Tubobx-yOpUu6vf_-f2FeipUpORonuKzXzSk450zFQbqmUV6xE80peVXutvFKzVKlVzOTklVpVmdp5pXapUqeYyc0rdaoydfJK3fI2aBRDeX_0Znmbl1B19afzEInnuzBAho23w_rk9H6gnuCvpP5-Z4_i2cjq3yCJ7MGPJCd44z_xPlc8XYdxKFW4RKbSDd9u__oVAAD__zKPHM4=
+
+# Left join against covering secondary index
+query T
+EXPLAIN (VERBOSE) SELECT small.c, large.c FROM small LEFT JOIN large ON small.c = large.b
+----
+distribution: full
+vectorized: true
+·
+• project
+│ columns: (c, c)
+│
+└── • lookup join (left outer)
+    │ columns: (c, b, c)
+    │ estimated row count: 1,000
+    │ table: large@bc
+    │ equality: (c) = (b)
+    │ parallel
+    │
+    └── • scan
+          columns: (c)
+          estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+          table: small@small_pkey
+          spans: FULL SCAN
+
+# Left join against non-covering secondary index
+query T
+EXPLAIN (VERBOSE) SELECT small.c, large.d FROM small LEFT JOIN large ON small.c = large.b
+----
+distribution: full
+vectorized: true
+·
+• project
+│ columns: (c, d)
+│
+└── • project
+    │ columns: (c, b, d)
+    │
+    └── • lookup join (left outer)
+        │ columns: (c, a, b, d)
+        │ estimated row count: 1,000
+        │ table: large@large_pkey
+        │ equality: (a, b) = (a, b)
+        │ equality cols are key
+        │ parallel
+        │
+        └── • lookup join (left outer)
+            │ columns: (c, a, b)
+            │ estimated row count: 1,000
+            │ table: large@bc
+            │ equality: (c) = (b)
+            │ parallel
+            │
+            └── • scan
+                  columns: (c)
+                  estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+                  table: small@small_pkey
+                  spans: FULL SCAN
+
+# Left join with ON filter on covering index
+query T
+EXPLAIN (VERBOSE) SELECT small.c, large.c FROM small LEFT JOIN large ON small.c = large.b AND large.c < 20
+----
+distribution: full
+vectorized: true
+·
+• project
+│ columns: (c, c)
+│
+└── • lookup join (left outer)
+    │ columns: (c, b, c)
+    │ estimated row count: 336
+    │ table: large@bc
+    │ equality: (c) = (b)
+    │ pred: c < 20
+    │ parallel
+    │
+    └── • scan
+          columns: (c)
+          estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+          table: small@small_pkey
+          spans: FULL SCAN
+
+# Left join with ON filter on non-covering index
+query T
+EXPLAIN (VERBOSE) SELECT small.c, large.d FROM small LEFT JOIN large ON small.c = large.b AND large.d < 30
+----
+distribution: full
+vectorized: true
+·
+• project
+│ columns: (c, d)
+│
+└── • project
+    │ columns: (c, b, d)
+    │
+    └── • lookup join (left outer)
+        │ columns: (c, a, b, cont, b, d)
+        │ estimated row count: 336
+        │ table: large@large_pkey
+        │ equality: (a, b) = (a, b)
+        │ equality cols are key
+        │ pred: d < 30
+        │ parallel
+        │
+        └── • lookup join (left outer)
+            │ columns: (c, a, b, cont)
+            │ estimated row count: 1,000
+            │ table: large@bc
+            │ equality: (c) = (b)
+            │ parallel
+            │
+            └── • scan
+                  columns: (c)
+                  estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+                  table: small@small_pkey
+                  spans: FULL SCAN
+
+# Left semi-join with ON filter on non-covering index
+query T
+EXPLAIN (VERBOSE) SELECT small.c FROM small WHERE EXISTS(SELECT 1 FROM large WHERE small.c = large.b AND large.d < 30)
+----
+distribution: full
+vectorized: true
+·
+• project
+│ columns: (c)
+│
+└── • lookup join (semi)
+    │ columns: (c, a, b, cont)
+    │ estimated row count: 100
+    │ table: large@large_pkey
+    │ equality: (a, b) = (a, b)
+    │ equality cols are key
+    │ pred: d < 30
+    │ parallel
+    │
+    └── • lookup join (inner)
+        │ columns: (c, a, b, cont)
+        │ estimated row count: 990
+        │ table: large@bc
+        │ equality: (c) = (b)
+        │ parallel
+        │
+        └── • scan
+              columns: (c)
+              estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+              table: small@small_pkey
+              spans: FULL SCAN
+
+# Left anti-join with ON filter on non-covering index
+query T
+EXPLAIN (VERBOSE) SELECT small.c FROM small WHERE NOT EXISTS(SELECT 1 FROM large WHERE small.c = large.b AND large.d < 30)
+----
+distribution: full
+vectorized: true
+·
+• project
+│ columns: (c)
+│
+└── • lookup join (anti)
+    │ columns: (c, a, b, cont)
+    │ estimated row count: 1
+    │ table: large@large_pkey
+    │ equality: (a, b) = (a, b)
+    │ equality cols are key
+    │ pred: d < 30
+    │ parallel
+    │
+    └── • lookup join (left outer)
+        │ columns: (c, a, b, cont)
+        │ estimated row count: 1,000
+        │ table: large@bc
+        │ equality: (c) = (b)
+        │ parallel
+        │
+        └── • scan
+              columns: (c)
+              estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+              table: small@small_pkey
+              spans: FULL SCAN
+
+###########################################################
+#  LOOKUP JOINS ON IMPLICIT INDEX KEY COLUMNS             #
+#  https://github.com/cockroachdb/cockroach/issues/31777  #
+###########################################################
+statement ok
+CREATE TABLE t (a INT, b INT, c INT, d INT, e INT)
+
+statement ok
+CREATE TABLE u (a INT, b INT, c INT, d INT, e INT, PRIMARY KEY (a DESC, b, c))
+
+# Test index with all primary key columns implicit.
+statement ok
+CREATE INDEX idx ON u (d)
+
+query T
+EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a WHERE t.e = 5
+----
+distribution: full
+vectorized: true
+·
+• project
+│ columns: (a)
+│
+└── • lookup join (inner)
+    │ columns: (a, d, e, a, d)
+    │ estimated row count: 1 (missing stats)
+    │ table: u@idx
+    │ equality: (d, a) = (d, a)
+    │
+    └── • filter
+        │ columns: (a, d, e)
+        │ estimated row count: 10 (missing stats)
+        │ filter: e = 5
+        │
+        └── • scan
+              columns: (a, d, e)
+              estimated row count: 1,000 (missing stats)
+              table: t@t_pkey
+              spans: FULL SCAN
+
+# Test unique version of same index. (Lookup join should not use column a.)
+statement ok
+DROP INDEX u@idx
+
+statement ok
+CREATE UNIQUE INDEX idx ON u (d)
+
+query T
+EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a WHERE t.e = 5
+----
+distribution: full
+vectorized: true
+·
+• project
+│ columns: (a)
+│
+└── • lookup join (inner)
+    │ columns: (a, d, e, a, d)
+    │ estimated row count: 1 (missing stats)
+    │ table: u@idx
+    │ equality: (d) = (d)
+    │ equality cols are key
+    │ pred: a = a
+    │ parallel
+    │
+    └── • filter
+        │ columns: (a, d, e)
+        │ estimated row count: 10 (missing stats)
+        │ filter: e = 5
+        │
+        └── • scan
+              columns: (a, d, e)
+              estimated row count: 1,000 (missing stats)
+              table: t@t_pkey
+              spans: FULL SCAN
+
+# Test index with first primary key column explicit and the rest implicit.
+statement ok
+DROP INDEX u@idx CASCADE
+
+statement ok
+CREATE INDEX idx ON u (d, a)
+
+query T
+EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.b = u.b WHERE t.e = 5
+----
+distribution: full
+vectorized: true
+·
+• project
+│ columns: (a)
+│
+└── • lookup join (inner)
+    │ columns: (a, b, d, e, a, b, d)
+    │ estimated row count: 1 (missing stats)
+    │ table: u@idx
+    │ equality: (d, a, b) = (d, a, b)
+    │
+    └── • filter
+        │ columns: (a, b, d, e)
+        │ estimated row count: 10 (missing stats)
+        │ filter: e = 5
+        │
+        └── • scan
+              columns: (a, b, d, e)
+              estimated row count: 1,000 (missing stats)
+              table: t@t_pkey
+              spans: FULL SCAN
+
+# Test index with middle primary key column explicit and the rest implicit.
+statement ok
+DROP INDEX u@idx
+
+statement ok
+CREATE INDEX idx ON u (d, b)
+
+query T
+EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.b = u.b WHERE t.e = 5
+----
+distribution: full
+vectorized: true
+·
+• project
+│ columns: (a)
+│
+└── • lookup join (inner)
+    │ columns: (a, b, d, e, a, b, d)
+    │ estimated row count: 1 (missing stats)
+    │ table: u@idx
+    │ equality: (d, b, a) = (d, b, a)
+    │
+    └── • filter
+        │ columns: (a, b, d, e)
+        │ estimated row count: 10 (missing stats)
+        │ filter: e = 5
+        │
+        └── • scan
+              columns: (a, b, d, e)
+              estimated row count: 1,000 (missing stats)
+              table: t@t_pkey
+              spans: FULL SCAN
+
+# Test index with last primary key column explicit and the rest implicit.
+statement ok
+DROP INDEX u@idx
+
+statement ok
+CREATE INDEX idx ON u (d, c)
+
+query T
+EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.d = u.d WHERE t.e = 5
+----
+distribution: full
+vectorized: true
+·
+• project
+│ columns: (a)
+│
+└── • lookup join (inner)
+    │ columns: (a, d, e, a, d)
+    │ estimated row count: 1 (missing stats)
+    │ table: u@idx
+    │ equality: (d) = (d)
+    │ pred: a = a
+    │
+    └── • filter
+        │ columns: (a, d, e)
+        │ estimated row count: 10 (missing stats)
+        │ filter: e = 5
+        │
+        └── • scan
+              columns: (a, d, e)
+              estimated row count: 1,000 (missing stats)
+              table: t@t_pkey
+              spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM def JOIN abc ON a=f ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (d, e, f, a, b, c)
+│ ordering: +a
+│ estimated row count: 100
+│ table: def@def_pkey
+│ equality: (a) = (f)
+│ parallel
+│
+└── • scan
+      columns: (a, b, c)
+      ordering: +a
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+# Test that we don't get a lookup join if we force a merge join.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM def INNER MERGE JOIN abc ON a=f ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• merge join (inner)
+│ columns: (d, e, f, a, b, c)
+│ ordering: +f
+│ estimated row count: 100
+│ equality: (f) = (a)
+│ merge ordering: +"(f=a)"
+│
+├── • scan
+│     columns: (d, e, f)
+│     ordering: +f
+│     estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
+│     table: def@def_pkey
+│     spans: FULL SCAN
+│
+└── • scan
+      columns: (a, b, c)
+      ordering: +a
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+# Test that we don't get a lookup join if we force a hash join.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM def INNER HASH JOIN abc ON a=f ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ columns: (d, e, f, a, b, c)
+│ estimated row count: 100
+│ order: +f
+│
+└── • hash join (inner)
+    │ columns: (d, e, f, a, b, c)
+    │ estimated row count: 100
+    │ equality: (f) = (a)
+    │
+    ├── • scan
+    │     columns: (d, e, f)
+    │     estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
+    │     table: def@def_pkey
+    │     spans: FULL SCAN
+    │
+    └── • scan
+          columns: (a, b, c)
+          estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+          table: abc@abc_pkey
+          spans: FULL SCAN
+
+# Test lookup semi and anti join.
+query T
+EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f)
+----
+distribution: local
+vectorized: true
+·
+• lookup join (semi)
+│ columns: (a, b, c)
+│ estimated row count: 100
+│ table: def@def_pkey
+│ equality: (a) = (f)
+│ parallel
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f)
+----
+distribution: local
+vectorized: true
+·
+• lookup join (anti)
+│ columns: (a, b, c)
+│ estimated row count: 1
+│ table: def@def_pkey
+│ equality: (a) = (f)
+│ parallel
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AND c=e)
+----
+distribution: local
+vectorized: true
+·
+• lookup join (semi)
+│ columns: (a, b, c)
+│ estimated row count: 100
+│ table: def@def_pkey
+│ equality: (a, c) = (f, e)
+│ equality cols are key
+│ parallel
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f AND c=e)
+----
+distribution: local
+vectorized: true
+·
+• lookup join (anti)
+│ columns: (a, b, c)
+│ estimated row count: 1
+│ table: def@def_pkey
+│ equality: (a, c) = (f, e)
+│ equality cols are key
+│ parallel
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AND d+b>1)
+----
+distribution: local
+vectorized: true
+·
+• lookup join (semi)
+│ columns: (a, b, c)
+│ estimated row count: 33
+│ table: def@def_pkey
+│ equality: (a) = (f)
+│ pred: (d + b) > 1
+│ parallel
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f AND d+b>1)
+----
+distribution: local
+vectorized: true
+·
+• lookup join (anti)
+│ columns: (a, b, c)
+│ estimated row count: 67
+│ table: def@def_pkey
+│ equality: (a) = (f)
+│ pred: (d + b) > 1
+│ parallel
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+query T
+ EXPLAIN (DISTSQL)
+  SELECT a,b from small WHERE EXISTS (SELECT a FROM data WHERE small.a=data.a) ORDER BY a
+----
+distribution: full
+·
+• lookup join (semi)
+│ estimated row count: 100
+│ table: data@data_pkey
+│ equality: (a) = (a)
+│
+└── • scan
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: small@small_pkey
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzElV9vmzoYxu_Pp7Deq1bHlBjIP0tHyllDNao06ZJI6zRFlRvetqwEM-yoq6p89wnSrMAKSrgJF5ZsHh7__LzGfgX1MwQO7s316H9vTE6G3mw--zI6JTN35J7PiaDkjlxMJ1dErUQYkq-f3alL3JtURk52oq3CF1q8CTLxmSD_ZYNn4pRMpkN3Sj59IwIoRNLHsVihAv4dGFCwgIINFByg0IYFhTiRS1RKJqnkNfvA838Bb1EIonit0-EFhaVMEPgr6ECHCBzm4i7EKQofE7MFFHzUIgizaTKkQdbexk_4AhTOZbheRYpnqwQKs1ikPcNkREQ-YUTqR0xgsaEg1_p9VqXFAwJnOUxvCLy1ofuTXsogegNtF0HnLzFyMnIv5mTmXnnkcuKNU4XQYpA2O_qRlE_rmPyQQURkxMmAFZZUiW2VsNuV2O-0MvExQb8IOmD_wmLzwdrG0pCxyYoFqMKxSzisGCPbv-CsacFNZphWo5KzQ1hzJe8ct-SdAra1f8RW44gtw7QbRWwdwpqLuHvciLsFbHv_iO3GEduG6TSK2D6ENRdx77gR9wrYzv4RO40jdgyz3Shi5xDWXMT940bcP-RKm6KKZaRwr2O_VZrJYOlNgv4Dbm8eJdfJEq8Tucy02-4kM8oGfFR6-5ZtO160e6V0gmL150bOO7FaJ6vgxPJO7bKTVc90CJRda-VUO7Gyk9N0eZ2yU7vWqVPNZJWdOk2ZumWnbq1Tr5rJLjv1mjL1yk79-m3QqoZy_tqb9du8hqqf_jr3oXy-DXzg0Hp7jA-a3QPpB-JBpf_v7FE-Z7bp6aKA34tQIYUr8YRD1JisgihQOlgC18kaN5t_fgcAAP__88fvLQ==
+
+query T
+ EXPLAIN (DISTSQL)
+  SELECT a,b from small WHERE a+b<20 AND EXISTS (SELECT a FROM data WHERE small.a=data.a AND small.b+data.c>15) ORDER BY a
+----
+distribution: full
+·
+• lookup join (semi)
+│ estimated row count: 11
+│ table: data@data_pkey
+│ equality: (a) = (a)
+│ pred: (b + c) > 15
+│
+└── • filter
+    │ estimated row count: 33
+    │ filter: (a + b) < 20
+    │
+    └── • scan
+          estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+          table: small@small_pkey
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMll2Pm0YUhu_7K47Ola3FgeHDa49UyWnMqkReO7UtNVW7imZhsqGLGcpgpdHK_z0C1g4fgTVIK9kXSIw5D-8588ieJ5T_BUjR_vhh8dZZwmDubLabPxZD2NgL-90WmAL3cLNe3YLcsSCAP3-31zYMBgyu4H4I_-w1zXBB14bwdjkH-2NaDoNjcV7psYQdCzPKGwa_ZqtvWF43eF6_h6t83X1GcyDWcAir9dxew29_AUMFQ-HxJdtxifRvJKigjgoaqKCJClp4p2AUC5dLKeL0kaeswPH-R6op6IfRPkmX7xR0RcyRPmHiJwFHilt2H_A1Zx6PVQ0V9HjC_CB7TRZvll0_RY_8Gyr4TgT7XShpNiJUcBOx9G6kEmChBwRE8oXHeHdQUOyTH2-VCXvgSEkhpjNHqh2U85Pe-EHCYx6rVjlmvk5hMCNwBTO9sEGUUme5nTTm0St5rC553gs_fB4cqUxu-y3iFBb2zRY29q0D71fOMn2CJWyWXo7jXAjxuI_gX-GHIEIKs3RnV0sYzPS0FbMgxLGV8h64ja0ZldZI86x_tCRij8fcKzczI1d4d_jJAJZiJCKVlLejKY9ZzVOeNTnfUtLXUpWMVL2Xp6RL1pOn41fzdNwlT9FTcvmelmetn--F3tsLfaQavbzQu2Q9eXH9al5cd8lT9EK_fC_KszbO98Lo7YUxUs1eXhhdsp68mLyaF5MueYpeGJfvRXnW5vlemL29MEeq1csLs0vWkxfTV_Ni2iVP0Qvz8r0wu5zl1lxGIpT8rKOMVnnViKSnI-498Pw0JcU-dvmHWLjZs_ntKgNlCx6XSf4tyW-c8PiVTGLOdqejcZFEWkl6M8mqkvRWklEikSKJ1EIZ7e2NO_RntqKsZhKpkqxWUkumcZU07j2pWqjrVtSkOZReJU1aSdNm0nWVNO3dXi0UeUH0FtONGqtdddLi-qTG6i97PdcLtpvNucwaq1130uL7tMZqF76tRzP95fociK-ffA8pas-f0U8uxw-mBexBpj-fmy_ia8ZN_wAk0s8skFzBW_bI5zzh8c4PfZn4LtIk3vPD4ZfvAQAA__9jwoJy
+
+# Regression test for #40562.
+
+statement ok
+CREATE TABLE public.region
+(
+    r_regionkey int PRIMARY KEY,
+    r_name char(25) NOT NULL,
+    r_comment varchar(152)
+)
+
+statement ok
+ALTER TABLE public.region INJECT STATISTICS '[
+  {
+    "columns": ["r_regionkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 5,
+    "distinct_count": 5
+  },
+  {
+    "columns": ["r_name"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 5,
+    "distinct_count": 5
+  },
+  {
+    "columns": ["r_comment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 5,
+    "distinct_count": 5
+  }
+]'
+
+statement ok
+CREATE TABLE public.nation
+(
+    n_nationkey int PRIMARY KEY,
+    n_name char(25) NOT NULL,
+    n_regionkey int NOT NULL,
+    n_comment varchar(152),
+    INDEX n_rk (n_regionkey ASC),
+    CONSTRAINT nation_fkey_region FOREIGN KEY (n_regionkey) references public.region (r_regionkey)
+)
+
+statement ok
+ALTER TABLE public.nation INJECT STATISTICS '[
+  {
+    "columns": ["n_nationkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 25,
+    "distinct_count": 25
+  },
+  {
+    "columns": ["n_name"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 25,
+    "distinct_count": 25
+  },
+  {
+    "columns": ["n_regionkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 25,
+    "distinct_count": 5
+  },
+  {
+    "columns": ["n_comment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 25,
+    "distinct_count": 25
+  }
+]'
+
+statement ok
+CREATE TABLE public.supplier
+(
+    s_suppkey int PRIMARY KEY,
+    s_name char(25) NOT NULL,
+    s_address varchar(40) NOT NULL,
+    s_nationkey int NOT NULL,
+    s_phone char(15) NOT NULL,
+    s_acctbal float NOT NULL,
+    s_comment varchar(101) NOT NULL,
+    INDEX s_nk (s_nationkey ASC),
+    CONSTRAINT supplier_fkey_nation FOREIGN KEY (s_nationkey) references public.nation (n_nationkey)
+)
+
+statement ok
+ALTER TABLE public.supplier INJECT STATISTICS '[
+  {
+    "columns": ["s_suppkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["s_name"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["s_address"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["s_nationkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 25
+  },
+  {
+    "columns": ["s_phone"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["s_acctbal"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["s_comment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+
+statement ok
+CREATE TABLE public.part
+(
+    p_partkey int PRIMARY KEY,
+    p_name varchar(55) NOT NULL,
+    p_mfgr char(25) NOT NULL,
+    p_brand char(10) NOT NULL,
+    p_type varchar(25) NOT NULL,
+    p_size int NOT NULL,
+    p_container char(10) NOT NULL,
+    p_retailprice float NOT NULL,
+    p_comment varchar(23) NOT NULL
+)
+
+statement ok
+ALTER TABLE public.part INJECT STATISTICS '[
+  {
+    "columns": ["p_partkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 200000
+  },
+  {
+    "columns": ["p_name"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 200000
+  },
+  {
+    "columns": ["p_mfgr"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 5
+  },
+  {
+    "columns": ["p_brand"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 25
+  },
+  {
+    "columns": ["p_type"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 150
+  },
+  {
+    "columns": ["p_size"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 50
+  },
+  {
+    "columns": ["p_container"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 40
+  },
+  {
+    "columns": ["p_retailprice"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 20000
+  },
+  {
+    "columns": ["p_comment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 130000
+  }
+]'
+
+statement ok
+CREATE TABLE public.partsupp
+(
+    ps_partkey int NOT NULL,
+    ps_suppkey int NOT NULL,
+    ps_availqty int NOT NULL,
+    ps_supplycost float NOT NULL,
+    ps_comment varchar(199) NOT NULL,
+    PRIMARY KEY (ps_partkey, ps_suppkey),
+    INDEX ps_sk (ps_suppkey ASC),
+    CONSTRAINT partsupp_fkey_part FOREIGN KEY (ps_partkey) references public.part (p_partkey),
+    CONSTRAINT partsupp_fkey_supplier FOREIGN KEY (ps_suppkey) references public.supplier (s_suppkey)
+)
+
+statement ok
+ALTER TABLE public.partsupp INJECT STATISTICS '[
+  {
+    "columns": ["ps_partkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 800000,
+    "distinct_count": 200000
+  },
+  {
+    "columns": ["ps_suppkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 800000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["ps_availqty"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 800000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["ps_supplycost"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 800000,
+    "distinct_count": 100000
+  },
+  {
+    "columns": ["ps_comment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 800000,
+    "distinct_count": 800000
+  }
+]'
+
+statement ok
+CREATE TABLE public.customer
+(
+    c_custkey int PRIMARY KEY,
+    c_name varchar(25) NOT NULL,
+    c_address varchar(40) NOT NULL,
+    c_nationkey int NOT NULL NOT NULL,
+    c_phone char(15) NOT NULL,
+    c_acctbal float NOT NULL,
+    c_mktsegment char(10) NOT NULL,
+    c_comment varchar(117) NOT NULL,
+    INDEX c_nk (c_nationkey ASC),
+    CONSTRAINT customer_fkey_nation FOREIGN KEY (c_nationkey) references public.nation (n_nationkey)
+)
+
+statement ok
+ALTER TABLE public.customer INJECT STATISTICS '[
+  {
+    "columns": ["c_custkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 150000,
+    "distinct_count": 150000
+  },
+  {
+    "columns": ["c_name"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 150000,
+    "distinct_count": 150000
+  },
+  {
+    "columns": ["c_address"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 150000,
+    "distinct_count": 150000
+  },
+  {
+    "columns": ["c_nationkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 150000,
+    "distinct_count": 25
+  },
+  {
+    "columns": ["c_phone"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 150000,
+    "distinct_count": 150000
+  },
+  {
+    "columns": ["c_acctbal"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 150000,
+    "distinct_count": 150000
+  },
+  {
+    "columns": ["c_mktsegment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 150000,
+    "distinct_count": 5
+  },
+  {
+    "columns": ["c_comment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 150000,
+    "distinct_count": 150000
+  }
+]'
+
+statement ok
+CREATE TABLE public.orders
+(
+    o_orderkey int PRIMARY KEY,
+    o_custkey int NOT NULL,
+    o_orderstatus char(1) NOT NULL,
+    o_totalprice float NOT NULL,
+    o_orderdate date NOT NULL,
+    o_orderpriority char(15) NOT NULL,
+    o_clerk char(15) NOT NULL,
+    o_shippriority int NOT NULL,
+    o_comment varchar(79) NOT NULL,
+    INDEX o_ck (o_custkey ASC),
+    INDEX o_od (o_orderdate ASC),
+    CONSTRAINT orders_fkey_customer FOREIGN KEY (o_custkey) references public.customer (c_custkey)
+)
+
+statement ok
+ALTER TABLE public.orders INJECT STATISTICS '[
+  {
+    "columns": ["o_orderkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 1500000
+  },
+  {
+    "columns": ["o_custkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 100000
+  },
+  {
+    "columns": ["o_orderstatus"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 3
+  },
+  {
+    "columns": ["o_totalprice"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 1500000
+  },
+  {
+    "columns": ["o_orderdate"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 2500
+  },
+  {
+    "columns": ["o_orderpriority"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 5
+  },
+  {
+    "columns": ["o_clerk"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 1000
+  },
+  {
+    "columns": ["o_shippriority"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 1
+  },
+  {
+    "columns": ["o_comment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 1500000
+  }
+]'
+
+statement ok
+CREATE TABLE public.lineitem
+(
+    l_orderkey int NOT NULL,
+    l_partkey int NOT NULL,
+    l_suppkey int NOT NULL,
+    l_linenumber int NOT NULL,
+    l_quantity float NOT NULL,
+    l_extendedprice float NOT NULL,
+    l_discount float NOT NULL,
+    l_tax float NOT NULL,
+    l_returnflag char(1) NOT NULL,
+    l_linestatus char(1) NOT NULL,
+    l_shipdate date NOT NULL,
+    l_commitdate date NOT NULL,
+    l_receiptdate date NOT NULL,
+    l_shipinstruct char(25) NOT NULL,
+    l_shipmode char(10) NOT NULL,
+    l_comment varchar(44) NOT NULL,
+    PRIMARY KEY (l_orderkey, l_linenumber),
+    INDEX l_ok (l_orderkey ASC),
+    INDEX l_pk (l_partkey ASC),
+    INDEX l_sk (l_suppkey ASC),
+    INDEX l_sd (l_shipdate ASC),
+    INDEX l_cd (l_commitdate ASC),
+    INDEX l_rd (l_receiptdate ASC),
+    INDEX l_pk_sk (l_partkey ASC, l_suppkey ASC),
+    INDEX l_sk_pk (l_suppkey ASC, l_partkey ASC),
+    CONSTRAINT lineitem_fkey_orders FOREIGN KEY (l_orderkey) references public.orders (o_orderkey),
+    CONSTRAINT lineitem_fkey_part FOREIGN KEY (l_partkey) references public.part (p_partkey),
+    CONSTRAINT lineitem_fkey_supplier FOREIGN KEY (l_suppkey) references public.supplier (s_suppkey),
+    CONSTRAINT lineitem_fkey_partsupp FOREIGN KEY (l_partkey, l_suppkey) references partsupp (ps_partkey, ps_suppkey)
+)
+
+statement ok
+ALTER TABLE public.lineitem INJECT STATISTICS '[
+  {
+    "columns": ["l_orderkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 1500000
+  },
+  {
+    "columns": ["l_partkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 200000
+  },
+  {
+    "columns": ["l_suppkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["l_linenumber"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 7
+  },
+  {
+    "columns": ["l_quantity"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 50
+  },
+  {
+    "columns": ["l_extendedprice"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 1000000
+  },
+  {
+    "columns": ["l_discount"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 11
+  },
+  {
+    "columns": ["l_tax"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 9
+  },
+  {
+    "columns": ["l_returnflag"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 3
+  },
+  {
+    "columns": ["l_linestatus"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 2
+  },
+  {
+    "columns": ["l_shipdate"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 2500
+  },
+  {
+    "columns": ["l_commitdate"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 2500
+  },
+  {
+    "columns": ["l_receiptdate"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 2500
+  },
+  {
+    "columns": ["l_shipinstruct"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 4
+  },
+  {
+    "columns": ["l_shipmode"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 7
+  },
+  {
+    "columns": ["l_comment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 4500000
+  }
+]'
+
+query T
+EXPLAIN SELECT s_name, count(*) AS numwait
+    FROM supplier, lineitem AS l1, orders, nation
+   WHERE s_suppkey = l1.l_suppkey
+     AND o_orderkey = l1.l_orderkey
+     AND o_orderstatus = 'F'
+     AND l1.l_receiptdate > l1.l_commitdate
+     AND EXISTS(
+            SELECT *
+              FROM lineitem AS l2
+             WHERE l2.l_orderkey = l1.l_orderkey
+               AND l2.l_suppkey != l1.l_suppkey
+         )
+     AND NOT EXISTS(
+                SELECT *
+                  FROM lineitem AS l3
+                 WHERE l3.l_orderkey = l1.l_orderkey
+                   AND l3.l_receiptdate > l3.l_commitdate
+             )
+     AND s_nationkey = n_nationkey
+     AND n_name = 'SAUDI ARABIA'
+GROUP BY s_name
+ORDER BY numwait DESC, s_name
+   LIMIT 100;
+----
+distribution: full
+·
+• top-k
+│ estimated row count: 1
+│ order: -count_rows,+s_name
+│ k: 100
+│
+└── • group (hash)
+    │ estimated row count: 1
+    │ group by: s_name
+    │
+    └── • lookup join (semi)
+        │ estimated row count: 1
+        │ table: lineitem@lineitem_pkey
+        │ equality: (l_orderkey) = (l_orderkey)
+        │ pred: l_suppkey != l_suppkey
+        │
+        └── • lookup join
+            │ estimated row count: 1
+            │ table: orders@orders_pkey
+            │ equality: (l_orderkey) = (o_orderkey)
+            │ equality cols are key
+            │ pred: o_orderstatus = 'F'
+            │
+            └── • lookup join (anti)
+                │ estimated row count: 1
+                │ table: lineitem@lineitem_pkey
+                │ equality: (l_orderkey) = (l_orderkey)
+                │ pred: l_receiptdate > l_commitdate
+                │
+                └── • lookup join
+                    │ estimated row count: 80,016
+                    │ table: lineitem@lineitem_pkey
+                    │ equality: (l_orderkey, l_linenumber) = (l_orderkey, l_linenumber)
+                    │ equality cols are key
+                    │ pred: l_receiptdate > l_commitdate
+                    │
+                    └── • lookup join
+                        │ estimated row count: 240,049
+                        │ table: lineitem@l_sk
+                        │ equality: (s_suppkey) = (l_suppkey)
+                        │
+                        └── • lookup join
+                            │ estimated row count: 400
+                            │ table: supplier@supplier_pkey
+                            │ equality: (s_suppkey) = (s_suppkey)
+                            │ equality cols are key
+                            │
+                            └── • lookup join
+                                │ estimated row count: 400
+                                │ table: supplier@s_nk
+                                │ equality: (n_nationkey) = (s_nationkey)
+                                │
+                                └── • filter
+                                    │ estimated row count: 1
+                                    │ filter: n_name = 'SAUDI ARABIA'
+                                    │
+                                    └── • scan
+                                          estimated row count: 25 (100% of the table; stats collected <hidden> ago)
+                                          table: nation@nation_pkey
+                                          spans: FULL SCAN
+
+# Regression test for #50964.
+statement ok
+CREATE TABLE tab4 (
+  pk INT8 PRIMARY KEY, col0 INT8, col1 FLOAT8, col2 STRING, col3 INT8, col4 FLOAT8, col5 STRING,
+  UNIQUE (col3 DESC, col4 DESC)
+)
+
+query T
+EXPLAIN (VERBOSE)
+  SELECT pk FROM tab4 WHERE col0 IN (SELECT col3 FROM tab4 WHERE col4 = 495.6) AND (col3 IS NULL)
+----
+distribution: full
+vectorized: true
+·
+• project
+│ columns: (pk)
+│
+└── • project
+    │ columns: (pk, col0, col3)
+    │
+    └── • lookup join (semi)
+        │ columns: ("lookup_join_const_col_@17", pk, col0, col3)
+        │ estimated row count: 10 (missing stats)
+        │ table: tab4@tab4_col3_col4_key
+        │ equality: (col0, lookup_join_const_col_@17) = (col3, col4)
+        │ equality cols are key
+        │ parallel
+        │
+        └── • render
+            │ columns: ("lookup_join_const_col_@17", pk, col0, col3)
+            │ render lookup_join_const_col_@17: 495.6
+            │ render pk: pk
+            │ render col0: col0
+            │ render col3: col3
+            │
+            └── • index join
+                │ columns: (pk, col0, col3)
+                │ estimated row count: 10 (missing stats)
+                │ table: tab4@tab4_pkey
+                │ key columns: pk
+                │ parallel
+                │
+                └── • scan
+                      columns: (pk, col3)
+                      estimated row count: 10 (missing stats)
+                      table: tab4@tab4_col3_col4_key
+                      spans: /NULL-
+
+###########################################################
+#  LOOKUP JOINS WITH LOOKUP EXPRESSIONS                   #
+#  https://github.com/cockroachdb/cockroach/issues/59615  #
+###########################################################
+
+# Regression test for #59615. Ensure that invalid lookup joins are not created
+# for left and anti joins.
+statement ok
+CREATE TABLE t59615 (
+  x INT NOT NULL CHECK (x in (1, 3)),
+  y INT NOT NULL,
+  z INT,
+  PRIMARY KEY (x, y)
+)
+
+query T
+EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1), (2)) AS u(y) LEFT JOIN t59615 t ON u.y = t.y
+----
+distribution: local
+·
+• lookup join (left outer)
+│ table: t59615@t59615_pkey
+│ lookup condition: (x IN (1, 3)) AND (column1 = y)
+│
+└── • values
+      size: 1 column, 2 rows
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUV9PnE4Uff99ipv7BL-MuoO1aScx2a2LCQbBLmiaNMQQuK502RnKzETphu_eANqqqaa9DzNz_8w5OefuUH-vUaD_5SJcBBE4yyBJk8-hC4kf-icp_A-nq_gcnKtFeOkn4HCXgeO5LiwSsOB0LoT-aQpncRCBOfr4nh8NHQNxBHa_g2Mw-x0ylKqkKN-SRvEVOWYMm1YVpLVqh9JuHAjKexQzhpVsrBnKGcNCtYRih6YyNaHAq7y2pA9myLAkk1f1iPgOPoHjQXFr5Ua7mPUMlTW_UbTJ14SCP6ENlihmPft75jNVyRXlJbUH_Dl72jUkJh_iy9RfjW4gw8mP-XRdNxsanAiV2tgGvqlKgpICnLkHg_FcCBFE6QcGhw-vweRoCc6cwzHMD11keKJqu5VawD2DjsGPV5V6L5Tyf1G6It0oqemZyteYZi-Y9nifMaRyTdNitbJtQRetKsbZKY1HoLFQkjZTl09JIB9b2rSUb38t6ikSfxPJewspY3hTq7vrqkSBs4fY-8PxGDh8yNd6sCi5VXcj7LBzjeImrzUxPM83tCRD7baSlTZVgcK0lvr-v58BAAD__0s5CJ4=
+
+query T
+EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1), (2)) AS u(y) WHERE NOT EXISTS (
+  SELECT * FROM t59615 t WHERE u.y = t.y
+)
+----
+distribution: local
+·
+• lookup join (anti)
+│ table: t59615@t59615_pkey
+│ lookup condition: (x IN (1, 3)) AND (column1 = y)
+│
+└── • values
+      size: 1 column, 2 rows
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUV1P2zAUfd-vuLpPyWSgLmPaLCG1o0ELCilrMoY0VShKLpA1tbPYFkRV_vvkpGwUDbT5IbHvxzk652xQ_6xQYHB1EU3DGLxZmKTJl8iHJIiCkxTewulifg7e5TT6GiTgcZ-BN_Z9mCZgwWt9-PY5WAQQz1MIrtwyeLur5ujje37k5s121u63cAxmv_WRoVQFxdmaNIrvyHHJsG5UTlqrxpU2_UBYPKAYMSxlbY0rLxnmqiEUGzSlqQgFXmaVJX0wQoYFmaysesR38Am8MeR3Vq60j8uOobLmD4o22S2h4E9owxmKUcf-nflMlXJBWUHNAd9lT9uaBETBaQrTOA3hbB7GyHCwZDL8rusVtcgwUmpla_ihSglKCvAmY3CJcCFEGKcfGBxub879eAbehMMxTA6diyeqsmupBTwwaF9UOX6mkv-PygXpWklNOwpfYho9Y9rj3ZIhFbc0hKqVbXK6aFTezw7PeQ_UFwrSZujy4RHKx5Y2DWXr3yE9ReKvIo1fQ1oyvKnU_XVZoMDR9uz95fN40C1kt9pZlNyp-x7W5a1R3GSVJobn2YpmZKhZl7LUpsxRmMZS1735FQAA__9OFg4z
+
+statement ok
+CREATE TABLE lookup_expr (
+  r STRING NOT NULL CHECK (r IN ('east', 'west')),
+  v INT NOT NULL,
+  w INT,
+  x INT,
+  y INT NOT NULL CHECK (y IN (10, 20)),
+  z INT NOT NULL CHECK (z = 5),
+  PRIMARY KEY (r, v),
+  INDEX (r, x, y, z, w)
+)
+
+query T
+EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1, 10), (2, 20), (3, NULL)) AS u(w, x) LEFT JOIN lookup_expr t
+ON u.w = t.w AND u.x = t.x
+----
+distribution: local
+·
+• lookup join (left outer)
+│ table: lookup_expr@lookup_expr_r_x_y_z_w_idx
+│ lookup condition: ((((r IN ('east', 'west')) AND (y IN (10, 20))) AND (column2 = x)) AND ("lookup_join_const_col_@8" = z)) AND (column1 = w)
+│
+└── • render
+    │
+    └── • values
+          size: 2 columns, 3 rows
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkt9O20oQxu_PU4zmBvtogNjh70pIm5JQGRmHJgZVqiLLigdwcbypd90YUN69WgfSgApq98Lab2b8zei384T6R4ECB18vw14QgdMPxvH4S-jCeBAOTmP4H85Gwwtwrnvh1WAMjkfgdVwCxyfw20uXILoKQ9eF3hhqcBYEjQvh4CyG82EQQaHUfT1PuJlXtsLAMAKn3lnACZidhQu9qG910-rGRcJSZRylM9YovqGHE8J5paastaps6KktCLIGRYcwL-e1seEJ4VRVjOIJTW4KRoHXaVGz3u0gYcYmzYuVowefwOnC9K4u77VtOOIy40rAvhAiiOIjAukRSB8nS0JVm98dtElvGYW3MVLQR9FZ0t9Pda7ycsRpxtWu93qy-GHOYoVueBUPRi1AJNxAKDfuSZU0yUPymCySPGuQMGxz8F3lJahSgOM4jtwD-65bnGqzJYQYx6Mg-kywteDNgPv8EPKoLfc6axT-y9Vd13ThBOThWnpWHq-lb-WB5XqqinpWagEVwU8CuxkEDwSPSDisjQDpk-yS3CO5T_KA5CHJI5LH73L333D3_oX7iPVclZpfMX-vU-dNp21vOSHk7JZXK6hVXU35slLTtnYlh61RG8hYm1XWW4mgfElpU3E6W6_NppP3oZP_kdOE8KZQdhNQYOf5bP_h83LQ_pDeaotofKcWra3dQI3iJi00E16k99xnw9UsL3Nt8ikKU9W8XP73KwAA__9wN0Ix
+
+query T
+EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1, 10), (2, 20), (3, NULL)) AS u(w, x) WHERE NOT EXISTS (
+  SELECT * FROM lookup_expr t WHERE u.w = t.w AND u.x = t.x
+)
+----
+distribution: local
+·
+• lookup join (anti)
+│ table: lookup_expr@lookup_expr_r_x_y_z_w_idx
+│ lookup condition: ((((r IN ('east', 'west')) AND (y IN (10, 20))) AND (column2 = x)) AND ("lookup_join_const_col_@8" = z)) AND (column1 = w)
+│
+└── • render
+    │
+    └── • values
+          size: 2 columns, 3 rows
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUl1P20oQfb-_YjQv2FcLeJ3LLVoJySkxrZFxaGwoUhVZVjyAi-NNd9eKAeW_V-tAGlBB7T6s5szHmdGZeUT9o0aB4dV5PIwScEZRmqVfYhfSMA6PM_gXTibjM3Auh_FFmILDGXDPZeD4DPzeGDBILuLYdWGYQgvOkkHnwtfP4SSEZJxBeGUpwXlJWEt51y5y6hbK1pmnAqfdW8IRmL2lC8NkZHHX4851kWEjS0qKOWkU35DjlOFCyRlpLZV1PfYJUdmh8BhWzaI11j1lOJOKUDyiqUxNKPCyqFvS-x4yLMkUVb1m5PARnAHMbtvmTtuGE2pKUgIOhBBRkh0yCDiDwMfpiqFsza8O2hQ3hIJvjRSNUHgr9udTncqqmVBRktrnLyfL7hckIA5PMhgmWQSn4yhBhlsqBlt2rvIuv88f8mVelR0yjPsYfJdVA7IR4DiOE_wHduE7VGizI4RIs0mUfGKws6Rth_u0iOBDn869jRL-s-lucgZwBMH_G8gtPNxA38IDK-uxrNt5owUoBvZeGNwzeECG49YICHwWDN5U2H-lMP8bhSekF7LR9ELdtzp5rzrt8tWUIZU3tD42LVs1o3MlZ33uGo57ot5RkjbrKF-DqHkOaaOomG8OZJuJv8vkv8c0ZXhdS7t0FOg9vd3ffM8PbUFxo61E6a1c9rT21jSK66LWxPCsuKMRGVLzqqm0qWYojGpptfrnZwAAAP__X75D9w==
+
+# The following tests check that if the joiners can separate a row request
+# into separate families that it does, and generates spans for each family
+# instead of reading the entire row when it doesn't need to.
+
+statement ok
+CREATE TABLE family_split_1 (x INT, PRIMARY KEY (x))
+
+statement ok
+INSERT INTO family_split_1 VALUES (1)
+
+statement ok
+CREATE TABLE family_split_2 (x INT, y INT, z INT, PRIMARY KEY (x), FAMILY f1 (x), FAMILY f2 (y), FAMILY f3 (z))
+
+statement ok
+INSERT INTO family_split_2 VALUES (1, 2, 3)
+
+query T kvtrace(Scan)
+SELECT family_split_2.x, family_split_2.z FROM family_split_1 INNER LOOKUP JOIN family_split_2 ON family_split_1.x = family_split_2.x; SET tracing = off
+----
+Scan /Table/128/{1-2}
+Scan /Table/129/1/1/0, /Table/129/1/1/2/1
+
+statement ok
+CREATE TABLE family_index_join (x INT PRIMARY KEY, y INT, z INT, w INT, INDEX (y), FAMILY f1 (x), FAMILY f2 (y), FAMILY f3 (z), FAMILY f4(w))
+
+statement ok
+INSERT INTO family_index_join VALUES (1, 2, 3, 4)
+
+query T kvtrace(Scan)
+SELECT y,w FROM family_index_join@family_index_join_y_idx WHERE y = 2
+----
+Scan /Table/130/2/{2-3}
+Scan /Table/130/1/1/{0-1/2}, /Table/130/1/1/3/1
+
+statement ok
+SET variable_inequality_lookup_join_enabled=false
+
+query T
+EXPLAIN SELECT * FROM abc INNER LOOKUP JOIN def_e_decimal ON f = b AND e <= a::DECIMAL ORDER BY a, b, c, d, e, f
+----
+distribution: local
+·
+• sort
+│ estimated row count: 33
+│ order: +a,+b,+c,+d,+e
+│ already ordered: +a
+│
+└── • lookup join
+    │ estimated row count: 33
+    │ table: def_e_decimal@def_e_decimal_pkey
+    │ equality: (b) = (f)
+    │ pred: column15 >= e
+    │
+    └── • render
+        │
+        └── • scan
+              estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+              table: abc@abc_pkey
+              spans: FULL SCAN
+
+statement ok
+RESET variable_inequality_lookup_join_enabled
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@primary ON f = a ORDER BY a, c, e;
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ ordering: +a,+c,+e
+│ estimated row count: 100
+│ table: def@def_pkey
+│ equality: (a) = (f)
+│
+└── • scan
+      columns: (a, b, c)
+      ordering: +a,+c
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@primary ON f = a ORDER BY a, c, e DESC;
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ ordering: +a,+c,-e
+│ estimated row count: 100
+│ table: def@def_pkey
+│ equality: (a) = (f)
+│ reverse scans
+│
+└── • scan
+      columns: (a, b, c)
+      ordering: +a,+c
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@desc_idx ON f = a ORDER BY a, c, e;
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ ordering: +a,+c,+e
+│ estimated row count: 100
+│ table: def@desc_idx
+│ equality: (a) = (f)
+│ reverse scans
+│
+└── • scan
+      columns: (a, b, c)
+      ordering: +a,+c
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@desc_idx ON f = a ORDER BY a, c, e DESC;
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ ordering: +a,+c,-e
+│ estimated row count: 100
+│ table: def@desc_idx
+│ equality: (a) = (f)
+│
+└── • scan
+      columns: (a, b, c)
+      ordering: +a,+c
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@primary ON f = a AND e >= c-1 ORDER BY a, c, e;
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c, d, e, f)
+│ ordering: +a,+c,+e
+│
+└── • lookup join (inner)
+    │ columns: (column15, a, b, c, d, e, f)
+    │ ordering: +a,+c,+e
+    │ estimated row count: 33
+    │ table: def@def_pkey
+    │ lookup condition: (column15 <= e) AND (a = f)
+    │
+    └── • render
+        │ columns: (column15, a, b, c)
+        │ ordering: +a,+c
+        │ render column15: c - 1
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │
+        └── • scan
+              columns: (a, b, c)
+              ordering: +a,+c
+              estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+              table: abc@abc_pkey
+              spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@primary ON f = a AND e >= c-1 ORDER BY a, c, e DESC;
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c, d, e, f)
+│ ordering: +a,+c,-e
+│
+└── • lookup join (inner)
+    │ columns: (column15, a, b, c, d, e, f)
+    │ ordering: +a,+c,-e
+    │ estimated row count: 33
+    │ table: def@def_pkey
+    │ reverse scans
+    │ lookup condition: (column15 <= e) AND (a = f)
+    │
+    └── • render
+        │ columns: (column15, a, b, c)
+        │ ordering: +a,+c
+        │ render column15: c - 1
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │
+        └── • scan
+              columns: (a, b, c)
+              ordering: +a,+c
+              estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+              table: abc@abc_pkey
+              spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@primary ON f = a AND e <= c ORDER BY a, c, e;
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ ordering: +a,+c,+e
+│ estimated row count: 33
+│ table: def@def_pkey
+│ lookup condition: (e <= c) AND (a = f)
+│
+└── • scan
+      columns: (a, b, c)
+      ordering: +a,+c
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@primary ON f = a AND e <= c ORDER BY a, c, e DESC;
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ ordering: +a,+c,-e
+│ estimated row count: 33
+│ table: def@def_pkey
+│ reverse scans
+│ lookup condition: (e <= c) AND (a = f)
+│
+└── • scan
+      columns: (a, b, c)
+      ordering: +a,+c
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@desc_idx ON f = a AND e >= c-1 ORDER BY a, c, e;
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c, d, e, f)
+│ ordering: +a,+c,+e
+│
+└── • lookup join (inner)
+    │ columns: (column15, a, b, c, d, e, f)
+    │ ordering: +a,+c,+e
+    │ estimated row count: 33
+    │ table: def@desc_idx
+    │ reverse scans
+    │ lookup condition: (column15 <= e) AND (a = f)
+    │
+    └── • render
+        │ columns: (column15, a, b, c)
+        │ ordering: +a,+c
+        │ render column15: c - 1
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │
+        └── • scan
+              columns: (a, b, c)
+              ordering: +a,+c
+              estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+              table: abc@abc_pkey
+              spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@desc_idx ON f = a AND e >= c-1 ORDER BY a, c, e DESC;
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c, d, e, f)
+│ ordering: +a,+c,-e
+│
+└── • lookup join (inner)
+    │ columns: (column15, a, b, c, d, e, f)
+    │ ordering: +a,+c,-e
+    │ estimated row count: 33
+    │ table: def@desc_idx
+    │ lookup condition: (column15 <= e) AND (a = f)
+    │
+    └── • render
+        │ columns: (column15, a, b, c)
+        │ ordering: +a,+c
+        │ render column15: c - 1
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │
+        └── • scan
+              columns: (a, b, c)
+              ordering: +a,+c
+              estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+              table: abc@abc_pkey
+              spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@desc_idx ON f = a AND e <= c ORDER BY a, c, e;
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ ordering: +a,+c,+e
+│ estimated row count: 33
+│ table: def@desc_idx
+│ reverse scans
+│ lookup condition: (e <= c) AND (a = f)
+│
+└── • scan
+      columns: (a, b, c)
+      ordering: +a,+c
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@desc_idx ON f = a AND e <= c ORDER BY a, c, e DESC;
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ ordering: +a,+c,-e
+│ estimated row count: 33
+│ table: def@desc_idx
+│ lookup condition: (e <= c) AND (a = f)
+│
+└── • scan
+      columns: (a, b, c)
+      ordering: +a,+c
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+# Do not plan a lookup join with reverse scans if the session setting is
+# turned off.
+statement ok
+SET optimizer_plan_lookup_joins_with_reverse_scans = false
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@primary ON f = a ORDER BY a, c, e DESC;
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ columns: (a, b, c, d, e, f)
+│ estimated row count: 100
+│ order: +a,+c,-e
+│ already ordered: +a,+c
+│
+└── • lookup join (inner)
+    │ columns: (a, b, c, d, e, f)
+    │ ordering: +a,+c
+    │ estimated row count: 100
+    │ table: def@def_pkey
+    │ equality: (a) = (f)
+    │ parallel
+    │
+    └── • scan
+          columns: (a, b, c)
+          ordering: +a,+c
+          estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+          table: abc@abc_pkey
+          spans: FULL SCAN
+
+statement ok
+RESET optimizer_plan_lookup_joins_with_reverse_scans
+
+# Make sure the admission control priority is correctly set for leaf txns.
+subtest regression_144421
+
+statement ok
+SET default_transaction_quality_of_service=background
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+SELECT small.a, large.c FROM small INNER LOOKUP JOIN large ON small.a = large.b
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE MESSAGE LIKE 'initializing leaf txn%';
+----
+initializing leaf txn admission control header with priority: user-low-pri
+initializing leaf txn admission control header with priority: user-low-pri
+
+# Turning off admission header propagation should result in the old behavior.
+statement ok
+SET propagate_admission_header_to_leaf_transactions = false;
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+SELECT small.a, large.c FROM small INNER LOOKUP JOIN large ON small.a = large.b
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE MESSAGE LIKE 'initializing leaf txn%';
+----
+
+statement ok
+RESET propagate_admission_header_to_leaf_transactions;
+
+statement ok
+RESET default_transaction_quality_of_service
+
+subtest end

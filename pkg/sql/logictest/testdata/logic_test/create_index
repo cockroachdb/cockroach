@@ -1,0 +1,1016 @@
+# LogicTest: default-configs 3node-tenant !local-prepared
+statement ok
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT,
+  FAMILY (a),
+  FAMILY (b)
+)
+
+statement ok
+INSERT INTO t VALUES (1,1)
+
+user root
+
+statement ok
+CREATE INDEX foo ON t (b)
+
+statement error pgcode 42P07 index with name \"foo\" already exists
+CREATE INDEX foo ON t (a)
+
+statement error column "c" does not exist
+CREATE INDEX bar ON t (c)
+
+statement error index \"bar\" contains duplicate column \"b\"
+CREATE INDEX bar ON t (b, b);
+
+query TTBITTTBBBF colnames,rowsort
+SHOW INDEXES FROM t
+----
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
+t           foo         true        1             b            b           ASC        false    false     true     1
+t           foo         true        2             a            a           ASC        false    true      true     1
+t           t_pkey      false       1             a            a           ASC        false    false     true     1
+t           t_pkey      false       2             b            b           N/A        true     false     true     1
+
+statement ok
+INSERT INTO t VALUES (2,1)
+
+statement error pgcode 23505 violates unique constraint "bar"
+CREATE UNIQUE INDEX bar ON t (b)
+
+query TTBITTTBBBF colnames,rowsort
+SHOW INDEXES FROM t
+----
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
+t           foo         true        1             b            b           ASC        false    false     true     1
+t           foo         true        2             a            a           ASC        false    true      true     1
+t           t_pkey      false       1             a            a           ASC        false    false     true     1
+t           t_pkey      false       2             b            b           N/A        true     false     true     1
+
+# test for DESC index
+
+statement ok
+DROP TABLE t
+
+statement ok
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT
+)
+
+statement ok
+INSERT INTO t VALUES (1,1,1), (2,2,2)
+
+statement ok
+CREATE INDEX b_desc ON t (b DESC)
+
+statement ok
+CREATE INDEX b_asc ON t (b ASC, c DESC)
+
+query TTBITTTBBBF colnames,rowsort
+SHOW INDEXES FROM t
+----
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
+t           b_asc       true        1             b            b           ASC        false    false     true     1
+t           b_asc       true        2             c            c           DESC       false    false     true     1
+t           b_asc       true        3             a            a           ASC        false    true      true     1
+t           b_desc      true        1             b            b           DESC       false    false     true     1
+t           b_desc      true        2             a            a           ASC        false    true      true     1
+t           t_pkey      false       1             a            a           ASC        false    false     true     1
+t           t_pkey      false       2             b            b           N/A        true     false     true     1
+t           t_pkey      false       3             c            c           N/A        true     false     true     1
+
+statement error pgcode 42P01 relation "foo" does not exist
+CREATE INDEX fail ON foo (b DESC)
+
+statement ok
+CREATE VIEW v AS SELECT a,b FROM t
+
+statement error pgcode 42809 "v" is not a table or materialized view
+CREATE INDEX failview ON v (b DESC)
+
+statement ok
+CREATE TABLE privs (a INT PRIMARY KEY, b INT)
+
+user testuser
+
+skipif config local-legacy-schema-changer
+statement error must be owner of table privs or have CREATE privilege on table privs
+CREATE INDEX foo ON privs (b)
+
+onlyif config local-legacy-schema-changer
+statement error user testuser does not have CREATE privilege on relation privs
+CREATE INDEX foo ON privs (b)
+
+
+user root
+
+query TTBITTTBBBF colnames,rowsort
+SHOW INDEXES FROM privs
+----
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
+privs       privs_pkey  false       1             a            a           ASC        false    false     true     1
+privs       privs_pkey  false       2             b            b           N/A        true     false     true     1
+
+statement ok
+GRANT CREATE ON privs TO testuser
+
+user testuser
+
+statement ok
+CREATE INDEX foo ON privs (b)
+
+query TTBITTTBBBF colnames,rowsort
+SHOW INDEXES FROM privs
+----
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
+privs       foo         true        1             b            b           ASC        false    false     true     1
+privs       foo         true        2             a            a           ASC        false    true      true     1
+privs       privs_pkey  false       1             a            a           ASC        false    false     true     1
+privs       privs_pkey  false       2             b            b           N/A        true     false     true     1
+
+
+user root
+
+statement ok
+CREATE TABLE telemetry (
+  x INT PRIMARY KEY,
+  y INT,
+  z JSONB,
+  v VECTOR(3)
+)
+
+statement ok
+CREATE INVERTED INDEX ON telemetry (z);
+CREATE VECTOR INDEX ON telemetry (v);
+CREATE INDEX ON telemetry (y) USING HASH WITH (bucket_count=4)
+
+query T rowsort
+SELECT feature_name FROM crdb_internal.feature_usage
+WHERE feature_name IN (
+  'sql.schema.inverted_index',
+  'sql.schema.vector_index',
+  'sql.schema.hash_sharded_index'
+)
+----
+sql.schema.inverted_index
+sql.schema.vector_index
+sql.schema.hash_sharded_index
+
+subtest create_index_concurrently
+
+statement disable-cf-mutator ok
+CREATE TABLE create_index_concurrently_tbl (a int)
+
+onlyif config weak-iso-level-configs
+statement ok
+CREATE INDEX CONCURRENTLY create_index_concurrently_idx ON create_index_concurrently_tbl(a)
+
+# Weak isolation levels emit extra notices, so skip them.
+skipif config weak-iso-level-configs
+query T noticetrace
+CREATE INDEX CONCURRENTLY create_index_concurrently_idx ON create_index_concurrently_tbl(a)
+----
+NOTICE: CONCURRENTLY is not required as all indexes are created concurrently
+
+# Weak isolation levels emit extra notices, so skip them.
+skipif config weak-iso-level-configs
+query T noticetrace
+CREATE INDEX CONCURRENTLY IF NOT EXISTS create_index_concurrently_idx ON create_index_concurrently_tbl(a)
+----
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE create_index_concurrently_tbl
+----
+create_index_concurrently_tbl  CREATE TABLE public.create_index_concurrently_tbl (
+                                 a INT8 NULL,
+                                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                 CONSTRAINT create_index_concurrently_tbl_pkey PRIMARY KEY (rowid ASC),
+                                 INDEX create_index_concurrently_idx (a ASC)
+                               );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE create_index_concurrently_tbl
+----
+create_index_concurrently_tbl  CREATE TABLE public.create_index_concurrently_tbl (
+                                 a INT8 NULL,
+                                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                 CONSTRAINT create_index_concurrently_tbl_pkey PRIMARY KEY (rowid ASC),
+                                 INDEX create_index_concurrently_idx (a ASC)
+                               ) WITH (schema_locked = true);
+
+# Weak isolation levels emit extra notices, so skip them.
+skipif config weak-iso-level-configs
+query T noticetrace
+DROP INDEX CONCURRENTLY create_index_concurrently_idx
+----
+NOTICE: CONCURRENTLY is not required as all indexes are dropped concurrently
+NOTICE: the data for dropped indexes is reclaimed asynchronously
+HINT: The reclamation delay can be customized in the zone configuration for the table.
+
+# Weak isolation levels emit extra notices, so skip them.
+skipif config weak-iso-level-configs
+query T noticetrace
+DROP INDEX CONCURRENTLY IF EXISTS create_index_concurrently_idx
+----
+NOTICE: CONCURRENTLY is not required as all indexes are dropped concurrently
+
+onlyif config weak-iso-level-configs
+statement ok
+DROP INDEX CONCURRENTLY create_index_concurrently_idx
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE create_index_concurrently_tbl
+----
+create_index_concurrently_tbl  CREATE TABLE public.create_index_concurrently_tbl (
+                                 a INT8 NULL,
+                                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                 CONSTRAINT create_index_concurrently_tbl_pkey PRIMARY KEY (rowid ASC)
+                               );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE create_index_concurrently_tbl
+----
+create_index_concurrently_tbl  CREATE TABLE public.create_index_concurrently_tbl (
+                                 a INT8 NULL,
+                                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                 CONSTRAINT create_index_concurrently_tbl_pkey PRIMARY KEY (rowid ASC)
+                               ) WITH (schema_locked = true);
+
+statement ok
+DROP TABLE create_index_concurrently_tbl
+
+# Test that creating an index on a column which is currently being dropped
+# causes an error.
+subtest create_index_on_dropping_column
+
+statement ok
+CREATE TABLE create_idx_drop_column (c0 INT PRIMARY KEY, c1 INT);
+
+statement ok
+begin; ALTER TABLE create_idx_drop_column DROP COLUMN c1;
+
+statement error column "c1" does not exist
+CREATE INDEX idx_create_idx_drop_column ON create_idx_drop_column (c1);
+
+statement ok
+ROLLBACK;
+
+statement ok
+DROP TABLE create_idx_drop_column;
+
+subtest names-with-escaped-chars
+
+# Similarly try using special characters making an index for a new table, we
+# will attempt to recreate it and expect the look up to find the old one.
+statement disable-cf-mutator ok
+CREATE TABLE "'t1-esc'"(name int);
+
+statement ok
+CREATE INDEX "'t1-esc-index'" ON "'t1-esc'"(name)
+
+statement error index with name "'t1-esc-index'" already exists
+CREATE INDEX "'t1-esc-index'" ON "'t1-esc'"(name)
+
+subtest resume-with-diff-tenant-resume-spans
+
+let $schema_changer_state
+SELECT value FROM information_schema.session_variables where variable='use_declarative_schema_changer'
+
+# Intentionally, disable the declarative schema changer for this
+# part of the test, since we are pausing jobs intentionally below.
+statement ok
+SET use_declarative_schema_changer = 'off'
+
+statement ok
+SET create_table_with_schema_locked=false
+
+statement ok
+SET CLUSTER SETTING jobs.registry.interval.adopt = '50ms';
+
+# Lower the job registry loop interval to accelerate the test.
+statement ok
+SET CLUSTER SETTING jobs.registry.interval.cancel = '50ms'
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = 'indexbackfill.before_flow';
+
+statement ok
+CREATE TABLE tbl (i INT PRIMARY KEY, j INT NOT NULL);
+
+statement ok
+INSERT INTO tbl VALUES (1, 100), (2, 200), (3, 300);
+
+statement error job .* was paused before it completed with reason: pause point "indexbackfill.before_flow" hit
+CREATE INDEX pauseidx ON tbl(j);
+
+# clear the pause point now that the job is paused.
+statement ok
+RESET CLUSTER SETTING jobs.debug.pausepoints
+
+let $tab_id
+SELECT 'tbl'::regclass::int
+
+# Construct some resume spans where half of the span has the wrong
+# tenant prefix and the other half has no tenant prefix. The variable will
+# hold the json text for the resume spans we want. We'll verify them below.
+# This is some really low-level mucking around. Things to know are that 0xfe
+# is the tenant prefix.
+let $spans
+  WITH span AS (
+                SELECT j->'schemaChange'->'resumeSpanList'->0->'resumeSpans'->0 AS span
+                  FROM (
+                        SELECT crdb_internal.pb_to_json('payload', payload) AS j
+                          FROM crdb_internal.system_jobs
+                       )
+                 WHERE j->>'description' LIKE 'CREATE INDEX pauseidx%'
+            ),
+       keys AS (
+                SELECT key,
+                       encode(
+                        decode(
+                            regexp_replace(
+                                encode(decode(value->>0, 'base64'), 'hex'),
+                                '^fe..',
+                                ''
+                            ),
+                            'hex'
+                        ),
+                        'base64'
+                       ) AS value
+                  FROM (SELECT * FROM ROWS FROM (json_each((SELECT span FROM span))))
+            ),
+       span_new AS (SELECT json_object_agg(key, value) AS span FROM keys),
+       mid_key AS (SELECT crdb_internal.encode_key($tab_id, 1, (100,)) AS k),
+       modified_mid_key AS (
+                            SELECT IF(
+                                    substring(k, 1, 1) = b'\xfe',
+                                    substring(k, 3),
+                                    k
+                                   ) AS k
+                              FROM mid_key
+                        )
+SELECT json_build_array(
+        json_build_object(
+            'key',
+            encode(b'\xfe\xef' || decode(span->>'key', 'base64'), 'base64'),
+            'endKey',
+            encode(b'\xfe\xef' || k, 'base64')
+        ),
+        json_build_object('key', encode(k, 'base64'), 'endKey', span->>'endKey')
+       )
+  FROM span_new, modified_mid_key;
+
+# while the backfill is paused, go in and replace the resume spans with some new
+# spans that both the wrong tenant ID or no tenant ID before resuming it to make
+# sure that on resume it re-keys the spans correctly. We pretty_key these below
+# to confirm/show what is in them.
+statement ok
+UPDATE system.job_info
+  SET value = crdb_internal.json_to_pb(
+    'cockroach.sql.jobs.jobspb.Payload',
+      json_set(
+        crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', value),
+        ARRAY['schemaChange', 'resumeSpanList', '0'],
+        '{"resumeSpans": $spans}'::jsonb
+      )
+    )
+WHERE info_key = 'legacy_payload' AND crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', value)->>'description' LIKE 'CREATE INDEX pauseidx%';
+
+# confirm we see these bogus start and end keys in the job, both for the wrong
+# tenant and for no tenant.
+query TTTT
+SELECT
+  crdb_internal.pretty_key(decode(j->'schemaChange'->'resumeSpanList'->0->'resumeSpans'->0->>'key', 'base64'), 0),
+  crdb_internal.pretty_key(decode(j->'schemaChange'->'resumeSpanList'->0->'resumeSpans'->0->>'endKey', 'base64'), 0),
+  crdb_internal.pretty_key(decode(j->'schemaChange'->'resumeSpanList'->0->'resumeSpans'->1->>'key', 'base64'), 0),
+  crdb_internal.pretty_key(decode(j->'schemaChange'->'resumeSpanList'->0->'resumeSpans'->1->>'endKey', 'base64'), 0)
+FROM (
+  SELECT crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload) j FROM crdb_internal.system_jobs
+) WHERE j->>'description' LIKE 'CREATE INDEX pauseidx%';
+----
+/103/Table/114/1  /103/Table/114/1/100  /114/1/100  /114/2
+
+# resume the job and ensure it completes, which includes validation.
+statement ok
+RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'CREATE INDEX pauseidx%');
+
+query T
+SELECT status FROM [SHOW JOB WHEN COMPLETE (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'CREATE INDEX pauseidx%')];
+----
+succeeded
+
+statement ok
+SET CLUSTER SETTING jobs.registry.interval.cancel = DEFAULT;
+
+# Restore the schema changer state back.
+statement ok
+SET use_declarative_schema_changer = $schema_changer_state
+
+statement ok
+RESET create_table_with_schema_locked
+
+subtest test_old_bucket_count_syntax
+
+statement ok
+CREATE TABLE t_hash (
+  pk INT PRIMARY KEY,
+  a INT,
+  b INT,
+  FAMILY fam_0_pk_a_b (pk, a, b)
+);
+
+statement ok
+CREATE INDEX idx_t_hash_a ON t_hash (a) USING HASH WITH BUCKET_COUNT = 5;
+
+statement ok
+CREATE UNIQUE INDEX idx_t_hash_b ON t_hash (b) USING HASH WITH BUCKET_COUNT = 5;
+
+onlyif config schema-locked-disabled
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_hash]
+----
+CREATE TABLE public.t_hash (
+  pk INT8 NOT NULL,
+  a INT8 NULL,
+  b INT8 NULL,
+  crdb_internal_a_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 5:::INT8)) VIRTUAL,
+  crdb_internal_b_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 5:::INT8)) VIRTUAL,
+  CONSTRAINT t_hash_pkey PRIMARY KEY (pk ASC),
+  INDEX idx_t_hash_a (a ASC) USING HASH WITH (bucket_count=5),
+  UNIQUE INDEX idx_t_hash_b (b ASC) USING HASH WITH (bucket_count=5),
+  FAMILY fam_0_pk_a_b (pk, a, b)
+);
+
+skipif config schema-locked-disabled
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_hash]
+----
+CREATE TABLE public.t_hash (
+  pk INT8 NOT NULL,
+  a INT8 NULL,
+  b INT8 NULL,
+  crdb_internal_a_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 5:::INT8)) VIRTUAL,
+  crdb_internal_b_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 5:::INT8)) VIRTUAL,
+  CONSTRAINT t_hash_pkey PRIMARY KEY (pk ASC),
+  INDEX idx_t_hash_a (a ASC) USING HASH WITH (bucket_count=5),
+  UNIQUE INDEX idx_t_hash_b (b ASC) USING HASH WITH (bucket_count=5),
+  FAMILY fam_0_pk_a_b (pk, a, b)
+) WITH (schema_locked = true);
+
+statement ok
+CREATE TABLE opclasses (a INT PRIMARY KEY, b TEXT, c JSON)
+
+# Make sure that we don't permit creating indexes with opclasses that aren't
+# inverted.
+statement error pgcode 42804 operator classes are only allowed for the last column of an inverted or vector index
+CREATE INDEX ON opclasses(b blah_ops)
+
+# Make sure that we don't permit creating indexes with opclasses that aren't
+# inverted, even if the type is invertible.
+statement error pgcode 42804 operator classes are only allowed for the last column of an inverted or vector index
+CREATE INDEX ON opclasses(c blah_ops)
+
+# Make sure that we don't permit creating indexes with opclasses that don't exist
+statement error pgcode 42704 operator class "blah_ops" does not exist
+CREATE INVERTED INDEX ON opclasses(c blah_ops)
+
+# Make sure that we don't permit a descending column for the last column of an
+# inverted index.
+statement error pgcode 0A000 the last column in an inverted index cannot have the DESC option
+CREATE INVERTED INDEX ON opclasses(c DESC)
+
+# Make sure that we don't permit a descending column for the last column of an
+# inverted index.
+statement ok
+CREATE INVERTED INDEX ON opclasses(a DESC, c)
+
+# Regression test for GH issue #137404
+subtest disallow_full_table_scans
+
+let $disallow_full_table_scans
+select value from [show cluster settings] where variable = 'sql.defaults.disallow_full_table_scans.enabled';
+
+statement ok
+SET CLUSTER SETTING sql.defaults.disallow_full_table_scans.enabled = true;
+
+statement ok
+CREATE TABLE t_disable_full_ts (id UUID PRIMARY KEY);
+
+statement ok
+CREATE INDEX ON t_disable_full_ts (id);
+
+statement ok
+SET CLUSTER SETTING sql.defaults.disallow_full_table_scans.enabled = $disallow_full_table_scans;
+
+statement ok
+DROP TABLE t_disable_full_ts
+
+subtest create_index_on_materialized_view
+
+statement ok
+DROP TABLE t CASCADE;
+CREATE TABLE t (a INT PRIMARY KEY);
+INSERT INTO t SELECT generate_series(0, 9);
+
+statement ok
+CREATE MATERIALIZED VIEW v (b) AS SELECT a * 2 FROM t WITH DATA;
+
+statement ok
+CREATE INDEX ON v (b);
+
+# Issue #114843 happened because we are unable to create
+# virtual columns on materialized views in the declarative
+# schema changer.
+statement ok
+CREATE INDEX ON v ((b>0));
+
+# Repro of issue found in #124511 when using the declarative schema changer.
+# Using utf8 character in column name that is included in STORED() clause is not
+# being seen as a duplicate of an existing index.
+# This also tests to make sure mixed-case names are handled correctly.
+subtest create_index_with_utf8_col_names
+
+statement ok
+CREATE TABLE tab_w0_7 (
+   "col\u000b7ͪ%q_w0_10" UUID,
+   c2 STRING,
+   "MixedCase" INT,
+   PRIMARY KEY(c2, "col\u000b7ͪ%q_w0_10", "MixedCase")
+);
+
+skipif config local-legacy-schema-changer
+skipif config weak-iso-level-configs
+query T noticetrace
+CREATE INDEX tab_w0_7_i1 on tab_w0_7 (c2) STORING ("col\u000b7ͪ%q_w0_10");
+----
+NOTICE: index "tab_w0_7_i1" already contains column "col\\u000b7ͪ%q_w0_10" which is part of the primary key and therefore implicit in all indexes
+
+skipif config local-legacy-schema-changer
+skipif config weak-iso-level-configs
+statement ok
+DROP INDEX tab_w0_7_i1;
+
+onlyif config local-legacy-schema-changer
+statement ok
+CREATE INDEX tab_w0_7_i1 on tab_w0_7 (c2) STORING ("col\u000b7ͪ%q_w0_10");
+
+onlyif config local-legacy-schema-changer
+statement ok
+DROP INDEX tab_w0_7_i1;
+
+onlyif config weak-iso-level-configs
+statement ok
+CREATE INDEX tab_w0_7_i1 on tab_w0_7 (c2) STORING ("col\u000b7ͪ%q_w0_10");
+
+onlyif config weak-iso-level-configs
+statement ok
+DROP INDEX tab_w0_7_i1;
+
+statement error index ".*" already contains column ".*q_w0_10".*
+CREATE INDEX tab_w0_7_i1 on tab_w0_7 ("col\u000b7ͪ%q_w0_10") STORING ("col\u000b7ͪ%q_w0_10");
+
+skipif config local-legacy-schema-changer
+skipif config weak-iso-level-configs
+query T noticetrace
+CREATE INDEX tab_w0_7_i1 on tab_w0_7 (c2) STORING ("MixedCase");
+----
+NOTICE: index "tab_w0_7_i1" already contains column "MixedCase" which is part of the primary key and therefore implicit in all indexes
+
+skipif config local-legacy-schema-changer
+skipif config weak-iso-level-configs
+statement ok
+DROP INDEX tab_w0_7_i1;
+
+onlyif config local-legacy-schema-changer
+statement ok
+CREATE INDEX tab_w0_7_i1 on tab_w0_7 (c2) STORING ("MixedCase");
+
+onlyif config local-legacy-schema-changer
+statement ok
+DROP INDEX tab_w0_7_i1;
+
+onlyif config weak-iso-level-configs
+statement ok
+CREATE INDEX tab_w0_7_i1 on tab_w0_7 (c2) STORING ("MixedCase");
+
+onlyif config weak-iso-level-configs
+statement ok
+DROP INDEX tab_w0_7_i1;
+
+statement ok
+DROP TABLE tab_w0_7;
+
+# Repro of issue found in #124511 when using the declarative schema changer. We
+# need to block when attempting to include a virtual column in a STORING()
+# clause.
+subtest create_index_with_stored_virtual_col
+
+statement ok
+CREATE TABLE tab1 (
+  c1 UUID PRIMARY KEY,
+  c2 UUID AS (c1) VIRTUAL,
+  c3 STRING
+);
+
+statement error index cannot store virtual column c2
+CREATE INDEX tab1_i1 ON tab1 (c3) STORING (c2);
+
+statement ok
+DROP TABLE tab1;
+
+# Make sure the IF NOT EXISTS clause short-circuits if the index already exists.
+subtest create_index_if_not_exists_short_circuits
+
+statement ok
+CREATE TABLE tbl_ifne (a INT PRIMARY KEY, b INT)
+
+statement ok
+CREATE INDEX idx ON tbl_ifne (b)
+
+skipif config local-legacy-schema-changer
+skipif config weak-iso-level-configs
+query T noticetrace
+CREATE INDEX invalid_idx ON tbl_ifne (b) STORING (a)
+----
+NOTICE: index "invalid_idx" already contains column "a" which is part of the primary key and therefore implicit in all indexes
+
+skipif config local-legacy-schema-changer
+skipif config weak-iso-level-configs
+statement ok
+DROP INDEX invalid_idx
+
+onlyif config local-legacy-schema-changer
+statement ok
+CREATE INDEX invalid_idx ON tbl_ifne (b) STORING (a)
+
+onlyif config local-legacy-schema-changer
+statement ok
+DROP INDEX invalid_idx
+
+onlyif config weak-iso-level-configs
+statement ok
+CREATE INDEX invalid_idx ON tbl_ifne (b) STORING (a)
+
+onlyif config weak-iso-level-configs
+statement ok
+DROP INDEX invalid_idx
+
+# With IF NOT EXISTS, the statement never runs, so this succeeds.
+statement ok
+CREATE INDEX IF NOT EXISTS idx ON tbl_ifne (b) STORING (a)
+
+statement ok
+DROP TABLE tbl_ifne CASCADE
+
+subtest disallow_full_table_scans
+
+let $disallow_full_table_scans
+select value from [show cluster settings] where variable = 'sql.defaults.disallow_full_table_scans.enabled';
+
+statement ok
+SET CLUSTER SETTING sql.defaults.disallow_full_table_scans.enabled = true;
+
+statement ok
+CREATE TABLE t_disable_full_ts (id UUID PRIMARY KEY);
+
+statement ok
+CREATE INDEX ON t_disable_full_ts (id);
+
+statement ok
+SET CLUSTER SETTING sql.defaults.disallow_full_table_scans.enabled = $disallow_full_table_scans;
+
+statement ok
+DROP TABLE t_disable_full_ts
+
+subtest end
+
+subtest create_index_duplicate_storage_params
+
+statement ok
+CREATE TABLE create_index_duplicate_storage_params_a (
+  a INT PRIMARY KEY,
+  b INT
+);
+
+statement error pgcode 22023 pq: parameter "fillfactor" specified more than once
+CREATE INDEX idx_a ON create_index_duplicate_storage_params_a (b) WITH (fillfactor=10, fillfactor=20);
+
+statement error pgcode 22023 pq: parameter "fillfactor" specified more than once
+CREATE INDEX IF NOT EXISTS idx_b ON create_index_duplicate_storage_params_a (b) WITH (fillfactor=10, fillfactor=20);
+
+statement error pgcode 22023 pq: parameter "bucket_count" specified more than once
+CREATE INDEX ON create_index_duplicate_storage_params_a (b) USING HASH WITH (bucket_count=10, bucket_count=12);
+
+subtest end
+
+subtest create_inverted_index_duplicate_storage_params
+
+statement ok
+CREATE TABLE create_inverted_index_duplicate_storage_params_a (
+  a INT PRIMARY KEY,
+  b JSONB
+);
+
+statement error pgcode 22023 pq: parameter "fillfactor" specified more than once
+CREATE INVERTED INDEX idx_a ON create_inverted_index_duplicate_storage_params_a (b) WITH (fillfactor=10, fillfactor=20);
+
+statement error pgcode 22023 pq: parameter "fillfactor" specified more than once
+CREATE INVERTED INDEX IF NOT EXISTS idx_b ON create_inverted_index_duplicate_storage_params_a (b) WITH (fillfactor=10, fillfactor=20);
+
+subtest end
+
+# Storage parameter tests for CREATE INDEX.
+subtest create_index_storage_params
+
+statement ok
+CREATE TABLE t_storage_params (
+  id INT PRIMARY KEY,
+  x INT,
+  y INT,
+  geom GEOMETRY,
+  v VECTOR(3)
+)
+
+# Test that fillfactor can be set at index creation time.
+statement ok
+CREATE INDEX idx_fillfactor ON t_storage_params(x) WITH (fillfactor = 70)
+
+# Test invalid fillfactor values.
+statement error "fillfactor" must be between 0 and 100
+CREATE INDEX idx_fillfactor_invalid ON t_storage_params(x) WITH (fillfactor = -1)
+
+statement error "fillfactor" must be between 0 and 100
+CREATE INDEX idx_fillfactor_invalid ON t_storage_params(x) WITH (fillfactor = 101)
+
+# Test spatial index parameters (s2_*).
+statement ok
+CREATE INDEX idx_geom_s2 ON t_storage_params USING GIST(geom) WITH (s2_max_level = 16, s2_level_mod = 2, s2_max_cells = 10)
+
+# Test that s2_* parameters cannot be used on non-spatial indexes.
+statement error index setting "s2_max_level" can only be set on GEOMETRY or GEOGRAPHY spatial indexes
+CREATE INDEX idx_s2_invalid ON t_storage_params(x) WITH (s2_max_level = 15)
+
+statement error index setting "s2_level_mod" can only be set on GEOMETRY or GEOGRAPHY spatial indexes
+CREATE INDEX idx_s2_invalid ON t_storage_params(x) WITH (s2_level_mod = 2)
+
+statement error index setting "s2_max_cells" can only be set on GEOMETRY or GEOGRAPHY spatial indexes
+CREATE INDEX idx_s2_invalid ON t_storage_params(x) WITH (s2_max_cells = 10)
+
+# Test invalid s2_* parameter values.
+statement error "s2_max_level" value must be between 0 and 30 inclusive
+CREATE INDEX idx_s2_invalid ON t_storage_params USING GIST(geom) WITH (s2_max_level = 31)
+
+statement error "s2_level_mod" value must be between 1 and 3 inclusive
+CREATE INDEX idx_s2_invalid ON t_storage_params USING GIST(geom) WITH (s2_level_mod = 0)
+
+statement error "s2_level_mod" value must be between 1 and 3 inclusive
+CREATE INDEX idx_s2_invalid ON t_storage_params USING GIST(geom) WITH (s2_level_mod = 4)
+
+statement error "s2_max_cells" value must be between 1 and 32 inclusive
+CREATE INDEX idx_s2_invalid ON t_storage_params USING GIST(geom) WITH (s2_max_cells = 0)
+
+statement error "s2_max_cells" value must be between 1 and 32 inclusive
+CREATE INDEX idx_s2_invalid ON t_storage_params USING GIST(geom) WITH (s2_max_cells = 33)
+
+# Test that s2_max_level must be divisible by s2_level_mod.
+statement error s2_max_level \(17\) must be divisible by s2_level_mod \(2\)
+CREATE INDEX idx_s2_divisible ON t_storage_params USING GIST(geom) WITH (s2_max_level = 17, s2_level_mod = 2)
+
+statement ok
+CREATE INDEX idx_s2_divisible_ok ON t_storage_params USING GIST(geom) WITH (s2_max_level = 18, s2_level_mod = 2)
+
+# Test geometry_* parameters.
+statement ok
+CREATE INDEX idx_geom_bounds ON t_storage_params USING GIST(geom) WITH (geometry_min_x = -180.0, geometry_max_x = 180.0, geometry_min_y = -90.0, geometry_max_y = 90.0)
+
+# Test that geometry_* parameters cannot be used on non-geometry indexes.
+statement error "geometry_min_x" can only be applied to GEOMETRY spatial indexes
+CREATE INDEX idx_geom_invalid ON t_storage_params(x) WITH (geometry_min_x = -180.0)
+
+# Test that geometry_max_x must be greater than geometry_min_x.
+statement error geometry_max_x \(.*\) must be greater than geometry_min_x \(.*\)
+CREATE INDEX idx_geom_invalid ON t_storage_params USING GIST(geom) WITH (geometry_min_x = 180.0, geometry_max_x = -180.0)
+
+# Test that geometry_max_y must be greater than geometry_min_y.
+statement error geometry_max_y \(.*\) must be greater than geometry_min_y \(.*\)
+CREATE INDEX idx_geom_invalid ON t_storage_params USING GIST(geom) WITH (geometry_min_y = 90.0, geometry_max_y = -90.0)
+
+# Test vector index parameters.
+statement ok
+CREATE INDEX idx_vec_params ON t_storage_params USING HNSW(v) WITH (build_beam_size = 100, min_partition_size = 50, max_partition_size = 200)
+
+# Test invalid vector index parameter values.
+statement error "build_beam_size" value must be between 1 and 512 inclusive
+CREATE INDEX idx_vec_invalid ON t_storage_params USING HNSW(v) WITH (build_beam_size = 0)
+
+statement error "build_beam_size" value must be between 1 and 512 inclusive
+CREATE INDEX idx_vec_invalid ON t_storage_params USING HNSW(v) WITH (build_beam_size = 513)
+
+statement error "min_partition_size" value must be between 1 and 1024 inclusive
+CREATE INDEX idx_vec_invalid ON t_storage_params USING HNSW(v) WITH (min_partition_size = 0)
+
+statement error "min_partition_size" value must be between 1 and 1024 inclusive
+CREATE INDEX idx_vec_invalid ON t_storage_params USING HNSW(v) WITH (min_partition_size = 1025)
+
+statement error "max_partition_size" value must be between 4 and 4096 inclusive
+CREATE INDEX idx_vec_invalid ON t_storage_params USING HNSW(v) WITH (max_partition_size = 3)
+
+statement error "max_partition_size" value must be between 4 and 4096 inclusive
+CREATE INDEX idx_vec_invalid ON t_storage_params USING HNSW(v) WITH (max_partition_size = 4097)
+
+# Test unimplemented parameters.
+statement error pgcode 0A000 unimplemented: storage parameter "vacuum_cleanup_index_scale_factor"
+CREATE INDEX idx_unimpl ON t_storage_params(x) WITH (vacuum_cleanup_index_scale_factor = 0.5)
+
+statement error pgcode 0A000 unimplemented: storage parameter "buffering"
+CREATE INDEX idx_unimpl ON t_storage_params(x) WITH (buffering = auto)
+
+statement error pgcode 0A000 unimplemented: storage parameter "fastupdate"
+CREATE INDEX idx_unimpl ON t_storage_params(x) WITH (fastupdate = on)
+
+statement error pgcode 0A000 unimplemented: storage parameter "gin_pending_list_limit"
+CREATE INDEX idx_unimpl ON t_storage_params(x) WITH (gin_pending_list_limit = 4096)
+
+statement error pgcode 0A000 unimplemented: storage parameter "pages_per_range"
+CREATE INDEX idx_unimpl ON t_storage_params(x) WITH (pages_per_range = 128)
+
+statement error pgcode 0A000 unimplemented: storage parameter "autosummarize"
+CREATE INDEX idx_unimpl ON t_storage_params(x) WITH (autosummarize = on)
+
+# Test invalid parameters.
+statement error pgcode 22023 invalid storage parameter "invalid_param"
+CREATE INDEX idx_invalid ON t_storage_params(x) WITH (invalid_param = 100)
+
+# Test skip_unique_checks parameter.
+
+# Test that skip_unique_checks cannot be set on a non-unique index at creation.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 22023 skip_unique_checks can only be set on UNIQUE indexes
+CREATE INDEX idx_nonunique_skip ON t_storage_params(y) WITH (skip_unique_checks = true)
+
+# Test that skip_unique_checks cannot be set on a unique index without implicit partitioning.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 22023 skip_unique_checks can only be set on implicitly partitioned indexes
+CREATE UNIQUE INDEX idx_unique_with_skip ON t_storage_params(y) WITH (skip_unique_checks = true)
+
+# Test multiple parameters at once.
+statement ok
+CREATE INDEX idx_multi ON t_storage_params(x) WITH (fillfactor = 80)
+
+# Test with IF NOT EXISTS.
+statement ok
+CREATE INDEX IF NOT EXISTS idx_exists ON t_storage_params(x) WITH (fillfactor = 70)
+
+subtest end
+
+subtest skip_unique_checks_create_table
+
+# Test skip_unique_checks error cases in different CREATE TABLE scenarios.
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 22023 skip_unique_checks can only be set on UNIQUE indexes
+CREATE TABLE t_nonunique_inline (
+  a INT,
+  INDEX idx_a (a) WITH (skip_unique_checks = true)
+)
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 22023 skip_unique_checks can only be set on UNIQUE indexes
+CREATE TABLE t_nonunique_later (
+  a INT,
+  b INT,
+  INDEX (a, b) WITH (skip_unique_checks = true)
+)
+
+# Cannot set skip_unique_checks on indexes without implicit partitioning.
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 22023 skip_unique_checks can only be set on implicitly partitioned indexes
+CREATE TABLE t_pk_inline (a INT PRIMARY KEY WITH (skip_unique_checks = true))
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 22023 skip_unique_checks can only be set on implicitly partitioned indexes
+CREATE TABLE t_pk_table_level (
+  a INT,
+  b INT,
+  PRIMARY KEY (a, b) WITH (skip_unique_checks = true)
+)
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 22023 skip_unique_checks can only be set on implicitly partitioned indexes
+CREATE TABLE t_unique_inline (
+  a INT PRIMARY KEY,
+  b INT,
+  UNIQUE INDEX idx_b (b) WITH (skip_unique_checks = true)
+)
+
+# Syntax errors (cannot use WITH on unnamed UNIQUE constraints or CHECK).
+statement error pgcode 42601 syntax error
+CREATE TABLE t_unique_constraint (
+  a INT PRIMARY KEY,
+  b INT,
+  UNIQUE (b) WITH (skip_unique_checks = true)
+)
+
+statement error pgcode 42601 syntax error
+CREATE TABLE t_check_constraint (
+  a INT PRIMARY KEY,
+  b INT,
+  CHECK (b > 0) WITH (skip_unique_checks = true)
+)
+
+statement error pgcode 42601 syntax error
+CREATE TABLE t_unique_column (
+  a INT PRIMARY KEY,
+  b INT UNIQUE WITH (skip_unique_checks = true)
+)
+
+subtest end
+
+subtest create_index_expression_with_default_collation
+
+statement disable-cf-mutator ok
+CREATE TABLE tbl_with_collate (c1 int);
+
+statement ok
+CREATE UNIQUE INDEX tbl_with_collate_expr ON tbl_with_collate ((c1::text COLLATE "C"));
+
+statement ok
+CREATE UNIQUE INDEX tbl_with_collate_expr2 ON tbl_with_collate ((c1::text COLLATE "POSIX"));
+
+statement ok
+CREATE UNIQUE INDEX tbl_with_collate_expr3 ON tbl_with_collate ((c1::text COLLATE "en-us"));
+
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE tbl_with_collate
+----
+tbl_with_collate  CREATE TABLE public.tbl_with_collate (
+                    c1 INT8 NULL,
+                    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                    CONSTRAINT tbl_with_collate_pkey PRIMARY KEY (rowid ASC),
+                    UNIQUE INDEX tbl_with_collate_expr ((c1::STRING) ASC),
+                    UNIQUE INDEX tbl_with_collate_expr2 ((c1::STRING) ASC),
+                    UNIQUE INDEX tbl_with_collate_expr3 ((c1::STRING COLLATE en_US) ASC)
+                  );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE tbl_with_collate
+----
+tbl_with_collate  CREATE TABLE public.tbl_with_collate (
+                    c1 INT8 NULL,
+                    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                    CONSTRAINT tbl_with_collate_pkey PRIMARY KEY (rowid ASC),
+                    UNIQUE INDEX tbl_with_collate_expr ((c1::STRING) ASC),
+                    UNIQUE INDEX tbl_with_collate_expr2 ((c1::STRING) ASC),
+                    UNIQUE INDEX tbl_with_collate_expr3 ((c1::STRING COLLATE en_US) ASC)
+                  ) WITH (schema_locked = true);
+
+subtest end
+
+
+subtest index_name_conflicts_with_primary_key
+
+statement ok
+CREATE TABLE t_index_name_conflicts_with_primary_key (a INT PRIMARY KEY, b INT);
+
+statement error pgcode 42P07 index with name \"t_index_name_conflicts_with_primary_key_pkey\" already exists
+CREATE INDEX t_index_name_conflicts_with_primary_key_pkey ON t_index_name_conflicts_with_primary_key (a);
+
+subtest end
+
+# Regression test for an internal setting's effect on index backfills.
+subtest issue-161408
+
+statement ok
+SET CLUSTER SETTING sql.schema.preserved_split_count_multiple = 0
+
+statement ok
+CREATE TABLE t161408 (
+  a INT PRIMARY KEY,
+  b INT,
+  c STRING
+)
+
+statement ok
+INSERT INTO t161408 SELECT i, i % 100, repeat('x', 10) FROM generate_series(1, 10000) AS g(i)
+
+statement ok
+CREATE STATISTICS st FROM t161408
+
+statement ok
+CREATE INDEX idx_b ON t161408 (b)
+
+statement ok
+DROP TABLE t161408;
+
+subtest end

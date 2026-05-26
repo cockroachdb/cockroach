@@ -1,0 +1,291 @@
+# This test demonstrates the behavior of concurrent WaitForEval operations with
+# binary token state management. 
+#
+# Start the first WaitForEval operation with a quorum of 2 and three handles.
+wait_for_eval name=a quorum=2
+handle: stream=s1 required=true
+handle: stream=s2 required=true
+handle: stream=s3 required=false
+----
+a: waiting
+
+# Start a second WaitForEval operation with a quorum of 2 and three handles.
+wait_for_eval name=b quorum=2
+handle: stream=s4 required=true
+handle: stream=s5 required=true
+handle: stream=s6 required=false
+----
+a: waiting
+b: waiting
+
+# Set tokens for streams s1 and s2 to positive, this should trigger the
+# completion of a but not b.
+set_tokens s1=positive s2=positive
+----
+s1: positive
+s2: positive
+s3: non-positive
+s4: non-positive
+s5: non-positive
+s6: non-positive
+
+check_state
+----
+a: wait_success
+b: waiting
+
+# Set tokens for stream s4 and s6 to positive, this won't trigger b as s5 is
+# required.
+set_tokens s4=positive s6=positive
+----
+s1: positive
+s2: positive
+s3: non-positive
+s4: positive
+s5: non-positive
+s6: positive
+
+# Check the state. b should still be waiting as s5 (required) has no tokens.
+check_state
+----
+a: wait_success
+b: waiting
+
+# Now set s5 to positive, which should complete b. Revert s1 to non-positive.
+set_tokens s5=positive s1=non-positive
+----
+s1: non-positive
+s2: positive
+s3: non-positive
+s4: positive
+s5: positive
+s6: positive
+
+check_state
+----
+a: wait_success
+b: wait_success
+
+# Test out multiple operations with overlapping streams
+wait_for_eval name=c quorum=2
+handle: stream=s1 required=false
+handle: stream=s4 required=false
+handle: stream=s7 required=false
+----
+a: wait_success
+b: wait_success
+c: waiting
+
+wait_for_eval name=d quorum=3
+handle: stream=s2 required=true
+handle: stream=s3 required=true
+handle: stream=s7 required=true
+----
+a: wait_success
+b: wait_success
+c: waiting
+d: waiting
+
+check_state
+----
+a: wait_success
+b: wait_success
+c: waiting
+d: waiting
+
+# Set s7 to positive, which should complete c but not d, as d has s5 required.
+set_tokens s7=positive
+----
+s1: non-positive
+s2: positive
+s3: non-positive
+s4: positive
+s5: positive
+s6: positive
+s7: positive
+
+check_state
+----
+a: wait_success
+b: wait_success
+c: wait_success
+d: waiting
+
+wait_for_eval name=e quorum=0
+handle: stream=s8 required=true
+handle: stream=s9 required=true
+handle: stream=s10 required=true
+----
+a: wait_success
+b: wait_success
+c: wait_success
+d: waiting
+e: waiting
+
+# Set only s8 to positive
+set_tokens s8=positive
+----
+s1: non-positive
+s10: non-positive
+s2: positive
+s3: non-positive
+s4: positive
+s5: positive
+s6: positive
+s7: positive
+s8: positive
+s9: non-positive
+
+# Cancel e before it completes.
+cancel name=e
+----
+a: wait_success
+b: wait_success
+c: wait_success
+d: waiting
+e: context_cancelled
+
+# Test out refresh signal on f.
+wait_for_eval name=f quorum=2
+handle: stream=s11 required=true
+handle: stream=s12 required=true
+handle: stream=s13 required=false
+----
+a: wait_success
+b: wait_success
+c: wait_success
+d: waiting
+e: context_cancelled
+f: waiting
+
+# Send a refresh signal before any tokens are available.
+refresh name=f kind=replica
+----
+a: wait_success
+b: wait_success
+c: wait_success
+d: waiting
+e: context_cancelled
+f: replica_refresh_wait_signaled
+
+# Lastly, test out a WaitForEval operation with 3 handles overlapping the next
+# WaitForEval operation.
+wait_for_eval name=g quorum=3
+handle: stream=s14 required=true
+handle: stream=s15 required=true
+handle: stream=s16 required=true
+----
+a: wait_success
+b: wait_success
+c: wait_success
+d: waiting
+e: context_cancelled
+f: replica_refresh_wait_signaled
+g: waiting
+
+wait_for_eval name=h quorum=2
+handle: stream=s14 required=false
+handle: stream=s15 required=true
+handle: stream=s17 required=true
+----
+a: wait_success
+b: wait_success
+c: wait_success
+d: waiting
+e: context_cancelled
+f: replica_refresh_wait_signaled
+g: waiting
+h: waiting
+
+# Set some tokens to positive.
+set_tokens s14=positive s15=positive s17=positive
+----
+s1: non-positive
+s10: non-positive
+s11: non-positive
+s12: non-positive
+s13: non-positive
+s14: positive
+s15: positive
+s16: non-positive
+s17: positive
+s2: positive
+s3: non-positive
+s4: positive
+s5: positive
+s6: positive
+s7: positive
+s8: positive
+s9: non-positive
+
+check_state
+----
+a: wait_success
+b: wait_success
+c: wait_success
+d: waiting
+e: context_cancelled
+f: replica_refresh_wait_signaled
+g: waiting
+h: wait_success
+
+# Set the last required token for g to positive, as well as d.
+set_tokens s16=positive s3=positive
+----
+s1: non-positive
+s10: non-positive
+s11: non-positive
+s12: non-positive
+s13: non-positive
+s14: positive
+s15: positive
+s16: positive
+s17: positive
+s2: positive
+s3: positive
+s4: positive
+s5: positive
+s6: positive
+s7: positive
+s8: positive
+s9: non-positive
+
+check_state
+----
+a: wait_success
+b: wait_success
+c: wait_success
+d: wait_success
+e: context_cancelled
+f: replica_refresh_wait_signaled
+g: wait_success
+h: wait_success
+
+# Test out another refresh signal on i.
+wait_for_eval name=i quorum=2
+handle: stream=s1 required=true
+handle: stream=s10 required=true
+handle: stream=s13 required=false
+----
+a: wait_success
+b: wait_success
+c: wait_success
+d: wait_success
+e: context_cancelled
+f: replica_refresh_wait_signaled
+g: wait_success
+h: wait_success
+i: waiting
+
+# Send a refresh signal before any tokens are available.
+refresh name=i kind=config
+----
+a: wait_success
+b: wait_success
+c: wait_success
+d: wait_success
+e: context_cancelled
+f: replica_refresh_wait_signaled
+g: wait_success
+h: wait_success
+i: config_refresh_wait_signaled

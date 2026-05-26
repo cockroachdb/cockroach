@@ -1,0 +1,48 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "apiutil",
+    srcs = [
+        "apiutil.go",
+        "index_names.go",
+        "rangeutil.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/apiutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/server/serverpb",
+        "//pkg/server/srverrors",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/descs",
+        "//pkg/util/httputil",
+        "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//jsonpb",
+        "@com_github_grpc_ecosystem_grpc_gateway//runtime:go_default_library",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//status",
+    ],
+)
+
+go_test(
+    name = "apiutil_test",
+    srcs = [
+        "index_names_test.go",
+        "rangeutil_test.go",
+    ],
+    deps = [
+        ":apiutil",
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/dbdesc",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/sem/catid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

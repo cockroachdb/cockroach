@@ -1,0 +1,2842 @@
+# tests adapted from logictest -- join
+
+exec-ddl
+CREATE TABLE onecolumn (x INT)
+----
+
+build
+SELECT * FROM onecolumn AS a(x) CROSS JOIN onecolumn AS b(y)
+----
+project
+ ├── columns: x:1 y:5
+ └── inner-join (cross)
+      ├── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 y:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      ├── scan onecolumn [as=a]
+      │    └── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+      ├── scan onecolumn [as=b]
+      │    └── columns: y:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      └── filters (true)
+
+# Check that name resolution chokes on ambiguity when it needs to.
+build
+SELECT x FROM onecolumn AS a, onecolumn AS b
+----
+error (42702): column reference "x" is ambiguous (candidates: a.x, b.x)
+
+# Check that name resolution does not choke on ambiguity if an
+# unqualified column name is requested and there is an anonymous
+# source providing this name in addition to two or more named sources
+# that also provide it.
+build
+SELECT x FROM (SELECT 1 AS x), onecolumn AS a, onecolumn AS b
+----
+project
+ ├── columns: x:1!null
+ └── inner-join (cross)
+      ├── columns: x:1!null a.x:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 a.tableoid:5 b.x:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
+      ├── project
+      │    ├── columns: x:1!null
+      │    ├── values
+      │    │    └── ()
+      │    └── projections
+      │         └── 1 [as=x:1]
+      ├── inner-join (cross)
+      │    ├── columns: a.x:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 a.tableoid:5 b.x:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
+      │    ├── scan onecolumn [as=a]
+      │    │    └── columns: a.x:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 a.tableoid:5
+      │    ├── scan onecolumn [as=b]
+      │    │    └── columns: b.x:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
+      │    └── filters (true)
+      └── filters (true)
+
+build
+SELECT * FROM onecolumn AS a(x) JOIN onecolumn AS b(y) ON a.x = b.y
+----
+project
+ ├── columns: x:1!null y:5!null
+ └── inner-join (hash)
+      ├── columns: x:1!null a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 y:5!null b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      ├── scan onecolumn [as=a]
+      │    └── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+      ├── scan onecolumn [as=b]
+      │    └── columns: y:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      └── filters
+           └── x:1 = y:5
+
+build
+SELECT * FROM onecolumn AS a JOIN onecolumn as b USING(x) ORDER BY x
+----
+sort
+ ├── columns: x:1!null
+ ├── ordering: +1
+ └── project
+      ├── columns: a.x:1!null
+      └── inner-join (hash)
+           ├── columns: a.x:1!null a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 b.x:5!null b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+           ├── scan onecolumn [as=a]
+           │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+           ├── scan onecolumn [as=b]
+           │    └── columns: b.x:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+           └── filters
+                └── a.x:1 = b.x:5
+
+build
+SELECT * FROM onecolumn AS a NATURAL JOIN onecolumn as b
+----
+project
+ ├── columns: x:1!null
+ └── inner-join (hash)
+      ├── columns: a.x:1!null a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 b.x:5!null b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      ├── scan onecolumn [as=a]
+      │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+      ├── scan onecolumn [as=b]
+      │    └── columns: b.x:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      └── filters
+           └── a.x:1 = b.x:5
+
+build
+SELECT * FROM onecolumn AS a(x) LEFT OUTER JOIN onecolumn AS b(y) ON a.x = b.y
+----
+project
+ ├── columns: x:1 y:5
+ └── left-join (hash)
+      ├── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 y:5 b.rowid:6 b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      ├── scan onecolumn [as=a]
+      │    └── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+      ├── scan onecolumn [as=b]
+      │    └── columns: y:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      └── filters
+           └── x:1 = y:5
+
+build
+SELECT * FROM onecolumn AS a LEFT OUTER JOIN onecolumn AS b USING(x) ORDER BY x
+----
+sort
+ ├── columns: x:1
+ ├── ordering: +1
+ └── project
+      ├── columns: a.x:1
+      └── left-join (hash)
+           ├── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 b.x:5 b.rowid:6 b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+           ├── scan onecolumn [as=a]
+           │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+           ├── scan onecolumn [as=b]
+           │    └── columns: b.x:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+           └── filters
+                └── a.x:1 = b.x:5
+
+# Check that ORDER BY chokes on ambiguity if no table less columns
+# were introduced by USING. (#12239)
+build
+SELECT * FROM onecolumn AS a, onecolumn AS b ORDER BY x
+----
+error (42P09): ORDER BY "x" is ambiguous
+
+build
+SELECT * FROM (SELECT x, x FROM onecolumn) AS a JOIN onecolumn AS b USING (x)
+----
+error (42701): common column name "x" appears more than once in left table
+
+build
+SELECT * FROM onecolumn AS a JOIN (SELECT x, x FROM onecolumn) AS b USING (x)
+----
+error (42701): common column name "x" appears more than once in right table
+
+build
+SELECT * FROM (SELECT x, x FROM onecolumn) AS a NATURAL JOIN onecolumn AS b
+----
+error (42701): common column name "x" appears more than once in left table
+
+build
+SELECT * FROM onecolumn AS a NATURAL JOIN (SELECT x, x FROM onecolumn) AS b
+----
+error (42701): common column name "x" appears more than once in right table
+
+build
+SELECT * FROM onecolumn AS a NATURAL LEFT OUTER JOIN onecolumn AS b
+----
+project
+ ├── columns: x:1
+ └── left-join (hash)
+      ├── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 b.x:5 b.rowid:6 b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      ├── scan onecolumn [as=a]
+      │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+      ├── scan onecolumn [as=b]
+      │    └── columns: b.x:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      └── filters
+           └── a.x:1 = b.x:5
+
+build
+SELECT * FROM onecolumn AS a(x) RIGHT OUTER JOIN onecolumn AS b(y) ON a.x = b.y
+----
+project
+ ├── columns: x:1 y:5
+ └── right-join (hash)
+      ├── columns: x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 y:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      ├── scan onecolumn [as=a]
+      │    └── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+      ├── scan onecolumn [as=b]
+      │    └── columns: y:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      └── filters
+           └── x:1 = y:5
+
+build
+SELECT * FROM onecolumn AS a RIGHT OUTER JOIN onecolumn AS b USING(x) ORDER BY x
+----
+sort
+ ├── columns: x:5
+ ├── ordering: +5
+ └── project
+      ├── columns: b.x:5
+      └── right-join (hash)
+           ├── columns: a.x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 b.x:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+           ├── scan onecolumn [as=a]
+           │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+           ├── scan onecolumn [as=b]
+           │    └── columns: b.x:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+           └── filters
+                └── a.x:1 = b.x:5
+
+build
+SELECT * FROM onecolumn AS a NATURAL RIGHT OUTER JOIN onecolumn AS b
+----
+project
+ ├── columns: x:5
+ └── right-join (hash)
+      ├── columns: a.x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 b.x:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      ├── scan onecolumn [as=a]
+      │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+      ├── scan onecolumn [as=b]
+      │    └── columns: b.x:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      └── filters
+           └── a.x:1 = b.x:5
+
+exec-ddl
+CREATE TABLE onecolumn_w(w INT)
+----
+
+build
+SELECT * FROM onecolumn AS a NATURAL JOIN onecolumn_w as b
+----
+project
+ ├── columns: x:1 w:5
+ └── inner-join (cross)
+      ├── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 w:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      ├── scan onecolumn [as=a]
+      │    └── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+      ├── scan onecolumn_w [as=b]
+      │    └── columns: w:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      └── filters (true)
+
+exec-ddl
+CREATE TABLE othercolumn (x INT)
+----
+
+build
+SELECT * FROM onecolumn AS a FULL OUTER JOIN othercolumn AS b ON a.x = b.x ORDER BY a.x,b.x
+----
+sort
+ ├── columns: x:1 x:5
+ ├── ordering: +1,+5
+ └── project
+      ├── columns: a.x:1 b.x:5
+      └── full-join (hash)
+           ├── columns: a.x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 b.x:5 b.rowid:6 b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+           ├── scan onecolumn [as=a]
+           │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+           ├── scan othercolumn [as=b]
+           │    └── columns: b.x:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+           └── filters
+                └── a.x:1 = b.x:5
+
+build
+SELECT * FROM onecolumn AS a FULL OUTER JOIN othercolumn AS b USING(x) ORDER BY x
+----
+sort
+ ├── columns: x:9
+ ├── ordering: +9
+ └── project
+      ├── columns: x:9
+      └── project
+           ├── columns: x:9 a.x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 b.x:5 b.rowid:6 b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+           ├── full-join (hash)
+           │    ├── columns: a.x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 b.x:5 b.rowid:6 b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+           │    ├── scan onecolumn [as=a]
+           │    │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+           │    ├── scan othercolumn [as=b]
+           │    │    └── columns: b.x:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+           │    └── filters
+           │         └── a.x:1 = b.x:5
+           └── projections
+                └── COALESCE(a.x:1, b.x:5) [as=x:9]
+
+# Check that the source columns can be selected separately from the
+# USING column (#12033).
+build
+SELECT x AS s, a.x, b.x FROM onecolumn AS a FULL OUTER JOIN othercolumn AS b USING(x) ORDER BY s
+----
+sort
+ ├── columns: s:9 x:1 x:5
+ ├── ordering: +9
+ └── project
+      ├── columns: a.x:1 b.x:5 x:9
+      └── project
+           ├── columns: x:9 a.x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 b.x:5 b.rowid:6 b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+           ├── full-join (hash)
+           │    ├── columns: a.x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 b.x:5 b.rowid:6 b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+           │    ├── scan onecolumn [as=a]
+           │    │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+           │    ├── scan othercolumn [as=b]
+           │    │    └── columns: b.x:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+           │    └── filters
+           │         └── a.x:1 = b.x:5
+           └── projections
+                └── COALESCE(a.x:1, b.x:5) [as=x:9]
+
+build
+SELECT * FROM onecolumn AS a NATURAL FULL OUTER JOIN othercolumn AS b ORDER BY x
+----
+sort
+ ├── columns: x:9
+ ├── ordering: +9
+ └── project
+      ├── columns: x:9
+      └── project
+           ├── columns: x:9 a.x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 b.x:5 b.rowid:6 b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+           ├── full-join (hash)
+           │    ├── columns: a.x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 b.x:5 b.rowid:6 b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+           │    ├── scan onecolumn [as=a]
+           │    │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+           │    ├── scan othercolumn [as=b]
+           │    │    └── columns: b.x:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+           │    └── filters
+           │         └── a.x:1 = b.x:5
+           └── projections
+                └── COALESCE(a.x:1, b.x:5) [as=x:9]
+
+# Check that a limit on the JOIN's result do not cause rows from the
+# JOIN operands to become invisible to the JOIN.
+build
+SELECT * FROM (SELECT x FROM onecolumn ORDER BY x DESC) NATURAL JOIN (VALUES (42)) AS v(x) LIMIT 1
+----
+limit
+ ├── columns: x:1!null
+ ├── project
+ │    ├── columns: x:1!null
+ │    ├── limit hint: 1.00
+ │    └── inner-join (hash)
+ │         ├── columns: x:1!null column1:5!null
+ │         ├── limit hint: 1.00
+ │         ├── project
+ │         │    ├── columns: x:1
+ │         │    └── scan onecolumn
+ │         │         └── columns: x:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+ │         ├── values
+ │         │    ├── columns: column1:5!null
+ │         │    └── (42,)
+ │         └── filters
+ │              └── x:1 = column1:5
+ └── 1
+
+exec-ddl
+CREATE TABLE empty (x INT)
+----
+
+build
+SELECT * FROM onecolumn AS a(x) CROSS JOIN empty AS b(y)
+----
+project
+ ├── columns: x:1 y:5
+ └── inner-join (cross)
+      ├── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 y:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      ├── scan onecolumn [as=a]
+      │    └── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+      ├── scan empty [as=b]
+      │    └── columns: y:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      └── filters (true)
+
+build
+SELECT * FROM empty AS a CROSS JOIN onecolumn AS b
+----
+project
+ ├── columns: x:1 x:5
+ └── inner-join (cross)
+      ├── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 b.x:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      ├── scan empty [as=a]
+      │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+      ├── scan onecolumn [as=b]
+      │    └── columns: b.x:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      └── filters (true)
+
+build
+SELECT * FROM onecolumn AS a(x) JOIN empty AS b(y) ON a.x = b.y
+----
+project
+ ├── columns: x:1!null y:5!null
+ └── inner-join (hash)
+      ├── columns: x:1!null a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 y:5!null b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      ├── scan onecolumn [as=a]
+      │    └── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+      ├── scan empty [as=b]
+      │    └── columns: y:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      └── filters
+           └── x:1 = y:5
+
+build
+SELECT * FROM onecolumn AS a JOIN empty AS b USING(x)
+----
+project
+ ├── columns: x:1!null
+ └── inner-join (hash)
+      ├── columns: a.x:1!null a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 b.x:5!null b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      ├── scan onecolumn [as=a]
+      │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+      ├── scan empty [as=b]
+      │    └── columns: b.x:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      └── filters
+           └── a.x:1 = b.x:5
+
+build
+SELECT * FROM empty AS a(x) JOIN onecolumn AS b(y) ON a.x = b.y
+----
+project
+ ├── columns: x:1!null y:5!null
+ └── inner-join (hash)
+      ├── columns: x:1!null a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 y:5!null b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      ├── scan empty [as=a]
+      │    └── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+      ├── scan onecolumn [as=b]
+      │    └── columns: y:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      └── filters
+           └── x:1 = y:5
+
+build
+SELECT * FROM empty AS a JOIN onecolumn AS b USING(x)
+----
+project
+ ├── columns: x:1!null
+ └── inner-join (hash)
+      ├── columns: a.x:1!null a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 b.x:5!null b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      ├── scan empty [as=a]
+      │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+      ├── scan onecolumn [as=b]
+      │    └── columns: b.x:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      └── filters
+           └── a.x:1 = b.x:5
+
+build
+SELECT * FROM onecolumn AS a(x) LEFT OUTER JOIN empty AS b(y) ON a.x = b.y ORDER BY a.x
+----
+sort
+ ├── columns: x:1 y:5
+ ├── ordering: +1
+ └── project
+      ├── columns: x:1 y:5
+      └── left-join (hash)
+           ├── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 y:5 b.rowid:6 b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+           ├── scan onecolumn [as=a]
+           │    └── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+           ├── scan empty [as=b]
+           │    └── columns: y:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+           └── filters
+                └── x:1 = y:5
+
+build
+SELECT * FROM onecolumn AS a LEFT OUTER JOIN empty AS b USING(x) ORDER BY x
+----
+sort
+ ├── columns: x:1
+ ├── ordering: +1
+ └── project
+      ├── columns: a.x:1
+      └── left-join (hash)
+           ├── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 b.x:5 b.rowid:6 b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+           ├── scan onecolumn [as=a]
+           │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+           ├── scan empty [as=b]
+           │    └── columns: b.x:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+           └── filters
+                └── a.x:1 = b.x:5
+
+build
+SELECT * FROM empty AS a(x) LEFT OUTER JOIN onecolumn AS b(y) ON a.x = b.y
+----
+project
+ ├── columns: x:1 y:5
+ └── left-join (hash)
+      ├── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 y:5 b.rowid:6 b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      ├── scan empty [as=a]
+      │    └── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+      ├── scan onecolumn [as=b]
+      │    └── columns: y:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      └── filters
+           └── x:1 = y:5
+
+build
+SELECT * FROM empty AS a LEFT OUTER JOIN onecolumn AS b USING(x)
+----
+project
+ ├── columns: x:1
+ └── left-join (hash)
+      ├── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 b.x:5 b.rowid:6 b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      ├── scan empty [as=a]
+      │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+      ├── scan onecolumn [as=b]
+      │    └── columns: b.x:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      └── filters
+           └── a.x:1 = b.x:5
+
+build
+SELECT * FROM onecolumn AS a(x) RIGHT OUTER JOIN empty AS b(y) ON a.x = b.y
+----
+project
+ ├── columns: x:1 y:5
+ └── right-join (hash)
+      ├── columns: x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 y:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      ├── scan onecolumn [as=a]
+      │    └── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+      ├── scan empty [as=b]
+      │    └── columns: y:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      └── filters
+           └── x:1 = y:5
+
+build
+SELECT * FROM onecolumn AS a RIGHT OUTER JOIN empty AS b USING(x)
+----
+project
+ ├── columns: x:5
+ └── right-join (hash)
+      ├── columns: a.x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 b.x:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      ├── scan onecolumn [as=a]
+      │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+      ├── scan empty [as=b]
+      │    └── columns: b.x:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      └── filters
+           └── a.x:1 = b.x:5
+
+build
+SELECT * FROM empty AS a(x) FULL OUTER JOIN onecolumn AS b(y) ON a.x = b.y ORDER BY b.y
+----
+sort
+ ├── columns: x:1 y:5
+ ├── ordering: +5
+ └── project
+      ├── columns: x:1 y:5
+      └── full-join (hash)
+           ├── columns: x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 y:5 b.rowid:6 b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+           ├── scan empty [as=a]
+           │    └── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+           ├── scan onecolumn [as=b]
+           │    └── columns: y:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+           └── filters
+                └── x:1 = y:5
+
+build
+SELECT * FROM empty AS a FULL OUTER JOIN onecolumn AS b USING(x) ORDER BY x
+----
+sort
+ ├── columns: x:9
+ ├── ordering: +9
+ └── project
+      ├── columns: x:9
+      └── project
+           ├── columns: x:9 a.x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 b.x:5 b.rowid:6 b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+           ├── full-join (hash)
+           │    ├── columns: a.x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 b.x:5 b.rowid:6 b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+           │    ├── scan empty [as=a]
+           │    │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+           │    ├── scan onecolumn [as=b]
+           │    │    └── columns: b.x:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+           │    └── filters
+           │         └── a.x:1 = b.x:5
+           └── projections
+                └── COALESCE(a.x:1, b.x:5) [as=x:9]
+
+build
+SELECT * FROM onecolumn AS a(x) FULL OUTER JOIN empty AS b(y) ON a.x = b.y ORDER BY a.x
+----
+sort
+ ├── columns: x:1 y:5
+ ├── ordering: +1
+ └── project
+      ├── columns: x:1 y:5
+      └── full-join (hash)
+           ├── columns: x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 y:5 b.rowid:6 b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+           ├── scan onecolumn [as=a]
+           │    └── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+           ├── scan empty [as=b]
+           │    └── columns: y:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+           └── filters
+                └── x:1 = y:5
+
+build
+SELECT * FROM onecolumn AS a FULL OUTER JOIN empty AS b USING(x) ORDER BY x
+----
+sort
+ ├── columns: x:9
+ ├── ordering: +9
+ └── project
+      ├── columns: x:9
+      └── project
+           ├── columns: x:9 a.x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 b.x:5 b.rowid:6 b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+           ├── full-join (hash)
+           │    ├── columns: a.x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 b.x:5 b.rowid:6 b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+           │    ├── scan onecolumn [as=a]
+           │    │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+           │    ├── scan empty [as=b]
+           │    │    └── columns: b.x:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+           │    └── filters
+           │         └── a.x:1 = b.x:5
+           └── projections
+                └── COALESCE(a.x:1, b.x:5) [as=x:9]
+
+exec-ddl
+CREATE TABLE twocolumn (x INT, y INT)
+----
+
+# Natural joins with partial match
+build
+SELECT * FROM onecolumn NATURAL JOIN twocolumn
+----
+project
+ ├── columns: x:1!null y:6
+ └── inner-join (hash)
+      ├── columns: onecolumn.x:1!null onecolumn.rowid:2!null onecolumn.crdb_internal_mvcc_timestamp:3 onecolumn.tableoid:4 twocolumn.x:5!null y:6 twocolumn.rowid:7!null twocolumn.crdb_internal_mvcc_timestamp:8 twocolumn.tableoid:9
+      ├── scan onecolumn
+      │    └── columns: onecolumn.x:1 onecolumn.rowid:2!null onecolumn.crdb_internal_mvcc_timestamp:3 onecolumn.tableoid:4
+      ├── scan twocolumn
+      │    └── columns: twocolumn.x:5 y:6 twocolumn.rowid:7!null twocolumn.crdb_internal_mvcc_timestamp:8 twocolumn.tableoid:9
+      └── filters
+           └── onecolumn.x:1 = twocolumn.x:5
+
+build
+SELECT * FROM onecolumn JOIN twocolumn USING(x)
+----
+project
+ ├── columns: x:1!null y:6
+ └── inner-join (hash)
+      ├── columns: onecolumn.x:1!null onecolumn.rowid:2!null onecolumn.crdb_internal_mvcc_timestamp:3 onecolumn.tableoid:4 twocolumn.x:5!null y:6 twocolumn.rowid:7!null twocolumn.crdb_internal_mvcc_timestamp:8 twocolumn.tableoid:9
+      ├── scan onecolumn
+      │    └── columns: onecolumn.x:1 onecolumn.rowid:2!null onecolumn.crdb_internal_mvcc_timestamp:3 onecolumn.tableoid:4
+      ├── scan twocolumn
+      │    └── columns: twocolumn.x:5 y:6 twocolumn.rowid:7!null twocolumn.crdb_internal_mvcc_timestamp:8 twocolumn.tableoid:9
+      └── filters
+           └── onecolumn.x:1 = twocolumn.x:5
+
+build
+SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = b.y
+----
+project
+ ├── columns: x:1!null y:2 x:6 y:7!null
+ └── inner-join (hash)
+      ├── columns: a.x:1!null a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 a.tableoid:5 b.x:6 b.y:7!null b.rowid:8!null b.crdb_internal_mvcc_timestamp:9 b.tableoid:10
+      ├── scan twocolumn [as=a]
+      │    └── columns: a.x:1 a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 a.tableoid:5
+      ├── scan twocolumn [as=b]
+      │    └── columns: b.x:6 b.y:7 b.rowid:8!null b.crdb_internal_mvcc_timestamp:9 b.tableoid:10
+      └── filters
+           └── a.x:1 = b.y:7
+
+build
+SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = a.y
+----
+project
+ ├── columns: x:1!null y:2!null x:6 y:7
+ └── inner-join (cross)
+      ├── columns: a.x:1!null a.y:2!null a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 a.tableoid:5 b.x:6 b.y:7 b.rowid:8!null b.crdb_internal_mvcc_timestamp:9 b.tableoid:10
+      ├── scan twocolumn [as=a]
+      │    └── columns: a.x:1 a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 a.tableoid:5
+      ├── scan twocolumn [as=b]
+      │    └── columns: b.x:6 b.y:7 b.rowid:8!null b.crdb_internal_mvcc_timestamp:9 b.tableoid:10
+      └── filters
+           └── a.x:1 = a.y:2
+
+build
+SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
+----
+project
+ ├── columns: x:1!null x:5 y:6!null
+ └── inner-join (hash)
+      ├── columns: a.x:1!null a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 b.x:5 y:6!null b.rowid:7!null b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
+      ├── scan onecolumn [as=a]
+      │    └── columns: a.x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+      ├── scan twocolumn [as=b]
+      │    └── columns: b.x:5 y:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
+      └── filters
+           └── a.x:1 = y:6
+
+build
+SELECT * FROM onecolumn JOIN twocolumn ON onecolumn.x = twocolumn.y
+----
+project
+ ├── columns: x:1!null x:5 y:6!null
+ └── inner-join (hash)
+      ├── columns: onecolumn.x:1!null onecolumn.rowid:2!null onecolumn.crdb_internal_mvcc_timestamp:3 onecolumn.tableoid:4 twocolumn.x:5 y:6!null twocolumn.rowid:7!null twocolumn.crdb_internal_mvcc_timestamp:8 twocolumn.tableoid:9
+      ├── scan onecolumn
+      │    └── columns: onecolumn.x:1 onecolumn.rowid:2!null onecolumn.crdb_internal_mvcc_timestamp:3 onecolumn.tableoid:4
+      ├── scan twocolumn
+      │    └── columns: twocolumn.x:5 y:6 twocolumn.rowid:7!null twocolumn.crdb_internal_mvcc_timestamp:8 twocolumn.tableoid:9
+      └── filters
+           └── onecolumn.x:1 = y:6
+
+# Inner join with filter predicate
+build
+SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
+----
+project
+ ├── columns: x:1!null y:2 x:6 y:7
+ └── inner-join (cross)
+      ├── columns: a.x:1!null a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 a.tableoid:5 b.x:6 b.y:7 b.rowid:8!null b.crdb_internal_mvcc_timestamp:9 b.tableoid:10
+      ├── scan twocolumn [as=a]
+      │    └── columns: a.x:1 a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 a.tableoid:5
+      ├── scan twocolumn [as=b]
+      │    └── columns: b.x:6 b.y:7 b.rowid:8!null b.crdb_internal_mvcc_timestamp:9 b.tableoid:10
+      └── filters
+           └── a.x:1 = 44
+
+build
+SELECT o.x, t.y FROM onecolumn o INNER JOIN twocolumn t ON (o.x=t.x AND t.y=53)
+----
+project
+ ├── columns: x:1!null y:6!null
+ └── inner-join (cross)
+      ├── columns: o.x:1!null o.rowid:2!null o.crdb_internal_mvcc_timestamp:3 o.tableoid:4 t.x:5!null y:6!null t.rowid:7!null t.crdb_internal_mvcc_timestamp:8 t.tableoid:9
+      ├── scan onecolumn [as=o]
+      │    └── columns: o.x:1 o.rowid:2!null o.crdb_internal_mvcc_timestamp:3 o.tableoid:4
+      ├── scan twocolumn [as=t]
+      │    └── columns: t.x:5 y:6 t.rowid:7!null t.crdb_internal_mvcc_timestamp:8 t.tableoid:9
+      └── filters
+           └── (o.x:1 = t.x:5) AND (y:6 = 53)
+
+# Outer joins with filter predicate
+build
+SELECT o.x, t.y FROM onecolumn o LEFT OUTER JOIN twocolumn t ON (o.x=t.x AND t.y=53)
+----
+project
+ ├── columns: x:1 y:6
+ └── left-join (cross)
+      ├── columns: o.x:1 o.rowid:2!null o.crdb_internal_mvcc_timestamp:3 o.tableoid:4 t.x:5 y:6 t.rowid:7 t.crdb_internal_mvcc_timestamp:8 t.tableoid:9
+      ├── scan onecolumn [as=o]
+      │    └── columns: o.x:1 o.rowid:2!null o.crdb_internal_mvcc_timestamp:3 o.tableoid:4
+      ├── scan twocolumn [as=t]
+      │    └── columns: t.x:5 y:6 t.rowid:7!null t.crdb_internal_mvcc_timestamp:8 t.tableoid:9
+      └── filters
+           └── (o.x:1 = t.x:5) AND (y:6 = 53)
+
+build
+SELECT o.x, t.y FROM onecolumn o LEFT OUTER JOIN twocolumn t ON (o.x=t.x AND o.x=44)
+----
+project
+ ├── columns: x:1 y:6
+ └── left-join (cross)
+      ├── columns: o.x:1 o.rowid:2!null o.crdb_internal_mvcc_timestamp:3 o.tableoid:4 t.x:5 y:6 t.rowid:7 t.crdb_internal_mvcc_timestamp:8 t.tableoid:9
+      ├── scan onecolumn [as=o]
+      │    └── columns: o.x:1 o.rowid:2!null o.crdb_internal_mvcc_timestamp:3 o.tableoid:4
+      ├── scan twocolumn [as=t]
+      │    └── columns: t.x:5 y:6 t.rowid:7!null t.crdb_internal_mvcc_timestamp:8 t.tableoid:9
+      └── filters
+           └── (o.x:1 = t.x:5) AND (o.x:1 = 44)
+
+build
+SELECT o.x, t.y FROM onecolumn o LEFT OUTER JOIN twocolumn t ON (o.x=t.x AND t.x=44)
+----
+project
+ ├── columns: x:1 y:6
+ └── left-join (cross)
+      ├── columns: o.x:1 o.rowid:2!null o.crdb_internal_mvcc_timestamp:3 o.tableoid:4 t.x:5 y:6 t.rowid:7 t.crdb_internal_mvcc_timestamp:8 t.tableoid:9
+      ├── scan onecolumn [as=o]
+      │    └── columns: o.x:1 o.rowid:2!null o.crdb_internal_mvcc_timestamp:3 o.tableoid:4
+      ├── scan twocolumn [as=t]
+      │    └── columns: t.x:5 y:6 t.rowid:7!null t.crdb_internal_mvcc_timestamp:8 t.tableoid:9
+      └── filters
+           └── (o.x:1 = t.x:5) AND (t.x:5 = 44)
+
+build
+SELECT x, a.x, b.y FROM (SELECT * FROM onecolumn AS a NATURAL JOIN twocolumn AS b) AS q
+----
+error (42P01): no data source matches prefix: a in this context
+
+build
+SELECT x, a.x, b.y FROM (SELECT * FROM onecolumn AS a NATURAL JOIN twocolumn AS b)
+----
+error (42P01): no data source matches prefix: a in this context
+
+
+## Simple test cases for inner, left, right, and outer joins
+
+exec-ddl
+CREATE TABLE a (i int)
+----
+
+exec-ddl
+CREATE TABLE b (i int, b bool)
+----
+
+build
+SELECT * FROM a INNER JOIN b ON a.i = b.i
+----
+project
+ ├── columns: i:1!null i:5!null b:6
+ └── inner-join (hash)
+      ├── columns: a.i:1!null a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 b.i:5!null b:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
+      ├── scan a
+      │    └── columns: a.i:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+      ├── scan b
+      │    └── columns: b.i:5 b:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
+      └── filters
+           └── a.i:1 = b.i:5
+
+build
+SELECT * FROM a LEFT OUTER JOIN b ON a.i = b.i
+----
+project
+ ├── columns: i:1 i:5 b:6
+ └── left-join (hash)
+      ├── columns: a.i:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 b.i:5 b:6 b.rowid:7 b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
+      ├── scan a
+      │    └── columns: a.i:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+      ├── scan b
+      │    └── columns: b.i:5 b:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
+      └── filters
+           └── a.i:1 = b.i:5
+
+build
+SELECT * FROM a RIGHT OUTER JOIN b ON a.i = b.i ORDER BY b.i, b.b
+----
+sort
+ ├── columns: i:1 i:5 b:6
+ ├── ordering: +5,+6
+ └── project
+      ├── columns: a.i:1 b.i:5 b:6
+      └── right-join (hash)
+           ├── columns: a.i:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 b.i:5 b:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
+           ├── scan a
+           │    └── columns: a.i:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+           ├── scan b
+           │    └── columns: b.i:5 b:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
+           └── filters
+                └── a.i:1 = b.i:5
+
+build
+SELECT * FROM a FULL OUTER JOIN b ON a.i = b.i ORDER BY b.i, b.b
+----
+sort
+ ├── columns: i:1 i:5 b:6
+ ├── ordering: +5,+6
+ └── project
+      ├── columns: a.i:1 b.i:5 b:6
+      └── full-join (hash)
+           ├── columns: a.i:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 b.i:5 b:6 b.rowid:7 b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
+           ├── scan a
+           │    └── columns: a.i:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+           ├── scan b
+           │    └── columns: b.i:5 b:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
+           └── filters
+                └── a.i:1 = b.i:5
+
+# Full outer join with filter predicate
+build
+SELECT * FROM a FULL OUTER JOIN b ON (a.i = b.i and a.i>2) ORDER BY a.i, b.i
+----
+sort
+ ├── columns: i:1 i:5 b:6
+ ├── ordering: +1,+5
+ └── project
+      ├── columns: a.i:1 b.i:5 b:6
+      └── full-join (cross)
+           ├── columns: a.i:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 b.i:5 b:6 b.rowid:7 b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
+           ├── scan a
+           │    └── columns: a.i:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+           ├── scan b
+           │    └── columns: b.i:5 b:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
+           └── filters
+                └── (a.i:1 = b.i:5) AND (a.i:1 > 2)
+
+# Check column orders and names.
+build
+SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(b) ON a.b=twocolumn.x JOIN twocolumn AS c(d,e) ON a.b=c.d AND c.d=onecolumn.x) ORDER BY 1 LIMIT 1
+----
+limit
+ ├── columns: x:1!null x:5!null y:6 b:10!null d:14!null e:15
+ ├── internal-ordering: +1
+ ├── ordering: +1
+ ├── sort
+ │    ├── columns: onecolumn.x:1!null twocolumn.x:5!null y:6 b:10!null d:14!null e:15
+ │    ├── ordering: +1
+ │    ├── limit hint: 1.00
+ │    └── project
+ │         ├── columns: onecolumn.x:1!null twocolumn.x:5!null y:6 b:10!null d:14!null e:15
+ │         └── inner-join (cross)
+ │              ├── columns: onecolumn.x:1!null onecolumn.rowid:2!null onecolumn.crdb_internal_mvcc_timestamp:3 onecolumn.tableoid:4 twocolumn.x:5!null y:6 twocolumn.rowid:7!null twocolumn.crdb_internal_mvcc_timestamp:8 twocolumn.tableoid:9 b:10!null a.rowid:11!null a.crdb_internal_mvcc_timestamp:12 a.tableoid:13 d:14!null e:15 c.rowid:16!null c.crdb_internal_mvcc_timestamp:17 c.tableoid:18
+ │              ├── inner-join (hash)
+ │              │    ├── columns: onecolumn.x:1 onecolumn.rowid:2!null onecolumn.crdb_internal_mvcc_timestamp:3 onecolumn.tableoid:4 twocolumn.x:5!null y:6 twocolumn.rowid:7!null twocolumn.crdb_internal_mvcc_timestamp:8 twocolumn.tableoid:9 b:10!null a.rowid:11!null a.crdb_internal_mvcc_timestamp:12 a.tableoid:13
+ │              │    ├── inner-join (cross)
+ │              │    │    ├── columns: onecolumn.x:1 onecolumn.rowid:2!null onecolumn.crdb_internal_mvcc_timestamp:3 onecolumn.tableoid:4 twocolumn.x:5 y:6 twocolumn.rowid:7!null twocolumn.crdb_internal_mvcc_timestamp:8 twocolumn.tableoid:9
+ │              │    │    ├── scan onecolumn
+ │              │    │    │    └── columns: onecolumn.x:1 onecolumn.rowid:2!null onecolumn.crdb_internal_mvcc_timestamp:3 onecolumn.tableoid:4
+ │              │    │    ├── scan twocolumn
+ │              │    │    │    └── columns: twocolumn.x:5 y:6 twocolumn.rowid:7!null twocolumn.crdb_internal_mvcc_timestamp:8 twocolumn.tableoid:9
+ │              │    │    └── filters (true)
+ │              │    ├── scan onecolumn [as=a]
+ │              │    │    └── columns: b:10 a.rowid:11!null a.crdb_internal_mvcc_timestamp:12 a.tableoid:13
+ │              │    └── filters
+ │              │         └── b:10 = twocolumn.x:5
+ │              ├── scan twocolumn [as=c]
+ │              │    └── columns: d:14 e:15 c.rowid:16!null c.crdb_internal_mvcc_timestamp:17 c.tableoid:18
+ │              └── filters
+ │                   └── (b:10 = d:14) AND (d:14 = onecolumn.x:1)
+ └── 1
+
+# Check sub-queries in ON conditions.
+build
+SELECT * FROM onecolumn JOIN twocolumn ON twocolumn.x = onecolumn.x AND onecolumn.x IN (SELECT x FROM twocolumn WHERE y >= 52)
+----
+project
+ ├── columns: x:1!null x:5!null y:6
+ └── inner-join (cross)
+      ├── columns: onecolumn.x:1!null onecolumn.rowid:2!null onecolumn.crdb_internal_mvcc_timestamp:3 onecolumn.tableoid:4 twocolumn.x:5!null y:6 twocolumn.rowid:7!null twocolumn.crdb_internal_mvcc_timestamp:8 twocolumn.tableoid:9
+      ├── scan onecolumn
+      │    └── columns: onecolumn.x:1 onecolumn.rowid:2!null onecolumn.crdb_internal_mvcc_timestamp:3 onecolumn.tableoid:4
+      ├── scan twocolumn
+      │    └── columns: twocolumn.x:5 y:6 twocolumn.rowid:7!null twocolumn.crdb_internal_mvcc_timestamp:8 twocolumn.tableoid:9
+      └── filters
+           └── and
+                ├── twocolumn.x:5 = onecolumn.x:1
+                └── any: eq
+                     ├── project
+                     │    ├── columns: twocolumn.x:10
+                     │    └── select
+                     │         ├── columns: twocolumn.x:10 y:11!null twocolumn.rowid:12!null twocolumn.crdb_internal_mvcc_timestamp:13 twocolumn.tableoid:14
+                     │         ├── scan twocolumn
+                     │         │    └── columns: twocolumn.x:10 y:11 twocolumn.rowid:12!null twocolumn.crdb_internal_mvcc_timestamp:13 twocolumn.tableoid:14
+                     │         └── filters
+                     │              └── y:11 >= 52
+                     └── onecolumn.x:1
+
+# Check sub-queries as data sources.
+build
+SELECT * FROM onecolumn JOIN (VALUES (41),(42),(43)) AS a(x) USING(x)
+----
+project
+ ├── columns: x:1!null
+ └── inner-join (hash)
+      ├── columns: x:1!null rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4 column1:5!null
+      ├── scan onecolumn
+      │    └── columns: x:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── values
+      │    ├── columns: column1:5!null
+      │    ├── (41,)
+      │    ├── (42,)
+      │    └── (43,)
+      └── filters
+           └── x:1 = column1:5
+
+build
+SELECT * FROM onecolumn JOIN (SELECT x + 2 AS x FROM onecolumn) USING(x)
+----
+project
+ ├── columns: x:1!null
+ └── inner-join (hash)
+      ├── columns: onecolumn.x:1!null rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4 x:9!null
+      ├── scan onecolumn
+      │    └── columns: onecolumn.x:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── project
+      │    ├── columns: x:9
+      │    ├── scan onecolumn
+      │    │    └── columns: onecolumn.x:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+      │    └── projections
+      │         └── onecolumn.x:5 + 2 [as=x:9]
+      └── filters
+           └── onecolumn.x:1 = x:9
+
+# Check that a single column can have multiple table aliases.
+build
+SELECT * FROM (twocolumn AS a JOIN twocolumn AS b USING(x) JOIN twocolumn AS c USING(x)) ORDER BY x LIMIT 1
+----
+limit
+ ├── columns: x:1!null y:2 y:7 y:12
+ ├── internal-ordering: +1
+ ├── ordering: +1
+ ├── sort
+ │    ├── columns: a.x:1!null a.y:2 b.y:7 c.y:12
+ │    ├── ordering: +1
+ │    ├── limit hint: 1.00
+ │    └── project
+ │         ├── columns: a.x:1!null a.y:2 b.y:7 c.y:12
+ │         └── inner-join (hash)
+ │              ├── columns: a.x:1!null a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 a.tableoid:5 b.x:6!null b.y:7 b.rowid:8!null b.crdb_internal_mvcc_timestamp:9 b.tableoid:10 c.x:11!null c.y:12 c.rowid:13!null c.crdb_internal_mvcc_timestamp:14 c.tableoid:15
+ │              ├── inner-join (hash)
+ │              │    ├── columns: a.x:1!null a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 a.tableoid:5 b.x:6!null b.y:7 b.rowid:8!null b.crdb_internal_mvcc_timestamp:9 b.tableoid:10
+ │              │    ├── scan twocolumn [as=a]
+ │              │    │    └── columns: a.x:1 a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 a.tableoid:5
+ │              │    ├── scan twocolumn [as=b]
+ │              │    │    └── columns: b.x:6 b.y:7 b.rowid:8!null b.crdb_internal_mvcc_timestamp:9 b.tableoid:10
+ │              │    └── filters
+ │              │         └── a.x:1 = b.x:6
+ │              ├── scan twocolumn [as=c]
+ │              │    └── columns: c.x:11 c.y:12 c.rowid:13!null c.crdb_internal_mvcc_timestamp:14 c.tableoid:15
+ │              └── filters
+ │                   └── a.x:1 = c.x:11
+ └── 1
+
+build
+SELECT a.x AS s, b.x, c.x, a.y, b.y, c.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x) JOIN twocolumn AS c USING(x)) ORDER BY s
+----
+sort
+ ├── columns: s:1!null x:6!null x:11!null y:2 y:7 y:12
+ ├── ordering: +1
+ └── project
+      ├── columns: a.x:1!null a.y:2 b.x:6!null b.y:7 c.x:11!null c.y:12
+      └── inner-join (hash)
+           ├── columns: a.x:1!null a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 a.tableoid:5 b.x:6!null b.y:7 b.rowid:8!null b.crdb_internal_mvcc_timestamp:9 b.tableoid:10 c.x:11!null c.y:12 c.rowid:13!null c.crdb_internal_mvcc_timestamp:14 c.tableoid:15
+           ├── inner-join (hash)
+           │    ├── columns: a.x:1!null a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 a.tableoid:5 b.x:6!null b.y:7 b.rowid:8!null b.crdb_internal_mvcc_timestamp:9 b.tableoid:10
+           │    ├── scan twocolumn [as=a]
+           │    │    └── columns: a.x:1 a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 a.tableoid:5
+           │    ├── scan twocolumn [as=b]
+           │    │    └── columns: b.x:6 b.y:7 b.rowid:8!null b.crdb_internal_mvcc_timestamp:9 b.tableoid:10
+           │    └── filters
+           │         └── a.x:1 = b.x:6
+           ├── scan twocolumn [as=c]
+           │    └── columns: c.x:11 c.y:12 c.rowid:13!null c.crdb_internal_mvcc_timestamp:14 c.tableoid:15
+           └── filters
+                └── a.x:1 = c.x:11
+
+build
+SELECT * FROM (onecolumn AS a JOIN onecolumn AS b USING(y))
+----
+error (42703): column "y" specified in USING clause does not exist in left table
+
+build
+SELECT * FROM (onecolumn AS a JOIN onecolumn AS b USING(x, x))
+----
+error (42701): column name "x" appears more than once in USING clause
+
+exec-ddl
+CREATE TABLE othertype (x TEXT)
+----
+
+build
+SELECT * FROM (onecolumn AS a JOIN othertype AS b USING(x))
+----
+error (42804): JOIN/USING types int for left and string for right cannot be matched for column "x"
+
+build
+SELECT * FROM (onecolumn JOIN onecolumn USING(x))
+----
+error (42712): source name "onecolumn" specified more than once (missing AS clause)
+
+build
+SELECT * FROM (onecolumn JOIN twocolumn USING(x) JOIN onecolumn USING(x))
+----
+error (42712): source name "onecolumn" specified more than once (missing AS clause)
+
+# Check that star expansion works across anonymous sources.
+build
+SELECT * FROM (SELECT * FROM onecolumn), (SELECT * FROM onecolumn)
+----
+inner-join (cross)
+ ├── columns: x:1 x:5
+ ├── project
+ │    ├── columns: x:1
+ │    └── scan onecolumn
+ │         └── columns: x:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+ ├── project
+ │    ├── columns: x:5
+ │    └── scan onecolumn
+ │         └── columns: x:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ └── filters (true)
+
+# Check that anonymous sources are properly looked up without ambiguity.
+build
+SELECT x FROM (onecolumn JOIN othercolumn USING (x)) JOIN (onecolumn AS a JOIN othercolumn AS b USING(x)) USING(x)
+----
+project
+ ├── columns: x:1!null
+ └── inner-join (hash)
+      ├── columns: onecolumn.x:1!null onecolumn.rowid:2!null onecolumn.crdb_internal_mvcc_timestamp:3 onecolumn.tableoid:4 othercolumn.x:5!null othercolumn.rowid:6!null othercolumn.crdb_internal_mvcc_timestamp:7 othercolumn.tableoid:8 a.x:9!null a.rowid:10!null a.crdb_internal_mvcc_timestamp:11 a.tableoid:12 b.x:13!null b.rowid:14!null b.crdb_internal_mvcc_timestamp:15 b.tableoid:16
+      ├── inner-join (hash)
+      │    ├── columns: onecolumn.x:1!null onecolumn.rowid:2!null onecolumn.crdb_internal_mvcc_timestamp:3 onecolumn.tableoid:4 othercolumn.x:5!null othercolumn.rowid:6!null othercolumn.crdb_internal_mvcc_timestamp:7 othercolumn.tableoid:8
+      │    ├── scan onecolumn
+      │    │    └── columns: onecolumn.x:1 onecolumn.rowid:2!null onecolumn.crdb_internal_mvcc_timestamp:3 onecolumn.tableoid:4
+      │    ├── scan othercolumn
+      │    │    └── columns: othercolumn.x:5 othercolumn.rowid:6!null othercolumn.crdb_internal_mvcc_timestamp:7 othercolumn.tableoid:8
+      │    └── filters
+      │         └── onecolumn.x:1 = othercolumn.x:5
+      ├── inner-join (hash)
+      │    ├── columns: a.x:9!null a.rowid:10!null a.crdb_internal_mvcc_timestamp:11 a.tableoid:12 b.x:13!null b.rowid:14!null b.crdb_internal_mvcc_timestamp:15 b.tableoid:16
+      │    ├── scan onecolumn [as=a]
+      │    │    └── columns: a.x:9 a.rowid:10!null a.crdb_internal_mvcc_timestamp:11 a.tableoid:12
+      │    ├── scan othercolumn [as=b]
+      │    │    └── columns: b.x:13 b.rowid:14!null b.crdb_internal_mvcc_timestamp:15 b.tableoid:16
+      │    └── filters
+      │         └── a.x:9 = b.x:13
+      └── filters
+           └── onecolumn.x:1 = a.x:9
+
+# Check that multiple anonymous sources cause proper ambiguity errors.
+build
+SELECT x FROM (SELECT * FROM onecolumn), (SELECT * FROM onecolumn)
+----
+error (42702): column reference "x" is ambiguous (candidates: <anonymous>.x)
+
+build
+SELECT * FROM (onecolumn AS a JOIN onecolumn AS b ON x > 32)
+----
+error (42702): column reference "x" is ambiguous (candidates: a.x, b.x)
+
+build
+SELECT * FROM (onecolumn AS a JOIN onecolumn AS b ON a.y > y)
+----
+error (42703): column "a.y" does not exist
+
+# THe following queries verify that only the necessary columns are scanned.
+build
+SELECT a.x, b.y FROM twocolumn AS a, twocolumn AS b
+----
+project
+ ├── columns: x:1 y:7
+ └── inner-join (cross)
+      ├── columns: a.x:1 a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 a.tableoid:5 b.x:6 b.y:7 b.rowid:8!null b.crdb_internal_mvcc_timestamp:9 b.tableoid:10
+      ├── scan twocolumn [as=a]
+      │    └── columns: a.x:1 a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 a.tableoid:5
+      ├── scan twocolumn [as=b]
+      │    └── columns: b.x:6 b.y:7 b.rowid:8!null b.crdb_internal_mvcc_timestamp:9 b.tableoid:10
+      └── filters (true)
+
+build
+SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x))
+----
+project
+ ├── columns: y:7
+ └── inner-join (hash)
+      ├── columns: a.x:1!null a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 a.tableoid:5 b.x:6!null b.y:7 b.rowid:8!null b.crdb_internal_mvcc_timestamp:9 b.tableoid:10
+      ├── scan twocolumn [as=a]
+      │    └── columns: a.x:1 a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 a.tableoid:5
+      ├── scan twocolumn [as=b]
+      │    └── columns: b.x:6 b.y:7 b.rowid:8!null b.crdb_internal_mvcc_timestamp:9 b.tableoid:10
+      └── filters
+           └── a.x:1 = b.x:6
+
+build
+SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b ON a.x = b.x)
+----
+project
+ ├── columns: y:7
+ └── inner-join (hash)
+      ├── columns: a.x:1!null a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 a.tableoid:5 b.x:6!null b.y:7 b.rowid:8!null b.crdb_internal_mvcc_timestamp:9 b.tableoid:10
+      ├── scan twocolumn [as=a]
+      │    └── columns: a.x:1 a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 a.tableoid:5
+      ├── scan twocolumn [as=b]
+      │    └── columns: b.x:6 b.y:7 b.rowid:8!null b.crdb_internal_mvcc_timestamp:9 b.tableoid:10
+      └── filters
+           └── a.x:1 = b.x:6
+
+build
+SELECT a.x FROM (twocolumn AS a JOIN twocolumn AS b ON a.x < b.y)
+----
+project
+ ├── columns: x:1!null
+ └── inner-join (cross)
+      ├── columns: a.x:1!null a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 a.tableoid:5 b.x:6 b.y:7!null b.rowid:8!null b.crdb_internal_mvcc_timestamp:9 b.tableoid:10
+      ├── scan twocolumn [as=a]
+      │    └── columns: a.x:1 a.y:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 a.tableoid:5
+      ├── scan twocolumn [as=b]
+      │    └── columns: b.x:6 b.y:7 b.rowid:8!null b.crdb_internal_mvcc_timestamp:9 b.tableoid:10
+      └── filters
+           └── a.x:1 < b.y:7
+
+build
+SELECT * FROM (SELECT * FROM (VALUES (9, 1), (8, 2)) AS a (u, k) ORDER BY k)
+  INNER JOIN (VALUES (1, 1), (2, 2)) AS b (k, w) USING (k) ORDER BY u
+----
+sort
+ ├── columns: k:2!null u:1!null w:4!null
+ ├── ordering: +1
+ └── project
+      ├── columns: column1:1!null column2:2!null column2:4!null
+      └── inner-join (hash)
+           ├── columns: column1:1!null column2:2!null column1:3!null column2:4!null
+           ├── values
+           │    ├── columns: column1:1!null column2:2!null
+           │    ├── (9, 1)
+           │    └── (8, 2)
+           ├── values
+           │    ├── columns: column1:3!null column2:4!null
+           │    ├── (1, 1)
+           │    └── (2, 2)
+           └── filters
+                └── column2:2 = column1:3
+
+# Tests for filter propagation through joins.
+
+exec-ddl
+CREATE TABLE square (n INT PRIMARY KEY, sq INT)
+----
+
+exec-ddl
+CREATE TABLE pairs (a INT, b INT)
+----
+
+# The filter expression becomes an equality constraint.
+build
+SELECT * FROM pairs, square WHERE pairs.b = square.n
+----
+project
+ ├── columns: a:1 b:2!null n:6!null sq:7
+ └── select
+      ├── columns: a:1 b:2!null rowid:3!null pairs.crdb_internal_mvcc_timestamp:4 pairs.tableoid:5 n:6!null sq:7 square.crdb_internal_mvcc_timestamp:8 square.tableoid:9
+      ├── inner-join (cross)
+      │    ├── columns: a:1 b:2 rowid:3!null pairs.crdb_internal_mvcc_timestamp:4 pairs.tableoid:5 n:6!null sq:7 square.crdb_internal_mvcc_timestamp:8 square.tableoid:9
+      │    ├── scan pairs
+      │    │    └── columns: a:1 b:2 rowid:3!null pairs.crdb_internal_mvcc_timestamp:4 pairs.tableoid:5
+      │    ├── scan square
+      │    │    └── columns: n:6!null sq:7 square.crdb_internal_mvcc_timestamp:8 square.tableoid:9
+      │    └── filters (true)
+      └── filters
+           └── b:2 = n:6
+
+# The filter expression becomes an ON predicate.
+build
+SELECT * FROM pairs, square WHERE pairs.a + pairs.b = square.sq
+----
+project
+ ├── columns: a:1 b:2 n:6!null sq:7
+ └── select
+      ├── columns: a:1 b:2 rowid:3!null pairs.crdb_internal_mvcc_timestamp:4 pairs.tableoid:5 n:6!null sq:7 square.crdb_internal_mvcc_timestamp:8 square.tableoid:9
+      ├── inner-join (cross)
+      │    ├── columns: a:1 b:2 rowid:3!null pairs.crdb_internal_mvcc_timestamp:4 pairs.tableoid:5 n:6!null sq:7 square.crdb_internal_mvcc_timestamp:8 square.tableoid:9
+      │    ├── scan pairs
+      │    │    └── columns: a:1 b:2 rowid:3!null pairs.crdb_internal_mvcc_timestamp:4 pairs.tableoid:5
+      │    ├── scan square
+      │    │    └── columns: n:6!null sq:7 square.crdb_internal_mvcc_timestamp:8 square.tableoid:9
+      │    └── filters (true)
+      └── filters
+           └── (a:1 + b:2) = sq:7
+
+# Query similar to the one above, but the filter refers to a rendered
+# expression and can't "break through". See the comment for propagateFilters
+# in fitler_opt.go for all the details.
+build
+SELECT a, b, n, sq FROM (SELECT a, b, a + b AS sum, n, sq FROM pairs, square) WHERE sum = sq
+----
+project
+ ├── columns: a:1 b:2 n:6!null sq:7!null
+ └── select
+      ├── columns: a:1 b:2 n:6!null sq:7!null sum:10!null
+      ├── project
+      │    ├── columns: sum:10 a:1 b:2 n:6!null sq:7
+      │    ├── inner-join (cross)
+      │    │    ├── columns: a:1 b:2 rowid:3!null pairs.crdb_internal_mvcc_timestamp:4 pairs.tableoid:5 n:6!null sq:7 square.crdb_internal_mvcc_timestamp:8 square.tableoid:9
+      │    │    ├── scan pairs
+      │    │    │    └── columns: a:1 b:2 rowid:3!null pairs.crdb_internal_mvcc_timestamp:4 pairs.tableoid:5
+      │    │    ├── scan square
+      │    │    │    └── columns: n:6!null sq:7 square.crdb_internal_mvcc_timestamp:8 square.tableoid:9
+      │    │    └── filters (true)
+      │    └── projections
+      │         └── a:1 + b:2 [as=sum:10]
+      └── filters
+           └── sum:10 = sq:7
+
+# The filter expression must stay on top of the outer join.
+build
+SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq
+----
+project
+ ├── columns: a:1 b:2 n:6 sq:7
+ └── full-join (cross)
+      ├── columns: a:1 b:2 rowid:3 pairs.crdb_internal_mvcc_timestamp:4 pairs.tableoid:5 n:6 sq:7 square.crdb_internal_mvcc_timestamp:8 square.tableoid:9
+      ├── scan pairs
+      │    └── columns: a:1 b:2 rowid:3!null pairs.crdb_internal_mvcc_timestamp:4 pairs.tableoid:5
+      ├── scan square
+      │    └── columns: n:6!null sq:7 square.crdb_internal_mvcc_timestamp:8 square.tableoid:9
+      └── filters
+           └── (a:1 + b:2) = sq:7
+
+build
+SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq WHERE pairs.b%2 <> square.sq%2
+----
+project
+ ├── columns: a:1 b:2 n:6 sq:7
+ └── select
+      ├── columns: a:1 b:2 rowid:3 pairs.crdb_internal_mvcc_timestamp:4 pairs.tableoid:5 n:6 sq:7 square.crdb_internal_mvcc_timestamp:8 square.tableoid:9
+      ├── full-join (cross)
+      │    ├── columns: a:1 b:2 rowid:3 pairs.crdb_internal_mvcc_timestamp:4 pairs.tableoid:5 n:6 sq:7 square.crdb_internal_mvcc_timestamp:8 square.tableoid:9
+      │    ├── scan pairs
+      │    │    └── columns: a:1 b:2 rowid:3!null pairs.crdb_internal_mvcc_timestamp:4 pairs.tableoid:5
+      │    ├── scan square
+      │    │    └── columns: n:6!null sq:7 square.crdb_internal_mvcc_timestamp:8 square.tableoid:9
+      │    └── filters
+      │         └── (a:1 + b:2) = sq:7
+      └── filters
+           └── (b:2 % 2) != (sq:7 % 2)
+
+# Filter propagation through outer joins.
+
+build
+SELECT *
+  FROM (SELECT * FROM pairs LEFT JOIN square ON b = sq AND a > 1 AND n < 6)
+ WHERE b > 1 AND (n IS NULL OR n > 1) AND (n IS NULL OR a  < sq)
+----
+select
+ ├── columns: a:1 b:2!null n:6 sq:7
+ ├── project
+ │    ├── columns: a:1 b:2 n:6 sq:7
+ │    └── left-join (cross)
+ │         ├── columns: a:1 b:2 rowid:3!null pairs.crdb_internal_mvcc_timestamp:4 pairs.tableoid:5 n:6 sq:7 square.crdb_internal_mvcc_timestamp:8 square.tableoid:9
+ │         ├── scan pairs
+ │         │    └── columns: a:1 b:2 rowid:3!null pairs.crdb_internal_mvcc_timestamp:4 pairs.tableoid:5
+ │         ├── scan square
+ │         │    └── columns: n:6!null sq:7 square.crdb_internal_mvcc_timestamp:8 square.tableoid:9
+ │         └── filters
+ │              └── ((b:2 = sq:7) AND (a:1 > 1)) AND (n:6 < 6)
+ └── filters
+      └── ((b:2 > 1) AND ((n:6 IS NULL) OR (n:6 > 1))) AND ((n:6 IS NULL) OR (a:1 < sq:7))
+
+build
+SELECT *
+  FROM (SELECT * FROM pairs RIGHT JOIN square ON b = sq AND a > 1 AND n < 6)
+ WHERE (a IS NULL OR a > 2) AND n > 1 AND (a IS NULL OR a < sq)
+----
+select
+ ├── columns: a:1 b:2 n:6!null sq:7
+ ├── project
+ │    ├── columns: a:1 b:2 n:6!null sq:7
+ │    └── right-join (cross)
+ │         ├── columns: a:1 b:2 rowid:3 pairs.crdb_internal_mvcc_timestamp:4 pairs.tableoid:5 n:6!null sq:7 square.crdb_internal_mvcc_timestamp:8 square.tableoid:9
+ │         ├── scan pairs
+ │         │    └── columns: a:1 b:2 rowid:3!null pairs.crdb_internal_mvcc_timestamp:4 pairs.tableoid:5
+ │         ├── scan square
+ │         │    └── columns: n:6!null sq:7 square.crdb_internal_mvcc_timestamp:8 square.tableoid:9
+ │         └── filters
+ │              └── ((b:2 = sq:7) AND (a:1 > 1)) AND (n:6 < 6)
+ └── filters
+      └── (((a:1 IS NULL) OR (a:1 > 2)) AND (n:6 > 1)) AND ((a:1 IS NULL) OR (a:1 < sq:7))
+
+# The simpler plan for an inner join, to compare.
+build
+SELECT *
+  FROM (SELECT * FROM pairs JOIN square ON b = sq AND a > 1 AND n < 6)
+ WHERE (a IS NULL OR a > 2) AND n > 1 AND (a IS NULL OR a < sq)
+----
+select
+ ├── columns: a:1!null b:2!null n:6!null sq:7!null
+ ├── project
+ │    ├── columns: a:1!null b:2!null n:6!null sq:7!null
+ │    └── inner-join (cross)
+ │         ├── columns: a:1!null b:2!null rowid:3!null pairs.crdb_internal_mvcc_timestamp:4 pairs.tableoid:5 n:6!null sq:7!null square.crdb_internal_mvcc_timestamp:8 square.tableoid:9
+ │         ├── scan pairs
+ │         │    └── columns: a:1 b:2 rowid:3!null pairs.crdb_internal_mvcc_timestamp:4 pairs.tableoid:5
+ │         ├── scan square
+ │         │    └── columns: n:6!null sq:7 square.crdb_internal_mvcc_timestamp:8 square.tableoid:9
+ │         └── filters
+ │              └── ((b:2 = sq:7) AND (a:1 > 1)) AND (n:6 < 6)
+ └── filters
+      └── (((a:1 IS NULL) OR (a:1 > 2)) AND (n:6 > 1)) AND ((a:1 IS NULL) OR (a:1 < sq:7))
+
+
+exec-ddl
+CREATE TABLE t1 (col1 INT, x INT, col2 INT, y INT)
+----
+
+exec-ddl
+CREATE TABLE t2 (col3 INT, y INT, x INT, col4 INT)
+----
+
+build
+SELECT * FROM t1 JOIN t2 USING(x)
+----
+project
+ ├── columns: x:2!null col1:1 col2:3 y:4 col3:8 y:9 col4:11
+ └── inner-join (hash)
+      ├── columns: col1:1 t1.x:2!null col2:3 t1.y:4 t1.rowid:5!null t1.crdb_internal_mvcc_timestamp:6 t1.tableoid:7 col3:8 t2.y:9 t2.x:10!null col4:11 t2.rowid:12!null t2.crdb_internal_mvcc_timestamp:13 t2.tableoid:14
+      ├── scan t1
+      │    └── columns: col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5!null t1.crdb_internal_mvcc_timestamp:6 t1.tableoid:7
+      ├── scan t2
+      │    └── columns: col3:8 t2.y:9 t2.x:10 col4:11 t2.rowid:12!null t2.crdb_internal_mvcc_timestamp:13 t2.tableoid:14
+      └── filters
+           └── t1.x:2 = t2.x:10
+
+build
+SELECT * FROM t1 NATURAL JOIN t2
+----
+project
+ ├── columns: x:2!null y:4!null col1:1 col2:3 col3:8 col4:11
+ └── inner-join (hash)
+      ├── columns: col1:1 t1.x:2!null col2:3 t1.y:4!null t1.rowid:5!null t1.crdb_internal_mvcc_timestamp:6 t1.tableoid:7 col3:8 t2.y:9!null t2.x:10!null col4:11 t2.rowid:12!null t2.crdb_internal_mvcc_timestamp:13 t2.tableoid:14
+      ├── scan t1
+      │    └── columns: col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5!null t1.crdb_internal_mvcc_timestamp:6 t1.tableoid:7
+      ├── scan t2
+      │    └── columns: col3:8 t2.y:9 t2.x:10 col4:11 t2.rowid:12!null t2.crdb_internal_mvcc_timestamp:13 t2.tableoid:14
+      └── filters
+           ├── t1.x:2 = t2.x:10
+           └── t1.y:4 = t2.y:9
+
+build
+SELECT x, t1.x, t2.x FROM t1 NATURAL JOIN t2
+----
+project
+ ├── columns: x:2!null x:2!null x:10!null
+ └── inner-join (hash)
+      ├── columns: col1:1 t1.x:2!null col2:3 t1.y:4!null t1.rowid:5!null t1.crdb_internal_mvcc_timestamp:6 t1.tableoid:7 col3:8 t2.y:9!null t2.x:10!null col4:11 t2.rowid:12!null t2.crdb_internal_mvcc_timestamp:13 t2.tableoid:14
+      ├── scan t1
+      │    └── columns: col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5!null t1.crdb_internal_mvcc_timestamp:6 t1.tableoid:7
+      ├── scan t2
+      │    └── columns: col3:8 t2.y:9 t2.x:10 col4:11 t2.rowid:12!null t2.crdb_internal_mvcc_timestamp:13 t2.tableoid:14
+      └── filters
+           ├── t1.x:2 = t2.x:10
+           └── t1.y:4 = t2.y:9
+
+build
+SELECT t1.*, t2.* FROM t1 NATURAL JOIN t2
+----
+project
+ ├── columns: col1:1 x:2!null col2:3 y:4!null col3:8 y:9!null x:10!null col4:11
+ └── inner-join (hash)
+      ├── columns: col1:1 t1.x:2!null col2:3 t1.y:4!null t1.rowid:5!null t1.crdb_internal_mvcc_timestamp:6 t1.tableoid:7 col3:8 t2.y:9!null t2.x:10!null col4:11 t2.rowid:12!null t2.crdb_internal_mvcc_timestamp:13 t2.tableoid:14
+      ├── scan t1
+      │    └── columns: col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5!null t1.crdb_internal_mvcc_timestamp:6 t1.tableoid:7
+      ├── scan t2
+      │    └── columns: col3:8 t2.y:9 t2.x:10 col4:11 t2.rowid:12!null t2.crdb_internal_mvcc_timestamp:13 t2.tableoid:14
+      └── filters
+           ├── t1.x:2 = t2.x:10
+           └── t1.y:4 = t2.y:9
+
+build
+SELECT * FROM t1 JOIN t2 ON t2.x=t1.x
+----
+project
+ ├── columns: col1:1 x:2!null col2:3 y:4 col3:8 y:9 x:10!null col4:11
+ └── inner-join (hash)
+      ├── columns: col1:1 t1.x:2!null col2:3 t1.y:4 t1.rowid:5!null t1.crdb_internal_mvcc_timestamp:6 t1.tableoid:7 col3:8 t2.y:9 t2.x:10!null col4:11 t2.rowid:12!null t2.crdb_internal_mvcc_timestamp:13 t2.tableoid:14
+      ├── scan t1
+      │    └── columns: col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5!null t1.crdb_internal_mvcc_timestamp:6 t1.tableoid:7
+      ├── scan t2
+      │    └── columns: col3:8 t2.y:9 t2.x:10 col4:11 t2.rowid:12!null t2.crdb_internal_mvcc_timestamp:13 t2.tableoid:14
+      └── filters
+           └── t2.x:10 = t1.x:2
+
+build
+SELECT * FROM t1 FULL OUTER JOIN t2 USING(x)
+----
+project
+ ├── columns: x:15 col1:1 col2:3 y:4 col3:8 y:9 col4:11
+ └── project
+      ├── columns: x:15 col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5 t1.crdb_internal_mvcc_timestamp:6 t1.tableoid:7 col3:8 t2.y:9 t2.x:10 col4:11 t2.rowid:12 t2.crdb_internal_mvcc_timestamp:13 t2.tableoid:14
+      ├── full-join (hash)
+      │    ├── columns: col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5 t1.crdb_internal_mvcc_timestamp:6 t1.tableoid:7 col3:8 t2.y:9 t2.x:10 col4:11 t2.rowid:12 t2.crdb_internal_mvcc_timestamp:13 t2.tableoid:14
+      │    ├── scan t1
+      │    │    └── columns: col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5!null t1.crdb_internal_mvcc_timestamp:6 t1.tableoid:7
+      │    ├── scan t2
+      │    │    └── columns: col3:8 t2.y:9 t2.x:10 col4:11 t2.rowid:12!null t2.crdb_internal_mvcc_timestamp:13 t2.tableoid:14
+      │    └── filters
+      │         └── t1.x:2 = t2.x:10
+      └── projections
+           └── COALESCE(t1.x:2, t2.x:10) [as=x:15]
+
+build
+SELECT * FROM t1 NATURAL FULL OUTER JOIN t2
+----
+project
+ ├── columns: x:15 y:16 col1:1 col2:3 col3:8 col4:11
+ └── project
+      ├── columns: x:15 y:16 col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5 t1.crdb_internal_mvcc_timestamp:6 t1.tableoid:7 col3:8 t2.y:9 t2.x:10 col4:11 t2.rowid:12 t2.crdb_internal_mvcc_timestamp:13 t2.tableoid:14
+      ├── full-join (hash)
+      │    ├── columns: col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5 t1.crdb_internal_mvcc_timestamp:6 t1.tableoid:7 col3:8 t2.y:9 t2.x:10 col4:11 t2.rowid:12 t2.crdb_internal_mvcc_timestamp:13 t2.tableoid:14
+      │    ├── scan t1
+      │    │    └── columns: col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5!null t1.crdb_internal_mvcc_timestamp:6 t1.tableoid:7
+      │    ├── scan t2
+      │    │    └── columns: col3:8 t2.y:9 t2.x:10 col4:11 t2.rowid:12!null t2.crdb_internal_mvcc_timestamp:13 t2.tableoid:14
+      │    └── filters
+      │         ├── t1.x:2 = t2.x:10
+      │         └── t1.y:4 = t2.y:9
+      └── projections
+           ├── COALESCE(t1.x:2, t2.x:10) [as=x:15]
+           └── COALESCE(t1.y:4, t2.y:9) [as=y:16]
+
+# Regression: computed columns are not wrapped with Variable outside join.
+build
+SELECT * FROM (SELECT x, x+1 AS plus1 FROM t1) NATURAL FULL OUTER JOIN (SELECT x, 2 AS two FROM t2)
+----
+project
+ ├── columns: x:17 plus1:8 two:16
+ └── project
+      ├── columns: x:17 t1.x:2 plus1:8 t2.x:11 two:16
+      ├── full-join (hash)
+      │    ├── columns: t1.x:2 plus1:8 t2.x:11 two:16
+      │    ├── project
+      │    │    ├── columns: plus1:8 t1.x:2
+      │    │    ├── scan t1
+      │    │    │    └── columns: col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5!null t1.crdb_internal_mvcc_timestamp:6 t1.tableoid:7
+      │    │    └── projections
+      │    │         └── t1.x:2 + 1 [as=plus1:8]
+      │    ├── project
+      │    │    ├── columns: two:16!null t2.x:11
+      │    │    ├── scan t2
+      │    │    │    └── columns: col3:9 t2.y:10 t2.x:11 col4:12 t2.rowid:13!null t2.crdb_internal_mvcc_timestamp:14 t2.tableoid:15
+      │    │    └── projections
+      │    │         └── 2 [as=two:16]
+      │    └── filters
+      │         └── t1.x:2 = t2.x:11
+      └── projections
+           └── COALESCE(t1.x:2, t2.x:11) [as=x:17]
+
+build
+SELECT * FROM t1 FULL OUTER JOIN t2 ON t1.x=t2.x
+----
+project
+ ├── columns: col1:1 x:2 col2:3 y:4 col3:8 y:9 x:10 col4:11
+ └── full-join (hash)
+      ├── columns: col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5 t1.crdb_internal_mvcc_timestamp:6 t1.tableoid:7 col3:8 t2.y:9 t2.x:10 col4:11 t2.rowid:12 t2.crdb_internal_mvcc_timestamp:13 t2.tableoid:14
+      ├── scan t1
+      │    └── columns: col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5!null t1.crdb_internal_mvcc_timestamp:6 t1.tableoid:7
+      ├── scan t2
+      │    └── columns: col3:8 t2.y:9 t2.x:10 col4:11 t2.rowid:12!null t2.crdb_internal_mvcc_timestamp:13 t2.tableoid:14
+      └── filters
+           └── t1.x:2 = t2.x:10
+
+build
+SELECT t2.x, t1.x, x FROM t1 JOIN t2 USING(x)
+----
+project
+ ├── columns: x:10!null x:2!null x:2!null
+ └── inner-join (hash)
+      ├── columns: col1:1 t1.x:2!null col2:3 t1.y:4 t1.rowid:5!null t1.crdb_internal_mvcc_timestamp:6 t1.tableoid:7 col3:8 t2.y:9 t2.x:10!null col4:11 t2.rowid:12!null t2.crdb_internal_mvcc_timestamp:13 t2.tableoid:14
+      ├── scan t1
+      │    └── columns: col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5!null t1.crdb_internal_mvcc_timestamp:6 t1.tableoid:7
+      ├── scan t2
+      │    └── columns: col3:8 t2.y:9 t2.x:10 col4:11 t2.rowid:12!null t2.crdb_internal_mvcc_timestamp:13 t2.tableoid:14
+      └── filters
+           └── t1.x:2 = t2.x:10
+
+build
+SELECT t2.x, t1.x, x FROM t1 FULL OUTER JOIN t2 USING(x)
+----
+project
+ ├── columns: x:10 x:2 x:15
+ └── project
+      ├── columns: x:15 col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5 t1.crdb_internal_mvcc_timestamp:6 t1.tableoid:7 col3:8 t2.y:9 t2.x:10 col4:11 t2.rowid:12 t2.crdb_internal_mvcc_timestamp:13 t2.tableoid:14
+      ├── full-join (hash)
+      │    ├── columns: col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5 t1.crdb_internal_mvcc_timestamp:6 t1.tableoid:7 col3:8 t2.y:9 t2.x:10 col4:11 t2.rowid:12 t2.crdb_internal_mvcc_timestamp:13 t2.tableoid:14
+      │    ├── scan t1
+      │    │    └── columns: col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5!null t1.crdb_internal_mvcc_timestamp:6 t1.tableoid:7
+      │    ├── scan t2
+      │    │    └── columns: col3:8 t2.y:9 t2.x:10 col4:11 t2.rowid:12!null t2.crdb_internal_mvcc_timestamp:13 t2.tableoid:14
+      │    └── filters
+      │         └── t1.x:2 = t2.x:10
+      └── projections
+           └── COALESCE(t1.x:2, t2.x:10) [as=x:15]
+
+# Test for #19536.
+build
+SELECT x FROM t1 NATURAL JOIN (SELECT * FROM t2)
+----
+project
+ ├── columns: x:2!null
+ └── inner-join (hash)
+      ├── columns: col1:1 t1.x:2!null col2:3 t1.y:4!null t1.rowid:5!null t1.crdb_internal_mvcc_timestamp:6 t1.tableoid:7 col3:8 t2.y:9!null t2.x:10!null col4:11
+      ├── scan t1
+      │    └── columns: col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5!null t1.crdb_internal_mvcc_timestamp:6 t1.tableoid:7
+      ├── project
+      │    ├── columns: col3:8 t2.y:9 t2.x:10 col4:11
+      │    └── scan t2
+      │         └── columns: col3:8 t2.y:9 t2.x:10 col4:11 t2.rowid:12!null t2.crdb_internal_mvcc_timestamp:13 t2.tableoid:14
+      └── filters
+           ├── t1.x:2 = t2.x:10
+           └── t1.y:4 = t2.y:9
+
+# Tests for merge join ordering information.
+exec-ddl
+CREATE TABLE pkBA (a INT, b INT, c INT, d INT, PRIMARY KEY(b,a))
+----
+
+exec-ddl
+CREATE TABLE pkBC (a INT, b INT, c INT, d INT, PRIMARY KEY(b,c))
+----
+
+exec-ddl
+CREATE TABLE pkBAC (a INT, b INT, c INT, d INT, PRIMARY KEY(b,a,c))
+----
+
+exec-ddl
+CREATE TABLE pkBAD (a INT, b INT, c INT, d INT, PRIMARY KEY(b,a,d))
+----
+
+build
+SELECT * FROM pkBA AS l JOIN pkBC AS r ON l.a = r.a AND l.b = r.b AND l.c = r.c
+----
+project
+ ├── columns: a:1!null b:2!null c:3!null d:4 a:7!null b:8!null c:9!null d:10
+ └── inner-join (cross)
+      ├── columns: l.a:1!null l.b:2!null l.c:3!null l.d:4 l.crdb_internal_mvcc_timestamp:5 l.tableoid:6 r.a:7!null r.b:8!null r.c:9!null r.d:10 r.crdb_internal_mvcc_timestamp:11 r.tableoid:12
+      ├── scan pkba [as=l]
+      │    └── columns: l.a:1!null l.b:2!null l.c:3 l.d:4 l.crdb_internal_mvcc_timestamp:5 l.tableoid:6
+      ├── scan pkbc [as=r]
+      │    └── columns: r.a:7 r.b:8!null r.c:9!null r.d:10 r.crdb_internal_mvcc_timestamp:11 r.tableoid:12
+      └── filters
+           └── ((l.a:1 = r.a:7) AND (l.b:2 = r.b:8)) AND (l.c:3 = r.c:9)
+
+build
+SELECT * FROM pkBA NATURAL JOIN pkBAD
+----
+project
+ ├── columns: a:1!null b:2!null c:3!null d:4!null
+ └── inner-join (hash)
+      ├── columns: pkba.a:1!null pkba.b:2!null pkba.c:3!null pkba.d:4!null pkba.crdb_internal_mvcc_timestamp:5 pkba.tableoid:6 pkbad.a:7!null pkbad.b:8!null pkbad.c:9!null pkbad.d:10!null pkbad.crdb_internal_mvcc_timestamp:11 pkbad.tableoid:12
+      ├── scan pkba
+      │    └── columns: pkba.a:1!null pkba.b:2!null pkba.c:3 pkba.d:4 pkba.crdb_internal_mvcc_timestamp:5 pkba.tableoid:6
+      ├── scan pkbad
+      │    └── columns: pkbad.a:7!null pkbad.b:8!null pkbad.c:9 pkbad.d:10!null pkbad.crdb_internal_mvcc_timestamp:11 pkbad.tableoid:12
+      └── filters
+           ├── pkba.a:1 = pkbad.a:7
+           ├── pkba.b:2 = pkbad.b:8
+           ├── pkba.c:3 = pkbad.c:9
+           └── pkba.d:4 = pkbad.d:10
+
+build
+SELECT * FROM pkBAC AS l JOIN pkBAC AS r USING(a, b, c)
+----
+project
+ ├── columns: a:1!null b:2!null c:3!null d:4 d:10
+ └── inner-join (hash)
+      ├── columns: l.a:1!null l.b:2!null l.c:3!null l.d:4 l.crdb_internal_mvcc_timestamp:5 l.tableoid:6 r.a:7!null r.b:8!null r.c:9!null r.d:10 r.crdb_internal_mvcc_timestamp:11 r.tableoid:12
+      ├── scan pkbac [as=l]
+      │    └── columns: l.a:1!null l.b:2!null l.c:3!null l.d:4 l.crdb_internal_mvcc_timestamp:5 l.tableoid:6
+      ├── scan pkbac [as=r]
+      │    └── columns: r.a:7!null r.b:8!null r.c:9!null r.d:10 r.crdb_internal_mvcc_timestamp:11 r.tableoid:12
+      └── filters
+           ├── l.a:1 = r.a:7
+           ├── l.b:2 = r.b:8
+           └── l.c:3 = r.c:9
+
+build
+SELECT * FROM pkBAC AS l JOIN pkBAD AS r ON l.c = r.d AND l.a = r.a AND l.b = r.b
+----
+project
+ ├── columns: a:1!null b:2!null c:3!null d:4 a:7!null b:8!null c:9 d:10!null
+ └── inner-join (cross)
+      ├── columns: l.a:1!null l.b:2!null l.c:3!null l.d:4 l.crdb_internal_mvcc_timestamp:5 l.tableoid:6 r.a:7!null r.b:8!null r.c:9 r.d:10!null r.crdb_internal_mvcc_timestamp:11 r.tableoid:12
+      ├── scan pkbac [as=l]
+      │    └── columns: l.a:1!null l.b:2!null l.c:3!null l.d:4 l.crdb_internal_mvcc_timestamp:5 l.tableoid:6
+      ├── scan pkbad [as=r]
+      │    └── columns: r.a:7!null r.b:8!null r.c:9 r.d:10!null r.crdb_internal_mvcc_timestamp:11 r.tableoid:12
+      └── filters
+           └── ((l.c:3 = r.d:10) AND (l.a:1 = r.a:7)) AND (l.b:2 = r.b:8)
+
+# Tests with joins with merged columns of collated string type.
+exec-ddl
+CREATE TABLE str1 (a INT PRIMARY KEY, s STRING COLLATE en_u_ks_level1)
+----
+
+exec-ddl
+CREATE TABLE str2 (a INT PRIMARY KEY, s STRING COLLATE en_u_ks_level1)
+----
+
+build
+SELECT s, str1.s, str2.s FROM str1 INNER JOIN str2 USING(s)
+----
+project
+ ├── columns: s:2!null s:2!null s:6!null
+ └── inner-join (hash)
+      ├── columns: str1.a:1!null str1.s:2!null str1.crdb_internal_mvcc_timestamp:3 str1.tableoid:4 str2.a:5!null str2.s:6!null str2.crdb_internal_mvcc_timestamp:7 str2.tableoid:8
+      ├── scan str1
+      │    └── columns: str1.a:1!null str1.s:2 str1.crdb_internal_mvcc_timestamp:3 str1.tableoid:4
+      ├── scan str2
+      │    └── columns: str2.a:5!null str2.s:6 str2.crdb_internal_mvcc_timestamp:7 str2.tableoid:8
+      └── filters
+           └── str1.s:2 = str2.s:6
+
+build
+SELECT s, str1.s, str2.s FROM str1 LEFT OUTER JOIN str2 USING(s)
+----
+project
+ ├── columns: s:2 s:2 s:6
+ └── left-join (hash)
+      ├── columns: str1.a:1!null str1.s:2 str1.crdb_internal_mvcc_timestamp:3 str1.tableoid:4 str2.a:5 str2.s:6 str2.crdb_internal_mvcc_timestamp:7 str2.tableoid:8
+      ├── scan str1
+      │    └── columns: str1.a:1!null str1.s:2 str1.crdb_internal_mvcc_timestamp:3 str1.tableoid:4
+      ├── scan str2
+      │    └── columns: str2.a:5!null str2.s:6 str2.crdb_internal_mvcc_timestamp:7 str2.tableoid:8
+      └── filters
+           └── str1.s:2 = str2.s:6
+
+build
+SELECT s, str1.s, str2.s FROM str1 RIGHT OUTER JOIN str2 USING(s)
+----
+project
+ ├── columns: s:9 s:2 s:6
+ └── project
+      ├── columns: s:9 str1.a:1 str1.s:2 str1.crdb_internal_mvcc_timestamp:3 str1.tableoid:4 str2.a:5!null str2.s:6 str2.crdb_internal_mvcc_timestamp:7 str2.tableoid:8
+      ├── right-join (hash)
+      │    ├── columns: str1.a:1 str1.s:2 str1.crdb_internal_mvcc_timestamp:3 str1.tableoid:4 str2.a:5!null str2.s:6 str2.crdb_internal_mvcc_timestamp:7 str2.tableoid:8
+      │    ├── scan str1
+      │    │    └── columns: str1.a:1!null str1.s:2 str1.crdb_internal_mvcc_timestamp:3 str1.tableoid:4
+      │    ├── scan str2
+      │    │    └── columns: str2.a:5!null str2.s:6 str2.crdb_internal_mvcc_timestamp:7 str2.tableoid:8
+      │    └── filters
+      │         └── str1.s:2 = str2.s:6
+      └── projections
+           └── COALESCE(str1.s:2, str2.s:6) [as=s:9]
+
+build
+SELECT s, str1.s, str2.s FROM str1 FULL OUTER JOIN str2 USING(s)
+----
+project
+ ├── columns: s:9 s:2 s:6
+ └── project
+      ├── columns: s:9 str1.a:1 str1.s:2 str1.crdb_internal_mvcc_timestamp:3 str1.tableoid:4 str2.a:5 str2.s:6 str2.crdb_internal_mvcc_timestamp:7 str2.tableoid:8
+      ├── full-join (hash)
+      │    ├── columns: str1.a:1 str1.s:2 str1.crdb_internal_mvcc_timestamp:3 str1.tableoid:4 str2.a:5 str2.s:6 str2.crdb_internal_mvcc_timestamp:7 str2.tableoid:8
+      │    ├── scan str1
+      │    │    └── columns: str1.a:1!null str1.s:2 str1.crdb_internal_mvcc_timestamp:3 str1.tableoid:4
+      │    ├── scan str2
+      │    │    └── columns: str2.a:5!null str2.s:6 str2.crdb_internal_mvcc_timestamp:7 str2.tableoid:8
+      │    └── filters
+      │         └── str1.s:2 = str2.s:6
+      └── projections
+           └── COALESCE(str1.s:2, str2.s:6) [as=s:9]
+
+# Verify that we resolve the merged column a to str2.a but use IFNULL for
+# column s which is a collated string.
+build
+SELECT * FROM str1 RIGHT OUTER JOIN str2 USING(a, s)
+----
+project
+ ├── columns: a:5!null s:9
+ └── project
+      ├── columns: s:9 str1.a:1 str1.s:2 str1.crdb_internal_mvcc_timestamp:3 str1.tableoid:4 str2.a:5!null str2.s:6 str2.crdb_internal_mvcc_timestamp:7 str2.tableoid:8
+      ├── right-join (hash)
+      │    ├── columns: str1.a:1 str1.s:2 str1.crdb_internal_mvcc_timestamp:3 str1.tableoid:4 str2.a:5!null str2.s:6 str2.crdb_internal_mvcc_timestamp:7 str2.tableoid:8
+      │    ├── scan str1
+      │    │    └── columns: str1.a:1!null str1.s:2 str1.crdb_internal_mvcc_timestamp:3 str1.tableoid:4
+      │    ├── scan str2
+      │    │    └── columns: str2.a:5!null str2.s:6 str2.crdb_internal_mvcc_timestamp:7 str2.tableoid:8
+      │    └── filters
+      │         ├── str1.a:1 = str2.a:5
+      │         └── str1.s:2 = str2.s:6
+      └── projections
+           └── COALESCE(str1.s:2, str2.s:6) [as=s:9]
+
+
+exec-ddl
+CREATE TABLE xyu (x INT, y INT, u INT, PRIMARY KEY(x,y,u))
+----
+
+exec-ddl
+CREATE TABLE xyv (x INT, y INT, v INT, PRIMARY KEY(x,y,v))
+----
+
+build
+SELECT * FROM xyu INNER JOIN xyv USING(x, y) WHERE x > 2
+----
+project
+ ├── columns: x:1!null y:2!null u:3!null v:8!null
+ └── select
+      ├── columns: xyu.x:1!null xyu.y:2!null u:3!null xyu.crdb_internal_mvcc_timestamp:4 xyu.tableoid:5 xyv.x:6!null xyv.y:7!null v:8!null xyv.crdb_internal_mvcc_timestamp:9 xyv.tableoid:10
+      ├── inner-join (hash)
+      │    ├── columns: xyu.x:1!null xyu.y:2!null u:3!null xyu.crdb_internal_mvcc_timestamp:4 xyu.tableoid:5 xyv.x:6!null xyv.y:7!null v:8!null xyv.crdb_internal_mvcc_timestamp:9 xyv.tableoid:10
+      │    ├── scan xyu
+      │    │    └── columns: xyu.x:1!null xyu.y:2!null u:3!null xyu.crdb_internal_mvcc_timestamp:4 xyu.tableoid:5
+      │    ├── scan xyv
+      │    │    └── columns: xyv.x:6!null xyv.y:7!null v:8!null xyv.crdb_internal_mvcc_timestamp:9 xyv.tableoid:10
+      │    └── filters
+      │         ├── xyu.x:1 = xyv.x:6
+      │         └── xyu.y:2 = xyv.y:7
+      └── filters
+           └── xyu.x:1 > 2
+
+build
+SELECT * FROM xyu LEFT OUTER JOIN xyv USING(x, y) WHERE x > 2
+----
+project
+ ├── columns: x:1!null y:2!null u:3!null v:8
+ └── select
+      ├── columns: xyu.x:1!null xyu.y:2!null u:3!null xyu.crdb_internal_mvcc_timestamp:4 xyu.tableoid:5 xyv.x:6 xyv.y:7 v:8 xyv.crdb_internal_mvcc_timestamp:9 xyv.tableoid:10
+      ├── left-join (hash)
+      │    ├── columns: xyu.x:1!null xyu.y:2!null u:3!null xyu.crdb_internal_mvcc_timestamp:4 xyu.tableoid:5 xyv.x:6 xyv.y:7 v:8 xyv.crdb_internal_mvcc_timestamp:9 xyv.tableoid:10
+      │    ├── scan xyu
+      │    │    └── columns: xyu.x:1!null xyu.y:2!null u:3!null xyu.crdb_internal_mvcc_timestamp:4 xyu.tableoid:5
+      │    ├── scan xyv
+      │    │    └── columns: xyv.x:6!null xyv.y:7!null v:8!null xyv.crdb_internal_mvcc_timestamp:9 xyv.tableoid:10
+      │    └── filters
+      │         ├── xyu.x:1 = xyv.x:6
+      │         └── xyu.y:2 = xyv.y:7
+      └── filters
+           └── xyu.x:1 > 2
+
+build
+SELECT * FROM xyu RIGHT OUTER JOIN xyv USING(x, y) WHERE x > 2
+----
+project
+ ├── columns: x:6!null y:7!null u:3 v:8!null
+ └── select
+      ├── columns: xyu.x:1 xyu.y:2 u:3 xyu.crdb_internal_mvcc_timestamp:4 xyu.tableoid:5 xyv.x:6!null xyv.y:7!null v:8!null xyv.crdb_internal_mvcc_timestamp:9 xyv.tableoid:10
+      ├── right-join (hash)
+      │    ├── columns: xyu.x:1 xyu.y:2 u:3 xyu.crdb_internal_mvcc_timestamp:4 xyu.tableoid:5 xyv.x:6!null xyv.y:7!null v:8!null xyv.crdb_internal_mvcc_timestamp:9 xyv.tableoid:10
+      │    ├── scan xyu
+      │    │    └── columns: xyu.x:1!null xyu.y:2!null u:3!null xyu.crdb_internal_mvcc_timestamp:4 xyu.tableoid:5
+      │    ├── scan xyv
+      │    │    └── columns: xyv.x:6!null xyv.y:7!null v:8!null xyv.crdb_internal_mvcc_timestamp:9 xyv.tableoid:10
+      │    └── filters
+      │         ├── xyu.x:1 = xyv.x:6
+      │         └── xyu.y:2 = xyv.y:7
+      └── filters
+           └── xyv.x:6 > 2
+
+build
+SELECT * FROM xyu FULL OUTER JOIN xyv USING(x, y) WHERE x > 2
+----
+project
+ ├── columns: x:11!null y:12 u:3 v:8
+ └── select
+      ├── columns: xyu.x:1 xyu.y:2 u:3 xyu.crdb_internal_mvcc_timestamp:4 xyu.tableoid:5 xyv.x:6 xyv.y:7 v:8 xyv.crdb_internal_mvcc_timestamp:9 xyv.tableoid:10 x:11!null y:12
+      ├── project
+      │    ├── columns: x:11 y:12 xyu.x:1 xyu.y:2 u:3 xyu.crdb_internal_mvcc_timestamp:4 xyu.tableoid:5 xyv.x:6 xyv.y:7 v:8 xyv.crdb_internal_mvcc_timestamp:9 xyv.tableoid:10
+      │    ├── full-join (hash)
+      │    │    ├── columns: xyu.x:1 xyu.y:2 u:3 xyu.crdb_internal_mvcc_timestamp:4 xyu.tableoid:5 xyv.x:6 xyv.y:7 v:8 xyv.crdb_internal_mvcc_timestamp:9 xyv.tableoid:10
+      │    │    ├── scan xyu
+      │    │    │    └── columns: xyu.x:1!null xyu.y:2!null u:3!null xyu.crdb_internal_mvcc_timestamp:4 xyu.tableoid:5
+      │    │    ├── scan xyv
+      │    │    │    └── columns: xyv.x:6!null xyv.y:7!null v:8!null xyv.crdb_internal_mvcc_timestamp:9 xyv.tableoid:10
+      │    │    └── filters
+      │    │         ├── xyu.x:1 = xyv.x:6
+      │    │         └── xyu.y:2 = xyv.y:7
+      │    └── projections
+      │         ├── COALESCE(xyu.x:1, xyv.x:6) [as=x:11]
+      │         └── COALESCE(xyu.y:2, xyv.y:7) [as=y:12]
+      └── filters
+           └── x:11 > 2
+
+# Verify that we transfer constraints between the two sides.
+build
+SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y WHERE xyu.x = 1 AND xyu.y < 10
+----
+project
+ ├── columns: x:1!null y:2!null u:3!null x:6!null y:7!null v:8!null
+ └── select
+      ├── columns: xyu.x:1!null xyu.y:2!null u:3!null xyu.crdb_internal_mvcc_timestamp:4 xyu.tableoid:5 xyv.x:6!null xyv.y:7!null v:8!null xyv.crdb_internal_mvcc_timestamp:9 xyv.tableoid:10
+      ├── inner-join (cross)
+      │    ├── columns: xyu.x:1!null xyu.y:2!null u:3!null xyu.crdb_internal_mvcc_timestamp:4 xyu.tableoid:5 xyv.x:6!null xyv.y:7!null v:8!null xyv.crdb_internal_mvcc_timestamp:9 xyv.tableoid:10
+      │    ├── scan xyu
+      │    │    └── columns: xyu.x:1!null xyu.y:2!null u:3!null xyu.crdb_internal_mvcc_timestamp:4 xyu.tableoid:5
+      │    ├── scan xyv
+      │    │    └── columns: xyv.x:6!null xyv.y:7!null v:8!null xyv.crdb_internal_mvcc_timestamp:9 xyv.tableoid:10
+      │    └── filters
+      │         └── (xyu.x:1 = xyv.x:6) AND (xyu.y:2 = xyv.y:7)
+      └── filters
+           └── (xyu.x:1 = 1) AND (xyu.y:2 < 10)
+
+build
+SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
+----
+project
+ ├── columns: x:1!null y:2!null u:3!null x:6!null y:7!null v:8!null
+ └── inner-join (cross)
+      ├── columns: xyu.x:1!null xyu.y:2!null u:3!null xyu.crdb_internal_mvcc_timestamp:4 xyu.tableoid:5 xyv.x:6!null xyv.y:7!null v:8!null xyv.crdb_internal_mvcc_timestamp:9 xyv.tableoid:10
+      ├── scan xyu
+      │    └── columns: xyu.x:1!null xyu.y:2!null u:3!null xyu.crdb_internal_mvcc_timestamp:4 xyu.tableoid:5
+      ├── scan xyv
+      │    └── columns: xyv.x:6!null xyv.y:7!null v:8!null xyv.crdb_internal_mvcc_timestamp:9 xyv.tableoid:10
+      └── filters
+           └── (((xyu.x:1 = xyv.x:6) AND (xyu.y:2 = xyv.y:7)) AND (xyu.x:1 = 1)) AND (xyu.y:2 < 10)
+
+build
+SELECT * FROM xyu LEFT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
+----
+project
+ ├── columns: x:1!null y:2!null u:3!null x:6 y:7 v:8
+ └── left-join (cross)
+      ├── columns: xyu.x:1!null xyu.y:2!null u:3!null xyu.crdb_internal_mvcc_timestamp:4 xyu.tableoid:5 xyv.x:6 xyv.y:7 v:8 xyv.crdb_internal_mvcc_timestamp:9 xyv.tableoid:10
+      ├── scan xyu
+      │    └── columns: xyu.x:1!null xyu.y:2!null u:3!null xyu.crdb_internal_mvcc_timestamp:4 xyu.tableoid:5
+      ├── scan xyv
+      │    └── columns: xyv.x:6!null xyv.y:7!null v:8!null xyv.crdb_internal_mvcc_timestamp:9 xyv.tableoid:10
+      └── filters
+           └── (((xyu.x:1 = xyv.x:6) AND (xyu.y:2 = xyv.y:7)) AND (xyu.x:1 = 1)) AND (xyu.y:2 < 10)
+
+build
+SELECT * FROM xyu RIGHT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
+----
+project
+ ├── columns: x:1 y:2 u:3 x:6!null y:7!null v:8!null
+ └── right-join (cross)
+      ├── columns: xyu.x:1 xyu.y:2 u:3 xyu.crdb_internal_mvcc_timestamp:4 xyu.tableoid:5 xyv.x:6!null xyv.y:7!null v:8!null xyv.crdb_internal_mvcc_timestamp:9 xyv.tableoid:10
+      ├── scan xyu
+      │    └── columns: xyu.x:1!null xyu.y:2!null u:3!null xyu.crdb_internal_mvcc_timestamp:4 xyu.tableoid:5
+      ├── scan xyv
+      │    └── columns: xyv.x:6!null xyv.y:7!null v:8!null xyv.crdb_internal_mvcc_timestamp:9 xyv.tableoid:10
+      └── filters
+           └── (((xyu.x:1 = xyv.x:6) AND (xyu.y:2 = xyv.y:7)) AND (xyu.x:1 = 1)) AND (xyu.y:2 < 10)
+
+
+# Test OUTER joins that are run in the distSQL merge joiner
+
+build
+SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
+----
+project
+ ├── columns: x:1!null y:2!null u:3!null v:8
+ └── select
+      ├── columns: xyu.x:1!null xyu.y:2!null u:3!null xyv.x:6 xyv.y:7 v:8
+      ├── left-join (hash)
+      │    ├── columns: xyu.x:1!null xyu.y:2!null u:3!null xyv.x:6 xyv.y:7 v:8
+      │    ├── project
+      │    │    ├── columns: xyu.x:1!null xyu.y:2!null u:3!null
+      │    │    └── scan xyu
+      │    │         └── columns: xyu.x:1!null xyu.y:2!null u:3!null xyu.crdb_internal_mvcc_timestamp:4 xyu.tableoid:5
+      │    ├── project
+      │    │    ├── columns: xyv.x:6!null xyv.y:7!null v:8!null
+      │    │    └── scan xyv
+      │    │         └── columns: xyv.x:6!null xyv.y:7!null v:8!null xyv.crdb_internal_mvcc_timestamp:9 xyv.tableoid:10
+      │    └── filters
+      │         ├── xyu.x:1 = xyv.x:6
+      │         └── xyu.y:2 = xyv.y:7
+      └── filters
+           └── xyu.x:1 > 2
+
+build
+SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu RIGHT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
+----
+project
+ ├── columns: x:6!null y:7!null u:3 v:8!null
+ └── select
+      ├── columns: xyu.x:1 xyu.y:2 u:3 xyv.x:6!null xyv.y:7!null v:8!null
+      ├── right-join (hash)
+      │    ├── columns: xyu.x:1 xyu.y:2 u:3 xyv.x:6!null xyv.y:7!null v:8!null
+      │    ├── project
+      │    │    ├── columns: xyu.x:1!null xyu.y:2!null u:3!null
+      │    │    └── scan xyu
+      │    │         └── columns: xyu.x:1!null xyu.y:2!null u:3!null xyu.crdb_internal_mvcc_timestamp:4 xyu.tableoid:5
+      │    ├── project
+      │    │    ├── columns: xyv.x:6!null xyv.y:7!null v:8!null
+      │    │    └── scan xyv
+      │    │         └── columns: xyv.x:6!null xyv.y:7!null v:8!null xyv.crdb_internal_mvcc_timestamp:9 xyv.tableoid:10
+      │    └── filters
+      │         ├── xyu.x:1 = xyv.x:6
+      │         └── xyu.y:2 = xyv.y:7
+      └── filters
+           └── xyv.x:6 > 2
+
+build
+SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu FULL OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
+----
+project
+ ├── columns: x:11!null y:12 u:3 v:8
+ └── select
+      ├── columns: xyu.x:1 xyu.y:2 u:3 xyv.x:6 xyv.y:7 v:8 x:11!null y:12
+      ├── project
+      │    ├── columns: x:11 y:12 xyu.x:1 xyu.y:2 u:3 xyv.x:6 xyv.y:7 v:8
+      │    ├── full-join (hash)
+      │    │    ├── columns: xyu.x:1 xyu.y:2 u:3 xyv.x:6 xyv.y:7 v:8
+      │    │    ├── project
+      │    │    │    ├── columns: xyu.x:1!null xyu.y:2!null u:3!null
+      │    │    │    └── scan xyu
+      │    │    │         └── columns: xyu.x:1!null xyu.y:2!null u:3!null xyu.crdb_internal_mvcc_timestamp:4 xyu.tableoid:5
+      │    │    ├── project
+      │    │    │    ├── columns: xyv.x:6!null xyv.y:7!null v:8!null
+      │    │    │    └── scan xyv
+      │    │    │         └── columns: xyv.x:6!null xyv.y:7!null v:8!null xyv.crdb_internal_mvcc_timestamp:9 xyv.tableoid:10
+      │    │    └── filters
+      │    │         ├── xyu.x:1 = xyv.x:6
+      │    │         └── xyu.y:2 = xyv.y:7
+      │    └── projections
+      │         ├── COALESCE(xyu.x:1, xyv.x:6) [as=x:11]
+      │         └── COALESCE(xyu.y:2, xyv.y:7) [as=y:12]
+      └── filters
+           └── x:11 > 2
+
+build
+SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
+----
+left-join (cross)
+ ├── columns: x:1!null y:2!null u:3!null x:6 y:7 v:8
+ ├── project
+ │    ├── columns: xyu.x:1!null xyu.y:2!null u:3!null
+ │    └── scan xyu
+ │         └── columns: xyu.x:1!null xyu.y:2!null u:3!null xyu.crdb_internal_mvcc_timestamp:4 xyu.tableoid:5
+ ├── project
+ │    ├── columns: xyv.x:6!null xyv.y:7!null v:8!null
+ │    └── scan xyv
+ │         └── columns: xyv.x:6!null xyv.y:7!null v:8!null xyv.crdb_internal_mvcc_timestamp:9 xyv.tableoid:10
+ └── filters
+      └── (((xyu.x:1 = xyv.x:6) AND (xyu.y:2 = xyv.y:7)) AND (xyu.x:1 = 1)) AND (xyu.y:2 < 10)
+
+build
+SELECT * FROM xyu RIGHT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
+----
+project
+ ├── columns: x:1 y:2 u:3 x:6!null y:7!null v:8!null
+ └── right-join (cross)
+      ├── columns: xyu.x:1 xyu.y:2 u:3 xyu.crdb_internal_mvcc_timestamp:4 xyu.tableoid:5 xyv.x:6!null xyv.y:7!null v:8!null
+      ├── scan xyu
+      │    └── columns: xyu.x:1!null xyu.y:2!null u:3!null xyu.crdb_internal_mvcc_timestamp:4 xyu.tableoid:5
+      ├── project
+      │    ├── columns: xyv.x:6!null xyv.y:7!null v:8!null
+      │    └── scan xyv
+      │         └── columns: xyv.x:6!null xyv.y:7!null v:8!null xyv.crdb_internal_mvcc_timestamp:9 xyv.tableoid:10
+      └── filters
+           └── (((xyu.x:1 = xyv.x:6) AND (xyu.y:2 = xyv.y:7)) AND (xyu.x:1 = 1)) AND (xyu.y:2 < 10)
+
+# Regression test for #20472: break up tuple inequalities.
+build
+SELECT * FROM xyu JOIN xyv USING(x, y) WHERE (x, y, u) > (1, 2, 3)
+----
+project
+ ├── columns: x:1!null y:2!null u:3!null v:8!null
+ └── select
+      ├── columns: xyu.x:1!null xyu.y:2!null u:3!null xyu.crdb_internal_mvcc_timestamp:4 xyu.tableoid:5 xyv.x:6!null xyv.y:7!null v:8!null xyv.crdb_internal_mvcc_timestamp:9 xyv.tableoid:10
+      ├── inner-join (hash)
+      │    ├── columns: xyu.x:1!null xyu.y:2!null u:3!null xyu.crdb_internal_mvcc_timestamp:4 xyu.tableoid:5 xyv.x:6!null xyv.y:7!null v:8!null xyv.crdb_internal_mvcc_timestamp:9 xyv.tableoid:10
+      │    ├── scan xyu
+      │    │    └── columns: xyu.x:1!null xyu.y:2!null u:3!null xyu.crdb_internal_mvcc_timestamp:4 xyu.tableoid:5
+      │    ├── scan xyv
+      │    │    └── columns: xyv.x:6!null xyv.y:7!null v:8!null xyv.crdb_internal_mvcc_timestamp:9 xyv.tableoid:10
+      │    └── filters
+      │         ├── xyu.x:1 = xyv.x:6
+      │         └── xyu.y:2 = xyv.y:7
+      └── filters
+           └── (xyu.x:1, xyu.y:2, u:3) > (1, 2, 3)
+
+
+# Regression test for #20858.
+
+exec-ddl
+CREATE TABLE l (a INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE r (a INT PRIMARY KEY)
+----
+
+build
+SELECT * FROM l LEFT OUTER JOIN r ON l.a = r.a WHERE l.a = 3;
+----
+project
+ ├── columns: a:1!null a:4
+ └── select
+      ├── columns: l.a:1!null l.crdb_internal_mvcc_timestamp:2 l.tableoid:3 r.a:4 r.crdb_internal_mvcc_timestamp:5 r.tableoid:6
+      ├── left-join (hash)
+      │    ├── columns: l.a:1!null l.crdb_internal_mvcc_timestamp:2 l.tableoid:3 r.a:4 r.crdb_internal_mvcc_timestamp:5 r.tableoid:6
+      │    ├── scan l
+      │    │    └── columns: l.a:1!null l.crdb_internal_mvcc_timestamp:2 l.tableoid:3
+      │    ├── scan r
+      │    │    └── columns: r.a:4!null r.crdb_internal_mvcc_timestamp:5 r.tableoid:6
+      │    └── filters
+      │         └── l.a:1 = r.a:4
+      └── filters
+           └── l.a:1 = 3
+
+build
+SELECT * FROM l RIGHT OUTER JOIN r ON l.a = r.a WHERE r.a = 3;
+----
+project
+ ├── columns: a:1 a:4!null
+ └── select
+      ├── columns: l.a:1 l.crdb_internal_mvcc_timestamp:2 l.tableoid:3 r.a:4!null r.crdb_internal_mvcc_timestamp:5 r.tableoid:6
+      ├── right-join (hash)
+      │    ├── columns: l.a:1 l.crdb_internal_mvcc_timestamp:2 l.tableoid:3 r.a:4!null r.crdb_internal_mvcc_timestamp:5 r.tableoid:6
+      │    ├── scan l
+      │    │    └── columns: l.a:1!null l.crdb_internal_mvcc_timestamp:2 l.tableoid:3
+      │    ├── scan r
+      │    │    └── columns: r.a:4!null r.crdb_internal_mvcc_timestamp:5 r.tableoid:6
+      │    └── filters
+      │         └── l.a:1 = r.a:4
+      └── filters
+           └── r.a:4 = 3
+
+build
+SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 1
+----
+project
+ ├── columns: a:1!null
+ └── select
+      ├── columns: l.a:1!null l.crdb_internal_mvcc_timestamp:2 l.tableoid:3 r.a:4 r.crdb_internal_mvcc_timestamp:5 r.tableoid:6
+      ├── left-join (hash)
+      │    ├── columns: l.a:1!null l.crdb_internal_mvcc_timestamp:2 l.tableoid:3 r.a:4 r.crdb_internal_mvcc_timestamp:5 r.tableoid:6
+      │    ├── scan l
+      │    │    └── columns: l.a:1!null l.crdb_internal_mvcc_timestamp:2 l.tableoid:3
+      │    ├── scan r
+      │    │    └── columns: r.a:4!null r.crdb_internal_mvcc_timestamp:5 r.tableoid:6
+      │    └── filters
+      │         └── l.a:1 = r.a:4
+      └── filters
+           └── l.a:1 = 1
+
+build
+SELECT * FROM l RIGHT OUTER JOIN r USING(a) WHERE a = 3
+----
+project
+ ├── columns: a:4!null
+ └── select
+      ├── columns: l.a:1 l.crdb_internal_mvcc_timestamp:2 l.tableoid:3 r.a:4!null r.crdb_internal_mvcc_timestamp:5 r.tableoid:6
+      ├── right-join (hash)
+      │    ├── columns: l.a:1 l.crdb_internal_mvcc_timestamp:2 l.tableoid:3 r.a:4!null r.crdb_internal_mvcc_timestamp:5 r.tableoid:6
+      │    ├── scan l
+      │    │    └── columns: l.a:1!null l.crdb_internal_mvcc_timestamp:2 l.tableoid:3
+      │    ├── scan r
+      │    │    └── columns: r.a:4!null r.crdb_internal_mvcc_timestamp:5 r.tableoid:6
+      │    └── filters
+      │         └── l.a:1 = r.a:4
+      └── filters
+           └── r.a:4 = 3
+
+# Regression tests for #21243
+exec-ddl
+CREATE TABLE abcdef (
+  a INT NOT NULL,
+  b INT NOT NULL,
+  c INT NOT NULL,
+  d INT NOT NULL,
+  e INT NULL,
+  f INT NULL,
+  PRIMARY KEY (a ASC, b ASC, c DESC, d ASC)
+)
+----
+
+exec-ddl
+CREATE TABLE abg (
+  a INT NOT NULL,
+  b INT NOT NULL,
+  g INT NULL,
+  PRIMARY KEY (a ASC, b ASC)
+);
+----
+
+build
+SELECT * FROM abcdef join (select * from abg) USING (a,b) WHERE ((a,b)>(1,2) OR ((a,b)=(1,2) AND c < 6) OR ((a,b,c)=(1,2,6) AND d > 8))
+----
+project
+ ├── columns: a:1!null b:2!null c:3!null d:4!null e:5 f:6 g:11
+ └── select
+      ├── columns: abcdef.a:1!null abcdef.b:2!null c:3!null d:4!null e:5 f:6 abcdef.crdb_internal_mvcc_timestamp:7 abcdef.tableoid:8 abg.a:9!null abg.b:10!null g:11
+      ├── inner-join (hash)
+      │    ├── columns: abcdef.a:1!null abcdef.b:2!null c:3!null d:4!null e:5 f:6 abcdef.crdb_internal_mvcc_timestamp:7 abcdef.tableoid:8 abg.a:9!null abg.b:10!null g:11
+      │    ├── scan abcdef
+      │    │    └── columns: abcdef.a:1!null abcdef.b:2!null c:3!null d:4!null e:5 f:6 abcdef.crdb_internal_mvcc_timestamp:7 abcdef.tableoid:8
+      │    ├── project
+      │    │    ├── columns: abg.a:9!null abg.b:10!null g:11
+      │    │    └── scan abg
+      │    │         └── columns: abg.a:9!null abg.b:10!null g:11 abg.crdb_internal_mvcc_timestamp:12 abg.tableoid:13
+      │    └── filters
+      │         ├── abcdef.a:1 = abg.a:9
+      │         └── abcdef.b:2 = abg.b:10
+      └── filters
+           └── (((abcdef.a:1, abcdef.b:2) > (1, 2)) OR (((abcdef.a:1, abcdef.b:2) = (1, 2)) AND (c:3 < 6))) OR (((abcdef.a:1, abcdef.b:2, c:3) = (1, 2, 6)) AND (d:4 > 8))
+
+# Regression tests for mixed-type equality columns (#22514).
+exec-ddl
+CREATE TABLE foo (
+  a INT,
+  b INT,
+  c FLOAT,
+  d FLOAT
+)
+----
+
+exec-ddl
+CREATE TABLE bar (
+  a INT,
+  b FLOAT,
+  c FLOAT,
+  d INT
+)
+----
+
+# Only a and c can be equality columns.
+build
+SELECT * FROM foo NATURAL JOIN bar
+----
+project
+ ├── columns: a:1!null b:2!null c:3!null d:4!null
+ └── inner-join (hash)
+      ├── columns: foo.a:1!null foo.b:2!null foo.c:3!null foo.d:4!null foo.rowid:5!null foo.crdb_internal_mvcc_timestamp:6 foo.tableoid:7 bar.a:8!null bar.b:9!null bar.c:10!null bar.d:11!null bar.rowid:12!null bar.crdb_internal_mvcc_timestamp:13 bar.tableoid:14
+      ├── scan foo
+      │    └── columns: foo.a:1 foo.b:2 foo.c:3 foo.d:4 foo.rowid:5!null foo.crdb_internal_mvcc_timestamp:6 foo.tableoid:7
+      ├── scan bar
+      │    └── columns: bar.a:8 bar.b:9 bar.c:10 bar.d:11 bar.rowid:12!null bar.crdb_internal_mvcc_timestamp:13 bar.tableoid:14
+      └── filters
+           ├── foo.a:1 = bar.a:8
+           ├── foo.b:2 = bar.b:9
+           ├── foo.c:3 = bar.c:10
+           └── foo.d:4 = bar.d:11
+
+# b can't be an equality column.
+build
+SELECT * FROM foo JOIN bar USING (b)
+----
+project
+ ├── columns: b:2!null a:1 c:3 d:4 a:8 c:10 d:11
+ └── inner-join (cross)
+      ├── columns: foo.a:1 foo.b:2!null foo.c:3 foo.d:4 foo.rowid:5!null foo.crdb_internal_mvcc_timestamp:6 foo.tableoid:7 bar.a:8 bar.b:9!null bar.c:10 bar.d:11 bar.rowid:12!null bar.crdb_internal_mvcc_timestamp:13 bar.tableoid:14
+      ├── scan foo
+      │    └── columns: foo.a:1 foo.b:2 foo.c:3 foo.d:4 foo.rowid:5!null foo.crdb_internal_mvcc_timestamp:6 foo.tableoid:7
+      ├── scan bar
+      │    └── columns: bar.a:8 bar.b:9 bar.c:10 bar.d:11 bar.rowid:12!null bar.crdb_internal_mvcc_timestamp:13 bar.tableoid:14
+      └── filters
+           └── foo.b:2 = bar.b:9
+
+# Only a can be an equality column.
+build
+SELECT * FROM foo JOIN bar USING (a, b)
+----
+project
+ ├── columns: a:1!null b:2!null c:3 d:4 c:10 d:11
+ └── inner-join (hash)
+      ├── columns: foo.a:1!null foo.b:2!null foo.c:3 foo.d:4 foo.rowid:5!null foo.crdb_internal_mvcc_timestamp:6 foo.tableoid:7 bar.a:8!null bar.b:9!null bar.c:10 bar.d:11 bar.rowid:12!null bar.crdb_internal_mvcc_timestamp:13 bar.tableoid:14
+      ├── scan foo
+      │    └── columns: foo.a:1 foo.b:2 foo.c:3 foo.d:4 foo.rowid:5!null foo.crdb_internal_mvcc_timestamp:6 foo.tableoid:7
+      ├── scan bar
+      │    └── columns: bar.a:8 bar.b:9 bar.c:10 bar.d:11 bar.rowid:12!null bar.crdb_internal_mvcc_timestamp:13 bar.tableoid:14
+      └── filters
+           ├── foo.a:1 = bar.a:8
+           └── foo.b:2 = bar.b:9
+
+# Only a and c can be equality columns.
+build
+SELECT * FROM foo JOIN bar USING (a, b, c)
+----
+project
+ ├── columns: a:1!null b:2!null c:3!null d:4 d:11
+ └── inner-join (hash)
+      ├── columns: foo.a:1!null foo.b:2!null foo.c:3!null foo.d:4 foo.rowid:5!null foo.crdb_internal_mvcc_timestamp:6 foo.tableoid:7 bar.a:8!null bar.b:9!null bar.c:10!null bar.d:11 bar.rowid:12!null bar.crdb_internal_mvcc_timestamp:13 bar.tableoid:14
+      ├── scan foo
+      │    └── columns: foo.a:1 foo.b:2 foo.c:3 foo.d:4 foo.rowid:5!null foo.crdb_internal_mvcc_timestamp:6 foo.tableoid:7
+      ├── scan bar
+      │    └── columns: bar.a:8 bar.b:9 bar.c:10 bar.d:11 bar.rowid:12!null bar.crdb_internal_mvcc_timestamp:13 bar.tableoid:14
+      └── filters
+           ├── foo.a:1 = bar.a:8
+           ├── foo.b:2 = bar.b:9
+           └── foo.c:3 = bar.c:10
+
+# b can't be an equality column.
+build
+SELECT * FROM foo JOIN bar ON foo.b = bar.b
+----
+project
+ ├── columns: a:1 b:2!null c:3 d:4 a:8 b:9!null c:10 d:11
+ └── inner-join (cross)
+      ├── columns: foo.a:1 foo.b:2!null foo.c:3 foo.d:4 foo.rowid:5!null foo.crdb_internal_mvcc_timestamp:6 foo.tableoid:7 bar.a:8 bar.b:9!null bar.c:10 bar.d:11 bar.rowid:12!null bar.crdb_internal_mvcc_timestamp:13 bar.tableoid:14
+      ├── scan foo
+      │    └── columns: foo.a:1 foo.b:2 foo.c:3 foo.d:4 foo.rowid:5!null foo.crdb_internal_mvcc_timestamp:6 foo.tableoid:7
+      ├── scan bar
+      │    └── columns: bar.a:8 bar.b:9 bar.c:10 bar.d:11 bar.rowid:12!null bar.crdb_internal_mvcc_timestamp:13 bar.tableoid:14
+      └── filters
+           └── foo.b:2 = bar.b:9
+
+# Only a can be an equality column.
+build
+SELECT * FROM foo JOIN bar ON foo.a = bar.a AND foo.b = bar.b
+----
+project
+ ├── columns: a:1!null b:2!null c:3 d:4 a:8!null b:9!null c:10 d:11
+ └── inner-join (cross)
+      ├── columns: foo.a:1!null foo.b:2!null foo.c:3 foo.d:4 foo.rowid:5!null foo.crdb_internal_mvcc_timestamp:6 foo.tableoid:7 bar.a:8!null bar.b:9!null bar.c:10 bar.d:11 bar.rowid:12!null bar.crdb_internal_mvcc_timestamp:13 bar.tableoid:14
+      ├── scan foo
+      │    └── columns: foo.a:1 foo.b:2 foo.c:3 foo.d:4 foo.rowid:5!null foo.crdb_internal_mvcc_timestamp:6 foo.tableoid:7
+      ├── scan bar
+      │    └── columns: bar.a:8 bar.b:9 bar.c:10 bar.d:11 bar.rowid:12!null bar.crdb_internal_mvcc_timestamp:13 bar.tableoid:14
+      └── filters
+           └── (foo.a:1 = bar.a:8) AND (foo.b:2 = bar.b:9)
+
+build
+SELECT * FROM foo, bar WHERE foo.b = bar.b
+----
+project
+ ├── columns: a:1 b:2!null c:3 d:4 a:8 b:9!null c:10 d:11
+ └── select
+      ├── columns: foo.a:1 foo.b:2!null foo.c:3 foo.d:4 foo.rowid:5!null foo.crdb_internal_mvcc_timestamp:6 foo.tableoid:7 bar.a:8 bar.b:9!null bar.c:10 bar.d:11 bar.rowid:12!null bar.crdb_internal_mvcc_timestamp:13 bar.tableoid:14
+      ├── inner-join (cross)
+      │    ├── columns: foo.a:1 foo.b:2 foo.c:3 foo.d:4 foo.rowid:5!null foo.crdb_internal_mvcc_timestamp:6 foo.tableoid:7 bar.a:8 bar.b:9 bar.c:10 bar.d:11 bar.rowid:12!null bar.crdb_internal_mvcc_timestamp:13 bar.tableoid:14
+      │    ├── scan foo
+      │    │    └── columns: foo.a:1 foo.b:2 foo.c:3 foo.d:4 foo.rowid:5!null foo.crdb_internal_mvcc_timestamp:6 foo.tableoid:7
+      │    ├── scan bar
+      │    │    └── columns: bar.a:8 bar.b:9 bar.c:10 bar.d:11 bar.rowid:12!null bar.crdb_internal_mvcc_timestamp:13 bar.tableoid:14
+      │    └── filters (true)
+      └── filters
+           └── foo.b:2 = bar.b:9
+
+# Only a can be an equality column.
+build
+SELECT * FROM foo, bar WHERE foo.a = bar.a AND foo.b = bar.b
+----
+project
+ ├── columns: a:1!null b:2!null c:3 d:4 a:8!null b:9!null c:10 d:11
+ └── select
+      ├── columns: foo.a:1!null foo.b:2!null foo.c:3 foo.d:4 foo.rowid:5!null foo.crdb_internal_mvcc_timestamp:6 foo.tableoid:7 bar.a:8!null bar.b:9!null bar.c:10 bar.d:11 bar.rowid:12!null bar.crdb_internal_mvcc_timestamp:13 bar.tableoid:14
+      ├── inner-join (cross)
+      │    ├── columns: foo.a:1 foo.b:2 foo.c:3 foo.d:4 foo.rowid:5!null foo.crdb_internal_mvcc_timestamp:6 foo.tableoid:7 bar.a:8 bar.b:9 bar.c:10 bar.d:11 bar.rowid:12!null bar.crdb_internal_mvcc_timestamp:13 bar.tableoid:14
+      │    ├── scan foo
+      │    │    └── columns: foo.a:1 foo.b:2 foo.c:3 foo.d:4 foo.rowid:5!null foo.crdb_internal_mvcc_timestamp:6 foo.tableoid:7
+      │    ├── scan bar
+      │    │    └── columns: bar.a:8 bar.b:9 bar.c:10 bar.d:11 bar.rowid:12!null bar.crdb_internal_mvcc_timestamp:13 bar.tableoid:14
+      │    └── filters (true)
+      └── filters
+           └── (foo.a:1 = bar.a:8) AND (foo.b:2 = bar.b:9)
+
+# Only a and c can be equality columns.
+build
+SELECT * FROM foo JOIN bar USING (a, b) WHERE foo.c = bar.c AND foo.d = bar.d
+----
+project
+ ├── columns: a:1!null b:2!null c:3!null d:4!null c:10!null d:11!null
+ └── select
+      ├── columns: foo.a:1!null foo.b:2!null foo.c:3!null foo.d:4!null foo.rowid:5!null foo.crdb_internal_mvcc_timestamp:6 foo.tableoid:7 bar.a:8!null bar.b:9!null bar.c:10!null bar.d:11!null bar.rowid:12!null bar.crdb_internal_mvcc_timestamp:13 bar.tableoid:14
+      ├── inner-join (hash)
+      │    ├── columns: foo.a:1!null foo.b:2!null foo.c:3 foo.d:4 foo.rowid:5!null foo.crdb_internal_mvcc_timestamp:6 foo.tableoid:7 bar.a:8!null bar.b:9!null bar.c:10 bar.d:11 bar.rowid:12!null bar.crdb_internal_mvcc_timestamp:13 bar.tableoid:14
+      │    ├── scan foo
+      │    │    └── columns: foo.a:1 foo.b:2 foo.c:3 foo.d:4 foo.rowid:5!null foo.crdb_internal_mvcc_timestamp:6 foo.tableoid:7
+      │    ├── scan bar
+      │    │    └── columns: bar.a:8 bar.b:9 bar.c:10 bar.d:11 bar.rowid:12!null bar.crdb_internal_mvcc_timestamp:13 bar.tableoid:14
+      │    └── filters
+      │         ├── foo.a:1 = bar.a:8
+      │         └── foo.b:2 = bar.b:9
+      └── filters
+           └── (foo.c:3 = bar.c:10) AND (foo.d:4 = bar.d:11)
+
+exec-ddl
+CREATE TABLE t.kv (
+  k INT PRIMARY KEY,
+  v INT,
+  w INT,
+  s STRING
+)
+----
+
+build
+SELECT k FROM kv, (SELECT 1 AS k)
+----
+project
+ ├── columns: k:7!null
+ └── inner-join (cross)
+      ├── columns: kv.k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5 tableoid:6 k:7!null
+      ├── scan kv
+      │    └── columns: kv.k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+      ├── project
+      │    ├── columns: k:7!null
+      │    ├── values
+      │    │    └── ()
+      │    └── projections
+      │         └── 1 [as=k:7]
+      └── filters (true)
+
+build
+select * from (select 1 as k), (select 2 as k) where 1 in (select k from kv)
+----
+select
+ ├── columns: k:1!null k:2!null
+ ├── inner-join (cross)
+ │    ├── columns: k:1!null k:2!null
+ │    ├── project
+ │    │    ├── columns: k:1!null
+ │    │    ├── values
+ │    │    │    └── ()
+ │    │    └── projections
+ │    │         └── 1 [as=k:1]
+ │    ├── project
+ │    │    ├── columns: k:2!null
+ │    │    ├── values
+ │    │    │    └── ()
+ │    │    └── projections
+ │    │         └── 2 [as=k:2]
+ │    └── filters (true)
+ └── filters
+      └── any: eq
+           ├── project
+           │    ├── columns: kv.k:3!null
+           │    └── scan kv
+           │         └── columns: kv.k:3!null v:4 w:5 s:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+           └── 1
+
+# Test natural outer join when the left side has unknown type
+build
+SELECT * FROM (VALUES (NULL, NULL)) NATURAL FULL OUTER JOIN (SELECT * FROM (VALUES (1, 1)))
+----
+project
+ ├── columns: column1:5 column2:6
+ └── project
+      ├── columns: column1:5 column2:6 column1:1 column2:2 column1:3 column2:4
+      ├── full-join (cross)
+      │    ├── columns: column1:1 column2:2 column1:3 column2:4
+      │    ├── values
+      │    │    ├── columns: column1:1 column2:2
+      │    │    └── (NULL, NULL)
+      │    ├── values
+      │    │    ├── columns: column1:3!null column2:4!null
+      │    │    └── (1, 1)
+      │    └── filters
+      │         ├── column1:1 = column1:3
+      │         └── column2:2 = column2:4
+      └── projections
+           ├── COALESCE(column1:1, column1:3) [as=column1:5]
+           └── COALESCE(column2:2, column2:4) [as=column2:6]
+
+# Regression test for #23609: make sure that the type of the merged column
+# is int (not unknown).
+build
+SELECT column1, column1+1 AS r
+FROM
+  (SELECT * FROM
+    (VALUES (NULL, NULL)) AS t
+      NATURAL FULL OUTER JOIN
+    (VALUES (1, 1)) AS u)
+----
+project
+ ├── columns: column1:5 r:7
+ ├── project
+ │    ├── columns: column1:5 column2:6
+ │    └── project
+ │         ├── columns: column1:5 column2:6 column1:1 column2:2 column1:3 column2:4
+ │         ├── full-join (cross)
+ │         │    ├── columns: column1:1 column2:2 column1:3 column2:4
+ │         │    ├── values
+ │         │    │    ├── columns: column1:1 column2:2
+ │         │    │    └── (NULL, NULL)
+ │         │    ├── values
+ │         │    │    ├── columns: column1:3!null column2:4!null
+ │         │    │    └── (1, 1)
+ │         │    └── filters
+ │         │         ├── column1:1 = column1:3
+ │         │         └── column2:2 = column2:4
+ │         └── projections
+ │              ├── COALESCE(column1:1, column1:3) [as=column1:5]
+ │              └── COALESCE(column2:2, column2:4) [as=column2:6]
+ └── projections
+      └── column1:5 + 1 [as=r:7]
+
+# ON clause must be type bool.
+build
+SELECT * FROM foo JOIN bar ON foo.c
+----
+error (42804): argument of ON must be type bool, not type float
+
+# Regression test for #28817. Do not allow special functions in ON clause.
+build
+SELECT * FROM foo JOIN bar ON generate_series(0, 1) < 2
+----
+error (0A000): generate_series(): set-returning functions are not allowed in ON
+
+build
+SELECT * FROM foo JOIN bar ON max(foo.c) < 2
+----
+error (42803): aggregate functions are not allowed in JOIN conditions
+
+# Verify join hints get populated.
+build
+SELECT * FROM onecolumn AS a(x) INNER MERGE JOIN onecolumn AS b(y) ON a.x = b.y
+----
+project
+ ├── columns: x:1!null y:5!null
+ └── inner-join (hash)
+      ├── columns: x:1!null a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 y:5!null b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      ├── flags: force merge join
+      ├── scan onecolumn [as=a]
+      │    └── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+      ├── scan onecolumn [as=b]
+      │    └── columns: y:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      └── filters
+           └── x:1 = y:5
+
+build
+SELECT * FROM onecolumn AS a(x) INNER STRAIGHT JOIN onecolumn AS b(y) ON a.x = b.y
+----
+project
+ ├── columns: x:1!null y:5!null
+ └── inner-join (hash)
+      ├── columns: x:1!null a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 y:5!null b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      ├── flags: disallow hash join (store left side) and lookup join (into left side) and inverted join (into left side)
+      ├── scan onecolumn [as=a]
+      │    └── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+      ├── scan onecolumn [as=b]
+      │    └── columns: y:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      └── filters
+           └── x:1 = y:5
+
+build
+SELECT * FROM onecolumn AS a NATURAL LEFT LOOKUP JOIN onecolumn as b USING(x)
+----
+error (42601): at or near "using": syntax error
+
+build
+SELECT * FROM onecolumn AS a(x) FULL OUTER HASH JOIN onecolumn AS b(y) ON a.x = b.y
+----
+project
+ ├── columns: x:1 y:5
+ └── full-join (hash)
+      ├── columns: x:1 a.rowid:2 a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 y:5 b.rowid:6 b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      ├── flags: force hash join (store right side)
+      ├── scan onecolumn [as=a]
+      │    └── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+      ├── scan onecolumn [as=b]
+      │    └── columns: y:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      └── filters
+           └── x:1 = y:5
+
+# Regression test for #46403.
+exec-ddl
+CREATE TABLE t0(c0 INT)
+----
+
+exec-ddl
+CREATE VIEW v0(c0, c1) AS SELECT DISTINCT c0, c0 FROM t0
+----
+
+build
+SELECT * FROM v0 NATURAL JOIN t0
+----
+project
+ ├── columns: c0:1!null c1:1!null
+ └── inner-join (hash)
+      ├── columns: c0:1!null c0:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+      ├── distinct-on
+      │    ├── columns: c0:1
+      │    ├── grouping columns: c0:1
+      │    └── project
+      │         ├── columns: c0:1
+      │         └── scan t0
+      │              └── columns: c0:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── scan t0
+      │    └── columns: c0:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+      └── filters
+           └── c0:1 = c0:5
+
+build
+SELECT * FROM t0 NATURAL JOIN v0
+----
+project
+ ├── columns: c0:1!null c1:5!null
+ └── inner-join (hash)
+      ├── columns: c0:1!null rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4 c0:5!null
+      ├── scan t0
+      │    └── columns: c0:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── distinct-on
+      │    ├── columns: c0:5
+      │    ├── grouping columns: c0:5
+      │    └── project
+      │         ├── columns: c0:5
+      │         └── scan t0
+      │              └── columns: c0:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+      └── filters
+           └── c0:1 = c0:5
+
+build
+SELECT * FROM v0 NATURAL JOIN v0 AS v1
+----
+project
+ ├── columns: c0:1!null c1:1!null
+ └── inner-join (hash)
+      ├── columns: c0:1!null c0:5!null
+      ├── distinct-on
+      │    ├── columns: c0:1
+      │    ├── grouping columns: c0:1
+      │    └── project
+      │         ├── columns: c0:1
+      │         └── scan t0
+      │              └── columns: c0:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── distinct-on
+      │    ├── columns: c0:5
+      │    ├── grouping columns: c0:5
+      │    └── project
+      │         ├── columns: c0:5
+      │         └── scan t0
+      │              └── columns: c0:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+      └── filters
+           ├── c0:1 = c0:5
+           └── c0:1 = c0:5
+
+build
+SELECT * FROM v0 NATURAL LEFT JOIN v0 AS v1
+----
+project
+ ├── columns: c0:1 c1:1
+ └── left-join (hash)
+      ├── columns: c0:1 c0:5
+      ├── distinct-on
+      │    ├── columns: c0:1
+      │    ├── grouping columns: c0:1
+      │    └── project
+      │         ├── columns: c0:1
+      │         └── scan t0
+      │              └── columns: c0:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── distinct-on
+      │    ├── columns: c0:5
+      │    ├── grouping columns: c0:5
+      │    └── project
+      │         ├── columns: c0:5
+      │         └── scan t0
+      │              └── columns: c0:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+      └── filters
+           ├── c0:1 = c0:5
+           └── c0:1 = c0:5
+
+build
+SELECT * FROM v0 NATURAL RIGHT JOIN v0 AS v1
+----
+project
+ ├── columns: c0:5 c1:5
+ └── right-join (hash)
+      ├── columns: c0:1 c0:5
+      ├── distinct-on
+      │    ├── columns: c0:1
+      │    ├── grouping columns: c0:1
+      │    └── project
+      │         ├── columns: c0:1
+      │         └── scan t0
+      │              └── columns: c0:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── distinct-on
+      │    ├── columns: c0:5
+      │    ├── grouping columns: c0:5
+      │    └── project
+      │         ├── columns: c0:5
+      │         └── scan t0
+      │              └── columns: c0:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+      └── filters
+           ├── c0:1 = c0:5
+           └── c0:1 = c0:5
+
+build
+SELECT * FROM v0 NATURAL FULL OUTER JOIN v0 AS v1
+----
+project
+ ├── columns: c0:9 c1:10
+ └── project
+      ├── columns: c0:9 c1:10 t0.c0:1 t0.c0:5
+      ├── full-join (hash)
+      │    ├── columns: t0.c0:1 t0.c0:5
+      │    ├── distinct-on
+      │    │    ├── columns: t0.c0:1
+      │    │    ├── grouping columns: t0.c0:1
+      │    │    └── project
+      │    │         ├── columns: t0.c0:1
+      │    │         └── scan t0
+      │    │              └── columns: t0.c0:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+      │    ├── distinct-on
+      │    │    ├── columns: t0.c0:5
+      │    │    ├── grouping columns: t0.c0:5
+      │    │    └── project
+      │    │         ├── columns: t0.c0:5
+      │    │         └── scan t0
+      │    │              └── columns: t0.c0:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+      │    └── filters
+      │         ├── t0.c0:1 = t0.c0:5
+      │         └── t0.c0:1 = t0.c0:5
+      └── projections
+           ├── COALESCE(t0.c0:1, t0.c0:5) [as=c0:9]
+           └── COALESCE(t0.c0:1, t0.c0:5) [as=c1:10]
+
+build
+SELECT * FROM (SELECT DISTINCT c0, c0 FROM t0) AS v1(c0, c1) NATURAL JOIN t0
+----
+project
+ ├── columns: c0:1!null c1:1!null
+ └── inner-join (hash)
+      ├── columns: c0:1!null c0:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+      ├── distinct-on
+      │    ├── columns: c0:1
+      │    ├── grouping columns: c0:1
+      │    └── project
+      │         ├── columns: c0:1
+      │         └── scan t0
+      │              └── columns: c0:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── scan t0
+      │    └── columns: c0:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+      └── filters
+           └── c0:1 = c0:5
+
+build
+SELECT * FROM v0 JOIN v0 AS v1 USING (c0)
+----
+inner-join (hash)
+ ├── columns: c0:1!null c1:1!null c1:5!null
+ ├── distinct-on
+ │    ├── columns: c0:1
+ │    ├── grouping columns: c0:1
+ │    └── project
+ │         ├── columns: c0:1
+ │         └── scan t0
+ │              └── columns: c0:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+ ├── distinct-on
+ │    ├── columns: c0:5
+ │    ├── grouping columns: c0:5
+ │    └── project
+ │         ├── columns: c0:5
+ │         └── scan t0
+ │              └── columns: c0:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ └── filters
+      └── c0:1 = c0:5
+
+build
+SELECT * FROM v0 JOIN v0 AS v1 USING (c1)
+----
+inner-join (hash)
+ ├── columns: c1:1!null c0:1!null c0:5!null
+ ├── distinct-on
+ │    ├── columns: c0:1
+ │    ├── grouping columns: c0:1
+ │    └── project
+ │         ├── columns: c0:1
+ │         └── scan t0
+ │              └── columns: c0:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+ ├── distinct-on
+ │    ├── columns: c0:5
+ │    ├── grouping columns: c0:5
+ │    └── project
+ │         ├── columns: c0:5
+ │         └── scan t0
+ │              └── columns: c0:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ └── filters
+      └── c0:1 = c0:5
+
+exec-ddl
+CREATE TABLE abcd (a INT, b INT, c INT, d INT)
+----
+
+exec-ddl
+CREATE TABLE dxby (d INT, x INT, b INT, y INT)
+----
+
+build
+SELECT * FROM abcd NATURAL FULL OUTER JOIN dxby
+----
+project
+ ├── columns: b:15 d:16 a:1 c:3 x:9 y:11
+ └── project
+      ├── columns: b:15 d:16 a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5 abcd.crdb_internal_mvcc_timestamp:6 abcd.tableoid:7 dxby.d:8 x:9 dxby.b:10 y:11 dxby.rowid:12 dxby.crdb_internal_mvcc_timestamp:13 dxby.tableoid:14
+      ├── full-join (hash)
+      │    ├── columns: a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5 abcd.crdb_internal_mvcc_timestamp:6 abcd.tableoid:7 dxby.d:8 x:9 dxby.b:10 y:11 dxby.rowid:12 dxby.crdb_internal_mvcc_timestamp:13 dxby.tableoid:14
+      │    ├── scan abcd
+      │    │    └── columns: a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5!null abcd.crdb_internal_mvcc_timestamp:6 abcd.tableoid:7
+      │    ├── scan dxby
+      │    │    └── columns: dxby.d:8 x:9 dxby.b:10 y:11 dxby.rowid:12!null dxby.crdb_internal_mvcc_timestamp:13 dxby.tableoid:14
+      │    └── filters
+      │         ├── abcd.b:2 = dxby.b:10
+      │         └── abcd.d:4 = dxby.d:8
+      └── projections
+           ├── COALESCE(abcd.b:2, dxby.b:10) [as=b:15]
+           └── COALESCE(abcd.d:4, dxby.d:8) [as=d:16]
+
+# Test that qualified stars expand to all table columns (even those that aren't
+# directly visible); see #66123.
+build
+SELECT abcd.*, dxby.* FROM abcd NATURAL INNER JOIN dxby
+----
+project
+ ├── columns: a:1 b:2!null c:3 d:4!null d:8!null x:9 b:10!null y:11
+ └── inner-join (hash)
+      ├── columns: a:1 abcd.b:2!null c:3 abcd.d:4!null abcd.rowid:5!null abcd.crdb_internal_mvcc_timestamp:6 abcd.tableoid:7 dxby.d:8!null x:9 dxby.b:10!null y:11 dxby.rowid:12!null dxby.crdb_internal_mvcc_timestamp:13 dxby.tableoid:14
+      ├── scan abcd
+      │    └── columns: a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5!null abcd.crdb_internal_mvcc_timestamp:6 abcd.tableoid:7
+      ├── scan dxby
+      │    └── columns: dxby.d:8 x:9 dxby.b:10 y:11 dxby.rowid:12!null dxby.crdb_internal_mvcc_timestamp:13 dxby.tableoid:14
+      └── filters
+           ├── abcd.b:2 = dxby.b:10
+           └── abcd.d:4 = dxby.d:8
+
+build
+SELECT abcd.*, dxby.* FROM abcd NATURAL LEFT OUTER JOIN dxby
+----
+project
+ ├── columns: a:1 b:2 c:3 d:4 d:8 x:9 b:10 y:11
+ └── left-join (hash)
+      ├── columns: a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5!null abcd.crdb_internal_mvcc_timestamp:6 abcd.tableoid:7 dxby.d:8 x:9 dxby.b:10 y:11 dxby.rowid:12 dxby.crdb_internal_mvcc_timestamp:13 dxby.tableoid:14
+      ├── scan abcd
+      │    └── columns: a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5!null abcd.crdb_internal_mvcc_timestamp:6 abcd.tableoid:7
+      ├── scan dxby
+      │    └── columns: dxby.d:8 x:9 dxby.b:10 y:11 dxby.rowid:12!null dxby.crdb_internal_mvcc_timestamp:13 dxby.tableoid:14
+      └── filters
+           ├── abcd.b:2 = dxby.b:10
+           └── abcd.d:4 = dxby.d:8
+
+build
+SELECT abcd.*, dxby.* FROM abcd NATURAL RIGHT OUTER JOIN dxby
+----
+project
+ ├── columns: a:1 b:2 c:3 d:4 d:8 x:9 b:10 y:11
+ └── right-join (hash)
+      ├── columns: a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5 abcd.crdb_internal_mvcc_timestamp:6 abcd.tableoid:7 dxby.d:8 x:9 dxby.b:10 y:11 dxby.rowid:12!null dxby.crdb_internal_mvcc_timestamp:13 dxby.tableoid:14
+      ├── scan abcd
+      │    └── columns: a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5!null abcd.crdb_internal_mvcc_timestamp:6 abcd.tableoid:7
+      ├── scan dxby
+      │    └── columns: dxby.d:8 x:9 dxby.b:10 y:11 dxby.rowid:12!null dxby.crdb_internal_mvcc_timestamp:13 dxby.tableoid:14
+      └── filters
+           ├── abcd.b:2 = dxby.b:10
+           └── abcd.d:4 = dxby.d:8
+
+build
+SELECT abcd.*, dxby.* FROM abcd NATURAL FULL OUTER JOIN dxby
+----
+project
+ ├── columns: a:1 b:2 c:3 d:4 d:8 x:9 b:10 y:11
+ └── project
+      ├── columns: b:15 d:16 a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5 abcd.crdb_internal_mvcc_timestamp:6 abcd.tableoid:7 dxby.d:8 x:9 dxby.b:10 y:11 dxby.rowid:12 dxby.crdb_internal_mvcc_timestamp:13 dxby.tableoid:14
+      ├── full-join (hash)
+      │    ├── columns: a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5 abcd.crdb_internal_mvcc_timestamp:6 abcd.tableoid:7 dxby.d:8 x:9 dxby.b:10 y:11 dxby.rowid:12 dxby.crdb_internal_mvcc_timestamp:13 dxby.tableoid:14
+      │    ├── scan abcd
+      │    │    └── columns: a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5!null abcd.crdb_internal_mvcc_timestamp:6 abcd.tableoid:7
+      │    ├── scan dxby
+      │    │    └── columns: dxby.d:8 x:9 dxby.b:10 y:11 dxby.rowid:12!null dxby.crdb_internal_mvcc_timestamp:13 dxby.tableoid:14
+      │    └── filters
+      │         ├── abcd.b:2 = dxby.b:10
+      │         └── abcd.d:4 = dxby.d:8
+      └── projections
+           ├── COALESCE(abcd.b:2, dxby.b:10) [as=b:15]
+           └── COALESCE(abcd.d:4, dxby.d:8) [as=d:16]
+
+build
+SELECT abcd.*, dxby.* FROM abcd FULL OUTER JOIN dxby USING (d, b)
+----
+project
+ ├── columns: a:1 b:2 c:3 d:4 d:8 x:9 b:10 y:11
+ └── project
+      ├── columns: d:15 b:16 a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5 abcd.crdb_internal_mvcc_timestamp:6 abcd.tableoid:7 dxby.d:8 x:9 dxby.b:10 y:11 dxby.rowid:12 dxby.crdb_internal_mvcc_timestamp:13 dxby.tableoid:14
+      ├── full-join (hash)
+      │    ├── columns: a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5 abcd.crdb_internal_mvcc_timestamp:6 abcd.tableoid:7 dxby.d:8 x:9 dxby.b:10 y:11 dxby.rowid:12 dxby.crdb_internal_mvcc_timestamp:13 dxby.tableoid:14
+      │    ├── scan abcd
+      │    │    └── columns: a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5!null abcd.crdb_internal_mvcc_timestamp:6 abcd.tableoid:7
+      │    ├── scan dxby
+      │    │    └── columns: dxby.d:8 x:9 dxby.b:10 y:11 dxby.rowid:12!null dxby.crdb_internal_mvcc_timestamp:13 dxby.tableoid:14
+      │    └── filters
+      │         ├── abcd.d:4 = dxby.d:8
+      │         └── abcd.b:2 = dxby.b:10
+      └── projections
+           ├── COALESCE(abcd.d:4, dxby.d:8) [as=d:15]
+           └── COALESCE(abcd.b:2, dxby.b:10) [as=b:16]
+
+build
+SELECT abcd.a, abcd.b, abcd.c, abcd.d, dxby.d, dxby.x, dxby.b, dxby.y FROM abcd NATURAL FULL OUTER JOIN dxby
+----
+project
+ ├── columns: a:1 b:2 c:3 d:4 d:8 x:9 b:10 y:11
+ └── project
+      ├── columns: b:15 d:16 a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5 abcd.crdb_internal_mvcc_timestamp:6 abcd.tableoid:7 dxby.d:8 x:9 dxby.b:10 y:11 dxby.rowid:12 dxby.crdb_internal_mvcc_timestamp:13 dxby.tableoid:14
+      ├── full-join (hash)
+      │    ├── columns: a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5 abcd.crdb_internal_mvcc_timestamp:6 abcd.tableoid:7 dxby.d:8 x:9 dxby.b:10 y:11 dxby.rowid:12 dxby.crdb_internal_mvcc_timestamp:13 dxby.tableoid:14
+      │    ├── scan abcd
+      │    │    └── columns: a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5!null abcd.crdb_internal_mvcc_timestamp:6 abcd.tableoid:7
+      │    ├── scan dxby
+      │    │    └── columns: dxby.d:8 x:9 dxby.b:10 y:11 dxby.rowid:12!null dxby.crdb_internal_mvcc_timestamp:13 dxby.tableoid:14
+      │    └── filters
+      │         ├── abcd.b:2 = dxby.b:10
+      │         └── abcd.d:4 = dxby.d:8
+      └── projections
+           ├── COALESCE(abcd.b:2, dxby.b:10) [as=b:15]
+           └── COALESCE(abcd.d:4, dxby.d:8) [as=d:16]
+
+build
+SELECT abcd.a, abcd.b, abcd.c, abcd.d, dxby.d, dxby.x, dxby.b, dxby.y FROM abcd FULL OUTER JOIN dxby USING (d, b)
+----
+project
+ ├── columns: a:1 b:2 c:3 d:4 d:8 x:9 b:10 y:11
+ └── project
+      ├── columns: d:15 b:16 a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5 abcd.crdb_internal_mvcc_timestamp:6 abcd.tableoid:7 dxby.d:8 x:9 dxby.b:10 y:11 dxby.rowid:12 dxby.crdb_internal_mvcc_timestamp:13 dxby.tableoid:14
+      ├── full-join (hash)
+      │    ├── columns: a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5 abcd.crdb_internal_mvcc_timestamp:6 abcd.tableoid:7 dxby.d:8 x:9 dxby.b:10 y:11 dxby.rowid:12 dxby.crdb_internal_mvcc_timestamp:13 dxby.tableoid:14
+      │    ├── scan abcd
+      │    │    └── columns: a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5!null abcd.crdb_internal_mvcc_timestamp:6 abcd.tableoid:7
+      │    ├── scan dxby
+      │    │    └── columns: dxby.d:8 x:9 dxby.b:10 y:11 dxby.rowid:12!null dxby.crdb_internal_mvcc_timestamp:13 dxby.tableoid:14
+      │    └── filters
+      │         ├── abcd.d:4 = dxby.d:8
+      │         └── abcd.b:2 = dxby.b:10
+      └── projections
+           ├── COALESCE(abcd.d:4, dxby.d:8) [as=d:15]
+           └── COALESCE(abcd.b:2, dxby.b:10) [as=b:16]

@@ -1,0 +1,156 @@
+exec-ddl
+CREATE TABLE a (x INT PRIMARY KEY, y INT)
+----
+
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 5000
+  },
+  {
+    "columns": ["y"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 4000,
+    "distinct_count": 400
+  }
+]'
+----
+
+norm
+SELECT * FROM (SELECT * FROM a WITH ORDINALITY) WHERE ordinality > 0 AND ordinality <= 10
+----
+select
+ ├── columns: x:1(int!null) y:2(int) ordinality:5(int!null)
+ ├── cardinality: [0 - 10]
+ ├── stats: [rows=10, distinct(5)=10, null(5)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2,5), (5)-->(1,2)
+ ├── ordinality
+ │    ├── columns: x:1(int!null) y:2(int) ordinality:5(int!null)
+ │    ├── stats: [rows=4000, distinct(1)=4000, null(1)=0, distinct(5)=4000, null(5)=0]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,5), (5)-->(1,2)
+ │    └── scan a
+ │         ├── columns: x:1(int!null) y:2(int)
+ │         ├── stats: [rows=4000, distinct(1)=4000, null(1)=0]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2)
+ └── filters
+      └── (ordinality:5 > 0) AND (ordinality:5 <= 10) [type=bool, outer=(5), constraints=(/5: [/1 - /10]; tight)]
+
+norm
+SELECT * FROM (SELECT * FROM a WITH ORDINALITY) WHERE y > 0 AND y <= 10
+----
+select
+ ├── columns: x:1(int!null) y:2(int!null) ordinality:5(int!null)
+ ├── stats: [rows=100, distinct(2)=10, null(2)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2,5), (5)-->(1,2)
+ ├── ordinality
+ │    ├── columns: x:1(int!null) y:2(int) ordinality:5(int!null)
+ │    ├── stats: [rows=4000, distinct(1)=4000, null(1)=0, distinct(2)=400, null(2)=0, distinct(5)=4000, null(5)=0]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,5), (5)-->(1,2)
+ │    └── scan a
+ │         ├── columns: x:1(int!null) y:2(int)
+ │         ├── stats: [rows=4000, distinct(1)=4000, null(1)=0, distinct(2)=400, null(2)=0]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2)
+ └── filters
+      └── (y:2 > 0) AND (y:2 <= 10) [type=bool, outer=(2), constraints=(/2: [/1 - /10]; tight)]
+
+norm
+SELECT 1 x FROM a WITH ORDINALITY
+----
+project
+ ├── columns: x:6(int!null)
+ ├── stats: [rows=4000]
+ ├── fd: ()-->(6)
+ ├── ordinality
+ │    ├── columns: ordinality:5(int!null)
+ │    ├── stats: [rows=4000]
+ │    ├── key: (5)
+ │    └── scan a
+ │         └── stats: [rows=4000]
+ └── projections
+      └── 1 [as=x:6, type=int]
+
+norm
+SELECT x FROM (SELECT * FROM a WITH ORDINALITY) WHERE ordinality > 0 AND ordinality <= 10
+----
+project
+ ├── columns: x:1(int!null)
+ ├── cardinality: [0 - 10]
+ ├── stats: [rows=10]
+ ├── key: (1)
+ └── select
+      ├── columns: x:1(int!null) ordinality:5(int!null)
+      ├── cardinality: [0 - 10]
+      ├── stats: [rows=10, distinct(5)=10, null(5)=0]
+      ├── key: (1)
+      ├── fd: (1)-->(5), (5)-->(1)
+      ├── ordinality
+      │    ├── columns: x:1(int!null) ordinality:5(int!null)
+      │    ├── stats: [rows=4000, distinct(1)=4000, null(1)=0, distinct(5)=4000, null(5)=0]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(5), (5)-->(1)
+      │    └── scan a
+      │         ├── columns: x:1(int!null)
+      │         ├── stats: [rows=4000, distinct(1)=4000, null(1)=0]
+      │         └── key: (1)
+      └── filters
+           └── (ordinality:5 > 0) AND (ordinality:5 <= 10) [type=bool, outer=(5), constraints=(/5: [/1 - /10]; tight)]
+
+
+norm
+SELECT * FROM (SELECT * FROM a WITH ORDINALITY) WHERE ordinality = 2
+----
+select
+ ├── columns: x:1(int!null) y:2(int) ordinality:5(int!null)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1, distinct(5)=1, null(5)=0]
+ ├── key: ()
+ ├── fd: ()-->(1,2,5)
+ ├── ordinality
+ │    ├── columns: x:1(int!null) y:2(int) ordinality:5(int!null)
+ │    ├── stats: [rows=4000, distinct(1)=4000, null(1)=0, distinct(5)=4000, null(5)=0]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,5), (5)-->(1,2)
+ │    └── scan a
+ │         ├── columns: x:1(int!null) y:2(int)
+ │         ├── stats: [rows=4000, distinct(1)=4000, null(1)=0]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2)
+ └── filters
+      └── ordinality:5 = 2 [type=bool, outer=(5), constraints=(/5: [/2 - /2]; tight), fd=()-->(5)]
+
+build
+SELECT DISTINCT ordinality FROM (SELECT * FROM a WITH ORDINALITY)
+----
+distinct-on
+ ├── columns: ordinality:5(int!null)
+ ├── grouping columns: ordinality:5(int!null)
+ ├── stats: [rows=4000, distinct(5)=4000, null(5)=0]
+ ├── key: (5)
+ └── project
+      ├── columns: ordinality:5(int!null)
+      ├── stats: [rows=4000, distinct(5)=4000, null(5)=0]
+      ├── key: (5)
+      └── project
+           ├── columns: x:1(int!null) y:2(int) ordinality:5(int!null)
+           ├── stats: [rows=4000, distinct(5)=4000, null(5)=0]
+           ├── key: (1)
+           ├── fd: (1)-->(2,5), (5)-->(1,2)
+           └── ordinality
+                ├── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid) ordinality:5(int!null)
+                ├── stats: [rows=4000, distinct(5)=4000, null(5)=0]
+                ├── key: (1)
+                ├── fd: (1)-->(2-5), (5)-->(1-4)
+                └── scan a
+                     ├── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+                     ├── stats: [rows=4000]
+                     ├── key: (1)
+                     └── fd: (1)-->(2-4)

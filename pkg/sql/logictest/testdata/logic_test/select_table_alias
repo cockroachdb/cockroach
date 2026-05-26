@@ -1,0 +1,129 @@
+# Tests for SELECT with table aliasing.
+
+statement ok
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
+
+statement ok
+INSERT INTO abc VALUES (1, 2, 3), (4, 5, 6)
+
+
+# Verify output column naming with *.
+
+query III colnames,rowsort
+SELECT * FROM abc
+----
+a b c
+1 2 3
+4 5 6
+
+query III colnames,rowsort
+SELECT * FROM abc AS foo
+----
+a b c
+1 2 3
+4 5 6
+
+query III colnames,rowsort
+SELECT * FROM abc AS foo (foo1)
+----
+foo1 b c
+1 2 3
+4 5 6
+
+query III colnames,rowsort
+SELECT * FROM abc AS foo (foo1, foo2)
+----
+foo1 foo2 c
+1 2 3
+4 5 6
+
+query III colnames,rowsort
+SELECT * FROM abc AS foo (foo1, foo2, foo3)
+----
+foo1 foo2 foo3
+1 2 3
+4 5 6
+
+
+# Verify qualified name resolution.
+
+query IIII colnames,rowsort
+SELECT foo1, foo.foo1, b, foo.c FROM abc AS foo (foo1)
+----
+foo1 foo1 b c
+1 1 2 3
+4 4 5 6
+
+query III colnames,rowsort
+SELECT * FROM abc AS foo (foo1, foo2) WHERE foo.foo1 = 1
+----
+foo1 foo2 c
+1 2 3
+
+query III colnames,rowsort
+SELECT * FROM abc AS foo (foo1, foo2) WHERE foo.foo2 = 2
+----
+foo1 foo2 c
+1 2 3
+
+query III colnames,rowsort
+SELECT * FROM abc AS foo (foo1, foo2) WHERE foo.c = 6
+----
+foo1 foo2 c
+4 5 6
+
+
+# Verify we can't resolve columns using overridden table or colum names.
+
+query error no data source matches prefix: abc
+SELECT abc.foo1 FROM abc AS foo (foo1)
+
+query error no data source matches prefix: abc
+SELECT abc.b FROM abc AS foo (foo1)
+
+query error column "foo.a" does not exist
+SELECT foo.a FROM abc AS foo (foo1)
+
+
+# Verify error for too many column aliases.
+
+query error pgcode 42P10 source "foo" has 3 columns available but 4 columns specified
+SELECT * FROM abc AS foo (foo1, foo2, foo3, foo4)
+
+
+# Verify that implicit columns don't interfere with aliasing.
+
+statement ok
+CREATE TABLE ab (a INT, b INT)
+
+statement ok
+INSERT INTO ab VALUES (1, 2), (1, 3), (2, 5)
+
+query II colnames,rowsort
+SELECT * FROM ab AS foo (foo1, foo2)
+----
+foo1 foo2
+1 2
+1 3
+2 5
+
+statement ok
+SELECT rowid, foo.rowid FROM ab AS foo (foo1, foo2)
+
+query error no data source matches prefix: ab
+SELECT ab.rowid FROM ab AS foo (foo1)
+
+query error source "foo" has 2 columns available but 3 columns specified
+SELECT * FROM ab AS foo (foo1, foo2, foo3)
+
+query T colnames
+SELECT * FROM to_english(3) AS x
+----
+x
+three
+
+query T colnames
+TABLE ROWS FROM (to_english(3)) AS x;
+----
+x
+three

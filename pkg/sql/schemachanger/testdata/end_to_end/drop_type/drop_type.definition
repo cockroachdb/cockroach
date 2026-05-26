@@ -1,0 +1,7 @@
+setup
+CREATE TYPE blue_fish AS ENUM('salmon');
+----
+
+test
+DROP TYPE blue_fish;
+----

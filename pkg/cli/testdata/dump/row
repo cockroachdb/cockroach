@@ -1,0 +1,99 @@
+sql
+CREATE DATABASE d;
+CREATE TABLE d.t (
+	i int,
+	f float,
+	s string,
+	b bytes,
+	d date,
+	t time,
+	ts timestamp,
+	n interval,
+	o bool,
+	e decimal,
+	u uuid,
+	ip inet,
+	j JSON,
+	ary string[],
+	tz timestamptz,
+	e1 decimal(2),
+	e2 decimal(2, 1),
+	s1 string(1),
+	s2 string collate en_u_ks_level2,
+	oi oid,
+	FAMILY "primary" (i, f, d, t, ts, n, o, u, ip, j, ary, tz, e1, e2, s1, s2, oi, rowid),
+	FAMILY fam_1_s (s),
+	FAMILY fam_2_b (b),
+	FAMILY fam_3_e (e)
+);
+INSERT INTO d.t VALUES (
+	1,
+	2.3,
+	'striiing',
+	'\x613162326333',
+	'2016-03-26',
+	'01:02:03.456',
+	'2016-01-25 10:10:10',
+	'2h30m30s',
+	true,
+	1.2345,
+	'e9716c74-2638-443d-90ed-ffde7bea7d1d',
+	'192.168.0.1',
+	'{"a":"b"}',
+	ARRAY['hello','world'],
+	'2016-01-25 10:10:10',
+	3.4,
+	4.5,
+	's',
+	'hello' COLLATE en_u_ks_level2,
+	6
+);
+INSERT INTO d.t VALUES (DEFAULT);
+INSERT INTO d.t (f, e) VALUES (
+	CAST('+Inf' AS FLOAT), CAST('+Inf' AS DECIMAL)
+), (
+	CAST('-Inf' AS FLOAT), CAST('-Inf' AS DECIMAL)
+), (
+	CAST('NaN' AS FLOAT), CAST('NaN' AS DECIMAL)
+);
+----
+INSERT 3
+
+dump d t
+----
+----
+CREATE TABLE public.t (
+	i INT8 NULL,
+	f FLOAT8 NULL,
+	s STRING NULL,
+	b BYTES NULL,
+	d DATE NULL,
+	t TIME NULL,
+	ts TIMESTAMP NULL,
+	n INTERVAL NULL,
+	o BOOL NULL,
+	e DECIMAL NULL,
+	u UUID NULL,
+	ip INET NULL,
+	j JSONB NULL,
+	ary STRING[] NULL,
+	tz TIMESTAMPTZ NULL,
+	e1 DECIMAL(2) NULL,
+	e2 DECIMAL(2,1) NULL,
+	s1 STRING(1) NULL,
+	s2 STRING COLLATE en_u_ks_level2 NULL,
+	oi OID NULL,
+	FAMILY "primary" (i, f, d, t, ts, n, o, u, ip, j, ary, tz, e1, e2, s1, s2, oi, rowid),
+	FAMILY fam_1_s (s),
+	FAMILY fam_2_b (b),
+	FAMILY fam_3_e (e)
+);
+
+INSERT INTO public.t (i, f, s, b, d, t, ts, n, o, e, u, ip, j, ary, tz, e1, e2, s1, s2, oi) VALUES
+	(1, 2.3, 'striiing', '\x613162326333', '2016-03-26', '01:02:03.456', '2016-01-25 10:10:10', '02:30:30', true, 1.2345, 'e9716c74-2638-443d-90ed-ffde7bea7d1d', '192.168.0.1', '{"a": "b"}', ARRAY['hello','world'], '2016-01-25 10:10:10+00:00', 3, 4.5, 's', 'hello' COLLATE en_u_ks_level2, 6),
+	(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(NULL, '+Inf', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Infinity', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(NULL, '-Inf', NULL, NULL, NULL, NULL, NULL, NULL, NULL, '-Infinity', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(NULL, 'NaN', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'NaN', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+----
+----

@@ -1,0 +1,5 @@
+# Do not add environment-specific entries here (see the top-level .gitignore
+# for reasoning and alternatives).
+cockroach
+libgeos*.so*
+licenses

@@ -1,0 +1,141 @@
+exec-ddl
+CREATE TABLE abc (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT
+)
+----
+
+# --------------------------------------------------
+# Procedure without arguments.
+# --------------------------------------------------
+
+# TODO(mgartner): Fix the error message here.
+build
+CALL p()
+----
+error (42883): procedure p does not exist
+
+exec-ddl
+CREATE OR REPLACE PROCEDURE p() LANGUAGE SQL AS 'INSERT INTO abc VALUES (1, 2, 3)'
+----
+
+build format=show-scalars
+CALL p()
+----
+call
+ └── procedure: p
+      └── body
+           ├── insert abc
+           │    ├── columns: <none>
+           │    ├── insert-mapping:
+           │    │    ├── column1:6 => a:1
+           │    │    ├── column2:7 => b:2
+           │    │    └── column3:8 => c:3
+           │    └── values
+           │         ├── columns: column1:6!null column2:7!null column3:8!null
+           │         └── tuple
+           │              ├── const: 1
+           │              ├── const: 2
+           │              └── const: 3
+           └── limit
+                ├── columns: column1:9
+                ├── values
+                │    ├── columns: column1:9
+                │    └── tuple
+                │         └── null
+                └── const: 1
+
+exec-ddl
+CREATE OR REPLACE PROCEDURE p() LANGUAGE SQL AS $$
+  INSERT INTO abc VALUES (1, 2, 3);
+  UPSERT INTO abc VALUES (4, 5, 6), (7, 8, 9);
+$$
+----
+
+build format=show-scalars
+CALL p()
+----
+call
+ └── procedure: p
+      └── body
+           ├── insert abc
+           │    ├── columns: <none>
+           │    ├── insert-mapping:
+           │    │    ├── column1:6 => a:1
+           │    │    ├── column2:7 => b:2
+           │    │    └── column3:8 => c:3
+           │    └── values
+           │         ├── columns: column1:6!null column2:7!null column3:8!null
+           │         └── tuple
+           │              ├── const: 1
+           │              ├── const: 2
+           │              └── const: 3
+           ├── upsert abc
+           │    ├── columns: <none>
+           │    ├── upsert-mapping:
+           │    │    ├── column1:14 => a:9
+           │    │    ├── column2:15 => b:10
+           │    │    └── column3:16 => c:11
+           │    └── values
+           │         ├── columns: column1:14!null column2:15!null column3:16!null
+           │         ├── tuple
+           │         │    ├── const: 4
+           │         │    ├── const: 5
+           │         │    └── const: 6
+           │         └── tuple
+           │              ├── const: 7
+           │              ├── const: 8
+           │              └── const: 9
+           └── limit
+                ├── columns: column1:17
+                ├── values
+                │    ├── columns: column1:17
+                │    └── tuple
+                │         └── null
+                └── const: 1
+
+# Procedure with arguments.
+exec-ddl
+CREATE OR REPLACE PROCEDURE p(a INT, b INT, c FLOAT) LANGUAGE SQL AS $$
+  INSERT INTO abc VALUES (a+10, b, c);
+$$
+----
+
+build format=show-scalars
+CALL p(10, 20, 30.3)
+----
+call
+ └── procedure: p
+      ├── args
+      │    ├── const: 10
+      │    ├── const: 20
+      │    └── const: 30.3
+      ├── params: a:1 b:2 c:3
+      └── body
+           ├── insert abc
+           │    ├── columns: <none>
+           │    ├── insert-mapping:
+           │    │    ├── column1:9 => abc.a:4
+           │    │    ├── column2:10 => abc.b:5
+           │    │    └── c_cast:12 => abc.c:6
+           │    └── project
+           │         ├── columns: c_cast:12 column1:9 column2:10
+           │         ├── values
+           │         │    ├── columns: column1:9 column2:10 column3:11
+           │         │    └── tuple
+           │         │         ├── plus
+           │         │         │    ├── variable: a:1
+           │         │         │    └── const: 10
+           │         │         ├── variable: b:2
+           │         │         └── variable: c:3
+           │         └── projections
+           │              └── assignment-cast: INT8 [as=c_cast:12]
+           │                   └── variable: column3:11
+           └── limit
+                ├── columns: column1:13
+                ├── values
+                │    ├── columns: column1:13
+                │    └── tuple
+                │         └── null
+                └── const: 1

@@ -1,0 +1,3 @@
+alter_onetable_stmt ::=
+	'ALTER' 'TABLE' table_name 'RENAME' 'CONSTRAINT' current_name 'TO' name
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'RENAME' 'CONSTRAINT' current_name 'TO' name

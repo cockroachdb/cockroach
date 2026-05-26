@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "plpgsqltree",
+    srcs = [
+        "constants.go",
+        "exception.go",
+        "pretty.go",
+        "statements.go",
+        "variable.go",
+        "visitor.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/sem/tree",
+        "//pkg/util/errorutil/unimplemented",
+        "//pkg/util/pretty",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

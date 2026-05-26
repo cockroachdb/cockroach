@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "raftutil",
+    srcs = ["util.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvpb",
+        "//pkg/raft",
+        "//pkg/raft/raftpb",
+        "//pkg/raft/tracker",
+        "//pkg/roachpb",
+    ],
+)
+
+go_test(
+    name = "raftutil_test",
+    srcs = ["util_test.go"],
+    embed = [":raftutil"],
+    deps = [
+        "//pkg/raft",
+        "//pkg/raft/raftpb",
+        "//pkg/raft/tracker",
+        "@com_github_stretchr_testify//require",
+    ],
+)

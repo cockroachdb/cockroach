@@ -1,0 +1,74 @@
+# Test case when provider is completely out of tokens.
+
+# When throttle = -1, the provider will refuse to grant any tokens, either
+# directly or via a trickle.
+configure
+throttle: -1
+----
+
+# Issue 5K RU write to force token bucket request.
+write bytes=5117945 label=w1
+----
+
+wait-for-event
+token-bucket-response
+----
+
+await label=w1
+----
+
+token-bucket
+----
+0.00 tokens filling @ 0.00 tokens/s
+
+# Advance time and ensure there's no change to the bucket.
+advance wait=true
+1s
+----
+00:00:01.000
+
+token-bucket
+----
+0.00 tokens filling @ 0.00 tokens/s
+
+# Issue a blocking read.
+read bytes=1024 label=r1
+----
+
+# Expect maximum delay.
+timers
+----
+00:16:41.000
+
+# Advance the full delay and ensure there's no change.
+advance
+1000s
+----
+00:16:41.000
+
+not-completed label=r1
+----
+
+token-bucket
+----
+0.00 tokens filling @ 0.00 tokens/s (0.64 waiting tokens)
+
+# Expect maximum delay.
+timers
+----
+00:33:21.000
+
+# Simulate case where more tokens have been made available.
+configure
+throttle: 0
+----
+
+# Wait until next consumption reporting.
+advance
+40s
+----
+00:17:21.000
+
+# Ensure that read can now complete.
+await label=r1
+----

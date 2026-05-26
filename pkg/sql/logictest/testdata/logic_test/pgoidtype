@@ -1,0 +1,814 @@
+# LogicTest: !local-prepared
+
+query OO
+SELECT 3::OID, '3'::OID
+----
+3  3
+
+query O
+SELECT 3::OID::INT::OID
+----
+3
+
+query OOOOOOO
+SELECT 1::OID, 1::REGCLASS, 1::REGNAMESPACE, 1::REGPROC, 1::REGPROCEDURE, 1::REGROLE, 1::REGTYPE
+----
+1  1  1  array_agg  array_agg  1  1
+
+query OOOOOO
+SELECT 1::OID::REGCLASS, 1::OID::REGNAMESPACE, 1::OID::REGPROC, 1::OID::REGPROCEDURE, 1::OID::REGROLE, 1::OID::REGTYPE
+----
+1  1  array_agg  array_agg  1  1
+
+query TTT
+SELECT pg_typeof(1::OID), pg_typeof(1::REGCLASS), pg_typeof(1::REGNAMESPACE)
+----
+oid  regclass  regnamespace
+
+query TTTT
+SELECT pg_typeof(1::REGPROC), pg_typeof(1::REGPROCEDURE), pg_typeof(1::REGROLE), pg_typeof(1::REGTYPE)
+----
+regproc  regprocedure  regrole  regtype
+
+query TTT
+SELECT pg_typeof('1'::OID), pg_typeof('pg_constraint'::REGCLASS), pg_typeof('public'::REGNAMESPACE)
+----
+oid  regclass  regnamespace
+
+statement error pq: unknown function: upper\(string\)\(\)
+SELECT 'upper(string)'::REGPROC
+
+statement error invalid function signature: upper
+SELECT 'upper'::REGPROCEDURE
+
+statement error pq: function upper\(int\) does not exist
+SELECT 'upper(int)'::REGPROCEDURE
+
+query TT
+SELECT pg_typeof('upper'::REGPROC), pg_typeof('upper(string)'::REGPROCEDURE)
+----
+regproc  regprocedure
+
+query TT
+SELECT pg_typeof('root'::REGROLE), pg_typeof('bool'::REGTYPE)
+----
+regrole  regtype
+
+query OO
+SELECT 'pg_constraint'::REGCLASS, 'pg_catalog.pg_constraint'::REGCLASS
+----
+pg_constraint  pg_constraint
+
+query error pgcode 42P01 relation "foo.pg_constraint" does not exist
+SELECT 'foo.pg_constraint'::REGCLASS
+
+query OO
+SELECT '"pg_constraint"'::REGCLASS, '  "pg_constraint" '::REGCLASS
+----
+pg_constraint  pg_constraint
+
+query OO
+SELECT 'pg_constraint '::REGCLASS, '  pg_constraint '::REGCLASS
+----
+pg_constraint  pg_constraint
+
+# This weird form is to avoid making the test depend on the concrete value of
+# the pg_constraint table id.
+query OO
+SELECT 'pg_constraint '::REGCLASS, ('"pg_constraint"'::REGCLASS::OID::INT-'"pg_constraint"'::REGCLASS::OID::INT)::OID
+----
+pg_constraint  0
+
+query O
+SELECT 4061301040::REGCLASS
+----
+4061301040
+
+query OOIOT
+SELECT (oid::int-oid::int)::oid, oid::regclass, (oid::regclass::int-oid::regclass::int), oid::regclass::int::regclass, oid::regclass::text
+FROM pg_class
+WHERE relname = 'pg_constraint'
+----
+0  pg_constraint  0  pg_constraint  pg_constraint
+
+query OOOO
+SELECT 'upper'::REGPROC, 'upper(string)'::REGPROCEDURE, 'pg_catalog.upper(string)'::REGPROCEDURE, 'upper'::REGPROC::OID
+----
+upper  upper  upper  829
+
+query error pq: invalid function signature: invalid.more.pg_catalog.upper: at or near ".": syntax error
+SELECT 'invalid.more.pg_catalog.upper'::REGPROCEDURE
+
+query OOO
+SELECT 'upper'::REGPROC, 'upper(string)'::REGPROCEDURE, 'upper'::REGPROC::OID
+----
+upper  upper  829
+
+query error pq: unknown function: blah\(ignored\)\(\)
+SELECT 'blah(ignored)'::REGPROC
+
+query error pq: unknown function: blah\(\)
+SELECT 'blah(int, int)'::REGPROCEDURE
+
+query error pq: invalid name: expected separator .: blah \( ignored , ignored \)
+SELECT ' blah ( ignored , ignored ) '::REGPROC
+
+query error pq: invalid name: expected separator .: blah \(\)
+SELECT 'blah ()'::REGPROC
+
+query error pq: invalid name: expected separator .: blah\( \)
+SELECT 'blah( )'::REGPROC
+
+query error invalid name: expected separator \.: blah\(, \)
+SELECT 'blah(, )'::REGPROC
+
+query error more than one function named 'sqrt'
+SELECT 'sqrt'::REGPROC
+
+query OO
+SELECT 'array_in'::REGPROC, 'pg_catalog.array_in'::REGPROC
+----
+array_in  array_in
+
+query OO
+SELECT 'array_in(int)'::REGPROCEDURE, 'pg_catalog.array_in(int)'::REGPROCEDURE
+----
+array_in  array_in
+
+query OO
+SELECT 'public'::REGNAMESPACE, 'public'::REGNAMESPACE::OID
+----
+public  105
+
+query OO
+SELECT 'root'::REGROLE, 'root'::REGROLE::OID
+----
+root  1546506610
+
+query OO
+SELECT 'bool'::REGTYPE, 'bool'::REGTYPE::OID
+----
+boolean  16
+
+query OO
+SELECT 'numeric(10,3)'::REGTYPE, 'numeric( 10, 3 )'::REGTYPE
+----
+numeric  numeric
+
+query OO
+SELECT '"char"'::REGTYPE, 'pg_catalog.int4'::REGTYPE
+----
+"char"  integer
+
+query error type 'foo.' does not exist
+SELECT 'foo.'::REGTYPE
+
+query error pgcode 42P01 relation "blah" does not exist
+SELECT 'blah'::REGCLASS
+
+query error pgcode 42883 unknown function: blah\(\)
+SELECT 'blah'::REGPROC
+
+query error pgcode 42883 unknown function: blah\(\)
+SELECT 'blah()'::REGPROCEDURE
+
+query error pgcode 42704 namespace 'blah' does not exist
+SELECT 'blah'::REGNAMESPACE
+
+query error pgcode 42704 role 'blah' does not exist
+SELECT 'blah'::REGROLE
+
+query error pgcode 42704 type 'blah' does not exist
+SELECT 'blah'::REGTYPE
+
+query error pgcode 42704 type 'pg_catalog.int' does not exist
+SELECT 'pg_catalog.int'::REGTYPE
+
+## Test other cast syntaxes
+
+query O
+SELECT CAST ('pg_constraint' AS REGCLASS)
+----
+pg_constraint
+
+# This forces the b_expr form of the cast syntax.
+query OO
+SELECT ('pg_constraint')::REGCLASS, (('pg_constraint')::REGCLASS::OID::INT-('pg_constraint')::REGCLASS::OID::INT)::OID
+----
+pg_constraint  0
+
+## Test visibility of pg_* via oid casts.
+
+statement ok
+CREATE TABLE a (id INT PRIMARY KEY);
+CREATE TYPE typ AS ENUM ('a')
+
+let $table_oid
+SELECT c.oid FROM pg_class c WHERE c.relname = 'a';
+
+query O
+SELECT $table_oid::oid::regclass
+----
+a
+
+let $type_oid
+SELECT t.oid FROM pg_type t WHERE t.typname = 'typ';
+
+query O
+SELECT $type_oid::oid::regtype
+----
+typ
+
+query T
+SELECT relname from pg_class where oid='a'::regclass
+----
+a
+
+query T
+SELECT typname from pg_type where oid='typ'::regtype
+----
+typ
+
+## Regression for #16767 - ensure regclass casts use normalized table names
+
+statement ok
+CREATE TABLE hasCase (id INT PRIMARY KEY);
+CREATE TYPE typHasCase AS ENUM ('a')
+
+query T
+SELECT relname from pg_class where oid='hasCase'::regclass
+----
+hascase
+
+query T
+SELECT typname from pg_type where oid='typHasCase'::regtype
+----
+typhascase
+
+statement ok
+CREATE TABLE "quotedCase" (id INT PRIMARY KEY)
+
+statement ok
+CREATE TYPE "typQuotedCase" AS ENUM ('a')
+
+query error pgcode 42P01 relation "quotedcase" does not exist
+SELECT relname from pg_class where oid='quotedCase'::regclass
+
+query T
+SELECT relname from pg_class where oid='"quotedCase"'::regclass
+----
+quotedCase
+
+query error pgcode 42704 type 'typquotedcase' does not exist
+SELECT typname from pg_type where oid='typQuotedCase'::regtype
+
+query T
+SELECT typname from pg_type where oid='"typQuotedCase"'::regtype
+----
+typQuotedCase
+
+# a non-root user with sufficient permissions can get the OID of a table or
+# type from the current database
+
+statement ok
+GRANT ALL ON DATABASE test TO testuser
+
+statement ok
+GRANT SELECT ON test.* TO testuser
+
+user testuser
+
+query T
+SELECT relname from pg_class where oid='a'::regclass
+----
+a
+
+query T
+SELECT typname from pg_type where oid='typ'::regtype
+----
+typ
+
+user root
+
+statement ok
+CREATE DATABASE otherdb
+
+## a non-root user can't get the OID of a table or type from a different database
+
+user testuser
+
+statement ok
+SET DATABASE = otherdb
+
+query error pgcode 42P01 relation "a" does not exist
+SELECT 'a'::regclass
+
+query error pgcode 42704 type 'typ' does not exist
+SELECT 'typ'::regtype
+
+user root
+
+statement ok
+SET DATABASE = otherdb
+
+statement ok
+CREATE TABLE a (id INT PRIMARY KEY, foo STRING);
+CREATE TYPE typ AS ENUM ('a', 'b')
+
+## There is now a table named 'a' in both the database 'otherdb' and the
+## database 'test'. The following query shows that the root user can still
+## determine the OID of the table 'a' by using a regclass cast, despite the
+## fact that the root user has visibility into both of the tables. The 'a' that
+## gets selected should be the 'a' that exists in the current database.
+## The same exact reasoning applies to the type named 'typ'.
+## See https://github.com/cockroachdb/cockroach/issues/13695
+
+query OI
+SELECT relname, relnatts FROM pg_class WHERE oid='a'::regclass
+----
+a  2
+
+query OI
+SELECT t.typname, count(*) FROM pg_type t
+LEFT JOIN pg_enum e ON t.oid = e.enumtypid
+WHERE t.oid = 'typ'::regtype
+GROUP BY t.typname;
+----
+typ  2
+
+statement ok
+SET DATABASE = test
+
+query OI
+SELECT relname, relnatts FROM pg_class WHERE oid='a'::regclass
+----
+a  1
+
+query OI
+SELECT t.typname, count(*) FROM pg_type t
+LEFT JOIN pg_enum e ON t.oid = e.enumtypid
+WHERE t.oid = 'typ'::regtype
+GROUP BY t.typname;
+----
+typ  1
+
+statement ok
+CREATE DATABASE thirddb
+
+statement ok
+SET DATABASE = thirddb
+
+# Ensure that if the table is not in the current database, but it
+# still exists in another database, the query does fail (regclass
+# does not automatically search in other dbs, even for the root user).
+
+query error pgcode 42P01 relation "a" does not exist
+SELECT relname, relnatts FROM pg_class WHERE oid='a'::regclass
+
+query error pgcode 42704 type 'typ' does not exist
+SELECT t.typname, count(*) FROM pg_type t
+LEFT JOIN pg_enum e ON t.oid = e.enumtypid
+WHERE t.oid = 'typ'::regtype
+GROUP BY t.typname;
+
+statement ok
+CREATE TABLE o (a OID PRIMARY KEY)
+
+statement ok
+INSERT INTO o VALUES (1), (4)
+
+query O
+SELECT * FROM o WHERE a < 3
+----
+1
+
+query O rowsort
+SELECT * FROM o WHERE a <= 4
+----
+1
+4
+
+# Regression test for #23652.
+
+query B
+SELECT NOT (prorettype::regtype::text = 'foo') AND proretset FROM pg_proc WHERE proretset=false LIMIT 1
+----
+false
+
+query TTTTTT
+SELECT crdb_internal.create_regtype(10, 'foo'),
+       crdb_internal.create_regclass(10, 'foo'),
+       crdb_internal.create_regproc(10, 'foo'),
+       crdb_internal.create_regprocedure(10, 'foo'),
+       crdb_internal.create_regnamespace(10, 'foo'),
+       crdb_internal.create_regrole(10, 'foo')
+----
+foo  foo  foo  foo  foo  foo
+
+query OOOOOO
+SELECT crdb_internal.create_regtype(10, 'foo')::oid,
+       crdb_internal.create_regclass(10, 'foo')::oid,
+       crdb_internal.create_regproc(10, 'foo')::oid,
+       crdb_internal.create_regprocedure(10, 'foo')::oid,
+       crdb_internal.create_regnamespace(10, 'foo')::oid,
+       crdb_internal.create_regrole(10, 'foo')::oid
+----
+10  10  10  10  10  10
+
+# Regression test for #32422: ensure that VALUES nodes properly retain special
+# OID properties.
+
+query OO
+VALUES ('pg_constraint'::REGCLASS, 'pg_catalog.pg_constraint'::REGCLASS)
+----
+pg_constraint  pg_constraint
+
+# Ensure that arrays of reg* types work okay.
+query T rowsort
+SELECT proargtypes::REGTYPE[] FROM pg_proc WHERE proname = 'obj_description'
+----
+{oid}
+{oid,text}
+
+# Ensure that you can get a regtype for the trigger type.
+query I
+SELECT 'trigger'::REGTYPE::INT
+----
+2279
+
+# Regression test for #41708.
+
+query TT
+SELECT 1::OID::TEXT, quote_literal(1::OID)
+----
+1  '1'
+
+# Allow INT-OID comparison. Regression test for #53143.
+statement ok
+SELECT
+  c.oid,
+  a.attnum,
+  a.attname,
+  c.relname,
+  n.nspname,
+  a.attnotnull
+  OR (t.typtype = 'd' AND t.typnotnull),
+  pg_catalog.pg_get_expr(d.adbin, d.adrelid) LIKE '%nextval(%'
+FROM
+  pg_catalog.pg_class AS c
+  JOIN pg_catalog.pg_namespace AS n ON (c.relnamespace = n.oid)
+  JOIN pg_catalog.pg_attribute AS a ON (c.oid = a.attrelid)
+  JOIN pg_catalog.pg_type AS t ON (a.atttypid = t.oid)
+  LEFT JOIN pg_catalog.pg_attrdef AS d ON
+      (d.adrelid = a.attrelid AND d.adnum = a.attnum)
+  JOIN (SELECT 1 AS oid, 1 AS attnum) AS vals ON
+      (c.oid = vals.oid AND a.attnum = vals.attnum);
+
+statement error relation ".*"regression_53686.*"" does not exist
+SELECT '\"regression_53686\"'::regclass
+
+statement ok
+CREATE TABLE "regression_53686""" (a int)
+
+query T
+SELECT 'regression_53686"'::regclass
+----
+"regression_53686"""
+
+query T
+SELECT 'public.regression_53686"'::regclass
+----
+"regression_53686"""
+
+query T
+SELECT 'pg_catalog."radians"'::regproc
+----
+radians
+
+query T
+SELECT 'pg_catalog."radians"'::regproc
+----
+radians
+
+query T
+SELECT 'pg_catalog."radians"("float4")'::regprocedure
+----
+radians
+
+statement error unknown function: pg_catalog.radians"\(\)
+SELECT 'pg_catalog."radians"""'::regproc
+
+query TTTTT
+SELECT
+  '12345'::regclass::string,
+  '12345'::regtype::string,
+  '12345'::oid::string,
+  '12345'::regproc::string,
+  '12345'::regprocedure::string
+----
+12345  12345  12345  12345  12345
+
+query T
+PREPARE regression_56193 AS SELECT $1::regclass;
+EXECUTE regression_56193('regression_53686"'::regclass)
+----
+"regression_53686"""
+
+query O
+SELECT (-1)::OID
+----
+4294967295
+
+query O
+SELECT (-1)::REGPROC
+----
+4294967295
+
+query O
+SELECT (-1)::REGCLASS
+----
+4294967295
+
+# Test that we can cast a constant directly to regclass.
+statement ok
+CREATE TABLE regression_62205(a INT PRIMARY KEY)
+
+let $regression_62205_oid
+SELECT 'regression_62205'::regclass::oid
+
+query O
+SELECT $regression_62205_oid::regclass
+----
+regression_62205
+
+# Check we error as appropriate if the OID type is not legit.
+statement error pgcode 22P02 invalid input syntax for type oid: "regression_69907"
+SELECT 'regression_69907'::oid
+
+# 4294967295 is MaxUint32.
+# -2147483648 is MinInt32.
+query OIBB nosort
+SELECT o, i, o > i, i > o FROM (VALUES
+  (1::oid, 4294967295::int8),
+  (1::oid, -2147483648::int8),
+  ((-1)::oid, 4294967295::int8),
+  ((-1)::oid, -2147483648::int8),
+  ((-2147483648)::oid, 4294967295::int8),
+  ((-2147483648)::oid, -2147483648::int8),
+  (4294967295::oid, 4294967295::int8),
+  (4294967295::oid, -2147483648::int8)
+) tbl(o, i)
+----
+1           4294967295   false  true
+1           -2147483648  false  true
+4294967295  4294967295   false  false
+4294967295  -2147483648  true   false
+2147483648  4294967295   false  true
+2147483648  -2147483648  false  false
+4294967295  4294967295   false  false
+4294967295  -2147483648  true   false
+
+# 4294967296 is (MaxUint32 + 1).
+query error OID out of range: 4294967296
+SELECT 1:::OID >= 4294967296:::INT8
+
+query error OID out of range: 4294967296
+SELECT 4294967296:::INT8 >= 1:::OID
+
+# -2147483649 is (MinInt32 - 1).
+query error OID out of range: -2147483649
+SELECT 1:::OID >= -2147483649:::INT8
+
+query error OID out of range: -2147483649
+SELECT -2147483649:::INT8 >= 1:::OID
+
+# Test that we can cast index names to a regclass, and vice-versa.
+
+statement ok
+CREATE TABLE table_with_indexes (a INT PRIMARY key, b INT)
+
+query TT
+SELECT relname, oid::regclass::string from pg_class where oid='table_with_indexes_pkey'::regclass
+----
+table_with_indexes_pkey  table_with_indexes_pkey
+
+statement ok
+CREATE INDEX my_b_index ON table_with_indexes(b)
+
+query TT
+SELECT relname, oid::regclass::string from pg_class where oid='my_b_index'::regclass
+----
+my_b_index  my_b_index
+
+# Test that we can cast table and index names from different schemas.
+
+statement ok
+CREATE SCHEMA other_schema
+
+statement ok
+CREATE TABLE other_schema.table_with_indexes (a INT PRIMARY key, b INT)
+
+statement ok
+CREATE INDEX my_b_index ON other_schema.table_with_indexes(b)
+
+query TTT
+SELECT c.relname, c.oid::regclass::string, n.nspname from pg_class c
+JOIN pg_namespace n ON c.relnamespace = n.oid
+WHERE c.oid='other_schema.table_with_indexes'::regclass
+----
+table_with_indexes  table_with_indexes  other_schema
+
+query TTT
+SELECT c.relname, c.oid::regclass::string, n.nspname from pg_class c
+JOIN pg_namespace n ON c.relnamespace = n.oid
+WHERE c.oid='other_schema.table_with_indexes_pkey'::regclass
+----
+table_with_indexes_pkey  table_with_indexes_pkey  other_schema
+
+query TTT
+SELECT c.relname, c.oid::regclass::string, n.nspname from pg_class c
+JOIN pg_namespace n ON c.relnamespace = n.oid
+WHERE c.oid='other_schema.my_b_index'::regclass
+----
+my_b_index  my_b_index  other_schema
+
+# Changing the search_path should influence what gets resolved while casting.
+
+statement ok
+SET search_path = other_schema, public
+
+query TTT
+SELECT c.relname, c.oid::regclass::string, n.nspname from pg_class c
+JOIN pg_namespace n ON c.relnamespace = n.oid
+WHERE c.oid='table_with_indexes'::regclass
+----
+table_with_indexes  table_with_indexes  other_schema
+
+query TTT
+SELECT c.relname, c.oid::regclass::string, n.nspname from pg_class c
+JOIN pg_namespace n ON c.relnamespace = n.oid
+WHERE c.oid='table_with_indexes_pkey'::regclass
+----
+table_with_indexes_pkey  table_with_indexes_pkey  other_schema
+
+query TTT
+SELECT c.relname, c.oid::regclass::string, n.nspname from pg_class c
+JOIN pg_namespace n ON c.relnamespace = n.oid
+WHERE c.oid='my_b_index'::regclass
+----
+my_b_index  my_b_index  other_schema
+
+statement ok
+SET search_path = public, other_schema
+
+query TTT
+SELECT c.relname, c.oid::regclass::string, n.nspname from pg_class c
+JOIN pg_namespace n ON c.relnamespace = n.oid
+WHERE c.oid='table_with_indexes'::regclass
+----
+table_with_indexes  table_with_indexes  public
+
+query TTT
+SELECT c.relname, c.oid::regclass::string, n.nspname from pg_class c
+JOIN pg_namespace n ON c.relnamespace = n.oid
+WHERE c.oid='table_with_indexes_pkey'::regclass
+----
+table_with_indexes_pkey  table_with_indexes_pkey  public
+
+query TTT
+SELECT c.relname, c.oid::regclass::string, n.nspname from pg_class c
+JOIN pg_namespace n ON c.relnamespace = n.oid
+WHERE c.oid='my_b_index'::regclass
+----
+my_b_index  my_b_index  public
+
+statement ok
+RESET search_path
+
+# Check that we can cast table names from pg_catalog also.
+query TTT
+SELECT c.relname, c.oid::regclass::string, n.nspname from pg_class c
+JOIN pg_namespace n ON c.relnamespace = n.oid
+WHERE c.oid='pg_type'::regclass
+----
+pg_type  pg_type  pg_catalog
+
+# Regression test for #118273 - set the name of a non-T_oid oid type to '-' when
+# the value is zero.
+subtest zero_oid
+
+statement ok
+CREATE TABLE t118273 (x REGROLE PRIMARY KEY, y REGROLE);
+INSERT INTO t118273 VALUES (0, 0);
+
+query TT
+SELECT * FROM t118273;
+----
+-  -
+
+query TT
+SELECT 0::REGROLE, 0::REGROLE::TEXT;
+----
+-  -
+
+# Regression test for using the correct type when decoding EncDatum of Oid type
+# family (#123474).
+statement ok
+CREATE TABLE t123474 (
+  col_0 REGROLE, col_1 OID, col_2 INT,
+  INDEX (col_1 DESC) STORING (col_2),
+  INDEX (col_0) STORING (col_1)
+);
+INSERT INTO t123474 (col_0, col_1, col_2) VALUES (0, 0, 0);
+SET testing_optimizer_random_seed = 6047211422050928467;
+SET testing_optimizer_disable_rule_probability = 0.500000;
+
+query T
+SELECT t2.col_1
+  FROM t123474 AS t1 JOIN t123474 AS t2 ON (t1.col_0) = (t2.col_1)
+  ORDER BY t1.col_0;
+----
+0
+
+statement ok
+RESET testing_optimizer_random_seed;
+RESET testing_optimizer_disable_rule_probability;
+
+# Regression test for using the correct type when decoding EncDatum of Oid type
+# when probing the row-by-row hash table (#123548).
+statement ok
+CREATE TABLE t123548_1 (col1 REGCLASS, INDEX (col1));
+CREATE TABLE t123548_2 (col2 OID, UNIQUE (col2));
+INSERT INTO t123548_1 VALUES (0);
+INSERT INTO t123548_2 VALUES (0);
+SET testing_optimizer_random_seed = 5928357781746163642;
+SET testing_optimizer_disable_rule_probability = 1.000000;
+
+query T
+SELECT col1 FROM t123548_1 JOIN t123548_2 ON col1 = col2;
+----
+-
+
+statement ok
+RESET testing_optimizer_random_seed;
+RESET testing_optimizer_disable_rule_probability;
+
+# Regression test: string constants should be implicitly castable to oid[] in
+# comparisons, matching PostgreSQL behavior. This is needed for pg_dump
+# compatibility which compares oid[] columns against string literals like '{0}'.
+subtest oid_array_string_comparison
+
+statement ok
+CREATE TABLE t_oidarr (a OID[])
+
+statement ok
+INSERT INTO t_oidarr VALUES (ARRAY[0::oid])
+
+query B
+SELECT a = '{0}' FROM t_oidarr
+----
+true
+
+query B
+SELECT a = '{0}'::oid[] FROM t_oidarr
+----
+true
+
+statement ok
+DROP TABLE t_oidarr
+
+subtest end
+
+# Regression test: string constants should be resolvable as oid type, matching
+# PostgreSQL behavior. This is needed for pg_dump which uses EXECUTE with
+# string-literal OID arguments like: EXECUTE dumpEnumType('100108')
+subtest oid_string_constant
+
+# String constants should resolve to oid in EXECUTE parameter context.
+statement ok
+PREPARE test_oid_param(oid) AS SELECT $1
+
+query O
+EXECUTE test_oid_param('1234')
+----
+1234
+
+statement ok
+DEALLOCATE test_oid_param
+
+# String constants should be comparable to oid columns.
+statement ok
+CREATE TABLE t_oid_cmp (a OID)
+
+statement ok
+INSERT INTO t_oid_cmp VALUES (1234)
+
+query B
+SELECT a = '1234' FROM t_oid_cmp
+----
+true
+
+statement ok
+DROP TABLE t_oid_cmp
+
+subtest end

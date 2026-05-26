@@ -1,0 +1,544 @@
+# LogicTest: 5node
+
+statement ok
+CREATE TABLE ltable(
+  lk int primary key,
+  geom1 geometry,
+  geom2 geometry
+)
+
+statement ok
+INSERT INTO ltable VALUES
+  (1, 'POINT(3.0 3.0)', 'POINT(3.0 3.0)'),
+  (2, 'POINT(4.5 4.5)', 'POINT(3.0 3.0)'),
+  (3, 'POINT(1.5 1.5)', 'POINT(3.0 3.0)')
+
+statement ok
+CREATE TABLE rtable(
+  rk int primary key,
+  geom geometry,
+  INVERTED INDEX geom_index(geom)
+)
+
+statement ok
+INSERT INTO rtable VALUES
+  (11, 'POINT(1.0 1.0)'),
+  (12, 'LINESTRING(1.0 1.0, 2.0 2.0)'),
+  (13, 'POINT(3.0 3.0)'),
+  (14, 'LINESTRING(4.0 4.0, 5.0 5.0)'),
+  (15, 'LINESTRING(40.0 40.0, 41.0 41.0)'),
+  (16, 'POLYGON((1.0 1.0, 5.0 1.0, 5.0 5.0, 1.0 5.0, 1.0 1.0))')
+
+statement ok
+ALTER TABLE ltable SPLIT AT VALUES (2), (3)
+
+retry
+statement ok
+ALTER TABLE ltable EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 2), (ARRAY[3], 3)
+
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE ltable WITH DETAILS] ORDER BY lease_holder
+----
+start_key           end_key       replicas  lease_holder
+<before:/Table/XX>  …/1/2         {1}       1
+…/1/2               …/1/3         {2}       2
+…/1/3               <after:/Max>  {3}       3
+
+query T
+EXPLAIN (DISTSQL) SELECT lk, rk FROM ltable JOIN rtable@geom_index
+ON ST_Intersects(ltable.geom1, rtable.geom) ORDER BY (lk, rk)
+----
+distribution: full
+·
+• sort
+│ order: +lk,+rk
+│ already ordered: +lk
+│
+└── • lookup join
+    │ table: rtable@rtable_pkey
+    │ equality: (rk) = (rk)
+    │ equality cols are key
+    │ pred: st_intersects(geom1, geom)
+    │
+    └── • inverted join
+        │ table: rtable@geom_index
+        │
+        └── • scan
+              missing stats
+              table: ltable@ltable_pkey
+              spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlt9v-jYUxd_3V1j3qahmYCf8ylO2wiQqCh3wsGlCKCO3NCPEmW3WVhX_-5SEtmBISr7tA3kAktgfn3N1rs0rqH9DcKD3x_3gl_6QXHX7k-nk90GFTHqD3s2UhCtK5Ir8Nh7dkVB7f4dIbkf9IZHpb3eJYj0PIh-fyWhIlJ4HkUapcKHVVTb852QIo7sJ6V2FjMbd3pj8-ie5yvgVoBAJH4feGhU4fwEDChwoWDCjEEuxQKWETF69pgP7_jM4dQpBFG908nhGYSEkgvMKOtAhggPTZMExej7KWh0o-Ki9IEzxmTQ3-5rHK3wBCjci3Kwj5aSeU9VAYRJ7yaNqjcNsS0Fs9MeCSntLBIftKex3walv6fki-9F_KDX6tyKIUNasQ51HVQb6PqP3HEuj4i6nxLUr-17kzgtQGG20Q1xGXU5dK9cNN9xYZdwkLnYVb550Ig8qPhBitYnJPyKIiIgc4ib2j3KUump86srOtWQZlpplLE2E1ChrnUM7LrumLr8GCmtPLx5JiJFDWK4C21DQyVXwsbCQPkr0T687256QOhRVEdcYP5iSJ6lhSGL8QBM7v7fYF3urxqu1_Dya3cXKyDS6y7647rLLuNnrrtbldlerjKVdd7H6t7YXO9yC-flZ5l_NslU9O8m8jEgjyY2LS3KjjJu9JLcvN8ntMpbeksy-N8mszFk1RhWLSOFZB0DdWKrKkjMF_SVm55ASG7nAeykW6djsdpSC0gc-Kp29ZdlNP3p7pbREb_3-X2ifxApJPJ9kmSReSLLySU2TZBWS7AMS2yd1TJJdXKcCUUeFahSimvkkZpKahaRWPsk2Sa1CUjuf1DJJ7R8tOTsqVKe45vV8VfwonJ_kvCDojSNWcdJZQdTbR6zirBeVK23qh1A8zQMfHKjvruqJj7cLkgneUiU7y-RRPKXc6Uuc7AsPXqiQwp23wi5qlOsgCpQOFuBoucHt9qf_AwAA__95kqVH
+
+query T
+EXPLAIN (DISTSQL) SELECT lk, rk FROM ltable JOIN rtable@geom_index
+ON ST_Intersects(rtable.geom, ltable.geom1) OR ST_DWithin(ltable.geom1, rtable.geom, 2) ORDER BY (lk, rk)
+----
+distribution: full
+·
+• sort
+│ order: +lk,+rk
+│ already ordered: +lk
+│
+└── • lookup join
+    │ table: rtable@rtable_pkey
+    │ equality: (rk) = (rk)
+    │ equality cols are key
+    │ pred: st_intersects(geom, geom1) OR st_dwithin(geom1, geom, 2.0)
+    │
+    └── • inverted join
+        │ table: rtable@geom_index
+        │
+        └── • scan
+              missing stats
+              table: ltable@ltable_pkey
+              spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzUVl2T2jYUfe-v0Nyn3YkIlmw-Vk9Os2SGDIEUeGinwzAuvmFdjOVKoruZHf57xzabYIFdnOwLfgAkXR2dc3WPL8-g_4lBwOD3z6N3wzG5uR_O5rPfRrdkNhgN3s9JvKFEbciH6eQTiU3wV4zk42Q4Jir_7a9RbpdREuITmYyJNssoMag0roy-KULeZiH0sDcfsFsymWax4WNkHqLk5niNktI2nsXeD6bk1z_ITcHlFigkMsRxsEUN4k9gQIEDBRcWFFIlV6i1VNnScx44DJ9AOBSiJN2ZbHpBYSUVgngGE5kYQcA8O3OKQYiq7QCFEE0QxTl8wc4vvpbpBr8Chfcy3m0TLfL85MSBwiwNsqlWm8NiT0HuzPcDtQnWCIIdMRzeg3D29HKSw-RfVAbDjzJKULXdMs-TGwH6bcfgKVXW7ficEt-zr6KYpYS_dYQQH0aTd_P-7bFeddALFCY7I4jPqM-p71Yq5pZit4niTOnhVrpn1arSrYyk3OxS8reMEiITQfwsRSd16Xco8flZ5Z2Gyr1K2a4lu9tE9kwqg6p9V5bsszfU52-AwjYwqwcSYyIIq2TgWQzuKhl8P1iqEBWG589d7M9QHcuWTNuMl7ZUUepYlBgvcWKXe5T9pEfbvNWurlnbpawJTcul3lW61Gui-Milvet2aa-J7INLmfOqNmXllsAv9wT_WU-4rYsdwZuQtBzRuUpHdJooPnJE_7od0W8i-8UR7HUdwZr0zinqVCYaL2pIjnVUi2U9DsM1Fn1Ry51a4WclV3lsMZzkQPlEiNoUq6wYDJOXJW0UBttv__GOkVgtEq9Gcm0kXovkViN1bSS3FskrIbFjpDsbyavPUw2pk0R1aqG61UjMRurWIvWqkTwbqVeL1K9G6tlI_R9NOTtJ1F19zp1qVvykOP-nzmsKvXOCVV_prKbU-ydY9bVel67c1F9i-biMQhDgHJ7WmY-XB7INwVpnb5bZg3zMcedf0-y98CWINVL4FGzwHg2qbZRE2kQrEEbtcL__5b8AAAD__9wl72Q=
+
+query T
+EXPLAIN (DISTSQL) SELECT lk, rk FROM ltable JOIN rtable@geom_index
+ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_DWithin(rtable.geom, ltable.geom1, 2) ORDER BY (lk, rk)
+----
+distribution: full
+·
+• sort
+│ order: +lk,+rk
+│ already ordered: +lk
+│
+└── • lookup join
+    │ table: rtable@rtable_pkey
+    │ equality: (rk) = (rk)
+    │ equality cols are key
+    │ pred: st_intersects(geom1, geom) AND st_dwithin(geom, geom1, 2.0)
+    │
+    └── • inverted join
+        │ table: rtable@geom_index
+        │
+        └── • scan
+              missing stats
+              table: ltable@ltable_pkey
+              spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzUll-T2jYUxd_7KTT3aZmIYMnmz-rJ20BmyBBIgYd2Ogzj4hvWxViuJLqb2eG7d2yzCbaxi5O8wMPu2pJ-OufqHrQvoP8JQcDo90-Th_GU3A3Hi-Xit0mLLEaT0bslCXeUqB15P599JKHx_gqRfJiNp0Slf7tblPt1EPn4TGZTos06iAwqjRuj77Lpb5MpjJ4WpE8t8jAdJpP9p8A8BtHd2Rgl-WW8RWbz4WhOfv2D3GViWkAhkj5OvT1qEH8CAwocKNiwohAruUGtpUqGXtKJY_8ZhEUhiOKDSV6vKGykQhAvYAITIghYJpvO0fNRdSyg4KPxgjDFZ4Lc7Nc63uEXoPBOhod9pEVaoFQrUFjEXvKq3eGwOlKQB_NtQ228LYJgZwrHQxDWkV4vchz9i8qg_0EGEaqOnddZOhKgX1eMnmNVOB6XU-I6pbPIXlPC31pCiPeT2cNy0Do3rE6GgcLsYARxGXU5de1Ky7xg2W5iObF6OpbeRbsqdywTKXeHmPwtg4jISBA3qVGpM1OP3bL1LiXJUCPrTqVvu-C718T3QiqDqnOf9-yyN9Tlb4DC3jObRxJiJAirVOAUFNxXKvi2sVQ-KvQv77s6XpA6lW0ZdxjPLamS1C1IYjyniV2fUvaDKe3wdqe6aYs5ZU1kFnLq3GZOnSaWz3Lav_Gc9pv4PuWUWT81qCx_LfDrU8F_NBV2--pM8CYiC5no3mYmuk0sn2VicOOZGDTx_ZoJ9nMzwZrcn3PUsYw0XnUpWYWt2iy559DfYnY3anlQG_yk5Cadmz3OUlD6wkdtslGWPYyj1yFtFHr7r__pnZNYLYlXk-wiideS7GpSr0iya0lOjsTOSfdFklNfpxpRpUJ1a1G9ahIrknq1pH41ySmS-rWkQTWpXyQNvrfkrFSo-_qaW9WqeKk5_6fPaxq9W2LVdzqrafVBiVXf63XlSkP9OZRP68AHAdbp077w4_UDyQJvq5NvlsWjfEq5yy9x8r3w2Qs1Uvjo7XCIBtU-iAJtgg0Iow54PP7yXwAAAP__aTbwwg==
+
+query T
+EXPLAIN (DISTSQL)
+SELECT lk, rk FROM ltable JOIN rtable@geom_index
+ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_Covers(ltable.geom2, rtable.geom)
+AND (ST_DFullyWithin(rtable.geom, ltable.geom1, 100) OR ST_Intersects('POINT(1.0 1.0)', rtable.geom))
+----
+distribution: full
+·
+• lookup join
+│ table: rtable@rtable_pkey
+│ equality: (rk) = (rk)
+│ equality cols are key
+│ pred: (st_intersects(geom1, geom) AND st_covers(geom2, geom)) AND (st_dfullywithin(geom, geom1, 100.0) OR st_intersects('0101000000000000000000F03F000000000000F03F', geom))
+│
+└── • inverted join
+    │ table: rtable@geom_index
+    │
+    └── • scan
+          missing stats
+          table: ltable@ltable_pkey
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzslkFvozgUx-_7Kax3aSo5DYaEpj5RTdMVozR0kxx2taoiNrx22BDM2mbaqsp3XwHtTHBDFkazt3JoY_z88_P_8X_wAuqfBDhMfr-dXvoz0rvyF8vFb9NTsphMJ5-WJNlQIjfkeh7ckESHfyVIPgf-jMjyt_eAYruK0wifSDAjPaVXcapRKlxr1aviz4oYRl9XlKNTcjm7Ikqv1uIrylqgXQ-sIgtudJ8nyfNjrL_EaW8vhJL6NsyyTkkwJ_VUTm4Df7bssTOLsDPr9MTYBSikIsJZuEUF_E9gQMEGCg7cUcikWKNSQhZTL2WgHz0BtyjEaZbr4vYdhbWQCPwFdKwTBA7Lgj_HMEI5sIBChDqMkxJfZexV_1bZBp-BwieR5NtU8VLy18OUigCFRRYWM_2BDXc7CiLX3_dVOnxA4GwvUf8KuLWj7XP1068oNUafRZyiHDj1dN_VGui3FZOnTJp192xKvJFZZM8p7zZUtFpTlu_M4pxfT4PL5fhQJS1mMevddW051-b4hHP-6yS4mSznf1R778ssX2UGCkGuOfEY9WzqOdQbNopsGyI7XUQuxH19HtyDAsva8zAVYpNn5G8Rp0SknHjDItN3JiuFcw-K7TaK7VJSrPsfxXb_W-xRo8yOIbPbKPN3dfNUyAglRjVp73YHCjETfZENLozAw6kMjVQuaqmw9i2A_ZwWMLD7A6d1E2BdsjWawPCjCbRrAsMuIu81gfOPJtClCZzXZLbbO8_-Sc5z-q19Z3fJ1fDd6MN37Xw36iLynu_GH77r4rtxl2-cOapMpApbvVstY6c-K97WGD1g9WpXIpdrvJViXcZWw6AElTciVLqaZdXAT9-mlJYYbr99B--T2FGS3UxyTJJ9lOTUSGyf5Jok5_jprA7HGx5FjZpJzCSNjpLcZtLQJLk_KtS5STo_Sho352SbpPFR0kUzaWSSLn70dOPicb9PxOMqjoDDm6H7B_68XVAsCB9U4bnFF_FYYpfPWeGY-zBRSOEm3OAVapTbOI2VjtfAtcxxt_vl3wAAAP__PAr5dA==
+
+# This query performs a semi-join, which is converted to paired joins by the
+# optimizer.
+query T
+EXPLAIN (DISTSQL)
+SELECT lk FROM ltable WHERE EXISTS (SELECT * FROM rtable WHERE ST_Intersects(ltable.geom2, rtable.geom))
+----
+distribution: full
+·
+• lookup join (semi)
+│ table: rtable@rtable_pkey
+│ equality: (rk) = (rk)
+│ equality cols are key
+│ pred: st_intersects(geom2, geom)
+│
+└── • inverted join
+    │ table: rtable@geom_index
+    │
+    └── • scan
+          missing stats
+          table: ltable@ltable_pkey
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzcll9v2jwUxu_fT2Gdq_aVGSThb64ytamWikIHSKs0IZSRU5YR7Mx21lYV331yQltiEQbtVZsLkO2TX57n5Bw7jyB_J-CCf3Pd_xwMyMl5MJ6Mv_ZPydjv-2cTkizJxWh4RRIV_kiQfPvij3zi3-gocrKJ-b8IEdshUs1iplBInCt5Utz9aYF8ZdNNYD46PQUKjEc4CFcowf0OFlCwgYIDUwqp4HOUkgu99JgHBtE9uA0KMUszpaenFOZcILiPoGKVILgw0fwRhhGKegMoRKjCOMnxhRKv-JulS3wACmc8yVZMuiRZUpKLBArjNNRTtboN0zUFnqmXB0oVLhBca0thcA5uY00PFxmwPygURpc8ZijqTllnkSNPi5nFLMJ7oM93-PepMBLs2ZR4TZ3M21hIRX7xmJGYkTSMBUY1Pdz2KTY-gcIwUy7xLOrZ1HOo16o0axtmnWPMapObF9IuG508pOiSvn8xIWP_KiCXw2AA9Mm_KL2nPufLLC3MceYSTydtONiVi5bOhcQ5Z9G_klFORKV_x_DfrvT_YjtjXEQoMCp5nq53ZGjAazyt94zA3VKahpReSYp1eHNYb2yOul2rOwe3h3WMTKM9mu-tPZrHmN1qj84HaY9Oyb99eE3ab61Jp3ZwRdrHiDQqsvXeKrJ1jNmtiux-kIrsHnNgjVCmnEk8aD9uGE-qWXqHx2iBxXEgeSbmeC34PI8thsMclE9EKFWxahWDgD0tSSUwXD1_XGyTrL0ku5rkmCR7L8kpkaxtUtskOfvdNY6w19yLalWTLJPU2ktqV5OaJqn92kR1TFJnL6lbrck2Sd29pF41qWWSeq9119Xlfpvwu1kcgQuNzVXb8fN06Y0vCRdS99z4J7_LsXprkeDeholEClfhEs9RoVjFLJYqnoOrRIbr9X9_AwAA__9PaiVA
+
+# Left joins are converted to paired joins by the optimizer.
+query T
+EXPLAIN (DISTSQL)
+SELECT lk, rk FROM ltable LEFT JOIN rtable ON ST_Intersects(ltable.geom1, rtable.geom)
+----
+distribution: full
+·
+• lookup join (left outer)
+│ table: rtable@rtable_pkey
+│ equality: (rk) = (rk)
+│ equality cols are key
+│ pred: st_intersects(geom1, geom)
+│
+└── • inverted join (left outer)
+    │ table: rtable@geom_index
+    │
+    └── • scan
+          missing stats
+          table: ltable@ltable_pkey
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzcll9v2jAUxd_3Kaz71EpmkIS_ecrUUomKQgdMmjQhlJFb5hHszHbWVhXffXJCW_CaiLRv5KGV_-iXc07utXkC9ScGH_rfb4dfBiNydjmYzqZfh-dk2h_2L2YkXlMi1-RqMr4hsQ5_xkiG_asZuR4PRkTmE-MRUXrBuEapcKnVWb7x8wrFxqG7XdnoHChwEeEo3KAC_wc4QMEFCh7MKSRSLFEpIc3SU7ZxED2A36DAeJJqMz2nsBQSwX8CzXSM4MPM4CcYRijrDaAQoQ5ZnOFzIUH-b5Gs8REoXIg43XDlZ94yjUBhmoRmqlZ3Yb6lIFL9-kKlwxWC7-wpHFyC39jS40UO-F-UGqNrwTjKuneoc_aYoJ8HO_4260-yeIFCHl1gRC4Yj_AB6Aup_5BIK_fApSRompDvmFSa_BaME8ZJEjKJUc0M9_3LnX-gME61TwKHBi4NPBq0CkNwrRC8KiEY87sP1a4UgDz4gEMh1mmSuxPcJ4FJ878izMJomzAULgWP3pNGcQ6elUO7MIdX-ykXMkKJ0YH3-faNpEaiJpJ6z9r4tpSmJaV3IMU5vnmcDzZP3a3VvaPbx6ki02qf5qm0T7NKCHvt0zmx9ukc5OAeX7PuR2vWqx1dsW4VkVbFtk6lYltVQtir2O6JVWy3ysU3QZUIrvCo87xhvanmmBsCoxXm14kSqVzirRTLbG8-HGegbCJCpfNVJx8M-POS0hLDzcuPl32SU0pyi0meTXJLSd4BydkntW2SV-6uUcFesxTVKiY5NqlVSmoXk5o2qf3eoDo2qVNK6hZrcm1St5TUKya1bFLvve66ptzvYnG_YBH40Ng9tTf-PD_mAIzDlTI9N_0l7jOsOWIU-HdhrJDCTbjGS9QoN4wzpdkSfC1T3G4__QsAAP__9UE6_g==
+
+query T
+EXPLAIN (DISTSQL)
+SELECT lk, rk FROM ltable LEFT JOIN rtable@geom_index
+ON ST_Intersects(rtable.geom, ltable.geom1) OR ST_DWithin(ltable.geom1, rtable.geom, 2) ORDER BY (lk, rk)
+----
+distribution: full
+·
+• sort
+│ order: +lk,+rk
+│ already ordered: +lk
+│
+└── • lookup join (left outer)
+    │ table: rtable@rtable_pkey
+    │ equality: (rk) = (rk)
+    │ equality cols are key
+    │ pred: st_intersects(geom, geom1) OR st_dwithin(geom1, geom, 2.0)
+    │
+    └── • inverted join (left outer)
+        │ table: rtable@geom_index
+        │
+        └── • scan
+              missing stats
+              table: ltable@ltable_pkey
+              spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzklltv2zYUx9_3KYjzlKB0bVK-hU_qGgdw4dqd7QEbhiDQpJOEs0xqJL2kCPzdB0lOa0mRarV9ix4S8KIf__6fC_UE9t8YBEz--DR7N52Ts8vpar36bXZOVpPZ5P2axBtKzIZcLRcfSeyCv2Mks8nVmnxYTOfEZBP-HertjVQRPpLFnFh3I5VDYzF09izf8jbdQg-AbMDOyWKZ7o0epLuX6ux4jZLCazzdezlZkl__JGe5oHOgoHSE82CLFsRfwIACBwoeXFNIjA7RWm3Spads4zR6BNGjIFWyc-n0NYVQGwTxBE66GEHAOj1ziUGEptsDChG6QMYZPlfn5_9ukg1-BgrvdbzbKisykzLhQGGVBOlUp8vhek9B79zXA60L7hAEO1I4vQTR29PTRU7Vf2gcRh-0VGi6XlHn-nOCIo_Q4vf1ZJnFCShUIgX0C2nymJhS1HxOid8vhyifpYS_7QkhrmaLd-txGohbaawj_2ipiFQkCaTBqJMOjz0yB4-AwmLnBPEZ9Tn1PeoPao3iJaO8NkalBh2COWxlkikEeab1Zpfkv04rQfzU8Uqa-0NKfP6iYcOqYRZDraLvcazeK6_k1bCNVyttHJruRdEnn72hPn8DFLaBC-9JjEoQVqugX1JwUavg68HaRGgwevnc6_0LUue6o5Mu44VX6iQNSpIYL2hip_cD9oP9oMs7Xe_kjsDayCx1hP5r6gj9NkYddYTRK-wIozZeHToC6_3UlsCKVx0_vf74j9af1zm5-ngbkaXqG7ym6hu0Meqo-savsPrGbbx6rj72c6uPtfkmWKJNtLJ40kXbKx3VYendjdEd5ve91TsT4iejw2xvPlxkoGwiQuvyVZYPpup5yTqDwfbLd_IxiTWSeD3JK5N4I8mrJw3LJK-R1C-Q2DHpokzqN_vUIKpi1KARNawnsTJp2Ega1ZP6ZdKokTSuJ43KpPH3Ws4qRl00e96rV8UryfmNPG9I9EGF1ZzprCHVxxVWc6432ZUV9W2sH25kBAJ6h6fzwp_nJ72O4uDOpp1lda8fMm7a8C2I2yC2SOFjsMFLdGi2UknrZAjCmR3u97_8HwAA___6GlYQ
+
+query T
+EXPLAIN (DISTSQL)
+SELECT lk, rk FROM ltable LEFT JOIN rtable@geom_index
+ON ST_Intersects(ltable.geom1, rtable.geom) OR ST_DWithin(rtable.geom, ltable.geom2, 2) ORDER BY (lk, rk)
+----
+distribution: full
+·
+• sort
+│ order: +lk,+rk
+│ already ordered: +lk
+│
+└── • lookup join (left outer)
+    │ table: rtable@rtable_pkey
+    │ equality: (rk) = (rk)
+    │ equality cols are key
+    │ pred: st_intersects(geom1, geom) OR st_dwithin(geom, geom2, 2.0)
+    │
+    └── • inverted join (left outer)
+        │ table: rtable@geom_index
+        │
+        └── • scan
+              missing stats
+              table: ltable@ltable_pkey
+              spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzkll1v2zYUhu_3K4hzlaB0bVL-Cq_UNQ7gwrU72wM2DEGgWSeJZpnUSHpJEfi_D5ScVqYj1SpyF13Y4NfLV8_hOdQTmH9TEDD648vkw3hKzi7Hi-Xit8k5WYwmo49Lkq4p0WtyNZ99JqmN_k6RTEZXS_JpNp4SnXeEd6g2N4mM8ZHMpsTYm0Ra1AZX1pwVa967KYzuF-StczKbu7nxQ2LvE3lWGqKktIpTwt3cy9Gc_PonOSsMnQMFqWKcRhs0IP4CBhQ4UAjgmkKm1QqNUdoNPeUTx_EjiA6FRGZb67qvKayURhBPYBObIghYuk3nGMWo2x2gEKONkjSXLwyFxd9NtsavQOGjSrcbaUQOaf-GuWWgsMgiN9Jqc7jeUVBb-31fY6M7BMFKRseXIDo7errXsfwPtcX4k0ok6nZwaHf5NUNRBGr2-3I0z8MFFI4CBvSb0ugx017wQk5J2PMjFQaulxL-viOEuJrMPiyHLh63iTaW_KMSSRJJsijRGLdcs4xK71EBhdnWChIyGnIaBjTs0rBfyYp7rIImrByjfVj7jTjpg3BPlFpvs-IFlRQk7LqX8A98zmxwxGxAiePmMzO4UjL-GWjVrAKPVb8Jq4XSFnX74pBTyN7RkL8DCpvIru5JilIQVumg6zm4qHTwfWOlY9QYv7zv9e4Fq1PVUlmb8YMlVZZ6niXGDzyx0ysDe53K0OatdnBybWBN3Hq1ofvGakO3CatSbRi8wdowaMJqXxtY51WLAzu89_jpmchfKROD1sl5yJt49fKw98bysNeEVSkPh28wD4dNWD3nIXvdPGRNvhPmaDIlDZ50-Xa8rVrM3ecY32HxDWDUVq_wi1arfG7RnOVCeUeMxhajrGiM5fOQsRqjzbfP57ISq1Xi1UqBr8RrlYJqpb6vFNQqdQ-UWFnpwlfq1nOqMXUEqlcr1a9WYr5Sv1ZpUK3U9ZUGtUrDaqWBrzT8WeTsCNRFPfNOtSt-dDh_cM5rDnrvSKv-pLOaoz480qo_63W48qS-TdXDTRKDgM7-ab3w8_y4GymN7oyrLIt79ZDruoJvQNxGqUEKn6M1XqJFvUlkYmyyAmH1Fne7X_4PAAD__6KJXn4=
+
+query T
+EXPLAIN (DISTSQL)
+WITH q AS (
+  SELECT * FROM ltable WHERE lk > 2
+)
+SELECT count(*), (SELECT count(*) FROM q) FROM (
+  SELECT lk, rk
+  FROM q
+  LEFT JOIN rtable ON ST_Intersects(q.geom1, rtable.geom)
+) GROUP BY lk
+----
+distribution: local
+·
+• root
+│
+├── • render
+│   │
+│   └── • group (hash)
+│       │ group by: lk
+│       │
+│       └── • lookup join (left outer)
+│           │ table: rtable@rtable_pkey
+│           │ equality: (rk) = (rk)
+│           │ equality cols are key
+│           │ pred: st_intersects(geom1, geom)
+│           │
+│           └── • inverted join (left outer)
+│               │ table: rtable@geom_index
+│               │
+│               └── • scan buffer
+│                     label: buffer 1 (q)
+│
+├── • subquery
+│   │ id: @S1
+│   │ original sql: SELECT * FROM ltable WHERE lk > 2
+│   │ exec mode: discard all rows
+│   │
+│   └── • buffer
+│       │ label: buffer 1 (q)
+│       │
+│       └── • scan
+│             missing stats
+│             table: ltable@ltable_pkey
+│             spans: [/3 - ]
+│
+└── • subquery
+    │ id: @S2
+    │ original sql: (SELECT count(*) FROM q)
+    │ exec mode: one row
+    │
+    └── • group (scalar)
+        │
+        └── • scan buffer
+              label: buffer 1 (q)
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk99v2zYQx9_3VxzuyS6YRT9SYOCTskRdVbhSJivIis0wVOnsaZJJhaTWBIH_94GSncXC7NV8MHE__L27j3gvqB8b5Bj-dje7jmKY3EbzbP7rbAoPUfYRHuF6DpN5OAtvMngHH9LkMzQm_9oQPHwM0xCaGv7oHMcn8KawyytkJ8zk3ZS9_nPvGQQed_c-2tQMVL2LwSz8kMGnJIpBDYWSGLRZVsKQ0lQYPXn8cU1y47JdQm9Np_BLmtzfwc9foKmRoZAlxfmGNPLf0cUFw1bJgrSWyrpe-oSofELuMKxE2xnrXjAspCLkL2gq0xBybGSRN6CLXMDXbrUiBc6lgwxLMnnV9PJJZzgELgs8XGwZys78K6dNvibk7pv60S1yZ8u-v4VI_E3KUPlJVoLUpXtYPXtuiQ_YkvssTHt4yHCgE1g6y0qU9ITsVSl8atWIauAxCK6myHBVKW3gL1kJqAS0eaWovLAmMryRTbcRmoOqGVhpZG_GZ4HPgvdHIXgjCO45EOzwKeUlqUvvLADDtWxrekaGMynrrh2mk4JD4NsJxk-sh_HewtBUSFH-H41DEkcB-CMA3jkArtdrRevcSHXpHwII7Iu4jr8s4yRbxvez2SRwbe83yX2cLdPkYT6xZkqiJMXBDmezOI_i7KejzV6NmvXPaTYl3Uqh6aDRY5WcUaULd7tgSOWahlXVslMF3SlZ9LmDmfRCvaMkbYaoOxiR2Ie0UZRvXjfurZJ7Usk7ruSOlbyTSv5xJW-s5J9Uujo13YLhqpHfllWJHJ3dufiPn_2xm97ka20_2_xP-a2Xtbukka_yRhPDz3lNt2RIbSpRaVMVyI3qaLv94Z8AAAD__9Ub-Rc=
+
+# Anti joins are also converted to paired joins by the optimizer.
+query T
+EXPLAIN (DISTSQL)
+SELECT lk FROM ltable WHERE NOT EXISTS (SELECT * FROM rtable WHERE ST_Intersects(ltable.geom2, rtable.geom))
+----
+distribution: full
+·
+• lookup join (anti)
+│ table: rtable@rtable_pkey
+│ equality: (rk) = (rk)
+│ equality cols are key
+│ pred: st_intersects(geom2, geom)
+│
+└── • inverted join (left outer)
+    │ table: rtable@geom_index
+    │
+    └── • scan
+          missing stats
+          table: ltable@ltable_pkey
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzcll9v4jgUxd_3U1j3qV2ZhST8zVOqNtWmotCFrKbSCKEMuWUyBDtjO9NWFd995IS2YBEG2jfy0MrJ1S_nnNxr8wLyZwou-Pd3_YtgQM6ugnE4_q9_TsZ-378MSbog16PhLUlV9C1F8uVff-STwTAk_r2uJGfrur_LMrFZJtU0YQqFxJmSZyXhnznypU3XhcXq_BwoMB7jIFqiBPcrWEDBBgoOTChkgs9QSi70o5eiMIifwG1QSFiWK317QmHGBYL7AipRKYILoeaPMIpR1BtAIUYVJWmBL5V45b9ptsBnoHDJ03zJpEvSBSWFSKAwziJ9q1a3YbKiwHP1_kKpojmCa20oDK7Abazo4SID9guFwviGJwxF3dnWGT5n6JK-fx2S4f-hPyI3w2AAFMrsPC1ymrAYn4C-kfynTBjBezYlXlOH_JAIqcgPnjCSMJJFicC4ppeb_sXaP1AY5solnkU9m3oO9VqVIdhGCM4xIWjz6w_VrgzgYhAGhn-x9f36nC_yrDTHmUs8HeZwsCuLls5C4oyz-E9hbAdR6d8x_Lcr_b_bzhkXMQqMtzxPVjsSGvAaz-o9o3C3lKYhpbclxTp8aKxPDk3drtWdg8fGOkamMTbNUxmb5jEhbIxN50TGprPl3z68V-3P9qpTO7hT7WNEGp3aOpVObR0Twkandk-kU7vHHHAjlBlnEg_avxvGm2qWPhEwnmN5fEieixneCT4rasvlsAAVN2KUqnxqlYuAvT6SSmC0fPuRskmy9pLsapJjkuy9JGeLZG2S2ibJ2e-ucYS95l5Uq5pkmaTWXlK7mtQ0Se2PBtUxSZ29pG61JtskdfeSetWklknqfdRdV7f7Q8ofp0kMLjTWV23Hn9dLb3xpNJd65sbf-WOB1VuLBPchSiVSuI0WeIUKxTJhiVTJDFwlclyt_vodAAD__0nhOg0=
+
+query T
+EXPLAIN (DISTSQL)
+SELECT lk FROM ltable
+WHERE NOT EXISTS (
+  SELECT * FROM rtable WHERE ST_Covers(ltable.geom1, rtable.geom) AND lk > 5 AND rk > 12
+) ORDER BY lk
+----
+distribution: full
+·
+• lookup join (anti)
+│ table: rtable@rtable_pkey
+│ equality: (rk) = (rk)
+│ equality cols are key
+│ pred: st_covers(geom1, geom)
+│
+└── • inverted join (left outer)
+    │ table: rtable@geom_index
+    │ on: (lk > 5) AND (rk > 12)
+    │
+    └── • scan
+          missing stats
+          table: ltable@ltable_pkey
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzklluT2jYUx9_7KTTnCVpRfMFc9ORtcKbOEJOCO02nZRgXn6UuxnIlOdnMDt-948sCdmMCyduuH2AkHX76n7_OsXgE-W8MDJz372Z3rkc6U3fpL3-ZdcnSmTmvfBLvyOvF_C2JVfBXjOS3n52FQ7y5T5z3eSTpVHHfl2HiPKwj1XrDP6CQnfLnP26R73VaRRWjLrnzpqQT78ifmaaZSKxuNSWOU7rR7ZL5YuosyE-_k3gHFBIeohfsUQL7A3SgYAAFE1YUUsE3KCUX-dJjEeiGD8A0ClGSZiqfXlHYcIHAHkFFKkZg4OeKFhiEKPoaUAhRBVFc4Evtdvm1Tnf4CSi84nG2TyQj8Y6SIi2gsEyDfKrXN2B1oMAzddpQqmCLwPQzhe4UmHag14t0kw8oFIZveJSg6Jt1nf6nFBmZOa99Mv_Vdxbkzdz1gELptp2LXEdJiA9AjyTnIRXkdEy2QYk96AKFuUc6tn48FMaY6_nj6mhs83Q0TytA4T4SUpF_eJSQKCFpEAkMe_nw3C9R-ZXvkSlGbJ3aBrVNalutphkN08xbTMvNqg522GrYnee7Db9E7bxnnO-ytEyOJ4zYZmlSwzsr90Hihifhl4z4nwmt6ZuN9Iet6Z-y5iJEgWE9YVv_AVaHz3jk8R5P-5N6dKWsVdagIWtSk6Vf32_6N_Zb3-j1zas7Tr9FZqPjBi-14wa3mHbWcaPn0XGjWvrG9aVtfGtpm72rC9u4RWSjsK2XWtjWLaadFfb4eRT2-JabdIEy5YnEWuptO2mNnXp6fvFguMXyopI8Ext8J_imiC2H8wJUTIQoVbmqlwM3eVqSSmCwP_57OifpF0lGO8lskoyLJLNG0s9JwybJvJyddkN6g4soq52kN0nWRdKwnTRokoZfa9SoSRpdJI3bNRlN0vgiadJOspqkyddmN87L_T7mH9dRCAy06ul95uPpyd97cbCVec8t_-YfC2z-ZpHA7oNYIoW3wQ6nqFDsoySSKtoAUyLDw-G7_wIAAP__qZRjRA==
+
+# Bounding box operations.
+statement ok
+SET CLUSTER SETTING sql.spatial.experimental_box2d_comparison_operators.enabled = on
+
+query T
+EXPLAIN (DISTSQL)
+SELECT lk, rk FROM ltable JOIN rtable@geom_index ON ltable.geom1 ~ rtable.geom
+----
+distribution: full
+·
+• lookup join
+│ table: rtable@rtable_pkey
+│ equality: (rk) = (rk)
+│ equality cols are key
+│ pred: geom1 ~ geom
+│
+└── • inverted join
+    │ table: rtable@geom_index
+    │
+    └── • scan
+          missing stats
+          table: ltable@ltable_pkey
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlU1v2jAYx-_7FNZzaiUziBPecsrUMikVha5wmDQhlJGnLCPEme30RYh-9smBtuCRjLQXcmiJ4_zy_5l_zArknxhc6H2_6X_xB-Ts0h-NR9_652TU6_cuxiReUCIW5Ovt8JrEKvgZI7ka-gMi8s_eHPlyGiUhPpLhYDvhsx60yPN2Tn4KFBIe4iBYogT3B1hAgQEFGyYUUsFnKCUX-tIqn-iHj-A2KERJmik9PKEw4wLBXYGKVIzgwljTbzEIUdQbQCFEFURxjt8E8Tb_pukCn4DCBY-zZSLd3CnPCBRGaaCHanUGkzUFnqm3B0oVzBFcayehfwluY02PD-kn9ygUhlc8SlDU7f2c_6wi0Nc7eo-pIFJNZ_wehTzzGCWec77rIbYeQGGYKZd4FvUY9exCE2aY2FVMtMF2tVsHLcTeavc5X2Qp-c2jhPDEJZ5WHw6Ix8gz8Zr_83AKJWxDolUo8ZY9S7gIUWC4F3yyPqA54DWe1rvGxMNRHCNKdy-KdXx9rQ_Wt85q9eKv3SywVSWmUWDnpArsVDHZKXD7lArc3pNgx7eGfbQ1du3ozrAqIY3ONE-qM80qJjud6ZxSZzpVdu5blClPJB61pzWMJ9UsvUtiOMfNlip5JmZ4I_gsn7s5HeagfCBEqTZXrc2Jn7xckkpgsHz9Cd0lWaUkVkyyTRIrJdl7JGuX1DJJdrldo4KeU4pqFpMsk9QsJbWKSY5Jar13odomqV1K6hRnYiapU0rqFpOaJqn7XruOrvtdzB-mUQguNLZH7cCflwP0DcFc6ndu9Is_5NjxU6rfmLsglkjhOljgJSoUyyiJpIpm4CqR4Xr96W8AAAD__9wsvfo=
+
+query T
+EXPLAIN (DISTSQL)
+SELECT lk, rk FROM ltable JOIN rtable@geom_index ON rtable.geom ~ ltable.geom1
+----
+distribution: full
+·
+• lookup join
+│ table: rtable@rtable_pkey
+│ equality: (rk) = (rk)
+│ equality cols are key
+│ pred: geom ~ geom1
+│
+└── • inverted join
+    │ table: rtable@geom_index
+    │
+    └── • scan
+          missing stats
+          table: ltable@ltable_pkey
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlU1v4jwUhffvr7DuqpXMC3HCV1YZtYyUikKnsBhphFBKbpkMIc7YTj9U0d8-coAWPCRD2g1ZAL52Hp9zOXFeQP6OwYXe95v-F39Azi790Xj0rX9ORr1-72JM4gUlYkG-3g6vSayCuxjJ1dAfEJH_9ubIl9MoCfGJDLfF_3WRvG6W5yMLKCQ8xEGwRAnuD9AFBhRsmFBIBZ-hlFzoqZd8oR8-gdugECVppnR5QmHGBYL7AipSMYILY42_xSBEUW8AhRBVEMU5fr21t_6apgt8BgoXPM6WiXRzT1tVozTQpVqdwWRFgWfqfUOpgjmCa-0o9C_Bbazo8SL95AGFwvCKRwmKur2v868uAn27o_eUCiLVdMYfUGB493zmMUo853zXithYAQrDTLnEs6jHqGcXmmGGGbuKGW1i0_DWQSNir-F9zhdZSn7xKCE8cYmn3Q8HxGuSV-Kxf_lwCk3YholWoYl37VnCRagbuSd8sjpgc8BrPK13jYWHpTiGlO6eFOv4BFufTHCd1erFf7uZYauKTCPDzqll2KliZifD7VPKcHvPBDs-OOyzwbFrR8eGVRFpxKZ5arFpVjGzE5vOKcWmU-X8vkWZ8kTiUSdbw9ipZumzEsM5rg9WyTMxwxvBZ_na9XCYg_JCiFKtZ631wE-2U1IJDJZv79JdklVKYsUk2ySxUpK9R7J2SS2TZJe7a1Sw55SimsUkyyQ1S0mtYpJjklofbVTbJLVLSZ1iTcwkdUpJ3WJS0yR1P-quo-N-H_PHaRSCC43NVTvwsb1A3xDMpX7mRj_5Y44dP6f6ibkPYokUroMFXqJCsYySSKpoBq4SGa5W__0JAAD__2AFwY0=
+
+query T
+EXPLAIN (DISTSQL)
+SELECT lk, rk FROM ltable JOIN rtable@geom_index ON rtable.geom && ltable.geom1
+----
+distribution: full
+·
+• lookup join
+│ table: rtable@rtable_pkey
+│ equality: (rk) = (rk)
+│ equality cols are key
+│ pred: geom && geom1
+│
+└── • inverted join
+    │ table: rtable@geom_index
+    │
+    └── • scan
+          missing stats
+          table: ltable@ltable_pkey
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMld9vmzoUx9_vX2Gdp1ZybsCQXzxx1eZKVGnSNXmYtEURC6cZC8HMNmurKv_7BCRt8AIL7Ut4oOUYf3w-1hfnBeTPCBwYfr4b_eeNycW1N51NP40uyXQ4Gl7NSLSmRKzJ__eTWxIp_1uE5GbijYnI_3dXyDeLMA7wiUz2xX-zIvmaGgbrFvfdzHzABAoxD3Dsb1CC8wWyAgMKFswpJIIvUUousqGX_EUveALHoBDGSaqy8pzCkgsE5wVUqCIEB2YZ_h79AEXbAAoBKj-McnyxtFv8WSRrfAYKVzxKN7F0cr19V9PEz0qtNoP5lgJP1duCUvkrBMc86NC7BsfY0tOb9OJfKBQGNzyMUbStcp9_bCjQ1xnDp0QQqRZhrFBIXCp54TJKXPvy0EXsXIDCJFUOcU3qMupalTZMs7Ga2GQWux3vHjURpR0fcb5OE_KDhzHhsUPcTH8yJm6nnBSX_U3JrvSxNJ9upc-bRhpzEaDAoOQw3x4xHvMWT9oD7cXjrdhaK4NSK-bpaTY_mOY2a7WrE6Dn2WzSppZn--zybDexOchz70zz3Cv5sNNDxD4aIqt1coRYkya1CHXOLkKdJjYHEeqfaYT6TY74e5QJjyWedOIZ2kotMztDMVhhceBKnool3gm-zN8tHic5KC8EKFUxahYPXrwfkkqgv3n9vT0kmbUkVk2ydBKrJVklknlI6uokq97OaKBn16I61SRTJ3VqSd1qkq2Tuu_dqJ5O6tWS-tU9MZ3UryUNqkkdnTR4r10_i_tDxB8XYQAOGLurdeS2vyCb4K9k9s1Nv_PHHDt7TrIv5sGPJFK49dd4jQrFJoxDqcIlOEqkuN3-8zsAAP__97bN4A==
+
+# Tests where the table with the inverted index has multiple columns in the primary
+# key.
+statement ok
+CREATE TABLE rtable2(
+  rk1 int,
+  geom geometry,
+  rk2 int,
+  primary key (rk1, rk2),
+  INVERTED INDEX geom_index(geom)
+)
+
+statement ok
+INSERT INTO rtable2 VALUES
+  (11, 'POINT(1.0 1.0)', 22),
+  (12, 'LINESTRING(1.0 1.0, 2.0 2.0)', 24),
+  (13, 'POINT(3.0 3.0)', 26),
+  (14, 'LINESTRING(4.0 4.0, 5.0 5.0)', 28),
+  (15, 'LINESTRING(40.0 40.0, 41.0 41.0)', 30),
+  (16, 'POLYGON((1.0 1.0, 5.0 1.0, 5.0 5.0, 1.0 5.0, 1.0 1.0))', 32)
+
+query T
+EXPLAIN (DISTSQL)
+SELECT lk, rk1, rk2 FROM ltable JOIN rtable2@geom_index
+ON ST_Intersects(ltable.geom1, rtable2.geom) ORDER BY (lk, rk1, rk2)
+----
+distribution: full
+·
+• sort
+│ order: +lk,+rk1,+rk2
+│ already ordered: +lk
+│
+└── • lookup join
+    │ table: rtable2@rtable2_pkey
+    │ equality: (rk1, rk2) = (rk1, rk2)
+    │ equality cols are key
+    │ pred: st_intersects(geom1, geom)
+    │
+    └── • inverted join
+        │ table: rtable2@geom_index
+        │
+        └── • scan
+              missing stats
+              table: ltable@ltable_pkey
+              spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzUll9vokoYxu_Pp5i8VzUdj87gX644p7qJjdWuerGbjTGsvLWsyLAz47ZN43ffANoiFFa2vWi5AIGZ3zzPm-dlfAT10wMT-l-uh_8NRuSsN5jOpp-HFTLtD_sXM-KtKZFrFp44-TQZXxFP2989JJfjwYjI6De3Vig2C9d38J6MR0TphetrlAqXWp3F4_8Nh4SYeEZ0WyHjSa8_If9_JWfJdSpAwRcOjuwNKjC_AQMKHCgYMKcQSLFEpYQMXz1GAwfOPZh1Cq4fbHX4eE5hKSSC-Qja1R6CCbNw3QnaDspaHSg4qG3Xi_CxQiu-LII1PgCFC-FtN74yowpE4oHCNLDDR9Uah_mOgtjq5wWVtlcIJksoHPTArO_o6SIH_i-UGp1L4fooa8axzmy1gT5N6d8HMlV5i1NiNStJM4cSx5aAwnirTWIxanFqGdRq5PriKV9GGV-hn33tWy972l8P1R8Ksd4G5IdwfSJ8k8TaKGTSFXlsZT2G9iKnSY9NarVzDRopg60yBqdCapS17rE5i51Ti59TyzgHChtbL2-Jh75JWK6KRkpFN1fF8-JCOijRyV97vntB8khURVBj_GhanqxmShbjR7rY6b3HXtl7NV6tGSd3HysjM9V9jXfcfY0yvhLd1_4o3dcuY3Dffaz-5u3Hjj_f_PSc89fm3KienHJeRmQq5c13nPJmGV-JlHc-Sso7ZQweUs7ePuWszF43QRUIX-FJG0c9tVSVhXsROiuM9zAltnKJ11Iso7Hx7TgCRQ8cVDp-y-KbgX94pbREe_P0HytJYoUknk8y0iReSDLySa00ySgkNY5ILEnqpkmN4joViMoUqlmIauWTWJrUKiS180mNNKldSOrkk9ppUudvS84yheoW17yer4pnwvmHnBcEvZlhFSedFUS9k2EVZ72oXFFT33jibuE6YEJ9f1RfOB0OCCfYKxV-Waa34i7izh6C8LtwY3sKKVzZa-yhRrlxfVdpdwmmllvc7f75HQAA__8D3ryn
+
+query T
+EXPLAIN (DISTSQL)
+SELECT lk, rk1, rk2 FROM ltable LEFT JOIN rtable2@geom_index
+ON ST_Intersects(ltable.geom1, rtable2.geom) ORDER BY (lk, rk1, rk2)
+----
+distribution: full
+·
+• sort
+│ order: +lk,+rk1,+rk2
+│ already ordered: +lk
+│
+└── • lookup join (left outer)
+    │ table: rtable2@rtable2_pkey
+    │ equality: (rk1, rk2) = (rk1, rk2)
+    │ equality cols are key
+    │ pred: st_intersects(geom1, geom)
+    │
+    └── • inverted join (left outer)
+        │ table: rtable2@geom_index
+        │
+        └── • scan
+              missing stats
+              table: ltable@ltable_pkey
+              spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzcll9v8jYUxu_3Kaxz1apmYIe_ucr2witRUeiASZsmhLLklGaEOLPN2qriu09OoA2hycjaK7hIZCd5_OTn8-TwCurvEGwY_HY_-mk4Jlf94Ww--2V0TWaD0eDbnIRrSuSamQMn36eTOxJq988QyWjwfU5uJ8MxkckEd1YoNssg8vGZTMZE6WUQaZQKPa2u0od-NLcYrfSJZHhNJtP-YEp-_p1cZRe7BgqR8HHsblCB_QcwoMCBggULCrEUHiolpLn0mtw49J_BblAIonirzfSCgickgv0KOtAhgg1zs-4UXR9lvQEUfNRuECbyqUMnPS3jNb4AhW8i3G4iZScYEvNAYRa7ZqpW57DYURBb_b6g0u4KwWYZh8M-2I0dPd_kMPoHpUb_VgQRyrp17HP-EqOd0p_8Oh9Mkz0ACqe7APRNavAcy9yOOJwSp2UoPwRSafKXCCISRCR2A4l-zQyzAA7bkmIACpOttonDqMOpY1GnSZ12IQ6ew2FVwWEw7LesXQ3F_nzYzJEQ622cvqiIbJLYNm-SL9YETcegUeiJyD-LjcGSEMqyaVOnW0jFylFpV6EyE1KjrPeOiTjshjr8hjrWDVDYuNp7JCFGNmGFLpo5F71CF--LC-mjRL947cXuA8tjURNxnfGjx4pstXK2GD_yxc7POftkzuu8VrfOTjqrYjOX9OblJb1ZBUcm6Z2LTnqnCpV90lnjy6POjtsSPz9T_LOZsmpnJ4pXMZlLVOvyEtWqgiOTqO5FJ6pbhcohUezrE8Wq9PApqlhECs9qiI3cUjVmeiz6K0x7sxJb6eG9FF5ybzqcJELJhI9Kp1dZOhhGh0tKS3Q3b_9Ts0qsVIkXK1l5JV6qZBUrtfNKVqlS80iJZZV6eaVmOacSUyegWqVS7WIllldqlyp1ipWaeaVOqVK3WKmTV-r-X-TsBFSvnHmj2BU_Kc7_qPOSQm-daJVXOisp9e6JVnmtl-FKQv0Qiqdl4IMNjf2v9sHh8DNdKHRXynxZZo_iKdE1n3cF9oMbKqRw566xjxrlJogCpQMPbC23uNv98G8AAAD__0MZI1Y=
+
+query T
+EXPLAIN (DISTSQL)
+SELECT lk FROM ltable WHERE EXISTS (SELECT * FROM rtable2@geom_index
+WHERE ST_Intersects(ltable.geom1, rtable2.geom)) ORDER BY lk
+----
+distribution: full
+·
+• lookup join (semi)
+│ table: rtable2@rtable2_pkey
+│ equality: (rk1, rk2) = (rk1, rk2)
+│ equality cols are key
+│ pred: st_intersects(geom1, geom)
+│
+└── • inverted join
+    │ table: rtable2@geom_index
+    │
+    └── • scan
+          missing stats
+          table: ltable@ltable_pkey
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzcll9zmkwUxu_fT7FzruL7rq8C_uWKNpIpGaOpOtN0Oo5D5cRSkKW7a5NMxu_eWdBENsFqcpV4EWbh8NvneTgHcg_iVww2uFeX_Q_egJz0vPFk_LlfIWO3755OSByRs9HwgsTS_x4j-fLJHbnEvVJV5GRT829ewrMS01kgW87CJMDbTbmQszCRyAXOpTjJSf-rKoNub8qWlQoZjnruiHz8SuIIKCQswIG_RAH2NzCAggkULJhSSDmboxCMq0v3WaEX3IJdpxAm6Uqq01MKc8YR7HuQoYwRbJiozUboB8hrdaAQoPTDOMPnspz8MEsjvAMKpyxeLRNhkziiJFMMFMapr05VayZM1xTYSj5uKKS_QLCNHYVeD-z6mh4u0kt-I5cYnLMwQV6zijqfpgz04Rb3NuVa3I5JidOsAIXrkAtJfrIwIWFCUj_kGFTVctcoj9RDiczcLlAYrqRNHIM6JnUs6jSo0yq1bWq2rWNsK7ubR9MqWp7cpWiTvns2IWP3wiPnQ28A9CGJzXH7zPqMRas098kSm2SqlZHBc8m0VDIC5ywJ_hbNk0BKc7C0HFqlOTzaZzxAjkHRuWP8B9P1M2ENWJWltW6xeqOsVFZDk9UtyDIOHx3jlaNTM6s16-DhMY6RqQ1P4-0OT-MY2zvD035nw9Mu5GAe3qXma7vUqh7co-YxIrUebb7dHm0eY3unRzvvrEc7x3zoRihSlggsZFC2U13bqWqozwEGC8w_H4Kt-BwvOZtntflymIGyEwEKmV818oWXbC8JydFfPvx7sksy9pLMcpKlk8y9JKtAMnZJLZ1k7XdXP8JeYy-qWU4ydFJzL6lVTmropNZLg2rrpPZeUqdck6mTOntJ3XJSUyd1X-quo9r9OmY3szAAG-qbX_WZP9ufehPG_kKomRv_YDcZVr1iBNjXfiyQwoUfYQ8l8mWYhEKGc7AlX-F6_c-fAAAA___4fDua
+
+query T
+EXPLAIN (DISTSQL)
+SELECT lk FROM ltable WHERE NOT EXISTS (SELECT * FROM rtable2@geom_index
+WHERE ST_Intersects(ltable.geom1, rtable2.geom)) ORDER BY lk
+----
+distribution: full
+·
+• lookup join (anti)
+│ table: rtable2@rtable2_pkey
+│ equality: (rk1, rk2) = (rk1, rk2)
+│ equality cols are key
+│ pred: st_intersects(geom1, geom)
+│
+└── • inverted join (left outer)
+    │ table: rtable2@geom_index
+    │
+    └── • scan
+          missing stats
+          table: ltable@ltable_pkey
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzclt9v4jgQx9_vr7DmqdyZgyT8zFN6JdWlotCDnLarFUJZMmWzCXHWNttWFf_7ygm04DYstG_kgcjx5OPvfD0T8wTiRwI2uLc3_XNvQM563tgf_9evkLHbdy98ksTkcjS8JokMviZIPv3rjlwyGPrEvVWR5Gwd92cRxvMw05kjW0yjNMSH9StCTqNUIhc4k-KsoP2togy6eSkfVipkOOq5I_LPZ5LEQCFlIQ6CBQqwv4ABFEygYMGEQsbZDIVgXE095YFe-AB2nUKUZkupHk8ozBhHsJ9ARjJBsMFXi40wCJHX6kAhRBlESY4vZDnFbZrF-AgULliyXKTCJklMSa4YKIyzQD2q1kyYrCiwpXxZUMhgjmAbWwq9Htj1FT1cpJf-RC4xvGJRirxm7er0HzO0Sd-99Mnwf98dkauhNwAKr90H-oxyHzKubYNjUuI0K0DhLuJCku8sSkmUkiyIOIZVNdw2gMdqs2KzsAEoDJfSJo5BHZM6FnUa1GmV2mFqdljH2KFsWG9Zq9SK84Hv6U6s75u97DMWL7MiT5baJFetEhm85UxLOSNwxtLwd9a8MqTUB0vzoVXqw0v6jIfIMdzN3DH-gsnqDbMGrMqyWnc3eq2sVFZDk9XdkWUc3lLGB1uqZlZr1sFNZRwjU2uqxuk1VeMYO7aaqn1iTdXe8cE8vHrNj1avVT24ds1jRGq12zy92m0eY8dW7XZOrHY7xxyMIxQZSwXueFC2Ul1bqWqo4wPDORbHjWBLPsMbzmZ5bDEc5qD8QYhCFrNGMfDSzZSQHIPF89-cbZKxl2SWkyydZO4lWTskY5vU0knW_uzqR6TX2ItqlpMMndTcS2qVkxo6qfVeo9o6qb2X1CnXZOqkzl5St5zU1End92bXUeV-l7D7aRSCDfX1VX3jZ3OpL2ESzIXqufE3dp9j1SdGgH0XJAIpXAcx9lAiX0RpJGQ0A1vyJa5Wf_wKAAD__zuaUGc=

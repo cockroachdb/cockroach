@@ -1,0 +1,2 @@
+create_domain_stmt ::=
+	'CREATE' 'DOMAIN' type_name 'AS' typename domain_constraint_list_opt

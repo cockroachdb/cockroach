@@ -1,0 +1,56 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "grpcutil",
+    srcs = [
+        "fast_metadata.go",
+        "grpc_err_redaction.go",
+        "grpc_log.go",
+        "grpc_log_legacy.go",
+        "grpc_util.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/grpcutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/util/ctxutil",
+        "//pkg/util/log",
+        "//pkg/util/log/severity",
+        "//pkg/util/netutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//errbase",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_gogo_status//:status",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//grpclog",
+        "@org_golang_google_grpc//metadata",
+        "@org_golang_google_grpc//status",
+    ],
+)
+
+go_test(
+    name = "grpcutil_test",
+    size = "small",
+    srcs = [
+        "fast_metadata_test.go",
+        "grpc_err_redaction_test.go",
+        "grpc_log_test.go",
+        "grpc_util_test.go",
+    ],
+    embed = [":grpcutil"],
+    deps = [
+        "//pkg/server",
+        "//pkg/util/circuit",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/log/severity",
+        "//pkg/util/netutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_gogo_status//:status",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//metadata",
+        "@org_golang_google_grpc//status",
+    ],
+)

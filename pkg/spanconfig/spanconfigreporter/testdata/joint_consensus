@@ -1,0 +1,104 @@
+# Walk through a few scenarios where we generate reports in the presence of
+# voter-{incoming,outgoing,demoting-learners,demoting-non-voters} and learners.
+
+init
+n1:
+n2:
+n3:
+n4:
+n5:
+n6:
+r1: [a,b)
+----
+
+liveness
+n4: dead
+n5: dead
+----
+
+configure
+[a,b): num_replicas=3
+----
+
+allocate
+r1: voters=[n1,n2,n3]
+----
+
+report
+----
+ok
+
+# Under-replication in the "old group".
+allocate
+r1: voters=[n1,n2] voters-incoming=[n3]
+----
+
+report
+----
+under replicated:
+  r1:{a-b} [(n1,s1):1, (n2,s2):2, (n3,s3):3VOTER_INCOMING] applying range default
+
+# Under-replication in the "new group".
+allocate
+r1: voters=[n1,n2] voters-outgoing=[n3]
+----
+
+report
+----
+under replicated:
+  r1:{a-b} [(n1,s1):1, (n2,s2):2, (n3,s3):3VOTER_OUTGOING] applying range default
+
+# Under-replication in the old group because 4 is dead.
+allocate
+r1: voters=[n1,n2] voters-outgoing=[n4] voters-incoming=[n3]
+----
+
+report
+----
+under replicated:
+  r1:{a-b} [(n1,s1):1, (n2,s2):2, (n4,s4):4VOTER_OUTGOING, (n3,s3):3VOTER_INCOMING] applying range default
+
+# Unavailable in the new group (and also under-replicated), and also
+# over-replicated in the new group.
+allocate
+r1: voters=[n1,n2] voters-outgoing=[n3] voters-incoming=[n4,n5]
+----
+
+report
+----
+unavailable:
+  r1:{a-b} [(n1,s1):1, (n2,s2):2, (n3,s3):3VOTER_OUTGOING, (n4,s4):4VOTER_INCOMING, (n5,s5):5VOTER_INCOMING] applying range default
+under replicated:
+  r1:{a-b} [(n1,s1):1, (n2,s2):2, (n3,s3):3VOTER_OUTGOING, (n4,s4):4VOTER_INCOMING, (n5,s5):5VOTER_INCOMING] applying range default
+over replicated:
+  r1:{a-b} [(n1,s1):1, (n2,s2):2, (n3,s3):3VOTER_OUTGOING, (n4,s4):4VOTER_INCOMING, (n5,s5):5VOTER_INCOMING] applying range default
+
+# Over-replicated in the new group.
+allocate
+r1: voters=[n1,n2] voters-outgoing=[n3] voters-incoming=[n5,n6]
+----
+
+report
+----
+over replicated:
+  r1:{a-b} [(n1,s1):1, (n2,s2):2, (n3,s3):3VOTER_OUTGOING, (n5,s5):5VOTER_INCOMING, (n6,s6):6VOTER_INCOMING] applying range default
+
+
+# Many learners. No problems, since learners don't count.
+allocate
+r1: voters=[n1,n2,n3] learners=[n4,n5,n6]
+----
+
+report
+----
+ok
+
+# Under replicated. Learners don't count.
+allocate
+r1: voters=[n1,n2] learners=[n3]
+----
+
+report
+----
+under replicated:
+  r1:{a-b} [(n1,s1):1, (n2,s2):2, (n3,s3):3LEARNER] applying range default

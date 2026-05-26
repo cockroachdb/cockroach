@@ -1,0 +1,38 @@
+contains name=foo
+----
+false
+
+add parent-id=1 parent-schema-id=29 name=foo
+----
+(1, 29, foo)
+
+contains parent-id=1 parent-schema-id=29 name=foo
+----
+true
+
+contains name=foo
+----
+false
+
+contains parent-id=2 parent-schema-id=29 name=foo
+----
+false
+
+add parent-id=2 parent-schema-id=29 name=foo
+----
+(2, 29, foo)
+
+contains parent-id=2 parent-schema-id=29 name=foo
+----
+true
+
+contains name=foo
+----
+false
+
+clear
+----
+
+contains parent-id=1 parent-schema-id=29 name=foo
+----
+false

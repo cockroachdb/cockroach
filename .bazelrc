@@ -1,0 +1,176 @@
+# HEY! DON'T edit this file unless you really want to change a configuration for
+# everyone building cockroach ever.
+# This file is checked into tree and is not auto-generated.
+# If you are following directions from `dev doctor`, you probably want to put
+# your configurations in ~/.bazelrc or .bazelrc.user instead.
+# Configurations in ~/.bazelrc apply to all Bazel builds across all projects on
+# your machine. Configurations in .bazelrc.user apply only to builds in this
+# workspace. Take a closer look to see which one `dev doctor` is talking about.
+# Note that .bazelrc.user should be in your checkout (next to this file), not
+# your home directory.
+
+# Ignore warnings about using a source directory as an input file. This is
+# evidently a bug in rules_js that they haven't fixed yet. It seems it's
+# "mostly" fixed except for packages that have patches or lifecycle hooks.
+# Unfortunately that's many of the packages we use, so builds will be very
+# noisy without this. See aspect-build/rules_js#1408. When the upstream issue
+# is fixed, this should be removed.
+startup --host_jvm_args=-DBAZEL_TRACK_SOURCE_DIRECTORIES=1
+
+# Define a set up flag aliases, so people can use `--cross` instead of the
+# longer `//build/toolchains:cross_flag`.
+build --flag_alias=bazel_code_coverage=//build/toolchains:bazel_code_coverage_flag
+build --flag_alias=crdb_test=//build/toolchains:crdb_test_flag
+build --flag_alias=crdb_test_off=//build/toolchains:crdb_test_off_flag
+build --flag_alias=crdb_bench=//build/toolchains:crdb_bench_flag
+build --flag_alias=cross=//build/toolchains:cross_flag
+build --flag_alias=dev=//build/toolchains:dev_flag
+build --flag_alias=force_build_cdeps=//build/toolchains:force_build_cdeps_flag
+build --flag_alias=heavy=//build/toolchains:heavy_flag
+
+build:crdb_test_off --crdb_test_off
+build:cross --cross
+build:dev --dev
+build:force_build_cdeps --force_build_cdeps
+build:heavy --heavy
+build:lintonbuild --run_validations
+build:nolintonbuild --norun_validations
+# Note: nonogo is classically the name of the nolintonbuild configuration.
+build:nonogo --config nolintonbuild
+build:test --crdb_test
+
+# Basic settings.
+common --noenable_bzlmod
+# rules_ts 3.x requires explicit skipLibCheck configuration
+# honor_tsconfig means respect the tsconfig.json setting
+common --@aspect_rules_ts//ts:skipLibCheck=honor_tsconfig
+# rules_ts 3.x requires explicit transpiler selection
+# tsc means use TypeScript compiler for transpilation
+common --@aspect_rules_ts//ts:default_to_tsc_transpiler
+build --enable_platform_specific_config
+build --define gotags=bazel,gss
+build --experimental_proto_descriptor_sets_include_source_info
+build --incompatible_strict_action_env --incompatible_enable_cc_toolchain_resolution
+build --symlink_prefix=_bazel/
+common --experimental_allow_tags_propagation
+test --config=test --experimental_ui_max_stdouterr_bytes=10485760
+build --ui_event_filters=-DEBUG
+query --ui_event_filters=-DEBUG
+clean --ui_event_filters=-WARNING
+info --ui_event_filters=-WARNING
+
+build:race --@io_bazel_rules_go//go/config:race "--test_env=GORACE=halt_on_error=1 log_path=stdout"
+test:test --test_env=TZ=
+# Note: these timeout values are used indirectly in `build/teamcity/cockroach/ci/tests/testrace_impl.sh`.
+# If those values are updated, the script should be updated accordingly.
+test:race --test_timeout=1200,6000,18000,72000
+test:race --heavy
+
+# CI uses a custom timeout for enormous targets.
+test:use_ci_timeouts --test_timeout=60,300,900,900
+
+# Some automation should run with `--config=ci`. If using `--config=ci`, it is
+# expected you're running the build inside the `bazelbuilder` Docker container
+# (see `build/bazelbuilder`), as it will set the `test_tmpdir` to
+# `/artifacts/tmp`, a path that probably does not exist on any real machine. The
+# configurations in `--config ci` are otherwise generally meant to make log
+# output (generally as viewed in TeamCity) more understandable. If adding new
+# automation, review the settings that `--config=ci` applies and consider
+# whether you need any of these settings.
+#
+# For builds, `--config=ci` will disable `nogo` -- GitHub Actions Essential CI
+# does *not* use `--config=ci` (confusingly) so everything that does use
+# `--config=ci` is post-merge, and so it would be slow duplicate work to lint
+# everything again.
+build:ci --config=nolintonbuild
+# Set `-test.v` in Go tests.
+# Ref: https://github.com/bazelbuild/rules_go/pull/2456
+test:ci --test_env=GO_TEST_WRAP_TESTV=1
+# Dump all output for failed tests to the build log.
+test:ci --test_output=errors
+# Put all tmp artifacts in /artifacts/tmp.
+test:ci --test_tmpdir=/artifacts/tmp
+
+build:fips --@io_bazel_rules_go//go/config:gofips140=v1.0.0
+
+build:cross --stamp
+
+# Cross-compilation configurations. Add e.g. --config=crosslinux to turn these on.
+# Generally these should be used for development builds. Each cross config has
+# a corresponding `base` config that is the same thing but without the
+# `--workspace_status_command`; if using these `base` configs, you need to
+# specify an appropriate `--workspace_status_command`. These `base` configs are
+# used by the release process which needs to have more control over stamping.
+build:crosslinux '--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu'
+build:crosslinux --config=crosslinuxbase
+build:crosslinuxbase --platforms=//build/toolchains:cross_linux
+build:crosslinuxbase --config=cross
+build:crosslinuxfips '--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu'
+build:crosslinuxfips --config=crosslinuxfipsbase
+build:crosslinuxfipsbase --platforms=//build/toolchains:cross_linux
+build:crosslinuxfipsbase --config=cross
+build:crosslinuxfipsbase --config=fips
+build:crosswindows '--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-w64-mingw32'
+build:crosswindows --config=crosswindowsbase
+build:crosswindowsbase --platforms=//build/toolchains:cross_windows
+build:crosswindowsbase --config=cross
+build:crossmacos '--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-apple-darwin21.2'
+build:crossmacos --config=crossmacosbase
+build:crossmacosbase --platforms=//build/toolchains:cross_macos
+build:crossmacosbase --config=cross
+build:crossmacosarm '--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-apple-darwin21.2'
+build:crossmacosarm --config=crossmacosarmbase
+build:crossmacosarmbase --platforms=//build/toolchains:cross_macos_arm
+build:crossmacosarmbase --config=cross
+build:crosslinuxarm '--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-unknown-linux-gnu'
+build:crosslinuxarm --config=crosslinuxarmbase
+build:crosslinuxarmbase --platforms=//build/toolchains:cross_linux_arm
+build:crosslinuxarmbase --config=cross
+build:crosslinuxs390x '--workspace_status_command=./build/bazelutil/stamp.sh -t s390x-unknown-linux-gnu'
+build:crosslinuxs390x --config=crosslinuxs390xbase
+build:crosslinuxs390xbase --platforms=//build/toolchains:cross_linux_s390x
+build:crosslinuxs390xbase --config=cross
+build:crosslinuxppc64le '--workspace_status_command=./build/bazelutil/stamp.sh -t ppc64le-unknown-linux-gnu'
+build:crosslinuxppc64le --config=crosslinuxppc64lebase
+build:crosslinuxppc64lebase --platforms=//build/toolchains:cross_linux_ppc64le
+build:crosslinuxppc64lebase --config=cross
+
+# devdarwinx86_64 is a legacy setting that implies `--config=dev`.
+build:devdarwinx86_64 --config=dev
+build:macos --action_env=PATH=/opt/homebrew/bin:/opt/local/bin:/usr/local/bin:/usr/bin:/bin
+build:macos --host_action_env=PATH=/opt/homebrew/bin:/opt/local/bin:/usr/local/bin:/usr/bin:/bin
+
+build:macos --linkopt="-Xlinker"
+build:macos --linkopt="-no_warn_duplicate_libraries"
+
+build:pgo --@io_bazel_rules_go//go/config:pgoprofile=@pgo_profile//:profile.pprof
+
+build:engflowbase --define=EXECUTOR=remote
+build:engflowbase --disk_cache=
+build:engflowbase --experimental_inmemory_dotd_files
+build:engflowbase --experimental_inmemory_jdeps_files
+build:engflowbase --remote_timeout=600
+build:engflowbase --nolegacy_important_outputs
+build:engflowbase --grpc_keepalive_time=30s
+build:engflowbase --remote_cache_compression=true
+build:engflowbase --action_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
+build:engflowbase --extra_execution_platforms=//build/toolchains:cross_linux
+build:engflowbase --remote_upload_local_results=false
+build:engflowbase --remote_download_toplevel
+build:engflowbase --test_env=GO_TEST_WRAP_TESTV=1
+build:engflowbase --config=lintonbuild
+build:engflowbase --remote_cache=grpcs://mesolite.cluster.engflow.com
+build:engflowbase --remote_executor=grpcs://mesolite.cluster.engflow.com
+build:engflowbase --bes_backend=grpcs://mesolite.cluster.engflow.com
+test:engflowbase --test_env=REMOTE_EXEC=1
+test:engflowbase --test_env=GOTRACEBACK=all
+build:engflow --config=engflowbase
+build:engflow --bes_results_url=https://mesolite.cluster.engflow.com/invocations/private
+build:engflow --remote_instance_name=private
+build:engflow --bes_instance_name=private
+build:engflowpublic --config=engflowbase
+build:engflowpublic --bes_results_url=https://mesolite.cluster.engflow.com/invocation/
+
+try-import %workspace%/.bazelrc.user
+
+# vi: ft=sh

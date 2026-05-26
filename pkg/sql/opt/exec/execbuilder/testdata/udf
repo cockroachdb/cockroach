@@ -1,0 +1,430 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  a INT,
+  FAMILY (k, a)
+);
+INSERT INTO t VALUES (1, 1), (2, 2), (3, 3), (4, 1), (5, 1);
+
+statement ok
+CREATE FUNCTION one() RETURNS INT IMMUTABLE LANGUAGE SQL AS 'SELECT 1';
+
+query T
+EXPLAIN SELECT one()
+----
+distribution: local
+·
+• values
+  size: 1 column, 1 row
+
+query T
+EXPLAIN SELECT * FROM t WHERE a = one()
+----
+distribution: local
+·
+• filter
+│ filter: a = 1
+│
+└── • scan
+      missing stats
+      table: t@t_pkey
+      spans: FULL SCAN
+
+statement ok
+CREATE FUNCTION fetch_one_then_two() RETURNS INT LANGUAGE SQL AS $$
+  SELECT a FROM t WHERE k = 1;
+  SELECT a FROM t WHERE k = 2;
+$$
+
+# This test shows evidence of the execution of multiple statements within a UDF.
+# The trace includes the two point lookups made by the UDF.
+query T kvtrace
+SELECT fetch_one_then_two()
+----
+Scan /Table/106/1/1/0
+Scan /Table/106/1/2/0
+
+# This test shows that six point lookups are performed - two for each invocation
+# of the UDF.
+query T kvtrace
+SELECT i FROM (VALUES (1), (2), (3)) AS v(i) WHERE i = fetch_one_then_two()
+----
+Scan /Table/106/1/1/0
+Scan /Table/106/1/2/0
+Scan /Table/106/1/1/0
+Scan /Table/106/1/2/0
+Scan /Table/106/1/1/0
+Scan /Table/106/1/2/0
+
+statement ok
+CREATE FUNCTION fetch_a_of_1(i INT) RETURNS INT CALLED ON NULL INPUT LANGUAGE SQL AS $$
+  SELECT a FROM t WHERE k = 1
+$$
+
+statement ok
+CREATE FUNCTION fetch_a_of_1_strict(i INT) RETURNS INT RETURNS NULL ON NULL INPUT LANGUAGE SQL AS $$
+  SELECT a FROM t WHERE k = 1
+$$
+
+statement ok
+CREATE FUNCTION fetch_a_of_2_strict(i INT, j INT) RETURNS INT STRICT LANGUAGE SQL AS $$
+  SELECT a FROM t WHERE k = 2
+$$
+
+# When the function is CALLED ON NULL INPUT then it should be evaluated
+# regardless of whether or not any of its inputs are NULL. The trace proves that
+# the function is evaluated. It shows the scan performed by the statement in the
+# function body.
+query T kvtrace
+SELECT fetch_a_of_1(NULL::INT)
+----
+Scan /Table/106/1/1/0
+
+# When the function RETURNS NULL ON NULL INPUT or STRICT then it should not be
+# evaluated if any of its inputs are NULL. The empty traces prove that the
+# function is not evaluated. No scan is performed for the statement in the
+# function body.
+query T kvtrace
+SELECT fetch_a_of_1_strict(NULL::INT)
+----
+
+query T kvtrace
+SELECT fetch_a_of_2_strict(1, NULL::INT)
+----
+
+
+subtest subquery
+
+statement ok
+CREATE TABLE sub1 (a INT PRIMARY KEY);
+CREATE TABLE sub2 (a INT PRIMARY KEY);
+CREATE TABLE sub3 (a INT PRIMARY KEY);
+INSERT INTO sub1 VALUES (1), (2), (3);
+INSERT INTO sub2 VALUES (10), (20), (30);
+
+statement ok
+CREATE FUNCTION sub_fn() RETURNS INT LANGUAGE SQL AS 'SELECT a FROM sub1 WHERE a = (SELECT max(a) FROM sub2)'
+
+# A query with a subquery and a subquery inside a UDF.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM sub3 WHERE sub_fn() = 3 AND (SELECT max(a) FROM sub2) = a
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a)
+│
+└── • lookup join (inner)
+    │ columns: (any_not_null, a)
+    │ estimated row count: 1 (missing stats)
+    │ table: sub3@sub3_pkey
+    │ equality: (any_not_null) = (a)
+    │ equality cols are key
+    │ pred: sub_fn() = 3
+    │ parallel
+    │
+    └── • filter
+        │ columns: (any_not_null)
+        │ estimated row count: 1 (missing stats)
+        │ filter: sub_fn() = 3
+        │
+        └── • group (scalar)
+            │ columns: (any_not_null)
+            │ estimated row count: 1 (missing stats)
+            │ aggregate 0: any_not_null(a)
+            │
+            └── • revscan
+                  columns: (a)
+                  estimated row count: 1 (missing stats)
+                  table: sub2@sub2_pkey
+                  spans: LIMITED SCAN
+                  limit: 1
+
+statement ok
+CREATE FUNCTION sub_fn_lt() RETURNS INT LANGUAGE SQL AS 'SELECT a FROM sub1 WHERE a < (SELECT max(a) FROM sub2)'
+
+# The uncorrelated subquery in the UDF body is executed only once.
+query T kvtrace
+SELECT sub_fn_lt()
+----
+Scan /Table/112/{1-2}
+Scan /Table/113/{1-2}
+
+# The uncorrelated subquery in the UDF body is executed only once per row
+# produced by generate_series.
+query T kvtrace
+SELECT sub_fn_lt() FROM generate_series(1, 3)
+----
+Scan /Table/112/{1-2}
+Scan /Table/113/{1-2}
+Scan /Table/112/{1-2}
+Scan /Table/113/{1-2}
+Scan /Table/112/{1-2}
+Scan /Table/113/{1-2}
+
+statement ok
+CREATE FUNCTION sub_fn2() RETURNS INT LANGUAGE SQL AS 'SELECT a FROM sub1 WHERE a = (SELECT a FROM sub2 WHERE a = 30)'
+
+# The uncorrelated subquery in the UDF body is fully optimized - it performs
+# a constrained scan of sub2.
+query T kvtrace
+SELECT sub_fn2() FROM generate_series(1, 3)
+----
+Scan /Table/113/1/30/0
+Scan /Table/112/1/30/0
+Scan /Table/113/1/30/0
+Scan /Table/112/1/30/0
+Scan /Table/113/1/30/0
+Scan /Table/112/1/30/0
+
+statement ok
+CREATE FUNCTION sub_fn3() RETURNS INT LANGUAGE SQL AS 'SELECT a FROM sub1 WHERE EXISTS (SELECT a FROM sub2 WHERE a = 30)'
+
+# A query with an uncorrelated EXISTS within a UDF.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM sub3 WHERE sub_fn3() = 3
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a)
+│ estimated row count: 333 (missing stats)
+│ filter: sub_fn3() = 3
+│
+└── • scan
+      columns: (a)
+      estimated row count: 1,000 (missing stats)
+      table: sub3@sub3_pkey
+      spans: FULL SCAN
+
+statement ok
+CREATE FUNCTION sub_fn4() RETURNS INT LANGUAGE SQL AS $$
+  SELECT a FROM sub1 WHERE CASE
+    WHEN a > 0 THEN EXISTS (SELECT 1 FROM sub2 WHERE a/10 = sub1.a)
+    ELSE false
+  END
+$$
+
+# A query with a correlated EXISTS within a UDF.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM sub3 WHERE sub_fn4() = 3
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a)
+│ estimated row count: 333 (missing stats)
+│ filter: sub_fn4() = 3
+│
+└── • scan
+      columns: (a)
+      estimated row count: 1,000 (missing stats)
+      table: sub3@sub3_pkey
+      spans: FULL SCAN
+
+query I
+SELECT sub_fn4() FROM generate_series(1, 3)
+----
+1
+1
+1
+
+statement ok
+CREATE FUNCTION arr() RETURNS INT[] LANGUAGE SQL AS $$
+  SELECT ARRAY(VALUES (1), (2));
+$$
+
+# A query with a uncorrelated array-flatten within a UDF.
+query T
+EXPLAIN (VERBOSE) SELECT arr() FROM generate_series(1, 3)
+----
+distribution: local
+vectorized: true
+·
+• render
+│ columns: (arr)
+│ render arr: arr()
+│
+└── • project set
+    │ columns: (generate_series)
+    │ estimated row count: 10
+    │ render 0: generate_series(1, 3)
+    │
+    └── • emptyrow
+          columns: ()
+
+# Immutable UDFs can be inlined for index-acceleration.
+query T
+EXPLAIN (VERBOSE)
+SELECT * FROM t WHERE k = one()
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (k, a)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+
+statement ok
+CREATE FUNCTION num(n INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT n
+$$
+
+query T
+EXPLAIN (VERBOSE)
+SELECT * FROM t WHERE k = num(2)
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (k, a)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /2/0
+
+query T
+EXPLAIN (VERBOSE)
+SELECT * FROM t WHERE k >= num(2)
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (k, a)
+  estimated row count: 333 (missing stats)
+  table: t@t_pkey
+  spans: /2-
+
+
+subtest regressions
+
+# Regression test for #93210. Do not plan unnecessary assignment casts on the
+# return values of UDFs.
+statement ok
+CREATE TABLE t93210 (
+  a INT PRIMARY KEY
+);
+CREATE FUNCTION fn93210() RETURNS INT VOLATILE LANGUAGE SQL AS 'SELECT a FROM t93210';
+
+# The query plan should have no assignment cast expressions.
+query T
+EXPLAIN (OPT, TYPES)
+SELECT fn93210()
+----
+values
+ ├── columns: fn93210:6(int)
+ ├── cardinality: [1 - 1]
+ ├── volatile
+ ├── stats: [rows=1]
+ ├── cost: 0.02
+ ├── key: ()
+ ├── fd: ()-->(6)
+ ├── distribution: test
+ ├── prune: (6)
+ └── tuple [type=tuple{int}]
+      └── udf: fn93210 [type=int]
+           └── body
+                └── limit
+                     ├── columns: a:1(int!null)
+                     ├── cardinality: [0 - 1]
+                     ├── stats: [rows=1]
+                     ├── key: ()
+                     ├── fd: ()-->(1)
+                     ├── scan t93210
+                     │    ├── columns: a:1(int!null)
+                     │    ├── stats: [rows=1000]
+                     │    └── key: (1)
+                     └── const: 1 [type=int]
+
+# Regression test for #88259. Arguments to UDFs should be formatted correctly in
+# EXPLAIN output.
+statement ok
+CREATE FUNCTION f88259(a INT, b INT) RETURNS INT LANGUAGE SQL VOLATILE STRICT AS $$
+  SELECT a + b
+$$
+
+query T
+EXPLAIN (VERBOSE) SELECT f88259(333, 444)
+----
+distribution: local
+vectorized: true
+·
+• values
+  columns: (f88259)
+  size: 1 column, 1 row
+  row 0, expr 0: f88259(333, 444)
+
+# Regression test for not using actual argument types (#114846).
+statement ok
+CREATE FUNCTION array_to_set(anyarray) RETURNS SETOF RECORD AS $$
+   SELECT i AS "index", $1[i] AS "value" FROM generate_subscripts($1, 1) i
+$$ LANGUAGE SQL STRICT IMMUTABLE;
+
+query T
+EXPLAIN (VERBOSE, TYPES) SELECT * FROM array_to_set(array['one', 'two']) AS t(f1 numeric(4,2), f2 text);
+----
+distribution: local
+vectorized: true
+·
+• project set
+│ columns: (f1 decimal, f2 string)
+│ estimated row count: 1
+│ render 0: (array_to_set((ARRAY[('one')[string],('two')[string]])[string[]]))[tuple{decimal AS f1, string AS f2}]
+│
+└── • emptyrow
+      columns: ()
+
+# Regression test for #160475. IN-subqueries within UDFs should be
+# index-accelerated in the same way that they are outside of UDFs.
+statement ok
+CREATE TABLE t160475 (
+  a INT,
+  b INT,
+  c INT,
+  INDEX (a, b) STORING (c),
+  FAMILY (a, b, c)
+)
+
+statement ok
+ALTER TABLE t160475 INJECT STATISTICS '[
+  {
+    "avg_size": 4,
+    "columns": ["a"],
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 1000,
+    "created_at": "2025-01-05 21:51:13"
+  },
+  {
+    "avg_size": 4,
+    "columns": ["b"],
+    "distinct_count": 1000,
+    "null_count": 0,
+    "row_count": 1000,
+    "created_at": "2025-01-05 21:51:13"
+  }
+]'
+
+query T kvtrace
+SELECT c FROM t160475 WHERE a = 33 AND b IN (SELECT unnest(ARRAY[44, 55]::INT[]))
+----
+Scan /Table/20/1/12{6-7}
+Scan /Table/126/2/33/4{4-5}, /Table/126/2/33/5{5-6}
+
+statement ok
+CREATE OR REPLACE FUNCTION f160475(x INT, y INT[]) RETURNS INT LANGUAGE SQL AS $$
+  SELECT c FROM t160475 WHERE a = x AND b IN (SELECT unnest(y))
+$$
+
+query T kvtrace
+SELECT f160475(33, ARRAY[44, 55]::INT[])
+----
+Scan /Table/126/2/33/4{4-5}, /Table/126/2/33/5{5-6}

@@ -1,0 +1,2562 @@
+# LogicTest: !local-prepared
+# pg arrays must preserve control characters when converted to string,
+# but their direct representation as string does not escape the
+# control characters. In order for the test file to remain valid
+# printable UTF-8, we double-escape the representations below.
+
+statement ok
+SET bytea_output = escape
+
+# array construction
+
+query error cannot determine type of empty array
+SELECT ARRAY[]
+
+query T
+SELECT ARRAY[1, 2, 3]
+----
+{1,2,3}
+
+statement ok
+CREATE TABLE k (
+  k INT PRIMARY KEY
+)
+
+statement ok
+INSERT INTO k VALUES (1), (2), (3), (4), (5)
+
+query T rowsort
+SELECT ARRAY[k] FROM k
+----
+{1}
+{2}
+{3}
+{4}
+{5}
+
+query error expected 1 to be of type bool, found type int
+SELECT ARRAY['a', true, 1]
+
+query T
+SELECT ARRAY['a,', 'b{', 'c}', 'd', 'e f']
+----
+{"a,","b{","c}",d,"e f"}
+
+query T
+SELECT ARRAY['1}'::BYTES]
+----
+{"\\x317d"}
+
+# TODO(jordan): #16487
+# query T
+# SELECT ARRAY[e'g\x10h']
+# ----
+# {g\x10h}
+
+query TTTTTTT
+SELECT '', 'NULL', 'Null', 'null', NULL, '"', e'\''
+----
+·  NULL  Null  null  NULL  "  '
+
+query T
+SELECT ARRAY['', 'NULL', 'Null', 'null', NULL, '"', e'\'']
+----
+{"","NULL","Null","null",NULL,"\"",'}
+
+query T
+SELECT NULL::INT[]
+----
+NULL
+
+query TTTT
+SELECT
+  ARRAY[NULL]::STRING[],
+  ARRAY[NULL]::INT[],
+  ARRAY[NULL]::FLOAT[],
+  ARRAY[NULL]::TIMESTAMP[]
+----
+{NULL} {NULL} {NULL} {NULL}
+
+query BB
+SELECT NULL::INT[] IS DISTINCT FROM NULL, ARRAY[1,2,3] IS DISTINCT FROM NULL
+----
+false true
+
+# #19821
+
+query T
+SELECT ARRAY['one', 'two', 'fünf']
+----
+{one,two,fünf}
+
+query T
+SELECT ARRAY[e'\n', e'g\x10h']::STRING::BYTES::STRING
+----
+{"\012",g\020h}
+
+query T
+SELECT ARRAY['foo', 'bar']
+----
+{foo,bar}
+
+# array construction from subqueries
+
+query T
+SELECT ARRAY(SELECT 3 WHERE false)
+----
+{}
+
+statement ok
+SELECT ARRAY(SELECT 3 WHERE false) FROM k
+
+query T
+SELECT ARRAY(SELECT 3)
+----
+{3}
+
+query T
+SELECT ARRAY(VALUES (1),(2),(1))
+----
+{1,2,1}
+
+# This query works in local config but fails in distributed config since the
+# support for nested arrays is incomplete.
+onlyif config #32252 local
+query T
+SELECT ARRAY(VALUES (ARRAY[1]))
+----
+{"{1}"}
+
+onlyif config #32252 fakedist
+query error unimplemented: nested arrays are not fully supported.*\nHINT.*\n.*32552
+SELECT ARRAY(VALUES (ARRAY[1]))
+
+query T
+SELECT ARRAY(VALUES ('a'),('b'),('c'))
+----
+{a,b,c}
+
+query T
+SELECT ARRAY(SELECT (1,2))
+----
+{"(1,2)"}
+
+query error subquery must return only one column, found 2
+SELECT ARRAY(SELECT 1, 2)
+
+query T
+SELECT ARRAY[]:::int[]
+----
+{}
+
+# casting strings to arrays
+
+query T
+SELECT '{1,2,3}'::INT[]
+----
+{1,2,3}
+
+query T
+SELECT '{hello,"hello"}'::STRING[]
+----
+{hello,hello}
+
+query T
+SELECT e'{he\\\\llo}'::STRING[]
+----
+{"he\\llo"}
+
+query T
+SELECT '{"abc\nxyz"}'::STRING[]
+----
+{abcnxyz}
+
+query T
+SELECT '{hello}'::VARCHAR(2)[]
+----
+{he}
+
+query T
+SELECT '{hello, a🐛b🏠c}'::VARCHAR(2)[]
+----
+{he,a🐛}
+
+# Regression test for #50132.
+statement ok
+CREATE TABLE hello (s STRING);
+INSERT INTO hello VALUES ('{hello}'), ('{hello,a🐛b🏠c}')
+
+query T rowsort
+SELECT s::VARCHAR(2)[] FROM hello
+----
+{he}
+{he,a🐛}
+
+# array casting
+
+query T
+SELECT ARRAY['foo']::STRING
+----
+{foo}
+
+query T
+SELECT ARRAY[e'foo\nbar']::STRING::BYTES::STRING
+----
+{"foo\012bar"}
+
+query TTTTTT
+SELECT
+  ARRAY[e'foo\000bar']::STRING::BYTES::STRING,
+  ARRAY[e'foo\001bar']::STRING::BYTES::STRING,
+  ARRAY[e'foo\002bar']::STRING::BYTES::STRING,
+  ARRAY[e'foo\030bar']::STRING::BYTES::STRING,
+  ARRAY[e'foo\034bar']::STRING::BYTES::STRING,
+  ARRAY[e'foo\100bar']::STRING::BYTES::STRING
+----
+{foo\000bar}  {foo\001bar}  {foo\002bar}  {foo\030bar}  {foo\034bar}  {foo@bar}
+
+query T
+SELECT ARRAY[1,2,3]::INT[]
+----
+{1,2,3}
+
+query error invalid cast: int[] -> UUID[]
+SELECT ARRAY[1,2,3]::UUID[]
+
+query error invalid cast: inet[] -> INT[]
+SELECT ARRAY['8.8.8.8'::INET, '8.8.4.4'::INET]::INT[]
+
+query T
+SELECT ARRAY[1,2,3]::TEXT[]
+----
+{1,2,3}
+
+query T
+SELECT ARRAY[1,2,3]::INT2VECTOR
+----
+1 2 3
+
+query T
+SELECT ARRAY[1,2,3]::OIDVECTOR
+----
+1 2 3
+
+# array subscript access
+
+query T
+SELECT ARRAY['a', 'b', 'c'][-1]
+----
+NULL
+
+query T
+SELECT ARRAY['a', 'b', 'c'][0]
+----
+NULL
+
+# Regression test for #52134: make sure this is not an internal error.
+query error cannot subscript type string because it is not an array
+SELECT '{a,b,c}'[0]
+
+# name type subscript access (0-based, matching PostgreSQL).
+# In PG, the name type has typsubscript => 'raw_array_subscript_handler',
+# treating it as a fixed-length array of chars. text does not support this.
+
+query T
+SELECT ('hello'::name)[0]
+----
+h
+
+query T
+SELECT ('hello'::name)[4]
+----
+o
+
+query T nosort
+SELECT ('hello'::name)[5]
+----
+NULL
+
+query T nosort
+SELECT ('hello'::name)[-1]
+----
+NULL
+
+# pg_dump compatibility: detect array types by checking first char of typname.
+query B
+SELECT (typname::name)[0] = '_' FROM pg_type WHERE typname = '_int4'
+----
+true
+
+# text/string subscripting is not supported (matches PG).
+statement error cannot subscript type string
+SELECT ('world'::STRING)[0]
+
+query T
+SELECT (ARRAY['a', 'b', 'c'])[2]
+----
+b
+
+query T
+SELECT ARRAY['a', 'b', 'c'][2]
+----
+b
+
+query T
+SELECT ARRAY['a', 'b', 'c'][4]
+----
+NULL
+
+query T
+SELECT ARRAY['a', 'b', 'c'][1 + 2]
+----
+c
+
+query I
+SELECT ARRAY[1, 2, 3][-1]
+----
+NULL
+
+query I
+SELECT ARRAY[1, 2, 3][0]
+----
+NULL
+
+query I
+SELECT ARRAY[1, 2, 3][2]
+----
+2
+
+query I
+SELECT ARRAY[1, 2, 3][4]
+----
+NULL
+
+query I
+SELECT ARRAY[1, 2, 3][1 + 2]
+----
+3
+
+query error unimplemented: multidimensional indexing
+SELECT ARRAY['a', 'b', 'c'][4][2]
+
+query error incompatible ARRAY subscript type: decimal
+SELECT ARRAY['a', 'b', 'c'][3.5]
+
+query error could not parse "abc" as type int
+SELECT ARRAY['a', 'b', 'c']['abc']
+
+query error cannot subscript type int because it is not an array
+SELECT (123)[2]
+
+# array slicing
+
+query error unimplemented: ARRAY slicing
+SELECT ARRAY['a', 'b', 'c'][:]
+
+query error unimplemented: ARRAY slicing
+SELECT ARRAY['a', 'b', 'c'][1:]
+
+query error unimplemented: ARRAY slicing
+SELECT ARRAY['a', 'b', 'c'][1:2]
+
+query error unimplemented: ARRAY slicing
+SELECT ARRAY['a', 'b', 'c'][:2]
+
+query error unimplemented: ARRAY slicing
+SELECT ARRAY['a', 'b', 'c'][2:1]
+
+# other forms of indirection
+
+# From a column name.
+query T
+SELECT a[1] FROM (SELECT ARRAY['a','b','c'] AS a)
+----
+a
+
+# From a column ordinal.
+query T
+SELECT a[1] FROM (SELECT ARRAY['a','b','c'] AS a)
+----
+a
+
+# From a parenthetized expression.
+query I
+SELECT (ARRAY(VALUES (1),(2),(1)))[2]
+----
+2
+
+# From an ArrayFlatten expression - ARRAY(subquery)[...]
+query I
+SELECT ARRAY(VALUES (1),(2),(1))[2]
+----
+2
+
+# From a single-column subquery converted to a single datum.
+query I
+SELECT ((SELECT ARRAY[1, 2, 3]))[3]
+----
+3
+
+# From a subquery.
+query T
+SELECT (SELECT ARRAY['a', 'b', 'c'])[3]
+----
+c
+
+query T
+SELECT ARRAY(SELECT generate_series(1,10) ORDER BY 1 DESC)
+----
+{10,9,8,7,6,5,4,3,2,1}
+
+statement ok
+CREATE TABLE z (
+  x INT PRIMARY KEY,
+  y INT
+)
+
+statement ok
+INSERT INTO z VALUES (1, 5), (2, 4), (3, 3), (4, 2), (5, 1)
+
+query T
+SELECT ARRAY(SELECT x FROM z ORDER BY y)
+----
+{5,4,3,2,1}
+
+# From a function call expression.
+query T
+SELECT current_schemas(true)[1]
+----
+pg_catalog
+
+# From a CASE sub-expression.
+query I
+SELECT (CASE 1 = 1 WHEN true THEN ARRAY[1,2] ELSE ARRAY[2,3] END)[1]
+----
+1
+
+# From a tuple.
+query error cannot subscript type tuple{int, int, int} because it is not an array
+SELECT (1,2,3)[1]
+
+query error cannot subscript type tuple{int, int, int} because it is not an array
+SELECT ROW (1,2,3)[1]
+
+# Ensure grouping by an array column works
+
+statement ok
+SELECT conkey FROM pg_catalog.pg_constraint GROUP BY conkey
+
+statement ok
+SELECT indkey[0] FROM pg_catalog.pg_index
+
+# Verify serialization of array in expression (with distsql).
+statement ok
+CREATE TABLE t (k INT)
+
+statement ok
+INSERT INTO t VALUES (1), (2), (3), (4), (5)
+
+query I rowsort
+SELECT k FROM t WHERE k = ANY ARRAY[2,4]
+----
+2
+4
+
+query I rowsort
+SELECT k FROM t WHERE k > ANY ARRAY[2,4]
+----
+3
+4
+5
+
+query I
+SELECT k FROM t WHERE k < ALL ARRAY[2,4]
+----
+1
+
+# Undocumented - bounds should be allowed, as in Postgres
+statement ok
+CREATE TABLE boundedtable (b INT[10], c INT ARRAY[10])
+
+statement ok
+DROP TABLE boundedtable
+
+# Creating multidimensional arrays should be disallowed.
+statement error .*unimplemented.*\nHINT.*\n.*32552
+CREATE TABLE badtable (b INT[][])
+
+# This query works in local config but fails in distributed config since the
+# support for nested arrays is incomplete.
+onlyif config #32252 local
+query T
+SELECT ARRAY[ARRAY[1,2,3]]
+----
+{"{1,2,3}"}
+
+onlyif config #32552 fakedist
+query error unimplemented: nested arrays are not fully supported.*\nHINT.*\n.*32552
+SELECT ARRAY[ARRAY[1,2,3]]
+
+# The postgres-compat aliases should be disallowed.
+# INT2VECTOR is deprecated in Postgres.
+
+query error VECTOR column types are unsupported
+CREATE TABLE badtable (b INT2VECTOR)
+
+# Regression test for #18745
+
+statement ok
+CREATE TABLE ident (x INT)
+
+query T
+SELECT ARRAY[ROW()] FROM ident
+----
+
+statement disable-cf-mutator ok
+CREATE TABLE a (b INT ARRAY)
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE a
+----
+a  CREATE TABLE public.a (
+     b INT8[] NULL,
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
+   );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE a
+----
+a  CREATE TABLE public.a (
+     b INT8[] NULL,
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
+   ) WITH (schema_locked = true);
+
+statement ok
+DROP TABLE a
+
+# Int array columns.
+
+statement disable-cf-mutator ok
+CREATE TABLE a (b INT[])
+
+statement ok
+INSERT INTO a VALUES (ARRAY[1,2,3])
+
+query T
+SELECT b FROM a
+----
+{1,2,3}
+
+statement count 1
+DELETE FROM a
+
+statement ok
+INSERT INTO a VALUES (NULL)
+
+query T
+SELECT b FROM a
+----
+NULL
+
+statement count 1
+DELETE FROM a
+
+statement ok
+INSERT INTO a VALUES (ARRAY[])
+
+query T
+SELECT b FROM a
+----
+{}
+
+statement count 1
+DELETE FROM a;
+
+# Make sure arrays originating from ARRAY_AGG work as expected.
+
+statement ok
+INSERT INTO a (SELECT array_agg(generate_series) from generate_series(1,3))
+
+query T
+SELECT * FROM a
+----
+{1,2,3}
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE a
+----
+a  CREATE TABLE public.a (
+     b INT8[] NULL,
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
+   );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE a
+----
+a  CREATE TABLE public.a (
+     b INT8[] NULL,
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
+   ) WITH (schema_locked = true);
+
+statement error could not parse "foo" as type int
+INSERT INTO a VALUES (ARRAY['foo'])
+
+statement error could not parse "foo" as type int
+INSERT INTO a VALUES (ARRAY[1, 'foo'])
+
+statement count 1
+DELETE FROM a
+
+statement ok
+INSERT INTO a VALUES (ARRAY[1,2,3]), (ARRAY[4,5]), (ARRAY[6])
+
+query I
+SELECT b[1] FROM a ORDER BY b[1]
+----
+1
+4
+6
+
+query I
+SELECT b[2] FROM a ORDER BY b[1]
+----
+2
+5
+NULL
+
+# NULL values
+
+statement count 3
+DELETE FROM a
+
+statement ok
+INSERT INTO a VALUES (ARRAY[NULL::INT]), (ARRAY[NULL::INT, 1]), (ARRAY[1, NULL::INT]), (ARRAY[NULL::INT, NULL::INT])
+
+query T rowsort
+SELECT * FROM a
+----
+{NULL}
+{NULL,1}
+{1,NULL}
+{NULL,NULL}
+
+statement count 4
+DELETE FROM a
+
+# Test with arrays bigger than 8 elements so the NULL bitmap has to be larger than a byte
+
+statement ok
+INSERT INTO a VALUES (ARRAY[1,2,3,4,5,6,7,8,NULL::INT])
+
+query T
+SELECT * FROM a
+----
+{1,2,3,4,5,6,7,8,NULL}
+
+statement ok
+DROP TABLE a
+
+# Ensure that additional type info stays when used as an array.
+
+statement disable-cf-mutator ok
+CREATE TABLE a (b SMALLINT[])
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE a
+----
+a  CREATE TABLE public.a (
+     b INT2[] NULL,
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
+   );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE a
+----
+a  CREATE TABLE public.a (
+     b INT2[] NULL,
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
+   ) WITH (schema_locked = true);
+
+statement error integer out of range for type int2
+INSERT INTO a VALUES (ARRAY[100000])
+
+statement ok
+DROP TABLE a
+
+# String array columns.
+
+statement ok
+CREATE TABLE a (b STRING[])
+
+statement ok
+INSERT INTO a VALUES (ARRAY['foo', 'bar', 'baz'])
+
+query T
+SELECT b FROM a
+----
+{foo,bar,baz}
+
+statement ok
+UPDATE a SET b = ARRAY[]
+
+query T
+SELECT b FROM a
+----
+{}
+
+# Test NULLs with strings
+
+statement count 1
+DELETE FROM a
+
+statement ok
+INSERT INTO a VALUES (ARRAY[NULL::STRING, NULL::STRING, NULL::STRING, NULL::STRING, NULL::STRING, NULL::STRING, 'G'])
+
+query T
+SELECT * FROM a
+----
+{NULL,NULL,NULL,NULL,NULL,NULL,G}
+
+statement ok
+DROP TABLE a
+
+# Bool array columns.
+
+statement ok
+CREATE TABLE a (b BOOL[])
+
+statement ok
+INSERT INTO a VALUES (ARRAY[]), (ARRAY[TRUE]), (ARRAY[FALSE]), (ARRAY[TRUE, TRUE]), (ARRAY[FALSE, TRUE])
+
+query T rowsort
+SELECT b FROM a
+----
+{}
+{t}
+{f}
+{t,t}
+{f,t}
+
+statement ok
+DROP TABLE a
+
+# Float array columns.
+
+statement ok
+CREATE TABLE a (b FLOAT[])
+
+statement ok
+INSERT INTO a VALUES (ARRAY[1.1, 2.2, 3.3])
+
+query T
+SELECT b FROM a
+----
+{1.1,2.2,3.3}
+
+statement ok
+DROP TABLE a
+
+# Decimal array columns.
+
+statement ok
+CREATE TABLE a (b DECIMAL[])
+
+statement ok
+INSERT INTO a VALUES (ARRAY[1.1, 2.2, 3.3])
+
+query T
+SELECT b FROM a
+----
+{1.1,2.2,3.3}
+
+statement ok
+DROP TABLE a
+
+# Bytes array columns.
+
+statement ok
+CREATE TABLE a (b BYTES[])
+
+statement ok
+INSERT INTO a VALUES (ARRAY['foo','bar','baz'])
+
+query T
+SELECT b FROM a
+----
+{"\\x666f6f","\\x626172","\\x62617a"}
+
+statement ok
+DROP TABLE a
+
+# Date array columns.
+
+statement ok
+CREATE TABLE a (b DATE[])
+
+statement ok
+INSERT INTO a VALUES (ARRAY[current_date])
+
+query I
+SELECT count(b) FROM a
+----
+1
+
+statement ok
+DROP TABLE a
+
+# Timestamp array columns.
+
+statement ok
+CREATE TABLE a (b TIMESTAMP[])
+
+statement ok
+INSERT INTO a VALUES (ARRAY[now()])
+
+query I
+SELECT count(b) FROM a
+----
+1
+
+statement ok
+DROP TABLE a
+
+# Interval array columns.
+
+statement ok
+CREATE TABLE a (b INTERVAL[])
+
+statement ok
+INSERT INTO a VALUES (ARRAY['1-2'::interval])
+
+query T
+SELECT b FROM a
+----
+{"1 year 2 mons"}
+
+statement ok
+DROP TABLE a
+
+# UUID array columns.
+
+statement ok
+CREATE TABLE a (b UUID[])
+
+statement ok
+INSERT INTO a VALUES (ARRAY[uuid_v4()::uuid])
+
+query I
+SELECT count(b) FROM a
+----
+1
+
+statement ok
+DROP TABLE a
+
+# OID array columns.
+
+statement ok
+CREATE TABLE a (b OID[])
+
+statement ok
+INSERT INTO a VALUES (ARRAY[1])
+
+query T
+SELECT b FROM a
+----
+{1}
+
+statement ok
+DROP TABLE a
+
+# Collated string array columns.
+
+statement ok
+CREATE TABLE a (b STRING[] COLLATE en)
+
+statement ok
+INSERT INTO a VALUES (ARRAY['hello' COLLATE en]), (ARRAY['goodbye' COLLATE en])
+
+query T rowsort
+SELECT * FROM a
+----
+{hello}
+{goodbye}
+
+statement ok
+INSERT INTO a VALUES (ARRAY['hello' COLLATE fr])
+
+statement ok
+DROP TABLE a
+
+query T
+SELECT * FROM unnest(ARRAY['a', 'B']) ORDER BY UNNEST;
+----
+B
+a
+
+query T
+SELECT * FROM unnest(ARRAY['a' COLLATE en, 'B' COLLATE en]) ORDER BY UNNEST;
+----
+a
+B
+
+# TODO(justin): type system limitation
+statement error unsupported binary operator
+SELECT ARRAY['foo' COLLATE en] || ARRAY['bar' COLLATE en]
+
+statement error unsupported binary operator
+SELECT ARRAY['foo' COLLATE en] || 'bar' COLLATE en
+
+statement ok
+CREATE TABLE a (b STRING[])
+
+statement ok
+INSERT INTO a VALUES (ARRAY['foo'])
+
+statement ok
+INSERT INTO a VALUES (ARRAY['foo' COLLATE en])
+
+statement ok
+DROP TABLE a
+
+# Array operators
+
+# Element append
+
+# Postgres also requires that the string be explicitly casted, so we're no worse
+# for wear despite this being a little annoying.
+query T
+SELECT ARRAY['a','b','c'] || 'd'::text
+----
+{a,b,c,d}
+
+query error pq: could not parse "d" as type string\[\]
+SELECT ARRAY['a','b','c'] || 'd'
+
+query T
+SELECT ARRAY[1,2,3] || 4
+----
+{1,2,3,4}
+
+query T
+SELECT NULL::INT[] || 4
+----
+{4}
+
+query T
+SELECT 4 || NULL::INT[]
+----
+{4}
+
+query T
+SELECT ARRAY[1,2,3] || NULL::INT
+----
+{1,2,3,NULL}
+
+query T
+SELECT NULL::INT[] || NULL::INT
+----
+{NULL}
+
+query T
+SELECT NULL::INT || ARRAY[1,2,3]
+----
+{NULL,1,2,3}
+
+query TT
+SELECT NULL::INT || NULL::INT[], NULL::INT[] || NULL::INT
+----
+{NULL} {NULL}
+
+query T
+SELECT 1 || ARRAY[2,3,4]
+----
+{1,2,3,4}
+
+# This is a departure from Postgres' behavior.
+# In Postgres, ARRAY[1,2,3] || NULL = ARRAY[1,2,3].
+
+query T
+SELECT ARRAY[1,2,3] || NULL
+----
+{1,2,3}
+
+query T
+SELECT NULL || ARRAY[1,2,3]
+----
+{1,2,3}
+
+# This test is here because its typechecking is related to the above
+
+query TT
+SELECT NULL || 'asdf', 'asdf' || NULL
+----
+NULL NULL
+
+statement ok
+CREATE TABLE a (b INT[])
+
+# Ensure arrays appended to still encode properly.
+
+statement ok
+INSERT INTO a VALUES (ARRAY[])
+
+statement ok
+UPDATE a SET b = b || 1
+
+statement ok
+UPDATE a SET b = b || 2
+
+statement ok
+UPDATE a SET b = b || 3
+
+statement ok
+UPDATE a SET b = b || 4
+
+query T
+SELECT b FROM a
+----
+{1,2,3,4}
+
+statement ok
+UPDATE a SET b = NULL::INT || b || NULL::INT
+
+query T
+SELECT b FROM a
+----
+{NULL,1,2,3,4,NULL}
+
+# Array append
+
+query T
+SELECT ARRAY[1,2,3] || ARRAY[4,5,6]
+----
+{1,2,3,4,5,6}
+
+query T
+SELECT ARRAY['a','b','c'] || ARRAY['d','e','f']
+----
+{a,b,c,d,e,f}
+
+query T
+SELECT ARRAY[1,2,3] || NULL::INT[]
+----
+{1,2,3}
+
+query T
+SELECT NULL::INT[] || ARRAY[4,5,6]
+----
+{4,5,6}
+
+query T
+SELECT NULL::INT[] || NULL::INT[]
+----
+NULL
+
+# The following test check for projection operators that are called when an
+# argument is NULL.
+statement ok
+CREATE TABLE t_bool (b BOOL[]);
+
+query T
+SELECT b || NULL FROM t_bool;
+----
+
+statement ok
+INSERT INTO t_bool VALUES (Array[]);
+
+query T
+SELECT b || NULL FROM t_bool;
+----
+{}
+
+statement ok
+DROP TABLE t_bool;
+
+# Array equality
+
+query B
+SELECT ARRAY[1,2,3] = ARRAY[1,2,3]
+----
+true
+
+query B
+SELECT ARRAY[1,2,4] = ARRAY[1,2,3]
+----
+false
+
+query B
+SELECT ARRAY[1,2,3] != ARRAY[1,2,3]
+----
+false
+
+query B
+SELECT ARRAY[1,2,4] != ARRAY[1,2,3]
+----
+true
+
+query B
+SELECT ARRAY[1,2,4] = NULL
+----
+NULL
+
+# This behavior is surprising (one might expect that the result would be
+# NULL), but it's how Postgres behaves.
+query B
+SELECT ARRAY[1,2,NULL] = ARRAY[1,2,3]
+----
+false
+
+# ARRAY_APPEND function
+
+query TT
+SELECT array_append(ARRAY[1,2,3], 4), array_append(ARRAY[1,2,3], NULL::INT)
+----
+{1,2,3,4} {1,2,3,NULL}
+
+query TT
+SELECT array_append(NULL::INT[], 4), array_append(NULL::INT[], NULL::INT)
+----
+{4} {NULL}
+
+# ARRAY_PREPEND function
+
+query TT
+SELECT array_prepend(4, ARRAY[1,2,3]), array_prepend(NULL::INT, ARRAY[1,2,3])
+----
+{4,1,2,3} {NULL,1,2,3}
+
+query TT
+SELECT array_prepend(4, NULL::INT[]), array_prepend(NULL::INT, NULL::INT[])
+----
+{4} {NULL}
+
+# ARRAY_CAT function
+
+query TT
+SELECT array_cat(ARRAY[1,2,3], ARRAY[4,5,6]), array_cat(ARRAY[1,2,3], NULL::INT[])
+----
+{1,2,3,4,5,6} {1,2,3}
+
+query TT
+SELECT array_cat(NULL::INT[], ARRAY[4,5,6]), array_cat(NULL::INT[], NULL::INT[])
+----
+{4,5,6} NULL
+
+# ARRAY_REMOVE function
+
+query T
+SELECT array_remove(ARRAY[1,2,3,2], 2)
+----
+{1,3}
+
+query T
+SELECT array_remove(ARRAY[1,2,3,NULL::INT], NULL::INT)
+----
+{1,2,3}
+
+query T
+SELECT array_remove(NULL::INT[], NULL::INT)
+----
+NULL
+
+# ARRAY_REPLACE function
+
+query T
+SELECT array_replace(ARRAY[1,2,5,4], 5, 3)
+----
+{1,2,3,4}
+
+query TT
+SELECT array_replace(ARRAY[1,2,NULL,4], NULL::INT, 3), array_replace(NULL::INT[], 5, 3)
+----
+{1,2,3,4} NULL
+
+# ARRAY_POSITION function
+
+query error unknown signature: array_position\(int, string\)
+SELECT array_position(2, 'wed'::text)
+
+query error unknown signature: array_position\(string, string\)
+SELECT array_position('1,wed', 'wed'::text)
+
+query error unknown signature: array_position\(string\[\], int\)
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 1);
+
+query I
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'mon')
+----
+2
+
+query I
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'abc')
+----
+NULL
+
+query I
+SELECT array_position(NULL::STRING[], 'abc')
+----
+NULL
+
+query error initial position must not be null
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'mon', null)
+
+query error unknown signature: array_position\(int, string, int\)
+SELECT array_position(2, 'wed'::text, 2)
+
+query error unknown signature: array_position\(string, string, int\)
+SELECT array_position('1,wed', 'wed'::text, 1)
+
+query error unknown signature: array_position\(string\[\], int, int\)
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 1, 1);
+
+query I
+SELECT array_position('{sun,mon,tue,wed,thu,fri,sat,mon}', 'mon'::TEXT, 2)
+----
+2
+
+query I
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'mon', 3)
+----
+8
+
+query I
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'tue', 4)
+----
+NULL
+
+query I
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'abc', 1)
+----
+NULL
+
+query I
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'wed', 9)
+----
+NULL
+
+query I
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'wed', 0)
+----
+4
+
+query I
+SELECT array_position(NULL::STRING[], 'abc', 1)
+----
+NULL
+
+# ARRAY_POSITIONS function
+
+query TT
+SELECT array_positions(ARRAY['A','A','B','A'], 'A'), array_positions(ARRAY['A','A','B','A'], 'C')
+----
+{1,2,4} {}
+
+query T
+SELECT array_positions(NULL::STRING[], 'A')
+----
+NULL
+
+query T
+SELECT string_to_array('axbxc', 'x')
+----
+{a,b,c}
+
+query T
+SELECT string_to_array('~a~~b~c', '~')
+----
+{"",a,"",b,c}
+
+query T
+SELECT string_to_array('~foo~~bar~baz', '~', 'bar')
+----
+{"",foo,"",NULL,baz}
+
+query T
+SELECT string_to_array('xx~^~yy~^~zz', '~^~', 'yy')
+----
+{xx,NULL,zz}
+
+query T
+SELECT string_to_array('foo', '')
+----
+{foo}
+
+query T
+SELECT string_to_array('', '')
+----
+{}
+
+query T
+SELECT string_to_array('', 'foo')
+----
+{}
+
+query T
+SELECT string_to_array('a', NULL)
+----
+{a}
+
+query T
+SELECT string_to_array(NULL, 'a')
+----
+NULL
+
+query T
+SELECT string_to_array(NULL, 'a', 'b')
+----
+NULL
+
+query T
+SELECT string_to_array('a', 'foo', NULL)
+----
+{a}
+
+query T
+SELECT string_to_array('foofoofoofoo', 'foo', 'foo')
+----
+{"","","","",""}
+
+# jsonb_array_to_string_array function
+
+statement ok
+CREATE TABLE str_arr(j JSONB)
+
+statement ok
+INSERT INTO str_arr
+VALUES
+    ('{"a": ["foo", "bar", "z"]}'),
+    ('{"a": ["1", "2", "3"]}'),
+    ('{"a": []}'),
+    ('{"b": "not-array"}')
+
+query T
+SELECT jsonb_array_to_string_array(j -> 'a') FROM str_arr ORDER BY j ASC
+----
+{}
+{1,2,3}
+{foo,bar,z}
+{}
+
+query error input argument must be JSON array type
+SELECT jsonb_array_to_string_array(j -> 'b') FROM str_arr ORDER BY j ASC
+
+query T
+SELECT jsonb_array_to_string_array('[1, 2, 3]':::JSONB)
+----
+{1,2,3}
+
+query T
+SELECT jsonb_array_to_string_array('[true, false, false, true]':::JSONB)
+----
+{true,false,false,true}
+
+query T
+SELECT jsonb_array_to_string_array('[null]':::JSONB)
+----
+{NULL}
+
+query T
+SELECT jsonb_array_to_string_array('[1, "abc", true, ["a", "b"], {"b": "foo"}, null]':::JSONB)
+----
+{1,abc,true,"[\"a\", \"b\"]","{\"b\": \"foo\"}",NULL}
+
+# Regression test for #23429.
+
+statement ok
+CREATE TABLE x (a STRING[], b INT[])
+
+statement ok
+UPDATE x SET a = ARRAY[], b = ARRAY[]
+
+
+# Github Issue 24175: Regression test for error when using ANY with UUID array.
+statement ok
+CREATE TABLE documents (shared_users UUID[]);
+
+statement ok
+INSERT INTO documents
+VALUES
+    (ARRAY[]),
+    (ARRAY['3ae3560e-d771-4b63-affb-47e8d7853680'::UUID,
+           '6CC1B5C1-FE4F-417D-96BD-AFD1FEEEC34F'::UUID]),
+    (ARRAY['C6F8286C-3A41-4D7E-A4F4-3234B7A57BA9'::UUID])
+
+query T
+SELECT *
+FROM documents
+WHERE '3ae3560e-d771-4b63-affb-47e8d7853680'::UUID = ANY (documents.shared_users);
+----
+{3ae3560e-d771-4b63-affb-47e8d7853680,6cc1b5c1-fe4f-417d-96bd-afd1feeec34f}
+
+statement ok
+CREATE TABLE u (x INT)
+
+statement ok
+INSERT INTO u VALUES (1), (2)
+
+statement ok
+CREATE TABLE v (y INT[])
+
+statement ok
+INSERT INTO v VALUES (ARRAY[1, 2])
+
+# Regression test for #30191. Ensure ArrayFlatten returns correct type.
+query T
+SELECT * FROM v WHERE y = ARRAY(SELECT x FROM u ORDER BY x);
+----
+{1,2}
+
+# Regression test for #34439. Ensure that empty arrays are interned correctly.
+query B
+SELECT ARRAY[''] = ARRAY[] FROM (VALUES (1)) WHERE ARRAY[B''] != ARRAY[]
+----
+false
+
+subtest 36477
+
+statement ok
+CREATE TABLE array_single_family (a INT PRIMARY KEY, b INT[], FAMILY fam0(a), FAMILY fam1(b))
+
+statement ok
+INSERT INTO array_single_family VALUES(0,ARRAY[])
+
+statement ok
+INSERT INTO array_single_family VALUES(1,ARRAY[1])
+
+statement ok
+INSERT INTO array_single_family VALUES(2,ARRAY[1,2])
+
+statement ok
+INSERT INTO array_single_family VALUES(3,ARRAY[1,2,NULL])
+
+statement ok
+INSERT INTO array_single_family VALUES(4,ARRAY[NULL,2,3])
+
+statement ok
+INSERT INTO array_single_family VALUES(5,ARRAY[1,NULL,3])
+
+statement ok
+INSERT INTO array_single_family VALUES(6,ARRAY[NULL::INT])
+
+statement ok
+INSERT INTO array_single_family VALUES(7,ARRAY[NULL::INT,NULL::INT])
+
+statement ok
+INSERT INTO array_single_family VALUES(8,ARRAY[NULL::INT,NULL::INT,NULL::INT])
+
+query IT colnames
+SELECT a, b FROM array_single_family ORDER BY a
+----
+a  b
+0  {}
+1  {1}
+2  {1,2}
+3  {1,2,NULL}
+4  {NULL,2,3}
+5  {1,NULL,3}
+6  {NULL}
+7  {NULL,NULL}
+8  {NULL,NULL,NULL}
+
+statement ok
+DROP TABLE array_single_family
+
+query TT
+SELECT ARRAY[]::int[], ARRAY[]:::int[]
+----
+{}  {}
+
+subtest 37544
+
+query T
+SELECT
+    col_1
+FROM
+    (
+        VALUES
+            (ARRAY[]::INT8[]),
+            (ARRAY[]::INT8[])
+    )
+        AS tab_1 (col_1)
+GROUP BY
+    tab_1.col_1
+----
+{}
+
+# Regression test for #38293.
+statement ok
+CREATE TABLE defvals (
+    id SERIAL NOT NULL PRIMARY KEY,
+    arr1 STRING(100) ARRAY NOT NULL DEFAULT ARRAY[],
+    arr2 INT ARRAY NOT NULL DEFAULT ARRAY[]
+)
+
+statement ok
+INSERT INTO defvals(id) VALUES (1)
+
+statement ok
+CREATE TABLE defvals2 (
+    id SERIAL NOT NULL PRIMARY KEY,
+    arr1 STRING(100) ARRAY NOT NULL DEFAULT ARRAY[NULL],
+    arr2 INT ARRAY NOT NULL DEFAULT ARRAY[NULL]
+)
+
+statement ok
+INSERT INTO defvals2(id) VALUES (1)
+
+subtest array_compare
+
+statement ok
+DROP TABLE IF EXISTS t;
+
+statement ok
+CREATE TABLE t (x INT[], y INT[], z STRING[])
+
+statement error pq: unsupported comparison operator: <int\[\]> < <string\[\]>
+SELECT * FROM t WHERE y < z
+
+statement ok
+INSERT INTO t VALUES (ARRAY[1], ARRAY[1, 2], NULL), (ARRAY[1, 1, 1, 1], ARRAY[2], NULL)
+
+query TT rowsort
+SELECT x, y FROM t WHERE x < y
+----
+{1}        {1,2}
+{1,1,1,1}  {2}
+
+query TT
+SELECT x, y FROM t WHERE x > y
+----
+
+query TT
+SELECT x, y FROM t ORDER BY (x, y)
+----
+{1}        {1,2}
+{1,1,1,1}  {2}
+
+subtest array_indexes
+
+# TODO(mjibson): Fix #50659 and revert all removed tests from #50622.
+
+# Indexes not yet supported for arrays, see #50659.
+statement ok
+DROP TABLE IF EXISTS t
+
+statement ok
+CREATE TABLE t_indexed (x INT[] PRIMARY KEY)
+
+statement ok
+CREATE TABLE t (x INT[])
+
+statement ok
+INSERT INTO t VALUES
+  (ARRAY[1]),
+  (ARRAY[5]),
+  (ARRAY[4]),
+  (ARRAY[1,4,5]),
+  (ARRAY[1,4,6]),
+  (ARRAY[1,NULL,10]),
+  (ARRAY[NULL]),
+  (ARRAY[NULL, NULL, NULL])
+
+# Test that the unique index rejects bad inserts.
+# Disabled until #50659 is resolved.
+#statement error pq: duplicate key value violates unique constraint "primary"\nDETAIL: Key \(x\)=\(ARRAY\[1,NULL,10\]\) already exists\.
+#INSERT INTO t VALUES (ARRAY[1, NULL, 10])
+
+query T
+SELECT x FROM t ORDER BY x
+----
+{NULL}
+{NULL,NULL,NULL}
+{1}
+{1,NULL,10}
+{1,4,5}
+{1,4,6}
+{4}
+{5}
+
+# Use the index for point lookups.
+query T
+SELECT x FROM t WHERE x = ARRAY[1,4,6]
+----
+{1,4,6}
+
+# Use the index for bounded scans.
+# Note that nulls sort first in CockroachDB, so this ordering is different
+# than what postgres will output. In postgres, NULLs in arrays are treated
+# as larger than other elements, while we treat them as less.
+# TODO (rohany): We have always done this for array comparisons, so I think
+#  it would be a breaking change + opposite with our other null behavior to
+#  change it suddenly...
+query T
+SELECT x FROM t WHERE x < ARRAY[1, 4, 3] ORDER BY x
+----
+{NULL}
+{NULL,NULL,NULL}
+{1}
+{1,NULL,10}
+
+query T
+SELECT x FROM t WHERE x > ARRAY [1, NULL] ORDER BY x DESC
+----
+{5}
+{4}
+{1,4,6}
+{1,4,5}
+{1,NULL,10}
+
+query T
+SELECT x FROM t WHERE x > ARRAY[1, 3] AND x < ARRAY[1, 4, 10] ORDER BY x
+----
+{1,4,5}
+{1,4,6}
+
+query T
+SELECT x FROM t WHERE x > ARRAY[NULL, NULL]:::INT[] ORDER BY x
+----
+{NULL,NULL,NULL}
+{1}
+{1,NULL,10}
+{1,4,5}
+{1,4,6}
+{4}
+{5}
+
+# Test some operations on a descending index.
+statement ok
+CREATE INDEX i ON t(x DESC)
+
+query T
+SELECT x FROM t@i WHERE x <= ARRAY[1] ORDER BY x DESC
+----
+{1}
+{NULL,NULL,NULL}
+{NULL}
+
+query T
+SELECT x FROM t@i WHERE x > ARRAY[1] ORDER BY x
+----
+{1,NULL,10}
+{1,4,5}
+{1,4,6}
+{4}
+{5}
+
+# Ensure that we can order by the arrays without any indexes.
+statement ok
+DROP TABLE t
+
+statement ok
+CREATE TABLE t (x INT[])
+
+statement ok
+INSERT INTO t VALUES
+  (ARRAY[1]),
+  (ARRAY[5]),
+  (ARRAY[4]),
+  (ARRAY[1,4,5]),
+  (ARRAY[1,4,6]),
+  (ARRAY[1,NULL,10]),
+  (ARRAY[NULL]),
+  (ARRAY[NULL, NULL, NULL])
+
+query T
+SELECT x FROM t ORDER BY x
+----
+{NULL}
+{NULL,NULL,NULL}
+{1}
+{1,NULL,10}
+{1,4,5}
+{1,4,6}
+{4}
+{5}
+
+query T
+SELECT x FROM t ORDER BY x DESC
+----
+{5}
+{4}
+{1,4,6}
+{1,4,5}
+{1,NULL,10}
+{1}
+{NULL,NULL,NULL}
+{NULL}
+
+statement ok
+CREATE INDEX i ON t (x);
+
+# Ensure selecting works fine on the index.
+
+query T
+SELECT x FROM t@i ORDER BY x
+----
+{NULL}
+{NULL,NULL,NULL}
+{1}
+{1,NULL,10}
+{1,4,5}
+{1,4,6}
+{4}
+{5}
+
+query T
+SELECT x FROM t@i ORDER BY x DESC
+----
+{5}
+{4}
+{1,4,6}
+{1,4,5}
+{1,NULL,10}
+{1}
+{NULL,NULL,NULL}
+{NULL}
+
+statement ok
+INSERT INTO t VALUES (NULL), (NULL)
+
+# Test that NULL's are differentiated from {NULL}.
+# Add "t@i" index annotation once #50659 is fixed.
+query T
+SELECT x FROM t WHERE x IS NOT NULL ORDER BY x
+----
+{NULL}
+{NULL,NULL,NULL}
+{1}
+{1,NULL,10}
+{1,4,5}
+{1,4,6}
+{4}
+{5}
+
+# Ensure that unique indexes on array columns work okay.
+statement ok
+CREATE TABLE unique_array (a INT[] UNIQUE, b INT[])
+
+statement ok
+INSERT INTO unique_array VALUES (ARRAY[1], ARRAY[2, 3])
+
+statement error duplicate key value violates unique constraint
+INSERT INTO unique_array VALUES (ARRAY[1], ARRAY[2, 3])
+
+statement ok
+INSERT INTO unique_array VALUES (ARRAY[2], ARRAY[2, 3])
+
+statement error duplicate key value violates unique constraint
+CREATE UNIQUE INDEX ON unique_array(b)
+
+# Create an indexes on a bad type.
+statement error column x has type geography\[\], which is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/.+/inverted-indexes.html
+CREATE TABLE tbad (x GEOGRAPHY[] PRIMARY KEY)
+
+# Test arrays of composite types.
+# Add x to PRIMARY KEY once #50659 is fixed.
+statement ok
+CREATE TABLE tarray(x DECIMAL[]);
+INSERT INTO tarray VALUES (ARRAY[1.00]), (ARRAY[1.501])
+
+# Ensure these are round tripped correctly.
+query T
+SELECT x FROM tarray ORDER BY x
+----
+{1.00}
+{1.501}
+
+# Test indexes on multiple columns with arrays.
+# Add multicolumn INDEX i (x, y, z) once #50659 is fixed.
+statement ok
+DROP TABLE t;
+
+statement ok
+CREATE TABLE t (x INT, y INT[], z INT);
+
+statement ok
+INSERT INTO t VALUES
+  (1, ARRAY[1, 2, 3], 3),
+  (NULL, ARRAY[1, NULL, 3], NULL),
+  (2, ARRAY[NULL, NULL, NULL], NULL),
+  (NULL, ARRAY[NULL, NULL], 3),
+  (2, ARRAY[4, 5], 7)
+
+query ITI
+SELECT x, y, z FROM t WHERE x IS NOT NULL AND y > ARRAY[1] ORDER BY z
+----
+ 1  {1,2,3}  3
+ 2  {4,5}    7
+
+query ITI
+SELECT x, y, z FROM t WHERE x = 2 AND y < ARRAY[10] ORDER BY y
+----
+2  {NULL,NULL,NULL}  NULL
+2  {4,5}             7
+
+# Test arrays of strings.
+# Add parent PRIMARY KEY (x) once #50659 is fixed.
+statement ok
+DROP TABLE t;
+
+statement ok
+CREATE TABLE t (x STRING[]);
+
+statement ok
+INSERT INTO t VALUES
+  (ARRAY['']),
+  (ARRAY['hello', 'hi\nthere']),
+  (ARRAY['another', 'string', 'in', 'my', 'array']),
+  (ARRAY['this', 'array', NULL, 'has', NULL])
+
+query T
+SELECT x FROM t ORDER BY x DESC
+----
+{this,array,NULL,has,NULL}
+{hello,"hi\\nthere"}
+{another,string,in,my,array}
+{""}
+
+query T
+SELECT x FROM t WHERE x > ARRAY['hell'] AND x < ARRAY['i']
+----
+{hello,"hi\\nthere"}
+
+# Test arrays of bytes, and insert some bytes that are used by the
+# array encoding itself.
+# Add parent PRIMARY KEY (x) once #50659 is fixed.
+statement ok
+DROP TABLE t;
+
+statement ok
+CREATE TABLE t (x BYTES[]);
+
+statement ok
+INSERT INTO t VALUES
+  (ARRAY[b'\xFF', b'\x00']),
+  (ARRAY[NULL, b'\x01', b'\x01', NULL]),
+  (ARRAY[NULL, b'\xFF'])
+
+query T
+SELECT x FROM t ORDER BY x
+----
+{NULL,"\\x01","\\x01",NULL}
+{NULL,"\\xff"}
+{"\\xff","\\x00"}
+
+# Repeat the above test with a descending encoding.
+# Add parent PRIMARY KEY (x DESC) once #50659 is fixed.
+statement ok
+DROP TABLE t;
+
+statement ok
+CREATE TABLE t (x BYTES[]);
+
+statement ok
+INSERT INTO t VALUES
+  (ARRAY[b'\xFF', b'\x00']),
+  (ARRAY[NULL, b'\x01', b'\x01', NULL]),
+  (ARRAY[NULL, b'\xFF'])
+
+query T
+SELECT x FROM t ORDER BY x
+----
+{NULL,"\\x01","\\x01",NULL}
+{NULL,"\\xff"}
+{"\\xff","\\x00"}
+
+# Test some indexes with multiple array columns.
+# Add parent PRIMARY KEY (x, y) once #50659 is fixed.
+statement ok
+DROP TABLE t;
+
+statement ok
+CREATE TABLE t (x INT[], y INT[]);
+
+statement ok
+INSERT INTO t VALUES
+  (ARRAY[1, 2], ARRAY[3, 4]),
+  (ARRAY[NULL, NULL], ARRAY[NULL, NULL]),
+  (ARRAY[], ARRAY[]),
+  (ARRAY[], ARRAY[NULL, 2]),
+  (ARRAY[NULL], ARRAY[])
+
+query TT
+SELECT x, y FROM t ORDER BY x, y
+----
+{}           {}
+{}           {NULL,2}
+{NULL}       {}
+{NULL,NULL}  {NULL,NULL}
+{1,2}        {3,4}
+
+query TT
+SELECT x, y FROM t WHERE x > ARRAY[NULL]:::INT[] ORDER BY y
+----
+{NULL,NULL}  {NULL,NULL}
+{1,2}        {3,4}
+
+# Test that we can create foreign key references on arrays.
+# Enable once #50659 is fixed.
+#statement ok
+#DROP TABLE IF EXISTS t1, t2 CASCADE;
+#CREATE TABLE t1 (x INT[] PRIMARY KEY);
+#CREATE TABLE t2 (x INT[] PRIMARY KEY);
+#ALTER TABLE t2 ADD FOREIGN KEY (x) REFERENCES t1 (x)
+
+#statement ok
+#INSERT INTO t1 VALUES (ARRAY[1, 2, NULL, 3])
+
+#statement error pq: insert on table "t2" violates foreign key constraint "fk_x_ref_t1"
+#INSERT INTO t2 VALUES (ARRAY[1, 2])
+
+#statement ok
+#INSERT INTO t2 VALUES (ARRAY[1, 2, NULL, 3])
+
+#statement error pq: delete on table "t1" violates foreign key constraint "fk_x_ref_t1" on table "t2"
+#DELETE FROM t1 WHERE x > ARRAY[1]
+
+# Test different joins on indexed arrays.
+# Add t1 and t2 PRIMARY KEY x once #50659 is fixed.
+statement ok
+DROP TABLE IF EXISTS t1, t2 CASCADE;
+
+statement ok
+CREATE TABLE t1 (x INT[]);
+
+statement ok
+CREATE TABLE t2 (x INT[]);
+
+statement ok
+INSERT INTO t1 VALUES
+  (ARRAY[1, 2]),
+  (ARRAY[NULL]),
+  (ARRAY[3, 4]);
+INSERT INTO t2 VALUES
+  (ARRAY[]),
+  (ARRAY[1, 2]),
+  (ARRAY[NULL])
+
+query T rowsort
+SELECT t1.x FROM t1 INNER HASH JOIN t2 ON t1.x = t2.x
+----
+{NULL}
+{1,2}
+
+query T rowsort
+SELECT t1.x FROM t1 INNER MERGE JOIN t2 ON t1.x = t2.x
+----
+{NULL}
+{1,2}
+
+# Enable once #50659 is fixed.
+#query T rowsort
+#SELECT t1.x FROM t1 INNER LOOKUP JOIN t2 ON t1.x =# t2.x
+#----
+#{NULL}
+#{1,2}
+
+# Test that we can group by arrays.
+# Add INDEX (x) once #50659 is fixed.
+statement ok
+DROP TABLE t;
+
+statement ok
+CREATE TABLE t (x INT[]);
+
+statement ok
+INSERT INTO t VALUES
+  (ARRAY[1, 2]),
+  (ARRAY[1, 2]),
+  (ARRAY[1, 2]),
+  (ARRAY[NULL, NULL]),
+  (ARRAY[NULL, NULL]),
+  (ARRAY[1,2,NULL,4,NULL]),
+  (ARRAY[1,2,NULL,4,NULL])
+
+query T rowsort
+SELECT x FROM t GROUP BY x
+----
+{1,2}
+{NULL,NULL}
+{1,2,NULL,4,NULL}
+
+# Regression test for #53395: cast between tuples.
+query T
+SELECT CASE
+  WHEN NULL THEN (('1':::INT8, ARRAY[]:::INT2[]))
+  ELSE ('2':::INT8, ARRAY[(-23791):::INT8])
+END
+----
+(2,{-23791})
+
+# Test that string literals can be implicitly casted to array types
+statement ok
+DROP TABLE t;
+
+statement ok
+CREATE TABLE t (
+  a INT[],
+  b DECIMAL[],
+  c UUID[],
+  d STRING[],
+  e TIMESTAMPTZ[],
+  f DATE[],
+  g INTERVAL[],
+  h INET[],
+  i VARBIT[],
+  j FLOAT[]);
+
+statement ok
+INSERT INTO t VALUES (
+  '{1, 2}',
+  '{1.1, 2.2}',
+  '{18e7b17e-4ead-4e27-bfd5-bb6d11261bb6, 18e7b17e-4ead-4e27-bfd5-bb6d11261bb7}',
+  '{cat, dog}',
+  '{2010-09-28 12:00:00.1, 2010-09-29 12:00:00.1}',
+  '{2010-09-28, 2010-09-29}',
+  '{PT12H2M, -23:00:00}',
+  '{192.168.100.128, ::ffff:10.4.3.2}',
+  '{0101, 11}',
+  '{12.34, 45.67}');
+
+subtest array_builtin_uncasted_nulls
+
+query T
+SELECT array_prepend(1, NULL);
+----
+{1}
+
+query T
+SELECT array_append(NULL, 'cat');
+----
+{cat}
+
+query T
+SELECT array_cat(NULL, ARRAY[1]);
+----
+{1}
+
+query T
+SELECT array_cat(ARRAY[1], NULL);
+----
+{1}
+
+query T
+SELECT array_remove(NULL, 'cat');
+----
+NULL
+
+query T
+SELECT array_replace(NULL, 'cat', 'dog');
+----
+NULL
+
+query T
+SELECT array_position(NULL, 'cat');
+----
+NULL
+
+query T
+SELECT array_positions(NULL, 'cat');
+----
+NULL
+
+subtest array_tuples
+
+# Test for #32715: able to distribute queries with arrays of tuples.
+
+statement ok
+CREATE TABLE kv (
+  k INT PRIMARY KEY,
+  v STRING
+);
+
+statement ok
+INSERT INTO kv VALUES (1, 'one'), (2, 'two'), (3, 'three'), (4, 'four'), (5, null)
+
+query T rowsort
+SELECT ARRAY[(k, k)] FROM kv
+----
+{"(1,1)"}
+{"(2,2)"}
+{"(3,3)"}
+{"(4,4)"}
+{"(5,5)"}
+
+query T rowsort
+SELECT ARRAY[(k, k), (1, 2)] FROM kv
+----
+{"(1,1)","(1,2)"}
+{"(2,2)","(1,2)"}
+{"(3,3)","(1,2)"}
+{"(4,4)","(1,2)"}
+{"(5,5)","(1,2)"}
+
+query T rowsort
+SELECT ARRAY[(k, 'foo'), (1, v)] FROM kv
+----
+{"(1,foo)","(1,one)"}
+{"(2,foo)","(1,two)"}
+{"(3,foo)","(1,three)"}
+{"(4,foo)","(1,four)"}
+{"(5,foo)","(1,)"}
+
+# Test array builtins on record types
+
+query T rowsort
+SELECT array_cat(ARRAY[ROW(10,'fish')], ARRAY[(k,v)]) FROM kv
+----
+{"(10,fish)","(1,one)"}
+{"(10,fish)","(2,two)"}
+{"(10,fish)","(3,three)"}
+{"(10,fish)","(4,four)"}
+{"(10,fish)","(5,)"}
+
+query T rowsort
+SELECT array_cat(ARRAY[ROW(1,NULL)], ARRAY[(k,v)]) FROM kv
+----
+{"(1,)","(1,one)"}
+{"(1,)","(2,two)"}
+{"(1,)","(3,three)"}
+{"(1,)","(4,four)"}
+{"(1,)","(5,)"}
+
+query T rowsort
+SELECT array_cat(ARRAY[NULL::record], ARRAY[(k,v)]) FROM kv
+----
+{NULL,"(1,one)"}
+{NULL,"(2,two)"}
+{NULL,"(3,three)"}
+{NULL,"(4,four)"}
+{NULL,"(5,)"}
+
+query T
+SELECT array_cat(ARRAY[ROW(1,2)], ARRAY[NULL::record])
+----
+{"(1,2)",NULL}
+
+query T
+SELECT array_agg(ROW(1, 2))
+----
+{"(1,2)"}
+
+query T
+SELECT array_agg(ROW(k,v) ORDER BY k) FROM kv
+----
+{"(1,one)","(2,two)","(3,three)","(4,four)","(5,)"}
+
+query T rowsort
+SELECT array_append(ARRAY[ROW(10,'fish')], (k,v)) FROM kv
+----
+{"(10,fish)","(1,one)"}
+{"(10,fish)","(2,two)"}
+{"(10,fish)","(3,three)"}
+{"(10,fish)","(4,four)"}
+{"(10,fish)","(5,)"}
+
+query T
+SELECT array_append(ARRAY[ROW(1,2)], NULL::record)
+----
+{"(1,2)",NULL}
+
+query T rowsort
+SELECT array_append(NULL::record[], (k,v)) FROM kv
+----
+{"(1,one)"}
+{"(2,two)"}
+{"(3,three)"}
+{"(4,four)"}
+{"(5,)"}
+
+query T
+SELECT array_append(NULL::record[], NULL::record)
+----
+{NULL}
+
+query T rowsort
+SELECT array_prepend((k,v), ARRAY[ROW(10,'fish'), ROW(11,'zebra')]) FROM kv
+----
+{"(1,one)","(10,fish)","(11,zebra)"}
+{"(2,two)","(10,fish)","(11,zebra)"}
+{"(3,three)","(10,fish)","(11,zebra)"}
+{"(4,four)","(10,fish)","(11,zebra)"}
+{"(5,)","(10,fish)","(11,zebra)"}
+
+query T
+SELECT array_prepend(NULL::record, ARRAY[ROW(10,'fish'), ROW(11,'zebra')])
+----
+{NULL,"(10,fish)","(11,zebra)"}
+
+query T
+SELECT array_prepend(ROW(1,2), NULL::record[])
+----
+{"(1,2)"}
+
+query T
+SELECT array_prepend(NULL::record, NULL::record[])
+----
+{NULL}
+
+query T
+SELECT array_remove(ARRAY[ROW(1,'cat'), ROW(10,'fish'), ROW(11,'zebra')], ROW(10,'fish'))
+----
+{"(1,cat)","(11,zebra)"}
+
+query T
+SELECT array_remove(ARRAY[ROW(1,'cat'), ROW(10,'fish'), ROW(11,'zebra'), NULL], NULL::record)
+----
+{"(1,cat)","(10,fish)","(11,zebra)"}
+
+query T
+SELECT array_remove(NULL::record[], NULL::record)
+----
+NULL
+
+query T
+SELECT array_replace(ARRAY[ROW(1,'cat'), ROW(10,'fish'), ROW(11,'zebra')], ROW(10,'fish'), ROW(2,'dog'))
+----
+{"(1,cat)","(2,dog)","(11,zebra)"}
+
+query TT
+SELECT array_replace(ARRAY[ROW(1,'cat'), NULL, ROW(11,'zebra')], NULL::record, ROW(2,'dog')), array_replace(NULL::record[], ROW(10,'fish'), ROW(2,'dog'))
+----
+{"(1,cat)","(2,dog)","(11,zebra)"}  NULL
+
+# ARRAY_POSITION function
+
+query I
+SELECT array_position(ARRAY[ROW(1,'cat'), ROW(10,'fish'), ROW(11,'zebra')], ROW(11,'zebra'))
+----
+3
+
+query I
+SELECT array_position(ARRAY[ROW(1,'cat'), ROW(10,'fish'), ROW(11,'zebra')], ROW(33,'hippo'))
+----
+NULL
+
+query I
+SELECT array_position(NULL::record[], ROW(33,'hippo'))
+----
+NULL
+
+# ARRAY_POSITIONS function
+
+query T
+SELECT array_positions(ARRAY[ROW(1,'cat'), ROW(11,'zebra'), ROW(10,'fish'), ROW(11,'zebra')], ROW(11,'zebra'))
+----
+{2,4}
+
+query T
+SELECT array_positions(ARRAY[ROW(1,'cat'), ROW(11,'zebra'), ROW(10,'fish'), ROW(11,'zebra')], ROW(33,'hippo'))
+----
+{}
+
+query T
+SELECT array_positions(NULL::record[], ROW(33,'hippo'))
+----
+NULL
+
+# Handle tuples with mismatched types. This behavior matches PostgreSQL -- the
+# tuple comparison will short-circuit, so for example, there will be no error
+# if the second elements' types don't match as long as the first elements are
+# unequal.
+
+query error pgcode 42804 unsupported comparison.*\n.*at record column 2
+SELECT array_replace(ARRAY[(1,'cat'),(2,'dog')], (1, 12.3::decimal), (3,'fish'))
+
+# array_append does not require the tuple types to match exactly.
+query error pgcode 42804 unsupported comparison.*\n.*at record column 2
+SELECT array_replace(array_append(array[(1,'cat')], (2,true)), (2,'fish'), (3,'dog'))
+
+# This works because the comparison short-circuits before comparing the boolean column
+query T
+SELECT array_replace(array_append(array[(1,'cat')], (2,true)), (1,'fish'), (3,'dog'))
+----
+{"(1,cat)","(2,t)"}
+
+# The value that replaces the old one can have types.
+query T
+SELECT array_replace(ARRAY[(1,'cat'),(2,'dog')], (2, 'dog'), (3,true))
+----
+{"(1,cat)","(3,t)"}
+
+query error pgcode 42804 unsupported comparison.*\n.*at record column 1
+SELECT array_position(ARRAY[(12::OID,NULL),(NULL,NULL)], ('\xc03b4478eb'::BYTEA,NULL))
+
+query error pgcode 42804 unsupported comparison.*\n.*at record column 2
+SELECT array_positions(ARRAY[(1,'cat'),(2,'dog')], (2,true))
+
+query error pgcode 42804 unsupported comparison.*\n.*at record column 2
+SELECT array_remove(ARRAY[(1,'cat'),(2,'dog')], (2,'\xc03b4478eb'::BYTEA))
+
+# This works because the comparison short-circuits before comparing the BYTEA column
+query T
+SELECT array_remove(ARRAY[(1,'cat'),(2,'dog')], (3,'\xc03b4478eb'::BYTEA))
+----
+{"(1,cat)","(2,dog)"}
+
+subtest regression_71394
+
+statement ok
+PREPARE regression_71394 AS SELECT ARRAY[$1]::int[];
+
+query T
+EXECUTE regression_71394(71394)
+----
+{71394}
+
+subtest array_enums
+
+# Able to distribute queries with arrays of tuples.
+
+statement ok
+CREATE TYPE letter AS ENUM ('a', 'b', 'c');
+
+statement ok
+CREATE TABLE kv_enum (
+  k INT PRIMARY KEY,
+  v letter
+);
+
+statement ok
+INSERT INTO kv_enum VALUES (1, 'a'), (2, 'b'), (3, 'c'), (4, NULL)
+
+query T rowsort
+SELECT ARRAY[v] FROM kv_enum
+----
+{a}
+{b}
+{c}
+{NULL}
+
+# Test array builtins on enum types
+
+query T rowsort
+SELECT array_cat(ARRAY['a'::letter, 'b'], ARRAY[v]) FROM kv_enum
+----
+{a,b,a}
+{a,b,b}
+{a,b,c}
+{a,b,NULL}
+
+query T rowsort
+SELECT array_cat(ARRAY[NULL::letter], ARRAY[v]) FROM kv_enum
+----
+{NULL,a}
+{NULL,b}
+{NULL,c}
+{NULL,NULL}
+
+query T
+SELECT array_cat(ARRAY['a'::letter], ARRAY[NULL::letter])
+----
+{a,NULL}
+
+query T
+SELECT array_agg('a'::letter)
+----
+{a}
+
+query T
+SELECT array_agg(v ORDER BY k) FROM kv_enum
+----
+{a,b,c,NULL}
+
+query T rowsort
+SELECT array_append(ARRAY['a'::letter], v) FROM kv_enum
+----
+{a,a}
+{a,b}
+{a,c}
+{a,NULL}
+
+query T
+SELECT array_append(ARRAY['a'::letter], NULL::letter)
+----
+{a,NULL}
+
+query T rowsort
+SELECT array_append(NULL::letter[], v) FROM kv_enum
+----
+{a}
+{b}
+{c}
+{NULL}
+
+query T
+SELECT array_append(NULL::letter[], NULL::letter)
+----
+{NULL}
+
+query T rowsort
+SELECT array_prepend(v, ARRAY['a'::letter, 'b']) FROM kv_enum
+----
+{a,a,b}
+{b,a,b}
+{c,a,b}
+{NULL,a,b}
+
+query T
+SELECT array_prepend(NULL::letter, ARRAY['a'::letter])
+----
+{NULL,a}
+
+query T
+SELECT array_prepend('a'::letter, NULL::letter[])
+----
+{a}
+
+query T
+SELECT array_prepend(NULL::letter, NULL::letter[])
+----
+{NULL}
+
+query T
+SELECT array_remove(ARRAY['a'::letter, 'b'], 'a'::letter)
+----
+{b}
+
+query T
+SELECT array_remove(ARRAY['a'::letter, 'b', NULL], NULL::letter)
+----
+{a,b}
+
+query T
+SELECT array_remove(NULL::letter[], NULL::letter)
+----
+NULL
+
+query T
+SELECT array_replace(ARRAY['a'::letter, 'b'], 'b'::letter, 'c'::letter)
+----
+{a,c}
+
+query TT
+SELECT array_replace(ARRAY['a'::letter, NULL], NULL::letter, 'c'::letter), array_replace(NULL::letter[], 'a'::letter, 'b'::letter)
+----
+{a,c}  NULL
+
+# ARRAY_POSITION function
+
+query I
+SELECT array_position(ARRAY['a'::letter, 'b', 'c'], 'c'::letter)
+----
+3
+
+query I
+SELECT array_position(NULL::letter[], 'a'::letter)
+----
+NULL
+
+# ARRAY_POSITIONS function
+
+query T
+SELECT array_positions(ARRAY['a'::letter, 'b', 'a'], 'a'::letter)
+----
+{1,3}
+
+query T
+SELECT array_positions(NULL::letter[], 'b'::letter)
+----
+NULL
+
+# Regression test for losing the OID of the array during spilling to disk.
+
+# Lower the distsql_workmem so that the sort in the query below has to spill to
+# disk.
+statement ok
+SET distsql_workmem = '2B'
+
+# The output must be printed without the curly braces.
+query T
+SELECT indkey FROM pg_index WHERE indrelid = (SELECT oid FROM pg_class WHERE relname = 'k') ORDER BY 1
+----
+1
+
+statement ok
+RESET distsql_workmem
+
+# Regression test for incorrect planning in the vectorized engine for
+# concatenating a string with a string array (#85295).
+query T nosort
+SELECT ('foo'::STRING || col::STRING[])::STRING[] FROM (VALUES (ARRAY['bar':::STRING]), (ARRAY['baz':::STRING])) AS t (col);
+----
+{foo,bar}
+{foo,baz}
+
+# Regression test for #87919 - datum concatenation should be performed for
+# null arguments.
+statement ok
+CREATE TABLE t1_87919 (
+  a  INT
+);
+CREATE TABLE t2_87919 (
+  b INT,
+  c TIME[]
+);
+INSERT INTO t1_87919 (a) VALUES (NULL);
+INSERT INTO t2_87919 (c) VALUES (ARRAY['03:23:06.042923']);
+
+query T rowsort
+SELECT ('09:20:35.19023'::TIME || c)::TIME[] AS col_25551
+FROM t1_87919
+FULL JOIN t2_87919 ON a = b
+ORDER BY a;
+----
+{09:20:35.19023}
+{09:20:35.19023,03:23:06.042923}
+
+# Regression tests for not checking whether the left argument of a comparison
+# operator with a sub-operator for being non-NULL (#95158).
+statement ok
+CREATE TABLE t95158 (c STRING);
+INSERT INTO t95158 VALUES (NULL);
+
+query I
+SELECT * FROM t95158 WHERE c !~ ALL (ARRAY['x']::STRING[])
+----
+
+query I
+SELECT * FROM t95158 WHERE c !~ ANY (ARRAY['x']::STRING[])
+----
+
+query I
+SELECT * FROM t95158 WHERE c !~ SOME (ARRAY['x']::STRING[])
+----
+
+# Regression tests for internal errors on an empty array string (#89969).
+query error pgcode 42804 could not determine polymorphic type because input has type unknown
+SELECT array_length('{}', 1);
+
+query I
+SELECT array_length('{}'::text[], 1);
+----
+NULL
+
+query error pgcode 42804 could not determine polymorphic type because input has type unknown
+SELECT cardinality('{}');
+
+query I
+SELECT width_bucket(true, '{}'::BOOL[]);
+----
+0
+
+# TODO(yuzefovich): this works in PG because 'thresholds' argument uses
+# anycompatiblearray type, not anyarray.
+query error pgcode 42804 could not determine polymorphic type because input has type unknown
+SELECT width_bucket(true, '{}');
+
+query error pgcode 42804 could not determine polymorphic type because input has type unknown
+SELECT array_to_string('{}', 'foo');

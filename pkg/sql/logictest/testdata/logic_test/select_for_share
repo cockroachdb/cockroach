@@ -1,0 +1,274 @@
+# LogicTest: !local-prepared
+
+statement ok
+SET kv_transaction_buffered_writes_enabled = false;
+
+statement ok
+CREATE TABLE t(a INT PRIMARY KEY);
+INSERT INTO t VALUES(1);
+GRANT ALL ON t TO testuser;
+CREATE USER testuser2 WITH VIEWACTIVITY;
+GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser;
+GRANT ALL ON t TO testuser2;
+
+user testuser
+
+statement ok
+SET kv_transaction_buffered_writes_enabled = false;
+
+statement ok
+SET enable_shared_locking_for_serializable = true;
+
+statement ok
+BEGIN
+
+query I
+SELECT * FROM t WHERE a = 1 FOR SHARE;
+----
+1
+
+# Start another transaction to show multiple transactions can acquire SHARED
+# locks at the same time.
+
+user root
+
+statement ok
+SET enable_shared_locking_for_serializable = true;
+
+statement ok
+BEGIN
+
+query I
+SELECT * FROM t  WHERE a = 1 FOR SHARE;
+----
+1
+
+user testuser2
+
+statement ok
+SET kv_transaction_buffered_writes_enabled = false;
+
+statement async writeReq count 1
+UPDATE t SET a = 2 WHERE a = 1
+
+skipif config weak-iso-level-configs
+query TTTTTTTBB colnames,retry,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE database_name = 'test'
+----
+database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
+test           public       t           /Table/106/1/1/0  Shared         Unreplicated  SERIALIZABLE     true     true
+test           public       t           /Table/106/1/1/0  Exclusive      Unreplicated  SERIALIZABLE     false    true
+test           public       t           /Table/106/1/1/0  Shared         Unreplicated  SERIALIZABLE     true     true
+
+onlyif config local-read-committed
+query TTTTTTTBB colnames,retry,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, replace(isolation_level, ' ', '_') AS isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE database_name = 'test'
+----
+database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability  isolation_level  granted  contended
+test           public       t           /Table/106/1/1/0  Shared         Replicated  READ_COMMITTED   true     true
+test           public       t           /Table/106/1/1/0  Exclusive      Replicated  READ_COMMITTED   false    true
+test           public       t           /Table/106/1/1/0  Shared         Replicated  READ_COMMITTED   true     true
+
+onlyif config local-repeatable-read
+query TTTTTTTBB colnames,retry,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, replace(isolation_level, ' ', '_') AS isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE database_name = 'test'
+----
+database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability  isolation_level  granted  contended
+test           public       t           /Table/106/1/1/0  Shared         Replicated  REPEATABLE_READ  true     true
+test           public       t           /Table/106/1/1/0  Exclusive      Replicated  REPEATABLE_READ  false    true
+test           public       t           /Table/106/1/1/0  Shared         Replicated  REPEATABLE_READ  true     true
+
+# Commit the first transaction and rollback the second.
+
+user testuser
+
+statement ok
+COMMIT
+
+user root
+
+statement ok
+ROLLBACK
+
+user testuser2
+
+# Now that both the transactions that issued shared lock reads have been
+# finalized, the write should be able to proceed.
+
+awaitstatement writeReq
+
+query I
+SELECT * FROM t;
+----
+2
+
+# ------------------------------------------------------------------------------
+# Tests to ensure the enable_shared_locking_for_serializable session variable
+# works as expected.
+# -----------------------------------------------------------------------------
+
+user testuser
+
+statement ok
+SET enable_shared_locking_for_serializable = false
+
+statement ok
+BEGIN ISOLATION LEVEL SERIALIZABLE
+
+query I
+SELECT * FROM t WHERE a = 2 FOR SHARE
+----
+2
+
+user testuser2
+
+query TTTTTTTBB colnames,retry,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE database_name = 'test'
+----
+database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
+
+user testuser
+
+statement ok
+COMMIT
+
+statement ok
+SET enable_shared_locking_for_serializable = true
+
+statement ok
+BEGIN
+
+query I
+SELECT * FROM t WHERE a = 2 FOR SHARE
+----
+2
+
+user testuser2
+
+statement ok
+SET enable_shared_locking_for_serializable = true
+
+skipif config weak-iso-level-configs
+query TTTTTTTBB colnames,retry,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE database_name = 'test'
+----
+database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
+test           public       t           /Table/106/1/2/0  Shared         Unreplicated  SERIALIZABLE     true     false
+
+onlyif config weak-iso-level-configs
+query TTTTTTTBB colnames,retry,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE database_name = 'test'
+----
+database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
+
+statement ok
+BEGIN
+
+query I
+SELECT * FROM t FOR SHARE SKIP LOCKED
+----
+2
+
+user root
+
+skipif config weak-iso-level-configs
+query TTTTTTTBB colnames,retry,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE database_name = 'test'
+----
+database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
+test           public       t           /Table/106/1/2/0  Shared         Unreplicated  SERIALIZABLE     true     false
+test           public       t           /Table/106/1/2/0  Shared         Unreplicated  SERIALIZABLE     true     false
+
+onlyif config weak-iso-level-configs
+query TTTTTTTBB colnames,retry,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE database_name = 'test'
+----
+database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
+
+statement ok
+BEGIN
+
+query I
+SELECT * FROM t FOR UPDATE SKIP LOCKED
+----
+
+statement ok
+COMMIT
+
+# Complete the open transactions.
+user testuser
+
+statement ok
+COMMIT
+
+user testuser2
+
+statement ok
+COMMIT
+
+# Ensure FOR SHARE SKIP LOCKED works correctly with replicated locks.
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t(a INT PRIMARY KEY);
+INSERT INTO t VALUES(1), (2);
+GRANT ALL ON t TO testuser;
+
+# Read both keys to ensure the INSERT's intents are resolved before any SKIP
+# LOCKED scan, which would skip unresolved intents (see #167582).
+query I rowsort
+SELECT * FROM t
+----
+1
+2
+
+user testuser
+
+statement ok
+SET enable_durable_locking_for_serializable = true;
+
+query I
+BEGIN;
+SELECT * FROM t WHERE a = 1 FOR SHARE;
+----
+1
+
+user root
+
+# Locks:
+# 1: Shared
+# 2: None
+
+query I
+BEGIN;
+SELECT * FROM t FOR UPDATE SKIP LOCKED
+----
+2
+
+user testuser2
+
+# Locks:
+# 1: Shared
+# 2: Exclusive
+
+query I
+BEGIN;
+SELECT * FROM t FOR SHARE SKIP LOCKED;
+COMMIT;
+----
+1
+
+user root
+
+statement ok
+COMMIT
+
+user testuser
+
+statement ok
+COMMIT
+
+# TODO(arul): Add a test to show that the session setting doesn't apply to read
+# committed transactions. We currently can't issue SELECT FOR SHARE statements
+# in read committed transactions because durable locking hasn't been fully
+# hooked up.

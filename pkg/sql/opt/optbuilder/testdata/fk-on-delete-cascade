@@ -1,0 +1,1223 @@
+exec-ddl
+CREATE TABLE parent (p INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p) ON DELETE CASCADE)
+----
+
+exec-ddl
+CREATE FUNCTION one_volatile() RETURNS INT VOLATILE LANGUAGE SQL AS 'SELECT 1'
+----
+
+exec-ddl
+CREATE FUNCTION one_immutable() RETURNS INT IMMUTABLE LANGUAGE SQL AS 'SELECT 1'
+----
+
+# Simple cascade; fast path (the filter gets transferred over to the cascade).
+build-post-queries
+DELETE FROM parent WHERE p > 1
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:4
+ │    ├── cascades
+ │    │    └── child_p_fkey
+ │    └── select
+ │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── scan parent
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── p:4 > 1
+ └── cascade
+      └── delete child
+           ├── columns: <none>
+           ├── fetch columns: c:11 child.p:12
+           └── select
+                ├── columns: c:11!null child.p:12!null
+                ├── scan child
+                │    ├── columns: c:11!null child.p:12!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     └── child.p:12 > 1
+
+# Simple cascade; no fast path.
+build-post-queries
+DELETE FROM parent WHERE p > 1 AND random() < 0.5
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:4
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── child_p_fkey
+ │    └── select
+ │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── scan parent
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── (p:4 > 1) AND (random() < 0.5)
+ └── cascade
+      └── delete child
+           ├── columns: <none>
+           ├── fetch columns: c:11 child.p:12
+           └── semi-join (hash)
+                ├── columns: c:11!null child.p:12!null
+                ├── scan child
+                │    ├── columns: c:11!null child.p:12!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                ├── with-scan &1
+                │    ├── columns: p:15!null
+                │    └── mapping:
+                │         └──  parent.p:4 => p:15
+                └── filters
+                     └── child.p:12 = p:15
+
+# Delete with subquery; no fast path.
+build-post-queries
+DELETE FROM parent WHERE EXISTS (SELECT p FROM parent)
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:4
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── child_p_fkey
+ │    └── select
+ │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── scan parent
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── exists
+ │                   └── project
+ │                        ├── columns: p:7!null
+ │                        └── scan parent
+ │                             └── columns: p:7!null crdb_internal_mvcc_timestamp:8 tableoid:9
+ └── cascade
+      └── delete child
+           ├── columns: <none>
+           ├── fetch columns: c:15 child.p:16
+           └── semi-join (hash)
+                ├── columns: c:15!null child.p:16!null
+                ├── scan child
+                │    ├── columns: c:15!null child.p:16!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                ├── with-scan &1
+                │    ├── columns: p:19!null
+                │    └── mapping:
+                │         └──  parent.p:4 => p:19
+                └── filters
+                     └── child.p:16 = p:19
+
+# Delete with volatile UDF; no fast path.
+build-post-queries
+DELETE FROM parent WHERE p > one_volatile()
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:4
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── child_p_fkey
+ │    └── select
+ │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── scan parent
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── p:4 > one_volatile()
+ └── cascade
+      └── delete child
+           ├── columns: <none>
+           ├── fetch columns: c:12 child.p:13
+           └── semi-join (hash)
+                ├── columns: c:12!null child.p:13!null
+                ├── scan child
+                │    ├── columns: c:12!null child.p:13!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                ├── with-scan &1
+                │    ├── columns: p:16!null
+                │    └── mapping:
+                │         └──  parent.p:4 => p:16
+                └── filters
+                     └── child.p:13 = p:16
+
+# Delete with immutable UDF; fast path.
+build-post-queries
+DELETE FROM parent WHERE p > one_immutable()
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:4
+ │    ├── cascades
+ │    │    └── child_p_fkey
+ │    └── select
+ │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── scan parent
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── p:4 > one_immutable()
+ └── cascade
+      └── delete child
+           ├── columns: <none>
+           ├── fetch columns: c:12 child.p:13
+           └── select
+                ├── columns: c:12!null child.p:13!null
+                ├── scan child
+                │    ├── columns: c:12!null child.p:13!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     └── child.p:13 > one_immutable()
+
+# Delete everything.
+build-post-queries
+DELETE FROM parent
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:4
+ │    ├── cascades
+ │    │    └── child_p_fkey
+ │    └── scan parent
+ │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         └── flags: avoid-full-scan
+ └── cascade
+      └── delete child
+           ├── columns: <none>
+           ├── fetch columns: c:11 child.p:12
+           └── scan child
+                ├── columns: c:11!null child.p:12!null
+                └── flags: avoid-full-scan disabled not visible index feature
+
+exec-ddl
+CREATE TABLE grandchild (g INT PRIMARY KEY, c INT REFERENCES child(c) ON DELETE CASCADE)
+----
+
+# Two-level cascade; fast path for the first cascade.
+build-post-queries
+DELETE FROM parent WHERE p > 1
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:4
+ │    ├── cascades
+ │    │    └── child_p_fkey
+ │    └── select
+ │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── scan parent
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── p:4 > 1
+ └── cascade
+      ├── delete child
+      │    ├── columns: <none>
+      │    ├── fetch columns: c:11 child.p:12
+      │    ├── input binding: &1
+      │    ├── cascades
+      │    │    └── grandchild_c_fkey
+      │    └── select
+      │         ├── columns: c:11!null child.p:12!null
+      │         ├── scan child
+      │         │    ├── columns: c:11!null child.p:12!null
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
+      │         └── filters
+      │              └── child.p:12 > 1
+      └── cascade
+           └── delete grandchild
+                ├── columns: <none>
+                ├── fetch columns: g:19 grandchild.c:20
+                └── semi-join (hash)
+                     ├── columns: g:19!null grandchild.c:20
+                     ├── scan grandchild
+                     │    ├── columns: g:19!null grandchild.c:20
+                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     ├── with-scan &1
+                     │    ├── columns: c:23!null
+                     │    └── mapping:
+                     │         └──  child.c:11 => c:23
+                     └── filters
+                          └── grandchild.c:20 = c:23
+
+# Two-level cascade; no fast path.
+build-post-queries
+DELETE FROM parent WHERE p > 1 AND random() < 0.5
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:4
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── child_p_fkey
+ │    └── select
+ │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── scan parent
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── (p:4 > 1) AND (random() < 0.5)
+ └── cascade
+      ├── delete child
+      │    ├── columns: <none>
+      │    ├── fetch columns: c:11 child.p:12
+      │    ├── input binding: &2
+      │    ├── cascades
+      │    │    └── grandchild_c_fkey
+      │    └── semi-join (hash)
+      │         ├── columns: c:11!null child.p:12!null
+      │         ├── scan child
+      │         │    ├── columns: c:11!null child.p:12!null
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
+      │         ├── with-scan &1
+      │         │    ├── columns: p:15!null
+      │         │    └── mapping:
+      │         │         └──  parent.p:4 => p:15
+      │         └── filters
+      │              └── child.p:12 = p:15
+      └── cascade
+           └── delete grandchild
+                ├── columns: <none>
+                ├── fetch columns: g:20 grandchild.c:21
+                └── semi-join (hash)
+                     ├── columns: g:20!null grandchild.c:21
+                     ├── scan grandchild
+                     │    ├── columns: g:20!null grandchild.c:21
+                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     ├── with-scan &2
+                     │    ├── columns: c:24!null
+                     │    └── mapping:
+                     │         └──  child.c:11 => c:24
+                     └── filters
+                          └── grandchild.c:21 = c:24
+
+# Delete everything.
+build-post-queries
+DELETE FROM parent
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:4
+ │    ├── cascades
+ │    │    └── child_p_fkey
+ │    └── scan parent
+ │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         └── flags: avoid-full-scan
+ └── cascade
+      ├── delete child
+      │    ├── columns: <none>
+      │    ├── fetch columns: c:11 child.p:12
+      │    ├── cascades
+      │    │    └── grandchild_c_fkey
+      │    └── scan child
+      │         ├── columns: c:11!null child.p:12!null
+      │         └── flags: avoid-full-scan disabled not visible index feature
+      └── cascade
+           └── delete grandchild
+                ├── columns: <none>
+                ├── fetch columns: g:19 grandchild.c:20
+                └── select
+                     ├── columns: g:19!null grandchild.c:20!null
+                     ├── scan grandchild
+                     │    ├── columns: g:19!null grandchild.c:20
+                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     └── filters
+                          └── grandchild.c:20 IS DISTINCT FROM CAST(NULL AS INT8)
+
+# Cascade with check query.
+exec-ddl
+DROP TABLE grandchild
+----
+
+exec-ddl
+CREATE TABLE grandchild (g INT PRIMARY KEY, c INT REFERENCES child(c))
+----
+
+build-post-queries
+DELETE FROM parent WHERE p > 1
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:4
+ │    ├── cascades
+ │    │    └── child_p_fkey
+ │    └── select
+ │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── scan parent
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── p:4 > 1
+ └── cascade
+      └── delete child
+           ├── columns: <none>
+           ├── fetch columns: child.c:11 child.p:12
+           ├── input binding: &1
+           ├── select
+           │    ├── columns: child.c:11!null child.p:12!null
+           │    ├── scan child
+           │    │    ├── columns: child.c:11!null child.p:12!null
+           │    │    └── flags: avoid-full-scan disabled not visible index feature
+           │    └── filters
+           │         └── child.p:12 > 1
+           └── f-k-checks
+                └── f-k-checks-item: grandchild(c) -> child(c)
+                     └── semi-join (hash)
+                          ├── columns: c:15!null
+                          ├── with-scan &1
+                          │    ├── columns: c:15!null
+                          │    └── mapping:
+                          │         └──  child.c:11 => c:15
+                          ├── scan grandchild
+                          │    ├── columns: grandchild.c:17
+                          │    └── flags: avoid-full-scan disabled not visible index feature
+                          └── filters
+                               └── c:15 = grandchild.c:17
+
+build-post-queries
+DELETE FROM parent WHERE p > 1 AND random() < 0.5
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:4
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── child_p_fkey
+ │    └── select
+ │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── scan parent
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── (p:4 > 1) AND (random() < 0.5)
+ └── cascade
+      └── delete child
+           ├── columns: <none>
+           ├── fetch columns: child.c:11 child.p:12
+           ├── input binding: &2
+           ├── semi-join (hash)
+           │    ├── columns: child.c:11!null child.p:12!null
+           │    ├── scan child
+           │    │    ├── columns: child.c:11!null child.p:12!null
+           │    │    └── flags: avoid-full-scan disabled not visible index feature
+           │    ├── with-scan &1
+           │    │    ├── columns: p:15!null
+           │    │    └── mapping:
+           │    │         └──  parent.p:4 => p:15
+           │    └── filters
+           │         └── child.p:12 = p:15
+           └── f-k-checks
+                └── f-k-checks-item: grandchild(c) -> child(c)
+                     └── semi-join (hash)
+                          ├── columns: c:16!null
+                          ├── with-scan &2
+                          │    ├── columns: c:16!null
+                          │    └── mapping:
+                          │         └──  child.c:11 => c:16
+                          ├── scan grandchild
+                          │    ├── columns: grandchild.c:18
+                          │    └── flags: avoid-full-scan disabled not visible index feature
+                          └── filters
+                               └── c:16 = grandchild.c:18
+
+# Self-reference with cascade.
+exec-ddl
+CREATE TABLE self (a INT PRIMARY KEY, b INT REFERENCES self(a) ON DELETE CASCADE)
+----
+
+build-post-queries post-query-levels=3
+DELETE FROM self WHERE a=1
+----
+root
+ ├── delete self
+ │    ├── columns: <none>
+ │    ├── fetch columns: a:5 b:6
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── self_b_fkey
+ │    └── select
+ │         ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         ├── scan self
+ │         │    ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── a:5 = 1
+ └── cascade
+      ├── delete self
+      │    ├── columns: <none>
+      │    ├── fetch columns: self.a:13 b:14
+      │    ├── input binding: &2
+      │    ├── cascades
+      │    │    └── self_b_fkey
+      │    └── semi-join (hash)
+      │         ├── columns: self.a:13!null b:14
+      │         ├── scan self
+      │         │    ├── columns: self.a:13!null b:14
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
+      │         ├── with-scan &1
+      │         │    ├── columns: a:17!null
+      │         │    └── mapping:
+      │         │         └──  self.a:5 => a:17
+      │         └── filters
+      │              └── b:14 = a:17
+      └── cascade
+           ├── delete self
+           │    ├── columns: <none>
+           │    ├── fetch columns: self.a:22 b:23
+           │    ├── input binding: &3
+           │    ├── cascades
+           │    │    └── self_b_fkey
+           │    └── semi-join (hash)
+           │         ├── columns: self.a:22!null b:23
+           │         ├── scan self
+           │         │    ├── columns: self.a:22!null b:23
+           │         │    └── flags: avoid-full-scan disabled not visible index feature
+           │         ├── with-scan &2
+           │         │    ├── columns: a:26!null
+           │         │    └── mapping:
+           │         │         └──  self.a:13 => a:26
+           │         └── filters
+           │              └── b:23 = a:26
+           └── cascade
+                └── delete self
+                     ├── columns: <none>
+                     ├── fetch columns: self.a:31 b:32
+                     ├── input binding: &4
+                     ├── cascades
+                     │    └── self_b_fkey
+                     └── semi-join (hash)
+                          ├── columns: self.a:31!null b:32
+                          ├── scan self
+                          │    ├── columns: self.a:31!null b:32
+                          │    └── flags: avoid-full-scan disabled not visible index feature
+                          ├── with-scan &3
+                          │    ├── columns: a:35!null
+                          │    └── mapping:
+                          │         └──  self.a:22 => a:35
+                          └── filters
+                               └── b:32 = a:35
+
+# Cascade cycle.
+exec-ddl
+CREATE TABLE ab (a INT PRIMARY KEY, b INT)
+----
+
+exec-ddl
+CREATE TABLE cd (c INT PRIMARY KEY, d INT)
+----
+
+exec-ddl
+CREATE TABLE ef (e INT PRIMARY KEY, f INT)
+----
+
+exec-ddl
+ALTER TABLE ab ADD CONSTRAINT ab_cd FOREIGN KEY (b) REFERENCES cd(c) ON DELETE CASCADE
+----
+
+exec-ddl
+ALTER TABLE cd ADD CONSTRAINT cd_ef FOREIGN KEY (d) REFERENCES ef(e) ON DELETE CASCADE
+----
+
+exec-ddl
+ALTER TABLE ef ADD CONSTRAINT ef_ab FOREIGN KEY (f) REFERENCES ab(a) ON DELETE CASCADE
+----
+
+# Fast path should not be used when there are cycles.
+build-post-queries post-query-levels=3
+DELETE FROM ab WHERE a = 1
+----
+root
+ ├── delete ab
+ │    ├── columns: <none>
+ │    ├── fetch columns: a:5 b:6
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── ef_ab
+ │    └── select
+ │         ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         ├── scan ab
+ │         │    ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── a:5 = 1
+ └── cascade
+      ├── delete ef
+      │    ├── columns: <none>
+      │    ├── fetch columns: e:13 f:14
+      │    ├── input binding: &2
+      │    ├── cascades
+      │    │    └── cd_ef
+      │    └── semi-join (hash)
+      │         ├── columns: e:13!null f:14
+      │         ├── scan ef
+      │         │    ├── columns: e:13!null f:14
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
+      │         ├── with-scan &1
+      │         │    ├── columns: a:17!null
+      │         │    └── mapping:
+      │         │         └──  ab.a:5 => a:17
+      │         └── filters
+      │              └── f:14 = a:17
+      └── cascade
+           ├── delete cd
+           │    ├── columns: <none>
+           │    ├── fetch columns: c:22 d:23
+           │    ├── input binding: &3
+           │    ├── cascades
+           │    │    └── ab_cd
+           │    └── semi-join (hash)
+           │         ├── columns: c:22!null d:23
+           │         ├── scan cd
+           │         │    ├── columns: c:22!null d:23
+           │         │    └── flags: avoid-full-scan disabled not visible index feature
+           │         ├── with-scan &2
+           │         │    ├── columns: e:26!null
+           │         │    └── mapping:
+           │         │         └──  ef.e:13 => e:26
+           │         └── filters
+           │              └── d:23 = e:26
+           └── cascade
+                └── delete ab
+                     ├── columns: <none>
+                     ├── fetch columns: ab.a:31 b:32
+                     ├── input binding: &4
+                     ├── cascades
+                     │    └── ef_ab
+                     └── semi-join (hash)
+                          ├── columns: ab.a:31!null b:32
+                          ├── scan ab
+                          │    ├── columns: ab.a:31!null b:32
+                          │    └── flags: avoid-full-scan disabled not visible index feature
+                          ├── with-scan &3
+                          │    ├── columns: c:35!null
+                          │    └── mapping:
+                          │         └──  cd.c:22 => c:35
+                          └── filters
+                               └── b:32 = c:35
+
+# Test a multi-level fast path.
+exec-ddl
+CREATE TABLE f1 (
+  a INT, data INT,
+  PRIMARY KEY (a)
+)
+----
+
+exec-ddl
+CREATE TABLE f2 (
+  a INT, b INT, data INT,
+  PRIMARY KEY (a,b),
+  CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES f1(a) ON DELETE CASCADE
+)
+----
+
+exec-ddl
+CREATE TABLE f3 (
+  a INT, b INT, c INT, data INT,
+  PRIMARY KEY (a,b,c),
+  CONSTRAINT fk3 FOREIGN KEY (a,b) REFERENCES f2(a,b) ON DELETE CASCADE
+)
+----
+
+build-post-queries
+DELETE FROM f1 WHERE a >= 1 AND a <= 4
+----
+root
+ ├── delete f1
+ │    ├── columns: <none>
+ │    ├── fetch columns: a:5 data:6
+ │    ├── cascades
+ │    │    └── fk2
+ │    └── select
+ │         ├── columns: a:5!null data:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         ├── scan f1
+ │         │    ├── columns: a:5!null data:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── (a:5 >= 1) AND (a:5 <= 4)
+ └── cascade
+      ├── delete f2
+      │    ├── columns: <none>
+      │    ├── fetch columns: f2.a:14 b:15 f2.data:16
+      │    ├── cascades
+      │    │    └── fk3
+      │    └── select
+      │         ├── columns: f2.a:14!null b:15!null f2.data:16
+      │         ├── scan f2
+      │         │    ├── columns: f2.a:14!null b:15!null f2.data:16
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
+      │         └── filters
+      │              └── (f2.a:14 >= 1) AND (f2.a:14 <= 4)
+      └── cascade
+           └── delete f3
+                ├── columns: <none>
+                ├── fetch columns: f3.a:25 f3.b:26 c:27 f3.data:28
+                └── select
+                     ├── columns: f3.a:25!null f3.b:26!null c:27!null f3.data:28
+                     ├── scan f3
+                     │    ├── columns: f3.a:25!null f3.b:26!null c:27!null f3.data:28
+                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     └── filters
+                          └── (f3.a:25 >= 1) AND (f3.a:25 <= 4)
+
+# No fast path possible (filter references other columns).
+build-post-queries
+DELETE FROM f1 WHERE a = 1 AND data = 1
+----
+root
+ ├── delete f1
+ │    ├── columns: <none>
+ │    ├── fetch columns: a:5 data:6
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── fk2
+ │    └── select
+ │         ├── columns: a:5!null data:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         ├── scan f1
+ │         │    ├── columns: a:5!null data:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── (a:5 = 1) AND (data:6 = 1)
+ └── cascade
+      ├── delete f2
+      │    ├── columns: <none>
+      │    ├── fetch columns: f2.a:14 b:15 f2.data:16
+      │    ├── input binding: &2
+      │    ├── cascades
+      │    │    └── fk3
+      │    └── semi-join (hash)
+      │         ├── columns: f2.a:14!null b:15!null f2.data:16
+      │         ├── scan f2
+      │         │    ├── columns: f2.a:14!null b:15!null f2.data:16
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
+      │         ├── with-scan &1
+      │         │    ├── columns: a:19!null
+      │         │    └── mapping:
+      │         │         └──  f1.a:5 => a:19
+      │         └── filters
+      │              └── f2.a:14 = a:19
+      └── cascade
+           └── delete f3
+                ├── columns: <none>
+                ├── fetch columns: f3.a:26 f3.b:27 c:28 f3.data:29
+                └── semi-join (hash)
+                     ├── columns: f3.a:26!null f3.b:27!null c:28!null f3.data:29
+                     ├── scan f3
+                     │    ├── columns: f3.a:26!null f3.b:27!null c:28!null f3.data:29
+                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     ├── with-scan &2
+                     │    ├── columns: a:32!null b:33!null
+                     │    └── mapping:
+                     │         ├──  f2.a:14 => a:32
+                     │         └──  f2.b:15 => b:33
+                     └── filters
+                          ├── f3.a:26 = a:32
+                          └── f3.b:27 = b:33
+
+# Test with a fast path cascade and a non-fast path cascade.
+exec-ddl
+CREATE TABLE g1 (a INT UNIQUE, b INT UNIQUE)
+----
+
+exec-ddl
+CREATE TABLE g2a (a INT REFERENCES g1(a) ON DELETE CASCADE, data INT)
+----
+
+exec-ddl
+CREATE TABLE g2b (b INT REFERENCES g1(b) ON DELETE CASCADE, data INT)
+----
+
+build-post-queries
+DELETE FROM g1 WHERE a = 1
+----
+root
+ ├── delete g1
+ │    ├── columns: <none>
+ │    ├── fetch columns: a:6 b:7 rowid:8
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    ├── g2a_a_fkey
+ │    │    └── g2b_b_fkey
+ │    └── select
+ │         ├── columns: a:6!null b:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+ │         ├── scan g1
+ │         │    ├── columns: a:6 b:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── a:6 = 1
+ ├── cascade
+ │    └── delete g2a
+ │         ├── columns: <none>
+ │         ├── fetch columns: g2a.a:16 data:17 g2a.rowid:18
+ │         └── select
+ │              ├── columns: g2a.a:16!null data:17 g2a.rowid:18!null
+ │              ├── scan g2a
+ │              │    ├── columns: g2a.a:16 data:17 g2a.rowid:18!null
+ │              │    └── flags: avoid-full-scan disabled not visible index feature
+ │              └── filters
+ │                   ├── g2a.a:16 = 1
+ │                   └── g2a.a:16 IS DISTINCT FROM CAST(NULL AS INT8)
+ └── cascade
+      └── delete g2b
+           ├── columns: <none>
+           ├── fetch columns: g2b.b:26 g2b.data:27 g2b.rowid:28
+           └── semi-join (hash)
+                ├── columns: g2b.b:26 g2b.data:27 g2b.rowid:28!null
+                ├── scan g2b
+                │    ├── columns: g2b.b:26 g2b.data:27 g2b.rowid:28!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                ├── with-scan &1
+                │    ├── columns: b:31
+                │    └── mapping:
+                │         └──  g1.b:7 => b:31
+                └── filters
+                     └── g2b.b:26 = b:31
+
+build-post-queries
+DELETE FROM g1 WHERE b = 1
+----
+root
+ ├── delete g1
+ │    ├── columns: <none>
+ │    ├── fetch columns: a:6 b:7 rowid:8
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    ├── g2a_a_fkey
+ │    │    └── g2b_b_fkey
+ │    └── select
+ │         ├── columns: a:6 b:7!null rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+ │         ├── scan g1
+ │         │    ├── columns: a:6 b:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── b:7 = 1
+ ├── cascade
+ │    └── delete g2a
+ │         ├── columns: <none>
+ │         ├── fetch columns: g2a.a:16 data:17 g2a.rowid:18
+ │         └── semi-join (hash)
+ │              ├── columns: g2a.a:16 data:17 g2a.rowid:18!null
+ │              ├── scan g2a
+ │              │    ├── columns: g2a.a:16 data:17 g2a.rowid:18!null
+ │              │    └── flags: avoid-full-scan disabled not visible index feature
+ │              ├── with-scan &1
+ │              │    ├── columns: a:21
+ │              │    └── mapping:
+ │              │         └──  g1.a:6 => a:21
+ │              └── filters
+ │                   └── g2a.a:16 = a:21
+ └── cascade
+      └── delete g2b
+           ├── columns: <none>
+           ├── fetch columns: g2b.b:27 g2b.data:28 g2b.rowid:29
+           └── select
+                ├── columns: g2b.b:27!null g2b.data:28 g2b.rowid:29!null
+                ├── scan g2b
+                │    ├── columns: g2b.b:27 g2b.data:28 g2b.rowid:29!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     ├── g2b.b:27 = 1
+                     └── g2b.b:27 IS DISTINCT FROM CAST(NULL AS INT8)
+
+# Verify composite types handling.
+exec-ddl
+CREATE TABLE h1 (p DECIMAL PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE h2 (c INT PRIMARY KEY, p DECIMAL REFERENCES h1(p) ON DELETE CASCADE)
+----
+
+# Fast path cannot be used: it would be incorrect to transfer this
+# condition to the child column.
+build-post-queries
+DELETE FROM h1 WHERE p::STRING = '1.0'
+----
+root
+ ├── delete h1
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:4
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── h2_p_fkey
+ │    └── select
+ │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── scan h1
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── p:4::STRING = '1.0'
+ └── cascade
+      └── delete h2
+           ├── columns: <none>
+           ├── fetch columns: c:11 h2.p:12
+           └── semi-join (hash)
+                ├── columns: c:11!null h2.p:12
+                ├── scan h2
+                │    ├── columns: c:11!null h2.p:12
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                ├── with-scan &1
+                │    ├── columns: p:15!null
+                │    └── mapping:
+                │         └──  h1.p:4 => p:15
+                └── filters
+                     └── h2.p:12 = p:15
+
+# It is ok to use the fast path if the expression is not composite-sensitive.
+build-post-queries
+DELETE FROM h1 WHERE p = 1
+----
+root
+ ├── delete h1
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:4
+ │    ├── cascades
+ │    │    └── h2_p_fkey
+ │    └── select
+ │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── scan h1
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── p:4 = 1
+ └── cascade
+      └── delete h2
+           ├── columns: <none>
+           ├── fetch columns: c:11 h2.p:12
+           └── select
+                ├── columns: c:11!null h2.p:12!null
+                ├── scan h2
+                │    ├── columns: c:11!null h2.p:12
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     ├── h2.p:12 = 1
+                     └── h2.p:12 IS DISTINCT FROM CAST(NULL AS DECIMAL)
+
+# Test null column handling for fast path cascades.
+exec-ddl
+CREATE TABLE m1 (
+  a INT,
+  b INT,
+  c INT,
+  UNIQUE(a,b,c)
+)
+----
+
+exec-ddl
+CREATE TABLE m2 (
+  a INT,
+  b INT NOT NULL,
+  c INT,
+  FOREIGN KEY (a,b,c) REFERENCES m1(a,b,c) ON DELETE CASCADE
+)
+----
+
+build-post-queries
+DELETE FROM m1 WHERE a+b+c=1
+----
+root
+ ├── delete m1
+ │    ├── columns: <none>
+ │    ├── fetch columns: a:7 b:8 c:9 rowid:10
+ │    ├── cascades
+ │    │    └── m2_a_b_c_fkey
+ │    └── select
+ │         ├── columns: a:7 b:8 c:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+ │         ├── scan m1
+ │         │    ├── columns: a:7 b:8 c:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── ((a:7 + b:8) + c:9) = 1
+ └── cascade
+      └── delete m2
+           ├── columns: <none>
+           ├── fetch columns: m2.a:19 m2.b:20 m2.c:21 m2.rowid:22
+           └── select
+                ├── columns: m2.a:19!null m2.b:20!null m2.c:21!null m2.rowid:22!null
+                ├── scan m2
+                │    ├── columns: m2.a:19 m2.b:20!null m2.c:21 m2.rowid:22!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     ├── ((m2.a:19 + m2.b:20) + m2.c:21) = 1
+                     ├── m2.a:19 IS DISTINCT FROM CAST(NULL AS INT8)
+                     └── m2.c:21 IS DISTINCT FROM CAST(NULL AS INT8)
+
+# The filter will end up being a contradiction, so the cascade is a no-op.
+build-post-queries
+DELETE FROM m1 WHERE a IS NULL
+----
+root
+ ├── delete m1
+ │    ├── columns: <none>
+ │    ├── fetch columns: a:7 b:8 c:9 rowid:10
+ │    ├── cascades
+ │    │    └── m2_a_b_c_fkey
+ │    └── select
+ │         ├── columns: a:7 b:8 c:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+ │         ├── scan m1
+ │         │    ├── columns: a:7 b:8 c:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── a:7 IS NULL
+ └── cascade
+      └── delete m2
+           ├── columns: <none>
+           ├── fetch columns: m2.a:19 m2.b:20 m2.c:21 m2.rowid:22
+           └── select
+                ├── columns: m2.a:19!null m2.b:20!null m2.c:21!null m2.rowid:22!null
+                ├── scan m2
+                │    ├── columns: m2.a:19 m2.b:20!null m2.c:21 m2.rowid:22!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     ├── m2.a:19 IS NULL
+                     ├── m2.a:19 IS DISTINCT FROM CAST(NULL AS INT8)
+                     └── m2.c:21 IS DISTINCT FROM CAST(NULL AS INT8)
+
+# Test cascades to a child with a partial index.
+exec-ddl
+CREATE TABLE parent_partial (p INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE child_partial (
+  c INT PRIMARY KEY,
+  p INT REFERENCES parent_partial(p) ON DELETE CASCADE,
+  i INT,
+  INDEX (p) WHERE i > 0,
+  INDEX (i) WHERE p > 0
+)
+----
+
+# Test a cascade to a child with a partial index; fast path.
+build-post-queries
+DELETE FROM parent_partial WHERE p > 1
+----
+root
+ ├── delete parent_partial
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:4
+ │    ├── cascades
+ │    │    └── child_partial_p_fkey
+ │    └── select
+ │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── scan parent_partial
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── p:4 > 1
+ └── cascade
+      └── delete child_partial
+           ├── columns: <none>
+           ├── fetch columns: c:12 child_partial.p:13 i:14
+           ├── partial index del columns: partial_index_del1:17 partial_index_del2:18
+           └── project
+                ├── columns: partial_index_del1:17 partial_index_del2:18!null c:12!null child_partial.p:13!null i:14
+                ├── select
+                │    ├── columns: c:12!null child_partial.p:13!null i:14
+                │    ├── scan child_partial
+                │    │    ├── columns: c:12!null child_partial.p:13 i:14
+                │    │    ├── partial index predicates
+                │    │    │    ├── child_partial_p_idx: filters
+                │    │    │    │    └── i:14 > 0
+                │    │    │    └── child_partial_i_idx: filters
+                │    │    │         └── child_partial.p:13 > 0
+                │    │    └── flags: avoid-full-scan disabled not visible index feature
+                │    └── filters
+                │         ├── child_partial.p:13 > 1
+                │         └── child_partial.p:13 IS DISTINCT FROM CAST(NULL AS INT8)
+                └── projections
+                     ├── i:14 > 0 [as=partial_index_del1:17]
+                     └── child_partial.p:13 > 0 [as=partial_index_del2:18]
+
+# Test a cascade to a child with a partial index; no fast path.
+build-post-queries
+DELETE FROM parent_partial WHERE p > 1 AND random() < 0.5
+----
+root
+ ├── delete parent_partial
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:4
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── child_partial_p_fkey
+ │    └── select
+ │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── scan parent_partial
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── (p:4 > 1) AND (random() < 0.5)
+ └── cascade
+      └── delete child_partial
+           ├── columns: <none>
+           ├── fetch columns: c:12 child_partial.p:13 i:14
+           ├── partial index del columns: partial_index_del1:18 partial_index_del2:19
+           └── project
+                ├── columns: partial_index_del1:18 partial_index_del2:19 c:12!null child_partial.p:13 i:14
+                ├── semi-join (hash)
+                │    ├── columns: c:12!null child_partial.p:13 i:14
+                │    ├── scan child_partial
+                │    │    ├── columns: c:12!null child_partial.p:13 i:14
+                │    │    ├── partial index predicates
+                │    │    │    ├── child_partial_p_idx: filters
+                │    │    │    │    └── i:14 > 0
+                │    │    │    └── child_partial_i_idx: filters
+                │    │    │         └── child_partial.p:13 > 0
+                │    │    └── flags: avoid-full-scan disabled not visible index feature
+                │    ├── with-scan &1
+                │    │    ├── columns: p:17!null
+                │    │    └── mapping:
+                │    │         └──  parent_partial.p:4 => p:17
+                │    └── filters
+                │         └── child_partial.p:13 = p:17
+                └── projections
+                     ├── i:14 > 0 [as=partial_index_del1:18]
+                     └── child_partial.p:13 > 0 [as=partial_index_del2:19]
+
+# Test a cascade to a child with a partial index; delete everything.
+build-post-queries
+DELETE FROM parent_partial
+----
+root
+ ├── delete parent_partial
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:4
+ │    ├── cascades
+ │    │    └── child_partial_p_fkey
+ │    └── scan parent_partial
+ │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         └── flags: avoid-full-scan
+ └── cascade
+      └── delete child_partial
+           ├── columns: <none>
+           ├── fetch columns: c:12 child_partial.p:13 i:14
+           ├── partial index del columns: partial_index_del1:17 partial_index_del2:18
+           └── project
+                ├── columns: partial_index_del1:17 partial_index_del2:18!null c:12!null child_partial.p:13!null i:14
+                ├── select
+                │    ├── columns: c:12!null child_partial.p:13!null i:14
+                │    ├── scan child_partial
+                │    │    ├── columns: c:12!null child_partial.p:13 i:14
+                │    │    ├── partial index predicates
+                │    │    │    ├── child_partial_p_idx: filters
+                │    │    │    │    └── i:14 > 0
+                │    │    │    └── child_partial_i_idx: filters
+                │    │    │         └── child_partial.p:13 > 0
+                │    │    └── flags: avoid-full-scan disabled not visible index feature
+                │    └── filters
+                │         └── child_partial.p:13 IS DISTINCT FROM CAST(NULL AS INT8)
+                └── projections
+                     ├── i:14 > 0 [as=partial_index_del1:17]
+                     └── child_partial.p:13 > 0 [as=partial_index_del2:18]
+
+# Test cascade to a child with a virtual column that references the FK.
+exec-ddl
+CREATE TABLE parent_virt (p INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE child_virt (
+  c INT PRIMARY KEY,
+  p INT REFERENCES parent_virt(p) ON DELETE CASCADE,
+  v INT AS (p) VIRTUAL,
+  v2 STRING AS (c::STRING) VIRTUAL
+)
+----
+
+# Fast path.
+build-post-queries
+DELETE FROM parent_virt WHERE p > 1
+----
+root
+ ├── delete parent_virt
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:4
+ │    ├── cascades
+ │    │    └── child_virt_p_fkey
+ │    └── select
+ │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── scan parent_virt
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── p:4 > 1
+ └── cascade
+      └── delete child_virt
+           ├── columns: <none>
+           ├── fetch columns: c:13 child_virt.p:14 v:15 v2:16
+           └── select
+                ├── columns: c:13!null child_virt.p:14!null v:15 v2:16!null
+                ├── project
+                │    ├── columns: v:15 v2:16!null c:13!null child_virt.p:14
+                │    ├── scan child_virt
+                │    │    ├── columns: c:13!null child_virt.p:14
+                │    │    ├── computed column expressions
+                │    │    │    ├── v:15
+                │    │    │    │    └── child_virt.p:14
+                │    │    │    └── v2:16
+                │    │    │         └── c:13::STRING
+                │    │    └── flags: avoid-full-scan disabled not visible index feature
+                │    └── projections
+                │         ├── child_virt.p:14 [as=v:15]
+                │         └── c:13::STRING [as=v2:16]
+                └── filters
+                     ├── child_virt.p:14 > 1
+                     └── child_virt.p:14 IS DISTINCT FROM CAST(NULL AS INT8)
+
+# No fast path.
+build-post-queries
+DELETE FROM parent_virt WHERE p > 1 AND random() < 0.5
+----
+root
+ ├── delete parent_virt
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:4
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── child_virt_p_fkey
+ │    └── select
+ │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── scan parent_virt
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── (p:4 > 1) AND (random() < 0.5)
+ └── cascade
+      └── delete child_virt
+           ├── columns: <none>
+           ├── fetch columns: c:13 child_virt.p:14 v:15 v2:16
+           └── semi-join (hash)
+                ├── columns: c:13!null child_virt.p:14 v:15 v2:16!null
+                ├── project
+                │    ├── columns: v:15 v2:16!null c:13!null child_virt.p:14
+                │    ├── scan child_virt
+                │    │    ├── columns: c:13!null child_virt.p:14
+                │    │    ├── computed column expressions
+                │    │    │    ├── v:15
+                │    │    │    │    └── child_virt.p:14
+                │    │    │    └── v2:16
+                │    │    │         └── c:13::STRING
+                │    │    └── flags: avoid-full-scan disabled not visible index feature
+                │    └── projections
+                │         ├── child_virt.p:14 [as=v:15]
+                │         └── c:13::STRING [as=v2:16]
+                ├── with-scan &1
+                │    ├── columns: p:19!null
+                │    └── mapping:
+                │         └──  parent_virt.p:4 => p:19
+                └── filters
+                     └── child_virt.p:14 = p:19

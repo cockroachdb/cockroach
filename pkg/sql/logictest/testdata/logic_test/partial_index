@@ -1,0 +1,2596 @@
+# LogicTest: !local-prepared
+#### Partial Indexes
+
+statement ok
+CREATE TABLE t1 (a INT, INDEX (a) WHERE a = 0)
+
+statement ok
+CREATE TABLE t2 (a INT, INDEX (a) WHERE false)
+
+# Allow immutable functions.
+statement ok
+CREATE TABLE t3 (a INT, INDEX (a) WHERE abs(1) > 2)
+
+# Don't allow non-boolean expressions.
+statement error expected INDEX PREDICATE expression to have type bool, but '1' has type int
+CREATE TABLE error (a INT, INDEX (a) WHERE 1)
+
+# Don't allow columns not in table.
+statement error pgcode 42703 column "b" does not exist
+CREATE TABLE error (a INT, INDEX (a) WHERE b = 3)
+
+# Don't allow non-immutable operators.
+# TODO(mgartner): The error code for this should be 42P17, not 0A000.
+statement error pgcode 0A000 now\(\): context-dependent operators are not allowed in INDEX PREDICATE
+CREATE TABLE error (t TIMESTAMPTZ, INDEX (t) WHERE t < now())
+
+statement error pgcode 0A000 timestamptz::string: context-dependent operators are not allowed in INDEX PREDICATE
+CREATE TABLE error (t TIMESTAMPTZ, INDEX (t) WHERE t::string = 'foo')
+
+statement error pgcode 0A000 =: context-dependent operators are not allowed in INDEX PREDICATE
+CREATE TABLE error (t TIMESTAMPTZ, i TIMESTAMP, INDEX (t) WHERE i = t)
+
+statement error pgcode 0A000 random\(\): volatile functions are not allowed in INDEX PREDICATE
+CREATE TABLE error (t FLOAT, INDEX (t) WHERE t < random())
+
+# Don't allow variable subexpressions.
+statement error pgcode 42601 variable sub-expressions are not allowed in INDEX PREDICATE
+CREATE TABLE error (a INT, INDEX (a) WHERE count(*) = 1)
+
+# Don't allow subqueries.
+statement error pgcode 42601 variable sub-expressions are not allowed in INDEX PREDICATE
+CREATE TABLE error (a INT, INDEX (a) WHERE (SELECT true))
+
+# Don't allow aggregate functions.
+statement error pgcode 42803 aggregate functions are not allowed in INDEX PREDICATE
+CREATE TABLE error (a INT, INDEX (a) WHERE sum(a) > 1)
+
+# Don't allow window functions.
+statement error pgcode 42P20 window functions are not allowed in INDEX PREDICATE
+CREATE TABLE error (a INT, INDEX (a) WHERE row_number() OVER () > 1)
+
+# Don't allow set-returning functions.
+statement error pgcode 0A000 set-returning functions are not allowed in INDEX PREDICATE
+CREATE TABLE error (a INT, INDEX (a) WHERE generate_series(1, 1))
+
+# Fail on bad types.
+statement error pq: unsupported binary operator: <bool> - <bool>
+CREATE TABLE error (a INT, INDEX (a) WHERE false - true)
+
+# Don't allow references to other tables.
+statement error no data source matches prefix: t1
+CREATE TABLE error (a INT, INDEX (a) WHERE t1.a > 0)
+
+# Don't allow references to unknown tables.
+statement error no data source matches prefix: unknown
+CREATE TABLE error (a INT, INDEX (a) WHERE unknown.a > 0)
+
+# Don't allow reference to unknown databases.
+statement error no data source matches prefix: unknown.error
+CREATE TABLE error (a INT, INDEX (a) WHERE unknown.error.a > 9)
+
+# Validate CREATE TABLE ... UNIQUE INDEX predicate.
+
+statement ok
+CREATE TABLE t4 (a INT, UNIQUE INDEX (a) WHERE a = 0)
+
+statement error expected INDEX PREDICATE expression to have type bool, but '1' has type int
+CREATE TABLE error (a INT, UNIQUE INDEX (a) WHERE 1)
+
+# Validate CREATE INDEX predicate.
+
+statement ok
+CREATE TABLE t5 (a INT)
+
+statement ok
+CREATE INDEX t5i ON t5 (a) WHERE a = 0
+
+# Don't allow invalid predicates.
+statement error expected INDEX PREDICATE expression to have type bool, but '1' has type int
+CREATE INDEX error ON t5 (a) WHERE 1
+
+# Don't allow references to other tables in predicates.
+statement error no data source matches prefix: t4
+CREATE INDEX error ON t5 (a) WHERE t4.a = 1
+
+# Dequalify table references.
+
+statement disable-cf-mutator ok
+CREATE TABLE t6 (
+    a INT,
+    INDEX (a) WHERE a > 0,
+    INDEX (a) WHERE t6.a > 1,
+    INDEX (a DESC) WHERE test.t6.a > 2,
+    UNIQUE INDEX (a) WHERE a > 3,
+    UNIQUE INDEX (a) WHERE t6.a > 4,
+    UNIQUE INDEX (a DESC) WHERE test.t6.a > 5
+)
+
+statement ok
+CREATE INDEX t6i1 ON t6 (a) WHERE a > 6;
+CREATE INDEX t6i2 ON t6 (a) WHERE t6.a > 7;
+CREATE INDEX t6i3 ON t6 (a DESC) WHERE test.t6.a > 8;
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE t6
+----
+t6  CREATE TABLE public.t6 (
+      a INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t6_pkey PRIMARY KEY (rowid ASC),
+      INDEX t6_a_idx (a ASC) WHERE a > 0:::INT8,
+      INDEX t6_a_idx1 (a ASC) WHERE a > 1:::INT8,
+      INDEX t6_a_idx2 (a DESC) WHERE a > 2:::INT8,
+      UNIQUE INDEX t6_a_key (a ASC) WHERE a > 3:::INT8,
+      UNIQUE INDEX t6_a_key1 (a ASC) WHERE a > 4:::INT8,
+      UNIQUE INDEX t6_a_key2 (a DESC) WHERE a > 5:::INT8,
+      INDEX t6i1 (a ASC) WHERE a > 6:::INT8,
+      INDEX t6i2 (a ASC) WHERE a > 7:::INT8,
+      INDEX t6i3 (a DESC) WHERE a > 8:::INT8
+    );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE t6
+----
+t6  CREATE TABLE public.t6 (
+      a INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t6_pkey PRIMARY KEY (rowid ASC),
+      INDEX t6_a_idx (a ASC) WHERE a > 0:::INT8,
+      INDEX t6_a_idx1 (a ASC) WHERE a > 1:::INT8,
+      INDEX t6_a_idx2 (a DESC) WHERE a > 2:::INT8,
+      UNIQUE INDEX t6_a_key (a ASC) WHERE a > 3:::INT8,
+      UNIQUE INDEX t6_a_key1 (a ASC) WHERE a > 4:::INT8,
+      UNIQUE INDEX t6_a_key2 (a DESC) WHERE a > 5:::INT8,
+      INDEX t6i1 (a ASC) WHERE a > 6:::INT8,
+      INDEX t6i2 (a ASC) WHERE a > 7:::INT8,
+      INDEX t6i3 (a DESC) WHERE a > 8:::INT8
+    ) WITH (schema_locked = true);
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE t6 WITH REDACT
+----
+t6  CREATE TABLE public.t6 (
+      a INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t6_pkey PRIMARY KEY (rowid ASC),
+      INDEX t6_a_idx (a ASC) WHERE a > ‹×›:::INT8,
+      INDEX t6_a_idx1 (a ASC) WHERE a > ‹×›:::INT8,
+      INDEX t6_a_idx2 (a DESC) WHERE a > ‹×›:::INT8,
+      UNIQUE INDEX t6_a_key (a ASC) WHERE a > ‹×›:::INT8,
+      UNIQUE INDEX t6_a_key1 (a ASC) WHERE a > ‹×›:::INT8,
+      UNIQUE INDEX t6_a_key2 (a DESC) WHERE a > ‹×›:::INT8,
+      INDEX t6i1 (a ASC) WHERE a > ‹×›:::INT8,
+      INDEX t6i2 (a ASC) WHERE a > ‹×›:::INT8,
+      INDEX t6i3 (a DESC) WHERE a > ‹×›:::INT8
+    );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE t6 WITH REDACT
+----
+t6  CREATE TABLE public.t6 (
+      a INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t6_pkey PRIMARY KEY (rowid ASC),
+      INDEX t6_a_idx (a ASC) WHERE a > ‹×›:::INT8,
+      INDEX t6_a_idx1 (a ASC) WHERE a > ‹×›:::INT8,
+      INDEX t6_a_idx2 (a DESC) WHERE a > ‹×›:::INT8,
+      UNIQUE INDEX t6_a_key (a ASC) WHERE a > ‹×›:::INT8,
+      UNIQUE INDEX t6_a_key1 (a ASC) WHERE a > ‹×›:::INT8,
+      UNIQUE INDEX t6_a_key2 (a DESC) WHERE a > ‹×›:::INT8,
+      INDEX t6i1 (a ASC) WHERE a > ‹×›:::INT8,
+      INDEX t6i2 (a ASC) WHERE a > ‹×›:::INT8,
+      INDEX t6i3 (a DESC) WHERE a > ‹×›:::INT8
+    ) WITH (schema_locked = true);
+
+# Renaming a column updates the index predicates.
+
+statement ok
+ALTER TABLE t6 RENAME COLUMN a TO b
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE t6
+----
+t6  CREATE TABLE public.t6 (
+      b INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t6_pkey PRIMARY KEY (rowid ASC),
+      INDEX t6_a_idx (b ASC) WHERE b > 0:::INT8,
+      INDEX t6_a_idx1 (b ASC) WHERE b > 1:::INT8,
+      INDEX t6_a_idx2 (b DESC) WHERE b > 2:::INT8,
+      UNIQUE INDEX t6_a_key (b ASC) WHERE b > 3:::INT8,
+      UNIQUE INDEX t6_a_key1 (b ASC) WHERE b > 4:::INT8,
+      UNIQUE INDEX t6_a_key2 (b DESC) WHERE b > 5:::INT8,
+      INDEX t6i1 (b ASC) WHERE b > 6:::INT8,
+      INDEX t6i2 (b ASC) WHERE b > 7:::INT8,
+      INDEX t6i3 (b DESC) WHERE b > 8:::INT8
+    );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE t6
+----
+t6  CREATE TABLE public.t6 (
+      b INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t6_pkey PRIMARY KEY (rowid ASC),
+      INDEX t6_a_idx (b ASC) WHERE b > 0:::INT8,
+      INDEX t6_a_idx1 (b ASC) WHERE b > 1:::INT8,
+      INDEX t6_a_idx2 (b DESC) WHERE b > 2:::INT8,
+      UNIQUE INDEX t6_a_key (b ASC) WHERE b > 3:::INT8,
+      UNIQUE INDEX t6_a_key1 (b ASC) WHERE b > 4:::INT8,
+      UNIQUE INDEX t6_a_key2 (b DESC) WHERE b > 5:::INT8,
+      INDEX t6i1 (b ASC) WHERE b > 6:::INT8,
+      INDEX t6i2 (b ASC) WHERE b > 7:::INT8,
+      INDEX t6i3 (b DESC) WHERE b > 8:::INT8
+    ) WITH (schema_locked = true);
+
+# Renaming a table keeps the index predicates intact.
+
+statement ok
+ALTER TABLE t6 RENAME TO t7
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE t7
+----
+t7  CREATE TABLE public.t7 (
+      b INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t6_pkey PRIMARY KEY (rowid ASC),
+      INDEX t6_a_idx (b ASC) WHERE b > 0:::INT8,
+      INDEX t6_a_idx1 (b ASC) WHERE b > 1:::INT8,
+      INDEX t6_a_idx2 (b DESC) WHERE b > 2:::INT8,
+      UNIQUE INDEX t6_a_key (b ASC) WHERE b > 3:::INT8,
+      UNIQUE INDEX t6_a_key1 (b ASC) WHERE b > 4:::INT8,
+      UNIQUE INDEX t6_a_key2 (b DESC) WHERE b > 5:::INT8,
+      INDEX t6i1 (b ASC) WHERE b > 6:::INT8,
+      INDEX t6i2 (b ASC) WHERE b > 7:::INT8,
+      INDEX t6i3 (b DESC) WHERE b > 8:::INT8
+    );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE t7
+----
+t7  CREATE TABLE public.t7 (
+      b INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t6_pkey PRIMARY KEY (rowid ASC),
+      INDEX t6_a_idx (b ASC) WHERE b > 0:::INT8,
+      INDEX t6_a_idx1 (b ASC) WHERE b > 1:::INT8,
+      INDEX t6_a_idx2 (b DESC) WHERE b > 2:::INT8,
+      UNIQUE INDEX t6_a_key (b ASC) WHERE b > 3:::INT8,
+      UNIQUE INDEX t6_a_key1 (b ASC) WHERE b > 4:::INT8,
+      UNIQUE INDEX t6_a_key2 (b DESC) WHERE b > 5:::INT8,
+      INDEX t6i1 (b ASC) WHERE b > 6:::INT8,
+      INDEX t6i2 (b ASC) WHERE b > 7:::INT8,
+      INDEX t6i3 (b DESC) WHERE b > 8:::INT8
+    ) WITH (schema_locked = true);
+
+# Dropping a column referenced in the predicate drops the index.
+
+statement ok
+CREATE TABLE t8 (
+    a INT,
+    b INT,
+    c STRING,
+    INDEX (a) WHERE b > 0,
+    INDEX (a) WHERE c = 'foo',
+    FAMILY (a, b, c)
+)
+
+# TODO(mgartner): Lift this restriction. See #96924.
+statement error cannot drop column "c" because it is referenced by partial index "t8_a_idx1"\nHINT: drop the partial index first, then drop the column
+ALTER TABLE t8 DROP COLUMN c
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE t8
+----
+t8  CREATE TABLE public.t8 (
+      a INT8 NULL,
+      b INT8 NULL,
+      c STRING NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t8_pkey PRIMARY KEY (rowid ASC),
+      INDEX t8_a_idx (a ASC) WHERE b > 0:::INT8,
+      INDEX t8_a_idx1 (a ASC) WHERE c = 'foo':::STRING,
+      FAMILY fam_0_a_b_c_rowid (a, b, c, rowid)
+    );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE t8
+----
+t8  CREATE TABLE public.t8 (
+      a INT8 NULL,
+      b INT8 NULL,
+      c STRING NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t8_pkey PRIMARY KEY (rowid ASC),
+      INDEX t8_a_idx (a ASC) WHERE b > 0:::INT8,
+      INDEX t8_a_idx1 (a ASC) WHERE c = 'foo':::STRING,
+      FAMILY fam_0_a_b_c_rowid (a, b, c, rowid)
+    ) WITH (schema_locked = true);
+
+# CREATE TABLE LIKE ... INCLUDING INDEXES copies partial index predicate
+# expressions to the new table.
+
+statement ok
+CREATE TABLE t9 (a INT, b INT, INDEX (a) WHERE b > 1)
+
+statement ok
+CREATE TABLE t10 (LIKE t9 INCLUDING INDEXES)
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE t10
+----
+t10  CREATE TABLE public.t10 (
+       a INT8 NULL,
+       b INT8 NULL,
+       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+       CONSTRAINT t10_pkey PRIMARY KEY (rowid ASC),
+       INDEX t9_a_idx (a ASC) WHERE b > 1:::INT8
+     );
+
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE t10
+----
+t10  CREATE TABLE public.t10 (
+       a INT8 NULL,
+       b INT8 NULL,
+       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+       CONSTRAINT t10_pkey PRIMARY KEY (rowid ASC),
+       INDEX t9_a_idx (a ASC) WHERE b > 1:::INT8
+     ) WITH (schema_locked = true);
+
+# SHOW CONSTRAINTS includes partial index predicate of UNIQUE partial indexes.
+
+statement ok
+CREATE TABLE t11 (a INT, b INT, UNIQUE INDEX (a) WHERE b > 0)
+
+statement ok
+CREATE UNIQUE INDEX t11_b_key ON t11 (b) WHERE a > 0
+
+query TTTTB colnames,nosort
+SHOW CONSTRAINTS FROM t11
+----
+table_name  constraint_name     constraint_type  details                       validated
+t11         t11_a_key           UNIQUE           UNIQUE (a ASC) WHERE (b > 0)  true
+t11         t11_b_key           UNIQUE           UNIQUE (b ASC) WHERE (a > 0)  true
+t11         t11_pkey            PRIMARY KEY      PRIMARY KEY (rowid ASC)       true
+t11         t11_rowid_not_null  NOT NULL         NOT NULL                      true
+
+# Update a non-indexed column referenced by the predicate.
+
+statement ok
+CREATE TABLE a (
+    a INT,
+    b INT,
+    c INT,
+    INDEX idx_c_b_gt_1 (c) WHERE b > 1,
+    FAMILY (a),
+    FAMILY (b),
+    FAMILY (c)
+)
+
+statement ok
+INSERT INTO a VALUES (1, 1, 1)
+
+statement ok
+UPDATE a SET b = b + 1 WHERE a = 1
+
+query III rowsort
+SELECT * FROM a@idx_c_b_gt_1 WHERE b > 1
+----
+1  2  1
+
+statement error index "idx_c_b_gt_1" is a partial index that does not contain all the rows needed to execute this query
+SELECT * FROM a@idx_c_b_gt_1 WHERE b = 0
+
+# Return error if evaluating the predicate errs and do not insert or update the
+# row.
+
+statement ok
+CREATE TABLE b (a INT, b INT, INDEX (a) WHERE 1 / b = 1)
+
+statement error division by zero
+INSERT INTO b VALUES (1, 0)
+
+query I rowsort
+SELECT count(1) FROM b
+----
+0
+
+statement ok
+INSERT INTO b VALUES (1, 1)
+
+statement error division by zero
+UPDATE b SET b = 0 WHERE a = 1
+
+query II rowsort
+SELECT * FROM b
+----
+1  1
+
+# Update two rows where one is in a partial index and one is not.
+
+statement ok
+CREATE TABLE c (
+    k INT PRIMARY KEY,
+    i INT,
+    INDEX i_0_100_idx (i) WHERE i > 0 AND i < 100
+)
+
+statement ok
+INSERT INTO c VALUES (3, 30), (300, 3000)
+
+statement ok
+UPDATE c SET i = i + 1
+
+query II rowsort
+SELECT * FROM c@i_0_100_idx WHERE i > 0 AND i < 100
+----
+3  31
+
+# Partial index entries are kept consistent throughout multiple mutations.
+
+statement ok
+CREATE TABLE d (
+    k INT PRIMARY KEY,
+    i INT,
+    f FLOAT,
+    s STRING,
+    b BOOL,
+    INDEX i_0_100_idx (i) WHERE i > 0 and i < 100,
+    INDEX f_b_s_foo_idx (f) WHERE b AND s = 'foo'
+)
+
+# Inserting values populates partial indexes.
+
+statement ok
+INSERT INTO d VALUES
+    (1, 1, 1.0, 'foo', true),
+    (2, 2, 2.0, 'foo', false),
+    (3, 3, 3.0, 'bar', true),
+    (100, 100, 100.0, 'foo', true),
+    (200, 200, 200.0, 'foo', false),
+    (300, 300, 300.0, 'bar', true)
+
+query IIRTB rowsort
+SELECT * FROM d@i_0_100_idx WHERE i > 0 AND i < 100
+----
+1  1  1  foo  true
+2  2  2  foo  false
+3  3  3  bar  true
+
+query IIRTB rowsort
+SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
+----
+1    1    1    foo  true
+100  100  100  foo  true
+
+# Updating rows both in an out of partial index without changing partial index
+# eligibility.
+
+statement ok
+UPDATE d SET i = i + 10
+
+query IIRTB rowsort
+SELECT * FROM d@i_0_100_idx WHERE i > 0 AND i < 100
+----
+1  11  1  foo  true
+2  12  2  foo  false
+3  13  3  bar  true
+
+# Updating rows both in an out of partial index updates partial index entries
+# and changing eligibility.
+
+statement ok
+UPDATE d SET s = 'foo'
+
+query IIRTB rowsort
+SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
+----
+1    11   1    foo  true
+3    13   3    foo  true
+100  110  100  foo  true
+300  310  300  foo  true
+
+# Upsert a conflicting row, taking it out of the second partial index.
+
+statement ok
+UPSERT INTO d VALUES (300, 320, 300.0, 'bar', true)
+
+query IIRTB rowsort
+SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
+----
+1    11   1    foo  true
+3    13   3    foo  true
+100  110  100  foo  true
+
+# Upsert a conflicting row, adding it into the second partial index.
+
+statement ok
+UPSERT INTO d VALUES (300, 330, 300.0, 'foo', true)
+
+query IIRTB rowsort
+SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
+----
+1    11   1    foo  true
+3    13   3    foo  true
+100  110  100  foo  true
+300  330  300  foo  true
+
+# Upsert a non-conflicting row.
+
+statement ok
+UPSERT INTO d VALUES (400, 400, 400.0, 'foo', true)
+
+query IIRTB rowsort
+SELECT * FROM d@i_0_100_idx WHERE i > 0 AND i < 100
+----
+1  11  1  foo  true
+2  12  2  foo  false
+3  13  3  foo  true
+
+query IIRTB rowsort
+SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
+----
+1    11   1    foo  true
+3    13   3    foo  true
+100  110  100  foo  true
+300  330  300  foo  true
+400  400  400  foo  true
+
+# Delete a row in both partial indexes.
+
+statement count 1
+DELETE FROM d WHERE k = 1
+
+query IIRTB rowsort
+SELECT * FROM d@i_0_100_idx WHERE i > 0 AND i < 100
+----
+2  12  2  foo  false
+3  13  3  foo  true
+
+query IIRTB rowsort
+SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
+----
+3    13   3    foo  true
+100  110  100  foo  true
+300  330  300  foo  true
+400  400  400  foo  true
+
+# Delete a row in one partial index.
+
+statement count 1
+DELETE FROM d WHERE k = 2
+
+query IIRTB rowsort
+SELECT * FROM d@i_0_100_idx WHERE i > 0 AND i < 100
+----
+3  13  3  foo  true
+
+query IIRTB rowsort
+SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
+----
+3    13   3    foo  true
+100  110  100  foo  true
+300  330  300  foo  true
+400  400  400  foo  true
+
+# Delete a row not in either partial index.
+
+statement count 1
+DELETE FROM d WHERE k = 200
+
+query IIRTB rowsort
+SELECT * FROM d@i_0_100_idx WHERE i > 0 AND i < 100
+----
+3  13  3  foo  true
+
+query IIRTB rowsort
+SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
+----
+3    13   3    foo  true
+100  110  100  foo  true
+300  330  300  foo  true
+400  400  400  foo  true
+
+# Backfill a partial index.
+
+statement ok
+CREATE TABLE e (a INT, b INT)
+
+statement ok
+INSERT INTO e VALUES
+    (1, 10),
+    (2, 20),
+    (3, 30),
+    (4, 40),
+    (5, 50),
+    (6, 60)
+
+statement ok
+CREATE INDEX a_b_gt_30_idx ON e (a) WHERE b > 30
+
+# Note: This is guaranteed to be a full scan over the partial index because b
+# is not an indexed column. Therefore, this is a valid way to retrieve all rows
+# that have entries in the partial index.
+query II rowsort
+SELECT * FROM e@a_b_gt_30_idx WHERE b > 30
+----
+4  40
+5  50
+6  60
+
+# Backfill a partial index when a new table is created in the same transaction.
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE f (a INT, b INT)
+
+statement ok
+INSERT INTO f VALUES (1, 10), (6, 60)
+
+statement ok
+CREATE INDEX a_b_gt_30_idx ON f (a) WHERE b > 30
+
+statement ok
+COMMIT
+
+query II rowsort
+SELECT * FROM f@a_b_gt_30_idx WHERE b > 30
+----
+6  60
+
+# Backfill a partial index with a user defined type.
+
+statement ok
+CREATE TYPE enum AS ENUM ('foo', 'bar', 'baz')
+
+statement ok
+CREATE TABLE h (a INT, b enum)
+
+statement ok
+INSERT INTO h VALUES (1, 'foo'), (2, 'bar')
+
+statement ok
+CREATE INDEX a_b_foo_idx ON h (a) WHERE b = 'foo'
+
+query IT rowsort
+SELECT * FROM h@a_b_foo_idx WHERE b = 'foo'
+----
+1  foo
+
+# Backfill a partial index with a user defined type when a new table is created
+# in the same transaction. Use a high priority to make it less likely for the
+# transaction to be aborted.
+
+# Skip 3node-tenant config since it's prone to hitting a txn retry error
+# (#126763).
+skipif config 3node-tenant
+statement ok
+BEGIN PRIORITY HIGH
+
+skipif config 3node-tenant
+statement ok
+CREATE TABLE i (a INT, b enum)
+
+skipif config 3node-tenant
+statement ok
+INSERT INTO i VALUES (1, 'foo'), (2, 'bar')
+
+skipif config 3node-tenant
+statement ok
+CREATE INDEX a_b_foo_idx ON i (a) WHERE b = 'foo'
+
+skipif config 3node-tenant
+statement ok
+COMMIT
+
+skipif config 3node-tenant
+query IT rowsort
+SELECT * FROM i@a_b_foo_idx WHERE b = 'foo'
+----
+1  foo
+
+# Add a primary key to a table with a partial index.
+
+statement ok
+CREATE TABLE j (k INT NOT NULL, a INT, INDEX a_gt_5_idx (a) WHERE a > 5)
+
+statement ok
+INSERT INTO j VALUES (1, 1), (6, 6)
+
+statement ok
+ALTER TABLE j ADD PRIMARY KEY (k)
+
+query II rowsort
+SELECT * FROM j@a_gt_5_idx WHERE a > 5
+----
+6  6
+
+# Backfill a unique partial index.
+
+statement ok
+CREATE TABLE k (a INT, b INT)
+
+statement ok
+INSERT INTO k VALUES (1, 1), (1, 2)
+
+statement error pgcode 23505 violates unique constraint \"k_a_key\"
+CREATE UNIQUE INDEX ON k (a) WHERE b > 0
+
+statement ok
+UPDATE k SET b = 0 WHERE b = 2
+
+statement ok
+CREATE UNIQUE INDEX ON k (a) WHERE b > 0
+
+query II rowsort
+SELECT * FROM k@k_a_key WHERE b > 0
+----
+1  1
+
+# Truncate "removes" all entries from a partial index (technically a new table
+# is created). The partial index is preserved correctly in the new table.
+
+statement ok
+CREATE TABLE l (
+    a INT PRIMARY KEY,
+    b INT,
+    INDEX a_b_gt_5 (a) WHERE b > 5
+)
+
+statement ok
+INSERT INTO l VALUES (1, 1), (6, 6)
+
+
+statement ok
+ALTER TABLE l SET (schema_locked=false)
+
+statement ok
+TRUNCATE l
+
+statement ok
+ALTER TABLE l RESET (schema_locked)
+
+query II rowsort
+SELECT * FROM l@a_b_gt_5 WHERE b > 5
+----
+
+statement ok
+INSERT INTO l VALUES (1, 1), (7, 7)
+
+query II rowsort
+SELECT * FROM l@a_b_gt_5 WHERE b > 5
+----
+7  7
+
+# Test unique partial indexes.
+subtest unique
+
+statement ok
+CREATE TABLE u (
+    a INT,
+    b INT,
+    UNIQUE INDEX i (a) WHERE b > 0
+)
+
+# Inserting multiple rows that conflicts fails.
+statement error pgcode 23505 duplicate key value violates unique constraint \"i\"\nDETAIL: Key \(a\)=\(1\) already exists\.
+INSERT INTO u VALUES (1, 1), (1, 2)
+
+# Inserting multiple rows that don't conflict succeeds.
+statement ok
+INSERT INTO u VALUES (1, 1), (2, 2), (1, -1)
+
+# Inserting a row that conflicts with an existing row fails.
+statement error pgcode 23505 duplicate key value violates unique constraint \"i\"\nDETAIL: Key \(a\)=\(1\) already exists\.
+INSERT INTO u VALUES (1, 3)
+
+query II rowsort
+SELECT * FROM u
+----
+1  1
+2  2
+1  -1
+
+# Deleting and re-inserting a conflicting row is successful.
+statement count 1
+DELETE FROM u WHERE a = 2;
+
+statement ok
+INSERT INTO u VALUES (2, 2);
+
+# Updating a row in the unique partial index to conflict with another row fails.
+statement error pgcode 23505 duplicate key value violates unique constraint \"i\"\nDETAIL: Key \(a\)=\(2\) already exists\.
+UPDATE u SET a = 2 WHERE b = 1
+
+# Updating a row not in the unique partial index to conflict with a row in the
+# index fails.
+statement error pgcode 23505 duplicate key value violates unique constraint \"i\"\nDETAIL: Key \(a\)=\(2\) already exists\.
+UPDATE u SET a = 2, b = 1 WHERE b = -1
+
+# Updating a row not in the unique index to remain out of the unique index
+# succeeds.
+statement ok
+UPDATE u SET a = 2, b = -2 WHERE b = -1
+
+# Updating a row in the unique index to a non-conflicting value in the unqiue
+# index succeeds.
+statement ok
+UPDATE u SET a = 3, b = 3  WHERE b = 2
+
+query II rowsort
+SELECT * FROM u
+----
+1  1
+3  3
+2  -2
+
+statement count 3
+DELETE FROM u
+
+# Tests for ON CONFLICT DO NOTHING.
+
+# Inserting a row not contained in the unique index succeeds.
+statement ok
+INSERT INTO u VALUES (1, -1) ON CONFLICT DO NOTHING
+
+query II rowsort
+SELECT * FROM u
+----
+1  -1
+
+# Inserting a non-conflicting row succeeds.
+statement ok
+INSERT INTO u VALUES (1, 1) ON CONFLICT DO NOTHING;
+
+query II rowsort
+SELECT * FROM u
+----
+1  1
+1  -1
+
+# Inserting rows that aren't contained by the unique index succeeds.
+statement ok
+INSERT INTO u VALUES (1, -10), (1, -100) ON CONFLICT DO NOTHING;
+INSERT INTO u VALUES (1, -1000) ON CONFLICT DO NOTHING;
+
+query II rowsort
+SELECT * FROM u
+----
+1  1
+1  -1
+1  -10
+1  -100
+1  -1000
+
+statement count 3
+DELETE FROM u WHERE b IN (-10, -100, -1000)
+
+# Inserting multiple rows that conflict with each other inserts some of the
+# rows.
+statement ok
+INSERT INTO u VALUES (2, 2), (2, 2), (2, -2) ON CONFLICT DO NOTHING
+
+query II rowsort
+SELECT * FROM u
+----
+1  1
+2  2
+1  -1
+2  -2
+
+# Inserting a row that conflicts with an existing row is a no-op.
+statement ok
+INSERT INTO u VALUES (1, 10) ON CONFLICT DO NOTHING
+
+query II rowsort
+SELECT * FROM u
+----
+1  1
+2  2
+1  -1
+2  -2
+
+# Inserting one conflicting and one non-conflicting row inserts the
+# non-conflicting row.
+statement ok
+INSERT INTO u VALUES (2, 20), (3, 3) ON CONFLICT DO NOTHING
+
+query II rowsort
+SELECT * FROM u
+----
+1  1
+2  2
+3  3
+1  -1
+2  -2
+
+statement ok
+CREATE UNIQUE INDEX i2 ON u (b) WHERE a > 0
+
+# Inserting a row that conflicts with a row via a second unique index is a
+# no-op.
+statement ok
+INSERT INTO u VALUES (4, 3) ON CONFLICT DO NOTHING
+
+query II rowsort
+SELECT * FROM u
+----
+1  1
+2  2
+3  3
+1  -1
+2  -2
+
+# Inserting a row that conflicts with rows via two unique indexes is a no-op.
+statement ok
+INSERT INTO u VALUES (1, 3) ON CONFLICT DO NOTHING
+
+query II rowsort
+SELECT * FROM u
+----
+1  1
+2  2
+3  3
+1  -1
+2  -2
+
+# Inserting rows that conflict with neither unique index succeeds.
+statement ok
+INSERT INTO u VALUES (4, 4), (1, -10), (-10, 2) ON CONFLICT DO NOTHING
+
+query II rowsort
+SELECT * FROM u
+----
+1    1
+2    2
+3    3
+4    4
+1    -1
+1    -10
+2    -2
+-10  2
+
+statement ok
+DROP INDEX i2
+
+statement count 8
+DELETE from u
+
+# Tests for ON CONFLICT (a) [WHERE ...] DO NOTHING.
+
+# An ON CONFLICT without a WHERE clause cannot use a unique partial index as an
+# arbiter.
+statement error pgcode 42P10 there is no unique or exclusion constraint matching the ON CONFLICT specification
+INSERT INTO u VALUES (1, 1) ON CONFLICT (a) DO NOTHING
+
+# An ON CONFLICT with a WHERE clause cannot use a unique partial index if the
+# WHERE clause does not imply the partial index predicate.
+statement error pgcode 42P10 there is no unique or exclusion constraint matching the ON CONFLICT specification
+INSERT INTO u VALUES (1, 1) ON CONFLICT (a) WHERE b < -1 DO NOTHING
+
+# An ON CONFLICT without a WHERE clause can use a unique pseudo-partial index as
+# an arbiter.
+statement ok
+CREATE UNIQUE INDEX i2 ON u (b) WHERE 1 = 1;
+
+statement ok
+INSERT INTO u VALUES (1, 1) ON CONFLICT (b) DO NOTHING;
+
+statement count 1
+DELETE FROM u;
+
+statement ok
+DROP INDEX i2;
+
+# An ON CONFLICT with any WHERE clause can use a unique non-partial index as an
+# arbiter.
+statement ok
+CREATE UNIQUE INDEX i2 ON u (b);
+
+statement ok
+INSERT INTO u VALUES (1, 1) ON CONFLICT (b) WHERE b > 0 DO NOTHING;
+
+statement ok
+DROP INDEX i2;
+
+# An ON CONFLICT with a WHERE clause can be use a unique partial index if the
+# WHERE clause implies the partial index predicate.
+statement ok
+INSERT INTO u VALUES (1, 1) ON CONFLICT (a) WHERE b > 1 DO NOTHING;
+INSERT INTO u VALUES (1, 2) ON CONFLICT (a) WHERE b > 1 DO NOTHING;
+
+query II rowsort
+SELECT * FROM u
+----
+1   1
+
+# There can be duplicate key errors from unique partial indexes that are not
+# arbiters.
+statement ok
+CREATE UNIQUE INDEX i2 ON u (a) WHERE b < 0;
+
+statement ok
+INSERT INTO u VALUES (-1, -1);
+
+statement error pgcode 23505 duplicate key value violates unique constraint \"i2\"\nDETAIL: Key \(a\)=\(-1\) already exists\.
+INSERT INTO u VALUES (-1, -1) ON CONFLICT (a) WHERE b > 0 DO NOTHING
+
+# Two arbiters can be used to detect conflicts and avoid duplicate key errors.
+statement ok
+INSERT INTO u VALUES (1, 2), (-1, -2) ON CONFLICT (a) WHERE b > 0 AND b < 0 DO NOTHING
+
+# It is not valid to use non-immutable functions in an arbiter predicate with a
+# partial index as the arbiter index.
+statement error pgcode 42P10 there is no unique or exclusion constraint matching the ON CONFLICT specification
+INSERT INTO u VALUES (1, 2)
+ON CONFLICT (a) WHERE b < (CASE WHEN now() > '1980-01-01' THEN 0 ELSE 100 END) DO NOTHING
+
+statement ok
+DROP INDEX i2
+
+statement ok
+CREATE UNIQUE INDEX i2 ON u (a) WHERE true;
+
+# Non-immutable functions in an arbiter predicate are ok if there is
+# a pseudo-partial index.
+statement ok
+INSERT INTO u VALUES (1, 2)
+ON CONFLICT (a) WHERE b < (CASE WHEN now() > '1980-01-01' THEN 0 ELSE 100 END) DO NOTHING
+
+statement ok
+DROP INDEX i2
+
+statement count 2
+DELETE FROM u
+
+# Tests for ON CONFLICT DO UPDATE.
+
+# Error if no arbiter predicate is specified.
+statement error pgcode 42P10 there is no unique or exclusion constraint matching the ON CONFLICT specification
+INSERT INTO u VALUES (1, 1) ON CONFLICT (a) DO UPDATE SET b = 10
+
+# Error if the arbiter predicate does not imply the partial index predicate.
+statement error pgcode 42P10 there is no unique or exclusion constraint matching the ON CONFLICT specification
+INSERT INTO u VALUES (1, 1) ON CONFLICT (a) WHERE b < 0 DO UPDATE SET b = 10
+
+statement ok
+CREATE UNIQUE INDEX i2 ON u (a) WHERE b < 0
+
+# Error if the arbiter predicate does not imply the partial index predicate.
+statement error pgcode 0A000 there are multiple unique or exclusion constraints matching the ON CONFLICT specification
+INSERT INTO u VALUES (1, 1) ON CONFLICT (a) WHERE b < 0 AND b > 0 DO UPDATE SET b = 10
+
+statement ok
+DROP INDEX i2
+
+# Inserting a row not contained in the unique index succeeds.
+statement ok
+INSERT INTO u VALUES (1, -1) ON CONFLICT (a) WHERE b > 0 DO UPDATE SET b = -10
+
+query II rowsort
+SELECT * FROM u
+----
+1  -1
+
+# Inserting a non-conflicting row succeeds.
+statement ok
+INSERT INTO u VALUES (1, 1) ON CONFLICT (a) WHERE b > 0 DO UPDATE SET b = 10
+
+query II rowsort
+SELECT * FROM u
+----
+1  1
+1  -1
+
+# Inserting rows that aren't contained by the unique index succeeds.
+statement ok
+INSERT INTO u VALUES (1, -10), (1, -100) ON CONFLICT (a) WHERE b > 0 DO UPDATE SET b = -11;
+INSERT INTO u VALUES (1, -1000) ON CONFLICT (a) WHERE b > 0 DO UPDATE SET b = -11;
+
+query II rowsort
+SELECT * FROM u
+----
+1  1
+1  -1
+1  -10
+1  -100
+1  -1000
+
+statement count 3
+DELETE FROM u WHERE b IN (-10, -100, -1000)
+
+# Inserting one row conflicting and one non-conflicting row updates the first
+# and inserts the second.
+statement ok
+INSERT INTO u VALUES (1, 10), (3, 3) ON CONFLICT (a) WHERE b > 0 DO UPDATE SET b = 100
+
+query II rowsort
+SELECT * FROM u
+----
+1  100
+3  3
+1  -1
+
+# Inserting multiple rows that conflict with each other errors.
+statement error pgcode 21000 UPSERT or INSERT...ON CONFLICT command cannot affect row a second time
+INSERT INTO u VALUES (4, 4), (4, 40) ON CONFLICT (a) WHERE b > 0 DO UPDATE SET b = 300
+
+# Conflicting rows that satisfy the UPDATE WHERE clause should be updated. Conflicting
+# rows that don't satisfy the UPDATE WHERE clause should be ignored.
+statement ok
+INSERT INTO u VALUES (1, 11), (3, 33) ON CONFLICT (a) WHERE b > 0 DO UPDATE SET b = 10 WHERE u.a = 1
+
+query II rowsort
+SELECT * FROM u
+----
+1  10
+3  3
+1  -1
+
+statement ok
+CREATE UNIQUE INDEX i2 ON u (a) WHERE b < 0;
+
+# There can be duplicate key errors from unique partial indexes that are not
+# arbiters.
+statement error pgcode 23505 duplicate key value violates unique constraint \"i2\"\nDETAIL: Key \(a\)=\(1\) already exists\.
+INSERT INTO u VALUES (1, -1) ON CONFLICT (a) WHERE b > 0 DO UPDATE SET a = 100
+
+statement ok
+DROP INDEX i2
+
+statement count 3
+DELETE from u
+
+# Test partial indexes with lookup joins.
+subtest join
+
+statement ok
+CREATE TABLE join_small (m INT, n INT);
+CREATE TABLE join_large (i INT, s STRING, INDEX (i) WHERE s IN ('foo', 'bar', 'baz'));
+
+statement ok
+ALTER TABLE join_small INJECT STATISTICS '[
+  {
+    "columns": ["m"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 20,
+    "distinct_count": 20
+  }
+]';
+
+statement ok
+ALTER TABLE join_large INJECT STATISTICS '[
+  {
+    "columns": ["i"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 50
+  }
+]';
+
+statement ok
+INSERT INTO join_small VALUES (1, 1), (2, 2), (3, 3);
+INSERT INTO join_large VALUES (1, 'foo'), (2, 'not'), (3, 'bar'), (4, 'not');
+
+query I rowsort
+SELECT m FROM join_small JOIN join_large ON n = i AND s IN ('foo', 'bar', 'baz')
+----
+1
+3
+
+query I rowsort
+SELECT m FROM join_small JOIN join_large ON n = i AND s = 'foo'
+----
+1
+
+# A lookup semi-join is used when an expression in the semi-join filter exactly
+# matches the partial index predicate.
+query I rowsort
+SELECT m FROM join_small WHERE EXISTS (SELECT 1 FROM join_large WHERE n = i AND s IN ('foo', 'bar', 'baz'))
+----
+1
+3
+
+# A lookup anti-join is used when an expression in the anti-join filter exactly
+# matches the partial index predicate.
+query I rowsort
+SELECT m FROM join_small WHERE NOT EXISTS (SELECT 1 FROM join_large WHERE n = i AND s IN ('foo', 'bar', 'baz'))
+----
+2
+
+# Test partial indexes with an ENUM in the predicate.
+subtest enum
+
+statement ok
+CREATE TYPE enum_type AS ENUM ('foo', 'bar', 'baz');
+CREATE TABLE enum_table (
+    a INT PRIMARY KEY,
+    b enum_type,
+    INDEX i (a) WHERE b IN ('foo', 'bar')
+);
+
+statement ok
+INSERT INTO enum_table VALUES
+    (1, 'foo'),
+    (2, 'bar'),
+    (3, 'baz')
+
+query IT rowsort
+SELECT * FROM enum_table@i WHERE b IN ('foo', 'bar')
+----
+1  foo
+2  bar
+
+statement ok
+UPDATE enum_table SET b = 'baz' WHERE a = 1;
+UPDATE enum_table SET b = 'foo' WHERE a = 3;
+
+query IT rowsort
+SELECT * FROM enum_table@i WHERE b IN ('foo', 'bar')
+----
+2  bar
+3  foo
+
+statement count 1
+DELETE FROM enum_table WHERE a = 2
+
+query IT rowsort
+SELECT * FROM enum_table@i WHERE b IN ('foo', 'bar')
+----
+3  foo
+
+statement ok
+UPSERT INTO enum_table VALUES
+    (1, 'foo'),
+    (2, 'bar'),
+    (3, 'baz')
+
+query IT rowsort
+SELECT * FROM enum_table@i WHERE b IN ('foo', 'bar')
+----
+1  foo
+2  bar
+
+# User defined types in partial index predicates should be human-readable.
+
+statement ok
+CREATE TABLE enum_table_show (
+    a INT,
+    b enum_type,
+    INDEX i (a) WHERE b IN ('foo', 'bar'),
+    FAMILY (a, b)
+)
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE enum_table_show
+----
+enum_table_show  CREATE TABLE public.enum_table_show (
+                   a INT8 NULL,
+                   b public.enum_type NULL,
+                   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                   CONSTRAINT enum_table_show_pkey PRIMARY KEY (rowid ASC),
+                   INDEX i (a ASC) WHERE b IN ('foo':::public.enum_type, 'bar':::public.enum_type),
+                   FAMILY fam_0_a_b_rowid (a, b, rowid)
+                 );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE enum_table_show
+----
+enum_table_show  CREATE TABLE public.enum_table_show (
+                   a INT8 NULL,
+                   b public.enum_type NULL,
+                   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                   CONSTRAINT enum_table_show_pkey PRIMARY KEY (rowid ASC),
+                   INDEX i (a ASC) WHERE b IN ('foo':::public.enum_type, 'bar':::public.enum_type),
+                   FAMILY fam_0_a_b_rowid (a, b, rowid)
+                 ) WITH (schema_locked = true);
+
+# Inverted partial indexes.
+subtest inverted
+
+statement ok
+CREATE TABLE inv (j JSON, i INT, INVERTED INDEX (j) WHERE i > 0);
+DROP TABLE inv;
+
+statement ok
+CREATE TABLE inv (k INT PRIMARY KEY, j JSON, s STRING);
+CREATE INVERTED INDEX i ON inv (j) WHERE s IN ('foo', 'bar');
+
+statement ok
+INSERT INTO inv VALUES
+    (1, '{"x": "y", "num": 1}', 'foo'),
+    (2, '{"x": "y", "num": 2}', 'baz'),
+    (3, '{"x": "y", "num": 3}', 'bar')
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"x": "y"}' AND s = 'foo'
+----
+1  {"num": 1, "x": "y"}  foo
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"num": 1}' AND s IN ('foo', 'bar')
+----
+1  {"num": 1, "x": "y"}  foo
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"x": "y"}' AND s IN ('foo', 'bar') ORDER BY k
+----
+1  {"num": 1, "x": "y"}  foo
+3  {"num": 3, "x": "y"}  bar
+
+statement count 1
+DELETE FROM inv WHERE k = 3
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"x": "y"}' AND s IN ('foo', 'bar')
+----
+1  {"num": 1, "x": "y"}  foo
+
+statement ok
+UPDATE inv SET j = '{"x": "y", "num": 10}' WHERE k = 1
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"num": 10}' AND s = 'foo'
+----
+1  {"num": 10, "x": "y"}  foo
+
+statement ok
+UPDATE inv SET k = 10 WHERE k = 1
+
+statement ok
+UPDATE inv SET s = 'bar' WHERE k = 2
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"x": "y"}' AND s IN ('foo', 'bar') ORDER BY k
+----
+2   {"num": 2, "x": "y"}   bar
+10  {"num": 10, "x": "y"}  foo
+
+statement ok
+UPDATE inv SET s = 'baz' WHERE k = 10
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"x": "y"}' AND s IN ('foo', 'bar')
+----
+2  {"num": 2, "x": "y"}  bar
+
+statement ok
+UPSERT INTO inv VALUES (3, '{"x": "y", "num": 3}', 'bar')
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"x": "y"}' AND s = 'bar' ORDER BY k
+----
+2  {"num": 2, "x": "y"}  bar
+3  {"num": 3, "x": "y"}  bar
+
+statement ok
+UPSERT INTO inv VALUES (3, '{"x": "y", "num": 4}', 'bar')
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"num": 4}' AND s = 'bar'
+----
+3  {"num": 4, "x": "y"}  bar
+
+statement error index "i" is a partial inverted index and cannot be used for this query
+SELECT * FROM inv@i WHERE j @> '{"num": 2}' AND s = 'baz'
+
+# Backfill a partial inverted index.
+
+statement ok
+CREATE TABLE inv_b (k INT PRIMARY KEY, j JSON, s STRING)
+
+statement ok
+INSERT INTO inv_b VALUES
+    (1, '{"x": "y", "num": 1}', 'foo'),
+    (2, '{"x": "y", "num": 2}', 'baz'),
+    (3, '{"x": "y", "num": 3}', 'bar')
+
+statement ok
+CREATE INVERTED INDEX i ON inv_b (j) WHERE s IN ('foo', 'bar')
+
+query ITT
+SELECT * FROM inv_b@i WHERE j @> '{"x": "y"}' AND s IN ('foo', 'bar') ORDER BY k
+----
+1  {"num": 1, "x": "y"}  foo
+3  {"num": 3, "x": "y"}  bar
+
+# Backfill a partial inverted index when a new table is created in the same
+# transaction.
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE inv_c (k INT PRIMARY KEY, j JSON, s STRING)
+
+statement ok
+INSERT INTO inv_c VALUES
+    (1, '{"x": "y", "num": 1}', 'foo'),
+    (2, '{"x": "y", "num": 2}', 'baz'),
+    (3, '{"x": "y", "num": 3}', 'bar')
+
+statement ok
+CREATE INVERTED INDEX i ON inv_c (j) WHERE s IN ('foo', 'bar')
+
+statement ok
+COMMIT
+
+query ITT
+SELECT * FROM inv_c@i WHERE j @> '{"x": "y"}' AND s IN ('foo', 'bar') ORDER BY k
+----
+1  {"num": 1, "x": "y"}  foo
+3  {"num": 3, "x": "y"}  bar
+
+# Updates and Upserts with fetch columns pruned.
+
+statement ok
+CREATE TABLE prune (
+    a INT PRIMARY KEY,
+    b INT,
+    c INT,
+    d INT,
+    INDEX idx (b) WHERE c > 0,
+    FAMILY (a),
+    FAMILY (b),
+    FAMILY (c),
+    FAMILY (d)
+)
+
+statement ok
+INSERT INTO prune (a, b, c, d) VALUES (1, 2, 3, 4)
+
+# Test that an update is successful when fetch columns b and c are pruned
+# because an update to idx is not required.
+statement ok
+UPDATE prune SET d = d + 1 WHERE a = 1
+
+query IIII rowsort
+SELECT * FROM prune@idx WHERE c > 0
+----
+1  2  3  5
+
+# Test that an upsert is successful when fetch columns b and c are pruned
+# because an update to idx is not required.
+statement ok
+UPSERT INTO prune (a, d) VALUES (1, 6)
+
+query IIII rowsort
+SELECT * FROM prune@idx WHERE c > 0
+----
+1  2  3  6
+
+# Test that an upsert is successful when fetch columns b and c are pruned
+# because an update to idx is not required.
+statement ok
+INSERT INTO prune (a, d) VALUES (1, 6) ON CONFLICT (a) DO UPDATE SET d = 7
+
+query IIII rowsort
+SELECT * FROM prune@idx WHERE c > 0
+----
+1  2  3  7
+
+# Vector partial indexes.
+subtest vector
+
+statement ok
+CREATE TABLE vec (id INT PRIMARY KEY, v VECTOR(3), VECTOR INDEX (v) WHERE id > 0);
+
+statement ok
+INSERT INTO vec VALUES
+    (1, '[1,2,3]'),
+    (2, '[4,5,6]'),
+    (3, '[7,8,9]'),
+    (4, '[10,11,12]')
+
+query IT
+SELECT * FROM vec@vec_v_idx WHERE id > 0 ORDER BY v <-> '[3,1,2]' LIMIT 2
+----
+1  [1,2,3]
+2  [4,5,6]
+
+query IT
+SELECT * FROM vec@primary WHERE id > 0 ORDER BY v <-> '[3,1,2]' LIMIT 2
+----
+1  [1,2,3]
+2  [4,5,6]
+
+statement ok
+DROP TABLE vec;
+
+statement ok
+CREATE TABLE vec (
+  id INT PRIMARY KEY,
+  v VECTOR(3),
+  VECTOR INDEX (v) WHERE v <-> '[3,1,2]' >= 3,
+  FAMILY (id, v)
+);
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE vec
+----
+vec  CREATE TABLE public.vec (
+       id INT8 NOT NULL,
+       v VECTOR(3) NULL,
+       CONSTRAINT vec_pkey PRIMARY KEY (id ASC),
+       VECTOR INDEX vec_v_idx (v vector_l2_ops) WHERE (v <-> '[3,1,2]':::VECTOR) >= 3.0:::FLOAT8,
+       FAMILY fam_0_id_v (id, v)
+     );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE vec
+----
+vec  CREATE TABLE public.vec (
+       id INT8 NOT NULL,
+       v VECTOR(3) NULL,
+       CONSTRAINT vec_pkey PRIMARY KEY (id ASC),
+       VECTOR INDEX vec_v_idx (v vector_l2_ops) WHERE (v <-> '[3,1,2]':::VECTOR) >= 3.0:::FLOAT8,
+       FAMILY fam_0_id_v (id, v)
+     ) WITH (schema_locked = true);
+
+statement ok
+INSERT INTO vec VALUES
+    (1, '[1,2,3]'),
+    (2, '[4,5,6]'),
+    (3, '[7,8,9]'),
+    (4, '[10,11,12]')
+
+query IT
+SELECT * FROM vec@vec_v_idx WHERE v <-> '[3,1,2]' >= 3 ORDER BY v <-> '[3,1,2]' LIMIT 2
+----
+2  [4,5,6]
+3  [7,8,9]
+
+query IT
+SELECT * FROM vec@primary WHERE v <-> '[3,1,2]' >= 3 ORDER BY v <-> '[3,1,2]' LIMIT 2
+----
+2  [4,5,6]
+3  [7,8,9]
+
+statement ok
+DROP TABLE vec;
+
+statement ok
+CREATE TABLE vec (id INT PRIMARY KEY, s STRING, v VECTOR(3));
+CREATE VECTOR INDEX ON vec (v) WHERE s IN ('foo', 'bar');
+
+statement ok
+INSERT INTO vec VALUES
+    (1, 'foo', '[1,2,3]'),
+    (2, 'bar', '[4,5,6]'),
+    (3, 'baz', '[7,8,9]'),
+    (4, 'bar', '[10,11,12]')
+
+query ITT
+SELECT * FROM vec@vec_v_idx WHERE s IN ('foo', 'bar') ORDER BY v <-> '[3,1,2]' LIMIT 2
+----
+1  foo  [1,2,3]
+2  bar  [4,5,6]
+
+query ITT
+SELECT * FROM vec@primary WHERE s IN ('foo', 'bar') ORDER BY v <-> '[3,1,2]' LIMIT 2
+----
+1  foo  [1,2,3]
+2  bar  [4,5,6]
+
+statement ok
+DROP TABLE vec;
+
+statement ok
+CREATE TABLE vec (k INT PRIMARY KEY, v VECTOR(2), s STRING);
+CREATE VECTOR INDEX i ON vec (s, v) WHERE s IN ('foo', 'bar');
+
+statement ok
+INSERT INTO vec VALUES
+    (1, '[1,2]', 'foo'),
+    (2, '[3,4]', 'foo'),
+    (3, '[5,6]', 'baz'),
+    (4, '[5,6]', 'bar')
+
+# Only consider foo rows.
+query ITT
+SELECT * FROM vec@i WHERE s = 'foo' ORDER BY v <-> '[5,5]' LIMIT 1
+----
+2  [3,4]  foo
+
+# Consider both foo and bar rows.
+query ITT
+SELECT * FROM vec@i WHERE s IN ('foo', 'bar') ORDER BY v <-> '[5,5]' LIMIT 1
+----
+4  [5,6]  bar
+
+# Delete bar row and ensure it is not returned.
+statement count 1
+DELETE FROM vec WHERE k = 4
+
+query ITT
+SELECT * FROM vec@i WHERE s IN ('foo', 'bar') ORDER BY v <-> '[5,5]' LIMIT 1
+----
+2  [3,4]  foo
+
+# Update vector and ensure it is now returned.
+statement ok
+UPDATE vec SET v = '[6,6]' WHERE k = 1
+
+query ITT
+SELECT * FROM vec@i WHERE s = 'foo' ORDER BY v <-> '[5,5]' LIMIT 1
+----
+1  [6,6]  foo
+
+# Update primary key and move row into partial index (baz => bar).
+statement ok
+UPDATE vec SET k = 10 WHERE k = 1
+
+statement ok
+UPDATE vec SET s = 'bar' WHERE k = 3
+
+query ITT
+SELECT * FROM vec@i WHERE s IN ('foo', 'bar') ORDER BY v <-> '[5,5]' LIMIT 3
+----
+3   [5,6]  bar
+10  [6,6]  foo
+2   [3,4]  foo
+
+# Move row out of partial index (foo => baz).
+statement ok
+UPDATE vec SET s = 'baz' WHERE k = 10
+
+query ITT
+SELECT * FROM vec@i WHERE s IN ('foo', 'bar') ORDER BY v <-> '[5,5]' LIMIT 3
+----
+3  [5,6]  bar
+2  [3,4]  foo
+
+# Overwrite value of row in partial index.
+statement ok
+UPSERT INTO vec VALUES (3, '[7, 8]', 'bar')
+
+query ITT
+SELECT * FROM vec@i WHERE s = 'bar' ORDER BY v <-> '[5,5]' LIMIT 3
+----
+3  [7,8]  bar
+
+statement error index "i" is a partial index that does not contain all the rows needed to execute this query
+SELECT * FROM vec@i WHERE s = 'baz' ORDER BY v <-> '[5,5]' LIMIT 3
+
+statement ok
+DROP TABLE vec
+
+# Backfill a partial vector index.
+statement ok
+CREATE TABLE vec_b (k INT PRIMARY KEY, v VECTOR(2), s STRING)
+
+statement ok
+INSERT INTO vec_b VALUES
+    (1, '[1,2]', 'foo'),
+    (2, '[3,4]', 'foo'),
+    (3, '[5,6]', 'baz'),
+    (4, '[5,6]', 'bar')
+
+statement ok
+CREATE VECTOR INDEX i ON vec_b (s, v) WHERE s IN ('foo', 'bar')
+
+query ITT
+SELECT * FROM vec_b@i WHERE s IN ('foo', 'bar') ORDER BY v <-> '[5,5]' LIMIT 3
+----
+4  [5,6]  bar
+2  [3,4]  foo
+1  [1,2]  foo
+
+statement ok
+DROP TABLE vec_b
+
+# Backfill a partial vector index when a new table is created in the same
+# transaction.
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE vec_c (k INT PRIMARY KEY, v VECTOR(2), s STRING)
+
+statement ok
+INSERT INTO vec_c VALUES
+    (1, '[1,2]', 'foo'),
+    (2, '[3,4]', 'foo'),
+    (3, '[5,6]', 'baz'),
+    (4, '[5,6]', 'bar')
+
+statement ok
+CREATE VECTOR INDEX i ON vec_c (s, v) WHERE s IN ('foo', 'bar')
+
+query ITT
+SELECT * FROM vec_c@i WHERE s IN ('foo', 'bar') ORDER BY v <-> '[5,5]' LIMIT 3
+----
+4  [5,6]  bar
+2  [3,4]  foo
+1  [1,2]  foo
+
+statement ok
+COMMIT
+
+statement ok
+DROP TABLE vec_c
+
+# Tests for partial indexes with predicates that reference virtual computed
+# columns.
+subtest virtual
+
+statement ok
+CREATE TABLE virt (
+    a INT PRIMARY KEY,
+    b INT,
+    c INT AS (b + 10) VIRTUAL,
+    INDEX idx (a) WHERE c = 10
+)
+
+statement ok
+INSERT INTO virt (a, b) VALUES
+    (1, 0),
+    (2, 2),
+    (3, 0)
+
+query III rowsort
+SELECT * FROM virt@idx WHERE c = 10
+----
+1  0  10
+3  0  10
+
+statement count 1
+DELETE FROM virt WHERE a = 1
+
+query III rowsort
+SELECT * FROM virt@idx WHERE c = 10
+----
+3  0  10
+
+statement ok
+UPDATE virt SET b = 0 WHERE a = 2
+
+statement ok
+UPDATE virt SET b = 3 WHERE a = 3
+
+query III rowsort
+SELECT * FROM virt@idx WHERE c = 10
+----
+2  0  10
+
+statement ok
+UPDATE virt SET a = 4 WHERE a = 2
+
+query III rowsort
+SELECT * FROM virt@idx WHERE c = 10
+----
+4  0  10
+
+statement ok
+UPSERT INTO virt (a, b) VALUES (5, 5), (6, 6);
+UPSERT INTO virt (a, b) VALUES (5, 0);
+
+query III rowsort
+SELECT * FROM virt@idx WHERE c = 10
+----
+4  0  10
+5  0  10
+
+statement ok
+INSERT INTO virt (a, b) VALUES (7, 7), (8, 0) ON CONFLICT (a) DO NOTHING;
+INSERT INTO virt (a, b) VALUES (7, 0) ON CONFLICT (a) DO NOTHING;
+
+query III rowsort
+SELECT * FROM virt@idx WHERE c = 10
+----
+4  0  10
+5  0  10
+8  0  10
+
+statement ok
+INSERT INTO virt (a, b) VALUES (7, 0), (9, 9), (10, 0) ON CONFLICT (a) DO UPDATE SET b = 0
+
+query III rowsort
+SELECT * FROM virt@idx WHERE c = 10
+----
+4   0  10
+5   0  10
+7   0  10
+8   0  10
+10  0  10
+
+# Tests for unique partial indexes with predicates that reference virtual
+# computed columns.
+statement count 8
+DELETE FROM virt;
+
+statement ok
+DROP INDEX virt@idx;
+
+statement ok
+CREATE UNIQUE INDEX idx ON virt (b) WHERE c > 10;
+
+statement ok
+INSERT INTO virt (a, b) VALUES (1, 1), (2, 2), (3, 1) ON CONFLICT DO NOTHING
+
+query III rowsort
+SELECT * FROM virt@idx WHERE c > 10
+----
+1  1  11
+2  2  12
+
+statement error pgcode 42P10 there is no unique or exclusion constraint matching the ON CONFLICT specification
+INSERT INTO virt (a, b) VALUES (4, 1), (5, 5) ON CONFLICT (b) DO NOTHING
+
+statement ok
+INSERT INTO virt (a, b) VALUES (4, 1), (5, 5) ON CONFLICT (b) WHERE c > 10 DO NOTHING
+
+query III rowsort
+SELECT * FROM virt@idx WHERE c > 10
+----
+1  1  11
+2  2  12
+5  5  15
+
+# Conflict with b=2 and the update to b=5 creates another conflict.
+statement error duplicate key value violates unique constraint "idx"\nDETAIL: Key \(b\)=\(5\) already exists\.
+INSERT INTO virt (a, b) VALUES (1, 2), (6, 6) ON CONFLICT (b) WHERE c > 10 DO UPDATE SET b = 5
+
+# Conflict with PK a=1 and no conflict with b.
+statement error duplicate key value violates unique constraint "virt_pkey"\nDETAIL: Key \(a\)=\(1\) already exists\.
+INSERT INTO virt (a, b) VALUES (1, 3), (7, 7) ON CONFLICT (b) WHERE c > 10 DO UPDATE SET b = 8
+
+statement ok
+INSERT INTO virt (a, b) VALUES (1, 2), (8, 8) ON CONFLICT (b) WHERE c > 10 DO UPDATE SET b = 9
+
+query III rowsort
+SELECT * FROM virt@idx WHERE c > 10
+----
+1  1  11
+2  9  19
+5  5  15
+8  8  18
+
+# Regression tests for #52318. Mutations on partial indexes in the
+# WRITE_ONLY state should update the indexes correctly.
+subtest regression_52318
+
+statement ok
+CREATE TABLE t52318 (
+    a INT PRIMARY KEY,
+    b INT,
+    INDEX (a)
+)
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+CREATE INDEX i ON t52318 (a) WHERE b > 5
+
+statement ok
+INSERT INTO t52318 (a, b) VALUES (1, 1), (6, 6)
+
+query II rowsort
+SELECT * FROM t52318 WHERE b > 5
+----
+6  6
+
+statement ok
+UPDATE t52318 SET b = b + 1
+
+query II rowsort
+SELECT * FROM t52318 WHERE b > 5
+----
+6  7
+
+statement count 2
+DELETE FROM t52318
+
+statement ok
+COMMIT
+
+# Regression tests for #52702. Indexes with predicates that always evaluate to
+# true can be forced with any query filter. Predicates that always evaluate to
+# false can be forced for a filter that always evaluates to false.
+subtest regression_52702
+
+statement ok
+CREATE TABLE t52702 (
+    a INT,
+    b INT,
+    INDEX t52702_true (a) WHERE 1 = 1,
+    INDEX t52702_false (a) WHERE 1 = 2
+)
+
+statement ok
+SELECT * FROM t52702@t52702_true;
+SELECT * FROM t52702@t52702_true WHERE true;
+SELECT * FROM t52702@t52702_true WHERE 1 = 1;
+SELECT * FROM t52702@t52702_true WHERE 's' = 's';
+SELECT * FROM t52702@t52702_true WHERE b = 1;
+SELECT * FROM t52702@t52702_true WHERE false;
+
+statement ok
+SELECT * FROM t52702@t52702_false WHERE 1 = 2;
+SELECT * FROM t52702@t52702_false WHERE 's' = 't';
+SELECT * FROM t52702@t52702_false WHERE false;
+
+# Regression test for #53922. Do not build functional dependency keys from
+# partial indexes. This causes incorrect results. For example, the optimizer
+# could incorrectly remove distinct operators if it thinks the column is a
+# strict key.
+subtest regression_53922
+
+statement ok
+CREATE TABLE t53922 (
+    a INT NOT NULL,
+    UNIQUE INDEX (a) WHERE a > 10
+)
+
+statement ok
+INSERT INTO t53922 VALUES (1), (2), (3), (3)
+
+query I rowsort
+SELECT distinct(a) FROM t53922
+----
+1
+2
+3
+
+# Regression tests for #54649. Do not panic with NULL atoms in filter and
+# predicate expressions.
+subtest regression_54649
+
+statement ok
+CREATE TABLE t54649_a (
+  i INT,
+  b BOOL,
+  INDEX (i) WHERE b
+)
+
+statement ok
+SELECT i FROM t54649_a WHERE (NULL OR b) OR b
+
+statement ok
+CREATE TABLE t54649_b (
+  i INT,
+  b BOOL,
+  c BOOL,
+  INDEX (i) WHERE (b OR NULL) OR b
+)
+
+statement ok
+SELECT i FROM t54649_b WHERE c
+
+# Regression test for #54819. Ensure predicates are fully normalized.
+subtest regression_54819
+
+statement ok
+CREATE TABLE public.indexes_article (
+    id INT8 NOT NULL DEFAULT unique_rowid(),
+    headline VARCHAR(100) NOT NULL,
+    pub_date TIMESTAMPTZ NOT NULL,
+    published BOOL NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (id ASC),
+    INDEX indexes_article_headline_pub_date_b992dbba_idx (headline ASC, pub_date ASC),
+    FAMILY "primary" (id, headline, pub_date, published)
+)
+
+statement ok
+CREATE INDEX "recent_article_idx" ON "indexes_article" ("pub_date") WHERE "pub_date" IS NOT NULL
+
+# Regression test for #55387. The optimizer should not incorrectly remove
+# filters from an expression while proving partial index implication.
+subtest regression_55387
+
+statement ok
+CREATE TABLE t55387 (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  INDEX (a) WHERE a > 1,
+  INDEX (b) WHERE b > 2
+);
+INSERT INTO t55387 VALUES (1, 1, 5);
+
+query I rowsort
+SELECT k FROM t55387 WHERE a > 1 AND b > 3
+----
+
+# Regression test for #55672. Do not build partial index predicates when the
+# scope does not include all table columns, like FK check scans.
+subtest regression_55672
+
+statement ok
+CREATE TABLE t55672_a (
+    a INT PRIMARY KEY,
+    t TIMESTAMPTZ DEFAULT NULL,
+    UNIQUE INDEX (a) WHERE t is NULL
+)
+
+statement ok
+CREATE TABLE t55672_b (
+    b INT PRIMARY KEY,
+    a INT NOT NULL REFERENCES t55672_a (a)
+)
+
+statement ok
+INSERT INTO t55672_a (a) VALUES (1)
+
+statement ok
+INSERT INTO t55672_b (b,a) VALUES (1,1)
+
+statement ok
+INSERT INTO t55672_a (a, t) VALUES (2, now())
+
+statement ok
+INSERT INTO t55672_b (b,a) VALUES (2,2)
+
+# Regression test for #57085. Cascading UPDATEs should correctly update partial
+# indexes of the child table.
+subtest regression_57085
+
+# Update a partial index in a child table.
+statement ok
+CREATE TABLE t57085_p1 (
+    p INT PRIMARY KEY
+);
+CREATE TABLE t57085_c1 (
+    c INT PRIMARY KEY,
+    p INT REFERENCES t57085_p1 ON UPDATE CASCADE,
+    i INT,
+    INDEX idx (p) WHERE i > 0
+);
+
+statement ok
+INSERT INTO t57085_p1 VALUES (1);
+INSERT INTO t57085_c1 VALUES (10, 1, 100), (20, 1, -100);
+UPDATE t57085_p1 SET p = 2 WHERE p = 1;
+
+query III rowsort
+SELECT c, p, i FROM t57085_c1@idx WHERE p = 2 AND i > 0
+----
+10  2  100
+
+# Update a partial index in a child table with a single variable boolean
+# predicate.
+statement ok
+CREATE TABLE t57085_p2 (
+    p INT PRIMARY KEY
+);
+CREATE TABLE t57085_c2 (
+    c INT PRIMARY KEY,
+    p INT REFERENCES t57085_p2 ON UPDATE CASCADE,
+    b BOOL,
+    INDEX idx (p) WHERE b
+);
+
+statement ok
+INSERT INTO t57085_p2 VALUES (1);
+INSERT INTO t57085_c2 VALUES (10, 1, true), (20, 1, false);
+UPDATE t57085_p2 SET p = 2 WHERE p = 1;
+
+query IIB rowsort
+SELECT c, p, b FROM t57085_c2@idx WHERE p = 2 AND b
+----
+10  2  true
+
+# Update the parent with an INSERT ON CONFLICT DO UPDATE.
+statement ok
+INSERT INTO t57085_p2 VALUES (2) ON CONFLICT (p) DO UPDATE SET p = 3
+
+query IIB rowsort
+SELECT c, p, b FROM t57085_c2@idx WHERE p = 3 AND b
+----
+10  3  true
+
+# Update a partial index that references the column being updated in the
+# cascade.
+statement ok
+CREATE TABLE t57085_p3 (
+    p INT PRIMARY KEY
+);
+CREATE TABLE t57085_c3 (
+    c INT PRIMARY KEY,
+    p INT REFERENCES t57085_p3 ON UPDATE CASCADE,
+    i INT,
+    INDEX idx (i) WHERE p = 3
+);
+
+statement ok
+INSERT INTO t57085_p3 VALUES (1), (2);
+INSERT INTO t57085_c3 VALUES (10, 1, 100), (20, 2, 200);
+UPDATE t57085_p3 SET p = 3 WHERE p = 1;
+
+query III rowsort
+SELECT c, p, i FROM t57085_c3@idx WHERE p = 3 AND i = 100
+----
+10  3  100
+
+statement ok
+UPDATE t57085_p3 SET p = 4 WHERE p = 3;
+
+query III rowsort
+SELECT c, p, i FROM t57085_c3@idx WHERE p = 3 AND i = 100
+----
+
+# Regression test for #58390. Altering the primary key of a table with a partial
+# index that has a disjunctive filter should not create a stack overflow due to
+# a cycle in the optimizer memo.
+subtest regression_58390
+
+statement ok
+CREATE TABLE t58390 (
+  a INT PRIMARY KEY,
+  b INT NOT NULL,
+  c INT,
+  INDEX (c) WHERE a = 1 OR b = 1
+)
+
+statement ok
+ALTER TABLE t58390 ALTER PRIMARY KEY USING COLUMNS (b, a)
+
+# Regression tests for #61414. Upsert execution should not error if partial
+# index PUT and DEL columns are not the last columns in the input of the
+# mutation.
+subtest regression_61414
+
+statement ok
+create table t61414_a (
+  k INT PRIMARY KEY
+)
+
+statement ok
+create table t61414_b (
+  k INT PRIMARY KEY,
+  a STRING,
+  b INT REFERENCES t61414_a(k),
+  UNIQUE INDEX (a, b),
+  INDEX (a) WHERE a = 'x'
+)
+
+statement ok
+INSERT INTO t61414_a VALUES (2)
+
+statement ok
+INSERT INTO t61414_b (k, a, b)
+VALUES (1, 'a', 2)
+ON CONFLICT (a, b) DO UPDATE SET a = excluded.a
+WHERE t61414_b.a = 'x'
+RETURNING k
+
+statement ok
+SET experimental_enable_unique_without_index_constraints = true
+
+statement ok
+CREATE TABLE t61414_c (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  INDEX (b) WHERE b > 0,
+  UNIQUE WITHOUT INDEX (b) WHERE b > 0,
+  FAMILY (k, a, c)
+)
+
+skipif config #126592 weak-iso-level-configs
+statement ok
+UPSERT INTO t61414_c (k, a, b, d) VALUES (1, 2, 3, 4)
+
+# Regression test for #61284. When building partial index DEL column
+# expressions, there should not be ambiguous column errors if there exists
+# columns in an UPDATE FROM clause that match column names in the partial index
+# predicate.
+subtest regression_61284
+
+statement ok
+CREATE TABLE t61284 (
+  a INT,
+  INDEX (a) WHERE a > 0
+)
+
+statement ok
+UPDATE t61284 SET a = v.a FROM (VALUES (1), (2)) AS v(a) WHERE t61284.a = v.a
+
+# Regression test for #74385. Correctly maintain multiple partial indexes with
+# the same predicate.
+subtest regression_74385
+
+statement ok
+CREATE TABLE t74385 (
+  k INT PRIMARY KEY,
+  a STRING,
+  b STRING,
+  c STRING,
+  INDEX b_idx (b) WHERE c IS NULL,
+  INDEX a_idx (a) WHERE c IS NULL
+);
+INSERT INTO t74385 (k, a, b, c) VALUES (10, 'a', 'b', NULL);
+UPDATE t74385 SET b = NULL
+
+query ITTT
+SELECT * FROM t74385@b_idx
+WHERE b = 'b' AND c IS NULL;
+----
+
+# Regression test for #75907. During a backfill, expressions of the form
+# j->'a' = '1' should not be normalized to j @> '{"a": 1}'.
+statement ok
+CREATE TABLE t75907 (k INT PRIMARY KEY, j JSONB);
+INSERT INTO t75907 VALUES (1, '{"a": 1}');
+CREATE INDEX t75907_partial_idx ON t75907 (k) WHERE (j->'b' = '1') IS NULL
+
+query IB
+SELECT k, (j->'b' = '1') IS NULL FROM t75907@t75907_partial_idx WHERE (j->'b' = '1') IS NULL
+----
+1  true
+
+# Regression test for #79613 to disallow adding a partial index referencing a
+# a column added in the same transaction.
+subtest column_added_in_same_transaction
+
+statement ok
+SET autocommit_before_ddl = false
+
+statement ok
+CREATE TABLE t79613 (i INT PRIMARY KEY) WITH (schema_locked=false);
+
+statement error pgcode 0A000 cannot create partial index on column "k" \(2\) which is not public
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+   ALTER TABLE t79613 ADD COLUMN k INT DEFAULT 1;
+   CREATE INDEX idx ON t79613(i) WHERE (k > 1);
+
+statement ok
+ROLLBACK
+
+statement error pgcode 0A000 cannot create partial index on column "k" \(2\) which is not public
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+   ALTER TABLE t79613 ADD COLUMN k INT DEFAULT 1;
+   CREATE UNIQUE INDEX idx ON t79613(i) WHERE (k > 1);
+
+statement ok
+ROLLBACK
+
+statement error pgcode 0A000 cannot create partial index on column "k" \(2\) which is not public
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+   ALTER TABLE t79613 ADD COLUMN k INT DEFAULT 1;
+   ALTER TABLE t79613 ADD CONSTRAINT c UNIQUE (k) WHERE (k > 1);
+
+statement ok
+ROLLBACK
+
+statement ok
+DROP TABLE t79613
+
+# If the table was created in the same transaction, then it's fine to add
+# these partial indexes because we'll have backfilled the new column
+# synchronously.
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+   CREATE TABLE t79613 (i INT PRIMARY KEY);
+   ALTER TABLE t79613 ADD COLUMN k INT DEFAULT 1;
+   CREATE INDEX idx ON t79613(i) WHERE (k > 1);
+COMMIT;
+SELECT * FROM t79613;
+
+statement ok
+DROP TABLE t79613;
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+   CREATE TABLE t79613 (i INT PRIMARY KEY);
+   ALTER TABLE t79613 ADD COLUMN k INT DEFAULT 1;
+   CREATE UNIQUE INDEX idx ON t79613(i) WHERE (k > 1);
+COMMIT;
+SELECT * FROM t79613;
+
+statement ok
+DROP TABLE t79613;
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+   CREATE TABLE t79613 (i INT PRIMARY KEY);
+   ALTER TABLE t79613 ADD COLUMN k INT DEFAULT 1;
+   ALTER TABLE t79613 ADD CONSTRAINT c UNIQUE (k) WHERE (k > 1);
+COMMIT;
+SELECT * FROM t79613;
+
+statement ok
+DROP TABLE t79613;
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+   CREATE TABLE t79613 (i INT PRIMARY KEY);
+   ALTER TABLE t79613 ADD COLUMN k INT DEFAULT 1,
+       ADD CONSTRAINT c UNIQUE (k) WHERE (k > 1);
+COMMIT;
+SELECT * FROM t79613;
+
+statement ok
+DROP TABLE t79613;
+
+statement ok
+RESET autocommit_before_ddl
+
+# Regression test for #96924 to disallow dropping a column that is referenced in
+# a partial index predicate.
+subtest column_dropped_referenced_in_partial_index
+
+statement ok
+SET experimental_enable_unique_without_index_constraints = true
+
+statement ok
+CREATE TABLE t96924 (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  e INT,
+  f JSON,
+  g INT,
+  h INT,
+  i INT,
+  INDEX (a) WHERE (b > 0),
+  UNIQUE INDEX (b) WHERE (b > 0),
+  UNIQUE (c) WHERE (c > 0),
+  UNIQUE WITHOUT INDEX (d) WHERE (d > 0),
+  INVERTED INDEX (e, f) WHERE (e > 0),
+  INDEX (g) WHERE (h > 0),
+  UNIQUE WITHOUT INDEX (g) WHERE (i > 0)
+)
+
+# Column `a` can be dropped because it is not referenced in any partial index
+# predicates.
+statement ok
+ALTER TABLE t96924 DROP COLUMN a
+
+statement error pq: cannot drop column "b" because it is referenced by partial index "t96924_b_key"\nHINT: drop the partial index first, then drop the column
+ALTER TABLE t96924 DROP COLUMN b
+
+statement ok
+DROP INDEX t96924_b_key CASCADE
+
+statement ok
+ALTER TABLE t96924 DROP COLUMN b
+
+statement error pq: cannot drop column "c" because it is referenced by partial index "t96924_c_key"\nHINT: drop the partial index first, then drop the column
+ALTER TABLE t96924 DROP COLUMN c
+
+statement ok
+DROP INDEX t96924_c_key CASCADE
+
+statement ok
+ALTER TABLE t96924 DROP COLUMN c
+
+statement error pq: cannot drop column "d" because it is referenced by partial unique constraint "unique_d"\nHINT: drop the unique constraint first, then drop the column
+ALTER TABLE t96924 DROP COLUMN d
+
+statement ok
+ALTER TABLE t96924 DROP CONSTRAINT unique_d
+
+statement ok
+ALTER TABLE t96924 DROP COLUMN d
+
+statement error pq: cannot drop column "e" because it is referenced by partial index "t96924_e_f_idx"\nHINT: drop the partial index first, then drop the column
+ALTER TABLE t96924 DROP COLUMN e
+
+statement ok
+DROP INDEX t96924_e_f_idx CASCADE
+
+statement ok
+ALTER TABLE t96924 DROP COLUMN e
+
+# Column `f` can be dropped because it is not referenced in any partial index
+# predicates.
+statement ok
+ALTER TABLE t96924 DROP COLUMN f
+
+# Column `h` is used in the predicate of another index that does not key on `h`,
+# we will prevent dropping column `h` as well.
+statement error pq: cannot drop column "h" because it is referenced by partial index "t96924_g_idx"\nHINT: drop the partial index first, then drop the column
+ALTER TABLE t96924 DROP COLUMN h
+
+statement ok
+DROP INDEX t96924_g_idx
+
+statement ok
+ALTER TABLE t96924 DROP COLUMN h
+
+# Similarly, column `i` cannot be dropped since it's used in the predicate of
+# of a UWI constraint.
+statement error pq: cannot drop column "i" because it is referenced by partial unique constraint "unique_g"\nHINT: drop the unique constraint first, then drop the column
+ALTER TABLE t96924 DROP COLUMN i
+
+statement ok
+ALTER TABLE t96924 DROP CONSTRAINT unique_g
+
+statement ok
+ALTER TABLE t96924 DROP COLUMN i
+
+statement ok
+ALTER TABLE t96924 DROP COLUMN g
+
+# Another edge case where ALTER PRIMARY KEY implicit drops the `rowid` column
+# yet `rowid` is referenced in a partial index. Note that this behavior is
+# only in the declarative schema changer but not in the legacy schema changer.
+statement ok
+DROP TABLE t96924
+
+statement ok
+CREATE TABLE t96924 (a INT NOT NULL)
+
+statement ok
+CREATE INDEX t96924_idx_1 ON t96924(a) WHERE (rowid > 0);
+
+skipif config local-legacy-schema-changer
+statement error cannot drop column "rowid" because it is referenced by partial index "t96924_idx_1"\nHINT: drop the partial index first, then drop the column
+ALTER TABLE t96924 ALTER PRIMARY KEY USING COLUMNS (a);
+
+statement ok
+DROP INDEX t96924_idx_1
+
+statement ok
+ALTER TABLE t96924 ALTER PRIMARY KEY USING COLUMNS (a);
+
+subtest enum_cast_references
+
+statement ok
+CREATE TYPE enum97551 AS ENUM ('a', 'b', 'c');
+CREATE TABLE t97551 (i INT PRIMARY KEY, j STRING);
+
+# We shouldn't be allowed to create this index because the cast from string
+# to an enum is not immutable. However, we can because of  #68672, so we
+# exercise that here. There's another set of statements below which can
+# continue to exist after that bug is fixed and also protect against the
+# underlying regression.
+statement ok
+CREATE INDEX idx97551 ON t97551 (j) WHERE (j::enum97551 = 'a'::enum97551);
+
+statement error pgcode 2BP01 cannot drop type "enum97551" because other objects \(\[test\.public\.t97551\]\) still depend on it
+DROP TYPE enum97551;
+
+statement ok
+DROP INDEX idx97551;
+
+statement ok
+DROP TYPE enum97551;
+
+# Do the same dance but with an expression that is actually immutable.
+
+statement ok
+CREATE TYPE enum97551 AS ENUM ('a', 'b', 'c');
+
+statement ok
+ALTER TABLE t97551 ADD COLUMN e enum97551;
+
+statement ok
+CREATE INDEX idx97551 ON t97551 (e) WHERE (e = 'a'::enum97551);
+
+statement error pgcode 2BP01 cannot drop type "enum97551" because other objects \(\[test\.public\.t97551\]\) still depend on it
+DROP TYPE enum97551;
+
+statement ok
+DROP INDEX idx97551;
+
+statement ok
+DROP TABLE t97551;
+DROP TYPE enum97551;
+
+subtest end
+
+# Regression test for #158154. Don't add transitive column dependencies to
+# routines that build partial index predicate expressions.
+subtest regression_158154
+
+# Simple case with INSERT and UPDATE into a table with a partial index.
+statement ok
+CREATE TABLE t158154 (a INT, b INT, INDEX b_idx (b) WHERE (b > 0));
+
+statement ok
+CREATE PROCEDURE p158154() LANGUAGE SQL AS $$
+  INSERT INTO t158154 (a) VALUES (1);
+  UPDATE t158154 SET a = a + 1;
+$$;
+
+statement ok
+CALL p158154();
+
+statement ok
+DROP INDEX t158154@b_idx;
+
+statement ok
+ALTER TABLE t158154 DROP COLUMN b;
+
+statement ok
+CALL p158154();
+
+statement ok
+DROP PROCEDURE p158154;
+DROP TABLE t158154;
+
+# Case with a partial index used as an arbiter.
+statement ok
+CREATE TABLE t158154 (a INT, b INT);
+
+statement ok
+CREATE UNIQUE INDEX a_idx ON t158154 (a) WHERE (b > 0);
+
+# WHERE false implies any partial index predicate.
+statement ok
+CREATE PROCEDURE p158154() LANGUAGE SQL AS $$
+  INSERT INTO t158154 (a) VALUES (1) ON CONFLICT (a) WHERE (false) DO NOTHING;
+  INSERT INTO t158154 (a) VALUES (2) ON CONFLICT (a) WHERE (false) DO UPDATE SET a = EXCLUDED.a + 1;
+$$;
+
+statement ok
+CALL p158154();
+
+statement ok
+DROP INDEX t158154@a_idx;
+
+statement ok
+ALTER TABLE t158154 DROP COLUMN b;
+
+statement ok
+CREATE UNIQUE INDEX a_idx ON t158154 (a);
+
+statement ok
+CALL p158154();
+
+statement ok
+DROP PROCEDURE p158154;
+DROP TABLE t158154;
+
+# Verify that a SELECT statement inside a procedure does not add transitive
+# dependencies from the partial index predicate.
+statement ok
+CREATE TABLE t158154 (a INT, b INT, INDEX b_idx (b) WHERE (b > 0));
+
+statement ok
+CREATE PROCEDURE p158154() LANGUAGE SQL AS $$
+  SELECT a FROM t158154;
+  SELECT count(*) FROM t158154 WHERE a > 5;
+$$;
+
+statement ok
+CALL p158154();
+
+statement ok
+DROP INDEX t158154@b_idx;
+
+statement ok
+ALTER TABLE t158154 DROP COLUMN b;
+
+statement ok
+CALL p158154();
+
+statement ok
+DROP PROCEDURE p158154;
+DROP TABLE t158154;
+
+subtest end

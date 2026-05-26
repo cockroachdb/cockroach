@@ -1,0 +1,39 @@
+services:
+  crdb:
+    image: cockroachdb/cockroach-ci:latest
+    command: start-single-node --http-port=8080
+    hostname: crdbhost
+    networks:
+      - db
+    expose:
+      - "8080"
+    healthcheck:
+      test: "[ -r ./init_success ] && curl --fail --head http://localhost:8080 || exit 1"
+      interval: 0.5s
+      timeout: 10s
+      retries: 25
+    environment:
+      COCKROACH_USER: cypress
+      COCKROACH_PASSWORD: tests
+      COCKROACH_DATABASE: movr
+
+  cypress:
+    build:
+      context: .
+      dockerfile: Dockerfile.cypress
+    image: crdb_ci-cypress_20230719
+    working_dir: /ui
+    entrypoint: ./workspaces/e2e-tests/build/compose-entrypoint.sh
+    environment:
+      IS_DOCKER: "1"
+    depends_on:
+      crdb:
+        condition: service_healthy
+    networks:
+      - db
+    volumes:
+      - ../../:/ui
+      - ./artifacts:/artifacts
+
+networks:
+  db:

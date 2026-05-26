@@ -1,0 +1,123 @@
+new-cluster name=s1 allow-implicit-access
+----
+
+# Create test schedules.
+
+exec-sql
+create schedule datatest for backup into 'nodelocal://1/example-schedule' recurring '@daily' full backup '@weekly';
+----
+
+let $fullID $incID
+with schedules as (show schedules for backup) select id from schedules where label='datatest' order by backup_type asc;
+----
+
+query-sql
+with schedules as (show schedules for backup) select label from schedules where id in ($fullID, $incID) order by backup_type asc;
+----
+datatest
+datatest
+
+exec-sql
+alter backup schedule $fullID set label 'datatest2'
+----
+
+query-sql
+with schedules as (show schedules for backup) select label from schedules where id in ($fullID, $incID) order by backup_type asc;
+----
+datatest2
+datatest2
+
+exec-sql
+alter backup schedule $fullID set into 'nodelocal://1/example-schedule-2'
+----
+
+query-sql
+with schedules as (show schedules for backup) select command, backup_type from schedules where id in ($fullID, $incID) order by backup_type asc;
+----
+BACKUP INTO 'nodelocal://1/example-schedule-2' WITH OPTIONS (detached) FULL
+BACKUP INTO LATEST IN 'nodelocal://1/example-schedule-2' WITH OPTIONS (detached) INCREMENTAL
+
+# Alter the `on_previous_running` schedule option to test that incremental
+# schedules always have their configuration set to wait.
+exec-sql
+alter backup schedule $fullID set schedule option on_previous_running = 'start';
+----
+
+query-sql
+select on_execution_failure, on_previous_running
+from [show schedules for backup]
+where id in ($fullID, $incID)
+order by backup_type asc;
+----
+RETRY_SCHED NO_WAIT
+RETRY_SCHED WAIT
+
+exec-sql
+alter backup schedule $fullID set schedule option on_previous_running = 'skip';
+----
+
+query-sql
+select on_execution_failure, on_previous_running
+from [show schedules for backup]
+where id in ($fullID, $incID)
+order by backup_type asc;
+----
+RETRY_SCHED SKIP
+RETRY_SCHED WAIT
+
+exec-sql
+alter backup schedule $fullID set schedule option on_previous_running = 'wait';
+----
+
+query-sql
+select on_execution_failure, on_previous_running
+from [show schedules for backup]
+where id in ($fullID, $incID)
+order by backup_type asc;
+----
+RETRY_SCHED WAIT
+RETRY_SCHED WAIT
+
+
+# Hard to validate these, so settle for checking they execute without errors.
+
+exec-sql
+alter backup schedule $fullID set schedule option on_previous_running='skip', set schedule option on_execution_failure = 'pause';
+----
+
+exec-sql
+alter backup schedule $fullID set schedule option updates_cluster_last_backup_time_metric = '1';
+alter backup schedule $fullID set schedule option updates_cluster_last_backup_time_metric = '0';
+alter backup schedule $fullID set schedule option updates_cluster_last_backup_time_metric = 'TRUE';
+alter backup schedule $fullID set schedule option updates_cluster_last_backup_time_metric = 'False';
+alter backup schedule $fullID set schedule option updates_cluster_last_backup_time_metric = 't';
+alter backup schedule $fullID set schedule option updates_cluster_last_backup_time_metric;
+----
+
+exec-sql expect-error-regex=(unexpected value)
+alter backup schedule $fullID set schedule option updates_cluster_last_backup_time_metric = 'yeah for sure true';
+----
+regex matches error
+
+exec-sql
+create user testuser;
+grant admin to testuser;
+----
+
+# Cluster backup as a non-admin user should fail.
+exec-sql user=testuser
+create schedule datatest3 for backup into 'nodelocal://1/example-schedule' recurring '@daily' full backup '@weekly';
+----
+
+exec-sql
+revoke admin from testuser;
+----
+
+let $fullID $incID
+with schedules as (show schedules) select id from schedules where label='datatest3' order by command->>'backup_type' asc;
+----
+
+exec-sql user=testuser expect-error-regex=(only users with the admin role are allowed to change updates_cluster_last_backup_time_metric)
+alter backup schedule $fullID set schedule option updates_cluster_last_backup_time_metric = '1';
+----
+regex matches error

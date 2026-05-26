@@ -1,0 +1,16 @@
+alter_domain_stmt ::=
+	'ALTER' 'DOMAIN' type_name 'SET' 'DEFAULT' a_expr
+	| 'ALTER' 'DOMAIN' type_name 'DROP' 'DEFAULT'
+	| 'ALTER' 'DOMAIN' type_name 'SET' 'NOT' 'NULL'
+	| 'ALTER' 'DOMAIN' type_name 'DROP' 'NOT' 'NULL'
+	| 'ALTER' 'DOMAIN' type_name 'ADD' 'CONSTRAINT' name 'CHECK' '(' a_expr ')' opt_validate_behavior
+	| 'ALTER' 'DOMAIN' type_name 'ADD' 'CHECK' '(' a_expr ')' opt_validate_behavior
+	| 'ALTER' 'DOMAIN' type_name 'ADD' 'CONSTRAINT' name 'NOT' 'NULL' opt_validate_behavior
+	| 'ALTER' 'DOMAIN' type_name 'ADD' 'NOT' 'NULL' opt_validate_behavior
+	| 'ALTER' 'DOMAIN' type_name 'DROP' 'CONSTRAINT' 'IF' 'EXISTS' constraint_name opt_drop_behavior
+	| 'ALTER' 'DOMAIN' type_name 'DROP' 'CONSTRAINT' constraint_name opt_drop_behavior
+	| 'ALTER' 'DOMAIN' type_name 'RENAME' 'CONSTRAINT' constraint_name 'TO' constraint_name
+	| 'ALTER' 'DOMAIN' type_name 'VALIDATE' 'CONSTRAINT' constraint_name
+	| 'ALTER' 'DOMAIN' type_name 'OWNER' 'TO' role_spec
+	| 'ALTER' 'DOMAIN' type_name 'RENAME' 'TO' name
+	| 'ALTER' 'DOMAIN' type_name 'SET' 'SCHEMA' schema_name

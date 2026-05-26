@@ -1,0 +1,86 @@
+# Write at a timestamp above the exclusion timestamp results in a write exclusion error.
+run ok
+put k=a v=v1 ts=2
+----
+>> at end:
+data: "a"/2.000000000,0 -> /BYTES/v1
+
+run error
+del k=a ts=3 expect-exclusion-since=1
+----
+>> at end:
+data: "a"/2.000000000,0 -> /BYTES/v1
+error: (*kvpb.ExclusionViolationError:) write exclusion on key "a" expected since 1.000000000,0 but found write at 2.000000000,0
+
+# Exclusion timestamp are inclusive
+run error
+del k=a ts=3 expect-exclusion-since=2
+----
+>> at end:
+data: "a"/2.000000000,0 -> /BYTES/v1
+error: (*kvpb.ExclusionViolationError:) write exclusion on key "a" expected since 2.000000000,0 but found write at 2.000000000,0
+
+run ok
+clear_range k=a end=z
+----
+>> at end:
+<no data>
+
+# Intent at a timestamp above the exclusion timestamp from a different transaction still results in a LockConflictError.
+run ok
+with t=A k=a
+  txn_begin ts=2
+  put v=v1
+----
+put: lock acquisition = {span=a id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
+>> at end:
+txn: "A" meta={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=2.000000000,0 gul=0,0
+meta: "a"/0,0 -> txn={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=0} ts=2.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/2.000000000,0 -> /BYTES/v1
+
+run error
+del k=a ts=3 expect-exclusion-since=1
+----
+>> at end:
+meta: "a"/0,0 -> txn={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=0} ts=2.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/2.000000000,0 -> /BYTES/v1
+error: (*kvpb.LockConflictError:) conflicting locks on "a"
+
+run ok
+clear_range k=a end=z
+----
+>> at end:
+<no data>
+
+# Intent at a timestamp above the exclusion timestamp from the same transaction is allowed.
+run ok
+with t=B k=a
+  txn_begin ts=2
+  put v=v1
+----
+put: lock acquisition = {span=a id=00000002 key="a" iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
+>> at end:
+txn: "B" meta={id=00000002 key="a" iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=2.000000000,0 gul=0,0
+meta: "a"/0,0 -> txn={id=00000002 key="a" iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=0} ts=2.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/2.000000000,0 -> /BYTES/v1
+
+run ok
+txn_advance t=B ts=3
+----
+>> at end:
+txn: "B" meta={id=00000002 key="a" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=2.000000000,0 gul=0,0
+
+run ok
+txn_step t=B
+----
+>> at end:
+txn: "B" meta={id=00000002 key="a" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=2.000000000,0 gul=0,0
+
+run ok
+del t=B k=a ts=2 expect-exclusion-since=1
+----
+del: "a": found key true
+del: lock acquisition = {span=a id=00000002 key="a" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1 durability=Replicated strength=Intent ignored=[]}
+>> at end:
+meta: "a"/0,0 -> txn={id=00000002 key="a" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1} ts=3.000000000,0 del=true klen=12 vlen=0 ih={{0 /BYTES/v1}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "a"/3.000000000,0 -> /<empty>

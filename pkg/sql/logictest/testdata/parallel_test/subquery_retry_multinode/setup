@@ -1,0 +1,5 @@
+statement ok
+CREATE TABLE T (k INT, filler STRING)
+
+statement ok
+INSERT INTO T VALUES (1, 'meh')

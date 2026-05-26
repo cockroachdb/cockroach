@@ -1,0 +1,78 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//build:STRINGER.bzl", "stringer")
+
+go_library(
+    name = "rel",
+    srcs = [
+        "attribute.go",
+        "clause_id.go",
+        "compare.go",
+        "database.go",
+        "database_entity_set.go",
+        "database_items.go",
+        "doc.go",
+        "entity.go",
+        "ordinal_set.go",
+        "query.go",
+        "query_build.go",
+        "query_data.go",
+        "query_eval.go",
+        "query_lang.go",
+        "query_lang_clause.go",
+        "query_lang_clauses.go",
+        "query_lang_expr.go",
+        "query_lang_yaml.go",
+        "schema.go",
+        "schema_attribute.go",
+        "schema_mappings.go",
+        "schema_rules.go",
+        "schema_value.go",
+        "system_attributes.go",
+        "values.go",
+        ":gen-systemattribute-stringer",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util",
+        "//pkg/util/intsets",
+        "//pkg/util/iterutil",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_google_btree//:btree",
+        "@in_gopkg_yaml_v2//:yaml_v2",
+        "@in_yaml_go_yaml_v4//:yaml",
+    ],
+)
+
+go_test(
+    name = "rel_test",
+    size = "small",
+    srcs = [
+        "bench_test.go",
+        "clause_id_test.go",
+        "ordinal_set_test.go",
+        "rel_internal_test.go",
+        "rel_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":rel"],
+    deps = [
+        "//pkg/sql/schemachanger/rel/internal/comparetest",
+        "//pkg/sql/schemachanger/rel/internal/cyclegraphtest",
+        "//pkg/sql/schemachanger/rel/internal/entitynodetest",
+        "//pkg/sql/schemachanger/rel/reltest",
+        "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_x_sync//errgroup",
+    ],
+)
+
+stringer(
+    name = "gen-systemattribute-stringer",
+    src = "system_attributes.go",
+    typ = "systemAttribute",
+)

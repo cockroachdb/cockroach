@@ -1,0 +1,50 @@
+// Copyright 2023 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.inspectz.inspectzpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/inspectz/inspectzpb";
+
+import "kv/kvserver/kvflowcontrol/kvflowinspectpb/kvflowinspect.proto";
+import "kv/kvserver/storeliveness/storelivenesspb/service.proto";
+
+// Inspectz exposes in-memory state of various CRDB components.
+//
+// TODO(irfansharif): Expose endpoints for the admission package, for example
+// what each work queue's occupancy is (with respect to tenants, "held" flow
+// tokens, etc). Also expose queues in the latch/lock manager, including who is
+// waiting and for how long.
+service Inspectz {
+  // KVFlowController exposes in-memory state of the node-level
+  // rac2.StreamTokenCounterProvider. It's housed under
+  // /inspectz/v2/kvflowcontroller.
+  rpc KVFlowControllerV2(kv.kvserver.kvflowcontrol.kvflowinspectpb.ControllerRequest)
+      returns (kv.kvserver.kvflowcontrol.kvflowinspectpb.ControllerResponse) {}
+
+  // KVFlowHandles exposes in-memory state of all rac2.RangeController(s). It's
+  // housed under /inspectz/v2/kvflowhandles.
+  rpc KVFlowHandlesV2(kv.kvserver.kvflowcontrol.kvflowinspectpb.HandlesRequest)
+      returns (kv.kvserver.kvflowcontrol.kvflowinspectpb.HandlesResponse) {}
+
+  // StoreLivenessSupportFrom exposes the in-memory state of all stores'
+  // storeliveness.SupportManagers' views of support provided from other stores.
+  // It's housed under /inspectz/storeliveness/supportFrom.
+  rpc StoreLivenessSupportFrom(kv.kvserver.storeliveness.storelivenesspb.InspectStoreLivenessRequest)
+      returns (kv.kvserver.storeliveness.storelivenesspb.InspectSupportFromResponse) {}
+
+  // StoreLivenessSupportFor exposes the in-memory state of all stores'
+  // storeliveness.SupportManagers' views of support provided for other stores.
+  // It's housed under /inspectz/storeliveness/supportFor.
+  rpc StoreLivenessSupportFor(kv.kvserver.storeliveness.storelivenesspb.InspectStoreLivenessRequest)
+      returns (kv.kvserver.storeliveness.storelivenesspb.InspectSupportForResponse) {}
+
+}
+
+// As of 04/23, we're not invoking these RPC interfaces as RPCs. But they're
+// kept as such for semi-opinionated code organization reasons. We want all
+// inspectz APIs and protos inspectable at glance in this one file even if
+// actual type definitions appear elsewhere. It's possible that other
+// subsystems that use /inspectz make use of the RPC interfaces (to fetch
+// remote inspectable state, for example).

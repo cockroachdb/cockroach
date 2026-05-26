@@ -1,0 +1,151 @@
+# Single-node
+upload-logs
+{
+  "nodes": {
+    "1": {
+      "logs": [
+        {
+          "name": "cockroach.hostname.username.2024-07-16T17_51_43Z.048498.log",
+          "lines": [
+            "I240716 17:51:44.661864 100 server/node.go:533 ⋮ [T1,n1] 24 initialized store s1",
+            "W240716 17:51:44.667017 100 server/env_sampler.go:125 ⋮ [T1,n1] 33 failed to start query profiler worker: failed to detect cgroup memory limit: failed to read memory cgroup from cgroups file: ‹/proc/self/cgroup›: open ‹/proc/self/cgroup›: no such file or directory"
+          ]
+        }
+      ]
+    }
+  }
+}
+----
+=== uploading logs
+Create DD Archive: https://api.us5.datadoghq.com/api/v2/logs/config/archives
+Create DD Archive: {"data":{"type":"archives","attributes":{"name":"abc-20241114000000","query":"-*","destination":{"type":"gcs","path":"ABC/abc-20241114000000","bucket":"debugzip-archives","integration":{"project_id":"arjun-sandbox-424904","client_email":"datadog-archive@arjun-sandbox-424904.iam.gserviceaccount.com"}}}}}
+GCS Upload: ABC/abc-20241114000000/dt=20240716/hour=17/1/cockroach.hostname.username.2024-07-16T17_51_43Z.048498.log:
+Upload ID: abc-20241114000000
+debug zip upload debugDir --dd-api-key=dd-api-key --dd-app-key=dd-app-key --cluster=ABC --include=logs
+{"timestamp":1721152304,"date":"2024-07-16T17:51:44Z","message":"failed to start query profiler worker: failed to detect cgroup memory limit: failed to read memory cgroup from cgroups file: /proc/self/cgroup: open /proc/self/cgroup: no such file or directory","tags":["cluster:ABC","env:debug","node_id:1","service:CRDB-SH","source:cockroachdb","upload_id:abc-20241114000000"],"_id":"a1b2c3","attributes":{"goroutine":100,"file":"server/env_sampler.go","line":125,"counter":33,"tenant_id":"1","date":"2024-07-16T17:51:44Z","timestamp":1721152304,"channel":"DEV","severity":"WARNING"}}
+{"timestamp":1721152304,"date":"2024-07-16T17:51:44Z","message":"initialized store s1","tags":["cluster:ABC","env:debug","node_id:1","service:CRDB-SH","source:cockroachdb","upload_id:abc-20241114000000"],"_id":"a1b2c3","attributes":{"goroutine":100,"file":"server/node.go","line":533,"counter":24,"tenant_id":"1","date":"2024-07-16T17:51:44Z","timestamp":1721152304,"channel":"DEV","severity":"INFO"}}
+
+
+# single-node with wrong log format
+upload-logs log-format=crdb-v2
+{
+  "nodes": {
+    "1": {
+      "logs": [
+        {
+          "name": "cockroach.hostname.username.2024-07-16T17_51_43Z.048498.log",
+          "lines": [
+            "I240716 17:51:44.661864 100 server/node.go:533 ⋮ [T1,n1] 24 initialized store s1",
+            "W240716 17:51:44.667017 100 server/env_sampler.go:125 ⋮ [T1,n1] 33 failed to start query profiler worker: failed to detect cgroup memory limit: failed to read memory cgroup from cgroups file: ‹/proc/self/cgroup›: open ‹/proc/self/cgroup›: no such file or directory"
+          ]
+        }
+      ]
+    }
+  }
+}
+----
+=== uploading logs
+Failed to upload logs: decoding on line 2: malformed log entry
+Upload ID: abc-20241114000000
+debug zip upload debugDir --dd-api-key=dd-api-key --dd-app-key=dd-app-key --cluster=ABC --include=logs --log-format=crdb-v2
+
+
+# multi-node
+upload-logs log-format=crdb-v1
+{
+  "nodes": {
+    "1": {
+      "logs": [
+        {
+          "name": "cockroach.node1.username.2024-07-16T17_51_43Z.048498.log",
+          "lines": [
+            "I240716 17:51:44.661864 100 server/node.go:533 ⋮ [T1,n1] 24 initialized store s1",
+            "W240716 17:51:44.667017 100 server/env_sampler.go:125 ⋮ [T1,n1] 33 failed to start query profiler worker: failed to detect cgroup memory limit: failed to read memory cgroup from cgroups file: ‹/proc/self/cgroup›: open ‹/proc/self/cgroup›: no such file or directory"
+          ]
+        }
+      ]
+    },
+    "2": {
+      "logs": [
+        {
+          "name": "cockroach.node2.username.2024-07-16T17_51_43Z.048498.log",
+          "lines": [
+            "I240716 17:51:44.797342 916 sql/sqlliveness/slstorage/slstorage.go:540 ⋮ [T1,n1] 43 inserted sqlliveness session 01018071445fbd54a44ee88e906efb311d7193",
+            "I240716 17:51:44.797530 916 sql/sqlliveness/slinstance/slinstance.go:258 ⋮ [T1,n1] 44 created new SQL liveness session 01018071445fbd54a44ee88e906efb311d7193"
+          ]
+        }
+      ]
+    }
+  }
+}
+----
+=== uploading logs
+Create DD Archive: https://api.us5.datadoghq.com/api/v2/logs/config/archives
+Create DD Archive: {"data":{"type":"archives","attributes":{"name":"abc-20241114000000","query":"-*","destination":{"type":"gcs","path":"ABC/abc-20241114000000","bucket":"debugzip-archives","integration":{"project_id":"arjun-sandbox-424904","client_email":"datadog-archive@arjun-sandbox-424904.iam.gserviceaccount.com"}}}}}
+GCS Upload: ABC/abc-20241114000000/dt=20240716/hour=17/1/cockroach.node1.username.2024-07-16T17_51_43Z.048498.log:
+GCS Upload: ABC/abc-20241114000000/dt=20240716/hour=17/2/cockroach.node2.username.2024-07-16T17_51_43Z.048498.log:
+Upload ID: abc-20241114000000
+debug zip upload debugDir --dd-api-key=dd-api-key --dd-app-key=dd-app-key --cluster=ABC --include=logs --log-format=crdb-v1
+{"timestamp":1721152304,"date":"2024-07-16T17:51:44Z","message":"created new SQL liveness session 01018071445fbd54a44ee88e906efb311d7193","tags":["cluster:ABC","env:debug","node_id:2","service:CRDB-SH","source:cockroachdb","upload_id:abc-20241114000000"],"_id":"a1b2c3","attributes":{"goroutine":916,"file":"sql/sqlliveness/slinstance/slinstance.go","line":258,"counter":44,"tenant_id":"1","date":"2024-07-16T17:51:44Z","timestamp":1721152304,"channel":"DEV","severity":"INFO"}}
+{"timestamp":1721152304,"date":"2024-07-16T17:51:44Z","message":"failed to start query profiler worker: failed to detect cgroup memory limit: failed to read memory cgroup from cgroups file: /proc/self/cgroup: open /proc/self/cgroup: no such file or directory","tags":["cluster:ABC","env:debug","node_id:1","service:CRDB-SH","source:cockroachdb","upload_id:abc-20241114000000"],"_id":"a1b2c3","attributes":{"goroutine":100,"file":"server/env_sampler.go","line":125,"counter":33,"tenant_id":"1","date":"2024-07-16T17:51:44Z","timestamp":1721152304,"channel":"DEV","severity":"WARNING"}}
+{"timestamp":1721152304,"date":"2024-07-16T17:51:44Z","message":"initialized store s1","tags":["cluster:ABC","env:debug","node_id:1","service:CRDB-SH","source:cockroachdb","upload_id:abc-20241114000000"],"_id":"a1b2c3","attributes":{"goroutine":100,"file":"server/node.go","line":533,"counter":24,"tenant_id":"1","date":"2024-07-16T17:51:44Z","timestamp":1721152304,"channel":"DEV","severity":"INFO"}}
+{"timestamp":1721152304,"date":"2024-07-16T17:51:44Z","message":"inserted sqlliveness session 01018071445fbd54a44ee88e906efb311d7193","tags":["cluster:ABC","env:debug","node_id:2","service:CRDB-SH","source:cockroachdb","upload_id:abc-20241114000000"],"_id":"a1b2c3","attributes":{"goroutine":916,"file":"sql/sqlliveness/slstorage/slstorage.go","line":540,"counter":43,"tenant_id":"1","date":"2024-07-16T17:51:44Z","timestamp":1721152304,"channel":"DEV","severity":"INFO"}}
+
+
+# Single-node - with recent logs that are use logs API
+upload-logs
+{
+  "nodes": {
+    "1": {
+      "logs": [
+        {
+          "name": "cockroach.hostname.username.2024-07-16T17_51_43Z.048498.log",
+          "lines": [
+            "I{{now}} 100 server/node.go:533 ⋮ [T1,n1] 24 initialized store s1",
+            "W{{now}} 100 server/env_sampler.go:125 ⋮ [T1,n1] 33 failed to start query profiler worker: failed to detect cgroup memory limit: failed to read memory cgroup from cgroups file: ‹/proc/self/cgroup›: open ‹/proc/self/cgroup›: no such file or directory"
+          ]
+        }
+      ]
+    }
+  }
+}
+----
+=== uploading logs
+Logs API Hook: https://http-intake.logs.us5.datadoghq.com/api/v2/logs
+Logs API Hook: {"goroutine":100,"file":"server/env_sampler.go","line":125,"message":"failed to start query profiler worker: failed to detect cgroup memory limit: failed to read memory cgroup from cgroups file: /proc/self/cgroup: open /proc/self/cgroup: no such file or directory","counter":33,"tenant_id":"1","timestamp":0,"severity":"WARNING","channel":"DEV","ddtags":"cluster:ABC,env:debug,node_id:1,service:CRDB-SH,source:cockroachdb,upload_id:abc-20241114000000"}
+Logs API Hook: {"goroutine":100,"file":"server/node.go","line":533,"message":"initialized store s1","counter":24,"tenant_id":"1","timestamp":0,"severity":"INFO","channel":"DEV","ddtags":"cluster:ABC,env:debug,node_id:1,service:CRDB-SH,source:cockroachdb,upload_id:abc-20241114000000"}
+Upload ID: abc-20241114000000
+debug zip upload debugDir --dd-api-key=dd-api-key --dd-app-key=dd-app-key --cluster=ABC --include=logs
+
+
+# Single-node - with both recent and old logs
+upload-logs
+{
+  "nodes": {
+    "1": {
+      "logs": [
+        {
+          "name": "cockroach.hostname.username.2024-07-16T17_51_43Z.048498.log",
+          "lines": [
+            "I240716 17:51:44.797342 916 sql/sqlliveness/slstorage/slstorage.go:540 ⋮ [T1,n1] 43 inserted sqlliveness session 01018071445fbd54a44ee88e906efb311d7193",
+            "I240716 17:51:44.797530 916 sql/sqlliveness/slinstance/slinstance.go:258 ⋮ [T1,n1] 44 created new SQL liveness session 01018071445fbd54a44ee88e906efb311d7193",
+            "I{{now}} 100 server/node.go:533 ⋮ [T1,n1] 24 initialized store s1",
+            "W{{now}} 100 server/env_sampler.go:125 ⋮ [T1,n1] 33 failed to start query profiler worker: failed to detect cgroup memory limit: failed to read memory cgroup from cgroups file: ‹/proc/self/cgroup›: open ‹/proc/self/cgroup›: no such file or directory"
+          ]
+        }
+      ]
+    }
+  }
+}
+----
+=== uploading logs
+Create DD Archive: https://api.us5.datadoghq.com/api/v2/logs/config/archives
+Create DD Archive: {"data":{"type":"archives","attributes":{"name":"abc-20241114000000","query":"-*","destination":{"type":"gcs","path":"ABC/abc-20241114000000","bucket":"debugzip-archives","integration":{"project_id":"arjun-sandbox-424904","client_email":"datadog-archive@arjun-sandbox-424904.iam.gserviceaccount.com"}}}}}
+GCS Upload: ABC/abc-20241114000000/dt=20240716/hour=17/1/cockroach.hostname.username.2024-07-16T17_51_43Z.048498.log:
+Logs API Hook: https://http-intake.logs.us5.datadoghq.com/api/v2/logs
+Logs API Hook: {"goroutine":100,"file":"server/env_sampler.go","line":125,"message":"failed to start query profiler worker: failed to detect cgroup memory limit: failed to read memory cgroup from cgroups file: /proc/self/cgroup: open /proc/self/cgroup: no such file or directory","counter":33,"tenant_id":"1","timestamp":0,"severity":"WARNING","channel":"DEV","ddtags":"cluster:ABC,env:debug,node_id:1,service:CRDB-SH,source:cockroachdb,upload_id:abc-20241114000000"}
+Logs API Hook: {"goroutine":100,"file":"server/node.go","line":533,"message":"initialized store s1","counter":24,"tenant_id":"1","timestamp":0,"severity":"INFO","channel":"DEV","ddtags":"cluster:ABC,env:debug,node_id:1,service:CRDB-SH,source:cockroachdb,upload_id:abc-20241114000000"}
+Upload ID: abc-20241114000000
+debug zip upload debugDir --dd-api-key=dd-api-key --dd-app-key=dd-app-key --cluster=ABC --include=logs
+{"timestamp":1721152304,"date":"2024-07-16T17:51:44Z","message":"created new SQL liveness session 01018071445fbd54a44ee88e906efb311d7193","tags":["cluster:ABC","env:debug","node_id:1","service:CRDB-SH","source:cockroachdb","upload_id:abc-20241114000000"],"_id":"a1b2c3","attributes":{"goroutine":916,"file":"sql/sqlliveness/slinstance/slinstance.go","line":258,"counter":44,"tenant_id":"1","date":"2024-07-16T17:51:44Z","timestamp":1721152304,"channel":"DEV","severity":"INFO"}}
+{"timestamp":1721152304,"date":"2024-07-16T17:51:44Z","message":"inserted sqlliveness session 01018071445fbd54a44ee88e906efb311d7193","tags":["cluster:ABC","env:debug","node_id:1","service:CRDB-SH","source:cockroachdb","upload_id:abc-20241114000000"],"_id":"a1b2c3","attributes":{"goroutine":916,"file":"sql/sqlliveness/slstorage/slstorage.go","line":540,"counter":43,"tenant_id":"1","date":"2024-07-16T17:51:44Z","timestamp":1721152304,"channel":"DEV","severity":"INFO"}}

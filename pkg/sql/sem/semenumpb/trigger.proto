@@ -1,0 +1,32 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+// This file should contain only ENUM definitions for concepts that
+// are visible in the SQL layer (i.e. concepts that can be configured
+// in a SQL query).
+// It uses proto3 so other packages can import those enum definitions
+// when needed.
+syntax = "proto3";
+package cockroach.sql.sem.semenumpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb";
+
+// TriggerActionTime describes the timing of a trigger: before, after, or
+// instead of the event.
+enum TriggerActionTime {
+  ACTION_UNKNOWN = 0;
+  BEFORE = 1;
+  AFTER = 2;
+  INSTEAD_OF = 3;
+}
+
+// TriggerEventType describes the event that will cause a trigger to fire:
+// insert, update, delete, truncate, or upsert.
+enum TriggerEventType {
+  EVENT_UNKNOWN = 0;
+  INSERT = 1;
+  UPDATE = 2;
+  DELETE = 3;
+  TRUNCATE = 4;
+}

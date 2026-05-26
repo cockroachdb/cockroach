@@ -1,0 +1,96 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.server.serverpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/server/serverpb";
+
+import "gogoproto/gogo.proto";
+import "google/api/annotations.proto";
+
+// UserLoginRequest contains credentials a user must provide to log in.
+message UserLoginRequest {
+	// A username which must correspond to a database user on the cluster.
+	string username = 1;
+	// A password for the provided username.
+	string password = 2;
+}
+
+// UserLoginResponse is currently empty. If a login is successful, an HTTP
+// Set-Cookie header will be added to the response with a session
+// cookie identifying the created session.
+message UserLoginResponse {
+	// No information to return.
+}
+
+// UserLogoutRequest will terminate the current session in use. The request
+// is empty because the current session is identified by an HTTP cookie on the
+// incoming request.
+message UserLogoutRequest {
+	// No information needed.
+}
+
+message UserLogoutResponse {
+	// No information to return.
+}
+
+// SessionCookie is a message used to encode the authentication cookie returned
+// from successful login requests.
+message SessionCookie {
+	// The unique ID of the session.
+	int64 id = 1 [(gogoproto.customname) = "ID"];
+	// The secret needed to verify ownership of a session.
+	bytes secret = 2;
+}
+
+// OIDCState is a message that is serialized and sent over with an OIDC authentication request
+// when the identity provider triggers our callback, it returns the same state message back to
+// us so that we can ensure that we're only processing responses that we originated.
+message OIDCState {
+	// Mode describes the behavior of the OIDC callback handler.
+	enum Mode {
+		// MODE_LOG_IN is the default, common case of logging in.
+		MODE_LOG_IN = 0;
+		// MODE_GENERATE_JWT_AUTH_TOKEN is the unusual case of, rather than logging
+		// in, redirecting to bespoke frontend code that generates a JWT auth token
+		// for cluster SSO.
+		MODE_GENERATE_JWT_AUTH_TOKEN = 1;
+	}
+
+	reserved 1;
+	reserved 2;
+	// token is a random string that is sent over to the auth provider to be returned back
+	bytes token = 3;
+	// tokenMAC is an HMAC hash of the random `token` string using the client-side cookie as a key
+	bytes tokenMAC = 4;
+	// mode is the requested behavior of the OIDC callback handler
+	Mode mode = 5;
+}
+
+// LogIn and LogOut are the GRPC APIs used to create web authentication sessions.
+// Intended for use over GRPC-Gateway, which identifies sessions using HTTP
+// cookies.
+//
+// They're separate services because LogIn must not require authentication so that
+// the user can log in, while LogOut does require authentication, so that we can
+// decode the cookie and revoke the session.
+service LogIn {
+	// UserLogin is used to create a web authentication session.
+	rpc UserLogin(UserLoginRequest) returns (UserLoginResponse) {
+		option (google.api.http) = {
+			post: "/login"
+			body: "*"
+		};
+	}
+}
+
+service LogOut {
+	// UserLogout terminates an active authentication session.
+	rpc UserLogout(UserLogoutRequest) returns (UserLogoutResponse) {
+		option (google.api.http) = {
+			get: "/logout"
+		};
+	}
+}

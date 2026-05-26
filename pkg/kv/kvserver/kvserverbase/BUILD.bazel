@@ -1,0 +1,57 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "kvserverbase",
+    srcs = [
+        "base.go",
+        "bulk_adder.go",
+        "forced_error.go",
+        "knobs.go",
+        "stores.go",
+        "syncing_write.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/raft/raftpb",
+        "//pkg/roachpb",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/util/debugutil",
+        "//pkg/util/envutil",
+        "//pkg/util/errorutil",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/quotapool",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//errorspb",
+        "@com_github_cockroachdb_pebble//vfs",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_gogo_protobuf//proto",
+        "@org_golang_x_time//rate",
+    ],
+)
+
+go_test(
+    name = "kvserverbase_test",
+    srcs = [
+        "bulk_adder_test.go",
+        "load_based_rebalancing_test.go",
+    ],
+    embed = [":kvserverbase"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

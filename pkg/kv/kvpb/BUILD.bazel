@@ -1,0 +1,177 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//build:STRINGER.bzl", "stringer")
+load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
+load(":gen.bzl", "batch_gen")
+
+go_library(
+    name = "kvpb",
+    srcs = [
+        "ambiguous_result_error.go",
+        "api.go",
+        "api_adapter.go",
+        "batch.go",
+        "data.go",
+        "errors.go",
+        "method.go",
+        "node_decommissioned_error.go",
+        "replica_unavailable_error.go",
+        ":gen-batch-generated",  # keep
+        ":gen-errordetailtype-stringer",  # keep
+        ":gen-method-stringer",  # keep
+    ],
+    embed = [":kvpb_go_proto"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvpb",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/kv/kvnemesis/kvnemesisutil",
+        "//pkg/kv/kvserver/concurrency/lock",
+        "//pkg/raft/raftpb",
+        "//pkg/roachpb",
+        "//pkg/storage/enginepb",
+        "//pkg/util/admission/admissionpb",
+        "//pkg/util/buildutil",
+        "//pkg/util/caller",
+        "//pkg/util/errorutil",
+        "//pkg/util/hlc",
+        "//pkg/util/humanizeutil",
+        "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//errorspb",
+        "@com_github_cockroachdb_errors//extgrpc",
+        "@com_github_cockroachdb_pebble//:pebble",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_dustin_go_humanize//:go-humanize",
+        "@com_github_gogo_protobuf//proto",
+        "@com_github_gogo_protobuf//types",
+        "@com_github_gogo_status//:status",
+        "@com_github_golang_mock//gomock",  # keep
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//metadata",  # keep
+    ],
+)
+
+go_test(
+    name = "kvpb_test",
+    srcs = [
+        "api_test.go",
+        "batch_test.go",
+        "data_test.go",
+        "errors_test.go",
+        "node_decommissioned_error_test.go",
+        "replica_unavailable_error_test.go",
+        "string_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":kvpb"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv/kvnemesis/kvnemesisutil",
+        "//pkg/kv/kvserver/concurrency/isolation",
+        "//pkg/kv/kvserver/concurrency/lock",
+        "//pkg/roachpb",
+        "//pkg/storage/enginepb",
+        "//pkg/testutils/echotest",
+        "//pkg/testutils/skip",
+        "//pkg/util/buildutil",
+        "//pkg/util/encoding",
+        "//pkg/util/hlc",
+        "//pkg/util/protoutil",
+        "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_gogo_protobuf//proto",
+        "@com_github_golang_protobuf//proto",
+        "@com_github_kr_pretty//:pretty",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//status",
+    ],
+)
+
+proto_library(
+    name = "kvpb_proto",
+    srcs = [
+        "api.proto",
+        "errors.proto",
+    ],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/concurrency/lock:lock_proto",
+        "//pkg/kv/kvserver/readsummary/rspb:rspb_proto",
+        "//pkg/multitenant/tenantcapabilitiespb:tenantcapabilitiespb_proto",
+        "//pkg/roachpb:roachpb_proto",
+        "//pkg/rpc/rpcpb:rpcpb_proto",
+        "//pkg/settings:settings_proto",
+        "//pkg/sql/catalog/fetchpb:fetchpb_proto",
+        "//pkg/storage/enginepb:enginepb_proto",
+        "//pkg/util/hlc:hlc_proto",
+        "//pkg/util/tracing/tracingpb:tracingpb_proto",
+        "@com_github_cockroachdb_errors//errorspb:errorspb_proto",
+        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+        "@com_google_protobuf//:duration_proto",
+    ],
+)
+
+go_proto_library(
+    name = "kvpb_go_proto",
+    compilers = [
+        "//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler",
+        "//pkg/cmd/protoc-gen-go-drpc:protoc-gen-go-drpc_compiler",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvpb",
+    proto = ":kvpb_proto",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/concurrency/lock",
+        "//pkg/kv/kvserver/readsummary/rspb",
+        "//pkg/multitenant/tenantcapabilitiespb",
+        "//pkg/roachpb",
+        "//pkg/rpc/rpcpb",
+        "//pkg/settings",
+        "//pkg/sql/catalog/fetchpb",
+        "//pkg/storage/enginepb",
+        "//pkg/util/hlc",
+        "//pkg/util/tracing/tracingpb",
+        "@com_github_cockroachdb_errors//errorspb",
+        "@com_github_gogo_protobuf//gogoproto",
+    ],
+)
+
+stringer(
+    name = "gen-method-stringer",
+    src = "method.go",
+    additional_args = ["--stringtovaluemapname=StringToMethodMap"],
+    typ = "Method",
+)
+
+stringer(
+    name = "gen-errordetailtype-stringer",
+    src = "errors.go",
+    typ = "ErrorDetailType",
+)
+
+batch_gen(
+    name = "gen-batch-generated",
+    src = ":kvpb_go_proto",
+    out = "batch_generated.go",
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
+disallowed_imports_test(
+    "kvpb",
+    [
+        "//pkg/geo",
+    ],
+    disallow_cdeps = True,
+)

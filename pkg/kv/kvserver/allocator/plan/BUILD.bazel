@@ -1,0 +1,51 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "plan",
+    srcs = [
+        "lease.go",
+        "op.go",
+        "replicate.go",
+        "replicate_stats.go",
+        "token.go",
+        "util.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/allocator",
+        "//pkg/kv/kvserver/allocator/allocatorimpl",
+        "//pkg/kv/kvserver/allocator/storepool",
+        "//pkg/kv/kvserver/benignerror",
+        "//pkg/kv/kvserver/kvflowcontrol/rac2",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/raft",
+        "//pkg/raft/raftpb",
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/retry",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "plan_test",
+    srcs = [
+        "token_test.go",
+        "util_test.go",
+    ],
+    embed = [":plan"],
+    deps = [
+        "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/allocator/allocatorimpl",
+        "//pkg/roachpb",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
+    ],
+)

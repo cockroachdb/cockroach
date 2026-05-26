@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "starlarkutil",
+    srcs = ["starlarkutil.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/build/starlarkutil",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_google_skylark//syntax"],
+)
+
+go_test(
+    name = "starlarkutil_test",
+    srcs = ["starlarkutil_test.go"],
+    embed = [":starlarkutil"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

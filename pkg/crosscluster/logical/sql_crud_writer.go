@@ -1,0 +1,183 @@
+// Copyright 2025 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package logical
+
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+)
+
+// sqlCrudWriter is a batch writer that implements the BatchHandler interface
+// using simple update, delete, and insert statements that assert the expected
+// previous value of the row.
+//
+// The sqlCrudWriter decodes the events, but it relies on per-table handlers to
+// process the batches.
+type sqlCrudWriter struct {
+	decoder  *ldrdecoder.CoalescingDecoder
+	handlers map[descpb.ID]*tableHandler
+	settings *cluster.Settings
+	discard  jobspb.LogicalReplicationDetails_Discard
+	pacer    *admission.Pacer
+}
+
+var _ BatchHandler = &sqlCrudWriter{}
+
+func newCrudSqlWriter(
+	ctx context.Context,
+	cfg *execinfra.ServerConfig,
+	evalCtx *eval.Context,
+	sd *sessiondata.SessionData,
+	discard jobspb.LogicalReplicationDetails_Discard,
+	procConfigByDestID map[descpb.ID]sqlProcessorTableConfig,
+	jobID jobspb.JobID,
+) (_ BatchHandler, err error) {
+	tableMappings := make([]ldrdecoder.TableMapping, 0, len(procConfigByDestID))
+	for dstID, cfg := range procConfigByDestID {
+		tableMappings = append(tableMappings, ldrdecoder.TableMapping{
+			SourceDescriptor: cfg.srcDesc,
+			DestID:           dstID,
+		})
+	}
+	decoder, err := ldrdecoder.NewCoalescingDecoder(ctx, cfg.DB, evalCtx.Settings, tableMappings)
+	if err != nil {
+		return nil, err
+	}
+
+	handlers := make(map[descpb.ID]*tableHandler)
+	defer func() {
+		if err != nil {
+			for _, handler := range handlers {
+				handler.Close(ctx)
+			}
+		}
+	}()
+
+	for dstDescID := range procConfigByDestID {
+		handler, err := newTableHandler(
+			ctx,
+			dstDescID,
+			cfg.DB,
+			cfg.Codec,
+			sd,
+			jobID,
+			cfg.LeaseManager.(*lease.Manager),
+			evalCtx.Settings,
+		)
+		if err != nil {
+			return nil, err
+		}
+		handlers[dstDescID] = handler
+	}
+
+	return &sqlCrudWriter{
+		decoder:  decoder,
+		handlers: handlers,
+		settings: evalCtx.Settings,
+		discard:  discard,
+		pacer:    bulk.NewCPUPacer(ctx, cfg.DB.KV(), useLowPriority),
+	}, nil
+}
+
+func (c *sqlCrudWriter) HandleBatch(
+	ctx context.Context, batch []streampb.StreamEvent_KV,
+) (b batchStats, err error) {
+	ctx, sp := tracing.ChildSpan(ctx, "crudBatcher.HandleBatch")
+	defer sp.Finish()
+
+	if _, err := c.pacer.Pace(ctx); err != nil {
+		return batchStats{}, err
+	}
+
+	sortedEvents, err := c.decoder.DecodeAndCoalesceEvents(ctx, batch, c.discard)
+	if err != nil {
+		return batchStats{}, err
+	}
+
+	var combinedStats batchStats
+	for _, events := range eventsByTable(sortedEvents) {
+		handler := c.handlers[events[0].TableID]
+		stats, err := handler.handleDecodedBatch(ctx, events)
+		if err != nil {
+			return batchStats{}, err
+		}
+		stats.AddTo(&combinedStats)
+	}
+
+	return combinedStats, nil
+}
+
+// eventsByTable is an iterator that groups events by their destination
+// descriptor ID. For optimal batching  input events should be sorted by
+// destination descriptor ID because the iterator groups runs of events with
+// the same destination.
+func eventsByTable(
+	events []ldrdecoder.DecodedRow,
+) func(yield func(descpb.ID, []ldrdecoder.DecodedRow) bool) {
+	return func(yield func(descpb.ID, []ldrdecoder.DecodedRow) bool) {
+		if len(events) == 0 {
+			return
+		}
+
+		start := 0
+		for i, event := range events {
+			if 1 <= i && events[i-1].TableID != event.TableID {
+				if !yield(events[start].TableID, events[start:i]) {
+					return
+				}
+				start = i
+			}
+		}
+
+		_ = yield(events[start].TableID, events[start:])
+	}
+}
+
+// Close implements BatchHandler.
+func (c *sqlCrudWriter) Close(ctx context.Context) {
+	for _, handler := range c.handlers {
+		handler.Close(ctx)
+	}
+}
+
+// GetLastRow implements BatchHandler.
+func (c *sqlCrudWriter) GetLastRow() cdcevent.Row {
+	return c.decoder.LastRow
+}
+
+// ReleaseLeases implements BatchHandler.
+func (c *sqlCrudWriter) ReleaseLeases(ctx context.Context) {
+	for _, handler := range c.handlers {
+		handler.ReleaseLeases(ctx)
+	}
+}
+
+// ReportMutations implements the BatchHandler interface, but is a no-op for
+// sqlCrudWriter because its mutations are already reported by the queries it
+// runs when they are run.
+func (c *sqlCrudWriter) ReportMutations(context.Context, *stats.Refresher) {}
+
+// SetSyntheticFailurePercent implements BatchHandler.
+func (c *sqlCrudWriter) SetSyntheticFailurePercent(uint32) {}
+
+// BatchSize implements BatchHandler.
+func (c *sqlCrudWriter) BatchSize() int {
+	return int(flushBatchSize.Get(&c.settings.SV))
+}

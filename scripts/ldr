@@ -1,0 +1,248 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+export COCKROACH_ROACHPROD_INSECURE=true
+export COCKROACH_USER=root
+
+A="$USER-a"
+B="$USER-b"
+
+
+if [ "$#" -lt 1 ]; then
+  cat << EOF
+usage: $0 <command>
+
+'command' can be:
+  * '<any valid roachprod command>'
+    runs command for each cluster with cluster name as first arg and all arguments passed through. E.g.:
+      ldr destroy
+      ldr put artifacts/cockroach
+      ldr start
+      ldr run -- whoami
+
+  * 'setup'
+    Shorthand to run 'create', 'start', 'workload init', 'jobs start', and then 'workload run' to
+    get LDR up and running in one command. Any extra arguments are passed along to 'create'.
+
+  * 'go'
+    Like 'setup' but without 'create', e.g. to run again after a wipe/put. 
+
+  * 'create'
+    creates two clusters, \$USER-a and \$USER-b, defaulting to 3x16vCPU but any optional extra args
+    including overriding those defaults are passed through to 'roachprod create'. It stages cockroach
+    and workload from master but these can be overwritten with put if desired before starting.
+
+  * 'workload <init|run|stop> [...]'
+    manages the workload on both clusters
+      'init'    sets up the workload dataset on each cluster.
+      'start'   will start the ycsb workload on first node of each cluster and any optional extra args
+      passed, e.g. --duration or --concurrency, are passed through to workload.
+
+  * 'jobs <start|pause|resume|cancel|producer-stats|stats>'
+    manages the ldr jobs on both clusters.
+      NB: 'workload init' must run before 'jobs start'
+
+  * 'settings <fast,reset>'
+    alters some clusters settings for experimentation.
+
+  A typical test run with defaults, staged binaries, etc might thus look like:
+    ldr setup -n 5
+    ...
+    ldr jobs stats
+    ldr adminurl --path /debug/pprof/ui/cpu/?node=1&seconds=5&labels=true --open
+    ...
+    ldr destroy
+EOF
+  exit 0
+fi
+
+
+case $1 in
+  "setup")
+    shift
+    $0 create "$@" --nodes=3 
+    $0 go
+    ;;
+
+  "go")
+    $0 start
+    $0 ycsb init
+    $0 jobs start-ycsb
+    echo "starting ycsb..."
+    $0 ycsb run
+    echo "LDR is setup and running on the ycsb workload!"
+    echo
+    roachprod adminurl $A:1 --path "/#/metrics/logicalDataReplication/cluster"
+    roachprod adminurl $B:1 --path "/#/metrics/logicalDataReplication/cluster"
+    ;;
+
+  "create")
+    shift
+    roachprod create $A \
+      --clouds gce --gce-machine-type n2-standard-16 --nodes 5 --username "$USER" --local-ssd=false --gce-pd-volume-size 3000 --lifetime 96h "$@" 
+    roachprod create $B \
+      --clouds gce --gce-machine-type n2-standard-16 --nodes 5 --username "$USER" --local-ssd=false --gce-pd-volume-size 3000 --lifetime 96h "$@"
+    $0 stage cockroach
+    $0 stage workload
+    ;;
+
+  "jobs")
+    shift
+    case "${1:-}" in
+    "start-ycsb")
+      roachprod sql $A:1 -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
+      roachprod sql $B:1 -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
+      roachprod sql $A:1 -- -e "CREATE EXTERNAL CONNECTION IF NOT EXISTS b AS $(roachprod pgurl --database ycsb $B:1)"
+      roachprod sql $B:1 -- -e "CREATE EXTERNAL CONNECTION IF NOT EXISTS a AS $(roachprod pgurl --database ycsb $A:1)"
+      roachprod sql $A:1 -- -e "CREATE LOGICAL REPLICATION STREAM FROM TABLE usertable ON 'external://b' INTO TABLE ycsb.public.usertable;"
+      roachprod sql $B:1 -- -e "CREATE LOGICAL REPLICATION STREAM FROM TABLE usertable ON 'external://a' INTO TABLE ycsb.public.usertable;"
+      ;;
+    "start-tpcc-a")
+      roachprod sql $A:1 -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
+      roachprod sql $A:1 -- -e "CREATE EXTERNAL CONNECTION IF NOT EXISTS b AS $(roachprod pgurl --database tpcc $B:1)"
+      roachprod sql $A:1 -- -e "CREATE LOGICAL REPLICATION STREAM FROM TABLES (tpcc.customer, tpcc.district, tpcc.history, tpcc.item, tpcc.new_order, tpcc.order, tpcc.order_line, tpcc.stock, tpcc.warehouse)  ON 'external://b' INTO TABLES (tpcc.customer, tpcc.district, tpcc.history, tpcc.item, tpcc.new_order, tpcc.order, tpcc.order_line, tpcc.stock, tpcc.warehouse) WITH cursor='$(date +%s000000000.0)';"
+      ;;
+    "start-tpcc-b")
+      roachprod sql $B:1 -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
+      roachprod sql $B:1 -- -e "CREATE EXTERNAL CONNECTION IF NOT EXISTS a AS $(roachprod pgurl --database tpcc $A:1)"
+      roachprod sql $B:1 -- -e "CREATE LOGICAL REPLICATION STREAM FROM TABLES (tpcc.customer, tpcc.district, tpcc.history, tpcc.item, tpcc.new_order, tpcc.order, tpcc.order_line, tpcc.stock, tpcc.warehouse)  ON 'external://a' INTO TABLES (tpcc.customer, tpcc.district, tpcc.history, tpcc.item, tpcc.new_order, tpcc.order, tpcc.order_line, tpcc.stock, tpcc.warehouse) WITH cursor='$(date +%s000000000.0)';"
+      ;;
+    "pause")
+      roachprod sql $A:1 -- -e "PAUSE JOBS (WITH x AS (SHOW JOBS) SELECT job_id FROM x WHERE job_type = 'LOGICAL REPLICATION' AND status = 'running');"
+      roachprod sql $B:1 -- -e "PAUSE JOBS (WITH x AS (SHOW JOBS) SELECT job_id FROM x WHERE job_type = 'LOGICAL REPLICATION' AND status = 'running');"
+      ;;
+    "resume")
+      roachprod sql $A:1 -- -e "RESUME JOBS (WITH x AS (SHOW JOBS) SELECT job_id FROM x WHERE job_type = 'LOGICAL REPLICATION' AND status = 'paused');"
+      roachprod sql $B:1 -- -e "RESUME JOBS (WITH x AS (SHOW JOBS) SELECT job_id FROM x WHERE job_type = 'LOGICAL REPLICATION' AND status = 'paused');"
+      ;;
+    "cancel")
+      roachprod sql $A:1 -- -e "CANCEL JOBS (WITH x AS (SHOW JOBS) SELECT job_id FROM x WHERE job_type = 'LOGICAL REPLICATION' AND status = 'running' OR status = 'paused');"
+      roachprod sql $B:1 -- -e "CANCEL JOBS (WITH x AS (SHOW JOBS) SELECT job_id FROM x WHERE job_type = 'LOGICAL REPLICATION' AND status = 'running' OR status = 'paused');"
+      ;;
+    "producer-stats")
+      roachprod sql $A -- -e "select * from crdb_internal.cluster_replication_node_streams;"  --format=table
+      roachprod sql $B -- -e "select * from crdb_internal.cluster_replication_node_streams;"  --format=table
+      ;;
+    "stats")
+      roachprod sql $A -- -e "select * from crdb_internal.logical_replication_node_processors;"  --format=table
+      roachprod sql $B -- -e "select * from crdb_internal.logical_replication_node_processors;"  --format=table
+      ;;
+    *)
+      echo "unknown command '$1'; usage: $0 {start|pause|resume|cancel|producer-stats|stats}"
+      exit 1
+      ;;
+    esac
+    ;;
+
+  "ycsb")
+    shift
+    case "${1:-}" in
+      "init")
+        roachprod run $A:1 "./workload init ycsb --drop --families=false --splits 1000 $(roachprod pgurl $A)"
+        roachprod run $B:1 "./workload init ycsb --drop --families=false --splits 1000 $(roachprod pgurl $B)"
+        roachprod sql $A:1 -- -e "ALTER TABLE ycsb.public.usertable SET (ttl_expire_after = '3 hours');"
+        roachprod sql $B:1 -- -e "ALTER TABLE ycsb.public.usertable SET (ttl_expire_after = '3 hours');"
+        ;;
+      "run")
+        OUTPUT_FILE_A="a-ycsb-$(date '+%Y-%m-%d-%H:%M:%S').log"
+        OUTPUT_FILE_B="b-ycsb-$(date '+%Y-%m-%d-%H:%M:%S').log"
+        # Split the 2^63 key space in half and start at 4611686018427387904. This
+        # leaves us significant space in both halfs if we want to start a third or
+        # fourth cluster for n-way replication
+        start_a=1000000
+        start_b=4611686018427387904
+        shift
+        roachprod run $A:1 "env -i nohup ./workload run ycsb --tolerate-errors --families=false --duration=24h --concurrency=75 --max-rate=7500 --ramp=5s \
+          --workload='custom' --insert-freq=1.0 --insert-start=${start_a} $@ $(roachprod pgurl $A) > $OUTPUT_FILE_A 2> $OUTPUT_FILE_A &" &
+        roachprod run $B:1 "env -i nohup ./workload run ycsb --tolerate-errors --families=false --duration=24h --concurrency=75 --max-rate=7500 --ramp=5s \
+          --workload='custom' --insert-freq=1.0 --insert-start=${start_b} $@ $(roachprod pgurl $B) > $OUTPUT_FILE_B 2> $OUTPUT_FILE_B &" &
+        ;;
+      "stop")
+        roachprod run $A:1 -- "killall -9 workload || true"
+        roachprod run $B:1 -- "killall -9 workload || true"
+        ;;
+      *)
+        echo "unknown command '$1'; useage: $0 ycsb {init|run|stop}"
+        exit 1
+        ;;
+    esac
+    ;;
+
+  "tpcc")
+    shift
+    case "${1:-}" in
+      "init")
+        roachprod sql $A:1 -- -e "RESTORE DATABASE tpcc FROM latest IN 'gs://cockroach-fixtures-us-east1/backups/tpc-c/v24.1/db/warehouses=150k?AUTH=implicit' WITH OPTIONS (detached, unsafe_restore_incompatible_version)"
+        roachprod sql $B:1 -- -e "RESTORE DATABASE tpcc FROM latest IN 'gs://cockroach-fixtures-us-east1/backups/tpc-c/v24.1/db/warehouses=150k?AUTH=implicit' WITH OPTIONS (detached, unsafe_restore_incompatible_version)"
+        echo "monitor the restores via DB console for completion"
+        ;;
+      "run")
+        OUTPUT_FILE_A="a-tpcc-$(date '+%Y-%m-%d-%H:%M:%S').log"
+        shift
+        roachprod run $A:1 "env -i nohup ./workload run tpcc --warehouses=150000 --active-warehouses=5000 --max-rate 1600 --workers=5000 --active-workers=400 --wait=false --repair-order-ids $@ $(roachprod pgurl $A) $(roachprod pgurl $B) > $OUTPUT_FILE_A 2> $OUTPUT_FILE_A &" &
+        ;;
+      "stop")
+        roachprod run $A:1 -- "killall -9 workload || true"
+        ;;
+      *)
+        echo "unknown command '$1'; useage: $0 tpcc {init|run|stop}"
+        exit 1
+        ;;
+    esac
+    ;;
+  "settings")
+    shift
+    case "${1:-}" in
+    "fast")
+    for s in \
+        "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'" \
+        "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'" \
+        "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'" \
+        "SET CLUSTER SETTING physical_replication.producer.min_checkpoint_frequency='100ms'" \
+        "SET CLUSTER SETTING physical_replication.consumer.heartbeat_frequency = '1s'" \
+        "SET CLUSTER SETTING logical_replication.consumer.job_checkpoint_frequency = '100ms'" \
+      ; do
+        echo $s
+        roachprod sql $A:1 -- -e "$s"
+        roachprod sql $B:1 -- -e "$s"
+      done
+      ;;
+    "reset")
+      for s in \
+        "RESET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval" \
+        "RESET CLUSTER SETTING kv.closed_timestamp.target_duration" \
+        "RESET CLUSTER SETTING kv.closed_timestamp.side_transport_interval" \
+        "RESET CLUSTER SETTING physical_replication.producer.min_checkpoint_frequency" \
+        "RESET CLUSTER SETTING physical_replication.consumer.heartbeat_frequency" \
+        "RESET CLUSTER SETTING logical_replication.consumer.job_checkpoint_frequency" \
+      ; do
+        echo $s
+        roachprod sql $A:1 -- -e "$s"
+        roachprod sql $B:1 -- -e "$s"
+      done
+      ;;
+    *)
+      echo "unknown settings action: $1; usage $1 {fast,reset}"
+      exit 1
+      ;;
+    esac
+    ;;
+
+  *)
+    cmd="${1}"
+    shift
+
+    # We're going to run the same command against A and B, but note that we have
+    # set -e above which normally would cause the first to stop the script if it
+    # exited non-zero. So we capture the result in an `||` so we keep going to
+    # the second one, then if we're still running, exit with the first's result.
+    ret=0
+
+    echo "${A}:"
+    roachprod "${cmd}" $A "$@" || ret=$?
+    echo "${B}:"
+    roachprod "${cmd}" $B "$@"
+    exit $ret
+  ;;
+esac

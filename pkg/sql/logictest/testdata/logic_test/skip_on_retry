@@ -1,0 +1,24 @@
+# LogicTest: local
+
+# This test demonstrates that the skip_on_retry directive works as expected.
+# The directive applies to the entire remainder of the file.
+
+statement ok
+BEGIN; SELECT * FROM system.namespace LIMIT 1;
+
+statement error pgcode 40001 TransactionRetryWithProtoRefreshError
+SELECT crdb_internal.force_retry('1h');
+
+statement ok
+ROLLBACK;
+
+skip_on_retry
+
+subtest skip_this_subtest
+
+statement ok
+BEGIN; SELECT * FROM system.namespace LIMIT 1;
+
+statement ok
+SELECT crdb_internal.force_retry('1h');
+

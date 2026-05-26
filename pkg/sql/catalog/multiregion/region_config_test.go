@@ -1,0 +1,657 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package multiregion_test
+
+import (
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
+)
+
+func TestValidateRegionConfig(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const validRegionEnumID = 100
+
+	testCases := []struct {
+		err          string
+		regionConfig multiregion.RegionConfig
+	}{
+		{
+			err: "expected a valid multi-region enum ID",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{
+					"region_a",
+					"region_b",
+				},
+				"region_b",
+				descpb.SurvivalGoal_ZONE_FAILURE,
+				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
+				nil,
+				descpb.ZoneConfigExtensions{},
+			),
+		},
+		{
+			err: "3 regions are required for surviving a region failure",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{
+					"region_a",
+					"region_b",
+				},
+				"region_b",
+				descpb.SurvivalGoal_REGION_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				nil,
+				descpb.ZoneConfigExtensions{},
+			),
+		},
+		{
+			err: "expected > 0 number of regions in the region config",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{},
+				"region_b",
+				descpb.SurvivalGoal_REGION_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				nil,
+				descpb.ZoneConfigExtensions{},
+			),
+		},
+		{
+			err: "cannot have a database with restricted placement that is also region survivable",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{"region_a", "region_b", "region_c"},
+				"region_b",
+				descpb.SurvivalGoal_REGION_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_RESTRICTED,
+				nil,
+				descpb.ZoneConfigExtensions{},
+			),
+		},
+		{
+			err: "region region_d has REGIONAL IN zone config extension, but is not a region in the database",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{"region_a", "region_b", "region_c"},
+				"region_b",
+				descpb.SurvivalGoal_ZONE_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				nil,
+				descpb.ZoneConfigExtensions{
+					RegionalIn: map[catpb.RegionName]zonepb.ZoneConfig{
+						"region_b": {NumReplicas: proto.Int32(7)},
+						"region_d": {NumReplicas: proto.Int32(8)},
+					},
+				},
+			),
+		},
+	}
+
+	for _, tc := range testCases {
+		err := multiregion.ValidateRegionConfig(tc.regionConfig, false /* isSystemDatabase */)
+
+		require.Error(t, err)
+		require.True(
+			t,
+			testutils.IsError(err, tc.err),
+			"expected err %v, got %v",
+			tc.err,
+			err,
+		)
+	}
+}
+
+func TestValidateSuperRegionConfig(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const validRegionEnumID = 100
+
+	testCases := []struct {
+		testName     string
+		err          string
+		regionConfig multiregion.RegionConfig
+	}{
+		{
+			testName: "region names within a super region should be sorted",
+			err:      "the regions within super region sr1 were not in a sorted order",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{
+					"region_a",
+					"region_b",
+					"region_c",
+				},
+				"region_b",
+				descpb.SurvivalGoal_ZONE_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				[]descpb.SuperRegion{
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{"region_b", "region_a"},
+					},
+				},
+				descpb.ZoneConfigExtensions{},
+			),
+		},
+		{
+			testName: "regions should be unique within a super region",
+			err:      "duplicate region region_b found in super region sr1",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{
+					"region_a",
+					"region_b",
+					"region_c",
+				},
+				"region_b",
+				descpb.SurvivalGoal_ZONE_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				[]descpb.SuperRegion{
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{"region_b", "region_b"},
+					},
+				},
+				descpb.ZoneConfigExtensions{},
+			),
+		},
+		{
+			testName: "regions within a super region should map to a valid region on the database",
+			err:      "region region_d not part of database",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{
+					"region_a",
+					"region_b",
+					"region_c",
+				},
+				"region_b",
+				descpb.SurvivalGoal_ZONE_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				[]descpb.SuperRegion{
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{"region_d"},
+					},
+				},
+				descpb.ZoneConfigExtensions{},
+			),
+		},
+		{
+			testName: "super region names should be sorted",
+			err:      "super regions are not in sorted order based on the super region name",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{
+					"region_a",
+					"region_b",
+					"region_c",
+				},
+				"region_b",
+				descpb.SurvivalGoal_ZONE_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				[]descpb.SuperRegion{
+					{
+						SuperRegionName: "sr2",
+						Regions:         []catpb.RegionName{"region_a"},
+					},
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{"region_b"},
+					},
+				},
+				descpb.ZoneConfigExtensions{},
+			),
+		},
+		{
+			testName: "a region can only appear in one super region",
+			err:      "region region_a found in multiple super regions",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{
+					"region_a",
+					"region_b",
+					"region_c",
+				},
+				"region_b",
+				descpb.SurvivalGoal_ZONE_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				[]descpb.SuperRegion{
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{"region_a"},
+					},
+					{
+						SuperRegionName: "sr2",
+						Regions:         []catpb.RegionName{"region_a"},
+					},
+				},
+				descpb.ZoneConfigExtensions{},
+			),
+		},
+		{
+			testName: "super region names must be unique",
+			err:      "duplicate super regions with name sr1 found",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{
+					"region_a",
+					"region_b",
+					"region_c",
+				},
+				"region_b",
+				descpb.SurvivalGoal_ZONE_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				[]descpb.SuperRegion{
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{"region_a"},
+					},
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{"region_a"},
+					},
+				},
+				descpb.ZoneConfigExtensions{},
+			),
+		},
+		{
+			testName: "a super region should have at least one region",
+			err:      "no regions found within super region sr1",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{
+					"region_a",
+					"region_b",
+					"region_c",
+				},
+				"region_b",
+				descpb.SurvivalGoal_ZONE_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				[]descpb.SuperRegion{
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{},
+					},
+				},
+				descpb.ZoneConfigExtensions{},
+			),
+		},
+		{
+			testName: "a super region should have at least three regions if the survival mode is region failure",
+			err:      "super region sr1 only has 2 region(s): at least 3 regions are required for surviving a region failure",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{
+					"region_a",
+					"region_b",
+					"region_c",
+				},
+				"region_b",
+				descpb.SurvivalGoal_REGION_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				[]descpb.SuperRegion{
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{"region_a", "region_b"},
+					},
+				},
+				descpb.ZoneConfigExtensions{},
+			),
+		},
+		{
+			testName: "explicit REGION_FAILURE goal on super region with < 3 regions should fail",
+			err:      "super region sr1 only has 2 region(s): at least 3 regions are required for surviving a region failure",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{
+					"region_a",
+					"region_b",
+					"region_c",
+				},
+				"region_b",
+				descpb.SurvivalGoal_ZONE_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				[]descpb.SuperRegion{
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{"region_a", "region_b"},
+						HasSurvivalGoal: true,
+						SurvivalGoal:    descpb.SurvivalGoal_REGION_FAILURE,
+					},
+				},
+				descpb.ZoneConfigExtensions{},
+			),
+		},
+		{
+			testName: "super region inherits REGION_FAILURE from database with < 3 regions should fail",
+			err:      "super region sr1 only has 2 region(s): at least 3 regions are required for surviving a region failure",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{
+					"region_a",
+					"region_b",
+					"region_c",
+				},
+				"region_b",
+				descpb.SurvivalGoal_REGION_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				[]descpb.SuperRegion{
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{"region_a", "region_b"},
+						HasSurvivalGoal: false,
+					},
+				},
+				descpb.ZoneConfigExtensions{},
+			),
+		},
+	}
+
+	// Positive cases: these configs should pass validation.
+	validCases := []struct {
+		testName     string
+		regionConfig multiregion.RegionConfig
+	}{
+		{
+			testName: "explicit REGION_FAILURE goal on super region with 3 regions should pass",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{
+					"region_a",
+					"region_b",
+					"region_c",
+				},
+				"region_b",
+				descpb.SurvivalGoal_ZONE_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				[]descpb.SuperRegion{
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{"region_a", "region_b", "region_c"},
+						HasSurvivalGoal: true,
+						SurvivalGoal:    descpb.SurvivalGoal_REGION_FAILURE,
+					},
+				},
+				descpb.ZoneConfigExtensions{},
+			),
+		},
+		{
+			testName: "explicit ZONE_FAILURE goal on super region with any number of regions should pass",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{
+					"region_a",
+					"region_b",
+					"region_c",
+				},
+				"region_b",
+				descpb.SurvivalGoal_REGION_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				[]descpb.SuperRegion{
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{"region_a"},
+						HasSurvivalGoal: true,
+						SurvivalGoal:    descpb.SurvivalGoal_ZONE_FAILURE,
+					},
+				},
+				descpb.ZoneConfigExtensions{},
+			),
+		},
+		{
+			testName: "no explicit goal inherits from ZONE_FAILURE database — existing behavior preserved",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{
+					"region_a",
+					"region_b",
+					"region_c",
+				},
+				"region_b",
+				descpb.SurvivalGoal_ZONE_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				[]descpb.SuperRegion{
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{"region_a", "region_b"},
+						HasSurvivalGoal: false,
+					},
+				},
+				descpb.ZoneConfigExtensions{},
+			),
+		},
+	}
+
+	for _, tc := range testCases {
+		err := multiregion.ValidateRegionConfig(tc.regionConfig, false /* isSystemDatabase */)
+
+		require.Error(t, err)
+		require.True(
+			t,
+			testutils.IsError(err, tc.err),
+			"test %s: expected err %v, got %v",
+			tc.testName,
+			tc.err,
+			err,
+		)
+	}
+
+	for _, tc := range validCases {
+		err := multiregion.ValidateRegionConfig(tc.regionConfig, false /* isSystemDatabase */)
+		require.NoError(t, err, "test %s: expected no error, got %v", tc.testName, err)
+	}
+}
+
+func TestEffectiveSurvivalGoalForRegion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const validRegionEnumID = 100
+
+	testCases := []struct {
+		testName     string
+		regionConfig multiregion.RegionConfig
+		region       catpb.RegionName
+		expected     descpb.SurvivalGoal
+	}{
+		{
+			testName: "region in super region with explicit ZONE_FAILURE",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{"region_a", "region_b", "region_c"},
+				"region_a",
+				descpb.SurvivalGoal_REGION_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				[]descpb.SuperRegion{
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{"region_a", "region_b"},
+						HasSurvivalGoal: true,
+						SurvivalGoal:    descpb.SurvivalGoal_ZONE_FAILURE,
+					},
+				},
+				descpb.ZoneConfigExtensions{},
+			),
+			region:   "region_a",
+			expected: descpb.SurvivalGoal_ZONE_FAILURE,
+		},
+		{
+			testName: "region in super region with explicit REGION_FAILURE",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{"region_a", "region_b", "region_c"},
+				"region_a",
+				descpb.SurvivalGoal_ZONE_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				[]descpb.SuperRegion{
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{"region_a", "region_b", "region_c"},
+						HasSurvivalGoal: true,
+						SurvivalGoal:    descpb.SurvivalGoal_REGION_FAILURE,
+					},
+				},
+				descpb.ZoneConfigExtensions{},
+			),
+			region:   "region_b",
+			expected: descpb.SurvivalGoal_REGION_FAILURE,
+		},
+		{
+			testName: "region in super region with no explicit goal, database=ZONE_FAILURE",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{"region_a", "region_b", "region_c"},
+				"region_a",
+				descpb.SurvivalGoal_ZONE_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				[]descpb.SuperRegion{
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{"region_a", "region_b"},
+						HasSurvivalGoal: false,
+					},
+				},
+				descpb.ZoneConfigExtensions{},
+			),
+			region:   "region_a",
+			expected: descpb.SurvivalGoal_ZONE_FAILURE,
+		},
+		{
+			testName: "region in super region with no explicit goal, database=REGION_FAILURE",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{"region_a", "region_b", "region_c"},
+				"region_a",
+				descpb.SurvivalGoal_REGION_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				[]descpb.SuperRegion{
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{"region_a", "region_b", "region_c"},
+						HasSurvivalGoal: false,
+					},
+				},
+				descpb.ZoneConfigExtensions{},
+			),
+			region:   "region_b",
+			expected: descpb.SurvivalGoal_REGION_FAILURE,
+		},
+		{
+			testName: "region NOT in any super region, database=ZONE_FAILURE",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{"region_a", "region_b", "region_c"},
+				"region_a",
+				descpb.SurvivalGoal_ZONE_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				[]descpb.SuperRegion{
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{"region_a", "region_b"},
+						HasSurvivalGoal: true,
+						SurvivalGoal:    descpb.SurvivalGoal_REGION_FAILURE,
+					},
+				},
+				descpb.ZoneConfigExtensions{},
+			),
+			region:   "region_c",
+			expected: descpb.SurvivalGoal_ZONE_FAILURE,
+		},
+		{
+			testName: "region NOT in any super region, database=REGION_FAILURE",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{"region_a", "region_b", "region_c"},
+				"region_a",
+				descpb.SurvivalGoal_REGION_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				[]descpb.SuperRegion{
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{"region_a", "region_b"},
+						HasSurvivalGoal: true,
+						SurvivalGoal:    descpb.SurvivalGoal_ZONE_FAILURE,
+					},
+				},
+				descpb.ZoneConfigExtensions{},
+			),
+			region:   "region_c",
+			expected: descpb.SurvivalGoal_REGION_FAILURE,
+		},
+		{
+			testName: "two super regions with different goals — correct goal per region",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{"region_a", "region_b", "region_c", "region_d", "region_e"},
+				"region_a",
+				descpb.SurvivalGoal_ZONE_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				[]descpb.SuperRegion{
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{"region_a", "region_b", "region_c"},
+						HasSurvivalGoal: true,
+						SurvivalGoal:    descpb.SurvivalGoal_REGION_FAILURE,
+					},
+					{
+						SuperRegionName: "sr2",
+						Regions:         []catpb.RegionName{"region_d", "region_e"},
+						HasSurvivalGoal: true,
+						SurvivalGoal:    descpb.SurvivalGoal_ZONE_FAILURE,
+					},
+				},
+				descpb.ZoneConfigExtensions{},
+			),
+			region:   "region_a",
+			expected: descpb.SurvivalGoal_REGION_FAILURE,
+		},
+		{
+			testName: "two super regions with different goals — second super region",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{"region_a", "region_b", "region_c", "region_d", "region_e"},
+				"region_a",
+				descpb.SurvivalGoal_ZONE_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				[]descpb.SuperRegion{
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{"region_a", "region_b", "region_c"},
+						HasSurvivalGoal: true,
+						SurvivalGoal:    descpb.SurvivalGoal_REGION_FAILURE,
+					},
+					{
+						SuperRegionName: "sr2",
+						Regions:         []catpb.RegionName{"region_d", "region_e"},
+						HasSurvivalGoal: true,
+						SurvivalGoal:    descpb.SurvivalGoal_ZONE_FAILURE,
+					},
+				},
+				descpb.ZoneConfigExtensions{},
+			),
+			region:   "region_d",
+			expected: descpb.SurvivalGoal_ZONE_FAILURE,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.testName, func(t *testing.T) {
+			actual := tc.regionConfig.EffectiveSurvivalGoalForRegion(tc.region)
+			require.Equal(t, tc.expected, actual,
+				"expected %v, got %v", tc.expected, actual)
+		})
+	}
+}

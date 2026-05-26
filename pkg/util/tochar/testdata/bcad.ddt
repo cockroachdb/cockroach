@@ -1,0 +1,99 @@
+timestamp
+BC
+0001-02-22 BC 00:15:18
+0001-02-22 00:15:18
+----
+0001-02-22 BC 00:15:18: BC
+0001-02-22 00:15:18: AD
+
+timestamp
+AD
+0001-02-22 BC 00:15:18
+0001-02-22 00:15:18
+----
+0001-02-22 BC 00:15:18: BC
+0001-02-22 00:15:18: AD
+
+timestamp
+B.C.
+0001-02-22 BC 00:15:18
+0001-02-22 00:15:18
+----
+0001-02-22 BC 00:15:18: B.C.
+0001-02-22 00:15:18: A.D.
+
+timestamp
+A.D.
+0001-02-22 BC 00:15:18
+0001-02-22 00:15:18
+----
+0001-02-22 BC 00:15:18: B.C.
+0001-02-22 00:15:18: A.D.
+
+timestamp
+bc
+0001-02-22 BC 00:15:18
+0001-02-22 00:15:18
+----
+0001-02-22 BC 00:15:18: bc
+0001-02-22 00:15:18: ad
+
+timestamp
+ad
+0001-02-22 BC 00:15:18
+0001-02-22 00:15:18
+----
+0001-02-22 BC 00:15:18: bc
+0001-02-22 00:15:18: ad
+
+timestamp
+b.c.
+0001-02-22 BC 00:15:18
+0001-02-22 00:15:18
+----
+0001-02-22 BC 00:15:18: b.c.
+0001-02-22 00:15:18: a.d.
+
+timestamp
+a.d.
+0001-02-22 BC 00:15:18
+0001-02-22 00:15:18
+----
+0001-02-22 BC 00:15:18: b.c.
+0001-02-22 00:15:18: a.d.
+
+interval_fmt
+1 day
+a.d.
+b.c.
+A.D.
+B.C.
+ad
+bc
+AD
+BC
+----
+a.d.: [ERROR] invalid format specification for an interval value
+  DETAIL: format a.d.
+  HINT: intervals are not tied to specific calendar dates
+b.c.: [ERROR] invalid format specification for an interval value
+  DETAIL: format b.c.
+  HINT: intervals are not tied to specific calendar dates
+A.D.: [ERROR] invalid format specification for an interval value
+  DETAIL: format A.D.
+  HINT: intervals are not tied to specific calendar dates
+B.C.: [ERROR] invalid format specification for an interval value
+  DETAIL: format B.C.
+  HINT: intervals are not tied to specific calendar dates
+ad: [ERROR] invalid format specification for an interval value
+  DETAIL: format ad
+  HINT: intervals are not tied to specific calendar dates
+bc: [ERROR] invalid format specification for an interval value
+  DETAIL: format bc
+  HINT: intervals are not tied to specific calendar dates
+AD: [ERROR] invalid format specification for an interval value
+  DETAIL: format AD
+  HINT: intervals are not tied to specific calendar dates
+BC: [ERROR] invalid format specification for an interval value
+  DETAIL: format BC
+  HINT: intervals are not tied to specific calendar dates

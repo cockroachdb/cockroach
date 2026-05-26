@@ -1,0 +1,608 @@
+exec-ddl
+CREATE TABLE a (x INT PRIMARY KEY, y INT, z FLOAT NOT NULL, s STRING, UNIQUE (s DESC, z))
+----
+
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000,
+    "avg_size": 2
+  },
+  {
+    "columns": ["y"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 400,
+    "avg_size": 3
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 10,
+    "avg_size": 6
+  },
+  {
+    "columns": ["s","y","z"],
+    "created_at": "2018-01-01 1:40:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 600,
+    "avg_size": 22
+  }
+]'
+----
+
+# No aggregate.
+build
+SELECT x FROM a GROUP BY x, y
+----
+project
+ ├── columns: x:1(int!null)
+ ├── stats: [rows=2000]
+ ├── key: (1)
+ └── group-by (hash)
+      ├── columns: x:1(int!null) y:2(int)
+      ├── grouping columns: x:1(int!null) y:2(int)
+      ├── stats: [rows=2000, distinct(1,2)=2000, null(1,2)=0]
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      └── project
+           ├── columns: x:1(int!null) y:2(int)
+           ├── stats: [rows=2000, distinct(1,2)=2000, null(1,2)=0]
+           ├── key: (1)
+           ├── fd: (1)-->(2)
+           └── scan a
+                ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+                ├── stats: [rows=2000, distinct(1,2)=2000, null(1,2)=0]
+                ├── key: (1)
+                └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+
+# Group by single column key.
+build
+SELECT max(y) FROM a GROUP BY x
+----
+project
+ ├── columns: max:7(int)
+ ├── stats: [rows=2000]
+ └── group-by (hash)
+      ├── columns: x:1(int!null) max:7(int)
+      ├── grouping columns: x:1(int!null)
+      ├── stats: [rows=2000, distinct(1)=2000, null(1)=0]
+      ├── key: (1)
+      ├── fd: (1)-->(7)
+      ├── project
+      │    ├── columns: x:1(int!null) y:2(int)
+      │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    └── scan a
+      │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+      │         ├── stats: [rows=2000, distinct(1)=2000, null(1)=0]
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      └── aggregations
+           └── max [as=max:7, type=int, outer=(2)]
+                └── y:2 [type=int]
+
+# Group by non-key.
+build
+SELECT y, sum(z) FROM a GROUP BY y
+----
+group-by (hash)
+ ├── columns: y:2(int) sum:7(float!null)
+ ├── grouping columns: y:2(int)
+ ├── stats: [rows=400, distinct(2)=400, null(2)=0]
+ ├── key: (2)
+ ├── fd: (2)-->(7)
+ ├── project
+ │    ├── columns: y:2(int) z:3(float!null)
+ │    ├── stats: [rows=2000, distinct(2)=400, null(2)=0]
+ │    └── scan a
+ │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+ │         ├── stats: [rows=2000, distinct(2)=400, null(2)=0]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+ └── aggregations
+      └── sum [as=sum:7, type=float, outer=(3)]
+           └── z:3 [type=float]
+
+build
+SELECT max(x) FROM a GROUP BY y, z, s
+----
+project
+ ├── columns: max:7(int!null)
+ ├── stats: [rows=600]
+ └── group-by (hash)
+      ├── columns: y:2(int) z:3(float!null) s:4(string) max:7(int!null)
+      ├── grouping columns: y:2(int) z:3(float!null) s:4(string)
+      ├── stats: [rows=600, distinct(2-4)=600, null(2-4)=0]
+      ├── key: (2-4)
+      ├── fd: (3,4)~~>(2), (2-4)-->(7)
+      ├── project
+      │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+      │    ├── stats: [rows=2000, distinct(2-4)=600, null(2-4)=0]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      │    └── scan a
+      │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+      │         ├── stats: [rows=2000, distinct(2-4)=600, null(2-4)=0]
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      └── aggregations
+           └── max [as=max:7, type=int, outer=(1)]
+                └── x:1 [type=int]
+
+build
+SELECT min(x) FROM a GROUP BY y, z
+----
+project
+ ├── columns: min:7(int!null)
+ ├── stats: [rows=2000]
+ └── group-by (hash)
+      ├── columns: y:2(int) z:3(float!null) min:7(int!null)
+      ├── grouping columns: y:2(int) z:3(float!null)
+      ├── stats: [rows=2000, distinct(2,3)=2000, null(2,3)=0]
+      ├── key: (2,3)
+      ├── fd: (2,3)-->(7)
+      ├── project
+      │    ├── columns: x:1(int!null) y:2(int) z:3(float!null)
+      │    ├── stats: [rows=2000, distinct(2,3)=2000, null(2,3)=0]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3)
+      │    └── scan a
+      │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+      │         ├── stats: [rows=2000, distinct(2,3)=2000, null(2,3)=0]
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      └── aggregations
+           └── min [as=min:7, type=int, outer=(1)]
+                └── x:1 [type=int]
+
+build
+SELECT max(x) FROM a GROUP BY y, z, s HAVING s IN ('a', 'b')
+----
+project
+ ├── columns: max:7(int!null)
+ ├── stats: [rows=120]
+ └── select
+      ├── columns: y:2(int) z:3(float!null) s:4(string!null) max:7(int!null)
+      ├── stats: [rows=120, distinct(4)=2, null(4)=0]
+      ├── key: (3,4)
+      ├── fd: (3,4)-->(2), (2-4)-->(7)
+      ├── group-by (hash)
+      │    ├── columns: y:2(int) z:3(float!null) s:4(string) max:7(int!null)
+      │    ├── grouping columns: y:2(int) z:3(float!null) s:4(string)
+      │    ├── stats: [rows=600, distinct(3)=200, null(3)=0, distinct(4)=10, null(4)=0, distinct(7)=600, null(7)=0, distinct(2-4)=600, null(2-4)=0]
+      │    ├── key: (2-4)
+      │    ├── fd: (3,4)~~>(2), (2-4)-->(7)
+      │    ├── project
+      │    │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+      │    │    ├── stats: [rows=2000, distinct(3)=200, null(3)=0, distinct(4)=10, null(4)=0, distinct(2-4)=600, null(2-4)=0]
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      │    │    └── scan a
+      │    │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+      │    │         ├── stats: [rows=2000, distinct(3)=200, null(3)=0, distinct(4)=10, null(4)=0, distinct(2-4)=600, null(2-4)=0]
+      │    │         ├── key: (1)
+      │    │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      │    └── aggregations
+      │         └── max [as=max:7, type=int, outer=(1)]
+      │              └── x:1 [type=int]
+      └── filters
+           └── s:4 IN ('a', 'b') [type=bool, outer=(4), constraints=(/4: [/'a' - /'a'] [/'b' - /'b']; tight)]
+
+# Estimate the distinct count for an aggregate column.
+build
+SELECT sum(x), s FROM a GROUP BY s HAVING sum(x) = 5
+----
+select
+ ├── columns: sum:7(decimal!null) s:4(string)
+ ├── immutable
+ ├── stats: [rows=1, distinct(7)=1, null(7)=0]
+ ├── key: (4)
+ ├── fd: ()-->(7)
+ ├── group-by (hash)
+ │    ├── columns: s:4(string) sum:7(decimal!null)
+ │    ├── grouping columns: s:4(string)
+ │    ├── stats: [rows=10, distinct(4)=10, null(4)=0, distinct(7)=10, null(7)=0]
+ │    ├── key: (4)
+ │    ├── fd: (4)-->(7)
+ │    ├── project
+ │    │    ├── columns: x:1(int!null) s:4(string)
+ │    │    ├── stats: [rows=2000, distinct(4)=10, null(4)=0]
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(4)
+ │    │    └── scan a
+ │    │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+ │    │         ├── stats: [rows=2000, distinct(4)=10, null(4)=0]
+ │    │         ├── key: (1)
+ │    │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+ │    └── aggregations
+ │         └── sum [as=sum:7, type=decimal, outer=(1)]
+ │              └── x:1 [type=int]
+ └── filters
+      └── sum:7 = 5 [type=bool, outer=(7), immutable, constraints=(/7: [/5 - /5]; tight), fd=()-->(7)]
+
+# Scalar GroupBy.
+build
+SELECT max(y), sum(z) FROM a HAVING sum(z) = 5.0
+----
+select
+ ├── columns: max:7(int) sum:8(float!null)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1, distinct(8)=1, null(8)=0]
+ ├── key: ()
+ ├── fd: ()-->(7,8)
+ ├── scalar-group-by
+ │    ├── columns: max:7(int) sum:8(float)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1, distinct(8)=1, null(8)=0]
+ │    ├── key: ()
+ │    ├── fd: ()-->(7,8)
+ │    ├── project
+ │    │    ├── columns: y:2(int) z:3(float!null)
+ │    │    ├── stats: [rows=2000]
+ │    │    └── scan a
+ │    │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+ │    │         ├── stats: [rows=2000]
+ │    │         ├── key: (1)
+ │    │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+ │    └── aggregations
+ │         ├── max [as=max:7, type=int, outer=(2)]
+ │         │    └── y:2 [type=int]
+ │         └── sum [as=sum:8, type=float, outer=(3)]
+ │              └── z:3 [type=float]
+ └── filters
+      └── sum:8 = 5.0 [type=bool, outer=(8), constraints=(/8: [/5.0 - /5.0]; tight), fd=()-->(8)]
+
+# Bump up null counts.
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000,
+    "avg_size": 2
+  },
+  {
+    "columns": ["y"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 400,
+    "null_count": 1000,
+    "avg_size": 3
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 10,
+    "null_count": 1000,
+    "avg_size": 6
+  },
+  {
+    "columns": ["s","y","z"],
+    "created_at": "2018-01-01 2:10:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 600,
+    "null_count": 1100
+  }
+]'
+----
+
+# No aggregate.
+build
+SELECT x FROM a GROUP BY x, y
+----
+project
+ ├── columns: x:1(int!null)
+ ├── stats: [rows=2000]
+ ├── key: (1)
+ └── group-by (hash)
+      ├── columns: x:1(int!null) y:2(int)
+      ├── grouping columns: x:1(int!null) y:2(int)
+      ├── stats: [rows=2000, distinct(1,2)=2000, null(1,2)=0]
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      └── project
+           ├── columns: x:1(int!null) y:2(int)
+           ├── stats: [rows=2000, distinct(1,2)=2000, null(1,2)=0]
+           ├── key: (1)
+           ├── fd: (1)-->(2)
+           └── scan a
+                ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+                ├── stats: [rows=2000, distinct(1,2)=2000, null(1,2)=0]
+                ├── key: (1)
+                └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+
+# Group by single column key.
+build
+SELECT max(y) FROM a GROUP BY x
+----
+project
+ ├── columns: max:7(int)
+ ├── stats: [rows=2000]
+ └── group-by (hash)
+      ├── columns: x:1(int!null) max:7(int)
+      ├── grouping columns: x:1(int!null)
+      ├── stats: [rows=2000, distinct(1)=2000, null(1)=0]
+      ├── key: (1)
+      ├── fd: (1)-->(7)
+      ├── project
+      │    ├── columns: x:1(int!null) y:2(int)
+      │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    └── scan a
+      │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+      │         ├── stats: [rows=2000, distinct(1)=2000, null(1)=0]
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      └── aggregations
+           └── max [as=max:7, type=int, outer=(2)]
+                └── y:2 [type=int]
+
+# Group by non-key.
+build
+SELECT y, sum(z) FROM a GROUP BY y
+----
+group-by (hash)
+ ├── columns: y:2(int) sum:7(float!null)
+ ├── grouping columns: y:2(int)
+ ├── stats: [rows=400, distinct(2)=400, null(2)=1]
+ ├── key: (2)
+ ├── fd: (2)-->(7)
+ ├── project
+ │    ├── columns: y:2(int) z:3(float!null)
+ │    ├── stats: [rows=2000, distinct(2)=400, null(2)=1000]
+ │    └── scan a
+ │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+ │         ├── stats: [rows=2000, distinct(2)=400, null(2)=1000]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+ └── aggregations
+      └── sum [as=sum:7, type=float, outer=(3)]
+           └── z:3 [type=float]
+
+build
+SELECT max(x) FROM a GROUP BY y, z, s
+----
+project
+ ├── columns: max:7(int!null)
+ ├── stats: [rows=600]
+ └── group-by (hash)
+      ├── columns: y:2(int) z:3(float!null) s:4(string) max:7(int!null)
+      ├── grouping columns: y:2(int) z:3(float!null) s:4(string)
+      ├── stats: [rows=600, distinct(2-4)=600, null(2-4)=0]
+      ├── key: (2-4)
+      ├── fd: (3,4)~~>(2), (2-4)-->(7)
+      ├── project
+      │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+      │    ├── stats: [rows=2000, distinct(2-4)=600, null(2-4)=0]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      │    └── scan a
+      │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+      │         ├── stats: [rows=2000, distinct(2-4)=600, null(2-4)=0]
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      └── aggregations
+           └── max [as=max:7, type=int, outer=(1)]
+                └── x:1 [type=int]
+
+build
+SELECT min(x) FROM a GROUP BY y, z
+----
+project
+ ├── columns: min:7(int!null)
+ ├── stats: [rows=2000]
+ └── group-by (hash)
+      ├── columns: y:2(int) z:3(float!null) min:7(int!null)
+      ├── grouping columns: y:2(int) z:3(float!null)
+      ├── stats: [rows=2000, distinct(2,3)=2000, null(2,3)=0]
+      ├── key: (2,3)
+      ├── fd: (2,3)-->(7)
+      ├── project
+      │    ├── columns: x:1(int!null) y:2(int) z:3(float!null)
+      │    ├── stats: [rows=2000, distinct(2,3)=2000, null(2,3)=0]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3)
+      │    └── scan a
+      │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+      │         ├── stats: [rows=2000, distinct(2,3)=2000, null(2,3)=0]
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      └── aggregations
+           └── min [as=min:7, type=int, outer=(1)]
+                └── x:1 [type=int]
+
+build
+SELECT max(x) FROM a GROUP BY y, z, s HAVING s IN ('a', 'b')
+----
+project
+ ├── columns: max:7(int!null)
+ ├── stats: [rows=133.111]
+ └── select
+      ├── columns: y:2(int) z:3(float!null) s:4(string!null) max:7(int!null)
+      ├── stats: [rows=133.111, distinct(4)=2, null(4)=0]
+      ├── key: (3,4)
+      ├── fd: (3,4)-->(2), (2-4)-->(7)
+      ├── group-by (hash)
+      │    ├── columns: y:2(int) z:3(float!null) s:4(string) max:7(int!null)
+      │    ├── grouping columns: y:2(int) z:3(float!null) s:4(string)
+      │    ├── stats: [rows=600, distinct(3)=200, null(3)=0, distinct(4)=10, null(4)=1, distinct(7)=600, null(7)=0, distinct(2-4)=600, null(2-4)=0]
+      │    ├── key: (2-4)
+      │    ├── fd: (3,4)~~>(2), (2-4)-->(7)
+      │    ├── project
+      │    │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+      │    │    ├── stats: [rows=2000, distinct(3)=200, null(3)=0, distinct(4)=10, null(4)=1000, distinct(2-4)=600, null(2-4)=0]
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      │    │    └── scan a
+      │    │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+      │    │         ├── stats: [rows=2000, distinct(3)=200, null(3)=0, distinct(4)=10, null(4)=1000, distinct(2-4)=600, null(2-4)=0]
+      │    │         ├── key: (1)
+      │    │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      │    └── aggregations
+      │         └── max [as=max:7, type=int, outer=(1)]
+      │              └── x:1 [type=int]
+      └── filters
+           └── s:4 IN ('a', 'b') [type=bool, outer=(4), constraints=(/4: [/'a' - /'a'] [/'b' - /'b']; tight)]
+
+# Estimate the null count for an aggregate column.
+build
+SELECT sum(x), s FROM a GROUP BY s HAVING sum(x) = 5
+----
+select
+ ├── columns: sum:7(decimal!null) s:4(string)
+ ├── immutable
+ ├── stats: [rows=1, distinct(7)=1, null(7)=0]
+ ├── key: (4)
+ ├── fd: ()-->(7)
+ ├── group-by (hash)
+ │    ├── columns: s:4(string) sum:7(decimal!null)
+ │    ├── grouping columns: s:4(string)
+ │    ├── stats: [rows=10, distinct(4)=10, null(4)=1, distinct(7)=10, null(7)=0]
+ │    ├── key: (4)
+ │    ├── fd: (4)-->(7)
+ │    ├── project
+ │    │    ├── columns: x:1(int!null) s:4(string)
+ │    │    ├── stats: [rows=2000, distinct(4)=10, null(4)=1000]
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(4)
+ │    │    └── scan a
+ │    │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+ │    │         ├── stats: [rows=2000, distinct(4)=10, null(4)=1000]
+ │    │         ├── key: (1)
+ │    │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+ │    └── aggregations
+ │         └── sum [as=sum:7, type=decimal, outer=(1)]
+ │              └── x:1 [type=int]
+ └── filters
+      └── sum:7 = 5 [type=bool, outer=(7), immutable, constraints=(/7: [/5 - /5]; tight), fd=()-->(7)]
+
+# Regression test for #36442.
+norm
+WITH q (a, b) AS (SELECT * FROM (VALUES (true, NULL), (false, NULL), (true, 5)))
+  SELECT 1
+    FROM q
+   WHERE q.a
+GROUP BY q.b
+  HAVING bool_or(q.a)
+----
+project
+ ├── columns: "?column?":6(int!null)
+ ├── cardinality: [0 - 3]
+ ├── stats: [rows=1]
+ ├── fd: ()-->(6)
+ ├── select
+ │    ├── columns: b:4(int) bool_or:5(bool!null)
+ │    ├── cardinality: [0 - 3]
+ │    ├── stats: [rows=1, distinct(5)=1, null(5)=0]
+ │    ├── key: (4)
+ │    ├── fd: ()-->(5)
+ │    ├── group-by (hash)
+ │    │    ├── columns: b:4(int) bool_or:5(bool!null)
+ │    │    ├── grouping columns: b:4(int)
+ │    │    ├── cardinality: [0 - 3]
+ │    │    ├── stats: [rows=1.29289, distinct(4)=1.29289, null(4)=1, distinct(5)=1.29289, null(5)=0]
+ │    │    ├── key: (4)
+ │    │    ├── fd: (4)-->(5)
+ │    │    ├── select
+ │    │    │    ├── columns: a:3(bool!null) b:4(int)
+ │    │    │    ├── cardinality: [0 - 3]
+ │    │    │    ├── stats: [rows=1.5, distinct(3)=1, null(3)=0, distinct(4)=1.29289, null(4)=1]
+ │    │    │    ├── fd: ()-->(3)
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: a:3(bool!null) b:4(int)
+ │    │    │    │    ├── cardinality: [3 - 3]
+ │    │    │    │    ├── stats: [rows=3, distinct(3)=2, null(3)=0, distinct(4)=2, null(4)=2]
+ │    │    │    │    ├── (true, NULL) [type=tuple{bool, int}]
+ │    │    │    │    ├── (false, NULL) [type=tuple{bool, int}]
+ │    │    │    │    └── (true, 5) [type=tuple{bool, int}]
+ │    │    │    └── filters
+ │    │    │         └── a:3 [type=bool, outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
+ │    │    └── aggregations
+ │    │         └── bool-or [as=bool_or:5, type=bool, outer=(3)]
+ │    │              └── a:3 [type=bool]
+ │    └── filters
+ │         └── bool_or:5 [type=bool, outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
+ └── projections
+      └── 1 [as="?column?":6, type=int]
+
+# Regression test for #74667.
+exec-ddl
+CREATE TABLE t74667 (col TIMETZ PRIMARY KEY)
+----
+
+exec-ddl
+ALTER TABLE t74667 INJECT STATISTICS '[
+    {
+        "columns": [
+            "col"
+        ],
+        "created_at": "2000-01-01 00:00:00+00:00",
+        "distinct_count": 950814763580487611,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 3873172219268179689,
+                "num_range": 0,
+                "upper_bound": "00:00:00+15:59:00"
+            },
+            {
+                "distinct_range": 400000,
+                "num_eq": 3000000000,
+                "num_range": 400000,
+                "upper_bound": "04:40:23.558699+11:08:00"
+            },
+            {
+                "distinct_range": 381143202295070850,
+                "num_eq": 6399369578112136136,
+                "num_range": 381143202295070816,
+                "upper_bound": "06:12:15.740051+06:40:00"
+            }
+        ],
+        "histo_col_type": "TIMETZ",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 1188522479222658429
+    }
+]'
+----
+
+norm
+SELECT count(*)
+FROM t74667
+WHERE col < '03:33:05.598931+07:11:00':::TIMETZ
+GROUP BY col;
+----
+project
+ ├── columns: count:4(int!null)
+ ├── stats: [rows=2.00509e+16]
+ └── group-by (hash)
+      ├── columns: col:1(timetz!null) count_rows:4(int!null)
+      ├── grouping columns: col:1(timetz!null)
+      ├── stats: [rows=2.00509e+16, distinct(1)=2.00509e+16, null(1)=0]
+      ├── key: (1)
+      ├── fd: (1)-->(4)
+      ├── select
+      │    ├── columns: col:1(timetz!null)
+      │    ├── stats: [rows=4.52141e+17, distinct(1)=2.00509e+16, null(1)=0]
+      │    │   histogram(1)=  0     4.3209e+17     44624        3.3468e+08         2.0051e+16              0
+      │    │                <--- '00:00:00+15:59' ------- '04:40:23.558699+11:08' ------------ '03:33:06.598931+07:11:01'
+      │    ├── key: (1)
+      │    ├── scan t74667
+      │    │    ├── columns: col:1(timetz!null)
+      │    │    ├── stats: [rows=1.18852e+18, distinct(1)=9.50815e+17, null(1)=0]
+      │    │    │   histogram(1)=  0     4.3209e+17     44624        3.3468e+08         4.252e+16        7.1391e+17
+      │    │    │                <--- '00:00:00+15:59' ------- '04:40:23.558699+11:08' ----------- '06:12:15.740051+06:40'
+      │    │    └── key: (1)
+      │    └── filters
+      │         └── col:1 < '03:33:05.598931+07:11' [type=bool, outer=(1), constraints=(/1: (/NULL - /'03:33:06.598931+07:11:01']; tight)]
+      └── aggregations
+           └── count-rows [as=count_rows:4, type=int]

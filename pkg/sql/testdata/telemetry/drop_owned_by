@@ -1,0 +1,17 @@
+# This file contains telemetry tests for the sql.drop_owned_by counter.
+
+feature-list
+sql.drop_owned_by.*
+----
+
+exec
+CREATE ROLE testuser;
+CREATE TABLE t();
+GRANT CREATE ON DATABASE defaultdb TO testuser;
+ALTER TABLE t OWNER TO testuser
+----
+
+feature-usage
+DROP OWNED BY testuser
+----
+sql.drop_owned_by

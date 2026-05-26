@@ -1,0 +1,601 @@
+# a is the primary key so b gets optimized into a one column value. The c, d
+# family has two columns, so it's encoded as a tuple
+statement ok
+CREATE TABLE abcd(
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT,
+  FAMILY f1 (a, b),
+  FAMILY (c, d)
+)
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE abcd
+----
+abcd  CREATE TABLE public.abcd (
+        a INT8 NOT NULL,
+        b INT8 NULL,
+        c INT8 NULL,
+        d INT8 NULL,
+        CONSTRAINT abcd_pkey PRIMARY KEY (a ASC),
+        FAMILY f1 (a, b),
+        FAMILY fam_1_c_d (c, d)
+      );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE abcd
+----
+abcd  CREATE TABLE public.abcd (
+        a INT8 NOT NULL,
+        b INT8 NULL,
+        c INT8 NULL,
+        d INT8 NULL,
+        CONSTRAINT abcd_pkey PRIMARY KEY (a ASC),
+        FAMILY f1 (a, b),
+        FAMILY fam_1_c_d (c, d)
+      ) WITH (schema_locked = true);
+
+statement ok
+CREATE INDEX d_idx ON abcd(d)
+
+statement ok
+INSERT INTO abcd VALUES (1, 2, 3, 4), (5, 6, 7, 8)
+
+query IIII rowsort
+SELECT * FROM abcd
+----
+1 2 3 4
+5 6 7 8
+
+# Test point lookup, which triggers an optimization for only scanning one
+# column family.
+query I
+SELECT c FROM abcd WHERE a = 1
+----
+3
+
+query I
+SELECT count(*) FROM abcd
+----
+2
+
+query I
+SELECT count(*) FROM abcd@d_idx
+----
+2
+
+statement ok
+UPDATE abcd SET b = 9, d = 10, c = NULL where c = 7
+
+query IIII rowsort
+SELECT * FROM abcd
+----
+1 2 3    4
+5 9 NULL 10
+
+statement count 1
+DELETE FROM abcd where c = 3
+
+query IIII
+SELECT * FROM abcd
+----
+5 9 NULL 10
+
+statement ok
+UPSERT INTO abcd VALUES (1, 2, 3, 4), (5, 6, 7, 8)
+
+query IIII rowsort
+SELECT * FROM abcd
+----
+1 2 3 4
+5 6 7 8
+
+statement ok
+UPDATE abcd SET b = NULL, c = NULL, d = NULL WHERE a = 1
+
+query IIII
+SELECT * FROM abcd WHERE a = 1
+----
+1 NULL NULL NULL
+
+# Test updating a NULL family
+statement ok
+INSERT INTO abcd (a) VALUES (2)
+
+query IIII
+SELECT * FROM abcd WHERE a = 2
+----
+2 NULL NULL NULL
+
+statement ok
+UPDATE abcd SET d = 5 WHERE a = 2
+
+query IIII
+SELECT * FROM abcd WHERE a = 2
+----
+2 NULL NULL 5
+
+statement count 1
+DELETE FROM abcd WHERE a = 2
+
+query IIII
+SELECT * FROM abcd WHERE a = 2
+----
+
+statement ok
+ALTER TABLE abcd ADD e STRING FAMILY f1
+
+statement ok
+INSERT INTO abcd VALUES (9, 10, 11, 12, 'foo')
+
+query IIIIT rowsort
+SELECT * from abcd WHERE a > 1
+----
+5 6  7  8  NULL
+9 10 11 12 foo
+
+# Check the descriptor bookkeeping
+statement ok
+ALTER TABLE abcd ADD COLUMN f DECIMAL
+
+statement error unknown family \"foo\"
+ALTER TABLE abcd ADD COLUMN g INT FAMILY foo
+
+statement ok
+ALTER TABLE abcd ADD COLUMN g INT CREATE FAMILY
+
+statement error family "f1" already exists
+ALTER TABLE abcd ADD COLUMN h INT CREATE FAMILY F1
+
+statement ok
+ALTER TABLE abcd ADD COLUMN h INT CREATE FAMILY f_h
+
+statement ok
+ALTER TABLE abcd ADD COLUMN i INT CREATE IF NOT EXISTS FAMILY F_H
+
+statement ok
+ALTER TABLE abcd ADD COLUMN j INT CREATE IF NOT EXISTS FAMILY f_j
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE abcd
+----
+abcd  CREATE TABLE public.abcd (
+        a INT8 NOT NULL,
+        b INT8 NULL,
+        c INT8 NULL,
+        d INT8 NULL,
+        e STRING NULL,
+        f DECIMAL NULL,
+        g INT8 NULL,
+        h INT8 NULL,
+        i INT8 NULL,
+        j INT8 NULL,
+        CONSTRAINT abcd_pkey PRIMARY KEY (a ASC),
+        INDEX d_idx (d ASC),
+        FAMILY f1 (a, b, e, f),
+        FAMILY fam_1_c_d (c, d),
+        FAMILY fam_2_g (g),
+        FAMILY f_h (h, i),
+        FAMILY f_j (j)
+      );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE abcd
+----
+abcd  CREATE TABLE public.abcd (
+        a INT8 NOT NULL,
+        b INT8 NULL,
+        c INT8 NULL,
+        d INT8 NULL,
+        e STRING NULL,
+        f DECIMAL NULL,
+        g INT8 NULL,
+        h INT8 NULL,
+        i INT8 NULL,
+        j INT8 NULL,
+        CONSTRAINT abcd_pkey PRIMARY KEY (a ASC),
+        INDEX d_idx (d ASC),
+        FAMILY f1 (a, b, e, f),
+        FAMILY fam_1_c_d (c, d),
+        FAMILY fam_2_g (g),
+        FAMILY f_h (h, i),
+        FAMILY f_j (j)
+      ) WITH (schema_locked = true);
+
+statement ok
+ALTER TABLE abcd DROP c, DROP d, DROP e, DROP h, DROP i, DROP j
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE abcd
+----
+abcd  CREATE TABLE public.abcd (
+        a INT8 NOT NULL,
+        b INT8 NULL,
+        f DECIMAL NULL,
+        g INT8 NULL,
+        CONSTRAINT abcd_pkey PRIMARY KEY (a ASC),
+        FAMILY f1 (a, b, f),
+        FAMILY fam_2_g (g)
+      );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE abcd
+----
+abcd  CREATE TABLE public.abcd (
+        a INT8 NOT NULL,
+        b INT8 NULL,
+        f DECIMAL NULL,
+        g INT8 NULL,
+        CONSTRAINT abcd_pkey PRIMARY KEY (a ASC),
+        FAMILY f1 (a, b, f),
+        FAMILY fam_2_g (g)
+      ) WITH (schema_locked = true);
+
+statement ok
+CREATE TABLE f1 (
+  a INT PRIMARY KEY, b STRING, c STRING,
+  FAMILY "primary" (a, b, c)
+)
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE f1
+----
+f1  CREATE TABLE public.f1 (
+      a INT8 NOT NULL,
+      b STRING NULL,
+      c STRING NULL,
+      CONSTRAINT f1_pkey PRIMARY KEY (a ASC)
+    );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE f1
+----
+f1  CREATE TABLE public.f1 (
+      a INT8 NOT NULL,
+      b STRING NULL,
+      c STRING NULL,
+      CONSTRAINT f1_pkey PRIMARY KEY (a ASC)
+    ) WITH (schema_locked = true);
+
+statement ok
+CREATE TABLE assign_at_create (a INT PRIMARY KEY FAMILY pri, b INT FAMILY foo, c INT CREATE FAMILY)
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE assign_at_create
+----
+assign_at_create  CREATE TABLE public.assign_at_create (
+                    a INT8 NOT NULL,
+                    b INT8 NULL,
+                    c INT8 NULL,
+                    CONSTRAINT assign_at_create_pkey PRIMARY KEY (a ASC),
+                    FAMILY pri (a),
+                    FAMILY foo (b),
+                    FAMILY fam_2_c (c)
+                  );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE assign_at_create
+----
+assign_at_create  CREATE TABLE public.assign_at_create (
+                    a INT8 NOT NULL,
+                    b INT8 NULL,
+                    c INT8 NULL,
+                    CONSTRAINT assign_at_create_pkey PRIMARY KEY (a ASC),
+                    FAMILY pri (a),
+                    FAMILY foo (b),
+                    FAMILY fam_2_c (c)
+                  ) WITH (schema_locked = true);
+
+# Check the the diff-column-id storage
+statement ok
+CREATE TABLE unsorted_colids (a INT PRIMARY KEY, b INT NOT NULL, c INT NOT NULL, FAMILY (c, b, a))
+
+statement ok
+INSERT INTO unsorted_colids VALUES (1, 1, 1)
+
+statement ok
+UPDATE unsorted_colids SET b = 2, c = 3 WHERE a = 1
+
+query III
+SELECT * FROM unsorted_colids
+----
+1 2 3
+
+# Check that family bookkeeping correctly tracks column renames
+statement ok
+CREATE TABLE rename_col (a INT PRIMARY KEY, b INT, c STRING, FAMILY (a, b), FAMILY (c))
+
+statement ok
+ALTER TABLE rename_col RENAME b TO d
+
+statement ok
+ALTER TABLE rename_col RENAME c TO e
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE rename_col
+----
+rename_col  CREATE TABLE public.rename_col (
+              a INT8 NOT NULL,
+              d INT8 NULL,
+              e STRING NULL,
+              CONSTRAINT rename_col_pkey PRIMARY KEY (a ASC),
+              FAMILY fam_0_a_b (a, d),
+              FAMILY fam_1_c (e)
+            );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE rename_col
+----
+rename_col  CREATE TABLE public.rename_col (
+              a INT8 NOT NULL,
+              d INT8 NULL,
+              e STRING NULL,
+              CONSTRAINT rename_col_pkey PRIMARY KEY (a ASC),
+              FAMILY fam_0_a_b (a, d),
+              FAMILY fam_1_c (e)
+            ) WITH (schema_locked = true);
+
+# Regression tests for https://github.com/cockroachdb/cockroach/issues/41007.
+statement ok
+CREATE TABLE xyz (x INT PRIMARY KEY, y INT, z INT, FAMILY (x, y), FAMILY (z), INDEX (y))
+
+statement ok
+INSERT INTO xyz VALUES (1, 1, NULL)
+
+query I
+SELECT z FROM xyz WHERE y = 1
+----
+NULL
+
+statement ok
+CREATE TABLE y (y INT)
+
+statement ok
+INSERT INTO y VALUES (1)
+
+query I
+SELECT xyz.z FROM y INNER LOOKUP JOIN xyz ON y.y = xyz.y
+----
+NULL
+
+# Tests for NeededColumnFamilyIDs logic. This function is used for point lookups
+# to determine the minimal set of column families which need to be scanned.
+subtest needed_column_families
+
+statement ok
+CREATE TABLE t1 (
+  a INT PRIMARY KEY, b INT NOT NULL, c INT, d INT,
+  FAMILY (d), FAMILY (c), FAMILY (b), FAMILY (a)
+);
+INSERT INTO t1 VALUES (10, 20, 30, 40)
+
+# A point lookup on the primary key column should use family 0 (even if the
+# column is not in that family) because the column can be decoded from the key.
+query I
+SELECT a FROM t1 WHERE a = 10
+----
+10
+
+query T
+SELECT info FROM [EXPLAIN SELECT a FROM t1 WHERE a = 10] WHERE info LIKE '%table%' OR info LIKE '%spans%'
+----
+  table: t1@t1_pkey
+  spans: [/10 - /10]
+
+# A point lookup on a non-nullable column allows us to scan only that column
+# family.
+query I
+SELECT b FROM t1 WHERE a = 10
+----
+20
+
+query T
+SELECT info FROM [EXPLAIN SELECT b FROM t1 WHERE a = 10] WHERE info LIKE '%table%' OR info LIKE '%spans%'
+----
+  table: t1@t1_pkey
+  spans: [/10 - /10]
+
+# Even if we also select the primary key column, we can still scan the single
+# column family because that column can be decoded from the key.
+query II
+SELECT a, b FROM t1 WHERE a = 10
+----
+10  20
+
+query T
+SELECT info FROM [EXPLAIN SELECT a, b FROM t1 WHERE a = 10] WHERE info LIKE '%table%' OR info LIKE '%spans%'
+----
+  table: t1@t1_pkey
+  spans: [/10 - /10]
+
+# A point lookup on a nullable column requires also scanning column family 0 as
+# a sentinel.
+query I
+SELECT c FROM t1 WHERE a = 10
+----
+30
+
+query T
+SELECT info FROM [EXPLAIN SELECT c FROM t1 WHERE a = 10] WHERE info LIKE '%table%' OR info LIKE '%spans%'
+----
+  table: t1@t1_pkey
+  spans: [/10 - /10]
+
+# A point lookup on two columns in non-adjacent column families results in two
+# spans.
+query II
+SELECT b, d FROM t1 WHERE a = 10
+----
+20  40
+
+query T
+SELECT info FROM [EXPLAIN SELECT b, d FROM t1 WHERE a = 10] WHERE info LIKE '%table%' OR info LIKE '%spans%'
+----
+  table: t1@t1_pkey
+  spans: [/10 - /10]
+
+# Unique secondary indexes store non-indexed primary key columns in column
+# family 0.
+statement ok
+CREATE UNIQUE INDEX b_idx ON t1 (b) STORING (c, d)
+
+query I
+SELECT a FROM t1 WHERE b = 20
+----
+10
+
+query T
+SELECT info FROM [EXPLAIN SELECT a FROM t1 WHERE b = 20] WHERE info LIKE '%table%' OR info LIKE '%spans%'
+----
+  table: t1@b_idx
+  spans: [/20 - /20]
+
+# If the primary key column is composite, we do need to scan its column family
+# to retrieve its value.
+statement ok
+CREATE TABLE t2 (
+  a DECIMAL PRIMARY KEY, b INT, c INT NOT NULL, d INT,
+  FAMILY (d), FAMILY (c), FAMILY (b), FAMILY (a)
+);
+INSERT INTO t2 VALUES (10.00, 20, 30, 40)
+
+# A point lookup on the primary key column should use its family.
+query T
+SELECT a FROM t2 WHERE a = 10
+----
+10.00
+
+query T
+SELECT info FROM [EXPLAIN SELECT a FROM t2 WHERE a = 10] WHERE info LIKE '%table%' OR info LIKE '%spans%'
+----
+  table: t2@t2_pkey
+  spans: [/10 - /10]
+
+# A point lookup on `a` and `b` should scan both of their families.
+query TI
+SELECT a, b FROM t2 WHERE a = 10
+----
+10.00  20
+
+query T
+SELECT info FROM [EXPLAIN SELECT a, b FROM t2 WHERE a = 10] WHERE info LIKE '%table%' OR info LIKE '%spans%'
+----
+  table: t2@t2_pkey
+  spans: [/10 - /10]
+
+# Secondary indexes always store their composite values in column family 0.
+statement ok
+CREATE UNIQUE INDEX a_idx ON t2 (a) STORING (b, c, d)
+
+# A point lookup on the composite column should use family 0.
+query TI
+SELECT a, b FROM t2@a_idx WHERE a = 10
+----
+10.00  20
+
+query T
+SELECT info FROM [EXPLAIN SELECT a FROM t2@a_idx WHERE a = 10] WHERE info LIKE '%table%' OR info LIKE '%spans%'
+----
+  table: t2@a_idx
+  spans: [/10 - /10]
+
+# A point lookup on `a` and `b` should use column family 0 and b's family.
+query TI
+SELECT a, b FROM t2@a_idx WHERE a = 10
+----
+10.00  20
+
+query T
+SELECT info FROM [EXPLAIN SELECT a, b FROM t2@a_idx WHERE a = 10] WHERE info LIKE '%table%' OR info LIKE '%spans%'
+----
+  table: t2@a_idx
+  spans: [/10 - /10]
+
+# ------------------------------------------------------------------------------
+# UPSERT/INSERT..ON CONFLICT cases.
+# ------------------------------------------------------------------------------
+
+# No secondary index.
+statement ok
+CREATE TABLE fam (x INT PRIMARY KEY, y INT, y2 INT, y3 INT, FAMILY (x), FAMILY (y, y2), FAMILY (y3))
+
+statement ok
+INSERT INTO fam VALUES (1, NULL, NULL, NULL)
+
+statement ok
+INSERT INTO fam (x, y) VALUES (1, 1), (2, 2) ON CONFLICT (x) DO UPDATE SET y2=excluded.y, y3=excluded.y
+
+query IIII rowsort
+SELECT * from fam
+----
+1  NULL  1     1
+2  2     NULL  NULL
+
+# Add secondary index.
+statement ok
+CREATE UNIQUE INDEX secondary ON fam (y)
+
+statement ok
+INSERT INTO fam (x, y) VALUES (2, NULL), (3, NULL) ON CONFLICT (x) DO UPDATE SET y=NULL, y3=2
+
+query IIII rowsort
+SELECT * from fam
+----
+1  NULL  1     1
+2  NULL  NULL  2
+3  NULL  NULL  NULL
+
+query IIII rowsort
+SELECT * from fam@secondary
+----
+1  NULL  1     1
+2  NULL  NULL  2
+3  NULL  NULL  NULL
+
+# Add secondary index with STORING column.
+statement ok
+DROP INDEX secondary
+
+statement ok
+CREATE UNIQUE INDEX secondary ON fam (y) STORING (y2)
+
+statement ok
+UPSERT INTO fam (x, y) VALUES (4, 4), (5, 5)
+
+statement ok
+INSERT INTO fam (x, y) VALUES (4, 4), (5, 5)
+ON CONFLICT (y) DO UPDATE SET y=NULL, y2=excluded.y, y3=excluded.y
+
+query IIII rowsort
+SELECT * from fam
+----
+1  NULL  1     1
+2  NULL  NULL  2
+3  NULL  NULL  NULL
+4  NULL  4     4
+5  NULL  5     5
+
+query IIII rowsort
+SELECT * from fam@secondary
+----
+1  NULL  1     1
+2  NULL  NULL  2
+3  NULL  NULL  NULL
+4  NULL  4     4
+5  NULL  5     5
+
+statement ok
+DROP TABLE fam

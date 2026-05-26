@@ -1,0 +1,209 @@
+# Tests ReadAsOfIterator.
+#
+# Sets up the following dataset, where x is tombstone, o-o is range tombstone:
+#
+#  6                      f6
+#  5          o---------------o               k5
+#  4  x   x       d4      f4  g4  x
+#  3      o-------o   e3  o-------oh3                 o---o
+#  2  a2                  f2  g2
+#  1  o---------------------------------------o
+#     a   b   c   d   e   f   g   h   i   j   k   l   m   n   o
+#
+run stats ok
+del_range_ts k=a end=k ts=1
+put k=a ts=2 v=a2
+del k=a ts=4
+del_range_ts k=b end=d ts=3
+del k=b ts=4
+put k=d ts=4 v=d4
+put k=e ts=3 v=e3
+put k=f ts=2 v=f2
+put k=g ts=2 v=g2
+del_range_ts k=f end=h ts=3
+put k=f ts=4 v=f4
+del_range_ts k=c end=g ts=5
+put k=f ts=6 v=f6
+put k=g ts=4 v=g4
+put k=h ts=3 v=h3
+del k=h ts=4
+put k=k ts=5 v=k5
+del_range_ts k=m end=n ts=3 localTs=2
+----
+>> del_range_ts k=a end=k ts=1
+stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 gc_bytes_age=+1287
+>> put k=a ts=2 v=a2
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> del k=a ts=4
+del: "a": found key true
+stats: key_bytes=+12 val_count=+1 live_count=-1 live_bytes=-21 gc_bytes_age=+3168
+>> del_range_ts k=b end=d ts=3
+stats: range_key_count=+2 range_key_bytes=+35 range_val_count=+3 gc_bytes_age=+3439
+>> del k=b ts=4
+del: "b": found key false
+stats: key_count=+1 key_bytes=+14 val_count=+1 gc_bytes_age=+1344
+>> put k=d ts=4 v=d4
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> put k=e ts=3 v=e3
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> put k=f ts=2 v=f2
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> put k=g ts=2 v=g2
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> del_range_ts k=f end=h ts=3
+stats: range_key_count=+2 range_key_bytes=+35 range_val_count=+3 live_count=-2 live_bytes=-42 gc_bytes_age=+7513
+>> put k=f ts=4 v=f4
+stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21 gc_bytes_age=-194
+>> del_range_ts k=c end=g ts=5
+stats: range_key_count=+2 range_key_bytes=+71 range_val_count=+7 live_count=-3 live_bytes=-63 gc_bytes_age=+12822
+>> put k=f ts=6 v=f6
+stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21 gc_bytes_age=-190
+>> put k=g ts=4 v=g4
+stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21 gc_bytes_age=-194
+>> put k=h ts=3 v=h3
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> del k=h ts=4
+del: "h": found key true
+stats: key_bytes=+12 val_count=+1 live_count=-1 live_bytes=-21 gc_bytes_age=+3168
+>> put k=k ts=5 v=k5
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> del_range_ts k=m end=n ts=3 localTs=2
+stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 range_val_bytes=+13 gc_bytes_age=+2522
+>> at end:
+rangekey: {a-b}/[1.000000000,0=/<empty>]
+rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {h-k}/[1.000000000,0=/<empty>]
+rangekey: {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/4.000000000,0 -> /<empty>
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "e"/3.000000000,0 -> /BYTES/e3
+data: "f"/6.000000000,0 -> /BYTES/f6
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "f"/2.000000000,0 -> /BYTES/f2
+data: "g"/4.000000000,0 -> /BYTES/g4
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/4.000000000,0 -> /<empty>
+data: "h"/3.000000000,0 -> /BYTES/h3
+data: "k"/5.000000000,0 -> /BYTES/k5
+stats: key_count=8 key_bytes=172 val_count=13 val_bytes=70 range_key_count=8 range_key_bytes=167 range_val_count=15 range_val_bytes=13 live_count=3 live_bytes=63 gc_bytes_age=34685
+
+# Scan with no asOf timestamp.
+run ok
+iter_new_read_as_of
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "f"/6.000000000,0=/BYTES/f6
+iter_scan: "f"/6.000000000,0=/BYTES/f6
+iter_scan: "g"/4.000000000,0=/BYTES/g4
+iter_scan: "k"/5.000000000,0=/BYTES/k5
+iter_scan: .
+
+# Run scans as of every timestamp.
+run ok
+iter_new_read_as_of asOfTs=1
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: .
+iter_scan: .
+
+run ok
+iter_new_read_as_of asOfTs=2
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "a"/2.000000000,0=/BYTES/a2
+iter_scan: "a"/2.000000000,0=/BYTES/a2
+iter_scan: "f"/2.000000000,0=/BYTES/f2
+iter_scan: "g"/2.000000000,0=/BYTES/g2
+iter_scan: .
+
+run ok
+iter_new_read_as_of asOfTs=3
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "a"/2.000000000,0=/BYTES/a2
+iter_scan: "a"/2.000000000,0=/BYTES/a2
+iter_scan: "e"/3.000000000,0=/BYTES/e3
+iter_scan: "h"/3.000000000,0=/BYTES/h3
+iter_scan: .
+
+run ok
+iter_new_read_as_of asOfTs=4
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "d"/4.000000000,0=/BYTES/d4
+iter_scan: "d"/4.000000000,0=/BYTES/d4
+iter_scan: "e"/3.000000000,0=/BYTES/e3
+iter_scan: "f"/4.000000000,0=/BYTES/f4
+iter_scan: "g"/4.000000000,0=/BYTES/g4
+iter_scan: .
+
+run ok
+iter_new_read_as_of asOfTs=5
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "g"/4.000000000,0=/BYTES/g4
+iter_scan: "g"/4.000000000,0=/BYTES/g4
+iter_scan: "k"/5.000000000,0=/BYTES/k5
+iter_scan: .
+
+run ok
+iter_new_read_as_of asOfTs=6
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "f"/6.000000000,0=/BYTES/f6
+iter_scan: "f"/6.000000000,0=/BYTES/f6
+iter_scan: "g"/4.000000000,0=/BYTES/g4
+iter_scan: "k"/5.000000000,0=/BYTES/k5
+iter_scan: .
+
+run ok
+iter_new_read_as_of asOfTs=7
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "f"/6.000000000,0=/BYTES/f6
+iter_scan: "f"/6.000000000,0=/BYTES/f6
+iter_scan: "g"/4.000000000,0=/BYTES/g4
+iter_scan: "k"/5.000000000,0=/BYTES/k5
+iter_scan: .
+
+# Seek to a point key shadowed by a range tombstone.
+run ok
+iter_new_read_as_of asOfTs=5
+iter_seek_ge k=d
+----
+iter_seek_ge: "g"/4.000000000,0=/BYTES/g4
+
+# Seek to the start of a range tombstone.
+run ok
+iter_new_read_as_of asOfTs=5
+iter_seek_ge k=c
+----
+iter_seek_ge: "g"/4.000000000,0=/BYTES/g4
+
+# Seek to the same point key, without asOf.
+run ok
+iter_new_read_as_of
+iter_seek_ge k=d
+----
+iter_seek_ge: "f"/6.000000000,0=/BYTES/f6
+
+# Attempt seek to the same point key, ignoring the above range tombstone.
+run ok
+iter_new_read_as_of asOfTs=4
+iter_seek_ge k=d
+----
+iter_seek_ge: "d"/4.000000000,0=/BYTES/d4

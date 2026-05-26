@@ -1,0 +1,24 @@
+/* setup */
+CREATE TYPE salmon AS ENUM ('sockeye', 'king', 'atlantic');
+
+/* test */
+ALTER TYPE salmon RENAME VALUE 'atlantic' TO 'coho';
+EXPLAIN (DDL) rollback at post-commit stage 1 of 1;
+----
+Schema change plan for rolling back ALTER TYPE defaultdb.public.salmon RENAME VALUE ‹'atlantic'› TO ‹'coho'›;
+ └── PostCommitNonRevertiblePhase
+      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      │    ├── 1 element transitioning toward ABSENT
+      │    │    └── WRITE_ONLY → VALIDATED EnumTypeValue:{DescID: 104 (salmon), Name: "coho"}
+      │    └── 1 Validation operation
+      │         └── ValidateEnumTypeValueRemoval {"LogicalRepresentation":"coho","PhysicalRepresentation":"wA==","TypeID":104}
+      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward PUBLIC
+           │    └── WRITE_ONLY → PUBLIC EnumTypeValue:{DescID: 104 (salmon), Name: "atlantic"}
+           ├── 1 element transitioning toward ABSENT
+           │    └── VALIDATED  → ABSENT EnumTypeValue:{DescID: 104 (salmon), Name: "coho"}
+           └── 4 Mutation operations
+                ├── PromoteEnumTypeValue {"LogicalRepresentation":"atlantic","PhysicalRepresentation":"wA==","TypeID":104}
+                ├── RemoveEnumTypeValue {"LogicalRepresentation":"coho","PhysicalRepresentation":"wA==","TypeID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

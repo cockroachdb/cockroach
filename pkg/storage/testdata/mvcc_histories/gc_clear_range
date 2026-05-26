@@ -1,0 +1,264 @@
+# 1.Clear empty range
+run ok stats
+gc_points_clear_range k=a ts=3 end=z
+----
+>> gc_points_clear_range k=a ts=3 end=z
+stats: no change
+>> at end:
+<no data>
+stats: 
+
+# 2.Clear range starting from a version under value
+run ok
+put k=a v=11 ts=2,0
+put k=a v=12 ts=5,0
+----
+>> at end:
+data: "a"/5.000000000,0 -> /BYTES/12
+data: "a"/2.000000000,0 -> /BYTES/11
+
+run ok stats
+gc_points_clear_range k=a startTs=2 end=z ts=5
+----
+>> gc_points_clear_range k=a startTs=2 end=z ts=5
+stats: key_bytes=-12 val_count=-1 val_bytes=-7 gc_bytes_age=-1805
+>> at end:
+data: "a"/5.000000000,0 -> /BYTES/12
+stats: key_count=1 key_bytes=14 val_count=1 val_bytes=7 live_count=1 live_bytes=21
+
+run ok
+clear_range k=a end=z
+----
+>> at end:
+<no data>
+
+# 3. Clear range from version under tombstone
+run ok
+put k=a v=11 ts=2,0
+del k=a ts=5,0
+----
+del: "a": found key true
+>> at end:
+data: "a"/5.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/11
+
+run ok stats
+gc_points_clear_range k=a startTs=5 end=z ts=5
+----
+>> gc_points_clear_range k=a startTs=5 end=z ts=5
+stats: key_count=-1 key_bytes=-26 val_count=-2 val_bytes=-7 gc_bytes_age=-3135
+>> at end:
+<no data>
+stats: 
+
+# 4. Clear range from version under range tombstone
+run ok
+put k=a v=11 ts=2,0
+del_range_ts k=a end=b ts=5,0
+----
+>> at end:
+rangekey: {a-b}/[5.000000000,0=/<empty>]
+data: "a"/2.000000000,0 -> /BYTES/11
+
+run ok stats
+gc_points_clear_range k=a startTs=2 end=z ts=5
+----
+>> gc_points_clear_range k=a startTs=2 end=z ts=5
+stats: key_count=-1 key_bytes=-14 val_count=-1 val_bytes=-7 gc_bytes_age=-1995
+>> at end:
+rangekey: {a-b}/[5.000000000,0=/<empty>]
+stats: range_key_count=1 range_key_bytes=13 range_val_count=1 gc_bytes_age=1235
+
+run ok
+clear_range k=a end=z
+----
+>> at end:
+<no data>
+
+# 5. Clear range up to another value
+run ok
+put k=a v=11 ts=2,0
+put k=a v=12 ts=5,0
+put k=c v=13 ts=5,0
+----
+>> at end:
+data: "a"/5.000000000,0 -> /BYTES/12
+data: "a"/2.000000000,0 -> /BYTES/11
+data: "c"/5.000000000,0 -> /BYTES/13
+
+run ok stats
+gc_points_clear_range k=a startTs=2 end=c ts=5
+----
+>> gc_points_clear_range k=a startTs=2 end=c ts=5
+stats: key_bytes=-12 val_count=-1 val_bytes=-7 gc_bytes_age=-1805
+>> at end:
+data: "a"/5.000000000,0 -> /BYTES/12
+data: "c"/5.000000000,0 -> /BYTES/13
+stats: key_count=2 key_bytes=28 val_count=2 val_bytes=14 live_count=2 live_bytes=42
+
+run ok
+clear_range k=a end=z
+----
+>> at end:
+<no data>
+
+# 6. Clear range up to another intent
+run ok
+put k=a v=11 ts=2,0
+put k=a v=12 ts=5,0
+with t=A k=c
+  txn_begin ts=4,0
+  put v=1
+----
+put: lock acquisition = {span=c id=00000001 key="c" iso=Serializable pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
+>> at end:
+txn: "A" meta={id=00000001 key="c" iso=Serializable pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=4.000000000,0 gul=0,0
+data: "a"/5.000000000,0 -> /BYTES/12
+data: "a"/2.000000000,0 -> /BYTES/11
+meta: "c"/0,0 -> txn={id=00000001 key="c" iso=Serializable pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "c"/4.000000000,0 -> /BYTES/1
+
+run ok stats
+gc_points_clear_range k=a startTs=2 end=c ts=5
+----
+>> gc_points_clear_range k=a startTs=2 end=c ts=5
+stats: key_bytes=-12 val_count=-1 val_bytes=-7 gc_bytes_age=-1805
+>> at end:
+data: "a"/5.000000000,0 -> /BYTES/12
+meta: "c"/0,0 -> txn={id=00000001 key="c" iso=Serializable pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "c"/4.000000000,0 -> /BYTES/1
+stats: key_count=2 key_bytes=28 val_count=2 val_bytes=64 live_count=2 live_bytes=92 intent_count=1 intent_bytes=18 lock_count=1 lock_age=96
+
+run ok
+clear_range k=a end=z
+----
+>> at end:
+<no data>
+
+# 7. Clear from before first key
+run ok
+put k=b v=11 ts=2,0
+del k=b ts=5,0
+----
+del: "b": found key true
+>> at end:
+data: "b"/5.000000000,0 -> /<empty>
+data: "b"/2.000000000,0 -> /BYTES/11
+
+run ok stats
+gc_points_clear_range k=a end=z ts=5
+----
+>> gc_points_clear_range k=a end=z ts=5
+stats: key_count=-1 key_bytes=-26 val_count=-2 val_bytes=-7 gc_bytes_age=-3135
+>> at end:
+<no data>
+stats: 
+
+run ok
+clear_range k=a end=z
+----
+>> at end:
+<no data>
+
+# 8. Clear value under range tombstone
+run ok
+put k=b v=123 ts=2,0
+del_range_ts k=a end=c ts=5,0
+----
+>> at end:
+rangekey: {a-c}/[5.000000000,0=/<empty>]
+data: "b"/2.000000000,0 -> /BYTES/123
+
+run ok stats
+gc_points_clear_range k=a end=z ts=5
+----
+>> gc_points_clear_range k=a end=z ts=5
+stats: key_count=-1 key_bytes=-14 val_count=-1 val_bytes=-8 gc_bytes_age=-2090
+>> at end:
+rangekey: {a-c}/[5.000000000,0=/<empty>]
+stats: range_key_count=1 range_key_bytes=13 range_val_count=1 gc_bytes_age=1235
+
+run ok
+clear_range k=a end=z
+----
+>> at end:
+<no data>
+
+# 9. Clear value under point tombstone
+run ok
+put k=b v=123 ts=2,0
+del k=b ts=5,0
+----
+del: "b": found key true
+>> at end:
+data: "b"/5.000000000,0 -> /<empty>
+data: "b"/2.000000000,0 -> /BYTES/123
+
+run ok stats
+gc_points_clear_range k=a end=z ts=5
+----
+>> gc_points_clear_range k=a end=z ts=5
+stats: key_count=-1 key_bytes=-26 val_count=-2 val_bytes=-8 gc_bytes_age=-3230
+>> at end:
+<no data>
+stats: 
+
+run ok
+clear_range k=a end=z
+----
+>> at end:
+<no data>
+
+# 10. Clear value under point and range tombstone (checking that garbage age is correctly calculated)
+run ok
+put k=b v=123 ts=2,0
+del k=b ts=4,0
+del_range_ts k=a end=c ts=5,0
+----
+del: "b": found key true
+>> at end:
+rangekey: {a-c}/[5.000000000,0=/<empty>]
+data: "b"/4.000000000,0 -> /<empty>
+data: "b"/2.000000000,0 -> /BYTES/123
+
+run ok stats
+gc_points_clear_range k=a end=z ts=5
+----
+>> gc_points_clear_range k=a end=z ts=5
+stats: key_count=-1 key_bytes=-26 val_count=-2 val_bytes=-8 gc_bytes_age=-3264
+>> at end:
+rangekey: {a-c}/[5.000000000,0=/<empty>]
+stats: range_key_count=1 range_key_bytes=13 range_val_count=1 gc_bytes_age=1235
+
+run ok
+clear_range k=a end=z
+----
+>> at end:
+<no data>
+
+# 11. Clear value under range and point tombstone (checking that garbage age is correctly calculated)
+run ok
+put k=b v=123 ts=2,0
+del_range_ts k=a end=c ts=4,0
+del k=b ts=5,0
+----
+del: "b": found key false
+>> at end:
+rangekey: {a-c}/[4.000000000,0=/<empty>]
+data: "b"/5.000000000,0 -> /<empty>
+data: "b"/2.000000000,0 -> /BYTES/123
+
+run ok stats
+gc_points_clear_range k=a end=z ts=5
+----
+>> gc_points_clear_range k=a end=z ts=5
+stats: key_count=-1 key_bytes=-26 val_count=-2 val_bytes=-8 gc_bytes_age=-3250
+>> at end:
+rangekey: {a-c}/[4.000000000,0=/<empty>]
+stats: range_key_count=1 range_key_bytes=13 range_val_count=1 gc_bytes_age=1248
+
+run ok
+clear_range k=a end=z
+----
+>> at end:
+<no data>

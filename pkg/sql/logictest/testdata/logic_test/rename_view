@@ -1,0 +1,183 @@
+statement ok
+SET CLUSTER SETTING sql.cross_db_views.enabled = TRUE
+
+statement error pgcode 42P01 relation "foo" does not exist
+ALTER VIEW foo RENAME TO bar
+
+statement ok
+ALTER VIEW IF EXISTS foo RENAME TO bar
+
+statement ok
+CREATE TABLE kv (
+  k INT PRIMARY KEY,
+  v INT
+)
+
+statement ok
+INSERT INTO kv VALUES (1, 2), (3, 4)
+
+statement ok
+CREATE VIEW v as SELECT k,v FROM kv
+
+query II rowsort
+SELECT * FROM v
+----
+1 2
+3 4
+
+query TTTTIT rowsort
+SHOW TABLES
+----
+public  kv  table  root  0  NULL
+public  v   view   root  0  NULL
+
+statement error pgcode 42809 "kv" is not a view
+ALTER VIEW kv RENAME TO new_kv
+
+# We allow ALTER TABLE for renaming views.
+statement ok
+ALTER TABLE v RENAME TO new_v
+
+statement error pgcode 42P01 relation "v" does not exist
+SELECT * FROM v
+
+query II rowsort
+SELECT * FROM new_v
+----
+1 2
+3 4
+
+query TTTTIT rowsort
+SHOW TABLES
+----
+public  kv     table  root  0  NULL
+public  new_v  view   root  0  NULL
+
+# check the name in the descriptor, which is used by SHOW GRANTS, is also changed
+query TTTTTB rowsort
+SHOW GRANTS ON new_v
+----
+test  public  new_v  admin  ALL  true
+test  public  new_v  root   ALL  true
+
+statement error invalid table name: ""
+ALTER VIEW "" RENAME TO foo
+
+statement error invalid table name: ""
+ALTER VIEW new_v RENAME TO ""
+
+statement ok
+ALTER VIEW new_v RENAME TO new_v
+
+statement ok
+CREATE TABLE t (
+  c1 INT PRIMARY KEY,
+  c2 INT
+)
+
+statement ok
+INSERT INTO t VALUES (4, 16), (5, 25)
+
+statement ok
+CREATE VIEW v as SELECT c1,c2 from t
+
+statement error pgcode 42P07 relation "test.public.new_v" already exists
+ALTER VIEW v RENAME TO new_v
+
+user testuser
+
+statement error user testuser does not have DROP privilege on relation v
+ALTER VIEW test.v RENAME TO v2
+
+user root
+
+statement ok
+GRANT DROP ON test.v TO testuser
+
+statement ok
+create database test2
+
+user testuser
+
+statement error user testuser does not have CREATE privilege on database test
+ALTER VIEW test.v RENAME TO v2
+
+user root
+
+statement ok
+GRANT CREATE ON DATABASE test TO testuser
+
+statement ok
+ALTER VIEW test.v RENAME TO v2
+
+query TTTTIT rowsort
+SHOW TABLES FROM test
+----
+public  kv     table  root  0  NULL
+public  new_v  view   root  0  NULL
+public  t      table  root  0  NULL
+public  v2     view   root  0  NULL
+
+user testuser
+
+statement error user testuser does not have CREATE privilege on database test2
+ALTER VIEW test.v2 RENAME TO test2.v
+
+user root
+
+statement ok
+GRANT CREATE ON DATABASE test2 TO testuser
+
+statement ok
+GRANT DROP ON test.new_v TO testuser
+
+user testuser
+
+statement ok
+ALTER VIEW test.new_v RENAME TO test.v
+
+query TTTTIT rowsort
+SHOW TABLES FROM test
+----
+public  kv  table  root  0  NULL
+public  t   table  root  0  NULL
+public  v   view   root  0  NULL
+public  v2  view   root  0  NULL
+
+query TTTTIT
+SHOW TABLES FROM test2
+----
+
+user root
+
+query II rowsort
+SELECT * FROM test.v
+----
+1 2
+3 4
+
+query II rowsort
+SELECT * FROM test.v2
+----
+4 16
+5 25
+
+statement ok
+CREATE VIEW v3 AS SELECT count(*) FROM test.v AS v JOIN test.v2 AS v2 ON v.k > v2.c1
+
+# onlyif config local-legacy-schema-changer
+statement error cannot rename relation "test.public.v" because view "v3" depends on it
+ALTER VIEW test.v RENAME TO test.v3
+
+# skipif config local-legacy-schema-changer
+# statement error relation "test.public.v3" already exists
+# ALTER VIEW test.v RENAME TO test.v3
+
+statement error cannot rename relation "test.public.v2" because view "v3" depends on it
+ALTER VIEW test.v2 RENAME TO v4
+
+statement ok
+ALTER VIEW v3 RENAME TO v4
+
+statement error cannot rename relation "test.public.v2" because view "v4" depends on it
+ALTER VIEW test.v2 RENAME TO v5

@@ -1,0 +1,934 @@
+# Comparisons.
+
+eval
+0 = 1
+----
+false
+
+eval
+0 != 1
+----
+true
+
+eval
+0 < 1
+----
+true
+
+eval
+0 <= 1
+----
+true
+
+eval
+0 > 1
+----
+false
+
+eval
+1 > -1
+----
+true
+
+eval
+1 <= -1
+----
+false
+
+eval
+-1 >= 1
+----
+false
+
+eval
+-1 < 1
+----
+true
+
+eval
+0 >= 1
+----
+false
+
+eval
+true = false
+----
+false
+
+eval
+true != false
+----
+true
+
+eval
+true < false
+----
+false
+
+eval
+true <= false
+----
+false
+
+eval
+true > false
+----
+true
+
+eval
+true >= false
+----
+true
+
+eval
+'a' = 'b'
+----
+false
+
+eval
+'a' != 'b'
+----
+true
+
+eval
+'a' < 'b'
+----
+true
+
+eval
+'a' <= 'b'
+----
+true
+
+eval
+'a' > 'b'
+----
+false
+
+eval
+'a' >= 'b'
+----
+false
+
+eval
+'a' >= 'b'
+----
+false
+
+eval
+'10' > '2'
+----
+false
+
+eval
+1.1 = 1.2
+----
+false
+
+eval
+1.1 = 1.1
+----
+true
+
+eval
+1.1 != 1.2
+----
+true
+
+eval
+1.1 < 1.2
+----
+true
+
+eval
+1.1 <= 1.2
+----
+true
+
+eval
+1.1 > 1.2
+----
+false
+
+eval
+1.1 >= 1.2
+----
+false
+
+eval
+1.1::float = 1.2::float
+----
+false
+
+eval
+1.1::float = 1.1::float
+----
+true
+
+eval
+1.1::float != 1.2::float
+----
+true
+
+eval
+1.1::float < 1.2::float
+----
+true
+
+eval
+1.1::float <= 1.2::float
+----
+true
+
+eval
+1.1::float > 1.2::float
+----
+false
+
+eval
+1.1::float >= 1.2::float
+----
+false
+
+eval
+'2015-10-01'::date = '2015-10-02'::date
+----
+false
+
+eval
+'2015-10-01'::date = '2015-10-01'::date
+----
+true
+
+eval
+'2016-07-19 +0:0:0'::date = '2016-07-19'::date
+----
+true
+
+eval
+'2016-7-19 +0:0:0'::date = '2016-07-19'::date
+----
+true
+
+eval
+'2015-10-01'::date != '2015-10-02'::date
+----
+true
+
+eval
+'2015-10-01'::date < '2015-10-02'::date
+----
+true
+
+eval
+'2015-10-01'::date <= '2015-10-02'::date
+----
+true
+
+eval
+'2015-10-01'::date > '2015-10-02'::date
+----
+false
+
+eval
+'2015-10-01'::date >= '2015-10-02'::date
+----
+false
+
+eval
+'12:00:00'::time = '12:00:01'::time
+----
+false
+
+eval
+'12:00:00'::time = '12:00:00'::time
+----
+true
+
+eval
+'12:00:00.000000'::time = '12:00:00'::time
+----
+true
+
+eval
+'12:00:00'::time != '12:00:01'::time
+----
+true
+
+eval
+'12:00:00'::time < '12:00:01'::time
+----
+true
+
+eval
+'12:00:00'::time <= '12:00:01'::time
+----
+true
+
+eval
+'12:00:00'::time > '12:00:01'::time
+----
+false
+
+eval
+'12:00:00'::time >= '12:00:01'::time
+----
+false
+
+eval
+'12:00:00'::time = '12:00:00+0'::timetz
+----
+true
+
+eval
+'12:00:00'::time != '12:00:00+0'::timetz
+----
+false
+
+eval
+'12:00:00'::time < '11:00:00-1'::timetz
+----
+true
+
+eval
+'12:00:00'::time >= '11:00:00-1'::timetz
+----
+false
+
+eval
+'12:00:00'::time > '13:00:00+1'::timetz
+----
+true
+
+eval
+'12:00:00'::time <= '13:00:00+1'::timetz
+----
+false
+
+eval
+'12:00:00-07'::timetz = '12:00:00-08'::timetz
+----
+false
+
+eval
+'12:00:00+09'::timetz = '12:00:00+09'::timetz
+----
+true
+
+eval
+'12:00:00+01'::timetz != '12:00:00-01'::timetz
+----
+true
+
+eval
+'12:00:00+01'::timetz < '12:00:00-01'::timetz
+----
+true
+
+eval
+'12:00:00+01'::timetz <= '12:00:00-01'::timetz
+----
+true
+
+eval
+'12:00:00+10'::timetz > '12:00:00+09'::timetz
+----
+false
+
+eval
+'12:00:00+10'::timetz >= '12:00:00+09'::timetz
+----
+false
+
+eval
+'2015-10-01'::timestamp = '2015-10-02'::timestamp
+----
+false
+
+eval
+'2015-10-01'::timestamp != '2015-10-02'::timestamp
+----
+true
+
+eval
+'2015-10-01'::timestamp < '2015-10-02'::timestamp
+----
+true
+
+eval
+'2015-10-01'::timestamp <= '2015-10-02'::timestamp
+----
+true
+
+eval
+'2015-10-01'::timestamp > '2015-10-02'::timestamp
+----
+false
+
+eval
+'2015-10-01'::timestamp >= '2015-10-02'::timestamp
+----
+false
+
+eval
+'2015-10-01 -01:00'::timestamptz = '2015-10-01 01:00:00'::timestamp
+----
+true
+
+eval
+'12h2m1s23ms'::interval = '12h2m1s24ms'::interval
+----
+false
+
+eval
+'12h2m1s23ms'::interval != '12h2m1s24ms'::interval
+----
+true
+
+eval
+'12h2m1s23ms'::interval < '12h2m1s24ms'::interval
+----
+true
+
+eval
+'12h2m1s23ms'::interval <= '12h2m1s24ms'::interval
+----
+true
+
+eval
+'12h2m1s23ms'::interval > '12h2m1s24ms'::interval
+----
+false
+
+eval
+'12h2m1s23ms'::interval >= '12h2m1s24ms'::interval
+----
+false
+
+eval
+'P1Y2M10DT2H30M'::interval = 'P1Y2M10DT2H31M'::interval
+----
+false
+
+eval
+'P1Y2M10DT2H30M'::interval != 'P1Y2M10DT2H31M'::interval
+----
+true
+
+eval
+'P1Y2M10DT2H29M'::interval < 'P1Y2M10DT2H30M'::interval
+----
+true
+
+eval
+'P1Y2M10DT2H29M'::interval <= 'P1Y2M10DT2H30M'::interval
+----
+true
+
+eval
+'P1Y2M10DT2H29M'::interval > 'P1Y2M10DT2H30M'::interval
+----
+false
+
+eval
+'P1Y2M10DT2H29M'::interval >= 'P1Y2M10DT2H30M'::interval
+----
+false
+
+eval
+'1-2 10 2:30'::interval = 'P1Y2M10DT2H31M'::interval
+----
+false
+
+eval
+'1-2 10 2:30'::interval != 'P1Y2M10DT2H31M'::interval
+----
+true
+
+eval
+'1-2 10 2:29'::interval < 'P1Y2M10DT2H30M'::interval
+----
+true
+
+eval
+'1-2 10 2:29'::interval <= 'P1Y2M10DT2H30M'::interval
+----
+true
+
+eval
+'1-2 10 2:29'::interval > 'P1Y2M10DT2H30M'::interval
+----
+false
+
+eval
+'1-2 10 2:29'::interval >= 'P1Y2M10DT2H30M'::interval
+----
+false
+
+eval
+'1 year 2 months 3 days 4 hours 5 minutes 6 seconds'::interval = '1 year 2 months 3 days 4 hours 5 minutes 7 seconds'::interval
+----
+false
+
+eval
+'1 year 2 months 3 days 4 hours 5 minutes 6 seconds'::interval != '1 year 2 months 3 days 4 hours 5 minutes 7 seconds'::interval
+----
+true
+
+eval
+'1 year 2 months 3 days 4 hours 5 minutes 6 seconds'::interval < '1 year 2 months 3 days 4 hours 5 minutes 7 seconds'::interval
+----
+true
+
+eval
+'1 year 2 months 3 days 4 hours 5 minutes 6 seconds'::interval <= '1 year 2 months 3 days 4 hours 5 minutes 7 seconds'::interval
+----
+true
+
+eval
+'1 year 2 months 3 days 4 hours 5 minutes 6 seconds'::interval > '1 year 2 months 3 days 4 hours 5 minutes 7 seconds'::interval
+----
+false
+
+eval
+'1 year 2 months 3 days 4 hours 5 minutes 6 seconds'::interval >= '1 year 2 months 3 days 4 hours 5 minutes 7 seconds'::interval
+----
+false
+
+eval
+'5 minutes 6 seconds'::interval = '5 minutes 6 seconds'::interval
+----
+true
+
+eval
+'PT2H30M'::interval = 'PT2H30M'::interval
+----
+true
+
+# Comparisons against NULL result in NULL.
+
+eval
+0 = NULL
+----
+NULL
+
+eval
+0 < NULL
+----
+NULL
+
+eval
+0 <= NULL
+----
+NULL
+
+eval
+NULL = 0
+----
+NULL
+
+eval
+NULL < 0
+----
+NULL
+
+eval
+NULL <= 0
+----
+NULL
+
+eval
+0.1 = NULL
+----
+NULL
+
+eval
+0.1 < NULL
+----
+NULL
+
+eval
+0.1 <= NULL
+----
+NULL
+
+eval
+NULL = 0.1
+----
+NULL
+
+eval
+NULL < 0.1
+----
+NULL
+
+eval
+NULL <= 0.1
+----
+NULL
+
+eval
+0.1::float = NULL
+----
+NULL
+
+eval
+0.1::float < NULL
+----
+NULL
+
+eval
+0.1::float <= NULL
+----
+NULL
+
+eval
+NULL = 0.1::float
+----
+NULL
+
+eval
+NULL < 0.1::float
+----
+NULL
+
+eval
+NULL <= 0.1::float
+----
+NULL
+
+eval
+true = NULL
+----
+NULL
+
+eval
+true < NULL
+----
+NULL
+
+eval
+true <= NULL
+----
+NULL
+
+eval
+NULL = true
+----
+NULL
+
+eval
+NULL < true
+----
+NULL
+
+eval
+NULL <= true
+----
+NULL
+
+eval
+'a' = NULL
+----
+NULL
+
+eval
+'a' < NULL
+----
+NULL
+
+eval
+'a' <= NULL
+----
+NULL
+
+eval
+NULL = 'a'
+----
+NULL
+
+eval
+NULL < 'a'
+----
+NULL
+
+eval
+NULL <= 'a'
+----
+NULL
+
+eval
+'2015-10-01'::date = NULL
+----
+NULL
+
+eval
+'2015-10-01'::date < NULL
+----
+NULL
+
+eval
+'2015-10-01'::date <= NULL
+----
+NULL
+
+eval
+NULL = '2015-10-01'::date
+----
+NULL
+
+eval
+NULL < '2015-10-01'::date
+----
+NULL
+
+eval
+NULL <= '2015-10-01'::date
+----
+NULL
+
+eval
+'12:00:00'::time = NULL
+----
+NULL
+
+eval
+'12:00:00'::time < NULL
+----
+NULL
+
+eval
+'12:00:00'::time <= NULL
+----
+NULL
+
+eval
+NULL = '12:00:00'::time
+----
+NULL
+
+eval
+NULL < '12:00:00'::time
+----
+NULL
+
+eval
+NULL <= '12:00:00'::time
+----
+NULL
+
+eval
+'12:00:00+01'::timetz = NULL
+----
+NULL
+
+eval
+'12:00:00+01'::timetz < NULL
+----
+NULL
+
+eval
+'12:00:00+01'::timetz <= NULL
+----
+NULL
+
+eval
+NULL = '12:00:00+01'::timetz
+----
+NULL
+
+eval
+NULL < '12:00:00+01'::timetz
+----
+NULL
+
+eval
+NULL <= '12:00:00+01'::timetz
+----
+NULL
+
+eval
+'2015-10-01'::timestamp = NULL
+----
+NULL
+
+eval
+'2015-10-01'::timestamp < NULL
+----
+NULL
+
+eval
+'2015-10-01'::timestamp <= NULL
+----
+NULL
+
+eval
+NULL = '2015-10-01'::timestamp
+----
+NULL
+
+eval
+NULL < '2015-10-01'::timestamp
+----
+NULL
+
+eval
+NULL <= '2015-10-01'::timestamp
+----
+NULL
+
+eval
+'2015-10-01'::timestamptz = NULL
+----
+NULL
+
+eval
+'2015-10-01'::timestamptz < NULL
+----
+NULL
+
+eval
+'2015-10-01'::timestamptz <= NULL
+----
+NULL
+
+eval
+NULL = '2015-10-01'::timestamptz
+----
+NULL
+
+eval
+NULL < '2015-10-01'::timestamptz
+----
+NULL
+
+eval
+NULL <= '2015-10-01'::timestamptz
+----
+NULL
+
+eval
+'1-2 10 2:30'::interval = NULL
+----
+NULL
+
+eval
+'1-2 10 2:30'::interval < NULL
+----
+NULL
+
+eval
+'1-2 10 2:30'::interval <= NULL
+----
+NULL
+
+eval
+NULL = '1-2 10 2:30'::interval
+----
+NULL
+
+eval
+NULL < '1-2 10 2:30'::interval
+----
+NULL
+
+eval
+NULL <= '1-2 10 2:30'::interval
+----
+NULL
+
+eval
+NULL = NULL
+----
+NULL
+
+eval
+NULL < NULL
+----
+NULL
+
+eval
+NULL <= NULL
+----
+NULL
+
+eval
+NULL < ARRAY[1]
+----
+NULL
+
+eval
+NULL <= ARRAY[1]
+----
+NULL
+
+eval
+ARRAY[1] < NULL
+----
+NULL
+
+eval
+ARRAY[1] <= NULL
+----
+NULL
+
+eval
+ARRAY[1] < ARRAY[2]
+----
+true
+
+eval
+ARRAY[2] < ARRAY[2, 3]
+----
+true
+
+eval
+ARRAY[2] <= ARRAY[2]
+----
+true
+
+eval
+ARRAY[]:::INT[] < ARRAY[1]
+----
+true
+
+eval
+ARRAY[1, 2, 3] < ARRAY[1, 2]
+----
+false
+
+eval
+ARRAY[1, 2, 3] < ARRAY[1, 1]
+----
+false
+
+eval
+ARRAY[2, 2, 2, 4] < ARRAY[2, 2, 2, 5]
+----
+true
+
+eval
+ARRAY[1, 2, 3] = ARRAY[1, 2, 3]
+----
+true
+
+eval
+ARRAY[NULL]:::INT[] <= ARRAY[NULL]:::INT[]
+----
+true
+
+eval
+ARRAY[NULL, 1] >= ARRAY[NULL, 1]
+----
+true
+
+eval
+ARRAY[NULL, 1, NULL] > ARRAY[NULL, 2, NULL]
+----
+false
+
+# This differs from postgres -- crdb nulls come first.
+eval
+ARRAY[NULL, NULL]:::INT[] < ARRAY[NULL, 1]
+----
+true

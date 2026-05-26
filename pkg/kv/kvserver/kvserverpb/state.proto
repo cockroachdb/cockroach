@@ -1,0 +1,295 @@
+// Copyright 2016 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.kv.kvserver.storagepb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb";
+
+import "storage/enginepb/mvcc.proto";
+import "roachpb/metadata.proto";
+import "roachpb/data.proto";
+import "util/hlc/timestamp.proto";
+import "kv/kvserver/kvserverpb/internal_raft.proto";
+
+import "gogoproto/gogo.proto";
+
+// ReplicaState is the part of the Range Raft state machine which is cached in
+// memory and which is manipulated exclusively through consensus.
+//
+// The struct is also used to transfer state to Replicas in the context of
+// proposer-evaluated Raft, in which case it does not represent a complete
+// state but instead an update to be applied to an existing state, with each
+// field specified in the update overwriting its counterpart on the receiving
+// ReplicaState.
+//
+// For the ReplicaState persisted on the Replica, all optional fields are
+// populated (i.e. no nil pointers or enums with the default value).
+// Exception: TruncatedState is nil.
+message ReplicaState {
+  option (gogoproto.equal) = true;
+
+  // The highest (and last) index applied to the state machine.
+  uint64 raft_applied_index = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.RaftIndex"];
+  // The highest (and last) lease index applied to the state machine.
+  int64 lease_applied_index = 2  [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.LeaseAppliedIndex"];
+  // The Range descriptor.
+  // The pointer may change, but the referenced RangeDescriptor struct itself
+  // must be treated as immutable; it is leaked out of the lock.
+  //
+  // Changes of the descriptor should always go through one of the
+  // (*Replica).setDesc* methods.
+  roachpb.RangeDescriptor desc = 3;
+  // The latest range lease.
+  // The pointer may change, but the referenced Lease struct itself must be
+  // treated as immutable; it is leaked out of the lock.
+  //
+  // Note that this message is both sent over the network and used to model
+  // replica state in memory. In memory (Replica.mu.state), the lease is never
+  // nil (and never zero-valued), but it may be nil when sent over the network
+  // as part of ReplicatedEvalResult.
+  roachpb.Lease lease = 4;
+  // The truncation state of the Raft log.
+  //
+  // Since v25.1, this field can only be used in ReplicatedEvalResult, for
+  // proposals that were evaluated before V25_1_MoveRaftTruncatedState version
+  // gate. Everywhere else it is set to nil. The log truncation state is stored
+  // in a separate unreplicated rangeID-local key, and Replica maintains a
+  // separate RaftTruncatedState in memory.
+  //
+  // TODO(#97613): finalize moving this field out of the ReplicaState. Remove it
+  // when v25.1 version gates are removed, and all the historical entries have
+  // been compacted out of raft logs.
+  RaftTruncatedState truncated_state = 5;
+  // GCThreshold is the GC threshold of the Range, typically updated when keys
+  // are garbage collected. Reads and writes at timestamps <= this time will
+  // not be served.
+  util.hlc.Timestamp gc_threshold = 6 [(gogoproto.customname) = "GCThreshold"];
+  storage.enginepb.MVCCStats stats = 7;
+  // DeprecatedUsingAppliedStateKey was previously used to check whether the
+  // Range had upgraded to begin using the RangeAppliedState key. When set to
+  // true, replicas receiving the state (through a ReplicatedEvalResult) knew to
+  // begin using the new key. In #58088 (21.1) we introduced a migration to
+  // iterate through all ranges in the system and have them start using the
+  // RangeAppliedState key. This field was always set to true in 21.2, nodes
+  // nodes were already using the RangeAppliedState key, or receiving messages
+  // from 21.1 nodes that were also already using the RangeAppliedState key. In
+  // 21.2 (and in 21.1 for that matter) we no longer needed to trigger the "if
+  // set to true in an incoming message, upgrade to start using the
+  // RangeAppliedState key" code path.
+  //
+  // When looking to get rid of this field in 22.1 (#70464), we observed that
+  // there was an unintentional read of this field in 21.2 nodes (#72029). The
+  // saga is as follows:
+  //  - Removing this field in 22.1 meant it was set as false when received at
+  //    21.2 nodes.
+  //  - This should've been fine! We weren't using this field to trigger any
+  //    upgrade code paths (like it was originally intended for).
+  //  - It turns out that in 21.2 we were using the ReplicaState from the
+  //    incoming snapshot to update our in-memory replica state
+  //  - Because the proto field was being phased out, there was now a divergence
+  //    between the on-disk state (field set to true, from earlier 21.2
+  //    operations) and the in-memory state (field set to false, because sent
+  //    from a version that attempted to get rid of this field).
+  //
+  // Removing proto fields from the replica state are not possible until we stop
+  // using the protobuf copy of the replica state when applying a snapshot
+  // (#72222). Once that's done, we should be able to stop sending the replica
+  // state as part of the snapshot in the subsequent release.
+  //
+  // TODO(irfansharif): Remove this field in the release after the one where we
+  // stop consulting the protobuf copy of the replica state when applying a
+  // snapshot.
+  bool deprecated_using_applied_state_key = 11;
+  // Version tells us which migrations can be assumed to have run against this
+  // particular replica. When we introduce backwards incompatible changes to the
+  // replica state (for example using the unreplicated truncated state instead
+  // of the replicated variant), this field tells us if we should expect a
+  // state representation prior to, or after the change (in our example it
+  // tells us whether or not we can assume an unreplicated truncated state). All
+  // migrations associated with versions less than or equal to this one, can be
+  // assumed to have run.
+  //
+  // We should note that the progression of cluster versions in the cluster does
+  // not happen in lock step with replica versions for all replicas in the
+  // system. Well, not for all cluster versions. Replica versions are one the
+  // primitives used to coordinate below-raft migrations, and when cluster
+  // versions for those are being rolled out cluster-wide, the expectation is
+  // that all replica versions are bumped along side it. For everything else,
+  // the coupling is neither necessary nor enforced. When a new replica is being
+  // initialized, it's annotated with a replica version. This happens in one of
+  // two places:
+  // - during cluster creation time, in which case we source the binary version
+  //   (i.e. the version the cluster is bootstrapped with)
+  // - replicas created through snapshots or splits, where we inherit the
+  //   version from the incoming snapshot or the LHS of the split respectively.
+  //
+  // While a below-raft migration is underway, replicas from different ranges
+  // may have differing replica versions. This is fine, we rely on higher level
+  // orchestration primitives[1][2] to shepherd all replicas in the system to
+  // the right version.
+  //
+  // [1]: migration.Manager
+  // [2]: PurgeOutdatedReplicas
+  roachpb.Version version = 12;
+
+  // raft_closed_timestamp is the largest timestamp that is known to have been
+  // closed through Raft commands. This means that the current leaseholder (if
+  // any) and any future leaseholder will not evaluate writes at or below this
+  // timestamp, and also that any in-flight commands that can still apply are
+  // writing at higher timestamps. Non-leaseholder replicas are free to serve
+  // "follower reads" at or below this timestamp.
+  util.hlc.Timestamp raft_closed_timestamp = 13 [(gogoproto.nullable) = false];
+
+  // The term corresponding to RaftAppliedIndex. This is derived from
+  // RangeAppliedState.RaftAppliedIndexTerm.
+  uint64 raft_applied_index_term = 14 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.RaftTerm"];
+
+  // GCHint contains GC hint information for the replica. If hint
+  // timestamp is set that means all data in the range is expected to be
+  // garbage at that time and MVCC GC should optimize its removal together
+  // with other related ranges to reduce load on pebble.
+  roachpb.GCHint gc_hint = 15 [(gogoproto.customname) = "GCHint"];
+
+  // ForceFlushIndex is only non-empty for the Range Raft state machine cached
+  // in memory (see the comment at the top of ReplicaState). It is never used
+  // for proposer-evaluated Raft (this represents a Raft index, which is
+  // unknown to the proposer evaluator). It is persisted on the Replica with
+  // the RangeForceFlushKey.
+  roachpb.ForceFlushIndex force_flush_index = 16 [(gogoproto.nullable) = false];
+
+  reserved 8, 9, 10;
+}
+
+// RangeInfo is used for reporting status information about a range out through
+// the status server.
+message RangeInfo {
+  option (gogoproto.equal) = true;
+
+  ReplicaState state = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // The highest (and last) index in the Raft log.
+  uint64 last_index = 2 [(gogoproto.casttype) ="github.com/cockroachdb/cockroach/pkg/kv/kvpb.RaftIndex"];
+  uint64 num_pending = 3;
+  reserved 4; // previously last verification timestamp for verify queue.
+  uint64 num_dropped = 5;
+  // raft_log_size may be inaccurate, see storage.Replica.mu.raftLogSizeTrusted.
+  int64 raft_log_size = 6;
+  bool raft_log_size_trusted = 10;
+  // Approximately the amount of quota available.
+  int64 approximate_proposal_quota = 7;
+  // Index for which quota has already been released.
+  int64 proposal_quota_base_index = 14;
+  // Quota amounts for commands which the leader has applied but for which we're
+  // still waiting for followers to ack the corresponding entries. First entry
+  // corresponds to base_index+1 above.
+  repeated int64 proposal_quota_release_queue = 15;
+  // The max size the range can grow to before it will be split.
+  int64 range_max_bytes = 8;
+  reserved 9, 11;
+  // The closed timestamp active on the replica when the info was generated.
+  // This is the actual timestamp at or below which requests can be served from
+  // this replica at this moment (assuming it is not the leaseholder). This
+  // takes into account the current lease applied index, and the closed
+  // timestamp information received from other nodes, among other things.
+  util.hlc.Timestamp active_closed_timestamp = 12 [(gogoproto.nullable) = false];
+  // The number of Rangefeed registrations attached to the Replica.
+  int64 rangefeed_registrations = 13;
+  // TenantID is the ID of the tenant for which this range contains data.
+  uint64 tenant_id = 16 [(gogoproto.customname) = "TenantID"];
+  reserved 17;
+  roachpb.RangeClosedTimestampPolicy closed_timestamp_policy = 18;
+  // Closed timestamp info communicated through the side-transport. See also
+  // state.raft_closed_timestamp.
+  RangeSideTransportInfo closed_timestamp_sidetransport_info = 19 [(gogoproto.customname) = "ClosedTimestampSideTransportInfo", (gogoproto.nullable) = false ];
+  // The circuit breaker error, if any. This is nonzero if and only if the
+  // circuit breaker on the source Replica is tripped.
+  string circuit_breaker_error = 20;
+  repeated int32 paused_replicas = 21 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID"];
+  // Next tag: 22
+}
+
+// RangeSideTransportInfo describes a range's closed timestamp info communicated
+// through the side-transport.
+//
+// This proto combines information that lives on a replica with information
+// taken from the side-transport's Receiver "centralized" state.
+message RangeSideTransportInfo {
+  option (gogoproto.equal) = true;
+
+  util.hlc.Timestamp replica_closed = 1 [(gogoproto.nullable) = false];
+  int64 replica_lai = 2 [(gogoproto.customname) = "ReplicaLAI",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.LeaseAppliedIndex"];
+
+  util.hlc.Timestamp central_closed = 3 [(gogoproto.nullable) = false];
+  int64 central_lai = 4 [(gogoproto.customname) = "CentralLAI",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.LeaseAppliedIndex"];
+}
+
+
+// RangeAppliedState combines the raft and lease applied indices with
+// mvcc stats. These are all persisted on each transition of the Raft
+// state machine (i.e. on each Raft application), so they are stored
+// in the same RocksDB key for efficiency.
+message RangeAppliedState {
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+
+  // raft_applied_index is the highest (and last) index applied to the Raft
+  // state machine.
+  uint64 raft_applied_index = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.RaftIndex"];
+  // lease_applied_index is the highest (and last) lease index applied to the
+  // Raft state machine.
+  uint64 lease_applied_index = 2  [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.LeaseAppliedIndex"];
+  // range_stats is the set of mvcc stats that accounts for the current value
+  // of the Raft state machine.
+  MVCCPersistentStats range_stats = 3 [(gogoproto.nullable) = false];
+
+  // raft_closed_timestamp is the largest timestamp that is known to have been
+  // closed through Raft commands as of this lease applied index. This means
+  // that the current leaseholder (if any) and any future leaseholder will not
+  // evaluate writes at or below this timestamp, and also that any in-flight
+  // commands that can still apply are writing at higher timestamps.
+  // Non-leaseholder replicas are free to serve "follower reads" at or below
+  // this timestamp.
+  util.hlc.Timestamp raft_closed_timestamp = 4 [(gogoproto.nullable) = false];
+
+  // raft_applied_index_term is the term corresponding to raft_applied_index.
+  // The serialized proto will not contain this field until code starts
+  // setting it to a value > 0 (in v22.1). This is desirable since we don't
+  // want a mixed version cluster (v21.2 and v22.1) to have divergent replica
+  // state simply because we have introduced this field.
+  uint64 raft_applied_index_term = 5 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.RaftTerm"];
+}
+
+// MVCCPersistentStats is convertible to MVCCStats, but uses signed variable
+// width encodings for most fields that make it efficient to store positive
+// values but inefficient to store negative values. This makes the encodings
+// incompatible.
+message MVCCPersistentStats {
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+
+  int64 contains_estimates = 14; // must never go negative absent a bug
+  sfixed64 last_update_nanos = 1;
+  sfixed64 lock_age = 2;
+  sfixed64 gc_bytes_age = 3 [(gogoproto.customname) = "GCBytesAge"];
+  int64 live_bytes = 4;
+  int64 live_count = 5;
+  int64 key_bytes = 6;
+  int64 key_count = 7;
+  int64 val_bytes = 8;
+  int64 val_count = 9;
+  int64 intent_bytes = 10;
+  int64 intent_count = 11;
+  int64 lock_bytes = 21;
+  int64 lock_count = 16;
+  int64 range_key_count = 17;
+  int64 range_key_bytes = 18;
+  int64 range_val_count = 19;
+  int64 range_val_bytes = 20;
+  int64 sys_bytes = 12;
+  int64 sys_count = 13;
+  int64 abort_span_bytes = 15;
+}
+

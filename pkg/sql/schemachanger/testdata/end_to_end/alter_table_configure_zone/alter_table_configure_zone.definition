@@ -1,0 +1,7 @@
+setup
+CREATE TABLE t(i int);
+----
+
+test
+ALTER TABLE t CONFIGURE ZONE USING num_replicas = 7, gc.ttlseconds = 10000;
+----

@@ -1,0 +1,202 @@
+statement ok
+CREATE TABLE a(a INT PRIMARY KEY, b TEXT);
+INSERT INTO a VALUES(1,'2')
+
+# Virtual tables get an implicit record type.
+query TT
+SELECT (1, 'cat', 2, '{}')::pg_catalog.pg_namespace, ((3, 'dog', 4, ARRAY[]::STRING[])::pg_namespace).nspname
+----
+(1,cat,2,{})  dog
+
+query TITIT colnames
+SELECT t, t.a, t.b, t.* FROM a AS t
+----
+t      a  b  a  b
+(1,2)  1  2  1  2
+
+query TT
+SELECT (1, 'foo')::a, ((1, 'foo')::a).b
+----
+(1,foo)  foo
+
+# Can't cast if wrong element length.
+query error invalid cast: tuple{int} -> tuple{int AS a, string AS b}
+SELECT (1,)::a
+
+query error invalid cast: tuple{int, int, int} -> tuple{int AS a, string AS b}
+SELECT (1,3,5)::a
+
+# Types within a tuple auto-cast to each other when possible
+query TT
+SELECT (1, 3)::a, ('3', 'blah')::a
+----
+(1,3)  (3,blah)
+
+# ... but fail when not possible.
+query error could not parse \"blah\" as type int
+SELECT ('blah', 'blah')::a
+
+# You can resolve types with schemas and dbs attached.
+query TT
+SELECT (1, 'foo')::public.a, (1, 'foo')::test.public.a
+----
+(1,foo) (1,foo)
+
+# The tuple type doesn't contain implicit columns like rowid or hash columns.
+statement ok
+CREATE TABLE implicit_col(d INT, e TEXT, INDEX (e) USING HASH WITH (bucket_count=8))
+
+query T
+SELECT (1, 'foo')::implicit_col
+----
+(1,foo)
+
+# You can cast between tuple types and their labels change.
+query TITIT colnames
+SELECT t::implicit_col, (t::implicit_col).d, (t::implicit_col).e, (t::implicit_col).* FROM a AS t
+----
+t      d  e  d  e
+(1,2)  1  2  1  2
+
+# You can't use a table type as a column type.
+statement error cannot use table record type as table column
+CREATE TABLE fail (a implicit_col)
+
+# REGTYPE works, and returns the type ID.
+query TB
+SELECT 'a'::REGTYPE, 'a'::REGTYPE::INT = 'a'::REGCLASS::INT + 100000
+----
+a  true
+
+let $tabletypeid
+SELECT 'a'::REGTYPE::INT
+
+query T
+SELECT $tabletypeid::REGTYPE::TEXT
+----
+a
+
+query T
+SELECT pg_typeof((1,3)::a)
+----
+a
+
+# You can create arrays of tuples of the table type.
+query T
+SELECT ARRAY[(1, 3)::a, (1, 2)::a]
+----
+{"(1,3)","(1,2)"}
+
+# Their pg_type looks like a[].
+query T
+SELECT pg_typeof(ARRAY[(1, 3)::a, (1, 2)::a])
+----
+a[]
+
+# But getting the OID for the array type gives back the same thing as
+# generic record[].
+query T
+SELECT pg_typeof(ARRAY[(1, 3)::a, (1, 2)::a])::regtype::oid::regtype
+----
+a[]
+
+# You can't drop the type descriptor.
+statement error cannot modify table record type \"a\"
+DROP TYPE a
+
+# User-defined types in table defs work fine.
+statement ok
+CREATE TYPE e AS ENUM ('a', 'b');
+CREATE TABLE b (a INT PRIMARY KEY, e e)
+
+query T
+SELECT (1, 'a')::b
+----
+(1,a)
+
+
+# Can't use a table record type in a persisted descriptor.
+statement error cannot modify table record type
+CREATE TABLE fail (b INT DEFAULT (((1,'a')::b).a))
+
+statement error cannot modify table record type
+ALTER TABLE b ADD COLUMN b INT DEFAULT (((1,'a')::b).a)
+
+statement error cannot modify table record type
+CREATE TABLE fail (b INT AS (((1,'a')::b).a) VIRTUAL)
+
+statement error cannot modify table record type
+ALTER TABLE b ADD COLUMN b INT AS (((1,'a')::b).a) VIRTUAL
+
+statement error cannot modify table record type
+CREATE TABLE fail (b INT AS (((1,'a')::b).a) STORED)
+
+statement error cannot modify table record type
+ALTER TABLE b ADD COLUMN b INT AS (((1,'a')::b).a) STORED
+
+statement error cannot modify table record type
+CREATE TABLE fail (b INT, INDEX(b) WHERE b > (((1,'a')::b).a))
+
+statement error cannot modify table record type
+CREATE INDEX ON a(a) WHERE a > (((1,'a')::b).a)
+
+statement error cannot modify table record type
+CREATE TABLE fail (b INT, INDEX((b + (((1,'a')::b).a))))
+
+statement error cannot modify table record type
+CREATE INDEX ON a((a + (((1,'a')::b).a)))
+
+statement error cannot use table record type as table column
+CREATE VIEW v AS SELECT (1,'a')::b
+
+statement error cannot modify table record type "b"
+CREATE VIEW v AS SELECT ((1,'a')::b).a
+
+# Test parsing/casting of record types from string literals.
+
+query T
+SELECT COALESCE(ARRAY[ROW(1, 2)], '{}')
+----
+{"(1,2)"}
+
+query T
+SELECT COALESCE(NULL, '{}'::record[]);
+----
+{}
+
+query T
+SELECT '{"(1, 3)", "(1, 2)"}'::a[]
+----
+{"(1,\" 3\")","(1,\" 2\")"}
+
+query T
+SELECT COALESCE(NULL::a[], '{"(1, 3)", "(1, 2)"}');
+----
+{"(1,\" 3\")","(1,\" 2\")"}
+
+statement ok
+CREATE TABLE strings(s TEXT);
+INSERT INTO strings VALUES('(1,2)'), ('(5,6)')
+
+query TT
+SELECT s, s::a FROM strings ORDER BY 1
+----
+(1,2)  (1,2)
+(5,6)  (5,6)
+
+query T
+SELECT '(1 , 2)'::a
+----
+(1," 2")
+
+statement error pgcode 22P02 malformed record literal
+SELECT '()'::a
+
+statement error pgcode 0A000 cannot parse anonymous record type
+SELECT s, s::record FROM strings ORDER BY 1
+
+statement error pgcode 0A000 cannot parse anonymous record type
+SELECT '()'::record
+
+statement error pgcode 0A000 cannot parse anonymous record type
+SELECT '(1,4)'::record

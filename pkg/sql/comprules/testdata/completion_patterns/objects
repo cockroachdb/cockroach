@@ -1,0 +1,206 @@
+filter
+objects:
+----
+
+subtest after_keyword
+
+comp at=8
+select
+----
+i_
+ ^
+--
+objects: completing for "" (8,8), schema: IN (TABLE unnest(current_schemas(true)))
+--sql:
+SELECT c.relname AS completion,
+                'relation' AS category,
+                substr(COALESCE(d.description, ''), e'[^\n]{0,80}') as description,
+                $2:::INT AS start,
+                $3:::INT AS end
+           FROM pg_catalog.pg_class c
+           JOIN pg_catalog.pg_namespace n
+                ON c.relnamespace = n.oid AND n.nspname IN (TABLE unnest(current_schemas(true)))
+LEFT OUTER JOIN pg_catalog.pg_description d
+                ON c.oid = d.objoid AND d.classoid = 'pg_catalog.pg_class'::REGCLASS::OID
+          WHERE c.reltype != 0
+            AND left(relname, length($1:::STRING)) = $1::STRING
+            AND (nspname != 'pg_catalog' OR $4:::BOOL OR left($1:::STRING, 3) = 'pg_')
+--placeholders: []interface {}{"", 8, 8, false}
+
+subtest end
+
+subtest at_ident
+
+comp at=8
+select xor
+----
+ii'
+  ^
+--
+objects: completing for "xor" (7,10), schema: IN (TABLE unnest(current_schemas(true)))
+--sql:
+SELECT c.relname AS completion,
+                'relation' AS category,
+                substr(COALESCE(d.description, ''), e'[^\n]{0,80}') as description,
+                $2:::INT AS start,
+                $3:::INT AS end
+           FROM pg_catalog.pg_class c
+           JOIN pg_catalog.pg_namespace n
+                ON c.relnamespace = n.oid AND n.nspname IN (TABLE unnest(current_schemas(true)))
+LEFT OUTER JOIN pg_catalog.pg_description d
+                ON c.oid = d.objoid AND d.classoid = 'pg_catalog.pg_class'::REGCLASS::OID
+          WHERE c.reltype != 0
+            AND left(relname, length($1:::STRING)) = $1::STRING
+            AND (nspname != 'pg_catalog' OR $4:::BOOL OR left($1:::STRING, 3) = 'pg_')
+--placeholders: []interface {}{"xor", 7, 10, false}
+
+comp at=12
+select xor
+----
+ii_
+  ^
+--
+objects: completing for "" (12,12), schema: IN (TABLE unnest(current_schemas(true)))
+--sql:
+SELECT c.relname AS completion,
+                'relation' AS category,
+                substr(COALESCE(d.description, ''), e'[^\n]{0,80}') as description,
+                $2:::INT AS start,
+                $3:::INT AS end
+           FROM pg_catalog.pg_class c
+           JOIN pg_catalog.pg_namespace n
+                ON c.relnamespace = n.oid AND n.nspname IN (TABLE unnest(current_schemas(true)))
+LEFT OUTER JOIN pg_catalog.pg_description d
+                ON c.oid = d.objoid AND d.classoid = 'pg_catalog.pg_class'::REGCLASS::OID
+          WHERE c.reltype != 0
+            AND left(relname, length($1:::STRING)) = $1::STRING
+            AND (nspname != 'pg_catalog' OR $4:::BOOL OR left($1:::STRING, 3) = 'pg_')
+--placeholders: []interface {}{"", 12, 12, false}
+
+subtest end
+
+subtest after_period
+
+comp at=10
+select a.xor
+----
+ii.i'
+    ^
+--
+objects: completing for "xor" (9,12), schema: = 'a'
+--sql:
+SELECT c.relname AS completion,
+                'relation' AS category,
+                substr(COALESCE(d.description, ''), e'[^\n]{0,80}') as description,
+                $2:::INT AS start,
+                $3:::INT AS end
+           FROM pg_catalog.pg_class c
+           JOIN pg_catalog.pg_namespace n
+                ON c.relnamespace = n.oid AND n.nspname = 'a'
+LEFT OUTER JOIN pg_catalog.pg_description d
+                ON c.oid = d.objoid AND d.classoid = 'pg_catalog.pg_class'::REGCLASS::OID
+          WHERE c.reltype != 0
+            AND left(relname, length($1:::STRING)) = $1::STRING
+            AND (nspname != 'pg_catalog' OR $4:::BOOL OR left($1:::STRING, 3) = 'pg_')
+--placeholders: []interface {}{"xor", 9, 12, true}
+
+comp at=10
+select a.
+----
+ii._
+   ^
+--
+objects: completing for "" (10,10), schema: = 'a'
+--sql:
+SELECT c.relname AS completion,
+                'relation' AS category,
+                substr(COALESCE(d.description, ''), e'[^\n]{0,80}') as description,
+                $2:::INT AS start,
+                $3:::INT AS end
+           FROM pg_catalog.pg_class c
+           JOIN pg_catalog.pg_namespace n
+                ON c.relnamespace = n.oid AND n.nspname = 'a'
+LEFT OUTER JOIN pg_catalog.pg_description d
+                ON c.oid = d.objoid AND d.classoid = 'pg_catalog.pg_class'::REGCLASS::OID
+          WHERE c.reltype != 0
+            AND left(relname, length($1:::STRING)) = $1::STRING
+            AND (nspname != 'pg_catalog' OR $4:::BOOL OR left($1:::STRING, 3) = 'pg_')
+--placeholders: []interface {}{"", 10, 10, true}
+
+comp at=9
+select a.
+----
+ii.'
+   ^
+--
+objects: completing for "" (9,9), schema: = 'a'
+--sql:
+SELECT c.relname AS completion,
+                'relation' AS category,
+                substr(COALESCE(d.description, ''), e'[^\n]{0,80}') as description,
+                $2:::INT AS start,
+                $3:::INT AS end
+           FROM pg_catalog.pg_class c
+           JOIN pg_catalog.pg_namespace n
+                ON c.relnamespace = n.oid AND n.nspname = 'a'
+LEFT OUTER JOIN pg_catalog.pg_description d
+                ON c.oid = d.objoid AND d.classoid = 'pg_catalog.pg_class'::REGCLASS::OID
+          WHERE c.reltype != 0
+            AND left(relname, length($1:::STRING)) = $1::STRING
+            AND (nspname != 'pg_catalog' OR $4:::BOOL OR left($1:::STRING, 3) = 'pg_')
+--placeholders: []interface {}{"", 9, 9, true}
+
+
+subtest end
+
+subtest quoted_ident
+
+comp at=21
+select "pg_catalog".xor
+----
+ii.i'
+    ^
+--
+objects: completing for "xor" (20,23), schema: = 'pg_catalog'
+--sql:
+SELECT c.relname AS completion,
+                'relation' AS category,
+                substr(COALESCE(d.description, ''), e'[^\n]{0,80}') as description,
+                $2:::INT AS start,
+                $3:::INT AS end
+           FROM pg_catalog.pg_class c
+           JOIN pg_catalog.pg_namespace n
+                ON c.relnamespace = n.oid AND n.nspname = 'pg_catalog'
+LEFT OUTER JOIN pg_catalog.pg_description d
+                ON c.oid = d.objoid AND d.classoid = 'pg_catalog.pg_class'::REGCLASS::OID
+          WHERE c.reltype != 0
+            AND left(relname, length($1:::STRING)) = $1::STRING
+            AND (nspname != 'pg_catalog' OR $4:::BOOL OR left($1:::STRING, 3) = 'pg_')
+--placeholders: []interface {}{"xor", 20, 23, true}
+
+# Quoted uppercase is a different schema entirely.
+comp at=22
+select "PG_CATALOG".xor
+----
+ii.i'
+    ^
+--
+objects: completing for "xor" (20,23), schema: = 'PG_CATALOG'
+--sql:
+SELECT c.relname AS completion,
+                'relation' AS category,
+                substr(COALESCE(d.description, ''), e'[^\n]{0,80}') as description,
+                $2:::INT AS start,
+                $3:::INT AS end
+           FROM pg_catalog.pg_class c
+           JOIN pg_catalog.pg_namespace n
+                ON c.relnamespace = n.oid AND n.nspname = 'PG_CATALOG'
+LEFT OUTER JOIN pg_catalog.pg_description d
+                ON c.oid = d.objoid AND d.classoid = 'pg_catalog.pg_class'::REGCLASS::OID
+          WHERE c.reltype != 0
+            AND left(relname, length($1:::STRING)) = $1::STRING
+            AND (nspname != 'pg_catalog' OR $4:::BOOL OR left($1:::STRING, 3) = 'pg_')
+--placeholders: []interface {}{"xor", 20, 23, true}
+
+
+subtest end

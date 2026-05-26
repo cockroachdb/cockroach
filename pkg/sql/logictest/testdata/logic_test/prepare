@@ -1,0 +1,1791 @@
+# LogicTest: local
+
+## Tests for ensuring that prepared statements can't get overwritten and for
+## deallocate and deallocate all.
+statement error prepared statement \"a\" does not exist
+DEALLOCATE a
+
+statement
+PREPARE a AS SELECT 1
+
+query I
+EXECUTE a
+----
+1
+
+query I
+EXECUTE a
+----
+1
+
+statement error prepared statement \"a\" already exists
+PREPARE a AS SELECT 1
+
+statement
+DEALLOCATE a
+
+statement error prepared statement \"a\" does not exist
+DEALLOCATE a
+
+statement error prepared statement \"a\" does not exist
+EXECUTE a
+
+statement
+PREPARE a AS SELECT 1
+
+statement
+PREPARE b AS SELECT 1
+
+query I
+EXECUTE a
+----
+1
+
+query I
+EXECUTE b
+----
+1
+
+statement ok
+DEALLOCATE ALL
+
+statement error prepared statement \"a\" does not exist
+DEALLOCATE a
+
+statement error prepared statement \"a\" does not exist
+EXECUTE a
+
+statement error prepared statement \"b\" does not exist
+DEALLOCATE b
+
+statement error prepared statement \"b\" does not exist
+EXECUTE b
+
+## Typing tests - no type hints
+#
+query error at or near \"\)\": syntax error
+PREPARE a as ()
+
+statement error could not determine data type of placeholder \$1
+PREPARE a AS SELECT $1
+
+statement error could not determine data type of placeholder \$1
+PREPARE a AS SELECT $2:::int
+
+statement error could not determine data type of placeholder \$2
+PREPARE a AS SELECT $1:::int, $3:::int
+
+statement ok
+PREPARE a AS SELECT $1:::int + $2
+
+query I
+EXECUTE a(3, 1)
+----
+4
+
+query error could not parse "foo" as type int
+EXECUTE a('foo', 1)
+
+query I
+EXECUTE a(3.5, 1)
+----
+5
+
+query error aggregate functions are not allowed in EXECUTE parameter
+EXECUTE a(max(3), 1)
+
+query error window functions are not allowed in EXECUTE parameter
+EXECUTE a(rank() over (partition by 3), 1)
+
+query error variable sub-expressions are not allowed in EXECUTE parameter
+EXECUTE a((SELECT 3), 1)
+
+query error wrong number of parameters for prepared statement \"a\": expected 2, got 3
+EXECUTE a(1, 1, 1)
+
+query error wrong number of parameters for prepared statement \"a\": expected 2, got 0
+EXECUTE a
+
+# Regression test for #36153.
+statement error unknown signature: array_length\(int, int\)
+PREPARE fail AS SELECT array_length($1, 1)
+
+## Type hints
+
+statement
+PREPARE b (int) AS SELECT $1
+
+query I
+EXECUTE b(3)
+----
+3
+
+query error could not parse "foo" as type int
+EXECUTE b('foo')
+
+statement
+PREPARE allTypes(int, float, string, bytea, date, timestamp, timestamptz, bool, decimal) AS
+SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9
+
+query IRTTTTTBR
+EXECUTE allTypes(0, 0.0, 'foo', 'bar', '2017-08-08', '2015-08-30 03:34:45.34567', '2015-08-30 03:34:45.34567', true, 3.4)
+----
+0  0  foo  bar  2017-08-08 00:00:00 +0000 +0000  2015-08-30 03:34:45.34567 +0000 +0000  2015-08-30 03:34:45.34567 +0000 UTC  true  3.4
+
+## Other
+
+statement
+PREPARE c AS SELECT count(*)
+
+query I
+EXECUTE c
+----
+1
+
+statement
+CREATE TABLE t (a int)
+
+statement
+PREPARE i AS INSERT INTO t(a) VALUES($1) RETURNING $1 + 1
+
+statement
+PREPARE s AS SELECT * FROM t
+
+query I
+EXECUTE i(1)
+----
+2
+
+query I
+EXECUTE i(2)
+----
+3
+
+query error could not parse "foo" as type int
+EXECUTE i('foo')
+
+query I
+EXECUTE i(3.3)
+----
+4
+
+query I
+EXECUTE i(4.3::int)
+----
+5
+
+query I colnames,rowsort
+EXECUTE s
+----
+a
+1
+2
+3
+4
+
+# DISCARD ROWS drops the results, but does not affect the schema or the
+# internal plan.
+query I colnames
+EXECUTE s DISCARD ROWS
+----
+a
+
+statement
+DEALLOCATE ALL
+
+# Regression test for #15970
+
+statement
+PREPARE x AS SELECT avg(column1) OVER (PARTITION BY column2) FROM (VALUES (1, 2), (3, 4))
+
+query R rowsort
+EXECUTE x
+----
+1.0000000000000000000
+3.0000000000000000000
+
+statement
+PREPARE y AS SELECT avg(a.column1) OVER (PARTITION BY a.column2) FROM (VALUES (1, 2), (3, 4)) a
+
+query R rowsort
+EXECUTE y
+----
+1.0000000000000000000
+3.0000000000000000000
+
+statement
+DEALLOCATE ALL
+
+# Regression test for #16062
+
+statement
+CREATE TABLE IF NOT EXISTS f (v INT)
+
+statement
+PREPARE x AS SELECT * FROM f
+
+statement
+ALTER TABLE f ADD COLUMN u int
+
+statement
+INSERT INTO f VALUES (1, 2)
+
+statement error cached plan must not change result type
+EXECUTE x
+
+# Ensure that plan changes prevent INSERTs from succeeding.
+
+statement
+PREPARE y AS INSERT INTO f VALUES ($1, $2) RETURNING *
+
+statement
+EXECUTE y (2, 3)
+
+statement
+ALTER TABLE f ADD COLUMN t int
+
+statement error cached plan must not change result type
+EXECUTE y (3, 4)
+
+query III rowsort
+SELECT * FROM f
+----
+1 2 NULL
+2 3 NULL
+
+# Ensure that we have a memory monitor for preparing statements
+
+statement
+PREPARE z AS SELECT upper('a')
+
+# Ensure that GROUP BY HAVING doesn't mutate the parsed AST (#16388)
+statement
+CREATE TABLE foo (a int)
+
+statement
+PREPARE groupbyhaving AS SELECT min(1) FROM foo WHERE a = $1 GROUP BY a HAVING count(a) = 0
+
+query I
+EXECUTE groupbyhaving(1)
+----
+
+# Mismatch between expected and hinted types should prepare, but potentially
+# fail to execute if the cast is not possible.
+statement
+PREPARE wrongTypePossibleCast(float) AS INSERT INTO foo VALUES ($1)
+
+statement
+EXECUTE wrongTypePossibleCast(2.3)
+
+statement
+PREPARE wrongTypeImpossibleCast(string) AS INSERT INTO foo VALUES ($1)
+
+statement
+EXECUTE wrongTypeImpossibleCast('3')
+
+statement error could not parse "crabgas" as type int
+EXECUTE wrongTypeImpossibleCast('crabgas')
+
+# Check statement compatibility
+
+statement ok
+PREPARE s AS SELECT a FROM t; PREPARE p1 AS UPSERT INTO t(a) VALUES($1) RETURNING a
+
+query I rowsort
+EXECUTE s
+----
+1
+2
+3
+4
+
+query I
+EXECUTE p1(123)
+----
+123
+
+statement ok
+PREPARE p2 AS UPDATE t SET a = a + $1 RETURNING a
+
+query I rowsort
+EXECUTE s
+----
+1
+2
+3
+4
+123
+
+query I rowsort
+EXECUTE p2(123)
+----
+124
+125
+126
+127
+246
+
+statement ok
+PREPARE p3 AS DELETE FROM t WHERE a = $1 RETURNING a
+
+query I rowsort
+EXECUTE s
+----
+124
+125
+126
+127
+246
+
+query I
+EXECUTE p3(124)
+----
+124
+
+statement ok
+PREPARE p4 AS CANCEL JOB $1
+
+query error pq: job with ID 123 does not exist
+EXECUTE p4(123)
+
+statement ok
+PREPARE p5 AS PAUSE JOB $1
+
+query error pq: job with ID 123 does not exist
+EXECUTE p5(123)
+
+statement ok
+PREPARE p6 AS RESUME JOB $1
+
+query error pq: job with ID 123 does not exist
+EXECUTE p6(123)
+
+# Ensure that SET / SET CLUSTER SETTING know about placeholders
+statement ok
+PREPARE setp(string) AS SET application_name = $1
+
+query T
+SET application_name = 'foo'; SHOW application_name
+----
+foo
+
+query T
+EXECUTE setp('hello'); SHOW application_name
+----
+hello
+
+# Note: we can't check the result of SET CLUSTER SETTING synchronously
+# because it doesn't propagate immediately.
+
+statement ok
+PREPARE sets(string) AS SET CLUSTER SETTING cluster.label = $1
+
+statement ok
+EXECUTE sets('hello')
+
+# #19597
+
+statement error could not determine data type of placeholder
+PREPARE x19597 AS SELECT $1 IN ($2, null);
+
+statement error multiple conflicting type annotations around \$1
+PREPARE invalid AS SELECT $1:::int + $1:::float
+
+statement error type annotation around \$1 conflicts with specified type int
+PREPARE invalid (int) AS SELECT $1:::float
+
+statement ok
+PREPARE innerStmt AS SELECT $1:::int i, 'foo' t
+
+statement error at or near "execute": syntax error
+PREPARE outerStmt AS SELECT * FROM [EXECUTE innerStmt(3)] WHERE t = $1
+
+query error at or near "execute": syntax error
+SELECT * FROM [EXECUTE innerStmt(1)] CROSS JOIN [EXECUTE x]
+
+statement ok
+PREPARE selectin AS SELECT 1 in ($1, $2)
+
+statement ok
+PREPARE selectin2 AS SELECT $1::int in ($2, $3)
+
+query B
+EXECUTE selectin(5, 1)
+----
+true
+
+query B
+EXECUTE selectin2(1, 5, 1)
+----
+true
+
+# Regression tests for #21701.
+statement ok
+CREATE TABLE kv (k INT PRIMARY KEY, v INT)
+
+statement ok
+INSERT INTO kv VALUES (1, 1), (2, 2), (3, 3)
+
+statement ok
+PREPARE x21701a AS SELECT * FROM kv WHERE k = $1
+
+query II
+EXECUTE x21701a(NULL)
+----
+
+statement ok
+PREPARE x21701b AS SELECT * FROM kv WHERE k IS DISTINCT FROM $1
+
+query II rowsort
+EXECUTE x21701b(NULL)
+----
+1  1
+2  2
+3  3
+
+statement ok
+PREPARE x21701c AS SELECT * FROM kv WHERE k IS NOT DISTINCT FROM $1
+
+query II
+EXECUTE x21701c(NULL)
+----
+
+statement ok
+DROP TABLE kv
+
+# Test that a PREPARE statement after a CREATE TABLE in the same TRANSACTION
+# doesn't hang.
+subtest 24578
+
+statement ok
+BEGIN TRANSACTION
+
+statement ok
+create table bar (id integer)
+
+statement ok
+PREPARE forbar AS insert into bar (id) VALUES (1)
+
+statement ok
+COMMIT TRANSACTION
+
+# Test placeholder in aggregate.
+statement ok
+CREATE TABLE aggtab (a INT PRIMARY KEY);
+INSERT INTO aggtab (a) VALUES (1)
+
+statement ok
+PREPARE aggprep AS SELECT max(a + $1:::int) FROM aggtab
+
+query I
+EXECUTE aggprep(10)
+----
+11
+
+query I
+EXECUTE aggprep(20)
+----
+21
+
+# Test placeholder in subquery, where the placeholder will be constant folded
+# and then used to select an index.
+statement ok
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT);
+CREATE TABLE xyz (x INT PRIMARY KEY, y INT, z INT, INDEX(y));
+INSERT INTO abc (a, b, c) VALUES (1, 10, 100);
+INSERT INTO xyz (x, y, z) VALUES (1, 5, 50);
+INSERT INTO xyz (x, y, z) VALUES (2, 6, 60);
+
+statement ok
+PREPARE subqueryprep AS SELECT * FROM abc WHERE EXISTS(SELECT * FROM xyz WHERE y IN ($1 + 1))
+
+query III
+EXECUTE subqueryprep(4)
+----
+1  10  100
+
+query III
+EXECUTE subqueryprep(5)
+----
+1  10  100
+
+query III
+EXECUTE subqueryprep(6)
+----
+
+#
+# Test prepared statements that rely on context, and ensure they are invalidated
+# when that context changes.
+#
+
+statement ok
+CREATE DATABASE otherdb
+
+statement ok
+USE otherdb
+
+statement ok
+CREATE TABLE othertable (a INT PRIMARY KEY, b INT); INSERT INTO othertable (a, b) VALUES (1, 10)
+
+## Current database change: Use current_database function, and ensure its return
+## value changes when current database changes.
+statement ok
+PREPARE change_db AS SELECT current_database()
+
+query T
+EXECUTE change_db
+----
+otherdb
+
+statement ok
+USE test
+
+query T
+EXECUTE change_db
+----
+test
+
+statement ok
+USE otherdb
+
+## Name resolution change: Query table in current database. Ensure that it is
+## not visible in another database.
+statement ok
+PREPARE change_db_2 AS SELECT * FROM othertable
+
+query II
+EXECUTE change_db_2
+----
+1  10
+
+statement ok
+USE test
+
+query error pq: relation "othertable" does not exist
+EXECUTE change_db_2
+
+statement ok
+CREATE TABLE othertable (a INT PRIMARY KEY, b INT); INSERT INTO othertable (a, b) VALUES (2, 20)
+
+query II
+EXECUTE change_db_2
+----
+2  20
+
+# Same test with a query which refers to the same table twice initially, but
+# later the two tables are different.
+statement ok
+PREPARE change_db_3 AS SELECT * from othertable AS t1, test.othertable AS t2
+
+query IIII
+EXECUTE change_db_3
+----
+2 20 2 20
+
+statement ok
+USE otherdb
+
+query IIII
+EXECUTE change_db_3
+----
+1 10 2 20
+
+statement ok
+DROP TABLE test.othertable
+
+## Search path change: Change the search path and ensure that the prepared plan
+## is invalidated.
+statement ok
+PREPARE change_search_path AS SELECT * FROM othertable
+
+query II
+EXECUTE change_search_path
+----
+1  10
+
+statement ok
+SET search_path = pg_catalog
+
+query error pq: relation "othertable" does not exist
+EXECUTE change_search_path
+
+## New table in search path: check tricky case where originally resolved table
+## still exists but re-resolving with new search path yields another table.
+statement ok
+SET search_path=public,pg_catalog
+
+# During prepare, pg_type resolves to pg_catalog.pg_type.
+statement ok
+PREPARE new_table_in_search_path AS SELECT typname FROM pg_type
+
+statement ok
+CREATE TABLE pg_type(typname STRING); INSERT INTO pg_type VALUES('test')
+
+# Now, it should resolve to the table we just created.
+query T
+EXECUTE new_table_in_search_path
+----
+test
+
+statement ok
+DROP TABLE pg_type
+
+## Even more tricky case: the query has two table references that resolve to
+## the same table now, but later resolve to separate tables.
+statement ok
+PREPARE new_table_in_search_path_2 AS
+  SELECT a.typname, b.typname FROM pg_type AS a, pg_catalog.pg_type AS b ORDER BY a.typname, b.typname LIMIT 1
+
+query TT
+EXECUTE new_table_in_search_path_2
+----
+_aclitem  _aclitem
+
+statement ok
+CREATE TABLE pg_type(typname STRING); INSERT INTO pg_type VALUES('test')
+
+query TT
+EXECUTE new_table_in_search_path_2
+----
+test  _aclitem
+
+statement ok
+DROP TABLE pg_type
+
+statement ok
+RESET search_path
+
+## Functions: Use function which depends on context; ensure that it's not
+## constant folded when part of prepared plan.
+query B
+SELECT has_column_privilege('testuser', 'othertable', 1, 'SELECT')
+----
+false
+
+statement ok
+GRANT ALL ON othertable TO testuser
+
+query B
+SELECT has_column_privilege('testuser', 'othertable', 1, 'SELECT')
+----
+true
+
+statement ok
+REVOKE ALL ON othertable FROM testuser
+
+## Location change: Change the current location (affects timezone) and make
+## sure the query is invalidated.
+statement ok
+PREPARE change_loc AS SELECT '2000-01-01 18:05:10.123'::timestamptz
+
+query T
+EXECUTE change_loc
+----
+2000-01-01 18:05:10.123 +0000 UTC
+
+statement ok
+SET TIME ZONE 'EST'
+
+query T
+EXECUTE change_loc
+----
+2000-01-01 18:05:10.123 -0500 EST
+
+statement ok
+SET TIME ZONE 'UTC'
+
+# Similar test with a location-dependent operator. Note that the specified
+# timestamps include the timezone offset so they are the same (as shown by the
+# first column); the difference in the second column comes only from the
+# timezone at the time of execution.
+statement ok
+PREPARE loc_dependent_operator AS
+SELECT
+  extract(EPOCH FROM TIMESTAMP WITH TIME ZONE '2010-11-06 23:59:00-05:00'),
+  extract(EPOCH FROM TIMESTAMP WITH TIME ZONE '2010-11-06 23:59:00-05:00' + INTERVAL '1 day')
+
+statement ok
+SET TIME ZONE 'America/Chicago'
+
+query RR
+EXECUTE loc_dependent_operator
+----
+1.28910594e+09  1.28919594e+09
+
+statement ok
+SET TIME ZONE 'Europe/Berlin'
+
+query RR
+EXECUTE loc_dependent_operator
+----
+1.28910594e+09  1.28919234e+09
+
+statement ok
+SET TIME ZONE 'UTC'
+
+## Permissions: Grant and then revoke permission to select from a table. The
+## prepared plan should be invalidated.
+statement ok
+GRANT ALL ON othertable TO testuser
+
+user testuser
+
+statement ok
+USE otherdb
+
+statement ok
+PREPARE change_privileges AS SELECT * FROM othertable
+
+query II
+EXECUTE change_privileges
+----
+1  10
+
+user root
+
+statement ok
+REVOKE ALL ON othertable FROM testuser
+
+user testuser
+
+query error pq: user testuser does not have SELECT privilege on relation othertable
+EXECUTE change_privileges
+
+user root
+
+## Permissions: Use UPDATE statement that requires both UPDATE and SELECT
+## privileges.
+statement ok
+GRANT ALL ON othertable TO testuser
+
+user testuser
+
+statement ok
+USE otherdb
+
+statement ok
+PREPARE update_privileges AS UPDATE othertable SET b=$1
+
+user root
+
+statement ok
+REVOKE UPDATE ON othertable FROM testuser
+
+user testuser
+
+query error pq: user testuser does not have UPDATE privilege on relation othertable
+EXECUTE update_privileges(5)
+
+user root
+
+statement ok
+GRANT UPDATE ON othertable TO testuser
+
+statement ok
+REVOKE SELECT ON othertable FROM testuser
+
+user testuser
+
+query error pq: user testuser does not have SELECT privilege on relation othertable
+EXECUTE update_privileges(5)
+
+user root
+
+query II
+SELECT * FROM othertable
+----
+1  10
+
+user root
+
+## Schema change (rename): Rename column in table and ensure that the prepared
+## statement is updated to incorporate it.
+statement ok
+PREPARE change_rename AS SELECT * FROM othertable
+
+query II colnames
+EXECUTE change_rename
+----
+a  b
+1  10
+
+statement ok
+ALTER TABLE othertable RENAME COLUMN b TO c
+
+query II colnames
+EXECUTE change_rename
+----
+a  c
+1  10
+
+statement ok
+ALTER TABLE othertable RENAME COLUMN c TO b
+
+query II colnames
+EXECUTE change_rename
+----
+a  b
+1  10
+
+## Schema change (placeholders): Similar to previous case, but with placeholder
+## present.
+statement ok
+PREPARE change_placeholders AS SELECT * FROM othertable WHERE a=$1
+
+query II colnames
+EXECUTE change_placeholders(1)
+----
+a  b
+1  10
+
+statement ok
+ALTER TABLE othertable RENAME COLUMN b TO c
+
+query II colnames
+EXECUTE change_placeholders(1)
+----
+a  c
+1  10
+
+statement ok
+ALTER TABLE othertable RENAME COLUMN c TO b
+
+query II colnames
+EXECUTE change_placeholders(1)
+----
+a  b
+1  10
+
+## Schema change (view): Change view name and ensure that prepared query is
+## invalidated.
+statement ok
+CREATE VIEW otherview AS SELECT a, b FROM othertable
+
+statement ok
+PREPARE change_view AS SELECT * FROM otherview
+
+query II
+EXECUTE change_view
+----
+1  10
+
+statement ok
+ALTER VIEW otherview RENAME TO otherview2
+
+query error pq: relation "otherview" does not exist
+EXECUTE change_view
+
+statement ok
+DROP VIEW otherview2
+
+## Schema change: Drop column and ensure that correct error is reported.
+statement ok
+PREPARE change_drop AS SELECT * FROM othertable WHERE b=10
+
+query II
+EXECUTE change_drop
+----
+1  10
+
+statement ok
+ALTER TABLE othertable DROP COLUMN b
+
+query error pq: column "b" does not exist
+EXECUTE change_drop
+
+statement ok
+ALTER TABLE othertable ADD COLUMN b INT;
+
+statement ok
+UPDATE othertable SET b=10
+
+query II
+EXECUTE change_drop
+----
+1  10
+
+## Uncommitted schema change: Rename column in table in same transaction as
+## execution of prepared statement and make prepared statement incorporates it.
+statement ok
+PREPARE change_schema_uncommitted AS SELECT * FROM othertable
+
+statement ok
+BEGIN TRANSACTION
+
+query II colnames
+EXECUTE change_schema_uncommitted
+----
+a  b
+1  10
+
+statement ok
+ALTER TABLE othertable RENAME COLUMN b TO c
+
+query II colnames
+EXECUTE change_schema_uncommitted
+----
+a  c
+1  10
+
+# Change the schema again and verify that the previously prepared plan is not
+# reused. Testing this is important because the second schema change won't
+# bump the table descriptor version again.
+statement ok
+ALTER TABLE othertable RENAME COLUMN c TO d
+
+query II colnames
+EXECUTE change_schema_uncommitted
+----
+a  d
+1  10
+
+statement ok
+ROLLBACK TRANSACTION
+
+# Same virtual table in different catalogs (these virtual table instances have
+# the same table ID).
+statement ok
+CREATE SEQUENCE seq
+
+statement ok
+PREPARE pg_catalog_query AS SELECT * FROM pg_catalog.pg_sequence
+
+query OOIIIIIB colnames
+EXECUTE pg_catalog_query
+----
+seqrelid  seqtypid  seqstart  seqincrement  seqmax               seqmin  seqcache  seqcycle
+121       20        1         1             9223372036854775807  1       1         false
+
+statement ok
+USE test
+
+query OOIIIIIB colnames
+EXECUTE pg_catalog_query
+----
+seqrelid    seqtypid  seqstart  seqincrement  seqmax               seqmin  seqcache  seqcycle
+
+# Verify error when placeholders are used without prepare.
+statement error no value provided for placeholder: \$1
+SELECT $1:::int
+
+# Verify sequences get re-resolved.
+statement ok
+CREATE SEQUENCE seq
+
+statement ok
+PREPARE seqsel AS SELECT * FROM seq
+
+query I
+SELECT nextval('seq')
+----
+1
+
+query IIB
+EXECUTE seqsel
+----
+1  0  true
+
+statement ok
+DROP SEQUENCE seq
+
+statement ok
+CREATE SEQUENCE seq
+
+query IIB
+EXECUTE seqsel
+----
+0  0  true
+
+# Null placeholder values need to be assigned static types. Otherwise, we won't
+# be able to disambiguate the concat function overloads.
+statement ok
+PREPARE foobar AS VALUES ($1:::string || $2:::string)
+
+query T
+EXECUTE foobar(NULL, NULL)
+----
+NULL
+
+subtest regression_35145
+
+# Verify db-independent query behaves properly even when db does not exist
+
+statement ok
+SET application_name = ap35145
+
+# Prepare in custom db
+
+statement ok
+CREATE DATABASE d35145; SET database = d35145;
+
+statement ok
+PREPARE display_appname AS SELECT setting FROM pg_settings WHERE name = 'application_name'
+
+query T
+EXECUTE display_appname
+----
+ap35145
+
+# Check what happens when the db where the stmt was prepared disappears "underneath".
+
+statement ok
+DROP DATABASE d35145
+
+query error pgcode 3D000 database "d35145" does not exist
+EXECUTE display_appname
+
+statement ok
+CREATE DATABASE d35145
+
+query T
+EXECUTE display_appname
+----
+ap35145
+
+# Check what happens when the stmt is executed over a non-existent, unrelated db.
+
+statement ok
+CREATE DATABASE d35145_2; SET database = d35145_2; DROP DATABASE d35145_2
+
+query error pgcode 3D000 database "d35145_2" does not exist
+EXECUTE display_appname
+
+# Check what happens when the stmt is executed over no db whatsoever.
+
+statement ok
+SET database = ''
+
+query error  cannot access virtual schema in anonymous database
+EXECUTE display_appname
+
+statement ok
+SET database = 'test'
+
+# Lookup by ID: Rename column in table and ensure that the prepared statement
+# is updated to incorporate it.
+statement ok
+CREATE TABLE ab (a INT PRIMARY KEY, b INT); INSERT INTO ab(a, b) VALUES (1, 10)
+
+let $id
+SELECT id FROM system.namespace WHERE name='ab'
+
+statement ok
+PREPARE change_rename_2 AS SELECT * FROM [$id AS ab]
+
+query II colnames
+EXECUTE change_rename_2
+----
+a  b
+1  10
+
+statement ok
+ALTER TABLE ab RENAME COLUMN b TO c
+
+query II colnames
+EXECUTE change_rename_2
+----
+a  c
+1  10
+
+statement ok
+ALTER TABLE ab RENAME COLUMN c TO b
+
+query II colnames
+EXECUTE change_rename_2
+----
+a  b
+1  10
+
+statement ok
+USE test
+
+statement ok
+CREATE TABLE t2 (k INT PRIMARY KEY, str STRING)
+
+statement ok
+INSERT INTO t2 SELECT i, to_english(i) FROM generate_series(1, 5) AS g(i)
+
+statement error PREPARE AS OPT PLAN is a testing facility that should not be used directly
+PREPARE a AS OPT PLAN 'xx'
+
+statement ok
+SET allow_prepare_as_opt_plan = ON
+
+statement ok
+PREPARE a AS OPT PLAN '
+(Root
+  (Scan [ (Table "t2") (Cols "k,str") ])
+  (Presentation "k,str")
+  (NoOrdering)
+)'
+
+query IT rowsort
+EXECUTE a
+----
+1  one
+2  two
+3  three
+4  four
+5  five
+
+statement ok
+PREPARE b AS OPT PLAN '
+(Root
+  (Sort
+    (Select
+      (Scan [ (Table "t2") (Cols "k,str") ])
+      [
+        (Eq
+          (Mod (Var "k") (Const 2 "int"))
+          (Const 1 "int")
+        )
+      ]
+    )
+  )
+  (Presentation "k,str")
+  (OrderingChoice "+str")
+)'
+
+query IT nosort
+EXECUTE b
+----
+5  five
+1  one
+3  three
+
+statement ok
+PREPARE e AS OPT PLAN '
+(Root
+  (Explain
+    (Select
+      (Scan [ (Table "t2") (Cols "k,str") ])
+      [
+        (Eq
+          (Mod (Var "k") (Const 2 "int"))
+          (Const 1 "int")
+        )
+      ]
+    )
+    [
+      (Options "opt,verbose")
+      (ColList [ (NewColumn "info" "string") ])
+      (Props (MinPhysProps))
+    ]
+  )
+  (Presentation "info")
+  (NoOrdering)
+)'
+
+query T nosort
+EXECUTE e
+----
+select
+ ├── columns: k:1 str:2
+ ├── immutable
+ ├── stats: [rows=333.333]
+ ├── cost: 1118.85
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── prune: (2)
+ ├── scan t2
+ │    ├── columns: k:1 str:2
+ │    ├── stats: [rows=1000]
+ │    ├── cost: 1108.82
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── prune: (1,2)
+ └── filters
+      └── (k:1 % 2) = 1 [outer=(1), immutable]
+
+# Only root may use PREPARE AS OPT PLAN.
+
+user testuser
+
+statement ok
+USE test
+
+statement ok
+SET allow_prepare_as_opt_plan = ON
+
+statement error user testuser does not have SELECT privilege on relation t2
+SELECT * FROM t2
+
+statement error PREPARE AS OPT PLAN may only be used by root
+PREPARE a AS OPT PLAN '
+(Root
+  (Scan [ (Table "t2") (Cols "k") ])
+  (Presentation "k")
+  (NoOrdering)
+)'
+
+# Ensure we error even when the string matches a previously prepared statement.
+statement error PREPARE AS OPT PLAN may only be used by root
+PREPARE b AS OPT PLAN '
+(Root
+  (Scan [ (Table "t2") (Cols "k,str") ])
+  (Presentation "k,str")
+  (NoOrdering)
+)'
+
+# Make sure that we can constant-fold REGCLASS casts even if they're placeholders.
+statement ok
+PREPARE rcc(string) AS SELECT $1::REGCLASS::OID
+
+query O
+EXECUTE rcc('t')
+----
+106
+
+user root
+
+
+user root
+
+# Regression test for #46217. Test that we cannot inject a histogram type that
+# doesn't match the column type.
+statement ok
+CREATE TABLE ts (d DATE PRIMARY KEY, x INT)
+
+statement error pq: histogram for table ts column d created_at 2020-03-24 15:34:22\.863634\+00:00 does not match column type DATE: TIMESTAMP
+ALTER TABLE ts INJECT STATISTICS '[
+  {
+    "columns": ["d"],
+    "created_at": "2020-03-24 15:34:22.863634+00:00",
+    "distinct_count": 1000,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "2020-03-24 15:16:12.117516+00:00"
+      },
+      {
+        "distinct_range": 501.60499999999996,
+        "num_eq": 10,
+        "num_range": 9999,
+        "upper_bound": "2020-03-25 00:05:28.117516+00:00"
+      }
+    ],
+    "histo_col_type": "TIMESTAMP",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 100000
+  }
+]'
+
+# Test that if we replace a view the cached plan is invalidated.
+statement ok
+CREATE VIEW tview AS VALUES (1)
+
+statement ok
+PREPARE tview_prep AS SELECT * FROM tview
+
+statement ok
+CREATE OR REPLACE VIEW tview AS VALUES (2)
+
+query I
+EXECUTE tview_prep
+----
+2
+
+# Use of SELECT FOR UPDATE/SHARE in ReadOnly Transaction
+
+statement ok
+CREATE TABLE t3 (i INT PRIMARY KEY)
+
+statement ok
+PREPARE a1 AS SELECT * FROM t3 FOR UPDATE
+
+statement ok
+BEGIN READ ONLY
+
+statement error cannot execute SELECT FOR UPDATE in a read-only transaction
+EXECUTE a1
+
+statement ok
+ROLLBACK
+
+statement ok
+DEALLOCATE a1
+
+statement ok
+PREPARE a1 AS SELECT * FROM t3 FOR NO KEY UPDATE
+
+statement ok
+BEGIN READ ONLY
+
+statement error cannot execute SELECT FOR NO KEY UPDATE in a read-only transaction
+EXECUTE a1
+
+statement ok
+ROLLBACK
+
+statement ok
+DEALLOCATE a1
+
+statement ok
+PREPARE a1 AS SELECT * FROM t3 FOR SHARE
+
+statement ok
+BEGIN READ ONLY
+
+statement error cannot execute SELECT FOR SHARE in a read-only transaction
+EXECUTE a1
+
+statement ok
+ROLLBACK
+
+statement ok
+DEALLOCATE a1
+
+statement ok
+PREPARE a1 AS SELECT * FROM t3 FOR KEY SHARE
+
+statement ok
+BEGIN READ ONLY
+
+statement error cannot execute SELECT FOR KEY SHARE in a read-only transaction
+EXECUTE a1
+
+statement ok
+ROLLBACK
+
+statement ok
+DEALLOCATE a1
+
+statement ok
+DROP TABLE t3
+
+# Ensure that changes to used types in tables invalidate prepared statements.
+statement ok
+CREATE TYPE greeting AS ENUM ('hello', 'hi');
+CREATE TABLE greeting_table (x greeting NOT NULL, y INT, INDEX (x, y))
+
+# This query plan emits constrained lookups based on each enum value.
+statement ok
+PREPARE enum_query AS SELECT x, y FROM greeting_table WHERE y = 2
+
+# Create prepared statement to drop type.
+statement ok
+PREPARE enum_drop AS DROP TYPE greeting
+
+# Now alter the enum to have a new value.
+statement ok
+ALTER TYPE greeting ADD VALUE 'howdy'
+
+# Insert a value of this new enum into the table.
+statement ok
+INSERT INTO greeting_table VALUES ('howdy', 2)
+
+# If the query plan wasn't invalidated, we wouldn't scan the desired row.
+query TI
+EXECUTE enum_query
+----
+howdy 2
+
+# drop table
+statement ok
+DROP TABLE greeting_table
+
+# drop the type using prepared statement.
+statement ok
+EXECUTE enum_drop
+
+# Regression test for #64765.
+statement ok
+CREATE TABLE t64765 (x INT PRIMARY KEY, y INT, z INT)
+
+statement ok
+PREPARE q64765 as SELECT * FROM t64765 WHERE x = $1 AND y = $2
+
+statement ok
+EXECUTE q64765(1, 1)
+
+# Regression test for #81315.
+statement ok
+CREATE TABLE t81315 (a DECIMAL NOT NULL PRIMARY KEY, b INT);
+PREPARE q81315 AS SELECT * FROM t81315 WHERE a = $1::INT8;
+INSERT INTO t81315 VALUES (1, 100), (2, 200)
+
+query TI
+SELECT * FROM t81315 WHERE a = 1
+----
+1  100
+
+query TI
+EXECUTE q81315 (1)
+----
+1  100
+
+statement ok
+CREATE TABLE t81315_2 (
+  k INT PRIMARY KEY,
+  a INT
+);
+PREPARE q81315_2 AS SELECT * FROM t81315_2 WHERE k = $1;
+INSERT INTO t81315_2 VALUES (1, 1)
+
+query II
+EXECUTE q81315_2(1::DECIMAL)
+----
+1  1
+
+subtest possible_mismatch_num_types
+
+statement ok
+PREPARE args_test_many(int, int) as select $1
+
+query I
+EXECUTE args_test_many(1, 2)
+----
+1
+
+query error wrong number of parameters for prepared statement "args_test_many": expected 2, got 1
+EXECUTE args_test_many(1)
+
+statement ok
+PREPARE args_test_few(int) as select $1, $2::int
+
+query II
+EXECUTE args_test_few(1, 2)
+----
+1  2
+
+query error wrong number of parameters for prepared statement "args_test_few": expected 2, got 1
+EXECUTE args_test_few(1)
+
+statement ok
+DROP TABLE IF EXISTS t;
+
+statement ok
+CREATE TABLE t (x int, y varchar(10), z int2);
+
+statement ok
+PREPARE args_deduce_type(int, int, int, int) AS INSERT INTO t VALUES ($1, $2, $3);
+
+statement ok
+EXECUTE args_deduce_type(1,2,3,4);
+EXECUTE args_deduce_type('1','2',3,'4');
+
+query ITI rowsort
+SELECT * FROM t;
+----
+1  2  3
+1  2  3
+
+statement ok
+PREPARE args_deduce_type_1(int) AS SELECT $1::int, $2::varchar(10), $3::varchar(20);
+
+query ITT
+EXECUTE args_deduce_type_1(1,10,100);
+----
+1  10  100
+
+# Test that prepared_statements_cache_size functions correctly.
+subtest prepared_statements_cache_size
+
+statement ok
+DEALLOCATE ALL
+
+# With a very small cache, all prepared statements except the most recent one
+# should be automatically deallocated.
+statement ok
+SET prepared_statements_cache_size = '1 KiB'
+
+statement ok
+PREPARE pscs01 AS SELECT $1::bool, 1
+
+statement ok
+PREPARE pscs02 AS SELECT $1::float, 2
+
+statement ok
+PREPARE pscs03 AS SELECT $1::decimal, 3
+
+statement ok
+PREPARE pscs04 AS SELECT $1::string, 4
+
+statement ok
+PREPARE pscs05 AS SELECT $1::json, 5
+
+statement ok
+PREPARE pscs06 AS SELECT $1::int, 6
+
+query T
+SELECT name FROM pg_catalog.pg_prepared_statements ORDER BY name
+----
+pscs06
+
+query II
+EXECUTE pscs06(6)
+----
+6  6
+
+statement error prepared statement \"pscs05\" does not exist
+EXECUTE pscs05(5)
+
+statement error prepared statement \"pscs04\" does not exist
+EXECUTE pscs04(4)
+
+statement error prepared statement \"pscs03\" does not exist
+EXECUTE pscs03(3)
+
+statement error prepared statement \"pscs02\" does not exist
+EXECUTE pscs02(2)
+
+statement error prepared statement \"pscs01\" does not exist
+EXECUTE pscs01(1)
+
+# We should automatically deallocate old prepared statements as the cache grows.
+statement ok
+SET prepared_statements_cache_size = '20 KiB'
+
+statement ok
+PREPARE pscs07 AS SELECT $1::date, 7
+
+statement ok
+PREPARE pscs08 AS SELECT $1::timestamp, 8
+
+statement ok
+PREPARE pscs09 AS SELECT $1::bool, 9
+
+statement ok
+PREPARE pscs10 AS SELECT $1::bytes, 10
+
+statement ok
+PREPARE pscs11 AS SELECT $1::smallint, 11
+
+statement ok
+PREPARE pscs12 AS SELECT $1::time, 12
+
+statement ok
+PREPARE pscs13 AS SELECT $1::bigint, 13
+
+query T
+SELECT name FROM pg_catalog.pg_prepared_statements ORDER BY name
+----
+pscs09
+pscs10
+pscs11
+pscs12
+pscs13
+
+statement ok
+DEALLOCATE pscs10
+
+# Now we should have room for one more.
+statement ok
+PREPARE pscs14 AS SELECT $1::int, 14
+
+query T
+SELECT name FROM pg_catalog.pg_prepared_statements ORDER BY name
+----
+pscs09
+pscs11
+pscs12
+pscs13
+pscs14
+
+# Executing a prepared statement should move it to the front of the LRU list.
+query II
+EXECUTE pscs11(11)
+----
+11  11
+
+statement ok
+PREPARE pscs15 AS SELECT $1::timetz, 15
+
+statement ok
+PREPARE pscs16 AS SELECT $1::float, 16
+
+statement ok
+PREPARE pscs17 AS SELECT $1::interval, 17
+
+query T
+SELECT name FROM pg_catalog.pg_prepared_statements ORDER BY name
+----
+pscs11
+pscs14
+pscs15
+pscs16
+pscs17
+
+# Retrying a transaction should rewind the LRU list after each retry even if
+# some prepared statements were evicted. (We use a sequence to break out of the
+# retry loop.)
+
+statement ok
+CREATE SEQUENCE s
+
+statement ok
+CREATE TABLE prep_stmts (which INT, name STRING)
+
+statement ok
+BEGIN;
+INSERT INTO prep_stmts SELECT 1, name FROM pg_catalog.pg_prepared_statements;
+PREPARE pscs18 AS SELECT $1::inet, 18;
+EXECUTE pscs11(11);
+PREPARE pscs19 AS SELECT $1::string, 19;
+INSERT INTO prep_stmts SELECT 2, name FROM pg_catalog.pg_prepared_statements;
+SELECT IF(nextval('s') <= 3, crdb_internal.force_retry('1 hour'), 0);
+COMMIT
+
+statement ok
+INSERT INTO prep_stmts SELECT 3, name FROM pg_catalog.pg_prepared_statements
+
+# Validate that the transaction was actually tried multiple times.
+query I
+SELECT currval('s')
+----
+4
+
+# Validate that the LRU list was correct before and after the PREPAREs, and
+# after the COMMIT, even after multiple retries. Notice that evictions only
+# occur once the transaction successfully commits.
+query IT
+SELECT which, name FROM prep_stmts ORDER BY which, name
+----
+1  pscs11
+1  pscs14
+1  pscs15
+1  pscs16
+1  pscs17
+2  pscs11
+2  pscs14
+2  pscs15
+2  pscs16
+2  pscs17
+2  pscs18
+2  pscs19
+3  pscs11
+3  pscs16
+3  pscs17
+3  pscs18
+3  pscs19
+
+statement ok
+DROP TABLE prep_stmts
+
+statement ok
+DROP SEQUENCE s
+
+statement ok
+DEALLOCATE ALL
+
+statement ok
+RESET prepared_statements_cache_size
+
+statement error EXPLAIN ANALYZE can only be used as a top-level statement
+PREPARE p AS EXPLAIN ANALYZE SELECT 1
+
+# Regression test for #114867 to make sure that a statement that uses an enum
+# can be re-prepared after a schema change.
+subtest reprepare_statement_with_enum
+
+statement ok
+CREATE TYPE color AS ENUM ('red', 'blue', 'green');
+CREATE TABLE test_114867 (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    colors color[] DEFAULT ARRAY[]::color[]
+)
+
+statement ok
+PREPARE s_114867 AS INSERT INTO test_114867(colors) VALUES (ARRAY[$1::text]::color[]);
+EXECUTE s_114867('red')
+
+
+statement ok
+ALTER TABLE test_114867 SET (schema_locked=false)
+
+statement ok
+TRUNCATE TABLE test_114867 CASCADE
+
+statement ok
+ALTER TABLE test_114867 RESET (schema_locked)
+
+statement ok
+EXECUTE s_114867('red')
+
+query T
+SELECT colors FROM test_114867
+----
+{red}
+
+subtest prepare_call
+
+# CALL statements cannot be prepared.
+statement ok
+CREATE PROCEDURE foo(x INT) LANGUAGE SQL AS $$
+  SELECT 1;
+  SELECT 2;
+$$;
+
+statement error pgcode 42601 syntax error
+PREPARE bar AS CALL foo(0);
+
+statement error pgcode 42601 syntax error
+PREPARE bar AS CALL foo($1);
+
+subtest end
+
+# Regression test for #126288 to make sure that zone configurations in
+# prepared statements work as expected.
+subtest zone_config
+
+statement ok
+PREPARE p AS
+ALTER DATABASE test CONFIGURE ZONE USING gc.ttlseconds = $1
+
+statement ok
+EXECUTE p(120)
+
+subtest end
+
+# Regression test for #152664. Correctly type placeholders with UNKNOWN type
+# hints.
+statement ok
+PREPARE p152664 (BOOL, UNKNOWN, DECIMAL) AS SELECT IF($1, $2, $3) IS NOT NAN
+
+query B
+EXECUTE p152664(false, NULL, 4)
+----
+true
+
+statement ok
+DEALLOCATE p152664
+
+statement ok
+PREPARE p152664 (BOOL, DECIMAL, UNKNOWN) AS SELECT IF($1, $2, $3) IS NOT NAN
+
+query B
+EXECUTE p152664(true, 4, NULL)
+----
+true
+
+# Regression tests for #159043.
+statement ok
+CREATE TABLE t159043a (a INT)
+
+statement ok
+CREATE TABLE t159043b (b INT)
+
+statement ok
+INSERT INTO t159043b VALUES (33)
+
+statement ok
+PREPARE p159043 AS
+SELECT 1 FROM t159043b CROSS JOIN (SELECT min(1) FROM t159043a OFFSET $1) GROUP BY b
+
+query empty
+EXECUTE p159043(10)
+
+statement ok
+DEALLOCATE p159043
+
+statement ok
+PREPARE p159043 AS
+SELECT 1 FROM t159043b CROSS JOIN (SELECT min(1) FROM t159043a LIMIT $1) GROUP BY b
+
+statement error negative value for LIMIT
+EXECUTE p159043(-1)
