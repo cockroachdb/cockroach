@@ -135,3 +135,31 @@ func TestAvroSchemaPrefixValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestGetCreateKafkaTopics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, tc := range []struct {
+		name        string
+		opts        map[string]string
+		expected    CreateKafkaTopics
+		expectedErr string
+	}{
+		{name: "default", expected: CreateKafkaTopicsAuto},
+		{name: "auto", opts: map[string]string{OptCreateKafkaTopics: string(CreateKafkaTopicsAuto)}, expected: CreateKafkaTopicsAuto},
+		{name: "explicit", opts: map[string]string{OptCreateKafkaTopics: string(CreateKafkaTopicsExplicit)}, expected: CreateKafkaTopicsExplicit},
+		{name: "bare option means explicit", opts: map[string]string{OptCreateKafkaTopics: ""}, expected: CreateKafkaTopicsExplicit},
+		{name: "invalid value rejected", opts: map[string]string{OptCreateKafkaTopics: "yes"}, expectedErr: "unknown create_kafka_topics: yes"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := MakeStatementOptions(tc.opts).GetCreateKafkaTopics()
+			if tc.expectedErr != "" {
+				require.ErrorContains(t, err, tc.expectedErr)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, got)
+		})
+	}
+}
