@@ -173,7 +173,7 @@ jobs:
          (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
-    runs-on: [self-hosted, ubuntu_big_2404]
+    runs-on: [self-hosted, ubuntu_big_2004]
     timeout-minutes: 120
     permissions:
       id-token: write
@@ -248,7 +248,7 @@ jobs:
          (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
-    runs-on: [self-hosted, ubuntu_big_2404]
+    runs-on: [self-hosted, ubuntu_big_2004]
     timeout-minutes: 120
     permissions:
       id-token: write
@@ -306,7 +306,7 @@ jobs:
          (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
-    runs-on: [self-hosted, ubuntu_big_2404]
+    runs-on: [self-hosted, ubuntu_big_2004]
     timeout-minutes: 120
     permissions:
       id-token: write
@@ -389,7 +389,7 @@ jobs:
          (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
-    runs-on: [self-hosted, ubuntu_big_2404]
+    runs-on: [self-hosted, ubuntu_big_2004]
     timeout-minutes: 90
     permissions:
       id-token: write
@@ -440,7 +440,7 @@ jobs:
          (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
-    runs-on: [self-hosted, ubuntu_big_2404]
+    runs-on: [self-hosted, ubuntu_big_2004]
     timeout-minutes: 90
     permissions:
       id-token: write
@@ -496,7 +496,7 @@ jobs:
          (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
-    runs-on: [self-hosted, ubuntu_2404]
+    runs-on: [self-hosted, ubuntu_2004]
     timeout-minutes: 60
     permissions:
       id-token: write
@@ -564,7 +564,7 @@ jobs:
          (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
-    runs-on: [self-hosted, ubuntu_2404]
+    runs-on: [self-hosted, ubuntu_2004]
     timeout-minutes: 30
     permissions:
       id-token: write
@@ -607,7 +607,7 @@ jobs:
          (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
-    runs-on: [self-hosted, ubuntu_2404]
+    runs-on: [self-hosted, ubuntu_2004]
     timeout-minutes: 30
     permissions:
       id-token: write
@@ -670,7 +670,7 @@ jobs:
          (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
-    runs-on: [self-hosted, ubuntu_2404]
+    runs-on: [self-hosted, ubuntu_2004]
     timeout-minutes: 30
     permissions:
       id-token: write
@@ -731,7 +731,7 @@ jobs:
          (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
-    runs-on: [self-hosted, ubuntu_2404]
+    runs-on: [self-hosted, ubuntu_2004]
     timeout-minutes: 30
     permissions:
       id-token: write
@@ -803,7 +803,7 @@ jobs:
       - sentry-panic
       - publish-cloud-only
       - cloud-rollout
-    runs-on: [self-hosted, ubuntu_2404]
+    runs-on: [self-hosted, ubuntu_2004]
     timeout-minutes: 10
     permissions:
       id-token: write
