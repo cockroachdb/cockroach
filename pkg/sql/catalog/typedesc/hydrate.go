@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -162,6 +163,7 @@ func ensureTypeMetadataIsHydrated(
 				Name:         d.GetCheckConstraintName(i),
 				Expr:         d.GetCheckConstraintExpr(i),
 				ConstraintID: d.GetCheckConstraintID(i),
+				Validated:    d.GetCheckConstraintValidity(i) == descpb.ConstraintValidity_Validated,
 			}
 		}
 		tm.DomainData = &types.DomainMetadata{

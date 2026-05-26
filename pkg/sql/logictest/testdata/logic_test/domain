@@ -771,19 +771,19 @@ CREATE DOMAIN d_constraint_names AS INT
   CHECK (VALUE < 19)
   CHECK (VALUE != 23);
 
-query TTT colnames
-SELECT conname, contype, pg_get_constraintdef(oid) AS condef
+query TTTB colnames
+SELECT conname, contype, pg_get_constraintdef(oid) AS condef, convalidated
 FROM pg_constraint
 WHERE contypid = 'd_constraint_names'::regtype
 ORDER BY conname
 ----
-conname                       contype  condef
-d_constraint_names_check      c        CHECK ((value < 17))
-d_constraint_names_check1     c        CHECK ((value < 13))
-d_constraint_names_check2     c        CHECK ((value < 19))
-d_constraint_names_check3     c        CHECK ((value != 23))
-d_constraint_names_not_null   c        CHECK ((value > 0))
-d_constraint_names_not_null1  n        NOT NULL
+conname                       contype  condef                convalidated
+d_constraint_names_check      c        CHECK ((value < 17))  true
+d_constraint_names_check1     c        CHECK ((value < 13))  true
+d_constraint_names_check2     c        CHECK ((value < 19))  true
+d_constraint_names_check3     c        CHECK ((value != 23)) true
+d_constraint_names_not_null   c        CHECK ((value > 0))   true
+d_constraint_names_not_null1  n        NOT NULL               true
 
 statement ok
 DROP DOMAIN d_constraint_names;
