@@ -3565,6 +3565,190 @@ CONFIGURE ZONE USING
 			})
 		}
 	}
+
+	// cdc-bench/linger/* demonstrates the throughput-vs-latency tradeoff of
+	// the v2 batching sink: batching amortizes per-flush broker RTT cost
+	// (better throughput) but events wait up to the linger window before
+	// being sent (worse latency).
+	// TODO(#170214): Add no-linger variants.
+
+	r.Add(registry.TestSpec{
+		Name:             "cdc-bench/linger/latency/no-batching",
+		Owner:            registry.OwnerCDC,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(6, spec.CPU(16), spec.WorkloadNode()),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
+		Suites:           registry.Suites(registry.Weekly),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runLingerLatencyBench(ctx, t, c, "" /* flushFrequency */)
+		},
+	})
+
+	r.Add(registry.TestSpec{
+		// Expect mean p99 commit latency ~10ms higher than the no-batching baseline.
+		Name:             "cdc-bench/linger/latency/flush-interval-10ms",
+		Owner:            registry.OwnerCDC,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(6, spec.CPU(16), spec.WorkloadNode()),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
+		Suites:           registry.Suites(registry.Weekly),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runLingerLatencyBench(ctx, t, c, "10ms" /* flushFrequency */)
+		},
+	})
+
+	r.Add(registry.TestSpec{
+		Name:             "cdc-bench/linger/throughput/no-batching",
+		Owner:            registry.OwnerCDC,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(6, spec.CPU(16), spec.WorkloadNode()),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
+		Suites:           registry.Suites(registry.Weekly),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runLingerThroughputBench(ctx, t, c, "" /* flushFrequency */)
+		},
+	})
+
+	r.Add(registry.TestSpec{
+		// Expect the initial scan to finish roughly twice as fast as the
+		// no-batching baseline.
+		Name:             "cdc-bench/linger/throughput/flush-interval-10ms",
+		Owner:            registry.OwnerCDC,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(6, spec.CPU(16), spec.WorkloadNode()),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
+		Suites:           registry.Suites(registry.Weekly),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runLingerThroughputBench(ctx, t, c, "10ms" /* flushFrequency */)
+		},
+	})
+}
+
+// runLingerLatencyBench runs a sustainable kv workload against a live
+// changefeed and exports the average p99 commit_latency to roachperf.
+func runLingerLatencyBench(
+	ctx context.Context, t test.Test, c cluster.Cluster, flushFrequency string,
+) {
+	ct := newCDCTester(ctx, t, c, withNumSinkNodes(1))
+	defer ct.Close()
+
+	conn := ct.DB()
+
+	t.Status("initializing kv workload")
+	c.Run(ctx, option.WithNodes(ct.workloadNode), fmt.Sprintf(
+		`./cockroach workload init kv --splits 100 {pgurl:%d}`, ct.crdbNodes[0]))
+	require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t.L(), conn))
+
+	opts := map[string]string{"initial_scan": "'no'"}
+	if flushFrequency != "" {
+		opts["kafka_sink_config"] = fmt.Sprintf(
+			`'{"Flush": {"Frequency": "%s"}}'`, flushFrequency)
+	}
+	ct.newChangefeed(feedArgs{
+		sinkType: kafkaSink,
+		targets:  []string{"kv.kv"},
+		opts:     opts,
+	})
+
+	promClient, err := clusterstats.SetupCollectorPromClient(ctx, c, t.L(), ct.promCfg)
+	require.NoError(t, err)
+	collector := clusterstats.NewStatsCollector(ctx, promClient)
+
+	// Run the workload in the background so we can take the measurement while
+	// it's still in steady state and never observe the post-workload drain
+	// spike. The workload ramps the request rate from 0 over 30s to smooth out
+	// system warmup, then runs at saturation for the rest of the window.
+	const workloadDuration = 5 * time.Minute
+	const measureDuration = 4 * time.Minute
+	t.Status("running kv workload")
+	t.Go(func(taskCtx context.Context, _ *logger.Logger) error {
+		return c.RunE(taskCtx, option.WithNodes(ct.workloadNode), fmt.Sprintf(
+			`./cockroach workload run kv --ramp 30s --duration %s `+
+				`--max-rate 20000 --read-percent 0 --concurrency 64 --tolerate-errors `+
+				`{pgurl:%d-%d}`,
+			workloadDuration, ct.crdbNodes[0], ct.crdbNodes[len(ct.crdbNodes)-1]))
+	})
+
+	startTime := timeutil.Now()
+	select {
+	case <-time.After(measureDuration):
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	endTime := timeutil.Now()
+
+	commitLatencyP99 := clusterstats.AggQuery{
+		Stat:  clusterstats.ClusterStat{LabelName: "node", Query: "changefeed_commit_latency_bucket"},
+		Query: "histogram_quantile(0.99, sum by(le) (rate(changefeed_commit_latency_bucket[30s]))) / (1000*1000)",
+		Tag:   "Commit Latency P99 (ms)",
+	}
+
+	summarizeAvgP99 := func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
+		return meanNonNaN(stats, commitLatencyP99.Stat.Query,
+			"Commit Latency P99 avg (ms)", "ms", false /* isHigherBetter */)
+	}
+
+	testRun, err := collector.Exporter().Export(ctx, c, t, true, /* dryRun */
+		startTime, endTime, []clusterstats.AggQuery{commitLatencyP99}, summarizeAvgP99)
+	require.NoError(t, err)
+	cleanNaN(testRun, commitLatencyP99.Stat.Query)
+	require.NoError(t, testRun.SerializeOutRun(ctx, t, c, t.ExportOpenmetrics()))
+}
+
+// runLingerThroughputBench bulk-loads a kv table, runs an initial-scan-only
+// changefeed, and reports rows/sec (numRows / scan duration) to roachperf.
+func runLingerThroughputBench(
+	ctx context.Context, t test.Test, c cluster.Cluster, flushFrequency string,
+) {
+	ct := newCDCTester(ctx, t, c, withNumSinkNodes(1))
+	defer ct.Close()
+
+	conn := ct.DB()
+
+	const numRows = 10_000_000
+
+	t.Status("initializing kv table")
+	c.Run(ctx, option.WithNodes(ct.workloadNode), fmt.Sprintf(
+		`./cockroach workload init kv --splits 100 {pgurl:%d}`, ct.crdbNodes[0]))
+	require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t.L(), conn))
+
+	t.Status(fmt.Sprintf("bulk-loading %d rows", numRows))
+	c.Run(ctx, option.WithNodes(ct.workloadNode), fmt.Sprintf(
+		`./cockroach workload init kv --insert-count %d --data-loader import {pgurl:%d}`,
+		numRows, ct.crdbNodes[0]))
+	require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t.L(), conn))
+
+	opts := map[string]string{"initial_scan": "'only'"}
+	if flushFrequency != "" {
+		opts["kafka_sink_config"] = fmt.Sprintf(
+			`'{"Flush": {"Frequency": "%s"}}'`, flushFrequency)
+	}
+
+	startTime := timeutil.Now()
+	t.Status("starting initial-scan-only changefeed")
+	feed := ct.newChangefeed(feedArgs{
+		sinkType: kafkaSink,
+		targets:  []string{"kv.kv"},
+		opts:     opts,
+	})
+	feed.waitForCompletion()
+	elapsed := timeutil.Since(startTime)
+
+	info, err := getChangefeedInfo(conn, feed.jobID)
+	require.NoError(t, err)
+	if info.status != "succeeded" {
+		t.Fatalf("changefeed job %d ended in status %q (error=%q)",
+			feed.jobID, info.status, info.GetError())
+	}
+
+	rowsPerSec := int64(float64(numRows) / elapsed.Seconds())
+	t.L().Printf("initial scan complete: %s, %d rows/sec",
+		elapsed.Round(time.Second), rowsPerSec)
+	require.NoError(t, writeCDCBenchStats(ctx, t, c, ct.workloadNode, "rows-per-second", rowsPerSec))
 }
 
 const (
