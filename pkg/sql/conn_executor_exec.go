@@ -1060,76 +1060,20 @@ func (ex *connExecutor) execStmtInOpenState(
 	// set / RETURNING can be used instead. However this is not relevant
 	// here.)
 
-	// We first ensure stepping mode is enabled.
-	//
-	// This ought to be done just once when a txn gets initialized;
-	// unfortunately, there are too many places where the txn object
-	// is re-configured, re-set etc without using NewTxnWithSteppingEnabled().
-	//
-	// Manually hunting them down and calling ConfigureStepping() each
-	// time would be error prone (and increase the chance that a future
-	// change would forget to add the call).
-	//
-	// TODO(andrei): really the code should be rearchitected to ensure
-	// that all uses of SQL execution initialize the kv.Txn using a
-	// single/common function. That would be where the stepping mode
-	// gets enabled once for all SQL statements executed "underneath".
-	prevSteppingMode := ex.state.mu.txn.ConfigureStepping(ctx, kv.SteppingEnabled)
-	prevSeqNum := ex.state.mu.txn.GetReadSeqNum()
-	delegatedUnderOuterTxn := ex.executorType == executorTypeInternal && ex.extraTxnState.underOuterTxn
-	var origTs hlc.Timestamp
-	defer func() {
-		_ = ex.state.mu.txn.ConfigureStepping(ctx, prevSteppingMode)
-
-		// If this is an internal executor that is running on behalf of an outer
-		// txn, then we need to step back the txn so that the outer executor uses
-		// the proper sequence number.
-		if delegatedUnderOuterTxn {
-			if err := ex.state.mu.txn.SetReadSeqNum(prevSeqNum); err != nil {
-				retEv, retPayload, retErr = makeErrEvent(err)
-			}
-		}
-	}()
-
-	// Then we create a sequencing point.
-	//
-	// This is not the only place where a sequencing point is placed. There are
-	// also sequencing point after every stage of constraint checks and cascading
-	// actions at the _end_ of a statement's execution.
-	//
-	// If this is an internal executor running on behalf of an outer txn, then we
-	// also need to make sure the external read timestamp is not bumped. Normally,
-	// that happens whenever a READ COMMITTED txn is stepped.
-	//
-	// Under test builds, we add a few extra assertions to ensure that the
-	// external read timestamp does not change if it shouldn't, and that we use
-	// the correct isolation level for internal operations.
-	if buildutil.CrdbTestBuild {
-		if delegatedUnderOuterTxn {
-			origTs = ex.state.mu.txn.ReadTimestamp()
-		} else if ex.executorType == executorTypeInternal {
-			if level := ex.state.mu.txn.IsoLevel(); level != isolation.Serializable {
-				return nil, nil, errors.AssertionFailedf(
-					"internal operation is not using SERIALIZABLE isolation; found=%s",
-					level,
-				)
-			}
-		}
-	}
-	if err := ex.state.mu.txn.Step(ctx, !delegatedUnderOuterTxn /* allowReadTimestampStep */); err != nil {
+	// Create a sequencing point on the txn so this statement reads a
+	// consistent snapshot of writes done by prior statements. This is not
+	// the only place where a sequencing point is placed; there are also
+	// sequencing points after every stage of constraint checks and
+	// cascading actions at the _end_ of a statement's execution.
+	cleanup, err := ex.stepReadSequenceWithRestore(ctx)
+	if err != nil {
 		return makeErrEvent(err)
 	}
-	if buildutil.CrdbTestBuild && delegatedUnderOuterTxn {
-		newTs := ex.state.mu.txn.ReadTimestamp()
-		if newTs != origTs {
-			// This should never happen. If it does, it means that the internal
-			// executor incorrectly moved the txn's read timestamp forward.
-			return nil, nil, errors.AssertionFailedf(
-				"internal executor advanced the txn read timestamp. origTs=%s, newTs=%s",
-				origTs, newTs,
-			)
+	defer func() {
+		if err := cleanup(); err != nil {
+			retEv, retPayload, retErr = makeErrEvent(err)
 		}
-	}
+	}()
 
 	// Auto-commit is disallowed during statement execution if we previously
 	// executed any DDL. This is because may potentially create jobs and do other
@@ -2081,76 +2025,20 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	// set / RETURNING can be used instead. However this is not relevant
 	// here.)
 
-	// We first ensure stepping mode is enabled.
-	//
-	// This ought to be done just once when a txn gets initialized;
-	// unfortunately, there are too many places where the txn object
-	// is re-configured, re-set etc without using NewTxnWithSteppingEnabled().
-	//
-	// Manually hunting them down and calling ConfigureStepping() each
-	// time would be error prone (and increase the chance that a future
-	// change would forget to add the call).
-	//
-	// TODO(andrei): really the code should be rearchitected to ensure
-	// that all uses of SQL execution initialize the kv.Txn using a
-	// single/common function. That would be where the stepping mode
-	// gets enabled once for all SQL statements executed "underneath".
-	prevSteppingMode := ex.state.mu.txn.ConfigureStepping(ctx, kv.SteppingEnabled)
-	prevSeqNum := ex.state.mu.txn.GetReadSeqNum()
-	delegatedUnderOuterTxn := ex.executorType == executorTypeInternal && ex.extraTxnState.underOuterTxn
-	var origTs hlc.Timestamp
-	defer func() {
-		_ = ex.state.mu.txn.ConfigureStepping(ctx, prevSteppingMode)
-
-		// If this is an internal executor that is running on behalf of an outer
-		// txn, then we need to step back the txn so that the outer executor uses
-		// the proper sequence number.
-		if delegatedUnderOuterTxn {
-			if err := ex.state.mu.txn.SetReadSeqNum(prevSeqNum); err != nil {
-				retEv, retPayload, retErr = makeErrEvent(err)
-			}
-		}
-	}()
-
-	// Then we create a sequencing point.
-	//
-	// This is not the only place where a sequencing point is placed. There are
-	// also sequencing point after every stage of constraint checks and cascading
-	// actions at the _end_ of a statement's execution.
-	//
-	// If this is an internal executor running on behalf of an outer txn, then we
-	// also need to make sure the external read timestamp is not bumped. Normally,
-	// that happens whenever a READ COMMITTED txn is stepped.
-	//
-	// Under test builds, we add a few extra assertions to ensure that the
-	// external read timestamp does not change if it shouldn't, and that we use
-	// the correct isolation level for internal operations.
-	if buildutil.CrdbTestBuild {
-		if delegatedUnderOuterTxn {
-			origTs = ex.state.mu.txn.ReadTimestamp()
-		} else if ex.executorType == executorTypeInternal {
-			if level := ex.state.mu.txn.IsoLevel(); level != isolation.Serializable {
-				return nil, nil, errors.AssertionFailedf(
-					"internal operation is not using SERIALIZABLE isolation; found=%s",
-					level,
-				)
-			}
-		}
-	}
-	if err := ex.state.mu.txn.Step(ctx, !delegatedUnderOuterTxn /* allowReadTimestampStep */); err != nil {
+	// Create a sequencing point on the txn so this statement reads a
+	// consistent snapshot of writes done by prior statements. This is not
+	// the only place where a sequencing point is placed; there are also
+	// sequencing points after every stage of constraint checks and
+	// cascading actions at the _end_ of a statement's execution.
+	cleanup, err := ex.stepReadSequenceWithRestore(ctx)
+	if err != nil {
 		return makeErrEvent(err)
 	}
-	if buildutil.CrdbTestBuild && delegatedUnderOuterTxn {
-		newTs := ex.state.mu.txn.ReadTimestamp()
-		if newTs != origTs {
-			// This should never happen. If it does, it means that the internal
-			// executor incorrectly moved the txn's read timestamp forward.
-			return nil, nil, errors.AssertionFailedf(
-				"internal executor advanced the txn read timestamp. origTs=%s, newTs=%s",
-				origTs, newTs,
-			)
+	defer func() {
+		if err := cleanup(); err != nil {
+			retEv, retPayload, retErr = makeErrEvent(err)
 		}
-	}
+	}()
 
 	if portal.isPausable() {
 		p.pausablePortal = portal
@@ -2289,6 +2177,74 @@ func (ex *connExecutor) stepReadSequence(ctx context.Context) error {
 		ex.state.mu.txn.ConfigureStepping(ctx, prevSteppingMode)
 	}
 	return nil
+}
+
+// stepReadSequenceWithRestore creates a sequencing point on the current txn,
+// returning a cleanup function the caller MUST defer.
+//
+// The cleanup always restores the prior stepping mode. If this connExecutor is
+// an internal executor running under an outer user txn, the cleanup also
+// restores the read sequence number so that outer executor uses the proper
+// sequence number. The Step itself is also instructed not to advance the read
+// timestamp in that case — the parent owns timestamp advancement.
+//
+// When the connExecutor is not in stateOpen the call is a no-op and the
+// returned cleanup does nothing.
+//
+// The cleanup may itself return an error from restoring the read sequence
+// number.
+func (ex *connExecutor) stepReadSequenceWithRestore(ctx context.Context) (func() error, error) {
+	if _, isOpen := ex.machine.CurState().(stateOpen); !isOpen {
+		return func() error { return nil }, nil
+	}
+
+	prevSteppingMode := ex.state.mu.txn.ConfigureStepping(ctx, kv.SteppingEnabled)
+	prevSeqNum := ex.state.mu.txn.GetReadSeqNum()
+	delegatedUnderOuterTxn := ex.executorType == executorTypeInternal && ex.extraTxnState.underOuterTxn
+	cleanup := func() error {
+		_ = ex.state.mu.txn.ConfigureStepping(ctx, prevSteppingMode)
+		if delegatedUnderOuterTxn {
+			return ex.state.mu.txn.SetReadSeqNum(prevSeqNum)
+		}
+		return nil
+	}
+
+	// Under test builds, assert that an internal executor running
+	// under an outer txn does not advance the read timestamp and
+	// that any other internal operation runs at SERIALIZABLE
+	// isolation.
+	var origTs hlc.Timestamp
+	if buildutil.CrdbTestBuild {
+		if delegatedUnderOuterTxn {
+			origTs = ex.state.mu.txn.ReadTimestamp()
+		} else if ex.executorType == executorTypeInternal {
+			if level := ex.state.mu.txn.IsoLevel(); level != isolation.Serializable {
+				_ = cleanup()
+				return nil, errors.AssertionFailedf(
+					"internal operation is not using SERIALIZABLE isolation; found=%s",
+					level,
+				)
+			}
+		}
+	}
+
+	if err := ex.state.mu.txn.Step(ctx, !delegatedUnderOuterTxn /* allowReadTimestampStep */); err != nil {
+		_ = cleanup()
+		return nil, err
+	}
+
+	if buildutil.CrdbTestBuild && delegatedUnderOuterTxn {
+		newTs := ex.state.mu.txn.ReadTimestamp()
+		if newTs != origTs {
+			_ = cleanup()
+			return nil, errors.AssertionFailedf(
+				"internal executor advanced the txn read timestamp. origTs=%s, newTs=%s",
+				origTs, newTs,
+			)
+		}
+	}
+
+	return cleanup, nil
 }
 
 // handleAOST gets the AsOfSystemTime clause from the statement, and sets
