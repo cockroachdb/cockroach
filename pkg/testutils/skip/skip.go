@@ -255,6 +255,13 @@ func maybeSkip(t SkippableTest, reason string, args ...interface{}) {
 	t.Skip(append([]interface{}{reason}, args...)...)
 }
 
+// ServerlessOnly marks a test as testing Serverless-specific functionality.
+// Currently a no-op; uncomment the skip in release branches that no longer
+// support Serverless in production.
+func ServerlessOnly(t SkippableTest) {
+	// IgnoreLint(t, "version is not used by serverless in production")
+}
+
 var miscNightly = envutil.EnvOrDefaultBool("COCKROACH_MISC_NIGHTLY", false)
 
 // IfNotMiscNightly skips this test unless the COCKROACH_MISC_NIGHTLY

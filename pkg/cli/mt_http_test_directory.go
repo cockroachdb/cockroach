@@ -14,10 +14,10 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
-	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sqlproxy/tenant"
+	"github.com/cockroachdb/cockroach/pkg/sqlproxy/tenantdirsvr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"

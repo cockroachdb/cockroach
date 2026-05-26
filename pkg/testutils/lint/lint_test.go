@@ -1314,9 +1314,9 @@ func TestLint(t *testing.T) {
 			":!server/testserver.go",
 			":!util/tracing/*_test.go",
 			":!cli/mt_http_test_directory.go",
-			":!ccl/sqlproxyccl/tenantdirsvr/test_directory_svr.go",
-			":!ccl/sqlproxyccl/tenantdirsvr/test_simple_directory_svr.go",
-			":!ccl/sqlproxyccl/tenantdirsvr/test_static_directory_svr.go",
+			":!sqlproxy/tenantdirsvr/test_directory_svr.go",
+			":!sqlproxy/tenantdirsvr/test_simple_directory_svr.go",
+			":!sqlproxy/tenantdirsvr/test_static_directory_svr.go",
 			":!cmd/bazci/*.go",
 		)
 		if err != nil {
