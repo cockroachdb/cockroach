@@ -370,6 +370,9 @@ type DomainCheckConstraint struct {
 	Expr string
 	// ConstraintID uniquely identifies this constraint within the domain.
 	ConstraintID catid.ConstraintID
+	// Validated indicates whether this constraint has been validated against
+	// all existing data. False for constraints added with NOT VALID.
+	Validated bool
 }
 
 func (e *EnumMetadata) debugString() string {

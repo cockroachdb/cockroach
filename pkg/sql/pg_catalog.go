@@ -1484,38 +1484,42 @@ func populateDomainConstraints(
 			displayExpr = f.CloseAndGetString()
 		}
 		consrc := tree.NewDString(fmt.Sprintf("(%s)", displayExpr))
-		condef := tree.NewDString(fmt.Sprintf("CHECK ((%s))", displayExpr))
+		validity := ""
+		if !ck.Validated {
+			validity = " NOT VALID"
+		}
+		condef := tree.NewDString(fmt.Sprintf("CHECK ((%s))%s", displayExpr, validity))
 		if err := addRow(
-			conoid,               // oid
-			dNameOrNull(ck.Name), // conname
-			nspOid,               // connamespace
-			conTypeCheck,         // contype
-			tree.DBoolFalse,      // condeferrable
-			tree.DBoolFalse,      // condeferred
-			tree.DBoolTrue,       // convalidated
-			oidZero,              // conrelid
-			tree.NewDOid(typOid), // contypid
-			oidZero,              // conindid
-			oidZero,              // conparentid
-			oidZero,              // confrelid
-			tree.DNull,           // confupdtype
-			tree.DNull,           // confdeltype
-			tree.DNull,           // confmatchtype
-			tree.DBoolTrue,       // conislocal
-			zeroVal,              // coninhcount
-			tree.DBoolTrue,       // connoinherit
-			tree.DNull,           // conkey
-			tree.DNull,           // confkey
-			tree.DNull,           // conpfeqop
-			tree.DNull,           // conppeqop
-			tree.DNull,           // conffeqop
-			tree.DNull,           // confdelsetcols
-			tree.DNull,           // conexclop
-			consrc,               // conbin
-			consrc,               // consrc
-			condef,               // condef
-			tree.DBoolTrue,       // conenforced
-			tree.DBoolFalse,      // conperiod
+			conoid,                                   // oid
+			dNameOrNull(ck.Name),                     // conname
+			nspOid,                                   // connamespace
+			conTypeCheck,                             // contype
+			tree.DBoolFalse,                          // condeferrable
+			tree.DBoolFalse,                          // condeferred
+			tree.MakeDBool(tree.DBool(ck.Validated)), // convalidated
+			oidZero,                                  // conrelid
+			tree.NewDOid(typOid),                     // contypid
+			oidZero,                                  // conindid
+			oidZero,                                  // conparentid
+			oidZero,                                  // confrelid
+			tree.DNull,                               // confupdtype
+			tree.DNull,                               // confdeltype
+			tree.DNull,                               // confmatchtype
+			tree.DBoolTrue,                           // conislocal
+			zeroVal,                                  // coninhcount
+			tree.DBoolTrue,                           // connoinherit
+			tree.DNull,                               // conkey
+			tree.DNull,                               // confkey
+			tree.DNull,                               // conpfeqop
+			tree.DNull,                               // conppeqop
+			tree.DNull,                               // conffeqop
+			tree.DNull,                               // confdelsetcols
+			tree.DNull,                               // conexclop
+			consrc,                                   // conbin
+			consrc,                                   // consrc
+			condef,                                   // condef
+			tree.DBoolTrue,                           // conenforced
+			tree.DBoolFalse,                          // conperiod
 		); err != nil {
 			return err
 		}
