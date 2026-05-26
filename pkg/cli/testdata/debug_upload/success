@@ -1,0 +1,59 @@
+# Fresh upload, happy path.
+upload
+{
+  "create_session": {"status": 201, "session_id": "ses_test", "upload_token": "tok_test"},
+  "resumable_session": {"status": 201, "object_path": "ses_test/debug.zip"},
+  "blob_put": [{"status": 200}],
+  "complete": {"status": 200}
+}
+----
+Upload session: ses_test
+Session ses_test completed.
+Uploaded NN B in NNs (NN MB/s).
+[counters] create_session=1 reupload=0 resumable_session=1 complete=1 blob_probe=0 blob_put=1
+
+# Fresh upload with a support ticket-id label.
+upload
+{
+  "ticket_id": "TICKET-123",
+  "create_session": {"status": 201, "session_id": "ses_t1", "upload_token": "tok_t1"},
+  "resumable_session": {"status": 201, "object_path": "ses_t1/debug.zip"},
+  "blob_put": [{"status": 200}],
+  "complete": {"status": 200}
+}
+----
+Upload session: ses_t1
+Session ses_t1 completed.
+Uploaded NN B in NNs (NN MB/s).
+[counters] create_session=1 reupload=0 resumable_session=1 complete=1 blob_probe=0 blob_put=1
+
+# Resume an existing session: probe reports zero bytes on server, full PUT proceeds.
+upload
+{
+  "resume_session": "ses_existing",
+  "reupload": {"status": 200, "session_id": "ses_existing", "upload_token": "tok_new"},
+  "resumable_session": {"status": 200, "object_path": "ses_existing/debug.zip"},
+  "blob_probe": {"status": 308},
+  "blob_put": [{"status": 200}],
+  "complete": {"status": 200}
+}
+----
+Resumed upload session: ses_existing
+Session ses_existing completed.
+Uploaded NN B in NNs (NN MB/s).
+[counters] create_session=0 reupload=1 resumable_session=1 complete=1 blob_probe=1 blob_put=1
+
+# Resume: probe says the object is already complete, no PUT needed.
+upload
+{
+  "resume_session": "ses_done",
+  "reupload": {"status": 200, "session_id": "ses_done", "upload_token": "tok_done"},
+  "resumable_session": {"status": 200, "object_path": "ses_done/debug.zip"},
+  "blob_probe": {"status": 200},
+  "complete": {"status": 200}
+}
+----
+Resumed upload session: ses_done
+already fully uploaded; nothing to send.
+Session ses_done completed.
+[counters] create_session=0 reupload=1 resumable_session=1 complete=1 blob_probe=1 blob_put=0
