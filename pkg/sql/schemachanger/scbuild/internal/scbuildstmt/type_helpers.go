@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/errors"
 )
 
 func resolveSchemaByName(b BuildCtx, schemaName tree.Name, databaseID catid.DescID) *scpb.Schema {
@@ -48,11 +49,29 @@ func panicIfSchemaIsTemporaryOrVirtual(schemaName tree.Name) {
 	}
 }
 
+// typeElemIDs extracts the type ID and implicit array type ID from an element
+// representing a user-defined type with such an associated array type.
+func typeElemIDs(typeElem scpb.Element) (typeID, arrayTypeID catid.DescID) {
+	switch e := typeElem.(type) {
+	case *scpb.EnumType:
+		return e.TypeID, e.ArrayTypeID
+	case *scpb.CompositeType:
+		return e.TypeID, e.ArrayTypeID
+	case *scpb.DomainType:
+		return e.TypeID, e.ArrayTypeID
+	default:
+		panic(errors.AssertionFailedf(
+			"typeElemIDs: unsupported element type %T", typeElem,
+		))
+	}
+}
+
 // setOwnerForTypeDesc implements OWNER TO for user-defined types that have an
 // associated array type (enums, composites, domains).
 func setOwnerForTypeDesc(
-	b BuildCtx, tn *tree.TypeName, typeID catid.DescID, arrayTypeID catid.DescID, owner tree.RoleSpec,
+	b BuildCtx, tn *tree.TypeName, typeElem scpb.Element, owner tree.RoleSpec,
 ) {
+	typeID, arrayTypeID := typeElemIDs(typeElem)
 	newOwner, err := decodeusername.FromRoleSpec(
 		b.SessionData(), username.PurposeValidation, owner,
 	)
@@ -120,12 +139,9 @@ func setOwnerForTypeDesc(
 // setSchemaForTypeDesc implements SET SCHEMA for user-defined types that have
 // an associated array type (enums, composites, domains).
 func setSchemaForTypeDesc(
-	b BuildCtx,
-	typeID catid.DescID,
-	arrayTypeID catid.DescID,
-	newSchemaName tree.Name,
-	descriptorType string,
+	b BuildCtx, typeElem scpb.Element, newSchemaName tree.Name, descriptorType string,
 ) {
+	typeID, arrayTypeID := typeElemIDs(typeElem)
 	currNamespace := mustRetrieveNamespaceElem(b, typeID)
 	currSchemaID := currNamespace.SchemaID
 	panicIfSchemaIsTemporaryOrVirtual(newSchemaName)

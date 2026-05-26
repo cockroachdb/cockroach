@@ -266,15 +266,52 @@ subtest end
 
 subtest add_constraint
 
-statement error pgcode 0A000 ALTER DOMAIN ADD CONSTRAINT \.\.\. CHECK is not supported
-ALTER DOMAIN d ADD CHECK (VALUE < 100)
+statement ok
+ALTER DOMAIN d ADD CONSTRAINT bounded CHECK (VALUE < 100)
 
-statement error pgcode 0A000 ALTER DOMAIN ADD CONSTRAINT \.\.\. CHECK is not supported
-ALTER DOMAIN d ADD CONSTRAINT positive CHECK (VALUE > 0)
+query TT
+SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint
+WHERE contypid = 'd'::regtype AND contype = 'c' ORDER BY conname
+----
+bounded  CHECK ((value < 100))
+d_check  CHECK ((value > 0))
 
-statement error pgcode 0A000 ALTER DOMAIN ADD CONSTRAINT \.\.\. CHECK is not supported
-ALTER DOMAIN d ADD CONSTRAINT bounded CHECK (VALUE < 100) NOT VALID
+statement ok
+CREATE TABLE t_add_chk (c d)
 
+statement ok
+INSERT INTO t_add_chk VALUES (50)
+
+statement error value for domain d violates check constraint "bounded"
+INSERT INTO t_add_chk VALUES (200)
+
+statement error value for domain d violates check constraint "d_check"
+INSERT INTO t_add_chk VALUES (-1)
+
+statement ok
+ALTER DOMAIN d ADD CHECK (VALUE != 42)
+
+query T rowsort
+SELECT conname FROM pg_constraint
+WHERE contypid = 'd'::regtype AND contype = 'c'
+----
+bounded
+d_check
+d_check1
+
+statement error pgcode 42710 constraint "bounded" for domain d already exists
+ALTER DOMAIN d ADD CONSTRAINT bounded CHECK (VALUE < 200)
+
+statement ok
+ALTER DOMAIN d ADD CONSTRAINT deferred CHECK (VALUE != 99) NOT VALID
+
+query TB
+SELECT conname, convalidated FROM pg_constraint
+WHERE contypid = 'd'::regtype AND conname = 'deferred'
+----
+deferred  false
+
+# NOT NULL via ADD CONSTRAINT is still unsupported.
 statement error pgcode 0A000 ALTER DOMAIN ADD CONSTRAINT \.\.\. NOT NULL is not supported
 ALTER DOMAIN d ADD NOT NULL
 
@@ -286,6 +323,9 @@ ALTER DOMAIN d ADD NOT NULL NOT VALID
 
 statement error pgcode 0A000 NOT NULL constraints cannot be marked NOT VALID
 ALTER DOMAIN d ADD CONSTRAINT nn NOT NULL NOT VALID
+
+statement ok
+DROP TABLE t_add_chk
 
 subtest end
 

@@ -11,6 +11,7 @@ import (
 	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -194,13 +195,13 @@ func alterDomainDropNotNull(
 	// b.Drop on an element already targeting ABSENT.
 	domainElts := b.QueryByID(typeID).NotToAbsent()
 
-	existingNotNull := domainElts.FilterDomainNotNull().MustGetZeroOrOneElement()
+	existingNotNull := domainElts.FilterDomainNotNull().NotToAbsent().MustGetZeroOrOneElement()
 	if existingNotNull == nil {
 		return
 	}
 	b.Drop(existingNotNull)
 
-	domainElts.FilterDomainConstraintName().Filter(
+	domainElts.FilterDomainConstraintName().NotToAbsent().Filter(
 		func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.DomainConstraintName) bool {
 			return e.ConstraintID == existingNotNull.ConstraintID
 		},
@@ -209,38 +210,85 @@ func alterDomainDropNotNull(
 	})
 }
 
-// chooseDomainNotNullConstraintName generates a unique name for a domain
-// NOT NULL constraint, of the form `<domain>_not_null[<n>]`. It avoids
-// colliding with names already in use either in the persisted descriptor or
-// among in-flight constraint-name elements scheduled for addition during this
-// build.
-func chooseDomainNotNullConstraintName(b BuildCtx, domainName string, typeID catid.DescID) string {
-	// Persisted constraint names on the descriptor.
-	usedNames := b.DomainConstraintNames(typeID)
-	// In-flight constraint-name elements heading toward PUBLIC. Names that are
-	// being dropped (heading to ABSENT) can be reused, and are filtered out by
-	// NotToAbsent.
-	b.QueryByID(typeID).NotToAbsent().FilterDomainConstraintName().ForEach(
+// chooseDomainNotNullConstraintName returns a unique, unconflicted name for a
+// domain NOT NULL constraint.
+func chooseDomainNotNullConstraintName(b BuildCtx, tn *tree.TypeName, typeID catid.DescID) string {
+	var usedNames []string
+	b.QueryByID(typeID).FilterDomainConstraintName().ForEach(
 		func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.DomainConstraintName) {
 			usedNames = append(usedNames, e.Name)
 		},
 	)
-	base := domainName + "_not_null"
-	for pass := 0; ; pass++ {
-		candidate := base
-		if pass > 0 {
-			candidate = fmt.Sprintf("%s%d", base, pass)
-		}
-		if !slices.Contains(usedNames, candidate) {
-			return candidate
-		}
-	}
+	return chooseDomainConstraintName(tn, "not_null", usedNames)
 }
 
 func alterDomainAddCheckConstraint(
 	b BuildCtx, tn *tree.TypeName, domainType *scpb.DomainType, t *tree.AlterDomainAddCheckConstraint,
 ) {
-	panic(pgerror.Newf(pgcode.FeatureNotSupported, "ALTER DOMAIN ADD CONSTRAINT ... CHECK is not supported"))
+	typeID := domainType.TypeID
+	domainElts := b.QueryByID(typeID)
+	baseType := domainType.BaseTypeT.Type
+
+	typedExpr, err := schemaexpr.TypeCheckDomainCheckExpr(b, b.SemaCtx(), t.Check, baseType)
+	if err != nil {
+		panic(pgerror.Wrapf(err, pgcode.InvalidObjectDefinition,
+			"invalid CHECK expression for domain %s", tn.Object()))
+	}
+	typedExpr, err = schemaexpr.MaybeReplaceUDFNameWithOIDReferenceInTypedExpr(typedExpr)
+	if err != nil {
+		panic(err)
+	}
+
+	var usedNames []string
+	domainElts.FilterDomainConstraintName().ForEach(
+		func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.DomainConstraintName) {
+			usedNames = append(usedNames, e.Name)
+		},
+	)
+
+	constraintName := string(t.Name)
+	if constraintName == "" {
+		constraintName = chooseDomainConstraintName(tn, "check", usedNames)
+	} else if slices.Contains(usedNames, constraintName) {
+		panic(pgerror.Newf(pgcode.DuplicateObject,
+			"constraint %q for domain %s already exists", constraintName, tn.Object()))
+	}
+
+	// Wrap the typed (VALUE-substituted) expression to discover back-references
+	// to UDTs, sequences, and UDFs, then override the serialized expression with
+	// the original VALUE-containing form. The runtime CHECK evaluator
+	// (eval.ValidateDomainConstraints) re-substitutes VALUE per row, so the
+	// stored expression must preserve the VALUE placeholder.
+	checkExpr := b.WrapExpression(typeID, typedExpr)
+	checkExpr.Expr = catpb.Expression(tree.Serialize(t.Check))
+	// ReferencedColumnIDs is meaningless for a domain (no columns); drop it.
+	checkExpr.ReferencedColumnIDs = nil
+
+	constraintID := b.NextDomainConstraintID(typeID)
+	// TODO(62167): Emit DomainCheckConstraint (validated) when DDL is without
+	// `NOT VALID`. A subsequent PR will add support for validating pre-existing
+	// rows and allow validated to be emitted.
+	b.Add(&scpb.DomainCheckConstraintUnvalidated{
+		TypeID:       typeID,
+		ConstraintID: constraintID,
+		Expression:   *checkExpr,
+	})
+	b.Add(&scpb.DomainConstraintName{
+		TypeID:       typeID,
+		ConstraintID: constraintID,
+		Name:         constraintName,
+	})
+}
+
+// chooseDomainConstraintName returns a unique, unconflicted name for a
+// domain constraint.
+func chooseDomainConstraintName(tn *tree.TypeName, label string, usedNames []string) string {
+	domainName := tn.Object()
+	candidate := fmt.Sprintf("%s_%s", domainName, label)
+	for pass := 1; slices.Contains(usedNames, candidate); pass++ {
+		candidate = fmt.Sprintf("%s_%s%d", domainName, label, pass)
+	}
+	return candidate
 }
 
 func alterDomainAddNotNullConstraint(
@@ -277,7 +325,7 @@ func alterDomainValidateConstraint(
 func alterDomainOwner(
 	b BuildCtx, tn *tree.TypeName, domainType *scpb.DomainType, t *tree.AlterDomainOwner,
 ) {
-	setOwnerForTypeDesc(b, tn, domainType.TypeID, domainType.ArrayTypeID, t.Owner)
+	setOwnerForTypeDesc(b, tn, domainType, t.Owner)
 }
 
 func alterDomainRename(
@@ -289,5 +337,5 @@ func alterDomainRename(
 func alterDomainSetSchema(
 	b BuildCtx, tn *tree.TypeName, domainType *scpb.DomainType, t *tree.AlterDomainSetSchema,
 ) {
-	setSchemaForTypeDesc(b, domainType.TypeID, domainType.ArrayTypeID, t.Schema, "domain")
+	setSchemaForTypeDesc(b, domainType, t.Schema, "domain")
 }

@@ -1418,3 +1418,20 @@ type RemoveDomainDefault struct {
 	immediateMutationOp
 	TypeID descpb.ID
 }
+
+// AddDomainCheckConstraint adds a CHECK constraint to a domain type descriptor.
+type AddDomainCheckConstraint struct {
+	immediateMutationOp
+	TypeID       descpb.ID
+	ConstraintID descpb.ConstraintID
+	Expr         catpb.Expression
+	Validity     descpb.ConstraintValidity
+}
+
+// RemoveDomainCheckConstraint removes a CHECK constraint from a domain type
+// descriptor.
+type RemoveDomainCheckConstraint struct {
+	immediateMutationOp
+	TypeID       descpb.ID
+	ConstraintID descpb.ConstraintID
+}
