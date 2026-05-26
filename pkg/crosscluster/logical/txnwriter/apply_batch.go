@@ -96,6 +96,10 @@ func (tw *transactionWriter) tryApplyTransaction(
 		switch {
 		case row.IsDeleteRow():
 			err := tableWriter.DeleteRow(ctx, transaction.TxnID.Timestamp, row.PrevRow)
+			if sqlwriter.IsLwwLoser(err) {
+				lwwLosers++
+				continue
+			}
 			if err != nil {
 				return ApplyResult{}, err
 			}
@@ -118,6 +122,10 @@ func (tw *transactionWriter) tryApplyTransaction(
 				row.PrevRow,
 				row.Row,
 			)
+			if sqlwriter.IsLwwLoser(err) {
+				lwwLosers++
+				continue
+			}
 			if err != nil {
 				return ApplyResult{}, err
 			}

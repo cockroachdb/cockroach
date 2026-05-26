@@ -310,6 +310,85 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 				[][]string{{"new-insert"}},
 			)
 		},
+	}, {
+		// Regression test for #170683: an update whose previous value matches the
+		// local row but whose origin timestamp is older should be an LWW loser.
+		// Without the fix, the KV layer returns ConditionFailedError which is not
+		// caught as an LWW loser.
+		name: "update_lww_loser_with_correct_prev",
+		setup: func(t *testing.T, baseID int) {
+			sqlDB.Exec(t, fmt.Sprintf(
+				`INSERT INTO parent (id, payload) VALUES (%d, 'local')`, baseID+1))
+		},
+		buildTxn: func(t *testing.T, baseID int, preSetupTS hlc.Timestamp) ldrdecoder.Transaction {
+			return ldrdecoder.Transaction{
+				TxnID: ldrdecoder.TxnID{Timestamp: preSetupTS},
+				WriteSet: []ldrdecoder.DecodedRow{
+					{
+						Row:     parentRow(baseID+1, "loser"),
+						PrevRow: parentRow(baseID+1, "local"),
+						TableID: parentID,
+					},
+					{
+						Row:     parentRow(baseID+2, "new-insert"),
+						PrevRow: nil,
+						TableID: parentID,
+					},
+				},
+			}
+		},
+		validate: func(t *testing.T, baseID int, result ApplyResult) {
+			require.Equal(t, ApplyResult{AppliedRows: 1, LwwLoserRows: 1}, result)
+			// Original row unchanged.
+			sqlDB.CheckQueryResults(t,
+				fmt.Sprintf(`SELECT payload FROM parent WHERE id = %d`, baseID+1),
+				[][]string{{"local"}},
+			)
+			// Second insert succeeded.
+			sqlDB.CheckQueryResults(t,
+				fmt.Sprintf(`SELECT payload FROM parent WHERE id = %d`, baseID+2),
+				[][]string{{"new-insert"}},
+			)
+		},
+	}, {
+		// Regression test for #170683: a delete whose previous value matches the
+		// local row but whose origin timestamp is older should be an LWW loser.
+		name: "delete_lww_loser_with_correct_prev",
+		setup: func(t *testing.T, baseID int) {
+			sqlDB.Exec(t, fmt.Sprintf(
+				`INSERT INTO parent (id, payload) VALUES (%d, 'local')`, baseID+1))
+		},
+		buildTxn: func(t *testing.T, baseID int, preSetupTS hlc.Timestamp) ldrdecoder.Transaction {
+			return ldrdecoder.Transaction{
+				TxnID: ldrdecoder.TxnID{Timestamp: preSetupTS},
+				WriteSet: []ldrdecoder.DecodedRow{
+					{
+						Row:      tree.Datums{tree.NewDInt(tree.DInt(baseID + 1)), tree.DNull},
+						PrevRow:  parentRow(baseID+1, "local"),
+						IsDelete: true,
+						TableID:  parentID,
+					},
+					{
+						Row:     parentRow(baseID+2, "new-insert"),
+						PrevRow: nil,
+						TableID: parentID,
+					},
+				},
+			}
+		},
+		validate: func(t *testing.T, baseID int, result ApplyResult) {
+			require.Equal(t, ApplyResult{AppliedRows: 1, LwwLoserRows: 1}, result)
+			// Original row unchanged.
+			sqlDB.CheckQueryResults(t,
+				fmt.Sprintf(`SELECT payload FROM parent WHERE id = %d`, baseID+1),
+				[][]string{{"local"}},
+			)
+			// Second insert succeeded.
+			sqlDB.CheckQueryResults(t,
+				fmt.Sprintf(`SELECT payload FROM parent WHERE id = %d`, baseID+2),
+				[][]string{{"new-insert"}},
+			)
+		},
 	}}
 
 	lwwWinners := []applyTestCase{{

@@ -86,14 +86,19 @@ func TestSQLRowWriter(t *testing.T) {
 	// Test UpdateRow
 	updateRow := makeTestRow(t, desc, 1, "updated")
 	updateTimestamp := s.Clock().Now()
-	require.NoError(t, writer.UpdateRow(ctx, updateTimestamp, insertRow, updateRow))
+	err = session.Txn(ctx, func(ctx context.Context) error {
+		return writer.UpdateRow(ctx, updateTimestamp, insertRow, updateRow)
+	})
+	require.NoError(t, err)
 	require.Equal(t,
 		[][]string{{"1", "updated", "NULL", hlcToString(updateTimestamp), "1"}},
 		sqlDB.QueryStr(t, "SELECT id, name, is_always_null, crdb_internal_origin_timestamp, crdb_internal_origin_id FROM test_table WHERE id = 1"))
 
 	// Test UpdateRow with stale previous value
 	staleRow := makeTestRow(t, desc, 1, "test") // Using old value
-	err = writer.UpdateRow(ctx, s.Clock().Now(), staleRow, updateRow)
+	err = session.Txn(ctx, func(ctx context.Context) error {
+		return writer.UpdateRow(ctx, s.Clock().Now(), staleRow, updateRow)
+	})
 	require.ErrorIs(t, err, ErrStalePreviousValue)
 
 	// Test DeleteRow - first insert a test row to verify origin data before delete
@@ -110,19 +115,27 @@ func TestSQLRowWriter(t *testing.T) {
 		sqlDB.QueryStr(t, "SELECT id, name, is_always_null, crdb_internal_origin_timestamp, crdb_internal_origin_id FROM test_table WHERE id = 2"))
 
 	// Now delete the row
-	require.NoError(t, writer.DeleteRow(ctx, s.Clock().Now(), insertRow2))
+	err = session.Txn(ctx, func(ctx context.Context) error {
+		return writer.DeleteRow(ctx, s.Clock().Now(), insertRow2)
+	})
+	require.NoError(t, err)
 	require.Equal(t,
 		[][]string{},
 		sqlDB.QueryStr(t, "SELECT id, name, is_always_null, crdb_internal_origin_timestamp, crdb_internal_origin_id FROM test_table WHERE id = 2"))
 
 	// Also delete the original row to clean up
-	require.NoError(t, writer.DeleteRow(ctx, s.Clock().Now(), updateRow))
+	err = session.Txn(ctx, func(ctx context.Context) error {
+		return writer.DeleteRow(ctx, s.Clock().Now(), updateRow)
+	})
+	require.NoError(t, err)
 	require.Equal(t,
 		[][]string{},
 		sqlDB.QueryStr(t, "SELECT id, name, is_always_null, crdb_internal_origin_timestamp, crdb_internal_origin_id FROM test_table WHERE id = 1"))
 
 	// Test DeleteRow with stale value
-	err = writer.DeleteRow(ctx, s.Clock().Now(), staleRow)
+	err = session.Txn(ctx, func(ctx context.Context) error {
+		return writer.DeleteRow(ctx, s.Clock().Now(), staleRow)
+	})
 	require.ErrorIs(t, err, ErrStalePreviousValue)
 
 	// Test InsertRow LWW failure against existing row: inserting with an older
