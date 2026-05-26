@@ -87,6 +87,12 @@ type BackupRestoreTestingKnobs struct {
 	// download span worker before sending the download span request.
 	RunBeforeSendingDownloadSpan func() error
 
+	// RunAfterSendingDownloadSpan is called after the download span RPC
+	// completes; a non-nil return value is returned in place of the real
+	// result, allowing tests to inject a failure while letting the
+	// underlying download actually run.
+	RunAfterSendingDownloadSpan func() error
+
 	// RunBeforeDownloadCleanup is called before we cleanup after all external
 	// files have been download.
 	RunBeforeDownloadCleanup func() error

@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 const defaultLinkWorkersPerNode = 2
@@ -611,45 +612,76 @@ func (r *restoreResumer) maybeCalculateTotalDownloadSpans(
 	return total, nil
 }
 
+// sendDownloadWorker retries sendDownloadSpan with the given backoff
+// until either done is closed (the observer signalled remaining bytes
+// hit zero), the retry budget is exhausted, or ctx is cancelled. The
+// retry counter resets on each successful dispatch, so newly appearing
+// work (e.g. from rebalancing) does not count against the no-progress
+// budget.
 func (r *restoreResumer) sendDownloadWorker(
-	execCtx sql.JobExecContext, spans roachpb.Spans, completionPoller chan struct{},
-) func(context.Context) error {
-	return func(ctx context.Context) error {
-		ctx, tsp := tracing.ChildSpan(ctx, "backup.sendDownloadWorker")
-		defer tsp.Finish()
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	spans roachpb.Spans,
+	done <-chan struct{},
+	retryOpts retry.Options,
+) error {
+	ctx, tsp := tracing.ChildSpan(ctx, "backup.sendDownloadWorker")
+	defer tsp.Finish()
 
-		testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
-		for {
-			if err := ctx.Err(); err != nil {
-				return err
-			}
+	testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
+	logThrottler := util.EveryMono(orDownloadRetryLogRate.Get(&execCtx.ExecCfg().Settings.SV))
 
-			if testingKnobs != nil && testingKnobs.RunBeforeSendingDownloadSpan != nil {
-				if err := testingKnobs.RunBeforeSendingDownloadSpan(); err != nil {
-					return err
-				}
-			}
-
-			if err := sendDownloadSpan(ctx, execCtx, spans); err != nil {
-				return err
-			}
-
-			// Wait for the completion poller to signal that it has checked our work.
-			select {
-			case _, ok := <-completionPoller:
-				if !ok {
-					return nil
-				}
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-
-			// Sleep a bit before sending download requests again to avoid a hot loop.
-			// This will only be hit if after a successful download request, there are
-			// still spans to download (e.g. because of a rabalancing).
-			time.Sleep(10 * time.Second)
+	var lastErr error
+	for rt := retry.StartWithCtx(ctx, retryOpts); rt.Next(); {
+		select {
+		case <-done:
+			return nil
+		default:
 		}
+		if testingKnobs != nil && testingKnobs.RunBeforeSendingDownloadSpan != nil {
+			if err := testingKnobs.RunBeforeSendingDownloadSpan(); err != nil {
+				lastErr = err
+				r.recordDownloadFailure(ctx, execCtx, &logThrottler, err)
+				continue
+			}
+		}
+		if err := sendDownloadSpan(ctx, execCtx, spans); err != nil {
+			lastErr = err
+			r.recordDownloadFailure(ctx, execCtx, &logThrottler, err)
+			continue
+		}
+		lastErr = nil
+		rt.Reset()
 	}
+	if lastErr != nil {
+		return lastErr
+	}
+	return ctx.Err()
+}
+
+// recordDownloadFailure logs a download failure to the job's message
+// log, throttled by the configured rate.
+func (r *restoreResumer) recordDownloadFailure(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	throttler *util.EveryN[crtime.Mono],
+	err error,
+) {
+	log.Dev.Warningf(ctx, "failed attempt to download files: %v", err)
+	if !throttler.ShouldProcess(crtime.NowMono()) {
+		return
+	}
+	besteffort.Warning(
+		ctx, "or-download-failed-log",
+		func(ctx context.Context) error {
+			return execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				return r.job.Messages().Record(
+					ctx, txn, "error",
+					fmt.Sprintf("online restore download encountered error: %v", err),
+				)
+			})
+		},
+	)
 }
 
 var useCopy = envutil.EnvOrDefaultBool("COCKROACH_DOWNLOAD_COPY", true)
@@ -671,6 +703,12 @@ func sendDownloadSpan(ctx context.Context, execCtx sql.JobExecContext, spans roa
 		err := errors.DecodeError(ctx, encoded)
 		return errors.Wrapf(err,
 			"failed to download spans on %d nodes; n%d err", len(resp.Errors), n)
+	}
+	if testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs; testingKnobs != nil &&
+		testingKnobs.RunAfterSendingDownloadSpan != nil {
+		if err := testingKnobs.RunAfterSendingDownloadSpan(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -747,13 +785,19 @@ func (r *restoreResumer) maybeWriteDownloadJob(
 	})
 }
 
-// waitForDownloadToComplete waits until there are no more ExternalFileBytes
-// remaining to be downloaded for the restore. It sends a signal on the passed
-// channel each time it polls the span, and closes it when it stops.
+// waitForDownloadToComplete polls until there are no more ExternalFileBytes
+// remaining to be downloaded for the restore, or until the retry budget
+// elapses without any observed decrease in remaining bytes. Either way, done
+// is closed on exit so the dispatch worker can stop. The success vs failure
+// distinction is carried in the returned error, not the channel.
 func (r *restoreResumer) waitForDownloadToComplete(
-	ctx context.Context, execCtx sql.JobExecContext, details jobspb.RestoreDetails, ch chan struct{},
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	details jobspb.RestoreDetails,
+	done chan<- struct{},
+	retryOpts retry.Options,
 ) error {
-	defer close(ch)
+	defer close(done)
 
 	ctx, tsp := tracing.ChildSpan(ctx, "backup.waitForDownloadToComplete")
 	defer tsp.Finish()
@@ -773,13 +817,17 @@ func (r *restoreResumer) waitForDownloadToComplete(
 		})
 	}
 
+	lastRemaining := total
 	var lastProgressUpdate time.Time
-	for rt := retry.StartWithCtx(
-		ctx, retry.Options{InitialBackoff: time.Second, MaxBackoff: time.Second * 10},
-	); rt.Next(); {
+	for rt := retry.StartWithCtx(ctx, retryOpts); rt.Next(); {
 		remaining, err := getExternalBytesOverSpans(ctx, execCtx.ExecCfg(), details.DownloadSpans)
 		if err != nil {
 			return errors.Wrap(err, "failed to get remaining external file bytes")
+		}
+
+		if remaining < lastRemaining {
+			lastRemaining = remaining
+			rt.Reset()
 		}
 
 		// Sometimes a new virtual/external file sneaks in after we count total; the
@@ -815,14 +863,11 @@ func (r *restoreResumer) waitForDownloadToComplete(
 			}
 			lastProgressUpdate = timeutil.Now()
 		}
-		// Signal the download job if it is waiting that we've polled and found work
-		// left for it to do.
-		select {
-		case ch <- struct{}{}:
-		default:
-		}
 	}
-	return ctx.Err()
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return errors.New("download made no observable progress within retry budget")
 }
 
 func unstickRestoreSpans(
@@ -875,63 +920,22 @@ func getRemainingExternalFileBytes(
 	return remaining, nil
 }
 
-func (r *restoreResumer) doDownloadFilesWithRetry(
-	ctx context.Context, execCtx sql.JobExecContext,
-) error {
-	maxDuration := orDownloadRetryMaxDuration.Get(&execCtx.ExecCfg().Settings.SV)
-	retryOpts := retry.Options{
-		InitialBackoff: time.Millisecond * 100,
-		MaxBackoff:     5 * time.Minute,
-		MaxDuration:    maxDuration,
+// downloadRetryOpts returns the retry options used by both the dispatch
+// worker and the observer in the download phase. The MaxDuration bounds
+// how long either loop will sit without observable forward motion (a
+// successful dispatch for the worker, a decrease in remaining bytes for
+// the observer); both loops reset their counter on each forward step.
+func downloadRetryOpts(execCtx sql.JobExecContext) retry.Options {
+	opts := retry.Options{
+		InitialBackoff: time.Second,
+		MaxBackoff:     10 * time.Second,
+		MaxDuration:    orDownloadRetryMaxDuration.Get(&execCtx.ExecCfg().Settings.SV),
 	}
 	if knobs := execCtx.ExecCfg().BackupRestoreTestingKnobs; knobs != nil &&
 		knobs.DownloadPhaseRetryPolicy != nil {
-		retryOpts = *knobs.DownloadPhaseRetryPolicy
+		opts = *knobs.DownloadPhaseRetryPolicy
 	}
-
-	logRate := orDownloadRetryLogRate.Get(&execCtx.ExecCfg().Settings.SV)
-	logThrottler := util.EveryMono(logRate)
-
-	var err error
-	var lastProgress float32
-	for rt := retry.StartWithCtx(ctx, retryOpts); rt.Next(); {
-		err = r.doDownloadFiles(ctx, execCtx)
-		if err == nil {
-			return nil
-		}
-		log.Dev.Warningf(ctx, "failed attempt to download files: %v", err)
-
-		if errors.HasType(err, &kvpb.InsufficientSpaceError{}) {
-			return jobs.MarkPauseRequestError(errors.UnwrapAll(err))
-		}
-		if jobs.IsPauseSelfError(err) || jobs.IsPermanentJobError(err) {
-			return err
-		}
-
-		if logThrottler.ShouldProcess(crtime.NowMono()) {
-			besteffort.Warning(
-				ctx, "or-download-failed-log",
-				func(ctx context.Context) error {
-					return execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-						return r.job.Messages().Record(
-							ctx, txn, "error",
-							fmt.Sprintf("online restore download encountered error: %v", err),
-						)
-					})
-				},
-			)
-		}
-
-		if lastProgress != r.downloadJobProg {
-			lastProgress = r.downloadJobProg
-			rt.Reset()
-			log.Dev.Infof(ctx, "download progress has advanced since last retry, resetting retry counter")
-		}
-	}
-	if ctx.Err() != nil {
-		return errors.CombineErrors(ctx.Err(), err)
-	}
-	return jobs.MarkPauseRequestError(errors.Wrapf(err, "retries exhausted for downloading files"))
+	return opts
 }
 
 func (r *restoreResumer) doDownloadFiles(ctx context.Context, execCtx sql.JobExecContext) error {
@@ -941,16 +945,28 @@ func (r *restoreResumer) doDownloadFiles(ctx context.Context, execCtx sql.JobExe
 		return err
 	}
 
-	grp := ctxgroup.WithContext(ctx)
-	completionPoller := make(chan struct{})
+	retryOpts := downloadRetryOpts(execCtx)
+	done := make(chan struct{})
 
-	grp.GoCtx(r.sendDownloadWorker(execCtx, details.DownloadSpans, completionPoller))
-	grp.GoCtx(func(ctx context.Context) error {
-		return r.waitForDownloadToComplete(ctx, execCtx, details, completionPoller)
+	var grp errgroup.Group
+	grp.Go(func() error {
+		return r.sendDownloadWorker(ctx, execCtx, details.DownloadSpans, done, retryOpts)
+	})
+	grp.Go(func() error {
+		return r.waitForDownloadToComplete(ctx, execCtx, details, done, retryOpts)
 	})
 
 	if err := grp.Wait(); err != nil {
-		return errors.Wrap(err, "failed to generate and send download spans")
+		if errors.HasType(err, &kvpb.InsufficientSpaceError{}) {
+			return jobs.MarkPauseRequestError(errors.UnwrapAll(err))
+		}
+		if jobs.IsPauseSelfError(err) || jobs.IsPermanentJobError(err) {
+			return err
+		}
+		if ctx.Err() != nil {
+			return errors.CombineErrors(ctx.Err(), err)
+		}
+		return jobs.MarkPauseRequestError(errors.Wrap(err, "download phase"))
 	}
 
 	testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
