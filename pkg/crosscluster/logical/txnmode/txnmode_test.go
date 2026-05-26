@@ -8,6 +8,7 @@ package txnmode_test
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -15,13 +16,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
 
 // setupParentChildReplication creates source and destination databases with
@@ -55,6 +60,31 @@ func setupParentChildReplication(
 	return sourceDB, destDB, jobID
 }
 
+// cpuHandleAssertingSession wraps an isql.Session and asserts that the context
+// carries a SQL CPU handle with AtGateway=false and that the calling goroutine
+// has its handle registered before any SQL execution begins.
+type cpuHandleAssertingSession struct {
+	isql.Session
+	t       *testing.T
+	checked *atomic.Bool
+}
+
+func (s *cpuHandleAssertingSession) assertHandle(ctx context.Context) {
+	h := admission.SQLCPUHandleFromContext(ctx)
+	if h != nil {
+		s.checked.Store(true)
+		require.False(s.t, h.AtGateway(),
+			"LDR CPU handle should have AtGateway=false")
+		require.True(s.t, h.IsGoroutineRegistered(),
+			"goroutine handle should be registered before internal SQL execution")
+	}
+}
+
+func (s *cpuHandleAssertingSession) Txn(ctx context.Context, do func(context.Context) error) error {
+	s.assertHandle(ctx)
+	return s.Session.Txn(ctx, do)
+}
+
 func TestTxnModeSmoketest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderDeadlock(t)
@@ -62,10 +92,18 @@ func TestTxnModeSmoketest(t *testing.T) {
 
 	ctx := context.Background()
 
+	var cpuHandleChecked atomic.Bool
 	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(134857),
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				SessionWrapper: func(session isql.Session) isql.Session {
+					return &cpuHandleAssertingSession{
+						Session: session, t: t, checked: &cpuHandleChecked,
+					}
+				},
+			},
 		},
 	})
 	defer srv.Stopper().Stop(ctx)
@@ -97,6 +135,11 @@ func TestTxnModeSmoketest(t *testing.T) {
 
 	destDB.CheckQueryResults(t, "SELECT * FROM parent ORDER BY id", [][]string{})
 	destDB.CheckQueryResults(t, "SELECT * FROM child ORDER BY id", [][]string{})
+
+	// Verify that at least one session had its CPU handle checked, confirming
+	// that the writer goroutines are running with per-goroutine handles.
+	require.True(t, cpuHandleChecked.Load(),
+		"expected at least one session to have its CPU handle checked")
 }
 
 func TestTxnModeUniqueConstraintUpdate(t *testing.T) {

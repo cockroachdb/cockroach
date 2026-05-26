@@ -14,6 +14,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnwriter"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -200,6 +203,16 @@ func logDAG(t testing.TB, dag []txnNode) {
 			t.Logf("  txn %s; depends on %v", node.id, node.deps)
 		}
 	}
+}
+
+var testCPUHandleProvider = admission.NewSQLCPUProvider(
+	&cluster.MakeTestingClusterSettings().SV, nil, /* getWorkQueue */
+)
+
+func testNewCPUHandle() *admission.SQLCPUHandle {
+	return testCPUHandleProvider.GetHandle(admission.WorkInfo{
+		Priority: admissionpb.LowPri,
+	}, false /* atGateway */)
 }
 
 // checkApplierDrained verifies that the applier's internal buffers are empty
@@ -476,7 +489,7 @@ func runDistributedApplier(
 		for i := range writers {
 			writers[i] = sharedWriter
 		}
-		a, err := NewApplier(ctx, id, writers, depTracker, ids)
+		a, err := NewApplier(ctx, id, writers, depTracker, ids, testNewCPUHandle)
 		require.NoError(t, err)
 
 		inputs[id] = make(chan ApplierEvent, 2*len(dag)+len(ids)+1)
@@ -632,7 +645,7 @@ func runBenchApplier(b *testing.B, dag []txnNode, numWritersPerApplier int, rngS
 		for i := range writers {
 			writers[i] = sharedWriter
 		}
-		a, err := NewApplier(ctx, id, writers, depTracker, ids)
+		a, err := NewApplier(ctx, id, writers, depTracker, ids, testNewCPUHandle)
 		require.NoError(b, err)
 		inputs[id] = make(chan ApplierEvent, 2*len(dag)+len(ids)+1)
 		appliers[id] = a
