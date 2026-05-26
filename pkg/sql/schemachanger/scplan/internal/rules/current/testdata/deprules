@@ -882,7 +882,7 @@ deprules
     - descriptorIsNotBeingDropped-26.3($prev)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
-- name: 'DomainNotNull transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT'
+- name: 'DomainNotNull transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY'
   from: prev-Node
   kind: PreviousTransactionPrecedence
   to: next-Node
@@ -894,12 +894,12 @@ deprules
     - $prev-Target[Self] = $next-Target
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = VALIDATED
-    - $next-Node[CurrentStatus] = ABSENT
+    - $next-Node[CurrentStatus] = WRITE_ONLY
     - descriptorIsNotBeingDropped-26.3($prev)
-    - nodeNotExistsWithStatusIn_WRITE_ONLY($prev-Target)
+    - nodeNotExistsWithStatusIn_PUBLIC($prev-Target)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
-- name: 'DomainNotNull transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED'
+- name: 'DomainNotNull transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->ABSENT'
   from: prev-Node
   kind: PreviousTransactionPrecedence
   to: next-Node
@@ -911,7 +911,7 @@ deprules
     - $prev-Target[Self] = $next-Target
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = WRITE_ONLY
-    - $next-Node[CurrentStatus] = VALIDATED
+    - $next-Node[CurrentStatus] = ABSENT
     - descriptorIsNotBeingDropped-26.3($prev)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
@@ -6739,7 +6739,7 @@ deprules
     - descriptorIsNotBeingDropped-26.3($prev)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
-- name: 'DomainNotNull transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT'
+- name: 'DomainNotNull transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY'
   from: prev-Node
   kind: PreviousTransactionPrecedence
   to: next-Node
@@ -6751,12 +6751,12 @@ deprules
     - $prev-Target[Self] = $next-Target
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = VALIDATED
-    - $next-Node[CurrentStatus] = ABSENT
+    - $next-Node[CurrentStatus] = WRITE_ONLY
     - descriptorIsNotBeingDropped-26.3($prev)
-    - nodeNotExistsWithStatusIn_WRITE_ONLY($prev-Target)
+    - nodeNotExistsWithStatusIn_PUBLIC($prev-Target)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
-- name: 'DomainNotNull transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED'
+- name: 'DomainNotNull transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->ABSENT'
   from: prev-Node
   kind: PreviousTransactionPrecedence
   to: next-Node
@@ -6768,7 +6768,7 @@ deprules
     - $prev-Target[Self] = $next-Target
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = WRITE_ONLY
-    - $next-Node[CurrentStatus] = VALIDATED
+    - $next-Node[CurrentStatus] = ABSENT
     - descriptorIsNotBeingDropped-26.3($prev)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)

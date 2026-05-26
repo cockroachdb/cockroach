@@ -9,7 +9,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -18,19 +17,13 @@ import (
 func alterTypeRename(
 	b BuildCtx, tn *tree.TypeName, enumType *scpb.EnumType, t *tree.AlterTypeRename,
 ) {
-	renameForTypeDesc(b, tn, enumType, enumType.TypeID, enumType.ArrayTypeID, string(t.NewName))
+	renameForTypeDesc(b, tn, enumType, string(t.NewName))
 }
 
 // renameForTypeDesc implements RENAME TO for user-defined types that have an
 // associated array type (enums, composites, domains).
-func renameForTypeDesc(
-	b BuildCtx,
-	tn *tree.TypeName,
-	typeElem scpb.Element,
-	typeID catid.DescID,
-	arrayTypeID catid.DescID,
-	newName string,
-) {
+func renameForTypeDesc(b BuildCtx, tn *tree.TypeName, typeElem scpb.Element, newName string) {
+	typeID, arrayTypeID := typeElemIDs(typeElem)
 	typeElts := b.QueryByID(typeID)
 	currentNS := typeElts.FilterNamespace().NotToAbsent().MustGetOneElement()
 
