@@ -581,7 +581,8 @@ func verifyConflictCorrectness(
 	// with matching origin timestamps, so if there are 100 or more something
 	// else is wrong.
 	const diffLimit = 100
-	diffs, err := workloadrand.Diff(setup.left.db, "conflict.conflict", setup.right.db, "conflict.conflict", diffLimit)
+	conflictTable := workloadrand.QualifiedName{Table: "conflict", Schema: "public", Database: "conflict"}
+	diffs, err := workloadrand.Diff(setup.left.db, conflictTable, setup.right.db, conflictTable, diffLimit)
 	require.NoError(t, err)
 	require.NotEmpty(t, diffs, "fingerprints differ but no row diffs found")
 	require.Less(t, len(diffs), diffLimit, "too many diffs; likely a real divergence, not a timestamp tie")
