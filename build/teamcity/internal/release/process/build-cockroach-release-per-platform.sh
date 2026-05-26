@@ -6,7 +6,7 @@
 # included in the /LICENSE file.
 
 
-set -euxo pipefail
+set -euo pipefail
 
 dir="$(dirname $(dirname $(dirname $(dirname $(dirname "${0}")))))"
 source "$dir/release/teamcity-support.sh"
@@ -14,6 +14,12 @@ source "$dir/teamcity-bazel-support.sh"  # for run_bazel
 
 tc_start_block "Variable Setup"
 platform="${PLATFORM:?PLATFORM must be specified}"
+telemetry_disabled="${TELEMETRY_DISABLED:-false}"
+cockroach_archive_prefix="${COCKROACH_ARCHIVE_PREFIX:-cockroach}"
+if [[ $telemetry_disabled == true && $cockroach_archive_prefix == "cockroach" ]]; then
+  echo "COCKROACH_ARCHIVE_PREFIX must be set to a non-default value when telemetry is disabled"
+  exit 1
+fi
 version=$(grep -v "^#" "$dir/../pkg/build/version.txt" | head -n1)
 version_label=$(echo "${version}" | sed -e 's/^v//' | cut -d- -f 1)
 
@@ -29,31 +35,45 @@ fi
 
 if [[ -z "${DRY_RUN}" ]] ; then
   gcs_bucket="cockroach-release-artifacts-staged-prod"
-  gcr_credentials="$GCS_CREDENTIALS_PROD"
-  # export the variable to avoid shell escaping
-  export gcs_credentials="$GCS_CREDENTIALS_PROD"
-  gcr_staged_repository="us-docker.pkg.dev/releases-prod/cockroachdb-staged-releases/cockroach"
+  gcr_staged_repository="us-docker.pkg.dev/releases-prod/cockroachdb-staged-releases/${cockroach_archive_prefix}"
 else
   gcs_bucket="cockroach-release-artifacts-staged-dryrun"
-  gcr_credentials="$GCS_CREDENTIALS_DEV"
-  # export the variable to avoid shell escaping
-  export gcs_credentials="$GCS_CREDENTIALS_DEV"
-  gcr_staged_repository="us-docker.pkg.dev/releases-dev-356314/cockroachdb-staged-releases/cockroach"
+  gcr_staged_repository="us-docker.pkg.dev/releases-dev-356314/cockroachdb-staged-releases/${cockroach_archive_prefix}"
+fi
+
+# With WIF (GitHub Actions), credentials are handled via mounted credential
+# files rather than JSON key env vars. gcs_credentials and gcr_credentials may be empty.
+if [[ -n "${GCS_CREDENTIALS_PROD:-}" || -n "${GCS_CREDENTIALS_DEV:-}" ]]; then
+  if [[ -z "${DRY_RUN}" ]] ; then
+    gcr_credentials="$GCS_CREDENTIALS_PROD"
+    export gcs_credentials="$GCS_CREDENTIALS_PROD"
+  else
+    gcr_credentials="$GCS_CREDENTIALS_DEV"
+    export gcs_credentials="$GCS_CREDENTIALS_DEV"
+  fi
+else
+  gcr_credentials=""
+  export gcs_credentials=""
 fi
 
 tc_end_block "Variable Setup"
 
 
 tc_start_block "Make and publish release artifacts"
-# Using publish-provisional-artifacts here is funky. We're directly publishing
-# the official binaries, not provisional ones. Legacy naming. To clean up...
-BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e TC_BUILDTYPE_ID -e TC_BUILD_BRANCH=$version -e gcs_credentials -e gcs_bucket=$gcs_bucket -e platform=$platform" run_bazel << 'EOF'
-bazel build --config ci //pkg/cmd/publish-provisional-artifacts
-BAZEL_BIN=$(bazel info bazel-bin --config ci)
+BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e TC_BUILDTYPE_ID -e TC_BUILD_BRANCH=$version -e gcs_credentials -e gcs_bucket=$gcs_bucket -e platform=$platform -e telemetry_disabled=$telemetry_disabled -e cockroach_archive_prefix=$cockroach_archive_prefix" run_bazel << 'EOF'
+# release-24.1 still ships publish-provisional-artifacts; the rename to
+# publish-artifacts and the `release` subcommand split happened post-24.3.
+bazel build //pkg/cmd/publish-provisional-artifacts
+BAZEL_BIN=$(bazel info bazel-bin)
 export google_credentials="$gcs_credentials"
 source "build/teamcity-support.sh"  # For log_into_gcloud
 log_into_gcloud
-export GOOGLE_APPLICATION_CREDENTIALS="$PWD/.google-credentials.json"
+# Under WIF (GitHub Actions), GOOGLE_APPLICATION_CREDENTIALS is already set to
+# the mounted credential file. Only override it for TeamCity (service-account
+# key written to .google-credentials.json by log_into_gcloud).
+if [[ -z "${CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE:-}" ]]; then
+  export GOOGLE_APPLICATION_CREDENTIALS="$PWD/.google-credentials.json"
+fi
 
 cat licenses/THIRD-PARTY-NOTICES.txt > /tmp/THIRD-PARTY-NOTICES.txt.tmp
 echo "================================================================================" >> /tmp/THIRD-PARTY-NOTICES.txt.tmp 
@@ -74,7 +94,7 @@ done
 
 tr -d '\r' < /tmp/THIRD-PARTY-NOTICES.txt.tmp > /tmp/THIRD-PARTY-NOTICES.txt
 
-$BAZEL_BIN/pkg/cmd/publish-provisional-artifacts/publish-provisional-artifacts_/publish-provisional-artifacts -provisional -release --gcs-bucket="$gcs_bucket" --output-directory=artifacts --platform=$platform --third-party-notices-file=/tmp/THIRD-PARTY-NOTICES.txt
+$BAZEL_BIN/pkg/cmd/publish-provisional-artifacts/publish-provisional-artifacts_/publish-provisional-artifacts -provisional -release --gcs-bucket="$gcs_bucket" --output-directory=artifacts --platform=$platform --third-party-notices-file=/tmp/THIRD-PARTY-NOTICES.txt --telemetry-disabled=$telemetry_disabled --cockroach-archive-prefix=$cockroach_archive_prefix
 EOF
 tc_end_block "Make and publish release artifacts"
 
@@ -90,7 +110,7 @@ if [[ $platform == "linux-amd64" || $platform == "linux-arm64" || $platform == "
   tar \
     --directory="build/deploy-${platform}" \
     --extract \
-    --file="artifacts/cockroach-${version}.${platform}.tgz" \
+    --file="artifacts/${cockroach_archive_prefix}-${version}.${platform}.tgz" \
     --ungzip \
     --ignore-zeros \
     --strip-components=1
@@ -102,6 +122,10 @@ if [[ $platform == "linux-amd64" || $platform == "linux-arm64" || $platform == "
   build_docker_tag="${gcr_staged_repository}:${arch}-${version}"
   if [[ $platform == "linux-amd64-fips" ]]; then
     build_docker_tag="${gcr_staged_repository}:${version}-fips"
+    # release-24.1's build/deploy/Dockerfile gates FIPS-specific package
+    # installation on the fips_enabled build-arg. The post-25.x Dockerfile
+    # consolidated this so the arg is no longer needed; on release-24.1 we
+    # still have to pass it explicitly.
     docker build --label version="$version_label" --no-cache --pull --platform="linux/${arch}" --tag="${build_docker_tag}" --build-arg fips_enabled=1 "build/deploy-${platform}"
   else
     docker build --label version="$version_label" --no-cache --pull --platform="linux/${arch}" --tag="${build_docker_tag}" "build/deploy-${platform}"
@@ -114,6 +138,6 @@ fi
 # Here we verify the FIPS image only. The multi-arch image will be verified in the job it's created.
 if [[ $platform == "linux-amd64-fips" ]]; then
   tc_start_block "Verify FIPS docker image"
-  verify_docker_image "$build_docker_tag" "linux/amd64" "$BUILD_VCS_NUMBER" "$version" true
+  verify_docker_image "$build_docker_tag" "linux/amd64" "$BUILD_VCS_NUMBER" "$version" true $telemetry_disabled
   tc_end_block "Verify FIPS docker image"
 fi
