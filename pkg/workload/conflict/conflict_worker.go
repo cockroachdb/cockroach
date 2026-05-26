@@ -23,7 +23,9 @@ type conflictWorker struct {
 	nullPct int
 }
 
-func newConflictWorker(connections []*gosql.DB, tableName string) (*conflictWorker, error) {
+func newConflictWorker(
+	connections []*gosql.DB, tableName workloadrand.QualifiedName,
+) (*conflictWorker, error) {
 	table, err := workloadrand.LoadTable(connections[0], tableName)
 	if err != nil {
 		return nil, err
