@@ -476,7 +476,14 @@ func (b *Builder) buildRoutine(
 		couldBeInlined := len(stmts) == 1 && !isSetReturning &&
 			o.Volatility != volatility.Volatile
 
-		if f.ResolvedType().Identical(types.AnyTuple) || couldBeInlined || b.insideFuncDef {
+		// Force eager build when the descriptor's CanMutate status is
+		// unknown (pre-V26_3_FunctionDescCanMutate). Deferred body building
+		// relies on the persisted CanMutate field to propagate mutation
+		// flags without inspecting the body; without it, the executor may
+		// incorrectly use a LeafTxn for mutating routines.
+		canMutateUnknown := o.CanMutate == tree.RoutineCanMutateUnknown
+
+		if f.ResolvedType().Identical(types.AnyTuple) || couldBeInlined || b.insideFuncDef || canMutateUnknown {
 			// Eager path: build body RelExprs now.
 			body, bodyProps, bodyTags = b.buildSQLRoutineBodyStmts(
 				stmtASTs, bodyScope, f.ResolvedType(), f, inScope, isSetReturning,
@@ -582,13 +589,15 @@ func (b *Builder) buildRoutine(
 
 	// Derive canMutate from the descriptor (via the Overload). When the
 	// descriptor's CanMutate is unknown (for descriptors predating the
-	// field), fall back to inspecting the eagerly-built body expressions.
+	// V26_3_FunctionDescCanMutate version gate), fall back to inspecting
+	// the eagerly-built body expressions.
 	//
 	// This resolution always produces a definite value before the UDF
 	// call expression is constructed below, so parent routines that call
 	// this one will never see an unknown mutation status from this child.
 	// The fallback is safe because unknown-status descriptors always have
-	// eagerly-built body expressions available for inspection.
+	// eagerly-built body expressions available for inspection (we force
+	// eager building above when canMutateUnknown is true).
 	canMutate := o.CanMutate
 	if canMutate == tree.RoutineCanMutateUnknown {
 		for _, s := range body {
