@@ -1596,3 +1596,402 @@ SELECT bool_and(oid > 16384) FROM pg_cast
 true
 
 subtest end
+
+subtest pg_size_pretty
+
+# Stay in the bytes unit until 10*1024.
+query T
+SELECT pg_size_pretty(0::int)
+----
+0 bytes
+
+query T
+SELECT pg_size_pretty(1::int)
+----
+1 bytes
+
+query T
+SELECT pg_size_pretty(10239::int)
+----
+10239 bytes
+
+# Switch to kB at 10*1024.
+query T
+SELECT pg_size_pretty(10240::int)
+----
+10 kB
+
+query T
+SELECT pg_size_pretty(1024::int)
+----
+1024 bytes
+
+query T
+SELECT pg_size_pretty(1023::int)
+----
+1023 bytes
+
+# Switch to MB at 10*1024 kB = 10*1024*1024 bytes.
+query T
+SELECT pg_size_pretty(10485760::int)
+----
+10 MB
+
+# Stay in MB until 10*1024 MB.
+query T
+SELECT pg_size_pretty(1073741824::int)
+----
+1024 MB
+
+# Switch to GB at 10*1024 MB.
+query T
+SELECT pg_size_pretty(1099511627776::int)
+----
+1024 GB
+
+# Switch to TB.
+query T
+SELECT pg_size_pretty(1125899906842624::int)
+----
+1024 TB
+
+# Negatives mirror positives.
+query T
+SELECT pg_size_pretty(-1024::int)
+----
+-1024 bytes
+
+query T
+SELECT pg_size_pretty(-10240::int)
+----
+-10 kB
+
+query T
+SELECT pg_size_pretty(-10485760::int)
+----
+-10 MB
+
+# Half-rounding: 1.5 MiB = 1536 kB stays as kB (well under 10 MB threshold).
+query T
+SELECT pg_size_pretty(1572864::int)
+----
+1536 kB
+
+# 15 MiB.
+query T
+SELECT pg_size_pretty(15728640::int)
+----
+15 MB
+
+# NULL passthrough.
+query T
+SELECT pg_size_pretty(NULL::int)
+----
+NULL
+
+# Decimal overload yields the same output for whole values.
+query T
+SELECT pg_size_pretty(10240::decimal)
+----
+10 kB
+
+query T
+SELECT pg_size_pretty(1572864::decimal)
+----
+1536 kB
+
+# Decimal NULL.
+query T
+SELECT pg_size_pretty(NULL::decimal)
+----
+NULL
+
+subtest end
+
+subtest pg_size_bytes
+
+query I
+SELECT pg_size_bytes('0')
+----
+0
+
+query I
+SELECT pg_size_bytes('1024')
+----
+1024
+
+# No unit means bytes.
+query I
+SELECT pg_size_bytes('100')
+----
+100
+
+# 'bytes' and 'B' aliases.
+query I
+SELECT pg_size_bytes('1024 bytes')
+----
+1024
+
+query I
+SELECT pg_size_bytes('1024 B')
+----
+1024
+
+query I
+SELECT pg_size_bytes('1024 b')
+----
+1024
+
+# Standard units, case-insensitive.
+query I
+SELECT pg_size_bytes('10 kB')
+----
+10240
+
+query I
+SELECT pg_size_bytes('10 KB')
+----
+10240
+
+query I
+SELECT pg_size_bytes('1.5 MB')
+----
+1572864
+
+query I
+SELECT pg_size_bytes('1.5 GB')
+----
+1610612736
+
+query I
+SELECT pg_size_bytes('1.5 TB')
+----
+1649267441664
+
+query I
+SELECT pg_size_bytes('1.5 PB')
+----
+1688849860263936
+
+# No space between number and unit is allowed.
+query I
+SELECT pg_size_bytes('100bytes')
+----
+100
+
+# Surrounding whitespace is tolerated.
+query I
+SELECT pg_size_bytes('  1.5 MB  ')
+----
+1572864
+
+# Negative values pass through.
+query I
+SELECT pg_size_bytes('-10 kB')
+----
+-10240
+
+# Exponent notation.
+query I
+SELECT pg_size_bytes('1e3')
+----
+1000
+
+query I
+SELECT pg_size_bytes('1.5e3 kB')
+----
+1536000
+
+# 1.5 rounds to 2 (round half away from zero, matching PG).
+query I
+SELECT pg_size_bytes('1.5')
+----
+2
+
+# Round-trip with pg_size_pretty for whole-byte values.
+query I
+SELECT pg_size_bytes(pg_size_pretty(10240::int))
+----
+10240
+
+query I
+SELECT pg_size_bytes(pg_size_pretty(1234567::int))
+----
+1234944
+
+# Errors.
+query error pgcode 22023 invalid size: ""
+SELECT pg_size_bytes('')
+
+query error pgcode 22023 invalid size: "abc"
+SELECT pg_size_bytes('abc')
+
+query error pgcode 22023 invalid size: "123 XB"
+SELECT pg_size_bytes('123 XB')
+
+# NULL passthrough.
+query I
+SELECT pg_size_bytes(NULL)
+----
+NULL
+
+subtest end
+
+subtest pg_database_size
+
+# Empty database with no cache entries returns 0.
+statement ok
+CREATE DATABASE pg_db_size_empty
+
+let $empty_db_oid
+SELECT oid::INT FROM pg_database WHERE datname = 'pg_db_size_empty'
+
+query I
+SELECT pg_database_size('pg_db_size_empty')
+----
+0
+
+query I
+SELECT pg_database_size($empty_db_oid::OID)
+----
+0
+
+# Errors match PG's wording for unknown OIDs and names.
+query error pgcode 42704 database with OID 99999999 does not exist
+SELECT pg_database_size(99999999::OID)
+
+query error pgcode 3D000 database "no_such_db_for_size" does not exist
+SELECT pg_database_size('no_such_db_for_size')
+
+# NULL passthrough.
+query I
+SELECT pg_database_size(NULL::OID)
+----
+NULL
+
+query I
+SELECT pg_database_size(NULL::STRING)
+----
+NULL
+
+# Insert synthetic cache rows so we can verify the SUM aggregation. The cache
+# is normally populated by a background job; inserting directly lets the test
+# avoid waiting for it.
+statement ok
+INSERT INTO system.table_metadata (
+  db_id, table_id, db_name, schema_name, table_name, total_columns,
+  total_indexes, store_ids, replication_size_bytes, total_ranges,
+  total_live_data_bytes, total_data_bytes, perc_live_data, table_type, details
+) VALUES
+  ($empty_db_oid, 90001, 'pg_db_size_empty', 'public', 't1', 2, 1, ARRAY[1], 1024, 1, 1024, 1024, 1.0, 'TABLE', '{}'),
+  ($empty_db_oid, 90002, 'pg_db_size_empty', 'public', 't2', 2, 1, ARRAY[1], 2048, 1, 2048, 2048, 1.0, 'TABLE', '{}')
+
+query I
+SELECT pg_database_size('pg_db_size_empty')
+----
+3072
+
+query I
+SELECT pg_database_size($empty_db_oid::OID)
+----
+3072
+
+statement count 2
+DELETE FROM system.table_metadata WHERE db_id = $empty_db_oid
+
+statement ok
+DROP DATABASE pg_db_size_empty
+
+subtest end
+
+subtest pg_relation_size
+
+# Bogus OID: NULL (matches PG).
+query I
+SELECT pg_relation_size(99999999::OID)
+----
+NULL
+
+query I
+SELECT pg_table_size(99999999::OID)
+----
+NULL
+
+query I
+SELECT pg_total_relation_size(99999999::OID)
+----
+NULL
+
+# NULL passthrough.
+query I
+SELECT pg_relation_size(NULL::OID)
+----
+NULL
+
+# Real relation, no cache row yet: 0 (descriptor exists, cache hasn't ingested).
+statement ok
+CREATE TABLE pg_relsize_t (id INT PRIMARY KEY, v STRING)
+
+let $relsize_oid
+SELECT 'pg_relsize_t'::regclass::oid::INT
+
+query I
+SELECT pg_relation_size($relsize_oid::OID)
+----
+0
+
+query I
+SELECT pg_table_size($relsize_oid::OID)
+----
+0
+
+query I
+SELECT pg_total_relation_size($relsize_oid::OID)
+----
+0
+
+# Insert a synthetic cache row so we can verify the size returns from the cache.
+let $relsize_db_oid
+SELECT oid::INT FROM pg_database WHERE datname = current_database()
+
+statement ok
+INSERT INTO system.table_metadata (
+  db_id, table_id, db_name, schema_name, table_name, total_columns,
+  total_indexes, store_ids, replication_size_bytes, total_ranges,
+  total_live_data_bytes, total_data_bytes, perc_live_data, table_type, details
+) VALUES (
+  $relsize_db_oid, $relsize_oid, current_database(), 'public', 'pg_relsize_t',
+  2, 1, ARRAY[1], 4096, 1, 4096, 4096, 1.0, 'TABLE', '{}'
+)
+
+# All three return the same cached value in v1.
+query I
+SELECT pg_relation_size($relsize_oid::OID)
+----
+4096
+
+query I
+SELECT pg_table_size($relsize_oid::OID)
+----
+4096
+
+query I
+SELECT pg_total_relation_size($relsize_oid::OID)
+----
+4096
+
+# Resolve via pg_class.oid the way introspection tools do.
+query I
+SELECT pg_relation_size(c.oid)
+  FROM pg_catalog.pg_class c
+ WHERE c.relname = 'pg_relsize_t'
+----
+4096
+
+statement count 1
+DELETE FROM system.table_metadata WHERE table_id = $relsize_oid
+
+statement ok
+DROP TABLE pg_relsize_t
+
+subtest end

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -2566,6 +2567,97 @@ FROM defaults_parsed
 			Volatility: volatility.Stable,
 		}),
 
+	"pg_size_pretty": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "size", Typ: types.Int}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDString(pgSizePrettyInt(int64(tree.MustBeDInt(args[0])))), nil
+			},
+			Info:       "Converts a size in bytes into a human-readable string with units (e.g. '1024 bytes', '10 MB').",
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "size", Typ: types.Decimal}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				dd := tree.MustBeDDecimal(args[0])
+				s, err := pgSizePrettyDecimal(&dd.Decimal)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(s), nil
+			},
+			Info:       "Converts a size in bytes into a human-readable string with units (e.g. '1024 bytes', '10 MB').",
+			Volatility: volatility.Immutable,
+		}),
+
+	"pg_size_bytes": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "size", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				v, err := pgSizeBytes(string(tree.MustBeDString(args[0])))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt(v)), nil
+			},
+			Info:       "Parses a human-readable size string (e.g. '1.5 MB') and returns the size in bytes.",
+			Volatility: volatility.Immutable,
+		}),
+
+	"pg_database_size": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "database_oid", Typ: types.Oid}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				oidArg := tree.MustBeDOid(args[0])
+				return databaseSizeByOid(ctx, evalCtx, int64(oidArg.Oid))
+			},
+			Info: "Returns the on-disk size, in bytes, of all tables in the database with the " +
+				"given OID. The size is read from a periodically-refreshed cache and may lag " +
+				"behind the true value by minutes.",
+			// Volatile to match PostgreSQL's pg_proc.provolatile for this function.
+			Volatility: volatility.Volatile,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "database_name", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				name := string(tree.MustBeDString(args[0]))
+				return databaseSizeByName(ctx, evalCtx, name)
+			},
+			Info: "Returns the on-disk size, in bytes, of all tables in the named database. " +
+				"The size is read from a periodically-refreshed cache and may lag behind the " +
+				"true value by minutes.",
+			Volatility: volatility.Volatile,
+		}),
+
+	// pg_relation_size, pg_table_size, and pg_total_relation_size all return
+	// the same cached value today: the total on-disk size of the entire table
+	// keyspace (primary index data plus all secondary indexes). This matches
+	// PG's pg_total_relation_size exactly. The other two are an over-count
+	// vs PG by the size of secondary indexes; they are intentionally distinct
+	// symbols so a future per-index extension to the metadata cache can
+	// tighten pg_relation_size and pg_table_size downward without touching
+	// pg_total_relation_size.
+	"pg_relation_size": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
+		relationSizeOverload("the relation"),
+	),
+
+	"pg_table_size": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
+		relationSizeOverload("the table, including TOAST and visibility map (where applicable)"),
+	),
+
+	"pg_total_relation_size": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
+		relationSizeOverload("the relation, including all indexes"),
+	),
+
 	// NOTE: these two builtins could be defined as user-defined functions, like
 	// they are in Postgres:
 	// https://github.com/postgres/postgres/blob/master/src/backend/catalog/information_schema.sql
@@ -3324,4 +3416,377 @@ func isAdminOfRole(
 		return eval.HasPrivilege, nil
 	}
 	return eval.HasNoPrivilege, nil
+}
+
+// sizePrettyUnit describes one unit in the pg_size_pretty / pg_size_bytes unit
+// table. The implementation mirrors PostgreSQL's algorithm in
+// src/backend/utils/adt/dbsize.c so that output strings match exactly.
+type sizePrettyUnit struct {
+	name     string
+	limit    int64 // upper limit, prior to half rounding after converting to this unit
+	round    bool  // do half rounding for this unit
+	unitBits uint  // (1 << unitBits) bytes to make 1 of this unit
+}
+
+// sizePrettyUnits is the unit table for pg_size_pretty and pg_size_bytes.
+// It mirrors PostgreSQL's size_pretty_units. All units are powers of two.
+var sizePrettyUnits = []sizePrettyUnit{
+	{"bytes", 10 * 1024, false, 0},
+	{"kB", 20*1024 - 1, true, 10},
+	{"MB", 20*1024 - 1, true, 20},
+	{"GB", 20*1024 - 1, true, 30},
+	{"TB", 20*1024 - 1, true, 40},
+	{"PB", 20*1024 - 1, true, 50},
+}
+
+// sizeBytesAlias is a unit alias accepted by pg_size_bytes but not produced by
+// pg_size_pretty.
+type sizeBytesAlias struct {
+	alias     string
+	unitIndex int
+}
+
+var sizeBytesAliases = []sizeBytesAlias{
+	{"B", 0},
+}
+
+// pgSizePrettyInt formats a byte count as a human-readable string with units,
+// matching the output of PostgreSQL's pg_size_pretty(bigint).
+func pgSizePrettyInt(size int64) string {
+	for i := range sizePrettyUnits {
+		unit := &sizePrettyUnits[i]
+		// Compute the absolute size as a uint64 to handle math.MinInt64 correctly.
+		var absSize uint64
+		if size < 0 {
+			absSize = uint64(-(size + 1)) + 1
+		} else {
+			absSize = uint64(size)
+		}
+
+		// Use this unit if there are no more units or the absolute size is
+		// below the limit for the current unit.
+		if i == len(sizePrettyUnits)-1 || absSize < uint64(unit.limit) {
+			if unit.round {
+				size = halfRoundedInt64(size)
+			}
+			return fmt.Sprintf("%d %s", size, unit.name)
+		}
+
+		// Determine the number of bits to use to build the divisor. We may
+		// need to use 1 bit less than the difference between this and the
+		// next unit if the next unit uses half rounding. Or we may need to
+		// shift an extra bit if this unit uses half rounding and the next one
+		// does not.
+		next := &sizePrettyUnits[i+1]
+		bits := next.unitBits - unit.unitBits - boolToUint(next.round) + boolToUint(unit.round)
+		size /= int64(1) << bits
+	}
+	// Unreachable: the loop always returns when reaching the last unit.
+	return ""
+}
+
+// pgSizePrettyDecimal is the apd.Decimal-based equivalent of pgSizePrettyInt,
+// matching PostgreSQL's pg_size_pretty(numeric).
+func pgSizePrettyDecimal(size *apd.Decimal) (string, error) {
+	d := new(apd.Decimal).Set(size)
+	for i := range sizePrettyUnits {
+		unit := &sizePrettyUnits[i]
+		abs := new(apd.Decimal).Abs(d)
+		limit := apd.New(unit.limit, 0)
+		if i == len(sizePrettyUnits)-1 || abs.Cmp(limit) < 0 {
+			if unit.round {
+				if err := halfRoundedDecimal(d); err != nil {
+					return "", err
+				}
+			}
+			return fmt.Sprintf("%s %s", d.Text('f'), unit.name), nil
+		}
+
+		next := &sizePrettyUnits[i+1]
+		bits := next.unitBits - unit.unitBits - boolToUint(next.round) + boolToUint(unit.round)
+		divisor := apd.New(int64(1)<<bits, 0)
+		if _, err := tree.HighPrecisionCtx.QuoInteger(d, d, divisor); err != nil {
+			return "", err
+		}
+	}
+	return "", nil
+}
+
+// halfRoundedInt64 rounds size by adding (or subtracting, for negatives) one
+// half of the next unit's worth and truncating. PostgreSQL achieves the same
+// result via integer division of (size ± 1) by 2.
+func halfRoundedInt64(size int64) int64 {
+	if size >= 0 {
+		return (size + 1) / 2
+	}
+	return (size - 1) / 2
+}
+
+// halfRoundedDecimal applies the same half-rounding as halfRoundedInt64 to a
+// decimal, in place.
+func halfRoundedDecimal(d *apd.Decimal) error {
+	one := apd.New(1, 0)
+	two := apd.New(2, 0)
+	zero := apd.New(0, 0)
+	if d.Cmp(zero) >= 0 {
+		if _, err := tree.HighPrecisionCtx.Add(d, d, one); err != nil {
+			return err
+		}
+	} else {
+		if _, err := tree.HighPrecisionCtx.Sub(d, d, one); err != nil {
+			return err
+		}
+	}
+	_, err := tree.HighPrecisionCtx.QuoInteger(d, d, two)
+	return err
+}
+
+func boolToUint(b bool) uint {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// pgSizeBytes parses a human-readable byte count (e.g. "1.5 MB") and returns
+// the equivalent number of bytes, matching PostgreSQL's pg_size_bytes.
+func pgSizeBytes(input string) (int64, error) {
+	str := input
+	// Skip leading whitespace.
+	i := 0
+	for i < len(str) && isASCIISpace(str[i]) {
+		i++
+	}
+	numStart := i
+
+	// Parse an optional sign.
+	if i < len(str) && (str[i] == '+' || str[i] == '-') {
+		i++
+	}
+
+	// Parse the integer part.
+	haveDigits := false
+	for i < len(str) && isASCIIDigit(str[i]) {
+		i++
+		haveDigits = true
+	}
+
+	// Parse an optional fractional part.
+	if i < len(str) && str[i] == '.' {
+		i++
+		for i < len(str) && isASCIIDigit(str[i]) {
+			i++
+			haveDigits = true
+		}
+	}
+
+	if !haveDigits {
+		return 0, pgerror.Newf(pgcode.InvalidParameterValue, "invalid size: %q", input)
+	}
+
+	// Parse an optional exponent. We only consume the 'e'/'E' if it is followed
+	// by a valid integer; otherwise it is treated as the start of the unit.
+	if i < len(str) && (str[i] == 'e' || str[i] == 'E') {
+		j := i + 1
+		if j < len(str) && (str[j] == '+' || str[j] == '-') {
+			j++
+		}
+		if j < len(str) && isASCIIDigit(str[j]) {
+			for j < len(str) && isASCIIDigit(str[j]) {
+				j++
+			}
+			i = j
+		}
+	}
+
+	numStr := str[numStart:i]
+
+	// Skip whitespace between the number and the unit.
+	for i < len(str) && isASCIISpace(str[i]) {
+		i++
+	}
+
+	// Parse the optional unit, trimming trailing whitespace.
+	unitStr := strings.TrimRightFunc(str[i:], func(r rune) bool {
+		return r == ' ' || r == '\t' || r == '\n' || r == '\r' || r == '\v' || r == '\f'
+	})
+
+	num, _, err := apd.NewFromString(numStr)
+	if err != nil {
+		return 0, pgerror.Newf(pgcode.InvalidParameterValue, "invalid size: %q", input)
+	}
+
+	if unitStr != "" {
+		unitBits, ok := lookupSizeUnit(unitStr)
+		if !ok {
+			return 0, errors.WithHint(
+				errors.WithDetail(
+					pgerror.Newf(pgcode.InvalidParameterValue, "invalid size: %q", input),
+					fmt.Sprintf("Invalid size unit: %q.", unitStr),
+				),
+				`Valid units are "bytes", "B", "kB", "MB", "GB", "TB", and "PB".`,
+			)
+		}
+		if unitBits > 0 {
+			multiplier := apd.New(int64(1)<<unitBits, 0)
+			if _, err := tree.HighPrecisionCtx.Mul(num, num, multiplier); err != nil {
+				return 0, err
+			}
+		}
+	}
+
+	// Round to the nearest integer using PG's "round half away from zero" rule
+	// to match numeric_int8.
+	rounded := new(apd.Decimal)
+	if _, err := tree.HighPrecisionCtx.RoundToIntegralValue(rounded, num); err != nil {
+		return 0, err
+	}
+	result, err := rounded.Int64()
+	if err != nil {
+		return 0, pgerror.Newf(pgcode.NumericValueOutOfRange, "bigint out of range")
+	}
+	return result, nil
+}
+
+// lookupSizeUnit returns the unit-bits value for a unit name (case-insensitive),
+// or false if the name is not recognized.
+func lookupSizeUnit(name string) (uint, bool) {
+	for i := range sizePrettyUnits {
+		if strings.EqualFold(name, sizePrettyUnits[i].name) {
+			return sizePrettyUnits[i].unitBits, true
+		}
+	}
+	for _, a := range sizeBytesAliases {
+		if strings.EqualFold(name, a.alias) {
+			return sizePrettyUnits[a.unitIndex].unitBits, true
+		}
+	}
+	return 0, false
+}
+
+func isASCIISpace(b byte) bool {
+	switch b {
+	case ' ', '\t', '\n', '\r', '\v', '\f':
+		return true
+	}
+	return false
+}
+
+func isASCIIDigit(b byte) bool {
+	return b >= '0' && b <= '9'
+}
+
+// databaseSizeQuery is the shared query for the pg_database_size overloads.
+// It joins system.namespace (to validate that the database exists) with
+// system.table_metadata (the periodically-refreshed size cache). The query
+// returns one row containing the database's existence flag and the summed
+// replication size; the existence flag distinguishes "no such database"
+// (error) from "exists but no tables" (return 0).
+//
+// The query reads the admin-only system.table_metadata via the NodeUser
+// override at the call site.
+const databaseSizeQuery = `
+SELECT db.id IS NOT NULL,
+       COALESCE(sum(tm.replication_size_bytes), 0)::INT
+  FROM (SELECT $1::INT AS id) input
+  LEFT JOIN system.namespace db
+    ON db.id = input.id
+   AND db."parentID" = 0
+   AND db."parentSchemaID" = 0
+  LEFT JOIN system.table_metadata tm
+    ON tm.db_id = input.id
+ GROUP BY db.id`
+
+func databaseSizeByOid(
+	ctx context.Context, evalCtx *eval.Context, dbOid int64,
+) (tree.Datum, error) {
+	row, err := evalCtx.Planner.QueryRowEx(
+		ctx, "pg-database-size",
+		sessiondata.NodeUserSessionDataOverride,
+		databaseSizeQuery, dbOid,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if row == nil || !bool(tree.MustBeDBool(row[0])) {
+		// PostgreSQL uses pgcode 42704 (undefined_object) for the OID overload
+		// of pg_database_size (and 3D000 / undefined_database for the name
+		// overload — see databaseSizeByName).
+		return nil, pgerror.Newf(pgcode.UndefinedObject,
+			"database with OID %d does not exist", dbOid)
+	}
+	return row[1], nil
+}
+
+// relationSizeQuery returns the cached on-disk size of the relation identified
+// by the supplied OID, or NULL if no such relation exists. The descriptor join
+// distinguishes "no descriptor" (NULL) from "descriptor exists but the cache
+// has not yet ingested it" (0). The query uses the NodeUser session-data
+// override at the call site to read the admin-only system.table_metadata.
+const relationSizeQuery = `
+SELECT CASE WHEN d.id IS NOT NULL
+            THEN COALESCE(tm.replication_size_bytes, 0)::INT
+            ELSE NULL
+       END
+  FROM (SELECT $1::INT AS id) input
+  LEFT JOIN system.descriptor d
+    ON d.id = input.id
+  LEFT JOIN system.table_metadata tm
+    ON tm.table_id = input.id`
+
+// relationSizeOverload constructs a single-OID-argument overload that returns
+// the cached on-disk size for a relation. The three pg_*_size functions all
+// share this overload today; see the comment on pg_relation_size above for
+// the intentional separation between symbols.
+func relationSizeOverload(infoSubject string) tree.Overload {
+	return tree.Overload{
+		Types:      tree.ParamTypes{{Name: "relation_oid", Typ: types.Oid}},
+		ReturnType: tree.FixedReturnType(types.Int),
+		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			oidArg := tree.MustBeDOid(args[0])
+			row, err := evalCtx.Planner.QueryRowEx(
+				ctx, "pg-relation-size",
+				sessiondata.NodeUserSessionDataOverride,
+				relationSizeQuery, int64(oidArg.Oid),
+			)
+			if err != nil {
+				return nil, err
+			}
+			if row == nil {
+				return tree.DNull, nil
+			}
+			return row[0], nil
+		},
+		Info: fmt.Sprintf(
+			"Returns the on-disk size, in bytes, of %s with the given OID. The size is read "+
+				"from a periodically-refreshed cache and may lag behind the true value by "+
+				"minutes. Returns NULL if no such relation exists.",
+			infoSubject,
+		),
+		// Volatile to match PostgreSQL's pg_proc.provolatile for these functions.
+		Volatility: volatility.Volatile,
+	}
+}
+
+func databaseSizeByName(
+	ctx context.Context, evalCtx *eval.Context, name string,
+) (tree.Datum, error) {
+	// Resolve the database name to its descriptor ID via system.namespace, which
+	// is publicly readable. We do the resolution via SQL rather than reaching
+	// into the descriptor collection so the lookup runs under the same internal
+	// executor used for the size query, sharing its session-data override.
+	row, err := evalCtx.Planner.QueryRowEx(
+		ctx, "pg-database-size-resolve",
+		sessiondata.NodeUserSessionDataOverride,
+		`SELECT id FROM system.namespace WHERE "parentID" = 0 AND "parentSchemaID" = 0 AND name = $1`,
+		name,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if row == nil {
+		return nil, pgerror.Newf(pgcode.UndefinedDatabase,
+			"database %q does not exist", name)
+	}
+	return databaseSizeByOid(ctx, evalCtx, int64(tree.MustBeDInt(row[0])))
 }

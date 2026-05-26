@@ -2950,6 +2950,14 @@ var builtinOidsArray = []string{
 	2995: `st_3dshortestline(geometry_a: geometry, geometry_b: geometry) -> geometry`,
 	2996: `st_3dperimeter(geometry: geometry) -> float`,
 	2997: `pg_get_function_sqlbody(func_oid: oid) -> string`,
+	2998: `pg_size_pretty(size: int) -> string`,
+	2999: `pg_size_pretty(size: decimal) -> string`,
+	3000: `pg_size_bytes(size: string) -> int`,
+	3001: `pg_database_size(database_oid: oid) -> int`,
+	3002: `pg_database_size(database_name: string) -> int`,
+	3003: `pg_relation_size(relation_oid: oid) -> int`,
+	3004: `pg_table_size(relation_oid: oid) -> int`,
+	3005: `pg_total_relation_size(relation_oid: oid) -> int`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
