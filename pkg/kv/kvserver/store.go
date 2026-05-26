@@ -1491,6 +1491,15 @@ func NewStore(
 	if !cfg.Valid() {
 		log.KvExec.Fatalf(ctx, "invalid store configuration: %+v", &cfg)
 	}
+	// Production code (server.go) pairs MMAllocator with an AllocatorSync on
+	// the StoreConfig. A number of test entry points populate MMAllocator (via
+	// TestStoreConfig) and StorePool but leave AllocatorSync unset; co-construct
+	// it here so the rebalancer and queues always observe a non-nil receiver.
+	if cfg.AllocatorSync == nil && cfg.MMAllocator != nil {
+		cfg.AllocatorSync = mmaintegration.NewAllocatorSync(
+			cfg.StorePool, cfg.MMAllocator, cfg.Settings, nil, /* knobs */
+		)
+	}
 	iot := ioThresholds{}
 	iot.Replace(nil, 1.0) // init as empty
 	s := &Store{
