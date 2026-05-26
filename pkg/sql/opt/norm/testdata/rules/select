@@ -1946,6 +1946,70 @@ select
 
 
 # --------------------------------------------------
+# SimplifyCoalesceSelect
+# --------------------------------------------------
+
+norm expect=SimplifyCoalesceSelect
+SELECT * FROM d WHERE COALESCE(a, b) = 1
+----
+select
+ ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3-5)
+ ├── scan d
+ │    ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── a:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+
+# Negative test: should not fire when no argument is provably non-null.
+norm expect-not=SimplifyCoalesceSelect
+SELECT * FROM a WHERE COALESCE(i, 0) > 0
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── COALESCE(i:2, 0) > 0 [outer=(2)]
+
+# Leading NULLs stripped, then NOT NULL arg is reached.
+norm expect=SimplifyCoalesceSelect
+SELECT * FROM d WHERE COALESCE(NULL::INT, a, b) = 1
+----
+select
+ ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3-5)
+ ├── scan d
+ │    ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── a:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+
+# Nested COALESCE: outer is not directly simplifiable, but the inner
+# COALESCE(a, c) can be simplified to a (since a is NOT NULL).
+norm expect=SimplifyCoalesceSelect
+SELECT * FROM d WHERE COALESCE(b, COALESCE(a, c)) = 1
+----
+select
+ ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan d
+ │    ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── COALESCE(b:3, a:2) = 1 [outer=(2,3)]
+
+# --------------------------------------------------
 # EliminateCaseTrailingFalsyBranch
 # --------------------------------------------------
 
