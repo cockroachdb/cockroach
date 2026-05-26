@@ -16,7 +16,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
-	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -4702,20 +4701,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 	}
 
 	activeQueries := make([]serverpb.ActiveQuery, 0, len(ex.mu.ActiveQueries))
-	truncateSQL := func(sql string) string {
-		if len(sql) > MaxSQLBytes {
-			sql = sql[:MaxSQLBytes-utf8.RuneLen('…')]
-			// Ensure the resulting string is valid utf8.
-			for {
-				if r, _ := utf8.DecodeLastRuneInString(sql); r != utf8.RuneError {
-					break
-				}
-				sql = sql[:len(sql)-1]
-			}
-			sql += "…"
-		}
-		return sql
-	}
+	maxSQLBytes := int(ActiveQueryTextMaxBytes.Get(&ex.server.cfg.Settings.SV))
 
 	for id, query := range ex.mu.ActiveQueries {
 		if query.hidden {
@@ -4736,7 +4722,8 @@ func (ex *connExecutor) serialize() serverpb.Session {
 				"serialization")
 			continue
 		}
-		sqlNoConstants := truncateSQL(tree.FormatStatementHideConstants(parsed.AST))
+		sqlNoConstants := TruncateSQLForActiveQuery(
+			tree.FormatStatementHideConstants(parsed.AST), maxSQLBytes)
 		nPlaceholders := 0
 		if query.placeholders != nil {
 			nPlaceholders = len(query.placeholders.Values)
@@ -4745,7 +4732,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		for i := range placeholders {
 			placeholders[i] = tree.AsStringWithFlags(query.placeholders.Values[i], tree.FmtSimple)
 		}
-		sql := truncateSQL(query.stmt.SQL)
+		sql := TruncateSQLForActiveQuery(query.stmt.SQL, maxSQLBytes)
 		progress := math.Float64frombits(atomic.LoadUint64(&query.progressAtomic))
 		elapsedTime := crtime.MonoFromTime(timeNow).Sub(query.start)
 		var isolationLevel string
@@ -4775,8 +4762,9 @@ func (ex *connExecutor) serialize() serverpb.Session {
 	lastActiveQuery := ""
 	lastActiveQueryNoConstants := ""
 	if ex.mu.LastActiveQuery != nil {
-		lastActiveQuery = truncateSQL(ex.mu.LastActiveQuery.String())
-		lastActiveQueryNoConstants = truncateSQL(tree.FormatStatementHideConstants(ex.mu.LastActiveQuery))
+		lastActiveQuery = TruncateSQLForActiveQuery(ex.mu.LastActiveQuery.String(), maxSQLBytes)
+		lastActiveQueryNoConstants = TruncateSQLForActiveQuery(
+			tree.FormatStatementHideConstants(ex.mu.LastActiveQuery), maxSQLBytes)
 	}
 	status := serverpb.Session_IDLE
 	if len(activeQueries) > 0 {
