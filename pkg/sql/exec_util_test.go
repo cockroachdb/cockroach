@@ -8,6 +8,7 @@ package sql
 import (
 	"context"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -107,4 +108,76 @@ func TestSessionDefaultsSafeFormat(t *testing.T) {
 	session["disallow_full_table_scans"] = "true"
 	require.Contains(t, redact.Sprint(session), "database=‹test›")
 	require.Contains(t, redact.Sprint(session).Redact(), "statement_timeout=‹×›")
+}
+
+func TestTruncateSQLForActiveQuery(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const ellipsis = "…"
+	ellipsisLen := utf8.RuneLen('…')
+
+	tests := []struct {
+		name     string
+		sql      string
+		maxBytes int
+		expected string
+	}{
+		{
+			name:     "empty string is returned unchanged",
+			sql:      "",
+			maxBytes: 100,
+			expected: "",
+		},
+		{
+			name:     "string shorter than max is unchanged",
+			sql:      "SELECT 1",
+			maxBytes: 100,
+			expected: "SELECT 1",
+		},
+		{
+			name:     "string at exactly max is unchanged",
+			sql:      "SELECT 1",
+			maxBytes: len("SELECT 1"),
+			expected: "SELECT 1",
+		},
+		{
+			name:     "ascii truncation appends ellipsis",
+			sql:      "SELECT aaaa",
+			maxBytes: len("SELECT ") + ellipsisLen,
+			expected: "SELECT " + ellipsis,
+		},
+		{
+			name:     "rune boundary truncation walks back to valid utf8",
+			sql:      "SELECT 💩aaaa",
+			maxBytes: len("SELECT ") + len("💩") - 1 + ellipsisLen,
+			expected: "SELECT " + ellipsis,
+		},
+		{
+			name:     "maxBytes too small for ellipsis returns input unchanged",
+			sql:      "SELECT 1",
+			maxBytes: ellipsisLen - 1,
+			expected: "SELECT 1",
+		},
+		{
+			name:     "maxBytes exactly the ellipsis width yields only the ellipsis",
+			sql:      "SELECT 1",
+			maxBytes: ellipsisLen,
+			expected: ellipsis,
+		},
+		{
+			name:     "walk-back consuming entire prefix yields only the ellipsis",
+			sql:      "💩💩",
+			maxBytes: ellipsisLen + 1,
+			expected: ellipsis,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := TruncateSQLForActiveQuery(tc.sql, tc.maxBytes)
+			require.True(t, utf8.ValidString(got), "result %q is not valid UTF-8", got)
+			require.Equal(t, tc.expected, got)
+		})
+	}
 }
