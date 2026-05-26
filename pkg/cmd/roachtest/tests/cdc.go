@@ -3802,11 +3802,12 @@ func runCDCInitialScanBench(
 
 	conn := ct.DB()
 
-	// 10M rows at ~75 B/row = ~750 MB. Long enough to give stable throughput
-	// readings (several minutes at sink-bound rates) without inflating wall
-	// clock unnecessarily. --data-loader import bulk-loads via IMPORT, much
+	// 50M rows at ~75 B/row = ~3.75 GB. The earlier 10M run only produced
+	// ~30s of throughput plateau before the scan completed, too brief to
+	// compare variants. 50M gives several minutes of plateau at the rates
+	// we've been seeing. --data-loader import bulk-loads via IMPORT, much
 	// faster than --insert which would itself become the bottleneck.
-	const numRows = 10_000_000
+	const numRows = 50_000_000
 
 	t.Status("initializing kv table")
 	c.Run(ctx, option.WithNodes(ct.workloadNode), fmt.Sprintf(
