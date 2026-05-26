@@ -58,19 +58,19 @@ func TestDiff(t *testing.T) {
 	// the whole name as a single identifier).
 	sqlDB.Exec(t, `CREATE TABLE diff_a (id INT PRIMARY KEY, name STRING, value INT)`)
 	sqlDB.Exec(t, `CREATE TABLE diff_b (id INT PRIMARY KEY, name STRING, value INT)`)
-	const diffA = "defaultdb.public.diff_a"
-	const diffB = "defaultdb.public.diff_b"
+	diffA := QualifiedName{Table: "diff_a", Schema: "public", Database: "defaultdb"}
+	diffB := QualifiedName{Table: "diff_b", Schema: "public", Database: "defaultdb"}
 
 	// BIT column tables for the qualified-name regression test.
 	sqlDB.Exec(t, `CREATE TABLE bit_a (id INT PRIMARY KEY, bits BIT(15))`)
 	sqlDB.Exec(t, `CREATE TABLE bit_b (id INT PRIMARY KEY, bits BIT(15))`)
-	const bitA = "defaultdb.public.bit_a"
-	const bitB = "defaultdb.public.bit_b"
+	bitA := QualifiedName{Table: "bit_a", Schema: "public", Database: "defaultdb"}
+	bitB := QualifiedName{Table: "bit_b", Schema: "public", Database: "defaultdb"}
 
 	type diffCheck struct {
 		name     string
-		tableA   string // fully qualified table A name
-		tableB   string // fully qualified table B name
+		tableA   QualifiedName
+		tableB   QualifiedName
 		setup    []string
 		limit    int
 		wantLen  int
@@ -217,8 +217,8 @@ func TestDiffRandomSchema(t *testing.T) {
 		shortNameB := fmt.Sprintf("diff_rand_b_%d", attempt)
 		// Use fully qualified names to exercise the schema.table path in diff
 		// queries.
-		tableNameA := fmt.Sprintf("defaultdb.public.%s", shortNameA)
-		tableNameB := fmt.Sprintf("defaultdb.public.%s", shortNameB)
+		tableNameA := QualifiedName{Table: shortNameA, Schema: "public", Database: "defaultdb"}
+		tableNameB := QualifiedName{Table: shortNameB, Schema: "public", Database: "defaultdb"}
 
 		// Extract the table body and create both tables with the same schema.
 		// The random schema generator can produce features (e.g. partitions)
@@ -268,8 +268,8 @@ func TestDiffRandomSchema(t *testing.T) {
 		})
 
 		t.Run(fmt.Sprintf("fingerprint-diff-%d", created), func(t *testing.T) {
-			fpA := fingerprint(t, sqlDB, tableNameA)
-			fpB := fingerprint(t, sqlDB, tableNameB)
+			fpA := fingerprint(t, sqlDB, tableNameA.String())
+			fpB := fingerprint(t, sqlDB, tableNameB.String())
 
 			diffs, err := Diff(db, tableNameA, db, tableNameB, 100)
 			require.NoError(t, err)
@@ -282,6 +282,44 @@ func TestDiffRandomSchema(t *testing.T) {
 	}
 }
 
+// TestDiffCrossDatabase is a regression test for #170730. LoadTable fails with
+// "no columns detected" when called with a cross-database qualified table name
+// from a connection to a different database, because pg_catalog virtual tables
+// are scoped to the connection's current database.
+func TestDiffCrossDatabase(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderRace(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, "CREATE DATABASE xdb")
+	xdbConn := s.SQLConn(t, serverutils.DBName("xdb"))
+	xdbSQL := sqlutils.MakeSQLRunner(xdbConn)
+
+	xdbSQL.Exec(t, `CREATE TABLE xdb_a (id INT PRIMARY KEY, name STRING, value INT)`)
+	xdbSQL.Exec(t, `CREATE TABLE xdb_b (id INT PRIMARY KEY, name STRING, value INT)`)
+	xdbSQL.Exec(t, `INSERT INTO xdb_a VALUES (1, 'alice', 10), (2, 'bob', 20)`)
+	xdbSQL.Exec(t, `INSERT INTO xdb_b VALUES (1, 'alice', 10), (2, 'bob', 20)`)
+
+	// Call LoadTable from the defaultdb connection using a cross-database
+	// name. Before the fix, this failed because pg_catalog is scoped to the
+	// connection's current database.
+	xdbA := QualifiedName{Table: "xdb_a", Schema: "public", Database: "xdb"}
+	xdbB := QualifiedName{Table: "xdb_b", Schema: "public", Database: "xdb"}
+	tableA, err := LoadTable(db, xdbA)
+	require.NoError(t, err)
+	require.NotEmpty(t, tableA.Cols)
+
+	// Diff the two tables from the defaultdb connection.
+	diffs, err := Diff(db, xdbA, db, xdbB, 100)
+	require.NoError(t, err)
+	require.Empty(t, diffs, "identical tables should produce no diffs")
+}
+
 // insertRows inserts n random rows into the given table using the TableWriter.
 // Rows that fail to insert (e.g. due to unique constraint violations on
 // secondary indexes) are silently skipped.
@@ -291,7 +329,7 @@ func insertRows(
 	db *gosql.DB,
 	rng *rand.Rand,
 	table *Table,
-	tableName string,
+	tableName QualifiedName,
 	n int,
 ) {
 	t.Helper()
