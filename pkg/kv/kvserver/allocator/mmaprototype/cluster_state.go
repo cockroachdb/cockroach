@@ -2418,6 +2418,13 @@ func (cs *clusterState) hasStore(storeID roachpb.StoreID) bool {
 	return ok
 }
 
+// notHasStore is the negation of hasStore, exposed so callers can pass
+// it as a method value to slices.IndexFunc / slices.DeleteFunc without
+// an inline closure.
+func (cs *clusterState) notHasStore(storeID roachpb.StoreID) bool {
+	return !cs.hasStore(storeID)
+}
+
 func (cs *clusterState) getNodeReportedLoad(nodeID roachpb.NodeID) *NodeLoad {
 	if nodeState, ok := cs.nodes[nodeID]; ok {
 		return &nodeState.NodeLoad
