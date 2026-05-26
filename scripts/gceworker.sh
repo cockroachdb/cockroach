@@ -70,6 +70,24 @@ function refresh_ssh_config() {
 	fi
 }
 
+function grant_ssh_access() {
+	local user_email
+	user_email=$(gcloud config get-value account 2>/dev/null)
+	echo "Granting SSH access to ${user_email} on ${NAME}..."
+	gcloud compute instances add-iam-policy-binding "${NAME}" \
+		--zone="${CLOUDSDK_COMPUTE_ZONE}" \
+		--member="user:${user_email}" \
+		--role="roles/iap.tunnelResourceAccessor" \
+		--project="${CLOUDSDK_CORE_PROJECT}" \
+		--quiet
+	gcloud compute instances add-iam-policy-binding "${NAME}" \
+		--zone="${CLOUDSDK_COMPUTE_ZONE}" \
+		--member="user:${user_email}" \
+		--role="roles/compute.osLogin" \
+		--project="${CLOUDSDK_CORE_PROJECT}" \
+		--quiet
+}
+
 case "${cmd}" in
 gcloud)
 	gcloud "$@"
@@ -103,6 +121,8 @@ create)
 		--scopes "cloud-platform" \
 		--labels "created-by=${gsuite_account_for_label:0:63}" \
 		--metadata enable-oslogin=TRUE,block-project-ssh-keys=TRUE
+
+	grant_ssh_access
 
 	# wait a bit to let gcloud create the instance before retrying
 	sleep 30
