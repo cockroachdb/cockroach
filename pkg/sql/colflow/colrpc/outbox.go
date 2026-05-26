@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -187,6 +188,13 @@ func (o *Outbox) workloadType() workloadid.WorkloadType {
 	return workloadid.WorkloadTypeUnknown
 }
 
+func (o *Outbox) cfgStopper() *stop.Stopper {
+	if o.flowCtx != nil && o.flowCtx.Cfg != nil {
+		return o.flowCtx.Cfg.Stopper
+	}
+	return nil
+}
+
 // Run starts an outbox by connecting to the provided node and pushing
 // coldata.Batches over the stream after sending a header with the provided flow
 // and stream ID. Note that an extra goroutine is spawned so that Recv may be
@@ -261,7 +269,13 @@ func (o *Outbox) Run(
 		log.VEvent(ctx, 2, "Outbox sending header")
 		// Send header message to establish the remote server (consumer).
 		if err = stream.Send(
-			&execinfrapb.ProducerMessage{Header: &execinfrapb.ProducerHeader{FlowID: o.flowCtx.ID, StreamID: streamID}},
+			&execinfrapb.ProducerMessage{
+				Header: &execinfrapb.ProducerHeader{
+					FlowID:   o.flowCtx.ID,
+					StreamID: streamID,
+					Producer: o.flowCtx.NodeID.SQLInstanceID(),
+				},
+			},
 		); err != nil {
 			log.Dev.VWarningf(ctx, 1, "Outbox Send header error, distributed query will fail: %+v", err)
 			return err
@@ -347,7 +361,7 @@ func (o *Outbox) sendBatches(
 				err := stream.Send(o.scratch.msg)
 				sendCleanup()
 				if err != nil {
-					flowinfra.HandleStreamErr(ctx, "Send (streaming metadata)", err, flowCtxCancel, outboxCtxCancel)
+					flowinfra.HandleStreamErr(ctx, "Send (streaming metadata)", err, flowCtxCancel, outboxCtxCancel, o.cfgStopper())
 					return
 				}
 				continue
@@ -397,7 +411,7 @@ func (o *Outbox) sendBatches(
 			err = stream.Send(o.scratch.msg)
 			sendCleanup()
 			if err != nil {
-				flowinfra.HandleStreamErr(ctx, "Send (batches)", err, flowCtxCancel, outboxCtxCancel)
+				flowinfra.HandleStreamErr(ctx, "Send (batches)", err, flowCtxCancel, outboxCtxCancel, o.cfgStopper())
 				return
 			}
 		}
@@ -490,7 +504,7 @@ func (o *Outbox) runWithStream(
 		for {
 			msg, err := stream.Recv()
 			if err != nil {
-				flowinfra.HandleStreamErr(ctx, "watchdog Recv", err, flowCtxCancel, outboxCtxCancel)
+				flowinfra.HandleStreamErr(ctx, "watchdog Recv", err, flowCtxCancel, outboxCtxCancel, o.cfgStopper())
 				break
 			}
 			switch {
@@ -514,14 +528,14 @@ func (o *Outbox) runWithStream(
 		}
 		o.moveToDraining(ctx, reason)
 		if err := o.sendDrainedMetadata(ctx, stream, errToSend); err != nil {
-			flowinfra.HandleStreamErr(ctx, "Send (draining metadata)", err, flowCtxCancel, outboxCtxCancel)
+			flowinfra.HandleStreamErr(ctx, "Send (draining metadata)", err, flowCtxCancel, outboxCtxCancel, o.cfgStopper())
 		} else {
 			// Close the stream. Note that if this block isn't reached, the stream
 			// is unusable.
 			// The receiver goroutine will read from the stream until any error
 			// is returned (most likely an io.EOF).
 			if err := stream.CloseSend(); err != nil {
-				flowinfra.HandleStreamErr(ctx, "CloseSend", err, flowCtxCancel, outboxCtxCancel)
+				flowinfra.HandleStreamErr(ctx, "CloseSend", err, flowCtxCancel, outboxCtxCancel, o.cfgStopper())
 			}
 		}
 	}

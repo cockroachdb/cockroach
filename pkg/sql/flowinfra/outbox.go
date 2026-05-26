@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/growstack"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -111,7 +112,7 @@ func NewOutbox(
 	isGatewayNode bool,
 ) *Outbox {
 	m := &Outbox{flowCtx: flowCtx, processorID: processorID, sqlInstanceID: sqlInstanceID}
-	m.encoder.SetHeaderFields(flowCtx.ID, streamID)
+	m.encoder.SetHeaderFields(flowCtx.ID, streamID, flowCtx.NodeID.SQLInstanceID())
 	m.streamID = streamID
 	m.numOutboxes = numOutboxes
 	m.isGatewayNode = isGatewayNode
@@ -207,14 +208,13 @@ func (m *Outbox) flush(ctx context.Context) error {
 		}
 	}
 	if sendErr != nil {
-		HandleStreamErr(ctx, "flushing", sendErr, m.flowCtxCancel, m.outboxCtxCancel)
+		HandleStreamErr(ctx, "flushing", sendErr, m.flowCtxCancel, m.outboxCtxCancel, m.flowCtx.Cfg.Stopper)
 		// This error probably won't reach the client, but we wrap it with an
 		// internal connection failure error code anyway for consistency with
 		// other DistSQL connection failures.
 		sendErr = pgerror.Wrap(sendErr, pgcode.InternalConnectionFailure, "outbox communication error")
 		// Make sure the stream is not used any more.
 		m.stream = nil
-		log.Dev.VWarningf(ctx, 1, "Outbox flush error: %s", sendErr)
 	} else {
 		log.VEvent(ctx, 2, "Outbox flushed")
 	}
@@ -433,7 +433,7 @@ func (m *Outbox) startWatchdogGoroutine(
 					err = pgerror.Wrap(err, pgcode.InternalConnectionFailure, "outbox communication error")
 					m.setErr(err)
 				}
-				HandleStreamErr(ctx, "watchdog Recv", err, m.flowCtxCancel, m.outboxCtxCancel)
+				HandleStreamErr(ctx, "watchdog Recv", err, m.flowCtxCancel, m.outboxCtxCancel, m.flowCtx.Cfg.Stopper)
 				break
 			}
 			switch {
@@ -489,19 +489,32 @@ func (m *Outbox) Err() error {
 
 // HandleStreamErr is a utility method used to handle an error when calling
 // a method on a flowStreamClient. If err is an io.EOF, outboxCtxCancel is
-// called, for all other errors flowCtxCancel is. The given error is logged with
-// the associated opName.
+// called, for all other errors flowCtxCancel is called and the error is
+// logged at WARNING level (since it cannot be sent back via the broken
+// stream). The warning is suppressed when the stopper is quiescing, since
+// connection errors are expected during server shutdown.
 func HandleStreamErr(
 	ctx context.Context,
 	opName redact.SafeString,
 	err error,
 	flowCtxCancel, outboxCtxCancel context.CancelFunc,
+	stopper *stop.Stopper,
 ) {
 	if err == io.EOF {
 		log.VEventf(ctx, 2, "Outbox calling outboxCtxCancel after %s EOF", opName)
 		outboxCtxCancel()
 	} else {
-		log.VEventf(ctx, 1, "Outbox calling flowCtxCancel after %s connection error: %+v", opName, err)
+		quiescing := false
+		if stopper != nil {
+			select {
+			case <-stopper.ShouldQuiesce():
+				quiescing = true
+			default:
+			}
+		}
+		if !quiescing {
+			log.Dev.Warningf(ctx, "Outbox calling flowCtxCancel after %s connection error: %+v", opName, err)
+		}
 		flowCtxCancel()
 	}
 }
