@@ -18,6 +18,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -2917,9 +2918,55 @@ func (r *SessionRegistry) SerializeAll() []serverpb.Session {
 	return response
 }
 
-// MaxSQLBytes is the maximum length in bytes of SQL statements serialized
-// into a serverpb.Session. Exported for testing.
-const MaxSQLBytes = 1000
+const defaultActiveQueryTextMaxBytes = 16 << 10 // 16 KiB
+
+// ActiveQueryTextMaxBytes controls the maximum length, in bytes, of SQL
+// statement text persisted in a serverpb.Session by
+// (*connExecutor).serialize. This text is what's surfaced by SHOW CLUSTER
+// QUERIES, SHOW CLUSTER SESSIONS, and the corresponding
+// crdb_internal.cluster_queries and cluster_sessions virtual tables.
+// Statements longer than this are truncated with a trailing ellipsis.
+//
+// Raising this setting increases the size of session/status responses and the
+// transient memory used to serialize and serve them.
+var ActiveQueryTextMaxBytes = settings.RegisterByteSizeSetting(
+	settings.ApplicationLevel,
+	"sql.session.active_query_text.max_bytes",
+	"maximum length in bytes of SQL text retained per active and last-active "+
+		"query in session metadata exposed by SHOW CLUSTER QUERIES, "+
+		"SHOW CLUSTER SESSIONS, and the corresponding crdb_internal virtual "+
+		"tables; longer text is truncated with a trailing ellipsis. Raising "+
+		"this setting increases the size of session/status responses and the "+
+		"transient memory used to serialize and serve them",
+	defaultActiveQueryTextMaxBytes,
+	settings.ByteSizeWithMinimum(1000),
+	settings.ByteSizeWithMaximum(64<<10), // 64 KiB
+	settings.WithPublic,
+)
+
+// TruncateSQLForActiveQuery returns sql truncated to at most maxBytes,
+// appending a trailing ellipsis when truncation occurs. The truncation is
+// performed on a UTF-8 rune boundary so the returned string is always valid
+// UTF-8.
+func TruncateSQLForActiveQuery(sql string, maxBytes int) string {
+	const ellipsis = "…"
+	if maxBytes < utf8.RuneLen('…') {
+		return sql
+	}
+	if len(sql) > maxBytes {
+		sql = sql[:maxBytes-utf8.RuneLen('…')]
+		// Walk back to the nearest valid UTF-8 boundary so we never split a
+		// multi-byte rune.
+		for {
+			if r, _ := utf8.DecodeLastRuneInString(sql); r != utf8.RuneError {
+				break
+			}
+			sql = sql[:len(sql)-1]
+		}
+		sql += ellipsis
+	}
+	return sql
+}
 
 // truncateStatementStringForTelemetry truncates the string
 // representation of a statement to a maximum length, so as to not
