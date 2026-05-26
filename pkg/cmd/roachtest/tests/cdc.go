@@ -3614,22 +3614,8 @@ CONFIGURE ZONE USING
 	// Flush.Frequency, the set traces the linger tradeoff across cadences.
 	// cdc/linger/control is the no-batching baseline: kafka_sink_config is
 	// omitted entirely so the sink uses defaults (no CDC-level linger; kgo
-	// handles its own producer-side batching).
-	//
-	// The cluster is multi-region with the kafka sink node in us-west1 and
-	// everything else (crdb + workload) in us-east1. Cross-region RTT to the
-	// sink (~25-35ms) makes per-flush network cost a meaningful fraction of
-	// total work, which is the regime where the linger tradeoff actually
-	// manifests as a throughput effect. The earlier colocated runs showed
-	// per-flush overhead was sub-ms in a same-zone setup, so cadence had no
-	// measurable throughput impact — the bottleneck was always upstream.
-	//
-	// Layout (withNumSinkNodes(1) at runtime):
-	//   node 1-4: crdb       (us-east1-b)
-	//   node 5:   kafka sink (us-west1-b)
-	//   node 6:   workload   (us-east1-b)
-	//
-	// Run the whole sweep on one reused cluster with:
+	// handles its own producer-side batching). Run the whole sweep on one
+	// reused cluster with:
 	//   bin/roachtest run --cluster <name> --wipe cdc/linger
 	for _, flushFreq := range []string{"", "10ms", "100ms", "500ms", "1s", "5s"} {
 		flushFreq := flushFreq
@@ -3638,16 +3624,44 @@ CONFIGURE ZONE USING
 			name = fmt.Sprintf("cdc/linger/%s", flushFreq)
 		}
 		r.Add(registry.TestSpec{
-			Name:      name,
-			Owner:     registry.OwnerCDC,
-			Benchmark: true,
-			Cluster: r.MakeClusterSpec(6, spec.CPU(16), spec.WorkloadNode(),
-				spec.Geo(), spec.GCEZones("us-east1-b,us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-east1-b")),
+			Name:             name,
+			Owner:            registry.OwnerCDC,
+			Benchmark:        true,
+			Cluster:          r.MakeClusterSpec(6, spec.CPU(16), spec.WorkloadNode()),
 			Leases:           registry.MetamorphicLeases,
-			CompatibleClouds: registry.OnlyGCE,
+			CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 			Suites:           registry.Suites(registry.Weekly),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runCDCLingerBench(ctx, t, c, flushFreq)
+			},
+		})
+	}
+
+	// cdc/linger/initial-scan/* runs an initial-scan-only changefeed against
+	// a pre-populated kv table. The initial scan emits events as fast as
+	// the source-to-sink pipeline can drain, decoupled from per-write
+	// transaction overhead and admission control — so the sink is more
+	// likely to be the binding constraint than in the ramp tests. This
+	// is the regime where slack flush cadence should buy throughput by
+	// amortizing per-flush overhead. Three variants:
+	//   control: no kafka_sink_config; kgo defaults
+	//   10ms / 100ms: explicit linger cadence
+	for _, flushFreq := range []string{"", "10ms", "100ms"} {
+		flushFreq := flushFreq
+		name := "cdc/linger/initial-scan/control"
+		if flushFreq != "" {
+			name = fmt.Sprintf("cdc/linger/initial-scan/%s", flushFreq)
+		}
+		r.Add(registry.TestSpec{
+			Name:             name,
+			Owner:            registry.OwnerCDC,
+			Benchmark:        true,
+			Cluster:          r.MakeClusterSpec(6, spec.CPU(16), spec.WorkloadNode()),
+			Leases:           registry.MetamorphicLeases,
+			CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
+			Suites:           registry.Suites(registry.Weekly),
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				runCDCInitialScanBench(ctx, t, c, flushFreq)
 			},
 		})
 	}
@@ -3761,6 +3775,69 @@ func runCDCLingerBench(ctx context.Context, t test.Test, c cluster.Cluster, flus
 		ct.crdbNodes[0], ct.crdbNodes[len(ct.crdbNodes)-1])); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// runCDCInitialScanBench pre-populates the kv table with bulk-imported rows,
+// then runs a single initial_scan='only' changefeed and waits for it to
+// complete. The initial scan emits events as fast as the source-to-sink
+// pipeline can drain — no per-write transaction overhead, no admission
+// control gating, just sorted scan + emit. That makes the sink more likely
+// to be the binding constraint than under a live write workload, which is
+// the regime where slack linger cadence should amortize per-flush overhead
+// into a real throughput win.
+//
+// Empty flushFrequency means the control: kafka_sink_config omitted entirely
+// (no CDC-level linger, kgo defaults). Non-empty means we explicitly set
+// kafka_sink_config.Flush.Frequency to that value.
+//
+// Throughput is the row count divided by the changefeed's wall-clock
+// duration, logged via t.Status. The Grafana panels span the run for
+// shape-of-the-curve inspection.
+func runCDCInitialScanBench(
+	ctx context.Context, t test.Test, c cluster.Cluster, flushFrequency string,
+) {
+	// 4 crdb + 1 kafka + 1 workload, all in one zone.
+	ct := newCDCTester(ctx, t, c, withNumSinkNodes(1))
+	defer ct.Close()
+
+	conn := ct.DB()
+
+	// 10M rows at ~75 B/row = ~750 MB. Long enough to give stable throughput
+	// readings (several minutes at sink-bound rates) without inflating wall
+	// clock unnecessarily. --data-loader import bulk-loads via IMPORT, much
+	// faster than --insert which would itself become the bottleneck.
+	const numRows = 10_000_000
+
+	t.Status("initializing kv table")
+	c.Run(ctx, option.WithNodes(ct.workloadNode), fmt.Sprintf(
+		`./cockroach workload init kv --splits 100 {pgurl:%d}`, ct.crdbNodes[0]))
+	require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t.L(), conn))
+
+	t.Status(fmt.Sprintf("bulk-loading %d rows via IMPORT", numRows))
+	c.Run(ctx, option.WithNodes(ct.workloadNode), fmt.Sprintf(
+		`./cockroach workload init kv --insert-count %d --data-loader import {pgurl:%d}`,
+		numRows, ct.crdbNodes[0]))
+
+	opts := map[string]string{
+		"initial_scan": "'only'",
+	}
+	if flushFrequency != "" {
+		opts["kafka_sink_config"] = fmt.Sprintf(
+			`'{"Flush": {"Frequency": "%s"}}'`, flushFrequency)
+	}
+
+	startTime := timeutil.Now()
+	t.Status(fmt.Sprintf("starting initial-scan-only changefeed (Flush.Frequency=%q)", flushFrequency))
+	feed := ct.newChangefeed(feedArgs{
+		sinkType: kafkaSink,
+		targets:  []string{"kv.kv"},
+		opts:     opts,
+	})
+	feed.waitForCompletion()
+	elapsed := timeutil.Since(startTime)
+	rate := int64(float64(numRows) / elapsed.Seconds())
+	t.Status(fmt.Sprintf("initial scan complete: %s (~%d rows/sec)",
+		elapsed.Round(time.Second), rate))
 }
 
 // runCDCLingerLoadMatrix sweeps a (cadence x offered-rate) matrix on a
