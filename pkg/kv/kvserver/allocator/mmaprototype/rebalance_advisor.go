@@ -7,6 +7,7 @@ package mmaprototype
 
 import (
 	"context"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -103,24 +104,13 @@ func (a *allocatorState) BuildMMARebalanceAdvisor(
 	}
 	// Drop any cand the integration layer learned about (via gossip / StorePool)
 	// before MMA did. computeMeansForStoreSet would otherwise nil-deref on the
-	// missing storeLoad. In the steady state every cand is known, so copy on
-	// write: keep aliasing the caller's slice until the first unknown cand,
-	// then peel off into a fresh slice. `range cands` captures the original
-	// slice header, so reassigning cands inside the loop is safe.
-	var cow bool
-	for i, c := range cands {
-		if !a.cs.hasStore(c) {
-			if !cow {
-				filtered := make([]roachpb.StoreID, i, len(cands)+1)
-				copy(filtered, cands[:i])
-				cands = filtered
-				cow = true
-			}
-			continue
-		}
-		if cow {
-			cands = append(cands, c)
-		}
+	// missing storeLoad. In the steady state every cand is known, so the
+	// IndexFunc walk completes without allocating; only when an unknown cand
+	// is present do we copy and compact.
+	if slices.IndexFunc(cands, a.cs.notHasStore) != -1 {
+		cp := make([]roachpb.StoreID, len(cands))
+		copy(cp, cands)
+		cands = slices.DeleteFunc(cp, a.cs.notHasStore)
 	}
 	// TODO(wenyihu6): for simplicity, we create a new scratchNodes every call.
 	// We should reuse the scratchNodes instead.
