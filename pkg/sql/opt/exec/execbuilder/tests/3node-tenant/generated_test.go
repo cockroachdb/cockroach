@@ -78,7 +78,8 @@ func TestLogic_tmp(t *testing.T) {
 	var glob string
 	glob = filepath.Join(execBuildLogicTestDir, "_*")
 	serverArgs := logictest.TestServerArgs{
-		DisableWorkmemRandomization: true,
+		DisableWorkmemRandomization:   true,
+		DisableOptimizerPerturbations: true,
 	}
 	logictest.RunLogicTests(t, serverArgs, configIdx, glob)
 }

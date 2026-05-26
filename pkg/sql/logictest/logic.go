@@ -600,6 +600,24 @@ var (
 	)
 	sqlfmtLen = flag.Int("line-length", tree.DefaultPrettyCfg().LineWidth,
 		"target line length when using -rewrite-sql")
+
+	// metamorphicDisableOptRuleProbability and metamorphicOptimizerCostPerturbation
+	// mirror the testing_optimizer_cost_perturbation and
+	// testing_optimizer_disable_rule_probability session settings used by costfuzz and
+	// unoptimized-query-oracle. They are only applied when
+	// COCKROACH_LOGIC_TEST_OPTIMIZER_METAMORPHIC=true so that logictest files with
+	// fixed query plans are not perturbed during normal CI runs.
+	metamorphicDisableOptRuleProbability = metamorphic.ConstantWithTestChoice(
+		"logictest-disable-opt-rule-probability", float64(0), float64(0.5), float64(1.0))
+	// metamorphicOptimizerCostPerturbation mirrors the range used by costfuzz
+	// (see testing_optimizer_cost_perturbation). 0.1 exercises mild plan
+	// variation while 1.0 stress-tests extreme perturbations.
+	metamorphicOptimizerCostPerturbation = metamorphic.ConstantWithTestChoice(
+		"logictest-optimizer-cost-perturbation", float64(0), float64(0.1), float64(1.0))
+
+	logicTestOptimizerMetamorphicEnabled = envutil.EnvOrDefaultBool(
+		"COCKROACH_LOGIC_TEST_OPTIMIZER_METAMORPHIC", false)
+
 	disableOptRuleProbability = flag.Float64(
 		"disable-opt-rule-probability", 0,
 		"disable transformation rules in the cost-based optimizer with the given probability.")
@@ -1638,12 +1656,15 @@ func (t *logicTest) newCluster(
 		return st
 	}
 	setSQLTestingKnobs := func(knobs *base.TestingKnobs) {
+		disableProb, costPerturb := optimizerTestingKnobValues(
+			serverArgs, *disableOptRuleProbability, *optimizerCostPerturbation,
+		)
 		knobs.SQLEvalContext = &eval.TestingKnobs{
 			AssertBinaryExprReturnTypes:     true,
 			AssertUnaryExprReturnTypes:      true,
 			AssertFuncExprReturnTypes:       true,
-			DisableOptimizerRuleProbability: *disableOptRuleProbability,
-			OptimizerCostPerturbation:       *optimizerCostPerturbation,
+			DisableOptimizerRuleProbability: disableProb,
+			OptimizerCostPerturbation:       costPerturb,
 			ForceProductionValues:           serverArgs.ForceProductionValues,
 			UnsafeOverride: func() *bool {
 				v := t.allowUnsafe.Load()
@@ -4850,6 +4871,35 @@ type TestServerArgs struct {
 	BatchBytesLimitLowerBound int64
 	// If set, sql.distsql.direct_columnar_scans.enabled is set to false.
 	DisableDirectColumnarScans bool
+	// If set, testing optimizer perturbation knobs are forced to 0. This is
+	// needed for tests with fixed query plans in expected output (e.g. EXPLAIN
+	// tests and SQLite logic tests).
+	DisableOptimizerPerturbations bool
+}
+
+func optimizerTestingKnobValues(
+	serverArgs TestServerArgs, disableFlag, costFlag float64,
+) (disableProb, costPerturb float64) {
+	disableProb = disableFlag
+	costPerturb = costFlag
+	if serverArgs.ForceProductionValues || serverArgs.DisableOptimizerPerturbations {
+		return 0, 0
+	}
+	if logicTestOptimizerMetamorphicEnabled {
+		// Only apply the metamorphic constant when no explicit non-zero value
+		// was passed via the command-line flag. This lets callers override the
+		// metamorphic behaviour (e.g. -disable-opt-rule-probability=0.3) while
+		// still getting metamorphic defaults in unattended runs. Note: the
+		// metamorphic constant itself may be 0 (one of its valid choices), in
+		// which case the assignment is a no-op.
+		if disableProb == 0 {
+			disableProb = metamorphicDisableOptRuleProbability
+		}
+		if costPerturb == 0 {
+			costPerturb = metamorphicOptimizerCostPerturbation
+		}
+	}
+	return disableProb, costPerturb
 }
 
 // RunLogicTests runs logic tests for all files matching the given glob.
