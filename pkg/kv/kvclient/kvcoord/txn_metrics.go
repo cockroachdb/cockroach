@@ -386,7 +386,6 @@ func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 		ClientRefreshAutoRetries:            metric.NewCounter(metaClientRefreshAutoRetries),
 		ServerRefreshSuccess:                metric.NewCounter(metaServerRefreshSuccess),
 		Durations: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaDurationsHistograms,
 			Duration:     histogramWindow,
 			BucketConfig: metric.IOLatencyBuckets,
@@ -400,8 +399,6 @@ func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 		Restarts: metric.NewHistogram(metric.HistogramOptions{
 			Metadata:     metaRestartsHistogram,
 			Duration:     histogramWindow,
-			MaxVal:       100,
-			SigFigs:      3,
 			BucketConfig: metric.Count1KBuckets,
 		}),
 		RestartsWriteTooOld:                  telemetry.NewCounterWithMetric(metaRestartsWriteTooOld),

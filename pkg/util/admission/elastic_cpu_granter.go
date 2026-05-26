@@ -403,7 +403,6 @@ func makeElasticCPUGranterMetrics() *elasticCPUGranterMetrics {
 		AvailableNanos:         metric.NewGauge(elasticCPUAvailableNanos),
 		NanosExhaustedDuration: metric.NewCounter(elasticCPUNanosExhaustedDuration),
 		OverLimitDuration: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePrometheus,
 			Metadata:     elasticCPUOverLimitDurations,
 			Duration:     base.DefaultHistogramWindowInterval(),
 			BucketConfig: metric.IOLatencyBuckets,

@@ -93,7 +93,6 @@ func (m *RowLevelTTLAggMetrics) loadMetrics(labelMetrics bool, relation string) 
 }
 
 func makeRowLevelTTLAggMetrics(histogramWindowInterval time.Duration) metric.Struct {
-	sigFigs := 2
 	b := aggmetric.MakeBuilder("relation")
 	ret := &RowLevelTTLAggMetrics{
 		SpanTotalDuration: b.Histogram(metric.HistogramOptions{
@@ -107,8 +106,6 @@ func makeRowLevelTTLAggMetrics(histogramWindowInterval time.Duration) metric.Str
 				Category:    metric.Metadata_TTL,
 				HowToUse:    `See Description.`,
 			},
-			MaxVal:       time.Hour.Nanoseconds(),
-			SigFigs:      sigFigs,
 			Duration:     histogramWindowInterval,
 			BucketConfig: metric.LongRunning60mLatencyBuckets,
 		}),
@@ -123,8 +120,6 @@ func makeRowLevelTTLAggMetrics(histogramWindowInterval time.Duration) metric.Str
 				Category:    metric.Metadata_TTL,
 				HowToUse:    `See Description.`,
 			},
-			MaxVal:       time.Minute.Nanoseconds(),
-			SigFigs:      sigFigs,
 			Duration:     histogramWindowInterval,
 			BucketConfig: metric.BatchProcessLatencyBuckets,
 		}),
@@ -139,8 +134,6 @@ func makeRowLevelTTLAggMetrics(histogramWindowInterval time.Duration) metric.Str
 				Category:    metric.Metadata_TTL,
 				HowToUse:    `See Description.`,
 			},
-			MaxVal:       time.Minute.Nanoseconds(),
-			SigFigs:      sigFigs,
 			Duration:     histogramWindowInterval,
 			BucketConfig: metric.BatchProcessLatencyBuckets,
 		}),

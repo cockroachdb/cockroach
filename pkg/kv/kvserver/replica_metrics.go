@@ -7,7 +7,6 @@ package kvserver
 
 import (
 	"context"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -65,8 +64,6 @@ type ReplicaMetrics struct {
 	RaftFlowStateCounts      [tracker.StateCount]int64
 	ClosedTimestampPolicy    ctpb.RangeClosedTimestampPolicy
 
-	QuotaPoolPercentUsed int64 // [0,100]
-
 	// Latching and locking metrics.
 	LatchMetrics     concurrency.LatchMetrics
 	LockTableMetrics concurrency.LockTableMetrics
@@ -92,13 +89,6 @@ func (r *Replica) Metrics(
 
 	r.mu.RLock()
 
-	var qpUsed, qpCap int64
-	if q := r.mu.proposalQuota; q != nil {
-		qpAvail := int64(q.ApproximateQuota())
-		qpCap = int64(q.Capacity()) // NB: max capacity is MaxInt64, see NewIntPool
-		qpUsed = qpCap - qpAvail
-	}
-
 	input := calcReplicaMetricsInput{
 		raftCfg:                  &r.store.cfg.RaftConfig,
 		conf:                     r.mu.conf,
@@ -120,8 +110,6 @@ func (r *Replica) Metrics(
 		raftLogSize:              r.asLogStorage().shMu.size,
 		raftLogSizeTrusted:       r.asLogStorage().shMu.sizeTrusted,
 		rangeSize:                r.shMu.state.Stats.Total(),
-		qpUsed:                   qpUsed,
-		qpCapacity:               qpCap,
 		paused:                   r.mu.pausedFollowers,
 		pendingRaftProposalCount: r.numPendingProposalsRLocked(),
 		slowRaftProposalCount:    r.mu.slowProposalCount,
@@ -153,7 +141,6 @@ type calcReplicaMetricsInput struct {
 	raftLogSize              int64
 	raftLogSizeTrusted       bool
 	rangeSize                int64
-	qpUsed, qpCapacity       int64 // quota pool used and capacity bytes
 	paused                   map[roachpb.ReplicaID]struct{}
 	pendingRaftProposalCount int64
 	slowRaftProposalCount    int64
@@ -227,22 +214,10 @@ func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
 		PendingRaftProposalCount: d.pendingRaftProposalCount,
 		SlowRaftProposalCount:    d.slowRaftProposalCount,
 		RaftFlowStateCounts:      calcRaftFlowStateCounts(d.raftStatus),
-		QuotaPoolPercentUsed:     calcQuotaPoolPercentUsed(d.qpUsed, d.qpCapacity),
 		LatchMetrics:             d.latchMetrics,
 		LockTableMetrics:         d.lockTableMetrics,
 		ClosedTimestampPolicy:    d.closedTimestampPolicy,
 	}
-}
-
-func calcQuotaPoolPercentUsed(qpUsed, qpCapacity int64) int64 {
-	if qpCapacity < 1 {
-		qpCapacity++ // defense in depth against divide by zero below
-	}
-	// NB: assumes qpUsed < qpCapacity. If this isn't the case, below returns more
-	// than 100, but that's better than rounding it (and thus hiding a problem).
-	// Also this might be expected if a quota pool overcommits (for example, due
-	// to a single proposal that clocks in above the total capacity).
-	return int64(math.Round(float64(100*qpUsed) / float64(qpCapacity))) // 0-100
 }
 
 // calcRangeCounter returns whether this replica is designated as the replica in

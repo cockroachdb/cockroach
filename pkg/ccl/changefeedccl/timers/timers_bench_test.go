@@ -24,7 +24,6 @@ func BenchmarkTimerHandle(b *testing.B) {
 		},
 		Duration: time.Hour,
 		Buckets:  prometheus.ExponentialBucketsRange(float64(1*time.Microsecond), float64(1*time.Hour), 60),
-		Mode:     metric.HistogramModePrometheus,
 	}
 	builder := aggmetric.MakeBuilder("scope")
 	hist := builder.Histogram(histOpts).AddChild("test")

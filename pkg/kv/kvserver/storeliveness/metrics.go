@@ -77,7 +77,6 @@ func newSupportManagerMetrics() *SupportManagerMetrics {
 		SupportWithdrawFailures:  metric.NewCounter(metaSupportWithdrawFailures),
 		CallbacksProcessingDuration: metric.NewHistogram(
 			metric.HistogramOptions{
-				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     metaCallbacksProcessingDuration,
 				Duration:     base.DefaultHistogramWindowInterval(),
 				BucketConfig: metric.IOLatencyBuckets,
@@ -89,7 +88,6 @@ func newSupportManagerMetrics() *SupportManagerMetrics {
 		ReceiveQueueBytes: metric.NewGauge(metaReceiveQueueBytes),
 		HeartbeatPersistDuration: metric.NewHistogram(
 			metric.HistogramOptions{
-				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     metaHeartbeatPersistDuration,
 				Duration:     base.DefaultHistogramWindowInterval(),
 				BucketConfig: metric.IOLatencyBuckets,
@@ -97,7 +95,6 @@ func newSupportManagerMetrics() *SupportManagerMetrics {
 		),
 		MessageHandlePersistDuration: metric.NewHistogram(
 			metric.HistogramOptions{
-				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     metaMessageHandlePersistDuration,
 				Duration:     base.DefaultHistogramWindowInterval(),
 				BucketConfig: metric.IOLatencyBuckets,
@@ -105,7 +102,6 @@ func newSupportManagerMetrics() *SupportManagerMetrics {
 		),
 		SupportWithdrawPersistDuration: metric.NewHistogram(
 			metric.HistogramOptions{
-				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     metaSupportWithdrawPersistDuration,
 				Duration:     base.DefaultHistogramWindowInterval(),
 				BucketConfig: metric.IOLatencyBuckets,

@@ -19,10 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/tick"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/goodhistogram"
 	"github.com/gogo/protobuf/proto"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
@@ -216,22 +216,19 @@ func (m *Metadata) GetUnit() Unit {
 // from metric.LabelPair to prometheusgo.LabelPair, see the LabelPair comment
 // in pkg/util/metric/metric.proto.
 func (m *Metadata) GetLabels(useStaticLabels bool) []*prometheusgo.LabelPair {
-	// x satisfies the field XXX_unrecognized in prometheusgo.LabelPair.
-	var x []byte
-
 	var lps []*prometheusgo.LabelPair
 	numStaticLabels := 0
 	if useStaticLabels {
 		numStaticLabels = len(m.StaticLabels)
 		lps = make([]*prometheusgo.LabelPair, len(m.Labels)+numStaticLabels)
 		for i, v := range m.StaticLabels {
-			lps[i] = &prometheusgo.LabelPair{Name: v.Name, Value: v.Value, XXX_unrecognized: x}
+			lps[i] = &prometheusgo.LabelPair{Name: v.Name, Value: v.Value}
 		}
 	} else {
 		lps = make([]*prometheusgo.LabelPair, len(m.Labels))
 	}
 	for i, v := range m.Labels {
-		lps[i+numStaticLabels] = &prometheusgo.LabelPair{Name: v.Name, Value: v.Value, XXX_unrecognized: x}
+		lps[i+numStaticLabels] = &prometheusgo.LabelPair{Name: v.Name, Value: v.Value}
 	}
 	return lps
 }
@@ -303,45 +300,14 @@ func TestingSetNow(f func() time.Time) func() {
 	}
 }
 
-// useHdrHistogramsEnvVar can be used to switch all histograms to use the
-// legacy HDR histograms (except for those that explicitly force the use
-// of the newer Prometheus via HistogramModePrometheus). HDR Histograms
-// dynamically generate bucket boundaries, which can lead to hundreds of
-// buckets. This can cause performance issues with timeseries databases
-// like Prometheus.
-const useHdrHistogramsEnvVar = "COCKROACH_ENABLE_HDR_HISTOGRAMS"
-
-var hdrEnabled = metamorphic.ConstantWithTestBool(useHdrHistogramsEnvVar, envutil.EnvOrDefaultBool(useHdrHistogramsEnvVar, false))
-
-// HdrEnabled returns whether or not the HdrHistogram model is enabled
-// in the metric package. Primarily useful in tests where we want to validate
-// different outputs depending on whether or not HDR is enabled.
-func HdrEnabled() bool {
-	return hdrEnabled
-}
-
-// useNativeHistogramsEnvVar can be used to enable the Prometheus native
-// histogram feature, which represents a histogram as a single time series
-// rather than a collection of per-bucket counter series. If enabled, both
-// conventional and native histograms are exported.
+// useNativeHistogramsEnvVar controls whether histograms use the
+// goodhistogram-backed native histogram implementation (default, true)
+// or revert to the legacy prometheus-backed implementation (false).
+// Setting this to false can be used as a safety valve if issues are
+// discovered with the native histogram implementation.
 const useNativeHistogramsEnvVar = "COCKROACH_ENABLE_PROMETHEUS_NATIVE_HISTOGRAMS"
 
-var nativeHistogramsEnabled = envutil.EnvOrDefaultBool(useNativeHistogramsEnvVar, false)
-
-// nativeHistogramsBucketFactorEnvVar can be used to override the default
-// bucket size exponential factor for Prometheus native histograms, if enabled.
-// If not set, use the default factor of 1.1.
-const nativeHistogramsBucketFactorEnvVar = "COCKROACH_PROMETHEUS_NATIVE_HISTOGRAMS_BUCKET_FACTOR"
-
-var nativeHistogramsBucketFactor = envutil.EnvOrDefaultFloat64(nativeHistogramsBucketFactorEnvVar, 1.1)
-
-// nativeHistogramsBucketCountMultiplierEnvVar can be used to override the
-// default maximum bucket count for Prometheus native histograms, if enabled.
-// The maximum bucket count is set to the number of conventional buckets for
-// the histogram metric multiplied by the multiplier, which defaults to 1.0.
-const nativeHistogramsBucketCountMultiplierEnvVar = "COCKROACH_PROMETHEUS_NATIVE_HISTOGRAMS_BUCKET_COUNT_MULTIPLIER"
-
-var nativeHistogramsBucketCountMultiplier = envutil.EnvOrDefaultFloat64(nativeHistogramsBucketCountMultiplierEnvVar, 1)
+var nativeHistogramsEnabled = envutil.EnvOrDefaultBool(useNativeHistogramsEnvVar, true)
 
 // maxLabelValuesEnvVar can be used to configure the maximum number of distinct
 // label value combinations for high cardinality metrics before eviction starts.
@@ -350,28 +316,6 @@ const maxLabelValuesEnvVar = "COCKROACH_HIGH_CARDINALITY_METRICS_MAX_LABEL_VALUE
 // MaxLabelValues is the configured maximum number of distinct label value combinations
 // for high cardinality metrics before eviction starts, read from the environment variable.
 var MaxLabelValues = envutil.EnvOrDefaultInt(maxLabelValuesEnvVar, 10000)
-
-type HistogramMode byte
-
-const (
-	// HistogramModePrometheus will force the constructed histogram to use
-	// the Prometheus histogram model, regardless of the value of
-	// useHdrHistogramsEnvVar. This option should be used for all
-	// newly defined histograms moving forward.
-	//
-	// NB: If neither this mode nor the HistogramModePreferHdrLatency mode
-	// is set, MaxVal and SigFigs must be defined to maintain backwards
-	// compatibility with the legacy HdrHistogram model.
-	HistogramModePrometheus HistogramMode = iota + 1
-	// HistogramModePreferHdrLatency will cause the returned histogram to
-	// use the HdrHistgoram model and be configured with suitable defaults
-	// for latency tracking iff useHdrHistogramsEnvVar is enabled.
-	//
-	// NB: If this option is set, no MaxVal or SigFigs are required in the
-	// HistogramOptions to maintain backwards compatibility with the legacy
-	// HdrHistogram model, since suitable defaults are used for both.
-	HistogramModePreferHdrLatency
-)
 
 // HighCardinalityMetricOptions defines the configuration options for high cardinality metrics
 // (Counter, Gauge, Histogram) that use cache storage. This allows fine-grained control over
@@ -392,22 +336,11 @@ type HistogramOptions struct {
 	// Duration/WindowedHistogramWrapNum (i.e., the number of windows
 	// in the histogram).
 	Duration time.Duration
-	// MaxVal is only relevant to the HdrHistogram, and represents the
-	// highest trackable value in the resulting histogram buckets.
-	MaxVal int64
-	// SigFigs is only relevant to the HdrHistogram, and represents
-	// the number of significant figures to be used to determine the
-	// degree of accuracy used in measurements.
-	SigFigs int
-	// Buckets are only relevant to Prometheus histograms, and represent
-	// the pre-defined histogram bucket boundaries to be used.
+	// Buckets are the pre-defined histogram bucket boundaries to be used.
 	Buckets []float64
-	// BucketConfig is only relevant to Prometheus histograms, and represents
-	// the pre-defined histogram bucket configuration used to generate buckets.
+	// BucketConfig is the pre-defined histogram bucket configuration used
+	// to generate buckets.
 	BucketConfig staticBucketConfig
-	// Mode defines the type of histogram to be used. See individual
-	// comments on each HistogramMode value for details.
-	Mode HistogramMode
 	// HighCardinalityOpts configures cache eviction for high cardinality histograms.
 	// Only applies when using NewHighCardinalityHistogram.
 	HighCardinalityOpts HighCardinalityMetricOptions
@@ -415,56 +348,60 @@ type HistogramOptions struct {
 
 func NewHistogram(opt HistogramOptions) IHistogram {
 	opt.Metadata.MetricType = prometheusgo.MetricType_HISTOGRAM
-	if hdrEnabled && opt.Mode != HistogramModePrometheus {
-		if opt.Mode == HistogramModePreferHdrLatency {
-			return NewHdrLatency(opt.Metadata, opt.Duration)
-		} else {
-			return NewHdrHistogram(opt.Metadata, opt.Duration, opt.MaxVal, opt.SigFigs)
-		}
-	} else {
-		return newHistogram(opt.Metadata, opt.Duration, opt.Buckets,
-			opt.BucketConfig)
+	if !nativeHistogramsEnabled {
+		return newPrometheusHistogram(
+			opt.Metadata, opt.Duration, opt.Buckets, opt.BucketConfig)
 	}
+	return newHistogram(opt.Metadata, opt.Duration, opt.Buckets,
+		opt.BucketConfig)
 }
 
-// NewHistogram is a prometheus-backed histogram. Depending on the value of
-// opts.Buckets, this is suitable for recording any kind of quantity. Common
-// sensible choices are {IO,Network}LatencyBuckets.
+// newHistogram creates a goodhistogram-backed histogram suitable for
+// recording any kind of quantity. Bucket boundaries are derived from
+// the provided BucketConfig (preferred) or explicit Buckets slice.
 func newHistogram(
 	meta Metadata, duration time.Duration, buckets []float64, bucketConfig staticBucketConfig,
 ) *Histogram {
-	// TODO(obs-inf): prometheus supports labeled histograms but they require more
-	// plumbing and don't fit into the PrometheusObservable interface any more.
-
-	// If no buckets are provided, generate buckets from bucket configuration
-	if buckets == nil && bucketConfig.count != 0 {
-		buckets = bucketConfig.GetBucketsFromBucketConfig()
+	params := bucketConfig.ToGoodHistogramParams()
+	if params == (goodhistogram.Params{}) && len(buckets) > 0 {
+		// Fallback: derive params from explicit bucket boundaries.
+		params = goodhistogram.Params{
+			Lo:         buckets[0],
+			Hi:         buckets[len(buckets)-1],
+			ErrorBound: 0.05,
+		}
 	}
-	opts := prometheus.HistogramOpts{
-		Buckets: buckets,
+	if params == (goodhistogram.Params{}) {
+		// Default if nothing is configured.
+		params = goodhistogram.Params{
+			Lo:         1,
+			Hi:         1e9,
+			ErrorBound: 0.05,
+		}
 	}
-	if bucketConfig.distribution == Exponential && nativeHistogramsEnabled {
-		opts.NativeHistogramBucketFactor = nativeHistogramsBucketFactor
-		opts.NativeHistogramMaxBucketNumber = uint32(float64(len(buckets)) * nativeHistogramsBucketCountMultiplier)
-	}
-	cum := prometheus.NewHistogram(opts)
+	cum := goodhistogram.New(params)
+	curWindow := goodhistogram.New(params)
+	prevWindow := goodhistogram.New(params)
 	h := &Histogram{
 		Metadata: meta,
+		params:   params,
 		cum:      cum,
 	}
+	h.windowed.cur.Store(curWindow)
+	h.windowed.prev.Store(prevWindow)
 	h.windowed.Ticker = tick.NewTicker(
 		now(),
-		// We want to divide the total window duration by the number of windows
-		// because we need to rotate the windows at uniformly distributed
-		// intervals within a histogram's total duration.
 		duration/WindowedHistogramWrapNum,
 		func() {
 			h.windowed.Lock()
 			defer h.windowed.Unlock()
-			if h.windowed.cur.Load() != nil {
-				h.windowed.prev.Store(h.windowed.cur.Load())
-			}
-			h.windowed.cur.Store(prometheus.NewHistogram(opts))
+			// Rotate: prev becomes the new cur (after reset), cur
+			// becomes prev. No allocations.
+			prev := h.windowed.prev.Load()
+			cur := h.windowed.cur.Load()
+			prev.Reset()
+			h.windowed.prev.Store(cur)
+			h.windowed.cur.Store(prev)
 		})
 	h.windowed.Ticker.OnTick()
 	return h
@@ -475,27 +412,20 @@ var _ WindowedHistogram = (*Histogram)(nil)
 var _ CumulativeHistogram = (*Histogram)(nil)
 var _ IHistogram = (*Histogram)(nil)
 
-// Histogram is a prometheus-backed histogram. It collects observed values by
-// keeping bucketed counts. For convenience, internally two sets of buckets are
-// kept: A cumulative set (i.e. data is never evicted) and a windowed set (which
-// keeps only recently collected samples).
-//
-// New buckets are created using TestHistogramBuckets.
+// Histogram is a goodhistogram-backed histogram. It collects observed
+// values by keeping bucketed counts. Internally two sets of histograms
+// are kept: a cumulative set (data is never evicted) and a windowed
+// set (which keeps only recently collected samples via a 2-window
+// rotation scheme).
 type Histogram struct {
 	Metadata
-	cum prometheus.HistogramInternal
+	params goodhistogram.Params
+	cum    *goodhistogram.Histogram
 
-	// TODO(obs-inf): the way we implement windowed histograms is not great.
-	// We could "just" double the rotation interval (so that the histogram really
-	// collects for 20s when we expect to persist the contents every 10s).
-	// Really it would make more sense to explicitly rotate the histogram
-	// atomically with collecting its contents, but that is now how we have set
-	// it up right now. It should be doable though, since there is only one
-	// consumer of windowed histograms - our internal timeseries system.
 	windowed struct {
 		*tick.Ticker
 		syncutil.Mutex
-		prev, cur atomic.Value
+		prev, cur atomic.Pointer[goodhistogram.Histogram]
 	}
 }
 
@@ -536,11 +466,8 @@ func (h *Histogram) Tick() {
 
 // RecordValue adds the given value to the histogram.
 func (h *Histogram) RecordValue(n int64) {
-	v := float64(n)
-	b := h.cum.FindBucket(v)
-	h.cum.ObserveInternal(v, b)
-
-	h.windowed.cur.Load().(prometheus.HistogramInternal).ObserveInternal(v, b)
+	h.cum.Record(n)
+	h.windowed.cur.Load().Record(n)
 }
 
 // GetType returns the prometheus type enum for this metric.
@@ -548,38 +475,30 @@ func (h *Histogram) GetType() *prometheusgo.MetricType {
 	return prometheusgo.MetricType_HISTOGRAM.Enum()
 }
 
-// ToPrometheusMetric returns a filled-in prometheus metric of the right type.
+// ToPrometheusMetric returns a filled-in prometheus metric of the
+// right type.
 func (h *Histogram) ToPrometheusMetric() *prometheusgo.Metric {
-	m := &prometheusgo.Metric{}
-	if err := h.cum.Write(m); err != nil {
-		panic(err)
+	s := h.cum.Snapshot()
+	return &prometheusgo.Metric{
+		Histogram: s.ToPrometheusHistogram(),
 	}
-	return m
 }
 
 func (h *Histogram) CumulativeSnapshot() HistogramSnapshot {
-	return MakeHistogramSnapshot(h.ToPrometheusMetric().Histogram)
+	return MakeHistogramSnapshotFromGoodHistogram(h.cum.Snapshot())
 }
 
 func (h *Histogram) WindowedSnapshot() HistogramSnapshot {
 	h.windowed.Lock()
 	defer h.windowed.Unlock()
-	cur := h.windowed.cur.Load().(prometheus.Histogram)
-	// Can't cast here since prev might be nil.
+	curSnap := h.windowed.cur.Load().Snapshot()
 	prev := h.windowed.prev.Load()
-
-	curMetric := &prometheusgo.Metric{}
-	if err := cur.Write(curMetric); err != nil {
-		panic(err)
-	}
 	if prev != nil {
-		prevMetric := &prometheusgo.Metric{}
-		if err := prev.(prometheus.Histogram).Write(prevMetric); err != nil {
-			panic(err)
-		}
-		MergeWindowedHistogram(curMetric.Histogram, prevMetric.Histogram)
+		prevSnap := prev.Snapshot()
+		merged := curSnap.Merge(&prevSnap)
+		return MakeHistogramSnapshotFromGoodHistogram(merged)
 	}
-	return MakeHistogramSnapshot(curMetric.Histogram)
+	return MakeHistogramSnapshotFromGoodHistogram(curSnap)
 }
 
 // GetMetadata returns the metric's metadata including the Prometheus
@@ -601,64 +520,71 @@ var _ Iterable = (*ManualWindowHistogram)(nil)
 var _ WindowedHistogram = (*ManualWindowHistogram)(nil)
 var _ CumulativeHistogram = (*ManualWindowHistogram)(nil)
 
-// NewManualWindowHistogram is a prometheus-backed histogram. Depending on the
-// value of the buckets parameter, this is suitable for recording any kind of
-// quantity. The histogram is very similar to Histogram produced by
-// NewHistogram with the main difference being that Histogram supports
-// collecting values over time using the Histogram.RecordValue whereas this
-// histogram provides limited support RecordValue, the caller is responsible
-// for calling Rotate, after recording is complete or manually providing the
-// cumulative and current windowed histogram via Update. This means that it is
-// the responsibility of the creator of this histogram to replace the values by
-// either calling ManualWindowHistogram.Update or
-// ManualWindowHistogram.RecordValue and ManualWindowHistogram.Rotate. If
-// NewManualWindowHistogram is called withRotate as true, only the RecordValue
-// and Rotate method may be used; withRotate as false, only Update may be used.
+// NewManualWindowHistogram creates a histogram that supports two modes
+// of operation:
 //
-// TODO(kvoli,aadityasondhi): The two ways to use this histogram is a hack and
-// "temporary", rationalize the interface. Tracked in #98622.
-// TODO(aaditya): A tracking issue to overhaul the histogram interfaces into a
-// more coherent one: #116584.
+//   - manualRotate=true (RecordValue+Rotate mode): Uses goodhistogram
+//     for lock-free recording. Call RecordValue to record, then Rotate
+//     to compute the windowed delta.
+//   - manualRotate=false (Update mode): Uses prometheus.Histogram as
+//     the backing store since the data comes from external sources
+//     (e.g. pebble) in prometheus format. Call Update to replace the
+//     cumulative and add windowed data.
+//
+// TODO(kvoli,aadityasondhi): The two ways to use this histogram is a
+// hack and "temporary", rationalize the interface. Tracked in #98622.
+// TODO(aaditya): A tracking issue to overhaul the histogram interfaces
+// into a more coherent one: #116584.
 func NewManualWindowHistogram(
 	meta Metadata, buckets []float64, manualRotate bool,
 ) *ManualWindowHistogram {
-	opts := prometheus.HistogramOpts{
-		Buckets: buckets,
-	}
-	cum := prometheus.NewHistogram(opts)
-	// We initialize the histogram with the same bucket bounds as the cumulative
-	// histogram.
-	prev := &prometheusgo.Metric{}
-	if err := cum.Write(prev); err != nil {
-		panic(err.Error())
-	}
-	cur := &prometheusgo.Metric{}
-	if err := cum.Write(cur); err != nil {
-		panic(err.Error())
-	}
-
 	meta.MetricType = prometheusgo.MetricType_HISTOGRAM
 	h := &ManualWindowHistogram{
 		Metadata: meta,
 	}
-	h.mu.disableTick = manualRotate
-	h.mu.cum = cum
-	h.mu.cur = cur.GetHistogram()
-	h.mu.prev = prev.GetHistogram()
-	// If the caller specifies that it will not manually control rotating the
-	// histogram, it will use the ticker in the same way as metric.Histogram does.
-	if !manualRotate {
+	h.mu.useGoodHistogram = manualRotate
+
+	if manualRotate {
+		// RecordValue+Rotate mode: use goodhistogram.
+		params := goodhistogram.Params{
+			Lo:         1,
+			Hi:         1e9,
+			ErrorBound: 0.05,
+		}
+		if len(buckets) > 0 {
+			params.Lo = buckets[0]
+			if params.Lo <= 0 {
+				params.Lo = 1
+			}
+			params.Hi = buckets[len(buckets)-1]
+		}
+		h.mu.ghParams = params
+		h.mu.ghCum = goodhistogram.New(params)
+		h.mu.ghPrevSnap = goodhistogram.New(params).Snapshot()
+	} else {
+		// Update mode: use prometheus backing for compatibility with
+		// external data sources like pebble.
+		opts := prometheus.HistogramOpts{
+			Buckets: buckets,
+		}
+		cum := prometheus.NewHistogram(opts)
+		prev := &prometheusgo.Metric{}
+		if err := cum.Write(prev); err != nil {
+			panic(err.Error())
+		}
+		cur := &prometheusgo.Metric{}
+		if err := cum.Write(cur); err != nil {
+			panic(err.Error())
+		}
+		h.mu.cum = cum
+		h.mu.cur = cur.GetHistogram()
+		h.mu.prev = prev.GetHistogram()
 		h.mu.Ticker = tick.NewTicker(
 			now(),
-			// We want to divide the total window duration by the number of windows
-			// because we need to rotate the windows at uniformly distributed
-			// intervals within a histogram's total duration.
 			60*time.Second/WindowedHistogramWrapNum,
 			func() {
-				// This is called while holding a mutex prior to calling Tick().
 				newH := &prometheusgo.Metric{}
 				h.mu.prev = h.mu.cur
-				// Initialize the histogram with the same bucket bounds as original.
 				if err := prometheus.NewHistogram(opts).Write(newH); err != nil {
 					panic(err.Error())
 				}
@@ -668,58 +594,56 @@ func NewManualWindowHistogram(
 	return h
 }
 
-// ManualWindowHistogram is a prometheus-backed histogram. Internally there are
-// three sets of histograms: one is the cumulative set (i.e. data is never
-// evicted) which is a prometheus.Histogram, the cumulative histogram value
-// when last rotated and the current histogram, which is windowed. Both the
-// previous and current histograms are prometheusgo.Histograms. Both histograms
-// must be updated by the client by calling either ManualWindowHistogram.Update
-// or ManualWindowHistogram.RecordValue and subsequently Rotate.
+// ManualWindowHistogram supports two modes of operation: one backed by
+// goodhistogram (RecordValue+Rotate) and one backed by prometheus
+// (Update). See NewManualWindowHistogram for details.
 type ManualWindowHistogram struct {
 	Metadata
 
 	mu struct {
-		// prometheus.Histogram is thread safe, so we only need an RLock to
-		// RecordValue. When calling Update or Rotate, we require a WLock since we
-		// swap out fields.
 		syncutil.RWMutex
 		*tick.Ticker
-		disableTick bool
-		cum         prometheus.Histogram
-		prev, cur   *prometheusgo.Histogram
+		useGoodHistogram bool
+
+		// goodhistogram backing (RecordValue+Rotate mode).
+		ghParams   goodhistogram.Params
+		ghCum      *goodhistogram.Histogram
+		ghCurSnap  goodhistogram.Snapshot
+		ghPrevSnap goodhistogram.Snapshot
+
+		// prometheus backing (Update mode).
+		cum       prometheus.Histogram
+		prev, cur *prometheusgo.Histogram
 	}
 }
 
-// Update replaces the cumulative histogram and adds the new current values to
-// the previous ones.
+// Update replaces the cumulative histogram and adds the new current
+// values to the previous ones. Only valid in Update mode.
 func (mwh *ManualWindowHistogram) Update(cum prometheus.Histogram, cur *prometheusgo.Histogram) {
 	mwh.mu.Lock()
 	defer mwh.mu.Unlock()
 
-	if mwh.mu.disableTick {
+	if mwh.mu.useGoodHistogram {
 		panic("Unexpected call to Update with manual rotate enabled")
 	}
 
 	mwh.mu.cum = cum
-	// Add the new values to the current histogram.
 	MergeWindowedHistogram(mwh.mu.cur, cur)
 }
 
-// RecordValue records a value to the cumulative histogram. The value is only
-// added to the current window histogram once Rotate is called.
+// RecordValue records a value to the cumulative histogram. Only valid
+// in RecordValue+Rotate mode.
 func (mwh *ManualWindowHistogram) RecordValue(val float64) {
-	mwh.mu.RLock()
-	defer mwh.mu.RUnlock()
-
-	if !mwh.mu.disableTick {
+	if !mwh.mu.useGoodHistogram {
 		panic("Unexpected call to RecordValue with manual rotate disabled")
 	}
-	mwh.mu.cum.Observe(val)
+	// goodhistogram.Record is lock-free; no lock needed.
+	mwh.mu.ghCum.Record(int64(val))
 }
 
-// SubtractPrometheusHistograms subtracts the prev histogram from the cur
-// histogram, in place modifying the cur histogram. The bucket boundaries must
-// be identical for both prev and cur.
+// SubtractPrometheusHistograms subtracts the prev histogram from the
+// cur histogram, in place modifying the cur histogram. The bucket
+// boundaries must be identical for both prev and cur.
 func SubtractPrometheusHistograms(cur *prometheusgo.Histogram, prev *prometheusgo.Histogram) {
 	prevBuckets := prev.GetBucket()
 	curBuckets := cur.GetBucket()
@@ -735,30 +659,22 @@ func SubtractPrometheusHistograms(cur *prometheusgo.Histogram, prev *prometheusg
 	}
 }
 
-// Rotate sets the current windowed histogram (cur) to be the delta of the
-// cumulative histogram at the last rotation (prev) and the cumulative
-// histogram currently (cum).
+// Rotate sets the current windowed snapshot to be the delta between
+// the current cumulative snapshot and the previous cumulative
+// snapshot. Only valid in RecordValue+Rotate mode.
 func (mwh *ManualWindowHistogram) Rotate() error {
 	mwh.mu.Lock()
 	defer mwh.mu.Unlock()
 
-	if !mwh.mu.disableTick {
+	if !mwh.mu.useGoodHistogram {
 		panic("Unexpected call to Rotate with manual rotate disabled")
 	}
 
-	cur := &prometheusgo.Metric{}
-	if err := mwh.mu.cum.Write(cur); err != nil {
-		return err
-	}
-
-	SubtractPrometheusHistograms(cur.GetHistogram(), mwh.mu.prev)
-	mwh.mu.cur = cur.GetHistogram()
-	prev := &prometheusgo.Metric{}
-
-	if err := mwh.mu.cum.Write(prev); err != nil {
-		return err
-	}
-	mwh.mu.prev = prev.GetHistogram()
+	curSnap := mwh.mu.ghCum.Snapshot()
+	// The windowed snapshot is the delta: current cumulative minus
+	// previous cumulative.
+	mwh.mu.ghCurSnap = subtractSnapshots(&curSnap, &mwh.mu.ghPrevSnap)
+	mwh.mu.ghPrevSnap = curSnap
 
 	return nil
 }
@@ -771,7 +687,7 @@ func (mwh *ManualWindowHistogram) GetMetadata() Metadata {
 
 // Inspect calls the closure.
 func (mwh *ManualWindowHistogram) Inspect(f func(interface{})) {
-	if !mwh.mu.disableTick {
+	if !mwh.mu.useGoodHistogram {
 		func() {
 			mwh.mu.Lock()
 			defer mwh.mu.Unlock()
@@ -786,11 +702,18 @@ func (mwh *ManualWindowHistogram) GetType() *prometheusgo.MetricType {
 	return prometheusgo.MetricType_HISTOGRAM.Enum()
 }
 
-// ToPrometheusMetric returns a filled-in prometheus metric of the right type.
+// ToPrometheusMetric returns a filled-in prometheus metric of the
+// right type.
 func (mwh *ManualWindowHistogram) ToPrometheusMetric() *prometheusgo.Metric {
 	mwh.mu.RLock()
 	defer mwh.mu.RUnlock()
 
+	if mwh.mu.useGoodHistogram {
+		s := mwh.mu.ghCum.Snapshot()
+		return &prometheusgo.Metric{
+			Histogram: s.ToPrometheusHistogram(),
+		}
+	}
 	m := &prometheusgo.Metric{}
 	if err := mwh.mu.cum.Write(m); err != nil {
 		panic(err)
@@ -799,26 +722,47 @@ func (mwh *ManualWindowHistogram) ToPrometheusMetric() *prometheusgo.Metric {
 }
 
 func (mwh *ManualWindowHistogram) CumulativeSnapshot() HistogramSnapshot {
+	if mwh.mu.useGoodHistogram {
+		return MakeHistogramSnapshotFromGoodHistogram(mwh.mu.ghCum.Snapshot())
+	}
 	return MakeHistogramSnapshot(mwh.ToPrometheusMetric().Histogram)
 }
 
 func (mwh *ManualWindowHistogram) WindowedSnapshot() HistogramSnapshot {
 	mwh.mu.RLock()
 	defer mwh.mu.RUnlock()
-	// Take a copy of the mwh.mu.cur.
-	cur := deepCopy(*mwh.mu.cur)
+	if mwh.mu.useGoodHistogram {
+		return MakeHistogramSnapshotFromGoodHistogram(mwh.mu.ghCurSnap)
+	}
+	cur := deepCopy(mwh.mu.cur)
 	if mwh.mu.prev != nil {
 		MergeWindowedHistogram(cur, mwh.mu.prev)
 	}
 	return MakeHistogramSnapshot(cur)
 }
 
-// deepCopy performs a deep copy of the source histogram and returns the newly
-// allocated copy.
-//
-// NB: It only copies sample count, sample sum, and buckets (cumulative count,
-// upper bounds) since those are the only things we care about in this package.
-func deepCopy(source prometheusgo.Histogram) *prometheusgo.Histogram {
+// subtractSnapshots computes cur - prev element-wise, producing a
+// delta snapshot representing the observations that occurred between
+// the two cumulative snapshots. Both snapshots must have the same
+// configuration (same number of buckets).
+func subtractSnapshots(cur, prev *goodhistogram.Snapshot) goodhistogram.Snapshot {
+	delta := *cur
+	delta.TotalCount = cur.TotalCount - prev.TotalCount
+	delta.TotalSum = cur.TotalSum - prev.TotalSum
+	delta.ZeroCount = cur.ZeroCount - prev.ZeroCount
+	delta.Underflow = cur.Underflow - prev.Underflow
+	delta.Overflow = cur.Overflow - prev.Overflow
+	delta.Counts = make([]uint64, len(cur.Counts))
+	for i := range cur.Counts {
+		delta.Counts[i] = cur.Counts[i] - prev.Counts[i]
+	}
+	return delta
+}
+
+// deepCopy performs a deep copy of the source histogram and returns
+// the newly allocated copy. Used by ManualWindowHistogram in Update
+// mode.
+func deepCopy(source *prometheusgo.Histogram) *prometheusgo.Histogram {
 	count := source.GetSampleCount()
 	sum := source.GetSampleSum()
 	bucket := make([]*prometheusgo.Bucket, len(source.Bucket))

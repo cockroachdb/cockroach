@@ -63,11 +63,6 @@ var (
 	}
 )
 
-// mergeMetricsLog10Int64Times1000 duplicates log10int64times1000 from
-// pkg/sql/mem_metrics.go to avoid an import cycle between execinfra and sql.
-// log10(math.MaxInt64) * 1000, rounded up somewhat.
-const mergeMetricsLog10Int64Times1000 = 19 * 1000
-
 // MakeBulkMergeMetrics initializes distributed merge metrics with the given
 // histogram window for time-based bucketing.
 func MakeBulkMergeMetrics(histogramWindow time.Duration) BulkMergeMetrics {
@@ -77,22 +72,16 @@ func MakeBulkMergeMetrics(histogramWindow time.Duration) BulkMergeMetrics {
 		RPCMemoryReservedBytes: metric.NewHistogram(metric.HistogramOptions{
 			Metadata:     metaDistMergeRPCMemory,
 			Duration:     histogramWindow,
-			MaxVal:       mergeMetricsLog10Int64Times1000,
-			SigFigs:      3,
 			BucketConfig: metric.MemoryUsage64MBBuckets,
 		}),
 		MapPhaseSSTs: metric.NewHistogram(metric.HistogramOptions{
 			Metadata:     metaDistMergeMapPhaseSSTs,
 			Duration:     histogramWindow,
-			MaxVal:       mergeMetricsLog10Int64Times1000,
-			SigFigs:      3,
 			BucketConfig: metric.Count1KBuckets,
 		}),
 		FirstIterationOutputSSTs: metric.NewHistogram(metric.HistogramOptions{
 			Metadata:     metaDistMergeFirstIterOutputSSTs,
 			Duration:     histogramWindow,
-			MaxVal:       mergeMetricsLog10Int64Times1000,
-			SigFigs:      3,
 			BucketConfig: metric.Count1KBuckets,
 		}),
 	}

@@ -242,7 +242,6 @@ func makeProxyMetrics() metrics {
 		RefusedConnCount:       metric.NewCounter(metaRefusedConnCount),
 		SuccessfulConnCount:    metric.NewCounter(metaSuccessfulConnCount),
 		ConnectionLatency: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaConnMigrationAttemptedCount,
 			Duration:     base.DefaultHistogramWindowInterval(),
 			BucketConfig: metric.IOLatencyBuckets,
@@ -251,7 +250,6 @@ func makeProxyMetrics() metrics {
 		ExpiredClientConnCount: metric.NewCounter(metaExpiredClientConnCount),
 		// Connector metrics.
 		DialTenantLatency: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaDialTenantLatency,
 			Duration:     base.DefaultHistogramWindowInterval(),
 			BucketConfig: metric.IOLatencyBuckets},
@@ -263,7 +261,6 @@ func makeProxyMetrics() metrics {
 		ConnMigrationErrorRecoverableCount: metric.NewCounter(metaConnMigrationErrorRecoverableCount),
 		ConnMigrationAttemptedCount:        metric.NewCounter(metaConnMigrationAttemptedCount),
 		ConnMigrationAttemptedLatency: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaConnMigrationAttemptedLatency,
 			Duration:     base.DefaultHistogramWindowInterval(),
 			BucketConfig: metric.IOLatencyBuckets,
@@ -272,8 +269,6 @@ func makeProxyMetrics() metrics {
 			Metadata:     metaConnMigrationTransferResponseMessageSize,
 			Duration:     base.DefaultHistogramWindowInterval(),
 			BucketConfig: metric.DataSize16MBBuckets,
-			MaxVal:       maxExpectedTransferResponseMessageSize,
-			SigFigs:      1,
 		}),
 		QueryCancelReceivedPGWire: metric.NewCounter(metaQueryCancelReceivedPGWire),
 		QueryCancelReceivedHTTP:   metric.NewCounter(metaQueryCancelReceivedHTTP),

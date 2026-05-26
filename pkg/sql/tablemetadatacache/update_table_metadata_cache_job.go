@@ -239,7 +239,6 @@ func newTableMetadataUpdateJobMetrics() metric.Struct {
 				Unit:        metric.Unit_NANOSECONDS},
 			Duration:     base.DefaultHistogramWindowInterval(),
 			BucketConfig: metric.LongRunning60mLatencyBuckets,
-			Mode:         metric.HistogramModePrometheus,
 		}),
 	}
 }

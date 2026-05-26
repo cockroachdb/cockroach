@@ -54,7 +54,6 @@ func makeMetrics() Metrics {
 			func() int64 { return activeWorkStatesCount.Load() },
 		),
 		TakeSampleLatency: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaTakeSampleLatency,
 			Duration:     base.DefaultHistogramWindowInterval(),
 			BucketConfig: metric.IOLatencyBuckets,

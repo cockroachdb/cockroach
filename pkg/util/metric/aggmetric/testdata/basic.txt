@@ -13,7 +13,6 @@ foo_counter 6
 foo_counter{tenant_id="2"} 2
 foo_counter{tenant_id="3"} 4
 histo_gram_bucket{le="+Inf"} 2
-histo_gram_bucket{le="1"} 0
 histo_gram_bucket{le="1024"} 2
 histo_gram_bucket{le="128"} 2
 histo_gram_bucket{le="16"} 1
@@ -25,7 +24,6 @@ histo_gram_bucket{le="512"} 2
 histo_gram_bucket{le="64"} 1
 histo_gram_bucket{le="8"} 0
 histo_gram_bucket{tenant_id="2",le="+Inf"} 1
-histo_gram_bucket{tenant_id="2",le="1"} 0
 histo_gram_bucket{tenant_id="2",le="1024"} 1
 histo_gram_bucket{tenant_id="2",le="128"} 1
 histo_gram_bucket{tenant_id="2",le="16"} 1
@@ -37,7 +35,6 @@ histo_gram_bucket{tenant_id="2",le="512"} 1
 histo_gram_bucket{tenant_id="2",le="64"} 1
 histo_gram_bucket{tenant_id="2",le="8"} 0
 histo_gram_bucket{tenant_id="3",le="+Inf"} 1
-histo_gram_bucket{tenant_id="3",le="1"} 0
 histo_gram_bucket{tenant_id="3",le="1024"} 1
 histo_gram_bucket{tenant_id="3",le="128"} 1
 histo_gram_bucket{tenant_id="3",le="16"} 0

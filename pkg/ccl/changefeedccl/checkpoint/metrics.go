@@ -55,25 +55,21 @@ type AggMetrics struct {
 func NewAggMetrics(b aggmetric.Builder) *AggMetrics {
 	return &AggMetrics{
 		CreateNanos: b.Histogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePrometheus,
 			Metadata:     metaCreateNanos,
 			Duration:     base.DefaultHistogramWindowInterval(),
 			BucketConfig: metric.IOLatencyBuckets,
 		}),
 		TotalBytes: b.Histogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePrometheus,
 			Metadata:     metaTotalBytes,
 			Duration:     base.DefaultHistogramWindowInterval(),
 			BucketConfig: metric.MemoryUsage64MBBuckets,
 		}),
 		TimestampCount: b.Histogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePrometheus,
 			Metadata:     metaTimestampCount,
 			Duration:     base.DefaultHistogramWindowInterval(),
 			BucketConfig: metric.DataCount16MBuckets,
 		}),
 		SpanCount: b.Histogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePrometheus,
 			Metadata:     metaSpanCount,
 			Duration:     base.DefaultHistogramWindowInterval(),
 			BucketConfig: metric.DataCount16MBuckets,

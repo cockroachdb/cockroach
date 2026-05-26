@@ -54,7 +54,6 @@ func New(histogramWindow time.Duration) *Timers {
 			},
 			Duration: histogramWindow,
 			Buckets:  prometheus.ExponentialBucketsRange(float64(1*time.Microsecond), float64(1*time.Hour), 60),
-			Mode:     metric.HistogramModePrometheus,
 		}
 	}
 

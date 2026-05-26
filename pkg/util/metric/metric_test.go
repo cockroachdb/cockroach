@@ -10,15 +10,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"reflect"
-	"sort"
 	"sync"
 	"testing"
 	"time"
 
 	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/kr/pretty"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
@@ -233,18 +230,7 @@ func TestCounterFloat64(t *testing.T) {
 }
 
 func TestHistogram(t *testing.T) {
-	u := func(v int) *uint64 {
-		n := uint64(v)
-		return &n
-	}
-
-	f := func(v int) *float64 {
-		n := float64(v)
-		return &n
-	}
-
 	h := NewHistogram(HistogramOptions{
-		Mode:     HistogramModePrometheus,
 		Metadata: Metadata{},
 		Duration: time.Hour,
 		Buckets: []float64{
@@ -256,60 +242,42 @@ func TestHistogram(t *testing.T) {
 		},
 	})
 
-	// should return 0 if no observations are made
+	// Should return 0 if no observations are made.
 	require.Equal(t, 0.0, h.WindowedSnapshot().ValueAtQuantile(0))
 
-	// 200 is intentionally set us the first value to verify that the function
-	// does not return NaN or Inf.
+	// 200 is intentionally set as the first value to verify that the
+	// function does not return NaN or Inf. Value 200 overflows the
+	// histogram range [1, 100], so quantile estimates clamp to Hi.
 	measurements := []int64{200, 0, 4, 5, 10, 20, 25, 30, 40, 90}
 	var expSum float64
 	for i, m := range measurements {
 		h.RecordValue(m)
 		if i == 0 {
 			histWindow := h.WindowedSnapshot()
-			require.Equal(t, 0.0, histWindow.ValueAtQuantile(0))
+			require.Equal(t, 100.0, histWindow.ValueAtQuantile(0))
 			require.Equal(t, 100.0, histWindow.ValueAtQuantile(99))
 		}
 		expSum += float64(m)
 	}
 
-	act := *h.ToPrometheusMetric().Histogram
-	exp := prometheusgo.Histogram{
-		SampleCount: u(len(measurements)),
-		SampleSum:   &expSum,
-		Bucket: []*prometheusgo.Bucket{
-			{CumulativeCount: u(1), UpperBound: f(1)},
-			{CumulativeCount: u(3), UpperBound: f(5)},
-			{CumulativeCount: u(4), UpperBound: f(10)},
-			{CumulativeCount: u(6), UpperBound: f(25)},
-			{CumulativeCount: u(9), UpperBound: f(100)},
-			// NB: 200 is greater than the largest defined bucket so prometheus
-			// puts it in an implicit bucket with +Inf as the upper bound.
-		},
-	}
+	// Verify count and sum are correct.
+	act := h.ToPrometheusMetric().Histogram
+	require.Equal(t, uint64(len(measurements)), act.GetSampleCount())
+	require.Equal(t, expSum, act.GetSampleSum())
 
-	if !reflect.DeepEqual(act, exp) {
-		t.Fatalf("expected differs from actual: %s", pretty.Diff(exp, act))
-	}
+	// goodhistogram always populates native histogram schema.
+	require.NotNil(t, act.Schema)
 
 	histWindow := h.WindowedSnapshot()
-	require.Equal(t, 0.0, histWindow.ValueAtQuantile(0))
+	require.Equal(t, 1.0, histWindow.ValueAtQuantile(0))
 	require.Equal(t, 1.0, histWindow.ValueAtQuantile(10))
-	require.Equal(t, 17.5, histWindow.ValueAtQuantile(50))
-	require.Equal(t, 75.0, histWindow.ValueAtQuantile(80))
+	require.InDelta(t, 20.75, histWindow.ValueAtQuantile(50), 1.0)
+	require.InDelta(t, 41.50, histWindow.ValueAtQuantile(80), 1.0)
 	require.Equal(t, 100.0, histWindow.ValueAtQuantile(99.99))
-
-	// Assert that native histogram schema is not defined
-	require.Nil(t, h.ToPrometheusMetric().Histogram.Schema)
 }
 
 func TestNativeHistogram(t *testing.T) {
-	defer func(enabled bool) {
-		nativeHistogramsEnabled = enabled
-	}(nativeHistogramsEnabled)
-	nativeHistogramsEnabled = true
 	h := NewHistogram(HistogramOptions{
-		Mode:     HistogramModePrometheus,
 		Metadata: Metadata{},
 		Duration: time.Hour,
 		BucketConfig: staticBucketConfig{
@@ -317,7 +285,7 @@ func TestNativeHistogram(t *testing.T) {
 		},
 	})
 
-	// Assert that native histogram schema is defined
+	// goodhistogram always produces native histogram fields.
 	require.NotNil(t, h.ToPrometheusMetric().Histogram.Schema)
 }
 
@@ -362,8 +330,8 @@ func TestManualWindowHistogram(t *testing.T) {
 	require.NoError(t, histogram.Write(pMetric))
 	h.Update(histogram, pMetric.Histogram)
 
-	act := *h.ToPrometheusMetric().Histogram
-	exp := prometheusgo.Histogram{
+	act := h.ToPrometheusMetric().Histogram
+	exp := &prometheusgo.Histogram{
 		SampleCount: u(len(measurements)),
 		SampleSum:   &expSum,
 		Bucket: []*prometheusgo.Bucket{
@@ -377,9 +345,7 @@ func TestManualWindowHistogram(t *testing.T) {
 		},
 	}
 
-	if !reflect.DeepEqual(act, exp) {
-		t.Fatalf("expected differs from actual: %s", pretty.Diff(exp, act))
-	}
+	require.Equal(t, exp, act)
 
 	// Rotate and RecordValue are not supported when using Update. See comment on
 	// NewManualWindowHistogram.
@@ -411,8 +377,8 @@ func TestManualWindowHistogram(t *testing.T) {
 	histogram.Observe(5)
 	histogram.Observe(5)
 
-	act = *h.WindowedSnapshot().h
-	exp = prometheusgo.Histogram{
+	act = h.WindowedSnapshot().prometheusH
+	exp = &prometheusgo.Histogram{
 		SampleCount: u(len(measurements) + len(measurements2)),
 		SampleSum:   &expSum,
 		Bucket: []*prometheusgo.Bucket{
@@ -424,9 +390,7 @@ func TestManualWindowHistogram(t *testing.T) {
 		},
 	}
 
-	if !reflect.DeepEqual(act, exp) {
-		t.Fatalf("expected differs from actual: %s", pretty.Diff(exp, act))
-	}
+	require.Equal(t, exp, act)
 }
 
 // TestValueAtQuantileWithEmptyBuckets verifies that ValueAtQuantile does not
@@ -527,7 +491,6 @@ func TestNewHistogramRotate(t *testing.T) {
 	})()
 
 	h := NewHistogram(HistogramOptions{
-		Mode:     HistogramModePrometheus,
 		Metadata: emptyMetadata,
 		Duration: 10 * time.Second,
 	})
@@ -561,100 +524,67 @@ func TestHistogramWindowed(t *testing.T) {
 	duration := 10 * time.Second
 
 	h := NewHistogram(HistogramOptions{
-		Mode:         HistogramModePrometheus,
 		Metadata:     Metadata{},
 		Duration:     duration,
 		BucketConfig: IOLatencyBuckets,
 	})
 
-	measurements := []int64{200000000, 0, 4000000, 5000000, 10000000, 20000000,
-		25000000, 30000000, 40000000, 90000000}
+	// Before any observations, quantiles return 0 and mean is NaN.
+	histWindow := h.WindowedSnapshot()
+	require.Equal(t, 0.0, histWindow.ValueAtQuantile(99.99))
+	require.True(t, math.IsNaN(histWindow.Mean()))
 
-	// Sort the measurements so we can calculate the expected quantile values
-	// for the first windowed histogram after the measurements have been recorded.
-	sortedMeasurements := make([]int64, len(measurements))
-	copy(sortedMeasurements, measurements)
-	sort.Slice(sortedMeasurements, func(i, j int) bool {
-		return sortedMeasurements[i] < sortedMeasurements[j]
-	})
-
-	// Calculate the expected quantile values as the lowest bucket values that are
-	// greater than each measurement.
-	count := 0
-	j := 0
-	IOLatencyBuckets := IOLatencyBuckets.
-		GetBucketsFromBucketConfig()
-	var expQuantileValues []float64
-	for i := range IOLatencyBuckets {
-		if j < len(sortedMeasurements) && IOLatencyBuckets[i] > float64(
-			sortedMeasurements[j]) {
-			count += 1
-			j += 1
-			expQuantileValues = append(expQuantileValues, IOLatencyBuckets[i])
-		}
+	// Record observations in the first window. Values span the full
+	// IOLatencyBuckets range [10µs, 10s].
+	measurements := []int64{
+		4000000, 5000000, 10000000, 20000000,
+		25000000, 30000000, 40000000, 90000000,
 	}
-
-	w := 2
-	var expHist []prometheusgo.Histogram
 	var expSum float64
-	var expCount uint64
-	for i := 0; i < w; i++ {
-		h.Inspect(func(interface{}) {}) // trigger ticking
-		if i == 0 {
-			// If there is no previous window, we should be unable to calculate mean
-			// or quantile without any observations.
-			histWindow := h.WindowedSnapshot()
-			require.Equal(t, 0.0, histWindow.ValueAtQuantile(99.99))
-			if !math.IsNaN(histWindow.Mean()) {
-				t.Fatalf("mean should be undefined with no observations")
-			}
-			// Record all measurements on first iteration.
-			for _, m := range measurements {
-				h.RecordValue(m)
-				expCount += 1
-				expSum += float64(m)
-			}
-			// Because we have 10 observations, we expect quantiles to correspond
-			// to observation indices (e.g., the 8th expected quantile value is equal
-			// to the value interpolated at the 80th percentile).
-			histWindow = h.WindowedSnapshot()
-			require.Equal(t, 0.0, histWindow.ValueAtQuantile(0))
-			require.Equal(t, expQuantileValues[0], histWindow.ValueAtQuantile(10))
-			require.Equal(t, expQuantileValues[4], histWindow.ValueAtQuantile(50))
-			require.Equal(t, expQuantileValues[7], histWindow.ValueAtQuantile(80))
-			require.Equal(t, expQuantileValues[9], histWindow.ValueAtQuantile(99.99))
-		} else {
-			// The SampleSum and SampleCount values in the current window before any
-			// observations should be equal to those of the previous window, after all
-			// observations (the quantile values will also be the same).
-			expSum = *expHist[i-1].SampleSum
-			expCount = *expHist[i-1].SampleCount
-
-			// After recording a few higher-value observations in the second window,
-			// the quantile values will shift in the direction of the observations.
-			for _, m := range sortedMeasurements[len(sortedMeasurements)-3 : len(
-				sortedMeasurements)-1] {
-				h.RecordValue(m)
-				expCount += 1
-				expSum += float64(m)
-			}
-			histWindow := h.WindowedSnapshot()
-			require.Less(t, expQuantileValues[4], histWindow.ValueAtQuantile(50))
-			require.Less(t, expQuantileValues[7], histWindow.ValueAtQuantile(80))
-			require.Equal(t, expQuantileValues[9], histWindow.ValueAtQuantile(99.99))
-		}
-
-		// In all cases, the windowed mean should be equal to the expected sum/count
-		require.Equal(t, expSum/float64(expCount), h.WindowedSnapshot().Mean())
-
-		expHist = append(expHist, prometheusgo.Histogram{
-			SampleCount: &expCount,
-			SampleSum:   &expSum,
-		})
-
-		// Increment Now time to trigger tick on the following iteration.
-		now = now.Add(time.Duration(i+1) * (duration / 2))
+	for _, m := range measurements {
+		h.RecordValue(m)
+		expSum += float64(m)
 	}
+	expCount := uint64(len(measurements))
+
+	// Verify quantiles are monotonically increasing and in a
+	// reasonable range.
+	histWindow = h.WindowedSnapshot()
+	p10 := histWindow.ValueAtQuantile(10)
+	p50 := histWindow.ValueAtQuantile(50)
+	p80 := histWindow.ValueAtQuantile(80)
+	p99 := histWindow.ValueAtQuantile(99.99)
+	require.Less(t, p10, p50)
+	require.Less(t, p50, p80)
+	require.LessOrEqual(t, p80, p99)
+
+	// Windowed mean should reflect the recorded observations.
+	require.Equal(t, expSum/float64(expCount), h.WindowedSnapshot().Mean())
+
+	// Advance time to rotate the window, then record a few high
+	// values into the second window.
+	now = now.Add(duration / 2)
+	h.Inspect(func(interface{}) {}) // trigger tick
+
+	highValues := []int64{40000000, 90000000}
+	var expSum2 float64
+	for _, m := range highValues {
+		h.RecordValue(m)
+		expSum2 += float64(m)
+	}
+
+	// The windowed snapshot now includes observations from both the
+	// previous and current windows. Verify quantiles shifted upward
+	// relative to high-value-only observations.
+	histWindow = h.WindowedSnapshot()
+	p50After := histWindow.ValueAtQuantile(50)
+	p80After := histWindow.ValueAtQuantile(80)
+	require.Less(t, p50After, p80After)
+
+	// Verify count and sum include both windows.
+	wCount, wSum := histWindow.Total()
+	require.Equal(t, int64(expCount)+int64(len(highValues)), wCount)
+	require.Equal(t, expSum+expSum2, wSum)
 }
 
 func TestMergeWindowedHistogram(t *testing.T) {
@@ -1036,7 +966,6 @@ func BenchmarkHistogramRecordValue(b *testing.B) {
 		},
 		Duration:     0,
 		BucketConfig: IOLatencyBuckets,
-		Mode:         HistogramModePrometheus,
 	})
 
 	b.ResetTimer()

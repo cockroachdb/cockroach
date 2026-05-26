@@ -80,7 +80,6 @@ func TestRegistry(t *testing.T) {
 	r.AddMetric(NewCounterFloat64(Metadata{Name: "top.floatcounter"}))
 
 	r.AddMetric(NewHistogram(HistogramOptions{
-		Mode:         HistogramModePrometheus,
 		Metadata:     Metadata{Name: "top.histogram"},
 		Duration:     time.Minute,
 		BucketConfig: Count1KBuckets,
@@ -112,7 +111,6 @@ func TestRegistry(t *testing.T) {
 		StructCounter:   NewCounter(Metadata{Name: "struct.counter"}),
 		StructCounter64: NewCounterFloat64(Metadata{Name: "struct.counter64"}),
 		StructHistogram: NewHistogram(HistogramOptions{
-			Mode:         HistogramModePrometheus,
 			Metadata:     Metadata{Name: "struct.histogram"},
 			Duration:     time.Minute,
 			BucketConfig: Count1KBuckets,
@@ -362,7 +360,6 @@ func TestRegistryContains(t *testing.T) {
 	}{
 		StructCounter: NewCounter(Metadata{Name: "struct.counter"}),
 		StructHistogram: NewHistogram(HistogramOptions{
-			Mode:         HistogramModePrometheus,
 			Metadata:     Metadata{Name: "struct.histogram"},
 			Duration:     time.Minute,
 			BucketConfig: Count1KBuckets,

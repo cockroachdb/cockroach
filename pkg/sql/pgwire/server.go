@@ -481,7 +481,6 @@ func newTenantSpecificMetrics(
 		ConnsWaitingToHash:  metric.NewGauge(MetaConnsWaitingToHash),
 		PGWirePipelineCount: metric.NewGauge(MetaPGWirePipelineCount),
 		ConnLatency: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     MetaConnLatency,
 			Duration:     histogramWindow,
 			BucketConfig: metric.IOLatencyBuckets,
@@ -526,7 +525,6 @@ func getHistogramOptionsForIOLatency(
 	metadata metric.Metadata, histogramWindow time.Duration,
 ) metric.HistogramOptions {
 	return metric.HistogramOptions{
-		Mode:         metric.HistogramModePreferHdrLatency,
 		Metadata:     metadata,
 		Duration:     histogramWindow,
 		BucketConfig: metric.IOLatencyBuckets,

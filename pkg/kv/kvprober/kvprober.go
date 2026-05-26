@@ -274,7 +274,6 @@ func NewProber(opts Opts) *Prober {
 			ReadProbeAttempts: metric.NewCounter(metaReadProbeAttempts),
 			ReadProbeFailures: metric.NewCounter(metaReadProbeFailures),
 			ReadProbeLatency: metric.NewHistogram(metric.HistogramOptions{
-				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     metaReadProbeLatency,
 				Duration:     opts.HistogramWindowInterval,
 				BucketConfig: metric.IOLatencyBuckets,
@@ -282,7 +281,6 @@ func NewProber(opts Opts) *Prober {
 			WriteProbeAttempts: metric.NewCounter(metaWriteProbeAttempts),
 			WriteProbeFailures: metric.NewCounter(metaWriteProbeFailures),
 			WriteProbeLatency: metric.NewHistogram(metric.HistogramOptions{
-				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     metaWriteProbeLatency,
 				Duration:     opts.HistogramWindowInterval,
 				BucketConfig: metric.IOLatencyBuckets,

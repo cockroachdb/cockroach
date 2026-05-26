@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
+	"github.com/prometheus/common/model"
 	"github.com/stretchr/testify/require"
 )
 
@@ -75,7 +76,7 @@ func newTestMetricSource(clock hlc.WallClock) metricMarshaler {
 func extractPrometheusMetrics(
 	t *testing.T, w *httptest.ResponseRecorder,
 ) (cpuUserNanos float64, cpuSysNanos float64, uptimeNanos float64) {
-	var parser expfmt.TextParser
+	parser := expfmt.NewTextParser(model.UTF8Validation)
 	metrics, err := parser.TextToMetricFamilies(w.Body)
 	require.NoError(t, err)
 
