@@ -223,6 +223,10 @@ func emitInternal(
 	for _, rp := range plan.RoutinePlans {
 		ob.EnterMetaNode("routine")
 		ob.Attr("name", rp.Name)
+		if rp.TotalVariants > 1 {
+			ob.Attrf("plan variant", "%d of %d", rp.VariantIdx, rp.TotalVariants)
+		}
+		ob.Attrf("invocations", "%d", rp.InvocationCount)
 		for j, bodyNode := range rp.ExplainPlan {
 			ob.EnterMetaNode("body stmt")
 			if j < len(rp.BodyStmts) && rp.BodyStmts[j] != "" {

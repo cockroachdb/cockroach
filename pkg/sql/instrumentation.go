@@ -7,6 +7,7 @@ package sql
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"slices"
@@ -485,7 +486,7 @@ func (ih *instrumentationHelper) Setup(
 		// starts fresh; both the bundle code and populateRoutinePlans
 		// read DeferredRoutineOptPlans during Finish of this statement.
 		if ih.evalCtx != nil {
-			ih.evalCtx.CapturedRoutineGists = make(map[string]struct{})
+			ih.evalCtx.CapturedRoutineGists = make(map[string]int)
 			ih.evalCtx.DeferredRoutineOptPlans = nil
 		}
 
@@ -493,7 +494,7 @@ func (ih *instrumentationHelper) Setup(
 		ih.discardRows = true
 		// Initialize capture state for routine body plans. See above.
 		if ih.evalCtx != nil {
-			ih.evalCtx.CapturedRoutineGists = make(map[string]struct{})
+			ih.evalCtx.CapturedRoutineGists = make(map[string]int)
 			ih.evalCtx.DeferredRoutineOptPlans = nil
 		}
 
@@ -906,13 +907,41 @@ func (ih *instrumentationHelper) populateRoutinePlans() {
 		for i, n := range dp.ExplainPlan {
 			nodes[i] = n.(*explain.Node)
 		}
+		// Look up the invocation count for this variant.
+		dedupKey := dp.Name + ":" + dp.GistKey
+		invocations := ih.evalCtx.CapturedRoutineGists[dedupKey]
 		ih.explainPlan.RoutinePlans = append(ih.explainPlan.RoutinePlans, explain.RoutinePlanInfo{
-			Name:        dp.Name,
-			ExplainPlan: nodes,
-			BodyStmts:   dp.BodyStmts,
+			Name:            dp.Name,
+			ExplainPlan:     nodes,
+			BodyStmts:       dp.BodyStmts,
+			InvocationCount: invocations,
 		})
 	}
 	ih.evalCtx.DeferredRoutineOptPlans = nil
+
+	// Sort routine plans by name for deterministic output. Within the
+	// same name, preserve capture order (stable sort).
+	slices.SortStableFunc(ih.explainPlan.RoutinePlans, func(a, b explain.RoutinePlanInfo) int {
+		return cmp.Compare(a.Name, b.Name)
+	})
+
+	// Compute variant numbering: count plans per routine name and
+	// assign 1-based VariantIdx and TotalVariants for names with
+	// more than one distinct plan shape.
+	nameCount := make(map[string]int)
+	for i := range ih.explainPlan.RoutinePlans {
+		nameCount[ih.explainPlan.RoutinePlans[i].Name]++
+	}
+	nameIdx := make(map[string]int)
+	for i := range ih.explainPlan.RoutinePlans {
+		rp := &ih.explainPlan.RoutinePlans[i]
+		total := nameCount[rp.Name]
+		rp.TotalVariants = total
+		if total > 1 {
+			nameIdx[rp.Name]++
+			rp.VariantIdx = nameIdx[rp.Name]
+		}
+	}
 }
 
 // RecordPlanInfo records top-level information about the plan.

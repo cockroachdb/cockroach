@@ -142,6 +142,14 @@ type RoutinePlanInfo struct {
 	ExplainPlan []*Node
 	// BodyStmts holds the SQL text of each body statement.
 	BodyStmts []string
+	// InvocationCount is the number of times this variant was invoked.
+	InvocationCount int
+	// VariantIdx is the 1-based index of this variant among all variants
+	// for the same routine name. Only meaningful when TotalVariants > 1.
+	VariantIdx int
+	// TotalVariants is the total number of distinct plan variants for
+	// this routine name. When 1, variant labeling is omitted.
+	TotalVariants int
 }
 
 var _ exec.Plan = &Plan{}

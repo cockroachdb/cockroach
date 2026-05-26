@@ -88,6 +88,7 @@ regions: <hidden>
 │
 └── • routine
     │ name: count_above_volatile
+    │ invocations: 3
     │
     └── • body stmt
         │ sql: SELECT count(*)::INT8 FROM test.public.t_ea WHERE v > x
@@ -165,6 +166,7 @@ regions: <hidden>
 │
 └── • routine
     │ name: count_above_plpgsql
+    │ invocations: 3
     │
     └── • body stmt
         │
@@ -227,6 +229,7 @@ regions: <hidden>
 │
 └── • routine
     │ name: count_above_multi
+    │ invocations: 3
     │
     ├── • body stmt
     │   │ sql: SELECT 1
@@ -315,6 +318,7 @@ regions: <hidden>
 │
 └── • routine
     │ name: multi_scan
+    │ invocations: 3
     │
     ├── • body stmt
     │   │ sql: SELECT count(*)::INT8 FROM test.public.t_ea WHERE v > x
@@ -442,6 +446,7 @@ regions: <hidden>
 │
 └── • routine
     │ name: count_above_volatile
+    │ invocations: 6
     │
     └── • body stmt
         │ sql: SELECT count(*)::INT8 FROM test.public.t_ea WHERE v > x

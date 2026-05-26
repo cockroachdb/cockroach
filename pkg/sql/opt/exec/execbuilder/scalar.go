@@ -1484,8 +1484,8 @@ func (b *Builder) buildRoutinePlanGenerator(
 		if captureExplain && len(explainNodes) > 0 {
 			gistKey := strings.Join(gistStrs, ",")
 			dedupKey := routineName + ":" + gistKey
-			if _, ok := b.evalCtx.CapturedRoutineGists[dedupKey]; !ok {
-				b.evalCtx.CapturedRoutineGists[dedupKey] = struct{}{}
+			b.evalCtx.CapturedRoutineGists[dedupKey]++
+			if b.evalCtx.CapturedRoutineGists[dedupKey] == 1 {
 				bodyStmtTexts := make([]string, len(explainNodes))
 				for j := range bodyStmtTexts {
 					if j < len(stmtASTs) && stmtASTs[j] != nil {

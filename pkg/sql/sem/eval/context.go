@@ -426,11 +426,12 @@ type Context struct {
 	//   - Dedup key: prevents duplicate captures for the same routine +
 	//     plan shape across multiple call sites or invocations.
 	// The map key is "routineName:gistKey" where gistKey is the
-	// concatenation of per-body-statement plan gist strings.
+	// concatenation of per-body-statement plan gist strings. The value
+	// tracks the number of times each variant was invoked.
 	//
 	// Thread safety: accessed only from the planGen closure on the
 	// connExecutor goroutine. No locking needed.
-	CapturedRoutineGists map[string]struct{}
+	CapturedRoutineGists map[string]int
 }
 
 // DeferredRoutineOptPlan holds plan information for a single deferred SQL

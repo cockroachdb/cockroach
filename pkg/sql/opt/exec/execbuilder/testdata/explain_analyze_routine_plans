@@ -50,6 +50,7 @@ regions: <hidden>
 │
 └── • routine
     │ name: lookup_volatile
+    │ invocations: 3
     │
     └── • body stmt
         │ sql: SELECT b FROM test.public.t WHERE a = x
@@ -107,6 +108,7 @@ regions: <hidden>
 │
 └── • routine
     │ name: multi_stmt
+    │ invocations: 3
     │
     ├── • body stmt
     │   │ sql: SELECT 1
@@ -169,6 +171,7 @@ regions: <hidden>
 │
 └── • routine
     │ name: lookup_volatile
+    │ invocations: 6
     │
     └── • body stmt
         │ sql: SELECT b FROM test.public.t WHERE a = x
@@ -226,6 +229,7 @@ regions: <hidden>
 │
 ├── • routine
 │   │ name: lookup_volatile
+│   │ invocations: 3
 │   │
 │   └── • body stmt
 │       │ sql: SELECT b FROM test.public.t WHERE a = x
@@ -243,6 +247,7 @@ regions: <hidden>
 │
 └── • routine
     │ name: other_udf
+    │ invocations: 3
     │
     └── • body stmt
         │ sql: SELECT x + 1
@@ -301,6 +306,7 @@ regions: <hidden>
 │
 ├── • routine
 │   │ name: inner_fn
+│   │ invocations: 3
 │   │
 │   └── • body stmt
 │       │ sql: SELECT x * 10
@@ -314,6 +320,7 @@ regions: <hidden>
 │
 └── • routine
     │ name: outer_fn
+    │ invocations: 3
     │
     └── • body stmt
         │ sql: SELECT public.inner_fn(x) + 1
@@ -454,6 +461,7 @@ regions: <hidden>
 │
 └── • routine
     │ name: lookup_plpgsql
+    │ invocations: 3
     │
     └── • body stmt
         │
@@ -502,6 +510,7 @@ regions: <hidden>
 │
 └── • routine
     │ name: read_proc
+    │ invocations: 1
     │
     ├── • body stmt
     │   │ sql: SELECT b FROM test.public.t WHERE a = x
@@ -559,28 +568,8 @@ regions: <hidden>
 │     procedure: read_proc_plpgsql(1)
 │
 ├── • routine
-│   │ name: _stmt_raise_3
-│   │
-│   ├── • body stmt
-│   │   │
-│   │   └── • values
-│   │         size: 1 column, 1 row
-│   │
-│   └── • body stmt
-│       │
-│       └── • values
-│             size: 1 column, 1 row
-│
-├── • routine
-│   │ name: _stmt_exec_ret_2
-│   │
-│   └── • body stmt
-│       │
-│       └── • values
-│             size: 1 column, 1 row
-│
-├── • routine
 │   │ name: _stmt_exec_1
+│   │ invocations: 1
 │   │
 │   └── • body stmt
 │       │ sql: SELECT b FROM test.public.t WHERE a = x
@@ -614,8 +603,32 @@ regions: <hidden>
 │                         table: t@t_pkey
 │                         spans: [/1 - /1]
 │
+├── • routine
+│   │ name: _stmt_exec_ret_2
+│   │ invocations: 1
+│   │
+│   └── • body stmt
+│       │
+│       └── • values
+│             size: 1 column, 1 row
+│
+├── • routine
+│   │ name: _stmt_raise_3
+│   │ invocations: 1
+│   │
+│   ├── • body stmt
+│   │   │
+│   │   └── • values
+│   │         size: 1 column, 1 row
+│   │
+│   └── • body stmt
+│       │
+│       └── • values
+│             size: 1 column, 1 row
+│
 └── • routine
     │ name: read_proc_plpgsql
+    │ invocations: 1
     │
     └── • body stmt
         │
@@ -659,6 +672,8 @@ regions: <hidden>
 │
 ├── • routine
 │   │ name: lookup_volatile
+│   │ plan variant: 1 of 2
+│   │ invocations: 1
 │   │
 │   └── • body stmt
 │       │ sql: SELECT b FROM test.public.t WHERE a = x
@@ -676,6 +691,287 @@ regions: <hidden>
 │
 └── • routine
     │ name: lookup_volatile
+    │ plan variant: 2 of 2
+    │ invocations: 1
+    │
+    └── • body stmt
+        │ sql: SELECT b FROM test.public.t WHERE a = x
+        │
+        └── • norows
+              sql nodes: <hidden>
+              regions: <hidden>
+              execution time: 0µs
+              actual row count: 0
+
+subtest end
+
+# ------------------------------------------------------------------
+# 12. Many invocations of a single-variant UDF (invocation count).
+# ------------------------------------------------------------------
+subtest many_invocations
+
+query T
+EXPLAIN ANALYZE SELECT lookup_volatile(a) FROM t WHERE a <= 5
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+rows decoded from KV: 10 (95 B, 5 gRPC calls)
+regions: <hidden>
+·
+• root
+│
+├── • render
+│   │ execution time: 0µs
+│   │ actual row count: 5
+│   │
+│   └── • scan
+│         sql nodes: <hidden>
+│         kv nodes: <hidden>
+│         regions: <hidden>
+│         KV time: 0µs
+│         KV rows decoded: 5
+│         actual row count: 5
+│         missing stats
+│         table: t@t_pkey
+│         spans: [ - /5]
+│
+└── • routine
+    │ name: lookup_volatile
+    │ invocations: 5
+    │
+    └── • body stmt
+        │ sql: SELECT b FROM test.public.t WHERE a = x
+        │
+        └── • scan
+              sql nodes: <hidden>
+              kv nodes: <hidden>
+              regions: <hidden>
+              KV time: 0µs
+              KV rows decoded: 5
+              actual row count: 1
+              missing stats
+              table: t@t_pkey
+              spans: [/1 - /1]
+
+subtest end
+
+# ------------------------------------------------------------------
+# 13. Multi-variant with unequal invocation counts.
+# Non-NULL values produce one plan variant (point lookup), NULL
+# produces a different variant (norows). We invoke with 3 non-NULLs
+# and 2 NULLs.
+# ------------------------------------------------------------------
+subtest multi_variant_unequal_counts
+
+query T
+EXPLAIN ANALYZE
+  SELECT lookup_volatile(a)
+  FROM (VALUES (1), (2), (3), (NULL::INT), (NULL::INT)) AS v(a)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+rows decoded from KV: 3 (33 B, 0 KVs, 0 gRPC calls)
+regions: <hidden>
+·
+• root
+│
+├── • render
+│   │ execution time: 0µs
+│   │ actual row count: 5
+│   │
+│   └── • values
+│         sql nodes: <hidden>
+│         regions: <hidden>
+│         execution time: 0µs
+│         actual row count: 5
+│         size: 1 column, 5 rows
+│
+├── • routine
+│   │ name: lookup_volatile
+│   │ plan variant: 1 of 2
+│   │ invocations: 3
+│   │
+│   └── • body stmt
+│       │ sql: SELECT b FROM test.public.t WHERE a = x
+│       │
+│       └── • scan
+│             sql nodes: <hidden>
+│             kv nodes: <hidden>
+│             regions: <hidden>
+│             KV time: 0µs
+│             KV rows decoded: 3
+│             actual row count: 1
+│             missing stats
+│             table: t@t_pkey
+│             spans: [/1 - /1]
+│
+└── • routine
+    │ name: lookup_volatile
+    │ plan variant: 2 of 2
+    │ invocations: 2
+    │
+    └── • body stmt
+        │ sql: SELECT b FROM test.public.t WHERE a = x
+        │
+        └── • norows
+              sql nodes: <hidden>
+              regions: <hidden>
+              execution time: 0µs
+              actual row count: 0
+
+subtest end
+
+# ------------------------------------------------------------------
+# 14. UDF used in WHERE clause.
+# ------------------------------------------------------------------
+subtest udf_in_where
+
+statement ok
+CREATE FUNCTION is_positive(x INT) RETURNS BOOL VOLATILE LANGUAGE SQL AS $$
+  SELECT x > 0
+$$
+
+query T
+EXPLAIN ANALYZE SELECT * FROM t WHERE is_positive(b)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+rows decoded from KV: 10 (80 B, 20 KVs, 10 gRPC calls)
+regions: <hidden>
+·
+• root
+│
+├── • filter
+│   │ sql nodes: <hidden>
+│   │ regions: <hidden>
+│   │ execution time: 0µs
+│   │ actual row count: 10
+│   │ filter: is_positive(b)
+│   │
+│   └── • scan
+│         sql nodes: <hidden>
+│         kv nodes: <hidden>
+│         regions: <hidden>
+│         KV time: 0µs
+│         KV rows decoded: 10
+│         actual row count: 10
+│         missing stats
+│         table: t@t_pkey
+│         spans: FULL SCAN
+│
+└── • routine
+    │ name: is_positive
+    │ invocations: 10
+    │
+    └── • body stmt
+        │ sql: SELECT x > 0
+        │
+        └── • values
+              sql nodes: <hidden>
+              regions: <hidden>
+              execution time: 0µs
+              actual row count: 1
+              size: 1 column, 1 row
+
+subtest end
+
+# ------------------------------------------------------------------
+# 15. Multiple distinct routines, each with variants.
+# ------------------------------------------------------------------
+subtest multiple_routines_with_variants
+
+statement ok
+CREATE FUNCTION other_lookup(x INT) RETURNS INT VOLATILE LANGUAGE SQL AS $$
+  SELECT b FROM t WHERE a = x
+$$
+
+query T
+EXPLAIN ANALYZE
+  SELECT lookup_volatile(a), other_lookup(a)
+  FROM (VALUES (1), (NULL::INT)) AS v(a)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+rows decoded from KV: 2 (22 B, 0 KVs, 0 gRPC calls)
+regions: <hidden>
+·
+• root
+│
+├── • render
+│   │ execution time: 0µs
+│   │ actual row count: 2
+│   │
+│   └── • values
+│         sql nodes: <hidden>
+│         regions: <hidden>
+│         execution time: 0µs
+│         actual row count: 2
+│         size: 1 column, 2 rows
+│
+├── • routine
+│   │ name: lookup_volatile
+│   │ plan variant: 1 of 2
+│   │ invocations: 1
+│   │
+│   └── • body stmt
+│       │ sql: SELECT b FROM test.public.t WHERE a = x
+│       │
+│       └── • scan
+│             sql nodes: <hidden>
+│             kv nodes: <hidden>
+│             regions: <hidden>
+│             KV time: 0µs
+│             KV rows decoded: 2
+│             actual row count: 1
+│             missing stats
+│             table: t@t_pkey
+│             spans: [/1 - /1]
+│
+├── • routine
+│   │ name: lookup_volatile
+│   │ plan variant: 2 of 2
+│   │ invocations: 1
+│   │
+│   └── • body stmt
+│       │ sql: SELECT b FROM test.public.t WHERE a = x
+│       │
+│       └── • norows
+│             sql nodes: <hidden>
+│             regions: <hidden>
+│             execution time: 0µs
+│             actual row count: 0
+│
+├── • routine
+│   │ name: other_lookup
+│   │ plan variant: 1 of 2
+│   │ invocations: 1
+│   │
+│   └── • body stmt
+│       │ sql: SELECT b FROM test.public.t WHERE a = x
+│       │
+│       └── • scan
+│             sql nodes: <hidden>
+│             kv nodes: <hidden>
+│             regions: <hidden>
+│             KV time: 0µs
+│             KV rows decoded: 2
+│             actual row count: 1
+│             missing stats
+│             table: t@t_pkey
+│             spans: [/1 - /1]
+│
+└── • routine
+    │ name: other_lookup
+    │ plan variant: 2 of 2
+    │ invocations: 1
     │
     └── • body stmt
         │ sql: SELECT b FROM test.public.t WHERE a = x
