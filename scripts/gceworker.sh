@@ -99,6 +99,7 @@ create)
 		--boot-disk-size "250" \
 		--boot-disk-type "pd-ssd" \
 		--boot-disk-device-name "${NAME}" \
+		--service-account "cockroach-worker@cockroach-workers.iam.gserviceaccount.com" \
 		--scopes "cloud-platform" \
 		--labels "created-by=${gsuite_account_for_label:0:63}" \
 		--metadata enable-oslogin=TRUE,block-project-ssh-keys=TRUE
