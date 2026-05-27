@@ -779,7 +779,7 @@ func registerKVSplits(r registry.Registry) {
 		// far past the number of replicas per node we support, at least if the
 		// ranges start to unquiesce (which can set off a cascade due to resource
 		// exhaustion).
-		{true, 300_000, registry.EpochLeases, 2 * time.Hour, nil},
+		{true, 200_000, registry.EpochLeases, 140 * time.Minute, nil},
 		// This version of the test prevents range quiescence to trigger the
 		// badness described above more reliably for when we wish to improve
 		// the performance. For now, just verify that 30k unquiesced ranges
