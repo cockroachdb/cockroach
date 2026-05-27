@@ -88,9 +88,6 @@ type Storage interface {
 	// passed txn remains safe for future use.
 	Release(context.Context, uuid.UUID) error
 
-	// GetMetadata retrieves the metadata with the provided Txn.
-	GetMetadata(context.Context) (ptpb.Metadata, error)
-
 	// GetState retrieves the entire state of protectedts.Storage with the
 	// provided Txn.
 	GetState(context.Context) (ptpb.State, error)
