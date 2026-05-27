@@ -987,53 +987,53 @@ build format=show-scalars
 SELECT insert_zero_into_t1(10)
 ----
 project
- ├── columns: insert_zero_into_t1:14
+ ├── columns: insert_zero_into_t1:2
  ├── values
  │    └── tuple
  └── projections
-      └── udf: insert_zero_into_t1 [as=insert_zero_into_t1:14]
+      └── udf: insert_zero_into_t1 [as=insert_zero_into_t1:2]
            ├── args
            │    └── const: 10
-           ├── params: n:1
+           ├── params: n:3
            └── body
                 └── limit
-                     ├── columns: n:12
+                     ├── columns: n:14
                      ├── project
-                     │    ├── columns: n:12
+                     │    ├── columns: n:14
                      │    ├── insert t1
-                     │    │    ├── columns: c1:2!null c2:3 c3:4 rowid:5!null
+                     │    │    ├── columns: c1:4!null c2:5 c3:6 rowid:7!null
                      │    │    ├── insert-mapping:
-                     │    │    │    ├── column1:8 => c1:2
-                     │    │    │    ├── c2_default:9 => c2:3
-                     │    │    │    ├── c3_default:10 => c3:4
-                     │    │    │    └── rowid_default:11 => rowid:5
+                     │    │    │    ├── column1:10 => c1:4
+                     │    │    │    ├── c2_default:11 => c2:5
+                     │    │    │    ├── c3_default:12 => c3:6
+                     │    │    │    └── rowid_default:13 => rowid:7
                      │    │    ├── return-mapping:
-                     │    │    │    ├── column1:8 => c1:2
-                     │    │    │    ├── c2_default:9 => c2:3
-                     │    │    │    ├── c3_default:10 => c3:4
-                     │    │    │    └── rowid_default:11 => rowid:5
-                     │    │    ├── check columns: rls:13
+                     │    │    │    ├── column1:10 => c1:4
+                     │    │    │    ├── c2_default:11 => c2:5
+                     │    │    │    ├── c3_default:12 => c3:6
+                     │    │    │    └── rowid_default:13 => rowid:7
+                     │    │    ├── check columns: rls:15
                      │    │    └── project
-                     │    │         ├── columns: rls:13 column1:8!null c2_default:9 c3_default:10 rowid_default:11
+                     │    │         ├── columns: rls:15 column1:10!null c2_default:11 c3_default:12 rowid_default:13
                      │    │         ├── project
-                     │    │         │    ├── columns: c2_default:9 c3_default:10 rowid_default:11 column1:8!null
+                     │    │         │    ├── columns: c2_default:11 c3_default:12 rowid_default:13 column1:10!null
                      │    │         │    ├── values
-                     │    │         │    │    ├── columns: column1:8!null
+                     │    │         │    │    ├── columns: column1:10!null
                      │    │         │    │    └── tuple
                      │    │         │    │         └── const: 0
                      │    │         │    └── projections
-                     │    │         │         ├── cast: STRING [as=c2_default:9]
+                     │    │         │         ├── cast: STRING [as=c2_default:11]
                      │    │         │         │    └── null
-                     │    │         │         ├── cast: DATE [as=c3_default:10]
+                     │    │         │         ├── cast: DATE [as=c3_default:12]
                      │    │         │         │    └── null
-                     │    │         │         └── function: unique_rowid [as=rowid_default:11]
+                     │    │         │         └── function: unique_rowid [as=rowid_default:13]
                      │    │         └── projections
-                     │    │              └── lt [as=rls:13]
+                     │    │              └── lt [as=rls:15]
                      │    │                   ├── function: char_length
-                     │    │                   │    └── variable: c2_default:9
+                     │    │                   │    └── variable: c2_default:11
                      │    │                   └── const: 10
                      │    └── projections
-                     │         └── variable: n:1 [as=n:12]
+                     │         └── variable: n:3 [as=n:14]
                      └── const: 1
 
 exec-ddl

@@ -95,6 +95,10 @@ type CreateRoutine struct {
 	// BodyAnnotations is not assigned during initial parsing of user input. It's
 	// assigned by the opt builder when the optimizer parses the body statements.
 	BodyAnnotations []*Annotations
+	// CanMutate is set by the opt builder to indicate whether the routine body
+	// can perform mutations, including direct DML, mutations inside CTEs or
+	// subqueries, and calls to other mutating routines.
+	CanMutate bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -444,6 +448,34 @@ func (node RoutineSecurity) Format(ctx *FmtCtx) {
 	default:
 		panic(pgerror.New(pgcode.InvalidParameterValue, "unknown routine option"))
 	}
+}
+
+// RoutineCanMutate describes whether a routine body can perform mutations
+// (INSERT, UPDATE, DELETE, UPSERT, or calls to other mutating routines).
+type RoutineCanMutate int
+
+const (
+	// RoutineCanMutateUnknown indicates the mutation status has not been
+	// determined. This is the case for function descriptors created before
+	// the can_mutate field was introduced. Consumers must fall back to
+	// inspecting the body RelExprs when this value is encountered, and
+	// deferred optbuild must not be used.
+	RoutineCanMutateUnknown RoutineCanMutate = iota
+	// RoutineMutates indicates the routine body contains mutations.
+	RoutineMutates
+	// RoutineDoesNotMutate indicates the routine body does not contain
+	// mutations.
+	RoutineDoesNotMutate
+)
+
+// RoutineCanMutateFromBool converts a boolean CanMutate value to the
+// corresponding RoutineCanMutate enum value. This is used when the mutation
+// status is definitively known (e.g., after analyzing body RelExprs).
+func RoutineCanMutateFromBool(canMutate bool) RoutineCanMutate {
+	if canMutate {
+		return RoutineMutates
+	}
+	return RoutineDoesNotMutate
 }
 
 // RoutineBodyStr is a string containing all statements in a UDF body.

@@ -1,0 +1,86 @@
+# LogicTest: cockroach-go-testserver-configs
+
+# Test that the CanMutate field on function descriptors is handled correctly
+# across an upgrade. Functions created before V26_3_FunctionDescCanMutate have
+# CanMutate = UNKNOWN (zero value, omitted from JSON). After upgrade, new
+# functions get the field set, and CREATE FUNCTION correctly determines
+# CanMutate by eagerly building callee bodies even when the callee has an
+# UNKNOWN descriptor.
+
+statement ok
+CREATE TABLE ab (a INT PRIMARY KEY, b INT)
+
+# t0: Create f1 (mutating) on old binary. CanMutate won't be persisted.
+statement ok
+CREATE FUNCTION f1_mutating() RETURNS VOID LANGUAGE SQL AS 'INSERT INTO ab VALUES (1, 2)'
+
+# Verify canMutate is absent on the old-binary descriptor.
+query T
+SELECT crdb_internal.pb_to_json(
+  'cockroach.sql.sqlbase.Descriptor', descriptor, false
+)->'function'->>'canMutate'
+FROM system.descriptor
+WHERE id = 'f1_mutating()'::regprocedure::oid::int - 100000
+----
+NULL
+
+# t1: Upgrade all nodes and finalize.
+upgrade all
+
+statement ok
+SET CLUSTER SETTING version = crdb_internal.node_executable_version()
+
+# t2: Create f2 (non-mutating) on new binary. Should get CANNOT_MUTATE.
+statement ok
+CREATE FUNCTION f2_readonly() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+query T
+SELECT crdb_internal.pb_to_json(
+  'cockroach.sql.sqlbase.Descriptor', descriptor, false
+)->'function'->>'canMutate'
+FROM system.descriptor
+WHERE id = 'f2_readonly()'::regprocedure::oid::int - 100000
+----
+CANNOT_MUTATE
+
+# t3: Create f3 that calls both f1 (UNKNOWN) and f2 (CANNOT_MUTATE).
+# During CREATE FUNCTION, b.insideFuncDef forces eager build of f1's body,
+# so f1's mutation is detected and f3 correctly gets CAN_MUTATE.
+statement ok
+CREATE FUNCTION f3_calls_both() RETURNS INT LANGUAGE SQL AS $$
+  SELECT f1_mutating();
+  SELECT f2_readonly();
+$$
+
+query T
+SELECT crdb_internal.pb_to_json(
+  'cockroach.sql.sqlbase.Descriptor', descriptor, false
+)->'function'->>'canMutate'
+FROM system.descriptor
+WHERE id = 'f3_calls_both()'::regprocedure::oid::int - 100000
+----
+CAN_MUTATE
+
+# Verify the "mutations" property propagates in query plans.
+# f3_calls_both should show mutations because it transitively mutates.
+query B
+SELECT crdb_internal.pb_to_json(
+  'cockroach.sql.sqlbase.Descriptor', descriptor, false
+)->'function'->>'canMutate' = 'CAN_MUTATE'
+FROM system.descriptor
+WHERE id = 'f3_calls_both()'::regprocedure::oid::int - 100000
+----
+true
+
+# CREATE OR REPLACE f1 on the new binary should now set CanMutate.
+statement ok
+CREATE OR REPLACE FUNCTION f1_mutating() RETURNS VOID LANGUAGE SQL AS 'INSERT INTO ab VALUES (1, 2)'
+
+query T
+SELECT crdb_internal.pb_to_json(
+  'cockroach.sql.sqlbase.Descriptor', descriptor, false
+)->'function'->>'canMutate'
+FROM system.descriptor
+WHERE id = 'f1_mutating()'::regprocedure::oid::int - 100000
+----
+CAN_MUTATE
