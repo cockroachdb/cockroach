@@ -271,7 +271,7 @@ update-hosts)
 	echo "${NEW_IP} ${NAME}.local" | sudo tee -a ${HOSTS_FILE} > /dev/null
 	;;
 *)
-	echo "$0: unknown command: ${cmd}, use one of create, start, stop, resume, suspend, delete, status, ssh, get, put, sync, or update-hosts"
+	echo "$0: unknown command: ${cmd}, use one of create, start, stop, resume, suspend, reset, delete, status, ssh, mosh, get, put, ip, vscode, update-hosts, update-firewall, or gcloud"
 	exit 1
 	;;
 esac

@@ -73,6 +73,10 @@ function refresh_ssh_config() {
 function grant_ssh_access() {
 	local user_email
 	user_email=$(gcloud config get-value account 2>/dev/null)
+	if [[ -z "${user_email}" || "${user_email}" == "(unset)" ]]; then
+		echo "Error: no active gcloud account found. Run 'gcloud auth login' first." >&2
+		exit 1
+	fi
 	echo "Granting SSH access to ${user_email} on ${NAME}..."
 	gcloud compute instances add-iam-policy-binding "${NAME}" \
 		--zone="${CLOUDSDK_COMPUTE_ZONE}" \
@@ -83,7 +87,7 @@ function grant_ssh_access() {
 	gcloud compute instances add-iam-policy-binding "${NAME}" \
 		--zone="${CLOUDSDK_COMPUTE_ZONE}" \
 		--member="user:${user_email}" \
-		--role="roles/compute.osLogin" \
+		--role="roles/compute.osAdminLogin" \
 		--project="${CLOUDSDK_CORE_PROJECT}" \
 		--quiet
 }
@@ -149,11 +153,9 @@ start)
 
 	# SSH into the node, since that's probably why we started it.
 	echo "****************************************"
-	echo "Hint: you should also be able to directly invoke:"
-	echo "ssh ${FQNAME}"
+	echo "Hint: you can also connect directly via:"
+	echo "gcloud compute ssh ${NAME} --tunnel-through-iap"
 	echo "if needed instead of '$0 ssh'."
-	echo "If this does not work, try removing the section for your gceworker from ~/.ssh/config"
-	echo "and invoke '$0 start' again to recreate it."
 	echo "****************************************"
 	$0 ssh
 	;;
@@ -238,8 +240,8 @@ ip)
 	;;
 vscode)
 	start_and_wait "${NAME}"
-	HOST="$(gcloud_compute_ssh --dry-run "$NAME" | awk '{print $NF}')"
-	code --wait --remote ssh-remote+"$HOST" "$@"
+	refresh_ssh_config
+	code --wait --remote ssh-remote+"${FQNAME}" "$@"
 	;;
 status)
 	gcloud compute instances describe "$NAME" --format="table(name,status,lastStartTimestamp,lastStopTimestamp)"
@@ -254,7 +256,7 @@ update-hosts)
 	echo "${NEW_IP} ${NAME}.local" | sudo tee -a ${HOSTS_FILE} > /dev/null
 	;;
 *)
-	echo "$0: unknown command: ${cmd}, use one of create, start, stop, resume, suspend, delete, status, ssh, get, put, ip, vscode, update-hosts, or gcloud"
+	echo "$0: unknown command: ${cmd}, use one of create, start, stop, resume, suspend, reset, delete, status, ssh, get, put, ip, vscode, update-hosts, or gcloud"
 	exit 1
 	;;
 esac
