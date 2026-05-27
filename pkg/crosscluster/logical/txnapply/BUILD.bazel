@@ -16,6 +16,8 @@ go_library(
         "//pkg/crosscluster/logical/ldrdecoder",
         "//pkg/crosscluster/logical/txnpb",
         "//pkg/crosscluster/logical/txnwriter",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
         "//pkg/util/admission",
         "//pkg/util/container/heap",
         "//pkg/util/container/nudge",
