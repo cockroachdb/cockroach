@@ -694,3 +694,24 @@ func (l *raftLog) snap(storage LogStorage) LogSnapshot {
 		logger:    l.logger,
 	}
 }
+
+// findMatch finds the most up to date entryID in the remote log that matches
+// the local log.
+// remoteTermFlips is a list of entryIDs that are know to be in the remote log
+// which comes from the termCache of the remote log.
+func (l *raftLog) findMatch(remoteTermFlips []entryID, remoteLast entryID) (entryID, bool) {
+	tmp := remoteLast.index
+	for j := len(remoteTermFlips) - 1; j >= 0; j-- {
+		if tmp == 0 {
+			break
+		}
+		for i := int64(tmp); i >= int64(remoteTermFlips[j].index); i-- {
+			remoteEnt := entryID{term: remoteTermFlips[j].term, index: uint64(i)}
+			if l.matchTerm(remoteEnt) {
+				return remoteEnt, true
+			}
+		}
+		tmp = min(remoteTermFlips[j].index-1, tmp)
+	}
+	return entryID{remoteTermFlips[0].term, remoteTermFlips[0].index}, false
+}
