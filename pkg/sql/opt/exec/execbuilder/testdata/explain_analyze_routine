@@ -1,0 +1,440 @@
+# LogicTest: local
+
+# Regression test for #170398: KV reads from inside routine bodies were
+# silently dropped from the EXPLAIN ANALYZE "rows decoded from KV" line.
+
+statement ok
+CREATE TABLE t_ea (k INT PRIMARY KEY, v INT, FAMILY (k, v))
+
+statement ok
+INSERT INTO t_ea SELECT i, i*10 FROM generate_series(1, 10) AS g(i)
+
+# Baseline: show the plan for the UDF body query executed directly.
+# This full-scans t_ea (10 rows). When the same query runs inside a
+# routine body, these 10 rows should appear in the outer statement's
+# "rows decoded from KV" total.
+query T
+EXPLAIN ANALYZE SELECT count(*)::INT FROM t_ea WHERE v > 3
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+rows decoded from KV: 10 (80 B, 20 KVs, 10 gRPC calls)
+regions: <hidden>
+·
+• group (scalar)
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ execution time: 0µs
+│ actual row count: 1
+│
+└── • filter
+    │ sql nodes: <hidden>
+    │ regions: <hidden>
+    │ execution time: 0µs
+    │ actual row count: 10
+    │ filter: v > 3
+    │
+    └── • scan
+          sql nodes: <hidden>
+          kv nodes: <hidden>
+          regions: <hidden>
+          KV time: 0µs
+          KV rows decoded: 10
+          actual row count: 10
+          missing stats
+          table: t_ea@t_ea_pkey
+          spans: FULL SCAN
+
+# ------------------------------------------------------------------
+# Deferred-build path: VOLATILE single-statement SQL UDF.
+# VOLATILE prevents inlining and triggers deferred body building.
+# ------------------------------------------------------------------
+subtest volatile_sql_udf
+
+statement ok
+CREATE FUNCTION count_above_volatile(x INT) RETURNS INT VOLATILE LANGUAGE SQL AS $$
+  SELECT count(*)::INT FROM t_ea WHERE v > x
+$$
+
+# 3 outer rows (k <= 3) + 3 invocations × 10 inner rows = 33 total rows.
+query T
+EXPLAIN ANALYZE SELECT count_above_volatile(k) FROM t_ea WHERE k <= 3
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+rows decoded from KV: 33 (906 B, 6 KVs, 3 gRPC calls)
+regions: <hidden>
+·
+• root
+│
+├── • render
+│   │ execution time: 0µs
+│   │ actual row count: 3
+│   │
+│   └── • scan
+│         sql nodes: <hidden>
+│         kv nodes: <hidden>
+│         regions: <hidden>
+│         KV time: 0µs
+│         KV rows decoded: 3
+│         actual row count: 3
+│         missing stats
+│         table: t_ea@t_ea_pkey
+│         spans: [ - /3]
+│
+└── • routine
+    │ name: count_above_volatile
+    │
+    └── • body stmt
+        │ sql: SELECT count(*)::INT8 FROM test.public.t_ea WHERE v > x
+        │
+        └── • group (scalar)
+            │
+            └── • filter
+                │ filter: v > 1
+                │
+                └── • scan
+                      missing stats
+                      table: t_ea@t_ea_pkey
+                      spans: FULL SCAN
+
+subtest end
+
+# ------------------------------------------------------------------
+# Eager-build path: PL/pgSQL UDF with a table read.
+# PL/pgSQL routines always build their body eagerly and are never
+# inlined.
+# ------------------------------------------------------------------
+subtest plpgsql_udf
+
+statement ok
+CREATE FUNCTION count_above_plpgsql(x INT) RETURNS INT LANGUAGE PLpgSQL AS $$
+DECLARE
+  result INT;
+BEGIN
+  SELECT count(*)::INT INTO result FROM t_ea WHERE v > x;
+  RETURN result;
+END
+$$
+
+# 3 outer rows (k <= 3) + 3 invocations × 10 inner rows = 33 total rows.
+query T
+EXPLAIN ANALYZE SELECT count_above_plpgsql(k) FROM t_ea WHERE k <= 3
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+rows decoded from KV: 33 (906 B, 6 KVs, 3 gRPC calls)
+regions: <hidden>
+·
+• root
+│
+├── • render
+│   │ execution time: 0µs
+│   │ actual row count: 3
+│   │
+│   └── • scan
+│         sql nodes: <hidden>
+│         kv nodes: <hidden>
+│         regions: <hidden>
+│         KV time: 0µs
+│         KV rows decoded: 3
+│         actual row count: 3
+│         missing stats
+│         table: t_ea@t_ea_pkey
+│         spans: [ - /3]
+│
+└── • routine
+    │ name: count_above_plpgsql
+    │
+    └── • body stmt
+        │
+        └── • render
+            │
+            └── • group (streaming)
+                │
+                └── • cross join (right outer)
+                    │
+                    ├── • filter
+                    │   │ filter: v > 1
+                    │   │
+                    │   └── • scan
+                    │         missing stats
+                    │         table: t_ea@t_ea_pkey
+                    │         spans: FULL SCAN
+                    │
+                    └── • emptyrow
+
+subtest end
+
+# ------------------------------------------------------------------
+# Multi-statement UDF (deferred build, never inlined).
+# ------------------------------------------------------------------
+subtest multi_stmt_udf
+
+statement ok
+CREATE FUNCTION count_above_multi(x INT) RETURNS INT VOLATILE LANGUAGE SQL AS $$
+  SELECT 1;
+  SELECT count(*)::INT FROM t_ea WHERE v > x
+$$
+
+# 3 outer rows (k <= 3) + 3 invocations × 10 inner rows = 33 total rows.
+query T
+EXPLAIN ANALYZE SELECT count_above_multi(k) FROM t_ea WHERE k <= 3
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+rows decoded from KV: 33 (906 B, 6 KVs, 3 gRPC calls)
+regions: <hidden>
+·
+• root
+│
+├── • render
+│   │ execution time: 0µs
+│   │ actual row count: 3
+│   │
+│   └── • scan
+│         sql nodes: <hidden>
+│         kv nodes: <hidden>
+│         regions: <hidden>
+│         KV time: 0µs
+│         KV rows decoded: 3
+│         actual row count: 3
+│         missing stats
+│         table: t_ea@t_ea_pkey
+│         spans: [ - /3]
+│
+└── • routine
+    │ name: count_above_multi
+    │
+    ├── • body stmt
+    │   │ sql: SELECT 1
+    │   │
+    │   └── • values
+    │         size: 1 column, 1 row
+    │
+    └── • body stmt
+        │ sql: SELECT count(*)::INT8 FROM test.public.t_ea WHERE v > x
+        │
+        └── • group (scalar)
+            │
+            └── • filter
+                │ filter: v > 1
+                │
+                └── • scan
+                      missing stats
+                      table: t_ea@t_ea_pkey
+                      spans: FULL SCAN
+
+subtest end
+
+# ------------------------------------------------------------------
+# Multiple scans within a single routine body. Each body statement's
+# KV reads should be accumulated.
+# ------------------------------------------------------------------
+subtest multi_scan_routine
+
+statement ok
+CREATE TABLE t_ea2 (k INT PRIMARY KEY, v INT, FAMILY (k, v))
+
+statement ok
+INSERT INTO t_ea2 SELECT i, i FROM generate_series(1, 5) AS g(i)
+
+statement ok
+CREATE FUNCTION multi_scan(x INT) RETURNS INT VOLATILE LANGUAGE SQL AS $$
+  SELECT count(*)::INT FROM t_ea WHERE v > x;
+  SELECT count(*)::INT FROM t_ea2 WHERE v > x
+$$
+
+# 3 outer rows (k <= 3) + 3 invocations × (10 rows from t_ea + 5 rows from t_ea2) = 48 total.
+query T
+EXPLAIN ANALYZE SELECT multi_scan(k) FROM t_ea WHERE k <= 3
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+rows decoded from KV: 48 (1.3 KiB, 6 KVs, 3 gRPC calls)
+regions: <hidden>
+·
+• root
+│
+├── • render
+│   │ execution time: 0µs
+│   │ actual row count: 3
+│   │
+│   └── • scan
+│         sql nodes: <hidden>
+│         kv nodes: <hidden>
+│         regions: <hidden>
+│         KV time: 0µs
+│         KV rows decoded: 3
+│         actual row count: 3
+│         missing stats
+│         table: t_ea@t_ea_pkey
+│         spans: [ - /3]
+│
+└── • routine
+    │ name: multi_scan
+    │
+    ├── • body stmt
+    │   │ sql: SELECT count(*)::INT8 FROM test.public.t_ea WHERE v > x
+    │   │
+    │   └── • group (scalar)
+    │       │
+    │       └── • filter
+    │           │ filter: v > 1
+    │           │
+    │           └── • scan
+    │                 missing stats
+    │                 table: t_ea@t_ea_pkey
+    │                 spans: FULL SCAN
+    │
+    └── • body stmt
+        │ sql: SELECT count(*)::INT8 FROM test.public.t_ea2 WHERE v > x
+        │
+        └── • group (scalar)
+            │
+            └── • filter
+                │ filter: v > 1
+                │
+                └── • scan
+                      missing stats
+                      table: t_ea2@t_ea2_pkey
+                      spans: FULL SCAN
+
+subtest end
+
+# ------------------------------------------------------------------
+# Nested UDF calls: one UDF in the main query body, another in a CTE.
+# ------------------------------------------------------------------
+subtest nested_udf_with_cte
+
+# 3 outer rows from the CTE (k <= 3), each invoking count_above_volatile
+#   → 3 × 10 = 30 inner rows from CTE UDF calls.
+# Then the main query scans the CTE result (3 rows) and invokes
+# count_above_volatile on each → 3 × 10 = 30 more inner rows.
+# Plus 3 rows from the CTE scan of t_ea and 3 from the main query
+# reading the CTE (materialized).
+# Total outer KV reads: 3 (CTE scan of t_ea WHERE k <= 3).
+# Total inner KV reads: 30 (CTE UDF) + 30 (main query UDF) = 60.
+# Grand total: 3 + 60 = 63 rows.
+query T
+EXPLAIN ANALYZE
+  WITH cte AS (
+    SELECT k, count_above_volatile(k) AS cnt FROM t_ea WHERE k <= 3
+  )
+  SELECT count_above_volatile(k) FROM cte
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+rows decoded from KV: 63 (1.7 KiB, 6 KVs, 3 gRPC calls)
+regions: <hidden>
+·
+• root
+│
+├── • render
+│   │ execution time: 0µs
+│   │ actual row count: 3
+│   │
+│   └── • scan buffer
+│         sql nodes: <hidden>
+│         regions: <hidden>
+│         execution time: 0µs
+│         actual row count: 3
+│         label: buffer 1 (cte)
+│
+├── • subquery
+│   │ id: @S1
+│   │ original sql: SELECT k, public.count_above_volatile(k) AS cnt FROM t_ea WHERE k <= 3
+│   │ exec mode: discard all rows
+│   │
+│   └── • buffer
+│       │ sql nodes: <hidden>
+│       │ regions: <hidden>
+│       │ execution time: 0µs
+│       │ actual row count: 3
+│       │ label: buffer 1 (cte)
+│       │
+│       └── • render
+│           │ execution time: 0µs
+│           │ actual row count: 3
+│           │
+│           └── • scan
+│                 sql nodes: <hidden>
+│                 kv nodes: <hidden>
+│                 regions: <hidden>
+│                 KV time: 0µs
+│                 KV rows decoded: 3
+│                 actual row count: 3
+│                 missing stats
+│                 table: t_ea@t_ea_pkey
+│                 spans: [ - /3]
+│
+└── • routine
+    │ name: count_above_volatile
+    │
+    └── • body stmt
+        │ sql: SELECT count(*)::INT8 FROM test.public.t_ea WHERE v > x
+        │
+        └── • group (scalar)
+            │
+            └── • filter
+                │ filter: v > 1
+                │
+                └── • scan
+                      missing stats
+                      table: t_ea@t_ea_pkey
+                      spans: FULL SCAN
+
+subtest end
+
+# ------------------------------------------------------------------
+# Verify that queries without routines are unaffected by the fix.
+# ------------------------------------------------------------------
+subtest no_routine
+
+query T
+EXPLAIN ANALYZE SELECT count(*) FROM t_ea WHERE v > 5
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+rows decoded from KV: 10 (80 B, 20 KVs, 10 gRPC calls)
+regions: <hidden>
+·
+• group (scalar)
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ execution time: 0µs
+│ actual row count: 1
+│
+└── • filter
+    │ sql nodes: <hidden>
+    │ regions: <hidden>
+    │ execution time: 0µs
+    │ actual row count: 10
+    │ filter: v > 5
+    │
+    └── • scan
+          sql nodes: <hidden>
+          kv nodes: <hidden>
+          regions: <hidden>
+          KV time: 0µs
+          KV rows decoded: 10
+          actual row count: 10
+          missing stats
+          table: t_ea@t_ea_pkey
+          spans: FULL SCAN
+
+subtest end

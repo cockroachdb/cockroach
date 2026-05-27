@@ -6,7 +6,9 @@
 package execbuilder
 
 import (
+	"bytes"
 	"context"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -714,7 +716,9 @@ func (b *Builder) buildExistsSubquery(
 			nil,  /* stmtASTs */
 			true, /* allowOuterWithRefs */
 			wrapRootExpr,
-			0, /* resultBufferID */
+			0,   /* resultBufferID */
+			nil, /* bodyBuilder */
+			"",  /* routineName */
 		)
 		return tree.NewTypedCoalesceExpr(tree.TypedExprs{
 			tree.NewTypedRoutineExpr(
@@ -843,6 +847,8 @@ func (b *Builder) buildSubquery(
 			true, /* allowOuterWithRefs */
 			nil,  /* wrapRootExpr */
 			0,    /* resultBufferID */
+			nil,  /* bodyBuilder */
+			"",   /* routineName */
 		)
 		_, tailCall := b.tailCalls[subquery]
 		return tree.NewTypedRoutineExpr(
@@ -999,9 +1005,16 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		return nil, err
 	}
 
-	for _, s := range udf.Def.Body {
-		if s.Relational().CanMutate {
-			b.setMutationFlags(s)
+	switch udf.Def.CanMutate {
+	case tree.RoutineMutates:
+		b.flags.Set(exec.PlanFlagContainsMutation)
+	case tree.RoutineCanMutateUnknown:
+		// The descriptor predates the can_mutate field. Fall back to
+		// inspecting the eagerly-built body expressions.
+		for _, s := range udf.Def.Body {
+			if s.Relational().CanMutate {
+				b.setMutationFlags(s)
+			}
 		}
 	}
 
@@ -1014,7 +1027,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	// Execution expects there to be more than one body statement if a cursor is
 	// opened or the result of the first statement is directed to a buffer.
 	firstStmtOut := udf.Def.FirstStmtOutput
-	if len(udf.Def.Body) <= 1 &&
+	if udf.Def.Body != nil && len(udf.Def.Body) <= 1 &&
 		(firstStmtOut.CursorDeclaration != nil || firstStmtOut.TargetBufferID != 0) {
 		panic(errors.AssertionFailedf(
 			"expected more than one body statement for a routine that " +
@@ -1039,6 +1052,8 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		false, /* allowOuterWithRefs */
 		nil,   /* wrapRootExpr */
 		udf.Def.ResultBufferID,
+		udf.Def.BodyBuilder,
+		udf.Def.Name,
 	)
 
 	// Enable stepping for volatile functions so that statements within the UDF
@@ -1114,6 +1129,8 @@ func (b *Builder) initRoutineExceptionHandler(
 			false, /* allowOuterWithRefs */
 			nil,   /* wrapRootExpr */
 			0,     /* resultBufferID */
+			nil,   /* bodyBuilder */
+			"",    /* routineName */
 		)
 		// Build a routine with no arguments for the exception handler. The actual
 		// arguments will be supplied when (if) the handler is invoked.
@@ -1165,6 +1182,8 @@ func (b *Builder) buildRoutinePlanGenerator(
 	allowOuterWithRefs bool,
 	wrapRootExpr wrapRootExprFn,
 	resultBufferID memo.RoutineResultBufferID,
+	bodyBuilder memo.RoutineBodyBuilder,
+	routineName string,
 ) tree.RoutinePlanGenerator {
 	// argOrd returns the ordinal of the argument within the arguments list that
 	// can be substituted for each reference to the given function parameter
@@ -1197,6 +1216,7 @@ func (b *Builder) buildRoutinePlanGenerator(
 	var o xform.Optimizer
 	var gistFactory explain.PlanGistFactory
 	var latencyRecorder = sqlstats.NewStatementLatencyRecorder()
+	var deferredPlanCaptured bool
 	originalMemo := b.mem
 	planGen := func(
 		ctx context.Context,
@@ -1212,10 +1232,76 @@ func (b *Builder) buildRoutinePlanGenerator(
 			log.VEventf(ctx, 1, "%v", caughtErr)
 		})
 
+		// If a BodyBuilder is set, build the routine body now (deferred from
+		// plan time to execution time).
+		if bodyBuilder != nil {
+			var tmpO xform.Optimizer
+			tmpO.Init(ctx, b.evalCtx, b.catalog)
+			builtBody, builtProps, newParams, err := bodyBuilder.Build(
+				ctx, b.semaCtx, b.evalCtx, b.catalog, tmpO.Factory(),
+			)
+			if err != nil {
+				return err
+			}
+			stmts = builtBody
+			stmtProps = builtProps
+			originalMemo = tmpO.Factory().Memo()
+			argOrd = func(col opt.ColumnID) (ord int, ok bool) {
+				for i, param := range newParams {
+					if col == param {
+						return i, true
+					}
+				}
+				return 0, false
+			}
+
+			// Capture the deferred body's optimizer plan and table
+			// references for EXPLAIN ANALYZE (DEBUG) bundles. Only done on
+			// the first invocation to avoid duplicates from set-returning
+			// or multi-row routines.
+			if !deferredPlanCaptured &&
+				b.evalCtx.DeferredRoutineOptPlans != nil && routineName != "" {
+				deferredPlanCaptured = true
+				flags := memo.ExprFmtHideQualifications | memo.ExprFmtHideNotVisibleIndexInfo
+				var buf bytes.Buffer
+				for i, stmt := range stmts {
+					if i > 0 {
+						buf.WriteString("\n")
+					}
+					// Always format with redaction markers so the bundle
+					// code can apply redaction when needed.
+					f := memo.MakeExprFmtCtxBuffer(
+						ctx, &buf, flags,
+						true /* redactableValues */, originalMemo, b.catalog,
+					)
+					f.FormatExpr(stmt)
+				}
+				b.evalCtx.DeferredRoutineOptPlans = append(
+					b.evalCtx.DeferredRoutineOptPlans,
+					eval.DeferredRoutineOptPlan{Name: routineName, Plan: buf.String()},
+				)
+				// Capture table references from the deferred body's
+				// metadata so the bundle includes their stats and schema.
+				for _, tm := range originalMemo.Metadata().AllTables() {
+					b.evalCtx.DeferredRoutineTableRefs = append(
+						b.evalCtx.DeferredRoutineTableRefs, tm.Table,
+					)
+				}
+			}
+		}
+
 		dbName := b.evalCtx.SessionData().Database
 		appName := b.evalCtx.SessionData().ApplicationName
 		// TODO(yuzefovich): look into computing fingerprintFormat lazily.
 		fingerprintFormat := tree.FmtHideConstants | tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&b.evalCtx.Settings.SV))
+
+		// captureExplain is true when we are inside an EXPLAIN ANALYZE
+		// and should capture routine body plans. We only capture for
+		// named routines (not subquery/exists wrappers).
+		captureExplain := b.evalCtx.CapturedRoutineGists != nil && routineName != ""
+		var explainNodes []*explain.Node
+		var gistStrs []string
+
 		for i := range stmts {
 			latencyRecorder.Reset()
 			var builder *sqlstats.RecordedStatementStatsBuilder
@@ -1325,6 +1411,15 @@ func (b *Builder) buildRoutinePlanGenerator(
 				ef = &gistFactory
 			}
 
+			// Wrap with explain.Factory for EXPLAIN ANALYZE routine
+			// plan capture. The explain.Factory must be outermost so it
+			// captures the full plan structure, with gistFactory inside.
+			var explainFactory *explain.Factory
+			if captureExplain {
+				explainFactory = explain.NewFactory(ef, b.semaCtx, b.evalCtx)
+				ef = explainFactory
+			}
+
 			eb := New(ctx, ef, &o, f.Memo(), b.catalog, optimizedExpr, b.semaCtx, b.evalCtx, false /* allowAutoCommit */, b.IsANSIDML)
 			eb.withExprs = withExprs
 			eb.disableTelemetry = true
@@ -1338,10 +1433,34 @@ func (b *Builder) buildRoutinePlanGenerator(
 				eb.addRoutineResultBuffer(resultBufferID, resultWriter)
 			}
 			plan, err := eb.Build()
+
+			// Extract explain tree and unwrap the plan for execution.
+			// When explain.Factory is used, eb.Build() returns
+			// *explain.Plan wrapping the real exec plan in WrappedPlan.
+			// We capture the explain root for EXPLAIN ANALYZE output and
+			// pass the unwrapped plan to fn() for execution.
+			var execPlan exec.Plan = plan
+			if explainFactory != nil && plan != nil {
+				ep, ok := plan.(*explain.Plan)
+				if ok {
+					explainNodes = append(explainNodes, ep.Root)
+					execPlan = ep.WrappedPlan
+				}
+			}
+
 			if gistFactory.Initialized() {
 				planGist := gistFactory.PlanGist()
-				builder.PlanGist(planGist.String(), planGist.Hash())
+				gistStr := planGist.String()
+				builder.PlanGist(gistStr, planGist.Hash())
+				if captureExplain {
+					gistStrs = append(gistStrs, gistStr)
+				}
+			} else if captureExplain {
+				// No gist available (e.g., PL/pgSQL with nil AST or
+				// gists disabled). Use empty string for the dedup key.
+				gistStrs = append(gistStrs, "")
 			}
+
 			if err != nil {
 				if errors.IsAssertionFailure(err) {
 					// Enhance the error with the EXPLAIN (OPT, VERBOSE) of the
@@ -1364,12 +1483,44 @@ func (b *Builder) buildRoutinePlanGenerator(
 			}
 			incrementRoutineStmtCounter(b.evalCtx.StartedRoutineStatementCounters, dbName, appName, tag)
 			sqlstats.RecordStatementPhase(latencyRecorder, sqlstats.StatementEndPlanning)
-			err = fn(plan, statsBuilderWithLatencies, stmtForDistSQLDiagram, isFinalPlan)
+			err = fn(execPlan, statsBuilderWithLatencies, stmtForDistSQLDiagram, isFinalPlan)
 			if err != nil {
 				return err
 			}
 			incrementRoutineStmtCounter(b.evalCtx.ExecutedRoutineStatementCounters, dbName, appName, tag)
 		}
+
+		// Store captured routine body explain plans for EXPLAIN
+		// ANALYZE if this is a new {name, gist} variant. The dedup
+		// key is "routineName:gist1,gist2,..." where each gist is
+		// the per-body-statement plan gist string.
+		if captureExplain && len(explainNodes) > 0 {
+			gistKey := strings.Join(gistStrs, ",")
+			dedupKey := routineName + ":" + gistKey
+			if _, ok := b.evalCtx.CapturedRoutineGists[dedupKey]; !ok {
+				b.evalCtx.CapturedRoutineGists[dedupKey] = struct{}{}
+				bodyStmtTexts := make([]string, len(explainNodes))
+				for j := range bodyStmtTexts {
+					if j < len(stmtASTs) && stmtASTs[j] != nil {
+						bodyStmtTexts[j] = tree.AsString(stmtASTs[j])
+					}
+				}
+				explainAny := make([]any, len(explainNodes))
+				for j, n := range explainNodes {
+					explainAny[j] = n
+				}
+				b.evalCtx.DeferredRoutineOptPlans = append(
+					b.evalCtx.DeferredRoutineOptPlans,
+					eval.DeferredRoutineOptPlan{
+						Name:        routineName,
+						ExplainPlan: explainAny,
+						BodyStmts:   bodyStmtTexts,
+						GistKey:     gistKey,
+					},
+				)
+			}
+		}
+
 		return nil
 	}
 	return planGen

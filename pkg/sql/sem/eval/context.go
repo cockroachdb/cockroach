@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
@@ -402,6 +403,56 @@ type Context struct {
 	// WorkloadType distinguishes the kind of workload that WorkloadID
 	// represents (statement fingerprint, job ID, system task).
 	WorkloadType workloadid.WorkloadType
+
+	// DeferredRoutineOptPlans accumulates formatted optimizer plans for SQL
+	// routine bodies that were built at execution time (deferred from plan
+	// time). These are used by EXPLAIN ANALYZE (DEBUG) to include
+	// supplementary opt-vv-deferred-<func>.txt files in statement bundles,
+	// providing full optimizer detail for deferred routine bodies.
+	DeferredRoutineOptPlans []DeferredRoutineOptPlan
+
+	// DeferredRoutineTableRefs accumulates table references discovered
+	// during execution-time building of deferred SQL routine bodies. The
+	// bundle collector unions these with the plan-time metadata tables to
+	// ensure stats and schema are collected for all referenced tables.
+	DeferredRoutineTableRefs []cat.Table
+
+	// CapturedRoutineGists tracks which routine plan variants have already
+	// been captured during EXPLAIN ANALYZE execution. It serves dual
+	// purpose:
+	//   - Capture signal: non-nil means we are inside an EXPLAIN ANALYZE
+	//     and should capture routine body plans. Initialized by
+	//     instrumentationHelper.Setup() for EXPLAIN ANALYZE output modes.
+	//   - Dedup key: prevents duplicate captures for the same routine +
+	//     plan shape across multiple call sites or invocations.
+	// The map key is "routineName:gistKey" where gistKey is the
+	// concatenation of per-body-statement plan gist strings.
+	//
+	// Thread safety: accessed only from the planGen closure on the
+	// connExecutor goroutine. No locking needed.
+	CapturedRoutineGists map[string]struct{}
+}
+
+// DeferredRoutineOptPlan holds plan information for a single deferred SQL
+// routine body, captured during execution.
+type DeferredRoutineOptPlan struct {
+	// Name is the function or procedure name.
+	Name string
+	// Plan is the formatted optimizer plan output (opt-vv level).
+	Plan string
+	// ExplainPlan holds captured explain trees for each body statement,
+	// used to render routine sub-plans in EXPLAIN ANALYZE output. Each
+	// element is an *explain.Node but typed as any to avoid an import
+	// cycle (eval -> explain).
+	ExplainPlan []any
+	// BodyStmts holds the SQL text of each body statement, shown before
+	// its sub-plan in EXPLAIN ANALYZE output.
+	BodyStmts []string
+	// GistKey is the dedup key: the concatenation of per-body-statement
+	// plan gist strings (e.g., "AgFSAQAHAA==,AgHSBgEHAA=="). Two
+	// invocations are the same variant only if all per-statement gists
+	// match.
+	GistKey string
 }
 
 // RoutineStatementCounters encapsulates metrics for tracking the execution
