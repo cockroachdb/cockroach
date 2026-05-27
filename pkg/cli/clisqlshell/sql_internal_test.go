@@ -248,6 +248,51 @@ func TestHandleEmbedderInterrupt(t *testing.T) {
 	close(doneCh)
 }
 
+func TestHandleEmbedderInterruptExitsDuringWait(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	c := setupTestCliState()
+	c.cliCtx.IsInteractive = true
+	c.iCtx.stderr = os.Stderr
+	interruptCh := make(chan struct{}, 1)
+	c.sqlCtx.InterruptCh = interruptCh
+
+	// Simulate a query whose cancellation never resolves: cancelFn
+	// runs but doneCh stays open. Without ctx.Done() in the inner
+	// wait loop the goroutine would block for the full 3-second
+	// timeout before observing the embedder's teardown.
+	cancelCalled := make(chan struct{}, 1)
+	doneCh := make(chan struct{})
+	c.iCtx.mu.cancelFn = func(context.Context) error {
+		cancelCalled <- struct{}{}
+		return nil
+	}
+	c.iCtx.mu.doneCh = doneCh
+
+	finalFn := c.maybeHandleInterrupt()
+
+	interruptCh <- struct{}{}
+	select {
+	case <-cancelCalled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("cancelFn was not invoked after InterruptCh write")
+	}
+
+	// finalFn blocks on goroutine exit; it must return well under the
+	// 3-second wait-loop timeout.
+	returned := make(chan struct{})
+	go func() {
+		finalFn()
+		close(returned)
+	}()
+	select {
+	case <-returned:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("finalFn did not return promptly after embedder teardown")
+	}
+}
+
 func TestHandleEmbedderInterruptIgnoresIdle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

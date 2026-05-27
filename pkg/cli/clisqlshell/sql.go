@@ -2740,8 +2740,13 @@ func (c *cliState) maybeHandleInterrupt() func() {
 func (c *cliState) handleEmbedderInterrupt() func() {
 	embedderCh := c.sqlCtx.InterruptCh
 	ctx, cancel := context.WithCancel(context.Background())
+	// done is closed when the goroutine exits; the returned cleanup
+	// function blocks on it so the embedder knows the goroutine is
+	// fully torn down on return.
+	done := make(chan struct{})
 
 	go func() {
+		defer close(done)
 		for {
 			select {
 			case <-embedderCh:
@@ -2762,7 +2767,10 @@ func (c *cliState) handleEmbedderInterrupt() func() {
 				// Wait for the shell to process the cancellation, with
 				// the same 3-second timeout the signal path uses. We
 				// don't re-throw — the embedder, not the signal handler,
-				// owns escalation if the server is unresponsive.
+				// owns escalation if the server is unresponsive. If the
+				// embedder tears the shell down during the wait, ctx.Done
+				// short-circuits us so the goroutine exits promptly
+				// instead of blocking for the full timeout.
 				tooLongTimer := time.After(3 * time.Second)
 			wait:
 				for {
@@ -2772,6 +2780,8 @@ func (c *cliState) handleEmbedderInterrupt() func() {
 					case <-tooLongTimer:
 						fmt.Fprintln(c.iCtx.stderr, "server does not respond to query cancellation.")
 						break wait
+					case <-ctx.Done():
+						return
 					}
 				}
 
@@ -2780,7 +2790,10 @@ func (c *cliState) handleEmbedderInterrupt() func() {
 			}
 		}
 	}()
-	return cancel
+	return func() {
+		cancel()
+		<-done
+	}
 }
 
 func (c *cliState) runWithInterruptableCtx(fn func(ctx context.Context) error) error {
