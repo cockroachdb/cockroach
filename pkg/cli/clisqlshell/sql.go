@@ -136,6 +136,28 @@ Commands specific to the demo shell (EXPERIMENTAL):
 	debugPromptPattern = "%n@%M:%> %C>"
 )
 
+// localCmds enumerates the metacommands that touch the local filesystem
+// or shell out. They execute with the shell process's UID and are unsafe
+// to expose when the shell is embedded in a privileged service; see
+// Context.DisableLocalCmds, which uses this set as the source of truth
+// for the dispatcher-level guard.
+//
+// \e (external editor) is reached through the bubbline editor's own
+// keybinding rather than the dispatcher, so it is gated separately in
+// externalEditorAllowed(). \password is gated by Context.DisablePasswordCmd
+// because the concern is different (typing a password into the shell
+// session rather than local execution).
+//
+// When adding a new metacommand that reads or writes the local filesystem
+// or shells out, also add it here.
+var localCmds = map[string]struct{}{
+	`\!`:  {},
+	`\|`:  {},
+	`\i`:  {},
+	`\ir`: {},
+	`\o`:  {},
+}
+
 // cliState defines the current state of the CLI during
 // command-line processing.
 //
@@ -1445,12 +1467,12 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		return c.cliError(errState, errors.New(
 			`backslash commands are restricted; only \unrestrict is allowed`))
 	}
-	// Embedder-disabled commands. \e is enforced separately at
-	// editor-init time (see editor_bubbline.go); the cases below
-	// cover the commands that route through this dispatcher.
+	// Embedder-disabled commands. The set of dispatcher-level local
+	// commands is defined by localCmds. \e is enforced separately at
+	// editor-init time (see editor_bubbline.go) since it does not
+	// route through this dispatcher.
 	if c.sqlCtx.DisableLocalCmds {
-		switch cmd[0] {
-		case `\!`, `\|`, `\i`, `\ir`, `\o`:
+		if _, ok := localCmds[cmd[0]]; ok {
 			return c.cliError(errState, errors.Newf(
 				"%s: local command disabled by embedder", cmd[0]))
 		}
