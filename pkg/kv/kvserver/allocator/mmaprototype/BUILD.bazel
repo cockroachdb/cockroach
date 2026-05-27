@@ -61,6 +61,7 @@ go_test(
         "logging_test.go",
         "memo_helper_test.go",
         "mma_metrics_test.go",
+        "rebalance_advisor_test.go",
     ],
     data = glob(["testdata/**"]),
     embed = [":mmaprototype"],
