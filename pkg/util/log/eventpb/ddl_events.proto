@@ -143,7 +143,7 @@ message SetSchema {
   string descriptor_name = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The new name of the affected descriptor.
   string new_descriptor_name = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
-  // The descriptor type being changed (table, view, sequence, type).
+  // The descriptor type being changed (table, view, sequence, type, domain).
   string descriptor_type = 5 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 

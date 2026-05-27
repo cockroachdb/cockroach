@@ -224,8 +224,77 @@ subtest end
 
 subtest set_schema
 
-statement error pgcode 0A000 ALTER DOMAIN SET SCHEMA is not supported
-ALTER DOMAIN d SET SCHEMA public
+statement ok
+CREATE SCHEMA s_sc1;
+CREATE SCHEMA s_sc2;
+CREATE DOMAIN d_sc AS INT DEFAULT 0
+
+statement ok
+ALTER DOMAIN d_sc SET SCHEMA public
+
+statement ok
+ALTER DOMAIN d_sc SET SCHEMA s_sc1
+
+# The domain should be usable in the new schema.
+query T
+SELECT 1::s_sc1.d_sc
+----
+1
+
+# The array type should have moved too.
+query T
+SELECT ARRAY[1]::s_sc1._d_sc
+----
+{1}
+
+statement ok
+ALTER DOMAIN s_sc1.d_sc SET SCHEMA s_sc2
+
+query T
+SELECT 1::s_sc2.d_sc
+----
+1
+
+# The domain should no longer exist in s_sc1.
+query error pq: type "s_sc1.d_sc" does not exist
+SELECT 1::s_sc1.d_sc
+
+# Nor does the implicit array.
+query error pq: type "s_sc1._d_sc" does not exist
+SELECT '{}'::s_sc1._d_sc
+
+statement error pq: unknown schema "does_not_exist"
+ALTER DOMAIN s_sc2.d_sc SET SCHEMA does_not_exist
+
+# Error when there's a name conflict in the target schema.
+statement ok
+CREATE DOMAIN s_sc1.d_sc AS TEXT
+
+statement error pq: type "test.s_sc1.d_sc" already exists
+ALTER DOMAIN s_sc2.d_sc SET SCHEMA s_sc1
+
+# Moving a domain referenced by a table column should succeed
+# because types are referenced by ID.
+statement ok
+CREATE DOMAIN d_ref AS INT DEFAULT 42;
+CREATE TABLE t_dref (c d_ref);
+INSERT INTO t_dref VALUES (1);
+
+statement ok
+ALTER DOMAIN d_ref SET SCHEMA s_sc2
+
+query T
+SELECT c FROM t_dref
+----
+1
+
+statement ok
+DROP TABLE t_dref;
+DROP DOMAIN s_sc1.d_sc;
+DROP DOMAIN s_sc2.d_sc;
+DROP DOMAIN s_sc2.d_ref;
+DROP SCHEMA s_sc1;
+DROP SCHEMA s_sc2
 
 subtest end
 

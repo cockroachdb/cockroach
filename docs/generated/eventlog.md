@@ -2624,7 +2624,7 @@ An event of type `set_schema` is recorded when a table, view, sequence or type's
 |--|--|--|
 | `DescriptorName` | The old name of the affected descriptor. | no |
 | `NewDescriptorName` | The new name of the affected descriptor. | no |
-| `DescriptorType` | The descriptor type being changed (table, view, sequence, type). | no |
+| `DescriptorType` | The descriptor type being changed (table, view, sequence, type, domain). | no |
 
 
 #### Common fields
