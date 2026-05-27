@@ -99,6 +99,44 @@ SELECT count(*) FROM system.table_metadata WHERE total_live_data_bytes > total_d
 ----
 0
 
+# Every TABLE/SEQUENCE/MATERIALIZED_VIEW should have a primary_index_id
+# recorded. Plain views don't have a primary index.
+query
+SELECT count(*) FROM system.table_metadata
+WHERE table_type IN ('TABLE', 'SEQUENCE', 'MATERIALIZED_VIEW')
+  AND (details->>'primary_index_id')::INT IS NULL
+----
+0
+
+# And those same relations should have an index_sizes entry for the
+# primary.
+query
+SELECT count(*) FROM system.table_metadata
+WHERE table_type IN ('TABLE', 'SEQUENCE', 'MATERIALIZED_VIEW')
+  AND details->'index_sizes'->>(details->>'primary_index_id') IS NULL
+----
+0
+
+# Plain views have no live indexes, so index_sizes is empty/absent.
+query
+SELECT details->'index_sizes' FROM system.table_metadata
+WHERE table_name = 'myview'
+----
+<nil>
+
+# mytable2 has a single index (primary). The sum of its index_sizes
+# entries should equal its replication_size_bytes (modulo dropped-index
+# garbage, which there isn't any of for a freshly created table).
+query
+SELECT replication_size_bytes - (
+    SELECT COALESCE(sum(value::INT), 0)
+    FROM jsonb_each_text(details->'index_sizes')
+  )
+FROM system.table_metadata
+WHERE table_name = 'mytable2'
+----
+0
+
 query
 DROP TABLE mytable
 ----

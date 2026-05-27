@@ -376,25 +376,31 @@ func (b *Builder) buildRoutine(
 	b.insideUDF = true
 	b.insideSQLRoutine = o.Language == tree.RoutineLangSQL
 	isSetReturning := o.Class == tree.GeneratorClass
-	if o.Type != tree.BuiltinRoutine {
-		if o.SecurityMode == tree.RoutineDefiner {
-			// SECURITY DEFINER: override both privilege users to the routine
-			// owner, so all privilege checks inside the routine body use the
-			// definer's privileges.
-			checkPrivUser, err := b.catalog.GetRoutineOwner(b.ctx, o.Oid)
+	if o.SecurityMode == tree.RoutineDefiner {
+		// SECURITY DEFINER: override both privilege users to the routine
+		// owner, so all privilege checks inside the routine body use the
+		// definer's privileges. Builtins have no descriptor owner; treat
+		// NodeUser as the implicit definer so they can read system tables
+		// when their SQL body needs to (e.g. the pg_*_size builtins).
+		var checkPrivUser username.SQLUsername
+		if o.Type == tree.BuiltinRoutine {
+			checkPrivUser = username.NodeUserName()
+		} else {
+			var err error
+			checkPrivUser, err = b.catalog.GetRoutineOwner(b.ctx, o.Oid)
 			if err != nil {
 				panic(err)
 			}
-			b.dataSourcePrivilegeUserOverride = checkPrivUser
-			b.executePrivilegeUserOverride = checkPrivUser
-		} else {
-			// SECURITY INVOKER (default): set dataSourcePrivilegeUserOverride to
-			// the invoker. This is necessary because a view may have overridden
-			// dataSourcePrivilegeUserOverride to the view owner, but a
-			// SECURITY INVOKER function called by the view should run with the
-			// invoker's privileges, matching PostgreSQL behavior.
-			b.dataSourcePrivilegeUserOverride = b.executePrivilegeUserOverride
 		}
+		b.dataSourcePrivilegeUserOverride = checkPrivUser
+		b.executePrivilegeUserOverride = checkPrivUser
+	} else if o.Type != tree.BuiltinRoutine {
+		// SECURITY INVOKER (default): set dataSourcePrivilegeUserOverride to
+		// the invoker. This is necessary because a view may have overridden
+		// dataSourcePrivilegeUserOverride to the view owner, but a
+		// SECURITY INVOKER function called by the view should run with the
+		// invoker's privileges, matching PostgreSQL behavior.
+		b.dataSourcePrivilegeUserOverride = b.executePrivilegeUserOverride
 	}
 
 	// Special handling for set-returning PL/pgSQL functions.

@@ -21,6 +21,15 @@ import "github.com/lib/pq/oid"
 // used when converting between stable ID's and type/function OIDs.
 const CockroachPredefinedOIDMax = 100000
 
+// IsMaybeHashedOid returns true if the OID value is in the range that the
+// pg_catalog OID hasher uses for synthesized OIDs (indexes, columns,
+// constraints, etc.). Note that user-defined type/function descriptor IDs
+// also exceed CockroachPredefinedOIDMax, so a true result does not uniquely
+// imply a hashed OID — it only rules out the predefined-OID range.
+func IsMaybeHashedOid(o oid.Oid) bool {
+	return o > CockroachPredefinedOIDMax
+}
+
 // OIDs in this block are extensions of postgres, thus having no official OID.
 const (
 	T_geometry   = oid.Oid(90000)
