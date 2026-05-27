@@ -23,6 +23,7 @@ write *eventpb.DropTable to event log:
 delete object namespace entry {100 101 t} -> 105
 upsert descriptor #104
    function:
+     canMutate: CANNOT_MUTATE
   -  dependedOnBy:
   -  - columnIds:
   -    - 2
@@ -59,6 +60,7 @@ persist all catalog changes to storage
 delete object namespace entry {100 101 t} -> 105
 upsert descriptor #104
    function:
+     canMutate: CANNOT_MUTATE
   -  dependedOnBy:
   -  - columnIds:
   -    - 2
@@ -121,6 +123,7 @@ begin transaction #3
 ## PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
 upsert descriptor #104
    function:
+     canMutate: CANNOT_MUTATE
   -  declarativeSchemaChangerState:
   -    authorization:
   -      userName: root

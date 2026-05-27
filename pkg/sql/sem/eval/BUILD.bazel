@@ -60,6 +60,7 @@ go_library(
         "//pkg/sql/hintpb",
         "//pkg/sql/lex",
         "//pkg/sql/oidext",
+        "//pkg/sql/opt/cat",
         "//pkg/sql/parserutils",
         "//pkg/sql/pgrepl/lsn",
         "//pkg/sql/pgwire/pgcode",

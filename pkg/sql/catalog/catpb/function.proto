@@ -46,6 +46,12 @@ message Function {
     INVOKER = 0;
     DEFINER = 1;
   }
+
+  enum CanMutate {
+    UNKNOWN_CAN_MUTATE = 0;
+    CAN_MUTATE = 1;
+    CANNOT_MUTATE = 2;
+  }
 }
 
 // These wrappers are for the convenience of referencing the enum types from a

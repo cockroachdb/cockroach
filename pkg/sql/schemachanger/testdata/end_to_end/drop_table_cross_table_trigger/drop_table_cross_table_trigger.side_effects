@@ -177,6 +177,7 @@ upsert descriptor #107
   +  version: "6"
 upsert descriptor #108
    function:
+     canMutate: CANNOT_MUTATE
   -  dependedOnBy:
   -  - id: 104
   -    triggerIds:
@@ -191,6 +192,7 @@ upsert descriptor #108
      volatility: VOLATILE
 upsert descriptor #109
    function:
+     canMutate: CANNOT_MUTATE
   -  dependedOnBy:
   -  - id: 105
   -    triggerIds:
@@ -381,6 +383,7 @@ upsert descriptor #107
   +  version: "6"
 upsert descriptor #108
    function:
+     canMutate: CANNOT_MUTATE
   -  dependedOnBy:
   -  - id: 104
   -    triggerIds:
@@ -402,6 +405,7 @@ upsert descriptor #108
      volatility: VOLATILE
 upsert descriptor #109
    function:
+     canMutate: CANNOT_MUTATE
   -  dependedOnBy:
   -  - id: 105
   -    triggerIds:
@@ -522,6 +526,7 @@ upsert descriptor #107
   +  version: "7"
 upsert descriptor #108
    function:
+     canMutate: CANNOT_MUTATE
   -  declarativeSchemaChangerState:
   -    authorization:
   -      userName: root
@@ -539,6 +544,7 @@ upsert descriptor #108
      volatility: VOLATILE
 upsert descriptor #109
    function:
+     canMutate: CANNOT_MUTATE
   -  declarativeSchemaChangerState:
   -    authorization:
   -      userName: root

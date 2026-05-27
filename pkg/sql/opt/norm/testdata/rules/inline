@@ -1817,11 +1817,11 @@ norm expect-not=InlineUDF
 SELECT vol() FROM a
 ----
 project
- ├── columns: vol:9
+ ├── columns: vol:8
  ├── volatile
  ├── scan a
  └── projections
-      └── vol() [as=vol:9, volatile, udf]
+      └── vol() [as=vol:8, volatile, udf]
 
 exec-ddl
 CREATE FUNCTION set_fn(x INT) RETURNS SETOF INT IMMUTABLE LANGUAGE SQL AS $$
@@ -1834,7 +1834,7 @@ norm expect-not=InlineUDF
 SELECT * FROM set_fn(0)
 ----
 project-set
- ├── columns: set_fn:9
+ ├── columns: set_fn:2
  ├── immutable
  ├── values
  │    ├── cardinality: [1 - 1]
@@ -1855,12 +1855,12 @@ norm expect-not=InlineUDF
 SELECT multi_stmt() FROM a
 ----
 project
- ├── columns: multi_stmt:10
+ ├── columns: multi_stmt:8
  ├── immutable
- ├── fd: ()-->(10)
+ ├── fd: ()-->(8)
  ├── scan a
  └── projections
-      └── multi_stmt() [as=multi_stmt:10, immutable, udf]
+      └── multi_stmt() [as=multi_stmt:8, immutable, udf]
 
 exec-ddl
 CREATE FUNCTION empty() RETURNS BOOL STABLE LANGUAGE SQL AS ''

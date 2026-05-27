@@ -66,6 +66,7 @@ upsert descriptor #104
   +  version: "2"
 upsert descriptor #105
    function:
+     canMutate: CANNOT_MUTATE
   +  dependedOnBy:
   +  - constraintIds:
   +    - 2
@@ -162,6 +163,7 @@ upsert descriptor #104
   +  version: "2"
 upsert descriptor #105
    function:
+     canMutate: CANNOT_MUTATE
   +  declarativeSchemaChangerState:
   +    authorization:
   +      userName: root
@@ -285,6 +287,7 @@ upsert descriptor #104
   +  version: "4"
 upsert descriptor #105
    function:
+     canMutate: CANNOT_MUTATE
   -  declarativeSchemaChangerState:
   -    authorization:
   -      userName: root
