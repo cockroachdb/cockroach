@@ -13,6 +13,24 @@ if [ -z $token ]; then
 TEAMCITY_TOKEN not set. Get one here:
 
 https://teamcity.cockroachdb.com/profile.html?item=accessTokens
+
+Usage: $0 <pr-number-or-branch> <test-regex> [sha]
+
+Examples:
+  $0 12345 'perturbation/full/intents'
+  $0 my-branch-name 'kv/splits.*' a1b2c3d4
+
+Note: PR numbers work for all cases (recommended). Branch names only work
+for branches pushed directly to cockroachdb/cockroach, not personal forks.
+For fork branches, use the PR number instead.
+
+Environment variables:
+  COUNT     - number of test iterations (default: 1)
+  DEBUG     - enable debug mode (default: false)
+  USE_SPOT  - use spot VMs: never, auto, always (default: never)
+              The "auto" default in nightly scripts uses spot for the
+              first attempt, which causes preemptions on single-iteration
+              PR-triggered runs. Override here defaults to "never".
 EOF
   exit 1
 fi
@@ -20,7 +38,7 @@ fi
 pr=${1-}
 
 while [ -z $pr ]; do
-  read -p 'PR number (defaults to first arg, can also use branch name): ' pr
+  read -p 'PR number or branch name (PR number recommended): ' pr
 done
 
 tests=${2-}
@@ -50,6 +68,7 @@ json_payload=$(jq -n \
   --arg tests "$tests" \
   --arg envDebug "${DEBUG-false}" \
   --arg envCount "${COUNT-1}" \
+  --arg envUseSpot "${USE_SPOT-never}" \
   '{
   buildType: {id: "Cockroach_Nightlies_RoachtestNightlyGceBazel"},
   branchName: $branch_name,
@@ -60,7 +79,8 @@ json_payload=$(jq -n \
       {name: "env.SELECT_PROBABILITY", value: "1.0"},
       {name: "env.DEBUG", value: $envDebug},
       {name: "env.COUNT", value: $envCount},
-      {name: "env.TESTS", value: $tests}
+      {name: "env.TESTS", value: $tests},
+      {name: "env.USE_SPOT", value: $envUseSpot}
     ]
   }
 }')
