@@ -42,6 +42,7 @@ go_library(
         "create_policy.go",
         "create_schema.go",
         "create_sequence.go",
+        "create_table.go",
         "create_trigger.go",
         "database_zone_config.go",
         "dependencies.go",
@@ -153,11 +154,17 @@ go_library(
 
 go_test(
     name = "scbuildstmt_test",
-    srcs = ["process_test.go"],
+    srcs = [
+        "create_table_test.go",
+        "process_test.go",
+    ],
     embed = [":scbuildstmt"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/settings",
+        "//pkg/sql/schemachanger/scerrors",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondatapb",
         "@com_github_stretchr_testify//require",
     ],
 )
