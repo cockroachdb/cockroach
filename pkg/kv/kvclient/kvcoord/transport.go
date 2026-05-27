@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -212,6 +213,7 @@ func (gt *grpcTransport) sendBatch(
 		AppNameID:     ba.AppNameID,
 		GatewayNodeID: ba.GatewayNodeID,
 		WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
+		EnrichmentID:  clusterunique.ID{Uint128: ba.EnrichmentID},
 	}
 	var cleanup func()
 	if rpc.IsLocal(iface) {

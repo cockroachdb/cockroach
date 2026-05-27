@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
@@ -394,14 +395,20 @@ type Context struct {
 
 	// AppNameID is the hash of the application name, for ASH
 	// sampling. Set alongside WorkloadID in the connExecutor.
-	// Note(alyshan): This will eventually be replaced by a general
-	// enrichment_id field which will enable the ASH sampler to
-	// enrich samples with more workload context.
+	// Deprecated in favor of EnrichmentID once 26.3 is finalized;
+	// retained for mixed-version compatibility.
 	AppNameID uint64
 
 	// WorkloadType distinguishes the kind of workload that WorkloadID
 	// represents (statement fingerprint, job ID, system task).
 	WorkloadType workloadid.WorkloadType
+
+	// EnrichmentID is the per-execution clusterunique.ID under which
+	// the gateway's ASH enrichment cache holds this execution's
+	// attributes. Plumbed alongside AppNameID; the sampler stamps it
+	// onto each sample so downstream enrichment can resolve attributes
+	// via the local cache or the GetASHEnrichmentData RPC.
+	EnrichmentID clusterunique.ID
 }
 
 // RoutineStatementCounters encapsulates metrics for tracking the execution

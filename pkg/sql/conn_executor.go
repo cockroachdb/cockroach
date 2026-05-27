@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantcpu"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash/enrichment"
 	"github.com/cockroachdb/cockroach/pkg/obs/statementstore"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -415,6 +416,14 @@ type Server struct {
 	// fingerprint IDs for all recently executed transactions.
 	txnIDCache *txnidcache.Cache
 
+	// enrichmentCache stores per-execution attributes (app name, user,
+	// database, plan gist, etc.) keyed by clusterunique.ID. It feeds
+	// the ASH sampler's downstream enricher: each ASH sample carries
+	// the EnrichmentID of the execution that produced it, and the
+	// enricher looks attributes up here (locally or via the
+	// GetASHEnrichmentData RPC for samples produced on remote nodes).
+	enrichmentCache *enrichment.Cache
+
 	// Metrics is used to account normal queries.
 	Metrics Metrics
 
@@ -473,6 +482,10 @@ type ServerMetrics struct {
 
 	// IngesterMetrics contains metrics related to SQL stats ingestion.
 	IngesterMetrics sslocal.Metrics
+
+	// ASHEnrichmentMetrics contains metrics for the per-execution
+	// attribute cache that backs ASH sample enrichment.
+	ASHEnrichmentMetrics enrichment.Metrics
 }
 
 // NewServer creates a new Server. Start() needs to be called before the Server
@@ -534,6 +547,9 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		txnIDCache: txnidcache.NewTxnIDCache(
 			cfg.Settings,
 			&serverMetrics.ContentionSubsystemMetrics),
+		enrichmentCache: enrichment.NewCache(
+			cfg.Settings,
+			&serverMetrics.ASHEnrichmentMetrics),
 		idxRecommendationsCache: idxrecommendations.NewIndexRecommendationsCache(cfg.Settings),
 	}
 
@@ -740,6 +756,7 @@ func makeServerMetrics(cfg *ExecutorConfig) ServerMetrics {
 		ContentionSubsystemMetrics: txnidcache.NewMetrics(),
 		InsightsMetrics:            insights.NewMetrics(),
 		IngesterMetrics:            sslocal.NewIngesterMetrics(),
+		ASHEnrichmentMetrics:       enrichment.NewMetrics(),
 	}
 }
 
@@ -762,6 +779,18 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	s.reportedStats.Start(ctx, stopper)
 
 	s.txnIDCache.Start(ctx, stopper)
+	s.enrichmentCache.Start(ctx, stopper)
+
+	// Publish our enrichment cache so the process-wide
+	// GetASHEnrichmentData RPC handler can resolve our tenant's
+	// attributes. Unregister on shutdown so a fresh sql.Server in
+	// the same process (notably in shared-process multitenant
+	// deployments and tests) doesn't see a stale pointer.
+	tenantID := s.cfg.Codec.TenantID
+	enrichment.Register(tenantID, s.enrichmentCache)
+	stopper.AddCloser(stop.CloserFn(func() {
+		enrichment.Unregister(tenantID)
+	}))
 }
 
 // GetSchemaTelemetryController returns the schematelemetryschedule.Controller
@@ -806,6 +835,13 @@ func (s *Server) GetSQLStatsIngester() *sslocal.SQLStatsIngester {
 // GetTxnIDCache returns the txnidcache.Cache for the current sql.Server.
 func (s *Server) GetTxnIDCache() *txnidcache.Cache {
 	return s.txnIDCache
+}
+
+// GetEnrichmentCache returns the ASH enrichment cache for the current
+// sql.Server. The cache holds per-execution attributes consumed by the
+// ASH sampler's downstream enricher.
+func (s *Server) GetEnrichmentCache() *enrichment.Cache {
+	return s.enrichmentCache
 }
 
 // GetScrubbedStmtStats returns the statement statistics by app, with the

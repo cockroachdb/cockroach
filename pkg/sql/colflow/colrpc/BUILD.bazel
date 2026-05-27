@@ -16,6 +16,7 @@ go_library(
         "//pkg/obs/workloadid",
         "//pkg/roachpb",
         "//pkg/rpc/rpcbase",
+        "//pkg/sql/clusterunique",
         "//pkg/sql/colexec/colexecargs",
         "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexecerror",

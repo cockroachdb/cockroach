@@ -91,15 +91,21 @@ message EvalContext {
   optional uint64 workload_id = 17 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "WorkloadID"];
   // AppNameID is the hash of the application name, for ASH sampling.
-  // Note(alyshan): This will eventually be replaced by a general
-  // enrichment_id field which will enable the ASH sampler to
-  // enrich samples with more workload context.
+  // Deprecated in favor of EnrichmentID once 26.3 is finalized; retained
+  // for mixed-version compatibility.
   optional uint64 app_name_id = 18 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "AppNameID"];
   // WorkloadType distinguishes the kind of workload that workload_id
   // represents. Used by the ASH sampler to choose the right encoding.
   optional uint32 workload_type = 19 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "WorkloadType"];
+  // EnrichmentID is the per-execution clusterunique.ID under which the
+  // gateway's ASH enrichment cache holds this execution's attributes.
+  // The sampler stamps it onto each sample; the enricher uses it to
+  // look attributes up locally or via the GetASHEnrichmentData RPC.
+  optional bytes enrichment_id = 20 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "EnrichmentID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/clusterunique.ID"];
 }
 
 message SimpleResponse {

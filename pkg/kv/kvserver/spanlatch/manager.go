@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -513,6 +514,7 @@ func (m *Manager) wait(ctx context.Context, lg *Guard, snap snapshot) error {
 			AppNameID:     lg.ba.AppNameID,
 			GatewayNodeID: lg.ba.GatewayNodeID,
 			WorkloadType:  workloadid.WorkloadType(lg.ba.WorkloadType),
+			EnrichmentID:  clusterunique.ID{Uint128: lg.ba.EnrichmentID},
 		}
 	}
 	cleanup := ash.SetWorkState(

@@ -3029,9 +3029,8 @@ message Header {
 
   // app_name_id is the hash of the application name. Used for ASH sampling.
   // Set when the workload is from SQL execution.
-  // Note(alyshan): This will eventually be replaced by a general
-  // enrichment_id field which will enable the ASH sampler to
-  // enrich samples with more workload context.
+  // Deprecated in favor of enrichment_id once 26.3 is finalized; retained
+  // for mixed-version compatibility.
   uint64 app_name_id = 40 [(gogoproto.customname) = "AppNameID"];
 
   // workload_type distinguishes the kind of workload that workload_id
@@ -3039,9 +3038,20 @@ message Header {
   // Used by the ASH sampler to choose the right encoding.
   uint32 workload_type = 41 [(gogoproto.customname) = "WorkloadType"];
 
+  // enrichment_id is the per-execution clusterunique.ID under which the
+  // gateway's ASH enrichment cache holds this execution's attributes.
+  // The sampler stamps it onto each sample; the enricher uses it to
+  // look attributes up locally or via the GetASHEnrichmentData RPC.
+  // The wire type is uint128.Uint128 rather than clusterunique.ID to
+  // avoid a layering cycle through pkg/sql; clusterunique.ID is a thin
+  // wrapper around Uint128 and the two convert by struct embedding.
+  bytes enrichment_id = 42 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "EnrichmentID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uint128.Uint128"];
+
   reserved 7, 10, 12, 14, 20, 24;
 
-  // Next ID: 42
+  // Next ID: 43
 }
 
 message WriteOptions {

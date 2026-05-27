@@ -281,6 +281,7 @@ func (ds *ServerImpl) setupFlow(
 			req.EvalContext.WorkloadID,
 			req.EvalContext.AppNameID,
 			workloadid.WorkloadType(req.EvalContext.WorkloadType),
+			req.EvalContext.EnrichmentID,
 		)
 		return leafTxn, nil
 	}
@@ -389,6 +390,7 @@ func (ds *ServerImpl) setupFlow(
 		evalCtx.WorkloadID = req.EvalContext.WorkloadID
 		evalCtx.AppNameID = req.EvalContext.AppNameID
 		evalCtx.WorkloadType = workloadid.WorkloadType(req.EvalContext.WorkloadType)
+		evalCtx.EnrichmentID = req.EvalContext.EnrichmentID
 
 		// In DistSQL flows, we eagerly store the app name on remote nodes to reduce
 		// cache misses when the local ASH sampler resolves the app name ID.
@@ -413,6 +415,7 @@ func (ds *ServerImpl) setupFlow(
 				evalCtx.WorkloadID,
 				evalCtx.AppNameID,
 				roachpb.NodeID(ds.ServerConfig.NodeID.SQLInstanceID()),
+				evalCtx.EnrichmentID,
 			)
 			if err != nil {
 				return nil, nil, nil, err

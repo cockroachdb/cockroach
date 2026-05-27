@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantcpu"
 	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash/enrichment"
 	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -661,16 +662,33 @@ func (ex *connExecutor) execStmtInOpenState(
 	ctx = ih.Setup(ctx, ex, p, &stmt, os.ImplicitTxn.Get(),
 		ex.state.mu.priority, ex.state.mu.autoRetryCounter)
 
-	// Set workload ID and app name ID for ASH sampling. ih.Setup
-	// already computed the statement fingerprint ID, so reuse it here.
+	// Set workload ID, app name ID, and enrichment ID for ASH sampling.
+	// ih.Setup already computed the statement fingerprint ID, so reuse
+	// it here. The enrichment ID is the per-execution clusterunique.ID
+	// already on stmt; the gateway's enrichment cache is keyed by it.
 	p.extendedEvalCtx.WorkloadID = uint64(ih.fingerprintId)
 	appNameID := ash.GetOrStoreAppNameID(p.SessionData().ApplicationName)
 	p.extendedEvalCtx.AppNameID = appNameID
 	p.extendedEvalCtx.WorkloadType = workloadid.WorkloadTypeStatement
+	p.extendedEvalCtx.EnrichmentID = stmt.QueryID
 	if p.txn != nil {
 		p.txn.SetWorkloadInfo(
-			uint64(ih.fingerprintId), appNameID, workloadid.WorkloadTypeStatement,
+			uint64(ih.fingerprintId), appNameID, workloadid.WorkloadTypeStatement, stmt.QueryID,
 		)
+	}
+	// Gate construction of the Attributes literal on Enabled() so that
+	// callers pay zero cost (no field evaluation, no function call) when
+	// the enrichment subsystem is off, which is the default during the
+	// 26.3 rollout.
+	if ex.server.enrichmentCache.Enabled() {
+		ex.server.enrichmentCache.PutExecution(stmt.QueryID, enrichment.Attributes{
+			AppName:   p.SessionData().ApplicationName,
+			Database:  p.SessionData().Database,
+			User:      p.SessionData().User().Normalized(),
+			Query:     stmt.SQL,
+			SessionID: p.extendedEvalCtx.SessionID,
+			TxnID:     txnIDOrEmpty(p.txn),
+		})
 	}
 
 	// Note that here we always unconditionally defer a function that takes care
@@ -1698,15 +1716,18 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	p.semaCtx.Placeholders.Assign(pinfo, vars.stmt.NumPlaceholders)
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 
-	// Set workload ID and app name ID for ASH sampling. ih.Setup
-	// already computed the statement fingerprint ID, so reuse it here.
+	// Set workload ID, app name ID, and enrichment ID for ASH sampling.
+	// ih.Setup already computed the statement fingerprint ID, so reuse
+	// it here. The enrichment ID is the per-execution clusterunique.ID
+	// already on vars.stmt; the gateway's enrichment cache is keyed by it.
 	p.extendedEvalCtx.WorkloadID = uint64(ih.fingerprintId)
 	appNameID2 := ash.GetOrStoreAppNameID(p.SessionData().ApplicationName)
 	p.extendedEvalCtx.AppNameID = appNameID2
 	p.extendedEvalCtx.WorkloadType = workloadid.WorkloadTypeStatement
+	p.extendedEvalCtx.EnrichmentID = vars.stmt.QueryID
 	if p.txn != nil {
 		p.txn.SetWorkloadInfo(
-			uint64(ih.fingerprintId), appNameID2, workloadid.WorkloadTypeStatement,
+			uint64(ih.fingerprintId), appNameID2, workloadid.WorkloadTypeStatement, vars.stmt.QueryID,
 		)
 	}
 
@@ -2622,12 +2643,15 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) (retEr
 
 	// For explicit transactions, attribute the commit's deferred KV work
 	// to the transaction fingerprint, otherwise it will be attributed to
-	// the last statement's fingerprint which is misleading.
+	// the last statement's fingerprint which is misleading. The commit
+	// itself isn't a single-statement execution, so leave EnrichmentID
+	// at its zero value — ASH samples taken during commit deferred work
+	// will not carry per-execution enrichment.
 	if !ex.implicitTxn() {
 		txnFingerprintID := ex.extraTxnState.transactionStatementsHash.Sum()
 		appNameID := ash.GetOrStoreAppNameID(ex.sessionData().ApplicationName)
 		ex.state.mu.txn.SetWorkloadInfo(
-			txnFingerprintID, appNameID, workloadid.WorkloadTypeCommit,
+			txnFingerprintID, appNameID, workloadid.WorkloadTypeCommit, clusterunique.ID{},
 		)
 	}
 
@@ -2932,6 +2956,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			planner.extendedEvalCtx.WorkloadID,
 			planner.extendedEvalCtx.AppNameID,
 			roachpb.NodeID(planner.extendedEvalCtx.NodeID.SQLInstanceID()),
+			planner.extendedEvalCtx.EnrichmentID,
 		)
 		if err != nil {
 			return err
@@ -3554,6 +3579,27 @@ func (ex *connExecutor) makeExecPlan(
 	// Include gist in error reports.
 	ih := &planner.instrumentation
 	ex.curStmtPlanGist = redact.SafeString(ih.planGist.String())
+
+	// Refresh the enrichment cache entry with the post-planning
+	// fields (plan gist, canary-stats selection). The first
+	// PutExecution in execStmtInOpenState happens before planning so
+	// the sampler can observe early ticks; this overwrite carries the
+	// same keys forward with the planning-derived fields filled in,
+	// so subsequent ticks (and re-tries of earlier ticks via the
+	// retry queue) see the complete picture.
+	if ex.server.enrichmentCache.Enabled() {
+		ex.server.enrichmentCache.PutExecution(planner.stmt.QueryID, enrichment.Attributes{
+			AppName:     planner.SessionData().ApplicationName,
+			Database:    planner.SessionData().Database,
+			User:        planner.SessionData().User().Normalized(),
+			Query:       planner.stmt.SQL,
+			PlanGist:    []byte(ih.planGist.String()),
+			CanaryStats: ih.tableStatsRollout == eval.StatsRolloutCanary,
+			SessionID:   planner.extendedEvalCtx.SessionID,
+			TxnID:       txnIDOrEmpty(planner.txn),
+		})
+	}
+
 	if buildutil.CrdbTestBuild && ih.planGist.String() != "" {
 		// Ensure that the gist can be decoded in test builds.
 		//
@@ -4879,4 +4925,15 @@ func (ex *connExecutor) applySessionVariableHint(
 		return v.SetWithPlanner(ctx, p, setScopeStmt, varValue)
 	}
 	return errors.New("cannot set session variable")
+}
+
+// txnIDOrEmpty returns txn.ID() if txn is non-nil, otherwise the
+// zero uuid.UUID. Used by the ASH enrichment cache PutExecution call
+// sites where the planner may not yet have a transaction (and the
+// cache treats the zero TxnID as "unset").
+func txnIDOrEmpty(txn *kv.Txn) uuid.UUID {
+	if txn == nil {
+		return uuid.UUID{}
+	}
+	return txn.ID()
 }

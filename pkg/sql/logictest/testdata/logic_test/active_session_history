@@ -1,0 +1,98 @@
+# Tests for the crdb_internal.{node,cluster}_active_session_history
+# virtual tables. Locks down the column schema so future column
+# additions (and any renames) trip an obvious failure here rather
+# than silently breaking downstream consumers.
+
+# Both tables must be queryable and return zero or more rows. We
+# don't enable sampling, so the result is empty; the point is the
+# query succeeds with the expected column types.
+query TIITTTTTISSSSBTT
+SELECT
+  sample_time,
+  node_id,
+  tenant_id,
+  workload_id,
+  workload_type,
+  app_name,
+  work_event_type,
+  work_event,
+  goroutine_id,
+  database,
+  "user",
+  query,
+  plan_gist,
+  canary_stats,
+  txn_id,
+  session_id
+FROM crdb_internal.node_active_session_history
+----
+
+query TIITTTTTISSSSBTT
+SELECT
+  sample_time,
+  node_id,
+  tenant_id,
+  workload_id,
+  workload_type,
+  app_name,
+  work_event_type,
+  work_event,
+  goroutine_id,
+  database,
+  "user",
+  query,
+  plan_gist,
+  canary_stats,
+  txn_id,
+  session_id
+FROM crdb_internal.cluster_active_session_history
+----
+
+# Verify the column set on both tables. Spaces in data type names
+# don't play well with the whitespace-delimited result format, so
+# we check just the column names.
+query T rowsort
+SELECT column_name
+FROM information_schema.columns
+WHERE table_schema = 'crdb_internal'
+  AND table_name = 'node_active_session_history'
+----
+app_name
+canary_stats
+database
+goroutine_id
+node_id
+plan_gist
+query
+sample_time
+session_id
+tenant_id
+txn_id
+user
+work_event
+work_event_type
+workload_id
+workload_type
+
+query T rowsort
+SELECT column_name
+FROM information_schema.columns
+WHERE table_schema = 'crdb_internal'
+  AND table_name = 'cluster_active_session_history'
+----
+app_name
+canary_stats
+database
+goroutine_id
+node_id
+plan_gist
+query
+sample_time
+session_id
+tenant_id
+txn_id
+user
+work_event
+work_event_type
+workload_id
+workload_type

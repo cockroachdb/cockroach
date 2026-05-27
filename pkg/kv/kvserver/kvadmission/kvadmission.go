@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -306,6 +307,7 @@ func (n *controllerImpl) AdmitKVWork(
 					AppNameID:     admissionInfo.AppNameID,
 					GatewayNodeID: admissionInfo.GatewayNodeID,
 					WorkloadType:  admissionInfo.WorkloadType,
+					EnrichmentID:  admissionInfo.EnrichmentID,
 				})
 			if err != nil {
 				return Handle{}, err
@@ -640,6 +642,7 @@ func workInfoForBatch(
 		AppNameID:       ba.Header.AppNameID,
 		GatewayNodeID:   ba.Header.GatewayNodeID,
 		WorkloadType:    workloadid.WorkloadType(ba.Header.WorkloadType),
+		EnrichmentID:    clusterunique.ID{Uint128: ba.Header.EnrichmentID},
 	}
 	return admissionInfo
 }

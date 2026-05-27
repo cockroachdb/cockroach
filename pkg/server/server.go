@@ -68,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
 	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash/enrichment"
 	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -102,6 +103,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/catalog/schematelemetry" // register schedules declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/gcjob"    // register jobs declared outside of pkg/sql
 	_ "github.com/cockroachdb/cockroach/pkg/sql/importer" // register jobs/planHooks declared outside of pkg/sql
@@ -1930,6 +1932,35 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 			return nil, err
 		}
 		return resp.Mappings, nil
+	})
+	ash.SetGlobalEnrichmentResolver(func(
+		ctx context.Context, nodeID roachpb.NodeID, ids []clusterunique.ID,
+	) (map[clusterunique.ID]enrichment.Attributes, error) {
+		client, err := s.status.dialNode(ctx, nodeID)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := client.GetASHEnrichmentData(ctx, &serverpb.ASHEnrichmentRequest{Ids: ids})
+		if err != nil {
+			return nil, err
+		}
+		out := make(map[clusterunique.ID]enrichment.Attributes, len(resp.Data))
+		for i, entry := range resp.Data {
+			if !entry.Loaded {
+				continue
+			}
+			out[ids[i]] = enrichment.Attributes{
+				AppName:     entry.AppName,
+				Database:    entry.Database,
+				User:        entry.User,
+				Query:       entry.Query,
+				PlanGist:    entry.PlanGist,
+				CanaryStats: entry.CanaryStats,
+				TxnID:       entry.TxnID,
+				SessionID:   entry.SessionID,
+			}
+		}
+		return out, nil
 	})
 
 	// TODO(irfansharif): Now that we have our node ID, we should run another

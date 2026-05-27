@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -1060,7 +1061,7 @@ func (db *DB) NewTxn(ctx context.Context, debugName string) *Txn {
 	txn := NewTxn(ctx, db, nodeID)
 	txn.SetDebugName(debugName)
 	if wid, wtype := WorkloadInfoFromContext(ctx); wid != 0 {
-		txn.SetWorkloadInfo(wid, 0 /* appNameID */, wtype)
+		txn.SetWorkloadInfo(wid, 0 /* appNameID */, wtype, clusterunique.ID{})
 	}
 	return txn
 }
@@ -1120,7 +1121,7 @@ func (db *DB) TxnWithAdmissionControl(
 	txn.SetDebugName("unnamed")
 	txn.ConfigureStepping(ctx, steppingMode)
 	if wid, wtype := WorkloadInfoFromContext(ctx); wid != 0 {
-		txn.SetWorkloadInfo(wid, 0 /* appNameID */, wtype)
+		txn.SetWorkloadInfo(wid, 0 /* appNameID */, wtype, clusterunique.ID{})
 	}
 	return runTxn(ctx, txn, retryable)
 }
@@ -1142,7 +1143,7 @@ func (db *DB) TxnWithSteppingEnabled(
 	txn := NewTxnWithSteppingEnabled(ctx, db, nodeID, qualityOfService)
 	txn.SetDebugName("unnamed")
 	if wid, wtype := WorkloadInfoFromContext(ctx); wid != 0 {
-		txn.SetWorkloadInfo(wid, 0 /* appNameID */, wtype)
+		txn.SetWorkloadInfo(wid, 0 /* appNameID */, wtype, clusterunique.ID{})
 	}
 	return runTxn(ctx, txn, retryable)
 }

@@ -99,6 +99,30 @@ func FromBytes(b []byte) Uint128 {
 	return Uint128{hi, lo}
 }
 
+// Size returns the marshalled byte length, satisfying the gogoproto
+// custom type interface so Uint128 can be used as the Go type for a
+// proto bytes field.
+func (u Uint128) Size() int { return 16 }
+
+// MarshalTo writes u as 16 big-endian bytes into data, satisfying the
+// gogoproto custom type interface.
+func (u Uint128) MarshalTo(data []byte) (int, error) {
+	binary.BigEndian.PutUint64(data[:8], u.Hi)
+	binary.BigEndian.PutUint64(data[8:16], u.Lo)
+	return 16, nil
+}
+
+// Unmarshal reads u from a 16-byte big-endian buffer, satisfying the
+// gogoproto custom type interface.
+func (u *Uint128) Unmarshal(data []byte) error {
+	if len(data) != 16 {
+		return errors.Errorf("input data length %d for uint128 must be 16 bytes", len(data))
+	}
+	u.Hi = binary.BigEndian.Uint64(data[:8])
+	u.Lo = binary.BigEndian.Uint64(data[8:16])
+	return nil
+}
+
 // FromString parses a hexadecimal string as a 128-bit big-endian unsigned integer.
 func FromString(s string) (Uint128, error) {
 	if len(s) > 32 {

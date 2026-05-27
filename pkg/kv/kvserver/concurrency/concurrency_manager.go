@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
@@ -462,6 +463,7 @@ func (m *managerImpl) maybeInterceptReq(ctx context.Context, req Request) (Respo
 				AppNameID:     req.Batch.AppNameID,
 				GatewayNodeID: req.Batch.GatewayNodeID,
 				WorkloadType:  workloadid.WorkloadType(req.Batch.WorkloadType),
+				EnrichmentID:  clusterunique.ID{Uint128: req.Batch.EnrichmentID},
 			}
 		}
 		cleanup := ash.SetWorkState(tenantID, info, ash.WorkLock, "TxnPushWait")
@@ -484,6 +486,7 @@ func (m *managerImpl) maybeInterceptReq(ctx context.Context, req Request) (Respo
 				AppNameID:     req.Batch.AppNameID,
 				GatewayNodeID: req.Batch.GatewayNodeID,
 				WorkloadType:  workloadid.WorkloadType(req.Batch.WorkloadType),
+				EnrichmentID:  clusterunique.ID{Uint128: req.Batch.EnrichmentID},
 			}
 		}
 		cleanup := ash.SetWorkState(tenantID, info, ash.WorkLock, "TxnQueryWait")
