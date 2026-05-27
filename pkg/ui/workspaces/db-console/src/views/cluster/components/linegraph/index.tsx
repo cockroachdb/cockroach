@@ -277,6 +277,26 @@ export function InternalLineGraph({
     };
   }, []);
 
+  // Resize uPlot when its container changes size. The !!data dependency
+  // attaches the observer once data arrives and Visualization renders
+  // children (until then, the el ref is unattached).
+  useEffect(() => {
+    const container = el.current;
+    if (!container || typeof ResizeObserver === "undefined") {
+      return;
+    }
+    const observer = new ResizeObserver(entries => {
+      const u = uRef.current;
+      if (!u) return;
+      const width = entries[0]?.contentRect.width;
+      if (width && width > 0) {
+        u.setSize({ width, height: 300 });
+      }
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [!!data]);
+
   // Update chart when data, time info, or display dependencies change.
   // prevDataRef is still needed because the effect uses previous data to
   // compute prior series keys (deciding whether to setData() on the
@@ -341,6 +361,7 @@ export function InternalLineGraph({
       // Updates existing plot with new points.
       uRef.current.setData(uPlotData);
     } else {
+      const initialWidth = el.current?.clientWidth || 947;
       const options = configureUPlotLineChart(
         metricElements,
         axisElement,
@@ -348,6 +369,7 @@ export function InternalLineGraph({
         setNewTimeRange,
         () => xAxisDomainRef.current,
         () => yAxisDomainRef.current,
+        initialWidth,
       );
 
       if (uRef.current) {

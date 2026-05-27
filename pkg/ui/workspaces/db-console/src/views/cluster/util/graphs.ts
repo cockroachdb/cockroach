@@ -209,6 +209,9 @@ export function configureUPlotLineChart(
   setMetricsFixedWindow: (startMillis: number, endMillis: number) => void,
   getLatestXAxisDomain: () => AxisDomain,
   getLatestYAxisDomain: () => AxisDomain,
+  // Pass the container's current width; subsequent resizes should be
+  // driven via uPlot.setSize().
+  initialWidth?: number,
 ): uPlot.Options {
   const formattedRaw = formatMetricData(metrics, data);
   // Copy palette over since we mutate it in the `series` function
@@ -224,7 +227,7 @@ export function configureUPlotLineChart(
   // Please see https://github.com/leeoniya/uPlot/tree/master/docs for
   // information on how to construct this object.
   return {
-    width: 947,
+    width: initialWidth ?? 947,
     height: 300,
     cursor: {
       lock: true,

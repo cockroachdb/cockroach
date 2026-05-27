@@ -6,7 +6,9 @@
 @import "src/core/index.module";
 
 .visualization {
-  width: fit-content;
+  // Fill the flex/grid slot so the chart inside can resize down on
+  // narrow viewports.
+  width: 100%;
   position: relative;
   background-color: #fff;
   color: $headings-color;
@@ -26,8 +28,7 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  // These are the dimensions of the linegraph.
-  min-width: 947px;
+  // Reserve vertical space for the spinner so layout doesn't shift on load.
   min-height: 300px;
 }
 
