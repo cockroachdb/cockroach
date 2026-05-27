@@ -279,6 +279,12 @@ message RangeAppliedState {
   // flush prepare snapshot. Monotonic increase counts b1+b2, and flush commit
   // subtracts the value captured at flush prepare.
   //
+  // The value is approximate: it starts at zero on replica initialization
+  // during the cluster boostrap and is halved on splits, so it may over- or
+  // underestimate the actual store-local bytes. Any inaccuracy is corrected by
+  // the next range flush, which subtracts the value captured during flush
+  // prepare.
+  //
   // This field lives in RangeAppliedState rather than MVCCStats to avoid
   // interaction with the consistency checker, which can't recompute a
   // monotonically-increasing counter from a scan.

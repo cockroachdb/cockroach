@@ -1559,6 +1559,9 @@ func splitTriggerHelper(
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "loading LHS RangeAppliedState for split")
 		}
 
+		// Halve ApproxStoreLocalBytes for the RHS; the LHS is halved at
+		// application time in splitPreApply. The halving is approximate, but
+		// any inaccuracy is corrected by the next range flush.
 		if *h.AbsPostSplitRight(), err = kvstorage.WriteInitialReplicaState(
 			ctx, batch, *h.AbsPostSplitRight(), split.RightDesc, rightLease,
 			*in.GCThreshold, *in.GCHint, in.ReplicaVersion,
