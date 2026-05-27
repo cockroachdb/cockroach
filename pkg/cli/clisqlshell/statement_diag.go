@@ -25,6 +25,16 @@ func (c *cliState) handleStatementDiag(
 		cmd = args[0]
 		args = args[1:]
 	}
+	// `\statement-diag download` writes a zip file to the local
+	// filesystem with the shell process's UID, so it must be gated by
+	// DisableLocalCmds. `list` only issues a server-side query and
+	// remains enabled. The dispatcher cannot reject this from
+	// localCmds because the dangerous subcommand is in args[0], not
+	// cmd[0].
+	if c.sqlCtx.DisableLocalCmds && cmd == "download" {
+		return c.cliError(errState, errors.New(
+			`\statement-diag download: local command disabled by embedder`))
+	}
 	defer c.conn.AllowExecuteInternal(context.Background())()
 	var cmdErr error
 	switch cmd {

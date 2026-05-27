@@ -318,7 +318,17 @@ func TestDisableLocalCmds(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	blocked := []string{`\!`, `\| sort`, `\i file.sql`, `\ir file.sql`, `\o output`}
+	blocked := []string{
+		`\!`,
+		`\| sort`,
+		`\i file.sql`,
+		`\ir file.sql`,
+		`\o output`,
+		// \statement-diag download writes a zip to the local FS via a
+		// gate inside handleStatementDiag; \statement-diag list stays
+		// enabled because it only issues a server-side query.
+		`\statement-diag download 42`,
+	}
 	for _, line := range blocked {
 		c := setupTestCliState()
 		c.sqlCtx.DisableLocalCmds = true

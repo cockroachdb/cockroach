@@ -142,14 +142,22 @@ Commands specific to the demo shell (EXPERIMENTAL):
 // Context.DisableLocalCmds, which uses this set as the source of truth
 // for the dispatcher-level guard.
 //
-// \e (external editor) is reached through the bubbline editor's own
-// keybinding rather than the dispatcher, so it is gated separately in
-// externalEditorAllowed(). \password is gated by Context.DisablePasswordCmd
-// because the concern is different (typing a password into the shell
-// session rather than local execution).
+// Two related gates live outside this set because they cannot be matched
+// by the dispatcher on cmd[0] alone:
+//   - \e (external editor) is reached through the bubbline editor's own
+//     keybinding rather than the dispatcher, and is gated in
+//     externalEditorAllowed().
+//   - \statement-diag download writes a bundle file to the local FS but
+//     shares cmd[0] with the safe \statement-diag list; the subcommand
+//     gate lives in handleStatementDiag.
+//
+// \password is gated by Context.DisablePasswordCmd because the concern is
+// different (typing a password into the shell session rather than local
+// execution).
 //
 // When adding a new metacommand that reads or writes the local filesystem
-// or shells out, also add it here.
+// or shells out, also add it here (or, for a subcommand of an otherwise
+// safe command, in the command's handler — see handleStatementDiag).
 var localCmds = map[string]struct{}{
 	`\!`:  {},
 	`\|`:  {},
