@@ -158,6 +158,7 @@ var enabledDjangoTests = []string{
 
 // Maintain that this list is alphabetized.
 var djangoBlocklist = blocklist{
+	`introspection.tests.IntrospectionTests.test_get_constraints`:      "django 4.1.x does not expect synthesized NOT NULL rows in pg_constraint; see #170036",
 	`schema.tests.SchemaTests.test_alter_text_field_to_date_field`:     "alter type requires USING",
 	`schema.tests.SchemaTests.test_alter_text_field_to_datetime_field`: "alter type requires USING",
 	`schema.tests.SchemaTests.test_alter_text_field_to_time_field`:     "alter type requires USING",
