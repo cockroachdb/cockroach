@@ -171,7 +171,7 @@ SELECT '100126'::REGPROC;
 query T
 SELECT 'sc.proc_f_2'::REGPROC;
 ----
-proc_f_2
+sc.proc_f_2
 
 query I
 SELECT 'sc.proc_f_2'::REGPROC::INT;

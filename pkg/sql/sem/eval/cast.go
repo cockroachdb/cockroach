@@ -1120,39 +1120,24 @@ func performIntToOidCast(
 	case oid.T_oid:
 		return tree.NewDOidWithType(o, t), nil
 	case oid.T_regtype:
-		// Mapping an dOid to a regtype is easy: we have a hardcoded map.
-		var name string
+		// Builtin types have hardcoded SQL-standard names (e.g. "integer"
+		// for int4) that match Postgres's format_type output and are
+		// independent of search_path. UDTs fall through to resolveOID for
+		// search-path-aware schema qualification.
 		if typ, ok := types.OidToType[o]; ok {
-			name = typ.PGName()
-		} else if types.IsOIDUserDefinedType(o) {
-			typ, err := res.ResolveTypeByOID(ctx, o)
-			if err != nil {
-				return nil, err
-			}
-			name = typ.PGName()
+			return tree.NewDOidWithTypeAndName(o, t, typ.PGName()), nil
 		}
-		return tree.NewDOidWithTypeAndName(o, t, name), nil
-
-	case oid.T_regproc, oid.T_regprocedure:
-		name, _, err := res.ResolveFunctionByOID(ctx, oid.Oid(v))
-		if err != nil {
-			if errors.Is(err, tree.ErrRoutineUndefined) {
-				return tree.NewDOidWithType(o, t), nil //nolint:returnerrcheck
-			}
+	}
+	// resolveOID applies Postgres's search-path-aware schema qualification
+	// (regclassout / regprocout / regtypeout style output).
+	dOid, errSafeToIgnore, err := res.ResolveOIDFromOID(ctx, t, tree.NewDOid(o))
+	if err != nil {
+		if !errSafeToIgnore {
 			return nil, err
 		}
-		return tree.NewDOidWithTypeAndName(o, t, name.Object()), nil
-
-	default:
-		dOid, errSafeToIgnore, err := res.ResolveOIDFromOID(ctx, t, tree.NewDOid(o))
-		if err != nil {
-			if !errSafeToIgnore {
-				return nil, err
-			}
-			dOid = tree.NewDOidWithType(o, t)
-		}
-		return dOid, nil
+		dOid = tree.NewDOidWithType(o, t)
 	}
+	return dOid, nil
 }
 
 func roundDecimalToInt(d *apd.Decimal) (int64, error) {

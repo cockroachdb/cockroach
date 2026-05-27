@@ -320,14 +320,29 @@ EXECUTE seq3(200);
 statement ok
 SET TRACING = "off";
 
+# Each EXECUTE re-resolves the 'seq'::regclass argument; that lookup runs
+# its own SELECT via the internal executor, which traces a cache miss on
+# the first call and a hit on each subsequent call.
 query T
 SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
 ----
 reusing cached memo
+query cache miss (prepare)
 reusing cached memo
 reusing cached memo
+query cache hit (prepare)
 reusing cached memo
 reusing cached memo
+query cache hit (prepare)
+reusing cached memo
+reusing cached memo
+query cache hit (prepare)
+reusing cached memo
+reusing cached memo
+query cache hit (prepare)
+reusing cached memo
+reusing cached memo
+query cache hit (prepare)
 reusing cached memo
 
 # ------------------------------------------------------------------------------
