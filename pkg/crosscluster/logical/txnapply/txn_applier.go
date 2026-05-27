@@ -493,8 +493,8 @@ func (a *Applier) recordCompletion(
 			// timestamp order, if txnIDs contains a txn at timestamp T,
 			// there are no txns for this applier in the interval
 			// (resolvedTime, T). The resolved time can safely advance
-			// to T-1.
-			a.mu.committed.UpdateResolvedTime(id.Timestamp.FloorPrev())
+			// to T.Prev().
+			a.mu.committed.UpdateResolvedTime(id.Timestamp.Prev())
 			break
 		}
 		a.mu.committed.UpdateResolvedTime(id.Timestamp)

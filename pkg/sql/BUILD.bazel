@@ -15,6 +15,7 @@ go_library(
         "alter_index.go",
         "alter_index_visible.go",
         "alter_job_owner.go",
+        "alter_logical_replication_stmt.go",
         "alter_primary_key.go",
         "alter_role.go",
         "alter_schema.go",
