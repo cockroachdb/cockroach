@@ -11,6 +11,7 @@ go_library(
         "computed_exprs.go",
         "default_exprs.go",
         "doc.go",
+        "domain.go",
         "expr.go",
         "hash_sharded_compute_expr.go",
         "name.go",
