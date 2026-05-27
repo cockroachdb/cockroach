@@ -1805,6 +1805,7 @@ func TestClusterResetSQLStats(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderDuress(t)
+	skip.UnderRace(t, "flaky under race due to RPC fanout timing; see #170803")
 
 	ctx := context.Background()
 	knobs := sqlstats.CreateTestingKnobs()
