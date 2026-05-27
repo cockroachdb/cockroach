@@ -303,7 +303,7 @@ func runMultiTenantIsolation(
 	t.L().Printf("phase 2: running both tenants (%s)", phase2Duration)
 	annotatePhase("phase 2: both tenants")
 	workloadStart := timeutil.Now()
-	m2 := c.NewDeprecatedMonitor(ctx, kvNode)
+	m2 := c.NewDeprecatedMonitor(ctx, c.All())
 
 	// Quiet tenant workload.
 	m2.Go(func(ctx context.Context) error {
