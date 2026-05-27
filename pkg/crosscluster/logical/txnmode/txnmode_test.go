@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -155,6 +156,68 @@ func TestTxnModeSmoketest(t *testing.T) {
 	// that the writer goroutines are running with per-goroutine handles.
 	require.True(t, cpuHandleChecked.Load(),
 		"expected at least one session to have its CPU handle checked")
+}
+
+// TestTxnModeCursorAlignsProducerPTS verifies that the producer-side
+// protected timestamp is installed at the user-supplied CURSOR rather than
+// at the producer's statement time.
+func TestTxnModeCursorAlignsProducerPTS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(134857),
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
+	runner := sqlutils.MakeSQLRunner(conn)
+	sysRunner := sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t))
+	ldrtestutils.ApplyLowLatencyReplicationSettings(t, sysRunner, runner)
+
+	runner.Exec(t, "CREATE DATABASE source_db")
+	runner.Exec(t, "CREATE DATABASE dest_db")
+
+	sourceDB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("source_db")))
+	destDB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("dest_db")))
+	for _, db := range []*sqlutils.SQLRunner{sourceDB, destDB} {
+		db.Exec(t, "CREATE TABLE tab (id INT PRIMARY KEY)")
+	}
+
+	cursorTS := s.Clock().Now()
+	sourceURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("source_db"))
+	var consumerJobID jobspb.JobID
+	destDB.QueryRow(t,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = 'transactional', CURSOR = $2",
+		sourceURL.String(),
+		cursorTS.AsOfSystemTime(),
+	).Scan(&consumerJobID)
+
+	registry := s.JobRegistry().(*jobs.Registry)
+	consumerJob, err := registry.LoadJob(ctx, consumerJobID)
+	require.NoError(t, err)
+	streamID := consumerJob.Details().(jobspb.LogicalReplicationDetails).StreamID
+
+	producerJob, err := registry.LoadJob(ctx, jobspb.JobID(streamID))
+	require.NoError(t, err)
+	producerPayload := producerJob.Payload()
+	ptsID := producerPayload.GetStreamReplication().ProtectedTimestampRecordID
+
+	var tsStr string
+	runner.QueryRow(t,
+		"SELECT ts FROM system.protected_ts_records WHERE id = $1", ptsID,
+	).Scan(&tsStr)
+	ptsTS, err := hlc.ParseHLC(tsStr)
+	require.NoError(t, err)
+
+	require.Equal(t, cursorTS, ptsTS,
+		"producer PTS should equal user-supplied CURSOR")
 }
 
 func TestTxnModeUniqueConstraintUpdate(t *testing.T) {
