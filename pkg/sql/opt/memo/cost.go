@@ -36,7 +36,7 @@ type Cost struct {
 // member will have a lower cost.
 var MaxCost = Cost{
 	C:         math.Inf(+1),
-	Penalties: HugeCostPenalty | FullScanPenalty | PlanGramMismatchPenalty | UnboundedCardinalityPenalty,
+	Penalties: HugeCostPenalty | FullScanPenalty | PlanGramMismatchPenalty | UnboundedCardinalityPenalty | TopKAboveLockPenalty,
 }
 
 // Less returns true if this cost is lower than the given cost.
@@ -115,6 +115,19 @@ const (
 	// can produce. See props.AnyCardinality.
 	UnboundedCardinalityPenalty
 
+	// TopKAboveLockPenalty is true if the plan matches one of two shapes:
+	// TopK directly above a Lock, or Limit above Sort directly above a Lock.
+	// Both shapes force the Lock to process (and lock) every row produced by
+	// its input, even when only K rows are needed. Beyond wasted locking work,
+	// this under SKIP LOCKED starves concurrent sessions: rows that would have
+	// been emitted by an alternative plan are needlessly locked here and then
+	// skipped by other sessions, which can return fewer rows than they should.
+	//
+	// The preferred alternative places the Sort below the Lock (via the
+	// Lock's passthrough of input-ordering requirements), with a streaming
+	// Limit above the Lock, so only ~K rows are actually locked.
+	TopKAboveLockPenalty
+
 	// NoPenalties represents no penalties.
 	NoPenalties Penalties = 0
 )
@@ -126,9 +139,9 @@ const (
 // Where:
 //
 //	<Cost> is the floating point cost value.
-//	<Penalties> contains "H", "F", "P", or "U" for HugeCostPenalty,
-//	  FullScanPenalty, PlanGramMismatchPenalty, and
-//	  UnboundedCardinalityPenalty, respectively.
+//	<Penalties> contains "H", "F", "P", "U", or "T" for HugeCostPenalty,
+//	  FullScanPenalty, PlanGramMismatchPenalty,
+//	  UnboundedCardinalityPenalty, and TopKAboveLockPenalty, respectively.
 //	<aux> contains the number of full scans and unbounded reads.
 //
 // For example, the summary "1.23:HF:5f6u" indicates a cost of 1.23 with the
@@ -148,6 +161,9 @@ func (c Cost) Summary() string {
 	}
 	if c.Penalties&UnboundedCardinalityPenalty != 0 {
 		sb.WriteByte('U')
+	}
+	if c.Penalties&TopKAboveLockPenalty != 0 {
+		sb.WriteByte('T')
 	}
 	_, _ = fmt.Fprintf(&sb, ":%df", c.aux.fullScanCount)
 	_, _ = fmt.Fprintf(&sb, "%du", c.aux.unboundedReadCount)

@@ -939,6 +939,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			if cost.Penalties&UnboundedCardinalityPenalty != 0 {
 				b.WriteString(" unbounded-cardinality")
 			}
+			if cost.Penalties&TopKAboveLockPenalty != 0 {
+				b.WriteString(" topk-above-lock")
+			}
 			tp.Child(b.String())
 		}
 	}

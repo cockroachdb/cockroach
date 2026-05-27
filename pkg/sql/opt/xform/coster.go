@@ -717,6 +717,11 @@ func (c *coster) computeTopKCost(topk *memo.TopKExpr, required *physical.Require
 	// TODO(harding): Add the CPU cost of emitting the K output rows. This should
 	// be done in conjunction with computeSortCost.
 
+	// Penalize TopK directly above a Lock — see TopKAboveLockPenalty for why.
+	if topk.Input.Op() == opt.LockOp {
+		cost.Penalties |= memo.TopKAboveLockPenalty
+	}
+
 	return cost
 }
 
@@ -762,6 +767,15 @@ func (c *coster) computeSortCost(sort *memo.SortExpr, required *physical.Require
 	cost.C += c.rowCmpCost(numKeyCols-numPreorderedCols).C * numCmpOpsPerRow * stats.RowCount
 	// TODO(harding): Add the CPU cost of emitting the output rows. This should be
 	// done in conjunction with computeTopKCost.
+
+	// Penalize a Sort enforcer directly above a Lock when there is a limit
+	// hint flowing down — i.e. Limit -> Sort -> Lock. Without a limit above,
+	// all rows have to flow through anyway and there is no better alternative.
+	// See TopKAboveLockPenalty.
+	if required.LimitHint > 0 && sort.Input.Op() == opt.LockOp {
+		cost.Penalties |= memo.TopKAboveLockPenalty
+	}
+
 	return cost
 }
 

@@ -579,6 +579,60 @@ limit
  │         └── limit hint: 5.00
  └── 5
 
+# Regression test: when SKIP LOCKED is combined with ORDER BY on a non-indexed
+# column, the optimizer must not pick a TopK (or Sort) above the Lock. Either
+# shape locks every row produced by the Lock's input only to discard all but
+# K, which under SKIP LOCKED also starves concurrent sessions (they see the
+# discarded rows as locked and skip them, returning fewer rows than they
+# should). The preferred plan places the Sort below the Lock with a Limit
+# above, so only ~K rows are locked. The SortAboveLockPenalty in the coster
+# steers the optimizer away from the bad shape.
+exec-ddl
+CREATE TABLE skl (k INT PRIMARY KEY, v INT)
+----
+
+opt set=optimizer_use_lock_op_for_serializable=true
+SELECT k FROM skl WHERE v > 0 ORDER BY v LIMIT 1 FOR UPDATE SKIP LOCKED
+----
+limit
+ ├── columns: k:1!null  [hidden: v:2!null]
+ ├── internal-ordering: +2
+ ├── cardinality: [0 - 1]
+ ├── volatile
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── lock skl
+ │    ├── columns: k:1!null v:2!null
+ │    ├── key columns: k:1
+ │    ├── lock columns: (5,6)
+ │    ├── locking: for-update,skip-locked
+ │    ├── volatile
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── ordering: +2
+ │    ├── limit hint: 1.00
+ │    └── sort
+ │         ├── columns: k:1!null v:2!null
+ │         ├── volatile
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(2)
+ │         ├── ordering: +2
+ │         ├── limit hint: 1.00
+ │         └── select
+ │              ├── columns: k:1!null v:2!null
+ │              ├── volatile
+ │              ├── key: (1)
+ │              ├── fd: (1)-->(2)
+ │              ├── scan skl
+ │              │    ├── columns: k:1!null v:2
+ │              │    ├── locking: none,skip-locked
+ │              │    ├── volatile
+ │              │    ├── key: (1)
+ │              │    └── fd: (1)-->(2)
+ │              └── filters
+ │                   └── v:2 > 0 [outer=(2), constraints=(/2: [/1 - ]; tight)]
+ └── 1
+
 exec-ddl
 CREATE TABLE abcd (
   a INT PRIMARY KEY,
