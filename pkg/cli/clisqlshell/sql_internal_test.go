@@ -328,6 +328,12 @@ func TestDisableLocalCmds(t *testing.T) {
 		// gate inside handleStatementDiag; \statement-diag list stays
 		// enabled because it only issues a server-side query.
 		`\statement-diag download 42`,
+		// Unknown commands are rejected by the allow-list rather than
+		// falling through to the default "invalid syntax" path. This
+		// is the fail-closed property: a future metacommand that
+		// touches the local FS is blocked until it is added to
+		// embedderSafeCmds.
+		`\unknown-future-command`,
 	}
 	for _, line := range blocked {
 		c := setupTestCliState()
@@ -336,6 +342,24 @@ func TestDisableLocalCmds(t *testing.T) {
 		c.doHandleCliCmd(cliStateEnum(0), cliStateEnum(1))
 		require.Error(t, c.exitErr, "input %q", line)
 		assert.Contains(t, c.exitErr.Error(), "disabled by embedder", "input %q", line)
+	}
+
+	// Positive control: \echo is in embedderSafeCmds and does not
+	// require a conn, so it must run cleanly under DisableLocalCmds.
+	c := setupTestCliState()
+	c.sqlCtx.DisableLocalCmds = true
+	c.lastInputLine = `\echo hi`
+	c.doHandleCliCmd(cliStateEnum(0), cliStateEnum(1))
+	require.NoError(t, c.exitErr, "\\echo must be allowed under DisableLocalCmds")
+
+	// Describe-family commands route to handleDescribe above the
+	// allow-list gate. They are not in embedderSafeCmds because the
+	// gate doesn't see them; putting them in the set would suggest
+	// duplicated logic and could mask future routing bugs.
+	for _, line := range []string{`\d`, `\dt`, `\dT+`, `\du`, `\dv`, `\sf`, `\sv`, `\l`} {
+		_, present := embedderSafeCmds[line]
+		assert.False(t, present,
+			"%s is dispatched to handleDescribe; it should not appear in embedderSafeCmds", line)
 	}
 }
 

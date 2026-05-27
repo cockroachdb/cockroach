@@ -136,34 +136,64 @@ Commands specific to the demo shell (EXPERIMENTAL):
 	debugPromptPattern = "%n@%M:%> %C>"
 )
 
-// localCmds enumerates the metacommands that touch the local filesystem
-// or shell out. They execute with the shell process's UID and are unsafe
-// to expose when the shell is embedded in a privileged service; see
-// Context.DisableLocalCmds, which uses this set as the source of truth
-// for the dispatcher-level guard.
+// embedderSafeCmds is the allow-list of metacommands the dispatcher
+// permits when Context.DisableLocalCmds is set. Commands not in the
+// set are rejected; the fail-closed default ensures that a future
+// metacommand that touches the local filesystem or shells out is
+// blocked unless a contributor consciously opts it in.
 //
-// Two related gates live outside this set because they cannot be matched
-// by the dispatcher on cmd[0] alone:
-//   - \e (external editor) is reached through the bubbline editor's own
-//     keybinding rather than the dispatcher, and is gated in
+// The describe family (\d*, \sf, \sv, \l, and \z which is rewritten
+// to \dp) is implicitly allowed by being dispatched to handleDescribe
+// above this gate. Those commands issue server-side SQL queries and
+// would be tedious to enumerate; routing them above the gate keeps
+// the allow-list focused on commands that reach the explicit
+// dispatcher switch.
+//
+// Two adjacent gates handle commands with finer-grained restrictions
+// that cannot be expressed at the dispatcher level:
+//   - \e (external editor) is reached through the bubbline editor's
+//     own keybinding rather than the dispatcher, and is gated in
 //     externalEditorAllowed().
-//   - \statement-diag download writes a bundle file to the local FS but
-//     shares cmd[0] with the safe \statement-diag list; the subcommand
-//     gate lives in handleStatementDiag.
+//   - \statement-diag download writes a bundle file to the local
+//     filesystem, while \statement-diag list is server-side;
+//     \statement-diag is listed here as safe and the dangerous
+//     subcommand is rejected in handleStatementDiag.
 //
-// \password is gated by Context.DisablePasswordCmd because the concern is
-// different (typing a password into the shell session rather than local
-// execution).
+// \password is listed here as safe and gated independently by
+// Context.DisablePasswordCmd; the concern is typing a password into
+// the shell session rather than local execution.
 //
-// When adding a new metacommand that reads or writes the local filesystem
-// or shells out, also add it here (or, for a subcommand of an otherwise
-// safe command, in the command's handler — see handleStatementDiag).
-var localCmds = map[string]struct{}{
-	`\!`:  {},
-	`\|`:  {},
-	`\i`:  {},
-	`\ir`: {},
-	`\o`:  {},
+// When adding a new dispatcher case, add the command here if it is
+// safe to expose to an embedded shell (no local FS, no shell-out),
+// and add a subcommand gate to its handler otherwise.
+var embedderSafeCmds = map[string]struct{}{
+	`\q`:              {},
+	`\quit`:           {},
+	`\exit`:           {},
+	`\`:               {},
+	`\?`:              {},
+	`\help`:           {},
+	`\echo`:           {},
+	`\qecho`:          {},
+	`\set`:            {},
+	`\unset`:          {},
+	`\p`:              {},
+	`\r`:              {},
+	`\s`:              {},
+	`\show`:           {},
+	`\password`:       {},
+	`\h`:              {},
+	`\hf`:             {},
+	`\copy`:           {},
+	`\.`:              {},
+	`\connect`:        {},
+	`\c`:              {},
+	`\info`:           {},
+	`\x`:              {},
+	`\demo`:           {},
+	`\statement-diag`: {},
+	`\restrict`:       {},
+	`\unrestrict`:     {},
 }
 
 // cliState defines the current state of the CLI during
@@ -1475,12 +1505,26 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		return c.cliError(errState, errors.New(
 			`backslash commands are restricted; only \unrestrict is allowed`))
 	}
-	// Embedder-disabled commands. The set of dispatcher-level local
-	// commands is defined by localCmds. \e is enforced separately at
-	// editor-init time (see editor_bubbline.go) since it does not
-	// route through this dispatcher.
+	if cmd[0] == `\z` {
+		// psql compatibility.
+		cmd[0] = `\dp`
+	}
+	// The describe family routes here before the DisableLocalCmds
+	// gate below because every command in it issues a server-side
+	// query — implicitly safe for embedders, and impractical to
+	// enumerate explicitly in embedderSafeCmds.
+	if cmd[0] == `\sf` || cmd[0] == `\sf+` ||
+		cmd[0] == `\sv` || cmd[0] == `\sv+` ||
+		cmd[0] == `\l` || cmd[0] == `\l+` ||
+		(strings.HasPrefix(cmd[0], `\d`) && cmd[0] != `\demo`) {
+		return c.handleDescribe(cmd, loopState, errState)
+	}
+	// Embedder allow-list. Commands not in embedderSafeCmds are
+	// rejected when DisableLocalCmds is set; see the comment on
+	// embedderSafeCmds for the rationale and for adjacent gates
+	// (\e, \statement-diag download).
 	if c.sqlCtx.DisableLocalCmds {
-		if _, ok := localCmds[cmd[0]]; ok {
+		if _, ok := embedderSafeCmds[cmd[0]]; !ok {
 			return c.cliError(errState, errors.Newf(
 				"%s: local command disabled by embedder", cmd[0]))
 		}
@@ -1488,16 +1532,6 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 	if c.sqlCtx.DisablePasswordCmd && cmd[0] == `\password` {
 		return c.cliError(errState, errors.New(
 			`\password: disabled by embedder`))
-	}
-	if cmd[0] == `\z` {
-		// psql compatibility.
-		cmd[0] = `\dp`
-	}
-	if cmd[0] == `\sf` || cmd[0] == `\sf+` ||
-		cmd[0] == `\sv` || cmd[0] == `\sv+` ||
-		cmd[0] == `\l` || cmd[0] == `\l+` ||
-		(strings.HasPrefix(cmd[0], `\d`) && cmd[0] != `\demo`) {
-		return c.handleDescribe(cmd, loopState, errState)
 	}
 
 	switch cmd[0] {
