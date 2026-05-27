@@ -9,6 +9,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -17,9 +18,20 @@ import (
 func alterTypeRename(
 	b BuildCtx, tn *tree.TypeName, enumType *scpb.EnumType, t *tree.AlterTypeRename,
 ) {
-	newName := string(t.NewName)
+	renameForTypeDesc(b, tn, enumType, enumType.TypeID, enumType.ArrayTypeID, string(t.NewName))
+}
 
-	typeElts := b.QueryByID(enumType.TypeID)
+// renameForTypeDesc implements RENAME TO for user-defined types that have an
+// associated array type (enums, composites, domains).
+func renameForTypeDesc(
+	b BuildCtx,
+	tn *tree.TypeName,
+	typeElem scpb.Element,
+	typeID catid.DescID,
+	arrayTypeID catid.DescID,
+	newName string,
+) {
+	typeElts := b.QueryByID(typeID)
 	currentNS := typeElts.FilterNamespace().NotToAbsent().MustGetOneElement()
 
 	// Unlike table rename (which no-ops on self-rename), Postgres treats type
@@ -43,10 +55,10 @@ func alterTypeRename(
 	b.Add(newNS)
 
 	// Rename the implicit array type.
-	arrayElts := b.QueryByID(enumType.ArrayTypeID)
+	arrayElts := b.QueryByID(arrayTypeID)
 	arrayNS := arrayElts.FilterNamespace().NotToAbsent().MustGetOneElement()
 
-	newArrayName := findFreeNameInSchema(b, b.NamePrefix(currentNS), "_"+newName)
+	newArrayName := findFreeNameInSchema(b, b.NamePrefix(typeElem), "_"+newName)
 	newArrayNS := &scpb.Namespace{
 		DatabaseID:   arrayNS.DatabaseID,
 		SchemaID:     arrayNS.SchemaID,

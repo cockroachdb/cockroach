@@ -1372,3 +1372,48 @@ type RemoveEnumTypeValue struct {
 	PhysicalRepresentation []byte
 	LogicalRepresentation  string
 }
+
+// AddDomainNotNull sets the NOT NULL constraint on a domain type descriptor.
+type AddDomainNotNull struct {
+	immediateMutationOp
+	TypeID       descpb.ID
+	ConstraintID descpb.ConstraintID
+}
+
+// RemoveDomainNotNull removes the NOT NULL constraint from a domain type
+// descriptor.
+type RemoveDomainNotNull struct {
+	immediateMutationOp
+	TypeID descpb.ID
+}
+
+// SetDomainConstraintName sets the name of a constraint on a domain type
+// descriptor.
+type SetDomainConstraintName struct {
+	immediateMutationOp
+	TypeID       descpb.ID
+	ConstraintID descpb.ConstraintID
+	Name         string
+}
+
+// RemoveDomainConstraintName removes a constraint name from a domain type
+// descriptor.
+type RemoveDomainConstraintName struct {
+	immediateMutationOp
+	TypeID       descpb.ID
+	ConstraintID descpb.ConstraintID
+}
+
+// SetDomainDefault sets the default expression on a domain type descriptor.
+type SetDomainDefault struct {
+	immediateMutationOp
+	TypeID descpb.ID
+	Expr   catpb.Expression
+}
+
+// RemoveDomainDefault removes the default expression from a domain type
+// descriptor.
+type RemoveDomainDefault struct {
+	immediateMutationOp
+	TypeID descpb.ID
+}
