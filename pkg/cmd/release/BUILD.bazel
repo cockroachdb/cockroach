@@ -64,6 +64,7 @@ go_test(
     deps = [
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/release",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_version//:version",
         "@com_github_slack_go_slack//:slack",
         "@com_github_stretchr_testify//require",
