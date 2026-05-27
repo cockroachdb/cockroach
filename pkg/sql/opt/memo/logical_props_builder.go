@@ -1919,11 +1919,19 @@ func BuildSharedProps(e opt.Expr, shared *props.Shared, evalCtx *eval.Context) {
 	case *UDFCallExpr:
 		shared.HasUDF = true
 		shared.VolatilitySet.Add(t.Def.Volatility)
-		for _, s := range t.Def.Body {
-			if s != nil {
-				if relExpr := s.Relational(); relExpr != nil && relExpr.CanMutate {
-					shared.CanMutate = true
-					break
+		switch t.Def.CanMutate {
+		case tree.RoutineMutates:
+			shared.CanMutate = true
+		case tree.RoutineCanMutateUnknown:
+			// The descriptor predates the can_mutate field. Fall back to
+			// inspecting the eagerly-built body expressions. (Deferred-build
+			// routines always have a known CanMutate value.)
+			for _, s := range t.Def.Body {
+				if s != nil {
+					if relExpr := s.Relational(); relExpr != nil && relExpr.CanMutate {
+						shared.CanMutate = true
+						break
+					}
 				}
 			}
 		}

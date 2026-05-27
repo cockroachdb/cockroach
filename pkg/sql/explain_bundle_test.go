@@ -718,7 +718,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 						}
 						return nil
 					}, false, /* expectErrors */
-					plans, "statement.sql stats-defaultdb.public.pterosaur.sql env.sql vec.txt vec-v.txt",
+					plans, "statement.sql stats-defaultdb.public.pterosaur.sql env.sql vec.txt vec-v.txt opt-vv-deferred-test_redact.txt",
 				)
 			})
 		}
@@ -808,7 +808,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 				}
 				return nil
 			}, false /* expectErrors */, base, plans,
-			"distsql.html vec-v.txt vec.txt")
+			"distsql.html vec-v.txt vec.txt opt-vv-deferred-add_proc.txt")
 	})
 
 	// Regression test for #142041: triggers, their functions, and tables they
@@ -971,7 +971,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 				return nil
 			},
 			false /* expectErrors */, base, plans,
-			"stats-defaultdb.public.abc.sql stats-defaultdb.s.a.sql distsql.html vec-v.txt vec.txt",
+			"stats-defaultdb.public.abc.sql stats-defaultdb.s.a.sql distsql.html vec-v.txt vec.txt opt-vv-deferred-foo.txt",
 		)
 	})
 
@@ -1002,7 +1002,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 				return nil
 			},
 			false /* expectErrors */, base, plans,
-			"stats-defaultdb.public.abc.sql stats-defaultdb.s.a.sql distsql.html vec-v.txt vec.txt",
+			"stats-defaultdb.public.abc.sql stats-defaultdb.s.a.sql distsql.html vec-v.txt vec.txt opt-vv-deferred-bar.txt",
 		)
 	})
 
@@ -1210,7 +1210,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 				}
 				return nil
 			}, false, /* expectErrors */
-			base, plans, "distsql.html vec.txt vec-v.txt",
+			base, plans, "distsql.html vec.txt vec-v.txt opt-vv-deferred-r1.txt",
 		)
 	})
 
