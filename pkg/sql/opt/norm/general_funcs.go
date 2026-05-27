@@ -611,6 +611,81 @@ func (c *CustomFuncs) PrimaryKeyCols(table opt.TableID) opt.ColSet {
 	return tabMeta.IndexKeyColumns(cat.PrimaryIndex)
 }
 
+// KeyCols returns a column set consisting of the columns that make up the
+// candidate key for the input expression (a key must be present).
+func (c *CustomFuncs) KeyCols(in memo.RelExpr) opt.ColSet {
+	keyCols, ok := c.CandidateKey(in)
+	if !ok {
+		panic(errors.AssertionFailedf("expected expression to have key"))
+	}
+	return keyCols
+}
+
+// NonKeyCols returns a column set consisting of the output columns of the given
+// input, minus the columns that make up its candidate key (which it must have).
+func (c *CustomFuncs) NonKeyCols(in memo.RelExpr) opt.ColSet {
+	keyCols, ok := c.CandidateKey(in)
+	if !ok {
+		panic(errors.AssertionFailedf("expected expression to have key"))
+	}
+	return c.OutputCols(in).Difference(keyCols)
+}
+
+// EnsureKey finds the shortest strong key for the input expression. If no
+// strong key exists and the input expression is a Scan or a Scan wrapped in a
+// Select, EnsureKey returns a new Scan (possibly wrapped in a Select) with the
+// preexisting primary key for the table. If the input is not a Scan or
+// Select(Scan), EnsureKey wraps the input in an Ordinality operator, which
+// provides a key column by uniquely numbering the rows. EnsureKey returns the
+// input expression (perhaps augmented with a key column(s) or wrapped by
+// Ordinality).
+func (c *CustomFuncs) EnsureKey(in memo.RelExpr) memo.RelExpr {
+	// Try to add the preexisting primary key if the input is a Scan or Scan
+	// wrapped in a Select.
+	if res, ok := c.tryFindExistingKey(in); ok {
+		return res
+	}
+
+	// Otherwise, wrap the input in an Ordinality operator.
+	colID := c.f.Metadata().AddColumn("rownum", types.Int)
+	private := memo.OrdinalityPrivate{ColID: colID, ForDuplicateRemoval: true}
+	return c.f.ConstructOrdinality(in, &private)
+}
+
+// tryFindExistingKey attempts to find an existing key for the input expression.
+// It may modify the expression in order to project the key column.
+func (c *CustomFuncs) tryFindExistingKey(in memo.RelExpr) (_ memo.RelExpr, ok bool) {
+	_, hasKey := c.CandidateKey(in)
+	if hasKey {
+		return in, true
+	}
+	switch t := in.(type) {
+	case *memo.ProjectExpr:
+		input, foundKey := c.tryFindExistingKey(t.Input)
+		if foundKey {
+			return c.f.ConstructProject(input, t.Projections, input.Relational().OutputCols), true
+		}
+
+	case *memo.ScanExpr:
+		private := t.ScanPrivate
+		tableID := private.Table
+		table := c.f.Metadata().Table(tableID)
+		if !table.IsVirtualTable() {
+			keyCols := c.PrimaryKeyCols(tableID)
+			private.Cols = private.Cols.Union(keyCols)
+			return c.f.ConstructScan(&private), true
+		}
+
+	case *memo.SelectExpr:
+		input, foundKey := c.tryFindExistingKey(t.Input)
+		if foundKey {
+			return c.f.ConstructSelect(input, t.Filters), true
+		}
+	}
+
+	return nil, false
+}
+
 // ----------------------------------------------------------------------
 //
 // Property functions
