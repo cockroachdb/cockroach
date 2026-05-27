@@ -11,15 +11,46 @@ set -xeuo pipefail
 to=dev-inf+release-dev@cockroachlabs.com
 dry_run=true
 version_bump_only=false
-# override dev defaults with production values
-if [[ -z "${DRY_RUN}" ]] ; then
+# Production destination (real email, dry_run=false) requires both DRY_RUN
+# unset AND running on the production release repo. IS_PRODUCTION_REPO is
+# forwarded from a GHA repository variable (set only on the canonical repo)
+# and is absent under TeamCity; default to "true" so the TC code path keeps
+# its existing behavior.
+if [[ -z "${DRY_RUN}" && "${IS_PRODUCTION_REPO:-true}" == "true" ]] ; then
   echo "Setting production values"
   to=release-engineering-team@cockroachlabs.com
   dry_run=false
 fi
 
-if [[ -n "${VERSION_BUMP_ONLY}" ]] ; then
+if [[ -n "${VERSION_BUMP_ONLY:-}" ]] ; then
   version_bump_only=true
+fi
+
+# Configure git to authenticate to github.com using GH_TOKEN. Inside the
+# bazel container the auth that actions/checkout writes to the host's
+# .git/config is not reliably picked up, so subsequent `git fetch` /
+# `git ls-remote` invocations would otherwise prompt for a username and
+# abort with:
+#   fatal: could not read Username for 'https://github.com'
+#
+# Embed the token in the URL via insteadOf rewrite (rather than an
+# extraheader, which GitHub's git-over-HTTPS server rejects in the
+# Bearer form). The rewrite only matches https://github.com/* URLs, so
+# under TeamCity (where origin is typically SSH) it is a no-op and the
+# existing TC SSH auth path is preserved.
+#
+# Use GIT_CONFIG_COUNT/_KEY/_VALUE rather than `git config --local` so the
+# credentialed URL exists only in this script's process environment — never
+# on disk in .git/config, which lives on the bind-mounted workspace and
+# would survive the bazel container's --rm. Suppress xtrace around the
+# assignment so `set -x` doesn't echo the token to stderr (where masking
+# may not catch a token embedded inside a URL substring).
+if [[ -n "${GH_TOKEN:-}" ]]; then
+  { set +x; } 2>/dev/null
+  export GIT_CONFIG_COUNT=1
+  export GIT_CONFIG_KEY_0="url.https://x-access-token:${GH_TOKEN}@github.com/.insteadOf"
+  export GIT_CONFIG_VALUE_0="https://github.com/"
+  set -x
 fi
 
 # run git fetch in order to get all remote branches
@@ -36,6 +67,44 @@ export PATH=$PWD/bin:$PATH
 
 bazel build --config=crosslinux //pkg/cmd/release
 
+# --cockroach-repo picks the push target. Resolution, in order:
+#   1. $COCKROACH_REPO if the operator explicitly set it.
+#   2. $GITHUB_REPOSITORY if we're under GHA (auto-set by the runner;
+#      becomes "owner/name" of whatever repo dispatched the workflow).
+#   3. cockroachdb/cockroach if running under TeamCity ($TEAMCITY_VERSION
+#      set) — historical TC behavior preserved as a literal here, in
+#      the script, rather than baked into the Go binary.
+# Otherwise the binary errors out: --cockroach-repo is required and
+# local/foreign invocations must supply it explicitly.
+if [[ -n "${COCKROACH_REPO:-}" ]]; then
+  cockroach_repo="$COCKROACH_REPO"
+elif [[ -n "${GITHUB_REPOSITORY:-}" ]]; then
+  cockroach_repo="$GITHUB_REPOSITORY"
+elif [[ -n "${TEAMCITY_VERSION:-}" ]]; then
+  cockroach_repo="cockroachdb/cockroach"
+else
+  echo "ERROR: cannot derive --cockroach-repo. Set COCKROACH_REPO env var, run under GHA, or run under TeamCity." >&2
+  exit 1
+fi
+
+# Force IS_PRODUCTION_REPO=true under TeamCity (default-on for the
+# historical TC-as-prod assumption). The Go binary's isProductionRepo()
+# is the dry-run override trigger in generateRepoList, replacing the
+# previous flag-equals-literal check; under TC we want that trigger to
+# fire so dry-runs continue to push to crltest/* forks. GHA workflows
+# set IS_PRODUCTION_REPO explicitly via vars.IS_PRODUCTION_REPO; local
+# invocations get false unless the operator sets it.
+if [[ -n "${TEAMCITY_VERSION:-}" ]]; then
+  export IS_PRODUCTION_REPO="${IS_PRODUCTION_REPO:-true}"
+fi
+# --github-username controls which user pushes the PR branches and opens
+# the PRs. TC keeps the historical "cockroach-teamcity" default; the GHA
+# wrapper sets GITHUB_USERNAME to the bot account that owns its PAT
+# (e.g. "crl-release-eng-bot"). prExists() in the binary searches across
+# both authors regardless, so prior PRs aren't re-opened during the
+# migration period.
+github_username="${GITHUB_USERNAME:-cockroach-teamcity}"
+
 $(bazel info --config=crosslinux bazel-bin)/pkg/cmd/release/release_/release \
   update-versions \
   --dry-run=$dry_run \
@@ -47,4 +116,6 @@ $(bazel info --config=crosslinux bazel-bin)/pkg/cmd/release/release_/release \
   --smtp-host=smtp.gmail.com \
   --smtp-port=587 \
   --artifacts-dir=/artifacts \
+  --cockroach-repo="$cockroach_repo" \
+  --github-username="$github_username" \
   --to=$to
