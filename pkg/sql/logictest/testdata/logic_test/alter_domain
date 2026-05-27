@@ -8,46 +8,224 @@ CREATE DOMAIN d AS INT DEFAULT 0 NOT NULL CHECK (VALUE > 0)
 
 subtest set_default
 
-statement error pgcode 0A000 ALTER DOMAIN SET DEFAULT is not supported
-ALTER DOMAIN d SET DEFAULT 42
+# Use a domain without NOT NULL to allow NULL default testing.
+statement ok
+CREATE DOMAIN d_def AS INT DEFAULT 0
 
-statement error pgcode 0A000 ALTER DOMAIN SET DEFAULT is not supported
-ALTER DOMAIN d SET DEFAULT 1 + 2
+statement ok
+ALTER DOMAIN d_def SET DEFAULT 42
+
+# Verify the default was applied by creating a table and inserting.
+statement ok
+CREATE TABLE t_set_def (c d_def);
+INSERT INTO t_set_def (c) VALUES (DEFAULT)
+
+query T
+SELECT c FROM t_set_def
+----
+42
+
+# Replace the default with an expression.
+statement ok
+ALTER DOMAIN d_def SET DEFAULT 1 + 2
+
+statement ok
+TRUNCATE t_set_def;
+INSERT INTO t_set_def (c) VALUES (DEFAULT)
+
+query T
+SELECT c FROM t_set_def
+----
+3
+
+# Setting the default to NULL clears it.
+statement ok
+ALTER DOMAIN d_def SET DEFAULT NULL
+
+statement ok
+TRUNCATE t_set_def;
+INSERT INTO t_set_def (c) VALUES (DEFAULT)
+
+query T
+SELECT c FROM t_set_def
+----
+NULL
+
+# SET DEFAULT is idempotent (setting when already absent).
+statement ok
+ALTER DOMAIN d_def SET DEFAULT 10
+
+statement ok
+TRUNCATE t_set_def;
+INSERT INTO t_set_def (c) VALUES (DEFAULT)
+
+query T
+SELECT c FROM t_set_def
+----
+10
+
+# Type mismatch should be caught.
+statement error could not parse "not an int" as type int
+ALTER DOMAIN d_def SET DEFAULT 'not an int'
+
+statement ok
+DROP TABLE t_set_def
 
 subtest end
 
 subtest drop_default
 
-statement error pgcode 0A000 ALTER DOMAIN DROP DEFAULT is not supported
-ALTER DOMAIN d DROP DEFAULT
+statement ok
+ALTER DOMAIN d_def DROP DEFAULT
+
+# Verify the default is gone.
+statement ok
+CREATE TABLE t_drop_def (c d_def);
+INSERT INTO t_drop_def (c) VALUES (DEFAULT)
+
+query T
+SELECT c FROM t_drop_def
+----
+NULL
+
+# DROP DEFAULT is idempotent.
+statement ok
+ALTER DOMAIN d_def DROP DEFAULT
+
+# Restore the original default for subsequent tests.
+statement ok
+ALTER DOMAIN d_def SET DEFAULT 0
+
+statement ok
+DROP TABLE t_drop_def;
+DROP DOMAIN d_def
 
 subtest end
 
 subtest set_not_null
 
-statement error pgcode 0A000 ALTER DOMAIN SET NOT NULL is not supported
+statement ok
 ALTER DOMAIN d SET NOT NULL
+
+statement ok
+CREATE DOMAIN d_nn AS INT DEFAULT 0
+
+query T
+SELECT conname FROM pg_constraint WHERE contypid = 'd_nn'::regtype AND contype = 'n' ORDER BY conname
+----
+
+statement ok
+ALTER DOMAIN d_nn SET NOT NULL
+
+# Verify the NOT NULL constraint exists.
+query T
+SELECT conname FROM pg_constraint WHERE contypid = 'd_nn'::regtype AND contype = 'n' ORDER BY conname
+----
+d_nn_not_null
+
+statement ok
+ALTER DOMAIN d_nn SET NOT NULL
+
+# Verify there is exactly one NOT NULL constraint.
+query T
+SELECT conname FROM pg_constraint WHERE contypid = 'd_nn'::regtype AND contype = 'n' ORDER BY conname
+----
+d_nn_not_null
 
 subtest end
 
 subtest drop_not_null
 
-statement error pgcode 0A000 ALTER DOMAIN DROP NOT NULL is not supported
-ALTER DOMAIN d DROP NOT NULL
+statement ok
+ALTER DOMAIN d_nn DROP NOT NULL
+
+query T
+SELECT conname FROM pg_constraint WHERE contypid = 'd_nn'::regtype AND contype = 'n' ORDER BY conname
+----
+
+statement ok
+ALTER DOMAIN d_nn DROP NOT NULL
+
+statement ok
+DROP DOMAIN d_nn
+
+subtest end
+
+subtest not_null_enforcement
+
+statement ok
+CREATE DOMAIN d_enforce AS INT;
+CREATE TABLE t_enforce (c d_enforce)
+
+statement ok
+INSERT INTO t_enforce VALUES (NULL)
+
+statement ok
+ALTER DOMAIN d_enforce SET NOT NULL
+
+statement error domain d_enforce does not allow null values
+INSERT INTO t_enforce VALUES (NULL)
+
+statement ok
+ALTER DOMAIN d_enforce DROP NOT NULL
+
+statement ok
+INSERT INTO t_enforce VALUES (NULL)
+
+statement ok
+DROP TABLE t_enforce;
+DROP DOMAIN d_enforce
 
 subtest end
 
 subtest add_constraint
 
-statement error pgcode 0A000 ALTER DOMAIN ADD CONSTRAINT \.\.\. CHECK is not supported
-ALTER DOMAIN d ADD CHECK (VALUE < 100)
+statement ok
+ALTER DOMAIN d ADD CONSTRAINT bounded CHECK (VALUE < 100)
 
-statement error pgcode 0A000 ALTER DOMAIN ADD CONSTRAINT \.\.\. CHECK is not supported
-ALTER DOMAIN d ADD CONSTRAINT positive CHECK (VALUE > 0)
+query TT
+SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint
+WHERE contypid = 'd'::regtype AND contype = 'c' ORDER BY conname
+----
+bounded  CHECK ((value < 100))
+d_check  CHECK ((value > 0))
 
-statement error pgcode 0A000 ALTER DOMAIN ADD CONSTRAINT \.\.\. CHECK is not supported
-ALTER DOMAIN d ADD CONSTRAINT bounded CHECK (VALUE < 100) NOT VALID
+statement ok
+CREATE TABLE t_add_chk (c d)
 
+statement ok
+INSERT INTO t_add_chk VALUES (50)
+
+statement error value for domain d violates check constraint "bounded"
+INSERT INTO t_add_chk VALUES (200)
+
+statement error value for domain d violates check constraint "d_check"
+INSERT INTO t_add_chk VALUES (-1)
+
+statement ok
+ALTER DOMAIN d ADD CHECK (VALUE != 42)
+
+query T rowsort
+SELECT conname FROM pg_constraint
+WHERE contypid = 'd'::regtype AND contype = 'c'
+----
+bounded
+d_check
+d_check1
+
+statement error pgcode 42710 constraint "bounded" for domain d already exists
+ALTER DOMAIN d ADD CONSTRAINT bounded CHECK (VALUE < 200)
+
+statement ok
+ALTER DOMAIN d ADD CONSTRAINT deferred CHECK (VALUE != 99) NOT VALID
+
+query TB
+SELECT conname, convalidated FROM pg_constraint
+WHERE contypid = 'd'::regtype AND conname = 'deferred'
+----
+deferred  false
+
+# NOT NULL via ADD CONSTRAINT is still unsupported.
 statement error pgcode 0A000 ALTER DOMAIN ADD CONSTRAINT \.\.\. NOT NULL is not supported
 ALTER DOMAIN d ADD NOT NULL
 
@@ -59,6 +237,9 @@ ALTER DOMAIN d ADD NOT NULL NOT VALID
 
 statement error pgcode 0A000 NOT NULL constraints cannot be marked NOT VALID
 ALTER DOMAIN d ADD CONSTRAINT nn NOT NULL NOT VALID
+
+statement ok
+DROP TABLE t_add_chk
 
 subtest end
 
@@ -217,8 +398,67 @@ subtest end
 
 subtest rename_to
 
-statement error pgcode 0A000 ALTER DOMAIN RENAME TO is not supported
-ALTER DOMAIN d RENAME TO d2
+statement ok
+CREATE DOMAIN d_rename AS INT DEFAULT 10
+
+statement ok
+ALTER DOMAIN d_rename RENAME TO d_renamed
+
+query T
+SELECT 1::d_renamed
+----
+1
+
+# The old name no longer exist.
+statement error pgcode 42704 type "d_rename" does not exist
+SELECT 1::d_rename
+
+# The implicit array type is also renamed.
+query TT
+SELECT typname, nspname FROM pg_type JOIN pg_namespace ON typnamespace = pg_namespace.oid
+WHERE typname IN ('d_renamed', '_d_renamed') ORDER BY typname
+----
+_d_renamed  public
+d_renamed   public
+
+# Renaming to the same name is an error.
+statement error pgcode 42710 type "test.public.d_renamed" already exists
+ALTER DOMAIN d_renamed RENAME TO d_renamed
+
+# Renaming to a name that already exists fails.
+statement ok
+CREATE DOMAIN d_conflict AS TEXT
+
+statement error pgcode 42710 type "test.public.d_conflict" already exists
+ALTER DOMAIN d_renamed RENAME TO d_conflict
+
+# Renaming to a name that collides with a table fails.
+statement ok
+CREATE TABLE t_conflict (a INT)
+
+statement error pgcode 42P07 relation "test.public.t_conflict" already exists
+ALTER DOMAIN d_renamed RENAME TO t_conflict
+
+# A table referencing the domain by ID should still work after rename.
+statement ok
+CREATE DOMAIN d_ref_rename AS INT DEFAULT 42;
+CREATE TABLE t_dref2 (c d_ref_rename);
+INSERT INTO t_dref2 VALUES (1)
+
+statement ok
+ALTER DOMAIN d_ref_rename RENAME TO d_ref_renamed
+
+query T
+SELECT c FROM t_dref2
+----
+1
+
+statement ok
+DROP TABLE t_dref2;
+DROP DOMAIN d_ref_renamed;
+DROP DOMAIN d_renamed;
+DROP DOMAIN d_conflict;
+DROP TABLE t_conflict
 
 subtest end
 
@@ -323,7 +563,7 @@ CREATE SCHEMA s
 statement ok
 CREATE DOMAIN s.d_qual AS INT
 
-statement error pgcode 0A000 ALTER DOMAIN SET DEFAULT is not supported
+statement ok
 ALTER DOMAIN s.d_qual SET DEFAULT 1
 
 subtest end

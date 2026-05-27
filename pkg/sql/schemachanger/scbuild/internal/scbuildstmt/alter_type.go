@@ -280,13 +280,13 @@ func alterTypeRenameValue(
 func alterTypeSetSchema(
 	b BuildCtx, tn *tree.TypeName, enumType *scpb.EnumType, t *tree.AlterTypeSetSchema,
 ) {
-	setSchemaForTypeDesc(b, enumType, enumType.TypeID, enumType.ArrayTypeID, t.Schema, "type")
+	setSchemaForTypeDesc(b, enumType, t.Schema, "type")
 }
 
 func alterTypeOwner(
 	b BuildCtx, tn *tree.TypeName, enumType *scpb.EnumType, t *tree.AlterTypeOwner,
 ) {
-	setOwnerForTypeDesc(b, tn, enumType, enumType.TypeID, enumType.ArrayTypeID, t.Owner)
+	setOwnerForTypeDesc(b, tn, enumType, t.Owner)
 }
 
 func alterTypeDropValue(

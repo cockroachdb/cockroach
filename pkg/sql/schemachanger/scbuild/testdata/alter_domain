@@ -18,9 +18,113 @@ build skip=sql_dependencies
 ALTER DOMAIN defaultdb.d SET SCHEMA public
 ----
 
+build skip=sql_dependencies
+ALTER DOMAIN defaultdb.d RENAME TO d2
+----
+- [[Namespace:{DescID: 104, Name: d, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC]
+  {databaseId: 100, descriptorId: 104, name: d, schemaId: 101}
+- [[Namespace:{DescID: 104, Name: d2, ReferencedDescID: 100, IntValue: 101}, PUBLIC], ABSENT]
+  {databaseId: 100, descriptorId: 104, name: d2, schemaId: 101}
+- [[Namespace:{DescID: 105, Name: _d, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC]
+  {databaseId: 100, descriptorId: 105, name: _d, schemaId: 101}
+- [[Namespace:{DescID: 105, Name: _d2, ReferencedDescID: 100, IntValue: 101}, PUBLIC], ABSENT]
+  {databaseId: 100, descriptorId: 105, name: _d2, schemaId: 101}
+
+build skip=sql_dependencies
+ALTER DOMAIN defaultdb.d SET NOT NULL
+----
+
+build skip=sql_dependencies
+ALTER DOMAIN defaultdb.d DROP NOT NULL
+----
+- [[DomainNotNull:{DescID: 104, ConstraintID: 2}, ABSENT], PUBLIC]
+  {constraintId: 2, typeId: 104}
+- [[DomainConstraintName:{DescID: 104, Name: d_not_null, ConstraintID: 2}, ABSENT], PUBLIC]
+  {constraintId: 2, name: d_not_null, typeId: 104}
+
+setup
+CREATE DOMAIN defaultdb.d_no_nn AS INT DEFAULT 0;
+----
+
+build skip=sql_dependencies
+ALTER DOMAIN defaultdb.d_no_nn SET NOT NULL
+----
+- [[DomainNotNull:{DescID: 106, ConstraintID: 1}, PUBLIC], ABSENT]
+  {constraintId: 1, typeId: 106}
+- [[DomainConstraintName:{DescID: 106, Name: d_no_nn_not_null, ConstraintID: 1}, PUBLIC], ABSENT]
+  {constraintId: 1, name: d_no_nn_not_null, typeId: 106}
+
+build skip=sql_dependencies
+ALTER DOMAIN defaultdb.d_no_nn DROP NOT NULL
+----
+
 setup
 CREATE SCHEMA s;
 ----
+
+build skip=sql_dependencies
+ALTER DOMAIN defaultdb.d SET DEFAULT 42
+----
+- [[DomainDefault:{DescID: 104, Expr: 0}, ABSENT], PUBLIC]
+  {expr: "0", typeId: 104}
+- [[DomainDefault:{DescID: 104, Expr: 42:::INT8}, PUBLIC], ABSENT]
+  {expr: '42:::INT8', typeId: 104}
+
+build skip=sql_dependencies
+ALTER DOMAIN defaultdb.d DROP DEFAULT
+----
+- [[DomainDefault:{DescID: 104, Expr: 0}, ABSENT], PUBLIC]
+  {expr: "0", typeId: 104}
+
+setup
+CREATE DOMAIN defaultdb.d_no_def AS INT;
+----
+
+build skip=sql_dependencies
+ALTER DOMAIN defaultdb.d_no_def SET DEFAULT 99
+----
+- [[DomainDefault:{DescID: 109, Expr: 99:::INT8}, PUBLIC], ABSENT]
+  {expr: '99:::INT8', typeId: 109}
+
+build skip=sql_dependencies
+ALTER DOMAIN defaultdb.d_no_def DROP DEFAULT
+----
+
+setup
+CREATE DOMAIN defaultdb.d_nocheck AS INT;
+----
+
+build skip=sql_dependencies
+ALTER DOMAIN defaultdb.d_nocheck ADD CONSTRAINT chk CHECK (VALUE > 0)
+----
+- [[DomainCheckConstraintUnvalidated:{DescID: 111, ConstraintID: 1, Expr: value > 0}, PUBLIC], ABSENT]
+  {constraintId: 1, expr: value > 0, typeId: 111}
+- [[DomainConstraintName:{DescID: 111, Name: chk, ConstraintID: 1}, PUBLIC], ABSENT]
+  {constraintId: 1, name: chk, typeId: 111}
+
+build skip=sql_dependencies
+ALTER DOMAIN defaultdb.d_nocheck ADD CHECK (VALUE < 100)
+----
+- [[DomainCheckConstraintUnvalidated:{DescID: 111, ConstraintID: 1, Expr: value < 100}, PUBLIC], ABSENT]
+  {constraintId: 1, expr: value < 100, typeId: 111}
+- [[DomainConstraintName:{DescID: 111, Name: d_nocheck_check, ConstraintID: 1}, PUBLIC], ABSENT]
+  {constraintId: 1, name: d_nocheck_check, typeId: 111}
+
+build skip=sql_dependencies
+ALTER DOMAIN defaultdb.d_nocheck ADD CONSTRAINT chk_valid CHECK (VALUE > 0) NOT VALID
+----
+- [[DomainCheckConstraintUnvalidated:{DescID: 111, ConstraintID: 1, Expr: value > 0}, PUBLIC], ABSENT]
+  {constraintId: 1, expr: value > 0, typeId: 111}
+- [[DomainConstraintName:{DescID: 111, Name: chk_valid, ConstraintID: 1}, PUBLIC], ABSENT]
+  {constraintId: 1, name: chk_valid, typeId: 111}
+
+build skip=sql_dependencies
+ALTER DOMAIN defaultdb.d ADD CONSTRAINT d_new_check CHECK (VALUE < 100)
+----
+- [[DomainCheckConstraintUnvalidated:{DescID: 104, ConstraintID: 3, Expr: value < 100}, PUBLIC], ABSENT]
+  {constraintId: 3, expr: value < 100, typeId: 104}
+- [[DomainConstraintName:{DescID: 104, Name: d_new_check, ConstraintID: 3}, PUBLIC], ABSENT]
+  {constraintId: 3, name: d_new_check, typeId: 104}
 
 build skip=sql_dependencies
 ALTER DOMAIN defaultdb.d SET SCHEMA s
@@ -33,11 +137,11 @@ ALTER DOMAIN defaultdb.d SET SCHEMA s
   {databaseId: 100, descriptorId: 105, name: _d, schemaId: 101}
 - [[SchemaChild:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {childObjectId: 105, schemaId: 101}
-- [[Namespace:{DescID: 104, Name: d, ReferencedDescID: 100, IntValue: 106}, PUBLIC], ABSENT]
-  {databaseId: 100, descriptorId: 104, name: d, schemaId: 106}
-- [[SchemaChild:{DescID: 104, ReferencedDescID: 106}, PUBLIC], ABSENT]
-  {childObjectId: 104, schemaId: 106}
-- [[Namespace:{DescID: 105, Name: _d, ReferencedDescID: 100, IntValue: 106}, PUBLIC], ABSENT]
-  {databaseId: 100, descriptorId: 105, name: _d, schemaId: 106}
-- [[SchemaChild:{DescID: 105, ReferencedDescID: 106}, PUBLIC], ABSENT]
-  {childObjectId: 105, schemaId: 106}
+- [[Namespace:{DescID: 104, Name: d, ReferencedDescID: 100, IntValue: 108}, PUBLIC], ABSENT]
+  {databaseId: 100, descriptorId: 104, name: d, schemaId: 108}
+- [[SchemaChild:{DescID: 104, ReferencedDescID: 108}, PUBLIC], ABSENT]
+  {childObjectId: 104, schemaId: 108}
+- [[Namespace:{DescID: 105, Name: _d, ReferencedDescID: 100, IntValue: 108}, PUBLIC], ABSENT]
+  {databaseId: 100, descriptorId: 105, name: _d, schemaId: 108}
+- [[SchemaChild:{DescID: 105, ReferencedDescID: 108}, PUBLIC], ABSENT]
+  {childObjectId: 105, schemaId: 108}

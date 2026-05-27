@@ -1,0 +1,7 @@
+setup
+CREATE DOMAIN salmon AS INT DEFAULT 0;
+----
+
+test
+ALTER DOMAIN salmon RENAME TO trout;
+----
