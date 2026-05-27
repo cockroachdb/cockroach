@@ -6,7 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/ccl/multitenantccl/tenantcostclient",
         "//pkg/ccl/multitenantccl/tenantcostserver",
+        "//pkg/multitenant/tenantcostclient",
     ],
 )

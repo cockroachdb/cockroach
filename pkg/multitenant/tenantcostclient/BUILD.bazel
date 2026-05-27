@@ -9,7 +9,7 @@ go_library(
         "test_utils.go",
         "token_bucket.go",
     ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl/tenantcostclient",
+    importpath = "github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostclient",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
