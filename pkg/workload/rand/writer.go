@@ -43,7 +43,7 @@ func NewTableWriter(conn *gosql.DB, table Table) *TableWriter {
 
 	upsertStmt := fmt.Sprintf(
 		`INSERT INTO %s (%s) VALUES (%s) ON CONFLICT (%s) DO UPDATE SET %s`,
-		table.Name,
+		table.Name.String(),
 		strings.Join(columns, ", "),
 		strings.Join(params, ", "),
 		strings.Join(pkColumns, ", "),
@@ -62,7 +62,7 @@ func NewTableWriter(conn *gosql.DB, table Table) *TableWriter {
 	}
 	deleteStmt := fmt.Sprintf(
 		`DELETE FROM %s WHERE %s`,
-		table.Name, strings.Join(pkComponents, " AND "),
+		table.Name.String(), strings.Join(pkComponents, " AND "),
 	)
 
 	return &TableWriter{
