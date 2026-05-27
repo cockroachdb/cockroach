@@ -67,13 +67,17 @@ type Context struct {
 	// default signal handler: when set, signal.Notify is not called.
 	InterruptCh <-chan struct{}
 
-	// DisableLocalCmds, if true, causes the shell to refuse the
-	// metacommands that touch the local filesystem or shell out: \!,
-	// \|, \i, \ir, \o, and \e (external editor). Embedders that run
-	// the shell inside a privileged service process must set this:
+	// DisableUnsafeCmds, if true, restricts the dispatcher to the
+	// embedder-safe allow-list (see embedderSafeCmds in sql.go).
+	// Commands outside that set are rejected — most importantly the
+	// ones that touch the local filesystem or shell out (\!, \|, \i,
+	// \ir, \o, and \e for the external editor), but the gate is
+	// fail-closed and also rejects any future or unknown metacommand
+	// that has not been explicitly opted in. Embedders that run the
+	// shell inside a privileged service process must set this;
 	// otherwise any user who opens a session can execute commands
 	// with the service's UID and read or write its filesystem.
-	DisableLocalCmds bool
+	DisableUnsafeCmds bool
 
 	// DisablePasswordCmd, if true, causes the shell to refuse the
 	// \password metacommand. \password is harmless on the server side

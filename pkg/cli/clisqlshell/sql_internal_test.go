@@ -314,7 +314,7 @@ func TestHandleEmbedderInterruptIgnoresIdle(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 }
 
-func TestDisableLocalCmds(t *testing.T) {
+func TestDisableUnsafeCmds(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -337,7 +337,7 @@ func TestDisableLocalCmds(t *testing.T) {
 	}
 	for _, line := range blocked {
 		c := setupTestCliState()
-		c.sqlCtx.DisableLocalCmds = true
+		c.sqlCtx.DisableUnsafeCmds = true
 		c.lastInputLine = line
 		c.doHandleCliCmd(cliStateEnum(0), cliStateEnum(1))
 		require.Error(t, c.exitErr, "input %q", line)
@@ -345,12 +345,12 @@ func TestDisableLocalCmds(t *testing.T) {
 	}
 
 	// Positive control: \echo is in embedderSafeCmds and does not
-	// require a conn, so it must run cleanly under DisableLocalCmds.
+	// require a conn, so it must run cleanly under DisableUnsafeCmds.
 	c := setupTestCliState()
-	c.sqlCtx.DisableLocalCmds = true
+	c.sqlCtx.DisableUnsafeCmds = true
 	c.lastInputLine = `\echo hi`
 	c.doHandleCliCmd(cliStateEnum(0), cliStateEnum(1))
-	require.NoError(t, c.exitErr, "\\echo must be allowed under DisableLocalCmds")
+	require.NoError(t, c.exitErr, "\\echo must be allowed under DisableUnsafeCmds")
 
 	// Describe-family commands route to handleDescribe above the
 	// allow-list gate. They are not in embedderSafeCmds because the

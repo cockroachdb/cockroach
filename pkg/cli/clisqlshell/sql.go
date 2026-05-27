@@ -161,9 +161,9 @@ const (
 	cmdSet   = `\set`
 	cmdUnset = `\unset`
 
-	// Local filesystem / shell-out. These are the commands gated by
-	// the embedder allow-list (see embedderSafeCmds); they are absent
-	// from that set on purpose.
+	// Local filesystem / shell-out commands. These are the canonical
+	// reason DisableUnsafeCmds exists: they are deliberately absent
+	// from embedderSafeCmds so the allow-list gate rejects them.
 	cmdShellOut   = `\!`
 	cmdPipe       = `\|`
 	cmdInclude    = `\i`
@@ -229,7 +229,7 @@ const (
 )
 
 // embedderSafeCmds is the allow-list of metacommands the dispatcher
-// permits when Context.DisableLocalCmds is set. Commands not in the
+// permits when Context.DisableUnsafeCmds is set. Commands not in the
 // set are rejected; the fail-closed default ensures that a future
 // metacommand that touches the local filesystem or shells out is
 // blocked unless a contributor consciously opts it in.
@@ -1601,7 +1601,7 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		// psql compatibility.
 		cmd[0] = cmdPrivileges
 	}
-	// The describe family routes here before the DisableLocalCmds
+	// The describe family routes here before the DisableUnsafeCmds
 	// gate below because every command in it issues a server-side
 	// query — implicitly safe for embedders, and impractical to
 	// enumerate explicitly in embedderSafeCmds.
@@ -1612,13 +1612,13 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		return c.handleDescribe(cmd, loopState, errState)
 	}
 	// Embedder allow-list. Commands not in embedderSafeCmds are
-	// rejected when DisableLocalCmds is set; see the comment on
+	// rejected when DisableUnsafeCmds is set; see the comment on
 	// embedderSafeCmds for the rationale and for adjacent gates
 	// (\e, \statement-diag download).
-	if c.sqlCtx.DisableLocalCmds {
+	if c.sqlCtx.DisableUnsafeCmds {
 		if _, ok := embedderSafeCmds[cmd[0]]; !ok {
 			return c.cliError(errState, errors.Newf(
-				"%s: local command disabled by embedder", cmd[0]))
+				"%s: command disabled by embedder", cmd[0]))
 		}
 	}
 	if c.sqlCtx.DisablePasswordCmd && cmd[0] == cmdPassword {
@@ -2722,10 +2722,10 @@ func (c *cliState) enableDebug() bool {
 // externalEditorAllowed implements the sqlShell interface. The bubbline
 // editor's \e command launches an external editor (vi/nano/etc) on the
 // current input buffer, which is a shell-out; the embedder disables it
-// via Context.DisableLocalCmds in the same way as the dispatcher-level
+// via Context.DisableUnsafeCmds in the same way as the dispatcher-level
 // \! and \i guards.
 func (c *cliState) externalEditorAllowed() bool {
-	return !c.sqlCtx.DisableLocalCmds
+	return !c.sqlCtx.DisableUnsafeCmds
 }
 
 // serverSideParse implements the sqlShell interface (to support the editor).
