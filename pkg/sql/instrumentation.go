@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
@@ -421,6 +422,13 @@ func (ih *instrumentationHelper) finalizeSetup(ctx context.Context, cfg *Executo
 	if ih.collectBundle {
 		if pollInterval := inFlightTraceCollectorPollInterval.Get(cfg.SV()); pollInterval > 0 {
 			ih.startInFlightTraceCollector(ctx, cfg.InternalDB.Executor(), pollInterval)
+		}
+		// Initialize the slices so that execution-time deferred routine body
+		// builds will capture their optimizer plans and table references for
+		// the bundle.
+		if ih.evalCtx != nil {
+			ih.evalCtx.DeferredRoutineOptPlans = make([]eval.DeferredRoutineOptPlan, 0)
+			ih.evalCtx.DeferredRoutineTableRefs = make([]cat.Table, 0)
 		}
 	}
 }

@@ -3711,9 +3711,15 @@ func (b *Builder) buildCall(c *memo.CallExpr) (_ execPlan, outputCols colOrdMap,
 		}
 	}
 
-	for _, s := range udf.Def.Body {
-		if s.Relational().CanMutate {
-			b.setMutationFlags(s)
+	if udf.Def.Body != nil {
+		for _, s := range udf.Def.Body {
+			if s.Relational().CanMutate {
+				b.setMutationFlags(s)
+			}
+		}
+	} else {
+		for _, tag := range udf.Def.BodyTags {
+			b.setMutationFlagsFromTag(tag)
 		}
 	}
 
@@ -3728,6 +3734,8 @@ func (b *Builder) buildCall(c *memo.CallExpr) (_ execPlan, outputCols colOrdMap,
 		false, /* allowOuterWithRefs */
 		nil,   /* wrapRootExpr */
 		0,     /* resultBufferID */
+		udf.Def.BodyBuilder,
+		udf.Def.Name,
 	)
 
 	r := tree.NewTypedRoutineExpr(

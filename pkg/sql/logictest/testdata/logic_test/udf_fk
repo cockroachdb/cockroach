@@ -11,7 +11,6 @@ CREATE TABLE parent (p INT PRIMARY KEY);
 statement ok
 CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p));
 
-
 subtest insert
 
 statement ok
@@ -125,7 +124,6 @@ SELECT currval('s');
 subtest end
 
 subtest delete
-
 
 statement ok
 ALTER TABLE parent SET (schema_locked=false)
@@ -636,7 +634,6 @@ SELECT * FROM selfref;
 
 subtest end
 
-
 subtest corruption_check
 
 statement ok
@@ -704,7 +701,6 @@ SELECT i, j FROM child@child_j_idx;
 statement ok
 DROP TABLE IF EXISTS child CASCADE;
 
-
 statement ok
 ALTER TABLE parent SET (schema_locked=false)
 
@@ -759,5 +755,88 @@ SELECT i, j FROM child@child_j_idx;
 ----
 0  2
 
+subtest end
+
+subtest deferred_build_mutation_conflicts
+
+# Test mutation conflict detection between deferred-build UDFs and sibling CTEs.
+# Use dedicated table names to avoid conflicts with other subtests.
+
+statement ok
+CREATE TABLE deferred_parent (i INT PRIMARY KEY);
+
+statement ok
+CREATE TABLE deferred_child (
+  i INT PRIMARY KEY,
+  j INT REFERENCES deferred_parent(i) ON DELETE CASCADE,
+  k INT,
+  INDEX deferred_child_j_idx (j)
+);
+
+statement ok
+INSERT INTO deferred_parent VALUES (0), (1), (2);
+
+statement ok
+INSERT INTO deferred_child VALUES (0, 0, 0);
+
+# Two sibling deferred UDFs doing simple INSERTs on different tables are allowed.
+statement ok
+CREATE FUNCTION insert_deferred_parent(v INT) RETURNS INT LANGUAGE SQL AS $$
+  INSERT INTO deferred_parent VALUES (v) RETURNING i;
+$$;
+
+statement ok
+CREATE FUNCTION insert_deferred_child(v INT, p INT) RETURNS INT LANGUAGE SQL AS $$
+  INSERT INTO deferred_child VALUES (v, p, 0) RETURNING i;
+$$;
+
+query II
+WITH x AS (SELECT insert_deferred_parent(10) AS i), y AS (SELECT insert_deferred_child(10, 1) AS i) SELECT * FROM x, y;
+----
+10  10
+
+# Verify data integrity after the above.
+query I rowsort
+SELECT i FROM deferred_parent WHERE i >= 10;
+----
+10
+
+query III rowsort
+SELECT i, j, k FROM deferred_child WHERE i >= 10;
+----
+10  1  0
+
+# Clean up test functions.
+statement ok
+DROP FUNCTION insert_deferred_parent;
+DROP FUNCTION insert_deferred_child;
+
+# Two sibling deferred UDFs mutating different tables are allowed.
+statement ok
+CREATE FUNCTION update_deferred_parent(v INT) RETURNS INT LANGUAGE SQL AS $$
+  UPDATE deferred_parent SET i = i WHERE i = v RETURNING i;
+$$;
+
+statement ok
+CREATE FUNCTION update_deferred_child_k(v INT, new_k INT) RETURNS INT LANGUAGE SQL AS $$
+  UPDATE deferred_child SET k = new_k WHERE i = v RETURNING i;
+$$;
+
+query II
+WITH x AS (SELECT update_deferred_parent(0) AS i), y AS (SELECT update_deferred_child_k(0, 5) AS i) SELECT * FROM x, y;
+----
+0  0
+
+# Verify data integrity.
+query III
+SELECT i, j, k FROM deferred_child WHERE i = 0;
+----
+0  0  5
+
+statement ok
+DROP FUNCTION update_deferred_parent;
+DROP FUNCTION update_deferred_child_k;
+DROP TABLE deferred_child;
+DROP TABLE deferred_parent;
 
 subtest end

@@ -777,6 +777,11 @@ type UDFDefinition struct {
 	// results to the same buffer. This is used to implement the PL/pgsql
 	// RETURN NEXT and RETURN QUERY statements.
 	ResultBufferID RoutineResultBufferID
+
+	// BodyBuilder, when non-nil, defers body building to execution time.
+	// When set, Body and BodyProps are nil at plan time; they will be
+	// populated by calling BodyBuilder.Build() at execution time.
+	BodyBuilder RoutineBodyBuilder
 }
 
 // ExceptionBlock contains the information needed to match and handle errors in
@@ -1440,6 +1445,26 @@ type PostQueryBuilder interface {
 		bindingProps *props.Relational,
 		colMap opt.ColMap,
 	) (RelExpr, error)
+}
+
+// RoutineBodyBuilder defers building of SQL routine body statements to
+// execution time. At plan time, the builder captures metadata (parameter
+// types, privilege context, statement tree state). At execution time,
+// Build constructs the body RelExprs in a fresh memo.
+//
+// Like PostQueryBuilder, Build does not mutate captured state; it is
+// safe to call concurrently if the plan is cached and reused.
+//
+// Note: factory is always *norm.Factory; declared as interface{} to
+// avoid circular package dependencies.
+type RoutineBodyBuilder interface {
+	Build(
+		ctx context.Context,
+		semaCtx *tree.SemaContext,
+		evalCtx *eval.Context,
+		catalog cat.Catalog,
+		factory interface{},
+	) (body []RelExpr, bodyProps []*physical.Required, params opt.ColList, err error)
 }
 
 // GroupingOrderType is the grouping column order type for group by and distinct

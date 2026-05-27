@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
@@ -402,6 +403,28 @@ type Context struct {
 	// WorkloadType distinguishes the kind of workload that WorkloadID
 	// represents (statement fingerprint, job ID, system task).
 	WorkloadType workloadid.WorkloadType
+
+	// DeferredRoutineOptPlans accumulates formatted optimizer plans for SQL
+	// routine bodies that were built at execution time (deferred from plan
+	// time). These are used by EXPLAIN ANALYZE (DEBUG) to include
+	// supplementary opt-vv-deferred-<func>.txt files in statement bundles,
+	// providing full optimizer detail for deferred routine bodies.
+	DeferredRoutineOptPlans []DeferredRoutineOptPlan
+
+	// DeferredRoutineTableRefs accumulates table references discovered
+	// during execution-time building of deferred SQL routine bodies. The
+	// bundle collector unions these with the plan-time metadata tables to
+	// ensure stats and schema are collected for all referenced tables.
+	DeferredRoutineTableRefs []cat.Table
+}
+
+// DeferredRoutineOptPlan holds the formatted optimizer plan output for a
+// single deferred SQL routine body, captured during execution.
+type DeferredRoutineOptPlan struct {
+	// Name is the function or procedure name.
+	Name string
+	// Plan is the formatted optimizer plan output (opt-vv level).
+	Plan string
 }
 
 // RoutineStatementCounters encapsulates metrics for tracking the execution

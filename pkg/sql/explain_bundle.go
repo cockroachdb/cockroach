@@ -414,6 +414,24 @@ func (b *stmtBundleBuilder) addOptPlans(ctx context.Context) {
 		memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes|memo.ExprFmtHideNotVisibleIndexInfo|memo.ExprFmtHideFastPathChecks,
 	))
 	b.z.AddFile("opt-vv.txt", formatOptPlan(memo.ExprFmtHideQualifications|memo.ExprFmtHideNotVisibleIndexInfo))
+
+	// Add supplementary opt-vv files for deferred routine bodies that were
+	// built during execution. The captured plans always contain redaction
+	// markers, so we either redact or strip them depending on the mode.
+	if b.p != nil {
+		evalCtx := b.p.EvalContext()
+		for _, dp := range evalCtx.DeferredRoutineOptPlans {
+			fileName := fmt.Sprintf("opt-vv-deferred-%s.txt", dp.Name)
+			rs := redact.RedactableString(dp.Plan)
+			var contents string
+			if b.flags.RedactValues {
+				contents = string(rs.Redact())
+			} else {
+				contents = rs.StripMarkers()
+			}
+			b.z.AddFile(fileName, contents)
+		}
+	}
 }
 
 // addExecPlan adds the EXPLAIN (VERBOSE) plan as file plan.txt.
@@ -719,6 +737,13 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 		for _, table := range mem.Metadata().AllTables() {
 			referencedByMetadata.Add(int(table.Table.ID()))
 		}
+		// Include tables discovered during execution-time deferred routine
+		// body building.
+		if b.p != nil {
+			for _, tab := range b.p.EvalContext().DeferredRoutineTableRefs {
+				referencedByMetadata.Add(int(tab.ID()))
+			}
+		}
 		var refTables []cat.Table
 		var refTableIncluded intsets.Fast
 		opt.VisitFKReferenceTables(
@@ -861,6 +886,16 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 				include = hasDelete || hasUpdate || hasUpsert
 			},
 		)
+		// Add tables discovered during deferred routine body building that
+		// weren't visited by VisitFKReferenceTables.
+		if b.p != nil {
+			for _, tab := range b.p.EvalContext().DeferredRoutineTableRefs {
+				if !tab.IsVirtualTable() && !refTableIncluded.Contains(int(tab.ID())) {
+					refTables = append(refTables, tab)
+					refTableIncluded.Add(int(tab.ID()))
+				}
+			}
+		}
 		// Collect trigger information from all referenced tables. For each
 		// trigger, we record its name (for CREATE TRIGGER output later),
 		// the trigger function, and any tables/types/routines it depends on.

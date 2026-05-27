@@ -111,31 +111,31 @@ call
       │    ├── const: 10
       │    ├── const: 20
       │    └── const: 30.3
-      ├── params: a:1 b:2 c:3
+      ├── params: a:4 b:5 c:6
       └── body
            ├── insert abc
            │    ├── columns: <none>
            │    ├── insert-mapping:
-           │    │    ├── column1:9 => abc.a:4
-           │    │    ├── column2:10 => abc.b:5
-           │    │    └── c_cast:12 => abc.c:6
+           │    │    ├── column1:12 => abc.a:7
+           │    │    ├── column2:13 => abc.b:8
+           │    │    └── c_cast:15 => abc.c:9
            │    └── project
-           │         ├── columns: c_cast:12 column1:9 column2:10
+           │         ├── columns: c_cast:15 column1:12 column2:13
            │         ├── values
-           │         │    ├── columns: column1:9 column2:10 column3:11
+           │         │    ├── columns: column1:12 column2:13 column3:14
            │         │    └── tuple
            │         │         ├── plus
-           │         │         │    ├── variable: a:1
+           │         │         │    ├── variable: a:4
            │         │         │    └── const: 10
-           │         │         ├── variable: b:2
-           │         │         └── variable: c:3
+           │         │         ├── variable: b:5
+           │         │         └── variable: c:6
            │         └── projections
-           │              └── assignment-cast: INT8 [as=c_cast:12]
-           │                   └── variable: column3:11
+           │              └── assignment-cast: INT8 [as=c_cast:15]
+           │                   └── variable: column3:14
            └── limit
-                ├── columns: column1:13
+                ├── columns: column1:16
                 ├── values
-                │    ├── columns: column1:13
+                │    ├── columns: column1:16
                 │    └── tuple
                 │         └── null
                 └── const: 1
