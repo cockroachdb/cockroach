@@ -1,0 +1,172 @@
+/* setup */
+CREATE DATABASE db;
+USE db;
+
+/* test */
+EXPLAIN (DDL) CREATE TABLE t2 (a INT NOT NULL, b STRING);
+----
+Schema change plan for CREATE TABLE ‹db›.‹public›.‹t2› (‹a› INT8 NOT NULL, ‹b› STRING);
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 25 elements transitioning toward PUBLIC
+ │         │    ├── ABSENT → PUBLIC Table:{DescID: 106 (t2+)}
+ │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 106 (t2+), Name: "t2", ReferencedDescID: 104 (db), IntValue: 105}
+ │         │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 106 (t2+), ReferencedDescID: 105 (public)}
+ │         │    ├── ABSENT → PUBLIC TableData:{DescID: 106 (t2+), ReferencedDescID: 104 (db)}
+ │         │    ├── ABSENT → PUBLIC Column:{DescID: 106 (t2+), ColumnID: 1 (a+)}
+ │         │    ├── ABSENT → PUBLIC ColumnType:{DescID: 106 (t2+), ColumnFamilyID: 0, ColumnID: 1 (a+), TypeName: "INT8"}
+ │         │    ├── ABSENT → PUBLIC ColumnName:{DescID: 106 (t2+), Name: "a", ColumnID: 1 (a+)}
+ │         │    ├── ABSENT → PUBLIC ColumnNotNull:{DescID: 106 (t2+), ColumnID: 1 (a+), IndexID: 0}
+ │         │    ├── ABSENT → PUBLIC Column:{DescID: 106 (t2+), ColumnID: 2 (b+)}
+ │         │    ├── ABSENT → PUBLIC ColumnType:{DescID: 106 (t2+), ColumnFamilyID: 0, ColumnID: 2 (b+), TypeName: "STRING"}
+ │         │    ├── ABSENT → PUBLIC ColumnName:{DescID: 106 (t2+), Name: "b", ColumnID: 2 (b+)}
+ │         │    ├── ABSENT → PUBLIC Column:{DescID: 106 (t2+), ColumnID: 3 (rowid+)}
+ │         │    ├── ABSENT → PUBLIC ColumnHidden:{DescID: 106 (t2+), ColumnID: 3 (rowid+)}
+ │         │    ├── ABSENT → PUBLIC ColumnType:{DescID: 106 (t2+), ColumnFamilyID: 0, ColumnID: 3 (rowid+), TypeName: "INT8"}
+ │         │    ├── ABSENT → PUBLIC ColumnNotNull:{DescID: 106 (t2+), ColumnID: 3 (rowid+), IndexID: 0}
+ │         │    ├── ABSENT → PUBLIC ColumnName:{DescID: 106 (t2+), Name: "rowid", ColumnID: 3 (rowid+)}
+ │         │    ├── ABSENT → PUBLIC ColumnDefaultExpression:{DescID: 106 (t2+), ColumnID: 3 (rowid+), Expr: unique_rowid()}
+ │         │    ├── ABSENT → PUBLIC PrimaryIndex:{DescID: 106 (t2+), IndexID: 1 (t2_pkey+)}
+ │         │    ├── ABSENT → PUBLIC IndexName:{DescID: 106 (t2+), Name: "t2_pkey", IndexID: 1 (t2_pkey+)}
+ │         │    ├── ABSENT → PUBLIC IndexColumn:{DescID: 106 (t2+), ColumnID: 3 (rowid+), IndexID: 1 (t2_pkey+)}
+ │         │    ├── ABSENT → PUBLIC IndexColumn:{DescID: 106 (t2+), ColumnID: 1 (a+), IndexID: 1 (t2_pkey+)}
+ │         │    ├── ABSENT → PUBLIC IndexColumn:{DescID: 106 (t2+), ColumnID: 2 (b+), IndexID: 1 (t2_pkey+)}
+ │         │    ├── ABSENT → PUBLIC Owner:{DescID: 106 (t2+)}
+ │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 106 (t2+), Name: "admin"}
+ │         │    └── ABSENT → PUBLIC UserPrivileges:{DescID: 106 (t2+), Name: "root"}
+ │         └── 38 Mutation operations
+ │              ├── CreateTableDescriptor {"TableID":106}
+ │              ├── SetNameInDescriptor {"DescriptorID":106,"Name":"t2"}
+ │              ├── AddDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":106,"Name":"t2","SchemaID":105}}
+ │              ├── SetObjectParentID {"ObjParent":{"ChildObjectID":106,"SchemaID":105}}
+ │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":1,"TableID":106}}
+ │              ├── UpsertColumnType {"ColumnType":{"ColumnID":1,"TableID":106}}
+ │              ├── SetColumnName {"ColumnID":1,"Name":"a","TableID":106}
+ │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":2,"TableID":106}}
+ │              ├── UpsertColumnType {"ColumnType":{"ColumnID":2,"TableID":106}}
+ │              ├── SetColumnName {"ColumnID":2,"Name":"b","TableID":106}
+ │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":3,"TableID":106}}
+ │              ├── MakeColumnHidden {"ColumnID":3,"TableID":106}
+ │              ├── UpsertColumnType {"ColumnType":{"ColumnID":3,"TableID":106}}
+ │              ├── SetColumnName {"ColumnID":3,"Name":"rowid","TableID":106}
+ │              ├── AddColumnDefaultExpression {"Default":{"ColumnID":3,"TableID":106}}
+ │              ├── MakeAbsentIndexBackfilling {"Index":{"IndexID":1,"IsUnique":true,"TableID":106}}
+ │              ├── AddColumnToIndex {"ColumnID":3,"IndexID":1,"TableID":106}
+ │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":1,"Kind":2,"TableID":106}
+ │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":1,"Kind":2,"Ordinal":1,"TableID":106}
+ │              ├── UpdateOwner {"Owner":{"DescriptorID":106,"Owner":"root"}}
+ │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":106,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
+ │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":106,"Privileges":2,"UserName":"root","WithGrantOption":2}}
+ │              ├── MakeDeleteOnlyColumnWriteOnly {"ColumnID":1,"TableID":106}
+ │              ├── MakeAbsentColumnNotNullWriteOnly {"ColumnID":1,"TableID":106}
+ │              ├── MakeDeleteOnlyColumnWriteOnly {"ColumnID":2,"TableID":106}
+ │              ├── MakeDeleteOnlyColumnWriteOnly {"ColumnID":3,"TableID":106}
+ │              ├── MakeAbsentColumnNotNullWriteOnly {"ColumnID":3,"TableID":106}
+ │              ├── MakeBackfillingIndexDeleteOnly {"IndexID":1,"TableID":106}
+ │              ├── MakeValidatedColumnNotNullPublic {"ColumnID":1,"TableID":106}
+ │              ├── MakeValidatedColumnNotNullPublic {"ColumnID":3,"TableID":106}
+ │              ├── MakeBackfilledIndexMerging {"IndexID":1,"TableID":106}
+ │              ├── MakeWriteOnlyColumnPublic {"ColumnID":1,"TableID":106}
+ │              ├── MakeWriteOnlyColumnPublic {"ColumnID":2,"TableID":106}
+ │              ├── MakeWriteOnlyColumnPublic {"ColumnID":3,"TableID":106}
+ │              ├── MakeMergedIndexWriteOnly {"IndexID":1,"TableID":106}
+ │              ├── SetIndexName {"IndexID":1,"Name":"t2_pkey","TableID":106}
+ │              ├── MakeValidatedPrimaryIndexPublic {"IndexID":1,"TableID":106}
+ │              └── MarkDescriptorAsPublic {"DescriptorID":106}
+ └── PreCommitPhase
+      ├── Stage 1 of 2 in PreCommitPhase
+      │    ├── 25 elements transitioning toward PUBLIC
+      │    │    ├── PUBLIC → ABSENT Table:{DescID: 106 (t2+)}
+      │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 106 (t2+), Name: "t2", ReferencedDescID: 104 (db), IntValue: 105}
+      │    │    ├── PUBLIC → ABSENT SchemaChild:{DescID: 106 (t2+), ReferencedDescID: 105 (public)}
+      │    │    ├── PUBLIC → ABSENT TableData:{DescID: 106 (t2+), ReferencedDescID: 104 (db)}
+      │    │    ├── PUBLIC → ABSENT Column:{DescID: 106 (t2+), ColumnID: 1 (a+)}
+      │    │    ├── PUBLIC → ABSENT ColumnType:{DescID: 106 (t2+), ColumnFamilyID: 0, ColumnID: 1 (a+), TypeName: "INT8"}
+      │    │    ├── PUBLIC → ABSENT ColumnName:{DescID: 106 (t2+), Name: "a", ColumnID: 1 (a+)}
+      │    │    ├── PUBLIC → ABSENT ColumnNotNull:{DescID: 106 (t2+), ColumnID: 1 (a+), IndexID: 0}
+      │    │    ├── PUBLIC → ABSENT Column:{DescID: 106 (t2+), ColumnID: 2 (b+)}
+      │    │    ├── PUBLIC → ABSENT ColumnType:{DescID: 106 (t2+), ColumnFamilyID: 0, ColumnID: 2 (b+), TypeName: "STRING"}
+      │    │    ├── PUBLIC → ABSENT ColumnName:{DescID: 106 (t2+), Name: "b", ColumnID: 2 (b+)}
+      │    │    ├── PUBLIC → ABSENT Column:{DescID: 106 (t2+), ColumnID: 3 (rowid+)}
+      │    │    ├── PUBLIC → ABSENT ColumnHidden:{DescID: 106 (t2+), ColumnID: 3 (rowid+)}
+      │    │    ├── PUBLIC → ABSENT ColumnType:{DescID: 106 (t2+), ColumnFamilyID: 0, ColumnID: 3 (rowid+), TypeName: "INT8"}
+      │    │    ├── PUBLIC → ABSENT ColumnNotNull:{DescID: 106 (t2+), ColumnID: 3 (rowid+), IndexID: 0}
+      │    │    ├── PUBLIC → ABSENT ColumnName:{DescID: 106 (t2+), Name: "rowid", ColumnID: 3 (rowid+)}
+      │    │    ├── PUBLIC → ABSENT ColumnDefaultExpression:{DescID: 106 (t2+), ColumnID: 3 (rowid+), Expr: unique_rowid()}
+      │    │    ├── PUBLIC → ABSENT PrimaryIndex:{DescID: 106 (t2+), IndexID: 1 (t2_pkey+)}
+      │    │    ├── PUBLIC → ABSENT IndexName:{DescID: 106 (t2+), Name: "t2_pkey", IndexID: 1 (t2_pkey+)}
+      │    │    ├── PUBLIC → ABSENT IndexColumn:{DescID: 106 (t2+), ColumnID: 3 (rowid+), IndexID: 1 (t2_pkey+)}
+      │    │    ├── PUBLIC → ABSENT IndexColumn:{DescID: 106 (t2+), ColumnID: 1 (a+), IndexID: 1 (t2_pkey+)}
+      │    │    ├── PUBLIC → ABSENT IndexColumn:{DescID: 106 (t2+), ColumnID: 2 (b+), IndexID: 1 (t2_pkey+)}
+      │    │    ├── PUBLIC → ABSENT Owner:{DescID: 106 (t2+)}
+      │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 106 (t2+), Name: "admin"}
+      │    │    └── PUBLIC → ABSENT UserPrivileges:{DescID: 106 (t2+), Name: "root"}
+      │    └── 1 Mutation operation
+      │         └── UndoAllInTxnImmediateMutationOpSideEffects
+      └── Stage 2 of 2 in PreCommitPhase
+           ├── 25 elements transitioning toward PUBLIC
+           │    ├── ABSENT → PUBLIC Table:{DescID: 106 (t2+)}
+           │    ├── ABSENT → PUBLIC Namespace:{DescID: 106 (t2+), Name: "t2", ReferencedDescID: 104 (db), IntValue: 105}
+           │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 106 (t2+), ReferencedDescID: 105 (public)}
+           │    ├── ABSENT → PUBLIC TableData:{DescID: 106 (t2+), ReferencedDescID: 104 (db)}
+           │    ├── ABSENT → PUBLIC Column:{DescID: 106 (t2+), ColumnID: 1 (a+)}
+           │    ├── ABSENT → PUBLIC ColumnType:{DescID: 106 (t2+), ColumnFamilyID: 0, ColumnID: 1 (a+), TypeName: "INT8"}
+           │    ├── ABSENT → PUBLIC ColumnName:{DescID: 106 (t2+), Name: "a", ColumnID: 1 (a+)}
+           │    ├── ABSENT → PUBLIC ColumnNotNull:{DescID: 106 (t2+), ColumnID: 1 (a+), IndexID: 0}
+           │    ├── ABSENT → PUBLIC Column:{DescID: 106 (t2+), ColumnID: 2 (b+)}
+           │    ├── ABSENT → PUBLIC ColumnType:{DescID: 106 (t2+), ColumnFamilyID: 0, ColumnID: 2 (b+), TypeName: "STRING"}
+           │    ├── ABSENT → PUBLIC ColumnName:{DescID: 106 (t2+), Name: "b", ColumnID: 2 (b+)}
+           │    ├── ABSENT → PUBLIC Column:{DescID: 106 (t2+), ColumnID: 3 (rowid+)}
+           │    ├── ABSENT → PUBLIC ColumnHidden:{DescID: 106 (t2+), ColumnID: 3 (rowid+)}
+           │    ├── ABSENT → PUBLIC ColumnType:{DescID: 106 (t2+), ColumnFamilyID: 0, ColumnID: 3 (rowid+), TypeName: "INT8"}
+           │    ├── ABSENT → PUBLIC ColumnNotNull:{DescID: 106 (t2+), ColumnID: 3 (rowid+), IndexID: 0}
+           │    ├── ABSENT → PUBLIC ColumnName:{DescID: 106 (t2+), Name: "rowid", ColumnID: 3 (rowid+)}
+           │    ├── ABSENT → PUBLIC ColumnDefaultExpression:{DescID: 106 (t2+), ColumnID: 3 (rowid+), Expr: unique_rowid()}
+           │    ├── ABSENT → PUBLIC PrimaryIndex:{DescID: 106 (t2+), IndexID: 1 (t2_pkey+)}
+           │    ├── ABSENT → PUBLIC IndexName:{DescID: 106 (t2+), Name: "t2_pkey", IndexID: 1 (t2_pkey+)}
+           │    ├── ABSENT → PUBLIC IndexColumn:{DescID: 106 (t2+), ColumnID: 3 (rowid+), IndexID: 1 (t2_pkey+)}
+           │    ├── ABSENT → PUBLIC IndexColumn:{DescID: 106 (t2+), ColumnID: 1 (a+), IndexID: 1 (t2_pkey+)}
+           │    ├── ABSENT → PUBLIC IndexColumn:{DescID: 106 (t2+), ColumnID: 2 (b+), IndexID: 1 (t2_pkey+)}
+           │    ├── ABSENT → PUBLIC Owner:{DescID: 106 (t2+)}
+           │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 106 (t2+), Name: "admin"}
+           │    └── ABSENT → PUBLIC UserPrivileges:{DescID: 106 (t2+), Name: "root"}
+           └── 39 Mutation operations
+                ├── CreateTableDescriptor {"TableID":106}
+                ├── SetNameInDescriptor {"DescriptorID":106,"Name":"t2"}
+                ├── AddDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":106,"Name":"t2","SchemaID":105}}
+                ├── UpdateTTLScheduleMetadata {"NewName":"t2","TableID":106}
+                ├── SetObjectParentID {"ObjParent":{"ChildObjectID":106,"SchemaID":105}}
+                ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":1,"TableID":106}}
+                ├── UpsertColumnType {"ColumnType":{"ColumnID":1,"TableID":106}}
+                ├── SetColumnName {"ColumnID":1,"Name":"a","TableID":106}
+                ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":2,"TableID":106}}
+                ├── UpsertColumnType {"ColumnType":{"ColumnID":2,"TableID":106}}
+                ├── SetColumnName {"ColumnID":2,"Name":"b","TableID":106}
+                ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":3,"TableID":106}}
+                ├── MakeColumnHidden {"ColumnID":3,"TableID":106}
+                ├── UpsertColumnType {"ColumnType":{"ColumnID":3,"TableID":106}}
+                ├── SetColumnName {"ColumnID":3,"Name":"rowid","TableID":106}
+                ├── AddColumnDefaultExpression {"Default":{"ColumnID":3,"TableID":106}}
+                ├── MakeAbsentIndexBackfilling {"Index":{"IndexID":1,"IsUnique":true,"TableID":106}}
+                ├── AddColumnToIndex {"ColumnID":3,"IndexID":1,"TableID":106}
+                ├── AddColumnToIndex {"ColumnID":1,"IndexID":1,"Kind":2,"TableID":106}
+                ├── AddColumnToIndex {"ColumnID":2,"IndexID":1,"Kind":2,"Ordinal":1,"TableID":106}
+                ├── UpdateOwner {"Owner":{"DescriptorID":106,"Owner":"root"}}
+                ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":106,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
+                ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":106,"Privileges":2,"UserName":"root","WithGrantOption":2}}
+                ├── MakeDeleteOnlyColumnWriteOnly {"ColumnID":1,"TableID":106}
+                ├── MakeAbsentColumnNotNullWriteOnly {"ColumnID":1,"TableID":106}
+                ├── MakeDeleteOnlyColumnWriteOnly {"ColumnID":2,"TableID":106}
+                ├── MakeDeleteOnlyColumnWriteOnly {"ColumnID":3,"TableID":106}
+                ├── MakeAbsentColumnNotNullWriteOnly {"ColumnID":3,"TableID":106}
+                ├── MakeBackfillingIndexDeleteOnly {"IndexID":1,"TableID":106}
+                ├── MakeValidatedColumnNotNullPublic {"ColumnID":1,"TableID":106}
+                ├── MakeValidatedColumnNotNullPublic {"ColumnID":3,"TableID":106}
+                ├── MakeBackfilledIndexMerging {"IndexID":1,"TableID":106}
+                ├── MakeWriteOnlyColumnPublic {"ColumnID":1,"TableID":106}
+                ├── MakeWriteOnlyColumnPublic {"ColumnID":2,"TableID":106}
+                ├── MakeWriteOnlyColumnPublic {"ColumnID":3,"TableID":106}
+                ├── MakeMergedIndexWriteOnly {"IndexID":1,"TableID":106}
+                ├── SetIndexName {"IndexID":1,"Name":"t2_pkey","TableID":106}
+                ├── MakeValidatedPrimaryIndexPublic {"IndexID":1,"TableID":106}
+                └── MarkDescriptorAsPublic {"DescriptorID":106}

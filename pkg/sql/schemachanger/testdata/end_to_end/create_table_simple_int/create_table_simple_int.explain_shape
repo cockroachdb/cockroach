@@ -1,0 +1,9 @@
+/* setup */
+CREATE DATABASE db;
+USE db;
+
+/* test */
+EXPLAIN (DDL, SHAPE) CREATE TABLE t1 (a INT);
+----
+Schema change plan for CREATE TABLE ‹db›.‹public›.‹t1› (‹a› INT8);
+ └── execute 1 system table mutations transaction
