@@ -23,6 +23,14 @@ Examples:
 Note: PR numbers work for all cases (recommended). Branch names only work
 for branches pushed directly to cockroachdb/cockroach, not personal forks.
 For fork branches, use the PR number instead.
+
+Environment variables:
+  COUNT     - number of test iterations (default: 1)
+  DEBUG     - enable debug mode (default: false)
+  USE_SPOT  - use spot VMs: never, auto, always (default: never)
+              The "auto" default in nightly scripts uses spot for the
+              first attempt, which causes preemptions on single-iteration
+              PR-triggered runs. Override here defaults to "never".
 EOF
   exit 1
 fi
@@ -60,6 +68,7 @@ json_payload=$(jq -n \
   --arg tests "$tests" \
   --arg envDebug "${DEBUG-false}" \
   --arg envCount "${COUNT-1}" \
+  --arg envUseSpot "${USE_SPOT-never}" \
   '{
   buildType: {id: "Cockroach_Nightlies_RoachtestNightlyGceBazel"},
   branchName: $branch_name,
@@ -70,7 +79,8 @@ json_payload=$(jq -n \
       {name: "env.SELECT_PROBABILITY", value: "1.0"},
       {name: "env.DEBUG", value: $envDebug},
       {name: "env.COUNT", value: $envCount},
-      {name: "env.TESTS", value: $tests}
+      {name: "env.TESTS", value: $tests},
+      {name: "env.USE_SPOT", value: $envUseSpot}
     ]
   }
 }')
