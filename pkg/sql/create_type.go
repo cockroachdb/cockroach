@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
@@ -572,28 +573,13 @@ func (p *planner) createDomainWithID(
 		return unimplemented.NewWithIssue(32552, "domain of arrays and tuples is not yet supported")
 	}
 
-	// Build CHECK constraints. Each expression is validated by substituting
-	// VALUE with a typed null of the base type and type-checking as boolean.
-	// This catches invalid expressions (e.g., referencing nonexistent
-	// functions) at CREATE DOMAIN time rather than at INSERT/UPDATE time.
 	var nextConstraintID descpb.ConstraintID = 1
 	var usedNames []string
 	checks := make(
 		[]descpb.TypeDescriptor_Domain_CheckConstraint, len(n.DomainConstraints),
 	)
 	for i, c := range n.DomainConstraints {
-		validationExpr, err := tree.SimpleVisit(c.Expr, func(e tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
-			if n, ok := e.(*tree.UnresolvedName); ok {
-				if n.NumParts == 1 && strings.EqualFold(n.Parts[0], "value") {
-					return false, tree.NewTypedCastExpr(tree.DNull, baseType), nil
-				}
-			}
-			return true, e, nil
-		})
-		if err != nil {
-			return err
-		}
-		if _, err := tree.TypeCheck(params.ctx, validationExpr, params.p.SemaCtx(), types.Bool); err != nil {
+		if _, err := schemaexpr.TypeCheckDomainCheckExpr(params.ctx, params.p.SemaCtx(), c.Expr, baseType); err != nil {
 			return pgerror.Wrapf(err, pgcode.InvalidObjectDefinition,
 				"invalid CHECK expression for domain %s", typeName.Type())
 		}
