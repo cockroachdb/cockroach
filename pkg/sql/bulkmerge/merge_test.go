@@ -1026,11 +1026,20 @@ func TestWaitForViablePlan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tightRetry := retry.Options{
+	// riggedRetry is used by subtests that intentionally exhaust the retry
+	// budget so the test itself doesn't block for long.
+	riggedRetry := retry.Options{
 		InitialBackoff: 1 * time.Millisecond,
 		MaxBackoff:     5 * time.Millisecond,
 		Multiplier:     2,
 		MaxDuration:    100 * time.Millisecond,
+	}
+	// generousRetry is used by subtests that expect the retry loop to succeed.
+	generousRetry := retry.Options{
+		InitialBackoff: 1 * time.Millisecond,
+		MaxBackoff:     5 * time.Millisecond,
+		Multiplier:     2,
+		MaxDuration:    30 * time.Second,
 	}
 
 	sstsRequiringInstance2 := []execinfrapb.BulkMergeSpec_SST{
@@ -1045,7 +1054,7 @@ func TestWaitForViablePlan(t *testing.T) {
 		}
 
 		_, _, err := waitForViablePlan(
-			context.Background(), sstsRequiringInstance2, tightRetry, plan)
+			context.Background(), sstsRequiringInstance2, generousRetry, plan)
 		require.NoError(t, err)
 		require.Equal(t, 1, attempts)
 	})
@@ -1061,7 +1070,7 @@ func TestWaitForViablePlan(t *testing.T) {
 		}
 
 		_, _, err := waitForViablePlan(
-			context.Background(), sstsRequiringInstance2, tightRetry, plan)
+			context.Background(), sstsRequiringInstance2, generousRetry, plan)
 		require.NoError(t, err)
 		require.Equal(t, 2, attempts)
 	})
@@ -1072,7 +1081,7 @@ func TestWaitForViablePlan(t *testing.T) {
 		}
 
 		_, _, err := waitForViablePlan(
-			context.Background(), sstsRequiringInstance2, tightRetry, plan)
+			context.Background(), sstsRequiringInstance2, riggedRetry, plan)
 		require.Error(t, err)
 		var unavailErr *InstanceUnavailableError
 		require.True(t, errors.As(err, &unavailErr))
@@ -1086,7 +1095,7 @@ func TestWaitForViablePlan(t *testing.T) {
 		}
 
 		_, _, err := waitForViablePlan(
-			context.Background(), sstsRequiringInstance2, tightRetry, plan)
+			context.Background(), sstsRequiringInstance2, generousRetry, plan)
 		require.ErrorIs(t, err, boom)
 	})
 
@@ -1097,7 +1106,7 @@ func TestWaitForViablePlan(t *testing.T) {
 			return nil, []base.SQLInstanceID{1, 3}, nil // never covers 2
 		}
 
-		_, _, err := waitForViablePlan(ctx, sstsRequiringInstance2, tightRetry, plan)
+		_, _, err := waitForViablePlan(ctx, sstsRequiringInstance2, generousRetry, plan)
 		require.ErrorIs(t, err, context.Canceled)
 	})
 }
