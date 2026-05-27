@@ -1,0 +1,15 @@
+/* setup */
+CREATE DATABASE db;
+USE db;
+CREATE TABLE t1 (a INT);
+
+/* test */
+EXPLAIN (DDL) CREATE TABLE IF NOT EXISTS t1 (a INT);
+----
+Schema change plan for CREATE TABLE IF NOT EXISTS ‹db›.‹public›.‹t1› (‹a› INT8);
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ └── PreCommitPhase
+      └── Stage 1 of 1 in PreCommitPhase
+           └── 1 Mutation operation
+                └── UndoAllInTxnImmediateMutationOpSideEffects

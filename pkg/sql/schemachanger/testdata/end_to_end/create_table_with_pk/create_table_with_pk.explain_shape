@@ -1,0 +1,9 @@
+/* setup */
+CREATE DATABASE db;
+USE db;
+
+/* test */
+EXPLAIN (DDL, SHAPE) CREATE TABLE t3 (a INT PRIMARY KEY, b STRING NOT NULL);
+----
+Schema change plan for CREATE TABLE ‹db›.‹public›.‹t3› (‹a› INT8 PRIMARY KEY, ‹b› STRING NOT NULL);
+ └── execute 1 system table mutations transaction
