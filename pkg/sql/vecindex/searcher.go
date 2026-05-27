@@ -24,14 +24,15 @@ import (
 // NOTE: Searcher is intended to be embedded within an execution engine
 // processor object.
 type Searcher struct {
-	idx       *cspann.Index
-	txn       vecstore.Txn
-	idxCtx    cspann.Context
-	options   cspann.SearchOptions
-	searchSet cspann.SearchSet
-	results   cspann.SearchResults
-	resultIdx int
-	evalCtx   *eval.Context
+	idx          *cspann.Index
+	txn          vecstore.Txn
+	idxCtx       cspann.Context
+	options      cspann.SearchOptions
+	searchSet    cspann.SearchSet
+	results      cspann.SearchResults
+	resultIdx    int
+	evalCtx      *eval.Context
+	testingKnobs *VecIndexTestingKnobs
 }
 
 // Init wraps the given KV transaction in a C-SPANN transaction and initializes
@@ -65,6 +66,14 @@ func (s *Searcher) Init(
 		cspann.IncreaseRerankResults(baseBeamSize, maxResults, rerankMultiplier)
 }
 
+// SetTestingKnobs configures testing knobs on the searcher. Invoked by
+// executor processors after Init to propagate knobs from the Manager. The
+// pointer is nil in production, and a nil pointer is a no-op for subsequent
+// knob lookups.
+func (s *Searcher) SetTestingKnobs(knobs *VecIndexTestingKnobs) {
+	s.testingKnobs = knobs
+}
+
 // Search triggers a search over the index for the given vector, within the
 // scope of the given prefix. "maxResults" specifies the maximum number of
 // results that will be returned.
@@ -72,6 +81,10 @@ func (s *Searcher) Init(
 // NOTE: The caller is assumed to own the memory for all parameters and can
 // reuse the memory after the call returns.
 func (s *Searcher) Search(ctx context.Context, prefix roachpb.Key, vec vector.T) error {
+	if s.testingKnobs != nil && s.testingKnobs.PanicDuringSearch != nil {
+		s.testingKnobs.PanicDuringSearch()
+	}
+
 	err := s.idx.Search(ctx, &s.idxCtx, cspann.TreeKey(prefix), vec, &s.searchSet, s.options)
 	if err != nil {
 		return err
