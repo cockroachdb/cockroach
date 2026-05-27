@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -465,6 +466,100 @@ func TestPickSHARunnerProcessCandidateIdempotent(t *testing.T) {
 		"GitHub must not be called when Pick SHA subtask is already Done")
 }
 
+// TestFetchSHAForPickSHA exercises the pre-release branch-not-found
+// fallback. The critical invariant is the GA-release guard: a missing
+// staging branch on a non-pre-release version must surface as an error,
+// because it means branch-cut never ran. The fallback must also be
+// scoped to errBranchNotFound — other GitHub errors (network, auth, 5xx)
+// must propagate unchanged so operators don't silently build against
+// master when GitHub is misbehaving.
+func TestFetchSHAForPickSHA(t *testing.T) {
+	const stagingSHA = "stagingsha111"
+	const masterSHA = "mastersha222"
+
+	tests := []struct {
+		name              string
+		staging           string
+		summary           string
+		ghRefs            map[string]string // branches that exist on GitHub
+		expectedSHA       string
+		expectedFetchedOn string
+		expectErrContain  string
+	}{
+		{
+			name:              "staging branch exists, no fallback",
+			staging:           "release-25.4.3-rc",
+			summary:           "Release: v25.4.3",
+			ghRefs:            map[string]string{"release-25.4.3-rc": stagingSHA},
+			expectedSHA:       stagingSHA,
+			expectedFetchedOn: "release-25.4.3-rc",
+		},
+		{
+			name:              "pre-release with missing staging branch falls back to master",
+			staging:           "release-26.1.0-rc",
+			summary:           "Release: v26.1.0-rc.1",
+			ghRefs:            map[string]string{masterBranch: masterSHA},
+			expectedSHA:       masterSHA,
+			expectedFetchedOn: masterBranch,
+		},
+		{
+			name:             "non-pre-release with missing staging branch surfaces error",
+			staging:          "release-25.4.3-rc",
+			summary:          "Release: v25.4.3",
+			ghRefs:           map[string]string{masterBranch: masterSHA},
+			expectErrContain: "fetching tip SHA for staging branch release-25.4.3-rc",
+		},
+		{
+			name:             "pre-release with master also missing surfaces fallback error",
+			staging:          "release-26.1.0-rc",
+			summary:          "Release: v26.1.0-rc.1",
+			ghRefs:           map[string]string{}, // neither branch exists
+			expectErrContain: "fetching tip SHA for fallback branch master",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ghSrv := httptest.NewServer(mkRefHandler(tc.ghRefs))
+			defer ghSrv.Close()
+			r := newPickSHARunnerForTest(t, ghSrv, nil, time.Time{})
+
+			v, err := parseReleaseVersion(tc.summary)
+			require.NoError(t, err)
+
+			sha, fetchBranch, err := r.fetchSHAForPickSHA(
+				context.Background(), "REL-1", tc.staging, v)
+			if tc.expectErrContain != "" {
+				require.ErrorContains(t, err, tc.expectErrContain)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedSHA, sha)
+			require.Equal(t, tc.expectedFetchedOn, fetchBranch)
+		})
+	}
+}
+
+// TestFetchSHAForPickSHANonNotFoundErrorPropagates ensures the
+// pre-release fallback does not paper over transport/server errors:
+// only errBranchNotFound triggers fallback. A 5xx must propagate.
+func TestFetchSHAForPickSHANonNotFoundErrorPropagates(t *testing.T) {
+	ghSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer ghSrv.Close()
+	r := newPickSHARunnerForTest(t, ghSrv, nil, time.Time{})
+
+	v, err := parseReleaseVersion("Release: v26.1.0-rc.1")
+	require.NoError(t, err)
+
+	_, _, err = r.fetchSHAForPickSHA(
+		context.Background(), "REL-1", "release-26.1.0-rc", v)
+	require.Error(t, err)
+	require.False(t, errors.Is(err, errBranchNotFound),
+		"500 must not be wrapped as errBranchNotFound")
+	require.ErrorContains(t, err, "fetching tip SHA for staging branch")
+}
+
 // mkPickSHACandidate builds a candidate jiraIssue suitable for the JQL search
 // result: summary parses, pickDate is set, and no further fields are needed
 // because processCandidate refetches the full issue via Jira.
@@ -508,7 +603,9 @@ func newPickSHARunnerForTest(
 	gh.client.BaseURL = u
 
 	jira := newJiraClient("bot@example.com", "test-token")
-	jira.baseURL = jiraSrv.URL
+	if jiraSrv != nil {
+		jira.baseURL = jiraSrv.URL
+	}
 
 	return &pickSHARunner{
 		jira:          jira,
