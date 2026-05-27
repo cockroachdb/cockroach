@@ -1256,6 +1256,11 @@ func (b *Builder) buildRoutinePlanGenerator(
 				}
 				return 0, false
 			}
+			// Clear bodyBuilder so subsequent invocations of this closure
+			// (e.g., multi-row INSERTs evaluating a DEFAULT expression per
+			// row) reuse the already-built stmts instead of re-entering the
+			// build path.
+			bodyBuilder = nil
 
 			// Capture the deferred body's optimizer plan and table
 			// references for EXPLAIN ANALYZE (DEBUG) bundles. Only done on
