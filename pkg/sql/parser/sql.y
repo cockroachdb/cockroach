@@ -4287,7 +4287,15 @@ with_resource_group_options:
   {
     $$.val = $2.kvOptions()
   }
+| WITH_LA resource_group_option_list
+  {
+    $$.val = $2.kvOptions()
+  }
 | WITH '(' resource_group_option_list ')'
+  {
+    $$.val = $3.kvOptions()
+  }
+| WITH_LA '(' resource_group_option_list ')'
   {
     $$.val = $3.kvOptions()
   }
@@ -4311,7 +4319,7 @@ resource_group_option:
 // %Help: CREATE RESOURCE GROUP - create a resource group for the resource manager
 // %Category: Misc
 // %Text:
-// CREATE RESOURCE GROUP [IF NOT EXISTS] <name> WITH <option> = <value>, ...
+// CREATE RESOURCE GROUP [IF NOT EXISTS] <name> WITH (<option> = <value>, ...)
 //
 // Options:
 //   cpu_weight = <int>   relative CPU share (must be > 0)
@@ -4337,7 +4345,7 @@ create_resource_group_stmt:
 // %Help: ALTER RESOURCE GROUP - alter an existing resource group
 // %Category: Misc
 // %Text:
-// ALTER RESOURCE GROUP [IF EXISTS] <name> WITH <option> = <value>, ...
+// ALTER RESOURCE GROUP [IF EXISTS] <name> WITH (<option> = <value>, ...)
 //
 // Only the options named are updated; unspecified options are left unchanged.
 alter_resource_group_stmt:
