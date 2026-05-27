@@ -136,6 +136,98 @@ Commands specific to the demo shell (EXPERIMENTAL):
 	debugPromptPattern = "%n@%M:%> %C>"
 )
 
+// Backslash metacommand names dispatched by doHandleCliCmd. Centralized
+// here so the dispatcher switch, the embedderSafeCmds allow-list, the
+// describe-family dispatch, and the various inline guards reference the
+// same literal. A typo in any of those sites now produces a compile
+// error instead of a silent dispatch miss.
+const (
+	// Quit aliases.
+	cmdQ    = `\q`
+	cmdQuit = `\quit`
+	cmdExit = `\exit`
+
+	// Help aliases.
+	cmdHelpBackslash = `\`
+	cmdHelpQ         = `\?`
+	cmdHelp          = `\help`
+
+	// Output.
+	cmdEcho   = `\echo`
+	cmdQEcho  = `\qecho`
+	cmdOutput = `\o`
+
+	// Configuration.
+	cmdSet   = `\set`
+	cmdUnset = `\unset`
+
+	// Local filesystem / shell-out. These are the commands gated by
+	// the embedder allow-list (see embedderSafeCmds); they are absent
+	// from that set on purpose.
+	cmdShellOut   = `\!`
+	cmdPipe       = `\|`
+	cmdInclude    = `\i`
+	cmdIncludeRel = `\ir`
+
+	// Query buffer.
+	cmdPrint = `\p`
+	cmdReset = `\r`
+	cmdShow  = `\show`
+
+	// History.
+	cmdHistory = `\s`
+
+	// User management.
+	cmdPassword = `\password`
+
+	// SQL help.
+	cmdHelpSQL  = `\h`
+	cmdHelpFunc = `\hf`
+
+	// Copy.
+	cmdCopy    = `\copy`
+	cmdCopyEnd = `\.`
+
+	// Connection.
+	cmdConnect      = `\connect`
+	cmdConnectShort = `\c`
+	cmdInfo         = `\info`
+
+	// Display format.
+	cmdExpanded = `\x`
+
+	// Demo cluster.
+	cmdDemo = `\demo`
+
+	// Statement diagnostics.
+	cmdStmtDiag = `\statement-diag`
+
+	// Restricted mode (CVE-2025-8714).
+	cmdRestrict   = `\restrict`
+	cmdUnrestrict = `\unrestrict`
+
+	// Describe family. Dispatched to handleDescribe before the
+	// embedder allow-list gate; not enumerated in embedderSafeCmds.
+	// cmdDescribePrefix is both the bare `\d` command and the prefix
+	// for the `\d*` sub-family (`\dt`, `\du`, etc.); see
+	// handleDescribe.
+	cmdShowFunc          = `\sf`
+	cmdShowFuncPlus      = `\sf+`
+	cmdShowView          = `\sv`
+	cmdShowViewPlus      = `\sv+`
+	cmdListDatabases     = `\l`
+	cmdListDatabasesPlus = `\l+`
+	cmdDescribePrefix    = `\d`
+	cmdPrivileges        = `\dp`
+	cmdZ                 = `\z` // psql compat; rewritten to cmdPrivileges
+)
+
+// Subcommand tags for \statement-diag.
+const (
+	stmtDiagDownload = "download"
+	stmtDiagList     = "list"
+)
+
 // embedderSafeCmds is the allow-list of metacommands the dispatcher
 // permits when Context.DisableLocalCmds is set. Commands not in the
 // set are rejected; the fail-closed default ensures that a future
@@ -167,33 +259,33 @@ Commands specific to the demo shell (EXPERIMENTAL):
 // safe to expose to an embedded shell (no local FS, no shell-out),
 // and add a subcommand gate to its handler otherwise.
 var embedderSafeCmds = map[string]struct{}{
-	`\q`:              {},
-	`\quit`:           {},
-	`\exit`:           {},
-	`\`:               {},
-	`\?`:              {},
-	`\help`:           {},
-	`\echo`:           {},
-	`\qecho`:          {},
-	`\set`:            {},
-	`\unset`:          {},
-	`\p`:              {},
-	`\r`:              {},
-	`\s`:              {},
-	`\show`:           {},
-	`\password`:       {},
-	`\h`:              {},
-	`\hf`:             {},
-	`\copy`:           {},
-	`\.`:              {},
-	`\connect`:        {},
-	`\c`:              {},
-	`\info`:           {},
-	`\x`:              {},
-	`\demo`:           {},
-	`\statement-diag`: {},
-	`\restrict`:       {},
-	`\unrestrict`:     {},
+	cmdQ:             {},
+	cmdQuit:          {},
+	cmdExit:          {},
+	cmdHelpBackslash: {},
+	cmdHelpQ:         {},
+	cmdHelp:          {},
+	cmdEcho:          {},
+	cmdQEcho:         {},
+	cmdSet:           {},
+	cmdUnset:         {},
+	cmdPrint:         {},
+	cmdReset:         {},
+	cmdHistory:       {},
+	cmdShow:          {},
+	cmdPassword:      {},
+	cmdHelpSQL:       {},
+	cmdHelpFunc:      {},
+	cmdCopy:          {},
+	cmdCopyEnd:       {},
+	cmdConnect:       {},
+	cmdConnectShort:  {},
+	cmdInfo:          {},
+	cmdExpanded:      {},
+	cmdDemo:          {},
+	cmdStmtDiag:      {},
+	cmdRestrict:      {},
+	cmdUnrestrict:    {},
 }
 
 // cliState defines the current state of the CLI during
@@ -741,10 +833,10 @@ func isEndOfStatement(lastTok int) bool {
 // rejected by the dispatcher in doHandleCliCmd.
 func (c *cliState) handleRestrict(args []string, nextState, errState cliStateEnum) cliStateEnum {
 	if len(args) != 1 || args[0] == "" {
-		return c.cliError(errState, errors.New(`\restrict: missing required argument`))
+		return c.cliError(errState, errors.Newf("%s: missing required argument", cmdRestrict))
 	}
 	if c.iCtx.restricted {
-		return c.cliError(errState, errors.New(`\restrict: already in restricted mode`))
+		return c.cliError(errState, errors.Newf("%s: already in restricted mode", cmdRestrict))
 	}
 	c.iCtx.restrictKey = args[0]
 	c.iCtx.restricted = true
@@ -755,13 +847,13 @@ func (c *cliState) handleRestrict(args []string, nextState, errState cliStateEnu
 // restricted mode if the supplied key matches the key passed to \restrict.
 func (c *cliState) handleUnrestrict(args []string, nextState, errState cliStateEnum) cliStateEnum {
 	if len(args) != 1 || args[0] == "" {
-		return c.cliError(errState, errors.New(`\unrestrict: missing required argument`))
+		return c.cliError(errState, errors.Newf("%s: missing required argument", cmdUnrestrict))
 	}
 	if !c.iCtx.restricted {
-		return c.cliError(errState, errors.New(`\unrestrict: not currently in restricted mode`))
+		return c.cliError(errState, errors.Newf("%s: not currently in restricted mode", cmdUnrestrict))
 	}
 	if args[0] != c.iCtx.restrictKey {
-		return c.cliError(errState, errors.New(`\unrestrict: wrong key`))
+		return c.cliError(errState, errors.Newf("%s: wrong key", cmdUnrestrict))
 	}
 	c.iCtx.restrictKey = ""
 	c.iCtx.restricted = false
@@ -773,7 +865,7 @@ func (c *cliState) handleUnrestrict(args []string, nextState, errState cliStateE
 func (c *cliState) handleDemo(cmd []string, nextState, errState cliStateEnum) cliStateEnum {
 	// A demo cluster signifies the presence of `cockroach demo`.
 	if c.sqlCtx.DemoCluster == nil {
-		return c.cliError(errState, errors.New(`\demo can only be run with cockroach demo`))
+		return c.cliError(errState, errors.Newf("%s can only be run with cockroach demo", cmdDemo))
 	}
 
 	// The \demo command has one of three patterns:
@@ -1501,22 +1593,22 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 	// In restricted mode, only \unrestrict is permitted. This blocks
 	// metacommands that may have been injected via dump output before they
 	// reach the dispatcher below. See internalContext.restricted.
-	if c.iCtx.restricted && cmd[0] != `\unrestrict` {
-		return c.cliError(errState, errors.New(
-			`backslash commands are restricted; only \unrestrict is allowed`))
+	if c.iCtx.restricted && cmd[0] != cmdUnrestrict {
+		return c.cliError(errState, errors.Newf(
+			"backslash commands are restricted; only %s is allowed", cmdUnrestrict))
 	}
-	if cmd[0] == `\z` {
+	if cmd[0] == cmdZ {
 		// psql compatibility.
-		cmd[0] = `\dp`
+		cmd[0] = cmdPrivileges
 	}
 	// The describe family routes here before the DisableLocalCmds
 	// gate below because every command in it issues a server-side
 	// query — implicitly safe for embedders, and impractical to
 	// enumerate explicitly in embedderSafeCmds.
-	if cmd[0] == `\sf` || cmd[0] == `\sf+` ||
-		cmd[0] == `\sv` || cmd[0] == `\sv+` ||
-		cmd[0] == `\l` || cmd[0] == `\l+` ||
-		(strings.HasPrefix(cmd[0], `\d`) && cmd[0] != `\demo`) {
+	if cmd[0] == cmdShowFunc || cmd[0] == cmdShowFuncPlus ||
+		cmd[0] == cmdShowView || cmd[0] == cmdShowViewPlus ||
+		cmd[0] == cmdListDatabases || cmd[0] == cmdListDatabasesPlus ||
+		(strings.HasPrefix(cmd[0], cmdDescribePrefix) && cmd[0] != cmdDemo) {
 		return c.handleDescribe(cmd, loopState, errState)
 	}
 	// Embedder allow-list. Commands not in embedderSafeCmds are
@@ -1529,72 +1621,72 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 				"%s: local command disabled by embedder", cmd[0]))
 		}
 	}
-	if c.sqlCtx.DisablePasswordCmd && cmd[0] == `\password` {
-		return c.cliError(errState, errors.New(
-			`\password: disabled by embedder`))
+	if c.sqlCtx.DisablePasswordCmd && cmd[0] == cmdPassword {
+		return c.cliError(errState, errors.Newf(
+			"%s: disabled by embedder", cmdPassword))
 	}
 
 	switch cmd[0] {
-	case `\q`, `\quit`, `\exit`:
+	case cmdQ, cmdQuit, cmdExit:
 		// When explicitly exiting, clear exitErr.
 		c.exitErr = nil
 		return cliStop
 
-	case `\`, `\?`, `\help`:
+	case cmdHelpBackslash, cmdHelpQ, cmdHelp:
 		c.printCliHelp()
 
-	case `\echo`:
+	case cmdEcho:
 		fmt.Fprintln(c.iCtx.stdout, strings.Join(cmd[1:], " "))
 
-	case `\qecho`:
+	case cmdQEcho:
 		fmt.Fprintln(c.iCtx.queryOutput, strings.Join(cmd[1:], " "))
 		c.maybeFlushOutput()
 
-	case `\set`:
+	case cmdSet:
 		return c.handleSet(line, cmd[1:], loopState, errState)
 
-	case `\unset`:
+	case cmdUnset:
 		return c.handleUnset(cmd[1:], loopState, errState)
 
-	case `\!`:
+	case cmdShellOut:
 		return c.runSyscmd(c.lastInputLine, loopState, errState)
 
-	case `\i`:
+	case cmdInclude:
 		return c.runInclude(cmd[1:], loopState, errState, false /* relative */)
 
-	case `\ir`:
+	case cmdIncludeRel:
 		return c.runInclude(cmd[1:], loopState, errState, true /* relative */)
 
-	case `\o`:
+	case cmdOutput:
 		return c.runOpen(cmd[1:], loopState, errState)
 
-	case `\p`:
+	case cmdPrint:
 		if c.ins.multilineEdit() {
-			fmt.Fprintln(c.iCtx.stderr, `warning: \p is ineffective with this editor`)
+			fmt.Fprintf(c.iCtx.stderr, "warning: %s is ineffective with this editor\n", cmdPrint)
 			break
 		}
 		// This is analogous to \show but does not need a special case.
 		// Implemented for compatibility with psql.
 		fmt.Fprintln(c.iCtx.stdout, strings.Join(c.partialLines, "\n"))
 
-	case `\r`:
+	case cmdReset:
 		if c.ins.multilineEdit() {
-			fmt.Fprintln(c.iCtx.stderr, `warning: \r is ineffective with this editor`)
+			fmt.Fprintf(c.iCtx.stderr, "warning: %s is ineffective with this editor\n", cmdReset)
 			break
 		}
 		// Reset the input buffer so far. This is useful when e.g. a user
 		// got confused with string delimiters and multi-line input.
 		return cliStartLine
 
-	case `\s`:
+	case cmdHistory:
 		c.printCommandHistory()
 
-	case `\show`:
+	case cmdShow:
 		if c.ins.multilineEdit() {
-			fmt.Fprintln(c.iCtx.stderr, `warning: \show is ineffective with this editor`)
+			fmt.Fprintf(c.iCtx.stderr, "warning: %s is ineffective with this editor\n", cmdShow)
 			break
 		}
-		fmt.Fprintln(c.iCtx.stderr, `warning: \show is deprecated. Use \p.`)
+		fmt.Fprintf(c.iCtx.stderr, "warning: %s is deprecated. Use %s.\n", cmdShow, cmdPrint)
 		if len(c.partialLines) == 0 {
 			fmt.Fprintf(c.iCtx.stderr, "No input so far. Did you mean SHOW?\n")
 		} else {
@@ -1603,16 +1695,16 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 			}
 		}
 
-	case `\password`:
+	case cmdPassword:
 		return c.handlePassword(cmd[1:], cliRunStatement, errState)
 
-	case `\|`:
+	case cmdPipe:
 		return c.pipeSyscmd(c.lastInputLine, nextState, errState)
 
-	case `\h`:
+	case cmdHelpSQL:
 		return c.handleHelp(cmd[1:], loopState, errState)
 
-	case `\hf`:
+	case cmdHelpFunc:
 		if len(cmd) == 1 {
 			// The following query lists all functions. It prefixes
 			// functions with their schema but only if the schema is not in
@@ -1634,7 +1726,7 @@ ORDER BY 1`
 		}
 		return c.handleFunctionHelp(cmd[1:], loopState, errState)
 
-	case `\copy`:
+	case cmdCopy:
 		if err := c.runWithInterruptableCtx(func(ctx context.Context) error {
 			// Strip out the starting \ in \copy.
 			return c.beginCopyFrom(ctx, line[1:])
@@ -1643,21 +1735,21 @@ ORDER BY 1`
 		}
 		return cliStartLine
 
-	case `\.`:
+	case cmdCopyEnd:
 		if c.inCopy() {
-			c.partialLines = append(c.partialLines, `\.`)
+			c.partialLines = append(c.partialLines, cmdCopyEnd)
 			c.partialStmtsLen++
 			return cliRunStatement
 		}
 		return c.invalidSyntax(errState)
 
-	case `\connect`, `\c`:
+	case cmdConnect, cmdConnectShort:
 		return c.handleConnect(cmd[1:], loopState, errState)
 
-	case `\info`:
+	case cmdInfo:
 		return c.handleInfo(loopState)
 
-	case `\x`:
+	case cmdExpanded:
 		format := clisqlexec.TableDisplayRecords
 		switch len(cmd) {
 		case 1:
@@ -1679,16 +1771,16 @@ ORDER BY 1`
 		c.sqlExecCtx.TableDisplayFormat = format
 		return loopState
 
-	case `\demo`:
+	case cmdDemo:
 		return c.handleDemo(cmd[1:], loopState, errState)
 
-	case `\statement-diag`:
+	case cmdStmtDiag:
 		return c.handleStatementDiag(cmd[1:], loopState, errState)
 
-	case `\restrict`:
+	case cmdRestrict:
 		return c.handleRestrict(cmd[1:], loopState, errState)
 
-	case `\unrestrict`:
+	case cmdUnrestrict:
 		return c.handleUnrestrict(cmd[1:], loopState, errState)
 
 	default:
@@ -1982,7 +2074,7 @@ func (c *cliState) runInclude(
 	}
 
 	if c.levels >= maxRecursionLevels {
-		return c.cliError(errState, errors.Newf(`\i: too many recursion levels (max %d)`, maxRecursionLevels))
+		return c.cliError(errState, errors.Newf("%s: too many recursion levels (max %d)", cmdInclude, maxRecursionLevels))
 	}
 
 	if len(c.partialLines) > 0 {
@@ -2090,7 +2182,7 @@ func (c *cliState) doPrepareStatementLine(
 	endOfStmt := (!c.inCopy() && isEndOfStatement(lastTok)) ||
 		// We're always at the end of a statement if we're in COPY and encounter
 		// the \. or EOF character.
-		(c.inCopy() && (strings.HasSuffix(c.concatLines, "\n"+`\.`) || c.atEOF)) ||
+		(c.inCopy() && (strings.HasSuffix(c.concatLines, "\n"+cmdCopyEnd) || c.atEOF)) ||
 		// We're always at the end of a statement if EOF is reached in the
 		// single statement mode.
 		(c.singleStatement && c.atEOF)
@@ -2565,7 +2657,7 @@ func (c *cliState) configurePreShellDefaults(
 	if len(c.sqlCtx.SetStmts) > 0 {
 		setStmts := make([]string, 0, len(c.sqlCtx.SetStmts)+len(c.sqlCtx.ExecStmts))
 		for _, s := range c.sqlCtx.SetStmts {
-			setStmts = append(setStmts, `\set `+s)
+			setStmts = append(setStmts, cmdSet+" "+s)
 		}
 		c.sqlCtx.SetStmts = nil
 		c.sqlCtx.ExecStmts = append(setStmts, c.sqlCtx.ExecStmts...)

@@ -29,22 +29,22 @@ func (c *cliState) handleStatementDiag(
 	// filesystem with the shell process's UID, so it must be gated by
 	// DisableLocalCmds. `list` only issues a server-side query and
 	// remains enabled. The dispatcher cannot reject this from
-	// localCmds because the dangerous subcommand is in args[0], not
-	// cmd[0].
-	if c.sqlCtx.DisableLocalCmds && cmd == "download" {
-		return c.cliError(errState, errors.New(
-			`\statement-diag download: local command disabled by embedder`))
+	// embedderSafeCmds because the dangerous subcommand is in
+	// args[0], not cmd[0].
+	if c.sqlCtx.DisableLocalCmds && cmd == stmtDiagDownload {
+		return c.cliError(errState, errors.Newf(
+			"%s %s: local command disabled by embedder", cmdStmtDiag, stmtDiagDownload))
 	}
 	defer c.conn.AllowExecuteInternal(context.Background())()
 	var cmdErr error
 	switch cmd {
-	case "list":
+	case stmtDiagList:
 		if len(args) > 0 {
 			return c.invalidSyntax(errState)
 		}
 		cmdErr = c.statementDiagList()
 
-	case "download":
+	case stmtDiagDownload:
 		if len(args) < 1 || len(args) > 2 {
 			return c.invalidSyntax(errState)
 		}
