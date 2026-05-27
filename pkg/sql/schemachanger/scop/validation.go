@@ -67,5 +67,17 @@ func (ValidateEnumTypeValueRemoval) Description() redact.RedactableString {
 	return "Validating removal of enum type value"
 }
 
+// ValidateDomainConstraint validates that every existing row in every column
+// using the domain type satisfies the given domain constraint.
+type ValidateDomainConstraint struct {
+	validationOp
+	TypeID       descpb.ID
+	ConstraintID descpb.ConstraintID
+}
+
+func (ValidateDomainConstraint) Description() redact.RedactableString {
+	return "Validating domain constraint"
+}
+
 // Make sure baseOp is used for linter.
 var _ = validationOp{baseOp: baseOp{}}

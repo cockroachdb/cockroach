@@ -259,6 +259,45 @@ func (i *immediateVisitor) RemoveDomainCheckConstraint(
 	)
 }
 
+func (i *immediateVisitor) MakeValidatedDomainCheckConstraintPublic(
+	ctx context.Context, op scop.MakeValidatedDomainCheckConstraintPublic,
+) error {
+	return setDomainCheckConstraintValidity(
+		ctx, i, op.TypeID, op.ConstraintID, descpb.ConstraintValidity_Validated,
+	)
+}
+
+func (i *immediateVisitor) MakePublicDomainCheckConstraintValidated(
+	ctx context.Context, op scop.MakePublicDomainCheckConstraintValidated,
+) error {
+	return setDomainCheckConstraintValidity(
+		ctx, i, op.TypeID, op.ConstraintID, descpb.ConstraintValidity_Dropping,
+	)
+}
+
+func setDomainCheckConstraintValidity(
+	ctx context.Context,
+	i *immediateVisitor,
+	typeID descpb.ID,
+	constraintID descpb.ConstraintID,
+	validity descpb.ConstraintValidity,
+) error {
+	typ, err := i.checkOutDomain(ctx, typeID)
+	if err != nil {
+		return err
+	}
+	for j := range typ.Domain.CheckConstraints {
+		if typ.Domain.CheckConstraints[j].ConstraintID == constraintID {
+			typ.Domain.CheckConstraints[j].Validity = validity
+			return nil
+		}
+	}
+	return errors.AssertionFailedf(
+		"check constraint %d not found in domain type descriptor %d",
+		constraintID, typeID,
+	)
+}
+
 func (i *immediateVisitor) SetDomainDefault(ctx context.Context, op scop.SetDomainDefault) error {
 	typ, err := i.checkOutDomain(ctx, op.TypeID)
 	if err != nil {

@@ -72,6 +72,16 @@ type ValidateEnumTypeValueRemovalFn func(
 	execOverride sessiondata.InternalExecutorOverride,
 ) error
 
+// ValidateDomainConstraintFn is a callback function for validating existing
+// rows in columns using the domain type satisfy the constraint.
+type ValidateDomainConstraintFn func(
+	ctx context.Context,
+	typeDesc catalog.TypeDescriptor,
+	constraintID descpb.ConstraintID,
+	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
+	execOverride sessiondata.InternalExecutorOverride,
+) error
+
 // NewFakeSessionDataFn callback function used to create session data
 // for the internal executor.
 type NewFakeSessionDataFn func(ctx context.Context, settings *cluster.Settings, opName redact.SafeString) *sessiondata.SessionData
@@ -85,6 +95,7 @@ type validator struct {
 	validateInvertedIndexes      ValidateInvertedIndexesFn
 	validateConstraint           ValidateConstraintFn
 	validateEnumTypeValueRemoval ValidateEnumTypeValueRemovalFn
+	validateDomainConstraint     ValidateDomainConstraintFn
 	newFakeSessionData           NewFakeSessionDataFn
 	protectedTimestampProvider   scexec.ProtectedTimestampManager
 }
@@ -133,6 +144,19 @@ func (vd validator) ValidateConstraint(
 		vd.makeHistoricalInternalExecTxnRunner(), override)
 }
 
+// ValidateDomainConstraint scans every column whose declared type is the given
+// domain to verify that the constraint holds.
+func (vd validator) ValidateDomainConstraint(
+	ctx context.Context,
+	typeDesc catalog.TypeDescriptor,
+	constraintID descpb.ConstraintID,
+	override sessiondata.InternalExecutorOverride,
+) error {
+	return vd.validateDomainConstraint(
+		ctx, typeDesc, constraintID, vd.makeHistoricalInternalExecTxnRunner(), override,
+	)
+}
+
 // ValidateEnumTypeValueRemoval checks that an enum value can be safely removed
 // with no table rows referencing it.
 func (vd validator) ValidateEnumTypeValueRemoval(
@@ -177,6 +201,7 @@ func NewValidator(
 	validateInvertedIndexes ValidateInvertedIndexesFn,
 	validateCheckConstraint ValidateConstraintFn,
 	validateEnumTypeValueRemoval ValidateEnumTypeValueRemovalFn,
+	validateDomainConstraint ValidateDomainConstraintFn,
 	newFakeSessionData NewFakeSessionDataFn,
 ) scexec.Validator {
 	return validator{
@@ -188,6 +213,7 @@ func NewValidator(
 		validateInvertedIndexes:      validateInvertedIndexes,
 		validateConstraint:           validateCheckConstraint,
 		validateEnumTypeValueRemoval: validateEnumTypeValueRemoval,
+		validateDomainConstraint:     validateDomainConstraint,
 		newFakeSessionData:           newFakeSessionData,
 		protectedTimestampProvider:   protectedTimestampProvider,
 	}

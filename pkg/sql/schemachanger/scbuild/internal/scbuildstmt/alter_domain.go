@@ -265,14 +265,19 @@ func alterDomainAddCheckConstraint(
 	checkExpr.ReferencedColumnIDs = nil
 
 	constraintID := b.NextDomainConstraintID(typeID)
-	// TODO(62167): Emit DomainCheckConstraint (validated) when DDL is without
-	// `NOT VALID`. A subsequent PR will add support for validating pre-existing
-	// rows and allow validated to be emitted.
-	b.Add(&scpb.DomainCheckConstraintUnvalidated{
-		TypeID:       typeID,
-		ConstraintID: constraintID,
-		Expression:   *checkExpr,
-	})
+	if t.ValidationBehavior == tree.ValidationSkip {
+		b.Add(&scpb.DomainCheckConstraintUnvalidated{
+			TypeID:       typeID,
+			ConstraintID: constraintID,
+			Expression:   *checkExpr,
+		})
+	} else {
+		b.Add(&scpb.DomainCheckConstraint{
+			TypeID:       typeID,
+			ConstraintID: constraintID,
+			Expression:   *checkExpr,
+		})
+	}
 	b.Add(&scpb.DomainConstraintName{
 		TypeID:       typeID,
 		ConstraintID: constraintID,

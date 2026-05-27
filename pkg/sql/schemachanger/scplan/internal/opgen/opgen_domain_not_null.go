@@ -22,7 +22,14 @@ func init() {
 					}
 				}),
 			),
-			equiv(scpb.Status_VALIDATED),
+			to(scpb.Status_VALIDATED,
+				emit(func(this *scpb.DomainNotNull) *scop.ValidateDomainConstraint {
+					return &scop.ValidateDomainConstraint{
+						TypeID:       this.TypeID,
+						ConstraintID: this.ConstraintID,
+					}
+				}),
+			),
 			to(scpb.Status_PUBLIC),
 		),
 		toAbsent(

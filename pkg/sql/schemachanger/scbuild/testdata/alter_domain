@@ -97,7 +97,7 @@ CREATE DOMAIN defaultdb.d_nocheck AS INT;
 build skip=sql_dependencies
 ALTER DOMAIN defaultdb.d_nocheck ADD CONSTRAINT chk CHECK (VALUE > 0)
 ----
-- [[DomainCheckConstraintUnvalidated:{DescID: 111, ConstraintID: 1, Expr: value > 0}, PUBLIC], ABSENT]
+- [[DomainCheckConstraint:{DescID: 111, ConstraintID: 1, Expr: value > 0}, PUBLIC], ABSENT]
   {constraintId: 1, expr: value > 0, typeId: 111}
 - [[DomainConstraintName:{DescID: 111, Name: chk, ConstraintID: 1}, PUBLIC], ABSENT]
   {constraintId: 1, name: chk, typeId: 111}
@@ -105,7 +105,7 @@ ALTER DOMAIN defaultdb.d_nocheck ADD CONSTRAINT chk CHECK (VALUE > 0)
 build skip=sql_dependencies
 ALTER DOMAIN defaultdb.d_nocheck ADD CHECK (VALUE < 100)
 ----
-- [[DomainCheckConstraintUnvalidated:{DescID: 111, ConstraintID: 1, Expr: value < 100}, PUBLIC], ABSENT]
+- [[DomainCheckConstraint:{DescID: 111, ConstraintID: 1, Expr: value < 100}, PUBLIC], ABSENT]
   {constraintId: 1, expr: value < 100, typeId: 111}
 - [[DomainConstraintName:{DescID: 111, Name: d_nocheck_check, ConstraintID: 1}, PUBLIC], ABSENT]
   {constraintId: 1, name: d_nocheck_check, typeId: 111}
@@ -121,7 +121,7 @@ ALTER DOMAIN defaultdb.d_nocheck ADD CONSTRAINT chk_valid CHECK (VALUE > 0) NOT 
 build skip=sql_dependencies
 ALTER DOMAIN defaultdb.d ADD CONSTRAINT d_new_check CHECK (VALUE < 100)
 ----
-- [[DomainCheckConstraintUnvalidated:{DescID: 104, ConstraintID: 3, Expr: value < 100}, PUBLIC], ABSENT]
+- [[DomainCheckConstraint:{DescID: 104, ConstraintID: 3, Expr: value < 100}, PUBLIC], ABSENT]
   {constraintId: 3, expr: value < 100, typeId: 104}
 - [[DomainConstraintName:{DescID: 104, Name: d_new_check, ConstraintID: 3}, PUBLIC], ABSENT]
   {constraintId: 3, name: d_new_check, typeId: 104}

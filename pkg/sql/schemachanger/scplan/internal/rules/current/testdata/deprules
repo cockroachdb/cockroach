@@ -931,7 +931,7 @@ deprules
     - descriptorIsNotBeingDropped-26.3($prev)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
-- name: 'DomainNotNull transitions to PUBLIC uphold 2-version invariant: VALIDATED->WRITE_ONLY'
+- name: 'DomainNotNull transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC'
   from: prev-Node
   kind: PreviousTransactionPrecedence
   to: next-Node
@@ -943,11 +943,11 @@ deprules
     - $prev-Target[Self] = $next-Target
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = VALIDATED
-    - $next-Node[CurrentStatus] = WRITE_ONLY
+    - $next-Node[CurrentStatus] = PUBLIC
     - descriptorIsNotBeingDropped-26.3($prev)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
-- name: 'DomainNotNull transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->PUBLIC'
+- name: 'DomainNotNull transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED'
   from: prev-Node
   kind: PreviousTransactionPrecedence
   to: next-Node
@@ -959,9 +959,8 @@ deprules
     - $prev-Target[Self] = $next-Target
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = WRITE_ONLY
-    - $next-Node[CurrentStatus] = PUBLIC
+    - $next-Node[CurrentStatus] = VALIDATED
     - descriptorIsNotBeingDropped-26.3($prev)
-    - nodeNotExistsWithStatusIn_VALIDATED($prev-Target)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'EnumTypeValue transitions to ABSENT uphold 2-version invariant: PUBLIC->WRITE_ONLY'
@@ -6788,7 +6787,7 @@ deprules
     - descriptorIsNotBeingDropped-26.3($prev)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
-- name: 'DomainNotNull transitions to PUBLIC uphold 2-version invariant: VALIDATED->WRITE_ONLY'
+- name: 'DomainNotNull transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC'
   from: prev-Node
   kind: PreviousTransactionPrecedence
   to: next-Node
@@ -6800,11 +6799,11 @@ deprules
     - $prev-Target[Self] = $next-Target
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = VALIDATED
-    - $next-Node[CurrentStatus] = WRITE_ONLY
+    - $next-Node[CurrentStatus] = PUBLIC
     - descriptorIsNotBeingDropped-26.3($prev)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
-- name: 'DomainNotNull transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->PUBLIC'
+- name: 'DomainNotNull transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED'
   from: prev-Node
   kind: PreviousTransactionPrecedence
   to: next-Node
@@ -6816,9 +6815,8 @@ deprules
     - $prev-Target[Self] = $next-Target
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = WRITE_ONLY
-    - $next-Node[CurrentStatus] = PUBLIC
+    - $next-Node[CurrentStatus] = VALIDATED
     - descriptorIsNotBeingDropped-26.3($prev)
-    - nodeNotExistsWithStatusIn_VALIDATED($prev-Target)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'EnumTypeValue transitions to ABSENT uphold 2-version invariant: PUBLIC->WRITE_ONLY'

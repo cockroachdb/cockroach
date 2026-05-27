@@ -21,6 +21,7 @@ type ValidationVisitor interface {
 	ValidateConstraint(context.Context, ValidateConstraint) error
 	ValidateColumnNotNull(context.Context, ValidateColumnNotNull) error
 	ValidateEnumTypeValueRemoval(context.Context, ValidateEnumTypeValueRemoval) error
+	ValidateDomainConstraint(context.Context, ValidateDomainConstraint) error
 }
 
 // Visit is part of the ValidationOp interface.
@@ -41,4 +42,9 @@ func (op ValidateColumnNotNull) Visit(ctx context.Context, v ValidationVisitor) 
 // Visit is part of the ValidationOp interface.
 func (op ValidateEnumTypeValueRemoval) Visit(ctx context.Context, v ValidationVisitor) error {
 	return v.ValidateEnumTypeValueRemoval(ctx, op)
+}
+
+// Visit is part of the ValidationOp interface.
+func (op ValidateDomainConstraint) Visit(ctx context.Context, v ValidationVisitor) error {
+	return v.ValidateDomainConstraint(ctx, op)
 }

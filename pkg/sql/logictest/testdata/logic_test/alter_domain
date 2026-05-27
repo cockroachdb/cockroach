@@ -246,6 +246,12 @@ CREATE TABLE t_enforce (c d_enforce)
 statement ok
 INSERT INTO t_enforce VALUES (NULL)
 
+statement error pgcode 23502 column "c" of table "t_enforce" contains null values that violate domain d_enforce NOT NULL constraint
+ALTER DOMAIN d_enforce SET NOT NULL
+
+statement count 1
+DELETE FROM t_enforce WHERE c IS NULL
+
 statement ok
 ALTER DOMAIN d_enforce SET NOT NULL
 
@@ -326,6 +332,24 @@ ALTER DOMAIN d ADD CONSTRAINT nn NOT NULL NOT VALID
 
 statement ok
 DROP TABLE t_add_chk
+
+# Validation must observe pre-existing rows in columns that use the domain.
+statement ok
+CREATE DOMAIN d_valid AS INT;
+CREATE TABLE t_valid (c d_valid);
+INSERT INTO t_valid VALUES (50), (200)
+
+statement error pgcode 23514 column "c" of table "t_valid" contains a value that violates domain d_valid check constraint "value < 100"
+ALTER DOMAIN d_valid ADD CONSTRAINT bounded CHECK (VALUE < 100)
+
+# NOT VALID skips validation, so the constraint is added despite the violating
+# row.
+statement ok
+ALTER DOMAIN d_valid ADD CONSTRAINT bounded CHECK (VALUE < 100) NOT VALID
+
+statement ok
+DROP TABLE t_valid;
+DROP DOMAIN d_valid
 
 subtest end
 
