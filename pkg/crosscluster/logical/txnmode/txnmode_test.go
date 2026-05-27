@@ -7,14 +7,21 @@ package txnmode_test
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrtestutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -22,6 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
+	"github.com/stretchr/testify/require"
 )
 
 // setupParentChildReplication creates source and destination databases with
@@ -97,6 +107,111 @@ func TestTxnModeSmoketest(t *testing.T) {
 
 	destDB.CheckQueryResults(t, "SELECT * FROM parent ORDER BY id", [][]string{})
 	destDB.CheckQueryResults(t, "SELECT * FROM child ORDER BY id", [][]string{})
+}
+
+// TestTxnModeCursorPTSBlocksSourceGC verifies that when CURSOR is set,
+// the producer's ReplicationStartTime is the cursor timestamp. PTS on the
+// source is derived from ReplicationStartTime, so if it were set to the
+// statement time instead, keys at the cursor could be GC'd before the
+// consumer's rangefeed can read them.
+func TestTxnModeCursorPTSBlocksSourceGC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	var (
+		sourceRangeIDs []int64
+		sysDB          *gosql.DB
+		forceGCOnce    sync.Once
+		forceGCErr     error
+	)
+
+	streamingKnobs := &sql.StreamingTestingKnobs{
+		DistSQLRetryPolicy: &retry.Options{
+			InitialBackoff: time.Millisecond,
+			MaxBackoff:     time.Millisecond,
+			MaxRetries:     1,
+		},
+		BeforeClientSubscribe: func(_, _ string, _ span.Frontier, _ bool) {
+			forceGCOnce.Do(func() {
+				time.Sleep(500 * time.Millisecond)
+				for _, rid := range sourceRangeIDs {
+					if _, err := sysDB.ExecContext(ctx,
+						"SELECT crdb_internal.kv_enqueue_replica($1, 'mvccGC', true)", rid,
+					); err != nil {
+						forceGCErr = err
+						return
+					}
+				}
+			})
+		},
+	}
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(134857),
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			DistSQL: &execinfra.TestingKnobs{
+				StreamingTestingKnobs: streamingKnobs,
+			},
+			Streaming: streamingKnobs,
+			Store: &kvserver.StoreTestingKnobs{
+				DisableGCQueue: true,
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	runner := sqlutils.MakeSQLRunner(conn)
+
+	sysDB = srv.SystemLayer().SQLConn(t)
+	sysRunner := sqlutils.MakeSQLRunner(sysDB)
+	ldrtestutils.ApplyLowLatencyReplicationSettings(t, sysRunner, runner)
+	sqltestutils.SetShortRangeFeedIntervals(t, srv)
+
+	sysRunner.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms'")
+	runner.Exec(t, "CREATE DATABASE source_db")
+	runner.Exec(t, "CREATE DATABASE dest_db")
+
+	sourceDB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("source_db")))
+	destDB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("dest_db")))
+	for _, db := range []*sqlutils.SQLRunner{sourceDB, destDB} {
+		db.Exec(t, "CREATE TABLE tab (id INT PRIMARY KEY, v INT)")
+	}
+
+	cursorTS := s.Clock().Now()
+	sourceDB.Exec(t, "INSERT INTO tab VALUES (1, 10), (2, 20), (3, 30)")
+	sourceDB.Exec(t, "ALTER TABLE tab CONFIGURE ZONE USING gc.ttlseconds = 1")
+
+	// Age cursorTS past the GC TTL so a subsequent GC pass would, absent
+	// PTS protection, be able to advance the threshold past cursorTS.
+	time.Sleep(2 * time.Second)
+
+	rows := sourceDB.Query(t, "WITH r AS (SHOW RANGES FROM TABLE tab) SELECT range_id FROM r")
+	for rows.Next() {
+		var rid int64
+		require.NoError(t, rows.Scan(&rid))
+		sourceRangeIDs = append(sourceRangeIDs, rid)
+	}
+	require.NoError(t, rows.Err())
+	require.NoError(t, rows.Close())
+	require.NotEmpty(t, sourceRangeIDs)
+	sourceURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("source_db"))
+
+	var jobID jobspb.JobID
+	destDB.QueryRow(t,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = 'transactional', CURSOR = $2",
+		sourceURL.String(),
+		cursorTS.AsOfSystemTime(),
+	).Scan(&jobID)
+
+	now := s.Clock().Now()
+	ldrtestutils.WaitUntilReplicatedTime(t, now, destDB, jobID)
+	require.NoError(t, forceGCErr, "BeforeClientSubscribe failed to force GC")
+	destDB.CheckQueryResults(t, "SELECT id, v FROM tab ORDER BY id", [][]string{
+		{"1", "10"}, {"2", "20"}, {"3", "30"},
+	})
 }
 
 func TestTxnModeUniqueConstraintUpdate(t *testing.T) {
