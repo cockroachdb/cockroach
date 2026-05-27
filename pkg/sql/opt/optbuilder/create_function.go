@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -370,6 +371,13 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	targetVolatility := tree.GetRoutineVolatility(cf.Options)
 	fmtCtx := tree.NewFmtCtx(tree.FmtParsable | tree.FmtAlwaysQualifyUserDefinedTypeNames)
 
+	// When late binding is enabled for PL/pgSQL procedures, we parse but do not
+	// build the body statements. References are resolved at CALL time instead.
+	// LANGUAGE SQL procedures always use early binding.
+	lateBinding := cf.IsProcedure &&
+		language == tree.RoutineLangPLpgSQL &&
+		sqlclustersettings.PLpgSQLProcedureLateBindingEnabled(b.ctx, b.evalCtx.Settings)
+
 	defer func(origValue bool) {
 		b.insideSQLRoutine = origValue
 	}(b.insideSQLRoutine)
@@ -379,7 +387,8 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	var stmtScope *scope
 	switch language {
 	case tree.RoutineLangSQL:
-		// Parse the function body.
+		// Parse the function body. lateBinding cannot be true here: it requires
+		// language == RoutineLangPLpgSQL.
 		stmts, err := parser.Parse(funcBodyStr)
 		if err != nil {
 			panic(err)
@@ -426,7 +435,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			}
 		}
 
-		// Special handling for trigger functions.
+		// Special handling for trigger functions and late-bound procedures.
 		var skipSQL, isTriggerFn bool
 		if funcReturnType.Identical(types.Trigger) {
 			// Trigger functions cannot have user-defined parameters. However, they do
@@ -450,6 +459,17 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			// until the function is bound to a trigger.
 			isTriggerFn = true
 			skipSQL = true
+		} else if lateBinding {
+			// Under late binding the body is stored verbatim and references
+			// are resolved at CALL time, so no back-references should be
+			// installed on referenced descriptors. Setting skipSQL prevents
+			// the PL/pgSQL builder from analyzing SQL inside the body, and
+			// the call to afterBuildStmt below is skipped so that any
+			// schemaDeps / schemaTypeDeps / schemaFunctionDeps that did get
+			// pushed are not appended to the routine's dependency set.
+			// Parameter and return type dependencies are tracked separately
+			// and still survive.
+			skipSQL = true
 		}
 
 		// We need to disable stable function folding because we want to catch the
@@ -467,44 +487,52 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			)
 			stmtScope = plBuilder.buildRootBlock(stmt.AST, bodyScope, routineParams)
 		})
-		checkStmtVolatility(targetVolatility, stmtScope, stmt)
+		if !lateBinding {
+			checkStmtVolatility(targetVolatility, stmtScope, stmt)
 
-		// Format the statements with qualified datasource names.
-		formatFuncBodyStmt(fmtCtx, stmt.AST, language, false /* newLine */)
-		afterBuildStmt()
+			// Format the statements with qualified datasource names.
+			formatFuncBodyStmt(fmtCtx, stmt.AST, language, false /* newLine */)
+			afterBuildStmt()
+		}
 	default:
 		panic(errors.AssertionFailedf("unexpected language: %v", language))
 	}
 
-	if stmtScope != nil && (language != tree.RoutineLangPLpgSQL || !isSetReturning) {
-		// Validate that the result type of the last statement matches the
-		// return type of the function. We skip this validation for PL/pgSQL SRFs
-		// because those handle their own validation, and do not return a result
-		// directly from their last body statement anyway.
-		//
-		// TODO(mgartner): stmtScope.cols does not describe the result
-		// columns of the statement. We should use physical.Presentation
-		// instead.
-		err = validateReturnType(b.ctx, b.semaCtx, funcReturnType, stmtScope.cols)
-		if err != nil {
-			panic(err)
+	if !lateBinding {
+		if stmtScope != nil && (language != tree.RoutineLangPLpgSQL || !isSetReturning) {
+			// Validate that the result type of the last statement matches the
+			// return type of the function. We skip this validation for PL/pgSQL SRFs
+			// because those handle their own validation, and do not return a result
+			// directly from their last body statement anyway.
+			//
+			// TODO(mgartner): stmtScope.cols does not describe the result
+			// columns of the statement. We should use physical.Presentation
+			// instead.
+			err = validateReturnType(b.ctx, b.semaCtx, funcReturnType, stmtScope.cols)
+			if err != nil {
+				panic(err)
+			}
+		}
+
+		if targetVolatility == tree.RoutineImmutable && len(deps) > 0 {
+			panic(
+				pgerror.Newf(
+					pgcode.InvalidParameterValue,
+					"referencing relations is not allowed in immutable function",
+				),
+			)
 		}
 	}
 
-	if targetVolatility == tree.RoutineImmutable && len(deps) > 0 {
-		panic(
-			pgerror.Newf(
-				pgcode.InvalidParameterValue,
-				"referencing relations is not allowed in immutable function",
-			),
-		)
-	}
-
-	// Override the function body so that references are fully qualified.
-	for i, option := range cf.Options {
-		if _, ok := option.(tree.RoutineBodyStr); ok {
-			cf.Options[i] = tree.RoutineBodyStr(fmtCtx.CloseAndGetString())
-			break
+	if lateBinding {
+		fmtCtx.Close()
+	} else {
+		// Override the function body so that references are fully qualified.
+		for i, option := range cf.Options {
+			if _, ok := option.(tree.RoutineBodyStr); ok {
+				cf.Options[i] = tree.RoutineBodyStr(fmtCtx.CloseAndGetString())
+				break
+			}
 		}
 	}
 

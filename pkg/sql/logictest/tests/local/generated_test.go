@@ -2038,6 +2038,13 @@ func TestLogic_procedure_deps(
 	runLogicTest(t, "procedure_deps")
 }
 
+func TestLogic_procedure_late_binding(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "procedure_late_binding")
+}
+
 func TestLogic_procedure_params(
 	t *testing.T,
 ) {

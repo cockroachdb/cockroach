@@ -6,6 +6,9 @@
 package sqlclustersettings
 
 import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -191,6 +194,25 @@ var UseInstanceInfoForSQLInstances = settings.RegisterBoolSetting(
 	"use sqlinstance.InstanceInfo instead of NodeDescriptor for SQL instance lookups; "+
 		"enables proper handling of SQL instances in serverless environments",
 	metamorphic.ConstantWithTestBool("sql.instance_info.use_instance_resolver.enabled", true))
+
+var PLpgSQLProcedureLateBinding = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.procedures.plpgsql.late_binding.enabled",
+	"when true, PL/pgSQL procedure bodies are not resolved at creation time; "+
+		"references are resolved at CALL time instead, matching PostgreSQL "+
+		"PL/pgSQL semantics. Does not affect LANGUAGE SQL procedures or "+
+		"functions",
+	false,
+	settings.WithPublic,
+)
+
+// PLpgSQLProcedureLateBindingEnabled returns true when both the V26_3 version
+// gate and the cluster setting permit PL/pgSQL procedure late binding. All
+// late-binding call sites must use this helper.
+func PLpgSQLProcedureLateBindingEnabled(ctx context.Context, st *cluster.Settings) bool {
+	return st.Version.IsActive(ctx, clusterversion.V26_3) &&
+		PLpgSQLProcedureLateBinding.Get(&st.SV)
+}
 
 // SkipUnderlyingViewPrivilegeChecks controls whether privilege checks on underlying
 // tables are skipped when selecting from a view. By default (false), the view
