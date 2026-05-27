@@ -63,6 +63,11 @@ func (l *lexer) cleanup() {
 // lineFromPos converts a byte position (from plpgsqlSymType.pos) to a 1-based
 // line number by counting newlines in the source string. The lineOffset
 // accounts for newlines stripped from the input before the first token.
+//
+// NOTE: The line number is computed from the prettified function body, not the
+// original source. CockroachDB reformats PLpgSQL bodies during CREATE FUNCTION
+// (stripping blank lines, re-indenting), so the reported line may differ from
+// PostgreSQL, which preserves the original source text.
 func (l *lexer) lineFromPos(pos int32) int {
 	end := int(pos)
 	if end > len(l.in) {

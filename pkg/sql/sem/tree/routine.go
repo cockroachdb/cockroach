@@ -178,12 +178,20 @@ type RoutineExpr struct {
 // PLpgSQLErrorContext holds PLpgSQL source context information for error
 // reporting. It is set during compilation and propagated through execution so
 // that runtime errors can report the originating PLpgSQL source location.
+//
+// NOTE: Line numbers are computed from the prettified (reformatted) function
+// body, not the original source text. CockroachDB's Block.Format() strips
+// blank lines and re-indents during CREATE FUNCTION, so the reported line
+// numbers may differ from PostgreSQL, which preserves the original source.
 type PLpgSQLErrorContext struct {
-	// FuncName is the name of the PLpgSQL function or "inline_code_block" for
-	// DO blocks.
+	// FuncName is the name of the PLpgSQL function with parameter types
+	// (e.g., "my_func(integer,text)") or "inline_code_block" for DO blocks.
 	FuncName string
 
-	// LineNo is the 1-based line number of the PLpgSQL statement.
+	// LineNo is the 1-based line number of the PLpgSQL statement, computed
+	// from the prettified function body. This may differ from PostgreSQL's
+	// line numbers when the original source contains blank lines or
+	// inconsistent indentation, since CockroachDB reformats the body.
 	LineNo int
 
 	// StmtTag is a human-readable description of the statement type, e.g.

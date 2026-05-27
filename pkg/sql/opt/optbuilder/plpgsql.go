@@ -202,8 +202,12 @@ type plpgsqlBuilder struct {
 	// is how RETURN NEXT and RETURN QUERY are implemented.
 	resultBufferID memo.RoutineResultBufferID
 
-	routineName  string
-	identCounter int
+	routineName string
+	// routineDisplayName is the routine name with parameter types appended
+	// for use in PostgreSQL-compatible error context reporting (e.g.,
+	// "test_fn(integer,text)"). For DO blocks this is the same as routineName.
+	routineDisplayName string
+	identCounter       int
 }
 
 // plOptions is a set of options that can be used to modify the behavior of the
@@ -299,15 +303,27 @@ func newPLpgSQLBuilder(
 	resultBufferID memo.RoutineResultBufferID,
 ) *plpgsqlBuilder {
 	const initialBlocksCap = 2
+	// Build the display name with parameter types for PostgreSQL-compatible
+	// error context (e.g., "test_fn(integer,text)" instead of just "test_fn").
+	// DO blocks have no parameters so they keep the plain name.
+	displayName := routineName
+	if len(routineParams) > 0 {
+		typeNames := make([]string, len(routineParams))
+		for i, p := range routineParams {
+			typeNames[i] = p.typ.SQLStandardName()
+		}
+		displayName = fmt.Sprintf("%s(%s)", routineName, strings.Join(typeNames, ","))
+	}
 	b := &plpgsqlBuilder{
-		ob:             ob,
-		options:        options,
-		colRefs:        colRefs,
-		returnType:     returnType,
-		blocks:         make([]plBlock, 0, initialBlocksCap),
-		routineName:    routineName,
-		outScope:       outScope,
-		resultBufferID: resultBufferID,
+		ob:                 ob,
+		options:            options,
+		colRefs:            colRefs,
+		returnType:         returnType,
+		blocks:             make([]plBlock, 0, initialBlocksCap),
+		routineName:        routineName,
+		routineDisplayName: displayName,
+		outScope:           outScope,
+		resultBufferID:     resultBufferID,
 	}
 	if options.isSetReturning {
 		// The sub-routines for a set-returning PL/pgSQL function return VOID, since
@@ -2284,7 +2300,7 @@ func (b *plpgsqlBuilder) makeContinuationWithTyp(
 func (b *plpgsqlBuilder) setPLpgSQLCtx(con *continuation, stmt ast.Statement) {
 	if stmt.GetLineNo() > 0 {
 		con.def.PLpgSQLCtx = &tree.PLpgSQLErrorContext{
-			FuncName: b.routineName,
+			FuncName: b.routineDisplayName,
 			LineNo:   stmt.GetLineNo(),
 			StmtTag:  stmt.HumanReadableStmtTag(),
 		}
