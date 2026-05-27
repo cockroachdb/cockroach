@@ -86,22 +86,48 @@ type variations struct {
 	validationDuration   time.Duration
 	ratioOfMax           float64
 	splits               int
-	numNodes             int
-	numWorkloadNodes     int
-	vcpu                 int
-	disks                int
-	mem                  spec.MemPerCPU
-	leaseType            registry.LeaseType
-	perturbation         perturbation
-	workload             workloadType
-	impact               acceptableImpact
-	cloud                registry.CloudSet
-	acMode               admissionControlMode
-	diskBandwidthLimit   string
-	histogramArgs        string // set at test start for workload histogram export
-	profileOptions       []roachtestutil.ProfileOptionFunc
-	specOptions          []spec.Option
-	clusterSettings      map[string]string
+	scatter              bool // pass --scatter when initializing the workload table
+	timeout              time.Duration
+	// tokenReturnTime is the budget the post-test ValidateTokensReturned
+	// check is given to observe all kvadmission flow-control tokens
+	// returned. Zero means use the framework default (10m, 1h if a disk
+	// bandwidth limit is set). Tests that drive large send queues or hold
+	// many tokens at the end of the perturbation should bump this so the
+	// check doesn't trip while drain finishes.
+	tokenReturnTime  time.Duration
+	numNodes         int
+	numWorkloadNodes int
+	vcpu             int
+	disks            int
+	mem              spec.MemPerCPU
+	leaseType        registry.LeaseType
+	perturbation     perturbation
+	workload         workloadType
+	impact           acceptableImpact
+	// recoveryImpact is the threshold applied to the recovery interval
+	// (after the perturbation completes). The zero value means "use the
+	// same threshold as the perturbation interval (impact)". Reading at
+	// the runTest use site (rather than eager-copying at setup time)
+	// keeps the fallback automatic — perturbations that override impact
+	// after setup() don't have to remember to update recoveryImpact too.
+	//
+	// Separate from impact because some perturbations (e.g. mass splits)
+	// put the cluster under heavy short-term stress that the cluster is
+	// expected to absorb; the meaningful signal is whether the cluster
+	// returns to baseline afterwards.
+	recoveryImpact     acceptableImpact
+	cloud              registry.CloudSet
+	acMode             admissionControlMode
+	diskBandwidthLimit string
+	histogramArgs      string // set at test start for workload histogram export
+	profileOptions     []roachtestutil.ProfileOptionFunc
+	specOptions        []spec.Option
+	clusterSettings    map[string]string
+	// skipPostValidations is forwarded to TestSpec.SkipPostValidations. The
+	// zero value runs all post-test validations. Perturbations that
+	// inflate the cluster (large range counts, heavy fills) can set this
+	// to skip checks that exceed the framework's per-check budget.
+	skipPostValidations registry.PostValidation
 }
 
 const NUM_REGIONS = 3
@@ -374,6 +400,9 @@ func setup(p perturbation, impact acceptableImpact) variations {
 		roachtestutil.ProfMultipleFromP99(10),
 	}
 	v.impact = impact
+	// recoveryImpact left at zero value — falls back to impact at the
+	// runTest use site. Tests that want a different threshold for the
+	// recovery interval set it explicitly.
 	v.clusterSettings = make(map[string]string)
 	// Having the io_load_listener logs makes it easier to debug failures.
 	v.clusterSettings["server.debug.default_vmodule"] = "io_load_listener=1"
@@ -395,6 +424,13 @@ func RegisterTests(r registry.Registry) {
 	register(r, restart{}, notSkipped)
 	addLong(r, restart{})
 	register(r, backup{}, notSkipped)
+	// splits runs in two flavors: asleep=true exercises total replica
+	// capacity (followers park via store liveness quiescence), asleep=false
+	// exercises active-replica capacity (every replica costs full per-tick
+	// CPU). See splits.go for the long-form rationale.
+	for _, asleep := range []bool{true, false} {
+		register(r, splits{asleep: asleep}, notSkipped)
+	}
 
 	// TODO(ssd): We skipped the majority of these tests so that we can focus on
 	// one at a time. These are vaguely ordered by their previous pass rate
@@ -424,7 +460,14 @@ func (v variations) perturbationName() string {
 	if t.Kind() == reflect.Ptr {
 		t = t.Elem()
 	}
-	return t.Name()
+	name := t.Name()
+	// Allow a perturbation to append a variation suffix (e.g. "/asleep=true")
+	// so the same struct type can register multiple test entries that differ
+	// in configuration. See perturbationNamer.
+	if namer, ok := v.perturbation.(perturbationNamer); ok {
+		name += namer.nameSuffix()
+	}
+	return name
 }
 
 // finishSetup completes initialization of the variations.
@@ -529,13 +572,29 @@ var perturbationDefaultProcessFunction = func(test string, histograms *roachtest
 	return aggregatedMeanMetrics, nil
 }
 
+// applyTimeout copies v.timeout into spec.Timeout when non-zero so tests
+// that need to override the registry default can do so by setting one
+// variations field, without each add* function repeating the check.
+func (v variations) applyTimeout(spec *registry.TestSpec) {
+	if v.timeout > 0 {
+		spec.Timeout = v.timeout
+	}
+}
+
 //lint:ignore U1000 unused
 func addMetamorphic(r registry.Registry, p perturbation, skipReason string) {
 	rng, seed := randutil.NewPseudoRand()
 	v := p.setupMetamorphic(rng)
 	v.seed = seed
+	// Some perturbations need to scale down for the metamorphic variant
+	// (the randomized clusters this suite picks are smaller than the
+	// dedicated nightly cluster). They implement metamorphicSizer to
+	// return a shrunk version of themselves.
+	if ms, ok := v.perturbation.(metamorphicSizer); ok {
+		v.perturbation = ms.sizeForMetamorphic()
+	}
 	v = v.finishSetup()
-	r.Add(registry.TestSpec{
+	spec := registry.TestSpec{
 		Name:                   fmt.Sprintf("perturbation/metamorphic/%s", v.perturbationName()),
 		Skip:                   skipReason,
 		CompatibleClouds:       v.cloud,
@@ -544,15 +603,18 @@ func addMetamorphic(r registry.Registry, p perturbation, skipReason string) {
 		Cluster:                v.makeClusterSpec(),
 		Leases:                 v.leaseType,
 		Randomized:             true,
+		SkipPostValidations:    v.skipPostValidations,
 		PostProcessPerfMetrics: perturbationDefaultProcessFunction,
 		Run:                    v.runTest,
-	})
+	}
+	v.applyTimeout(&spec)
+	r.Add(spec)
 }
 
 func addFull(r registry.Registry, p perturbation, skipReason string) {
 	v := p.setup()
 	v = v.finishSetup()
-	r.Add(registry.TestSpec{
+	spec := registry.TestSpec{
 		Name:                   fmt.Sprintf("perturbation/full/%s", v.perturbationName()),
 		Skip:                   skipReason,
 		CompatibleClouds:       v.cloud,
@@ -561,9 +623,12 @@ func addFull(r registry.Registry, p perturbation, skipReason string) {
 		Cluster:                v.makeClusterSpec(),
 		Leases:                 v.leaseType,
 		Benchmark:              true,
+		SkipPostValidations:    v.skipPostValidations,
 		PostProcessPerfMetrics: perturbationDefaultProcessFunction,
 		Run:                    v.runTest,
-	})
+	}
+	v.applyTimeout(&spec)
+	r.Add(spec)
 }
 
 // addLong registers a heavyweight variant of a perturbation test that runs
@@ -602,7 +667,7 @@ func addLong(r registry.Registry, p perturbation) {
 	v := p.setup()
 	v.fillDuration = 2 * time.Hour
 	v = v.finishSetup()
-	r.Add(registry.TestSpec{
+	spec := registry.TestSpec{
 		Name:             fmt.Sprintf("perturbation/long/%s", v.perturbationName()),
 		CompatibleClouds: v.cloud,
 		Suites:           registry.Suites(registry.Weekly),
@@ -614,7 +679,8 @@ func addLong(r registry.Registry, p perturbation) {
 		// validation/recovery windows + teardown). The timeout is set well
 		// above that — it is a backstop for pathological cases (everything
 		// seizing up in a way that does not surface as a test failure) and
-		// not a target.
+		// not a target. Perturbations that need longer (e.g. heavier fill)
+		// can override via v.timeout, applied via applyTimeout below.
 		Timeout: 6 * time.Hour,
 		// The 2h fill produces enough data that the post-test replica
 		// divergence check exceeds its 20m budget, mirroring the carve-out
@@ -624,13 +690,29 @@ func addLong(r registry.Registry, p perturbation) {
 		SkipPostValidations:    registry.PostValidationReplicaDivergence,
 		PostProcessPerfMetrics: perturbationDefaultProcessFunction,
 		Run:                    v.runTest,
-	})
+	}
+	v.applyTimeout(&spec)
+	r.Add(spec)
 }
 
 func addDev(r registry.Registry, p perturbation) {
 	v := p.setup()
-	// Dev tests never fail on latency increases.
+	// Dev tests never fail on latency or throughput changes — local
+	// processes on a developer machine are too noisy for either to be
+	// meaningful. Zero out both intervals' thresholds. recoveryImpact
+	// must be zeroed explicitly even though impact is also zero: a
+	// perturbation setup that set recoveryImpact to a non-zero value
+	// would otherwise survive and gate the dev run.
 	v.impact = noImpactThresholds()
+	v.recoveryImpact = acceptableImpact{}
+	// Clear any per-test timeout override; the registry default is fine
+	// for a 30-second perturbation on a 5-node local cluster, and an
+	// override sized for the nightly variant (e.g. several hours) would
+	// hide hangs in the dev run. Same reasoning for tokenReturnTime:
+	// the nightly override (e.g. 1h) wildly overshoots what's
+	// meaningful on a 5-node local cluster.
+	v.timeout = 0
+	v.tokenReturnTime = 0
 	// Make the tests faster for development.
 	v.splits = 1
 	v.numNodes = 5
@@ -652,8 +734,14 @@ func addDev(r registry.Registry, p perturbation) {
 
 	// Allow the test to run on dev machines.
 	v.cloud = registry.AllClouds
+	// Some perturbations need to scale down for the dev variant (smaller
+	// cluster, faster wall time). They implement devSizer to return a
+	// shrunk version of themselves.
+	if ds, ok := v.perturbation.(devSizer); ok {
+		v.perturbation = ds.sizeForDev()
+	}
 	v = v.finishSetup()
-	r.Add(registry.TestSpec{
+	spec := registry.TestSpec{
 		Name:                   fmt.Sprintf("perturbation/dev/%s", v.perturbationName()),
 		CompatibleClouds:       v.cloud,
 		Suites:                 registry.ManualOnly,
@@ -663,7 +751,9 @@ func addDev(r registry.Registry, p perturbation) {
 		Benchmark:              true,
 		PostProcessPerfMetrics: perturbationDefaultProcessFunction,
 		Run:                    v.runTest,
-	})
+	}
+	v.applyTimeout(&spec)
+	r.Add(spec)
 }
 
 type perturbation interface {
@@ -686,6 +776,31 @@ type perturbation interface {
 	// endPerturbation ends the system change. Not all perturbations do anything on stop.
 	// It returns the duration looking backwards to collect performance stats.
 	endPerturbation(ctx context.Context, t test.Test, v variations) time.Duration
+}
+
+// perturbationNamer is an optional interface a perturbation may implement to
+// append a variation suffix to its test name. For example, a perturbation
+// that registers two flavors of the same struct can return "/asleep=true"
+// and "/asleep=false" to produce distinct test names like
+// "perturbation/full/splits/asleep=true".
+//
+// Implementations should return either an empty string (no suffix) or a
+// string starting with "/" so the test name reads naturally when composed
+// with the parent path.
+type perturbationNamer interface {
+	nameSuffix() string
+}
+
+// devSizer is an optional interface for perturbations that need to shrink
+// themselves for the dev variant (small cluster, fast wall time). addDev
+// invokes sizeForDev() if the perturbation implements it.
+type devSizer interface {
+	sizeForDev() perturbation
+}
+
+// metamorphicSizer is the same idea as devSizer for the metamorphic variant.
+type metamorphicSizer interface {
+	sizeForMetamorphic() perturbation
 }
 
 func prettyPrint(title string, stats map[string]aggregatedStat) string {
@@ -911,19 +1026,30 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	t.L().Printf("validating stats during the perturbation")
 	failures := isAcceptableChange(t.L(), baselineStats, perturbationStats, v.impact)
 	t.L().Printf("validating stats after the perturbation")
-	failures = append(failures, isAcceptableChange(t.L(), baselineStats, afterStats, v.impact)...)
+	// recoveryImpact is the zero value by default; fall back to impact so
+	// callers that don't care about separate thresholds get the obvious
+	// behavior automatically.
+	recovery := v.recoveryImpact
+	if recovery == (acceptableImpact{}) {
+		recovery = v.impact
+	}
+	failures = append(failures, isAcceptableChange(t.L(), baselineStats, afterStats, recovery)...)
 	if len(failures) > 0 {
 		// Collect perf artifacts before failing so that roachperf still gets
 		// the data for this run.
 		artifactsutil.CollectPerfArtifacts(ctx, t, c)
 		require.Fail(t, strings.Join(failures, "\n"))
 	}
+	// Per-test override wins; otherwise fall back to the previous default
+	// (10m, lifted to 1h when a disk bandwidth limit is set per #137017).
 	// TODO(baptist): Look at the time for token return in actual tests to
-	// determine if this can be lowered further.
-	tokenReturnTime := 10 * time.Minute
-	// TODO(#137017): Increase the return time if disk bandwidth limit is set.
-	if v.diskBandwidthLimit != "0" {
-		tokenReturnTime = 1 * time.Hour
+	// determine if the default can be lowered further.
+	tokenReturnTime := v.tokenReturnTime
+	if tokenReturnTime == 0 {
+		tokenReturnTime = 10 * time.Minute
+		if v.diskBandwidthLimit != "0" {
+			tokenReturnTime = 1 * time.Hour
+		}
 	}
 	roachtestutil.ValidateTokensReturned(ctx, t, v, v.stableNodes(), tokenReturnTime)
 }
