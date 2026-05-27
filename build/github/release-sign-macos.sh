@@ -60,8 +60,8 @@ for product in cockroach cockroach-sql; do
     target=${base}.tgz
 
     echo "Downloading unsigned archive: $unsigned_file"
-    gsutil -o 'GSUtil:num_retries=5' cp "gs://$gcs_staged_bucket/$unsigned_file" "$unsigned_file"
-    gsutil -o 'GSUtil:num_retries=5' cp "gs://$gcs_staged_bucket/$unsigned_file.sha256sum" "$unsigned_file.sha256sum"
+    gcloud storage cp "gs://$gcs_staged_bucket/$unsigned_file" "$unsigned_file"
+    gcloud storage cp "gs://$gcs_staged_bucket/$unsigned_file.sha256sum" "$unsigned_file.sha256sum"
 
     echo "Verifying checksum..."
     shasum --algorithm 256 --check "$unsigned_file.sha256sum"
@@ -87,8 +87,8 @@ for product in cockroach cockroach-sql; do
 
     echo "Uploading signed archive: $target"
     shasum --algorithm 256 "$target" > "$target.sha256sum"
-    gsutil -o 'GSUtil:num_retries=5' cp "$target" "gs://$gcs_staged_bucket/$target"
-    gsutil -o 'GSUtil:num_retries=5' cp "$target.sha256sum" "gs://$gcs_staged_bucket/$target.sha256sum"
+    gcloud storage cp "$target" "gs://$gcs_staged_bucket/$target"
+    gcloud storage cp "$target.sha256sum" "gs://$gcs_staged_bucket/$target.sha256sum"
 
   done
 done

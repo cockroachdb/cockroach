@@ -59,7 +59,7 @@ env:
   # staging-prod repos can run the prod flow against dev GCP. Real prod
   # cutover requires both vars set to true. Dry-run forces dev GCP.
   RELEASE_WIF_PROVIDER: ${{ (inputs.dry_run || vars.USE_PROD_GCP != 'true') && 'projects/65523152860/locations/global/workloadIdentityPools/gha-releases-oidc/providers/gha-releases-oidc' || 'projects/182391335559/locations/global/workloadIdentityPools/gha-releases-oidc/providers/gha-releases-oidc' }}
-  RELEASE_GCP_SERVICE_ACCOUNT: ${{ (inputs.dry_run || vars.USE_PROD_GCP != 'true') && 'gha-releases@releases-dev-356314.iam.gserviceaccount.com' || 'release-artifacts@releases-prod.iam.gserviceaccount.com' }}
+  RELEASE_GCP_SERVICE_ACCOUNT: ${{ (inputs.dry_run || vars.USE_PROD_GCP != 'true') && 'gha-releases@releases-dev-356314.iam.gserviceaccount.com' || 'gha-releases@releases-prod.iam.gserviceaccount.com' }}
   RELEASE_GCP_PROJECT: ${{ (inputs.dry_run || vars.USE_PROD_GCP != 'true') && 'releases-dev-356314' || 'releases-prod' }}
 
 jobs:
@@ -195,7 +195,7 @@ jobs:
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
     name: Update version.txt
-    runs-on: [self-hosted, ubuntu_2404]
+    runs-on: [self-hosted, ubuntu_2004]
     timeout-minutes: 60
     permissions:
       id-token: write
@@ -281,7 +281,7 @@ jobs:
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
     name: Publish staged cockroach release
-    runs-on: [self-hosted, ubuntu_big_2404]
+    runs-on: [self-hosted, ubuntu_big_2004]
     timeout-minutes: 90
     permissions:
       id-token: write
@@ -372,7 +372,7 @@ jobs:
       }}
     # Reviewer-approval gate is on approve-publish upstream; this job
     # inherits the gate transitively via its needs chain.
-    runs-on: [self-hosted, ubuntu_2404]
+    runs-on: [self-hosted, ubuntu_2004]
     timeout-minutes: 60
     permissions:
       id-token: write
@@ -437,7 +437,7 @@ jobs:
       }}
     # Reviewer-approval gate is on approve-publish upstream; this job
     # inherits the gate transitively via its needs chain.
-    runs-on: [self-hosted, ubuntu_2404]
+    runs-on: [self-hosted, ubuntu_2004]
     timeout-minutes: 30
     permissions:
       id-token: write
@@ -498,7 +498,7 @@ jobs:
     # only posts a Slack summary — gating it would block delivery of the
     # final status (especially failure pings) until the same human
     # approves an extra step, defeating the point of the notification.
-    runs-on: [self-hosted, ubuntu_2404]
+    runs-on: [self-hosted, ubuntu_2004]
     timeout-minutes: 10
     permissions:
       id-token: write
@@ -545,7 +545,7 @@ jobs:
           SLACK_TOKEN: ${{ steps.secrets.outputs.slack_bot_token }}
           SLACK_PAYLOAD: >-
             {
-              "channel": "C08H9FA1W3C",
+              "channel": "#release-ops",
               "text": "${{ steps.status.outputs.emoji }} Release publish *${{ steps.status.outputs.result }}* for `${{ github.ref_name }}` (<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View run>)",
               "attachments": [
                 {
