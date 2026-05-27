@@ -12,7 +12,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/backup"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl"
 	// TODO(ssd): Many test packages require this implicitly but have failed to
 	// import it, instead depending on the implicit dependency tree of pkg/ccl to
 	// include it.
@@ -20,6 +19,8 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster/logical"
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster/physical"
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster/producer"
+	_ "github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostclient"
+	_ "github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostserver"
 	// TODO(ssd): gssapiauth is no longer CCL; relocate this blank import out
 	// of ccl_init.go to a more appropriate place (e.g. a server-level init
 	// point).

@@ -1020,7 +1020,6 @@ GO_TARGETS = [
     "//pkg/ccl/multiregionccl/multiregionccltestutils:multiregionccltestutils",
     "//pkg/ccl/multiregionccl:multiregionccl",
     "//pkg/ccl/multiregionccl:multiregionccl_test",
-    "//pkg/ccl/multitenantccl:multitenantccl",
     "//pkg/ccl/schemachangerccl/sctestbackupccl:sctestbackupccl_test",
     "//pkg/ccl/schemachangerccl/sctestbackupmrccl:sctestbackupmrccl_test",
     "//pkg/ccl/schemachangerccl:schemachangerccl",
