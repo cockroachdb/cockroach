@@ -4285,19 +4285,7 @@ drop_external_connection_stmt:
 	| DROP EXTERNAL CONNECTION error // SHOW HELP: DROP EXTERNAL CONNECTION
 
 with_resource_group_options:
-  WITH resource_group_option_list
-  {
-    $$.val = $2.kvOptions()
-  }
-| WITH_LA resource_group_option_list
-  {
-    $$.val = $2.kvOptions()
-  }
-| WITH '(' resource_group_option_list ')'
-  {
-    $$.val = $3.kvOptions()
-  }
-| WITH_LA '(' resource_group_option_list ')'
+  WITH '(' resource_group_option_list ')'
   {
     $$.val = $3.kvOptions()
   }

@@ -1946,10 +1946,7 @@ label_spec ::=
 	| 'IF' 'NOT' 'EXISTS' string_or_placeholder
 
 with_resource_group_options ::=
-	'WITH' resource_group_option_list
-	| 'WITH' resource_group_option_list
-	| 'WITH' '(' resource_group_option_list ')'
-	| 'WITH' '(' resource_group_option_list ')'
+	'WITH' '(' resource_group_option_list ')'
 
 role_or_group_or_user ::=
 	'ROLE'
