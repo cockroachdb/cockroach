@@ -7,6 +7,6 @@ package multitenantccl
 
 import (
 	// Imports for the CCL init hooks.
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl/tenantcostserver"
 	_ "github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostclient"
+	_ "github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostserver"
 )
