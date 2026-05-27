@@ -225,10 +225,16 @@ func main() {
 	}
 	artifactName := fmt.Sprintf("cockroach-%s.%s.tgz", version, platform)
 	log.Printf("Downloading artifact: %s", artifactName)
-	gsutilCmd := exec.Command("gsutil", "cp",
+	// Use `gcloud storage cp` rather than `gsutil cp`: under Workload
+	// Identity Federation, gsutil does not honor the credentials file
+	// google-github-actions/auth writes and silently falls back to the
+	// runner VM's metadata service account.
+	downloadCmd := exec.Command("gcloud", "storage", "cp",
 		fmt.Sprintf("gs://cockroach-release-artifacts-staged-prod/%s", artifactName),
 		"./")
-	if err := gsutilCmd.Run(); err != nil {
+	downloadCmd.Stdout = os.Stdout
+	downloadCmd.Stderr = os.Stderr
+	if err := downloadCmd.Run(); err != nil {
 		log.Fatal(err)
 	}
 	log.Printf("Downloaded artifact: %s", artifactName)
