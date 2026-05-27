@@ -9,13 +9,48 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/tablestorageparam"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
+
+// CreateTableDescriptor materializes a new table descriptor in the ADD state.
+// Subsequent ops on the Table ABSENT -> PUBLIC path fill in the rest.
+func (i *immediateVisitor) CreateTableDescriptor(
+	_ context.Context, op scop.CreateTableDescriptor,
+) error {
+	// Mirrors CreateSequenceDescriptor. PrimaryIndex must be seeded so that
+	// AllocateIDsWithoutValidation (called during column emission) does not
+	// assign ID=1 to the zero-valued placeholder, which would leave a stale
+	// entry alongside the real mutation and fail end-of-stage validation.
+	mut := tabledesc.NewBuilder(&descpb.TableDescriptor{
+		ParentID:      catid.InvalidDescID, // set by `SchemaParent` element
+		Name:          "",                  // set by `Namespace` element
+		ID:            op.TableID,
+		Privileges:    &catpb.PrivilegeDescriptor{Version: catpb.Version23_2}, // set by `UserPrivileges` and `Owner` elements
+		Version:       1,
+		FormatVersion: descpb.InterleavedFormatVersion,
+		PrimaryIndex: descpb.IndexDescriptor{
+			ID:           1,
+			Name:         tabledesc.LegacyPrimaryKeyIndexName,
+			Version:      descpb.LatestIndexDescriptorVersion,
+			EncodingType: catenumpb.PrimaryIndexEncoding,
+			ConstraintID: 1,
+			Unique:       true,
+		},
+		NextIndexID:      2,
+		NextConstraintID: 2,
+	}).BuildCreatedMutable()
+	mut.(*tabledesc.Mutable).State = descpb.DescriptorState_ADD
+	i.CreateDescriptor(mut)
+	return nil
+}
 
 func (i *immediateVisitor) AddTableZoneConfig(
 	ctx context.Context, op scop.AddTableZoneConfig,
