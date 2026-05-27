@@ -691,10 +691,15 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 	}
 	skip.UnderRace(t, "test is too slow to run under race")
 
+	settings := cluster.MakeTestingClusterSettings()
+	persistedsqlstats.SQLStatsFlushEnabled.Override(
+		context.Background(), &settings.SV, false,
+	)
 	statsKnobs := sqlstats.CreateTestingKnobs()
 	statsKnobs.SynchronousSQLStats = true
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			Settings: settings,
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: statsKnobs,
 				SpanConfig: &spanconfig.TestingKnobs{
