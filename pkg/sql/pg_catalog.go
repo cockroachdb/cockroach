@@ -1683,7 +1683,7 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 									if errors.Is(err, catalog.ErrDescriptorNotFound) ||
 										catalog.HasInactiveDescriptorError(err) {
 										//nolint:returnerrcheck
-										return !IsMaybeHashedOid(oid.Oid(id)), nil
+										return !oidext.IsMaybeHashedOid(oid.Oid(id)), nil
 									}
 									return false, err
 								}
@@ -1692,7 +1692,7 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 								// not a hashed OID we can safely say the table was populated
 								// and skip an expensive step populating the full tables.
 								//nolint:returnerrcheck
-								return !IsMaybeHashedOid(oid.Oid(id)), nil
+								return !oidext.IsMaybeHashedOid(oid.Oid(id)), nil
 							}
 						} else {
 							return false, err
@@ -6368,11 +6368,6 @@ https://www.postgresql.org/docs/9.6/catalog-pg-aggregate.html`,
 //     only methods that are part of the oidHasher's external facing interface.
 type oidHasher struct {
 	h hash.Hash32
-}
-
-// IsMaybeHashedOid returns if the OID value is possibly a hashed value.
-func IsMaybeHashedOid(o oid.Oid) bool {
-	return o > oidext.CockroachPredefinedOIDMax
 }
 
 func makeOidHasher() oidHasher {

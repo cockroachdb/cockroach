@@ -2109,3 +2109,49 @@ statement ok
 DROP TABLE pg_idxsize_t
 
 subtest end
+
+subtest pg_size_non_table_oid
+
+# Verify that the four relation size builtins return NULL when called with
+# an OID that's not a relation (e.g. a type OID). PG behavior — without
+# this check the SECURITY DEFINER body would silently return 0 for any
+# descriptor.
+query IIII
+SELECT pg_relation_size('int4'::regtype::oid),
+       pg_table_size('int4'::regtype::oid),
+       pg_total_relation_size('int4'::regtype::oid),
+       pg_indexes_size('int4'::regtype::oid)
+----
+NULL  NULL  NULL  NULL
+
+subtest end
+
+subtest pg_database_size_no_connect
+
+# Verify that pg_database_size errors with 42501 when the caller lacks
+# CONNECT, matching PG. Earlier in this file testuser was granted the
+# root role; revoke it so the test exercises non-admin behavior.
+
+statement ok
+REVOKE root FROM testuser
+
+statement ok
+CREATE DATABASE pg_dbsize_priv;
+
+statement ok
+REVOKE CONNECT ON DATABASE pg_dbsize_priv FROM public;
+
+user testuser
+
+statement error pgcode 42501 permission denied for database pg_dbsize_priv
+SELECT pg_database_size('pg_dbsize_priv')
+
+statement error pgcode 42501 permission denied for database pg_dbsize_priv
+SELECT pg_database_size((SELECT oid FROM pg_database WHERE datname = 'pg_dbsize_priv'))
+
+user root
+
+statement ok
+DROP DATABASE pg_dbsize_priv
+
+subtest end
