@@ -7,6 +7,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -559,6 +560,24 @@ func (g *routineGenerator) handleException(ctx context.Context, err error) error
 		}
 	}
 	// We reached the end of the exception handlers without handling this error.
+	// Add PLpgSQL source context if available. The GetPLpgSQLContext check
+	// ensures that only the innermost (most specific) context is kept, since
+	// in the continuation-passing model, errors bubble from inner to outer
+	// routines.
+	//
+	// NOTE: The line number in the context string is based on the prettified
+	// (reformatted) function body, not the original source. This may differ
+	// from PostgreSQL's reported line number when the original source contains
+	// blank lines or inconsistent indentation.
+	if g.expr.PLpgSQLCtx != nil && g.expr.PLpgSQLCtx.LineNo > 0 {
+		if pgerror.GetPLpgSQLContext(err) == "" {
+			ctxStr := fmt.Sprintf("PL/pgSQL function %s line %d at %s",
+				g.expr.PLpgSQLCtx.FuncName,
+				g.expr.PLpgSQLCtx.LineNo,
+				g.expr.PLpgSQLCtx.StmtTag)
+			err = pgerror.WithPLpgSQLContext(err, ctxStr)
+		}
+	}
 	return err
 }
 

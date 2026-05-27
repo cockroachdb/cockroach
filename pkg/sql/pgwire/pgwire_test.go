@@ -244,6 +244,281 @@ func TestPGUnwrapError(t *testing.T) {
 	}
 }
 
+// TestPLpgSQLErrorContext verifies that errors from PLpgSQL routines include
+// the CONTEXT field with function name, line number, and statement type.
+//
+// NOTE: CockroachDB reformats PLpgSQL function bodies during CREATE FUNCTION
+// (via Block.Format()), which strips blank lines and re-indents. As a result,
+// line numbers in the CONTEXT field may differ from PostgreSQL by one or more
+// lines. Where this occurs, the expected PostgreSQL line number is noted.
+func TestPLpgSQLErrorContext(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	type testCase struct {
+		name string
+		// setupSQL is executed before the test (e.g., CREATE TABLE, CREATE FUNCTION).
+		setupSQL []string
+		// cleanupSQL is executed after the test to drop created objects.
+		cleanupSQL []string
+		// execSQL is the statement that triggers the error.
+		execSQL string
+		// expectedCode, if set, is the expected PG error code string.
+		expectedCode string
+		// expectedMessage is the expected error message.
+		expectedMessage string
+		// expectedContext is the exact expected CONTEXT (Where) string.
+		// If empty, expectedContextContains is used instead.
+		expectedContext string
+		// expectedContextContains, if set, checks that the context contains
+		// each of these substrings rather than matching exactly. Used when
+		// body reformatting makes exact line numbers unpredictable.
+		expectedContextContains []string
+	}
+
+	testCases := []testCase{
+		{
+			name: "do_block_raise",
+			execSQL: `
+				DO $$
+				BEGIN
+				  RAISE EXCEPTION 'test error';
+				END;
+				$$;
+			`,
+			expectedCode:    pgcode.RaiseException.String(),
+			expectedMessage: "test error",
+			expectedContext: "PL/pgSQL function inline_code_block line 3 at RAISE",
+		},
+		{
+			// Line number is off-by-one from PostgreSQL (which reports "line 4")
+			// because the function body is reformatted and line numbers are
+			// recomputed from the prettified body.
+			name: "named_function_raise",
+			setupSQL: []string{`
+				CREATE FUNCTION test_check_positive(x INT) RETURNS INT AS $$
+				BEGIN
+				  IF x <= 0 THEN
+				    RAISE EXCEPTION 'value must be positive, got %', x;
+				  END IF;
+				  RETURN x;
+				END;
+				$$ LANGUAGE plpgsql;
+			`},
+			cleanupSQL:      []string{`DROP FUNCTION IF EXISTS test_check_positive`},
+			execSQL:         `SELECT test_check_positive(-5)`,
+			expectedMessage: "value must be positive, got -5",
+			expectedContext: "PL/pgSQL function test_check_positive(bigint) line 3 at RAISE",
+		},
+		{
+			// Line number is off-by-one from PostgreSQL (which reports "line 6")
+			// due to body reformatting.
+			name: "named_function_constraint_error",
+			setupSQL: []string{
+				`CREATE TABLE test_accounts (id INT PRIMARY KEY, balance INT NOT NULL CHECK (balance >= 0))`,
+				`INSERT INTO test_accounts VALUES (1, 100)`,
+				`
+				CREATE FUNCTION test_withdraw(acct_id INT, amount INT) RETURNS VOID AS $$
+				DECLARE
+				  current_balance INT;
+				BEGIN
+				  SELECT balance INTO current_balance FROM test_accounts WHERE id = acct_id;
+				  UPDATE test_accounts SET balance = balance - amount WHERE id = acct_id;
+				END;
+				$$ LANGUAGE plpgsql;
+				`,
+			},
+			cleanupSQL: []string{
+				`DROP FUNCTION IF EXISTS test_withdraw`,
+				`DROP TABLE IF EXISTS test_accounts`,
+			},
+			execSQL:         `SELECT test_withdraw(1, 999)`,
+			expectedCode:    pgcode.CheckViolation.String(),
+			expectedMessage: "",
+			expectedContext: "PL/pgSQL function test_withdraw(bigint,bigint) line 5 at SQL statement",
+		},
+		{
+			// Line number is off-by-one from PostgreSQL (which reports "line 4")
+			// due to body reformatting.
+			name: "named_procedure_call",
+			setupSQL: []string{`
+				CREATE PROCEDURE test_validate_name(name TEXT) AS $$
+				BEGIN
+				  IF name IS NULL OR length(name) = 0 THEN
+				    RAISE EXCEPTION 'name cannot be empty';
+				  END IF;
+				END;
+				$$ LANGUAGE plpgsql;
+			`},
+			cleanupSQL:      []string{`DROP PROCEDURE IF EXISTS test_validate_name`},
+			execSQL:         `CALL test_validate_name('')`,
+			expectedMessage: "name cannot be empty",
+			expectedContext: "PL/pgSQL function test_validate_name(text) line 3 at RAISE",
+		},
+		{
+			// CockroachDB's Block.Format() strips blank lines when reformatting
+			// function bodies, so the line number won't match PostgreSQL (which
+			// preserves original source and would report "line 10").
+			name: "blank_lines_in_body",
+			setupSQL: []string{`
+				CREATE FUNCTION test_blank_lines(x INT) RETURNS INT AS $$
+				BEGIN
+
+
+				  IF x <= 0 THEN
+
+
+
+
+				    RAISE EXCEPTION 'value must be positive, got %', x;
+
+
+
+				  END IF;
+				  RETURN x;
+				END;
+				$$ LANGUAGE plpgsql;
+			`},
+			cleanupSQL:      []string{`DROP FUNCTION IF EXISTS test_blank_lines`},
+			execSQL:         `SELECT test_blank_lines(-5)`,
+			expectedMessage: "value must be positive, got -5",
+			expectedContextContains: []string{
+				"PL/pgSQL function test_blank_lines(bigint)",
+				"at RAISE",
+			},
+		},
+		{
+			// The context should point to the innermost function where the error
+			// originated. Line number is off-by-one from PostgreSQL (which reports
+			// "line 3") due to body reformatting.
+			name: "nested_function_call",
+			setupSQL: []string{
+				`
+				CREATE FUNCTION test_inner_fn(x INT) RETURNS INT AS $$
+				BEGIN
+				  RAISE EXCEPTION 'inner error at %', x;
+				  RETURN x;
+				END;
+				$$ LANGUAGE plpgsql;
+				`,
+				`
+				CREATE FUNCTION test_outer_fn(x INT) RETURNS INT AS $$
+				DECLARE
+				  result INT;
+				BEGIN
+				  result := test_inner_fn(x);
+				  RETURN result;
+				END;
+				$$ LANGUAGE plpgsql;
+				`,
+			},
+			cleanupSQL: []string{
+				`DROP FUNCTION IF EXISTS test_outer_fn`,
+				`DROP FUNCTION IF EXISTS test_inner_fn`,
+			},
+			execSQL:         `SELECT test_outer_fn(42)`,
+			expectedMessage: "inner error at 42",
+			expectedContextContains: []string{
+				"PL/pgSQL function test_inner_fn(bigint) line 2 at RAISE",
+			},
+		},
+		{
+			// The context should include parameter types to disambiguate
+			// overloaded functions.
+			name: "overloaded_function_int",
+			setupSQL: []string{
+				`
+				CREATE FUNCTION test_overloaded(x INT) RETURNS INT AS $$
+				BEGIN
+				  RAISE EXCEPTION 'int overload called with %', x;
+				  RETURN x;
+				END;
+				$$ LANGUAGE plpgsql;
+				`,
+				`
+				CREATE FUNCTION test_overloaded(x TEXT) RETURNS TEXT AS $$
+				BEGIN
+				  RAISE EXCEPTION 'text overload called with %', x;
+				  RETURN x;
+				END;
+				$$ LANGUAGE plpgsql;
+				`,
+			},
+			cleanupSQL: []string{
+				`DROP FUNCTION IF EXISTS test_overloaded(INT)`,
+				`DROP FUNCTION IF EXISTS test_overloaded(TEXT)`,
+			},
+			execSQL:         `SELECT test_overloaded(42)`,
+			expectedMessage: "int overload called with 42",
+			expectedContext: "PL/pgSQL function test_overloaded(bigint) line 2 at RAISE",
+		},
+		{
+			name: "overloaded_function_text",
+			setupSQL: []string{
+				`
+				CREATE FUNCTION test_overloaded(x INT) RETURNS INT AS $$
+				BEGIN
+				  RAISE EXCEPTION 'int overload called with %', x;
+				  RETURN x;
+				END;
+				$$ LANGUAGE plpgsql;
+				`,
+				`
+				CREATE FUNCTION test_overloaded(x TEXT) RETURNS TEXT AS $$
+				BEGIN
+				  RAISE EXCEPTION 'text overload called with %', x;
+				  RETURN x;
+				END;
+				$$ LANGUAGE plpgsql;
+				`,
+			},
+			cleanupSQL: []string{
+				`DROP FUNCTION IF EXISTS test_overloaded(INT)`,
+				`DROP FUNCTION IF EXISTS test_overloaded(TEXT)`,
+			},
+			execSQL:         `SELECT test_overloaded('hello')`,
+			expectedMessage: "text overload called with hello",
+			expectedContext: "PL/pgSQL function test_overloaded(text) line 2 at RAISE",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, sql := range tc.setupSQL {
+				_, err := db.Exec(sql)
+				require.NoError(t, err)
+			}
+			defer func() {
+				for _, sql := range tc.cleanupSQL {
+					_, _ = db.Exec(sql)
+				}
+			}()
+
+			_, err := db.Exec(tc.execSQL)
+			require.Error(t, err)
+
+			var pqErr *pq.Error
+			require.True(t, errors.As(err, &pqErr), "expected pq.Error, got %T: %v", err, err)
+
+			if tc.expectedCode != "" {
+				require.Equal(t, pq.ErrorCode(tc.expectedCode), pqErr.Code)
+			}
+			if tc.expectedMessage != "" {
+				require.Equal(t, tc.expectedMessage, pqErr.Message)
+			}
+			if tc.expectedContext != "" {
+				require.Equal(t, tc.expectedContext, pqErr.Where)
+			}
+			for _, substr := range tc.expectedContextContains {
+				require.Contains(t, pqErr.Where, substr)
+			}
+		})
+	}
+}
+
 func TestPGPrepareFail(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

@@ -202,8 +202,12 @@ type plpgsqlBuilder struct {
 	// is how RETURN NEXT and RETURN QUERY are implemented.
 	resultBufferID memo.RoutineResultBufferID
 
-	routineName  string
-	identCounter int
+	routineName string
+	// routineDisplayName is the routine name with parameter types appended
+	// for use in PostgreSQL-compatible error context reporting (e.g.,
+	// "test_fn(integer,text)"). For DO blocks this is the same as routineName.
+	routineDisplayName string
+	identCounter       int
 }
 
 // plOptions is a set of options that can be used to modify the behavior of the
@@ -301,15 +305,27 @@ func newPLpgSQLBuilder(
 	resultBufferID memo.RoutineResultBufferID,
 ) *plpgsqlBuilder {
 	const initialBlocksCap = 2
+	// Build the display name with parameter types for PostgreSQL-compatible
+	// error context (e.g., "test_fn(integer,text)" instead of just "test_fn").
+	// DO blocks have no parameters so they keep the plain name.
+	displayName := routineName
+	if len(routineParams) > 0 {
+		typeNames := make([]string, len(routineParams))
+		for i, p := range routineParams {
+			typeNames[i] = p.typ.SQLStandardName()
+		}
+		displayName = fmt.Sprintf("%s(%s)", routineName, strings.Join(typeNames, ","))
+	}
 	b := &plpgsqlBuilder{
-		ob:             ob,
-		options:        options,
-		colRefs:        colRefs,
-		returnType:     returnType,
-		blocks:         make([]plBlock, 0, initialBlocksCap),
-		routineName:    routineName,
-		outScope:       outScope,
-		resultBufferID: resultBufferID,
+		ob:                 ob,
+		options:            options,
+		colRefs:            colRefs,
+		returnType:         returnType,
+		blocks:             make([]plBlock, 0, initialBlocksCap),
+		routineName:        routineName,
+		routineDisplayName: displayName,
+		outScope:           outScope,
+		resultBufferID:     resultBufferID,
 	}
 	if options.isSetReturning {
 		// The sub-routines for a set-returning PL/pgSQL function return VOID, since
@@ -572,6 +588,7 @@ func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
 		// The routine is volatile to prevent inlining; see the buildExceptions
 		// comment for details.
 		blockCon := b.makeContinuation("nested_block")
+		b.setPLpgSQLCtx(&blockCon, astBlock)
 		blockCon.def.ExceptionBlock = exceptionBlock
 		blockCon.def.Volatility = volatility.Volatile
 		blockCon.def.BlockStart = true
@@ -599,6 +616,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			// before calling recursively into buildBlock. The continuation will be
 			// called when the control flow within the nested block terminates.
 			blockCon := b.makeContinuationWithTyp("post_nested_block", t.Label, continuationBlockExit)
+			b.setPLpgSQLCtx(&blockCon, t)
 			if len(t.Exceptions) > 0 {
 				// If the block has an exception handler, mark the continuation as
 				// volatile to prevent inlining. This is necessary to ensure that
@@ -670,6 +688,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			// expression. This becomes the first body statement of a new continuation
 			// with output redirected to the result buffer.
 			retCon := b.makeContinuation("return_next")
+			b.setPLpgSQLCtx(&retCon, t)
 			retCon.def.FirstStmtOutput.TargetBufferID = b.resultBufferID
 			returnScalar := b.buildSQLExpr(expr, b.setReturnType, retCon.s)
 			retColName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_return_next"))
@@ -691,6 +710,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			// statement of a new continuation. The output of the query is redirected
 			// to the result buffer.
 			retCon := b.makeContinuation("return_next")
+			b.setPLpgSQLCtx(&retCon, t)
 			retCon.def.FirstStmtOutput.TargetBufferID = b.resultBufferID
 			retQueryScope := b.buildSQLStatement(t.SqlStmt, retCon.s)
 			if !b.setReturnType.Identical(types.AnyTuple) {
@@ -739,6 +759,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 				// handleException comment for details on why this is necessary.
 				catchCon := b.makeContinuation("assign_exception_block")
 				catchCon.def.Volatility = volatility.Volatile
+				b.setPLpgSQLCtx(&catchCon, t)
 				b.appendPlpgSQLStmts(&catchCon, stmts[i+1:])
 				return b.callContinuation(&catchCon, s)
 			}
@@ -755,6 +776,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			//   IF (...) THEN ... END IF;
 			//   RETURN (...); <-- This is used to build the continuation function.
 			con := b.makeContinuation("stmt_if")
+			b.setPLpgSQLCtx(&con, t)
 			b.appendPlpgSQLStmts(&con, stmts[i+1:])
 			b.pushContinuation(con)
 			// Build each branch of the IF statement, calling the continuation
@@ -817,9 +839,11 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			// statement, the exit continuation is called to model returning control
 			// flow to the statements outside the loop.
 			exitCon := b.makeContinuationWithTyp("loop_exit", t.Label, continuationLoopExit)
+			b.setPLpgSQLCtx(&exitCon, t)
 			b.appendPlpgSQLStmts(&exitCon, stmts[i+1:])
 			b.pushContinuation(exitCon)
 			loopContinuation := b.makeContinuationWithTyp("stmt_loop", t.Label, continuationLoopContinue)
+			b.setPLpgSQLCtx(&loopContinuation, t)
 			loopContinuation.def.IsRecursive = true
 			b.pushContinuation(loopContinuation)
 			b.appendPlpgSQLStmts(&loopContinuation, t.Body)
@@ -856,6 +880,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 		case *ast.ForLoop:
 			// Build a continuation that will resume execution after the loop.
 			exitCon := b.makeContinuationWithTyp("loop_exit", t.Label, continuationLoopExit)
+			b.setPLpgSQLCtx(&exitCon, t)
 			b.appendPlpgSQLStmts(&exitCon, stmts[i+1:])
 			switch c := t.Control.(type) {
 			case *ast.IntForLoopControl:
@@ -949,6 +974,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			// The synchronous notice sending behavior is implemented in the
 			// crdb_internal.plpgsql_raise builtin function.
 			con := b.makeContinuation("_stmt_raise")
+			b.setPLpgSQLCtx(&con, t)
 			con.def.Volatility = volatility.Volatile
 			b.appendBodyStmtFromScope(&con, b.buildPLpgSQLRaise(con.s, b.getRaiseArgs(con.s, t)), nil /* stmt */)
 			b.appendPlpgSQLStmts(&con, stmts[i+1:])
@@ -967,6 +993,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 
 			// Create a new continuation routine to handle executing a SQL statement.
 			execCon := b.makeContinuation("_stmt_exec")
+			b.setPLpgSQLCtx(&execCon, t)
 			stmtScope := b.buildSQLStatement(t.SqlStmt, execCon.s)
 			if len(t.Target) == 0 {
 				// When there is no INTO target, build the SQL statement into a body
@@ -1042,6 +1069,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 				panic(scrollableCursorErr)
 			}
 			openCon := b.makeContinuation("_stmt_open")
+			b.setPLpgSQLCtx(&openCon, t)
 			openCon.def.Volatility = volatility.Volatile
 			_, source, _, err := openCon.s.FindSourceProvidingColumn(b.ob.ctx, t.CurVar)
 			if err != nil {
@@ -1089,6 +1117,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			// closing the cursor. Build a volatile (non-inlinable) continuation
 			// that calls the builtin function.
 			closeCon := b.makeContinuation("_stmt_close")
+			b.setPLpgSQLCtx(&closeCon, t)
 			closeCon.def.Volatility = volatility.Volatile
 			const closeFnName = "crdb_internal.plpgsql_close"
 			props, overloads := builtinsregistry.GetBuiltinProperties(closeFnName)
@@ -1141,6 +1170,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			}
 			b.checkDuplicateTargets(t.Target, "FETCH")
 			fetchCon := b.makeContinuation("_stmt_fetch")
+			b.setPLpgSQLCtx(&fetchCon, t)
 			fetchCon.def.Volatility = volatility.Volatile
 			fetchScope := b.buildFetch(fetchCon.s, t)
 			if t.IsMove {
@@ -1227,6 +1257,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 				}
 			}
 			con := b.makeContinuation(name)
+			b.setPLpgSQLCtx(&con, t)
 			con.def.Volatility = volatility.Volatile
 			b.appendPlpgSQLStmts(&con, stmts)
 			return b.callContinuationWithTxnOp(&con, s, txnOpType, txnModes)
@@ -1235,6 +1266,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			// Build a continuation that will execute the procedure, and then the
 			// following PL/pgSQL statements.
 			callCon := b.makeContinuation("_stmt_call")
+			b.setPLpgSQLCtx(&callCon, t)
 			callCon.def.Volatility = volatility.Volatile
 
 			// Resolve the procedure definition and overload for the call. Project the
@@ -2262,6 +2294,19 @@ func (b *plpgsqlBuilder) makeContinuationWithTyp(
 	con.label = label
 	con.typ = typ
 	return con
+}
+
+// setPLpgSQLCtx sets PLpgSQL error context on a continuation's definition,
+// using the given statement's line number and tag. This allows runtime errors
+// to include PostgreSQL-compatible CONTEXT information.
+func (b *plpgsqlBuilder) setPLpgSQLCtx(con *continuation, stmt ast.Statement) {
+	if stmt.GetLineNo() > 0 {
+		con.def.PLpgSQLCtx = &tree.PLpgSQLErrorContext{
+			FuncName: b.routineDisplayName,
+			LineNo:   stmt.GetLineNo(),
+			StmtTag:  stmt.HumanReadableStmtTag(),
+		}
+	}
 }
 
 // appendBodyStmtFromScope adds the given body statement and its required

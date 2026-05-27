@@ -70,7 +70,7 @@ func (f *formattedError) Error() string {
 	severity := "ERROR"
 
 	// Extract the fields.
-	var message, hint, detail, location, constraintName string
+	var message, hint, detail, location, constraintName, context string
 	var code pgcode.Code
 	if pgErr := (*pgconn.PgError)(nil); errors.As(f.err, &pgErr) {
 		if pgErr.Severity != "" {
@@ -80,6 +80,7 @@ func (f *formattedError) Error() string {
 		message = pgErr.Message
 		code = pgcode.MakeCode(pgErr.Code)
 		hint, detail = pgErr.Hint, pgErr.Detail
+		context = pgErr.Where
 		location = formatLocation(pgErr.File, int(pgErr.Line), pgErr.Routine)
 	} else {
 		message = f.err.Error()
@@ -125,6 +126,9 @@ func (f *formattedError) Error() string {
 	}
 	if hint != "" {
 		fmt.Fprintln(&buf, "HINT:", hint)
+	}
+	if context != "" {
+		fmt.Fprintln(&buf, "CONTEXT:", context)
 	}
 	if f.verbose && location != "" {
 		fmt.Fprintln(&buf, "LOCATION:", location)

@@ -1647,6 +1647,7 @@ func TestLint(t *testing.T) {
 			":!kv/kvpb/errors.go",
 			":!sql/flowinfra/flow_registry.go",
 			":!sql/pgwire/pgerror/constraint_name.go",
+			":!sql/pgwire/pgerror/plpgsql_context.go",
 			":!sql/pgwire/pgerror/severity.go",
 			":!sql/pgwire/pgerror/with_candidate_code.go",
 			":!sql/pgwire/pgwirebase/too_big_error.go",

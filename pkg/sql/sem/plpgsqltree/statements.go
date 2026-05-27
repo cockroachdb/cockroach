@@ -19,26 +19,32 @@ type Expr = tree.Expr
 type Statement interface {
 	tree.NodeFormatter
 	GetLineNo() int
+	SetLineNo(int)
 	GetStmtID() uint
 	plpgsqlStmt()
 	WalkStmt(StatementVisitor) Statement
 	PlpgSQLStatementTag() string
+	// HumanReadableStmtTag returns a PostgreSQL-compatible human-readable
+	// name for this statement type, used in error context reporting.
+	HumanReadableStmtTag() string
 }
 
 type StatementImpl struct {
-	// TODO(drewk): figure out how to get line number from scanner.
 	LineNo int
 	/*
 	 * Unique statement ID in this function (starting at 1; 0 is invalid/not
 	 * set).  This can be used by a profiler as the index for an array of
 	 * per-statement metrics.
 	 */
-	// TODO(drewk): figure out how to get statement id from parser.
 	StmtID uint
 }
 
 func (s *StatementImpl) GetLineNo() int {
 	return s.LineNo
+}
+
+func (s *StatementImpl) SetLineNo(lineNo int) {
+	s.LineNo = lineNo
 }
 
 func (s *StatementImpl) GetStmtID() uint {
@@ -99,6 +105,8 @@ func (s *Block) Format(ctx *tree.FmtCtx) {
 func (s *Block) PlpgSQLStatementTag() string {
 	return "stmt_block"
 }
+
+func (s *Block) HumanReadableStmtTag() string { return "statement block" }
 
 func (s *Block) WalkStmt(visitor StatementVisitor) Statement {
 	newStmt, recurse := visitor.Visit(s)
@@ -176,6 +184,8 @@ func (s *Declaration) PlpgSQLStatementTag() string {
 	return "decl_stmt"
 }
 
+func (s *Declaration) HumanReadableStmtTag() string { return "declaration" }
+
 func (s *Declaration) WalkStmt(visitor StatementVisitor) Statement {
 	newStmt, _ := visitor.Visit(s)
 	return newStmt
@@ -210,6 +220,8 @@ func (s *CursorDeclaration) PlpgSQLStatementTag() string {
 	return "decl_cursor_stmt"
 }
 
+func (s *CursorDeclaration) HumanReadableStmtTag() string { return "cursor declaration" }
+
 func (s *CursorDeclaration) WalkStmt(visitor StatementVisitor) Statement {
 	newStmt, _ := visitor.Visit(s)
 	return newStmt
@@ -234,6 +246,8 @@ func (s *Assignment) CopyNode() *Assignment {
 func (s *Assignment) PlpgSQLStatementTag() string {
 	return "stmt_assign"
 }
+
+func (s *Assignment) HumanReadableStmtTag() string { return "assignment" }
 
 func (s *Assignment) Format(ctx *tree.FmtCtx) {
 	ctx.FormatNode(&s.Var)
@@ -298,6 +312,8 @@ func (s *If) PlpgSQLStatementTag() string {
 	return "stmt_if"
 }
 
+func (s *If) HumanReadableStmtTag() string { return "IF" }
+
 func (s *If) WalkStmt(visitor StatementVisitor) Statement {
 	newStmt, recurse := visitor.Visit(s)
 
@@ -359,6 +375,8 @@ func (s *ElseIf) Format(ctx *tree.FmtCtx) {
 func (s *ElseIf) PlpgSQLStatementTag() string {
 	return "stmt_if_else_if"
 }
+
+func (s *ElseIf) HumanReadableStmtTag() string { return "IF" }
 
 func (s *ElseIf) WalkStmt(visitor StatementVisitor) Statement {
 	newStmt, recurse := visitor.Visit(s)
@@ -427,6 +445,8 @@ func (s *Case) PlpgSQLStatementTag() string {
 	return "stmt_case"
 }
 
+func (s *Case) HumanReadableStmtTag() string { return "CASE" }
+
 func (s *Case) WalkStmt(visitor StatementVisitor) Statement {
 	newStmt, recurse := visitor.Visit(s)
 
@@ -485,6 +505,8 @@ func (s *CaseWhen) PlpgSQLStatementTag() string {
 	return "stmt_when"
 }
 
+func (s *CaseWhen) HumanReadableStmtTag() string { return "CASE" }
+
 func (s *CaseWhen) WalkStmt(visitor StatementVisitor) Statement {
 	newStmt, recurse := visitor.Visit(s)
 
@@ -518,6 +540,8 @@ func (s *Loop) CopyNode() *Loop {
 func (s *Loop) PlpgSQLStatementTag() string {
 	return "stmt_simple_loop"
 }
+
+func (s *Loop) HumanReadableStmtTag() string { return "LOOP" }
 
 func (s *Loop) Format(ctx *tree.FmtCtx) {
 	if s.Label != "" {
@@ -591,6 +615,8 @@ func (s *While) Format(ctx *tree.FmtCtx) {
 func (s *While) PlpgSQLStatementTag() string {
 	return "stmt_while"
 }
+
+func (s *While) HumanReadableStmtTag() string { return "WHILE" }
 
 func (s *While) WalkStmt(visitor StatementVisitor) Statement {
 	newStmt, recurse := visitor.Visit(s)
@@ -690,6 +716,14 @@ func (s *ForLoop) PlpgSQLStatementTag() string {
 	return "stmt_for_unknown"
 }
 
+func (s *ForLoop) HumanReadableStmtTag() string {
+	switch s.Control.(type) {
+	case *IntForLoopControl:
+		return "FOR with integer loop variable"
+	}
+	return "FOR"
+}
+
 func (s *ForLoop) WalkStmt(visitor StatementVisitor) Statement {
 	newStmt, recurse := visitor.Visit(s)
 
@@ -726,6 +760,8 @@ func (s *ForEachArray) PlpgSQLStatementTag() string {
 	return "stmt_for_each_a"
 }
 
+func (s *ForEachArray) HumanReadableStmtTag() string { return "FOREACH over array" }
+
 func (s *ForEachArray) WalkStmt(visitor StatementVisitor) Statement {
 	panic(unimplemented.New("plpgsql visitor", "Unimplemented PLpgSQL visitor pattern"))
 }
@@ -759,6 +795,8 @@ func (s *Exit) Format(ctx *tree.FmtCtx) {
 func (s *Exit) PlpgSQLStatementTag() string {
 	return "stmt_exit"
 }
+
+func (s *Exit) HumanReadableStmtTag() string { return "EXIT" }
 
 func (s *Exit) WalkStmt(visitor StatementVisitor) Statement {
 	newStmt, _ := visitor.Visit(s)
@@ -794,6 +832,8 @@ func (s *Continue) PlpgSQLStatementTag() string {
 	return "stmt_continue"
 }
 
+func (s *Continue) HumanReadableStmtTag() string { return "CONTINUE" }
+
 func (s *Continue) WalkStmt(visitor StatementVisitor) Statement {
 	newStmt, _ := visitor.Visit(s)
 	return newStmt
@@ -823,6 +863,8 @@ func (s *Return) PlpgSQLStatementTag() string {
 	return "stmt_return"
 }
 
+func (s *Return) HumanReadableStmtTag() string { return "RETURN" }
+
 func (s *Return) WalkStmt(visitor StatementVisitor) Statement {
 	newStmt, _ := visitor.Visit(s)
 	return newStmt
@@ -851,6 +893,8 @@ func (s *ReturnNext) PlpgSQLStatementTag() string {
 	return "stmt_return_next"
 }
 
+func (s *ReturnNext) HumanReadableStmtTag() string { return "RETURN NEXT" }
+
 func (s *ReturnNext) WalkStmt(visitor StatementVisitor) Statement {
 	newStmt, _ := visitor.Visit(s)
 	return newStmt
@@ -878,6 +922,8 @@ func (s *ReturnQuery) Format(ctx *tree.FmtCtx) {
 func (s *ReturnQuery) PlpgSQLStatementTag() string {
 	return "stmt_return_query"
 }
+
+func (s *ReturnQuery) HumanReadableStmtTag() string { return "RETURN QUERY" }
 
 func (s *ReturnQuery) WalkStmt(visitor StatementVisitor) Statement {
 	newStmt, _ := visitor.Visit(s)
@@ -949,6 +995,8 @@ func (s *Raise) PlpgSQLStatementTag() string {
 	return "stmt_raise"
 }
 
+func (s *Raise) HumanReadableStmtTag() string { return "RAISE" }
+
 func (s *Raise) WalkStmt(visitor StatementVisitor) Statement {
 	newStmt, _ := visitor.Visit(s)
 	return newStmt
@@ -974,6 +1022,8 @@ func (s *Assert) Format(ctx *tree.FmtCtx) {
 func (s *Assert) PlpgSQLStatementTag() string {
 	return "stmt_assert"
 }
+
+func (s *Assert) HumanReadableStmtTag() string { return "ASSERT" }
 
 func (s *Assert) WalkStmt(visitor StatementVisitor) Statement {
 	newStmt, _ := visitor.Visit(s)
@@ -1014,6 +1064,8 @@ func (s *Execute) Format(ctx *tree.FmtCtx) {
 func (s *Execute) PlpgSQLStatementTag() string {
 	return "stmt_exec_sql"
 }
+
+func (s *Execute) HumanReadableStmtTag() string { return "SQL statement" }
 
 func (s *Execute) WalkStmt(visitor StatementVisitor) Statement {
 	newStmt, _ := visitor.Visit(s)
@@ -1058,6 +1110,8 @@ func (s *DynamicExecute) PlpgSQLStatementTag() string {
 	return "stmt_dyn_exec"
 }
 
+func (s *DynamicExecute) HumanReadableStmtTag() string { return "EXECUTE" }
+
 func (s *DynamicExecute) WalkStmt(visitor StatementVisitor) Statement {
 	newStmt, _ := visitor.Visit(s)
 	return newStmt
@@ -1075,6 +1129,8 @@ func (s *Perform) Format(ctx *tree.FmtCtx) {
 func (s *Perform) PlpgSQLStatementTag() string {
 	return "stmt_perform"
 }
+
+func (s *Perform) HumanReadableStmtTag() string { return "PERFORM" }
 
 func (s *Perform) WalkStmt(visitor StatementVisitor) Statement {
 	panic(unimplemented.New("plpgsql visitor", "Unimplemented PLpgSQL visitor pattern"))
@@ -1100,6 +1156,8 @@ func (s *Call) Format(ctx *tree.FmtCtx) {
 func (s *Call) PlpgSQLStatementTag() string {
 	return "stmt_call"
 }
+
+func (s *Call) HumanReadableStmtTag() string { return "CALL" }
 
 func (s *Call) WalkStmt(visitor StatementVisitor) Statement {
 	newStmt, _ := visitor.Visit(s)
@@ -1163,6 +1221,8 @@ func (s *DoBlock) PlpgSQLStatementTag() string {
 	return "stmt_do"
 }
 
+func (s *DoBlock) HumanReadableStmtTag() string { return "DO" }
+
 func (s *DoBlock) WalkStmt(visitor StatementVisitor) Statement {
 	newStmt, _ := visitor.Visit(s)
 	newBlock := s.Block.WalkStmt(visitor)
@@ -1216,6 +1276,8 @@ func (s *GetDiagnostics) PlpgSQLStatementTag() string {
 	return "stmt_get_diag"
 }
 
+func (s *GetDiagnostics) HumanReadableStmtTag() string { return "GET DIAGNOSTICS" }
+
 func (s *GetDiagnostics) WalkStmt(visitor StatementVisitor) Statement {
 	newStmt, _ := visitor.Visit(s)
 	return newStmt
@@ -1253,6 +1315,8 @@ func (s *Open) Format(ctx *tree.FmtCtx) {
 func (s *Open) PlpgSQLStatementTag() string {
 	return "stmt_open"
 }
+
+func (s *Open) HumanReadableStmtTag() string { return "OPEN" }
 
 func (s *Open) WalkStmt(visitor StatementVisitor) Statement {
 	newStmt, _ := visitor.Visit(s)
@@ -1303,6 +1367,13 @@ func (s *Fetch) PlpgSQLStatementTag() string {
 	return "stmt_fetch"
 }
 
+func (s *Fetch) HumanReadableStmtTag() string {
+	if s.IsMove {
+		return "MOVE"
+	}
+	return "FETCH"
+}
+
 func (s *Fetch) WalkStmt(visitor StatementVisitor) Statement {
 	newStmt, _ := visitor.Visit(s)
 	return newStmt
@@ -1323,6 +1394,8 @@ func (s *Close) Format(ctx *tree.FmtCtx) {
 func (s *Close) PlpgSQLStatementTag() string {
 	return "stmt_close"
 }
+
+func (s *Close) HumanReadableStmtTag() string { return "CLOSE" }
 
 func (s *Close) WalkStmt(visitor StatementVisitor) Statement {
 	newStmt, _ := visitor.Visit(s)
@@ -1355,6 +1428,13 @@ func (s *TransactionControl) PlpgSQLStatementTag() string {
 	return "stmt_commit"
 }
 
+func (s *TransactionControl) HumanReadableStmtTag() string {
+	if s.Rollback {
+		return "ROLLBACK"
+	}
+	return "COMMIT"
+}
+
 func (s *TransactionControl) WalkStmt(visitor StatementVisitor) Statement {
 	newStmt, _ := visitor.Visit(s)
 	return newStmt
@@ -1372,6 +1452,8 @@ func (s *Null) Format(ctx *tree.FmtCtx) {
 func (s *Null) PlpgSQLStatementTag() string {
 	return "stmt_null"
 }
+
+func (s *Null) HumanReadableStmtTag() string { return "NULL" }
 
 func (s *Null) WalkStmt(visitor StatementVisitor) Statement {
 	newStmt, _ := visitor.Visit(s)
