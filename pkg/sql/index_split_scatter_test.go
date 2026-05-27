@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -165,6 +166,12 @@ func TestIndexSplitAndScatterWithStats(t *testing.T) {
 		// Generate statistics for these tables.
 		if statsExist {
 			runner.Exec(t, "CREATE STATISTICS st FROM multi_column_split")
+			// Force a stats cache refresh on all nodes so
+			// MaybeSplitIndexSpans sees the new stats.
+			tableID := descpb.ID(sqlutils.QueryTableID(t, cluster.ServerConn(0), "defaultdb", "public", "multi_column_split"))
+			for i := 0; i < numNodes; i++ {
+				cluster.Server(i).ExecutorConfig().(sql.ExecutorConfig).TableStatsCache.InvalidateTableStats(ctx, tableID)
+			}
 		}
 		// Next create indexes on both tables.
 		splitHookEnabled.Store(true)
