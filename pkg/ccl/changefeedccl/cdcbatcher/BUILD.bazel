@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "cdcbatcher",
+    srcs = ["buffer.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcbatcher",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/container/heap",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "cdcbatcher_test",
+    srcs = ["buffer_test.go"],
+    embed = [":cdcbatcher"],
+    deps = [
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
+    ],
+)
