@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/version"
 	"github.com/spf13/cobra"
 )
 
@@ -40,6 +41,11 @@ const pickSHAJQLDryRun = `issueType="CRDB Release" and ` +
 // pickSHASubtaskMatch is the case-insensitive substring used to find the
 // "Pick SHA" subtask on a release ticket.
 const pickSHASubtaskMatch = "Pick SHA"
+
+// masterBranch is the fallback branch pick-sha uses when a pre-release
+// ticket points at a staging branch that hasn't been cut yet — see
+// fetchSHAForPickSHA for the rationale.
+const masterBranch = "master"
 
 // pickSHA success notifications go to the release-ops channels — a
 // RelEng-only audience. This deliberately differs from the wider
@@ -207,7 +213,8 @@ func (r *pickSHARunner) run(ctx context.Context) error {
 }
 
 func (r *pickSHARunner) processCandidate(ctx context.Context, c jiraIssue) error {
-	if _, err := parseReleaseVersion(c.Fields.Summary); err != nil {
+	v, err := parseReleaseVersion(c.Fields.Summary)
+	if err != nil {
 		// Tracking/template tickets that match the JQL but aren't real
 		// release tickets (e.g. summary "Release: 26.1|25.4|25.2 next
 		// patch") aren't actionable — log and move on rather than
@@ -272,17 +279,22 @@ func (r *pickSHARunner) processCandidate(ctx context.Context, c jiraIssue) error
 	if staging == "" {
 		return errors.Newf("ticket %s has no Staging Branch set", c.Key)
 	}
-	sha, err := r.gh.GetBranchSHA(ctx, staging)
+	sha, fetchBranch, err := r.fetchSHAForPickSHA(ctx, c.Key, staging, v)
 	if err != nil {
-		return errors.Wrapf(err, "fetching tip SHA for staging branch %s", staging)
+		return err
 	}
 
+	// `staging` keeps the ticket's original branch name so the Slack and
+	// Jira messages name the release series operators care about (e.g.
+	// release-26.1.0-rc), even when the actual SHA came from master via
+	// the pre-release fallback. `fetchBranch` is the branch we actually
+	// fetched and must dispatch on.
 	details, err := buildPickSHADetails(full, staging, sha, r.repo, r.buildWorkflow)
 	if err != nil {
 		return errors.Wrap(err, "building pick-SHA details")
 	}
 
-	ref := "refs/heads/" + staging
+	ref := "refs/heads/" + fetchBranch
 	// The workflow_dispatch REST endpoint requires every input value to be
 	// a JSON string — booleans typed in workflow YAML are coerced from
 	// "true"/"false" on receipt — so we stringify dry_run rather than
@@ -343,6 +355,39 @@ func (r *pickSHARunner) processCandidate(ctx context.Context, c jiraIssue) error
 
 	log.Printf("ticket %s: dispatched %s on %s at %s", c.Key, r.buildWorkflow, ref, sha)
 	return nil
+}
+
+// fetchSHAForPickSHA fetches the tip SHA for the staging branch named on
+// the ticket. If the branch doesn't exist AND the ticket is for a
+// pre-release version (vX.Y.0-alpha/beta/rc), it falls back to master:
+// branch-cut skips Patch()==0 so the staging branch is created manually
+// around beta.1, and in that window the only sensible source for the
+// build SHA is the tip of master. The fallback is deliberately scoped to
+// pre-releases — a missing staging branch on a patch release means
+// branch-cut never ran, which is a real error operators should see.
+//
+// Returns the SHA and the name of the branch it was actually fetched
+// from (which the caller must use to construct the workflow_dispatch
+// ref). The original `staging` value is preserved in the caller's
+// scope for display in Slack/Jira so operators see the release-series
+// branch even when the SHA came from master.
+func (r *pickSHARunner) fetchSHAForPickSHA(
+	ctx context.Context, key, staging string, v version.Version,
+) (sha, fetchBranch string, err error) {
+	sha, err = r.gh.GetBranchSHA(ctx, staging)
+	if err == nil {
+		return sha, staging, nil
+	}
+	if !errors.Is(err, errBranchNotFound) || !v.IsPrerelease() {
+		return "", "", errors.Wrapf(err, "fetching tip SHA for staging branch %s", staging)
+	}
+	log.Printf("ticket %s: staging branch %s does not exist; falling back to %s for pre-release %s",
+		key, staging, masterBranch, v)
+	sha, err = r.gh.GetBranchSHA(ctx, masterBranch)
+	if err != nil {
+		return "", "", errors.Wrapf(err, "fetching tip SHA for fallback branch %s", masterBranch)
+	}
+	return sha, masterBranch, nil
 }
 
 // notifyReleaseNotes builds the release-notes API payload from the Jira
