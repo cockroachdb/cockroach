@@ -72,7 +72,13 @@ func runImportFixtureTest(
 		SQLMemoryPoolSize: sqlMemoryPoolSize,
 	})
 	defer s.Stopper().Stop(ctx)
-	sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE d`)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	// This test validates workload import fixtures and then runs workload-specific
+	// consistency checks. IMPORT's INSPECT-backed row count validation is covered
+	// elsewhere, and sync validation can dominate this test under small
+	// metamorphic scan batch sizes.
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.row_count_validation.mode = 'off'`)
 
 	l := fixture.ImportDataLoader{}
 	if _, err := workloadsql.Setup(ctx, db, gen, l); err != nil {
