@@ -1,8 +1,0 @@
-A candidate SHA has been selected for {{ .Version }}. Proceeding to qualification shortly.
-
-	SHA: {{ .SHA }}
-	Tracking Issue: {{ .TrackingIssueURL }}
-	List of changes since last release: {{ .DiffURL }}
-
-Thanks
-Release Engineering
