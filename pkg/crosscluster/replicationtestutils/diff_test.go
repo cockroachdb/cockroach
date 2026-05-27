@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package rand
+package replicationtestutils
 
 import (
 	"context"
@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	workloadrand "github.com/cockroachdb/cockroach/pkg/workload/rand"
 	"github.com/stretchr/testify/require"
 )
 
@@ -53,9 +54,6 @@ func TestDiff(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
-	// Create tables used by most subtests. Fully qualified names exercise the
-	// schema.table path in diff queries (ensures we don't accidentally quote
-	// the whole name as a single identifier).
 	sqlDB.Exec(t, `CREATE TABLE diff_a (id INT PRIMARY KEY, name STRING, value INT)`)
 	sqlDB.Exec(t, `CREATE TABLE diff_b (id INT PRIMARY KEY, name STRING, value INT)`)
 	const diffA = "defaultdb.public.diff_a"
@@ -69,8 +67,8 @@ func TestDiff(t *testing.T) {
 
 	type diffCheck struct {
 		name     string
-		tableA   string // fully qualified table A name
-		tableB   string // fully qualified table B name
+		tableA   string
+		tableB   string
 		setup    []string
 		limit    int
 		wantLen  int
@@ -160,9 +158,8 @@ func TestDiff(t *testing.T) {
 			wantLen: 0,
 		},
 		{
-			// Regression test: LoadTable previously failed to resolve BIT column
-			// widths when using a fully qualified table name because typeForOid
-			// queried information_schema.columns with the raw (qualified) name.
+			// Regression test: BIT column widths must resolve when using a fully
+			// qualified table name (typeForOid joins on pg_class via the OID).
 			name:   "qualified-bit-column",
 			tableA: bitA, tableB: bitB,
 			setup: []string{
@@ -180,13 +177,56 @@ func TestDiff(t *testing.T) {
 			for _, stmt := range tc.setup {
 				sqlDB.Exec(t, stmt)
 			}
-			diffs, err := Diff(db, tc.tableA, db, tc.tableB, tc.limit)
+			diffs, err := Diff(ctx, db, tc.tableA, db, tc.tableB, tc.limit)
 			require.NoError(t, err)
 			require.Len(t, diffs, tc.wantLen)
 			if tc.validate != nil {
 				tc.validate(t, diffs)
 			}
 		})
+	}
+}
+
+// TestDiffCrossDatabase exercises the regression in #170053: pg_catalog
+// virtual tables only return rows for the connection's current database, so
+// Diff must pin a session to the table's database when the connection's
+// default database doesn't match.
+func TestDiffCrossDatabase(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderRace(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	// db is connected to defaultdb. Create the table in a different database.
+	sqlDB.Exec(t, `CREATE DATABASE other`)
+	sqlDB.Exec(t, `CREATE TABLE other.t (id INT PRIMARY KEY, v INT)`)
+	sqlDB.Exec(t, `INSERT INTO other.t VALUES (1, 10), (2, 20)`)
+
+	diffs, err := Diff(ctx, db, "other.public.t", db, "other.public.t", 100)
+	require.NoError(t, err)
+	require.Empty(t, diffs)
+}
+
+// TestDiffRequiresQualifiedName verifies that Diff rejects unqualified or
+// schema-only-qualified table names, since it cannot otherwise determine which
+// database to point its session at.
+func TestDiffRequiresQualifiedName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderRace(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	sqlutils.MakeSQLRunner(db).Exec(t, `CREATE TABLE t (id INT PRIMARY KEY)`)
+
+	for _, name := range []string{"t", "public.t"} {
+		_, err := Diff(ctx, db, name, db, name, 100)
+		require.ErrorContains(t, err, "must be fully qualified")
 	}
 }
 
@@ -215,8 +255,6 @@ func TestDiffRandomSchema(t *testing.T) {
 
 		shortNameA := fmt.Sprintf("diff_rand_a_%d", attempt)
 		shortNameB := fmt.Sprintf("diff_rand_b_%d", attempt)
-		// Use fully qualified names to exercise the schema.table path in diff
-		// queries.
 		tableNameA := fmt.Sprintf("defaultdb.public.%s", shortNameA)
 		tableNameB := fmt.Sprintf("defaultdb.public.%s", shortNameB)
 
@@ -239,11 +277,10 @@ func TestDiffRandomSchema(t *testing.T) {
 			continue
 		}
 
-		tableA, err := LoadTable(db, tableNameA)
+		tableA, err := workloadrand.LoadTable(db, tableNameA)
 		require.NoError(t, err)
 		require.NotEmpty(t, tableA.PrimaryKey, "table %s has no primary key", tableNameA)
 
-		// Insert random rows into both tables.
 		insertRows(t, ctx, db, rng, &tableA, tableNameA, 10)
 		insertRows(t, ctx, db, rng, &tableA, tableNameB, 10)
 
@@ -262,7 +299,7 @@ func TestDiffRandomSchema(t *testing.T) {
 		}
 
 		t.Run(fmt.Sprintf("self-diff-%d", created), func(t *testing.T) {
-			diffs, err := Diff(db, tableNameA, db, tableNameA, 100)
+			diffs, err := Diff(ctx, db, tableNameA, db, tableNameA, 100)
 			require.NoError(t, err)
 			require.Empty(t, diffs, "diffing table against itself should produce no differences")
 		})
@@ -271,7 +308,7 @@ func TestDiffRandomSchema(t *testing.T) {
 			fpA := fingerprint(t, sqlDB, tableNameA)
 			fpB := fingerprint(t, sqlDB, tableNameB)
 
-			diffs, err := Diff(db, tableNameA, db, tableNameB, 100)
+			diffs, err := Diff(ctx, db, tableNameA, db, tableNameB, 100)
 			require.NoError(t, err)
 			if fpA != fpB {
 				require.NotEmpty(t, diffs,
@@ -282,28 +319,25 @@ func TestDiffRandomSchema(t *testing.T) {
 	}
 }
 
-// insertRows inserts n random rows into the given table using the TableWriter.
-// Rows that fail to insert (e.g. due to unique constraint violations on
-// secondary indexes) are silently skipped.
+// insertRows inserts n random rows into the given table using the rand
+// workload's TableWriter. Rows that fail to insert (e.g. unique-constraint
+// violations on secondary indexes) are silently skipped.
 func insertRows(
 	t *testing.T,
 	ctx context.Context,
 	db *gosql.DB,
 	rng *rand.Rand,
-	table *Table,
+	table *workloadrand.Table,
 	tableName string,
 	n int,
 ) {
 	t.Helper()
-	// The TableWriter needs the table name to match, so override it.
 	writerTable := *table
 	writerTable.Name = tableName
-	w := NewTableWriter(db, writerTable)
+	w := workloadrand.NewTableWriter(db, writerTable)
 	for i := 0; i < n; i++ {
 		row, err := table.RandomRow(rng, 0 /* nullPct */)
 		require.NoError(t, err)
-		// Ignore execution errors from unique constraint violations on
-		// secondary indexes or other schema-level constraints.
 		_ = w.UpsertRow(ctx, row)
 	}
 }
