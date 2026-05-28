@@ -1928,7 +1928,9 @@ SELECT pg_relation_size(NULL::OID)
 ----
 NULL
 
-# Real relation, no cache row yet: 0 (descriptor exists, cache hasn't ingested).
+# Real relation, no cache row yet: NULL (descriptor exists, cache hasn't
+# ingested). NULL also covers virtual tables (pg_catalog, etc.) which have
+# no on-disk representation at all — see the pg_size_virtual_table subtest.
 statement ok
 CREATE TABLE pg_relsize_t (id INT PRIMARY KEY, v STRING)
 
@@ -1938,17 +1940,22 @@ SELECT 'pg_relsize_t'::regclass::oid::INT
 query I
 SELECT pg_relation_size($relsize_oid::OID)
 ----
-0
+NULL
 
 query I
 SELECT pg_table_size($relsize_oid::OID)
 ----
-0
+NULL
 
 query I
 SELECT pg_total_relation_size($relsize_oid::OID)
 ----
-0
+NULL
+
+query I
+SELECT pg_indexes_size($relsize_oid::OID)
+----
+NULL
 
 # Insert a synthetic cache row so we can verify the size returns from the cache.
 let $relsize_db_oid
@@ -2123,6 +2130,41 @@ SELECT pg_relation_size('int4'::regtype::oid),
        pg_indexes_size('int4'::regtype::oid)
 ----
 NULL  NULL  NULL  NULL
+
+subtest end
+
+subtest pg_size_virtual_table
+
+# Virtual tables (pg_catalog, information_schema, crdb_internal) have no
+# system.table_metadata row because they are not descriptor-backed. The
+# size builtins return NULL rather than 0 — 0 would imply "exists, empty"
+# while NULL signals "size does not apply".
+query IIII
+SELECT pg_relation_size('pg_catalog.pg_class'::regclass),
+       pg_table_size('pg_catalog.pg_class'::regclass),
+       pg_total_relation_size('pg_catalog.pg_class'::regclass),
+       pg_indexes_size('pg_catalog.pg_class'::regclass)
+----
+NULL  NULL  NULL  NULL
+
+query IIII
+SELECT pg_relation_size('information_schema.tables'::regclass),
+       pg_table_size('information_schema.tables'::regclass),
+       pg_total_relation_size('information_schema.tables'::regclass),
+       pg_indexes_size('information_schema.tables'::regclass)
+----
+NULL  NULL  NULL  NULL
+
+# SUM-style aggregations over pg_class skip the virtual rows rather than
+# adding meaningless zeros. Every pg_catalog table-class relation should
+# return NULL, so the count of non-NULL results in pg_catalog is zero.
+query I
+SELECT count(*) FROM pg_catalog.pg_class
+WHERE pg_total_relation_size(oid) IS NOT NULL
+  AND relnamespace = 'pg_catalog'::regnamespace
+  AND relkind = 'r'
+----
+0
 
 subtest end
 
