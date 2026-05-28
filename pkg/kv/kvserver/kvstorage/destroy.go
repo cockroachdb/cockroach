@@ -256,13 +256,19 @@ func RemoveStaleRHSFromSplit(
 
 // RewriteRaftState rewrites the raft state of the given replica with the
 // provided state. Specifically, it rewrites HardState and RaftTruncatedState,
-// and clears the raft log. All writes are generated in the engine keys order.
+// and clears raft log entries in (clearAfter, MaxUint64]. When clearAfter is 0,
+// the entire log is cleared. All writes are generated in the engine keys order.
+//
+// With separated engines, clearAfter should be set to the applied index so that
+// only the unapplied suffix of the log is cleared. The applied prefix is left
+// for WAG garbage collection.
 func RewriteRaftState(
 	ctx context.Context,
 	raftWO RaftWO,
 	sl logstore.StateLoader,
 	hs raftpb.HardState,
 	ts kvserverpb.RaftTruncatedState,
+	clearAfter kvpb.RaftIndex,
 ) error {
 	// Update HardState.
 	if err := sl.SetHardState(ctx, raftWO, hs); err != nil {
@@ -272,11 +278,9 @@ func RewriteRaftState(
 	// keys in this span. We use ClearRangeSizeKnown with pointKeyThreshold=0 to
 	// force a single range tombstone over the whole log span, without scanning.
 	// TODO(ibrahim): We can actually know the log bounds using truncIndex and lastIndex.
-	// TODO(sep-raft-log): delegate clearing <= AppliedIndex to WAG cleanup when engines
-	// are separated.
 	if err := logstore.ClearRangeSizeKnown(
 		raftWO, sl.RangeIDPrefixBuf,
-		0 /* lo */, math.MaxUint64 /* hi */, 0, /* pointKeyThreshold */
+		clearAfter /* lo */, math.MaxUint64 /* hi */, 0, /* pointKeyThreshold */
 		false, /* maybeUseSingleDel */
 	); err != nil {
 		return errors.Wrapf(err, "unable to clear the raft log")
