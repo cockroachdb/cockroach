@@ -3,9 +3,11 @@
 # Late binding is a PL/pgSQL-only feature. LANGUAGE SQL procedures and UDFs
 # always use early binding; the setting has no effect on them.
 #
-# The setting is ON for the entire file by default. The transition tests
-# toggle it intrinsically, and late_to_early_binding_transition leaves the
-# setting OFF for late_binding_disabled, which then RESETs at the end.
+# The setting is ON for the entire file by default, with one exception:
+# after the late_to_early_binding_transition subtest the setting is OFF for
+# the remaining subtests (those that test off-behavior, including
+# plpgsql_ddl_hint which also flips back to ON to test that direction).
+# A final RESET in the last subtest restores the default.
 statement ok
 SET CLUSTER SETTING sql.procedures.plpgsql.late_binding.enabled = true
 
@@ -807,7 +809,8 @@ subtest end
 
 # --------------------------------------------------------------------------
 # OFF-section: the setting is OFF from the transition above through the end
-# of the file.
+# of the file. Subtests here do not toggle it (except plpgsql_ddl_hint, which
+# tests both directions at the end).
 # --------------------------------------------------------------------------
 
 subtest late_binding_disabled
@@ -820,6 +823,131 @@ DECLARE
   v INT;
 BEGIN
   SELECT 1 INTO v FROM no_such_table LIMIT 1;
+END
+$$
+
+subtest end
+
+subtest plpgsql_ddl_nested
+
+# The DDL detector must recurse through nested PL/pgSQL constructs (IF, LOOP),
+# not just inspect top-level statements.
+statement error pgcode 0A000 DDL statements in PL/pgSQL procedure bodies require late binding
+CREATE PROCEDURE p_ddl_if() LANGUAGE PLpgSQL AS $$
+BEGIN
+  IF TRUE THEN
+    CREATE TABLE t_ddl_if (id INT);
+  END IF;
+END
+$$
+
+statement error pgcode 0A000 DDL statements in PL/pgSQL procedure bodies require late binding
+CREATE PROCEDURE p_ddl_loop() LANGUAGE PLpgSQL AS $$
+BEGIN
+  LOOP
+    DROP TABLE t_ddl_loop;
+    EXIT;
+  END LOOP;
+END
+$$
+
+subtest end
+
+subtest plpgsql_ddl_cursor
+
+# The DDL detector must inspect SQL statements wrapped inside PL/pgSQL cursor
+# nodes (CursorDeclaration.Query and Open.Query), not just bare top-level
+# statements.
+
+# CursorDeclaration branch: bound cursor whose query is DDL.
+statement error pgcode 0A000 DDL statements in PL/pgSQL procedure bodies require late binding
+CREATE PROCEDURE p_ddl_cursor_decl() LANGUAGE PLpgSQL AS $$
+DECLARE
+  c CURSOR FOR DROP TABLE t_does_not_exist;
+BEGIN
+  OPEN c;
+END
+$$
+
+# Open branch: OPEN c FOR <DDL>.
+statement error pgcode 0A000 DDL statements in PL/pgSQL procedure bodies require late binding
+CREATE PROCEDURE p_ddl_open() LANGUAGE PLpgSQL AS $$
+DECLARE
+  c REFCURSOR;
+BEGIN
+  OPEN c FOR DROP TABLE t_does_not_exist;
+END
+$$
+
+subtest end
+
+subtest plpgsql_ddl_hint
+
+# Tests both directions: supported DDL is rejected with a hint when the
+# setting is OFF, then accepted when it is ON. Unsupported DDL is rejected
+# in both cases.
+statement error pgcode 0A000 DDL statements in PL/pgSQL procedure bodies require late binding
+CREATE PROCEDURE p_ddl_create() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_ddl (id INT);
+END
+$$
+
+statement error pgcode 0A000 DDL statements in PL/pgSQL procedure bodies require late binding
+CREATE PROCEDURE p_ddl_drop() LANGUAGE PLpgSQL AS $$
+BEGIN
+  DROP TABLE t_ddl;
+END
+$$
+
+# DDL that is not in the in-procedure allowlist (e.g. ALTER TABLE,
+# CREATE INDEX, CREATE VIEW) is reported as unimplemented at CREATE
+# PROCEDURE time regardless of the setting; enabling late binding would
+# not make these work, so users get the more specific error instead of
+# the late-binding hint.
+statement error pgcode 0A000 unimplemented: ALTER TABLE usage inside a function definition
+CREATE PROCEDURE p_ddl_alter() LANGUAGE PLpgSQL AS $$
+BEGIN
+  ALTER TABLE t_ddl ADD COLUMN c INT;
+END
+$$
+
+statement error pgcode 0A000 unimplemented: CREATE INDEX usage inside a function definition
+CREATE PROCEDURE p_ddl_idx() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE INDEX idx ON t_ddl (id);
+END
+$$
+
+# Mixed bodies are reported by the unsupported statement first, since
+# enabling the setting alone would not fix it.
+statement error pgcode 0A000 unimplemented: ALTER TABLE usage inside a function definition
+CREATE PROCEDURE p_ddl_mixed() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_ddl (id INT);
+  ALTER TABLE t_ddl ADD COLUMN c INT;
+END
+$$
+
+# With the setting enabled the supported body is accepted, and the
+# unsupported body is still rejected at CREATE time (same error as above).
+statement ok
+SET CLUSTER SETTING sql.procedures.plpgsql.late_binding.enabled = true
+
+statement ok
+CREATE PROCEDURE p_ddl_create() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_ddl (id INT);
+END
+$$
+
+statement ok
+DROP PROCEDURE p_ddl_create
+
+statement error pgcode 0A000 unimplemented: ALTER TABLE usage inside a function definition
+CREATE PROCEDURE p_ddl_alter_late() LANGUAGE PLpgSQL AS $$
+BEGIN
+  ALTER TABLE t_ddl ADD COLUMN c INT;
 END
 $$
 

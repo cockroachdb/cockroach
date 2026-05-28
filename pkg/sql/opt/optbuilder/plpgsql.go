@@ -2967,6 +2967,84 @@ func (tc *transactionControlVisitor) Visit(
 	return stmt, !tc.foundTxnControlStatement
 }
 
+// isAllowlistedProcedureDDL reports whether stmt is one of the DDL or DCL
+// statements supported inside stored procedure bodies. The set must be kept
+// in sync with the corresponding case in (*Builder).buildStmtAtRoot.
+func isAllowlistedProcedureDDL(stmt tree.Statement) bool {
+	switch stmt.(type) {
+	case *tree.CreateTable, *tree.DropTable,
+		*tree.CreateSchema, *tree.DropSchema,
+		*tree.CreateRole, *tree.DropRole,
+		*tree.Grant, *tree.Revoke, *tree.AlterDefaultPrivileges:
+		return true
+	}
+	return false
+}
+
+// requiresLateBindingInProcedure reports whether stmt is a DDL statement that
+// introduces or removes a catalog object whose name later statements in the
+// same procedure body might reference. Such statements are unsafe under early
+// binding because the early-bound build cannot resolve references against a
+// catalog object that does not yet exist. DCL (GRANT, REVOKE, ALTER DEFAULT
+// PRIVILEGES) does not introduce new resolvable names and is safe under early
+// binding.
+func requiresLateBindingInProcedure(stmt tree.Statement) bool {
+	switch stmt.(type) {
+	case *tree.CreateTable, *tree.DropTable,
+		*tree.CreateSchema, *tree.DropSchema,
+		*tree.CreateRole, *tree.DropRole:
+		return true
+	}
+	return false
+}
+
+// ddlVisitor walks a PL/pgSQL routine body and classifies any embedded DDL.
+// It inspects the wrapped tree.Statement on each PL/pgSQL node that carries
+// one. DynamicExecute (EXECUTE of a string expression) is not implemented in
+// the optbuilder and is intentionally not inspected here.
+//
+// foundDDLStmt holds the first DDL statement encountered that requires late
+// binding (see requiresLateBindingInProcedure); when non-nil it indicates the
+// body contains DDL whose ordering relative to later statements matters.
+// unsupportedStmt holds the first DDL statement encountered that is not in the
+// procedure allowlist at all (see isAllowlistedProcedureDDL). The two fields
+// drive different error paths in buildCreateFunction: an unsupported statement
+// is reported as an "unimplemented" feature, while a body that contains
+// late-binding-sensitive DDL is gated on the late-binding cluster setting.
+type ddlVisitor struct {
+	foundDDLStmt    tree.Statement
+	unsupportedStmt tree.Statement
+}
+
+var _ ast.StatementVisitor = &ddlVisitor{}
+
+func (dv *ddlVisitor) Visit(stmt ast.Statement) (newStmt ast.Statement, recurse bool) {
+	var sqlStmt tree.Statement
+	switch s := stmt.(type) {
+	case *ast.Execute:
+		sqlStmt = s.SqlStmt
+	case *ast.ReturnQuery:
+		sqlStmt = s.SqlStmt
+	case *ast.CursorDeclaration:
+		sqlStmt = s.Query
+	case *ast.Open:
+		sqlStmt = s.Query
+	}
+	if sqlStmt == nil || !tree.CanModifySchema(sqlStmt) {
+		return stmt, true
+	}
+	if !isAllowlistedProcedureDDL(sqlStmt) {
+		if dv.unsupportedStmt == nil {
+			dv.unsupportedStmt = sqlStmt
+		}
+		return stmt, true
+	}
+	if requiresLateBindingInProcedure(sqlStmt) && dv.foundDDLStmt == nil {
+		dv.foundDDLStmt = sqlStmt
+	}
+	return stmt, true
+}
+
 var (
 	unsupportedPLStmtErr = unimplemented.New("unimplemented PL/pgSQL statement",
 		"attempted to use a PL/pgSQL statement that is not yet supported",
