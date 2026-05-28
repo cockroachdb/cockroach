@@ -3727,12 +3727,35 @@ func (s *Store) checkpointSpans(desc *roachpb.RangeDescriptor) []roachpb.Span {
 	return spans
 }
 
-// checkpoint creates a Pebble checkpoint in the auxiliary directory with the
-// provided tag used in the filepath. Returns the path to the created checkpoint
-// directory. The checkpoint includes only files that intersect with either of
-// the provided key spans. If spans is empty, it includes the entire store.
-func (s *Store) checkpoint(tag string, spans []roachpb.Span) (string, error) {
-	return createCheckpoint(s.TODOBothEngines(), tag, spans)
+// checkpoint creates Pebble checkpoint(s) in the auxiliary directory of each of
+// the Store's engines, with the provided tag used in the filepath. Returns the
+// paths to the created checkpoint directories.
+//
+// The state machine (or single) engine checkpoint includes only files that
+// intersect with either of the provided key spans. If spans is empty, it
+// includes the entire engine. With separated engines, the LogEngine is
+// checkpointed entirely.
+func (s *Store) checkpoint(tag string, spans []roachpb.Span) ([]string, error) {
+	// Checkpoint the state machine first, since this is where the potential
+	// inconsistency of the replicated range data resides. The checkpoint also
+	// includes the LogEngine state if the engine is not separated.
+	statePath, err := createCheckpoint(s.StateEngine(), tag, spans)
+	if err != nil {
+		return nil, err
+	}
+	if !s.EnginesSeparated() {
+		return []string{statePath}, nil
+	}
+	// When engines are separated, checkpoint the entire LogEngine rather than try
+	// to filter it to a subset of spans. The LogEngine is expected to be orders
+	// of magnitude smaller than the StateEngine, so there is no risk leaking a
+	// substantial amount of disk space. Having the entire LogEngine is convenient
+	// for debugging. For example, it contains all raft logs and the WAG.
+	logPath, err := createCheckpoint(s.LogEngine(), tag, nil)
+	if err != nil {
+		return nil, err
+	}
+	return []string{statePath, logPath}, nil
 }
 
 // createCheckpoint creates a Pebble checkpoint in the auxiliary directory with

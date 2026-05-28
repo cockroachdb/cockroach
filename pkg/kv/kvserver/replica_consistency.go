@@ -725,13 +725,12 @@ func (r *Replica) computeChecksumPostApply(
 		}
 		// NB: the names here will match on all nodes, which is nice for debugging.
 		tag := fmt.Sprintf("r%d_at_%d", r.RangeID, as.RaftAppliedIndex)
-		_ = r.store.TODOBothEngines() // need two sets of spans, one for each engine
 		spans := r.store.checkpointSpans(&desc)
 		log.KvExec.Warningf(ctx, "creating checkpoint %s with spans %+v", tag, spans)
-		if dir, err := r.store.checkpoint(tag, spans); err != nil {
+		if dirs, err := r.store.checkpoint(tag, spans); err != nil {
 			log.KvExec.Warningf(ctx, "unable to create checkpoint %s: %+v", tag, err)
 		} else {
-			log.KvExec.Warningf(ctx, "created checkpoint %s", dir)
+			log.KvExec.Warningf(ctx, "created checkpoint(s) %v", dirs)
 		}
 	}
 
