@@ -2007,6 +2007,7 @@ func (b *builderState) WrapFunctionBody(
 	bodyStr string,
 	lang catpb.Function_Language,
 	lazilyEvalSQL bool,
+	canMutate tree.RoutineCanMutate,
 	refProvider scbuildstmt.ReferenceProvider,
 ) *scpb.FunctionBody {
 	// When the body is evaluated lazily (trigger functions and late-bound
@@ -2020,6 +2021,15 @@ func (b *builderState) WrapFunctionBody(
 		FunctionID: fnID,
 		Body:       bodyStr,
 		Lang:       catpb.FunctionLanguage{Lang: lang},
+	}
+	// Persist CanMutate only once the cluster is on 26.3, since the can_mutate
+	// field does not exist on pre-26.3 binaries. Pre-existing descriptors keep
+	// the zero value (UNKNOWN), which makes consumers fall back to inspecting
+	// the body RelExprs.
+	if b.clusterSettings.Version.ActiveVersion(b.ctx).IsActive(
+		clusterversion.V26_3_Start,
+	) {
+		fnBody.CanMutate = funcdesc.CanMutateToProto(canMutate)
 	}
 	if err := refProvider.ForEachTableReference(func(tblID descpb.ID, idxID descpb.IndexID, colIDs descpb.ColumnIDs) error {
 		fnBody.UsesTables = append(

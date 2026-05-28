@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -129,6 +130,15 @@ func (n *createFunctionNode) createNewFunction(
 
 	if err := setFuncOptions(params, udfDesc, n.cf.Options); err != nil {
 		return err
+	}
+
+	// Only persist CanMutate once the cluster is on 26.3. The can_mutate field
+	// does not exist on pre-26.3 binaries, so we avoid writing it while such a
+	// binary might still be in the cluster. No migration is needed: pre-existing
+	// descriptors keep the zero value (UNKNOWN), which makes consumers fall back
+	// to inspecting the eagerly-built body.
+	if params.p.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.V26_3_Start) {
+		udfDesc.SetCanMutate(funcdesc.CanMutateToProto(n.cf.CanMutate))
 	}
 
 	if err := n.addUDFReferences(udfDesc, params); err != nil {
@@ -268,6 +278,12 @@ func (n *createFunctionNode) replaceFunction(
 	}
 	if err := setFuncOptions(params, udfDesc, n.cf.Options); err != nil {
 		return err
+	}
+
+	// Only persist CanMutate once the cluster is on 26.3. See the comment in
+	// createNewFunction for the rationale.
+	if params.p.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.V26_3_Start) {
+		udfDesc.SetCanMutate(funcdesc.CanMutateToProto(n.cf.CanMutate))
 	}
 
 	// Removing all existing references before adding new references.
@@ -616,6 +632,10 @@ func resetFuncOption(udfDesc *funcdesc.Mutable) {
 	udfDesc.SetVolatility(catpb.Function_VOLATILE)
 	udfDesc.SetNullInputBehavior(catpb.Function_CALLED_ON_NULL_INPUT)
 	udfDesc.SetLeakProof(false)
+	// Reset CanMutate so that a stale value from a previous version of the
+	// descriptor does not persist after CREATE OR REPLACE. The correct value
+	// is re-set below, gated on V26_3_Start.
+	udfDesc.SetCanMutate(catpb.Function_UNKNOWN_CAN_MUTATE)
 }
 
 func makeFunctionParam(
