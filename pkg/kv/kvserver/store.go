@@ -3653,8 +3653,10 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	return nil
 }
 
-func (s *Store) checkpointsDir() string {
-	return filepath.Join(s.TODOBothEngines().GetAuxiliaryDir(), "checkpoints")
+// checkpointsDir returns the directory within the given engine that contains
+// engine checkpoints as its subdirectories.
+func checkpointsDir(eng storage.Engine) string {
+	return filepath.Join(eng.GetAuxiliaryDir(), "checkpoints")
 }
 
 // checkpointSpans returns key spans containing the given range. The spans may
@@ -3730,8 +3732,15 @@ func (s *Store) checkpointSpans(desc *roachpb.RangeDescriptor) []roachpb.Span {
 // directory. The checkpoint includes only files that intersect with either of
 // the provided key spans. If spans is empty, it includes the entire store.
 func (s *Store) checkpoint(tag string, spans []roachpb.Span) (string, error) {
-	checkpointBase := s.checkpointsDir()
-	eng := s.TODOBothEngines()
+	return createCheckpoint(s.TODOBothEngines(), tag, spans)
+}
+
+// createCheckpoint creates a Pebble checkpoint in the auxiliary directory with
+// the provided tag used in the filepath. Returns the path to the created
+// directory. The checkpoint includes only files that intersect with either of
+// the provided key spans. If spans is empty, it includes the entire engine.
+func createCheckpoint(eng storage.Engine, tag string, spans []roachpb.Span) (string, error) {
+	checkpointBase := checkpointsDir(eng)
 	_ = eng.Env().MkdirAll(checkpointBase, os.ModePerm)
 	// Create the checkpoint in a "pending" directory first. If we fail midway, it
 	// should be clear that the directory contains an incomplete checkpoint.
@@ -3778,7 +3787,7 @@ func (s *Store) computeMetricsLocked(ctx context.Context) (m storage.Metrics, er
 	s.metrics.updateEnvStats(*envStats)
 
 	{
-		dirs, err := eng.Env().List(s.checkpointsDir())
+		dirs, err := eng.Env().List(checkpointsDir(eng))
 		if err != nil { // skip NotFound or any other error
 			dirs = nil
 		}
