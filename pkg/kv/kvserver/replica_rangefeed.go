@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/multiqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -216,10 +217,22 @@ var rangeFeedBulkDeliverySize = settings.RegisterIntSetting(
 	int64(metamorphic.ConstantWithTestRange("rangefeed-bulk_delivery", 2<<20, 0, 4<<20)),
 )
 
-// RangeFeed registers a rangefeed over the specified span. It sends updates to
-// the provided stream and returns with a future error when the rangefeed is
-// complete. The surrounding store's ConcurrentRequestLimiter is used to limit
-// the number of rangefeeds using catch-up iterators at the same time.
+// catchupQueueTypeFor maps a rangefeed admission priority to a catchup-scan
+// queue type. Requests at >= admissionpb.NormalPri (e.g. system-table
+// rangefeeds via rangefeed.WithSystemTablePriority) go to catchupQueueHigh;
+// the rest (typically BulkNormalPri) go to catchupQueueLow.
+func catchupQueueTypeFor(priority int32) int {
+	if admissionpb.WorkPriority(priority) >= admissionpb.NormalPri {
+		return catchupQueueHigh
+	}
+	return catchupQueueLow
+}
+
+// RangeFeed registers a rangefeed over the specified span. It sends updates
+// to the stream and returns with a future error when the rangefeed is
+// complete. The surrounding store's catchupScanQueue limits and prioritizes
+// concurrent catch-up scans; the queue type is derived from
+// args.AdmissionHeader.Priority via catchupQueueTypeFor.
 func (r *Replica) RangeFeed(
 	streamCtx context.Context,
 	args *kvpb.RangeFeedRequest,
@@ -275,27 +288,47 @@ func (r *Replica) RangeFeed(
 			perConsumerRelease = perConsumerAlloc.Release
 		}
 
-		alloc, err := r.store.limiters.ConcurrentRangefeedIters.Begin(streamCtx)
-		if err != nil {
-			perConsumerRelease()
-			return nil, err
+		var release func()
+		if catchupScanPrioritizationEnabled.Get(
+			&r.store.ClusterSettings().SV,
+		) {
+			queueType := catchupQueueTypeFor(args.AdmissionHeader.Priority)
+			task, err := r.store.catchupScanQueue.Add(
+				queueType, 0 /* priority */, -1, /* maxQueueLen */
+			)
+			if err != nil {
+				perConsumerRelease()
+				return nil, errors.Wrap(err, "rangefeed catchup scan")
+			}
+			var permit *multiqueue.WeightedPermit
+			select {
+			case permit = <-task.GetWaitChan():
+			case <-streamCtx.Done():
+				r.store.catchupScanQueue.Cancel(task)
+				perConsumerRelease()
+				return nil, streamCtx.Err()
+			}
+			release = func() { r.store.catchupScanQueue.Release(permit) }
+		} else {
+			alloc, err := r.store.limiters.ConcurrentRangefeedIters.Begin(streamCtx)
+			if err != nil {
+				perConsumerRelease()
+				return nil, err
+			}
+			release = alloc.Release
 		}
 
-		// Finish the iterator limit if we exit before the iterator finishes.
-		// The release function will be hooked into the Close method on the
-		// iterator below. The sync.Once prevents any races between exiting early
-		// from this call and finishing the catch-up scan underneath the
-		// rangefeed.Processor. We need to release here in case we fail to
-		// register the processor, or, more perniciously, in the case where the
-		// processor gets registered by shut down before starting the catch-up
-		// scan.
+		// iterSemRelease must be idempotent. The catch-up scan inside
+		// rangefeed.Processor releases when it finishes, but we also need to
+		// release on the early-exit paths below (failed registration, or ctx
+		// cancellation after the processor was registered but before the
+		// scan started). The sync.Once collapses both paths.
 		var iterSemReleaseOnce sync.Once
 		iterSemRelease = func() {
 			iterSemReleaseOnce.Do(func() {
-				alloc.Release()
+				release()
 				perConsumerRelease()
 			})
-
 		}
 	}
 

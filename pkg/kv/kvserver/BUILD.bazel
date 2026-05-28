@@ -371,6 +371,7 @@ go_test(
         "replica_raft_test.go",
         "replica_raft_truncation_test.go",
         "replica_raftlog_test.go",
+        "replica_rangefeed_internal_test.go",
         "replica_rangefeed_lag_observer_test.go",
         "replica_rangefeed_test.go",
         "replica_rankings_test.go",
