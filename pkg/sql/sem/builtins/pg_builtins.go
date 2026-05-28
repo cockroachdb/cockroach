@@ -2724,6 +2724,13 @@ FROM defaults_parsed
 	// in that case so callers see the v1 (over-counted) value rather than
 	// NULL or 0. Once the cluster is fully upgraded and the cache cycles
 	// once, all rows have the per-index data and the fallback is dormant.
+	//
+	// Relations with no system.table_metadata row return NULL. This covers
+	// virtual tables (pg_catalog, information_schema, crdb_internal) which
+	// have no on-disk storage, as well as physical tables whose metadata
+	// row has not yet been written by the cache job. NULL is preferable to
+	// 0 because it lets SUM-style aggregations skip rows where the concept
+	// of on-disk size does not apply, instead of summing meaningless zeros.
 	"pg_relation_size": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
 		tree.Overload{
@@ -2742,8 +2749,7 @@ FROM defaults_parsed
                     COALESCE((tm_idx.details->'index_sizes'->>ti.index_id::TEXT)::INT, 0)
                   WHEN c.relkind IS NOT NULL THEN COALESCE(
                     (tm.details->'index_sizes'->>(tm.details->>'primary_index_id'))::INT,
-                    tm.replication_size_bytes,
-                    0)
+                    tm.replication_size_bytes)
                   ELSE NULL
                 END
            FROM (SELECT $1::INT AS id) input
@@ -2758,7 +2764,7 @@ FROM defaults_parsed
 				"\"heap only\" semantics, since CockroachDB's primary index is the row data). " +
 				"For an index this is the size of just that index. The size is read from a " +
 				"periodically-refreshed cache and may lag behind the true value by minutes. " +
-				"Returns NULL if no such relation exists.",
+				"Returns NULL if no such relation exists or has no on-disk representation.",
 			Volatility:   volatility.Volatile,
 			Language:     tree.RoutineLangSQL,
 			SecurityMode: tree.RoutineDefiner,
@@ -2777,8 +2783,7 @@ FROM defaults_parsed
                   WHEN c.relkind IS NULL OR c.relkind = 'i' THEN NULL
                   ELSE COALESCE(
                     (tm.details->'index_sizes'->>(tm.details->>'primary_index_id'))::INT,
-                    tm.replication_size_bytes,
-                    0)
+                    tm.replication_size_bytes)
                 END
            FROM (SELECT $1::INT AS id) input
            LEFT JOIN pg_catalog.pg_class@primary c ON c.oid = $1
@@ -2787,7 +2792,7 @@ FROM defaults_parsed
 				"excluding indexes. In CockroachDB this is the primary index size, since the " +
 				"primary index is the row data. The size is read from a periodically-refreshed " +
 				"cache and may lag behind the true value by minutes. Returns NULL if no such " +
-				"relation exists.",
+				"relation exists or has no on-disk representation.",
 			Volatility:   volatility.Volatile,
 			Language:     tree.RoutineLangSQL,
 			SecurityMode: tree.RoutineDefiner,
@@ -2801,7 +2806,7 @@ FROM defaults_parsed
 			ReturnType: tree.FixedReturnType(types.Int),
 			Body: `SELECT CASE
                   WHEN c.relkind IS NULL OR c.relkind = 'i' THEN NULL
-                  ELSE COALESCE(tm.replication_size_bytes, 0)::INT
+                  ELSE tm.replication_size_bytes
                 END
            FROM (SELECT $1::INT AS id) input
            LEFT JOIN pg_catalog.pg_class@primary c ON c.oid = $1
@@ -2810,7 +2815,8 @@ FROM defaults_parsed
 				"including all indexes and any data still occupying the table's keyspace " +
 				"(such as dropped-index data awaiting garbage collection). The size is read " +
 				"from a periodically-refreshed cache and may lag behind the true value by " +
-				"minutes. Returns NULL if no such relation exists.",
+				"minutes. Returns NULL if no such relation exists or has no on-disk " +
+				"representation.",
 			Volatility:   volatility.Volatile,
 			Language:     tree.RoutineLangSQL,
 			SecurityMode: tree.RoutineDefiner,
@@ -2824,6 +2830,7 @@ FROM defaults_parsed
 			ReturnType: tree.FixedReturnType(types.Int),
 			Body: `SELECT CASE
                   WHEN c.relkind IS NULL OR c.relkind = 'i' THEN NULL
+                  WHEN tm.table_id IS NULL THEN NULL
                   ELSE COALESCE((
                     SELECT sum(value::INT)::INT
                       FROM jsonb_each_text(tm.details->'index_sizes')
@@ -2843,7 +2850,7 @@ FROM defaults_parsed
 				"reported by pg_relation_size and pg_table_size, since CockroachDB stores " +
 				"row data in the primary index). The size is read from a " +
 				"periodically-refreshed cache and may lag behind the true value by minutes. " +
-				"Returns NULL if no such relation exists.",
+				"Returns NULL if no such relation exists or has no on-disk representation.",
 			Volatility:   volatility.Volatile,
 			Language:     tree.RoutineLangSQL,
 			SecurityMode: tree.RoutineDefiner,
