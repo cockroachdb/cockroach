@@ -1169,6 +1169,9 @@ type FunctionDescriptor interface {
 
 	// GetSecurity returns the security specification of this function.
 	GetSecurity() catpb.Function_Security
+
+	// GetCanMutate returns the CanMutate field of this function descriptor.
+	GetCanMutate() catpb.Function_CanMutate
 }
 
 // FilterDroppedDescriptor returns an error if the descriptor state is DROP.

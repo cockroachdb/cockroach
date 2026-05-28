@@ -34,7 +34,7 @@ $$;
 - [[FunctionParams:{DescID: 109}, PUBLIC], ABSENT]
   {functionId: 109, params: [{class: {}, name: a, type: {closedTypeIds: [107, 108], type: {family: EnumFamily, oid: 100107, udtMetadata: {arrayTypeOid: 100108}}, typeName: public.notmyworkday}}]}
 - [[FunctionBody:{DescID: 109}, PUBLIC], ABSENT]
-  {body: SELECT 1;, functionId: 109, lang: {lang: SQL}, usesTypeIds: [107, 108]}
+  {body: SELECT 1;, canMutate: 2, functionId: 109, lang: {lang: SQL}, usesTypeIds: [107, 108]}
 
 # Replace a trigger function that has an active trigger. The trigger's
 # TriggerDeps and TriggerFunctionCall should be updated via Drop+Add.
@@ -70,7 +70,7 @@ $$;
 - [[FunctionParams:{DescID: 113}, PUBLIC], ABSENT]
   {functionId: 113, params: []}
 - [[FunctionBody:{DescID: 113}, PUBLIC], ABSENT]
-  {body: "\n  BEGIN\n    INSERT INTO log2 VALUES ('replaced');\n    RETURN NEW;\n  END\n", functionId: 113, lang: {lang: PLPGSQL}}
+  {body: "\n  BEGIN\n    INSERT INTO log2 VALUES ('replaced');\n    RETURN NEW;\n  END\n", canMutate: 2, functionId: 113, lang: {lang: PLPGSQL}}
 - [[IndexData:{DescID: 110, IndexID: 1}, PUBLIC], PUBLIC]
   {indexId: 1, tableId: 110}
 - [[TriggerFunctionCall:{DescID: 110, TriggerID: 1}, PUBLIC], ABSENT]

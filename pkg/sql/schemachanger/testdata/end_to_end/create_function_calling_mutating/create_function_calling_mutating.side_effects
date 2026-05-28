@@ -1,0 +1,353 @@
+/* setup */
+CREATE TABLE t(a INT PRIMARY KEY, b INT);
+CREATE FUNCTION f_insert(a INT, b INT) RETURNS INT LANGUAGE SQL AS $$
+  SELECT b;
+  INSERT INTO t VALUES(a, b);
+  SELECT a;
+$$;
+----
+...
++object {100 101 t} -> 104
+
+/* test */
+CREATE FUNCTION f_caller(a INT, b INT) RETURNS INT LANGUAGE SQL AS $$
+  SELECT f_insert(a, b);
+$$;
+CREATE FUNCTION f_caller_via_cte(a INT, b INT) RETURNS INT LANGUAGE SQL AS $$
+  WITH cte AS (SELECT f_insert(a, b) AS result) SELECT result FROM cte;
+$$;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: CREATE FUNCTION
+increment telemetry for sql.schema.create_function
+write *eventpb.CreateFunction to event log:
+  functionName: defaultdb.public.f_caller
+  sql:
+    descriptorId: 106
+    statement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹f_caller›(‹a› INT8, ‹b› INT8)\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT ‹public›.‹f_insert›(‹a›, ‹b›);$$"
+    tag: CREATE FUNCTION
+    user: root
+## StatementPhase stage 1 of 1 with 12 MutationType ops
+upsert descriptor #106
+  -
+  +function:
+  +  canMutate: CAN_MUTATE
+  +  dependsOnFunctions:
+  +  - 105
+  +  functionBody: SELECT f_insert(a, b);
+  +  id: 106
+  +  lang: SQL
+  +  modificationTime: {}
+  +  name: f_caller
+  +  nullInputBehavior: CALLED_ON_NULL_INPUT
+  +  params:
+  +  - name: a
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
+  +  - name: b
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
+  +  parentId: 100
+  +  parentSchemaId: 101
+  +  privileges:
+  +    ownerProto: root
+  +    users:
+  +    - privileges: "2"
+  +      userProto: admin
+  +      withGrantOption: "2"
+  +    - privileges: "1048576"
+  +      userProto: public
+  +    - privileges: "2"
+  +      userProto: root
+  +      withGrantOption: "2"
+  +    version: 3
+  +  returnType:
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
+  +  version: "1"
+  +  volatility: VOLATILE
+upsert descriptor #101
+   schema:
+     functions:
+  +    f_caller:
+  +      signatures:
+  +      - argTypes:
+  +        - family: IntFamily
+  +          oid: 20
+  +          width: 64
+  +        - family: IntFamily
+  +          oid: 20
+  +          width: 64
+  +        id: 106
+  +        returnType:
+  +          family: IntFamily
+  +          oid: 20
+  +          width: 64
+       f_insert:
+         signatures:
+  ...
+         withGrantOption: "2"
+       version: 3
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #105
+   function:
+     canMutate: CAN_MUTATE
+  +  dependedOnBy:
+  +  - id: 106
+     dependsOn:
+     - 104
+  ...
+         oid: 20
+         width: 64
+  -  version: "1"
+  +  version: "2"
+     volatility: VOLATILE
+checking for feature: CREATE FUNCTION
+increment telemetry for sql.schema.create_function
+write *eventpb.CreateFunction to event log:
+  functionName: defaultdb.public.f_caller_via_cte
+  sql:
+    descriptorId: 107
+    statement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹f_caller_via_cte›(‹a› INT8, ‹b› INT8)\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$WITH ‹cte› AS (SELECT ‹public›.‹f_insert›(‹a›, ‹b›) AS ‹result›) SELECT ‹result› FROM ‹\"\"›.‹\"\"›.‹cte›;$$"
+    tag: CREATE FUNCTION
+    user: root
+## StatementPhase stage 1 of 1 with 12 MutationType ops
+upsert descriptor #107
+  -
+  +function:
+  +  canMutate: CAN_MUTATE
+  +  dependsOnFunctions:
+  +  - 105
+  +  functionBody: WITH cte AS (SELECT f_insert(a, b) AS result) SELECT result FROM cte;
+  +  id: 107
+  +  lang: SQL
+  +  modificationTime: {}
+  +  name: f_caller_via_cte
+  +  nullInputBehavior: CALLED_ON_NULL_INPUT
+  +  params:
+  +  - name: a
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
+  +  - name: b
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
+  +  parentId: 100
+  +  parentSchemaId: 101
+  +  privileges:
+  +    ownerProto: root
+  +    users:
+  +    - privileges: "2"
+  +      userProto: admin
+  +      withGrantOption: "2"
+  +    - privileges: "1048576"
+  +      userProto: public
+  +    - privileges: "2"
+  +      userProto: root
+  +      withGrantOption: "2"
+  +    version: 3
+  +  returnType:
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
+  +  version: "1"
+  +  volatility: VOLATILE
+upsert descriptor #101
+  ...
+             oid: 20
+             width: 64
+  +    f_caller_via_cte:
+  +      signatures:
+  +      - argTypes:
+  +        - family: IntFamily
+  +          oid: 20
+  +          width: 64
+  +        - family: IntFamily
+  +          oid: 20
+  +          width: 64
+  +        id: 107
+  +        returnType:
+  +          family: IntFamily
+  +          oid: 20
+  +          width: 64
+       f_insert:
+         signatures:
+  ...
+         withGrantOption: "2"
+       version: 3
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #105
+  ...
+     dependedOnBy:
+     - id: 106
+  +  - id: 107
+     dependsOn:
+     - 104
+  ...
+         oid: 20
+         width: 64
+  -  version: "1"
+  +  version: "2"
+     volatility: VOLATILE
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 24 MutationType ops
+upsert descriptor #106
+  -
+  +function:
+  +  canMutate: CAN_MUTATE
+  +  dependsOnFunctions:
+  +  - 105
+  +  functionBody: SELECT f_insert(a, b);
+  +  id: 106
+  +  lang: SQL
+  +  modificationTime: {}
+  +  name: f_caller
+  +  nullInputBehavior: CALLED_ON_NULL_INPUT
+  +  params:
+  +  - name: a
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
+  +  - name: b
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
+  +  parentId: 100
+  +  parentSchemaId: 101
+  +  privileges:
+  +    ownerProto: root
+  +    users:
+  +    - privileges: "2"
+  +      userProto: admin
+  +      withGrantOption: "2"
+  +    - privileges: "1048576"
+  +      userProto: public
+  +    - privileges: "2"
+  +      userProto: root
+  +      withGrantOption: "2"
+  +    version: 3
+  +  returnType:
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
+  +  version: "1"
+  +  volatility: VOLATILE
+upsert descriptor #107
+  -
+  +function:
+  +  canMutate: CAN_MUTATE
+  +  dependsOnFunctions:
+  +  - 105
+  +  functionBody: WITH cte AS (SELECT f_insert(a, b) AS result) SELECT result FROM cte;
+  +  id: 107
+  +  lang: SQL
+  +  modificationTime: {}
+  +  name: f_caller_via_cte
+  +  nullInputBehavior: CALLED_ON_NULL_INPUT
+  +  params:
+  +  - name: a
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
+  +  - name: b
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
+  +  parentId: 100
+  +  parentSchemaId: 101
+  +  privileges:
+  +    ownerProto: root
+  +    users:
+  +    - privileges: "2"
+  +      userProto: admin
+  +      withGrantOption: "2"
+  +    - privileges: "1048576"
+  +      userProto: public
+  +    - privileges: "2"
+  +      userProto: root
+  +      withGrantOption: "2"
+  +    version: 3
+  +  returnType:
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
+  +  version: "1"
+  +  volatility: VOLATILE
+upsert descriptor #101
+   schema:
+     functions:
+  +    f_caller:
+  +      signatures:
+  +      - argTypes:
+  +        - family: IntFamily
+  +          oid: 20
+  +          width: 64
+  +        - family: IntFamily
+  +          oid: 20
+  +          width: 64
+  +        id: 106
+  +        returnType:
+  +          family: IntFamily
+  +          oid: 20
+  +          width: 64
+  +    f_caller_via_cte:
+  +      signatures:
+  +      - argTypes:
+  +        - family: IntFamily
+  +          oid: 20
+  +          width: 64
+  +        - family: IntFamily
+  +          oid: 20
+  +          width: 64
+  +        id: 107
+  +        returnType:
+  +          family: IntFamily
+  +          oid: 20
+  +          width: 64
+       f_insert:
+         signatures:
+  ...
+         withGrantOption: "2"
+       version: 3
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #105
+   function:
+     canMutate: CAN_MUTATE
+  +  dependedOnBy:
+  +  - id: 106
+  +  - id: 107
+     dependsOn:
+     - 104
+  ...
+         oid: 20
+         width: 64
+  -  version: "1"
+  +  version: "2"
+     volatility: VOLATILE
+persist all catalog changes to storage
+# end PreCommitPhase
+commit transaction #1
