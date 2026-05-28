@@ -1439,3 +1439,36 @@ func (og *operationGenerator) tableHasUniqueConstraintMutation(
 			AND (m->'index'->>'unique')::BOOL IS TRUE
 		);`, tableName)
 }
+
+// tableHasNotNullSpatialColumnMutation reports whether the table has a mutation
+// adding a NOT NULL column of a spatial type with no DEFAULT expression.
+func (og *operationGenerator) tableHasNotNullSpatialColumnMutation(
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
+) (bool, error) {
+	return og.scanBool(ctx, tx, `
+		WITH table_desc AS (
+			SELECT crdb_internal.pb_to_json(
+				'desc',
+				descriptor,
+				false
+			)->'table' as d
+			FROM system.descriptor
+			WHERE id = $1::REGCLASS
+		)
+		SELECT EXISTS (
+			SELECT * FROM (
+			SELECT jsonb_array_elements(
+				CASE WHEN d->'mutations' IS NULL
+				THEN '[]'::JSONB
+				ELSE d->'mutations'
+				END
+			) as m
+			FROM table_desc)
+			WHERE (m->>'direction')::STRING = 'ADD'
+			AND (m->'column'->'nullable')::BOOL IS NOT TRUE
+			AND (m->'column'->>'defaultExpr') IS NULL
+			AND (m->'column'->'type'->>'family') IN (
+				'Box2DFamily', 'GeometryFamily', 'GeographyFamily'
+			)
+		);`, tableName)
+}
