@@ -273,6 +273,14 @@ type workloadInstance struct {
 
 const workloadPProfStartPort = 33333
 
+type tpccSkipError struct {
+	reason string
+}
+
+func (e tpccSkipError) Error() string {
+	return e.reason
+}
+
 // tpccImportCmd see tpccImportCmdWithCockroachBinary, this variant is set up to
 // invoke the default tpcc subcommand
 func tpccImportCmd(db string, warehouses int, extraArgs ...string) string {
@@ -301,7 +309,9 @@ func tpccImportCmdWithCockroachBinary(
 func setupTPCC(
 	ctx context.Context, t test.Test, l *logger.Logger, c cluster.Cluster, opts tpccOptions,
 ) {
-	require.NoError(t, setupTPCCE(ctx, t, l, c, opts))
+	if err := setupTPCCE(ctx, t, l, c, opts); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func setupTPCCE(
@@ -472,6 +482,27 @@ func collectTPCCProfiles(
 func runTPCC(
 	ctx context.Context, t test.Test, l *logger.Logger, c cluster.Cluster, opts tpccOptions,
 ) {
+	err := runTPCCE(ctx, t, l, c, opts)
+	var skipErr tpccSkipError
+	if errors.As(err, &skipErr) {
+		t.Skip(skipErr.reason)
+		return
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func runTPCCE(
+	ctx context.Context, t test.Test, l *logger.Logger, c cluster.Cluster, opts tpccOptions,
+) error {
+	wrap := func(err error, component string) error {
+		if err == nil {
+			return nil
+		}
+		return mixedversion.ErrorWithIssueTitleComponent(err, component)
+	}
+
 	workloadInstances := opts.WorkloadInstances
 	if len(workloadInstances) == 0 {
 		workloadInstances = append(
@@ -494,20 +525,23 @@ func runTPCC(
 		// during import itself is uninteresting and pollutes actual workload
 		// data.
 		var cleanupFunc func()
-		promCfg, cleanupFunc = setupPrometheusForRoachtest(ctx, t, c, opts.PrometheusConfig, workloadInstances)
+		var err error
+		promCfg, cleanupFunc, err = setupPrometheusForRoachtestE(ctx, t, c, opts.PrometheusConfig, workloadInstances)
+		if err != nil {
+			return wrap(errors.Wrap(err, "setting up prometheus"), "prometheus")
+		}
 		defer cleanupFunc()
 	}
 	if opts.ChaosEventsProcessor != nil {
 		if promCfg == nil {
-			t.Skip("skipping test as prometheus is needed, but prometheus does not yet work locally")
-			return
+			return tpccSkipError{"skipping test as prometheus is needed, but prometheus does not yet work locally"}
 		}
 		cep, err := opts.ChaosEventsProcessor(
 			c.Nodes(int(promCfg.PrometheusNode)),
 			workloadInstances,
 		)
 		if err != nil {
-			t.Fatal(err)
+			return wrap(errors.Wrap(err, "setting up TPCC chaos event processor"), "chaos-events")
 		}
 		cep.listen(ctx, t, l)
 		ep = &cep
@@ -519,7 +553,9 @@ func runTPCC(
 			opts.Duration = time.Minute
 		}
 	}
-	setupTPCC(ctx, t, l, c, opts)
+	if err := setupTPCCE(ctx, t, l, c, opts); err != nil {
+		return wrap(errors.Wrap(err, "setting up TPCC"), "setup")
+	}
 	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 	m.ExpectDeaths(int32(opts.ExpectedDeaths))
 	rampDur := rampDuration(c.IsLocal())
@@ -565,17 +601,33 @@ func runTPCC(
 				return nil
 			}
 
-			return err
+			if err != nil {
+				return wrap(errors.Wrap(err, "running TPCC workload"), "workload-run")
+			}
+			return nil
 		})
 	}
 	if opts.Chaos != nil {
 		chaos := opts.Chaos()
-		m.Go(chaos.Runner(c, t, m))
+		chaosRunner := chaos.Runner(c, t, m)
+		m.Go(func(ctx context.Context) error {
+			if err := chaosRunner(ctx); err != nil {
+				return wrap(errors.Wrap(err, "running TPCC chaos events"), "chaos-events")
+			}
+			return nil
+		})
 	}
 	if opts.During != nil {
-		m.Go(opts.During)
+		m.Go(func(ctx context.Context) error {
+			if err := opts.During(ctx); err != nil {
+				return wrap(errors.Wrap(err, "running TPCC during hook"), "during")
+			}
+			return nil
+		})
 	}
-	m.Wait()
+	if err := m.WaitE(); err != nil {
+		return errors.Wrap(err, "running TPCC monitor")
+	}
 
 	if opts.CollectProfiles {
 		collectTPCCProfiles(ctx, t, c, opts, pgURLs)
@@ -589,15 +641,18 @@ func runTPCC(
 			Flag("warehouses", opts.Warehouses).
 			Arg("{pgurl:1}")
 
-		c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd.String())
+		if err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd.String()); err != nil {
+			return wrap(errors.Wrap(err, "checking TPCC workload"), "post-run-check")
+		}
 	}
 
 	// Check no errors from metrics.
 	if ep != nil {
 		if err := ep.err(); err != nil {
-			t.Fatal(errors.Wrap(err, "error detected during DRT"))
+			return wrap(errors.Wrap(err, "error detected during DRT"), "drt-metrics")
 		}
 	}
+	return nil
 }
 
 // mergeAndExportTPCCProfiles accepts a map of individual profiles of each
@@ -2570,11 +2625,25 @@ func setupPrometheusForRoachtest(
 	promCfg *prometheus.Config,
 	workloadInstances []workloadInstance,
 ) (*prometheus.Config, func()) {
+	cfg, cleanup, err := setupPrometheusForRoachtestE(ctx, t, c, promCfg, workloadInstances)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cfg, cleanup
+}
+
+func setupPrometheusForRoachtestE(
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	promCfg *prometheus.Config,
+	workloadInstances []workloadInstance,
+) (*prometheus.Config, func(), error) {
 	cfg := promCfg
 	if cfg == nil {
 		// Avoid setting prometheus automatically up for local clusters.
 		if c.IsLocal() {
-			return nil, func() {}
+			return nil, func() {}, nil
 		}
 		cfg = &prometheus.Config{}
 		workloadNode := c.WorkloadNode().InstallNodes()[0]
@@ -2588,17 +2657,17 @@ func setupPrometheusForRoachtest(
 	}
 	if c.IsLocal() {
 		t.Status("ignoring prometheus setup given --local was specified")
-		return nil, func() {}
+		return nil, func() {}, nil
 	}
 
 	t.Status(fmt.Sprintf("setting up prometheus/grafana (<%s)", 2*time.Minute))
 
 	quietLogger, err := t.L().ChildLogger("start-grafana", logger.QuietStdout, logger.QuietStderr)
 	if err != nil {
-		t.Fatal(err)
+		return nil, nil, err
 	}
 	if err := c.StartGrafana(ctx, quietLogger, cfg); err != nil {
-		t.Fatal(err)
+		return nil, nil, err
 	}
 	cleanupFunc := func() {
 		if t.IsDebug() {
@@ -2608,7 +2677,7 @@ func setupPrometheusForRoachtest(
 			t.L().ErrorfCtx(ctx, "error(s) shutting down prom/grafana: %s", err)
 		}
 	}
-	return cfg, cleanupFunc
+	return cfg, cleanupFunc, nil
 }
 
 func getTpccLabels(

@@ -149,24 +149,21 @@ func registerMultiRegionMixedVersion(r registry.Registry) {
 					l.Printf("waiting for setup to finish")
 					<-backgroundTPCCSetupDone
 
-					runTPCC(ctx, t, l, c, backgroundTPCCOpts)
-					return nil
+					return runTPCCE(ctx, t, l, c, backgroundTPCCOpts)
 				},
 			)
 
 			mvt.InMixedVersion(
 				"run tpcc",
 				func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-					runTPCC(ctx, t, l, c, mixedVersionTPCCOpts)
-					return nil
+					return runTPCCE(ctx, t, l, c, mixedVersionTPCCOpts)
 				},
 			)
 
 			mvt.AfterUpgradeFinalized(
 				"run tpcc",
 				func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-					runTPCC(ctx, t, l, c, mixedVersionTPCCOpts)
-					return nil
+					return runTPCCE(ctx, t, l, c, mixedVersionTPCCOpts)
 				},
 			)
 
