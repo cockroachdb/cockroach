@@ -80,6 +80,7 @@ ElementState:
       SELECT c FROM defaultdb.public.t@t_idx_c;
       SELECT a FROM defaultdb.public.v;
       SELECT nextval(105:::REGCLASS);
+    canMutate: 2
     functionId: 110
     lang:
       lang: SQL

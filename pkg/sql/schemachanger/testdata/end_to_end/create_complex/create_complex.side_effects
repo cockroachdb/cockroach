@@ -119,6 +119,7 @@ write *eventpb.CreateFunction to event log:
 upsert descriptor #107
   -
   +function:
+  +  canMutate: CANNOT_MUTATE
   +  functionBody: SELECT 1;
   +  id: 107
   +  lang: SQL
@@ -315,6 +316,7 @@ upsert descriptor #106
 upsert descriptor #107
   -
   +function:
+  +  canMutate: CANNOT_MUTATE
   +  functionBody: SELECT 1;
   +  id: 107
   +  lang: SQL
