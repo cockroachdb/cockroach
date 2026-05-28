@@ -33,12 +33,16 @@ import (
 type deleteRangeNode struct {
 	zeroInputPlanNode
 	rowsAffectedOutputHelper
-	// spans are the spans to delete.
+	// spans are the spans to delete. The slice is owned by the deleteRangeNode.
 	spans roachpb.Spans
 	// desc is the table descriptor the delete is operating on.
 	desc catalog.TableDescriptor
-	// fetcher is around to decode the returned keys from the DeleteRange, so that
-	// we can count the number of rows deleted.
+	// singleColumnFamily, if set, indicates that the table has only one column
+	// family.
+	singleColumnFamily bool
+	// fetcher is used to decode the returned keys from the DeleteRange, so that
+	// we can count the number of rows deleted. It's only used when the table
+	// has multiple column families (i.e. singleColumnFamily is false).
 	fetcher row.Fetcher
 
 	// autoCommitEnabled is set to true if the optimizer proved that we can safely
@@ -49,7 +53,8 @@ type deleteRangeNode struct {
 
 	// curRowPrefix is the prefix for all KVs (i.e. for all column families) of
 	// the SQL row that increased rowCount last. It is maintained across
-	// different BatchRequests in order to not double count the same SQL row.
+	// different BatchRequests in order to not double count the same SQL row. It
+	// is maintained only when singleColumnFamily is false.
 	curRowPrefix []byte
 
 	// kvCPUTimeAccum tracks the cumulative CPU time (in nanoseconds) that KV
@@ -103,31 +108,32 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		return err
 	}
 
-	// Configure the fetcher, which is only used to decode the returned keys
-	// from the Del and the DelRange operations, and is never used to actually
-	// fetch kvs.
-	var spec fetchpb.IndexFetchSpec
-	if err := rowenc.InitIndexFetchSpec(
-		&spec, params.ExecCfg().Codec, d.desc, d.desc.GetPrimaryIndex(), nil, /* fetchColumnIDs */
-	); err != nil {
-		return err
-	}
-	if err := d.fetcher.Init(
-		params.ctx,
-		row.FetcherInitArgs{
-			WillUseKVProvider: true,
-			Alloc:             &tree.DatumAlloc{},
-			Spec:              &spec,
-		},
-	); err != nil {
-		return err
+	if !d.singleColumnFamily {
+		// Configure the fetcher, which is only used to decode the returned keys
+		// from the Del and the DelRange operations, and is never used to
+		// actually fetch kvs.
+		var spec fetchpb.IndexFetchSpec
+		if err := rowenc.InitIndexFetchSpec(
+			&spec, params.ExecCfg().Codec, d.desc, d.desc.GetPrimaryIndex(), nil, /* fetchColumnIDs */
+		); err != nil {
+			return err
+		}
+		if err := d.fetcher.Init(
+			params.ctx,
+			row.FetcherInitArgs{
+				WillUseKVProvider: true,
+				Alloc:             &tree.DatumAlloc{},
+				Spec:              &spec,
+			},
+		); err != nil {
+			return err
+		}
 	}
 
 	ctx := params.ctx
 	log.VEvent(ctx, 2, "fast delete: skipping scan")
-	// TODO(yuzefovich): why are we making a copy of spans?
-	spans := make([]roachpb.Span, len(d.spans))
-	copy(spans, d.spans)
+	// We own the slice, so we can modify it as we please.
+	spans := d.spans
 	if !d.autoCommitEnabled {
 		// Without autocommit, we're going to run each batch one by one, respecting
 		// a max span request keys size. We use spans as a queue of spans to delete.
@@ -229,7 +235,7 @@ func (d *deleteRangeNode) processResults(
 		d.kvCPUTimeAccum += br.CPUTime
 	}
 
-	if !d.autoCommitEnabled {
+	if !d.autoCommitEnabled && !d.singleColumnFamily {
 		defer func() {
 			// Make a copy of curRowPrefix to avoid referencing the memory from
 			// the now-old BatchRequest.
@@ -242,23 +248,24 @@ func (d *deleteRangeNode) processResults(
 		}()
 	}
 	for _, r := range results {
-		// TODO(yuzefovich): when the table has 1 column family, we don't need
-		// to compare the key prefixes since each deleted key corresponds to a
-		// different deleted row.
-		for _, keyBytes := range r.Keys {
-			// If prefix is same, don't bother decoding key.
-			if len(d.curRowPrefix) > 0 && bytes.HasPrefix(keyBytes, d.curRowPrefix) {
-				continue
-			}
+		if d.singleColumnFamily {
+			d.addAffectedRows(len(r.Keys))
+		} else {
+			for _, keyBytes := range r.Keys {
+				// If prefix is same, don't bother decoding key.
+				if len(d.curRowPrefix) > 0 && bytes.HasPrefix(keyBytes, d.curRowPrefix) {
+					continue
+				}
 
-			after, _, err := d.fetcher.DecodeIndexKey(keyBytes)
-			if err != nil {
-				return nil, err
-			}
-			k := keyBytes[:len(keyBytes)-len(after)]
-			if !bytes.Equal(k, d.curRowPrefix) {
-				d.curRowPrefix = k
-				d.incAffectedRows()
+				after, _, err := d.fetcher.DecodeIndexKey(keyBytes)
+				if err != nil {
+					return nil, err
+				}
+				k := keyBytes[:len(keyBytes)-len(after)]
+				if !bytes.Equal(k, d.curRowPrefix) {
+					d.curRowPrefix = k
+					d.incAffectedRows()
+				}
 			}
 		}
 		if r.ResumeSpan != nil && r.ResumeSpan.Valid() {
