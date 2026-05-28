@@ -18,14 +18,9 @@ fi
 dir="$(dirname $(dirname $(dirname $(dirname $(dirname "${0}")))))"
 source "$dir/release/teamcity-support.sh"
 
-github_ssh_key="${GITHUB_COCKROACH_TEAMCITY_PRIVATE_SSH_KEY:?GITHUB_COCKROACH_TEAMCITY_PRIVATE_SSH_KEY must be specified}"
 metadata_gcs_bucket="cockroach-release-qualification-prod"
 metadata_google_credentials="$GCS_CREDENTIALS_PROD"
 build_name="$(git describe --tags --dirty --match=v[0-9]* 2> /dev/null || git rev-parse --short HEAD;)"
-
-configure_git_ssh_key
-git tag "${build_name}"
-git_wrapped push ssh://git@github.com/cockroachlabs/release-staging.git "${build_name}"
 
 # Publish build metadata to a stable location.
 timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
