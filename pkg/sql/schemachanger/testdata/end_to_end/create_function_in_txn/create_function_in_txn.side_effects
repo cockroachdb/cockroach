@@ -23,6 +23,7 @@ write *eventpb.CreateFunction to event log:
 upsert descriptor #105
   -
   +function:
+  +  canMutate: CANNOT_MUTATE
   +  functionBody: SELECT 1;
   +  id: 105
   +  lang: SQL
@@ -163,6 +164,7 @@ persist all catalog changes to storage
 upsert descriptor #105
   -
   +function:
+  +  canMutate: CANNOT_MUTATE
   +  declarativeSchemaChangerState:
   +    authorization:
   +      userName: root
@@ -635,6 +637,7 @@ upsert descriptor #104
   +  version: "8"
 upsert descriptor #105
    function:
+     canMutate: CANNOT_MUTATE
   -  declarativeSchemaChangerState:
   -    authorization:
   -      userName: root

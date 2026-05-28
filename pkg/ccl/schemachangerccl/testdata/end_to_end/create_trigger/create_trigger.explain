@@ -30,7 +30,7 @@ Schema change plan for CREATE TRIGGER tr BEFORE INSERT OR UPDATE OR DELETE ON �
  │              ├── SetTriggerEnabled {"Enabled":true,"TableID":104,"TriggerID":1}
  │              ├── SetTriggerTiming {"Timing":{"ActionTime":1,"ForEachRow":true,"TableID":104,"TriggerID":1}}
  │              ├── SetTriggerEvents {"Events":{"TableID":104,"TriggerID":1}}
- │              ├── SetTriggerFunctionCall {"FunctionCall":{"FuncBody":"BEGIN\nRAISE NOTI...","FuncID":105,"TableID":104,"TriggerID":1}}
+ │              ├── SetTriggerFunctionCall {"FunctionCall":{"CanMutate":2,"FuncBody":"BEGIN\nRAISE NOTI...","FuncID":105,"TableID":104,"TriggerID":1}}
  │              ├── SetTriggerForwardReferences {"Deps":{"TableID":104,"TriggerID":1}}
  │              ├── UpdateTriggerBackReferencesInRelations {"TableID":104,"TriggerID":1}
  │              └── AddTriggerBackReferencesInRoutines {"BackReferencedTableID":104,"BackReferencedTriggerID":1}
@@ -66,7 +66,7 @@ Schema change plan for CREATE TRIGGER tr BEFORE INSERT OR UPDATE OR DELETE ON �
  │              ├── SetTriggerEnabled {"Enabled":true,"TableID":104,"TriggerID":1}
  │              ├── SetTriggerTiming {"Timing":{"ActionTime":1,"ForEachRow":true,"TableID":104,"TriggerID":1}}
  │              ├── SetTriggerEvents {"Events":{"TableID":104,"TriggerID":1}}
- │              ├── SetTriggerFunctionCall {"FunctionCall":{"FuncBody":"BEGIN\nRAISE NOTI...","FuncID":105,"TableID":104,"TriggerID":1}}
+ │              ├── SetTriggerFunctionCall {"FunctionCall":{"CanMutate":2,"FuncBody":"BEGIN\nRAISE NOTI...","FuncID":105,"TableID":104,"TriggerID":1}}
  │              ├── SetTriggerForwardReferences {"Deps":{"TableID":104,"TriggerID":1}}
  │              ├── UpdateTriggerBackReferencesInRelations {"TableID":104,"TriggerID":1}
  │              ├── AddTriggerBackReferencesInRoutines {"BackReferencedTableID":104,"BackReferencedTriggerID":1}

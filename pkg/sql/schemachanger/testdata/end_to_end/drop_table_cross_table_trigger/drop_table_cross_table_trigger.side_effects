@@ -70,6 +70,7 @@ upsert descriptor #104
   -  schemaLocked: true
   -  triggers:
   -  - actionTime: AFTER
+  -    canMutate: CAN_MUTATE
   -    dependsOn:
   -    - 105
   -    - 106
@@ -113,6 +114,7 @@ upsert descriptor #105
   -  schemaLocked: true
   -  triggers:
   -  - actionTime: AFTER
+  -    canMutate: CAN_MUTATE
   -    dependsOn:
   -    - 104
   -    - 106
@@ -245,6 +247,7 @@ upsert descriptor #104
   -  schemaLocked: true
   -  triggers:
   -  - actionTime: AFTER
+  -    canMutate: CAN_MUTATE
   -    dependsOn:
   -    - 105
   -    - 106
@@ -303,6 +306,7 @@ upsert descriptor #105
   -  schemaLocked: true
   -  triggers:
   -  - actionTime: AFTER
+  -    canMutate: CAN_MUTATE
   -    dependsOn:
   -    - 104
   -    - 106
