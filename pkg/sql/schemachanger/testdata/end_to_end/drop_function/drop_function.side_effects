@@ -305,6 +305,7 @@ upsert descriptor #108
   +  version: "4"
 upsert descriptor #109
    function:
+     canMutate: CANNOT_MUTATE
   +  declarativeSchemaChangerState:
   +    authorization:
   +      userName: root

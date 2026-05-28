@@ -680,10 +680,24 @@ func TestEndToEndSideEffects_create_function_calling_function(t *testing.T) {
 	sctest.EndToEndSideEffects(t, path, sctest.SingleNodeTestClusterFactory{})
 }
 
+func TestEndToEndSideEffects_create_function_calling_mutating(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_function_calling_mutating"
+	sctest.EndToEndSideEffects(t, path, sctest.SingleNodeTestClusterFactory{})
+}
+
 func TestEndToEndSideEffects_create_function_in_txn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_function_in_txn"
+	sctest.EndToEndSideEffects(t, path, sctest.SingleNodeTestClusterFactory{})
+}
+
+func TestEndToEndSideEffects_create_function_mutating(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_function_mutating"
 	sctest.EndToEndSideEffects(t, path, sctest.SingleNodeTestClusterFactory{})
 }
 
@@ -1625,10 +1639,24 @@ func TestExecuteWithDMLInjection_create_function_calling_function(t *testing.T) 
 	sctest.ExecuteWithDMLInjection(t, path, sctest.SingleNodeTestClusterFactory{})
 }
 
+func TestExecuteWithDMLInjection_create_function_calling_mutating(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_function_calling_mutating"
+	sctest.ExecuteWithDMLInjection(t, path, sctest.SingleNodeTestClusterFactory{})
+}
+
 func TestExecuteWithDMLInjection_create_function_in_txn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_function_in_txn"
+	sctest.ExecuteWithDMLInjection(t, path, sctest.SingleNodeTestClusterFactory{})
+}
+
+func TestExecuteWithDMLInjection_create_function_mutating(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_function_mutating"
 	sctest.ExecuteWithDMLInjection(t, path, sctest.SingleNodeTestClusterFactory{})
 }
 
@@ -2570,10 +2598,24 @@ func TestGenerateSchemaChangeCorpus_create_function_calling_function(t *testing.
 	sctest.GenerateSchemaChangeCorpus(t, path, sctest.SingleNodeTestClusterFactory{})
 }
 
+func TestGenerateSchemaChangeCorpus_create_function_calling_mutating(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_function_calling_mutating"
+	sctest.GenerateSchemaChangeCorpus(t, path, sctest.SingleNodeTestClusterFactory{})
+}
+
 func TestGenerateSchemaChangeCorpus_create_function_in_txn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_function_in_txn"
+	sctest.GenerateSchemaChangeCorpus(t, path, sctest.SingleNodeTestClusterFactory{})
+}
+
+func TestGenerateSchemaChangeCorpus_create_function_mutating(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_function_mutating"
 	sctest.GenerateSchemaChangeCorpus(t, path, sctest.SingleNodeTestClusterFactory{})
 }
 
@@ -3515,10 +3557,24 @@ func TestPause_create_function_calling_function(t *testing.T) {
 	sctest.Pause(t, path, sctest.SingleNodeTestClusterFactory{})
 }
 
+func TestPause_create_function_calling_mutating(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_function_calling_mutating"
+	sctest.Pause(t, path, sctest.SingleNodeTestClusterFactory{})
+}
+
 func TestPause_create_function_in_txn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_function_in_txn"
+	sctest.Pause(t, path, sctest.SingleNodeTestClusterFactory{})
+}
+
+func TestPause_create_function_mutating(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_function_mutating"
 	sctest.Pause(t, path, sctest.SingleNodeTestClusterFactory{})
 }
 
@@ -4460,10 +4516,24 @@ func TestPauseMixedVersion_create_function_calling_function(t *testing.T) {
 	sctest.PauseMixedVersion(t, path, sctest.SingleNodeTestClusterFactory{})
 }
 
+func TestPauseMixedVersion_create_function_calling_mutating(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_function_calling_mutating"
+	sctest.PauseMixedVersion(t, path, sctest.SingleNodeTestClusterFactory{})
+}
+
 func TestPauseMixedVersion_create_function_in_txn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_function_in_txn"
+	sctest.PauseMixedVersion(t, path, sctest.SingleNodeTestClusterFactory{})
+}
+
+func TestPauseMixedVersion_create_function_mutating(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_function_mutating"
 	sctest.PauseMixedVersion(t, path, sctest.SingleNodeTestClusterFactory{})
 }
 
@@ -5405,10 +5475,24 @@ func TestRollback_create_function_calling_function(t *testing.T) {
 	sctest.Rollback(t, path, sctest.SingleNodeTestClusterFactory{})
 }
 
+func TestRollback_create_function_calling_mutating(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_function_calling_mutating"
+	sctest.Rollback(t, path, sctest.SingleNodeTestClusterFactory{})
+}
+
 func TestRollback_create_function_in_txn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_function_in_txn"
+	sctest.Rollback(t, path, sctest.SingleNodeTestClusterFactory{})
+}
+
+func TestRollback_create_function_mutating(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_function_mutating"
 	sctest.Rollback(t, path, sctest.SingleNodeTestClusterFactory{})
 }
 

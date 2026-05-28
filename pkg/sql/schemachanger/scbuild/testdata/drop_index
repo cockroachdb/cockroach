@@ -288,7 +288,7 @@ DROP INDEX t_trigger@idx CASCADE
 - [[TriggerEvents:{DescID: 108, TriggerID: 1}, ABSENT], PUBLIC]
   {events: [{type: INSERT}], tableId: 108, triggerId: 1}
 - [[TriggerFunctionCall:{DescID: 108, TriggerID: 1}, ABSENT], PUBLIC]
-  {funcBody: "BEGIN\nSELECT j FROM defaultdb.public.t_trigger@idx WHERE j = 32;\nRETURN NULL;\nEND;\n", funcId: 109, tableId: 108, triggerId: 1}
+  {canMutate: 2, funcBody: "BEGIN\nSELECT j FROM defaultdb.public.t_trigger@idx WHERE j = 32;\nRETURN NULL;\nEND;\n", funcId: 109, tableId: 108, triggerId: 1}
 - [[TriggerDeps:{DescID: 108, TriggerID: 1, ReferencedFunctionIDs: [109]}, ABSENT], PUBLIC]
   {tableId: 108, triggerId: 1, usesRelations: [{columnIds: [2], id: 108, indexId: 2}], usesRoutineIds: [109]}
 - [[TableData:{DescID: 108, ReferencedDescID: 100}, PUBLIC], PUBLIC]

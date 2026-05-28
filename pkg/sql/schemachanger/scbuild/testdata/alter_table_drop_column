@@ -286,7 +286,7 @@ ALTER TABLE t1 DROP COLUMN j CASCADE
 - [[TriggerEvents:{DescID: 106, TriggerID: 1}, ABSENT], PUBLIC]
   {events: [{type: INSERT}], tableId: 106, triggerId: 1}
 - [[TriggerFunctionCall:{DescID: 106, TriggerID: 1}, ABSENT], PUBLIC]
-  {funcBody: "BEGIN\nSELECT j FROM defaultdb.public.t1 WHERE j = 32;\nRETURN NULL;\nEND;\n", funcId: 107, tableId: 106, triggerId: 1}
+  {canMutate: 2, funcBody: "BEGIN\nSELECT j FROM defaultdb.public.t1 WHERE j = 32;\nRETURN NULL;\nEND;\n", funcId: 107, tableId: 106, triggerId: 1}
 - [[TriggerDeps:{DescID: 106, TriggerID: 1, ReferencedFunctionIDs: [107]}, ABSENT], PUBLIC]
   {tableId: 106, triggerId: 1, usesRelations: [{columnIds: [2], id: 106}], usesRoutineIds: [107]}
 - [[TableData:{DescID: 106, ReferencedDescID: 100}, PUBLIC], PUBLIC]

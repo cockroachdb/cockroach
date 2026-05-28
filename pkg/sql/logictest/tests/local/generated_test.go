@@ -2976,6 +2976,13 @@ func TestLogic_timetz(
 	runLogicTest(t, "timetz")
 }
 
+func TestLogic_trigger_can_mutate(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "trigger_can_mutate")
+}
+
 func TestLogic_triggers(
 	t *testing.T,
 ) {

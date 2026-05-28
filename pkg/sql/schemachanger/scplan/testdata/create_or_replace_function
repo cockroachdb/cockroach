@@ -68,6 +68,7 @@ StatementPhase stage 1 of 1 with 8 MutationType ops
     *scop.SetFunctionBody
       Body:
         Body: SELECT 1;
+        CanMutate: 2
         FunctionID: 109
         Lang:
           Lang: 1
@@ -137,6 +138,7 @@ PreCommitPhase stage 2 of 2 with 8 MutationType ops
     *scop.SetFunctionBody
       Body:
         Body: SELECT 1;
+        CanMutate: 2
         FunctionID: 109
         Lang:
           Lang: 1
@@ -208,6 +210,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
               INSERT INTO log2 VALUES ('replaced');
               RETURN NEW;
             END
+        CanMutate: 2
         FunctionID: 113
         Lang:
           Lang: 2
@@ -295,6 +298,7 @@ PreCommitPhase stage 2 of 2 with 12 MutationType ops
               INSERT INTO log2 VALUES ('replaced');
               RETURN NEW;
             END
+        CanMutate: 2
         FunctionID: 113
         Lang:
           Lang: 2

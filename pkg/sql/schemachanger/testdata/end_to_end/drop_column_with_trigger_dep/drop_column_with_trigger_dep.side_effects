@@ -154,6 +154,7 @@ upsert descriptor #104
   -  schemaLocked: true
   -  triggers:
   -  - actionTime: AFTER
+  -    canMutate: CANNOT_MUTATE
   -    dependsOn:
   -    - 104
   -    dependsOnRoutines:
@@ -592,6 +593,7 @@ upsert descriptor #104
        time: {}
   -  triggers:
   -  - actionTime: AFTER
+  -    canMutate: CANNOT_MUTATE
   -    dependsOn:
   -    - 104
   -    dependsOnRoutines:
