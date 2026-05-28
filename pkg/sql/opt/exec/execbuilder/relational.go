@@ -3716,7 +3716,6 @@ func (b *Builder) buildCall(c *memo.CallExpr) (_ execPlan, outputCols colOrdMap,
 			b.setMutationFlags(s)
 		}
 	}
-
 	// Create a tree.RoutinePlanFn that can plan the statements in the UDF body.
 	planGen := b.buildRoutinePlanGenerator(
 		udf.Def.Params,
@@ -3728,6 +3727,7 @@ func (b *Builder) buildCall(c *memo.CallExpr) (_ execPlan, outputCols colOrdMap,
 		false, /* allowOuterWithRefs */
 		nil,   /* wrapRootExpr */
 		0,     /* resultBufferID */
+		nil,   /* bodyBuilder */
 	)
 
 	r := tree.NewTypedRoutineExpr(

@@ -714,7 +714,8 @@ func (b *Builder) buildExistsSubquery(
 			nil,  /* stmtASTs */
 			true, /* allowOuterWithRefs */
 			wrapRootExpr,
-			0, /* resultBufferID */
+			0,   /* resultBufferID */
+			nil, /* bodyBuilder */
 		)
 		return tree.NewTypedCoalesceExpr(tree.TypedExprs{
 			tree.NewTypedRoutineExpr(
@@ -843,6 +844,7 @@ func (b *Builder) buildSubquery(
 			true, /* allowOuterWithRefs */
 			nil,  /* wrapRootExpr */
 			0,    /* resultBufferID */
+			nil,  /* bodyBuilder */
 		)
 		_, tailCall := b.tailCalls[subquery]
 		return tree.NewTypedRoutineExpr(
@@ -1014,7 +1016,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	// Execution expects there to be more than one body statement if a cursor is
 	// opened or the result of the first statement is directed to a buffer.
 	firstStmtOut := udf.Def.FirstStmtOutput
-	if len(udf.Def.Body) <= 1 &&
+	if udf.Def.Body != nil && len(udf.Def.Body) <= 1 &&
 		(firstStmtOut.CursorDeclaration != nil || firstStmtOut.TargetBufferID != 0) {
 		panic(errors.AssertionFailedf(
 			"expected more than one body statement for a routine that " +
@@ -1039,6 +1041,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		false, /* allowOuterWithRefs */
 		nil,   /* wrapRootExpr */
 		udf.Def.ResultBufferID,
+		nil, /* bodyBuilder */
 	)
 
 	// Enable stepping for volatile functions so that statements within the UDF
@@ -1114,6 +1117,7 @@ func (b *Builder) initRoutineExceptionHandler(
 			false, /* allowOuterWithRefs */
 			nil,   /* wrapRootExpr */
 			0,     /* resultBufferID */
+			nil,   /* bodyBuilder */
 		)
 		// Build a routine with no arguments for the exception handler. The actual
 		// arguments will be supplied when (if) the handler is invoked.
@@ -1165,6 +1169,7 @@ func (b *Builder) buildRoutinePlanGenerator(
 	allowOuterWithRefs bool,
 	wrapRootExpr wrapRootExprFn,
 	resultBufferID memo.RoutineResultBufferID,
+	bodyBuilder memo.RoutineBodyBuilder,
 ) tree.RoutinePlanGenerator {
 	// argOrd returns the ordinal of the argument within the arguments list that
 	// can be substituted for each reference to the given function parameter
@@ -1211,6 +1216,33 @@ func (b *Builder) buildRoutinePlanGenerator(
 		defer errorutil.MaybeCatchPanic(&retErr, func(caughtErr error) {
 			log.VEventf(ctx, 1, "%v", caughtErr)
 		})
+
+		// If a BodyBuilder is set, build the routine body now (deferred from
+		// plan time to execution time).
+		if bodyBuilder != nil {
+			if stmts != nil {
+				return errors.AssertionFailedf("routine body already built before BodyBuilder invocation")
+			}
+			var tmpO xform.Optimizer
+			tmpO.Init(ctx, b.evalCtx, b.catalog)
+			builtBody, builtProps, newParams, err := bodyBuilder.Build(
+				ctx, b.semaCtx, b.evalCtx, b.catalog, tmpO.Factory(),
+			)
+			if err != nil {
+				return err
+			}
+			stmts = builtBody
+			stmtProps = builtProps
+			originalMemo = tmpO.Factory().Memo()
+			argOrd = func(col opt.ColumnID) (ord int, ok bool) {
+				for i, param := range newParams {
+					if col == param {
+						return i, true
+					}
+				}
+				return 0, false
+			}
+		}
 
 		dbName := b.evalCtx.SessionData().Database
 		appName := b.evalCtx.SessionData().ApplicationName
