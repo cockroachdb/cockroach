@@ -77,13 +77,7 @@ function grant_ssh_access() {
 		echo "Error: no active gcloud account found. Run 'gcloud auth login' first." >&2
 		exit 1
 	fi
-	echo "Granting SSH access to ${user_email} on ${NAME}..."
-	gcloud compute instances add-iam-policy-binding "${NAME}" \
-		--zone="${CLOUDSDK_COMPUTE_ZONE}" \
-		--member="user:${user_email}" \
-		--role="roles/iap.tunnelResourceAccessor" \
-		--project="${CLOUDSDK_CORE_PROJECT}" \
-		--quiet
+	echo "Granting OS Login access to ${user_email} on ${NAME}..."
 	gcloud compute instances add-iam-policy-binding "${NAME}" \
 		--zone="${CLOUDSDK_COMPUTE_ZONE}" \
 		--member="user:${user_email}" \
