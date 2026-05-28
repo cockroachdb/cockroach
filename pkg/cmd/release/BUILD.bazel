@@ -9,6 +9,7 @@ go_library(
         "jira_adf.go",
         "jira_client.go",
         "main.go",
+        "notify_publish.go",
         "pick_sha.go",
         "release_notes_api.go",
         "sender.go",
@@ -50,6 +51,7 @@ go_test(
     srcs = [
         "cut_staging_branches_test.go",
         "git_test.go",
+        "notify_publish_test.go",
         "pick_sha_test.go",
         "update_releases_test.go",
         "update_workflow_test.go",
