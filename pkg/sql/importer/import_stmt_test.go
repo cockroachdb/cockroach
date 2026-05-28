@@ -1741,7 +1741,7 @@ func setupTestImportCSVStmt(
 	sqlDB = sqlutils.MakeSQLRunner(conn)
 	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.elastic_control.enabled = false`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
-	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.row_count_validation.mode = 'async'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.row_count_validation.mode = 'off'`)
 
 	testFiles = makeCSVData(t, numFiles, rowsPerFile, nodes, rowsPerRaceFile)
 	if util.RaceEnabled {
@@ -1939,6 +1939,7 @@ func TestImportCSVStmt(t *testing.T) {
 			sqlDB.Exec(t, fmt.Sprintf(`SET DATABASE = %s`, intodb))
 
 			var unused string
+			var nullableUnused gosql.NullString
 			var restored struct {
 				rows, idx, bytes int
 			}
@@ -1955,7 +1956,7 @@ func TestImportCSVStmt(t *testing.T) {
 				return
 			}
 			sqlDB.QueryRow(t, query).Scan(
-				&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.bytes, &unused,
+				&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.bytes, &nullableUnused,
 			)
 
 			jobPrefix := fmt.Sprintf(`IMPORT INTO %s.public.t`, intodb)
