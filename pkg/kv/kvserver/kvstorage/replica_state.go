@@ -109,12 +109,7 @@ func (r LoadedReplicaState) check(storeID roachpb.StoreID) error {
 // Returns kvpb.RaftGroupDeletedError if this replica can not be created
 // because it has been deleted.
 func CreateUninitializedReplica(
-	ctx context.Context,
-	stateRW State,
-	raftRO RaftRO,
-	w *wag.Writer,
-	storeID roachpb.StoreID,
-	id roachpb.FullReplicaID,
+	ctx context.Context, stateRW State, w *wag.Writer, id roachpb.FullReplicaID,
 ) error {
 	sl := MakeStateLoader(id.RangeID)
 	// Before creating the replica, see if there is a tombstone or an existing
@@ -141,12 +136,5 @@ func CreateUninitializedReplica(
 	// non-existent. The only RangeID-specific key that can be present is the
 	// RangeTombstone inspected above.
 	w.AddEvent(wagpb.MakeAddr(id, 0), wagpb.EventCreate, nil /* startKey */)
-	if err := sl.SetRaftReplicaID(ctx, stateRW.WO, id.ReplicaID); err != nil {
-		return err
-	}
-
-	// Make sure that storage invariants for this uninitialized replica hold.
-	uninitDesc := roachpb.RangeDescriptor{RangeID: id.RangeID}
-	_, err := LoadReplicaState(ctx, stateRW.RO, raftRO, storeID, &uninitDesc, id.ReplicaID)
-	return err
+	return sl.SetRaftReplicaID(ctx, stateRW.WO, id.ReplicaID)
 }

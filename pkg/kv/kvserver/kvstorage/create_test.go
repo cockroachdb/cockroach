@@ -27,7 +27,7 @@ func TestCreateUninitializedReplica(t *testing.T) {
 		ctx := context.Background()
 		out := testMutateSep(t, "create", e, func(rw ReadWriter, w *wag.Writer) {
 			require.NoError(t, CreateUninitializedReplica(
-				ctx, rw.State, rw.Raft.RO, w, 1, /* storeID */
+				ctx, rw.State, w,
 				roachpb.FullReplicaID{RangeID: 123, ReplicaID: 3},
 			))
 		})
