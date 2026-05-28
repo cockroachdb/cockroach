@@ -228,7 +228,7 @@ type tpccOptions struct {
 	// If specified, called to stage+start cockroach. If not
 	// specified, defaults to uploading the default binary to
 	// all nodes, and starting it on all but the last node.
-	Start func(context.Context, test.Test, cluster.Cluster)
+	Start func(context.Context, test.Test, cluster.Cluster) error
 	// If specified, assigned to StartOpts.ExtraArgs when starting cockroach.
 	ExtraStartArgs                []string
 	DisableDefaultScheduledBackup bool
@@ -301,9 +301,15 @@ func tpccImportCmdWithCockroachBinary(
 func setupTPCC(
 	ctx context.Context, t test.Test, l *logger.Logger, c cluster.Cluster, opts tpccOptions,
 ) {
+	require.NoError(t, setupTPCCE(ctx, t, l, c, opts))
+}
+
+func setupTPCCE(
+	ctx context.Context, t test.Test, l *logger.Logger, c cluster.Cluster, opts tpccOptions,
+) error {
 	// If setup should be skipped, then nothing to o here.
 	if opts.SkipSetup {
-		return
+		return nil
 	}
 
 	if c.IsLocal() {
@@ -311,7 +317,7 @@ func setupTPCC(
 	}
 
 	if opts.Start == nil {
-		opts.Start = func(ctx context.Context, t test.Test, c cluster.Cluster) {
+		opts.Start = func(ctx context.Context, t test.Test, c cluster.Cluster) error {
 			settings := install.MakeClusterSettings()
 			if c.IsLocal() {
 				settings.Env = append(settings.Env, "COCKROACH_SCAN_INTERVAL=200ms")
@@ -320,55 +326,67 @@ func setupTPCC(
 			startOpts := option.DefaultStartOpts()
 			startOpts.RoachprodOpts.ExtraArgs = opts.ExtraStartArgs
 			startOpts.RoachprodOpts.ScheduleBackups = !opts.DisableDefaultScheduledBackup
-			c.Start(ctx, l, startOpts, settings, c.CRDBNodes())
+			return c.StartE(ctx, l, startOpts, settings, c.CRDBNodes())
 		}
 	}
 
-	func() {
-		opts.Start(ctx, t, c)
-		db := c.Conn(ctx, l, 1)
-		defer db.Close()
+	if err := opts.Start(ctx, t, c); err != nil {
+		return errors.Wrap(err, "starting TPCC cluster")
+	}
+	db, err := c.ConnE(ctx, l, 1)
+	if err != nil {
+		return errors.Wrap(err, "connecting to TPCC cluster")
+	}
+	defer db.Close()
 
-		if t.SkipInit() {
-			return
+	if t.SkipInit() {
+		return nil
+	}
+
+	if !opts.DisableIsolationLevels {
+		if err := enableIsolationLevels(ctx, t, db); err != nil {
+			return errors.Wrap(err, "enabling isolation levels")
 		}
+	}
 
-		if !opts.DisableIsolationLevels {
-			require.NoError(t, enableIsolationLevels(ctx, t, db))
+	if err := roachtestutil.WaitFor3XReplication(ctx, l, db); err != nil {
+		return errors.Wrap(err, "waiting for 3x replication")
+	}
+
+	estimatedSetupTimeStr := ""
+	if opts.EstimatedSetupTime != 0 {
+		estimatedSetupTimeStr = fmt.Sprintf(" (<%s)", opts.EstimatedSetupTime)
+	}
+
+	switch opts.SetupType {
+	case usingExistingData:
+		// Do nothing.
+	case usingImport:
+		t.Status("loading fixture" + estimatedSetupTimeStr)
+		if err := c.RunE(ctx, option.WithNodes(c.Node(1)), tpccImportCmdWithCockroachBinary(test.DefaultCockroachPath, opts.DB, opts.getWorkloadCmd(), opts.Warehouses, opts.ExtraSetupArgs, "{pgurl:1}")); err != nil {
+			return errors.Wrap(err, "importing TPCC fixture")
 		}
-
-		require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, l, db))
-
-		estimatedSetupTimeStr := ""
-		if opts.EstimatedSetupTime != 0 {
-			estimatedSetupTimeStr = fmt.Sprintf(" (<%s)", opts.EstimatedSetupTime)
+	case usingInit:
+		l.Printf("initializing tables" + estimatedSetupTimeStr)
+		extraArgs := opts.ExtraSetupArgs
+		initNodes := opts.InitNodes
+		if len(initNodes) == 0 {
+			initNodes = c.Node(1)
 		}
+		cmd := roachtestutil.NewCommand("%s workload init %s", test.DefaultCockroachPath, opts.getWorkloadCmd()).
+			MaybeFlag(opts.DB != "", "db", opts.DB).
+			Flag("warehouses", opts.Warehouses).
+			Arg("%s", extraArgs).
+			Arg("{pgurl%s}", initNodes)
 
-		switch opts.SetupType {
-		case usingExistingData:
-			// Do nothing.
-		case usingImport:
-			t.Status("loading fixture" + estimatedSetupTimeStr)
-			c.Run(ctx, option.WithNodes(c.Node(1)), tpccImportCmdWithCockroachBinary(test.DefaultCockroachPath, opts.DB, opts.getWorkloadCmd(), opts.Warehouses, opts.ExtraSetupArgs, "{pgurl:1}"))
-		case usingInit:
-			l.Printf("initializing tables" + estimatedSetupTimeStr)
-			extraArgs := opts.ExtraSetupArgs
-			initNodes := opts.InitNodes
-			if len(initNodes) == 0 {
-				initNodes = c.Node(1)
-			}
-			cmd := roachtestutil.NewCommand("%s workload init %s", test.DefaultCockroachPath, opts.getWorkloadCmd()).
-				MaybeFlag(opts.DB != "", "db", opts.DB).
-				Flag("warehouses", opts.Warehouses).
-				Arg("%s", extraArgs).
-				Arg("{pgurl%s}", initNodes)
-
-			c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd.String())
-		default:
-			t.Fatal("unknown tpcc setup type")
+		if err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd.String()); err != nil {
+			return errors.Wrap(err, "initializing TPCC tables")
 		}
-		l.Printf("finished tpc-c setup")
-	}()
+	default:
+		return errors.New("unknown tpcc setup type")
+	}
+	l.Printf("finished tpc-c setup")
+	return nil
 }
 
 func collectTPCCProfiles(

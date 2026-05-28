@@ -23,6 +23,13 @@ type (
 		Err        error
 	}
 
+	IssueTitleOverride struct {
+		// TitleOverride allows errors to overwrite the "{testName}
+		// failed" title used in issues without changing issue ownership.
+		TitleOverride string
+		Err           error
+	}
+
 	NonReportableError struct {
 		Err error
 	}
@@ -44,6 +51,22 @@ func (ewo ErrorWithOwnership) Unwrap() error {
 
 func (ewo ErrorWithOwnership) As(reference interface{}) bool {
 	return errors.As(ewo.Err, reference)
+}
+
+func (ito IssueTitleOverride) Error() string {
+	return ito.Err.Error()
+}
+
+func (ito IssueTitleOverride) Is(target error) bool {
+	return errors.Is(ito.Err, target)
+}
+
+func (ito IssueTitleOverride) Unwrap() error {
+	return ito.Err
+}
+
+func (ito IssueTitleOverride) As(reference interface{}) bool {
+	return errors.As(ito.Err, reference)
 }
 
 func WithTitleOverride(title string) errorOption {
@@ -83,6 +106,12 @@ func ErrorWithOwner(owner Owner, err error, opts ...errorOption) ErrorWithOwners
 	}
 
 	return result
+}
+
+// ErrorWithIssueTitleOverride associates err with a GitHub issue title override
+// without changing the issue owner.
+func ErrorWithIssueTitleOverride(err error, title string) IssueTitleOverride {
+	return IssueTitleOverride{Err: err, TitleOverride: title}
 }
 
 // NonReportable wraps the given error and makes it non-reportable --
