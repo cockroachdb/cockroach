@@ -60,15 +60,6 @@ tc_end_block "Variable Setup"
 configure_git_ssh_key
 
 if [[ -z "${is_customized_build}" ]] ; then
-  tc_start_block "Tag the release"
-  git tag "${build_name}"
-  tc_end_block "Tag the release"
-
-  tc_start_block "Push release tag to github.com/cockroachlabs/release-staging"
-  git_wrapped push ssh://git@github.com/cockroachlabs/release-staging.git "${build_name}"
-  tc_end_block "Push release tag to github.com/cockroachlabs/release-staging"
-
-
   tc_start_block "Tag docker image as latest-build"
   # Only tag the image as "latest-vX.Y-build" if the tag is on a release branch
   # (or master for the alphas for the next major release).
