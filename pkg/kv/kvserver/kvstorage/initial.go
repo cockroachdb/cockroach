@@ -60,7 +60,7 @@ func WriteInitialReplicaState(
 	gcHint roachpb.GCHint,
 	replicaVersion roachpb.Version,
 	approxStoreLocalBytes int64,
-	flushGeneration uint64,
+	flushGeneration roachpb.FlushGeneration,
 ) (enginepb.MVCCStats, error) {
 	s := kvserverpb.ReplicaState{
 		RaftAppliedIndex:      RaftInitialLogIndex,
@@ -105,12 +105,15 @@ func WriteInitialReplicaState(
 		log.KvExec.Fatalf(ctx, "expected trivial version, but found %+v", existingVersion)
 	}
 
-	newMS, err := rsl.Save(ctx, stateRW, s)
-	if err != nil {
-		return enginepb.MVCCStats{}, err
+	// TODO(shubham): revisit how we assert that the replicated range-ID local
+	// keys are all empty, instead of asserting each key using point reads.
+	if existingFlushGeneration, err := rsl.LoadRangeFlushGeneration(ctx, stateRW); err != nil {
+		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading RangeFlushGeneration")
+	} else if existingFlushGeneration != 0 {
+		log.KvExec.Fatalf(ctx, "expected trivial RangeFlushGeneration, but found %+v", existingFlushGeneration)
 	}
 
-	return newMS, nil
+	return rsl.Save(ctx, stateRW, s)
 }
 
 // WriteInitialRangeState writes the initial range state. It's called during

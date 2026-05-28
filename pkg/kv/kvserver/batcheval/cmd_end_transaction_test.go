@@ -2298,9 +2298,9 @@ func TestSplitTriggerWritesInitialReplicaState(t *testing.T) {
 	require.Equal(t, &expAppliedState, loadedAppliedState)
 
 	// The FlushGeneration should have been propagated from LHS to RHS.
-	loadedFSC, err := slRight.LoadRangeFlushGeneration(ctx, batch)
+	loadedFG, err := slRight.LoadRangeFlushGeneration(ctx, batch)
 	require.NoError(t, err)
-	require.Equal(t, uint64(7), loadedFSC)
+	require.Equal(t, roachpb.FlushGeneration(7), loadedFG)
 }
 
 // TestMergeTriggerFlushGeneration verifies that mergeTrigger takes the max
@@ -2328,10 +2328,10 @@ func TestMergeTriggerFlushGeneration(t *testing.T) {
 
 	for _, tc := range []struct {
 		name           string
-		lhsFSC         uint64
-		rhsFSC         uint64
-		expectedResult uint64 // pd.Replicated.State.FlushGeneration
-		expectedOnDisk uint64 // on-disk LHS value after merge
+		lhsFG          roachpb.FlushGeneration
+		rhsFG          roachpb.FlushGeneration
+		expectedResult roachpb.FlushGeneration // pd.Replicated.State.FlushGeneration
+		expectedOnDisk roachpb.FlushGeneration // on-disk LHS value after merge
 	}{
 		{"rhs higher", 3, 7, 7, 7},
 		{"lhs higher", 10, 2, 0, 10},
@@ -2346,11 +2346,11 @@ func TestMergeTriggerFlushGeneration(t *testing.T) {
 			lhsSL := kvstorage.MakeStateLoader(lhsDesc.RangeID)
 			rhsSL := kvstorage.MakeStateLoader(rhsDesc.RangeID)
 
-			if tc.lhsFSC > 0 {
-				require.NoError(t, lhsSL.SetRangeFlushGeneration(ctx, batch, nil, tc.lhsFSC))
+			if tc.lhsFG > 0 {
+				require.NoError(t, lhsSL.SetRangeFlushGeneration(ctx, batch, nil, tc.lhsFG))
 			}
-			if tc.rhsFSC > 0 {
-				require.NoError(t, rhsSL.SetRangeFlushGeneration(ctx, batch, nil, tc.rhsFSC))
+			if tc.rhsFG > 0 {
+				require.NoError(t, rhsSL.SetRangeFlushGeneration(ctx, batch, nil, tc.rhsFG))
 			}
 
 			// The merge trigger's LeftDesc is the post-merge descriptor
@@ -2371,16 +2371,16 @@ func TestMergeTriggerFlushGeneration(t *testing.T) {
 			pd, err := mergeTrigger(ctx, rec, batch, &ms, &merge, hlc.Timestamp{})
 			require.NoError(t, err)
 
-			var gotFSC uint64
+			var gotFG roachpb.FlushGeneration
 			if pd.Replicated.State != nil {
-				gotFSC = pd.Replicated.State.FlushGeneration
+				gotFG = pd.Replicated.State.FlushGeneration
 			}
-			require.Equal(t, tc.expectedResult, gotFSC)
+			require.Equal(t, tc.expectedResult, gotFG)
 
 			// Verify the on-disk LHS key.
-			loadedFSC, err := lhsSL.LoadRangeFlushGeneration(ctx, batch)
+			loadedFG, err := lhsSL.LoadRangeFlushGeneration(ctx, batch)
 			require.NoError(t, err)
-			require.Equal(t, tc.expectedOnDisk, loadedFSC)
+			require.Equal(t, tc.expectedOnDisk, loadedFG)
 		})
 	}
 }

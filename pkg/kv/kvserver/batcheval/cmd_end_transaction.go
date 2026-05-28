@@ -1558,7 +1558,7 @@ func splitTriggerHelper(
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "loading LHS RangeAppliedState for split")
 		}
-		lhsFSC, err := lhsSL.LoadRangeFlushGeneration(ctx, batch)
+		lhsFG, err := lhsSL.LoadRangeFlushGeneration(ctx, batch)
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "loading LHS FlushGeneration for split")
 		}
@@ -1569,7 +1569,7 @@ func splitTriggerHelper(
 		if *h.AbsPostSplitRight(), err = kvstorage.WriteInitialReplicaState(
 			ctx, batch, *h.AbsPostSplitRight(), split.RightDesc, rightLease,
 			*in.GCThreshold, *in.GCHint, in.ReplicaVersion,
-			lhsAS.ApproxStoreLocalBytes/2, lhsFSC,
+			lhsAS.ApproxStoreLocalBytes/2, lhsFG,
 		); err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to write initial Replica state")
 		}
@@ -1720,19 +1720,19 @@ func mergeTrigger(
 	// Set the LHS FlushGeneration to max(LHS, RHS). See the comment on
 	// RangeFlushGenerationState for why this is needed. Only update when the
 	// RHS exceeds the LHS; otherwise the LHS already holds the max.
-	if rhsFSC, err := rhsLoader.LoadRangeFlushGeneration(ctx, batch); err != nil {
+	if rhsFG, err := rhsLoader.LoadRangeFlushGeneration(ctx, batch); err != nil {
 		return result.Result{}, err
-	} else if rhsFSC > 0 {
-		if lhsFSC, err := lhsLoader.LoadRangeFlushGeneration(ctx, batch); err != nil {
+	} else if rhsFG > 0 {
+		if lhsFG, err := lhsLoader.LoadRangeFlushGeneration(ctx, batch); err != nil {
 			return result.Result{}, err
-		} else if rhsFSC > lhsFSC {
-			if err := lhsLoader.SetRangeFlushGeneration(ctx, batch, ms, rhsFSC); err != nil {
+		} else if rhsFG > lhsFG {
+			if err := lhsLoader.SetRangeFlushGeneration(ctx, batch, ms, rhsFG); err != nil {
 				return result.Result{}, err
 			}
 			if pd.Replicated.State == nil {
 				pd.Replicated.State = &kvserverpb.ReplicaState{}
 			}
-			pd.Replicated.State.FlushGeneration = rhsFSC
+			pd.Replicated.State.FlushGeneration = rhsFG
 		}
 	}
 

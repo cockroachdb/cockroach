@@ -165,6 +165,7 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"StreamID": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/roachpb": {
+						"FlushGeneration":      {},
 						"LeaseAcquisitionType": {},
 						"LeaseSequence":        {},
 						"NodeID":               {},

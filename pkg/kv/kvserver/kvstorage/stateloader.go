@@ -382,7 +382,7 @@ func (s StateLoader) SetRangeTombstone(
 // Returns 0 if the key doesn't exist.
 func (s StateLoader) LoadRangeFlushGeneration(
 	ctx context.Context, stateRO StateRO,
-) (uint64, error) {
+) (roachpb.FlushGeneration, error) {
 	var state kvserverpb.RangeFlushGenerationState
 	_, err := storage.MVCCGetProto(
 		ctx, stateRO, s.RangeFlushGenerationKey(), hlc.Timestamp{}, &state,
@@ -393,7 +393,7 @@ func (s StateLoader) LoadRangeFlushGeneration(
 
 // SetRangeFlushGeneration writes the flush generation.
 func (s StateLoader) SetRangeFlushGeneration(
-	ctx context.Context, stateRW StateRW, ms *enginepb.MVCCStats, gen uint64,
+	ctx context.Context, stateRW StateRW, ms *enginepb.MVCCStats, gen roachpb.FlushGeneration,
 ) error {
 	state := kvserverpb.RangeFlushGenerationState{Generation: gen}
 	return storage.MVCCPutProto(ctx, stateRW, s.RangeFlushGenerationKey(),

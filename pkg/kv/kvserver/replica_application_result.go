@@ -639,7 +639,7 @@ func (r *Replica) handleGCHintResult(ctx context.Context, hint *roachpb.GCHint) 
 	r.mu.Unlock()
 }
 
-func (r *Replica) handleFlushGenerationResult(ctx context.Context, gen uint64) {
+func (r *Replica) handleFlushGenerationResult(ctx context.Context, gen roachpb.FlushGeneration) {
 	r.mu.Lock()
 	r.shMu.state.FlushGeneration = gen
 	r.mu.Unlock()

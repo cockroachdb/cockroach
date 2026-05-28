@@ -169,7 +169,7 @@ message ReplicaState {
   // It is updated during application from the value in ReplicatedEvalResult,
   // so that no engine reads are needed during application. See
   // RangeFlushGenerationState for the full protocol description.
-  uint64 flush_generation = 18;
+  uint64 flush_generation = 18 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.FlushGeneration"];
 
   reserved 8, 9, 10;
 }
@@ -324,7 +324,7 @@ message RangeFlushGenerationState {
   option (gogoproto.equal) = true;
 
   // generation is the flush generation (incremented on each flush prepare).
-  uint64 generation = 1;
+  uint64 generation = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.FlushGeneration"];
 }
 
 // MVCCPersistentStats is convertible to MVCCStats, but uses signed variable
