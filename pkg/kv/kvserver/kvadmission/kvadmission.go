@@ -353,7 +353,7 @@ func (n *controllerImpl) AdmitKVWork(
 			}
 		}
 	}
-	cpuAdmissionQ := n.cpuGrantCoords.GetKVWorkQueue(admissionInfo.TenantID.IsSystem())
+	cpuAdmissionQ := n.cpuGrantCoords.GetKVWorkQueue()
 	if admissionEnabled {
 		// Bulk jobs such as backups or row-level TTL issue KV requests with a
 		// priority of admissionpb.BulkNormalPri or lower; these are eligible for

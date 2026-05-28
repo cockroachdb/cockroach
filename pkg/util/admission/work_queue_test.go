@@ -418,10 +418,10 @@ func runCPUTimeTokenWorkQueueTest(t *testing.T, path string) {
 				opts.mode = usesCPUTimeTokens
 				cpuMetrics := makeCPUTimeTokenMetrics()
 				opts.perGroupAggMetrics = &groupAggMetrics{
-					admittedCount:  cpuMetrics.AdmittedCountPerTenant[systemTenant],
-					waitTimeNanos:  cpuMetrics.WaitTimeNanosPerTenant[systemTenant],
-					tokensUsed:     cpuMetrics.TokensUsedPerTenant[systemTenant],
-					tokensReturned: cpuMetrics.TokensReturnedPerTenant[systemTenant],
+					admittedCount:  cpuMetrics.AdmittedCountPerTenant,
+					waitTimeNanos:  cpuMetrics.WaitTimeNanosPerTenant,
+					tokensUsed:     cpuMetrics.TokensUsedPerTenant,
+					tokensReturned: cpuMetrics.TokensReturnedPerTenant,
 				}
 				opts.configHolder = newResourceGroupConfigHolder(&st.SV)
 				opts.groupKeyForWorkInfo = cpuTimeTokenGroupKeyForWorkInfo
@@ -561,7 +561,7 @@ func runCPUTimeTokenWorkQueueTest(t *testing.T, path string) {
 				// the requested group, and install directly. We bypass
 				// Set's builtin protection because the test needs to
 				// toggle maxCPU on built-in RM groups.
-				groups := q.configHolder.Snapshot().Groups
+				groups := q.configHolder.Snapshot().Groups()
 				fresh := make(ResourceGroupConfigSet, len(groups))
 				for gk, gc := range groups {
 					fresh[gk] = gc
@@ -577,7 +577,7 @@ func runCPUTimeTokenWorkQueueTest(t *testing.T, path string) {
 				q.configHolder.mu.config = fresh
 				q.configHolder.mu.Unlock()
 				q.mu.Lock()
-				q.applyConfigLocked(q.configHolder.Snapshot().Groups)
+				q.applyConfigLocked(q.configHolder.Snapshot().Groups())
 				q.mu.Unlock()
 				return ""
 
@@ -587,7 +587,7 @@ func runCPUTimeTokenWorkQueueTest(t *testing.T, path string) {
 				if v {
 					cpuTimeTokenACMode.Override(context.Background(), &st.SV, resourceManagerMode)
 					q.mu.Lock()
-					q.applyConfigLocked(q.configHolder.Snapshot().Groups)
+					q.applyConfigLocked(q.configHolder.Snapshot().Groups())
 					q.mu.Unlock()
 				} else {
 					cpuTimeTokenACMode.Override(context.Background(), &st.SV, serverlessMode)
@@ -643,10 +643,10 @@ func TestCPUTimeTokenEstimation(t *testing.T) {
 	opts.mode = usesCPUTimeTokens
 	cpuMetrics := makeCPUTimeTokenMetrics()
 	opts.perGroupAggMetrics = &groupAggMetrics{
-		admittedCount:  cpuMetrics.AdmittedCountPerTenant[systemTenant],
-		waitTimeNanos:  cpuMetrics.WaitTimeNanosPerTenant[systemTenant],
-		tokensUsed:     cpuMetrics.TokensUsedPerTenant[systemTenant],
-		tokensReturned: cpuMetrics.TokensReturnedPerTenant[systemTenant],
+		admittedCount:  cpuMetrics.AdmittedCountPerTenant,
+		waitTimeNanos:  cpuMetrics.WaitTimeNanosPerTenant,
+		tokensUsed:     cpuMetrics.TokensUsedPerTenant,
+		tokensReturned: cpuMetrics.TokensReturnedPerTenant,
 	}
 	opts.groupKeyForWorkInfo = cpuTimeTokenGroupKeyForWorkInfo
 	timeSource = timeutil.NewManualTime(initialTime)
@@ -787,10 +787,10 @@ func makeCPUTimeTokenWorkQueue(
 	opts.mode = usesCPUTimeTokens
 	cpuMetrics := makeCPUTimeTokenMetrics()
 	opts.perGroupAggMetrics = &groupAggMetrics{
-		admittedCount:  cpuMetrics.AdmittedCountPerTenant[systemTenant],
-		waitTimeNanos:  cpuMetrics.WaitTimeNanosPerTenant[systemTenant],
-		tokensUsed:     cpuMetrics.TokensUsedPerTenant[systemTenant],
-		tokensReturned: cpuMetrics.TokensReturnedPerTenant[systemTenant],
+		admittedCount:  cpuMetrics.AdmittedCountPerTenant,
+		waitTimeNanos:  cpuMetrics.WaitTimeNanosPerTenant,
+		tokensUsed:     cpuMetrics.TokensUsedPerTenant,
+		tokensReturned: cpuMetrics.TokensReturnedPerTenant,
 	}
 	opts.timeSource = timeutil.NewManualTime(initialTime)
 	opts.disableEpochClosingGoroutine = true
@@ -1365,7 +1365,7 @@ func TestRefreshResourceGroupConfigInServerlessIsNoOp(t *testing.T) {
 		"refresh in serverless mode must not pre-create rg containers")
 
 	// But the holder DID record the change (it's caller-side state).
-	cfg := q.configHolder.Snapshot().Groups.GetOrDefault(rgGroupKey(42))
+	cfg := q.configHolder.Snapshot().Groups().GetOrDefault(rgGroupKey(42))
 	require.Equal(t, uint32(60), cfg.Weight)
 	require.True(t, cfg.MaxCPU)
 }

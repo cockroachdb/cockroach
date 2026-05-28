@@ -1421,14 +1421,14 @@ func (q *WorkQueue) AdmittedSQLWorkDone(gKey groupKey, remaining int64) {
 // Holding q.mu once (instead of acquiring per group) costs one lock
 // acquire instead of N+1 and makes the refill atomic across groups: no
 // observer can see a partial-refill state.
-func (q *WorkQueue) refillGroupBurstBuckets(rate, cap float64) {
+func (q *WorkQueue) refillGroupBurstBuckets(rate, capacity float64) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	q.mu.burstBucketCapacity = int64(cap * defaultTenantGroupConfig.BurstFrac)
+	q.mu.burstBucketCapacity = int64(capacity * defaultTenantGroupConfig.BurstFrac)
 	for _, group := range q.mu.groups {
 		toAdd := int64(rate * group.burstFrac)
-		capacity := int64(cap * group.burstFrac)
-		q.refillBurstBucketLocked(group, toAdd, capacity)
+		groupCap := int64(capacity * group.burstFrac)
+		q.refillBurstBucketLocked(group, toAdd, groupCap)
 	}
 }
 
@@ -1539,7 +1539,7 @@ const defaultGroupWeight = 1
 func (q *WorkQueue) getGroupConfigLocked(
 	gKey groupKey,
 ) (weight uint32, burstFrac float64, maxCPU bool) {
-	cfg := q.configHolder.Snapshot().Groups.GetOrDefault(gKey)
+	cfg := q.configHolder.Snapshot().Groups().GetOrDefault(gKey)
 	return cfg.Weight, cfg.BurstFrac, cfg.MaxCPU
 }
 
@@ -1559,7 +1559,7 @@ func (q *WorkQueue) refreshResourceGroupConfig() {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if cpuTimeTokenACMode.Get(&q.settings.SV) == resourceManagerMode {
-		q.applyConfigLocked(q.configHolder.Snapshot().Groups)
+		q.applyConfigLocked(q.configHolder.Snapshot().Groups())
 	}
 }
 
