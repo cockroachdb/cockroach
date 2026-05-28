@@ -385,8 +385,6 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 
 	// Validate each statement and collect the dependencies.
 	var stmtScope *scope
-	// TODO(janexing): consider interaction with late binding, where the body
-	// is not resolved at CREATE time and canMutate should stay Unknown.
 	var canMutate tree.RoutineCanMutate
 	switch language {
 	case tree.RoutineLangSQL:
@@ -494,7 +492,8 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			)
 			stmtScope = plBuilder.buildRootBlock(stmt.AST, bodyScope, routineParams)
 		})
-		if canMutate != tree.RoutineMutates &&
+		if !lateBinding &&
+			canMutate != tree.RoutineMutates &&
 			stmtScope.expr != nil && stmtScope.expr.Relational().CanMutate {
 			canMutate = tree.RoutineMutates
 		}
@@ -509,13 +508,22 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		panic(errors.AssertionFailedf("unexpected language: %v", language))
 	}
 
-	// After body analysis, resolve unknown to definitively non-mutating.
-	// TODO(janexing): might be false-positive with late-binding.
-	if canMutate == tree.RoutineCanMutateUnknown {
-		canMutate = tree.RoutineDoesNotMutate
-	}
-	cf.CanMutate = canMutate
+	// For late-bound procedures, cf.CanMutate stays as RoutineCanMutateUnknown
+	// (the zero value) because the body was not resolved at CREATE time — the
+	// expressions built with skipSQL are placeholders (NoColsRow) whose
+	// canMutate value is meaningless. At CALL time:
+	//  - With eager optbuild, buildRoutine's fallback inspects the
+	//    fully-built body and derives the correct value.
+	//  - With deferred optbuild, the body isn't available at plan time;
+	//    the deferred-optbuild path must treat UNKNOWN conservatively as
+	//    CAN_MUTATE to ensure a root txn is selected.
 	if !lateBinding {
+		// After body analysis, resolve unknown to definitively non-mutating.
+		if canMutate == tree.RoutineCanMutateUnknown {
+			canMutate = tree.RoutineDoesNotMutate
+		}
+		cf.CanMutate = canMutate
+
 		if stmtScope != nil && (language != tree.RoutineLangPLpgSQL || !isSetReturning) {
 			// Validate that the result type of the last statement matches the
 			// return type of the function. We skip this validation for PL/pgSQL SRFs

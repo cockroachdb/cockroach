@@ -735,6 +735,116 @@ DROP FUNCTION f4_diamond;
 
 subtest end
 
+subtest can_mutate_late_bound_plpgsql
+
+# Late-bound PL/pgSQL procedures defer body resolution to CALL time, so the
+# body analyzed at CREATE time is just placeholders. CanMutate must be left as
+# UNKNOWN_CAN_MUTATE (the proto zero value, omitted from JSON output) so that
+# at CALL time the fallback inspects the fully-built body and derives the
+# correct value.
+#
+# NOTE: Tests for the interaction between late binding and deferred optbuild
+# (where the body is not available at plan time either) cannot be written yet
+# because deferred optbuild is not hooked into production code. When deferred
+# optbuild lands (#169933), tests should verify that UNKNOWN_CAN_MUTATE +
+# empty body conservatively selects a root txn (CAN_MUTATE behavior).
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+SET CLUSTER SETTING sql.procedures.plpgsql.late_binding.enabled = true
+
+# Create a late-bound PL/pgSQL procedure that performs DML.
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+CREATE PROCEDURE p_late_mutate() LANGUAGE PLpgSQL AS $$
+BEGIN
+  INSERT INTO can_mutate_t VALUES (100) ON CONFLICT DO NOTHING;
+END
+$$
+
+# The descriptor should store UNKNOWN_CAN_MUTATE (proto zero value = omitted
+# from JSON), NOT CANNOT_MUTATE. CANNOT_MUTATE would be incorrect because
+# the body was not resolved — we simply don't know.
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query T
+SELECT crdb_internal.pb_to_json(
+  'cockroach.sql.sqlbase.Descriptor', descriptor, false
+)->'function'->>'canMutate'
+FROM system.descriptor
+WHERE id = 'p_late_mutate()'::regprocedure::oid::int - 100000
+----
+NULL
+
+# A non-mutating late-bound procedure should also be UNKNOWN, not CANNOT_MUTATE.
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+CREATE PROCEDURE p_late_readonly() LANGUAGE PLpgSQL AS $$
+DECLARE
+  v INT;
+BEGIN
+  SELECT 1 INTO v;
+END
+$$
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query T
+SELECT crdb_internal.pb_to_json(
+  'cockroach.sql.sqlbase.Descriptor', descriptor, false
+)->'function'->>'canMutate'
+FROM system.descriptor
+WHERE id = 'p_late_readonly()'::regprocedure::oid::int - 100000
+----
+NULL
+
+# CALL the mutating procedure — this should succeed, meaning the CALL-time
+# fallback correctly detected the mutation and used a root txn.
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+CALL p_late_mutate()
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query I
+SELECT a FROM can_mutate_t WHERE a = 100
+----
+100
+
+# Early-bound PL/pgSQL procedures (late binding disabled) should still get
+# a definitive CanMutate value, not UNKNOWN.
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+SET CLUSTER SETTING sql.procedures.plpgsql.late_binding.enabled = false
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+CREATE PROCEDURE p_early_mutate() LANGUAGE PLpgSQL AS $$
+BEGIN
+  INSERT INTO can_mutate_t VALUES (200) ON CONFLICT DO NOTHING;
+END
+$$
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query T
+SELECT crdb_internal.pb_to_json(
+  'cockroach.sql.sqlbase.Descriptor', descriptor, false
+)->'function'->>'canMutate'
+FROM system.descriptor
+WHERE id = 'p_early_mutate()'::regprocedure::oid::int - 100000
+----
+CAN_MUTATE
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+DROP PROCEDURE p_late_mutate;
+DROP PROCEDURE p_late_readonly;
+DROP PROCEDURE p_early_mutate;
+DELETE FROM can_mutate_t WHERE a IN (100, 200)
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+RESET CLUSTER SETTING sql.procedures.plpgsql.late_binding.enabled
+
+subtest end
+
 skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
 statement ok
 DROP TABLE can_mutate_t

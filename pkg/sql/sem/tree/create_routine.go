@@ -97,7 +97,9 @@ type CreateRoutine struct {
 	BodyAnnotations []*Annotations
 	// CanMutate is set by the opt builder to indicate whether the routine body
 	// can perform mutations, including direct DML, mutations inside CTEs or
-	// subqueries, and calls to other mutating routines.
+	// subqueries, and calls to other mutating routines. For late-bound PL/pgSQL
+	// procedures whose body is not resolved at CREATE time, this is left as
+	// RoutineCanMutateUnknown.
 	CanMutate RoutineCanMutate
 }
 
@@ -456,10 +458,21 @@ type RoutineCanMutate int
 
 const (
 	// RoutineCanMutateUnknown indicates the mutation status has not been
-	// determined. This is the case for function descriptors created before
-	// the can_mutate field was introduced. Consumers must fall back to
-	// inspecting the body RelExprs when this value is encountered, and
-	// deferred optbuild must not be used.
+	// determined. This is the case for:
+	//  1. Function descriptors created before the can_mutate field was
+	//     introduced.
+	//  2. Late-bound PL/pgSQL procedures whose body is not resolved at
+	//     CREATE time (references are resolved at CALL time).
+	//
+	// For case 1, consumers fall back to inspecting the eagerly-built body
+	// RelExprs at CALL time, which always succeeds because pre-existing
+	// descriptors use eager optbuild.
+	//
+	// For case 2 with eager optbuild at CALL time, the same fallback works
+	// because the body is fully built then. With deferred optbuild, the
+	// body is not available at plan time, so the deferred-optbuild path
+	// must treat UNKNOWN conservatively as CAN_MUTATE to ensure a root txn
+	// is selected.
 	RoutineCanMutateUnknown RoutineCanMutate = iota
 	// RoutineMutates indicates the routine body contains mutations.
 	RoutineMutates

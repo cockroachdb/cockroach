@@ -143,7 +143,13 @@ func (n *createFunctionNode) createNewFunction(
 	// CREATE OR REPLACE on the old binary could leave a stale value (e.g.
 	// CANNOT_MUTATE on a body that now contains DML), causing new nodes
 	// after re-upgrade to incorrectly skip the body-loop fallback.
-	if params.p.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.V26_3_FunctionDescCanMutate) {
+	//
+	// For late-bound PL/pgSQL procedures, CanMutate is RoutineCanMutateUnknown
+	// because the body was not resolved at CREATE time. We leave the descriptor
+	// field at its zero value (UNKNOWN_CAN_MUTATE) so the CALL-time fallback
+	// determines the correct value from the built body.
+	if params.p.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.V26_3_FunctionDescCanMutate) &&
+		n.cf.CanMutate != tree.RoutineCanMutateUnknown {
 		udfDesc.SetCanMutate(funcdesc.CanMutateToProto(n.cf.CanMutate))
 	}
 
@@ -295,7 +301,16 @@ func (n *createFunctionNode) replaceFunction(
 	// CREATE OR REPLACE on the old binary could leave a stale value (e.g.
 	// CANNOT_MUTATE on a body that now contains DML), causing new nodes
 	// after re-upgrade to incorrectly skip the body-loop fallback.
-	if params.p.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.V26_3_FunctionDescCanMutate) {
+	//
+	// For late-bound PL/pgSQL procedures, CanMutate is RoutineCanMutateUnknown
+	// because the body was not resolved at CREATE time. We leave the descriptor
+	// field at its zero value (UNKNOWN_CAN_MUTATE) so the CALL-time fallback
+	// determines the correct value from the built body. This also means no
+	// propagation to callers occurs for late-bound replacements; callers
+	// retain their existing CanMutate value, which is acceptable because each
+	// caller resolves its nested callees' CanMutate at its own CALL time.
+	if params.p.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.V26_3_FunctionDescCanMutate) &&
+		n.cf.CanMutate != tree.RoutineCanMutateUnknown {
 		udfDesc.SetCanMutate(funcdesc.CanMutateToProto(n.cf.CanMutate))
 		// If the function became mutating, propagate CAN_MUTATE to all
 		// transitive callers so their descriptors stay accurate for

@@ -786,10 +786,12 @@ type UDFDefinition struct {
 
 	// CanMutate indicates whether the routine body can perform mutations.
 	// For descriptor-backed routines this is sourced from the persisted
-	// descriptor field via the Overload. When RoutineCanMutateUnknown
-	// (for descriptors predating the field), consumers fall back to
-	// inspecting Body RelExprs to determine mutation behavior. For
-	// anonymous routines (DO blocks, triggers) this is always
+	// descriptor field via the Overload. RoutineCanMutateUnknown occurs
+	// for descriptors predating the field and for late-bound PL/pgSQL
+	// procedures whose body was not resolved at CREATE time. Consumers
+	// fall back to inspecting Body RelExprs when available; if Body is
+	// empty (deferred optbuild), they conservatively assume mutations.
+	// For anonymous routines (DO blocks, triggers) this is always
 	// RoutineMutates or RoutineDoesNotMutate, derived from the body
 	// expression at build time.
 	CanMutate tree.RoutineCanMutate

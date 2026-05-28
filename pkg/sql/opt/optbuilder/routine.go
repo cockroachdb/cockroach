@@ -523,14 +523,21 @@ func (b *Builder) buildRoutine(
 	}
 
 	// Derive canMutate from the descriptor (via the Overload). When the
-	// descriptor's CanMutate is unknown (for descriptors predating the
-	// field), fall back to inspecting the eagerly-built body expressions.
+	// descriptor's CanMutate is unknown, fall back to inspecting the
+	// eagerly-built body expressions. Unknown occurs in two cases:
+	//  1. Descriptors created before the can_mutate field was introduced.
+	//  2. Late-bound PL/pgSQL procedures whose body was not resolved at
+	//     CREATE time.
+	//
+	// In both cases the body is always available here: case 1 uses eager
+	// optbuild, and case 2 resolves the body at CALL time. If the body
+	// is empty (which should not happen), we conservatively resolve to
+	// DoesNotMutate rather than assuming mutations, since an empty body
+	// also occurs transiently for recursive PL/pgSQL continuations.
 	//
 	// This resolution always produces a definite value before the UDF
 	// call expression is constructed below, so parent routines that call
 	// this one will never see an unknown mutation status from this child.
-	// The fallback is safe because unknown-status descriptors always have
-	// eagerly-built body expressions available for inspection.
 	canMutate := o.CanMutate
 	if canMutate == tree.RoutineCanMutateUnknown {
 		for _, s := range body {

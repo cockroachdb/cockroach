@@ -212,7 +212,12 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 	validateFunctionRelationReferences(b, refProvider, db.DatabaseID)
 	validateFunctionToFunctionReferences(b, refProvider, db.DatabaseID)
 	fnBody := b.WrapFunctionBody(fnID, fnBodyStr, lang, routineLazilyEvaluatesSQL(b, n, lang, typ), refProvider)
-	if b.EvalCtx().Settings.Version.ActiveVersion(b).IsActive(clusterversion.V26_3_FunctionDescCanMutate) {
+	// For late-bound PL/pgSQL procedures, CanMutate is RoutineCanMutateUnknown
+	// because the body was not resolved at CREATE time. We leave the proto field
+	// at its zero value (UNKNOWN_CAN_MUTATE) so the CALL-time fallback
+	// determines the correct value from the built body.
+	if b.EvalCtx().Settings.Version.ActiveVersion(b).IsActive(clusterversion.V26_3_FunctionDescCanMutate) &&
+		n.CanMutate != tree.RoutineCanMutateUnknown {
 		fnBody.CanMutate = funcdesc.CanMutateToProto(n.CanMutate)
 	}
 	b.Add(fnBody)
@@ -417,7 +422,15 @@ func replaceFunction(
 
 	// Build the FunctionBody element with the new body and references.
 	fnBody := b.WrapFunctionBody(fnID, fnBodyStr, lang, routineLazilyEvaluatesSQL(b, n, lang, typ), refProvider)
-	if b.EvalCtx().Settings.Version.ActiveVersion(b).IsActive(clusterversion.V26_3_FunctionDescCanMutate) {
+	// For late-bound PL/pgSQL procedures, CanMutate is RoutineCanMutateUnknown
+	// because the body was not resolved at CREATE time. We leave the proto field
+	// at its zero value (UNKNOWN_CAN_MUTATE) so the CALL-time fallback
+	// determines the correct value from the built body. This also means no
+	// propagation to callers occurs for late-bound replacements; callers
+	// retain their existing CanMutate value, which is acceptable because each
+	// caller resolves its nested callees' CanMutate at its own CALL time.
+	if b.EvalCtx().Settings.Version.ActiveVersion(b).IsActive(clusterversion.V26_3_FunctionDescCanMutate) &&
+		n.CanMutate != tree.RoutineCanMutateUnknown {
 		fnBody.CanMutate = funcdesc.CanMutateToProto(n.CanMutate)
 		// If the function became mutating, propagate CAN_MUTATE to all
 		// transitive callers so their descriptors stay accurate for
