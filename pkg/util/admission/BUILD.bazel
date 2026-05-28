@@ -123,7 +123,6 @@ go_test(
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_cockroachdb_tokenbucket//:tokenbucket",
         "@com_github_guptarohit_asciigraph//:asciigraph",
-        "@com_github_prometheus_client_model//go",
         "@com_github_stretchr_testify//require",
     ],
 )
