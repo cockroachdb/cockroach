@@ -1479,6 +1479,18 @@ func populateDomainConstraints(
 		conoid := h.DomainConstraintOid(typOid, ck.ConstraintID)
 		displayExpr := ck.Expr
 		if parsedExpr, err := parser.ParseExpr(ck.Expr); err == nil {
+			// Strip any redundant outer parentheses so that the rendered
+			// CHECK clause is stable across pg_dump → psql round-trips. The
+			// formatter does not strip them, and pg_get_constraintdef wraps
+			// the result in `CHECK ((...))`, so without this each cycle
+			// adds another level of parens.
+			for {
+				pe, ok := parsedExpr.(*tree.ParenExpr)
+				if !ok {
+					break
+				}
+				parsedExpr = pe.Expr
+			}
 			f := tree.NewFmtCtx(tree.FmtPGCatalog)
 			f.FormatNode(parsedExpr)
 			displayExpr = f.CloseAndGetString()
@@ -4331,7 +4343,6 @@ var (
 	typTypeRange     = tree.NewDString("r")
 
 	// Avoid unused warning for constants.
-	_ = typTypeDomain
 	_ = typTypePseudo
 	_ = typTypeRange
 
@@ -4432,6 +4443,9 @@ func addPGTypeRow(
 	typArray := oidZero
 	builtinPrefix := builtins.PGIOBuiltinPrefix(typ)
 	typrelid := oidZero
+	typBaseType := oidZero
+	typNotNull := tree.DBoolFalse
+	var typDefault tree.Datum = tree.DNull
 	switch typ.Family() {
 	case types.ArrayFamily:
 		switch typ.Oid() {
@@ -4481,6 +4495,27 @@ func addPGTypeRow(
 	if cat == typCategoryPseudo {
 		typType = typTypePseudo
 	}
+	// For DOMAIN types, override the fields that pg_dump and other clients
+	// inspect to recognize a domain. The base type's family is what propagates
+	// through typ.Family() (since MakeDomain shallow-copies the base type's
+	// internal representation), so without this override pg_dump would dump
+	// the domain as a base type and silently drop its CHECK constraints.
+	if d := typ.TypeMeta.DomainData; d != nil {
+		typType = typTypeDomain
+		typBaseType = tree.NewDOid(d.BaseType.Oid())
+		if d.NotNull {
+			typNotNull = tree.DBoolTrue
+		}
+		if d.DefaultExpr != "" {
+			// Populate both typdefaultbin and typdefault to match
+			// PostgreSQL's pg_type layout: pg_dump consumes typdefaultbin
+			// via pg_get_expr (a passthrough in CRDB), while psql \d and
+			// similar clients inspect typdefault. The same SQL fragment
+			// satisfies both columns because CRDB's DefaultExpr is already
+			// a SQL string.
+			typDefault = tree.NewDString(d.DefaultExpr)
+		}
+	}
 	typname := typ.PGName()
 	typDelim := tree.NewDString(typ.Delimiter())
 	var typacl tree.Datum = tree.DNull
@@ -4519,13 +4554,13 @@ func addPGTypeRow(
 
 		tree.DNull,      // typalign
 		tree.DNull,      // typstorage
-		tree.DBoolFalse, // typnotnull
-		oidZero,         // typbasetype
+		typNotNull,      // typnotnull
+		typBaseType,     // typbasetype
 		negOneVal,       // typtypmod
 		zeroVal,         // typndims
 		typColl(typ, h), // typcollation
-		tree.DNull,      // typdefaultbin
-		tree.DNull,      // typdefault
+		typDefault,      // typdefaultbin
+		typDefault,      // typdefault
 		typacl,          // typacl
 	)
 }
