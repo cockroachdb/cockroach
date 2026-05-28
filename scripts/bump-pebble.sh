@@ -39,7 +39,7 @@ echo "Current pebble SHA: $OLD_SHA"
 
 git submodule update --init --recursive
 
-PEBBLE_UPSTREAM_URL="https://github.com/cockroachdb/pebble.git"
+PEBBLE_UPSTREAM_URL="https://github.com/cockroachdb/pebble-private.git"
 
 # Check out the pebble repo in a temporary directory.
 PEBBLE_DIR=$(mktemp -d)
