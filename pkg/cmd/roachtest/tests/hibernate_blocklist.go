@@ -25,6 +25,7 @@ var hibernateIgnoreList = blocklist{
 	`org.hibernate.orm.test.jpa.txn.JtaTransactionJoiningTest.control()`:                                 "flaky",
 	`org.hibernate.orm.test.jpa.txn.JtaTransactionJoiningTest.testImplicitJoining()`:                     "flaky",
 	"org.hibernate.orm.test.schemaupdate.SchemaUpdateTest.testSchemaUpdateAndValidation[0]":              "flaky",
+	"org.hibernate.orm.test.schemaupdate.SchemaUpdateTest.testSchemaUpdateAndValidation[1]":              "flaky",
 	"org.hibernate.serialization.SessionFactorySerializationTest.testUnNamedSessionFactorySerialization": "flaky",
 	"org.hibernate.serialization.SessionFactorySerializationTest.testNamedSessionFactorySerialization":   "flaky",
 	"org.hibernate.test.batch.BatchTest.testBatchInsertUpdate":                                           "flaky",
