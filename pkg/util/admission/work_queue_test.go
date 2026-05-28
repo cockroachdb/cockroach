@@ -351,26 +351,6 @@ func scanTenantID(t *testing.T, d *datadriven.TestData) roachpb.TenantID {
 	return roachpb.MustMakeTenantID(uint64(id))
 }
 
-// newTestGroupAggMetrics wires both the primary (tenant_id, group_id) and the
-// legacy serverless-tenant (tenant_id only) AggCounter families into
-// workQueueOptions.perGroupAggMetrics for tests.
-func newTestGroupAggMetrics(m *cpuTimeTokenMetrics) *groupAggMetrics {
-	return &groupAggMetrics{
-		primary: &groupAggMetricSet{
-			admittedCount:  m.AdmittedCount,
-			waitTimeNanos:  m.WaitTimeNanos,
-			tokensUsed:     m.TokensUsed,
-			tokensReturned: m.TokensReturned,
-		},
-		legacy: &groupAggMetricSet{
-			admittedCount:  m.LegacyAdmittedCountPerTenant,
-			waitTimeNanos:  m.LegacyWaitTimeNanosPerTenant,
-			tokensUsed:     m.LegacyTokensUsedPerTenant,
-			tokensReturned: m.LegacyTokensReturnedPerTenant,
-		},
-	}
-}
-
 func maybeRetryWithWait(t *testing.T, expected string, rewrite bool, f func() string) {
 	t.Helper()
 	if rewrite {
@@ -438,7 +418,12 @@ func runCPUTimeTokenWorkQueueTest(t *testing.T, path string) {
 				opts.disableGCGroupsAndResetUsed = true
 				opts.mode = usesCPUTimeTokens
 				cpuMetrics := makeCPUTimeTokenMetrics()
-				opts.perGroupAggMetrics = newTestGroupAggMetrics(cpuMetrics)
+				opts.perGroupAggMetrics = &groupAggMetrics{
+					admittedCount:  cpuMetrics.AdmittedCountPerTenant,
+					waitTimeNanos:  cpuMetrics.WaitTimeNanosPerTenant,
+					tokensUsed:     cpuMetrics.TokensUsedPerTenant,
+					tokensReturned: cpuMetrics.TokensReturnedPerTenant,
+				}
 				opts.configHolder = newResourceGroupConfigHolder(&st.SV)
 				opts.groupKeyForWorkInfo = cpuTimeTokenGroupKeyForWorkInfo
 				q = makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
@@ -658,7 +643,12 @@ func TestCPUTimeTokenEstimation(t *testing.T) {
 	opts := makeWorkQueueOptions(KVWork)
 	opts.mode = usesCPUTimeTokens
 	cpuMetrics := makeCPUTimeTokenMetrics()
-	opts.perGroupAggMetrics = newTestGroupAggMetrics(cpuMetrics)
+	opts.perGroupAggMetrics = &groupAggMetrics{
+		admittedCount:  cpuMetrics.AdmittedCountPerTenant,
+		waitTimeNanos:  cpuMetrics.WaitTimeNanosPerTenant,
+		tokensUsed:     cpuMetrics.TokensUsedPerTenant,
+		tokensReturned: cpuMetrics.TokensReturnedPerTenant,
+	}
 	opts.groupKeyForWorkInfo = cpuTimeTokenGroupKeyForWorkInfo
 	timeSource = timeutil.NewManualTime(initialTime)
 	opts.timeSource = timeSource
@@ -795,7 +785,12 @@ func makeCPUTimeTokenWorkQueue(
 	opts := makeWorkQueueOptions(KVWork)
 	opts.mode = usesCPUTimeTokens
 	cpuMetrics := makeCPUTimeTokenMetrics()
-	opts.perGroupAggMetrics = newTestGroupAggMetrics(cpuMetrics)
+	opts.perGroupAggMetrics = &groupAggMetrics{
+		admittedCount:  cpuMetrics.AdmittedCountPerTenant,
+		waitTimeNanos:  cpuMetrics.WaitTimeNanosPerTenant,
+		tokensUsed:     cpuMetrics.TokensUsedPerTenant,
+		tokensReturned: cpuMetrics.TokensReturnedPerTenant,
+	}
 	opts.timeSource = timeutil.NewManualTime(initialTime)
 	opts.disableEpochClosingGoroutine = true
 	opts.disableGCGroupsAndResetUsed = true

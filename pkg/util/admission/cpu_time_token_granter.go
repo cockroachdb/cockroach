@@ -159,9 +159,9 @@ func (stg *cpuTimeTokenGranter) tookWithoutPermissionLocked(count int64) {
 	// compute rate(consumed) - rate(returned) over arbitrary windows
 	// (1m, 30m, etc.).
 	if count > 0 {
-		stg.metrics.UsageConsumed.Inc(count)
+		stg.metrics.TokensConsumed.Inc(count)
 	} else {
-		stg.metrics.UsageReturned.Inc(-count)
+		stg.metrics.TokensReturned.Inc(-count)
 	}
 	now := stg.timeSource.Now()
 	for qual := range stg.mu.buckets {
