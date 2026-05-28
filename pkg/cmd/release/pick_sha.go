@@ -346,7 +346,7 @@ func (r *pickSHARunner) processCandidate(ctx context.Context, c jiraIssue) error
 		return errors.Wrap(err, "posting Slack message")
 	}
 	if !r.dryRun {
-		if err := r.jira.AddComment(c.Key, buildPickSHAJiraComment(details, link, releaseNotesPRURL)); err != nil {
+		if _, err := r.jira.AddComment(c.Key, buildPickSHAJiraComment(details, link, releaseNotesPRURL)); err != nil {
 			return errors.Wrap(err, "adding Jira comment")
 		}
 	} else {
@@ -444,10 +444,6 @@ func (r *pickSHARunner) warnReleaseNotes(key string, payload releaseNotesPayload
 		log.Printf("failed to post release-notes warning to %s: %v", r.opsChannel, postErr)
 	}
 }
-
-// jiraBrowseBaseURL is the public Jira base URL for issue links rendered
-// into Slack notifications. The cockroachlabs.atlassian.net host is fixed.
-const jiraBrowseBaseURL = "https://cockroachlabs.atlassian.net/browse"
 
 // docsInfraSlackLink is a pre-rendered Slack mrkdwn link to the
 // #docs-infrastructure-team channel — the team that owns the
