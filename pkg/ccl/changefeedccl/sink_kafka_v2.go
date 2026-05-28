@@ -13,12 +13,16 @@ import (
 	"hash/fnv"
 	"io"
 	"net"
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/IBM/sarama"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -26,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/klauspost/compress/zstd"
@@ -33,6 +38,7 @@ import (
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kerr"
 	"github.com/twmb/franz-go/pkg/kgo"
+	"github.com/twmb/franz-go/pkg/kmsg"
 	"github.com/twmb/franz-go/pkg/kversion"
 )
 
@@ -71,6 +77,7 @@ func newKafkaSinkClientV2(
 	topicsForConnectionCheck []string,
 	constHeaders map[string][]byte,
 	partitionAlg string,
+	createTopics changefeedbase.CreateKafkaTopics,
 ) (*kafkaSinkClientV2, error) {
 	bootstrapBrokers := strings.Split(bootstrapAddrsStr, `,`)
 
@@ -88,8 +95,6 @@ func newKafkaSinkClientV2(
 		kgo.ProducerBatchMaxBytes(int32(changefeedbase.KafkaMaxRequestSize.Get(&settings.SV))),
 		kgo.BrokerMaxWriteBytes(1 << 30), // 1GiB
 
-		kgo.AllowAutoTopicCreation(),
-
 		kgo.RecordRetries(5),
 		// This applies only to non-produce requests, ie the ListTopics call.
 		kgo.RequestRetries(5),
@@ -99,6 +104,9 @@ func newKafkaSinkClientV2(
 		kgo.ProducerOnDataLossDetected(func(topic string, part int32) {
 			log.Changefeed.Errorf(ctx, `kafka sink detected data loss for topic %s partition %d`, redact.SafeString(topic), redact.SafeInt(part))
 		}),
+	}
+	if createTopics == changefeedbase.CreateKafkaTopicsBrokerAuto {
+		baseOpts = append(baseOpts, kgo.AllowAutoTopicCreation())
 	}
 
 	recordResize := func(numRecords int64) {}
@@ -117,6 +125,9 @@ func newKafkaSinkClientV2(
 
 	if knobs.OverrideClient != nil {
 		client, adminClient = knobs.OverrideClient(clientOpts)
+		if client == nil || adminClient == nil {
+			return nil, errors.New("override client returned nil kafka client or admin client")
+		}
 	} else {
 		client, err = kgo.NewClient(clientOpts...)
 		if err != nil {
@@ -323,7 +334,8 @@ type KafkaAdminClientV2 interface {
 }
 
 type kafkaSinkV2Knobs struct {
-	OverrideClient func(opts []kgo.Opt) (KafkaClientV2, KafkaAdminClientV2)
+	OverrideClient              func(opts []kgo.Opt) (KafkaClientV2, KafkaAdminClientV2)
+	SkipCreateTopicVersionCheck bool
 }
 
 var _ SinkClient = (*kafkaSinkClientV2)(nil)
@@ -385,6 +397,7 @@ func makeKafkaSinkV2(
 	settings *cluster.Settings,
 	mb metricsRecorderBuilder,
 	knobs kafkaSinkV2Knobs,
+	createTopics changefeedbase.CreateKafkaTopics,
 ) (Sink, error) {
 	jsonConfig := sinkOpts.JSONConfig
 	batchCfg, retryOpts, err := getSinkConfigFromJson(jsonConfig, sinkJSONConfig{
@@ -425,13 +438,241 @@ func makeKafkaSinkV2(
 	}
 
 	topicsForConnectionCheck := topicNamer.DisplayNamesSlice()
-	client, err := newKafkaSinkClientV2(ctx, clientOpts, batchCfg, u.Host, settings, knobs, mb, topicsForConnectionCheck, sinkOpts.Headers, sinkOpts.PartitionAlg)
+	client, err := newKafkaSinkClientV2(
+		ctx, clientOpts, batchCfg, u.Host, settings, knobs, mb, topicsForConnectionCheck,
+		sinkOpts.Headers, sinkOpts.PartitionAlg, createTopics,
+	)
 	if err != nil {
 		return nil, err
 	}
 
 	return makeBatchingSink(ctx, sinkTypeKafka, client, time.Duration(batchCfg.Frequency), retryOpts,
 		parallelism, topicNamer, pacerFactory, timeSource, mb(true), settings), nil
+}
+
+// maybeCreateKafkaTopics creates any missing kafka topics for the changefeed
+// when create_kafka_topics=explicit. No-op for other modes or non-kafka sinks;
+// errors if the v2 kafka sink is disabled (only path that implements this).
+func maybeCreateKafkaTopics(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	details jobspb.ChangefeedDetails,
+	targets changefeedbase.Targets,
+	schemaTS hlc.Timestamp,
+	knobs kafkaSinkV2Knobs,
+) error {
+	ctx, span := tracing.ChildSpan(ctx, "changefeed.create_kafka_topics")
+	defer span.Finish()
+
+	opts := changefeedbase.MakeStatementOptions(details.Opts)
+	createTopics, err := opts.GetCreateKafkaTopics()
+	if err != nil {
+		return err
+	}
+	if createTopics != changefeedbase.CreateKafkaTopicsExplicit {
+		return nil
+	}
+
+	resolvedSinkURI, err := resolveDest(ctx, execCfg, details.SinkURI)
+	if err != nil {
+		return err
+	}
+	parsedSinkURL, err := url.Parse(resolvedSinkURI)
+	if err != nil {
+		return err
+	}
+	if !isKafkaSink(parsedSinkURL) {
+		return nil
+	}
+	if !KafkaV2Enabled.Get(&execCfg.Settings.SV) {
+		return errors.Newf("%s=explicit requires the v2 kafka sink; enable it with the %q cluster setting",
+			changefeedbase.OptCreateKafkaTopics, KafkaV2Enabled.Name())
+	}
+	sinkURL := &changefeedbase.SinkURL{URL: parsedSinkURL}
+
+	topics, err := kafkaTopicNamesForTargets(ctx, execCfg, targets, sinkURL, schemaTS)
+	if err != nil {
+		return err
+	}
+	if len(topics) == 0 {
+		return nil
+	}
+
+	sinkOpts, err := opts.GetKafkaSinkOptions()
+	if err != nil {
+		return err
+	}
+	client, adminClient, err := newKafkaAdminClientV2(ctx, sinkURL, sinkOpts, knobs)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	return createMissingKafkaTopics(ctx, adminClient, topics, knobs)
+}
+
+// kafkaTopicNamesForTargets returns the deduplicated, sanitized topic names
+// this changefeed will emit to.
+func kafkaTopicNamesForTargets(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	targets changefeedbase.Targets,
+	sinkURL *changefeedbase.SinkURL,
+	schemaTS hlc.Timestamp,
+) ([]string, error) {
+	prefix := sinkURL.ConsumeParam(changefeedbase.SinkParamTopicPrefix)
+	singleName := sinkURL.ConsumeParam(changefeedbase.SinkParamTopicName)
+	return ResolveTopicNames(
+		targets,
+		func() ([]catalog.TableDescriptor, error) {
+			return fetchTableDescriptors(ctx, execCfg, targets, schemaTS)
+		},
+		WithPrefix(prefix),
+		WithSingleName(singleName),
+		WithSanitizeFn(changefeedbase.SQLNameToKafkaName),
+	)
+}
+
+func newKafkaAdminClientV2(
+	ctx context.Context,
+	u *changefeedbase.SinkURL,
+	sinkOpts changefeedbase.KafkaSinkOptions,
+	knobs kafkaSinkV2Knobs,
+) (KafkaClientV2, KafkaAdminClientV2, error) {
+	bootstrapBrokers := strings.Split(u.Host, `,`)
+	clientOpts, err := buildKgoConfig(ctx, u, sinkOpts.JSONConfig, nil /* netMetrics */)
+	if err != nil {
+		return nil, nil, err
+	}
+	baseOpts := []kgo.Opt{
+
+		kgo.DisableIdempotentWrite(),
+		kgo.SeedBrokers(bootstrapBrokers...),
+		kgo.ProducerBatchMaxBytes(256 << 20),
+		kgo.BrokerMaxWriteBytes(1 << 30),
+		kgo.RecordRetries(5),
+		kgo.WithLogger(kgoLogAdapter{ctx: ctx}),
+		kgo.RequestRetries(5),
+	}
+	clientOpts = append(baseOpts, clientOpts...)
+
+	if knobs.OverrideClient != nil {
+		client, adminClient := knobs.OverrideClient(clientOpts)
+		if client == nil || adminClient == nil {
+			return nil, nil, errors.New("override client returned nil kafka client or admin client")
+		}
+		return client, adminClient, nil
+	}
+
+	client, err := kgo.NewClient(clientOpts...)
+	if err != nil {
+		return nil, nil, err
+	}
+	return client, kadm.NewClient(client), nil
+}
+
+// createMissingKafkaTopics creates topics not already on the broker, using
+// broker-side defaults for partitions/replication.
+func createMissingKafkaTopics(
+	ctx context.Context, adminClient KafkaAdminClientV2, topics []string, knobs kafkaSinkV2Knobs,
+) error {
+	missing, err := missingKafkaTopics(ctx, adminClient, topics)
+	if err != nil {
+		return err
+	}
+	if len(missing) == 0 {
+		log.Changefeed.VInfof(ctx, 2, "all kafka topics already exist")
+		return nil
+	}
+	if err := ensureCreateTopicsDefaultsSupported(ctx, adminClient, knobs); err != nil {
+		return err
+	}
+
+	validateResp, err := adminClient.ValidateCreateTopics(ctx, -1, -1, nil, missing...)
+	if err != nil {
+		return err
+	}
+	for _, topic := range missing {
+		if resp, ok := validateResp[topic]; ok && resp.Err != nil && !errors.Is(resp.Err, kerr.TopicAlreadyExists) {
+			return errors.Wrapf(resp.Err, "failed to validate kafka topic creation for topic %s", topic)
+		}
+	}
+
+	log.Changefeed.Infof(ctx, "creating missing kafka topics: %v", missing)
+	createResp, err := adminClient.CreateTopics(ctx, -1, -1, nil, missing...)
+	if err != nil {
+		return err
+	}
+	for _, topic := range missing {
+		resp, ok := createResp[topic]
+		if !ok {
+			continue
+		}
+		if resp.Err != nil && !errors.Is(resp.Err, kerr.TopicAlreadyExists) {
+			return errors.Wrapf(resp.Err, "failed to create kafka topic %s", topic)
+		}
+		log.Changefeed.Infof(ctx, "created kafka topic %s with num_partitions=%d replication_factor=%d",
+			topic, resp.NumPartitions, resp.ReplicationFactor)
+	}
+	return nil
+}
+
+// missingKafkaTopics returns the subset of topics not present on the broker.
+func missingKafkaTopics(
+	ctx context.Context, adminClient KafkaAdminClientV2, topics []string,
+) ([]string, error) {
+	topicDetails, err := adminClient.ListTopics(ctx, topics...)
+	if err != nil {
+		return nil, err
+	}
+
+	missing := make([]string, 0, len(topics))
+	for _, topic := range topics {
+		details, ok := topicDetails[topic]
+		if ok && details.Err == nil {
+			continue
+		}
+		if ok && !errors.Is(details.Err, kerr.UnknownTopicOrPartition) {
+			return nil, errors.Wrapf(details.Err, "failed to list kafka topic %s", topic)
+		}
+		missing = append(missing, topic)
+	}
+	return missing, nil
+}
+
+// ensureCreateTopicsDefaultsSupported errors if any broker is too old. That
+// behavior requires CreateTopics v4 (Kafka 2.4+).
+func ensureCreateTopicsDefaultsSupported(
+	ctx context.Context, adminClient KafkaAdminClientV2, knobs kafkaSinkV2Knobs,
+) error {
+	if knobs.SkipCreateTopicVersionCheck {
+		return nil
+	}
+
+	v24 := kversion.V2_4_0()
+	createTopicsVersion, ok := v24.LookupMaxKeyVersion(kmsg.CreateTopics.Int16())
+	if !ok {
+		return errors.AssertionFailedf("v2.4.0 does not support create topics but it should")
+	}
+
+	versions, err := adminClient.ApiVersions(ctx)
+	if err != nil {
+		return err
+	}
+	for brokerID, version := range versions {
+		if version.Err != nil {
+			return errors.Wrapf(version.Err, "failed to get kafka api versions for broker %d", brokerID)
+		}
+		maxVersion, ok := version.KeyMaxVersion(kmsg.CreateTopics.Int16())
+		if !ok {
+			return errors.Errorf("kafka broker %d does not support CreateTopics", brokerID)
+		}
+		if maxVersion < createTopicsVersion {
+			return errors.Errorf("kafka broker %d does not support CreateTopics defaults; broker max version %d is lower than required version %d",
+				brokerID, maxVersion, createTopicsVersion)
+		}
+	}
+	return nil
 }
 
 func buildKgoConfig(

@@ -141,6 +141,9 @@ type TestingKnobs struct {
 	// changefeeds, it is nil. A non-nil return error is propagated to
 	// the change frontier.
 	AfterPersistFrontier func(eval.CoreChangefeedState) error
+
+	// KafkaSinkV2Knobs are testing knobs for the v2 Kafka client.
+	KafkaSinkV2Knobs kafkaSinkV2Knobs
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

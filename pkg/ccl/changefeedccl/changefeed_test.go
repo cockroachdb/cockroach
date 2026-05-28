@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/mocks"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed/schematestutils"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl" // locality-related table mutations
@@ -106,9 +107,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/dustin/go-humanize"
+	"github.com/golang/mock/gomock"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/twmb/franz-go/pkg/kadm"
+	"github.com/twmb/franz-go/pkg/kerr"
+	"github.com/twmb/franz-go/pkg/kgo"
 )
 
 var testServerRegion = "us-east-1"
@@ -13847,6 +13852,88 @@ func TestSinkClosedOnEventConsumerError(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestChangefeedCreateKafkaTopicsExplicit verifies that the resumer of a
+// changefeed created with `create_kafka_topics='explicit'` invokes the kafka
+// admin client's CreateTopics for each watched topic before emitting rows.
+func TestChangefeedCreateKafkaTopicsExplicit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	kafkaClient := mocks.NewMockKafkaClientV2(ctrl)
+	adminClient := mocks.NewMockKafkaAdminClientV2(ctrl)
+	kafkaClient.EXPECT().Close().AnyTimes()
+
+	const expectedTopic = "pre-foo"
+	var topicsCreated atomic.Bool
+	topicCreatedCh := make(chan struct{})
+	adminClient.EXPECT().ListTopics(gomock.Any(), expectedTopic).DoAndReturn(
+		func(ctx context.Context, topics ...string) (kadm.TopicDetails, error) {
+			require.Equal(t, []string{expectedTopic}, topics)
+			detail := kadm.TopicDetail{
+				Topic: expectedTopic,
+				Partitions: map[int32]kadm.PartitionDetail{
+					0: {Topic: expectedTopic, Partition: 0, Leader: 0, Replicas: []int32{0}, ISR: []int32{0}},
+				},
+			}
+			if !topicsCreated.Load() {
+				detail.Err = kerr.UnknownTopicOrPartition
+				detail.Partitions = nil
+			}
+			return kadm.TopicDetails{expectedTopic: detail}, nil
+		},
+	).AnyTimes()
+	adminClient.EXPECT().ValidateCreateTopics(gomock.Any(), int32(-1), int16(-1), nil, expectedTopic).Return(kadm.CreateTopicResponses{
+		expectedTopic: {Topic: expectedTopic},
+	}, nil)
+	adminClient.EXPECT().CreateTopics(gomock.Any(), int32(-1), int16(-1), nil, expectedTopic).DoAndReturn(
+		func(ctx context.Context, partitions int32, replicationFactor int16, configs map[string]*string, topics ...string) (kadm.CreateTopicResponses, error) {
+			require.Equal(t, []string{expectedTopic}, topics)
+			if topicsCreated.CompareAndSwap(false, true) {
+				close(topicCreatedCh)
+			}
+			return kadm.CreateTopicResponses{
+				expectedTopic: {Topic: expectedTopic, NumPartitions: 1, ReplicationFactor: 1},
+			}, nil
+		},
+	)
+
+	s, cleanup := makeServer(t, feedTestNoTenants, withKnobsFn(func(knobs *base.TestingKnobs) {
+		if knobs.DistSQL == nil {
+			knobs.DistSQL = &execinfra.TestingKnobs{}
+		}
+		if knobs.DistSQL.(*execinfra.TestingKnobs).Changefeed == nil {
+			knobs.DistSQL.(*execinfra.TestingKnobs).Changefeed = &TestingKnobs{}
+		}
+		cfKnobs := knobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
+		cfKnobs.KafkaSinkV2Knobs = kafkaSinkV2Knobs{
+			OverrideClient: func(opts []kgo.Opt) (KafkaClientV2, KafkaAdminClientV2) {
+				return kafkaClient, adminClient
+			},
+			SkipCreateTopicVersionCheck: true,
+		}
+	}))
+	defer cleanup()
+
+	execCfg := s.Server.ExecutorConfig().(sql.ExecutorConfig)
+	KafkaV2Enabled.Override(ctx, &execCfg.Settings.SV, true)
+	sqlDB := sqlutils.MakeSQLRunner(s.DB)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+
+	var jobID int
+	sqlDB.QueryRow(t,
+		`CREATE CHANGEFEED FOR foo INTO 'kafka://localhost:9092?topic_prefix=pre-' WITH initial_scan = 'no', create_kafka_topics = 'explicit'`,
+	).Scan(&jobID)
+	defer sqlDB.Exec(t, `CANCEL JOB $1`, jobID)
+
+	select {
+	case <-topicCreatedCh:
+	case <-time.After(30 * time.Second):
+		t.Fatal("timed out waiting for changefeed resumer to create kafka topics")
+	}
 }
 
 // closeTrackingSink wraps a Sink and counts Dial and Close calls.

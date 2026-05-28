@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/errors"
 )
@@ -110,18 +111,23 @@ func WithSanitizeFn(fn func(string) string) TopicNameOption {
 	return optSanitize(fn)
 }
 
+// newTopicNamer creates and populates a TopicNamer with the given options
+func newTopicNamer(opts ...TopicNameOption) *TopicNamer {
+	tn := &TopicNamer{}
+	for _, opt := range opts {
+		opt.set(tn)
+	}
+	return tn
+}
+
 // MakeTopicNamer creates a TopicNamer.
 // specs are used to populate DisplayNames and the values iterated over in Each.
 // Add options using WithJoinByte, WithPrefix, WithSingleName, and/or WithSanitizeFn.
 func MakeTopicNamer(targets changefeedbase.Targets, opts ...TopicNameOption) (*TopicNamer, error) {
-	tn := &TopicNamer{
-		join:         '.',
-		DisplayNames: make(map[changefeedbase.Target]string, targets.Size),
-		FullNames:    make(map[TopicIdentifier]string),
-	}
-	for _, opt := range opts {
-		opt.set(tn)
-	}
+	tn := newTopicNamer(opts...)
+	tn.join = '.'
+	tn.DisplayNames = make(map[changefeedbase.Target]string, targets.Size)
+	tn.FullNames = make(map[TopicIdentifier]string)
 	err := targets.EachTarget(func(t changefeedbase.Target) error {
 		name, err := tn.makeDisplayName(t)
 		if err != nil {
@@ -130,9 +136,80 @@ func MakeTopicNamer(targets changefeedbase.Targets, opts ...TopicNameOption) (*T
 		tn.DisplayNames[t] = name
 		return nil
 	})
-
 	return tn, err
+}
 
+// ResolveTopicNames returns the deduplicated list of fully-resolved topic
+// names a changefeed with the given targets and naming options would emit to.
+// This helper expands such targets into one name per column family.
+func ResolveTopicNames(
+	targets changefeedbase.Targets,
+	fetchDescriptors func() ([]catalog.TableDescriptor, error),
+	opts ...TopicNameOption,
+) ([]string, error) {
+	tn := newTopicNamer(opts...)
+	tn.join = '.'
+
+	if tn.singleName != "" {
+		return []string{tn.nameFromComponents("")}, nil
+	}
+
+	seen := make(map[string]struct{})
+	topics := make([]string, 0, targets.Size)
+	addTopic := func(topic string) {
+		if _, ok := seen[topic]; ok {
+			return
+		}
+		seen[topic] = struct{}{}
+		topics = append(topics, topic)
+	}
+
+	// resolve every target whose name is fully known from the
+	// spec, and queue EACH_FAMILY targets for descriptor-based expansion.
+	var familyTargets []changefeedbase.Target
+	if err := targets.EachTarget(func(t changefeedbase.Target) error {
+		switch t.Type {
+		case jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY:
+			addTopic(tn.nameFromComponents(t.StatementTimeName))
+		case jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY:
+			addTopic(tn.nameFromComponents(t.StatementTimeName, t.FamilyName))
+		case jobspb.ChangefeedTargetSpecification_EACH_FAMILY:
+			familyTargets = append(familyTargets, t)
+		default:
+			return errors.AssertionFailedf("unrecognized target type %s", t.Type)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	if len(familyTargets) == 0 {
+		return topics, nil
+	}
+
+	if fetchDescriptors == nil {
+		return nil, errors.AssertionFailedf(
+			"EACH_FAMILY targets present but no descriptor fetcher was supplied")
+	}
+	tableDescs, err := fetchDescriptors()
+	if err != nil {
+		return nil, err
+	}
+	descIdxByID := make(map[descpb.ID]int, len(tableDescs))
+	for i, d := range tableDescs {
+		descIdxByID[d.GetID()] = i
+	}
+	for _, t := range familyTargets {
+		idx, ok := descIdxByID[t.DescID]
+		if !ok {
+			return nil, errors.AssertionFailedf(
+				"missing table descriptor %d while expanding topics", t.DescID)
+		}
+		for _, family := range tableDescs[idx].GetFamilies() {
+			addTopic(tn.nameFromComponents(t.StatementTimeName, family.Name))
+		}
+	}
+	return topics, nil
 }
 
 const familyPlaceholder = "{family}"
