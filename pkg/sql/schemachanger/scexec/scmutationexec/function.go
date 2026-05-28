@@ -97,6 +97,7 @@ func (i *immediateVisitor) SetFunctionBody(ctx context.Context, op scop.SetFunct
 	}
 	fn.SetFuncBody(descpb.RoutineBody(op.Body.Body))
 	fn.SetLang(op.Body.Lang.Lang)
+	fn.SetCanMutate(op.Body.CanMutate)
 	return nil
 }
 

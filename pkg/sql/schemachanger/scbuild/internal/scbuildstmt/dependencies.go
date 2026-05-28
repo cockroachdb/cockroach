@@ -365,7 +365,8 @@ type TableHelpers interface {
 type FunctionHelpers interface {
 	BuildReferenceProvider(stmt tree.Statement) ReferenceProvider
 	WrapFunctionBody(fnID descpb.ID, bodyStr string, lang catpb.Function_Language,
-		lazilyEvalSQL bool, provider ReferenceProvider) *scpb.FunctionBody
+		lazilyEvalSQL bool, canMutate tree.RoutineCanMutate,
+		provider ReferenceProvider) *scpb.FunctionBody
 	ReplaceSeqTypeNamesInStatements(queryStr string, lang catpb.Function_Language) string
 }
 

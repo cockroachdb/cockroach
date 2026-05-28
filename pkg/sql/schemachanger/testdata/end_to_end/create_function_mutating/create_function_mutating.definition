@@ -1,0 +1,11 @@
+setup
+CREATE TABLE t(a INT PRIMARY KEY, b INT);
+----
+
+test
+CREATE FUNCTION f_insert(a INT, b INT) RETURNS INT LANGUAGE SQL AS $$
+  SELECT b;
+  INSERT INTO t VALUES(a, b);
+  SELECT a;
+$$;
+----

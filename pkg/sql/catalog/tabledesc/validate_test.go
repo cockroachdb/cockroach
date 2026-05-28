@@ -350,6 +350,7 @@ var validationMap = []struct {
 			"IsProcedure":                   {status: thisFieldReferencesNoObjects},
 			"Security":                      {status: thisFieldReferencesNoObjects},
 			"ReplicatedPCRVersion":          {status: thisFieldReferencesNoObjects},
+			"CanMutate":                     {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{
