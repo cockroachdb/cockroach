@@ -189,7 +189,10 @@ func (s *Store) tryGetOrCreateReplica(
 	b := s.batchFactory.NewBatch()
 	defer b.Close()
 	if err := kvstorage.CreateUninitializedReplica(
-		ctx, kvstorage.WrapState(b.State()),
+		ctx, kvstorage.ReadWriter{
+			State: kvstorage.WrapState(b.State()),
+			Raft:  kvstorage.Raft{RO: kvstorage.RaftRO(s.LogEngine()), WO: kvstorage.RaftWO(b.Raft())},
+		},
 		b.WagWriter(), id,
 	); err != nil {
 		return nil, false, err
