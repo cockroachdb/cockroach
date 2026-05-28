@@ -54,20 +54,20 @@ function start_and_wait() {
 }
 
 function refresh_ssh_config() {
-	IP=$(get_ip)
-	if ! grep -q "${FQNAME}" ~/.ssh/config; then
-		USER_DOMAIN_SUFFIX="$(user_domain_suffix)"
-		echo "No alias found for ${FQNAME} in ~/.ssh/config. Creating one for ${USER_DOMAIN_SUFFIX} now with the instance external ip."
-		echo "Host ${FQNAME}
-  HostName ${IP}
-  User ${USER_DOMAIN_SUFFIX}
-  IdentityFile $HOME/.ssh/google_compute_engine
-  UserKnownHostsFile=$HOME/.ssh/google_compute_known_hosts
-  IdentitiesOnly=yes
-  CheckHostIP=no" >>~/.ssh/config
-	else
-		sed -i"" -e "/Host ${FQNAME}/,/HostName/ s/HostName .*/HostName ${IP}/" ~/.ssh/config
+	# Remove any stale entry for this instance.
+	if grep -q "${FQNAME}" ~/.ssh/config 2>/dev/null; then
+		sed -i"" -e "/Host ${FQNAME}/,/^$/d" ~/.ssh/config
 	fi
+	USER_DOMAIN_SUFFIX="$(user_domain_suffix)"
+	echo "Writing SSH config entry for ${FQNAME} with IAP tunnel proxy."
+	echo "
+Host ${FQNAME}
+  HostName ${NAME}
+  User ${USER_DOMAIN_SUFFIX}
+  ProxyCommand gcloud compute start-iap-tunnel %h %p --listen-on-stdin --zone=${CLOUDSDK_COMPUTE_ZONE} --project=${CLOUDSDK_CORE_PROJECT} --quiet
+  IdentityFile $HOME/.ssh/google_compute_engine
+  StrictHostKeyChecking no
+  UserKnownHostsFile /dev/null" >>~/.ssh/config
 }
 
 function grant_ssh_access() {
