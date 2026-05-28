@@ -52,7 +52,7 @@ Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹f3›(‹
  │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":112,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
  │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":112,"Privileges":1048576,"UserName":"public"}}
  │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":112,"Privileges":2,"UserName":"root","WithGrantOption":2}}
- │              ├── SetFunctionBody {"Body":{"Body":"SELECT f2(a) + f...","FunctionID":112}}
+ │              ├── SetFunctionBody {"Body":{"Body":"SELECT f2(a) + f...","CanMutate":2,"FunctionID":112}}
  │              ├── UpdateFunctionTypeReferences {"FunctionID":112}
  │              ├── UpdateFunctionRelationReferences {"FunctionID":112}
  │              ├── SetFunctionParams {"Params":{"FunctionID":112}}
@@ -93,7 +93,7 @@ Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹f3›(‹
                 ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":112,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
                 ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":112,"Privileges":1048576,"UserName":"public"}}
                 ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":112,"Privileges":2,"UserName":"root","WithGrantOption":2}}
-                ├── SetFunctionBody {"Body":{"Body":"SELECT f2(a) + f...","FunctionID":112}}
+                ├── SetFunctionBody {"Body":{"Body":"SELECT f2(a) + f...","CanMutate":2,"FunctionID":112}}
                 ├── UpdateFunctionTypeReferences {"FunctionID":112}
                 ├── UpdateFunctionRelationReferences {"FunctionID":112}
                 ├── SetFunctionParams {"Params":{"FunctionID":112}}

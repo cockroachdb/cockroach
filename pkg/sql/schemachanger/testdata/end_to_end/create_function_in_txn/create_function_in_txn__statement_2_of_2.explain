@@ -83,7 +83,7 @@ Schema change plan for CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹publi
  │              ├── CreateFunctionDescriptor {"Function":{"FunctionID":105}}
  │              ├── SetFunctionName {"FunctionID":105,"Name":"t"}
  │              ├── SetFunctionParams {"Params":{"FunctionID":105}}
- │              ├── SetFunctionBody {"Body":{"Body":"SELECT 1;","FunctionID":105}}
+ │              ├── SetFunctionBody {"Body":{"Body":"SELECT 1;","CanMutate":2,"FunctionID":105}}
  │              ├── UpdateFunctionTypeReferences {"FunctionID":105}
  │              ├── UpdateFunctionRelationReferences {"FunctionID":105}
  │              ├── SetTableSchemaLocked {"TableID":104}

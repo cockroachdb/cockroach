@@ -43,6 +43,7 @@ write *eventpb.CreateFunction to event log:
 upsert descriptor #110
   -
   +function:
+  +  canMutate: CANNOT_MUTATE
   +  dependsOn:
   +  - 104
   +  - 105
@@ -186,6 +187,7 @@ persist all catalog changes to storage
 upsert descriptor #110
   -
   +function:
+  +  canMutate: CANNOT_MUTATE
   +  dependsOn:
   +  - 104
   +  - 105
