@@ -407,8 +407,6 @@
 /pkg/ccl/testccl/authccl/    @cockroachdb/cloud-identity @cockroachdb/security-engineering @cockroachdb/product-security
 /pkg/ccl/testccl/sqlccl/     @cockroachdb/sql-queries-prs
 /pkg/ccl/testccl/workload/schemachange/ @cockroachdb/sql-foundations-prs
-#!/pkg/ccl/testutilsccl/     @cockroachdb/test-eng-noreview
-/pkg/ccl/testutilsccl/alter_* @cockroachdb/sql-foundations-prs
 #!/pkg/clusterversion/       @cockroachdb/kv-prs-noreview @cockroachdb/dev-inf-noreview @cockroachdb/test-eng-noreview
 /pkg/clusterversion/cockroach_versions.go @cockroachdb/release-eng-prs @cockroachdb/upgrade-prs
 /pkg/cmd/allocsim/           @cockroachdb/kv-prs

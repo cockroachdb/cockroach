@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package testutilsccl
+package sqltestutils
 
 import (
 	"context"
@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/stretchr/testify/require"
@@ -115,7 +114,7 @@ func AlterPrimaryKeyCorrectZoneConfigTest(
 			require.NoError(t, err)
 
 			// Insert some rows so we can interrupt inspect state during backfill.
-			require.NoError(t, sqltestutils.BulkInsertIntoTable(sqlDB, maxValue))
+			require.NoError(t, BulkInsertIntoTable(sqlDB, maxValue))
 			runCheck = true
 			_, err = sqlDB.Exec(tc.AlterQuery)
 			require.NoError(t, err)
