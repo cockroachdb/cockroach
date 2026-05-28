@@ -516,6 +516,7 @@ func (noopValidator) ValidateConstraint(
 
 func (noopValidator) ValidateEnumTypeValueRemoval(
 	ctx context.Context,
+	job *jobs.Job,
 	typeDesc catalog.TypeDescriptor,
 	physicalRep []byte,
 	logicalRep string,
