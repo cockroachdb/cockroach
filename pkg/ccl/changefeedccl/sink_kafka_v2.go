@@ -317,6 +317,9 @@ type KafkaClientV2 interface {
 // to flush resolved messages.
 type KafkaAdminClientV2 interface {
 	ListTopics(ctx context.Context, topics ...string) (kadm.TopicDetails, error)
+	ApiVersions(ctx context.Context) (kadm.BrokersApiVersions, error)
+	ValidateCreateTopics(ctx context.Context, partitions int32, replicationFactor int16, configs map[string]*string, topics ...string) (kadm.CreateTopicResponses, error)
+	CreateTopics(ctx context.Context, partitions int32, replicationFactor int16, configs map[string]*string, topics ...string) (kadm.CreateTopicResponses, error)
 }
 
 type kafkaSinkV2Knobs struct {
