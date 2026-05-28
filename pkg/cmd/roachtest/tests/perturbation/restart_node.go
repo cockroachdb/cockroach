@@ -27,6 +27,13 @@ func (r restart) setup() variations {
 	r.cleanRestart = true
 	v := setup(r, defaultThresholds())
 
+	// Run with extra IO headroom relative to the cluster-wide default. When the
+	// target node returns it must absorb raft catch-up, rebalancing snapshots,
+	// and re-acquired lease traffic concurrently; at the default 0.5 the
+	// recovered store sits at the edge of its sustainable write rate and the
+	// flush/compaction pipeline can fall behind into a Pebble write stall.
+	v.ratioOfMax = 0.3
+
 	// TODO(baptist): Remove this setting once #120073 is fixed.
 	v.clusterSettings["kv.lease.reject_on_leader_unknown.enabled"] = "true"
 
