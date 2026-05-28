@@ -220,6 +220,18 @@ var upgrades = []upgradebase.Upgrade{
 			"restore for a cluster predating this table can leave it empty",
 		),
 	),
+
+	upgrade.NewTenantUpgrade(
+		"add can_mutate field to function descriptors",
+		clusterversion.V26_3_FunctionDescCanMutate.Version(),
+		upgrade.NoPrecondition,
+		// No-op: pre-existing function descriptors have the zero value
+		// UNKNOWN_CAN_MUTATE, which causes consumers to fall back to
+		// inspecting eagerly-built body RelExprs. CREATE OR REPLACE
+		// upgrades the descriptor to CAN_MUTATE or CANNOT_MUTATE.
+		NoTenantUpgradeFunc,
+		upgrade.RestoreActionNotRequired("function descriptors are restored with correct can_mutate values"),
+	),
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }

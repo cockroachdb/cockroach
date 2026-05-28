@@ -643,6 +643,11 @@ func (desc *Mutable) SetSecurity(v catpb.Function_Security) {
 	desc.Security = v
 }
 
+// SetCanMutate sets the CanMutate field on the function descriptor.
+func (desc *Mutable) SetCanMutate(v catpb.Function_CanMutate) {
+	desc.CanMutate = v
+}
+
 // SetName sets the function name.
 func (desc *Mutable) SetName(n string) {
 	desc.Name = n
@@ -1027,6 +1032,11 @@ func (desc *immutable) GetSecurity() catpb.Function_Security {
 	return desc.Security
 }
 
+// GetCanMutate implements the FunctionDescriptor interface.
+func (desc *immutable) GetCanMutate() catpb.Function_CanMutate {
+	return desc.CanMutate
+}
+
 func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 	routineType := tree.UDFRoutine
 	if desc.IsProcedure() {
@@ -1075,8 +1085,34 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 		ret.Class = tree.GeneratorClass
 	}
 	ret.SecurityMode = desc.getCreateExprSecurity()
+	ret.CanMutate = canMutateToOverload(desc.FunctionDescriptor.CanMutate)
 
 	return ret, nil
+}
+
+// canMutateToOverload converts the proto CanMutate enum to the tree type.
+func canMutateToOverload(cm catpb.Function_CanMutate) tree.RoutineCanMutate {
+	switch cm {
+	case catpb.Function_CAN_MUTATE:
+		return tree.RoutineMutates
+	case catpb.Function_CANNOT_MUTATE:
+		return tree.RoutineDoesNotMutate
+	default:
+		return tree.RoutineCanMutateUnknown
+	}
+}
+
+// CanMutateToProto converts a RoutineCanMutate enum to the proto enum for
+// persistence on the function descriptor.
+func CanMutateToProto(cm tree.RoutineCanMutate) catpb.Function_CanMutate {
+	switch cm {
+	case tree.RoutineMutates:
+		return catpb.Function_CAN_MUTATE
+	case tree.RoutineDoesNotMutate:
+		return catpb.Function_CANNOT_MUTATE
+	default:
+		return catpb.Function_UNKNOWN_CAN_MUTATE
+	}
 }
 
 func (desc *immutable) getOverloadVolatility() (volatility.V, error) {

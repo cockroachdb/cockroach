@@ -385,6 +385,9 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 
 	// Validate each statement and collect the dependencies.
 	var stmtScope *scope
+	// TODO(janexing): consider interaction with late binding, where the body
+	// is not resolved at CREATE time and canMutate should stay Unknown.
+	var canMutate tree.RoutineCanMutate
 	switch language {
 	case tree.RoutineLangSQL:
 		// Parse the function body. lateBinding cannot be true here: it requires
@@ -411,6 +414,10 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 				stmtScope = b.buildStmtAtRootWithScope(stmts[i].AST, nil /* desiredTypes */, bodyScope)
 			})
 			checkStmtVolatility(targetVolatility, stmtScope, stmt.AST)
+			if canMutate != tree.RoutineMutates &&
+				stmtScope.expr != nil && stmtScope.expr.Relational().CanMutate {
+				canMutate = tree.RoutineMutates
+			}
 
 			// Format the statements with qualified datasource names.
 			formatFuncBodyStmt(fmtCtx, stmt.AST, language, i > 0 /* newLine */)
@@ -487,6 +494,10 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			)
 			stmtScope = plBuilder.buildRootBlock(stmt.AST, bodyScope, routineParams)
 		})
+		if canMutate != tree.RoutineMutates &&
+			stmtScope.expr != nil && stmtScope.expr.Relational().CanMutate {
+			canMutate = tree.RoutineMutates
+		}
 		if !lateBinding {
 			checkStmtVolatility(targetVolatility, stmtScope, stmt)
 
@@ -498,6 +509,12 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		panic(errors.AssertionFailedf("unexpected language: %v", language))
 	}
 
+	// After body analysis, resolve unknown to definitively non-mutating.
+	// TODO(janexing): might be false-positive with late-binding.
+	if canMutate == tree.RoutineCanMutateUnknown {
+		canMutate = tree.RoutineDoesNotMutate
+	}
+	cf.CanMutate = canMutate
 	if !lateBinding {
 		if stmtScope != nil && (language != tree.RoutineLangPLpgSQL || !isSetReturning) {
 			// Validate that the result type of the last statement matches the

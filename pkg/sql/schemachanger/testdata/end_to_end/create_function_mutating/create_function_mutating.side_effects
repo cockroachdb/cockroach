@@ -1,0 +1,208 @@
+/* setup */
+CREATE TABLE t(a INT PRIMARY KEY, b INT);
+----
+...
++object {100 101 t} -> 104
+
+/* test */
+CREATE FUNCTION f_insert(a INT, b INT) RETURNS INT LANGUAGE SQL AS $$
+  SELECT b;
+  INSERT INTO t VALUES(a, b);
+  SELECT a;
+$$;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: CREATE FUNCTION
+increment telemetry for sql.schema.create_function
+write *eventpb.CreateFunction to event log:
+  functionName: defaultdb.public.f_insert
+  sql:
+    descriptorId: 105
+    statement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹f_insert›(‹a› INT8, ‹b› INT8)\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT ‹b›; INSERT INTO ‹defaultdb›.‹public›.‹t› VALUES (‹a›, ‹b›); SELECT ‹a›;$$"
+    tag: CREATE FUNCTION
+    user: root
+## StatementPhase stage 1 of 1 with 12 MutationType ops
+upsert descriptor #105
+  -
+  +function:
+  +  canMutate: CAN_MUTATE
+  +  dependsOn:
+  +  - 104
+  +  functionBody: |-
+  +    SELECT b;
+  +    INSERT INTO t VALUES (a, b);
+  +    SELECT a;
+  +  id: 105
+  +  lang: SQL
+  +  modificationTime: {}
+  +  name: f_insert
+  +  nullInputBehavior: CALLED_ON_NULL_INPUT
+  +  params:
+  +  - name: a
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
+  +  - name: b
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
+  +  parentId: 100
+  +  parentSchemaId: 101
+  +  privileges:
+  +    ownerProto: root
+  +    users:
+  +    - privileges: "2"
+  +      userProto: admin
+  +      withGrantOption: "2"
+  +    - privileges: "1048576"
+  +      userProto: public
+  +    - privileges: "2"
+  +      userProto: root
+  +      withGrantOption: "2"
+  +    version: 3
+  +  returnType:
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
+  +  version: "1"
+  +  volatility: VOLATILE
+upsert descriptor #101
+   schema:
+  +  functions:
+  +    f_insert:
+  +      signatures:
+  +      - argTypes:
+  +        - family: IntFamily
+  +          oid: 20
+  +          width: 64
+  +        - family: IntFamily
+  +          oid: 20
+  +          width: 64
+  +        id: 105
+  +        returnType:
+  +          family: IntFamily
+  +          oid: 20
+  +          width: 64
+     id: 101
+     modificationTime: {}
+  ...
+         withGrantOption: "2"
+       version: 3
+  -  version: "1"
+  +  version: "2"
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  dependedOnBy:
+  +  - columnIds:
+  +    - 1
+  +    - 2
+  +    id: 105
+     families:
+     - columnIds:
+  ...
+     schemaLocked: true
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 12 MutationType ops
+upsert descriptor #105
+  -
+  +function:
+  +  canMutate: CAN_MUTATE
+  +  dependsOn:
+  +  - 104
+  +  functionBody: |-
+  +    SELECT b;
+  +    INSERT INTO t VALUES (a, b);
+  +    SELECT a;
+  +  id: 105
+  +  lang: SQL
+  +  modificationTime: {}
+  +  name: f_insert
+  +  nullInputBehavior: CALLED_ON_NULL_INPUT
+  +  params:
+  +  - name: a
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
+  +  - name: b
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
+  +  parentId: 100
+  +  parentSchemaId: 101
+  +  privileges:
+  +    ownerProto: root
+  +    users:
+  +    - privileges: "2"
+  +      userProto: admin
+  +      withGrantOption: "2"
+  +    - privileges: "1048576"
+  +      userProto: public
+  +    - privileges: "2"
+  +      userProto: root
+  +      withGrantOption: "2"
+  +    version: 3
+  +  returnType:
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
+  +  version: "1"
+  +  volatility: VOLATILE
+upsert descriptor #101
+   schema:
+  +  functions:
+  +    f_insert:
+  +      signatures:
+  +      - argTypes:
+  +        - family: IntFamily
+  +          oid: 20
+  +          width: 64
+  +        - family: IntFamily
+  +          oid: 20
+  +          width: 64
+  +        id: 105
+  +        returnType:
+  +          family: IntFamily
+  +          oid: 20
+  +          width: 64
+     id: 101
+     modificationTime: {}
+  ...
+         withGrantOption: "2"
+       version: 3
+  -  version: "1"
+  +  version: "2"
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  dependedOnBy:
+  +  - columnIds:
+  +    - 1
+  +    - 2
+  +    id: 105
+     families:
+     - columnIds:
+  ...
+     schemaLocked: true
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+persist all catalog changes to storage
+# end PreCommitPhase
+commit transaction #1
