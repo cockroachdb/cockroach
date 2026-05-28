@@ -6061,6 +6061,12 @@ var crdbInternalCatalogCommentsTable = virtualSchemaTable{
 				classOid = tree.NewDOid(catconstants.PgCatalogTypeTableID)
 				objOid = tree.NewDOid(oid.Oid(key.ObjectID))
 
+			case catalogkeys.FunctionCommentType:
+				// Functions live in pg_proc; their OIDs are descriptor IDs offset
+				// by oidext.CockroachPredefinedOIDMax (see catid.FuncIDToOID).
+				classOid = tree.NewDOid(catconstants.PgCatalogProcTableID)
+				objOid = tree.NewDOid(catid.FuncIDToOID(descpb.ID(key.ObjectID)))
+
 			case catalogkeys.ColumnCommentType, catalogkeys.TableCommentType:
 				classOid = tree.NewDOid(catconstants.PgCatalogClassTableID)
 				objOid = tree.NewDOid(oid.Oid(key.ObjectID))

@@ -28,6 +28,19 @@ func (p *planner) AlterPolicy(ctx context.Context, n *tree.AlterPolicy) (planNod
 	return nil, makeUnimplementedLegacyError("ALTER POLICY")
 }
 
+func (p *planner) CommentOnRoutine(
+	ctx context.Context, n *tree.CommentOnRoutine,
+) (planNode, error) {
+	switch n.RoutineType {
+	case tree.ProcedureRoutine:
+		return nil, makeUnimplementedLegacyError("COMMENT ON PROCEDURE")
+	case tree.UDFRoutine | tree.ProcedureRoutine:
+		return nil, makeUnimplementedLegacyError("COMMENT ON ROUTINE")
+	default:
+		return nil, makeUnimplementedLegacyError("COMMENT ON FUNCTION")
+	}
+}
+
 func (p *planner) CommentOnSequence(
 	ctx context.Context, n *tree.CommentOnSequence,
 ) (planNode, error) {

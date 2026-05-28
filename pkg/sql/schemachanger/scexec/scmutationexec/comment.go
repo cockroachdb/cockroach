@@ -36,6 +36,13 @@ func (i *immediateVisitor) UpsertTypeComment(_ context.Context, op scop.UpsertTy
 	return nil
 }
 
+func (i *immediateVisitor) UpsertFunctionComment(
+	_ context.Context, op scop.UpsertFunctionComment,
+) error {
+	i.AddComment(op.FunctionID, 0, catalogkeys.FunctionCommentType, op.Comment)
+	return nil
+}
+
 func (i *immediateVisitor) UpsertColumnComment(
 	_ context.Context, op scop.UpsertColumnComment,
 ) error {

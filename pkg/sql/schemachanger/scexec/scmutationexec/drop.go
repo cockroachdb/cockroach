@@ -79,6 +79,13 @@ func (i *immediateVisitor) RemoveTypeComment(_ context.Context, op scop.RemoveTy
 	return nil
 }
 
+func (i *immediateVisitor) RemoveFunctionComment(
+	_ context.Context, op scop.RemoveFunctionComment,
+) error {
+	i.DeleteComment(op.FunctionID, 0, catalogkeys.FunctionCommentType)
+	return nil
+}
+
 func (i *immediateVisitor) RemoveDatabaseComment(
 	_ context.Context, op scop.RemoveDatabaseComment,
 ) error {
