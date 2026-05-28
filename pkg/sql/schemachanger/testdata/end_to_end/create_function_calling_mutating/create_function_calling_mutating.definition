@@ -1,0 +1,17 @@
+setup
+CREATE TABLE t(a INT PRIMARY KEY, b INT);
+CREATE FUNCTION f_insert(a INT, b INT) RETURNS INT LANGUAGE SQL AS $$
+  SELECT b;
+  INSERT INTO t VALUES(a, b);
+  SELECT a;
+$$;
+----
+
+test
+CREATE FUNCTION f_caller(a INT, b INT) RETURNS INT LANGUAGE SQL AS $$
+  SELECT f_insert(a, b);
+$$;
+CREATE FUNCTION f_caller_via_cte(a INT, b INT) RETURNS INT LANGUAGE SQL AS $$
+  WITH cte AS (SELECT f_insert(a, b) AS result) SELECT result FROM cte;
+$$;
+----

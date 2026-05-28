@@ -1001,11 +1001,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		return nil, err
 	}
 
-	for _, s := range udf.Def.Body {
-		if s.Relational().CanMutate {
-			b.setMutationFlags(s)
-		}
-	}
+	b.applyRoutineCanMutateFlags(udf.Def)
 
 	blockState := udf.Def.BlockState
 	if blockState != nil {
