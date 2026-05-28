@@ -1461,7 +1461,7 @@ aggregated_ts  fingerprint_id  transaction_fingerprint_id  plan_hash  app_name  
 
 # Validate that crdb_internal.statement_statistics includes query,
 # query_summary, and database columns.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query TTTTTTTTTTTTT colnames
 SELECT * FROM crdb_internal.statement_statistics WHERE aggregated_ts < '1970-01-01'
 ----
@@ -1469,7 +1469,7 @@ aggregated_ts  fingerprint_id  transaction_fingerprint_id  plan_hash  app_name  
 
 # Validate that crdb_internal.statement_statistics_persisted includes query,
 # query_summary, and database columns.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query TTTTTITTTTTTIRRRRRTTT colnames
 SELECT * FROM crdb_internal.statement_statistics_persisted WHERE aggregated_ts < '1970-01-01'
 ----
@@ -1477,7 +1477,7 @@ aggregated_ts  fingerprint_id  transaction_fingerprint_id  plan_hash  app_name  
 
 # Validate that crdb_internal.statement_activity includes query,
 # query_summary, and database columns.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query TTTTTTTTTTIRRRRRRTTT colnames
 SELECT * FROM crdb_internal.statement_activity WHERE aggregated_ts < '1970-01-01'
 ----

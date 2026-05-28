@@ -159,17 +159,17 @@ ALTER INDEX idx_x RESET (invalid_param)
 
 # Test skip_unique_checks parameter.
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE UNIQUE INDEX idx_unique ON t(y)
 
 # Cannot set skip_unique_checks on a non-unique index.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement error pgcode 22023 skip_unique_checks can only be set on UNIQUE indexes
 ALTER INDEX idx_x SET (skip_unique_checks = true)
 
 # Cannot set skip_unique_checks on a unique index without implicit partitioning.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement error pgcode 22023 skip_unique_checks can only be set on implicitly partitioned indexes
 ALTER INDEX idx_unique SET (skip_unique_checks = true)
 

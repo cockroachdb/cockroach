@@ -57,44 +57,44 @@ ALTER TYPE new__name RENAME TO newname
 
 # Force the declarative schema changer for multi-statement explicit
 # transactions.
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 statement ok
 SET use_declarative_schema_changer = unsafe_always
 
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 SET LOCAL autocommit_before_ddl=off
 
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 statement ok
 ALTER TYPE newname RENAME TO rename_once
 
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 statement ok
 ALTER TYPE rename_once RENAME TO rename_twice
 
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 query T
 SELECT 'hi'::rename_twice
 ----
 hi
 
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 statement ok
 COMMIT
 
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 query T
 SELECT 'hi'::rename_twice
 ----
 hi
 
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 statement ok
 ALTER TYPE rename_twice RENAME TO newname
 
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 statement ok
 RESET use_declarative_schema_changer
 
@@ -108,15 +108,15 @@ CREATE TABLE conflict (x INT)
 statement error pq: relation "test\.public\.conflict" already exists
 ALTER TYPE newname RENAME TO conflict
 
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 statement ok
 CREATE DOMAIN domain_conflict AS INT
 
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 statement error pq: type "test\.public\.domain_conflict" already exists
 ALTER TYPE newname RENAME TO domain_conflict
 
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 statement ok
 DROP DOMAIN domain_conflict
 

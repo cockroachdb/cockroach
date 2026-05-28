@@ -489,16 +489,6 @@ var LogicTestConfigs = []TestClusterConfig{
 		Localities: multiregion15node5region3azsLocalities,
 	},
 	{
-		// This config runs tests using 25.4 cluster version, simulating a node that
-		// is operating in a mixed-version cluster.
-		Name:                        "local-mixed-25.4",
-		NumNodes:                    1,
-		OverrideDistSQLMode:         "off",
-		BootstrapVersion:            clusterversion.V25_4,
-		DisableUpgrade:              true,
-		DeclarativeCorpusCollection: true,
-	},
-	{
 		// This config runs tests using 26.1 cluster version, simulating a node that
 		// is operating in a mixed-version cluster.
 		Name:                        "local-mixed-26.1",
@@ -630,7 +620,6 @@ var DefaultConfigSets = map[string]ConfigSet{
 		"fakedist-vec-off",
 		"fakedist-disk",
 		"3node-tenant",
-		"local-mixed-25.4",
 		"local-mixed-26.1",
 		"local-mixed-26.2",
 	),

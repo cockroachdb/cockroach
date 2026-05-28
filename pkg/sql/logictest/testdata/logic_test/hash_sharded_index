@@ -1125,7 +1125,7 @@ CREATE TABLE t_hash_pre_split (
   b INT
 );
 
-skipif config 3node-tenant-default-configs local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config 3node-tenant-default-configs local-mixed-26.1 local-mixed-26.2
 query TITTT retry,rowsort
 SELECT table_name, table_id, index_name, start_key, end_key
   FROM [SHOW RANGES FROM DATABASE test WITH INDEXES]
@@ -1136,7 +1136,7 @@ t_hash_pre_split  134  t_hash_pre_split_pkey  /Table/82  /Max
 statement ok
 CREATE INDEX t_hash_pre_split_idx_b ON t_hash_pre_split (b) USING HASH WITH (bucket_count=8);
 
-skipif config 3node-tenant-default-configs local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config 3node-tenant-default-configs local-mixed-26.1 local-mixed-26.2
 query TITTT colnames,retry,rowsort
 SELECT table_name, table_id, index_name, start_key, end_key
   FROM [SHOW RANGES FROM DATABASE test WITH INDEXES]

@@ -667,21 +667,21 @@ USE temp_priv_db
 # temp_test_user has TEMPORARY but no CREATE on public schema.
 # After V26_2, creating a temp table should succeed because only TEMPORARY is
 # needed, not CREATE on the schema.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE TEMP TABLE temp_priv_t (a INT PRIMARY KEY)
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE TEMP VIEW temp_priv_v AS SELECT 1
 
 # On mixed-version configs, temp table creation still requires CREATE on the
 # public schema, so it should fail.
-onlyif config local-mixed-25.4 local-mixed-26.1
+onlyif config local-mixed-26.1
 statement error user temp_test_user does not have CREATE privilege on schema public
 CREATE TEMP TABLE temp_priv_t (a INT PRIMARY KEY)
 
-onlyif config local-mixed-25.4 local-mixed-26.1
+onlyif config local-mixed-26.1
 statement error user temp_test_user does not have CREATE privilege on schema public
 CREATE TEMP VIEW temp_priv_v AS SELECT 1
 
@@ -689,11 +689,11 @@ CREATE TEMP VIEW temp_priv_v AS SELECT 1
 statement error user temp_test_user does not have CREATE privilege on schema public
 CREATE TABLE regular_t (a INT PRIMARY KEY)
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 DROP VIEW temp_priv_v
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 DROP TABLE temp_priv_t
 
@@ -715,11 +715,11 @@ USE temp_priv_db
 # After V26_2, creating a temp table should fail with a TEMPORARY privilege
 # error. On mixed-version configs, it fails with a CREATE privilege error
 # since TEMPORARY is not yet checked.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement error user temp_test_user does not have TEMPORARY privilege on database temp_priv_db
 CREATE TEMP TABLE temp_priv_t2 (a INT PRIMARY KEY)
 
-onlyif config local-mixed-25.4 local-mixed-26.1
+onlyif config local-mixed-26.1
 statement error user temp_test_user does not have CREATE privilege on schema public
 CREATE TEMP TABLE temp_priv_t2 (a INT PRIMARY KEY)
 
@@ -737,17 +737,17 @@ SET ROLE temp_test_user
 statement ok
 USE temp_priv_db
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE TEMP TABLE temp_priv_t2 (a INT PRIMARY KEY)
 
 # On mixed-version configs, temp table creation still requires CREATE on the
 # public schema.
-onlyif config local-mixed-25.4 local-mixed-26.1
+onlyif config local-mixed-26.1
 statement error user temp_test_user does not have CREATE privilege on schema public
 CREATE TEMP TABLE temp_priv_t2 (a INT PRIMARY KEY)
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 DROP TABLE temp_priv_t2
 

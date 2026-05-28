@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-const configIdx = 21
+const configIdx = 20
 
 var logicTestDir string
 
@@ -1308,6 +1308,13 @@ func TestLogic_merge_join(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "merge_join")
+}
+
+func TestLogic_mixed_version_distributed_merge(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_distributed_merge")
 }
 
 func TestLogic_mixed_version_skip_unique_checks(

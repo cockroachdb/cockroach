@@ -81,32 +81,32 @@ REVOKE SELECT ON t_vop FROM view_owner
 # has SELECT on the underlying table.
 user testuser
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement error pgcode 42501 user view_owner does not have SELECT privilege on relation t_vop
 SELECT * FROM v_vop
 
-onlyif config local-mixed-25.4 local-mixed-26.1
+onlyif config local-mixed-26.1
 statement ok
 SELECT * FROM v_vop;
 
 user root
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement error pgcode 42501 user view_owner does not have SELECT privilege on relation t_vop
 SELECT * FROM v_vop
 
-onlyif config local-mixed-25.4 local-mixed-26.1
+onlyif config local-mixed-26.1
 statement ok
 SELECT * FROM v_vop;
 
 statement ok
 SET ROLE view_owner
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement error pgcode 42501 user view_owner does not have SELECT privilege on relation t_vop
 SELECT * FROM v_vop
 
-onlyif config local-mixed-25.4 local-mixed-26.1
+onlyif config local-mixed-26.1
 statement ok
 SELECT * FROM v_vop;
 
@@ -197,11 +197,11 @@ REVOKE SELECT ON t_vop FROM view_owner
 
 user testuser
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement error pgcode 42501 user view_owner does not have SELECT privilege on relation t_vop
 SELECT * FROM v_vop_nested
 
-onlyif config local-mixed-25.4 local-mixed-26.1
+onlyif config local-mixed-26.1
 statement ok
 SELECT * FROM v_vop_nested
 
@@ -227,11 +227,11 @@ SET CLUSTER SETTING sql.auth.skip_underlying_view_privilege_checks.enabled = fal
 
 user testuser
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement error pgcode 42501 user view_owner does not have SELECT privilege on relation t_vop
 SELECT * FROM v_vop_nested
 
-onlyif config local-mixed-25.4 local-mixed-26.1
+onlyif config local-mixed-26.1
 statement ok
 SELECT * FROM v_vop_nested
 
@@ -354,11 +354,11 @@ REVOKE SELECT ON t_nv1 FROM nvo1
 
 user testuser
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement error pgcode 42501 user nvo1 does not have SELECT privilege on relation t_nv1
 SELECT * FROM v_nested_1_1
 
-onlyif config local-mixed-25.4 local-mixed-26.1
+onlyif config local-mixed-26.1
 statement ok
 SELECT * FROM v_nested_1_1
 
@@ -368,11 +368,11 @@ SELECT * FROM v_nested_1_2 ORDER BY x
 100  1000
 200  2000
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement error pgcode 42501 user nvo1 does not have SELECT privilege on relation t_nv1
 SELECT * FROM v_nested_2_1
 
-onlyif config local-mixed-25.4 local-mixed-26.1
+onlyif config local-mixed-26.1
 statement ok
 SELECT * FROM v_nested_2_1
 
@@ -398,11 +398,11 @@ SELECT * FROM v_nested_1_1 ORDER BY a
 1  10
 2  20
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement error pgcode 42501 user nvo2 does not have SELECT privilege on relation t_nv2
 SELECT * FROM v_nested_1_2
 
-onlyif config local-mixed-25.4 local-mixed-26.1
+onlyif config local-mixed-26.1
 statement ok
 SELECT * FROM v_nested_1_2
 
@@ -412,11 +412,11 @@ SELECT * FROM v_nested_2_1 ORDER BY a
 1  10
 2  20
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement error pgcode 42501 user nvo2 does not have SELECT privilege on relation t_nv2
 SELECT * FROM v_nested_2_2
 
-onlyif config local-mixed-25.4 local-mixed-26.1
+onlyif config local-mixed-26.1
 statement ok
 SELECT * FROM v_nested_2_2
 
@@ -428,35 +428,35 @@ REVOKE SELECT ON t_nv1 FROM nvo1;
 
 user testuser
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement error pgcode 42501 user nvo1 does not have SELECT privilege on relation t_nv1
 SELECT * FROM v_nested_1_1
 
-onlyif config local-mixed-25.4 local-mixed-26.1
+onlyif config local-mixed-26.1
 statement ok
 SELECT * FROM v_nested_1_1
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement error pgcode 42501 user nvo2 does not have SELECT privilege on relation t_nv2
 SELECT * FROM v_nested_1_2
 
-onlyif config local-mixed-25.4 local-mixed-26.1
+onlyif config local-mixed-26.1
 statement ok
 SELECT * FROM v_nested_1_2
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement error pgcode 42501 user nvo1 does not have SELECT privilege on relation t_nv1
 SELECT * FROM v_nested_2_1
 
-onlyif config local-mixed-25.4 local-mixed-26.1
+onlyif config local-mixed-26.1
 statement ok
 SELECT * FROM v_nested_2_1
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement error pgcode 42501 user nvo2 does not have SELECT privilege on relation t_nv2
 SELECT * FROM v_nested_2_2
 
-onlyif config local-mixed-25.4 local-mixed-26.1
+onlyif config local-mixed-26.1
 statement ok
 SELECT * FROM v_nested_2_2
 
@@ -561,14 +561,14 @@ SELECT * FROM view_rls_v;
 statement ok
 SET ROLE rls_invoker;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query II rowsort
 SELECT * FROM view_rls_v;
 ----
 2  20
 4  40
 
-onlyif config local-mixed-25.4 local-mixed-26.1
+onlyif config local-mixed-26.1
 query II rowsort
 SELECT * FROM view_rls_v;
 ----

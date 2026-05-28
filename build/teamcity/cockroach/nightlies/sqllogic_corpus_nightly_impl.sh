@@ -72,7 +72,7 @@ fi
 
 # Generate a corpus for all mixed version variants
 $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test -- --config=ci \
-    //pkg/sql/logictest/tests/local-mixed-25.4/... \
+    //pkg/sql/logictest/tests/local-mixed-26.1/... \
     --test_arg=--declarative-corpus=$ARTIFACTS_DIR/corpus-mixed \
     --test_env=GO_TEST_WRAP_TESTV=1 \
     --test_env=GO_TEST_WRAP=1 \

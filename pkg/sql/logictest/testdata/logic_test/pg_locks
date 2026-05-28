@@ -1,4 +1,4 @@
-# LogicTest: !local-mixed-25.4 !local-mixed-26.1 !local-mixed-26.2
+# LogicTest: !local-mixed-26.1 !local-mixed-26.2
 
 # End-to-end smoke: pg_locks (advisory-only) is a queryable view. Detailed row
 # shape is covered in pkg/sql/pg_locks_test.go (TestPGLocksAdvisory*).

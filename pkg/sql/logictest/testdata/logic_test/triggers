@@ -920,16 +920,16 @@ subtest end
 
 subtest replace_trigger_function_with_active_triggers
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE TABLE t_replace (a INT PRIMARY KEY, b TEXT);
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE TABLE audit_log (op TEXT, val TEXT);
 
 # Create a trigger function that logs 'v1' to identify the original version.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE FUNCTION tf_replace() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
   BEGIN
@@ -938,27 +938,27 @@ CREATE FUNCTION tf_replace() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
   END
 $$;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE TRIGGER tr_replace BEFORE INSERT ON t_replace FOR EACH ROW EXECUTE FUNCTION tf_replace();
 
 # Verify the trigger fires with the original function body.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 INSERT INTO t_replace VALUES (1, 'hello');
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query TT
 SELECT * FROM audit_log ORDER BY op;
 ----
 INSERT  v1
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement count 1
 DELETE FROM audit_log;
 
 # Replace the trigger function with a new body that logs 'v2'.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE OR REPLACE FUNCTION tf_replace() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
   BEGIN
@@ -968,25 +968,25 @@ CREATE OR REPLACE FUNCTION tf_replace() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
 $$;
 
 # Verify the trigger fires with the new function body.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 INSERT INTO t_replace VALUES (2, 'world');
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query TT
 SELECT * FROM audit_log ORDER BY op;
 ----
 INSERT  v2
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 DROP TRIGGER tr_replace ON t_replace;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 DROP TABLE t_replace, audit_log;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 DROP FUNCTION tf_replace;
 
@@ -994,19 +994,19 @@ subtest end
 
 subtest replace_trigger_function_multiple_triggers
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE TABLE t_m1 (a INT PRIMARY KEY);
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE TABLE t_m2 (a INT PRIMARY KEY);
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE TABLE audit_log (src TEXT, val TEXT);
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE FUNCTION tf_multi() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
   BEGIN
@@ -1015,35 +1015,35 @@ CREATE FUNCTION tf_multi() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
   END
 $$;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE TRIGGER tr1 BEFORE INSERT ON t_m1 FOR EACH ROW EXECUTE FUNCTION tf_multi();
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE TRIGGER tr2 BEFORE INSERT ON t_m2 FOR EACH ROW EXECUTE FUNCTION tf_multi();
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 INSERT INTO t_m1 VALUES (1);
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 INSERT INTO t_m2 VALUES (1);
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query TT rowsort
 SELECT * FROM audit_log;
 ----
 t_m1  v1
 t_m2  v1
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement count 2
 DELETE FROM audit_log;
 
 # Replace the function — both triggers should pick up the new body.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE OR REPLACE FUNCTION tf_multi() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
   BEGIN
@@ -1052,34 +1052,34 @@ CREATE OR REPLACE FUNCTION tf_multi() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
   END
 $$;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 INSERT INTO t_m1 VALUES (2);
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 INSERT INTO t_m2 VALUES (2);
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query TT rowsort
 SELECT * FROM audit_log;
 ----
 t_m1  v2
 t_m2  v2
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 DROP TRIGGER tr1 ON t_m1;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 DROP TRIGGER tr2 ON t_m2;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 DROP TABLE t_m1, t_m2, audit_log;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 DROP FUNCTION tf_multi;
 
@@ -1092,24 +1092,24 @@ subtest end
 
 subtest replace_trigger_function_deps
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE TYPE my_enum AS ENUM ('a', 'b');
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE TABLE t_deps (a INT PRIMARY KEY);
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE TABLE log_deps (val TEXT);
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE TABLE other_log (val TEXT);
 
 # Start with a simple trigger function that does not reference the type or other_log.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE FUNCTION tf_deps() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
   BEGIN
@@ -1118,7 +1118,7 @@ CREATE FUNCTION tf_deps() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
   END
 $$;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE TRIGGER tr_deps BEFORE INSERT ON t_deps FOR EACH ROW EXECUTE FUNCTION tf_deps();
 
@@ -1126,7 +1126,7 @@ CREATE TRIGGER tr_deps BEFORE INSERT ON t_deps FOR EACH ROW EXECUTE FUNCTION tf_
 # (Don't actually drop them — just verify no dependency error.)
 
 # Replace the function to reference the enum type and other_log table.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE OR REPLACE FUNCTION tf_deps() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
   BEGIN
@@ -1136,44 +1136,44 @@ CREATE OR REPLACE FUNCTION tf_deps() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
 $$;
 
 # Verify the trigger fires with the new body.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 INSERT INTO t_deps VALUES (1);
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query T
 SELECT * FROM other_log;
 ----
 a
 
 # Now the type and other_log are referenced — dropping them should be blocked.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement error pq: cannot drop type "my_enum" because other objects \(\[test.public.t_deps\]\) still depend on it
 DROP TYPE my_enum;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement error pgcode 2BP01 pq: cannot drop table other_log because other objects depend on it
 DROP TABLE other_log;
 
 # log_deps is no longer referenced after the replace, so it can be dropped.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 DROP TABLE log_deps;
 
 # Clean up.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 DROP TRIGGER tr_deps ON t_deps;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 DROP TABLE t_deps, other_log;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 DROP FUNCTION tf_deps;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 DROP TYPE my_enum;
 
@@ -1184,20 +1184,20 @@ subtest end
 # references correctly.
 subtest replace_trigger_function_relation_deps_only
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE TABLE t_rel (a INT PRIMARY KEY);
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE TABLE log1 (val TEXT);
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE TABLE log2 (val TEXT);
 
 # Simple trigger function referencing log1.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE FUNCTION tf_rel() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
   BEGIN
@@ -1206,12 +1206,12 @@ CREATE FUNCTION tf_rel() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
   END
 $$;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE TRIGGER tr_rel BEFORE INSERT ON t_rel FOR EACH ROW EXECUTE FUNCTION tf_rel();
 
 # Replace function to reference log2 instead (no type changes — only relation change).
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE OR REPLACE FUNCTION tf_rel() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
   BEGIN
@@ -1221,36 +1221,36 @@ CREATE OR REPLACE FUNCTION tf_rel() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
 $$;
 
 # Verify the trigger fires with the new body.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 INSERT INTO t_rel VALUES (1);
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query T
 SELECT * FROM log2;
 ----
 replaced
 
 # log1 is no longer referenced, so it should be droppable.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 DROP TABLE log1;
 
 # log2 is now referenced — dropping should be blocked.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement error pgcode 2BP01 pq: cannot drop table log2 because other objects depend on it
 DROP TABLE log2;
 
 # Clean up.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 DROP TRIGGER tr_rel ON t_rel;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 DROP TABLE t_rel, log2;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 DROP FUNCTION tf_rel;
 
@@ -1416,7 +1416,7 @@ ALTER TYPE typ RENAME TO typ2;
 # Routines are referenced by name, so renaming is not allowed.
 # In mixed-version clusters (before V26_3_Start), the trigger/policy dependency
 # check is skipped, so the rename succeeds.
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 statement error cannot rename function "g" because other objects \(.*\) still depend on it
 ALTER FUNCTION g RENAME TO g2;
 
@@ -4608,11 +4608,11 @@ select "eventType" from system.eventlog WHERE "eventType" <> 'finish_schema_chan
 create_trigger
 
 # Replacing a trigger function with active triggers is now supported (#134555).
-onlyif config local-mixed-25.4 local-mixed-26.1
+onlyif config local-mixed-26.1
 statement error pgcode 0A000 pq: unimplemented: cannot replace a trigger function with an active trigger
 CREATE OR REPLACE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEW; END $$;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE OR REPLACE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEW; END $$;
 
@@ -5121,12 +5121,12 @@ subtest end
 
 subtest enable_disable_trigger
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE TABLE enable_disable_t (a INT PRIMARY KEY, b INT);
 
 # Create an audit table to track trigger executions.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE TABLE trigger_audit (
   id SERIAL PRIMARY KEY,
@@ -5137,7 +5137,7 @@ CREATE TABLE trigger_audit (
 );
 
 # Create a trigger function that records its execution in the audit table.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE FUNCTION audit_trigger_func()
 RETURNS TRIGGER AS $$
@@ -5156,7 +5156,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE TRIGGER insert_trigger
   AFTER INSERT ON enable_disable_t
@@ -5164,77 +5164,77 @@ CREATE TRIGGER insert_trigger
   EXECUTE FUNCTION audit_trigger_func();
 
 # Verify trigger is enabled by default (tgenabled = 'O' for origin).
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query T
 SELECT tgenabled FROM pg_trigger WHERE tgname = 'insert_trigger';
 ----
 O
 
 # SHOW TRIGGERS should also report enabled = true.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query TB
 SHOW TRIGGERS FROM enable_disable_t;
 ----
 insert_trigger  true
 
 # Insert a row - trigger should fire and record in audit table.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 INSERT INTO enable_disable_t VALUES (1, 100);
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query TTI
 SELECT trigger_name, op, new_a FROM trigger_audit ORDER BY id;
 ----
 insert_trigger  INSERT  1
 
 # Disable the trigger.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 ALTER TABLE enable_disable_t DISABLE TRIGGER insert_trigger;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query T
 SELECT tgenabled FROM pg_trigger WHERE tgname = 'insert_trigger';
 ----
 D
 
 # SHOW TRIGGERS should report enabled = false.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query TB
 SHOW TRIGGERS FROM enable_disable_t;
 ----
 insert_trigger  false
 
 # Insert another row - trigger should NOT fire since it's disabled.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 INSERT INTO enable_disable_t VALUES (2, 200);
 
 # Audit table should still have only the first entry.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query TTI
 SELECT trigger_name, op, new_a FROM trigger_audit ORDER BY id;
 ----
 insert_trigger  INSERT  1
 
 # Re-enable the trigger.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 ALTER TABLE enable_disable_t ENABLE TRIGGER insert_trigger;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query T
 SELECT tgenabled FROM pg_trigger WHERE tgname = 'insert_trigger';
 ----
 O
 
 # Insert another row - trigger should fire again.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 INSERT INTO enable_disable_t VALUES (3, 300);
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query TTI
 SELECT trigger_name, op, new_a FROM trigger_audit ORDER BY id;
 ----
@@ -5242,42 +5242,42 @@ insert_trigger  INSERT  1
 insert_trigger  INSERT  3
 
 # Test that disabling an already disabled trigger is a no-op.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 ALTER TABLE enable_disable_t DISABLE TRIGGER insert_trigger;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 ALTER TABLE enable_disable_t DISABLE TRIGGER insert_trigger;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query T
 SELECT tgenabled FROM pg_trigger WHERE tgname = 'insert_trigger';
 ----
 D
 
 # Test that enabling an already enabled trigger is a no-op.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 ALTER TABLE enable_disable_t ENABLE TRIGGER insert_trigger;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 ALTER TABLE enable_disable_t ENABLE TRIGGER insert_trigger;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query T
 SELECT tgenabled FROM pg_trigger WHERE tgname = 'insert_trigger';
 ----
 O
 
 # Test error when trigger doesn't exist.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement error trigger "nonexistent" for table "enable_disable_t" does not exist
 ALTER TABLE enable_disable_t DISABLE TRIGGER nonexistent;
 
 # Create a second trigger to test ALL/USER keywords.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE TRIGGER update_trigger
   AFTER UPDATE ON enable_disable_t
@@ -5285,12 +5285,12 @@ CREATE TRIGGER update_trigger
   EXECUTE FUNCTION audit_trigger_func();
 
 # Clear the audit table to start fresh for ALL/USER tests.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement count 2
 DELETE FROM trigger_audit;
 
 # Both triggers should be enabled.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query TT rowsort
 SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
 ----
@@ -5298,15 +5298,15 @@ insert_trigger  O
 update_trigger  O
 
 # Insert and update - both triggers should fire.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 INSERT INTO enable_disable_t VALUES (10, 1000);
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 UPDATE enable_disable_t SET b = 1001 WHERE a = 10;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query TTI rowsort
 SELECT trigger_name, op, coalesce(new_a, old_a) as a_val FROM trigger_audit ORDER BY id;
 ----
@@ -5314,15 +5314,15 @@ insert_trigger  INSERT  10
 update_trigger  UPDATE  10
 
 # Clear audit and test DISABLE TRIGGER ALL.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement count 2
 DELETE FROM trigger_audit;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 ALTER TABLE enable_disable_t DISABLE TRIGGER ALL;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query TT rowsort
 SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
 ----
@@ -5330,7 +5330,7 @@ insert_trigger  D
 update_trigger  D
 
 # SHOW TRIGGERS should report both as disabled.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query TB rowsort
 SHOW TRIGGERS FROM enable_disable_t;
 ----
@@ -5338,27 +5338,27 @@ insert_trigger  false
 update_trigger  false
 
 # Neither trigger should fire when disabled.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 INSERT INTO enable_disable_t VALUES (11, 1100);
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 UPDATE enable_disable_t SET b = 1101 WHERE a = 11;
 
 # Audit table should be empty.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query I
 SELECT count(*) FROM trigger_audit;
 ----
 0
 
 # Test ENABLE TRIGGER ALL.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 ALTER TABLE enable_disable_t ENABLE TRIGGER ALL;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query TT rowsort
 SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
 ----
@@ -5366,15 +5366,15 @@ insert_trigger  O
 update_trigger  O
 
 # Both triggers should fire again.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 INSERT INTO enable_disable_t VALUES (12, 1200);
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 UPDATE enable_disable_t SET b = 1201 WHERE a = 12;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query TTI rowsort
 SELECT trigger_name, op, coalesce(new_a, old_a) as a_val FROM trigger_audit ORDER BY id;
 ----
@@ -5382,16 +5382,16 @@ insert_trigger  INSERT  12
 update_trigger  UPDATE  12
 
 # Clear audit and test selective disable.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement count 2
 DELETE FROM trigger_audit;
 
 # Disable only one trigger.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 ALTER TABLE enable_disable_t DISABLE TRIGGER insert_trigger;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query TT rowsort
 SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
 ----
@@ -5399,34 +5399,34 @@ insert_trigger  D
 update_trigger  O
 
 # Insert and update - only update trigger should fire.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 INSERT INTO enable_disable_t VALUES (13, 1300);
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 UPDATE enable_disable_t SET b = 1301 WHERE a = 13;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query TT
 SELECT trigger_name, op FROM trigger_audit ORDER BY id;
 ----
 update_trigger  UPDATE
 
 # Clear audit and test DISABLE TRIGGER USER (same as ALL in CockroachDB).
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement count 1
 DELETE FROM trigger_audit;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 ALTER TABLE enable_disable_t ENABLE TRIGGER insert_trigger;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 ALTER TABLE enable_disable_t DISABLE TRIGGER USER;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query TT rowsort
 SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
 ----
@@ -5434,22 +5434,22 @@ insert_trigger  D
 update_trigger  D
 
 # Neither trigger should fire.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 INSERT INTO enable_disable_t VALUES (14, 1400);
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query I
 SELECT count(*) FROM trigger_audit;
 ----
 0
 
 # Test ENABLE TRIGGER USER (same as ALL in CockroachDB).
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 ALTER TABLE enable_disable_t ENABLE TRIGGER USER;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query TT rowsort
 SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
 ----
@@ -5457,39 +5457,39 @@ insert_trigger  O
 update_trigger  O
 
 # Test that ALL/USER on a table with no triggers is a no-op.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 CREATE TABLE enable_disable_t_empty (a INT PRIMARY KEY);
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 ALTER TABLE enable_disable_t_empty DISABLE TRIGGER ALL;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 ALTER TABLE enable_disable_t_empty ENABLE TRIGGER USER;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 DROP TABLE enable_disable_t_empty;
 
 # Test combining with other ALTER TABLE commands.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 ALTER TABLE enable_disable_t DISABLE TRIGGER insert_trigger, DISABLE TRIGGER update_trigger;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query TT rowsort
 SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
 ----
 insert_trigger  D
 update_trigger  D
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 ALTER TABLE enable_disable_t ENABLE TRIGGER insert_trigger, ENABLE TRIGGER update_trigger;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query TT rowsort
 SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
 ----
@@ -5497,20 +5497,20 @@ insert_trigger  O
 update_trigger  O
 
 # Test with IF EXISTS on table.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 ALTER TABLE IF EXISTS nonexistent_table DISABLE TRIGGER some_trigger;
 
 # Clean up.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 DROP TABLE enable_disable_t;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 DROP TABLE trigger_audit;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 DROP FUNCTION audit_trigger_func;
 
@@ -6526,7 +6526,7 @@ INSERT INTO t_tr_udf_dep VALUES (1, 1);
 # Renaming the UDF referenced by the trigger body should be blocked.
 # In mixed-version clusters (before V26_3_Start), the trigger dependency
 # check is skipped, so the rename succeeds.
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 statement error cannot rename function "udf_dep_helper" because other objects \(\[trigger "tr_udf_dep" on .*t_tr_udf_dep\]\) still depend on it
 ALTER FUNCTION udf_dep_helper() RENAME TO udf_dep_helper_renamed;
 
@@ -6534,7 +6534,7 @@ ALTER FUNCTION udf_dep_helper() RENAME TO udf_dep_helper_renamed;
 statement ok
 CREATE SCHEMA sc_tr_dep;
 
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 statement error cannot set schema for function "udf_dep_helper" because other objects \(\[trigger "tr_udf_dep" on .*t_tr_udf_dep\]\) still depend on it
 ALTER FUNCTION udf_dep_helper() SET SCHEMA sc_tr_dep;
 

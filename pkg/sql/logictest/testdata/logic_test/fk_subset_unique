@@ -1,4 +1,4 @@
-# LogicTest: default-configs 3node-tenant !local-mixed-25.4 !local-mixed-26.1 !local-mixed-26.2
+# LogicTest: default-configs 3node-tenant !local-mixed-26.1 !local-mixed-26.2
 
 # Foreign keys backed by a unique constraint covering only a subset of the
 # referenced columns (CockroachDB extension). The feature is gated on cluster
