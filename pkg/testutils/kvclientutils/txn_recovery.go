@@ -28,6 +28,11 @@ const (
 	// ExpectPusheeTxnRecordNotFound means we're expecting the push to not find the
 	// pushee txn record.
 	ExpectPusheeTxnRecordNotFound
+	// ExpectNoTxnRecovery means we're expecting the push to NOT perform
+	// transaction recovery. This is weaker than ExpectPusheeTxnRecordNotFound: it
+	// tolerates a PENDING txn record (e.g. written by the heartbeat loop) but
+	// verifies no STAGING record was found and recovered.
+	ExpectNoTxnRecovery
 	// DontExpectAnything means we're not going to check the state in which the
 	// pusher found the pushee's txn record.
 	DontExpectAnything
@@ -113,6 +118,13 @@ func CheckPushResult(
 			resolutionErr = errors.Errorf(
 				"push didn't run as expected (missing \"%s\"). recording: %s",
 				expMsg, recording)
+		}
+	case ExpectNoTxnRecovery:
+		unexpectedMsg := fmt.Sprintf("recovered txn %s", txn.ID.Short())
+		if _, ok := recording.FindLogMessage(unexpectedMsg); ok {
+			resolutionErr = errors.Errorf(
+				"push unexpectedly performed txn recovery (found \"%s\"). recording: %s",
+				unexpectedMsg, recording)
 		}
 	case DontExpectAnything:
 	}
