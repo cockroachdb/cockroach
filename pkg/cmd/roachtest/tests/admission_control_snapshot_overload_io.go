@@ -226,7 +226,9 @@ func runAdmissionControlSnapshotOverloadIO(
 	time.Sleep(2 * time.Hour)
 
 	t.Status(fmt.Sprintf("starting node 3... (<%s)", time.Minute))
-	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(envOptions), c.Node(3))
+	restartOpts := startOpts
+	restartOpts.RoachprodOpts.IsRestart = true
+	c.Start(ctx, t.L(), restartOpts, install.MakeClusterSettings(envOptions), c.Node(3))
 
 	t.Status(fmt.Sprintf("waiting for snapshot transfers to finish %s", 2*time.Hour))
 	m.Go(func(ctx context.Context) error {

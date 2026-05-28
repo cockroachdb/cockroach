@@ -224,7 +224,9 @@ func revlogNodeRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 	time.Sleep(10 * time.Second)
 
 	t.L().Printf("restarting node 3")
-	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(3))
+	restartOpts := startOpts
+	restartOpts.RoachprodOpts.IsRestart = true
+	c.Start(ctx, t.L(), restartOpts, install.MakeClusterSettings(), c.Node(3))
 	time.Sleep(15 * time.Second)
 
 	d.randomWait(t.L(), testRNG)

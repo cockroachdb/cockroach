@@ -67,7 +67,9 @@ func runClockMonotonicity(
 
 		offsetInjector.recover(ctx, c.Spec().NodeCount)
 
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(c.Spec().NodeCount))
+		startOpts := option.DefaultStartOpts()
+		startOpts.RoachprodOpts.IsRestart = true
+		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(c.Spec().NodeCount))
 		if !isAlive(db, t.L()) {
 			t.Fatal("Node unexpectedly crashed")
 		}
@@ -79,7 +81,9 @@ func runClockMonotonicity(
 	t.Status("injecting offset")
 	offsetInjector.offset(ctx, c.Spec().NodeCount, tc.offset)
 	t.Status("starting cockroach post offset")
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(c.Spec().NodeCount))
+	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.IsRestart = true
+	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(c.Spec().NodeCount))
 
 	if !isAlive(db, t.L()) {
 		t.Fatal("Node unexpectedly crashed")
