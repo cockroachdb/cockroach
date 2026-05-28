@@ -57,6 +57,7 @@ func main() {
 
 func init() {
 	rootCmd.AddCommand(cutStagingBranchesCmd)
+	rootCmd.AddCommand(notifyPublishCmd)
 	rootCmd.AddCommand(pickSHACmd)
 	rootCmd.AddCommand(updateReleasesTestFilesCmd)
 	rootCmd.AddCommand(updateVersionsCmd)
