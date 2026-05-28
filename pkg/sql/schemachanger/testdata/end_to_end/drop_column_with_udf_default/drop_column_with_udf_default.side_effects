@@ -143,6 +143,7 @@ persist all catalog changes to storage
 ## PreCommitPhase stage 2 of 2 with 12 MutationType ops
 upsert descriptor #104
    function:
+     canMutate: CANNOT_MUTATE
   +  declarativeSchemaChangerState:
   +    authorization:
   +      userName: root
@@ -686,6 +687,7 @@ begin transaction #13
 ## PostCommitNonRevertiblePhase stage 4 of 4 with 4 MutationType ops
 upsert descriptor #104
    function:
+     canMutate: CANNOT_MUTATE
   -  declarativeSchemaChangerState:
   -    authorization:
   -      userName: root
