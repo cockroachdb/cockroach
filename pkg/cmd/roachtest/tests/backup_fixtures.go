@@ -208,17 +208,24 @@ type BackupSchedule struct {
 }
 
 // CreateScheduleStatement returns a SQL statement that creates a scheduled
-// backup of database dbName into uri at the schedule's full and incremental
-// cron frequencies.
-func (schedule *BackupSchedule) CreateScheduleStatement(dbName string, uri url.URL) string {
+// backup into uri at the schedule's full and incremental cron frequencies.
+// If tenantID is non-zero, the schedule backs up that virtual cluster;
+// otherwise it backs up the database dbName.
+func (schedule *BackupSchedule) CreateScheduleStatement(
+	dbName string, tenantID uint64, uri url.URL,
+) string {
+	target := fmt.Sprintf("DATABASE %s", dbName)
+	if tenantID != 0 {
+		target = fmt.Sprintf("VIRTUAL CLUSTER %d", tenantID)
+	}
 	return fmt.Sprintf(
 		`CREATE SCHEDULE IF NOT EXISTS "%s"
-     FOR BACKUP DATABASE %s
+     FOR BACKUP %s
      INTO '%s'
      RECURRING '%s'
      FULL BACKUP '%s'
      WITH SCHEDULE OPTIONS first_run = 'now';`,
-		scheduleLabel, dbName, uri.String(), schedule.IncrementalFrequency, schedule.FullFrequency)
+		scheduleLabel, target, uri.String(), schedule.IncrementalFrequency, schedule.FullFrequency)
 }
 
 type backupDriver struct {
@@ -227,6 +234,14 @@ type backupDriver struct {
 	c        cluster.Cluster
 	fixture  blobfixture.FixtureMetadata
 	registry *blobfixture.Registry
+	// tenantName and tenantID identify a virtual cluster the driver should run
+	// its workload against and scope its backup/restore statements to. When
+	// tenantName is empty (and tenantID is zero), the driver targets the
+	// fixture's database instead. Both fields are needed because workload pgurl
+	// plumbing takes a name while the BACKUP/RESTORE VIRTUAL CLUSTER grammar
+	// takes an integer ID.
+	tenantName string
+	tenantID   uint64
 }
 
 func (bd *backupDriver) prepareCluster(ctx context.Context) {
@@ -252,7 +267,9 @@ func (bd *backupDriver) prepareCluster(ctx context.Context) {
 func (bd *backupDriver) initWorkload(ctx context.Context) {
 	bd.t.L().Printf("importing tpcc with %d warehouses", bd.sp.fixture.ImportWarehouses)
 
-	urls, err := bd.c.InternalPGUrl(ctx, bd.t.L(), bd.c.Node(1), roachprod.PGURLOptions{})
+	urls, err := bd.c.InternalPGUrl(ctx, bd.t.L(), bd.c.Node(1), roachprod.PGURLOptions{
+		VirtualClusterName: bd.tenantName,
+	})
 	require.NoError(bd.t, err)
 
 	cmd := roachtestutil.NewCommand("./cockroach workload fixtures import tpcc").
@@ -270,8 +287,12 @@ func (bd *backupDriver) runWorkload(ctx context.Context) (func(), error) {
 	workloadCtx, workloadCancel := context.WithCancel(ctx)
 	m := bd.c.NewDeprecatedMonitor(workloadCtx)
 	m.Go(func(ctx context.Context) error {
+		pgurlArg := fmt.Sprintf("{pgurl%s}", bd.c.CRDBNodes())
+		if bd.tenantName != "" {
+			pgurlArg = fmt.Sprintf("{pgurl%s:%s}", bd.c.CRDBNodes(), bd.tenantName)
+		}
 		cmd := roachtestutil.NewCommand("./cockroach workload run tpcc").
-			Arg("{pgurl%s}", bd.c.CRDBNodes()).
+			Arg("%s", pgurlArg).
 			Option("tolerate-errors=true").
 			// Increase the ramp time to prevent the initial connection spike from
 			// the workload starting from overloading the cluster. Connection set up
@@ -334,7 +355,7 @@ func (bd *backupDriver) scheduleBackups(ctx context.Context) {
 		require.NoError(bd.t, err)
 	}
 	createScheduleStatement := bd.sp.fixture.Schedule.CreateScheduleStatement(
-		bd.sp.fixture.DatabaseName(), bd.registry.URI(bd.fixture.DataPath),
+		bd.sp.fixture.DatabaseName(), bd.tenantID, bd.registry.URI(bd.fixture.DataPath),
 	)
 	_, err := conn.Exec(createScheduleStatement)
 	require.NoError(bd.t, err)
@@ -522,17 +543,26 @@ func (bd *backupDriver) checkRestorability(ctx context.Context) error {
 	defer conn.Close()
 
 	uri := bd.registry.URI(bd.fixture.DataPath)
-	var restoreJobID jobspb.JobID
-	err := conn.QueryRowContext(
-		ctx,
-		fmt.Sprintf(
+	var restoreStmt string
+	if bd.tenantID != 0 {
+		restoreStmt = fmt.Sprintf(
+			`RESTORE VIRTUAL CLUSTER %d FROM LATEST IN '%s'
+			WITH detached, virtual_cluster_name='%s_restored', schema_only, experimental deferred copy`,
+			bd.tenantID,
+			uri.String(),
+			bd.tenantName,
+		)
+	} else {
+		restoreStmt = fmt.Sprintf(
 			`RESTORE DATABASE %s FROM LATEST IN '%s'
 			WITH detached, new_db_name='%s_restored', schema_only, experimental deferred copy`,
 			bd.sp.fixture.DatabaseName(),
 			uri.String(),
 			bd.sp.fixture.DatabaseName(),
-		),
-	).Scan(&restoreJobID)
+		)
+	}
+	var restoreJobID jobspb.JobID
+	err := conn.QueryRowContext(ctx, restoreStmt).Scan(&restoreJobID)
 	if err != nil {
 		return errors.Wrapf(err, "error starting restore job")
 	}

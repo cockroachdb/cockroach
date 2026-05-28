@@ -7,13 +7,21 @@ package tests
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,6 +34,10 @@ const (
 	// in backups during these tests. It is set to an extremely low value in order to cause heavy stress
 	// in situations where we are attempting to protect or backup spans that we should not be touching.
 	scheduleChainingNotIncludedGCTTL = 10 * time.Second
+
+	// scheduleChainingTenantName is the name of the shared-process virtual
+	// cluster used when isTenant is true.
+	scheduleChainingTenantName = "apptenant"
 )
 
 func registerBackupScheduleChaining(r registry.Registry) {
@@ -60,13 +72,23 @@ func registerBackupScheduleChaining(r registry.Registry) {
 			Suites:            spec.suites,
 			Skip:              spec.skip,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				registry := GetFixtureRegistry(ctx, t, c.Cloud())
+				testRNG, seed := randutil.NewLockedPseudoRand()
+				t.L().Printf("random seed: %d", seed)
+				// isTenant := testRNG.Intn(2) == 0
+				isTenant := true
 
-				handle, err := registry.Create(ctx, fmt.Sprintf(
-					"%s-schedule-chaining", spec.fixture.Name,
-				), t.L())
+				fixtureName := fmt.Sprintf("%s-schedule-chaining", spec.fixture.Name)
+				if isTenant {
+					fixtureName += "-tenant"
+				}
+				registry := GetFixtureRegistry(ctx, t, c.Cloud())
+				handle, err := registry.Create(ctx, fixtureName, t.L())
 				require.NoError(t, err)
 
+				if isTenant {
+					spec.fixture.Schedule.CompactionThreshold = 0
+					spec.fixture.Schedule.CompactionWindow = 0
+				}
 				bd := backupDriver{
 					t:        t,
 					c:        c,
@@ -76,16 +98,44 @@ func registerBackupScheduleChaining(r registry.Registry) {
 				}
 				bd.prepareCluster(ctx)
 
+				systemConn := bd.c.Conn(
+					ctx, t.L(), 1, /* node */
+					option.VirtualClusterName(install.SystemInterfaceName),
+				)
+				defer systemConn.Close()
+
+				var sqlConn *gosql.DB
+				if isTenant {
+					bd.tenantName = scheduleChainingTenantName
+					c.StartServiceForVirtualCluster(
+						ctx, t.L(),
+						option.StartSharedVirtualClusterOpts(scheduleChainingTenantName),
+						install.MakeClusterSettings(),
+					)
+					sqlConn = bd.c.Conn(
+						ctx, t.L(), 1, /* node */
+						option.VirtualClusterName(scheduleChainingTenantName),
+					)
+					defer sqlConn.Close()
+					require.NoError(t, roachtestutil.WaitForSQLReady(ctx, sqlConn))
+					// BACKUP/RESTORE VIRTUAL CLUSTER only accepts an integer tenant ID,
+					// so resolve the name to an ID for the driver to use.
+					require.NoError(t, systemConn.QueryRowContext(
+						ctx, "SELECT id FROM system.tenants WHERE name = $1",
+						scheduleChainingTenantName,
+					).Scan(&bd.tenantID))
+				} else {
+					sqlConn = systemConn
+				}
+
 				// Shorten the GC TTL to be less than the frequency of the backup schedule.
-				conn := bd.c.Conn(ctx, t.L(), 1 /* node */)
-				defer conn.Close()
-				_, err = conn.Exec(
+				_, err = sqlConn.Exec(
 					"ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = $1",
 					int(scheduleChainingDefaultGCTTL.Seconds()),
 				)
 				require.NoError(t, err)
 				// Shorten the GC TTL of the system database, which should not be included in the backup.
-				_, err = conn.Exec(
+				_, err = sqlConn.Exec(
 					"ALTER DATABASE system CONFIGURE ZONE USING gc.ttlseconds = $1",
 					int(scheduleChainingNotIncludedGCTTL.Seconds()),
 				)
@@ -94,6 +144,13 @@ func registerBackupScheduleChaining(r registry.Registry) {
 				bd.initWorkload(ctx)
 				stopWorkload, err := bd.runWorkload(ctx)
 				require.NoError(t, err)
+				if isTenant {
+					stopExcludedWorkload := t.GoWithCancel(func(ctx context.Context, l *logger.Logger) error {
+						runExcludedTablesWorkload(t, ctx, sqlConn, testRNG)
+						return nil
+					}, task.Name("excluded-tables-workload"))
+					defer stopExcludedWorkload()
+				}
 
 				bd.scheduleBackups(ctx)
 				require.NoError(t, bd.monitorBackups(ctx))
@@ -111,5 +168,42 @@ func registerBackupScheduleChaining(r registry.Registry) {
 				require.NoError(t, handle.SetReadyAt(ctx))
 			},
 		})
+	}
+}
+
+func runExcludedTablesWorkload(t test.Test, ctx context.Context, db *gosql.DB, rng *rand.Rand) {
+	var numCreatedTables int
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			// Create or drop a table.
+			if rng.Intn(2) == 0 {
+				_, err := db.Exec(fmt.Sprintf(
+					"CREATE TABLE IF NOT EXISTS maybe_excluded_table_%d (id INT PRIMARY KEY)",
+					numCreatedTables,
+				))
+				require.NoError(t, err)
+				numCreatedTables += 1
+			} else {
+				if numCreatedTables == 0 {
+					continue
+				}
+				toDrop := rng.Intn(numCreatedTables)
+				_, err := db.Exec(fmt.Sprintf(
+					"DROP TABLE IF EXISTS maybe_excluded_table_%d",
+					toDrop,
+				))
+				require.NoError(t, err)
+			}
+
+			// Set or remove excluded flag.
+			_, err := db.Exec(fmt.Sprintf(
+				"ALTER TABLE IF EXISTS maybe_excluded_table_%d SET (exclude_data_from_backup = %t)",
+				rng.Intn(numCreatedTables), rng.Intn(2) == 0,
+			))
+			require.NoError(t, err)
+		}
 	}
 }
