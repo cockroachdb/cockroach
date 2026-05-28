@@ -3809,13 +3809,18 @@ func (s *Store) computeMetricsLocked(ctx context.Context) (m storage.Metrics, er
 	}
 	s.metrics.updateEnvStats(*envStats)
 
-	{
+	countCheckpoints := func(eng storage.Engine) int {
 		dirs, err := eng.Env().List(checkpointsDir(eng))
 		if err != nil { // skip NotFound or any other error
-			dirs = nil
+			return 0
 		}
-		s.metrics.RdbCheckpoints.Update(int64(len(dirs)))
+		return len(dirs)
 	}
+	numCheckpoints := countCheckpoints(s.StateEngine())
+	if s.EnginesSeparated() {
+		numCheckpoints += countCheckpoints(s.LogEngine())
+	}
+	s.metrics.RdbCheckpoints.Update(int64(numCheckpoints))
 
 	return m, nil
 }
