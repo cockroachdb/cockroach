@@ -65,14 +65,28 @@ func (k groupKey) isBuiltin() bool {
 	return ok
 }
 
-// metricLabels returns the (kind, id) label pair for per-group
-// metrics, preserving the existing metric label scheme.
-//
-// TODO(ssd): We will fix up metrics for the unification in a
-// future commit.
-func (k groupKey) metricLabels() (kindStr, idStr string) {
-	if k.groupID == 0 {
-		return "tenant", strconv.FormatUint(k.tenantID, 10)
-	}
-	return "rg", strconv.FormatUint(k.groupID, 10)
+// isServerlessGroup reports whether k names a serverless tenant
+// group (groupID==0, tenantID>0). The legacy per-tenant metric
+// family is populated only for these groups; RM-mode resource
+// groups (tenantID==0, groupID>0) and future user-defined groups
+// (both non-zero) feed only the primary per-group family. The
+// system tenant (tenantID==1, groupID==0) qualifies.
+func (k groupKey) isServerlessGroup() bool {
+	return k.groupID == 0 && k.tenantID > 0
+}
+
+// primaryMetricLabels returns the (tenant_id, group_id) label pair
+// used by the primary per-group AggCounter family. Both labels are
+// bare numeric strings; the tuple disambiguates same-numbered ids
+// across namespaces (e.g. tenant 1 vs rg 1).
+func (k groupKey) primaryMetricLabels() (tenantIDStr, groupIDStr string) {
+	return strconv.FormatUint(k.tenantID, 10),
+		strconv.FormatUint(k.groupID, 10)
+}
+
+// legacyTenantMetricLabel returns the tenant_id label used by the
+// legacy per-tenant AggCounter family. Only meaningful for keys for
+// which isServerlessGroup returns true.
+func (k groupKey) legacyTenantMetricLabel() string {
+	return strconv.FormatUint(k.tenantID, 10)
 }

@@ -376,13 +376,32 @@ type WorkQueue struct {
 	knobs      *TestingKnobs
 }
 
-// groupAggMetrics groups the parent AggCounters from which per-group
-// child counters are created via AddChild.
-type groupAggMetrics struct {
+// groupAggMetricSet bundles the four parent AggCounters that make
+// up one per-group metric family. Either all four fields are set or
+// the whole set is nil.
+type groupAggMetricSet struct {
 	admittedCount  *aggmetric.AggCounter
 	waitTimeNanos  *aggmetric.AggCounter
 	tokensUsed     *aggmetric.AggCounter
 	tokensReturned *aggmetric.AggCounter
+}
+
+// groupAggMetrics holds the parent AggCounter sets from which
+// per-group child counters are created. There are two families:
+//
+//   - primary: labeled (tenant_id, group_id). Every group feeds
+//     this family.
+//   - legacy: labeled (tenant_id). Only serverless tenant groups
+//     (see groupKey.isServerlessGroup) feed this family. It exists
+//     so dashboards predating the primary family keep working;
+//     new consumers should target the primary family.
+//
+// Either set may be nil in tests that only care about one family.
+// newGroupInfo skips child creation for a missing or kind-excluded
+// set.
+type groupAggMetrics struct {
+	primary *groupAggMetricSet
+	legacy  *groupAggMetricSet
 }
 
 var _ requester = &WorkQueue{}
@@ -861,8 +880,11 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 	}
 	if info.BypassAdmission {
 		q.adjustGroupUsedLocked(group, info.RequestedCount)
-		if group.perGroupMetrics.admittedCount != nil {
-			group.perGroupMetrics.admittedCount.Inc(1)
+		if group.perGroupMetrics.primaryAdmittedCount != nil {
+			group.perGroupMetrics.primaryAdmittedCount.Inc(1)
+		}
+		if group.perGroupMetrics.legacyAdmittedCount != nil {
+			group.perGroupMetrics.legacyAdmittedCount.Inc(1)
 		}
 		q.mu.Unlock()
 		q.granter.tookWithoutPermission(info.RequestedCount)
@@ -889,18 +911,22 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		// Fast-path. Try to grab token/slot.
 		// Optimistically update used to avoid locking again.
 		q.adjustGroupUsedLocked(group, info.RequestedCount)
-		// Save the admittedCount counter before releasing the mutex,
+		// Save the admittedCount counters before releasing the mutex,
 		// since group may be GC'd and its counters Unlink'd after
 		// unlock. Inc after Unlink is safe: the aggregate parent counter
 		// still gets the increment (see aggmetric.Counter.Unlink docs).
-		admittedCount := group.perGroupMetrics.admittedCount
+		primaryAdmittedCount := group.perGroupMetrics.primaryAdmittedCount
+		legacyAdmittedCount := group.perGroupMetrics.legacyAdmittedCount
 		q.mu.Unlock()
 		// We have unlocked q.mu, so another concurrent request can also do tryGet
 		// and get ahead of this request. We don't need to be fair for such
 		// concurrent requests.
 		if q.granter.tryGet(burstQual, info.RequestedCount) {
-			if admittedCount != nil {
-				admittedCount.Inc(1)
+			if primaryAdmittedCount != nil {
+				primaryAdmittedCount.Inc(1)
+			}
+			if legacyAdmittedCount != nil {
+				legacyAdmittedCount.Inc(1)
 			}
 			q.metrics.incAdmitted(info.Priority)
 			if info.ReplicatedWorkInfo.Enabled {
@@ -1257,9 +1283,13 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 	waitDur := now.Sub(item.enqueueingTime)
 	group.priorityStates.updateDelayLocked(item.priority, waitDur, false /* canceled */)
 	q.adjustGroupUsedLocked(group, item.requestedCount)
-	if group.perGroupMetrics.admittedCount != nil {
-		group.perGroupMetrics.admittedCount.Inc(1)
-		group.perGroupMetrics.waitTimeNanos.Inc(waitDur.Nanoseconds())
+	if group.perGroupMetrics.primaryAdmittedCount != nil {
+		group.perGroupMetrics.primaryAdmittedCount.Inc(1)
+		group.perGroupMetrics.primaryWaitTimeNanos.Inc(waitDur.Nanoseconds())
+	}
+	if group.perGroupMetrics.legacyAdmittedCount != nil {
+		group.perGroupMetrics.legacyAdmittedCount.Inc(1)
+		group.perGroupMetrics.legacyWaitTimeNanos.Inc(waitDur.Nanoseconds())
 	}
 	if !isInGroupHeap(group) {
 		q.mu.groupHeap.remove(group)
@@ -1373,11 +1403,19 @@ func (q *WorkQueue) adjustGroupUsedLocked(group *groupInfo, delta int64) {
 	} else {
 		group.used += uint64(delta)
 	}
-	if group.perGroupMetrics.tokensUsed != nil {
-		if delta > 0 {
-			group.perGroupMetrics.tokensUsed.Inc(delta)
-		} else if delta < 0 {
-			group.perGroupMetrics.tokensReturned.Inc(-delta)
+	if delta > 0 {
+		if group.perGroupMetrics.primaryTokensUsed != nil {
+			group.perGroupMetrics.primaryTokensUsed.Inc(delta)
+		}
+		if group.perGroupMetrics.legacyTokensUsed != nil {
+			group.perGroupMetrics.legacyTokensUsed.Inc(delta)
+		}
+	} else if delta < 0 {
+		if group.perGroupMetrics.primaryTokensReturned != nil {
+			group.perGroupMetrics.primaryTokensReturned.Inc(-delta)
+		}
+		if group.perGroupMetrics.legacyTokensReturned != nil {
+			group.perGroupMetrics.legacyTokensReturned.Inc(-delta)
 		}
 	}
 	if q.mode == usesCPUTimeTokens {
@@ -1836,13 +1874,28 @@ type groupInfo struct {
 	perGroupMetrics groupMetrics
 }
 
-// groupMetrics groups the per-group metric children that are created
-// via AggCounter.AddChild for each group.
+// groupMetrics holds the per-group metric children created via
+// AggCounter.AddChild. There are two parallel sets, mirroring
+// groupAggMetrics:
+//
+//   - primary: always populated when the WorkQueue has a primary
+//     parent set and the group is admitted under usesCPUTimeTokens.
+//   - legacy: populated only for serverless tenant groups when the
+//     WorkQueue has a legacy parent set.
+//
+// Any of the eight fields may be nil and must be nil-checked before
+// Inc / Unlink. Inc on a child counter after Unlink is safe and
+// still propagates to the parent (see aggmetric.Counter.Unlink).
 type groupMetrics struct {
-	admittedCount  *aggmetric.Counter
-	waitTimeNanos  *aggmetric.Counter
-	tokensUsed     *aggmetric.Counter
-	tokensReturned *aggmetric.Counter
+	primaryAdmittedCount  *aggmetric.Counter
+	primaryWaitTimeNanos  *aggmetric.Counter
+	primaryTokensUsed     *aggmetric.Counter
+	primaryTokensReturned *aggmetric.Counter
+
+	legacyAdmittedCount  *aggmetric.Counter
+	legacyWaitTimeNanos  *aggmetric.Counter
+	legacyTokensUsed     *aggmetric.Counter
+	legacyTokensReturned *aggmetric.Counter
 }
 
 // groupHeap is a heap of groups with waiting work, ordered by burst
@@ -1888,13 +1941,32 @@ func newGroupInfo(
 	ti.cpuTimeBurstBucket.init(
 		burstBucketCapacity, mode != usesCPUTimeTokens /* disable */, maxCPU)
 	if aggMetrics != nil {
-		// AddChild takes the label values in the same order as
-		// aggmetric.MakeBuilder declared them: ("kind", "tenant_id").
-		kindStr, idStr := gKey.metricLabels()
-		ti.perGroupMetrics.admittedCount = aggMetrics.admittedCount.AddChild(kindStr, idStr)
-		ti.perGroupMetrics.waitTimeNanos = aggMetrics.waitTimeNanos.AddChild(kindStr, idStr)
-		ti.perGroupMetrics.tokensUsed = aggMetrics.tokensUsed.AddChild(kindStr, idStr)
-		ti.perGroupMetrics.tokensReturned = aggMetrics.tokensReturned.AddChild(kindStr, idStr)
+		if aggMetrics.primary != nil {
+			// Primary family: every group feeds it, labeled
+			// (tenant_id, group_id) in the order declared by
+			// makeCPUTimeTokenMetrics.
+			tenantIDStr, groupIDStr := gKey.primaryMetricLabels()
+			ti.perGroupMetrics.primaryAdmittedCount =
+				aggMetrics.primary.admittedCount.AddChild(tenantIDStr, groupIDStr)
+			ti.perGroupMetrics.primaryWaitTimeNanos =
+				aggMetrics.primary.waitTimeNanos.AddChild(tenantIDStr, groupIDStr)
+			ti.perGroupMetrics.primaryTokensUsed =
+				aggMetrics.primary.tokensUsed.AddChild(tenantIDStr, groupIDStr)
+			ti.perGroupMetrics.primaryTokensReturned =
+				aggMetrics.primary.tokensReturned.AddChild(tenantIDStr, groupIDStr)
+		}
+		if aggMetrics.legacy != nil && gKey.isServerlessGroup() {
+			// Legacy per-tenant family: serverless tenant groups only.
+			tenantIDStr := gKey.legacyTenantMetricLabel()
+			ti.perGroupMetrics.legacyAdmittedCount =
+				aggMetrics.legacy.admittedCount.AddChild(tenantIDStr)
+			ti.perGroupMetrics.legacyWaitTimeNanos =
+				aggMetrics.legacy.waitTimeNanos.AddChild(tenantIDStr)
+			ti.perGroupMetrics.legacyTokensUsed =
+				aggMetrics.legacy.tokensUsed.AddChild(tenantIDStr)
+			ti.perGroupMetrics.legacyTokensReturned =
+				aggMetrics.legacy.tokensReturned.AddChild(tenantIDStr)
+		}
 	}
 	return ti
 }
@@ -1903,11 +1975,17 @@ func releaseGroupInfo(ti *groupInfo) {
 	if isInGroupHeap(ti) {
 		panic("groupInfo has non-empty heap")
 	}
-	if ti.perGroupMetrics.admittedCount != nil {
-		ti.perGroupMetrics.admittedCount.Unlink()
-		ti.perGroupMetrics.waitTimeNanos.Unlink()
-		ti.perGroupMetrics.tokensUsed.Unlink()
-		ti.perGroupMetrics.tokensReturned.Unlink()
+	if ti.perGroupMetrics.primaryAdmittedCount != nil {
+		ti.perGroupMetrics.primaryAdmittedCount.Unlink()
+		ti.perGroupMetrics.primaryWaitTimeNanos.Unlink()
+		ti.perGroupMetrics.primaryTokensUsed.Unlink()
+		ti.perGroupMetrics.primaryTokensReturned.Unlink()
+	}
+	if ti.perGroupMetrics.legacyAdmittedCount != nil {
+		ti.perGroupMetrics.legacyAdmittedCount.Unlink()
+		ti.perGroupMetrics.legacyWaitTimeNanos.Unlink()
+		ti.perGroupMetrics.legacyTokensUsed.Unlink()
+		ti.perGroupMetrics.legacyTokensReturned.Unlink()
 	}
 	// NB: {waitingWorkHeap,openEpochsHeap}.Pop nil the slice elements when
 	// removing, so we are not inadvertently holding any references.
