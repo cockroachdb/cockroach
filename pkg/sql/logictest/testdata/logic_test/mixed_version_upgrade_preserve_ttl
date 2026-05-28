@@ -1,4 +1,4 @@
-# LogicTest: cockroach-go-testserver-25.4
+# LogicTest: cockroach-go-testserver-26.1
 
 # This test verifies that when a cluster is upgraded, it preserves the TTL
 # job configuration on a table.
