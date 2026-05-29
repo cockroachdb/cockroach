@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/privchecker"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -56,6 +57,10 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 	sqlDB.Exec(t, "GRANT SYSTEM VIEWCLUSTERMETADATA TO withviewclustermetadata")
 	sqlDB.Exec(t, "CREATE USER withviewdebug")
 	sqlDB.Exec(t, "GRANT SYSTEM VIEWDEBUG TO withviewdebug")
+	sqlDB.Exec(t, "CREATE USER withviewjob")
+	sqlDB.Exec(t, "GRANT SYSTEM VIEWJOB TO withviewjob")
+	sqlDB.Exec(t, "CREATE USER withvieweventlog")
+	sqlDB.Exec(t, "GRANT SYSTEM VIEWEVENTLOG TO withvieweventlog")
 
 	execCfg := ts.ExecutorConfig().(sql.ExecutorConfig)
 	kvDB := ts.DB()
@@ -97,6 +102,28 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 	withVaAndRedactedGlobalPrivilege := username.MakeSQLUsernameFromPreNormalizedString("withvaandredactedglobalprivilege")
 	withviewclustermetadata := username.MakeSQLUsernameFromPreNormalizedString("withviewclustermetadata")
 	withViewDebug := username.MakeSQLUsernameFromPreNormalizedString("withviewdebug")
+	withViewJob := username.MakeSQLUsernameFromPreNormalizedString("withviewjob")
+	withViewEventLog := username.MakeSQLUsernameFromPreNormalizedString("withvieweventlog")
+
+	// Test HasGlobalPrivilege for VIEWJOB and VIEWEVENTLOG.
+	globalPrivTests := []struct {
+		name      string
+		privilege privilege.Kind
+		username  username.SQLUsername
+		wantHas   bool
+	}{
+		{"viewjob-granted", privilege.VIEWJOB, withViewJob, true},
+		{"viewjob-not-granted", privilege.VIEWJOB, withoutPrivs, false},
+		{"vieweventlog-granted", privilege.VIEWEVENTLOG, withViewEventLog, true},
+		{"vieweventlog-not-granted", privilege.VIEWEVENTLOG, withoutPrivs, false},
+	}
+	for _, tt := range globalPrivTests {
+		t.Run(tt.name, func(t *testing.T) {
+			has, err := underTest.HasGlobalPrivilege(ctx, tt.username, tt.privilege)
+			require.NoError(t, err)
+			require.Equal(t, tt.wantHas, has)
+		})
+	}
 
 	tests := []struct {
 		name            string
@@ -139,6 +166,13 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 			underTest.RequireViewDebugPermission,
 			map[username.SQLUsername]bool{
 				withAdmin: false, withoutPrivs: true, withViewDebug: false,
+			},
+		},
+		{
+			"requireViewEventLogPermission",
+			underTest.RequireViewEventLogPermission,
+			map[username.SQLUsername]bool{
+				withAdmin: false, withoutPrivs: true, withViewEventLog: false, withviewclustermetadata: false,
 			},
 		},
 	}

@@ -10,14 +10,53 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 )
 
 // commandColumn converts executor execution arguments into jsonb representation.
 const commandColumn = `crdb_internal.pb_to_json('cockroach.jobs.jobspb.ExecutionArguments', execution_args, false, true)->'args'`
 
 func (d *delegator) delegateShowSchedules(n *tree.ShowSchedules) (tree.Statement, error) {
+	// Provide a clear privilege error upfront. Without this check, the
+	// delegated query would fail with "does not have SELECT privilege on
+	// relation scheduled_jobs", which doesn't tell the user what privilege
+	// they actually need. The authorization.go layer grants implicit SELECT
+	// on the underlying system tables when VIEWJOB or VIEWSYSTEMTABLE
+	// is held, so we let those users through.
+	cat := d.catalog
+	user := cat.GetCurrentUser()
+	globalPrivObj := syntheticprivilege.GlobalPrivilegeObject
+
+	// processPrivError returns nil if the error is an InsufficientPrivilege
+	// error (meaning the user simply lacks the privilege), or the original
+	// error for any unexpected failure.
+	processPrivError := func(err error) error {
+		if pgerror.GetPGCode(err) == pgcode.InsufficientPrivilege {
+			return nil
+		}
+		return err
+	}
+
+	if err := cat.CheckPrivilege(d.ctx, globalPrivObj, user, privilege.VIEWJOB); err != nil {
+		if unexpectedErr := processPrivError(err); unexpectedErr != nil {
+			return nil, unexpectedErr
+		}
+		// User lacks VIEWJOB; check VIEWSYSTEMTABLE as a fallback.
+		if err := cat.CheckPrivilege(d.ctx, globalPrivObj, user, privilege.VIEWSYSTEMTABLE); err != nil {
+			if unexpectedErr := processPrivError(err); unexpectedErr != nil {
+				return nil, unexpectedErr
+			}
+			return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+				"user %s does not have %s system privilege",
+				user, privilege.VIEWJOB)
+		}
+	}
+
 	sqltelemetry.IncrementShowCounter(sqltelemetry.Schedules)
 
 	columnExprs := []string{

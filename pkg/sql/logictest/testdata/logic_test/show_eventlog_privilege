@@ -1,0 +1,62 @@
+# LogicTest: local
+
+# Verify that the VIEWEVENTLOG privilege grants access to system.eventlog.
+
+# testuser should not be able to read system.eventlog.
+user testuser
+
+statement error user testuser does not have SELECT privilege on relation eventlog
+SELECT * FROM system.eventlog LIMIT 0
+
+user root
+
+# Grant VIEWEVENTLOG to testuser.
+statement ok
+GRANT SYSTEM VIEWEVENTLOG TO testuser
+
+user testuser
+
+# testuser should now be able to read system.eventlog.
+statement ok
+SELECT * FROM system.eventlog LIMIT 0
+
+user root
+
+# Revoke VIEWEVENTLOG from testuser.
+statement ok
+REVOKE SYSTEM VIEWEVENTLOG FROM testuser
+
+user testuser
+
+# testuser should no longer be able to read system.eventlog.
+statement error user testuser does not have SELECT privilege on relation eventlog
+SELECT * FROM system.eventlog LIMIT 0
+
+user root
+
+# Test that inheriting VIEWEVENTLOG through a role works.
+statement ok
+CREATE ROLE eventlogviewer
+
+statement ok
+GRANT SYSTEM VIEWEVENTLOG TO eventlogviewer
+
+statement ok
+GRANT eventlogviewer TO testuser
+
+user testuser
+
+# testuser should be able to read system.eventlog through role membership.
+statement ok
+SELECT * FROM system.eventlog LIMIT 0
+
+user root
+
+statement ok
+REVOKE eventlogviewer FROM testuser
+
+user testuser
+
+# testuser should no longer be able to read system.eventlog.
+statement error user testuser does not have SELECT privilege on relation eventlog
+SELECT * FROM system.eventlog LIMIT 0

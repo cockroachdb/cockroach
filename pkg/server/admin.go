@@ -1478,23 +1478,23 @@ func (s *adminServer) Events(
 ) (_ *serverpb.EventsResponse, retErr error) {
 	ctx = s.AnnotateCtx(ctx)
 
-	err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx)
-	if err != nil {
+	if err := s.privilegeChecker.RequireViewEventLogPermission(ctx); err != nil {
 		// NB: not using srverrors.ServerError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
 	}
 	redactEvents := !req.UnredactedEvents
 
+	userName, err := authserver.UserFromIncomingRPCContext(ctx)
+	if err != nil {
+		return nil, srverrors.ServerError(ctx, err)
+	}
+
 	limit := req.Limit
 	if limit == 0 {
 		limit = apiconstants.DefaultAPIEventLimit
 	}
 
-	userName, err := authserver.UserFromIncomingRPCContext(ctx)
-	if err != nil {
-		return nil, srverrors.ServerError(ctx, err)
-	}
 	r, err := s.eventsHelper(ctx, req, userName, int(limit), 0, redactEvents)
 	if err != nil {
 		return nil, srverrors.ServerError(ctx, err)

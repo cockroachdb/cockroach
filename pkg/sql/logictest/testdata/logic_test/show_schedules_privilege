@@ -1,0 +1,84 @@
+# LogicTest: local
+
+# Verify that SHOW SCHEDULES requires the VIEWJOB privilege.
+
+# testuser should not be able to SHOW SCHEDULES.
+user testuser
+
+statement error user testuser does not have VIEWJOB system privilege
+SHOW SCHEDULES
+
+user root
+
+# Grant VIEWJOB to testuser.
+statement ok
+GRANT SYSTEM VIEWJOB TO testuser
+
+user testuser
+
+# testuser should now be able to SHOW SCHEDULES.
+statement ok
+SHOW SCHEDULES
+
+user root
+
+# Revoke VIEWJOB from testuser.
+statement ok
+REVOKE SYSTEM VIEWJOB FROM testuser
+
+user testuser
+
+# testuser should no longer be able to SHOW SCHEDULES.
+statement error user testuser does not have VIEWJOB system privilege
+SHOW SCHEDULES
+
+user root
+
+# Test that inheriting VIEWJOB through a role works.
+statement ok
+CREATE ROLE scheduleviewer
+
+statement ok
+GRANT SYSTEM VIEWJOB TO scheduleviewer
+
+statement ok
+GRANT scheduleviewer TO testuser
+
+user testuser
+
+# testuser should be able to SHOW SCHEDULES through role membership.
+statement ok
+SHOW SCHEDULES
+
+user root
+
+statement ok
+REVOKE scheduleviewer FROM testuser
+
+user testuser
+
+# testuser should no longer be able to SHOW SCHEDULES.
+statement error user testuser does not have VIEWJOB system privilege
+SHOW SCHEDULES
+
+user root
+
+# Test that VIEWSYSTEMTABLE also grants access to SHOW SCHEDULES (no
+# regression for users who previously relied on this broader privilege).
+statement ok
+GRANT SYSTEM VIEWSYSTEMTABLE TO testuser
+
+user testuser
+
+statement ok
+SHOW SCHEDULES
+
+user root
+
+statement ok
+REVOKE SYSTEM VIEWSYSTEMTABLE FROM testuser
+
+user testuser
+
+statement error user testuser does not have VIEWJOB system privilege
+SHOW SCHEDULES
