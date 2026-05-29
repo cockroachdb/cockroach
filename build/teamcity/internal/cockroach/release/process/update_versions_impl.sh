@@ -71,7 +71,7 @@ bazel build --config=crosslinux //pkg/cmd/release
 #   1. $COCKROACH_REPO if the operator explicitly set it.
 #   2. $GITHUB_REPOSITORY if we're under GHA (auto-set by the runner;
 #      becomes "owner/name" of whatever repo dispatched the workflow).
-#   3. cockroachdb/cockroach if running under TeamCity ($TEAMCITY_VERSION
+#   3. cockroachdb/cockroach-private if running under TeamCity ($TEAMCITY_VERSION
 #      set) — historical TC behavior preserved as a literal here, in
 #      the script, rather than baked into the Go binary.
 # Otherwise the binary errors out: --cockroach-repo is required and
@@ -81,7 +81,7 @@ if [[ -n "${COCKROACH_REPO:-}" ]]; then
 elif [[ -n "${GITHUB_REPOSITORY:-}" ]]; then
   cockroach_repo="$GITHUB_REPOSITORY"
 elif [[ -n "${TEAMCITY_VERSION:-}" ]]; then
-  cockroach_repo="cockroachdb/cockroach"
+  cockroach_repo="cockroachdb/cockroach-private"
 else
   echo "ERROR: cannot derive --cockroach-repo. Set COCKROACH_REPO env var, run under GHA, or run under TeamCity." >&2
   exit 1

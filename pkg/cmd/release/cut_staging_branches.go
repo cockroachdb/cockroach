@@ -71,7 +71,7 @@ const (
 	// defaultCockroachRepo is the fallback GitHub repo that holds release
 	// branches when neither --repo nor GITHUB_REPOSITORY is set (e.g. local
 	// invocations outside of GitHub Actions).
-	defaultCockroachRepo = "cockroachdb/cockroach"
+	defaultCockroachRepo = "cockroachdb/cockroach-private"
 	releaseChannel       = "#db-release-status"
 	opsChannel           = "#release-ops"
 	// nonProdChannel keeps Slack noise out of the production channel when

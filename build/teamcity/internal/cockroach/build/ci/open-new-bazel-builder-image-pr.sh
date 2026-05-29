@@ -34,7 +34,7 @@ configure_git_ssh_key
 trap "rm -f $ssh_key_dir/.cockroach-teamcity-key" EXIT
 WORKDIR="$(mktemp -d ./workdir.XXXXXX)"
 
-git_ssh clone "ssh://git@github.com/cockroachdb/cockroach.git" "$WORKDIR/cockroach" && cd "$WORKDIR/cockroach"
+git_ssh clone "ssh://git@github.com/cockroachdb/cockroach-private.git" "$WORKDIR/cockroach" && cd "$WORKDIR/cockroach"
 
 # Push commit to fork.
 git checkout -b "$BRANCH"
@@ -43,9 +43,9 @@ git commit -a -m "ci: update bazel builder image
 
 Release note: None
 Epic: None"
-git_ssh push "ssh://git@github.com/cockroach-teamcity/cockroach.git" $BRANCH
+git_ssh push "ssh://git@github.com/cockroach-teamcity/cockroach-private.git" $BRANCH
 
 # Create PR.
-gh pr create --fill --head="cockroach-teamcity:$BRANCH" --base="master"
+gh pr create --repo cockroachdb/cockroach-private --fill --head="cockroach-teamcity:$BRANCH" --base="master"
 
 rm -rf $WORKDIR

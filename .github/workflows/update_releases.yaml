@@ -53,7 +53,7 @@ jobs:
         with:
           base: "${{ matrix.branch }}"
           branch: "crdb-releases-yaml-update-${{ matrix.branch }}"
-          push-to-fork: "cockroach-teamcity/cockroach"
+          push-to-fork: "cockroach-teamcity/cockroach-private"
           title: "${{ matrix.branch }}: Update pkg/testutils/release/cockroach_releases.yaml"
           author: "CRL Release bot <teamcity@cockroachlabs.com>"
           token: "${{ secrets.GH_TOKEN_PR }}"
