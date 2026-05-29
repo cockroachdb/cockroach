@@ -330,6 +330,11 @@ const (
 	// HotRangesLoggerJobID A static job ID which is used for the
 	// hot ranges logger job.
 	HotRangesLoggerJobID = jobspb.JobID(107)
+
+	// ResourceGroupReconciliationJobID is the static job ID for the
+	// per-tenant singleton job that forwards changes from
+	// system.resource_groups to the host's system.tenant_resource_groups.
+	ResourceGroupReconciliationJobID = jobspb.JobID(108)
 )
 
 // MakeJobID generates a new job ID.

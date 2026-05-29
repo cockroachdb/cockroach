@@ -9,6 +9,7 @@ import (
 	reflect "reflect"
 
 	kvpb "github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	rgpb "github.com/cockroachdb/cockroach/pkg/resourcegroup/rgpb"
 	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	gomock "github.com/golang/mock/gomock"
 )
@@ -229,6 +230,21 @@ func (m *MockRPCInternalClient) TokenBucket(arg0 context.Context, arg1 *kvpb.Tok
 func (mr *MockRPCInternalClientMockRecorder) TokenBucket(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TokenBucket", reflect.TypeOf((*MockRPCInternalClient)(nil).TokenBucket), arg0, arg1)
+}
+
+// UpdateResourceGroups mocks base method.
+func (m *MockRPCInternalClient) UpdateResourceGroups(arg0 context.Context, arg1 *rgpb.UpdateResourceGroupsRequest) (*rgpb.UpdateResourceGroupsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateResourceGroups", arg0, arg1)
+	ret0, _ := ret[0].(*rgpb.UpdateResourceGroupsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateResourceGroups indicates an expected call of UpdateResourceGroups.
+func (mr *MockRPCInternalClientMockRecorder) UpdateResourceGroups(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateResourceGroups", reflect.TypeOf((*MockRPCInternalClient)(nil).UpdateResourceGroups), arg0, arg1)
 }
 
 // UpdateSpanConfigs mocks base method.

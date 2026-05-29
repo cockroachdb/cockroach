@@ -36,6 +36,7 @@ go_test(
     deps = [
         "//pkg/clusterversion",
         "//pkg/kv/kvpb",
+        "//pkg/resourcegroup/rgpb",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/rpcbase",

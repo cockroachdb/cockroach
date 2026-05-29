@@ -1,0 +1,42 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "rgkvaccessor",
+    srcs = ["writer.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/resourcegroup/rgkvaccessor",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/resourcegroup/rgpb",
+        "//pkg/roachpb",
+        "//pkg/security/username",
+        "//pkg/sql/isql",
+        "//pkg/sql/sessiondata",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "rgkvaccessor_test",
+    srcs = [
+        "main_test.go",
+        "writer_test.go",
+    ],
+    deps = [
+        ":rgkvaccessor",
+        "//pkg/base",
+        "//pkg/resourcegroup/rgpb",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/util/admission/admissionpb",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)

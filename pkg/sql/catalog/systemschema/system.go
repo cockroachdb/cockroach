@@ -1414,8 +1414,12 @@ CREATE TABLE system.statements (
 	// ResourceGroupsTableSchema defines the schema for the
 	// system.resource_groups table, which stores the user-defined resource
 	// group configurations used by the resource manager. The table holds
-	// the configurations for the tenant it lives on; a future host-side
-	// table will hold the host's reconciled view of every tenant's groups.
+	// the configurations for the tenant it lives on;
+	// system.tenant_resource_groups holds the host's reconciled view of
+	// every tenant's groups.
+	//
+	// Column layout is read by rgreconciler.rowDecoder; update that decoder
+	// if columns are added, removed, or reordered.
 	//
 	// IDs < 16 are reserved for built-in groups that are hardcoded in code
 	// rather than stored in this table. The CHECK on this table and the
@@ -1438,6 +1442,32 @@ CREATE TABLE system.resource_groups (
 	// fall in the reserved range.
 	ResourceGroupIDSequenceSchema = `
 CREATE SEQUENCE system.resource_group_id_seq START 16 MINVALUE 16 MAXVALUE 9223372036854775807;`
+
+	// TenantResourceGroupsTableSchema defines the schema for the host-side
+	// system.tenant_resource_groups table, which holds the reconciled view of
+	// every tenant's resource group configurations. Each row mirrors a row
+	// from a tenant-local system.resource_groups, partitioned by tenant_id.
+	//
+	// Column layout is read by rgsubscriber.rowDecoder; update that decoder
+	// if columns are added, removed, or reordered.
+	//
+	// Per-tenant reconciler jobs forward changes to this table over the
+	// tenant connector. The host-side rangefeed subscriber that drives
+	// admission control's in-memory cache reads from this table.
+	//
+	// Names are tenant-local and not unique here: two tenants may use the
+	// same name, and (intentionally) we do not enforce per-tenant name
+	// uniqueness on this side either, since the source table already does so.
+	// Likewise, no CHECK on the reserved id range; the source enforces it.
+	TenantResourceGroupsTableSchema = `
+CREATE TABLE system.tenant_resource_groups (
+    tenant_id INT8   NOT NULL,
+    id        INT8   NOT NULL,
+    name      STRING NOT NULL,
+    config    BYTES  NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (tenant_id, id),
+    FAMILY "primary" (tenant_id, id, name, config)
+);`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -1482,7 +1512,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // release version).
 //
 // NB: Don't set this to clusterversion.Latest; use a specific version instead.
-var SystemDatabaseSchemaBootstrapVersion = clusterversion.V26_3_AddResourceGroupsTable.Version()
+var SystemDatabaseSchemaBootstrapVersion = clusterversion.V26_3_AddTenantResourceGroupsTable.Version()
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
@@ -1688,6 +1718,7 @@ func MakeSystemTables() []SystemTable {
 		StatementsTable,
 		ResourceGroupsTable,
 		ResourceGroupIDSequence,
+		TenantResourceGroupsTable,
 	}
 }
 
@@ -5677,6 +5708,43 @@ var (
 			tbl.NextConstraintID = 0
 			tbl.PrimaryIndex.ConstraintID = 0
 		},
+	)
+
+	// TenantResourceGroupsTable is the descriptor for the host-side
+	// system.tenant_resource_groups table. See TenantResourceGroupsTableSchema
+	// for details.
+	TenantResourceGroupsTable = makeSystemTable(
+		TenantResourceGroupsTableSchema,
+		systemTable(
+			catconstants.TenantResourceGroupsTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "tenant_id", ID: 1, Type: types.Int},
+				{Name: "id", ID: 2, Type: types.Int},
+				{Name: "name", ID: 3, Type: types.String},
+				{Name: "config", ID: 4, Type: types.Bytes},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "primary",
+					ID:          0,
+					ColumnNames: []string{"tenant_id", "id", "name", "config"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4},
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:           "primary",
+				ID:             1,
+				Unique:         true,
+				KeyColumnNames: []string{"tenant_id", "id"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_ASC,
+					catenumpb.IndexColumn_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{1, 2},
+				Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
+		),
 	)
 )
 

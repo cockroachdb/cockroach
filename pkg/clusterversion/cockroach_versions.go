@@ -290,6 +290,13 @@ const (
 	// to persist per-tenant resource group configurations.
 	V26_3_AddResourceGroupsTable
 
+	// V26_3_AddTenantResourceGroupsTable adds the host-side
+	// system.tenant_resource_groups table, which holds the reconciled view of
+	// every tenant's resource group configurations. The table is populated by
+	// per-tenant reconciler jobs that forward changes to system.resource_groups
+	// over the tenant connector.
+	V26_3_AddTenantResourceGroupsTable
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -380,6 +387,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_3_AlterStatementsTablePK: {Major: 26, Minor: 2, Internal: 8},
 
 	V26_3_AddResourceGroupsTable: {Major: 26, Minor: 2, Internal: 10},
+
+	V26_3_AddTenantResourceGroupsTable: {Major: 26, Minor: 2, Internal: 12},
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// *************************************************

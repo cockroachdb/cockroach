@@ -154,6 +154,13 @@ func (a tenantAuthorizer) authorize(
 		"/cockroach.roachpb.TenantSpanConfig/UpdateSpanConfigs":
 		return a.authUpdateSpanConfigs(ctx, tenID, req.(*roachpb.UpdateSpanConfigsRequest))
 
+	case "/cockroach.roachpb.Internal/UpdateResourceGroups",
+		"/cockroach.roachpb.TenantResourceGroup/UpdateResourceGroups":
+		// Tenant identity comes from the TLS cert; the request body
+		// has no tenant-scoped data to validate (the host handler
+		// keys writes by the cert-derived tenant ID).
+		return nil
+
 	case "/cockroach.roachpb.Internal/GetRangeDescriptors",
 		"/cockroach.roachpb.TenantService/GetRangeDescriptors":
 		return a.authGetRangeDescriptors(ctx, tenID, req.(*kvpb.GetRangeDescriptorsRequest))

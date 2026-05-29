@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/resourcegroup/rgpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -126,6 +127,13 @@ type Connector interface {
 	// end of the grace period for clusters with a license. The timestamp is
 	// represented as the number of seconds since the Unix epoch.
 	GetClusterInitGracePeriodTS() int64
+
+	// UpdateResourceGroups pushes a batch of resource group config changes
+	// from this tenant to the host's system.tenant_resource_groups. The
+	// host applies the batch transactionally and returns once durable.
+	UpdateResourceGroups(
+		ctx context.Context, in *rgpb.UpdateResourceGroupsRequest,
+	) (*rgpb.UpdateResourceGroupsResponse, error)
 }
 
 // TokenBucketProvider supplies an endpoint (to tenants) for the TokenBucket API
@@ -219,6 +227,7 @@ type client struct {
 	kvpb.RPCTenantServiceClient
 	kvpb.RPCTenantUsageClient
 	kvpb.RPCTenantSpanConfigClient
+	kvpb.RPCTenantResourceGroupClient
 	serverpb.RPCStatusClient
 	serverpb.RPCAdminClient
 	tspb.RPCTimeSeriesClient
@@ -733,6 +742,24 @@ func (c *connector) TokenBucket(
 	return nil, errors.Wrap(ctx.Err(), "token bucket")
 }
 
+// UpdateResourceGroups implements the Connector interface. It proxies
+// the call through the Internal service and retries against alternate
+// addresses on transient RPC failures.
+func (c *connector) UpdateResourceGroups(
+	ctx context.Context, in *rgpb.UpdateResourceGroupsRequest,
+) (*rgpb.UpdateResourceGroupsResponse, error) {
+	ctx = c.AnnotateCtx(ctx)
+	var resp *rgpb.UpdateResourceGroupsResponse
+	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
+		var err error
+		resp, err = c.UpdateResourceGroups(ctx, in)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
 // GetSpanConfigRecords implements the spanconfig.KVAccessor interface.
 func (c *connector) GetSpanConfigRecords(
 	ctx context.Context, targets []spanconfig.Target,
@@ -970,12 +997,13 @@ func (c *connector) dialAddrs(ctx context.Context) (*client, error) {
 					continue
 				}
 				return &client{
-					RPCTenantServiceClient:    kvpb.NewGRPCInternalToTenantServiceClientAdapter(conn),
-					RPCTenantSpanConfigClient: kvpb.NewGRPCInternalClientAdapter(conn),
-					RPCTenantUsageClient:      kvpb.NewGRPCInternalClientAdapter(conn),
-					RPCStatusClient:           serverpb.NewGRPCStatusClientAdapter(conn),
-					RPCAdminClient:            serverpb.NewGRPCAdminClientAdapter(conn),
-					RPCTimeSeriesClient:       tspb.NewGRPCTimeSeriesClientAdapter(conn),
+					RPCTenantServiceClient:       kvpb.NewGRPCInternalToTenantServiceClientAdapter(conn),
+					RPCTenantSpanConfigClient:    kvpb.NewGRPCInternalClientAdapter(conn),
+					RPCTenantUsageClient:         kvpb.NewGRPCInternalClientAdapter(conn),
+					RPCTenantResourceGroupClient: kvpb.NewGRPCInternalClientAdapter(conn),
+					RPCStatusClient:              serverpb.NewGRPCStatusClientAdapter(conn),
+					RPCAdminClient:               serverpb.NewGRPCAdminClientAdapter(conn),
+					RPCTimeSeriesClient:          tspb.NewGRPCTimeSeriesClientAdapter(conn),
 				}, nil
 			}
 			conn, err := c.drpcDialAddr(ctx, addr)
@@ -984,12 +1012,13 @@ func (c *connector) dialAddrs(ctx context.Context) (*client, error) {
 				continue
 			}
 			return &client{
-				RPCTenantServiceClient:    kvpb.NewDRPCTenantServiceClientAdapter(conn),
-				RPCTenantSpanConfigClient: kvpb.NewDRPCTenantSpanConfigClientAdapter(conn),
-				RPCTenantUsageClient:      kvpb.NewDRPCTenantUsageClientAdapter(conn),
-				RPCStatusClient:           serverpb.NewDRPCStatusClientAdapter(conn),
-				RPCAdminClient:            serverpb.NewDRPCAdminClientAdapter(conn),
-				RPCTimeSeriesClient:       tspb.NewDRPCTimeSeriesClientAdapter(conn),
+				RPCTenantServiceClient:       kvpb.NewDRPCTenantServiceClientAdapter(conn),
+				RPCTenantSpanConfigClient:    kvpb.NewDRPCTenantSpanConfigClientAdapter(conn),
+				RPCTenantUsageClient:         kvpb.NewDRPCTenantUsageClientAdapter(conn),
+				RPCTenantResourceGroupClient: kvpb.NewDRPCTenantResourceGroupClientAdapter(conn),
+				RPCStatusClient:              serverpb.NewDRPCStatusClientAdapter(conn),
+				RPCAdminClient:               serverpb.NewDRPCAdminClientAdapter(conn),
+				RPCTimeSeriesClient:          tspb.NewDRPCTimeSeriesClientAdapter(conn),
 			}, nil
 		}
 	}

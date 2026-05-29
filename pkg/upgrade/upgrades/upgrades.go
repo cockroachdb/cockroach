@@ -220,6 +220,16 @@ var upgrades = []upgradebase.Upgrade{
 			"restore for a cluster predating this table can leave it empty",
 		),
 	),
+
+	upgrade.NewTenantUpgrade(
+		"create tenant_resource_groups host-side table",
+		clusterversion.V26_3_AddTenantResourceGroupsTable.Version(),
+		upgrade.NoPrecondition,
+		createTenantResourceGroupsTable,
+		upgrade.RestoreActionNotRequired(
+			"the table is repopulated by the per-tenant reconciler jobs after restore",
+		),
+	),
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }
