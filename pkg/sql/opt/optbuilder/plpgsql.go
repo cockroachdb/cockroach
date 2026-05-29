@@ -3011,6 +3011,11 @@ func requiresLateBindingInProcedure(stmt tree.Statement) bool {
 // drive different error paths in buildCreateFunction: an unsupported statement
 // is reported as an "unimplemented" feature, while a body that contains
 // late-binding-sensitive DDL is gated on the late-binding cluster setting.
+//
+// foundDDLStmt is also used for CanMutate detection: when non-nil, the body
+// cannot be optbuilt and is inherently mutating (CAN_MUTATE). When nil, a
+// trial optbuild is attempted; if it fails (e.g., non-existent references),
+// the fallback conservatively sets CAN_MUTATE.
 type ddlVisitor struct {
 	foundDDLStmt    tree.Statement
 	unsupportedStmt tree.Statement

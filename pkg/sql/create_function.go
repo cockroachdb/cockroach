@@ -288,13 +288,8 @@ func (n *createFunctionNode) replaceFunction(
 		return err
 	}
 
-	// Only persist CanMutate after the version gate is active. During a
-	// rolling upgrade, old nodes don't know about the can_mutate field and
-	// won't reset it in resetFuncOption during CREATE OR REPLACE. If we
-	// wrote the field before finalization and then rolled back, a subsequent
-	// CREATE OR REPLACE on the old binary could leave a stale value (e.g.
-	// CANNOT_MUTATE on a body that now contains DML), causing new nodes
-	// after re-upgrade to incorrectly skip the body-loop fallback.
+	// Only persist CanMutate after the version gate is active. See the
+	// comment in createNewFunction for the rationale.
 	if params.p.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.V26_3_FunctionDescCanMutate) {
 		udfDesc.SetCanMutate(funcdesc.CanMutateToProto(n.cf.CanMutate))
 		// If the function became mutating, propagate CAN_MUTATE to all
