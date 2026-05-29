@@ -5810,6 +5810,26 @@ func (og *operationGenerator) createTrigger(ctx context.Context, tx pgx.Tx) (*op
 	}
 	resolvedTriggerFunctionName := picked["resolved_name"].(string)
 
+	// Occasionally target an existing trigger with CREATE OR REPLACE TRIGGER to
+	// exercise the schema changer's drop-and-recreate path for TriggerDeps, which
+	// is distinct from DROP + CREATE. A trigger's name is scoped to its table, so
+	// reuse both the existing name and table; otherwise OR REPLACE would just
+	// create a new trigger and the replace path would not be hit.
+	orReplace := ""
+	triggerName := fmt.Sprintf("trigger_%s", og.newUniqueSeqNumSuffix())
+	if og.randIntn(2) == 0 {
+		existing, err := og.findExistingTrigger(ctx, tx)
+		if err != nil {
+			return nil, err
+		}
+		if existing != nil {
+			orReplace = "OR REPLACE "
+			triggerName = existing.triggerName
+			tableName = &existing.table
+			triggerTableExists = true
+		}
+	}
+
 	// Randomize trigger timing and events.
 	triggerActionTime := "BEFORE"
 	if og.randIntn(2) == 1 {
@@ -5823,11 +5843,10 @@ func (og *operationGenerator) createTrigger(ctx context.Context, tx pgx.Tx) (*op
 	}
 
 	eventClause := strings.Join(events, " OR ")
-	triggerName := fmt.Sprintf("trigger_%s", og.newUniqueSeqNumSuffix())
 
 	opStmt.sql = fmt.Sprintf(
-		"CREATE TRIGGER %s %s %s ON %s FOR EACH ROW EXECUTE FUNCTION %s()",
-		triggerName, triggerActionTime, eventClause, tableName, resolvedTriggerFunctionName,
+		"CREATE %sTRIGGER %s %s %s ON %s FOR EACH ROW EXECUTE FUNCTION %s()",
+		orReplace, triggerName, triggerActionTime, eventClause, tableName, resolvedTriggerFunctionName,
 	)
 	og.LogMessage(fmt.Sprintf("createTrigger: %s", opStmt.sql))
 
