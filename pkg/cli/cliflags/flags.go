@@ -1724,6 +1724,15 @@ necessary to support CockroachDB.
 `,
 	}
 
+	ZipRedactLocally = FlagInfo{
+		Name: "redact-locally",
+		Description: `
+Redact log files client-side instead of server-side.
+When set, logs are fetched unredacted and redacted locally before
+being written to the zip file.
+`,
+	}
+
 	ZipIncludeRangeInfo = FlagInfo{
 		Name: "include-range-info",
 		Description: `

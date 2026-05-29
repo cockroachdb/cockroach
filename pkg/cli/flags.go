@@ -699,6 +699,7 @@ func init() {
 		cliflagcfg.BoolFlag(f, &zipCtx.redactLogs, cliflags.ZipRedactLogs)
 		_ = f.MarkDeprecated(cliflags.ZipRedactLogs.Name, "use --"+cliflags.ZipRedact.Name+" instead")
 		cliflagcfg.BoolFlag(f, &zipCtx.redact, cliflags.ZipRedact)
+		cliflagcfg.BoolFlag(f, &zipCtx.redactLocally, cliflags.ZipRedactLocally)
 		cliflagcfg.DurationFlag(f, &zipCtx.cpuProfDuration, cliflags.ZipCPUProfileDuration)
 		cliflagcfg.IntFlag(f, &zipCtx.concurrency, cliflags.ZipConcurrency)
 		cliflagcfg.BoolFlag(f, &zipCtx.includeRangeInfo, cliflags.ZipIncludeRangeInfo)
