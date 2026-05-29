@@ -115,9 +115,9 @@ var systemTenantGroupConfig = ResourceGroupConfig{
 // holder. Set seeds from this list first; callers cannot overwrite
 // built-in keys.
 var builtinGroupConfigs = ResourceGroupConfigSet{
-	tenantGroupKey(1):               systemTenantGroupConfig,
-	rgGroupKey(highResourceGroupID): {Weight: 80, BurstFrac: 0.8, MaxCPU: true},
-	rgGroupKey(lowResourceGroupID):  {Weight: 20, BurstFrac: 0.2, MaxCPU: false},
+	tenantGroupKey(1):    systemTenantGroupConfig,
+	highResourceGroupKey: {Weight: 80, BurstFrac: 0.8, MaxCPU: true},
+	lowResourceGroupKey:  {Weight: 20, BurstFrac: 0.2, MaxCPU: false},
 }
 
 // ConfigSnapshot is the immutable snapshot returned by
