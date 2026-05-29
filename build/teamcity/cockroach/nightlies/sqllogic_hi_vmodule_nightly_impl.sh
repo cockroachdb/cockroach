@@ -22,6 +22,7 @@ $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- test --config=ci \
     --test_arg=-show-sql \
     --test_env=GO_TEST_WRAP_TESTV=1 \
     --test_env=GO_TEST_WRAP=1 \
+    --test_env=COCKROACH_LOGIC_TESTS_NIGHTLY=true \
     --test_timeout=7200 \
     || exit_status=$?
 

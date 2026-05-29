@@ -85,13 +85,6 @@ func TestLogic_alias_types(
 	runLogicTest(t, "alias_types")
 }
 
-func TestLogic_alter_column_type(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "alter_column_type")
-}
-
 func TestLogic_alter_database_convert_to_schema(
 	t *testing.T,
 ) {
@@ -398,13 +391,6 @@ func TestLogic_composite_types(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "composite_types")
-}
-
-func TestLogic_computed(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "computed")
 }
 
 func TestLogic_conditional(
@@ -741,13 +727,6 @@ func TestLogic_fips_ready(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "fips_ready")
-}
-
-func TestLogic_fk(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "fk")
 }
 
 func TestLogic_fk_read_committed(
@@ -1338,13 +1317,6 @@ func TestLogic_postgresjoin(
 	runLogicTest(t, "postgresjoin")
 }
 
-func TestLogic_privileges_comments(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "privileges_comments")
-}
-
 func TestLogic_privileges_table(
 	t *testing.T,
 ) {
@@ -1604,13 +1576,6 @@ func TestLogic_schema_change_logical_replication(
 	runLogicTest(t, "schema_change_logical_replication")
 }
 
-func TestLogic_schema_repair(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "schema_repair")
-}
-
 func TestLogic_scrub(
 	t *testing.T,
 ) {
@@ -1737,46 +1702,11 @@ func TestLogic_show_completions(
 	runLogicTest(t, "show_completions")
 }
 
-func TestLogic_show_create(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "show_create")
-}
-
-func TestLogic_show_create_all_routines(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "show_create_all_routines")
-}
-
-func TestLogic_show_create_all_schemas(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "show_create_all_schemas")
-}
-
-func TestLogic_show_create_all_tables(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "show_create_all_tables")
-}
-
 func TestLogic_show_create_all_triggers(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "show_create_all_triggers")
-}
-
-func TestLogic_show_create_all_types(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "show_create_all_types")
 }
 
 func TestLogic_show_create_ccl(
@@ -2136,13 +2066,6 @@ func TestLogic_udf_insert(
 	runLogicTest(t, "udf_insert")
 }
 
-func TestLogic_udf_observability(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "udf_observability")
-}
-
 func TestLogic_udf_oid_ref(
 	t *testing.T,
 ) {
@@ -2442,11 +2365,4 @@ func TestLogic_zigzag_join(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "zigzag_join")
-}
-
-func TestLogic_zone_config_system_tenant(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "zone_config_system_tenant")
 }
