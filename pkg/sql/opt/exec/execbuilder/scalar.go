@@ -8,6 +8,7 @@ package execbuilder
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -735,6 +736,8 @@ func (b *Builder) buildExistsSubquery(
 				nil,   /* blockState */
 				nil,   /* cursorDeclaration */
 				nil,   /* firstStmtResultWriter */
+				tree.RoutineInvoker,
+				username.SQLUsername{},
 			),
 			tree.DBoolFalse,
 		}, types.Bool), nil
@@ -864,6 +867,8 @@ func (b *Builder) buildSubquery(
 			nil,   /* blockState */
 			nil,   /* cursorDeclaration */
 			nil,   /* firstStmtResultWriter */
+			tree.RoutineInvoker,
+			username.SQLUsername{},
 		), nil
 	}
 
@@ -944,6 +949,8 @@ func (b *Builder) buildSubquery(
 			nil,   /* blockState */
 			nil,   /* cursorDeclaration */
 			nil,   /* firstStmtResultWriter */
+			tree.RoutineInvoker,
+			username.SQLUsername{},
 		), nil
 	}
 
@@ -1075,6 +1082,8 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		blockState,
 		firstStmtOut.CursorDeclaration,
 		firstStmtResultWriter,
+		udf.Def.SecurityMode,
+		udf.Def.RoutineOwner,
 	), nil
 }
 
@@ -1138,6 +1147,8 @@ func (b *Builder) initRoutineExceptionHandler(
 			nil,   /* blockState */
 			nil,   /* cursorDeclaration */
 			nil,   /* firstStmtResultWriter */
+			tree.RoutineInvoker,
+			username.SQLUsername{},
 		)
 	}
 	blockState.ExceptionHandler = exceptionHandler

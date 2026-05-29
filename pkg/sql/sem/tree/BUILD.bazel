@@ -140,6 +140,7 @@ go_library(
         "//pkg/geo",
         "//pkg/geo/geopb",
         "//pkg/kv/kvserver/concurrency/isolation",
+        "//pkg/security/username",
         "//pkg/settings",
         "//pkg/sql/lex",
         "//pkg/sql/lexbase",

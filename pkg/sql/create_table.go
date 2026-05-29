@@ -377,7 +377,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		n.dbDesc.GetDefaultPrivilegeDescriptor(),
 		schema.GetDefaultPrivilegeDescriptor(),
 		n.dbDesc.GetID(),
-		params.SessionData().User(),
+		params.p.User(),
 		privilege.Tables,
 	)
 	if err != nil {
