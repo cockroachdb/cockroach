@@ -1953,8 +1953,8 @@ FROM defaults_parsed
 				"INSERT WITH GRANT OPTION":     {Kind: privilege.INSERT, GrantOption: true},
 				"UPDATE":                       {Kind: privilege.UPDATE},
 				"UPDATE WITH GRANT OPTION":     {Kind: privilege.UPDATE, GrantOption: true},
-				"REFERENCES":                   {Kind: privilege.SELECT},
-				"REFERENCES WITH GRANT OPTION": {Kind: privilege.SELECT, GrantOption: true},
+				"REFERENCES":                   {Kind: privilege.REFERENCES},
+				"REFERENCES WITH GRANT OPTION": {Kind: privilege.REFERENCES, GrantOption: true},
 			})
 			if err != nil {
 				return eval.HasNoPrivilege, err
@@ -1981,8 +1981,8 @@ FROM defaults_parsed
 				"INSERT WITH GRANT OPTION":     {Kind: privilege.INSERT, GrantOption: true},
 				"UPDATE":                       {Kind: privilege.UPDATE},
 				"UPDATE WITH GRANT OPTION":     {Kind: privilege.UPDATE, GrantOption: true},
-				"REFERENCES":                   {Kind: privilege.SELECT},
-				"REFERENCES WITH GRANT OPTION": {Kind: privilege.SELECT, GrantOption: true},
+				"REFERENCES":                   {Kind: privilege.REFERENCES},
+				"REFERENCES WITH GRANT OPTION": {Kind: privilege.REFERENCES, GrantOption: true},
 			})
 			if err != nil {
 				return eval.HasNoPrivilege, err
@@ -2263,8 +2263,8 @@ FROM defaults_parsed
 				"DELETE WITH GRANT OPTION":     {Kind: privilege.DELETE, GrantOption: true},
 				"TRUNCATE":                     {Kind: privilege.TRUNCATE},
 				"TRUNCATE WITH GRANT OPTION":   {Kind: privilege.TRUNCATE, GrantOption: true},
-				"REFERENCES":                   {Kind: privilege.SELECT},
-				"REFERENCES WITH GRANT OPTION": {Kind: privilege.SELECT, GrantOption: true},
+				"REFERENCES":                   {Kind: privilege.REFERENCES},
+				"REFERENCES WITH GRANT OPTION": {Kind: privilege.REFERENCES, GrantOption: true},
 				"TRIGGER":                      {Kind: privilege.TRIGGER},
 				"TRIGGER WITH GRANT OPTION":    {Kind: privilege.TRIGGER, GrantOption: true},
 				"RULE":                         {Kind: privilege.RULE},

@@ -226,8 +226,8 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		grantReferencesToUsersWithCreate,
 		upgrade.RestoreActionNotRequired(
-			"restoring pre-26.3 backups does not automatically grant REFERENCES "+
-				"to users who have CREATE; they will need an explicit GRANT REFERENCES "+
+			"restoring backups does not automatically grant REFERENCES to users "+
+				"who have CREATE; they will need an explicit GRANT REFERENCES "+
 				"to create foreign keys on the restored tables",
 		),
 	),

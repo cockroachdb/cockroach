@@ -374,3 +374,120 @@ statement ok
 DROP USER fk_user
 
 subtest end
+
+subtest missing_parent_error_message
+
+statement ok
+CREATE TABLE child_err (id INT PRIMARY KEY, parent_id INT)
+
+statement ok
+CREATE USER err_user
+
+statement ok
+GRANT err_user TO testuser
+
+statement ok
+GRANT CREATE ON child_err TO err_user
+
+user testuser
+
+statement ok
+SET ROLE err_user
+
+# A missing parent table should give "relation does not exist" regardless of
+# whether the user has privileges, not a privilege error.
+statement error pgcode 42P01 relation "nonexistent_parent" does not exist
+ALTER TABLE child_err ADD CONSTRAINT fk1 FOREIGN KEY (parent_id) REFERENCES nonexistent_parent(id)
+
+user root
+
+statement error pgcode 42P01 relation "nonexistent_parent" does not exist
+ALTER TABLE child_err ADD CONSTRAINT fk1 FOREIGN KEY (parent_id) REFERENCES nonexistent_parent(id)
+
+# CREATE TABLE with FK referencing non-existent parent should give the same error.
+statement ok
+GRANT CREATE ON SCHEMA public TO err_user
+
+user testuser
+
+statement ok
+SET ROLE err_user
+
+statement error pgcode 42P01 relation "nonexistent_parent" does not exist
+CREATE TABLE child_err2 (id INT PRIMARY KEY, parent_id INT REFERENCES nonexistent_parent(id))
+
+user root
+
+statement error pgcode 42P01 relation "nonexistent_parent" does not exist
+CREATE TABLE child_err2 (id INT PRIMARY KEY, parent_id INT REFERENCES nonexistent_parent(id))
+
+statement ok
+DROP TABLE child_err
+
+statement ok
+REVOKE CREATE ON SCHEMA public FROM err_user
+
+statement ok
+DROP USER err_user
+
+subtest end
+
+subtest has_privilege_builtins_respect_references
+
+statement ok
+CREATE TABLE priv_test (id INT PRIMARY KEY, val INT)
+
+statement ok
+CREATE USER priv_user
+
+# Grant the role to testuser so SET ROLE works.
+statement ok
+GRANT priv_user TO testuser
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+GRANT REFERENCES ON priv_test TO priv_user
+
+user testuser
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+SET ROLE priv_user
+
+# has_table_privilege should return true for REFERENCES but false for SELECT.
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query BBBB
+SELECT has_table_privilege('priv_test', 'REFERENCES'),
+       has_table_privilege('priv_test', 'REFERENCES WITH GRANT OPTION'),
+       has_table_privilege('priv_test', 'SELECT'),
+       has_table_privilege('priv_test', 'SELECT WITH GRANT OPTION')
+----
+true  false  false  false
+
+# has_column_privilege should return true for REFERENCES but false for SELECT.
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query BBBB
+SELECT has_column_privilege('priv_test', 'id', 'REFERENCES'),
+       has_column_privilege('priv_test', 'id', 'REFERENCES WITH GRANT OPTION'),
+       has_column_privilege('priv_test', 'id', 'SELECT'),
+       has_column_privilege('priv_test', 'id', 'SELECT WITH GRANT OPTION')
+----
+true  false  false  false
+
+# has_any_column_privilege should return true for REFERENCES but false for SELECT.
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query BB
+SELECT has_any_column_privilege('priv_test', 'REFERENCES'),
+       has_any_column_privilege('priv_test', 'SELECT')
+----
+true  false
+
+user root
+
+statement ok
+DROP TABLE priv_test
+
+statement ok
+DROP USER priv_user
+
+subtest end
