@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash/enrichment"
 	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -58,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfiglimiter"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
@@ -907,6 +909,35 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 				return nil, err
 			}
 			return resp.Mappings, nil
+		})
+		ash.SetGlobalEnrichmentResolver(func(
+			ctx context.Context, nodeID roachpb.NodeID, ids []clusterunique.ID,
+		) (map[clusterunique.ID]enrichment.Attributes, error) {
+			client, err := s.tenantStatus.dialNode(ctx, nodeID)
+			if err != nil {
+				return nil, err
+			}
+			resp, err := client.GetASHEnrichmentData(ctx, &serverpb.ASHEnrichmentRequest{Ids: ids})
+			if err != nil {
+				return nil, err
+			}
+			out := make(map[clusterunique.ID]enrichment.Attributes, len(resp.Data))
+			for i, entry := range resp.Data {
+				if !entry.Loaded {
+					continue
+				}
+				out[ids[i]] = enrichment.Attributes{
+					AppName:     entry.AppName,
+					Database:    entry.Database,
+					User:        entry.User,
+					Query:       entry.Query,
+					PlanGist:    entry.PlanGist,
+					CanaryStats: entry.CanaryStats,
+					TxnID:       entry.TxnID,
+					SessionID:   entry.SessionID,
+				}
+			}
+			return out, nil
 		})
 	}
 

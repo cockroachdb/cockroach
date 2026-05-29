@@ -433,7 +433,10 @@ func TestRequestHeaderRoundTrip(t *testing.T) {
 
 func TestBatchRequestEmptySize(t *testing.T) {
 	ba := &BatchRequest{}
-	require.Equal(t, 22, ba.Size())
+	// 22 bytes of always-present header fields plus 19 bytes for the
+	// non-nullable EnrichmentID custom type (16 bytes of payload plus
+	// 3 bytes of proto framing: field tag + length).
+	require.Equal(t, 41, ba.Size())
 }
 
 func TestBatchResponseEmptySize(t *testing.T) {

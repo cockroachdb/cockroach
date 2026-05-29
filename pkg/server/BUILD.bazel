@@ -170,6 +170,7 @@ go_library(
         "//pkg/multitenant/tenantcapabilitiespb",
         "//pkg/multitenant/tenantcostmodel",
         "//pkg/obs/ash",
+        "//pkg/obs/ash/enrichment",
         "//pkg/obs/clustermetrics",
         "//pkg/obs/clustermetrics/cmwriter",
         "//pkg/obs/clustermetrics/utils",

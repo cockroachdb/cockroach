@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
@@ -337,6 +338,7 @@ func NewFlowBase(
 	admissionInfo.AppNameID = flowCtx.EvalCtx.AppNameID
 	admissionInfo.GatewayNodeID = roachpb.NodeID(flowCtx.NodeID.SQLInstanceID())
 	admissionInfo.WorkloadType = flowCtx.EvalCtx.WorkloadType
+	admissionInfo.EnrichmentID = flowCtx.EvalCtx.EnrichmentID
 	if flowCtx.Txn == nil {
 		admissionInfo.Priority = admissionpb.NormalPri
 		admissionInfo.CreateTime = timeutil.Now().UnixNano()
@@ -780,6 +782,7 @@ func MakeCPUHandle(
 	workloadID uint64,
 	appNameID uint64,
 	gatewayNodeID roachpb.NodeID,
+	enrichmentID clusterunique.ID,
 ) (context.Context, *admission.SQLCPUHandle, *admission.GoroutineCPUHandle, error) {
 	var priority admissionpb.WorkPriority
 	var createTime int64
@@ -798,6 +801,7 @@ func MakeCPUHandle(
 		WorkloadID:    workloadID,
 		AppNameID:     appNameID,
 		GatewayNodeID: gatewayNodeID,
+		EnrichmentID:  enrichmentID,
 	}, atGateway)
 	newCtx := admission.ContextWithSQLCPUHandle(ctx, cpuHandle)
 	gh := cpuHandle.RegisterGoroutine()

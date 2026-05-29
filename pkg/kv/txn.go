@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -86,9 +87,8 @@ type Txn struct {
 	// appNameID, if != 0, is the hash of the application name for
 	// ASH sampling. Propagated alongside workloadID to all BatchRequests.
 	// Set when the workload is from SQL execution.
-	// Note(alyshan): This will eventually be replaced by a general
-	// enrichment_id field which will enable the ASH sampler to
-	// enrich samples with more workload context.
+	// Deprecated in favor of enrichmentID once 26.3 is finalized; retained
+	// for mixed-version compatibility.
 	appNameID uint64
 
 	// workloadID, if != 0, is the identifier for the workload that is using
@@ -103,6 +103,11 @@ type Txn struct {
 	// workloadType identifies the kind of workload that workloadID
 	// represents (statement fingerprint, job, system task).
 	workloadType workloadid.WorkloadType
+	// enrichmentID, if non-zero, is the per-execution clusterunique.ID
+	// under which the gateway's ASH enrichment cache holds this
+	// execution's attributes. Propagated alongside workloadID to all
+	// BatchRequests. Same concurrency note as workloadID.
+	enrichmentID clusterunique.ID
 
 	// The following fields are not safe for concurrent modification.
 	// They should be set before operating on the transaction.
@@ -463,15 +468,16 @@ func (txn *Txn) debugNameLocked() string {
 	return fmt.Sprintf("%s (id: %s)", txn.mu.debugName, txn.mu.ID)
 }
 
-// SetWorkloadInfo sets the workload ID, app name ID, and workload
-// type for ASH sampling. All three are automatically propagated to
-// all BatchRequests sent through this transaction.
+// SetWorkloadInfo sets the workload ID, app name ID, workload type,
+// and enrichment ID for ASH sampling. All four are automatically
+// propagated to all BatchRequests sent through this transaction.
 func (txn *Txn) SetWorkloadInfo(
-	workloadID, appNameID uint64, workloadType workloadid.WorkloadType,
+	workloadID, appNameID uint64, workloadType workloadid.WorkloadType, enrichmentID clusterunique.ID,
 ) {
 	txn.workloadID = workloadID
 	txn.appNameID = appNameID
 	txn.workloadType = workloadType
+	txn.enrichmentID = enrichmentID
 }
 
 // SetBufferedWritesEnabled toggles whether the writes are buffered on the
@@ -1396,6 +1402,11 @@ func (txn *Txn) Send(
 
 	if txn.workloadType != workloadid.WorkloadTypeUnknown && ba.Header.WorkloadType == 0 {
 		ba.Header.WorkloadType = txn.workloadType.ToUint32()
+	}
+
+	if (txn.enrichmentID.Hi != 0 || txn.enrichmentID.Lo != 0) &&
+		ba.Header.EnrichmentID.Hi == 0 && ba.Header.EnrichmentID.Lo == 0 {
+		ba.Header.EnrichmentID = txn.enrichmentID.Uint128
 	}
 
 	// Requests with a bounded staleness header should use NegotiateAndSend.

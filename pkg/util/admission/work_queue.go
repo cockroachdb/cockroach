@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -223,6 +224,8 @@ type WorkInfo struct {
 	// WorkloadID is used for ASH sampling.
 	WorkloadID uint64
 	// AppNameID is the hash of the application name. Used for ASH sampling.
+	// Deprecated in favor of EnrichmentID once 26.3 is finalized; retained
+	// for mixed-version compatibility.
 	AppNameID uint64
 	// GatewayNodeID is the node that initiated the workload. Used for ASH
 	// sampling.
@@ -230,6 +233,10 @@ type WorkInfo struct {
 	// WorkloadType distinguishes the kind of workload that WorkloadID
 	// represents. Used for ASH sampling.
 	WorkloadType workloadid.WorkloadType
+	// EnrichmentID is the per-execution clusterunique.ID under which the
+	// gateway's ASH enrichment cache holds this execution's attributes.
+	// Used for ASH sampling.
+	EnrichmentID clusterunique.ID
 }
 
 // ReplicatedWorkInfo groups everything needed to admit replicated writes, done
@@ -1068,6 +1075,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 			AppNameID:     info.AppNameID,
 			GatewayNodeID: info.GatewayNodeID,
 			WorkloadType:  info.WorkloadType,
+			EnrichmentID:  info.EnrichmentID,
 		},
 		ash.WorkAdmission, string(q.queueKind))
 	defer cleanup()

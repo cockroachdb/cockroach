@@ -26,6 +26,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql/clusterunique",
         "//pkg/sql/sessiondatapb",
         "//pkg/storage/enginepb",
         "//pkg/util/admission",

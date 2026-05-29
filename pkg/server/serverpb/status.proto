@@ -1242,11 +1242,34 @@ message ASHSample {
   roachpb.TenantID tenant_id = 7
       [(gogoproto.nullable) = false, (gogoproto.customname) = "TenantID"];
   // AppName is the application name string. Set when the sample corresponds
-  // to SQL execution.
+  // to SQL execution. Sourced either from the legacy AppNameMappings path
+  // or from the ASH enrichment cache (the latter wins when both have a
+  // value).
   string app_name = 8;
   // WorkloadType distinguishes the kind of workload (e.g., "STATEMENT",
   // "JOB", "SYSTEM", "UNKNOWN").
   string workload_type = 9;
+  // The fields below are populated from the ASH enrichment cache. They
+  // are zero-valued for samples that don't have an EnrichmentID, or
+  // whose enrichment could not be resolved within the retry window.
+  // Statement fingerprint is intentionally not surfaced here — it's
+  // already in workload_id (as the hex-encoded uint64 for
+  // statement-type work).
+  reserved 10;
+  string database = 11;
+  string user = 12;
+  bytes plan_gist = 13;
+  bool canary_stats = 14;
+  bytes txn_id = 15 [
+    (gogoproto.customname) = "TxnID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.nullable) = false];
+  bytes session_id = 16 [
+    (gogoproto.customname) = "SessionID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/clusterunique.ID",
+    (gogoproto.nullable) = false];
+  // query is the raw SQL text of the statement (PII-sensitive).
+  string query = 17;
 }
 
 // An error wrapper for ListActiveSessionHistory fan-out.
@@ -1283,6 +1306,55 @@ message AppNameMappingsRequest {
 message AppNameMappingsResponse {
   // mappings is a map from app name ID to the original app name string.
   map<uint64, string> mappings = 1;
+}
+
+// EnrichmentAttributes is the per-execution metadata returned by
+// GetASHEnrichmentData for a single enrichment ID. The order of
+// entries in ASHEnrichmentResponse.data corresponds to the order
+// of IDs in ASHEnrichmentRequest.ids; when the responder did not
+// have an entry for the requested ID, loaded is false and the
+// other fields are at their zero values.
+message EnrichmentAttributes {
+  // loaded indicates whether the responder had an entry for the
+  // requested ID. When false, the caller should treat the sample
+  // as unresolved (and may retry on a later sampler tick).
+  bool loaded = 1;
+  // 2 was stmt_fingerprint; that value is already carried by
+  // ASHSample.workload_id for statement-type work, so we don't
+  // duplicate it through the enrichment path.
+  reserved 2;
+  string app_name = 3;
+  string database = 4;
+  string user = 5;
+  bytes plan_gist = 6;
+  bool canary_stats = 7;
+  bytes txn_id = 8 [
+    (gogoproto.customname) = "TxnID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.nullable) = false];
+  bytes session_id = 9 [
+    (gogoproto.customname) = "SessionID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/clusterunique.ID",
+    (gogoproto.nullable) = false];
+  // query is the raw SQL text of the statement. May contain PII
+  // (literal values from the user's query); production deployments
+  // should treat this field as sensitive.
+  string query = 10;
+}
+
+// ASHEnrichmentRequest fetches per-execution attributes from a
+// remote gateway node's enrichment cache. Each id is the 16-byte
+// big-endian encoding of a clusterunique.ID.
+message ASHEnrichmentRequest {
+  repeated bytes ids = 1 [
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/clusterunique.ID",
+    (gogoproto.nullable) = false];
+}
+
+// ASHEnrichmentResponse returns the attributes for the requested
+// IDs. data[i] corresponds to request.ids[i].
+message ASHEnrichmentResponse {
+  repeated EnrichmentAttributes data = 1 [(gogoproto.nullable) = false];
 }
 
 // Request object for issuing a query cancel request.
@@ -2566,6 +2638,13 @@ service Status {
   // this node's local cache for the requested IDs.
   rpc AppNameMappings(AppNameMappingsRequest)
       returns (AppNameMappingsResponse) {}
+
+  // GetASHEnrichmentData retrieves per-execution attributes from
+  // this node's local ASH enrichment cache for the requested IDs.
+  // The response preserves request ordering; entries the responder
+  // could not resolve are returned with loaded=false.
+  rpc GetASHEnrichmentData(ASHEnrichmentRequest)
+      returns (ASHEnrichmentResponse) {}
 
   // CancelQuery cancels a SQL query given its ID.
   rpc CancelQuery(CancelQueryRequest) returns (CancelQueryResponse) {

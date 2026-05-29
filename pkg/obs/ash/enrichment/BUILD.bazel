@@ -1,0 +1,51 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_test(
+    name = "enrichment_test",
+    srcs = [
+        "bench_test.go",
+        "cache_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    deps = [
+        ":enrichment",
+        "//pkg/base",
+        "//pkg/settings/cluster",
+        "//pkg/sql/clusterunique",
+        "//pkg/testutils",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+go_library(
+    name = "enrichment",
+    srcs = [
+        "attributes.go",
+        "cache.go",
+        "cluster_settings.go",
+        "concurrent_write_buffer.go",
+        "fifo_cache.go",
+        "metrics.go",
+        "registry.go",
+        "writer.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/obs/ash/enrichment",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/sql/clusterunique",
+        "//pkg/sql/contention/contentionutils",
+        "//pkg/util/metric",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/uuid",
+    ],
+)

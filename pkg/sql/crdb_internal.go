@@ -101,6 +101,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
@@ -9990,6 +9991,72 @@ func populateStoreLivenessSupportForResponse(
 	return nil
 }
 
+// addAshSampleRow encodes one ASH sample as a SQL row matching the
+// crdb_internal.{node,cluster}_active_session_history column order.
+// Shared by both the node-local and cluster-fan-out populate
+// functions so the column ordering and zero-handling stays in sync.
+//
+// Enrichment fields (database, user, query, plan_gist, canary_stats,
+// txn_id, session_id) are emitted as NULL when unset rather than as
+// empty strings, so that downstream consumers can distinguish "not
+// enriched yet" from "explicitly empty". The statement fingerprint
+// is not surfaced here because it's already in workload_id (as the
+// hex-encoded uint64 for statement-type work).
+func addAshSampleRow(addRow func(...tree.Datum) error, sample serverpb.ASHSample) error {
+	sampleTime, err := tree.MakeDTimestampTZ(sample.SampleTime, time.Microsecond)
+	if err != nil {
+		return err
+	}
+	workloadType := sample.WorkloadType
+	if workloadType == "" {
+		workloadType = "UNKNOWN"
+	}
+	database := nullableString(sample.Database)
+	user := nullableString(sample.User)
+	query := nullableString(sample.Query)
+	planGist := tree.DNull
+	if len(sample.PlanGist) > 0 {
+		planGist = tree.NewDString(string(sample.PlanGist))
+	}
+	txnID := tree.DNull
+	if !sample.TxnID.Equal(uuid.UUID{}) {
+		dUUID := tree.DUuid{UUID: sample.TxnID}
+		txnID = &dUUID
+	}
+	sessionID := tree.DNull
+	if sample.SessionID.Hi != 0 || sample.SessionID.Lo != 0 {
+		sessionID = tree.NewDString(sample.SessionID.String())
+	}
+	return addRow(
+		sampleTime,
+		tree.NewDInt(tree.DInt(sample.NodeID)),
+		tree.NewDInt(tree.DInt(sample.TenantID.ToUint64())),
+		tree.NewDString(sample.WorkloadID),
+		tree.NewDString(workloadType),
+		tree.NewDString(sample.AppName),
+		tree.NewDString(ash.WorkEventType(sample.WorkEventType).String()),
+		tree.NewDString(sample.WorkEvent),
+		tree.NewDInt(tree.DInt(sample.GoroutineID)),
+		database,
+		user,
+		query,
+		planGist,
+		tree.MakeDBool(tree.DBool(sample.CanaryStats)),
+		txnID,
+		sessionID,
+	)
+}
+
+// nullableString returns NULL for the empty string and a DString
+// otherwise. Used by the ASH virtual tables to keep "unset" cleanly
+// separated from "set to empty".
+func nullableString(s string) tree.Datum {
+	if s == "" {
+		return tree.DNull
+	}
+	return tree.NewDString(s)
+}
+
 // crdbInternalNodeActiveSessionHistoryTable exposes Active Session History
 // samples from the local node's in-memory buffer. Tenant filtering is
 // performed by ListLocalActiveSessionHistory, so secondary tenants
@@ -9998,15 +10065,22 @@ var crdbInternalNodeActiveSessionHistoryTable = virtualSchemaTable{
 	comment: `sampled active session history from this node (RAM)`,
 	schema: `
 CREATE TABLE crdb_internal.node_active_session_history (
-  sample_time      TIMESTAMPTZ NOT NULL,
-  node_id          INT NOT NULL,
-  tenant_id        INT NOT NULL,
-  workload_id      STRING,
-  workload_type    STRING NOT NULL,
-  app_name         STRING,
-  work_event_type  STRING NOT NULL,
-  work_event       STRING NOT NULL,
-  goroutine_id     INT NOT NULL
+  sample_time         TIMESTAMPTZ NOT NULL,
+  node_id             INT NOT NULL,
+  tenant_id           INT NOT NULL,
+  workload_id         STRING,
+  workload_type       STRING NOT NULL,
+  app_name            STRING,
+  work_event_type     STRING NOT NULL,
+  work_event          STRING NOT NULL,
+  goroutine_id        INT NOT NULL,
+  database            STRING,
+  "user"              STRING,
+  query               STRING,
+  plan_gist           STRING,
+  canary_stats        BOOL,
+  txn_id              UUID,
+  session_id          STRING
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		hasViewActivityOrhasViewActivityRedacted, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
@@ -10024,25 +10098,7 @@ CREATE TABLE crdb_internal.node_active_session_history (
 		}
 
 		for _, sample := range response.Samples {
-			sampleTime, err := tree.MakeDTimestampTZ(sample.SampleTime, time.Microsecond)
-			if err != nil {
-				return err
-			}
-			workloadType := sample.WorkloadType
-			if workloadType == "" {
-				workloadType = "UNKNOWN"
-			}
-			if err := addRow(
-				sampleTime,
-				tree.NewDInt(tree.DInt(sample.NodeID)),
-				tree.NewDInt(tree.DInt(sample.TenantID.ToUint64())),
-				tree.NewDString(sample.WorkloadID),
-				tree.NewDString(workloadType),
-				tree.NewDString(sample.AppName),
-				tree.NewDString(ash.WorkEventType(sample.WorkEventType).String()),
-				tree.NewDString(sample.WorkEvent),
-				tree.NewDInt(tree.DInt(sample.GoroutineID)),
-			); err != nil {
+			if err := addAshSampleRow(addRow, sample); err != nil {
 				return err
 			}
 		}
@@ -10059,15 +10115,22 @@ var crdbInternalClusterActiveSessionHistoryTable = virtualSchemaTable{
 	comment: `sampled active session history from all nodes in the cluster (cluster RPC; expensive!)`,
 	schema: `
 CREATE TABLE crdb_internal.cluster_active_session_history (
-  sample_time      TIMESTAMPTZ NOT NULL,
-  node_id          INT NOT NULL,
-  tenant_id        INT NOT NULL,
-  workload_id      STRING,
-  workload_type    STRING NOT NULL,
-  app_name         STRING,
-  work_event_type  STRING NOT NULL,
-  work_event       STRING NOT NULL,
-  goroutine_id     INT NOT NULL
+  sample_time         TIMESTAMPTZ NOT NULL,
+  node_id             INT NOT NULL,
+  tenant_id           INT NOT NULL,
+  workload_id         STRING,
+  workload_type       STRING NOT NULL,
+  app_name            STRING,
+  work_event_type     STRING NOT NULL,
+  work_event          STRING NOT NULL,
+  goroutine_id        INT NOT NULL,
+  database            STRING,
+  "user"              STRING,
+  query               STRING,
+  plan_gist           STRING,
+  canary_stats        BOOL,
+  txn_id              UUID,
+  session_id          STRING
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		hasViewActivityOrhasViewActivityRedacted, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
@@ -10085,25 +10148,7 @@ CREATE TABLE crdb_internal.cluster_active_session_history (
 		}
 
 		for _, sample := range response.Samples {
-			sampleTime, err := tree.MakeDTimestampTZ(sample.SampleTime, time.Microsecond)
-			if err != nil {
-				return err
-			}
-			workloadType := sample.WorkloadType
-			if workloadType == "" {
-				workloadType = "UNKNOWN"
-			}
-			if err := addRow(
-				sampleTime,
-				tree.NewDInt(tree.DInt(sample.NodeID)),
-				tree.NewDInt(tree.DInt(sample.TenantID.ToUint64())),
-				tree.NewDString(sample.WorkloadID),
-				tree.NewDString(workloadType),
-				tree.NewDString(sample.AppName),
-				tree.NewDString(ash.WorkEventType(sample.WorkEventType).String()),
-				tree.NewDString(sample.WorkEvent),
-				tree.NewDInt(tree.DInt(sample.GoroutineID)),
-			); err != nil {
+			if err := addAshSampleRow(addRow, sample); err != nil {
 				return err
 			}
 		}

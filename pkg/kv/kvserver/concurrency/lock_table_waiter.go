@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -123,6 +124,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 			AppNameID:     req.Batch.AppNameID,
 			GatewayNodeID: req.Batch.GatewayNodeID,
 			WorkloadType:  workloadid.WorkloadType(req.Batch.WorkloadType),
+			EnrichmentID:  clusterunique.ID{Uint128: req.Batch.EnrichmentID},
 		}
 	}
 	cleanup := ash.SetWorkState(

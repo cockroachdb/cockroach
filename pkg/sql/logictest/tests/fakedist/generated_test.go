@@ -71,6 +71,13 @@ func TestLogic_tmp(t *testing.T) {
 	logictest.RunLogicTests(t, logictest.TestServerArgs{}, configIdx, glob)
 }
 
+func TestLogic_active_session_history(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "active_session_history")
+}
+
 func TestLogic_advisory_lock(
 	t *testing.T,
 ) {

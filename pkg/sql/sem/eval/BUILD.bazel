@@ -57,6 +57,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/clusterunique",
         "//pkg/sql/hintpb",
         "//pkg/sql/lex",
         "//pkg/sql/oidext",

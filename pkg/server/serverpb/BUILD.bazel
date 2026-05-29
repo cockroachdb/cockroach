@@ -66,6 +66,7 @@ go_proto_library(
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/sql/catalog/descpb",  # keep
+        "//pkg/sql/clusterunique",  # keep
         "//pkg/sql/execinfrapb",  # keep
         "//pkg/sql/pgwire/pgwirecancel",  # keep
         "//pkg/util/uuid",  # keep

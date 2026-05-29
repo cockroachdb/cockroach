@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash/enrichment"
 	raft "github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -3516,6 +3517,13 @@ func (s *statusServer) ListLocalActiveSessionHistory(
 			WorkEventType: serverpb.WorkEventType(sample.WorkEventType),
 			WorkEvent:     sample.WorkEvent,
 			GoroutineID:   sample.GoroutineID,
+			Database:      sample.Database,
+			User:          sample.User,
+			Query:         sample.Query,
+			PlanGist:      sample.PlanGist,
+			CanaryStats:   sample.CanaryStats,
+			TxnID:         sample.TxnID,
+			SessionID:     sample.SessionID,
 		})
 	}
 
@@ -3546,6 +3554,61 @@ func (s *statusServer) AppNameMappings(
 	return &serverpb.AppNameMappingsResponse{
 		Mappings: ash.GetAppNameMappings(req.Ids),
 	}, nil
+}
+
+// GetASHEnrichmentData returns per-execution attributes for the
+// requested enrichment IDs from this node's local cache. The
+// response preserves request ordering; entries the cache does not
+// have are returned with loaded=false so the caller can distinguish
+// "not yet enriched" from "all defaults".
+//
+// The cache lookup is tenant-scoped via roachpb.ClientTenantFromContext:
+// each tenant only sees its own cache. When the inbound context has
+// no tenant (e.g. a system-tenant RPC), the system tenant cache is
+// used; if no cache is registered for the resolved tenant (the
+// enrichment subsystem has not been initialized, or this RPC arrived
+// before sql.Server startup completed), every entry is returned with
+// loaded=false rather than producing an error — callers handle the
+// retry-on-next-tick path the same way for either reason.
+func (s *statusServer) GetASHEnrichmentData(
+	ctx context.Context, req *serverpb.ASHEnrichmentRequest,
+) (*serverpb.ASHEnrichmentResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
+
+	if err := s.privilegeChecker.RequireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	tenantID, ok := roachpb.ClientTenantFromContext(ctx)
+	if !ok {
+		tenantID = roachpb.SystemTenantID
+	}
+
+	resp := &serverpb.ASHEnrichmentResponse{
+		Data: make([]serverpb.EnrichmentAttributes, len(req.Ids)),
+	}
+	cache := enrichment.Lookup(tenantID)
+	if cache == nil || !cache.Enabled() {
+		return resp, nil
+	}
+	for i, id := range req.Ids {
+		attrs, found := cache.GetExecution(id)
+		if !found {
+			continue
+		}
+		resp.Data[i] = serverpb.EnrichmentAttributes{
+			Loaded:      true,
+			AppName:     attrs.AppName,
+			Database:    attrs.Database,
+			User:        attrs.User,
+			Query:       attrs.Query,
+			PlanGist:    attrs.PlanGist,
+			CanaryStats: attrs.CanaryStats,
+			TxnID:       attrs.TxnID,
+			SessionID:   attrs.SessionID,
+		}
+	}
+	return resp, nil
 }
 
 // ListActiveSessionHistory returns ASH samples from all nodes in the cluster.

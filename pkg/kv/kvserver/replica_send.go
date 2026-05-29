@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -117,6 +118,7 @@ func (r *Replica) SendWithWorkStats(
 			AppNameID:     ba.AppNameID,
 			GatewayNodeID: ba.GatewayNodeID,
 			WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
+			EnrichmentID:  clusterunique.ID{Uint128: ba.EnrichmentID},
 		},
 		ash.WorkCPU, "ReplicaSend")
 	defer cleanup()
@@ -317,6 +319,7 @@ func (r *Replica) maybeCommitWaitBeforeCommitTrigger(
 			AppNameID:     ba.AppNameID,
 			GatewayNodeID: ba.GatewayNodeID,
 			WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
+			EnrichmentID:  clusterunique.ID{Uint128: ba.EnrichmentID},
 		},
 		ash.WorkOther, "CommitWaitSleep")
 	defer cleanup()
@@ -885,6 +888,7 @@ func (r *Replica) handleInvalidLeaseError(ctx context.Context, ba *kvpb.BatchReq
 			AppNameID:     ba.AppNameID,
 			GatewayNodeID: ba.GatewayNodeID,
 			WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
+			EnrichmentID:  clusterunique.ID{Uint128: ba.EnrichmentID},
 		},
 	)
 	// If we managed to get a lease (i.e. pErr == nil), the request evaluation
@@ -980,6 +984,7 @@ func (r *Replica) executeAdminBatch(
 					AppNameID:     ba.AppNameID,
 					GatewayNodeID: ba.GatewayNodeID,
 					WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
+					EnrichmentID:  clusterunique.ID{Uint128: ba.EnrichmentID},
 				},
 			)
 			if pErr != nil {

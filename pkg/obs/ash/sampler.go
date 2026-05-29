@@ -150,7 +150,13 @@ type Sampler struct {
 	workloadIDCache *cache.UnorderedCache
 	// resolver, when set, fetches app name mappings from remote nodes
 	// for work states whose app name could not be resolved locally.
+	// Deprecated in favor of the enrichment subsystem; retained for
+	// mixed-version compatibility.
 	resolver atomic.Pointer[AppNameResolverFn]
+	// enrichment holds the in-tick enrichment state — the resolver
+	// callback, the retry queue, and per-node backoff records. See
+	// sampler_enrichment.go.
+	enrichment *enrichmentState
 	// pendingSamples is a reusable slice for collecting work state snapshots
 	// during rangeWorkStates. Reused across samples to avoid per-sample
 	// slice allocation.
@@ -163,11 +169,12 @@ type Sampler struct {
 func newSampler(nodeID roachpb.NodeID, st *cluster.Settings, stopper *stop.Stopper) *Sampler {
 	bufSize := int(BufferSize.Get(&st.SV))
 	return &Sampler{
-		nodeID:  nodeID,
-		st:      st,
-		buffer:  NewRingBuffer(bufSize),
-		stopper: stopper,
-		metrics: makeMetrics(),
+		nodeID:     nodeID,
+		st:         st,
+		buffer:     NewRingBuffer(bufSize),
+		stopper:    stopper,
+		metrics:    makeMetrics(),
+		enrichment: newEnrichmentState(),
 		workloadIDCache: cache.NewUnorderedCache(cache.Config{
 			Policy: cache.CacheLRU,
 			ShouldEvict: func(size int, key, value interface{}) bool {
@@ -241,6 +248,22 @@ func (s *Sampler) run(ctx context.Context) {
 }
 
 // takeSample captures a snapshot of all active work states.
+//
+// The tick has three phases:
+//
+//  1. Capture work states and resolve legacy app names (synchronously,
+//     against the local app-name cache or via the AppNameMappings RPC).
+//
+//  2. Resolve enrichment attributes for samples carrying a non-zero
+//     EnrichmentID. Local samples (whose enrichment was produced on
+//     this node) are resolved from the tenant-scoped cache directly;
+//     remote samples are batched per-gateway-node and resolved via
+//     parallel GetASHEnrichmentData RPCs with a per-node timeout.
+//     Samples that fail enrichment (RPC error, timeout, missing entry)
+//     are placed on the retry queue and re-attempted on subsequent
+//     ticks until they either resolve or age out.
+//
+//  3. Publish enriched samples to the ring buffer.
 func (s *Sampler) takeSample(ctx context.Context) {
 	start := timeutil.Now()
 	defer func() {
@@ -250,16 +273,22 @@ func (s *Sampler) takeSample(ctx context.Context) {
 
 	sampleTime := start
 
-	// Collect work states. rangeWorkStates reclaims retired states after
-	// iteration so pooled objects can be reused.
+	// Phase 1a: collect work states. rangeWorkStates reclaims retired
+	// states after iteration so pooled objects can be reused.
 	s.pendingSamples = s.pendingSamples[:0]
 	rangeWorkStates(func(gid int64, state WorkState) bool {
 		s.pendingSamples = append(s.pendingSamples, pendingSample{gid: gid, state: state})
 		return true
 	})
+	// Count every observed sample once, at first capture. Samples
+	// retried from prior ticks are not re-counted here, and samples
+	// that ultimately drop are counted in this denominator — so
+	// EnrichmentSamplesDropped / SamplesCollected is the terminal
+	// enrichment failure rate.
+	s.metrics.SamplesCollected.Inc(int64(len(s.pendingSamples)))
 
-	// First pass: resolve app names and workload IDs, tracking
-	// indices where local app name resolution fails.
+	// Phase 1b: resolve workload IDs and (legacy) app names. Track
+	// indices needing remote app-name resolution.
 	var unresolvedIndices []int
 	for i := range s.pendingSamples {
 		ps := &s.pendingSamples[i]
@@ -282,7 +311,6 @@ func (s *Sampler) takeSample(ctx context.Context) {
 			}
 		}
 
-		// Resolve app name ID to string via the node-local cache.
 		if ps.state.WorkloadInfo.AppNameID != 0 {
 			if name, ok := GetAppName(ps.state.WorkloadInfo.AppNameID); ok {
 				ps.appName = name
@@ -291,18 +319,17 @@ func (s *Sampler) takeSample(ctx context.Context) {
 			}
 		}
 	}
-
-	// If there are unresolved app names, try fetching from remote
-	// gateway nodes. Group by gateway node ID to make at most one
-	// RPC per remote node.
 	if len(unresolvedIndices) > 0 {
 		s.resolveRemoteAppNames(ctx, unresolvedIndices)
 	}
 
-	// Emit samples.
+	// Phase 1c: materialize the captured WorkStates into ASHSample
+	// values. Each sample is allocated on the heap so the enrichment
+	// phase can hand stable pointers across goroutines.
+	newSamples := make([]*ASHSample, len(s.pendingSamples))
 	for i := range s.pendingSamples {
 		ps := &s.pendingSamples[i]
-		sample := ASHSample{
+		newSamples[i] = &ASHSample{
 			SampleTime:    sampleTime,
 			NodeID:        s.nodeID,
 			TenantID:      ps.state.TenantID,
@@ -312,12 +339,79 @@ func (s *Sampler) takeSample(ctx context.Context) {
 			WorkEventType: ps.state.WorkEventType,
 			WorkEvent:     ps.state.WorkEvent,
 			GoroutineID:   ps.gid,
+			EnrichmentID:  ps.state.WorkloadInfo.EnrichmentID,
 		}
-		s.buffer.Add(sample)
 	}
-	s.metrics.SamplesCollected.Inc(int64(len(s.pendingSamples)))
+
+	// Phase 2: enrich. Combine newly captured samples with the
+	// drained retry queue, resolve locally where possible, RPC for
+	// the rest. Track the first-capture timestamp of each sample so
+	// re-enqueues preserve the right age for the drop window.
+	retried := s.drainRetryQueue(sampleTime)
+	firstCapture := make(map[*ASHSample]time.Time, len(newSamples)+len(retried))
+	for _, sample := range newSamples {
+		firstCapture[sample] = sample.SampleTime
+	}
+	// Retried samples already carry SampleTime from their first
+	// capture; record that explicitly so requeue uses it on a
+	// subsequent failure.
+	for _, sample := range retried {
+		firstCapture[sample] = sample.SampleTime
+	}
+
+	all := append(newSamples, retried...)
+	publish, requeue := s.enrichInTick(ctx, sampleTime, all)
+	if len(requeue) > 0 {
+		s.metrics.EnrichmentSamplesRequeued.Inc(int64(len(requeue)))
+		s.requeue(requeue, firstCapture)
+	}
+
+	// Phase 3: publish enriched samples.
+	for _, sample := range publish {
+		s.buffer.Add(*sample)
+	}
 
 	s.maybeLogSummary(ctx)
+}
+
+// enrichInTick partitions samples by whether enrichment succeeds
+// locally, succeeds remotely (via RPC), or fails. The first two are
+// returned in `publish` for the ring buffer; the third in `requeue`
+// for retry on the next tick.
+//
+// Samples whose EnrichmentID is zero are passed through directly
+// (they have no enrichment to do).
+func (s *Sampler) enrichInTick(
+	ctx context.Context, now time.Time, samples []*ASHSample,
+) (publish, requeue []*ASHSample) {
+	// Per-gateway-node grouping of samples requiring remote RPC.
+	remoteByNode := make(map[roachpb.NodeID][]*ASHSample)
+	for _, sample := range samples {
+		// Try local enrichment first. enrichSampleFromLocal returns
+		// true if the sample needs no further work (either it had no
+		// EnrichmentID, or the local cache had a hit).
+		if enrichSampleFromLocal(sample) {
+			publish = append(publish, sample)
+			continue
+		}
+		gateway := roachpb.NodeID(sample.EnrichmentID.GetNodeID())
+		if gateway == 0 || gateway == s.nodeID {
+			// Either the sample was produced locally (so a miss on
+			// the local cache means it will never resolve — likely
+			// evicted) or the gateway is unknown. Either way, no
+			// RPC will help.
+			requeue = append(requeue, sample)
+			continue
+		}
+		remoteByNode[gateway] = append(remoteByNode[gateway], sample)
+	}
+	if len(remoteByNode) == 0 {
+		return publish, requeue
+	}
+	enriched, unresolved := s.enrichRemote(ctx, now, remoteByNode)
+	publish = append(publish, enriched...)
+	requeue = append(requeue, unresolved...)
+	return publish, requeue
 }
 
 // workloadCount pairs a workload key with its sample count for sorting.

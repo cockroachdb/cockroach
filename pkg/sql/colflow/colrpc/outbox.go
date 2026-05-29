@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -166,6 +167,16 @@ func (o *Outbox) appNameID() uint64 {
 		return o.flowCtx.EvalCtx.AppNameID
 	}
 	return 0
+}
+
+// enrichmentID returns the EnrichmentID from the flow context's
+// EvalCtx, or the zero clusterunique.ID if EvalCtx is nil (which
+// happens in tests).
+func (o *Outbox) enrichmentID() clusterunique.ID {
+	if o.flowCtx != nil && o.flowCtx.EvalCtx != nil {
+		return o.flowCtx.EvalCtx.EnrichmentID
+	}
+	return clusterunique.ID{}
 }
 
 // gatewayNodeID returns the GatewayNodeID derived from the flow
@@ -356,6 +367,7 @@ func (o *Outbox) sendBatches(
 						AppNameID:     o.appNameID(),
 						GatewayNodeID: o.gatewayNodeID(),
 						WorkloadType:  o.workloadType(),
+						EnrichmentID:  o.enrichmentID(),
 					},
 					ash.WorkNetwork, "OutboxSend")
 				err := stream.Send(o.scratch.msg)
@@ -406,6 +418,7 @@ func (o *Outbox) sendBatches(
 					AppNameID:     o.appNameID(),
 					GatewayNodeID: o.gatewayNodeID(),
 					WorkloadType:  o.workloadType(),
+					EnrichmentID:  o.enrichmentID(),
 				},
 				ash.WorkNetwork, "OutboxSend")
 			err = stream.Send(o.scratch.msg)

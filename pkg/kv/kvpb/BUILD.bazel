@@ -39,6 +39,7 @@ go_library(
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
         "//pkg/util/protoutil",
+        "//pkg/util/uint128",  # keep
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//errorspb",
@@ -140,6 +141,7 @@ go_proto_library(
         "//pkg/storage/enginepb",
         "//pkg/util/hlc",
         "//pkg/util/tracing/tracingpb",
+        "//pkg/util/uint128",  # keep
         "@com_github_cockroachdb_errors//errorspb",
         "@com_github_gogo_protobuf//gogoproto",
     ],
