@@ -32,6 +32,7 @@ go_library(
 
 go_test(
     name = "tablemetadatacache_test",
+    size = "large",
     srcs = [
         "main_test.go",
         "table_metadata_updater_test.go",
