@@ -28,7 +28,7 @@ func (s saslPlainBuilder) validateParams(u *changefeedbase.SinkURL) error {
 }
 
 // build implements authMechanismBuilder.
-func (s saslPlainBuilder) build(u *changefeedbase.SinkURL) (SASLMechanism, error) {
+func (s saslPlainBuilder) build(u *changefeedbase.SinkURL, _ BuildContext) (SASLMechanism, error) {
 	handshake, err := consumeHandshake(u)
 	if err != nil {
 		return nil, err

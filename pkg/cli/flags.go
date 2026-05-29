@@ -617,6 +617,7 @@ func init() {
 		cliflagcfg.VarFlag(f, &startCtx.diskTempStorageSizeValue, cliflags.SQLTempStorage)
 		cliflagcfg.StringFlag(f, &startCtx.tempDir, cliflags.TempDir)
 		cliflagcfg.StringFlag(f, &startCtx.externalIODir, cliflags.ExternalIODir)
+		cliflagcfg.StringFlag(f, &startCtx.secretDirectory, cliflags.SecretDirectory)
 
 		if backgroundFlagDefined {
 			cliflagcfg.BoolFlag(f, &startBackground, cliflags.Background)
@@ -1576,6 +1577,13 @@ func extraStoreFlagInit(cmd *cobra.Command) error {
 		// Make the directory name absolute.
 		var err error
 		startCtx.externalIODir, err = base.GetAbsoluteFSPath(cliflags.ExternalIODir.Name, startCtx.externalIODir)
+		if err != nil {
+			return err
+		}
+	}
+	if startCtx.secretDirectory != "" {
+		var err error
+		startCtx.secretDirectory, err = base.GetAbsoluteFSPath(cliflags.SecretDirectory.Name, startCtx.secretDirectory)
 		if err != nil {
 			return err
 		}

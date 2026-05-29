@@ -1,10 +1,11 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "fileutil",
     srcs = [
         "copy.go",
         "escape.go",
+        "is_contained.go",
         "move.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/fileutil",
@@ -13,4 +14,11 @@ go_library(
         "//pkg/util/sysutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
+)
+
+go_test(
+    name = "fileutil_test",
+    srcs = ["is_contained_test.go"],
+    embed = [":fileutil"],
+    deps = ["@com_github_stretchr_testify//require"],
 )

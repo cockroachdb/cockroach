@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kafkaauth"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/security/secretdir"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -870,14 +871,16 @@ type kafkaDialConfig struct {
 	authMechanism kafkaauth.SASLMechanism
 }
 
-func buildDialConfig(u *changefeedbase.SinkURL) (kafkaDialConfig, error) {
+func buildDialConfig(
+	u *changefeedbase.SinkURL, secretReader *secretdir.Reader,
+) (kafkaDialConfig, error) {
 	switch u.Scheme {
 	case changefeedbase.SinkSchemeConfluentKafka:
-		return buildConfluentKafkaConfig(u)
+		return buildConfluentKafkaConfig(u, secretReader)
 	case changefeedbase.SinkSchemeAzureKafka:
-		return buildAzureKafkaConfig(u)
+		return buildAzureKafkaConfig(u, secretReader)
 	default:
-		return buildDefaultKafkaConfig(u)
+		return buildDefaultKafkaConfig(u, secretReader)
 	}
 }
 
@@ -889,7 +892,9 @@ func buildDialConfig(u *changefeedbase.SinkURL) (kafkaDialConfig, error) {
 // related params (which I believe are common to all the SASL schemes). It would
 // also make sense to update the docs to reflect these cases
 // rather than having a huge table of auth params like we have now.
-func buildDefaultKafkaConfig(u *changefeedbase.SinkURL) (kafkaDialConfig, error) {
+func buildDefaultKafkaConfig(
+	u *changefeedbase.SinkURL, secretReader *secretdir.Reader,
+) (kafkaDialConfig, error) {
 	dialConfig := kafkaDialConfig{}
 
 	if _, err := u.ConsumeBool(changefeedbase.SinkParamTLSEnabled, &dialConfig.tlsEnabled); err != nil {
@@ -908,7 +913,7 @@ func buildDefaultKafkaConfig(u *changefeedbase.SinkURL) (kafkaDialConfig, error)
 		return kafkaDialConfig{}, err
 	}
 
-	authMechanism, ok, err := kafkaauth.Pick(u)
+	authMechanism, ok, err := kafkaauth.Pick(u, secretReader)
 	if err != nil {
 		return kafkaDialConfig{}, err
 	}
@@ -1016,7 +1021,9 @@ func setDefaultParametersForConfluentAndAzure(
 // information on how to connect to confluent cloud kafka. There are also
 // instructions when you go to the `Clients` page of the cluster in confluent
 // cloud.
-func buildConfluentKafkaConfig(u *changefeedbase.SinkURL) (kafkaDialConfig, error) {
+func buildConfluentKafkaConfig(
+	u *changefeedbase.SinkURL, secretReader *secretdir.Reader,
+) (kafkaDialConfig, error) {
 	dialConfig := kafkaDialConfig{}
 	// Check for api_key and api_secret.
 	var saslUser, saslPassword string
@@ -1040,7 +1047,7 @@ func buildConfluentKafkaConfig(u *changefeedbase.SinkURL) (kafkaDialConfig, erro
 		return kafkaDialConfig{}, err
 	}
 
-	authMechanism, ok, err := kafkaauth.Pick(u)
+	authMechanism, ok, err := kafkaauth.Pick(u, secretReader)
 	if err != nil {
 		return kafkaDialConfig{}, err
 	}
@@ -1068,7 +1075,9 @@ func buildConfluentKafkaConfig(u *changefeedbase.SinkURL) (kafkaDialConfig, erro
 // See
 // https://learn.microsoft.com/en-us/azure/event-hubs/azure-event-hubs-kafka-overview
 // on how to connect to azure event hub kafka protocol.
-func buildAzureKafkaConfig(u *changefeedbase.SinkURL) (dialConfig kafkaDialConfig, _ error) {
+func buildAzureKafkaConfig(
+	u *changefeedbase.SinkURL, secretReader *secretdir.Reader,
+) (dialConfig kafkaDialConfig, _ error) {
 	hostName := u.Hostname()
 	// saslUser="$ConnectionString"
 	// saslPassword="Endpoint=sb://<NamespaceName>.servicebus.windows.net/;SharedAccessKeyName=<KeyName>;SharedAccessKey=<KeyValue>;
@@ -1113,7 +1122,7 @@ func buildAzureKafkaConfig(u *changefeedbase.SinkURL) (dialConfig kafkaDialConfi
 		return kafkaDialConfig{}, err
 	}
 
-	authMechanism, ok, err := kafkaauth.Pick(u)
+	authMechanism, ok, err := kafkaauth.Pick(u, secretReader)
 	if err != nil {
 		return kafkaDialConfig{}, err
 	}
@@ -1135,8 +1144,9 @@ func buildKafkaConfig(
 	jsonStr changefeedbase.SinkSpecificJSONConfig,
 	kafkaThrottlingMetrics metrics.Histogram,
 	netMetrics *cidr.NetMetrics,
+	secretReader *secretdir.Reader,
 ) (*sarama.Config, error) {
-	dialConfig, err := buildDialConfig(u)
+	dialConfig, err := buildDialConfig(u, secretReader)
 	if err != nil {
 		return nil, err
 	}
@@ -1231,6 +1241,7 @@ func makeKafkaSink(
 	sinkOpts changefeedbase.KafkaSinkOptions,
 	settings *cluster.Settings,
 	mb metricsRecorderBuilder,
+	secretReader *secretdir.Reader,
 ) (Sink, error) {
 	kafkaTopicPrefix := u.ConsumeParam(changefeedbase.SinkParamTopicPrefix)
 	kafkaTopicName := u.ConsumeParam(changefeedbase.SinkParamTopicName)
@@ -1245,7 +1256,7 @@ func makeKafkaSink(
 	}
 
 	m := mb(requiresResourceAccounting)
-	config, err := buildKafkaConfig(ctx, u, jsonStr, m.getKafkaThrottlingMetrics(settings), m.netMetrics())
+	config, err := buildKafkaConfig(ctx, u, jsonStr, m.getKafkaThrottlingMetrics(settings), m.netMetrics(), secretReader)
 	if err != nil {
 		return nil, err
 	}

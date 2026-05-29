@@ -16,6 +16,7 @@ import (
 
 	"github.com/IBM/sarama"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/security/secretdir"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -38,33 +39,68 @@ func (s saslProprietaryOAuthBuilder) validateParams(u *changefeedbase.SinkURL) e
 		changefeedbase.SinkParamSASLClientID,
 		changefeedbase.SinkParamSASLTokenURL,
 		changefeedbase.SinkParamSASLProprietaryResource,
-		changefeedbase.SinkParamSASLProprietaryClientAssertion,
 		changefeedbase.SinkParamSASLProprietaryClientAssertionType,
 	}
-	return peekAndRequireParams(s.name(), u, requiredParams)
+	if err := peekAndRequireParams(s.name(), u, requiredParams); err != nil {
+		return err
+	}
+	hasAssertion := u.PeekParam(changefeedbase.SinkParamSASLProprietaryClientAssertion) != ""
+	hasAssertionLocation := u.PeekParam(changefeedbase.SinkParamSASLProprietaryClientAssertionLocation) != ""
+	switch {
+	case hasAssertion && hasAssertionLocation:
+		return errors.Newf("%s and %s cannot be used together",
+			changefeedbase.SinkParamSASLProprietaryClientAssertion,
+			changefeedbase.SinkParamSASLProprietaryClientAssertionLocation)
+	case !hasAssertion && !hasAssertionLocation:
+		return errors.Newf("one of %s or %s must be provided when SASL is enabled using mechanism %s",
+			changefeedbase.SinkParamSASLProprietaryClientAssertion,
+			changefeedbase.SinkParamSASLProprietaryClientAssertionLocation,
+			proprietaryOAuthName)
+	}
+	return nil
 }
 
 // build implements authMechanismBuilder.
-func (s saslProprietaryOAuthBuilder) build(u *changefeedbase.SinkURL) (SASLMechanism, error) {
+func (s saslProprietaryOAuthBuilder) build(
+	u *changefeedbase.SinkURL, bc BuildContext,
+) (SASLMechanism, error) {
 	handshake, err := consumeHandshake(u)
 	if err != nil {
 		return nil, err
 	}
+	clientAssertionLocation := u.ConsumeParam(changefeedbase.SinkParamSASLProprietaryClientAssertionLocation)
+	if clientAssertionLocation != "" {
+		// Validate now so a misconfigured path fails at planning rather than
+		// at first bearer mint. nil SecretReader is surfaced by Validate as
+		// "--secret-directory is not configured".
+		if err := bc.SecretReader.Validate(clientAssertionLocation); err != nil {
+			return nil, err
+		}
+	}
 	return &saslProprietaryOAuth{
-		clientID:            u.ConsumeParam(changefeedbase.SinkParamSASLClientID),
-		tokenURL:            u.ConsumeParam(changefeedbase.SinkParamSASLTokenURL),
-		resource:            u.ConsumeParam(changefeedbase.SinkParamSASLProprietaryResource),
-		clientAssertion:     u.ConsumeParam(changefeedbase.SinkParamSASLProprietaryClientAssertion),
-		clientAssertionType: u.ConsumeParam(changefeedbase.SinkParamSASLProprietaryClientAssertionType),
-		handshake:           handshake,
+		clientID:                u.ConsumeParam(changefeedbase.SinkParamSASLClientID),
+		tokenURL:                u.ConsumeParam(changefeedbase.SinkParamSASLTokenURL),
+		resource:                u.ConsumeParam(changefeedbase.SinkParamSASLProprietaryResource),
+		clientAssertion:         u.ConsumeParam(changefeedbase.SinkParamSASLProprietaryClientAssertion),
+		clientAssertionLocation: clientAssertionLocation,
+		secretReader:            bc.SecretReader,
+		clientAssertionType:     u.ConsumeParam(changefeedbase.SinkParamSASLProprietaryClientAssertionType),
+		handshake:               handshake,
 	}, nil
 }
 
 var _ saslMechanismBuilder = saslProprietaryOAuthBuilder{}
 
 type saslProprietaryOAuth struct {
-	clientID, tokenURL, resource,
-	clientAssertion, clientAssertionType string
+	clientID, tokenURL, resource, clientAssertionType string
+
+	// Exactly one of clientAssertion and clientAssertionLocation is set
+	// (enforced in validateParams). SecretReader should be non-nil if the
+	// sasl_proprietary_client_assertion_location URI param is set.
+	clientAssertion         string
+	clientAssertionLocation string
+	secretReader            *secretdir.Reader
+
 	handshake bool
 }
 
@@ -109,10 +145,22 @@ func (s *saslProprietaryOAuth) newKgoTokenProvider(
 }
 
 func (s *saslProprietaryOAuth) newTokenSource(ctx context.Context) oauth2.TokenSource {
+	var getClientAssertion func() (string, error)
+	if s.clientAssertionLocation != "" {
+		getClientAssertion = func() (string, error) {
+			b, err := s.secretReader.ReadFile(s.clientAssertionLocation)
+			if err != nil {
+				return "", errors.Wrapf(err, "reading client assertion file %q", s.clientAssertionLocation)
+			}
+			return strings.TrimSpace(string(b)), nil
+		}
+	} else {
+		getClientAssertion = func() (string, error) { return s.clientAssertion, nil }
+	}
 	return proprietaryTokenSource{
 		tokenURL:            s.tokenURL,
 		clientID:            s.clientID,
-		clientAssertion:     s.clientAssertion,
+		getClientAssertion:  getClientAssertion,
 		clientAssertionType: s.clientAssertionType,
 		resource:            s.resource,
 		ctx:                 ctx,
@@ -123,7 +171,11 @@ func (s *saslProprietaryOAuth) newTokenSource(ctx context.Context) oauth2.TokenS
 var _ SASLMechanism = (*saslProprietaryOAuth)(nil)
 
 type proprietaryTokenSource struct {
-	tokenURL, clientID, clientAssertion, clientAssertionType, resource string
+	tokenURL, clientID, clientAssertionType, resource string
+	// getClientAssertion returns the current JWT client assertion. For
+	// static (inline) configs it returns the captured value; for file-mode
+	// it re-reads from disk each call.
+	getClientAssertion func() (string, error)
 	// The oauth2.TokenSource API seems to require us to keep a context in here.
 	ctx    context.Context
 	client *http.Client
@@ -136,36 +188,41 @@ func (s proprietaryTokenSource) Token() (*oauth2.Token, error) {
 		return nil, errors.Wrap(err, "malformed token url")
 	}
 
+	clientAssertion, err := s.getClientAssertion()
+	if err != nil {
+		return nil, err
+	}
+
 	bodyParams := url.Values{
 		"grant_type":            {"client_credentials"},
 		"client_id":             {s.clientID},
 		"client_assertion_type": {s.clientAssertionType},
-		"client_assertion":      {s.clientAssertion},
+		"client_assertion":      {clientAssertion},
 		"resource":              {s.resource},
 	}
 
 	req, err := http.NewRequestWithContext(s.ctx, "POST", tokenURL.String(), strings.NewReader(bodyParams.Encode()))
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create oauth token request")
+		return nil, errors.Wrap(err, "creating oauth token request")
 	}
 	req.Header.Set("Content-Type", "application/www-url-encoded")
 
 	res, err := s.client.Do(req)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to make oauth token request")
+		return nil, errors.Wrap(err, "issuing oauth token request")
 	}
 
 	body, err := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 	if err != nil {
-		return nil, errors.Join(errors.Wrap(err, "failed to read oauth response body"), res.Body.Close())
+		return nil, errors.Join(errors.Wrap(err, "reading oauth response body"), res.Body.Close())
 	}
 	if err := res.Body.Close(); err != nil {
-		return nil, errors.Wrap(err, "failed to close oauth response body")
+		return nil, errors.Wrap(err, "closing oauth response body")
 	}
 
 	var resp proprietaryOAuthResp
 	if err := json.Unmarshal(body, &resp); err != nil {
-		return nil, errors.Wrapf(err, "failed to parse oauth response")
+		return nil, errors.Wrap(err, "parsing oauth response")
 	}
 	if resp.AccessToken == "" {
 		return nil, errors.Errorf("no access token in oauth response")

@@ -29,7 +29,7 @@ func (s saslMSKBuilder) validateParams(u *changefeedbase.SinkURL) error {
 }
 
 // build implements authMechanismBuilder.
-func (s saslMSKBuilder) build(u *changefeedbase.SinkURL) (SASLMechanism, error) {
+func (s saslMSKBuilder) build(u *changefeedbase.SinkURL, _ BuildContext) (SASLMechanism, error) {
 	handshake, err := consumeHandshake(u)
 	if err != nil {
 		return nil, err
