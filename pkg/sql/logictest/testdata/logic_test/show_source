@@ -164,6 +164,7 @@ optimizer_disable_cross_region_cascade_fast_path_for_rbr_tables  on             
 optimizer_enable_lock_elision                                    on                  Controls whether the optimizer can eliminate unnecessary locking operations.
 optimizer_hoist_uncorrelated_equality_subqueries                 on                  Controls whether the optimizer hoists uncorrelated subqueries in equality expressions with columns, potentially producing more efficient plans.
 optimizer_inline_any_unnest_subquery                             on                  Controls whether the optimizer inlines subqueries containing ANY expressions combined with UNNEST.
+optimizer_inline_placeholder_equalities                          on                  Controls whether the optimizer inlines placeholder equalities in the InlineConstVar normalization rule.
 optimizer_merge_joins_enabled                                    on                  Controls whether the optimizer should explore query plans with merge joins.
 optimizer_min_row_count                                          1                   Sets a lower bound on row count estimates during query planning, except for expressions with zero cardinality.
 optimizer_plan_lookup_joins_with_reverse_scans                   on                  Controls whether the optimizer can plan lookup joins using reverse index scans.
