@@ -179,7 +179,7 @@ inner-join (cross)
 
 # Regression test for #164666. A placeholder equality like i = $1 should
 # propagate into correlated subqueries referencing the same column.
-norm expect=InlineConstVar
+norm set=optimizer_inline_placeholder_equalities=on expect=InlineConstVar
 SELECT k FROM a WHERE i = $1 AND EXISTS(SELECT 1 FROM xy WHERE y = a.i)
 ----
 project
