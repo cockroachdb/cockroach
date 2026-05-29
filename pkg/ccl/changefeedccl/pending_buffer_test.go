@@ -16,8 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TODO(#170203): add a parallelism/stress test under --race once
-// completeBatch is implemented.
 func ts(n int) hlc.Timestamp {
 	return hlc.Timestamp{WallTime: int64(n)}
 }
@@ -35,50 +33,153 @@ func assertEvents(t *testing.T, expected []*rowEvent, actual []*rowEvent) {
 	}
 }
 
-// TestPendingBufferGetBatch covers the addRow -> getBatch path: events
-// come back in oldest-first order, capped by the configured batch
-// limit. Same-key and distinct-key inputs are exercised together.
-func TestPendingBufferGetBatch(t *testing.T) {
+// mustReceive blocks up to one second waiting for ch to fire and
+// returns the received value, failing the test on timeout.
+func mustReceive[T any](t *testing.T, ch <-chan T, msg string) T {
+	t.Helper()
+	select {
+	case v := <-ch:
+		return v
+	case <-time.After(time.Second):
+		t.Fatalf("timed out waiting for %s", msg)
+		var zero T
+		return zero
+	}
+}
+
+// mustBlock waits 200ms and fails the test if ch fires in that window.
+// The check is best-effort: a goroutine that hasn't yet parked will
+// look "blocked" even if it would return immediately, but in practice
+// 200ms is plenty for the operations we exercise.
+func mustBlock[T any](t *testing.T, ch <-chan T, msg string) {
+	t.Helper()
+	select {
+	case v := <-ch:
+		t.Fatalf("%s: unexpectedly received %v", msg, v)
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
+// TestPendingBufferBatchSequence drives a series of addRow calls
+// followed by a sequence of getBatch calls. Between consecutive
+// batches the runner calls completeBatch so that inflight keys are
+// released and (if they still have pending events) re-enter the heap
+// at their original arrival slot. Each subcase asserts the exact
+// events returned by every batch in the sequence.
+func TestPendingBufferBatchSequence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	evA := mkEvent("a", "1", ts(0))
-	evB := mkEvent("b", "1", ts(1))
-	evC := mkEvent("c", "1", ts(2))
-	evD := mkEvent("d", "1", ts(3))
-	evE := mkEvent("e", "1", ts(4))
-
-	evA1 := mkEvent("a", "1", ts(0))
-	evA2 := mkEvent("a", "2", ts(1))
-	evA3 := mkEvent("a", "3", ts(2))
-	evA4 := mkEvent("a", "4", ts(3))
-	evA5 := mkEvent("a", "5", ts(4))
+	mk := func(key, val string) *rowEvent {
+		return mkEvent(key, val, ts(0))
+	}
 
 	tests := []struct {
-		name     string
-		inputs   []*rowEvent
-		expected []*rowEvent
+		name    string
+		inputs  []*rowEvent
+		batches [][]*rowEvent
 	}{
 		{
-			name:     "round trip 4 distinct keys",
-			inputs:   []*rowEvent{evA, evB, evC, evD},
-			expected: []*rowEvent{evA, evB, evC, evD},
+			name:    "round trip 4 distinct keys",
+			inputs:  []*rowEvent{mk("a", "1"), mk("b", "1"), mk("c", "1"), mk("d", "1")},
+			batches: [][]*rowEvent{{mk("a", "1"), mk("b", "1"), mk("c", "1"), mk("d", "1")}},
 		},
 		{
-			name:     "limit caps cross-key batch",
-			inputs:   []*rowEvent{evA, evB, evC, evD, evE},
-			expected: []*rowEvent{evA, evB, evC, evD},
+			// Fifth event would exceed maxMessages=4; it stays pending
+			// and drains in batch2 once batch1 completes.
+			name:   "limit caps cross-key batch",
+			inputs: []*rowEvent{mk("a", "1"), mk("b", "1"), mk("c", "1"), mk("d", "1"), mk("e", "1")},
+			batches: [][]*rowEvent{
+				{mk("a", "1"), mk("b", "1"), mk("c", "1"), mk("d", "1")},
+				{mk("e", "1")},
+			},
 		},
 		{
-			name:     "limit caps per-key batch",
-			inputs:   []*rowEvent{evA1, evA2, evA3, evA4, evA5},
-			expected: []*rowEvent{evA1, evA2, evA3, evA4},
+			// Single key with 5 events: first 4 fit, fifth comes through
+			// in batch2 after completeBatch re-pushes A's tail.
+			name: "limit caps per-key batch",
+			inputs: []*rowEvent{
+				mk("a", "1"), mk("a", "2"), mk("a", "3"), mk("a", "4"), mk("a", "5"),
+			},
+			batches: [][]*rowEvent{
+				{mk("a", "1"), mk("a", "2"), mk("a", "3"), mk("a", "4")},
+				{mk("a", "5")},
+			},
 		},
 		{
-			name:     "fills batch by oldest key",
-			inputs:   []*rowEvent{evA1, evB, evC, evD, evA2, evA3},
-			expected: []*rowEvent{evA1, evA2, evA3, evB},
+			// A is oldest, so its whole FIFO drains before we move on to
+			// B; C and D never make it into batch1 and come through in
+			// batch2.
+			name: "fills batch by oldest key",
+			inputs: []*rowEvent{
+				mk("a", "1"), mk("b", "1"), mk("c", "1"), mk("d", "1"), mk("a", "2"), mk("a", "3"),
+			},
+			batches: [][]*rowEvent{
+				{mk("a", "1"), mk("a", "2"), mk("a", "3"), mk("b", "1")},
+				{mk("c", "1"), mk("d", "1")},
+			},
+		},
+		{
+			// Same-key overflow: 8 events for a single key produce two
+			// back-to-back full batches once completeBatch releases the
+			// key between them.
+			name: "same key partial requeue",
+			inputs: []*rowEvent{
+				mk("a", "1"), mk("a", "2"), mk("a", "3"), mk("a", "4"),
+				mk("a", "5"), mk("a", "6"), mk("a", "7"), mk("a", "8"),
+			},
+			batches: [][]*rowEvent{
+				{mk("a", "1"), mk("a", "2"), mk("a", "3"), mk("a", "4")},
+				{mk("a", "5"), mk("a", "6"), mk("a", "7"), mk("a", "8")},
+			},
+		},
+		{
+			// A's tail re-enters the heap at its original arrival slot
+			// (seq=6, between B/C and D/E), so batch2 is B, C, A, A and
+			// D/E come through in batch3.
+			name: "requeue lands at arrival slot",
+			inputs: []*rowEvent{
+				mk("a", "1"), mk("a", "2"), mk("a", "3"), mk("a", "4"),
+				mk("b", "1"), mk("c", "1"),
+				mk("a", "5"), mk("a", "6"),
+				mk("d", "1"), mk("e", "1"),
+			},
+			batches: [][]*rowEvent{
+				{mk("a", "1"), mk("a", "2"), mk("a", "3"), mk("a", "4")},
+				{mk("b", "1"), mk("c", "1"), mk("a", "5"), mk("a", "6")},
+				{mk("d", "1"), mk("e", "1")},
+			},
+		},
+		{
+			// A's tail arrived AFTER B/C/D/E, so on re-push its seq sits
+			// behind them. Batch2 drains B, C, D, E and A's tail comes
+			// through in batch3.
+			name: "requeue lands behind newer keys",
+			inputs: []*rowEvent{
+				mk("a", "1"), mk("a", "2"), mk("a", "3"), mk("a", "4"),
+				mk("b", "1"), mk("c", "1"), mk("d", "1"), mk("e", "1"),
+				mk("a", "5"), mk("a", "6"),
+			},
+			batches: [][]*rowEvent{
+				{mk("a", "1"), mk("a", "2"), mk("a", "3"), mk("a", "4")},
+				{mk("b", "1"), mk("c", "1"), mk("d", "1"), mk("e", "1")},
+				{mk("a", "5"), mk("a", "6")},
+			},
+		},
+		{
+			// A's FIFO is exactly drained by batch1 (no tail), so
+			// completeBatch must NOT re-push A. Batch2 has only B/C/D
+			// available and returns a partial 3-event batch.
+			name: "fully drained key not requeued",
+			inputs: []*rowEvent{
+				mk("a", "1"), mk("a", "2"), mk("a", "3"), mk("a", "4"),
+				mk("b", "1"), mk("c", "1"), mk("d", "1"),
+			},
+			batches: [][]*rowEvent{
+				{mk("a", "1"), mk("a", "2"), mk("a", "3"), mk("a", "4")},
+				{mk("b", "1"), mk("c", "1"), mk("d", "1")},
+			},
 		},
 	}
 
@@ -89,9 +190,12 @@ func TestPendingBufferGetBatch(t *testing.T) {
 			for _, ev := range tc.inputs {
 				require.NoError(t, b.addRow(ctx, ev))
 			}
-			batch, err := b.getBatch(ctx)
-			require.NoError(t, err)
-			assertEvents(t, tc.expected, batch.events)
+			for _, expected := range tc.batches {
+				batch, err := b.getBatch(ctx)
+				require.NoError(t, err)
+				assertEvents(t, expected, batch.events)
+				b.completeBatch(batch)
+			}
 		})
 	}
 }
@@ -116,21 +220,13 @@ func TestPendingBufferGetBatchBlocksUntilAddRow(t *testing.T) {
 		batchCh <- batch
 	}()
 
-	select {
-	case <-batchCh:
-		t.Fatal("getBatch returned on empty buffer")
-	case <-time.After(200 * time.Millisecond):
-	}
+	mustBlock(t, batchCh, "getBatch on empty buffer")
 
 	ev := mkEvent("a", "1", ts(0))
 	require.NoError(t, b.addRow(ctx, ev))
 
-	select {
-	case batch := <-batchCh:
-		assertEvents(t, []*rowEvent{ev}, batch.events)
-	case <-time.After(time.Second):
-		t.Fatal("getBatch did not return after addRow")
-	}
+	batch := mustReceive(t, batchCh, "getBatch after addRow")
+	assertEvents(t, []*rowEvent{ev}, batch.events)
 }
 
 // TestPendingBufferGetBatchExcludesInflightKey verifies that a key
@@ -164,11 +260,7 @@ func TestPendingBufferGetBatchExcludesInflightKey(t *testing.T) {
 		batchCh <- batch
 	}()
 
-	select {
-	case <-batchCh:
-		t.Fatal("getBatch returned while same-key batch was inflight")
-	case <-time.After(200 * time.Millisecond):
-	}
+	mustBlock(t, batchCh, "getBatch while same-key batch was inflight")
 }
 
 // TestPendingBufferCloseSentinel verifies that close wakes a getBatch
@@ -188,24 +280,53 @@ func TestPendingBufferCloseSentinel(t *testing.T) {
 		errCh <- err
 	}()
 
-	select {
-	case err := <-errCh:
-		t.Fatalf("getBatch returned before close: %v", err)
-	case <-time.After(200 * time.Millisecond):
-	}
+	mustBlock(t, errCh, "getBatch before close")
 
 	b.close()
 
-	select {
-	case err := <-errCh:
-		require.ErrorIs(t, err, errPendingBufferClosed)
-	case <-time.After(time.Second):
-		t.Fatal("getBatch did not return after close")
-	}
+	err := mustReceive(t, errCh, "getBatch after close")
+	require.ErrorIs(t, err, errPendingBufferClosed)
 
-	err := b.addRow(ctx, mkEvent("a", "1", ts(0)))
+	err = b.addRow(ctx, mkEvent("a", "1", ts(0)))
 	require.ErrorIs(t, err, errPendingBufferClosed)
 
 	_, err = b.getBatch(ctx)
 	require.ErrorIs(t, err, errPendingBufferClosed)
+}
+
+// TestPendingBufferDrainOnEmpty verifies that drain on an empty
+// buffer with no inflight batches returns immediately.
+func TestPendingBufferDrainOnEmpty(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	b := newPendingBuffer(pendingBufferConfig{maxMessages: 4}, nil /* topic */)
+	defer b.close()
+
+	doneCh := make(chan error, 1)
+	go func() { doneCh <- b.drain() }()
+	require.NoError(t, mustReceive(t, doneCh, "drain on empty buffer"))
+}
+
+// TestPendingBufferCompleteBatchAfterClose verifies that completeBatch
+// called after close is a no-op (releases events/allocs, does not
+// panic, does not touch the heap).
+//
+// TODO(#170203): "doesn't panic" is a weak assertion. A meaningful
+// "releases allocs" check requires rowEvent/Alloc plumbing and a way
+// to observe release count (e.g. a test-only release callback or an
+// instrumented pool) — separate production work.
+func TestPendingBufferCompleteBatchAfterClose(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	b := newPendingBuffer(pendingBufferConfig{maxMessages: 4}, nil /* topic */)
+
+	require.NoError(t, b.addRow(ctx, mkEvent("a", "1", ts(0))))
+	batch, err := b.getBatch(ctx)
+	require.NoError(t, err)
+
+	b.close()
+	require.NotPanics(t, func() { b.completeBatch(batch) })
 }

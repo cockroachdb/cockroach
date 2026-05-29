@@ -177,14 +177,42 @@ func (b *pendingBuffer) getBatch(ctx context.Context) (*pendingBatch, error) {
 // kvevent.Alloc. It also adds any inflight keys back to the heap if
 // they have pending events.
 func (b *pendingBuffer) completeBatch(batch *pendingBatch) {
-	// TODO(#170203): implement.
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	for _, ev := range batch.events {
+		inflightKey := string(ev.key)
+		if _, inflight := b.mu.inflight[inflightKey]; !inflight {
+			// If we've already seen an event for this key in this
+			// batch, we will have already removed it from inflight.
+			continue
+		}
+
+		delete(b.mu.inflight, inflightKey)
+		if pendingEvents, ok := b.mu.events[inflightKey]; ok {
+			if len(pendingEvents) == 0 {
+				panic(errors.AssertionFailedf("events map has empty FIFO for inflight key instead of nil"))
+			}
+			// The events in pendingEvents are sorted by the order we
+			// recieved them. The seq value of the first event is the
+			// one we use for the heap.
+			firstPendingEvent := pendingEvents[0]
+			heapEntry := keyHeapEntry{key: inflightKey, seq: firstPendingEvent.seq}
+			heap.Push[keyHeapEntry](&b.mu.heap, heapEntry)
+
+			b.mu.cond.Signal()
+		}
+	}
 }
 
 // drain blocks until every event accepted by addRow has been pulled
 // by a worker via getBatch AND released via completeBatch. Used by
-// Sink.Flush.
-func (b *pendingBuffer) drain() {
+// Sink.Flush. Returns errPendingBufferClosed if close races with the
+// drain — a closed buffer cannot guarantee the pre-drain events were
+// actually flushed.
+func (b *pendingBuffer) drain() error {
 	// TODO(#170203): implement.
+	return nil
 }
 
 // close marks the buffer closed and wakes all waiters. Subsequent
