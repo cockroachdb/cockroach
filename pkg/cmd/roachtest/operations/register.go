@@ -35,6 +35,7 @@ func RegisterOperations(r registry.Registry) {
 	registerDebugZip(r)
 	registerDiskFill(r)
 	registerOOM(r)
+	registerDiskFillBulkIngest(r)
 	changefeeds.RegisterChangefeeds(r)
 	registerInspect(r)
 	registerTPCCCheck(r)
