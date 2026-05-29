@@ -548,26 +548,20 @@ func (b *Builder) buildRoutine(
 	return routine
 }
 
-// buildSQLRoutineBodyStmts builds the body statements of a SQL routine into
-// RelExprs. It is used on both the eager path (plan-time) and the deferred path
-// (execution-time), distinguished by funcExpr:
+// buildSQLRoutineBodyStmts builds all body statements of a SQL routine into
+// RelExprs at plan time (the eager path), called from buildRoutine.
 //
-//   - Eager path (funcExpr != nil): called at plan time from
-//     buildRoutine. The return type may still need finalization (e.g. resolving
-//     AnyTuple for RETURNS RECORD routines), so finalizeRoutineReturnType is
-//     called. funcExpr and inScope are required for this
-//     finalization.
+// It appends the synthetic VOID-return statement when needed, then builds each
+// statement via buildOneBodyStmt. funcExpr (always non-nil here) and inScope
+// are required because the final statement's return type may still need
+// finalization at plan time, e.g. resolving AnyTuple for RETURNS RECORD
+// routines; see buildOneBodyStmt for how funcExpr selects between finalization
+// and validation. rTyp is the return type (funcExpr.ResolvedType()), used for
+// the VOID-return check.
 //
-//   - Deferred path (funcExpr == nil): called at execution time from
-//     sqlRoutineBodyBuilder.Build. The return type (rTyp) was already resolved
-//     and persisted at plan time — AnyTuple and ReturnsRecordType are always
-//     resolved before reaching this path. Only validateReturnType is needed to
-//     confirm that the rebuilt body columns are still compatible.
-//
-// rTyp is the routine's return type on both paths: on the eager path it is
-// funcExpr.ResolvedType(); on the deferred path it is the type captured
-// at plan time. It is always used for the VOID-return check (appending
-// VALUES (NULL)).
+// The deferred (execution-time) path does not go through this function; it
+// builds statements directly via buildOneBodyStmt from
+// sqlRoutineBodyBuilder.Build and BuildStmt.
 func (b *Builder) buildSQLRoutineBodyStmts(
 	stmtASTs []tree.Statement,
 	bodyScope *scope,
@@ -577,62 +571,109 @@ func (b *Builder) buildSQLRoutineBodyStmts(
 	isSetReturning bool,
 	insideDataSource bool,
 ) (body []memo.RelExpr, bodyProps []*physical.Required, bodyTags []string) {
-	// Add a VALUES (NULL) statement if the return type of the function is
-	// VOID. We cannot simply project NULL from the last statement because
-	// all columns would be pruned and the contents of last statement would
-	// not be executed.
-	// TODO(mgartner): This will add some planning overhead for every
-	// invocation of the function. Is there a more efficient way to do this?
-	var appendedNullForVoidReturn bool
-	if rTyp.Family() == types.VoidFamily {
-		stmtASTs = append(append([]tree.Statement(nil), stmtASTs...), &tree.Select{
-			Select: &tree.ValuesClause{
-				Rows: []tree.Exprs{{tree.DNull}},
-			},
-		})
-		appendedNullForVoidReturn = true
-	}
-
+	stmtASTs, appendedNullForVoidReturn := maybeAppendVoidReturnStmt(stmtASTs, rTyp)
+	lastIdx := len(stmtASTs) - 1
 	body = make([]memo.RelExpr, len(stmtASTs))
 	bodyProps = make([]*physical.Required, len(stmtASTs))
 	bodyTags = make([]string, len(stmtASTs))
 	for i, ast := range stmtASTs {
-		// TODO(michae2): We should be checking the statement hints cache here to
-		// find any external statement hints that could apply to this statement.
-		stmtScope := b.buildStmtAtRootWithScope(ast, nil /* desiredTypes */, bodyScope)
-
-		// The last statement produces the output of the routine.
-		if i == len(stmtASTs)-1 {
-			if funcExpr != nil {
-				// Eager path: finalize the return type. This handles AnyTuple
-				// resolution for RETURNS RECORD routines, column-definition-list
-				// validation for data-source usage, and type annotation on the
-				// FuncExpr. See finalizeRoutineReturnType for details.
-				rTyp = b.finalizeRoutineReturnType(
-					funcExpr, stmtScope, inScope, insideDataSource,
-				)
-			} else {
-				// Deferred path: the return type is already resolved. Just
-				// validate that the rebuilt body columns are compatible.
-				if err := validateReturnType(
-					b.ctx, b.semaCtx, rTyp, stmtScope.cols,
-				); err != nil {
-					panic(err)
-				}
-			}
-			stmtScope = b.finishRoutineReturnStmt(stmtScope, isSetReturning, insideDataSource, rTyp)
-		}
-		body[i] = stmtScope.expr
-		bodyProps[i] = stmtScope.makePhysicalProps()
+		expr, props, tag := b.buildOneBodyStmt(
+			ast, bodyScope, rTyp, funcExpr, inScope, isSetReturning, insideDataSource, i, lastIdx,
+		)
+		body[i] = expr
+		bodyProps[i] = props
 		// We don't need a statement tag for the artificial appended `SELECT NULL`
 		// statement.
-		if appendedNullForVoidReturn && i == len(stmtASTs)-1 {
+		if appendedNullForVoidReturn && i == lastIdx {
 			bodyTags[i] = ""
 		} else {
-			bodyTags[i] = ast.StatementTag()
+			bodyTags[i] = tag
 		}
 	}
 	return body, bodyProps, bodyTags
+}
+
+// buildOneBodyStmt builds a single SQL routine body statement at stmtIdx into a
+// RelExpr, returning the expression, its required physical properties, and its
+// statement tag. It is the shared per-statement helper used by both the eager
+// (plan-time) and deferred (execution-time) build paths.
+//
+// lastIdx is the index of the final body statement. The final statement
+// produces the routine's output, so when stmtIdx == lastIdx the statement
+// receives return-type handling and finalization (LIMIT 1 for
+// non-set-returning routines, tuple wrapping, and assignment casts) via
+// finishRoutineReturnStmt.
+//
+// funcExpr selects between the two build paths:
+//
+//   - Eager path (funcExpr != nil): called at plan time from
+//     buildSQLRoutineBodyStmts. The return type may still need finalization
+//     (e.g. resolving AnyTuple for RETURNS RECORD routines), so
+//     finalizeRoutineReturnType is called; funcExpr and inScope are required.
+//
+//   - Deferred path (funcExpr == nil): called at execution time from
+//     sqlRoutineBodyBuilder.Build and BuildStmt. The return type is already
+//     resolved, so only validateReturnType runs to confirm the rebuilt body
+//     columns are still compatible.
+func (b *Builder) buildOneBodyStmt(
+	ast tree.Statement,
+	bodyScope *scope,
+	rTyp *types.T,
+	funcExpr *tree.FuncExpr,
+	inScope *scope,
+	isSetReturning bool,
+	insideDataSource bool,
+	stmtIdx int,
+	lastIdx int,
+) (expr memo.RelExpr, props *physical.Required, tag string) {
+	// TODO(michae2): We should be checking the statement hints cache here to
+	// find any external statement hints that could apply to this statement.
+	stmtScope := b.buildStmtAtRootWithScope(ast, nil /* desiredTypes */, bodyScope)
+
+	// The last statement produces the output of the routine.
+	if stmtIdx == lastIdx {
+		if funcExpr != nil {
+			// Eager path: finalize the return type. This handles AnyTuple
+			// resolution for RETURNS RECORD routines, column-definition-list
+			// validation for data-source usage, and type annotation on the
+			// FuncExpr. See finalizeRoutineReturnType for details.
+			rTyp = b.finalizeRoutineReturnType(
+				funcExpr, stmtScope, inScope, insideDataSource,
+			)
+		} else {
+			// Deferred path: the return type is already resolved. Just
+			// validate that the rebuilt body columns are compatible.
+			if err := validateReturnType(
+				b.ctx, b.semaCtx, rTyp, stmtScope.cols,
+			); err != nil {
+				panic(err)
+			}
+		}
+		stmtScope = b.finishRoutineReturnStmt(stmtScope, isSetReturning, insideDataSource, rTyp)
+	}
+	return stmtScope.expr, stmtScope.makePhysicalProps(), ast.StatementTag()
+}
+
+// maybeAppendVoidReturnStmt appends a synthetic VALUES (NULL) statement to
+// stmtASTs when the routine returns VOID, returning the (possibly extended)
+// statement list and whether the synthetic statement was appended. The input
+// slice is never mutated.
+//
+// The synthetic statement is required because we cannot simply project NULL
+// from the last statement: doing so would prune all columns and the contents
+// of the last statement would not be executed.
+func maybeAppendVoidReturnStmt(
+	stmtASTs []tree.Statement, rTyp *types.T,
+) (augmented []tree.Statement, appended bool) {
+	if rTyp.Family() != types.VoidFamily {
+		return stmtASTs, false
+	}
+	augmented = append(append([]tree.Statement(nil), stmtASTs...), &tree.Select{
+		Select: &tree.ValuesClause{
+			Rows: []tree.Exprs{{tree.DNull}},
+		},
+	})
+	return augmented, true
 }
 
 // finishRoutineReturnStmt manages the output columns for a statement that will
@@ -1004,7 +1045,17 @@ func (b *Builder) buildDo(do *tree.DoBlock, inScope *scope) *scope {
 // sqlRoutineBodyBuilder implements memo.RoutineBodyBuilder for SQL routines.
 // It captures all metadata needed to build the routine body at execution time
 // instead of plan time.
+//
+// Construct instances with newSQLRoutineBodyBuilder, which performs the
+// VOID-return statement augmentation once so that NumStmts is stable.
+//
+// TODO(janexing): when hooking deferred optbuild up with the production code,
+// use newSQLRoutineBodyBuilder (rather than the struct literal) to ensure the
+// VOID-return statement augmentation is in place.
 type sqlRoutineBodyBuilder struct {
+	// stmtASTs holds the body statements to build, including the synthetic
+	// VALUES (NULL) statement appended for VOID-returning routines. It is set
+	// by newSQLRoutineBodyBuilder.
 	stmtASTs         []tree.Statement
 	paramTypes       []*types.T
 	paramNames       []tree.Name
@@ -1018,8 +1069,24 @@ type sqlRoutineBodyBuilder struct {
 
 var _ memo.RoutineBodyBuilder = &sqlRoutineBodyBuilder{}
 
-// Build constructs the body RelExprs for a SQL routine in a fresh memo.
-// It is called at execution time, after plan-time metadata has been captured.
+// newSQLRoutineBodyBuilder returns a sqlRoutineBodyBuilder for the given
+// configuration. The caller supplies the raw (pre-VOID-append) body statements
+// in cfg.stmtASTs; the synthetic VALUES (NULL) statement for VOID-returning
+// routines is appended here so that NumStmts and per-statement indexing are
+// stable for the lifetime of the builder.
+func newSQLRoutineBodyBuilder(cfg sqlRoutineBodyBuilder) *sqlRoutineBodyBuilder {
+	cfg.stmtASTs, _ = maybeAppendVoidReturnStmt(cfg.stmtASTs, cfg.rTyp)
+	return &cfg
+}
+
+// NumStmts is part of the memo.RoutineBodyBuilder interface.
+func (rb *sqlRoutineBodyBuilder) NumStmts() int {
+	return len(rb.stmtASTs)
+}
+
+// Build is part of the memo.RoutineBodyBuilder interface. All body statements
+// are built into the single provided factory using one Builder, so that the
+// resulting RelExprs share a memo and a single set of parameter columns.
 func (rb *sqlRoutineBodyBuilder) Build(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
@@ -1030,8 +1097,80 @@ func (rb *sqlRoutineBodyBuilder) Build(
 	// Enact panic handling similar to Builder.Build().
 	defer errorutil.MaybeCatchPanic(&retErr, nil /* errCallback */)
 
+	b, bodyScope, params := rb.newBodyBuilder(ctx, semaCtx, evalCtx, catalog, factoryI)
+
+	// Builtin routines need access to internal tables.
+	if rb.routineType == tree.BuiltinRoutine {
+		defer b.DisableUnsafeInternalCheck()()
+	}
+
+	lastIdx := len(rb.stmtASTs) - 1
+	body = make([]memo.RelExpr, len(rb.stmtASTs))
+	bodyProps = make([]*physical.Required, len(rb.stmtASTs))
+	for i, ast := range rb.stmtASTs {
+		// Pass funcExpr=nil to indicate the deferred path (the return type is
+		// already resolved).
+		body[i], bodyProps[i], _ = b.buildOneBodyStmt(
+			ast, bodyScope, rb.rTyp, nil /* funcExpr */, nil, /* inScope */
+			rb.isSetReturning, rb.insideDataSource, i, lastIdx,
+		)
+	}
+	return body, bodyProps, params, nil
+}
+
+// BuildStmt is part of the memo.RoutineBodyBuilder interface. Each call uses a
+// fresh Builder so that the statement is built against the provided catalog,
+// which may reflect DDL applied by earlier statements.
+func (rb *sqlRoutineBodyBuilder) BuildStmt(
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	evalCtx *eval.Context,
+	catalog cat.Catalog,
+	factoryI interface{},
+	stmtIdx int,
+) (stmt memo.RelExpr, props *physical.Required, params opt.ColList, retErr error) {
+	// Enact panic handling similar to Builder.Build().
+	defer errorutil.MaybeCatchPanic(&retErr, nil /* errCallback */)
+
+	if stmtIdx < 0 || stmtIdx >= len(rb.stmtASTs) {
+		return nil, nil, nil, errors.AssertionFailedf(
+			"body statement index %d out of range [0, %d)", stmtIdx, len(rb.stmtASTs),
+		)
+	}
+
+	b, bodyScope, params := rb.newBodyBuilder(ctx, semaCtx, evalCtx, catalog, factoryI)
+
+	// Builtin routines need access to internal tables.
+	if rb.routineType == tree.BuiltinRoutine {
+		defer b.DisableUnsafeInternalCheck()()
+	}
+
+	// Pass funcExpr=nil to indicate the deferred path (the return type is
+	// already resolved).
+	stmt, props, _ = b.buildOneBodyStmt(
+		rb.stmtASTs[stmtIdx], bodyScope, rb.rTyp, nil /* funcExpr */, nil, /* inScope */
+		rb.isSetReturning, rb.insideDataSource, stmtIdx, len(rb.stmtASTs)-1,
+	)
+	return stmt, props, params, nil
+}
+
+// newBodyBuilder creates and configures a Builder for building this routine's
+// body statements at execution time, returning the builder, a body scope
+// populated with the routine's parameter columns, and the parameter column
+// list.
+//
+// Callers building a builtin routine must additionally disable the
+// unsafe-internals check on the returned builder for the duration of the build;
+// see Build and BuildStmt.
+func (rb *sqlRoutineBodyBuilder) newBodyBuilder(
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	evalCtx *eval.Context,
+	catalog cat.Catalog,
+	factoryI interface{},
+) (b *Builder, bodyScope *scope, params opt.ColList) {
 	factory := factoryI.(*norm.Factory)
-	b := New(ctx, semaCtx, evalCtx, catalog, factory, nil /* stmt */)
+	b = New(ctx, semaCtx, evalCtx, catalog, factory, nil /* stmt */)
 
 	// Initialize the statement tree from the captured init function.
 	if rb.stmtTreeInitFn != nil {
@@ -1043,11 +1182,6 @@ func (rb *sqlRoutineBodyBuilder) Build(
 	b.insideSQLRoutine = true
 	b.trackSchemaDeps = false
 
-	// Builtin routines need access to internal tables.
-	if rb.routineType == tree.BuiltinRoutine {
-		defer b.DisableUnsafeInternalCheck()()
-	}
-
 	// Restore the effective privilege user for SECURITY DEFINER contexts.
 	if rb.privilegeUser != "" {
 		privUser := username.MakeSQLUsernameFromPreNormalizedString(rb.privilegeUser)
@@ -1055,8 +1189,18 @@ func (rb *sqlRoutineBodyBuilder) Build(
 		b.executePrivilegeUserOverride = privUser
 	}
 
-	// Create body scope with parameter columns.
-	bodyScope := b.allocScope()
+	// The stable parameter-column-ID guarantee documented on
+	// RoutineBodyBuilder.BuildStmt holds only because the parameter columns are
+	// the first columns synthesized into the factory. Guard against a future
+	// change allocating a column earlier, which would silently shift the IDs.
+	if n := b.factory.Metadata().NumColumns(); n != 0 {
+		panic(errors.AssertionFailedf(
+			"expected no columns synthesized before routine parameters, found %d", n,
+		))
+	}
+
+	// Create the body scope with parameter columns.
+	bodyScope = b.allocScope()
 	params = make(opt.ColList, len(rb.paramTypes))
 	for i := range rb.paramTypes {
 		var name tree.Name
@@ -1070,16 +1214,7 @@ func (rb *sqlRoutineBodyBuilder) Build(
 		col.setParamOrd(i)
 		params[i] = col.id
 	}
-
-	// Build the body statements using the shared helper. Pass
-	// funcExpr=nil to indicate the deferred path (return type is already
-	// resolved).
-	body, bodyProps, _ = b.buildSQLRoutineBodyStmts(
-		rb.stmtASTs, bodyScope, rb.rTyp,
-		nil /* funcExpr */, nil, /* inScope */
-		rb.isSetReturning, rb.insideDataSource,
-	)
-	return body, bodyProps, params, nil
+	return b, bodyScope, params
 }
 
 // buildDoBody builds the body of the anonymous routine for a DO statement.
