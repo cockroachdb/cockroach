@@ -134,6 +134,13 @@ func TestLogic_mixed_version_trigger_backref(
 	runLogicTest(t, "mixed_version_trigger_backref")
 }
 
+func TestLogic_mixed_version_udf_can_mutate(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_udf_can_mutate")
+}
+
 func TestLogic_upgrade(
 	t *testing.T,
 ) {

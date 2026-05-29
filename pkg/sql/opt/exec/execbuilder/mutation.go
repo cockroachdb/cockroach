@@ -1473,3 +1473,29 @@ func (b *Builder) setMutationFlags(e memo.RelExpr) {
 		b.flags.Set(exec.PlanFlagContainsUpsert)
 	}
 }
+
+// applyRoutineCanMutateFlags sets PlanFlagContainsMutation based on the
+// routine's CanMutate status. Unknown occurs only for pre-existing
+// descriptors that predate the can_mutate field; in that case, the body
+// is inspected if available, or mutations are conservatively assumed
+// when the body is permanently unavailable (deferred optbuild).
+func (b *Builder) applyRoutineCanMutateFlags(def *memo.UDFDefinition) {
+	switch def.CanMutate {
+	case tree.RoutineMutates:
+		b.flags.Set(exec.PlanFlagContainsMutation)
+	case tree.RoutineCanMutateUnknown:
+		// See BuildSharedProps for the full case breakdown.
+		if len(def.Body) == 0 && def.BodyBuilder != nil {
+			b.flags.Set(exec.PlanFlagContainsMutation)
+		} else {
+			for _, s := range def.Body {
+				if s != nil {
+					if relExpr := s.Relational(); relExpr != nil && relExpr.CanMutate {
+						b.setMutationFlags(s)
+						return
+					}
+				}
+			}
+		}
+	}
+}

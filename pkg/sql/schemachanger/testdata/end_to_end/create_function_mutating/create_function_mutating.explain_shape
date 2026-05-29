@@ -1,0 +1,15 @@
+/* setup */
+CREATE TABLE t(a INT PRIMARY KEY, b INT);
+
+/* test */
+EXPLAIN (DDL, SHAPE) CREATE FUNCTION f_insert(a INT, b INT) RETURNS INT LANGUAGE SQL AS $$
+  SELECT b;
+  INSERT INTO t VALUES(a, b);
+  SELECT a;
+$$;
+----
+Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹f_insert›(‹a› INT8, ‹b› INT8)
+	RETURNS INT8
+	LANGUAGE SQL
+	AS $$SELECT ‹b›; INSERT INTO ‹defaultdb›.‹public›.‹t› VALUES (‹a›, ‹b›); SELECT ‹a›;$$;
+ └── execute 1 system table mutations transaction
