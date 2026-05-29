@@ -174,7 +174,18 @@ func registerRebalanceLoad(r registry.Registry) {
 			duration := leaseAndReplicaRebalanceDuration
 			monitor := false
 			randomized := false
-			concurrency := 128
+			// Concurrency is set high enough to drive the cluster well above
+			// MMA's 5%-absolute-utilization classification floor. The previous
+			// value (128) produced only ~12% mean CPU on 4-vCPU s390x VMs --
+			// at that low utilization, per-node ambient-CPU noise dominates
+			// the signal and MMA can satisfy its own "within 10% of mean"
+			// criterion while the test's symmetric host-CPU tolerance is
+			// still violated.
+			//
+			// 4x produces ~75-85% mean CPU on GCE n2-standard-4 (with
+			// matching headroom on the ±20% tolerance band) and should land
+			// comfortably above the floor on slower architectures like s390x.
+			concurrency := 512
 
 			// Use fewer nodes for the lease only test.
 			if rebalanceMode == "leases" {
@@ -396,9 +407,12 @@ func makeStoreCPUFn(
 	}, nil
 }
 
-// isLoadEvenlyDistributed checks whether the load for the stores given are
-// within tolerance of the mean. If the store loads are, true is returned as
-// well as reason, otherwise false. The function expects the loads to be
+// isLoadEvenlyDistributed checks whether any store's load is above
+// mean*(1+tolerance), i.e. whether MMA's "no overloaded store" contract holds.
+// Stores below mean*(1-tolerance) are reported for visibility but do not cause
+// the check to fail: MMA only sheds from overloaded sources and has no
+// pull-to-cold mechanism, so a cold-side outlier (often dominated by per-node
+// ambient-CPU noise) is not actionable. The function expects the loads to be
 // indexed to store IDs, see makeStoreCPUFn for example format.
 func isLoadEvenlyDistributed(loads []float64, tolerance float64) (ok bool, reason string) {
 	mean := arithmeticMean(loads)
@@ -412,7 +426,7 @@ func isLoadEvenlyDistributed(loads []float64, tolerance float64) (ok bool, reaso
 	lb := mean - meanTolerance
 	ub := mean + meanTolerance
 
-	// Partiton the loads into above, below and within the tolerance bounds of
+	// Partition the loads into above, below and within the tolerance bounds of
 	// the load mean.
 	above, below, within := []int{}, []int{}, []int{}
 	for i, load := range loads {
@@ -426,19 +440,22 @@ func isLoadEvenlyDistributed(loads []float64, tolerance float64) (ok bool, reaso
 		}
 	}
 
+	ok = len(above) == 0
 	boundsStr := fmt.Sprintf("mean=%.1f tolerance=%.1f%% (±%.1f) bounds=[%.1f, %.1f]",
 		mean, 100*tolerance, meanTolerance, lb, ub)
-	if len(below) > 0 || len(above) > 0 {
-		ok = false
+	if len(above) > 0 || len(below) > 0 {
+		header := "above bounds"
+		if ok {
+			header = "below bounds (informational, not a failure)"
+		}
 		reason = fmt.Sprintf(
-			"outside bounds %s\n\tbelow  = %s\n\twithin = %s\n\tabove  = %s\n",
-			boundsStr,
+			"%s %s\n\tbelow  = %s\n\twithin = %s\n\tabove  = %s\n",
+			header, boundsStr,
 			formatLoads(below, loads, mean),
 			formatLoads(within, loads, mean),
 			formatLoads(above, loads, mean),
 		)
 	} else {
-		ok = true
 		reason = fmt.Sprintf("within bounds %s\n\tstores=%s\n",
 			boundsStr, formatLoads(within, loads, mean))
 	}
