@@ -168,7 +168,7 @@ func (c *CustomFuncs) checkConstraintFilters(tabID opt.TableID) memo.FiltersExpr
 }
 
 func (c *CustomFuncs) initIdxConstraintForIndex(
-	requiredFilters, optionalFilters memo.FiltersExpr, tabID opt.TableID, indexOrd int,
+	requiredFilters, optionalFilters memo.FiltersExpr, tabID opt.TableID, indexOrd int, spanLimit int,
 ) (ic *idxconstraint.Instance) {
 	ic = &idxconstraint.Instance{}
 
@@ -200,6 +200,7 @@ func (c *CustomFuncs) initIdxConstraintForIndex(
 		columns, notNullCols, tabMeta.ComputedCols,
 		tabMeta.ColsInComputedColsExpressions,
 		true /* consolidate */, c.e.evalCtx, c.e.f, ps,
+		spanLimit,
 		c.checkCancellation,
 	)
 	return ic
@@ -266,6 +267,8 @@ func (c *CustomFuncs) splitScanIntoUnionScansOrSelects(
 	// This is configurable using a session setting opt_split_scan_limit.
 	// If OptSplitScanLimit is below maxScanCount, we will decrease maxScanCount
 	// to that value because a hard limit should never be lower than a soft limit.
+	//
+	// TODO(michae2): Consider also bounding this by optimizer_span_limit.
 	hardMaxScanCount := int(c.e.evalCtx.SessionData().OptSplitScanLimit)
 	if hardMaxScanCount < maxScanCount {
 		maxScanCount = hardMaxScanCount
@@ -671,11 +674,13 @@ func (c *CustomFuncs) getKnownScanConstraint(
 	// Build a constraint set with the check constraints of the underlying
 	// table.
 	filters := c.checkConstraintFilters(sp.Table)
+	spanLimit := int(c.e.evalCtx.SessionData().OptimizerSpanLimit)
 	instance := c.initIdxConstraintForIndex(
 		nil, /* requiredFilters */
 		filters,
 		sp.Table,
 		sp.Index,
+		spanLimit,
 	)
 	var cons constraint.Constraint
 	instance.Constraint(&cons)

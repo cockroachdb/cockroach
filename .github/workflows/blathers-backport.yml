@@ -7,11 +7,17 @@ on:
 jobs:
   backport:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: write
       pull-requests: write
       issues: write
+      id-token: write  # needed for Vertex AI OIDC
+
+    env:
+      # When ANTHROPIC_API_KEY is set (e.g. on a personal fork), the
+      # workflow uses it directly instead of Vertex AI.
+      HAS_API_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
 
     steps:
       - name: Generate GitHub App token
@@ -31,7 +37,23 @@ jobs:
           git config user.name "blathers-crl[bot]"
           git config user.email "blathers-crl[bot]@users.noreply.github.com"
 
+      # Vertex AI auth for Claude conflict analysis. Skipped when an
+      # ANTHROPIC_API_KEY secret is set (e.g. on a personal fork).
+      - name: Authenticate to Google Cloud
+        if: env.HAS_API_KEY != 'true'
+        uses: 'google-github-actions/auth@v3'
+        with:
+          project_id: 'vertex-model-runners'
+          service_account: 'ai-review@dev-inf-prod.iam.gserviceaccount.com'
+          workload_identity_provider: 'projects/72497726731/locations/global/workloadIdentityPools/ai-review/providers/ai-review'
+
+      # Save the prompt file before the backport loop checks out release
+      # branches where it does not exist.
+      - name: Stash prompt file
+        run: cp .github/prompts/backport-conflict-analysis.md /tmp/backport-conflict-analysis.md
+
       - name: Backport PR
+        id: backport
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           PR_NUMBER: ${{ github.event.client_payload.pr_number }}
@@ -40,6 +62,9 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
+
+          # Prepare directory for conflict context files.
+          mkdir -p /tmp/conflict-contexts
 
           # Fetch PR title and body for use in backport PRs.
           PR_TITLE=$(gh pr view "$PR_NUMBER" --json title --jq '.title')
@@ -54,6 +79,7 @@ jobs:
 
           FAILED_BRANCHES=""
           SUCCEEDED_BRANCHES=""
+          HAS_CONFLICTS=false
 
           for BRANCH in $BRANCHES; do
             echo "=== Backporting to $BRANCH ==="
@@ -84,6 +110,37 @@ jobs:
             for SHA in $COMMIT_SHAS; do
               if ! git cherry-pick "$SHA"; then
                 echo "::error::Cherry-pick of $SHA failed on branch $TARGET_BRANCH"
+
+                # Capture conflict details BEFORE aborting so the analysis
+                # step can read them. Only save if there are actual merge
+                # conflicts (unmerged files), not other cherry-pick failures.
+                CONFLICTED_FILES=$(git diff --name-only --diff-filter=U 2>/dev/null || true)
+                if [ -n "$CONFLICTED_FILES" ]; then
+                  HAS_CONFLICTS=true
+                  {
+                    echo "# Cherry-pick Conflict Context"
+                    echo ""
+                    echo "- Original PR: #${PR_NUMBER} — ${PR_TITLE}"
+                    echo "- Commit being cherry-picked: ${SHA}"
+                    echo "- Target branch: ${TARGET_BRANCH}"
+                    echo ""
+                    echo "## Conflicted files"
+                    echo '```'
+                    echo "$CONFLICTED_FILES"
+                    echo '```'
+                    echo ""
+                    echo "## Git status"
+                    echo '```'
+                    git status 2>/dev/null || true
+                    echo '```'
+                    echo ""
+                    echo "## Conflict diff"
+                    echo '```'
+                    git diff 2>/dev/null || true
+                    echo '```'
+                  } > "/tmp/conflict-contexts/${TARGET_BRANCH}.md"
+                fi
+
                 git cherry-pick --abort 2>/dev/null || true
                 CHERRY_PICK_FAILED=true
                 break
@@ -186,5 +243,60 @@ jobs:
           )"
             fi
             gh issue edit "$PR_NUMBER" --add-label "backport-failed" || true
+          fi
+
+          # Expose whether there were merge conflicts for the analysis step.
+          echo "has_conflicts=$HAS_CONFLICTS" >> "$GITHUB_OUTPUT"
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+
+          # Exit non-zero if any branches failed so the job shows as failed.
+          if [ -n "$(echo "$FAILED_BRANCHES" | xargs)" ]; then
             exit 1
           fi
+
+      # When cherry-picks fail with merge conflicts, invoke Claude to
+      # analyze the conflicts and produce actionable resolution guidance.
+      # This runs as a follow-up: the failure comment is already posted
+      # by the step above, and the analysis appears as a second comment.
+      - name: Analyze conflicts
+        id: analyze
+        if: always() && steps.backport.outputs.has_conflicts == 'true'
+        uses: cockroachdb/claude-code-action@v1
+        env:
+          ANTHROPIC_VERTEX_PROJECT_ID: ${{ env.HAS_API_KEY != 'true' && 'vertex-model-runners' || '' }}
+          CLOUD_ML_REGION: ${{ env.HAS_API_KEY != 'true' && 'us-east5' || '' }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          use_vertex: ${{ env.HAS_API_KEY != 'true' && 'true' || 'false' }}
+          claude_args: |
+            --model claude-sonnet-4-5
+            --allowedTools "Write,Read,Grep,Glob,Bash(mkdir:*),Bash(ls:*),Bash(cat:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*)"
+          prompt: |
+            Read and follow the instructions in `/tmp/backport-conflict-analysis.md`.
+
+      - name: Post conflict analysis
+        if: always() && steps.analyze.conclusion == 'success'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR_NUMBER: ${{ steps.backport.outputs.pr_number }}
+        run: |
+          if [ ! -f artifacts/conflict-analysis.md ]; then
+            echo "No conflict analysis file found"
+            exit 0
+          fi
+
+          # Post the analysis as a follow-up comment on the original PR.
+          COMMENT_FILE=$(mktemp)
+          trap 'rm -f "$COMMENT_FILE"' EXIT
+
+          {
+            echo "### Backport conflict analysis"
+            echo ""
+            cat artifacts/conflict-analysis.md
+            echo ""
+            echo "---"
+            echo "*Analysis generated by Claude Code. [Workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})*"
+          } > "$COMMENT_FILE"
+
+          gh pr comment "$PR_NUMBER" --body-file "$COMMENT_FILE"

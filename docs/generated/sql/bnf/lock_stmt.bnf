@@ -1,0 +1,5 @@
+lock_stmt ::=
+	'LOCK' opt_table relation_expr_list 'IN' lock_mode 'MODE'
+	| 'LOCK' opt_table relation_expr_list 'IN' lock_mode 'MODE' 'NOWAIT'
+	| 'LOCK' opt_table relation_expr_list
+	| 'LOCK' opt_table relation_expr_list 'NOWAIT'

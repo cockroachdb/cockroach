@@ -101,9 +101,9 @@
 // OID hashing is performed by the oidHasher type (in pkg/sql/pg_catalog.go),
 // which uses FNV-32 to produce deterministic OIDs for database objects that
 // do not have a native descriptor ID (e.g. indexes, columns, constraints).
-// The IsMaybeHashedOid function checks whether a given OID falls in the
-// hashed range, which is used to decide whether an incomplete index lookup
-// can be trusted.
+// The oidext.IsMaybeHashedOid function checks whether a given OID falls in
+// the hashed range, which is used to decide whether an incomplete index
+// lookup can be trusted.
 //
 // When adding virtual indexes, use the
 // makeAllRelationsVirtualTableWithDescriptorIDIndex helper for tables that

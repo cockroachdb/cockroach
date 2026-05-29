@@ -2763,10 +2763,10 @@ func (b *Builder) shouldParallelizeLookupJoin(
 	}
 	md := b.mem.Metadata()
 	table := md.Table(join.Table)
-	// Out of caution, we currently utilize the heuristic only for mutations of
-	// multi-region tables.
-	// TODO(#149849): remove this check so that the heuristic is applicable in
-	// all cases.
+	// If the session var has non-default value 'true', we'll apply the
+	// heuristic only to mutations of MR tables.
+	// TODO(yuzefovich): consider removing this session variable altogether once
+	// we have enough confidence in applying the heuristic across the board.
 	if sd.ParallelizeMultiKeyLookupJoinsOnlyOnMRMutations {
 		if !table.IsMultiregion() || !b.flags.IsSet(exec.PlanFlagContainsMutation) {
 			log.VEventf(b.ctx, 2, "either not multi-region or not a mutation, not parallelizing")
@@ -3716,7 +3716,6 @@ func (b *Builder) buildCall(c *memo.CallExpr) (_ execPlan, outputCols colOrdMap,
 			b.setMutationFlags(s)
 		}
 	}
-
 	// Create a tree.RoutinePlanFn that can plan the statements in the UDF body.
 	planGen := b.buildRoutinePlanGenerator(
 		udf.Def.Params,
@@ -3728,6 +3727,7 @@ func (b *Builder) buildCall(c *memo.CallExpr) (_ execPlan, outputCols colOrdMap,
 		false, /* allowOuterWithRefs */
 		nil,   /* wrapRootExpr */
 		0,     /* resultBufferID */
+		nil,   /* bodyBuilder */
 	)
 
 	r := tree.NewTypedRoutineExpr(
@@ -3747,6 +3747,8 @@ func (b *Builder) buildCall(c *memo.CallExpr) (_ execPlan, outputCols colOrdMap,
 		nil,   /* blockState */
 		nil,   /* cursorDeclaration */
 		nil,   /* firstStmtResultWriter */
+		udf.Def.SecurityMode,
+		udf.Def.RoutineOwner,
 	)
 
 	var ep execPlan

@@ -13,69 +13,66 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// Task represents a request for a Permit for a piece of work that needs to be
-// done. It is created by a call to MultiQueue.Add. After creation,
-// Task.GetWaitChan is called to get a permit, and after all work related to
-// this task is done, MultiQueue.Release must be called so future tasks can run.
-// Alternatively, if the user decides they no longer want to run their work,
-// MultiQueue.Cancel can be called to release the permit without waiting for the
-// permit.
-type Task struct {
+// Task represents a queued request for a Permit. The caller waits on
+// GetWaitChan, then must Release (or Cancel before dispatch) on the issuing
+// queue. The type parameter P is the permit type issued by that queue
+// (Permit for MultiQueue, WeightedPermit for WeightedMultiQueue) and is
+// generally inferred at the call site.
+type Task[P any] struct {
 	priority  float64
 	queueType int
 	heapIdx   int
-	permitC   chan *Permit
+	permitC   chan *P
 }
 
 // GetWaitChan returns a permit channel which is used to wait for the permit to
 // become available.
-func (t *Task) GetWaitChan() <-chan *Permit {
+func (t *Task[P]) GetWaitChan() <-chan *P {
 	return t.permitC
 }
 
-func (t *Task) String() string {
+func (t *Task[P]) String() string {
 	return redact.Sprintf("{Queue type : %d, Priority :%f}", t.queueType, t.priority).StripMarkers()
 }
 
 // notifyHeap is a standard go heap over tasks.
-type notifyHeap []*Task
+type notifyHeap[P any] []*Task[P]
 
-func (h notifyHeap) Len() int {
+func (h notifyHeap[P]) Len() int {
 	return len(h)
 }
 
-func (h notifyHeap) Less(i, j int) bool {
+func (h notifyHeap[P]) Less(i, j int) bool {
 	return h[j].priority < h[i].priority
 }
 
-func (h notifyHeap) Swap(i, j int) {
+func (h notifyHeap[P]) Swap(i, j int) {
 	h[i], h[j] = h[j], h[i]
 	h[i].heapIdx = i
 	h[j].heapIdx = j
 }
 
-func (h *notifyHeap) Push(x interface{}) {
-	t := x.(*Task)
-	// Set the index to the end, it will be moved later
+func (h *notifyHeap[P]) Push(x any) {
+	t := x.(*Task[P])
+	// Set the index to the end, it will be moved later.
 	t.heapIdx = h.Len()
 	*h = append(*h, t)
 }
 
-func (h *notifyHeap) Pop() interface{} {
+func (h *notifyHeap[P]) Pop() any {
 	old := *h
 	n := len(old)
 	x := old[n-1]
 	old[n-1] = nil
 	*h = old[0 : n-1]
-	// No longer in the heap so clear the index
+	// No longer in the heap so clear the index.
 	x.heapIdx = -1
-
 	return x
 }
 
-// tryRemove attempts to remove the task from this queue by iterating through
-// the queue. Will returns true if the task was successfully removed.
-func (h *notifyHeap) tryRemove(task *Task) bool {
+// tryRemove attempts to remove the task from this queue. Returns true if the
+// task was successfully removed.
+func (h *notifyHeap[P]) tryRemove(task *Task[P]) bool {
 	if task.heapIdx < 0 {
 		return false
 	}
@@ -83,12 +80,28 @@ func (h *notifyHeap) tryRemove(task *Task) bool {
 	return true
 }
 
+// tryDrainPermit handles the Cancel/dispatch race: if the dispatcher already
+// delivered a permit, drain and return it (caller must release). Returns nil
+// if no permit was waiting. Closes the task's channel if a permit was drained.
+func tryDrainPermit[P any](task *Task[P]) *P {
+	select {
+	case p, ok := <-task.permitC:
+		if ok {
+			close(task.permitC)
+			return p
+		}
+	default:
+		// The permit has already been received by the caller, who must release it.
+	}
+	return nil
+}
+
 // MultiQueue is a type that round-robins through a set of typed queues, each
 // independently prioritized. A MultiQueue is constructed with a concurrencySem
 // which is the number of concurrent jobs this queue will allow to run. Tasks
 // are added to the queue using MultiQueue.Add. That will return a channel that
-// should be received from. It will be notified when the waiting job is ready to
-// be run. Once the job is completed, MultiQueue.TaskDone must be called to
+// should be received from. It will be notified when the waiting job is ready
+// to be run. Once the job is completed, MultiQueue.Release must be called to
 // return the Permit to the queue so that the next Task can be started.
 type MultiQueue struct {
 	mu               syncutil.Mutex
@@ -96,7 +109,7 @@ type MultiQueue struct {
 	remainingRuns    int
 	mapping          map[int]int
 	lastQueueIndex   int
-	outstanding      []notifyHeap
+	outstanding      []notifyHeap[Permit]
 }
 
 // NewMultiQueue creates a new queue. The queue is not started, and start needs
@@ -112,7 +125,7 @@ func NewMultiQueue(maxConcurrency int) *MultiQueue {
 	return &queue
 }
 
-// Permit is a token which is returned from a Task.GetWaitChan call.
+// Permit is a token returned from a MultiQueue Task.GetWaitChan call.
 type Permit struct {
 	valid bool
 }
@@ -131,7 +144,7 @@ func (m *MultiQueue) tryRunNextLocked() {
 		// If all queues are empty then return, as there is nothing to run.
 		index := (m.lastQueueIndex + i + 1) % len(m.outstanding)
 		if m.outstanding[index].Len() > 0 {
-			task := heap.Pop(&m.outstanding[index]).(*Task)
+			task := heap.Pop(&m.outstanding[index]).(*Task[Permit])
 			task.permitC <- &Permit{valid: true}
 			m.remainingRuns--
 			m.lastQueueIndex = index
@@ -160,7 +173,9 @@ func (m *MultiQueue) updateConcurrencyLimitLocked(newLimit int) {
 // Add returns a Task that must be closed (calling m.Release(..)) to
 // release the Permit. The number of types is expected to
 // be relatively small and not be changing over time.
-func (m *MultiQueue) Add(queueType int, priority float64, maxQueueLength int64) (*Task, error) {
+func (m *MultiQueue) Add(
+	queueType int, priority float64, maxQueueLength int64,
+) (*Task[Permit], error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -181,9 +196,9 @@ func (m *MultiQueue) Add(queueType int, priority float64, maxQueueLength int64) 
 		// a new queue type.
 		pos = len(m.outstanding)
 		m.mapping[queueType] = pos
-		m.outstanding = append(m.outstanding, notifyHeap{})
+		m.outstanding = append(m.outstanding, notifyHeap[Permit]{})
 	}
-	newTask := Task{
+	newTask := Task[Permit]{
 		priority:  priority,
 		permitC:   make(chan *Permit, 1),
 		heapIdx:   -1,
@@ -197,34 +212,22 @@ func (m *MultiQueue) Add(queueType int, priority float64, maxQueueLength int64) 
 	return &newTask, nil
 }
 
-// Cancel will cancel a Task that may not have started yet. This is useful if it
-// is determined that it is no longer required to run this Task.
-func (m *MultiQueue) Cancel(task *Task) {
+// Cancel will cancel a Task that may not have started yet. This is useful if
+// it is determined that it is no longer required to run this Task.
+func (m *MultiQueue) Cancel(task *Task[Permit]) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	// Find the right queue and try to remove it. Queues monotonically grow, and a
-	// Task will track its position within the queue.
+	// Find the right queue and try to remove it. Queues monotonically grow, and
+	// a Task tracks its position within the queue.
 	queueIdx := m.mapping[task.queueType]
-	ok := m.outstanding[queueIdx].tryRemove(task)
-	// Close the permit channel so that waiters stop blocking.
-	if ok {
+	if m.outstanding[queueIdx].tryRemove(task) {
 		close(task.permitC)
 		return
 	}
-	// If we get here, we are racing with the task being started. The concern is
-	// that the caller may also call MultiQueue.Release since the task was
-	// started. Either we get the permit or the caller, so we guarantee only one
-	// release will be called.
-	select {
-	case p, ok := <-task.permitC:
-		// Only release if the channel is open, and we can get the permit.
-		if ok {
-			close(task.permitC)
-			m.releaseLocked(p)
-		}
-	default:
-		// If we are not able to get the permit, this means the permit has already
-		// been given to the caller, and they must call Release on it.
+	// Race with the dispatcher: drain a delivered permit if one is waiting and
+	// release it on the caller's behalf.
+	if p := tryDrainPermit(task); p != nil {
+		m.releaseLocked(p)
 	}
 }
 

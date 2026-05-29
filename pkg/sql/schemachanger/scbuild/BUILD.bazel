@@ -59,6 +59,7 @@ go_library(
         "//pkg/util/log/logpb",
         "//pkg/util/mon",
         "//pkg/util/uuid",
+        "//pkg/util/walkutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_lib_pq//oid",

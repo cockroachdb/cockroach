@@ -85,6 +85,11 @@ var asyncpgIgnoreList = blocklist{
 	`test_copy.TestCopyTo.test_copy_to_table_large_rows`:                         "flaky; see #119291 and https://github.com/MagicStack/asyncpg/issues/240",
 	`test_copy.TestCopyTo.test_copy_to_table_timeout`:                            "flaky; see #119291 and https://github.com/MagicStack/asyncpg/issues/240",
 	`test_execute.TestExecuteMany.test_executemany_server_failure_during_writes`: "flaky",
+	`test_execute.TestExecuteMany.test_executemany_timeout`:                      "flaky; see #170913",
 	`test_listeners.TestListeners.test_dangling_listener_warns`:                  "flaky",
 	`test_timeout.TestTimeout.test_timeout_05`:                                   "flaky",
+	`test_connect.TestConnectionGC.test_no_explicit_close_with_debug`:            "flaky - https://github.com/cockroachdb/cockroach/issues/168660",
+	`test_pool.TestPool.test_pool_04`:                                            "flaky - https://github.com/cockroachdb/cockroach/issues/168660",
+	`test_pool.TestPool.test_pool_handles_inactive_connection_errors`:            "flaky - https://github.com/cockroachdb/cockroach/issues/168660",
+	`test_pool.TestPool.test_pool_max_inactive_time_05`:                          "flaky - https://github.com/cockroachdb/cockroach/issues/168660",
 }

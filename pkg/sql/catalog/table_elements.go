@@ -173,7 +173,7 @@ type Index interface {
 	IsNotVisible() bool
 	IsCreatedExplicitly() bool
 	GetInvisibility() float64
-	GetPredicate() string
+	GetPredicate() catpb.Expression
 	GetType() idxtype.T
 	GetGeoConfig() geopb.Config
 	GetVecConfig() vecpb.Config
@@ -343,21 +343,21 @@ type Column interface {
 
 	// GetDefaultExpr returns the column default expression if it exists,
 	// empty string otherwise.
-	GetDefaultExpr() string
+	GetDefaultExpr() catpb.Expression
 
 	// HasOnUpdate returns true iff the column has an on update expression set.
 	HasOnUpdate() bool
 
 	// GetOnUpdateExpr returns the column on update expression if it exists,
 	// empty string otherwise.
-	GetOnUpdateExpr() string
+	GetOnUpdateExpr() catpb.Expression
 
 	// IsComputed returns true iff the column is a computed column.
 	IsComputed() bool
 
 	// GetComputeExpr returns the column computed expression if it exists,
 	// empty string otherwise.
-	GetComputeExpr() string
+	GetComputeExpr() catpb.Expression
 
 	// IsHidden returns true iff the column is not visible.
 	IsHidden() bool
@@ -485,7 +485,12 @@ type UniqueConstraint interface {
 
 	// IsValidReferencedUniqueConstraint returns whether the unique constraint can
 	// serve as a referenced unique constraint for a foreign key constraint.
-	IsValidReferencedUniqueConstraint(fk ForeignKeyConstraint) bool
+	//
+	// When asSubset is false, the constraint's columns must be a permutation of
+	// the FK's referenced columns. When true, the constraint validates as a
+	// subset match: a non-partial unique constraint whose columns are a
+	// non-empty subset of the FK's referenced columns is accepted.
+	IsValidReferencedUniqueConstraint(fk ForeignKeyConstraint, asSubset bool) bool
 
 	// NumKeyColumns returns the number of columns in this unique constraint.
 	NumKeyColumns() int
@@ -502,7 +507,7 @@ type UniqueConstraint interface {
 	IsPartial() bool
 
 	// GetPredicate returns the partial predicate if there is one, "" otherwise.
-	GetPredicate() string
+	GetPredicate() catpb.Expression
 }
 
 // UniqueWithIndexConstraint is an interface around a unique constraint
@@ -526,7 +531,7 @@ type CheckConstraint interface {
 	CheckDesc() *descpb.TableDescriptor_CheckConstraint
 
 	// GetExpr returns the check expression as a string.
-	GetExpr() string
+	GetExpr() catpb.Expression
 
 	// NumReferencedColumns returns the number of column references in the check
 	// expression. Note that a column may be referenced multiple times in an
@@ -560,7 +565,7 @@ type CheckConstraintValidator interface {
 	GetName() string
 
 	// GetExpr returns the check expression as a string.
-	GetExpr() string
+	GetExpr() catpb.Expression
 
 	// IsRLSConstraint returns true iff ths check constraint is the synthethic one
 	// to enforce row-level security policies.
@@ -1377,23 +1382,81 @@ func MustFindPublicColumnByID(desc TableDescriptor, id descpb.ColumnID) (Column,
 	return col, nil
 }
 
-// FindFKReferencedUniqueConstraint finds the first index in the supplied
-// referencedTable that can satisfy a foreign key of the supplied column ids.
-// If no such index exists, attempts to find a unique constraint on the supplied
-// column ids. If neither an index nor unique constraint is found, returns an
-// error.
+// FindFKReferencedUniqueConstraint finds a unique constraint on referencedTable
+// that can satisfy the foreign key. When considerSubsets is true, constraints
+// covering a strict subset of the FK's referenced columns are also candidates;
+// otherwise, only exact matches are considered. An error is returned if no
+// qualifying constraint is found.
+//
+// Preference order when multiple constraints qualify:
+//  1. Exact match over subset match.
+//  2. Unique-with-index over unique-without-index.
+//  3. Among subset matches, prefer the largest key column count (for tighter
+//     subset coverage).
+//  4. Final tiebreaker: prefer the lower constraint ID (for deterministic display).
+//
+// The optimizer picks its own enforcement index; this choice only affects
+// catalog display.
 func FindFKReferencedUniqueConstraint(
-	referencedTable TableDescriptor, fk ForeignKeyConstraint,
+	referencedTable TableDescriptor, fk ForeignKeyConstraint, considerSubsets bool,
 ) (UniqueConstraint, error) {
-	for _, uwi := range referencedTable.UniqueConstraintsWithIndex() {
-		if !uwi.Dropped() && uwi.IsValidReferencedUniqueConstraint(fk) {
-			return uwi, nil
+	// best tracks the best unique constraint found so far based on
+	// the preference order defined above.
+	var best struct {
+		constraint UniqueConstraint
+		subset     bool
+		withIndex  bool
+	}
+	isBetter := func(c UniqueConstraint, subset, withIndex bool) bool {
+		if best.constraint == nil {
+			return true
+		}
+		// 1. Exact beats subset.
+		if best.subset != subset {
+			return !subset
+		}
+		// 2. With-index beats without-index.
+		if best.withIndex != withIndex {
+			return withIndex
+		}
+		// 3. Among two subsets, more columns wins.
+		if subset {
+			if cN, bN := c.NumKeyColumns(), best.constraint.NumKeyColumns(); cN != bN {
+				return cN > bN
+			}
+		}
+		// 4. Final tiebreaker: lower constraint ID.
+		return c.GetConstraintID() < best.constraint.GetConstraintID()
+	}
+	consider := func(c UniqueConstraint, withIndex bool) {
+		if c.Dropped() {
+			return
+		}
+		var subset bool
+		switch {
+		case c.IsValidReferencedUniqueConstraint(fk, false /* asSubset */):
+			// Exact match.
+		case considerSubsets && c.IsValidReferencedUniqueConstraint(fk, true /* asSubset */):
+			// Subset match.
+			subset = true
+		default:
+			// No match.
+			return
+		}
+		if isBetter(c, subset, withIndex) {
+			best.constraint = c
+			best.subset = subset
+			best.withIndex = withIndex
 		}
 	}
+	for _, uwi := range referencedTable.UniqueConstraintsWithIndex() {
+		consider(uwi, true /* withIndex */)
+	}
 	for _, uwoi := range referencedTable.UniqueConstraintsWithoutIndex() {
-		if !uwoi.Dropped() && uwoi.IsValidReferencedUniqueConstraint(fk) {
-			return uwoi, nil
-		}
+		consider(uwoi, false /* withIndex */)
+	}
+	if best.constraint != nil {
+		return best.constraint, nil
 	}
 	return nil, pgerror.Newf(
 		pgcode.ForeignKeyViolation,

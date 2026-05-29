@@ -160,7 +160,6 @@ type clusterCfg struct {
 func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 	params := base.TestClusterArgs{}
 	params.ServerArgs.ExternalIODirConfig = cfg.ioConf
-
 	params.ServerArgs.DefaultTestTenant = cfg.defaultTestTenant
 	var transactionRetryFilter func(roachpb.Transaction) bool
 	if cfg.randomTxnRetries {

@@ -687,8 +687,8 @@ func client(ctx context.Context, serverAddr net.Addr, wg *sync.WaitGroup) error 
 
 func newTestServer() *Server {
 	sqlMetrics := sql.MakeMemMetrics("test" /* endpoint */, time.Second /* histogramWindow */)
-	metrics := newTenantSpecificMetrics(sqlMetrics /* sqlMemMetrics */, metric.TestSampleInterval)
 	st := cluster.MakeTestingClusterSettings()
+	metrics := newTenantSpecificMetrics(sqlMetrics /* sqlMemMetrics */, metric.TestSampleInterval, &st.SV)
 	s := &Server{
 		tenantMetrics: metrics,
 		destinationMetrics: destinationAggMetrics{

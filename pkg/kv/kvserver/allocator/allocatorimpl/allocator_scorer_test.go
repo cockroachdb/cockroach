@@ -448,7 +448,7 @@ func TestBestRebalanceTarget(t *testing.T) {
 	var i int
 	for {
 		i++
-		target, existing, _ := bestRebalanceTarget(allocRand, candidates, a.as)
+		target, existing, _ := bestRebalanceTarget(ctx, allocRand, candidates, a.as)
 		if len(expectedTargets) == 0 {
 			if target == nil {
 				break

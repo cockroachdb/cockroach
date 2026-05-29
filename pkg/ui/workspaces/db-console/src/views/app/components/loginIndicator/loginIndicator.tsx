@@ -4,10 +4,10 @@
 // included in the /LICENSE file.
 
 import React, { useState } from "react";
-import { useDispatch, useSelector } from "react-redux";
+import { useSelector } from "react-redux";
 
 import { doLogout, selectLoginState } from "src/redux/login";
-import { AdminUIState, AppDispatch } from "src/redux/state";
+import { AdminUIState } from "src/redux/state";
 import { trustIcon } from "src/util/trust";
 import UserMenu from "src/views/app/components/userMenu";
 import Popover from "src/views/shared/components/popover";
@@ -20,11 +20,10 @@ function LoginIndicator(): React.ReactElement {
   const loginState = useSelector((state: AdminUIState) =>
     selectLoginState(state),
   );
-  const dispatch: AppDispatch = useDispatch();
   const [isOpenMenu, setIsOpenMenu] = useState(false);
 
   const handleLogout = () => {
-    dispatch(doLogout());
+    doLogout();
   };
 
   const onUserMenuToggle = (nextState: boolean) => {

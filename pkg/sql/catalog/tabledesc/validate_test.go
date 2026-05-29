@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"google.golang.org/protobuf/proto"
 )
 
 type validateStatus int
@@ -468,12 +467,12 @@ func TestValidateCoversAllDescriptorFields(t *testing.T) {
 func TestValidateTableDesc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	computedExpr := "1 + 1"
+	computedExpr := descpb.Expression("1 + 1")
 	generatedAsIdentitySequenceOptionExpr := " START 2 INCREMENT 3 CACHE 10"
 	boolTrue := true
 	negativeOne := int64(-1)
 	negativeOneFloat := float64(-1)
-	pointer := func(s string) *string {
+	pointer := func(s descpb.Expression) *descpb.Expression {
 		return &s
 	}
 
@@ -2319,8 +2318,8 @@ func TestValidateTableDesc(t *testing.T) {
 					{
 						ID:           1,
 						Name:         "bar",
-						ComputeExpr:  proto.String("'blah'"),
-						OnUpdateExpr: proto.String("'blah'"),
+						ComputeExpr:  pointer("'blah'"),
+						OnUpdateExpr: pointer("'blah'"),
 					},
 				},
 				Families: []descpb.ColumnFamilyDescriptor{
@@ -2341,7 +2340,7 @@ func TestValidateTableDesc(t *testing.T) {
 						Name:                    "bar",
 						GeneratedAsIdentityType: catpb.GeneratedAsIdentityType_GENERATED_ALWAYS,
 						UsesSequenceIds:         []descpb.ID{32},
-						OnUpdateExpr:            proto.String("'blah'"),
+						OnUpdateExpr:            pointer("'blah'"),
 					},
 				},
 				Families: []descpb.ColumnFamilyDescriptor{
@@ -2363,7 +2362,7 @@ func TestValidateTableDesc(t *testing.T) {
 						GeneratedAsIdentityType: catpb.GeneratedAsIdentityType_GENERATED_BY_DEFAULT,
 						UsesSequenceIds:         []descpb.ID{32},
 
-						OnUpdateExpr: proto.String("'blah'"),
+						OnUpdateExpr: pointer("'blah'"),
 					},
 				},
 				Families: []descpb.ColumnFamilyDescriptor{
@@ -3423,7 +3422,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	pointer := func(s string) *string {
+	pointer := func(s descpb.Expression) *descpb.Expression {
 		return &s
 	}
 

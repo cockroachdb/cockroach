@@ -3865,7 +3865,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "rebalanceRHSAway", func(t *testing.T, rebalanceRHSAway bool) {
 		// We will be testing the SSTs written on store3's engine.
-		var receivingEng, sendingEng storage.Engine
+		var recvStateEng, recvLogEng, sendStateEng storage.Engine
 		// All of these variables will be populated later, after starting the
 		// cluster.
 		var keyStart, keyA, keyB, keyC, keyD, keyEnd roachpb.Key
@@ -3925,7 +3925,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 
 			// Construct SSTs for the the first 4 bullets as numbered above, but
 			// only ultimately keep the last one.
-			snapReader := sendingEng.NewSnapshot()
+			snapReader := sendStateEng.NewSnapshot()
 			defer snapReader.Close()
 
 			// Write a Pebble range deletion tombstone to each of the SSTs then
@@ -4018,9 +4018,15 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 					kvserverpb.RangeTombstone{NextReplicaID: math.MaxInt32},
 				))
 				// Ditto for the unreplicated RangeID keys. Note that it is also split
-				// into two range clears, to work around the RaftReplicaID key.
+				// into three range clears, to work around the RaftReplicaID key and
+				// to force all raft log clearing to go through logstore.
 				require.NoError(t, sst.ClearRawRange(
-					keys.RaftHardStateKey(rangeID), sl.RaftReplicaIDKey(), true, false,
+					keys.RaftHardStateKey(rangeID), sl.RaftLogPrefix(), true, false,
+				))
+				require.NoError(t, storage.ClearRangeWithHeuristic(
+					ctx, recvLogEng, &sst,
+					sl.RaftLogPrefix(), sl.RaftLogPrefix().PrefixEnd(),
+					kvstorage.ClearRangeThresholdPointKeys(),
 				))
 				require.NoError(t, sl.ClearRaftReplicaID(&sst))
 				require.NoError(t, sst.ClearRawRange(
@@ -4042,7 +4048,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 				EndKey:   roachpb.RKey(keyEnd),
 			}
 			require.NoError(t, storage.ClearRangeWithHeuristic(
-				ctx, receivingEng, &sst,
+				ctx, recvStateEng, &sst,
 				desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey(),
 				kvstorage.ClearRangeThresholdPointKeys(),
 			))
@@ -4053,7 +4059,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			// byte-by-byte equal.
 			var dumpDir string
 			for i := range sstNamesSubset {
-				actualSST, err := fs.ReadFile(receivingEng.Env(), sstNamesSubset[i])
+				actualSST, err := fs.ReadFile(recvStateEng.Env(), sstNamesSubset[i])
 				require.NoError(t, err)
 				if !bytes.Equal(expectedSSTs[i], actualSST) { // intentionally not printing
 					t.Logf("%d=%s", i, sstNamesSubset[i])
@@ -4094,8 +4100,9 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			})
 		defer tc.Stopper().Stop(ctx)
 		store1, store3 := tc.GetFirstStoreFromServer(t, 0), tc.GetFirstStoreFromServer(t, 2)
-		sendingEng = store1.StateEngine()
-		receivingEng = store3.StateEngine()
+		sendStateEng = store1.StateEngine()
+		recvStateEng = store3.StateEngine()
+		recvLogEng = store3.LogEngine()
 		distSender := tc.Servers[0].DistSenderI().(kv.Sender)
 
 		// This test works across 5 ranges in total. We start with a scratch

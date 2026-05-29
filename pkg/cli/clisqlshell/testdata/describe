@@ -29,6 +29,63 @@ create function myfunc(val int) returns int language sql as $$ select val $$;
 ----
 ok
 
+# Seed system.table_metadata so \l+ and \dt+ show deterministic sizes.
+# The details JSONB mirrors what tableMetadataUpdater writes in production
+# (replica_count + primary_index_id + per-index sizes), so the size
+# builtins go through their normal lookup path rather than the
+# mixed-version replication_size_bytes fallback.
+sql
+WITH per_table(name, primary_size, secondary_size) AS (
+  VALUES
+    ('mytable', 16384, 4096),
+    ('mymview',  8192,    0),
+    ('ftable1',  1024,  256),
+    ('ftable2',  2048,    0)
+),
+idx AS (
+  SELECT t.parent_id  AS db_id,
+         t.table_id,
+         t.database_name,
+         t.schema_name,
+         t.name,
+         ti.index_id,
+         ti.index_type,
+         CASE ti.index_type
+           WHEN 'primary'   THEN p.primary_size
+           WHEN 'secondary' THEN p.secondary_size
+         END AS index_size
+    FROM crdb_internal.tables t
+    JOIN per_table p ON p.name = t.name
+    JOIN crdb_internal.table_indexes ti ON ti.descriptor_id = t.table_id
+   WHERE t.database_name = 'defaultdb'
+)
+INSERT INTO system.table_metadata (
+  db_id, table_id, db_name, schema_name, table_name,
+  total_columns, total_indexes, store_ids,
+  replication_size_bytes, total_ranges,
+  total_live_data_bytes, total_data_bytes, perc_live_data,
+  table_type, details
+)
+SELECT db_id, table_id, database_name, schema_name, name,
+       0,
+       count(*)::INT,
+       ARRAY[1]::INT[],
+       sum(index_size)::INT,
+       1,
+       sum(index_size)::INT, sum(index_size)::INT, 1.0,
+       'TABLE',
+       jsonb_build_object(
+         'replica_count', 1,
+         'primary_index_id',
+           (array_agg(index_id) FILTER (WHERE index_type = 'primary'))[1],
+         'index_sizes',
+           jsonb_object_agg(index_id::TEXT, index_size)
+       )
+  FROM idx
+ GROUP BY db_id, table_id, database_name, schema_name, name;
+----
+ok
+
 subtest list_dbs
 
 cli
@@ -67,15 +124,20 @@ List of databases:
        THEN IF(d.datconnlimit < 0, 'Unlimited', d.datconnlimit::STRING)
        ELSE 'No Access'
        END AS "Connections",
+       CASE
+       WHEN pg_catalog.has_database_privilege(d.datname, 'CONNECT')
+       THEN pg_catalog.pg_size_pretty(pg_catalog.pg_database_size(d.datname))
+       ELSE 'No Access'
+       END AS "Size",
        COALESCE(pg_catalog.shobj_description(d.oid, 'pg_database'), '') AS "Description"
   FROM pg_catalog.pg_database d
 ORDER BY 1
-Name,Owner,Encoding,Collate,Ctype,Access privileges,Connections,Description
-defaultdb,root,UTF8,en_US.utf8,en_US.utf8,,Unlimited,
-mydb,root,UTF8,en_US.utf8,en_US.utf8,,Unlimited,my awesome db comment
-postgres,root,UTF8,en_US.utf8,en_US.utf8,,Unlimited,
+Name,Owner,Encoding,Collate,Ctype,Access privileges,Connections,Size,Description
+defaultdb,root,UTF8,en_US.utf8,en_US.utf8,,Unlimited,31 kB,
+mydb,root,UTF8,en_US.utf8,en_US.utf8,,Unlimited,0 bytes,my awesome db comment
+postgres,root,UTF8,en_US.utf8,en_US.utf8,,Unlimited,0 bytes,
 system,node,UTF8,en_US.utf8,en_US.utf8,"admin=c*/node
-root=c*/node",Unlimited,
+root=c*/node",Unlimited,0 bytes,
 
 cli
 \l my%
@@ -275,6 +337,7 @@ LEFT JOIN pg_catalog.pg_am am ON am.oid = c.relam
  ORDER BY 1,2
 Schema,Name,Type,Owner
 pg_catalog,pg_aggregate,table,node
+pg_catalog,pg_aios,table,node
 pg_catalog,pg_am,table,node
 pg_catalog,pg_amop,table,node
 pg_catalog,pg_amproc,table,node
@@ -284,6 +347,7 @@ pg_catalog,pg_auth_members,table,node
 pg_catalog,pg_authid,table,node
 pg_catalog,pg_available_extension_versions,table,node
 pg_catalog,pg_available_extensions,table,node
+pg_catalog,pg_backend_memory_contexts,table,node
 pg_catalog,pg_cast,table,node
 pg_catalog,pg_class,table,node
 pg_catalog,pg_collation,table,node
@@ -305,6 +369,7 @@ pg_catalog,pg_foreign_server,table,node
 pg_catalog,pg_foreign_table,table,node
 pg_catalog,pg_group,table,node
 pg_catalog,pg_hba_file_rules,table,node
+pg_catalog,pg_ident_file_mappings,table,node
 pg_catalog,pg_index,table,node
 pg_catalog,pg_indexes,table,node
 pg_catalog,pg_inherits,table,node
@@ -318,6 +383,7 @@ pg_catalog,pg_namespace,table,node
 pg_catalog,pg_opclass,table,node
 pg_catalog,pg_operator,table,node
 pg_catalog,pg_opfamily,table,node
+pg_catalog,pg_parameter_acl,table,node
 pg_catalog,pg_partitioned_table,table,node
 pg_catalog,pg_policies,table,node
 pg_catalog,pg_policy,table,node
@@ -325,6 +391,7 @@ pg_catalog,pg_prepared_statements,table,node
 pg_catalog,pg_prepared_xacts,table,node
 pg_catalog,pg_proc,table,node
 pg_catalog,pg_publication,table,node
+pg_catalog,pg_publication_namespace,table,node
 pg_catalog,pg_publication_rel,table,node
 pg_catalog,pg_publication_tables,table,node
 pg_catalog,pg_range,table,node
@@ -343,29 +410,37 @@ pg_catalog,pg_shadow,table,node
 pg_catalog,pg_shdepend,table,node
 pg_catalog,pg_shdescription,view,node
 pg_catalog,pg_shmem_allocations,table,node
+pg_catalog,pg_shmem_allocations_numa,table,node
 pg_catalog,pg_shseclabel,table,node
 pg_catalog,pg_stat_activity,table,node
 pg_catalog,pg_stat_all_indexes,table,node
 pg_catalog,pg_stat_all_tables,table,node
 pg_catalog,pg_stat_archiver,table,node
 pg_catalog,pg_stat_bgwriter,table,node
+pg_catalog,pg_stat_checkpointer,table,node
 pg_catalog,pg_stat_database,table,node
 pg_catalog,pg_stat_database_conflicts,table,node
 pg_catalog,pg_stat_gssapi,table,node
+pg_catalog,pg_stat_io,table,node
 pg_catalog,pg_stat_progress_analyze,table,node
 pg_catalog,pg_stat_progress_basebackup,table,node
 pg_catalog,pg_stat_progress_cluster,table,node
+pg_catalog,pg_stat_progress_copy,table,node
 pg_catalog,pg_stat_progress_create_index,table,node
 pg_catalog,pg_stat_progress_vacuum,table,node
+pg_catalog,pg_stat_recovery_prefetch,table,node
 pg_catalog,pg_stat_replication,table,node
+pg_catalog,pg_stat_replication_slots,table,node
 pg_catalog,pg_stat_slru,table,node
 pg_catalog,pg_stat_ssl,table,node
 pg_catalog,pg_stat_subscription,table,node
+pg_catalog,pg_stat_subscription_stats,table,node
 pg_catalog,pg_stat_sys_indexes,table,node
 pg_catalog,pg_stat_sys_tables,table,node
 pg_catalog,pg_stat_user_functions,table,node
 pg_catalog,pg_stat_user_indexes,table,node
 pg_catalog,pg_stat_user_tables,table,node
+pg_catalog,pg_stat_wal,table,node
 pg_catalog,pg_stat_wal_receiver,table,node
 pg_catalog,pg_stat_xact_all_tables,table,node
 pg_catalog,pg_stat_xact_sys_tables,table,node
@@ -385,6 +460,7 @@ pg_catalog,pg_statistic_ext,table,node
 pg_catalog,pg_statistic_ext_data,table,node
 pg_catalog,pg_stats,table,node
 pg_catalog,pg_stats_ext,table,node
+pg_catalog,pg_stats_ext_exprs,table,node
 pg_catalog,pg_subscription,table,node
 pg_catalog,pg_subscription_rel,table,node
 pg_catalog,pg_tables,table,node
@@ -403,6 +479,7 @@ pg_catalog,pg_user,table,node
 pg_catalog,pg_user_mapping,table,node
 pg_catalog,pg_user_mappings,table,node
 pg_catalog,pg_views,table,node
+pg_catalog,pg_wait_events,table,node
 pg_extension,geography_columns,table,node
 pg_extension,geometry_columns,table,node
 pg_extension,spatial_ref_sys,table,node
@@ -438,6 +515,7 @@ List of relations:
           WHEN 't' THEN 'temporary'
           WHEN 'u' THEN 'unlogged' END AS "Persistence",
           am.amname AS "Access Method",
+          pg_catalog.pg_size_pretty(pg_catalog.pg_table_size(c.oid)) AS "Size",
           COALESCE(pg_catalog.obj_description(c.oid, 'pg_class'),'') as "Description"
      FROM pg_catalog.pg_class c
 LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
@@ -448,13 +526,13 @@ LEFT JOIN pg_catalog.pg_am am ON am.oid = c.relam
       AND n.nspname <> 'crdb_internal'
       AND pg_catalog.pg_table_is_visible(c.oid)
  ORDER BY 1,2
-Schema,Name,Type,Owner,Persistence,Access Method,Description
-public,ftable1,table,root,permanent,prefix,
-public,ftable2,table,root,permanent,prefix,
-public,mymview,materialized view,root,permanent,NULL,
-public,myseq,sequence,root,permanent,NULL,
-public,mytable,table,root,permanent,prefix,my awesome tb comment
-public,myview,view,root,permanent,NULL,
+Schema,Name,Type,Owner,Persistence,Access Method,Size,Description
+public,ftable1,table,root,permanent,prefix,1024 bytes,
+public,ftable2,table,root,permanent,prefix,2048 bytes,
+public,mymview,materialized view,root,permanent,NULL,8192 bytes,
+public,myseq,sequence,root,permanent,NULL,NULL,
+public,mytable,table,root,permanent,prefix,16 kB,my awesome tb comment
+public,myview,view,root,permanent,NULL,NULL,
 
 cli
 \dS+
@@ -481,6 +559,7 @@ List of relations:
           WHEN 't' THEN 'temporary'
           WHEN 'u' THEN 'unlogged' END AS "Persistence",
           am.amname AS "Access Method",
+          pg_catalog.pg_size_pretty(pg_catalog.pg_table_size(c.oid)) AS "Size",
           COALESCE(pg_catalog.obj_description(c.oid, 'pg_class'),'') as "Description"
      FROM pg_catalog.pg_class c
 LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
@@ -488,206 +567,221 @@ LEFT JOIN pg_catalog.pg_am am ON am.oid = c.relam
     WHERE c.relkind IN ('r','p','t','v','m','S','s','f','')
       AND pg_catalog.pg_table_is_visible(c.oid)
  ORDER BY 1,2
-Schema,Name,Type,Owner,Persistence,Access Method,Description
-pg_catalog,pg_aggregate,table,node,permanent,prefix,"aggregated built-in functions (incomplete)
+Schema,Name,Type,Owner,Persistence,Access Method,Size,Description
+pg_catalog,pg_aggregate,table,node,permanent,prefix,NULL,"aggregated built-in functions (incomplete)
 https://www.postgresql.org/docs/9.6/catalog-pg-aggregate.html"
-pg_catalog,pg_am,table,node,permanent,prefix,"index access methods (incomplete)
+pg_catalog,pg_aios,table,node,permanent,prefix,NULL,pg_aios was created for compatibility and is currently unimplemented
+pg_catalog,pg_am,table,node,permanent,prefix,NULL,"index access methods (incomplete)
 https://www.postgresql.org/docs/9.5/catalog-pg-am.html"
-pg_catalog,pg_amop,table,node,permanent,prefix,pg_amop was created for compatibility and is currently unimplemented
-pg_catalog,pg_amproc,table,node,permanent,prefix,pg_amproc was created for compatibility and is currently unimplemented
-pg_catalog,pg_attrdef,table,node,permanent,prefix,"column default values
+pg_catalog,pg_amop,table,node,permanent,prefix,NULL,pg_amop was created for compatibility and is currently unimplemented
+pg_catalog,pg_amproc,table,node,permanent,prefix,NULL,pg_amproc was created for compatibility and is currently unimplemented
+pg_catalog,pg_attrdef,table,node,permanent,prefix,NULL,"column default values
 https://www.postgresql.org/docs/9.5/catalog-pg-attrdef.html"
-pg_catalog,pg_attribute,table,node,permanent,prefix,"table columns (incomplete - see also information_schema.columns)
-https://www.postgresql.org/docs/12/catalog-pg-attribute.html"
-pg_catalog,pg_auth_members,table,node,permanent,prefix,"role membership
-https://www.postgresql.org/docs/9.5/catalog-pg-auth-members.html"
-pg_catalog,pg_authid,table,node,permanent,prefix,"authorization identifiers - differs from postgres as we do not display passwords, 
+pg_catalog,pg_attribute,table,node,permanent,prefix,NULL,"table columns (incomplete - see also information_schema.columns)
+https://www.postgresql.org/docs/18/catalog-pg-attribute.html"
+pg_catalog,pg_auth_members,table,node,permanent,prefix,NULL,"role membership
+https://www.postgresql.org/docs/18/catalog-pg-auth-members.html"
+pg_catalog,pg_authid,table,node,permanent,prefix,NULL,"authorization identifiers - differs from postgres as we do not display passwords, 
 and thus do not require admin privileges for access. 
 https://www.postgresql.org/docs/9.5/catalog-pg-authid.html"
-pg_catalog,pg_available_extension_versions,table,node,permanent,prefix,pg_available_extension_versions was created for compatibility and is currently unimplemented
-pg_catalog,pg_available_extensions,table,node,permanent,prefix,"available extensions
+pg_catalog,pg_available_extension_versions,table,node,permanent,prefix,NULL,pg_available_extension_versions was created for compatibility and is currently unimplemented
+pg_catalog,pg_available_extensions,table,node,permanent,prefix,NULL,"available extensions
 https://www.postgresql.org/docs/9.6/view-pg-available-extensions.html"
-pg_catalog,pg_cast,table,node,permanent,prefix,"casts (empty - needs filling out)
+pg_catalog,pg_backend_memory_contexts,table,node,permanent,prefix,NULL,pg_backend_memory_contexts was created for compatibility and is currently unimplemented
+pg_catalog,pg_cast,table,node,permanent,prefix,NULL,"casts (empty - needs filling out)
 https://www.postgresql.org/docs/9.6/catalog-pg-cast.html"
-pg_catalog,pg_class,table,node,permanent,prefix,"tables and relation-like objects (incomplete - see also information_schema.tables/sequences/views)
+pg_catalog,pg_class,table,node,permanent,prefix,NULL,"tables and relation-like objects (incomplete - see also information_schema.tables/sequences/views)
 https://www.postgresql.org/docs/9.5/catalog-pg-class.html"
-pg_catalog,pg_collation,table,node,permanent,prefix,"available collations (incomplete)
-https://www.postgresql.org/docs/9.5/catalog-pg-collation.html"
-pg_catalog,pg_config,table,node,permanent,prefix,pg_config was created for compatibility and is currently unimplemented
-pg_catalog,pg_constraint,table,node,permanent,prefix,"table constraints (incomplete - see also information_schema.table_constraints)
-https://www.postgresql.org/docs/9.5/catalog-pg-constraint.html"
-pg_catalog,pg_conversion,table,node,permanent,prefix,"encoding conversions (empty - unimplemented)
+pg_catalog,pg_collation,table,node,permanent,prefix,NULL,"available collations (incomplete)
+https://www.postgresql.org/docs/18/catalog-pg-collation.html"
+pg_catalog,pg_config,table,node,permanent,prefix,NULL,pg_config was created for compatibility and is currently unimplemented
+pg_catalog,pg_constraint,table,node,permanent,prefix,NULL,"table constraints (incomplete - see also information_schema.table_constraints)
+https://www.postgresql.org/docs/18/catalog-pg-constraint.html"
+pg_catalog,pg_conversion,table,node,permanent,prefix,NULL,"encoding conversions (empty - unimplemented)
 https://www.postgresql.org/docs/9.6/catalog-pg-conversion.html"
-pg_catalog,pg_cursors,table,node,permanent,prefix,"contains currently active SQL cursors created with DECLARE
+pg_catalog,pg_cursors,table,node,permanent,prefix,NULL,"contains currently active SQL cursors created with DECLARE
 https://www.postgresql.org/docs/14/view-pg-cursors.html"
-pg_catalog,pg_database,table,node,permanent,prefix,"available databases (incomplete)
-https://www.postgresql.org/docs/9.5/catalog-pg-database.html"
-pg_catalog,pg_db_role_setting,table,node,permanent,prefix,"contains the default values that have been configured for session variables
+pg_catalog,pg_database,table,node,permanent,prefix,NULL,"available databases (incomplete)
+https://www.postgresql.org/docs/18/catalog-pg-database.html"
+pg_catalog,pg_db_role_setting,table,node,permanent,prefix,NULL,"contains the default values that have been configured for session variables
 https://www.postgresql.org/docs/13/catalog-pg-db-role-setting.html"
-pg_catalog,pg_default_acl,table,node,permanent,prefix,"default ACLs; these are the privileges that will be assigned to newly created objects
+pg_catalog,pg_default_acl,table,node,permanent,prefix,NULL,"default ACLs; these are the privileges that will be assigned to newly created objects
 https://www.postgresql.org/docs/13/catalog-pg-default-acl.html"
-pg_catalog,pg_depend,table,node,permanent,prefix,"dependency relationships (incomplete)
+pg_catalog,pg_depend,table,node,permanent,prefix,NULL,"dependency relationships (incomplete)
 https://www.postgresql.org/docs/9.5/catalog-pg-depend.html"
-pg_catalog,pg_description,view,node,permanent,NULL,"object comments
+pg_catalog,pg_description,view,node,permanent,NULL,NULL,"object comments
 https://www.postgresql.org/docs/9.5/catalog-pg-description.html"
-pg_catalog,pg_enum,table,node,permanent,prefix,"enum types and labels (empty - feature does not exist)
+pg_catalog,pg_enum,table,node,permanent,prefix,NULL,"enum types and labels (empty - feature does not exist)
 https://www.postgresql.org/docs/9.5/catalog-pg-enum.html"
-pg_catalog,pg_event_trigger,table,node,permanent,prefix,"event triggers (empty - feature does not exist)
+pg_catalog,pg_event_trigger,table,node,permanent,prefix,NULL,"event triggers (empty - feature does not exist)
 https://www.postgresql.org/docs/9.6/catalog-pg-event-trigger.html"
-pg_catalog,pg_extension,table,node,permanent,prefix,"installed extensions (empty - feature does not exist)
+pg_catalog,pg_extension,table,node,permanent,prefix,NULL,"installed extensions (empty - feature does not exist)
 https://www.postgresql.org/docs/9.5/catalog-pg-extension.html"
-pg_catalog,pg_file_settings,table,node,permanent,prefix,pg_file_settings was created for compatibility and is currently unimplemented
-pg_catalog,pg_foreign_data_wrapper,table,node,permanent,prefix,"foreign data wrappers (empty - feature does not exist)
+pg_catalog,pg_file_settings,table,node,permanent,prefix,NULL,pg_file_settings was created for compatibility and is currently unimplemented
+pg_catalog,pg_foreign_data_wrapper,table,node,permanent,prefix,NULL,"foreign data wrappers (empty - feature does not exist)
 https://www.postgresql.org/docs/9.5/catalog-pg-foreign-data-wrapper.html"
-pg_catalog,pg_foreign_server,table,node,permanent,prefix,"foreign servers (empty - feature does not exist)
+pg_catalog,pg_foreign_server,table,node,permanent,prefix,NULL,"foreign servers (empty - feature does not exist)
 https://www.postgresql.org/docs/9.5/catalog-pg-foreign-server.html"
-pg_catalog,pg_foreign_table,table,node,permanent,prefix,"foreign tables (empty  - feature does not exist)
+pg_catalog,pg_foreign_table,table,node,permanent,prefix,NULL,"foreign tables (empty  - feature does not exist)
 https://www.postgresql.org/docs/9.5/catalog-pg-foreign-table.html"
-pg_catalog,pg_group,table,node,permanent,prefix,pg_group was created for compatibility and is currently unimplemented
-pg_catalog,pg_hba_file_rules,table,node,permanent,prefix,pg_hba_file_rules was created for compatibility and is currently unimplemented
-pg_catalog,pg_index,table,node,permanent,prefix,"indexes (incomplete)
+pg_catalog,pg_group,table,node,permanent,prefix,NULL,pg_group was created for compatibility and is currently unimplemented
+pg_catalog,pg_hba_file_rules,table,node,permanent,prefix,NULL,pg_hba_file_rules was created for compatibility and is currently unimplemented
+pg_catalog,pg_ident_file_mappings,table,node,permanent,prefix,NULL,pg_ident_file_mappings was created for compatibility and is currently unimplemented
+pg_catalog,pg_index,table,node,permanent,prefix,NULL,"indexes (incomplete)
 https://www.postgresql.org/docs/9.5/catalog-pg-index.html"
-pg_catalog,pg_indexes,table,node,permanent,prefix,"index creation statements
+pg_catalog,pg_indexes,table,node,permanent,prefix,NULL,"index creation statements
 https://www.postgresql.org/docs/9.5/view-pg-indexes.html"
-pg_catalog,pg_inherits,table,node,permanent,prefix,"table inheritance hierarchy (empty - feature does not exist)
+pg_catalog,pg_inherits,table,node,permanent,prefix,NULL,"table inheritance hierarchy (empty - feature does not exist)
 https://www.postgresql.org/docs/9.5/catalog-pg-inherits.html"
-pg_catalog,pg_init_privs,table,node,permanent,prefix,pg_init_privs was created for compatibility and is currently unimplemented
-pg_catalog,pg_language,table,node,permanent,prefix,"available languages
+pg_catalog,pg_init_privs,table,node,permanent,prefix,NULL,pg_init_privs was created for compatibility and is currently unimplemented
+pg_catalog,pg_language,table,node,permanent,prefix,NULL,"available languages
 https://www.postgresql.org/docs/9.5/catalog-pg-language.html"
-pg_catalog,pg_largeobject,table,node,permanent,prefix,pg_largeobject was created for compatibility and is currently unimplemented
-pg_catalog,pg_largeobject_metadata,table,node,permanent,prefix,pg_largeobject_metadata was created for compatibility and is currently unimplemented
-pg_catalog,pg_locks,table,node,permanent,prefix,"locks held by active processes (empty - feature does not exist)
-https://www.postgresql.org/docs/9.6/view-pg-locks.html"
-pg_catalog,pg_matviews,table,node,permanent,prefix,"available materialized views
+pg_catalog,pg_largeobject,table,node,permanent,prefix,NULL,pg_largeobject was created for compatibility and is currently unimplemented
+pg_catalog,pg_largeobject_metadata,table,node,permanent,prefix,NULL,pg_largeobject_metadata was created for compatibility and is currently unimplemented
+pg_catalog,pg_locks,table,node,permanent,prefix,NULL,"advisory locks: granted and waiting advisory locks
+https://www.postgresql.org/docs/18/view-pg-locks.html"
+pg_catalog,pg_matviews,table,node,permanent,prefix,NULL,"available materialized views
 https://www.postgresql.org/docs/9.6/view-pg-matviews.html"
-pg_catalog,pg_namespace,table,node,permanent,prefix,"available namespaces
+pg_catalog,pg_namespace,table,node,permanent,prefix,NULL,"available namespaces
 https://www.postgresql.org/docs/9.5/catalog-pg-namespace.html"
-pg_catalog,pg_opclass,table,node,permanent,prefix,"opclass (empty - Operator classes not supported yet)
+pg_catalog,pg_opclass,table,node,permanent,prefix,NULL,"opclass (empty - Operator classes not supported yet)
 https://www.postgresql.org/docs/12/catalog-pg-opclass.html"
-pg_catalog,pg_operator,table,node,permanent,prefix,"operators (incomplete)
+pg_catalog,pg_operator,table,node,permanent,prefix,NULL,"operators (incomplete)
 https://www.postgresql.org/docs/9.5/catalog-pg-operator.html"
-pg_catalog,pg_opfamily,table,node,permanent,prefix,pg_opfamily was created for compatibility and is currently unimplemented
-pg_catalog,pg_partitioned_table,table,node,permanent,prefix,pg_partitioned_table was created for compatibility and is currently unimplemented
-pg_catalog,pg_policies,table,node,permanent,prefix,"pg_policies provides a user-friendly view of row-level security policies
+pg_catalog,pg_opfamily,table,node,permanent,prefix,NULL,pg_opfamily was created for compatibility and is currently unimplemented
+pg_catalog,pg_parameter_acl,table,node,permanent,prefix,NULL,pg_parameter_acl was created for compatibility and is currently unimplemented
+pg_catalog,pg_partitioned_table,table,node,permanent,prefix,NULL,pg_partitioned_table was created for compatibility and is currently unimplemented
+pg_catalog,pg_policies,table,node,permanent,prefix,NULL,"pg_policies provides a user-friendly view of row-level security policies
 https://www.postgresql.org/docs/17/view-pg-policies.html"
-pg_catalog,pg_policy,table,node,permanent,prefix,"stores row-level security policies for tables
+pg_catalog,pg_policy,table,node,permanent,prefix,NULL,"stores row-level security policies for tables
 https://www.postgresql.org/docs/17/catalog-pg-policy.html"
-pg_catalog,pg_prepared_statements,table,node,permanent,prefix,"prepared statements
-https://www.postgresql.org/docs/9.6/view-pg-prepared-statements.html"
-pg_catalog,pg_prepared_xacts,table,node,permanent,prefix,"prepared transactions
+pg_catalog,pg_prepared_statements,table,node,permanent,prefix,NULL,"prepared statements
+https://www.postgresql.org/docs/18/view-pg-prepared-statements.html"
+pg_catalog,pg_prepared_xacts,table,node,permanent,prefix,NULL,"prepared transactions
 https://www.postgresql.org/docs/9.6/view-pg-prepared-xacts.html"
-pg_catalog,pg_proc,table,node,permanent,prefix,"built-in functions (incomplete)
+pg_catalog,pg_proc,table,node,permanent,prefix,NULL,"built-in functions (incomplete)
 https://www.postgresql.org/docs/16/catalog-pg-proc.html"
-pg_catalog,pg_publication,table,node,permanent,prefix,pg_publication was created for compatibility and is currently unimplemented
-pg_catalog,pg_publication_rel,table,node,permanent,prefix,pg_publication_rel was created for compatibility and is currently unimplemented
-pg_catalog,pg_publication_tables,table,node,permanent,prefix,pg_publication_tables was created for compatibility and is currently unimplemented
-pg_catalog,pg_range,table,node,permanent,prefix,"range types (empty - feature does not exist)
+pg_catalog,pg_publication,table,node,permanent,prefix,NULL,pg_publication was created for compatibility and is currently unimplemented
+pg_catalog,pg_publication_namespace,table,node,permanent,prefix,NULL,pg_publication_namespace was created for compatibility and is currently unimplemented
+pg_catalog,pg_publication_rel,table,node,permanent,prefix,NULL,pg_publication_rel was created for compatibility and is currently unimplemented
+pg_catalog,pg_publication_tables,table,node,permanent,prefix,NULL,pg_publication_tables was created for compatibility and is currently unimplemented
+pg_catalog,pg_range,table,node,permanent,prefix,NULL,"range types (empty - feature does not exist)
 https://www.postgresql.org/docs/9.5/catalog-pg-range.html"
-pg_catalog,pg_replication_origin,table,node,permanent,prefix,pg_replication_origin was created for compatibility and is currently unimplemented
-pg_catalog,pg_replication_origin_status,table,node,permanent,prefix,pg_replication_origin_status was created for compatibility and is currently unimplemented
-pg_catalog,pg_replication_slots,table,node,permanent,prefix,pg_replication_slots was created for compatibility and is currently unimplemented
-pg_catalog,pg_rewrite,table,node,permanent,prefix,"rewrite rules (only for referencing on pg_depend for table-view dependencies)
+pg_catalog,pg_replication_origin,table,node,permanent,prefix,NULL,pg_replication_origin was created for compatibility and is currently unimplemented
+pg_catalog,pg_replication_origin_status,table,node,permanent,prefix,NULL,pg_replication_origin_status was created for compatibility and is currently unimplemented
+pg_catalog,pg_replication_slots,table,node,permanent,prefix,NULL,pg_replication_slots was created for compatibility and is currently unimplemented
+pg_catalog,pg_rewrite,table,node,permanent,prefix,NULL,"rewrite rules (only for referencing on pg_depend for table-view dependencies)
 https://www.postgresql.org/docs/9.5/catalog-pg-rewrite.html"
-pg_catalog,pg_roles,table,node,permanent,prefix,"database roles
+pg_catalog,pg_roles,table,node,permanent,prefix,NULL,"database roles
 https://www.postgresql.org/docs/9.5/view-pg-roles.html"
-pg_catalog,pg_rules,table,node,permanent,prefix,pg_rules was created for compatibility and is currently unimplemented
-pg_catalog,pg_seclabel,table,node,permanent,prefix,"security labels (empty - feature does not exist)
+pg_catalog,pg_rules,table,node,permanent,prefix,NULL,pg_rules was created for compatibility and is currently unimplemented
+pg_catalog,pg_seclabel,table,node,permanent,prefix,NULL,"security labels (empty - feature does not exist)
 https://www.postgresql.org/docs/9.5/catalog-pg-seclabel.html"
-pg_catalog,pg_seclabels,table,node,permanent,prefix,"security labels (empty)
+pg_catalog,pg_seclabels,table,node,permanent,prefix,NULL,"security labels (empty)
 https://www.postgresql.org/docs/9.6/view-pg-seclabels.html"
-pg_catalog,pg_sequence,table,node,permanent,prefix,"sequences (see also information_schema.sequences)
+pg_catalog,pg_sequence,table,node,permanent,prefix,NULL,"sequences (see also information_schema.sequences)
 https://www.postgresql.org/docs/9.5/catalog-pg-sequence.html"
-pg_catalog,pg_sequences,table,node,permanent,prefix,"pg_sequences is very similar as pg_sequence.
+pg_catalog,pg_sequences,table,node,permanent,prefix,NULL,"pg_sequences is very similar as pg_sequence.
 https://www.postgresql.org/docs/13/view-pg-sequences.html
 "
-pg_catalog,pg_settings,table,node,permanent,prefix,"session variables (incomplete)
+pg_catalog,pg_settings,table,node,permanent,prefix,NULL,"session variables (incomplete)
 https://www.postgresql.org/docs/9.5/catalog-pg-settings.html"
-pg_catalog,pg_shadow,table,node,permanent,prefix,"pg_shadow lists properties for roles that are marked as rolcanlogin in pg_authid
+pg_catalog,pg_shadow,table,node,permanent,prefix,NULL,"pg_shadow lists properties for roles that are marked as rolcanlogin in pg_authid
 https://www.postgresql.org/docs/13/view-pg-shadow.html"
-pg_catalog,pg_shdepend,table,node,permanent,prefix,"Shared Dependencies (Roles depending on objects). 
+pg_catalog,pg_shdepend,table,node,permanent,prefix,NULL,"Shared Dependencies (Roles depending on objects). 
 https://www.postgresql.org/docs/9.6/catalog-pg-shdepend.html"
-pg_catalog,pg_shdescription,view,node,permanent,NULL,"shared object comments
+pg_catalog,pg_shdescription,view,node,permanent,NULL,NULL,"shared object comments
 https://www.postgresql.org/docs/9.5/catalog-pg-shdescription.html"
-pg_catalog,pg_shmem_allocations,table,node,permanent,prefix,pg_shmem_allocations was created for compatibility and is currently unimplemented
-pg_catalog,pg_shseclabel,table,node,permanent,prefix,"shared security labels (empty - feature not supported)
+pg_catalog,pg_shmem_allocations,table,node,permanent,prefix,NULL,pg_shmem_allocations was created for compatibility and is currently unimplemented
+pg_catalog,pg_shmem_allocations_numa,table,node,permanent,prefix,NULL,pg_shmem_allocations_numa was created for compatibility and is currently unimplemented
+pg_catalog,pg_shseclabel,table,node,permanent,prefix,NULL,"shared security labels (empty - feature not supported)
 https://www.postgresql.org/docs/9.5/catalog-pg-shseclabel.html"
-pg_catalog,pg_stat_activity,table,node,permanent,prefix,"backend access statistics (empty - monitoring works differently in CockroachDB)
+pg_catalog,pg_stat_activity,table,node,permanent,prefix,NULL,"backend access statistics (empty - monitoring works differently in CockroachDB)
 https://www.postgresql.org/docs/9.6/monitoring-stats.html#PG-STAT-ACTIVITY-VIEW"
-pg_catalog,pg_stat_all_indexes,table,node,permanent,prefix,pg_stat_all_indexes was created for compatibility and is currently unimplemented
-pg_catalog,pg_stat_all_tables,table,node,permanent,prefix,pg_stat_all_tables was created for compatibility and is currently unimplemented
-pg_catalog,pg_stat_archiver,table,node,permanent,prefix,pg_stat_archiver was created for compatibility and is currently unimplemented
-pg_catalog,pg_stat_bgwriter,table,node,permanent,prefix,pg_stat_bgwriter was created for compatibility and is currently unimplemented
-pg_catalog,pg_stat_database,table,node,permanent,prefix,pg_stat_database was created for compatibility and is currently unimplemented
-pg_catalog,pg_stat_database_conflicts,table,node,permanent,prefix,pg_stat_database_conflicts was created for compatibility and is currently unimplemented
-pg_catalog,pg_stat_gssapi,table,node,permanent,prefix,pg_stat_gssapi was created for compatibility and is currently unimplemented
-pg_catalog,pg_stat_progress_analyze,table,node,permanent,prefix,pg_stat_progress_analyze was created for compatibility and is currently unimplemented
-pg_catalog,pg_stat_progress_basebackup,table,node,permanent,prefix,pg_stat_progress_basebackup was created for compatibility and is currently unimplemented
-pg_catalog,pg_stat_progress_cluster,table,node,permanent,prefix,pg_stat_progress_cluster was created for compatibility and is currently unimplemented
-pg_catalog,pg_stat_progress_create_index,table,node,permanent,prefix,pg_stat_progress_create_index was created for compatibility and is currently unimplemented
-pg_catalog,pg_stat_progress_vacuum,table,node,permanent,prefix,pg_stat_progress_vacuum was created for compatibility and is currently unimplemented
-pg_catalog,pg_stat_replication,table,node,permanent,prefix,pg_stat_replication was created for compatibility and is currently unimplemented
-pg_catalog,pg_stat_slru,table,node,permanent,prefix,pg_stat_slru was created for compatibility and is currently unimplemented
-pg_catalog,pg_stat_ssl,table,node,permanent,prefix,pg_stat_ssl was created for compatibility and is currently unimplemented
-pg_catalog,pg_stat_subscription,table,node,permanent,prefix,pg_stat_subscription was created for compatibility and is currently unimplemented
-pg_catalog,pg_stat_sys_indexes,table,node,permanent,prefix,pg_stat_sys_indexes was created for compatibility and is currently unimplemented
-pg_catalog,pg_stat_sys_tables,table,node,permanent,prefix,pg_stat_sys_tables was created for compatibility and is currently unimplemented
-pg_catalog,pg_stat_user_functions,table,node,permanent,prefix,pg_stat_user_functions was created for compatibility and is currently unimplemented
-pg_catalog,pg_stat_user_indexes,table,node,permanent,prefix,pg_stat_user_indexes was created for compatibility and is currently unimplemented
-pg_catalog,pg_stat_user_tables,table,node,permanent,prefix,pg_stat_user_tables was created for compatibility and is currently unimplemented
-pg_catalog,pg_stat_wal_receiver,table,node,permanent,prefix,pg_stat_wal_receiver was created for compatibility and is currently unimplemented
-pg_catalog,pg_stat_xact_all_tables,table,node,permanent,prefix,pg_stat_xact_all_tables was created for compatibility and is currently unimplemented
-pg_catalog,pg_stat_xact_sys_tables,table,node,permanent,prefix,pg_stat_xact_sys_tables was created for compatibility and is currently unimplemented
-pg_catalog,pg_stat_xact_user_functions,table,node,permanent,prefix,pg_stat_xact_user_functions was created for compatibility and is currently unimplemented
-pg_catalog,pg_stat_xact_user_tables,table,node,permanent,prefix,pg_stat_xact_user_tables was created for compatibility and is currently unimplemented
-pg_catalog,pg_statio_all_indexes,table,node,permanent,prefix,pg_statio_all_indexes was created for compatibility and is currently unimplemented
-pg_catalog,pg_statio_all_sequences,table,node,permanent,prefix,pg_statio_all_sequences was created for compatibility and is currently unimplemented
-pg_catalog,pg_statio_all_tables,table,node,permanent,prefix,pg_statio_all_tables was created for compatibility and is currently unimplemented
-pg_catalog,pg_statio_sys_indexes,table,node,permanent,prefix,pg_statio_sys_indexes was created for compatibility and is currently unimplemented
-pg_catalog,pg_statio_sys_sequences,table,node,permanent,prefix,pg_statio_sys_sequences was created for compatibility and is currently unimplemented
-pg_catalog,pg_statio_sys_tables,table,node,permanent,prefix,pg_statio_sys_tables was created for compatibility and is currently unimplemented
-pg_catalog,pg_statio_user_indexes,table,node,permanent,prefix,pg_statio_user_indexes was created for compatibility and is currently unimplemented
-pg_catalog,pg_statio_user_sequences,table,node,permanent,prefix,pg_statio_user_sequences was created for compatibility and is currently unimplemented
-pg_catalog,pg_statio_user_tables,table,node,permanent,prefix,pg_statio_user_tables was created for compatibility and is currently unimplemented
-pg_catalog,pg_statistic,table,node,permanent,prefix,pg_statistic was created for compatibility and is currently unimplemented
-pg_catalog,pg_statistic_ext,table,node,permanent,prefix,"pg_statistic_ext has the statistics objects created with CREATE STATISTICS
-https://www.postgresql.org/docs/13/catalog-pg-statistic-ext.html"
-pg_catalog,pg_statistic_ext_data,table,node,permanent,prefix,pg_statistic_ext_data was created for compatibility and is currently unimplemented
-pg_catalog,pg_stats,table,node,permanent,prefix,pg_stats was created for compatibility and is currently unimplemented
-pg_catalog,pg_stats_ext,table,node,permanent,prefix,pg_stats_ext was created for compatibility and is currently unimplemented
-pg_catalog,pg_subscription,table,node,permanent,prefix,pg_subscription was created for compatibility and is currently unimplemented
-pg_catalog,pg_subscription_rel,table,node,permanent,prefix,pg_subscription_rel was created for compatibility and is currently unimplemented
-pg_catalog,pg_tables,table,node,permanent,prefix,"tables summary (see also information_schema.tables, pg_catalog.pg_class)
+pg_catalog,pg_stat_all_indexes,table,node,permanent,prefix,NULL,pg_stat_all_indexes was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_all_tables,table,node,permanent,prefix,NULL,pg_stat_all_tables was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_archiver,table,node,permanent,prefix,NULL,pg_stat_archiver was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_bgwriter,table,node,permanent,prefix,NULL,pg_stat_bgwriter was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_checkpointer,table,node,permanent,prefix,NULL,pg_stat_checkpointer was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_database,table,node,permanent,prefix,NULL,pg_stat_database was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_database_conflicts,table,node,permanent,prefix,NULL,pg_stat_database_conflicts was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_gssapi,table,node,permanent,prefix,NULL,pg_stat_gssapi was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_io,table,node,permanent,prefix,NULL,pg_stat_io was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_progress_analyze,table,node,permanent,prefix,NULL,pg_stat_progress_analyze was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_progress_basebackup,table,node,permanent,prefix,NULL,pg_stat_progress_basebackup was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_progress_cluster,table,node,permanent,prefix,NULL,pg_stat_progress_cluster was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_progress_copy,table,node,permanent,prefix,NULL,pg_stat_progress_copy was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_progress_create_index,table,node,permanent,prefix,NULL,pg_stat_progress_create_index was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_progress_vacuum,table,node,permanent,prefix,NULL,pg_stat_progress_vacuum was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_recovery_prefetch,table,node,permanent,prefix,NULL,pg_stat_recovery_prefetch was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_replication,table,node,permanent,prefix,NULL,pg_stat_replication was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_replication_slots,table,node,permanent,prefix,NULL,pg_stat_replication_slots was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_slru,table,node,permanent,prefix,NULL,pg_stat_slru was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_ssl,table,node,permanent,prefix,NULL,pg_stat_ssl was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_subscription,table,node,permanent,prefix,NULL,pg_stat_subscription was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_subscription_stats,table,node,permanent,prefix,NULL,pg_stat_subscription_stats was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_sys_indexes,table,node,permanent,prefix,NULL,pg_stat_sys_indexes was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_sys_tables,table,node,permanent,prefix,NULL,pg_stat_sys_tables was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_user_functions,table,node,permanent,prefix,NULL,pg_stat_user_functions was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_user_indexes,table,node,permanent,prefix,NULL,pg_stat_user_indexes was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_user_tables,table,node,permanent,prefix,NULL,pg_stat_user_tables was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_wal,table,node,permanent,prefix,NULL,pg_stat_wal was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_wal_receiver,table,node,permanent,prefix,NULL,pg_stat_wal_receiver was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_xact_all_tables,table,node,permanent,prefix,NULL,pg_stat_xact_all_tables was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_xact_sys_tables,table,node,permanent,prefix,NULL,pg_stat_xact_sys_tables was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_xact_user_functions,table,node,permanent,prefix,NULL,pg_stat_xact_user_functions was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_xact_user_tables,table,node,permanent,prefix,NULL,pg_stat_xact_user_tables was created for compatibility and is currently unimplemented
+pg_catalog,pg_statio_all_indexes,table,node,permanent,prefix,NULL,pg_statio_all_indexes was created for compatibility and is currently unimplemented
+pg_catalog,pg_statio_all_sequences,table,node,permanent,prefix,NULL,pg_statio_all_sequences was created for compatibility and is currently unimplemented
+pg_catalog,pg_statio_all_tables,table,node,permanent,prefix,NULL,pg_statio_all_tables was created for compatibility and is currently unimplemented
+pg_catalog,pg_statio_sys_indexes,table,node,permanent,prefix,NULL,pg_statio_sys_indexes was created for compatibility and is currently unimplemented
+pg_catalog,pg_statio_sys_sequences,table,node,permanent,prefix,NULL,pg_statio_sys_sequences was created for compatibility and is currently unimplemented
+pg_catalog,pg_statio_sys_tables,table,node,permanent,prefix,NULL,pg_statio_sys_tables was created for compatibility and is currently unimplemented
+pg_catalog,pg_statio_user_indexes,table,node,permanent,prefix,NULL,pg_statio_user_indexes was created for compatibility and is currently unimplemented
+pg_catalog,pg_statio_user_sequences,table,node,permanent,prefix,NULL,pg_statio_user_sequences was created for compatibility and is currently unimplemented
+pg_catalog,pg_statio_user_tables,table,node,permanent,prefix,NULL,pg_statio_user_tables was created for compatibility and is currently unimplemented
+pg_catalog,pg_statistic,table,node,permanent,prefix,NULL,pg_statistic was created for compatibility and is currently unimplemented
+pg_catalog,pg_statistic_ext,table,node,permanent,prefix,NULL,"pg_statistic_ext has the statistics objects created with CREATE STATISTICS
+https://www.postgresql.org/docs/18/catalog-pg-statistic-ext.html"
+pg_catalog,pg_statistic_ext_data,table,node,permanent,prefix,NULL,pg_statistic_ext_data was created for compatibility and is currently unimplemented
+pg_catalog,pg_stats,table,node,permanent,prefix,NULL,pg_stats was created for compatibility and is currently unimplemented
+pg_catalog,pg_stats_ext,table,node,permanent,prefix,NULL,pg_stats_ext was created for compatibility and is currently unimplemented
+pg_catalog,pg_stats_ext_exprs,table,node,permanent,prefix,NULL,pg_stats_ext_exprs was created for compatibility and is currently unimplemented
+pg_catalog,pg_subscription,table,node,permanent,prefix,NULL,pg_subscription was created for compatibility and is currently unimplemented
+pg_catalog,pg_subscription_rel,table,node,permanent,prefix,NULL,pg_subscription_rel was created for compatibility and is currently unimplemented
+pg_catalog,pg_tables,table,node,permanent,prefix,NULL,"tables summary (see also information_schema.tables, pg_catalog.pg_class)
 https://www.postgresql.org/docs/9.5/view-pg-tables.html"
-pg_catalog,pg_tablespace,table,node,permanent,prefix,"available tablespaces (incomplete; concept inapplicable to CockroachDB)
+pg_catalog,pg_tablespace,table,node,permanent,prefix,NULL,"available tablespaces (incomplete; concept inapplicable to CockroachDB)
 https://www.postgresql.org/docs/9.5/catalog-pg-tablespace.html"
-pg_catalog,pg_timezone_abbrevs,table,node,permanent,prefix,pg_timezone_abbrevs was created for compatibility and is currently unimplemented
-pg_catalog,pg_timezone_names,table,node,permanent,prefix,pg_timezone_names lists all the timezones that are supported by SET timezone
-pg_catalog,pg_transform,table,node,permanent,prefix,pg_transform was created for compatibility and is currently unimplemented
-pg_catalog,pg_trigger,table,node,permanent,prefix,"trigger definitions
+pg_catalog,pg_timezone_abbrevs,table,node,permanent,prefix,NULL,pg_timezone_abbrevs lists the timezone abbreviations recognized by date/time literal parsing
+pg_catalog,pg_timezone_names,table,node,permanent,prefix,NULL,pg_timezone_names lists all the timezones that are supported by SET timezone
+pg_catalog,pg_transform,table,node,permanent,prefix,NULL,pg_transform was created for compatibility and is currently unimplemented
+pg_catalog,pg_trigger,table,node,permanent,prefix,NULL,"trigger definitions
 https://www.postgresql.org/docs/16/catalog-pg-trigger.html"
-pg_catalog,pg_ts_config,table,node,permanent,prefix,pg_ts_config was created for compatibility and is currently unimplemented
-pg_catalog,pg_ts_config_map,table,node,permanent,prefix,pg_ts_config_map was created for compatibility and is currently unimplemented
-pg_catalog,pg_ts_dict,table,node,permanent,prefix,pg_ts_dict was created for compatibility and is currently unimplemented
-pg_catalog,pg_ts_parser,table,node,permanent,prefix,pg_ts_parser was created for compatibility and is currently unimplemented
-pg_catalog,pg_ts_template,table,node,permanent,prefix,pg_ts_template was created for compatibility and is currently unimplemented
-pg_catalog,pg_type,table,node,permanent,prefix,"scalar types (incomplete)
+pg_catalog,pg_ts_config,table,node,permanent,prefix,NULL,pg_ts_config was created for compatibility and is currently unimplemented
+pg_catalog,pg_ts_config_map,table,node,permanent,prefix,NULL,pg_ts_config_map was created for compatibility and is currently unimplemented
+pg_catalog,pg_ts_dict,table,node,permanent,prefix,NULL,pg_ts_dict was created for compatibility and is currently unimplemented
+pg_catalog,pg_ts_parser,table,node,permanent,prefix,NULL,pg_ts_parser was created for compatibility and is currently unimplemented
+pg_catalog,pg_ts_template,table,node,permanent,prefix,NULL,pg_ts_template was created for compatibility and is currently unimplemented
+pg_catalog,pg_type,table,node,permanent,prefix,NULL,"scalar types (incomplete)
 https://www.postgresql.org/docs/9.5/catalog-pg-type.html"
-pg_catalog,pg_user,table,node,permanent,prefix,"database users
+pg_catalog,pg_user,table,node,permanent,prefix,NULL,"database users
 https://www.postgresql.org/docs/9.5/view-pg-user.html"
-pg_catalog,pg_user_mapping,table,node,permanent,prefix,"local to remote user mapping (empty - feature does not exist)
+pg_catalog,pg_user_mapping,table,node,permanent,prefix,NULL,"local to remote user mapping (empty - feature does not exist)
 https://www.postgresql.org/docs/9.5/catalog-pg-user-mapping.html"
-pg_catalog,pg_user_mappings,table,node,permanent,prefix,pg_user_mappings was created for compatibility and is currently unimplemented
-pg_catalog,pg_views,table,node,permanent,prefix,"view definitions (incomplete - see also information_schema.views)
+pg_catalog,pg_user_mappings,table,node,permanent,prefix,NULL,pg_user_mappings was created for compatibility and is currently unimplemented
+pg_catalog,pg_views,table,node,permanent,prefix,NULL,"view definitions (incomplete - see also information_schema.views)
 https://www.postgresql.org/docs/9.5/view-pg-views.html"
-pg_extension,geography_columns,table,node,permanent,prefix,Shows all defined geography columns. Matches PostGIS' geography_columns functionality.
-pg_extension,geometry_columns,table,node,permanent,prefix,Shows all defined geometry columns. Matches PostGIS' geometry_columns functionality.
-pg_extension,spatial_ref_sys,table,node,permanent,prefix,Shows all defined Spatial Reference Identifiers (SRIDs). Matches PostGIS' spatial_ref_sys table.
-public,ftable1,table,root,permanent,prefix,
-public,ftable2,table,root,permanent,prefix,
-public,mymview,materialized view,root,permanent,NULL,
-public,myseq,sequence,root,permanent,NULL,
-public,mytable,table,root,permanent,prefix,my awesome tb comment
-public,myview,view,root,permanent,NULL,
+pg_catalog,pg_wait_events,table,node,permanent,prefix,NULL,pg_wait_events was created for compatibility and is currently unimplemented
+pg_extension,geography_columns,table,node,permanent,prefix,NULL,Shows all defined geography columns. Matches PostGIS' geography_columns functionality.
+pg_extension,geometry_columns,table,node,permanent,prefix,NULL,Shows all defined geometry columns. Matches PostGIS' geometry_columns functionality.
+pg_extension,spatial_ref_sys,table,node,permanent,prefix,NULL,Shows all defined Spatial Reference Identifiers (SRIDs). Matches PostGIS' spatial_ref_sys table.
+public,ftable1,table,root,permanent,prefix,1024 bytes,
+public,ftable2,table,root,permanent,prefix,2048 bytes,
+public,mymview,materialized view,root,permanent,NULL,8192 bytes,
+public,myseq,sequence,root,permanent,NULL,NULL,
+public,mytable,table,root,permanent,prefix,16 kB,my awesome tb comment
+public,myview,view,root,permanent,NULL,NULL,
 
 subtest end
 
@@ -726,6 +820,47 @@ Schema,Name,Type,Owner
 public,ftable1,table,root
 public,ftable2,table,root
 public,mytable,table,root
+
+cli
+\dt+
+----
+sql -e \set echo -e \set display_format csv -e \dt+
+List of relations:
+>    SELECT n.nspname as "Schema",
+          c.relname as "Name",
+          CASE c.relkind
+          WHEN 'r' THEN 'table'
+          WHEN 'v' THEN 'view'
+          WHEN 'm' THEN 'materialized view'
+          WHEN 'i' THEN 'index'
+          WHEN 'S' THEN 'sequence'
+          WHEN 's' THEN 'special'
+          WHEN 't' THEN 'TOAST table'
+          WHEN 'f' THEN 'foreign table'
+          WHEN 'p' THEN 'partitioned table'
+          WHEN 'I' THEN 'partitioned index'
+          END as "Type",
+          pg_catalog.pg_get_userbyid(c.relowner) as "Owner",
+          CASE c.relpersistence
+          WHEN 'p' THEN 'permanent'
+          WHEN 't' THEN 'temporary'
+          WHEN 'u' THEN 'unlogged' END AS "Persistence",
+          am.amname AS "Access Method",
+          pg_catalog.pg_size_pretty(pg_catalog.pg_table_size(c.oid)) AS "Size",
+          COALESCE(pg_catalog.obj_description(c.oid, 'pg_class'),'') as "Description"
+     FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
+LEFT JOIN pg_catalog.pg_am am ON am.oid = c.relam
+    WHERE c.relkind IN ('r','p','')
+      AND n.nspname !~ '^pg_'
+      AND n.nspname <> 'information_schema'
+      AND n.nspname <> 'crdb_internal'
+      AND pg_catalog.pg_table_is_visible(c.oid)
+ ORDER BY 1,2
+Schema,Name,Type,Owner,Persistence,Access Method,Size,Description
+public,ftable1,table,root,permanent,prefix,1024 bytes,
+public,ftable2,table,root,permanent,prefix,2048 bytes,
+public,mytable,table,root,permanent,prefix,16 kB,my awesome tb comment
 
 subtest end
 
@@ -768,7 +903,6 @@ public,ftable1_pkey,index,root,ftable1
 public,ftable1_x_key,index,root,ftable1
 public,ftable2_pkey,index,root,ftable2
 public,myidx,index,root,mytable
-public,mymview_pkey,index,root,mymview
 public,mytable_pkey,index,root,mytable
 
 cli
@@ -797,6 +931,7 @@ List of relations:
           WHEN 't' THEN 'temporary'
           WHEN 'u' THEN 'unlogged' END AS "Persistence",
           am.amname AS "Access Method",
+          pg_catalog.pg_size_pretty(pg_catalog.pg_table_size(c.oid)) AS "Size",
           COALESCE(pg_catalog.obj_description(c.oid, 'pg_class'),'') as "Description"
      FROM pg_catalog.pg_class@primary c
 LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
@@ -809,13 +944,12 @@ LEFT JOIN pg_catalog.pg_class c2 ON i.indrelid = c2.oid
       AND n.nspname <> 'crdb_internal'
       AND pg_catalog.pg_table_is_visible(c.oid)
  ORDER BY 1,2
-Schema,Name,Type,Owner,Table,Persistence,Access Method,Description
-public,ftable1_pkey,index,root,ftable1,permanent,prefix,
-public,ftable1_x_key,index,root,ftable1,permanent,prefix,
-public,ftable2_pkey,index,root,ftable2,permanent,prefix,
-public,myidx,index,root,mytable,permanent,prefix,my awesome idx comment
-public,mymview_pkey,index,root,mymview,permanent,prefix,
-public,mytable_pkey,index,root,mytable,permanent,prefix,
+Schema,Name,Type,Owner,Table,Persistence,Access Method,Size,Description
+public,ftable1_pkey,index,root,ftable1,permanent,prefix,NULL,
+public,ftable1_x_key,index,root,ftable1,permanent,prefix,NULL,
+public,ftable2_pkey,index,root,ftable2,permanent,prefix,NULL,
+public,myidx,index,root,mytable,permanent,prefix,NULL,my awesome idx comment
+public,mytable_pkey,index,root,mytable,permanent,prefix,NULL,
 
 cli
 \di myidx
@@ -875,6 +1009,7 @@ List of relations:
           WHEN 't' THEN 'temporary'
           WHEN 'u' THEN 'unlogged' END AS "Persistence",
           am.amname AS "Access Method",
+          pg_catalog.pg_size_pretty(pg_catalog.pg_table_size(c.oid)) AS "Size",
           COALESCE(pg_catalog.obj_description(c.oid, 'pg_class'),'') as "Description"
      FROM pg_catalog.pg_class@primary c
 LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
@@ -884,8 +1019,8 @@ LEFT JOIN pg_catalog.pg_class c2 ON i.indrelid = c2.oid
     WHERE c.relkind IN ('i','s','')
       AND c.relname LIKE 'myidx'
  ORDER BY 1,2
-Schema,Name,Type,Owner,Table,Persistence,Access Method,Description
-public,myidx,index,root,mytable,permanent,prefix,my awesome idx comment
+Schema,Name,Type,Owner,Table,Persistence,Access Method,Size,Description
+public,myidx,index,root,mytable,permanent,prefix,NULL,my awesome idx comment
 
 subtest end
 
@@ -977,6 +1112,7 @@ List of relations:
           WHEN 't' THEN 'temporary'
           WHEN 'u' THEN 'unlogged' END AS "Persistence",
           am.amname AS "Access Method",
+          pg_catalog.pg_size_pretty(pg_catalog.pg_table_size(c.oid)) AS "Size",
           COALESCE(pg_catalog.obj_description(c.oid, 'pg_class'),'') as "Description"
      FROM pg_catalog.pg_class c
 LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
@@ -987,8 +1123,8 @@ LEFT JOIN pg_catalog.pg_am am ON am.oid = c.relam
       AND n.nspname <> 'crdb_internal'
       AND pg_catalog.pg_table_is_visible(c.oid)
  ORDER BY 1,2
-Schema,Name,Type,Owner,Persistence,Access Method,Description
-public,mymview,materialized view,root,permanent,NULL,
+Schema,Name,Type,Owner,Persistence,Access Method,Size,Description
+public,mymview,materialized view,root,permanent,NULL,8192 bytes,
 
 cli
 \dm+ mymview
@@ -1015,6 +1151,7 @@ List of relations:
           WHEN 't' THEN 'temporary'
           WHEN 'u' THEN 'unlogged' END AS "Persistence",
           am.amname AS "Access Method",
+          pg_catalog.pg_size_pretty(pg_catalog.pg_table_size(c.oid)) AS "Size",
           COALESCE(pg_catalog.obj_description(c.oid, 'pg_class'),'') as "Description"
      FROM pg_catalog.pg_class c
 LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
@@ -1022,8 +1159,8 @@ LEFT JOIN pg_catalog.pg_am am ON am.oid = c.relam
     WHERE c.relkind IN ('m','s','')
       AND c.relname LIKE 'mymview'
  ORDER BY 1,2
-Schema,Name,Type,Owner,Persistence,Access Method,Description
-public,mymview,materialized view,root,permanent,NULL,
+Schema,Name,Type,Owner,Persistence,Access Method,Size,Description
+public,mymview,materialized view,root,permanent,NULL,8192 bytes,
 
 subtest end
 
@@ -1113,6 +1250,7 @@ List of relations:
           WHEN 'p' THEN 'permanent'
           WHEN 't' THEN 'temporary'
           WHEN 'u' THEN 'unlogged' END AS "Persistence",
+          pg_catalog.pg_size_pretty(pg_catalog.pg_table_size(c.oid)) AS "Size",
           COALESCE(pg_catalog.obj_description(c.oid, 'pg_class'),'') as "Description"
      FROM pg_catalog.pg_class c
 LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
@@ -1122,8 +1260,8 @@ LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
       AND n.nspname <> 'crdb_internal'
       AND pg_catalog.pg_table_is_visible(c.oid)
  ORDER BY 1,2
-Schema,Name,Type,Owner,Persistence,Description
-public,myview,view,root,permanent,
+Schema,Name,Type,Owner,Persistence,Size,Description
+public,myview,view,root,permanent,NULL,
 
 cli
 \dv+ myview
@@ -1149,14 +1287,15 @@ List of relations:
           WHEN 'p' THEN 'permanent'
           WHEN 't' THEN 'temporary'
           WHEN 'u' THEN 'unlogged' END AS "Persistence",
+          pg_catalog.pg_size_pretty(pg_catalog.pg_table_size(c.oid)) AS "Size",
           COALESCE(pg_catalog.obj_description(c.oid, 'pg_class'),'') as "Description"
      FROM pg_catalog.pg_class c
 LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
     WHERE c.relkind IN ('v','s','')
       AND c.relname LIKE 'myview'
  ORDER BY 1,2
-Schema,Name,Type,Owner,Persistence,Description
-public,myview,view,root,permanent,
+Schema,Name,Type,Owner,Persistence,Size,Description
+public,myview,view,root,permanent,NULL,
 
 subtest end
 
@@ -1217,6 +1356,7 @@ List of relations:
           WHEN 'p' THEN 'permanent'
           WHEN 't' THEN 'temporary'
           WHEN 'u' THEN 'unlogged' END AS "Persistence",
+          pg_catalog.pg_size_pretty(pg_catalog.pg_table_size(c.oid)) AS "Size",
           COALESCE(pg_catalog.obj_description(c.oid, 'pg_class'),'') as "Description"
      FROM pg_catalog.pg_class c
 LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
@@ -1226,8 +1366,8 @@ LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
       AND n.nspname <> 'crdb_internal'
       AND pg_catalog.pg_table_is_visible(c.oid)
  ORDER BY 1,2
-Schema,Name,Type,Owner,Persistence,Description
-public,myseq,sequence,root,permanent,
+Schema,Name,Type,Owner,Persistence,Size,Description
+public,myseq,sequence,root,permanent,NULL,
 
 cli
 \ds mys%
@@ -1281,14 +1421,15 @@ List of relations:
           WHEN 'p' THEN 'permanent'
           WHEN 't' THEN 'temporary'
           WHEN 'u' THEN 'unlogged' END AS "Persistence",
+          pg_catalog.pg_size_pretty(pg_catalog.pg_table_size(c.oid)) AS "Size",
           COALESCE(pg_catalog.obj_description(c.oid, 'pg_class'),'') as "Description"
      FROM pg_catalog.pg_class c
 LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
     WHERE c.relkind IN ('S','s','')
       AND c.relname LIKE 'mys%'
  ORDER BY 1,2
-Schema,Name,Type,Owner,Persistence,Description
-public,myseq,sequence,root,permanent,
+Schema,Name,Type,Owner,Persistence,Size,Description
+public,myseq,sequence,root,permanent,NULL,
 
 subtest end
 
@@ -1638,7 +1779,6 @@ SELECT pg_catalog.quote_ident(idxname) ||
   FROM idx
 ORDER BY indisprimary DESC, idxname
 Indexes
-"mymview_pkey PRIMARY KEY, btree (rowid ASC)"
 > SELECT pg_catalog.pg_get_viewdef(107::pg_catalog.oid, true) AS "View definition"
 View definition
 SELECT mycolumn FROM defaultdb.public.mytable;
@@ -2122,7 +2262,7 @@ LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
       AND n.nspname <> 'crdb_internal'
       AND pg_catalog.pg_function_is_visible(p.oid) ORDER BY 1, 2, 4
 Schema,Name,Result data type,Argument data types,Type
-public,myfunc,int8,int8,func
+public,myfunc,int8,val int8,func
 
 cli
 \df abs
@@ -2170,7 +2310,7 @@ List of functions:
         pg_catalog.pg_get_userbyid(p.proowner) AS "Owner",
         CASE WHEN p.prosecdef THEN 'definer' ELSE 'invoker' END AS "Security",
        COALESCE(pg_catalog.array_to_string(p.proacl, e'\n'), '') AS "Access privileges",
-       p.prosrc AS "Source code",
+       COALESCE(p.prosrc, pg_catalog.pg_get_function_sqlbody(p.oid)) AS "Source code",
        pg_catalog.obj_description(p.oid, 'pg_proc') AS "Description"
      FROM pg_catalog.pg_proc p
 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
@@ -2226,7 +2366,7 @@ List of functions:
         pg_catalog.pg_get_userbyid(p.proowner) AS "Owner",
         CASE WHEN p.prosecdef THEN 'definer' ELSE 'invoker' END AS "Security",
        COALESCE(pg_catalog.array_to_string(p.proacl, e'\n'), '') AS "Access privileges",
-       p.prosrc AS "Source code",
+       COALESCE(p.prosrc, pg_catalog.pg_get_function_sqlbody(p.oid)) AS "Source code",
        pg_catalog.obj_description(p.oid, 'pg_proc') AS "Description"
      FROM pg_catalog.pg_proc p
 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
@@ -2281,7 +2421,7 @@ List of functions:
         pg_catalog.pg_get_userbyid(p.proowner) AS "Owner",
         CASE WHEN p.prosecdef THEN 'definer' ELSE 'invoker' END AS "Security",
        COALESCE(pg_catalog.array_to_string(p.proacl, e'\n'), '') AS "Access privileges",
-       p.prosrc AS "Source code",
+       COALESCE(p.prosrc, pg_catalog.pg_get_function_sqlbody(p.oid)) AS "Source code",
        pg_catalog.obj_description(p.oid, 'pg_proc') AS "Description"
      FROM pg_catalog.pg_proc p
 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
@@ -2313,7 +2453,7 @@ LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
       AND n.nspname <> 'crdb_internal'
       AND pg_catalog.pg_function_is_visible(p.oid) ORDER BY 1, 2, 4
 Schema,Name,Result data type,Argument data types,Type
-public,myfunc,int8,int8,func
+public,myfunc,int8,val int8,func
 
 cli
 \dfn+
@@ -2338,7 +2478,7 @@ List of functions:
         pg_catalog.pg_get_userbyid(p.proowner) AS "Owner",
         CASE WHEN p.prosecdef THEN 'definer' ELSE 'invoker' END AS "Security",
        COALESCE(pg_catalog.array_to_string(p.proacl, e'\n'), '') AS "Access privileges",
-       p.prosrc AS "Source code",
+       COALESCE(p.prosrc, pg_catalog.pg_get_function_sqlbody(p.oid)) AS "Source code",
        pg_catalog.obj_description(p.oid, 'pg_proc') AS "Description"
      FROM pg_catalog.pg_proc p
 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
@@ -2348,7 +2488,7 @@ LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
       AND n.nspname <> 'crdb_internal'
       AND pg_catalog.pg_function_is_visible(p.oid) ORDER BY 1, 2, 4
 Schema,Name,Result data type,Argument data types,Type,Volatility,Owner,Security,Access privileges,Source code,Description
-public,myfunc,int8,int8,func,v,root,invoker,,SELECT val;,NULL
+public,myfunc,int8,val int8,func,v,root,invoker,,SELECT val;,NULL
 
 cli
 \dfwa %tile%

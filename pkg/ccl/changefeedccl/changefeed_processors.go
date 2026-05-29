@@ -406,9 +406,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		kvFeedHighWater = ca.spec.Feed.StatementTime
 	}
 
-	// TODO(yevgeniy): Introduce separate changefeed monitor that's a parent
-	// for all changefeeds to control memory allocated to all changefeeds.
-	pool := ca.FlowCtx.Cfg.BackfillerMonitor
+	pool := ca.MemMonitor
 	if ca.knobs.MemMonitor != nil {
 		pool = ca.knobs.MemMonitor
 	}
@@ -723,7 +721,6 @@ func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 
 		select {
 		case <-ca.aggTimer.C:
-			ca.aggTimer.Read = true
 			ca.aggTimer.Reset(tracingAggTimerInterval)
 			return nil, bulkutil.ConstructTracingAggregatorProducerMeta(ca.Ctx(),
 				ca.FlowCtx.NodeID.SQLInstanceID(), ca.FlowCtx.ID, ca.agg)
@@ -1345,6 +1342,12 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	// TODO(yevgeniy): Figure out how to inject replication stream metrics.
 	cf.metrics = cf.FlowCtx.Cfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
 
+	// Attach changefeed cluster metrics to the local writer so values
+	// flush to system.cluster_metrics. Idempotent and a no-op if the
+	// writer is nil (test setups that bypass the SQL server).
+	execCfg := cf.FlowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig)
+	cf.metrics.ClusterMetrics.RegisterClusterMetric(execCfg.ClusterMetricsWriter)
+
 	// Pass a nil oracle because this sink is only used to emit resolved timestamps
 	// but the oracle is only used when emitting row updates.
 	var nilOracle timestampLowerBoundOracle
@@ -1593,7 +1596,6 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 
 		select {
 		case <-cf.aggTimer.C:
-			cf.aggTimer.Read = true
 			cf.aggTimer.Reset(1 * time.Second)
 			return nil, bulkutil.ConstructTracingAggregatorProducerMeta(cf.Ctx(),
 				cf.FlowCtx.NodeID.SQLInstanceID(), cf.FlowCtx.ID, cf.agg)
@@ -1754,6 +1756,9 @@ func (cf *changeFrontier) maybeCheckpoint(
 	// checkpoint_progress metric which will return the lowest timestamp across
 	// all feeds in the scope.
 	cf.sliMetrics.setCheckpoint(cf.sliMetricsID, newResolved)
+	cf.metrics.ClusterMetrics.SetCheckpointLag(
+		cf.spec.JobID, cf.spec.Feed.Opts[changefeedbase.OptMetricsScope], newResolved.WallTime,
+	)
 
 	return cf.maybeEmitResolved(ctx, newResolved)
 }
@@ -1833,8 +1838,9 @@ func (cf *changeFrontier) checkpointJobProgress(
 	cf.metrics.FrontierUpdates.Inc(1)
 	if cf.js.job != nil {
 		var ptsUpdated bool
-		if err := cf.js.job.DebugNameNoTxn(changefeedJobProgressTxnName).Update(cf.Ctx(), func(
-			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+		if err := cf.js.job.DeprecatedDebugNameNoTxn(changefeedJobProgressTxnName).Update(cf.Ctx(), func(
+			txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater,
 		) error {
 			var err error
 			if err = md.CheckRunningOrReverting(); err != nil {

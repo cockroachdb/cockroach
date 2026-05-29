@@ -8,17 +8,77 @@ package txnapply
 import (
 	"context"
 	"slices"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnwriter"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/container/heap"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
+	"github.com/gogo/protobuf/proto"
 )
+
+func init() {
+	pKey := errors.GetTypeKey((*ReplicationError)(nil))
+	errors.RegisterWrapperEncoder(pKey, encodeReplicationError)
+	errors.RegisterWrapperDecoder(pKey, decodeReplicationError)
+}
+
+var leaseReleaseInterval = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"logical_replication.consumer.lease_release_interval",
+	"how often applier goroutines release descriptor leases held by tombstone updaters",
+	5*time.Second,
+	settings.PositiveDuration,
+)
+
+// ReplicationError is returned by a writer goroutine when a source transaction
+// cannot be applied to the destination (e.g. a constraint violation).
+type ReplicationError struct {
+	// The underlying error that prevented the transaction from being applied.
+	Err error
+	// The MVCC timestamp of the source transaction that could not be applied.
+	Timestamp hlc.Timestamp
+}
+
+// Error implements the error interface.
+func (e *ReplicationError) Error() string {
+	return redact.StringWithoutMarkers(e)
+}
+
+// SafeFormat implements redact.SafeFormatter.
+func (e *ReplicationError) SafeFormat(p redact.SafePrinter, _ rune) {
+	p.Printf("replication error at %s: %v", e.Timestamp, e.Err)
+}
+
+// Unwrap implements the errors.Wrapper interface.
+func (e *ReplicationError) Unwrap() error { return e.Err }
+
+func encodeReplicationError(
+	_ context.Context, err error,
+) (msgPrefix string, safe []string, details proto.Message) {
+	var e *ReplicationError
+	errors.As(err, &e)
+	return "", nil, &e.Timestamp
+}
+
+func decodeReplicationError(
+	_ context.Context, cause error, _ string, _ []string, payload proto.Message,
+) error {
+	ts, ok := payload.(*hlc.Timestamp)
+	if !ok {
+		// Payload type changed unexpectedly; fall back to opaque decode.
+		return nil
+	}
+	return &ReplicationError{Timestamp: *ts, Err: cause}
+}
 
 type appliedTransaction struct {
 	ldrdecoder.Transaction
@@ -72,7 +132,8 @@ type Checkpoint struct{ Timestamp hlc.Timestamp }
 // timestamp order.
 type Applier struct {
 	id          ldrdecoder.ApplierID
-	depResolver DependencyResolver
+	settings    *cluster.Settings
+	depResolver DependencyResolverClient
 
 	mu struct {
 		syncutil.Mutex
@@ -106,6 +167,11 @@ type Applier struct {
 	}
 	txnWriters []txnwriter.TransactionWriter
 
+	// newCPUHandle creates a per-goroutine SQLCPUHandle for CPU accounting.
+	// Each writer goroutine calls this to get its own handle, avoiding
+	// cross-writer mutex contention on a shared handle.
+	newCPUHandle func() *admission.SQLCPUHandle
+
 	// TODO(msbutler): consider removing and simply call commited.ResolvedTime().
 	localResolvedTime Latest[hlc.Timestamp]
 }
@@ -119,9 +185,11 @@ type Applier struct {
 func NewApplier(
 	ctx context.Context,
 	id ldrdecoder.ApplierID,
+	settings *cluster.Settings,
 	writers []txnwriter.TransactionWriter,
-	depResolver DependencyResolver,
+	depResolver DependencyResolverClient,
 	allApplierIDs []ldrdecoder.ApplierID,
+	newCPUHandle func() *admission.SQLCPUHandle,
 ) (_ *Applier, retErr error) {
 	defer func() {
 		if retErr != nil {
@@ -131,15 +199,20 @@ func NewApplier(
 		}
 	}()
 	if id == 0 {
-		return nil, errors.New("applier ID must be nonzero")
+		return nil, errors.AssertionFailedf("applier ID must be nonzero")
 	}
 	if depResolver == nil {
-		return nil, errors.New("dependency resolver must not be nil")
+		return nil, errors.AssertionFailedf("dependency resolver must not be nil")
+	}
+	if newCPUHandle == nil {
+		return nil, errors.AssertionFailedf("newCPUHandle must not be nil")
 	}
 	a := &Applier{
 		id:                id,
+		settings:          settings,
 		depResolver:       depResolver,
 		txnWriters:        writers,
+		newCPUHandle:      newCPUHandle,
 		localResolvedTime: MakeLatest[hlc.Timestamp](),
 	}
 	a.mu.committed = makeCommittedSet()
@@ -342,14 +415,24 @@ func (a *Applier) writer(
 	ready chan ldrdecoder.Transaction,
 	applied chan appliedTransaction,
 ) error {
+	handle := a.newCPUHandle()
+	defer handle.Close()
+	ctx = admission.ContextWithSQLCPUHandle(ctx, handle)
+	defer handle.RegisterGoroutine().Close(ctx)
+	ticker := time.NewTicker(leaseReleaseInterval.Get(&a.settings.SV))
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-ticker.C:
+			ticker.Reset(leaseReleaseInterval.Get(&a.settings.SV))
+			txnWriter.ReleaseLeases(ctx)
 		case transaction := <-ready:
-			// TODO(jeffswenson): build up a batch to apply by pulling from the ready
-			// channel.
-			results, err := txnWriter.ApplyBatch(ctx, []ldrdecoder.Transaction{transaction})
+			// TODO(jeffswenson): build up a batch to apply by pulling from the
+			// ready channel.
+			results, err := txnWriter.ApplyBatch(
+				ctx, []ldrdecoder.Transaction{transaction})
 			if err != nil {
 				return err
 			}
@@ -358,8 +441,10 @@ func (a *Applier) writer(
 				applyResult: results[0],
 			}
 			if txn.applyResult.DlqReason != nil {
-				// TODO(msbutler): actually write to the DLQ.
-				log.Dev.Errorf(ctx, "transaction %s should be sent to DLQ with reason: %v", transaction.TxnID.Timestamp, txn.applyResult.DlqReason)
+				return &ReplicationError{
+					Err:       txn.applyResult.DlqReason,
+					Timestamp: transaction.TxnID.Timestamp,
+				}
 			}
 			select {
 			case <-ctx.Done():
@@ -376,7 +461,7 @@ func (a *Applier) aggregator(
 	// WARNING: there is a deadlock risk in aggregator because we are creating a
 	// loop between the channels. We avoid this deadlock by buffering newly ready
 	// transactions.
-	remoteUpdates := a.depResolver.Receive(a.id)
+	receiveBuffer := a.depResolver.Receive(a.id)
 	readyBuffer := ring.MakeBuffer[ldrdecoder.Transaction](nil)
 	for {
 		if readyBuffer.Len() == 0 {
@@ -388,7 +473,14 @@ func (a *Applier) aggregator(
 				if err != nil {
 					return err
 				}
-			case update := <-remoteUpdates:
+			case <-receiveBuffer.Ch():
+				update, ok := receiveBuffer.Pop()
+				if !ok {
+					// NB: !ok implies the buffer is empty. Further, the receivBuffer.Ch
+					// is never closed, so there's no reason tear down the flow based this
+					// channel closing.
+					break
+				}
 				if err := a.processRemoteUpdate(update, &readyBuffer); err != nil {
 					return err
 				}
@@ -404,7 +496,11 @@ func (a *Applier) aggregator(
 				if err != nil {
 					return err
 				}
-			case update := <-remoteUpdates:
+			case <-receiveBuffer.Ch():
+				update, ok := receiveBuffer.Pop()
+				if !ok {
+					break
+				}
 				if err := a.processRemoteUpdate(update, &readyBuffer); err != nil {
 					return err
 				}
@@ -443,8 +539,8 @@ func (a *Applier) recordCompletion(
 			// timestamp order, if txnIDs contains a txn at timestamp T,
 			// there are no txns for this applier in the interval
 			// (resolvedTime, T). The resolved time can safely advance
-			// to T-1.
-			a.mu.committed.UpdateResolvedTime(id.Timestamp.FloorPrev())
+			// to T.Prev().
+			a.mu.committed.UpdateResolvedTime(id.Timestamp.Prev())
 			break
 		}
 		a.mu.committed.UpdateResolvedTime(id.Timestamp)

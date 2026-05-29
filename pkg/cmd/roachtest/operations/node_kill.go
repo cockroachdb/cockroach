@@ -8,58 +8,54 @@ package operations
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operation"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operations/helpers"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 //lint:ignore U1000 temporarily disabled
 type cleanupNodeKill struct {
-	nodes option.NodeListOption
+	failer *failures.Failer
 }
 
 //lint:ignore U1000 temporarily disabled
 func (cl *cleanupNodeKill) Cleanup(ctx context.Context, o operation.Operation, c cluster.Cluster) {
-	db, err := c.ConnE(ctx, o.L(), cl.nodes[0])
-	if err != nil {
-		err = c.RunE(ctx, option.WithNodes(cl.nodes), "./cockroach.sh")
-		if err != nil {
-			o.Status(fmt.Sprintf("restarted node with error %s", err))
-		} else {
-			o.Status("restarted node with no error")
-		}
-		return
+	o.Status("recovering killed node")
+	if err := cl.failer.Recover(ctx, o.L()); err != nil {
+		o.L().Printf("failed to recover node: %v", err)
 	}
-	defer db.Close()
-	_, err = db.Query("SELECT 1")
-	if err != nil {
-		err = c.RunE(ctx, option.WithNodes(cl.nodes), "./cockroach.sh")
-		if err != nil {
-			o.Status(fmt.Sprintf("restarted node with error %s", err))
-		} else {
-			o.Status("restarted node with no error")
-		}
+	o.Status("waiting for node to stabilize")
+	if err := cl.failer.WaitForFailureToRecover(ctx, o.L()); err != nil {
+		o.L().Printf("node failed to stabilize: %v", err)
+	}
+	if err := cl.failer.Cleanup(ctx, o.L()); err != nil {
+		o.Fatalf("failed to cleanup: %v", err)
 	}
 }
 
 //lint:ignore U1000 temporarily disabled
 func nodeKillRunner(
-	signal int, drain bool,
+	graceful bool, drain bool, gracePeriod time.Duration,
 ) func(ctx context.Context, o operation.Operation, c cluster.Cluster) registry.OperationCleanup {
 	return func(ctx context.Context, o operation.Operation, c cluster.Cluster) registry.OperationCleanup {
-		return runNodeKill(ctx, o, c, signal, drain)
+		return runNodeKill(ctx, o, c, graceful, drain, gracePeriod)
 	}
 }
 
 //lint:ignore U1000 temporarily disabled
 func runNodeKill(
-	ctx context.Context, o operation.Operation, c cluster.Cluster, signal int, drain bool,
+	ctx context.Context,
+	o operation.Operation,
+	c cluster.Cluster,
+	graceful bool,
+	drain bool,
+	gracePeriod time.Duration,
 ) registry.OperationCleanup {
 	rng, _ := randutil.NewPseudoRand()
 	node := c.All().SeededRandNode(rng)
@@ -68,59 +64,79 @@ func runNodeKill(
 		helpers.DrainNode(ctx, o, c, node)
 	}
 
-	o.Status(fmt.Sprintf("killing node %s with signal %d", node.NodeIDsString(), signal))
-	if err := c.RunE(ctx, option.WithNodes(node), "pkill", fmt.Sprintf("-%d", signal), "-f", "cockroach\\ start"); err != nil {
+	failer, args, err := roachtestutil.MakeProcessKillFailer(
+		o.L(), c, node, graceful, gracePeriod,
+	)
+	if err != nil {
 		o.Fatal(err)
 	}
 
-	o.Status(fmt.Sprintf("sent signal %d to node %s, waiting for process to exit", signal, node.NodeIDsString()))
-	for {
-		if err := ctx.Err(); err != nil {
-			// Context cancelled, but node was already killed successfully.
-			// Cleanup will still run and restart the node.
-			break
-		}
-		err := c.RunE(ctx, option.WithNodes(node), "pgrep", "-f", "cockroach\\ start")
-		if err != nil {
-			if strings.Contains(err.Error(), "status 1") {
-				// pgrep returns error code 1 if no processes are found.
-				o.Status(fmt.Sprintf("killed node %s with signal %d", node.NodeIDsString(), signal))
-				break
-			}
-			o.Fatal(err)
-		}
-		time.Sleep(1 * time.Second)
+	// Assign cleanup handler before Setup so partial failures are cleaned up.
+	cleanup := &cleanupNodeKill{failer: failer}
+
+	if err := failer.Setup(ctx, o.L(), args); err != nil {
+		o.Fatal(err)
 	}
 
-	return &cleanupNodeKill{nodes: node}
+	o.Status(fmt.Sprintf("killing node %s (graceful=%t)", node.NodeIDsString(), graceful))
+	if err := failer.Inject(ctx, o.L(), args); err != nil {
+		o.Fatal(err)
+	}
+	if err := failer.WaitForFailureToPropagate(ctx, o.L()); err != nil {
+		o.Fatal(err)
+	}
+	o.Status(fmt.Sprintf("killed node %s", node.NodeIDsString()))
+
+	return cleanup
 }
 
 //lint:ignore U1000 temporarily disabled
 func registerNodeKill(r registry.Registry) {
 	for _, spec := range []struct {
-		name     string
-		signal   int
-		drain    bool
-		downtime time.Duration
-		timeout  time.Duration
+		name        string
+		graceful    bool
+		drain       bool
+		gracePeriod time.Duration
+		downtime    time.Duration
+		timeout     time.Duration
 	}{
-		{"node-kill/sigkill/drain=true/downtime=10m", 9, true, 10 * time.Minute, 25 * time.Minute},
-
-		{"node-kill/sigkill/drain=false/downtime=10m", 9, false, 10 * time.Minute, 25 * time.Minute},
-
-		{"node-kill/sigterm/drain=true/downtime=10m", 15, true, 10 * time.Minute, 25 * time.Minute},
-
-		{"node-kill/sigterm/drain=false/downtime=10m", 15, false, 10 * time.Minute, 25 * time.Minute},
+		// SIGKILL + drain: drain first, then hard kill.
+		{
+			name:     "node-kill/sigkill/drain=true/downtime=10m",
+			graceful: false, drain: true, gracePeriod: 0,
+			downtime: 10 * time.Minute, timeout: 35 * time.Minute,
+		},
+		// SIGKILL, no drain.
+		{
+			name:     "node-kill/sigkill/drain=false/downtime=10m",
+			graceful: false, drain: false, gracePeriod: 0,
+			downtime: 10 * time.Minute, timeout: 35 * time.Minute,
+		},
+		// SIGTERM + drain: drain first, then graceful shutdown.
+		{
+			name:     "node-kill/sigterm/drain=true/downtime=10m",
+			graceful: true, drain: true, gracePeriod: 5 * time.Minute,
+			downtime: 10 * time.Minute, timeout: 35 * time.Minute,
+		},
+		// SIGTERM, no drain.
+		{
+			name:     "node-kill/sigterm/drain=false/downtime=10m",
+			graceful: true, drain: false, gracePeriod: 5 * time.Minute,
+			downtime: 10 * time.Minute, timeout: 35 * time.Minute,
+		},
 	} {
+		s := spec
 		r.AddOperation(registry.OperationSpec{
-			Name:               spec.name,
+			Name:               s.name,
 			Owner:              registry.OwnerServer,
-			Timeout:            spec.timeout,
+			Timeout:            s.timeout,
 			CompatibleClouds:   registry.AllClouds,
 			CanRunConcurrently: registry.OperationCannotRunConcurrently,
-			Dependencies:       []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
-			WaitBeforeCleanup:  spec.downtime,
-			Run:                nodeKillRunner(spec.signal, spec.drain),
+			Dependencies: []registry.OperationDependency{
+				registry.OperationRequiresZeroUnderreplicatedRanges,
+			},
+			WaitBeforeCleanup: s.downtime,
+			Run:               nodeKillRunner(s.graceful, s.drain, s.gracePeriod),
 		})
 	}
 }

@@ -7,6 +7,7 @@ package rowexec
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -858,6 +859,7 @@ func (z *zigzagJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 		LockWaitTime:        optional.MakeTimeValue(z.contentionEventsListener.GetLockWaitTime()),
 		LatchWaitTime:       optional.MakeTimeValue(z.contentionEventsListener.GetLatchWaitTime()),
 		BatchRequestsIssued: optional.MakeUint(uint64(z.getBatchRequestsIssued())),
+		LocalKVCPUTime:      optional.MakeTimeValue(time.Duration(z.getLocalKVCPUTime())),
 	}
 	scanStats := z.scanStatsListener.GetScanStats()
 	execstats.PopulateKVMVCCStats(&kvStats, &scanStats)
@@ -868,7 +870,6 @@ func (z *zigzagJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 		}
 		kvStats.TuplesRead.MaybeAdd(fis.NumTuples)
 		kvStats.KVTime.MaybeAdd(fis.WaitTime)
-		kvStats.KVCPUTime.MaybeAdd(optional.MakeTimeValue(fis.kvCPUTime))
 	}
 	ret := &execinfrapb.ComponentStats{
 		KV:     kvStats,
@@ -918,6 +919,14 @@ func (z *zigzagJoiner) getBatchRequestsIssued() int64 {
 	return batchRequestsIssued
 }
 
+func (z *zigzagJoiner) getLocalKVCPUTime() int64 {
+	var localKVCPUTime int64
+	for i := range z.infos {
+		localKVCPUTime += z.infos[i].fetcher.GetLocalKVCPUTime()
+	}
+	return localKVCPUTime
+}
+
 func (z *zigzagJoiner) generateMeta() []execinfrapb.ProducerMetadata {
 	trailingMeta := make([]execinfrapb.ProducerMetadata, 1, 2)
 	meta := &trailingMeta[0]
@@ -925,6 +934,7 @@ func (z *zigzagJoiner) generateMeta() []execinfrapb.ProducerMetadata {
 	meta.Metrics.BytesRead = z.getBytesRead()
 	meta.Metrics.RowsRead = z.getRowsRead()
 	meta.Metrics.KVCPUTime = z.getKVCPUTime()
+	meta.Metrics.LocalKVCPUTime = z.getLocalKVCPUTime()
 	if tfs := execinfra.GetLeafTxnFinalState(z.Ctx(), z.FlowCtx.Txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}

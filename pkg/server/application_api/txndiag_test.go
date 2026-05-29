@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -289,13 +290,15 @@ func TestAdminAPITransactionDiagnosticsBundle(t *testing.T) {
 	// Set up the test table
 	conn.Exec(t, "CREATE TABLE test (id INT)")
 
-	// Insert into transaction_diagnostics first
-	txnFingerprintID, err := sqlstatsutil.DecodeStringToTxnFingerprintID("5a808c2f3780b2c8")
-	require.NoError(t, err)
-	stmt1FingerprintID, err := sqlstatsutil.DecodeStringToStmtFingerprintID("2ca050d725bfd5f0")
-	require.NoError(t, err)
-	stmt2FingerprintID, err := sqlstatsutil.DecodeStringToStmtFingerprintID("fece62580b006715")
-	require.NoError(t, err)
+	// Compute fingerprint IDs that match the queries we'll run below.
+	stmt1FingerprintID := appstatspb.ConstructStatementFingerprintID(
+		"INSERT INTO test VALUES (_)", "defaultdb")
+	stmt2FingerprintID := appstatspb.ConstructStatementFingerprintID(
+		"SELECT * FROM test", "defaultdb")
+	txnHash := util.MakeFNV64()
+	txnHash.Add(uint64(stmt1FingerprintID))
+	txnHash.Add(uint64(stmt2FingerprintID))
+	txnFingerprintID := appstatspb.TransactionFingerprintID(txnHash.Sum())
 
 	// Create a transaction diagnostic request that should match our data
 	req := &serverpb.CreateTransactionDiagnosticsReportRequest{
@@ -307,7 +310,7 @@ func TestAdminAPITransactionDiagnosticsBundle(t *testing.T) {
 	}
 
 	var resp serverpb.CreateTransactionDiagnosticsReportResponse
-	err = srvtestutils.PostStatusJSONProto(ts, "txndiagreports", req, &resp)
+	err := srvtestutils.PostStatusJSONProto(ts, "txndiagreports", req, &resp)
 	require.NoError(t, err)
 	require.NotZero(t, resp.Report.Id)
 

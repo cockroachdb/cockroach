@@ -339,6 +339,17 @@ func (h *txnInstrumentationHelper) Finalize(
 		return
 	}
 	if collector.InProgress() {
+		// An InProgress collector at Finalize time corresponds to an implicit
+		// transaction: there is no terminal statement to drive the state
+		// machine through MaybeContinueDiagnostics. If any expected statement
+		// fingerprints remain uncaptured, the implicit transaction was a
+		// partial match for the request and must not be finalized.
+		if len(collector.stmtsFpsToCapture) > 0 {
+			log.Dev.VInfof(ctx, 2, "txn diag: aborting partial collection for "+
+				"request %d, txn %s, txn fingerprint %s, %d stmt fingerprints not captured",
+				collector.requestId, txnID, txnFpStr, len(collector.stmtsFpsToCapture))
+			return
+		}
 		log.Dev.VInfof(ctx, 2, "txn diag: finalizing collection for "+
 			"request %d, txn %s, txn fingerprint %s",
 			collector.requestId, txnID, txnFpStr)

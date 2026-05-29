@@ -54,32 +54,6 @@ enum ProtectionMode {
   // PROTECT_AT = 1;
 }
 
-// Metadata is the system metadata. The metadata is stored explicitly and all
-// operations which create or release Records increment the version and update
-// the metadata fields accordingly.
-//
-// The version provides a mechanism for cheap caching and forms the basis of
-// the implementation of the Tracker. The Tracker needs to provide a recent
-// view of the protectedts subsystem for GC to proceed. The protectedts
-// state changes rarely. The timestamp of cached state can by updated by
-// merely observing that the version has not changed.
-message Metadata {
-
-   // Version is incremented whenever a Record is created or removed.
-   uint64 version = 1 [deprecated=true];
-
-   // NumRecords is the number of records which exist in the subsystem.
-   uint64 num_records = 2 [deprecated=true];
-
-   // NumSpans is the number of spans currently being protected by the
-   // protectedts subsystem.
-   uint64 num_spans = 3 [deprecated=true];
-
-   // TotalBytes is the number of bytes currently in use by records
-   // to store their spans and metadata.
-   uint64 total_bytes = 4 [deprecated=true];
-}
-
 // Record corresponds to a protected timestamp.
 message Record {
   // ID uniquely identifies this row.
@@ -125,7 +99,13 @@ message Record {
 
 // State is the complete system state.
 message State {
-  Metadata metadata = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // Field 1 was an embedded Metadata message (version, num_records, num_spans,
+  // total_bytes) read from the system.protected_ts_meta table. It fed the now-
+  // removed ptcache, which observed Version to decide when to refresh. The
+  // cache and its consumers are gone; the meta table is still written to but
+  // no longer read into the State proto.
+  reserved 1;
+  reserved "metadata";
   repeated Record records = 2 [(gogoproto.nullable) = false];
 }
 

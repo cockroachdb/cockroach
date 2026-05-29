@@ -87,8 +87,9 @@ type indexConsistencyCheck struct {
 	// lastQueryPlaceholders stores the placeholder values used in lastQuery.
 	lastQueryPlaceholders []interface{}
 
-	// rowCount stores the number of rows processed by the check.
-	rowCount uint64
+	// rowCount stores the number of rows processed by the check. It is nil
+	// when the check cannot provide a reliable row count for the span.
+	rowCount *uint64
 }
 
 var _ inspectCheck = (*indexConsistencyCheck)(nil)
@@ -183,7 +184,6 @@ func (c *indexConsistencyCheck) Start(
 				c.secIndex.GetName())
 		} else {
 			match, rowCount, hashErr := c.hashesMatch(ctx, allColNames, predicate, queryArgs)
-			c.rowCount = uint64(rowCount)
 			if hashErr != nil {
 				if isQueryConstructionError(hashErr) {
 					// If hashing fails and the error stems from query construction,
@@ -192,6 +192,8 @@ func (c *indexConsistencyCheck) Start(
 				}
 				// For all other hash errors, log and fall back.
 				log.Dev.Infof(ctx, "hash precheck failed; falling back to full check: %v", hashErr)
+			} else {
+				c.rowCount = &rowCount
 			}
 			if match {
 				// Hashes match, no corruption detected - skip the full check.
@@ -353,8 +355,8 @@ func (c *indexConsistencyCheck) Close(context.Context) error {
 	return nil
 }
 
-// Rows implements the inspectCheckRowCount interface.
-func (c *indexConsistencyCheck) RowCount() uint64 {
+// RowCount implements the inspectCheckRowCount interface.
+func (c *indexConsistencyCheck) RowCount() *uint64 {
 	return c.rowCount
 }
 
@@ -635,7 +637,7 @@ func (c *indexConsistencyCheck) createIndexCheckQuery(
 }
 
 type hashResult struct {
-	rowCount int64
+	rowCount uint64
 	hash     string
 }
 
@@ -645,7 +647,7 @@ type hashResult struct {
 // row count from the primary index.
 func (c *indexConsistencyCheck) hashesMatch(
 	ctx context.Context, columnNames []string, predicate string, queryArgs []interface{},
-) (match bool, rowCount int64, err error) {
+) (match bool, rowCount uint64, err error) {
 	primary, err := c.computeHashAndRowCount(ctx, c.priIndex, columnNames, predicate, queryArgs)
 	if err != nil {
 		return false, 0, errors.Wrapf(err, "computing hash for primary index %s", c.priIndex.GetName())
@@ -687,7 +689,7 @@ func (c *indexConsistencyCheck) computeHashAndRowCount(
 		return hashResult{}, errors.AssertionFailedf("hash query returned unexpected column count: %d", len(row))
 	}
 	return hashResult{
-		rowCount: int64(tree.MustBeDInt(row[0])),
+		rowCount: uint64(tree.MustBeDInt(row[0])),
 		hash:     string(tree.MustBeDBytes(row[1])),
 	}, nil
 }

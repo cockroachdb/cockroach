@@ -235,6 +235,7 @@ func newUninitializedReplicaWithoutRaftGroup(store *Store, id roachpb.FullReplic
 	r.logStorage.ls = &logstore.LogStore{
 		RangeID:     id.RangeID,
 		Engine:      store.LogEngine(),
+		Separated:   store.EnginesSeparated(),
 		Sideload:    sideloaded,
 		StateLoader: r.raftMu.stateLoader.StateLoader,
 		// NOTE: use the same SyncWaiter loop for all raft log writes performed by a

@@ -472,9 +472,16 @@ func parseZones(opts vm.CreateOpts, providerOpts *ProviderOpts) ([]Zone, error) 
 
 func DefaultZones(geoDistributed bool) []string {
 	if geoDistributed {
-		return defaultZones
+		return append([]string(nil), defaultZones...)
 	}
 	return []string{defaultZones[0]}
+}
+
+// DefaultRetryZoneCandidates returns the default non-geo Azure zone pool.
+// DefaultZones chooses from this pool for ordinary creates, and roachtest uses
+// it to choose a different zone after provider capacity failures.
+func DefaultRetryZoneCandidates() []string {
+	return append([]string(nil), defaultZones...)
 }
 
 // Create implements vm.Provider.
@@ -1189,13 +1196,17 @@ func (p *Provider) createVM(
 
 	future, err := client.CreateOrUpdate(ctx, *group.Name, name, machine)
 	if err != nil {
-		return
+		return compute.VirtualMachine{}, maybeAzureCapacityError(err, zone, providerOpts.MachineType)
 	}
 	if err = future.WaitForCompletionRef(ctx, client.Client); err != nil {
-		return
+		return compute.VirtualMachine{}, maybeAzureCapacityError(err, zone, providerOpts.MachineType)
 	}
 
-	return future.Result(client)
+	machine, err = future.Result(client)
+	if err != nil {
+		return compute.VirtualMachine{}, maybeAzureCapacityError(err, zone, providerOpts.MachineType)
+	}
+	return machine, nil
 }
 
 // createNIC creates a network adapter that is bound to the given public IP address.
@@ -1806,14 +1817,14 @@ func (p *Provider) createUltraDisk(
 			},
 		})
 	if err != nil {
-		return compute.Disk{}, err
+		return compute.Disk{}, maybeAzureCapacityError(err, zone, providerOpts.MachineType)
 	}
 	if err := future.WaitForCompletionRef(ctx, client.Client); err != nil {
-		return compute.Disk{}, err
+		return compute.Disk{}, maybeAzureCapacityError(err, zone, providerOpts.MachineType)
 	}
 	disk, err := future.Result(client)
 	if err != nil {
-		return compute.Disk{}, err
+		return compute.Disk{}, maybeAzureCapacityError(err, zone, providerOpts.MachineType)
 	}
 	l.Printf("created ultra-disk: %s\n", *disk.Name)
 	return disk, err

@@ -7,6 +7,7 @@ package metric
 
 import (
 	"fmt"
+	"os"
 	"runtime"
 	"strings"
 	"testing"
@@ -38,7 +39,10 @@ func TestHistogramBuckets(t *testing.T) {
 
 		category := config.category
 		if arch == "s390x" {
-			category = fmt.Sprintf("%s_%s", category, arch)
+			s390xPath := datapathutils.TestDataPath(t, fmt.Sprintf("%s_%s", category, arch))
+			if _, err := os.Stat(s390xPath); err == nil {
+				category = fmt.Sprintf("%s_%s", category, arch)
+			}
 		}
 
 		echotest.Require(t, buf, datapathutils.TestDataPath(t, category))

@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/pebble"
@@ -60,7 +59,7 @@ func (m *mockKVAdmissionController) AdmitKVWork(
 }
 
 func (m *mockKVAdmissionController) AdmittedKVWorkDone(
-	kvadmission.Handle, *kvadmission.StoreWriteBytes,
+	kvadmission.Handle, admission.StoreWorkDoneInfo,
 ) {
 }
 
@@ -68,11 +67,6 @@ func (m *mockKVAdmissionController) AdmitRangefeedRequest(
 	_ roachpb.TenantID, _ *kvpb.RangeFeedRequest,
 ) *admission.Pacer {
 	return nil
-}
-
-func (m *mockKVAdmissionController) SetTenantWeightProvider(
-	kvadmission.TenantWeightProvider, *stop.Stopper,
-) {
 }
 
 func (m *mockKVAdmissionController) SnapshotIngestedOrWritten(
@@ -272,4 +266,88 @@ func TestKVBatchSnapshotStrategyReceiveExternalReplicate(t *testing.T) {
 		require.Error(t, err, "Receive should fail with DEL operation when neither SharedReplicate nor ExternalReplicate is set")
 		require.Contains(t, err.Error(), "unexpected batch entry key kind")
 	})
+}
+
+func TestKVBatchSnapshotStrategyReceiveBatchReaderError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
+	cfg := TestStoreConfig(hlc.NewClockForTesting(manual))
+	cfg.KVAdmissionController = &mockKVAdmissionController{}
+
+	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	testIdent := roachpb.StoreIdent{
+		ClusterID: uuid.MakeV4(),
+		NodeID:    1,
+		StoreID:   1,
+	}
+	store := &Store{
+		cfg:   cfg,
+		Ident: &testIdent,
+	}
+
+	desc := &roachpb.RangeDescriptor{
+		RangeID:  1,
+		StartKey: roachpb.RKey("a"),
+		EndKey:   roachpb.RKeyMax,
+	}
+
+	snapUUID := uuid.Must(uuid.FromBytes([]byte("foobar1234567890")))
+	sstSnapshotStorage := snaprecv.NewSSTSnapshotStorage(eng, rate.NewLimiter(rate.Inf, 0))
+	scratch := sstSnapshotStorage.NewScratchSpace(desc.RangeID, snapUUID, nil)
+
+	now := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+
+	makeBatchRepr := func(fn func(storage.WriteBatch)) []byte {
+		batch := eng.NewWriteBatch()
+		defer batch.Close()
+		fn(batch)
+		repr := batch.Repr()
+		reprCopy := make([]byte, len(repr))
+		copy(reprCopy, repr)
+		return reprCopy
+	}
+
+	kvBatch := makeBatchRepr(func(b storage.WriteBatch) {
+		mvccKey := storage.MVCCKey{Key: roachpb.Key("b"), Timestamp: now}
+		require.NoError(t, b.PutMVCC(mvccKey, storage.MVCCValue{Value: roachpb.MakeValueFromString("val")}))
+		mvccKey2 := storage.MVCCKey{Key: roachpb.Key("c"), Timestamp: now}
+		require.NoError(t, b.PutMVCC(mvccKey2, storage.MVCCValue{Value: roachpb.MakeValueFromString("val2")}))
+	})
+
+	corruptBatch := make([]byte, len(kvBatch)-5)
+	copy(corruptBatch, kvBatch[:len(kvBatch)-5])
+
+	stream := &mockIncomingSnapshotStream{
+		requests: []*kvserverpb.SnapshotRequest{
+			{KVBatch: corruptBatch},
+			{Final: true},
+		},
+	}
+
+	header := kvserverpb.SnapshotRequest_Header{
+		State: kvserverpb.ReplicaState{
+			Desc: desc,
+		},
+		RaftMessageRequest: kvserverpb.RaftMessageRequest{
+			Message: raftpb.Message{
+				Snapshot: &raftpb.Snapshot{
+					Data: snapUUID.GetBytes(),
+				},
+			},
+		},
+	}
+
+	kvSS := &kvBatchSnapshotStrategy{
+		st:      cfg.Settings,
+		scratch: scratch,
+	}
+
+	_, err := kvSS.Receive(ctx, store, stream, header, func(int64) {})
+	require.Error(t, err, "Receive should return an error when batch reader encounters a corrupt batch")
 }

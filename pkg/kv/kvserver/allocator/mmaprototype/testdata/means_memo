@@ -77,3 +77,9 @@ stores: 1, 2, 3
 store-means (load,cap,util): cpu: (43, unknown, 0.00) write-bw: (166, 566, 0.29) bytes: (1800, 4533, 0.40)
    secondary-load: [100 0]
 node-mean cpu (load,cap,util): (225, 750, 0.30)
+
+# Constraint that no store satisfies returns ok=false rather than panicking.
+get-means
++=purple
+----
+ok: false (no stores match)

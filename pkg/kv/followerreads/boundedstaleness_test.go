@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -276,6 +277,9 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 		tc.ToggleLeaseQueues(false)
 		tc.ToggleSplitQueues(false)
 		tc.ToggleReplicateQueues(false)
+		kvserverbase.OverrideLoadBasedRebalancingMode(
+			ctx, &tc.Server(0).SystemLayer().ClusterSettings().SV, kvserverbase.LBRebalancingOff,
+		)
 
 		savedTraceStmt := ""
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {

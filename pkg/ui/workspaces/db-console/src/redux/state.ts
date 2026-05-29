@@ -18,32 +18,25 @@ import {
   compose,
   Store,
   Action,
+  Dispatch,
 } from "redux";
-import createSagaMiddleware from "redux-saga";
-import thunk, { ThunkDispatch } from "redux-thunk";
 import { createSelector } from "reselect";
 
 import { DataFromServer } from "src/util/dataFromServer";
 
-import { initializeAnalytics } from "./analytics";
-import { apiReducersReducer, APIReducersState } from "./apiReducers";
 import { healthReducer, HealthState } from "./health";
 import { hoverReducer, HoverState } from "./hover";
 import { localSettingsReducer, LocalSettingsState } from "./localsettings";
 import { loginReducer, LoginAPIState } from "./login";
-import { queryManagerReducer, QueryManagerState } from "./queryManager/reducer";
-import rootSaga from "./sagas";
 import { timeScaleReducer, TimeScaleState } from "./timeScale";
 import { uiDataReducer, UIDataState } from "./uiData";
 
 import FeatureFlags = cockroach.server.serverpb.FeatureFlags;
 
 export interface AdminUIState {
-  cachedData: APIReducersState;
   health: HealthState;
   hover: HoverState;
   localSettings: LocalSettingsState;
-  queryManager: QueryManagerState;
   router: RouterState;
   timeScale: TimeScaleState;
   uiData: UIDataState;
@@ -82,16 +75,13 @@ export function createAdminUIStore(
   historyInst: History<any>,
   dataFromServer: DataFromServer = emptyDataFromServer,
 ) {
-  const sagaMiddleware = createSagaMiddleware();
   const routerReducer = connectRouter(historyInst);
 
   const s: Store<AdminUIState> = createStore(
     combineReducers<AdminUIState>({
-      cachedData: apiReducersReducer,
       health: healthReducer,
       hover: hoverReducer,
       localSettings: localSettingsReducer,
-      queryManager: queryManagerReducer,
       router: routerReducer,
       timeScale: timeScaleReducer,
       uiData: uiDataReducer,
@@ -101,18 +91,11 @@ export function createAdminUIStore(
     {
       login: {
         loggedInUser: dataFromServer.LoggedInUser,
-        error: null,
-        inProgress: false,
-        oidcAutoLogin: dataFromServer.OIDCAutoLogin,
-        oidcLoginEnabled: dataFromServer.OIDCLoginEnabled,
-        oidcButtonText: dataFromServer.OIDCButtonText,
-        oidcGenerateJWTAuthTokenEnabled:
-          dataFromServer.OIDCGenerateJWTAuthTokenEnabled,
       },
       flags: dataFromServer.FeatureFlags,
     },
     compose(
-      applyMiddleware(thunk, sagaMiddleware, routerMiddleware(historyInst)),
+      applyMiddleware(routerMiddleware(historyInst)),
       // Support for redux dev tools
       // https://chrome.google.com/webstore/detail/redux-devtools/lmhkpmbekcpmknklioeibfkpmmfibljd
       (window as any).__REDUX_DEVTOOLS_EXTENSION__
@@ -132,9 +115,7 @@ export function createAdminUIStore(
     ),
   );
 
-  sagaMiddleware.run(rootSaga);
-  initializeAnalytics(s);
   return s;
 }
 
-export type AppDispatch = ThunkDispatch<AdminUIState, unknown, Action>;
+export type AppDispatch = Dispatch<Action>;

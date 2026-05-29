@@ -503,10 +503,91 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 			vea.Report(errors.AssertionFailedf("COMPOSITE type desc has nil composite type"))
 		}
 	case descpb.TypeDescriptor_DOMAIN:
+		if desc.RegionConfig != nil {
+			vea.Report(errors.AssertionFailedf(
+				"found region config on %s type desc", desc.Kind.String(),
+			))
+		}
+		if len(desc.EnumMembers) > 0 {
+			vea.Report(errors.AssertionFailedf(
+				"DOMAIN type desc has enum members",
+			))
+		}
+		if desc.Alias != nil {
+			vea.Report(errors.AssertionFailedf(
+				"DOMAIN type desc has alias type set",
+			))
+		}
+		if desc.Composite != nil {
+			vea.Report(errors.AssertionFailedf(
+				"DOMAIN type desc has composite type set",
+			))
+		}
 		if desc.Domain == nil {
 			vea.Report(errors.AssertionFailedf("DOMAIN type desc has nil domain"))
 		} else if desc.Domain.BaseType == nil {
 			vea.Report(errors.AssertionFailedf("DOMAIN type desc has nil base type"))
+		} else {
+			if desc.Domain.NotNull {
+				if desc.Domain.NotNullConstraintName == "" {
+					vea.Report(errors.AssertionFailedf(
+						"DOMAIN type desc has NotNull but no NOT NULL constraint name",
+					))
+				}
+				if desc.Domain.NotNullConstraintID == 0 {
+					vea.Report(errors.AssertionFailedf(
+						"DOMAIN type desc has NotNull but no NOT NULL constraint ID",
+					))
+				}
+			} else {
+				if desc.Domain.NotNullConstraintName != "" {
+					vea.Report(errors.AssertionFailedf(
+						"DOMAIN type desc has NOT NULL constraint name %q but NotNull is false",
+						desc.Domain.NotNullConstraintName,
+					))
+				}
+				if desc.Domain.NotNullConstraintID != 0 {
+					vea.Report(errors.AssertionFailedf(
+						"DOMAIN type desc has NOT NULL constraint ID %d but NotNull is false",
+						desc.Domain.NotNullConstraintID,
+					))
+				}
+			}
+			constraintNames := make(map[string]struct{})
+			constraintIDs := make(map[descpb.ConstraintID]struct{})
+			if desc.Domain.NotNull {
+				constraintNames[desc.Domain.NotNullConstraintName] = struct{}{}
+				constraintIDs[desc.Domain.NotNullConstraintID] = struct{}{}
+			}
+			for i, c := range desc.Domain.CheckConstraints {
+				if c.Name == "" {
+					vea.Report(errors.AssertionFailedf(
+						"DOMAIN type desc CHECK constraint %d has empty name", i,
+					))
+				}
+				if c.Expr == "" {
+					vea.Report(errors.AssertionFailedf(
+						"DOMAIN type desc CHECK constraint %d has empty expr", i,
+					))
+				}
+				if c.ConstraintID == 0 {
+					vea.Report(errors.AssertionFailedf(
+						"DOMAIN type desc CHECK constraint %d has unset constraint ID", i,
+					))
+				}
+				if _, exists := constraintNames[c.Name]; exists {
+					vea.Report(errors.AssertionFailedf(
+						"DOMAIN type desc has duplicated constraint name %q", c.Name,
+					))
+				}
+				constraintNames[c.Name] = struct{}{}
+				if _, exists := constraintIDs[c.ConstraintID]; exists {
+					vea.Report(errors.AssertionFailedf(
+						"DOMAIN type desc has duplicated constraint ID %d", c.ConstraintID,
+					))
+				}
+				constraintIDs[c.ConstraintID] = struct{}{}
+			}
 		}
 	case descpb.TypeDescriptor_TABLE_IMPLICIT_RECORD_TYPE:
 		vea.Report(errors.AssertionFailedf("invalid type descriptor: kind %s should never be serialized or validated", desc.Kind.String()))
@@ -526,15 +607,29 @@ func (desc *immutable) validateEnumMembers(vea catalog.ValidationErrorAccumulato
 		vea.Report(errors.AssertionFailedf("enum members are not sorted %v", desc.EnumMembers))
 	}
 	// Ensure there are no duplicate enum physical and logical reps.
-	physicalMap := make(map[string]struct{}, len(desc.EnumMembers))
+	// Track physical reps along with their transition direction so that
+	// renames (one member being added and one being removed with the same
+	// physical representation) are allowed.
+	type physicalRepInfo struct {
+		direction descpb.TypeDescriptor_EnumMember_Direction
+	}
+	physicalMap := make(map[string]physicalRepInfo, len(desc.EnumMembers))
 	logicalMap := make(map[string]struct{}, len(desc.EnumMembers))
 	for _, member := range desc.EnumMembers {
-		// Ensure there are no duplicate enum physical reps.
-		_, duplicatePhysical := physicalMap[string(member.PhysicalRepresentation)]
-		if duplicatePhysical {
-			vea.Report(errors.AssertionFailedf("duplicate enum physical rep %v", member.PhysicalRepresentation))
+		// Ensure there are no duplicate enum physical reps. Two members may
+		// share the same physical representation during a rename transition,
+		// where one member is being removed and another is being added.
+		key := string(member.PhysicalRepresentation)
+		if existing, ok := physicalMap[key]; ok {
+			isRename := (existing.direction == descpb.TypeDescriptor_EnumMember_REMOVE &&
+				member.Direction == descpb.TypeDescriptor_EnumMember_ADD) ||
+				(existing.direction == descpb.TypeDescriptor_EnumMember_ADD &&
+					member.Direction == descpb.TypeDescriptor_EnumMember_REMOVE)
+			if !isRename {
+				vea.Report(errors.AssertionFailedf("duplicate enum physical rep %v", member.PhysicalRepresentation))
+			}
 		}
-		physicalMap[string(member.PhysicalRepresentation)] = struct{}{}
+		physicalMap[key] = physicalRepInfo{direction: member.Direction}
 		// Ensure there are no duplicate enum logical reps.
 		_, duplicateLogical := logicalMap[member.LogicalRepresentation]
 		if duplicateLogical {
@@ -1077,6 +1172,16 @@ func (desc *immutable) IsNotNull() bool {
 	return desc.Domain.NotNull
 }
 
+// GetNotNullConstraintName implements the catalog.DomainTypeDescriptor interface.
+func (desc *immutable) GetNotNullConstraintName() string {
+	return desc.Domain.NotNullConstraintName
+}
+
+// GetNotNullConstraintID implements the catalog.DomainTypeDescriptor interface.
+func (desc *immutable) GetNotNullConstraintID() descpb.ConstraintID {
+	return desc.Domain.NotNullConstraintID
+}
+
 // GetDefaultExpr implements the catalog.DomainTypeDescriptor interface.
 func (desc *immutable) GetDefaultExpr() string {
 	return desc.Domain.DefaultExpr
@@ -1095,6 +1200,16 @@ func (desc *immutable) GetCheckConstraintName(idx int) string {
 // GetCheckConstraintExpr implements the catalog.DomainTypeDescriptor interface.
 func (desc *immutable) GetCheckConstraintExpr(idx int) string {
 	return desc.Domain.CheckConstraints[idx].Expr
+}
+
+// GetCheckConstraintID implements the catalog.DomainTypeDescriptor interface.
+func (desc *immutable) GetCheckConstraintID(idx int) descpb.ConstraintID {
+	return desc.Domain.CheckConstraints[idx].ConstraintID
+}
+
+// GetCheckConstraintValidity implements the catalog.DomainTypeDescriptor interface.
+func (desc *immutable) GetCheckConstraintValidity(idx int) descpb.ConstraintValidity {
+	return desc.Domain.CheckConstraints[idx].Validity
 }
 
 // Aliased implements the catalog.AliasTypeDescriptor interface.
@@ -1168,6 +1283,11 @@ func (desc *immutable) GetSuperRegionSurvivalGoal(superRegion string) (string, b
 		}
 	}
 	return "", false, nil
+}
+
+// Rewrite implements the catalog.MutableDescriptor interface.
+func (desc *Mutable) Rewrite(_ catalog.DescriptorRewriteFn) error {
+	return errors.AssertionFailedf("Rewrite is not implemented for type descriptors")
 }
 
 // SetDeclarativeSchemaChangerState is part of the catalog.MutableDescriptor

@@ -14,54 +14,111 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
+// seedReservation populates h.mu.reservation with `amount` CPU nanos by
+// driving a single Admit directly, bypassing refillHeuristic. Sets
+// reservationSourceGroup so Close routes the drained tokens to the correct
+// container. Intended only for tests that need a specific reservation amount
+// as a setup precondition.
+func seedReservation(t *testing.T, ctx context.Context, h *SQLCPUHandle, amount int64) {
+	t.Helper()
+	workInfo := h.constructWorkInfo(amount, false /*noWait*/)
+	resp, err := h.wq.Admit(ctx, workInfo)
+	require.NoError(t, err)
+	require.True(t, resp.Enabled)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.mu.reservation.Add(resp.requestedCount)
+	h.mu.reservationSourceGroup = resp.groupKey
+}
+
+// TestSQLCPUHandleRefillHeuristic exercises the stateful refillHeuristic
+// directly: first call returns deficit only (buffer=0); subsequent calls
+// ramp the buffer from bufferSeed, doubling up to maxRefillBuffer.
+func TestSQLCPUHandleRefillHeuristic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	h := newSQLCPUAdmissionHandle(WorkInfo{}, true, &sqlCPUProviderImpl{}, nil)
+
+	const deficit = int64(50 * time.Microsecond)
+	steps := []struct {
+		name           string
+		expectedBuffer int64
+	}{
+		{name: "first call: no buffer", expectedBuffer: 0},
+		{name: "second call: seed", expectedBuffer: bufferSeed},
+		{name: "third call: 2x seed", expectedBuffer: 2 * bufferSeed},
+		{name: "fourth call: 4x seed", expectedBuffer: 4 * bufferSeed},
+		{name: "fifth call: 8x seed", expectedBuffer: 8 * bufferSeed},
+		{name: "sixth call: 16x seed", expectedBuffer: 16 * bufferSeed},
+		{name: "seventh call: 32x seed", expectedBuffer: 32 * bufferSeed},
+		{name: "eighth call: 64x seed", expectedBuffer: 64 * bufferSeed},
+		{name: "ninth call: capped at maxRefillBuffer", expectedBuffer: maxRefillBuffer},
+		{name: "tenth call: stays at cap", expectedBuffer: maxRefillBuffer},
+	}
+
+	for _, s := range steps {
+		got := h.refillHeuristic(deficit)
+		require.Equal(t, deficit+s.expectedBuffer, got, s.name)
+	}
+}
+
 // TestSQLCPUHandleFastAndSlowPath walks through the full reservation
-// lifecycle: slow path (Admit) → fast path (CAS) → reservation
-// exhausted → slow path again.
+// lifecycle under the exponential refill heuristic: first slow path
+// (no buffer), second slow path (seed buffer), fast path (CAS), and
+// a third slow path (doubled buffer).
 func TestSQLCPUHandleFastAndSlowPath(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	tenantID := roachpb.MustMakeTenantID(1)
-	q, tg, cleanup := makeCPUTimeTokenWorkQueue(t)
+	q, tg, _, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 
 	provider := &sqlCPUProviderImpl{}
 	h := newSQLCPUAdmissionHandle(
 		WorkInfo{TenantID: tenantID}, true, provider, q)
 
-	// 1) Slow path: reservation is 0, must call Admit.
-	// heuristic(1ms) = 1ms + min(1ms, 1ms) = 2ms requested.
-	// 1ms consumed, 1ms goes to reservation.
+	// 1) First slow path: reservation is 0, first call gets no buffer.
+	// Request = 1ms (deficit only). Reservation stays at 0.
 	require.NoError(t, h.reportAndAcquireConsumedCPU(ctx, 1*time.Millisecond, false))
-	require.Equal(t, int64(1*time.Millisecond), h.mu.reservation.Load())
+	require.Zero(t, h.mu.reservation.Load(),
+		"first slow-path call must not seed reservation (buffer=0)")
 	require.Contains(t, tg.buf.stringAndReset(), "tryGet",
 		"first call should go through Admit")
 
-	// 2) Fast path: 500us < 1ms reservation, CAS covers it.
-	require.NoError(t, h.reportAndAcquireConsumedCPU(ctx, 500*time.Microsecond, false))
-	require.Equal(t, int64(500*time.Microsecond), h.mu.reservation.Load())
+	// 2) Second slow path: buffer = bufferSeed.
+	// Request = 1ms + 10us. Reservation += 10us.
+	require.NoError(t, h.reportAndAcquireConsumedCPU(ctx, 1*time.Millisecond, false))
+	require.Equal(t, bufferSeed, h.mu.reservation.Load(),
+		"second slow-path call should seed reservation with bufferSeed")
+	require.Contains(t, tg.buf.stringAndReset(), "tryGet")
+
+	// 3) Fast path: 5us < 10us reservation, CAS covers it.
+	require.NoError(t, h.reportAndAcquireConsumedCPU(ctx, 5*time.Microsecond, false))
+	require.Equal(t, bufferSeed-int64(5*time.Microsecond), h.mu.reservation.Load())
 	require.Empty(t, tg.buf.stringAndReset(),
 		"fast path should not call Admit")
 
-	// 3) Slow path again: 2ms > 500us reservation.
-	// CAS grabs 500us, remaining=1.5ms, slow path.
-	// heuristic(1.5ms) = 1.5ms + min(1.5ms, 1ms) = 2.5ms.
-	// buffer = 2.5ms - 1.5ms = 1ms added to reservation.
-	require.NoError(t, h.reportAndAcquireConsumedCPU(ctx, 2*time.Millisecond, false))
-	require.Equal(t, int64(1*time.Millisecond), h.mu.reservation.Load())
-	require.Contains(t, tg.buf.stringAndReset(), "tryGet",
-		"exhausted reservation should fall back to Admit")
+	// 4) Third slow path: buffer doubles to 2*seed.
+	// CAS grabs the remaining 5us, remaining deficit = 1ms - 5us, request =
+	// (1ms - 5us) + 20us; reservation ends at 20us.
+	require.NoError(t, h.reportAndAcquireConsumedCPU(ctx, 1*time.Millisecond, false))
+	require.Equal(t, 2*bufferSeed, h.mu.reservation.Load(),
+		"third slow-path call should double buffer to 2*bufferSeed")
+	require.Contains(t, tg.buf.stringAndReset(), "tryGet")
 
-	// CPU should be fully reported across all three calls.
+	// CPU should be fully reported across all four calls.
 	gw, _ := provider.GetCumulativeSQLCPUNanos()
-	require.Equal(t, int64(3500*time.Microsecond), gw)
+	require.Equal(t, int64(3*time.Millisecond+5*time.Microsecond), gw)
 }
 
 // TestSQLCPUHandleCloseReturnsTokens verifies that Close drains
@@ -93,7 +150,7 @@ func TestSQLCPUHandleCloseReturnsTokens(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			q, tg, cleanup := makeCPUTimeTokenWorkQueue(t)
+			q, tg, _, cleanup := makeCPUTimeTokenWorkQueue(t)
 			defer cleanup()
 
 			provider := &sqlCPUProviderImpl{}
@@ -101,8 +158,7 @@ func TestSQLCPUHandleCloseReturnsTokens(t *testing.T) {
 				WorkInfo{TenantID: tenantID}, true, provider, q)
 
 			if tc.seedReservation {
-				require.NoError(t, h.reportAndAcquireConsumedCPU(
-					ctx, 1*time.Millisecond, false))
+				seedReservation(t, ctx, h, int64(1*time.Millisecond))
 				require.Equal(t, int64(1*time.Millisecond),
 					h.mu.reservation.Load())
 			}
@@ -131,7 +187,7 @@ func TestSQLCPUHandleNoWaitBypassAdmission(t *testing.T) {
 
 	ctx := context.Background()
 	tenantID := roachpb.MustMakeTenantID(1)
-	q, tg, cleanup := makeCPUTimeTokenWorkQueue(t)
+	q, tg, _, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 
 	// Make tryGet return false — a blocking Admit would hang, but
@@ -182,17 +238,17 @@ func TestSQLCPUHandleConcurrentFastPath(t *testing.T) {
 
 	ctx := context.Background()
 	tenantID := roachpb.MustMakeTenantID(1)
-	q, tg, cleanup := makeCPUTimeTokenWorkQueue(t)
+	q, tg, _, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 
 	provider := &sqlCPUProviderImpl{}
 	h := newSQLCPUAdmissionHandle(
 		WorkInfo{TenantID: tenantID}, true, provider, q)
 
-	// Seed reservation via slow path.
-	// heuristic(50ms) = 50ms + min(50ms, 1ms) = 51ms.
-	// Reservation = 51ms - 50ms = 1ms.
-	require.NoError(t, h.reportAndAcquireConsumedCPU(ctx, 50*time.Millisecond, false))
+	// Seed reservation directly to a known amount, bypassing the refill
+	// heuristic. The test's concern is concurrent CAS on a non-empty
+	// reservation, not the heuristic itself.
+	seedReservation(t, ctx, h, int64(1*time.Millisecond))
 	require.Equal(t, int64(1*time.Millisecond), h.mu.reservation.Load())
 
 	_ = tg.buf.stringAndReset()
@@ -231,7 +287,7 @@ func TestSQLCPUHandleConcurrentSlowPath(t *testing.T) {
 
 	ctx := context.Background()
 	tenantID := roachpb.MustMakeTenantID(1)
-	q, _, cleanup := makeCPUTimeTokenWorkQueue(t)
+	q, _, _, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 
 	provider := &sqlCPUProviderImpl{}
@@ -266,16 +322,15 @@ func TestSQLCPUHandleConcurrentCloseAndAdmit(t *testing.T) {
 
 	ctx := context.Background()
 	tenantID := roachpb.MustMakeTenantID(1)
-	q, _, cleanup := makeCPUTimeTokenWorkQueue(t)
+	q, _, _, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 
 	provider := &sqlCPUProviderImpl{}
 	h := newSQLCPUAdmissionHandle(
 		WorkInfo{TenantID: tenantID}, true, provider, q)
 
-	// Seed reservation: heuristic(5ms) = 5ms + min(5ms, 1ms) = 6ms.
-	// Reservation = 6ms - 5ms = 1ms.
-	require.NoError(t, h.reportAndAcquireConsumedCPU(ctx, 5*time.Millisecond, false))
+	// Seed reservation directly so the workers below have something to drain.
+	seedReservation(t, ctx, h, int64(1*time.Millisecond))
 	require.Equal(t, int64(1*time.Millisecond), h.mu.reservation.Load())
 
 	var wg sync.WaitGroup
@@ -328,7 +383,7 @@ func TestSQLCPUHandleConcurrentCASAndSwap(t *testing.T) {
 
 	ctx := context.Background()
 	tenantID := roachpb.MustMakeTenantID(1)
-	q, _, cleanup := makeCPUTimeTokenWorkQueue(t)
+	q, _, _, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 
 	for iter := 0; iter < 100; iter++ {
@@ -336,9 +391,10 @@ func TestSQLCPUHandleConcurrentCASAndSwap(t *testing.T) {
 		h := newSQLCPUAdmissionHandle(
 			WorkInfo{TenantID: tenantID}, true, provider, q)
 
-		// Seed reservation: heuristic(10ms) = 10ms + min(10ms, 1ms) = 11ms.
-		// Reservation = 11ms - 10ms = 1ms.
-		require.NoError(t, h.reportAndAcquireConsumedCPU(ctx, 10*time.Millisecond, false))
+		// Seed reservation directly. The test races CAS deductions against
+		// Close's Swap(0) on a non-empty reservation; the heuristic itself
+		// is not under test.
+		seedReservation(t, ctx, h, int64(1*time.Millisecond))
 		initialReservation := h.mu.reservation.Load()
 
 		var wg sync.WaitGroup
@@ -396,7 +452,7 @@ func TestSQLCPUHandleAdmitVsCloseTokenConservation(t *testing.T) {
 
 	ctx := context.Background()
 	tenantID := roachpb.MustMakeTenantID(1)
-	q, _, cleanup := makeCPUTimeTokenWorkQueue(t)
+	q, _, _, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 
 	provider := &sqlCPUProviderImpl{}
@@ -447,7 +503,7 @@ func TestSQLCPUHandleContextCancellation(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	tenantID := roachpb.MustMakeTenantID(1)
-	q, _, cleanup := makeCPUTimeTokenWorkQueue(t)
+	q, _, _, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 
 	provider := &sqlCPUProviderImpl{}
@@ -492,16 +548,16 @@ func TestSQLCPUHandleCloseDoesNotBlockOnAdmitTurn(t *testing.T) {
 
 	ctx := context.Background()
 	tenantID := roachpb.MustMakeTenantID(1)
-	q, _, cleanup := makeCPUTimeTokenWorkQueue(t)
+	q, _, _, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 
 	provider := &sqlCPUProviderImpl{}
 	h := newSQLCPUAdmissionHandle(
 		WorkInfo{TenantID: tenantID}, true, provider, q)
 
-	// Seed reservation: heuristic(1ms) = 1ms + min(1ms, 1ms) = 2ms.
-	// Reservation = 2ms - 1ms = 1ms.
-	require.NoError(t, h.reportAndAcquireConsumedCPU(ctx, 1*time.Millisecond, false))
+	// Seed reservation directly. The test's concern is the close-vs-Admit
+	// race on admitTurn, not the heuristic.
+	seedReservation(t, ctx, h, int64(1*time.Millisecond))
 	require.Equal(t, int64(1*time.Millisecond), h.mu.reservation.Load())
 
 	// Hold admitTurn so the next slow-path goroutine blocks on it.
@@ -539,31 +595,19 @@ func TestSQLCPUHandleSecondDeductionAfterTurn(t *testing.T) {
 
 	ctx := context.Background()
 	tenantID := roachpb.MustMakeTenantID(1)
-	q, tg, cleanup := makeCPUTimeTokenWorkQueue(t)
+	q, tg, _, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 
 	provider := &sqlCPUProviderImpl{}
 	h := newSQLCPUAdmissionHandle(
 		WorkInfo{TenantID: tenantID}, true, provider, q)
 
-	// Case 1: second deduction finds nothing, must call Admit.
-	// Reservation starts at 0, so both deductions get nothing.
-	_ = tg.buf.stringAndReset()
-	require.NoError(t, h.reportAndAcquireConsumedCPU(ctx, 500*time.Microsecond, false))
-	require.Contains(t, tg.buf.stringAndReset(), "tryGet",
-		"should have called Admit")
-	// heuristic(500us) = 500us + min(500us, 1ms) = 1ms.
-	// Reservation = 1ms - 500us = 500us.
-	require.Equal(t, int64(500*time.Microsecond), h.mu.reservation.Load())
-
-	// Case 2: second deduction covers the shortfall, skips Admit.
-	// Hold the turn, start a goroutine that blocks on it, then
-	// inject tokens into reservation (simulating what the previous
-	// turn-holder would leave) before releasing the turn.
-
-	// Consume 400us via fast path, leaving 100us.
-	require.NoError(t, h.reportAndAcquireConsumedCPU(ctx, 400*time.Microsecond, false))
+	// Seed reservation with 100us directly; this test isn't about the refill
+	// heuristic but about the second deduction skipping Admit when a prior
+	// turn-holder refilled the reservation.
+	seedReservation(t, ctx, h, int64(100*time.Microsecond))
 	require.Equal(t, int64(100*time.Microsecond), h.mu.reservation.Load())
+	_ = tg.buf.stringAndReset()
 
 	// Hold admitTurn.
 	h.admitTurn <- struct{}{}
@@ -598,4 +642,123 @@ func TestSQLCPUHandleSecondDeductionAfterTurn(t *testing.T) {
 		"second deduction should have covered shortfall, skipping Admit")
 
 	h.Close()
+}
+
+// TestSetResourceGroupConfigRGOnly verifies that SetResourceGroupConfig
+// inputs affect rg-keyed containers and that the kind discriminator in
+// q.mu.groups prevents a rg-keyed maxCPU flip from leaking to a
+// numerically equal tenant-keyed container.
+//
+// We use tenant 5 (not 1) because tenantGroupKey(1) is a built-in
+// config with maxCPU=true (systemTenantGroupConfig), which would
+// confound the cross-namespace isolation check.
+func TestSetResourceGroupConfigRGOnly(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	q, _, st, cleanup := makeCPUTimeTokenWorkQueue(t)
+	defer cleanup()
+
+	// Create a tenant-keyed container with id=5 (no built-in config).
+	cpuTimeTokenACMode.Override(ctx, &st.SV, serverlessMode)
+	tenantHandle := newSQLCPUAdmissionHandle(
+		WorkInfo{
+			TenantID: roachpb.MustMakeTenantID(5),
+			Priority: admissionpb.NormalPri,
+		}, true, &sqlCPUProviderImpl{}, q)
+	require.NoError(t, tenantHandle.reportAndAcquireConsumedCPU(ctx, 1*time.Millisecond, false))
+
+	// Create an rg-keyed container with id=5.
+	cpuTimeTokenACMode.Override(ctx, &st.SV, resourceManagerMode)
+	// Install a config that seeds rgGroupKey(5).
+	q.configHolder.Set(ResourceGroupConfigSet{
+		rgGroupKey(5): {Weight: 1, MaxCPU: true},
+	})
+	q.refreshResourceGroupConfig()
+
+	// Both containers should now coexist with the same numeric ID.
+	q.mu.Lock()
+	tenantContainer, tenantOK := q.mu.groups[tenantGroupKey(5)]
+	rgContainer, rgOK := q.mu.groups[rgGroupKey(5)]
+	q.mu.Unlock()
+	require.True(t, tenantOK, "tenant 5 container should exist")
+	require.True(t, rgOK, "rg 5 container should exist")
+	require.NotSame(t, tenantContainer, rgContainer,
+		"tenant 5 and rg 5 must be distinct *groupInfo entries")
+
+	q.mu.Lock()
+	tenantMaxCPU := tenantContainer.cpuTimeBurstBucket.maxCPU
+	rgMaxCPU := rgContainer.cpuTimeBurstBucket.maxCPU
+	q.mu.Unlock()
+
+	require.False(t, tenantMaxCPU,
+		"tenant container must not inherit the rg-keyed maxCPU flag "+
+			"(applyConfigLocked writes only rg-keyed entries)")
+	require.True(t, rgMaxCPU,
+		"rg container should pick up the maxCPU flag")
+
+	tenantHandle.Close()
+}
+
+// requireGroupUsed returns q.mu.groups[key].used, failing the test
+// if the entry does not exist.
+func requireGroupUsed(t *testing.T, q *WorkQueue, key groupKey) uint64 {
+	t.Helper()
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	g, ok := q.mu.groups[key]
+	require.Truef(t, ok, "group %v should exist in q.mu.groups", key)
+	return g.used
+}
+
+// TestSQLCPUHandleCloseAfterModeFlip verifies that a mode flip
+// between Admit and Close still routes the drained reservation to
+// the original (Admit-time) container. The reservationSourceGroup
+// field captures the key at Admit time precisely so this scenario
+// stays correct: re-deriving from the WorkQueue's current
+// cpuTimeTokenACMode would route to a freshly-created container that
+// never received the tokens.
+func TestSQLCPUHandleCloseAfterModeFlip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	q, tg, st, cleanup := makeCPUTimeTokenWorkQueue(t)
+	defer cleanup()
+	// Start in serverless mode: Admit creates a tenant-keyed container.
+	cpuTimeTokenACMode.Override(ctx, &st.SV, serverlessMode)
+
+	h := newSQLCPUAdmissionHandle(
+		WorkInfo{TenantID: roachpb.MustMakeTenantID(7), Priority: admissionpb.NormalPri},
+		true, &sqlCPUProviderImpl{}, q)
+	// Seed reservation directly so reservationSourceGroup is captured at the
+	// pre-flip mode and reservation > 0 (Close's drain path requires both).
+	seedReservation(t, ctx, h, int64(1*time.Millisecond))
+	tenantKey := tenantGroupKey(7)
+	require.Equal(t, tenantKey, h.mu.reservationSourceGroup)
+	usedBefore := requireGroupUsed(t, q, tenantKey)
+
+	// Flip mode mid-handle. A subsequent Admit on this WorkQueue would
+	// route to rgGroupKey(highResourceGroupID), but Close should still
+	// target the tenant-keyed container that holds the prior tokens.
+	// Pre-create the rg-keyed containers via applyConfigLocked so the
+	// rg container exists before Close runs.
+	cpuTimeTokenACMode.Override(ctx, &st.SV, resourceManagerMode)
+	q.mu.Lock()
+	q.applyConfigLocked(q.configHolder.Snapshot().Groups())
+	q.mu.Unlock()
+	rgUsedBefore := requireGroupUsed(t, q, rgGroupKey(highResourceGroupID))
+
+	_ = tg.buf.stringAndReset()
+	h.Close()
+	require.Contains(t, tg.buf.String(), "returnGrant")
+
+	require.Less(t, requireGroupUsed(t, q, tenantKey), usedBefore,
+		"tenant container's used must decrement; if not, Close "+
+			"re-derived the container key from the post-flip mode")
+	require.Equal(t, rgUsedBefore, requireGroupUsed(t, q, rgGroupKey(highResourceGroupID)),
+		"rg container's used must not change; if it did, Close "+
+			"re-derived the container key from the post-flip mode "+
+			"rather than using reservationSourceGroup")
 }

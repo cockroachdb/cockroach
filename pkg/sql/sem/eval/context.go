@@ -9,6 +9,7 @@ import (
 	"context"
 	"math"
 	"math/rand"
+	"slices"
 	"time"
 
 	apd "github.com/cockroachdb/apd/v3"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -100,6 +102,12 @@ type Context struct {
 	// context. Each element on the stack represents the beginning of a new
 	// transaction or nested transaction (savepoints).
 	SessionDataStack *sessiondata.Stack
+
+	// effectiveUserStack temporarily overrides EffectiveUser when a SECURITY
+	// DEFINER routine body is on the call stack. Pushed by PushEffectiveUser on
+	// routine entry and popped by the returned restore closure on exit; the
+	// top entry wins. See EffectiveUser / PushEffectiveUser.
+	effectiveUserStack []username.SQLUsername
 	// TxnState is a string representation of the current transactional state.
 	TxnState string
 	// TxnReadOnly specifies if the current transaction is read-only.
@@ -417,6 +425,22 @@ type RoutineStatementCounters struct {
 	UpdateCount *telemetry.CounterWithAggMetric
 	InsertCount *telemetry.CounterWithAggMetric
 	DeleteCount *telemetry.CounterWithAggMetric
+
+	// DDL/DCL statements. CREATE TABLE is split by tree.Persistence:
+	// CreateTableCount tracks permanent tables and CreateTempTableCount
+	// tracks temporary tables. DROP TABLE is not split because
+	// persistence is not known at the increment site without descriptor
+	// resolution.
+	CreateTableCount            *telemetry.CounterWithAggMetric
+	CreateTempTableCount        *telemetry.CounterWithAggMetric
+	DropTableCount              *telemetry.CounterWithAggMetric
+	CreateSchemaCount           *telemetry.CounterWithAggMetric
+	DropSchemaCount             *telemetry.CounterWithAggMetric
+	CreateRoleCount             *telemetry.CounterWithAggMetric
+	DropRoleCount               *telemetry.CounterWithAggMetric
+	GrantCount                  *telemetry.CounterWithAggMetric
+	RevokeCount                 *telemetry.CounterWithAggMetric
+	AlterDefaultPrivilegesCount *telemetry.CounterWithAggMetric
 }
 
 // RNGFactory is a simple wrapper to preserve the RNG throughout the session.
@@ -487,7 +511,7 @@ type DescIDGenerator interface {
 
 	// IncrementDescID increments the descriptor ID counter by at least inc.
 	// It returns the first ID in the incremented range:
-	// <val> .. <val> + inc  are all available to the caller.
+	// [<val>, <val> + inc) are all available to the caller.
 	IncrementDescID(ctx context.Context, inc int64) (catid.DescID, error)
 }
 
@@ -648,6 +672,41 @@ func (ec *Context) SessionData() *sessiondata.SessionData {
 	return ec.SessionDataStack.Top()
 }
 
+// EffectiveUser returns the user that should be used for privilege checks,
+// ownership assignment, and the current_user builtin. When a SECURITY DEFINER
+// routine body is executing this is the routine owner; otherwise it falls
+// back to the session user. session_user is never affected.
+func (ec *Context) EffectiveUser() username.SQLUsername {
+	if n := len(ec.effectiveUserStack); n > 0 {
+		return ec.effectiveUserStack[n-1]
+	}
+	if sd := ec.SessionData(); sd != nil {
+		return sd.User()
+	}
+	return username.SQLUsername{}
+}
+
+// PushEffectiveUser pushes u onto the effective-user stack and returns a
+// closure that pops it. The caller must defer the closure immediately so
+// that errors, panics, and PL/pgSQL exception handlers all restore the
+// prior user, and so pops occur in reverse push order. See EffectiveUser
+// for read semantics.
+func (ec *Context) PushEffectiveUser(u username.SQLUsername) (restore func()) {
+	ec.effectiveUserStack = append(ec.effectiveUserStack, u)
+	expectedLen := len(ec.effectiveUserStack)
+	return func() {
+		// Detect misordered pops or a missing intervening push. The defer
+		// pattern guarantees LIFO order, so any divergence here is a bug in
+		// a future caller, not a routine occurrence.
+		if got := len(ec.effectiveUserStack); got != expectedLen {
+			panic(errors.AssertionFailedf(
+				"PushEffectiveUser restore called out of order: stack length %d, expected %d", got, expectedLen,
+			))
+		}
+		ec.effectiveUserStack = ec.effectiveUserStack[:expectedLen-1]
+	}
+}
+
 // Copy returns a copy of the EvalCtx that can safely be used concurrently with
 // the original.
 func (ec *Context) Copy() *Context {
@@ -656,6 +715,9 @@ func (ec *Context) Copy() *Context {
 	ctxCopy.CollationEnv = tree.CollationEnvironment{}
 	ctxCopy.iVarContainerStack = make([]tree.IndexedVarContainer, len(ec.iVarContainerStack), cap(ec.iVarContainerStack))
 	copy(ctxCopy.iVarContainerStack, ec.iVarContainerStack)
+	// Clone the effective-user stack so subsequent pushes on either copy
+	// don't alias each other via the shared backing array.
+	ctxCopy.effectiveUserStack = slices.Clone(ec.effectiveUserStack)
 	return &ctxCopy
 }
 

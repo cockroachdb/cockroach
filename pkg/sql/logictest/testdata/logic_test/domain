@@ -24,6 +24,45 @@ CREATE DOMAIN d_small_int AS INT DEFAULT 0 NOT NULL CHECK (VALUE > 0)
 statement ok
 CREATE DOMAIN d_bounded_int AS INT CONSTRAINT positive CHECK (VALUE > 0) CONSTRAINT small CHECK (VALUE < 100)
 
+# pg_dump and similar tools dispatch on pg_type.typtype to recognize a
+# domain. Verify that domains are exposed with typtype='d', a populated
+# typbasetype, and the NOT NULL / DEFAULT fields that dumpDomain consults.
+# Both typdefault and typdefaultbin are populated to match PostgreSQL —
+# pg_dump reads typdefaultbin (via pg_get_expr), while psql \d reads
+# typdefault.
+query TTTBTT colnames,rowsort
+SELECT typname, typtype, typbasetype::regtype::text, typnotnull, typdefault, typdefaultbin
+FROM pg_type
+WHERE typname IN ('d_int', 'd_text', 'd_small_int', 'd_bounded_int')
+----
+typname        typtype  typbasetype  typnotnull  typdefault  typdefaultbin
+d_bounded_int  d        int8         false       NULL        NULL
+d_int          d        int8         false       NULL        NULL
+d_small_int    d        int8         true        0           0
+d_text         d        text         false       NULL        NULL
+
+# Domain CHECK constraints must appear in pg_constraint with contype='c'
+# and contypid pointing at the domain's type OID, so that pg_dump's
+# getDomainConstraints can find them. Spaces in condef are substituted
+# with underscores so the result can be compared cell-by-cell.
+query TTT rowsort
+SELECT conname, contype, replace(pg_get_constraintdef(oid), ' ', '_')
+FROM pg_constraint
+WHERE contypid = 'd_small_int'::regtype::oid
+   OR contypid = 'd_bounded_int'::regtype::oid
+----
+d_small_int_check     c  CHECK_((value_>_0))
+d_small_int_not_null  n  NOT_NULL
+positive              c  CHECK_((value_>_0))
+small                 c  CHECK_((value_<_100))
+
+# Repeated CHECK rendering must be stable so that dump→restore→dump
+# round-trips through pg_dump do not accumulate extra parentheses.
+query T
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'd_small_int_check'
+----
+CHECK ((value > 0))
+
 subtest domain_not_null
 
 # Test NOT NULL enforcement via explicit CAST.
@@ -422,6 +461,21 @@ CREATE DOMAIN d_nested AS d_base_for_nested
 
 subtest end
 
+subtest domain_of_array_and_tuple
+
+# Test that CREATE DOMAIN with an array base type is rejected (#32552).
+statement error pgcode 0A000 unimplemented: domain of arrays and tuples is not yet supported
+CREATE DOMAIN d_array AS INT[]
+
+# Test that CREATE DOMAIN with a tuple base type is rejected (#32552).
+statement ok
+CREATE TYPE my_tuple AS (a INT, b INT)
+
+statement error pgcode 0A000 unimplemented: domain of arrays and tuples is not yet supported
+CREATE DOMAIN d_tuple AS my_tuple
+
+subtest end
+
 subtest domain_drop_syntax
 
 # Test DROP DOMAIN syntax variants.
@@ -735,5 +789,98 @@ DROP TABLE t_atom
 
 statement ok
 DROP DOMAIN d_atom
+
+subtest end
+
+subtest domain_constraint_names
+
+# Test that constraint naming behaves like PG18.
+
+statement error pgcode 42710 constraint "upper_bound" for domain d_constraint_names already exists
+CREATE DOMAIN d_constraint_names AS INT
+  CONSTRAINT upper_bound CHECK (VALUE < 100)
+  CONSTRAINT upper_bound CHECK (VALUE < 500);
+
+statement ok
+CREATE DOMAIN d_constraint_names AS INT 
+  CONSTRAINT d_constraint_names_not_null CHECK (VALUE > 0)
+  NOT NULL
+  CONSTRAINT d_constraint_names_check1 CHECK (VALUE < 13)
+  CHECK (VALUE < 17)
+  CHECK (VALUE < 19)
+  CHECK (VALUE != 23);
+
+query TTTB colnames
+SELECT conname, contype, pg_get_constraintdef(oid) AS condef, convalidated
+FROM pg_constraint
+WHERE contypid = 'd_constraint_names'::regtype
+ORDER BY conname
+----
+conname                       contype  condef                convalidated
+d_constraint_names_check      c        CHECK ((value < 17))  true
+d_constraint_names_check1     c        CHECK ((value < 13))  true
+d_constraint_names_check2     c        CHECK ((value < 19))  true
+d_constraint_names_check3     c        CHECK ((value != 23)) true
+d_constraint_names_not_null   c        CHECK ((value > 0))   true
+d_constraint_names_not_null1  n        NOT NULL               true
+
+statement ok
+DROP DOMAIN d_constraint_names;
+
+# Domain with only NOT NULL and no CHECK constraints.
+statement ok
+CREATE DOMAIN d_not_null_only AS INT NOT NULL;
+
+query TTT colnames
+SELECT conname, contype, pg_get_constraintdef(oid) AS condef
+FROM pg_constraint
+WHERE contypid = 'd_not_null_only'::regtype
+ORDER BY conname
+----
+conname               contype  condef
+d_not_null_only_not_null  n        NOT NULL
+
+statement ok
+DROP DOMAIN d_not_null_only;
+
+# Test a not null constraint name-colliding with a check constraint.
+statement ok
+CREATE DOMAIN d_nn_collision AS INT
+  CONSTRAINT d_nn_collision_not_null CHECK (VALUE > 0)
+  NOT NULL;
+
+query TTT colnames
+SELECT conname, contype, pg_get_constraintdef(oid) AS condef
+FROM pg_constraint
+WHERE contypid = 'd_nn_collision'::regtype
+ORDER BY conname
+----
+conname                   contype  condef
+d_nn_collision_not_null   c        CHECK ((value > 0))
+d_nn_collision_not_null1  n        NOT NULL
+
+statement ok
+DROP DOMAIN d_nn_collision;
+
+
+# TODO(166932): name this constraint when there's grammar support
+# Test a check constraint name-colliding with a not null constraint.
+statement ok
+CREATE DOMAIN d_c_collision AS INT
+  NOT NULL 
+  CHECK (VALUE > 0);
+
+query TTT colnames
+SELECT conname, contype, pg_get_constraintdef(oid) AS condef
+FROM pg_constraint
+WHERE contypid = 'd_c_collision'::regtype
+ORDER BY conname
+----
+conname                 contype  condef
+d_c_collision_check     c        CHECK ((value > 0))
+d_c_collision_not_null  n        NOT NULL
+
+statement ok
+DROP DOMAIN d_c_collision;
 
 subtest end

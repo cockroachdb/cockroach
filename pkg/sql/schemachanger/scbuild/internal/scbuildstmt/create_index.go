@@ -878,7 +878,7 @@ func maybeCreateAndAddShardCol(
 		return shardColName, existingShardColID
 	}
 	expr := schemaexpr.MakeHashShardComputeExpr(colNames, shardBuckets)
-	parsedExpr, err := parser.ParseExpr(*expr)
+	parsedExpr, err := parser.ParseExpr(string(*expr))
 	if err != nil {
 		panic(err)
 	}

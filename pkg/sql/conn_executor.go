@@ -6,11 +6,13 @@
 package sql
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"io"
 	"math"
 	"math/rand"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -24,12 +26,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantcpu"
+	"github.com/cockroachdb/cockroach/pkg/obs/statementstore"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/advisorylock"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -380,6 +384,8 @@ type Server struct {
 	// sqlStatsIngester provides the interface to consume stats about a sql execution.
 	sqlStatsIngester *sslocal.SQLStatsIngester
 
+	statementsStore *statementstore.StatementStore
+
 	// schemaTelemetryController is the control-plane interface for schema
 	// telemetry.
 	schemaTelemetryController *schematelemetrycontroller.Controller
@@ -486,6 +492,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		nil, /* reportedProvider */
 		cfg.SQLStatsTestingKnobs,
 	)
+	statementStore := statementstore.NewStatementStore(cfg.Settings, nil)
 	localSQLStats := sslocal.NewSQLStats(
 		cfg.Settings,
 		sqlstats.MaxMemSQLStatsStmtFingerprints,
@@ -498,7 +505,9 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		cfg.SQLStatsTestingKnobs,
 	)
 	sqlStatsIngester := sslocal.NewSQLStatsIngester(
-		cfg.Settings, cfg.SQLStatsTestingKnobs, serverMetrics.IngesterMetrics, pool, insightsProvider, localSQLStats)
+		cfg.Settings, cfg.SQLStatsTestingKnobs, serverMetrics.IngesterMetrics,
+		serverMetrics.StatsMetrics.DiscardedStatsCount,
+		pool, statementStore, insightsProvider, localSQLStats)
 	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
 	sqlstats.TxnStatsEnable.SetOnChange(&cfg.Settings.SV, func(_ context.Context) {
 		if !sqlstats.TxnStatsEnable.Get(&cfg.Settings.SV) {
@@ -514,6 +523,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		localSqlStats:     localSQLStats,
 		reportedStats:     reportedSQLStats,
 		sqlStatsIngester:  sqlStatsIngester,
+		statementsStore:   statementStore,
 		insights:          insightsProvider,
 		reCache:           tree.NewRegexpCache(512),
 		toCharFormatCache: tochar.NewFormatCache(512),
@@ -562,6 +572,17 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		s.cfg.NodeInfo.LogicalClusterID,
 	)
 	s.indexUsageStatsController = idxusage.NewController(cfg.SQLStatusServer)
+
+	statementStoreIEMonitor := mon.NewMonitor(mon.Options{
+		Name:       mon.MakeName("statement store"),
+		Settings:   s.GetExecutorConfig().Settings,
+		LongLiving: true,
+	})
+	statementStoreIEMonitor.StartNoReserved(context.Background(), s.GetBytesMonitor())
+	s.statementsStore.SetInternalExecutor(
+		NewInternalDB(s, MemoryMetrics{}, statementStoreIEMonitor),
+		statementStoreIEMonitor,
+	)
 	return s
 }
 
@@ -729,10 +750,10 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	// If a user can opt in/out of some aspect of background processing, then it
 	// should be accounted for in their costs.
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
+	s.statementsStore.Start(ctx, stopper)
 
 	s.sqlStatsIngester.Start(ctx, stopper)
 	s.persistedSQLStats.Start(ctx, stopper)
-
 	s.schemaTelemetryController.Start(ctx, stopper)
 
 	// reportedStats is periodically cleared to prevent too many SQL Stats
@@ -1349,6 +1370,8 @@ func (s *Server) newConnExecutor(
 	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.NewCollection(
 		ctx, descs.WithDescriptorSessionDataProvider(dsdp), descs.WithMonitor(ex.sessionMon),
 	)
+	ex.extraTxnState.advisoryLockManager = &atomic.Pointer[advisorylock.Manager]{}
+	ex.extraTxnState.advisoryLockManager.Store(advisorylock.NewManager(ex.extraTxnState.descCollection, ex.server.cfg.Codec))
 	ex.extraTxnState.jobs = newTxnJobsCollection()
 	ex.extraTxnState.txnRewindPos = -1
 	ex.extraTxnState.schemaChangerState = &SchemaChangerState{
@@ -1639,6 +1662,10 @@ type connExecutor struct {
 		// descCollection collects descriptors used by the current transaction.
 		descCollection *descs.Collection
 
+		// advisoryLockManager is an atomic pointer that refers to
+		//  the current advisory lock manager.
+		advisoryLockManager *atomic.Pointer[advisorylock.Manager]
+
 		jobs *txnJobsCollection
 
 		// firstStmtExecuted indicates that the first statement inside this
@@ -1770,6 +1797,7 @@ type connExecutor struct {
 		rewindPosSnapshot struct {
 			savepoints       savepointStack
 			sessionDataStack *sessiondata.Stack
+			advisoryRewind   advisorylock.RewindSnapshot
 		}
 		// transactionStatementFingerprintIDs tracks all statement IDs that make up the current
 		// transaction. It's length is bound by the TxnStatsNumStmtFingerprintIDsToRecord
@@ -1962,6 +1990,23 @@ type connExecutor struct {
 	// executorType is set to whether this executor is an ordinary executor which
 	// responds to user queries or an internal one.
 	executorType executorType
+
+	// forceNextTxnSerializable is a one-shot override consumed when the next
+	// implicit txn is opened. It is set by maybeAutoCommitBeforeDDL only
+	// after handleAutoCommit confirms the current txn was committed for a
+	// CALL whose body contains DDL under weaker isolation; the restart must
+	// then begin at SERIALIZABLE so the body's DDL runs safely.
+	//
+	// The flag is cleared in two places to bound its lifetime to the very
+	// next txn: implicitTxnIsoLevel applies and clears it when the restart's
+	// implicit txn opens; the BEGIN branch of execStmtInNoTxnState discards
+	// it if the user opens an explicit txn first, preventing leakage into
+	// a later unrelated implicit txn.
+	//
+	// Lives outside extraTxnState because that struct is reset per-txn and
+	// this flag must survive the boundary between the auto-committed txn
+	// and its restart.
+	forceNextTxnSerializable bool
 
 	// hasCreatedTemporarySchema is set if the executor has created a
 	// temporary schema, which requires special cleanup on close.
@@ -2214,6 +2259,18 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent, pay
 		}
 	} else {
 		ex.extraTxnState.descCollection.ReleaseAll(ctx)
+		// Advisory lock acquisitions are stored both in KV (where they are
+		// held by the txn record and survive refresh/restart) and in the
+		// in-memory advisoryLockManager. On txnRestart the KV intents
+		// persist, so we must preserve the manager too; replacing it would
+		// silently desync the in-memory stack from KV for the rest of the
+		// txn, surfacing as wrong rows in pg_locks /
+		// crdb_internal.cluster_held_advisory_locks.
+		if ev.eventType != txnRestart {
+			ex.extraTxnState.advisoryLockManager.Store(advisorylock.NewManager(
+				ex.extraTxnState.descCollection, ex.server.cfg.Codec,
+			))
+		}
 		ex.extraTxnState.jobs.reset()
 		ex.extraTxnState.validateDbZoneConfig = false
 		ex.extraTxnState.schemaChangerState.memAcc.Clear(ctx)
@@ -2822,6 +2879,9 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		// Note we use the Replace function instead of reassigning, as there are
 		// copies of the ex.sessionDataStack in the iterators and extendedEvalContext.
 		ex.sessionDataStack.Replace(ex.extraTxnState.rewindPosSnapshot.sessionDataStack)
+		if mgr := ex.extraTxnState.advisoryLockManager.Load(); mgr != nil {
+			mgr.ApplyRewindSnapshot(ex.extraTxnState.rewindPosSnapshot.advisoryRewind)
+		}
 		advInfo.rewCap.rewindAndUnlock(ctx)
 	case stayInPlace:
 		// Nothing to do. The same statement will be executed again.
@@ -2998,6 +3058,11 @@ func (ex *connExecutor) setTxnRewindPos(ctx context.Context, pos CmdPos) error {
 	ex.stmtBuf.Ltrim(ctx, pos)
 	ex.extraTxnState.rewindPosSnapshot.savepoints = ex.extraTxnState.savepoints.clone()
 	ex.extraTxnState.rewindPosSnapshot.sessionDataStack = ex.sessionDataStack.Clone()
+	if mgr := ex.extraTxnState.advisoryLockManager.Load(); mgr != nil {
+		ex.extraTxnState.rewindPosSnapshot.advisoryRewind = mgr.ExportRewindSnapshot()
+	} else {
+		ex.extraTxnState.rewindPosSnapshot.advisoryRewind = advisorylock.RewindSnapshot{}
+	}
 	return ex.commitPrepStmtNamespace(ctx)
 }
 
@@ -3773,6 +3838,18 @@ var allowBufferedWritesForWeakIsolation = settings.RegisterBoolSetting(
 	),
 )
 
+// implicitTxnIsoLevel returns the isolation level to use for a new implicit
+// transaction. It honors and clears forceNextTxnSerializable: when set, the
+// next implicit txn starts at SERIALIZABLE regardless of the session default.
+// The flag is consumed exactly once.
+func (ex *connExecutor) implicitTxnIsoLevel(ctx context.Context) isolation.Level {
+	if ex.forceNextTxnSerializable {
+		ex.forceNextTxnSerializable = false
+		return isolation.Serializable
+	}
+	return ex.txnIsolationLevelToKV(ctx, tree.UnspecifiedIsolation)
+}
+
 func (ex *connExecutor) txnIsolationLevelToKV(
 	ctx context.Context, level tree.IsolationLevel,
 ) isolation.Level {
@@ -3955,6 +4032,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		indexUsageStats:      ex.indexUsageStats,
 		statementPreparer:    ex,
 	}
+	evalCtx.advisoryLockManager = ex.extraTxnState.advisoryLockManager
 	evalCtx.copyFromExecCfg(ex.server.cfg)
 }
 
@@ -4069,6 +4147,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 	p.statsCollector = ex.statsCollector
 	p.sessionDataMutatorIterator = ex.dataMutatorIterator
 	p.noticeSender = nil
+	p.stmtResultBuffering = nil
 	p.preparedStatements = ex.getPrepStmtsAccessor()
 	p.sqlCursors = ex.getCursorAccessor()
 	p.routineMetadataForwarder = nil
@@ -4270,7 +4349,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		// acquired.
 		if ex.extraTxnState.descCollection.HasUncommittedDescriptors() {
 			// Apply statement timeout on any waiting logic.
-			err = ex.runWithStatementTimeout(func(ctx context.Context) error {
+			err = ex.runWithStatementTimeout(ex.Ctx(), func(ctx context.Context) error {
 				cachedRegions, err := regions.NewCachedDatabaseRegions(ctx, ex.server.cfg.DB, ex.server.cfg.LeaseManager)
 				if err != nil {
 					return err
@@ -4372,15 +4451,16 @@ func (ex *connExecutor) onTxnStart(txnID uuid.UUID) error {
 	return ex.maybeSetSQLLivenessSessionAndGeneration()
 }
 
-// runWithStatementTimeout runs the given function with a context that has
-// the statement timeout applied. If the statement timeout is exceeded,
-// the onTimeoutError function is called and the return value of the function
-// is returned.
+// runWithStatementTimeout runs the given function with a context derived from
+// ctx that has the statement timeout applied. The caller passes the ctx it
+// wants threaded into execFn (e.g. a per-statement ctx so tracing spans and
+// other scope-bound state propagate to downstream KV calls). If the statement
+// timeout is exceeded, the onTimeoutError function is called and
+// QueryTimeoutError is returned.
 func (ex *connExecutor) runWithStatementTimeout(
-	execFn func(ctx context.Context) error, onTimeoutError func() error,
+	ctx context.Context, execFn func(ctx context.Context) error, onTimeoutError func() error,
 ) error {
-	// Set up a context that can be cancelled when the statement timeout is exceeded.
-	waitCtx := ex.ctxHolder.ctx()
+	waitCtx := ctx
 	var queryTimedout atomic.Bool
 	if ex.sessionData().StmtTimeout > 0 {
 		timePassed := ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived).Elapsed()
@@ -4430,7 +4510,7 @@ func (ex *connExecutor) waitForTxnJobs() error {
 		ex.ctxHolder.connCtx, ex.extraTxnState.jobs.created...,
 	)
 
-	return ex.runWithStatementTimeout(func(ctx context.Context) error {
+	return ex.runWithStatementTimeout(ex.Ctx(), func(ctx context.Context) error {
 		if !ex.sessionData().DisableWaitForJobsNotice {
 			jobIDs := strings.Builder{}
 			for i, jobID := range ex.extraTxnState.jobs.created {
@@ -4718,6 +4798,40 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		sessionActiveTime = time.Duration(sessionActiveTime.Nanoseconds() + elapsed.Nanoseconds())
 	}
 
+	var heldAdvisoryLocks []serverpb.HeldAdvisoryLock
+	if mgr := ex.extraTxnState.advisoryLockManager.Load(); mgr != nil {
+		if locks := mgr.GetHeldLocks(); len(locks) > 0 {
+			heldAdvisoryLocks = make([]serverpb.HeldAdvisoryLock, 0, len(locks))
+			for _, lock := range locks {
+				convertedMode := serverpb.HeldAdvisoryLock_ADVISORY_LOCK_MODE_UNKNOWN
+				switch lock.Mode {
+				case advisorylock.LockModeExclusive:
+					convertedMode = serverpb.HeldAdvisoryLock_ADVISORY_LOCK_MODE_EXCLUSIVE
+				case advisorylock.LockModeShare:
+					convertedMode = serverpb.HeldAdvisoryLock_ADVISORY_LOCK_MODE_SHARED
+				default:
+					log.Dev.Warningf(ex.Ctx(), "unknown advisory lock mode: %d", lock.Mode)
+				}
+				db, isSingleValue, id := lock.Key.Extract()
+				heldAdvisoryLocks = append(heldAdvisoryLocks, serverpb.HeldAdvisoryLock{
+					LockDatabaseId: int64(db),
+					LockId:         id,
+					IsSingeValue:   isSingleValue,
+					LockMode:       convertedMode,
+				})
+			}
+			slices.SortFunc(heldAdvisoryLocks, func(a, b serverpb.HeldAdvisoryLock) int {
+				if c := cmp.Compare(a.LockDatabaseId, b.LockDatabaseId); c != 0 {
+					return c
+				}
+				if c := cmp.Compare(a.LockId, b.LockId); c != 0 {
+					return c
+				}
+				return cmp.Compare(a.LockMode, b.LockMode)
+			})
+		}
+	}
+
 	return serverpb.Session{
 		Username:          sd.SessionUser().Normalized(),
 		ClientAddress:     remoteStr,
@@ -4740,6 +4854,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		GoroutineID:                ex.ctxHolder.goroutineID,
 		AuthenticationMethod:       sd.AuthenticationMethod,
 		DefaultIsolationLevel:      tree.IsolationLevel(sd.DefaultTxnIsolationLevel).String(),
+		HeldAdvisoryLocks:          heldAdvisoryLocks,
 	}
 }
 
@@ -4834,6 +4949,20 @@ type StatementCounters struct {
 	RoutineInsertCount telemetry.CounterWithAggMetric
 	RoutineDeleteCount telemetry.CounterWithAggMetric
 
+	// DDL/DCL statements within the UDF/SP body. CREATE TABLE is split
+	// by tree.Persistence: RoutineCreateTableCount tracks permanent
+	// tables and RoutineCreateTempTableCount tracks temporary tables.
+	RoutineCreateTableCount            telemetry.CounterWithAggMetric
+	RoutineCreateTempTableCount        telemetry.CounterWithAggMetric
+	RoutineDropTableCount              telemetry.CounterWithAggMetric
+	RoutineCreateSchemaCount           telemetry.CounterWithAggMetric
+	RoutineDropSchemaCount             telemetry.CounterWithAggMetric
+	RoutineCreateRoleCount             telemetry.CounterWithAggMetric
+	RoutineDropRoleCount               telemetry.CounterWithAggMetric
+	RoutineGrantCount                  telemetry.CounterWithAggMetric
+	RoutineRevokeCount                 telemetry.CounterWithAggMetric
+	RoutineAlterDefaultPrivilegesCount telemetry.CounterWithAggMetric
+
 	// Transaction operations.
 	TxnBeginCount    telemetry.CounterWithAggMetric
 	TxnCommitCount   telemetry.CounterWithAggMetric
@@ -4920,6 +5049,26 @@ func makeStartedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaRoutineInsertStarted, internal)),
 		RoutineDeleteCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaRoutineDeleteStarted, internal)),
+		RoutineCreateTableCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineCreateTableStarted, internal)),
+		RoutineCreateTempTableCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineCreateTempTableStarted, internal)),
+		RoutineDropTableCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineDropTableStarted, internal)),
+		RoutineCreateSchemaCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineCreateSchemaStarted, internal)),
+		RoutineDropSchemaCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineDropSchemaStarted, internal)),
+		RoutineCreateRoleCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineCreateRoleStarted, internal)),
+		RoutineDropRoleCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineDropRoleStarted, internal)),
+		RoutineGrantCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineGrantStarted, internal)),
+		RoutineRevokeCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineRevokeStarted, internal)),
+		RoutineAlterDefaultPrivilegesCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineAlterDefaultPrivilegesStarted, internal)),
 		CRUDQueryCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaCRUDStarted, internal)),
 		DdlCount: telemetry.NewCounterWithMetric(
@@ -4981,6 +5130,26 @@ func makeExecutedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaRoutineInsertExecuted, internal)),
 		RoutineDeleteCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaRoutineDeleteExecuted, internal)),
+		RoutineCreateTableCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineCreateTableExecuted, internal)),
+		RoutineCreateTempTableCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineCreateTempTableExecuted, internal)),
+		RoutineDropTableCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineDropTableExecuted, internal)),
+		RoutineCreateSchemaCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineCreateSchemaExecuted, internal)),
+		RoutineDropSchemaCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineDropSchemaExecuted, internal)),
+		RoutineCreateRoleCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineCreateRoleExecuted, internal)),
+		RoutineDropRoleCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineDropRoleExecuted, internal)),
+		RoutineGrantCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineGrantExecuted, internal)),
+		RoutineRevokeCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineRevokeExecuted, internal)),
+		RoutineAlterDefaultPrivilegesCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineAlterDefaultPrivilegesExecuted, internal)),
 		CRUDQueryCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaCRUDExecuted, internal)),
 		DdlCount: telemetry.NewCounterWithMetric(
@@ -5072,10 +5241,20 @@ func (sc *StatementCounters) incrementCount(ex *connExecutor, stmt tree.Statemen
 // import cycle.
 func (sc *StatementCounters) toRoutineStmtCounters() eval.RoutineStatementCounters {
 	return eval.RoutineStatementCounters{
-		SelectCount: &sc.RoutineSelectCount,
-		UpdateCount: &sc.RoutineUpdateCount,
-		InsertCount: &sc.RoutineInsertCount,
-		DeleteCount: &sc.RoutineDeleteCount,
+		SelectCount:                 &sc.RoutineSelectCount,
+		UpdateCount:                 &sc.RoutineUpdateCount,
+		InsertCount:                 &sc.RoutineInsertCount,
+		DeleteCount:                 &sc.RoutineDeleteCount,
+		CreateTableCount:            &sc.RoutineCreateTableCount,
+		CreateTempTableCount:        &sc.RoutineCreateTempTableCount,
+		DropTableCount:              &sc.RoutineDropTableCount,
+		CreateSchemaCount:           &sc.RoutineCreateSchemaCount,
+		DropSchemaCount:             &sc.RoutineDropSchemaCount,
+		CreateRoleCount:             &sc.RoutineCreateRoleCount,
+		DropRoleCount:               &sc.RoutineDropRoleCount,
+		GrantCount:                  &sc.RoutineGrantCount,
+		RevokeCount:                 &sc.RoutineRevokeCount,
+		AlterDefaultPrivilegesCount: &sc.RoutineAlterDefaultPrivilegesCount,
 	}
 }
 

@@ -144,7 +144,8 @@ func (p *planner) addColumnImpl(
 		if err != nil {
 			return err
 		}
-		col.ComputeExpr = &serializedExpr
+		expr := descpb.Expression(serializedExpr)
+		col.ComputeExpr = &expr
 	}
 
 	if !col.Virtual {

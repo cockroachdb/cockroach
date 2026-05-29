@@ -39,6 +39,13 @@ import (
 // will wait for a graceful shutdown.
 const shutdownGracePeriod = 300
 
+// throttledStoresMsg is the substring emitted by the allocator when every
+// candidate target store is within its server.failed_reservation.timeout
+// window (default 5s) after a snapshot reservation failure. See the comment
+// in runDecommissionRandomized for why this surfaces transiently during
+// decommission.
+const throttledStoresMsg = "matching stores are currently throttled"
+
 func registerDecommission(r registry.Registry) {
 	{
 		numNodes := 4
@@ -635,10 +642,55 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 		}
 
 		// Decommission two nodes.
+		//
+		// DUCT TAPE: the substring match below is a targeted retry, not a
+		// fix. The right fix lives elsewhere and is non-trivial — see below.
+		//
+		// The CLI exits non-zero ("Cannot decommission nodes.") when the
+		// server-side pre-check (DecommissionPreCheck → AllocatorCheckRange →
+		// AllocateTarget) cannot find a target for any range on the
+		// decommissioning node. One common transient cause:
+		//
+		//   1. A replication change tries to send a snapshot to s_X.
+		//   2. s_X already holds a placeholder for that range (its prior
+		//      snapshot is still applying), so canAcceptSnapshotLocked rejects
+		//      the new one within milliseconds.
+		//   3. The sender calls StorePool.Throttle(ThrottleFailed, ...), which
+		//      marks s_X throttled for server.failed_reservation.timeout
+		//      (default 5s) and stores the rejection text in
+		//      detail.throttledBecause.
+		//   4. If the pre-check runs in that 5s window and s_X is the only
+		//      viable target, the allocator returns "N matching stores are
+		//      currently throttled: [<throttledBecause>...]", which surfaces
+		//      verbatim as the per-range blocker text — even though the
+		//      placeholder is long gone.
+		//
+		// A proper fix would have to address one of:
+		//   - the pre-check treating a transient throttle as a hard blocker
+		//     (it should distinguish "no viable target ever" from "back off
+		//     and retry"),
+		//   - the allocator's throttle reason string being stale/misleading
+		//     after the underlying snapshot has succeeded, or
+		//   - canAcceptSnapshotLocked engaging the failed-reservation throttle
+		//     for a benign "already in progress" rejection.
+		// Each of these threads through allocator/storepool/snapshot code,
+		// touches mixed-version and CLI UX, and has already burned at least
+		// one revert (#159165, fix attempt for #157973). Not something to do
+		// drive-by from a roachtest flake.
+		//
+		// With --wait=none the CLI is one-shot, so the retry has to live
+		// here. Keep it tight: substring-match only this transient and let
+		// every other CLI failure fatal as before.
 		if err := retry.WithMaxAttempts(ctx, retryOpts, maxAttempts, func() error {
-			o, err := h.decommission(ctx, c.Nodes(targetNodeA, targetNodeB), runNode,
+			o, e, err := h.decommissionExt(ctx, c.Nodes(targetNodeA, targetNodeB), runNode,
 				fmt.Sprintf("--wait=%s", waitStrategy), "--format=csv")
 			if err != nil {
+				// The blocking-range summary goes to stderr; roachprod also folds
+				// stderr into err.Error(), so check both.
+				if strings.Contains(e, throttledStoresMsg) || strings.Contains(err.Error(), throttledStoresMsg) {
+					t.L().Printf("decommission hit transient throttle, retrying: %v", err)
+					return err
+				}
 				t.Fatalf("decommission failed: %v", err)
 			}
 

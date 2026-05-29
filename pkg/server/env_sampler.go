@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/gcassist"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -45,10 +47,65 @@ var gcAssistEnabled = settings.RegisterBoolSetting(
 	settings.SystemVisible,
 	"server.gc_assist.enabled",
 	"set to false to dynamically disable GC assist in the Go runtime "+
-		"(requires CockroachDB's forked Go runtime; no-op otherwise); "+
-		"picks up the GODEBUG gcnoassist flag as its default",
-	gcassist.Enabled(), // default reflects GODEBUG=gcnoassist at startup
+		"(requires CockroachDB's forked Go runtime; no-op otherwise)",
+	false, // disabled by default to reduce tail latencies
 )
+
+var gcPressureWarningThreshold = settings.RegisterFloatSetting(
+	settings.SystemVisible,
+	"server.gc_pressure.warning_threshold",
+	"gc cpu fraction (0.0-1.0) above which a warning event is emitted "+
+		"after sustained samples; set to 0 to disable GC pressure warnings",
+	0.25,
+	settings.FloatInRange(0, 1),
+)
+
+const (
+	// gcPressureSustainedSamples is the number of consecutive
+	// above-threshold samples required before warning. This filters
+	// out transient GC spikes (e.g. during bulk ingestion).
+	gcPressureSustainedSamples = 3
+	// gcPressureCooldown is the minimum time between consecutive
+	// GC pressure warnings to avoid log noise during prolonged pressure.
+	gcPressureCooldown = 5 * time.Minute
+)
+
+// gcPressureChecker detects sustained GC pressure by monitoring
+// the GC CPU ratio. When the ratio exceeds the configured threshold
+// for gcPressureSustainedSamples consecutive samples, a warning is
+// emitted. A cooldown prevents excessive warnings.
+type gcPressureChecker struct {
+	consecutiveAbove int
+	lastWarning      time.Time
+}
+
+// check reports whether a GC pressure warning should be emitted.
+// It returns true when gcCPURatio has been at or above threshold
+// for gcPressureSustainedSamples consecutive calls and the cooldown
+// has elapsed since the last warning.
+func (c *gcPressureChecker) check(gcCPURatio, threshold float64, now time.Time) bool {
+	if gcCPURatio >= threshold {
+		c.consecutiveAbove++
+	} else {
+		c.consecutiveAbove = 0
+		return false
+	}
+
+	if c.consecutiveAbove < gcPressureSustainedSamples {
+		return false
+	}
+	if !c.lastWarning.IsZero() &&
+		now.Sub(c.lastWarning) < gcPressureCooldown {
+		return false
+	}
+	c.lastWarning = now
+	// Reset so the checker must re-observe gcPressureSustainedSamples
+	// new above-threshold samples before firing again. Combined with the
+	// cooldown, the effective minimum re-fire interval is
+	// gcPressureCooldown + gcPressureSustainedSamples*sampleInterval.
+	c.consecutiveAbove = 0
+	return true
+}
 
 type sampleEnvironmentCfg struct {
 	st                    *cluster.Settings
@@ -172,6 +229,8 @@ func startSampleEnvironment(
 			defer timer.Stop()
 			timer.Reset(cfg.minSampleInterval)
 
+			var gcChecker gcPressureChecker
+
 			for {
 				select {
 				case <-cfg.stopper.ShouldQuiesce():
@@ -181,6 +240,35 @@ func startSampleEnvironment(
 
 					cgoStats := status.GetCGoMemStats(ctx)
 					cfg.runtime.SampleEnvironment(ctx, cgoStats)
+
+					threshold :=
+						gcPressureWarningThreshold.Get(&cfg.st.SV)
+					if threshold > 0 {
+						gcCPU := cfg.runtime.GcCPUPercent.Value()
+						if gcChecker.check(gcCPU, threshold, timeutil.Now()) {
+							goAlloc := uint64(cfg.runtime.GoAllocBytes.Value())
+							goLimit := uint64(cfg.runtime.GoLimitBytes.Value())
+							ev := &eventpb.GCPressureDetected{
+								NodeID:        int32(srvCfg.IDContainer.Get()),
+								GCCPUFraction: gcCPU,
+								GoAllocBytes:  goAlloc,
+								GoLimitBytes:  goLimit,
+							}
+							ev.CommonDetails().Timestamp =
+								timeutil.Now().UnixNano()
+							log.StructuredEvent(
+								ctx, severity.WARNING, ev,
+							)
+							log.Ops.Warningf(ctx,
+								"GC pressure detected: GC using %.1f%% "+
+									"of available CPU "+
+									"(heap: %d MiB, limit: %d MiB)",
+								gcCPU*100,
+								goAlloc/(1024*1024),
+								goLimit/(1024*1024),
+							)
+						}
+					}
 
 					// Maybe purge jemalloc dirty pages.
 					if overhead, period := jemallocPurgeOverhead.Get(&cfg.st.SV), jemallocPurgePeriod.Get(&cfg.st.SV); overhead > 0 && period > 0 {

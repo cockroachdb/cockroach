@@ -147,6 +147,10 @@ func (d *deleteSwapNode) kvCPUTime() int64 {
 	return d.run.td.kvCPUTime
 }
 
+func (d *deleteSwapNode) localKVCPUTime() int64 {
+	return d.run.td.localKVCPUTime
+}
+
 func (d *deleteSwapNode) enableAutoCommit() {
 	d.run.td.enableAutoCommit()
 }

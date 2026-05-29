@@ -2423,7 +2423,8 @@ func TestChangefeedCanResumeWhenClusterIDMissing(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			return job.NoTxn().Update(context.Background(), func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+			return job.DeprecatedNoTxn().Update(context.Background(), func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 				md.Payload.CreationClusterID = uuid.Nil
 				ju.UpdatePayload(md.Payload)
 				return nil
@@ -2798,6 +2799,7 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `SET CLUSTER SETTING sql.catalog.descriptor_lease_duration = '15s'`)
 
 		_ = maybeDisableDeclarativeSchemaChangesForTest(t, sqlDB)
 
@@ -7759,6 +7761,14 @@ func TestChangefeedErrors(t *testing.T) {
 		t, `format=csv is only usable with initial_scan_only`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH format = csv`, `kafka://nope`,
 	)
+	sqlDB.ExpectErrWithTimeout(
+		t, `this sink is incompatible with option csv_header`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH format=csv, csv_header, initial_scan_only`, `kafka://nope`,
+	)
+	sqlDB.ExpectErrWithTimeout(
+		t, `csv_header is only usable with format=csv`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH csv_header`, `experimental-nodelocal://1/bar`,
+	)
 
 	var tsCurrent string
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&tsCurrent)
@@ -10590,6 +10600,7 @@ func (s *memoryHoggingSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
+	csvColumnHeader []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 	headers rowHeaders,
@@ -10640,6 +10651,7 @@ func (s *countEmittedRowsSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
+	csvColumnHeader []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 	_headers rowHeaders,
@@ -10797,6 +10809,23 @@ func TestChangefeedMultiPodTenantPlanning(t *testing.T) {
 	sql1.Exec(t, "INSERT INTO foo VALUES (1), (2)")
 	sql1.Exec(t, "CREATE TABLE bar (b INT PRIMARY KEY)")
 	sql1.Exec(t, "INSERT INTO bar VALUES (1), (2)")
+
+	// Force foo and bar into separate ranges. Without this, the two tiny
+	// tables may share a single range, in which case PartitionSpans returns
+	// one partition and the two-aggregator assertion below flakes.
+	sql1.Exec(t, "ALTER TABLE foo SPLIT AT VALUES (0)")
+	sql1.Exec(t, "ALTER TABLE bar SPLIT AT VALUES (0)")
+	testutils.SucceedsSoon(t, func() error {
+		var fooRangeID, barRangeID int
+		sql1.QueryRow(t,
+			"SELECT range_id FROM [SHOW RANGES FROM TABLE foo] LIMIT 1").Scan(&fooRangeID)
+		sql1.QueryRow(t,
+			"SELECT range_id FROM [SHOW RANGES FROM TABLE bar] LIMIT 1").Scan(&barRangeID)
+		if fooRangeID == barRangeID {
+			return errors.Newf("foo and bar still share range %d", fooRangeID)
+		}
+		return nil
+	})
 
 	foo := feed(t, feedFactory, "CREATE CHANGEFEED FOR foo, bar")
 	defer closeFeed(t, foo)
@@ -11687,6 +11716,122 @@ func TestChangefeedPubsubResolvedMessages(t *testing.T) {
 	}
 
 	cdcTest(t, testFn, feedTestForceSink("pubsub"))
+}
+
+// TestChangefeedCSVHeaderRowCDCQueries exercises csv_header with CDC query
+// features: ALTER TABLE adding a column, column reordering via projection,
+func TestChangefeedCSVHeaderRowCDCQueries(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	readLines := func(t *testing.T, f cdctest.TestFeed, n int) []string {
+		var lines []string
+		for len(lines) < n {
+			m, err := f.Next()
+			require.NoError(t, err)
+			if len(m.Value) > 0 {
+				lines = append(lines, string(m.Value))
+			}
+		}
+		return lines
+	}
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE csv_cdc (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO csv_cdc VALUES (1, 'before')`)
+		sqlDB.Exec(t, `ALTER TABLE csv_cdc ADD COLUMN c BOOL DEFAULT true`)
+		sqlDB.Exec(t, `INSERT INTO csv_cdc VALUES (2, 'after', false)`)
+
+		t.Run("alter-table", func(t *testing.T) {
+			foo := feed(t, f, `CREATE CHANGEFEED FOR csv_cdc WITH format=csv, csv_header, initial_scan_only`)
+			defer closeFeed(t, foo)
+
+			lines := readLines(t, foo, 3)
+			require.Equal(t, "a,b,c", lines[0], "header must include the added column")
+			require.Len(t, lines, 3, "expected header + 2 data rows")
+		})
+
+		t.Run("reorder-columns", func(t *testing.T) {
+			foo := feed(t, f,
+				`CREATE CHANGEFEED WITH format=csv, csv_header, initial_scan_only AS SELECT c, a FROM csv_cdc`)
+			defer closeFeed(t, foo)
+
+			lines := readLines(t, foo, 2)
+			require.Equal(t, "c,a", lines[0], "header must match projection order")
+		})
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
+}
+
+// TestChangefeedCSVHeaderRowWebhook checks that WITH csv_header and batched
+// webhook_sink_config, each HTTP POST body begins with the CSV column header
+// as the first bytes, and that header appears only once per POST — not before
+// every row in the batch.
+func TestChangefeedCSVHeaderRowWebhook(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const wantHeader = "a,b"
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE csv_hdr (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO csv_hdr VALUES (1, 'x'), (2, 'y'), (3, 'z'), (4, 'w'), (5, 'u'), (6, 'v')`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR csv_hdr WITH format=csv, csv_header, initial_scan_only, webhook_sink_config='{"Flush":{"Messages":4,"Bytes":8192,"Frequency":"1h"},"Retry":{"Backoff":"5ms"}}'`)
+		defer closeFeed(t, foo)
+
+		var posts []string
+		for len(posts) < 2 {
+			m, err := foo.Next()
+			require.NoError(t, err)
+			posts = append(posts, string(m.Value))
+		}
+
+		for i := range posts {
+			require.True(t, strings.HasPrefix(posts[i], wantHeader),
+				"POST %d: first bytes must be the CSV column header %q", i, wantHeader)
+			require.Equal(t, 1, strings.Count(posts[i], wantHeader),
+				"POST %d: column header %q must appear exactly once (not before each row in the batch)", i, wantHeader)
+		}
+		require.Greater(t, len(posts[0]), len(posts[1]), "first batch (4 rows) should be larger than second (2 rows)")
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("webhook"))
+}
+
+// TestChangefeedMultiRowWebhookBatch verifies that the webhook test feed
+// returns every row when the webhook sink batches multiple rows into a
+// single POST. Real webhook sinks wrap batches as
+// {"payload":[r1,r2,...],"length":N}; the test feed must surface all N
+// rows when consumed via Next.
+func TestChangefeedMultiRowWebhookBatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+		// Frequency=1h keeps the batcher's timer from flushing partial
+		// batches before Messages is reached.
+		wf := feed(t, f,
+			`CREATE CHANGEFEED FOR foo `+
+				`WITH webhook_sink_config='{"Flush":{"Messages":4,"Frequency":"1h"}}'`)
+		defer closeFeed(t, wf)
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b'), (3, 'c'), (4, 'd')`)
+		assertPayloads(t, wf, []string{
+			`foo: [1]->{"after": {"a": 1, "b": "a"}}`,
+			`foo: [2]->{"after": {"a": 2, "b": "b"}}`,
+			`foo: [3]->{"after": {"a": 3, "b": "c"}}`,
+			`foo: [4]->{"after": {"a": 4, "b": "d"}}`,
+		})
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("webhook"))
 }
 
 // TestCloudstorageBufferedBytesMetric tests the metric which tracks the number
@@ -13727,11 +13872,12 @@ func (s *closeTrackingSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
+	csvColumnHeader []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 	headers rowHeaders,
 ) error {
-	return s.wrapped.EmitRow(ctx, topic, key, value, updated, mvcc, alloc, headers)
+	return s.wrapped.EmitRow(ctx, topic, key, value, csvColumnHeader, updated, mvcc, alloc, headers)
 }
 
 func (s *closeTrackingSink) Flush(ctx context.Context) error {

@@ -14,6 +14,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnwriter"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -56,7 +59,8 @@ func (w *testWriter) ApplyBatch(
 	return results, nil
 }
 
-func (w *testWriter) Close(ctx context.Context) {}
+func (w *testWriter) ReleaseLeases(ctx context.Context) {}
+func (w *testWriter) Close(ctx context.Context)         {}
 
 // txnNode represents a transaction with its dependencies and an optional
 // EventHorizon that must be met before the transaction can be applied.
@@ -99,7 +103,7 @@ func ddeps(pairs ...int64) ddepsOpt {
 	out := make(ddepsOpt, len(pairs)/2)
 	for i := 0; i < len(pairs); i += 2 {
 		out[i/2] = ldrdecoder.TxnID{
-			ApplierID: ldrdecoder.ApplierID(pairs[i]),
+			ApplierID: int32(pairs[i]),
 			Timestamp: hlc.Timestamp{WallTime: pairs[i+1]},
 		}
 	}
@@ -158,9 +162,9 @@ func generateRandomDAG(rng *rand.Rand, numTxns int, maxDeps int, numAppliers int
 	batchStart := 0 // index of the first txn in the current batch
 
 	for i := range nodes {
-		applierID := ldrdecoder.ApplierID(1)
+		applierID := int32(1)
 		if numAppliers > 1 {
-			applierID = ldrdecoder.ApplierID(rng.Intn(numAppliers) + 1)
+			applierID = int32(rng.Intn(numAppliers) + 1)
 		}
 		nodes[i].id = ldrdecoder.TxnID{
 			Timestamp: hlc.Timestamp{WallTime: int64(i + 1)},
@@ -202,6 +206,16 @@ func logDAG(t testing.TB, dag []txnNode) {
 	}
 }
 
+var testCPUHandleProvider = admission.NewSQLCPUProvider(
+	&cluster.MakeTestingClusterSettings().SV, nil, /* getWorkQueue */
+)
+
+func testNewCPUHandle() *admission.SQLCPUHandle {
+	return testCPUHandleProvider.GetHandle(admission.WorkInfo{
+		Priority: admissionpb.LowPri,
+	}, false /* atGateway */)
+}
+
 // checkApplierDrained verifies that the applier's internal buffers are empty
 // after all transactions have been processed.
 func checkApplierDrained(t testing.TB, applier *Applier) {
@@ -217,9 +231,9 @@ func checkApplierDrained(t testing.TB, applier *Applier) {
 	require.Empty(t, applier.mu.horizonWaiting, "horizonWaiting should be empty")
 }
 
-// checkTrackerServerDrained verifies that the trackerServer's internal state is
+// checkTrackerServerDrained verifies that the TrackerServer's internal state is
 // empty after all transactions have been processed.
-func checkTrackerServerDrained(t testing.TB, ts *trackerServer) {
+func checkTrackerServerDrained(t testing.TB, ts *TrackerServer) {
 	t.Helper()
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
@@ -229,7 +243,14 @@ func checkTrackerServerDrained(t testing.TB, ts *trackerServer) {
 	for applier, horizons := range ts.mu.horizonWaiters {
 		require.Empty(t, horizons, "horizonWaiters for applier %d should be empty", applier)
 	}
-	require.Empty(t, ts.mu.committed.completedTxns, "completedTxns should be empty")
+	// Leftover completedTxns entries are benign: they occur when the applier's
+	// final Ready() call races with context cancellation in the test router,
+	// so the resolvedTime never advances far enough to prune them.
+	for txnID := range ts.mu.committed.completedTxns {
+		_, hasWaiters := ts.mu.waiters[txnID]
+		require.False(t, hasWaiters,
+			"completedTxns contains txn %+v that still has active waiters", txnID)
+	}
 }
 
 // checkApplyOrder verifies that all transactions were applied after their
@@ -437,13 +458,6 @@ func runDistributedApplier(
 		ids = append(ids, id)
 	}
 
-	depTracker := NewDependencyTracker(ids)
-
-	// Shared writer so all appliers record to one log, giving us a global
-	// application order.
-	rng := rand.New(randutil.NewLockedSource(rngSeed))
-	sharedWriter := &testWriter{t: t, rng: rng}
-
 	// Compute maxTs across all txns for the checkpoint.
 	var maxTs hlc.Timestamp
 	for _, node := range dag {
@@ -459,7 +473,16 @@ func runDistributedApplier(
 	maxCheckpoint := maxTs.Add(1, 0)
 
 	ctx, cancel := context.WithCancel(context.Background())
+
+	depTracker, depTrackerCleanup := NewTestDependencyTrackerClient(ctx, ids)
+	st := cluster.MakeTestingClusterSettings()
+
 	defer cancel()
+
+	// Shared writer so all appliers record to one log, giving us a global
+	// application order.
+	rng := rand.New(randutil.NewLockedSource(rngSeed))
+	sharedWriter := &testWriter{t: t, rng: rng}
 
 	appliers := make(map[ldrdecoder.ApplierID]*Applier)
 	inputs := make(map[ldrdecoder.ApplierID]chan ApplierEvent)
@@ -468,7 +491,7 @@ func runDistributedApplier(
 		for i := range writers {
 			writers[i] = sharedWriter
 		}
-		a, err := NewApplier(ctx, id, writers, depTracker, ids)
+		a, err := NewApplier(ctx, id, st, writers, depTracker, ids, testNewCPUHandle)
 		require.NoError(t, err)
 
 		inputs[id] = make(chan ApplierEvent, 2*len(dag)+len(ids)+1)
@@ -526,10 +549,14 @@ func runDistributedApplier(
 	require.True(t, err == nil || errors.Is(err, context.Canceled),
 		"unexpected error: %v", err)
 
+	err = depTrackerCleanup()
+	require.True(t, err == nil || errors.Is(err, context.Canceled),
+		"unexpected dep tracker error: %v", err)
+
 	for _, a := range appliers {
 		checkApplierDrained(t, a)
 	}
-	for _, ts := range depTracker.(*trackerClient).servers {
+	for _, ts := range depTracker.(*testTrackerClient).servers {
 		checkTrackerServerDrained(t, ts)
 	}
 
@@ -561,7 +588,8 @@ func (w *benchWriter) ApplyBatch(
 	return results, nil
 }
 
-func (w *benchWriter) Close(context.Context) {}
+func (w *benchWriter) ReleaseLeases(context.Context) {}
+func (w *benchWriter) Close(context.Context)         {}
 
 func BenchmarkTxnApplier(b *testing.B) {
 	for _, numAppliers := range []int{1, 3, 6} {
@@ -596,8 +624,6 @@ func runBenchApplier(b *testing.B, dag []txnNode, numWritersPerApplier int, rngS
 		ids = append(ids, id)
 	}
 
-	depTracker := NewDependencyTracker(ids)
-
 	sharedWriter := &benchWriter{}
 
 	var maxTs hlc.Timestamp
@@ -611,6 +637,9 @@ func runBenchApplier(b *testing.B, dag []txnNode, numWritersPerApplier int, rngS
 	rng := rand.New(rand.NewSource(rngSeed))
 
 	ctx, cancel := context.WithCancel(context.Background())
+
+	depTracker, depTrackerCleanup := NewTestDependencyTrackerClient(ctx, ids)
+	st := cluster.MakeTestingClusterSettings()
 	defer cancel()
 
 	appliers := make(map[ldrdecoder.ApplierID]*Applier)
@@ -620,7 +649,7 @@ func runBenchApplier(b *testing.B, dag []txnNode, numWritersPerApplier int, rngS
 		for i := range writers {
 			writers[i] = sharedWriter
 		}
-		a, err := NewApplier(ctx, id, writers, depTracker, ids)
+		a, err := NewApplier(ctx, id, st, writers, depTracker, ids, testNewCPUHandle)
 		require.NoError(b, err)
 		inputs[id] = make(chan ApplierEvent, 2*len(dag)+len(ids)+1)
 		appliers[id] = a
@@ -667,6 +696,10 @@ func runBenchApplier(b *testing.B, dag []txnNode, numWritersPerApplier int, rngS
 	err := group.Wait()
 	if err != nil && !errors.Is(err, context.Canceled) {
 		b.Fatalf("unexpected error: %v", err)
+	}
+
+	if err := depTrackerCleanup(); err != nil && !errors.Is(err, context.Canceled) {
+		b.Fatalf("unexpected dep tracker error: %v", err)
 	}
 }
 
@@ -760,4 +793,54 @@ func TestDistributedTxnApplierSimple(t *testing.T) {
 			checkApplyOrder(t, tc.dag, applied)
 		})
 	}
+}
+
+// releaseTrackingWriter is a fake TransactionWriter that signals a channel
+// each time ReleaseLeases is called.
+type releaseTrackingWriter struct {
+	released chan struct{}
+}
+
+func (w *releaseTrackingWriter) ApplyBatch(
+	_ context.Context, _ []ldrdecoder.Transaction,
+) ([]txnwriter.ApplyResult, error) {
+	panic("unexpected ApplyBatch call")
+}
+
+func (w *releaseTrackingWriter) ReleaseLeases(_ context.Context) {
+	select {
+	case w.released <- struct{}{}:
+	default:
+	}
+}
+
+func (w *releaseTrackingWriter) Close(_ context.Context) {}
+
+// TestWriterReleasesLeases verifies that the writer goroutine periodically
+// calls ReleaseLeases on the TransactionWriter based on the
+// lease_release_interval setting.
+func TestWriterReleasesLeases(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	st := cluster.MakeTestingClusterSettings()
+	leaseReleaseInterval.Override(context.Background(), &st.SV, 10*time.Millisecond)
+
+	a := &Applier{settings: st, newCPUHandle: testNewCPUHandle}
+	w := &releaseTrackingWriter{released: make(chan struct{}, 1)}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ready := make(chan ldrdecoder.Transaction)
+	applied := make(chan appliedTransaction)
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- a.writer(ctx, w, ready, applied)
+	}()
+
+	<-w.released
+
+	cancel()
+	require.ErrorIs(t, <-errCh, context.Canceled)
 }

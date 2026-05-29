@@ -349,28 +349,33 @@ func PGWireFormatTimestamp(t time.Time, offset *time.Location, tmp []byte) (b []
 		return []byte("-infinity")
 	}
 
-	format := PGTimeStampFormatNoOffset
 	if offset != nil {
-		format = PGTimeStampFormat
-		if _, offsetSeconds := t.In(offset).Zone(); offsetSeconds%60 != 0 {
-			format += ":00:00"
-		} else if offsetSeconds%3600 != 0 {
-			format += ":00"
-		}
+		t = t.In(offset)
 	}
 
 	// Need to send dates before 0001 A.D. with " BC" suffix, instead of the
 	// minus sign preferred by Go.
 	// Beware, "0000" in ISO is "1 BC", "-0001" is "2 BC" and so on
-	if offset != nil {
-		t = t.In(offset)
-	}
-
 	bc := false
 	if t.Year() <= 0 {
 		// flip year sign, and add 1, e.g: "0" will be "1", and "-10" will be "11"
 		t = t.AddDate((-t.Year())*2+1, 0, 0)
 		bc = true
+	}
+
+	format := PGTimeStampFormatNoOffset
+	if offset != nil {
+		format = PGTimeStampFormat
+		// Compute the offset suffix using the post-flip time, since for BCE
+		// years some IANA zones (e.g. EST on modern tzdata) report an LMT
+		// offset that differs from the standard offset used for CE years.
+		// Using the post-flip offset keeps the suffix consistent with what
+		// AppendFormat will emit below.
+		if _, offsetSeconds := t.Zone(); offsetSeconds%60 != 0 {
+			format += ":00:00"
+		} else if offsetSeconds%3600 != 0 {
+			format += ":00"
+		}
 	}
 
 	b = t.AppendFormat(tmp, format)

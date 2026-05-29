@@ -59,11 +59,15 @@ func newMMAStoreRebalancer(
 	// Initialize disk utilization thresholds from cluster settings.
 	opts := allocatorimpl.MakeDiskCapacityOptions(&st.SV)
 	mma.SetDiskUtilThresholds(opts.RebalanceToThreshold, opts.ShedAndBlockAllThreshold)
+	as := s.cfg.AllocatorSync
+	if as == nil {
+		panic(errors.AssertionFailedf("AllocatorSync must be set on StoreConfig"))
+	}
 	return &mmaStoreRebalancer{
 		store:              (*mmaStore)(s),
 		mma:                mma,
 		st:                 st,
-		as:                 s.cfg.AllocatorSync,
+		as:                 as,
 		processTimeoutFunc: makeRateLimitedTimeoutFunc(rebalanceSnapshotRate),
 	}
 }
@@ -73,7 +77,7 @@ func newMMAStoreRebalancer(
 func (m *mmaStoreRebalancer) run(ctx context.Context, stopper *stop.Stopper) {
 	timer := time.NewTicker(jitteredInterval(allocator.LoadBasedRebalanceInterval.Get(&m.st.SV)))
 	defer timer.Stop()
-	log.KvDistribution.Infof(ctx, "starting multi-metric store rebalancer with mode=%v", kvserverbase.GetLoadBasedRebalancingMode(&m.st.SV))
+	log.KvDistribution.Infof(ctx, "starting multi-metric store rebalancer with mode=%v", kvserverbase.GetLoadBasedRebalancingMode(ctx, m.st))
 
 	for {
 		select {
@@ -85,7 +89,7 @@ func (m *mmaStoreRebalancer) run(ctx context.Context, stopper *stop.Stopper) {
 			// Wait out the first tick before doing anything since the store is still
 			// starting up and we might as well wait for some stats to accumulate.
 			timer.Reset(jitteredInterval(allocator.LoadBasedRebalanceInterval.Get(&m.st.SV)))
-			if !kvserverbase.LoadBasedRebalancingModeIsMMA(&m.st.SV) {
+			if !kvserverbase.LoadBasedRebalancingModeIsMMA(ctx, m.st) {
 				continue
 			}
 

@@ -155,14 +155,18 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 				}
 			}
 			if meta != nil {
-				streamingMeta = append(streamingMeta, *meta)
+				// Skip the always-on grunning emission from each worker
+				// goroutine; it is orthogonal to the test-induced metadata
+				// this test exercises.
+				if meta.Metrics == nil {
+					streamingMeta = append(streamingMeta, *meta)
+				}
 				continue
 			}
 			if b.Length() == 0 {
 				if terminationScenario == synchronizerGracefulTermination {
 					// Successful run, check that all inputs have returned metadata.
-					drainedMeta := s.DrainMeta()
-					meta := append(streamingMeta, drainedMeta...)
+					meta := append(streamingMeta, filterMetricsMeta(s.DrainMeta())...)
 					require.Equal(t, len(inputs), len(meta), "metadata length mismatch, returned metadata is: %v", meta)
 				}
 				break
@@ -170,8 +174,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 			batchesReturned++
 			if terminationScenario == synchronizerPrematureDrainMeta && batchesReturned < expectedBatchesReturned {
 				// Call DrainMeta before the input is finished.
-				drainedMeta := s.DrainMeta()
-				meta := append(streamingMeta, drainedMeta...)
+				meta := append(streamingMeta, filterMetricsMeta(s.DrainMeta())...)
 				// Make sure that all expected metadata is still propagated.
 				// Note that if the last input wasn't pre-emptied, then the
 				// error will not match.
@@ -239,7 +242,8 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 	for {
 		if err := colexecerror.CatchVectorizedRuntimeError(func() {
 			_, meta := s.Next()
-			if meta != nil {
+			// Skip the always-on grunning emission from each worker goroutine.
+			if meta != nil && meta.Metrics == nil {
 				streamingMeta = append(streamingMeta, *meta)
 			}
 		}); err != nil {
@@ -254,9 +258,23 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 	// properly drain their metadata sources. Notably, the error itself should
 	// not be propagated as metadata (i.e. we don't want it to be duplicated),
 	// but each input should produce a single metadata object.
-	require.Equal(t, len(inputs), len(streamingMeta)+len(s.DrainMeta()))
+	require.Equal(t, len(inputs), len(streamingMeta)+len(filterMetricsMeta(s.DrainMeta())))
 	// This is the crux of the test: assert that all inputs have finished.
 	require.Equal(t, len(inputs), int(atomic.LoadUint32(&s.numFinishedInputs)))
+}
+
+// filterMetricsMeta drops the always-on per-goroutine grunning emissions
+// (Metrics-only metadata) so tests that count test-induced metadata don't
+// have to account for the synchronizer's own instrumentation overhead.
+func filterMetricsMeta(meta []execinfrapb.ProducerMetadata) []execinfrapb.ProducerMetadata {
+	filtered := meta[:0]
+	for _, m := range meta {
+		if m.Metrics != nil && m.Err == nil {
+			continue
+		}
+		filtered = append(filtered, m)
+	}
+	return filtered
 }
 
 func BenchmarkParallelUnorderedSynchronizer(b *testing.B) {

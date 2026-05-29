@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/errors"
 	"github.com/petermattis/goid"
 )
@@ -37,9 +38,41 @@ var workStatePool = sync.Pool{
 	New: func() any { return &WorkState{} },
 }
 
-// activeWorkStates maps goroutine IDs to their work state.
-// This is a global map that the sampler reads from periodically.
-var activeWorkStates syncutil.Map[int64, WorkState]
+// numWorkStateShards is the number of shards used to partition
+// goroutine work states. Must be a power of two. Sharding reduces
+// contention on the underlying syncutil.Map mutexes when many goroutines
+// call SetWorkState concurrently on high-core machines; without it,
+// every Store hits the same mutex and dirty-map pointer, causing
+// cache-line invalidation cascades across cores.
+//
+// 32 shards keeps average contention at ~2 cores per shard on
+// 64-vCPU machines. On low-core machines the overhead is negligible:
+// shard selection is a single bitwise AND, each empty shard costs only
+// the syncutil.Map zero value, and rangeWorkStates iterates all shards
+// just once per second.
+const numWorkStateShards = 32
+
+// Compile-time assertion: numWorkStateShards must be a power of two.
+const _ = -uint(numWorkStateShards & (numWorkStateShards - 1))
+
+// workStateMapShard is a single shard of the work state map.
+type workStateMapShard struct {
+	m syncutil.Map[int64, WorkState]
+	// Padding ensures each shard occupies its own cache line, so that a
+	// write to one shard's mutex doesn't invalidate the cache line holding
+	// an adjacent shard's mutex on other cores.
+	_ [system.CacheLineSize]byte
+}
+
+// activeWorkStateShards partitions goroutine work states across N
+// shards, each with its own syncutil.Map. Shard assignment uses
+// goroutineID & (N-1).
+var activeWorkStateShards [numWorkStateShards]workStateMapShard
+
+// workStateShard returns the syncutil.Map shard for the given goroutine ID.
+func workStateShard(gid int64) *syncutil.Map[int64, WorkState] {
+	return &activeWorkStateShards[uint64(gid)&(numWorkStateShards-1)].m
+}
 
 // activeWorkStatesCount tracks the number of goroutines with an
 // active work state. It is incremented when a goroutine is first
@@ -98,7 +131,7 @@ func SetWorkState(
 		state.prev = nil
 		activeWorkStatesCount.Add(1)
 	}
-	activeWorkStates.Store(gid, state)
+	workStateShard(gid).Store(gid, state)
 
 	// In test builds, we panic if the closure is called from a different goroutine.
 	// It's unlikely, but better to catch improper usage of ASH API in tests.
@@ -134,7 +167,8 @@ func clearWorkState() {
 }
 
 func _clearWorkState(gid int64) {
-	state, ok := activeWorkStates.Load(gid)
+	shard := workStateShard(gid)
+	state, ok := shard.Load(gid)
 	if !ok {
 		return
 	}
@@ -144,9 +178,9 @@ func _clearWorkState(gid int64) {
 	// zeroes the struct anyway. We skip it to avoid a race with the
 	// sampler's concurrent *value copy in rangeWorkStates.
 	if prev != nil {
-		activeWorkStates.Store(gid, prev)
+		shard.Store(gid, prev)
 	} else {
-		activeWorkStates.Delete(gid)
+		shard.Delete(gid)
 		activeWorkStatesCount.Add(-1)
 	}
 	retireWorkState(state)
@@ -179,7 +213,7 @@ func reclaimRetiredWorkStates() {
 }
 
 func getWorkState(gid int64) (*WorkState, bool) {
-	return activeWorkStates.Load(gid)
+	return workStateShard(gid).Load(gid)
 }
 
 // rangeWorkStates iterates over all registered work states and then
@@ -191,8 +225,18 @@ func getWorkState(gid int64) (*WorkState, bool) {
 // The callback receives a copy of the WorkState to avoid data races
 // during iteration.
 func rangeWorkStates(fn func(gid int64, state WorkState) bool) {
-	activeWorkStates.Range(func(key int64, value *WorkState) bool {
-		return fn(key, *value)
-	})
+	for i := range activeWorkStateShards {
+		done := false
+		activeWorkStateShards[i].m.Range(func(key int64, value *WorkState) bool {
+			if !fn(key, *value) {
+				done = true
+				return false
+			}
+			return true
+		})
+		if done {
+			break
+		}
+	}
 	reclaimRetiredWorkStates()
 }

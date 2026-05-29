@@ -26,10 +26,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
-	// intentionally not all the workloads in pkg/ccl/workloadccl/allccl
+	// intentionally not all the workloads in pkg/workload/all
 	_ "github.com/cockroachdb/cockroach/pkg/workload/bank"       // registers workloads
 	_ "github.com/cockroachdb/cockroach/pkg/workload/bulkingest" // registers workloads
 	workloadcli "github.com/cockroachdb/cockroach/pkg/workload/cli"
+	_ "github.com/cockroachdb/cockroach/pkg/workload/cli/fixturescmd"    // registers fixtures command
 	_ "github.com/cockroachdb/cockroach/pkg/workload/debug"              // registers workloads
 	_ "github.com/cockroachdb/cockroach/pkg/workload/examples"           // registers workloads
 	_ "github.com/cockroachdb/cockroach/pkg/workload/insights"           // registers workloads
@@ -41,6 +42,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpch"               // registers workloads
 	_ "github.com/cockroachdb/cockroach/pkg/workload/ttlbench"           // registers workloads
 	_ "github.com/cockroachdb/cockroach/pkg/workload/ttllogger"          // registers workloads
+	_ "github.com/cockroachdb/cockroach/pkg/workload/uniqueindex"        // registers workloads
 	_ "github.com/cockroachdb/cockroach/pkg/workload/workload_generator" //registers workloads
 	_ "github.com/cockroachdb/cockroach/pkg/workload/ycsb"               // registers workloads
 	"github.com/cockroachdb/errors"
@@ -258,6 +260,7 @@ func init() {
 		nodeCmd,
 		nodeLocalCmd,
 		userFileCmd,
+		licenseCmd,
 
 		// Miscellaneous commands.
 		// TODO(pmattis): stats

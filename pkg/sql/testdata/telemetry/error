@@ -144,9 +144,9 @@ error: pq: division by zero
 errorcodes.22012
 
 feature-usage
-ALTER DOMAIN foo
+ALTER AGGREGATE foo
 ----
 error: pq: at or near "foo": syntax error: unimplemented: this syntax
 errorcodes.0A000
-unimplemented.alter domain
-unimplemented.syntax.alter domain
+unimplemented.#74775.alter aggregate
+unimplemented.syntax.#74775.alter aggregate

@@ -96,20 +96,21 @@ func init() {
 	)
 }
 
-// These rules ensure that a unique without index constraint with a column
-// name in its expression is cleaned up before the column name is dropped.
-// This is needed because unique without index constraints can have predicates
-// that reference columns by name.
+// Constraints whose stored expression text references a column by name
+// must be cleaned up before that column's ColumnName transitions to
+// ABSENT. The rule is scoped to the drop case to avoid a planner cycle
+// with transient variants used during multi-column rename.
 func init() {
-	registerDepRuleForDrop(
-		"unique without index constraint should be cleaned up before column name references",
+	registerDepRule(
+		"constraint with column-name references should be cleaned up before column name",
 		scgraph.Precedence,
 		"constraint", "referenced-column-name",
-		scpb.Status_ABSENT, scpb.Status_ABSENT,
 		func(from, to NodeVars) rel.Clauses {
 			fromColumnID := rel.Var("fromColumnID")
 			return rel.Clauses{
 				from.Type(
+					(*scpb.CheckConstraint)(nil),
+					(*scpb.CheckConstraintUnvalidated)(nil),
 					(*scpb.UniqueWithoutIndexConstraint)(nil),
 					(*scpb.UniqueWithoutIndexConstraintUnvalidated)(nil),
 				),
@@ -117,6 +118,7 @@ func init() {
 				to.Type((*scpb.ColumnName)(nil)),
 				to.El.AttrEqVar(screl.ColumnID, fromColumnID),
 				JoinOnDescID(from, to, "table-id"),
+				StatusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_ABSENT),
 			}
 		},
 	)

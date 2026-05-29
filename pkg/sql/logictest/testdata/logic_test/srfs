@@ -117,14 +117,19 @@ SELECT * FROM generate_series('2017-11-11 00:00:00'::TIMESTAMP, '2017-11-11 03:0
 ----
 generate_series
 
-query II colnames,rowsort
+# Duplicate SRF names in FROM without aliases now correctly errors,
+# matching Postgres behavior (#150532).
+query error pgcode 42712 source name "generate_series" specified more than once
 SELECT * FROM generate_series(1, 2), generate_series(1, 2)
+
+query II colnames,rowsort
+SELECT * FROM generate_series(1, 2) AS a, generate_series(1, 2) AS b
 ----
-generate_series  generate_series
-1                1
-1                2
-2                1
-2                2
+a  b
+1  1
+1  2
+2  1
+2  2
 
 query I colnames,nosort
 SELECT * FROM generate_series(3, 1, -1)
@@ -1467,3 +1472,110 @@ query T
 SELECT unnest('{}', '{}', '{3}'::int[]);
 ----
 (,,3)
+
+subtest srf_qualified_column_refs
+
+# Regression tests for #150532. SRF columns should be referenceable using the
+# function name as a data source qualifier, matching Postgres behavior.
+
+# Single-column SRF.
+query I
+SELECT generate_series.generate_series FROM generate_series(1, 3) ORDER BY 1
+----
+1
+2
+3
+
+# Multi-column SRF: qualified column reference.
+query T
+SELECT pg_get_keywords.word FROM pg_get_keywords() WHERE pg_get_keywords.word = 'select'
+----
+select
+
+# Multi-column SRF: qualified star.
+query TTT
+SELECT pg_get_keywords.* FROM pg_get_keywords() WHERE pg_get_keywords.word = 'select'
+----
+select  R  reserved
+
+# Schema-qualified invocation: the data source is the unqualified function name.
+query I
+SELECT generate_series.generate_series FROM pg_catalog.generate_series(1, 3) ORDER BY 1
+----
+1
+2
+3
+
+# Non-pg_catalog builtin: def.Name includes schema, but data source is
+# the unqualified function name only.
+query TI
+SELECT _pg_expandarray.x, _pg_expandarray.n
+FROM information_schema._pg_expandarray(ARRAY['a','b']) ORDER BY 2
+----
+a  1
+b  2
+
+# Different SRFs in FROM referenced by function name.
+query IT
+SELECT generate_series.generate_series, unnest.unnest
+FROM generate_series(1, 2), unnest(ARRAY['a', 'b']) ORDER BY 1, 2
+----
+1  a
+1  b
+2  a
+2  b
+
+# Single-column SRF with AS alias: alias overrides function name for both
+# column and table name.
+query I colnames
+SELECT gs FROM generate_series(1, 2) AS gs ORDER BY 1
+----
+gs
+1
+2
+
+# ROWS FROM with qualified reference using the function name.
+query I
+SELECT generate_series.generate_series FROM ROWS FROM(generate_series(1, 2)) ORDER BY 1
+----
+1
+2
+
+# Correlated SRF with qualified reference.
+statement ok
+CREATE TABLE jt_test (id INT PRIMARY KEY, j JSONB)
+
+statement ok
+INSERT INTO jt_test VALUES (1, '{"a": "x", "b": "y"}')
+
+query ITT rowsort
+SELECT jt_test.id, jsonb_each_text.key, jsonb_each_text.value
+FROM jt_test, jsonb_each_text(jt_test.j)
+----
+1  a  x
+1  b  y
+
+statement ok
+DROP TABLE jt_test
+
+# Table and SRF with the same name: the join succeeds but qualified
+# references are ambiguous. Aliasing the table resolves the ambiguity.
+statement ok
+CREATE TABLE unnest (x INT PRIMARY KEY);
+INSERT INTO unnest VALUES (1), (2)
+
+query error pgcode 42P09 ambiguous source name
+SELECT unnest.x FROM unnest, unnest(ARRAY[10])
+
+query II rowsort
+SELECT u.x, unnest.unnest FROM unnest AS u, unnest(ARRAY[10, 20])
+----
+1  10
+1  20
+2  10
+2  20
+
+statement ok
+DROP TABLE unnest
+
+subtest end

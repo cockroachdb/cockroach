@@ -196,7 +196,7 @@ func formatViewQueryForDisplay(
 	if err != nil {
 		log.Dev.Warningf(ctx, "error deserializing user defined types for view %s (%v): %+v",
 			desc.GetName(), desc.GetID(), err)
-		return desc.GetViewQuery(), nil
+		return string(desc.GetViewQuery()), nil
 	}
 
 	// Convert sequences referenced by ID in the view back to their names.
@@ -368,7 +368,7 @@ func formatViewQueryTypesForDisplay(
 			return true, expr, nil
 		}
 		formattedExpr, err := schemaexpr.FormatExprForDisplay(
-			ctx, desc, expr.String(), evalCtx, semaCtx, sessionData, tree.FmtParsable,
+			ctx, desc, catpb.Expression(expr.String()), evalCtx, semaCtx, sessionData, tree.FmtParsable,
 		)
 		if err != nil {
 			return false, expr, err
@@ -381,7 +381,7 @@ func formatViewQueryTypesForDisplay(
 	}
 
 	viewQuery := desc.GetViewQuery()
-	stmt, err := parser.ParseOne(viewQuery)
+	stmt, err := parser.ParseOne(string(viewQuery))
 	if err != nil {
 		return "", err
 	}

@@ -220,6 +220,12 @@ func WorkClassFromStoreWorkType(workType StoreWorkType) WorkClass {
 	return class
 }
 
+// ResourceGroupID identifies a resource group for admission control.
+type ResourceGroupID uint64
+
+// SafeValue implements redact.SafeValue.
+func (ResourceGroupID) SafeValue() {}
+
 // WorkClassFromPri translates a WorkPriority to its given WorkClass.
 func WorkClassFromPri(pri WorkPriority) WorkClass {
 	class := RegularWorkClass

@@ -31,6 +31,7 @@ go_library(
         "//pkg/util/metric",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "//pkg/util/system",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_petermattis_goid//:goid",
@@ -42,6 +43,7 @@ go_test(
     name = "ash_test",
     srcs = [
         "aggregate_test.go",
+        "bench_test.go",
         "buffer_test.go",
         "report_test.go",
         "sampler_test.go",

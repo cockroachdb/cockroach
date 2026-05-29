@@ -59,6 +59,7 @@ type GaugeVec struct {
 // names. The metadata is automatically registered so that the cmreader
 // can materialize this metric from the rangefeed.
 func NewGaugeVec(metadata metric.Metadata, labelNames ...string) *GaugeVec {
+	metadata.MetricType = prometheusgo.MetricType_GAUGE
 	ensureLabeledClusterMetricRegistered(metadata.Name, metadata, labelNames)
 	return &GaugeVec{
 		GaugeVec: metric.NewExportedGaugeVec(metadata, labelNames),
@@ -131,6 +132,7 @@ type CounterVec struct {
 // label names. The metadata is automatically registered so that the
 // cmreader can materialize this metric from the rangefeed.
 func NewCounterVec(metadata metric.Metadata, labelNames ...string) *CounterVec {
+	metadata.MetricType = prometheusgo.MetricType_COUNTER
 	ensureLabeledClusterMetricRegistered(metadata.Name, metadata, labelNames)
 	return &CounterVec{
 		CounterVec: metric.NewExportedCounterVec(metadata, labelNames),
@@ -209,6 +211,7 @@ type WriteStopwatchVec struct {
 func NewWriteStopwatchVec(
 	metadata metric.Metadata, timeSource timeutil.TimeSource, labelNames ...string,
 ) *WriteStopwatchVec {
+	metadata.MetricType = prometheusgo.MetricType_GAUGE
 	ensureLabeledClusterMetricRegistered(metadata.Name, metadata, labelNames)
 	return &WriteStopwatchVec{
 		GaugeVec:   metric.NewExportedGaugeVec(metadata, labelNames),
@@ -220,6 +223,12 @@ func NewWriteStopwatchVec(
 // given label set.
 func (v *WriteStopwatchVec) SetStartTime(labels map[string]string) {
 	v.GaugeVec.Update(labels, v.timeSource.Now().UnixNano())
+}
+
+// UpdateStartTime records the provided timestampNanos as the start time
+// for the given label set.
+func (v *WriteStopwatchVec) UpdateStartTime(labels map[string]string, timestampNanos int64) {
+	v.GaugeVec.Update(labels, timestampNanos)
 }
 
 // Each calls f for every child stopwatch.

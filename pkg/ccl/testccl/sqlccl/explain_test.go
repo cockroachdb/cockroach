@@ -202,6 +202,7 @@ func TestExplainGist(t *testing.T) {
 					"expected equivalence dependants to be its closure",                  // #119045
 					"argument expression has type RECORD, need type USER DEFINED RECORD", // #139910
 					"invalid datum type given: RECORD, expected RECORD",                  // #140773
+					"is a built-in type", // #164215
 				} {
 					if strings.Contains(err.Error(), knownErr) {
 						// Don't fail the test on a set of known errors.

@@ -716,6 +716,9 @@ func TestFlowControlRaftSnapshotV2(t *testing.T) {
 							return disableWorkQueueGranting.Load()
 						},
 					},
+					KVClient: &kvcoord.ClientTestingKnobs{
+						DontRandomizeLeaseholderOnCtxError: true,
+					},
 					RaftTransport: &kvserver.RaftTransportTestingKnobs{
 						OverrideIdleTimeout: func() time.Duration {
 							// Effectively disable token returns due to underlying
@@ -949,6 +952,9 @@ func TestFlowControlRaftMembershipV2(t *testing.T) {
 						DisableWorkQueueGranting: func() bool {
 							return disableWorkQueueGranting.Load()
 						},
+					},
+					KVClient: &kvcoord.ClientTestingKnobs{
+						DontRandomizeLeaseholderOnCtxError: true,
 					},
 					Server: &server.TestingKnobs{
 						WallClock: manualClock,
@@ -1337,6 +1343,9 @@ func TestFlowControlUnquiescedRangeV2(t *testing.T) {
 						DisableWorkQueueGranting: func() bool {
 							return disableWorkQueueGranting.Load()
 						},
+					},
+					KVClient: &kvcoord.ClientTestingKnobs{
+						DontRandomizeLeaseholderOnCtxError: true,
 					},
 					RaftTransport: &kvserver.RaftTransportTestingKnobs{
 						DisableFallbackFlowTokenDispatch: func() bool {
@@ -2926,6 +2935,9 @@ func TestFlowControlSendQueueRangeMigrate(t *testing.T) {
 						return disableWorkQueueGrantingServers[idx].Load()
 					},
 				},
+				KVClient: &kvcoord.ClientTestingKnobs{
+					DontRandomizeLeaseholderOnCtxError: true,
+				},
 			},
 		}
 	}
@@ -3380,6 +3392,9 @@ func TestFlowControlSendQueueRangeFeed(t *testing.T) {
 						idx := i
 						return disableWorkQueueGrantingServers[idx].Load()
 					},
+				},
+				KVClient: &kvcoord.ClientTestingKnobs{
+					DontRandomizeLeaseholderOnCtxError: true,
 				},
 			},
 		}

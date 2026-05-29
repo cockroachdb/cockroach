@@ -22,8 +22,49 @@ import (
 	"github.com/lib/pq/oid"
 )
 
+// QualifiedName identifies a table by name, and optionally by schema and
+// database. When Database is non-empty, pg_catalog and information_schema
+// queries are prefixed with the database name so they resolve correctly even
+// when the connection targets a different database.
+type QualifiedName struct {
+	// Table is the unqualified table name (e.g. "foo").
+	Table string
+	// Schema, when non-empty, is included between Database and Table
+	// (e.g. "public").
+	Schema string
+	// Database, when non-empty, is prepended to form a fully-qualified
+	// reference for DML and REGCLASS resolution (e.g. "mydb.public.foo"),
+	// and is also used to prefix pg_catalog and information_schema queries
+	// so schema introspection targets the correct database.
+	Database string
+}
+
+// catalogPrefix returns the database-qualified prefix for pg_catalog and
+// information_schema queries (e.g. "mydb."). Returns "" when the table is
+// in the connection's current database.
+func (n QualifiedName) catalogPrefix() string {
+	if n.Database == "" {
+		return ""
+	}
+	return n.Database + "."
+}
+
+// String returns the fully-qualified table name, joining whichever of
+// Database, Schema, and Table are set with dots.
+func (n QualifiedName) String() string {
+	var parts []string
+	if n.Database != "" {
+		parts = append(parts, n.Database)
+	}
+	if n.Schema != "" {
+		parts = append(parts, n.Schema)
+	}
+	parts = append(parts, n.Table)
+	return strings.Join(parts, ".")
+}
+
 type Table struct {
-	Name       string
+	Name       QualifiedName
 	Cols       []Col
 	PrimaryKey []int
 	// PrimaryKeyComponents is the set of columns that influence the primary key.
@@ -57,6 +98,25 @@ func (t *Table) RandomRow(rng *rand.Rand, nullPct int) ([]any, error) {
 		row = append(row, column)
 	}
 	return row, nil
+}
+
+// IndexableColumns returns the indices of columns with a type that can be
+// stored in an index. This is useful for things like fingerprinting, where we
+// can only tolerate types with a canonical encoding.
+func (t *Table) IndexableColumns() []int {
+	var columns []int
+	for i := range t.Cols {
+		switch t.Cols[i].DataType.Family() {
+		case types.TSVectorFamily,
+			types.TSQueryFamily,
+			types.JsonpathFamily,
+			types.PGVectorFamily,
+			types.RefCursorFamily:
+			continue
+		}
+		columns = append(columns, i)
+	}
+	return columns
 }
 
 func (t *Table) randomColumn(rng *rand.Rand, columnIndex int, nullPct int) (any, error) {
@@ -99,15 +159,20 @@ func (t *Table) MutateRow(rng *rand.Rand, nullPct int, prevRow []any) ([]any, er
 // `character_maximum_length` column is NULL, it means the column has
 // variable width and we set the width of the type to 0, which will
 // cause the random data generator to generate data with random width.
-func typeForOid(db *gosql.DB, typeOid oid.Oid, tableName, columnName string) (*types.T, error) {
+func typeForOid(
+	db *gosql.DB, typeOid oid.Oid, relid int, columnName string, catPrefix string,
+) (*types.T, error) {
 	datumType := *types.OidToType[typeOid]
 	if typeOid == oid.T_bit || typeOid == oid.T_char {
 		var width int32
 		if err := db.QueryRow(
-			`SELECT IFNULL(character_maximum_length, 0)
-			FROM information_schema.columns
-			WHERE table_name = $1 AND column_name = $2`,
-			tableName, columnName).Scan(&width); err != nil {
+			fmt.Sprintf(
+				`SELECT IFNULL(character_maximum_length, 0)
+				FROM %sinformation_schema.columns
+				JOIN %spg_catalog.pg_class ON pg_class.relname = table_name
+				WHERE pg_class.oid = $1 AND column_name = $2`,
+				catPrefix, catPrefix),
+			relid, columnName).Scan(&width); err != nil {
 			return nil, err
 		}
 
@@ -118,21 +183,22 @@ func typeForOid(db *gosql.DB, typeOid oid.Oid, tableName, columnName string) (*t
 }
 
 // LoadTable loads a table's schema from the database.
-func LoadTable(conn *gosql.DB, tableName string) (_ Table, retErr error) {
+func LoadTable(conn *gosql.DB, tableName QualifiedName) (_ Table, retErr error) {
+	catPrefix := tableName.catalogPrefix()
+
 	var relid int
-	sqlName := tree.Name(tableName)
-	if err := conn.QueryRow("SELECT $1::REGCLASS::OID", sqlName.String()).Scan(&relid); err != nil {
-		return Table{}, err
+	if err := conn.QueryRow("SELECT $1::REGCLASS::OID", tableName.String()).Scan(&relid); err != nil {
+		return Table{}, errors.Wrapf(err, "resolving REGCLASS OID for %s", tableName)
 	}
 
-	rows, err := conn.Query(`
+	rows, err := conn.Query(fmt.Sprintf(`
 SELECT attname, atttypid, adsrc, NOT attnotnull, attgenerated != '', pg_get_expr(adbin, adrelid) as expression
-FROM pg_catalog.pg_attribute
-LEFT JOIN pg_catalog.pg_attrdef
+FROM %spg_catalog.pg_attribute
+LEFT JOIN %spg_catalog.pg_attrdef
 	ON attrelid=adrelid AND attnum=adnum
-WHERE attrelid=$1 AND NOT attisdropped`, relid)
+WHERE attrelid=$1 AND NOT attisdropped`, catPrefix, catPrefix), relid)
 	if err != nil {
-		return Table{}, err
+		return Table{}, errors.Wrapf(err, "querying columns for %s", tableName)
 	}
 	defer func() { retErr = errors.CombineErrors(retErr, rows.Close()) }()
 	var cols []Col
@@ -145,11 +211,11 @@ WHERE attrelid=$1 AND NOT attisdropped`, relid)
 
 		var typOid int
 		if err := rows.Scan(&c.Name, &typOid, &c.CDefault, &c.IsNullable, &c.IsComputed, &c.Expression); err != nil {
-			return Table{}, err
+			return Table{}, errors.Wrapf(err, "scanning column row for %s", tableName)
 		}
-		c.DataType, err = typeForOid(conn, oid.Oid(typOid), tableName, c.Name)
+		c.DataType, err = typeForOid(conn, oid.Oid(typOid), relid, c.Name, catPrefix)
 		if err != nil {
-			return Table{}, err
+			return Table{}, errors.Wrapf(err, "resolving type for column %s in %s", c.Name, tableName)
 		}
 		if c.CDefault.String == "unique_rowid()" { // skip
 			continue
@@ -162,11 +228,11 @@ WHERE attrelid=$1 AND NOT attisdropped`, relid)
 	}
 
 	if numCols == 0 {
-		return Table{}, errors.New("no columns detected")
+		return Table{}, errors.Newf("no columns detected for %s", tableName)
 	}
 
 	if err = rows.Err(); err != nil {
-		return Table{}, err
+		return Table{}, errors.Wrapf(err, "iterating columns for %s", tableName)
 	}
 
 	t := Table{
@@ -174,22 +240,21 @@ WHERE attrelid=$1 AND NOT attisdropped`, relid)
 		Cols: cols,
 	}
 
-	rows, err = conn.Query(
-		`
+	rows, err = conn.Query(fmt.Sprintf(`
 SELECT a.attname
-FROM   pg_index i
-JOIN   pg_attribute a ON a.attrelid = i.indrelid
+FROM   %spg_catalog.pg_index i
+JOIN   %spg_catalog.pg_attribute a ON a.attrelid = i.indrelid
 					AND a.attnum = ANY(i.indkey)
 WHERE  i.indrelid = $1
-AND    i.indisprimary`, relid)
+AND    i.indisprimary`, catPrefix, catPrefix), relid)
 	if err != nil {
-		return Table{}, err
+		return Table{}, errors.Wrapf(err, "querying primary key for %s", tableName)
 	}
 	defer func() { retErr = errors.CombineErrors(retErr, rows.Close()) }()
 	for rows.Next() {
 		var colname string
 		if err := rows.Scan(&colname); err != nil {
-			return Table{}, err
+			return Table{}, errors.Wrapf(err, "scanning primary key column for %s", tableName)
 		}
 		for i, c := range cols {
 			if c.Name == colname {
@@ -198,7 +263,7 @@ AND    i.indisprimary`, relid)
 		}
 	}
 	if err = rows.Err(); err != nil {
-		return Table{}, err
+		return Table{}, errors.Wrapf(err, "iterating primary key for %s", tableName)
 	}
 
 	t.PrimaryKeyComponents = make(map[int]bool)

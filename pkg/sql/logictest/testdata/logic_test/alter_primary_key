@@ -881,7 +881,9 @@ t  CREATE TABLE public.t (
      FAMILY fam_1_y (y)
    );
 
-# The declarative schema changer leaves behind an index on the old primary key column.
+# Regression for #168748: when DROP CONSTRAINT <pk> and ADD PRIMARY KEY appear
+# in the same statement, the DSC must not preserve the old PK as a unique
+# secondary index.
 skipif config local-legacy-schema-changer
 query TT
 SHOW CREATE t
@@ -890,7 +892,6 @@ t  CREATE TABLE public.t (
      x INT8 NOT NULL,
      y INT8 NOT NULL,
      CONSTRAINT t_pkey PRIMARY KEY (y ASC),
-     UNIQUE INDEX t_x_key (x ASC),
      FAMILY fam_0_x (x),
      FAMILY fam_1_y (y)
    );
@@ -1103,8 +1104,7 @@ t  CREATE TABLE public.t (
      x INT8 NOT NULL,
      y INT8 NOT NULL,
      z INT8 NULL AS (x + 1:::INT8) STORED,
-     CONSTRAINT t_pkey PRIMARY KEY (y ASC),
-     UNIQUE INDEX t_x_key (x ASC)
+     CONSTRAINT t_pkey PRIMARY KEY (y ASC)
    );
 
 subtest create_table_change_pk

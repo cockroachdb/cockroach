@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
@@ -264,6 +265,17 @@ func TestServerQueryCombinedBatchReducesKVRPCs(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var tsBatchCount atomic.Int64
+	// isTSRead reports whether the request reads from the timeseries keyspace.
+	// The background ts poller writes metrics via Merge requests on the same
+	// keyspace; filtering by request type prevents a poll inflating the count.
+	isTSRead := func(ru kvpb.RequestUnion) bool {
+		inner := ru.GetInner()
+		switch inner.(type) {
+		case *kvpb.GetRequest, *kvpb.ScanRequest:
+			return bytes.HasPrefix(inner.Header().Key, keys.TimeseriesPrefix)
+		}
+		return false
+	}
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 		Knobs: base.TestingKnobs{
@@ -273,10 +285,7 @@ func TestServerQueryCombinedBatchReducesKVRPCs(t *testing.T) {
 					_ context.Context, req *kvpb.BatchRequest,
 				) *kvpb.Error {
 					for _, ru := range req.Requests {
-						if bytes.HasPrefix(
-							ru.GetInner().Header().Key,
-							keys.TimeseriesPrefix,
-						) {
+						if isTSRead(ru) {
 							tsBatchCount.Add(1)
 							break
 						}
@@ -823,6 +832,11 @@ func TestServerQueryTenant(t *testing.T) {
 	hostMetricName := "sys.rss"
 	// This is a store-level metric identified by isStoreTenantMetric.
 	storeMetricName := "cr.store.livebytes"
+	// Histogram metrics are stored in TSDB with quantile suffixes (e.g. "-p99")
+	// but registered under their base name. This tests that TenantServer.Query
+	// correctly strips the suffix before the registry lookup.
+	histogramBaseName := "sql.service.latency"
+	histogramSuffixedName := histogramBaseName + "-p99"
 
 	// Populate data directly. Aggregate sources ("1", "10") contain the sum
 	// of all tenants' data. Per-tenant sources ("1-2", "10-2") track tenant 2's
@@ -943,6 +957,36 @@ func TestServerQueryTenant(t *testing.T) {
 				{
 					TimestampNanos: 500 * 1e9,
 					Value:          20.0,
+				},
+			},
+		},
+		// Histogram metric with quantile suffix. Same aggregate/per-tenant
+		// pattern: aggregate "1" = 500, per-tenant "1-2" = 50.
+		{
+			Name:   histogramSuffixedName,
+			Source: "1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{
+					TimestampNanos: 400 * 1e9,
+					Value:          500.0,
+				},
+				{
+					TimestampNanos: 500 * 1e9,
+					Value:          600.0,
+				},
+			},
+		},
+		{
+			Name:   histogramSuffixedName,
+			Source: "1-2",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{
+					TimestampNanos: 400 * 1e9,
+					Value:          50.0,
+				},
+				{
+					TimestampNanos: 500 * 1e9,
+					Value:          60.0,
 				},
 			},
 		},
@@ -1272,6 +1316,41 @@ func TestServerQueryTenant(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, expectedTenantHostMetricsResponse, tenantResponse)
+
+	// We should get back the histogram data for the tenant.
+	expectedTenantHistogramResponse := &tspb.TimeSeriesQueryResponse{
+		Results: []tspb.TimeSeriesQueryResponse_Result{
+			{
+				Query: tspb.Query{
+					Name:     histogramSuffixedName,
+					Sources:  []string{"1"},
+					TenantID: tenantID,
+				},
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					{
+						TimestampNanos: 400 * 1e9,
+						Value:          50.0,
+					},
+					{
+						TimestampNanos: 500 * 1e9,
+						Value:          60.0,
+					},
+				},
+			},
+		},
+	}
+	tenantHistogramResponse, err := tenantClient.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 400 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries: []tspb.Query{
+			{
+				Name:    histogramSuffixedName,
+				Sources: []string{"1"},
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, expectedTenantHistogramResponse, tenantHistogramResponse)
 }
 
 // TestServerQueryMemoryManagement verifies that queries succeed under
@@ -1500,16 +1579,24 @@ func TestServerDump(t *testing.T) {
 	}
 }
 
+// TestServerDumpChildMetrics covers the dump path's handling of labeled child
+// metrics. For each base in tsutil.AllowedChildMetrics, the server runs a
+// 1m-resolution scan keyed on the base after stripping any histogram suffix
+// from the requested names. The span [base, base|) covers labeled
+// counters/gauges ("base{labels}") and labeled histogram children
+// ("base{labels}-anysuffix") in a single pass, since '{' (0x7B) > '-' (0x2D).
+//
+// Cases exercise non-histogram counters, histogram-suffixed names (which the
+// CLI expands per quantile), allow-list misses (no scan should occur), and
+// dedup across multiple suffixes that share a base (the scan must run once).
 func TestServerDumpChildMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		// For now, direct access to the tsdb is reserved to the storage layer.
 		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableTimeSeriesMaintenanceQueue: true,
@@ -1519,115 +1606,171 @@ func TestServerDumpChildMetrics(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	tsdb := s.TsDB().(*ts.DB)
-
-	// Store parent metric (without labels)
-	parentMetric := "cr.node.changefeed.emitted_messages"
-	if err := tsdb.StoreData(ctx, ts.Resolution10s, []tspb.TimeSeriesData{
-		{
-			Name:   parentMetric,
-			Source: "1",
-			Datapoints: []tspb.TimeSeriesDatapoint{
-				{TimestampNanos: 100 * 1e9, Value: 1000.0},
-				{TimestampNanos: 200 * 1e9, Value: 2000.0},
-			},
-		},
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	// Store child metrics (with labels encoded in name)
-	childMetric1 := fmt.Sprintf(`%s{feed_id="123",scope="default"}`, parentMetric)
-	childMetric2 := fmt.Sprintf(`%s{feed_id="456",scope="system"}`, parentMetric)
-	if err := tsdb.StoreData(ctx, ts.Resolution1m, []tspb.TimeSeriesData{
-		{
-			Name:   childMetric1,
-			Source: "1",
-			Datapoints: []tspb.TimeSeriesDatapoint{
-				{TimestampNanos: 100 * 1e9, Value: 500.0},
-				{TimestampNanos: 200 * 1e9, Value: 1500.0},
-			},
-		},
-		{
-			Name:   childMetric2,
-			Source: "1",
-			Datapoints: []tspb.TimeSeriesDatapoint{
-				{TimestampNanos: 100 * 1e9, Value: 300.0},
-				{TimestampNanos: 200 * 1e9, Value: 800.0},
-			},
-		},
-	}); err != nil {
-		t.Fatal(err)
-	}
-
 	conn := s.RPCClientConn(t, username.RootUserName())
 	client := conn.NewTimeSeriesClient()
 
-	t.Run("includes child metrics", func(t *testing.T) {
-		dumpClient, err := client.Dump(ctx, &tspb.DumpRequest{
-			Names:      []string{parentMetric},
+	// store writes a single-datapoint series at the given resolution.
+	store := func(name string, res ts.Resolution) {
+		require.NoError(t, tsdb.StoreData(ctx, res, []tspb.TimeSeriesData{{
+			Name:   name,
+			Source: "1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 100 * 1e9, Value: 1.0},
+			},
+		}}))
+	}
+
+	// suffixed returns base appended with each HistogramMetricComputers suffix
+	// -- the shape the CLI sends for histogram metrics.
+	suffixed := func(base string) []string {
+		out := make([]string, 0, len(metric.HistogramMetricComputers))
+		for _, c := range metric.HistogramMetricComputers {
+			out = append(out, base+c.Suffix)
+		}
+		return out
+	}
+
+	// labeledSuffixed returns one "base{labels}suffix" per histogram suffix --
+	// labels appear before the suffix, matching how labeled histogram children
+	// are stored in production.
+	labeledSuffixed := func(base, labels string) []string {
+		out := make([]string, 0, len(metric.HistogramMetricComputers))
+		for _, c := range metric.HistogramMetricComputers {
+			out = append(out, base+labels+c.Suffix)
+		}
+		return out
+	}
+
+	// counterBase and histogramBase must be in tsutil.AllowedChildMetrics;
+	// nonAllowedBase must not.
+	const (
+		counterBase    = "cr.node.changefeed.emitted_messages"
+		histogramBase  = "cr.node.changefeed.sink_backpressure_nanos"
+		nonAllowedBase = "cr.node.sql.bytesin"
+	)
+
+	tests := []struct {
+		name string
+		// setup populates tsdb with the series this case needs.
+		setup func()
+		// requestNames is sent in DumpRequest.Names.
+		requestNames []string
+		// expectedPresent must each appear exactly once in the dump output.
+		// More than once indicates a missing dedup or repeated scan.
+		expectedPresent []string
+		// expectedAbsent must not appear in the dump output.
+		expectedAbsent []string
+	}{
+		{
+			name: "non-histogram counter with labeled children",
+			setup: func() {
+				store(counterBase, ts.Resolution10s)
+				store(counterBase+`{feed_id="123",scope="default"}`, ts.Resolution1m)
+				store(counterBase+`{feed_id="456",scope="system"}`, ts.Resolution1m)
+			},
+			requestNames: []string{counterBase},
+			expectedPresent: []string{
+				counterBase,
+				counterBase + `{feed_id="123",scope="default"}`,
+				counterBase + `{feed_id="456",scope="system"}`,
+			},
+		},
+		{
+			name: "histogram with labeled children at every suffix",
+			setup: func() {
+				for _, n := range suffixed(histogramBase) {
+					store(n, ts.Resolution10s)
+				}
+				for _, n := range labeledSuffixed(histogramBase, `{scope="default"}`) {
+					store(n, ts.Resolution1m)
+				}
+			},
+			requestNames:    suffixed(histogramBase),
+			expectedPresent: labeledSuffixed(histogramBase, `{scope="default"}`),
+		},
+		{
+			name: "non-allow-listed metric: labeled children are not scanned",
+			setup: func() {
+				store(nonAllowedBase, ts.Resolution10s)
+				store(nonAllowedBase+`{app="foo"}`, ts.Resolution1m)
+			},
+			requestNames:    []string{nonAllowedBase},
+			expectedPresent: []string{nonAllowedBase},
+			expectedAbsent:  []string{nonAllowedBase + `{app="foo"}`},
+		},
+		{
+			name: "dedup: multiple suffixes sharing a base scan once",
+			setup: func() {
+				// Distinct labels from the histogram case so we can attribute
+				// any duplicates to this case's request shape rather than to
+				// data left over from earlier subtests.
+				for _, n := range labeledSuffixed(histogramBase, `{scope="dedup"}`) {
+					store(n, ts.Resolution1m)
+				}
+			},
+			// One request per histogram suffix, all sharing histogramBase.
+			// Each labeled child must appear exactly once -- a count > 1 means
+			// the seenBases dedup is broken and the 1m scan ran multiple times.
+			requestNames:    suffixed(histogramBase),
+			expectedPresent: labeledSuffixed(histogramBase, `{scope="dedup"}`),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.setup()
+
+			stream, err := client.Dump(ctx, &tspb.DumpRequest{
+				Names:      tc.requestNames,
+				StartNanos: 100 * 1e9,
+				EndNanos:   300 * 1e9,
+			})
+			require.NoError(t, err)
+
+			counts := make(map[string]int)
+			for {
+				msg, err := stream.Recv()
+				if err == io.EOF {
+					break
+				}
+				require.NoError(t, err)
+				counts[msg.Name]++
+			}
+
+			for _, name := range tc.expectedPresent {
+				require.Equalf(t, 1, counts[name],
+					"expected %q exactly once, got %d", name, counts[name])
+			}
+			for _, name := range tc.expectedAbsent {
+				require.Zerof(t, counts[name],
+					"did not expect %q in dump output", name)
+			}
+		})
+	}
+
+	// Smoke-test the DumpRaw streaming path. Both Dump and DumpRaw share
+	// dumpImpl, so the table above already exercises the lookup logic; this
+	// subtest only confirms that labeled child KVs survive the raw RPC path.
+	t.Run("DumpRaw streams labeled child KVs", func(t *testing.T) {
+		stream, err := client.DumpRaw(ctx, &tspb.DumpRequest{
+			Names:      []string{counterBase},
 			StartNanos: 100 * 1e9,
 			EndNanos:   300 * 1e9,
 		})
 		require.NoError(t, err)
 
-		resultMap := make(map[string][]tspb.TimeSeriesDatapoint)
+		var sawLabeled bool
 		for {
-			msg, err := dumpClient.Recv()
+			kv, err := stream.Recv()
 			if err == io.EOF {
 				break
 			}
 			require.NoError(t, err)
-			resultMap[msg.Name] = append(resultMap[msg.Name], msg.Datapoints...)
-		}
-
-		// Should have parent metric AND both child metrics
-		require.Contains(t, resultMap, parentMetric, "parent metric should be included")
-		require.Contains(t, resultMap, childMetric1, "child metric 1 should be included")
-		require.Contains(t, resultMap, childMetric2, "child metric 2 should be included")
-		require.Equal(t, 3, len(resultMap), "should have parent and both child metrics")
-
-		// Verify data correctness for parent metric
-		require.Len(t, resultMap[parentMetric], 2, "parent metric should have 2 datapoints")
-		require.Equal(t, 1000.0, resultMap[parentMetric][0].Value)
-		require.Equal(t, 2000.0, resultMap[parentMetric][1].Value)
-
-		// Verify data correctness for child metrics
-		require.Len(t, resultMap[childMetric1], 2, "child metric 1 should have 2 datapoints")
-		require.Equal(t, 500.0, resultMap[childMetric1][0].Value)
-		require.Equal(t, 1500.0, resultMap[childMetric1][1].Value)
-
-		require.Len(t, resultMap[childMetric2], 2, "child metric 2 should have 2 datapoints")
-		require.Equal(t, 300.0, resultMap[childMetric2][0].Value)
-		require.Equal(t, 800.0, resultMap[childMetric2][1].Value)
-	})
-
-	t.Run("DumpRaw sees child metrics", func(t *testing.T) {
-		dumpRawClient, err := client.DumpRaw(ctx, &tspb.DumpRequest{
-			Names:      []string{parentMetric},
-			StartNanos: 100 * 1e9,
-			EndNanos:   300 * 1e9,
-		})
-		require.NoError(t, err)
-
-		var kvCount int
-		seenMetrics := make(map[string]bool)
-		for {
-			kv, err := dumpRawClient.Recv()
-			if err == io.EOF {
-				break
-			}
-			require.NoError(t, err)
-			kvCount++
-			// Decode the key to verify it contains child metrics
-			// The key contains the encoded metric name
-			keyStr := string(kv.Key)
-			if strings.Contains(keyStr, "{") {
-				seenMetrics["child"] = true
+			if strings.Contains(string(kv.Key), "{") {
+				sawLabeled = true
 			}
 		}
-
-		require.Greater(t, kvCount, 0, "should have raw KVs")
-		require.True(t, seenMetrics["child"], "should have seen child metrics in raw dump")
+		require.True(t, sawLabeled, "DumpRaw should stream labeled child KVs")
 	})
 }
 

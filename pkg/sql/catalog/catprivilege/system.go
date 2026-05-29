@@ -87,10 +87,12 @@ var (
 		catconstants.AdvisoryLocksTableName,
 		catconstants.ClusterMetricsTableName,
 		catconstants.StatementsTableName,
+		catconstants.ResourceGroupsTableName,
 	}
 
 	readWriteSystemSequences = []catconstants.SystemTableName{
 		catconstants.RoleIDSequenceName,
+		catconstants.ResourceGroupIDSequenceName,
 	}
 
 	systemSuperuserPrivileges = func() map[descpb.NameInfo]privilege.List {

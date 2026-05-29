@@ -12,7 +12,13 @@ common_support_remove_files_on_exit() {
 }
 
 log_into_gcloud() {
-  if [[ "${google_credentials}" ]]; then
+  # When running under Workload Identity Federation (e.g. GitHub Actions), gcloud
+  # is already authenticated via CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE or
+  # GOOGLE_APPLICATION_CREDENTIALS set by the google-github-actions/auth action.
+  if [[ -n "${CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE:-}" ]]; then
+    return
+  fi
+  if [[ "${google_credentials:-}" ]]; then
     echo "${google_credentials}" > .google-credentials.json
     gcloud auth activate-service-account --key-file=.google-credentials.json
   else

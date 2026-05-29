@@ -155,6 +155,17 @@ func TestTemporaryObjectCleaner(t *testing.T) {
 				UseDatabase: "defaultdb",
 				Knobs:       knobs,
 				Settings:    settings,
+				// With an auto-injected virtual cluster, both the system tenant
+				// and the application layer run a TemporaryObjectCleaner per
+				// pod. They share the TempObjectsCleanupCh testing knob, and
+				// the application-layer cleaners run concurrently with no
+				// coordination — exposing a race where a cleaner with a stale
+				// SQL instance reader cache deletes the still-active session's
+				// temp schema. See #169912 for the underlying production race;
+				// disable VC injection here so this test exercises only the
+				// meta1-leaseholder-gated system tenant path it was written
+				// for.
+				DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(169912),
 			},
 		},
 	)

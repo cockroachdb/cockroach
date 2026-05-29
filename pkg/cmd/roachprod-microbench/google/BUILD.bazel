@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "google",
@@ -8,11 +8,24 @@ go_library(
     deps = [
         "//pkg/cmd/roachprod-microbench/model",
         "//pkg/cmd/roachprod-microbench/util",
+        "//pkg/util/retry",
         "@com_github_cockroachdb_errors//:errors",
         "@org_golang_google_api//drive/v3:drive",
         "@org_golang_google_api//googleapi",
         "@org_golang_google_api//option",
         "@org_golang_google_api//sheets/v4:sheets",
         "@org_golang_x_exp//maps",
+    ],
+)
+
+go_test(
+    name = "google_test",
+    srcs = ["service_test.go"],
+    embed = [":google"],
+    deps = [
+        "//pkg/util/retry",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_google_api//googleapi",
     ],
 )

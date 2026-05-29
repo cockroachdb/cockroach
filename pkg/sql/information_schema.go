@@ -485,8 +485,12 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 					collationSchema = pgCatalogNameDString
 					collationName = tree.NewDString(locale)
 				}
+				// Identity columns must not report a column_default; the
+				// implicit nextval default is replaced by the identity
+				// property, which is reported in identity_generation,
+				// identity_start, and identity_increment instead.
 				colDefault := tree.DNull
-				if column.HasDefault() {
+				if column.HasDefault() && !column.IsGeneratedAsIdentity() {
 					colExpr, err := schemaexpr.FormatExprForDisplay(
 						ctx, table, column.GetDefaultExpr(), p.EvalContext(), &p.semaCtx, p.SessionData(), tree.FmtParsableNumerics,
 					)
@@ -1006,7 +1010,7 @@ https://www.postgresql.org/docs/9.5/infoschema-referential-constraints.html`,
 				if r, ok := matchOptionMap[fk.Match()]; ok {
 					matchType = r
 				}
-				refConstraint, err := catalog.FindFKReferencedUniqueConstraint(refTable, fk)
+				refConstraint, err := catalog.FindFKReferencedUniqueConstraint(refTable, fk, true /* considerSubsets */)
 				if err != nil {
 					return err
 				}
@@ -1737,16 +1741,16 @@ https://www.postgresql.org/docs/9.5/infoschema-views.html`,
 				// TODO(a-robinson): Insert column aliases into view query once we
 				// have a semantic query representation to work with (#10083).
 				return addRow(
-					tree.NewDString(db.GetName()),         // table_catalog
-					tree.NewDString(sc.GetName()),         // table_schema
-					tree.NewDString(table.GetName()),      // table_name
-					tree.NewDString(table.GetViewQuery()), // view_definition
-					tree.DNull,                            // check_option
-					noString,                              // is_updatable
-					noString,                              // is_insertable_into
-					noString,                              // is_trigger_updatable
-					noString,                              // is_trigger_deletable
-					noString,                              // is_trigger_insertable_into
+					tree.NewDString(db.GetName()),                 // table_catalog
+					tree.NewDString(sc.GetName()),                 // table_schema
+					tree.NewDString(table.GetName()),              // table_name
+					tree.NewDString(string(table.GetViewQuery())), // view_definition
+					tree.DNull, // check_option
+					noString,   // is_updatable
+					noString,   // is_insertable_into
+					noString,   // is_trigger_updatable
+					noString,   // is_trigger_deletable
+					noString,   // is_trigger_insertable_into
 				)
 			})
 	},
@@ -2480,7 +2484,7 @@ https://www.postgresql.org/docs/current/infoschema-triggers.html`,
 						// Handle action condition (WHEN clause).
 						var actionCondition tree.Datum = tree.DNull
 						if trigger.WhenExpr != "" {
-							actionCondition = tree.NewDString(trigger.WhenExpr)
+							actionCondition = tree.NewDString(string(trigger.WhenExpr))
 						}
 
 						// Handle transition table names

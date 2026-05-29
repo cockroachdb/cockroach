@@ -170,73 +170,6 @@ func (og *operationGenerator) sequenceHasDependencies(
 	)`, seqName.Object(), seqName.Schema())
 }
 
-func (og *operationGenerator) columnIsDependedOn(
-	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName tree.Name, includeFKs bool,
-) (bool, error) {
-	// To see if a column is depended on, the ordinal_position of the column is looked up in
-	// information_schema.columns. Then, this position is used to see if that column has view dependencies
-	// or foreign key dependencies which would be stored in crdb_internal.forward_dependencies and
-	// pg_catalog.pg_constraint respectively.
-	//
-	// crdb_internal.forward_dependencies.dependedonby_details is an array of ordinal positions
-	// stored as a list of numbers in a string (e.g. "Columns=[1 2]" or
-	// "Columns=[1 2], TriggerID=3"), so SQL functions are used to parse these values into
-	// arrays. unnest is used to flatten rows with this column of array type into multiple
-	// rows, so performing unions and joins is easier.
-	//
-	// To check if any foreign key references exist to this table, we use pg_constraint
-	// and check if any columns are dependent. We check both confrelid (table is referenced)
-	// and self-referential foreign keys (where conrelid = confrelid).
-	return og.scanBool(ctx, tx, `SELECT EXISTS(
-		SELECT source.column_id
-			FROM (
-			   SELECT DISTINCT column_id
-			     FROM (
-			           SELECT unnest(
-			                   string_to_array(
-			                    NULLIF(
-			                     rtrim(
-			                      ltrim(
-			                       split_part(fd.dependedonby_details, ', TriggerID=', 1),
-			                       'Columns:= ['
-			                      ),
-			                      ']'
-			                     ),
-			                     ''
-			                    ),
-			                    ' '
-			                   )::INT8[]
-			                  ) AS column_id
-			             FROM crdb_internal.forward_dependencies
-			                   AS fd
-			            WHERE fd.descriptor_id
-			                  = $1::REGCLASS
-                    AND fd.dependedonby_type != 'sequence'
-										AND ($5::BOOL || fd.dependedonby_type != 'fk')
-			          )
-			   UNION  (
-			           SELECT unnest(confkey) AS column_id
-			             FROM pg_catalog.pg_constraint
-			            WHERE confrelid = $1::REGCLASS
-			          )
-			   UNION  (
-			           SELECT unnest(conkey) AS column_id
-			             FROM pg_catalog.pg_constraint
-			            WHERE conrelid = $1::REGCLASS
-			              AND confrelid = $1::REGCLASS
-			          )
-			 ) AS cons
-			 INNER JOIN (
-			   SELECT ordinal_position AS column_id
-			     FROM information_schema.columns
-			    WHERE table_schema = $2
-			      AND table_name = $3
-			      AND column_name = $4
-			  ) AS source ON source.column_id = cons.column_id
-)
-`, tableName.String(), tableName.Schema(), tableName.Object(), columnName, includeFKs)
-}
-
 // colIsRefByComputed determines if a column is referenced by a computed column.
 func (og *operationGenerator) colIsRefByComputed(
 	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName tree.Name,
@@ -1178,6 +1111,30 @@ FROM
 	return tree.Name(regionCol), nil
 }
 
+// sqlReferencesRegionColumn reports whether sql mentions any column
+// whose type is the crdb_internal_region enum.
+func (og *operationGenerator) sqlReferencesRegionColumn(
+	ctx context.Context, tx pgx.Tx, sql string,
+) (bool, error) {
+	regionCols, err := Collect(ctx, og, tx, pgx.RowTo[string], `
+SELECT DISTINCT a.attname
+  FROM pg_catalog.pg_attribute a
+  JOIN pg_catalog.pg_type t ON a.atttypid = t.oid
+ WHERE t.typname = 'crdb_internal_region'
+   AND a.attnum > 0
+   AND NOT a.attisdropped`,
+	)
+	if err != nil {
+		return false, err
+	}
+	for _, col := range regionCols {
+		if strings.Contains(sql, col) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // tableIsRegionalByRow checks whether the given table is a REGIONAL BY ROW table.
 func (og *operationGenerator) tableIsRegionalByRow(
 	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
@@ -1483,37 +1440,35 @@ func (og *operationGenerator) tableHasUniqueConstraintMutation(
 		);`, tableName)
 }
 
-// getTableForeignKeyReferences returns a list of tables that reference
-// the specified table via foreign key references.
-func (og *operationGenerator) getTableForeignKeyReferences(
+// tableHasNotNullSpatialColumnMutation reports whether the table has a mutation
+// adding a NOT NULL column of a spatial type with no DEFAULT expression.
+func (og *operationGenerator) tableHasNotNullSpatialColumnMutation(
 	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
-) ([]tree.TableName, error) {
-	rows, err := tx.Query(ctx,
-		`WITH fk_refs AS (
-					SELECT conrelid FROM pg_constraint WHERE
-						confrelid = $1::REGCLASS AND
-						conrelid <> $1::REGCLASS
-				)
-				SELECT
-					n.nspname as schema_name,  c.relname AS object_name
-				FROM fk_refs AS f
-					JOIN pg_class AS c ON c.oid = f.conrelid
-					JOIN pg_namespace AS n ON c.relnamespace = n.oid
-`,
-		tableName.String())
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var result []tree.TableName
-	for rows.Next() {
-		var table, schema string
-		err = rows.Scan(&schema, &table)
-		if err != nil {
-			return nil, err
-		}
-		name := tree.MakeTableNameWithSchema(tableName.CatalogName, tree.Name(schema), tree.Name(table))
-		result = append(result, name)
-	}
-	return result, rows.Err()
+) (bool, error) {
+	return og.scanBool(ctx, tx, `
+		WITH table_desc AS (
+			SELECT crdb_internal.pb_to_json(
+				'desc',
+				descriptor,
+				false
+			)->'table' as d
+			FROM system.descriptor
+			WHERE id = $1::REGCLASS
+		)
+		SELECT EXISTS (
+			SELECT * FROM (
+			SELECT jsonb_array_elements(
+				CASE WHEN d->'mutations' IS NULL
+				THEN '[]'::JSONB
+				ELSE d->'mutations'
+				END
+			) as m
+			FROM table_desc)
+			WHERE (m->>'direction')::STRING = 'ADD'
+			AND (m->'column'->'nullable')::BOOL IS NOT TRUE
+			AND (m->'column'->>'defaultExpr') IS NULL
+			AND (m->'column'->'type'->>'family') IN (
+				'Box2DFamily', 'GeometryFamily', 'GeographyFamily'
+			)
+		);`, tableName)
 }

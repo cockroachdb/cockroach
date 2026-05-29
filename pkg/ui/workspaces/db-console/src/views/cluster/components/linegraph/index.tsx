@@ -118,10 +118,7 @@ function touPlot(
 }
 
 // TODO (koorosh): the same logic can be achieved with uPlot's series.gaps API starting from 1.6.15 version.
-export function fillGaps(
-  data: uPlot.AlignedData[0],
-  sampleDuration?: Long,
-): uPlot.AlignedData[0] {
+export function fillGaps(data: number[], sampleDuration?: Long): number[] {
   if (data.length === 0 || !sampleDuration) {
     return data;
   }

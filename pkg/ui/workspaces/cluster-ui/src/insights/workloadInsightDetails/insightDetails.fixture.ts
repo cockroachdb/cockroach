@@ -22,7 +22,6 @@ const insightEventBaseFixture: InsightEventBase = {
   cpuSQLNanos: 25000000000,
   elapsedTimeMillis: 127.0,
   endTime: moment.utc("2021-12-10T05:06:07"),
-  implicitTxn: true,
   insights: [
     {
       name: InsightNameEnum.SLOW_EXECUTION,

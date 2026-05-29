@@ -904,6 +904,22 @@ type RemoveTypeComment struct {
 	TypeID descpb.ID
 }
 
+// UpsertFunctionComment is used to add a comment to a function (or
+// procedure). Functions and procedures share descriptor space, so a single
+// op covers both.
+type UpsertFunctionComment struct {
+	immediateMutationOp
+	FunctionID descpb.ID
+	Comment    string
+}
+
+// RemoveFunctionComment is used to delete a comment associated with a
+// function (or procedure).
+type RemoveFunctionComment struct {
+	immediateMutationOp
+	FunctionID descpb.ID
+}
+
 // UpsertDatabaseComment is used to add a comment to a database.
 type UpsertDatabaseComment struct {
 	immediateMutationOp
@@ -1095,6 +1111,13 @@ type UpdateUserPrivileges struct {
 type UpdateOwner struct {
 	immediateMutationOp
 	Owner scpb.Owner
+}
+
+// RemoveOwner is a noop. The descriptor drop or the UpdateOwner handles the
+// state change.
+type RemoveOwner struct {
+	immediateMutationOp
+	DescriptorID descpb.ID
 }
 
 type CreateSchemaDescriptor struct {

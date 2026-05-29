@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
@@ -140,6 +141,10 @@ func (i *InternalSession) Savepoint(ctx context.Context, do func(ctx context.Con
 		return i.poison
 	}
 
+	if _, ok := i.csm.Txn(); !ok {
+		return errors.AssertionFailedf("Savepoint requires an active transaction")
+	}
+
 	if err := i.executeStatement(ctx, savepointBegin); err != nil {
 		return errors.Wrap(err, "failed to create savepoint")
 	}
@@ -167,6 +172,23 @@ func (i *InternalSession) Savepoint(ctx context.Context, do func(ctx context.Con
 	}
 
 	return nil
+}
+
+func (i *InternalSession) KVSavepoint(
+	ctx context.Context, do func(ctx context.Context, txn *kv.Txn) error,
+) error {
+	return i.Savepoint(ctx, func(ctx context.Context) error {
+		txn, ok := i.csm.Txn()
+		if !ok {
+			return errors.AssertionFailedf("KVSavepoint requires an active transaction")
+		}
+		// Step the txn to ensure we are reading all writes that are present on
+		// the transaction. The SQL SAVEPOINT path does not step automatically.
+		if err := txn.Step(ctx, false /* allowReadTimestampStep */); err != nil {
+			return err
+		}
+		return do(ctx, txn)
+	})
 }
 
 func (i *InternalSession) Prepare(

@@ -67,7 +67,7 @@ fi
 
 bazel run //:gazelle ${EXTRA_BAZEL_ARGS:-}
 
-if files_unchanged_from_upstream WORKSPACE $(find_relevant ./pkg/sql/logictest/logictestbase -name BUILD.bazel -or -name '*.go') $(find_relevant ./pkg/sql/logictest/testdata -name '*') $(find_relevant ./pkg/sql/sqlitelogictest -name BUILD.bazel -or -name '*.go') $(find_relevant ./pkg/ccl/logictestccl/testdata -name '*') $(find_relevant pkg/sql/opt/exec/execbuilder/testdata -name '*') $(find_relevant ./pkg/cmd/generate-logictest -name BUILD.bazel -or -name '*.go'); then
+if files_unchanged_from_upstream WORKSPACE $(find_relevant ./pkg/sql/logictest/logictestbase -name BUILD.bazel -or -name '*.go') $(find_relevant ./pkg/sql/logictest/testdata -name '*') $(find_relevant ./pkg/sql/sqlitelogictest -name BUILD.bazel -or -name '*.go') $(find_relevant pkg/sql/opt/exec/execbuilder/testdata -name '*') $(find_relevant ./pkg/cmd/generate-logictest -name BUILD.bazel -or -name '*.go'); then
   echo "Skipping //pkg/cmd/generate-logictest (relevant files are unchanged from upstream)"
 else
   bazel run pkg/cmd/generate-logictest ${EXTRA_BAZEL_ARGS:-} -- -out-dir="$PWD"

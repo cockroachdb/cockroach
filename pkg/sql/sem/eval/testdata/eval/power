@@ -420,3 +420,103 @@ eval
 '-Inf'::numeric ^ '-Inf'::numeric
 ----
 0
+
+# Float power edge cases (regression for #122879).
+
+eval
+0::FLOAT8 ^ (-1.0)::FLOAT8
+----
+zero raised to a negative power is undefined
+
+eval
+power(0::FLOAT8, (-1.0)::FLOAT8)
+----
+zero raised to a negative power is undefined
+
+eval
+(-1.3)::FLOAT8 ^ 0.5::FLOAT8
+----
+a negative number raised to a non-integer power yields a complex result
+
+eval
+power((-1.3)::FLOAT8, 0.5::FLOAT8)
+----
+a negative number raised to a non-integer power yields a complex result
+
+# Negative base with integer exponent should still work.
+eval
+(-1.3)::FLOAT8 ^ 2.0::FLOAT8
+----
+1.6900000000000002
+
+eval
+power((-200.0)::FLOAT8, 3.0::FLOAT8)
+----
+-8e+06
+
+# NaN base.
+eval
+'NaN'::FLOAT8 ^ 0::FLOAT8
+----
+1.0
+
+eval
+1::FLOAT8 ^ 'NaN'::FLOAT8
+----
+1.0
+
+eval
+'NaN'::FLOAT8 ^ 'NaN'::FLOAT8
+----
+NaN
+
+eval
+2::FLOAT8 ^ 'NaN'::FLOAT8
+----
+NaN
+
+eval
+(-2)::FLOAT8 ^ 'NaN'::FLOAT8
+----
+NaN
+
+eval
+'NaN'::FLOAT8 ^ 2::FLOAT8
+----
+NaN
+
+eval
+power(1e308::FLOAT8, 2::FLOAT8)
+----
+value out of range: overflow
+
+eval
+power(1e-308::FLOAT8, 2::FLOAT8)
+----
+value out of range: underflow
+
+# Inf base.
+eval
+'Inf'::FLOAT8 ^ 0::FLOAT8
+----
+1.0
+
+eval
+'Inf'::FLOAT8 ^ 2::FLOAT8
+----
++Inf
+
+eval
+'Inf'::FLOAT8 ^ (-2)::FLOAT8
+----
+0.0
+
+eval
+'Inf'::FLOAT8 ^ 'Inf'::FLOAT8
+----
++Inf
+
+eval
+'Inf'::FLOAT8 ^ '-Inf'::FLOAT8
+----
+0.0

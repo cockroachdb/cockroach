@@ -100,6 +100,7 @@ root     admin    CREATE          true
 root     admin    DELETE          true
 root     admin    INSERT          true
 root     admin    MAINTAIN        true
+root     admin    REFERENCES      true
 root     admin    SELECT          true
 root     admin    TRIGGER         true
 root     admin    TRUNCATE        true
@@ -108,6 +109,7 @@ root     root     CREATE          true
 root     root     DELETE          true
 root     root     INSERT          true
 root     root     MAINTAIN        true
+root     root     REFERENCES      true
 root     root     SELECT          true
 root     root     TRIGGER         true
 root     root     TRUNCATE        true
@@ -166,7 +168,7 @@ subtest acldefault
 query T
 SELECT acldefault('r'::"char", 'root'::regrole)
 ----
-{admin=C*r*a*d*w*D*t*m*/root,root=C*r*a*d*w*D*t*m*/root}
+{admin=C*r*a*d*w*D*t*m*x*/root,root=C*r*a*d*w*D*t*m*x*/root}
 
 # Database defaults: admin and root get CREATE, CONNECT, TEMPORARY.
 # PUBLIC gets CONNECT and TEMPORARY.
@@ -605,30 +607,31 @@ pg_class           reltablespace        9       0                         false
 pg_class           relpages             10      0                         false
 pg_class           reltuples            11      0                         false
 pg_class           relallvisible        12      0                         false
-pg_class           reltoastrelid        13      0                         false
-pg_class           relhasindex          14      0                         false
-pg_class           relisshared          15      0                         false
-pg_class           relpersistence       16      0                         false
-pg_class           relistemp            17      0                         false
-pg_class           relkind              18      0                         false
-pg_class           relnatts             19      0                         false
-pg_class           relchecks            20      0                         false
-pg_class           relhasoids           21      0                         false
-pg_class           relhaspkey           22      0                         false
-pg_class           relhasrules          23      0                         false
-pg_class           relhastriggers       24      0                         false
-pg_class           relhassubclass       25      0                         false
-pg_class           relfrozenxid         26      0                         false
-pg_class           relacl               27      0                         false
-pg_class           reloptions           28      0                         false
-pg_class           relforcerowsecurity  29      0                         false
-pg_class           relispartition       30      0                         false
-pg_class           relispopulated       31      0                         false
-pg_class           relreplident         32      0                         false
-pg_class           relrewrite           33      0                         false
-pg_class           relrowsecurity       34      0                         false
-pg_class           relpartbound         35      0                         false
-pg_class           relminmxid           36      0                         false
+pg_class           relallfrozen         13      0                         false
+pg_class           reltoastrelid        14      0                         false
+pg_class           relhasindex          15      0                         false
+pg_class           relisshared          16      0                         false
+pg_class           relpersistence       17      0                         false
+pg_class           relistemp            18      0                         false
+pg_class           relkind              19      0                         false
+pg_class           relnatts             20      0                         false
+pg_class           relchecks            21      0                         false
+pg_class           relhasoids           22      0                         false
+pg_class           relhaspkey           23      0                         false
+pg_class           relhasrules          24      0                         false
+pg_class           relhastriggers       25      0                         false
+pg_class           relhassubclass       26      0                         false
+pg_class           relfrozenxid         27      0                         false
+pg_class           relacl               28      0                         false
+pg_class           reloptions           29      0                         false
+pg_class           relforcerowsecurity  30      0                         false
+pg_class           relispartition       31      0                         false
+pg_class           relispopulated       32      0                         false
+pg_class           relreplident         33      0                         false
+pg_class           relrewrite           34      0                         false
+pg_class           relrowsecurity       35      0                         false
+pg_class           relpartbound         36      0                         false
+pg_class           relminmxid           37      0                         false
 
 
 # Check that the oid does not exist. If this test fail, change the oid here and in
@@ -1258,7 +1261,7 @@ NULL
 query T
 SELECT to_regtype('test_type')
 ----
-public.test_type
+test_type
 
 # Test that pg_get_indexdef works for expression indexes.
 statement ok
@@ -1481,13 +1484,13 @@ skipif config local-legacy-schema-changer
 query T
 SELECT pg_get_triggerdef(oid) FROM pg_trigger WHERE tgname = 'test_trig'
 ----
-CREATE TRIGGER test_trig BEFORE INSERT ON test.public.trig_test FOR EACH ROW EXECUTE FUNCTION test.public.trig_fn()
+CREATE TRIGGER test_trig BEFORE INSERT ON public.trig_test FOR EACH ROW EXECUTE FUNCTION public.trig_fn()
 
 skipif config local-legacy-schema-changer
 query T
 SELECT pg_get_triggerdef(oid, true) FROM pg_trigger WHERE tgname = 'test_trig'
 ----
-CREATE TRIGGER test_trig BEFORE INSERT ON test.public.trig_test FOR EACH ROW EXECUTE FUNCTION test.public.trig_fn()
+CREATE TRIGGER test_trig BEFORE INSERT ON public.trig_test FOR EACH ROW EXECUTE FUNCTION public.trig_fn()
 
 # Invalid OID returns NULL.
 query T nosort
@@ -1570,5 +1573,629 @@ DROP TABLE stxtest_kw
 
 statement ok
 DROP TABLE stxtest
+
+subtest end
+
+subtest pg_cast_oids_pg_dump_compat
+
+statement ok
+SET pg_dump_compatibility = 'postgres'
+
+# All cast OIDs should be below 16384 (PostgreSQL's FirstNormalObjectId)
+# so pg_dump treats them as built-in and skips them.
+query B
+SELECT bool_and(oid < 16384) FROM pg_cast
+----
+true
+
+statement ok
+SET pg_dump_compatibility = 'off'
+
+# Without compat mode, cast OIDs should be above 16384.
+query B
+SELECT bool_and(oid > 16384) FROM pg_cast
+----
+true
+
+subtest end
+
+subtest pg_size_pretty
+
+# Stay in the bytes unit until 10*1024.
+query T
+SELECT pg_size_pretty(0::int)
+----
+0 bytes
+
+query T
+SELECT pg_size_pretty(1::int)
+----
+1 bytes
+
+query T
+SELECT pg_size_pretty(10239::int)
+----
+10239 bytes
+
+# Switch to kB at 10*1024.
+query T
+SELECT pg_size_pretty(10240::int)
+----
+10 kB
+
+query T
+SELECT pg_size_pretty(1024::int)
+----
+1024 bytes
+
+query T
+SELECT pg_size_pretty(1023::int)
+----
+1023 bytes
+
+# Switch to MB at 10*1024 kB = 10*1024*1024 bytes.
+query T
+SELECT pg_size_pretty(10485760::int)
+----
+10 MB
+
+# Stay in MB until 10*1024 MB.
+query T
+SELECT pg_size_pretty(1073741824::int)
+----
+1024 MB
+
+# Switch to GB at 10*1024 MB.
+query T
+SELECT pg_size_pretty(1099511627776::int)
+----
+1024 GB
+
+# Switch to TB.
+query T
+SELECT pg_size_pretty(1125899906842624::int)
+----
+1024 TB
+
+# Negatives mirror positives.
+query T
+SELECT pg_size_pretty(-1024::int)
+----
+-1024 bytes
+
+query T
+SELECT pg_size_pretty(-10240::int)
+----
+-10 kB
+
+query T
+SELECT pg_size_pretty(-10485760::int)
+----
+-10 MB
+
+# Half-rounding: 1.5 MiB = 1536 kB stays as kB (well under 10 MB threshold).
+query T
+SELECT pg_size_pretty(1572864::int)
+----
+1536 kB
+
+# 15 MiB.
+query T
+SELECT pg_size_pretty(15728640::int)
+----
+15 MB
+
+# NULL passthrough.
+query T
+SELECT pg_size_pretty(NULL::int)
+----
+NULL
+
+# Decimal overload yields the same output for whole values.
+query T
+SELECT pg_size_pretty(10240::decimal)
+----
+10 kB
+
+query T
+SELECT pg_size_pretty(1572864::decimal)
+----
+1536 kB
+
+# Decimal NULL.
+query T
+SELECT pg_size_pretty(NULL::decimal)
+----
+NULL
+
+subtest end
+
+subtest pg_size_bytes
+
+query I
+SELECT pg_size_bytes('0')
+----
+0
+
+query I
+SELECT pg_size_bytes('1024')
+----
+1024
+
+# No unit means bytes.
+query I
+SELECT pg_size_bytes('100')
+----
+100
+
+# 'bytes' and 'B' aliases.
+query I
+SELECT pg_size_bytes('1024 bytes')
+----
+1024
+
+query I
+SELECT pg_size_bytes('1024 B')
+----
+1024
+
+query I
+SELECT pg_size_bytes('1024 b')
+----
+1024
+
+# Standard units, case-insensitive.
+query I
+SELECT pg_size_bytes('10 kB')
+----
+10240
+
+query I
+SELECT pg_size_bytes('10 KB')
+----
+10240
+
+query I
+SELECT pg_size_bytes('1.5 MB')
+----
+1572864
+
+query I
+SELECT pg_size_bytes('1.5 GB')
+----
+1610612736
+
+query I
+SELECT pg_size_bytes('1.5 TB')
+----
+1649267441664
+
+query I
+SELECT pg_size_bytes('1.5 PB')
+----
+1688849860263936
+
+# No space between number and unit is allowed.
+query I
+SELECT pg_size_bytes('100bytes')
+----
+100
+
+# Surrounding whitespace is tolerated.
+query I
+SELECT pg_size_bytes('  1.5 MB  ')
+----
+1572864
+
+# Negative values pass through.
+query I
+SELECT pg_size_bytes('-10 kB')
+----
+-10240
+
+# Exponent notation.
+query I
+SELECT pg_size_bytes('1e3')
+----
+1000
+
+query I
+SELECT pg_size_bytes('1.5e3 kB')
+----
+1536000
+
+# 1.5 rounds to 2 (round half away from zero, matching PG).
+query I
+SELECT pg_size_bytes('1.5')
+----
+2
+
+# Round-trip with pg_size_pretty for whole-byte values.
+query I
+SELECT pg_size_bytes(pg_size_pretty(10240::int))
+----
+10240
+
+query I
+SELECT pg_size_bytes(pg_size_pretty(1234567::int))
+----
+1234944
+
+# Errors.
+query error pgcode 22023 invalid size: ""
+SELECT pg_size_bytes('')
+
+query error pgcode 22023 invalid size: "abc"
+SELECT pg_size_bytes('abc')
+
+query error pgcode 22023 invalid size: "123 XB"
+SELECT pg_size_bytes('123 XB')
+
+# NULL passthrough.
+query I
+SELECT pg_size_bytes(NULL)
+----
+NULL
+
+subtest end
+
+subtest pg_database_size
+
+# Empty database with no cache entries returns 0.
+statement ok
+CREATE DATABASE pg_db_size_empty
+
+let $empty_db_oid
+SELECT oid::INT FROM pg_database WHERE datname = 'pg_db_size_empty'
+
+query I
+SELECT pg_database_size('pg_db_size_empty')
+----
+0
+
+query I
+SELECT pg_database_size($empty_db_oid::OID)
+----
+0
+
+# Errors match PG's wording for unknown OIDs and names.
+query error pgcode 42704 database with OID 99999999 does not exist
+SELECT pg_database_size(99999999::OID)
+
+query error pgcode 3D000 database "no_such_db_for_size" does not exist
+SELECT pg_database_size('no_such_db_for_size')
+
+# NULL passthrough.
+query I
+SELECT pg_database_size(NULL::OID)
+----
+NULL
+
+query I
+SELECT pg_database_size(NULL::STRING)
+----
+NULL
+
+# Insert synthetic cache rows so we can verify the SUM aggregation. The cache
+# is normally populated by a background job; inserting directly lets the test
+# avoid waiting for it.
+statement ok
+INSERT INTO system.table_metadata (
+  db_id, table_id, db_name, schema_name, table_name, total_columns,
+  total_indexes, store_ids, replication_size_bytes, total_ranges,
+  total_live_data_bytes, total_data_bytes, perc_live_data, table_type, details
+) VALUES
+  ($empty_db_oid, 90001, 'pg_db_size_empty', 'public', 't1', 2, 1, ARRAY[1], 1024, 1, 1024, 1024, 1.0, 'TABLE', '{}'),
+  ($empty_db_oid, 90002, 'pg_db_size_empty', 'public', 't2', 2, 1, ARRAY[1], 2048, 1, 2048, 2048, 1.0, 'TABLE', '{}')
+
+query I
+SELECT pg_database_size('pg_db_size_empty')
+----
+3072
+
+query I
+SELECT pg_database_size($empty_db_oid::OID)
+----
+3072
+
+statement count 2
+DELETE FROM system.table_metadata WHERE db_id = $empty_db_oid
+
+statement ok
+DROP DATABASE pg_db_size_empty
+
+subtest end
+
+subtest pg_relation_size
+
+# Bogus OID: NULL (matches PG).
+query I
+SELECT pg_relation_size(99999999::OID)
+----
+NULL
+
+query I
+SELECT pg_table_size(99999999::OID)
+----
+NULL
+
+query I
+SELECT pg_total_relation_size(99999999::OID)
+----
+NULL
+
+# NULL passthrough.
+query I
+SELECT pg_relation_size(NULL::OID)
+----
+NULL
+
+# Real relation, no cache row yet: NULL (descriptor exists, cache hasn't
+# ingested). NULL also covers virtual tables (pg_catalog, etc.) which have
+# no on-disk representation at all — see the pg_size_virtual_table subtest.
+statement ok
+CREATE TABLE pg_relsize_t (id INT PRIMARY KEY, v STRING)
+
+let $relsize_oid
+SELECT 'pg_relsize_t'::regclass::oid::INT
+
+query I
+SELECT pg_relation_size($relsize_oid::OID)
+----
+NULL
+
+query I
+SELECT pg_table_size($relsize_oid::OID)
+----
+NULL
+
+query I
+SELECT pg_total_relation_size($relsize_oid::OID)
+----
+NULL
+
+query I
+SELECT pg_indexes_size($relsize_oid::OID)
+----
+NULL
+
+# Insert a synthetic cache row so we can verify the size returns from the cache.
+let $relsize_db_oid
+SELECT oid::INT FROM pg_database WHERE datname = current_database()
+
+statement ok
+INSERT INTO system.table_metadata (
+  db_id, table_id, db_name, schema_name, table_name, total_columns,
+  total_indexes, store_ids, replication_size_bytes, total_ranges,
+  total_live_data_bytes, total_data_bytes, perc_live_data, table_type, details
+) VALUES (
+  $relsize_db_oid, $relsize_oid, current_database(), 'public', 'pg_relsize_t',
+  2, 1, ARRAY[1], 4096, 1, 4096, 4096, 1.0, 'TABLE', '{}'
+)
+
+# All three return the same cached value in v1.
+query I
+SELECT pg_relation_size($relsize_oid::OID)
+----
+4096
+
+query I
+SELECT pg_table_size($relsize_oid::OID)
+----
+4096
+
+query I
+SELECT pg_total_relation_size($relsize_oid::OID)
+----
+4096
+
+# Resolve via pg_class.oid the way introspection tools do.
+query I
+SELECT pg_relation_size(c.oid)
+  FROM pg_catalog.pg_class c
+ WHERE c.relname = 'pg_relsize_t'
+----
+4096
+
+# pg_indexes_size on a row with empty details returns 0, since there are
+# no per-index entries to sum.
+query I
+SELECT pg_indexes_size($relsize_oid::OID)
+----
+0
+
+statement count 1
+DELETE FROM system.table_metadata WHERE table_id = $relsize_oid
+
+statement ok
+DROP TABLE pg_relsize_t
+
+subtest end
+
+subtest pg_size_per_index
+
+# Build a table with two secondary indexes and populate a synthetic cache
+# row whose details JSONB has per-index sizes. Then verify the math:
+#   pg_relation_size = pg_table_size = primary index size only
+#   pg_indexes_size  = sum of secondary index sizes
+#   pg_total_relation_size = whole table prefix (including any garbage)
+#   pg_table_size + pg_indexes_size <= pg_total_relation_size
+statement ok
+CREATE TABLE pg_idxsize_t (id INT PRIMARY KEY, a STRING, b STRING, INDEX (a), INDEX (b))
+
+let $idxsize_oid
+SELECT 'pg_idxsize_t'::regclass::oid::INT
+
+let $idxsize_db_oid
+SELECT oid::INT FROM pg_database WHERE datname = current_database()
+
+# Determine the primary index_id and the two secondary index_ids from
+# crdb_internal.table_indexes so the synthetic details JSONB matches what
+# the real cache job would produce.
+let $idxsize_primary_id
+SELECT index_id FROM crdb_internal.table_indexes
+WHERE descriptor_id = $idxsize_oid AND index_type = 'primary'
+
+# Insert a synthetic cache row. replication_size_bytes is intentionally
+# 1000 larger than the sum of per-index sizes — that 1000-byte gap stands
+# in for dropped-index garbage.
+statement ok
+INSERT INTO system.table_metadata (
+  db_id, table_id, db_name, schema_name, table_name, total_columns,
+  total_indexes, store_ids, replication_size_bytes, total_ranges,
+  total_live_data_bytes, total_data_bytes, perc_live_data, table_type, details
+) VALUES (
+  $idxsize_db_oid, $idxsize_oid, current_database(), 'public', 'pg_idxsize_t',
+  4, 3, ARRAY[1], 7000, 1, 7000, 7000, 1.0, 'TABLE',
+  json_build_object(
+    'primary_index_id', $idxsize_primary_id,
+    'index_sizes', json_build_object(
+      $idxsize_primary_id::TEXT, 4000,
+      (SELECT min(index_id) FROM crdb_internal.table_indexes
+        WHERE descriptor_id = $idxsize_oid AND index_type = 'secondary')::TEXT, 1000,
+      (SELECT max(index_id) FROM crdb_internal.table_indexes
+        WHERE descriptor_id = $idxsize_oid AND index_type = 'secondary')::TEXT, 1000
+    )
+  )
+)
+
+# Primary index size only.
+query I
+SELECT pg_relation_size($idxsize_oid::OID)
+----
+4000
+
+query I
+SELECT pg_table_size($idxsize_oid::OID)
+----
+4000
+
+# Sum of secondary index sizes.
+query I
+SELECT pg_indexes_size($idxsize_oid::OID)
+----
+2000
+
+# Whole table prefix, including the 1000-byte garbage gap.
+query I
+SELECT pg_total_relation_size($idxsize_oid::OID)
+----
+7000
+
+# Identity holds: pg_table_size + pg_indexes_size <= pg_total_relation_size.
+# The gap (1000 bytes here) is the GC-pressure proxy.
+query II
+SELECT pg_table_size($idxsize_oid::OID) + pg_indexes_size($idxsize_oid::OID),
+       pg_total_relation_size($idxsize_oid::OID)
+       - (pg_table_size($idxsize_oid::OID) + pg_indexes_size($idxsize_oid::OID))
+----
+6000  1000
+
+# pg_relation_size on a secondary index OID returns just that index's size.
+query TI rowsort
+SELECT c.relname, pg_relation_size(c.oid)
+  FROM pg_catalog.pg_class c
+  JOIN pg_catalog.pg_index i ON i.indexrelid = c.oid
+ WHERE i.indrelid = $idxsize_oid AND c.relkind = 'i'
+   AND NOT i.indisprimary
+----
+pg_idxsize_t_a_idx  1000
+pg_idxsize_t_b_idx  1000
+
+# pg_relation_size on the primary index OID also returns its cached size.
+query I
+SELECT pg_relation_size(c.oid)
+  FROM pg_catalog.pg_class c
+  JOIN pg_catalog.pg_index i ON i.indexrelid = c.oid
+ WHERE i.indrelid = $idxsize_oid AND i.indisprimary
+----
+4000
+
+statement count 1
+DELETE FROM system.table_metadata WHERE table_id = $idxsize_oid
+
+statement ok
+DROP TABLE pg_idxsize_t
+
+subtest end
+
+subtest pg_size_non_table_oid
+
+# Verify that the four relation size builtins return NULL when called with
+# an OID that's not a relation (e.g. a type OID). PG behavior — without
+# this check the SECURITY DEFINER body would silently return 0 for any
+# descriptor.
+query IIII
+SELECT pg_relation_size('int4'::regtype::oid),
+       pg_table_size('int4'::regtype::oid),
+       pg_total_relation_size('int4'::regtype::oid),
+       pg_indexes_size('int4'::regtype::oid)
+----
+NULL  NULL  NULL  NULL
+
+subtest end
+
+subtest pg_size_virtual_table
+
+# Virtual tables (pg_catalog, information_schema, crdb_internal) have no
+# system.table_metadata row because they are not descriptor-backed. The
+# size builtins return NULL rather than 0 — 0 would imply "exists, empty"
+# while NULL signals "size does not apply".
+query IIII
+SELECT pg_relation_size('pg_catalog.pg_class'::regclass),
+       pg_table_size('pg_catalog.pg_class'::regclass),
+       pg_total_relation_size('pg_catalog.pg_class'::regclass),
+       pg_indexes_size('pg_catalog.pg_class'::regclass)
+----
+NULL  NULL  NULL  NULL
+
+query IIII
+SELECT pg_relation_size('information_schema.tables'::regclass),
+       pg_table_size('information_schema.tables'::regclass),
+       pg_total_relation_size('information_schema.tables'::regclass),
+       pg_indexes_size('information_schema.tables'::regclass)
+----
+NULL  NULL  NULL  NULL
+
+# SUM-style aggregations over pg_class skip the virtual rows rather than
+# adding meaningless zeros. Every pg_catalog table-class relation should
+# return NULL, so the count of non-NULL results in pg_catalog is zero.
+query I
+SELECT count(*) FROM pg_catalog.pg_class
+WHERE pg_total_relation_size(oid) IS NOT NULL
+  AND relnamespace = 'pg_catalog'::regnamespace
+  AND relkind = 'r'
+----
+0
+
+subtest end
+
+subtest pg_database_size_no_connect
+
+# Verify that pg_database_size errors with 42501 when the caller lacks
+# CONNECT, matching PG. Earlier in this file testuser was granted the
+# root role; revoke it so the test exercises non-admin behavior.
+
+statement ok
+REVOKE root FROM testuser
+
+statement ok
+CREATE DATABASE pg_dbsize_priv;
+
+statement ok
+REVOKE CONNECT ON DATABASE pg_dbsize_priv FROM public;
+
+user testuser
+
+statement error pgcode 42501 permission denied for database pg_dbsize_priv
+SELECT pg_database_size('pg_dbsize_priv')
+
+statement error pgcode 42501 permission denied for database pg_dbsize_priv
+SELECT pg_database_size((SELECT oid FROM pg_database WHERE datname = 'pg_dbsize_priv'))
+
+user root
+
+statement ok
+DROP DATABASE pg_dbsize_priv
 
 subtest end

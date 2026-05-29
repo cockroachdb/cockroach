@@ -84,7 +84,7 @@ func newCompactBackupsProcessor(
 func (p *compactBackupsProcessor) Start(ctx context.Context) {
 	ctx = logtags.AddTag(ctx, "job", p.spec.JobID)
 
-	p.StartInternal(ctx, compactBackupsProcessorName)
+	ctx = p.StartInternal(ctx, compactBackupsProcessorName)
 	ctx, cancel := context.WithCancel(ctx)
 	p.cancelAndWaitForWorker = func() {
 		cancel()

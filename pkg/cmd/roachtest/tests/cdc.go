@@ -1648,9 +1648,16 @@ func runCDCFineGrainedCheckpointingBenchmark(
 	t.L().Printf("setting up test data...")
 	setupStmts := []string{
 		`CREATE TABLE foo (id INT PRIMARY KEY, val INT)`,
+		// Configure frequent checkpointing in the form of frontier persistence.
+		// Span level checkpointing is now deprecated, so we use frontier persistence
+		// instead.
+		//
+		// NB: We set changefeed.span_checkpoint.interval because in addition
+		// to controlling how often we saved the now-deprecated legacy span-level
+		// checkpoint, it also controls how often a change aggregator will flush
+		// its frontier to the coordinator during a backfill.
 		`SET CLUSTER SETTING changefeed.span_checkpoint.interval = '1s'`,
-		`SET CLUSTER SETTING changefeed.frontier_highwater_lag_checkpoint_threshold = '100ms'`,
-		`SET CLUSTER SETTING changefeed.frontier_checkpoint_frequency = '1s'`,
+		`SET CLUSTER SETTING changefeed.progress.frontier_persistence.interval = '5s'`,
 		// We do not set timestamp quantization here since it is off by default
 		`SET CLUSTER SETTING kv.rangefeed.enabled = true`,
 	}
@@ -2512,7 +2519,7 @@ CONFIGURE ZONE USING
 		Cluster:   r.MakeClusterSpec(4, spec.WorkloadNode(), spec.CPU(16)),
 		Leases:    registry.MetamorphicLeases,
 		// Disabled on IBM due to lack of Kafka support on s390x.
-		CompatibleClouds: registry.AllClouds.NoIBM(),
+		CompatibleClouds: registry.AllClouds.NoIBM().NoAzure(),
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
@@ -2625,7 +2632,6 @@ CONFIGURE ZONE USING
 	})
 	r.Add(registry.TestSpec{
 		Name:             "cdc/initial-scan-only/parquet/metamorphic",
-		Skip:             "#119295",
 		Owner:            registry.OwnerCDC,
 		Benchmark:        true,
 		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode(), spec.Arch(spec.OnlyAMD64)),
@@ -2722,7 +2728,7 @@ CONFIGURE ZONE USING
 		Cluster:   r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
 		Leases:    registry.MetamorphicLeases,
 		// Disabled on IBM due to lack of Kafka support on s390x.
-		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
+		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM().NoAzure(),
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
@@ -2832,7 +2838,7 @@ CONFIGURE ZONE USING
 		Cluster:   r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
 		Leases:    registry.MetamorphicLeases,
 		// Disabled on IBM due to lack of Kafka support on s390x.
-		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
+		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM().NoAzure(),
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
@@ -2871,7 +2877,7 @@ CONFIGURE ZONE USING
 		Cluster:   r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
 		Leases:    registry.MetamorphicLeases,
 		// Disabled on IBM due to lack of Kafka support on s390x.
-		CompatibleClouds:           registry.AllClouds.NoAWS().NoIBM(),
+		CompatibleClouds:           registry.AllClouds.NoAWS().NoIBM().NoAzure(),
 		Suites:                     registry.Suites(registry.Nightly),
 		RequiresDeprecatedWorkload: true, // uses ledger
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -3378,7 +3384,7 @@ CONFIGURE ZONE USING
 		Cluster:   r.MakeClusterSpec(4, spec.WorkloadNode(), spec.CPU(16)),
 		Leases:    registry.MetamorphicLeases,
 		// Disabled on IBM due to lack of Kafka support on s390x.
-		CompatibleClouds: registry.AllClouds.NoIBM(),
+		CompatibleClouds: registry.AllClouds.NoIBM().NoAzure(),
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
@@ -3422,7 +3428,7 @@ CONFIGURE ZONE USING
 		Leases:           registry.MetamorphicLeases,
 		Suites:           registry.Suites(registry.Nightly),
 		Timeout:          15 * time.Minute,
-		CompatibleClouds: registry.AllExceptIBM,
+		CompatibleClouds: registry.AllClouds.NoIBM().NoAzure(),
 		Run:              runMessageTooLarge,
 	})
 	for _, perTablePTS := range []bool{false} {

@@ -3,8 +3,8 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-// Package sctest contains tools to run end-to-end datadriven tests in both
-// ccl and non-ccl settings.
+// Package sctest contains tools to run end-to-end datadriven tests for the
+// declarative schema changer.
 package sctest
 
 import (

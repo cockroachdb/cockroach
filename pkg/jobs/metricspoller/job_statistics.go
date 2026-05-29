@@ -267,8 +267,9 @@ func processJobPTSRecord(
 		return nil
 	}
 
-	err = execCfg.JobRegistry.UpdateJobWithTxn(ctx, jobspb.JobID(jobID), txn,
-		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	err = execCfg.JobRegistry.DeprecatedUpdateJobWithTxn(ctx, jobspb.JobID(jobID), txn,
+		func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 			p := md.Payload
 			jobType, err := p.CheckType()
 			if err != nil {

@@ -311,7 +311,6 @@ export interface ExecutionStatistics {
   database: string;
   distSQL: boolean;
   vec: boolean;
-  implicit_txn: boolean;
   full_scan: boolean;
   node_id: number;
   txn_fingerprint_ids: Long[];
@@ -331,7 +330,6 @@ export function flattenStatementStats(
     database: stmt.key.key_data.database,
     distSQL: stmt.key.key_data.distSQL,
     vec: stmt.key.key_data.vec,
-    implicit_txn: stmt.key.key_data.implicit_txn,
     full_scan: stmt.key.key_data.full_scan,
     node_id: stmt.key.node_id,
     txn_fingerprint_ids: stmt.txn_fingerprint_ids,
@@ -343,7 +341,7 @@ export function flattenStatementStats(
 // that should be used to group statements.
 // Currently, using only statement_fingerprint_id
 // (created by ConstructStatementFingerprintID using:
-// query, implicit_txn, database, failed).
+// query, database).
 export function statementKey(stmt: ExecutionStatistics): string {
   return stmt.statement_fingerprint_id?.toString();
 }

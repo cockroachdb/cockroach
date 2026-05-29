@@ -4,7 +4,7 @@ IMPORT INTO foo(id, email) CSV DATA ('path/to/some/file', $1) WITH temp = 'path/
 IMPORT INTO foo(id, email) CSV DATA ('*****', $1) WITH OPTIONS (temp = 'path/to/temp') -- normalized!
 IMPORT INTO foo(id, email) CSV DATA (('*****'), ($1)) WITH OPTIONS (temp = ('path/to/temp')) -- fully parenthesized
 IMPORT INTO foo(id, email) CSV DATA ('_', $1) WITH OPTIONS (temp = '_') -- literals removed
-IMPORT INTO _(_, _) CSV DATA ('*****', $1) WITH OPTIONS (_ = 'path/to/temp') -- identifiers removed
+IMPORT INTO _(_, _) CSV DATA ('*****', $1) WITH OPTIONS (temp = 'path/to/temp') -- identifiers removed
 IMPORT INTO foo(id, email) CSV DATA ('path/to/some/file', $1) WITH OPTIONS (temp = 'path/to/temp') -- passwords exposed
 
 parse
@@ -13,7 +13,7 @@ IMPORT INTO foo CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'
 IMPORT INTO foo CSV DATA ('*****', $1) WITH OPTIONS (temp = 'path/to/temp') -- normalized!
 IMPORT INTO foo CSV DATA (('*****'), ($1)) WITH OPTIONS (temp = ('path/to/temp')) -- fully parenthesized
 IMPORT INTO foo CSV DATA ('_', $1) WITH OPTIONS (temp = '_') -- literals removed
-IMPORT INTO _ CSV DATA ('*****', $1) WITH OPTIONS (_ = 'path/to/temp') -- identifiers removed
+IMPORT INTO _ CSV DATA ('*****', $1) WITH OPTIONS (temp = 'path/to/temp') -- identifiers removed
 IMPORT INTO foo CSV DATA ('path/to/some/file', $1) WITH OPTIONS (temp = 'path/to/temp') -- passwords exposed
 
 parse
@@ -40,7 +40,7 @@ EXPORT INTO CSV 's3://my/path/%part%.csv' WITH delimiter = '|' FROM TABLE a
 EXPORT INTO CSV '*****' WITH OPTIONS(delimiter = '|') FROM TABLE a -- normalized!
 EXPORT INTO CSV ('*****') WITH OPTIONS(delimiter = ('|')) FROM TABLE a -- fully parenthesized
 EXPORT INTO CSV '_' WITH OPTIONS(delimiter = '_') FROM TABLE a -- literals removed
-EXPORT INTO CSV '*****' WITH OPTIONS(_ = '|') FROM TABLE _ -- identifiers removed
+EXPORT INTO CSV '*****' WITH OPTIONS(delimiter = '|') FROM TABLE _ -- identifiers removed
 EXPORT INTO CSV 's3://my/path/%part%.csv' WITH OPTIONS(delimiter = '|') FROM TABLE a -- passwords exposed
 
 parse
@@ -49,5 +49,5 @@ EXPORT INTO CSV 's3://my/path/%part%.csv' WITH delimiter = '|' FROM SELECT a, su
 EXPORT INTO CSV '*****' WITH OPTIONS(delimiter = '|') FROM SELECT a, sum(b) FROM c WHERE d = 1 ORDER BY sum(b) DESC LIMIT 10 -- normalized!
 EXPORT INTO CSV ('*****') WITH OPTIONS(delimiter = ('|')) FROM SELECT (a), (sum((b))) FROM c WHERE ((d) = (1)) ORDER BY (sum((b))) DESC LIMIT (10) -- fully parenthesized
 EXPORT INTO CSV '_' WITH OPTIONS(delimiter = '_') FROM SELECT a, sum(b) FROM c WHERE d = _ ORDER BY sum(b) DESC LIMIT _ -- literals removed
-EXPORT INTO CSV '*****' WITH OPTIONS(_ = '|') FROM SELECT _, _(_) FROM _ WHERE _ = 1 ORDER BY _(_) DESC LIMIT 10 -- identifiers removed
+EXPORT INTO CSV '*****' WITH OPTIONS(delimiter = '|') FROM SELECT _, _(_) FROM _ WHERE _ = 1 ORDER BY _(_) DESC LIMIT 10 -- identifiers removed
 EXPORT INTO CSV 's3://my/path/%part%.csv' WITH OPTIONS(delimiter = '|') FROM SELECT a, sum(b) FROM c WHERE d = 1 ORDER BY sum(b) DESC LIMIT 10 -- passwords exposed

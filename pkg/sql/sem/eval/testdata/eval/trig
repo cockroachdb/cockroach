@@ -8,6 +8,8 @@
 # architectural support for some trig functions like atan), so we check rounded
 # results too.
 
+# ── Forward trig (radians) ──────────────────────────────────────────
+
 eval
 cos(0)
 ----
@@ -28,25 +30,71 @@ round(cot(0.7853981633974483), 10)
 ----
 1.0
 
-eval
-acos(0)
-----
-1.5707963267948966
+# NaN passthrough for forward trig.
 
 eval
-asin(1.0)
+sin('NaN'::float)
 ----
-1.5707963267948966
+NaN
 
 eval
-round(atan(1.0), 15)
+cos('NaN'::float)
 ----
-0.785398163397448
+NaN
 
 eval
-round(atan2(1.0, 1.0), 15)
+tan('NaN'::float)
 ----
-0.785398163397448
+NaN
+
+eval
+cot('NaN'::float)
+----
+NaN
+
+# Infinity rejection for forward trig.
+
+eval
+sin('Infinity'::float)
+----
+input is out of range
+
+eval
+sin('-Infinity'::float)
+----
+input is out of range
+
+eval
+cos('Infinity'::float)
+----
+input is out of range
+
+eval
+cos('-Infinity'::float)
+----
+input is out of range
+
+eval
+tan('Infinity'::float)
+----
+input is out of range
+
+eval
+tan('-Infinity'::float)
+----
+input is out of range
+
+eval
+cot('Infinity'::float)
+----
+input is out of range
+
+eval
+cot('-Infinity'::float)
+----
+input is out of range
+
+# ── Forward trig (degrees) ──────────────────────────────────────────
 
 eval
 cosd(0)
@@ -68,6 +116,147 @@ round(cotd(45), 10)
 ----
 1.0
 
+# NaN passthrough for degree trig.
+
+eval
+sind('NaN'::float)
+----
+NaN
+
+eval
+cosd('NaN'::float)
+----
+NaN
+
+eval
+tand('NaN'::float)
+----
+NaN
+
+eval
+cotd('NaN'::float)
+----
+NaN
+
+# Infinity rejection for degree trig.
+
+eval
+sind('Infinity'::float)
+----
+input is out of range
+
+eval
+cosd('Infinity'::float)
+----
+input is out of range
+
+eval
+tand('Infinity'::float)
+----
+input is out of range
+
+eval
+cotd('Infinity'::float)
+----
+input is out of range
+
+# ── Inverse trig (radians) ──────────────────────────────────────────
+
+eval
+acos(0)
+----
+1.5707963267948966
+
+eval
+asin(1.0)
+----
+1.5707963267948966
+
+# Boundary values: exactly -1 and 1 must succeed.
+
+eval
+asin(-1.0)
+----
+-1.5707963267948966
+
+eval
+acos(1.0)
+----
+0.0
+
+eval
+acos(-1.0)
+----
+3.141592653589793
+
+# Domain errors for out-of-range inputs.
+
+eval
+asin(1.5)
+----
+input is out of range
+
+eval
+asin(-1.5)
+----
+input is out of range
+
+eval
+acos(1.5)
+----
+input is out of range
+
+eval
+acos(-1.5)
+----
+input is out of range
+
+# NaN passthrough for inverse trig.
+
+eval
+asin('NaN'::float)
+----
+NaN
+
+eval
+acos('NaN'::float)
+----
+NaN
+
+# Infinity rejection for inverse trig.
+
+eval
+asin('Infinity'::float)
+----
+input is out of range
+
+eval
+asin('-Infinity'::float)
+----
+input is out of range
+
+eval
+acos('Infinity'::float)
+----
+input is out of range
+
+eval
+acos('-Infinity'::float)
+----
+input is out of range
+
+eval
+round(atan(1.0), 15)
+----
+0.785398163397448
+
+eval
+round(atan2(1.0, 1.0), 15)
+----
+0.785398163397448
+
+# ── Inverse trig (degrees) ──────────────────────────────────────────
+
 eval
 acosd(0)
 ----
@@ -78,6 +267,69 @@ asind(1.0)
 ----
 90.0
 
+# Boundary values.
+
+eval
+asind(-1.0)
+----
+-90.0
+
+eval
+acosd(1.0)
+----
+0.0
+
+eval
+acosd(-1.0)
+----
+180.0
+
+# Domain errors.
+
+eval
+asind(1.5)
+----
+input is out of range
+
+eval
+asind(-1.5)
+----
+input is out of range
+
+eval
+acosd(1.5)
+----
+input is out of range
+
+eval
+acosd(-1.5)
+----
+input is out of range
+
+# NaN passthrough.
+
+eval
+asind('NaN'::float)
+----
+NaN
+
+eval
+acosd('NaN'::float)
+----
+NaN
+
+# Infinity rejection.
+
+eval
+asind('Infinity'::float)
+----
+input is out of range
+
+eval
+acosd('Infinity'::float)
+----
+input is out of range
+
 eval
 round(atand(1.0), 10)
 ----
@@ -87,6 +339,8 @@ eval
 round(atan2d(1.0, 1.0), 10)
 ----
 45.0
+
+# ── Hyperbolic functions ────────────────────────────────────────────
 
 eval
 sinh(0)
@@ -113,7 +367,76 @@ acosh(1)
 ----
 0.0
 
+# acosh domain errors.
+
+eval
+acosh(0.5)
+----
+input is out of range
+
+eval
+acosh(-1)
+----
+input is out of range
+
+# acosh accepts Infinity.
+
+eval
+acosh('Infinity'::float)
+----
++Inf
+
+# acosh NaN passthrough.
+
+eval
+acosh('NaN'::float)
+----
+NaN
+
 eval
 atanh(0)
 ----
 0.0
+
+# atanh boundary values: exactly -1 and 1 return -Inf and +Inf.
+
+eval
+atanh(1)
+----
++Inf
+
+eval
+atanh(-1)
+----
+-Inf
+
+# atanh domain errors.
+
+eval
+atanh(1.5)
+----
+input is out of range
+
+eval
+atanh(-1.5)
+----
+input is out of range
+
+# atanh NaN passthrough.
+
+eval
+atanh('NaN'::float)
+----
+NaN
+
+# atanh Infinity rejection.
+
+eval
+atanh('Infinity'::float)
+----
+input is out of range
+
+eval
+atanh('-Infinity'::float)
+----
+input is out of range

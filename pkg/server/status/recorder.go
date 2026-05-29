@@ -1162,59 +1162,75 @@ func (rr registryRecorder) recordChild(
 	})
 }
 
+// hashLabels computes a stable hash of a label set. The zero-byte separator
+// after each field prevents collisions where boundaries could otherwise shift
+// (e.g. without it, {a="bc"} and {ab="c"} would both hash "abc").
 func hashLabels(labels []*prometheusgo.LabelPair) uint64 {
 	h := fnv.New64a()
 	for _, label := range labels {
 		h.Write([]byte(label.GetName()))
+		h.Write([]byte{0})
 		h.Write([]byte(label.GetValue()))
+		h.Write([]byte{0})
 	}
 	return h.Sum64()
 }
 
-// cacheEntry holds a cached metric name along with the labels that produced it,
-// used for verification when hash collisions occur.
+// cacheEntry records the encoded label suffix produced from a label set. The
+// suffix depends only on labels (sanitization, sorting, and formatting via
+// metric.EncodeLabeledName), not on the metric name, so a single entry is
+// reused across distinct metrics that happen to share an identical label set.
+// In practice this is the common case: the allowlisted changefeed metrics
+// are all built via aggmetric.MakeBuilder("scope") and share a single-label
+// shape.
 type cacheEntry struct {
+	// labels is the label set this entry was produced from. Captured by
+	// reference; callers must not mutate the slice (or the underlying
+	// LabelPair values) after passing it to getOrComputeMetricName. Stored
+	// to verify cache hits in the (vanishingly rare) event of an FNV-1a
+	// collision.
 	labels []*prometheusgo.LabelPair
-	name   string
+	// suffix is the encoded label portion of a metric name, e.g.
+	// `{scope="default"}`. Concatenate with the metric name to form the
+	// full TSDB name.
+	suffix string
 }
 
-// labelsEqual returns true if two label slices are equal.
-func labelsEqual(a, b []*prometheusgo.LabelPair) bool {
-	if len(a) != len(b) {
+// matches reports whether the cached entry was produced from the given label
+// set.
+func (c *cacheEntry) matches(labels []*prometheusgo.LabelPair) bool {
+	if len(c.labels) != len(labels) {
 		return false
 	}
-	for i := range a {
-		if a[i].GetName() != b[i].GetName() || a[i].GetValue() != b[i].GetValue() {
+	for i := range c.labels {
+		if c.labels[i].GetName() != labels[i].GetName() ||
+			c.labels[i].GetValue() != labels[i].GetValue() {
 			return false
 		}
 	}
 	return true
 }
 
-// getOrComputeMetricName looks up the encoded metric name in the cache,
-// or computes it using the provided computeFn if not found.
-// Verifies labels on cache hit to detect hash collisions.
+// getOrComputeMetricName returns metricName concatenated with the encoded
+// label suffix for labels. The expensive label encoding work is cached keyed
+// by the label set, so distinct metrics that share a label set share the
+// work — only the trailing string concatenation is paid per call.
 func getOrComputeMetricName(
-	cache *syncutil.Map[uint64, cacheEntry],
-	labels []*prometheusgo.LabelPair,
-	computeFn func() string,
+	cache *syncutil.Map[uint64, cacheEntry], metricName string, labels []*prometheusgo.LabelPair,
 ) string {
 	if cache == nil {
-		return computeFn()
+		return metricName + metric.EncodeLabeledName(&prometheusgo.Metric{Label: labels})
 	}
-	labelHash := hashLabels(labels)
-	if cached, ok := cache.Load(labelHash); ok {
-		if labelsEqual(cached.labels, labels) {
-			return cached.name
-		}
-		// Hash collision detected - proceed to compute
+	key := hashLabels(labels)
+	if cached, ok := cache.Load(key); ok && cached.matches(labels) {
+		return metricName + cached.suffix
 	}
-	name := computeFn()
-	cache.Store(labelHash, &cacheEntry{
+	suffix := metric.EncodeLabeledName(&prometheusgo.Metric{Label: labels})
+	cache.Store(key, &cacheEntry{
 		labels: labels,
-		name:   name,
+		suffix: suffix,
 	})
-	return name
+	return metricName + suffix
 }
 
 // recordChangefeedChildMetrics iterates through changefeed metrics in the registry and processes child metrics
@@ -1262,9 +1278,7 @@ func (rr registryRecorder) recordChangefeedChildMetrics(dest *[]tspb.TimeSeriesD
 				}
 
 				// Check cache for encoded name
-				baseName := getOrComputeMetricName(rr.childMetricNameCache, childLabels, func() string {
-					return metadata.Name + metric.EncodeLabeledName(&prometheusgo.Metric{Label: childLabels})
-				})
+				baseName := getOrComputeMetricName(rr.childMetricNameCache, metadata.Name, childLabels)
 				// Record all histogram computed metrics using child-specific snapshots
 				for _, c := range metric.HistogramMetricComputers {
 					var snapshot metric.HistogramSnapshot
@@ -1277,15 +1291,13 @@ func (rr registryRecorder) recordChangefeedChildMetrics(dest *[]tspb.TimeSeriesD
 					if count < 0 {
 						continue // Skip malformed snapshots
 					}
-					value := c.ComputedMetric(snapshot)
-					metricName := baseName + c.Suffix
 					*dest = append(*dest, tspb.TimeSeriesData{
-						Name:   fmt.Sprintf(rr.format, metricName),
+						Name:   fmt.Sprintf(rr.format, baseName+c.Suffix),
 						Source: rr.source,
 						Datapoints: []tspb.TimeSeriesDatapoint{
 							{
 								TimestampNanos: rr.timestampNanos,
-								Value:          value,
+								Value:          c.ComputedMetric(snapshot),
 							},
 						},
 					})
@@ -1323,9 +1335,8 @@ func (rr registryRecorder) recordChangefeedChildMetrics(dest *[]tspb.TimeSeriesD
 			}
 
 			// Check cache for encoded name
-			metricName := getOrComputeMetricName(rr.childMetricNameCache, childMetric.Label, func() string {
-				return prom.GetName(false /* useStaticLabels */) + metric.EncodeLabeledName(childMetric)
-			})
+			promName := prom.GetName(false /* useStaticLabels */)
+			metricName := getOrComputeMetricName(rr.childMetricNameCache, promName, childMetric.Label)
 
 			*dest = append(*dest, tspb.TimeSeriesData{
 				Name:   fmt.Sprintf(rr.format, metricName),

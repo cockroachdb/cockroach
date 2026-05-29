@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -17,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -35,8 +37,8 @@ var cpuTimeTokenACEnabled = settings.RegisterBoolSetting(
 	false)
 
 // cpuTimeTokenMode selects between off (slot-based AC), Serverless
-// (2 WorkQueues, per-tier settings), and Resource Manager (1 WorkQueue,
-// resource groups) modes.
+// (per-tenant groups), and Resource Manager (priority-based groups)
+// modes. All modes use a single WorkQueue with 2 buckets.
 type cpuTimeTokenMode int64
 
 const (
@@ -44,13 +46,11 @@ const (
 	// When the mode is off, the legacy bool setting is checked as a
 	// fallback.
 	offMode cpuTimeTokenMode = iota
-	// serverlessMode uses 2 WorkQueues (systemTenant, appTenant), per-tier
-	// utilization targets, and 4 buckets (2 tiers x 2 burst quals).
+	// serverlessMode uses CPU time token AC with a single WorkQueue and
+	// 2 buckets (canBurst, noBurst).
 	serverlessMode
-	// resourceManagerMode will use 1 WorkQueue with N resource groups,
-	// a single utilization target, and 2 buckets (1 tier x 2 burst quals).
-	// TODO(wenyihu): In RM mode, only queue[0] should receive work;
-	// queue[1] will sit idle. This routing is not yet implemented.
+	// resourceManagerMode uses 1 WorkQueue with N resource groups,
+	// a single utilization target, and 2 buckets (canBurst, noBurst).
 	resourceManagerMode
 )
 
@@ -67,8 +67,8 @@ var cpuTimeTokenACMode = settings.RegisterEnumSetting[cpuTimeTokenMode](
 	"admission.cpu_time_tokens.mode",
 	"selects the CPU time token admission control mode: off uses "+
 		"slot-based AC (or falls back to the legacy enabled bool), "+
-		"serverless uses 2 queues with per-tier targets, "+
-		"resource_manager uses 1 queue with resource groups",
+		"serverless uses CPU time token AC with per-tenant groups, "+
+		"resource_manager uses CPU time token AC with priority-based groups",
 	"off",
 	map[cpuTimeTokenMode]string{
 		offMode:             "off",
@@ -132,37 +132,31 @@ type CPUGrantCoordinators struct {
 
 // GetKVWorkQueue returns a WorkQueue to use for KVWork. If CPU time
 // token AC is enabled (via admission.cpu_time_tokens.mode or the legacy
-// enabled bool), it returns a WorkQueue that implements CPU time token
-// AC. Else it returns a WorkQueue that does slots-based AC.
-//
-// In serverless mode, there is one WorkQueue for system tenant work
-// and another for app tenant work. The system tenant WorkQueue is
-// backed by a granter that allows greater resource usage than the app
-// tenant WorkQueue. This is a prioritization scheme. In resource
-// manager mode, only queue[0] will be used (not yet implemented). For
-// details regarding the granters, see cpu_time_token_granter.go.
-func (coord *CPUGrantCoordinators) GetKVWorkQueue(isSystemTenant bool) *WorkQueue {
+// enabled bool), it returns the single CPU time token WorkQueue.
+// Otherwise it returns a WorkQueue that does slots-based AC.
+func (coord *CPUGrantCoordinators) GetKVWorkQueue() *WorkQueue {
 	if !cpuTimeTokenACIsEnabled(&coord.st.SV) {
 		return coord.slotsCoord.GetWorkQueue(KVWork)
 	}
-	return coord.GetCTTWorkQueue(isSystemTenant)
+	return coord.cpuTimeCoord.queue
 }
 
-// GetCTTWorkQueue returns the CPU time token WorkQueue unconditionally,
-// without checking whether CPU time token AC is enabled. The caller is
-// responsible for gating on the setting. This avoids a race in GetKVWorkQueue
-// where the setting can flip between the caller's check and the internal
-// re-check, returning a slot-based queue to a caller that expects a CTT queue.
-func (coord *CPUGrantCoordinators) GetCTTWorkQueue(isSystemTenant bool) *WorkQueue {
-	if isSystemTenant {
-		return coord.cpuTimeCoord.getWorkQueue(systemTenant)
-	}
-	return coord.cpuTimeCoord.getWorkQueue(appTenant)
+// GetCTTWorkQueue returns the CPU time token WorkQueue directly,
+// bypassing the CTT-enabled check that GetKVWorkQueue performs. Callers
+// that already know they want the CTT queue (e.g. the SQLCPUProvider
+// fast path) use this to avoid the TOCTOU window where the setting can
+// flip between the caller's check and GetKVWorkQueue's re-check —
+// otherwise the caller can be handed the slot-based queue and silently
+// run with the wrong admission policy.
+func (coord *CPUGrantCoordinators) GetCTTWorkQueue() *WorkQueue {
+	return coord.cpuTimeCoord.queue
 }
 
-// GetSQLWorkQueue returns a WorkQueue for SQLKVResponseWork or
-// SQLSQLResponseWork. If any other queue is requested from this function,
-// it panics.
+// GetSQLWorkQueue returns the slot-based WorkQueue for SQLKVResponseWork
+// or SQLSQLResponseWork; panics for any other WorkKind. Note this is
+// only the slots path: when CPU time token AC is enabled SQL work
+// instead flows through the CTT queue via SQLCPUProvider (see
+// sql_cpu_handle.go).
 func (coord *CPUGrantCoordinators) GetSQLWorkQueue(workKind WorkKind) *WorkQueue {
 	if workKind != SQLKVResponseWork && workKind != SQLSQLResponseWork {
 		panic(fmt.Sprintf("workKind %q not supported by GetSQLWorkQueue", workKind))
@@ -170,19 +164,28 @@ func (coord *CPUGrantCoordinators) GetSQLWorkQueue(workKind WorkKind) *WorkQueue
 	return coord.slotsCoord.queues[workKind].(*WorkQueue)
 }
 
-// SetTenantWeights sets the weight of tenants, using the provided tenant ID
-// => weight map. A nil map will result in all tenants having the same weight.
-// SetTenantWeights adjusts the weights on all WorkQueues that
-// CPUGrantCoordinators manages.
-func (coord *CPUGrantCoordinators) SetTenantWeights(weights map[uint64]uint32) {
-	coord.slotsCoord.GetWorkQueue(KVWork).SetTenantWeights(weights)
-	coord.cpuTimeCoord.setTenantWeights(weights)
+// SetResourceGroupConfig installs a new per-resource-group config (weight +
+// maxCPU) into the holder, then signals the RM-mode WorkQueue to refresh its
+// cached per-group state. When RM mode is off, the second step is a no-op:
+// the change stays staged in the holder and is applied when the mode
+// setting changes to resourceManagerMode.
+func (coord *CPUGrantCoordinators) SetResourceGroupConfig(config ResourceGroupConfigSet) {
+	coord.cpuTimeCoord.configHolder.Set(config)
+	coord.cpuTimeCoord.queue.refreshResourceGroupConfig()
 }
 
 // GetRunnableCountCallback returns a callback of type
-// goschedstats.RunnableCountCallback.
+// goschedstats.RunnableCountCallback. The callback fans out to both
+// the slot-based coordinator (which adjusts slots and records period
+// duration metrics) and the CPU time token allocator (which adjusts
+// its dampening factor). The slot coordinator is called first so its
+// KVCPULoadShortPeriodDuration / KVCPULoadLongPeriodDuration metrics
+// are incremented before the token allocator reads them.
 func (coord *CPUGrantCoordinators) GetRunnableCountCallback() goschedstats.RunnableCountCallback {
-	return coord.slotsCoord.CPULoad
+	return func(runnable int, procs int, samplePeriod time.Duration) {
+		coord.slotsCoord.CPULoad(runnable, procs, samplePeriod)
+		coord.cpuTimeCoord.allocator.CPULoad(runnable, procs, samplePeriod)
+	}
 }
 
 // Close implements the stop.Closer interface.
@@ -192,8 +195,10 @@ func (cg *CPUGrantCoordinators) Close() {
 }
 
 type cpuTimeTokenGrantCoordinator struct {
-	filler *cpuTimeTokenFiller
-	queues [numResourceTiers]requesterClose
+	filler       *cpuTimeTokenFiller
+	allocator    *cpuTimeTokenAllocator
+	queue        *WorkQueue
+	configHolder *ResourceGroupConfigHolder
 }
 
 func makeCPUTimeTokenGrantCoordinator(
@@ -207,21 +212,18 @@ func makeCPUTimeTokenGrantCoordinator(
 	registry.AddMetricStruct(metrics)
 	timeSource := timeutil.DefaultTimeSource{}
 	granter := newCPUTimeTokenGranter(metrics, timeSource)
-	var childGranters [numResourceTiers]cpuTimeTokenChildGranter
-	for tier := resourceTier(0); tier < numResourceTiers; tier++ {
-		childGranters[tier] = cpuTimeTokenChildGranter{
-			tier:   tier,
-			parent: granter,
-		}
-	}
 	filler := &cpuTimeTokenFiller{
 		timeSource: timeSource,
 		closeCh:    make(chan struct{}),
 	}
+	configHolder := newResourceGroupConfigHolder(&settings.SV)
 	allocator := &cpuTimeTokenAllocator{
-		granter:  granter,
-		settings: settings,
-		metrics:  metrics,
+		granter:         granter,
+		settings:        settings,
+		configHolder:    configHolder,
+		metrics:         metrics,
+		nowMono:         crtime.NowMono,
+		dampeningFactor: 1.0,
 	}
 	model := &cpuTimeTokenLinearModel{
 		granter:            granter,
@@ -232,30 +234,35 @@ func makeCPUTimeTokenGrantCoordinator(
 	allocator.model = model
 	filler.allocator = allocator
 
-	var requesters [numResourceTiers]requester
 	wqMetrics := makeWorkQueueMetrics("cpu", registry)
-	for tier := resourceTier(0); tier < numResourceTiers; tier++ {
-		opts := makeWorkQueueOptions(KVWork)
-		opts.mode = usesCPUTimeTokens
-		opts.perTenantAggMetrics = &tenantAggMetrics{
-			admittedCount:  metrics.AdmittedCountPerTenant[tier],
-			waitTimeNanos:  metrics.WaitTimeNanosPerTenant[tier],
-			tokensUsed:     metrics.TokensUsedPerTenant[tier],
-			tokensReturned: metrics.TokensReturnedPerTenant[tier],
-		}
-		requesters[tier] = makeWorkQueue(
-			ambientCtx, KVWork, &childGranters[tier], settings, wqMetrics, opts)
-		granter.requester[tier] = requesters[tier]
-		// This type assertion is always valid, since makeWorkQueue always
-		// returns a *WorkQueue.
-		allocator.queues[tier] = requesters[tier].(*WorkQueue)
+	wqOpts := makeWorkQueueOptions(KVWork)
+	wqOpts.mode = usesCPUTimeTokens
+	wqOpts.perGroupAggMetrics = &groupAggMetrics{
+		primary: &groupAggMetricSet{
+			admittedCount:  metrics.AdmittedCount,
+			waitTimeNanos:  metrics.WaitTimeNanos,
+			tokensUsed:     metrics.TokensUsed,
+			tokensReturned: metrics.TokensReturned,
+		},
+		legacy: &groupAggMetricSet{
+			admittedCount:  metrics.LegacyAdmittedCountPerTenant,
+			waitTimeNanos:  metrics.LegacyWaitTimeNanosPerTenant,
+			tokensUsed:     metrics.LegacyTokensUsedPerTenant,
+			tokensReturned: metrics.LegacyTokensReturnedPerTenant,
+		},
 	}
+	wqOpts.configHolder = configHolder
+	wqOpts.groupKeyForWorkInfo = cpuTimeTokenGroupKeyForWorkInfo
+	queue := makeWorkQueue(
+		ambientCtx, KVWork, granter, settings, wqMetrics, wqOpts).(*WorkQueue)
+	granter.requester = queue
+	allocator.queue = queue
 
 	coordinator := &cpuTimeTokenGrantCoordinator{
-		filler: filler,
-	}
-	for tier := resourceTier(0); tier < numResourceTiers; tier++ {
-		coordinator.queues[tier] = requesters[tier]
+		filler:       filler,
+		allocator:    allocator,
+		queue:        queue,
+		configHolder: configHolder,
 	}
 
 	// The filler ticking appears to have a slight negative impact on perf.
@@ -284,19 +291,7 @@ func makeCPUTimeTokenGrantCoordinator(
 	return coordinator
 }
 
-func (coord *cpuTimeTokenGrantCoordinator) getWorkQueue(tier resourceTier) *WorkQueue {
-	return coord.queues[tier].(*WorkQueue)
-}
-
-func (coord *cpuTimeTokenGrantCoordinator) setTenantWeights(weights map[uint64]uint32) {
-	for tier := range coord.queues {
-		coord.queues[tier].(*WorkQueue).SetTenantWeights(weights)
-	}
-}
-
 func (coord *cpuTimeTokenGrantCoordinator) close() {
-	for tier := range coord.queues {
-		coord.queues[tier].close()
-	}
+	coord.queue.close()
 	coord.filler.close()
 }

@@ -471,3 +471,19 @@ statement ok
 SET CLUSTER SETTING sql.ttl.default_select_rate_limit = 0;
 
 subtest end
+
+subtest internal_executor_session_overrides_validation
+
+statement ok
+SET CLUSTER SETTING sql.internal_executor.session_overrides = 'Database=foo'
+
+statement error unknown or unsupported session variable "bogus"
+SET CLUSTER SETTING sql.internal_executor.session_overrides = 'bogus=bar'
+
+statement error invalid override format
+SET CLUSTER SETTING sql.internal_executor.session_overrides = 'no_equals_sign'
+
+statement ok
+SET CLUSTER SETTING sql.internal_executor.session_overrides = ''
+
+subtest end

@@ -13,8 +13,8 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
+	"github.com/cockroachdb/cockroach/pkg/sqlproxy"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -74,7 +74,7 @@ func runStartSQLProxy(cmd *cobra.Command, args []string) (returnErr error) {
 	}
 	stopper.AddCloser(stop.CloserFn(func() { _ = metricsLn.Close() }))
 
-	server, err := sqlproxyccl.NewServer(ctx, stopper, proxyContext)
+	server, err := sqlproxy.NewServer(ctx, stopper, proxyContext)
 	if err != nil {
 		return err
 	}
@@ -115,7 +115,7 @@ func initProxyLogging(cmd *cobra.Command) (ctx context.Context, stopper *stop.St
 
 func waitForProxySignals(
 	ctx context.Context,
-	server *sqlproxyccl.Server,
+	server *sqlproxy.Server,
 	stopper *stop.Stopper,
 	proxyLn net.Listener,
 	proxyProtocolLn net.Listener,

@@ -40,7 +40,7 @@ Schema change plan for rolling back CREATE DATABASE ‹db›; following CREATE U
       │         ├── RemoveDroppedIndexPartialPredicate {"IndexID":2,"TableID":104}
       │         ├── MarkDescriptorAsDropped {"DescriptorID":106}
       │         ├── RemoveSchemaParent {"Parent":{"ParentDatabaseID":105,"SchemaID":106}}
-      │         ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.Owner"}
+      │         ├── RemoveOwner {"DescriptorID":106}
       │         ├── RemoveUserPrivileges {"DescriptorID":106,"User":"admin"}
       │         ├── RemoveUserPrivileges {"DescriptorID":106,"User":"public"}
       │         ├── RemoveUserPrivileges {"DescriptorID":106,"User":"root"}
@@ -50,7 +50,7 @@ Schema change plan for rolling back CREATE DATABASE ‹db›; following CREATE U
       │         ├── MarkDescriptorAsDropped {"DescriptorID":105}
       │         ├── DrainDescriptorName {"Namespace":{"DescriptorID":105,"Name":"db"}}
       │         ├── RemoveDatabaseRoleSettings {"DatabaseID":105}
-      │         ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.Owner"}
+      │         ├── RemoveOwner {"DescriptorID":105}
       │         ├── RemoveUserPrivileges {"DescriptorID":105,"User":"admin"}
       │         ├── RemoveUserPrivileges {"DescriptorID":105,"User":"public"}
       │         ├── RemoveUserPrivileges {"DescriptorID":105,"User":"root"}

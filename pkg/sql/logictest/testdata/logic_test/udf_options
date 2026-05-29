@@ -94,6 +94,30 @@ SELECT pg_get_functiondef('soundex'::regproc::oid)
 ----
 soundex
 
+# pg_get_function_sqlbody returns the deparsed body only for functions defined
+# with the SQL-standard inline body syntax (RETURN expr or BEGIN ATOMIC ... END).
+# CockroachDB does not support that syntax (#85144), so prosqlbody is always
+# NULL today, matching Postgres' behavior for AS $$...$$ functions.
+query T
+SELECT pg_get_function_sqlbody('get_l'::regproc::oid)
+----
+NULL
+
+query T
+SELECT pg_get_function_sqlbody(NULL)
+----
+NULL
+
+query T
+SELECT pg_get_function_sqlbody(123456)
+----
+NULL
+
+query T
+SELECT pg_get_function_sqlbody('soundex'::regproc::oid)
+----
+NULL
+
 # Only the volatile functions should see the changes made by the UPDATE in the
 # CTE.
 query IIIIIIII colnames,rowsort

@@ -12,8 +12,13 @@ distribution: local
 │
 └── • emptyrow
 
-query T
+# Duplicate SRF names in FROM without aliases now correctly errors,
+# matching Postgres behavior (#150532).
+query error pgcode 42712 source name "generate_series" specified more than once
 EXPLAIN SELECT * FROM generate_series(1, 2), generate_series(1, 2)
+
+query T
+EXPLAIN SELECT * FROM generate_series(1, 2) AS a, generate_series(1, 2) AS b
 ----
 distribution: local
 ·

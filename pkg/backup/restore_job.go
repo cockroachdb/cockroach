@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
+	"github.com/cockroachdb/cockroach/pkg/revlog/restorerevlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -566,7 +568,11 @@ func restore(
 		// Only update the job progress on the main data bundle. This should account
 		// for the bulk of the data to restore. Other data (e.g. zone configs in
 		// cluster restores) may be restored first.
-		progressLogger := jobs.DeprecatedNewChunkProgressLoggerForJob(job, numImportSpans, job.FractionCompleted(), progressTracker.updateJobCallback)
+		fractionTarget := float32(1.0)
+		if details.ExperimentalCopy {
+			fractionTarget = experimentalCopyLinkFraction
+		}
+		progressLogger := jobs.DeprecatedNewChunkProgressLoggerForJob(job, numImportSpans, job.FractionCompleted(), fractionTarget, progressTracker.updateJobCallback)
 
 		jobProgressLoop := func(ctx context.Context) error {
 			ctx, progressSpan := tracing.ChildSpan(ctx, "progress-loop")
@@ -816,6 +822,29 @@ func loadBackupSQLDescs(
 	allDescs, latestBackupManifest, err := backupinfo.LoadSQLDescsFromBackupsAtTime(ctx, backupManifests, layerToBackupManifestFileIterFactory, details.EndTime)
 	if err != nil {
 		return nil, backuppb.BackupManifest{}, nil, 0, err
+	}
+
+	// For revlog restores, merge in descriptors from schema changes that
+	// occurred between the backup end time and the revlog AOST. This
+	// ensures that tables created during the revlog window are included
+	// in the descriptor set and flow through the normal rewrite and
+	// namespace-entry-writing pipeline in createImportingDescriptors.
+	if !build.IsRelease() && !details.RevisionLogTimestamp.IsEmpty() {
+		store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(
+			ctx, details.DefaultCollectionURI, p.User(),
+		)
+		if err != nil {
+			return nil, backuppb.BackupManifest{}, nil, 0,
+				errors.Wrap(err, "opening collection for revlog descriptor merge")
+		}
+		defer store.Close()
+		allDescs, _, err = restorerevlog.ApplyDescriptorChanges(
+			ctx, store, allDescs, details.EndTime, details.RevisionLogTimestamp,
+		)
+		if err != nil {
+			return nil, backuppb.BackupManifest{}, nil, 0,
+				errors.Wrap(err, "applying revlog descriptor changes")
+		}
 	}
 
 	for _, m := range details.DatabaseModifiers {
@@ -1371,6 +1400,24 @@ func createRestoreFlows(
 	preRestoreTables := make([]catalog.TableDescriptor, 0)
 	tablesToPreRestore := getSystemTablesToRestoreBeforeData()
 
+	// Build a set of pre-rewrite IDs for tables added by the revision log.
+	// These tables have no backup data, so they must be excluded from the
+	// backup data restore flow (their data comes from the revision log).
+	var revlogNewPostIDs map[descpb.ID]struct{}
+	var revlogOldIDs map[descpb.ID]struct{}
+	if !build.IsRelease() && len(details.RevlogNewTableIDs) > 0 {
+		revlogNewPostIDs = make(map[descpb.ID]struct{}, len(details.RevlogNewTableIDs))
+		for _, id := range details.RevlogNewTableIDs {
+			revlogNewPostIDs[id] = struct{}{}
+		}
+		revlogOldIDs = make(map[descpb.ID]struct{})
+		for oldID, rw := range details.DescriptorRewrites {
+			if _, ok := revlogNewPostIDs[rw.ID]; ok {
+				revlogOldIDs[oldID] = struct{}{}
+			}
+		}
+	}
+
 	shouldPreRestore := func(tableDesc catalog.TableDescriptor) bool {
 		if tableDesc.GetParentID() != keys.SystemDatabaseID {
 			return false
@@ -1390,6 +1437,11 @@ func createRestoreFlows(
 			}
 		}
 		if tableDesc, ok := desc.(catalog.TableDescriptor); ok {
+			// Skip tables added by the revision log — they have no backup
+			// data and their content is restored via restoreFromRevisionLog.
+			if _, ok := revlogOldIDs[tableDesc.GetID()]; ok {
+				continue
+			}
 			if shouldPreRestore(tableDesc) {
 				preRestoreTables = append(preRestoreTables, tableDesc)
 			} else {
@@ -1429,6 +1481,10 @@ func createRestoreFlows(
 	var systemTables []catalog.TableDescriptor
 	for i := range details.TableDescs {
 		desc := tabledesc.NewBuilder(details.TableDescs[i]).BuildImmutableTable()
+		// Skip rekeys for revlog-added tables — no backup data to rekey.
+		if _, ok := revlogNewPostIDs[desc.GetID()]; ok {
+			continue
+		}
 		newDescBytes, err := protoutil.Marshal(desc.DescriptorProto())
 		if err != nil {
 			return nil, nil, nil, errors.NewAssertionErrorWithWrappedErrf(err,
@@ -2024,7 +2080,9 @@ func createImportingDescriptors(
 		}
 
 		// Update the job once all descs have been prepared for ingestion.
-		err := r.job.WithTxn(txn).SetDetails(ctx, details)
+		//
+		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+		err := r.job.DeprecatedWithTxn(txn).SetDetails(ctx, details)
 
 		// Emit to the event log now that the job has finished preparing descs.
 		emitRestoreJobEvent(ctx, p, jobs.StateRunning, r.job)
@@ -2285,7 +2343,8 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		// Ensure we have the latest copy of the job details.
 		details = r.job.Details().(jobspb.RestoreDetails)
 		details.DownloadSpans = downloadSpans
-		if err := r.job.NoTxn().SetDetails(ctx, details); err != nil {
+		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+		if err := r.job.DeprecatedNoTxn().SetDetails(ctx, details); err != nil {
 			return errors.Wrap(err, "updating job details with download spans")
 		}
 	}
@@ -2484,7 +2543,8 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	}
 
 	if details.ExperimentalCopy {
-		if len(details.DownloadSpans) == 0 && !details.SchemaOnly {
+		if len(details.DownloadSpans) == 0 && !details.SchemaOnly &&
+			(build.IsRelease() || len(details.RevlogNewTableIDs) == 0) {
 			return errors.AssertionFailedf("download spans should have been persisted to job details")
 		}
 		// TODO(msbutler): ideally doDownloadFiles would not depend on job details
@@ -2492,6 +2552,14 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		// it needs. If that occured, we would not need to update details above.
 		if err := r.doDownloadFilesWithRetry(ctx, p); err != nil {
 			return err
+		}
+	}
+
+	if !build.IsRelease() && !details.RevisionLogTimestamp.IsEmpty() {
+		if err := restorerevlog.RestoreFromRevisionLog(
+			ctx, p, r.job, r.execCfg,
+		); err != nil {
+			return errors.Wrap(err, "restoring from revision log")
 		}
 	}
 
@@ -2992,7 +3060,8 @@ func insertStats(
 
 	// Mark the stats insertion complete.
 	details.StatsInserted = true
-	return errors.Wrap(job.NoTxn().SetDetails(ctx, details), "updating job marking stats insertion complete")
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	return errors.Wrap(job.DeprecatedNoTxn().SetDetails(ctx, details), "updating job marking stats insertion complete")
 }
 
 // publishDescriptors updates the RESTORED descriptors' status from OFFLINE to
@@ -3249,7 +3318,8 @@ func (r *restoreResumer) publishDescriptors(
 	if details.OnlineImpl() {
 		details.PostDownloadTableAutoStatsSettings = tableAutoStatsSettings
 	}
-	if err := r.job.WithTxn(txn).SetDetails(ctx, details); err != nil {
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	if err := r.job.DeprecatedWithTxn(txn).SetDetails(ctx, details); err != nil {
 		return errors.Wrap(err,
 			"updating job details after publishing tables")
 	}
@@ -3460,6 +3530,13 @@ func (r *restoreResumer) OnFailOrCancel(
 
 	if err := r.maybeCleanupTempSystemDB(ctx); err != nil {
 		return err
+	}
+
+	// Best-effort cleanup of any intermediate revlog merge SSTs
+	// on this node. SSTs on other nodes are cleaned up by the
+	// background CleanupOrphanedFiles sweeper.
+	if !build.IsRelease() {
+		restorerevlog.CleanupMergeSSTs(ctx, p, r.job)
 	}
 
 	// Emit to the event log that the job has completed reverting.
@@ -4116,7 +4193,8 @@ func (r *restoreResumer) restoreSystemTables(
 				// restarts don't try to import data over our migrated data. This would
 				// fail since the restored data would shadow the migrated keys.
 				details.SystemTablesMigrated[systemTable.systemTableName] = true
-				return r.job.WithTxn(txn).SetDetails(ctx, details)
+				//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+				return r.job.DeprecatedWithTxn(txn).SetDetails(ctx, details)
 			}); err != nil {
 				return err
 			}

@@ -1506,7 +1506,8 @@ JOIN pg_catalog.pg_class t ON c.conrelid = t.oid
 WHERE t.relname = 'expr_tab'
 ORDER BY c.conname
 ----
-expr_tab_pkey  PRIMARY KEY (a ASC, (b + 100:::INT8) ASC, lower(c) ASC)
+expr_tab_a_not_null  NOT NULL
+expr_tab_pkey        PRIMARY KEY (a ASC, (b + 100:::INT8) ASC, lower(c) ASC)
 
 # Test with a table where the primary key starts with an expression
 statement ok
@@ -1552,7 +1553,8 @@ JOIN pg_catalog.pg_class t ON c.conrelid = t.oid
 WHERE t.relname = 'expr_tab2'
 ORDER BY c.conname
 ----
-expr_tab2_pkey  PRIMARY KEY ((a + b) ASC, c ASC)
+expr_tab2_c_not_null  NOT NULL
+expr_tab2_pkey        PRIMARY KEY ((a + b) ASC, c ASC)
 
 # Test with multiple expressions in primary key
 statement ok

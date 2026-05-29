@@ -320,7 +320,7 @@ func (tr *tableReader) execStatsForTrace() *execinfrapb.ComponentStats {
 			LockWaitTime:        optional.MakeTimeValue(tr.contentionEventsListener.GetLockWaitTime()),
 			LatchWaitTime:       optional.MakeTimeValue(tr.contentionEventsListener.GetLatchWaitTime()),
 			BatchRequestsIssued: optional.MakeUint(uint64(tr.fetcher.GetBatchRequestsIssued())),
-			KVCPUTime:           optional.MakeTimeValue(is.kvCPUTime),
+			LocalKVCPUTime:      optional.MakeTimeValue(time.Duration(tr.fetcher.GetLocalKVCPUTime())),
 		},
 		Output: tr.OutputHelper.Stats(),
 	}
@@ -350,6 +350,7 @@ func (tr *tableReader) generateMeta() []execinfrapb.ProducerMetadata {
 	meta.Metrics.BytesRead = tr.fetcher.GetBytesRead()
 	meta.Metrics.KVCPUTime = tr.fetcher.GetKVCPUTime()
 	meta.Metrics.RowsRead = tr.rowsRead
+	meta.Metrics.LocalKVCPUTime = tr.fetcher.GetLocalKVCPUTime()
 	meta.Metrics.StageID = tr.stageID
 	return append(trailingMeta, *meta)
 }

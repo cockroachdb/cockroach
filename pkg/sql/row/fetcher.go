@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -153,6 +154,13 @@ type KVBatchFetcher interface {
 	// processed by this fetcher throughout its lifetime. It is safe for concurrent
 	// use and is able to handle a case of uninitialized fetcher.
 	GetKVCPUTime() int64
+
+	// GetLocalKVCPUTime returns the SQL goroutine CPU time spent inside KV
+	// calls, measured via grunning deltas around txn.Send. This is the portion
+	// of SQL goroutine CPU that overlapped with KV work, not the CPU consumed
+	// on KV servers (see GetKVCPUTime for that). It is safe for concurrent use
+	// and is able to handle a case of uninitialized fetcher.
+	GetLocalKVCPUTime() int64
 
 	// Close releases the resources of this KVBatchFetcher. Must be called once
 	// the fetcher is no longer in use. Note that observability-related methods
@@ -508,6 +516,7 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 		var kvPairsRead int64
 		var batchRequestsIssued int64
 		var kvCPUTime int64
+		var localKVCPUTime int64
 		fetcherArgs := newTxnKVFetcherArgs{
 			reverse:                    args.Reverse,
 			lockStrength:               args.LockStrength,
@@ -521,10 +530,14 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 			kvPairsRead:                &kvPairsRead,
 			batchRequestsIssued:        &batchRequestsIssued,
 			kvCPUTime:                  &kvCPUTime,
+			localKVCPUTime:             &localKVCPUTime,
 			workloadID:                 args.WorkloadID,
 		}
 		if args.Txn != nil {
-			fetcherArgs.sendFn = makeSendFunc(args.Txn, args.Spec.External, &batchRequestsIssued, &kvCPUTime)
+			fetcherArgs.sendFn = makeSendFunc(
+				args.Txn, args.Spec.External,
+				&batchRequestsIssued, &kvCPUTime, &localKVCPUTime,
+			)
 			fetcherArgs.admission.requestHeader = args.Txn.AdmissionHeader()
 			fetcherArgs.admission.responseQ = args.Txn.DB().SQLKVResponseAdmissionQ
 			fetcherArgs.admission.pacerFactory = args.Txn.DB().AdmissionPacerFactory
@@ -551,7 +564,10 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 func (rf *Fetcher) SetTxn(txn *kv.Txn) error {
 	var batchRequestsIssued int64
 	var kvCPUTime int64
-	sendFn := makeSendFunc(txn, rf.args.Spec.External, &batchRequestsIssued, &kvCPUTime)
+	var localKVCPUTime int64
+	sendFn := makeSendFunc(
+		txn, rf.args.Spec.External, &batchRequestsIssued, &kvCPUTime, &localKVCPUTime,
+	)
 	return rf.setTxnAndSendFn(txn, sendFn)
 }
 
@@ -714,6 +730,19 @@ func (rf *Fetcher) StartInconsistentScan(
 		log.Dev.Infof(ctx, "starting inconsistent scan at timestamp %v", txnTimestamp)
 	}
 
+	// Extract the CPU time metric pointers from the underlying txnKVFetcher
+	// (set during Init) so the inconsistent scan's sendFn can accumulate into
+	// the same counters used by the normal scan path.
+	f, ok := rf.kvFetcher.KVBatchFetcher.(*txnKVFetcher)
+	if !ok {
+		return errors.AssertionFailedf(
+			"unexpectedly the KVBatchFetcher is %T and not *txnKVFetcher", rf.kvFetcher.KVBatchFetcher,
+		)
+	}
+	kvCPUTime := f.atomics.kvCPUTime
+	localKVCPUTime := f.atomics.localKVCPUTime
+
+	var w timeutil.CPUStopWatch
 	sendFn := func(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
 		if now := timeutil.Now(); now.Sub(txnTimestamp.GoTime()) >= maxTimestampAge {
 			// Time to bump the transaction. First commit the old one (should be a no-op).
@@ -742,9 +771,16 @@ func (rf *Fetcher) StartInconsistentScan(
 		}
 
 		log.VEventf(ctx, 2, "inconsistent scan: sending a batch with %d requests", len(ba.Requests))
+		w.Start()
 		res, err := txn.Send(ctx, ba)
+		if delta := w.Stop(); delta > 0 && localKVCPUTime != nil {
+			atomic.AddInt64(localKVCPUTime, int64(delta))
+		}
 		if err != nil {
 			return nil, err.GoError()
+		}
+		if res.CPUTime > 0 && kvCPUTime != nil {
+			atomic.AddInt64(kvCPUTime, res.CPUTime)
 		}
 		if TestingInconsistentScanSleep != 0 {
 			time.Sleep(TestingInconsistentScanSleep)
@@ -1426,6 +1462,16 @@ func (rf *Fetcher) GetKVCPUTime() int64 {
 		return 0
 	}
 	return rf.kvFetcher.GetKVCPUTime()
+}
+
+// GetLocalKVCPUTime returns the SQL goroutine CPU time spent inside KV calls,
+// measured via grunning around txn.Send. This is the portion of SQL goroutine
+// CPU that overlapped with KV work, not the CPU consumed on KV servers.
+func (rf *Fetcher) GetLocalKVCPUTime() int64 {
+	if rf == nil || rf.kvFetcher == nil {
+		return 0
+	}
+	return rf.kvFetcher.GetLocalKVCPUTime()
 }
 
 // GetBatchRequestsIssued returns total number of BatchRequests issued by the

@@ -38,6 +38,8 @@ WHERE rel.relname='userfiles_$user_upload_payload'
 ORDER BY conname;
 ----
 file_id_fk
+userfiles_$user_upload_payload_byte_offset_not_null
+userfiles_$user_upload_payload_file_id_not_null
 userfiles_$user_upload_payload_pkey
 
 subtest end

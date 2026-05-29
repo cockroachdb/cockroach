@@ -19,7 +19,7 @@ const (
 	GrafanaEnterpriseVersion = "9.2.3"
 	// PrometheusVersion is the version of Prometheus installed during the
 	// grafana-start command.
-	PrometheusVersion = "2.27.1"
+	PrometheusVersion = "2.53.5"
 	// NodeExporterVersion is the version of NodeExporter installed on each node
 	// in the startup script and during the grafana-start command.
 	NodeExporterVersion = "1.10.2"

@@ -106,6 +106,25 @@ func getSpanExprForGeographyIndex(
 				"parameter %s is not float", additionalParams[0].ResolvedType())
 		}
 		distanceMeters := float64(*d)
+		// At distance=0, the spans produced by geogIdx.DWithin are equivalent
+		// to those of geogIdx.Intersects: DWithin builds the same cell
+		// covering of geog and then expands it by an angle proportional to
+		// the distance, which is a no-op at distance=0 regardless of the
+		// use_spheroid argument. We delegate to Intersects because it avoids
+		// an upstream check in the DWithin path that produces empty spans at
+		// distance=0 and prevents index acceleration. Note that this
+		// equivalence is only at the index-span layer; ST_DWithin and
+		// ST_Intersects can disagree at the function level (in particular,
+		// spheroid vs. sphere math for geography), but the recheck of the
+		// original ST_DWithin filter on top of the inverted scan preserves
+		// the original semantics.
+		if distanceMeters == 0 {
+			unionKeySpans, err := geogIdx.Intersects(ctx, geog)
+			if err != nil {
+				return nil, err
+			}
+			return invertedexpr.GeoUnionKeySpansToSpanExpr(unionKeySpans), nil
+		}
 		useSpheroid := geogfn.UseSpheroid
 		if len(additionalParams) == 2 {
 			b, ok := additionalParams[1].(*tree.DBool)
@@ -191,6 +210,22 @@ func getSpanExprForGeometryIndex(
 
 	case geoindex.DWithin:
 		distance := getDistanceParam(additionalParams)
+		// At distance=0, the spans produced by geomIdx.DWithin are equivalent
+		// to those of geomIdx.Intersects: DWithin buffers geom by the
+		// distance and then computes Intersects spans on the result, and
+		// buffering by 0 is a no-op (modulo a degenerate case where it
+		// produces an empty geometry, which is what made the existing path
+		// produce empty spans and prevented index acceleration). Note that
+		// this equivalence is only at the index-span layer; the recheck of
+		// the original ST_DWithin filter on top of the inverted scan
+		// preserves the function-level semantics.
+		if distance == 0 {
+			unionKeySpans, err := geomIdx.Intersects(ctx, geom)
+			if err != nil {
+				return nil, err
+			}
+			return invertedexpr.GeoUnionKeySpansToSpanExpr(unionKeySpans), nil
+		}
 		unionKeySpans, err := geomIdx.DWithin(ctx, geom, distance)
 		if err != nil {
 			return nil, err

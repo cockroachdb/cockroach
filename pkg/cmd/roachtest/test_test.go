@@ -67,7 +67,7 @@ func nilLogger() *logger.Logger {
 
 func defaultClusterOpt() clustersOpt {
 	return clustersOpt{
-		typ:       roachprodCluster,
+		typ:       roachprodClusterType,
 		user:      "test_user",
 		cpuQuota:  1000,
 		debugMode: NoDebug,
@@ -79,7 +79,7 @@ func defaultClusterOpt() clustersOpt {
 // cluster provisioning error.
 func clusterOptWithProvisioningError() clustersOpt {
 	return clustersOpt{
-		typ:       roachprodCluster,
+		typ:       roachprodClusterType,
 		user:      "test_user",
 		cpuQuota:  1000,
 		debugMode: NoDebug,
@@ -288,7 +288,7 @@ func TestRunnerEncryptionAtRest(t *testing.T) {
 		Owner:             OwnerUnitTest,
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			encAtRest := c.(*clusterImpl).encAtRest
+			encAtRest := c.(testCluster).EncryptedAtRest()
 			t.L().Printf("encryption-at-rest=%t", encAtRest)
 			if encAtRest {
 				atomic.StoreInt32(&sawEncrypted, 1)
@@ -731,6 +731,142 @@ func TestGCESameDefaultZone(t *testing.T) {
 	}
 }
 
+func TestNewClusterRetriesProviderSuggestedZone(t *testing.T) {
+	const suggestedZone = "us-central1-f"
+	createCalls := runGCECreateRetryTest(t, func(createCalls int, opts ...*cloud.ClusterCreateOpts) error {
+		require.Equal(t, len(opts), 2)
+		crdbZones := opts[0].ProviderOptsContainer[gce.ProviderName].(*gce.ProviderOpts).Zones
+		workloadZones := opts[1].ProviderOptsContainer[gce.ProviderName].(*gce.ProviderOpts).Zones
+		require.Equal(t, crdbZones, workloadZones)
+		require.NotEmpty(t, crdbZones)
+
+		if createCalls == 1 {
+			return &vm.CreateCapacityError{
+				CapacityClass:  vm.CreateCapacityClassZone,
+				Provider:       gce.ProviderName,
+				MachineType:    "t2a-standard-8",
+				FailedZones:    crdbZones,
+				SuggestedZones: []string{suggestedZone},
+				Cause:          errors.New("capacity unavailable"),
+			}
+		}
+
+		require.Equal(t, []string{suggestedZone}, crdbZones)
+		return &roachprod.ClusterAlreadyExistsError{}
+	})
+
+	require.Equal(t, 2, createCalls)
+}
+
+func TestNewClusterRetriesDifferentDefaultZoneAfterCapacityError(t *testing.T) {
+	var firstAttemptZones []string
+	createCalls := runGCECreateRetryTest(t, func(createCalls int, opts ...*cloud.ClusterCreateOpts) error {
+		require.Equal(t, len(opts), 2)
+		crdbZones := opts[0].ProviderOptsContainer[gce.ProviderName].(*gce.ProviderOpts).Zones
+		workloadZones := opts[1].ProviderOptsContainer[gce.ProviderName].(*gce.ProviderOpts).Zones
+		require.Equal(t, crdbZones, workloadZones)
+		require.Len(t, crdbZones, 1)
+
+		if createCalls == 1 {
+			firstAttemptZones = append([]string(nil), crdbZones...)
+			return &vm.CreateCapacityError{
+				CapacityClass: vm.CreateCapacityClassZone,
+				Provider:      gce.ProviderName,
+				MachineType:   "n2-standard-8",
+				FailedZones:   crdbZones,
+				Cause:         errors.New("capacity unavailable"),
+			}
+		}
+
+		require.NotEqual(t, firstAttemptZones, crdbZones)
+		return &roachprod.ClusterAlreadyExistsError{}
+	})
+
+	require.Equal(t, 2, createCalls)
+}
+
+func runGCECreateRetryTest(
+	t *testing.T, createMock func(createCalls int, opts ...*cloud.ClusterCreateOpts) error,
+) int {
+	t.Helper()
+	factory := &clusterFactory{sem: make(chan struct{}, 1), r: newClusterRegistry()}
+	cfg := clusterConfig{spec: spec.MakeClusterSpec(2, spec.WorkloadNode())}
+	prevCloud, prevZones, prevClusterWipe := roachtestflags.Cloud, roachtestflags.Zones, roachtestflags.ClusterWipe
+	roachtestflags.Cloud, roachtestflags.Zones, roachtestflags.ClusterWipe = spec.GCE, "", false
+	t.Cleanup(func() {
+		roachtestflags.Cloud, roachtestflags.Zones = prevCloud, prevZones
+		roachtestflags.ClusterWipe, create = prevClusterWipe, roachprod.Create
+	})
+
+	var createCalls int
+	create = func(ctx context.Context, l *logger.Logger, username string, opts ...*cloud.ClusterCreateOpts) error {
+		createCalls++
+		return createMock(createCalls, opts...)
+	}
+	_, _, err := factory.newCluster(context.Background(), cfg, func(string) {})
+	require.Error(t, err)
+	return createCalls
+}
+
+func TestCreateRetryPlannerFallsBackToUntriedDefaultZone(t *testing.T) {
+	planner := &createRetryPlanner{
+		retryCandidates: []string{"us-east1-b", "us-east1-c", "us-east1-d"},
+		attemptedZones:  map[string]struct{}{"us-east1-b": {}},
+	}
+
+	zones, source := planner.selectNextZones(&vm.CreateCapacityError{
+		FailedZones: []string{"us-east1-b"},
+	})
+	require.Equal(t, []string{"us-east1-c"}, zones)
+	require.Equal(t, "untried default zones", source)
+}
+
+func TestCreateRetryPlannerIgnoresFailedSuggestedZone(t *testing.T) {
+	planner := &createRetryPlanner{
+		retryCandidates: []string{"us-east1-b", "us-east1-c", "us-east1-d"},
+		attemptedZones:  make(map[string]struct{}),
+	}
+
+	zones, source := planner.selectNextZones(&vm.CreateCapacityError{
+		FailedZones:    []string{"us-east1-b"},
+		SuggestedZones: []string{"us-east1-b"},
+	})
+	require.Equal(t, []string{"us-east1-c"}, zones)
+	require.Equal(t, "untried default zones", source)
+}
+
+func TestCreateRetryPlannerRecordFailureSkipsOverride(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		planner createRetryPlanner
+	}{
+		{
+			name:    "explicit zones",
+			planner: createRetryPlanner{explicitZones: true},
+		},
+		{
+			name:    "geo-distributed",
+			planner: createRetryPlanner{clusterSpec: spec.ClusterSpec{Geo: true}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			l := nilLogger()
+			defer l.Close()
+			planner := tc.planner
+			planner.attemptedZones = make(map[string]struct{})
+			planner.retryCandidates = []string{"us-east1-b", "us-east1-c"}
+
+			planner.recordFailure(&vm.CreateCapacityError{
+				CapacityClass: vm.CreateCapacityClassZone,
+				FailedZones:   []string{"us-east1-b"},
+			}, l)
+
+			require.Empty(t, planner.nextAttemptZones)
+			require.Empty(t, planner.attemptedZones)
+		})
+	}
+}
+
 func TestTransientErrorFallback(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
@@ -1019,6 +1155,36 @@ func TestVMPreemptionPolling(t *testing.T) {
 			defaultParallelism, copt, testOpts{}, lopt, github)
 
 		require.NoError(t, err)
+	})
+
+	// Test that a benchmark whose spot VM gets preempted is automatically
+	// requeued for one retry. Without this, a single preemption silently
+	// loses the nightly's perf data point for that benchmark (the runner
+	// uses --count=1 and the test selector only forces re-selection on
+	// the *next* nightly). The retry runs on a non-spot cluster, which is
+	// also the loop-breaker: only spot runs can preempt.
+	t.Run("benchmark preempted on spot is requeued for retry", func(t *testing.T) {
+		// Drive preemption via the polling path: both the original and the
+		// retry's Run will block on ctx.Done() and be cancelled when
+		// monitorForPreemptedVMs observes the (always-on) preemption hook.
+		setPollPreemptionInterval(50 * time.Millisecond)
+		getPreemptedVMsHook = func(c cluster.Cluster, ctx context.Context, l *logger.Logger) ([]vm.PreemptedVM, error) {
+			return []vm.PreemptedVM{{Name: "test_node", PreemptedAt: time.Now()}}, nil
+		}
+
+		var calls atomic.Int32
+		benchmarkTest := mockTest
+		benchmarkTest.Benchmark = true
+		benchmarkTest.Run = func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			calls.Add(1)
+			<-ctx.Done()
+		}
+
+		err := runner.Run(ctx, []registry.TestSpec{benchmarkTest}, 1, /* count */
+			defaultParallelism, copt, testOpts{}, lopt, github)
+		require.NoError(t, err)
+		require.Equal(t, int32(2), calls.Load(),
+			"benchmark should run twice: original (spot, preempted) + one non-spot retry")
 	})
 }
 

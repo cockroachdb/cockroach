@@ -388,7 +388,7 @@ type TableDescriptor interface {
 
 	// GetCreateQuery returns the full CREATE TABLE AS query that was used for
 	// table's creation. Only valid if IsAs is true.
-	GetCreateQuery() string
+	GetCreateQuery() catpb.Statement
 	// GetCreateAsOfTime returns the transaction timestamp that this table was
 	// created at, for materialized views and CREATE TABLE AS. Only valid if
 	// IsAs or MaterializedView returns true.
@@ -396,7 +396,7 @@ type TableDescriptor interface {
 
 	// GetViewQuery returns this view's CREATE VIEW declaration. Only valid if
 	// IsView is true.
-	GetViewQuery() string
+	GetViewQuery() catpb.Statement
 
 	// GetDropTime returns the timestamp at which the table is truncated or
 	// dropped. It's represented as the current time in nanoseconds since the
@@ -1067,6 +1067,12 @@ type DomainTypeDescriptor interface {
 	GetBaseType() *types.T
 	// IsNotNull returns true if the domain has a NOT NULL constraint.
 	IsNotNull() bool
+	// GetNotNullConstraintName returns the name of the NOT NULL constraint, or
+	// an empty string if there is no NOT NULL constraint.
+	GetNotNullConstraintName() string
+	// GetNotNullConstraintID returns the ID of the NOT NULL constraint, or zero
+	// if there is no NOT NULL constraint.
+	GetNotNullConstraintID() descpb.ConstraintID
 	// GetDefaultExpr returns the default expression for the domain, or an
 	// empty string if no default is specified.
 	GetDefaultExpr() string
@@ -1078,6 +1084,12 @@ type DomainTypeDescriptor interface {
 	// GetCheckConstraintExpr returns the expression of the CHECK constraint at
 	// the given ordinal.
 	GetCheckConstraintExpr(idx int) string
+	// GetCheckConstraintID returns the ID of the CHECK constraint at the given
+	// ordinal.
+	GetCheckConstraintID(idx int) descpb.ConstraintID
+	// GetCheckConstraintValidity returns the validity of the CHECK constraint
+	// at the given ordinal.
+	GetCheckConstraintValidity(idx int) descpb.ConstraintValidity
 }
 
 // TypeDescriptorResolver is an interface used during hydration of type
@@ -1118,7 +1130,7 @@ type FunctionDescriptor interface {
 	GetNullInputBehavior() catpb.Function_NullInputBehavior
 
 	// GetFunctionBody returns the function body string.
-	GetFunctionBody() string
+	GetFunctionBody() catpb.RoutineBody
 
 	// GetParams returns a list of all parameters of the function.
 	GetParams() []descpb.FunctionDescriptor_Parameter
@@ -1163,9 +1175,8 @@ type FunctionDescriptor interface {
 func FilterDroppedDescriptor(desc Descriptor) error {
 	if !desc.Dropped() {
 		return nil
-
 	}
-	return NewInactiveDescriptorError(ErrDescriptorDropped)
+	return NewInactiveDescriptorError(NewDescriptorDroppedError(desc))
 }
 
 // FilterOfflineDescriptor returns an error if the descriptor state is OFFLINE.

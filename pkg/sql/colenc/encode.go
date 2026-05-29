@@ -44,7 +44,13 @@ type BatchEncoder struct {
 	b coldata.Batch
 	// The destination for KVs.
 	p row.Putter
-	// The map of columns in the input batch to column ids on the table.
+	// insCols are the columns being inserted, in the same order as the vectors
+	// in the input batch. This may include write-only mutation columns that are
+	// not in desc.PublicColumns(), so encodePK must look up column metadata via
+	// insCols rather than PublicColumns when indexing by an insCols ordinal.
+	insCols []catalog.Column
+	// colMap maps a table column ID to its position in insCols (which is also
+	// its vector index in the input batch).
 	colMap catalog.TableColMap
 	// Map of index id to a slice of bools that contain partial index predicates.
 	partialIndexes map[descpb.IndexID][]bool
@@ -93,6 +99,7 @@ func MakeEncoder(
 	return BatchEncoder{
 		rh:                         &rh,
 		b:                          b,
+		insCols:                    insCols,
 		colMap:                     colMap,
 		partialIndexes:             partialIndexes,
 		useCPutsOnNonUniqueIndexes: sd.UseCPutsOnNonUniqueIndexes,
@@ -242,7 +249,11 @@ func (b *BatchEncoder) encodePK(ctx context.Context, ind catalog.Index) error {
 	keyAndSuffixCols := desc.IndexFetchSpecKeyAndSuffixColumns(ind)
 	keyCols := keyAndSuffixCols[:ind.NumKeyColumns()]
 	families := desc.GetFamilies()
-	fetchedCols := desc.PublicColumns()
+	// fetchedCols must use the same ordinal space as colMap (which is built from
+	// insCols), since we index it with values returned by colMap.Get below. Using
+	// desc.PublicColumns() here would crash whenever insCols includes a
+	// write-only mutation column not present in PublicColumns. See #169583.
+	fetchedCols := b.insCols
 
 	b.setupPrefixes(ind, b.rh.PrimaryIndexKeyPrefix)
 	kys := b.keys

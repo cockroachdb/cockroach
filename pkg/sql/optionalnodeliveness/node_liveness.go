@@ -30,12 +30,13 @@ func MakeContainer(nl livenesspb.NodeVitalityInterface) Container {
 }
 
 // OptionalErr returns the NodeLiveness instance if available. Otherwise, it
-// returns an error referring to the optionally passed in issues.
+// returns an error indicating that the operation is unsupported within a
+// virtual cluster.
 //
 // Use of NodeLiveness from within the SQL layer is **deprecated**. Please do
 // not introduce new uses of it.
-func (nl *Container) OptionalErr(issue int) (livenesspb.NodeVitalityInterface, error) {
-	v, err := nl.w.OptionalErr(issue)
+func (nl *Container) OptionalErr() (livenesspb.NodeVitalityInterface, error) {
+	v, err := nl.w.OptionalErr()
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +50,7 @@ var _ = (*Container)(nil).OptionalErr // silence unused lint
 //
 // Use of NodeLiveness from within the SQL layer is **deprecated**. Please do
 // not introduce new uses of it.
-func (nl *Container) Optional(issue int) (livenesspb.NodeVitalityInterface, bool) {
+func (nl *Container) Optional() (livenesspb.NodeVitalityInterface, bool) {
 	v, ok := nl.w.Optional()
 	if !ok {
 		return nil, false

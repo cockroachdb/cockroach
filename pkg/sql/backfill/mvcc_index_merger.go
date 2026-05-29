@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -279,7 +280,16 @@ func (ibm *IndexBackfillMerger) Run(ctx context.Context, output execinfra.RowRec
 	})
 
 	workersDoneCh := make(chan error)
-	go func() { workersDoneCh <- g.Wait() }()
+	go func() {
+		// Without this defer, a panic re-thrown from a ctxgroup worker via Wait
+		// would tear down the SQL pod with no Sentry report. We can't switch
+		// this goroutine to stop.Stopper.RunAsyncTask because Run blocks on
+		// g.Wait to satisfy the invariant that the deferred memory monitor
+		// cleanup above runs only after the workers in g have exited; a refused
+		// stopper task would force a return with workers still running.
+		defer logcrash.RecoverAndReportPanic(ctx, &ibm.flowCtx.Cfg.Settings.SV)
+		workersDoneCh <- g.Wait()
+	}()
 
 	tick := time.NewTicker(indexBackfillMergeProgressReportInterval)
 	defer tick.Stop()

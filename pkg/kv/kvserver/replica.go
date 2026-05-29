@@ -354,7 +354,7 @@ func (mu *ReplicaMutex) RLocker() sync.Locker {
 	return (*syncutil.RWMutex)(mu).RLocker()
 }
 
-var _ SenderWithWriteBytes = &Replica{}
+var _ SenderWithWorkStats = &Replica{}
 
 // A Replica is a contiguous keyspace with writes managed via an
 // instance of the Raft consensus algorithm. Many ranges may exist
@@ -466,6 +466,9 @@ type Replica struct {
 		stateMachine replicaStateMachine
 		// decoder is used to decode committed raft entries.
 		decoder replicaDecoder
+
+		// Historical information about the command that set the closed timestamp.
+		closedTimestampSetter closedTimestampSetterInfo
 
 		// Scratch for populating rac2.RaftEvent.MsgApps for flowControlV2.
 		msgAppScratchForFlowControl map[roachpb.ReplicaID][]raftpb.Message
@@ -990,9 +993,6 @@ type Replica struct {
 		failureToGossipSystemConfig bool
 
 		tenantID roachpb.TenantID // Set when first initialized, not modified after
-
-		// Historical information about the command that set the closed timestamp.
-		closedTimestampSetter closedTimestampSetterInfo
 
 		// Followers to which replication traffic is currently dropped.
 		//

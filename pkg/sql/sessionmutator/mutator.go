@@ -324,6 +324,14 @@ func (m *SessionDataMutator) SetDistSQLWorkMem(val int64) {
 	m.Data.WorkMemLimit = val
 }
 
+func (m *SessionDataMutator) SetDistSQLPlanLocalityFilter(val string) {
+	m.Data.DistSQLPlanLocalityFilter = val
+}
+
+func (m *SessionDataMutator) SetDistSQLPlanLocalityFilterStrict(val bool) {
+	m.Data.DistSQLPlanLocalityFilterStrict = val
+}
+
 func (m *SessionDataMutator) SetForceSavepointRestart(val bool) {
 	m.Data.ForceSavepointRestart = val
 }
@@ -614,6 +622,10 @@ func (m *SessionDataMutator) SetCopyNumRetriesPerBatch(val int32) {
 
 func (m *SessionDataMutator) SetOptSplitScanLimit(val int32) {
 	m.Data.OptSplitScanLimit = val
+}
+
+func (m *SessionDataMutator) SetOptimizerSpanLimit(val int32) {
+	m.Data.OptimizerSpanLimit = val
 }
 
 func (m *SessionDataMutator) SetStreamReplicationEnabled(val bool) {
@@ -1152,6 +1164,10 @@ func (m *SessionDataMutator) SetOptimizerInlineAnyUnnestSubquery(val bool) {
 	m.Data.OptimizerInlineAnyUnnestSubquery = val
 }
 
+func (m *SessionDataMutator) SetOptimizerInlinePlaceholderEqualities(val bool) {
+	m.Data.OptimizerInlinePlaceholderEqualities = val
+}
+
 func (m *SessionDataMutator) SetUseBackupsWithIDs(val bool) {
 	m.Data.UseBackupsWithIDs = val
 }
@@ -1189,6 +1205,10 @@ func (m *SessionDataMutator) notifyTCPKeepAliveChange() {
 
 func (m *SessionDataMutator) SetOptimizerUseMinRowCountAntiJoinFix(val bool) {
 	m.Data.OptimizerUseMinRowCountAntiJoinFix = val
+}
+
+func (m *SessionDataMutator) SetPgDumpCompatibility(val string) {
+	m.Data.PgDumpCompatibility = val
 }
 
 func (m *SessionDataMutator) SetStatsAsOf(val hlc.Timestamp) {

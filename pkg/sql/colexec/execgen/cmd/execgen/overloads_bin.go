@@ -32,7 +32,7 @@ var binaryOpDecMethod = map[treebin.BinaryOperatorSymbol]string{
 var binaryOpFloatMethod = map[treebin.BinaryOperatorSymbol]string{
 	treebin.FloorDiv: "math.Trunc",
 	treebin.Mod:      "math.Mod",
-	treebin.Pow:      "math.Pow",
+	treebin.Pow:      "eval.FloatPow", // returns two arguments so has to be treated separately
 }
 
 var binaryOpDecCtx = map[treebin.BinaryOperatorSymbol]string{
@@ -357,12 +357,38 @@ func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 func (c floatCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		binOp := op.overloadBase.BinOp
+		tmpl := `
+			{
+				{{if .CheckRightIsZero}}
+				if {{.Right}} == 0.0 && !math.IsNaN({{.Left}}) {
+					colexecerror.ExpectedError(tree.ErrDivByZero)
+				}
+				{{end}}`
+		if binOp == treebin.Pow {
+			// Floats use eval.FloatPow which returns two arguments and has to
+			// be treated separately.
+			tmpl += fmt.Sprintf(`
+				res, err := eval.FloatPow(float64(%s), float64(%s))
+				if err != nil {
+					colexecerror.ExpectedError(err)
+				}
+				{{.Target}} = float64(*res)
+			}
+			`, leftElem, rightElem)
+		} else {
+			tmpl += `
+				{{.Target}} = {{.ComputeBinOp}}
+			}
+			`
+		}
 		var computeBinOp string
 		switch binOp {
 		case treebin.FloorDiv:
 			computeBinOp = fmt.Sprintf("%s(float64(%s) / float64(%s))", binaryOpFloatMethod[binOp], leftElem, rightElem)
-		case treebin.Mod, treebin.Pow:
+		case treebin.Mod:
 			computeBinOp = fmt.Sprintf("%s(float64(%s), float64(%s))", binaryOpFloatMethod[binOp], leftElem, rightElem)
+		case treebin.Pow:
+			// Handled separately above.
 		default:
 			computeBinOp = fmt.Sprintf("float64(%s) %s float64(%s)", leftElem, binOp, rightElem)
 		}
@@ -374,16 +400,7 @@ func (c floatCustomizer) getBinOpAssignFunc() assignFunc {
 			"ComputeBinOp":     computeBinOp,
 		}
 		buf := strings.Builder{}
-		t := template.Must(template.New("").Parse(`
-			{
-				{{if .CheckRightIsZero}}
-				if {{.Right}} == 0.0 && !math.IsNaN({{.Left}}) {
-					colexecerror.ExpectedError(tree.ErrDivByZero)
-				}
-				{{end}}
-				{{.Target}} = {{.ComputeBinOp}}
-			}
-			`))
+		t := template.Must(template.New("").Parse(tmpl))
 		if err := t.Execute(&buf, args); err != nil {
 			colexecerror.InternalError(err)
 		}

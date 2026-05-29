@@ -100,14 +100,21 @@ func listAllDbs(hasPattern bool, verbose bool) (string, string) {
 	printACLColumn(&buf, "d.datacl")
 	if verbose {
 		// TODO(sql-sessions): "Tablespace" is omitted.
-		// TODO(sql-sessions): "Size" is omited.
-		// (pg_database_size is not yet supported.)
+		// "Size" is read from the periodically-refreshed system.table_metadata
+		// cache and may lag the truth by minutes; the column is omitted entirely
+		// (rather than reported as zero) for databases the caller cannot CONNECT
+		// to, matching the upstream psql behavior.
 		buf.WriteString(`,
        CASE
        WHEN pg_catalog.has_database_privilege(d.datname, 'CONNECT')
        THEN IF(d.datconnlimit < 0, 'Unlimited', d.datconnlimit::STRING)
        ELSE 'No Access'
        END AS "Connections",
+       CASE
+       WHEN pg_catalog.has_database_privilege(d.datname, 'CONNECT')
+       THEN pg_catalog.pg_size_pretty(pg_catalog.pg_database_size(d.datname))
+       ELSE 'No Access'
+       END AS "Size",
        COALESCE(pg_catalog.shobj_description(d.oid, 'pg_database'), '') AS "Description"`)
 	}
 	buf.WriteString(`
@@ -278,14 +285,11 @@ func describeFunctions(
 		// TODO(sql-sessions): Column "Language" omitted.
 		// (pg_language is not supported)
 		//
-		// TODO(sql-sessions): pg_get_function_sqlbody is not called here
-		// because it is not supported.
-		//
 		// TODO(sql-sessions): The "Description" column is currently
 		// ineffective for UDFs because of
 		// https://github.com/cockroachdb/cockroach/issues/44135
 		buf.WriteString(`,
-       p.prosrc AS "Source code",
+       COALESCE(p.prosrc, pg_catalog.pg_get_function_sqlbody(p.oid)) AS "Source code",
        pg_catalog.obj_description(p.oid, 'pg_proc') AS "Description"`)
 	}
 	buf.WriteString(`
@@ -406,9 +410,10 @@ func listTables(tabTypes string, hasPattern bool, verbose, showSystem bool) (str
           am.amname AS "Access Method"`)
 		}
 
-		// TODO(sql-sessions): Column "Size" omitted here.
-		// This is because pg_table_size() is not supported yet.
+		// "Size" is read from the periodically-refreshed
+		// system.table_metadata cache and may lag the truth by minutes.
 		buf.WriteString(`,
+          pg_catalog.pg_size_pretty(pg_catalog.pg_table_size(c.oid)) AS "Size",
           COALESCE(pg_catalog.obj_description(c.oid, 'pg_class'),'') as "Description"`)
 	}
 

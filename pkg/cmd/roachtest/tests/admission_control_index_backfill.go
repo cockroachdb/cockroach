@@ -50,8 +50,11 @@ type indexBackfillVariant struct {
 
 var indexBackfillVariants = []indexBackfillVariant{
 	{
-		nameSuffix:     "/no-disk-limit",
-		snapshotPrefix: "index-backfill-tpce-100k-nodisklimit",
+		nameSuffix: "/no-disk-limit",
+		// Keep the snapshot prefix short: GCE caps snapshot names at 63 chars,
+		// and snapshotName() appends a version+node infix that consumes ~22
+		// chars on top of the versionedSnapshotPrefix(t) prefix.
+		snapshotPrefix: "index-backfill-tpce-100k-nodl",
 	},
 	{
 		nameSuffix:         "/provisioned-bandwidth=false",
@@ -78,22 +81,28 @@ func versionedSnapshotPrefix(t test.Test) string {
 }
 
 func registerIndexBackfill(r registry.Registry) {
-	clusterSpec := r.MakeClusterSpec(
-		10, /* nodeCount */
-		spec.CPU(8),
-		spec.WorkloadNode(),
-		// The use of snapshots requires workload nodes to also have an attached disk.
-		// See: https://github.com/cockroachdb/cockroach/issues/156760
-		spec.WorkloadRequiresDisk(),
-		spec.WorkloadNodeCPU(8),
-		spec.VolumeSize(500),
-		spec.VolumeType("pd-ssd"),
-		spec.GCEMachineType("n2-standard-8"),
-		spec.GCEZones("us-east1-b"),
-		spec.ReuseNone(),
-	)
-
 	for _, v := range indexBackfillVariants {
+		clusterOpts := []spec.Option{
+			spec.CPU(8),
+			spec.WorkloadNode(),
+			// The use of snapshots requires workload nodes to also have an attached disk.
+			// See: https://github.com/cockroachdb/cockroach/issues/156760
+			spec.WorkloadRequiresDisk(),
+			spec.WorkloadNodeCPU(8),
+			spec.VolumeSize(500),
+			spec.VolumeType("pd-ssd"),
+			spec.GCEMachineType("n2-standard-8"),
+			spec.GCEZones("us-east1-b"),
+			spec.ReuseNone(),
+		}
+		if v.withCgroupLimiting {
+			// The cgroup disk staller relies on `lsblk -o NAME,MAJ:MIN,MOUNTPOINTS`,
+			// which requires util-linux >= 2.37 (Ubuntu 22.04+). FIPS images run
+			// Ubuntu 20.04, so exclude FIPS for cgroup-limiting variants. See #169098.
+			clusterOpts = append(clusterOpts, spec.Arch(spec.AllExceptFIPS))
+		}
+		clusterSpec := r.MakeClusterSpec(10 /* nodeCount */, clusterOpts...)
+
 		r.Add(registry.TestSpec{
 			Name:             "admission-control/index-backfill" + v.nameSuffix,
 			Timeout:          12 * time.Hour,
@@ -292,7 +301,7 @@ func runIndexBackfill(
 	// Run TPC-E workload and schema changes concurrently, collecting
 	// disk bandwidth metrics during the schema changes.
 	const (
-		workloadDuration = 90 * time.Minute
+		workloadDuration = 4 * time.Hour
 		baselineWait     = 5 * time.Minute
 	)
 	var backfillDuration time.Duration
@@ -300,10 +309,9 @@ func runIndexBackfill(
 	var totalBWSamples []float64
 	var metricsStart, metricsEnd time.Time
 
-	g := t.NewGroup(task.WithContext(ctx))
-
-	// Goroutine 1: Run TPC-E workload.
-	g.Go(func(ctx context.Context, l *logger.Logger) error {
+	// Run the TPC-E workload with a cancelable context so we can stop it
+	// once the schema changes complete.
+	cancelWorkload := t.GoWithCancel(func(ctx context.Context, l *logger.Logger) error {
 		t.Status(fmt.Sprintf("starting TPC-E workload with 20000 active customers (<%s)",
 			workloadDuration))
 		runOptions := tpceCmdOptions{
@@ -317,6 +325,12 @@ func runIndexBackfill(
 		}
 		result, err := tpceSpec.run(ctx, t, c, runOptions)
 		if err != nil {
+			// Context cancellation is expected when we stop the workload
+			// after schema changes complete.
+			if ctx.Err() != nil {
+				l.Printf("TPC-E workload stopped (schema changes completed)")
+				return nil
+			}
 			l.Printf("TPC-E workload error: %v", err)
 			return err
 		}
@@ -324,7 +338,11 @@ func runIndexBackfill(
 		return nil
 	}, task.Name("tpce-workload"))
 
-	// Goroutine 2: Run index creation after baseline period.
+	// Run schema changes in a separate group so we can wait for them
+	// independently of the workload.
+	g := t.NewGroup(task.WithContext(ctx))
+
+	// Goroutine 1: Run index creation after baseline period.
 	g.Go(func(ctx context.Context, l *logger.Logger) error {
 		t.Status(fmt.Sprintf("recording baseline performance (<%s)", baselineWait))
 		time.Sleep(baselineWait)
@@ -346,7 +364,7 @@ func runIndexBackfill(
 		return nil
 	}, task.Name("index-backfill"))
 
-	// Goroutine 3: Run primary key change, starting 10 minutes after
+	// Goroutine 2: Run primary key change, starting 10 minutes after
 	// test start (5 minutes after the index backfill starts).
 	g.Go(func(ctx context.Context, l *logger.Logger) error {
 		time.Sleep(baselineWait + 5*time.Minute)
@@ -424,8 +442,10 @@ func runIndexBackfill(
 		}
 	}, task.Name("metrics-collector"))
 
-	// Wait for workload and schema changes, then stop metrics collection.
+	// Wait for schema changes to complete, then stop the workload and
+	// metrics collection.
 	g.Wait()
+	cancelWorkload()
 	close(stopMetrics)
 	<-metricsDone
 

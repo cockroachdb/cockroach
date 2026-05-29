@@ -1393,6 +1393,7 @@ vectorized: true
                 │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
                 │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (column3 = b)
                 │ pred: (column1 != r) OR (column2 != a)
+                │ parallel
                 │
                 └── • filter
                     │ columns: (column1, column2, column3, column4)
@@ -1453,6 +1454,7 @@ vectorized: true
                 │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
                 │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (column3 = b)
                 │ pred: column4 IN ('bar', 'baz', 'foo')
+                │ parallel
                 │
                 └── • lookup join (anti)
                     │ columns: (column1, column2, column3, column4)
@@ -3225,6 +3227,7 @@ vectorized: true
                 │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
                 │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (b_new = b)
                 │ pred: (r != r) OR (a != a)
+                │ parallel
                 │
                 └── • filter
                     │ columns: (r, a, b_new, c)
@@ -4861,6 +4864,7 @@ vectorized: true
                 │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
                 │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (column3 = b)
                 │ pred: (upsert_r != r) OR (upsert_a != a)
+                │ parallel
                 │
                 └── • filter
                     │ columns: (upsert_r, upsert_a, column3, column4)
@@ -4923,6 +4927,7 @@ vectorized: true
                 │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
                 │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (column3 = b)
                 │ pred: column4 IN ('bar', 'baz', 'foo')
+                │ parallel
                 │
                 └── • distinct
                     │ columns: (arbiter_unique_b_distinct, column1, column2, column3, column4)

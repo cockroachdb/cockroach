@@ -1265,7 +1265,7 @@ func (desc *wrapper) validateColumns() error {
 
 		if column.IsComputed() {
 			// Verify that the computed column expression is valid.
-			expr, err := parserutils.ParseExpr(column.GetComputeExpr())
+			expr, err := parserutils.ParseExpr(string(column.GetComputeExpr()))
 			if err != nil {
 				return err
 			}
@@ -1481,12 +1481,12 @@ func (desc *wrapper) validateTriggers() error {
 
 		// Verify that the WHEN expression and function body statements are valid.
 		if trigger.WhenExpr != "" {
-			_, err := parserutils.ParseExpr(trigger.WhenExpr)
+			_, err := parserutils.ParseExpr(string(trigger.WhenExpr))
 			if err != nil {
 				return err
 			}
 		}
-		_, err := parserutils.PLpgSQLParse(trigger.FuncBody)
+		_, err := parserutils.PLpgSQLParse(string(trigger.FuncBody))
 		if err != nil {
 			return err
 		}
@@ -1553,7 +1553,7 @@ func (desc *wrapper) validateCheckConstraints(
 		}
 
 		// Verify that the check's expression is valid.
-		expr, err := parserutils.ParseExpr(chk.GetExpr())
+		expr, err := parserutils.ParseExpr(string(chk.GetExpr()))
 		if err != nil {
 			return err
 		}
@@ -1607,7 +1607,7 @@ func (desc *wrapper) validateUniqueWithoutIndexConstraints(
 		}
 
 		if c.IsPartial() {
-			expr, err := parserutils.ParseExpr(c.GetPredicate())
+			expr, err := parserutils.ParseExpr(string(c.GetPredicate()))
 			if err != nil {
 				return err
 			}
@@ -1812,7 +1812,7 @@ func (desc *wrapper) validateTableIndexes(
 			}
 		}
 		if idx.IsPartial() {
-			expr, err := parserutils.ParseExpr(idx.GetPredicate())
+			expr, err := parserutils.ParseExpr(string(idx.GetPredicate()))
 			if err != nil {
 				return err
 			}
@@ -2282,13 +2282,13 @@ func (desc *wrapper) validatePolicyRoles(p *descpb.PolicyDescriptor) error {
 // validatePolicyExprs will validate the expressions within the policy.
 func (desc *wrapper) validatePolicyExprs(p *descpb.PolicyDescriptor) error {
 	if p.WithCheckExpr != "" {
-		_, err := parserutils.ParseExpr(p.WithCheckExpr)
+		_, err := parserutils.ParseExpr(string(p.WithCheckExpr))
 		if err != nil {
 			return errors.Wrapf(err, "WITH CHECK expression %q is invalid", p.WithCheckExpr)
 		}
 	}
 	if p.UsingExpr != "" {
-		_, err := parserutils.ParseExpr(p.UsingExpr)
+		_, err := parserutils.ParseExpr(string(p.UsingExpr))
 		if err != nil {
 			return errors.Wrapf(err, "USING expression %q is invalid", p.UsingExpr)
 		}
@@ -2440,7 +2440,7 @@ func ValidateRBRTableUsingConstraint(
 		if !col.IsComputed() {
 			continue
 		}
-		expr, err := parserutils.ParseExpr(col.GetComputeExpr())
+		expr, err := parserutils.ParseExpr(string(col.GetComputeExpr()))
 		if err != nil {
 			// At this point, we should be able to parse the computed expression.
 			return errors.WithAssertionFailure(err)

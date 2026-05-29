@@ -410,6 +410,159 @@ func insertVectors(t *testing.T, runner *sqlutils.SQLRunner, startId int, vector
 	runner.Exec(t, query, args...)
 }
 
+// TestVecSearchKVStats verifies that KV statistics (gRPC calls, bytes read,
+// pairs read, KV time) are reported in EXPLAIN ANALYZE output for vector
+// search operations.
+// See https://github.com/cockroachdb/cockroach/issues/146695.
+func TestVecSearchKVStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+	defer srv.Stopper().Stop(ctx)
+
+	runner.Exec(t, `CREATE TABLE t (
+		id INT PRIMARY KEY,
+		vec VECTOR(2),
+		VECTOR INDEX idx (vec) WITH (min_partition_size=1, max_partition_size=5),
+		FAMILY (id, vec)
+	)`)
+
+	runner.Exec(t, `INSERT INTO t (id, vec) VALUES
+		(1, '[1, 2]'),
+		(2, '[7, 4]'),
+		(3, '[4, 3]'),
+		(4, '[8, 11]'),
+		(5, '[14, 1]'),
+		(6, '[0, 0]'),
+		(7, '[0, 4]'),
+		(8, '[-2, 8]'),
+		(9, '[5, 6]')`)
+
+	rows := runner.QueryStr(t,
+		`EXPLAIN ANALYZE (VERBOSE) SELECT id, vec FROM t@idx ORDER BY vec <-> '[3, 3]' LIMIT 5`)
+
+	// Extract the vector search section from the plan output.
+	var inVectorSearch bool
+	var vectorSearchOutput strings.Builder
+	for _, row := range rows {
+		line := row[0]
+		if strings.Contains(line, "• vector search") {
+			inVectorSearch = true
+		}
+		if inVectorSearch {
+			vectorSearchOutput.WriteString(line)
+			vectorSearchOutput.WriteString("\n")
+		}
+	}
+	vsSection := vectorSearchOutput.String()
+	require.NotEmpty(t, vsSection, "vector search section not found in plan")
+
+	// Verify that the vector search node reports KV stats with non-zero values.
+	require.Regexp(t, `KV time: [1-9]`, vsSection)
+	require.Regexp(t, `KV pairs read: [1-9]`, vsSection)
+	require.Regexp(t, `KV bytes read: [1-9]`, vsSection)
+	require.Regexp(t, `KV gRPC calls: [1-9]`, vsSection)
+
+	// Verify that MVCC scan stats from the ScanStatsListener are present.
+	require.Regexp(t, `MVCC step count \(ext/int\): \d+/\d+`, vsSection)
+	require.Regexp(t, `MVCC seek count \(ext/int\): \d+/\d+`, vsSection)
+}
+
+// TestVecMutationSearchKVStats verifies that KV statistics are reported in
+// EXPLAIN ANALYZE output for vector mutation search operations (INSERT, UPDATE,
+// DELETE). See https://github.com/cockroachdb/cockroach/issues/146695.
+func TestVecMutationSearchKVStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+	defer srv.Stopper().Stop(ctx)
+
+	runner.Exec(t, `CREATE TABLE t (
+		id INT PRIMARY KEY,
+		vec VECTOR(2),
+		VECTOR INDEX idx (vec) WITH (min_partition_size=1, max_partition_size=5),
+		FAMILY (id, vec)
+	)`)
+
+	runner.Exec(t, `INSERT INTO t (id, vec) VALUES
+		(1, '[1, 2]'),
+		(2, '[7, 4]'),
+		(3, '[4, 3]'),
+		(4, '[8, 11]'),
+		(5, '[14, 1]'),
+		(6, '[0, 0]'),
+		(7, '[0, 4]'),
+		(8, '[-2, 8]'),
+		(9, '[5, 6]')`)
+
+	// extractSection extracts lines belonging to the first occurrence of
+	// the given node header. It stops when a different node (marked by "•")
+	// is encountered at the same or higher level.
+	extractSection := func(rows [][]string, header string) string {
+		var inSection bool
+		var out strings.Builder
+		for _, row := range rows {
+			line := row[0]
+			if !inSection {
+				if strings.Contains(line, header) {
+					inSection = true
+				}
+			} else if strings.Contains(line, "•") {
+				break
+			}
+			if inSection {
+				out.WriteString(line)
+				out.WriteString("\n")
+			}
+		}
+		return out.String()
+	}
+
+	// Verify INSERT mutation search has KV stats.
+	insertRows := runner.QueryStr(t,
+		`EXPLAIN ANALYZE (VERBOSE) INSERT INTO t (id, vec) VALUES (10, '[3, 3]')`)
+	insertSection := extractSection(insertRows, "• vector mutation search")
+	require.NotEmpty(t, insertSection, "vector mutation search section not found")
+	require.Regexp(t, `KV time: [1-9]`, insertSection)
+	require.Regexp(t, `KV pairs read: [1-9]`, insertSection)
+	require.Regexp(t, `KV bytes read: [1-9]`, insertSection)
+	require.Regexp(t, `KV gRPC calls: [1-9]`, insertSection)
+	require.Regexp(t, `MVCC step count \(ext/int\): \d+/\d+`, insertSection)
+	require.Regexp(t, `MVCC seek count \(ext/int\): \d+/\d+`, insertSection)
+
+	// Verify UPDATE mutation search has KV stats. UPDATE produces two
+	// vector mutation search nodes (del + put). extractSection captures
+	// from the first occurrence to the end, which covers both nodes.
+	updateRows := runner.QueryStr(t,
+		`EXPLAIN ANALYZE (VERBOSE) UPDATE t SET vec = '[9, 9]' WHERE id = 1`)
+	updateSection := extractSection(updateRows, "• vector mutation search")
+	require.NotEmpty(t, updateSection, "vector mutation search section not found")
+	require.Regexp(t, `KV time: [1-9]`, updateSection)
+	require.Regexp(t, `KV pairs read: [1-9]`, updateSection)
+	require.Regexp(t, `KV bytes read: [1-9]`, updateSection)
+	require.Regexp(t, `KV gRPC calls: [1-9]`, updateSection)
+	require.Regexp(t, `MVCC step count \(ext/int\): \d+/\d+`, updateSection)
+	require.Regexp(t, `MVCC seek count \(ext/int\): \d+/\d+`, updateSection)
+
+	// Verify DELETE mutation search has KV stats.
+	deleteRows := runner.QueryStr(t,
+		`EXPLAIN ANALYZE (VERBOSE) DELETE FROM t WHERE id = 9`)
+	deleteSection := extractSection(deleteRows, "• vector mutation search")
+	require.NotEmpty(t, deleteSection, "vector mutation search section not found")
+	require.Regexp(t, `KV time: [1-9]`, deleteSection)
+	require.Regexp(t, `KV pairs read: [1-9]`, deleteSection)
+	require.Regexp(t, `KV bytes read: [1-9]`, deleteSection)
+	require.Regexp(t, `KV gRPC calls: [1-9]`, deleteSection)
+	require.Regexp(t, `MVCC step count \(ext/int\): \d+/\d+`, deleteSection)
+	require.Regexp(t, `MVCC seek count \(ext/int\): \d+/\d+`, deleteSection)
+}
+
 // TestVecIndexDeletion tests that rows can be properly deleted from a vector index.
 func TestVecIndexDeletion(t *testing.T) {
 	defer leaktest.AfterTest(t)()

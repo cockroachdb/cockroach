@@ -19,6 +19,7 @@ import (
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadog"
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/stretchr/testify/require"
@@ -377,7 +378,7 @@ func TestDiscoverLogFiles(t *testing.T) {
 
 	l, err := logger.RootLogger(os.DevNull, logger.NoTee)
 	require.NoError(t, err)
-	files, err := discoverLogFiles(l, tmpDir)
+	files, err := discoverTestLogFiles(l, tmpDir)
 	require.NoError(t, err)
 
 	// Convert to relative paths for readability.
@@ -400,6 +401,54 @@ func TestDiscoverLogFiles(t *testing.T) {
 		"logs/1.unredacted/diskusage.txt",
 		"run_073000.log",
 		"test.log",
+	}
+	require.Equal(t, expected, relPaths)
+}
+
+func TestDiscoverRunnerLogFiles(t *testing.T) {
+	// Create a representative _runner-logs/ directory structure:
+	//
+	//   tmpDir/
+	//   ├── test_runner-1773642173.log  ✓ runner log
+	//   ├── w0.log                      ✓ worker log
+	//   ├── w1.log                      ✓ worker log
+	//   ├── w15.log                     ✓ worker log
+	//   ├── params.log                  ✗ excluded
+	//   ├── cluster-create/             ✗ directory, skipped
+	//   │   └── teamcity-xxx.log
+	//   └── ssh/                        ✗ directory, skipped
+	tmpDir := t.TempDir()
+
+	touch := func(relPath string) {
+		absPath := filepath.Join(tmpDir, relPath)
+		require.NoError(t, os.MkdirAll(filepath.Dir(absPath), 0777))
+		require.NoError(t, os.WriteFile(absPath, nil, 0666))
+	}
+
+	touch("test_runner-1773642173.log")
+	touch("w0.log")
+	touch("w1.log")
+	touch("w15.log")
+	touch("params.log")                      // excluded
+	touch("cluster-create/teamcity-xxx.log") // excluded (in subdir)
+	touch("ssh/some-host.log")               // excluded (in subdir)
+
+	files, err := discoverRunnerLogFiles(tmpDir)
+	require.NoError(t, err)
+
+	var relPaths []string
+	for _, f := range files {
+		rel, relErr := filepath.Rel(tmpDir, f)
+		require.NoError(t, relErr)
+		relPaths = append(relPaths, rel)
+	}
+	sort.Strings(relPaths)
+
+	expected := []string{
+		"test_runner-1773642173.log",
+		"w0.log",
+		"w1.log",
+		"w15.log",
 	}
 	require.Equal(t, expected, relPaths)
 }
@@ -565,7 +614,7 @@ func TestNewDatadogContextDatadogSiteSet(t *testing.T) {
 	require.Equal(t, "1234", apiKeyMap["apiKeyAuth"].Key)
 }
 
-func TestShouldUploadLogsToDatadog(t *testing.T) {
+func TestShouldUploadTestLogsToDatadog(t *testing.T) {
 	// Save and restore env var and flags
 	originalBranch := os.Getenv(envTCBuildBranch)
 	originalSendLogsAnyBranch := roachtestflags.DatadogSendLogsAnyBranch
@@ -691,7 +740,7 @@ func TestShouldUploadLogsToDatadog(t *testing.T) {
 			_ = os.Setenv(envTCBuildBranch, tt.branch)
 			roachtestflags.DatadogSendLogsAnyBranch = tt.sendLogsAnyBranch
 			roachtestflags.DatadogSendLogsAnyResult = tt.sendLogsAnyResult
-			result := ShouldUploadLogsToDatadog(tt.testFailed)
+			result := ShouldUploadTestLogsToDatadog(tt.testFailed)
 			require.Equal(t, tt.expectedShouldUpload, result)
 		})
 	}
@@ -731,6 +780,12 @@ func TestShouldUploadLogsToDatadog(t *testing.T) {
 //	        ├── cockroach.exit.log                         crdbV2Parser (raw fallback)
 //	        ├── diskusage.txt                              roachtestParser (raw fallback)
 //	        └── roachprod.log                              roachtestParser
+//
+// Runner-level logs (uploaded via MaybeUploadRunnerLogs):
+//
+//	_runner-logs/
+//	├── test_runner-<unix_ts>.log                          roachtestParser
+//	└── w<N>.log                                           roachtestParser
 
 // parseTestLogResult holds the output of parseTestLog.
 type parseTestLogResult struct {
@@ -1021,7 +1076,7 @@ func TestParseLogFileJournalctl(t *testing.T) {
 //
 //	cockroach-health.teamcity-21260621-1773728561-75-n10cpu2-0001.ubuntu.2026-03-17T09_44_19Z.003965.log
 //
-// Both segment and base-name files are discovered by discoverLogFiles, and base-name files are only uploaded if no segment files exist for the same channel.
+// Both segment and base-name files are discovered by discoverTestLogFiles, and base-name files are only uploaded if no segment files exist for the same channel.
 func TestParseLogFileCockroach(t *testing.T) {
 	r := parseTestLog(t, "test_cockroach_log", crdbV2Parser,
 		"cockroach.teamcity-xxx.ubuntu.2026-02-11T00_19_40Z.log")
@@ -1072,4 +1127,147 @@ func TestParseLogFileCockroachStderr(t *testing.T) {
 		require.Equal(t, 0, len(r.validEntries), "no lines should match crdb-v2 format")
 		require.Equal(t, 11, r.skipCount, "all lines should be skipped")
 	})
+}
+
+// TestParseLogFileTestRunner tests the parsing of a _runner-logs/test_runner-*.log file.
+// These contain global orchestration events and may include worker-prefixed
+// lines ([wN]) interleaved with unprefixed runner lines.
+func TestParseLogFileTestRunner(t *testing.T) {
+	r := parseTestLog(t, "test_runner_log", roachtestParser, "test_runner-1773642173.log")
+
+	// All 12 lines match the roachtest timestamp pattern (both plain
+	// and [wN]-prefixed variants). No lines are skipped.
+	require.Equal(t, 12, len(r.validEntries), "expected 12 entries")
+	require.Equal(t, 0, r.skipCount, "no lines should be skipped")
+
+	// Verify first entry.
+	require.Contains(t, r.validEntries[0].Message, "test runner logs in:")
+
+	// Verify a worker-prefixed entry is parsed correctly.
+	require.Contains(t, r.validEntries[5].Message, "[w5]")
+	require.Contains(t, r.validEntries[5].Message, "roachprod.go")
+
+	// Verify last entry (summary line).
+	last := r.validEntries[len(r.validEntries)-1]
+	require.Contains(t, last.Message, "runTests destroying all clusters")
+
+	// Verify timestamp parsing.
+	ts, ok := r.validEntries[0].AdditionalProperties["timestamp"]
+	require.True(t, ok)
+	require.Equal(t, "2026-03-16T06:22:53Z", ts)
+}
+
+// TestParseLogFileWorker tests the parsing of a _runner-logs/w*.log file.
+// These contain per-worker lifecycle events with a [wN] prefix on most
+// lines, plus unprefixed roachprod stdout lines (no timestamp).
+func TestParseLogFileWorker(t *testing.T) {
+	r := parseTestLog(t, "test_worker_log", roachtestParser, "w0.log")
+
+	// 8 lines match the roachtest timestamp pattern ([w0]-prefixed).
+	// 3 lines are unprefixed roachprod stdout absorbed as continuations
+	// of the preceding entry.
+	require.Equal(t, 8, len(r.validEntries), "expected 8 entries")
+	require.Equal(t, 0, r.skipCount, "no lines should be skipped")
+
+	// Verify first entry.
+	require.Contains(t, r.validEntries[0].Message, "Acquired quota for 16 CPUs")
+
+	// Verify multiline entry: the "Wiping" entry should absorb the
+	// unprefixed continuation lines (stopping, wiping, Destroying).
+	require.Contains(t, r.validEntries[6].Message, "Wiping")
+	require.Contains(t, r.validEntries[6].Message, "stopping and waiting")
+	require.Contains(t, r.validEntries[6].Message, "wiping")
+	require.Contains(t, r.validEntries[6].Message, "Destroying Prometheus configs")
+
+	// Verify timestamp parsing.
+	ts, ok := r.validEntries[0].AdditionalProperties["timestamp"]
+	require.True(t, ok)
+	require.Equal(t, "2026-03-16T06:22:53Z", ts)
+}
+
+func TestShouldUploadRunnerLogsToDatadog(t *testing.T) {
+	originalBranch := os.Getenv(envTCBuildBranch)
+	originalSendLogsAnyBranch := roachtestflags.DatadogSendLogsAnyBranch
+	defer func() {
+		_ = os.Setenv(envTCBuildBranch, originalBranch)
+		roachtestflags.DatadogSendLogsAnyBranch = originalSendLogsAnyBranch
+	}()
+
+	tests := []struct {
+		name              string
+		branch            string
+		sendLogsAnyBranch bool
+		expected          bool
+	}{
+		{"master", "master", false, true},
+		{"release branch", "release-24.1", false, true},
+		{"feature branch", "feature-new-stuff", false, false},
+		{"feature branch with flag", "feature-new-stuff", true, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = os.Setenv(envTCBuildBranch, tt.branch)
+			roachtestflags.DatadogSendLogsAnyBranch = tt.sendLogsAnyBranch
+			require.Equal(t, tt.expected, ShouldUploadRunnerLogsToDatadog())
+		})
+	}
+}
+
+func TestShouldUploadRunnerFile(t *testing.T) {
+	tests := []struct {
+		name     string
+		fileName string
+		expected bool
+	}{
+		{"test_runner log", "test_runner-1773642173.log", true},
+		{"worker 0", "w0.log", true},
+		{"worker 15", "w15.log", true},
+		{"params.log excluded", "params.log", false},
+		{"directory excluded", "cluster-create", false},
+		{"non-log excluded", "something.txt", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.expected, shouldUploadRunnerFile(tt.fileName))
+		})
+	}
+}
+
+func TestNewRunnerLogMetadata(t *testing.T) {
+	l, err := logger.RootLogger(os.DevNull, logger.NoTee)
+	require.NoError(t, err)
+	defer l.Close()
+
+	originalBranch := os.Getenv(envTCBuildBranch)
+	defer func() { _ = os.Setenv(envTCBuildBranch, originalBranch) }()
+	_ = os.Setenv(envTCBuildBranch, "master")
+
+	m := NewRunnerLogMetadata(l, spec.GCE)
+
+	// Version and Cloud should be set.
+	require.Equal(t, "master", m.Version)
+	require.Equal(t, "gce", m.Cloud)
+
+	// Test-specific fields should be empty.
+	require.Empty(t, m.TestName)
+	require.Empty(t, m.Owner)
+	require.Empty(t, m.Cluster)
+	require.Empty(t, m.Result)
+	require.Empty(t, m.Duration)
+
+	// Tags should be populated.
+	require.NotNil(t, m.Tags)
+	require.Equal(t, defaultEnv, m.Tags[envTagName])
+	require.Equal(t, "master", m.Tags[versionTagName])
+	require.Equal(t, "gce", m.Tags[cloudTagName])
+
+	// Test-specific tags should be omitted (not present with empty values).
+	_, hasName := m.Tags[testNameTagName]
+	_, hasOwner := m.Tags[ownerTagName]
+	_, hasPlatform := m.Tags[platformTagName]
+	require.False(t, hasName, "empty test name tag should be omitted")
+	require.False(t, hasOwner, "empty owner tag should be omitted")
+	require.False(t, hasPlatform, "empty platform tag should be omitted")
 }

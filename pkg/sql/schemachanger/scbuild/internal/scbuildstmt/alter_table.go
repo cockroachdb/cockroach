@@ -15,12 +15,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/walkutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -49,6 +49,7 @@ var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
 	reflect.TypeOf((*tree.AlterTableAddIdentity)(nil)):        {fn: alterTableAddIdentity, on: true, checks: isV261Active},
 	reflect.TypeOf((*tree.AlterTableSetVisible)(nil)):         {fn: alterTableAlterColumnSetVisible, on: true, checks: isV261Active},
 	reflect.TypeOf((*tree.AlterTableIdentity)(nil)):           {fn: alterTableAlterColumnIdentity, on: true, checks: isV261Active},
+	reflect.TypeOf((*tree.AlterTableDropIdentity)(nil)):       {fn: alterTableDropIdentity, on: true, checks: isV263Active},
 	reflect.TypeOf((*tree.AlterTableSetStorageParams)(nil)):   {fn: AlterTableSetStorageParams, on: true, checks: isV261Active},
 	reflect.TypeOf((*tree.AlterTableResetStorageParams)(nil)): {fn: AlterTableResetStorageParams, on: true, checks: isV261Active},
 	reflect.TypeOf((*tree.AlterTableSetTrigger)(nil)):         {fn: alterTableSetTrigger, on: true, checks: isV262Active},
@@ -79,6 +80,7 @@ var alterTableSubcommandNames = map[reflect.Type]string{
 	reflect.TypeOf((*tree.AlterTableAddIdentity)(nil)):        "ADD IDENTITY",
 	reflect.TypeOf((*tree.AlterTableSetVisible)(nil)):         "SET VISIBLE",
 	reflect.TypeOf((*tree.AlterTableIdentity)(nil)):           "ALTER IDENTITY",
+	reflect.TypeOf((*tree.AlterTableDropIdentity)(nil)):       "DROP IDENTITY",
 	reflect.TypeOf((*tree.AlterTableSetStorageParams)(nil)):   "SET STORAGE PARAM",
 	reflect.TypeOf((*tree.AlterTableResetStorageParams)(nil)): "RESET STORAGE PARAM",
 	reflect.TypeOf((*tree.AlterTableSetTrigger)(nil)):         "SET TRIGGER",
@@ -276,13 +278,13 @@ func maybeRewriteIndexAndConstraintID(
 	b.QueryByID(tableID).ForEach(func(
 		_ scpb.Status, _ scpb.TargetStatus, e scpb.Element,
 	) {
-		_ = screl.WalkIndexIDs(e, func(id *catid.IndexID) error {
+		_ = walkutil.Walk(e, func(id *catid.IndexID) error {
 			if id != nil && *id == indexID {
 				*id = actualIndexID
 			}
 			return nil
 		})
-		_ = screl.WalkConstraintIDs(e, func(id *catid.ConstraintID) error {
+		_ = walkutil.Walk(e, func(id *catid.ConstraintID) error {
 			if id != nil && *id == constraintID {
 				*id = actualConstraintID
 			}

@@ -6,12 +6,18 @@
 package sql_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -24,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -121,4 +128,153 @@ func TestRollbackRandomTable(t *testing.T) {
 
 	afterFingerprint := db.QueryStr(t, fmt.Sprintf("SHOW FINGERPRINTS FROM TABLE test.%s", tableName))
 	require.Equal(t, fingerprint, afterFingerprint)
+}
+
+// TestDeleteTableWithPredicateNoHang covers two regressions in
+// DeleteTableWithPredicate's producer/worker pipeline (#168754): when the
+// parent ctx is canceled (e.g. PAUSE on a reverting IMPORT) and when a worker
+// returns an error, the producer must observe the cancellation rather than
+// block forever on send into a channel whose readers have exited. The cluster
+// settings pin parallelism=1 and rangesPerBatch=1 so the producer must
+// traverse multiple ranges before the lone worker drains its first request,
+// keeping the producer mid-loop when the injected filter fires.
+func TestDeleteTableWithPredicateNoHang(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	noopFilter := kvserverbase.ReplicaRequestFilter(
+		func(context.Context, *kvpb.BatchRequest) *kvpb.Error { return nil })
+
+	var filterFn atomic.Value
+	filterFn.Store(noopFilter)
+
+	s, sqlDB, kv := serverutils.StartServer(t, base.TestServerArgs{
+		UseDatabase: "test",
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+					return filterFn.Load().(kvserverbase.ReplicaRequestFilter)(ctx, ba)
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(context.Background())
+	tt := s.ApplicationLayer()
+
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.Exec(t, `CREATE DATABASE IF NOT EXISTS test`)
+	db.Exec(t, `SET CLUSTER SETTING bulkio.import.predicate_delete_range_batch_size = 1`)
+	db.Exec(t, `SET CLUSTER SETTING bulkio.import.predicate_delete_range_parallelism = 1`)
+
+	for _, tc := range []struct {
+		name string
+		// run installs the per-subtest filter behavior, drives
+		// DeleteTableWithPredicate via invoke, and asserts the outcome.
+		// tablePrefix scopes the filter to predicate DeleteRanges targeting
+		// the test's table, ignoring any unrelated traffic.
+		run func(t *testing.T, tablePrefix roachpb.Key, invoke func(context.Context) error)
+	}{
+		{
+			name: "parent_context_cancellation",
+			run: func(t *testing.T, tablePrefix roachpb.Key, invoke func(context.Context) error) {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				var triggered atomic.Bool
+				filterFn.Store(kvserverbase.ReplicaRequestFilter(
+					func(_ context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+						for _, ru := range ba.Requests {
+							if dr, ok := ru.GetInner().(*kvpb.DeleteRangeRequest); ok &&
+								dr.Predicates.StartTime.IsSet() &&
+								bytes.HasPrefix(dr.Key, tablePrefix) {
+								if triggered.CompareAndSwap(false, true) {
+									cancel()
+								}
+								break
+							}
+						}
+						return nil
+					}))
+				err := runWithHangWatchdog(t, ctx, invoke)
+				require.True(t, triggered.Load(), "filter never saw a predicate DeleteRange")
+				require.True(t, errors.Is(err, context.Canceled), "want context.Canceled, got: %v", err)
+			},
+		},
+		{
+			name: "worker_error_propagation",
+			run: func(t *testing.T, tablePrefix roachpb.Key, invoke func(context.Context) error) {
+				var triggered atomic.Bool
+				filterFn.Store(kvserverbase.ReplicaRequestFilter(
+					func(_ context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+						for _, ru := range ba.Requests {
+							if dr, ok := ru.GetInner().(*kvpb.DeleteRangeRequest); ok &&
+								dr.Predicates.StartTime.IsSet() &&
+								bytes.HasPrefix(dr.Key, tablePrefix) {
+								triggered.Store(true)
+								return kvpb.NewError(errors.New("injected delete range error"))
+							}
+						}
+						return nil
+					}))
+				// Background ctx so any hang can only stem from the worker error.
+				err := runWithHangWatchdog(t, context.Background(), invoke)
+				require.True(t, triggered.Load(), "filter never saw a predicate DeleteRange")
+				require.ErrorContains(t, err, "injected delete range error")
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Reset filter in case a prior subtest left its closure installed
+			// (matters under -shuffle, where source order isn't guaranteed).
+			filterFn.Store(noopFilter)
+
+			// Reseed: rows on both sides of a captured timestamp, with the
+			// post-targetTime writes giving the predicate something to match.
+			db.Exec(t, `DROP TABLE IF EXISTS test`)
+			db.Exec(t, `CREATE TABLE test (k INT PRIMARY KEY)`)
+			db.Exec(t, `INSERT INTO test SELECT generate_series(1, 200)`)
+			db.Exec(t, `ALTER TABLE test SPLIT AT SELECT i*10 FROM generate_series(1, 19) AS g(i)`)
+
+			var ts string
+			db.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts)
+			targetTime, err := hlc.ParseHLC(ts)
+			require.NoError(t, err)
+
+			db.Exec(t, `INSERT INTO test SELECT generate_series(201, 400)`)
+
+			desc := desctestutils.TestingGetPublicTableDescriptor(kv, tt.Codec(), "test", "test")
+			predicates := kvpb.DeleteRangePredicates{StartTime: targetTime}
+			tablePrefix := tt.Codec().TablePrefix(uint32(desc.GetID()))
+
+			tc.run(t, tablePrefix, func(ctx context.Context) error {
+				return sql.DeleteTableWithPredicate(ctx, kv, tt.Codec(), tt.ClusterSettings(),
+					tt.ExecutorConfig().(sql.ExecutorConfig).DistSender, desc.GetID(), predicates, 10)
+			})
+		})
+	}
+}
+
+// runWithHangWatchdog runs do(ctx) in a goroutine and fails the test if it
+// doesn't return within 15s. On timeout the ctx is canceled and the goroutine
+// is given a brief grace period so a non-buggy call can unwind cleanly,
+// avoiding a noisy secondary leaktest failure on top of the t.Fatal.
+func runWithHangWatchdog(
+	t *testing.T, parent context.Context, do func(context.Context) error,
+) error {
+	t.Helper()
+	ctx, cancel := context.WithCancel(parent)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- do(ctx) }()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(15 * time.Second):
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+		}
+		t.Fatal("DeleteTableWithPredicate hung; producer likely blocked on send")
+	}
+	panic("unreachable") // t.Fatal aborts the goroutine
 }

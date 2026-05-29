@@ -56,6 +56,7 @@ var ashResponseLimit = settings.RegisterIntSetting(
 	"maximum number of ASH samples returned per node in fan-out responses",
 	10_000,
 	settings.PositiveInt,
+	settings.WithPublic,
 )
 
 // DebugZipRedactAddressesEnabled guards whether hostname / ip address and other sensitive fields

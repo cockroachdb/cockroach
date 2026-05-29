@@ -11,6 +11,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
@@ -38,6 +40,7 @@ type indexSplitAndScatter struct {
 	rangeIter    rangedesc.IteratorFactory
 	nodeDescs    kvclient.NodeDescStore
 	statsCache   *stats.TableStatisticsCache
+	systemConfig config.SystemConfigProvider
 	testingKnobs *ExecutorTestingKnobs
 }
 
@@ -49,6 +52,17 @@ var SplitAndScatterWithStats = settings.RegisterBoolSetting(
 	true,
 )
 
+// SkipBackfillSplitsForSmallTables controls whether index backfill splits
+// are skipped for tables whose estimated size fits within a single range.
+var SkipBackfillSplitsForSmallTables = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"schemachanger.backfiller.skip_splits_for_small_tables.enabled",
+	"when enabled, index backfill operations skip creating range splits "+
+		"for tables whose estimated size fits within a single range",
+	true,
+	settings.WithVisibility(settings.Reserved),
+)
+
 // NewIndexSplitAndScatter creates a new scexec.IndexSpanSplitter implementation.
 func NewIndexSplitAndScatter(execCfg *ExecutorConfig) scexec.IndexSpanSplitter {
 	return &indexSplitAndScatter{
@@ -58,6 +72,7 @@ func NewIndexSplitAndScatter(execCfg *ExecutorConfig) scexec.IndexSpanSplitter {
 		rangeIter:    execCfg.RangeDescIteratorFactory,
 		nodeDescs:    execCfg.NodeDescs,
 		statsCache:   execCfg.TableStatsCache,
+		systemConfig: execCfg.SystemConfig,
 		testingKnobs: &execCfg.TestingKnobs,
 	}
 }
@@ -194,6 +209,68 @@ func (is *indexSplitAndScatter) getSplitPointsWithStats(
 	return splitPoints, nil
 }
 
+// estimatedTableSize returns the estimated total data size of the table in
+// bytes, based on cached table statistics. It sums AvgSize across
+// single-column stats from the most recent collection and multiplies by
+// RowCount. Returns 0 if stats are unavailable or insufficient, since a
+// table without stats is most likely newly created and small.
+func (is *indexSplitAndScatter) estimatedTableSize(
+	ctx context.Context, table catalog.TableDescriptor,
+) int64 {
+	tableStats, err := is.statsCache.GetFreshTableStats(
+		ctx, table, nil, /* typeResolver */
+	)
+	if err != nil || len(tableStats) == 0 {
+		return 0
+	}
+	rowCount := tableStats[0].RowCount
+	if rowCount == 0 {
+		return 0
+	}
+	// Sum AvgSize across single-column stats from the latest collection to
+	// estimate total row width.
+	latestCreatedAt := tableStats[0].CreatedAt
+	var totalAvgRowSize uint64
+	for _, s := range tableStats {
+		if s.CreatedAt != latestCreatedAt {
+			break
+		}
+		if len(s.ColumnIDs) == 1 {
+			totalAvgRowSize += s.AvgSize
+		}
+	}
+	if totalAvgRowSize == 0 {
+		return 0
+	}
+	return int64(rowCount * totalAvgRowSize)
+}
+
+// rangeMaxBytesForTable returns the effective RangeMaxBytes for the given
+// table from its zone config. Falls back to the default (512 MB) if the
+// zone config is unavailable.
+func (is *indexSplitAndScatter) rangeMaxBytesForTable(table catalog.TableDescriptor) int64 {
+	if !SkipBackfillSplitsForSmallTables.Get(is.sv) {
+		return 0
+	}
+	if is.systemConfig != nil {
+		if sysCfg := is.systemConfig.GetSystemConfig(); sysCfg != nil {
+			if zc, err := sysCfg.GetZoneConfigForObject(
+				is.codec, config.ObjectID(table.GetID()),
+			); err == nil && zc != nil && zc.RangeMaxBytes != nil {
+				return *zc.RangeMaxBytes
+			}
+		}
+	}
+	return *zonepb.DefaultZoneConfig().RangeMaxBytes
+}
+
+// ShouldSkipSplitForSmallTable implements the scexec.IndexSpanSplitter interface.
+func (is *indexSplitAndScatter) ShouldSkipSplitForSmallTable(
+	ctx context.Context, table catalog.TableDescriptor,
+) bool {
+	return is.estimatedTableSize(ctx, table) < is.rangeMaxBytesForTable(table)
+}
+
 // MaybeSplitIndexSpans implements the scexec.IndexSpanSplitter interface.
 func (is *indexSplitAndScatter) MaybeSplitIndexSpans(
 	ctx context.Context,
@@ -201,6 +278,15 @@ func (is *indexSplitAndScatter) MaybeSplitIndexSpans(
 	indexToBackfill catalog.Index,
 	copyIndexSource catalog.Index,
 ) error {
+	// Skip splitting if table stats indicate the table fits within a single
+	// range. Splits exist to distribute write load during index backfills,
+	// which is unnecessary when there is little or no data. This avoids range
+	// count bloat on clusters running many schema changes on small tables.
+	if is.ShouldSkipSplitForSmallTable(ctx, table) {
+		log.Dev.Infof(ctx, "skipping index split for tableId=%d index=%d",
+			table.GetID(), indexToBackfill.GetID())
+		return nil
+	}
 	// If we are asked to copy a source indexes splits, then there is
 	// no need split along partitioning.
 	if copyIndexSource == nil {
@@ -382,6 +468,11 @@ func (is *indexSplitAndScatter) MaybeSplitIndexSpansForPartitioning(
 	ctx context.Context, tableDesc catalog.TableDescriptor, idx catalog.Index,
 ) error {
 	if !is.shouldSplitAndScatter(idx) {
+		return nil
+	}
+	if is.ShouldSkipSplitForSmallTable(ctx, tableDesc) {
+		log.Dev.Infof(ctx, "skipping hash shard pre-split for tableId=%d index=%d",
+			tableDesc.GetID(), idx.GetID())
 		return nil
 	}
 	const backfillSplitExpiration = time.Hour

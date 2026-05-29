@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -153,6 +154,11 @@ var execLogRe = regexp.MustCompile(`event_log.go`)
 // Test the SQL_PERF and SQL_INTERNAL_PERF logging channels.
 func TestPerfLogging(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	// CheckRowSize rate-limits LargeRow emissions process-wide. This test
+	// drives one query per case and expects a deterministic emission for
+	// each; disable the limiter so unrelated emissions in the same binary
+	// don't steal the window.
+	defer row.TestingDisableLargeRowRateLimit()()
 
 	var testCases = []struct {
 		// Query to execute. query might be empty if setup is not empty, in
@@ -295,22 +301,27 @@ func TestPerfLogging(t *testing.T) {
 			logExpected: false,
 		},
 		{
-			query:       `ALTER TABLE t ADD COLUMN f FLOAT DEFAULT 99.999`,
-			errRe:       ``,
-			logRe:       `"EventType":"large_row_internal","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/4/0›"`,
+			query: `ALTER TABLE t ADD COLUMN f FLOAT DEFAULT 99.999`,
+			errRe: ``,
+			// Schema-change backfills emit one large_row_internal per
+			// CheckRowSize call; CheckRowSize rate-limits per RowHelper, so
+			// only the first row whose CF size exceeds the threshold gets
+			// logged. The PK of that row depends on iteration order, so
+			// match any value rather than a specific one.
+			logRe:       `"EventType":"large_row_internal","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/\d+/0›"`,
 			logExpected: true,
 			breakHere:   true,
 		},
 		{
 			query:       `CREATE TABLE t2 (i, s, PRIMARY KEY (i)) AS SELECT i, s FROM t`,
 			errRe:       ``,
-			logRe:       `"EventType":"large_row_internal","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/4/0›"`,
+			logRe:       `"EventType":"large_row_internal","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/\d+/0›"`,
 			logExpected: true,
 		},
 		{
 			query:       `ALTER TABLE t2 ADD COLUMN z STRING DEFAULT repeat('z', 2048)`,
 			errRe:       ``,
-			logRe:       `"EventType":"large_row_internal","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/4/0›"`,
+			logRe:       `"EventType":"large_row_internal","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/\d+/0›"`,
 			logExpected: true,
 		},
 		{
@@ -626,6 +637,49 @@ func TestPerfLogging(t *testing.T) {
                 RESET transaction_rows_read_err;
             `,
 		},
+
+		// Tests for the failed query log.
+		{
+			// A failing query is not logged when the setting is off.
+			query:       `SELECT 1/0`,
+			errRe:       `division by zero`,
+			logRe:       `"EventType":"failed_query"`,
+			logExpected: false,
+		},
+		{
+			setup: `SET CLUSTER SETTING sql.log.failed_query.enabled = true`,
+		},
+		{
+			// Runtime error: division by zero (SQLSTATE 22012).
+			query:       `SELECT 1/0`,
+			errRe:       `division by zero`,
+			logRe:       `"EventType":"failed_query","Statement":"SELECT ‹1› / ‹0›".*"SQLSTATE":"22012","ErrorText":"division by zero"`,
+			logExpected: true,
+		},
+		{
+			// Planning-time error: undefined relation (SQLSTATE 42P01).
+			query:       `SELECT * FROM nonexistent_table_for_failed_query_test`,
+			errRe:       `does not exist`,
+			logRe:       `"EventType":"failed_query","Statement":"SELECT \* FROM .*nonexistent_table_for_failed_query_test".*"SQLSTATE":"42P01"`,
+			logExpected: true,
+		},
+		{
+			// Successful queries do not emit failed_query events.
+			query:       `SELECT 1`,
+			errRe:       ``,
+			logRe:       `"EventType":"failed_query"`,
+			logExpected: false,
+		},
+		{
+			setup: `SET CLUSTER SETTING sql.log.failed_query.enabled = DEFAULT`,
+		},
+		{
+			// Once disabled, failures are no longer logged.
+			query:       `SELECT 1/0`,
+			errRe:       `division by zero`,
+			logRe:       `"EventType":"failed_query"`,
+			logExpected: false,
+		},
 	}
 
 	// Make file sinks for the SQL perf logs.
@@ -644,6 +698,8 @@ func TestPerfLogging(t *testing.T) {
 			"large_row_internal",
 			"slow_query",
 			"slow_query_internal",
+			"failed_query",
+			"failed_query_internal",
 		},
 		func(entry logpb.Entry) (logpb.Entry, error) {
 			entry.Message = entry.Message[entry.StructuredStart:entry.StructuredEnd]

@@ -45,6 +45,8 @@ public schema full
 public schema full
 public schema full
 public schema full
+resource_group_id_seq table full
+resource_groups table full
 role_id_seq table full
 role_members table full
 role_options table full

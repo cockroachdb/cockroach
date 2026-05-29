@@ -1,0 +1,33 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.util.admission.admissionpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb";
+
+import "gogoproto/gogo.proto";
+
+// ResourceGroupConfig is the marshaled value stored in
+// system.resource_groups.config. Field numbers are wire-stable once the
+// migration that introduced this proto has shipped.
+message ResourceGroupConfig {
+  option (gogoproto.equal) = true;
+
+  // CPUWeight is the relative share of CPU the group is entitled to
+  // when contending with other groups. Must be > 0.
+  int64 cpu_weight = 1 [(gogoproto.customname) = "CPUWeight"];
+
+  // MaxCPU allows the group to burst to the cluster's maximum
+  // available CPU when no other group is contending.
+  bool max_cpu = 2 [(gogoproto.customname) = "MaxCPU"];
+
+  // BurstFrac is the share of CPU the group is entitled to, derived
+  // from CPUWeight by Normalize(). It is never written to
+  // system.resource_groups: writers leave it zero, and readers (e.g.
+  // SHOW RESOURCE GROUP) populate it by calling Normalize over the
+  // full set of rows. The field is on the proto so the same struct can
+  // carry the derived share across package boundaries.
+  double burst_frac = 3 [(gogoproto.customname) = "BurstFrac"];
+}

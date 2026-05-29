@@ -189,8 +189,18 @@ RESTORE FROM LATEST IN 'nodelocal://1/foo';
 ----
 pq: only users with the admin role or the RESTORE system privilege are allowed to perform a cluster restore: user testuser does not have RESTORE system privilege
 
+# RESTORE SYSTEM USERS requires the same privilege (#167602).
+exec-sql user=testuser
+RESTORE SYSTEM USERS FROM LATEST IN 'nodelocal://1/foo';
+----
+pq: only users with the admin role or the RESTORE system privilege are allowed to perform a cluster restore: user testuser does not have RESTORE system privilege
+
 exec-sql
 GRANT SYSTEM RESTORE TO testuser;
+----
+
+exec-sql user=testuser
+RESTORE SYSTEM USERS FROM LATEST IN 'nodelocal://1/foo';
 ----
 
 exec-sql user=testuser

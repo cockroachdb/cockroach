@@ -241,6 +241,10 @@ func (r *Replica) maybeBackpressureBatch(ctx context.Context, ba *kvpb.BatchRequ
 			return nil
 		}
 
+		if knobs := r.store.TestingKnobs(); knobs != nil && knobs.TestingBackpressureCallbackRegistered != nil {
+			knobs.TestingBackpressureCallbackRegistered(r.RangeID)
+		}
+
 		const errHint = `For help understanding this error and troubleshooting, visit:
 
     https://www.cockroachlabs.com/docs/stable/common-errors.html#split-failed-while-applying-backpressure-are-rows-updated-in-a-tight-loop`

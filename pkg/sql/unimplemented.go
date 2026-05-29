@@ -20,12 +20,39 @@ import (
 // The below methods are ordered in alphabetical order. They represent statements
 // which are UNIMPLEMENTED for the legacy schema changer.
 
+func (p *planner) AlterDomain(ctx context.Context, n *tree.AlterDomain) (planNode, error) {
+	return nil, makeUnimplementedLegacyError("ALTER DOMAIN")
+}
+
 func (p *planner) AlterPolicy(ctx context.Context, n *tree.AlterPolicy) (planNode, error) {
 	return nil, makeUnimplementedLegacyError("ALTER POLICY")
 }
 
+func (p *planner) CommentOnRoutine(
+	ctx context.Context, n *tree.CommentOnRoutine,
+) (planNode, error) {
+	switch n.RoutineType {
+	case tree.ProcedureRoutine:
+		return nil, makeUnimplementedLegacyError("COMMENT ON PROCEDURE")
+	case tree.UDFRoutine | tree.ProcedureRoutine:
+		return nil, makeUnimplementedLegacyError("COMMENT ON ROUTINE")
+	default:
+		return nil, makeUnimplementedLegacyError("COMMENT ON FUNCTION")
+	}
+}
+
+func (p *planner) CommentOnSequence(
+	ctx context.Context, n *tree.CommentOnSequence,
+) (planNode, error) {
+	return nil, makeUnimplementedLegacyError("COMMENT ON SEQUENCE")
+}
+
 func (p *planner) CommentOnType(ctx context.Context, n *tree.CommentOnType) (planNode, error) {
 	return nil, makeUnimplementedLegacyError("COMMENT ON TYPE")
+}
+
+func (p *planner) CommentOnView(ctx context.Context, n *tree.CommentOnView) (planNode, error) {
+	return nil, makeUnimplementedLegacyError("COMMENT ON VIEW")
 }
 
 func (p *planner) CreatePolicy(ctx context.Context, n *tree.CreatePolicy) (planNode, error) {

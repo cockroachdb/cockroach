@@ -2267,6 +2267,15 @@ var (
 		Measurement: "Log Entries",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRaftLogTruncatorBusyNanos = metric.Metadata{
+		Name: "raftlog.truncator.busy_nanos",
+		Help: crstrings.UnwrapText(`
+			Cumulative wall-clock nanoseconds the per-store loosely-coupled raft
+			log truncator goroutine has spent running.
+		`),
+		Measurement: "Processing Time",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 
 	metaRaftLogTotalSize = metric.Metadata{
 		Name:        "raftlog.size.total",
@@ -2900,10 +2909,10 @@ var (
 		Visibility:  metric.Metadata_SUPPORT,
 	}
 
-	// Export request counter.
-	metaExportEvalTotalDelay = metric.Metadata{
-		Name:        "exportrequest.delay.total",
-		Help:        "Amount by which evaluation of Export requests was delayed",
+	// Bulk low-priority read request metrics.
+	metaBulkReadEvalTotalDelay = metric.Metadata{
+		Name:        "kv.bulk_low_pri_read.delay.total",
+		Help:        "Amount by which evaluation of bulk low-priority read requests was delayed",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
@@ -3647,6 +3656,7 @@ type StoreMetrics struct {
 	// Raft log metrics.
 	RaftLogFollowerBehindCount *metric.Gauge
 	RaftLogTruncated           *metric.Counter
+	RaftLogTruncatorBusyNanos  *metric.Counter
 	RaftLogTotalSize           *metric.Gauge
 	RaftLogMaxSize             *metric.Gauge
 
@@ -3749,8 +3759,8 @@ type StoreMetrics struct {
 	AddSSTableAsWrites           *metric.Counter
 	AddSSTableProposalTotalDelay *metric.Counter
 
-	// Export request stats.
-	ExportRequestProposalTotalDelay *metric.Counter
+	// Records how much low-priority bulk read request throttling was performed.
+	BulkLowPriReadRequestTotalDelay *metric.Counter
 
 	// Encryption-at-rest stats.
 	// EncryptionAlgorithm is an enum representing the cipher in use, so we use a gauge.
@@ -4474,6 +4484,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		// Raft log metrics.
 		RaftLogFollowerBehindCount: metric.NewGauge(metaRaftLogFollowerBehindCount),
 		RaftLogTruncated:           metric.NewCounter(metaRaftLogTruncated),
+		RaftLogTruncatorBusyNanos:  metric.NewCounter(metaRaftLogTruncatorBusyNanos),
 		RaftLogTotalSize:           metric.NewGauge(metaRaftLogTotalSize),
 		RaftLogMaxSize:             metric.NewGauge(metaRaftLogMaxSize),
 
@@ -4575,8 +4586,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		AddSSTableApplicationCopies:  metric.NewCounter(metaAddSSTableApplicationCopies),
 		AddSSTableProposalTotalDelay: metric.NewCounter(metaAddSSTableEvalTotalDelay),
 
-		// ExportRequest proposal.
-		ExportRequestProposalTotalDelay: metric.NewCounter(metaExportEvalTotalDelay),
+		// Low-priority bulk read request delay counter.
+		BulkLowPriReadRequestTotalDelay: metric.NewCounter(metaBulkReadEvalTotalDelay),
 
 		// Encryption-at-rest.
 		EncryptionAlgorithm: metric.NewGauge(metaEncryptionAlgorithm),
@@ -4822,12 +4833,12 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.CompressionUnknownBytes.Update(int64(c.CompressedBytesWithoutStats))
 
 	overall := pebble.CompressionStatsForSetting{
-		CompressedBytes:   m.Table.Compression.NoCompressionBytes,
-		UncompressedBytes: m.Table.Compression.NoCompressionBytes,
+		CompressedBytes:   c.NoCompressionBytes,
+		UncompressedBytes: c.NoCompressionBytes,
 	}
-	overall.Add(m.Table.Compression.Snappy)
-	overall.Add(m.Table.Compression.MinLZ)
-	overall.Add(m.Table.Compression.Zstd)
+	overall.Add(c.Snappy)
+	overall.Add(c.MinLZ)
+	overall.Add(c.Zstd)
 	// We cannot use CompressedBytesWithoutStats for the overall compression
 	// ratio; we estimate it from the data we do have.
 	sm.CompressionOverallCR.Update(overall.CompressionRatio())

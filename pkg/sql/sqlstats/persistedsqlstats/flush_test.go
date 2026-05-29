@@ -839,16 +839,11 @@ func TestSQLStatsStmtSampling(t *testing.T) {
 	sqlStats := s.SQLServer().(*sql.Server).GetSQLStatsProvider()
 	appStats := sqlStats.GetApplicationStats(appName)
 
-	checkSampled := func(fingerprint string, implicitTxn bool, expectedPreviouslySampledState bool) {
+	checkSampled := func(fingerprint string, expectedPreviouslySampledState bool) {
+		previouslySampled := appStats.StatementSampled(fingerprint, dbName)
 
-		previouslySampled := appStats.StatementSampled(
-			fingerprint,
-			implicitTxn,
-			dbName,
-		)
-
-		errMessage := fmt.Sprintf("validate: %s, implicit: %t expected sample before: %t, actual sample before: %t\n",
-			fingerprint, implicitTxn, expectedPreviouslySampledState, previouslySampled)
+		errMessage := fmt.Sprintf("validate: %s, expected sample before: %t, actual sample before: %t\n",
+			fingerprint, expectedPreviouslySampledState, previouslySampled)
 		require.Equal(t, expectedPreviouslySampledState, previouslySampled, errMessage)
 	}
 
@@ -857,33 +852,22 @@ func TestSQLStatsStmtSampling(t *testing.T) {
 		// If the sampling rate is 0, we shouldn't trace any statements for sql stats.
 		sqlRun.Exec(t, "SELECT 1")
 		sqlRun.Exec(t, "SELECT 1, 2")
-		checkSampled("SELECT 1", true /* implicitTxn */, false /* sampled */)
-		checkSampled("SELECT 1, 2", true /* implicitTxn */, false /* sampled */)
+		checkSampled("SELECT 1", false /* sampled */)
+		checkSampled("SELECT 1, 2", false /* sampled */)
 		sqlRun.Exec(t, `SET CLUSTER SETTING sql.txn_stats.sample_rate = 0.01;`)
 	})
 
 	t.Run("sampling on", func(t *testing.T) {
 		sqlRun.Exec(t, `SET CLUSTER SETTING sql.txn_stats.sample_rate = 0.01;`)
 		// To start, we should not have any statements sampled.
-		checkSampled("SELECT _", true /* implicit */, false /* sampled */)
-		checkSampled("SELECT _, _", true /* implicit */, false /* sampled */)
+		checkSampled("SELECT _", false /* sampled */)
+		checkSampled("SELECT _, _", false /* sampled */)
 		// Execute each of the above statements to trigger a trace. We
 		// trace all statements the app hasn't seen before.
 		sqlRun.Exec(t, "SELECT 1")
 		sqlRun.Exec(t, "SELECT 1, 2")
-		checkSampled("SELECT _", true /* implicit */, true /* sampled */)
-		checkSampled("SELECT _, _", true /* implicit */, true /* sampled */)
-
-		// Now we'll execute each of the above statements again in explicit transactions.
-		// These should be treated as new statements and should be sampled.
-		checkSampled("SELECT _", false /* implicit */, false /* sampled */)
-		checkSampled("SELECT _, _", false /* implicit */, false /* sampled */)
-
-		sqlRun.Exec(t, "BEGIN; SELECT 1; COMMIT;")
-		sqlRun.Exec(t, "BEGIN; SELECT 1, 2; COMMIT;")
-
-		checkSampled("SELECT _", false /* implicit */, true /* sampled */)
-		checkSampled("SELECT _, _", false /* implicit */, true /* sampled */)
+		checkSampled("SELECT _", true /* sampled */)
+		checkSampled("SELECT _, _", true /* sampled */)
 	})
 
 }
@@ -918,7 +902,7 @@ func TestPersistedSQLStats_Flush(t *testing.T) {
 			DisableElasticCPUAdmission: true,
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: &sqlstats.TestingKnobs{
-					FlushInterceptor: func(ctx context.Context, stopper *stop.Stopper, aggregatedTs time.Time, stmtStats []*appstatspb.CollectedStatementStatistics, txnStats []*appstatspb.CollectedTransactionStatistics) {
+					FlushInterceptor: func(ctx context.Context, stopper *stop.Stopper, stmtStats []*appstatspb.CollectedStatementStatistics, txnStats []*appstatspb.CollectedTransactionStatistics) {
 						for _, stmt := range stmtStats {
 							if stmt.Key.App == appName {
 								flushedStmtStats++
@@ -1007,6 +991,104 @@ func TestPersistedSQLStats_Flush(t *testing.T) {
 	})
 }
 
+// TestFlushUsesRecordTimeAggregatedTs verifies that stats carry their own
+// aggregated_ts from record time and that the flush path writes those
+// per-stat timestamps to the system tables. Previously, the flush path
+// computed a single aggregated_ts at flush time and applied it uniformly,
+// which could attribute stats to the wrong aggregation window when the
+// flush was delayed.
+func TestFlushUsesRecordTimeAggregatedTs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Record the current hour boundary before executing any queries. The
+	// recording-time aggregated_ts must be truncated to this boundary.
+	// We also accept the next hour in case the test crosses an hour boundary.
+	now := timeutil.Now()
+	expectedAggTs := now.Truncate(time.Hour)
+	nextHourAggTs := expectedAggTs.Add(time.Hour)
+
+	var interceptedStmts []*appstatspb.CollectedStatementStatistics
+	var interceptedTxns []*appstatspb.CollectedTransactionStatistics
+	var mu syncutil.Mutex
+
+	appName := "record_time_agg_test"
+
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DisableElasticCPUAdmission: true,
+		Knobs: base.TestingKnobs{
+			SQLStatsKnobs: &sqlstats.TestingKnobs{
+				FlushInterceptor: func(
+					ctx context.Context,
+					stopper *stop.Stopper,
+					stmtStats []*appstatspb.CollectedStatementStatistics,
+					txnStats []*appstatspb.CollectedTransactionStatistics,
+				) {
+					mu.Lock()
+					defer mu.Unlock()
+					for _, s := range stmtStats {
+						if s.Key.App == appName {
+							interceptedStmts = append(interceptedStmts, s)
+						}
+					}
+					for _, tx := range txnStats {
+						if tx.App == appName {
+							interceptedTxns = append(interceptedTxns, tx)
+						}
+					}
+				},
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	sqlConn := sqlutils.MakeSQLRunner(conn)
+	obsConn := sqlutils.MakeSQLRunner(s.SQLConn(t))
+
+	sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.flush.minimum_interval = '0s'")
+	sqlConn.Exec(t, fmt.Sprintf("SET application_name = '%s'", appName))
+
+	sqlConn.Exec(t, "SELECT 1")
+	sqlConn.Exec(t, "SELECT 1, 2")
+	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, obsConn, 2,
+		sqlstatstestutil.StatementFilter{App: appName})
+
+	pss := s.SQLServer().(*sql.Server).GetSQLStatsProvider()
+	pss.MaybeFlush(ctx, s.AppStopper())
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	require.NotEmpty(t, interceptedStmts, "expected intercepted statement stats")
+	require.NotEmpty(t, interceptedTxns, "expected intercepted transaction stats")
+
+	// Every flushed stat must carry a non-zero AggregatedTs that was set at
+	// record time (by ObserveTransaction), not by the flush path.
+	for _, stmt := range interceptedStmts {
+		require.False(t, stmt.AggregatedTs.IsZero(),
+			"statement stat should have non-zero AggregatedTs (query: %s)", stmt.Key.Query)
+		require.NotZero(t, stmt.AggregationInterval,
+			"statement stat should have non-zero AggregationInterval")
+		aggTs := stmt.AggregatedTs.UTC()
+		require.True(t, aggTs.Equal(expectedAggTs) || aggTs.Equal(nextHourAggTs),
+			"statement AggregatedTs %v should match recording-time hour boundary %v (or %v if hour rolled over)",
+			aggTs, expectedAggTs, nextHourAggTs)
+	}
+	for _, txn := range interceptedTxns {
+		require.False(t, txn.AggregatedTs.IsZero(),
+			"transaction stat should have non-zero AggregatedTs")
+		require.NotZero(t, txn.AggregationInterval,
+			"transaction stat should have non-zero AggregationInterval")
+		aggTs := txn.AggregatedTs.UTC()
+		require.True(t, aggTs.Equal(expectedAggTs) || aggTs.Equal(nextHourAggTs),
+			"transaction AggregatedTs %v should match recording-time hour boundary %v (or %v if hour rolled over)",
+			aggTs, expectedAggTs, nextHourAggTs)
+	}
+}
+
 type stubTime struct {
 	syncutil.RWMutex
 	t           time.Time
@@ -1039,6 +1121,12 @@ func (s *stubTime) Now() time.Time {
 	return timeutil.Now()
 }
 
+// fingerprintIDHex returns the hex fingerprint_id for stmtNoConst executed
+// against the default database.
+func fingerprintIDHex(stmtNoConst string) string {
+	return sqlstatstestutil.FingerprintIDHex(stmtNoConst, "defaultdb")
+}
+
 func verifyInsertedFingerprintExecCount(
 	t *testing.T,
 	sqlConn *sqlutils.SQLRunner,
@@ -1055,7 +1143,7 @@ SELECT
 FROM
     system.transaction_statistics T,
     system.statement_statistics S
-WHERE S.metadata ->> 'query' = $1
+WHERE S.fingerprint_id = decode($1, 'hex')
 	  AND T.aggregated_ts = $2
     AND T.node_id = $3
     AND T.app_name = 'flush_unit_test'
@@ -1063,7 +1151,7 @@ WHERE S.metadata ->> 'query' = $1
     AND S.node_id = T.node_id
     AND S.aggregated_ts = T.aggregated_ts
     AND S.app_name = T.app_name
-`, fingerprint, ts, instanceID)
+`, fingerprintIDHex(fingerprint), ts, instanceID)
 
 	require.True(t, row.Next(), "no stats found for fingerprint: %s", fingerprint)
 
@@ -1092,12 +1180,12 @@ SELECT
 FROM
 	system.statement_statistics
 WHERE
-	metadata ->> 'query' = $1 AND
+	fingerprint_id = decode($1, 'hex') AND
   node_id = $2 AND
   app_name = 'flush_unit_test'
 GROUP BY
   (fingerprint_id, node_id)
-`, fingerprint, instanceID)
+`, fingerprintIDHex(fingerprint), instanceID)
 
 	var stmtFingerprintID string
 	var numOfInsertedStmtEntry int64
@@ -1201,9 +1289,9 @@ SELECT
 FROM
 	system.statement_statistics
 WHERE
-	metadata ->> 'query' = $1 AND
+	fingerprint_id = decode($1, 'hex') AND
   app_name = $2
-`, fingerprint, appName)
+`, fingerprintIDHex(fingerprint), appName)
 
 	var gatewayNodeID int64
 	var allNodesIds string

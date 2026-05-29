@@ -65,10 +65,13 @@ func TestPersistedSQLStatsReset(t *testing.T) {
 	appName := "controller_test"
 	sqlDB.Exec(t, "SET application_name = $1", appName)
 
-	expectedStmtFingerprintToFingerprintID := make(map[string]string)
+	// Map canonical fingerprint text to the expected hex-encoded fingerprint
+	// ID. Persisted rows are identified by fingerprint ID rather than query
+	// text because the query column is populated asynchronously via a JOIN
+	// against system.statements.
+	expectedFingerprintIDs := make(map[string]string)
 	for fingerprint, query := range testCasesForDisk {
-		// We will populate the fingerprint ID later.
-		expectedStmtFingerprintToFingerprintID[fingerprint] = ""
+		expectedFingerprintIDs[fingerprint] = sqlstatstestutil.FingerprintIDHex(fingerprint, "defaultdb")
 		sqlDB.Exec(t, query)
 	}
 
@@ -79,14 +82,14 @@ func TestPersistedSQLStatsReset(t *testing.T) {
 	sqlStats := server.SQLServer().(*sql.Server).GetSQLStatsProvider()
 	sqlStats.MaybeFlush(ctx, cluster.ApplicationLayer(0).AppStopper())
 
-	checkInsertedStmtStatsAndUpdateFingerprintIDs(t, appName, observer, expectedStmtFingerprintToFingerprintID)
-	checkInsertedTxnStats(t, appName, observer, expectedStmtFingerprintToFingerprintID)
+	checkInsertedStmtStats(t, appName, observer, expectedFingerprintIDs)
+	checkInsertedTxnStats(t, appName, observer, expectedFingerprintIDs)
 
 	// Run few additional queries, so we would also have some SQL stats in-memory.
 	for fingerprint, query := range testCasesForMem {
 		sqlDB.Exec(t, query)
-		if _, ok := expectedStmtFingerprintToFingerprintID[fingerprint]; !ok {
-			expectedStmtFingerprintToFingerprintID[fingerprint] = ""
+		if _, ok := expectedFingerprintIDs[fingerprint]; !ok {
+			expectedFingerprintIDs[fingerprint] = sqlstatstestutil.FingerprintIDHex(fingerprint, "defaultdb")
 		}
 	}
 	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, observer,
@@ -95,8 +98,8 @@ func TestPersistedSQLStatsReset(t *testing.T) {
 
 	// Sanity check that we still have the same count since we are still within
 	// the same aggregation interval.
-	checkInsertedStmtStatsAndUpdateFingerprintIDs(t, appName, observer, expectedStmtFingerprintToFingerprintID)
-	checkInsertedTxnStats(t, appName, observer, expectedStmtFingerprintToFingerprintID)
+	checkInsertedStmtStats(t, appName, observer, expectedFingerprintIDs)
+	checkInsertedTxnStats(t, appName, observer, expectedFingerprintIDs)
 
 	// Resets cluster wide SQL stats.
 	require.NoError(t, sqlStats.ResetClusterSQLStats(ctx))
@@ -113,29 +116,27 @@ func TestPersistedSQLStatsReset(t *testing.T) {
 	require.Equal(t, 0 /* expected */, count)
 }
 
-func checkInsertedStmtStatsAndUpdateFingerprintIDs(
+func checkInsertedStmtStats(
 	t *testing.T,
 	appName string,
 	observer *sqlutils.SQLRunner,
-	expectedStmtFingerprintToFingerprintID map[string]string,
+	expectedFingerprintIDs map[string]string,
 ) {
 	result := observer.QueryStr(t,
 		`
-SELECT encode(fingerprint_id, 'hex'), metadata ->> 'query'
+SELECT encode(fingerprint_id, 'hex')
 FROM crdb_internal.statement_statistics
 WHERE app_name = $1`, appName)
 
-	for expectedFingerprint := range expectedStmtFingerprintToFingerprintID {
-		var found bool
-		for _, row := range result {
-			if expectedFingerprint == row[1] {
-				found = true
-
-				// Populate fingerprintID.
-				expectedStmtFingerprintToFingerprintID[expectedFingerprint] = row[0]
-			}
-		}
-		require.True(t, found, "expect %s to be found, but it was not", expectedFingerprint)
+	got := make(map[string]struct{}, len(result))
+	for _, row := range result {
+		got[row[0]] = struct{}{}
+	}
+	for canonical, expectedID := range expectedFingerprintIDs {
+		_, found := got[expectedID]
+		require.True(t, found,
+			"expected fingerprint %q (id=%s) to be found, but it was not",
+			canonical, expectedID)
 	}
 }
 

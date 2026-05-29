@@ -286,6 +286,7 @@ test           pg_catalog          oidvector[]                            type  
 test           pg_catalog          oidvector[]                            type         public   USAGE           false
 test           pg_catalog          oidvector[]                            type         root     ALL             false
 test           pg_catalog          pg_aggregate                           table        public   SELECT          false
+test           pg_catalog          pg_aios                                table        public   SELECT          false
 test           pg_catalog          pg_am                                  table        public   SELECT          false
 test           pg_catalog          pg_amop                                table        public   SELECT          false
 test           pg_catalog          pg_amproc                              table        public   SELECT          false
@@ -295,6 +296,7 @@ test           pg_catalog          pg_auth_members                        table 
 test           pg_catalog          pg_authid                              table        public   SELECT          false
 test           pg_catalog          pg_available_extension_versions        table        public   SELECT          false
 test           pg_catalog          pg_available_extensions                table        public   SELECT          false
+test           pg_catalog          pg_backend_memory_contexts             table        public   SELECT          false
 test           pg_catalog          pg_cast                                table        public   SELECT          false
 test           pg_catalog          pg_class                               table        public   SELECT          false
 test           pg_catalog          pg_collation                           table        public   SELECT          false
@@ -316,6 +318,7 @@ test           pg_catalog          pg_foreign_server                      table 
 test           pg_catalog          pg_foreign_table                       table        public   SELECT          false
 test           pg_catalog          pg_group                               table        public   SELECT          false
 test           pg_catalog          pg_hba_file_rules                      table        public   SELECT          false
+test           pg_catalog          pg_ident_file_mappings                 table        public   SELECT          false
 test           pg_catalog          pg_index                               table        public   SELECT          false
 test           pg_catalog          pg_indexes                             table        public   SELECT          false
 test           pg_catalog          pg_inherits                            table        public   SELECT          false
@@ -335,6 +338,7 @@ test           pg_catalog          pg_namespace                           table 
 test           pg_catalog          pg_opclass                             table        public   SELECT          false
 test           pg_catalog          pg_operator                            table        public   SELECT          false
 test           pg_catalog          pg_opfamily                            table        public   SELECT          false
+test           pg_catalog          pg_parameter_acl                       table        public   SELECT          false
 test           pg_catalog          pg_partitioned_table                   table        public   SELECT          false
 test           pg_catalog          pg_policies                            table        public   SELECT          false
 test           pg_catalog          pg_policy                              table        public   SELECT          false
@@ -342,6 +346,7 @@ test           pg_catalog          pg_prepared_statements                 table 
 test           pg_catalog          pg_prepared_xacts                      table        public   SELECT          false
 test           pg_catalog          pg_proc                                table        public   SELECT          false
 test           pg_catalog          pg_publication                         table        public   SELECT          false
+test           pg_catalog          pg_publication_namespace               table        public   SELECT          false
 test           pg_catalog          pg_publication_rel                     table        public   SELECT          false
 test           pg_catalog          pg_publication_tables                  table        public   SELECT          false
 test           pg_catalog          pg_range                               table        public   SELECT          false
@@ -360,29 +365,37 @@ test           pg_catalog          pg_shadow                              table 
 test           pg_catalog          pg_shdepend                            table        public   SELECT          false
 test           pg_catalog          pg_shdescription                       table        public   SELECT          false
 test           pg_catalog          pg_shmem_allocations                   table        public   SELECT          false
+test           pg_catalog          pg_shmem_allocations_numa              table        public   SELECT          false
 test           pg_catalog          pg_shseclabel                          table        public   SELECT          false
 test           pg_catalog          pg_stat_activity                       table        public   SELECT          false
 test           pg_catalog          pg_stat_all_indexes                    table        public   SELECT          false
 test           pg_catalog          pg_stat_all_tables                     table        public   SELECT          false
 test           pg_catalog          pg_stat_archiver                       table        public   SELECT          false
 test           pg_catalog          pg_stat_bgwriter                       table        public   SELECT          false
+test           pg_catalog          pg_stat_checkpointer                   table        public   SELECT          false
 test           pg_catalog          pg_stat_database                       table        public   SELECT          false
 test           pg_catalog          pg_stat_database_conflicts             table        public   SELECT          false
 test           pg_catalog          pg_stat_gssapi                         table        public   SELECT          false
+test           pg_catalog          pg_stat_io                             table        public   SELECT          false
 test           pg_catalog          pg_stat_progress_analyze               table        public   SELECT          false
 test           pg_catalog          pg_stat_progress_basebackup            table        public   SELECT          false
 test           pg_catalog          pg_stat_progress_cluster               table        public   SELECT          false
+test           pg_catalog          pg_stat_progress_copy                  table        public   SELECT          false
 test           pg_catalog          pg_stat_progress_create_index          table        public   SELECT          false
 test           pg_catalog          pg_stat_progress_vacuum                table        public   SELECT          false
+test           pg_catalog          pg_stat_recovery_prefetch              table        public   SELECT          false
 test           pg_catalog          pg_stat_replication                    table        public   SELECT          false
+test           pg_catalog          pg_stat_replication_slots              table        public   SELECT          false
 test           pg_catalog          pg_stat_slru                           table        public   SELECT          false
 test           pg_catalog          pg_stat_ssl                            table        public   SELECT          false
 test           pg_catalog          pg_stat_subscription                   table        public   SELECT          false
+test           pg_catalog          pg_stat_subscription_stats             table        public   SELECT          false
 test           pg_catalog          pg_stat_sys_indexes                    table        public   SELECT          false
 test           pg_catalog          pg_stat_sys_tables                     table        public   SELECT          false
 test           pg_catalog          pg_stat_user_functions                 table        public   SELECT          false
 test           pg_catalog          pg_stat_user_indexes                   table        public   SELECT          false
 test           pg_catalog          pg_stat_user_tables                    table        public   SELECT          false
+test           pg_catalog          pg_stat_wal                            table        public   SELECT          false
 test           pg_catalog          pg_stat_wal_receiver                   table        public   SELECT          false
 test           pg_catalog          pg_stat_xact_all_tables                table        public   SELECT          false
 test           pg_catalog          pg_stat_xact_sys_tables                table        public   SELECT          false
@@ -402,6 +415,7 @@ test           pg_catalog          pg_statistic_ext                       table 
 test           pg_catalog          pg_statistic_ext_data                  table        public   SELECT          false
 test           pg_catalog          pg_stats                               table        public   SELECT          false
 test           pg_catalog          pg_stats_ext                           table        public   SELECT          false
+test           pg_catalog          pg_stats_ext_exprs                     table        public   SELECT          false
 test           pg_catalog          pg_subscription                        table        public   SELECT          false
 test           pg_catalog          pg_subscription_rel                    table        public   SELECT          false
 test           pg_catalog          pg_tables                              table        public   SELECT          false
@@ -420,6 +434,7 @@ test           pg_catalog          pg_user                                table 
 test           pg_catalog          pg_user_mapping                        table        public   SELECT          false
 test           pg_catalog          pg_user_mappings                       table        public   SELECT          false
 test           pg_catalog          pg_views                               table        public   SELECT          false
+test           pg_catalog          pg_wait_events                         table        public   SELECT          false
 test           pg_catalog          record                                 type         admin    ALL             false
 test           pg_catalog          record                                 type         public   USAGE           false
 test           pg_catalog          record                                 type         root     ALL             false
@@ -1702,6 +1717,7 @@ a  public  t  readwrite  CHANGEFEED         false
 a  public  t  readwrite  CREATE             false
 a  public  t  readwrite  DROP               false
 a  public  t  readwrite  MAINTAIN           false
+a  public  t  readwrite  REFERENCES         false
 a  public  t  readwrite  REPLICATIONDEST    false
 a  public  t  readwrite  REPLICATIONSOURCE  false
 a  public  t  readwrite  SELECT             false
@@ -1715,6 +1731,7 @@ a  public  t  test-user  CHANGEFEED         false
 a  public  t  test-user  CREATE             false
 a  public  t  test-user  DROP               false
 a  public  t  test-user  MAINTAIN           false
+a  public  t  test-user  REFERENCES         false
 a  public  t  test-user  REPLICATIONDEST    false
 a  public  t  test-user  REPLICATIONSOURCE  false
 a  public  t  test-user  SELECT             false
@@ -1731,6 +1748,7 @@ a  public  t  readwrite  CHANGEFEED         false
 a  public  t  readwrite  CREATE             false
 a  public  t  readwrite  DROP               false
 a  public  t  readwrite  MAINTAIN           false
+a  public  t  readwrite  REFERENCES         false
 a  public  t  readwrite  REPLICATIONDEST    false
 a  public  t  readwrite  REPLICATIONSOURCE  false
 a  public  t  readwrite  SELECT             false
@@ -1743,6 +1761,7 @@ a  public  t  test-user  CHANGEFEED         false
 a  public  t  test-user  CREATE             false
 a  public  t  test-user  DROP               false
 a  public  t  test-user  MAINTAIN           false
+a  public  t  test-user  REFERENCES         false
 a  public  t  test-user  REPLICATIONDEST    false
 a  public  t  test-user  REPLICATIONSOURCE  false
 a  public  t  test-user  SELECT             false
@@ -1763,6 +1782,7 @@ a  public  t  readwrite  CHANGEFEED         false
 a  public  t  readwrite  CREATE             false
 a  public  t  readwrite  DROP               false
 a  public  t  readwrite  MAINTAIN           false
+a  public  t  readwrite  REFERENCES         false
 a  public  t  readwrite  REPLICATIONDEST    false
 a  public  t  readwrite  REPLICATIONSOURCE  false
 a  public  t  readwrite  SELECT             false
@@ -1776,6 +1796,7 @@ a  public  t  test-user  CHANGEFEED         false
 a  public  t  test-user  CREATE             false
 a  public  t  test-user  DROP               false
 a  public  t  test-user  MAINTAIN           false
+a  public  t  test-user  REFERENCES         false
 a  public  t  test-user  REPLICATIONDEST    false
 a  public  t  test-user  REPLICATIONSOURCE  false
 a  public  t  test-user  TRIGGER            false
@@ -1791,6 +1812,7 @@ a  public  t  readwrite  CHANGEFEED         false
 a  public  t  readwrite  CREATE             false
 a  public  t  readwrite  DROP               false
 a  public  t  readwrite  MAINTAIN           false
+a  public  t  readwrite  REFERENCES         false
 a  public  t  readwrite  REPLICATIONDEST    false
 a  public  t  readwrite  REPLICATIONSOURCE  false
 a  public  t  readwrite  SELECT             false
@@ -1803,6 +1825,7 @@ a  public  t  test-user  CHANGEFEED         false
 a  public  t  test-user  CREATE             false
 a  public  t  test-user  DROP               false
 a  public  t  test-user  MAINTAIN           false
+a  public  t  test-user  REFERENCES         false
 a  public  t  test-user  REPLICATIONDEST    false
 a  public  t  test-user  REPLICATIONSOURCE  false
 a  public  t  test-user  TRIGGER            false
@@ -1871,6 +1894,7 @@ a  public  v  readwrite  CHANGEFEED         false
 a  public  v  readwrite  CREATE             false
 a  public  v  readwrite  DROP               false
 a  public  v  readwrite  MAINTAIN           false
+a  public  v  readwrite  REFERENCES         false
 a  public  v  readwrite  REPLICATIONDEST    false
 a  public  v  readwrite  REPLICATIONSOURCE  false
 a  public  v  readwrite  SELECT             false
@@ -1884,6 +1908,7 @@ a  public  v  test-user  CHANGEFEED         false
 a  public  v  test-user  CREATE             false
 a  public  v  test-user  DROP               false
 a  public  v  test-user  MAINTAIN           false
+a  public  v  test-user  REFERENCES         false
 a  public  v  test-user  REPLICATIONDEST    false
 a  public  v  test-user  REPLICATIONSOURCE  false
 a  public  v  test-user  SELECT             false
@@ -1900,6 +1925,7 @@ a  public  v  readwrite  CHANGEFEED         false
 a  public  v  readwrite  CREATE             false
 a  public  v  readwrite  DROP               false
 a  public  v  readwrite  MAINTAIN           false
+a  public  v  readwrite  REFERENCES         false
 a  public  v  readwrite  REPLICATIONDEST    false
 a  public  v  readwrite  REPLICATIONSOURCE  false
 a  public  v  readwrite  SELECT             false
@@ -1912,6 +1938,7 @@ a  public  v  test-user  CHANGEFEED         false
 a  public  v  test-user  CREATE             false
 a  public  v  test-user  DROP               false
 a  public  v  test-user  MAINTAIN           false
+a  public  v  test-user  REFERENCES         false
 a  public  v  test-user  REPLICATIONDEST    false
 a  public  v  test-user  REPLICATIONSOURCE  false
 a  public  v  test-user  SELECT             false
@@ -1932,6 +1959,7 @@ a  public  v  readwrite  CHANGEFEED         false
 a  public  v  readwrite  CREATE             false
 a  public  v  readwrite  DROP               false
 a  public  v  readwrite  MAINTAIN           false
+a  public  v  readwrite  REFERENCES         false
 a  public  v  readwrite  REPLICATIONDEST    false
 a  public  v  readwrite  REPLICATIONSOURCE  false
 a  public  v  readwrite  SELECT             false
@@ -1945,6 +1973,7 @@ a  public  v  test-user  CHANGEFEED         false
 a  public  v  test-user  CREATE             false
 a  public  v  test-user  DROP               false
 a  public  v  test-user  MAINTAIN           false
+a  public  v  test-user  REFERENCES         false
 a  public  v  test-user  REPLICATIONDEST    false
 a  public  v  test-user  REPLICATIONSOURCE  false
 a  public  v  test-user  TRIGGER            false
@@ -1960,6 +1989,7 @@ a  public  v  readwrite  CHANGEFEED         false
 a  public  v  readwrite  CREATE             false
 a  public  v  readwrite  DROP               false
 a  public  v  readwrite  MAINTAIN           false
+a  public  v  readwrite  REFERENCES         false
 a  public  v  readwrite  REPLICATIONDEST    false
 a  public  v  readwrite  REPLICATIONSOURCE  false
 a  public  v  readwrite  SELECT             false
@@ -1972,6 +2002,7 @@ a  public  v  test-user  CHANGEFEED         false
 a  public  v  test-user  CREATE             false
 a  public  v  test-user  DROP               false
 a  public  v  test-user  MAINTAIN           false
+a  public  v  test-user  REFERENCES         false
 a  public  v  test-user  REPLICATIONDEST    false
 a  public  v  test-user  REPLICATIONSOURCE  false
 a  public  v  test-user  TRIGGER            false
@@ -1990,6 +2021,7 @@ a  public  v     table     readwrite  CHANGEFEED         false
 a  public  v     table     readwrite  CREATE             false
 a  public  v     table     readwrite  DROP               false
 a  public  v     table     readwrite  MAINTAIN           false
+a  public  v     table     readwrite  REFERENCES         false
 a  public  v     table     readwrite  REPLICATIONDEST    false
 a  public  v     table     readwrite  REPLICATIONSOURCE  false
 a  public  v     table     readwrite  SELECT             false
@@ -2002,6 +2034,7 @@ a  public  v     table     test-user  CHANGEFEED         false
 a  public  v     table     test-user  CREATE             false
 a  public  v     table     test-user  DROP               false
 a  public  v     table     test-user  MAINTAIN           false
+a  public  v     table     test-user  REFERENCES         false
 a  public  v     table     test-user  REPLICATIONDEST    false
 a  public  v     table     test-user  REPLICATIONSOURCE  false
 a  public  v     table     test-user  TRIGGER            false

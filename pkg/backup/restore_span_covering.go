@@ -513,8 +513,13 @@ func newFileSpanStartKeyIterator(
 	ctx context.Context,
 	backups []backuppb.BackupManifest,
 	layerToBackupManifestFileIterFactory backupinfo.LayerToBackupManifestFileIterFactory,
-) (*fileSpanStartKeyIterator, error) {
+) (_ *fileSpanStartKeyIterator, err error) {
 	it := &fileSpanStartKeyIterator{}
+	defer func() {
+		if err != nil {
+			it.Close()
+		}
+	}()
 	for layer := range backups {
 		iter, err := layerToBackupManifestFileIterFactory[layer].NewFileIter(ctx)
 		if err != nil {

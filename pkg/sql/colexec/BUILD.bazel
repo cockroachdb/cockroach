@@ -88,6 +88,7 @@ go_library(
         "//pkg/util/mon",
         "//pkg/util/randutil",
         "//pkg/util/stringarena",
+        "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_apd_v3//:apd",  # keep
         "@com_github_cockroachdb_errors//:errors",

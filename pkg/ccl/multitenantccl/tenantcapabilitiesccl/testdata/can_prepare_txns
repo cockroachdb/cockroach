@@ -29,7 +29,7 @@ ok
 exec-privileged-op-tenant
 PREPARE TRANSACTION 'txn1'
 ----
-pq: ba: QueryIntent [/Tenant/10/Table/104/1/1/0], EndTxn(prepare) [/Tenant/10/Table/104/1/1/0], [txn: ‹×›], [can-forward-ts] RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_prepare_txns" (*kvpb.EndTxnRequest)
+pq: ba: QueryIntent [/Tenant/10/Table/×/1/1/0], EndTxn(prepare) [/Tenant/10/Table/×/1/1/0], [txn: ‹×›], [can-forward-ts] RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_prepare_txns" (*kvpb.EndTxnRequest)
 
 exec-privileged-op-tenant
 RESET kv_transaction_buffered_writes_enabled
@@ -88,7 +88,7 @@ ok
 exec-privileged-op-tenant
 PREPARE TRANSACTION 'txn3'
 ----
-pq: ba: QueryIntent [/Tenant/10/Table/104/1/1/0], EndTxn(prepare) [/Tenant/10/Table/104/1/1/0], [txn: ‹×›], [can-forward-ts] RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_prepare_txns" (*kvpb.EndTxnRequest)
+pq: ba: QueryIntent [/Tenant/10/Table/×/1/1/0], EndTxn(prepare) [/Tenant/10/Table/×/1/1/0], [txn: ‹×›], [can-forward-ts] RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_prepare_txns" (*kvpb.EndTxnRequest)
 
 exec-privileged-op-tenant
 RESET kv_transaction_buffered_writes_enabled

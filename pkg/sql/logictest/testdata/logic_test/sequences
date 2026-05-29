@@ -1014,7 +1014,9 @@ SELECT count(DISTINCT x) FROM svals
 ----
 1
 
-# Check that the KV trace is empty.
+# Check that the KV trace is empty. The two "rows affected: 1" rows are from
+# the user-issued nextval and from the internal pg_catalog lookup that the
+# 'sv'::regclass cast runs to compute the search-path-aware regclass name.
 statement ok
 BEGIN;
   SELECT nextval('sv'); -- acquire the lease, so that doesn't go to the KV trace
@@ -1024,6 +1026,7 @@ BEGIN;
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
 ----
+rows affected: 1
 rows affected: 1
 
 statement ok
@@ -1151,12 +1154,7 @@ CREATE TABLE ab(a INT DEFAULT nextval('owned_seq'), b INT DEFAULT nextval('owned
 statement ok
 ALTER SEQUENCE owned_seq OWNED BY ab.a;
 
-skipif config local-legacy-schema-changer
-statement error cannot drop column a because other objects depend on it
-ALTER TABLE ab DROP COLUMN a;
-
-onlyif config local-legacy-schema-changer
-statement error cannot drop table ab because other objects depend on it
+statement error cannot drop column a of table ab because other objects depend on it
 ALTER TABLE ab DROP COLUMN a;
 
 statement ok
@@ -1211,12 +1209,7 @@ CREATE TABLE b(b INT DEFAULT nextval('seq'));
 statement error cannot drop table a because other objects depend on it
 DROP TABLE a
 
-skipif config local-legacy-schema-changer
-statement error cannot drop column a because other objects depend on it
-ALTER TABLE a DROP COLUMN a;
-
-onlyif config local-legacy-schema-changer
-statement error cannot drop table a because other objects depend on it
+statement error cannot drop column a of table a because other objects depend on it
 ALTER TABLE a DROP COLUMN a;
 
 statement ok

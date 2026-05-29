@@ -201,7 +201,7 @@ func (m *mergeCoordinator) handleRow(row rowenc.EncDatumRow) error {
 
 // Start implements execinfra.RowSource.
 func (m *mergeCoordinator) Start(ctx context.Context) {
-	m.StartInternal(ctx, "mergeCoordinator")
+	ctx = m.StartInternal(ctx, "mergeCoordinator")
 	m.input.Start(ctx)
 	m.publishInitialTasks()
 }

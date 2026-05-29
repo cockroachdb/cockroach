@@ -56,9 +56,11 @@ type ChunkProgressLogger struct {
 
 // NewChunkProgressLoggerForJob returns a ChunkProgressLogger which updates a job's
 // fraction_completed via ProgressStorage. expectedChunks is the expected number of chunks left
-// for this job, and fraction_completed is calculated based on this number and startFraction.
+// for this job, and fraction_completed is calculated based on this number, startFraction,
+// and targetFraction. Progress is linearly interpolated from startFraction to targetFraction
+// as chunks complete.
 func NewChunkProgressLoggerForJob(
-	jobID jobspb.JobID, db isql.DB, expectedChunks int, startFraction float64,
+	jobID jobspb.JobID, db isql.DB, expectedChunks int, startFraction float64, targetFraction float64,
 ) *ChunkProgressLogger {
 	return NewChunkProgressLogger(
 		func(ctx context.Context, fraction float64) error {
@@ -66,7 +68,7 @@ func NewChunkProgressLoggerForJob(
 				return ProgressStorage(jobID).SetFraction(ctx, txn, fraction)
 			})
 		},
-		expectedChunks, startFraction,
+		expectedChunks, startFraction, targetFraction,
 	)
 }
 
@@ -78,27 +80,32 @@ func DeprecatedNewChunkProgressLoggerForJob(
 	j *Job,
 	expectedChunks int,
 	startFraction float32,
+	targetFraction float32,
 	progressedFn func(context.Context, jobspb.ProgressDetails),
 ) *ChunkProgressLogger {
 	return NewChunkProgressLogger(
 		func(ctx context.Context, fraction float64) error {
-			return j.NoTxn().FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+			return j.DeprecatedNoTxn().FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
 				if progressedFn != nil {
 					progressedFn(ctx, details)
 				}
 				return float32(fraction)
 			})
-		}, expectedChunks, float64(startFraction))
+		}, expectedChunks, float64(startFraction), float64(targetFraction))
 }
 
-// NewChunkProgressLogger returns a ChunkProgressLogger.
+// NewChunkProgressLogger returns a ChunkProgressLogger. Progress is linearly
+// interpolated from startFraction to targetFraction as chunks complete.
 func NewChunkProgressLogger(
-	report func(ctx context.Context, pct float64) error, expectedChunks int, startFraction float64,
+	report func(ctx context.Context, pct float64) error,
+	expectedChunks int,
+	startFraction float64,
+	targetFraction float64,
 ) *ChunkProgressLogger {
 	return &ChunkProgressLogger{
 		expectedChunks: expectedChunks,
 		batcher: ProgressUpdateBatcher{
-			perChunkContribution: (1.0 - startFraction) * 1.0 / float64(expectedChunks),
+			perChunkContribution: (targetFraction - startFraction) / float64(expectedChunks),
 			start:                startFraction,
 			reported:             startFraction,
 			Report:               report,

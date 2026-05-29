@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/colfetcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
@@ -386,30 +387,37 @@ func TestHalloweenProblemAvoidance(t *testing.T) {
 		`SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = true;`,
 		`CREATE DATABASE t;`,
 		`CREATE TABLE t.test (x FLOAT);`,
+		`CREATE USER halloween_user;`,
 	} {
 		if _, err := db.Exec(s); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	for _, isoLevel := range []tree.IsolationLevel{
-		tree.ReadCommittedIsolation,
-		tree.RepeatableReadIsolation,
-		tree.SerializableIsolation,
-	} {
-		t.Run(isoLevel.String(), func(t *testing.T) {
-			if _, err := db.Exec("DELETE FROM t.test"); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := db.Exec(
-				`INSERT INTO t.test(x) SELECT generate_series(1, $1)::FLOAT`,
-				numRows); err != nil {
-				t.Fatal(err)
-			}
-			// Now slightly modify the values in duplicate rows.
-			// We choose a float +0.1 to ensure that none of the derived
-			// values become duplicate of already-present values.
-			q := fmt.Sprintf(`
+	// Run as both a system user and a regular user: name resolution and
+	// privilege checks routinely take different paths for the two, and
+	// only the regular-user path forces has_table_privilege to invoke
+	// the internal executor here.
+	for _, privUser := range []string{"root", "halloween_user"} {
+		t.Run(privUser, func(t *testing.T) {
+			for _, isoLevel := range []tree.IsolationLevel{
+				tree.ReadCommittedIsolation,
+				tree.RepeatableReadIsolation,
+				tree.SerializableIsolation,
+			} {
+				t.Run(isoLevel.String(), func(t *testing.T) {
+					if _, err := db.Exec("DELETE FROM t.test"); err != nil {
+						t.Fatal(err)
+					}
+					if _, err := db.Exec(
+						`INSERT INTO t.test(x) SELECT generate_series(1, $1)::FLOAT`,
+						numRows); err != nil {
+						t.Fatal(err)
+					}
+					// Now slightly modify the values in duplicate rows.
+					// We choose a float +0.1 to ensure that none of the derived
+					// values become duplicate of already-present values.
+					q := fmt.Sprintf(`
 BEGIN TRANSACTION ISOLATION LEVEL %s;
 INSERT INTO t.test(x)
     -- the if ensures that no row is processed two times.
@@ -420,21 +428,23 @@ SELECT IF(x::INT::FLOAT = x,
        + 0.1
   FROM t.test
   -- the function used here is implemented by using the internal executor.
-  WHERE has_table_privilege('root', ((x+.1)/(x+1) + 1)::int::oid, 'INSERT') IS NULL;
-COMMIT;`, isoLevel.String())
-			if _, err := db.Exec(q); err != nil {
-				t.Fatal(err)
-			}
+  WHERE has_table_privilege('%s', ((x+.1)/(x+1) + 1)::int::oid, 'INSERT') IS NULL;
+COMMIT;`, isoLevel.String(), privUser)
+					if _, err := db.Exec(q); err != nil {
+						t.Fatal(err)
+					}
 
-			// Finally verify that no rows has been operated on more than once.
-			row := db.QueryRow(`SELECT count(DISTINCT x) FROM t.test`)
-			var cnt int
-			if err := row.Scan(&cnt); err != nil {
-				t.Fatal(err)
-			}
+					// Finally verify that no rows has been operated on more than once.
+					row := db.QueryRow(`SELECT count(DISTINCT x) FROM t.test`)
+					var cnt int
+					if err := row.Scan(&cnt); err != nil {
+						t.Fatal(err)
+					}
 
-			if cnt != 2*numRows {
-				t.Fatalf("expected %d rows in final table, got %d", 2*numRows, cnt)
+					if cnt != 2*numRows {
+						t.Fatalf("expected %d rows in final table, got %d", 2*numRows, cnt)
+					}
+				})
 			}
 		})
 	}
@@ -2540,4 +2550,164 @@ func TestInternalAppNamePrefix(t *testing.T) {
 		finalUserMetrics = sqlServer.Metrics.ExecutedStatementCounters.InsertCount.Count()
 		require.Greater(t, finalUserMetrics, initialUserMetrics)
 	})
+}
+
+// TestPrepareAfterSavepointRollback reproduces #169720: after ROLLBACK TO
+// SAVEPOINT, the transaction's read sequence number can remain in the ignored
+// range because execPrepare (pgwire Parse) does not call Step() to advance it.
+// Any KV read during the Prepare then hits the assertion in
+// checkReadSeqNotIgnoredLocked.
+//
+// The test disables descriptor leasing so that descriptor lookups fall
+// through to storage, issuing real KV reads through the user's transaction.
+// A second table (t_for_parse) is used as the Parse target — it has never
+// been accessed in this transaction, so the descriptor collection has no
+// cached entry and must resolve it from storage.
+func TestPrepareAfterSavepointRollback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Insecure: true,
+	})
+	defer s.Stopper().Stop(ctx)
+	defer lease.TestingDisableTableLeases()()
+
+	p, err := pgtest.NewPGTest(ctx, s.SQLAddr(), username.RootUser)
+	require.NoError(t, err)
+	defer func() { _ = p.Close() }()
+
+	until := pgtest.ParseMessages("ReadyForQuery")
+
+	// Two tables: t_for_insert is the INSERT target (cached in the txn's
+	// descriptor collection after the INSERT), t_for_parse is the Parse
+	// target (never accessed in this txn, forcing a storage lookup).
+	require.NoError(t, p.SendOneLine(`Query {"String": "CREATE TABLE t_for_insert (id INT PRIMARY KEY)"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+
+	require.NoError(t, p.SendOneLine(`Query {"String": "CREATE TABLE t_for_parse (id INT PRIMARY KEY)"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+
+	// BEGIN → SAVEPOINT → INSERT → ROLLBACK TO SAVEPOINT.
+	// After the rollback the ignored seqnum range is [0, 1] and readSeq
+	// remains 0 (stepping mode does not auto-advance it).
+	require.NoError(t, p.SendOneLine(`Query {"String": "BEGIN"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+
+	require.NoError(t, p.SendOneLine(`Query {"String": "SAVEPOINT sp1"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+
+	require.NoError(t, p.SendOneLine(`Query {"String": "INSERT INTO t_for_insert VALUES (1)"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+
+	require.NoError(t, p.SendOneLine(`Query {"String": "ROLLBACK TO SAVEPOINT sp1"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+
+	// Parse "SELECT * FROM t_for_parse" — descriptor lookup for t_for_parse
+	// goes to storage (leases disabled, not in collection cache) and issues
+	// a KV read on the user's txn. Without the fix, readSeq=0 is inside the
+	// ignored range [0, 1], triggering the assertion.
+	require.NoError(t, p.SendOneLine(`Parse {"Query": "SELECT * FROM t_for_parse"}`))
+	require.NoError(t, p.SendOneLine(`Sync`))
+
+	_, err = p.Until(
+		true, /* keepErrMsg */
+		pgtest.ParseMessages("ParseComplete\nReadyForQuery")...)
+	require.NoError(t, err,
+		"Parse after ROLLBACK TO SAVEPOINT hit readSeq-in-ignored-range assertion; see #169720")
+
+	require.NoError(t, p.SendOneLine(`Query {"String": "COMMIT"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+}
+
+// TestBindAfterSavepointRollback reproduces the same class of bug as
+// TestPrepareAfterSavepointRollback but through the Bind (pgwire Bind)
+// entry point instead of Parse. It uses an enum-typed parameter to
+// trigger ResolveTypeByOID inside execBind's resolve() closure — the
+// exact code path that runs BEFORE stepReadSequence in the unfixed code.
+//
+// The test disables descriptor leasing so that the enum type resolution
+// falls through to storage, issuing real KV reads through the user's
+// transaction.
+func TestBindAfterSavepointRollback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Insecure: true,
+	})
+	defer s.Stopper().Stop(ctx)
+	defer lease.TestingDisableTableLeases()()
+
+	p, err := pgtest.NewPGTest(ctx, s.SQLAddr(), username.RootUser)
+	require.NoError(t, err)
+	defer func() { _ = p.Close() }()
+
+	until := pgtest.ParseMessages("ReadyForQuery")
+
+	// Create an enum type and a table that uses it, plus a plain table
+	// for the INSERT inside the savepoint.
+	require.NoError(t, p.SendOneLine(`Query {"String": "CREATE TABLE t_for_insert (id INT PRIMARY KEY)"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+
+	require.NoError(t, p.SendOneLine(`Query {"String": "CREATE TYPE te AS ENUM ('a', 'b')"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+
+	require.NoError(t, p.SendOneLine(`Query {"String": "CREATE TABLE t_for_bind (id INT, val te)"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+
+	// Parse OUTSIDE the transaction. The autocommit descriptor collection
+	// used during Parse is discarded, so the enum type will not be cached
+	// in the new transaction's collection created at BEGIN.
+	require.NoError(t, p.SendOneLine(`Parse {"Query": "INSERT INTO t_for_bind VALUES ($1, $2)"}`))
+	require.NoError(t, p.SendOneLine(`Sync`))
+	_, err = p.Until(false /* keepErrMsg */, pgtest.ParseMessages("ParseComplete\nReadyForQuery")...)
+	require.NoError(t, err)
+
+	// BEGIN → SAVEPOINT → INSERT → ROLLBACK TO SAVEPOINT.
+	require.NoError(t, p.SendOneLine(`Query {"String": "BEGIN"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+
+	require.NoError(t, p.SendOneLine(`Query {"String": "SAVEPOINT sp1"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+
+	require.NoError(t, p.SendOneLine(`Query {"String": "INSERT INTO t_for_insert VALUES (1)"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+
+	require.NoError(t, p.SendOneLine(`Query {"String": "ROLLBACK TO SAVEPOINT sp1"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+
+	// Bind with enum-typed parameters. resolve() calls ResolveTypeByOID
+	// for the enum OID — the enum is not in this txn's descriptor
+	// collection (Parse used a different collection), so it falls through
+	// to storage (leases disabled) and issues a KV read on the user's txn.
+	// Without the fix, readSeq=0 is inside the ignored range [0, 1].
+	require.NoError(t, p.SendOneLine(`Bind {"ParameterFormatCodes": [0, 0], "Parameters": [{"text":"1"}, {"text":"a"}]}`))
+	require.NoError(t, p.SendOneLine(`Sync`))
+
+	_, err = p.Until(
+		true, /* keepErrMsg */
+		pgtest.ParseMessages("BindComplete\nReadyForQuery")...)
+	require.NoError(t, err,
+		"Bind after ROLLBACK TO SAVEPOINT hit readSeq-in-ignored-range assertion; see #169720")
+
+	require.NoError(t, p.SendOneLine(`Query {"String": "COMMIT"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
 }

@@ -106,28 +106,26 @@ SET TRACING=off;
 	sqlstatstestutil.WaitForTransactionEntriesAtLeast(t, obsConn, 1,
 		sqlstatstestutil.TransactionFilter{App: "contentionTest"})
 
-	var resp serverpb.ListContentionEventsResponse
-	require.NoError(t,
-		srvtestutils.GetStatusJSONProtoWithAdminOption(
+	testutils.SucceedsSoon(t, func() error {
+		var resp serverpb.ListContentionEventsResponse
+		if err := srvtestutils.GetStatusJSONProtoWithAdminOption(
 			s2,
 			"contention_events",
 			&resp,
-			true /* isAdmin */),
-	)
-
-	require.GreaterOrEqualf(t, len(resp.Events.IndexContentionEvents), 1,
-		"expecting at least 1 contention event, but found none")
-
-	found := false
-	for _, event := range resp.Events.IndexContentionEvents {
-		if event.TableID == descpb.ID(testTableID) && event.IndexID == descpb.IndexID(1) {
-			found = true
-			break
+			true, /* isAdmin */
+		); err != nil {
+			return err
 		}
-	}
-
-	require.True(t, found,
-		"expect to find contention event for table %d, but found %+v", testTableID, resp)
+		for _, event := range resp.Events.IndexContentionEvents {
+			if event.TableID == descpb.ID(testTableID) && event.IndexID == descpb.IndexID(1) {
+				return nil
+			}
+		}
+		return errors.Newf(
+			"contention event for table %d not found in response: %+v",
+			testTableID, resp,
+		)
+	})
 
 	server1Conn.CheckQueryResultsRetry(t, `
   SELECT count(*)

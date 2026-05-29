@@ -51,6 +51,7 @@ go_test(
         "//pkg/sql/backfill",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/desctestutils",
+        "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/execinfra",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/rowenc",

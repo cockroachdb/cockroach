@@ -737,7 +737,7 @@ func maybeAddSequenceDependencies(
 		if err != nil {
 			return nil, err
 		}
-		s := tree.Serialize(newExpr)
+		s := descpb.Expression(tree.Serialize(newExpr))
 		switch colExprKind {
 		case tabledesc.DefaultExpr:
 			col.DefaultExpr = &s

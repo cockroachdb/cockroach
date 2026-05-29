@@ -183,6 +183,7 @@ func (c *CustomFuncs) MakeCombinedFiltersConstraint(
 	explicitFilters memo.FiltersExpr,
 	optionalFilters memo.FiltersExpr,
 	filterColumns opt.ColSet,
+	spanLimit int,
 ) (
 	partitionFilters memo.FiltersExpr,
 	remainingFilters memo.FiltersExpr,
@@ -298,6 +299,7 @@ func (c *CustomFuncs) MakeCombinedFiltersConstraint(
 		append(optionalFilters, partitionFilters...),
 		scanPrivate.Table,
 		index.Ordinal(),
+		spanLimit,
 	)
 	if !ok {
 		return nil, nil, nil, false
@@ -309,6 +311,7 @@ func (c *CustomFuncs) MakeCombinedFiltersConstraint(
 			append(optionalFilters, inBetweenFilters...),
 			scanPrivate.Table,
 			index.Ordinal(),
+			spanLimit,
 		)
 		if !ok {
 			// If there are multiple partitioning columns on the index with different
@@ -444,11 +447,14 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		// local to the gateway region.
 		prefixSorter := tabMeta.IndexPartitionLocality(index.Ordinal())
 
+		spanLimit := int(c.e.evalCtx.SessionData().OptimizerSpanLimit)
+
 		// Build Constraints to scan a subset of the table Spans.
 		if partitionFilters, remainingFilters, combinedConstraint, ok =
 			c.MakeCombinedFiltersConstraint(
 				tabMeta, index, scanPrivate, prefixSorter,
 				filters, optionalFilters, filterColumns,
+				spanLimit,
 			); !ok {
 			return
 		}
@@ -1201,7 +1207,7 @@ func (c *CustomFuncs) GenerateTrigramSimilarityInvertedIndexScans(
 // filter remaining after extracting the constraint. If no constraint can be
 // derived, then tryConstrainIndex returns ok = false.
 func (c *CustomFuncs) tryConstrainIndex(
-	requiredFilters, optionalFilters memo.FiltersExpr, tabID opt.TableID, indexOrd int,
+	requiredFilters, optionalFilters memo.FiltersExpr, tabID opt.TableID, indexOrd int, spanLimit int,
 ) (_ *constraint.Constraint, remainingFilters memo.FiltersExpr, ok bool) {
 	// Start with fast check to rule out indexes that cannot be constrained.
 	if !c.canMaybeConstrainNonInvertedIndex(requiredFilters, tabID, indexOrd) &&
@@ -1209,7 +1215,7 @@ func (c *CustomFuncs) tryConstrainIndex(
 		return nil, nil, false
 	}
 
-	ic := c.initIdxConstraintForIndex(requiredFilters, optionalFilters, tabID, indexOrd)
+	ic := c.initIdxConstraintForIndex(requiredFilters, optionalFilters, tabID, indexOrd, spanLimit)
 	var cons constraint.Constraint
 	ic.Constraint(&cons)
 	if cons.IsUnconstrained() {

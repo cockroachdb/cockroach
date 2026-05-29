@@ -141,14 +141,16 @@ func TestWriteResumeSpan(t *testing.T) {
 		t.Fatal(errors.Wrapf(err, "can't find job %d", jobID))
 	}
 
-	require.NoError(t, job.NoTxn().Update(ctx, func(
-		_ isql.Txn, _ jobs.JobMetadata, ju *jobs.JobUpdater,
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	require.NoError(t, job.DeprecatedNoTxn().Update(ctx, func(
+		_ isql.Txn, _ jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater,
 	) error {
 		ju.UpdateState(jobs.StateRunning)
 		return nil
 	}))
 
-	err = job.NoTxn().SetDetails(ctx, details)
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	err = job.DeprecatedNoTxn().SetDetails(ctx, details)
 	if err != nil {
 		t.Fatal(err)
 	}

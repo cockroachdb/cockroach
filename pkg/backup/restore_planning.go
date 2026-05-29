@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuputils"
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
@@ -25,6 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
+	"github.com/cockroachdb/cockroach/pkg/revlog"
+	"github.com/cockroachdb/cockroach/pkg/revlog/restorerevlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -50,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -58,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -304,6 +310,9 @@ func remapSchemas(
 ) (bool, error) {
 
 	txn := p.InternalSQLTxn()
+	if txn == nil {
+		return false, errors.AssertionFailedf("remapSchemas: planner has no active transaction")
+	}
 	col := txn.Descriptors()
 	shouldBufferDeprecatedPrivilegeNotice := false
 
@@ -364,6 +373,7 @@ func remapTables(
 	p sql.PlanHookState,
 	databasesByID map[descpb.ID]*dbdesc.Mutable,
 	tablesByID map[descpb.ID]*tabledesc.Mutable,
+	typesByID map[descpb.ID]*typedesc.Mutable,
 	descriptorCoverage tree.DescriptorCoverage,
 	intoDB string,
 	restoreDBNames map[string]catalog.DatabaseDescriptor,
@@ -373,6 +383,9 @@ func remapTables(
 ) (bool, error) {
 
 	txn := p.InternalSQLTxn()
+	if txn == nil {
+		return false, errors.AssertionFailedf("remapTables: planner has no active transaction")
+	}
 	col := txn.Descriptors()
 	shouldBufferDeprecatedPrivilegeNotice := false
 
@@ -452,6 +465,16 @@ func remapTables(
 			return false, pgerror.WithCandidateCode(err, pgcode.FeatureNotSupported)
 		}
 
+		// Must run before the table's own rewrite is recorded below: any region
+		// enum referenced by an in-flight SET LOCALITY in the table's
+		// declarative schema changer state needs a mapping to the destination
+		// DB's enum (which checkMultiRegionCompatible above guaranteed exists).
+		if err := maybeAddRegionEnumRewriteForSchemaChangeState(
+			ctx, txn, table, parentDB, typesByID, descriptorRewrites,
+		); err != nil {
+			return false, err
+		}
+
 		// Create the table rewrite with the new parent ID. We've done all the
 		// up-front validation that we can.
 		descriptorRewrites[table.ID] = &jobspb.DescriptorRewrite{ParentID: parentID}
@@ -468,6 +491,123 @@ func remapTables(
 	return shouldBufferDeprecatedPrivilegeNotice, nil
 }
 
+// maybeAddRegionEnumRewriteForSchemaChangeState records ToExisting rewrites
+// from the source database's region enum and array type IDs to the
+// destination database's existing enum and array type IDs.
+//
+// Without these rewrites, table-level RESTORE of a multi-region table whose
+// in-flight schema change references the region enum (via
+// TableLocalitySecondaryRegion or via the crdb_region column's type closure)
+// would fail downstream with "missing rewrite for ..." because remapTypes
+// does not visit type descriptors not in the restore set.
+//
+// The destination database is required to be multi-region (enforced by
+// checkMultiRegionCompatible upstream).
+func maybeAddRegionEnumRewriteForSchemaChangeState(
+	ctx context.Context,
+	txn descs.Txn,
+	table *tabledesc.Mutable,
+	parentDB catalog.DatabaseDescriptor,
+	typesByID map[descpb.ID]*typedesc.Mutable,
+	descriptorRewrites jobspb.DescRewriteMap,
+) error {
+	if !parentDB.IsMultiRegion() {
+		return nil
+	}
+	srcEnum, srcEnumID, srcArrayID := findSourceRegionEnumIDs(table, typesByID)
+	needRewrite := func(srcID descpb.ID) bool {
+		if srcID == descpb.InvalidID {
+			return false
+		}
+		_, ok := descriptorRewrites[srcID]
+		return !ok
+	}
+	if !needRewrite(srcEnumID) && !needRewrite(srcArrayID) {
+		return nil
+	}
+
+	destEnumID, err := parentDB.MultiRegionEnumID()
+	if err != nil {
+		// Unreachable: parentDB.IsMultiRegion() is checked above.
+		return errors.NewAssertionErrorWithWrappedErrf(err,
+			"MultiRegionEnumID after IsMultiRegion check")
+	}
+	destEnumDesc, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).Get().Type(ctx, destEnumID)
+	if err != nil {
+		return errors.Wrapf(err,
+			"fetching destination region enum descriptor (id %d) for table-level restore of %q",
+			destEnumID, table.GetName())
+	}
+	// When the source enum descriptor is in scope, verify that every value it
+	// contains is also present in the destination. Otherwise rows whose
+	// crdb_region values exist only in the source would be silently mismapped
+	// after the rewrite. The fallback branch in findSourceRegionEnumIDs (where
+	// srcEnum is nil) has no source descriptor to compare against and skips
+	// this check.
+	if srcEnum != nil {
+		if err := srcEnum.IsCompatibleWith(destEnumDesc); err != nil {
+			return errors.Wrapf(err,
+				"table-level restore of %q into database %q",
+				table.GetName(), parentDB.GetName())
+		}
+	}
+	destArrayID := destEnumDesc.TypeDesc().ArrayTypeID
+
+	addRewrite := func(srcID, destID descpb.ID) {
+		if !needRewrite(srcID) {
+			return
+		}
+		descriptorRewrites[srcID] = &jobspb.DescriptorRewrite{
+			ParentID:   parentDB.GetID(),
+			ID:         destID,
+			ToExisting: true,
+		}
+	}
+	addRewrite(srcEnumID, destEnumID)
+	addRewrite(srcArrayID, destArrayID)
+	return nil
+}
+
+// findSourceRegionEnumIDs returns the source database's region enum descriptor
+// (when in scope), enum ID, and array type ID referenced by the table. Either
+// or both IDs may be descpb.InvalidID and srcEnum may be nil if the
+// corresponding reference is not present.
+//
+// The enum and array IDs come from two sources, in order of preference:
+//   - The first MULTIREGION_ENUM type descriptor in typesByID whose parent
+//     matches the table's parent (covers RBR tables and any case where the
+//     enum descriptor itself is in the restore set). srcEnum is non-nil here.
+//   - Any TableLocalitySecondaryRegion element in the table's declarative
+//     schema changer state (covers RBT-IN-region tables whose enum descriptor
+//     is not in the restore set). srcEnum is nil here, srcArrayID is
+//     InvalidID, and no enum compatibility check can be run against the
+//     destination because the source descriptor is not available.
+func findSourceRegionEnumIDs(
+	table *tabledesc.Mutable, typesByID map[descpb.ID]*typedesc.Mutable,
+) (srcEnum catalog.TypeDescriptor, srcEnumID, srcArrayID descpb.ID) {
+	for _, typ := range typesByID {
+		if typ.GetKind() != descpb.TypeDescriptor_MULTIREGION_ENUM {
+			continue
+		}
+		if typ.GetParentID() != table.GetParentID() {
+			continue
+		}
+		return typ, typ.GetID(), typ.ArrayTypeID
+	}
+	if state := table.GetDeclarativeSchemaChangerState(); state != nil {
+		for _, target := range state.Targets {
+			sec, ok := target.Element().(*scpb.TableLocalitySecondaryRegion)
+			if !ok {
+				continue
+			}
+			if sec.RegionEnumTypeID != descpb.InvalidID {
+				return nil, sec.RegionEnumTypeID, descpb.InvalidID
+			}
+		}
+	}
+	return nil, descpb.InvalidID, descpb.InvalidID
+}
+
 func remapTypes(
 	ctx context.Context,
 	p sql.PlanHookState,
@@ -482,6 +622,9 @@ func remapTypes(
 ) (bool, error) {
 
 	txn := p.InternalSQLTxn()
+	if txn == nil {
+		return false, errors.AssertionFailedf("remapTypes: planner has no active transaction")
+	}
 	col := txn.Descriptors()
 	shouldBufferDeprecatedPrivilegeNotice := false
 
@@ -635,6 +778,9 @@ func remapFunctions(
 	descriptorRewrites jobspb.DescRewriteMap,
 ) error {
 	txn := p.InternalSQLTxn()
+	if txn == nil {
+		return errors.AssertionFailedf("remapFunctions: planner has no active transaction")
+	}
 	col := txn.Descriptors()
 
 	for _, function := range functionsByID {
@@ -858,16 +1004,17 @@ func allocateIDs(
 
 	// First, assign new IDs to objects.
 	// Do this in order to maintain sorting of keys on disk.
-	for _, oldID := range oldIDs {
+	idsToRewrite := util.Filter(oldIDs, func(id descpb.ID) bool {
+		return !descriptorRewrites[id].ToExisting
+	})
+	newID, err := p.ExecCfg().DescIDGenerator.IncrementDescID(ctx, int64(len(idsToRewrite)))
+	if err != nil {
+		return err
+	}
+	for _, oldID := range idsToRewrite {
 		rewrite := descriptorRewrites[oldID]
-		if rewrite.ToExisting {
-			continue
-		}
-		newID, err := p.ExecCfg().DescIDGenerator.GenerateUniqueDescID(ctx)
-		if err != nil {
-			return err
-		}
 		rewrite.ID = newID
+		newID++
 	}
 
 	// Second, iterate through all rewrite objects and update parent IDs
@@ -952,6 +1099,9 @@ func allocateDescriptorRewrites(
 	}
 
 	txn := p.InternalSQLTxn()
+	if txn == nil {
+		return nil, 0, errors.AssertionFailedf("allocateDescriptorRewrites: planner has no active transaction")
+	}
 	col := txn.Descriptors()
 	// Check that any DBs being restored do _not_ exist.
 	// Fail fast if the necessary databases don't exist or are otherwise
@@ -1002,7 +1152,7 @@ func allocateDescriptorRewrites(
 	}
 
 	if b, err := remapTables(
-		ctx, p, databasesByID, tablesByID, descriptorCoverage, intoDB, restoreDBNames,
+		ctx, p, databasesByID, tablesByID, typesByID, descriptorCoverage, intoDB, restoreDBNames,
 		databasesWithDeprecatedPrivileges, descriptorRewrites,
 	); err != nil {
 		return nil, 0, err
@@ -1857,6 +2007,34 @@ func doRestorePlan(
 		return err
 	}
 
+	// Check whether a revision log exists at the collection root. If so,
+	// adjust the end time to the latest backup in the chain and record
+	// the original AOST as the revision log replay target.
+	var revisionLogTimestamp hlc.Timestamp
+	collectionStore, err := mkStore(ctx, defaultCollectionURI, p.User())
+	if err != nil {
+		return err
+	}
+	defer func() { _ = collectionStore.Close() }()
+
+	endTime, revisionLogTimestamp, err = restorerevlog.MaybeAdjustEndTime(
+		ctx, collectionStore, endTime, fullyResolvedSubdir,
+	)
+	if err != nil {
+		return err
+	}
+	if !revisionLogTimestamp.IsEmpty() {
+		log.Dev.Infof(ctx,
+			"revision log detected; restoring to backup end %s, will replay log through %s",
+			endTime, revisionLogTimestamp,
+		)
+		if err := restorerevlog.ValidateResolved(
+			ctx, collectionStore, endTime, revisionLogTimestamp,
+		); err != nil {
+			return err
+		}
+	}
+
 	mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)
 
@@ -1914,9 +2092,31 @@ func doRestorePlan(
 		return err
 	}
 
-	sqlDescs, restoreDBs, descsByTablePattern, tenants, setupTempDB, err := selectTargets(
-		ctx, p, mainBackupManifests, layerToIterFactory, restoreStmt.Targets, restoreStmt.DescriptorCoverage, endTime,
-	)
+	var sqlDescs []catalog.Descriptor
+	var restoreDBs []catalog.DatabaseDescriptor
+	var descsByTablePattern map[tree.TablePattern]catalog.Descriptor
+	var tenants []mtinfopb.TenantInfoWithUsage
+	var setupTempDB bool
+	var newDescIDs map[descpb.ID]struct{}
+
+	if !revisionLogTimestamp.IsEmpty() {
+		sqlDescs, restoreDBs, descsByTablePattern, tenants,
+			setupTempDB, newDescIDs, err =
+			selectTargetsWithRevlog(
+				ctx, p, collectionStore,
+				mainBackupManifests, layerToIterFactory,
+				restoreStmt.Targets,
+				restoreStmt.DescriptorCoverage,
+				endTime, revisionLogTimestamp,
+			)
+	} else {
+		sqlDescs, restoreDBs, descsByTablePattern, tenants, setupTempDB, err =
+			selectTargets(
+				ctx, p, mainBackupManifests, layerToIterFactory,
+				restoreStmt.Targets,
+				restoreStmt.DescriptorCoverage, endTime,
+			)
+	}
 	if err != nil {
 		return errors.Wrap(err,
 			"failed to resolve targets in the BACKUP location specified by the RESTORE statement, "+
@@ -2069,6 +2269,19 @@ func doRestorePlan(
 		return err
 	}
 
+	// Compute RevlogNewTableIDs: post-rewrite IDs for tables that
+	// were added by revision log schema changes (not in the backup).
+	var revlogNewTableIDs []descpb.ID
+	for oldID := range newDescIDs {
+		if rw, ok := descriptorRewrites[oldID]; ok {
+			if _, isTable := filteredTablesByID[oldID]; isTable {
+				revlogNewTableIDs = append(
+					revlogNewTableIDs, rw.ID,
+				)
+			}
+		}
+	}
+
 	if restoreStmt.Options.OnlineImpl() {
 		if err := checkBackupElidedPrefixForOnlineCompat(ctx, mainBackupManifests, descriptorRewrites); err != nil {
 			return err
@@ -2172,6 +2385,20 @@ func doRestorePlan(
 		UnsafeRestoreIncompatibleVersion: restoreStmt.Options.UnsafeRestoreIncompatibleVersion,
 		TempSystemID:                     tempSysDBID,
 		Grants:                           restoreStmt.Options.Grants,
+		RevisionLogTimestamp:             revisionLogTimestamp,
+		DefaultCollectionURI:             defaultCollectionURI,
+		RevlogNewTableIDs:                revlogNewTableIDs,
+	}
+
+	// Validate that revision log rekeys can be built from the
+	// restore details. This catches errors during planning rather
+	// than during job execution.
+	if !revisionLogTimestamp.IsEmpty() {
+		if _, _, err := restorerevlog.BuildRekeys(
+			restoreDetails, p.ExecCfg(),
+		); err != nil {
+			return errors.Wrap(err, "validating revision log rekeys")
+		}
 	}
 
 	jr := jobs.Record{
@@ -2627,11 +2854,24 @@ func resolveRestoreSubdirAndEndTime(
 		// the requested AOST, not that a specific backup covers it. It is easier to
 		// perform the validation here than to overhaul the existing logic.
 		if backupIdx.MVCCFilter != backuppb.MVCCFilter_All {
-			return "", hlc.Timestamp{}, errors.Errorf(
-				"backup %s is not a revision history backup and cannot be used for AS OF SYSTEM TIME restores. "+
-					"Please use 'SHOW BACKUPS IN ... WITH REVISION START TIME' to find a revision history backup.",
-				backupID,
-			)
+			// The backup is not a revision history backup. If a revision
+			// log exists at the collection root, the AOST can still be
+			// satisfied by replaying the log on top of the backup.
+			hasLog := false
+			if !build.IsRelease() {
+				var logErr error
+				hasLog, logErr = revlog.HasLog(ctx, defaultRootStore)
+				if logErr != nil {
+					return "", hlc.Timestamp{}, logErr
+				}
+			}
+			if !hasLog {
+				return "", hlc.Timestamp{}, errors.Errorf(
+					"backup %s is not a revision history backup and cannot be used for AS OF SYSTEM TIME restores. "+
+						"Please use 'SHOW BACKUPS IN ... WITH REVISION START TIME' to find a revision history backup.",
+					backupID,
+				)
+			}
 		} else if aost.Less(backupIdx.RevisionStartTime) || backupIdx.EndTime.Less(aost) {
 			return "", hlc.Timestamp{}, errors.Errorf(
 				"backup %s does not cover the specified AS OF SYSTEM TIME. "+

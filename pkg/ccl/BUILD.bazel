@@ -8,14 +8,12 @@ go_library(
     deps = [
         "//pkg/backup",
         "//pkg/ccl/changefeedccl",
-        "//pkg/ccl/gssapiccl",
         "//pkg/ccl/multiregionccl",
         "//pkg/ccl/multitenantccl",
-        "//pkg/ccl/workloadccl",
-        "//pkg/ccl/workloadccl/cliccl",
         "//pkg/cloud/impl:cloudimpl",
         "//pkg/crosscluster/logical",
         "//pkg/crosscluster/physical",
         "//pkg/crosscluster/producer",
+        "//pkg/security/gssapiauth",
     ],
 )

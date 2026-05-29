@@ -305,7 +305,7 @@ module.exports = (env, argv) => {
       loader: StringReplacePlugin.replace({
         replacements: [
           {
-            pattern: /import rootSaga from ".\/sagas";/gi, // match last 'import' expression in module.
+            pattern: /import { DataFromServer } from "src\/util\/dataFromServer";/gi, // match last 'import' expression in module.
             replacement: function(match, p) {
               return `${match}\nimport { fakeMetricsDataGenerationMiddleware } from "src/test-utils/fakeMetricsDataGenerationMiddleware";`;
             },

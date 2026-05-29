@@ -176,7 +176,9 @@ func (p *Manager) Protect(
 		return nil, nil
 	}
 	// Set up a new protected timestamp ID and install it on the job.
-	err := job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	//
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	err := job.DeprecatedNoTxn().Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 		// Check if the protected timestamp is visible in the txn.
 		protectedtsID := getProtectedTSOnJob(md.Payload.UnwrapDetails())
 		// If it's been removed lets create a new one.
@@ -214,7 +216,9 @@ func (p *Manager) Unprotect(ctx context.Context, job *jobs.Job) error {
 	}
 	// If we do find one then we need to clean up the protected timestamp,
 	// and remove it from the job.
-	return job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	//
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	return job.DeprecatedNoTxn().Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 		// The job will get refreshed, so check one more time the protected
 		// timestamp still exists. The callback returned from Protect works
 		// on a previously cached copy.

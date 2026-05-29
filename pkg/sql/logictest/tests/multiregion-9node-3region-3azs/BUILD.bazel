@@ -9,11 +9,12 @@ go_test(
         "//pkg/sql/logictest:testdata",  # keep
     ],
     exec_properties = {"test.Pool": "large"},
-    shard_count = 1,
+    shard_count = 34,
     tags = ["cpu:4"],
     deps = [
         "//pkg/base",
         "//pkg/build/bazel",
+        "//pkg/ccl",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",

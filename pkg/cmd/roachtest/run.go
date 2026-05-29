@@ -23,6 +23,7 @@ import (
 
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadog"
 	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost/issues"
+	roachtestdd "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/datadog"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
@@ -88,7 +89,7 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 	defer stopper.Stop(context.Background())
 	runner := newTestRunner(cr, stopper)
 
-	clusterType := roachprodCluster
+	clusterType := roachprodClusterType
 	bindTo := ""
 	parallelism := roachtestflags.Parallelism
 	if roachtestflags.Cloud == spec.Local {
@@ -234,6 +235,15 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 		fmt.Printf("##teamcity[publishArtifacts '%s' => '%s']\n", filepath.Join(literalArtifactsDir, runnerLogsDir), runnerLogsDir)
 	}
 	runner.writeTestReports(ctx, runnerL, artifactsDir)
+
+	// Upload runner-level logs to Datadog (best effort).
+	if roachtestdd.ShouldUploadRunnerLogsToDatadog() {
+		m := roachtestdd.NewRunnerLogMetadata(runnerL, roachtestflags.Cloud)
+		runnerDir := filepath.Join(artifactsDir, runnerLogsDir)
+		if uploadErr := roachtestdd.MaybeUploadRunnerLogs(ctx, runnerL, runnerDir, m); uploadErr != nil {
+			runnerL.Printf("error uploading runner logs to Datadog: %v", uploadErr)
+		}
+	}
 
 	return err
 }

@@ -50,7 +50,7 @@ Schema change plan for DROP FUNCTION ‹""›.‹""›.‹f›;
  │              ├── RemoveBackReferenceInTypes {"BackReferencedDescriptorID":109}
  │              ├── RemoveBackReferencesInRelations {"BackReferencedID":109}
  │              ├── RemoveBackReferenceInFunctions {"BackReferencedDescriptorID":109}
- │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.Owner"}
+ │              ├── RemoveOwner {"DescriptorID":109}
  │              ├── RemoveUserPrivileges {"DescriptorID":109,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":109,"User":"public"}
  │              └── RemoveUserPrivileges {"DescriptorID":109,"User":"root"}
@@ -99,7 +99,7 @@ Schema change plan for DROP FUNCTION ‹""›.‹""›.‹f›;
  │              ├── RemoveBackReferenceInTypes {"BackReferencedDescriptorID":109}
  │              ├── RemoveBackReferencesInRelations {"BackReferencedID":109}
  │              ├── RemoveBackReferenceInFunctions {"BackReferencedDescriptorID":109}
- │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.Owner"}
+ │              ├── RemoveOwner {"DescriptorID":109}
  │              ├── RemoveUserPrivileges {"DescriptorID":109,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":109,"User":"public"}
  │              ├── RemoveUserPrivileges {"DescriptorID":109,"User":"root"}

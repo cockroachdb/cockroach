@@ -213,6 +213,10 @@ func (lv *latencyVerifier) assertValid(t test.Test) {
 	}
 }
 
+func (lv *latencyVerifier) MaxSeenSteadyLatency() time.Duration {
+	return lv.maxSeenSteadyLatency
+}
+
 func (lv *latencyVerifier) maybeLogLatencyHist() {
 	if lv.latencyHist == nil {
 		return

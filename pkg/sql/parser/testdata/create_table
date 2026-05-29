@@ -1721,6 +1721,23 @@ CREATE TABLE a (b INT8 AS (((a) + (b))) VIRTUAL) -- fully parenthesized
 CREATE TABLE a (b INT8 AS (a + b) VIRTUAL) -- literals removed
 CREATE TABLE _ (_ INT8 AS (_ + _) VIRTUAL) -- identifiers removed
 
+# Without STORED or VIRTUAL the column defaults to VIRTUAL, matching PostgreSQL.
+parse
+CREATE TABLE a (b INT8 GENERATED ALWAYS AS (a + b))
+----
+CREATE TABLE a (b INT8 AS (a + b) VIRTUAL) -- normalized!
+CREATE TABLE a (b INT8 AS (((a) + (b))) VIRTUAL) -- fully parenthesized
+CREATE TABLE a (b INT8 AS (a + b) VIRTUAL) -- literals removed
+CREATE TABLE _ (_ INT8 AS (_ + _) VIRTUAL) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8 AS (a + b))
+----
+CREATE TABLE a (b INT8 AS (a + b) VIRTUAL) -- normalized!
+CREATE TABLE a (b INT8 AS (((a) + (b))) VIRTUAL) -- fully parenthesized
+CREATE TABLE a (b INT8 AS (a + b) VIRTUAL) -- literals removed
+CREATE TABLE _ (_ INT8 AS (_ + _) VIRTUAL) -- identifiers removed
+
 parse
 CREATE TABLE view (view INT8)
 ----
@@ -2444,12 +2461,13 @@ CREATE TABLE generated_error (
   b INT GENERATED ALWAYS AS (a + 10) IDENTITY
 )
 ----
-at or near "identity": syntax error: use AS ( <expr> ) STORED or AS ( <expr> ) VIRTUAL
+at or near "identity": syntax error
 DETAIL: source SQL:
 CREATE TABLE generated_error (
   a INT,
   b INT GENERATED ALWAYS AS (a + 10) IDENTITY
                                      ^
+HINT: try \h CREATE TABLE
 
 error
 CREATE TABLE generated_error (
@@ -2663,6 +2681,16 @@ CREATE TABLE t (a INT8 PRIMARY KEY, b INT8, UNIQUE INDEX (b NULLS FIRST) USING H
 CREATE TABLE t (a INT8 PRIMARY KEY, b INT8, UNIQUE INDEX (b NULLS FIRST) USING HASH WITH BUCKET_COUNT = (10) WITH ('foo' = ('bar'))) -- fully parenthesized
 CREATE TABLE t (a INT8 PRIMARY KEY, b INT8, UNIQUE INDEX (b NULLS FIRST) USING HASH WITH BUCKET_COUNT = _ WITH ('foo' = '_')) -- literals removed
 CREATE TABLE _ (_ INT8 PRIMARY KEY, _ INT8, UNIQUE INDEX (_ NULLS FIRST) USING HASH WITH BUCKET_COUNT = 10 WITH ('foo' = 'bar')) -- identifiers removed
+
+# Regression test for #169278: WITH clause must come before WHERE and visibility
+# clauses in UniqueConstraintTableDef formatting.
+parse
+CREATE TABLE t (a INT8, UNIQUE INDEX idx (a) WITH ('fillfactor' = 100) WHERE a > 5)
+----
+CREATE TABLE t (a INT8, UNIQUE INDEX idx (a) WITH ('fillfactor' = 100) WHERE a > 5)
+CREATE TABLE t (a INT8, UNIQUE INDEX idx (a) WITH ('fillfactor' = (100)) WHERE ((a) > (5))) -- fully parenthesized
+CREATE TABLE t (a INT8, UNIQUE INDEX idx (a) WITH ('fillfactor' = _) WHERE a > _) -- literals removed
+CREATE TABLE _ (_ INT8, UNIQUE INDEX _ (_) WITH ('fillfactor' = 100) WHERE _ > 5) -- identifiers removed
 
 parse
 CREATE TABLE t (a INT PRIMARY KEY, b INT, UNIQUE INDEX (b) USING HASH)

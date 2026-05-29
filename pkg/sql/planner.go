@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/advisorylock"
 	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
@@ -120,6 +121,9 @@ type extendedEvalContext struct {
 
 	// validateDbZoneConfig should the DB zone config on commit.
 	validateDbZoneConfig *bool
+
+	// advisoryLockManager is the manager for advisory locks.
+	advisoryLockManager *atomic.Pointer[advisorylock.Manager]
 }
 
 // copyFromExecCfg copies relevant fields from an ExecutorConfig.
@@ -293,6 +297,13 @@ type planner struct {
 	// Do not use this object directly; use the BufferClientNotice() method
 	// instead.
 	noticeSender noticeSender
+
+	// stmtResultBuffering exposes the current statement's result writer so a
+	// side-effecting builtin can flush its results immediately and prevent
+	// transparent connExecutor rewind across the side effect. Set in
+	// execStmtInOpenState after resetPlanner; nil between statements and for
+	// the internal executor.
+	stmtResultBuffering resultBufferingDisabler
 
 	queryCacheSession querycache.Session
 
@@ -734,10 +745,11 @@ func (p *planner) InternalSQLTxn() descs.Txn {
 		ie := MakeInternalExecutor(ief.server, ief.memMetrics, ief.monitor)
 		ie.SetSessionData(p.SessionData())
 		ie.extraTxnState = &extraTxnState{
-			txn:                p.Txn(),
-			descCollection:     p.Descriptors(),
-			jobs:               p.extendedEvalCtx.jobs,
-			schemaChangerState: p.extendedEvalCtx.SchemaChangerState,
+			txn:                 p.Txn(),
+			descCollection:      p.Descriptors(),
+			jobs:                p.extendedEvalCtx.jobs,
+			schemaChangerState:  p.extendedEvalCtx.SchemaChangerState,
+			advisoryLockManager: p.extendedEvalCtx.advisoryLockManager,
 		}
 		p.internalSQLTxn.init(p.txn, ie)
 	}
@@ -766,7 +778,7 @@ func (p *planner) regionsProvider() *regions.Provider {
 }
 
 func (p *planner) User() username.SQLUsername {
-	return p.SessionData().User()
+	return p.EvalContext().EffectiveUser()
 }
 
 // TemporarySchemaName implements scbuildstmt.TemporarySchemaProvider.
@@ -904,6 +916,11 @@ func (p *planner) Ann() *tree.Annotations {
 // ExecutorConfig implements Planner interface.
 func (p *planner) ExecutorConfig() interface{} {
 	return p.execCfg
+}
+
+// TimeSeriesQuerier implements the eval.Planner interface.
+func (p *planner) TimeSeriesQuerier() eval.TimeSeriesQuerier {
+	return p.execCfg.TimeSeriesQuerier
 }
 
 // statementPreparer is an interface used when deserializing a session in order
@@ -1214,10 +1231,21 @@ func (p *planner) InsertStatementHint(
 	statementFingerprint string,
 	hint hintpb.StatementHintUnion,
 	optDatabase string,
-) (int64, error) {
-	return hints.InsertHintIntoDB(
-		ctx, p.execCfg.Settings, p.InternalSQLTxn(), statementFingerprint, hint, optDatabase,
+) (int64, int64, error) {
+	txn := p.InternalSQLTxn()
+	hintID, err := hints.InsertHintIntoDB(
+		ctx, p.execCfg.Settings, txn, statementFingerprint, hint, optDatabase,
 	)
+	if err != nil {
+		return 0, 0, err
+	}
+	numOverridden, err := hints.CountConflictingHintsInDB(
+		ctx, p.execCfg.Settings, txn, statementFingerprint, hint, hintID,
+	)
+	if err != nil {
+		return 0, 0, err
+	}
+	return hintID, numOverridden, nil
 }
 
 // DeleteStatementHint is part of the eval.Planner interface.
@@ -1278,6 +1306,87 @@ func (p *planner) UsingHintInjection() bool {
 // LogEvent is part of the eval.Planner interface.
 func (p *planner) LogEvent(ctx context.Context, event interface{}) error {
 	return p.logEvent(ctx, 0 /* descID */, event.(logpb.EventPayload))
+}
+
+// AdvisoryXactLock is part of the eval.Planner interface.
+func (p *planner) AdvisoryXactLock(ctx context.Context, key int64, shared bool) error {
+	_, err := p.advisoryXactLockImpl(ctx, shared, func(dbID descpb.ID) advisorylock.LockKey {
+		return advisorylock.MakeLockKeyInt64(dbID, key)
+	}, true /* wait */)
+	return err
+}
+
+// AdvisoryXactLockInt4 is part of the eval.Planner interface.
+func (p *planner) AdvisoryXactLockInt4(ctx context.Context, key1, key2 int32, shared bool) error {
+	_, err := p.advisoryXactLockImpl(ctx, shared, func(dbID descpb.ID) advisorylock.LockKey {
+		return advisorylock.MakeLockKeyInt32(dbID, key1, key2)
+	}, true /* wait */)
+	return err
+}
+
+// AdvisoryTryXactLock is part of the eval.Planner interface.
+func (p *planner) AdvisoryTryXactLock(ctx context.Context, key int64, shared bool) (bool, error) {
+	return p.advisoryXactLockImpl(ctx, shared, func(dbID descpb.ID) advisorylock.LockKey {
+		return advisorylock.MakeLockKeyInt64(dbID, key)
+	}, false /* wait */)
+}
+
+// AdvisoryTryXactLockInt4 is part of the eval.Planner interface.
+func (p *planner) AdvisoryTryXactLockInt4(
+	ctx context.Context, key1, key2 int32, shared bool,
+) (bool, error) {
+	return p.advisoryXactLockImpl(ctx, shared, func(dbID descpb.ID) advisorylock.LockKey {
+		return advisorylock.MakeLockKeyInt32(dbID, key1, key2)
+	}, false /* wait */)
+}
+
+func (p *planner) advisoryXactLockImpl(
+	ctx context.Context, shared bool, mk func(descpb.ID) advisorylock.LockKey, wait bool,
+) (bool, error) {
+	if !p.execCfg.Settings.Version.IsActive(ctx, clusterversion.V26_3_AddAdvisoryLocksTable) {
+		return false, pgerror.Newf(pgcode.FeatureNotSupported,
+			"advisory locks are not available until the cluster upgrade to v26.3 is finalized")
+	}
+	if p.txn == nil || !p.txn.IsOpen() {
+		return false, pgerror.New(pgcode.NoActiveSQLTransaction,
+			"advisory locks are only available in a transaction")
+	}
+	mgr := p.extendedEvalCtx.advisoryLockManager.Load()
+	if mgr == nil {
+		return false, errors.AssertionFailedf("advisory lock manager not initialized")
+	}
+	dbName := p.CurrentDatabase()
+	if dbName == "" {
+		return false, pgerror.New(pgcode.InvalidName, "no database is set")
+	}
+	db, err := p.Descriptors().ByName(p.txn).Get().Database(ctx, dbName)
+	if err != nil {
+		return false, err
+	}
+	mode := advisorylock.LockModeExclusive
+	if shared {
+		mode = advisorylock.LockModeShare
+	}
+	lockKey := mk(db.GetID())
+	// When wait is true, honor the session's lock_timeout (if set). The non-
+	// waiting (try_*) variants ignore lockTimeout entirely on the KV side
+	// because WaitPolicy_Error short-circuits before any waiting happens.
+	lockTimeout := p.SessionData().LockTimeout
+	err = mgr.AcquireInTxn(ctx, p.txn, lockKey, mode, wait /* wait */, lockTimeout /* lockTimeout */)
+	if err != nil {
+		if !wait && errors.Is(err, advisorylock.LockIsNotAvailableErr) {
+			return false, nil
+		}
+		return false, err
+	}
+	// The acquire is a visible side effect; flush the statement's result so
+	// the connExecutor cannot transparently rewind past it on a subsequent
+	// serializable push (e.g. a deadlock break would otherwise be masked by
+	// auto-retry and the losing client would see no error).
+	if w := p.stmtResultBuffering; w != nil {
+		w.DisableBuffering()
+	}
+	return true, nil
 }
 
 // GetHintIDs is part of the eval.Planner interface.

@@ -10,12 +10,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/sqlwriter"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
 )
 
@@ -28,21 +30,26 @@ type ApplyResult struct {
 	LwwLoserRows int
 	// AppliedRows is the number of rows that were written to the local cluster.
 	// If the transaction was applied, then LwwLoserRows + AppliedRows ==
-	// len(Transaction.Rows)
+	// len(Transaction.WriteSet)
 	AppliedRows int
 }
 
-// TODO(jeffswenson): Consider replacing the crud writer with transaction
-// writer once the transaction writer supports the tombstone update case.
 type TransactionWriter interface {
 	// ApplyBatch will apply the batch of transactions. ApplyBatch requires the
 	// the transactions to have disjoint write sets.
 	ApplyBatch(context.Context, []ldrdecoder.Transaction) ([]ApplyResult, error)
+	// ReleaseLeases releases descriptor leases held by tombstone updaters.
+	// Should be called periodically to avoid holding leases indefinitely.
+	ReleaseLeases(ctx context.Context)
 	Close(ctx context.Context)
 }
 
 func NewTransactionWriter(
-	ctx context.Context, db isql.DB, leaseMgr *lease.Manager, settings *cluster.Settings,
+	ctx context.Context,
+	db isql.DB,
+	leaseMgr *lease.Manager,
+	codec keys.SQLCodec,
+	settings *cluster.Settings,
 ) (TransactionWriter, error) {
 	sd := sql.NewInternalSessionData(ctx, settings, "txn-writer")
 	session, err := sqlwriter.NewInternalSession(ctx, db, sd, settings)
@@ -51,22 +58,29 @@ func NewTransactionWriter(
 	}
 
 	return &transactionWriter{
-		db:           db,
-		leaseMgr:     leaseMgr,
-		session:      session,
-		tableWriters: make(map[descpb.ID]*sqlwriter.RowWriter),
-		tableReaders: make(map[descpb.ID]sqlwriter.RowReader),
+		db:                db,
+		leaseMgr:          leaseMgr,
+		codec:             codec,
+		sd:                sd,
+		settings:          settings,
+		session:           session,
+		tableWriters:      make(map[descpb.ID]*sqlwriter.RowWriter),
+		tableReaders:      make(map[descpb.ID]sqlwriter.RowReader),
+		tombstoneUpdaters: make(map[descpb.ID]*sqlwriter.TombstoneUpdater),
 	}, nil
 }
 
 type transactionWriter struct {
 	db       isql.DB
 	leaseMgr *lease.Manager
+	codec    keys.SQLCodec
+	sd       *sessiondata.SessionData
+	settings *cluster.Settings
 
-	session      isql.Session
-	tableWriters map[descpb.ID]*sqlwriter.RowWriter
-	tableReaders map[descpb.ID]sqlwriter.RowReader
-	// TODO(jeffswenson): add tombstone updater
+	session           isql.Session
+	tableWriters      map[descpb.ID]*sqlwriter.RowWriter
+	tableReaders      map[descpb.ID]sqlwriter.RowReader
+	tombstoneUpdaters map[descpb.ID]*sqlwriter.TombstoneUpdater
 }
 
 func (tw *transactionWriter) initTable(ctx context.Context, tableID descpb.ID) error {
@@ -104,9 +118,19 @@ func (tw *transactionWriter) initTable(ctx context.Context, tableID descpb.ID) e
 
 	tw.tableWriters[tableID] = writer
 	tw.tableReaders[tableID] = reader
+	tw.tombstoneUpdaters[tableID] = sqlwriter.NewTombstoneUpdater(
+		tw.codec, tw.db.KV(), tw.leaseMgr, tableID, tw.sd, tw.settings,
+	)
 	return nil
 }
 
+func (tw *transactionWriter) ReleaseLeases(ctx context.Context) {
+	for _, tu := range tw.tombstoneUpdaters {
+		tu.ReleaseLeases(ctx)
+	}
+}
+
 func (tw *transactionWriter) Close(ctx context.Context) {
+	tw.ReleaseLeases(ctx)
 	tw.session.Close(ctx)
 }

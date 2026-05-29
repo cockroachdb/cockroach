@@ -23,6 +23,7 @@ import "gogoproto/gogo.proto";
 import "roachpb/data.proto";
 import "kv/kvpb/api.proto";
 import "cloud/cloudpb/external_storage.proto";
+import "revlog/revlogpb/revlog.proto";
 
 // BackfillerSpec is the specification for a "schema change backfiller".
 // The created backfill processor runs a backfill for the first mutations in
@@ -211,6 +212,55 @@ message MergeLoopbackSpec {
 message IngestStoppedSpec {
   optional int64 job_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID",
   (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/jobs/jobspb.JobID"];
+}
+
+message RevlogSpec {
+  optional int64 job_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID",
+  (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/jobs/jobspb.JobID"];
+  // spans this producer processor covers.
+  repeated roachpb.Span spans = 2 [(gogoproto.nullable) = false];
+  // start_hlc is the lower bound of the log: the rangefeed
+  // subscription is started after this HLC, and tick_start of the
+  // first manifest equals start_hlc.
+  optional util.hlc.Timestamp start_hlc = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "StartHLC"];
+  // dest is the cloud storage URI where data files and manifests
+  // are written.
+  optional string dest = 4 [(gogoproto.nullable) = false];
+  // tick_width_nanos is the wall-clock-aligned tick width, in
+  // nanoseconds.
+  optional int64 tick_width_nanos = 5 [(gogoproto.nullable) = false];
+  // resume_starts gives per-span rangefeed start times for the
+  // producer to subscribe at. On first run this is empty and the
+  // producer uses start_hlc for every span. On resume it carries
+  // the prior incarnation's persisted frontier, sliced to this
+  // producer's assigned spans, so the rangefeed only redelivers
+  // events the manager hasn't already accounted for. Spans
+  // assigned to this producer but absent from resume_starts fall
+  // back to start_hlc (e.g. a span newly added by a coverage
+  // change since the last checkpoint).
+  repeated RevlogResumeSpan resume_starts = 6 [(gogoproto.nullable) = false];
+  // tick_starting_flush_orders gives the per-tick starting
+  // flushorder counter for ticks the prior incarnation already
+  // contributed files to. The producer's first new file for each
+  // listed tick lands at this flushorder (== max(prior) + 1
+  // computed at the gateway from the persisted open-tick file
+  // lists), so per-key ordering survives the resume boundary
+  // even if span partitioning has changed.
+  repeated RevlogTickResume tick_starting_flush_orders = 7 [(gogoproto.nullable) = false];
+}
+
+// RevlogResumeSpan pairs a span with the resolved timestamp the
+// producer should resume the rangefeed subscription at.
+message RevlogResumeSpan {
+  optional roachpb.Span span = 1 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp resolved = 2 [(gogoproto.nullable) = false];
+}
+
+// RevlogTickResume pairs a tick end with the producer's starting
+// flushorder for that tick.
+message RevlogTickResume {
+  optional util.hlc.Timestamp tick_end = 1 [(gogoproto.nullable) = false];
+  optional int32 starting_flush_order = 2 [(gogoproto.nullable) = false];
 }
 
 // StreamIngestionPartitionSpec contains information about a partition and how
@@ -694,4 +744,50 @@ message BulkMapProgress {
 // processor. Each SST is expected to be range-aligned and non-overlapping.
 message IngestFileSpec {
 	repeated BulkMergeSpec.SST ssts = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SSTs"];
+}
+
+// RevlogLocalMergeSpec describes a set of revision log ticks assigned to
+// one SQL instance for local merge. Each tick's manifest identifies the
+// data files to replay. The processor reads the assigned ticks, performs
+// a k-way merge, deduplicates to the latest revision per key ≤ the
+// restore timestamp, rewrites key prefixes to the target keyspace, and
+// writes MVCC-encoded SSTs to nodelocal storage.
+message RevlogLocalMergeSpec {
+  // collection_uri is the collection root URI where the revision log lives.
+  optional string collection_uri = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "CollectionURI"
+  ];
+
+  // ticks is the set of tick manifests assigned to this processor,
+  // shuffled by the coordinator to avoid hot-spot skew.
+  repeated cockroach.revlog.revlogpb.Manifest ticks = 2 [(gogoproto.nullable) = false];
+
+  // job_id is the restore job ID for progress reporting.
+  optional int64 job_id = 3 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "JobID"
+  ];
+
+  // user_proto is the user who initiated the restore, needed to open
+  // external storage on the processor node.
+  optional string user_proto = 4 [
+    (gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"
+  ];
+
+  // restore_timestamp is the AOST target. During deduplication, only
+  // events with timestamps ≤ this value are kept.
+  optional util.hlc.Timestamp restore_timestamp = 5 [
+    (gogoproto.nullable) = false
+  ];
+
+  // table_rekeys maps old table IDs to new table descriptors for
+  // source→target key prefix rewriting.
+  repeated TableRekey table_rekeys = 6 [(gogoproto.nullable) = false];
+
+  // tenant_rekeys maps old tenant IDs to new tenant IDs.
+  repeated TenantRekey tenant_rekeys = 7 [(gogoproto.nullable) = false];
+
+  // NEXT ID: 8.
 }

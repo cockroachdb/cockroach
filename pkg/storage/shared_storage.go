@@ -19,11 +19,11 @@ import (
 // ConfigureForSharedStorage mutates the provided Pebble options to use shared
 // storage using the provided remote storage.
 func ConfigureForSharedStorage(opts *pebble.Options, remoteStorage remote.Storage) error {
-	opts.Experimental.RemoteStorage = remote.MakeSimpleFactory(map[remote.Locator]remote.Storage{
+	opts.RemoteStorage = remote.MakeSimpleFactory(map[remote.Locator]remote.Storage{
 		remote.MakeLocator(""): remoteStorage,
 	})
-	opts.Experimental.CreateOnShared = remote.CreateOnSharedLower
-	opts.Experimental.CreateOnSharedLocator = remote.MakeLocator("")
+	opts.CreateOnShared = remote.CreateOnSharedLower
+	opts.CreateOnSharedLocator = remote.MakeLocator("")
 	return nil
 }
 

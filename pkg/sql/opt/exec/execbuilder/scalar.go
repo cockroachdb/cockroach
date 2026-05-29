@@ -8,6 +8,7 @@ package execbuilder
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -134,7 +135,20 @@ func (b *Builder) buildPlaceholder(
 	ctx *buildScalarCtx, scalar opt.ScalarExpr,
 ) (tree.TypedExpr, error) {
 	if b.evalCtx != nil && b.evalCtx.Placeholders != nil {
-		return eval.Expr(b.ctx, b.evalCtx, scalar.Private().(*tree.Placeholder))
+		d, err := eval.Expr(b.ctx, b.evalCtx, scalar.Private().(*tree.Placeholder))
+		if err != nil {
+			return nil, err
+		}
+		if d == tree.DNull {
+			// When a placeholder evaluates to NULL, the result is tree.DNull
+			// which has type Unknown. We must retype it to the placeholder's
+			// declared type so that downstream operators see the correct type.
+			retypedNull, ok := eval.ReType(tree.DNull, scalar.DataType())
+			if ok {
+				return retypedNull, nil
+			}
+		}
+		return d, nil
 	}
 	return b.buildTypedExpr(ctx, scalar)
 }
@@ -701,7 +715,8 @@ func (b *Builder) buildExistsSubquery(
 			nil,  /* stmtASTs */
 			true, /* allowOuterWithRefs */
 			wrapRootExpr,
-			0, /* resultBufferID */
+			0,   /* resultBufferID */
+			nil, /* bodyBuilder */
 		)
 		return tree.NewTypedCoalesceExpr(tree.TypedExprs{
 			tree.NewTypedRoutineExpr(
@@ -721,6 +736,8 @@ func (b *Builder) buildExistsSubquery(
 				nil,   /* blockState */
 				nil,   /* cursorDeclaration */
 				nil,   /* firstStmtResultWriter */
+				tree.RoutineInvoker,
+				username.SQLUsername{},
 			),
 			tree.DBoolFalse,
 		}, types.Bool), nil
@@ -830,6 +847,7 @@ func (b *Builder) buildSubquery(
 			true, /* allowOuterWithRefs */
 			nil,  /* wrapRootExpr */
 			0,    /* resultBufferID */
+			nil,  /* bodyBuilder */
 		)
 		_, tailCall := b.tailCalls[subquery]
 		return tree.NewTypedRoutineExpr(
@@ -849,6 +867,8 @@ func (b *Builder) buildSubquery(
 			nil,   /* blockState */
 			nil,   /* cursorDeclaration */
 			nil,   /* firstStmtResultWriter */
+			tree.RoutineInvoker,
+			username.SQLUsername{},
 		), nil
 	}
 
@@ -929,6 +949,8 @@ func (b *Builder) buildSubquery(
 			nil,   /* blockState */
 			nil,   /* cursorDeclaration */
 			nil,   /* firstStmtResultWriter */
+			tree.RoutineInvoker,
+			username.SQLUsername{},
 		), nil
 	}
 
@@ -1001,7 +1023,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	// Execution expects there to be more than one body statement if a cursor is
 	// opened or the result of the first statement is directed to a buffer.
 	firstStmtOut := udf.Def.FirstStmtOutput
-	if len(udf.Def.Body) <= 1 &&
+	if udf.Def.Body != nil && len(udf.Def.Body) <= 1 &&
 		(firstStmtOut.CursorDeclaration != nil || firstStmtOut.TargetBufferID != 0) {
 		panic(errors.AssertionFailedf(
 			"expected more than one body statement for a routine that " +
@@ -1026,6 +1048,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		false, /* allowOuterWithRefs */
 		nil,   /* wrapRootExpr */
 		udf.Def.ResultBufferID,
+		nil, /* bodyBuilder */
 	)
 
 	// Enable stepping for volatile functions so that statements within the UDF
@@ -1059,6 +1082,8 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		blockState,
 		firstStmtOut.CursorDeclaration,
 		firstStmtResultWriter,
+		udf.Def.SecurityMode,
+		udf.Def.RoutineOwner,
 	), nil
 }
 
@@ -1097,10 +1122,11 @@ func (b *Builder) initRoutineExceptionHandler(
 			action.BodyProps,
 			action.BodyStmts,
 			action.BodyTags,
-			nil,   /* stmtASTs */
+			action.BodyASTs,
 			false, /* allowOuterWithRefs */
 			nil,   /* wrapRootExpr */
 			0,     /* resultBufferID */
+			nil,   /* bodyBuilder */
 		)
 		// Build a routine with no arguments for the exception handler. The actual
 		// arguments will be supplied when (if) the handler is invoked.
@@ -1121,6 +1147,8 @@ func (b *Builder) initRoutineExceptionHandler(
 			nil,   /* blockState */
 			nil,   /* cursorDeclaration */
 			nil,   /* firstStmtResultWriter */
+			tree.RoutineInvoker,
+			username.SQLUsername{},
 		)
 	}
 	blockState.ExceptionHandler = exceptionHandler
@@ -1152,6 +1180,7 @@ func (b *Builder) buildRoutinePlanGenerator(
 	allowOuterWithRefs bool,
 	wrapRootExpr wrapRootExprFn,
 	resultBufferID memo.RoutineResultBufferID,
+	bodyBuilder memo.RoutineBodyBuilder,
 ) tree.RoutinePlanGenerator {
 	// argOrd returns the ordinal of the argument within the arguments list that
 	// can be substituted for each reference to the given function parameter
@@ -1199,6 +1228,33 @@ func (b *Builder) buildRoutinePlanGenerator(
 			log.VEventf(ctx, 1, "%v", caughtErr)
 		})
 
+		// If a BodyBuilder is set, build the routine body now (deferred from
+		// plan time to execution time).
+		if bodyBuilder != nil {
+			if stmts != nil {
+				return errors.AssertionFailedf("routine body already built before BodyBuilder invocation")
+			}
+			var tmpO xform.Optimizer
+			tmpO.Init(ctx, b.evalCtx, b.catalog)
+			builtBody, builtProps, newParams, err := bodyBuilder.Build(
+				ctx, b.semaCtx, b.evalCtx, b.catalog, tmpO.Factory(),
+			)
+			if err != nil {
+				return err
+			}
+			stmts = builtBody
+			stmtProps = builtProps
+			originalMemo = tmpO.Factory().Memo()
+			argOrd = func(col opt.ColumnID) (ord int, ok bool) {
+				for i, param := range newParams {
+					if col == param {
+						return i, true
+					}
+				}
+				return 0, false
+			}
+		}
+
 		dbName := b.evalCtx.SessionData().Database
 		appName := b.evalCtx.SessionData().ApplicationName
 		// TODO(yuzefovich): look into computing fingerprintFormat lazily.
@@ -1219,7 +1275,7 @@ func (b *Builder) buildRoutinePlanGenerator(
 			}
 			if i < len(stmtASTs) && stmtASTs[i] != nil {
 				fingerprint := tree.FormatStatementHideConstants(stmtASTs[i], fingerprintFormat)
-				fpId := appstatspb.ConstructStatementFingerprintID(fingerprint, b.evalCtx.TxnImplicit, dbName)
+				fpId := appstatspb.ConstructStatementFingerprintID(fingerprint, dbName)
 				summary := tree.FormatStatementSummary(stmtASTs[i], fingerprintFormat)
 				stmtType := stmtASTs[i].StatementType()
 				builder = sqlstats.NewRecordedStatementStatsBuilder(
@@ -1349,21 +1405,34 @@ func (b *Builder) buildRoutinePlanGenerator(
 			if i < len(stmtStr) {
 				stmtForDistSQLDiagram = stmtStr[i]
 			}
-			incrementRoutineStmtCounter(b.evalCtx.StartedRoutineStatementCounters, dbName, appName, tag)
+			var ast tree.Statement
+			if i < len(stmtASTs) {
+				ast = stmtASTs[i]
+			}
+			incrementRoutineStmtCounter(b.evalCtx.StartedRoutineStatementCounters, dbName, appName, tag, ast)
 			sqlstats.RecordStatementPhase(latencyRecorder, sqlstats.StatementEndPlanning)
 			err = fn(plan, statsBuilderWithLatencies, stmtForDistSQLDiagram, isFinalPlan)
 			if err != nil {
 				return err
 			}
-			incrementRoutineStmtCounter(b.evalCtx.ExecutedRoutineStatementCounters, dbName, appName, tag)
+			incrementRoutineStmtCounter(b.evalCtx.ExecutedRoutineStatementCounters, dbName, appName, tag, ast)
 		}
 		return nil
 	}
 	return planGen
 }
 
+// incrementRoutineStmtCounter increments the routine statement counter that
+// corresponds to stmtTag. ast is the parsed statement that produced stmtTag;
+// it is consulted only to distinguish permanent from temporary CREATE TABLE.
+// When ast is nil, CREATE TABLE is counted as permanent. Unknown tags
+// (statement types without a dedicated routine counter) are silently ignored.
 func incrementRoutineStmtCounter(
-	counters eval.RoutineStatementCounters, dbName string, appName string, stmtTag string,
+	counters eval.RoutineStatementCounters,
+	dbName string,
+	appName string,
+	stmtTag string,
+	ast tree.Statement,
 ) {
 	switch stmtTag {
 	case "INSERT":
@@ -1381,6 +1450,49 @@ func incrementRoutineStmtCounter(
 	case "DELETE":
 		if counters.DeleteCount != nil {
 			counters.DeleteCount.Inc(dbName, appName)
+		}
+	case "CREATE TABLE":
+		// Permanent and temporary CREATE TABLE share a statement tag but
+		// have distinct counters; fall back to the permanent counter when
+		// the AST is unavailable.
+		if ct, ok := ast.(*tree.CreateTable); ok && ct.Persistence.IsTemporary() {
+			if counters.CreateTempTableCount != nil {
+				counters.CreateTempTableCount.Inc(dbName, appName)
+			}
+		} else if counters.CreateTableCount != nil {
+			counters.CreateTableCount.Inc(dbName, appName)
+		}
+	case "DROP TABLE":
+		if counters.DropTableCount != nil {
+			counters.DropTableCount.Inc(dbName, appName)
+		}
+	case "CREATE SCHEMA":
+		if counters.CreateSchemaCount != nil {
+			counters.CreateSchemaCount.Inc(dbName, appName)
+		}
+	case "DROP SCHEMA":
+		if counters.DropSchemaCount != nil {
+			counters.DropSchemaCount.Inc(dbName, appName)
+		}
+	case "CREATE ROLE":
+		if counters.CreateRoleCount != nil {
+			counters.CreateRoleCount.Inc(dbName, appName)
+		}
+	case "DROP ROLE":
+		if counters.DropRoleCount != nil {
+			counters.DropRoleCount.Inc(dbName, appName)
+		}
+	case "GRANT":
+		if counters.GrantCount != nil {
+			counters.GrantCount.Inc(dbName, appName)
+		}
+	case "REVOKE":
+		if counters.RevokeCount != nil {
+			counters.RevokeCount.Inc(dbName, appName)
+		}
+	case "ALTER DEFAULT PRIVILEGES":
+		if counters.AlterDefaultPrivilegesCount != nil {
+			counters.AlterDefaultPrivilegesCount.Inc(dbName, appName)
 		}
 	}
 }

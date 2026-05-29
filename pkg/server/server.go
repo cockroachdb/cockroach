@@ -611,8 +611,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	db.AdmissionPacerFactory = gcoords.ElasticCPU
 	sqlCPUProvider := admission.NewSQLCPUProvider(
 		&st.SV,
-		func(tenantID roachpb.TenantID) *admission.WorkQueue {
-			return gcoords.RegularCPU.GetCTTWorkQueue(tenantID.IsSystem())
+		func() *admission.WorkQueue {
+			return gcoords.RegularCPU.GetCTTWorkQueue()
 		},
 	)
 	db.SQLCPUProvider = sqlCPUProvider
@@ -1300,6 +1300,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		sqlCPUProvider:           sqlCPUProvider,
 		rangeDescIteratorFactory: rangedesc.NewIteratorFactory(db),
 		tenantCapabilitiesReader: sql.MakeSystemTenantOnly[tenantcapabilities.Reader](tenantCapabilitiesWatcher),
+		timeSeriesQuerier:        ts.NewSQLAdapter(&sTS),
 	})
 	if err != nil {
 		return nil, err
@@ -2401,9 +2402,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		s.stopper)
 
 	// Let the server controller start watching tenant service mode changes.
-	if err := s.serverController.start(workersCtx,
-		s.node.execCfg.InternalDB.Executor(),
-	); err != nil {
+	if err := s.serverController.start(workersCtx); err != nil {
 		return errors.Wrap(err, "failed to start the server controller")
 	}
 

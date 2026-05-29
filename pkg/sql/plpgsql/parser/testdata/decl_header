@@ -250,13 +250,12 @@ DECLARE
 BEGIN
 END
 ----
-at or near "rowtype": syntax error: unable to parse type of variable declaration
+at or near "rowtype": syntax error: unimplemented: %TYPE and %ROWTYPE syntax
 DETAIL: source SQL:
 DECLARE
   var1 xy%ROWTYPE;
           ^
-HINT: you may have attempted to use %TYPE or %ROWTYPE syntax, which is unsupported.
---
+HINT: You have attempted to use a feature that is not yet implemented.
 See: https://go.crdb.dev/issue-v/114676/
 
 error
@@ -266,14 +265,13 @@ DECLARE
 BEGIN
 END
 ----
-at or near "type": syntax error: unable to parse type of variable declaration
+at or near "type": syntax error: unimplemented: %TYPE and %ROWTYPE syntax
 DETAIL: source SQL:
 DECLARE
   var1 INT;
   var2 var1%TYPE;
             ^
-HINT: you may have attempted to use %TYPE or %ROWTYPE syntax, which is unsupported.
---
+HINT: You have attempted to use a feature that is not yet implemented.
 See: https://go.crdb.dev/issue-v/114676/
 
 pretty

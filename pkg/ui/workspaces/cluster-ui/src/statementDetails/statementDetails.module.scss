@@ -5,6 +5,41 @@
 
 @import "src/core/index.module";
 
+.canary-chart-wrapper {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.latency-legend {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-left: 12px;
+  padding-top: 40px;
+  padding-bottom: 24px;
+  font-size: 11px;
+  color: #475872;
+
+  &__bar {
+    width: 14px;
+    flex: 1;
+    min-height: 60px;
+    margin: 4px 0;
+    border-radius: 3px;
+    // --latency-gradient is set on the parent .latency-legend from
+    // LATENCY_LEGEND_GRADIENT in timeseriesUtils.ts to keep the
+    // gradient in sync with latencyToColor.
+    background: var(--latency-gradient);
+  }
+
+  &__label {
+    margin-top: 4px;
+    font-size: 10px;
+    color: #8b96a9;
+  }
+}
+
 .text-link {
   white-space: nowrap;
   line-height: $line-height--medium;

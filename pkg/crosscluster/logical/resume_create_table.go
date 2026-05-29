@@ -9,6 +9,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrsettings"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/physical"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
@@ -152,7 +153,7 @@ func (r *logicalReplicationResumer) runOfflineInitialScan(
 
 	heartbeatSender := streamclient.NewHeartbeatSender(ctx, client, streampb.StreamID(streamID),
 		func() time.Duration {
-			return heartbeatFrequency.Get(&execCfg.Settings.SV)
+			return ldrsettings.HeartbeatFrequency.Get(&execCfg.Settings.SV)
 		})
 	defer func() {
 		_ = heartbeatSender.Stop()
@@ -214,7 +215,8 @@ func (r *logicalReplicationResumer) maybeStartReverseStream(
 		return errors.Wrapf(err, "failed to start reverse stream")
 	}
 
-	if err := r.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	if err := r.job.DeprecatedNoTxn().Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 		md.Progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication.StartedReverseStream = true
 		ju.UpdateProgress(md.Progress)
 		return nil
@@ -259,7 +261,8 @@ func (r *logicalReplicationResumer) maybePublishCreatedTables(
 		if err := txn.KV().Run(ctx, b); err != nil {
 			return err
 		}
-		return r.job.WithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+		return r.job.DeprecatedWithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 			md.Progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication.PublishedNewTables = true
 			ju.UpdateProgress(md.Progress)
 			return nil

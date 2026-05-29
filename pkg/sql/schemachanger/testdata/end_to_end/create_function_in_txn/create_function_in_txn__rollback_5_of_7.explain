@@ -42,7 +42,7 @@ Schema change plan for rolling back CREATE UNIQUE INDEX idx ON defaultdb.public.
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":104}
       │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
-      │         ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.Owner"}
+      │         ├── RemoveOwner {"DescriptorID":105}
       │         ├── RemoveUserPrivileges {"DescriptorID":105,"User":"admin"}
       │         ├── RemoveUserPrivileges {"DescriptorID":105,"User":"public"}
       │         ├── RemoveUserPrivileges {"DescriptorID":105,"User":"root"}

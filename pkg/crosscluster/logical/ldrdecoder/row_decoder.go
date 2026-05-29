@@ -47,6 +47,9 @@ func newTableDecoder(
 			if err != nil {
 				return err
 			}
+			if descriptor == nil {
+				return catalog.NewDescriptorNotFoundError(table.DestID)
+			}
 
 			columns := sqlwriter.GetColumnSchema(descriptor)
 			columnNames := make([]string, 0, len(columns))

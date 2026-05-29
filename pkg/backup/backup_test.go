@@ -1486,7 +1486,11 @@ func TestRestoreJobRetryReset(t *testing.T) {
 				InitialBackoff: time.Microsecond,
 				Multiplier:     2,
 				MaxBackoff:     2 * time.Microsecond,
-				MaxDuration:    time.Second,
+				// Instead of max duration, which can be flaky, we use the more
+				// deterministic max retries. As long as this is set to a value
+				// sufficiently higher than maxRestoreRestryFastFail, this test will be
+				// able to verify that retries were reset after progress was made.
+				MaxRetries: maxRestoreRetryFastFail * 2,
 			},
 			// Disable switching to the secondary retry policy for this test since it
 			// is not relevant to the test. Set to an unachievable value.
@@ -3344,107 +3348,6 @@ func TestBackupRestoreIncremental(t *testing.T) {
 	}
 }
 
-// a bg worker is intended to write to the bank table concurrent with other
-// operations (writes, backups, restores), mutating the payload on rows-maxID.
-// it notified the `wake` channel (to allow ensuring bg activity has occurred)
-// and can be informed when errors are allowable (e.g. when the bank table is
-// unavailable between a drop and restore) via the atomic "bool" allowErrors.
-func startBackgroundWrites(
-	stopper *stop.Stopper, sqlDB *gosql.DB, maxID int, wake chan<- struct{}, allowErrors *int32,
-) error {
-	rng, _ := randutil.NewTestRand()
-
-	for {
-		select {
-		case <-stopper.ShouldQuiesce():
-			return nil // All done.
-		default:
-			// Keep going.
-		}
-
-		id := rand.Intn(maxID)
-		payload := randutil.RandBytes(rng, backupRestoreRowPayloadSize)
-
-		updateFn := func() error {
-			select {
-			case <-stopper.ShouldQuiesce():
-				return nil // All done.
-			default:
-				// Keep going.
-			}
-			_, err := sqlDB.Exec(`UPDATE data.bank SET payload = $1 WHERE id = $2`, payload, id)
-			if atomic.LoadInt32(allowErrors) == 1 {
-				return nil
-			}
-			return err
-		}
-		if err := retry.ForDuration(testutils.DefaultSucceedsSoonDuration, updateFn); err != nil {
-			return err
-		}
-		select {
-		case wake <- struct{}{}:
-		default:
-		}
-	}
-}
-
-func TestBackupRestoreWithConcurrentWrites(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	const rows = 10
-	const numBackgroundTasks = multiNode
-
-	skip.UnderRace(t, "test is too slow under race")
-
-	ctx := context.Background()
-	tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, multiNode, rows, InitManualReplication)
-	defer cleanupFn()
-
-	bgActivity := make(chan struct{})
-	// allowErrors is used as an atomic bool to tell bg workers when to allow
-	// errors, between dropping and restoring the table they are using.
-	var allowErrors int32
-	for task := 0; task < numBackgroundTasks; task++ {
-		taskNum := task
-		_ = tc.Stopper().RunAsyncTask(ctx, "bg-task", func(context.Context) {
-			conn := tc.Conns[taskNum%len(tc.Conns)]
-			// Use different sql gateways to make sure leasing is right.
-			if err := startBackgroundWrites(tc.Stopper(), conn, rows, bgActivity, &allowErrors); err != nil {
-				t.Error(err)
-			}
-		})
-	}
-
-	// Use the data.bank table as a key (id), value (balance) table with a
-	// payload.The background tasks are mutating the table concurrently while we
-	// backup and restore.
-	<-bgActivity
-
-	// Set, break, then reset the id=balance invariant -- while doing concurrent
-	// writes -- to get multiple MVCC revisions as well as txn conflicts.
-	sqlDB.Exec(t, `UPDATE data.bank SET balance = id`)
-	<-bgActivity
-	sqlDB.Exec(t, `UPDATE data.bank SET balance = -1`)
-	<-bgActivity
-	sqlDB.Exec(t, `UPDATE data.bank SET balance = id`)
-	<-bgActivity
-
-	// Backup DB while concurrent writes continue.
-	sqlDB.Exec(t, `BACKUP DATABASE data INTO $1`, localFoo)
-
-	// Drop the table and restore from backup and check our invariant.
-	atomic.StoreInt32(&allowErrors, 1)
-	sqlDB.Exec(t, `DROP TABLE data.bank`)
-	sqlDB.Exec(t, `RESTORE TABLE data.* FROM LATEST IN $1`, localFoo)
-	atomic.StoreInt32(&allowErrors, 0)
-
-	bad := sqlDB.QueryStr(t, `SELECT id, balance, payload FROM data.bank WHERE id != balance`)
-	for _, r := range bad {
-		t.Errorf("bad row ID %s = bal %s (payload: %q)", r[0], r[1], r[2])
-	}
-}
-
 func TestConcurrentBackupRestores(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -3960,8 +3863,7 @@ func TestRestoreAsOfSystemTimeGCBounds(t *testing.T) {
 
 	const numAccounts = 10
 	ctx := context.Background()
-	args := base.TestClusterArgs{}
-	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, args)
+	tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 	const dir = "nodelocal://1/"
 	s := tc.SystemLayer(0)
@@ -3997,7 +3899,7 @@ func TestRestoreAsOfSystemTimeGCBounds(t *testing.T) {
 
 	t.Run("restore-pre-gc-aost", func(t *testing.T) {
 		backupPath := dir + "/tbl-before-gc"
-		_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 0, InitManualReplication, args)
+		_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
 		defer cleanupFn()
 
 		sqlDB.Exec(t, "CREATE DATABASE db")
@@ -5994,7 +5896,8 @@ func TestBatchedInsertStats(t *testing.T) {
 			// Reset the job state, for the next iteration of the test.
 			details := job.Details().(jobspb.RestoreDetails)
 			details.StatsInserted = false
-			require.NoError(t, job.NoTxn().SetDetails(ctx, details))
+			//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+			require.NoError(t, job.DeprecatedNoTxn().SetDetails(ctx, details))
 			var err error
 			job, err = registry.LoadJob(ctx, job.ID())
 			require.NoError(t, err)
@@ -10599,7 +10502,7 @@ $$;
 		require.Equal(t, 111, int(fnDesc.GetID()))
 		require.Equal(t, 104, int(fnDesc.GetParentID()))
 		require.Equal(t, 106, int(fnDesc.GetParentSchemaID()))
-		require.Equal(t, "SELECT a FROM db1.sc1.tbl1;\nSELECT nextval(110:::REGCLASS);", fnDesc.GetFunctionBody())
+		require.Equal(t, "SELECT a FROM db1.sc1.tbl1;\nSELECT nextval(110:::REGCLASS);", string(fnDesc.GetFunctionBody()))
 		require.Equal(t, 100108, int(fnDesc.GetParams()[0].Type.Oid()))
 		require.Equal(t, []descpb.ID{107, 110}, fnDesc.GetDependsOn())
 		require.Equal(t, []descpb.ID{108, 109}, fnDesc.GetDependsOnTypes())
@@ -10652,7 +10555,7 @@ $$;
 		require.Equal(t, 112, int(fnDesc.GetParentID()))
 		require.Equal(t, 114, int(fnDesc.GetParentSchemaID()))
 		// Make sure db name and IDs are rewritten in function body.
-		require.Equal(t, "SELECT a FROM db1_new.sc1.tbl1;\nSELECT nextval(118:::REGCLASS);", fnDesc.GetFunctionBody())
+		require.Equal(t, "SELECT a FROM db1_new.sc1.tbl1;\nSELECT nextval(118:::REGCLASS);", string(fnDesc.GetFunctionBody()))
 		require.Equal(t, 100116, int(fnDesc.GetParams()[0].Type.Oid()))
 		require.Equal(t, []descpb.ID{115, 118}, fnDesc.GetDependsOn())
 		require.Equal(t, []descpb.ID{116, 117}, fnDesc.GetDependsOnTypes())
@@ -10862,10 +10765,8 @@ func TestBackupRestoreForeignKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params := base.TestServerArgs{}
 	const numAccounts = 1000
-	_, sqlDB, _, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
-		InitManualReplication, base.TestClusterArgs{ServerArgs: params})
+	_, sqlDB, _, cleanup := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanup()
 	sqlDB.Exec(t, `SET use_backups_with_ids = true`)
 

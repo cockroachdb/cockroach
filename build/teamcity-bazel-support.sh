@@ -31,6 +31,10 @@ DOCKER_EXPORT_COCKROACH_VARS=$(env | grep '^COCKROACH_' | cut -d= -f1 | sed -e '
 # image running the given script.
 # BAZEL_SUPPORT_EXTRA_DOCKER_ARGS will be passed on to `docker run` unchanged.
 run_bazel() {
+    if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+        run_bazel_github "$@"
+        return
+    fi
     # Set up volumes.
     # TeamCity uses git alternates, so make sure we mount the path to the real
     # git objects.
@@ -44,6 +48,35 @@ run_bazel() {
     mkdir -p $cache
     vols="${vols} --volume ${root}:/go/src/github.com/cockroachdb/cockroach"
     vols="${vols} --volume ${cache}:/home/roach"
+
+    exit_status=0
+    docker run -i ${tty-} --rm --init \
+        -u "$(id -u):$(id -g)" \
+        --workdir="/go/src/github.com/cockroachdb/cockroach" \
+	${DOCKER_EXPORT_COCKROACH_VARS} \
+	${BAZEL_SUPPORT_EXTRA_DOCKER_ARGS:+$BAZEL_SUPPORT_EXTRA_DOCKER_ARGS} \
+        ${vols} \
+        $BAZEL_IMAGE "$@" || exit_status=$?
+    rm -rf _bazel
+    return $exit_status
+}
+
+# GitHub Actions sibling of run_bazel. Kept separate so the TC body of
+# run_bazel above stays identical to its pre-GHA-migration form, which
+# lets TC-side fixes backport cleanly to release branches that don't
+# carry the GHA migration.
+run_bazel_github() {
+    artifacts_dir=$root/artifacts
+    mkdir -p "$artifacts_dir"
+    vols="--volume ${artifacts_dir}:/artifacts"
+    vols="${vols} --volume ${root}:/go/src/github.com/cockroachdb/cockroach"
+    cache="${RUNNER_TEMP:-/tmp}/.bzlhome"
+    mkdir -p "$cache"
+    vols="${vols} --volume ${cache}:/home/roach"
+    if [[ -n "${GOOGLE_GHA_CREDS_PATH:-}" && -f "${GOOGLE_GHA_CREDS_PATH}" ]]; then
+        vols="${vols} --volume ${GOOGLE_GHA_CREDS_PATH}:${GOOGLE_GHA_CREDS_PATH}:ro"
+        BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="${BAZEL_SUPPORT_EXTRA_DOCKER_ARGS:-} -e CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE=${GOOGLE_GHA_CREDS_PATH} -e GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_GHA_CREDS_PATH}"
+    fi
 
     exit_status=0
     docker run -i ${tty-} --rm --init \

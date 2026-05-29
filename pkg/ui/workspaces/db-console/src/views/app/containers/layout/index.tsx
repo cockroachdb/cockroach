@@ -17,6 +17,8 @@ import {
   Text,
   TextTypes,
 } from "src/components";
+import { AnalyticsProvider } from "src/contexts/analyticsProvider";
+import { TimezoneProvider } from "src/contexts/timezoneProvider";
 import { getDataFromServer } from "src/util/dataFromServer";
 import ErrorBoundary from "src/views/app/components/errorMessage/errorBoundary";
 import NavigationBar from "src/views/app/components/layoutSidebar";
@@ -65,47 +67,53 @@ function Layout({ children }: LayoutProps): React.ReactElement {
 
   return (
     <RequireLogin>
-      <Helmet
-        titleTemplate="%s | Cockroach Console"
-        defaultTitle="Cockroach Console"
-      />
-      <TimeWindowManager />
-      <HealthMonitor />
-      <AlertBanner />
-      <div className="layout-panel">
-        <div className="layout-panel__header">
-          <GlobalNavigation>
-            <Left>
-              <CockroachLabsLockupIcon height={26} />
-            </Left>
-            <Right>
-              <LicenseNotification />
-              <LoginIndicator />
-            </Right>
-          </GlobalNavigation>
-        </div>
-        <div className="layout-panel__navigation-bar">
-          <PageHeader>
-            <Text textType={TextTypes.Heading2} noWrap>
-              {getDataFromServer().FeatureFlags.is_observability_service
-                ? "(Obs Service) "
-                : ""}
-              {clusterName || `Cluster id: ${clusterId || ""}`}
-            </Text>
-            <Badge text={clusterVersion} />
-            <TenantDropdown />
-          </PageHeader>
-        </div>
-        <ThrottleNotificationBar />
-        <div className="layout-panel__body">
-          <div className="layout-panel__sidebar">
-            <NavigationBar />
+      <TimezoneProvider>
+        <AnalyticsProvider>
+          <Helmet
+            titleTemplate="%s | Cockroach Console"
+            defaultTitle="Cockroach Console"
+          />
+          <TimeWindowManager />
+          <HealthMonitor />
+          <AlertBanner />
+          <div className="layout-panel">
+            <div className="layout-panel__header">
+              <GlobalNavigation>
+                <Left>
+                  <CockroachLabsLockupIcon height={26} />
+                </Left>
+                <Right>
+                  <LicenseNotification />
+                  <LoginIndicator />
+                </Right>
+              </GlobalNavigation>
+            </div>
+            <div className="layout-panel__navigation-bar">
+              <PageHeader>
+                <Text textType={TextTypes.Heading2} noWrap>
+                  {getDataFromServer().FeatureFlags.is_observability_service
+                    ? "(Obs Service) "
+                    : ""}
+                  {clusterName || `Cluster id: ${clusterId || ""}`}
+                </Text>
+                <Badge text={clusterVersion} />
+                <TenantDropdown />
+              </PageHeader>
+            </div>
+            <ThrottleNotificationBar />
+            <div className="layout-panel__body">
+              <div className="layout-panel__sidebar">
+                <NavigationBar />
+              </div>
+              <div ref={contentRef} className="layout-panel__content">
+                <ErrorBoundary key={location.pathname}>
+                  {children}
+                </ErrorBoundary>
+              </div>
+            </div>
           </div>
-          <div ref={contentRef} className="layout-panel__content">
-            <ErrorBoundary key={location.pathname}>{children}</ErrorBoundary>
-          </div>
-        </div>
-      </div>
+        </AnalyticsProvider>
+      </TimezoneProvider>
     </RequireLogin>
   );
 }

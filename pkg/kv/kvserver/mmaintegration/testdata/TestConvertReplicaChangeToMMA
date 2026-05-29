@@ -89,11 +89,15 @@ store-id=3 type=ADD_NON_VOTER
 ----
 panicked as expected
 
-# Expect panic since removing non-existent replica.
-convert-replica-changes expect-panic
+# Regression for #170183: the replicate queue can pass a stale change set
+# (REMOVE_VOTER for a store that was concurrently removed by another
+# replication change) against a fresh range descriptor that no longer contains
+# that store. We return an error rather than panicking so this benign
+# descriptor race does not bring down the node.
+convert-replica-changes
 store-id=4 type=REMOVE_VOTER
 ----
-panicked as expected
+error: no replica found for removal target=4 post-filter=[] pre-filter=r1:{-} [(n1,s1):10, (n2,s2):20, next=0, gen=0]
 
 # Attempt to downgrade leaseholder voter to non-voter, without adding a voter,
 # returns an error.

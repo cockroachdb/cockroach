@@ -57,14 +57,9 @@ EOF
 # We'd love to see a stack trace though, so after 7800 minutes,
 # kill with SIGINT which will allow roachtest to fail tests and
 # cleanup.
-#
-# NB(2): We specify --zones below so that nodes are created in us-central1-b
-# by default. This reserves us-east1-b (the roachprod default zone) for use
-# by manually created clusters.
 timeout -s INT $((7800*60)) bin/roachtest run \
   --suite release_qualification \
   --cluster-id "${TC_BUILD_ID}" \
-  --zones "us-central1-b,us-west1-b,europe-west2-b" \
   --cockroach "$PWD/cockroach" \
   --roachprod "$PWD/bin/roachprod" \
   --workload "$PWD/bin/workload" \

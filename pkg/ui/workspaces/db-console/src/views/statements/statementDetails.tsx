@@ -2,70 +2,77 @@
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
-import {
-  StatementDetails,
-  StatementDetailsDispatchProps,
-  StatementDetailsStateProps,
-  api as clusterUiApi,
-} from "@cockroachlabs/cluster-ui";
+import { StatementDetails, TimeScale } from "@cockroachlabs/cluster-ui";
 import moment from "moment-timezone";
-import { connect } from "react-redux";
-import { RouteComponentProps } from "react-router";
-import { withRouter } from "react-router-dom";
+import React, { useCallback } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import { useHistory, useLocation, useRouteMatch } from "react-router-dom";
 
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
-import {
-  trackCancelDiagnosticsBundleAction,
-  trackDownloadDiagnosticsBundleAction,
-  trackStatementDetailsSubnavSelectionAction,
-} from "src/redux/analyticsActions";
-import { AdminUIState, AppDispatch } from "src/redux/state";
+import { AdminUIState } from "src/redux/state";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { selectTimeScale } from "src/redux/timeScale";
-import { trackActivateDiagnostics } from "src/util/analytics";
+import {
+  trackActivateDiagnostics,
+  trackDownloadDiagnosticsBundle,
+  trackSubnavSelection,
+} from "src/util/analytics";
+import trackCancelDiagnosticsBundle from "src/util/analytics/trackCancelDiagnosticsBundle";
 import { statementAttr } from "src/util/constants";
 import { getMatchParamByName } from "src/util/query";
 
 import { requestTimeLocalSetting } from "./statementsPage";
 
-const mapStateToProps = (
-  state: AdminUIState,
-  props: RouteComponentProps,
-): StatementDetailsStateProps => ({
-  statementFingerprintID: getMatchParamByName(props.match, statementAttr),
-  timeScale: selectTimeScale(state),
-  requestTime: requestTimeLocalSetting.selector(state),
-});
+const ConnectedStatementDetailsPage: React.FC = () => {
+  const history = useHistory();
+  const location = useLocation();
+  const match = useRouteMatch<{ statement: string }>();
+  const dispatch = useDispatch();
+  const timeScale = useSelector(selectTimeScale);
+  const requestTime = useSelector((state: AdminUIState) =>
+    requestTimeLocalSetting.selector(state),
+  );
+  const statementFingerprintID = getMatchParamByName(match, statementAttr);
 
-const mapDispatchToProps: StatementDetailsDispatchProps = {
-  dismissStatementDiagnosticsAlertMessage: () =>
-    createStatementDiagnosticsAlertLocalSetting.set({ show: false }),
-  onTabChanged: trackStatementDetailsSubnavSelectionAction,
-  onTimeScaleChange: setGlobalTimeScaleAction,
-  onRequestTimeChange: (t: moment.Moment) => requestTimeLocalSetting.set(t),
-  onDiagnosticBundleDownload: trackDownloadDiagnosticsBundleAction,
-  onActivateStatementDiagnosticsAnalytics: (statementFingerprint: string) => {
-    return () => trackActivateDiagnostics(statementFingerprint);
-  },
-  onDiagnosticCancelRequestTracking: (
-    report: clusterUiApi.StatementDiagnosticsReport,
-  ) => {
-    return (dispatch: AppDispatch) => {
-      dispatch(
-        trackCancelDiagnosticsBundleAction(report.statement_fingerprint),
-      );
-    };
-  },
+  const dismissStatementDiagnosticsAlertMessage = useCallback(() => {
+    dispatch(createStatementDiagnosticsAlertLocalSetting.set({ show: false }));
+  }, [dispatch]);
+
+  const onTimeScaleChange = useCallback(
+    (ts: TimeScale) => {
+      dispatch(setGlobalTimeScaleAction(ts));
+    },
+    [dispatch],
+  );
+
+  const onRequestTimeChange = useCallback(
+    (t: moment.Moment) => {
+      dispatch(requestTimeLocalSetting.set(t));
+    },
+    [dispatch],
+  );
+
+  return (
+    <StatementDetails
+      history={history}
+      location={location}
+      match={match}
+      statementFingerprintID={statementFingerprintID}
+      timeScale={timeScale}
+      requestTime={requestTime}
+      dismissStatementDiagnosticsAlertMessage={
+        dismissStatementDiagnosticsAlertMessage
+      }
+      onTabChanged={trackSubnavSelection}
+      onTimeScaleChange={onTimeScaleChange}
+      onRequestTimeChange={onRequestTimeChange}
+      onDiagnosticBundleDownload={trackDownloadDiagnosticsBundle}
+      onActivateStatementDiagnosticsAnalytics={trackActivateDiagnostics}
+      onDiagnosticCancelRequestTracking={report =>
+        trackCancelDiagnosticsBundle(report.statement_fingerprint)
+      }
+    />
+  );
 };
 
-export default withRouter(
-  connect<
-    StatementDetailsStateProps,
-    StatementDetailsDispatchProps,
-    RouteComponentProps,
-    AdminUIState
-  >(
-    mapStateToProps,
-    mapDispatchToProps,
-  )(StatementDetails),
-);
+export default ConnectedStatementDetailsPage;

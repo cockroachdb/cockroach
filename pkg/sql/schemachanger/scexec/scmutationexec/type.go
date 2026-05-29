@@ -50,7 +50,8 @@ func (i *immediateVisitor) PromoteEnumTypeValue(
 
 	for j := range typ.EnumMembers {
 		member := &typ.EnumMembers[j]
-		if bytes.Equal(member.PhysicalRepresentation, op.PhysicalRepresentation) {
+		if member.LogicalRepresentation == op.LogicalRepresentation &&
+			bytes.Equal(member.PhysicalRepresentation, op.PhysicalRepresentation) {
 			member.Capability = descpb.TypeDescriptor_EnumMember_ALL
 			member.Direction = descpb.TypeDescriptor_EnumMember_NONE
 			return nil
@@ -73,7 +74,8 @@ func (i *immediateVisitor) DemoteEnumTypeValue(
 
 	for j := range typ.EnumMembers {
 		member := &typ.EnumMembers[j]
-		if bytes.Equal(member.PhysicalRepresentation, op.PhysicalRepresentation) {
+		if member.LogicalRepresentation == op.LogicalRepresentation &&
+			bytes.Equal(member.PhysicalRepresentation, op.PhysicalRepresentation) {
 			member.Capability = descpb.TypeDescriptor_EnumMember_READ_ONLY
 			member.Direction = descpb.TypeDescriptor_EnumMember_REMOVE
 			return nil

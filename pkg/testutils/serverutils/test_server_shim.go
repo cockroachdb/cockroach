@@ -284,7 +284,7 @@ func StartServerOnlyE(t TestLogger, params base.TestServerArgs) (TestServerInter
 	// Priority of these Should* functions:
 	// Test explicit value > env vars > factory defaults > metamorphic.
 	params.DefaultTestTenant = ShouldStartDefaultTestTenant(t, params.DefaultTestTenant)
-	params.UseDRPC = ShouldEnableDRPC(ctx, t, params.DefaultDRPCOption)
+	params.DefaultDRPCOption = ShouldEnableDRPC(ctx, t, params.DefaultDRPCOption)
 
 	s, err := NewServer(params)
 	if err != nil {
@@ -596,14 +596,11 @@ func parseDefaultTestDRPCOptionFromEnv() base.DefaultTestDRPCOption {
 }
 
 // ShouldEnableDRPC determines the final DRPC enablement decision based on the
-// input option, resolving random choices to a concrete bool.
-func ShouldEnableDRPC(ctx context.Context, t TestLogger, option base.DefaultTestDRPCOption) bool {
-	if skip.UnderBench() {
-		// Microbenchmarks exercise specific parts of the database and we
-		// want to remove any non-deterministic factors that could affect the
-		// numbers, so we disable the dRPC option until it becomes the default.
-		return false
-	}
+// input option, resolving random choices to a concrete TestDRPCEnabled or
+// TestDRPCDisabled value.
+func ShouldEnableDRPC(
+	ctx context.Context, t TestLogger, option base.DefaultTestDRPCOption,
+) base.DefaultTestDRPCOption {
 	var logSuffix string
 
 	if option == base.TestDRPCUnset {
@@ -614,7 +611,7 @@ func ShouldEnableDRPC(ctx context.Context, t TestLogger, option base.DefaultTest
 			option = *factoryDefaultDRPC
 			logSuffix = " (via testserver factory defaults)"
 		} else {
-			return false
+			return base.TestDRPCDisabled
 		}
 	} else {
 		logSuffix = " (via test explicit setting)"
@@ -625,16 +622,23 @@ func ShouldEnableDRPC(ctx context.Context, t TestLogger, option base.DefaultTest
 	case base.TestDRPCEnabled:
 		enableDRPC = true
 	case base.TestDRPCEnabledRandomly:
+		if skip.UnderBench() {
+			// Benchmarks need deterministic behavior; skip random DRPC selection.
+			return base.TestDRPCDisabled
+		}
 		rng, _ := randutil.NewTestRand()
 		enableDRPC = rng.Intn(2) == 0
 	case base.TestDRPCUnset:
-		return false
+		return base.TestDRPCDisabled
 	}
 
-	if enableDRPC && t != nil {
-		t.Log("DRPC is enabled" + logSuffix)
+	if enableDRPC {
+		if t != nil {
+			t.Log("DRPC is enabled" + logSuffix)
+		}
+		return base.TestDRPCEnabled
 	}
-	return enableDRPC
+	return base.TestDRPCDisabled
 }
 
 // SetUnsafeOverride sets an unsafe override for eval.TestingKnobs.UnsafeOverride on

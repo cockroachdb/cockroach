@@ -2000,6 +2000,24 @@ func TestLeaseExpirationBelowFutureTimeRequest(t *testing.T) {
 			return lease.Replica.StoreID == l.replica1.StoreID()
 		}, 5*time.Second, 100*time.Millisecond, "timed out waiting for replica 0 to pick up new lease")
 
+		// Wait for raft leadership to transfer to the leaseholder. The lease
+		// extension below goes through verifyLeaseRequestSafetyRLocked which
+		// treats a stasis-period lease as expired (PrevLeaseExpired=true) and
+		// falls through to verifyAcquisition, which rejects if we're not the
+		// raft leader. Without this wait, the raft group can be leaderless
+		// after AdminTransferLease initiates a leadership transfer.
+		testutils.SucceedsSoon(t, func() error {
+			raftStatus := l.replica1.RaftStatus()
+			if raftStatus == nil {
+				return errors.New("raft status not available")
+			}
+			if raftStatus.RaftState == raftpb.StateLeader {
+				return nil
+			}
+			return errors.Newf("replica1 raft state: %s, lead: %d, term: %d",
+				raftStatus.RaftState, raftStatus.Lead, raftStatus.Term)
+		})
+
 		// Pause the cluster's clocks.
 		l.manualClock.Pause()
 		atPause := l.manualClock.UnixNano()
@@ -2033,8 +2051,8 @@ func TestLeaseExpirationBelowFutureTimeRequest(t *testing.T) {
 			// may end up being extended by some other request. That fact that
 			// our request was rejected is good enough.
 		} else {
-			// The request should have been rejected.
-			require.Nil(t, pErr)
+			// The request should succeed and trigger a lease extension.
+			require.Nil(t, pErr, "expected request to succeed: %s", pErr)
 
 			// The lease should have been extended.
 			l.checkHasLease(t, 1)
@@ -3506,6 +3524,11 @@ func TestLeaseTransferRejectedIfTargetNeedsSnapshot(t *testing.T) {
 		truncArgs.Key = keyA
 		_, pErr = kv.SendWrapped(ctx, store0.TestSender(), truncArgs)
 		require.Nil(t, pErr)
+
+		// Wait for the truncation to be enacted. Under loosely coupled
+		// truncations, the truncation is applied asynchronously after the state
+		// machine engine flushes, so we poll until GetCompactedIndex catches up.
+		waitForTruncationForTesting(t, repl0, index)
 
 		// Complete or initiate the lease transfer attempt to node 2, which must not
 		// succeed because node 2 now needs a snapshot.

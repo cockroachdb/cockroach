@@ -371,6 +371,7 @@ func ingestKvs(
 			flowCtx.Cfg.ExternalStorageFromURI,
 			flowCtx.Cfg.DB.KV().Clock(),
 			prefix,
+			nodeID,
 			writeTS,
 			processorID,
 			true, /*checkDuplicates */

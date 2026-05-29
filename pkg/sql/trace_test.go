@@ -214,6 +214,15 @@ func TestTrace(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Wait for each node's statement_hints rangefeed to complete its initial
+	// scan. Otherwise, the first query on a node will fall through to a DB read
+	// in MaybeGetStatementHints (because hintedHashes is still nil) and pollute
+	// the trace with internal-query spans like colbatchscan / colindexjoin.
+	for i := 0; i < numNodes; i++ {
+		hc := cluster.ApplicationLayer(i).ExecutorConfig().(sql.ExecutorConfig).StatementHintsCache
+		hc.Await(context.Background())
+	}
+
 	for _, test := range testData {
 		optionalSpans := append([]string{}, alwaysOptionalSpans...)
 		// Check if DRPC is enabled. When DRPC is enabled, remote KV requests

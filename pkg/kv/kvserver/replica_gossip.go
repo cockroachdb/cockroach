@@ -97,7 +97,7 @@ func (r *Replica) MaybeGossipNodeLivenessRaftMuLocked(
 
 	br, result, pErr :=
 		evaluateBatch(
-			ctx, kvserverbase.CmdIDKey(""), rw, rec, nil /* ms */, &ba,
+			ctx, kvserverbase.CmdIDKey(""), rw, rec, nil /* ms */, nil /* ss */, &ba,
 			nil /* g */, nil /* st */, uncertainty.Interval{}, readOnlyDefault, false, /* omitInRangefeeds */
 		)
 	if pErr != nil {

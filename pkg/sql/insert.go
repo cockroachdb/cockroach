@@ -394,3 +394,7 @@ func (n *insertNode) returnsRowsAffected() bool {
 func (n *insertNode) kvCPUTime() int64 {
 	return n.run.ti.kvCPUTime
 }
+
+func (n *insertNode) localKVCPUTime() int64 {
+	return n.run.ti.localKVCPUTime
+}

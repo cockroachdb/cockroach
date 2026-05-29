@@ -44,8 +44,8 @@ import (
 const (
 	ProviderName       = "gce"
 	DefaultMachineType = "n2-standard-4"
-	DefaultImage       = "ubuntu-2204-jammy-v20240319"
-	ARM64Image         = "ubuntu-2204-jammy-arm64-v20240319"
+	DefaultImage       = "ubuntu-2204-jammy-v20260414"
+	ARM64Image         = "ubuntu-2204-jammy-arm64-v20260414"
 	// TODO(DarrylWong): Upgrade FIPS to Ubuntu 22 when it is available.
 	FIPSImage           = "ubuntu-pro-fips-2004-focal-v20230811"
 	defaultImageProject = "ubuntu-os-cloud"
@@ -241,8 +241,9 @@ func runJSONCommand(args []string, parsed interface{}) error {
 		// TODO(peter,ajwerner): Remove this hack once gcloud behaves when adding
 		// new zones.
 		if matched, _ := regexp.Match(`.*Unknown zone`, stderr); !matched {
-			return errors.Wrapf(err, "failed to run: gcloud %s\nstdout: %s\nstderr: %s\n",
+			err = errors.Wrapf(err, "failed to run: gcloud %s\nstdout: %s\nstderr: %s\n",
 				strings.Join(args, " "), bytes.TrimSpace(rawJSON), bytes.TrimSpace(stderr))
+			return maybeGCECapacityError(err, stderr)
 		}
 	}
 
@@ -742,8 +743,9 @@ func (p *Provider) CreateVolumeSnapshot(
 		return vm.VolumeSnapshot{}, err
 	}
 	return vm.VolumeSnapshot{
-		ID:   createJsonResponse.ID,
-		Name: createJsonResponse.Name,
+		ID:     createJsonResponse.ID,
+		Name:   createJsonResponse.Name,
+		Status: createJsonResponse.Status,
 	}, nil
 }
 
@@ -755,7 +757,7 @@ func (p *Provider) ListVolumeSnapshots(
 		"--project", p.GetProject(),
 		"snapshots",
 		"list",
-		"--format", "json(name,id)",
+		"--format", "json(name,id,status)",
 	}
 	var filters []string
 	// Only list snapshots that are fully created. Without this filter,
@@ -786,8 +788,9 @@ func (p *Provider) ListVolumeSnapshots(
 			continue
 		}
 		snapshots = append(snapshots, vm.VolumeSnapshot{
-			ID:   snapshotJson.ID,
-			Name: snapshotJson.Name,
+			ID:     snapshotJson.ID,
+			Name:   snapshotJson.Name,
+			Status: snapshotJson.Status,
 		})
 	}
 	sort.Sort(vm.VolumeSnapshots(snapshots))
@@ -1003,23 +1006,32 @@ func (p *Provider) ListVolumes(l *logger.Logger, v *vm.VM) ([]vm.Volume, error) 
 		}
 	}
 
-	// Unfortunately the above responses contain no common identifier to join
-	// on, so we must resort to indexing. This does not work if the number of
-	// attached disks is different from the number of described volumes, i.e.
-	// if the cluster is using local SSDs.
-	if len(attachedDisks) != len(describedVolumes) {
-		err := errors.Newf("expected to find the same number of attached disks (%d) as described volumes (%d)",
-			len(attachedDisks), len(describedVolumes))
-		return nil, errors.WithHint(err, "is the cluster using local SSD?")
+	// We join the two sets based on their disk name. describedVolumes contains
+	// the metadata required, so we iterate over describedVolumes to retrieve the
+	// needed information. Local SSDs appear in attachedDisks, so we drop them
+	// when creating the bootByName mapping and exclude them from the join. The
+	// boot disk only holds the OS so it is skipped in the join loop. Described
+	// volumes with no matching attached disks are logged and skipped as this can
+	// happen when the two gcloud responses disagree (during a detach).
+	bootByName := make(map[string]bool, len(attachedDisks))
+	for _, a := range attachedDisks {
+		if a.Source == "" && a.Type == "SCRATCH" {
+			continue
+		}
+		bootByName[lastComponent(a.Source)] = a.Boot
 	}
 
 	var volumes []vm.Volume
-	for idx := range attachedDisks {
-		attachedDisk := attachedDisks[idx]
-		if attachedDisk.Boot {
+	for _, describedVolume := range describedVolumes {
+		isBoot, ok := bootByName[describedVolume.Name]
+		if !ok {
+			l.Printf("WARNING: described volume %q on VM %q has no matching attached disk; skipping",
+				describedVolume.Name, v.Name)
 			continue
 		}
-		describedVolume := describedVolumes[idx]
+		if isBoot {
+			continue
+		}
 		size, err := strconv.Atoi(describedVolume.SizeGB)
 		if err != nil {
 			return nil, err
@@ -1175,11 +1187,7 @@ type ProjectsVal struct {
 // TODO(manojpillai): use same defaults for ARM64, given c4a wide availability.
 // But review roachtest impact before changing.
 func DefaultZones(arch string, geoDistributed bool) []string {
-	zones := []string{"us-east1-b", "us-east1-c", "us-east1-d"}
-	if vm.ParseArch(arch) == vm.ArchARM64 {
-		// T2A instances are only available in us-central1 in NA.
-		zones = []string{"us-central1-a", "us-central1-b", "us-central1-f"}
-	}
+	zones := DefaultRetryZoneCandidates(arch)
 	rand.Shuffle(len(zones), func(i, j int) { zones[i], zones[j] = zones[j], zones[i] })
 
 	if geoDistributed {
@@ -1197,6 +1205,18 @@ func DefaultZones(arch string, geoDistributed bool) []string {
 	}
 
 	return []string{zones[0]}
+}
+
+// DefaultRetryZoneCandidates returns the default non-geo GCE zone pool.
+// DefaultZones chooses from this pool for ordinary creates, and roachtest uses
+// it to choose a different zone after provider capacity failures.
+func DefaultRetryZoneCandidates(arch string) []string {
+	zones := []string{"us-east1-b", "us-east1-c", "us-east1-d"}
+	if vm.ParseArch(arch) == vm.ArchARM64 {
+		// T2A instances are only available in us-central1 in NA.
+		zones = []string{"us-central1-a", "us-central1-b", "us-central1-f"}
+	}
+	return zones
 }
 
 // Set is part of the pflag.Value interface.
@@ -1883,6 +1903,7 @@ func waitForGroupStability(l *logger.Logger, project, groupName string, zones []
 			cmd := exec.Command("gcloud", groupStableArgs...)
 			output, err := cmd.CombinedOutput()
 			if err != nil {
+				err = annotateGCECapacityError(maybeGCECapacityError(err, output), zone)
 				return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", groupStableArgs, output)
 			}
 			return nil
@@ -2001,6 +2022,7 @@ func (p *Provider) Create(
 					cmd := exec.Command("gcloud", argsWithHost...)
 					output, err := cmd.CombinedOutput()
 					if err != nil {
+						err = maybeGCECapacityError(err, output)
 						return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", argsWithHost, output)
 					}
 					return nil
@@ -2201,6 +2223,7 @@ func (p *Provider) Grow(
 				cmd := exec.Command("gcloud", argsWithName...)
 				output, err := cmd.CombinedOutput()
 				if err != nil {
+					err = maybeGCECapacityError(err, output)
 					return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", argsWithName, output)
 				}
 				return nil

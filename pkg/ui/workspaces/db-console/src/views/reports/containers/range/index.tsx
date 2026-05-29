@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { Button, commonStyles } from "@cockroachlabs/cluster-ui";
+import { Button, commonStyles, util } from "@cockroachlabs/cluster-ui";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import flatMap from "lodash/flatMap";
@@ -16,22 +16,12 @@ import some from "lodash/some";
 import sortBy from "lodash/sortBy";
 import sortedUniqBy from "lodash/sortedUniqBy";
 import Long from "long";
-import React, { useEffect } from "react";
+import React from "react";
 import { Helmet } from "react-helmet";
-import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
 import * as protos from "src/js/protos";
-import {
-  allocatorRangeRequestKey,
-  rangeRequestKey,
-  rangeLogRequestKey,
-  refreshAllocatorRange,
-  refreshRange,
-  refreshRangeLog,
-} from "src/redux/apiReducers";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
-import { AdminUIState } from "src/redux/state";
+import { getRange, getAllocatorRange, getRangeLog } from "src/util/api";
 import { rangeIDAttr } from "src/util/constants";
 import { FixLong } from "src/util/fixLong";
 import { getMatchParamByName } from "src/util/query";
@@ -44,113 +34,101 @@ import RangeTable from "src/views/reports/containers/range/rangeTable";
 
 import IRangeInfo = cockroach.server.serverpb.IRangeInfo;
 
-interface RangeDispatchProps {
-  refreshRange: typeof refreshRange;
-  refreshAllocatorRange: typeof refreshAllocatorRange;
-  refreshRangeLog: typeof refreshRangeLog;
-}
-
-interface RangeStateProps {
-  range: CachedDataReducerState<protos.cockroach.server.serverpb.RangeResponse>;
-  allocator: CachedDataReducerState<protos.cockroach.server.serverpb.AllocatorRangeResponse>;
-  rangeLog: CachedDataReducerState<protos.cockroach.server.serverpb.RangeLogResponse>;
-}
-
-type RangeOwnProps = RangeDispatchProps & RangeStateProps;
-
-type RangeProps = RangeOwnProps & RouteComponentProps;
-
 function ErrorPage(props: {
   rangeID: string;
   errorText: string;
-  range?: CachedDataReducerState<protos.cockroach.server.serverpb.RangeResponse>;
+  rangeData?: protos.cockroach.server.serverpb.RangeResponse;
+  rangeError?: Error;
+  rangeIsLoading?: boolean;
 }) {
   return (
     <div className="section">
       <h1 className="base-heading">Range Report for r{props.rangeID}</h1>
       <h2 className="base-heading">{props.errorText}</h2>
-      <ConnectionsTable range={props.range} />
+      <ConnectionsTable
+        data={props.rangeData}
+        error={props.rangeError}
+        isLoading={props.rangeIsLoading}
+      />
     </div>
   );
-}
-
-function rangeRequestFromProps(props: RouteComponentProps) {
-  const rangeId = getMatchParamByName(props.match, rangeIDAttr);
-  return new protos.cockroach.server.serverpb.RangeRequest({
-    range_id: Long.fromString(rangeId),
-  });
-}
-
-function allocatorRequestFromProps(props: RouteComponentProps) {
-  const rangeId = getMatchParamByName(props.match, rangeIDAttr);
-  return new protos.cockroach.server.serverpb.AllocatorRangeRequest({
-    range_id: Long.fromString(rangeId),
-  });
-}
-
-function rangeLogRequestFromProps(props: RouteComponentProps) {
-  const rangeId = getMatchParamByName(props.match, rangeIDAttr);
-  return new protos.cockroach.server.serverpb.RangeLogRequest({
-    range_id: Long.fromString(rangeId),
-    limit: -1,
-  });
 }
 
 /**
  * Renders the Range Report page.
  */
 export function Range({
-  range,
-  allocator,
-  rangeLog,
-  refreshRange: refreshRangeAction,
-  refreshAllocatorRange: refreshAllocatorRangeAction,
-  refreshRangeLog: refreshRangeLogAction,
   match,
   history,
-}: RangeProps): React.ReactElement {
+}: RouteComponentProps): React.ReactElement {
   const rangeID = getMatchParamByName(match, rangeIDAttr);
+  const rangeIdLong = Long.fromString(rangeID);
 
-  useEffect(() => {
-    const rangeIdLong = Long.fromString(rangeID);
-    refreshRangeAction(
-      new protos.cockroach.server.serverpb.RangeRequest({
-        range_id: rangeIdLong,
-      }),
-    );
-    refreshAllocatorRangeAction(
-      new protos.cockroach.server.serverpb.AllocatorRangeRequest({
-        range_id: rangeIdLong,
-      }),
-    );
-    refreshRangeLogAction(
-      new protos.cockroach.server.serverpb.RangeLogRequest({
-        range_id: rangeIdLong,
-        limit: -1,
-      }),
-    );
-  }, [
-    refreshRangeAction,
-    refreshAllocatorRangeAction,
-    refreshRangeLogAction,
-    rangeID,
-  ]);
+  const {
+    data: rangeData,
+    error: rangeError,
+    isLoading: rangeIsLoading,
+  } = util.useSwrWithClusterId(
+    ["range", rangeID],
+    () =>
+      getRange(
+        new protos.cockroach.server.serverpb.RangeRequest({
+          range_id: rangeIdLong,
+        }),
+      ),
+    { revalidateOnFocus: false },
+  );
+
+  const {
+    data: allocatorData,
+    error: allocatorError,
+    isLoading: allocatorIsLoading,
+  } = util.useSwrWithClusterId(
+    ["allocatorRange", rangeID],
+    () =>
+      getAllocatorRange(
+        new protos.cockroach.server.serverpb.AllocatorRangeRequest({
+          range_id: rangeIdLong,
+        }),
+      ),
+    { revalidateOnFocus: false },
+  );
+
+  const {
+    data: rangeLogData,
+    error: rangeLogError,
+    isLoading: rangeLogIsLoading,
+  } = util.useSwrWithClusterId(
+    ["rangeLog", rangeID],
+    () =>
+      getRangeLog(
+        new protos.cockroach.server.serverpb.RangeLogRequest({
+          range_id: rangeIdLong,
+          limit: -1,
+        }),
+      ),
+    { revalidateOnFocus: false },
+  );
 
   // A bunch of quick error cases.
-  if (!isNil(range) && !isNil(range.lastError)) {
+  if (!isNil(rangeError)) {
     return (
       <ErrorPage
         rangeID={rangeID}
-        errorText={`Error loading range ${range.lastError}`}
+        errorText={`Error loading range ${rangeError}`}
       />
     );
   }
-  if (isNil(range) || isEmpty(range.data)) {
+  if (rangeIsLoading || isEmpty(rangeData)) {
     return (
-      <ErrorPage rangeID={rangeID} errorText={`Loading cluster status...`} />
+      <ErrorPage
+        rangeID={rangeID}
+        errorText={`Loading cluster status...`}
+        rangeIsLoading={rangeIsLoading}
+      />
     );
   }
-  const responseRangeID = FixLong(range.data.range_id);
+  const responseRangeID = FixLong(rangeData.range_id);
   if (!responseRangeID.eq(rangeID)) {
     return (
       <ErrorPage rangeID={rangeID} errorText={`Updating cluster status...`} />
@@ -166,12 +144,14 @@ export function Range({
   }
 
   // Did we get any responses?
-  if (!some(range.data.responses_by_node_id, resp => resp.infos.length > 0)) {
+  if (!some(rangeData.responses_by_node_id, resp => resp.infos.length > 0)) {
     return (
       <ErrorPage
         rangeID={rangeID}
         errorText={`No results found, perhaps r${rangeID} doesn't exist.`}
-        range={range}
+        rangeData={rangeData}
+        rangeError={rangeError}
+        rangeIsLoading={rangeIsLoading}
       />
     );
   }
@@ -179,7 +159,7 @@ export function Range({
   // Collect all the infos and sort them, putting the leader (or the replica
   // with the highest term, first.
   const infos = orderBy(
-    flatMap(range.data.responses_by_node_id, resp => {
+    flatMap(rangeData.responses_by_node_id, resp => {
       if (resp.response && isEmpty(resp.error_message)) {
         return resp.infos;
       }
@@ -226,39 +206,24 @@ export function Range({
       </a>
       <RangeTable infos={infos} replicas={replicas} />
       <LeaseTable info={head(infos)} />
-      <ConnectionsTable range={range} />
-      <AllocatorOutput allocator={allocator} />
-      <LogTable rangeID={responseRangeID} log={rangeLog} />
+      <ConnectionsTable
+        data={rangeData}
+        error={rangeError}
+        isLoading={rangeIsLoading}
+      />
+      <AllocatorOutput
+        data={allocatorData}
+        error={allocatorError}
+        isLoading={allocatorIsLoading}
+      />
+      <LogTable
+        rangeID={responseRangeID}
+        data={rangeLogData}
+        error={rangeLogError}
+        isLoading={rangeLogIsLoading}
+      />
     </div>
   );
 }
 
-const mapStateToProps = (state: AdminUIState, props: RouteComponentProps) => ({
-  range: state.cachedData.range[rangeRequestKey(rangeRequestFromProps(props))],
-  allocator:
-    state.cachedData.allocatorRange[
-      allocatorRangeRequestKey(allocatorRequestFromProps(props))
-    ],
-  rangeLog:
-    state.cachedData.rangeLog[
-      rangeLogRequestKey(rangeLogRequestFromProps(props))
-    ],
-});
-
-const mapDispatchToProps = {
-  refreshRange,
-  refreshAllocatorRange,
-  refreshRangeLog,
-};
-
-export default withRouter(
-  connect<
-    RangeStateProps,
-    RangeDispatchProps,
-    RouteComponentProps,
-    AdminUIState
-  >(
-    mapStateToProps,
-    mapDispatchToProps,
-  )(Range),
-);
+export default withRouter(Range);

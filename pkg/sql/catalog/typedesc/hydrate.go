@@ -9,7 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -159,23 +159,20 @@ func ensureTypeMetadataIsHydrated(
 		n := d.NumCheckConstraints()
 		checks := make([]types.DomainCheckConstraint, n)
 		for i := 0; i < n; i++ {
-			exprStr := d.GetCheckConstraintExpr(i)
 			checks[i] = types.DomainCheckConstraint{
-				Name: d.GetCheckConstraintName(i),
-				Expr: exprStr,
-			}
-			// Pre-parse the CHECK expression so that eval-time validation can
-			// skip the parse step. Errors are intentionally ignored; the
-			// eval-time fallback will surface them.
-			if parsed, err := parserutils.ParseExpr(exprStr); err == nil {
-				checks[i].ParsedExpr = parsed
+				Name:         d.GetCheckConstraintName(i),
+				Expr:         d.GetCheckConstraintExpr(i),
+				ConstraintID: d.GetCheckConstraintID(i),
+				Validated:    d.GetCheckConstraintValidity(i) == descpb.ConstraintValidity_Validated,
 			}
 		}
 		tm.DomainData = &types.DomainMetadata{
-			BaseType:         d.GetBaseType(),
-			NotNull:          d.IsNotNull(),
-			DefaultExpr:      d.GetDefaultExpr(),
-			CheckConstraints: checks,
+			BaseType:              d.GetBaseType(),
+			NotNull:               d.IsNotNull(),
+			NotNullConstraintName: d.GetNotNullConstraintName(),
+			NotNullConstraintID:   d.GetNotNullConstraintID(),
+			DefaultExpr:           d.GetDefaultExpr(),
+			CheckConstraints:      checks,
 		}
 	}
 }

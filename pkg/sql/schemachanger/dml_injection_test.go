@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
@@ -858,5 +859,85 @@ func TestAlterTableDMLInjection(t *testing.T) {
 				require.ErrorContains(t, err, expectedErr)
 			}
 		}))
+	}
+}
+
+// TestDropNotNullColumnPlaceholderLeak verifies that DROP COLUMN CASCADE
+// of a column with a dependent CHECK constraint does not surface the
+// column's placeholder name in errors from concurrent INSERTs that trip
+// the CHECK. The leak occurs when the CHECK is still being enforced
+// after ColumnName has transitioned to ABSENT and rewritten the
+// predicate to reference the placeholder name.
+func TestDropNotNullColumnPlaceholderLeak(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	var sqlDB *sqlutils.SQLRunner
+	var setupDone atomic.Bool
+	// Replace the column ID with \d+ to match any column.
+	placeholderRe := regexp.MustCompile(
+		strings.Replace(regexp.QuoteMeta(tabledesc.ColumnNamePlaceholder(0)), "0", `\d+`, 1))
+	var leakedErrors, unexpectedErrors []string
+	var insertAttempts int
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
+				BeforeStage: func(p scplan.Plan, stageIdx int) error {
+					if !setupDone.Load() {
+						return nil
+					}
+					if len(p.TargetState.Statements) == 0 ||
+						!strings.Contains(p.TargetState.Statements[0].Statement, "DROP COLUMN") {
+						return nil
+					}
+					// Sequence-backed key avoids PK conflicts across stages.
+					insertAttempts++
+					_, err := sqlDB.DB.ExecContext(ctx,
+						`INSERT INTO t (k) VALUES (nextval('seq'))`)
+					stage := p.Stages[stageIdx]
+					switch {
+					case err == nil:
+					case placeholderRe.MatchString(err.Error()):
+						leakedErrors = append(leakedErrors,
+							fmt.Sprintf("stage=%s:%d err=%v", stage.Phase, stage.Ordinal, err))
+					default:
+						unexpectedErrors = append(unexpectedErrors,
+							fmt.Sprintf("stage=%s:%d err=%v", stage.Phase, stage.Ordinal, err))
+					}
+					// Returning a non-nil error here would be injected into the
+					// schema-change executor and fail the DROP. Record observations
+					// instead and let the DROP run to completion.
+					return nil
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	sqlDB = sqlutils.MakeSQLRunner(s.ApplicationLayer().SQLConn(t))
+
+	sqlDB.Exec(t, `CREATE SEQUENCE seq`)
+	sqlDB.Exec(t, `CREATE TABLE t (k INT PRIMARY KEY, i INT)`)
+	sqlDB.Exec(t, `INSERT INTO t (k, i) VALUES (-1, 1)`)
+	sqlDB.Exec(t, `ALTER TABLE t ADD CONSTRAINT c CHECK (i IS NOT NULL)`)
+
+	setupDone.Store(true)
+	_, err := sqlDB.DB.ExecContext(ctx, `ALTER TABLE t DROP COLUMN i CASCADE`)
+	require.NoError(t, err)
+
+	// Ensure the hook fires.
+	require.Greater(t, insertAttempts, 0)
+
+	if len(unexpectedErrors) > 0 {
+		t.Logf("note: %d INSERT(s) failed with non-placeholder errors:\n  %s",
+			len(unexpectedErrors), strings.Join(unexpectedErrors, "\n  "))
+	}
+
+	if len(leakedErrors) > 0 {
+		t.Fatalf("placeholder column name leaked into %d error(s):\n  %s",
+			len(leakedErrors), strings.Join(leakedErrors, "\n  "))
 	}
 }

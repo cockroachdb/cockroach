@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/obs/statementstore"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
@@ -116,6 +117,15 @@ type SQLStatsIngester struct {
 	testingKnobs *sqlstats.TestingKnobs
 
 	metrics Metrics
+
+	// discardedStatsCount is incremented when a statement is dropped because
+	// the memory monitor rejects the allocation in processStatement. This is
+	// the same counter as the one held by SQLStats for downstream
+	// fingerprint-limit drops, so operators see a single signal for
+	// "stats records lost" regardless of where the drop occurred.
+	discardedStatsCount *metric.Counter
+
+	statementStore *statementstore.StatementStore
 }
 
 type eventBufChPayload struct {
@@ -368,7 +378,9 @@ func NewSQLStatsIngester(
 	st *cluster.Settings,
 	knobs *sqlstats.TestingKnobs,
 	metrics Metrics,
+	discardedStatsCount *metric.Counter,
 	parentMon *mon.BytesMonitor,
+	statementStore *statementstore.StatementStore,
 	sinks ...SQLStatsSink,
 ) *SQLStatsIngester {
 	i := &SQLStatsIngester{
@@ -386,6 +398,8 @@ func NewSQLStatsIngester(
 		settings:              st,
 		testingKnobs:          knobs,
 		metrics:               metrics,
+		discardedStatsCount:   discardedStatsCount,
+		statementStore:        statementStore,
 	}
 
 	if parentMon != nil {
@@ -446,11 +460,18 @@ func (i *SQLStatsIngester) clearSession(ctx context.Context, sessionID clusterun
 func (i *SQLStatsIngester) processStatement(
 	ctx context.Context, statement *sqlstats.RecordedStmtStats,
 ) {
+	i.storeStatementFingerprint(ctx, statement)
 	stmtSize := statement.Size()
 	if err := i.acc.Grow(ctx, stmtSize); err != nil {
 		// If we hit memory limits, we cannot buffer this statement.
 		// The error will propagate through the SQL memory pool accounting,
 		// causing queries to fail with "budget exceeded error" when the pool is exhausted.
+		// Record the drop on the same counter used for downstream
+		// fingerprint-limit drops so operators get a single signal for
+		// "stats records lost" regardless of where the drop occurred.
+		if i.discardedStatsCount != nil {
+			i.discardedStatsCount.Inc(1)
+		}
 		return
 	}
 	i.stmtSizes[statement.SessionID] += stmtSize
@@ -461,6 +482,21 @@ func (i *SQLStatsIngester) processStatement(
 		i.statementsBySessionID[statement.SessionID] = b
 	}
 	*b = append(*b, statement)
+}
+
+func (i *SQLStatsIngester) storeStatementFingerprint(
+	ctx context.Context, s *sqlstats.RecordedStmtStats,
+) {
+	if i.statementStore == nil {
+		return
+	}
+
+	i.statementStore.PutStatement(ctx, statementstore.StatementInfo{
+		FingerprintID: s.FingerprintID,
+		Fingerprint:   s.Query,
+		Database:      s.Database,
+		Summary:       s.QuerySummary,
+	})
 }
 
 // flushBuffer sends the buffered statementsBySessionID and provided transaction
@@ -500,13 +536,6 @@ func (i *SQLStatsIngester) flushBuffer(
 			if shouldAssociateWithTxn {
 				s.TransactionFingerprintID = transaction.FingerprintID
 			}
-			if s.ImplicitTxn == transaction.ImplicitTxn {
-				continue
-			}
-			// We need to recompute the fingerprint ID.
-			s.ImplicitTxn = transaction.ImplicitTxn
-			s.FingerprintID = appstatspb.ConstructStatementFingerprintID(
-				s.Query, s.ImplicitTxn, s.Database)
 		}
 	}
 
@@ -540,7 +569,6 @@ func (i *SQLStatsIngester) flushStatementsOnly(ctx context.Context, sessionID cl
 			s.TransactionFingerprintID = forceFlushTransactionFingerprintId
 		}
 	}
-
 	for _, sink := range i.sinks {
 		sink.ObserveTransaction(ctx, nil, statements)
 	}

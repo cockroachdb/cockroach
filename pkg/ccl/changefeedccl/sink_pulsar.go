@@ -132,6 +132,7 @@ func (p *pulsarSink) EmitRow(
 	td TopicDescriptor,
 	key []byte,
 	value []byte,
+	csvColumnHeader []byte,
 	updated hlc.Timestamp,
 	mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,

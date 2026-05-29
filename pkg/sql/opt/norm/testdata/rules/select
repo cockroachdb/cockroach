@@ -1453,6 +1453,170 @@ select
       └── count_rows:8 = 0 [outer=(8), constraints=(/8: [/0 - /0]; tight), fd=()-->(8)]
 
 # --------------------------------------------------
+# PushSelectIntoUnorderedDistinctOn
+# --------------------------------------------------
+
+# Push down filter on a non-grouping column (first-agg column) into an
+# unordered DistinctOn. This is valid because an unordered DistinctOn can
+# choose any row from a group, so filtering first is correct.
+norm expect=PushSelectIntoUnorderedDistinctOn
+SELECT * FROM (SELECT DISTINCT ON (i) i, s FROM a) WHERE s='foo'
+----
+distinct-on
+ ├── columns: i:2 s:4!null
+ ├── grouping columns: i:2
+ ├── key: (2)
+ ├── fd: ()-->(4)
+ ├── select
+ │    ├── columns: i:2 s:4!null
+ │    ├── fd: ()-->(4)
+ │    ├── scan a
+ │    │    └── columns: i:2 s:4
+ │    └── filters
+ │         └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+ └── aggregations
+      └── first-agg [as=s:4, outer=(4)]
+           └── s:4
+
+# Push down filter on a non-grouping column with multiple aggregated columns.
+norm expect=PushSelectIntoUnorderedDistinctOn
+SELECT * FROM (SELECT DISTINCT ON (i) i, s, f FROM a) WHERE s='foo'
+----
+distinct-on
+ ├── columns: i:2 s:4!null f:3
+ ├── grouping columns: i:2
+ ├── key: (2)
+ ├── fd: ()-->(4), (2)-->(3,4)
+ ├── select
+ │    ├── columns: i:2 f:3 s:4!null
+ │    ├── fd: ()-->(4)
+ │    ├── scan a
+ │    │    └── columns: i:2 f:3 s:4
+ │    └── filters
+ │         └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+ └── aggregations
+      ├── first-agg [as=s:4, outer=(4)]
+      │    └── s:4
+      └── first-agg [as=f:3, outer=(3)]
+           └── f:3
+
+# Push down multiple filters that all reference grouping input columns.
+norm expect=PushSelectIntoUnorderedDistinctOn
+SELECT * FROM (SELECT DISTINCT ON (i) i, s, f FROM a) WHERE s='foo' AND f > 1.0
+----
+distinct-on
+ ├── columns: i:2 s:4!null f:3!null
+ ├── grouping columns: i:2
+ ├── key: (2)
+ ├── fd: ()-->(4), (2)-->(3,4)
+ ├── select
+ │    ├── columns: i:2 f:3!null s:4!null
+ │    ├── fd: ()-->(4)
+ │    ├── scan a
+ │    │    └── columns: i:2 f:3 s:4
+ │    └── filters
+ │         ├── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+ │         └── f:3 > 1.0 [outer=(3), constraints=(/3: [/1.0000000000000002 - ]; tight)]
+ └── aggregations
+      ├── first-agg [as=s:4, outer=(4)]
+      │    └── s:4
+      └── first-agg [as=f:3, outer=(3)]
+           └── f:3
+
+# Do *not* push down into an ordered DistinctOn when the filter references a
+# non-grouping, non-const-agg column. An ordered DistinctOn must pick a specific
+# row (determined by the ordering), so filtering before could change the result.
+norm expect-not=PushSelectIntoUnorderedDistinctOn
+SELECT * FROM (SELECT DISTINCT ON (i) i, s FROM a ORDER BY i, s) WHERE s='foo'
+----
+select
+ ├── columns: i:2 s:4!null
+ ├── key: (2)
+ ├── fd: ()-->(4)
+ ├── distinct-on
+ │    ├── columns: i:2 s:4
+ │    ├── grouping columns: i:2
+ │    ├── internal-ordering: +4 opt(2)
+ │    ├── key: (2)
+ │    ├── fd: (2)-->(4)
+ │    ├── sort
+ │    │    ├── columns: i:2 s:4
+ │    │    ├── ordering: +4 opt(2) [actual: +4]
+ │    │    └── scan a
+ │    │         └── columns: i:2 s:4
+ │    └── aggregations
+ │         └── first-agg [as=s:4, outer=(4)]
+ │              └── s:4
+ └── filters
+      └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+
+# Push down filter that references a column from a join input under unordered
+# DistinctOn.
+norm expect=PushSelectIntoUnorderedDistinctOn
+SELECT * FROM (SELECT DISTINCT ON (i) i, x FROM a JOIN xy ON k=x) WHERE x > 5
+----
+distinct-on
+ ├── columns: i:2 x:8!null
+ ├── grouping columns: i:2
+ ├── key: (8)
+ ├── fd: (8)-->(2), (2)-->(8)
+ ├── inner-join (hash)
+ │    ├── columns: k:1!null i:2 x:8!null
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ │    ├── key: (8)
+ │    ├── fd: (1)-->(2), (1)==(8), (8)==(1)
+ │    ├── select
+ │    │    ├── columns: k:1!null i:2
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── scan a
+ │    │    │    ├── columns: k:1!null i:2
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2)
+ │    │    └── filters
+ │    │         └── k:1 > 5 [outer=(1), constraints=(/1: [/6 - ]; tight)]
+ │    ├── select
+ │    │    ├── columns: x:8!null
+ │    │    ├── key: (8)
+ │    │    ├── scan xy
+ │    │    │    ├── columns: x:8!null
+ │    │    │    └── key: (8)
+ │    │    └── filters
+ │    │         └── x:8 > 5 [outer=(8), constraints=(/8: [/6 - ]; tight)]
+ │    └── filters
+ │         └── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+ └── aggregations
+      └── first-agg [as=x:8, outer=(8)]
+           └── x:8
+
+# Do *not* push down a filter that references outer columns.
+norm expect-not=PushSelectIntoUnorderedDistinctOn
+SELECT * FROM a AS outer_a WHERE EXISTS(
+  SELECT * FROM (SELECT DISTINCT ON (i) i, s FROM a) AS inner_a WHERE inner_a.s = outer_a.s
+)
+----
+semi-join (hash)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a [as=outer_a]
+ │    ├── columns: outer_a.k:1!null outer_a.i:2 outer_a.f:3 outer_a.s:4 outer_a.j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── distinct-on
+ │    ├── columns: a.i:9 a.s:11
+ │    ├── grouping columns: a.i:9
+ │    ├── key: (9)
+ │    ├── fd: (9)-->(11)
+ │    ├── scan a
+ │    │    └── columns: a.i:9 a.s:11
+ │    └── aggregations
+ │         └── first-agg [as=a.s:11, outer=(11)]
+ │              └── a.s:11
+ └── filters
+      └── a.s:11 = outer_a.s:4 [outer=(4,11), constraints=(/4: (/NULL - ]; /11: (/NULL - ]), fd=(4)==(11), (11)==(4)]
+
+# --------------------------------------------------
 # RemoveNotNullCondition
 # --------------------------------------------------
 exec-ddl

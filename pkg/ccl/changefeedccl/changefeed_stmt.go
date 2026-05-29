@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupresolver"
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcprogresspb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -58,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -194,8 +194,7 @@ func changefeedPlanHook(
 	}
 	if changefeedStmt.Level != tree.ChangefeedLevelTable {
 		return nil, nil, false,
-			errors.UnimplementedError(
-				errors.IssueLink{IssueURL: build.MakeIssueURL(154053)},
+			unimplemented.NewWithIssue(154053,
 				"database-level changefeed is not implemented yet",
 			)
 	}
@@ -705,9 +704,9 @@ func createChangefeedJobRecord(
 	for _, t := range tableNameToDescriptor {
 		if tbl, ok := t.(catalog.TableDescriptor); ok && tbl.ExternalRowData() != nil {
 			if tbl.ExternalRowData().TenantID.IsSet() {
-				return nil, changefeedbase.Targets{}, errors.UnimplementedError(errors.IssueLink{}, "changefeeds on a replication target are not supported")
+				return nil, changefeedbase.Targets{}, unimplemented.New("changefeed.replication_target", "changefeeds on a replication target are not supported")
 			}
-			return nil, changefeedbase.Targets{}, errors.UnimplementedError(errors.IssueLink{}, "changefeeds on external tables are not supported")
+			return nil, changefeedbase.Targets{}, unimplemented.New("changefeed.external_table", "changefeeds on external tables are not supported")
 		}
 	}
 	// This grabs table descriptors once to get their ids.
@@ -726,9 +725,9 @@ func createChangefeedJobRecord(
 		for _, t := range tableNameToDescriptor {
 			if tbl, ok := t.(catalog.TableDescriptor); ok && tbl.ExternalRowData() != nil {
 				if tbl.ExternalRowData().TenantID.IsSet() {
-					return nil, changefeedbase.Targets{}, errors.UnimplementedError(errors.IssueLink{}, "changefeeds on a replication target are not supported")
+					return nil, changefeedbase.Targets{}, unimplemented.New("changefeed.replication_target", "changefeeds on a replication target are not supported")
 				}
-				return nil, changefeedbase.Targets{}, errors.UnimplementedError(errors.IssueLink{}, "changefeeds on external tables are not supported")
+				return nil, changefeedbase.Targets{}, unimplemented.New("changefeed.external_table", "changefeeds on external tables are not supported")
 			}
 		}
 
@@ -1349,9 +1348,11 @@ func validateSink(
 	}
 
 	// If there's no projection we may need to force some options to ensure messages
-	// have enough information.
+	// have enough information. Formats like CSV and Parquet inherently include all
+	// columns in every row, so key_in_value is unnecessary.
 	if details.Select == `` {
-		if requiresKeyInValue(canarySink) {
+		format := changefeedbase.FormatType(details.Opts[changefeedbase.OptFormat])
+		if requiresKeyInValue(canarySink) && formatSupportsKeyInValue(format) {
 			if err = opts.ForceKeyInValue(); err != nil {
 				return err
 			}
@@ -1385,6 +1386,17 @@ func requiresKeyInValue(s Sink) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// formatSupportsKeyInValue returns true if the given format
+// supports key_in_value.
+func formatSupportsKeyInValue(f changefeedbase.FormatType) bool {
+	switch f {
+	case changefeedbase.OptFormatCSV, changefeedbase.OptFormatParquet:
+		return false
+	default:
+		return true
 	}
 }
 
@@ -1546,6 +1558,23 @@ func validateDetailsAndOptions(
 		}
 	}
 
+	encOpts, err := opts.GetEncodingOptions()
+	if err != nil {
+		return err
+	}
+	if encOpts.CsvHeader {
+		if details.SinkURI == `` {
+			return errors.Newf(
+				`%s is not supported for sinkless changefeeds`,
+				changefeedbase.OptCsvHeader)
+		}
+		if len(details.TargetSpecifications) > 1 || isDBLevelChangefeed(details) {
+			return errors.Newf(
+				`%s is not supported for changefeeds targeting multiple tables`,
+				changefeedbase.OptCsvHeader)
+		}
+	}
+
 	return nil
 }
 
@@ -1608,7 +1637,8 @@ func (b *changefeedResumer) setJobStatusMessage(
 	}
 
 	status := jobs.StatusMessage(fmt.Sprintf(fmtOrMsg, args...))
-	if err := b.job.NoTxn().UpdateStatusMessage(ctx, status); err != nil {
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	if err := b.job.DeprecatedNoTxn().UpdateStatusMessage(ctx, status); err != nil {
 		log.Changefeed.Warningf(ctx, "failed to set status: %v", err)
 	}
 
@@ -1629,9 +1659,22 @@ func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) err
 
 	err := b.resumeWithRetries(ctx, jobExec, jobID, details, description, execCfg)
 	if err != nil {
-		return b.handleChangefeedError(ctx, err, details, jobExec)
+		err = b.handleChangefeedError(ctx, err, details, jobExec)
 	}
-	return nil
+	// Drop the per-job entry from the cluster checkpoint-lag metric on
+	// successful completion (e.g., initial_scan_only finished, end_time
+	// reached). We should also drop the metric during cancellation or failure,
+	// which is handled in OnFailOrCancel.
+	if err == nil {
+		state := b.job.State()
+		if state != jobs.StatePaused && state != jobs.StatePauseRequested {
+			metrics := execCfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
+			metrics.ClusterMetrics.DeleteJob(
+				b.job.ID(), details.Opts[changefeedbase.OptMetricsScope],
+			)
+		}
+	}
+	return err
 }
 
 // ensureClusterIDMatches verifies that this job record matches
@@ -1645,7 +1688,9 @@ func (b *changefeedResumer) ensureClusterIDMatches(ctx context.Context, clusterI
 	if createdBy := b.job.Payload().CreationClusterID; createdBy == uuid.Nil {
 		// This cluster was upgraded from a version that did not set clusterID
 		// in the job record -- rectify this issue.
-		if err := b.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		//
+		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+		if err := b.job.DeprecatedNoTxn().Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 			md.Payload.CreationClusterID = clusterID
 			ju.UpdatePayload(md.Payload)
 			return nil
@@ -1728,7 +1773,8 @@ func (b *changefeedResumer) handleChangefeedError(
 		const errorFmt = "job failed (%v) but is being paused because of %s=%s"
 		errorMessage := fmt.Sprintf(errorFmt, changefeedErr,
 			changefeedbase.OptOnError, changefeedbase.OptOnErrorPause)
-		return b.job.NoTxn().PauseRequestedWithFunc(ctx, func(ctx context.Context, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+		return b.job.DeprecatedNoTxn().PauseRequestedWithFunc(ctx, func(ctx context.Context, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 			// directly update running status to avoid the running/reverted job status check
 			md.Progress.StatusMessage = errorMessage
 			ju.UpdateProgress(md.Progress)
@@ -2105,8 +2151,11 @@ func (b *changefeedResumer) OnFailOrCancel(
 			ptsID,
 		)
 	}
-
 	maybeCleanUpProtectedTimestamp(progress.GetChangefeed().ProtectedTimestampRecord)
+	// Drop per-job entries from the changefeed cluster metrics.
+	metrics := execCfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
+	details := b.job.Details().(jobspb.ChangefeedDetails)
+	metrics.ClusterMetrics.DeleteJob(b.job.ID(), details.Opts[changefeedbase.OptMetricsScope])
 	// We clean up the per-table protected timestamps (and their accompanying
 	// system tables protected timestamp record) in a transaction since we need
 	// to read from the job info.
@@ -2438,8 +2487,9 @@ func maybeUpgradePreProductionReadyExpression(
 	}
 	details.Select = cdceval.AsStringUnredacted(newExpression)
 
-	if err := jobExec.ExecCfg().JobRegistry.UpdateJobWithTxn(ctx, jobID, nil, /* txn */
-		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	if err := jobExec.ExecCfg().JobRegistry.DeprecatedUpdateJobWithTxn(ctx, jobID, nil, /* txn */
+		func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 			payload := md.Payload
 			payload.Details = jobspb.WrapPayloadDetails(details)
 			ju.UpdatePayload(payload)

@@ -419,7 +419,7 @@ func (b *SSTBatcher) AddMVCCKeyWithImportEpoch(
 	if err != nil {
 		return err
 	}
-	return b.AddMVCCKey(ctx, key, b.valueScratch)
+	return b.AddMVCCKey(ctx, key, buf)
 }
 
 func (b *SSTBatcher) AddMVCCKeyLDR(ctx context.Context, key storage.MVCCKey, value []byte) error {

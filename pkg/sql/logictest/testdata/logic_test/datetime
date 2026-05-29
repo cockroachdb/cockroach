@@ -829,14 +829,21 @@ SELECT '2015-08-25 05:45:45.53453'::timestamp
 statement ok
 SET TIME ZONE 'Europe/Rome'
 
-query error unimplemented: timestamp abbreviations not supported
-SELECT '2015-08-25 05:45:45.53453 CET'::timestamptz WHERE false
+# Timezone abbreviations (e.g. CET) parse to a fixed offset via
+# pg_catalog.pg_timezone_abbrevs. Display uses the session timezone, which is
+# Europe/Rome here, so the +01:00 input renders as +02:00 (CEST) on Aug 25.
+query T
+SELECT '2015-08-25 05:45:45.53453 CET'::timestamptz
+----
+2015-08-25 06:45:45.53453 +0200 CEST
 
 statement ok
 SET TIME ZONE +1
 
-query error unimplemented: timestamp abbreviations not supported
-SELECT '2015-08-25 05:45:45.53453 CET'::timestamptz WHERE false
+query T
+SELECT '2015-08-25 05:45:45.53453 CET'::timestamptz
+----
+2015-08-25 05:45:45.53453 +0100 +0100
 
 query T
 SELECT '2015-08-25 05:45:45.53453'::timestamp
@@ -872,8 +879,10 @@ SELECT '2015-08-25 05:45:45-01:00'::timestamptz
 statement ok
 SET TIMEZONE = +2
 
-query error unimplemented: timestamp abbreviations not supported
-SELECT '2015-08-25 05:45:45.53453 CET'::timestamptz WHERE false
+query T
+SELECT '2015-08-25 05:45:45.53453 CET'::timestamptz
+----
+2015-08-25 06:45:45.53453 +0200 +0200
 
 query T
 SELECT '2015-08-25 05:45:45.53453'::timestamp
@@ -2037,11 +2046,20 @@ SELECT make_date(2013, 7, 15)::string
 make_date
 2013-07-15
 
+# Cast to text on the server so the assertion exercises the postgres-style
+# BC wire format and matches what real postgres outputs. See #149950.
 query T colnames,rowsort
-SELECT make_date(-2013, 7, 15)
+SELECT make_date(-2013, 7, 15)::string
 ----
 make_date
--2013-07-15 00:00:00 +0000 +0000
+2013-07-15 BC
+
+# Boundary: -1 maps to 1 BC, matching postgres (no year zero in SQL semantics).
+query T colnames,rowsort
+SELECT make_date(-1, 1, 1)::string
+----
+make_date
+0001-01-01 BC
 
 statement error pgcode 22008 pq: year value of 0 is not valid
 SELECT make_date(0, 11, 11)
@@ -2057,10 +2075,17 @@ make_timestamp
 2013-07-15 08:15:23.5
 
 query T colnames,rowsort
-SELECT make_timestamp(-2013, 7, 15, 8, 15, 23.5)
+SELECT make_timestamp(-2013, 7, 15, 8, 15, 23.5)::string
 ----
 make_timestamp
--2013-07-15 08:15:23.5 +0000 +0000
+2013-07-15 08:15:23.5 BC
+
+# Boundary: -1 maps to 1 BC.
+query T colnames,rowsort
+SELECT make_timestamp(-1, 1, 1, 0, 0, 0)::string
+----
+make_timestamp
+0001-01-01 00:00:00 BC
 
 query T colnames,rowsort
 SELECT make_timestamp(2013, 7, 15, 8, 15, 23.5231231244234)::string
@@ -2096,11 +2121,15 @@ SELECT make_timestamptz(2013, 7, 15, 8, 15, 23.5)
 make_timestamptz
 2013-07-15 08:15:23.5 -0500 EST
 
+# Cast to text on the server so the result doesn't depend on the client's
+# tzdata: lib/pq cannot preserve a named timezone (e.g. EST) when scanning
+# BCE timestamptz values into Go's time.Time on systems where the local
+# tzdata reports an LMT offset for the BCE instant.
 query T colnames,rowsort
-SELECT make_timestamptz(-2013, 7, 15, 8, 15, 23.5)
+SELECT make_timestamptz(-2013, 7, 15, 8, 15, 23.5)::text
 ----
 make_timestamptz
--2013-07-15 08:15:23.5 -0500 EST
+2013-07-15 08:15:23.5-05 BC
 
 query T colnames,rowsort
 SELECT make_timestamptz(2013, 7, 15, 8, 15, 23.5231231244234)
@@ -2137,6 +2166,37 @@ SELECT make_timestamptz(0, 7, 15, 8, 15, 23.5, 'No');
 
 subtest end
 
+subtest timezone_abbreviation_parsing
+
+# Timestamp literals with PostgreSQL-recognized timezone abbreviations resolve
+# to a fixed offset via pg_catalog.pg_timezone_abbrevs, regardless of the host
+# system's IANA tzdata. Previously these returned unimplemented (#31710).
+
+query T
+SELECT '2014-07-15 08:15:23 EST'::timestamptz::text;
+----
+2014-07-15 08:15:23-05
+
+query T
+SELECT '2014-07-15 08:15:23 PST'::timestamptz::text;
+----
+2014-07-15 11:15:23-05
+
+# Abbreviations that have no IANA zone counterpart still resolve. EAT (East
+# Africa Time) is +03:00.
+query T
+SELECT '2014-07-15 08:15:23 EAT'::timestamptz::text;
+----
+2014-07-15 00:15:23-05
+
+# Lowercase input is accepted.
+query T
+SELECT '2014-07-15 08:15:23 est'::timestamptz::text;
+----
+2014-07-15 08:15:23-05
+
+subtest end
+
 subtest date_trunc_withtz
 
 query T
@@ -2162,3 +2222,38 @@ SELECT details FROM [SHOW CONSTRAINTS FROM t97643];
 ----
 PRIMARY KEY (rowid ASC)
 CHECK ((parse_time('abc'::text) = parse_time('abc'::text)))
+NOT NULL
+
+subtest experimental_strftime_year_padding
+
+# Regression test for #45884: %Y must zero-pad to at least 4 digits, matching
+# POSIX/glibc/BSD strftime and Postgres's to_char(YYYY).
+query TTTTT
+SELECT
+  experimental_strftime('0001-01-01 00:00:00'::timestamp, '%Y-%m-%d'),
+  experimental_strftime('0099-06-15 00:00:00'::timestamp, '%Y-%m-%d'),
+  experimental_strftime('0999-12-31 00:00:00'::timestamp, '%Y-%m-%d'),
+  experimental_strftime('2024-01-02 00:00:00'::timestamp, '%Y-%m-%d'),
+  experimental_strftime('10001-01-01 00:00:00'::timestamp, '%Y-%m-%d')
+----
+0001-01-01  0099-06-15  0999-12-31  2024-01-02  10001-01-01
+
+# %y should still print only the last two digits, zero-padded.
+query TTT
+SELECT
+  experimental_strftime('0001-01-01 00:00:00'::timestamp, '%y'),
+  experimental_strftime('0099-01-01 00:00:00'::timestamp, '%y'),
+  experimental_strftime('2024-01-01 00:00:00'::timestamp, '%y')
+----
+01  99  24
+
+# %C%y should keep producing the same output it did before the fix.
+query TTT
+SELECT
+  experimental_strftime('0001-01-01 00:00:00'::timestamp, '%C%y-%m-%d'),
+  experimental_strftime('0099-01-01 00:00:00'::timestamp, '%C%y-%m-%d'),
+  experimental_strftime('2024-01-02 00:00:00'::timestamp, '%C%y-%m-%d')
+----
+0001-01-01  0099-01-01  2024-01-02
+
+subtest end

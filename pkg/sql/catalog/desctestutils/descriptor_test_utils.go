@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
 
@@ -167,10 +168,12 @@ func TestingGetFunctionDescriptor(
 	sc := TestingGetSchemaDescriptor(kvDB, codec, db.GetID(), schema)
 	f, found := sc.GetFunction(fName)
 	if !found {
-		panic(fmt.Sprintf("function %s.%s.%s does not exist", database, schema, fName))
+		fn := tree.MakeQualifiedRoutineName(database, schema, fName)
+		panic(fmt.Sprintf("function %s does not exist", fn.FQString()))
 	}
 	if len(f.Signatures) != 1 {
-		panic(fmt.Sprintf("expected only 1 function %s.%s.%s, found %d", database, schema, fName, len(f.Signatures)))
+		fn := tree.MakeQualifiedRoutineName(database, schema, fName)
+		panic(fmt.Sprintf("expected only 1 function %s, found %d", fn.FQString(), len(f.Signatures)))
 	}
 	fnID := f.Signatures[0].ID
 	ctx := context.Background()

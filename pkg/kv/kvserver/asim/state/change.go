@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/google/btree"
@@ -191,6 +192,23 @@ func (rc *ReplicaChange) Apply(ctx context.Context, s State) {
 	if len(rc.Changes) == 0 {
 		// Nothing to do.
 		return
+	}
+
+	// Subject the planned change to the same validation that real CRDB
+	// applies before sending changes to raft
+	// (allocatorimpl.ValidateReplicationChanges, invoked from
+	// kvserver.ChangeReplicas → changeReplicasImpl). Without this asim
+	// happily applies pairs that the production validator would reject —
+	// most notably, a (ADD on n, REMOVE on m≠n) pair when n already holds
+	// a replica of the range. Modelling the rejection here lets allocator
+	// bugs whose only symptom is a rejected change surface in asim runs.
+	if rng, ok := s.Range(rc.RangeID); ok {
+		if err := allocatorimpl.ValidateReplicationChanges(rng.Descriptor(), rc.Changes); err != nil {
+			log.KvDistribution.Infof(ctx,
+				"r%d: s%d planned change rejected by ValidateReplicationChanges: %v (changes=%+v)",
+				rc.RangeID, rc.Author, err, rc.Changes)
+			return
+		}
 	}
 
 	// We track every change that is applied and apply the reverse in a list of

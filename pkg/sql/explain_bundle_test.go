@@ -831,7 +831,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 						"CREATE FUNCTION public.trigger_f()",
 						"CREATE TABLE public.trigger_t1",
 						"CREATE TABLE public.trigger_t2",
-						"CREATE TRIGGER trigger_foo AFTER INSERT ON defaultdb.public.trigger_t1"} {
+						"CREATE TRIGGER trigger_foo AFTER INSERT ON public.trigger_t1"} {
 						if !strings.Contains(contents, expected) {
 							return errors.Errorf("could not find %q in schema.sql:\n%s", expected, contents)
 						}

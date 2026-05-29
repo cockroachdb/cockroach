@@ -72,6 +72,7 @@ func (e *externalConnectionKafkaSink) EmitRow(
 	_ context.Context,
 	_ TopicDescriptor,
 	_, _ []byte,
+	_ []byte,
 	_, _ hlc.Timestamp,
 	_ kvevent.Alloc,
 	_ rowHeaders,

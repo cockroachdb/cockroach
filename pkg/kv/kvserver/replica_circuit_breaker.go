@@ -32,7 +32,7 @@ import (
 type replicaInCircuitBreaker interface {
 	Clock() *hlc.Clock
 	Desc() *roachpb.RangeDescriptor
-	SenderWithWriteBytes
+	SenderWithWorkStats
 	slowReplicationThreshold(ba *kvpb.BatchRequest) (time.Duration, bool)
 	replicaUnavailableError(err error) error
 	poisonInflightLatches(err error)
@@ -226,8 +226,7 @@ func sendProbe(ctx context.Context, r replicaInCircuitBreaker) error {
 	}
 	// Pass empty AdmissionInfo since this is an internal probe request that
 	// bypasses admission control.
-	_, writeBytes, pErr := r.SendWithWriteBytes(ctx, ba, kvadmission.AdmissionInfo{})
-	writeBytes.Release()
+	_, pErr := r.SendWithWorkStats(ctx, ba, nil /* stats */, kvadmission.AdmissionInfo{})
 	if err := pErr.GoError(); err != nil {
 		return r.replicaUnavailableError(err)
 	}

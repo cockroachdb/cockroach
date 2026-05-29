@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -173,6 +175,46 @@ func (p *planner) writeDescToBatch(
 	)
 }
 
+/*
+typeSchemaChanger manages online schema changes for user-defined types,
+primarily focusing on ENUM types (both standard and multi-region enums).
+
+# The Type Schema Changer
+
+Similar to the legacy schema changer, the type schema changer must uphold
+the 2-version invariant to ensure cluster-wide consistency when types are altered
+(e.g., adding or dropping ENUM values).
+
+## Enum Member State Machine
+
+Unlike table mutations which have complex multi-step state machines (DELETE_ONLY,
+WRITE_ONLY, BACKFILLING), enum members use a much simpler two-step state machine
+governed by their `Capability` and `Direction`:
+
+1. Addition (`ALTER TYPE ... ADD VALUE`):
+   - Initial State: The new enum value is appended to the type descriptor with
+     `Capability = READ_ONLY` and `Direction = ADD`. In this state, existing data
+     can be read (if it somehow exists), but new data cannot be written using
+     this logical value.
+   - Job Execution: The `typeSchemaChanger` job waits for cluster-wide lease
+     convergence on the `READ_ONLY` state. Once converged, it transitions the
+     member to `Capability = ALL` and `Direction = NONE`.
+
+2. Dropping (`ALTER TYPE ... DROP VALUE` - primarily for multi-region enums):
+   - Initial State: The enum value is marked with `Direction = DROP`.
+   - Job Execution: The job validates that the value is no longer in use. For
+     multi-region enums, this includes complex coordination to re-partition any
+     REGIONAL BY ROW tables that depend on the dropped region value before
+     finally removing the member from the descriptor entirely.
+
+## Jobs Integration
+
+The `typeSchemaChanger` is invoked via the jobs framework (usually as part of a
+`TYPEDESC_SCHEMA_CHANGE` job or embedded within standard schema change jobs).
+The job ensures that the necessary lease expirations occur between state
+transitions so that no node caches an invalid or premature version of the
+type descriptor.
+*/
 // typeSchemaChanger is the struct that actually runs the type schema change.
 type typeSchemaChanger struct {
 	typeID descpb.ID
@@ -747,9 +789,9 @@ func visitExprToCheckEnumValueUsage(
 // findUsagesOfEnumValue takes an expr, type ID and a enum member of that type,
 // and checks if the expr uses that enum member.
 func findUsagesOfEnumValue(
-	exprStr string, member *descpb.TypeDescriptor_EnumMember, typeID descpb.ID,
+	exprStr catpb.Expression, member *descpb.TypeDescriptor_EnumMember, typeID descpb.ID,
 ) (bool, error) {
-	expr, err := parser.ParseExpr(exprStr)
+	expr, err := parser.ParseExpr(string(exprStr))
 	if err != nil {
 		return false, err
 	}
@@ -772,7 +814,7 @@ func findUsagesOfEnumValue(
 // findUsagesOfEnumValueInViewQuery takes a view query, type ID and an
 // enum member of that type, and checks if the view query uses that enum member.
 func findUsagesOfEnumValueInViewQuery(
-	viewQuery string, member *descpb.TypeDescriptor_EnumMember, typeID descpb.ID,
+	viewQuery catpb.Statement, member *descpb.TypeDescriptor_EnumMember, typeID descpb.ID,
 ) (bool, error) {
 	var foundUsage, foundUsageInCurrentWalk bool
 	visitFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
@@ -782,7 +824,7 @@ func findUsagesOfEnumValueInViewQuery(
 		return recurse, newExpr, err
 	}
 
-	stmt, err := parser.ParseOne(viewQuery)
+	stmt, err := parser.ParseOne(string(viewQuery))
 	if err != nil {
 		return false, err
 	}
@@ -814,7 +856,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromUDF(
 	}
 	switch udfDesc.GetLanguage() {
 	case catpb.Function_SQL:
-		parsedStmts, err := parser.Parse(udfDesc.GetFunctionBody())
+		parsedStmts, err := parser.Parse(string(udfDesc.GetFunctionBody()))
 		if err != nil {
 			return err
 		}
@@ -828,7 +870,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromUDF(
 			}
 		}
 	case catpb.Function_PLPGSQL:
-		stmt, err := plpgsql.Parse(udfDesc.GetFunctionBody())
+		stmt, err := plpgsql.Parse(string(udfDesc.GetFunctionBody()))
 		if err != nil {
 			return errors.Wrapf(err, "failed to parse routine %s", udfDesc.GetName())
 		}
@@ -1141,22 +1183,56 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 	return t.canRemoveEnumValueFromArrayUsages(ctx, arrayTypeDesc, member, txn, descsCol)
 }
 
-// ValidateEnumValueRemoval checks that the given enum value is unused and safe to remove.
+// ValidateEnumValueRemoval checks that the given enum value is unused and safe
+// to remove. It installs a protected timestamp over the enum's referencing
+// descriptors for the duration of the historical scans so that GC cannot
+// invalidate the read timestamp on large tables (see #161636).
 func ValidateEnumValueRemoval(
 	ctx context.Context,
+	job *jobs.Job,
 	codec keys.SQLCodec,
 	typeDesc catalog.TypeDescriptor,
 	physicalRep []byte,
 	logicalRep string,
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	override sessiondata.InternalExecutorOverride,
-) error {
+	protectedTSManager scexec.ProtectedTimestampManager,
+) (retErr error) {
+	// If this removal is part of a rename (another member with the same physical
+	// representation exists and is not being removed), skip validation. The value
+	// is being renamed, not deleted, so data referencing it remains valid.
+	if isEnumValueRename(typeDesc, physicalRep, logicalRep) {
+		return nil
+	}
 	member := descpb.TypeDescriptor_EnumMember{
 		PhysicalRepresentation: physicalRep,
 		LogicalRepresentation:  logicalRep,
 		Capability:             descpb.TypeDescriptor_EnumMember_READ_ONLY,
 		Direction:              descpb.TypeDescriptor_EnumMember_REMOVE,
 	}
+
+	// Install a protected timestamp over the enum's referencing descriptors so
+	// the historical scans below cannot fail due to GC catching up with the
+	// read timestamp. Backreferences for T[] columns are installed on both the
+	// enum descriptor and its array alias, so iterating typeDesc's referencing
+	// IDs covers both the direct and array-aliased usages.
+	if n := typeDesc.NumReferencingDescriptors(); n > 0 && protectedTSManager != nil && job != nil {
+		ids := make(descpb.IDs, n)
+		for i := 0; i < n; i++ {
+			ids[i] = typeDesc.GetReferencingDescriptorID(i)
+		}
+		target := ptpb.MakeSchemaObjectsTarget(ids)
+		cleaner, err := protectedTSManager.Protect(ctx, job, target, runHistoricalTxn.ReadAsOf())
+		if err != nil {
+			return err
+		}
+		if cleaner != nil {
+			defer func() {
+				retErr = errors.CombineErrors(retErr, cleaner(ctx))
+			}()
+		}
+	}
+
 	return runHistoricalTxn.Exec(ctx, func(ctx context.Context, txn descs.Txn) error {
 		mutableType, err := txn.Descriptors().MutableByID(txn.KV()).Type(ctx, typeDesc.GetID())
 		if err != nil {
@@ -1168,6 +1244,24 @@ func ValidateEnumValueRemoval(
 		}
 		return t.canRemoveEnumValue(ctx, mutableType, txn, &member, txn.Descriptors())
 	})
+}
+
+// isEnumValueRename returns true if the enum value being removed is part of a
+// rename operation rather than an actual deletion. This is detected by checking
+// whether the type descriptor contains another member with the same physical
+// representation that is not being removed (i.e., has ADD or NONE direction).
+func isEnumValueRename(
+	typeDesc catalog.TypeDescriptor, physicalRep []byte, logicalRep string,
+) bool {
+	for _, member := range typeDesc.TypeDesc().EnumMembers {
+		if member.LogicalRepresentation == logicalRep {
+			continue
+		}
+		if bytes.Equal(member.PhysicalRepresentation, physicalRep) {
+			return true
+		}
+	}
+	return false
 }
 
 // findUsagesOfEnumValueInPartitioning is a recursive function to explore all of

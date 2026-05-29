@@ -7,34 +7,55 @@ package kvstorage
 
 import (
 	"context"
+	"iter"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 )
+
+// The following diagram illustrates the replica lifecycle for each replica
+// (with ID r) on a store. A WAG event can generally be replayed
+// safely if it brings the replica's applied state from one valid state to
+// another following the allowed transitions. The WAG application logic below
+// (canApply) asserts on these transitions (assertValidTransition).
+//
+// For each transition from one state to another, let i be the applied index of
+// the old state, and i' be the applied index of the new state. Some transitions
+// include a restriction on these indices.
+//
+//                                                                 EventApply
+//                                                                 EventSplit
+//                                                                 EventMerge
+//                                                                 (i' > i)
+//                                                                  ┌────────┐
+// ┌─────────────────┐             ┌──────────────┐ EventInit ┌─────▼──────┐ │
+// │ Nonexistent     │ EventCreate │ Uninitialized│ (i' > i)  │ Initialized│ │
+// │ !mark.Exists(r) ├────────────▶│ mark.Is(r)   ├──────────▶│ mark.Is(r) ├─┘
+// └─────────────────┘             │ i == 0       │           │ i >= 10    │
+//                                 └────┬─────────┘           └──┬─────────┘
+//                         EventDestroy │                        │ EventDestroy
+//                         (i' == 0)    │                        │ EventSubsume
+//                                      └───────────────┬────────┘ (i' >= i)
+//                                                      │
+//                                            ┌─────────▼─────────┐
+//                                            │ Destroyed         │
+//                                            │ mark.Destroyed(r) │
+//                                            └───────────────────┘
+//
+// TODO(mira): Clarify the snapshot transition. We may need a distinct event
+// type for it.
 
 // persistedRangeState describes the applied state of a range in the state
 // machine, as needed by the WAG replay decision logic.
 type persistedRangeState struct {
-	replicaID              roachpb.ReplicaID
-	tombstoneNextReplicaID roachpb.ReplicaID
-	appliedIndex           kvpb.RaftIndex
-}
-
-// validate checks persistedRangeState invariants.
-func (s persistedRangeState) validate() error {
-	// When a replica exists (ReplicaID > 0), the tombstone must not exceed the
-	// replica ID. The tombstone is only bumped above a replica's ID when that
-	// replica is destroyed.
-	if s.replicaID > 0 && s.tombstoneNextReplicaID > s.replicaID {
-		return errors.AssertionFailedf(
-			"tombstone (NextReplicaID=%d) is above current ReplicaID=%d",
-			s.tombstoneNextReplicaID, s.replicaID,
-		)
-	}
-	return nil
+	mark         ReplicaMark
+	appliedIndex kvpb.RaftIndex
 }
 
 // loadPersistedRangeState loads the replay-relevant state for a range from the
@@ -51,163 +72,279 @@ func loadPersistedRangeState(
 	if err != nil {
 		return persistedRangeState{}, err
 	}
-	state := persistedRangeState{
-		replicaID:              mark.ReplicaID,
-		tombstoneNextReplicaID: mark.NextReplicaID,
-		appliedIndex:           as.RaftAppliedIndex,
-	}
-	return state, state.validate()
+	return persistedRangeState{
+		mark:         mark,
+		appliedIndex: as.RaftAppliedIndex,
+	}, nil
 }
 
-// replayAction describes what the replay loop must do for a WAG node.
-type replayAction struct {
-	// apply indicates whether the WAG node's mutation needs to be applied.
-	apply bool
-	// catchUps lists ranges that must be caught up via raft log replay before
-	// the WAG node can be applied. Empty when apply is false, and may be empty
-	// when apply is true (e.g. for EventCreate/EventInit nodes).
-	catchUps []raftCatchUpTarget
-}
-
-// raftCatchUpTarget identifies a range/replica that must be caught up to a
-// specific raft index via raft log replay before a WAG node can be applied.
+// raftCatchUpTarget identifies a range that must be caught up to a specific
+// raft index via raft log replay before a WAG node can be applied. The start
+// key is used to load the range descriptor via a point read.
 type raftCatchUpTarget struct {
-	rangeID   roachpb.RangeID
-	replicaID roachpb.ReplicaID
-	index     kvpb.RaftIndex
+	rangeID  roachpb.RangeID
+	startKey roachpb.RKey
+	index    kvpb.RaftIndex
+}
+
+// ReplayBatch applies raft entries to the state machine via an internal storage
+// batch. The implementation is responsible for decoding entries and staging
+// their writes. The caller must call Close when done, whether or not Commit
+// was called.
+type ReplayBatch interface {
+	// ApplyEntry applies a single raft entry. Returns whether the entry had
+	// only trivial side effects (no lease change, GC threshold bump, etc.).
+	ApplyEntry(context.Context, raftpb.Entry) (trivial bool, _ error)
+	// AppliedIndex returns the raft applied index after the last ApplyEntry,
+	// or the initial applied index if no entries have been applied yet.
+	AppliedIndex() kvpb.RaftIndex
+	// Commit writes the applied state and commits the batch.
+	Commit(context.Context) error
+	// Close releases batch resources. Safe to call after Commit.
+	Close()
+}
+
+// NewReplayBatchFn creates a fresh ReplayBatch for a range by loading the
+// current ReplicaState from the engine. The startKey is used to locate the
+// range descriptor via a point read.
+type NewReplayBatchFn func(ctx context.Context, rangeID roachpb.RangeID, startKey roachpb.RKey) (ReplayBatch, error)
+
+func assert(cond bool, msg string, e wagpb.Event, s persistedRangeState) {
+	if !cond {
+		panic(errors.AssertionFailedf("%s: event %s, state %+v", msg, e, s))
+	}
+}
+
+// assertValidTransition validates that an event being applied is a valid
+// forward transition from the current replica state (see lifecycle diagram
+// above). Events from the past of the replica's lifecycle are stale and
+// skipped by canApply before reaching this function.
+func (s persistedRangeState) assertValidTransition(e wagpb.Event) {
+	if mark, id := s.mark, e.Addr.ReplicaID; mark.Destroyed(id) {
+		assert(false, "replica is destroyed", e, s)
+	} else if !mark.Is(id) {
+		// Nonexistent: only EventCreate (at index 0) is valid.
+		assert(e.Type == wagpb.EventCreate && e.Addr.Index == 0,
+			"replica must start with EventCreate at index 0", e, s)
+	} else if s.appliedIndex == 0 {
+		// Uninitialized: only EventInit (at non-zero index) and EventDestroy
+		// (at index 0) are valid.
+		assert(
+			(e.Type == wagpb.EventInit && e.Addr.Index > 0) ||
+				(e.Type == wagpb.EventDestroy && e.Addr.Index == 0),
+			"invalid forward transition from uninitialized replica", e, s,
+		)
+	} else {
+		// Initialized: neither EventInit nor EventCreate are valid transitions.
+		// All transitions satisfy i' >= i, with strict inequality for
+		// everything except Destroy/Subsume.
+		assert(e.Type != wagpb.EventInit && e.Type != wagpb.EventCreate,
+			"EventInit or EventCreate on initialized replica", e, s)
+		if e.Type == wagpb.EventDestroy || e.Type == wagpb.EventSubsume {
+			assert(e.Addr.Index >= s.appliedIndex, "destroying below applied index", e, s)
+		} else {
+			assert(e.Addr.Index > s.appliedIndex, "applied index must advance", e, s)
+		}
+	}
 }
 
 // canApply reports whether a WAG event can be applied to the state machine,
 // given the current applied state for the event's RangeID. It compares the
-// event against the state machine's current position for this range. See
-// canApplyWAGNode for the node-level wrapper.
+// event against the state machine's current position for this range.
 //
-// The decision is based on where event replica ID falls relative to
-// state.replicaID on the number line, giving three regions:
-//
-//	[0, state.replicaID)   → old (destroyed or never existed); skip
-//	state.replicaID        → current replica; compare raft indices
-//	(state.replicaID, ∞)   → new replica; apply
-//
-// TODO(mira): Refactor to use ReplicaMark (#156696) which will encapsulate
-// the replicaID/tombstone comparison logic.
-//
-// TODO(mira): Some of the cases below are not possible for all event types.
-// E.g. For a new replica with event.Addr.ReplicaID > state.replicaID, we'd
-// expect an EventCreate, not another type of event. Assert on these.
-func (state persistedRangeState) canApply(event wagpb.Event) bool {
-	// The WAG protocol ensures that any WAG node event has a non-zero ReplicaID.
-	if event.Addr.ReplicaID == 0 {
-		panic(errors.AssertionFailedf("WAG event for r%d has zero ReplicaID", event.Addr.RangeID))
-	}
+// See the replica lifecycle diagram above, and canApplyWAGNode for the
+// node-level wrapper.
+func (s persistedRangeState) canApply(e wagpb.Event) (apply bool) {
+	assert(e.Addr.ReplicaID != 0, "event with zero ReplicaID", e, s)
 	switch {
-	case event.Addr.ReplicaID < state.tombstoneNextReplicaID ||
-		event.Addr.ReplicaID < state.replicaID:
-		// Old replica (destroyed or never existed); skip. The persistedRangeState
-		// validation guarantees state.tombstoneNextReplicaID <= state.replicaID
-		// when a replica exists, but we can't rely on the state.replicaID
-		// comparison alone because when no current replica exists
-		// (state.replicaID == 0), only the tombstone can identify stale events.
-		return false
-	case event.Addr.ReplicaID == state.replicaID:
-		// Current replica. Destroy/Subsume events always need applying here —
-		// if their mutation had already been applied, the tombstone would have
-		// been bumped and the first case would have matched.
-		if event.Type == wagpb.EventDestroy || event.Type == wagpb.EventSubsume {
-			return true
+	case s.mark.Destroyed(e.Addr.ReplicaID):
+		// Old replica (destroyed or never existed); skip.
+		apply = false
+	case s.mark.Is(e.Addr.ReplicaID):
+		// Current replica (initialized or not).
+		//
+		// Destroy/Subsume events always need applying here — if their mutation had
+		// already been applied, the tombstone would have been bumped and the
+		// Destroyed case would have matched.
+		if e.Type == wagpb.EventDestroy || e.Type == wagpb.EventSubsume {
+			apply = true
+		} else {
+			// For other events, compare raft indices.
+			apply = e.Addr.Index > s.appliedIndex
 		}
-		// For other events, compare raft indices.
-		return event.Addr.Index > state.appliedIndex
-	case event.Addr.ReplicaID > state.replicaID:
-		// New replica not yet seen on this store; apply.
-		return true
+	case e.Addr.ReplicaID > s.mark.ReplicaID:
+		// New replica: must enter the lifecycle via EventCreate.
+		apply = true
 	default:
-		panic(errors.AssertionFailedf("unhandled: event %s, state %+v", event, state))
+		panic(errors.AssertionFailedf("unhandled: event %s, state %+v", e, s))
 	}
+	if apply {
+		s.assertValidTransition(e)
+	}
+	return apply
 }
 
 // raftCatchUp returns the raft index the replica must be caught up to before
 // this WAG event can be applied. Zero means no catch-up is needed.
-func raftCatchUp(event wagpb.Event) kvpb.RaftIndex {
-	switch event.Type {
+func raftCatchUp(e wagpb.Event) kvpb.RaftIndex {
+	switch e.Type {
 	case wagpb.EventCreate, wagpb.EventInit:
 		// No prior raft log; no catch-up.
 		return 0
 	case wagpb.EventApply, wagpb.EventSubsume, wagpb.EventDestroy:
 		// Subsume, Destroy: the replica must be fully caught up before destruction.
-		return event.Addr.Index
+		return e.Addr.Index
 	case wagpb.EventSplit, wagpb.EventMerge:
 		// The replica must be caught up to the command just before the
-		// split/merge at event.Index.
-		return event.Addr.Index - 1
+		// split/merge at e.Index.
+		return e.Addr.Index - 1
 	default:
-		panic(errors.AssertionFailedf("unexpected event type %d", event.Type))
+		panic(errors.AssertionFailedf("unexpected event type %d", e.Type))
 	}
 }
 
 // canApplyWAGNode determines whether a WAG node's mutation can be applied to
-// the state machine. It checks each event in the node and returns the replay
-// action, which indicates whether to apply and which ranges need raft log
-// catch-up first.
+// the state machine. It checks each event in the node against the persisted
+// range state to decide if the node still needs applying.
 //
 // All events in a node are expected to agree on whether they need applying,
 // since they are written and applied atomically.
-func canApplyWAGNode(ctx context.Context, node wagpb.Node, stateRO StateRO) (replayAction, error) {
-	var result replayAction
-	for i, event := range node.Events {
-		state, err := loadPersistedRangeState(ctx, stateRO, event.Addr.RangeID)
+func canApplyWAGNode(ctx context.Context, node wagpb.Node, stateRO StateRO) (bool, error) {
+	var apply bool
+	for i, e := range node.Events {
+		s, err := loadPersistedRangeState(ctx, stateRO, e.Addr.RangeID)
 		if err != nil {
-			return replayAction{}, errors.Wrapf(err, "loading state for r%d", event.Addr.RangeID)
+			return false, errors.Wrapf(err, "loading state for r%d", e.Addr.RangeID)
 		}
 		// A given RangeID appears at most once in the events list, so the decision
 		// of whether an event can be applied is independent for each event.
-		apply := state.canApply(event)
-		if i == 0 {
-			result.apply = apply
-		} else if apply != result.apply {
-			return replayAction{}, errors.Newf(
+		if evApply := s.canApply(e); i == 0 {
+			apply = evApply
+		} else if evApply != apply {
+			return false, errors.Newf(
 				"partial apply: event[0]=%s (apply=%t), event[%d]=%s (apply=%t)",
-				node.Events[0], result.apply, i, event, apply,
+				node.Events[0], apply, i, e, evApply,
 			)
 		}
-		if !apply {
-			continue
-		}
-		if catchUp := raftCatchUp(event); catchUp > 0 {
-			result.catchUps = append(result.catchUps, raftCatchUpTarget{
-				rangeID:   event.Addr.RangeID,
-				replicaID: event.Addr.ReplicaID,
-				index:     catchUp,
-			})
+	}
+	return apply, nil
+}
+
+// wagNodeCatchUps returns an iterator over the raft catch-up targets for a WAG
+// node's events. Each target identifies a range/replica that must be caught up
+// to a specific raft index before the node can be applied. The caller must have
+// already determined that the node needs applying via canApplyWAGNode.
+func wagNodeCatchUps(node wagpb.Node) iter.Seq[raftCatchUpTarget] {
+	return func(yield func(raftCatchUpTarget) bool) {
+		for _, e := range node.Events {
+			if catchUp := raftCatchUp(e); catchUp > 0 && !yield(raftCatchUpTarget{
+				rangeID:  e.Addr.RangeID,
+				startKey: e.StartKey,
+				index:    catchUp,
+			}) {
+				return
+			}
 		}
 	}
-	return result, nil
 }
 
 // ReplayWAG iterates over the WAG in the log engine and applies any unapplied
 // nodes to the state machine. It is called during store startup, before the
-// store goes online.
-func ReplayWAG(ctx context.Context, raftRO RaftRO, stateRW StateRW) error {
-	var iter wag.Iterator
-	for wagIdx, node := range iter.Iter(ctx, raftRO) {
-		action, err := canApplyWAGNode(ctx, node, stateRW)
-		if err != nil {
+// store goes online. For each unapplied node, it first replays raft log entries
+// to catch up the affected ranges, then applies the node's mutation.
+//
+// The newBatch callback creates ReplayBatch instances that apply raft entries
+// to the state machine. It is the only injection point from kvserver.
+func ReplayWAG(
+	ctx context.Context, raftRO RaftRO, stateRW StateRW, newBatch NewReplayBatchFn,
+) error {
+	var it wag.Iterator
+	for wagIdx, node := range it.Iter(ctx, raftRO) {
+		if apply, err := canApplyWAGNode(ctx, node, stateRW); err != nil {
 			return errors.Wrapf(err, "WAG node %d", wagIdx)
-		}
-		if !action.apply {
+		} else if !apply {
 			continue
 		}
-		// TODO(mira): For each entry in action.catchUps, replay raft log
-		// entries for the target range/replica up to the target index before
-		// applying the WAG node. The current raft log replay in
-		// handleRaftReadyRaftMuLocked needs to be factored out and invoked here.
-		// The catch-up code should assert that the target index is >= the
-		// replica's current applied index.
+		for target := range wagNodeCatchUps(node) {
+			if err := replayRaftLog(ctx, raftRO, target, newBatch); err != nil {
+				return errors.Wrapf(err, "WAG node %d: catch-up r%d", wagIdx, target.rangeID)
+			}
+		}
 		if err := applyMutation(ctx, stateRW, node.Mutation); err != nil {
 			return errors.Wrapf(err, "WAG node %d", wagIdx)
 		}
 	}
-	return iter.Error()
+	return it.Error()
+}
+
+// replayRaftLog replays raft log entries for a range from its current applied
+// index up to the target index. It creates a ReplayBatch, iterates entries via
+// raftlog.Visit, and applies each one. Non-trivial entries (lease changes, GC
+// threshold bumps, etc.) trigger a batch flush and state reload so that
+// subsequent entries are checked against up-to-date state.
+func replayRaftLog(
+	ctx context.Context, raftRO RaftRO, target raftCatchUpTarget, newBatch NewReplayBatchFn,
+) error {
+	for {
+		done, err := replayRaftLogBatch(ctx, raftRO, target, newBatch)
+		if err != nil {
+			return errors.Wrapf(err, "replaying raft log for r%d", target.rangeID)
+		}
+		if done {
+			return nil
+		}
+	}
+}
+
+// replayRaftLogBatch creates a ReplayBatch and applies entries from the
+// current applied index up to the target. It returns done=true when all
+// entries have been applied, or done=false if a non-trivial entry was
+// encountered and the caller should invoke this function again so that a
+// fresh batch is created with reloaded state.
+func replayRaftLogBatch(
+	ctx context.Context, raftRO RaftRO, target raftCatchUpTarget, newBatch NewReplayBatchFn,
+) (done bool, _ error) {
+	rb, err := newBatch(ctx, target.rangeID, target.startKey)
+	if err != nil {
+		return false, err
+	}
+	defer rb.Close()
+
+	lo, hi := rb.AppliedIndex(), target.index
+	if lo > hi {
+		return false, errors.AssertionFailedf(
+			"target index %d is behind applied index %d for r%d",
+			hi, lo, target.rangeID)
+	}
+	if lo == hi {
+		return true, nil
+	}
+
+	// TODO(mira): Add a max batch size policy to bound memory usage. Large
+	// ranges with many entries could produce an oversized batch here.
+	var needsReload bool
+	// NB: Visit uses [start, end) semantics.
+	err = raftlog.Visit(ctx, raftRO, target.rangeID, lo+1, hi+1, func(ent raftpb.Entry) error {
+		trivial, err := rb.ApplyEntry(ctx, ent)
+		if err != nil {
+			return err
+		}
+		if !trivial {
+			// Non-trivial entries may change state (lease, GC threshold)
+			// that affects accept/reject decisions for subsequent entries.
+			// Stop iteration so the caller can flush and reload.
+			needsReload = true
+			return iterutil.StopIteration()
+		}
+		return nil
+	})
+	if err = iterutil.Map(err); err != nil {
+		return false, err
+	}
+	if err := rb.Commit(ctx); err != nil {
+		return false, err
+	}
+	return !needsReload, nil
 }
 
 // applyMutation applies a WAG node's mutation to the state machine. It handles

@@ -40,6 +40,7 @@ go_library(
 
 go_test(
     name = "oidcauth_test",
+    size = "medium",
     srcs = [
         "authentication_oidc_test.go",
         "authorization_oidc_test.go",

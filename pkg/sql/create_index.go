@@ -296,7 +296,7 @@ func makeIndexDescriptor(
 		if err != nil {
 			return nil, err
 		}
-		indexDesc.Predicate = expr
+		indexDesc.Predicate = descpb.Expression(expr)
 	}
 
 	if err := indexDesc.FillColumns(columns); err != nil {
@@ -524,7 +524,7 @@ func replaceExpressionElemsWithVirtualCols(
 ) error {
 	findExistingExprIndexCol := func(expr string) (colName string, ok bool) {
 		for _, col := range desc.AllColumns() {
-			if col.IsExpressionIndexColumn() && col.GetComputeExpr() == expr {
+			if col.IsExpressionIndexColumn() && string(col.GetComputeExpr()) == expr {
 				return col.GetName(), true
 			}
 		}
@@ -596,11 +596,11 @@ func replaceExpressionElemsWithVirtualCols(
 				Name:         colName,
 				Inaccessible: true,
 				Type:         typ,
-				ComputeExpr:  &expr,
+				ComputeExpr:  new(descpb.Expression(expr)),
 				Virtual:      true,
 				Nullable:     true,
 			}
-			if fnIDs, err := schemaexpr.GetUDFIDsFromExprStr(expr); err != nil {
+			if fnIDs, err := schemaexpr.GetUDFIDsFromExprStr(descpb.Expression(expr)); err != nil {
 				return err
 			} else {
 				col.UsesFunctionIds = fnIDs.Ordered()

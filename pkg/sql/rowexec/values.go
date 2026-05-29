@@ -68,7 +68,7 @@ func newValuesProcessor(
 
 // Start is part of the RowSource interface.
 func (v *valuesProcessor) Start(ctx context.Context) {
-	v.StartInternal(ctx, valuesProcName)
+	_ = v.StartInternal(ctx, valuesProcName)
 }
 
 // Next is part of the RowSource interface.

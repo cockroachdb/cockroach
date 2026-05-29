@@ -24,24 +24,24 @@ func (r *Registry) CancelRequested(ctx context.Context, txn isql.Txn, id jobspb.
 	if err != nil {
 		return err
 	}
-	return job.WithTxn(txn).CancelRequested(ctx)
+	return job.DeprecatedWithTxn(txn).CancelRequested(ctx)
 }
 
 // Started is a wrapper around the internal function that moves a job to the
 // started state.
 func (j *Job) Started(ctx context.Context) error {
-	return j.NoTxn().started(ctx)
+	return j.DeprecatedNoTxn().started(ctx)
 }
 
 // Reverted is a wrapper around the internal function that moves a job to the
 // reverting state.
 func (j *Job) Reverted(ctx context.Context, err error) error {
-	return j.NoTxn().reverted(ctx, err, nil)
+	return j.DeprecatedNoTxn().reverted(ctx, err, nil)
 }
 
 // Paused is a helper to the paused state.
 func (j *Job) Paused(ctx context.Context) error {
-	return j.NoTxn().Update(ctx, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
+	return j.DeprecatedNoTxn().Update(ctx, func(txn isql.Txn, md DeprecatedJobMetadata, ju *DeprecatedJobUpdater) error {
 		if md.State == StatePaused {
 			// Already paused - do nothing.
 			return nil
@@ -57,13 +57,13 @@ func (j *Job) Paused(ctx context.Context) error {
 // Failed is a wrapper around the internal function that moves a job to the
 // failed state.
 func (j *Job) Failed(ctx context.Context, causingErr error) error {
-	return j.NoTxn().failed(ctx, causingErr)
+	return j.DeprecatedNoTxn().failed(ctx, causingErr)
 }
 
 // Succeeded is a wrapper around the internal function that moves a job to the
 // succeeded state.
 func (j *Job) Succeeded(ctx context.Context) error {
-	return j.NoTxn().succeeded(ctx, nil /* fn */)
+	return j.DeprecatedNoTxn().succeeded(ctx, nil /* fn */)
 }
 
 // TestingCurrentState returns the current job state from the jobs table or error.

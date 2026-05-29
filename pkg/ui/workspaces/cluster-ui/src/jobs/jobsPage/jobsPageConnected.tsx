@@ -19,7 +19,14 @@ import { actions as localStorageActions } from "../../store/localStorage";
 
 import { JobsPage } from "./jobsPage";
 
-export const JobsPageConnected: React.FC = () => {
+export interface JobsPageConnectedProps {
+  // When true, suppresses the page header for use inside a parent layout
+  // that already provides its own heading (e.g. the console nav shell).
+  isEmbedded?: boolean;
+}
+
+export const JobsPageConnected: React.FC<JobsPageConnectedProps> = props => {
+  const { isEmbedded = false } = props;
   const dispatch = useDispatch();
   const sort = useSelector(selectSortSetting);
   const status = useSelector(selectStatusSetting);
@@ -107,6 +114,7 @@ export const JobsPageConnected: React.FC = () => {
       setShow={setShow}
       setType={setType}
       onColumnsChange={onColumnsChange}
+      isEmbedded={isEmbedded}
     />
   );
 };

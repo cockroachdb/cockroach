@@ -8,14 +8,19 @@ package google
 import (
 	"context"
 	"fmt"
+	"io"
+	"log"
 	"math"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/model"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/util"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/exp/maps"
 	"google.golang.org/api/drive/v3"
@@ -25,6 +30,13 @@ import (
 )
 
 const dashboardURL = "https://microbench.testeng.crdb.io/dashboard/"
+
+var googleAPIRequestRetryOptions = retry.Options{
+	InitialBackoff: 1 * time.Second,
+	MaxBackoff:     30 * time.Second,
+	Multiplier:     2,
+	MaxRetries:     5,
+}
 
 // Service is capable of communicating with the Google Drive API and the Google
 // Sheets API to create new spreadsheets and populate them from benchstat
@@ -62,15 +74,22 @@ func newSheetsService(ctx context.Context) (*sheets.Service, error) {
 }
 
 func (srv *Service) testServices(ctx context.Context) error {
-	if _, err := srv.drive.About.Get().Fields("user").Context(ctx).Do(); err != nil {
+	if err := retryGoogleAPIRequest(ctx, "Drive About.Get", func(ctx context.Context) error {
+		_, err := srv.drive.About.Get().Fields("user").Context(ctx).Do()
+		return err
+	}); err != nil {
 		return errors.Wrap(err, "testing Drive client")
 	}
-	if _, err := srv.sheets.Spreadsheets.Get("none").Context(ctx).Do(); err != nil {
+	if err := retryGoogleAPIRequest(ctx, "Sheets Spreadsheets.Get", func(ctx context.Context) error {
+		_, err := srv.sheets.Spreadsheets.Get("none").Context(ctx).Do()
 		// We expect a 404.
 		var apiError *googleapi.Error
-		if errors.As(err, &apiError) && apiError.Code != http.StatusNotFound {
-			return errors.Wrap(err, "testing Sheets client")
+		if errors.As(err, &apiError) && apiError.Code == http.StatusNotFound {
+			return nil
 		}
+		return err
+	}); err != nil {
+		return errors.Wrap(err, "testing Sheets client")
 	}
 	return nil
 }
@@ -340,8 +359,16 @@ func (srv *Service) createOverviewSheet(rawInfos []rawSheetInfo) *sheets.Sheet {
 func (srv *Service) createSheet(
 	ctx context.Context, s sheets.Spreadsheet,
 ) (*sheets.Spreadsheet, error) {
-	res, err := srv.sheets.Spreadsheets.Create(&s).Context(ctx).Do()
-	if err != nil {
+	var res *sheets.Spreadsheet
+	// Spreadsheets.Create is not idempotent: if Google commits the request but
+	// the client loses the response, retrying can create a duplicate spreadsheet.
+	// For this CI publisher, that tradeoff is preferable to failing the completed
+	// microbenchmark run on a transient Sheets error.
+	if err := retryGoogleAPIRequest(ctx, "Sheets Spreadsheets.Create", func(ctx context.Context) error {
+		var err error
+		res, err = srv.sheets.Spreadsheets.Create(&s).Context(ctx).Do()
+		return err
+	}); err != nil {
 		return nil, errors.Wrap(err, "create new Spreadsheet")
 	}
 	return res, nil
@@ -356,8 +383,51 @@ func (srv *Service) updatePerms(ctx context.Context, spreadsheetID string) error
 		Type: "anyone",
 		Role: "reader",
 	}
-	_, err := srv.drive.Permissions.Create(spreadsheetID, perm).Context(ctx).Do()
+	// Drive does not document the HTTP status it returns for duplicate
+	// permission creates. Keep this as a simple bounded retry and rely on retry
+	// logs to show whether duplicate-permission behavior becomes a problem.
+	err := retryGoogleAPIRequest(ctx, "Drive Permissions.Create", func(ctx context.Context) error {
+		_, err := srv.drive.Permissions.Create(spreadsheetID, perm).Context(ctx).Do()
+		return err
+	})
 	return errors.Wrap(err, "update Spreadsheet permissions")
+}
+
+func retryGoogleAPIRequest(
+	ctx context.Context, operation string, fn func(context.Context) error,
+) error {
+	var attempt int
+	return googleAPIRequestRetryOptions.DoWithRetryable(ctx, func(ctx context.Context) (bool, error) {
+		attempt++
+		err := fn(ctx)
+		retryable := shouldRetryGoogleAPIRequest(err)
+		if retryable {
+			log.Printf("retryable Google API %s error on attempt %d: %v", operation, attempt, err)
+		}
+		return retryable, err
+	})
+}
+
+func shouldRetryGoogleAPIRequest(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	var apiError *googleapi.Error
+	if errors.As(err, &apiError) {
+		return apiError.Code == http.StatusRequestTimeout ||
+			apiError.Code == http.StatusTooManyRequests ||
+			(apiError.Code >= http.StatusInternalServerError && apiError.Code < 600)
+	}
+	var urlError *url.Error
+	if errors.As(err, &urlError) {
+		errText := urlError.Error()
+		return strings.Contains(errText, "connection refused") ||
+			strings.Contains(errText, "connection reset")
+	}
+	return false
 }
 
 func sheetIDForTable(i int) int64 {

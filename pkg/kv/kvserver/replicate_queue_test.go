@@ -2126,9 +2126,19 @@ func TestPromoteNonVoterInAddVoter(t *testing.T) {
 	// SQL update, changing the span configs (which should register on all nodes),
 	// and subsequent replication changes. In failing runs, it will be interesting
 	// which prefix of events remains.
+	//
+	// `allocator_scorer=3` logs per-candidate scoring details (diversity,
+	// balance, convergence, range counts) when the allocator picks a target. This
+	// is useful for diagnosing the likely failure mode below, see #170221: when
+	// the balance scores of the existing non-voter and a fresh voter candidate
+	// diverge (e.g. because their range counts differ enough to land in
+	// different balance buckets), the allocator's promotion preference for the
+	// existing non-voter is not applied, and a brand new voter is added instead.
+	// The per-candidate scoring output makes it possible to see which inputs
+	// pushed the two candidates into different balance buckets.
 	{
 		old := log.GetVModule()
-		changed := "store=2,reconciler=3"
+		changed := "store=2,reconciler=3,allocator_scorer=3"
 		if old != "" {
 			changed = old + "," + changed
 		}

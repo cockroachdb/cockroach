@@ -567,6 +567,30 @@ SELECT row_id, fingerprint, hint, created_at, '%s' FROM %s`,
 	return nil
 }
 
+// statementsRestoreFunc handles restore of system.statements across the
+// V26_3_AlterStatementsTablePK boundary. The pre-V26_3 schema had an extra
+// `id` column (the prior primary key); a backup taken on such a cluster
+// produces a temp table whose column count exceeds that of the post-migration
+// target, which would cause the default `INSERT ... SELECT *` copy to fail.
+//
+// The table existed in v26.2 but no writer populated it until v26.3, so any
+// pre-V26_3 backup is guaranteed to be empty and we can skip the copy entirely.
+func statementsRestoreFunc(
+	ctx context.Context,
+	deps customRestoreFuncDeps,
+	txn isql.Txn,
+	systemTableName, tempTableName string,
+) error {
+	hasLegacyID, err := tableHasColumnName(ctx, txn, tempTableName, "id")
+	if err != nil {
+		return err
+	}
+	if hasLegacyID {
+		return nil
+	}
+	return defaultSystemTableRestoreFunc(ctx, deps, txn, systemTableName, tempTableName)
+}
+
 func tableHasColumnName(
 	ctx context.Context, txn isql.Txn, tableName string, columnName string,
 ) (bool, error) {
@@ -951,7 +975,36 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	},
 	systemschema.StatementsTable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup,
+		customRestoreFunc:            statementsRestoreFunc,
 	},
+	systemschema.ResourceGroupsTable.GetName(): {
+		shouldIncludeInClusterBackup: optInToClusterBackup,
+	},
+	systemschema.ResourceGroupIDSequence.GetName(): {
+		shouldIncludeInClusterBackup: optInToClusterBackup,
+		// The sequence's row data can't be DELETE'd or INSERT'd via SQL,
+		// so the default restore func doesn't apply. Instead, re-seed the
+		// sequence so newly created groups get IDs above any restored ones.
+		customRestoreFunc: resourceGroupIDSeqRestoreFunc,
+		// Restore after system.resource_groups so we can read max(id).
+		restoreInOrder: 1,
+	},
+}
+
+func resourceGroupIDSeqRestoreFunc(
+	ctx context.Context,
+	deps customRestoreFuncDeps,
+	txn isql.Txn,
+	systemTableName, tempTableName string,
+) error {
+	// Setval to max(id) of the restored resource_groups table; if there
+	// are no rows the sequence keeps its bootstrap MINVALUE of 16.
+	_, err := txn.ExecEx(
+		ctx, "resource-group-id-seq-custom-restore", txn.KV(),
+		sessiondata.NodeUserSessionDataOverride,
+		`SELECT setval('system.resource_group_id_seq', greatest(16, (SELECT coalesce(max(id), 16) FROM system.resource_groups)), true)`,
+	)
+	return err
 }
 
 func rekeySystemTable(

@@ -398,6 +398,10 @@ PreCommitPhase stage 2 of 2 with 12 MutationType ops
 deps
 CREATE OR REPLACE TRIGGER t1_tg AFTER INSERT ON defaultdb.t1 FOR EACH ROW EXECUTE FUNCTION g();
 ----
+- from: [Trigger:{DescID: 104, TriggerID: 1}, ABSENT]
+  to:   [TriggerDeps:{DescID: 104, TriggerID: 1, ReferencedFunctionIDs: [105]}, ABSENT]
+  kind: SameStagePrecedence
+  rule: dependents remove trigger
 - from: [Trigger:{DescID: 104, TriggerID: 2}, PUBLIC]
   to:   [TriggerDeps:{DescID: 104, TriggerID: 2, ReferencedFunctionIDs: [105]}, PUBLIC]
   kind: Precedence
@@ -422,7 +426,3 @@ CREATE OR REPLACE TRIGGER t1_tg AFTER INSERT ON defaultdb.t1 FOR EACH ROW EXECUT
   to:   [TriggerTiming:{DescID: 104, TriggerID: 2}, PUBLIC]
   kind: Precedence
   rule: trigger public before its dependents
-- from: [TriggerDeps:{DescID: 104, TriggerID: 1, ReferencedFunctionIDs: [105]}, ABSENT]
-  to:   [Trigger:{DescID: 104, TriggerID: 1}, PUBLIC]
-  kind: Precedence
-  rule: trigger removed before dependents

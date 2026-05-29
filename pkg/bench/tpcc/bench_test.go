@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/bench/benchprof"
-	"github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/fixture"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpcc"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
@@ -183,7 +183,7 @@ func startCluster(
 
 	// Load the TPC-C workload data.
 	gen := tpccGenerator(b, []string{"--db=" + dbName})
-	var loader workloadccl.ImportDataLoader
+	var loader fixture.ImportDataLoader
 	sqlDB, err := gosql.Open(`cockroach`, strings.Join(pgURLs[:], " "))
 	if err != nil {
 		b.Fatal(err)

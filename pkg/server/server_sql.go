@@ -429,6 +429,12 @@ type sqlServerArgs struct {
 	// tenantTimeSeriesServer is used to make TSDB queries by the DB Console.
 	tenantTimeSeriesServer *ts.TenantServer
 
+	// timeSeriesQuerier exposes the TSDB to SQL through
+	// crdb_internal.tsdb_query generator builtin.
+	// For the system tenant this wraps *ts.Server;
+	// For secondary tenants it wraps *ts.TenantServer.
+	timeSeriesQuerier eval.TimeSeriesQuerier
+
 	tenantCapabilitiesReader sql.SystemTenantOnly[tenantcapabilities.Reader]
 }
 
@@ -808,6 +814,11 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	rangeStatsFetcher := rangestats.NewFetcher(cfg.db)
 
 	vecIndexManager := vecindex.NewManager(ctx, cfg.stopper, &cfg.Settings.SV, codec, cfg.internalDB)
+
+	if vecIndexKnobs, ok := cfg.TestingKnobs.VecIndexTestingKnobs.(*vecindex.VecIndexTestingKnobs); ok && vecIndexKnobs != nil {
+		vecIndexManager.SetTestingKnobs(vecIndexKnobs)
+	}
+
 	cfg.registry.AddMetricStruct(vecIndexManager.Metrics())
 
 	// Set up the DistSQL server.
@@ -934,7 +945,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 
 	var isAvailable func(sqlInstanceID base.SQLInstanceID) bool
-	nodeLiveness, hasNodeLiveness := cfg.nodeLiveness.Optional(47900)
+	nodeLiveness, hasNodeLiveness := cfg.nodeLiveness.Optional()
 	if hasNodeLiveness {
 		isAvailable = func(sqlInstanceID base.SQLInstanceID) bool {
 			return nodeLiveness.GetNodeVitalityFromCache(roachpb.NodeID(sqlInstanceID)).IsLive(livenesspb.DistSQL)
@@ -1003,6 +1014,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		SQLLiveness:             cfg.sqlLivenessProvider,
 		JobRegistry:             jobRegistry,
 		VirtualSchemas:          virtualSchemas,
+		TimeSeriesQuerier:       cfg.timeSeriesQuerier,
 		HistogramWindowInterval: cfg.HistogramWindowInterval(),
 		RangeDescriptorCache:    cfg.distSender.RangeDescriptorCache(),
 		RoleMemberCache: rolemembershipcache.NewMembershipCache(
@@ -1051,10 +1063,11 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		),
 
 		TableStatsCache: stats.NewTableStatisticsCache(
-			cfg.TableStatCacheSize,
+			ctx,
 			cfg.Settings,
 			cfg.internalDB,
 			cfg.stopper,
+			serverCacheMemoryMonitor,
 		),
 
 		QueryCache: querycache.New(cfg.QueryCacheSize),

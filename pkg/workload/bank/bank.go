@@ -135,6 +135,79 @@ func (b *bank) Hooks() workload.Hooks {
 			}
 			return nil
 		},
+		CheckConsistency: func(ctx context.Context, db *gosql.DB) error {
+			// Auto-discover bank tables so the check works regardless of
+			// the --tables flag value used during init.
+			rows, err := db.QueryContext(ctx,
+				"SELECT table_name FROM [SHOW TABLES] WHERE table_name = 'bank' OR table_name LIKE 'bank\\_%'",
+			)
+			if err != nil {
+				return errors.Wrap(err, "discovering bank tables")
+			}
+			defer rows.Close()
+
+			var tables []string
+			for rows.Next() {
+				var t string
+				if err := rows.Scan(&t); err != nil {
+					return errors.Wrap(err, "scanning table name")
+				}
+				tables = append(tables, t)
+			}
+			if err := rows.Err(); err != nil {
+				return errors.Wrap(err, "iterating bank tables")
+			}
+			if len(tables) == 0 {
+				return errors.New("no bank tables found")
+			}
+
+			for _, tableName := range tables {
+				// Check 1: Balance invariant — the workload only performs
+				// atomic transfers, so the sum of all balances must be zero.
+				var total int64
+				if err := db.QueryRowContext(ctx,
+					fmt.Sprintf("SELECT COALESCE(sum(balance), 0) FROM %s", tableName),
+				).Scan(&total); err != nil {
+					return errors.Wrapf(err, "balance check on table %s", tableName)
+				}
+				if total != 0 {
+					return errors.Errorf(
+						"balance invariant violated for table %s: expected sum 0, got %d",
+						tableName, total,
+					)
+				}
+				fmt.Printf("%s: balance check passed (sum=0)\n", tableName)
+
+				// Check 2: Row integrity — the workload only performs
+				// UPDATEs so rows should never be inserted or deleted.
+				// IDs are sequential starting at 0, so count(*) must
+				// equal max(id)+1 and min(id) must be 0.
+				var rowCount, minID, maxID int64
+				if err := db.QueryRowContext(ctx,
+					fmt.Sprintf(
+						"SELECT count(*), COALESCE(min(id), 0), COALESCE(max(id), -1) FROM %s",
+						tableName,
+					),
+				).Scan(&rowCount, &minID, &maxID); err != nil {
+					return errors.Wrapf(err, "row integrity check on table %s", tableName)
+				}
+				if rowCount > 0 && minID != 0 {
+					return errors.Errorf(
+						"row integrity violated for table %s: expected min(id)=0, got %d",
+						tableName, minID,
+					)
+				}
+				if rowCount != maxID+1 {
+					return errors.Errorf(
+						"row integrity violated for table %s: count(*)=%d but max(id)+1=%d",
+						tableName, rowCount, maxID+1,
+					)
+				}
+				fmt.Printf("%s: row integrity check passed (rows=%d, ids 0..%d)\n",
+					tableName, rowCount, maxID)
+			}
+			return nil
+		},
 	}
 }
 

@@ -1366,6 +1366,7 @@ var debugCmds = []*cobra.Command{
 	debugSendKVBatchCmd,
 	debugRecoverCmd,
 	debugResolveTxnIDCmd,
+	debugUploadCmd,
 }
 
 // DebugCmd is the root of all debug commands.
@@ -1590,6 +1591,24 @@ func init() {
 	// --dry-run is a hidden flag that is only meant to be used for testing and diagnostics
 	f.BoolVar(&debugZipUploadOpts.dryRun, "dry-run", false, "run in dry-run mode without making any actual uploads")
 	f.Lookup("dry-run").Hidden = true
+
+	f = debugUploadCmd.Flags()
+	f.StringVar(&debugUploadOpts.crlSupportAPIKey, "crl-support-api-key",
+		getEnvOrDefault(crlSupportAPIKeyEnvVar, ""),
+		"API key for uploads to Cockroach Labs support "+
+			"(defaults to $"+crlSupportAPIKeyEnvVar+")")
+	// TODO: bake in the prod upload server URL as the default once
+	// finalised; until then the flag is hidden and internal users
+	// must pass it explicitly.
+	f.StringVar(&debugUploadOpts.crlSupportURL, "crl-support-url", "",
+		"base URL of the Cockroach Labs support server")
+	f.Lookup("crl-support-url").Hidden = true
+	f.StringVar(&debugUploadOpts.crlSupportTicketID, "crl-support-ticket-id", "",
+		"optional support ticket ID to associate with this upload")
+	f.StringVar(&debugUploadOpts.resumeSession, "resume-session", "",
+		"resume an interrupted upload by session ID")
+	f.StringVar(&debugUploadOpts.proxy, "proxy", "",
+		"forward proxy URL (defaults to $"+httpsProxyEnvVar+")")
 
 	f = debugDecodeKeyCmd.Flags()
 	f.Var(&decodeKeyOptions.encoding, "encoding", "key argument encoding")

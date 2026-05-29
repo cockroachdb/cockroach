@@ -11,9 +11,7 @@ import "testing"
 func TestProtectedTimestamps(t *testing.T) {
 	var (
 		_ Provider
-		_ Cache
 		_ Storage
-		_ = EmptyCache(nil)
 		_ = ErrNotExists
 		_ = ErrExists
 		_ = PollInterval

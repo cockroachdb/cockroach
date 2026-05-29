@@ -432,6 +432,42 @@ func (e QoSLevel) ValidateInternal() QoSLevel {
 	panic(errors.AssertionFailedf("use of illegal internal QoSLevel: %s", e.String()))
 }
 
+// PgDumpCompatibility values for the pg_dump_compatibility session setting.
+const (
+	// PgDumpCompatibilityOff disables all pg_dump compatibility adjustments.
+	// pg_catalog reports CockroachDB's native OIDs and objects.
+	PgDumpCompatibilityOff = "off"
+	// PgDumpCompatibilityPostgres remaps pg_catalog OIDs to match PostgreSQL,
+	// hides CockroachDB-internal objects, and suppresses CRDB-specific storage
+	// parameters so that pg_dump output can run on non-CockroachDB servers.
+	PgDumpCompatibilityPostgres = "postgres"
+	// PgDumpCompatibilityCockroachDB applies the same pg_catalog OID fixes as
+	// "postgres" mode but retains CockroachDB-specific syntax and objects so
+	// the dump is intended for import into another CockroachDB cluster.
+	PgDumpCompatibilityCockroachDB = "cockroachdb"
+)
+
+// IsPgDumpCompatibilityEnabled returns true if the pg_dump_compatibility
+// setting is set to anything other than "off" (or the zero value).
+func IsPgDumpCompatibilityEnabled(val string) bool {
+	return val != "" && val != PgDumpCompatibilityOff
+}
+
+// PgDumpCompatibilityFromString converts a string into a validated
+// pg_dump_compatibility value. Returns false if the input is not recognized.
+func PgDumpCompatibilityFromString(val string) (_ string, ok bool) {
+	switch strings.ToLower(val) {
+	case PgDumpCompatibilityOff:
+		return PgDumpCompatibilityOff, true
+	case PgDumpCompatibilityPostgres:
+		return PgDumpCompatibilityPostgres, true
+	case PgDumpCompatibilityCockroachDB:
+		return PgDumpCompatibilityCockroachDB, true
+	default:
+		return "", false
+	}
+}
+
 // CanaryStatsMode controls which table statistics the optimizer uses for
 // query planning in this session. See the comments on each mode for details.
 type CanaryStatsMode int64

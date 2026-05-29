@@ -9,7 +9,6 @@ package kvadmission
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -27,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
@@ -163,16 +161,12 @@ type Controller interface {
 	) (Handle, error)
 	// AdmittedKVWorkDone is called after the admitted KV work is done
 	// executing.
-	AdmittedKVWorkDone(Handle, *StoreWriteBytes)
+	AdmittedKVWorkDone(Handle, admission.StoreWorkDoneInfo)
 	// AdmitRangefeedRequest must be called before serving rangefeed requests.
 	// If enabled, it returns a non-nil Pacer that's to be used within rangefeed
 	// catchup scans (typically CPU-intensive and affecting scheduling
 	// latencies).
 	AdmitRangefeedRequest(roachpb.TenantID, *kvpb.RangeFeedRequest) *admission.Pacer
-	// SetTenantWeightProvider is used to set the provider that will be
-	// periodically polled for weights. The stopper should be used to terminate
-	// the periodic polling.
-	SetTenantWeightProvider(TenantWeightProvider, *stop.Stopper)
 	// SnapshotIngestedOrWritten informs admission control about a range
 	// snapshot ingestion or a range snapshot written as a normal write.
 	// writeBytes should roughly correspond to the size of the write when
@@ -190,27 +184,6 @@ type Controller interface {
 	// given store in bytes/second, or 0 if the store is not found or bandwidth
 	// is not configured.
 	GetProvisionedBandwidth(roachpb.StoreID) int64
-}
-
-// TenantWeightProvider can be periodically asked to provide the tenant
-// weights.
-type TenantWeightProvider interface {
-	GetTenantWeights() TenantWeights
-}
-
-// TenantWeights contains the various tenant weights.
-type TenantWeights struct {
-	// Node is the node level tenant ID => weight.
-	Node map[uint64]uint32
-	// Stores contains the per-store tenant weights.
-	Stores []TenantWeightsForStore
-}
-
-// TenantWeightsForStore contains the tenant weights for a store.
-type TenantWeightsForStore struct {
-	roachpb.StoreID
-	// Weights is tenant ID => weight.
-	Weights map[uint64]uint32
 }
 
 // controllerImpl implements Controller interface.
@@ -380,7 +353,7 @@ func (n *controllerImpl) AdmitKVWork(
 			}
 		}
 	}
-	cpuAdmissionQ := n.cpuGrantCoords.GetKVWorkQueue(admissionInfo.TenantID.IsSystem())
+	cpuAdmissionQ := n.cpuGrantCoords.GetKVWorkQueue()
 	if admissionEnabled {
 		// Bulk jobs such as backups or row-level TTL issue KV requests with a
 		// priority of admissionpb.BulkNormalPri or lower; these are eligible for
@@ -457,7 +430,7 @@ func (n *controllerImpl) AdmitKVWork(
 }
 
 // AdmittedKVWorkDone implements the Controller interface.
-func (n *controllerImpl) AdmittedKVWorkDone(ah Handle, writeBytes *StoreWriteBytes) {
+func (n *controllerImpl) AdmittedKVWorkDone(ah Handle, doneInfo admission.StoreWorkDoneInfo) {
 	n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.AdmittedWorkDone(ah.elasticCPUWorkHandle)
 	if ah.cpuKVAdmissionQResp.Enabled {
 		cpuTime := grunning.Time() - ah.cpuStart
@@ -473,10 +446,6 @@ func (n *controllerImpl) AdmittedKVWorkDone(ah Handle, writeBytes *StoreWriteByt
 		ah.cpuAdmissionQueue.AdmittedWorkDone(ah.cpuKVAdmissionQResp, cpuTime)
 	}
 	if ah.storeAdmissionQ != nil {
-		var doneInfo admission.StoreWorkDoneInfo
-		if writeBytes != nil {
-			doneInfo = admission.StoreWorkDoneInfo(*writeBytes)
-		}
 		err := ah.storeAdmissionQ.AdmittedWorkDone(ah.storeWorkHandle, doneInfo)
 		if err != nil {
 			// This shouldn't be happening.
@@ -511,51 +480,6 @@ func (n *controllerImpl) AdmitRangefeedRequest(
 			WorkloadID:      uint64(workloadid.WORKLOAD_ID_RANGEFEED),
 			WorkloadType:    workloadid.WorkloadTypeSystem,
 		})
-}
-
-// SetTenantWeightProvider implements the Controller interface.
-func (n *controllerImpl) SetTenantWeightProvider(
-	provider TenantWeightProvider, stopper *stop.Stopper,
-) {
-	// TODO(irfansharif): Use a stopper here instead.
-	go func() {
-		const weightCalculationPeriod = 10 * time.Minute
-		ticker := time.NewTicker(weightCalculationPeriod)
-		// Used for short-circuiting the weights calculation if all weights are
-		// disabled.
-		allWeightsDisabled := false
-		for {
-			select {
-			case <-ticker.C:
-				kvDisabled := !admission.KVTenantWeightsEnabled.Get(&n.settings.SV)
-				kvStoresDisabled := !admission.KVStoresTenantWeightsEnabled.Get(&n.settings.SV)
-				if allWeightsDisabled && kvDisabled && kvStoresDisabled {
-					// Have already transitioned to disabled, so noop.
-					continue
-				}
-				weights := provider.GetTenantWeights()
-				if kvDisabled {
-					weights.Node = nil
-				}
-				n.cpuGrantCoords.SetTenantWeights(weights.Node)
-				n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.SetTenantWeights(weights.Node)
-
-				for _, storeWeights := range weights.Stores {
-					q := n.storeGrantCoords.TryGetQueueForStore(storeWeights.StoreID)
-					if q != nil {
-						if kvStoresDisabled {
-							storeWeights.Weights = nil
-						}
-						q.SetTenantWeights(storeWeights.Weights)
-					}
-				}
-				allWeightsDisabled = kvDisabled && kvStoresDisabled
-			case <-stopper.ShouldQuiesce():
-				ticker.Stop()
-				return
-			}
-		}
-	}()
 }
 
 // SnapshotIngestedOrWritten implements the Controller interface.
@@ -660,30 +584,6 @@ func (f *FollowerStoreWriteBytes) Merge(from FollowerStoreWriteBytes) {
 	f.NumEntries += from.NumEntries
 	f.WriteBytes += from.WriteBytes
 	f.IngestedBytes += from.IngestedBytes
-}
-
-// StoreWriteBytes aliases admission.StoreWorkDoneInfo, since the notion of
-// "work is done" is specific to admission control and doesn't need to leak
-// everywhere.
-type StoreWriteBytes admission.StoreWorkDoneInfo
-
-var storeWriteBytesPool = sync.Pool{
-	New: func() interface{} { return &StoreWriteBytes{} },
-}
-
-// NewStoreWriteBytes constructs a new StoreWriteBytes.
-func NewStoreWriteBytes() *StoreWriteBytes {
-	wb := storeWriteBytesPool.Get().(*StoreWriteBytes)
-	*wb = StoreWriteBytes{}
-	return wb
-}
-
-// Release returns the *StoreWriteBytes to the pool.
-func (wb *StoreWriteBytes) Release() {
-	if wb == nil {
-		return
-	}
-	storeWriteBytesPool.Put(wb)
 }
 
 func workInfoForBatch(

@@ -93,13 +93,28 @@ func Merge(
 ) (MergeResult, error) {
 	logMergeInputs(ctx, ssts, opts.Iteration, opts.MaxIterations)
 
-	// Proactive availability gate: wait for all required nodes to be alive
-	// before planning or executing the merge.
-	if err := waitForRequiredInstances(ctx, execCtx, ssts); err != nil {
+	// Proactive plan-coverage gate: retry until SetupAllNodesPlanning
+	// returns an instance set that covers every node owning an input
+	// SST. Avoids silent empty merge output when the planner's health
+	// view briefly drops a required node.
+	sv := &execCtx.ExecCfg().Settings.SV
+	retryOpts := retry.Options{
+		InitialBackoff: 5 * time.Second,
+		MaxBackoff:     1 * time.Minute,
+		Multiplier:     2,
+		MaxDuration:    InstanceUnavailabilityTimeout.Get(sv),
+	}
+	planCtx, sqlInstanceIDs, err := waitForViablePlan(ctx, ssts, retryOpts,
+		func(ctx context.Context) (*sql.PlanningCtx, []base.SQLInstanceID, error) {
+			return execCtx.DistSQLPlanner().SetupAllNodesPlanning(
+				ctx, execCtx.ExtendedEvalContext(), execCtx.ExecCfg())
+		})
+	if err != nil {
 		return MergeResult{}, err
 	}
 
-	plan, planCtx, err := newBulkMergePlan(ctx, execCtx, ssts, spans, genOutputURIAndRecordPrefix, opts)
+	plan, err := newBulkMergePlan(
+		ctx, execCtx, planCtx, sqlInstanceIDs, ssts, spans, genOutputURIAndRecordPrefix, opts)
 	if err != nil {
 		return MergeResult{}, err
 	}
@@ -221,51 +236,50 @@ func logMergeInputs(
 	log.Dev.Infof(ctx, "  total input keys: %d", totalInputKeys)
 }
 
-// waitForRequiredInstances checks that all SQL instances owning SST files
-// needed for the merge are alive. If any are unavailable, it retries with
-// exponential backoff until they come back or the configured timeout is
-// exceeded.
-func waitForRequiredInstances(
-	ctx context.Context, execCtx sql.JobExecContext, ssts []execinfrapb.BulkMergeSpec_SST,
-) error {
-	sv := &execCtx.ExecCfg().Settings.SV
-	timeout := InstanceUnavailabilityTimeout.Get(sv)
+// planFn returns the planning context and planned SQL instance set for a
+// single attempt of the merge planner. Implementations should call
+// SetupAllNodesPlanning (or equivalent) and surface its outputs without
+// building the full physical plan, so the retry loop can validate
+// coverage before paying for plan construction.
+type planFn func(ctx context.Context) (*sql.PlanningCtx, []base.SQLInstanceID, error)
 
-	retryOpts := retry.Options{
-		InitialBackoff: 5 * time.Second,
-		MaxBackoff:     1 * time.Minute,
-		Multiplier:     2,
-		MaxDuration:    timeout,
-	}
-
+// waitForViablePlan retries plan() until its instance set covers every
+// SQL instance referenced by an input SST URI, or the retry budget is
+// exhausted. On success it returns the planning context and instance
+// set from the satisfying attempt. On timeout it returns the
+// InstanceUnavailableError from the final attempt; on context
+// cancellation it returns ctx.Err().
+//
+// The retry loop tolerates transient gaps where the planner briefly
+// excludes a node that owns input SSTs (e.g., during a health-check
+// blip). Without coverage, no merge task touches the SSTs on the
+// excluded node and the merge silently produces empty output.
+func waitForViablePlan(
+	ctx context.Context, ssts []execinfrapb.BulkMergeSpec_SST, retryOpts retry.Options, plan planFn,
+) (*sql.PlanningCtx, []base.SQLInstanceID, error) {
 	var lastErr error
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		instances, err := execCtx.DistSQLPlanner().GetAllInstancesByLocality(
-			ctx, roachpb.Locality{},
-		)
+		planCtx, instances, err := plan(ctx)
 		if err != nil {
-			return errors.Wrap(err, "getting SQL instances for availability check")
+			return nil, nil, err
 		}
-
 		lastErr = CheckRequiredInstancesAvailable(ssts, instances)
 		if lastErr == nil {
-			return nil
+			return planCtx, instances, nil
 		}
-
 		log.Dev.Warningf(ctx,
-			"distributed merge waiting for unavailable SQL instances "+
+			"distributed merge waiting for planner to cover required SQL instances "+
 				"(attempt %d, timeout %s): %v",
-			r.CurrentAttempt(), timeout, lastErr,
+			r.CurrentAttempt(), retryOpts.MaxDuration, lastErr,
 		)
 	}
 
-	// Distinguish context cancellation from timeout expiry.
 	if ctx.Err() != nil {
-		return ctx.Err()
+		return nil, nil, ctx.Err()
 	}
-	return errors.Wrapf(lastErr,
-		"distributed merge failed: required SQL instances remain unavailable after %s",
-		timeout,
+	return nil, nil, errors.Wrapf(lastErr,
+		"distributed merge failed: required SQL instances remain uncovered after %s",
+		retryOpts.MaxDuration,
 	)
 }
 

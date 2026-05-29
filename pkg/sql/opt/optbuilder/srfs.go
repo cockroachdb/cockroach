@@ -7,6 +7,7 @@ package optbuilder
 
 import (
 	"context"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -148,6 +149,25 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 		} else {
 			scalar = b.buildScalar(texpr, inScope, outScope, outCol, nil)
 		}
+
+		// For Postgres compatibility, set the data source name of SRF columns
+		// to the unqualified function name. This allows column references to
+		// be qualified with the function name, e.g. jsonb_each_text.key.
+		if def != nil {
+			// def.Name is unqualified for pg_catalog builtins and UDFs, but
+			// includes the schema for non-pg_catalog builtins (e.g.
+			// "information_schema._pg_expandarray"). Strip the prefix to get
+			// the unqualified function name.
+			funcNameStr := def.Name
+			if idx := strings.LastIndex(funcNameStr, "."); idx >= 0 {
+				funcNameStr = funcNameStr[idx+1:]
+			}
+			funcName := tree.Name(funcNameStr)
+			for j := startCols; j < len(outScope.cols); j++ {
+				outScope.cols[j].table = tree.MakeUnqualifiedTableName(funcName)
+			}
+		}
+
 		numExpectedOutputCols := len(outScope.cols) - startCols
 		cols := make(opt.ColList, 0, numExpectedOutputCols)
 		for j := startCols; j < len(outScope.cols); j++ {

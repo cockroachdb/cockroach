@@ -96,9 +96,9 @@ func newTempEngine(
 			cfg.opts.KeySchemas = nil
 			cfg.opts.KeySchema = ""
 			cfg.opts.DisableWAL = true
-			cfg.opts.Experimental.UserKeyCategories = pebble.UserKeyCategories{}
-			cfg.opts.Experimental.ShortAttributeExtractor = nil
-			cfg.opts.Experimental.SpanPolicyFunc = func(bounds pebble.UserKeyBounds) (pebble.SpanPolicy, error) {
+			cfg.opts.UserKeyCategories = pebble.UserKeyCategories{}
+			cfg.opts.ShortAttributeExtractor = nil
+			cfg.opts.SpanPolicyFunc = func(bounds pebble.UserKeyBounds) (pebble.SpanPolicy, error) {
 				return pebble.SpanPolicy{}, nil
 			}
 			cfg.opts.BlockPropertyCollectors = nil

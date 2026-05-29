@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
@@ -376,7 +377,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		n.dbDesc.GetDefaultPrivilegeDescriptor(),
 		schema.GetDefaultPrivilegeDescriptor(),
 		n.dbDesc.GetID(),
-		params.SessionData().User(),
+		params.p.User(),
 		privilege.Tables,
 	)
 	if err != nil {
@@ -843,7 +844,7 @@ func ResolveUniqueWithoutIndexConstraint(
 		Name:         constraintName,
 		TableID:      tbl.ID,
 		ColumnIDs:    columnIDs,
-		Predicate:    predicate,
+		Predicate:    descpb.Expression(predicate),
 		Validity:     validity,
 		ConstraintID: tbl.NextConstraintID,
 	}
@@ -876,6 +877,14 @@ func ResolveUniqueWithoutIndexConstraint(
 // be looked up uncached, and we'll allow FK dependencies on tables
 // that were just added.
 //
+// fkPrivilegeChecker is an optional interface that resolver.SchemaResolver
+// implementations can satisfy to check REFERENCES privilege during FK
+// resolution. If the SchemaResolver passed to ResolveFK implements this
+// interface, the check is performed after the target table is resolved.
+type fkPrivilegeChecker interface {
+	checkFKReferencesPrivilege(ctx context.Context, parent catalog.TableDescriptor) error
+}
+
 // The passed Txn is used to lookup databases to qualify names in error messages
 // but if nil, will result in unqualified names in those errors.
 //
@@ -918,6 +927,11 @@ func ResolveFK(
 	if err != nil {
 		return err
 	}
+	if checker, ok := sc.(fkPrivilegeChecker); ok {
+		if err := checker.checkFKReferencesPrivilege(ctx, target); err != nil {
+			return err
+		}
+	}
 	if target.ParentID != tbl.ParentID {
 		if !allowCrossDatabaseFKs.Get(&evalCtx.Settings.SV) {
 			return errors.WithHint(
@@ -940,6 +954,7 @@ func ResolveFK(
 			persistenceType,
 		)
 	}
+
 	if target.ID == tbl.ID {
 		// When adding a self-ref FK to an _existing_ table, we want to make sure
 		// we edit the same copy.
@@ -1134,8 +1149,28 @@ func ResolveFK(
 		return errors.HandleAsAssertionFailure(err)
 	}
 	// Ensure that there is a unique constraint on the referenced side to use.
-	_, err = catalog.FindFKReferencedUniqueConstraint(target, c.(catalog.ForeignKeyConstraint))
-	return err
+	fkConstraint := c.(catalog.ForeignKeyConstraint)
+	canUseSubset := evalCtx.Settings.Version.IsActive(ctx, clusterversion.V26_3)
+	match, err := catalog.FindFKReferencedUniqueConstraint(target, fkConstraint, canUseSubset)
+	if err != nil {
+		return err
+	}
+	if !match.IsValidReferencedUniqueConstraint(fkConstraint, false /* asSubset */) {
+		// The match was accepted by the catalog lookup only because subset
+		// matching is on. The cluster setting decides whether to allow it.
+		if !sqlclustersettings.AllowSubsetUniqueFKs.Get(&evalCtx.Settings.SV) {
+			return errors.WithHintf(
+				pgerror.Newf(pgcode.ForeignKeyViolation,
+					"there is no unique constraint matching given keys for referenced table %s",
+					target.GetName()),
+				"a unique constraint matching a subset of the referenced columns exists; "+
+					"set cluster setting %q to true to allow this foreign key to be created",
+				sqlclustersettings.AllowSubsetUniqueFKs.Name())
+		}
+		// An exact match would have been preferred had one existed.
+		telemetry.Inc(sqltelemetry.SubsetUniqueForeignKeysUseCounter)
+	}
+	return nil
 }
 
 // CreatePartitioning returns a set of implicit columns and a new partitioning
@@ -1313,7 +1348,7 @@ func newTableDescIfAs(
 	if err != nil {
 		return nil, err
 	}
-	desc.CreateQuery = createQuery
+	desc.CreateQuery = descpb.Statement(createQuery)
 	return desc, nil
 }
 
@@ -1774,7 +1809,7 @@ func NewTableDesc(
 	for i := range desc.Columns {
 		col := &desc.Columns[i]
 		if col.IsComputed() {
-			expr, err := parser.ParseExpr(*col.ComputeExpr)
+			expr, err := parser.ParseExpr(string(*col.ComputeExpr))
 			if err != nil {
 				return nil, err
 			}
@@ -1783,7 +1818,8 @@ func NewTableDesc(
 			if err != nil {
 				return nil, err
 			}
-			col.ComputeExpr = &deqExpr
+			computeExpr := descpb.Expression(deqExpr)
+			col.ComputeExpr = &computeExpr
 		}
 	}
 
@@ -1875,7 +1911,8 @@ func NewTableDesc(
 				if err != nil {
 					return nil, err
 				}
-				col.ColumnDesc().ComputeExpr = &serializedExpr
+				expr := descpb.Expression(serializedExpr)
+				col.ColumnDesc().ComputeExpr = &expr
 			}
 		}
 	}
@@ -1999,7 +2036,7 @@ func NewTableDesc(
 				if err != nil {
 					return nil, err
 				}
-				idx.Predicate = expr
+				idx.Predicate = descpb.Expression(expr)
 			}
 			if err := addSecondaryIdx(idx, d.StorageParams); err != nil {
 				return nil, err
@@ -2115,7 +2152,7 @@ func NewTableDesc(
 				if err != nil {
 					return nil, err
 				}
-				idx.Predicate = expr
+				idx.Predicate = descpb.Expression(expr)
 			}
 			if d.PrimaryKey {
 				if err := addPrimaryIdx(idx, d.StorageParams); err != nil {
@@ -2686,7 +2723,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 			if c.DefaultExpr != nil {
 				_, shouldCopyColumnDefault := shouldCopyColumnDefaultSet[c.Name]
 				if opts.Has(tree.LikeTableOptDefaults) || shouldCopyColumnDefault {
-					def.DefaultExpr.Expr, err = parser.ParseExpr(*c.DefaultExpr)
+					def.DefaultExpr.Expr, err = parser.ParseExpr(string(*c.DefaultExpr))
 					if err != nil {
 						return nil, err
 					}
@@ -2696,7 +2733,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 				if opts.Has(tree.LikeTableOptGenerated) {
 					def.Computed.Computed = true
 					def.Computed.Virtual = c.Virtual
-					def.Computed.Expr, err = parser.ParseExpr(*c.ComputeExpr)
+					def.Computed.Expr, err = parser.ParseExpr(string(*c.ComputeExpr))
 					if err != nil {
 						return nil, err
 					}
@@ -2704,7 +2741,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 			}
 			if c.OnUpdateExpr != nil {
 				if opts.Has(tree.LikeTableOptDefaults) {
-					def.OnUpdateExpr.Expr, err = parser.ParseExpr(*c.OnUpdateExpr)
+					def.OnUpdateExpr.Expr, err = parser.ParseExpr(string(*c.OnUpdateExpr))
 					if err != nil {
 						return nil, err
 					}
@@ -2718,7 +2755,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 					Name:                  tree.Name(c.Name),
 					FromHashShardedColumn: c.FromHashShardedColumn,
 				}
-				def.Expr, err = parser.ParseExpr(c.Expr)
+				def.Expr, err = parser.ParseExpr(string(c.Expr))
 				if err != nil {
 					return nil, err
 				}
@@ -2741,7 +2778,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 				}
 				defs = append(defs, &def)
 				if c.IsPartial() {
-					def.Predicate, err = parser.ParseExpr(c.Predicate)
+					def.Predicate, err = parser.ParseExpr(string(c.Predicate))
 					if err != nil {
 						return nil, err
 					}
@@ -2787,7 +2824,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 					}
 					if col.IsExpressionIndexColumn() {
 						elem.Column = ""
-						elem.Expr, err = parser.ParseExpr(col.GetComputeExpr())
+						elem.Expr, err = parser.ParseExpr(string(col.GetComputeExpr()))
 						if err != nil {
 							return nil, err
 						}
@@ -2813,7 +2850,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 					}
 				}
 				if idx.IsPartial() {
-					indexDef.Predicate, err = parser.ParseExpr(idx.GetPredicate())
+					indexDef.Predicate, err = parser.ParseExpr(string(idx.GetPredicate()))
 					if err != nil {
 						return nil, err
 					}

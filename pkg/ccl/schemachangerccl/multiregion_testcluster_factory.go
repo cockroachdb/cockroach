@@ -9,11 +9,13 @@ import (
 	"context"
 	gosql "database/sql"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -80,7 +82,12 @@ func (f MultiRegionTestClusterFactory) Start(ctx context.Context, t *testing.T) 
 		st = cluster.MakeClusterSettingsWithVersions(clusterversion.Latest.Version(), f.server.ClusterVersionOverride)
 	}
 	sql.CreateTableWithSchemaLocked.Override(ctx, &st.SV, !f.schemaLockedDisabled)
-	c, db, _ := multiregionccltestutils.TestingCreateMultiRegionCluster(t, numServers, knobs, multiregionccltestutils.WithSettings(st))
+	closedts.TargetDuration.Override(ctx, &st.SV, 20*time.Millisecond)
+	closedts.SideTransportCloseInterval.Override(ctx, &st.SV, 20*time.Millisecond)
+	c, db, _ := multiregionccltestutils.TestingCreateMultiRegionCluster(t, numServers, knobs,
+		multiregionccltestutils.WithSettings(st),
+		multiregionccltestutils.WithBaseDirectory(t.TempDir()),
+	)
 	return sctest.TestServer{
 		Server: c.Server(0),
 		DB:     db,

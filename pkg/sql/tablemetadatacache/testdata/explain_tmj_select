@@ -42,7 +42,12 @@ SELECT
         WHERE "tableID" = n_id
         GROUP BY "tableID"
     ),
-    crdb_internal.table_span(n_id) as span
+    crdb_internal.table_span(n_id) as span,
+    (d->'table'->'primaryIndex'->>'id')::INT as primary_index_id,
+    (
+        SELECT array_agg((idx->>'id')::INT)
+        FROM jsonb_array_elements(d->'table'->'indexes') idx
+    ) as secondary_index_ids
 FROM
     cte
 AS OF SYSTEM TIME '-1us'
@@ -52,51 +57,70 @@ distribution: local
 
 • render
 │
-└── • apply join (left outer)
+└── • group (hash)
+    │ group by: rownum
     │
-    ├── • render
-    │   │
-    │   └── • limit
-    │       │ count: ‹×›
-    │       │
-    │       └── • lookup join
-    │           │ table: descriptor@primary
-    │           │ equality: (id) = (id)
-    │           │ equality cols are key
-    │           │
-    │           └── • sort
-    │               │ order: +"parentID",+"parentSchemaID",+name
-    │               │
-    │               └── • hash join
-    │                   │ equality: (parentID, parentSchemaID) = (id, id)
-    │                   │
-    │                   ├── • filter
-    │                   │   │ filter: "parentSchemaID" != ‹×›
-    │                   │   │
-    │                   │   └── • scan
-    │                   │         missing stats
-    │                   │         table: namespace@primary
-    │                   │         spans: 1 span
-    │                   │
-    │                   └── • lookup join
-    │                       │ table: namespace@primary
-    │                       │ equality: (id) = (parentID)
-    │                       │ pred: id != ‹×›
-    │                       │
-    │                       └── • scan
-    │                             missing stats
-    │                             table: namespace@primary
-    │                             spans: 1 span
-    │
-    └── • inner loop (unoptimized)
+    └── • apply join (left outer)
         │
-        └── • group-by (streaming)
-               ├── select
-               │    ├── scan table_statistics
-               │    └── filters
-               │         └── tableID = n_id
-               └── aggregations
-                    └── max
-                         └── createdAt
+        ├── • ordinality
+        │   │
+        │   └── • apply join (left outer)
+        │       │
+        │       ├── • render
+        │       │   │
+        │       │   └── • limit
+        │       │       │ count: ‹×›
+        │       │       │
+        │       │       └── • lookup join
+        │       │           │ table: descriptor@primary
+        │       │           │ equality: (id) = (id)
+        │       │           │ equality cols are key
+        │       │           │
+        │       │           └── • sort
+        │       │               │ order: +"parentID",+"parentSchemaID",+name
+        │       │               │
+        │       │               └── • hash join
+        │       │                   │ equality: (parentID, parentSchemaID) = (id, id)
+        │       │                   │
+        │       │                   ├── • filter
+        │       │                   │   │ filter: "parentSchemaID" != ‹×›
+        │       │                   │   │
+        │       │                   │   └── • scan
+        │       │                   │         missing stats
+        │       │                   │         table: namespace@primary
+        │       │                   │         spans: 1 span
+        │       │                   │
+        │       │                   └── • lookup join
+        │       │                       │ table: namespace@primary
+        │       │                       │ equality: (id) = (parentID)
+        │       │                       │ pred: id != ‹×›
+        │       │                       │
+        │       │                       └── • scan
+        │       │                             missing stats
+        │       │                             table: namespace@primary
+        │       │                             spans: 1 span
+        │       │
+        │       └── • inner loop (unoptimized)
+        │           │
+        │           └── • group-by (streaming)
+        │                  ├── select
+        │                  │    ├── scan table_statistics
+        │                  │    └── filters
+        │                  │         └── tableID = n_id
+        │                  └── aggregations
+        │                       └── max
+        │                            └── createdAt
+        │
+        └── • inner loop (unoptimized)
+            │
+            └── • project
+                   ├── project-set
+                   │    ├── values
+                   │    │    └── ()
+                   │    └── zip
+                   │         └── jsonb_array_elements((d->‹×›)->‹×›)
+                   └── projections
+                        ├── ‹×›
+                        └── (value->>‹×›)::INT8
 ----
 ----

@@ -401,7 +401,6 @@ func BenchmarkSqlStatsMaxFlushTime(b *testing.B) {
 				Query:                    "SELECT 1",
 				App:                      "bench",
 				DistSQL:                  false,
-				ImplicitTxn:              false,
 				Vec:                      false,
 				FullScan:                 false,
 				Database:                 "",

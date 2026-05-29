@@ -188,6 +188,10 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 			return nil, errors.New(
 				"implicit credentials disallowed for s3 due to --external-io-disable-implicit-credentials flag")
 		}
+		// Tune the cache that LoadDefaultConfig will wrap around whichever
+		// refreshable provider the default chain selects; see credsCacheOptions
+		// for the rationale.
+		addLoadOption(config.WithCredentialsCacheOptions(credsCacheOptions))
 	default:
 		return nil, errors.Errorf("unsupported value %s for %s", kmsURIParams.auth, cloud.AuthParam)
 	}
@@ -209,7 +213,7 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 				}
 			})
 			intermediateCreds := stscreds.NewAssumeRoleProvider(client, delegateProvider.roleARN, withExternalID(delegateProvider.externalID))
-			cfg.Credentials = aws.NewCredentialsCache(intermediateCreds)
+			cfg.Credentials = aws.NewCredentialsCache(intermediateCreds, credsCacheOptions)
 		}
 
 		client := sts.NewFromConfig(cfg, func(options *sts.Options) {
@@ -218,7 +222,7 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 			}
 		})
 		creds := stscreds.NewAssumeRoleProvider(client, kmsURIParams.roleProvider.roleARN, withExternalID(kmsURIParams.roleProvider.externalID))
-		cfg.Credentials = aws.NewCredentialsCache(creds)
+		cfg.Credentials = aws.NewCredentialsCache(creds, credsCacheOptions)
 	}
 
 	reuse := reuseKMSSession.Get(&env.ClusterSettings().SV)

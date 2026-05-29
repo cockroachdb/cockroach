@@ -10,13 +10,14 @@ import orderBy from "lodash/orderBy";
 import React from "react";
 
 import * as protos from "src/js/protos";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { FixLong } from "src/util/fixLong";
 import Print from "src/views/reports/containers/range/print";
 
 interface LogTableProps {
   rangeID: Long;
-  log: CachedDataReducerState<protos.cockroach.server.serverpb.RangeLogResponse>;
+  data: protos.cockroach.server.serverpb.RangeLogResponse;
+  error?: Error;
+  isLoading?: boolean;
 }
 
 function printLogEventType(
@@ -72,7 +73,9 @@ function renderLogInfo(
 
 export default function LogTable({
   rangeID,
-  log,
+  data,
+  error,
+  isLoading: loading,
 }: LogTableProps): React.ReactElement {
   // If there is no otherRangeID, it comes back as the number 0.
   const renderRangeID = (otherRangeID: Long | number) => {
@@ -96,7 +99,7 @@ export default function LogTable({
   const renderContent = () => {
     // Sort by descending timestamp.
     const events = orderBy(
-      log && log.data && log.data.events,
+      data && data.events,
       event => util.TimestampToMoment(event.event.timestamp).valueOf(),
       "desc",
     );
@@ -147,9 +150,9 @@ export default function LogTable({
     <div>
       <h2 className="base-heading">Range Log</h2>
       <Loading
-        loading={!log || log.inFlight}
+        loading={loading}
         page={"log table"}
-        error={log && log.lastError}
+        error={error}
         render={renderContent}
       />
     </div>

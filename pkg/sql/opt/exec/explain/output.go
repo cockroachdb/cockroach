@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -328,13 +329,31 @@ func (ob *OutputBuilder) AddPlanType(generic, optimized bool) {
 	}
 }
 
-// AddStmtHintCount adds a top-level field displaying the number of statement
-// hints applied to the query. Cannot be called while inside a node.
-func (ob *OutputBuilder) AddStmtHintCount(hintCount uint64) {
-	if hintCount == 0 {
+// AddStmtHintCount adds a top-level field displaying a summary of the
+// statement hints loaded for the query (applied and skipped). Cannot be called
+// while inside a node.
+func (ob *OutputBuilder) AddStmtHintCount(hints []hints.Hint, runtimeErrors map[int]error) {
+	if len(hints) == 0 {
 		return
 	}
-	ob.AddTopLevelField("statement hints count", string(humanizeutil.Count(hintCount)))
+	total := uint64(len(hints))
+	applied := uint64(0)
+	for i := range hints {
+		if hints[i].Enabled() && runtimeErrors[i] == nil {
+			applied++
+		}
+	}
+	if total == applied {
+		ob.AddTopLevelField("statement hints", string(humanizeutil.Count(total)))
+	} else {
+		skipped := total - applied
+		ob.AddTopLevelField("statement hints", fmt.Sprintf(
+			"%s (%s applied, %s skipped)",
+			humanizeutil.Count(total),
+			humanizeutil.Count(applied),
+			humanizeutil.Count(skipped),
+		))
+	}
 }
 
 // AddPlanningTime adds a top-level planning time field. Cannot be called

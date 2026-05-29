@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -295,6 +296,7 @@ func (ib *indexBackfiller) makeIndexBackfillSink(ctx context.Context) (bulksst.B
 			ib.flowCtx.Cfg.ExternalStorageFromURI,
 			ib.flowCtx.Cfg.DB.KV().Clock(),
 			prefix,
+			nodeID,
 			ib.spec.WriteAsOf,
 			ib.processorID,
 			checkDuplicates,
@@ -568,12 +570,21 @@ func (ib *indexBackfiller) Run(ctx context.Context, output execinfra.RowReceiver
 
 	progCh := make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 	var err error
-	// We don't have to worry about this go routine leaking because next we loop
-	// over progCh which is closed only after the go routine returns.
-	go func() {
+	// Launch via the stopper so that any panic in runBackfill (or a panic
+	// re-thrown from a ctxgroup worker via Wait) is recovered and reported to
+	// Sentry by the stopper's recover wrapper before it tears down the
+	// process. We don't have to worry about the goroutine leaking because next
+	// we loop over progCh, which is closed only after the goroutine returns.
+	if startErr := ib.flowCtx.Stopper().RunAsyncTaskEx(ctx, stop.TaskOpts{
+		TaskName: "indexBackfiller-runBackfill",
+		SpanOpt:  stop.ChildSpan,
+	}, func(ctx context.Context) {
 		defer close(progCh)
 		err = ib.runBackfill(ctx, progCh)
-	}()
+	}); startErr != nil {
+		close(progCh)
+		err = startErr
+	}
 
 	for prog := range progCh {
 		// Take a copy so that we can send the progress address to the output processor.

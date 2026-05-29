@@ -23,7 +23,7 @@ END;
  -- literals removed
 DECLARE
 BEGIN
-IMPORT INTO _ CSV DATA ('*****') WITH OPTIONS (_ = '524288');
+IMPORT INTO _ CSV DATA ('*****') WITH OPTIONS (max_row_size = '524288');
 END;
  -- identifiers removed
 DECLARE

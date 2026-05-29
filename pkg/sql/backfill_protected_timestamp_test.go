@@ -521,3 +521,38 @@ func TestBackfillQueryWithProtectedTS(t *testing.T) {
 		})
 	}
 }
+
+// TestBackfillQueryPTSInstallErrorPropagation verifies that errors during PTS
+// installation in backfillQueryIntoTable are properly propagated. This is a
+// regression test for a bug where a variable shadowing issue inside a
+// sync.Once closure caused PTS installation errors to be silently swallowed.
+func TestBackfillQueryPTSInstallErrorPropagation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	injectedErr := errors.New("injected PTS installation error")
+	ptsInstallCalled := atomic.Int32{}
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+				RunBeforeQueryBackfillPTSInstall: func() error {
+					ptsInstallCalled.Add(1)
+					return injectedErr
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+	r := sqlutils.MakeSQLRunner(db)
+	r.Exec(t, "SET create_table_with_schema_locked=false")
+	r.Exec(t, "CREATE TABLE src(n int)")
+	r.Exec(t, "INSERT INTO src VALUES (1), (2), (3)")
+
+	_, err := db.ExecContext(ctx, "CREATE MATERIALIZED VIEW mv AS SELECT n FROM src")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "injected PTS installation error")
+	require.Greater(t, ptsInstallCalled.Load(), int32(0),
+		"PTS installation knob should have been called")
+}

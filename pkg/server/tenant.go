@@ -1488,6 +1488,7 @@ func makeTenantSQLServerArgs(
 		sqlCPUProvider:           sqlCPUProvider,
 		rangeDescIteratorFactory: tenantConnect,
 		tenantTimeSeriesServer:   sTS,
+		timeSeriesQuerier:        ts.NewTenantSQLAdapter(sTS),
 		tenantCapabilitiesReader: sql.EmptySystemTenantOnly[tenantcapabilities.Reader](),
 	}, nil
 }

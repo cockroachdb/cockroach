@@ -93,26 +93,35 @@ func (n *alterTypeNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("type", n.n.Cmd.TelemetryName()))
 
 	typeName := tree.AsStringWithFQNames(n.n.Type, params.p.Ann())
-	eventLogDone := false
-	var err error
 	switch t := n.n.Cmd.(type) {
 	case *tree.AlterTypeAddValue:
-		err = params.p.addEnumValue(params.ctx, n.desc, t, tree.AsStringWithFQNames(n.n, params.p.Ann()))
-	case *tree.AlterTypeRenameValue:
-		err = params.p.renameTypeValue(params.ctx, n, string(t.OldVal), string(t.NewVal))
-	case *tree.AlterTypeRename:
-		if err = params.p.renameType(params.ctx, n, string(t.NewName)); err != nil {
+		if err := params.p.addEnumValue(params.ctx, n.desc, t, tree.AsStringWithFQNames(n.n, params.p.Ann())); err != nil {
 			return err
 		}
-		err = params.p.logEvent(params.ctx, n.desc.ID, &eventpb.RenameType{
+		return params.p.logEvent(params.ctx, n.desc.ID, &eventpb.AlterTypeAddValue{
+			TypeName: typeName,
+			Value:    string(t.NewVal),
+		})
+	case *tree.AlterTypeRenameValue:
+		if err := params.p.renameTypeValue(params.ctx, n, string(t.OldVal), string(t.NewVal)); err != nil {
+			return err
+		}
+		return params.p.logEvent(params.ctx, n.desc.ID, &eventpb.AlterTypeRenameValue{
+			TypeName: typeName,
+			OldValue: string(t.OldVal),
+			NewValue: string(t.NewVal),
+		})
+	case *tree.AlterTypeRename:
+		if err := params.p.renameType(params.ctx, n, string(t.NewName)); err != nil {
+			return err
+		}
+		return params.p.logEvent(params.ctx, n.desc.ID, &eventpb.RenameType{
 			TypeName:    typeName,
 			NewTypeName: string(t.NewName),
 		})
-		eventLogDone = true
 	case *tree.AlterTypeSetSchema:
-		// TODO(knz): this is missing dedicated logging,
-		// See https://github.com/cockroachdb/cockroach/issues/57741
-		err = params.p.setTypeSchema(params.ctx, n, string(t.Schema))
+		// Event logged inside setTypeSchema.
+		return params.p.setTypeSchema(params.ctx, n, string(t.Schema))
 	case *tree.AlterTypeOwner:
 		owner, err := decodeusername.FromRoleSpec(
 			params.SessionData(), username.PurposeValidation, t.Owner,
@@ -120,30 +129,19 @@ func (n *alterTypeNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
-		if err = params.p.alterTypeOwner(params.ctx, n, owner); err != nil {
-			return err
-		}
-		eventLogDone = true // done inside alterTypeOwner().
+		// Event logged inside alterTypeOwner.
+		return params.p.alterTypeOwner(params.ctx, n, owner)
 	case *tree.AlterTypeDropValue:
-		err = params.p.dropEnumValue(params.ctx, n.desc, t.Val)
-	default:
-		err = errors.AssertionFailedf("unknown alter type cmd %s", t)
-	}
-	if err != nil {
-		return err
-	}
-
-	if !eventLogDone {
-		// Write a log event.
-		if err := params.p.logEvent(params.ctx,
-			n.desc.ID,
-			&eventpb.AlterType{
-				TypeName: typeName,
-			}); err != nil {
+		if err := params.p.dropEnumValue(params.ctx, n.desc, t.Val); err != nil {
 			return err
 		}
+		return params.p.logEvent(params.ctx, n.desc.ID, &eventpb.AlterTypeDropValue{
+			TypeName: typeName,
+			Value:    string(t.Val),
+		})
+	default:
+		return errors.AssertionFailedf("unknown alter type cmd %s", t)
 	}
-	return nil
 }
 
 func findEnumMemberByName(
@@ -302,21 +300,20 @@ func (p *planner) performRenameTypeDesc(
 func (p *planner) renameTypeValue(
 	ctx context.Context, n *alterTypeNode, oldVal string, newVal string,
 ) error {
-	enumMemberIndex := -1
-
-	// Do one pass to verify that the oldVal exists and there isn't already
-	// a member that is named newVal.
-	for i := range n.desc.EnumMembers {
-		member := n.desc.EnumMembers[i]
-		if member.LogicalRepresentation == oldVal {
-			enumMemberIndex = i
-		} else if member.LogicalRepresentation == newVal {
-			return pgerror.Newf(pgcode.DuplicateObject,
-				"enum value %s already exists", newVal)
-		}
+	if n.desc.Kind != descpb.TypeDescriptor_ENUM &&
+		n.desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
+		return pgerror.Newf(pgcode.WrongObjectType, "%q is not an enum", n.desc.Name)
 	}
 
-	// An enum member with the name oldVal was not found.
+	enumMemberIndex := -1
+
+	// Verify that oldVal exists.
+	for i := range n.desc.EnumMembers {
+		if n.desc.EnumMembers[i].LogicalRepresentation == oldVal {
+			enumMemberIndex = i
+			break
+		}
+	}
 	if enumMemberIndex == -1 {
 		return pgerror.Newf(pgcode.InvalidParameterValue,
 			"%s is not an existing enum value", oldVal)
@@ -329,7 +326,14 @@ func (p *planner) renameTypeValue(
 	if enumMemberIsAdding(&n.desc.EnumMembers[enumMemberIndex]) {
 		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 			"enum value %q is being added, try again later", oldVal)
+	}
 
+	// Check that newVal doesn't already exist.
+	for _, member := range n.desc.EnumMembers {
+		if member.LogicalRepresentation == newVal {
+			return pgerror.Newf(pgcode.DuplicateObject,
+				"enum value %s already exists", newVal)
+		}
 	}
 
 	n.desc.EnumMembers[enumMemberIndex].LogicalRepresentation = newVal
@@ -350,6 +354,8 @@ func (p *planner) setTypeSchema(ctx context.Context, n *alterTypeNode, schema st
 		return err
 	}
 
+	// The prepareSetSchema checks the primary type's name while the name of the
+	// companion array is collision-checked below.
 	desiredSchemaID, err := p.prepareSetSchema(ctx, n.prefix.Database, typeDesc, schema)
 	if err != nil {
 		return err
@@ -361,16 +367,31 @@ func (p *planner) setTypeSchema(ctx context.Context, n *alterTypeNode, schema st
 		return nil
 	}
 
-	err = p.performRenameTypeDesc(
-		ctx, typeDesc, typeDesc.Name, desiredSchemaID, tree.AsStringWithFQNames(n.n, p.Ann()),
-	)
-
+	arrayDesc, err := p.Descriptors().MutableByID(p.txn).Type(ctx, n.desc.ArrayTypeID)
 	if err != nil {
 		return err
 	}
 
-	arrayDesc, err := p.Descriptors().MutableByID(p.txn).Type(ctx, n.desc.ArrayTypeID)
-	if err != nil {
+	// CheckObjectNameCollision checks that the companion array can be moved
+	// without a name collision.
+	//
+	// This is consistent with the PG behavior which itself is inconsistent:
+	// `SET SCHEMA` errors on collision while `ALTER TYPE ... RENAME`
+	// auto-resolves conflicts on companion array names.
+	if err := descs.CheckObjectNameCollision(
+		ctx,
+		p.Descriptors(),
+		p.txn,
+		typeDesc.GetParentID(),
+		desiredSchemaID,
+		tree.NewUnqualifiedTypeName(arrayDesc.GetName()),
+	); err != nil {
+		return err
+	}
+
+	if err := p.performRenameTypeDesc(
+		ctx, typeDesc, typeDesc.Name, desiredSchemaID, tree.AsStringWithFQNames(n.n, p.Ann()),
+	); err != nil {
 		return err
 	}
 
@@ -401,6 +422,10 @@ func (p *planner) alterTypeOwner(
 	typeDesc := n.desc
 	oldOwner := typeDesc.GetPrivileges().Owner()
 
+	if newOwner == oldOwner {
+		return nil
+	}
+
 	arrayDesc, err := p.Descriptors().MutableByID(p.txn).Type(ctx, typeDesc.ArrayTypeID)
 	if err != nil {
 		return err
@@ -423,11 +448,6 @@ func (p *planner) alterTypeOwner(
 	if err := p.setNewTypeOwner(ctx, typeDesc, arrayDesc, typeNameWithPrefix,
 		arrayTypeNameWithPrefix, newOwner); err != nil {
 		return err
-	}
-
-	// If the owner we want to set to is the current owner, do a no-op.
-	if newOwner == oldOwner {
-		return nil
 	}
 
 	if err := p.writeTypeSchemaChange(

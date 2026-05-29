@@ -1949,7 +1949,7 @@ func TestEventuallyRecoverFromLeaseholderContextError(t *testing.T) {
 	require.False(t, hasRandomized(rec), "unexpected randomization in first send, trace:\n%s", rec)
 
 	// Advance the clock past the randomization threshold.
-	manualClock.Increment(randomizeLeaseholderOnContextErrorDuration.Nanoseconds())
+	manualClock.Increment(randomizeLeaseholderOnContextErrorDuration.Get(&ds.st.SV).Nanoseconds())
 
 	// Second send: should fail, but this time randomize the leaseholder.
 	rec, err = sendGet()

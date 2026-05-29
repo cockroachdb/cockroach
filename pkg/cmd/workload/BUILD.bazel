@@ -6,9 +6,9 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/workload",
     visibility = ["//visibility:private"],
     deps = [
-        "//pkg/ccl/workloadccl/allccl",
-        "//pkg/ccl/workloadccl/cliccl",
+        "//pkg/workload/all",
         "//pkg/workload/cli",
+        "//pkg/workload/cli/fixturescmd",
     ],
 )
 

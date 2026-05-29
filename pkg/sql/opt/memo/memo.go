@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -193,6 +194,7 @@ type Memo struct {
 	useImprovedTrigramSimilaritySelectivity    bool
 	trigramSimilarityThreshold                 float64
 	splitScanLimit                             int32
+	spanLimit                                  int32
 	useImprovedZigzagJoinCosting               bool
 	useImprovedMultiColumnSelectivityEstimate  bool
 	proveImplicationWithVirtualComputedCols    bool
@@ -221,8 +223,10 @@ type Memo struct {
 	preventUpdateSetColumnDrop                 bool
 	useImprovedRoutineDepsTriggersComputedCols bool
 	inlineAnyUnnestSubquery                    bool
+	inlinePlaceholderEqualities                bool
 	useMinRowCountAntiJoinFix                  bool
 	useBackupsWithIDs                          bool
+	pgDumpCompatibility                        string
 	// builtWithStatsRollout records the stats rollout mode under which
 	// this memo was built.
 	//
@@ -340,6 +344,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		useImprovedTrigramSimilaritySelectivity:    evalCtx.SessionData().OptimizerUseImprovedTrigramSimilaritySelectivity,
 		trigramSimilarityThreshold:                 evalCtx.SessionData().TrigramSimilarityThreshold,
 		splitScanLimit:                             evalCtx.SessionData().OptSplitScanLimit,
+		spanLimit:                                  evalCtx.SessionData().OptimizerSpanLimit,
 		useImprovedZigzagJoinCosting:               evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting,
 		useImprovedMultiColumnSelectivityEstimate:  evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate,
 		proveImplicationWithVirtualComputedCols:    evalCtx.SessionData().OptimizerProveImplicationWithVirtualComputedColumns,
@@ -368,10 +373,12 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		preventUpdateSetColumnDrop:                 evalCtx.SessionData().PreventUpdateSetColumnDrop,
 		useImprovedRoutineDepsTriggersComputedCols: evalCtx.SessionData().UseImprovedRoutineDepsTriggersAndComputedCols,
 		inlineAnyUnnestSubquery:                    evalCtx.SessionData().OptimizerInlineAnyUnnestSubquery,
+		inlinePlaceholderEqualities:                evalCtx.SessionData().OptimizerInlinePlaceholderEqualities,
 		useMinRowCountAntiJoinFix:                  evalCtx.SessionData().OptimizerUseMinRowCountAntiJoinFix,
 		skipUnderlyingViewPrivilegeChecks:          sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Get(&evalCtx.Settings.SV),
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 		useBackupsWithIDs:                          evalCtx.SessionData().UseBackupsWithIDs,
+		pgDumpCompatibility:                        evalCtx.SessionData().PgDumpCompatibility,
 		builtWithStatsRollout:                      evalCtx.StatsRollout,
 	}
 	m.metadata.Init()
@@ -528,6 +535,7 @@ func (m *Memo) IsStale(
 		m.useImprovedTrigramSimilaritySelectivity != evalCtx.SessionData().OptimizerUseImprovedTrigramSimilaritySelectivity ||
 		m.trigramSimilarityThreshold != evalCtx.SessionData().TrigramSimilarityThreshold ||
 		m.splitScanLimit != evalCtx.SessionData().OptSplitScanLimit ||
+		m.spanLimit != evalCtx.SessionData().OptimizerSpanLimit ||
 		m.useImprovedZigzagJoinCosting != evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting ||
 		m.useImprovedMultiColumnSelectivityEstimate != evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate ||
 		m.proveImplicationWithVirtualComputedCols != evalCtx.SessionData().OptimizerProveImplicationWithVirtualComputedColumns ||
@@ -556,10 +564,13 @@ func (m *Memo) IsStale(
 		m.preventUpdateSetColumnDrop != evalCtx.SessionData().PreventUpdateSetColumnDrop ||
 		m.useImprovedRoutineDepsTriggersComputedCols != evalCtx.SessionData().UseImprovedRoutineDepsTriggersAndComputedCols ||
 		m.inlineAnyUnnestSubquery != evalCtx.SessionData().OptimizerInlineAnyUnnestSubquery ||
+		m.inlinePlaceholderEqualities != evalCtx.SessionData().OptimizerInlinePlaceholderEqualities ||
 		m.useMinRowCountAntiJoinFix != evalCtx.SessionData().OptimizerUseMinRowCountAntiJoinFix ||
 		m.skipUnderlyingViewPrivilegeChecks != sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Get(&evalCtx.Settings.SV) ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel ||
-		m.useBackupsWithIDs != evalCtx.SessionData().UseBackupsWithIDs {
+		m.useBackupsWithIDs != evalCtx.SessionData().UseBackupsWithIDs ||
+		m.pgDumpCompatibility != evalCtx.SessionData().PgDumpCompatibility {
+		log.VEventf(ctx, 1, "memo is stale: session settings changed")
 		return true, nil
 	}
 
@@ -579,13 +590,15 @@ func (m *Memo) IsStale(
 	// evicting it, avoiding cache thrashing.
 	if (m.builtWithStatsRollout == eval.StatsRolloutStable && evalCtx.StatsRollout == eval.StatsRolloutDefault) ||
 		(m.builtWithStatsRollout == eval.StatsRolloutDefault && evalCtx.StatsRollout == eval.StatsRolloutStable) {
+		log.VEventf(ctx, 1, "memo is stale: stats rollout mode changed")
 		return true, nil
 	}
 
 	// Memo is stale if the fingerprint of any object in the memo's metadata has
 	// changed, or if the current user no longer has sufficient privilege to
 	// access the object.
-	if depsUpToDate, err := m.Metadata().CheckDependencies(ctx, evalCtx, catalog); err != nil || !depsUpToDate {
+	if reason, err := m.Metadata().CheckDependencies(ctx, evalCtx, catalog); err != nil || reason != "" {
+		log.VEventf(ctx, 1, "memo is stale: %s", reason)
 		return true, err
 	}
 	return false, nil

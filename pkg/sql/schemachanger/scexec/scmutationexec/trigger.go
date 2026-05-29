@@ -99,7 +99,7 @@ func (i *immediateVisitor) SetTriggerWhen(ctx context.Context, op scop.SetTrigge
 	if err != nil {
 		return err
 	}
-	trigger.WhenExpr = op.When.WhenExpr
+	trigger.WhenExpr = descpb.Expression(op.When.WhenExpr)
 	return nil
 }
 
@@ -112,7 +112,7 @@ func (i *immediateVisitor) SetTriggerFunctionCall(
 	}
 	trigger.FuncID = op.FunctionCall.FuncID
 	trigger.FuncArgs = op.FunctionCall.FuncArgs
-	trigger.FuncBody = op.FunctionCall.FuncBody
+	trigger.FuncBody = descpb.RoutineBody(op.FunctionCall.FuncBody)
 	return nil
 }
 

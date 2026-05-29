@@ -171,7 +171,7 @@ SELECT '100126'::REGPROC;
 query T
 SELECT 'sc.proc_f_2'::REGPROC;
 ----
-proc_f_2
+sc.proc_f_2
 
 query I
 SELECT 'sc.proc_f_2'::REGPROC::INT;
@@ -1174,10 +1174,10 @@ SET ROLE root;
 statement ok
 REVOKE SELECT ON xy FROM bob;
 
-statement error pgcode 0A000 cannot rename function "f_scalar" because other functions or views \(\[test.public.v, test.public.mv\]\) still depend on it
+statement error pgcode 0A000 cannot rename function "f_scalar" because other objects \(\[test.public.v, test.public.mv\]\) still depend on it
 ALTER FUNCTION f_scalar RENAME TO f_scalar_renamed;
 
-statement error pgcode 0A000 cannot rename function "f_setof" because other functions or views \(\[test.public.v, test.public.mv\]\) still depend on it
+statement error pgcode 0A000 cannot rename function "f_setof" because other objects \(\[test.public.v, test.public.mv\]\) still depend on it
 ALTER FUNCTION f_setof RENAME TO f_setof_renamed;
 
 statement error pgcode 2BP01 pq: cannot drop function "f_scalar" because other objects \(\[test.public.v, test.public.mv\]\) still depend on it

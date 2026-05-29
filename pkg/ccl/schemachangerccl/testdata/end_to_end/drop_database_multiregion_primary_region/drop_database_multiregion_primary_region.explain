@@ -105,17 +105,17 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":108}
  │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":108}
  │              ├── SetTableSchemaLocked {"TableID":108}
- │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.Owner"}
+ │              ├── RemoveOwner {"DescriptorID":106}
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"public"}
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"root"}
  │              ├── MarkDescriptorAsDropped {"DescriptorID":105}
  │              ├── RemoveSchemaParent {"Parent":{"ParentDatabaseID":104,"SchemaID":105}}
- │              ├── NotImplementedForPublicObjects {"DescID":107,"ElementType":"scpb.Owner"}
+ │              ├── RemoveOwner {"DescriptorID":107}
  │              ├── RemoveUserPrivileges {"DescriptorID":107,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":107,"User":"public"}
  │              ├── RemoveUserPrivileges {"DescriptorID":107,"User":"root"}
- │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.Owner"}
+ │              ├── RemoveOwner {"DescriptorID":108}
  │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"root"}
  │              ├── RemoveColumnNotNull {"ColumnID":1,"TableID":108}
@@ -129,7 +129,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │              ├── RemoveEnumTypeValue {"LogicalRepresentation":"us-east2","PhysicalRepresentation":"gA==","TypeID":106}
  │              ├── RemoveEnumTypeValue {"LogicalRepresentation":"us-east3","PhysicalRepresentation":"wA==","TypeID":106}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":105,"Name":"public"}}
- │              ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.Owner"}
+ │              ├── RemoveOwner {"DescriptorID":105}
  │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"public"}
  │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"root"}
@@ -143,7 +143,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967292,"TableID":108}
  │              ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":108}
  │              ├── DrainDescriptorName {"Namespace":{"DescriptorID":104,"Name":"multi_region_tes..."}}
- │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.Owner"}
+ │              ├── RemoveOwner {"DescriptorID":104}
  │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"public"}
  │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"root"}
@@ -319,17 +319,17 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":108}
  │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":108}
  │              ├── SetTableSchemaLocked {"TableID":108}
- │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.Owner"}
+ │              ├── RemoveOwner {"DescriptorID":106}
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"public"}
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"root"}
  │              ├── MarkDescriptorAsDropped {"DescriptorID":105}
  │              ├── RemoveSchemaParent {"Parent":{"ParentDatabaseID":104,"SchemaID":105}}
- │              ├── NotImplementedForPublicObjects {"DescID":107,"ElementType":"scpb.Owner"}
+ │              ├── RemoveOwner {"DescriptorID":107}
  │              ├── RemoveUserPrivileges {"DescriptorID":107,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":107,"User":"public"}
  │              ├── RemoveUserPrivileges {"DescriptorID":107,"User":"root"}
- │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.Owner"}
+ │              ├── RemoveOwner {"DescriptorID":108}
  │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"root"}
  │              ├── RemoveColumnNotNull {"ColumnID":1,"TableID":108}
@@ -344,7 +344,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │              ├── RemoveEnumTypeValue {"LogicalRepresentation":"us-east2","PhysicalRepresentation":"gA==","TypeID":106}
  │              ├── RemoveEnumTypeValue {"LogicalRepresentation":"us-east3","PhysicalRepresentation":"wA==","TypeID":106}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":105,"Name":"public"}}
- │              ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.Owner"}
+ │              ├── RemoveOwner {"DescriptorID":105}
  │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"public"}
  │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"root"}
@@ -358,7 +358,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967292,"TableID":108}
  │              ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":108}
  │              ├── DrainDescriptorName {"Namespace":{"DescriptorID":104,"Name":"multi_region_tes..."}}
- │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.Owner"}
+ │              ├── RemoveOwner {"DescriptorID":104}
  │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"public"}
  │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"root"}

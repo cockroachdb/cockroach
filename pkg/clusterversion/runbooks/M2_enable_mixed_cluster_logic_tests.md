@@ -195,13 +195,11 @@ Run bazel generation to create test files for the new configuration.
 ```
 
 This will generate test files in:
-- `pkg/ccl/logictestccl/tests/local-mixed-25.4/`
 - `pkg/sql/logictest/tests/local-mixed-25.4/`
 - `pkg/sql/sqlitelogictest/tests/local-mixed-25.4/`
 
 **Add the generated directories to git:**
 ```bash
-git add pkg/ccl/logictestccl/tests/local-mixed-25.4/
 git add pkg/sql/logictest/tests/local-mixed-25.4/
 git add pkg/sql/sqlitelogictest/tests/local-mixed-25.4/
 ```
@@ -313,14 +311,12 @@ A typical M.2 change should modify approximately 15-20 files:
 8. `pkg/BUILD.bazel` - Updated by `./dev gen bazel` (binary file)
 
 **Generated test files (always created):**
-9. `pkg/ccl/logictestccl/tests/local-mixed-25.4/BUILD.bazel`
-10. `pkg/ccl/logictestccl/tests/local-mixed-25.4/generated_test.go`
-11. `pkg/sql/logictest/tests/local-mixed-25.4/BUILD.bazel`
-12. `pkg/sql/logictest/tests/local-mixed-25.4/generated_test.go`
-13. `pkg/sql/logictest/tests/cockroach-go-testserver-25.4/BUILD.bazel`
-14. `pkg/sql/logictest/tests/cockroach-go-testserver-25.4/generated_test.go`
-15. `pkg/sql/sqlitelogictest/tests/local-mixed-25.4/BUILD.bazel`
-16. `pkg/sql/sqlitelogictest/tests/local-mixed-25.4/generated_test.go`
+9. `pkg/sql/logictest/tests/local-mixed-25.4/BUILD.bazel`
+10. `pkg/sql/logictest/tests/local-mixed-25.4/generated_test.go`
+11. `pkg/sql/logictest/tests/cockroach-go-testserver-25.4/BUILD.bazel`
+12. `pkg/sql/logictest/tests/cockroach-go-testserver-25.4/generated_test.go`
+13. `pkg/sql/sqlitelogictest/tests/local-mixed-25.4/BUILD.bazel`
+14. `pkg/sql/sqlitelogictest/tests/local-mixed-25.4/generated_test.go`
 
 **Test expectation updates (may vary):**
 17. `pkg/sql/logictest/testdata/logic_test/crdb_internal_catalog` - Update skipif
@@ -590,8 +586,7 @@ cp /tmp/25_4_* pkg/sql/catalog/bootstrap/data/
 
 # Step 5: Generate test files
 ./dev gen bazel
-git add pkg/ccl/logictestccl/tests/local-mixed-25.4/ \
-        pkg/sql/logictest/tests/local-mixed-25.4/ \
+git add pkg/sql/logictest/tests/local-mixed-25.4/ \
         pkg/sql/logictest/tests/cockroach-go-testserver-25.4/ \
         pkg/sql/sqlitelogictest/tests/local-mixed-25.4/
 

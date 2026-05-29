@@ -22,17 +22,22 @@ owners:
   addsstable_copies: cockroachdb/kv
   addsstable_delay_total: cockroachdb/kv
   addsstable_proposals: cockroachdb/kv
-  admission.cpu_time_tokens.exhausted_duration_nanos.%s.%s: cockroachdb/admission-control
-  admission.cpu_time_tokens.per_tenant.admitted_count.%s: cockroachdb/admission-control
-  admission.cpu_time_tokens.per_tenant.tokens_returned.%s: cockroachdb/admission-control
-  admission.cpu_time_tokens.per_tenant.tokens_used.%s: cockroachdb/admission-control
-  admission.cpu_time_tokens.per_tenant.wait_time_nanos.%s: cockroachdb/admission-control
-  admission.cpu_time_tokens.refill.added.%s.%s: cockroachdb/admission-control
-  admission.cpu_time_tokens.refill.removed.%s.%s: cockroachdb/admission-control
+  admission.cpu_time_tokens.exhausted_duration_nanos.%s: cockroachdb/admission-control
+  admission.cpu_time_tokens.refill.added.%s: cockroachdb/admission-control
+  admission.cpu_time_tokens.refill.removed.%s: cockroachdb/admission-control
   admission_admitted_snapshot_bytes: cockroachdb/admission-control
+  admission_cpu_time_tokens_admitted_count: cockroachdb/admission-control
+  admission_cpu_time_tokens_dampening_deficit_nanos: cockroachdb/admission-control
   admission_cpu_time_tokens_multiplier: cockroachdb/admission-control
+  admission_cpu_time_tokens_per_tenant_admitted_count: cockroachdb/admission-control
+  admission_cpu_time_tokens_per_tenant_tokens_returned: cockroachdb/admission-control
+  admission_cpu_time_tokens_per_tenant_tokens_used: cockroachdb/admission-control
+  admission_cpu_time_tokens_per_tenant_wait_time_nanos: cockroachdb/admission-control
+  admission_cpu_time_tokens_tokens_returned: cockroachdb/admission-control
+  admission_cpu_time_tokens_tokens_used: cockroachdb/admission-control
   admission_cpu_time_tokens_usage_consumed: cockroachdb/admission-control
   admission_cpu_time_tokens_usage_returned: cockroachdb/admission-control
+  admission_cpu_time_tokens_wait_time_nanos: cockroachdb/admission-control
   admission_elastic_cpu_acquired_nanos: cockroachdb/admission-control
   admission_elastic_cpu_available_nanos: cockroachdb/admission-control
   admission_elastic_cpu_bypassed_utilization: cockroachdb/admission-control
@@ -47,6 +52,10 @@ owners:
   admission_granter_cpu_load_long_period_duration_kv: cockroachdb/admission-control
   admission_granter_cpu_load_short_period_duration_kv: cockroachdb/admission-control
   admission_granter_disk_write_byte_tokens_exhausted_duration_kv: cockroachdb/admission-control
+  admission_granter_disk_write_byte_tokens_used_elastic_kv: cockroachdb/admission-control
+  admission_granter_disk_write_byte_tokens_used_kv: cockroachdb/admission-control
+  admission_granter_disk_write_byte_tokens_used_regular_kv: cockroachdb/admission-control
+  admission_granter_disk_write_byte_tokens_used_snapshot_kv: cockroachdb/admission-control
   admission_granter_elastic_io_tokens_available_kv: cockroachdb/admission-control
   admission_granter_elastic_io_tokens_exhausted_duration_kv: cockroachdb/admission-control
   admission_granter_io_tokens_available_kv: cockroachdb/admission-control
@@ -75,7 +84,9 @@ owners:
   auth_jwt_conn_latency: cockroachdb/sql-foundations
   auth_ldap_conn_latency: cockroachdb/sql-foundations
   auth_ldap_conn_latency_internal: cockroachdb/sql-foundations
+  auth_min_password_length: cockroachdb/sql-foundations
   auth_password_conn_latency: cockroachdb/sql-foundations
+  auth_password_encryption_is_scram: cockroachdb/sql-foundations
   auth_scram_conn_latency: cockroachdb/sql-foundations
   backup_last_failed_time_kms_inaccessible: cockroachdb/disaster-recovery
   batch_requests_bytes: cockroachdb/kv
@@ -105,6 +116,7 @@ owners:
   changefeed_buffer_pushback_nanos: cockroachdb/cdc
   changefeed_checkpoint_create_nanos: cockroachdb/cdc
   changefeed_checkpoint_hist_nanos: cockroachdb/cdc
+  changefeed_checkpoint_lag: cockroachdb/cdc
   changefeed_checkpoint_progress: cockroachdb/cdc
   changefeed_checkpoint_span_count: cockroachdb/cdc
   changefeed_checkpoint_timestamp_count: cockroachdb/cdc
@@ -226,7 +238,6 @@ owners:
   exec_error: cockroachdb/kv
   exec_latency: cockroachdb/kv
   exec_success: cockroachdb/kv
-  exportrequest_delay_total: cockroachdb/kv
   follower_reads_success_count: cockroachdb/kv
   gcbytesage: cockroachdb/kv
   go_scheduler_latency: cockroachdb/admission-control
@@ -304,6 +315,7 @@ owners:
   kv_allocator_load_based_replica_rebalancing_existing_not_overfull: cockroachdb/kv
   kv_allocator_load_based_replica_rebalancing_missing_stats_for_existing_store: cockroachdb/kv
   kv_allocator_load_based_replica_rebalancing_should_transfer: cockroachdb/kv
+  kv_bulk_low_pri_read_delay_total: cockroachdb/kv
   kv_closed_timestamp_max_behind_nanos: cockroachdb/kv
   kv_closed_timestamp_policy_change: cockroachdb/kv
   kv_closed_timestamp_policy_latency_info_missing: cockroachdb/kv
@@ -423,6 +435,7 @@ owners:
   liveness_heartbeatsinflight: cockroachdb/kv
   liveness_heartbeatsuccesses: cockroachdb/kv
   liveness_livenodes: cockroachdb/kv
+  liveness_uncached_scans: cockroachdb/kv
   lockbytes: cockroachdb/kv
   lockcount: cockroachdb/kv
   log_buffered_messages_dropped: cockroachdb/obs-prs
@@ -475,12 +488,16 @@ owners:
   mma_external_registration_success: cockroachdb/kv
   mma_overloaded_store: cockroachdb/kv
   mma_overloaded_store_lease_grace_failure: cockroachdb/kv
+  mma_overloaded_store_lease_grace_skipped: cockroachdb/kv
   mma_overloaded_store_lease_grace_success: cockroachdb/kv
   mma_overloaded_store_long_dur_failure: cockroachdb/kv
+  mma_overloaded_store_long_dur_skipped: cockroachdb/kv
   mma_overloaded_store_long_dur_success: cockroachdb/kv
   mma_overloaded_store_medium_dur_failure: cockroachdb/kv
+  mma_overloaded_store_medium_dur_skipped: cockroachdb/kv
   mma_overloaded_store_medium_dur_success: cockroachdb/kv
   mma_overloaded_store_short_dur_failure: cockroachdb/kv
+  mma_overloaded_store_short_dur_skipped: cockroachdb/kv
   mma_overloaded_store_short_dur_success: cockroachdb/kv
   mma_span_config_normalization: cockroachdb/kv
   mma_span_config_normalization_error: cockroachdb/kv
@@ -732,6 +749,7 @@ owners:
   raftlog_size_max: cockroachdb/kv
   raftlog_size_total: cockroachdb/kv
   raftlog_truncated: cockroachdb/kv
+  raftlog_truncator_busy_nanos: cockroachdb/kv
   range_adds: cockroachdb/kv
   range_merges: cockroachdb/kv
   range_raftleaderremovals: cockroachdb/kv
@@ -889,6 +907,24 @@ owners:
   security_certificate_expiration_node_client: cockroachdb/security-engineering
   security_certificate_expiration_ui: cockroachdb/security-engineering
   security_certificate_expiration_ui_ca: cockroachdb/security-engineering
+  security_certificate_expiry_days: cockroachdb/security-engineering
+  security_certificate_expiry_days_ca: cockroachdb/security-engineering
+  security_certificate_expiry_days_ca_client_tenant: cockroachdb/security-engineering
+  security_certificate_expiry_days_client_ca: cockroachdb/security-engineering
+  security_certificate_expiry_days_client_tenant: cockroachdb/security-engineering
+  security_certificate_expiry_days_node: cockroachdb/security-engineering
+  security_certificate_expiry_days_node_client: cockroachdb/security-engineering
+  security_certificate_expiry_days_ui: cockroachdb/security-engineering
+  security_certificate_expiry_days_ui_ca: cockroachdb/security-engineering
+  security_certificate_last_rotation: cockroachdb/security-engineering
+  security_certificate_last_rotation_ca: cockroachdb/security-engineering
+  security_certificate_last_rotation_ca_client_tenant: cockroachdb/security-engineering
+  security_certificate_last_rotation_client_ca: cockroachdb/security-engineering
+  security_certificate_last_rotation_client_tenant: cockroachdb/security-engineering
+  security_certificate_last_rotation_node: cockroachdb/security-engineering
+  security_certificate_last_rotation_node_client: cockroachdb/security-engineering
+  security_certificate_last_rotation_ui: cockroachdb/security-engineering
+  security_certificate_last_rotation_ui_ca: cockroachdb/security-engineering
   security_certificate_ttl: cockroachdb/security-engineering
   security_certificate_ttl_ca: cockroachdb/security-engineering
   security_certificate_ttl_ca_client_tenant: cockroachdb/security-engineering
@@ -1029,10 +1065,30 @@ owners:
   sql_restart_savepoint_rollback_started_count: cockroachdb/sql-queries
   sql_restart_savepoint_started_count: cockroachdb/sql-queries
   sql_rls_policies_applied_count: cockroachdb/sql-queries
+  sql_routine_alter_default_privileges_count: cockroachdb/sql-queries
+  sql_routine_alter_default_privileges_started_count: cockroachdb/sql-queries
+  sql_routine_create_role_count: cockroachdb/sql-queries
+  sql_routine_create_role_started_count: cockroachdb/sql-queries
+  sql_routine_create_schema_count: cockroachdb/sql-queries
+  sql_routine_create_schema_started_count: cockroachdb/sql-queries
+  sql_routine_create_table_count: cockroachdb/sql-queries
+  sql_routine_create_table_started_count: cockroachdb/sql-queries
+  sql_routine_create_temp_table_count: cockroachdb/sql-queries
+  sql_routine_create_temp_table_started_count: cockroachdb/sql-queries
   sql_routine_delete_count: cockroachdb/sql-queries
   sql_routine_delete_started_count: cockroachdb/sql-queries
+  sql_routine_drop_role_count: cockroachdb/sql-queries
+  sql_routine_drop_role_started_count: cockroachdb/sql-queries
+  sql_routine_drop_schema_count: cockroachdb/sql-queries
+  sql_routine_drop_schema_started_count: cockroachdb/sql-queries
+  sql_routine_drop_table_count: cockroachdb/sql-queries
+  sql_routine_drop_table_started_count: cockroachdb/sql-queries
+  sql_routine_grant_count: cockroachdb/sql-queries
+  sql_routine_grant_started_count: cockroachdb/sql-queries
   sql_routine_insert_count: cockroachdb/sql-queries
   sql_routine_insert_started_count: cockroachdb/sql-queries
+  sql_routine_revoke_count: cockroachdb/sql-queries
+  sql_routine_revoke_started_count: cockroachdb/sql-queries
   sql_routine_select_count: cockroachdb/sql-queries
   sql_routine_select_started_count: cockroachdb/sql-queries
   sql_routine_update_count: cockroachdb/sql-queries
@@ -1100,8 +1156,8 @@ owners:
   sql_txns_open: cockroachdb/sql-queries
   sql_update_count: cockroachdb/sql-queries
   sql_update_started_count: cockroachdb/sql-queries
-  sql_vecindex_pending_splits_merges: cockroachdb/sql-queries
-  sql_vecindex_successful_splits: cockroachdb/sql-queries
+  sql_vecindex_pending_splits_merges: cockroachdb/specialized-indexing
+  sql_vecindex_successful_splits: cockroachdb/specialized-indexing
   sqlliveness_is_alive_cache_hits: cockroachdb/server
   sqlliveness_is_alive_cache_misses: cockroachdb/server
   sqlliveness_sessions_deleted: cockroachdb/server
@@ -1257,6 +1313,7 @@ owners:
   sys_gc_assist_enabled: cockroachdb/obs-prs
   sys_gc_assist_ns: cockroachdb/obs-prs
   sys_gc_count: cockroachdb/obs-prs
+  sys_gc_cpu_percent: cockroachdb/obs-prs
   sys_gc_pause_ns: cockroachdb/obs-prs
   sys_gc_pause_percent: cockroachdb/obs-prs
   sys_gc_stop_ns: cockroachdb/obs-prs

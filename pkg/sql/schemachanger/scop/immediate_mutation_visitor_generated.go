@@ -130,6 +130,8 @@ type ImmediateMutationVisitor interface {
 	RemoveTableComment(context.Context, RemoveTableComment) error
 	UpsertTypeComment(context.Context, UpsertTypeComment) error
 	RemoveTypeComment(context.Context, RemoveTypeComment) error
+	UpsertFunctionComment(context.Context, UpsertFunctionComment) error
+	RemoveFunctionComment(context.Context, RemoveFunctionComment) error
 	UpsertDatabaseComment(context.Context, UpsertDatabaseComment) error
 	RemoveDatabaseComment(context.Context, RemoveDatabaseComment) error
 	UpsertSchemaComment(context.Context, UpsertSchemaComment) error
@@ -157,6 +159,7 @@ type ImmediateMutationVisitor interface {
 	SetObjectParentID(context.Context, SetObjectParentID) error
 	UpdateUserPrivileges(context.Context, UpdateUserPrivileges) error
 	UpdateOwner(context.Context, UpdateOwner) error
+	RemoveOwner(context.Context, RemoveOwner) error
 	CreateSchemaDescriptor(context.Context, CreateSchemaDescriptor) error
 	CreateSequenceDescriptor(context.Context, CreateSequenceDescriptor) error
 	SetSequenceOption(context.Context, SetSequenceOption) error
@@ -760,6 +763,16 @@ func (op RemoveTypeComment) Visit(ctx context.Context, v ImmediateMutationVisito
 }
 
 // Visit is part of the ImmediateMutationOp interface.
+func (op UpsertFunctionComment) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.UpsertFunctionComment(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op RemoveFunctionComment) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.RemoveFunctionComment(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
 func (op UpsertDatabaseComment) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.UpsertDatabaseComment(ctx, op)
 }
@@ -892,6 +905,11 @@ func (op UpdateUserPrivileges) Visit(ctx context.Context, v ImmediateMutationVis
 // Visit is part of the ImmediateMutationOp interface.
 func (op UpdateOwner) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.UpdateOwner(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op RemoveOwner) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.RemoveOwner(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.

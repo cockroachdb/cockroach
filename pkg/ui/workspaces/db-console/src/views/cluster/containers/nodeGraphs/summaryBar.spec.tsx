@@ -3,49 +3,41 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+import * as clusterUi from "@cockroachlabs/cluster-ui";
 import { render, screen } from "@testing-library/react";
 import React from "react";
 import { MemoryRouter as Router } from "react-router-dom";
 
-import { NodeSummaryStats } from "src/redux/nodes";
-import * as nodes from "src/redux/nodes";
 import { renderWithProviders } from "src/test-utils/renderWithProviders";
 
-import * as summaryBar from "./summaryBar";
 import { ClusterNodeTotals } from "./summaryBar";
 
+jest.mock("@cockroachlabs/cluster-ui", () => ({
+  ...jest.requireActual("@cockroachlabs/cluster-ui"),
+  useNodesSummary: jest.fn(),
+}));
+
+const mockedUseNodesSummary = clusterUi.useNodesSummary as jest.MockedFunction<
+  typeof clusterUi.useNodesSummary
+>;
+
 describe("<ClusterNodeTotals>", () => {
-  let nodeSumsSelectorStubReturn: NodeSummaryStats;
-
-  beforeEach(() => {
-    nodeSumsSelectorStubReturn = {
-      capacityAvailable: 0,
-      capacityTotal: 0,
-      capacityUsable: 0,
-      capacityUsed: 0,
-      replicas: 0,
-      totalRanges: 0,
-      unavailableRanges: 0,
-      underReplicatedRanges: 0,
-      usedBytes: 0,
-      usedMem: 0,
-      nodeCounts: {
-        total: 0,
-        healthy: 0,
-        suspect: 0,
-        dead: 0,
-        decommissioned: 0,
-        draining: 0,
-      },
-    };
-  });
-
   afterEach(() => {
     jest.restoreAllMocks();
   });
 
   it("hidden when no data", () => {
-    jest.spyOn(summaryBar, "selectNodesSummaryEmpty").mockReturnValue(true);
+    mockedUseNodesSummary.mockReturnValue({
+      nodeStatuses: [],
+      nodeIDs: [],
+      nodeStatusByID: {},
+      nodeDisplayNameByID: {},
+      livenessStatusByNodeID: {},
+      livenessByNodeID: {},
+      storeIDsByNodeID: {},
+      isLoading: false,
+      error: undefined,
+    });
     const { container } = render(
       renderWithProviders(
         <Router>
@@ -57,17 +49,23 @@ describe("<ClusterNodeTotals>", () => {
   });
 
   it("renders", () => {
-    jest.spyOn(summaryBar, "selectNodesSummaryEmpty").mockReturnValue(false);
-    jest.spyOn(nodes, "nodeSumsSelector").mockReturnValue({
-      ...nodeSumsSelectorStubReturn,
-      nodeCounts: {
-        total: 1,
-        healthy: 1,
-        suspect: 0,
-        dead: 0,
-        decommissioned: 0,
-        draining: 0,
-      },
+    mockedUseNodesSummary.mockReturnValue({
+      nodeStatuses: [
+        {
+          desc: { node_id: 1 },
+          metrics: {},
+        },
+      ] as any,
+      nodeIDs: ["1"],
+      nodeStatusByID: {},
+      nodeDisplayNameByID: { "1": "n1" },
+      livenessStatusByNodeID: {
+        "1": 3, // NODE_STATUS_LIVE
+      } as any,
+      livenessByNodeID: {},
+      storeIDsByNodeID: {},
+      isLoading: false,
+      error: undefined,
     });
     render(
       renderWithProviders(
@@ -80,17 +78,28 @@ describe("<ClusterNodeTotals>", () => {
   });
 
   it("renders dead nodes", () => {
-    jest.spyOn(summaryBar, "selectNodesSummaryEmpty").mockReturnValue(false);
-    jest.spyOn(nodes, "nodeSumsSelector").mockReturnValue({
-      ...nodeSumsSelectorStubReturn,
-      nodeCounts: {
-        total: 2,
-        healthy: 0,
-        suspect: 1,
-        dead: 1,
-        decommissioned: 0,
-        draining: 0,
-      },
+    mockedUseNodesSummary.mockReturnValue({
+      nodeStatuses: [
+        {
+          desc: { node_id: 1 },
+          metrics: {},
+        },
+        {
+          desc: { node_id: 2 },
+          metrics: {},
+        },
+      ] as any,
+      nodeIDs: ["1", "2"],
+      nodeStatusByID: {},
+      nodeDisplayNameByID: { "1": "n1", "2": "n2" },
+      livenessStatusByNodeID: {
+        "1": 1, // NODE_STATUS_DEAD
+        "2": 2, // NODE_STATUS_UNAVAILABLE (suspect)
+      } as any,
+      livenessByNodeID: {},
+      storeIDsByNodeID: {},
+      isLoading: false,
+      error: undefined,
     });
     render(
       renderWithProviders(

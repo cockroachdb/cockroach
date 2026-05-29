@@ -245,7 +245,8 @@ func (s *sampleAggregator) mainLoop(
 		// If it changed by less than 1%, just check for cancellation (which is more
 		// efficient).
 		if fractionCompleted < 1.0 && fractionCompleted < lastReportedFractionCompleted+0.01 {
-			return job.NoTxn().CheckState(ctx)
+			//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+			return job.DeprecatedNoTxn().CheckState(ctx)
 		}
 		lastReportedFractionCompleted = fractionCompleted
 		return s.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {

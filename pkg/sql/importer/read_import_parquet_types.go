@@ -27,8 +27,31 @@ import (
 // parquetColumnMetadata caches immutable schema information for a column.
 // This is populated once when the file is opened and reused across all batches.
 type parquetColumnMetadata struct {
+	// columnName is the user-visible column name. For flat columns this is the
+	// leaf name (e.g. "id"); for LIST columns it is the top-level group node
+	// name (e.g. "tags", not "element"). Always populated, even when
+	// detectListColumn fails — it is the canonical source of truth for the
+	// column's name and is used to match against IMPORT target columns.
+	columnName string
+
 	logicalType   schema.LogicalType   // Always populated (derived from ConvertedType if needed)
 	convertedType schema.ConvertedType // Original annotation (for reference/debugging)
+
+	// isList is true when this column is a LIST. When isList is true,
+	// logicalType and convertedType describe the element's types, not the
+	// enclosing group's.
+	isList bool
+
+	// listInfo holds the list schema metadata; non-nil iff isList is true.
+	listInfo *parquetListColumnInfo
+
+	// detectionErr, when non-nil, is the deferred error from
+	// detectListColumn for an unsupported column (e.g. nested LIST or
+	// MAP). It is surfaced only if the column is in the import target
+	// set, so files with unsupported columns can still be partially
+	// imported. logicalType, convertedType, isList, and listInfo are
+	// unset in this case.
+	detectionErr error
 }
 
 // Helper functions for common Parquet type conversions.

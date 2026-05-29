@@ -35,6 +35,7 @@ const (
 	testArgsFlag     = "test-args"
 	vModuleFlag      = "vmodule"
 	showDiffFlag     = "show-diff"
+	coverageFlag     = "coverage"
 )
 
 // List of bazel integration tests that will fail when running `dev test pkg/...`
@@ -63,7 +64,7 @@ pkg/kv/kvserver:kvserver_test) instead.`,
     dev test pkg/... -v
         Increase test verbosity. Shows bazel and go test process output.
 
-    dev test pkg/spanconfig/... pkg/ccl/spanconfigccl/...
+    dev test pkg/spanconfig/... pkg/ccl/kvccl/...
         Test multiple packages recursively
 
     dev test --race --count 250 ...
@@ -131,6 +132,7 @@ pkg/kv/kvserver:kvserver_test) instead.`,
 	testCmd.Flags().String(testArgsFlag, "", "additional arguments to pass to the go test binary")
 	testCmd.Flags().String(vModuleFlag, "", "comma-separated list of pattern=N settings for file-filtered logging")
 	testCmd.Flags().Bool(showDiffFlag, false, "generate a diff for expectation mismatches when possible")
+	testCmd.Flags().Bool(coverageFlag, false, "run tests with code coverage and produce an lcov report")
 	return testCmd
 }
 
@@ -174,13 +176,12 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		count        = mustGetFlagInt(cmd, countFlag)
 		vModule      = mustGetFlagString(cmd, vModuleFlag)
 		showDiff     = mustGetFlagBool(cmd, showDiffFlag)
+		coverage     = mustGetFlagBool(cmd, coverageFlag)
 
 		// These are tests that require access to another directory for
 		// --rewrite. These can either be single directories or
 		// recursive directories ending in /...
 		extraRewritablePaths = []struct{ pkg, path string }{
-			{"pkg/ccl/logictestccl", "pkg/sql/logictest"},
-			{"pkg/ccl/logictestccl", "pkg/sql/opt/exec/execbuilder"},
 			{"pkg/ccl/schemachangerccl", "pkg/sql/schemachanger/testdata"},
 			{"pkg/sql/opt/memo", "pkg/sql/opt/testutils/opttester/testfixtures"},
 			{"pkg/sql/opt/norm", "pkg/sql/opt/testutils/opttester/testfixtures"},
@@ -191,10 +192,8 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 
 		logicTestPaths = []string{
 			"pkg/sql/logictest/tests",
-			"pkg/ccl/logictestccl/tests",
 			"pkg/sql/opt/exec/execbuilder/tests",
 			"pkg/sql/sqlitelogictest/tests",
-			"pkg/ccl/sqlitelogictestccl/tests",
 		}
 	)
 
@@ -217,6 +216,9 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	if stress && streamOutput {
 		return fmt.Errorf("cannot combine --%s and --%s", stressFlag, streamOutputFlag)
 	}
+	if coverage && stress {
+		return fmt.Errorf("cannot combine --%s and --%s", coverageFlag, stressFlag)
+	}
 
 	if rewrite {
 		ignoreCache = true
@@ -231,7 +233,11 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 
 	var args []string
 	var goTags []string
-	args = append(args, "test")
+	if coverage {
+		args = append(args, "coverage")
+	} else {
+		args = append(args, "test")
+	}
 	addCommonBazelArguments(&args)
 	if race {
 		args = append(args, "--config=race", "--test_sharding_strategy=disabled")
@@ -281,6 +287,13 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 
 	args = append(args, testTargets...)
 	args = append(args, "--test_env=GOTRACEBACK=all")
+	if coverage {
+		args = append(args,
+			"--@io_bazel_rules_go//go/config:cover_format=lcov",
+			"--combined_report=lcov",
+			"--instrumentation_filter=//pkg/...",
+		)
+	}
 
 	if rewrite {
 		if stress {
@@ -397,6 +410,18 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 			log.Printf("WARNING: the build succeeded but no tests were found.")
 			err = nil
 		}
+	}
+
+	if coverage && err == nil {
+		outputPath, pathErr := d.getBazelInfo(ctx, "output_path", nil)
+		if pathErr != nil {
+			return pathErr
+		}
+		lcovFile := filepath.Join(outputPath, "_coverage", "_coverage_report.dat")
+		log.Printf("Coverage report: %s", lcovFile)
+		log.Printf("To generate an HTML report, run:")
+		log.Printf("  genhtml --exclude 'external/*' %s -o coverage-html && open coverage-html/index.html", lcovFile)
+		log.Printf("Install genhtml via: brew install lcov")
 	}
 
 	return err

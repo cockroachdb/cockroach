@@ -249,3 +249,9 @@ var (
 	// from a table via ALTER TABLE ... NO FORCE ROW LEVEL SECURITY.
 	NoForceRLSCounter = telemetry.GetCounterOnce("sql.schema.no_force_rls")
 )
+
+// SubsetUniqueForeignKeysUseCounter is incremented every time a foreign key is
+// created that is backed by a unique constraint covering only a strict subset
+// of the FK's referenced columns. This is a CRDB extension over the SQL
+// standard and PostgreSQL, which require an exact match.
+var SubsetUniqueForeignKeysUseCounter = telemetry.GetCounterOnce("sql.schema.subset_unique_foreign_keys")

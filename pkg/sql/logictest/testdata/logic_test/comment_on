@@ -637,3 +637,381 @@ SELECT database_name FROM [SHOW DATABASES] WHERE database_name = 'test_db'
 ----
 
 subtest end
+
+# Tests for COMMENT ON VIEW and COMMENT ON SEQUENCE (issue #44135). These
+# are declarative-schema-changer-only, mirroring COMMENT ON TYPE. Views and
+# sequences share the TableCommentType (1) storage with tables.
+subtest comment_on_view_and_sequence
+
+statement ok
+CREATE VIEW comment_view AS SELECT 1 AS x
+
+statement ok
+CREATE SEQUENCE comment_seq
+
+onlyif config local-legacy-schema-changer
+statement error COMMENT ON VIEW is only implemented in the declarative schema changer
+COMMENT ON VIEW comment_view IS 'view_comment'
+
+onlyif config local-legacy-schema-changer
+statement error COMMENT ON SEQUENCE is only implemented in the declarative schema changer
+COMMENT ON SEQUENCE comment_seq IS 'sequence_comment'
+
+skipif config local-legacy-schema-changer
+statement ok
+COMMENT ON VIEW comment_view IS 'view_comment'
+
+skipif config local-legacy-schema-changer
+statement ok
+COMMENT ON SEQUENCE comment_seq IS 'sequence_comment'
+
+# Comments are stored with type=1 (TableCommentType) for table, view, and
+# sequence alike.
+skipif config local-legacy-schema-changer
+query IT rowsort
+SELECT type, comment
+  FROM system.comments
+ WHERE object_id IN ('comment_view'::regclass::oid::int, 'comment_seq'::regclass::oid::int)
+   AND sub_id = 0
+----
+1  sequence_comment
+1  view_comment
+
+# Comments are visible via pg_description / obj_description.
+skipif config local-legacy-schema-changer
+query T
+SELECT obj_description('comment_view'::regclass::oid)
+----
+view_comment
+
+skipif config local-legacy-schema-changer
+query T
+SELECT obj_description('comment_seq'::regclass::oid)
+----
+sequence_comment
+
+# Overwriting an existing comment.
+skipif config local-legacy-schema-changer
+statement ok
+COMMENT ON VIEW comment_view IS 'view_comment_AGAIN';
+COMMENT ON SEQUENCE comment_seq IS 'sequence_comment_AGAIN'
+
+skipif config local-legacy-schema-changer
+query T
+SELECT obj_description('comment_view'::regclass::oid)
+----
+view_comment_AGAIN
+
+skipif config local-legacy-schema-changer
+query T
+SELECT obj_description('comment_seq'::regclass::oid)
+----
+sequence_comment_AGAIN
+
+# Qualified names work.
+skipif config local-legacy-schema-changer
+statement ok
+COMMENT ON VIEW public.comment_view IS 'qualified_view';
+COMMENT ON SEQUENCE public.comment_seq IS 'qualified_sequence'
+
+skipif config local-legacy-schema-changer
+query T rowsort
+SELECT obj_description(oid)
+  FROM (VALUES ('comment_view'::regclass::oid), ('comment_seq'::regclass::oid)) AS v(oid)
+----
+qualified_sequence
+qualified_view
+
+# Setting comment to NULL removes it.
+skipif config local-legacy-schema-changer
+statement ok
+COMMENT ON VIEW comment_view IS NULL;
+COMMENT ON SEQUENCE comment_seq IS NULL
+
+skipif config local-legacy-schema-changer
+query I
+SELECT count(*)
+  FROM system.comments
+ WHERE object_id IN ('comment_view'::regclass::oid::int, 'comment_seq'::regclass::oid::int)
+   AND sub_id = 0
+----
+0
+
+# Wrong object type: COMMENT ON VIEW on a table or sequence, and COMMENT ON
+# SEQUENCE on a table or view, must error rather than silently succeed.
+skipif config local-legacy-schema-changer
+statement error pgcode 42809 .* is not a view
+COMMENT ON VIEW comment_seq IS 'oops'
+
+skipif config local-legacy-schema-changer
+statement error pgcode 42809 .* is not a sequence
+COMMENT ON SEQUENCE comment_view IS 'oops'
+
+# Non-existent objects produce the standard "does not exist" error.
+skipif config local-legacy-schema-changer
+statement error pgcode 42P01 relation "no_such_view" does not exist
+COMMENT ON VIEW no_such_view IS 'oops'
+
+skipif config local-legacy-schema-changer
+statement error pgcode 42P01 relation "no_such_seq" does not exist
+COMMENT ON SEQUENCE no_such_seq IS 'oops'
+
+# Materialized views also work via COMMENT ON VIEW.
+skipif config local-legacy-schema-changer
+statement ok
+CREATE MATERIALIZED VIEW comment_mv AS SELECT 1 AS x
+
+skipif config local-legacy-schema-changer
+statement ok
+COMMENT ON VIEW comment_mv IS 'matview_comment'
+
+skipif config local-legacy-schema-changer
+query T
+SELECT obj_description('comment_mv'::regclass::oid)
+----
+matview_comment
+
+skipif config local-legacy-schema-changer
+statement ok
+DROP MATERIALIZED VIEW comment_mv
+
+statement ok
+DROP VIEW comment_view
+
+statement ok
+DROP SEQUENCE comment_seq
+
+subtest end
+
+# Tests for COMMENT ON FUNCTION / PROCEDURE / ROUTINE (issue #44135).
+# Declarative-only, mirroring COMMENT ON TYPE. Functions get their own
+# scpb.FunctionComment element and the catalogkeys.FunctionCommentType (6)
+# storage. Privilege model is ownership, matching PG and matching how
+# DROP/ALTER FUNCTION already gate.
+subtest comment_on_function_and_procedure
+
+statement ok
+CREATE FUNCTION fn_comment_int(x INT) RETURNS INT LANGUAGE SQL AS 'SELECT x'
+
+statement ok
+CREATE FUNCTION fn_comment_str(x STRING) RETURNS STRING LANGUAGE SQL AS 'SELECT x'
+
+statement ok
+CREATE PROCEDURE proc_comment(x INT) LANGUAGE SQL AS 'SELECT 1'
+
+# Legacy schema changer rejects all three keywords with kind-specific errors.
+onlyif config local-legacy-schema-changer
+statement error COMMENT ON FUNCTION is only implemented in the declarative schema changer
+COMMENT ON FUNCTION fn_comment_int(INT) IS 'fn_legacy'
+
+onlyif config local-legacy-schema-changer
+statement error COMMENT ON PROCEDURE is only implemented in the declarative schema changer
+COMMENT ON PROCEDURE proc_comment(INT) IS 'proc_legacy'
+
+onlyif config local-legacy-schema-changer
+statement error COMMENT ON ROUTINE is only implemented in the declarative schema changer
+COMMENT ON ROUTINE fn_comment_int(INT) IS 'routine_legacy'
+
+# Declarative path: each keyword sets a comment.
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+COMMENT ON FUNCTION fn_comment_int(INT) IS 'fn_int_v1'
+
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+COMMENT ON PROCEDURE proc_comment(INT) IS 'proc_v1'
+
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+COMMENT ON ROUTINE fn_comment_str(STRING) IS 'fn_str_via_routine'
+
+# Comments are stored with type=6 (FunctionCommentType) keyed by the
+# routine's descriptor ID. Function OIDs are descriptor IDs offset by the
+# CockroachPredefinedOIDMax (100000) so we subtract that to compare.
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query IT rowsort
+SELECT type, comment
+  FROM system.comments
+ WHERE type = 6
+   AND object_id IN (
+     'fn_comment_int(INT)'::regprocedure::oid::int - 100000,
+     'fn_comment_str(STRING)'::regprocedure::oid::int - 100000,
+     'proc_comment(INT)'::regprocedure::oid::int - 100000)
+----
+6  fn_int_v1
+6  fn_str_via_routine
+6  proc_v1
+
+# Comments surface via obj_description(oid, 'pg_proc').
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query T
+SELECT obj_description('fn_comment_int(INT)'::regprocedure::oid, 'pg_proc')
+----
+fn_int_v1
+
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query T
+SELECT obj_description('proc_comment(INT)'::regprocedure::oid, 'pg_proc')
+----
+proc_v1
+
+# Overwriting an existing comment.
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+COMMENT ON FUNCTION fn_comment_int(INT) IS 'fn_int_v2'
+
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query T
+SELECT obj_description('fn_comment_int(INT)'::regprocedure::oid, 'pg_proc')
+----
+fn_int_v2
+
+# Setting comment to NULL removes it.
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+COMMENT ON FUNCTION fn_comment_int(INT) IS NULL
+
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query I
+SELECT count(*) FROM system.comments
+ WHERE type = 6
+   AND object_id = 'fn_comment_int(INT)'::regprocedure::oid::int - 100000
+----
+0
+
+# Re-set so the DROP cleanup test below has something to clean up.
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+COMMENT ON FUNCTION fn_comment_int(INT) IS 'fn_int_v3'
+
+# Wrong-kind: COMMENT ON FUNCTION on a procedure errors, and vice versa.
+# ResolveRoutine surfaces this as "X(args) is not a function/procedure".
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement error proc_comment\(int\) is not a function
+COMMENT ON FUNCTION proc_comment(INT) IS 'oops'
+
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement error fn_comment_int\(int\) is not a procedure
+COMMENT ON PROCEDURE fn_comment_int(INT) IS 'oops'
+
+# COMMENT ON ROUTINE accepts either kind.
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+COMMENT ON ROUTINE proc_comment(INT) IS 'proc_via_routine'
+
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query T
+SELECT obj_description('proc_comment(INT)'::regprocedure::oid, 'pg_proc')
+----
+proc_via_routine
+
+# Builtin functions are off-limits for COMMENT ON writes. ResolveRoutine's
+# RoutineType filter excludes BuiltinRoutine, so the failure mode is
+# "is not a function/procedure" rather than the panic message — either way
+# the write is rejected.
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement error length\(string\) is not a function
+COMMENT ON FUNCTION length(STRING) IS 'oops'
+
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement error length\(string\) is not a procedure
+COMMENT ON PROCEDURE length(STRING) IS 'oops'
+
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement error length\(string\) is not a function
+COMMENT ON ROUTINE length(STRING) IS 'oops'
+
+# Builtin descriptions remain readable through obj_description, populated
+# by crdb_internal.kv_builtin_function_comments. Pick a stable builtin
+# whose Info string isn't expected to change. crdb_internal.cluster_id is
+# a no-arg builtin with a stable description.
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query B
+SELECT obj_description('crdb_internal.cluster_id()'::regprocedure::oid, 'pg_proc') IS NOT NULL
+----
+true
+
+# DROP FUNCTION removes the comment from system.comments via the scdecomp
+# wiring (FunctionComment element gets dropped when the parent Function
+# element is dropped).
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+DROP FUNCTION fn_comment_int(INT)
+
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query I
+SELECT count(*) FROM system.comments WHERE type = 6 AND comment = 'fn_int_v3'
+----
+0
+
+# Cleanup.
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+DROP FUNCTION fn_comment_str(STRING);
+DROP PROCEDURE proc_comment(INT)
+
+# Final invalid_objects check: the comment-on-routine plumbing should not
+# leave dangling system.comments rows.
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query ITTTT
+SELECT * FROM "".crdb_internal.invalid_objects WHERE error LIKE '%FunctionCommentType%' OR error LIKE '%type 6%'
+----
+
+subtest end
+
+# COMMENT ON FUNCTION/PROCEDURE/ROUTINE is gated on routine ownership, not
+# the EXECUTE privilege. Mirrors DROP/ALTER FUNCTION and matches PostgreSQL.
+subtest comment_on_routine_privileges
+
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+CREATE FUNCTION fn_priv() RETURNS INT LANGUAGE SQL AS 'SELECT 1';
+CREATE PROCEDURE proc_priv(x INT) LANGUAGE SQL AS 'SELECT 1';
+GRANT EXECUTE ON FUNCTION fn_priv() TO testuser;
+GRANT EXECUTE ON PROCEDURE proc_priv(INT) TO testuser
+
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+SET ROLE testuser
+
+# EXECUTE alone is not enough to comment on a routine owned by someone else.
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement error pgcode 42501 must be owner of function fn_priv
+COMMENT ON FUNCTION fn_priv() IS 'nope'
+
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement error pgcode 42501 must be owner of function proc_priv
+COMMENT ON PROCEDURE proc_priv(INT) IS 'nope'
+
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement error pgcode 42501 must be owner of function fn_priv
+COMMENT ON ROUTINE fn_priv() IS 'nope'
+
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+RESET ROLE
+
+# Owner path: a routine created while acting as testuser is owned by
+# testuser, and testuser can then comment on it.
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+GRANT CREATE ON SCHEMA public TO testuser;
+SET ROLE testuser;
+CREATE FUNCTION fn_priv_owned() RETURNS INT LANGUAGE SQL AS 'SELECT 1';
+COMMENT ON FUNCTION fn_priv_owned() IS 'owner ok'
+
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query T
+SELECT obj_description('fn_priv_owned()'::regprocedure::oid, 'pg_proc')
+----
+owner ok
+
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+RESET ROLE;
+DROP FUNCTION fn_priv_owned();
+DROP FUNCTION fn_priv();
+DROP PROCEDURE proc_priv(INT);
+REVOKE CREATE ON SCHEMA public FROM testuser
+
+subtest end

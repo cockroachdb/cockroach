@@ -3963,9 +3963,11 @@ func TestTxnCoordSenderRetriesAcrossEndTxn(t *testing.T) {
 			sideRejectedOnSecondAttempt: left,
 			// The first attempt of right side contains a parallel commit (i.e. an
 			// EndTxn), but fails. The 2nd attempt of the right side will no longer
-			// contain an EndTxn, as explained above. So we expect the txn record to
-			// not exist.
-			txnRecExpectation: kvclientutils.ExpectPusheeTxnRecordNotFound,
+			// contain an EndTxn, as explained above. So we expect no STAGING txn
+			// record / no transaction recovery. Note that a PENDING txn record may
+			// or may not exist depending on whether the heartbeat loop managed to
+			// fire before the CommitInBatch completed.
+			txnRecExpectation: kvclientutils.ExpectNoTxnRecovery,
 		},
 		{
 			// On the first attempt, the right side succeed in writing a STAGING txn
@@ -4398,8 +4400,10 @@ func TestProxyTracing(t *testing.T) {
 
 		checkLeaseCount := func(node, expectedLeaseCount int) error {
 			if count := leaseCount(node); count != expectedLeaseCount {
-				require.NoError(t, tc.GetFirstStoreFromServer(t, 0).
-					ForceLeaseQueueProcess())
+				for i := 0; i < tc.NumServers(); i++ {
+					require.NoError(t, tc.GetFirstStoreFromServer(t, i).
+						ForceLeaseQueueProcess())
+				}
 				return errors.Errorf("expected %d leases on node %d, found %d",
 					expectedLeaseCount, node, count)
 			}
@@ -4453,29 +4457,48 @@ func TestProxyTracing(t *testing.T) {
 	})
 }
 
-// TestUnexpectedCommitOnTxnRecovery constructs a scenario where transaction
-// recovery could incorrectly determine that a transaction is committed. The
-// scenario is as follows:
+// TestUnexpectedCommitOnTxnRecovery is a regression test for #145458. It
+// verifies that once QueryIntent has reported a replicated lock as missing on
+// some key, that lock cannot subsequently appear via an unrelated code path
+// (specifically, a lease-transfer-driven durability upgrade of a covering
+// unreplicated lock) and cause a later transaction recovery to incorrectly
+// conclude that the transaction committed.
+//
+// The scenario, in detail:
 //
 // Txn1:
-// - Writes to keyA.
-// - Acquires an unreplicated exclusive lock on keyB.
-// - Acquires a replicated shared lock on keyB. This lock is pipelined, and
-// replication for it fails.
-// - Attempts to commit, but fails because of the lost replicated Shared lock.
+//   - Writes to keyA (in-flight write).
+//   - Acquires an unreplicated Exclusive lock on keyB (BestEffort durability).
+//   - Acquires a replicated Shared lock on keyB (GuaranteedDurability). This
+//     lock is pipelined and a testing knob forces its raft application to
+//     fail, so the replicated Shared lock is never written.
+//   - Attempts a parallel commit. The pre-commit QueryIntent for the Shared
+//     lock on keyB finds nothing and returns RETRY_ASYNC_WRITE_FAILURE.
 //
-// Lease is then transferred to n3. This causes the unreplicated exclusive lock
-// on keyB to be replicated.
+// The lease for keyB is then transferred to n3. With unreplicated lock
+// reliability for lease transfers enabled, this transfer normally exports
+// unreplicated locks held by ongoing transactions and writes them as
+// replicated locks on the new leaseholder. Without the fix from #145458, the
+// unreplicated Exclusive lock on keyB would be exported and a replicated
+// Exclusive lock would appear on keyB after the QueryIntent above had already
+// reported the replicated Shared lock missing.
 //
 // Txn2:
-// - Attempts to read keyA, which kicks off transaction recovery for Txn1.
-// - Txn2 (incorrectly) concludes that Txn1 is committed at epoch=1 because it
-// finds a (stronger than Shared) replicated lock on keyB.
+//   - Reads keyA, which kicks off transaction recovery for Txn1.
+//   - Recovery's QueryIntent for the Shared lock on keyB must NOT find any
+//     lock, so that recovery aborts Txn1 (consistent with the earlier
+//     RETRY_ASYNC_WRITE_FAILURE observed by Txn1).
+//
+// Without the fix, recovery would find the replicated Exclusive lock left
+// behind by the lease transfer (Exclusive >= Shared satisfies the QueryIntent
+// check) and conclude that Txn1 committed, contradicting Txn1's own view that
+// the commit failed. The fix in #145458 marks any lock reported as missing by
+// QueryIntent as ineligible for export, so the lease transfer's durability
+// upgrade skips keyB.
 //
 // Txn1:
-// - Back here, we do a stateful retry. We should learn that someone (Txn2)
-// aborted us when we go and try to commit. At the time of writing, we
-// incorrectly learn that we've been (unexpectedly) committed.
+//   - Performs a stateful retry. The Put(keyA) at epoch=1 should observe
+//     ABORT_REASON_ABORT_SPAN, confirming that recovery aborted us.
 func TestUnexpectedCommitOnTxnRecovery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -4499,6 +4522,20 @@ func TestUnexpectedCommitOnTxnRecovery(t *testing.T) {
 			Settings: st,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
+					// Disable autonomous lease movement so that the only lease
+					// transfer is the one performed explicitly by the test
+					// (via transferLease). Otherwise, an autonomous lease
+					// transfer can run between the failed replicated Shared
+					// lock acquisition and the parallel commit's QueryIntent,
+					// upgrading the unreplicated Exclusive lock on keyB to a
+					// replicated Exclusive lock before QueryIntent runs.
+					// QueryIntent would then find that stronger lock and the
+					// parallel commit would succeed validly (no anomaly, since
+					// any subsequent recovery would observe the same
+					// replicated lock and reach the same conclusion), but that
+					// is not the scenario this test means to exercise. See
+					// #170323.
+					DisableLeaseQueue: true,
 					TestingProposalFilter: func(fArgs kvserverbase.ProposalFilterArgs) *kvpb.Error {
 						if fArgs.Req.Header.Txn == nil ||
 							fArgs.Req.Header.Txn.ID.String() != targetTxnIDString.Load().(string) {

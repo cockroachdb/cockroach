@@ -250,7 +250,8 @@ type tpccOptions struct {
 	// InitNodes specifies which nodes to use for the init step. If nil,
 	// defaults to node 1 only. Set this to distribute table creation
 	// across multiple nodes for large schema workloads.
-	InitNodes option.NodeListOption
+	InitNodes       option.NodeListOption
+	CollectProfiles bool
 }
 
 func (t tpccOptions) getWorkloadCmd() string {
@@ -370,6 +371,86 @@ func setupTPCC(
 	}()
 }
 
+func collectTPCCProfiles(
+	ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptions, pgURLs []string,
+) {
+	t.Status("running 75 second workload to collect profiles")
+
+	logFileNamePattern := "run_*_n*_cockroach-workload-*.log"
+	existingWorkloadLogs := make(map[string]struct{})
+	if matches, _ := filepath.Glob(filepath.Join(t.ArtifactsDir(),
+		logFileNamePattern)); matches != nil {
+		for _, logPath := range matches {
+			existingWorkloadLogs[logPath] = struct{}{}
+		}
+	}
+
+	profilesDir := filepath.Join(t.ArtifactsDir(), "1.perf", "profiles")
+	if err := os.MkdirAll(profilesDir, 0755); err != nil {
+		t.L().Errorf("Failed to create profiles directory %s: %v", profilesDir, err)
+		return
+	}
+
+	profileM := t.NewErrorGroup(task.WithContext(ctx))
+	profileM.Go(
+		func(ctx context.Context, l *logger.Logger) error {
+			profileDuration := 75 * time.Second
+
+			fileName := roachtestutil.GetBenchmarkMetricsFileName(t)
+			histogramsPath := fmt.Sprintf("%s/profile_%s", t.PerfArtifactsDir(), fileName)
+
+			cmd := roachtestutil.NewCommand("%s workload run %s",
+				test.DefaultCockroachPath, opts.getWorkloadCmd()).
+				MaybeFlag(opts.DB != "", "db", opts.DB).
+				Flag("warehouses", opts.Warehouses).
+				MaybeFlag(!opts.DisableHistogram, "histograms", histogramsPath).
+				Flag("ramp", 0*time.Second).
+				Flag("duration", profileDuration).
+				Arg("%s", opts.ExtraRunArgs).
+				Arg("%s", pgURLs[0])
+			return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd.String())
+		},
+	)
+
+	t.L().Printf("waiting 30 seconds for workload to ramp up before collecting profiles")
+	time.Sleep(30 * time.Second)
+
+	collectionDuration := 30 * time.Second
+	t.L().Printf("starting profile collection from %d nodes for %s",
+		len(c.CRDBNodes()), collectionDuration)
+
+	profiles := map[string][]*profile.Profile{"cpu": {}, "allocs": {}, "mutex": {}}
+	for typ := range profiles {
+		typ := typ
+		profileM.Go(
+			func(ctx context.Context, l *logger.Logger) error {
+				var err error
+				profiles[typ], err = roachtestutil.GetProfile(ctx, t, c, typ,
+					collectionDuration, c.CRDBNodes())
+				return err
+			},
+		)
+	}
+
+	if err := profileM.WaitE(); err != nil {
+		t.L().Errorf("failed to collect profiles: %v", err)
+		_ = os.RemoveAll(profilesDir)
+	} else {
+		if err := mergeAndExportTPCCProfiles(t, c, collectionDuration, profiles, profilesDir); err != nil {
+			t.L().Errorf("failed to merge and export profiles: %v", err)
+			_ = os.RemoveAll(profilesDir)
+		}
+	}
+
+	if matches, _ := filepath.Glob(filepath.Join(t.ArtifactsDir(), logFileNamePattern)); matches != nil {
+		for _, logPath := range matches {
+			if _, ok := existingWorkloadLogs[logPath]; !ok {
+				_ = os.Remove(logPath)
+			}
+		}
+	}
+}
+
 func runTPCC(
 	ctx context.Context, t test.Test, l *logger.Logger, c cluster.Cluster, opts tpccOptions,
 ) {
@@ -478,96 +559,8 @@ func runTPCC(
 	}
 	m.Wait()
 
-	// Collect profiles by running a short workload
-	t.Status("running 75 second workload to collect profiles")
-
-	// Capture existing workload log files before collecting profiles. This will
-	// allow us to clean up any new workload log files that are created during
-	// the profile collection run.
-	logFileNamePattern := "run_*_n*_cockroach-workload-*.log"
-	existingWorkloadLogs := make(map[string]struct{})
-	if matches, _ := filepath.Glob(filepath.Join(t.ArtifactsDir(),
-		logFileNamePattern)); matches != nil {
-		for _, logPath := range matches {
-			existingWorkloadLogs[logPath] = struct{}{}
-		}
-	}
-
-	profilesDir := filepath.Join(t.ArtifactsDir(), "1.perf", "profiles")
-	if err := os.MkdirAll(profilesDir, 0755); err != nil {
-		t.L().Errorf("Failed to create profiles directory %s: %v", profilesDir, err)
-	} else {
-		// Start a short TPCC test in order to collect the profiles from an
-		// active cluster.
-		profileM := t.NewErrorGroup(task.WithContext(ctx))
-		profileM.Go(
-			func(ctx context.Context, l *logger.Logger) error {
-				// Run workload for 75 seconds
-				profileDuration := 75 * time.Second
-
-				fileName := roachtestutil.GetBenchmarkMetricsFileName(t)
-				histogramsPath := fmt.Sprintf("%s/profile_%s", t.PerfArtifactsDir(), fileName)
-
-				cmd := roachtestutil.NewCommand("%s workload run %s",
-					test.DefaultCockroachPath, opts.getWorkloadCmd()).
-					MaybeFlag(opts.DB != "", "db", opts.DB).
-					Flag("warehouses", opts.Warehouses).
-					MaybeFlag(!opts.DisableHistogram, "histograms", histogramsPath).
-					Flag("ramp", 0*time.Second). // No ramp for profile collection
-					Flag("duration", profileDuration).
-					Arg("%s", opts.ExtraRunArgs).
-					Arg("%s", pgURLs[0])
-				return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd.String())
-			},
-		)
-
-		// Wait for 30 seconds to give a chance to the workload to start, and then
-		// collect CPU, mutex, allocs profiles.
-		t.L().Printf("waiting 30 seconds for workload to ramp up before collecting profiles")
-		time.Sleep(30 * time.Second)
-
-		collectionDuration := 30 * time.Second
-		t.L().Printf("starting profile collection from %d nodes for %s",
-			len(c.CRDBNodes()), collectionDuration)
-
-		// Collect the profiles.
-		profiles := map[string][]*profile.Profile{"cpu": {}, "allocs": {}, "mutex": {}}
-		for typ := range profiles {
-			typ := typ // Capture for goroutine
-			profileM.Go(
-				func(ctx context.Context, l *logger.Logger) error {
-					var err error
-					profiles[typ], err = roachtestutil.GetProfile(ctx, t, c, typ,
-						collectionDuration, c.CRDBNodes())
-					return err
-				},
-			)
-		}
-
-		// If there is a problem executing the workload or there is a problem
-		// collecting the profiles we need to clean up the directory and log the error.
-		if err := profileM.WaitE(); err != nil {
-			t.L().Errorf("failed to collect profiles: %v", err)
-			_ = os.RemoveAll(profilesDir)
-		} else {
-			// At this point we know that the workload has not crashed, and we have
-			// collected all the individual profiles. We can now merge and export them.
-			if err := mergeAndExportTPCCProfiles(t, c, collectionDuration, profiles, profilesDir); err != nil {
-				t.L().Errorf("failed to merge and export profiles: %v", err)
-				_ = os.RemoveAll(profilesDir)
-			}
-		}
-
-		// Clean up the profile collection workload log file to reduce clutter.
-		// Delete any workload-r logs that were created after the main test run.
-		if matches, _ := filepath.Glob(filepath.Join(t.ArtifactsDir(), logFileNamePattern)); matches != nil {
-			for _, logPath := range matches {
-				if _, ok := existingWorkloadLogs[logPath]; !ok {
-					// This log was created by the profile collection run, remove it
-					_ = os.Remove(logPath)
-				}
-			}
-		}
+	if opts.CollectProfiles {
+		collectTPCCProfiles(ctx, t, c, opts, pgURLs)
 	}
 
 	if !opts.SkipPostRunCheck {
@@ -861,9 +854,10 @@ func registerTPCC(r registry.Registry) {
 			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
 			t.L().Printf("computed headroom warehouses of %d\n", headroomWarehouses)
 			runTPCC(ctx, t, t.L(), c, tpccOptions{
-				Warehouses: headroomWarehouses,
-				Duration:   120 * time.Minute,
-				SetupType:  usingImport,
+				Warehouses:      headroomWarehouses,
+				Duration:        120 * time.Minute,
+				SetupType:       usingImport,
+				CollectProfiles: true,
 			})
 		},
 	})
@@ -882,10 +876,11 @@ func registerTPCC(r registry.Registry) {
 			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
 			t.L().Printf("computed headroom warehouses of %d\n", headroomWarehouses)
 			runTPCC(ctx, t, t.L(), c, tpccOptions{
-				Warehouses:   headroomWarehouses,
-				ExtraRunArgs: "--isolation-level=read_committed --txn-retries=false",
-				Duration:     120 * time.Minute,
-				SetupType:    usingImport,
+				Warehouses:      headroomWarehouses,
+				ExtraRunArgs:    "--isolation-level=read_committed --txn-retries=false",
+				Duration:        120 * time.Minute,
+				SetupType:       usingImport,
+				CollectProfiles: true,
 				// Increase the vmodule level around transaction pushes so that if we do
 				// see a transaction retry error, we can debug it. This may affect perf,
 				// so we should not use this as a performance test.

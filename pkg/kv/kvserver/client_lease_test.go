@@ -1309,11 +1309,12 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
 
-	// Speed up lease transfers.
+	const numNodes = 4
+	const suspectServer = 1
+
 	stickyRegistry := fs.NewStickyRegistry()
 	manualClock := hlc.NewHybridManualClock()
 	serverArgs := make(map[int]base.TestServerArgs)
-	numNodes := 4
 	for i := 0; i < numNodes; i++ {
 		serverArgs[i] = base.TestServerArgs{
 			Settings: st,
@@ -1339,11 +1340,6 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 			ServerArgsPerNode: serverArgs,
 		})
 	defer tc.Stopper().Stop(ctx)
-
-	// We are not going to have stats, so disable this so we just rely on
-	// the store means.
-	_, err := tc.ServerConn(0).Exec(`SET CLUSTER SETTING kv.allocator.load_based_lease_rebalancing.enabled = 'false'`)
-	require.NoError(t, err)
 
 	_, rhsDesc := tc.SplitRangeOrFatal(t, bootstrap.TestingUserTableDataMin(keys.SystemSQLCodec))
 	tc.AddVotersOrFatal(t, rhsDesc.StartKey.AsRawKey(), tc.Targets(1, 2, 3)...)
@@ -1471,18 +1467,24 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 		heartbeat(0, 1, 2, 3)
 	}
 
+	// Verify that the previously-suspect server is no longer suspect on any
+	// store pool. Whether the lease queue actually transfers leases back
+	// depends on MMA and other allocator heuristics, which are covered by
+	// unit tests like TestAllocatorShouldTransferSuspected.
 	testutils.SucceedsSoon(t, func() error {
-		// Server 1 should get some leases back as it's no longer suspect.
-		for _, key := range startKeys {
-			runThroughTheLeaseQueue(key)
-		}
-		for _, key := range startKeys {
-			repl := tc.GetFirstStoreFromServer(t, 1).LookupReplica(roachpb.RKey(key))
-			if repl.OwnsValidLease(ctx, tc.Servers[1].Clock().NowAsClockTimestamp()) {
-				return nil
+		for i := 0; i < numNodes; i++ {
+			if i == suspectServer {
+				continue
+			}
+			live, err := tc.GetFirstStoreFromServer(t, i).GetStoreConfig().StorePool.IsLive(tc.Target(suspectServer).StoreID)
+			if err != nil {
+				return err
+			}
+			if !live {
+				return errors.Errorf("expected server %d to be live on server %d", suspectServer, i)
 			}
 		}
-		return errors.Errorf("Expected server 1 to have at lease 1 lease.")
+		return nil
 	})
 }
 

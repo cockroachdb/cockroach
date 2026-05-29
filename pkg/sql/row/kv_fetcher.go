@@ -7,6 +7,7 @@ package row
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // KVFetcher wraps KVBatchFetcher, providing a NextKV interface that returns the
@@ -69,12 +71,16 @@ func newTxnKVFetcher(
 		batchRequestsIssued int64
 		kvPairsRead         int64
 		kvCPUTime           int64
+		localKVCPUTime      int64
 	})
 	var sendFn sendFunc
 	if bsHeader == nil {
-		sendFn = makeSendFunc(txn, ext, &alloc.batchRequestsIssued, &alloc.kvCPUTime)
+		sendFn = makeSendFunc(
+			txn, ext, &alloc.batchRequestsIssued, &alloc.kvCPUTime, &alloc.localKVCPUTime,
+		)
 	} else {
 		negotiated := false
+		var w timeutil.CPUStopWatch
 		sendFn = func(ctx context.Context, ba *kvpb.BatchRequest) (br *kvpb.BatchResponse, _ error) {
 			if ext != nil {
 				return nil, unimplemented.New(
@@ -88,12 +94,16 @@ func newTxnKVFetcher(
 			// Only use NegotiateAndSend if we have not yet negotiated a timestamp.
 			// If we have, fallback to Send which will already have the timestamp
 			// fixed.
+			w.Start()
 			if !negotiated {
 				ba.BoundedStaleness = bsHeader
 				br, pErr = txn.NegotiateAndSend(ctx, ba)
 				negotiated = true
 			} else {
 				br, pErr = txn.Send(ctx, ba)
+			}
+			if delta := w.Stop(); delta > 0 {
+				atomic.AddInt64(&alloc.localKVCPUTime, int64(delta))
 			}
 			if pErr != nil {
 				return nil, pErr.GoError()
@@ -120,6 +130,7 @@ func newTxnKVFetcher(
 		kvPairsRead:                &alloc.kvPairsRead,
 		batchRequestsIssued:        &alloc.batchRequestsIssued,
 		kvCPUTime:                  &alloc.kvCPUTime,
+		localKVCPUTime:             &alloc.localKVCPUTime,
 		workloadID:                 workloadID,
 		workloadType:               workloadType,
 	}
@@ -223,7 +234,7 @@ func NewStreamingKVFetcher(
 	var kvPairsRead int64
 	var batchRequestsIssued int64
 	var kvCPUTime int64
-	sendFn := makeSendFunc(txn, ext, &batchRequestsIssued, &kvCPUTime)
+	sendFn := makeSendFunc(txn, ext, &batchRequestsIssued, &kvCPUTime, nil /* localKVCPUTime */)
 	streamer := kvstreamer.NewStreamer(
 		distSender,
 		metrics,
@@ -258,7 +269,8 @@ func NewStreamingKVFetcher(
 	)
 	return newKVFetcher(newTxnKVStreamer(
 		streamer, lockStrength, lockDurability, kvFetcherMemAcc,
-		&kvPairsRead, &batchRequestsIssued, &kvCPUTime, rawMVCCValues, reverse,
+		&kvPairsRead, &batchRequestsIssued, &kvCPUTime,
+		rawMVCCValues, reverse,
 	))
 }
 
@@ -443,6 +455,11 @@ func (f *KVProvider) GetBatchRequestsIssued() int64 {
 
 // GetKVCPUTime implements the KVBatchFetcher interface.
 func (f *KVProvider) GetKVCPUTime() int64 {
+	return 0
+}
+
+// GetLocalKVCPUTime implements the KVBatchFetcher interface.
+func (f *KVProvider) GetLocalKVCPUTime() int64 {
 	return 0
 }
 

@@ -309,6 +309,9 @@ func TestOIDCAuthorization_TokenPaths(t *testing.T) {
 			rpcCtx := app.NewClientRPCContext(ctx, username.TestUserName())
 			client, err := rpcCtx.GetHTTPClient()
 			require.NoError(t, err)
+			// The default 10s timeout is too short under race detection where OIDC
+			// callback processing can take 20s+.
+			client.Timeout = 45 * time.Second
 			// Prevent automatic redirects so we can capture cookies and headers.
 			client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
@@ -317,7 +320,15 @@ func TestOIDCAuthorization_TokenPaths(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, http.StatusFound, resp.StatusCode)
 
-			stateCookie := resp.Cookies()[0]
+			// Find by name; in shared-process multi-tenant mode the tenant cookie precedes oidc_secret.
+			var stateCookie *http.Cookie
+			for _, c := range resp.Cookies() {
+				if c.Name == secretCookieName {
+					stateCookie = c
+					break
+				}
+			}
+			require.NotNil(t, stateCookie, "expected oidc_secret cookie")
 			loc, err := url.Parse(resp.Header.Get("Location"))
 			require.NoError(t, err)
 			state := loc.Query().Get("state")
@@ -377,6 +388,9 @@ func TestOIDCAuthorization_UserinfoPaths(t *testing.T) {
 	rpc := app.NewClientRPCContext(ctx, username.TestUserName())
 	cl, err := rpc.GetHTTPClient()
 	require.NoError(t, err)
+	// The default 10s timeout is too short under race detection where OIDC
+	// callback processing can take 20s+.
+	cl.Timeout = 45 * time.Second
 	cl.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
 	// Create an RSA key pair for signing and verifying tokens.
@@ -546,7 +560,15 @@ func TestOIDCAuthorization_UserinfoPaths(t *testing.T) {
 
 			resp, err := cl.Get(app.AdminURL().WithPath("/oidc/v1/login").String())
 			require.NoError(t, err)
-			cookie := resp.Cookies()[0]
+			// Find by name; in shared-process multi-tenant mode the tenant cookie precedes oidc_secret.
+			var cookie *http.Cookie
+			for _, c := range resp.Cookies() {
+				if c.Name == secretCookieName {
+					cookie = c
+					break
+				}
+			}
+			require.NotNil(t, cookie, "expected oidc_secret cookie")
 			loc, _ := url.Parse(resp.Header.Get("Location"))
 			state := loc.Query().Get("state")
 
@@ -651,7 +673,15 @@ func TestOIDCAuthorization_RoleGrantAndRevoke(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, http.StatusFound, resp.StatusCode)
 
-		stateCookie := resp.Cookies()[0]
+		// Find by name; in shared-process multi-tenant mode the tenant cookie precedes oidc_secret.
+		var stateCookie *http.Cookie
+		for _, c := range resp.Cookies() {
+			if c.Name == secretCookieName {
+				stateCookie = c
+				break
+			}
+		}
+		require.NotNil(t, stateCookie, "expected oidc_secret cookie")
 		loc, err := url.Parse(resp.Header.Get("Location"))
 		require.NoError(t, err)
 		state := loc.Query().Get("state")
@@ -714,6 +744,9 @@ func TestOIDCAuthorization_RoleGrantAndRevoke(t *testing.T) {
 	rpcCtx := app.NewClientRPCContext(ctx, username.TestUserName())
 	client, err := rpcCtx.GetHTTPClient()
 	require.NoError(t, err)
+	// The default 10s timeout is too short under race detection where OIDC
+	// callback processing can take 20s+.
+	client.Timeout = 45 * time.Second
 	// Prevent automatic redirects so we can capture cookies and headers.
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 

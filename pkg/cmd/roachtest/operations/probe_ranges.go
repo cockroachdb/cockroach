@@ -84,23 +84,25 @@ func runProbeRanges(
 
 func registerProbeRanges(r registry.Registry) {
 	r.AddOperation(registry.OperationSpec{
-		Name:               "probe-ranges/read",
-		Owner:              registry.OwnerKV, // Contact SRE first, as they own the prober.
-		Timeout:            30 * time.Minute,
-		CompatibleClouds:   registry.AllClouds,
-		CanRunConcurrently: registry.OperationCannotRunConcurrently,
-		Dependencies:       []registry.OperationDependency{registry.OperationRequiresPopulatedDatabase, registry.OperationRequiresZeroUnavailableRanges},
+		Name:             "probe-ranges/read",
+		Owner:            registry.OwnerKV, // Contact SRE first, as they own the prober.
+		Timeout:          1 * time.Hour,
+		CompatibleClouds: registry.AllClouds,
+		Dependencies:     []registry.OperationDependency{registry.OperationRequiresPopulatedDatabase},
+		Cadence:          1 * time.Hour,
+		LongRunning:      true,
 		Run: func(ctx context.Context, o operation.Operation, c cluster.Cluster) registry.OperationCleanup {
 			return runProbeRanges(ctx, o, c, false)
 		},
 	})
 	r.AddOperation(registry.OperationSpec{
-		Name:               "probe-ranges/write",
-		Owner:              registry.OwnerKV, // Contact SRE first, as they own the prober.
-		Timeout:            30 * time.Minute,
-		CompatibleClouds:   registry.AllClouds,
-		CanRunConcurrently: registry.OperationCannotRunConcurrently,
-		Dependencies:       []registry.OperationDependency{registry.OperationRequiresPopulatedDatabase, registry.OperationRequiresZeroUnavailableRanges},
+		Name:             "probe-ranges/write",
+		Owner:            registry.OwnerKV, // Contact SRE first, as they own the prober.
+		Timeout:          1 * time.Hour,
+		CompatibleClouds: registry.AllClouds,
+		Dependencies:     []registry.OperationDependency{registry.OperationRequiresPopulatedDatabase},
+		Cadence:          1 * time.Hour,
+		LongRunning:      true,
 		Run: func(ctx context.Context, o operation.Operation, c cluster.Cluster) registry.OperationCleanup {
 			return runProbeRanges(ctx, o, c, true)
 		},

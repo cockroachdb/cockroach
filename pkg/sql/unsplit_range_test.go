@@ -288,6 +288,9 @@ func TestUnsplitRanges(t *testing.T) {
 		srv, sqlDB, _ := serverutils.StartServer(t, params)
 		defer srv.Stopper().Stop(context.Background())
 		s := srv.ApplicationLayer()
+		// Disable the small-table size check so index backfills always
+		// create splits, matching the expectations of this test.
+		sql.SkipBackfillSplitsForSmallTables.Override(ctx, &s.ClusterSettings().SV, false)
 		// Use the application layer's DB for table data operations.
 		kvDB := s.DB()
 		// Use the system layer's DB for meta range operations (scanning meta

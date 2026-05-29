@@ -8,6 +8,7 @@ package democluster
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/clicfg"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 )
@@ -109,6 +110,13 @@ type Context struct {
 	// UseDRPC indicates whether to use DRPC instead of gRPC for
 	// inter-node RPC communication in the demo cluster.
 	UseDRPC bool
+}
+
+func (demoCtx *Context) defaultDRPCOption() base.DefaultTestDRPCOption {
+	if demoCtx.UseDRPC {
+		return base.TestDRPCEnabled
+	}
+	return base.TestDRPCDisabled
 }
 
 // IsInteractive returns true if the demo cluster configuration

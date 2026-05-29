@@ -54,7 +54,6 @@ var pgCatalogTables = []string{
 	vtable.PGCatalogIndexes,
 	vtable.PGCatalogInherits,
 	vtable.PGCatalogLanguage,
-	vtable.PGCatalogLocks,
 	vtable.PGCatalogMatViews,
 	vtable.PGCatalogNamespace,
 	vtable.PGCatalogOperator,

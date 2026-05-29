@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiestestutils"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -34,6 +36,46 @@ import (
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 )
+
+// TestRemoveEntryWithPlaceholder verifies that removing a tenant entry
+// does not panic when the store contains a placeholder entry with a
+// nil embedded Entry pointer, as created by getInternal when a reader
+// queries a tenant that hasn't been seen by the rangefeed yet.
+//
+// Regression test for a nil pointer dereference in
+// removeEntryForTenantIDLocked.
+func TestRemoveEntryWithPlaceholder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	w := tenantcapabilitieswatcher.New(
+		hlc.NewClockForTesting(nil),
+		st,
+		nil,   /* rangeFeedFactory — unused, rangefeed not started */
+		0,     /* tenantsTableID */
+		nil,   /* stopper */
+		1<<20, /* bufferMemLimit */
+		nil,   /* knobs */
+	)
+
+	tenantID := roachpb.MustMakeTenantID(10)
+
+	// GetInfo calls getInternal which inserts a placeholder entry
+	// with a nil embedded *Entry into the store.
+	_, _, found := w.GetInfo(tenantID)
+	require.False(t, found)
+
+	// Removing the placeholder entry must not panic.
+	w.TestingRemoveEntry(ctx, tenantID)
+
+	// The entry should be gone.
+	entries := w.TestingFlushCapabilitiesState()
+	for _, e := range entries {
+		require.NotEqual(t, tenantID, e.TenantID)
+	}
+}
 
 // TestDataDriven runs datadriven tests against the
 // tenentcapabilitieswatcher.Watcher struct. The syntax is as follows:

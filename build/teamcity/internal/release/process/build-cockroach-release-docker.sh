@@ -6,7 +6,7 @@
 # included in the /LICENSE file.
 
 
-set -euxo pipefail
+set -euo pipefail
 
 dir="$(dirname $(dirname $(dirname $(dirname $(dirname "${0}")))))"
 source "$dir/release/teamcity-support.sh"
@@ -24,18 +24,28 @@ version_label=$(echo "${version}" | sed -e 's/^v//' | cut -d- -f 1)
 
 if [[ -z "${DRY_RUN}" ]] ; then
   gcs_bucket="cockroach-release-artifacts-staged-prod"
-  export gcp_credentials="$GCS_CREDENTIALS_PROD"
   gcr_staged_repository="us-docker.pkg.dev/releases-prod/cockroachdb-staged-releases/${cockroach_archive_prefix}"
 else
   gcs_bucket="cockroach-release-artifacts-staged-dryrun"
-  export gcp_credentials="$GCS_CREDENTIALS_DEV"
   gcr_staged_repository="us-docker.pkg.dev/releases-dev-356314/cockroachdb-staged-releases/${cockroach_archive_prefix}"
+fi
+
+# With WIF (GitHub Actions), credentials are handled via the environment.
+# With TeamCity, use the JSON key env vars.
+if [[ -n "${GCS_CREDENTIALS_PROD:-}" || -n "${GCS_CREDENTIALS_DEV:-}" ]]; then
+  if [[ -z "${DRY_RUN}" ]] ; then
+    export gcp_credentials="$GCS_CREDENTIALS_PROD"
+  else
+    export gcp_credentials="$GCS_CREDENTIALS_DEV"
+  fi
+else
+  export gcp_credentials=""
 fi
 tc_end_block "Variable Setup"
 
 
 tc_start_block "Download and extract tarballs"
-google_credentials="$gcp_credentials"
+google_credentials="${gcp_credentials}"
 log_into_gcloud
 
 tmpdir=$(mktemp -d)
@@ -50,7 +60,7 @@ cp build/deploy/Dockerfile "$context/Dockerfile"
 for platform in linux-amd64 linux-arm64 linux-s390x; do
   arch="${platform#linux-}"
   archive="${cockroach_archive_prefix}-${version}.${platform}.tgz"
-  gsutil -o 'GSUtil:num_retries=5' cp "gs://$gcs_bucket/$archive" "$tmpdir/$archive"
+  gcloud storage cp "gs://$gcs_bucket/$archive" "$tmpdir/$archive"
   # Extract into a staging directory, then copy the files the Dockerfile needs
   # into the ${arch}/ subdirectory of the build context.
   staging="$tmpdir/staging-${platform}"
@@ -74,7 +84,7 @@ fips_context="$tmpdir/fips-context"
 mkdir -p "$fips_context/amd64"
 cp build/deploy/Dockerfile "$fips_context/Dockerfile"
 fips_archive="${cockroach_archive_prefix}-${version}.linux-amd64-fips.tgz"
-gsutil -o 'GSUtil:num_retries=5' cp "gs://$gcs_bucket/$fips_archive" "$tmpdir/$fips_archive"
+gcloud storage cp "gs://$gcs_bucket/$fips_archive" "$tmpdir/$fips_archive"
 fips_staging="$tmpdir/staging-linux-amd64-fips"
 mkdir -p "$fips_staging"
 tar \
@@ -92,7 +102,7 @@ tc_end_block "Download and extract tarballs"
 
 
 tc_start_block "Build and push multi-arch docker image"
-docker_login_gcr "$gcr_staged_repository" "$gcp_credentials"
+docker_login_gcr "$gcr_staged_repository" "${gcp_credentials:-}"
 
 # Create a buildx builder for multi-platform builds.
 docker buildx rm "release-builder-$$" 2>/dev/null || true

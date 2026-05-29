@@ -43,7 +43,7 @@ func init() {
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.TypeFilter(rulesVersionKey, isDescriptor),
-				to.TypeFilter(rulesVersionKey, Or(isSimpleDependent, isOwner), Not(isConstraintDependent)),
+				to.TypeFilter(rulesVersionKey, Or(isSimpleDependent, isOwner), Not(isConstraintDependent), Not(isTriggerOrDependent)),
 				JoinOnDescID(from, to, "desc-id"),
 				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
 			}
@@ -129,7 +129,7 @@ func init() {
 				from.TypeFilter(rulesVersionKey, isTypeDescriptor),
 				from.DescIDEq(fromDescID),
 				to.ReferencedTypeDescIDsContain(fromDescID),
-				to.TypeFilter(rulesVersionKey, isSimpleDependent, isWithTypeTOrHasReferences),
+				to.TypeFilter(rulesVersionKey, isSimpleDependent, isWithTypeT),
 				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
 			}
 		},
@@ -168,7 +168,7 @@ func init() {
 	)
 
 	registerDepRule(
-		"descriptor drop right before removing dependent with function refs in columns / triggers",
+		"descriptor drop right before removing dependent with function refs in columns",
 		scgraph.SameStagePrecedence,
 		"referenced-descriptor", "referencing-via-function",
 		func(from, to NodeVars) rel.Clauses {
@@ -177,7 +177,7 @@ func init() {
 				from.Type((*scpb.Function)(nil)),
 				from.DescIDEq(fromDescID),
 				to.ReferencedFunctionIDsContains(fromDescID),
-				to.TypeFilter(rulesVersionKey, isSimpleDependent, isWithExpressionOrHasReferences),
+				to.TypeFilter(rulesVersionKey, isSimpleDependent, isWithExpression),
 				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
 			}
 		},

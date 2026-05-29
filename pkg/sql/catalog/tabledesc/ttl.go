@@ -108,21 +108,21 @@ func ValidateTTLExpirationColumn(desc catalog.TableDescriptor) error {
 	if err != nil {
 		return errors.Wrapf(err, "expected column %s", catpb.TTLDefaultExpirationColumnName)
 	}
-	expectedStr := `current_timestamp():::TIMESTAMPTZ + ` + string(intervalExpr)
-	if col.GetDefaultExpr() != expectedStr {
+	expectedExpr := catpb.Expression(`current_timestamp():::TIMESTAMPTZ + ` + string(intervalExpr))
+	if col.GetDefaultExpr() != expectedExpr {
 		return pgerror.Newf(
 			pgcode.InvalidTableDefinition,
 			"expected DEFAULT expression of %s to be ( %s ), but got: ( %s )",
 			catpb.TTLDefaultExpirationColumnName,
-			expectedStr, col.GetDefaultExpr(),
+			expectedExpr, col.GetDefaultExpr(),
 		)
 	}
-	if col.GetOnUpdateExpr() != expectedStr {
+	if col.GetOnUpdateExpr() != expectedExpr {
 		return pgerror.Newf(
 			pgcode.InvalidTableDefinition,
 			"expected ON UPDATE expression of %s to be ( %s ), but got: ( %s )",
 			catpb.TTLDefaultExpirationColumnName,
-			expectedStr, col.GetOnUpdateExpr(),
+			expectedExpr, col.GetOnUpdateExpr(),
 		)
 	}
 

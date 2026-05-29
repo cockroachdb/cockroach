@@ -1078,7 +1078,9 @@ func (c *SyncedCluster) RunWithDetails(
 	return results, nil
 }
 
-// Wait TODO(peter): document
+// Wait waits for all nodes in the cluster to finish initializing by
+// checking for the existence of the OS initialized file. Uses
+// exponential backoff with a 5-minute timeout.
 func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 	display := fmt.Sprintf("%s: waiting for nodes to start", c.Name)
 	results, hasError, err := c.ParallelE(ctx, l, WithNodes(c.Nodes).WithDisplay(display).WithRetryDisabled(),
@@ -1091,17 +1093,21 @@ func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 			cmd := fmt.Sprintf("test -e %s", vm.OSInitializedFile)
 			// N.B. we disable ssh debug output capture, lest we end up with _thousands_ of useless .log files.
 			opts := cmdOptsWithDebugDisabled()
-			for j := 0; j < 600; j++ {
+			retryOpts := retry.Options{
+				InitialBackoff: 500 * time.Millisecond,
+				MaxBackoff:     30 * time.Second,
+				Multiplier:     2,
+				MaxDuration:    5 * time.Minute,
+			}
+			for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 				res, err = c.runCmdOnSingleNode(ctx, l, node, cmd, opts)
 				if err != nil {
 					return nil, err
 				}
 
-				if res.Err != nil {
-					time.Sleep(500 * time.Millisecond)
-					continue
+				if res.Err == nil {
+					return res, nil
 				}
-				return res, nil
 			}
 			res.Err = errors.Wrapf(res.Err, "timed out after 5m")
 			logContent, err := c.runCmdOnSingleNode(ctx, nil, node, fmt.Sprintf("tail -n %d %s", 20, vm.StartupLogs), cmdOptsWithDebugDisabled())

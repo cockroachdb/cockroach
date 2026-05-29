@@ -39,7 +39,7 @@ else
   build_name="${build_name}.dryrun"
   export gcp_credentials="$GOOGLE_COCKROACH_RELEASE_CREDENTIALS"
   gcs_bucket="cockroach-builds-artifacts-dryrun"
-  gcr_repository="us.gcr.io/cockroach-release/${cockroach_archive_prefix}-test"
+  gcr_repository="us-docker.pkg.dev/releases-dev-356314/cockroachdb-staged-releases/${cockroach_archive_prefix}-test"
   gcs_credentials="$GCS_CREDENTIALS_DEV"
 fi
 

@@ -17,6 +17,7 @@ go_library(
     deps = [
         "//pkg/clusterversion",
         "//pkg/kv/kvserver/concurrency/isolation",
+        "//pkg/security/username",
         "//pkg/server/telemetry",
         "//pkg/sql/appstatspb",
         "//pkg/sql/catalog/colinfo",
@@ -103,8 +104,8 @@ filegroup(
         ],
     ),
     visibility = [
-        "//pkg/ccl/logictestccl:__subpackages__",
         "//pkg/cmd/generate-logictest:__pkg__",
+        "//pkg/sql/logictest:__subpackages__",
         "//pkg/sql/opt/exec/execbuilder:__subpackages__",
     ],
 )

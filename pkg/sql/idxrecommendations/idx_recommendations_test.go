@@ -8,15 +8,18 @@ package idxrecommendations_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/indexrec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,7 +28,20 @@ func TestIndexRecommendationsStats(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	testServer, sqlConn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+
+	// Pin all executions to a single SQL stats aggregation window. Without
+	// this, a test run that crosses an hour boundary produces duplicate
+	// (fingerprint, aggregatedTs) entries, which both inflates the count
+	// asserted by WaitForStatementEntriesEqual and makes the index
+	// recommendation visible in only one of the two buckets that QueryRow
+	// then reads non-deterministically.
+	stubTime := timeutil.Now().Truncate(time.Hour)
+	sqlStatsKnobs := sqlstats.CreateTestingKnobs()
+	sqlStatsKnobs.StubTimeNow = func() time.Time { return stubTime }
+
+	testServer, sqlConn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{SQLStatsKnobs: sqlStatsKnobs},
+	})
 	defer testServer.Stopper().Stop(ctx)
 
 	testConn := sqlutils.MakeSQLRunner(sqlConn)

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/walkutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -108,7 +109,7 @@ func checkToAbsentCategories(e scpb.Element) error {
 
 // Assert that isWithTypeT covers all elements with embedded TypeTs.
 func checkIsWithTypeT(e scpb.Element) error {
-	return screl.WalkTypes(e, func(t *types.T) error {
+	return walkutil.Walk(e, func(t *types.T) error {
 		if isWithTypeT(e) {
 			return nil
 		}
@@ -119,7 +120,7 @@ func checkIsWithTypeT(e scpb.Element) error {
 // Assert that isWithExpression covers all elements with embedded
 // expressions.
 func checkIsWithExpression(e scpb.Element) error {
-	return screl.WalkExpressions(e, func(t *catpb.Expression) error {
+	return walkutil.Walk(e, func(t *catpb.Expression) error {
 		switch e.(type) {
 		// Ignore elements which have catpb.Expression fields but which don't
 		// have them within an scpb.Expression for valid reasons.

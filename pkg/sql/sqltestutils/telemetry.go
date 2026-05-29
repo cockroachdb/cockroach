@@ -77,10 +77,16 @@ import (
 //     Installs a rule to rewrite all matches of the regexp in the first
 //     line to the string in the second line. This is useful to eliminate
 //     non-determinism in the output.
-func TelemetryTest(t *testing.T, serverArgs []base.TestServerArgs, testTenant bool) {
+func TelemetryTest(
+	t *testing.T, serverArgs []base.TestServerArgs, testTenant bool, testdataDir ...string,
+) {
+	dir := "testdata/telemetry"
+	if len(testdataDir) > 0 && testdataDir[0] != "" {
+		dir = testdataDir[0]
+	}
 	// Note: these tests cannot be run in parallel (with each other or with other
 	// tests) because telemetry counters are global.
-	datadriven.Walk(t, "testdata/telemetry", func(t *testing.T, path string) {
+	datadriven.Walk(t, dir, func(t *testing.T, path string) {
 		// Disable cloud info reporting (it would make these tests really slow).
 		defer cloudinfo.Disable()()
 

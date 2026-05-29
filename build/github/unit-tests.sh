@@ -15,21 +15,29 @@ if [[ "$GITHUB_ACTIONS_BRANCH" == "staging" || "$GITHUB_ACTIONS_BRANCH" == trunk
   EXTRA_PARAMS=" --flaky_test_attempts=2"
 fi
 
-# Determine test targets: use affected targets if a base SHA is provided,
-# otherwise fall back to the full test suite.
+# Determine Go test targets: use affected targets if a base SHA is provided,
+# otherwise fall back to the full test suite. JS tests (//pkg/ui:lint and
+# //pkg/ui:test) are always run regardless; we may want to gate those on
+# front-end file changes in the future using a similar mechanism.
 TEST_TARGETS="//pkg:all_tests"
 if [ -n "${BASE_SHA:-}" ]; then
   AFFECTED=$(./build/github/affected-targets.sh "$BASE_SHA")
   if [ -z "$AFFECTED" ]; then
-    echo "No test-relevant files changed, skipping unit tests."
-    exit 0
+    echo "No test-relevant Go files changed, skipping Go unit tests."
+    TEST_TARGETS=""
   elif [ "$AFFECTED" != "FULL" ]; then
     TEST_TARGETS="$AFFECTED"
   fi
 fi
 
+# Note: --remote_download_minimal is intentionally present despite the warning
+# from bazel about conflict with --remote_download_toplevel (from
+# --config=engflowpublic via engflow-args.sh). Bazel gives explicit command-line
+# flags precedence over config expansions, so 'minimal' is in effect. The warning
+# can be ignored.
 bazel test $TEST_TARGETS //pkg/ui:lint //pkg/ui:test \
     --config crosslinux --jobs 200 --remote_download_minimal \
     --bes_keywords ci-unit-test --config=use_ci_timeouts \
     --build_event_binary_file=bes.bin $(./build/github/engflow-args.sh) \
+    --test_output=summary --test_summary=terse --noshow_progress \
     $EXTRA_PARAMS

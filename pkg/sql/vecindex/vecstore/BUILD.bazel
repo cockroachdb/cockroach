@@ -35,6 +35,7 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/intsets",
         "//pkg/util/log",
+        "//pkg/util/timeutil",
         "//pkg/util/unique",
         "//pkg/util/vector",
         "@com_github_cockroachdb_errors//:errors",

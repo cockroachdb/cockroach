@@ -340,7 +340,7 @@ SELECT id, status, payload, progress FROM system.jobs
 	jobsTable = make(doctor.JobsTable, 0)
 
 	if err := selectRowsMap(sqlConn, stmt, make([]driver.Value, 4), func(vals []driver.Value) error {
-		md := jobs.JobMetadata{}
+		md := jobs.DeprecatedJobMetadata{}
 		md.ID = jobspb.JobID(vals[0].(int64))
 		md.State = jobs.State(vals[1].(string))
 		md.Payload = &jobspb.Payload{}
@@ -517,7 +517,7 @@ func fromZipDir(
 			if len(fields) < 6 {
 				return errors.Errorf("expected at least 6 fields, got %d in crdb_internal.system_jobs.txt", len(fields))
 			}
-			md := jobs.JobMetadata{}
+			md := jobs.DeprecatedJobMetadata{}
 			md.State = jobs.State(fields[1])
 
 			id, err := strconv.Atoi(fields[0])
@@ -565,7 +565,7 @@ func fromZipDir(
 			return nil, nil, nil, errors.Wrapf(err, "failed to parse crdb_internal.system_jobs.json")
 		}
 		for _, job := range jobsTableJSON {
-			row := jobs.JobMetadata{
+			row := jobs.DeprecatedJobMetadata{
 				State: jobs.State(job.Status),
 			}
 			id, err := strconv.ParseInt(job.ID, 10, 64)

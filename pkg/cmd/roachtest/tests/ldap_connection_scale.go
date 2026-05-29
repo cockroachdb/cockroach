@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 )
@@ -81,17 +82,22 @@ func runLDAPConnectionScaleTest(ctx context.Context, t test.Test, c cluster.Clus
 	userGroupFileContent, userUidList := prepareUserAndGroups()
 	importUserAndGroupsForLDAPScale(ctx, t, c, nodeListOptions, userGroupFileContent)
 
-	// Create the users with login role which will later
-	// used for authentication.
-	prepareSQLUserForLDAPScale(ctx, t, c)
+	// Roles are auto-provisioned on first LDAP login.
 
-	// Setup CRDB specific configs for LDAP authentication.
-	// Update the relevant cluster settings for configuring and debugging.
+	// Setup CRDB specific configs for LDAP authentication including
+	// auto-provisioning enablement.
 	setupCRDBFOrLDAPScale(ctx, t, c, hostName)
 
 	// Test that `ldapScaleUserCount` number of connections
-	// can be created in parallel.
+	// can be created in parallel (roles are auto-provisioned).
+	authStart := timeutil.Now()
 	testParallelConnections(ctx, t, c, userUidList, numNodes)
+
+	// Validate auto-provisioning for a sample of users.
+	validateAutoProvisioningScale(ctx, t, c, userUidList)
+
+	// Validate estimated_last_login_time propagation for a sample user.
+	validateLastLoginTime(ctx, t, c, userUidList[0], authStart)
 }
 
 // prepareUserAndGroups prepares user and group LDIF file content.
@@ -195,20 +201,6 @@ func importUserAndGroupsForLDAPScale(
 	require.NoError(t, err)
 }
 
-// prepareSQLUserForLDAPScale runs a cockroach command to
-// log in to the sql shell using the root user credentials.
-// Then create role with the name in format user<num>
-// using CRDB sql syntax of for loop.
-func prepareSQLUserForLDAPScale(ctx context.Context, t test.Test, c cluster.Cluster) {
-	query := fmt.Sprintf("./cockroach sql --certs-dir=%s "+
-		"--host=localhost:{pgport:1} -e '\\| for ((i=%d;i<=%d;++i)); "+
-		"do echo \"CREATE ROLE user$i LOGIN;\"; done'",
-		install.CockroachNodeCertsDir, 1, ldapScaleUserCount)
-	err := c.RunE(ctx, option.WithNodes(c.Node(1)), query)
-	require.NoError(t, err)
-	t.L().Printf("Created all login roles in crdb.")
-}
-
 // Setup CRDB specific configs for LDAP authentication.
 // Update the relevant cluster settings for configuring and debugging.
 func setupCRDBFOrLDAPScale(ctx context.Context, t test.Test, c cluster.Cluster, hostName string) {
@@ -238,6 +230,12 @@ func setupCRDBFOrLDAPScale(ctx context.Context, t test.Test, c cluster.Cluster, 
 	caCertQuery := createClusterSettingQuery(
 		"server.ldap_authentication.domain.custom_ca", fmt.Sprintf("'%s'", trimmed))
 	runSQLQueryForConnection(ctx, t, conn, caCertQuery)
+
+	// Enable LDAP auto-provisioning so that SQL roles are created
+	// automatically on first successful LDAP authentication.
+	provisioningQuery := createClusterSettingQuery(
+		"security.provisioning.ldap.enabled", "true")
+	runSQLQueryForConnection(ctx, t, conn, provisioningQuery)
 
 	// This is required for better debugging in-case of failures in authentication.
 	debuggingQuery := createClusterSettingQuery(
@@ -342,4 +340,43 @@ func testParallelConnections(
 		}
 	}
 	t.L().Printf("All Connections closed.")
+}
+
+// validateAutoProvisioningScale checks that a sample of auto-provisioned users
+// have the PROVISIONSRC role option with the "ldap:" prefix.
+func validateAutoProvisioningScale(
+	ctx context.Context, t test.Test, c cluster.Cluster, userUidList []string,
+) {
+	conn := createPgxConnWithExternalURL(ctx, t, c)
+	defer func() { _ = conn.Close(ctx) }()
+
+	// Check the first, middle, and last users as a representative sample.
+	sampleIndices := []int{0, len(userUidList) / 2, len(userUidList) - 1}
+	for _, idx := range sampleIndices {
+		username := userUidList[idx]
+		var provisionSrc *string
+		err := conn.QueryRow(ctx,
+			"SELECT value FROM system.role_options "+
+				"WHERE username = $1 AND option = 'PROVISIONSRC'",
+			username).Scan(&provisionSrc)
+		require.NoError(t, err,
+			"PROVISIONSRC role option not found for user %s", username)
+		require.NotNil(t, provisionSrc)
+		require.Contains(t, *provisionSrc, "ldap:",
+			"expected PROVISIONSRC to have ldap: prefix for user %s, got %q",
+			username, *provisionSrc)
+		t.L().Printf("Auto-provisioning validated for user %s: PROVISIONSRC=%s",
+			username, *provisionSrc)
+	}
+
+	// Verify total count of provisioned users matches expected.
+	var count int
+	err := conn.QueryRow(ctx,
+		"SELECT count(*) FROM system.role_options WHERE option = 'PROVISIONSRC' AND value LIKE 'ldap:%'",
+	).Scan(&count)
+	require.NoError(t, err)
+	t.L().Printf("Total auto-provisioned users with PROVISIONSRC: %d (expected %d)",
+		count, ldapScaleUserCount)
+	require.Equal(t, ldapScaleUserCount, count,
+		"expected all %d users to have PROVISIONSRC", ldapScaleUserCount)
 }

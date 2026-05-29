@@ -38,6 +38,7 @@ func TestBackupResolveOptionsForJobDescription(t *testing.T) {
 		ExecutionLocality:               tree.NewDString("test expr"),
 		UpdatesClusterMonitoringMetrics: tree.NewDString("test expr"),
 		Strict:                          true,
+		RevisionStream:                  true,
 	}
 
 	ensureAllStructFieldsSet := func(s tree.BackupOptions, name string) {

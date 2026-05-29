@@ -53,7 +53,6 @@ describe("StatementsPage", () => {
       database: "",
       applicationName: "",
       fullScan: false,
-      implicitTxn: false,
       summary: "",
       label:
         "SELECT count(*) > _ FROM [SHOW ALL CLUSTER SETTINGS] AS _ (v) WHERE v = '_'",

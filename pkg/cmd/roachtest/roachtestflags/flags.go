@@ -60,6 +60,12 @@ var (
 		Usage: `List only benchmarks`,
 	})
 
+	ListDetails bool
+	_           = registerListFlag(&ListDetails, FlagInfo{
+		Name:  "details",
+		Usage: `Include additional per-test fields (e.g. SkipPostValidations) in the listing`,
+	})
+
 	ForceCloudCompat bool
 	_                = registerRunFlag(&ForceCloudCompat, FlagInfo{
 		Name:  "force-cloud-compat",
@@ -547,6 +553,15 @@ var (
 			be specified multiple times. These are applied via SQL after cluster
 			startup but before the test body runs, so tests may override them.
 			Example: --start-setting=kv.range_split.by_load_enabled=false`,
+	})
+
+	ForceDRPC bool = false
+	_              = registerRunFlag(&ForceDRPC, FlagInfo{
+		Name: "force-drpc",
+		Usage: `
+			Force DRPC (--use-new-rpc) to be enabled for all tests.
+			Older binaries that don't support "--use-new-rpc" will
+			skip it automatically.`,
 	})
 )
 

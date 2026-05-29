@@ -53,8 +53,17 @@ type endpointJSON struct {
 	Endpoints []endpoint `json:"endpoints"`
 }
 
-// These will be used in the test when placeholders need to be filled.
-var tableID, databaseID, fingerprintID uint64
+// endpointIDs holds the IDs discovered by initializeSchemaAndIDs that are
+// substituted into endpoint URL placeholders. It is per-test-invocation: both
+// db-console/endpoints and db-console/mixed-version-endpoints can run as
+// separate workers in the same roachtest process, against different clusters
+// whose tpcc database/table land at different IDs. Sharing these via package
+// globals races between workers (see #170167).
+type endpointIDs struct {
+	tableID       uint64
+	databaseID    uint64
+	fingerprintID uint64
+}
 
 // Placeholders in the DB console endpoints.
 const (
@@ -121,10 +130,15 @@ func runDBConsoleMixedVersion(ctx context.Context, t test.Test, c cluster.Cluste
 	mvt.InMixedVersion(
 		"test db console endpoints", func(ctx context.Context, l *logger.Logger, rng *rand.Rand,
 			h *mixedversion.Helper) error {
-			if err := initializeSchemaAndIDs(ctx, c, l, h.VersionedCockroachPath(t)); err != nil {
+			// Use the current binary for workload init rather than the
+			// versioned binary. Older binaries can't handle result column
+			// changes (e.g., the inspect_job_id column added to IMPORT
+			// results) when running against a newer cluster.
+			ids, err := initializeSchemaAndIDs(ctx, c, l, test.DefaultCockroachPath)
+			if err != nil {
 				t.Fatal(err)
 			}
-			return testEndpoints(ctx, c, l, getEndpoints(t), true)
+			return testEndpoints(ctx, c, l, getEndpoints(t), ids, true)
 		})
 
 	mvt.Run()
@@ -132,11 +146,12 @@ func runDBConsoleMixedVersion(ctx context.Context, t test.Test, c cluster.Cluste
 
 func runDBConsole(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
-	if err := initializeSchemaAndIDs(ctx, c, t.L(), "./cockroach"); err != nil {
+	ids, err := initializeSchemaAndIDs(ctx, c, t.L(), "./cockroach")
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := testEndpoints(ctx, c, t.L(), getEndpoints(t), false); err != nil {
+	if err := testEndpoints(ctx, c, t.L(), getEndpoints(t), ids, false); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -146,6 +161,7 @@ func testEndpoints(
 	c cluster.Cluster,
 	l *logger.Logger,
 	endpoints []endpoint,
+	ids endpointIDs,
 	multiVersionTest bool,
 ) error {
 	// Get the NodeIDs and DB console URLs for each node.
@@ -175,23 +191,23 @@ func testEndpoints(
 			for nodeID := 1; nodeID <= len(idMap); nodeID++ {
 				baseURL := urlMap[nodeID]
 				// Test with "local".
-				if err := testEndpoint(ctx, c, client, baseURL, ep, "local", ep.getVerifyResponse(), l, multiVersionTest); err != nil {
+				if err := testEndpoint(ctx, c, client, baseURL, ep, "local", ids, ep.getVerifyResponse(), l, multiVersionTest); err != nil {
 					return errors.Wrapf(err, "failed testing endpoint %s with local", ep.URL)
 				}
 				// Test with own node ID.
-				if err := testEndpoint(ctx, c, client, baseURL, ep, idMap[nodeID].String(), ep.getVerifyResponse(), l, multiVersionTest); err != nil {
+				if err := testEndpoint(ctx, c, client, baseURL, ep, idMap[nodeID].String(), ids, ep.getVerifyResponse(), l, multiVersionTest); err != nil {
 					return errors.Wrapf(err, "failed testing endpoint %s with own node ID", ep.URL)
 				}
 				// Test with another node ID.
 				otherNodeID := (nodeID % len(idMap)) + 1
-				if err := testEndpoint(ctx, c, client, baseURL, ep, idMap[otherNodeID].String(), ep.getVerifyResponse(), l, multiVersionTest); err != nil {
+				if err := testEndpoint(ctx, c, client, baseURL, ep, idMap[otherNodeID].String(), ids, ep.getVerifyResponse(), l, multiVersionTest); err != nil {
 					return errors.Wrapf(err, "failed testing endpoint %s with other node ID", ep.URL)
 				}
 			}
 		} else {
 			// For endpoints without node IDs, test on each node.
 			for nodeID := 1; nodeID <= len(idMap); nodeID++ {
-				if err := testEndpoint(ctx, c, client, urlMap[nodeID], ep, "", ep.getVerifyResponse(), l, multiVersionTest); err != nil {
+				if err := testEndpoint(ctx, c, client, urlMap[nodeID], ep, "", ids, ep.getVerifyResponse(), l, multiVersionTest); err != nil {
 					return errors.Wrapf(err, "failed testing endpoint %s", ep.URL)
 				}
 			}
@@ -208,13 +224,14 @@ func testEndpoint(
 	baseURL string,
 	ep endpoint,
 	nodeID string,
+	ids endpointIDs,
 	verifyResponse func(*http.Response) error,
 	l *logger.Logger,
 	multiVersionTest bool,
 ) error {
 	fullURL := baseURL + ep.URL
 	var err error
-	fullURL, err = fillPlaceholders(fullURL, nodeID)
+	fullURL, err = fillPlaceholders(fullURL, nodeID, ids)
 	if err != nil {
 		return err
 	}
@@ -248,7 +265,7 @@ func testEndpoint(
 		if ep.URL == "/api/v2/database_metadata/{database_id}/" && resp.StatusCode == http.StatusNotFound {
 			body, _ := io.ReadAll(resp.Body)
 			l.Printf("DEBUG 404: url=%s, databaseID=%d, tableID=%d, fingerprintID=%d, body=%s",
-				fullURL, databaseID, tableID, fingerprintID, body)
+				fullURL, ids.databaseID, ids.tableID, ids.fingerprintID, body)
 			// Run a debug query to show namespace state.
 			if conn, connErr := c.ConnE(ctx, l, 1); connErr == nil {
 				defer conn.Close()
@@ -302,11 +319,12 @@ func withRetries(ctx context.Context, opts retry.Options, f func() error) error 
 // the various IDs that will be used as placeholders for the endpoints.
 func initializeSchemaAndIDs(
 	ctx context.Context, c cluster.Cluster, l *logger.Logger, binaryPath string,
-) error {
+) (endpointIDs, error) {
+	var ids endpointIDs
 	// Get SQL connection to query for a tableID, databaseID and fingerprintID.
 	conn, err := c.ConnE(ctx, l, 1)
 	if err != nil {
-		return err
+		return ids, err
 	}
 	defer conn.Close()
 
@@ -318,7 +336,7 @@ func initializeSchemaAndIDs(
 	err = conn.QueryRowContext(ctx,
 		"SELECT count(*) > 0 FROM system.namespace WHERE name='warehouse'").Scan(&exists)
 	if err != nil {
-		return err
+		return ids, err
 	}
 	if !exists {
 		initTpcc := fmt.Sprintf("%s workload init tpcc {pgurl:1}", binaryPath)
@@ -327,24 +345,24 @@ func initializeSchemaAndIDs(
 		l.Printf("TPCC already initialized, skipping workload init")
 	}
 
-	err = conn.QueryRowContext(ctx, "select id, \"parentID\" from system.namespace where name='warehouse'").Scan(&tableID, &databaseID)
+	err = conn.QueryRowContext(ctx, "select id, \"parentID\" from system.namespace where name='warehouse'").Scan(&ids.tableID, &ids.databaseID)
 	if err != nil {
-		return err
+		return ids, err
 	}
-	l.Printf("Found tableID: %d, databaseID: %d", tableID, databaseID)
+	l.Printf("Found tableID: %d, databaseID: %d", ids.tableID, ids.databaseID)
 
 	var fingerprintHexString string
 	err = conn.QueryRowContext(ctx, "select encode(fingerprint_id, 'hex') from crdb_internal.statement_statistics limit 1").Scan(&fingerprintHexString)
 	if err != nil {
-		return err
+		return ids, err
 	}
-	fingerprintID, err = strconv.ParseUint(fingerprintHexString, 16, 64)
+	ids.fingerprintID, err = strconv.ParseUint(fingerprintHexString, 16, 64)
 	if err != nil {
-		return err
+		return ids, err
 	}
-	l.Printf("Found fingerprintID hex %s, cast to int: %d", fingerprintHexString, fingerprintID)
+	l.Printf("Found fingerprintID hex %s, cast to int: %d", fingerprintHexString, ids.fingerprintID)
 
-	return nil
+	return ids, nil
 }
 
 func getEndpoints(t test.Test) []endpoint {
@@ -399,7 +417,7 @@ func defaultVerifyResponse(resp *http.Response) error {
 	return nil
 }
 
-func fillPlaceholders(url string, nodeID string) (string, error) {
+func fillPlaceholders(url string, nodeID string, ids endpointIDs) (string, error) {
 	// Fill node_id.
 	url = strings.Replace(url, nodeIDPlaceholder, nodeID, 1)
 
@@ -413,9 +431,9 @@ func fillPlaceholders(url string, nodeID string) (string, error) {
 	url = strings.Replace(url, jobIDPlaceholder, "103", 1)
 
 	// database_id, table_id and fingerprint_id.
-	url = strings.Replace(url, databaseIDPlaceholder, strconv.FormatUint(databaseID, 10), 1)
-	url = strings.Replace(url, tableIDPlaceholder, strconv.FormatUint(tableID, 10), 1)
-	url = strings.Replace(url, fingerprintIDPlaceholder, strconv.FormatUint(fingerprintID, 10), 1)
+	url = strings.Replace(url, databaseIDPlaceholder, strconv.FormatUint(ids.databaseID, 10), 1)
+	url = strings.Replace(url, tableIDPlaceholder, strconv.FormatUint(ids.tableID, 10), 1)
+	url = strings.Replace(url, fingerprintIDPlaceholder, strconv.FormatUint(ids.fingerprintID, 10), 1)
 
 	// 1 is the minimum range id.
 	url = strings.Replace(url, rangeIDPlaceholder, "1", 1)

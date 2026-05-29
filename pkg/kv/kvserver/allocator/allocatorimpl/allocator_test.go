@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
@@ -55,6 +56,15 @@ import (
 func MakeAllocatorSync(
 	sp *storepool.StorePool, st *cluster.Settings,
 ) *mmaintegration.AllocatorSync {
+	// Pin the rebalancing mode to the pre-MMA default so tests that pre-date
+	// MMA do not inadvertently exercise multi-metric paths through the
+	// auto-resolved default. The MMA prototype state in these tests is not
+	// initialized via SetStore, so any code path that reaches it would panic.
+	if st != nil {
+		kvserverbase.OverrideLoadBasedRebalancingMode(
+			context.Background(), &st.SV, kvserverbase.LBRebalancingLeasesAndReplicas,
+		)
+	}
 	mmAllocator := mmaprototype.NewAllocatorState(timeutil.DefaultTimeSource{},
 		rand.New(rand.NewSource(timeutil.Now().UnixNano())))
 	return mmaintegration.NewAllocatorSync(sp, mmAllocator, st, nil)
@@ -6316,6 +6326,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
+	EnableLoadBasedLeaseRebalancing.Override(ctx, &st.SV, true)
 	stopper, g, _, storePool, _, _ := storepool.CreateTestStorePool(ctx, st,
 		liveness.TestTimeUntilNodeDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
@@ -8856,6 +8867,133 @@ func TestSimulateFilterUnremovableReplicas(t *testing.T) {
 			if !reflect.DeepEqual(c.expected, ids) {
 				t.Fatalf("expected %d, but got %d", c.expected, ids)
 			}
+		})
+	}
+}
+
+// TestNarrowRemoveCandidatesToSameNode covers the same-node-swap policy
+// pulled out of simulateRemoveTarget. The policy fixes #170471, where the
+// rebalance planner could emit a (ADD on n, REMOVE on m != n) pair that
+// the production validator (validateOneReplicaPerNode) rejects, leaving
+// the rebalance to fail indefinitely.
+func TestNarrowRemoveCandidatesToSameNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	store := func(storeID roachpb.StoreID, nodeID roachpb.NodeID) roachpb.StoreDescriptor {
+		return roachpb.StoreDescriptor{
+			StoreID: storeID,
+			Node:    roachpb.NodeDescriptor{NodeID: nodeID},
+		}
+	}
+	repl := func(storeID roachpb.StoreID, nodeID roachpb.NodeID) roachpb.ReplicaDescriptor {
+		return roachpb.ReplicaDescriptor{StoreID: storeID, NodeID: nodeID}
+	}
+	storeIDs := func(stores []roachpb.StoreDescriptor) []roachpb.StoreID {
+		out := make([]roachpb.StoreID, 0, len(stores))
+		for _, s := range stores {
+			out = append(out, s.StoreID)
+		}
+		return out
+	}
+
+	tests := []struct {
+		name             string
+		candidates       []roachpb.StoreDescriptor
+		targetStore      roachpb.StoreID
+		rebalanceSet     []roachpb.ReplicaDescriptor
+		otherReplicas    []roachpb.ReplicaDescriptor
+		expectedNarrowed []roachpb.StoreID
+		expectedAbort    bool
+	}{
+		{
+			// Target's node has no other replica of the range; no
+			// narrowing is needed. Candidate set passes through unchanged.
+			name: "target node has no other replica",
+			candidates: []roachpb.StoreDescriptor{
+				store(1, 1), store(3, 2), store(5, 3),
+			},
+			targetStore: 7,
+			rebalanceSet: []roachpb.ReplicaDescriptor{
+				repl(1, 1), repl(3, 2), repl(5, 3),
+				repl(7, 4), // the to-be-added target, on a fresh node
+			},
+			expectedNarrowed: []roachpb.StoreID{1, 3, 5},
+		},
+		{
+			// Target lands on a node that already holds another voter of
+			// the range. Narrowing keeps only candidates on that node.
+			name: "target node has another voter — narrow to same node",
+			candidates: []roachpb.StoreDescriptor{
+				store(1, 1), store(3, 2), store(5, 3),
+			},
+			targetStore: 6,
+			rebalanceSet: []roachpb.ReplicaDescriptor{
+				repl(1, 1), repl(3, 2), repl(5, 3),
+				repl(6, 3), // the to-be-added target, same node as s5
+			},
+			expectedNarrowed: []roachpb.StoreID{5},
+		},
+		{
+			// Target's node holds ONLY a non-voter (no same-type sibling
+			// in rebalanceSet). validateOneReplicaPerNode is type-agnostic,
+			// so narrowing must still abort the cross-node rebalance
+			// here. With the candidate set holding no same-node entry,
+			// the function returns abort=true.
+			name: "target node has only a non-voter — abort",
+			candidates: []roachpb.StoreDescriptor{
+				store(1, 1), store(3, 2), store(5, 9),
+			},
+			targetStore: 6,
+			rebalanceSet: []roachpb.ReplicaDescriptor{
+				repl(1, 1), repl(3, 2), repl(5, 9),
+				repl(6, 3), // the to-be-added voter target on n3
+			},
+			otherReplicas: []roachpb.ReplicaDescriptor{
+				repl(7, 3), // a non-voter on the same node as the target
+			},
+			expectedAbort: true,
+		},
+		{
+			// Target's node holds another voter, but the same-node
+			// sibling has been filtered out of the candidate set (e.g.
+			// it is the leaseholder). The rebalance cannot proceed
+			// safely; the caller is asked to abort.
+			name: "same-node sibling not removable — abort",
+			candidates: []roachpb.StoreDescriptor{
+				store(1, 1), store(3, 2),
+			},
+			targetStore: 6,
+			rebalanceSet: []roachpb.ReplicaDescriptor{
+				repl(1, 1), repl(3, 2), repl(5, 3),
+				repl(6, 3),
+			},
+			expectedAbort: true,
+		},
+		{
+			// targetStore is not in rebalanceSet (caller forgot to
+			// append it). Function gracefully falls through with no
+			// narrowing rather than panic.
+			name: "target not in rebalance set — no narrowing",
+			candidates: []roachpb.StoreDescriptor{
+				store(1, 1), store(3, 2), store(5, 3),
+			},
+			targetStore: 9,
+			rebalanceSet: []roachpb.ReplicaDescriptor{
+				repl(1, 1), repl(3, 2), repl(5, 3),
+			},
+			expectedNarrowed: []roachpb.StoreID{1, 3, 5},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			narrowed, abort := narrowRemoveCandidatesToSameNode(
+				tc.candidates, tc.targetStore, tc.rebalanceSet, tc.otherReplicas)
+			require.Equal(t, tc.expectedAbort, abort)
+			if abort {
+				return
+			}
+			require.Equal(t, tc.expectedNarrowed, storeIDs(narrowed))
 		})
 	}
 }

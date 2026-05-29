@@ -116,6 +116,9 @@ func (p *Required) String() string {
 	if p.RemoteBranch {
 		output("remote branch", func(buf *bytes.Buffer) { buf.WriteString("true") })
 	}
+	if !p.PlanGram.Any() {
+		output("plangram", p.PlanGram.Format)
+	}
 
 	// Handle empty properties case.
 	if buf.Len() == 0 {
@@ -128,7 +131,8 @@ func (p *Required) String() string {
 func (p *Required) Equals(rhs *Required) bool {
 	return p.Presentation.Equals(rhs.Presentation) && p.Ordering.Equals(&rhs.Ordering) &&
 		p.Distribution.Equals(rhs.Distribution) &&
-		p.LimitHint == rhs.LimitHint && p.RemoteBranch == rhs.RemoteBranch
+		p.LimitHint == rhs.LimitHint && p.RemoteBranch == rhs.RemoteBranch &&
+		p.PlanGram.Equals(rhs.PlanGram)
 }
 
 // LimitHintInt64 returns the limit hint converted to an int64.

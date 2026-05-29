@@ -84,7 +84,7 @@ store-id=5 node-id=5 status=ok accepting all reported=[cpu:100ns/s, write-bandwi
 
 # Rebalance from s1 (the leaseholder). s4 should be identified as overloaded
 # on WriteBandwidth, and the non-voter of r1 should be moved from s4 to s5.
-rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-threshold=10.0
+rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-threshold=10.0 vmodule=3
 ----
 [mmaid=1] rebalanceStores begins
 [mmaid=1] cluster means: (stores-load [cpu:100ns/s, write-bandwidth:10 MB/s, byte-size:0 B]) (stores-capacity [cpu:2µs/s, write-bandwidth:unknown/s, byte-size:1.0 MB]) (nodes-cpu-load 100) (nodes-cpu-capacity 2000)
@@ -109,13 +109,13 @@ rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-t
 [mmaid=1] load summary for dim=CPURate (n4): loadNormal, reason: load is within 5% of mean [load=100 meanLoad=100 fractionUsed=5.00% meanUtil=5.00% capacity=2000]
 [mmaid=1] evaluating s4: node load loadNormal, store load overloadSlow, worst dim WriteBandwidth
 [mmaid=1] overload-continued s4 ((store=overloadSlow worst=WriteBandwidth cpu=loadNormal writes=overloadSlow bytes=loadNormal node=loadNormal frac_pending=0.00,0.00(true))) - within grace period
-[mmaid=1] store s4 was added to shedding store list
+[mmaid=1] adding overloaded store s4 to shedding list (worst dim: WriteBandwidth, cannotShed: false, pending decrease 0.00 vs threshold 10.00, pending increase 0.00 vs epsilon 0.00); pending: (none)
 [mmaid=1] load summary for dim=CPURate (s5): loadNormal, reason: load is within 5% of mean [load=100 meanLoad=100 fractionUsed=5.00% meanUtil=5.00% capacity=2000]
 [mmaid=1] load summary for dim=WriteBandwidth (s5): loadLow, reason: load is >10% below mean [load=8000000 meanLoad=10000000]
 [mmaid=1] load summary for dim=ByteSize (s5): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00%* meanUtil=0.00% capacity=1000000]
 [mmaid=1] load summary for dim=CPURate (n5): loadNormal, reason: load is within 5% of mean [load=100 meanLoad=100 fractionUsed=5.00% meanUtil=5.00% capacity=2000]
 [mmaid=1] evaluating s5: node load loadNormal, store load loadNormal, worst dim CPURate
-[mmaid=1] sorted shedding stores: (s4: overloadSlow)
+[mmaid=1] sorted shedding stores: (s4: overloadSlow, cannotShed: false)
 [mmaid=1] start processing shedding store s4: cpu node load loadNormal, store load overloadSlow, worst dim WriteBandwidth
 [mmaid=1] top-K[WriteBandwidth] ranges for s4 with lease on local s1: r1:[cpu:1ns/s, write-bandwidth:800 kB/s, byte-size:0 B]
 [mmaid=1] attempting to shed replicas next

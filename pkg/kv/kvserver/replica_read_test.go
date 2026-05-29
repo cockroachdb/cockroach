@@ -164,7 +164,7 @@ func TestVirtualizedIntentResolution(t *testing.T) {
 				}
 				gArgs := getArgs(k)
 				ba.Add(&gArgs)
-				br, _, _, pErr := tc.repl.executeReadOnlyBatch(ctx, ba, g, kvadmission.AdmissionInfo{})
+				br, _, pErr := tc.repl.executeReadOnlyBatch(ctx, ba, g, nil /* stats */, kvadmission.AdmissionInfo{})
 
 				if c.exp.error == "" {
 					require.NoError(t, pErr.GoError())

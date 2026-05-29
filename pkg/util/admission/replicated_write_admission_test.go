@@ -53,12 +53,9 @@ import (
 //     requests waiting. If no class is specified, we grant admission across
 //     both classes.
 //
-//   - "tenant-weights" [t<int>=<int>]...
-//     Set weights for each tenant.
-//
 //   - "print"
 //     Pretty-print work queue internal state (waiting requests, consumed tokens
-//     per-tenant, physical admission statistics, tenant weights, etc).
+//     per-tenant, physical admission statistics).
 func TestReplicatedWriteAdmission(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -213,18 +210,6 @@ func TestReplicatedWriteAdmission(t *testing.T) {
 				}
 				return printTestGranterTokens(tg)
 
-			case "tenant-weights":
-				weightMap := make(map[uint64]uint32)
-				for _, cmdArg := range d.CmdArgs {
-					tenantID, err := strconv.Atoi(strings.TrimPrefix(cmdArg.Key, "t"))
-					require.NoError(t, err)
-					weight, err := strconv.Atoi(cmdArg.Vals[0])
-					require.NoError(t, err)
-					weightMap[uint64(tenantID)] = uint32(weight)
-				}
-				storeWorkQueue.SetTenantWeights(weightMap)
-				return ""
-
 			case "grant":
 				var wcs []admissionpb.WorkClass
 				if d.HasArg("class") {
@@ -311,28 +296,33 @@ func printWorkQueue(q *WorkQueue) string {
 	var buf strings.Builder
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	buf.WriteString(fmt.Sprintf("len(tenant-heap)=%d", len(q.mu.tenantHeap)))
-	if len(q.mu.tenantHeap) > 0 {
-		buf.WriteString(fmt.Sprintf(" top-tenant=t%d", q.mu.tenantHeap[0].id))
+	buf.WriteString(fmt.Sprintf("len(group-heap)=%d", len(q.mu.groupHeap)))
+	if len(q.mu.groupHeap) > 0 {
+		buf.WriteString(fmt.Sprintf(" top-group=%s", q.mu.groupHeap[0].groupKey))
 	}
-	var ids []uint64
-	for id := range q.mu.tenants {
-		ids = append(ids, id)
+	var keys []groupKey
+	for k := range q.mu.groups {
+		keys = append(keys, k)
 	}
-	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
-	for _, id := range ids {
-		tenant := q.mu.tenants[id]
-		buf.WriteString(fmt.Sprintf("\n tenant=t%d weight=%d fifo-threshold=%s used=%s",
-			tenant.id,
-			tenant.weight,
-			admissionpb.WorkPriority(tenant.fifoPriorityThreshold),
-			printTrimmedBytes(int64(tenant.used)),
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].tenantID != keys[j].tenantID {
+			return keys[i].tenantID < keys[j].tenantID
+		}
+		return keys[i].groupID < keys[j].groupID
+	})
+	for _, k := range keys {
+		group := q.mu.groups[k]
+		buf.WriteString(fmt.Sprintf("\n group=%s weight=%d fifo-threshold=%s used=%s",
+			group.groupKey,
+			group.weight,
+			admissionpb.WorkPriority(group.fifoPriorityThreshold),
+			printTrimmedBytes(int64(group.used)),
 		))
-		if len(tenant.waitingWorkHeap) > 0 {
+		if len(group.waitingWorkHeap) > 0 {
 			buf.WriteString("\n")
 
-			for i := range tenant.waitingWorkHeap {
-				w := tenant.waitingWorkHeap[i]
+			for i := range group.waitingWorkHeap {
+				w := group.waitingWorkHeap[i]
 				if i != 0 {
 					buf.WriteString("\n")
 				}

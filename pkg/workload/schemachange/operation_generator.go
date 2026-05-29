@@ -1725,16 +1725,10 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 		return nil, err
 	}
 
-	// Check if the table has any policies, triggers, foreign keys, or row-level TTL.
-	tableHasPolicies, tableHasTriggers, tableHasFK, tableHasTTL := false, false, false, false
+	// Check if the table has any policies or row-level TTL.
+	tableHasPolicies, tableHasTTL := false, false
 	if tableExists {
 		if tableHasPolicies, err = og.tableHasPolicies(ctx, tx, tableName); err != nil {
-			return nil, err
-		}
-		if tableHasTriggers, err = og.tableHasTriggers(ctx, tx, tableName); err != nil {
-			return nil, err
-		}
-		if tableHasFK, err = og.tableHasFK(ctx, tx, tableName); err != nil {
 			return nil, err
 		}
 		if tableHasTTL, err = og.tableHasRowLevelTTL(ctx, tx, tableName); err != nil {
@@ -1751,10 +1745,6 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 		return nil, err
 	}
 	colIsPrimaryKey, err := og.colIsPrimaryKey(ctx, tx, tableName, columnName)
-	if err != nil {
-		return nil, err
-	}
-	columnIsDependedOn, err := og.columnIsDependedOn(ctx, tx, tableName, columnName, false /* includeFKs */)
 	if err != nil {
 		return nil, err
 	}
@@ -1776,7 +1766,6 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 		{code: pgcode.ObjectNotInPrerequisiteState, condition: columnIsInAddingOrDroppingIndex},
 		{code: pgcode.UndefinedColumn, condition: !columnExists},
 		{code: pgcode.InvalidColumnReference, condition: colIsPrimaryKey || colIsRefByComputed},
-		{code: pgcode.DependentObjectsStillExist, condition: columnIsDependedOn},
 		{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange && !og.useDeclarativeSchemaChanger},
 	})
 	stmt.potentialExecErrors.addAll(codesWithConditions{
@@ -1789,36 +1778,12 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 		// It is possible that we cannot drop column because it is referenced
 		// in a policy expression or a row-level TTL expiration expression.
 		{code: pgcode.InvalidTableDefinition, condition: tableHasPolicies || tableHasTTL},
-		// It is possible that we cannot drop column because
-		// it is depended on by a trigger or foreign key.
-		{code: pgcode.DependentObjectsStillExist, condition: tableHasTriggers || tableHasFK},
+		// Predicting DependentObjectsStillExist precisely has been a source of
+		// flakes, so permit it as a valid outcome instead.
+		{code: pgcode.DependentObjectsStillExist, condition: true},
 	})
 	stmt.sql = fmt.Sprintf(`ALTER TABLE %s DROP COLUMN %s`, tableName.String(), columnName.String())
 	return stmt, nil
-}
-
-// tableHasTriggers checks if a table has any triggers defined
-func (og *operationGenerator) tableHasTriggers(
-	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
-) (bool, error) {
-	// Query to check if a table has any triggers
-	query := `
-	SELECT EXISTS (
-		SELECT 1
-		FROM information_schema.triggers
-		WHERE event_object_schema = $1
-		AND event_object_table = $2
-		LIMIT 1
-	)
-	`
-
-	var hasTriggers bool
-	err := tx.QueryRow(ctx, query, tableName.Schema(), tableName.Object()).Scan(&hasTriggers)
-	if err != nil {
-		return false, err
-	}
-
-	return hasTriggers, nil
 }
 
 // tableHasPolicies checks if a table has any row-level security policies defined
@@ -1845,19 +1810,6 @@ func (og *operationGenerator) tableHasPolicies(
 	}
 
 	return hasPolicies, nil
-}
-
-// tableHasFK checks if a table participates in any foreign key constraints.
-func (og *operationGenerator) tableHasFK(
-	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
-) (bool, error) {
-	return og.scanBool(ctx, tx, `
-SELECT EXISTS (
-	SELECT 1
-	  FROM pg_constraint
-	 WHERE contype = 'f'
-	   AND (conrelid = $1::REGCLASS OR confrelid = $1::REGCLASS)
-)`, tableName.String())
 }
 
 // tableHasRowLevelTTL checks if a table has a row-level TTL configured.
@@ -2262,11 +2214,11 @@ func (og *operationGenerator) alterTypeDropValue(ctx context.Context, tx pgx.Tx)
 		return nil, err
 	}
 
-	// TODO(chrisseto): We're currently missing cases around enum members being
-	// referenced as it's quite difficult to tell if an individual member is
-	// referenced. Unreferenced members can be dropped but referenced members may
-	// not. For now, we skip over all enums where the type itself is being
-	// referenced.
+	// It's difficult to tell if an individual enum member is referenced, so
+	// for the success case we allow any non-dropping member regardless of
+	// whether the type has references, and flag DependentObjectsStillExist as
+	// a potential error when the selected member's type is referenced.
+	var pickedReferenced bool
 
 	stmt, code, err := Generate[*tree.AlterType](og.params.rng, og.produceError(), []GenerationCase{
 		// Fail to drop values from a type that doesn't exist.
@@ -2275,22 +2227,37 @@ func (og *operationGenerator) alterTypeDropValue(ctx context.Context, tx pgx.Tx)
 		{pgcode.ObjectNotInPrerequisiteState, `{ with (EnumValue true false) } ALTER TYPE { .name } DROP VALUE { .value } { end }`},
 		// Fail to drop values that don't exist.
 		{pgcode.UndefinedObject, `{ with (EnumValue false false) } ALTER TYPE { .name } DROP VALUE 'ValueThatDoesntExist' { end }`},
-		// Successful drop of an enum value.
-		{pgcode.SuccessfulCompletion, `{ with (EnumValue false false) } ALTER TYPE { .name } DROP VALUE { .value } { end }`},
+		// Successful drop of an enum value. The member may belong to a
+		// referenced type, in which case the drop could fail.
+		{pgcode.SuccessfulCompletion, `{ with (AnyEnumValue false) } ALTER TYPE { .name } DROP VALUE { .value } { end }`},
 	}, template.FuncMap{
 		"EnumValue": func(dropping, referenced bool) (map[string]any, error) {
 			return PickOne(og.params.rng, util.Filter(enumMembers, func(enum map[string]any) bool {
 				return enum["has_references"].(bool) == referenced && enum["dropping"].(bool) == dropping
 			}))
 		},
+		"AnyEnumValue": func(dropping bool) (map[string]any, error) {
+			member, err := PickOne(og.params.rng, util.Filter(enumMembers, func(enum map[string]any) bool {
+				return enum["dropping"].(bool) == dropping
+			}))
+			if err == nil {
+				pickedReferenced = member["has_references"].(bool)
+			}
+			return member, err
+		},
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	return newOpStmt(stmt, codesWithConditions{
+	opStmt := newOpStmt(stmt, codesWithConditions{
 		{code, true},
-	}), nil
+	})
+	if pickedReferenced {
+		opStmt.potentialExecErrors.add(pgcode.DependentObjectsStillExist)
+		og.potentialCommitErrors.add(pgcode.DependentObjectsStillExist)
+	}
+	return opStmt, nil
 }
 
 func (og *operationGenerator) renameColumn(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
@@ -3294,12 +3261,22 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 		}
 	}
 
+	// A concurrent ADD COLUMN of a NOT NULL spatial type without a DEFAULT
+	// causes the optimizer to synthesize a default for the WRITE_ONLY mutation
+	// column which fails because tree.NewDefaultDatum has no zero value for
+	// these type families.
+	hasNotNullSpatialColumnMutation, err := og.tableHasNotNullSpatialColumnMutation(ctx, tx, tableName)
+	if err != nil {
+		return nil, err
+	}
+
 	stmt.potentialExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UniqueViolation, condition: hasUniqueConstraints || hasUniqueConstraintsMutations},
 		{code: pgcode.ForeignKeyViolation, condition: true},
 		{code: pgcode.NotNullViolation, condition: true},
 		{code: pgcode.CheckViolation, condition: true},
 		{code: pgcode.InsufficientPrivilege, condition: true}, // For RLS violations
+		{code: pgcode.FeatureNotSupported, condition: hasNotNullSpatialColumnMutation},
 	})
 	og.potentialCommitErrors.addAll(codesWithConditions{
 		{code: pgcode.ForeignKeyViolation, condition: true},
@@ -4022,9 +3999,13 @@ func (og *operationGenerator) randConstraint(
 	if err := og.setSeedInDB(ctx, tx); err != nil {
 		return "", err
 	}
+	// NOT NULL rows in pg_constraint are synthesized from non-nullable column
+	// metadata, so they cannot be dropped via ALTER TABLE ... DROP CONSTRAINT.
+	// Skip them when picking a random constraint for drop.
 	q := fmt.Sprintf(`
   SELECT constraint_name
     FROM [SHOW CONSTRAINTS FROM %s]
+   WHERE constraint_type <> 'NOT NULL'
 ORDER BY random()
    LIMIT 1;
 `, tableName)
@@ -4516,42 +4497,15 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 				COALESCE((descriptor->'state')::INT != 0, false) AS non_public
 			FROM enums
 		`)
-	enumMemberQuery := With([]CTE{
-		{"descriptors", descJSONQuery},
-		{"enums", enumDescsQuery},
-		{"enum_members", enumMemberDescsQuery},
-	}, `SELECT
-				quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) AS name,
-				quote_literal(member->>'logicalRepresentation') AS value,
-				(
-					COALESCE(member->>'direction' = 'REMOVE', false) OR
-					COALESCE(member->>'capability' = 'READ_ONLY', false)
-				) AS non_public
-			FROM enum_members
-		`)
 	schemasQuery := With([]CTE{
 		{"descriptors", descJSONQuery},
 	}, `SELECT quote_ident(name) FROM descriptors WHERE descriptor ? 'schema'`)
 
-	functionsQuery := With([]CTE{
-		{"descriptors", descJSONQuery},
-		{"functions", functionDescsQuery},
-	}, `SELECT
-	quote_ident(schema_id::REGNAMESPACE::STRING) AS schema,
-	quote_ident(name) AS name,
-	array_to_string(proargnames, ',') AS args,
-	proargtypes AS argtypes,
-	pronargdefaults as numdefaults
-FROM
-	functions
-	INNER JOIN pg_catalog.pg_proc ON oid = (id + 100000)
-	WHERE COALESCE((descriptor->'state')::STRING, 'PUBLIC') = 'PUBLIC'::STRING
-	AND prorettype != 'trigger'::REGTYPE;`)
 	enums, err := Collect(ctx, og, tx, pgx.RowToMap, enumQuery)
 	if err != nil {
 		return nil, err
 	}
-	enumMembers, err := Collect(ctx, og, tx, pgx.RowToMap, enumMemberQuery)
+	enumMembers, err := og.collectEnumMembers(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
@@ -4559,7 +4513,7 @@ FROM
 	if err != nil {
 		return nil, err
 	}
-	functions, err := Collect(ctx, og, tx, pgx.RowToMap, functionsQuery)
+	functions, err := og.findNonTriggerFunctions(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
@@ -4641,50 +4595,12 @@ FROM
 		possibleBodyReferences = append(possibleBodyReferences, fmt.Sprintf(`((SELECT count(*) FROM %s LIMIT 0) = 0)`, table))
 	}
 
-	// For each function generate a possible invocation passing in null arguments.
 	for _, function := range functions {
-		args := ""
-		if function["args"] != nil {
-			args = function["args"].(string)
-			argTypesStr := strings.Split(function["argtypes"].(string), " ")
-			argTypes := make([]int, 0, len(argTypesStr))
-			// Determine how many default arguemnts should be used.
-			numDefaultArgs := int(function["numdefaults"].(int16))
-			if numDefaultArgs > 0 {
-				numDefaultArgs = rand.Intn(numDefaultArgs)
-			}
-			// Populate the arguments for this signature, and select some number
-			// of default arguments.
-			for _, oidStr := range argTypesStr {
-				oid, err := strconv.Atoi(oidStr)
-				if err != nil {
-					return nil, err
-				}
-				argTypes = append(argTypes, oid)
-			}
-			argIn := strings.Builder{}
-			for idx := range strings.Split(args, ",") {
-				// We have hit the default arguments that we want to not populate.
-				if idx > len(argTypesStr)-numDefaultArgs {
-					break
-				}
-				if argIn.Len() > 0 {
-					argIn.WriteString(",")
-				}
-				// Resolve the type for each column and if possible generate a random
-				// value via randgen.
-				oidValue := oid.Oid(argTypes[idx])
-				typ, ok := types.OidToType[oidValue]
-				if !ok {
-					argIn.WriteString("NULL")
-				} else {
-					randomDatum := randgen.RandDatum(og.params.rng, typ, true)
-					argIn.WriteString(tree.AsStringWithFlags(randomDatum, tree.FmtParsable))
-				}
-			}
-			args = argIn.String()
+		invocation, err := og.buildFuncInvocation(function)
+		if err != nil {
+			return nil, err
 		}
-		possibleBodyFuncReferences = append(possibleBodyFuncReferences, fmt.Sprintf("(SELECT %s.%s(%s) IS NOT NULL)", function["schema"].(string), function["name"].(string), args))
+		possibleBodyFuncReferences = append(possibleBodyFuncReferences, invocation)
 	}
 
 	hasFuncRefs := false
@@ -4918,9 +4834,32 @@ func (og *operationGenerator) alterFunctionRename(ctx context.Context, tx pgx.Tx
 		return nil, err
 	}
 
+	triggerPolicyDeps, err := Collect(ctx, og, tx, pgx.RowToMap,
+		With([]CTE{
+			{"descriptors", descJSONQuery},
+		},
+			functionTriggerPolicyDepsQuery,
+		))
+	if err != nil {
+		return nil, err
+	}
+
+	// The server only blocks ALTER FUNCTION RENAME on trigger/policy
+	// back-refs when the cluster version reaches V26_3_Start. Mirror
+	// that gate here so the workload's error expectations match.
+	skipTriggerPolicyDeps, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_3_Start.Version())
+	if err != nil {
+		return nil, err
+	}
+
 	functionDepsMap := make(map[int64]struct{})
 	for _, f := range functionDeps {
 		functionDepsMap[f["to_oid"].(int64)] = struct{}{}
+	}
+	if !skipTriggerPolicyDeps {
+		for _, f := range triggerPolicyDeps {
+			functionDepsMap[f["func_oid"].(int64)] = struct{}{}
+		}
 	}
 
 	functionWithDeps := make([]map[string]any, 0, len(functions))
@@ -5015,9 +4954,32 @@ func (og *operationGenerator) alterFunctionSetSchema(
 		return nil, err
 	}
 
+	triggerPolicyDeps, err := Collect(ctx, og, tx, pgx.RowToMap,
+		With([]CTE{
+			{"descriptors", descJSONQuery},
+		},
+			functionTriggerPolicyDepsQuery,
+		))
+	if err != nil {
+		return nil, err
+	}
+
+	// The server only blocks ALTER FUNCTION SET SCHEMA on trigger/policy
+	// back-refs when the cluster version reaches V26_3_Start. Mirror
+	// that gate here so the workload's error expectations match.
+	skipTriggerPolicyDeps, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_3_Start.Version())
+	if err != nil {
+		return nil, err
+	}
+
 	functionDepsMap := make(map[int64]struct{})
 	for _, f := range functionDeps {
 		functionDepsMap[f["to_oid"].(int64)] = struct{}{}
+	}
+	if !skipTriggerPolicyDeps {
+		for _, f := range triggerPolicyDeps {
+			functionDepsMap[f["func_oid"].(int64)] = struct{}{}
+		}
 	}
 
 	functionWithDeps := make([]map[string]any, 0, len(functions))
@@ -5698,6 +5660,24 @@ func (og *operationGenerator) createTriggerFunction(
 		return nil, err
 	}
 
+	// On clusters older than V26_3_Start, a trigger function that
+	// references a region column (of type crdb_internal_region) will
+	// cause a validation failure. Clear the SELECT if any of its
+	// tables have a region-typed column.
+	excludeRegion, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_3_Start.Version())
+	if err != nil {
+		return nil, err
+	}
+	if excludeRegion {
+		refsRegionCol, err := og.sqlReferencesRegionColumn(ctx, tx, selectStmt.sql)
+		if err != nil {
+			return nil, err
+		}
+		if refsRegionCol {
+			selectStmt.sql = "SELECT 1"
+		}
+	}
+
 	// Sometimes include a sequence reference to exercise trigger-sequence
 	// dependency tracking.
 	seqSelectStmt := ""
@@ -5713,11 +5693,72 @@ func (og *operationGenerator) createTriggerFunction(
 		}
 	}
 
+	// Sometimes include an enum cast expression to exercise trigger-enum
+	// dependency tracking (TriggerDeps.uses_type_ids).
+	enumSelectStmt := ""
+	if og.randIntn(2) == 0 {
+		enumMembers, err := og.collectEnumMembers(ctx, tx)
+		if err != nil {
+			return nil, err
+		}
+		// On clusters older than V26_3_Start, exclude the
+		// crdb_internal_region enum to avoid creating a type dependency
+		// that causes validation failures on v26.2 nodes (see #170091).
+		excludeRegion, err := isClusterVersionLessThan(
+			ctx, tx, clusterversion.V26_3_Start.Version(),
+		)
+		if err != nil {
+			return nil, err
+		}
+		if excludeRegion {
+			enumMembers = slices.DeleteFunc(enumMembers, func(m map[string]any) bool {
+				name, _ := m["name"].(string)
+				return strings.Contains(name, "crdb_internal_region")
+			})
+		}
+		var publicEnumExprs []string
+		for _, member := range enumMembers {
+			if member["non_public"].(bool) {
+				continue
+			}
+			publicEnumExprs = append(publicEnumExprs,
+				fmt.Sprintf(`(%s::%s IS NULL)`, member["value"], member["name"]))
+		}
+		if len(publicEnumExprs) > 0 {
+			picked, err := PickOne(og.params.rng, publicEnumExprs)
+			if err != nil {
+				return nil, err
+			}
+			enumSelectStmt = fmt.Sprintf("SELECT %s;", picked)
+		}
+	}
+
+	// Sometimes include a UDF call expression to exercise trigger-UDF
+	// dependency tracking (TriggerDeps.uses_routine_ids).
+	udfSelectStmt := ""
+	if og.randIntn(2) == 0 {
+		udfFunctions, err := og.findNonTriggerFunctions(ctx, tx)
+		if err != nil {
+			return nil, err
+		}
+		if len(udfFunctions) > 0 {
+			picked, err := PickOne(og.params.rng, udfFunctions)
+			if err != nil {
+				return nil, err
+			}
+			invocation, err := og.buildFuncInvocation(picked)
+			if err != nil {
+				return nil, err
+			}
+			udfSelectStmt = fmt.Sprintf("SELECT %s;", invocation)
+		}
+	}
+
 	// The trigger function always returns NEW to avoid breaking inserts.
 	opStmt := makeOpStmt(OpStmtDDL)
 	opStmt.sql = fmt.Sprintf(
-		`CREATE FUNCTION %s() RETURNS TRIGGER AS $FUNC_BODY$ BEGIN %s%s;RETURN NEW;END; $FUNC_BODY$ LANGUAGE PLpgSQL`,
-		resolvedName, seqSelectStmt, selectStmt.sql,
+		`CREATE FUNCTION %s() RETURNS TRIGGER AS $FUNC_BODY$ BEGIN %s%s%s%s;RETURN NEW;END; $FUNC_BODY$ LANGUAGE PLpgSQL`,
+		resolvedName, seqSelectStmt, enumSelectStmt, udfSelectStmt, selectStmt.sql,
 	)
 	og.LogMessage(fmt.Sprintf("createTriggerFunction: %s", opStmt.sql))
 
@@ -5730,7 +5771,6 @@ func (og *operationGenerator) createTriggerFunction(
 		{code: pgcode.FeatureNotSupported, condition: !og.useDeclarativeSchemaChanger},
 		{code: pgcode.DuplicateFunction, condition: routineAlreadyExists},
 	})
-
 	return opStmt, nil
 }
 
@@ -5796,12 +5836,19 @@ func (og *operationGenerator) createTrigger(ctx context.Context, tx pgx.Tx) (*op
 		{code: pgcode.UndefinedTable, condition: !triggerTableExists},
 	})
 	opStmt.potentialExecErrors.addAll(codesWithConditions{
-		// References within the trigger function are evaluated lazily when the
-		// TRIGGER is created. Not when the function is created. What may have
-		// existed when the function was created could no longer exist.
+		// References within the trigger function body (tables, functions,
+		// columns, enum types, enum members) are evaluated lazily at CREATE
+		// TRIGGER time, not when the function is created. Any referenced
+		// object may have been dropped or transitioned to a non-public state
+		// in the interim.
 		{code: pgcode.UndefinedTable, condition: true},
 		{code: pgcode.UndefinedFunction, condition: true},
 		{code: pgcode.UndefinedColumn, condition: true},
+		{code: pgcode.UndefinedObject, condition: true},
+		{code: pgcode.InvalidParameterValue, condition: true},
+		{code: pgcode.InvalidTextRepresentation, condition: true},
+		{code: pgcode.InvalidSchemaName, condition: true},
+		{code: pgcode.InvalidFunctionDefinition, condition: true},
 	})
 
 	return opStmt, nil
@@ -5834,6 +5881,113 @@ func (og *operationGenerator) dropTrigger(ctx context.Context, tx pgx.Tx) (*opSt
 type triggerInfo struct {
 	table       tree.TableName
 	triggerName string
+}
+
+// collectEnumMembers returns all public enum members in the current database.
+// Each result row is a map with keys "name" (qualified enum type name), "value"
+// (quoted member literal), and "non_public" (always false).
+//
+// This uses enum_range(NULL::type) which goes through the lease-based type
+// resolution and filters out read-only members. This ensures the results are
+// consistent with what DML statements see, avoiding TOCTOU races where the
+// previous system.descriptor-based query could see a member as public while a
+// concurrent schema change has already marked it as READ_ONLY in the leased
+// descriptor.
+func (og *operationGenerator) collectEnumMembers(
+	ctx context.Context, tx pgx.Tx,
+) ([]map[string]any, error) {
+	// First, collect all user-defined enum type names via pg_type (lease-based).
+	enumTypeNames, err := Collect(ctx, og, tx, pgx.RowTo[string], `
+		SELECT quote_ident(n.nspname) || '.' || quote_ident(t.typname)
+		FROM pg_catalog.pg_type t
+		JOIN pg_catalog.pg_namespace n ON t.typnamespace = n.oid
+		WHERE t.typtype = 'e'
+		  AND n.nspname NOT IN ('information_schema', 'pg_catalog', 'pg_extension', 'crdb_internal')
+	`)
+	if err != nil {
+		return nil, err
+	}
+	if len(enumTypeNames) == 0 {
+		return nil, nil
+	}
+
+	// For each enum type, use enum_range to get only public members. Build a
+	// UNION ALL query so we make a single round-trip.
+	var parts []string
+	for _, name := range enumTypeNames {
+		parts = append(parts, fmt.Sprintf(
+			`SELECT '%[1]s' AS name, quote_literal(v) AS value, false AS non_public
+			FROM unnest(enum_range(NULL::%[1]s)) v`, name))
+	}
+	q := strings.Join(parts, " UNION ALL ")
+	return Collect(ctx, og, tx, pgx.RowToMap, q)
+}
+
+// findNonTriggerFunctions returns public, non-trigger UDFs with argument
+// metadata (schema, name, args, argtypes, numdefaults) for building
+// invocations.
+func (og *operationGenerator) findNonTriggerFunctions(
+	ctx context.Context, tx pgx.Tx,
+) ([]map[string]any, error) {
+	q := With([]CTE{
+		{"descriptors", descJSONQuery},
+		{"functions", functionDescsQuery},
+	}, `SELECT
+	quote_ident(schema_id::REGNAMESPACE::STRING) AS schema,
+	quote_ident(name) AS name,
+	array_to_string(proargnames, ',') AS args,
+	proargtypes AS argtypes,
+	pronargdefaults as numdefaults
+FROM
+	functions
+	INNER JOIN pg_catalog.pg_proc ON oid = (id + 100000)
+	WHERE COALESCE((descriptor->'state')::STRING, 'PUBLIC') = 'PUBLIC'::STRING
+	AND prorettype != 'trigger'::REGTYPE;`)
+	return Collect(ctx, og, tx, pgx.RowToMap, q)
+}
+
+// buildFuncInvocation constructs a SQL expression that invokes the given UDF
+// with random arguments: (SELECT schema.func(args) IS NOT NULL).
+func (og *operationGenerator) buildFuncInvocation(function map[string]any) (string, error) {
+	args := ""
+	if function["args"] != nil {
+		args = function["args"].(string)
+		argTypesStr := strings.Split(function["argtypes"].(string), " ")
+		argTypes := make([]int, 0, len(argTypesStr))
+		numDefaultArgs := int(function["numdefaults"].(int16))
+		if numDefaultArgs > 0 {
+			numDefaultArgs = og.randIntn(numDefaultArgs)
+		}
+		for _, oidStr := range argTypesStr {
+			oidVal, err := strconv.Atoi(oidStr)
+			if err != nil {
+				return "", err
+			}
+			argTypes = append(argTypes, oidVal)
+		}
+		argIn := strings.Builder{}
+		for idx := range strings.Split(args, ",") {
+			if idx > len(argTypesStr)-numDefaultArgs {
+				break
+			}
+			if argIn.Len() > 0 {
+				argIn.WriteString(",")
+			}
+			oidValue := oid.Oid(argTypes[idx])
+			typ, ok := types.OidToType[oidValue]
+			if !ok {
+				argIn.WriteString("NULL")
+			} else {
+				randomDatum := randgen.RandDatum(og.params.rng, typ, true)
+				argIn.WriteString(tree.AsStringWithFlags(randomDatum, tree.FmtParsable))
+			}
+		}
+		args = argIn.String()
+	}
+	return fmt.Sprintf(
+		"(SELECT %s.%s(%s) IS NOT NULL)",
+		function["schema"].(string), function["name"].(string), args,
+	), nil
 }
 
 // findExistingTriggerFunctions returns existing trigger functions (RETURNS
@@ -5930,44 +6084,20 @@ func (og *operationGenerator) truncateTable(ctx context.Context, tx pgx.Tx) (*op
 		{expectedCode, true},
 	})
 
-	// If the the TRUNCATE is not cascaded, then the operation can fail
-	// if foreign key references exist.
+	// A non-CASCADE TRUNCATE is rejected when an inbound foreign key references
+	// one of the truncated tables. Rather than checking for inbound FK
+	// dependencies, always allow the rejection as a potential outcome.
 	if expectedCode == pgcode.SuccessfulCompletion &&
 		stmt.DropBehavior != tree.DropCascade {
-		tableSet := map[string]struct{}{}
-		fkSet := map[string]struct{}{}
-		// Gather the set of tables handled by this statement, and
-		// any foreign keys that reference these tables.
-		for _, table := range stmt.Tables {
-			tableSet[table.FQString()] = struct{}{}
-			fkReferenceTables, err := og.getTableForeignKeyReferences(ctx, tx, &table)
-			if err != nil {
-				return nil, err
-			}
-			for _, fk := range fkReferenceTables {
-				fkSet[fk.FQString()] = struct{}{}
-			}
+		op.potentialExecErrors.add(pgcode.FeatureNotSupported)
+		// Pre-v26.1 binaries returned Uncategorized for this rejection; the
+		// pgcode was changed in #154382.
+		versionBefore261, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_1.Version())
+		if err != nil {
+			return nil, err
 		}
-		// Check if any of the foreign keys that reference these
-		// tables are not truncated. If they are, then the TRUNCATE
-		// will fail with an error.
-		for fk := range fkSet {
-			if _, hasTable := tableSet[fk]; !hasTable {
-				// In mixed version workloads, we can see either pgcode.Uncategorized
-				// (pre-v26.1) or pgcode.FeatureNotSupported (v26.1+) depending on which
-				// node handles the TRUNCATE. The pgcode was changed in #154382 (v26.1).
-				versionBefore261, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_1.Version())
-				if err != nil {
-					return nil, err
-				}
-				if versionBefore261 {
-					op.expectedExecErrors.add(pgcode.Uncategorized)
-					op.potentialExecErrors.add(pgcode.FeatureNotSupported)
-				} else {
-					op.expectedExecErrors.add(pgcode.FeatureNotSupported)
-				}
-				break
-			}
+		if versionBefore261 {
+			op.potentialExecErrors.add(pgcode.Uncategorized)
 		}
 	}
 	return op, nil

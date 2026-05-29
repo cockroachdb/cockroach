@@ -48,7 +48,6 @@ export type InsightEventBase = {
   cpuSQLNanos: number;
   elapsedTimeMillis: number;
   endTime: Moment;
-  implicitTxn: boolean;
   insights: Insight[];
   lastRetryReason?: string;
   priority: string;
@@ -66,6 +65,7 @@ export type InsightEventBase = {
 };
 
 export type TxnInsightEvent = InsightEventBase & {
+  implicitTxn: boolean;
   status: TransactionStatus;
   stmtExecutionIDs: string[];
 };
@@ -337,7 +337,6 @@ export interface ExecutionDetails {
   elapsedTimeMillis?: number;
   contentionTimeMs?: number;
   fingerprintID?: string;
-  implicit?: boolean;
   indexRecommendations?: string[];
   retries?: number;
   statement?: string;

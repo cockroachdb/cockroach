@@ -933,6 +933,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			if cost.Penalties&HugeCostPenalty != 0 {
 				b.WriteString(" huge-cost-penalty")
 			}
+			if cost.Penalties&PlanGramMismatchPenalty != 0 {
+				b.WriteString(" plangram-mismatch")
+			}
 			if cost.Penalties&UnboundedCardinalityPenalty != 0 {
 				b.WriteString(" unbounded-cardinality")
 			}
@@ -1079,30 +1082,40 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 			if len(def.Params) > 0 {
 				f.formatColList(tp, "params:", def.Params, opt.ColSet{} /* notNullCols */)
 			}
-			n := tp.Child("body")
-			for i := range def.Body {
-				stmtNode := n
-				if i == 0 {
-					if def.FirstStmtOutput.CursorDeclaration != nil {
-						// The first statement is opening a cursor.
-						stmtNode = n.Child("open-cursor")
-					} else if def.FirstStmtOutput.TargetBufferID != 0 {
-						// The first statement is writing to a target buffer.
-						stmtNode = n.Child("add-to-srf-result")
+			if def.Body != nil {
+				n := tp.Child("body")
+				for i := range def.Body {
+					stmtNode := n
+					if i == 0 {
+						if def.FirstStmtOutput.CursorDeclaration != nil {
+							// The first statement is opening a cursor.
+							stmtNode = n.Child("open-cursor")
+						} else if def.FirstStmtOutput.TargetBufferID != 0 {
+							// The first statement is writing to a target buffer.
+							stmtNode = n.Child("add-to-srf-result")
+						}
+					}
+					prevTailCalls := f.tailCalls
+
+					// Routine calls in the last body statement may be tail calls if
+					// ResultBufferID is unset. If it is set, the result of the last
+					// body statement is not directly used as the result of the UDF
+					// call, so it cannot contain tail calls.
+					if i == len(def.Body)-1 && def.ResultBufferID == 0 {
+						f.tailCalls = make(map[opt.ScalarExpr]struct{})
+						ExtractTailCalls(def.Body[i], f.tailCalls)
+					}
+					f.formatExpr(def.Body[i], stmtNode)
+					f.tailCalls = prevTailCalls
+				}
+			} else {
+				// Deferred-build routine: body is not yet built. Show ASTs.
+				n := tp.Child("body (deferred)")
+				for i, ast := range def.BodyASTs {
+					if ast != nil {
+						n.Childf("stmt%d: %s", i+1, tree.AsString(ast))
 					}
 				}
-				prevTailCalls := f.tailCalls
-
-				// Routine calls in the last body statement may be tail calls if
-				// ResultBufferID is unset. If it is set, the result of the last body
-				// statement is not directly used as the result of the UDF call, so it
-				// cannot contain tail calls.
-				if i == len(def.Body)-1 && def.ResultBufferID == 0 {
-					f.tailCalls = make(map[opt.ScalarExpr]struct{})
-					ExtractTailCalls(def.Body[i], f.tailCalls)
-				}
-				f.formatExpr(def.Body[i], stmtNode)
-				f.tailCalls = prevTailCalls
 			}
 			delete(f.withinUDFs, def)
 		} else if _, recursive := f.withinUDFs[def]; recursive {

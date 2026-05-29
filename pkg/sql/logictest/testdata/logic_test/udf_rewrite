@@ -200,7 +200,7 @@ $$ LANGUAGE SQL
 query T
 SELECT get_body_str('p_rewrite');
 ----
-"SELECT public.nested_func();\nSELECT nested_func FROM ROWS FROM (public.nested_func());"
+"SELECT public.nested_func();\nSELECT nested_func.nested_func FROM ROWS FROM (public.nested_func());"
 
 subtest end
 

@@ -1696,13 +1696,13 @@ type OptionalGossip struct {
 }
 
 // OptionalErr returns the Gossip instance if the wrapper was set up to allow
-// it. Otherwise, it returns an error referring to the optionally passed in
-// issues.
+// it. Otherwise, it returns an error indicating that the operation is
+// unsupported within a virtual cluster.
 //
 // Use of Gossip from within the SQL layer is **deprecated**. Please do not
 // introduce new uses of it.
-func (og OptionalGossip) OptionalErr(issue int) (*Gossip, error) {
-	v, err := og.w.OptionalErr(issue)
+func (og OptionalGossip) OptionalErr() (*Gossip, error) {
+	v, err := og.w.OptionalErr()
 	if err != nil {
 		return nil, err
 	}
@@ -1715,7 +1715,7 @@ func (og OptionalGossip) OptionalErr(issue int) (*Gossip, error) {
 //
 // Use of Gossip from within the SQL layer is **deprecated**. Please do not
 // introduce new uses of it.
-func (og OptionalGossip) Optional(issue int) (*Gossip, bool) {
+func (og OptionalGossip) Optional() (*Gossip, bool) {
 	v, ok := og.w.Optional()
 	if !ok {
 		return nil, false

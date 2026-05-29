@@ -3,6 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+import { useNodesSummary } from "@cockroachlabs/cluster-ui";
 import classNames from "classnames/bind";
 import moment from "moment";
 import React, { useEffect, useState } from "react";
@@ -14,7 +15,6 @@ import {
   LicenseType,
   licenseTypeSelector,
 } from "src/redux/alerts";
-import { nodeIDsSelector } from "src/redux/nodes";
 import {
   getThrottlingMetadata,
   GetThrottlingMetadataResponse,
@@ -44,7 +44,7 @@ export const ThrottleNotificationBar = () => {
   const [loaded, updateLoaded] = useState(false);
   const daysUntilLicenseExpires = useSelector(daysUntilLicenseExpiresSelector);
   const licenseType = useSelector(licenseTypeSelector);
-  const nodeIDs = useSelector(nodeIDsSelector);
+  const { nodeIDs } = useNodesSummary();
   const init: GetThrottlingMetadataResponse = {
     throttled: false,
     throttleExplanation: "",

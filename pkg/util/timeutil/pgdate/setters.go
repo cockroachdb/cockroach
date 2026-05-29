@@ -9,8 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
 // The functions in this file are used by fieldExtract.Extract().
@@ -66,28 +64,17 @@ var keywordSetters = map[string]fieldSetter{
 	keywordZulu:     fieldSetterUTC,
 }
 
-// These abbreviations are taken from:
-// https://github.com/postgres/postgres/blob/master/src/timezone/known_abbrevs.txt
-// We have not yet implemented PostgreSQL's abbreviation-matching logic
-// because we'd also need to incorporate more tzinfo than is readily-available
-// from the time package.  Instead, we have this map to provide a more
-// useful error message (and telemetry) until we do implement this
-// behavior.
-var unsupportedAbbreviations = [...]string{
-	"ACDT", "ACST", "ADT", "AEDT", "AEST", "AKDT", "AKST", "AST", "AWST", "BST",
-	"CAT", "CDT", "CDT", "CEST", "CET", "CST", "CST", "CST", "ChST",
-	"EAT", "EDT", "EEST", "EET", "EST",
-	// GMT has been removed from this list.
-	"HDT", "HKT", "HST", "IDT", "IST", "IST", "IST", "JST", "KST",
-	"MDT", "MEST", "MET", "MSK", "MST", "NDT", "NST", "NZDT", "NZST",
-	"PDT", "PKT", "PST", "PST", "SAST", "SST", "UCT",
-	// UTC has been removed from this list.
-	"WAT", "WEST", "WET", "WIB", "WIT", "WITA",
-}
-
 func init() {
-	for _, tz := range unsupportedAbbreviations {
-		keywordSetters[strings.ToLower(tz)] = fieldSetterUnsupportedAbbreviation
+	// Register a setter for every PostgreSQL-known fixed-offset abbreviation
+	// (see pg_timezone_abbrevs.go). Pre-existing entries in keywordSetters
+	// (UTC, GMT, Z, ZULU) take precedence: their setters use time.UTC, which
+	// is equivalent for those four abbreviations and avoids churn.
+	for abbrev, entry := range pgTimezoneAbbrevs {
+		lower := strings.ToLower(abbrev)
+		if _, exists := keywordSetters[lower]; exists {
+			continue
+		}
+		keywordSetters[lower] = fieldSetterAbbreviation(abbrev, int(entry.UTCOffsetSecs))
 	}
 }
 
@@ -158,8 +145,18 @@ func fieldSetterUTC(fe *fieldExtract, _ string) error {
 	return nil
 }
 
-// fieldSetterUnsupportedAbbreviation always returns an error, but
-// captures the abbreviation in telemetry.
-func fieldSetterUnsupportedAbbreviation(_ *fieldExtract, s string) error {
-	return unimplemented.NewWithIssueDetail(31710, s, "timestamp abbreviations not supported")
+// fieldSetterAbbreviation returns a fieldSetter that resolves a PostgreSQL
+// timezone abbreviation (e.g. EST, PST) to a fixed-offset time.Location.
+// PostgreSQL's parsing path consults its session timezone first via
+// TimeZoneAbbrevIsKnown before falling back to pg_timezone_abbrevs; CRDB
+// does not currently emulate that precedence, so the fixed offset is always
+// used. In practice this matches PostgreSQL for the modern era because the
+// IANA zone reports the same offset as the abbreviation.
+func fieldSetterAbbreviation(name string, offsetSecs int) fieldSetter {
+	loc := time.FixedZone(name, offsetSecs)
+	return func(fe *fieldExtract, _ string) error {
+		fe.location = loc
+		fe.wanted = fe.wanted.ClearAll(tzFields)
+		return nil
+	}
 }

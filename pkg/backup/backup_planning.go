@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backupdest"
 	"github.com/cockroachdb/cockroach/pkg/backup/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuputils"
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -75,6 +77,7 @@ func resolveOptionsForBackupJobDescription(
 		ExecutionLocality:               opts.ExecutionLocality,
 		UpdatesClusterMonitoringMetrics: opts.UpdatesClusterMonitoringMetrics,
 		Strict:                          opts.Strict,
+		RevisionStream:                  opts.RevisionStream,
 	}
 
 	if opts.EncryptionPassphrase != nil {
@@ -399,6 +402,13 @@ func backupPlanHook(
 
 	detached := backupStmt.Options.Detached == tree.DBoolTrue
 
+	// REVISION STREAM is a prototype (continuous backup / revlog
+	// sibling job); refuse it on release builds until it has matured.
+	if backupStmt.Options.RevisionStream && build.IsRelease() {
+		return nil, nil, false, pgerror.New(pgcode.FeatureNotSupported,
+			"BACKUP ... WITH REVISION STREAM is a prototype and is not enabled in release builds")
+	}
+
 	exprEval := p.ExprEvaluator("BACKUP")
 
 	var err error
@@ -555,9 +565,9 @@ func backupPlanHook(
 		for _, t := range targetDescs {
 			if tbl, ok := t.(catalog.TableDescriptor); ok && tbl.ExternalRowData() != nil {
 				if tbl.ExternalRowData().TenantID.IsSet() {
-					return errors.UnimplementedError(errors.IssueLink{}, "backing up from a replication target is not supported")
+					return unimplemented.New("backup.replication_target", "backing up from a replication target is not supported")
 				}
-				return errors.UnimplementedError(errors.IssueLink{}, "backing up from external tables is not supported")
+				return unimplemented.New("backup.external_table", "backing up from external tables is not supported")
 			}
 		}
 
@@ -588,6 +598,7 @@ func backupPlanHook(
 			ExecutionLocality:               executionLocality,
 			UpdatesClusterMonitoringMetrics: updatesClusterMonitoringMetrics,
 			StrictLocalityFiltering:         backupStmt.Options.Strict,
+			CreateRevlogJob:                 backupStmt.Options.RevisionStream,
 		}
 		if backupStmt.CreatedByInfo != nil {
 			initialDetails.ScheduleID = backupStmt.CreatedByInfo.ScheduleID()

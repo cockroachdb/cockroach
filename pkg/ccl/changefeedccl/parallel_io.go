@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -31,6 +32,7 @@ import (
 // in an ioResult struct sent to resultCh.  After sending an error to resultCh
 // all workers are torn down and no further requests are received or handled.
 type ParallelIO struct {
+	everyN    log.EveryN
 	retryOpts retry.Options
 	wg        ctxgroup.Group
 	metrics   metricsRecorder
@@ -95,6 +97,7 @@ func NewParallelIO(
 		requestCh: make(chan AdmittedIORequest, quota),
 		resultCh:  make(chan IOResult, quota),
 		doneCh:    make(chan struct{}),
+		everyN:    log.Every(15 * time.Second),
 	}
 
 	wg.GoCtx(func(ctx context.Context) error {
@@ -253,13 +256,17 @@ func (p *ParallelIO) processIO(ctx context.Context, numEmitWorkers int) error {
 			}
 		}
 
-		initialSend := true
+		var lastErr error
 		return retry.WithMaxAttempts(ctx, p.retryOpts, p.retryOpts.MaxRetries+1, func() error {
-			if !initialSend {
+			if lastErr != nil {
 				p.metrics.recordInternalRetry(int64(r.Keys().Len()), false)
+				if p.everyN.ShouldLog() {
+					log.Changefeed.Infof(ctx, "internal retry of %d message(s) due to error: %v",
+						r.Keys().Len(), lastErr)
+				}
 			}
-			initialSend = false
-			return p.ioHandler(ctx, r)
+			lastErr = p.ioHandler(ctx, r)
+			return lastErr
 		})
 	}
 

@@ -9,6 +9,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -82,8 +83,8 @@ func TestRenameColumn(t *testing.T) {
 	to := tree.Name("bar")
 
 	testData := []struct {
-		expr     string
-		expected string
+		expr     catpb.Expression
+		expected catpb.Expression
 	}{
 		{"foo", "bar"},
 		{"foo = 1", "bar = 1"},
@@ -93,7 +94,7 @@ func TestRenameColumn(t *testing.T) {
 	}
 
 	for _, d := range testData {
-		t.Run(d.expr, func(t *testing.T) {
+		t.Run(string(d.expr), func(t *testing.T) {
 			res, err := RenameColumn(d.expr, from, to)
 			if err != nil {
 				t.Fatalf("%s: unexpected error: %s", d.expr, err)

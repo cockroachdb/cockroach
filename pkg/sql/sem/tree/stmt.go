@@ -88,6 +88,7 @@ const (
 )
 
 const (
+	AlterDomainTag         = "ALTER DOMAIN"
 	AlterSequenceTag       = "ALTER SEQUENCE"
 	AlterTableTag          = "ALTER TABLE"
 	AlterTypeTag           = "ALTER TYPE"
@@ -99,15 +100,21 @@ const (
 	CreateTriggerTag       = "CREATE TRIGGER"
 	CreateSchemaTag        = "CREATE SCHEMA"
 	CreateSequenceTag      = "CREATE SEQUENCE"
+	CreateTableTag         = "CREATE TABLE"
 	CreateDatabaseTag      = "CREATE DATABASE"
 	CreatePolicyTag        = "CREATE POLICY"
 	CommentOnColumnTag     = "COMMENT ON COLUMN"
 	CommentOnConstraintTag = "COMMENT ON CONSTRAINT"
 	CommentOnDatabaseTag   = "COMMENT ON DATABASE"
+	CommentOnFunctionTag   = "COMMENT ON FUNCTION"
 	CommentOnIndexTag      = "COMMENT ON INDEX"
+	CommentOnProcedureTag  = "COMMENT ON PROCEDURE"
+	CommentOnRoutineTag    = "COMMENT ON ROUTINE"
 	CommentOnSchemaTag     = "COMMENT ON SCHEMA"
+	CommentOnSequenceTag   = "COMMENT ON SEQUENCE"
 	CommentOnTableTag      = "COMMENT ON TABLE"
 	CommentOnTypeTag       = "COMMENT ON TYPE"
+	CommentOnViewTag       = "COMMENT ON VIEW"
 	DropDatabaseTag        = "DROP DATABASE"
 	DropFunctionTag        = "DROP FUNCTION"
 	DropPolicyTag          = "DROP POLICY"
@@ -199,7 +206,7 @@ func CanWriteData(stmt Statement) bool {
 	case *Split, *Unsplit, *Relocate, *RelocateRange, *Scatter:
 		return true
 	// Replication operations.
-	case *CreateTenantFromReplication, *AlterTenantReplication, *CreateLogicalReplicationStream:
+	case *CreateTenantFromReplication, *AlterTenantReplication, *CreateLogicalReplicationStream, *AlterLogicalReplicationStream:
 		return true
 	}
 	return false
@@ -487,6 +494,17 @@ func (*AlterDefaultPrivileges) StatementType() StatementType { return TypeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*AlterDefaultPrivileges) StatementTag() string { return "ALTER DEFAULT PRIVILEGES" }
+
+// StatementReturnType implements the Statement interface.
+func (*AlterDomain) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*AlterDomain) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterDomain) StatementTag() string { return AlterDomainTag }
+
+func (*AlterDomain) hiddenFromShowQueries() {}
 
 // StatementReturnType implements the Statement interface.
 func (*AlterIndex) StatementReturnType() StatementReturnType { return DDL }
@@ -952,6 +970,44 @@ func (*CommentOnType) StatementType() StatementType { return TypeDDL }
 func (*CommentOnType) StatementTag() string { return CommentOnTypeTag }
 
 // StatementReturnType implements the Statement interface.
+func (*CommentOnView) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*CommentOnView) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CommentOnView) StatementTag() string { return CommentOnViewTag }
+
+// StatementReturnType implements the Statement interface.
+func (*CommentOnRoutine) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*CommentOnRoutine) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns the keyword the user wrote (FUNCTION, PROCEDURE, or
+// ROUTINE) so telemetry, log lines, and EXPLAIN reflect intent rather than
+// always showing FUNCTION.
+func (n *CommentOnRoutine) StatementTag() string {
+	switch n.RoutineType {
+	case ProcedureRoutine:
+		return CommentOnProcedureTag
+	case UDFRoutine | ProcedureRoutine:
+		return CommentOnRoutineTag
+	default:
+		return CommentOnFunctionTag
+	}
+}
+
+// StatementReturnType implements the Statement interface.
+func (*CommentOnSequence) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*CommentOnSequence) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CommentOnSequence) StatementTag() string { return CommentOnSequenceTag }
+
+// StatementReturnType implements the Statement interface.
 func (*CommitPrepared) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
@@ -1039,6 +1095,15 @@ func (*CreateExtension) StatementType() StatementType { return TypeDDL }
 func (*CreateExtension) StatementTag() string { return "CREATE EXTENSION" }
 
 // StatementReturnType implements the Statement interface.
+func (*CreateLanguage) StatementReturnType() StatementReturnType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*CreateLanguage) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CreateLanguage) StatementTag() string { return "CREATE LANGUAGE" }
+
+// StatementReturnType implements the Statement interface.
 func (*CreateExternalConnection) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
@@ -1055,6 +1120,51 @@ func (*AlterExternalConnection) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*AlterExternalConnection) StatementTag() string { return "ALTER EXTERNAL CONNECTION" }
+
+// StatementReturnType implements the Statement interface.
+func (*CreateResourceGroup) StatementReturnType() StatementReturnType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*CreateResourceGroup) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CreateResourceGroup) StatementTag() string { return "CREATE RESOURCE GROUP" }
+
+// StatementReturnType implements the Statement interface.
+func (*AlterResourceGroup) StatementReturnType() StatementReturnType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*AlterResourceGroup) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterResourceGroup) StatementTag() string { return "ALTER RESOURCE GROUP" }
+
+// StatementReturnType implements the Statement interface.
+func (*DropResourceGroup) StatementReturnType() StatementReturnType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*DropResourceGroup) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*DropResourceGroup) StatementTag() string { return "DROP RESOURCE GROUP" }
+
+// StatementReturnType implements the Statement interface.
+func (*ShowResourceGroup) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*ShowResourceGroup) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowResourceGroup) StatementTag() string { return "SHOW RESOURCE GROUP" }
+
+// StatementReturnType implements the Statement interface.
+func (*ShowResourceGroups) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*ShowResourceGroups) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowResourceGroups) StatementTag() string { return "SHOW RESOURCE GROUPS" }
 
 // StatementReturnType implements the Statement interface.
 func (*CheckExternalConnection) StatementReturnType() StatementReturnType { return Rows }
@@ -2641,6 +2751,7 @@ func (n *AlterDatabaseSecondaryRegion) String() string        { return AsString(
 func (n *AlterDatabaseDropSecondaryRegion) String() string    { return AsString(n) }
 func (n *AlterDatabaseSetZoneConfigExtension) String() string { return AsString(n) }
 func (n *AlterDefaultPrivileges) String() string              { return AsString(n) }
+func (n *AlterDomain) String() string                         { return AsString(n) }
 func (n *AlterFunctionOptions) String() string                { return AsString(n) }
 func (n *AlterPolicy) String() string                         { return AsString(n) }
 func (n *AlterRoutineRename) String() string                  { return AsString(n) }
@@ -2695,8 +2806,11 @@ func (n *CommentOnConstraint) String() string                 { return AsString(
 func (n *CommentOnDatabase) String() string                   { return AsString(n) }
 func (n *CommentOnSchema) String() string                     { return AsString(n) }
 func (n *CommentOnIndex) String() string                      { return AsString(n) }
+func (n *CommentOnRoutine) String() string                    { return AsString(n) }
+func (n *CommentOnSequence) String() string                   { return AsString(n) }
 func (n *CommentOnTable) String() string                      { return AsString(n) }
 func (n *CommentOnType) String() string                       { return AsString(n) }
+func (n *CommentOnView) String() string                       { return AsString(n) }
 func (n *CommitPrepared) String() string                      { return AsString(n) }
 func (n *CommitTransaction) String() string                   { return AsString(n) }
 func (n *CopyFrom) String() string                            { return AsString(n) }
@@ -2704,6 +2818,7 @@ func (n *CopyTo) String() string                              { return AsString(
 func (n *CreateChangefeed) String() string                    { return AsString(n) }
 func (n *CreateDatabase) String() string                      { return AsString(n) }
 func (n *CreateExtension) String() string                     { return AsString(n) }
+func (n *CreateLanguage) String() string                      { return AsString(n) }
 func (n *CreateRoutine) String() string                       { return AsString(n) }
 func (n *CreateTrigger) String() string                       { return AsString(n) }
 func (n *CreateIndex) String() string                         { return AsString(n) }
@@ -2743,6 +2858,11 @@ func (n *CreateExternalConnection) String() string            { return AsString(
 func (n *AlterExternalConnection) String() string             { return AsString(n) }
 func (n *CheckExternalConnection) String() string             { return AsString(n) }
 func (n *DropExternalConnection) String() string              { return AsString(n) }
+func (n *CreateResourceGroup) String() string                 { return AsString(n) }
+func (n *AlterResourceGroup) String() string                  { return AsString(n) }
+func (n *DropResourceGroup) String() string                   { return AsString(n) }
+func (n *ShowResourceGroup) String() string                   { return AsString(n) }
+func (n *ShowResourceGroups) String() string                  { return AsString(n) }
 func (n *FetchCursor) String() string                         { return AsString(n) }
 func (n *Grant) String() string                               { return AsString(n) }
 func (n *GrantRole) String() string                           { return AsString(n) }

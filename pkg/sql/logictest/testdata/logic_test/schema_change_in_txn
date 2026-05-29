@@ -42,6 +42,7 @@ COMMIT
 query TTTTB
 SELECT * FROM [SHOW CONSTRAINTS FROM test.child] ORDER BY constraint_name
 ----
+child  child_id_not_null   NOT NULL     NOT NULL                                                 true
 child  child_pkey          PRIMARY KEY  PRIMARY KEY (id ASC)                                     true
 child  fk_child_parent_id  FOREIGN KEY  FOREIGN KEY (parent_id) REFERENCES parent(id) NOT VALID  false
 
@@ -51,6 +52,7 @@ ALTER TABLE test.child VALIDATE CONSTRAINT fk_child_parent_id
 query TTTTB
 SELECT * FROM [SHOW CONSTRAINTS FROM test.child] ORDER BY constraint_name
 ----
+child  child_id_not_null   NOT NULL     NOT NULL                                       true
 child  child_pkey          PRIMARY KEY  PRIMARY KEY (id ASC)                           true
 child  fk_child_parent_id  FOREIGN KEY  FOREIGN KEY (parent_id) REFERENCES parent(id)  true
 
@@ -84,6 +86,7 @@ COMMIT
 query TTTTB
 SELECT * FROM [SHOW CONSTRAINTS FROM test.child] ORDER BY constraint_name
 ----
+child  child_id_not_null   NOT NULL     NOT NULL                                       true
 child  child_pkey          PRIMARY KEY  PRIMARY KEY (id ASC)                           true
 child  fk_child_parent_id  FOREIGN KEY  FOREIGN KEY (parent_id) REFERENCES parent(id)  true
 
@@ -926,9 +929,10 @@ COMMIT
 query TTTTB
 SELECT * FROM [SHOW CONSTRAINTS FROM check_table] ORDER BY constraint_name
 ----
-check_table  c_0               CHECK        CHECK ((c > 0)) NOT VALID  false
-check_table  check_table_pkey  PRIMARY KEY  PRIMARY KEY (k ASC)        true
-check_table  d_0               CHECK        CHECK ((d > 0))            true
+check_table  c_0                     CHECK        CHECK ((c > 0)) NOT VALID  false
+check_table  check_table_k_not_null  NOT NULL     NOT NULL                   true
+check_table  check_table_pkey        PRIMARY KEY  PRIMARY KEY (k ASC)        true
+check_table  d_0                     CHECK        CHECK ((d > 0))            true
 
 statement ok
 BEGIN
@@ -959,9 +963,10 @@ COMMIT
 query TTTTB
 SELECT * FROM [SHOW CONSTRAINTS FROM check_table] ORDER BY constraint_name
 ----
-check_table  c_0               CHECK        CHECK ((c > 0)) NOT VALID  false
-check_table  check_table_pkey  PRIMARY KEY  PRIMARY KEY (k ASC)        true
-check_table  d_0               CHECK        CHECK ((d > 0))            true
+check_table  c_0                     CHECK        CHECK ((c > 0)) NOT VALID  false
+check_table  check_table_k_not_null  NOT NULL     NOT NULL                   true
+check_table  check_table_pkey        PRIMARY KEY  PRIMARY KEY (k ASC)        true
+check_table  d_0                     CHECK        CHECK ((d > 0))            true
 
 # Adding column e was rolled back
 query TTBTTTB rowsort
@@ -995,10 +1000,11 @@ ALTER TABLE check_table ADD CHECK (a >= 0)
 statement error pgcode XXA00 violates unique constraint "idx"
 COMMIT
 
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM check_table
 ----
-check_table  check_table_pkey  PRIMARY KEY  PRIMARY KEY (k ASC)  true
+check_table  check_table_k_not_null  NOT NULL     NOT NULL             true
+check_table  check_table_pkey        PRIMARY KEY  PRIMARY KEY (k ASC)  true
 
 statement ok
 BEGIN
@@ -1012,10 +1018,11 @@ ALTER TABLE check_table ADD CHECK (a < 0)
 statement error pgcode XXA00 validation of CHECK \"a < 0:::INT8\" failed on row
 COMMIT
 
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM check_table
 ----
-check_table  check_table_pkey  PRIMARY KEY  PRIMARY KEY (k ASC)  true
+check_table  check_table_k_not_null  NOT NULL     NOT NULL             true
+check_table  check_table_pkey        PRIMARY KEY  PRIMARY KEY (k ASC)  true
 
 statement ok
 DROP TABLE check_table
@@ -1144,10 +1151,11 @@ COMMIT
 query TTTTB
 SELECT * FROM [SHOW CONSTRAINTS FROM check_table] ORDER BY constraint_name
 ----
-check_table  check_table_pkey  PRIMARY KEY  PRIMARY KEY (rowid ASC)  true
-check_table  ck_a              CHECK        CHECK ((a = 0))          true
-check_table  ck_b              CHECK        CHECK ((b > 0))          true
-check_table  ck_c              CHECK        CHECK ((c > b))          true
+check_table  check_table_pkey            PRIMARY KEY  PRIMARY KEY (rowid ASC)  true
+check_table  check_table_rowid_not_null  NOT NULL     NOT NULL                 true
+check_table  ck_a                        CHECK        CHECK ((a = 0))          true
+check_table  ck_b                        CHECK        CHECK ((b > 0))          true
+check_table  ck_c                        CHECK        CHECK ((c > b))          true
 
 # Also test insert/update to ensure constraint was added in a valid state (with correct column IDs, etc.)
 
@@ -1518,8 +1526,9 @@ COMMIT
 query TTTTB
 SELECT * FROM [SHOW CONSTRAINTS FROM y] ORDER BY constraint_name
 ----
-y  y_b_fkey  FOREIGN KEY  FOREIGN KEY (b) REFERENCES x(b)  true
-y  y_pkey    PRIMARY KEY  PRIMARY KEY (a ASC)              true
+y  y_a_not_null  NOT NULL     NOT NULL                         true
+y  y_b_fkey      FOREIGN KEY  FOREIGN KEY (b) REFERENCES x(b)  true
+y  y_pkey        PRIMARY KEY  PRIMARY KEY (a ASC)              true
 
 # Also test dropping the index on the referenced side
 statement ok
@@ -1541,18 +1550,20 @@ COMMIT
 
 # Verify that table x is in a consistent state (otherwise, SHOW CONSTRAINTS
 # would fail with an error).
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM x
 ----
-x  x_pkey   PRIMARY KEY  PRIMARY KEY (a ASC)  true
+x  x_a_not_null  NOT NULL     NOT NULL             true
+x  x_pkey        PRIMARY KEY  PRIMARY KEY (a ASC)  true
 
 # Verify that table y is in a consistent state (otherwise, SHOW
 # CONSTRAINTS would fail with an error). The foreign constraint here
 # hasn't been rolled back because the index hasn't been rolled back.
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM y
 ----
-y  y_pkey    PRIMARY KEY  PRIMARY KEY (a ASC)              true
+y  y_a_not_null  NOT NULL     NOT NULL             true
+y  y_pkey        PRIMARY KEY  PRIMARY KEY (a ASC)  true
 
 statement ok
 DROP TABLE x, y
@@ -1859,11 +1870,19 @@ ALTER TABLE t_52501_valid ALTER COLUMN a SET NOT NULL
 statement ok
 COMMIT
 
+# The column should end up NOT NULL with no residual synthetic check
+# constraint. Regression test for #166612.
 query TTTTB
 SELECT * FROM [SHOW CONSTRAINTS FROM t_52501_valid] ORDER BY constraint_name
 ----
-t_52501_valid  a_auto_not_null     CHECK        CHECK ((a IS NOT NULL))  true
-t_52501_valid  t_52501_valid_pkey  PRIMARY KEY  PRIMARY KEY (rowid ASC)  true
+t_52501_valid  t_52501_valid_a_not_null      NOT NULL     NOT NULL                 true
+t_52501_valid  t_52501_valid_pkey            PRIMARY KEY  PRIMARY KEY (rowid ASC)  true
+t_52501_valid  t_52501_valid_rowid_not_null  NOT NULL     NOT NULL                 true
+
+query TB
+SELECT column_name, is_nullable FROM [SHOW COLUMNS FROM t_52501_valid] WHERE column_name = 'a'
+----
+a  false
 
 statement ok
 DROP TABLE t_52501_valid
@@ -1905,8 +1924,9 @@ COMMIT
 query TTTTB
 SELECT * FROM [SHOW CONSTRAINTS FROM child_54265] ORDER BY constraint_name
 ----
-child_54265  child_54265_a_fkey  FOREIGN KEY  FOREIGN KEY (a) REFERENCES parent_54265(a) NOT VALID  false
-child_54265  child_54265_pkey    PRIMARY KEY  PRIMARY KEY (rowid ASC)                               true
+child_54265  child_54265_a_fkey          FOREIGN KEY  FOREIGN KEY (a) REFERENCES parent_54265(a) NOT VALID  false
+child_54265  child_54265_pkey            PRIMARY KEY  PRIMARY KEY (rowid ASC)                               true
+child_54265  child_54265_rowid_not_null  NOT NULL     NOT NULL                                              true
 
 # Test that dropping a unique index used by a foreign key reference causes the
 # foreign key addition to fail.

@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -1320,7 +1321,7 @@ func TestRangeFeedStartTimeExclusive(t *testing.T) {
 			v, err := row.Value.GetInt()
 			require.NoError(t, err)
 			require.EqualValues(t, 3, v)
-		case <-time.After(3 * time.Second):
+		case <-time.After(testutils.SucceedsSoonDuration()):
 			t.Fatal("timed out waiting for event")
 		}
 	})
@@ -1899,9 +1900,21 @@ func TestRangefeedCatchupStarvation(t *testing.T) {
 		settings := cluster.MakeTestingClusterSettings()
 		kvserver.RangefeedUseBufferedSender.Override(ctx, &settings.SV, rt.useBufferedSender)
 		kvserver.RangefeedEnabled.Override(ctx, &settings.SV, true)
-		// Lower the limit to make it more likely to get starved.
+		// Lower the limits to make it more likely to get starved. The
+		// per-consumer limit must stay strictly below the number of
+		// catch-up slots a single priority band can occupy, otherwise one
+		// consumer can hold every slot and the second consumer is starved.
+		//
+		// None of the rangefeeds below set WithSystemTablePriority, so they
+		// all run at BulkNormalPri and share the catch-up queue's
+		// low-priority band. With catch-up prioritization enabled (the
+		// default), that band is capped at catchupQueueLowMaxActive(8) = 6
+		// of the 8 total iterator slots; the other 2 are reserved for
+		// high-priority (system-table) rangefeeds. A per-consumer limit of 4
+		// therefore leaves consumer-2 at least 6-4=2 slots regardless of how
+		// many catch-up scans consumer-1 floods the queue with.
 		kvserver.ConcurrentRangefeedItersLimit.Override(ctx, &settings.SV, 8)
-		kvserver.PerConsumerCatchupLimit.Override(ctx, &settings.SV, 6)
+		kvserver.PerConsumerCatchupLimit.Override(ctx, &settings.SV, 4)
 		srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
 			Settings: settings,
 		})
@@ -1913,8 +1926,18 @@ func TestRangefeedCatchupStarvation(t *testing.T) {
 		mkKey := func(k string) roachpb.Key {
 			return encoding.EncodeStringAscending(scratchKey, k)
 		}
+		// The number of ranges drives the contention this test exercises: each
+		// range registers its own catch-up scan, so 32 ranges across consumer-1's
+		// many rangefeeds is what saturates the iterator pool. keysPerRange only
+		// drives delivery volume (consumer-2 must receive every key over a
+		// blocking channel), which dominates wall-clock time. Under race that
+		// volume pushes the test past its timeout when stressed, so trim it there
+		// while keeping the range count, and thus the contention, intact.
 		ranges := 32
 		keysPerRange := 128
+		if util.RaceEnabled {
+			keysPerRange = 24
+		}
 		totalKeys := ranges * keysPerRange
 		for i := range ranges {
 			for j := range keysPerRange {

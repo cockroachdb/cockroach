@@ -6,7 +6,7 @@ init
 
 prep-admission-stats admitted=0
 ----
-{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 # Even though above the threshold, the first 60 ticks don't limit the tokens.
 set-state l0-bytes=10000 l0-added-write=1000 l0-files=21 l0-sublevels=21
@@ -82,7 +82,7 @@ tick: 59, addAvailableTokens: io-tokens=unlimited(elastic unlimited) disk-write-
 
 prep-admission-stats admitted=10000 write-bytes=40000
 ----
-{workCount:10000 writeAccountedBytes:40000 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:10000 writeAccountedBytes:40000 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:10000 writeAccountedBytes:40000 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:10000 writeAccountedBytes:40000 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 # Delta added is 100,000. The l0-bytes are the same, so compactions removed
 # 100,000 bytes. Smoothed removed by compactions is 50,000. Each admitted is
@@ -163,7 +163,7 @@ tick: 59, addAvailableTokens: io-tokens=208(elastic 0) disk-write-bw-tokens=unli
 
 prep-admission-stats admitted=20000 write-bytes=80000
 ----
-{workCount:20000 writeAccountedBytes:80000 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:20000 writeAccountedBytes:80000 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:20000 writeAccountedBytes:80000 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:20000 writeAccountedBytes:80000 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 # Same delta as previous but smoothing bumps up the tokens to 25,000.
 set-state l0-bytes=10000 l0-added-write=201000 l0-files=21 l0-sublevels=21
@@ -256,7 +256,7 @@ addAvailableTokens: io-tokens=365(elastic 1) disk-write-bw-tokens=unlimited disk
 
 prep-admission-stats admitted=30000 write-bytes=120000
 ----
-{workCount:30000 writeAccountedBytes:120000 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:30000 writeAccountedBytes:120000 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:30000 writeAccountedBytes:120000 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:30000 writeAccountedBytes:120000 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 # l0-sublevels drops below threshold. We calculate the smoothed values, but
 # don't limit the tokens.
@@ -276,7 +276,7 @@ addAvailableTokens: io-tokens=1870(elastic 1055) disk-write-bw-tokens=unlimited 
 
 prep-admission-stats admitted=40000 write-bytes=160000
 ----
-{workCount:40000 writeAccountedBytes:160000 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:40000 writeAccountedBytes:160000 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:40000 writeAccountedBytes:160000 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:40000 writeAccountedBytes:160000 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 set-state l0-bytes=10000 l0-added-write=501000 l0-files=21 l0-sublevels=6 print-only-first-tick=true
 ----
@@ -294,7 +294,7 @@ addAvailableTokens: io-tokens=2201(elastic 1055) disk-write-bw-tokens=unlimited 
 
 prep-admission-stats admitted=50000 write-bytes=200000
 ----
-{workCount:50000 writeAccountedBytes:200000 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:50000 writeAccountedBytes:200000 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:50000 writeAccountedBytes:200000 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:50000 writeAccountedBytes:200000 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 set-state l0-bytes=10000 l0-added-write=501000 l0-files=21 l0-sublevels=3 print-only-first-tick=true
 ----
@@ -317,7 +317,7 @@ init
 
 prep-admission-stats admitted=0
 ----
-{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 set-state l0-bytes=1000 l0-added-write=1000 l0-added-ingested=0 l0-files=21 l0-sublevels=21 print-only-first-tick=true
 ----
@@ -335,7 +335,7 @@ tick: 0, addAvailableTokens: io-tokens=unlimited(elastic unlimited) disk-write-b
 # the admitted requests.
 prep-admission-stats admitted=10 write-bytes=130000 ingested-bytes=20000 below-raft=true
 ----
-{workCount:10 writeAccountedBytes:130000 ingestedAccountedBytes:20000 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:10 writeAccountedBytes:130000 ingestedAccountedBytes:20000 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 # The ingested model can be fit with a multiplier of ~1.5 for the interval,
 # but since the l0-ingest-lm model had a previous multiplier of 0.75 and the
@@ -361,7 +361,7 @@ addAvailableTokens: io-tokens=417(elastic 1) disk-write-bw-tokens=unlimited disk
 # ingested model is decayed by a factor of 2.
 prep-admission-stats admitted=20 write-bytes=150000 ingested-bytes=20000
 ----
-{workCount:20 writeAccountedBytes:150000 ingestedAccountedBytes:20000 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:20 writeAccountedBytes:150000 ingestedAccountedBytes:20000} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:20 writeAccountedBytes:150000 ingestedAccountedBytes:20000 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:20 writeAccountedBytes:150000 ingestedAccountedBytes:20000} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 set-state l0-bytes=1000 l0-added-write=191000 l0-added-ingested=30000 l0-files=21 l0-sublevels=21 print-only-first-tick=true
 ----
@@ -381,7 +381,7 @@ addAvailableTokens: io-tokens=459(elastic 1) disk-write-bw-tokens=unlimited disk
 # bytes to L0. We don't let unaccounted bytes become negative.
 prep-admission-stats admitted=30 write-bytes=250000 ingested-bytes=20000 ingested-into-l0=20000
 ----
-{workCount:30 writeAccountedBytes:250000 ingestedAccountedBytes:20000 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:30 writeAccountedBytes:250000 ingestedAccountedBytes:20000} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:30 writeAccountedBytes:250000 ingestedAccountedBytes:20000 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:30 writeAccountedBytes:250000 ingestedAccountedBytes:20000} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 set-state l0-bytes=1000 l0-added-write=211000 l0-added-ingested=30000 l0-files=21 l0-sublevels=21 print-only-first-tick=true
 ----
@@ -403,7 +403,7 @@ init
 
 prep-admission-stats admitted=0
 ----
-{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 set-state l0-bytes=1000 l0-added-write=1000 l0-added-ingested=0 l0-files=21 l0-sublevels=21 print-only-first-tick=true
 ----
@@ -420,7 +420,7 @@ tick: 0, addAvailableTokens: io-tokens=unlimited(elastic unlimited) disk-write-b
 # L0 will see an addition of 200,000 bytes. All were mentioned in the admitted requests.
 prep-admission-stats admitted=10 write-bytes=200000
 ----
-{workCount:10 writeAccountedBytes:200000 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:10 writeAccountedBytes:200000 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:10 writeAccountedBytes:200000 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:10 writeAccountedBytes:200000 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 set-state l0-bytes=1000 l0-added-write=201000 l0-files=21 l0-sublevels=21 print-only-first-tick=true
 ----
@@ -438,7 +438,7 @@ addAvailableTokens: io-tokens=417(elastic 1) disk-write-bw-tokens=unlimited disk
 
 prep-admission-stats admitted=10 write-bytes=200000
 ----
-{workCount:10 writeAccountedBytes:200000 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:10 writeAccountedBytes:200000 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:10 writeAccountedBytes:200000 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:10 writeAccountedBytes:200000 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 # Even though compactions out of L0 did not happen, the smoothed compacted bytes stayed the same (98KiB) and so did the admission tokens (24KiB).
 set-state l0-bytes=201000 l0-added-write=401000 l0-files=41 l0-sublevels=41 print-only-first-tick=true wal-secondary-write-sec=1
@@ -461,7 +461,7 @@ set-unlimited-wal-failover-tokens
 
 prep-admission-stats admitted=10 write-bytes=200000
 ----
-{workCount:10 writeAccountedBytes:200000 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:10 writeAccountedBytes:200000 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:10 writeAccountedBytes:200000 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:10 writeAccountedBytes:200000 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 # Even though compactions out of L0 did not happen, the smoothed compacted bytes stayed the same (98KiB). The admission tokens are unlimited due to the cluster setting.
 set-state l0-bytes=401000 l0-added-write=601000 l0-files=61 l0-sublevels=61 print-only-first-tick=true wal-secondary-write-sec=1
@@ -483,7 +483,7 @@ set-unlimited-wal-failover-tokens enabled=false
 
 prep-admission-stats admitted=10 write-bytes=200000
 ----
-{workCount:10 writeAccountedBytes:200000 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:10 writeAccountedBytes:200000 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:10 writeAccountedBytes:200000 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:10 writeAccountedBytes:200000 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 # Still no compactions out of L0, but sub-levels fell (for whatever reason),
 # and since WAL is still seeing some writes to secondary, the smoothed
@@ -508,7 +508,7 @@ addAvailableTokens: io-tokens=417(elastic 1) disk-write-bw-tokens=unlimited disk
 
 prep-admission-stats admitted=10 write-bytes=200000
 ----
-{workCount:10 writeAccountedBytes:200000 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:10 writeAccountedBytes:200000 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:10 writeAccountedBytes:200000 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:10 writeAccountedBytes:200000 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 # Compactions remove 700,000 bytes from L0. Even though WAL failover is still
 # active, this higher compaction rate is incorporated into giving out more
@@ -530,7 +530,7 @@ addAvailableTokens: io-tokens=3542(elastic 1) disk-write-bw-tokens=unlimited dis
 
 prep-admission-stats admitted=10000 write-bytes=200000000
 ----
-{workCount:10000 writeAccountedBytes:200000000 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:10000 writeAccountedBytes:200000000 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:10000 writeAccountedBytes:200000000 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:10000 writeAccountedBytes:200000000 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 # unflushed-too-large indicates that the memtable backlog is high. Even though
 # the additions to L0 are small compared to write-bytes, the write models are
@@ -552,7 +552,7 @@ addAvailableTokens: io-tokens=unlimited(elastic 1700) disk-write-bw-tokens=unlim
 # Small number of additional writes.
 prep-admission-stats admitted=10010 write-bytes=200000100
 ----
-{workCount:10010 writeAccountedBytes:200000100 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:10010 writeAccountedBytes:200000100 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:10010 writeAccountedBytes:200000100 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:10010 writeAccountedBytes:200000100 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 # But the bytes added to L0 are huge. Even though unflushed-too-large is no
 # longer true, it was true in the previous call, so the write models are not
@@ -577,7 +577,7 @@ init
 
 prep-admission-stats admitted=0
 ----
-{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 set-state l0-bytes=10000 l0-added-write=1000 l0-files=1 l0-sublevels=1 print-only-first-tick=true
 ----
@@ -844,7 +844,7 @@ init
 
 prep-admission-stats admitted=0
 ----
-{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 # Expect zeroes for most things. Smoothed write-amp will use the max value of model, smoothed with 0.
 set-state l0-bytes=0 l0-added-write=0 bytes-read=0 bytes-written=0 provisioned-bandwidth=0 l0-files=1 l0-sublevels=1 print-only-first-tick=true
@@ -862,7 +862,7 @@ tick: 0, addAvailableTokens: io-tokens=unlimited(elastic unlimited) disk-write-b
 # Admit some work.
 prep-admission-stats admitted=10 write-bytes=10
 ----
-{workCount:10 writeAccountedBytes:10 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:10 writeAccountedBytes:10 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:10 writeAccountedBytes:10 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:10 writeAccountedBytes:10 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 # Set provisioned bandwidth and some disk reads and writes. Provisione rate is
 # 100 B/s, so over the 15s adjustment interval there are 1500 byte tokens.
@@ -888,7 +888,7 @@ addAvailableTokens: io-tokens=unlimited(elastic unlimited) disk-write-bw-tokens=
 
 prep-admission-stats admitted=20 write-bytes=20
 ----
-{workCount:20 writeAccountedBytes:20 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:20 writeAccountedBytes:20 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:20 writeAccountedBytes:20 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:20 writeAccountedBytes:20 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 # The bytes-written for the interval are 400-350=50 and the bytes-read are
 # 120-60=60. We again have 1440 disk write tokens and 60 disk read tokens for
@@ -911,7 +911,7 @@ addAvailableTokens: io-tokens=unlimited(elastic unlimited) disk-write-bw-tokens=
 
 prep-admission-stats admitted=60 write-bytes=70
 ----
-{workCount:60 writeAccountedBytes:70 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:60 writeAccountedBytes:70 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:60 writeAccountedBytes:70 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:60 writeAccountedBytes:70 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 set-state l0-bytes=90 l0-added-write=80 bytes-read=180 bytes-written=1200 provisioned-bandwidth=100 disk-write-tokens-used=(400,500) l0-files=1 l0-sublevels=2 print-only-first-tick=true
 ----
@@ -935,7 +935,7 @@ init
 
 prep-admission-stats admitted=0
 ----
-{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 # Even though above the threshold, the first 60 ticks don't limit the tokens.
 set-state l0-bytes=10000 l0-added-write=1000 l0-files=21 l0-sublevels=21 print-only-first-tick=true loaded=true
@@ -952,7 +952,7 @@ tick: 0, addAvailableTokens: io-tokens=unlimited(elastic unlimited) disk-write-b
 
 prep-admission-stats admitted=10000 write-bytes=40000
 ----
-{workCount:10000 writeAccountedBytes:40000 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:10000 writeAccountedBytes:40000 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:10000 writeAccountedBytes:40000 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:10000 writeAccountedBytes:40000 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 # Delta added is 100,000. The l0-bytes are the same, so compactions removed
 # 100,000 bytes. Smoothed removed by compactions is 50,000. Each admitted is
@@ -1010,7 +1010,7 @@ init
 
 prep-admission-stats admitted=0
 ----
-{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 set-state l0-bytes=10000 l0-added-write=1000 l0-files=5 l0-sublevels=5 print-only-first-tick=true loaded=true
 ----
@@ -1127,7 +1127,7 @@ init
 
 prep-admission-stats admitted=0
 ----
-{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 set-state l0-bytes=10000 l0-added-write=1000 l0-files=21 l0-sublevels=21 print-only-first-tick=true
 ----
@@ -1192,7 +1192,7 @@ init
 
 prep-admission-stats admitted=0
 ----
-{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 set-state l0-bytes=10000 l0-added-write=1000 l0-files=100 l0-sublevels=6 print-only-first-tick=true
 ----
@@ -1277,7 +1277,7 @@ init
 
 prep-admission-stats admitted=0
 ----
-{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 # Expect zeroes for most things. Smoothed write-amp will use the max value of model, smoothed with 0.
 set-state l0-bytes=0 l0-added-write=0 bytes-read=0 bytes-written=0 provisioned-bandwidth=0 l0-files=1 l0-sublevels=1 print-only-first-tick=true
@@ -1295,7 +1295,7 @@ tick: 0, addAvailableTokens: io-tokens=unlimited(elastic unlimited) disk-write-b
 # Admit some work.
 prep-admission-stats admitted=10 write-bytes=10
 ----
-{workCount:10 writeAccountedBytes:10 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:10 writeAccountedBytes:10 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:10 writeAccountedBytes:10 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:10 writeAccountedBytes:10 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 # Set provisioned bandwidth and some disk reads and writes. Provisione rate is
 # 100 B/s, so over the 15s adjustment interval there are 1500 byte tokens.
@@ -1321,7 +1321,7 @@ addAvailableTokens: io-tokens=unlimited(elastic unlimited) disk-write-bw-tokens=
 
 prep-admission-stats admitted=20 write-bytes=20
 ----
-{workCount:20 writeAccountedBytes:20 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:20 writeAccountedBytes:20 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:20 writeAccountedBytes:20 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:20 writeAccountedBytes:20 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 # The bytes-written for the interval are 400-350=50 and the bytes-read are
 # 120-60=60. We again have 1440 disk write tokens and 60 disk read tokens for
@@ -1344,7 +1344,7 @@ addAvailableTokens: io-tokens=unlimited(elastic unlimited) disk-write-bw-tokens=
 
 prep-admission-stats admitted=60 write-bytes=70
 ----
-{workCount:60 writeAccountedBytes:70 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:60 writeAccountedBytes:70 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:60 writeAccountedBytes:70 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:60 writeAccountedBytes:70 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 set-state l0-bytes=90 l0-added-write=80 bytes-read=180 bytes-written=1200 provisioned-bandwidth=100 disk-write-tokens-used=(400,500) l0-files=1 l0-sublevels=2 print-only-first-tick=true
 ----
@@ -1367,7 +1367,7 @@ addAvailableTokens: io-tokens=unlimited(elastic 1) disk-write-bw-tokens=24 disk-
 # bandwidth" on the status line and "[over budget]" on the disk line.
 prep-admission-stats admitted=70 write-bytes=80
 ----
-{workCount:70 writeAccountedBytes:80 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:70 writeAccountedBytes:80 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:70 writeAccountedBytes:80 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:70 writeAccountedBytes:80 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 set-state l0-bytes=90 l0-added-write=80 bytes-read=240 bytes-written=2000 provisioned-bandwidth=100 disk-write-tokens-used=(500,400) remaining-disk-write-tokens=-500 l0-files=1 l0-sublevels=1 print-only-first-tick=true
 ----
@@ -1393,7 +1393,7 @@ set-disk-bw-tokens-enabled enabled=false
 
 prep-admission-stats admitted=80 write-bytes=90
 ----
-{workCount:80 writeAccountedBytes:90 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:80 writeAccountedBytes:90 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+{workCount:80 writeAccountedBytes:90 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0 LevelBytes:[0 0 0 0 0 0 0] LevelFiles:[0 0 0 0 0 0 0]} writeBytes:0} aboveRaftStats:{workCount:80 writeAccountedBytes:90 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
 set-state l0-bytes=90 l0-added-write=80 bytes-read=300 bytes-written=2500 provisioned-bandwidth=100 disk-write-tokens-used=(500,400) remaining-disk-write-tokens=-500 l0-files=1 l0-sublevels=1 print-only-first-tick=true
 ----

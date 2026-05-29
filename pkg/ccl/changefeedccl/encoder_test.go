@@ -523,6 +523,28 @@ func TestAvroArrayCap(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
+func TestCSVEncodeCSVHeaderRow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tableDesc, err := parseTableDesc(`CREATE TABLE t (rowid INT PRIMARY KEY, "na,me" STRING)`)
+	require.NoError(t, err)
+	row := rowenc.EncDatumRow{
+		rowenc.EncDatum{Datum: tree.NewDInt(1)},
+		rowenc.EncDatum{Datum: tree.NewDString("x")},
+	}
+	cdcRow := cdcevent.TestingMakeEventRow(tableDesc, 0, row, false)
+	enc := newCSVEncoder(changefeedbase.EncodingOptions{})
+	ctx := context.Background()
+	hdr, err := enc.EncodeCSVHeaderRow(ctx, cdcRow)
+	require.NoError(t, err)
+	hdr = append([]byte(nil), hdr...)
+	val, err := enc.EncodeValue(ctx, eventContext{}, cdcRow, cdcevent.Row{})
+	require.NoError(t, err)
+	require.Equal(t, "rowid,\"na,me\"", string(hdr))
+	require.Equal(t, "1,x", string(val))
+}
+
 func TestCollatedString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

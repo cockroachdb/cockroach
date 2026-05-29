@@ -390,6 +390,7 @@ func finalizeAlterChangefeed(
 	resultsCh chan<- tree.Datums,
 ) error {
 	prevDescription := job.Payload().Description
+	prevDetails := job.Details().(jobspb.ChangefeedDetails)
 
 	newPayload := job.Payload()
 	newPayload.Details = jobspb.WrapPayloadDetails(newDetails)
@@ -404,8 +405,9 @@ func finalizeAlterChangefeed(
 	if err != nil {
 		return err
 	}
-	if err := j.WithTxn(p.InternalSQLTxn()).Update(ctx, func(
-		txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	if err := j.DeprecatedWithTxn(p.InternalSQLTxn()).Update(ctx, func(
+		txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater,
 	) error {
 		ju.UpdatePayload(&newPayload)
 		if newProgress != nil {
@@ -422,6 +424,13 @@ func finalizeAlterChangefeed(
 		return nil
 	}); err != nil {
 		return err
+	}
+
+	prevScope := prevDetails.Opts[changefeedbase.OptMetricsScope]
+	newScope := newDetails.Opts[changefeedbase.OptMetricsScope]
+	if normalizeSLIScope(prevScope) != normalizeSLIScope(newScope) {
+		metrics := p.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics)
+		metrics.ClusterMetrics.DeleteJob(jobID, prevScope)
 	}
 
 	telemetry.Count(telemetryPath)

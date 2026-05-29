@@ -9,7 +9,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 )
@@ -47,8 +46,7 @@ type ElasticCPUWorkQueue struct {
 type elasticCPUInternalWorkQueue interface {
 	requester
 	Admit(ctx context.Context, info WorkInfo) (AdmitResponse, error)
-	SetTenantWeights(tenantWeights map[uint64]uint32)
-	adjustTenantUsed(tenantID roachpb.TenantID, additionalUsed int64)
+	adjustGroupUsed(gKey groupKey, additionalUsed int64)
 }
 
 func makeElasticCPUWorkQueue(
@@ -106,7 +104,7 @@ func (e *ElasticCPUWorkQueue) AdmittedWorkDone(h *ElasticCPUWorkHandle) {
 
 	e.metrics.PreWorkNanos.Inc(h.preWork.Nanoseconds())
 	_, difference := h.overLimitInner()
-	e.workQueue.adjustTenantUsed(h.tenantID, difference.Nanoseconds())
+	e.workQueue.adjustGroupUsed(tenantGroupKey(h.tenantID.ToUint64()), difference.Nanoseconds())
 	if h.bypassedAdmission {
 		e.metrics.bypassedAdmissionCumNanos.Add(difference.Nanoseconds())
 	}
@@ -122,11 +120,6 @@ func (e *ElasticCPUWorkQueue) AdmittedWorkDone(h *ElasticCPUWorkHandle) {
 
 	e.granter.returnGrant(-difference.Nanoseconds())
 	e.metrics.ReturnedNanos.Inc(-difference.Nanoseconds())
-}
-
-// SetTenantWeights passes through to WorkQueue.SetTenantWeights.
-func (e *ElasticCPUWorkQueue) SetTenantWeights(tenantWeights map[uint64]uint32) {
-	e.workQueue.SetTenantWeights(tenantWeights)
 }
 
 func (e *ElasticCPUWorkQueue) enabled() bool {

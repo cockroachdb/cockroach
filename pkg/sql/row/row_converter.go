@@ -209,7 +209,9 @@ func GenerateInsertRow(
 type KVBatch struct {
 	// Source is where the row data in the batch came from.
 	Source int32
-	// LastRow is the index of the last converted row in source in this batch.
+	// LastRow is a progress marker used as the resume position on retry.
+	// Its meaning is opaque: File-based imports set it to a row index while
+	// workload-based imports set it to a batch sequence number.
 	LastRow int64
 	// Progress represents the fraction of the input that generated this row.
 	Progress float32
@@ -249,10 +251,14 @@ type DatumRowConverter struct {
 	computedIVarContainer     schemaexpr.RowIndexedVarContainer
 	partialIndexIVarContainer schemaexpr.RowIndexedVarContainer
 
-	// FractionFn is used to set the progress header in KVBatches.
+	// CompletedRowFn is an opaque callback that returns a progress indicator
+	// stamped onto each KV batch as LastRow. The meaning of the returned value
+	// depends on the caller: File-based imports use it as a row index while
+	// workload-based imports use it as a batch sequence number.
 	CompletedRowFn func() int64
-	FractionFn     func() float32
-	kvInserter     KVInserter
+	// FractionFn is used to set the progress header in KVBatches.
+	FractionFn func() float32
+	kvInserter KVInserter
 
 	db *kv.DB
 }

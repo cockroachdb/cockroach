@@ -331,7 +331,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					if err != nil {
 						return err
 					}
-					idx.Predicate = expr
+					idx.Predicate = descpb.Expression(expr)
 				}
 
 				idx, err = params.p.configureIndexDescForNewIndexPartitioning(
@@ -1335,7 +1335,7 @@ func applyColumnMutation(
 
 		// Verify sequence is not depended on by another column.
 		// Use tree.DropDefault behavior to verify without the need to alter other dependencies via tree.DropCascade.
-		if err := params.p.canRemoveAllColumnOwnedSequences(params.ctx, tableDesc, col, tree.DropDefault); err != nil {
+		if err := params.p.canRemoveAllIdentityOwnedSequences(params.ctx, tableDesc, col, tree.DropDefault); err != nil {
 			return err
 		}
 		// Drop the identity flag first, so that it is treated like a normal column.
@@ -1388,7 +1388,7 @@ func updateNonComputedColExpr(
 	tab *tabledesc.Mutable,
 	col catalog.Column,
 	newExpr tree.Expr,
-	exprField **string,
+	exprField **descpb.Expression,
 	op tree.SchemaExprContext,
 ) error {
 	if col.IsGeneratedAsIdentity() {
@@ -1414,7 +1414,8 @@ func updateNonComputedColExpr(
 			return err
 		}
 
-		*exprField = &s
+		expr := descpb.Expression(s)
+		*exprField = &expr
 	}
 
 	if err := updateSequenceDependencies(params, tab, col, op); err != nil {
@@ -1479,7 +1480,7 @@ func updateSequenceDependencies(
 		colExprKind    tabledesc.ColExprKind
 		colExprContext tree.SchemaExprContext
 		exists         func() bool
-		get            func() string
+		get            func() catpb.Expression
 	}{
 		{
 			colExprKind:    tabledesc.DefaultExpr,
@@ -1497,7 +1498,7 @@ func updateSequenceDependencies(
 		if !colExpr.exists() {
 			continue
 		}
-		untypedExpr, err := parser.ParseExpr(colExpr.get())
+		untypedExpr, err := parser.ParseExpr(string(colExpr.get()))
 		if err != nil {
 			panic(err)
 		}
@@ -2101,7 +2102,7 @@ func dropColumnImpl(
 			idx.CollectKeySuffixColumnIDs().Contains(colToDrop.GetID()) ||
 			idx.CollectSecondaryStoredColumnIDs().Contains(colToDrop.GetID())
 		if idx.IsPartial() {
-			expr, err := parser.ParseExpr(idx.GetPredicate())
+			expr, err := parser.ParseExpr(string(idx.GetPredicate()))
 			if err != nil {
 				return nil, err
 			}
@@ -2146,7 +2147,7 @@ func dropColumnImpl(
 	// Drop non-index-backed unique constraints which reference the column.
 	for _, uwoi := range tableDesc.EnforcedUniqueConstraintsWithoutIndex() {
 		if uwoi.IsPartial() {
-			expr, err := parser.ParseExpr(uwoi.GetPredicate())
+			expr, err := parser.ParseExpr(string(uwoi.GetPredicate()))
 			if err != nil {
 				return nil, err
 			}
@@ -2221,6 +2222,36 @@ func dropColumnImpl(
 		}
 	}
 	tableDesc.OutboundFKs = tableDesc.OutboundFKs[:sliceIdx]
+
+	// Drop inbound FKs that reference the column being dropped. Inbound FKs
+	// backed by a unique constraint covering this column were already handled
+	// when that constraint was dropped above; what remains here are subset
+	// FKs, which can reference a column with no backing unique constraint
+	// covering it.
+	sliceIdx = 0
+	for i, fk := range tableDesc.InboundForeignKeys() {
+		tableDesc.InboundFKs[sliceIdx] = tableDesc.InboundFKs[i]
+		sliceIdx++
+		if !fk.CollectReferencedColumnIDs().Contains(colToDrop.GetID()) {
+			continue
+		}
+		if t.DropBehavior != tree.DropCascade {
+			originDesc, err := params.p.Descriptors().MutableByID(params.p.txn).
+				Table(params.ctx, fk.GetOriginTableID())
+			if err != nil {
+				return nil, err
+			}
+			return nil, sqlerrors.NewDependentBlocksOpError(
+				"drop", "column", colToDrop.GetName(),
+				"constraint",
+				fmt.Sprintf("%s on relation %s", fk.GetName(), originDesc.GetName()))
+		}
+		sliceIdx--
+		if err := params.p.removeFKForBackReference(params.ctx, tableDesc, fk); err != nil {
+			return nil, err
+		}
+	}
+	tableDesc.InboundFKs = tableDesc.InboundFKs[:sliceIdx]
 
 	found := false
 	for i := range tableDesc.Columns {
@@ -2436,9 +2467,10 @@ func (p *planner) tryRemoveFKBackReferences(
 	behavior tree.DropBehavior,
 	withSearchForReplacement bool,
 ) error {
+	canUseSubset := p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V26_3)
 	isSuitable := func(fk catalog.ForeignKeyConstraint, u catalog.UniqueConstraint) bool {
 		return u.GetConstraintID() != uniqueConstraint.GetConstraintID() && !u.Dropped() &&
-			u.IsValidReferencedUniqueConstraint(fk)
+			u.IsValidReferencedUniqueConstraint(fk, canUseSubset)
 	}
 	uwis := tableDesc.UniqueConstraintsWithIndex()
 	uwois := tableDesc.UniqueConstraintsWithoutIndex()
@@ -2469,7 +2501,7 @@ func (p *planner) tryRemoveFKBackReferences(
 		// The constraint being deleted could potentially be required by a
 		// referencing foreign key. Find alternatives if that's the case,
 		// otherwise remove the foreign key.
-		if uniqueConstraint.IsValidReferencedUniqueConstraint(fk) &&
+		if uniqueConstraint.IsValidReferencedUniqueConstraint(fk, canUseSubset) &&
 			!uniqueConstraintHasReplacementCandidate(fk) {
 			// If we haven't found a replacement, then we check that the drop
 			// behavior is cascade.

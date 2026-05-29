@@ -8,6 +8,7 @@ package logstore
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -181,7 +182,18 @@ func (ss *DiskSideloadStorage) Clear(_ context.Context) error {
 
 // TruncateTo implements SideloadStorage.
 func (ss *DiskSideloadStorage) TruncateTo(ctx context.Context, lastIndex kvpb.RaftIndex) error {
-	span := kvpb.RaftSpan{Last: lastIndex}
+	return ss.purgeSpan(ctx, kvpb.RaftSpan{Last: lastIndex})
+}
+
+// TruncateAfter implements SideloadStorage.
+func (ss *DiskSideloadStorage) TruncateAfter(ctx context.Context, index kvpb.RaftIndex) error {
+	return ss.purgeSpan(ctx, kvpb.RaftSpan{After: index, Last: math.MaxUint64})
+}
+
+// purgeSpan iterates all sideloaded files and deletes those with an index
+// contained in the given span. If all files are deleted, the sideloaded
+// directory is removed as well.
+func (ss *DiskSideloadStorage) purgeSpan(ctx context.Context, span kvpb.RaftSpan) error {
 	deletedAll := true
 	if err := ss.forEach(ctx, func(index kvpb.RaftIndex, filename string) (bool, error) {
 		if !span.Contains(index) {
@@ -190,8 +202,7 @@ func (ss *DiskSideloadStorage) TruncateTo(ctx context.Context, lastIndex kvpb.Ra
 		}
 		// index is in (span.After, span.Last].
 		// TODO(pav-kv): don't compute the size in purgeFile.
-		_, err := ss.purgeFile(ctx, filename)
-		if err != nil {
+		if _, err := ss.purgeFile(ctx, filename); err != nil {
 			return false, err
 		}
 		return true, nil

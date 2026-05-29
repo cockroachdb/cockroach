@@ -24,19 +24,9 @@ mkdir -p $ARTIFACTS_DIR/corpus-mixed
 exit_status=0
 
 # Generate a corpus for all non-mixed version variants
-for config in local multiregion-9node-3region-3azs; do
-$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test -- --config=ci \
-    //pkg/sql/logictest/tests/$config/... \
-    --test_arg=--declarative-corpus=$ARTIFACTS_DIR/corpus \
-    --test_env=GO_TEST_WRAP_TESTV=1 \
-    --test_env=GO_TEST_WRAP=1 \
-    --test_timeout=7200 \
-    || exit_status=$?
-done
-
 for config in local multiregion-9node-3region-3azs multiregion-9node-3region-3azs-no-los multiregion-9node-3region-3azs-tenant multiregion-9node-3region-3azs-vec-off multiregion-15node-5region-3azs 3node-tenant 3node-tenant-multiregion; do
 $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test -- --config=ci \
-    //pkg/ccl/logictestccl/tests/$config/... \
+    //pkg/sql/logictest/tests/$config/... \
     --test_arg=--declarative-corpus=$ARTIFACTS_DIR/corpus \
     --test_env=GO_TEST_WRAP_TESTV=1 \
     --test_env=GO_TEST_WRAP=1 \
@@ -81,15 +71,13 @@ if [ $exit_status = 0 ]; then
 fi
 
 # Generate a corpus for all mixed version variants
-for config in local-mixed-25.4; do
-  $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test -- --config=ci \
-      //pkg/sql/logictest/tests/$config/... \
-      --test_arg=--declarative-corpus=$ARTIFACTS_DIR/corpus-mixed \
-      --test_env=GO_TEST_WRAP_TESTV=1 \
-      --test_env=GO_TEST_WRAP=1 \
-      --test_timeout=7200 \
-      || exit_status=$?
-done
+$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test -- --config=ci \
+    //pkg/sql/logictest/tests/local-mixed-25.4/... \
+    --test_arg=--declarative-corpus=$ARTIFACTS_DIR/corpus-mixed \
+    --test_env=GO_TEST_WRAP_TESTV=1 \
+    --test_env=GO_TEST_WRAP=1 \
+    --test_timeout=7200 \
+    || exit_status=$?
 
 # Any generated corpus should be validated on the current version first, which
 # indicates we can replay it on the same version.

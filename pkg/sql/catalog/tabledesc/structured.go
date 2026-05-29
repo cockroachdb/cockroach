@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -39,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/walkutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -259,8 +261,8 @@ func generatedFamilyName(familyID descpb.FamilyID, columnNames []string) string 
 	return buf.String()
 }
 
-// ForEachExprStringInTableDesc runs a closure for each expression string
-// within a TableDescriptor. The closure takes in a string pointer so that
+// ForEachExprStringInTableDesc runs a closure for each expression within
+// a TableDescriptor. The closure takes in an expression pointer so that
 // it can mutate the TableDescriptor if desired. It also takes SerializedExprTyp
 // to indicate the type of the expression.
 func ForEachExprStringInTableDesc(
@@ -280,17 +282,17 @@ func ForEachExprStringInTableDesc(
 	// Helpers for each schema element type that can contain an expression.
 	doCol := func(c *descpb.ColumnDescriptor) error {
 		if c.HasDefault() {
-			if err := f(c.DefaultExpr, catalog.SQLExpr); err != nil {
+			if err := f((*string)(c.DefaultExpr), catalog.SQLExpr); err != nil {
 				return err
 			}
 		}
 		if c.IsComputed() {
-			if err := f(c.ComputeExpr, catalog.SQLExpr); err != nil {
+			if err := f((*string)(c.ComputeExpr), catalog.SQLExpr); err != nil {
 				return err
 			}
 		}
 		if c.HasOnUpdate() {
-			if err := f(c.OnUpdateExpr, catalog.SQLExpr); err != nil {
+			if err := f((*string)(c.OnUpdateExpr), catalog.SQLExpr); err != nil {
 				return err
 			}
 		}
@@ -298,38 +300,38 @@ func ForEachExprStringInTableDesc(
 	}
 	doIndex := func(i catalog.Index) error {
 		if i.IsPartial() {
-			return f(&i.IndexDesc().Predicate, catalog.SQLExpr)
+			return f((*string)(&i.IndexDesc().Predicate), catalog.SQLExpr)
 		}
 		return nil
 	}
 	doCheck := func(c *descpb.TableDescriptor_CheckConstraint) error {
-		return f(&c.Expr, catalog.SQLExpr)
+		return f((*string)(&c.Expr), catalog.SQLExpr)
 	}
 	doUwi := func(uwi *descpb.UniqueWithoutIndexConstraint) error {
 		if uwi.Predicate != "" {
-			return f(&uwi.Predicate, catalog.SQLExpr)
+			return f((*string)(&uwi.Predicate), catalog.SQLExpr)
 		}
 		return nil
 	}
 	doTrigger := func(t *descpb.TriggerDescriptor) error {
 		if t.WhenExpr != "" {
-			if err := f(&t.WhenExpr, catalog.SQLExpr); err != nil {
+			if err := f((*string)(&t.WhenExpr), catalog.SQLExpr); err != nil {
 				return err
 			}
 		}
 		if t.FuncBody == "" {
 			panic(errors.AssertionFailedf("expected non-empty trigger function body"))
 		}
-		return f(&t.FuncBody, catalog.PLpgSQLStmt)
+		return f((*string)(&t.FuncBody), catalog.PLpgSQLStmt)
 	}
 	doPolicy := func(p *descpb.PolicyDescriptor) error {
 		if p.UsingExpr != "" {
-			if err := f(&p.UsingExpr, catalog.SQLExpr); err != nil {
+			if err := f((*string)(&p.UsingExpr), catalog.SQLExpr); err != nil {
 				return err
 			}
 		}
 		if p.WithCheckExpr != "" {
-			if err := f(&p.WithCheckExpr, catalog.SQLExpr); err != nil {
+			if err := f((*string)(&p.WithCheckExpr), catalog.SQLExpr); err != nil {
 				return err
 			}
 		}
@@ -762,11 +764,10 @@ func (desc *Mutable) ensurePrimaryKey() error {
 		nameExists := func(name string) bool {
 			return catalog.FindColumnByName(desc, name) != nil
 		}
-		s := "unique_rowid()"
 		col := &descpb.ColumnDescriptor{
 			Name:        GenerateUniqueName("rowid", nameExists),
 			Type:        types.Int,
-			DefaultExpr: &s,
+			DefaultExpr: new(catpb.Expression("unique_rowid()")),
 			Hidden:      true,
 			Nullable:    false,
 		}
@@ -2013,7 +2014,7 @@ func MakeNotNullCheckConstraint(
 
 	return &descpb.TableDescriptor_CheckConstraint{
 		Name:                name,
-		Expr:                tree.Serialize(expr),
+		Expr:                catpb.Expression(tree.Serialize(expr)),
 		Validity:            validity,
 		ColumnIDs:           []descpb.ColumnID{col.GetID()},
 		IsNonNullConstraint: true,
@@ -2668,11 +2669,11 @@ func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) ([]string, error) 
 	if count, ok := desc.HistogramBucketsCount(); ok {
 		appendStorageParam(`sql_stats_histogram_buckets_count`, fmt.Sprintf("%d", count))
 	}
-	if desc.IsSchemaLocked() {
-		appendStorageParam(`schema_locked`, `true`)
-	}
 	if desc.StatsCanaryWindow != 0 {
 		appendStorageParam(`sql_stats_canary_window`, fmt.Sprintf(`'%s'`, desc.StatsCanaryWindow.String()))
+	}
+	if desc.IsSchemaLocked() {
+		appendStorageParam(`schema_locked`, `true`)
 	}
 	if usingFK := desc.GetRegionalByRowUsingConstraint(); usingFK != descpb.ConstraintID(0) {
 		// NOTE: when validating the descriptor, we check that the referenced
@@ -2861,6 +2862,73 @@ func LocalityConfigRegionalByRow(regionColName tree.Name) catpb.LocalityConfig {
 func (desc *Mutable) SetTableLocalityGlobal() {
 	lc := LocalityConfigGlobal()
 	desc.LocalityConfig = &lc
+}
+
+// Rewrite implements the catalog.MutableDescriptor interface.
+func (desc *Mutable) Rewrite(rewriter catalog.DescriptorRewriteFn) error {
+	desc.Version = 1
+	desc.ModificationTime = hlc.Timestamp{}
+
+	if err := walkutil.Walk(&desc.TableDescriptor, func(id *catid.DescID) error {
+		newID, err := rewriter(*id)
+		if err != nil {
+			return err
+		}
+		*id = newID
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	if err := walkutil.Walk(&desc.TableDescriptor, func(t *types.T) error {
+		return descutil.RewriteTypeOIDs(t, rewriter)
+	}); err != nil {
+		return err
+	}
+
+	if err := walkutil.Walk(&desc.TableDescriptor, func(expr *catpb.Expression) error {
+		if *expr == "" {
+			return nil
+		}
+		newExpr, err := descutil.RewriteExprIDs(*expr, rewriter)
+		if err != nil {
+			return err
+		}
+		*expr = newExpr
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	if err := walkutil.Walk(&desc.TableDescriptor, func(stmt *catpb.Statement) error {
+		if *stmt == "" {
+			return nil
+		}
+		newStmt, err := descutil.RewriteViewQueryIDs(*stmt, rewriter)
+		if err != nil {
+			return err
+		}
+		*stmt = newStmt
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	if err := walkutil.Walk(&desc.TableDescriptor, func(body *catpb.RoutineBody) error {
+		if *body == "" {
+			return nil
+		}
+		newBody, err := descutil.RewritePLpgSQLBodyIDs(*body, rewriter)
+		if err != nil {
+			return err
+		}
+		*body = newBody
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // SetDeclarativeSchemaChangerState is part of the catalog.MutableDescriptor

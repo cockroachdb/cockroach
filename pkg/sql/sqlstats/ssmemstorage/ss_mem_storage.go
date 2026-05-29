@@ -16,6 +16,8 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/obs/statementstore"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
@@ -36,12 +38,19 @@ type stmtKey struct {
 	fingerprintID            appstatspb.StmtFingerprintID
 	planHash                 uint64
 	transactionFingerprintID appstatspb.TransactionFingerprintID
+	aggregatedTs             time.Time
+	aggInterval              time.Duration
+}
+
+type txnKey struct {
+	transactionFingerprintID appstatspb.TransactionFingerprintID
+	aggregatedTs             time.Time
+	aggInterval              time.Duration
 }
 
 // sampledPlanKey is used by the Optimizer to determine if we should build a full EXPLAIN plan.
 type sampledPlanKey struct {
 	stmtNoConstants string
-	implicitTxn     bool
 	database        string
 }
 
@@ -50,10 +59,12 @@ func (p sampledPlanKey) size() int64 {
 }
 
 func (s stmtKey) size() int64 {
-	return int64(unsafe.Sizeof(invalidStmtFingerprintID))
+	return int64(unsafe.Sizeof(s))
 }
 
-const invalidStmtFingerprintID = 0
+func (t txnKey) size() int64 {
+	return int64(unsafe.Sizeof(t))
+}
 
 // Container holds per-application statement and transaction statistics.
 type Container struct {
@@ -73,7 +84,7 @@ type Container struct {
 		syncutil.Mutex
 
 		stmts map[stmtKey]*stmtStats
-		txns  map[appstatspb.TransactionFingerprintID]*txnStats
+		txns  map[txnKey]*txnStats
 
 		// sampledStatementCache records if the statement has been sampled via
 		// tracing. sampledPlanKey is used as the key to the map as it does not
@@ -111,7 +122,7 @@ func New(
 	}
 
 	s.mu.stmts = make(map[stmtKey]*stmtStats)
-	s.mu.txns = make(map[appstatspb.TransactionFingerprintID]*txnStats)
+	s.mu.txns = make(map[txnKey]*txnStats)
 	s.mu.sampledStatementCache = make(map[sampledPlanKey]struct{})
 
 	return s
@@ -209,11 +220,12 @@ func NewTempContainerFromExistingStmtStats(
 			fingerprintID:            statistics[i].ID,
 			planHash:                 statistics[i].Key.KeyData.PlanHash,
 			transactionFingerprintID: statistics[i].Key.KeyData.TransactionFingerprintID,
+			aggregatedTs:             statistics[i].Key.AggregatedTs,
+			aggInterval:              statistics[i].Key.AggregationInterval,
 		}
 		stmtStats, _, throttled :=
 			container.tryCreateStatsForStmtWithKeyLocked(key, sampledPlanKey{
 				stmtNoConstants: statistics[i].Key.KeyData.Query,
-				implicitTxn:     statistics[i].Key.KeyData.ImplicitTxn,
 				database:        statistics[i].Key.KeyData.Database,
 			})
 		if throttled {
@@ -278,8 +290,13 @@ func NewTempContainerFromExistingTxnStats(
 		}
 		// Since we just created the container and haven't exposed it yet, we
 		// don't need to take a lock on it.
+		key := txnKey{
+			transactionFingerprintID: statistics[i].StatsData.TransactionFingerprintID,
+			aggregatedTs:             statistics[i].StatsData.AggregatedTs,
+			aggInterval:              statistics[i].StatsData.AggregationInterval,
+		}
 		txnStats, _, throttled := container.tryCreateStatsForTxnWithKey(
-			statistics[i].StatsData.TransactionFingerprintID,
+			key,
 			statistics[i].StatsData.StatementFingerprintIDs)
 		if throttled {
 			return nil /* container */, nil /* remaining */, ErrFingerprintLimitReached
@@ -445,14 +462,14 @@ func (s *Container) tryCreateStatsForStmtWithKeyLocked(
 	return stats, true /* created */, false /* throttled */
 }
 
-func (s *Container) getStatsForTxnWithKey(key appstatspb.TransactionFingerprintID) *txnStats {
+func (s *Container) getStatsForTxnWithKey(key txnKey) *txnStats {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.mu.txns[key]
 }
 
 func (s *Container) tryCreateStatsForTxnWithKey(
-	key appstatspb.TransactionFingerprintID, stmtFingerprintIDs []appstatspb.StmtFingerprintID,
+	key txnKey, stmtFingerprintIDs []appstatspb.StmtFingerprintID,
 ) (stats *txnStats, created, throttled bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -505,7 +522,7 @@ func (s *Container) DrainStats(
 	var stmts map[stmtKey]*stmtStats
 
 	transactionStats := make([]*appstatspb.CollectedTransactionStatistics, 0)
-	var txns map[appstatspb.TransactionFingerprintID]*txnStats
+	var txns map[txnKey]*txnStats
 
 	func() {
 		s.mu.Lock()
@@ -520,6 +537,17 @@ func (s *Container) DrainStats(
 	var distSQLUsed, vectorized, fullScan bool
 	var querySummary string
 
+	// Once V26_3 is active, query, query summary, and database are sourced
+	// from system.statements; omit them from the persisted metadata JSONB to
+	// avoid duplication. Mixed-version clusters keep populating them so
+	// older binaries reading metadata->>'query' continue to work. If the
+	// statement store is disabled, system.statements will not be populated,
+	// so we must keep writing the fields into the metadata JSONB to avoid
+	// losing the query metadata entirely.
+	omitDeprecatedKeyFields := s.st != nil &&
+		s.st.Version.IsActive(ctx, clusterversion.V26_3) &&
+		statementstore.StatementStoreEnabled.Get(&s.st.SV)
+
 	for key, stmt := range stmts {
 		func() {
 			stmt.mu.Lock()
@@ -531,21 +559,29 @@ func (s *Container) DrainStats(
 			querySummary = stmt.mu.querySummary
 		}()
 
+		stmtKey := appstatspb.StatementStatisticsKey{
+			Query:                    stmt.meta.stmtNoConstants,
+			QuerySummary:             querySummary,
+			DistSQL:                  distSQLUsed,
+			Vec:                      vectorized,
+			FullScan:                 fullScan,
+			App:                      s.appName,
+			Database:                 stmt.meta.database,
+			PlanHash:                 key.planHash,
+			TransactionFingerprintID: key.transactionFingerprintID,
+		}
+		if omitDeprecatedKeyFields {
+			stmtKey.Query = ""
+			stmtKey.QuerySummary = ""
+			stmtKey.Database = ""
+		}
+
 		statementStats = append(statementStats, &appstatspb.CollectedStatementStatistics{
-			Key: appstatspb.StatementStatisticsKey{
-				Query:                    stmt.meta.stmtNoConstants,
-				QuerySummary:             querySummary,
-				DistSQL:                  distSQLUsed,
-				Vec:                      vectorized,
-				ImplicitTxn:              stmt.meta.implicitTxn,
-				FullScan:                 fullScan,
-				App:                      s.appName,
-				Database:                 stmt.meta.database,
-				PlanHash:                 key.planHash,
-				TransactionFingerprintID: key.transactionFingerprintID,
-			},
-			ID:    stmt.ID,
-			Stats: data,
+			Key:                 stmtKey,
+			ID:                  stmt.ID,
+			Stats:               data,
+			AggregatedTs:        key.aggregatedTs,
+			AggregationInterval: key.aggInterval,
 		})
 	}
 
@@ -560,7 +596,9 @@ func (s *Container) DrainStats(
 			StatementFingerprintIDs:  txn.statementFingerprintIDs,
 			App:                      s.appName,
 			Stats:                    stats,
-			TransactionFingerprintID: key,
+			TransactionFingerprintID: key.transactionFingerprintID,
+			AggregatedTs:             key.aggregatedTs,
+			AggregationInterval:      key.aggInterval,
 		})
 	}
 	return statementStats, transactionStats
@@ -582,7 +620,7 @@ func (s *Container) clearLocked(ctx context.Context) {
 	// Clear the map, to release the memory; make the new map somewhat already
 	// large for the likely future workload.
 	s.mu.stmts = make(map[stmtKey]*stmtStats, len(s.mu.stmts)/2)
-	s.mu.txns = make(map[appstatspb.TransactionFingerprintID]*txnStats, len(s.mu.txns)/2)
+	s.mu.txns = make(map[txnKey]*txnStats, len(s.mu.txns)/2)
 	s.mu.sampledStatementCache = make(map[sampledPlanKey]struct{}, len(s.mu.sampledStatementCache)/2)
 	if s.knobs != nil && s.knobs.OnAfterClear != nil {
 		s.knobs.OnAfterClear()
@@ -601,7 +639,10 @@ func (s *Container) Free(ctx context.Context) {
 func (s *Container) freeLocked(ctx context.Context) {
 	s.acc.Clear(ctx)
 	if s.uniqueServerCount != nil {
-		s.uniqueServerCount.freeByCnt(int64(len(s.mu.stmts)), int64(len(s.mu.txns)))
+		s.uniqueServerCount.freeByCnt(
+			int64(len(s.mu.stmts)),
+			int64(len(s.mu.txns)),
+		)
 	}
 }
 
@@ -679,10 +720,10 @@ func (s *Container) Add(ctx context.Context, other *Container) (err error) {
 	}
 
 	// Do what we did above for the statMap for the txn Map now.
-	txnMap := func() map[appstatspb.TransactionFingerprintID]*txnStats {
+	txnMap := func() map[txnKey]*txnStats {
 		other.mu.Lock()
 		defer other.mu.Unlock()
-		txnMap := make(map[appstatspb.TransactionFingerprintID]*txnStats)
+		txnMap := make(map[txnKey]*txnStats)
 		for k, v := range other.mu.txns {
 			txnMap[k] = v
 		}
@@ -720,7 +761,7 @@ func (s *Container) Add(ctx context.Context, other *Container) (err error) {
 			defer t.mu.Unlock()
 
 			if created {
-				estimatedAllocBytes := t.sizeUnsafeLocked() + k.Size() + 8 /* TransactionFingerprintID hash */
+				estimatedAllocBytes := t.sizeUnsafeLocked() + k.size() + 8 /* txnKey hash */
 				// We still want to continue this loop to merge stats that are already
 				// present in our map that do not require allocation.
 				if latestErr := func() error {

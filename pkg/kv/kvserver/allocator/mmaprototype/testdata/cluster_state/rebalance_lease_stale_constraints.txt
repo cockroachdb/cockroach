@@ -1,0 +1,157 @@
+# Regression for #170112: TestStartManyStores hit
+#
+#   panic: internal state inconsistency: store=8 range_id=44 should be
+#   leaseholder but isn't
+#
+# in rebalanceLeasesFromLocalStoreID. rs.constraints is a cached blob
+# populated by a prior rebalance pass on the then-leaseholder. The bug was
+# that addPendingRangeChange mutated rs.replicas (via applyReplicaChange)
+# without calling clearAnalyzedConstraints. The narrow trigger:
+#  1. cache constraints with leaseholderID=s1 while s1 holds the lease,
+#  2. external lease transfer s1->s8 registered with MMA: rs.replicas's
+#     IsLeaseholder flag flips to s8 in place (replica-ids preserved
+#     because lease transfer is an isUpdate change),
+#  3. change enacted (rs.pendingChanges drained, replicas unchanged),
+#  4. s8's leaseholder msg arrives matching rs.replicas exactly with no
+#     spanConf and no pending → fast path in processRangeMsg, no
+#     clearAnalyzedConstraints,
+#  5. s8's rebalance pass reads cached constraints → leaseholderID=s1 but
+#     store=s8 → panic.
+#
+# This test walks that sequence. The full add+remove rebalance has the same
+# property at step 2 (constraints not invalidated), but its applyReplicaChange
+# uses replica-id=unknown for the new replica, so step 4's leaseholder msg
+# takes the slow path (replica-ids differ) and clears constraints — masking
+# the underlying bug. The lease-transfer path preserves replica-ids and is
+# the narrowest reproduction.
+#
+# Fix: addPendingRangeChange now calls clearAnalyzedConstraints. Step 1's
+# cached blob is dropped at step 2; step 5's analyze-constraints rebuilds
+# from current rs.replicas and reports the correct leaseholderID=s8;
+# rebalance-stores reaches the lease-shed loop with consistent state and
+# completes without panic.
+
+set-store
+  store-id=1 node-id=1
+  store-id=8 node-id=8
+----
+node-id=1 locality-tiers=node=1
+  store-id=1 attrs=
+node-id=8 locality-tiers=node=8
+  store-id=8 attrs=
+
+store-load-msg
+  store-id=1 node-id=1 load=[0,0,0] capacity=[1000,1000,1000] secondary-load=0 load-time=0s
+  store-id=8 node-id=8 load=[0,0,0] capacity=[1000,1000,1000] secondary-load=0 load-time=0s
+----
+
+# r44 has voters on s1 (leaseholder) and s8. spanConf included so
+# ensureAnalyzedConstraints can run.
+store-leaseholder-msg
+store-id=1
+  range-id=44 load=[100,0,0] raft-cpu=10
+  config=num_replicas=2 constraints={} voter_constraints={}
+    store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+    store-id=8 replica-id=2 type=VOTER_FULL
+----
+
+# Step 1: cache constraints with leaseholderID=s1.
+analyze-constraints range-id=44
+----
+leaseholderID=s1
+
+# Step 2: external lease transfer s1->s8 registered with MMA. After
+# addPendingRangeChange, rs.replicas's leaseholder flag has flipped to s8;
+# the fix added clearAnalyzedConstraints here, so the cached blob from step 1
+# is also dropped.
+make-pending-changes range-id=44
+  transfer-lease: remove-store-id=1 add-store-id=8
+----
+pending(2)
+change-id=1 store-id=1 node-id=1 range-id=44 load-delta=[cpu:-90ns/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=1m0s
+  prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
+  next=(replica-id=1 type=VOTER_FULL)
+change-id=2 store-id=8 node-id=8 range-id=44 load-delta=[cpu:99ns/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=1m0s
+  prev=(replica-id=2 type=VOTER_FULL)
+  next=(replica-id=2 type=VOTER_FULL leaseholder=true)
+
+ranges
+----
+range-id=44 local-store=1 load=[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B] raft-cpu=10
+  store-id=1 replica-id=1 type=VOTER_FULL
+  store-id=8 replica-id=2 type=VOTER_FULL leaseholder=true
+
+# Step 3: enact (mirrors AdjustPendingChangeDisposition(success=true) →
+# pendingChangeEnacted). Pending drained from cs.pendingChanges and
+# rs.pendingChanges. Entries linger in store.adjusted.loadPendingChanges
+# (visible as enacted=...) until their load is GC'd, but those are
+# bookkeeping only; rs.pendingChanges (which the lease-shed path checks) is
+# now empty. rs.constraints stays nil since step 2 cleared it.
+enact-pending-changes change-ids=(1,2)
+----
+pending(2)
+change-id=1 store-id=1 node-id=1 range-id=44 load-delta=[cpu:-90ns/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=1m0s enacted=0s
+  prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
+  next=(replica-id=1 type=VOTER_FULL)
+change-id=2 store-id=8 node-id=8 range-id=44 load-delta=[cpu:99ns/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=1m0s enacted=0s
+  prev=(replica-id=2 type=VOTER_FULL)
+  next=(replica-id=2 type=VOTER_FULL leaseholder=true)
+
+# Step 4: s8's leaseholder msg confirming what rs.replicas already shows.
+# Use span-config-not-populated since the parser otherwise sets
+# MaybeSpanConfIsPopulated=true whenever load/raft-cpu fields are present;
+# in production only the gossiped span config sets this flag and steady-state
+# msgs from a leaseholder for a known range arrive without it. With no
+# spanConf, no pending, and replicas matching → fast path in processRangeMsg
+# (no clearAnalyzedConstraints). Top-k for s8 is recomputed and includes
+# r44. Pre-fix the fast path would have left a stale rs.constraints behind;
+# post-fix the cache was already invalidated in step 2.
+store-leaseholder-msg
+store-id=8
+  range-id=44 load=[100,0,0] raft-cpu=10 span-config-not-populated
+    store-id=1 replica-id=1 type=VOTER_FULL
+    store-id=8 replica-id=2 type=VOTER_FULL leaseholder=true
+----
+
+# Post-fix: rs.constraints was nil, so this call rebuilds it from current
+# rs.replicas and the leaseholderID is the now-correct s8. Pre-fix this would
+# have returned the stale leaseholderID=s1.
+analyze-constraints range-id=44
+----
+leaseholderID=s8
+
+# Advance the clock so the still-tracked enacted load-pending changes get
+# GC'd by the next store-load-msg (lagForChangeReflectedInLoad=10s). Without
+# this, s8 has nonzero maxFractionPendingIncrease and the rebalance pass
+# classifies it as cannotShed before reaching the lease-shed loop.
+tick seconds=15
+----
+t=15s
+
+# Bump s8's reported load so it is CPU-overloaded; load-time advanced past
+# enactedAt+10s lets processStoreLoadMsg drop the enacted entries from
+# loadPendingChanges, clearing the pending-increase block.
+store-load-msg
+  store-id=8 node-id=8 load=[1000,0,0] capacity=[1000,1000,1000] secondary-load=0 load-time=15s
+----
+
+# Step 5: s8's rebalance pass enters rebalanceLeasesFromLocalStoreID for
+# r44 with consistent state (leaseholderID=s8, store=s8) and proceeds
+# normally. Pre-fix this site panicked.
+rebalance-stores store-id=8
+----
+[mmaid=1] rebalanceStores begins
+[mmaid=1] cluster means: (stores-load [cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B]) (stores-capacity [cpu:1µs/s, write-bandwidth:1.0 kB/s, byte-size:1.0 kB]) (nodes-cpu-load 0) (nodes-cpu-capacity 1000)
+[mmaid=1] evaluating s1: node load loadLow, store load loadNormal, worst dim WriteBandwidth
+[mmaid=1] evaluating s8: node load overloadUrgent, store load overloadUrgent, worst dim CPURate
+[mmaid=1] overload-continued s8 ((store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true))) - within grace period
+[mmaid=1] adding overloaded store s8 to shedding list (worst dim: CPURate, cannotShed: false, pending decrease 0.00 vs threshold 0.10, pending increase 0.00 vs epsilon 0.00); pending: (none)
+[mmaid=1] sorted shedding stores: (s8: overloadUrgent, cannotShed: false)
+[mmaid=1] rebalancing pass summary [local=s8]:
+	overloaded:
+		lease-grace: [s8]
+	failure: [{s8, total: 2, no-cand:1, no-cand-load:1}]
+pending(1)
+change-id=1 store-id=1 node-id=1 range-id=44 load-delta=[cpu:-90ns/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=1m0s enacted=0s
+  prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
+  next=(replica-id=1 type=VOTER_FULL)

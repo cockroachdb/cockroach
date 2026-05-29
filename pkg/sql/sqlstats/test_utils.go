@@ -16,7 +16,6 @@ import (
 
 type FlushFn func(ctx context.Context,
 	stopper *stop.Stopper,
-	aggregatedTs time.Time,
 	stmtStats []*appstatspb.CollectedStatementStatistics,
 	txnStats []*appstatspb.CollectedTransactionStatistics,
 )

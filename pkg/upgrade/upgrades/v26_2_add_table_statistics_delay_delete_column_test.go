@@ -132,9 +132,17 @@ func TestCanaryStatsDelayDelete(t *testing.T) {
 	)
 	defer tc.Stopper().Stop(ctx)
 
+	// Disable automatic stats collection to prevent it from racing with
+	// manual ANALYZE calls. The auto refresher would create __auto__ stats
+	// and delete the test's manually-created stats, breaking assertions.
+	_, err := sqlDB.Exec(
+		`SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`,
+	)
+	require.NoError(t, err)
+
 	// Verify that sql_stats_canary_window is rejected before upgrading
 	// to V26_2.
-	_, err := sqlDB.Exec(
+	_, err = sqlDB.Exec(
 		`CREATE TABLE t_canary (k INT PRIMARY KEY) WITH (sql_stats_canary_window = '15s')`,
 	)
 	require.Error(t, err)
@@ -258,9 +266,6 @@ func TestCanaryStatsDelayDelete(t *testing.T) {
 // system.table_statistics table descriptor that was being used
 // before adding the delayDelete column to the current version.
 func getOldTableStatisticsDescriptor() *descpb.TableDescriptor {
-	uniqueRowIDString := "unique_rowid()"
-	nowString := "now()"
-	zeroIntString := "0:::INT8"
 	return &descpb.TableDescriptor{
 		Name:                    string(catconstants.TableStatisticsTableName),
 		ID:                      keys.TableStatisticsTableID,
@@ -269,15 +274,15 @@ func getOldTableStatisticsDescriptor() *descpb.TableDescriptor {
 		Version:                 1,
 		Columns: []descpb.ColumnDescriptor{
 			{Name: "tableID", ID: 1, Type: types.Int},
-			{Name: "statisticID", ID: 2, Type: types.Int, DefaultExpr: &uniqueRowIDString},
+			{Name: "statisticID", ID: 2, Type: types.Int, DefaultExpr: new(descpb.Expression("unique_rowid()"))},
 			{Name: "name", ID: 3, Type: types.String, Nullable: true},
 			{Name: "columnIDs", ID: 4, Type: types.IntArray},
-			{Name: "createdAt", ID: 5, Type: types.Timestamp, DefaultExpr: &nowString},
+			{Name: "createdAt", ID: 5, Type: types.Timestamp, DefaultExpr: new(descpb.Expression("now()"))},
 			{Name: "rowCount", ID: 6, Type: types.Int},
 			{Name: "distinctCount", ID: 7, Type: types.Int},
 			{Name: "nullCount", ID: 8, Type: types.Int},
 			{Name: "histogram", ID: 9, Type: types.Bytes, Nullable: true},
-			{Name: "avgSize", ID: 10, Type: types.Int, DefaultExpr: &zeroIntString},
+			{Name: "avgSize", ID: 10, Type: types.Int, DefaultExpr: new(descpb.Expression("0:::INT8"))},
 			{Name: "partialPredicate", ID: 11, Type: types.String, Nullable: true},
 			{Name: "fullStatisticID", ID: 12, Type: types.Int, Nullable: true},
 			// Note: delayDelete column (ID 13) is intentionally omitted for the old descriptor

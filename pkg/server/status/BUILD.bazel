@@ -172,6 +172,7 @@ go_test(
         "//pkg/util/log/eventpb",
         "//pkg/util/metric",
         "//pkg/util/metric/aggmetric",
+        "//pkg/util/syncutil",
         "//pkg/util/system",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",

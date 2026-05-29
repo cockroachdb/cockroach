@@ -65,6 +65,11 @@ func (s *Seq) Next() uint64 {
 	return s.index.Add(1)
 }
 
+// Load returns the last used WAG sequence number.
+func (s *Seq) Load() uint64 {
+	return s.index.Load()
+}
+
 // Write puts the WAG node under the specific sequence number into the given
 // writer. The index must have been allocated to the caller by the sequencer.
 func Write(w storage.Writer, index uint64, node wagpb.Node) error {
@@ -104,6 +109,7 @@ func (it *Iterator) Iter(ctx context.Context, r storage.Reader) iter.Seq2[uint64
 
 // IterFrom is similar to Iter, but allows specifying a starting point for the
 // iteration.
+// TODO(ibrahim): Make this function take a WAG index instead of a key.
 func (it *Iterator) IterFrom(
 	ctx context.Context, r storage.Reader, seekKey roachpb.Key,
 ) iter.Seq2[uint64, wagpb.Node] {

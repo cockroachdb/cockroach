@@ -792,3 +792,57 @@ INSERT INTO t147559 VALUES (1, 'abc');
 
 query error nondeterministic collations are not supported for LIKE
 SELECT * FROM t147559 WHERE b LIKE 'abc%';
+
+subtest qualified_collation_name
+
+# COLLATE accepts the pg_catalog.<name> qualified form. Every CRDB collation
+# lives in the pg_catalog namespace (see pg_collation), and PostgreSQL emits
+# COLLATE clauses qualified that way; the parser strips the qualifier and uses
+# the trailing locale name.
+
+statement ok
+CREATE TABLE qcn_unquoted (s TEXT COLLATE pg_catalog."en-US")
+
+statement ok
+DROP TABLE qcn_unquoted
+
+statement ok
+CREATE TABLE qcn_mixed_case (s TEXT COLLATE Pg_Catalog."en-US")
+
+statement ok
+DROP TABLE qcn_mixed_case
+
+statement ok
+CREATE TABLE qcn_upper (s TEXT COLLATE PG_CATALOG."en-US")
+
+statement ok
+DROP TABLE qcn_upper
+
+# Quoted lowercase pg_catalog matches.
+statement ok
+CREATE TABLE qcn_quoted_lower (s TEXT COLLATE "pg_catalog"."en-US")
+
+statement ok
+DROP TABLE qcn_quoted_lower
+
+# Quoted identifiers preserve case, so a quoted non-lowercase form is treated
+# as a different schema and rejected, matching PostgreSQL.
+statement error collation "Pg_Catalog\.en-US" does not exist
+CREATE TABLE qcn_quoted_mixed (s TEXT COLLATE "Pg_Catalog"."en-US")
+
+# Any other schema is rejected.
+statement error collation "other_schema\.en-US" does not exist
+CREATE TABLE qcn_other_schema (s TEXT COLLATE other_schema."en-US")
+
+# Qualified form also works in expression context.
+query T
+SELECT 'foo' COLLATE pg_catalog."en-US"
+----
+foo
+
+# An invalid trailing locale still surfaces the BCP47 error after the schema
+# check passes.
+statement error invalid locale bogus
+CREATE TABLE qcn_bogus_locale (s TEXT COLLATE pg_catalog.bogus)
+
+subtest end

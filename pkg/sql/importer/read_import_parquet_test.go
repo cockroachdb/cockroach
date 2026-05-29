@@ -7,9 +7,11 @@ package importer
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/apache/arrow/go/v11/arrow"
@@ -20,14 +22,19 @@ import (
 	"github.com/apache/arrow/go/v11/parquet/file"
 	"github.com/apache/arrow/go/v11/parquet/pqarrow"
 	"github.com/apache/arrow/go/v11/parquet/schema"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -76,68 +83,29 @@ func viewToRow(rowData interface{}) []interface{} {
 	return row
 }
 
-// createTestParquetFile creates a simple Parquet file in memory for testing
+// createTestParquetFile creates a simple Parquet file in memory for testing.
 func createTestParquetFile(
 	t *testing.T, numRows int, compression compress.Compression,
-) *bytes.Buffer {
-	// Handle empty file case - return nil, tests should check for this
-	if numRows == 0 {
-		return nil
-	}
-
-	pool := memory.NewGoAllocator()
-
-	// Define schema with various types
-	schema := arrow.NewSchema(
-		[]arrow.Field{
-			{Name: "id", Type: arrow.PrimitiveTypes.Int32, Nullable: false},
-			{Name: "name", Type: arrow.BinaryTypes.String, Nullable: true},
-			{Name: "score", Type: arrow.PrimitiveTypes.Float64, Nullable: true},
-			{Name: "active", Type: arrow.FixedWidthTypes.Boolean, Nullable: true},
-		},
-		nil,
-	)
-
-	// Build record with test data
-	builder := array.NewRecordBuilder(pool, schema)
-	defer builder.Release()
-
-	idBuilder := builder.Field(0).(*array.Int32Builder)
-	nameBuilder := builder.Field(1).(*array.StringBuilder)
-	scoreBuilder := builder.Field(2).(*array.Float64Builder)
-	activeBuilder := builder.Field(3).(*array.BooleanBuilder)
-
-	for i := 0; i < numRows; i++ {
-		idBuilder.Append(int32(i))
-		if i%3 == 0 {
-			nameBuilder.AppendNull()
-		} else {
-			nameBuilder.Append("name_" + string(rune('A'+i%26)))
+) *fileReader {
+	t.Helper()
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "id", Type: arrow.PrimitiveTypes.Int32, Nullable: false},
+		{Name: "name", Type: arrow.BinaryTypes.String, Nullable: true},
+		{Name: "score", Type: arrow.PrimitiveTypes.Float64, Nullable: true},
+		{Name: "active", Type: arrow.FixedWidthTypes.Boolean, Nullable: true},
+	}, nil)
+	rows := make([]parquetRow, numRows)
+	for i := range numRows {
+		var name, score any
+		if i%3 != 0 {
+			name = "name_" + string(rune('A'+i%26))
 		}
-		if i%5 == 0 {
-			scoreBuilder.AppendNull()
-		} else {
-			scoreBuilder.Append(float64(i) * 1.5)
+		if i%5 != 0 {
+			score = float64(i) * 1.5
 		}
-		activeBuilder.Append(i%2 == 0)
+		rows[i] = parquetRow{int32(i), name, score, i%2 == 0}
 	}
-
-	record := builder.NewRecord()
-	defer record.Release()
-
-	// Write to Parquet format with specified compression
-	buf := new(bytes.Buffer)
-	writerProps := parquet.NewWriterProperties(parquet.WithCompression(compression))
-	writer, err := pqarrow.NewFileWriter(schema, buf, writerProps, pqarrow.DefaultWriterProps())
-	require.NoError(t, err)
-
-	err = writer.Write(record)
-	require.NoError(t, err)
-
-	err = writer.Close()
-	require.NoError(t, err)
-
-	return buf
+	return makeParquetFile(t, schema, rows, withParquetCompression(compression))
 }
 
 func TestParquetRowProducerBasicScanning(t *testing.T) {
@@ -159,16 +127,7 @@ func TestParquetRowProducerBasicScanning(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create a test Parquet file with 10 rows and specified compression
-			parquetData := createTestParquetFile(t, 10, tc.compression)
-
-			// Create fileReader from buffer - use the same bytes.Reader instance for all interfaces
-			reader := bytes.NewReader(parquetData.Bytes())
-			fileReader := &fileReader{
-				Reader:   reader,
-				ReaderAt: reader,
-				Seeker:   reader,
-				total:    int64(parquetData.Len()),
-			}
+			fileReader := createTestParquetFile(t, 10, tc.compression)
 
 			producer, err := newParquetRowProducer(fileReader, nil)
 			require.NoError(t, err)
@@ -206,15 +165,7 @@ func TestParquetRowProducerNullHandling(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Create a test Parquet file
-	parquetData := createTestParquetFile(t, 15, compress.Codecs.Uncompressed)
-
-	reader := bytes.NewReader(parquetData.Bytes())
-	fileReader := &fileReader{
-		Reader:   reader,
-		ReaderAt: reader,
-		Seeker:   reader,
-		total:    int64(parquetData.Len()),
-	}
+	fileReader := createTestParquetFile(t, 15, compress.Codecs.Uncompressed)
 
 	producer, err := newParquetRowProducer(fileReader, nil)
 	require.NoError(t, err)
@@ -254,15 +205,7 @@ func TestParquetRowProducerBatching(t *testing.T) {
 
 	// Create a file with more rows than the batch size
 	numRows := 250
-	parquetData := createTestParquetFile(t, numRows, compress.Codecs.Uncompressed)
-
-	reader := bytes.NewReader(parquetData.Bytes())
-	fileReader := &fileReader{
-		Reader:   reader,
-		ReaderAt: reader,
-		Seeker:   reader,
-		total:    int64(parquetData.Len()),
-	}
+	fileReader := createTestParquetFile(t, numRows, compress.Codecs.Uncompressed)
 
 	producer, err := newParquetRowProducer(fileReader, nil)
 	require.NoError(t, err)
@@ -292,15 +235,7 @@ func TestParquetRowProducerProgress(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	numRows := 100
-	parquetData := createTestParquetFile(t, numRows, compress.Codecs.Uncompressed)
-
-	reader := bytes.NewReader(parquetData.Bytes())
-	fileReader := &fileReader{
-		Reader:   reader,
-		ReaderAt: reader,
-		Seeker:   reader,
-		total:    int64(parquetData.Len()),
-	}
+	fileReader := createTestParquetFile(t, numRows, compress.Codecs.Uncompressed)
 
 	producer, err := newParquetRowProducer(fileReader, nil)
 	require.NoError(t, err)
@@ -334,15 +269,7 @@ func TestParquetRowProducerSingleRow(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Create a Parquet file with just 1 row
-	parquetData := createTestParquetFile(t, 1, compress.Codecs.Uncompressed)
-
-	reader := bytes.NewReader(parquetData.Bytes())
-	fileReader := &fileReader{
-		Reader:   reader,
-		ReaderAt: reader,
-		Seeker:   reader,
-		total:    int64(parquetData.Len()),
-	}
+	fileReader := createTestParquetFile(t, 1, compress.Codecs.Uncompressed)
 
 	producer, err := newParquetRowProducer(fileReader, nil)
 	require.NoError(t, err)
@@ -362,15 +289,7 @@ func TestParquetRowProducerSkip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	parquetData := createTestParquetFile(t, 10, compress.Codecs.Uncompressed)
-
-	reader := bytes.NewReader(parquetData.Bytes())
-	fileReader := &fileReader{
-		Reader:   reader,
-		ReaderAt: reader,
-		Seeker:   reader,
-		total:    int64(parquetData.Len()),
-	}
+	fileReader := createTestParquetFile(t, 10, compress.Codecs.Uncompressed)
 
 	producer, err := newParquetRowProducer(fileReader, nil)
 	require.NoError(t, err)
@@ -535,14 +454,7 @@ func TestParquetRowConsumerCreation(t *testing.T) {
 	}
 
 	// Create a mock Parquet file to get the schema
-	parquetData := createTestParquetFile(t, 1, compress.Codecs.Uncompressed)
-	reader := bytes.NewReader(parquetData.Bytes())
-	fileReader := &fileReader{
-		Reader:   reader,
-		ReaderAt: reader,
-		Seeker:   reader,
-		total:    int64(parquetData.Len()),
-	}
+	fileReader := createTestParquetFile(t, 1, compress.Codecs.Uncompressed)
 	producer, err := newParquetRowProducer(fileReader, nil)
 	require.NoError(t, err)
 
@@ -597,14 +509,7 @@ func TestParquetAutomaticColumnMapping(t *testing.T) {
 	}
 
 	// Create a mock Parquet file to get the schema
-	parquetData := createTestParquetFile(t, 1, compress.Codecs.Uncompressed)
-	reader := bytes.NewReader(parquetData.Bytes())
-	fileReader := &fileReader{
-		Reader:   reader,
-		ReaderAt: reader,
-		Seeker:   reader,
-		total:    int64(parquetData.Len()),
-	}
+	fileReader := createTestParquetFile(t, 1, compress.Codecs.Uncompressed)
 	producer, err := newParquetRowProducer(fileReader, nil)
 	require.NoError(t, err)
 
@@ -721,13 +626,210 @@ func TestParquetColumnOrderMapping(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, consumer)
 
-	// Verify the mapping is correct:
-	// - "score" should map to visibleCols[3] (index 3 in table schema)
-	// - "name" should map to visibleCols[1] (index 1 in table schema)
-	// - "id" should map to visibleCols[0] (index 0 in table schema)
+	// Verify fieldNameToIdx maps to full-table visibleCols indices.
 	require.Equal(t, 3, consumer.fieldNameToIdx["score"], "score should map to visibleCols index 3")
 	require.Equal(t, 1, consumer.fieldNameToIdx["name"], "name should map to visibleCols index 1")
 	require.Equal(t, 0, consumer.fieldNameToIdx["id"], "id should map to visibleCols index 0")
+
+	// Verify colMapping uses target-column indices (position in targetCols),
+	// not full-table indices. Target order is [score, name, id].
+	require.Equal(t, 0, consumer.colMapping[0], "parquet col 0 (score) -> target index 0")
+	require.Equal(t, 1, consumer.colMapping[1], "parquet col 1 (name) -> target index 1")
+	require.Equal(t, 2, consumer.colMapping[2], "parquet col 2 (id) -> target index 2")
+}
+
+// TestParquetSubsetColumnMapping is a regression test for #169899. When IMPORT
+// INTO excludes columns, colMapping must use target-column indices (position in
+// the targetCols list) rather than full-table visibleCols indices. Using
+// full-table indices caused an out-of-bounds panic in FillDatums because
+// DatumRowConverter.Datums is sized to len(targetCols).
+func TestParquetSubsetColumnMapping(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Table schema shared by all sub-tests: [name, id, age, score]. The
+	// primary key is id (not the first column), so test cases can exclude
+	// parquet col 0 (name) while still satisfying IMPORT INTO's requirement
+	// that targetCols include the primary key.
+	tableDesc := tabledesc.NewBuilder(&descpb.TableDescriptor{
+		Name: "test_table",
+		Columns: []descpb.ColumnDescriptor{
+			{Name: "name", ID: 2, Type: types.String, Nullable: true},
+			{Name: "id", ID: 1, Type: types.Int, Nullable: true},
+			{Name: "age", ID: 3, Type: types.Int, Nullable: true},
+			{Name: "score", ID: 4, Type: types.Float, Nullable: true},
+		},
+		NextColumnID: 5,
+		Families: []descpb.ColumnFamilyDescriptor{{
+			Name:        "primary",
+			ColumnNames: []string{"name", "id", "age", "score"},
+			ColumnIDs:   []descpb.ColumnID{2, 1, 3, 4},
+		}},
+		PrimaryIndex: descpb.IndexDescriptor{
+			Name:                "primary",
+			ID:                  1,
+			Unique:              true,
+			KeyColumnNames:      []string{"id"},
+			KeyColumnIDs:        []descpb.ColumnID{1},
+			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+		},
+	}).BuildImmutableTable()
+
+	// makeParquetFile writes a single row [name="Alice", id=1, age=30,
+	// score=95.5] using the supplied column names (cases). Type order is
+	// fixed: string, int32, int32, float64.
+	makeParquetFile := func(t *testing.T, colNames [4]string) *fileReader {
+		t.Helper()
+		pqSchema := arrow.NewSchema(
+			[]arrow.Field{
+				{Name: colNames[0], Type: arrow.BinaryTypes.String, Nullable: true},
+				{Name: colNames[1], Type: arrow.PrimitiveTypes.Int32, Nullable: true},
+				{Name: colNames[2], Type: arrow.PrimitiveTypes.Int32, Nullable: true},
+				{Name: colNames[3], Type: arrow.PrimitiveTypes.Float64, Nullable: true},
+			},
+			nil,
+		)
+
+		var buf bytes.Buffer
+		writer, err := pqarrow.NewFileWriter(
+			pqSchema, &buf,
+			parquet.NewWriterProperties(
+				parquet.WithCompression(compress.Codecs.Uncompressed)),
+			pqarrow.DefaultWriterProps(),
+		)
+		require.NoError(t, err)
+
+		rb := array.NewRecordBuilder(memory.DefaultAllocator, pqSchema)
+		rb.Field(0).(*array.StringBuilder).Append("Alice")
+		rb.Field(1).(*array.Int32Builder).Append(1)
+		rb.Field(2).(*array.Int32Builder).Append(30)
+		rb.Field(3).(*array.Float64Builder).Append(95.5)
+		record := rb.NewRecord()
+		defer record.Release()
+
+		require.NoError(t, writer.Write(record))
+		require.NoError(t, writer.Close())
+
+		reader := bytes.NewReader(buf.Bytes())
+		return &fileReader{
+			Reader:   reader,
+			ReaderAt: reader,
+			Seeker:   reader,
+			total:    int64(buf.Len()),
+		}
+	}
+
+	lowerCaseNames := [4]string{"name", "id", "age", "score"}
+
+	// Sample row written by makeParquetFile; expected datums below pick out
+	// the targeted subset (lookup is case-insensitive).
+	allDatums := map[string]tree.Datum{
+		"id":    tree.NewDInt(1),
+		"name":  tree.NewDString("Alice"),
+		"age":   tree.NewDInt(30),
+		"score": tree.NewDFloat(95.5),
+	}
+
+	testCases := []struct {
+		name string
+		// parquetColNames overrides the parquet schema column names; defaults
+		// to lowerCaseNames when zero-valued.
+		parquetColNames [4]string
+		targetCols      tree.NameList
+		// Expected colMapping: parquet col index -> target col index (-1 = skipped).
+		wantColMapping []int
+	}{
+		{
+			// Excludes parquet col 0 (name, a non-PK column).
+			name:           "first column excluded",
+			targetCols:     tree.NameList{"id", "age", "score"},
+			wantColMapping: []int{-1, 0, 1, 2},
+		},
+		{
+			// Excluding a non-last column is the original panic from #169899.
+			name:           "middle column excluded",
+			targetCols:     tree.NameList{"name", "id", "score"},
+			wantColMapping: []int{0, 1, -1, 2},
+		},
+		{
+			name:           "last column excluded",
+			targetCols:     tree.NameList{"name", "id", "age"},
+			wantColMapping: []int{0, 1, 2, -1},
+		},
+		{
+			name:           "multiple columns excluded",
+			targetCols:     tree.NameList{"id", "score"},
+			wantColMapping: []int{-1, 0, -1, 1},
+		},
+		{
+			// Parquet matching is case-insensitive; mixed-case parquet column
+			// names must still resolve to the lowercase target columns.
+			name:            "mixed case parquet columns",
+			parquetColNames: [4]string{"Name", "ID", "Age", "Score"},
+			targetCols:      tree.NameList{"id", "age", "score"},
+			wantColMapping:  []int{-1, 0, 1, 2},
+		},
+	}
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := eval.MakeTestingEvalContext(st)
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
+	defer row.TestingSetDatumRowConverterBatchSize(2)()
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			importCtx := &parallelImportContext{
+				targetCols: tc.targetCols,
+				tableDesc:  tableDesc,
+			}
+
+			colNames := tc.parquetColNames
+			if colNames == [4]string{} {
+				colNames = lowerCaseNames
+			}
+			fr := makeParquetFile(t, colNames)
+			producer, err := newParquetRowProducer(fr, importCtx)
+			require.NoError(t, err)
+
+			consumer, err := newParquetRowConsumer(
+				importCtx, producer, &importFileContext{}, false)
+			require.NoError(t, err)
+
+			require.Equal(t, tc.wantColMapping, consumer.colMapping)
+
+			// Verify all mapped indices are within the target column bounds.
+			// This is the invariant FillDatums relies on: conv.Datums and
+			// conv.VisibleColTypes are sized to len(targetCols).
+			for _, idx := range consumer.colMapping {
+				if idx >= 0 {
+					require.Less(t, idx, len(tc.targetCols),
+						"colMapping index must be < len(targetCols)")
+				}
+			}
+
+			// Drive FillDatums end-to-end. This is the call site that
+			// originally panicked with an out-of-bounds index when a non-last
+			// column was excluded (#169899).
+			conv, err := row.NewDatumRowConverter(
+				ctx, &semaCtx, tableDesc, tc.targetCols, evalCtx.Copy(),
+				nil /* kvCh */, nil /* seqChunkProvider */, nil /* metrics */, nil, /* db */
+			)
+			require.NoError(t, err)
+
+			require.True(t, producer.Scan(), "expected at least one row")
+			rowData, err := producer.Row()
+			require.NoError(t, err)
+			require.NoError(t, consumer.FillDatums(ctx, rowData, 1, conv))
+
+			require.Len(t, conv.Datums, len(tc.targetCols))
+			for i, colName := range tc.targetCols {
+				want := allDatums[strings.ToLower(string(colName))]
+				require.Equalf(t, want, conv.Datums[i],
+					"datum at target index %d (column %q)", i, colName)
+			}
+		})
+	}
 }
 
 // TestParquetCaseConflictingColumns tests that we reject tables with columns
@@ -949,14 +1051,7 @@ func TestParquetMissingRequiredColumn(t *testing.T) {
 	}
 
 	// Create a mock Parquet file (has id, name, score, active - but NOT email)
-	parquetData := createTestParquetFile(t, 1, compress.Codecs.Uncompressed)
-	reader := bytes.NewReader(parquetData.Bytes())
-	fileReader := &fileReader{
-		Reader:   reader,
-		ReaderAt: reader,
-		Seeker:   reader,
-		total:    int64(parquetData.Len()),
-	}
+	fileReader := createTestParquetFile(t, 1, compress.Codecs.Uncompressed)
 	producer, err := newParquetRowProducer(fileReader, nil)
 	require.NoError(t, err)
 
@@ -1610,4 +1705,1269 @@ func TestParquetPlainPrimitivesValidation(t *testing.T) {
 	require.NotNil(t, consumer)
 
 	t.Log("Successfully validated plain primitive types through consumer creation")
+}
+
+// TestParquetListSchemaDetection verifies that detectListColumn correctly
+// identifies valid LIST columns and rejects unsupported nesting.
+func TestParquetListSchemaDetection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	pool := memory.NewGoAllocator()
+
+	t.Run("DetectsListColumn", func(t *testing.T) {
+		arrowSchema := arrow.NewSchema([]arrow.Field{
+			{Name: "tags", Type: arrow.ListOf(arrow.BinaryTypes.String), Nullable: true},
+		}, nil)
+		builder := array.NewRecordBuilder(pool, arrowSchema)
+		defer builder.Release()
+
+		lb := builder.Field(0).(*array.ListBuilder)
+		lb.Append(true)
+		lb.ValueBuilder().(*array.StringBuilder).Append("a")
+
+		record := builder.NewRecord()
+		defer record.Release()
+
+		buf := new(bytes.Buffer)
+		writerProps := parquet.NewWriterProperties(
+			parquet.WithCompression(compress.Codecs.Uncompressed))
+		writer, err := pqarrow.NewFileWriter(
+			arrowSchema, buf, writerProps, pqarrow.DefaultWriterProps())
+		require.NoError(t, err)
+		require.NoError(t, writer.Write(record))
+		require.NoError(t, writer.Close())
+
+		reader := bytes.NewReader(buf.Bytes())
+		fr := &fileReader{
+			Reader: reader, ReaderAt: reader, Seeker: reader,
+			total: int64(buf.Len()),
+		}
+		parquetReader, err := file.NewParquetReader(fr)
+		require.NoError(t, err)
+
+		pqSchema := parquetReader.MetaData().Schema
+		listInfo, err := detectListColumn(pqSchema, 0)
+		require.NoError(t, err)
+		require.NotNil(t, listInfo)
+		require.Equal(t, "tags", listInfo.columnName)
+		require.True(t, listInfo.elementIsOptional)
+		require.Equal(t, int16(3), listInfo.maxDefLevel)
+		require.Equal(t, int16(3), listInfo.presentElementDefLevel)
+		require.Equal(t, 1, listInfo.nestingDepth)
+		require.Len(t, listInfo.levels, 1)
+		require.Equal(t, int16(1), listInfo.levels[0].repLevel)
+		require.Equal(t, int16(0), listInfo.levels[0].nullListDefLevel)
+		require.Equal(t, int16(1), listInfo.levels[0].emptyListDefLevel)
+	})
+
+	t.Run("FlatColumnNotDetectedAsList", func(t *testing.T) {
+		arrowSchema := arrow.NewSchema([]arrow.Field{
+			{Name: "id", Type: arrow.PrimitiveTypes.Int32, Nullable: true},
+		}, nil)
+		builder := array.NewRecordBuilder(pool, arrowSchema)
+		defer builder.Release()
+
+		builder.Field(0).(*array.Int32Builder).Append(1)
+
+		record := builder.NewRecord()
+		defer record.Release()
+
+		buf := new(bytes.Buffer)
+		writerProps := parquet.NewWriterProperties(
+			parquet.WithCompression(compress.Codecs.Uncompressed))
+		writer, err := pqarrow.NewFileWriter(
+			arrowSchema, buf, writerProps, pqarrow.DefaultWriterProps())
+		require.NoError(t, err)
+		require.NoError(t, writer.Write(record))
+		require.NoError(t, writer.Close())
+
+		reader := bytes.NewReader(buf.Bytes())
+		fr := &fileReader{
+			Reader: reader, ReaderAt: reader, Seeker: reader,
+			total: int64(buf.Len()),
+		}
+		parquetReader, err := file.NewParquetReader(fr)
+		require.NoError(t, err)
+
+		pqSchema := parquetReader.MetaData().Schema
+		listInfo, err := detectListColumn(pqSchema, 0)
+		require.NoError(t, err)
+		require.Nil(t, listInfo, "flat column should not be detected as LIST")
+	})
+}
+
+// parquetRow is one row passed to makeParquetFile: one value per column, in
+// schema order. Conventions:
+//   - nil means the column is NULL (or the LIST itself is NULL).
+//   - For a LIST<T> column, pass []any of element values. An empty []any{}
+//     is an empty list (not NULL).
+//   - Primitive columns require the exact Go type (int32 for Int32, string
+//     for String, etc.) — see appendParquetValue for the supported set.
+type parquetRow []any
+
+// parquetFileOption configures non-default knobs of makeParquetFile.
+type parquetFileOption func(*parquetFileOptions)
+
+type parquetFileOptions struct {
+	compression compress.Compression
+}
+
+// withParquetCompression overrides the default compression (Uncompressed).
+func withParquetCompression(c compress.Compression) parquetFileOption {
+	return func(o *parquetFileOptions) { o.compression = c }
+}
+
+// makeParquetFile assembles an in-memory parquet file from the given arrow
+// schema plus a slice of rows, and returns it wrapped in a *fileReader ready
+// to feed the importer. Defaults to uncompressed.
+//
+// TODO(sravotto): adopt this helper at the other ~15 inline
+// pqarrow.NewFileWriter sites in this file and the sibling
+// read_import_parquet_list_test.go / read_import_parquet_batch_test.go.
+// Extend appendParquetValue and add options (max row group length, ...) as
+// those call sites need them.
+func makeParquetFile(
+	t *testing.T, arrowSchema *arrow.Schema, rows []parquetRow, opts ...parquetFileOption,
+) *fileReader {
+	t.Helper()
+	options := parquetFileOptions{compression: compress.Codecs.Uncompressed}
+	for _, o := range opts {
+		o(&options)
+	}
+	buf := new(bytes.Buffer)
+	writer, err := pqarrow.NewFileWriter(
+		arrowSchema, buf,
+		parquet.NewWriterProperties(parquet.WithCompression(options.compression)),
+		pqarrow.DefaultWriterProps())
+	require.NoError(t, err)
+
+	builder := array.NewRecordBuilder(memory.NewGoAllocator(), arrowSchema)
+	defer builder.Release()
+	for rowIdx, row := range rows {
+		require.Lenf(t, row, len(arrowSchema.Fields()),
+			"row %d has %d values but schema has %d columns",
+			rowIdx, len(row), len(arrowSchema.Fields()))
+		for colIdx, val := range row {
+			appendParquetValue(t, rowIdx, colIdx,
+				arrowSchema.Field(colIdx).Type, builder.Field(colIdx), val)
+		}
+	}
+	record := builder.NewRecord()
+	defer record.Release()
+	require.NoError(t, writer.Write(record))
+	require.NoError(t, writer.Close())
+
+	reader := bytes.NewReader(buf.Bytes())
+	return &fileReader{
+		Reader: reader, ReaderAt: reader, Seeker: reader,
+		total: int64(buf.Len()),
+	}
+}
+
+// appendParquetValue appends one Go value to the arrow builder for the given
+// column type, applying the parquetRow conventions documented on parquetRow.
+// rowIdx and colIdx are only used for error messages.
+func appendParquetValue(
+	t *testing.T, rowIdx, colIdx int, dt arrow.DataType, b array.Builder, val any,
+) {
+	t.Helper()
+	if val == nil {
+		b.AppendNull()
+		return
+	}
+	switch dt := dt.(type) {
+	case *arrow.Int32Type:
+		v, ok := val.(int32)
+		require.Truef(t, ok, "row %d col %d: expected int32, got %T", rowIdx, colIdx, val)
+		b.(*array.Int32Builder).Append(v)
+	case *arrow.Float64Type:
+		v, ok := val.(float64)
+		require.Truef(t, ok, "row %d col %d: expected float64, got %T", rowIdx, colIdx, val)
+		b.(*array.Float64Builder).Append(v)
+	case *arrow.BooleanType:
+		v, ok := val.(bool)
+		require.Truef(t, ok, "row %d col %d: expected bool, got %T", rowIdx, colIdx, val)
+		b.(*array.BooleanBuilder).Append(v)
+	case *arrow.StringType:
+		v, ok := val.(string)
+		require.Truef(t, ok, "row %d col %d: expected string, got %T", rowIdx, colIdx, val)
+		b.(*array.StringBuilder).Append(v)
+	case *arrow.ListType:
+		elems, ok := val.([]any)
+		require.Truef(t, ok, "row %d col %d: expected []any for LIST, got %T", rowIdx, colIdx, val)
+		lb := b.(*array.ListBuilder)
+		lb.Append(true)
+		for _, elem := range elems {
+			appendParquetValue(t, rowIdx, colIdx, dt.Elem(), lb.ValueBuilder(), elem)
+		}
+	default:
+		t.Fatalf("row %d col %d: unsupported arrow type %T (extend appendParquetValue)",
+			rowIdx, colIdx, dt)
+	}
+}
+
+// TestParquetListEndToEnd drives the full producer/consumer pipeline for LIST
+// columns: it scans every row, calls FillDatums, and asserts that the assembled
+// datums match what the Parquet file encodes for both ARRAY and JSONB targets.
+func TestParquetListEndToEnd(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := eval.MakeTestingEvalContext(st)
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
+	defer row.TestingSetDatumRowConverterBatchSize(2)()
+
+	// jsonArr builds a JSONB array datum from primitive Go values, mirroring
+	// the elements assembled by parquetElementToJSON.
+	jsonArr := func(t *testing.T, elems ...any) tree.Datum {
+		t.Helper()
+		ab := json.NewArrayBuilder(len(elems))
+		for _, e := range elems {
+			if e == nil {
+				ab.Add(json.NullJSONValue)
+				continue
+			}
+			switch v := e.(type) {
+			case string:
+				ab.Add(json.FromString(v))
+			default:
+				t.Fatalf("unsupported jsonArr element type %T", e)
+			}
+		}
+		return tree.NewDJSON(ab.Build())
+	}
+
+	// stringArr builds a tree.DArray of strings (with optional nulls).
+	stringArr := func(t *testing.T, elems ...any) tree.Datum {
+		t.Helper()
+		arr := tree.NewDArray(types.String)
+		for _, e := range elems {
+			if e == nil {
+				require.NoError(t, arr.Append(tree.DNull))
+				continue
+			}
+			require.NoError(t, arr.Append(tree.NewDString(e.(string))))
+		}
+		return arr
+	}
+
+	cases := []struct {
+		name        string
+		tagsColType *types.T
+		// expectedTags is keyed by id (1..4) — the value the consumer should
+		// produce for the "tags" column on that row.
+		expectedTags func(t *testing.T) map[int]tree.Datum
+	}{
+		{
+			name:        "ListToArray",
+			tagsColType: types.MakeArray(types.String),
+			expectedTags: func(t *testing.T) map[int]tree.Datum {
+				return map[int]tree.Datum{
+					1: stringArr(t, "a", "b"),
+					2: tree.DNull,
+					3: stringArr(t),
+					4: stringArr(t, "x"),
+				}
+			},
+		},
+		{
+			name:        "ListToJSON",
+			tagsColType: types.Jsonb,
+			expectedTags: func(t *testing.T) map[int]tree.Datum {
+				return map[int]tree.Datum{
+					1: jsonArr(t, "a", "b"),
+					2: tree.DNull,
+					3: jsonArr(t),
+					4: jsonArr(t, "x"),
+				}
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fr := makeParquetFile(t, arrow.NewSchema([]arrow.Field{
+				{Name: "id", Type: arrow.PrimitiveTypes.Int32, Nullable: false},
+				{Name: "tags", Type: arrow.ListOf(arrow.BinaryTypes.String), Nullable: true},
+			}, nil), []parquetRow{
+				{int32(1), []any{"a", "b"}},
+				{int32(2), nil},
+				{int32(3), []any{}},
+				{int32(4), []any{"x"}},
+			})
+
+			tableDesc := tabledesc.NewBuilder(&descpb.TableDescriptor{
+				ID:   1,
+				Name: "test_table",
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "id", Type: types.Int4},
+					{ID: 2, Name: "tags", Type: tc.tagsColType, Nullable: true},
+				},
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID: 1, Name: "pk",
+					KeyColumnIDs:        []descpb.ColumnID{1},
+					KeyColumnNames:      []string{"id"},
+					KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+				},
+			}).BuildImmutableTable()
+			targetCols := tree.NameList{"id", "tags"}
+			importCtx := &parallelImportContext{
+				tableDesc:  tableDesc,
+				targetCols: targetCols,
+			}
+
+			producer, err := newParquetRowProducer(fr, importCtx)
+			require.NoError(t, err)
+			consumer, err := newParquetRowConsumer(
+				importCtx, producer, &importFileContext{}, false)
+			require.NoError(t, err)
+
+			conv, err := row.NewDatumRowConverter(
+				ctx, &semaCtx, tableDesc, targetCols, evalCtx.Copy(),
+				nil /* kvCh */, nil /* seqChunkProvider */, nil /* metrics */, nil, /* db */
+			)
+			require.NoError(t, err)
+
+			expected := tc.expectedTags(t)
+			seen := 0
+			for producer.Scan() {
+				rowData, err := producer.Row()
+				require.NoError(t, err)
+				require.NoError(t, consumer.FillDatums(ctx, rowData, int64(seen), conv))
+
+				require.Len(t, conv.Datums, 2)
+				id := int(tree.MustBeDInt(conv.Datums[0]))
+				want, ok := expected[id]
+				require.True(t, ok, "unexpected id %d", id)
+				require.Equalf(t, want, conv.Datums[1], "tags datum for id=%d", id)
+				seen++
+			}
+			require.NoError(t, producer.Err())
+			require.Equal(t, len(expected), seen)
+		})
+	}
+}
+
+// TestParquetListOmittedFromTargets verifies that a parquet file containing a
+// LIST column can still be imported when that LIST column is not in the
+// IMPORT target list. The producer must open the file, skip the LIST column,
+// and yield the remaining columns.
+func TestParquetListOmittedFromTargets(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := eval.MakeTestingEvalContext(st)
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
+	defer row.TestingSetDatumRowConverterBatchSize(2)()
+
+	fr := makeParquetFile(t, arrow.NewSchema([]arrow.Field{
+		{Name: "id", Type: arrow.PrimitiveTypes.Int32, Nullable: false},
+		{Name: "tags", Type: arrow.ListOf(arrow.BinaryTypes.String), Nullable: true},
+	}, nil), []parquetRow{
+		{int32(1), []any{"a", "b"}},
+		{int32(2), nil},
+		{int32(3), []any{}},
+		{int32(4), []any{"x"}},
+	})
+
+	tableDesc := tabledesc.NewBuilder(&descpb.TableDescriptor{
+		ID:   1,
+		Name: "test_table",
+		Columns: []descpb.ColumnDescriptor{
+			{ID: 1, Name: "id", Type: types.Int4},
+			{ID: 2, Name: "tags", Type: types.MakeArray(types.String), Nullable: true},
+		},
+		PrimaryIndex: descpb.IndexDescriptor{
+			ID: 1, Name: "pk",
+			KeyColumnIDs:        []descpb.ColumnID{1},
+			KeyColumnNames:      []string{"id"},
+			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+		},
+	}).BuildImmutableTable()
+	// IMPORT INTO t(id) — the user explicitly omits the tags column.
+	targetCols := tree.NameList{"id"}
+	importCtx := &parallelImportContext{
+		tableDesc:  tableDesc,
+		targetCols: targetCols,
+	}
+
+	producer, err := newParquetRowProducer(fr, importCtx)
+	require.NoError(t, err)
+	consumer, err := newParquetRowConsumer(
+		importCtx, producer, &importFileContext{}, false)
+	require.NoError(t, err)
+
+	conv, err := row.NewDatumRowConverter(
+		ctx, &semaCtx, tableDesc, targetCols, evalCtx.Copy(),
+		nil /* kvCh */, nil /* seqChunkProvider */, nil /* metrics */, nil, /* db */
+	)
+	require.NoError(t, err)
+
+	expectedIDs := []int{1, 2, 3, 4}
+	seen := 0
+	for producer.Scan() {
+		rowData, err := producer.Row()
+		require.NoError(t, err)
+		require.NoError(t, consumer.FillDatums(ctx, rowData, int64(seen), conv))
+
+		// The converter still allocates a slot for every visible column, but
+		// "tags" was not in targetCols and therefore stays at its default.
+		require.Equal(t, expectedIDs[seen], int(tree.MustBeDInt(conv.Datums[0])))
+		seen++
+	}
+	require.NoError(t, producer.Err())
+	require.Equal(t, len(expectedIDs), seen)
+}
+
+// TestParquetUnsupportedColumnDeferred verifies that detectListColumn errors
+// for unsupported parquet structures (nested LIST, MAP) are deferred until
+// the user actually imports the offending column. Otherwise, opening a
+// parquet file that contains any unsupported column would fail regardless
+// of which columns the user asked for.
+func TestParquetUnsupportedColumnDeferred(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const fieldID = -1
+
+	// Build a parquet schema with one importable flat column ("id") and one
+	// unsupported nested LIST column ("nested"). We can't easily produce a
+	// real LIST<LIST<T>> parquet file with the high-level arrow writer, so
+	// we exercise determineColumnsToRead directly: it is the function that
+	// decides which columns to read and is where the deferred error must
+	// surface.
+	idLeaf, err := schema.NewPrimitiveNode(
+		"id", parquet.Repetitions.Required,
+		parquet.Types.Int32, -1, fieldID)
+	require.NoError(t, err)
+
+	innerLeaf, err := schema.NewPrimitiveNode(
+		"element", parquet.Repetitions.Optional,
+		parquet.Types.Int32, -1, fieldID)
+	require.NoError(t, err)
+	innerRepeated, err := schema.NewGroupNode(
+		"list", parquet.Repetitions.Repeated,
+		[]schema.Node{innerLeaf}, fieldID)
+	require.NoError(t, err)
+	innerList, err := schema.NewGroupNodeLogical(
+		"element", parquet.Repetitions.Optional,
+		[]schema.Node{innerRepeated},
+		schema.ListLogicalType{}, fieldID)
+	require.NoError(t, err)
+	outerRepeated, err := schema.NewGroupNode(
+		"list", parquet.Repetitions.Repeated,
+		[]schema.Node{innerList}, fieldID)
+	require.NoError(t, err)
+	nestedList, err := schema.NewGroupNodeLogical(
+		"nested_list", parquet.Repetitions.Optional,
+		[]schema.Node{outerRepeated},
+		schema.ListLogicalType{}, fieldID)
+	require.NoError(t, err)
+
+	root, err := schema.NewGroupNode(
+		"schema", parquet.Repetitions.Required,
+		[]schema.Node{idLeaf, nestedList}, fieldID)
+	require.NoError(t, err)
+	pqSchema := schema.NewSchema(root)
+
+	// Mirror what newParquetRowProducer does: build columnMetadata for every
+	// leaf, deferring detectListColumn errors. The leaf order matches the
+	// schema's column layout: 0=id, 1=nested.element.
+	columnMetadata := make(map[int]*parquetColumnMetadata)
+	for colIdx := range pqSchema.NumColumns() {
+		col := pqSchema.Column(colIdx)
+		name := pqSchema.ColumnRoot(colIdx).Name()
+		listInfo, detectErr := detectListColumn(pqSchema, colIdx)
+		switch {
+		case detectErr != nil:
+			columnMetadata[colIdx] = &parquetColumnMetadata{
+				columnName:   name,
+				detectionErr: detectErr,
+			}
+		case listInfo != nil:
+			columnMetadata[colIdx] = &parquetColumnMetadata{
+				columnName: name,
+				isList:     true,
+				listInfo:   listInfo,
+			}
+		default:
+			columnMetadata[colIdx] = &parquetColumnMetadata{
+				columnName:    name,
+				logicalType:   deriveLogicalType(col),
+				convertedType: col.ConvertedType(),
+			}
+		}
+	}
+	require.Error(t, columnMetadata[1].detectionErr,
+		"nested LIST should produce a deferred error in metadata")
+
+	tableDesc := tabledesc.NewBuilder(&descpb.TableDescriptor{
+		ID:   1,
+		Name: "t",
+		Columns: []descpb.ColumnDescriptor{
+			{ID: 1, Name: "id", Type: types.Int4},
+			{ID: 2, Name: "nested_list", Type: types.MakeArray(types.MakeArray(types.Int4)), Nullable: true},
+		},
+		PrimaryIndex: descpb.IndexDescriptor{
+			ID: 1, Name: "pk",
+			KeyColumnIDs:        []descpb.ColumnID{1},
+			KeyColumnNames:      []string{"id"},
+			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+		},
+	}).BuildImmutableTable()
+
+	t.Run("OmittingUnsupportedColumnSucceeds", func(t *testing.T) {
+		importCtx := &parallelImportContext{
+			tableDesc:  tableDesc,
+			targetCols: tree.NameList{"id"},
+		}
+		cols, err := determineColumnsToRead(importCtx, pqSchema, columnMetadata)
+		require.NoError(t, err)
+		require.Equal(t, []int{0}, cols)
+	})
+
+	t.Run("ImportingUnsupportedColumnFails", func(t *testing.T) {
+		importCtx := &parallelImportContext{
+			tableDesc:  tableDesc,
+			targetCols: tree.NameList{"id", "nested_list"},
+		}
+		_, err := determineColumnsToRead(importCtx, pqSchema, columnMetadata)
+		require.Error(t, err)
+		require.ErrorContains(t, err, `column "nested_list"`)
+		require.ErrorContains(t, err, "nested LIST")
+	})
+}
+
+// TestParquetMultipleListColumns drives the full producer/consumer pipeline
+// against a file with two LIST columns. Each LIST is read by its own stateful
+// reader, and we verify both columns produce the expected per-row datums.
+func TestParquetMultipleListColumns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := eval.MakeTestingEvalContext(st)
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
+	defer row.TestingSetDatumRowConverterBatchSize(2)()
+
+	stringArr := func(t *testing.T, elems ...string) tree.Datum {
+		t.Helper()
+		arr := tree.NewDArray(types.String)
+		for _, e := range elems {
+			require.NoError(t, arr.Append(tree.NewDString(e)))
+		}
+		return arr
+	}
+	intArr := func(t *testing.T, elems ...int) tree.Datum {
+		t.Helper()
+		arr := tree.NewDArray(types.Int4)
+		for _, e := range elems {
+			require.NoError(t, arr.Append(tree.NewDInt(tree.DInt(e))))
+		}
+		return arr
+	}
+
+	type expected struct {
+		tags   tree.Datum
+		scores tree.Datum
+	}
+	want := map[int]expected{
+		1: {tags: stringArr(t, "a", "b"), scores: intArr(t, 10, 20, 30)},
+		2: {tags: tree.DNull, scores: intArr(t)},
+		3: {tags: stringArr(t), scores: tree.DNull},
+		4: {tags: stringArr(t, "x"), scores: intArr(t, 99)},
+	}
+
+	fr := makeParquetFile(t, arrow.NewSchema([]arrow.Field{
+		{Name: "id", Type: arrow.PrimitiveTypes.Int32, Nullable: false},
+		{Name: "tags", Type: arrow.ListOf(arrow.BinaryTypes.String), Nullable: true},
+		{Name: "scores", Type: arrow.ListOf(arrow.PrimitiveTypes.Int32), Nullable: true},
+	}, nil), []parquetRow{
+		{int32(1), []any{"a", "b"}, []any{int32(10), int32(20), int32(30)}},
+		{int32(2), nil, []any{}},
+		{int32(3), []any{}, nil},
+		{int32(4), []any{"x"}, []any{int32(99)}},
+	})
+
+	tableDesc := tabledesc.NewBuilder(&descpb.TableDescriptor{
+		ID:   1,
+		Name: "test_table",
+		Columns: []descpb.ColumnDescriptor{
+			{ID: 1, Name: "id", Type: types.Int4},
+			{ID: 2, Name: "tags", Type: types.MakeArray(types.String), Nullable: true},
+			{ID: 3, Name: "scores", Type: types.MakeArray(types.Int4), Nullable: true},
+		},
+		PrimaryIndex: descpb.IndexDescriptor{
+			ID: 1, Name: "pk",
+			KeyColumnIDs:        []descpb.ColumnID{1},
+			KeyColumnNames:      []string{"id"},
+			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+		},
+	}).BuildImmutableTable()
+	targetCols := tree.NameList{"id", "tags", "scores"}
+	importCtx := &parallelImportContext{
+		tableDesc:  tableDesc,
+		targetCols: targetCols,
+	}
+
+	producer, err := newParquetRowProducer(fr, importCtx)
+	require.NoError(t, err)
+	consumer, err := newParquetRowConsumer(
+		importCtx, producer, &importFileContext{}, false)
+	require.NoError(t, err)
+
+	conv, err := row.NewDatumRowConverter(
+		ctx, &semaCtx, tableDesc, targetCols, evalCtx.Copy(),
+		nil /* kvCh */, nil /* seqChunkProvider */, nil /* metrics */, nil, /* db */
+	)
+	require.NoError(t, err)
+
+	seen := 0
+	for producer.Scan() {
+		rowData, err := producer.Row()
+		require.NoError(t, err)
+		require.NoError(t, consumer.FillDatums(ctx, rowData, int64(seen), conv))
+
+		require.Len(t, conv.Datums, 3)
+		id := int(tree.MustBeDInt(conv.Datums[0]))
+		exp, ok := want[id]
+		require.True(t, ok, "unexpected id %d", id)
+		require.Equalf(t, exp.tags, conv.Datums[1], "tags datum for id=%d", id)
+		require.Equalf(t, exp.scores, conv.Datums[2], "scores datum for id=%d", id)
+		seen++
+	}
+	require.NoError(t, producer.Err())
+	require.Equal(t, len(want), seen)
+}
+
+// TestParquetListMultiBatch verifies that LIST column data is correctly
+// preserved across multiple fillBuffer calls, ensuring level entries
+// consumed by a chunk read but beyond the batch boundary are not
+// discarded.
+func TestParquetListMultiBatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	pool := memory.NewGoAllocator()
+
+	// Create a file with 300 rows (batch size is 100, so 3 fillBuffer calls).
+	arrowSchema := arrow.NewSchema([]arrow.Field{
+		{Name: "id", Type: arrow.PrimitiveTypes.Int32, Nullable: false},
+		{Name: "scores", Type: arrow.ListOf(arrow.PrimitiveTypes.Int32), Nullable: true},
+	}, nil)
+	builder := array.NewRecordBuilder(pool, arrowSchema)
+	defer builder.Release()
+
+	idBuilder := builder.Field(0).(*array.Int32Builder)
+	lb := builder.Field(1).(*array.ListBuilder)
+	vb := lb.ValueBuilder().(*array.Int32Builder)
+
+	numRows := 300
+	for i := range numRows {
+		idBuilder.Append(int32(i))
+		if i%10 == 0 {
+			// Every 10th row: null list.
+			lb.AppendNull()
+		} else if i%10 == 1 {
+			// Every 10th+1 row: empty list.
+			lb.Append(true)
+		} else {
+			// Other rows: [i*100, i*100+1, i*100+2].
+			lb.Append(true)
+			vb.Append(int32(i * 100))
+			vb.Append(int32(i*100 + 1))
+			vb.Append(int32(i*100 + 2))
+		}
+	}
+
+	record := builder.NewRecord()
+	defer record.Release()
+
+	buf := new(bytes.Buffer)
+	writerProps := parquet.NewWriterProperties(
+		parquet.WithCompression(compress.Codecs.Uncompressed))
+	writer, err := pqarrow.NewFileWriter(
+		arrowSchema, buf, writerProps, pqarrow.DefaultWriterProps())
+	require.NoError(t, err)
+	require.NoError(t, writer.Write(record))
+	require.NoError(t, writer.Close())
+
+	reader := bytes.NewReader(buf.Bytes())
+	fr := &fileReader{
+		Reader: reader, ReaderAt: reader, Seeker: reader,
+		total: int64(buf.Len()),
+	}
+
+	// Read through the full producer pipeline (no importCtx = test mode).
+	producer, err := newParquetRowProducer(fr, nil)
+	require.NoError(t, err)
+
+	rowIdx := 0
+	for producer.Scan() {
+		rowData, err := producer.Row()
+		require.NoError(t, err)
+
+		view := rowData.(*parquetRowView)
+		// Find the LIST column batch (column with isList=true).
+		for colIdx := range view.numColumns {
+			batch := view.batches[colIdx]
+			if batch == nil || !batch.isList {
+				continue
+			}
+
+			val, isNull, err := batch.GetValueAt(int(view.rowIndex))
+			require.NoError(t, err, "row %d", rowIdx)
+
+			if rowIdx%10 == 0 {
+				// Null list.
+				require.True(t, isNull, "row %d should be null", rowIdx)
+			} else if rowIdx%10 == 1 {
+				// Empty list.
+				require.False(t, isNull, "row %d should not be null", rowIdx)
+				elements := val.([]any)
+				require.Len(t, elements, 0, "row %d should be empty list", rowIdx)
+			} else {
+				// 3-element list.
+				require.False(t, isNull, "row %d should not be null", rowIdx)
+				elements := val.([]any)
+				require.Len(t, elements, 3, "row %d", rowIdx)
+				require.Equal(t, int32(rowIdx*100), elements[0], "row %d elem 0", rowIdx)
+				require.Equal(t, int32(rowIdx*100+1), elements[1], "row %d elem 1", rowIdx)
+				require.Equal(t, int32(rowIdx*100+2), elements[2], "row %d elem 2", rowIdx)
+			}
+		}
+		rowIdx++
+	}
+	require.NoError(t, producer.Err())
+	require.Equal(t, numRows, rowIdx, "should read all rows")
+}
+
+// TestParquetListAcrossRowGroups verifies that the producer correctly resets
+// LIST reader state on a row-group boundary. The test forces multiple row
+// groups via WithMaxRowGroupLength and drives the full Scan/Row pipeline.
+func TestParquetListAcrossRowGroups(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	pool := memory.NewGoAllocator()
+
+	arrowSchema := arrow.NewSchema([]arrow.Field{
+		{Name: "id", Type: arrow.PrimitiveTypes.Int32, Nullable: false},
+		{Name: "vals", Type: arrow.ListOf(arrow.PrimitiveTypes.Int32), Nullable: true},
+	}, nil)
+	builder := array.NewRecordBuilder(pool, arrowSchema)
+	defer builder.Release()
+	idBuilder := builder.Field(0).(*array.Int32Builder)
+	lb := builder.Field(1).(*array.ListBuilder)
+	vb := lb.ValueBuilder().(*array.Int32Builder)
+
+	const numRows = 25
+	for i := range numRows {
+		idBuilder.Append(int32(i))
+		lb.Append(true)
+		vb.Append(int32(i))
+		vb.Append(int32(i + 1))
+	}
+	record := builder.NewRecord()
+	defer record.Release()
+
+	buf := new(bytes.Buffer)
+	writerProps := parquet.NewWriterProperties(
+		parquet.WithCompression(compress.Codecs.Uncompressed),
+		parquet.WithMaxRowGroupLength(5),
+	)
+	writer, err := pqarrow.NewFileWriter(
+		arrowSchema, buf, writerProps, pqarrow.DefaultWriterProps())
+	require.NoError(t, err)
+	require.NoError(t, writer.Write(record))
+	require.NoError(t, writer.Close())
+
+	reader := bytes.NewReader(buf.Bytes())
+	fr := &fileReader{
+		Reader: reader, ReaderAt: reader, Seeker: reader,
+		total: int64(buf.Len()),
+	}
+
+	producer, err := newParquetRowProducer(fr, nil)
+	require.NoError(t, err)
+	require.Greater(t, producer.totalRowGroups, 1,
+		"test fixture should produce multiple row groups")
+
+	rowIdx := 0
+	for producer.Scan() {
+		rowData, err := producer.Row()
+		require.NoError(t, err)
+		view := rowData.(*parquetRowView)
+		for colIdx := range view.numColumns {
+			batch := view.batches[colIdx]
+			if batch == nil || !batch.isList {
+				continue
+			}
+			val, isNull, err := batch.GetValueAt(int(view.rowIndex))
+			require.NoError(t, err, "row %d", rowIdx)
+			require.False(t, isNull, "row %d should not be null", rowIdx)
+			elements := val.([]any)
+			require.Len(t, elements, 2, "row %d", rowIdx)
+			require.Equal(t, int32(rowIdx), elements[0], "row %d elem 0", rowIdx)
+			require.Equal(t, int32(rowIdx+1), elements[1], "row %d elem 1", rowIdx)
+		}
+		rowIdx++
+	}
+	require.NoError(t, producer.Err())
+	require.Equal(t, numRows, rowIdx)
+}
+
+// TestParquetElementToJSON pins the JSON output of parquetElementToJSON for
+// every supported physical type and the recognized logical-type annotations.
+// The assertions are coupled to tree.AsJSON's per-datum formatting, so a
+// change to that formatter (e.g. number layout, bytea encoding) will surface
+// here.
+func TestParquetElementToJSON(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	plainMeta := func() *parquetColumnMetadata { return &parquetColumnMetadata{} }
+	withLogical := func(lt schema.LogicalType) *parquetColumnMetadata {
+		return &parquetColumnMetadata{logicalType: lt}
+	}
+	uuidBytes := []byte{0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0,
+		0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}
+	// Parquet INTERVAL: 12 bytes = uint32 months + uint32 days + uint32 millis,
+	// each little-endian. Pin to 1 month, 2 days, 3000 ms.
+	intervalBytes := []byte{
+		0x01, 0x00, 0x00, 0x00,
+		0x02, 0x00, 0x00, 0x00,
+		0xb8, 0x0b, 0x00, 0x00,
+	}
+
+	tests := []struct {
+		name        string
+		elem        any
+		meta        *parquetColumnMetadata
+		expectedStr string
+	}{
+		{name: "bool", elem: true, meta: plainMeta(), expectedStr: "true"},
+		{name: "int32", elem: int32(7), meta: plainMeta(), expectedStr: "7"},
+		{name: "int64", elem: int64(123456789012), meta: plainMeta(), expectedStr: "123456789012"},
+		{name: "float32", elem: float32(1.5), meta: plainMeta(), expectedStr: "1.5"},
+		{name: "float64", elem: 2.25, meta: plainMeta(), expectedStr: "2.25"},
+		{
+			name: "byte array no logical type",
+			elem: []byte("hello"), meta: plainMeta(),
+			expectedStr: `"hello"`,
+		},
+		{
+			name:        "byte array string logical type",
+			elem:        []byte("world"),
+			meta:        withLogical(schema.StringLogicalType{}),
+			expectedStr: `"world"`,
+		},
+		{
+			name:        "byte array enum logical type",
+			elem:        []byte("RED"),
+			meta:        withLogical(schema.EnumLogicalType{}),
+			expectedStr: `"RED"`,
+		},
+		{
+			name:        "byte array JSON logical type",
+			elem:        []byte(`{"a":1}`),
+			meta:        withLogical(schema.JSONLogicalType{}),
+			expectedStr: `{"a": 1}`,
+		},
+		{
+			name: "int32 date logical type",
+			// Days since 1970-01-01: 2023-02-01 = 19389.
+			elem:        int32(19389),
+			meta:        withLogical(schema.DateLogicalType{}),
+			expectedStr: `"2023-02-01"`,
+		},
+		{
+			name:        "fixed len byte array UUID logical type",
+			elem:        parquet.FixedLenByteArray(uuidBytes),
+			meta:        withLogical(schema.UUIDLogicalType{}),
+			expectedStr: `"12345678-9abc-def0-1234-56789abcdef0"`,
+		},
+		{
+			name:        "fixed len byte array interval logical type",
+			elem:        parquet.FixedLenByteArray(intervalBytes),
+			meta:        withLogical(schema.IntervalLogicalType{}),
+			expectedStr: `"1 mon 2 days 00:00:03"`,
+		},
+		{
+			name: "fixed len byte array no logical type",
+			// Unannotated FLBA falls through to types.Bytes, producing the
+			// standard "\x..." hex encoding used by CRDB's bytea_output=hex.
+			elem:        parquet.FixedLenByteArray([]byte{0xde, 0xad, 0xbe, 0xef}),
+			meta:        plainMeta(),
+			expectedStr: `"\\xdeadbeef"`,
+		},
+		{
+			name: "int96 timestamp",
+			// INT96 = nanos within day (8 bytes, little-endian) + Julian day
+			// number (4 bytes, little-endian). 2451545 = 0x256859 is the JD
+			// for 2000-01-01.
+			elem:        parquet.Int96{0, 0, 0, 0, 0, 0, 0, 0, 0x59, 0x68, 0x25, 0x00},
+			meta:        plainMeta(),
+			expectedStr: `"2000-01-01T00:00:00Z"`,
+		},
+		{
+			name: "int32 decimal non-zero scale",
+			// 12345 with scale 2 = 123.45.
+			elem:        int32(12345),
+			meta:        withLogical(schema.NewDecimalLogicalType(5, 2)),
+			expectedStr: `123.45`,
+		},
+		{
+			name: "int64 timestamp micros",
+			// 1675209600000000 micros = 2023-02-01T00:00:00Z.
+			elem:        int64(1675209600000000),
+			meta:        withLogical(schema.NewTimestampLogicalType(true, schema.TimeUnitMicros)),
+			expectedStr: `"2023-02-01T00:00:00Z"`,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			j, err := parquetElementToJSON(tc.elem, tc.meta)
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedStr, j.String())
+		})
+	}
+
+	t.Run("unsupported type fails assertion", func(t *testing.T) {
+		_, err := parquetElementToJSON(struct{}{}, plainMeta())
+		require.ErrorContains(t, err, "unsupported element type")
+		require.True(t, errors.HasAssertionFailure(err),
+			"unsupported element type should be reported as an assertion failure")
+	})
+}
+
+// TestAssembleListDatum covers assembleListDatum directly: interleaved NULL
+// elements for both ARRAY and JSONB targets, and the per-element error wraps
+// emitted when a conversion or append fails.
+func TestAssembleListDatum(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	plainMeta := &parquetColumnMetadata{}
+
+	t.Run("array with null elements", func(t *testing.T) {
+		got, err := assembleListDatum(
+			[]any{[]byte("a"), nil, []byte("b")},
+			types.MakeArray(types.String), plainMeta)
+		require.NoError(t, err)
+
+		want := tree.NewDArray(types.String)
+		require.NoError(t, want.Append(tree.NewDString("a")))
+		require.NoError(t, want.Append(tree.DNull))
+		require.NoError(t, want.Append(tree.NewDString("b")))
+		require.Equal(t, want, got)
+	})
+
+	t.Run("array empty list", func(t *testing.T) {
+		got, err := assembleListDatum(
+			[]any{}, types.MakeArray(types.Int), plainMeta)
+		require.NoError(t, err)
+		require.Equal(t, tree.NewDArray(types.Int), got)
+	})
+
+	t.Run("array string passes through invalid utf-8", func(t *testing.T) {
+		// No UTF-8 validation on this path; matches the flat-path importer.
+		got, err := assembleListDatum(
+			[]any{[]byte{0xff}}, types.MakeArray(types.String), plainMeta)
+		require.NoError(t, err)
+
+		want := tree.NewDArray(types.String)
+		require.NoError(t, want.Append(tree.NewDString("\xff")))
+		require.Equal(t, want, got)
+	})
+
+	t.Run("array conversion error wraps with element index", func(t *testing.T) {
+		// struct{} has no Parquet physical type, so convertWithLogicalType
+		// rejects it; the wrap must name the offending element index.
+		_, err := assembleListDatum(
+			[]any{int32(1), struct{}{}},
+			types.MakeArray(types.Int), plainMeta)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "converting LIST element 1")
+		require.Contains(t, err.Error(), "unsupported Parquet value type")
+	})
+
+	t.Run("array append type mismatch wraps with element index", func(t *testing.T) {
+		// []byte with an INT target produces a DString via the byte-array
+		// fallback path; appending that DString to a DArray(Int) fails the
+		// type check in arr.Append, which is the wrap we want to assert.
+		_, err := assembleListDatum(
+			[]any{int32(1), []byte("not-an-int")},
+			types.MakeArray(types.Int), plainMeta)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "appending LIST element 1")
+	})
+
+	t.Run("json with null elements", func(t *testing.T) {
+		got, err := assembleListDatum(
+			[]any{[]byte("a"), nil, []byte("b")}, types.Jsonb, plainMeta)
+		require.NoError(t, err)
+
+		ab := json.NewArrayBuilder(3)
+		ab.Add(json.FromString("a"))
+		ab.Add(json.NullJSONValue)
+		ab.Add(json.FromString("b"))
+		require.Equal(t, tree.NewDJSON(ab.Build()), got)
+	})
+
+	t.Run("json empty list", func(t *testing.T) {
+		got, err := assembleListDatum(
+			[]any{}, types.Jsonb, plainMeta)
+		require.NoError(t, err)
+		require.Equal(t, tree.NewDJSON(json.NewArrayBuilder(0).Build()), got)
+	})
+
+	t.Run("json with mixed nil and empty bytes", func(t *testing.T) {
+		// Asymmetric with the ARRAY<JSONB> case above: inside a JSONB list,
+		// []byte{} becomes an empty JSON string rather than collapsing to
+		// null.
+		got, err := assembleListDatum(
+			[]any{nil, []byte{}}, types.Jsonb, plainMeta)
+		require.NoError(t, err)
+
+		ab := json.NewArrayBuilder(2)
+		ab.Add(json.NullJSONValue)
+		ab.Add(json.FromString(""))
+		require.Equal(t, tree.NewDJSON(ab.Build()), got)
+	})
+
+	t.Run("json passes through invalid utf-8", func(t *testing.T) {
+		// Same as the ARRAY<STRING> case: the bytes ride through into the
+		// JSON string unchanged.
+		got, err := assembleListDatum(
+			[]any{[]byte{0xff}}, types.Jsonb, plainMeta)
+		require.NoError(t, err)
+
+		ab := json.NewArrayBuilder(1)
+		ab.Add(json.FromString("\xff"))
+		require.Equal(t, tree.NewDJSON(ab.Build()), got)
+	})
+
+	t.Run("json conversion error wraps with element index", func(t *testing.T) {
+		_, err := assembleListDatum(
+			[]any{int32(1), struct{}{}}, types.Jsonb, plainMeta)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "converting LIST element 1 to JSON")
+		require.Contains(t, err.Error(), "unsupported element type")
+	})
+
+	t.Run("unsupported target type fails assertion", func(t *testing.T) {
+		// LIST targeting a scalar type should never make it past schema
+		// validation; if it does, assembleListDatum trips an assertion.
+		_, err := assembleListDatum([]any{int32(1)}, types.Int, plainMeta)
+		require.ErrorContains(t, err, "LIST columns can only target ARRAY or JSONB")
+		require.True(t, errors.HasAssertionFailure(err))
+	})
+
+	t.Run("non-slice value fails assertion", func(t *testing.T) {
+		// The producer is contractually obligated to hand assembleListDatum a
+		// []any; any other shape is a programmer error.
+		_, err := assembleListDatum("not a slice", types.MakeArray(types.String), plainMeta)
+		require.ErrorContains(t, err, "expected []any for LIST column")
+		require.True(t, errors.HasAssertionFailure(err))
+	})
+}
+
+// TestParquetListValidationRejects verifies that the LIST branch of
+// validateAndBuildColumnMapping rejects non-ARRAY/JSONB targets and arrays
+// whose element type is incompatible with the Parquet element's physical type,
+// surfacing the error at file-open time rather than mid-import.
+func TestParquetListValidationRejects(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Build a Parquet file with a single LIST<int32> column named "vals".
+	pool := memory.NewGoAllocator()
+	arrowSchema := arrow.NewSchema([]arrow.Field{
+		{Name: "vals", Type: arrow.ListOf(arrow.PrimitiveTypes.Int32), Nullable: true},
+	}, nil)
+	builder := array.NewRecordBuilder(pool, arrowSchema)
+	defer builder.Release()
+	lb := builder.Field(0).(*array.ListBuilder)
+	vb := lb.ValueBuilder().(*array.Int32Builder)
+	lb.Append(true)
+	vb.Append(1)
+	record := builder.NewRecord()
+	defer record.Release()
+
+	buf := new(bytes.Buffer)
+	writer, err := pqarrow.NewFileWriter(
+		arrowSchema, buf,
+		parquet.NewWriterProperties(parquet.WithCompression(compress.Codecs.Uncompressed)),
+		pqarrow.DefaultWriterProps())
+	require.NoError(t, err)
+	require.NoError(t, writer.Write(record))
+	require.NoError(t, writer.Close())
+	parquetBytes := buf.Bytes()
+
+	newImportCtxWithType := func(colType *types.T) *parallelImportContext {
+		tableDesc := tabledesc.NewBuilder(&descpb.TableDescriptor{
+			Name: "t",
+			Columns: []descpb.ColumnDescriptor{
+				{ID: 1, Name: "id", Type: types.Int},
+				{ID: 2, Name: "vals", Type: colType, Nullable: true},
+			},
+			NextColumnID: 3,
+			PrimaryIndex: descpb.IndexDescriptor{
+				ID: 1, Name: "pk",
+				KeyColumnIDs:        []descpb.ColumnID{1},
+				KeyColumnNames:      []string{"id"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+			},
+		}).BuildImmutableTable()
+		return &parallelImportContext{
+			tableDesc:  tableDesc,
+			targetCols: tree.NameList{"vals"},
+		}
+	}
+
+	tests := []struct {
+		name         string
+		colType      *types.T
+		expectedErr  string
+		expectedHelp string // optional substring for the wrapping context
+	}{
+		{
+			name:         "scalar int target",
+			colType:      types.Int,
+			expectedErr:  "Parquet LIST requires an ARRAY or JSONB target type",
+			expectedHelp: `column "vals"`,
+		},
+		{
+			name:         "string array target for int list",
+			colType:      types.MakeArray(types.String),
+			expectedErr:  "int32 type can only be converted to INT or DECIMAL, got StringFamily",
+			expectedHelp: `column "vals" (LIST element type)`,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			reader := bytes.NewReader(parquetBytes)
+			fr := &fileReader{
+				Reader: reader, ReaderAt: reader, Seeker: reader,
+				total: int64(len(parquetBytes)),
+			}
+			importCtx := newImportCtxWithType(tc.colType)
+			producer, err := newParquetRowProducer(fr, importCtx)
+			require.NoError(t, err)
+			_, err = newParquetRowConsumer(importCtx, producer, &importFileContext{}, false)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), tc.expectedErr)
+			if tc.expectedHelp != "" {
+				require.Contains(t, err.Error(), tc.expectedHelp)
+			}
+		})
+	}
+}
+
+// TestParquetConsumerListRouting verifies that parquetRowConsumer.FillDatums
+// dispatches LIST batches through assembleListDatum and produces the expected
+// DArray or DJSON datum, depending on the target column type. The producer
+// half of the LIST pipeline is mocked by fabricating parquetColumnBatch
+// values directly, so the test exercises the consumer routing in isolation.
+func TestParquetConsumerListRouting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Three Parquet columns: id (flat int32), tags (LIST<string>),
+	// scores (LIST<int32>). The first targets an INT column, the second an
+	// ARRAY(STRING) column, the third a JSONB column. This shape covers
+	// both LIST destinations plus the flat fallthrough.
+	listMeta := func() *parquetColumnMetadata {
+		return &parquetColumnMetadata{isList: true}
+	}
+	flatMeta := func() *parquetColumnMetadata { return &parquetColumnMetadata{} }
+	consumer := &parquetRowConsumer{
+		columnMetadata: map[int]*parquetColumnMetadata{
+			0: flatMeta(),
+			1: listMeta(),
+			2: listMeta(),
+		},
+		colMapping: []int{0, 1, 2},
+	}
+
+	// Two rows. Row 0: id=10, tags=["a","b"], scores=[1,2]. Row 1: id=20,
+	// tags=NULL, scores=[].
+	idBatch := &parquetColumnBatch{
+		physicalType: parquet.Types.Int32,
+		rowCount:     2,
+		isNull:       []bool{false, false},
+		int32Values:  []int32{10, 20},
+	}
+	tagsBatch := &parquetColumnBatch{
+		isList:   true,
+		rowCount: 2,
+		isNull:   []bool{false, true},
+		listRowValues: [][]any{
+			{[]byte("a"), []byte("b")},
+			nil,
+		},
+	}
+	scoresBatch := &parquetColumnBatch{
+		isList:   true,
+		rowCount: 2,
+		isNull:   []bool{false, false},
+		listRowValues: [][]any{
+			{int32(1), int32(2)},
+			{},
+		},
+	}
+
+	conv := &row.DatumRowConverter{
+		VisibleColTypes: []*types.T{
+			types.Int,
+			types.MakeArray(types.String),
+			types.Jsonb,
+		},
+		Datums: make([]tree.Datum, 3),
+	}
+
+	// Row 0.
+	view0 := &parquetRowView{
+		batches:    []*parquetColumnBatch{idBatch, tagsBatch, scoresBatch},
+		numColumns: 3,
+		rowIndex:   0,
+	}
+	require.NoError(t, consumer.FillDatums(ctx, view0, 0, conv))
+
+	wantTags := tree.NewDArray(types.String)
+	require.NoError(t, wantTags.Append(tree.NewDString("a")))
+	require.NoError(t, wantTags.Append(tree.NewDString("b")))
+	wantScoresAb := json.NewArrayBuilder(2)
+	wantScoresAb.Add(json.FromInt(1))
+	wantScoresAb.Add(json.FromInt(2))
+	wantScores := tree.NewDJSON(wantScoresAb.Build())
+
+	require.Equal(t, tree.NewDInt(10), conv.Datums[0])
+	require.Equal(t, wantTags, conv.Datums[1])
+	require.Equal(t, wantScores, conv.Datums[2])
+
+	// Row 1: null list and empty list.
+	conv.Datums = make([]tree.Datum, 3)
+	view1 := &parquetRowView{
+		batches:    []*parquetColumnBatch{idBatch, tagsBatch, scoresBatch},
+		numColumns: 3,
+		rowIndex:   1,
+	}
+	require.NoError(t, consumer.FillDatums(ctx, view1, 1, conv))
+
+	require.Equal(t, tree.NewDInt(20), conv.Datums[0])
+	require.Equal(t, tree.DNull, conv.Datums[1], "null LIST should map to DNull")
+	require.Equal(t, tree.NewDJSON(json.NewArrayBuilder(0).Build()), conv.Datums[2],
+		"empty LIST should map to empty JSONB array")
 }

@@ -23,7 +23,10 @@ import (
 // descriptor is a valid target for logical replication and is equivalent to the
 // source table.
 func CheckLogicalReplicationCompatibility(
-	src, dst *descpb.TableDescriptor, skipTableEquivalenceCheck bool, requireKvWriterCompatible bool,
+	src, dst *descpb.TableDescriptor,
+	skipTableEquivalenceCheck bool,
+	requireKvWriterCompatible bool,
+	isTxnMode bool,
 ) error {
 	const cannotLDRMsg = "cannot create logical replication stream"
 	if !skipTableEquivalenceCheck {
@@ -39,7 +42,7 @@ func CheckLogicalReplicationCompatibility(
 		return pgerror.Wrapf(err, pgcode.InvalidTableDefinition, cannotLDRMsg)
 	}
 
-	if err := checkExpressionEvaluation(dst, requireKvWriterCompatible); err != nil {
+	if err := checkExpressionEvaluation(dst, requireKvWriterCompatible, isTxnMode); err != nil {
 		return pgerror.Wrapf(err, pgcode.InvalidTableDefinition, cannotLDRMsg)
 	}
 	if err := checkUniqueWithoutIndex(dst); err != nil {
@@ -122,8 +125,13 @@ func checkOutboundReferences(dst *descpb.TableDescriptor) error {
 // columns, even the computed ones, along with a list of columns that we've
 // already determined should be updated.
 //
+// For transactional LDR, we additionally disallow computed columns in
+// secondary unique indexes and foreign key constraints.
+//
 // TODO(msbutler): allow virtual computed columns in pk.
-func checkExpressionEvaluation(dst *descpb.TableDescriptor, requireKVCompatible bool) error {
+func checkExpressionEvaluation(
+	dst *descpb.TableDescriptor, requireKVCompatible bool, isTxnMode bool,
+) error {
 	// Disallow virtual columns if they are a key of an index.
 	// NB: it is impossible for a virtual column to be stored in an index.
 	columns := make([]catalog.Column, len(dst.Columns))
@@ -139,6 +147,12 @@ func checkExpressionEvaluation(dst *descpb.TableDescriptor, requireKVCompatible 
 				"table %s has a virtual computed column %s that appears in the primary key",
 				dst.Name, columns[pkColOrd].GetName(),
 			)
+		}
+	}
+
+	if isTxnMode {
+		if err := checkComputedColumnsInConstraints(dst, columns, colOrd); err != nil {
+			return err
 		}
 	}
 
@@ -158,6 +172,63 @@ func checkExpressionEvaluation(dst *descpb.TableDescriptor, requireKVCompatible 
 						dst.Name, columns[keyColOrd].GetName(), idx.Name,
 					)
 				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// checkComputedColumnsInConstraints rejects computed columns that are
+// in a unique or a foreign key constraint. Lock derivation hashes column datums
+// from the decoded row, which does not contain computed columns.
+//
+// TODO(#164507): support stored computed columns.
+func checkComputedColumnsInConstraints(
+	dst *descpb.TableDescriptor, columns []catalog.Column, colOrd catalog.TableColMap,
+) error {
+	getComputedCol := func(colID descpb.ColumnID) (catalog.Column, bool) {
+		ord, ok := colOrd.Get(colID)
+		if !ok || !columns[ord].IsComputed() {
+			return nil, false
+		}
+		return columns[ord], true
+	}
+
+	for _, idx := range dst.Indexes {
+		if !idx.Unique {
+			continue
+		}
+		for _, colID := range idx.KeyColumnIDs {
+			if col, ok := getComputedCol(colID); ok {
+				return errors.Newf(
+					"table %s has a computed column %s that is a key of unique index %s",
+					dst.Name, col.GetName(), idx.Name,
+				)
+			}
+		}
+	}
+
+	// CRDB doesn't currently support FKs over virtual computed columns (#59671)
+	// but the check should be harmless in case we add support.
+	for _, fk := range dst.OutboundFKs {
+		for _, colID := range fk.OriginColumnIDs {
+			if col, ok := getComputedCol(colID); ok {
+				return errors.Newf(
+					"table %s has a computed column %s that is part of foreign key %s",
+					dst.Name, col.GetName(), fk.Name,
+				)
+			}
+		}
+	}
+
+	for _, fk := range dst.InboundFKs {
+		for _, colID := range fk.ReferencedColumnIDs {
+			if col, ok := getComputedCol(colID); ok {
+				return errors.Newf(
+					"table %s has a computed column %s that is referenced by foreign key %s",
+					dst.Name, col.GetName(), fk.Name,
+				)
 			}
 		}
 	}

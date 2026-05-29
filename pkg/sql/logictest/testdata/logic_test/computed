@@ -344,15 +344,19 @@ DROP TABLE x
 # statement ok
 # DROP TABLE x
 
-statement error use AS \( <expr> \) STORED or AS \( <expr> \) VIRTUAL
+statement error use AS \( <expr> \), AS \( <expr> \) STORED, or AS \( <expr> \) VIRTUAL
 CREATE TABLE y (
   a INT AS 3 STORED
 )
 
-statement error use AS \( <expr> \) STORED or AS \( <expr> \) VIRTUAL
+# Without STORED or VIRTUAL, the column defaults to VIRTUAL (matches PostgreSQL).
+statement ok
 CREATE TABLE y (
   a INT AS (3)
 )
+
+statement ok
+DROP TABLE y
 
 statement ok
 CREATE TABLE tmp (x INT)
@@ -1032,7 +1036,7 @@ ALTER TABLE x ADD COLUMN d INT AS (a + 'a') STORED
 statement error could not parse "a" as type int
 ALTER TABLE x ADD COLUMN d INT AS ('a') STORED
 
-statement error unsupported binary operator
+statement error expected STORED COMPUTED COLUMN expression to have type int, but 'a / 0' has type decimal
 ALTER TABLE x ADD COLUMN d INT AS (a / 0) STORED
 
 # Verify an error during computation fails.

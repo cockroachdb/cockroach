@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -18,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 )
@@ -192,8 +195,7 @@ func runLDAPConnectionLatencyTest(
 		option.NewStartOpts(option.NoBackupSchedule), settings)
 	require.NoError(t, err)
 
-	// Prepare the user which will later be used for ldap bind.
-	prepareSQLUserForLDAP(ctx, t, c, ldapTestUserName)
+	// Roles are auto-provisioned on first LDAP login.
 
 	nodeArr := make([]int, numNodes)
 	for i := 1; i <= numNodes; i++ {
@@ -222,11 +224,29 @@ func runLDAPConnectionLatencyTest(
 			ldapTestUserName, ldapTestUserPassword)
 	}
 
-	// Create the SQL authenticating URL and test the connection.
+	// Create the SQL authenticating URL and test the connection. This
+	// triggers auto-provisioning of the jdoe role via LDAP.
+	authStart := timeutil.Now()
 	testAuthCmd := fmt.Sprintf(
 		"./cockroach sql --url \"%s\" --certs-dir=certs", urlTemplate("localhost"))
 	err = c.RunE(ctx, option.WithNodes(nodeListOptions), testAuthCmd)
 	require.NoError(t, err)
+
+	// Validate auto-provisioning: the role should have been created with
+	// a PROVISIONSRC option containing the "ldap:" prefix.
+	validateAutoProvisioning(ctx, t, c, ldapTestUserName)
+
+	// Validate estimated_last_login_time propagation: poll until the
+	// column is populated (the lastLoginUpdater batches updates
+	// asynchronously via singleflight).
+	validateLastLoginTime(ctx, t, c, ldapTestUserName, authStart)
+
+	// Grant admin to the auto-provisioned user so the connectionlatency
+	// workload can create its database.
+	adminConn := createPgxConnWithExternalURL(ctx, t, c)
+	defer func() { _ = adminConn.Close(ctx) }()
+	runSQLQueryForConnection(ctx, t, adminConn,
+		fmt.Sprintf("GRANT admin TO %s", ldapTestUserName))
 
 	runWorkload := func(roachNodes, loadNode option.NodeListOption, locality string) {
 		var urlString string
@@ -497,6 +517,12 @@ func setupCRDBForLDAPAuth(ctx context.Context, t test.Test, c cluster.Cluster, h
 		"server.ldap_authentication.domain.custom_ca", fmt.Sprintf("'%s'", trimmed))
 	runSQLQueryForConnection(ctx, t, conn, caCertQuery)
 
+	// Enable LDAP auto-provisioning so that SQL roles are created
+	// automatically on first successful LDAP authentication.
+	provisioningQuery := createClusterSettingQuery(
+		"security.provisioning.ldap.enabled", "true")
+	runSQLQueryForConnection(ctx, t, conn, provisioningQuery)
+
 	// This is required for better debugging in-case of failures in authentication.
 	debuggingQuery := createClusterSettingQuery(
 		"server.auth_log.sql_sessions.enabled", "true")
@@ -518,26 +544,6 @@ func createClusterSettingQuery(key, value string) string {
 	return fmt.Sprintf("SET cluster setting %s=%s", key, value)
 }
 
-// prepareUserForLDAP creates a SQL user and grants admin privilege
-// to the user. The `ldapUserName` must be same as the username
-// on the LDAP server.
-func prepareSQLUserForLDAP(
-	ctx context.Context, t test.Test, c cluster.Cluster, ldapUserName string,
-) {
-	// Connect to the node to create the required SQL users
-	// which will be authenticated using LDAP.
-	conn := createPgxConnWithExternalURL(ctx, t, c)
-
-	runSQLQueryForConnection(ctx, t, conn,
-		fmt.Sprintf("CREATE ROLE %s LOGIN", ldapUserName))
-
-	// connectionlatency workload checks the presence of the database named
-	// `connectionlatency`, if not present it creates it using the logged-in user
-	// Hence for ease of use, giving admin privilege to the user.
-	runSQLQueryForConnection(ctx, t, conn,
-		fmt.Sprintf("GRANT admin to %s", ldapUserName))
-}
-
 // createPgxConnWithExternalURL returns a psql connection
 // using the cluster's external url.
 func createPgxConnWithExternalURL(ctx context.Context, t test.Test, c cluster.Cluster) *pgx.Conn {
@@ -548,4 +554,52 @@ func createPgxConnWithExternalURL(ctx context.Context, t test.Test, c cluster.Cl
 	conn, err := pgx.Connect(ctx, pgURL[0])
 	require.NoError(t, err)
 	return conn
+}
+
+// validateAutoProvisioning checks that the given user was auto-provisioned
+// by LDAP authentication by verifying the PROVISIONSRC role option contains
+// the "ldap:" prefix.
+func validateAutoProvisioning(
+	ctx context.Context, t test.Test, c cluster.Cluster, username string,
+) {
+	conn := createPgxConnWithExternalURL(ctx, t, c)
+	defer func() { _ = conn.Close(ctx) }()
+
+	var provisionSrc *string
+	err := conn.QueryRow(ctx,
+		"SELECT value FROM system.role_options "+
+			"WHERE username = $1 AND option = 'PROVISIONSRC'",
+		username).Scan(&provisionSrc)
+	require.NoError(t, err, "PROVISIONSRC role option not found for user %s", username)
+	require.NotNil(t, provisionSrc)
+	require.Contains(t, *provisionSrc, "ldap:",
+		"expected PROVISIONSRC to have ldap: prefix, got %q", *provisionSrc)
+	t.L().Printf("Auto-provisioning validated for user %s: PROVISIONSRC=%s",
+		username, *provisionSrc)
+}
+
+// validateLastLoginTime polls system.users until estimated_last_login_time is
+// populated for the given user. It measures and logs the propagation time from
+// the authentication instant. The lastLoginUpdater processes updates
+// asynchronously via singleflight, so we poll with a short interval.
+func validateLastLoginTime(
+	ctx context.Context, t test.Test, c cluster.Cluster, username string, authTime time.Time,
+) {
+	conn := createPgxConnWithExternalURL(ctx, t, c)
+	defer func() { _ = conn.Close(ctx) }()
+
+	err := retry.ForDuration(30*time.Second, func() error {
+		var lastLogin *time.Time
+		if err := conn.QueryRow(ctx,
+			"SELECT estimated_last_login_time FROM system.users WHERE username = $1",
+			username).Scan(&lastLogin); err != nil {
+			return err
+		}
+		if lastLogin == nil {
+			return fmt.Errorf("estimated_last_login_time not yet populated for user %s", username)
+		}
+		return nil
+	})
+	require.NoError(t, err,
+		"timed out waiting for estimated_last_login_time for user %s", username)
 }

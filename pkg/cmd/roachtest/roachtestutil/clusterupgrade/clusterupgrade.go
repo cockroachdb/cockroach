@@ -259,6 +259,9 @@ func ClusterVersionFromKV(
 	defer rows.Close()
 
 	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return zero, err
+		}
 		return zero, fmt.Errorf("no version found in system.settings")
 	}
 

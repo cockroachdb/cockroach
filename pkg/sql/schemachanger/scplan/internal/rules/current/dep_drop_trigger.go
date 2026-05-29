@@ -10,20 +10,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	. "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 )
 
 func init() {
-	// The Trigger element must be removed before TriggerDeps in particular, in
-	// order to ensure that back-references are updated correctly.
+	// The trigger dependents are removed before the trigger.
 	registerDepRuleForDrop(
-		"trigger removed before dependents",
-		scgraph.Precedence,
-		"trigger", "dependents",
-		scpb.Status_ABSENT, scpb.Status_PUBLIC,
+		"dependents remove trigger",
+		scgraph.SameStagePrecedence,
+		"dependents", "trigger",
+		scpb.Status_ABSENT, scpb.Status_ABSENT,
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				to.Type((*scpb.Trigger)(nil)),
-				from.TypeFilter(rulesVersionKey, isTriggerDependent),
+				from.Type((*scpb.Trigger)(nil)),
+				to.TypeFilter(rulesVersionKey, isTriggerDependent),
 				JoinOnTriggerID(from, to, "table-id", "trigger-id"),
 			}
 		},
@@ -58,6 +58,57 @@ func init() {
 					// Otherwise, no references exist.
 					return false
 				}),
+			}
+		})
+	// Ensure that trigger dependencies are cleared before any referenced
+	// relation descriptors are removed.
+	registerDepRuleForDrop("trigger references cleaned before referenced relations",
+		scgraph.Precedence,
+		"trigger dependency", "relation",
+		scpb.Status_ABSENT, scpb.Status_DROPPED,
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.TriggerDeps)(nil)),
+				to.Type((*scpb.Table)(nil), (*scpb.View)(nil), (*scpb.Sequence)(nil)),
+				FilterElements("trigger refers to relation", from, to, func(trigger *scpb.TriggerDeps, relation scpb.Element) bool {
+					descID := screl.GetDescID(relation)
+					// Avoid self-references to avoid cycles.
+					if descID == trigger.TableID {
+						return false
+					}
+					for _, ref := range trigger.UsesRelations {
+						if ref.ID == descID {
+							return true
+						}
+					}
+					return false
+				}),
+			}
+		})
+
+	registerDepRuleForDrop("trigger references cleaned before referenced types",
+		scgraph.Precedence,
+		"trigger dependency", "types",
+		scpb.Status_ABSENT, scpb.Status_DROPPED,
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.TriggerDeps)(nil)),
+				to.TypeFilter(rulesVersionKey, isTypeDescriptor),
+				to.El.AttrEqVar(screl.DescID, "desc-id"),
+				from.El.AttrContainsVar(screl.ReferencedTypeIDs, "desc-id"),
+			}
+		})
+
+	registerDepRuleForDrop("trigger references cleaned before referenced functions",
+		scgraph.SameStagePrecedence,
+		"trigger dependency", "functions",
+		scpb.Status_ABSENT, scpb.Status_DROPPED,
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.TriggerDeps)(nil)),
+				to.Type((*scpb.Function)(nil)),
+				to.El.AttrEqVar(screl.DescID, "desc-id"),
+				from.El.AttrContainsVar(screl.ReferencedFunctionIDs, "desc-id"),
 			}
 		})
 }

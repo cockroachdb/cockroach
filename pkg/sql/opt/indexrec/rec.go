@@ -15,7 +15,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/errors"
 )
 
 // Type represents the type of index recommendation for Rec.
@@ -84,6 +86,8 @@ func (rc recCollector) addIndexRec(md *opt.Metadata, expr opt.Expr) {
 	case *memo.ZigzagJoinExpr:
 		rc.addIndex(md, expr.LeftIndex, expr.Cols, expr.LeftTable)
 		rc.addIndex(md, expr.RightIndex, expr.Cols, expr.RightTable)
+	case *memo.VectorSearchExpr:
+		rc.addIndex(md, expr.Index, expr.Cols, expr.Table)
 	}
 	for i, n := 0, expr.ChildCount(); i < n; i++ {
 		rc.addIndexRec(md, expr.Child(i))
@@ -165,6 +169,12 @@ func findBestExistingIndexToReplace(
 		}
 		if existingIndex.GetInvisibility() != 0.0 {
 			if hypIndex.hasPrefixOfExplicitCols(existingIndex) {
+				// For vector indexes, the invisible index must use the same
+				// distance metric to be a valid ALTER VISIBLE candidate. An
+				// invisible L2 index cannot serve a cosine distance query.
+				if !hypIndex.isVecConfigCompatible(existingIndex) {
+					continue
+				}
 				existingIndexAllCols := getAllCols(existingIndex)
 				if newStoredCols.Difference(existingIndexAllCols).Empty() {
 					// There exists an invisible index containing every explicit column in
@@ -184,12 +194,15 @@ func findBestExistingIndexToReplace(
 		}
 
 		existingIndexStoredCols := getStoredCols(existingIndex)
-		// hasSameExplicitCols returns true iff the existing index and hypIndex has
-		// the same explicit columns. If hypIndex is inverted, it also makes sure
-		// that their inverted column comes from the same source column.
-		hasSameExplicitCols := hypIndex.hasSameExplicitCols(existingIndex)
-		if hasSameExplicitCols {
-			// If hasSameExplicitCols, this existing index is a candidate for
+		// isReplacementCandidate is true iff the existing index and hypIndex
+		// have the same explicit columns (with matching inverted source columns
+		// for inverted indexes) and compatible vector index configuration.
+		isReplacementCandidate := hypIndex.hasSameExplicitCols(existingIndex)
+		if isReplacementCandidate && !hypIndex.isVecConfigCompatible(existingIndex) {
+			isReplacementCandidate = false
+		}
+		if isReplacementCandidate {
+			// If isReplacementCandidate, this existing index is a candidate for
 			// potential index replacement.
 			//
 			// storedColsDiffSet is the list of cols that are in actuallyScannedCol
@@ -465,7 +478,14 @@ func (ir *indexRecommendation) indexCols() []tree.IndexElem {
 			direction = tree.Descending
 		}
 
-		indexCols[i] = tree.IndexElem{Column: colName, Direction: direction}
+		// The operator class is only set on the last column of a vector index,
+		// which is the vector column itself. Preceding columns are prefix columns.
+		var opClass tree.Name
+		if ir.index.Type() == idxtype.VECTOR && i == len(ir.index.cols)-1 {
+			opClass = tree.Name(vecOpClassName(ir.index.vectorConfig.DistanceMetric))
+		}
+
+		indexCols[i] = tree.IndexElem{Column: colName, Direction: direction, OpClass: opClass}
 	}
 
 	return indexCols
@@ -484,4 +504,19 @@ func (ir *indexRecommendation) storingColumns() []tree.Name {
 		storingCols = append(storingCols, colName)
 	})
 	return storingCols
+}
+
+// vecOpClassName returns the operator class name for a given vector distance
+// metric, used in the CREATE VECTOR INDEX recommendation output.
+func vecOpClassName(metric vecpb.DistanceMetric) string {
+	switch metric {
+	case vecpb.L2SquaredDistance:
+		return "vector_l2_ops"
+	case vecpb.CosineDistance:
+		return "vector_cosine_ops"
+	case vecpb.InnerProductDistance:
+		return "vector_ip_ops"
+	default:
+		panic(errors.AssertionFailedf("unknown distance metric %d", metric))
+	}
 }

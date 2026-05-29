@@ -58,6 +58,12 @@ message Event {
   Addr addr = 1 [(gogoproto.nullable) = false];
   // Type identifies the kind of lifecycle event.
   EventType type = 2;
+  // StartKey is the range's start key at the time of the event. It allows
+  // replay to load the range descriptor via a point read rather than scanning
+  // all descriptors. Empty only for EventCreate (uninitialized replicas have
+  // no descriptor yet).
+  bytes start_key = 3 [
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
 }
 
 // Addr describes the full address of a WAG event, consisting of RangeID,

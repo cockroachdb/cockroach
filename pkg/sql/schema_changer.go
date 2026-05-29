@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"math"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -109,6 +108,13 @@ const (
 	// StatusWaitingForMVCCGC is used for the GC job when it has cleared
 	// the data but is waiting for MVCC GC to remove the data.
 	StatusWaitingForMVCCGC jobs.StatusMessage = "waiting for MVCC GC"
+	// StatusWaitingForProtectedTimestamp is used for the GC job when it has
+	// observed an empty span but is holding off on deleting the table
+	// descriptor and zone config because a protected timestamp record still
+	// covers the span. Tearing down the descriptor would remove the span
+	// config record carrying ExcludeDataFromBackup, breaking the backup
+	// processor's ability to recover from BatchTimestampBeforeGCError.
+	StatusWaitingForProtectedTimestamp jobs.StatusMessage = "waiting for protected timestamp release"
 	// StatusDeletingData is used for the GC job when it is about
 	// to clear the data.
 	StatusDeletingData jobs.StatusMessage = "deleting data"
@@ -135,7 +141,106 @@ const (
 	StatusValidation jobs.StatusMessage = "validating schema"
 )
 
-// SchemaChanger is used to change the schema on a table.
+/*
+SchemaChanger is used to change the schema on a table and implements the
+legacy schema changer job.
+
+# The Legacy Schema Changer
+
+The legacy schema changer was designed to perform online schema changes by
+upholding the 2-version invariant, as described in the original 2015 design
+(see docs/RFCS/20151014_online_schema_change.md). It ensures that at any point
+in time, nodes in a cluster see at most two consecutive versions of a descriptor,
+allowing concurrent DML operations to proceed during the schema change.
+
+## Job State Machine
+
+The legacy schema changer execution is driven by a high-level state machine
+orchestrated by the jobs framework (specifically `schemaChangeResumer`). When
+a job is resumed, it typically follows this sequence of stages:
+
+1. Initialization:
+The job verifies it is "first in line" for the descriptor and initializes its
+running status.
+
+2. RunStateMachineBeforeBackfill:
+The first major transition stage. It moves mutations from their initial state
+towards the backfill stage. For additions, this typically means moving from
+`DELETE_ONLY` to `WRITE_ONLY`. For drops, it moves towards `DELETE_ONLY`.
+Each transition requires a descriptor update and waiting for lease convergence
+across the cluster.
+
+3. runBackfill:
+The bulk of the schema change work occurs here.
+  - Column Backfill: Uses `columnBackfiller` to populate new columns with default
+    values or computed expressions.
+  - Index Backfill: Uses `indexBackfiller` to populate new indexes from existing
+    table data.
+  - CTAS and Materialized Views: For `CREATE TABLE AS` and `CREATE MATERIALIZED
+    VIEW`, the legacy schema changer uses `backfillQueryIntoTable` to populate
+    the new table or view with the results of the defining query.
+
+For indexes, this stage might involve multiple sub-steps, including
+transitioning through `BACKFILLING` and `MERGING` states to handle
+MVCC-compatible backfills and unique constraint validation.
+
+4. done:
+The final stage where mutations are either made `PUBLIC` (for additions) or
+the descriptor elements are fully removed (for drops). This stage also
+schedules cleanup tasks, such as GC jobs for dropped indexes or tables.
+
+Each of these stages involves one or more transactions and often requires
+waiting for the entire cluster to see the latest version of the descriptor
+before proceeding.
+
+## Core Mechanisms
+
+1. Descriptor Mutations:
+The legacy schema changer operates by appending "mutations" to a table
+descriptor. Each mutation represents a step in a schema change (e.g., adding
+a column, creating an index). These mutations are stored in the
+`TableDescriptor.Mutations` slice. Each mutation has a `State` (e.g.,
+`DELETE_ONLY`, `WRITE_ONLY`) and a `Direction` (`ADD` or `DROP`).
+
+2. Jobs Integration:
+The execution is managed by jobs of type `SCHEMA_CHANGE` or
+`TYPEDESC_SCHEMA_CHANGE`. The `schemaChangeResumer` implements the `jobs.Resumer`
+interface to drive the process.
+
+## Limitations
+
+The legacy schema changer has several design limitations that eventually led to
+the development of the declarative schema changer (found in pkg/sql/schemachanger/):
+
+  - Linear Execution: It is largely restricted to performing a single mutation
+    at a time per descriptor.
+  - Limited Atomicity: While individual mutations are atomic, complex multi-step
+    schema changes involving multiple descriptors are difficult to coordinate
+    and roll back reliably.
+  - Rollback Weakness: Rollbacks in the legacy schema changer are not always
+    fully undoing all side effects. The `columnBackfiller` is particularly
+    problematic for rollbacks because it needs to perform another full table
+    scan and update to "remove" a column addition. Specifically, it
+    backfills the column with `NULL` values for all rows to ensure the data
+    is cleared before the column is fully dropped. This makes rollbacks as
+    expensive as the original addition. Furthermore, certain complex
+    interactions between concurrent DDLs can lead to states from which the
+    legacy schema changer cannot safely recover, potentially leaving the
+    descriptor in a "stuck" state.
+  - Complexity: The logic for handling various DDL operations was spread across
+    many files, making it hard to reason about correctness and add new features.
+
+## Relationship with the Declarative Schema Changer
+
+As of CockroachDB v22.2, the declarative schema changer (pkg/sql/schemachanger/)
+is the default for most DDL operations. The legacy schema changer remains in the
+codebase to handle transactions and schema changes that have not been ported over
+yet. The remaining legacy schema changes are mainly non-backfilling, outside of
+CREATE TABLE AS and materialized views.
+
+For information on the newer declarative schema changer, see the documentation in
+pkg/sql/schemachanger/doc.go.
+*/
 type SchemaChanger struct {
 	descID            descpb.ID
 	mutationID        descpb.MutationID
@@ -366,7 +471,7 @@ func (sc *SchemaChanger) validateBackfillQueryIntoTable(
 func (sc *SchemaChanger) backfillQueryIntoTable(
 	ctx context.Context,
 	table catalog.TableDescriptor,
-	query string,
+	query catpb.Statement,
 	ts hlc.Timestamp,
 	opName redact.SafeString,
 	backfillAsUser username.SQLUsername,
@@ -381,7 +486,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 	// Protected timestamp cleaners, which will release any protected timestamp
 	// at the end of the query
 	var ptsCleaners []jobsprotectedts.Cleaner
-	var ptsInstalled sync.Once
+	var ptsInstalled bool
 	defer func() {
 		for _, cleaner := range ptsCleaners {
 			cleanerErr := cleaner(ctx)
@@ -441,7 +546,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			}
 		}
 
-		stmt, err := parser.ParseOne(query)
+		stmt, err := parser.ParseOne(string(query))
 		if err != nil {
 			return err
 		}
@@ -476,25 +581,31 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 		defer localPlanner.curPlan.close(ctx)
 
 		// Only if a fixed timestamp is used install a protected timestamp.
-		if !ts.IsEmpty() {
-			// We could end up with retry errors, but the PTS only needs to be installed
-			// once, since the timestamp will not change.
-			ptsInstalled.Do(func() {
-				// Add a PTS record any tables accessed by this planner.
-				tbls := localPlanner.curPlan.mem.Metadata().AllTables()
-				for _, table := range tbls {
-					descID := table.Table.ID()
-					tbl, err := localPlanner.descCollection.ByIDWithoutLeased(localPlanner.Txn()).Get().Table(ctx, catid.DescID(descID))
-					if err != nil {
-						return
-					}
-					ptsCleaners = append(ptsCleaners,
-						sc.execCfg.ProtectedTimestampManager.TryToProtectBeforeGC(ctx, sc.job, tbl.GetID(), ts))
+		if !ts.IsEmpty() && !ptsInstalled {
+			if fn := sc.testingKnobs.RunBeforeQueryBackfillPTSInstall; fn != nil {
+				if err := fn(); err != nil {
+					return err
 				}
-			})
-			if err != nil {
-				return err
 			}
+			// Fetch all descriptors before installing any PTS records so that a
+			// fetch failure doesn't leave partial cleaners behind for the next
+			// txn retry to duplicate.
+			tbls := localPlanner.curPlan.mem.Metadata().AllTables()
+			fetched := make([]catalog.TableDescriptor, 0, len(tbls))
+			for _, table := range tbls {
+				tbl, err := localPlanner.descCollection.ByIDWithoutLeased(localPlanner.Txn()).
+					Get().Table(ctx, catid.DescID(table.Table.ID()))
+				if err != nil {
+					return err
+				}
+				fetched = append(fetched, tbl)
+			}
+			for _, tbl := range fetched {
+				ptsCleaners = append(ptsCleaners,
+					sc.execCfg.ProtectedTimestampManager.TryToProtectBeforeGC(
+						ctx, sc.job, tbl.GetID(), ts))
+			}
+			ptsInstalled = true
 		}
 		rw := NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 			var counts kvpb.BulkOpSummary
@@ -1176,7 +1287,8 @@ func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
 			}
 		}
 		if statusMessage != "" && !desc.Dropped() {
-			if err := sc.job.WithTxn(txn).UpdateStatusMessage(ctx, statusMessage); err != nil {
+			//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+			if err := sc.job.DeprecatedWithTxn(txn).UpdateStatusMessage(ctx, statusMessage); err != nil {
 				return errors.Wrapf(err, "failed to update job status")
 			}
 		}
@@ -1537,7 +1649,8 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 			return err
 		}
 		if sc.job != nil {
-			if err := sc.job.WithTxn(txn).UpdateStatusMessage(ctx, runStatus); err != nil {
+			//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+			if err := sc.job.DeprecatedWithTxn(txn).UpdateStatusMessage(ctx, runStatus); err != nil {
 				return errors.Wrap(err, "failed to update job status")
 			}
 		}
@@ -2670,7 +2783,8 @@ func (sc *SchemaChanger) updateJobForRollback(
 		}
 	}
 	oldDetails := sc.job.Details().(jobspb.SchemaChangeDetails)
-	u := sc.job.WithTxn(txn)
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	u := sc.job.DeprecatedWithTxn(txn)
 	if err := u.SetDetails(
 		ctx, jobspb.SchemaChangeDetails{
 			DescID:               sc.descID,
@@ -2898,12 +3012,21 @@ type GCJobTestingKnobs struct {
 	// protected timestamp status of a table or an index. The protection status is
 	// passed in along with the jobID.
 	RunAfterIsProtectedCheck func(jobID jobspb.JobID, isProtected bool)
+	// RunAfterPTSReleaseCheck is called after each poll of the
+	// protected-timestamp wait that gates descriptor cleanup. It receives
+	// the descriptor ID being inspected and whether the span is still
+	// protected.
+	RunAfterPTSReleaseCheck func(jobID jobspb.JobID, descID descpb.ID, isProtected bool)
 
 	// Notifier is used to optionally inject a new gcjobnotifier.Notifier.
 	Notifier *gcjobnotifier.Notifier
 
 	// If true, the GC job will not wait for MVCC GC.
 	SkipWaitingForMVCCGC bool
+	// If true, the GC job will not wait for protected timestamp records to
+	// be released before deleting a dropped table's descriptor and zone
+	// config.
+	SkipWaitingForPTSRelease bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
@@ -2927,6 +3050,11 @@ type SchemaChangerTestingKnobs struct {
 
 	// RunBeforeQueryBackfill is called before a query based backfill.
 	RunBeforeQueryBackfill func() error
+
+	// RunBeforeQueryBackfillPTSInstall is called during a query-based backfill
+	// just before PTS records are installed. If it returns an error, the error
+	// is propagated as if the descriptor fetch failed.
+	RunBeforeQueryBackfillPTSInstall func() error
 
 	// RunBeforeIndexBackfill is called just before starting the index backfill, after
 	// fixing the index backfill scan timestamp.

@@ -95,6 +95,15 @@ func alterTableAddIdentity(
 		colDef.GeneratedIdentity.GeneratedAsIdentityType = tree.GeneratedByDefault
 		colDef.GeneratedIdentity.SeqOptions = q.SeqOptions
 	}
+	// The PG18 SEQUENCE NAME clause introduces a relation name into the AST that
+	// the annotator would otherwise reject as unresolved. The sequence does not
+	// exist yet (we are about to create it), so mark the name as non-existent so
+	// the annotator skips qualification checks for it.
+	for _, opt := range colDef.GeneratedIdentity.SeqOptions {
+		if opt.Name == tree.SeqOptName && opt.NameVal != nil {
+			b.MarkNameAsNonExistent(opt.NameVal)
+		}
+	}
 	// Step 2. create a sequence and default expression
 	serialNormalizationMode := sessiondatapb.SerialUsesSQLSequences
 	colDef, expr := alterTableCreateColumnSequence(b, colDef, tn, serialNormalizationMode, colTypeElem.Type)

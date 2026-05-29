@@ -6,7 +6,10 @@ create-replica range-id=1
 ----
 created replica: (n1,s1):5
 state engine:
-Put: 0,0 /Local/RangeID/1/u/RaftReplicaID (0x016989757266747200): replica_id:5 
+(matches WAG node)
+log engine:
+Put: 0,0 /Local/Store/wag/1 (0x01737761676e000000000000000100): (r1/5:0,EventCreate)
+> Put: 0,0 /Local/RangeID/1/u/RaftReplicaID (0x016989757266747200): replica_id:5 
 
 # Make the uninitialized replica vote.
 update-hard-state range-id=1 term=10 vote=2
@@ -47,7 +50,10 @@ create-replica range-id=1 replica-id=10
 ----
 created replica: (n1,s1):10
 state engine:
-Put: 0,0 /Local/RangeID/1/u/RaftReplicaID (0x016989757266747200): replica_id:10 
+(matches WAG node)
+log engine:
+Put: 0,0 /Local/Store/wag/2 (0x01737761676e000000000000000200): (r1/10:0,EventCreate)
+> Put: 0,0 /Local/RangeID/1/u/RaftReplicaID (0x016989757266747200): replica_id:10 
 
 # TODO(pav-kv): HardState of the previous replica should not be inherited.
 print-range-state

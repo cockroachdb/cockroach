@@ -1130,7 +1130,7 @@ func (s *TestState) UpdateSchemaChangeJob(
 		Details:          jobspb.WrapPayloadDetails(scJob.Details),
 		PauseReason:      "",
 	}
-	oldJobMetadata := jobs.JobMetadata{
+	oldJobMetadata := jobs.DeprecatedJobMetadata{
 		ID:       scJob.JobID,
 		State:    jobs.StateRunning,
 		Payload:  &oldPayload,
@@ -1256,6 +1256,7 @@ func (s *TestState) ValidateConstraint(
 // ValidateEnumTypeValueRemoval implements the validator interface.
 func (s *TestState) ValidateEnumTypeValueRemoval(
 	ctx context.Context,
+	job *jobs.Job,
 	typeDesc catalog.TypeDescriptor,
 	physicalRep []byte,
 	logicalRep string,
@@ -1517,6 +1518,11 @@ func (s *TestState) GetTableComment(tableID catid.DescID) (comment string, ok bo
 // GetTypeComment implements the scdecomp.CommentGetter interface.
 func (s *TestState) GetTypeComment(typeID catid.DescID) (comment string, ok bool) {
 	return s.get(typeID, 0, catalogkeys.TypeCommentType)
+}
+
+// GetFunctionComment implements the scdecomp.CommentGetter interface.
+func (s *TestState) GetFunctionComment(funcID catid.DescID) (comment string, ok bool) {
+	return s.get(funcID, 0, catalogkeys.FunctionCommentType)
 }
 
 // GetColumnComment implements the scdecomp.CommentGetter interface.

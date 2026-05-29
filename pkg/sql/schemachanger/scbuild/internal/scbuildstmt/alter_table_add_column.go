@@ -413,15 +413,23 @@ func alterTableCreateColumnSequence(
 	serialNormalizationMode sessiondatapb.SerialNormalizationMode,
 	defType *types.T,
 ) (newDef *tree.ColumnTableDef, colDefaultExpression *scpb.Expression) {
-	seqName := getNextAvailableSeqName(b, d.Name, tn)
-
 	seqOptions, err := catalog.SequenceOptionsFromNormalizationMode(serialNormalizationMode, b.ClusterSettings(), d, defType)
 	if err != nil {
 		panic(err)
 	}
-	// For generated identities inherit the sequence options from the AST.
+	// For generated identities, inherit the sequence options from the AST and
+	// honor the PG18 SEQUENCE NAME clause (if present) by using its name as the
+	// sequence's name instead of an auto-generated one.
+	var explicitSeqName *tree.TableName
 	if d.GeneratedIdentity.IsGeneratedAsIdentity {
+		explicitSeqName, d.GeneratedIdentity.SeqOptions = d.GeneratedIdentity.SeqOptions.ExtractIdentitySeqName()
 		seqOptions = d.GeneratedIdentity.SeqOptions
+	}
+	var seqName *tree.TableName
+	if explicitSeqName != nil {
+		seqName = qualifyExplicitSeqName(b, explicitSeqName, tn)
+	} else {
+		seqName = getNextAvailableSeqName(b, d.Name, tn)
 	}
 
 	// Create the sequence and fetch the element after. The full descriptor
@@ -444,6 +452,39 @@ func alterTableCreateColumnSequence(
 		Expr:            catpb.Expression(tree.Serialize(expr)),
 		UsesSequenceIDs: []catid.DescID{sequenceElem.SequenceID},
 	}
+}
+
+// qualifyExplicitSeqName resolves any unqualified parts of an explicit
+// SEQUENCE NAME against the owning table's database/schema, and panics with a
+// duplicate-relation error if an object with that name already exists. This
+// matches PostgreSQL's behavior, which does not auto-suffix user-supplied
+// sequence names on collision.
+func qualifyExplicitSeqName(
+	b BuildCtx, explicit *tree.TableName, tn *tree.TableName,
+) *tree.TableName {
+	seqName := tree.NewTableNameWithSchema(
+		explicit.CatalogName, explicit.SchemaName, explicit.ObjectName,
+	)
+	if seqName.SchemaName == "" {
+		seqName.SchemaName = tn.SchemaName
+		seqName.ExplicitSchema = tn.ExplicitSchema
+	}
+	if seqName.CatalogName == "" {
+		seqName.CatalogName = tn.CatalogName
+		seqName.ExplicitCatalog = tn.ExplicitCatalog
+	}
+	ers := b.ResolveRelation(seqName.ToUnresolvedObjectName(),
+		ResolveParams{
+			IsExistenceOptional: true,
+			RequiredPrivilege:   privilege.USAGE,
+			WithOffline:         true,
+			ResolveTypes:        true,
+		})
+	if !ers.IsEmpty() {
+		panic(pgerror.Newf(pgcode.DuplicateRelation,
+			"relation %q already exists", seqName.Object()))
+	}
+	return seqName
 }
 
 func getNextAvailableSeqName(b BuildCtx, colName tree.Name, tn *tree.TableName) *tree.TableName {

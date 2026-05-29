@@ -7,6 +7,7 @@ package wag
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 )
 
@@ -46,11 +47,17 @@ func (w *Writer) Empty() bool {
 // AddEvent stages a lifecycle event. Each event identifies a replica and the
 // type of lifecycle transition (create, split, destroy, etc.). A given RangeID
 // must appear at most once across all events in a Writer.
-func (w *Writer) AddEvent(addr wagpb.Addr, eventType wagpb.EventType) {
+//
+// The startKey is the range's start key, used during replay to load the range
+// descriptor via a point read. It may be nil for EventCreate (uninitialized
+// replicas have no descriptor yet).
+func (w *Writer) AddEvent(addr wagpb.Addr, eventType wagpb.EventType, startKey roachpb.RKey) {
 	if w.disabled() {
 		return
 	}
-	w.events = append(w.events, wagpb.Event{Addr: addr, Type: eventType})
+	w.events = append(w.events, wagpb.Event{
+		Addr: addr, Type: eventType, StartKey: startKey,
+	})
 }
 
 // Flush writes the staged WAG node to the raft engine. The node's

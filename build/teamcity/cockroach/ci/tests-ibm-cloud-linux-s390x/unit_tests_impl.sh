@@ -24,3 +24,5 @@ $(bazel info bazel-bin)/pkg/cmd/bazci/bazci_/bazci --extralabels=s390x-test-fail
 		       test --config=ci --config=dev \
 		       $TESTS \
 		       --profile=/artifacts/profile.gz
+
+bazel clean --expunge

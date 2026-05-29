@@ -143,6 +143,9 @@ const (
 	// WorkloadTypeSystem identifies a system task, encoded using
 	// WorkloadID.Name() by the sampler.
 	WorkloadTypeSystem
+	// WorkloadTypeCommit identifies a transaction fingerprint ID for
+	// commit work, hex-encoded by the sampler.
+	WorkloadTypeCommit
 )
 
 // ToUint32 converts a WorkloadType to uint32 for use in protobuf
@@ -160,6 +163,8 @@ func (t WorkloadType) String() string {
 		return "JOB"
 	case WorkloadTypeSystem:
 		return "SYSTEM"
+	case WorkloadTypeCommit:
+		return "COMMIT"
 	default:
 		return "UNKNOWN"
 	}

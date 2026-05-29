@@ -569,6 +569,13 @@ func (s spanSetWriter) ClearEngineKey(key storage.EngineKey, opts storage.ClearO
 	return s.w.ClearEngineKey(key, opts)
 }
 
+func (s spanSetWriter) SingleClearUnversioned(key roachpb.Key) error {
+	if err := s.checkAllowed(key); err != nil {
+		return err
+	}
+	return s.w.SingleClearUnversioned(key)
+}
+
 func (s spanSetWriter) SingleClearEngineKey(key storage.EngineKey) error {
 	// Pass-through, since single clear is only used for the lock table, which
 	// is not in the spans.

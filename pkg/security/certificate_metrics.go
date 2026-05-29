@@ -6,6 +6,8 @@
 package security
 
 import (
+	"math"
+
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -45,6 +47,29 @@ type Metrics struct {
 	NodeTTL       *metric.FunctionalGauge
 	NodeClientTTL *metric.FunctionalGauge
 	ClientTTL     *aggmetric.AggFunctionalGauge
+
+	// Rotation timestamp metrics. Each records the unix timestamp (seconds)
+	// of the last successful certificate reload where the certificate content
+	// actually changed. 0 means never rotated since process start.
+	CALastRotation         *metric.Gauge
+	ClientCALastRotation   *metric.Gauge
+	UICALastRotation       *metric.Gauge
+	TenantCALastRotation   *metric.Gauge
+	NodeLastRotation       *metric.Gauge
+	NodeClientLastRotation *metric.Gauge
+	UILastRotation         *metric.Gauge
+	TenantLastRotation     *metric.Gauge
+
+	// Days-until-expiry metrics. Each reports the number of days remaining
+	// until the certificate expires. 0 means expired, missing, or error.
+	CAExpiryDays         *metric.FunctionalGauge
+	ClientCAExpiryDays   *metric.FunctionalGauge
+	UICAExpiryDays       *metric.FunctionalGauge
+	TenantCAExpiryDays   *metric.FunctionalGauge
+	NodeExpiryDays       *metric.FunctionalGauge
+	NodeClientExpiryDays *metric.FunctionalGauge
+	UIExpiryDays         *metric.FunctionalGauge
+	TenantExpiryDays     *metric.FunctionalGauge
 }
 
 var _ metric.Struct = (*Metrics)(nil)
@@ -217,6 +242,186 @@ var (
 		LabeledName:  "security.certificate.ttl",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "client-tenant"),
 	}
+
+	// Rotation timestamp metadata.
+	metaCALastRotation = metric.Metadata{
+		Name:         "security.certificate.last_rotation.ca",
+		Help:         "Unix timestamp of the last CA certificate rotation. 0 means no rotation since process start.",
+		Measurement:  "Certificate Last Rotation",
+		Unit:         metric.Unit_TIMESTAMP_SEC,
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_EXPIRATIONS,
+		HowToUse:     "Use this metric to verify that CA certificate rotations are occurring as expected. A value of 0 indicates no rotation has happened since the process started. Compare with the corresponding expiry metric to ensure rotations happen well before expiration.",
+		LabeledName:  "security.certificate.last_rotation",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "ca"),
+	}
+	metaClientCALastRotation = metric.Metadata{
+		Name:         "security.certificate.last_rotation.client-ca",
+		Help:         "Unix timestamp of the last client CA certificate rotation. 0 means no rotation since process start.",
+		Measurement:  "Certificate Last Rotation",
+		Unit:         metric.Unit_TIMESTAMP_SEC,
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_EXPIRATIONS,
+		HowToUse:     "Use this metric to verify that client CA certificate rotations are occurring as expected. A value of 0 indicates no rotation has happened since the process started. Compare with the corresponding expiry metric to ensure rotations happen well before expiration.",
+		LabeledName:  "security.certificate.last_rotation",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "client-ca"),
+	}
+	metaUICALastRotation = metric.Metadata{
+		Name:         "security.certificate.last_rotation.ui-ca",
+		Help:         "Unix timestamp of the last UI CA certificate rotation. 0 means no rotation since process start.",
+		Measurement:  "Certificate Last Rotation",
+		Unit:         metric.Unit_TIMESTAMP_SEC,
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_EXPIRATIONS,
+		HowToUse:     "Use this metric to verify that UI CA certificate rotations are occurring as expected. A value of 0 indicates no rotation has happened since the process started. Compare with the corresponding expiry metric to ensure rotations happen well before expiration.",
+		LabeledName:  "security.certificate.last_rotation",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "ui-ca"),
+	}
+	metaTenantCALastRotation = metric.Metadata{
+		Name:         "security.certificate.last_rotation.ca-client-tenant",
+		Help:         "Unix timestamp of the last tenant client CA certificate rotation. 0 means no rotation since process start.",
+		Measurement:  "Certificate Last Rotation",
+		Unit:         metric.Unit_TIMESTAMP_SEC,
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_EXPIRATIONS,
+		HowToUse:     "Use this metric to verify that tenant client CA certificate rotations are occurring as expected. A value of 0 indicates no rotation has happened since the process started. Compare with the corresponding expiry metric to ensure rotations happen well before expiration.",
+		LabeledName:  "security.certificate.last_rotation",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "ca-client-tenant"),
+	}
+	metaNodeLastRotation = metric.Metadata{
+		Name:         "security.certificate.last_rotation.node",
+		Help:         "Unix timestamp of the last node certificate rotation. 0 means no rotation since process start.",
+		Measurement:  "Certificate Last Rotation",
+		Unit:         metric.Unit_TIMESTAMP_SEC,
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_EXPIRATIONS,
+		HowToUse:     "Use this metric to verify that node certificate rotations are occurring as expected. A value of 0 indicates no rotation has happened since the process started. Compare with the corresponding expiry metric to ensure rotations happen well before expiration.",
+		LabeledName:  "security.certificate.last_rotation",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "node"),
+	}
+	metaNodeClientLastRotation = metric.Metadata{
+		Name:         "security.certificate.last_rotation.node-client",
+		Help:         "Unix timestamp of the last node client certificate rotation. 0 means no rotation since process start.",
+		Measurement:  "Certificate Last Rotation",
+		Unit:         metric.Unit_TIMESTAMP_SEC,
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_EXPIRATIONS,
+		HowToUse:     "Use this metric to verify that node client certificate rotations are occurring as expected. A value of 0 indicates no rotation has happened since the process started. Compare with the corresponding expiry metric to ensure rotations happen well before expiration.",
+		LabeledName:  "security.certificate.last_rotation",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "node-client"),
+	}
+	metaUILastRotation = metric.Metadata{
+		Name:         "security.certificate.last_rotation.ui",
+		Help:         "Unix timestamp of the last UI certificate rotation. 0 means no rotation since process start.",
+		Measurement:  "Certificate Last Rotation",
+		Unit:         metric.Unit_TIMESTAMP_SEC,
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_EXPIRATIONS,
+		HowToUse:     "Use this metric to verify that UI certificate rotations are occurring as expected. A value of 0 indicates no rotation has happened since the process started. Compare with the corresponding expiry metric to ensure rotations happen well before expiration.",
+		LabeledName:  "security.certificate.last_rotation",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "ui"),
+	}
+	metaTenantLastRotation = metric.Metadata{
+		Name:         "security.certificate.last_rotation.client-tenant",
+		Help:         "Unix timestamp of the last tenant client certificate rotation. 0 means no rotation since process start.",
+		Measurement:  "Certificate Last Rotation",
+		Unit:         metric.Unit_TIMESTAMP_SEC,
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_EXPIRATIONS,
+		HowToUse:     "Use this metric to verify that tenant client certificate rotations are occurring as expected. A value of 0 indicates no rotation has happened since the process started. Compare with the corresponding expiry metric to ensure rotations happen well before expiration.",
+		LabeledName:  "security.certificate.last_rotation",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "client-tenant"),
+	}
+
+	// Days-until-expiry metadata.
+	metaCAExpiryDays = metric.Metadata{
+		Name:         "security.certificate.expiry_days.ca",
+		Help:         "Days until expiration for the CA certificate. 0 means expired, no certificate or error.",
+		Measurement:  "Certificate Expiry Days",
+		Unit:         metric.Unit_COUNT,
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_EXPIRATIONS,
+		HowToUse:     "Alert when this value drops below your organization's rotation threshold (e.g. 30 days). A value of 0 means the certificate is expired, missing, or has an error. Renew the CA certificate and reload it before expiration to avoid cluster-wide TLS failures.",
+		LabeledName:  "security.certificate.expiry_days",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "ca"),
+	}
+	metaClientCAExpiryDays = metric.Metadata{
+		Name:         "security.certificate.expiry_days.client-ca",
+		Help:         "Days until expiration for the client CA certificate. 0 means expired, no certificate or error.",
+		Measurement:  "Certificate Expiry Days",
+		Unit:         metric.Unit_COUNT,
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_EXPIRATIONS,
+		HowToUse:     "Alert when this value drops below your organization's rotation threshold (e.g. 30 days). A value of 0 means the certificate is expired, missing, or has an error. Renew the client CA certificate and reload it before expiration to avoid client authentication failures.",
+		LabeledName:  "security.certificate.expiry_days",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "client-ca"),
+	}
+	metaUICAExpiryDays = metric.Metadata{
+		Name:         "security.certificate.expiry_days.ui-ca",
+		Help:         "Days until expiration for the UI CA certificate. 0 means expired, no certificate or error.",
+		Measurement:  "Certificate Expiry Days",
+		Unit:         metric.Unit_COUNT,
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_EXPIRATIONS,
+		HowToUse:     "Alert when this value drops below your organization's rotation threshold (e.g. 30 days). A value of 0 means the certificate is expired, missing, or has an error. Renew the UI CA certificate and reload it before expiration to avoid DB Console access failures.",
+		LabeledName:  "security.certificate.expiry_days",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "ui-ca"),
+	}
+	metaTenantCAExpiryDays = metric.Metadata{
+		Name:         "security.certificate.expiry_days.ca-client-tenant",
+		Help:         "Days until expiration for the tenant client CA certificate. 0 means expired, no certificate or error.",
+		Measurement:  "Certificate Expiry Days",
+		Unit:         metric.Unit_COUNT,
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_EXPIRATIONS,
+		HowToUse:     "Alert when this value drops below your organization's rotation threshold (e.g. 30 days). A value of 0 means the certificate is expired, missing, or has an error. Renew the tenant client CA certificate and reload it before expiration to avoid tenant authentication failures.",
+		LabeledName:  "security.certificate.expiry_days",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "ca-client-tenant"),
+	}
+	metaNodeExpiryDays = metric.Metadata{
+		Name:         "security.certificate.expiry_days.node",
+		Help:         "Days until expiration for the node certificate. 0 means expired, no certificate or error.",
+		Measurement:  "Certificate Expiry Days",
+		Unit:         metric.Unit_COUNT,
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_EXPIRATIONS,
+		HowToUse:     "Alert when this value drops below your organization's rotation threshold (e.g. 30 days). A value of 0 means the certificate is expired, missing, or has an error. Renew the node certificate and reload it before expiration to avoid inter-node communication failures.",
+		LabeledName:  "security.certificate.expiry_days",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "node"),
+	}
+	metaNodeClientExpiryDays = metric.Metadata{
+		Name:         "security.certificate.expiry_days.node-client",
+		Help:         "Days until expiration for the node client certificate. 0 means expired, no certificate or error.",
+		Measurement:  "Certificate Expiry Days",
+		Unit:         metric.Unit_COUNT,
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_EXPIRATIONS,
+		HowToUse:     "Alert when this value drops below your organization's rotation threshold (e.g. 30 days). A value of 0 means the certificate is expired, missing, or has an error. Renew the node client certificate and reload it before expiration to avoid node-to-node RPC failures.",
+		LabeledName:  "security.certificate.expiry_days",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "node-client"),
+	}
+	metaUIExpiryDays = metric.Metadata{
+		Name:         "security.certificate.expiry_days.ui",
+		Help:         "Days until expiration for the UI certificate. 0 means expired, no certificate or error.",
+		Measurement:  "Certificate Expiry Days",
+		Unit:         metric.Unit_COUNT,
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_EXPIRATIONS,
+		HowToUse:     "Alert when this value drops below your organization's rotation threshold (e.g. 30 days). A value of 0 means the certificate is expired, missing, or has an error. Renew the UI certificate and reload it before expiration to avoid DB Console HTTPS failures.",
+		LabeledName:  "security.certificate.expiry_days",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "ui"),
+	}
+	metaTenantExpiryDays = metric.Metadata{
+		Name:         "security.certificate.expiry_days.client-tenant",
+		Help:         "Days until expiration for the tenant client certificate. 0 means expired, no certificate or error.",
+		Measurement:  "Certificate Expiry Days",
+		Unit:         metric.Unit_COUNT,
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_EXPIRATIONS,
+		HowToUse:     "Alert when this value drops below your organization's rotation threshold (e.g. 30 days). A value of 0 means the certificate is expired, missing, or has an error. Renew the tenant client certificate and reload it before expiration to avoid tenant-to-KV communication failures.",
+		LabeledName:  "security.certificate.expiry_days",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "client-tenant"),
+	}
 )
 
 // certClosure defines a way to expose a certificate to the below metric types.
@@ -254,6 +459,28 @@ func ttlGauge(
 	})
 }
 
+const secondsPerDay = 86400
+
+// expiryDaysGauge returns a FunctionalGauge that reports the number of whole
+// days remaining until the certificate expires. math.Ceil is used so that any
+// partial day is rounded up: a certificate with 1 second remaining reports 1
+// (not 0), matching operator expectations that 0 means "already expired".
+func expiryDaysGauge(
+	metadata metric.Metadata, certFunc certClosure, ts timeutil.TimeSource,
+) *metric.FunctionalGauge {
+	return metric.NewFunctionalGauge(metadata, func() int64 {
+		ci := certFunc()
+		if ci != nil && ci.Error == nil {
+			sec := ci.ExpirationTime.Sub(ts.Now()).Seconds()
+			if sec < 0 {
+				return 0
+			}
+			return int64(math.Ceil(sec / secondsPerDay))
+		}
+		return 0
+	})
+}
+
 var defaultTimeSource = timeutil.DefaultTimeSource{}
 
 // createMetrics makes metrics using the certificate values on the manager.
@@ -286,5 +513,23 @@ func createMetrics(cm *CertificateManager) *Metrics {
 		ClientCATTL:   ttlGauge(metaClientCATTL, cm.ClientCACert, ts),
 		NodeTTL:       ttlGauge(metaNodeTTL, cm.NodeCert, ts),
 		NodeClientTTL: ttlGauge(metaNodeClientTTL, cm.NodeClientCert, ts),
+
+		CALastRotation:         metric.NewGauge(metaCALastRotation),
+		ClientCALastRotation:   metric.NewGauge(metaClientCALastRotation),
+		UICALastRotation:       metric.NewGauge(metaUICALastRotation),
+		TenantCALastRotation:   metric.NewGauge(metaTenantCALastRotation),
+		NodeLastRotation:       metric.NewGauge(metaNodeLastRotation),
+		NodeClientLastRotation: metric.NewGauge(metaNodeClientLastRotation),
+		UILastRotation:         metric.NewGauge(metaUILastRotation),
+		TenantLastRotation:     metric.NewGauge(metaTenantLastRotation),
+
+		CAExpiryDays:         expiryDaysGauge(metaCAExpiryDays, cm.CACert, ts),
+		ClientCAExpiryDays:   expiryDaysGauge(metaClientCAExpiryDays, cm.ClientCACert, ts),
+		UICAExpiryDays:       expiryDaysGauge(metaUICAExpiryDays, cm.UICACert, ts),
+		TenantCAExpiryDays:   expiryDaysGauge(metaTenantCAExpiryDays, cm.TenantCACert, ts),
+		NodeExpiryDays:       expiryDaysGauge(metaNodeExpiryDays, cm.NodeCert, ts),
+		NodeClientExpiryDays: expiryDaysGauge(metaNodeClientExpiryDays, cm.NodeClientCert, ts),
+		UIExpiryDays:         expiryDaysGauge(metaUIExpiryDays, cm.UICert, ts),
+		TenantExpiryDays:     expiryDaysGauge(metaTenantExpiryDays, cm.TenantCert, ts),
 	}
 }

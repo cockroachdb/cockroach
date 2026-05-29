@@ -369,12 +369,12 @@ distribution: local
 └── • render
     │
     └── • hash join (left outer)
-        │ equality: (column85) = (table_id)
+        │ equality: (column86) = (table_id)
         │
         ├── • render
         │   │
         │   └── • hash join (left outer)
-        │       │ equality: (column66) = (table_id)
+        │       │ equality: (column67) = (table_id)
         │       │ right cols are key
         │       │
         │       ├── • render
@@ -423,12 +423,12 @@ distribution: local
 └── • render
     │
     └── • hash join (left outer)
-        │ equality: (column102) = (table_id)
+        │ equality: (column104) = (table_id)
         │
         ├── • render
         │   │
         │   └── • hash join (left outer)
-        │       │ equality: (column83) = (table_id)
+        │       │ equality: (column85) = (table_id)
         │       │ right cols are key
         │       │
         │       ├── • render
@@ -466,7 +466,7 @@ distribution: local
         │       │                       └── • render
         │       │                           │
         │       │                           └── • filter
-        │       │                               │ filter: classoid = <oid>
+        │       │                               │ filter: (classoid != 4294967069) AND (compat_classoid = <oid>)
         │       │                               │
         │       │                               └── • virtual table
         │       │                                     table: kv_catalog_comments@primary
@@ -2648,7 +2648,7 @@ query T
 EXPLAIN SELECT k FROM t_hints WHERE k >= 100
 ----
 distribution: local
-statement hints count: 1
+statement hints: 1
 ·
 • filter
 │ filter: k >= 100
@@ -2663,7 +2663,7 @@ EXPLAIN (VERBOSE) SELECT k FROM t_hints WHERE k >= 100
 ----
 distribution: local
 vectorized: true
-statement hints count: 1
+statement hints: 1
 ·
 • filter
 │ columns: (k)
@@ -2675,3 +2675,7 @@ statement hints count: 1
       estimated row count: 1,000 (missing stats)
       table: t_hints@t_hints_v_idx
       spans: FULL SCAN
+·
+applied statement hints: 1
+ └── REWRITE INLINE HINTS
+     donor: SELECT k FROM t_hints@t_hints_v_idx WHERE k >= _

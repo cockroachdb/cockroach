@@ -26,11 +26,33 @@ type Lock struct {
 
 type LockSet struct {
 	Locks      []Lock
-	SortedRows []ldrdecoder.DecodedRow
+	SortedRows ldrdecoder.TxnEnvelope
+}
+
+type TestingKnobs struct {
+	// Testing hook called on every DeriveLocks call.
+	LockValidation func(ctx context.Context, ls *LockSynthesizer, rows []ldrdecoder.DecodedRow, rowLocks [][]Lock) error
+}
+
+// Option configures a LockSynthesizer.
+type Option interface {
+	apply(*LockSynthesizer)
+}
+
+type optionFunc func(*LockSynthesizer)
+
+func (f optionFunc) apply(ls *LockSynthesizer) { f(ls) }
+
+// WithTestingKnobs attaches TestingKnobs to the LockSynthesizer.
+func WithTestingKnobs(knobs TestingKnobs) Option {
+	return optionFunc(func(ls *LockSynthesizer) {
+		ls.knobs = knobs
+	})
 }
 
 type LockSynthesizer struct {
 	tableConstraints map[descpb.ID]*tableConstraints
+	knobs            TestingKnobs
 }
 
 func NewLockSynthesizer(
@@ -39,9 +61,13 @@ func NewLockSynthesizer(
 	lm *lease.Manager,
 	clock *hlc.Clock,
 	tableMappings []ldrdecoder.TableMapping,
+	opts ...Option,
 ) (*LockSynthesizer, error) {
 	ls := &LockSynthesizer{
 		tableConstraints: make(map[descpb.ID]*tableConstraints, len(tableMappings)),
+	}
+	for _, opt := range opts {
+		opt.apply(ls)
 	}
 
 	timestamp := lease.TimestampToReadTimestamp(clock.Now())
@@ -77,8 +103,14 @@ type rowsWithLock struct {
 }
 
 func (ls *LockSynthesizer) DeriveLocks(
-	ctx context.Context, rows []ldrdecoder.DecodedRow,
+	ctx context.Context, envelope ldrdecoder.TxnEnvelope,
 ) (LockSet, error) {
+	rows := envelope.Txn.WriteSet
+	if len(rows) != len(envelope.RawKVs) {
+		return LockSet{}, errors.AssertionFailedf(
+			"WriteSet and RawKVs must have the same length: %d vs %d", len(rows), len(envelope.RawKVs))
+	}
+
 	// We build a table of locks for two reasons:
 	// 1. We use it to eliminate duplicate locks for the same row.
 	// 2. We need to topologically sort the rows to get an apply order and
@@ -104,7 +136,13 @@ func (ls *LockSynthesizer) DeriveLocks(
 		}
 	}
 
-	sorted, err := ls.sort(ctx, rows, rowLocks, locks)
+	if ls.knobs.LockValidation != nil {
+		if err := ls.knobs.LockValidation(ctx, ls, rows, rowLocks); err != nil {
+			return LockSet{}, err
+		}
+	}
+
+	sorted, err := ls.sort(ctx, envelope, rowLocks, locks)
 	if err != nil {
 		return LockSet{}, err
 	}
@@ -113,7 +151,6 @@ func (ls *LockSynthesizer) DeriveLocks(
 		SortedRows: sorted,
 		Locks:      make([]Lock, 0, len(locks)),
 	}
-
 	for hash, lr := range locks {
 		lockSet.Locks = append(lockSet.Locks, Lock{
 			Hash: hash,

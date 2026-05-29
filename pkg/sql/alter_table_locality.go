@@ -248,7 +248,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 	enumOID := catid.TypeIDToOID(enumTypeID)
 
 	var newColumnID *descpb.ColumnID
-	var newColumnDefaultExpr *string
+	var newColumnDefaultExpr *descpb.Expression
 
 	if !createDefaultRegionCol {
 		// If the column is not public, we cannot use it yet.
@@ -380,8 +380,8 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 		if err != nil {
 			return err
 		}
-		s := tree.Serialize(finalDefaultExpr)
-		newColumnDefaultExpr = &s
+		expr := descpb.Expression(tree.Serialize(finalDefaultExpr))
+		newColumnDefaultExpr = &expr
 		newColumnID = &col.ID
 	}
 
@@ -421,7 +421,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityFromOrToRegionalByRow(
 	mutationIdxAllowedInSameTxn *int,
 	newColumnName *tree.Name,
 	newColumnID *descpb.ColumnID,
-	newColumnDefaultExpr *string,
+	newColumnDefaultExpr *descpb.Expression,
 	pkColumnNames []string,
 	pkColumnDirections []catenumpb.IndexColumn_Direction,
 ) error {

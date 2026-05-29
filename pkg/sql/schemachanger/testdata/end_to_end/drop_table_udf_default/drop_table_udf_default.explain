@@ -69,7 +69,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":105}
  │              ├── SetTableSchemaLocked {"TableID":105}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":105,"Name":"t","SchemaID":101}}
- │              ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.Owner"}
+ │              ├── RemoveOwner {"DescriptorID":105}
  │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"root"}
  │              ├── RemoveColumnNotNull {"ColumnID":1,"TableID":105}
@@ -195,7 +195,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":105}
  │              ├── SetTableSchemaLocked {"TableID":105}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":105,"Name":"t","SchemaID":101}}
- │              ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.Owner"}
+ │              ├── RemoveOwner {"DescriptorID":105}
  │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"root"}
  │              ├── RemoveColumnNotNull {"ColumnID":1,"TableID":105}

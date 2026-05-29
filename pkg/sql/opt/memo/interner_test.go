@@ -10,6 +10,7 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 	"unsafe"
@@ -974,6 +975,30 @@ func TestInternerPhysProps(t *testing.T) {
 		RemoteBranch: true,
 	}
 
+	planGramScan, err := physical.ParsePlanGram(strings.NewReader("root: (Scan);"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	planGramSelect, err := physical.ParsePlanGram(strings.NewReader("root: (Select);"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	physProps12 := physical.Required{
+		Presentation: physical.Presentation{{Alias: "c", ID: 1}},
+		Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
+		PlanGram:     planGramScan,
+	}
+	physProps13 := physical.Required{
+		Presentation: physical.Presentation{{Alias: "c", ID: 1}},
+		Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
+		PlanGram:     planGramSelect,
+	}
+	physProps14 := physical.Required{
+		Presentation: physical.Presentation{{Alias: "c", ID: 1}},
+		Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
+		PlanGram:     planGramScan,
+	}
+
 	testCases := []struct {
 		phys    *physical.Required
 		inCache bool
@@ -990,6 +1015,9 @@ func TestInternerPhysProps(t *testing.T) {
 		{phys: &physProps9, inCache: true},
 		{phys: &physProps10, inCache: false},
 		{phys: &physProps11, inCache: true},
+		{phys: &physProps12, inCache: false},
+		{phys: &physProps13, inCache: false},
+		{phys: &physProps14, inCache: true},
 	}
 
 	inCache := make(map[*physical.Required]bool)

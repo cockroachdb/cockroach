@@ -10,7 +10,6 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/bench/benchprof",
-        "//pkg/ccl/workloadccl",
         "//pkg/rpc/nodedialer",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
@@ -24,6 +23,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/workload",
+        "//pkg/workload/fixture",
         "//pkg/workload/histogram",
         "//pkg/workload/tpcc",
         "//pkg/workload/workloadsql",

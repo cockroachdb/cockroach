@@ -112,6 +112,7 @@ SHOW CONSTRAINTS FROM t
 table_name  constraint_name  constraint_type  details                              validated
 t           check_a          CHECK            CHECK ((a > 0))                      true
 t           foo              UNIQUE           UNIQUE (b ASC)                       true
+t           t_a_not_null     NOT NULL         NOT NULL                             true
 t           t_f_fkey         FOREIGN KEY      FOREIGN KEY (f) REFERENCES other(b)  true
 t           t_pkey           PRIMARY KEY      PRIMARY KEY (a ASC)                  true
 
@@ -139,10 +140,11 @@ INSERT INTO t (a) VALUES (-3)
 query TTTTB nosort
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a   CHECK        CHECK ((a > 0))                      true
-t  foo       UNIQUE       UNIQUE (b ASC)                       true
-t  t_f_fkey  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
-t  t_pkey    PRIMARY KEY  PRIMARY KEY (a ASC)                  true
+t  check_a       CHECK        CHECK ((a > 0))                      true
+t  foo           UNIQUE       UNIQUE (b ASC)                       true
+t  t_a_not_null  NOT NULL     NOT NULL                             true
+t  t_f_fkey      FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
+t  t_pkey        PRIMARY KEY  PRIMARY KEY (a ASC)                  true
 
 statement error duplicate constraint name
 ALTER TABLE t ADD CONSTRAINT check_a CHECK (a > 0)
@@ -168,11 +170,12 @@ ALTER TABLE t ADD CHECK (a > 0)
 query TTTTB nosort
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a   CHECK        CHECK ((a > 0))                      true
-t  check_a1  CHECK        CHECK ((a > 0))                      true
-t  foo       UNIQUE       UNIQUE (b ASC)                       true
-t  t_f_fkey  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
-t  t_pkey    PRIMARY KEY  PRIMARY KEY (a ASC)                  true
+t  check_a       CHECK        CHECK ((a > 0))                      true
+t  check_a1      CHECK        CHECK ((a > 0))                      true
+t  foo           UNIQUE       UNIQUE (b ASC)                       true
+t  t_a_not_null  NOT NULL     NOT NULL                             true
+t  t_f_fkey      FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
+t  t_pkey        PRIMARY KEY  PRIMARY KEY (a ASC)                  true
 
 statement error constraint "typo" of relation "t" does not exist
 ALTER TABLE t VALIDATE CONSTRAINT typo
@@ -190,11 +193,12 @@ ALTER TABLE t VALIDATE CONSTRAINT check_a
 query TTTTB nosort
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a   CHECK        CHECK ((a > 0))                      true
-t  check_a1  CHECK        CHECK ((a > 0))                      true
-t  foo       UNIQUE       UNIQUE (b ASC)                       true
-t  t_f_fkey  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
-t  t_pkey    PRIMARY KEY  PRIMARY KEY (a ASC)                  true
+t  check_a       CHECK        CHECK ((a > 0))                      true
+t  check_a1      CHECK        CHECK ((a > 0))                      true
+t  foo           UNIQUE       UNIQUE (b ASC)                       true
+t  t_a_not_null  NOT NULL     NOT NULL                             true
+t  t_f_fkey      FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
+t  t_pkey        PRIMARY KEY  PRIMARY KEY (a ASC)                  true
 
 statement ok
 ALTER TABLE t DROP CONSTRAINT check_a, DROP CONSTRAINT check_a1
@@ -468,12 +472,14 @@ ALTER TABLE t ADD i INT AS (g - 1) STORED CHECK (i > 0)
 query TTTTB nosort
 SHOW CONSTRAINTS FROM t
 ----
-t  check_f   CHECK        CHECK ((f > 1))      true
-t  check_g   CHECK        CHECK ((g > 0))      true
-t  check_h   CHECK        CHECK ((h > 0))      true
-t  check_h1  CHECK        CHECK ((h < 10))     true
-t  t_h_key   UNIQUE       UNIQUE (h ASC)       true
-t  t_pkey    PRIMARY KEY  PRIMARY KEY (a ASC)  true
+t  check_f       CHECK        CHECK ((f > 1))      true
+t  check_g       CHECK        CHECK ((g > 0))      true
+t  check_h       CHECK        CHECK ((h > 0))      true
+t  check_h1      CHECK        CHECK ((h < 10))     true
+t  t_a_not_null  NOT NULL     NOT NULL             true
+t  t_h_key       UNIQUE       UNIQUE (h ASC)       true
+t  t_pkey        PRIMARY KEY  PRIMARY KEY (a ASC)  true
+t  t_y_not_null  NOT NULL     NOT NULL             true
 
 statement ok
 DROP TABLE t
@@ -506,13 +512,14 @@ ALTER TABLE t ADD COLUMN u INT UNIQUE, ADD COLUMN v INT UNIQUE, ADD CONSTRAINT c
 query TTTTB nosort
 SHOW CONSTRAINTS FROM t
 ----
-t  check_c_b  CHECK        CHECK ((c > b))      true
-t  ck         CHECK        CHECK ((a > 0))      true
-t  t_d_key    UNIQUE       UNIQUE (d ASC)       true
-t  t_e_key    UNIQUE       UNIQUE (e ASC)       true
-t  t_pkey     PRIMARY KEY  PRIMARY KEY (a ASC)  true
-t  t_u_key    UNIQUE       UNIQUE (u ASC)       true
-t  t_v_key    UNIQUE       UNIQUE (v ASC)       true
+t  check_c_b     CHECK        CHECK ((c > b))      true
+t  ck            CHECK        CHECK ((a > 0))      true
+t  t_a_not_null  NOT NULL     NOT NULL             true
+t  t_d_key       UNIQUE       UNIQUE (d ASC)       true
+t  t_e_key       UNIQUE       UNIQUE (e ASC)       true
+t  t_pkey        PRIMARY KEY  PRIMARY KEY (a ASC)  true
+t  t_u_key       UNIQUE       UNIQUE (u ASC)       true
+t  t_v_key       UNIQUE       UNIQUE (v ASC)       true
 
 statement ok
 DROP TABLE t
@@ -1062,10 +1069,12 @@ ALTER TABLE t ALTER COLUMN a SET NOT NULL
 statement error null value in column "a" violates not-null constraint
 INSERT INTO t VALUES (NULL)
 
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM t
 ----
-t  t_pkey  PRIMARY KEY  PRIMARY KEY (rowid ASC)  true
+t  t_a_not_null      NOT NULL     NOT NULL                 true
+t  t_pkey            PRIMARY KEY  PRIMARY KEY (rowid ASC)  true
+t  t_rowid_not_null  NOT NULL     NOT NULL                 true
 
 statement ok
 ALTER TABLE t ALTER COLUMN a DROP NOT NULL
@@ -1098,7 +1107,9 @@ SHOW CONSTRAINTS FROM t
 ----
 t  a_auto_not_null   CHECK        CHECK ((a IS NOT NULL))  true
 t  a_auto_not_null1  CHECK        CHECK ((a IS NOT NULL))  true
+t  t_a_not_null      NOT NULL     NOT NULL                 true
 t  t_pkey            PRIMARY KEY  PRIMARY KEY (rowid ASC)  true
+t  t_rowid_not_null  NOT NULL     NOT NULL                 true
 
 statement ok
 DROP TABLE t
@@ -1122,9 +1133,10 @@ ALTER TABLE t ADD CHECK (a < 16) NOT VALID
 query TTTTB nosort
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a   CHECK        CHECK ((a < 100))           true
-t  check_a1  CHECK        CHECK ((a < 16)) NOT VALID  false
-t  t_pkey    PRIMARY KEY  PRIMARY KEY (rowid ASC)     true
+t  check_a           CHECK        CHECK ((a < 100))           true
+t  check_a1          CHECK        CHECK ((a < 16)) NOT VALID  false
+t  t_pkey            PRIMARY KEY  PRIMARY KEY (rowid ASC)     true
+t  t_rowid_not_null  NOT NULL     NOT NULL                    true
 
 query error pq: failed to satisfy CHECK constraint \(a < 16:::INT8\)
 INSERT INTO t VALUES (20)
@@ -1141,9 +1153,10 @@ ALTER TABLE t VALIDATE CONSTRAINT check_a1
 query TTTTB nosort
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a   CHECK        CHECK ((a < 100))        true
-t  check_a1  CHECK        CHECK ((a < 16))         true
-t  t_pkey    PRIMARY KEY  PRIMARY KEY (rowid ASC)  true
+t  check_a           CHECK        CHECK ((a < 100))        true
+t  check_a1          CHECK        CHECK ((a < 16))         true
+t  t_pkey            PRIMARY KEY  PRIMARY KEY (rowid ASC)  true
+t  t_rowid_not_null  NOT NULL     NOT NULL                 true
 
 subtest regression_42858
 
@@ -1852,19 +1865,20 @@ ALTER TABLE unique_without_index_partial ADD CONSTRAINT uniq_a_2 UNIQUE WITHOUT 
 query TTTTB colnames,nosort
 SHOW CONSTRAINTS FROM unique_without_index
 ----
-table_name            constraint_name             constraint_type  details                                 validated
-unique_without_index  my_partial_unique_f         UNIQUE           UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
-unique_without_index  my_unique_e                 UNIQUE           UNIQUE WITHOUT INDEX (e)                true
-unique_without_index  my_unique_e2                UNIQUE           UNIQUE WITHOUT INDEX (e) NOT VALID      false
-unique_without_index  my_unique_f                 UNIQUE           UNIQUE WITHOUT INDEX (f)                true
-unique_without_index  unique_a_b                  UNIQUE           UNIQUE WITHOUT INDEX (a, b)             true
-unique_without_index  unique_b                    UNIQUE           UNIQUE WITHOUT INDEX (b)                true
-unique_without_index  unique_b_1                  UNIQUE           UNIQUE WITHOUT INDEX (b)                true
-unique_without_index  unique_c                    UNIQUE           UNIQUE WITHOUT INDEX (c)                true
-unique_without_index  unique_d                    UNIQUE           UNIQUE WITHOUT INDEX (d)                true
-unique_without_index  unique_d_e                  UNIQUE           UNIQUE WITHOUT INDEX (d, e)             true
-unique_without_index  unique_without_index_c_key  UNIQUE           UNIQUE (c ASC)                          true
-unique_without_index  unique_without_index_pkey   PRIMARY KEY      PRIMARY KEY (rowid ASC)                 true
+table_name            constraint_name                      constraint_type  details                                 validated
+unique_without_index  my_partial_unique_f                  UNIQUE           UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
+unique_without_index  my_unique_e                          UNIQUE           UNIQUE WITHOUT INDEX (e)                true
+unique_without_index  my_unique_e2                         UNIQUE           UNIQUE WITHOUT INDEX (e) NOT VALID      false
+unique_without_index  my_unique_f                          UNIQUE           UNIQUE WITHOUT INDEX (f)                true
+unique_without_index  unique_a_b                           UNIQUE           UNIQUE WITHOUT INDEX (a, b)             true
+unique_without_index  unique_b                             UNIQUE           UNIQUE WITHOUT INDEX (b)                true
+unique_without_index  unique_b_1                           UNIQUE           UNIQUE WITHOUT INDEX (b)                true
+unique_without_index  unique_c                             UNIQUE           UNIQUE WITHOUT INDEX (c)                true
+unique_without_index  unique_d                             UNIQUE           UNIQUE WITHOUT INDEX (d)                true
+unique_without_index  unique_d_e                           UNIQUE           UNIQUE WITHOUT INDEX (d, e)             true
+unique_without_index  unique_without_index_c_key           UNIQUE           UNIQUE (c ASC)                          true
+unique_without_index  unique_without_index_pkey            PRIMARY KEY      PRIMARY KEY (rowid ASC)                 true
+unique_without_index  unique_without_index_rowid_not_null  NOT NULL         NOT NULL                                true
 
 statement ok
 ALTER TABLE unique_without_index RENAME COLUMN a TO aa
@@ -1881,18 +1895,19 @@ ALTER TABLE unique_without_index RENAME CONSTRAINT unique_b TO unique_b_2
 query TTTTB nosort
 SHOW CONSTRAINTS FROM unique_without_index
 ----
-unique_without_index  my_partial_unique_f         UNIQUE       UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
-unique_without_index  my_unique_e                 UNIQUE       UNIQUE WITHOUT INDEX (e)                true
-unique_without_index  my_unique_e2                UNIQUE       UNIQUE WITHOUT INDEX (e) NOT VALID      false
-unique_without_index  my_unique_f                 UNIQUE       UNIQUE WITHOUT INDEX (f)                true
-unique_without_index  unique_a_b                  UNIQUE       UNIQUE WITHOUT INDEX (aa, b)            true
-unique_without_index  unique_b_1                  UNIQUE       UNIQUE WITHOUT INDEX (b)                true
-unique_without_index  unique_b_2                  UNIQUE       UNIQUE WITHOUT INDEX (b)                true
-unique_without_index  unique_c                    UNIQUE       UNIQUE WITHOUT INDEX (c)                true
-unique_without_index  unique_d                    UNIQUE       UNIQUE WITHOUT INDEX (d)                true
-unique_without_index  unique_d_e                  UNIQUE       UNIQUE WITHOUT INDEX (d, e)             true
-unique_without_index  unique_without_index_c_key  UNIQUE       UNIQUE (c ASC)                          true
-unique_without_index  unique_without_index_pkey   PRIMARY KEY  PRIMARY KEY (rowid ASC)                 true
+unique_without_index  my_partial_unique_f                  UNIQUE       UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
+unique_without_index  my_unique_e                          UNIQUE       UNIQUE WITHOUT INDEX (e)                true
+unique_without_index  my_unique_e2                         UNIQUE       UNIQUE WITHOUT INDEX (e) NOT VALID      false
+unique_without_index  my_unique_f                          UNIQUE       UNIQUE WITHOUT INDEX (f)                true
+unique_without_index  unique_a_b                           UNIQUE       UNIQUE WITHOUT INDEX (aa, b)            true
+unique_without_index  unique_b_1                           UNIQUE       UNIQUE WITHOUT INDEX (b)                true
+unique_without_index  unique_b_2                           UNIQUE       UNIQUE WITHOUT INDEX (b)                true
+unique_without_index  unique_c                             UNIQUE       UNIQUE WITHOUT INDEX (c)                true
+unique_without_index  unique_d                             UNIQUE       UNIQUE WITHOUT INDEX (d)                true
+unique_without_index  unique_d_e                           UNIQUE       UNIQUE WITHOUT INDEX (d, e)             true
+unique_without_index  unique_without_index_c_key           UNIQUE       UNIQUE (c ASC)                          true
+unique_without_index  unique_without_index_pkey            PRIMARY KEY  PRIMARY KEY (rowid ASC)                 true
+unique_without_index  unique_without_index_rowid_not_null  NOT NULL     NOT NULL                                true
 
 # Drop an index-backed unique constraint using ALTER TABLE DROP CONSTRAINT.
 skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1
@@ -1927,15 +1942,16 @@ ALTER TABLE unique_without_index DROP CONSTRAINT my_unique_e2
 query TTTTB nosort
 SHOW CONSTRAINTS FROM unique_without_index
 ----
-unique_without_index  my_partial_unique_f         UNIQUE       UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
-unique_without_index  my_unique_e                 UNIQUE       UNIQUE WITHOUT INDEX (e)                true
-unique_without_index  my_unique_f                 UNIQUE       UNIQUE WITHOUT INDEX (f)                true
-unique_without_index  unique_a_b                  UNIQUE       UNIQUE WITHOUT INDEX (aa, b)            true
-unique_without_index  unique_b_1                  UNIQUE       UNIQUE WITHOUT INDEX (b)                true
-unique_without_index  unique_c                    UNIQUE       UNIQUE WITHOUT INDEX (c)                true
-unique_without_index  unique_d                    UNIQUE       UNIQUE WITHOUT INDEX (d)                true
-unique_without_index  unique_d_e                  UNIQUE       UNIQUE WITHOUT INDEX (d, e)             true
-unique_without_index  unique_without_index_pkey   PRIMARY KEY  PRIMARY KEY (rowid ASC)                 true
+unique_without_index  my_partial_unique_f                  UNIQUE       UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
+unique_without_index  my_unique_e                          UNIQUE       UNIQUE WITHOUT INDEX (e)                true
+unique_without_index  my_unique_f                          UNIQUE       UNIQUE WITHOUT INDEX (f)                true
+unique_without_index  unique_a_b                           UNIQUE       UNIQUE WITHOUT INDEX (aa, b)            true
+unique_without_index  unique_b_1                           UNIQUE       UNIQUE WITHOUT INDEX (b)                true
+unique_without_index  unique_c                             UNIQUE       UNIQUE WITHOUT INDEX (c)                true
+unique_without_index  unique_d                             UNIQUE       UNIQUE WITHOUT INDEX (d)                true
+unique_without_index  unique_d_e                           UNIQUE       UNIQUE WITHOUT INDEX (d, e)             true
+unique_without_index  unique_without_index_pkey            PRIMARY KEY  PRIMARY KEY (rowid ASC)                 true
+unique_without_index  unique_without_index_rowid_not_null  NOT NULL     NOT NULL                                true
 
 # Dropping a column in a unique constraint drops the constraint.
 statement ok
@@ -1944,21 +1960,23 @@ ALTER TABLE unique_without_index DROP COLUMN b
 query TTTTB nosort
 SHOW CONSTRAINTS FROM unique_without_index
 ----
-unique_without_index  my_partial_unique_f         UNIQUE       UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
-unique_without_index  my_unique_e                 UNIQUE       UNIQUE WITHOUT INDEX (e)                true
-unique_without_index  my_unique_f                 UNIQUE       UNIQUE WITHOUT INDEX (f)                true
-unique_without_index  unique_c                    UNIQUE       UNIQUE WITHOUT INDEX (c)                true
-unique_without_index  unique_d                    UNIQUE       UNIQUE WITHOUT INDEX (d)                true
-unique_without_index  unique_d_e                  UNIQUE       UNIQUE WITHOUT INDEX (d, e)             true
-unique_without_index  unique_without_index_pkey   PRIMARY KEY  PRIMARY KEY (rowid ASC)                 true
+unique_without_index  my_partial_unique_f                  UNIQUE       UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
+unique_without_index  my_unique_e                          UNIQUE       UNIQUE WITHOUT INDEX (e)                true
+unique_without_index  my_unique_f                          UNIQUE       UNIQUE WITHOUT INDEX (f)                true
+unique_without_index  unique_c                             UNIQUE       UNIQUE WITHOUT INDEX (c)                true
+unique_without_index  unique_d                             UNIQUE       UNIQUE WITHOUT INDEX (d)                true
+unique_without_index  unique_d_e                           UNIQUE       UNIQUE WITHOUT INDEX (d, e)             true
+unique_without_index  unique_without_index_pkey            PRIMARY KEY  PRIMARY KEY (rowid ASC)                 true
+unique_without_index  unique_without_index_rowid_not_null  NOT NULL     NOT NULL                                true
 
 query TTTTB nosort
 SHOW CONSTRAINTS FROM uwi_child
 ----
-uwi_child  fk_d_e            FOREIGN KEY  FOREIGN KEY (d, e) REFERENCES unique_without_index(d, e)  true
-uwi_child  fk_e_d            FOREIGN KEY  FOREIGN KEY (e, d) REFERENCES unique_without_index(e, d)  true
-uwi_child  uwi_child_d_fkey  FOREIGN KEY  FOREIGN KEY (d) REFERENCES unique_without_index(d)        true
-uwi_child  uwi_child_pkey    PRIMARY KEY  PRIMARY KEY (rowid ASC)                                   true
+uwi_child  fk_d_e                    FOREIGN KEY  FOREIGN KEY (d, e) REFERENCES unique_without_index(d, e)  true
+uwi_child  fk_e_d                    FOREIGN KEY  FOREIGN KEY (e, d) REFERENCES unique_without_index(e, d)  true
+uwi_child  uwi_child_d_fkey          FOREIGN KEY  FOREIGN KEY (d) REFERENCES unique_without_index(d)        true
+uwi_child  uwi_child_pkey            PRIMARY KEY  PRIMARY KEY (rowid ASC)                                   true
+uwi_child  uwi_child_rowid_not_null  NOT NULL     NOT NULL                                                  true
 
 # Attempting to drop a column with a foreign key reference fails.
 statement error pq: "unique_d" is referenced by foreign key from table "uwi_child"
@@ -1971,16 +1989,18 @@ ALTER TABLE unique_without_index DROP COLUMN d CASCADE
 query TTTTB nosort
 SHOW CONSTRAINTS FROM unique_without_index
 ----
-unique_without_index  my_partial_unique_f         UNIQUE       UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
-unique_without_index  my_unique_e                 UNIQUE       UNIQUE WITHOUT INDEX (e)                true
-unique_without_index  my_unique_f                 UNIQUE       UNIQUE WITHOUT INDEX (f)                true
-unique_without_index  unique_c                    UNIQUE       UNIQUE WITHOUT INDEX (c)                true
-unique_without_index  unique_without_index_pkey   PRIMARY KEY  PRIMARY KEY (rowid ASC)                 true
+unique_without_index  my_partial_unique_f                  UNIQUE       UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
+unique_without_index  my_unique_e                          UNIQUE       UNIQUE WITHOUT INDEX (e)                true
+unique_without_index  my_unique_f                          UNIQUE       UNIQUE WITHOUT INDEX (f)                true
+unique_without_index  unique_c                             UNIQUE       UNIQUE WITHOUT INDEX (c)                true
+unique_without_index  unique_without_index_pkey            PRIMARY KEY  PRIMARY KEY (rowid ASC)                 true
+unique_without_index  unique_without_index_rowid_not_null  NOT NULL     NOT NULL                                true
 
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM uwi_child
 ----
-uwi_child  uwi_child_pkey  PRIMARY KEY  PRIMARY KEY (rowid ASC)  true
+uwi_child  uwi_child_pkey            PRIMARY KEY  PRIMARY KEY (rowid ASC)  true
+uwi_child  uwi_child_rowid_not_null  NOT NULL     NOT NULL                 true
 
 # Regression for #54629.
 statement ok
@@ -3428,9 +3448,10 @@ SELECT table_name, constraint_name, constraint_type, validated
 FROM [SHOW CONSTRAINTS FROM t_96115]
 ORDER BY constraint_type;
 ----
-table_name  constraint_name  constraint_type  validated
-t_96115     check_i_j        CHECK            true
-t_96115     t_96115_pkey     PRIMARY KEY      true
+table_name  constraint_name     constraint_type  validated
+t_96115     check_i_j           CHECK            true
+t_96115     t_96115_i_not_null  NOT NULL         true
+t_96115     t_96115_pkey        PRIMARY KEY      true
 
 statement ok
 ALTER TABLE t_96115 DROP CONSTRAINT check_i_j;
@@ -3441,8 +3462,9 @@ SELECT table_name, constraint_name, constraint_type, validated
 FROM [SHOW CONSTRAINTS FROM t_96115]
 ORDER BY constraint_type;
 ----
-table_name  constraint_name  constraint_type  validated
-t_96115     t_96115_pkey     PRIMARY KEY      true
+table_name  constraint_name     constraint_type  validated
+t_96115     t_96115_i_not_null  NOT NULL         true
+t_96115     t_96115_pkey        PRIMARY KEY      true
 
 statement ok
 ALTER TABLE t_96115 ADD CHECK (i > nextval('seq_96115') AND j::typ_96115 = 'a'::typ_96115);
@@ -3453,9 +3475,10 @@ SELECT table_name, constraint_name, constraint_type, validated
 FROM [SHOW CONSTRAINTS FROM t_96115]
 ORDER BY constraint_type;
 ----
-table_name  constraint_name  constraint_type  validated
-t_96115     check_i_j        CHECK            true
-t_96115     t_96115_pkey     PRIMARY KEY      true
+table_name  constraint_name     constraint_type  validated
+t_96115     check_i_j           CHECK            true
+t_96115     t_96115_i_not_null  NOT NULL         true
+t_96115     t_96115_pkey        PRIMARY KEY      true
 
 statement ok
 DROP SEQUENCE seq_96115 CASCADE;
@@ -3466,8 +3489,9 @@ SELECT table_name, constraint_name, constraint_type, validated
 FROM [SHOW CONSTRAINTS FROM t_96115]
 ORDER BY constraint_type;
 ----
-table_name  constraint_name  constraint_type  validated
-t_96115     t_96115_pkey     PRIMARY KEY      true
+table_name  constraint_name     constraint_type  validated
+t_96115     t_96115_i_not_null  NOT NULL         true
+t_96115     t_96115_pkey        PRIMARY KEY      true
 
 statement ok
 CREATE SEQUENCE seq_96115;
@@ -3501,9 +3525,10 @@ SELECT table_name, constraint_name, constraint_type, validated
 FROM [SHOW CONSTRAINTS FROM t_96115]
 ORDER BY constraint_type;
 ----
-table_name  constraint_name  constraint_type  validated
-t_96115     t_96115_pkey     PRIMARY KEY      true
-t_96115     unique_j         UNIQUE           true
+table_name  constraint_name     constraint_type  validated
+t_96115     t_96115_i_not_null  NOT NULL         true
+t_96115     t_96115_pkey        PRIMARY KEY      true
+t_96115     unique_j            UNIQUE           true
 
 statement ok
 ALTER TABLE t_96115 DROP CONSTRAINT unique_j;
@@ -3513,8 +3538,9 @@ SELECT table_name, constraint_name, constraint_type, validated
 FROM [SHOW CONSTRAINTS FROM t_96115]
 ORDER BY constraint_type;
 ----
-table_name  constraint_name  constraint_type  validated
-t_96115     t_96115_pkey     PRIMARY KEY      true
+table_name  constraint_name     constraint_type  validated
+t_96115     t_96115_i_not_null  NOT NULL         true
+t_96115     t_96115_pkey        PRIMARY KEY      true
 
 statement ok
 DROP TABLE t_96115;
@@ -3591,9 +3617,10 @@ DROP INDEX t_97538_2_j_key;
 query TTTTB colnames,nosort
 SHOW CONSTRAINTS FROM t_97538_1
 ----
-table_name  constraint_name   constraint_type  details                                  validated
-t_97538_1   t_97538_1_i_fkey  FOREIGN KEY      FOREIGN KEY (i) REFERENCES t_97538_2(j)  true
-t_97538_1   t_97538_1_pkey    PRIMARY KEY      PRIMARY KEY (i ASC)                      true
+table_name  constraint_name       constraint_type  details                                  validated
+t_97538_1   t_97538_1_i_fkey      FOREIGN KEY      FOREIGN KEY (i) REFERENCES t_97538_2(j)  true
+t_97538_1   t_97538_1_i_not_null  NOT NULL         NOT NULL                                 true
+t_97538_1   t_97538_1_pkey        PRIMARY KEY      PRIMARY KEY (i ASC)                      true
 
 # Add back the unique index, and drop the unique without index constraint (without CASCADE) this time.
 statement ok
@@ -3607,19 +3634,21 @@ ALTER TABLE t_97538_2 DROP CONSTRAINT unique_j;
 query TTTTB colnames,nosort
 SHOW CONSTRAINTS FROM t_97538_1
 ----
-table_name  constraint_name   constraint_type  details                                  validated
-t_97538_1   t_97538_1_i_fkey  FOREIGN KEY      FOREIGN KEY (i) REFERENCES t_97538_2(j)  true
-t_97538_1   t_97538_1_pkey    PRIMARY KEY      PRIMARY KEY (i ASC)                      true
+table_name  constraint_name       constraint_type  details                                  validated
+t_97538_1   t_97538_1_i_fkey      FOREIGN KEY      FOREIGN KEY (i) REFERENCES t_97538_2(j)  true
+t_97538_1   t_97538_1_i_not_null  NOT NULL         NOT NULL                                 true
+t_97538_1   t_97538_1_pkey        PRIMARY KEY      PRIMARY KEY (i ASC)                      true
 
 statement ok
 DROP INDEX t_97538_2_j_key CASCADE;
 
 # Now ensure that the FK is dropped as a result of the cascade.
-query TTTTB colnames
+query TTTTB colnames,nosort
 SHOW CONSTRAINTS FROM t_97538_1
 ----
-table_name  constraint_name  constraint_type  details              validated
-t_97538_1   t_97538_1_pkey   PRIMARY KEY      PRIMARY KEY (i ASC)  true
+table_name  constraint_name       constraint_type  details              validated
+t_97538_1   t_97538_1_i_not_null  NOT NULL         NOT NULL             true
+t_97538_1   t_97538_1_pkey        PRIMARY KEY      PRIMARY KEY (i ASC)  true
 
 # This subtest ensures that dropping a column that is referenced
 # by constraints works properly.
@@ -3828,11 +3857,25 @@ ALTER TABLE t_96729 ADD PRIMARY KEY (i) NOT VALID;
 statement ok
 ALTER TABLE t_96729 ADD PRIMARY KEY (i);
 
-query TTTTB colnames
+skipif config local-legacy-schema-changer
+query TTTTB colnames,nosort
 SHOW CONSTRAINTS FROM t_96729
 ----
-table_name  constraint_name  constraint_type  details              validated
-t_96729     t_96729_pkey     PRIMARY KEY      PRIMARY KEY (i ASC)  true
+table_name  constraint_name     constraint_type  details              validated
+t_96729     t_96729_i_not_null  NOT NULL         NOT NULL             true
+t_96729     t_96729_pkey        PRIMARY KEY      PRIMARY KEY (i ASC)  true
+
+# Legacy schema changer keeps the old rowid column when ALTER PRIMARY KEY swaps
+# to an explicit PK column, so the synthesized rowid NOT NULL row is still
+# present.
+onlyif config local-legacy-schema-changer
+query TTTTB colnames,nosort
+SHOW CONSTRAINTS FROM t_96729
+----
+table_name  constraint_name         constraint_type  details              validated
+t_96729     t_96729_i_not_null      NOT NULL         NOT NULL             true
+t_96729     t_96729_pkey            PRIMARY KEY      PRIMARY KEY (i ASC)  true
+t_96729     t_96729_rowid_not_null  NOT NULL         NOT NULL             true
 
 # This subtests ensures adding UNIQUE constraint works properly.
 subtest alter_table_add_unique_96728
@@ -3849,9 +3892,10 @@ ALTER TABLE t_96728 ADD UNIQUE (j, k) WHERE (i > 0);
 query TTTTB colnames,nosort
 SHOW CONSTRAINTS FROM t_96728
 ----
-table_name  constraint_name  constraint_type  details                              validated
-t_96728     t_96728_j_k_key  UNIQUE           UNIQUE (j ASC, k ASC) WHERE (i > 0)  true
-t_96728     t_96728_pkey     PRIMARY KEY      PRIMARY KEY (i ASC)                  true
+table_name  constraint_name     constraint_type  details                              validated
+t_96728     t_96728_i_not_null  NOT NULL         NOT NULL                             true
+t_96728     t_96728_j_k_key     UNIQUE           UNIQUE (j ASC, k ASC) WHERE (i > 0)  true
+t_96728     t_96728_pkey        PRIMARY KEY      PRIMARY KEY (i ASC)                  true
 
 # This subtest tests behavior when there are multiple commands (ADD COLUMN, DROP COLUMN,
 # ALTER PRIMARY KEY, ADD CONSTRAINT) in one ALTER TABLE statement.
@@ -4466,6 +4510,155 @@ SELECT * FROM t_add_generated ORDER BY a
 22  14  NULL  22  1
 23  17  NULL  23  1
 
+subtest add_identity_sequence_name_alter
+
+# PG18: ADD GENERATED ... AS IDENTITY (SEQUENCE NAME ...) lets users name the
+# backing sequence explicitly instead of using the auto-generated
+# <table>_<column>_seq pattern. The ALTER TABLE form works under both the
+# declarative and legacy schema changers.
+
+statement ok
+CREATE TABLE t_seqname (a INT NOT NULL, b INT NOT NULL, c INT NOT NULL, d INT NOT NULL, FAMILY (a,b,c,d))
+
+statement ok
+ALTER TABLE t_seqname ALTER COLUMN a ADD GENERATED ALWAYS AS IDENTITY (SEQUENCE NAME my_seq_a)
+
+# The sequence is created with the user-supplied name and is owned by the column.
+query T
+SELECT relname FROM pg_class WHERE relname = 'my_seq_a' AND relkind = 'S'
+----
+my_seq_a
+
+query I
+SELECT nextval('my_seq_a')
+----
+1
+
+# Mixing SEQUENCE NAME with other sequence options.
+statement ok
+ALTER TABLE t_seqname ALTER COLUMN b ADD GENERATED BY DEFAULT AS IDENTITY (START WITH 100 INCREMENT BY 5 SEQUENCE NAME my_seq_b)
+
+query II
+SELECT nextval('my_seq_b'), nextval('my_seq_b')
+----
+100  105
+
+# SEQUENCE NAME is not persisted into the column's stored sequence options.
+# SHOW CREATE TABLE shows the start/increment but never SEQUENCE NAME.
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_seqname]
+----
+CREATE TABLE public.t_seqname (
+  a INT8 NOT NULL GENERATED ALWAYS AS IDENTITY,
+  b INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START 100 INCREMENT 5),
+  c INT8 NOT NULL,
+  d INT8 NOT NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_seqname_pkey PRIMARY KEY (rowid ASC),
+  FAMILY fam_0_a_b_c_d_rowid (a, b, c, d, rowid)
+);
+
+# Schema-qualified explicit names work and the sequence ends up in the named schema.
+statement ok
+CREATE SCHEMA s_seqname
+
+statement ok
+ALTER TABLE t_seqname ALTER COLUMN c ADD GENERATED ALWAYS AS IDENTITY (SEQUENCE NAME s_seqname.my_seq_c)
+
+query TT
+SELECT n.nspname, c.relname
+FROM pg_class c JOIN pg_namespace n ON c.relnamespace = n.oid
+WHERE c.relname = 'my_seq_c' AND c.relkind = 'S'
+----
+s_seqname  my_seq_c
+
+# A name collision with an existing relation is a hard error (PG semantics —
+# no auto-suffix disambiguation for explicitly named sequences).
+statement ok
+CREATE SEQUENCE my_seq_d_taken
+
+statement error pq: relation "my_seq_d_taken" already exists
+ALTER TABLE t_seqname ALTER COLUMN d ADD GENERATED ALWAYS AS IDENTITY (SEQUENCE NAME my_seq_d_taken)
+
+statement ok
+DROP TABLE t_seqname
+
+statement ok
+DROP SEQUENCE my_seq_d_taken
+
+statement ok
+DROP SCHEMA s_seqname CASCADE
+
+subtest end
+
+subtest add_identity_sequence_name_create
+
+# CREATE TABLE form with SEQUENCE NAME runs through the legacy CREATE TABLE
+# code path under both schema changers.
+statement ok
+CREATE TABLE t_seqname_create (id INT GENERATED ALWAYS AS IDENTITY (SEQUENCE NAME my_create_seq))
+
+query I
+SELECT nextval('my_create_seq')
+----
+1
+
+statement ok
+INSERT INTO t_seqname_create DEFAULT VALUES
+
+query I
+SELECT id FROM t_seqname_create
+----
+2
+
+# Sanity: dropping the identity-owned sequence directly without CASCADE is
+# rejected; DROP TABLE is the supported way to clean up both the table and its
+# owned sequence.
+statement error pq: cannot drop sequence my_create_seq because other objects depend on it
+DROP SEQUENCE my_create_seq
+
+statement ok
+DROP TABLE t_seqname_create
+
+query I
+SELECT count(*) FROM pg_class WHERE relname = 'my_create_seq'
+----
+0
+
+# DROP SEQUENCE CASCADE on an identity-owned sequence: CRDB cascades through
+# and drops the sequence (note: this differs from PG, which rejects CASCADE
+# on a sequence that backs an identity column with the same "column requires
+# it" error). This is pre-existing behavior shared with auto-named identity
+# sequences and is unrelated to the SEQUENCE NAME clause.
+statement ok
+CREATE TABLE t_seqname_cascade (id INT GENERATED ALWAYS AS IDENTITY (SEQUENCE NAME my_cascade_seq))
+
+statement ok
+DROP SEQUENCE my_cascade_seq CASCADE
+
+query I
+SELECT count(*) FROM pg_class WHERE relname = 'my_cascade_seq'
+----
+0
+
+statement ok
+DROP TABLE t_seqname_cascade
+
+# SEQUENCE NAME is not allowed in CREATE SEQUENCE / ALTER SEQUENCE.
+statement error pq: SEQUENCE NAME is only valid for identity columns
+CREATE SEQUENCE bad_seq SEQUENCE NAME other_name
+
+statement ok
+CREATE SEQUENCE plain_seq
+
+statement error pq: SEQUENCE NAME is only valid for identity columns
+ALTER SEQUENCE plain_seq SEQUENCE NAME another_name
+
+statement ok
+DROP SEQUENCE plain_seq
+
+subtest end
+
 statement ok
 CREATE TABLE t_set_generated (
   a int GENERATED ALWAYS AS IDENTITY (START WITH 2 INCREMENT 3),
@@ -4733,7 +4926,7 @@ INSERT INTO t_identity_drop (a) VALUES (3);
 statement ok
 CREATE TABLE t_identity_drop_dependency(id INT PRIMARY KEY DEFAULT nextval('public.t_identity_drop_b_seq'));
 
-statement error pgcode 2BP01 pq: cannot drop table t_identity_drop because other objects depend on it
+statement error pgcode 2BP01 pq: cannot drop sequence t_identity_drop_b_seq because other objects depend on it
 ALTER TABLE t_identity_drop ALTER COLUMN b DROP IDENTITY;
 
 let $old_serial_normalization
@@ -4920,7 +5113,73 @@ create table t_124546(a int);
 
 # Regression Test for https://github.com/cockroachdb/cockroach/issues/124546
 statement error pgcode 42601 variable sub-expressions are not allowed in EXPRESSION INDEX ELEMENT
+ALTER TABLE t_124546 ADD CONSTRAINT ident UNIQUE ( ( EXISTS ( TABLE error FOR READ ONLY ) ) DESC ) STORING ( a );
+
+skipif config local-legacy-schema-changer
+statement error index "ident" already contains column "ident"
 ALTER TABLE t_124546 ADD CONSTRAINT ident UNIQUE ( ( EXISTS ( TABLE error FOR READ ONLY ) ) DESC ) STORING ( ident , ident );
+
+subtest end
+
+subtest regression_168527_add_constraint_unique_storing
+
+statement ok
+CREATE TABLE t_168527 (a INT PRIMARY KEY, b INT, c INT, d INT);
+
+# Test STORING clause.
+statement ok
+ALTER TABLE t_168527 ADD CONSTRAINT t_168527_storing UNIQUE (c) STORING (b);
+
+query B
+SELECT create_statement LIKE '%UNIQUE INDEX t_168527_storing (c ASC) STORING (b)%'
+FROM [SHOW CREATE t_168527]
+----
+true
+
+# Test partial unique constraint (WHERE predicate).
+statement ok
+ALTER TABLE t_168527 ADD CONSTRAINT t_168527_partial UNIQUE (d) WHERE d > 0;
+
+query B
+SELECT create_statement LIKE '%UNIQUE INDEX t_168527_partial (d ASC) WHERE d > 0%'
+FROM [SHOW CREATE t_168527]
+----
+true
+
+# Test STORING combined with WHERE predicate.
+statement ok
+ALTER TABLE t_168527 ADD CONSTRAINT t_168527_storing_partial UNIQUE (c) STORING (d) WHERE c > 100;
+
+query B
+SELECT create_statement LIKE '%UNIQUE INDEX t_168527_storing_partial (c ASC) STORING (d) WHERE c > 100%'
+FROM [SHOW CREATE t_168527]
+----
+true
+
+# Test PARTITION BY clause.
+statement ok
+CREATE TABLE t_168527_part (a INT PRIMARY KEY, b INT, c INT) PARTITION BY LIST (a) (
+  PARTITION p1 VALUES IN (1, 2, 3),
+  PARTITION p2 VALUES IN (4, 5, 6)
+);
+
+statement ok
+ALTER TABLE t_168527_part ADD CONSTRAINT t_168527_part_idx UNIQUE (b) PARTITION BY LIST (b) (
+  PARTITION bp1 VALUES IN (10, 20),
+  PARTITION bp2 VALUES IN (30, 40)
+);
+
+query B
+SELECT create_statement LIKE '%UNIQUE INDEX t_168527_part_idx (b ASC) PARTITION BY LIST (b)%'
+FROM [SHOW CREATE t_168527_part]
+----
+true
+
+statement ok
+DROP TABLE t_168527_part;
+
+statement ok
+DROP TABLE t_168527
 
 subtest end
 
@@ -5117,7 +5376,7 @@ subtest validate_not_null_during_sc
 statement ok
 SET create_table_with_schema_locked=false
 
-statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(n IS NOT NULL\)
+statement error pgcode 23502 null value in column "n" violates not-null constraint
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 SET LOCAL autocommit_before_ddl = false;
 create table t1_135692(n int);

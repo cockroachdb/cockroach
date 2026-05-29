@@ -268,6 +268,10 @@ func (d *deleteNode) kvCPUTime() int64 {
 	return d.run.td.kvCPUTime
 }
 
+func (d *deleteNode) localKVCPUTime() int64 {
+	return d.run.td.localKVCPUTime
+}
+
 func (d *deleteNode) enableAutoCommit() {
 	d.run.td.enableAutoCommit()
 }

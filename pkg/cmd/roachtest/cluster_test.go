@@ -30,10 +30,10 @@ import (
 )
 
 func TestClusterNodes(t *testing.T) {
-	c := &clusterImpl{spec: spec.MakeClusterSpec(10, spec.WorkloadNode())}
-	c2 := &clusterImpl{spec: spec.MakeClusterSpec(10, spec.WorkloadNodeCount(0))}
-	c3 := &clusterImpl{spec: spec.MakeClusterSpec(10, spec.WorkloadNodeCount(1))}
-	c4 := &clusterImpl{spec: spec.MakeClusterSpec(10, spec.WorkloadNodeCount(4))}
+	c := &roachprodCluster{spec: spec.MakeClusterSpec(10, spec.WorkloadNode())}
+	c2 := &roachprodCluster{spec: spec.MakeClusterSpec(10, spec.WorkloadNodeCount(0))}
+	c3 := &roachprodCluster{spec: spec.MakeClusterSpec(10, spec.WorkloadNodeCount(1))}
+	c4 := &roachprodCluster{spec: spec.MakeClusterSpec(10, spec.WorkloadNodeCount(4))}
 	opts := func(opts ...option.Option) []option.Option {
 		return opts
 	}
@@ -84,7 +84,7 @@ func TestSeededRandGroups(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
-			c := &clusterImpl{spec: spec.MakeClusterSpec(tc.numNodes)}
+			c := &roachprodCluster{spec: spec.MakeClusterSpec(tc.numNodes)}
 			nodes := c.All()
 			groups, err := nodes.SeededRandGroups(rng, tc.numGroups)
 			require.NoError(t, err)

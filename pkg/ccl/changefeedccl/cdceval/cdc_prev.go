@@ -185,7 +185,7 @@ func (c *prevCol) HasNullDefault() bool {
 	return false
 }
 
-func (c *prevCol) GetDefaultExpr() string {
+func (c *prevCol) GetDefaultExpr() catpb.Expression {
 	return ""
 }
 
@@ -193,7 +193,7 @@ func (c *prevCol) HasOnUpdate() bool {
 	return false
 }
 
-func (c *prevCol) GetOnUpdateExpr() string {
+func (c *prevCol) GetOnUpdateExpr() catpb.Expression {
 	return ""
 }
 
@@ -201,7 +201,7 @@ func (c *prevCol) IsComputed() bool {
 	return false
 }
 
-func (c *prevCol) GetComputeExpr() string {
+func (c *prevCol) GetComputeExpr() catpb.Expression {
 	return ""
 }
 

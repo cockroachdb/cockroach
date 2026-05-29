@@ -1,17 +1,14 @@
 /* setup */
-CREATE TABLE t (i INT PRIMARY KEY, j INT, m INT);
-CREATE TABLE k (i INT PRIMARY KEY, j INT, m INT);
+CREATE TABLE t (i INT, j INT, m INT);
+CREATE TABLE k (i INT, j INT, m INT);
 CREATE UNIQUE INDEX idx ON t(j, i) USING HASH;
 CREATE UNIQUE INDEX idx2 ON k(j, i);
 INSERT INTO t VALUES (-1, -1), (-2, -2), (-3, -3);
 INSERT INTO k VALUES (-1, -1), (-2, -2), (-3, -3);
 CREATE TABLE t_ref(i INT PRIMARY KEY,
                    j INT,
-                   CONSTRAINT "j_t_fk" FOREIGN KEY (j, i) REFERENCES
-                          t(j, i),
-                   CONSTRAINT "j_k_fk" FOREIGN KEY (j, i) REFERENCES
-                                                    k(j, i)
-                   );
+                   CONSTRAINT "j_t_fk" FOREIGN KEY (j, i) REFERENCES t(j, i),
+                   CONSTRAINT "j_k_fk" FOREIGN KEY (j, i) REFERENCES k(j, i));
 ----
 ...
 +object {100 101 t} -> 104
@@ -44,7 +41,7 @@ upsert descriptor #104
   +    name: crdb_internal_constraint_2_name_placeholder
   +    validity: Dropping
   +  - columnIds:
-  +    - 4
+  +    - 5
   +    expr: crdb_internal_i_j_shard_16 IS NOT NULL
   +    isNonNullConstraint: true
   +    name: crdb_internal_i_j_shard_16_auto_not_null
@@ -52,7 +49,7 @@ upsert descriptor #104
      columns:
      - id: 1
   ...
-       id: 4
+       id: 5
        name: crdb_internal_i_j_shard_16
   +    nullable: true
        type:
@@ -80,13 +77,15 @@ upsert descriptor #104
   -    - ASC
   -    - ASC
   -    keyColumnIds:
-  -    - 4
+  -    - 5
   -    - 2
   -    - 1
   -    keyColumnNames:
   -    - crdb_internal_i_j_shard_16
   -    - j
   -    - i
+  -    keySuffixColumnIds:
+  -    - 4
   -    name: idx
   -    partitioning: {}
   -    sharded:
@@ -106,7 +105,7 @@ upsert descriptor #104
   +  - constraint:
   +      check:
   +        columnIds:
-  +        - 4
+  +        - 5
   +        expr: crdb_internal_i_j_shard_16 IS NOT NULL
   +        isNonNullConstraint: true
   +        name: crdb_internal_i_j_shard_16_auto_not_null
@@ -114,7 +113,7 @@ upsert descriptor #104
   +      constraintType: NOT_NULL
   +      foreignKey: {}
   +      name: crdb_internal_i_j_shard_16_auto_not_null
-  +      notNullColumn: 4
+  +      notNullColumn: 5
   +      uniqueWithoutIndexConstraint: {}
   +    direction: DROP
   +    mutationId: 1
@@ -133,13 +132,15 @@ upsert descriptor #104
   +      - ASC
   +      - ASC
   +      keyColumnIds:
-  +      - 4
+  +      - 5
   +      - 2
   +      - 1
   +      keyColumnNames:
   +      - crdb_internal_i_j_shard_16
   +      - j
   +      - i
+  +      keySuffixColumnIds:
+  +      - 4
   +      name: idx
   +      partitioning: {}
   +      sharded:
@@ -157,7 +158,7 @@ upsert descriptor #104
   +  - constraint:
   +      check:
   +        columnIds:
-  +        - 4
+  +        - 5
   +        constraintId: 2
   +        expr: crdb_internal_i_j_shard_16 IN (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)
   +        fromHashShardedColumn: true
@@ -170,7 +171,7 @@ upsert descriptor #104
   +    mutationId: 1
   +    state: WRITE_ONLY
      name: t
-     nextColumnId: 5
+     nextColumnId: 6
   ...
      replacementOf:
        time: {}
@@ -239,7 +240,7 @@ upsert descriptor #104
   +    name: crdb_internal_constraint_2_name_placeholder
   +    validity: Dropping
   +  - columnIds:
-  +    - 4
+  +    - 5
   +    expr: crdb_internal_i_j_shard_16 IS NOT NULL
   +    isNonNullConstraint: true
   +    name: crdb_internal_i_j_shard_16_auto_not_null
@@ -247,7 +248,7 @@ upsert descriptor #104
      columns:
      - id: 1
   ...
-       id: 4
+       id: 5
        name: crdb_internal_i_j_shard_16
   +    nullable: true
        type:
@@ -265,6 +266,7 @@ upsert descriptor #104
   +        "1": i
   +        "2": j
   +        "3": m
+  +        "4": rowid
   +        "4294967292": crdb_internal_origin_timestamp
   +        "4294967293": crdb_internal_origin_id
   +        "4294967294": tableoid
@@ -307,13 +309,15 @@ upsert descriptor #104
   -    - ASC
   -    - ASC
   -    keyColumnIds:
-  -    - 4
+  -    - 5
   -    - 2
   -    - 1
   -    keyColumnNames:
   -    - crdb_internal_i_j_shard_16
   -    - j
   -    - i
+  -    keySuffixColumnIds:
+  -    - 4
   -    name: idx
   -    partitioning: {}
   -    sharded:
@@ -333,7 +337,7 @@ upsert descriptor #104
   +  - constraint:
   +      check:
   +        columnIds:
-  +        - 4
+  +        - 5
   +        expr: crdb_internal_i_j_shard_16 IS NOT NULL
   +        isNonNullConstraint: true
   +        name: crdb_internal_i_j_shard_16_auto_not_null
@@ -341,7 +345,7 @@ upsert descriptor #104
   +      constraintType: NOT_NULL
   +      foreignKey: {}
   +      name: crdb_internal_i_j_shard_16_auto_not_null
-  +      notNullColumn: 4
+  +      notNullColumn: 5
   +      uniqueWithoutIndexConstraint: {}
   +    direction: DROP
   +    mutationId: 1
@@ -360,13 +364,15 @@ upsert descriptor #104
   +      - ASC
   +      - ASC
   +      keyColumnIds:
-  +      - 4
+  +      - 5
   +      - 2
   +      - 1
   +      keyColumnNames:
   +      - crdb_internal_i_j_shard_16
   +      - j
   +      - i
+  +      keySuffixColumnIds:
+  +      - 4
   +      name: idx
   +      partitioning: {}
   +      sharded:
@@ -384,7 +390,7 @@ upsert descriptor #104
   +  - constraint:
   +      check:
   +        columnIds:
-  +        - 4
+  +        - 5
   +        constraintId: 2
   +        expr: crdb_internal_i_j_shard_16 IN (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)
   +        fromHashShardedColumn: true
@@ -397,7 +403,7 @@ upsert descriptor #104
   +    mutationId: 1
   +    state: WRITE_ONLY
      name: t
-     nextColumnId: 5
+     nextColumnId: 6
   ...
      replacementOf:
        time: {}
@@ -495,19 +501,19 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 4 with 15 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 4 with 16 MutationType ops
 upsert descriptor #104
    table:
   -  checks:
   -  - columnIds:
-  -    - 4
+  -    - 5
   -    constraintId: 2
   -    expr: crdb_internal_i_j_shard_16 IN (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)
   -    fromHashShardedColumn: true
   -    name: crdb_internal_constraint_2_name_placeholder
   -    validity: Dropping
   -  - columnIds:
-  -    - 4
+  -    - 5
   -    expr: crdb_internal_i_j_shard_16 IS NOT NULL
   -    isNonNullConstraint: true
   -    name: crdb_internal_i_j_shard_16_auto_not_null
@@ -520,7 +526,7 @@ upsert descriptor #104
          width: 64
   -  - computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(i, j))), 16:::INT8)
   -    hidden: true
-  -    id: 4
+  -    id: 5
   -    name: crdb_internal_i_j_shard_16
   -    nullable: true
   -    type:
@@ -551,7 +557,7 @@ upsert descriptor #104
   -  - constraint:
   -      check:
   -        columnIds:
-  -        - 4
+  -        - 5
   -        expr: crdb_internal_i_j_shard_16 IS NOT NULL
   -        isNonNullConstraint: true
   -        name: crdb_internal_i_j_shard_16_auto_not_null
@@ -559,7 +565,7 @@ upsert descriptor #104
   -      constraintType: NOT_NULL
   -      foreignKey: {}
   -      name: crdb_internal_i_j_shard_16_auto_not_null
-  -      notNullColumn: 4
+  -      notNullColumn: 5
   -      uniqueWithoutIndexConstraint: {}
   -    direction: DROP
   -    mutationId: 1
@@ -570,9 +576,11 @@ upsert descriptor #104
          - 1
          keyColumnNames:
   -      - crdb_internal_i_j_shard_16
-  +      - crdb_internal_column_4_name_placeholder
+  +      - crdb_internal_column_5_name_placeholder
          - j
          - i
+         keySuffixColumnIds:
+         - 4
   -      name: idx
   +      name: crdb_internal_index_2_name_placeholder
          partitioning: {}
@@ -584,7 +592,7 @@ upsert descriptor #104
   -  - constraint:
   -      check:
   -        columnIds:
-  -        - 4
+  -        - 5
   -        constraintId: 2
   -        expr: crdb_internal_i_j_shard_16 IN (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)
   -        fromHashShardedColumn: true
@@ -596,8 +604,8 @@ upsert descriptor #104
   +    state: DELETE_ONLY
   +  - column:
   +      computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(i, j))), 16:::INT8)
-  +      id: 4
-  +      name: crdb_internal_column_4_name_placeholder
+  +      id: 5
+  +      name: crdb_internal_column_5_name_placeholder
   +      nullable: true
   +      type:
   +        family: IntFamily
@@ -666,13 +674,15 @@ upsert descriptor #104
   -      - ASC
   -      - ASC
   -      keyColumnIds:
-  -      - 4
+  -      - 5
   -      - 2
   -      - 1
   -      keyColumnNames:
-  -      - crdb_internal_column_4_name_placeholder
+  -      - crdb_internal_column_5_name_placeholder
   -      - j
   -      - i
+  -      keySuffixColumnIds:
+  -      - 4
   -      name: crdb_internal_index_2_name_placeholder
   -      partitioning: {}
   -      sharded:
@@ -695,7 +705,7 @@ upsert descriptor #104
   -    state: WRITE_ONLY
   +    state: DELETE_ONLY
      name: t
-     nextColumnId: 5
+     nextColumnId: 6
   ...
        time: {}
      unexposedParentSchemaId: 101
@@ -722,8 +732,8 @@ upsert descriptor #104
   -  mutations:
   -  - column:
   -      computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(i, j))), 16:::INT8)
-  -      id: 4
-  -      name: crdb_internal_column_4_name_placeholder
+  -      id: 5
+  -      name: crdb_internal_column_5_name_placeholder
   -      nullable: true
   -      type:
   -        family: IntFamily
@@ -735,7 +745,7 @@ upsert descriptor #104
   -    state: DELETE_ONLY
   +  mutations: []
      name: t
-     nextColumnId: 5
+     nextColumnId: 6
   ...
        time: {}
      unexposedParentSchemaId: 101
@@ -766,6 +776,7 @@ upsert descriptor #104
   -        "1": i
   -        "2": j
   -        "3": m
+  -        "4": rowid
   -        "4294967292": crdb_internal_origin_timestamp
   -        "4294967293": crdb_internal_origin_id
   -        "4294967294": tableoid

@@ -1038,14 +1038,10 @@ func TestShowBackupsWithIDsAndRevisionHistory(t *testing.T) {
 	})
 
 	t.Run("WITHOUT REVISION START TIME", func(t *testing.T) {
-		revStartTimes := sqlDB.QueryStr(
-			t,
-			`SELECT revision_start_time FROM [SHOW BACKUPS IN $1]`,
-			collectionURI,
-		)
-		require.Len(t, revStartTimes, 3, "expected 3 backups")
-		for idx, row := range revStartTimes {
-			require.Equal(t, "NULL", row[0], "expected empty revision start time (row %d)", idx)
+		rows := sqlDB.QueryStr(t, `SHOW BACKUPS IN $1`, collectionURI)
+		require.Len(t, rows, 3, "expected 3 backups")
+		for _, row := range rows {
+			require.Len(t, row, 2, "expected 2 columns (id, backup_time)")
 		}
 	})
 }
@@ -1234,7 +1230,7 @@ func TestShowBackupWithIDs(t *testing.T) {
 	for idRows.Next() {
 		var id string
 		var unused any
-		if err := idRows.Scan(&id, &unused, &unused); err != nil {
+		if err := idRows.Scan(&id, &unused); err != nil {
 			t.Fatal(err)
 		}
 		ids = append([]string{id}, ids...)

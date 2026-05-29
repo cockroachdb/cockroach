@@ -205,7 +205,7 @@ func writeEntry(w redact.SafeWriter, entry traceLogData, start time.Time, mode f
 // was generated after the child Span started (or even after the child
 // finished).
 //
-// TODO(andrei): this should be unified with
+// The span start format is shared with
 // SessionTracing.generateSessionTraceVTable().
 func (r Recording) String() string {
 	return redact.Sprint(r).StripMarkers()
@@ -316,6 +316,33 @@ type OperationAndMetadata struct {
 	Metadata  OperationMetadata
 }
 
+// FormatSpanStartMessage formats the operation line for a recorded span,
+// including the goroutine ID and all tags. The format is:
+//
+//	=== operation:<name> [gid:<N>] [<tag-key>:<value>]...
+//
+// Tag values are treated as unsafe for redaction; everything else is safe.
+// This is the canonical format used by both Recording.String() and SHOW TRACE
+// FOR SESSION.
+func FormatSpanStartMessage(sp *RecordedSpan) redact.RedactableString {
+	var sb redact.StringBuilder
+	sb.SafeString("=== operation:")
+	sb.SafeString(redact.SafeString(sp.Operation))
+	if sp.GoroutineID != 0 {
+		sb.Printf(" gid:%d", sp.GoroutineID)
+	}
+	for _, tg := range sp.TagGroups {
+		var prefix redact.RedactableString
+		if tg.Name != AnonymousTagGroupName {
+			prefix = redact.Sprintf("%s-", redact.SafeString(tg.Name))
+		}
+		for _, tag := range tg.Tags {
+			sb.Printf(" %s%s:%s", prefix, redact.SafeString(tag.Key), tag.Value)
+		}
+	}
+	return sb.RedactableString()
+}
+
 // visitSpan returns the log messages for sp, and all of sp's children.
 //
 // All messages from a Span are kept together. Sibling spans are ordered within
@@ -345,24 +372,7 @@ func (r Recording) visitSpanWithWriter(
 
 	// Build operation line only in full mode.
 	if mode == formatFull {
-		var sb redact.StringBuilder
-		sb.SafeString("=== operation:")
-		sb.SafeString(redact.SafeString(sp.Operation))
-
-		if sp.GoroutineID != 0 {
-			sb.Printf(" gid:%d", sp.GoroutineID)
-		}
-
-		for _, tg := range sp.TagGroups {
-			var prefix redact.RedactableString
-			if tg.Name != AnonymousTagGroupName {
-				prefix = redact.Sprintf("%s-", redact.SafeString(tg.Name))
-			}
-			for _, tag := range tg.Tags {
-				sb.Printf(" %s%s:%s", prefix, redact.SafeString(tag.Key), tag.Value)
-			}
-		}
-		ownLogs = append(ownLogs, conv(sb.RedactableString(), sp.StartTime, time.Time{}))
+		ownLogs = append(ownLogs, conv(FormatSpanStartMessage(&sp), sp.StartTime, time.Time{}))
 	}
 
 	// Sort the OperationMetadata of s' children in descending order of duration.

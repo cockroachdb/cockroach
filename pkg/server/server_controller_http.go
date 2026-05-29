@@ -138,6 +138,16 @@ func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 		s.getHTTPHandlerFn()(w, r)
 		return
 	}
+	// Persist the ?cluster= query parameter as the tenant cookie so that
+	// subsequent SPA requests (which use relative URLs without ?cluster=)
+	// and OIDC IdP callbacks (which strip all query parameters) continue
+	// to route to the correct tenant. Only set after getServer confirms
+	// the tenant exists to avoid persisting invalid names.
+	if r.URL.Query().Get(ClusterNameParamInQueryURL) != "" {
+		http.SetCookie(w, authserver.CreateTenantSelectCookie(
+			string(tenantName), !c.disableTLSForHTTP, /* forHTTPSOnly */
+		))
+	}
 	s.getHTTPHandlerFn()(w, r)
 }
 

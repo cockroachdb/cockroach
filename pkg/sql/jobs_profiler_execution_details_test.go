@@ -239,7 +239,25 @@ func TestReadWriteProfilerExecutionDetails(t *testing.T) {
 	})
 
 	t.Run("execution details for invalid job ID", func(t *testing.T) {
-		runner.ExpectErr(t, `coordinator not found for job -123`, `SELECT crdb_internal.request_job_execution_details(-123)`)
+		runner.ExpectErr(t, `job with ID -123 does not exist`, `SELECT crdb_internal.request_job_execution_details(-123)`)
+	})
+
+	t.Run("execution details for unclaimed job", func(t *testing.T) {
+		defer jobs.TestingRegisterConstructor(jobspb.TypeImport, func(j *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+			return fakeExecResumer{}
+		}, jobs.UsesTenantCostControl)()
+
+		var importJobID int
+		runner.QueryRow(t, `IMPORT INTO t CSV DATA ('nodelocal://1/foo') WITH DETACHED`).Scan(&importJobID)
+		jobutils.WaitForJobToSucceed(t, runner, jobspb.JobID(importJobID))
+
+		// NULL out the claim_instance_id to simulate an unclaimed job.
+		runner.Exec(t, `UPDATE system.jobs SET claim_instance_id = NULL WHERE id = $1`, importJobID)
+
+		runner.ExpectErr(
+			t, `is not currently claimed by any node`,
+			`SELECT crdb_internal.request_job_execution_details($1)`, importJobID,
+		)
 	})
 
 	t.Run("read/write terminal trace", func(t *testing.T) {

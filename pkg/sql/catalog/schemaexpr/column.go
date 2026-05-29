@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -151,8 +152,8 @@ func FormatColumnForDisplay(
 
 // RenameColumn replaces any occurrence of the column from in expr with to, and
 // returns a string representation of the new expression.
-func RenameColumn(expr string, from tree.Name, to tree.Name) (string, error) {
-	parsed, err := parserutils.ParseExpr(expr)
+func RenameColumn(expr catpb.Expression, from tree.Name, to tree.Name) (catpb.Expression, error) {
+	parsed, err := parserutils.ParseExpr(string(expr))
 	if err != nil {
 		return "", err
 	}
@@ -178,7 +179,7 @@ func RenameColumn(expr string, from tree.Name, to tree.Name) (string, error) {
 		return "", err
 	}
 
-	return renamed.String(), nil
+	return catpb.Expression(renamed.String()), nil
 }
 
 // iterColDescriptors iterates over the expression's variable columns and

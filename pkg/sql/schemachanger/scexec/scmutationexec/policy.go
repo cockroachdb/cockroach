@@ -108,7 +108,7 @@ func (i *immediateVisitor) SetPolicyWithCheckExpression(
 	if err != nil {
 		return err
 	}
-	policy.WithCheckExpr = op.Expr
+	policy.WithCheckExpr = descpb.Expression(op.Expr)
 	policy.WithCheckColumnIDs = op.ColumnIDs
 	return nil
 }
@@ -120,7 +120,7 @@ func (i *immediateVisitor) SetPolicyUsingExpression(
 	if err != nil {
 		return err
 	}
-	policy.UsingExpr = op.Expr
+	policy.UsingExpr = descpb.Expression(op.Expr)
 	policy.UsingColumnIDs = op.ColumnIDs
 	return nil
 }

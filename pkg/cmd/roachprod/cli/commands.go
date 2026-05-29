@@ -2130,7 +2130,7 @@ func buildSnapshotListCmd() *cobra.Command {
 				return err
 			}
 			for _, snapshot := range snapshots {
-				config.Logger.Printf("found snapshot %s (id: %s)", snapshot.Name, snapshot.ID)
+				config.Logger.Printf("found snapshot %s (id: %s, status: %s)", snapshot.Name, snapshot.ID, snapshot.Status)
 			}
 			return nil
 		}),
@@ -2337,6 +2337,21 @@ func (cr *commandRegistry) buildOpentelemetryStartCmd() *cobra.Command {
 	}
 	initOpentelemetryStartCmdFlags(opentelemetryStartCmd)
 	return opentelemetryStartCmd
+}
+
+func (cr *commandRegistry) buildOpentelemetryRestartCmd() *cobra.Command {
+	opentelemetryRestartCmd := &cobra.Command{
+		Use:   "opentelemetry-restart <cluster>",
+		Short: "Restart the OpenTelemetry Collector with updated configuration",
+		Long: "Regenerate configuration and restart the OpenTelemetry Collector. " +
+			"The collector must already be installed via opentelemetry-start.",
+		Args: cobra.ExactArgs(1),
+		Run: Wrap(func(cmd *cobra.Command, args []string) error {
+			return roachprod.RestartOpenTelemetry(context.Background(), config.Logger, args[0], opentelemetryConfig)
+		}),
+	}
+	initOpentelemetryStartCmdFlags(opentelemetryRestartCmd)
+	return opentelemetryRestartCmd
 }
 
 func (cr *commandRegistry) buildOpentelemetryStopCmd() *cobra.Command {

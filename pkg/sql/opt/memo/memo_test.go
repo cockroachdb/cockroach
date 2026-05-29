@@ -495,6 +495,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptSplitScanLimit = 0
 	notStale()
 
+	// Stale optimizer_span_limit.
+	evalCtx.SessionData().OptimizerSpanLimit = 100
+	stale()
+	evalCtx.SessionData().OptimizerSpanLimit = 0
+	notStale()
+
 	// Stale optimizer_use_improved_zigzag_join_costing.
 	evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting = true
 	stale()
@@ -626,6 +632,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerInlineAnyUnnestSubquery = false
 	notStale()
 
+	// Stale optimizer_inline_placeholder_equalities.
+	evalCtx.SessionData().OptimizerInlinePlaceholderEqualities = true
+	stale()
+	evalCtx.SessionData().OptimizerInlinePlaceholderEqualities = false
+	notStale()
+
 	// Stale optimizer_use_min_row_count_anti_join_fix.
 	evalCtx.SessionData().OptimizerUseMinRowCountAntiJoinFix = true
 	stale()
@@ -636,6 +648,12 @@ func TestMemoIsStale(t *testing.T) {
 	sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Override(ctx, &evalCtx.Settings.SV, true)
 	stale()
 	sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Override(ctx, &evalCtx.Settings.SV, false)
+	notStale()
+
+	// Stale pg_dump_compatibility.
+	evalCtx.SessionData().PgDumpCompatibility = "postgres"
+	stale()
+	evalCtx.SessionData().PgDumpCompatibility = ""
 	notStale()
 
 	// User no longer has access to view.

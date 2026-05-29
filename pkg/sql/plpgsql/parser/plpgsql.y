@@ -4,12 +4,12 @@ package parser
 import (
   "strings"
 
-  "github.com/cockroachdb/cockroach/pkg/build"
   "github.com/cockroachdb/cockroach/pkg/sql/parser"
   "github.com/cockroachdb/cockroach/pkg/sql/scanner"
   "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
   "github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
   "github.com/cockroachdb/cockroach/pkg/sql/types"
+  unimp "github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
   "github.com/cockroachdb/errors"
   "github.com/cockroachdb/redact"
 )
@@ -584,13 +584,12 @@ decl_datatype:
     case *tree.CastExpr:
       $$.val = t.Type
     default:
-      err := errors.New("unable to parse type of variable declaration")
       if strings.Contains(sqlStr, "%") {
-        err = errors.WithIssueLink(errors.WithHint(err,
-          "you may have attempted to use %TYPE or %ROWTYPE syntax, which is unsupported.",
-        ), errors.IssueLink{IssueURL: build.MakeIssueURL(114676)})
+        return setErr(plpgsqllex, unimp.NewWithIssue(114676,
+          "%TYPE and %ROWTYPE syntax",
+        ))
       }
-      return setErr(plpgsqllex, err)
+      return setErr(plpgsqllex, errors.New("unable to parse type of variable declaration"))
     }
   }
 ;

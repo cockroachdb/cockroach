@@ -2009,47 +2009,46 @@ full-join (hash)
  ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── lax-key: (1,6)
  ├── fd: (1)~~>(2), (6)~~>(7), (1,6)~~>(2,7)
+ ├── prune: (2,7)
  ├── reject-nulls: (1,2,6,7)
- ├── select
+ ├── distinct-on
  │    ├── columns: t1.x:1(int) t1.y:2(int!null)
+ │    ├── grouping columns: t1.x:1(int)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
- │    ├── distinct-on
- │    │    ├── columns: t1.x:1(int) t1.y:2(int)
- │    │    ├── grouping columns: t1.x:1(int)
- │    │    ├── key: (1)
- │    │    ├── fd: (1)-->(2)
- │    │    ├── prune: (2)
+ │    ├── prune: (2)
+ │    ├── select
+ │    │    ├── columns: t1.x:1(int) t1.y:2(int!null)
+ │    │    ├── prune: (1)
  │    │    ├── scan t1
  │    │    │    ├── columns: t1.x:1(int) t1.y:2(int)
  │    │    │    └── prune: (1,2)
- │    │    └── aggregations
- │    │         └── first-agg [as=t1.y:2, type=int, outer=(2)]
- │    │              └── variable: t1.y:2 [type=int]
- │    └── filters
- │         └── is-not [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
- │              ├── variable: t1.y:2 [type=int]
- │              └── null [type=unknown]
- ├── select
+ │    │    └── filters
+ │    │         └── is-not [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+ │    │              ├── variable: t1.y:2 [type=int]
+ │    │              └── null [type=unknown]
+ │    └── aggregations
+ │         └── first-agg [as=t1.y:2, type=int, outer=(2)]
+ │              └── variable: t1.y:2 [type=int]
+ ├── distinct-on
  │    ├── columns: t2.x:6(int) t2.y:7(int!null)
+ │    ├── grouping columns: t2.x:6(int)
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)
- │    ├── distinct-on
- │    │    ├── columns: t2.x:6(int) t2.y:7(int)
- │    │    ├── grouping columns: t2.x:6(int)
- │    │    ├── key: (6)
- │    │    ├── fd: (6)-->(7)
- │    │    ├── prune: (7)
+ │    ├── prune: (7)
+ │    ├── select
+ │    │    ├── columns: t2.x:6(int) t2.y:7(int!null)
+ │    │    ├── prune: (6)
  │    │    ├── scan t2
  │    │    │    ├── columns: t2.x:6(int) t2.y:7(int)
  │    │    │    └── prune: (6,7)
- │    │    └── aggregations
- │    │         └── first-agg [as=t2.y:7, type=int, outer=(7)]
- │    │              └── variable: t2.y:7 [type=int]
- │    └── filters
- │         └── is-not [type=bool, outer=(7), constraints=(/7: (/NULL - ]; tight)]
- │              ├── variable: t2.y:7 [type=int]
- │              └── null [type=unknown]
+ │    │    └── filters
+ │    │         └── is-not [type=bool, outer=(7), constraints=(/7: (/NULL - ]; tight)]
+ │    │              ├── variable: t2.y:7 [type=int]
+ │    │              └── null [type=unknown]
+ │    └── aggregations
+ │         └── first-agg [as=t2.y:7, type=int, outer=(7)]
+ │              └── variable: t2.y:7 [type=int]
  └── filters
       └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
            ├── variable: t1.x:1 [type=int]

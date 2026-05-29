@@ -428,13 +428,12 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 	if as.Alias != "" {
 		colAlias := as.Cols
 
-		// Special case for Postgres compatibility: if a data source does not
-		// currently have a name, and it is a set-generating function or a scalar
-		// function with just one column, and the AS clause doesn't specify column
-		// names, then use the specified table name both as the column name and
-		// table name.
+		// Special case for Postgres compatibility: if a set-generating function
+		// or a scalar function has just one column, and the AS clause doesn't
+		// specify column names, then use the specified table name both as the
+		// column name and table name.
 		noColNameSpecified := len(colAlias) == 0
-		if scope.isAnonymousTable() && noColNameSpecified && scope.singleSRFColumn {
+		if noColNameSpecified && scope.singleSRFColumn {
 			colAlias = tree.ColumnDefList{tree.ColumnDef{Name: as.Alias}}
 		}
 

@@ -215,10 +215,11 @@ ALTER TABLE test_utf.żółw ADD CONSTRAINT żó UNIQUE (value)`)); err != nil {
 	}
 	expected = `
   table_name | constraint_name
--------------+------------------
+-------------+-------------------
   żółw       | żó
+  żółw       | żółw_id_not_null
   żółw       | żółw_pkey
-(2 rows)
+(3 rows)
 `
 	if a, e := b.String(), expected[1:]; a != e {
 		t.Errorf("expected output:\n%s\ngot:\n%s", e, a)

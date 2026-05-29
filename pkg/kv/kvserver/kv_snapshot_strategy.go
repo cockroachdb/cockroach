@@ -232,7 +232,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 					return noSnap, err
 				}
 			}
-			if batchReader.Error() != nil {
+			if err := batchReader.Error(); err != nil {
 				return noSnap, err
 			}
 			timingTag.stop("sst")

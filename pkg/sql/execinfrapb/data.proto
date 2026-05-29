@@ -217,6 +217,10 @@ message ProducerHeader {
   optional int32 stream_id = 2 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "StreamID",
     (gogoproto.casttype) = "StreamID"];
+
+  // The SQLInstanceID of the producer. Used for debugging.
+  optional int32 producer = 3 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/base.SQLInstanceID"];
 }
 
 // ProducerData is a message that can be sent multiple times as part of a stream
@@ -303,7 +307,11 @@ message RemoteProducerMetadata {
     optional bool drained = 9 [(gogoproto.nullable) = false];
     // ProcessorID is the ID of the processor that published the metadata.
     optional int32 processor_id = 10 [(gogoproto.nullable) = false, (gogoproto.customname) = "ProcessorID"];
-    // NEXT ID: 11
+    // ProgressMessage is an opaque bytes field that job-specific DistSQL
+    // processors can use to marshal their own progress protos into. Prefer
+    // this over ProgressDetails, which uses google.protobuf.Any.
+    optional bytes progress_message = 11;
+    // NEXT ID: 12
   }
   // Metrics are unconditionally emitted by table readers.
   message Metrics {
@@ -333,7 +341,18 @@ message RemoteProducerMetadata {
     // representative of the "synchronous" portion of work performed by KV.
     // See the CPUTime field in the kvpb.BatchResponse_Header.
     optional int64 kv_cpu_time = 7 [(gogoproto.nullable) = false, (gogoproto.customname) = "KVCPUTime"];
-    // NEXT ID: 8
+    // LocalKVCPUTime is the SQL goroutine CPU time (in nanoseconds) spent
+    // inside KV calls for this flow, as measured by the grunning library. This
+    // is the portion of SQL goroutine CPU that overlapped with KV work, not
+    // the CPU consumed on KV servers (see KVCPUTime for that). The gateway
+    // subtracts it from total goroutine CPU to derive SQL-only CPU.
+    optional int64 local_kv_cpu_time = 8 [(gogoproto.nullable) = false, (gogoproto.customname) = "LocalKVCPUTime"];
+    // RawSQLCPUTime carries raw goroutine CPU time (in nanoseconds) for this
+    // flow, before any correction. Remote flows send their accumulated
+    // grunning time here; the gateway subtracts total LocalKVCPUTime to
+    // derive SQL-only CPU.
+    optional int64 raw_sql_cpu_time = 9 [(gogoproto.nullable) = false, (gogoproto.customname) = "RawSQLCPUTime"];
+    // NEXT ID: 10
   }
   oneof value {
     RangeInfos range_info = 1;

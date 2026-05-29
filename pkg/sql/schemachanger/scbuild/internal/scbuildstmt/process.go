@@ -40,6 +40,7 @@ type supportedStatement struct {
 //
 // Please keep this list alphabetized for easier navigation.
 var supportedStatements = map[reflect.Type]supportedStatement{
+	reflect.TypeOf((*tree.AlterDomain)(nil)): {fn: AlterDomain, statementTags: []string{tree.AlterDomainTag}, on: true, checks: alterDomainChecks},
 	// Alter table will have commands individually whitelisted via the
 	// supportedAlterTableStatements list, so we will consider it fully supported
 	// here.
@@ -53,15 +54,19 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	reflect.TypeOf((*tree.CommentOnConstraint)(nil)): {fn: CommentOnConstraint, statementTags: []string{tree.CommentOnConstraintTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.CommentOnDatabase)(nil)):   {fn: CommentOnDatabase, statementTags: []string{tree.CommentOnDatabaseTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.CommentOnIndex)(nil)):      {fn: CommentOnIndex, statementTags: []string{tree.CommentOnIndexTag}, on: true, checks: nil},
+	reflect.TypeOf((*tree.CommentOnRoutine)(nil)):    {fn: CommentOnRoutine, statementTags: []string{tree.CommentOnFunctionTag, tree.CommentOnProcedureTag, tree.CommentOnRoutineTag}, on: true, checks: isV263Active},
 	reflect.TypeOf((*tree.CommentOnSchema)(nil)):     {fn: CommentOnSchema, statementTags: []string{tree.CommentOnSchemaTag}, on: true, checks: nil},
+	reflect.TypeOf((*tree.CommentOnSequence)(nil)):   {fn: CommentOnSequence, statementTags: []string{tree.CommentOnSequenceTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.CommentOnTable)(nil)):      {fn: CommentOnTable, statementTags: []string{tree.CommentOnTableTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.CommentOnType)(nil)):       {fn: CommentOnType, statementTags: []string{tree.CommentOnTypeTag}, on: true, checks: nil},
+	reflect.TypeOf((*tree.CommentOnView)(nil)):       {fn: CommentOnView, statementTags: []string{tree.CommentOnViewTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.CreateDatabase)(nil)):      {fn: CreateDatabase, statementTags: []string{tree.CreateDatabaseTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.CreateIndex)(nil)):         {fn: CreateIndex, statementTags: []string{tree.CreateIndexTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.CreatePolicy)(nil)):        {fn: CreatePolicy, statementTags: []string{tree.CreatePolicyTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.CreateRoutine)(nil)):       {fn: CreateFunction, statementTags: []string{tree.CreateFunctionTag, tree.CreateProcedureTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.CreateSchema)(nil)):        {fn: CreateSchema, statementTags: []string{tree.CreateSchemaTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.CreateSequence)(nil)):      {fn: CreateSequence, statementTags: []string{tree.CreateSequenceTag}, on: true, checks: nil},
+	reflect.TypeOf((*tree.CreateTable)(nil)):         {fn: CreateTable, statementTags: []string{tree.CreateTableTag}, on: true, checks: createTableChecks},
 	reflect.TypeOf((*tree.CreateTrigger)(nil)):       {fn: CreateTrigger, statementTags: []string{tree.CreateTriggerTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.DropDatabase)(nil)):        {fn: DropDatabase, statementTags: []string{tree.DropDatabaseTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.DropRoutine)(nil)):         {fn: DropFunction, statementTags: []string{tree.DropFunctionTag, tree.DropProcedureTag}, on: true, checks: nil},

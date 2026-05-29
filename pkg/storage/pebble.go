@@ -204,7 +204,7 @@ var UnhealthyWriteDuration = settings.RegisterDurationSetting(
 // useDeprecatedCompensatedScore is a temporary setting that provides a
 // mechanism for reverting Pebble's compaction picking heuristic to the previous
 // (25.3 and earlier) behavior for deciding when a level is eligible for
-// compaction. See the pebble.Options Experimental UseDeprecatedCompensatedScore
+// compaction. See the pebble.Options UseDeprecatedCompensatedScore
 // setting for details.
 //
 // We anticipate not needing to use this setting, but it's provided as an escape
@@ -406,7 +406,6 @@ var CompressionAlgorithmBackupStorage = settings.RegisterEnumSetting[SSTableComp
 	// TODO(radu,jackson): use a metamorphic constant.
 	SSTableCompressionFastest.String(),
 	sstableCompressionProfileToString,
-	settings.WithPublic,
 )
 
 // CompressionAlgorithmBackupTransport determines the compression algorithm used
@@ -423,7 +422,6 @@ var CompressionAlgorithmBackupTransport = settings.RegisterEnumSetting[SSTableCo
 	// TODO(radu,jackson): use a metamorphic constant.
 	SSTableCompressionFastest.String(),
 	sstableCompressionProfileToString,
-	settings.WithPublic,
 )
 
 var walFailoverUnhealthyOpThreshold = settings.RegisterDurationSetting(
@@ -675,7 +673,7 @@ func initPebbleOptions() *pebble.Options {
 		BlockPropertyCollectors:     cockroachkvs.BlockPropertyCollectors,
 		FormatMajorVersion:          MinimumSupportedFormatVersion,
 	}
-	opts.Experimental.L0CompactionConcurrency = l0SubLevelCompactionConcurrency
+	opts.L0CompactionConcurrency = l0SubLevelCompactionConcurrency
 	// Automatically flush 10s after the first range tombstone is added to a
 	// memtable. This ensures that we can reclaim space even when there's no
 	// activity on the database generating flushes.
@@ -684,13 +682,13 @@ func initPebbleOptions() *pebble.Options {
 	// This ensures that range keys are quickly flushed, allowing use of lazy
 	// combined iteration within Pebble.
 	opts.FlushDelayRangeKey = 10 * time.Second
-	opts.Experimental.ShortAttributeExtractor = shortAttributeExtractorForValues
+	opts.ShortAttributeExtractor = shortAttributeExtractorForValues
 
-	opts.Experimental.UserKeyCategories = userKeyCategories
+	opts.UserKeyCategories = userKeyCategories
 
 	// Every 5 minutes, log iterators that have been open for more than 1 minute.
-	opts.Experimental.IteratorTracking.PollInterval = 5 * time.Minute
-	opts.Experimental.IteratorTracking.MaxAge = time.Minute
+	opts.IteratorTracking.PollInterval = 5 * time.Minute
+	opts.IteratorTracking.MaxAge = time.Minute
 
 	opts.Levels[0] = pebble.LevelOptions{
 		BlockSize:         32 << 10,  // 32 KB
@@ -1101,16 +1099,16 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	cfg.opts.DeletionPacing.BaselineRate = func() uint64 {
 		return uint64(baselineDeletionRate.Get(sv))
 	}
-	cfg.opts.Experimental.TombstoneDenseCompactionThreshold = func() float64 {
+	cfg.opts.TombstoneDenseCompactionThreshold = func() float64 {
 		return 0.01 * float64(tombstoneDenseCompactionThreshold.Get(sv))
 	}
-	if cfg.opts.Experimental.UseDeprecatedCompensatedScore == nil {
-		cfg.opts.Experimental.UseDeprecatedCompensatedScore = func() bool {
+	if cfg.opts.UseDeprecatedCompensatedScore == nil {
+		cfg.opts.UseDeprecatedCompensatedScore = func() bool {
 			return useDeprecatedCompensatedScore.Get(sv)
 		}
 	}
-	if cfg.opts.Experimental.SpanPolicyFunc == nil {
-		cfg.opts.Experimental.SpanPolicyFunc = spanPolicyFuncFactory(sv)
+	if cfg.opts.SpanPolicyFunc == nil {
+		cfg.opts.SpanPolicyFunc = spanPolicyFuncFactory(sv)
 	}
 
 	cfg.opts.EnsureDefaults()
@@ -1140,8 +1138,8 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	cfg.opts.WALMinSyncInterval = func() time.Duration {
 		return minWALSyncInterval.Get(&cfg.settings.SV)
 	}
-	cfg.opts.Experimental.EnableValueBlocks = func() bool { return true }
-	cfg.opts.Experimental.DisableIngestAsFlushable = func() bool {
+	cfg.opts.EnableValueBlocks = func() bool { return true }
+	cfg.opts.DisableIngestAsFlushable = func() bool {
 		// Disable flushable ingests if shared storage is enabled. This is because
 		// flushable ingests currently do not support Excise operations.
 		//
@@ -1150,13 +1148,13 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		// Pebble has better guards against this.
 		return cfg.sharedStorage != nil || !IngestAsFlushable.Get(&cfg.settings.SV)
 	}
-	cfg.opts.Experimental.IngestSplit = func() bool {
+	cfg.opts.IngestSplit = func() bool {
 		return IngestSplitEnabled.Get(&cfg.settings.SV)
 	}
-	cfg.opts.Experimental.EnableDeleteOnlyCompactionExcises = func() bool {
+	cfg.opts.EnableDeleteOnlyCompactionExcises = func() bool {
 		return deleteCompactionsCanExcise.Get(&cfg.settings.SV)
 	}
-	cfg.opts.Experimental.ValueSeparationPolicy = func() pebble.ValueSeparationPolicy {
+	cfg.opts.ValueSeparationPolicy = func() pebble.ValueSeparationPolicy {
 		if !valueSeparationEnabled.Get(&cfg.settings.SV) {
 			return pebble.ValueSeparationPolicy{}
 		}
@@ -1175,7 +1173,7 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 			GarbageRatioHighPriority: highPri,
 		}
 	}
-	cfg.opts.Experimental.MultiLevelCompactionHeuristic = func() pebble.MultiLevelHeuristic {
+	cfg.opts.MultiLevelCompactionHeuristic = func() pebble.MultiLevelHeuristic {
 		if enableMultiLevelWriteAmpHeuristic.Get(&cfg.settings.SV) {
 			// Use the default write amp heuristic, which adds no propensity towards
 			// multi-level compactions and disallows multi-level compactions involving L0.
@@ -1302,7 +1300,7 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		}
 	} else {
 		if cfg.remoteStorageFactory != nil {
-			cfg.opts.Experimental.RemoteStorage = remoteStorageAdaptor{p: p, ctx: logCtx, factory: cfg.remoteStorageFactory}
+			cfg.opts.RemoteStorage = remoteStorageAdaptor{p: p, ctx: logCtx, factory: cfg.remoteStorageFactory}
 		}
 	}
 	// If the store cluster version is not empty, it means that we initialized
@@ -1751,6 +1749,14 @@ func (p *Pebble) ClearMVCC(key MVCCKey, opts ClearOptions) error {
 // ClearUnversioned implements the Engine interface.
 func (p *Pebble) ClearUnversioned(key roachpb.Key, opts ClearOptions) error {
 	return p.clear(MVCCKey{Key: key}, opts)
+}
+
+// SingleClearUnversioned implements the Engine interface.
+func (p *Pebble) SingleClearUnversioned(key roachpb.Key) error {
+	if len(key) == 0 {
+		return emptyKeyError()
+	}
+	return p.db.SingleDelete(EncodeMVCCKey(MVCCKey{Key: key}), pebble.Sync)
 }
 
 // ClearEngineKey implements the Engine interface.
@@ -2583,6 +2589,7 @@ func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
 // named version, it can be assumed all *nodes* have ratcheted to the pebble
 // version associated with it, since they did so during the fence version.
 var pebbleFormatVersionMap = map[clusterversion.Key]pebble.FormatMajorVersion{
+	clusterversion.V26_3: pebble.FormatRowblkMarkedForCompaction,
 	clusterversion.V26_1: pebble.FormatMarkForCompactionInVersionEdit,
 	clusterversion.V25_4: pebble.FormatV2BlobFiles,
 }
@@ -3043,6 +3050,10 @@ func (p *pebbleReadOnly) ClearMVCC(key MVCCKey, opts ClearOptions) error {
 }
 
 func (p *pebbleReadOnly) ClearUnversioned(key roachpb.Key, opts ClearOptions) error {
+	return errors.AssertionFailedf("not implemented")
+}
+
+func (p *pebbleReadOnly) SingleClearUnversioned(key roachpb.Key) error {
 	return errors.AssertionFailedf("not implemented")
 }
 

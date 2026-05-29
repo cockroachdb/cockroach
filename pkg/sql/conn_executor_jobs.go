@@ -161,6 +161,13 @@ func (ex *connExecutor) descIDsInSchemaChangeJobs() (catalog.DescriptorIDSet, er
 			}
 			descIDsInJobs.Add(t.DroppedDatabaseID)
 			descIDsInJobs.Add(t.DescID)
+		case jobspb.TypeSchemaChangeDetails:
+			// The type schema-change job drains old leases on the type
+			// descriptor itself (via refreshTypeDescriptorLeases). Register
+			// the type ID here so waitOneVersionForNewVersionDescriptorsWithoutJobs
+			// skips it and the user session does not redundantly wait for the
+			// same leases to converge.
+			descIDsInJobs.Add(t.TypeID)
 		}
 		return nil
 	}); err != nil {

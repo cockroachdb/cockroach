@@ -10,13 +10,14 @@ import {
   TransactionsPageDispatchProps,
   TransactionsPageRoot,
   TransactionsPageRootProps,
+  TimeScale,
   api,
 } from "@cockroachlabs/cluster-ui";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { bindActionCreators } from "redux";
 
-import { trackApplySearchCriteriaAction } from "src/redux/analyticsActions";
+import { analytics } from "src/redux/analytics";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
@@ -87,7 +88,19 @@ const fingerprintsPageActions = {
   onSearchComplete: (query: string) => searchLocalSetting.set(query),
   onChangeLimit: (newLimit: number) => limitSetting.set(newLimit),
   onChangeReqSort: (sort: api.SqlStatsSortType) => reqSortSetting.set(sort),
-  onApplySearchCriteria: trackApplySearchCriteriaAction,
+  onApplySearchCriteria: (ts: TimeScale, limit: number, sort: string) => {
+    return () => {
+      analytics?.track({
+        event: "Apply Search Criteria",
+        properties: {
+          page: "Transactions",
+          tsValue: ts.key,
+          limit,
+          sort,
+        },
+      });
+    };
+  },
   onRequestTimeChange: (t: moment.Moment) => requestTimeLocalSetting.set(t),
 };
 

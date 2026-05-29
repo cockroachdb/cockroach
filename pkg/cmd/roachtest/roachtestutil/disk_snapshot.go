@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
 // CopySnapshotDataToNodes copies CockroachDB data from GCE disk snapshots to
@@ -103,15 +104,60 @@ func copySnapshotDataToNode(
 	tempDiskName := fmt.Sprintf("%s-temp-snapshot-%04d", c.Name(), nodeID)
 	deviceName := fmt.Sprintf("snapshot-disk-%04d", nodeID)
 
-	// Create a temporary disk from the snapshot.
+	// Create a temporary disk from the snapshot. Retry transient GCE API
+	// errors (e.g. HTTP 502) which can occur when many nodes create disks
+	// in parallel against the same zone.
+	//
+	// We use a count-based retry (rather than a duration-based one) because a
+	// single `gcloud compute disks create` invocation can itself take several
+	// minutes to fail with a transient error; a short duration-based budget
+	// would be exhausted on the first attempt before any retry occurs (see
+	// #170038). Retries are bounded only by the test's context, not by an
+	// extra timeout layered on top.
 	l.Printf("n%d: creating temp disk %s from snapshot in zone %s",
 		nodeID, tempDiskName, zone)
 	createDiskCmd := fmt.Sprintf(
 		`gcloud compute disks create %s --source-snapshot=%s --zone=%s --type=pd-ssd --quiet`,
 		tempDiskName, snap.ID, zone,
 	)
-	if err := c.RunE(ctx, option.WithNodes(node), createDiskCmd); err != nil {
-		return fmt.Errorf("n%d: failed to create disk from snapshot: %w", nodeID, err)
+	const createDiskAttempts = 3
+	createDiskBackoff := retry.Options{
+		InitialBackoff: 30 * time.Second,
+		MaxBackoff:     30 * time.Second,
+		Multiplier:     1,
+	}
+	var createDiskErr error
+	if err := retry.WithMaxAttempts(ctx, createDiskBackoff, createDiskAttempts, func() error {
+		result, err := c.RunWithDetailsSingleNode(
+			ctx, l, option.WithNodes(node), createDiskCmd,
+		)
+		if err == nil {
+			return nil
+		}
+		// A prior attempt may have created the disk on the server but
+		// failed on the response path (e.g. an HTTP 502 returned after
+		// the create succeeded). In that case, the retry sees an
+		// "already exists" error for our uniquely-named disk; treat it
+		// as success.
+		if isGCEAlreadyExistsError(result.Stderr) {
+			l.Printf("n%d: disk %s already exists (created by prior attempt), treating as success",
+				nodeID, tempDiskName)
+			return nil
+		}
+		if isGCETransientError(result.Stderr) {
+			l.Printf("n%d: transient GCE error creating disk, retrying: %v", nodeID, err)
+			return err
+		}
+		// Non-transient error; stop retrying.
+		createDiskErr = err
+		return nil
+	}); err != nil {
+		// Transient errors exhausted the retry attempts.
+		return fmt.Errorf("n%d: failed to create disk from snapshot after %d attempts: %w",
+			nodeID, createDiskAttempts, err)
+	}
+	if createDiskErr != nil {
+		return fmt.Errorf("n%d: failed to create disk from snapshot: %w", nodeID, createDiskErr)
 	}
 
 	// Clean up the temp disk when we're done, regardless of success or
@@ -173,4 +219,32 @@ func copySnapshotDataToNode(
 	l.Printf("n%d: data copy complete", nodeID)
 
 	return nil
+}
+
+// isGCEAlreadyExistsError checks whether stderr from a gcloud command
+// indicates the resource already exists. This can happen on a retry
+// after a prior attempt's response was lost (e.g. HTTP 502): the server
+// created the resource but the client never got the success response.
+func isGCEAlreadyExistsError(stderr string) bool {
+	return strings.Contains(stderr, "already exists")
+}
+
+// isGCETransientError checks whether stderr from a gcloud command
+// indicates a transient server-side error worth retrying.
+func isGCETransientError(stderr string) bool {
+	transientPatterns := []string{
+		"502",
+		"503",
+		"Server Error",
+		"try again",
+		"Rate Limit",
+		"RATE_LIMIT",
+		"rate limit",
+	}
+	for _, p := range transientPatterns {
+		if strings.Contains(stderr, p) {
+			return true
+		}
+	}
+	return false
 }

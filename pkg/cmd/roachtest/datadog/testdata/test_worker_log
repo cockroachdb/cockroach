@@ -1,0 +1,11 @@
+[w0] 2026/03/16 06:22:53 work_pool.go:198: Acquired quota for 16 CPUs
+[w0] 2026/03/16 06:22:53 cluster.go:3238: Using randomly chosen arch="amd64", acceptance/version-upgrade
+[w0] 2026/03/16 06:25:29 test_runner.go:932: Created new cluster for test acceptance/version-upgrade: teamcity-xxx-08-n4cpu4 (arch="amd64")
+[w0] 2026/03/16 06:25:29 test_runner.go:1018: Starting test: acceptance/version-upgrade:1 on cluster=teamcity-xxx-08-n4cpu4 (arch="amd64")
+[w0] 2026/03/16 06:25:31 cluster_synced.go:1794: teamcity-xxx-08-n4cpu4: putting (dist) cockroach on nodes [1 2 3 4]
+[w0] 2026/03/16 06:42:51 test_runner.go:1140: test passed: acceptance/version-upgrade (run 1)
+[w0] 2026/03/16 06:42:51 cluster.go:3144: Using existing cluster: teamcity-xxx-08-n4cpu4 (arch="amd64"). Wiping
+teamcity-xxx-08-n4cpu4: stopping and waiting
+teamcity-xxx-08-n4cpu4: wiping
+Destroying Prometheus configs
+[w0] 2026/03/16 06:43:10 test_runner.go:1018: Starting test: import/colfam/distmerge=false/nodes=4:1 on cluster=teamcity-xxx-08-n4cpu4 (arch="amd64")

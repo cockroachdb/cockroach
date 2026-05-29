@@ -51,7 +51,7 @@ range-id=1 local-store=1 load=[cpu:50ns/s, write-bandwidth:50 B/s, byte-size:50 
 
 # Rebalance from store 1. The rebalancer attempts to shed load from s1 but
 # cannot find a suitable candidate.
-rebalance-stores store-id=1
+rebalance-stores store-id=1 vmodule=3
 ----
 [mmaid=1] rebalanceStores begins
 [mmaid=1] cluster means: (stores-load [cpu:55ns/s, write-bandwidth:55 B/s, byte-size:55 B]) (stores-capacity [cpu:200ns/s, write-bandwidth:200 B/s, byte-size:200 B]) (nodes-cpu-load 55) (nodes-cpu-capacity 200)
@@ -61,13 +61,13 @@ rebalance-stores store-id=1
 [mmaid=1] load summary for dim=CPURate (n1): overloadSlow, reason: load is >10% above mean [load=100 meanLoad=55 fractionUsed=50.00% meanUtil=27.50% capacity=200]
 [mmaid=1] evaluating s1: node load overloadSlow, store load overloadSlow, worst dim CPURate
 [mmaid=1] overload-continued s1 ((store=overloadSlow worst=CPURate cpu=overloadSlow writes=overloadSlow bytes=overloadSlow node=overloadSlow frac_pending=0.00,0.00(true))) - within grace period
-[mmaid=1] store s1 was added to shedding store list
+[mmaid=1] adding overloaded store s1 to shedding list (worst dim: CPURate, cannotShed: false, pending decrease 0.00 vs threshold 0.10, pending increase 0.00 vs epsilon 0.00); pending: (none)
 [mmaid=1] load summary for dim=CPURate (s2): loadLow, reason: load is >10% below mean [load=10 meanLoad=55 fractionUsed=5.00% meanUtil=27.50% capacity=200]
 [mmaid=1] load summary for dim=WriteBandwidth (s2): loadLow, reason: load is >10% below mean [load=10 meanLoad=55 fractionUsed=5.00% meanUtil=27.50% capacity=200]
 [mmaid=1] load summary for dim=ByteSize (s2): loadLow, reason: load is >10% below mean [load=10 meanLoad=55 fractionUsed=5.00% meanUtil=27.50% capacity=200]
 [mmaid=1] load summary for dim=CPURate (n2): loadLow, reason: load is >10% below mean [load=10 meanLoad=55 fractionUsed=5.00% meanUtil=27.50% capacity=200]
 [mmaid=1] evaluating s2: node load loadLow, store load loadLow, worst dim CPURate
-[mmaid=1] sorted shedding stores: (s1: overloadSlow)
+[mmaid=1] sorted shedding stores: (s1: overloadSlow, cannotShed: false)
 [mmaid=1] start processing shedding store s1: cpu node load overloadSlow, store load overloadSlow, worst dim CPURate
 [mmaid=1] top-K[CPURate] ranges for s1 with lease on local s1: r1:[cpu:50ns/s, write-bandwidth:50 B/s, byte-size:50 B]
 [mmaid=1] local store s1 is CPU overloaded (overloadSlow >= overloadSlow), attempting lease transfers first

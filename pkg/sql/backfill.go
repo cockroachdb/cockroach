@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -599,6 +600,7 @@ func (sc *SchemaChanger) addConstraints(
 		if err != nil {
 			return err
 		}
+		canUseSubset := sc.execCfg.Settings.Version.IsActive(ctx, clusterversion.V26_3)
 
 		b := txn.KV().NewBatch()
 		for _, constraint := range constraints {
@@ -673,7 +675,7 @@ func (sc *SchemaChanger) addConstraints(
 					// referenced table. It's possible for the unique index found during
 					// planning to have been dropped in the meantime, since only the
 					// presence of the backreference prevents it.
-					_, err = catalog.FindFKReferencedUniqueConstraint(backrefTable, fk)
+					_, err = catalog.FindFKReferencedUniqueConstraint(backrefTable, fk, canUseSubset)
 					if err != nil {
 						return err
 					}
@@ -975,7 +977,8 @@ func (sc *SchemaChanger) distIndexBackfill(
 	writeAsOf := jobDetails.WriteTimestamp
 	if writeAsOf.IsEmpty() {
 		status := jobs.StatusMessage("scanning target index for in-progress transactions")
-		if err := sc.job.NoTxn().UpdateStatusMessage(ctx, status); err != nil {
+		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+		if err := sc.job.DeprecatedNoTxn().UpdateStatusMessage(ctx, status); err != nil {
 			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(sc.job.ID()))
 		}
 		writeAsOf = sc.clock.Now()
@@ -1010,11 +1013,13 @@ func (sc *SchemaChanger) distIndexBackfill(
 		) error {
 			details := sc.job.Details().(jobspb.SchemaChangeDetails)
 			details.WriteTimestamp = writeAsOf
-			return sc.job.WithTxn(txn).SetDetails(ctx, details)
+			//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+			return sc.job.DeprecatedWithTxn(txn).SetDetails(ctx, details)
 		}, metadataOnlyTxn); err != nil {
 			return err
 		}
-		if err := sc.job.NoTxn().UpdateStatusMessage(ctx, StatusBackfill); err != nil {
+		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+		if err := sc.job.DeprecatedNoTxn().UpdateStatusMessage(ctx, StatusBackfill); err != nil {
 			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(sc.job.ID()))
 		}
 	} else {
@@ -1458,7 +1463,8 @@ func (sc *SchemaChanger) updateJobStatusMessage(
 			}
 		}
 		if updateJobRunningProgress && !tableDesc.Dropped() {
-			if err := sc.job.WithTxn(txn).UpdateStatusMessage(ctx, status); err != nil {
+			//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+			if err := sc.job.DeprecatedWithTxn(txn).UpdateStatusMessage(ctx, status); err != nil {
 				return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(sc.job.ID()))
 			}
 		}
@@ -1661,7 +1667,7 @@ func ValidateConstraint(
 					return validateUniqueConstraint(
 						ctx, tableDesc, uwi.GetName(),
 						uwi.CollectKeyColumnIDs().Ordered(),
-						uwi.GetPredicate(),
+						string(uwi.GetPredicate()),
 						indexIDForValidation,
 						txn,
 						sessionData.User(),
@@ -1860,7 +1866,7 @@ func countExpectedRowsForInvertedIndex(
 	// exist" error.
 	var colNameOrExpr string
 	if col.IsExpressionIndexColumn() {
-		colNameOrExpr = col.GetComputeExpr()
+		colNameOrExpr = string(col.GetComputeExpr())
 	} else {
 		// Format the column name so that it can be parsed if it has special
 		// characters, like "-" or a newline.
@@ -2222,7 +2228,7 @@ func countIndexRowsAndMaybeCheckUniqueness(
 					tableDesc,
 					idx.GetName(),
 					idx.IndexDesc().KeyColumnIDs[idx.ImplicitPartitioningColumnCount():],
-					idx.GetPredicate(),
+					string(idx.GetPredicate()),
 					desc.GetPrimaryIndexID(), /* indexIDForValidation */
 					txn,
 					username.NodeUserName(),
@@ -2329,11 +2335,25 @@ func (sc *SchemaChanger) backfillIndexes(
 	writeAtRequestTimestamp := len(temporaryIndexes) != 0
 	log.Dev.Infof(ctx, "backfilling %d indexes: %v (writeAtRequestTimestamp: %v)", len(addingSpans), addingSpans, writeAtRequestTimestamp)
 
-	// Split off a new range for each new index span.
-	expirationTime := sc.db.KV().Clock().Now().Add(time.Hour.Nanoseconds(), 0)
-	for _, span := range addingSpans {
-		if err := sc.db.KV().AdminSplit(ctx, span.Key, expirationTime); err != nil {
+	// Split off a new range for each new index span, unless the table is
+	// small enough to fit in a single range.
+	skipSplit := false
+	if err := sc.txn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		tableDesc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, sc.descID)
+		if err != nil {
 			return err
+		}
+		skipSplit = sc.execCfg.IndexSpanSplitter.ShouldSkipSplitForSmallTable(ctx, tableDesc)
+		return nil
+	}, metadataOnlyTxn); err != nil {
+		return err
+	}
+	if !skipSplit {
+		expirationTime := sc.db.KV().Clock().Now().Add(time.Hour.Nanoseconds(), 0)
+		for _, span := range addingSpans {
+			if err := sc.db.KV().AdminSplit(ctx, span.Key, expirationTime); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -2468,7 +2488,8 @@ func (sc *SchemaChanger) runStateMachineAfterTempIndexMerge(ctx context.Context)
 			return err
 		}
 		if sc.job != nil {
-			if err := sc.job.WithTxn(txn).UpdateStatusMessage(ctx, runStatus); err != nil {
+			//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+			if err := sc.job.DeprecatedWithTxn(txn).UpdateStatusMessage(ctx, runStatus); err != nil {
 				return errors.Wrap(err, "failed to update job status")
 			}
 		}
@@ -2730,16 +2751,20 @@ func runSchemaChangesInTxn(
 	for _, c := range constraintAdditionMutations {
 		if ck := c.AsCheck(); ck != nil {
 			if ck.IsNotNullColumnConstraint() {
-				// Remove the  check constraint we added.
+				// The synthetic IS NOT NULL check was added earlier to drive
+				// backfill validation. Validation succeeded, so flip the
+				// column descriptor's Nullable bit and drop the synthetic
+				// check rather than persisting it on the table.
+				colID := ck.GetReferencedColumnID(0)
+				col := catalog.FindColumnByID(tableDesc, colID)
+				col.ColumnDesc().Nullable = false
 				for i := range tableDesc.Checks {
 					if tableDesc.Checks[i].ConstraintID == ck.GetConstraintID() {
 						tableDesc.Checks = append(tableDesc.Checks[:i], tableDesc.Checks[i+1:]...)
+						break
 					}
-					colID := ck.GetReferencedColumnID(0)
-					col := catalog.FindColumnByID(tableDesc, colID)
-					col.ColumnDesc().Nullable = false
-					continue
 				}
+				continue
 			}
 			tableDesc.Checks = append(tableDesc.Checks, ck.CheckDesc())
 		} else if fk := c.AsForeignKey(); fk != nil {
@@ -2933,7 +2958,7 @@ func validateUniqueWithoutIndexConstraintInTxn(
 				tableDesc,
 				uc.Name,
 				uc.ColumnIDs,
-				uc.Predicate,
+				string(uc.Predicate),
 				0, /* indexIDForValidation */
 				txn,
 				user,

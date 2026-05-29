@@ -1,0 +1,88 @@
+name: Close test failures fixed on deleted release branches
+
+on:
+  schedule:
+    # Run daily at 8:00 AM UTC (3:00 AM EST)
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+
+jobs:
+  close-fixed-issues:
+    if: github.repository == 'cockroachdb/cockroach'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Close issues for deleted RC branches
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            // Find all open issues with the C-fixed-on-release-branch label.
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'C-fixed-on-release-branch',
+              per_page: 100,
+            });
+
+            for (const issue of issues) {
+              // Extract branch-release-*-rc labels to determine the RC branch.
+              const branchLabels = issue.labels
+                .map(l => l.name)
+                .filter(name => /^branch-release-.*-rc$/.test(name));
+
+              if (branchLabels.length === 0) {
+                continue;
+              }
+
+              // Check if all associated RC branches have been deleted.
+              let allBranchesDeleted = true;
+              const deletedBranches = [];
+
+              for (const label of branchLabels) {
+                // Convert label "branch-release-X.Y.Z-rc" to branch name "release-X.Y.Z-rc".
+                const branchName = label.replace(/^branch-/, '');
+                try {
+                  await github.rest.repos.getBranch({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    branch: branchName,
+                  });
+                  // Branch still exists; don't close this issue.
+                  allBranchesDeleted = false;
+                  break;
+                } catch (err) {
+                  if (err.status === 404) {
+                    deletedBranches.push(branchName);
+                  } else {
+                    core.warning(`Error checking branch ${branchName}: ${err.message}`);
+                    allBranchesDeleted = false;
+                    break;
+                  }
+                }
+              }
+
+              if (!allBranchesDeleted) {
+                continue;
+              }
+
+              const branchList = deletedBranches.join(', ');
+              core.info(`Closing issue #${issue.number}: RC branch(es) ${branchList} no longer exist`);
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: `Closing this issue because the RC branch(es) (${branchList}) have been deleted and are no longer under test. This issue was labeled \`C-fixed-on-release-branch\`, indicating the fix was already applied to the release branch.`,
+              });
+
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                state: 'closed',
+                state_reason: 'completed',
+              });
+            }

@@ -222,14 +222,16 @@ func (lv SecondaryLoadVector) SafeFormat(w redact.SafePrinter, _ rune) {
 
 type RangeLoad struct {
 	Load LoadVector
-	// Nanos per second. RaftCPU <= Load[cpu]. Handling this as a special case,
-	// rather than trying to (over) generalize, since currently this is the only
-	// resource broken down into two components.
+	// Nanos per second. Handling this as a special case, rather than trying to
+	// (over) generalize, since currently this is the only resource broken down
+	// into two components.
 	//
 	// Load[cpu]-RaftCPU is work being done on this store for evaluating
 	// proposals and can vary across replicas. Pessimistically, one can assume
 	// that if this replica is the leaseholder and we move the lease to a
 	// different existing replica, it will see an addition of Load[cpu]-RaftCPU.
+	//
+	// INVARIANT: RaftCPU <= Load[CPU].
 	RaftCPU LoadValue
 }
 
@@ -327,6 +329,11 @@ func (m meanNodeLoad) SafeFormat(w redact.SafePrinter, _ rune) {
 // storeLoadSummary for some of the stores in this set. This cache is lazily
 // populated and is implicitly invalidated if the loadSeqNum of the
 // storeLoadSummary no longer matches that of storeState.loadSeqNum.
+//
+// An entry with len(stores) == 0 represents a constraint expression that
+// no store satisfies. Such entries are still cached (for O(1) repeat
+// lookups) but meansLoad is left zero; meansMemo.getMeans signals this
+// case to callers via its ok return.
 type meansForStoreSet struct {
 	constraintsDisj
 	meansLoad
@@ -434,19 +441,27 @@ func (mm *meansMemo) clear() {
 type loadInfoProvider interface {
 	getStoreReportedLoad(roachpb.StoreID) (roachpb.NodeID, *storeLoad)
 	getNodeReportedLoad(roachpb.NodeID) *NodeLoad
-	computeLoadSummary(context.Context, roachpb.StoreID, *meanStoreLoad, *meanNodeLoad) storeLoadSummary
+	computeLoadSummary(context.Context, roachpb.StoreID, *meanStoreLoad, *meanNodeLoad, mmaLogger) storeLoadSummary
 }
 
-// getMeans returns the means for an expression.
-func (mm *meansMemo) getMeans(expr constraintsDisj) *meansForStoreSet {
-	means, ok := mm.meansMap.get(expr)
-	if ok {
-		return means
+// getMeans returns the means for an expression. Returns ok=false if no
+// stores satisfy the expression (or, for a nil expr, if the allocator knows
+// of no stores at all). When ok is false the returned *meansForStoreSet
+// value is unspecified; callers must not pass it to getStoreLoadSummary or
+// otherwise consume it. Empty results are still inserted into the cache so
+// repeated lookups within an allocator pass remain O(1).
+func (mm *meansMemo) getMeans(expr constraintsDisj) (*meansForStoreSet, bool) {
+	means, hit := mm.meansMap.get(expr)
+	if hit {
+		return means, len(means.stores) > 0
 	}
 	means.constraintsDisj = expr
 	mm.constraintMatcher.constrainStoresForExpr(expr, &means.stores)
-	means.meansLoad = computeMeansForStoreSet(mm.loadInfoProvider, means.stores, mm.scratchNodes, mm.scratchStores)
-	return means
+	if len(means.stores) == 0 {
+		return means, false
+	}
+	means.meansLoad, _ = computeMeansForStoreSet(mm.loadInfoProvider, means.stores, mm.scratchNodes, mm.scratchStores)
+	return means, true
 }
 
 // getStoreLoadSummary returns the load summary for a store in the context of
@@ -459,7 +474,7 @@ func (mm *meansMemo) getStoreLoadSummary(
 	if ok {
 		return summary
 	}
-	summary = mm.loadInfoProvider.computeLoadSummary(ctx, storeID, &means.storeLoad, &means.nodeLoad)
+	summary = mm.loadInfoProvider.computeLoadSummary(ctx, storeID, &means.storeLoad, &means.nodeLoad, makeMMALogger(false /* verboseToInfof */))
 	means.putStoreLoadSummary(storeID, summary)
 	return summary
 }
@@ -471,6 +486,20 @@ func (mm *meansMemo) getStoreLoadSummary(
 // stores may contain duplicate storeIDs, in which case computeMeansForStoreSet
 // should deduplicate processing of the stores. stores should be immutable.
 //
+// Precondition: every storeID in stores must be known to loadProvider
+// (loadProvider.getStoreReportedLoad must return a non-nil *storeLoad).
+// Callers receiving storeIDs from outside MMA (notably the legacy
+// allocator's StorePool view, which can run ahead of MMA's gossip
+// updates) must filter unknown stores out first. BuildMMARebalanceAdvisor
+// is the canonical filtering point; clusterState.hasStore is the helper
+// to use. A violation is asserted in test builds and logged-and-skipped
+// in production rather than nil-dereferenced (see #170703).
+//
+// If stores is empty, computeMeansForStoreSet returns the zero meansLoad
+// and ok=false. Callers must check ok before consuming the returned means;
+// the zero value would otherwise misclassify stores as overloaded due to
+// zero capacity.
+//
 // TODO: fix callers to exclude stores based on node failure detection, from
 // the mean.
 func computeMeansForStoreSet(
@@ -478,9 +507,9 @@ func computeMeansForStoreSet(
 	stores []roachpb.StoreID,
 	scratchNodes map[roachpb.NodeID]*NodeLoad,
 	scratchStores map[roachpb.StoreID]struct{},
-) (means meansLoad) {
+) (means meansLoad, ok bool) {
 	if len(stores) == 0 {
-		panic(fmt.Sprintf("no stores for meansForStoreSet: %v", stores))
+		return meansLoad{}, false
 	}
 	clear(scratchNodes)
 	clear(scratchStores)
@@ -490,6 +519,17 @@ func computeMeansForStoreSet(
 		// negative.
 		nodeID, sload := loadProvider.getStoreReportedLoad(storeID)
 		if _, ok := scratchStores[storeID]; ok {
+			continue
+		}
+		if sload == nil {
+			// Precondition violation: a caller passed an unknown storeID. In
+			// test builds this panics, surfacing the bug; in production it
+			// logs and skips, avoiding the nil-pointer crash from #170703.
+			// context.Background is used because plumbing ctx into this
+			// internal helper would touch every memo path; the assertion is a
+			// last-resort safety net and is not expected to fire.
+			assertTruef(context.Background(), false,
+				"computeMeansForStoreSet: storeID %d not known to loadProvider", storeID)
 			continue
 		}
 		n++
@@ -511,6 +551,11 @@ func computeMeansForStoreSet(
 			// negative.
 			scratchNodes[nodeID] = loadProvider.getNodeReportedLoad(nodeID)
 		}
+	}
+	if n == 0 {
+		// Every storeID hit the nil-sload guard above. Bail out before the
+		// divisions below would panic with division by zero.
+		return meansLoad{}, false
 	}
 	for i := range means.storeLoad.load {
 		if means.storeLoad.capacity[i] != UnknownCapacity {
@@ -540,7 +585,7 @@ func computeMeansForStoreSet(
 		float64(means.nodeLoad.loadCPU) / float64(means.nodeLoad.capacityCPU)
 	means.nodeLoad.loadCPU /= LoadValue(n)
 	means.nodeLoad.capacityCPU /= LoadValue(n)
-	return means
+	return means, true
 }
 
 // loadSummary aggregates across all load dimensions for a store, or a node.
@@ -736,6 +781,7 @@ func loadSummaryForDimension(
 	capacity LoadValue,
 	meanLoad LoadValue,
 	meanUtil float64,
+	ml mmaLogger,
 ) (summary loadSummary) {
 	summ := loadLow
 	reason := ""
@@ -782,7 +828,7 @@ func loadSummaryForDimension(
 	}
 
 	defer func() {
-		if !log.ExpensiveLogEnabled(ctx, 3) {
+		if !ml.V(ctx, 3) {
 			return
 		}
 
@@ -808,7 +854,7 @@ func loadSummaryForDimension(
 				redact.SafeFloat(meanUtil*100), capacity)
 		}
 		buf.SafeRune(']')
-		log.KvDistribution.VEventf(ctx, 3, "%s", buf.RedactableString())
+		ml.logf(ctx, 3, "%s", buf.RedactableString())
 	}()
 
 	// Treat nearing full capacity as urgent regardless of relative position.

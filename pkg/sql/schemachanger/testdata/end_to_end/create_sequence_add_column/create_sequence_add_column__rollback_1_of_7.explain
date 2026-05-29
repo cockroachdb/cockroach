@@ -54,7 +54,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ADD COLUMN j 
       │         ├── CreateGCJobForIndex {"IndexID":2,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
       │         ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":105,"Name":"sq1","SchemaID":101}}
-      │         ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.Owner"}
+      │         ├── RemoveOwner {"DescriptorID":105}
       │         ├── RemoveUserPrivileges {"DescriptorID":105,"User":"admin"}
       │         ├── RemoveUserPrivileges {"DescriptorID":105,"User":"root"}
       │         ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":105}

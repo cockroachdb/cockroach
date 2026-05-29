@@ -473,8 +473,15 @@ type StrVal struct {
 	scannedAsBytes bool
 
 	// The following fields are used to avoid allocating Datums on type resolution.
-	resString DString
-	resBytes  DBytes
+	// resString always caches DString(s) regardless of the target type (e.g.
+	// bpchar trimming is applied on top of the cached value, not stored into it).
+	// The resAs* flags indicate whether the field has been populated; once set
+	// the field must not be overwritten, because other goroutines may be reading
+	// it through pointers stored in a shared QueryCache memo.
+	resString   DString
+	resBytes    DBytes
+	resAsString bool
+	resAsBytes  bool
 }
 
 // NewStrVal constructs a StrVal instance. This is used during
@@ -621,7 +628,10 @@ func (expr *StrVal) ResolveAsType(
 		// We're looking at typing a byte literal constant into some value type.
 		switch typ.Family() {
 		case types.BytesFamily:
-			expr.resBytes = DBytes(expr.s)
+			if !expr.resAsBytes {
+				expr.resBytes = DBytes(expr.s)
+				expr.resAsBytes = true
+			}
 			return &expr.resBytes, nil
 		case types.EnumFamily:
 			e, err := MakeDEnumFromPhysicalRepresentation(typ, []byte(expr.s))
@@ -632,7 +642,10 @@ func (expr *StrVal) ResolveAsType(
 		case types.UuidFamily:
 			return ParseDUuidFromBytes([]byte(expr.s))
 		case types.StringFamily:
-			expr.resString = DString(expr.s)
+			if !expr.resAsString {
+				expr.resString = DString(expr.s)
+				expr.resAsString = true
+			}
 			return &expr.resString, nil
 		}
 		return nil, errors.AssertionFailedf("attempt to type byte array literal to %s", typ.SQLStringForError())
@@ -644,12 +657,14 @@ func (expr *StrVal) ResolveAsType(
 	case types.AnyFamily:
 		fallthrough
 	case types.StringFamily:
+		if !expr.resAsString {
+			expr.resString = DString(expr.s)
+			expr.resAsString = true
+		}
 		switch typ.Oid() {
 		case oid.T_aclitem:
-			expr.resString = DString(expr.s)
 			return NewDACLItemFromDString(&expr.resString)
 		case oid.T_name:
-			expr.resString = DString(expr.s)
 			return NewDNameFromDString(&expr.resString), nil
 		case oid.T_bpchar:
 			// TODO(mgartner): This should probably use the same logic in
@@ -657,10 +672,9 @@ func (expr *StrVal) ResolveAsType(
 			// eval.performCastWithoutPrecisionTruncation. casts use (see the
 			// cast package). We might be able to replace this entire function
 			// with logic in those functions.
-			expr.resString = DString(strings.TrimRight(expr.s, " "))
-			return &expr.resString, nil
+			d := DString(strings.TrimRight(string(expr.resString), " "))
+			return &d, nil
 		default:
-			expr.resString = DString(expr.s)
 			return &expr.resString, nil
 		}
 
@@ -699,7 +713,10 @@ func (expr *StrVal) ResolveAsType(
 		// we return a CastExpr and let the conversion happen at evaluation time. We
 		// still want to error out if the conversion is not possible though (this is
 		// used when resolving overloads).
-		expr.resString = DString(expr.s)
+		if !expr.resAsString {
+			expr.resString = DString(expr.s)
+			expr.resAsString = true
+		}
 		c := NewTypedCastExpr(&expr.resString, typ)
 		return c.TypeCheck(ctx, semaCtx, typ)
 	}

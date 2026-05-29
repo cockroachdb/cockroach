@@ -1,0 +1,958 @@
+# LogicTest: local
+
+# Late binding is a PL/pgSQL-only feature. LANGUAGE SQL procedures and UDFs
+# always use early binding; the setting has no effect on them.
+#
+# The setting is ON for the entire file by default, with one exception:
+# after the late_to_early_binding_transition subtest the setting is OFF for
+# the remaining subtests (those that test off-behavior, including
+# plpgsql_ddl_hint which also flips back to ON to test that direction).
+# A final RESET in the last subtest restores the default.
+statement ok
+SET CLUSTER SETTING sql.procedures.plpgsql.late_binding.enabled = true
+
+# Required by the helper views below, which select from system.descriptor.
+statement ok
+SET CLUSTER SETTING sql.override.allow_unsafe_internals.enabled = true
+
+# Helper views exposing late-binding-relevant descriptor fields. Used throughout
+# this file to assert presence/absence of back-references on tables, sequences,
+# views, types, functions, and procedures. Field names match the descriptor
+# proto so the JSON paths are still visible.
+statement ok
+CREATE VIEW proc_descs AS
+SELECT
+  d->'function'->>'name' AS name,
+  (d->'function'->>'id')::INT AS id,
+  COALESCE(d->'function'->'dependsOn',          '[]'::JSONB) AS depends_on,
+  COALESCE(d->'function'->'dependsOnTypes',     '[]'::JSONB) AS depends_on_types,
+  COALESCE(d->'function'->'dependsOnFunctions', '[]'::JSONB) AS depends_on_functions,
+  COALESCE(d->'function'->'dependedOnBy',       '[]'::JSONB) AS depended_on_by
+FROM (
+  SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false) d
+  FROM system.descriptor
+) WHERE d->'function' IS NOT NULL
+
+statement ok
+CREATE VIEW table_descs AS
+SELECT
+  (d->'table'->>'id')::INT AS id,
+  d->'table'->>'name' AS name,
+  COALESCE(d->'table'->'dependedOnBy', '[]'::JSONB) AS depended_on_by
+FROM (
+  SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false) d
+  FROM system.descriptor
+) WHERE d->'table' IS NOT NULL
+
+statement ok
+CREATE VIEW type_descs AS
+SELECT
+  d->'type'->>'name' AS name,
+  COALESCE(d->'type'->'referencingDescriptorIds', '[]'::JSONB) AS referencing_descriptor_ids
+FROM (
+  SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false) d
+  FROM system.descriptor
+) WHERE d->'type' IS NOT NULL AND d->'type'->>'enumMembers' IS NOT NULL
+
+subtest forward_reference_plpgsql
+
+# CREATE PROCEDURE with PL/pgSQL should succeed even though t1 does not exist.
+statement ok
+CREATE PROCEDURE p_fwd() LANGUAGE PLpgSQL AS $$
+BEGIN
+  INSERT INTO t1 VALUES (1);
+END
+$$
+
+# The procedure's dependsOn list should be empty (no back-references installed).
+query T
+SELECT depends_on FROM proc_descs WHERE name = 'p_fwd'
+----
+[]
+
+# CALL should fail because t1 does not exist yet.
+statement error pgcode 42P01 relation "t1" does not exist
+CALL p_fwd()
+
+# Create the table and verify CALL now works.
+statement ok
+CREATE TABLE t1 (c1 INT)
+
+statement ok
+CALL p_fwd()
+
+query I
+SELECT * FROM t1
+----
+1
+
+# The table should NOT have a back-reference to the procedure.
+let $t1_id
+SELECT 't1'::regclass::oid::int
+
+query T
+SELECT depended_on_by FROM table_descs WHERE id = $t1_id
+----
+[]
+
+statement ok
+DROP TABLE t1
+
+statement ok
+DROP PROCEDURE p_fwd
+
+subtest end
+
+subtest no_dependency_protection
+
+# With late binding, DDL on referenced objects should not be blocked.
+statement ok
+CREATE TABLE t_dep (a INT PRIMARY KEY, b INT, c INT)
+
+statement ok
+CREATE PROCEDURE p_dep() LANGUAGE PLpgSQL AS $$
+DECLARE
+  v_a INT;
+  v_b INT;
+BEGIN
+  SELECT a, b INTO v_a, v_b FROM t_dep LIMIT 1;
+END
+$$
+
+# The table should have no back-reference to the procedure.
+let $t_dep_id
+SELECT 't_dep'::regclass::oid::int
+
+query T
+SELECT depended_on_by FROM table_descs WHERE id = $t_dep_id
+----
+[]
+
+# DROP TABLE should succeed (no dependency protection).
+statement ok
+DROP TABLE t_dep
+
+# CALL should fail because the table was dropped.
+statement error pgcode 42P01 relation "t_dep" does not exist
+CALL p_dep()
+
+# Re-create the table and verify CALL works again.
+statement ok
+CREATE TABLE t_dep (a INT PRIMARY KEY, b INT, c INT)
+
+statement ok
+CALL p_dep()
+
+# DROP COLUMN should succeed (no dependency protection).
+statement ok
+ALTER TABLE t_dep DROP COLUMN b
+
+# CALL should now fail because the body references the dropped column.
+statement error pgcode 42703 column "b" does not exist
+CALL p_dep()
+
+statement ok
+DROP TABLE t_dep
+
+statement ok
+DROP PROCEDURE p_dep
+
+subtest end
+
+subtest column_rename
+
+statement ok
+CREATE TABLE t4 (a INT, b INT)
+
+statement ok
+INSERT INTO t4 VALUES (1, 2)
+
+statement ok
+CREATE PROCEDURE p_col() LANGUAGE PLpgSQL AS $$
+DECLARE
+  v INT;
+BEGIN
+  SELECT b INTO v FROM t4 LIMIT 1;
+END
+$$
+
+statement ok
+CALL p_col()
+
+# Rename the column. With late binding, this succeeds (no dependency protection).
+statement ok
+ALTER TABLE t4 RENAME COLUMN b TO c
+
+# CALL should fail because the body still references the old column name.
+statement error pgcode 42703 column "b" does not exist
+CALL p_col()
+
+statement ok
+DROP TABLE t4
+
+statement ok
+DROP PROCEDURE p_col
+
+subtest end
+
+subtest early_to_late_binding_transition
+
+# Create a procedure with early binding, then CREATE OR REPLACE with late
+# binding enabled. Verify old back-references are properly cleaned up.
+statement ok
+SET CLUSTER SETTING sql.procedures.plpgsql.late_binding.enabled = false
+
+statement ok
+CREATE TABLE t_trans (a INT PRIMARY KEY, b INT)
+
+statement ok
+CREATE PROCEDURE p_trans() LANGUAGE PLpgSQL AS $$
+DECLARE
+  v_a INT;
+  v_b INT;
+BEGIN
+  SELECT a, b INTO v_a, v_b FROM t_trans LIMIT 1;
+END
+$$
+
+# With early binding, the table should have a back-reference to the procedure.
+let $t_trans_id
+SELECT 't_trans'::regclass::oid::int
+
+query B
+SELECT jsonb_array_length(depended_on_by) > 0 FROM table_descs WHERE id = $t_trans_id
+----
+true
+
+# DROP TABLE should be blocked by the back-reference.
+statement error pgcode 2BP01 cannot drop table t_trans because other objects depend on it
+DROP TABLE t_trans
+
+# Now enable late binding and CREATE OR REPLACE the procedure.
+statement ok
+SET CLUSTER SETTING sql.procedures.plpgsql.late_binding.enabled = true
+
+statement ok
+CREATE OR REPLACE PROCEDURE p_trans() LANGUAGE PLpgSQL AS $$
+DECLARE
+  v_a INT;
+  v_b INT;
+BEGIN
+  SELECT a, b INTO v_a, v_b FROM t_trans LIMIT 1;
+END
+$$
+
+# The old back-reference should be cleaned up. The table should have no
+# back-references now.
+query T
+SELECT depended_on_by FROM table_descs WHERE id = $t_trans_id
+----
+[]
+
+# DROP TABLE should now succeed.
+statement ok
+DROP TABLE t_trans
+
+statement ok
+DROP PROCEDURE p_trans
+
+subtest end
+
+subtest drop_procedure_no_orphans
+
+# Verify that DROP PROCEDURE on a late-bound procedure doesn't leave orphaned
+# back-references.
+statement ok
+CREATE TABLE t_orphan (a INT)
+
+statement ok
+CREATE PROCEDURE p_orphan() LANGUAGE PLpgSQL AS $$
+DECLARE
+  v INT;
+BEGIN
+  SELECT a INTO v FROM t_orphan LIMIT 1;
+END
+$$
+
+# Verify no back-reference was installed.
+let $t_orphan_id
+SELECT 't_orphan'::regclass::oid::int
+
+query T
+SELECT depended_on_by FROM table_descs WHERE id = $t_orphan_id
+----
+[]
+
+# DROP PROCEDURE should succeed cleanly.
+statement ok
+DROP PROCEDURE p_orphan
+
+# Table should still have no back-references.
+query T
+SELECT depended_on_by FROM table_descs WHERE id = $t_orphan_id
+----
+[]
+
+statement ok
+DROP TABLE t_orphan
+
+subtest end
+
+subtest create_or_replace_basic
+
+# Verify CREATE OR REPLACE works with late binding.
+statement ok
+CREATE PROCEDURE p_replace() LANGUAGE PLpgSQL AS $$
+DECLARE
+  v INT;
+BEGIN
+  SELECT 1 INTO v FROM nonexistent LIMIT 1;
+END
+$$
+
+statement ok
+CREATE OR REPLACE PROCEDURE p_replace() LANGUAGE PLpgSQL AS $$
+DECLARE
+  v INT;
+BEGIN
+  v := 1;
+END
+$$
+
+statement ok
+CALL p_replace()
+
+statement ok
+DROP PROCEDURE p_replace
+
+subtest end
+
+subtest parameter_types_required
+
+# Parameter types must still exist at CREATE time.
+statement error pgcode 42704 type "nonexistent_type" does not exist
+CREATE PROCEDURE p_badtype(x nonexistent_type) LANGUAGE PLpgSQL AS $$
+DECLARE
+  v INT;
+BEGIN
+  v := 1;
+END
+$$
+
+subtest end
+
+subtest sequence_names_preserved
+
+# Sequence names should not be replaced with IDs in the body.
+statement ok
+CREATE SEQUENCE s1
+
+statement ok
+CREATE PROCEDURE p_seq() LANGUAGE PLpgSQL AS $$
+DECLARE
+  v INT;
+BEGIN
+  SELECT nextval('s1') INTO v;
+END
+$$
+
+statement ok
+CALL p_seq()
+
+# Drop and re-create the sequence. With late binding, the procedure should
+# resolve the new sequence by name.
+statement ok
+DROP SEQUENCE s1
+
+statement ok
+CREATE SEQUENCE s1
+
+statement ok
+CALL p_seq()
+
+statement ok
+DROP SEQUENCE s1
+
+statement ok
+DROP PROCEDURE p_seq
+
+subtest end
+
+subtest plpgsql_with_variables
+
+# PL/pgSQL structural validation still works even with late binding.
+statement ok
+CREATE PROCEDURE p_vars(x INT) LANGUAGE PLpgSQL AS $$
+DECLARE
+  v INT;
+BEGIN
+  v := x + 1;
+  INSERT INTO future_table VALUES (v);
+END
+$$
+
+statement error pgcode 42P01 relation "future_table" does not exist
+CALL p_vars(1)
+
+statement ok
+CREATE TABLE future_table (c1 INT)
+
+statement ok
+CALL p_vars(10)
+
+query I
+SELECT * FROM future_table
+----
+11
+
+statement ok
+DROP TABLE future_table
+
+statement ok
+DROP PROCEDURE p_vars
+
+subtest end
+
+subtest plpgsql_no_deps
+
+# PL/pgSQL late-bound procedures should also have empty dependsOn.
+statement ok
+CREATE TABLE t_pldep (a INT)
+
+statement ok
+CREATE PROCEDURE p_pldep() LANGUAGE PLpgSQL AS $$
+BEGIN
+  INSERT INTO t_pldep VALUES (1);
+END
+$$
+
+# Procedure's dependsOn should be empty.
+query T
+SELECT depends_on FROM proc_descs WHERE name = 'p_pldep'
+----
+[]
+
+# Table should have no back-reference.
+let $t_pldep_id
+SELECT 't_pldep'::regclass::oid::int
+
+query T
+SELECT depended_on_by FROM table_descs WHERE id = $t_pldep_id
+----
+[]
+
+# DROP TABLE should succeed.
+statement ok
+DROP TABLE t_pldep
+
+statement ok
+DROP PROCEDURE p_pldep
+
+subtest end
+
+subtest view_deps
+
+# Views referenced in procedure body should not get back-references.
+statement ok
+CREATE TABLE t_vbase (a INT PRIMARY KEY, b INT)
+
+statement ok
+CREATE VIEW v_dep AS SELECT a, b FROM t_vbase
+
+statement ok
+CREATE PROCEDURE p_view() LANGUAGE PLpgSQL AS $$
+DECLARE
+  v_a INT;
+  v_b INT;
+BEGIN
+  SELECT a, b INTO v_a, v_b FROM v_dep LIMIT 1;
+END
+$$
+
+# Procedure descriptor should have no dependsOn.
+query T
+SELECT depends_on FROM proc_descs WHERE name = 'p_view'
+----
+[]
+
+# The view's only back-reference should be from t_vbase (the base table), not
+# from the procedure.
+let $v_dep_id
+SELECT 'v_dep'::regclass::oid::int
+
+query B
+SELECT NOT EXISTS (
+  SELECT 1 FROM (
+    SELECT jsonb_array_elements(depended_on_by) AS ref
+    FROM table_descs WHERE id = $v_dep_id
+  ) sub
+  WHERE (ref->>'id')::INT NOT IN (SELECT 't_vbase'::regclass::oid::int)
+)
+----
+true
+
+# DROP VIEW should succeed (no dependency from the procedure).
+statement ok
+DROP VIEW v_dep
+
+statement error pgcode 42P01 relation "v_dep" does not exist
+CALL p_view()
+
+statement ok
+DROP TABLE t_vbase
+
+statement ok
+DROP PROCEDURE p_view
+
+subtest end
+
+subtest sequence_deps
+
+# Sequences referenced in procedure body should not get back-references.
+statement ok
+CREATE SEQUENCE s_dep
+
+statement ok
+CREATE PROCEDURE p_seqdep() LANGUAGE PLpgSQL AS $$
+DECLARE
+  v INT;
+BEGIN
+  SELECT nextval('s_dep') INTO v;
+END
+$$
+
+# Procedure descriptor should have no dependsOn.
+query T
+SELECT depends_on FROM proc_descs WHERE name = 'p_seqdep'
+----
+[]
+
+# Sequence should have no back-reference from the procedure.
+let $s_dep_id
+SELECT 's_dep'::regclass::oid::int
+
+query T
+SELECT depended_on_by FROM table_descs WHERE id = $s_dep_id
+----
+[]
+
+# DROP SEQUENCE should succeed.
+statement ok
+DROP SEQUENCE s_dep
+
+statement error pgcode 42P01 relation "s_dep" does not exist
+CALL p_seqdep()
+
+statement ok
+DROP PROCEDURE p_seqdep
+
+subtest end
+
+subtest type_deps
+
+# UDTs used in the procedure body should not get back-references.
+statement ok
+CREATE TYPE color AS ENUM ('red', 'green', 'blue')
+
+statement ok
+CREATE TABLE t_typed (a INT, c color)
+
+statement ok
+CREATE PROCEDURE p_type() LANGUAGE PLpgSQL AS $$
+BEGIN
+  INSERT INTO t_typed VALUES (1, 'red'::color);
+END
+$$
+
+# Procedure descriptor should have no dependsOnTypes from the body.
+# (Parameter/return type deps are still tracked, but this procedure has
+# no UDT parameters.)
+query T
+SELECT depends_on_types FROM proc_descs WHERE name = 'p_type'
+----
+[]
+
+# The type descriptor should have no back-reference from the procedure.
+# (The table t_typed legitimately depends on color, so we check specifically
+# that the procedure's id is not present in the type's referencing list.)
+let $p_type_id
+SELECT id FROM proc_descs WHERE name = 'p_type'
+
+query B
+SELECT NOT EXISTS (
+  SELECT 1 FROM (
+    SELECT jsonb_array_elements(referencing_descriptor_ids)::TEXT::INT AS ref_id
+    FROM type_descs WHERE name = 'color'
+  ) sub
+  WHERE ref_id = $p_type_id
+)
+----
+true
+
+statement ok
+DROP TABLE t_typed
+
+statement ok
+DROP PROCEDURE p_type
+
+statement ok
+DROP TYPE color
+
+subtest end
+
+subtest function_deps
+
+# Functions called from a late-bound procedure body should not get
+# back-references.
+statement ok
+CREATE FUNCTION f_helper() RETURNS INT LANGUAGE SQL AS $$ SELECT 42 $$
+
+statement ok
+CREATE PROCEDURE p_callfn() LANGUAGE PLpgSQL AS $$
+DECLARE
+  v INT;
+BEGIN
+  SELECT f_helper() INTO v;
+END
+$$
+
+# Procedure descriptor should have no dependsOnFunctions.
+query T
+SELECT depends_on_functions FROM proc_descs WHERE name = 'p_callfn'
+----
+[]
+
+# The helper function should have no back-reference from the procedure.
+let $p_callfn_id
+SELECT id FROM proc_descs WHERE name = 'p_callfn'
+
+query B
+SELECT NOT EXISTS (
+  SELECT 1 FROM (
+    SELECT jsonb_array_elements(depended_on_by) AS ref
+    FROM proc_descs WHERE name = 'f_helper'
+  ) sub
+  WHERE (ref->>'id')::INT = $p_callfn_id
+)
+----
+true
+
+# Verify the CALL still works.
+statement ok
+CALL p_callfn()
+
+# Drop the function. With late binding, this should succeed.
+statement ok
+DROP FUNCTION f_helper
+
+statement error pgcode 42883 unknown function: f_helper
+CALL p_callfn()
+
+statement ok
+DROP PROCEDURE p_callfn
+
+subtest end
+
+subtest udf_still_early_bound
+
+# UDFs should still use early binding even when the setting is enabled.
+statement error pgcode 42P01 relation "no_such_table" does not exist
+CREATE FUNCTION f_early() RETURNS INT LANGUAGE SQL AS $$ SELECT * FROM no_such_table $$
+
+# UDFs that reference existing tables should still install back-references.
+statement ok
+CREATE TABLE t_udf (a INT)
+
+statement ok
+CREATE FUNCTION f_udf() RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM t_udf LIMIT 1 $$
+
+let $t_udf_id
+SELECT 't_udf'::regclass::oid::int
+
+query B
+SELECT jsonb_array_length(depended_on_by) > 0 FROM table_descs WHERE id = $t_udf_id
+----
+true
+
+statement ok
+DROP FUNCTION f_udf
+
+statement ok
+DROP TABLE t_udf
+
+subtest end
+
+subtest language_sql_ignores_setting
+
+# LANGUAGE SQL procedures always use early binding. With the setting enabled,
+# CREATE PROCEDURE should still fail when referenced relations are missing.
+statement error pgcode 42P01 relation "no_such_table_sql" does not exist
+CREATE PROCEDURE p_sql_early() LANGUAGE SQL AS $$ SELECT * FROM no_such_table_sql $$
+
+# An existing-table reference should install a back-reference (early binding).
+statement ok
+CREATE TABLE t_sql (a INT)
+
+statement ok
+CREATE PROCEDURE p_sql_early() LANGUAGE SQL AS $$ SELECT a FROM t_sql $$
+
+let $t_sql_id
+SELECT 't_sql'::regclass::oid::int
+
+query B
+SELECT jsonb_array_length(depended_on_by) > 0 FROM table_descs WHERE id = $t_sql_id
+----
+true
+
+statement ok
+DROP PROCEDURE p_sql_early
+
+statement ok
+DROP TABLE t_sql
+
+subtest end
+
+subtest syntax_errors_caught_at_create_time
+
+# Late binding skips body analysis but still parses the body. Syntax errors,
+# including those in embedded SQL statements, must be reported at CREATE
+# PROCEDURE time rather than being deferred to CALL time.
+
+# PL/pgSQL-level syntax error (missing semicolon).
+statement error syntax error
+CREATE PROCEDURE p_bad_plpgsql() LANGUAGE PLpgSQL AS $$
+  BEGIN
+    SELECT 1
+  END
+$$
+
+# Embedded SQL with a syntax error (typo in keyword).
+statement error syntax error
+CREATE PROCEDURE p_bad_sql() LANGUAGE PLpgSQL AS $$
+  BEGIN
+    SELECT * FORM nonexistent_table;
+  END
+$$
+
+# Invalid PL/pgSQL construct (assignment from a SELECT statement). The PL/pgSQL
+# parser rejects this even though name resolution is skipped under late binding.
+statement error syntax error
+CREATE PROCEDURE p_bad_assign() LANGUAGE PLpgSQL AS $$
+  DECLARE
+    x INT;
+  BEGIN
+    x := SELECT 1;
+  END
+$$
+
+subtest end
+
+# Transition subtest. Inherits the ON setting from the section above, flips to
+# OFF mid-test, and leaves the setting OFF for the subtests that follow.
+subtest late_to_early_binding_transition
+
+# Symmetric to early_to_late_binding_transition: create with late binding on,
+# flip off, CREATE OR REPLACE, and verify back-references are now installed.
+statement ok
+CREATE TABLE t_l2e (a INT PRIMARY KEY, b INT)
+
+statement ok
+CREATE PROCEDURE p_l2e() LANGUAGE PLpgSQL AS $$
+DECLARE
+  v_a INT;
+  v_b INT;
+BEGIN
+  SELECT a, b INTO v_a, v_b FROM t_l2e LIMIT 1;
+END
+$$
+
+# With late binding, the table should have no back-references.
+let $t_l2e_id
+SELECT 't_l2e'::regclass::oid::int
+
+query T
+SELECT depended_on_by FROM table_descs WHERE id = $t_l2e_id
+----
+[]
+
+# Flip the setting off and CREATE OR REPLACE the procedure.
+statement ok
+SET CLUSTER SETTING sql.procedures.plpgsql.late_binding.enabled = false
+
+statement ok
+CREATE OR REPLACE PROCEDURE p_l2e() LANGUAGE PLpgSQL AS $$
+DECLARE
+  v_a INT;
+  v_b INT;
+BEGIN
+  SELECT a, b INTO v_a, v_b FROM t_l2e LIMIT 1;
+END
+$$
+
+# The table should now have a back-reference from the procedure.
+query B
+SELECT jsonb_array_length(depended_on_by) > 0 FROM table_descs WHERE id = $t_l2e_id
+----
+true
+
+# DROP TABLE should be blocked.
+statement error pgcode 2BP01 cannot drop table t_l2e because other objects depend on it
+DROP TABLE t_l2e
+
+statement ok
+DROP PROCEDURE p_l2e
+
+statement ok
+DROP TABLE t_l2e
+
+subtest end
+
+# --------------------------------------------------------------------------
+# OFF-section: the setting is OFF from the transition above through the end
+# of the file. Subtests here do not toggle it (except plpgsql_ddl_hint, which
+# tests both directions at the end).
+# --------------------------------------------------------------------------
+
+subtest late_binding_disabled
+
+# With late binding disabled, PL/pgSQL procedures revert to early binding and
+# CREATE PROCEDURE rejects references to missing relations.
+statement error pgcode 42P01 relation "no_such_table" does not exist
+CREATE PROCEDURE p_early() LANGUAGE PLpgSQL AS $$
+DECLARE
+  v INT;
+BEGIN
+  SELECT 1 INTO v FROM no_such_table LIMIT 1;
+END
+$$
+
+subtest end
+
+subtest plpgsql_ddl_nested
+
+# The DDL detector must recurse through nested PL/pgSQL constructs (IF, LOOP),
+# not just inspect top-level statements.
+statement error pgcode 0A000 DDL statements in PL/pgSQL procedure bodies require late binding
+CREATE PROCEDURE p_ddl_if() LANGUAGE PLpgSQL AS $$
+BEGIN
+  IF TRUE THEN
+    CREATE TABLE t_ddl_if (id INT);
+  END IF;
+END
+$$
+
+statement error pgcode 0A000 DDL statements in PL/pgSQL procedure bodies require late binding
+CREATE PROCEDURE p_ddl_loop() LANGUAGE PLpgSQL AS $$
+BEGIN
+  LOOP
+    DROP TABLE t_ddl_loop;
+    EXIT;
+  END LOOP;
+END
+$$
+
+subtest end
+
+subtest plpgsql_ddl_cursor
+
+# The DDL detector must inspect SQL statements wrapped inside PL/pgSQL cursor
+# nodes (CursorDeclaration.Query and Open.Query), not just bare top-level
+# statements.
+
+# CursorDeclaration branch: bound cursor whose query is DDL.
+statement error pgcode 0A000 DDL statements in PL/pgSQL procedure bodies require late binding
+CREATE PROCEDURE p_ddl_cursor_decl() LANGUAGE PLpgSQL AS $$
+DECLARE
+  c CURSOR FOR DROP TABLE t_does_not_exist;
+BEGIN
+  OPEN c;
+END
+$$
+
+# Open branch: OPEN c FOR <DDL>.
+statement error pgcode 0A000 DDL statements in PL/pgSQL procedure bodies require late binding
+CREATE PROCEDURE p_ddl_open() LANGUAGE PLpgSQL AS $$
+DECLARE
+  c REFCURSOR;
+BEGIN
+  OPEN c FOR DROP TABLE t_does_not_exist;
+END
+$$
+
+subtest end
+
+subtest plpgsql_ddl_hint
+
+# Tests both directions: supported DDL is rejected with a hint when the
+# setting is OFF, then accepted when it is ON. Unsupported DDL is rejected
+# in both cases.
+statement error pgcode 0A000 DDL statements in PL/pgSQL procedure bodies require late binding
+CREATE PROCEDURE p_ddl_create() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_ddl (id INT);
+END
+$$
+
+statement error pgcode 0A000 DDL statements in PL/pgSQL procedure bodies require late binding
+CREATE PROCEDURE p_ddl_drop() LANGUAGE PLpgSQL AS $$
+BEGIN
+  DROP TABLE t_ddl;
+END
+$$
+
+# DDL that is not in the in-procedure allowlist (e.g. ALTER TABLE,
+# CREATE INDEX, CREATE VIEW) is reported as unimplemented at CREATE
+# PROCEDURE time regardless of the setting; enabling late binding would
+# not make these work, so users get the more specific error instead of
+# the late-binding hint.
+statement error pgcode 0A000 unimplemented: ALTER TABLE usage inside a function definition
+CREATE PROCEDURE p_ddl_alter() LANGUAGE PLpgSQL AS $$
+BEGIN
+  ALTER TABLE t_ddl ADD COLUMN c INT;
+END
+$$
+
+statement error pgcode 0A000 unimplemented: CREATE INDEX usage inside a function definition
+CREATE PROCEDURE p_ddl_idx() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE INDEX idx ON t_ddl (id);
+END
+$$
+
+# Mixed bodies are reported by the unsupported statement first, since
+# enabling the setting alone would not fix it.
+statement error pgcode 0A000 unimplemented: ALTER TABLE usage inside a function definition
+CREATE PROCEDURE p_ddl_mixed() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_ddl (id INT);
+  ALTER TABLE t_ddl ADD COLUMN c INT;
+END
+$$
+
+# With the setting enabled the supported body is accepted, and the
+# unsupported body is still rejected at CREATE time (same error as above).
+statement ok
+SET CLUSTER SETTING sql.procedures.plpgsql.late_binding.enabled = true
+
+statement ok
+CREATE PROCEDURE p_ddl_create() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_ddl (id INT);
+END
+$$
+
+statement ok
+DROP PROCEDURE p_ddl_create
+
+statement error pgcode 0A000 unimplemented: ALTER TABLE usage inside a function definition
+CREATE PROCEDURE p_ddl_alter_late() LANGUAGE PLpgSQL AS $$
+BEGIN
+  ALTER TABLE t_ddl ADD COLUMN c INT;
+END
+$$
+
+statement ok
+RESET CLUSTER SETTING sql.procedures.plpgsql.late_binding.enabled
+
+subtest end
+

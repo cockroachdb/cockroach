@@ -8,6 +8,7 @@ package ldrtestutils
 import (
 	"testing"
 
+	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -64,8 +65,10 @@ func WaitUntilReplicatedTime(
 			t.Fatalf("logical replication job %d failed: %s", jobID, payload.Error)
 		}
 
-		progress := jobutils.GetJobProgress(t, db, jobID)
-		replicatedTime := progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication.ReplicatedTime
+		replicatedTime, err := GetReplicatedTime(t, db, jobID)
+		if err != nil {
+			return err
+		}
 		if replicatedTime.IsEmpty() {
 			return errors.Newf(
 				"logical replication has not recorded any progress yet, waiting to advance past %s",
@@ -78,4 +81,21 @@ func WaitUntilReplicatedTime(
 		}
 		return nil
 	})
+}
+
+// GetReplicatedTime reads the replicated time from system.job_progress via
+// crdb_internal.jobs.high_water_timestamp.
+func GetReplicatedTime(
+	t *testing.T, db *sqlutils.SQLRunner, jobID jobspb.JobID,
+) (hlc.Timestamp, error) {
+	t.Helper()
+	var hwts *apd.Decimal
+	db.QueryRow(t,
+		"SELECT high_water_timestamp FROM crdb_internal.jobs WHERE job_id = $1",
+		jobID,
+	).Scan(&hwts)
+	if hwts == nil {
+		return hlc.Timestamp{}, nil
+	}
+	return hlc.DecimalToHLC(hwts)
 }

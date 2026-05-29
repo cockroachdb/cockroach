@@ -29,8 +29,11 @@ cd /home/ubuntu
 
 export ROACHPROD_GCE_DEFAULT_PROJECT=cockroach-drt
 export ROACHPROD_DNS="drt.crdb.io"
-./drtprod sync
-sleep 20
+
+if [[ "${ROACHTEST_OPS_SYSTEMD:-}" != "1" ]]; then
+  ./drtprod sync
+  sleep 20
+fi
 
 # Fetch secrets from cloud provider at runtime (not stored in any file)
 # AWS secrets are stored in us-east-1 region for consistency across all clusters
@@ -81,15 +84,30 @@ if [ -z "${DD_API_KEY}" ]; then
   exit 1
 fi
 
-# Ignore SIGINT in the shell so that tee (which inherits the signal
-# disposition) stays alive when Ctrl+C is pressed. Only
-# roachtest-operations receives SIGINT and handles cleanup gracefully.
-trap '' INT
+UNIT_NAME="roachtest-operations-${CLUSTER}"
 
-./roachtest-operations run-operation "${CLUSTER}" ".*" \
-  --datadog-api-key "${DD_API_KEY}" \
-  --datadog-app-key "unused" \
-  --datadog-tags "env:development,cluster:${CLUSTER},workload:${WORKLOAD_CLUSTER},team:drt,service:drt-cockroachdb" \
-  --certs-dir ./certs --prom-port 2115 \
-  --cloud "${CLOUD}" --workload-cluster "${WORKLOAD_CLUSTER}" --run-forever 2>&1 | tee -a roachtest_ops.log
+if [[ "${ROACHTEST_OPS_SYSTEMD:-}" == "1" ]]; then
+  exec ./roachtest-operations run-operation "${CLUSTER}" ".*" \
+    --datadog-api-key "${DD_API_KEY}" \
+    --datadog-app-key "unused" \
+    --datadog-tags "env:development,cluster:${CLUSTER},workload:${WORKLOAD_CLUSTER},team:drt,service:drt-cockroachdb" \
+    --certs-dir ./certs --prom-port 2115 \
+    --cloud "${CLOUD}" --workload-cluster "${WORKLOAD_CLUSTER}" --run-forever
+fi
 
+# Set up systemd unit and start it, which will recursively
+# invoke this script but hit the above conditional.
+
+if systemctl is-active -q "${UNIT_NAME}"; then
+  echo "${UNIT_NAME} service already active"
+  echo "To get more information: systemctl status ${UNIT_NAME}"
+  exit 1
+fi
+
+sudo systemctl reset-failed "${UNIT_NAME}" 2>/dev/null || true
+
+sudo systemd-run --unit "${UNIT_NAME}" \
+  --same-dir --uid "$(id -u)" --gid "$(id -g)" \
+  -p TimeoutStopSec=150 \
+  --setenv ROACHTEST_OPS_SYSTEMD=1 \
+  bash "${0}" "${CLUSTER}" "${WORKLOAD_CLUSTER}" "${CLOUD}"

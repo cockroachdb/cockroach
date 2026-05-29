@@ -78,15 +78,21 @@ func renderCreateTriggerStatement(
 	}
 
 	// Resolve the fully-qualified names of the trigger function and table.
+	// PostgreSQL's pg_get_triggerdef emits a schema-qualified table name but
+	// no catalog (database) prefix; suppress the catalog here so SHOW CREATE
+	// TRIGGER and pg_get_triggerdef produce schema.table, matching PostgreSQL
+	// and keeping the output reusable across databases.
 	funcName, err := p.GetQualifiedFunctionNameByID(ctx, int64(trigger.FuncID))
 	if err != nil {
 		return "", err
 	}
+	funcName.ExplicitCatalog = false
 
 	tableName, err := p.getQualifiedTableName(ctx, tableDesc)
 	if err != nil {
 		return "", err
 	}
+	tableName.ExplicitCatalog = false
 
 	// Use the trigger descriptor to decompile a CreateTrigger statement that
 	// will be used to produce the SHOW CREATE TRIGGER output.

@@ -391,7 +391,7 @@ var (
 	// internally on a connection between different Cockroach nodes.
 	InternalConnectionFailure = MakeCode("58C01")
 
-	// ProxyConnectionError is returned by the sqlproxyccl and it indicates a
+	// ProxyConnectionError is returned by the sqlproxy and it indicates a
 	// problem establishing the connection through the proxy.
 	ProxyConnectionError = MakeCode("08C00")
 

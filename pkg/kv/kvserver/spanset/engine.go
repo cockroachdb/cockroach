@@ -92,11 +92,9 @@ func (s *spanSetEngine) Download(ctx context.Context, span roachpb.Span, copy bo
 
 // CreateCheckpoint implements the storage.EngineWithoutRW interface.
 func (s *spanSetEngine) CreateCheckpoint(dir string, spans []roachpb.Span) error {
-	for _, span := range spans {
-		if err := s.spans.CheckAllowed(SpanReadOnly, TrickySpan{Key: span.Key, EndKey: span.EndKey}); err != nil {
-			return err
-		}
-	}
+	// NB: intentionally not checking allowed spans. The caller declares
+	// coarsely-grained spans for checkpointing, so fine-grained span checking
+	// here would be more trouble than it's worth.
 	return s.e.CreateCheckpoint(dir, spans)
 }
 

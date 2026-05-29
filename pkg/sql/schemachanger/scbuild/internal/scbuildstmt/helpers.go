@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/walkutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -180,6 +181,10 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 			if t.IsTemporary {
 				panic(scerrors.NotImplementedErrorf(nil, "dropping a temporary table"))
 			}
+			if ldrJobIDs := undropped.FilterLDRJobIDs().MustGetZeroOrOneElement(); ldrJobIDs != nil && len(ldrJobIDs.JobIDs) > 0 {
+				ns := undropped.FilterNamespace().MustGetOneElement()
+				panic(sqlerrors.NewDisallowedSchemaChangeOnLDRTableErr(ns.Name, ldrJobIDs.JobIDs))
+			}
 		case *scpb.Sequence:
 			if t.IsTemporary {
 				panic(scerrors.NotImplementedErrorf(nil, "dropping a temporary sequence"))
@@ -266,7 +271,12 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 			*scpb.ForeignKeyConstraint,
 			*scpb.ForeignKeyConstraintUnvalidated,
 			*scpb.SequenceOwner,
-			*scpb.DatabaseRegionConfig:
+			*scpb.DatabaseRegionConfig,
+			*scpb.DomainCheckConstraint,
+			*scpb.DomainCheckConstraintUnvalidated,
+			*scpb.DomainDefault,
+			*scpb.DomainNotNull,
+			*scpb.DomainConstraintName:
 			b.Drop(e)
 		default:
 			panic(errors.AssertionFailedf("un-dropped backref %T (%v) should either be "+
@@ -424,12 +434,13 @@ func isNonDropIndex(target scpb.TargetStatus) bool {
 
 // getColumnIDFromColumnName looks up a column's ID by its name.
 // If no column with this name exists, 0 will be returned.
+// This function does not check for any privileges on the table.
+// The caller check the privileges as needed.
 func getColumnIDFromColumnName(
 	b BuilderState, tableID catid.DescID, columnName tree.Name, required bool,
 ) catid.ColumnID {
 	colElems := b.ResolveColumn(tableID, columnName, ResolveParams{
 		IsExistenceOptional: !required,
-		RequiredPrivilege:   privilege.CREATE,
 	})
 
 	if colElems == nil {
@@ -462,10 +473,12 @@ func mustGetColumnIDFromColumnName(
 // Currently unused.
 var _ = mustGetColumnIDFromColumnName
 
-func mustGetTableIDFromTableName(b BuildCtx, tableName tree.TableName) catid.DescID {
+func mustGetTableIDFromTableName(
+	b BuildCtx, tableName tree.TableName, requiredPrivilege privilege.Kind,
+) catid.DescID {
 	tableElems := b.ResolveTable(tableName.ToUnresolvedObjectName(), ResolveParams{
 		IsExistenceOptional: false,
-		RequiredPrivilege:   privilege.CREATE,
+		RequiredPrivilege:   requiredPrivilege,
 	})
 	_, _, tableElem := scpb.FindTable(tableElems)
 	if tableElem == nil {
@@ -575,7 +588,7 @@ func referencesColumnIDFilter(
 	columnID catid.ColumnID,
 ) func(_ scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
 	return func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) (included bool) {
-		_ = screl.WalkColumnIDs(e, func(id *catid.ColumnID) error {
+		_ = walkutil.Walk(e, func(id *catid.ColumnID) error {
 			if id != nil && *id == columnID {
 				included = true
 			}

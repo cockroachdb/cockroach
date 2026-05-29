@@ -628,8 +628,8 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 				})
 				log.Dev.Infof(ctx, "job %d, session %s: paused", id, s.ID())
 			case StateReverting:
-				if err := job.WithTxn(txn).Update(ctx, func(
-					txn isql.Txn, md JobMetadata, ju *JobUpdater,
+				if err := job.DeprecatedWithTxn(txn).Update(ctx, func(
+					txn isql.Txn, md DeprecatedJobMetadata, ju *DeprecatedJobUpdater,
 				) error {
 					if !r.cancelRegisteredJobContext(id) {
 						// If we didn't already have a running job for this

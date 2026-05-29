@@ -2175,6 +2175,36 @@ var regularBuiltins = map[string]builtinDefinition{
 		},
 	),
 
+	"random_normal": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(_ context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDFloat(tree.DFloat(evalCtx.GetRNG().NormFloat64())), nil
+			},
+			Info:       "Returns a random floating-point value drawn from the standard normal distribution (mean 0, standard deviation 1).",
+			Volatility: volatility.Volatile,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "mean", Typ: types.Float},
+				{Name: "stddev", Typ: types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(_ context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				mean := float64(tree.MustBeDFloat(args[0]))
+				stddev := float64(tree.MustBeDFloat(args[1]))
+				if stddev < 0 {
+					return nil, pgerror.New(pgcode.InvalidParameterValue, "stddev cannot be negative")
+				}
+				return tree.NewDFloat(tree.DFloat(stddev*evalCtx.GetRNG().NormFloat64() + mean)), nil
+			},
+			Info:       "Returns a random floating-point value drawn from a normal distribution with the given `mean` and `stddev`.",
+			Volatility: volatility.Volatile,
+		},
+	),
+
 	"setseed": makeBuiltin(
 		defProps(),
 		tree.Overload{
@@ -2697,12 +2727,18 @@ var regularBuiltins = map[string]builtinDefinition{
 				if year == 0 {
 					return nil, pgerror.New(pgcode.DatetimeFieldOverflow, "year value of 0 is not valid")
 				}
+				// PostgreSQL's make_date treats a negative year argument as
+				// "N BC" (no year zero in SQL semantics), but Go's time.Date
+				// uses astronomical numbering (year 0 = 1 BC). Shift negative
+				// inputs by one so e.g. -2013 maps to astronomical year -2012,
+				// matching PostgreSQL output. See #149950.
+				if year < 0 {
+					year++
+				}
 				location := evalCtx.GetLocation()
 				return tree.NewDDateFromTime(time.Date(year, month, day, 0, 0, 0, 0, location))
 			},
-			// For the ISO 8601 standard, the conversion from a negative year to BC changes the year value (ex. -2013 == 2014 BC).
-			// https://en.wikipedia.org/wiki/ISO_8601#Years
-			Info:       "Create date (formatted according to ISO 8601) from year, month, and day fields (negative years signify BC).",
+			Info:       "Create date from year, month, and day fields (negative years signify BC).",
 			Volatility: volatility.Immutable,
 		},
 	),
@@ -5294,10 +5330,11 @@ value if you rely on the HLC for accuracy.`,
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if evalCtx.SessionData().User().Undefined() {
+				u := evalCtx.EffectiveUser()
+				if u.Undefined() {
 					return tree.DNull, nil
 				}
-				return tree.NewDString(evalCtx.SessionData().User().Normalized()), nil
+				return tree.NewDString(u.Normalized()), nil
 			},
 			Info: "Returns the current user. This function is provided for " +
 				"compatibility with PostgreSQL.",
@@ -13067,9 +13104,7 @@ func makeTimestampStatementBuiltinOverload(withOutputTZ bool, withInputTZ bool) 
 	if !withOutputTZ && withInputTZ {
 		panic("Creating a timestamp without a timezone should not have an input timestamp attached to it.")
 	}
-	// For the ISO 8601 standard, the conversion from a negative year to BC changes the year value (ex. -2013 == 2014 BC).
-	// https://en.wikipedia.org/wiki/ISO_8601#Years
-	info := "Create timestamp (formatted according to ISO 8601) "
+	info := "Create timestamp "
 	vol := volatility.Immutable
 	typs := tree.ParamTypes{{Name: "year", Typ: types.Int}, {Name: "month", Typ: types.Int}, {Name: "day", Typ: types.Int},
 		{Name: "hour", Typ: types.Int}, {Name: "min", Typ: types.Int}, {Name: "sec", Typ: types.Float}}
@@ -13102,6 +13137,14 @@ func makeTimestampStatementBuiltinOverload(withOutputTZ bool, withInputTZ bool) 
 			}
 			if year == 0 {
 				return nil, pgerror.New(pgcode.DatetimeFieldOverflow, "year value of 0 is not valid")
+			}
+			// PostgreSQL's make_timestamp(tz) treats a negative year argument
+			// as "N BC" (no year zero in SQL semantics), but Go's time.Date
+			// uses astronomical numbering (year 0 = 1 BC). Shift negative
+			// inputs by one so e.g. -2013 maps to astronomical year -2012,
+			// matching PostgreSQL output. See #149950.
+			if year < 0 {
+				year++
 			}
 			hour := int(tree.MustBeDInt(args[3]))
 			min := int(tree.MustBeDInt(args[4]))
@@ -13312,9 +13355,16 @@ func rewriteInlineHintsImpl(
 	// Now that we've passed some basic validation, insert into statement_hints.
 	var hint hintpb.StatementHintUnion
 	hint.SetValue(&hintpb.InjectHints{DonorSQL: donorSQL})
-	hintID, err := evalCtx.Planner.InsertStatementHint(ctx, targetSQL, hint, optDatabase)
+	hintID, numOverridden, err := evalCtx.Planner.InsertStatementHint(ctx, targetSQL, hint, optDatabase)
 	if err != nil {
 		return nil, err
+	}
+	if numOverridden > 0 {
+		evalCtx.ClientNoticeSender.BufferClientNotice(ctx, pgnotice.Newf(
+			"this hint overrides %d existing inline hint(s) for the same statement fingerprint; "+
+				"the older hint(s) will be skipped. Use SHOW STATEMENT HINTS to identify stale hints.",
+			numOverridden,
+		))
 	}
 
 	// Log the statement hint injection event.
@@ -13593,9 +13643,17 @@ func sessionVariableHintImpl(
 		VariableName:  varName,
 		VariableValue: varValue,
 	})
-	hintID, err := evalCtx.Planner.InsertStatementHint(ctx, fingerprint, hint, optDatabase)
+	hintID, numOverridden, err := evalCtx.Planner.InsertStatementHint(ctx, fingerprint, hint, optDatabase)
 	if err != nil {
 		return nil, err
+	}
+	if numOverridden > 0 {
+		evalCtx.ClientNoticeSender.BufferClientNotice(ctx, pgnotice.Newf(
+			"this hint overrides %d existing session variable hint(s) for %q "+
+				"on the same statement fingerprint; the older hint(s) will be skipped. "+
+				"Use SHOW STATEMENT HINTS to identify stale hints.",
+			numOverridden, varName,
+		))
 	}
 
 	// Log the session variable hint event.

@@ -69,10 +69,10 @@ query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder
 FROM [SHOW EXPERIMENTAL_RANGES FROM INDEX json_inv WITH DETAILS] ORDER BY lease_holder
 ----
-start_key     end_key       replicas  lease_holder
-…/<IndexMin>  …/10          {1}       1
-…/10          …/20          {2}       2
-…/20          …/<IndexMax>  {3}       3
+start_key           end_key       replicas  lease_holder
+<before:/Table/XX>  …/10          {1}       1
+…/10                …/20          {2}       2
+…/20                <after:/Max>  {3}       3
 
 statement ok
 ALTER TABLE json_tab VALIDATE CONSTRAINT check_c
@@ -345,10 +345,10 @@ query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder
 FROM [SHOW EXPERIMENTAL_RANGES FROM INDEX arr_inv WITH DETAILS] ORDER BY lease_holder
 ----
-start_key     end_key       replicas  lease_holder
-…/<IndexMin>  …/10          {1}       1
-…/10          …/20          {2}       2
-…/20          …/<IndexMax>  {3}       3
+start_key                 end_key       replicas  lease_holder
+<before:/Table/106/2/20>  …/10          {1}       1
+…/10                      …/20          {2}       2
+…/20                      <after:/Max>  {3}       3
 
 query T
 EXPLAIN (DISTSQL)

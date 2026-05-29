@@ -179,16 +179,16 @@ query T
 SELECT table_name FROM [SHOW TABLES]
 ORDER BY table_name
 ----
-i😰nspect_errors
-mvcc_statistics
-proteC ted_ts_records
-r\\x86egion_\\U000B092Dlivenes s
-replication_critical_localities
-statement_bundle_chunks
-statement_diagnost ics
+join_tokens
+locatio%f9ns
+replication_const͌raint_?stats
+span_configurations
+sqlliveness
 sta😣tement_statistics
-tab͇le_statistics
-tenant_usage
+t"enant_settings
+table_statistics_😍locks
+tenants
+transaction_diagnostics
 users
 
 # Again, the column names are randomized.
@@ -198,26 +198,26 @@ WHERE table_catalog = 'newdb2' AND table_schema = 'public'
 ORDER BY table_name, column_name
 LIMIT 20
 ----
-i😰nspect_errors          " id"            oid
-i😰nspect_errors          " primary_key"   text
-i😰nspect_errors          "%verror😌_type"  text
-i😰nspect_errors          aost😹            timestamp with time zone
-i😰nspect_errors          database_id      oid
-i😰nspect_errors          "deta*😫ils"      jsonb
-i😰nspect_errors          error_id         uuid
-i😰nspect_errors          job_id           bigint
-i😰nspect_errors          rowid            bigint
-i😰nspect_errors          "sche m̻%pa_id"  oid
-mvcc_statistics          "Table_id"       bigint
-mvcc_statistics          created_at       timestamp with time zone
-mvcc_statistics          database_id      bigint
-mvcc_statistics          index_id         bigint
-mvcc_statistics          rowid            bigint
-mvcc_statistics          statistics       jsonb
-"proteC ted_ts_records"  "id              "                         uuid
-"proteC ted_ts_records"  meta_type        text
-"proteC ted_ts_records"  m😛eta            bytea
-"proteC ted_ts_records"  "nu m_spans"     bigint
+join_tokens                       expiration        timestamp with time zone
+join_tokens                       id                uuid
+join_tokens                       rowid             bigint
+join_tokens                       secret            bytea
+"locatio%f9ns"                    "latitude "       numeric
+"locatio%f9ns"                    "locali!tyValue"  text
+"locatio%f9ns"                    "localityKey"     text
+"locatio%f9ns"                    longitude         numeric
+"locatio%f9ns"                    rowid             bigint
+"replication_const͌raint_?stats"  "config"""        text
+"replication_const͌raint_?stats"  report_id         bigint
+"replication_const͌raint_?stats"  rowid             bigint
+"replication_const͌raint_?stats"  "suBzone_id"      bigint
+"replication_const͌raint_?stats"  "type"           text
+"replication_const͌raint_?stats"  violating_ranges  bigint
+"replication_const͌raint_?stats"  violation_start   timestamp with time zone
+"replication_const͌raint_?stats"  zone_id           bigint
+span_configurations               config🙃           bytea
+span_configurations               end_key           bytea
+span_configurations               rowid             bigint
 
 subtest templates/different_templates_in_each_db
 
@@ -235,15 +235,16 @@ SELECT quote_ident(database_name), quote_ident(schema_name), quote_ident(name)
 FROM "".crdb_internal.tables WHERE database_name ILIKE '%d%b%t%'
 ORDER BY database_name, schema_name, name
 ----
+"d%qbt_1"  public  advisory_locks
 "d%qbt_1"  public  cluster_metrics
-"d%qbt_1"  public  "job%p_info"
-"d%qbt_1"  public  "tr ansaction_diagnostics_requests"
-"d%qbt_2"  public  rangelog
-"d%qbt_2"  public  "replication_sta ts"
-"d%qbt_2"  public  span_stat̲s_buckets
-dbt_3      public  "descrip%to%qr_id_seq"
-dbt_3      public  replication_stats
-dbt_3      public  statement_activity
+"d%qbt_1"  public  "ta&sk_pa%yloads"
+"d%qbt_2"  public  "cOmmen%qts"
+"d%qbt_2"  public  "loc
+                   ations"
+"d%qbt_2"  public  "resource\\xfb_groups"
+dbt_3      public  "job_s'tatus"
+dbt_3      public  settings
+dbt_3      public  "tra\\xaansaction_activity"
 
 
 statement ok

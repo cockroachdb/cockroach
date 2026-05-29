@@ -5,25 +5,7 @@ bazel info workspace --color=no
 bazel info workspace --color=no
 bazel run pkg/cmd/generate-logictest -- -out-dir=crdb-checkout
 bazel run //pkg/gen:schemachanger
-bazel test //pkg/sql/logictest/tests/... //pkg/ccl/logictestccl/tests/... //pkg/sql/opt/exec/execbuilder/tests/... --test_env=GOTRACEBACK=all --test_output errors
-
-exec
-dev testlogic ccl
-----
-bazel info workspace --color=no
-bazel info workspace --color=no
-bazel run pkg/cmd/generate-logictest -- -out-dir=crdb-checkout
-bazel run //pkg/gen:schemachanger
-bazel test //pkg/ccl/logictestccl/tests/... --test_env=GOTRACEBACK=all --test_output errors
-
-exec
-dev testlogic ccl opt
-----
-bazel info workspace --color=no
-bazel info workspace --color=no
-bazel run pkg/cmd/generate-logictest -- -out-dir=crdb-checkout
-bazel run //pkg/gen:schemachanger
-bazel test //pkg/ccl/logictestccl/tests/... //pkg/sql/opt/exec/execbuilder/tests/... --test_env=GOTRACEBACK=all --test_output errors
+bazel test //pkg/sql/logictest/tests/... //pkg/sql/opt/exec/execbuilder/tests/... --test_env=GOTRACEBACK=all --test_output errors
 
 exec
 dev testlogic base --ignore-cache 

@@ -52,8 +52,6 @@ func TestWaiterOnRejectedCommit(t *testing.T) {
 
 	// The txn id whose commit we're going to reject. A uuid.UUID.
 	var txnID atomic.Value
-	// The EndTxn proposal that we want to reject. A string.
-	var commitCmdID atomic.Value
 	readerBlocked := make(chan struct{}, 2)
 	// txnUpdate is signaled once the txn wait queue is updated for our
 	// transaction. Normally it only needs a buffer length of 1, but bugs that
@@ -62,53 +60,40 @@ func TestWaiterOnRejectedCommit(t *testing.T) {
 	txnUpdate := make(chan roachpb.TransactionStatus, 20)
 
 	illegalLeaseIndex := true
-	s, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,
 				DisableSplitQueue: true,
-				TestingProposalFilter: func(args kvserverbase.ProposalFilterArgs) *kvpb.Error {
-					// We'll recognize the attempt to commit our transaction and store the
-					// respective command id.
-					ba := args.Req
-					etReq, ok := ba.GetArg(kvpb.EndTxn)
+				TestingApplyCalledTwiceFilter: func(args kvserverbase.ApplyFilterArgs) (int, *kvpb.Error) {
+					// Match on the transaction ID rather than the command ID,
+					// because reproposals get new command IDs.
+					if args.Req == nil {
+						return 0, nil
+					}
+					etReq, ok := args.Req.GetArg(kvpb.EndTxn)
 					if !ok {
-						return nil
+						return 0, nil
 					}
 					if !etReq.(*kvpb.EndTxnRequest).Commit {
-						return nil
+						return 0, nil
 					}
 					v := txnID.Load()
 					if v == nil {
-						return nil
-					}
-					if !ba.Txn.ID.Equal(v.(uuid.UUID)) {
-						return nil
-					}
-					t.Logf("EndTxn command ID: %v", args.CmdID)
-					commitCmdID.Store(args.CmdID)
-					return nil
-				},
-				TestingApplyCalledTwiceFilter: func(args kvserverbase.ApplyFilterArgs) (int, *kvpb.Error) {
-					// We'll trap the processing of the commit command and return an error
-					// for it.
-					v := commitCmdID.Load()
-					if v == nil {
 						return 0, nil
 					}
-					cmdID := v.(kvserverbase.CmdIDKey)
-					if args.CmdID == cmdID {
-						if illegalLeaseIndex {
-							illegalLeaseIndex = false
-							t.Logf("injecting illegal lease index for %v", cmdID)
-							// NB: 1 is ProposalRejectionIllegalLeaseIndex.
-							return 1, kvpb.NewErrorf("test injected err (illegal lease index)")
-						}
-						t.Logf("injecting permanent rejection for %v", cmdID)
-						// NB: 0 is ProposalRejectionPermanent.
-						return 0, kvpb.NewErrorf("test injected err")
+					if !args.Req.Txn.ID.Equal(v.(uuid.UUID)) {
+						return 0, nil
 					}
-					return 0, nil
+					if illegalLeaseIndex {
+						illegalLeaseIndex = false
+						t.Logf("injecting illegal lease index for %v", args.CmdID)
+						// NB: 1 is ProposalRejectionIllegalLeaseIndex.
+						return 1, kvpb.NewErrorf("test injected err (illegal lease index)")
+					}
+					t.Logf("injecting permanent rejection for %v", args.CmdID)
+					// NB: 0 is ProposalRejectionPermanent.
+					return 0, kvpb.NewErrorf("test injected err")
 				},
 				TxnWaitKnobs: txnwait.TestingKnobs{
 					OnPusherBlocked: func(ctx context.Context, push *kvpb.PushTxnRequest) {
@@ -136,16 +121,6 @@ func TestWaiterOnRejectedCommit(t *testing.T) {
 		},
 	})
 	defer s.Stopper().Stop(ctx)
-
-	// Disable parallel commits protocol. In some rare cases, we see two different
-	// command ids for the committing this transaction. The first one could be the
-	// one through parallel commits protocol and the second is using the normal
-	// commit protocol. There is a test race where TestingProposalFilter changes
-	// the commit command id from the first one (parallel commit) to the second
-	// one (normal commit). This causes the test to inject the error on the wrong
-	// command id. Disabling parallel commits avoids this test race.
-	_, err := sqlDB.Exec("SET CLUSTER SETTING kv.transaction.parallel_commits_enabled = 'false'")
-	require.NoError(t, err)
 
 	if _, _, err := s.SplitRange(roachpb.Key("b")); err != nil {
 		t.Fatal(err)

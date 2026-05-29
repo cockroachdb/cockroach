@@ -184,7 +184,7 @@ func makePartialIndexHelper(
 func (pi partialIndexHelper) makePartialIndexExpr(
 	ctx context.Context, idx catalog.Index,
 ) (tree.TypedExpr, catalog.TableColSet, error) {
-	expr, err := parserutils.ParseExpr(idx.GetPredicate())
+	expr, err := parserutils.ParseExpr(string(idx.GetPredicate()))
 	if err != nil {
 		return nil, catalog.TableColSet{}, err
 	}

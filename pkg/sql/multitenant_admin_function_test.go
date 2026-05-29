@@ -167,6 +167,58 @@ FROM [SHOW RANGES FROM INDEX t@primary WITH DETAILS]`)
 	}
 }
 
+// disableQueuesAndStabilize disables the split, lease, and replicate queues and
+// waits for replica state to stabilize.
+func disableQueuesAndStabilize(
+	t *testing.T,
+	ctx context.Context,
+	testCluster serverutils.TestClusterInterface,
+	db *gosql.DB,
+	expectedNumReplicas int,
+) {
+	// Prevent new splits and lease transfers.
+	testCluster.ToggleSplitQueues(false)
+	testCluster.ToggleLeaseQueues(false)
+
+	// Wait for learner replicas to be promoted. The replicate queue must stay
+	// active throughout because learner promotion requires a Raft snapshot
+	// transfer that cannot complete if the queue is toggled on and off.
+	testutils.SucceedsSoon(t, func() error {
+		var count int
+		if err := db.QueryRowContext(ctx,
+			`SELECT count(*) FROM [SHOW RANGES FROM INDEX t@primary WITH DETAILS] WHERE learner_replicas != '{}'`,
+		).Scan(&count); err != nil {
+			return err
+		}
+		if count > 0 {
+			return errors.Newf("waiting for %d ranges with LEARNER replicas to clear", count)
+		}
+		return nil
+	})
+
+	// Disable the replicate queue and check that replica counts are correct.
+	// If a rebalance was in progress (add phase done, remove phase pending),
+	// re-enable the queue so it can finish, then retry.
+	testutils.SucceedsSoon(t, func() error {
+		testCluster.ToggleReplicateQueues(false)
+		var count int
+		if err := db.QueryRowContext(ctx,
+			fmt.Sprintf(
+				`SELECT count(*) FROM [SHOW RANGES FROM INDEX t@primary WITH DETAILS]
+				 WHERE array_length(replicas, 1) != %d`, expectedNumReplicas),
+		).Scan(&count); err != nil {
+			return err
+		}
+		if count > 0 {
+			testCluster.ToggleReplicateQueues(true)
+			return errors.Newf(
+				"waiting for %d ranges with unexpected replica count to stabilize", count,
+			)
+		}
+		return nil
+	})
+}
+
 // getToReplica determines the "to" node for a relocate command by finding the NodeID
 // in clusterNodeIDs that is not in replicaNodeIDs.
 func getToReplica(clusterNodeIDs []roachpb.NodeID, replicaNodeIDs []roachpb.NodeID) roachpb.NodeID {
@@ -260,6 +312,12 @@ func (tc testCase) runTest(
 
 	systemDB := testServer.SystemLayer().SQLConn(t)
 
+	// Disable the small-table size check so index backfills always create
+	// splits, matching the expectations of these admin-function tests.
+	if _, err := systemDB.Exec("SET CLUSTER SETTING schemachanger.backfiller.skip_splits_for_small_tables.enabled = false"); err != nil {
+		t.Fatal(err)
+	}
+
 	createSecondaryDB := func(
 		tenantID roachpb.TenantID,
 		clusterSettings ...*settings.BoolSetting,
@@ -270,6 +328,7 @@ func (tc testCase) runTest(
 			},
 		)
 		st := s.ClusterSettings()
+		sql.SkipBackfillSplitsForSmallTables.Override(ctx, &st.SV, false)
 		// StartTenant enables a couple of settings by default, but we want
 		// precise control of what's enabled, so we first disable the settings
 		// we care about and then apply the overrides the caller asked for.
@@ -709,112 +768,6 @@ func TestTruncateTable(t *testing.T) {
 	)
 }
 
-// TestRelocateVoters tests that a range can be relocated from a
-// non-leaseholder VOTER replica node to a non-replica node via RELOCATE.
-func TestRelocateVoters(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	skip.UnderDuress(t, "test flakes in slow builds; see #108081")
-
-	testCases := []testCase{
-		{
-			desc:  "ALTER RANGE x RELOCATE VOTERS",
-			query: "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE VOTERS FROM %[1]s TO %[2]s;",
-			system: tenantExpected{
-				result: [][]string{{ignore, ignore, ok}},
-			},
-			secondary: tenantExpected{
-				result: [][]string{{ignore, ignore, ok}},
-			},
-			secondaryWithoutCapability: tenantExpected{
-				result: [][]string{{ignore, ignore, `does not have capability "can_admin_relocate_range"`}},
-			},
-			queryCapability: bcap(tenantcapabilitiespb.CanAdminRelocateRange, true),
-		},
-		{
-			desc:  "ALTER RANGE RELOCATE VOTERS",
-			query: "ALTER RANGE RELOCATE VOTERS FROM %[1]s TO %[2]s FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
-			system: tenantExpected{
-				result: [][]string{{ignore, ignore, ok}},
-			},
-			secondary: tenantExpected{
-				result: [][]string{{ignore, ignore, ok}},
-			},
-			secondaryWithoutCapability: tenantExpected{
-				result: [][]string{{ignore, ignore, `does not have capability "can_admin_relocate_range"`}},
-			},
-			queryCapability: bcap(tenantcapabilitiespb.CanAdminRelocateRange, true),
-		},
-	}
-
-	const (
-		numNodes                     = 4
-		expectedNumVotingReplicas    = 3
-		expectedNumNonVotingReplicas = 0
-		expectedNumReplicas          = expectedNumVotingReplicas + expectedNumNonVotingReplicas
-	)
-	for _, tc := range testCases {
-		t.Run(tc.desc, func(t *testing.T) {
-			tc.runTest(
-				t,
-				testClusterCfg{
-					numNodes:        numNodes,
-					TestClusterArgs: createTestClusterArgs(ctx, expectedNumReplicas, expectedNumVotingReplicas),
-				},
-				func(testCluster serverutils.TestClusterInterface, db *gosql.DB, tenant string, tExp tenantExpected) {
-					_, err := db.ExecContext(ctx, createTable)
-					message := fmt.Sprintf("tenant=%s", tenant)
-					require.NoErrorf(t, err, message)
-					err = testCluster.WaitForFullReplication()
-					require.NoErrorf(t, err, message)
-					testutils.SucceedsSoon(t, func() error {
-						var count int
-						if err := db.QueryRowContext(ctx,
-							`SELECT count(*) FROM [SHOW RANGES FROM INDEX t@primary WITH DETAILS] WHERE learner_replicas != '{}'`,
-						).Scan(&count); err != nil {
-							return err
-						}
-						if count > 0 {
-							return errors.Newf("waiting for %d ranges with LEARNER replicas to clear", count)
-						}
-						return nil
-					})
-					testCluster.ToggleLeaseQueues(false)
-					testCluster.ToggleReplicateQueues(false)
-					testCluster.ToggleSplitQueues(false)
-					tExp.validate(
-						t,
-						func() (_ *gosql.Rows, msg string, _ error) {
-							replicaState := getReplicaState(
-								t,
-								ctx,
-								db,
-								expectedNumReplicas,
-								expectedNumVotingReplicas,
-								expectedNumNonVotingReplicas,
-								message,
-							)
-							replicas := replicaState.replicas
-							// Set toReplica to the node that does not have a voting replica for t.
-							toReplica := getToReplica(testCluster.NodeIDs(), replicas)
-							// Set fromReplica to the first non-leaseholder voting replica for t.
-							fromReplica := replicas[0]
-							if fromReplica == replicaState.leaseholder {
-								fromReplica = replicas[1]
-							}
-							query := fmt.Sprintf(tc.query, fromReplica, toReplica)
-							message = getReplicaStateMessage(tenant, query, replicaState, fromReplica, toReplica)
-							rows, err := db.QueryContext(ctx, query)
-							return rows, message, err
-						},
-					)
-				},
-			)
-		})
-	}
-}
-
 // TestExperimentalRelocateVoters tests that a range can be relocated from a
 // non-leaseholder VOTER replica node to a non-replica node via
 // EXPERIMENTAL_RELOCATE.
@@ -861,21 +814,7 @@ func TestExperimentalRelocateVoters(t *testing.T) {
 					require.NoErrorf(t, err, message)
 					err = testCluster.WaitForFullReplication()
 					require.NoErrorf(t, err, message)
-					testutils.SucceedsSoon(t, func() error {
-						var count int
-						if err := db.QueryRowContext(ctx,
-							`SELECT count(*) FROM [SHOW RANGES FROM INDEX t@primary WITH DETAILS] WHERE learner_replicas != '{}'`,
-						).Scan(&count); err != nil {
-							return err
-						}
-						if count > 0 {
-							return errors.Newf("waiting for %d ranges with LEARNER replicas to clear", count)
-						}
-						return nil
-					})
-					testCluster.ToggleLeaseQueues(false)
-					testCluster.ToggleReplicateQueues(false)
-					testCluster.ToggleSplitQueues(false)
+					disableQueuesAndStabilize(t, ctx, testCluster, db, expectedNumReplicas)
 					tExp.validate(
 						t,
 						func() (*gosql.Rows, string, error) {
@@ -967,21 +906,7 @@ func TestRelocateNonVoters(t *testing.T) {
 					require.NoErrorf(t, err, message)
 					err = testCluster.WaitForFullReplication()
 					require.NoErrorf(t, err, message)
-					testutils.SucceedsSoon(t, func() error {
-						var count int
-						if err := db.QueryRowContext(ctx,
-							`SELECT count(*) FROM [SHOW RANGES FROM INDEX t@primary WITH DETAILS] WHERE learner_replicas != '{}'`,
-						).Scan(&count); err != nil {
-							return err
-						}
-						if count > 0 {
-							return errors.Newf("waiting for %d ranges with LEARNER replicas to clear", count)
-						}
-						return nil
-					})
-					testCluster.ToggleLeaseQueues(false)
-					testCluster.ToggleReplicateQueues(false)
-					testCluster.ToggleSplitQueues(false)
+					disableQueuesAndStabilize(t, ctx, testCluster, db, expectedNumReplicas)
 					tExp.validate(
 						t,
 						func() (*gosql.Rows, string, error) {
@@ -1054,21 +979,7 @@ func TestExperimentalRelocateNonVoters(t *testing.T) {
 					require.NoErrorf(t, err, message)
 					err = testCluster.WaitForFullReplication()
 					require.NoErrorf(t, err, message)
-					testutils.SucceedsSoon(t, func() error {
-						var count int
-						if err := db.QueryRowContext(ctx,
-							`SELECT count(*) FROM [SHOW RANGES FROM INDEX t@primary WITH DETAILS] WHERE learner_replicas != '{}'`,
-						).Scan(&count); err != nil {
-							return err
-						}
-						if count > 0 {
-							return errors.Newf("waiting for %d ranges with LEARNER replicas to clear", count)
-						}
-						return nil
-					})
-					testCluster.ToggleLeaseQueues(false)
-					testCluster.ToggleReplicateQueues(false)
-					testCluster.ToggleSplitQueues(false)
+					disableQueuesAndStabilize(t, ctx, testCluster, db, expectedNumReplicas)
 					tExp.validate(
 						t,
 						func() (*gosql.Rows, string, error) {

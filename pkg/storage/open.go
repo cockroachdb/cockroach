@@ -193,7 +193,7 @@ func SharedStorage(sharedStorage cloud.ExternalStorage) ConfigOption {
 // SecondaryCache enables use of a secondary cache to store shared objects.
 func SecondaryCache(size int64) ConfigOption {
 	return func(cfg *engineConfig) error {
-		cfg.opts.Experimental.SecondaryCacheSizeBytes = size
+		cfg.opts.SecondaryCacheSizeBytes = size
 		return nil
 	}
 }

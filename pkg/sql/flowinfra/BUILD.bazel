@@ -44,6 +44,7 @@ go_library(
         "//pkg/util/cancelchecker",
         "//pkg/util/ctxlog",
         "//pkg/util/growstack",
+        "//pkg/util/grunning",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/mon",

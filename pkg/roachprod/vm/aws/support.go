@@ -213,8 +213,9 @@ func (p *Provider) runCommandWithContext(
 		if exitErr := (*exec.ExitError)(nil); errors.As(err, &exitErr) {
 			l.Printf("%s", exitErr)
 		}
-		return nil, errors.Wrapf(err, "failed to run: aws %s: stderr: %v",
+		err = errors.Wrapf(err, "failed to run: aws %s: stderr: %v",
 			strings.Join(args, " "), stderrBuf.String())
+		return nil, maybeAWSCapacityError(err, stderrBuf.String())
 	}
 	return output, nil
 }

@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -241,17 +240,10 @@ func (r releaseOp) run(ctx context.Context, t *testing.T, tCtx *testContext) {
 		i := sort.Search(len(tCtx.state.Records), func(i int) bool {
 			return bytes.Compare(id[:], tCtx.state.Records[i].ID[:]) <= 0
 		})
-		rec := tCtx.state.Records[i]
 		tCtx.state.Records = append(tCtx.state.Records[:i], tCtx.state.Records[i+1:]...)
 		if len(tCtx.state.Records) == 0 {
 			tCtx.state.Records = nil
 		}
-		tCtx.state.Version++
-		tCtx.state.NumRecords--
-		tCtx.state.NumSpans -= uint64(len(rec.DeprecatedSpans))
-		encoded, err := protoutil.Marshal(&ptpb.Target{Union: rec.Target.GetUnion()})
-		require.NoError(t, err)
-		tCtx.state.TotalBytes -= uint64(len(encoded) + len(rec.Meta) + len(rec.MetaType))
 	}
 }
 
@@ -302,12 +294,6 @@ func (p protectOp) run(ctx context.Context, t *testing.T, tCtx *testContext) {
 		tail := tCtx.state.Records[i:]
 		tCtx.state.Records = append(tCtx.state.Records[:i:i], rec)
 		tCtx.state.Records = append(tCtx.state.Records, tail...)
-		tCtx.state.Version++
-		tCtx.state.NumRecords++
-		tCtx.state.NumSpans += uint64(len(rec.DeprecatedSpans))
-		encoded, err := protoutil.Marshal(&ptpb.Target{Union: rec.Target.GetUnion()})
-		require.NoError(t, err)
-		tCtx.state.TotalBytes += uint64(len(encoded) + len(p.meta) + len(p.metaType))
 	}
 }
 
@@ -330,7 +316,6 @@ func (p updateTimestampOp) run(ctx context.Context, t *testing.T, tCtx *testCont
 			return bytes.Equal(id[:], tCtx.state.Records[i].ID[:])
 		})
 		tCtx.state.Records[i] = p.expectedRecordFn(tCtx.state.Records[i])
-		tCtx.state.Version++
 	}
 }
 
@@ -601,25 +586,6 @@ func TestErrorsFromSQL(t *testing.T) {
 	require.EqualError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		return pts.WithTxn(wrapTxn(txn, errFunc)).Release(ctx, rec.ID.GetUUID())
 	}), fmt.Sprintf("failed to release record %v: boom", rec.ID))
-	require.EqualError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		_, err := pts.WithTxn(wrapTxn(txn, errFunc)).GetMetadata(ctx)
-		return err
-	}), "failed to read metadata: boom")
-	require.EqualError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		_, err := pts.WithTxn(wrapTxn(txn, errFunc)).GetState(ctx)
-		return err
-	}), "failed to read metadata: boom")
-	// Test that we get an error retrieving the records in GetState.
-	// The preceding call tested the error while retrieving the metadata in a
-	// call to GetState.
-	var seen bool
-	errFunc = func(string) error {
-		if !seen {
-			seen = true
-			return nil
-		}
-		return errors.New("boom")
-	}
 	require.EqualError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		_, err := pts.WithTxn(wrapTxn(txn, errFunc)).GetState(ctx)
 		return err

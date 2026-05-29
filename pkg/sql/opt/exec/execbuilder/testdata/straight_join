@@ -60,6 +60,7 @@ vectorized: true
     │ estimated row count: 100
     │ table: t2@idx_y
     │ equality: (x) = (y)
+    │ parallel
     │
     └── • scan
           columns: (x)
@@ -87,6 +88,7 @@ vectorized: true
     │ estimated row count: 100
     │ table: t2@idx_y
     │ equality: (x) = (y)
+    │ parallel
     │
     └── • scan
           columns: (x)

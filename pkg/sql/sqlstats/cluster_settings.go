@@ -148,3 +148,16 @@ var GatewayNodeEnabled = settings.RegisterBoolSetting(
 		"be stored as 0.",
 	false,
 	settings.WithPublic)
+
+// SQLStatsAggregationInterval is the cluster setting that controls the
+// aggregation interval for SQL execution statistics. Stats are bucketed
+// into windows of this duration at record time.
+var SQLStatsAggregationInterval = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"sql.stats.aggregation.interval",
+	"the interval at which SQL execution statistics are aggregated into "+
+		"time windows; this value must be greater than or equal to "+
+		"sql.stats.flush.interval",
+	time.Hour,
+	settings.NonNegativeDurationWithMaximum(time.Hour*24),
+)

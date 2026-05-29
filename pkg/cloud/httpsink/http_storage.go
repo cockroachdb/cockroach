@@ -8,12 +8,10 @@ package httpsink
 import (
 	"context"
 	"fmt"
-	"hash/fnv"
 	"io"
 	"net/http"
 	"net/url"
 	"path"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -39,7 +37,6 @@ func parseHTTPURL(uri *url.URL) (cloudpb.ExternalStorage, error) {
 type httpStorage struct {
 	base     *url.URL
 	client   *http.Client
-	hosts    []string
 	settings *cluster.Settings
 	ioConf   base.ExternalIODirConfig
 	uri      string // original URI used to construct this storage
@@ -85,7 +82,6 @@ func MakeHTTPStorage(
 	return &httpStorage{
 		base:     uri,
 		client:   client,
-		hosts:    strings.Split(uri.Host, ","),
 		settings: args.Settings,
 		ioConf:   args.IOConf,
 		uri:      dest.URI,
@@ -235,16 +231,6 @@ func (h *httpStorage) req(
 	ctx context.Context, method, file string, body io.Reader, headers map[string]string,
 ) (*http.Response, error) {
 	dest := *h.base
-	if hosts := len(h.hosts); hosts > 1 {
-		if file == "" {
-			return nil, errors.New("cannot use a multi-host HTTP basepath for single file")
-		}
-		hash := fnv.New32a()
-		if _, err := hash.Write([]byte(file)); err != nil {
-			panic(errors.Wrap(err, `"It never returns an error." -- https://golang.org/pkg/hash`))
-		}
-		dest.Host = h.hosts[int(hash.Sum32())%hosts]
-	}
 	dest.Path = path.Join(dest.Path, file)
 	url := dest.String()
 	req, err := http.NewRequest(method, url, body)

@@ -6,6 +6,8 @@ show_stmt ::=
 	| show_create_stmt
 	| show_create_schedules_stmt
 	| show_create_external_connections_stmt
+	| show_resource_group_stmt
+	| show_resource_groups_stmt
 	| show_databases_stmt
 	| show_enums_stmt
 	| show_external_connections_stmt

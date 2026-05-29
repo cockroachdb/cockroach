@@ -274,3 +274,668 @@ select
                                                         │    └── projections
                                                         │         └── const: 1 [as="?column?":6, type=int]
                                                         └── const: 1 [type=int]
+
+subtest udf_mutations
+
+# Regression test: the "mutations" property should propagate from a nested UDF
+# that contains a mutation to the outer expression.
+exec-ddl
+CREATE FUNCTION fn_mutating() RETURNS VOID LANGUAGE SQL AS 'INSERT INTO ab VALUES (1, 2)'
+----
+
+exec-ddl
+CREATE FUNCTION fn_calls_mutating(a INT) RETURNS INT LANGUAGE SQL AS $$
+  SELECT fn_mutating();
+  SELECT a;
+$$
+----
+
+build
+SELECT fn_calls_mutating(a) FROM ab
+----
+project
+ ├── columns: fn_calls_mutating:15(int)
+ ├── volatile, mutations
+ ├── prune: (15)
+ ├── scan ab
+ │    ├── columns: ab.a:1(int!null) b:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1)
+ └── projections
+      └── udf: fn_calls_mutating [as=fn_calls_mutating:15, type=int, outer=(1), volatile, udf]
+           ├── args
+           │    └── variable: ab.a:1 [type=int]
+           ├── params: a:5(int)
+           └── body
+                ├── project
+                │    ├── columns: fn_mutating:13(void)
+                │    ├── cardinality: [1 - 1]
+                │    ├── volatile, mutations
+                │    ├── key: ()
+                │    ├── fd: ()-->(13)
+                │    ├── values
+                │    │    ├── cardinality: [1 - 1]
+                │    │    ├── key: ()
+                │    │    └── tuple [type=tuple]
+                │    └── projections
+                │         └── udf: fn_mutating [as=fn_mutating:13, type=void, volatile, udf]
+                │              └── body
+                │                   ├── insert ab
+                │                   │    ├── columns: <none>
+                │                   │    ├── insert-mapping:
+                │                   │    │    ├── column1:10 => ab.a:6
+                │                   │    │    └── column2:11 => b:7
+                │                   │    ├── cardinality: [0 - 0]
+                │                   │    ├── volatile, mutations
+                │                   │    └── values
+                │                   │         ├── columns: column1:10(int!null) column2:11(int!null)
+                │                   │         ├── cardinality: [1 - 1]
+                │                   │         ├── key: ()
+                │                   │         ├── fd: ()-->(10,11)
+                │                   │         └── tuple [type=tuple{int, int}]
+                │                   │              ├── const: 1 [type=int]
+                │                   │              └── const: 2 [type=int]
+                │                   └── limit
+                │                        ├── columns: column1:12(unknown)
+                │                        ├── cardinality: [1 - 1]
+                │                        ├── key: ()
+                │                        ├── fd: ()-->(12)
+                │                        ├── values
+                │                        │    ├── columns: column1:12(unknown)
+                │                        │    ├── cardinality: [1 - 1]
+                │                        │    ├── key: ()
+                │                        │    ├── fd: ()-->(12)
+                │                        │    └── tuple [type=tuple{unknown}]
+                │                        │         └── null [type=unknown]
+                │                        └── const: 1 [type=int]
+                └── limit
+                     ├── columns: a:14(int)
+                     ├── outer: (5)
+                     ├── cardinality: [1 - 1]
+                     ├── key: ()
+                     ├── fd: ()-->(14)
+                     ├── project
+                     │    ├── columns: a:14(int)
+                     │    ├── outer: (5)
+                     │    ├── cardinality: [1 - 1]
+                     │    ├── key: ()
+                     │    ├── fd: ()-->(14)
+                     │    ├── values
+                     │    │    ├── cardinality: [1 - 1]
+                     │    │    ├── key: ()
+                     │    │    └── tuple [type=tuple]
+                     │    └── projections
+                     │         └── variable: a:5 [as=a:14, type=int, outer=(5)]
+                     └── const: 1 [type=int]
+
+# The "mutations" property should propagate through CTEs that call mutating
+# functions.
+build
+WITH cte AS (SELECT fn_mutating()) SELECT * FROM cte
+----
+with &1 (cte)
+ ├── columns: fn_mutating:9(void)
+ ├── cardinality: [1 - 1]
+ ├── volatile, mutations
+ ├── key: ()
+ ├── fd: ()-->(9)
+ ├── prune: (9)
+ ├── project
+ │    ├── columns: fn_mutating:8(void)
+ │    ├── cardinality: [1 - 1]
+ │    ├── volatile, mutations
+ │    ├── key: ()
+ │    ├── fd: ()-->(8)
+ │    ├── prune: (8)
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    └── tuple [type=tuple]
+ │    └── projections
+ │         └── udf: fn_mutating [as=fn_mutating:8, type=void, volatile, udf]
+ │              └── body
+ │                   ├── insert ab
+ │                   │    ├── columns: <none>
+ │                   │    ├── insert-mapping:
+ │                   │    │    ├── column1:5 => a:1
+ │                   │    │    └── column2:6 => b:2
+ │                   │    ├── cardinality: [0 - 0]
+ │                   │    ├── volatile, mutations
+ │                   │    └── values
+ │                   │         ├── columns: column1:5(int!null) column2:6(int!null)
+ │                   │         ├── cardinality: [1 - 1]
+ │                   │         ├── key: ()
+ │                   │         ├── fd: ()-->(5,6)
+ │                   │         └── tuple [type=tuple{int, int}]
+ │                   │              ├── const: 1 [type=int]
+ │                   │              └── const: 2 [type=int]
+ │                   └── limit
+ │                        ├── columns: column1:7(unknown)
+ │                        ├── cardinality: [1 - 1]
+ │                        ├── key: ()
+ │                        ├── fd: ()-->(7)
+ │                        ├── values
+ │                        │    ├── columns: column1:7(unknown)
+ │                        │    ├── cardinality: [1 - 1]
+ │                        │    ├── key: ()
+ │                        │    ├── fd: ()-->(7)
+ │                        │    └── tuple [type=tuple{unknown}]
+ │                        │         └── null [type=unknown]
+ │                        └── const: 1 [type=int]
+ └── with-scan &1 (cte)
+      ├── columns: fn_mutating:9(void)
+      ├── mapping:
+      │    └──  fn_mutating:8(void) => fn_mutating:9(void)
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(9)
+      └── prune: (9)
+
+build
+WITH cte AS (SELECT fn_calls_mutating(a) FROM ab) SELECT * FROM cte
+----
+with &1 (cte)
+ ├── columns: fn_calls_mutating:16(int)
+ ├── volatile, mutations
+ ├── prune: (16)
+ ├── project
+ │    ├── columns: fn_calls_mutating:15(int)
+ │    ├── volatile, mutations
+ │    ├── prune: (15)
+ │    ├── scan ab
+ │    │    ├── columns: ab.a:1(int!null) b:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2-4)
+ │    │    ├── prune: (1-4)
+ │    │    └── interesting orderings: (+1)
+ │    └── projections
+ │         └── udf: fn_calls_mutating [as=fn_calls_mutating:15, type=int, outer=(1), volatile, udf]
+ │              ├── args
+ │              │    └── variable: ab.a:1 [type=int]
+ │              ├── params: a:5(int)
+ │              └── body
+ │                   ├── project
+ │                   │    ├── columns: fn_mutating:13(void)
+ │                   │    ├── cardinality: [1 - 1]
+ │                   │    ├── volatile, mutations
+ │                   │    ├── key: ()
+ │                   │    ├── fd: ()-->(13)
+ │                   │    ├── values
+ │                   │    │    ├── cardinality: [1 - 1]
+ │                   │    │    ├── key: ()
+ │                   │    │    └── tuple [type=tuple]
+ │                   │    └── projections
+ │                   │         └── udf: fn_mutating [as=fn_mutating:13, type=void, volatile, udf]
+ │                   │              └── body
+ │                   │                   ├── insert ab
+ │                   │                   │    ├── columns: <none>
+ │                   │                   │    ├── insert-mapping:
+ │                   │                   │    │    ├── column1:10 => ab.a:6
+ │                   │                   │    │    └── column2:11 => b:7
+ │                   │                   │    ├── cardinality: [0 - 0]
+ │                   │                   │    ├── volatile, mutations
+ │                   │                   │    └── values
+ │                   │                   │         ├── columns: column1:10(int!null) column2:11(int!null)
+ │                   │                   │         ├── cardinality: [1 - 1]
+ │                   │                   │         ├── key: ()
+ │                   │                   │         ├── fd: ()-->(10,11)
+ │                   │                   │         └── tuple [type=tuple{int, int}]
+ │                   │                   │              ├── const: 1 [type=int]
+ │                   │                   │              └── const: 2 [type=int]
+ │                   │                   └── limit
+ │                   │                        ├── columns: column1:12(unknown)
+ │                   │                        ├── cardinality: [1 - 1]
+ │                   │                        ├── key: ()
+ │                   │                        ├── fd: ()-->(12)
+ │                   │                        ├── values
+ │                   │                        │    ├── columns: column1:12(unknown)
+ │                   │                        │    ├── cardinality: [1 - 1]
+ │                   │                        │    ├── key: ()
+ │                   │                        │    ├── fd: ()-->(12)
+ │                   │                        │    └── tuple [type=tuple{unknown}]
+ │                   │                        │         └── null [type=unknown]
+ │                   │                        └── const: 1 [type=int]
+ │                   └── limit
+ │                        ├── columns: a:14(int)
+ │                        ├── outer: (5)
+ │                        ├── cardinality: [1 - 1]
+ │                        ├── key: ()
+ │                        ├── fd: ()-->(14)
+ │                        ├── project
+ │                        │    ├── columns: a:14(int)
+ │                        │    ├── outer: (5)
+ │                        │    ├── cardinality: [1 - 1]
+ │                        │    ├── key: ()
+ │                        │    ├── fd: ()-->(14)
+ │                        │    ├── values
+ │                        │    │    ├── cardinality: [1 - 1]
+ │                        │    │    ├── key: ()
+ │                        │    │    └── tuple [type=tuple]
+ │                        │    └── projections
+ │                        │         └── variable: a:5 [as=a:14, type=int, outer=(5)]
+ │                        └── const: 1 [type=int]
+ └── with-scan &1 (cte)
+      ├── columns: fn_calls_mutating:16(int)
+      ├── mapping:
+      │    └──  fn_calls_mutating:15(int) => fn_calls_mutating:16(int)
+      └── prune: (16)
+
+# The "mutations" property should propagate when a UDF body contains a mutation
+# inside a CTE.
+exec-ddl
+CREATE FUNCTION fn_mutating_via_cte() RETURNS INT LANGUAGE SQL AS $$
+  WITH cte AS (INSERT INTO ab VALUES (1, 2) RETURNING a) SELECT a FROM cte
+$$
+----
+
+build
+SELECT fn_mutating_via_cte() FROM ab
+----
+project
+ ├── columns: fn_mutating_via_cte:12(int)
+ ├── volatile, mutations
+ ├── prune: (12)
+ ├── scan ab
+ │    ├── columns: ab.a:1(int!null) b:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1)
+ └── projections
+      └── udf: fn_mutating_via_cte [as=fn_mutating_via_cte:12, type=int, volatile, udf]
+           └── body
+                └── limit
+                     ├── columns: a:11(int!null)
+                     ├── cardinality: [1 - 1]
+                     ├── volatile, mutations
+                     ├── key: ()
+                     ├── fd: ()-->(11)
+                     ├── with &1 (cte)
+                     │    ├── columns: a:11(int!null)
+                     │    ├── cardinality: [1 - 1]
+                     │    ├── volatile, mutations
+                     │    ├── key: ()
+                     │    ├── fd: ()-->(11)
+                     │    ├── project
+                     │    │    ├── columns: ab.a:5(int!null)
+                     │    │    ├── cardinality: [1 - 1]
+                     │    │    ├── volatile, mutations
+                     │    │    ├── key: ()
+                     │    │    ├── fd: ()-->(5)
+                     │    │    └── insert ab
+                     │    │         ├── columns: ab.a:5(int!null) b:6(int!null)
+                     │    │         ├── insert-mapping:
+                     │    │         │    ├── column1:9 => ab.a:5
+                     │    │         │    └── column2:10 => b:6
+                     │    │         ├── return-mapping:
+                     │    │         │    ├── column1:9 => ab.a:5
+                     │    │         │    └── column2:10 => b:6
+                     │    │         ├── cardinality: [1 - 1]
+                     │    │         ├── volatile, mutations
+                     │    │         ├── key: ()
+                     │    │         ├── fd: ()-->(5,6)
+                     │    │         └── values
+                     │    │              ├── columns: column1:9(int!null) column2:10(int!null)
+                     │    │              ├── cardinality: [1 - 1]
+                     │    │              ├── key: ()
+                     │    │              ├── fd: ()-->(9,10)
+                     │    │              └── tuple [type=tuple{int, int}]
+                     │    │                   ├── const: 1 [type=int]
+                     │    │                   └── const: 2 [type=int]
+                     │    └── with-scan &1 (cte)
+                     │         ├── columns: a:11(int!null)
+                     │         ├── mapping:
+                     │         │    └──  ab.a:5(int) => a:11(int)
+                     │         ├── cardinality: [1 - 1]
+                     │         ├── key: ()
+                     │         └── fd: ()-->(11)
+                     └── const: 1 [type=int]
+
+# The "mutations" property should propagate through a nested function that calls
+# a mutating-via-CTE function inside its own CTE.
+exec-ddl
+CREATE FUNCTION fn_calls_mutating_via_cte() RETURNS INT LANGUAGE SQL AS $$
+  WITH cte AS (SELECT fn_mutating_via_cte()) SELECT * FROM cte
+$$
+----
+
+build
+SELECT fn_calls_mutating_via_cte() FROM ab
+----
+project
+ ├── columns: fn_calls_mutating_via_cte:14(int)
+ ├── volatile, mutations
+ ├── prune: (14)
+ ├── scan ab
+ │    ├── columns: ab.a:1(int!null) b:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1)
+ └── projections
+      └── udf: fn_calls_mutating_via_cte [as=fn_calls_mutating_via_cte:14, type=int, volatile, udf]
+           └── body
+                └── limit
+                     ├── columns: fn_mutating_via_cte:13(int)
+                     ├── cardinality: [1 - 1]
+                     ├── volatile, mutations
+                     ├── key: ()
+                     ├── fd: ()-->(13)
+                     ├── with &2 (cte)
+                     │    ├── columns: fn_mutating_via_cte:13(int)
+                     │    ├── cardinality: [1 - 1]
+                     │    ├── volatile, mutations
+                     │    ├── key: ()
+                     │    ├── fd: ()-->(13)
+                     │    ├── project
+                     │    │    ├── columns: fn_mutating_via_cte:12(int)
+                     │    │    ├── cardinality: [1 - 1]
+                     │    │    ├── volatile, mutations
+                     │    │    ├── key: ()
+                     │    │    ├── fd: ()-->(12)
+                     │    │    ├── values
+                     │    │    │    ├── cardinality: [1 - 1]
+                     │    │    │    ├── key: ()
+                     │    │    │    └── tuple [type=tuple]
+                     │    │    └── projections
+                     │    │         └── udf: fn_mutating_via_cte [as=fn_mutating_via_cte:12, type=int, volatile, udf]
+                     │    │              └── body
+                     │    │                   └── limit
+                     │    │                        ├── columns: a:11(int!null)
+                     │    │                        ├── cardinality: [1 - 1]
+                     │    │                        ├── volatile, mutations
+                     │    │                        ├── key: ()
+                     │    │                        ├── fd: ()-->(11)
+                     │    │                        ├── with &1 (cte)
+                     │    │                        │    ├── columns: a:11(int!null)
+                     │    │                        │    ├── cardinality: [1 - 1]
+                     │    │                        │    ├── volatile, mutations
+                     │    │                        │    ├── key: ()
+                     │    │                        │    ├── fd: ()-->(11)
+                     │    │                        │    ├── project
+                     │    │                        │    │    ├── columns: ab.a:5(int!null)
+                     │    │                        │    │    ├── cardinality: [1 - 1]
+                     │    │                        │    │    ├── volatile, mutations
+                     │    │                        │    │    ├── key: ()
+                     │    │                        │    │    ├── fd: ()-->(5)
+                     │    │                        │    │    └── insert ab
+                     │    │                        │    │         ├── columns: ab.a:5(int!null) b:6(int!null)
+                     │    │                        │    │         ├── insert-mapping:
+                     │    │                        │    │         │    ├── column1:9 => ab.a:5
+                     │    │                        │    │         │    └── column2:10 => b:6
+                     │    │                        │    │         ├── return-mapping:
+                     │    │                        │    │         │    ├── column1:9 => ab.a:5
+                     │    │                        │    │         │    └── column2:10 => b:6
+                     │    │                        │    │         ├── cardinality: [1 - 1]
+                     │    │                        │    │         ├── volatile, mutations
+                     │    │                        │    │         ├── key: ()
+                     │    │                        │    │         ├── fd: ()-->(5,6)
+                     │    │                        │    │         └── values
+                     │    │                        │    │              ├── columns: column1:9(int!null) column2:10(int!null)
+                     │    │                        │    │              ├── cardinality: [1 - 1]
+                     │    │                        │    │              ├── key: ()
+                     │    │                        │    │              ├── fd: ()-->(9,10)
+                     │    │                        │    │              └── tuple [type=tuple{int, int}]
+                     │    │                        │    │                   ├── const: 1 [type=int]
+                     │    │                        │    │                   └── const: 2 [type=int]
+                     │    │                        │    └── with-scan &1 (cte)
+                     │    │                        │         ├── columns: a:11(int!null)
+                     │    │                        │         ├── mapping:
+                     │    │                        │         │    └──  ab.a:5(int) => a:11(int)
+                     │    │                        │         ├── cardinality: [1 - 1]
+                     │    │                        │         ├── key: ()
+                     │    │                        │         └── fd: ()-->(11)
+                     │    │                        └── const: 1 [type=int]
+                     │    └── with-scan &2 (cte)
+                     │         ├── columns: fn_mutating_via_cte:13(int)
+                     │         ├── mapping:
+                     │         │    └──  fn_mutating_via_cte:12(int) => fn_mutating_via_cte:13(int)
+                     │         ├── cardinality: [1 - 1]
+                     │         ├── key: ()
+                     │         └── fd: ()-->(13)
+                     └── const: 1 [type=int]
+
+# The "mutations" property should propagate from a PL/pgSQL routine that
+# contains a mutation.
+exec-ddl
+CREATE FUNCTION fn_plpgsql_mutating() RETURNS VOID LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO ab VALUES (1, 2);
+  END
+$$
+----
+
+build
+SELECT fn_plpgsql_mutating() FROM ab
+----
+project
+ ├── columns: fn_plpgsql_mutating:13(void)
+ ├── volatile, mutations
+ ├── prune: (13)
+ ├── scan ab
+ │    ├── columns: a:1(int!null) b:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1)
+ └── projections
+      └── udf: fn_plpgsql_mutating [as=fn_plpgsql_mutating:13, type=void, volatile, udf]
+           └── body
+                └── limit
+                     ├── columns: "_stmt_exec_1":12(void)
+                     ├── cardinality: [1 - 1]
+                     ├── volatile, mutations
+                     ├── key: ()
+                     ├── fd: ()-->(12)
+                     ├── project
+                     │    ├── columns: "_stmt_exec_1":12(void)
+                     │    ├── cardinality: [1 - 1]
+                     │    ├── volatile, mutations
+                     │    ├── key: ()
+                     │    ├── fd: ()-->(12)
+                     │    ├── values
+                     │    │    ├── cardinality: [1 - 1]
+                     │    │    ├── key: ()
+                     │    │    └── tuple [type=tuple]
+                     │    └── projections
+                     │         └── udf: _stmt_exec_1 [as="_stmt_exec_1":12, type=void, volatile, udf]
+                     │              └── body
+                     │                   ├── insert ab
+                     │                   │    ├── columns: <none>
+                     │                   │    ├── insert-mapping:
+                     │                   │    │    ├── column1:9 => a:5
+                     │                   │    │    └── column2:10 => b:6
+                     │                   │    ├── cardinality: [0 - 0]
+                     │                   │    ├── volatile, mutations
+                     │                   │    └── values
+                     │                   │         ├── columns: column1:9(int!null) column2:10(int!null)
+                     │                   │         ├── cardinality: [1 - 1]
+                     │                   │         ├── key: ()
+                     │                   │         ├── fd: ()-->(9,10)
+                     │                   │         └── tuple [type=tuple{int, int}]
+                     │                   │              ├── const: 1 [type=int]
+                     │                   │              └── const: 2 [type=int]
+                     │                   └── project
+                     │                        ├── columns: "_implicit_return":11(void)
+                     │                        ├── cardinality: [1 - 1]
+                     │                        ├── immutable
+                     │                        ├── key: ()
+                     │                        ├── fd: ()-->(11)
+                     │                        ├── values
+                     │                        │    ├── cardinality: [1 - 1]
+                     │                        │    ├── key: ()
+                     │                        │    └── tuple [type=tuple]
+                     │                        └── projections
+                     │                             └── cast: VOID [as="_implicit_return":11, type=void, immutable]
+                     │                                  └── null [type=unknown]
+                     └── const: 1 [type=int]
+
+# The "mutations" property should propagate from a PL/pgSQL routine that
+# transitively calls a mutating function.
+exec-ddl
+CREATE FUNCTION fn_plpgsql_calls_mutating() RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    v VOID;
+  BEGIN
+    SELECT fn_mutating() INTO v;
+    RETURN 1;
+  END
+$$
+----
+
+build
+SELECT fn_plpgsql_calls_mutating() FROM ab
+----
+project
+ ├── columns: fn_plpgsql_calls_mutating:20(int)
+ ├── volatile, mutations
+ ├── prune: (20)
+ ├── scan ab
+ │    ├── columns: a:1(int!null) b:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1)
+ └── projections
+      └── udf: fn_plpgsql_calls_mutating [as=fn_plpgsql_calls_mutating:20, type=int, volatile, udf]
+           └── body
+                └── limit
+                     ├── columns: "_stmt_exec_1":19(int)
+                     ├── cardinality: [1 - 1]
+                     ├── volatile, mutations
+                     ├── key: ()
+                     ├── fd: ()-->(19)
+                     ├── project
+                     │    ├── columns: "_stmt_exec_1":19(int)
+                     │    ├── cardinality: [1 - 1]
+                     │    ├── volatile, mutations
+                     │    ├── key: ()
+                     │    ├── fd: ()-->(19)
+                     │    ├── barrier
+                     │    │    ├── columns: v:5(void)
+                     │    │    ├── cardinality: [1 - 1]
+                     │    │    ├── immutable
+                     │    │    ├── key: ()
+                     │    │    ├── fd: ()-->(5)
+                     │    │    └── project
+                     │    │         ├── columns: v:5(void)
+                     │    │         ├── cardinality: [1 - 1]
+                     │    │         ├── immutable
+                     │    │         ├── key: ()
+                     │    │         ├── fd: ()-->(5)
+                     │    │         ├── values
+                     │    │         │    ├── cardinality: [1 - 1]
+                     │    │         │    ├── key: ()
+                     │    │         │    └── tuple [type=tuple]
+                     │    │         └── projections
+                     │    │              └── cast: VOID [as=v:5, type=void, immutable]
+                     │    │                   └── null [type=unknown]
+                     │    └── projections
+                     │         └── udf: _stmt_exec_1 [as="_stmt_exec_1":19, type=int, outer=(5), volatile, udf]
+                     │              ├── args
+                     │              │    └── variable: v:5 [type=void]
+                     │              ├── params: v:6(void)
+                     │              └── body
+                     │                   └── project
+                     │                        ├── columns: "_stmt_exec_ret_2":18(int)
+                     │                        ├── cardinality: [1 - 1]
+                     │                        ├── volatile, mutations
+                     │                        ├── key: ()
+                     │                        ├── fd: ()-->(18)
+                     │                        ├── project
+                     │                        │    ├── columns: v:17(void)
+                     │                        │    ├── cardinality: [1 - 1]
+                     │                        │    ├── volatile, mutations
+                     │                        │    ├── key: ()
+                     │                        │    ├── fd: ()-->(17)
+                     │                        │    ├── prune: (17)
+                     │                        │    ├── barrier
+                     │                        │    │    ├── columns: fn_mutating:14(void)
+                     │                        │    │    ├── cardinality: [1 - 1]
+                     │                        │    │    ├── volatile, mutations
+                     │                        │    │    ├── key: ()
+                     │                        │    │    ├── fd: ()-->(14)
+                     │                        │    │    └── right-join (cross)
+                     │                        │    │         ├── columns: fn_mutating:14(void)
+                     │                        │    │         ├── cardinality: [1 - 1]
+                     │                        │    │         ├── volatile, mutations
+                     │                        │    │         ├── key: ()
+                     │                        │    │         ├── fd: ()-->(14)
+                     │                        │    │         ├── limit
+                     │                        │    │         │    ├── columns: fn_mutating:14(void)
+                     │                        │    │         │    ├── cardinality: [1 - 1]
+                     │                        │    │         │    ├── volatile, mutations
+                     │                        │    │         │    ├── key: ()
+                     │                        │    │         │    ├── fd: ()-->(14)
+                     │                        │    │         │    ├── project
+                     │                        │    │         │    │    ├── columns: fn_mutating:14(void)
+                     │                        │    │         │    │    ├── cardinality: [1 - 1]
+                     │                        │    │         │    │    ├── volatile, mutations
+                     │                        │    │         │    │    ├── key: ()
+                     │                        │    │         │    │    ├── fd: ()-->(14)
+                     │                        │    │         │    │    ├── values
+                     │                        │    │         │    │    │    ├── cardinality: [1 - 1]
+                     │                        │    │         │    │    │    ├── key: ()
+                     │                        │    │         │    │    │    └── tuple [type=tuple]
+                     │                        │    │         │    │    └── projections
+                     │                        │    │         │    │         └── udf: fn_mutating [as=fn_mutating:14, type=void, volatile, udf]
+                     │                        │    │         │    │              └── body
+                     │                        │    │         │    │                   ├── insert ab
+                     │                        │    │         │    │                   │    ├── columns: <none>
+                     │                        │    │         │    │                   │    ├── insert-mapping:
+                     │                        │    │         │    │                   │    │    ├── column1:11 => a:7
+                     │                        │    │         │    │                   │    │    └── column2:12 => b:8
+                     │                        │    │         │    │                   │    ├── cardinality: [0 - 0]
+                     │                        │    │         │    │                   │    ├── volatile, mutations
+                     │                        │    │         │    │                   │    └── values
+                     │                        │    │         │    │                   │         ├── columns: column1:11(int!null) column2:12(int!null)
+                     │                        │    │         │    │                   │         ├── cardinality: [1 - 1]
+                     │                        │    │         │    │                   │         ├── key: ()
+                     │                        │    │         │    │                   │         ├── fd: ()-->(11,12)
+                     │                        │    │         │    │                   │         └── tuple [type=tuple{int, int}]
+                     │                        │    │         │    │                   │              ├── const: 1 [type=int]
+                     │                        │    │         │    │                   │              └── const: 2 [type=int]
+                     │                        │    │         │    │                   └── limit
+                     │                        │    │         │    │                        ├── columns: column1:13(unknown)
+                     │                        │    │         │    │                        ├── cardinality: [1 - 1]
+                     │                        │    │         │    │                        ├── key: ()
+                     │                        │    │         │    │                        ├── fd: ()-->(13)
+                     │                        │    │         │    │                        ├── values
+                     │                        │    │         │    │                        │    ├── columns: column1:13(unknown)
+                     │                        │    │         │    │                        │    ├── cardinality: [1 - 1]
+                     │                        │    │         │    │                        │    ├── key: ()
+                     │                        │    │         │    │                        │    ├── fd: ()-->(13)
+                     │                        │    │         │    │                        │    └── tuple [type=tuple{unknown}]
+                     │                        │    │         │    │                        │         └── null [type=unknown]
+                     │                        │    │         │    │                        └── const: 1 [type=int]
+                     │                        │    │         │    └── const: 1 [type=int]
+                     │                        │    │         ├── values
+                     │                        │    │         │    ├── cardinality: [1 - 1]
+                     │                        │    │         │    ├── key: ()
+                     │                        │    │         │    └── tuple [type=tuple]
+                     │                        │    │         └── filters (true)
+                     │                        │    └── projections
+                     │                        │         └── variable: fn_mutating:14 [as=v:17, type=void, outer=(14)]
+                     │                        └── projections
+                     │                             └── udf: _stmt_exec_ret_2 [as="_stmt_exec_ret_2":18, type=int, outer=(17), udf]
+                     │                                  ├── tail-call
+                     │                                  ├── args
+                     │                                  │    └── variable: v:17 [type=void]
+                     │                                  ├── params: v:15(void)
+                     │                                  └── body
+                     │                                       └── project
+                     │                                            ├── columns: stmt_return_3:16(int!null)
+                     │                                            ├── cardinality: [1 - 1]
+                     │                                            ├── key: ()
+                     │                                            ├── fd: ()-->(16)
+                     │                                            ├── values
+                     │                                            │    ├── cardinality: [1 - 1]
+                     │                                            │    ├── key: ()
+                     │                                            │    └── tuple [type=tuple]
+                     │                                            └── projections
+                     │                                                 └── const: 1 [as=stmt_return_3:16, type=int]
+                     └── const: 1 [type=int]
+
+subtest end

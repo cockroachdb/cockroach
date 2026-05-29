@@ -142,7 +142,7 @@ func init() {
 		txn *kv.Txn,
 		override sessiondata.InternalExecutorOverride,
 		stmt string,
-		qargs ...interface{},
+		qargs ...any,
 	) (eval.InternalRows, error) {
 		ie := evalCtx.JobExecContext.(JobExecContext).ExecCfg().InternalDB.Executor()
 		return ie.QueryIteratorEx(ctx, opName, txn, override, stmt, qargs...)
@@ -401,6 +401,14 @@ var temporaryTablesEnabledClusterMode = settings.RegisterBoolSetting(
 	"default value for experimental_enable_temp_tables; allows for use of temporary tables by default",
 	false,
 	settings.WithPublic)
+
+var experimentalResourceGroupsEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.experimental_resource_groups.enabled",
+	"if true, enables CREATE/ALTER/DROP/SHOW RESOURCE GROUP SQL syntax; "+
+		"the resource manager is in development and not yet for production use",
+	false,
+)
 
 var implicitColumnPartitioningEnabledClusterMode = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
@@ -832,6 +840,12 @@ var errTransactionInProgress = pgerror.New(pgcode.ActiveSQLTransaction, "there i
 const sqlTxnName string = "sql txn"
 const metricsSampleInterval = 10 * time.Second
 
+// routineDDLDCLHowToUse is the shared HowToUse text for the routine
+// DDL/DCL execution counters defined below. The wording mirrors the
+// routine-scoped framing of the existing routine DML counters
+// (MetaRoutineSelectStarted et al.).
+const routineDDLDCLHowToUse = "This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages."
+
 // Fully-qualified names for metrics.
 var (
 	MetaSQLExecLatency = metric.Metadata{
@@ -1233,6 +1247,106 @@ var (
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
 	}
+	MetaRoutineCreateTableStarted = metric.Metadata{
+		Name:         "sql.routine.create_table.started.count",
+		Help:         "Number of SQL CREATE TABLE statements for permanent tables started within routine invocation",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.started.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine_started_create_table"),
+		Category:     metric.Metadata_SQL,
+		HowToUse:     routineDDLDCLHowToUse,
+	}
+	MetaRoutineCreateTempTableStarted = metric.Metadata{
+		Name:         "sql.routine.create_temp_table.started.count",
+		Help:         "Number of SQL CREATE TABLE statements for temporary tables started within routine invocation",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.started.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine_started_create_temp_table"),
+		Category:     metric.Metadata_SQL,
+		HowToUse:     routineDDLDCLHowToUse,
+	}
+	MetaRoutineDropTableStarted = metric.Metadata{
+		Name:         "sql.routine.drop_table.started.count",
+		Help:         "Number of SQL DROP TABLE statements started within routine invocation",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.started.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine_started_drop_table"),
+		Category:     metric.Metadata_SQL,
+		HowToUse:     routineDDLDCLHowToUse,
+	}
+	MetaRoutineCreateSchemaStarted = metric.Metadata{
+		Name:         "sql.routine.create_schema.started.count",
+		Help:         "Number of SQL CREATE SCHEMA statements started within routine invocation",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.started.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine_started_create_schema"),
+		Category:     metric.Metadata_SQL,
+		HowToUse:     routineDDLDCLHowToUse,
+	}
+	MetaRoutineDropSchemaStarted = metric.Metadata{
+		Name:         "sql.routine.drop_schema.started.count",
+		Help:         "Number of SQL DROP SCHEMA statements started within routine invocation",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.started.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine_started_drop_schema"),
+		Category:     metric.Metadata_SQL,
+		HowToUse:     routineDDLDCLHowToUse,
+	}
+	MetaRoutineCreateRoleStarted = metric.Metadata{
+		Name:         "sql.routine.create_role.started.count",
+		Help:         "Number of SQL CREATE ROLE statements started within routine invocation",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.started.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine_started_create_role"),
+		Category:     metric.Metadata_SQL,
+		HowToUse:     routineDDLDCLHowToUse,
+	}
+	MetaRoutineDropRoleStarted = metric.Metadata{
+		Name:         "sql.routine.drop_role.started.count",
+		Help:         "Number of SQL DROP ROLE statements started within routine invocation",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.started.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine_started_drop_role"),
+		Category:     metric.Metadata_SQL,
+		HowToUse:     routineDDLDCLHowToUse,
+	}
+	MetaRoutineGrantStarted = metric.Metadata{
+		Name:         "sql.routine.grant.started.count",
+		Help:         "Number of SQL GRANT statements started within routine invocation",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.started.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine_started_grant"),
+		Category:     metric.Metadata_SQL,
+		HowToUse:     routineDDLDCLHowToUse,
+	}
+	MetaRoutineRevokeStarted = metric.Metadata{
+		Name:         "sql.routine.revoke.started.count",
+		Help:         "Number of SQL REVOKE statements started within routine invocation",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.started.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine_started_revoke"),
+		Category:     metric.Metadata_SQL,
+		HowToUse:     routineDDLDCLHowToUse,
+	}
+	MetaRoutineAlterDefaultPrivilegesStarted = metric.Metadata{
+		Name:         "sql.routine.alter_default_privileges.started.count",
+		Help:         "Number of SQL ALTER DEFAULT PRIVILEGES statements started within routine invocation",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.started.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine_started_alter_default_privileges"),
+		Category:     metric.Metadata_SQL,
+		HowToUse:     routineDDLDCLHowToUse,
+	}
 
 	// Below are the metadata for the statement executed counters.
 	MetaQueryExecuted = metric.Metadata{
@@ -1482,6 +1596,116 @@ var (
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
 	}
+	MetaRoutineCreateTableExecuted = metric.Metadata{
+		Name:         "sql.routine.create_table.count",
+		Help:         "Number of SQL CREATE TABLE statements for permanent tables successfully executed within routine invocation",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine_create_table"),
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_SQL,
+		HowToUse:     routineDDLDCLHowToUse,
+	}
+	MetaRoutineCreateTempTableExecuted = metric.Metadata{
+		Name:         "sql.routine.create_temp_table.count",
+		Help:         "Number of SQL CREATE TABLE statements for temporary tables successfully executed within routine invocation",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine_create_temp_table"),
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_SQL,
+		HowToUse:     routineDDLDCLHowToUse,
+	}
+	MetaRoutineDropTableExecuted = metric.Metadata{
+		Name:         "sql.routine.drop_table.count",
+		Help:         "Number of SQL DROP TABLE statements successfully executed within routine invocation",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine_drop_table"),
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_SQL,
+		HowToUse:     routineDDLDCLHowToUse,
+	}
+	MetaRoutineCreateSchemaExecuted = metric.Metadata{
+		Name:         "sql.routine.create_schema.count",
+		Help:         "Number of SQL CREATE SCHEMA statements successfully executed within routine invocation",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine_create_schema"),
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_SQL,
+		HowToUse:     routineDDLDCLHowToUse,
+	}
+	MetaRoutineDropSchemaExecuted = metric.Metadata{
+		Name:         "sql.routine.drop_schema.count",
+		Help:         "Number of SQL DROP SCHEMA statements successfully executed within routine invocation",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine_drop_schema"),
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_SQL,
+		HowToUse:     routineDDLDCLHowToUse,
+	}
+	MetaRoutineCreateRoleExecuted = metric.Metadata{
+		Name:         "sql.routine.create_role.count",
+		Help:         "Number of SQL CREATE ROLE statements successfully executed within routine invocation",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine_create_role"),
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_SQL,
+		HowToUse:     routineDDLDCLHowToUse,
+	}
+	MetaRoutineDropRoleExecuted = metric.Metadata{
+		Name:         "sql.routine.drop_role.count",
+		Help:         "Number of SQL DROP ROLE statements successfully executed within routine invocation",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine_drop_role"),
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_SQL,
+		HowToUse:     routineDDLDCLHowToUse,
+	}
+	MetaRoutineGrantExecuted = metric.Metadata{
+		Name:         "sql.routine.grant.count",
+		Help:         "Number of SQL GRANT statements successfully executed within routine invocation",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine_grant"),
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_SQL,
+		HowToUse:     routineDDLDCLHowToUse,
+	}
+	MetaRoutineRevokeExecuted = metric.Metadata{
+		Name:         "sql.routine.revoke.count",
+		Help:         "Number of SQL REVOKE statements successfully executed within routine invocation",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine_revoke"),
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_SQL,
+		HowToUse:     routineDDLDCLHowToUse,
+	}
+	MetaRoutineAlterDefaultPrivilegesExecuted = metric.Metadata{
+		Name:         "sql.routine.alter_default_privileges.count",
+		Help:         "Number of SQL ALTER DEFAULT PRIVILEGES statements successfully executed within routine invocation",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine_alter_default_privileges"),
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_SQL,
+		HowToUse:     routineDDLDCLHowToUse,
+	}
 
 	// Miscellaneous metrics.
 	MetaSQLTxnContended = metric.Metadata{
@@ -1719,7 +1943,7 @@ func EmptySystemTenantOnly[T any]() SystemTenantOnly[T] {
 // system.cluster_metrics. Implemented by cmwriter.Writer.
 type ClusterMetricAdder interface {
 	AddMetric(m metric.Iterable)
-	AddMetricStruct(s interface{})
+	AddMetricStruct(s any)
 }
 
 // An ExecutorConfig encompasses the auxiliary objects and configuration
@@ -1771,6 +1995,11 @@ type ExecutorConfig struct {
 	// ClusterMetricsWriter registers metrics for periodic flushing to
 	// system.cluster_metrics. Implemented by cmwriter.Writer.
 	ClusterMetricsWriter ClusterMetricAdder
+
+	// TimeSeriesQuerier exposes TSDB to SQL.
+	// Implemented by an adapter in pkg/ts. May be nil in test
+	// configurations that do not bring up a TSDB server.
+	TimeSeriesQuerier eval.TimeSeriesQuerier
 
 	TestingKnobs                         ExecutorTestingKnobs
 	UpgradeTestingKnobs                  *upgradebase.TestingKnobs
@@ -2279,10 +2508,10 @@ type InspectTestingKnobs struct {
 	// has been created (if applicable). If it returns an error, the job fails.
 	OnInspectAfterProtectedTimestamp func() error
 	// InspectIssueLogger is an override to the default issue logger.
-	InspectIssueLogger interface{}
+	InspectIssueLogger any
 	// OnCheckComplete is called after a check completes. The check interface
 	// is passed to allow the callback to extract metadata (e.g., row counts).
-	OnCheckComplete func(check interface{}) error
+	OnCheckComplete func(check any) error
 	// OverrideSpans, if set, replaces the primary index spans before they
 	// are passed to PartitionSpans. This gives tests control over the exact
 	// spans used by the inspect job, bypassing the span merge logic in
@@ -2468,7 +2697,7 @@ func (p *planner) getPlanDistribution(
 // TODO: This does not support arguments of the SQL 'Date' type, as there is not
 // an equivalent type in Go's standard library. It's not currently needed by any
 // of our internal tables.
-func golangFillQueryArguments(args ...interface{}) (tree.Datums, error) {
+func golangFillQueryArguments(args ...any) (tree.Datums, error) {
 	res := make(tree.Datums, len(args))
 	for i, arg := range args {
 		if arg == nil {
@@ -3477,7 +3706,7 @@ func getMessagesForSubtrace(
 		allLogs,
 		logRecordRow{
 			timestamp: span.StartTime,
-			msg:       fmt.Sprintf("=== SPAN START: %s ===", span.Operation),
+			msg:       tracingpb.FormatSpanStartMessage(span.RecordedSpan).StripMarkers(),
 			span:      span,
 			index:     0,
 		},
@@ -3552,6 +3781,8 @@ var bufferableParamStatusUpdates = func() []bufferableParamStatusUpdate {
 		"IntervalStyle",
 		"is_superuser",
 		"TimeZone",
+		"default_transaction_read_only",
+		"search_path",
 	}
 	ret := make([]bufferableParamStatusUpdate, len(params))
 	for i, param := range params {

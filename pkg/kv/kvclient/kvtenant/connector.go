@@ -399,9 +399,8 @@ func (c *connector) runGossipSubscription(ctx context.Context, startupCh chan st
 				break
 			}
 			if e.Error != nil {
-				// Hard logical error. We expect io.EOF next.
 				log.Dev.Errorf(ctx, "error consuming GossipSubscription RPC: %v", e.Error)
-				continue
+				break
 			}
 			handler, ok := gossipSubsHandlers[e.PatternMatched]
 			if !ok {

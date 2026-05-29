@@ -18,7 +18,6 @@ import { util } from "@cockroachlabs/cluster-ui";
 import clone from "lodash/clone";
 import isNil from "lodash/isNil";
 import { Action } from "redux";
-import { call, takeEvery } from "redux-saga/effects";
 import { createSelector, Selector } from "reselect";
 
 import { PayloadAction } from "src/interfaces/action";
@@ -80,6 +79,8 @@ export function localSettingsReducer(
       const { payload } = action as PayloadAction<LocalSettingData>;
       state = clone(state);
       state[payload.key] = payload.value;
+      // Persist to sessionStorage as a side effect.
+      saveToSessionStorage(payload);
       return state;
     }
     default:
@@ -155,19 +156,8 @@ export class LocalSetting<S, T> {
       innerSelector,
       () => getValueFromSessionStorage(this.key),
       (uiSettings, cachedValue) => {
-        if (cachedValue != null && uiSettings[this.key] == null) {
-          uiSettings[this.key] = cachedValue;
-        }
         return uiSettings[this.key] ?? cachedValue ?? defaultValue;
       },
     );
   }
-}
-
-export function* persistLocalSetting(action: PayloadAction<LocalSettingData>) {
-  yield call(saveToSessionStorage, action.payload);
-}
-
-export function* localSettingsSaga() {
-  yield takeEvery(SET_UI_VALUE, persistLocalSetting);
 }

@@ -23,6 +23,17 @@ import (
 
 var cockroachIOController = filepath.Join("/sys/fs/cgroup/system.slice", install.VirtualClusterLabel(install.SystemInterfaceName, 0)+".service", "io.max")
 
+// diskMajMinExpr is a shell command substitution that expands to the
+// "MAJ:MIN" pair of the block device backing /mnt/data1 on the current node.
+// It is evaluated on each node so that the device is resolved locally, since
+// GCE does not guarantee consistent /dev/sdX letter assignment across VMs
+// (see #170379). All cgroup-disk-staller commands that need the device's
+// major:minor go through this single expression.
+// Double quotes (not single) around [:space:] keep this expression usable
+// inside an outer `bash -c '...'` invocation (setThroughputCmd) without
+// terminating the surrounding single-quoted string.
+const diskMajMinExpr = `$(lsblk -dn -o MAJ:MIN "$(findmnt -n -o SOURCE /mnt/data1)" | tr -d "[:space:]")`
+
 const CgroupsDiskStallName = "cgroup-disk-stall"
 
 type CGroupDiskStaller struct {
@@ -279,17 +290,7 @@ func (s *CGroupDiskStaller) Recover(ctx context.Context, l *logger.Logger, args 
 		return err
 	}
 
-	// If we are restarting nodes, then we assume the failure above is because
-	// the disk stall was injected too long, and it was an expected death. Restart
-	// any dead nodes.
-	return forEachNode(diskStallArgs.Nodes, func(n install.Nodes) error {
-		err = s.Run(ctx, l, n, "cat", cockroachIOController)
-		if err != nil && diskStallArgs.RestartNodes {
-			l.Printf("failed to log cgroup bandwidth limits, assuming n%d exited and restarting: %v", n, err)
-			return s.StartNodes(ctx, l, n)
-		}
-		return nil
-	})
+	return s.restartCrashedNodes(ctx, l, diskStallArgs.Nodes)
 }
 
 func (s *CGroupDiskStaller) WaitForFailureToPropagate(
@@ -352,11 +353,6 @@ func (s *CGroupDiskStaller) setThroughputCmd(
 	bw throughput,
 	cockroachIOController string,
 ) (string, error) {
-	maj, min, err := s.DiskDeviceMajorMinor(ctx, l)
-	if err != nil {
-		return "", err
-	}
-
 	var limits []string
 	for _, rw := range readOrWrite {
 		bytesPerSecondStr := "max"
@@ -367,9 +363,9 @@ func (s *CGroupDiskStaller) setThroughputCmd(
 	}
 	l.Printf("setting cgroup bandwith limits:\n%v", limits)
 
-	return fmt.Sprintf("sudo /bin/bash -c 'echo %d:%d %s > %s'",
-		maj,
-		min,
+	return fmt.Sprintf(
+		`sudo /bin/bash -c 'echo "%s %s" > %s'`,
+		diskMajMinExpr,
 		strings.Join(limits, " "),
 		cockroachIOController,
 	), nil
@@ -380,14 +376,9 @@ func (s *CGroupDiskStaller) setThroughputCmd(
 func (s *CGroupDiskStaller) GetReadWriteBytes(
 	ctx context.Context, l *logger.Logger, node install.Nodes,
 ) (int, int, error) {
-	maj, min, err := s.DiskDeviceMajorMinor(ctx, l)
-	if err != nil {
-		return 0, 0, err
-	}
-	// Check the number of bytes read and written to disk.
 	res, err := s.RunWithDetails(
 		ctx, l, node,
-		fmt.Sprintf(`grep -E '%d:%d' /sys/fs/cgroup/system.slice/io.stat |`, maj, min),
+		fmt.Sprintf(`grep -E "^%s" /sys/fs/cgroup/system.slice/io.stat |`, diskMajMinExpr),
 		`grep -oE 'rbytes=[0-9]+|wbytes=[0-9]+' |`,
 		`awk -F= '{printf "%s ", $2} END {print ""}'`,
 	)
@@ -415,9 +406,13 @@ const (
 	DmsetupDiskStallName = "dmsetup-disk-stall"
 	dmsetupStallCmd      = "sudo dmsetup suspend --noflush --nolockfs data1"
 	dmsetupUnstallCmd    = "sudo dmsetup resume data1"
-	// dmsetupStateFile stores the original disk device name so cleanup can find it
-	// even when running as a separate stage after setup has modified the mount.
+	// dmsetupStateFile stores the original disk device name (per node) so
+	// cleanup can find it even when running as a separate stage after setup
+	// has unmounted /mnt/data1 and remounted /dev/mapper/data1 over it.
 	dmsetupStateFile = "/tmp/dmsetup-disk-stall-device"
+	// dmsetupDevExpr is a shell expression that expands to the data disk
+	// device name stored in dmsetupStateFile on the current node.
+	dmsetupDevExpr = `"$(cat ` + dmsetupStateFile + `)"`
 )
 
 type DmsetupDiskStaller struct {
@@ -446,36 +441,23 @@ func (s *DmsetupDiskStaller) Description() string {
 	return "dmsetup disk staller"
 }
 
-// getStoredDeviceName reads the device name from the state file saved during setup.
-// This allows cleanup to find the original device even when running as a separate stage.
-func (s *DmsetupDiskStaller) getStoredDeviceName(
-	ctx context.Context, l *logger.Logger,
-) (string, error) {
-	res, err := s.RunWithDetails(ctx, l, s.c.Nodes[:1], fmt.Sprintf("cat %s 2>/dev/null", dmsetupStateFile))
-	if err != nil {
-		return "", errors.Wrap(err, "failed to read stored device name")
+// storeDeviceName writes the device backing /mnt/data1 (per node, via
+// findmnt) to dmsetupStateFile so subsequent commands can read it back via
+// dmsetupDevExpr. Doing this per node is required because GCE does not
+// guarantee consistent /dev/sdX letter assignment across VMs (see #170379).
+//
+// If overwrite is true, the state file is always rewritten (used by Setup).
+// If false, the file is only written when missing (used by Cleanup, since
+// after Setup has run findmnt would return /dev/mapper/data1 rather than the
+// original device).
+func (s *DmsetupDiskStaller) storeDeviceName(
+	ctx context.Context, l *logger.Logger, overwrite bool,
+) error {
+	cmd := fmt.Sprintf(`findmnt -n -o SOURCE /mnt/data1 > %s`, dmsetupStateFile)
+	if !overwrite {
+		cmd = fmt.Sprintf(`[ -s %s ] || `, dmsetupStateFile) + cmd
 	}
-	dev := strings.TrimSpace(res.Stdout)
-	if dev == "" {
-		return "", errors.New("no stored device name found; run setup stage first")
-	}
-	return dev, nil
-}
-
-// getOrStoreDeviceName gets the disk device name, storing it to the state file if not already stored.
-// This is used during setup to persist the device name for later stages.
-func (s *DmsetupDiskStaller) getOrStoreDeviceName(
-	ctx context.Context, l *logger.Logger,
-) (string, error) {
-	dev, err := s.DiskDeviceName(ctx, l)
-	if err != nil {
-		return "", err
-	}
-	// Save the device name for later use by cleanup when running stages independently.
-	if err = s.Run(ctx, l, s.c.Nodes, fmt.Sprintf("echo '%s' > %s", dev, dmsetupStateFile)); err != nil {
-		return "", errors.Wrap(err, "failed to save device name to state file")
-	}
-	return dev, nil
+	return s.Run(ctx, l, s.c.Nodes, cmd)
 }
 
 func (s *DmsetupDiskStaller) Setup(ctx context.Context, l *logger.Logger, args FailureArgs) error {
@@ -492,10 +474,11 @@ func (s *DmsetupDiskStaller) Setup(ctx context.Context, l *logger.Logger, args F
 		}
 	}
 
-	// Get the device name and store it for later stages (cleanup).
-	dev, err := s.getOrStoreDeviceName(ctx, l)
-	if err != nil {
-		return err
+	// Resolve the data disk device on each node and persist it for later
+	// stages (cleanup may run independently after the mount has been
+	// replaced).
+	if err = s.storeDeviceName(ctx, l, true /* overwrite */); err != nil {
+		return errors.Wrap(err, "resolving data disk device")
 	}
 
 	// snapd will run "snapd auto-import /dev/dm-0" via udev triggers when
@@ -515,11 +498,12 @@ sudo udevadm settle`); err != nil {
 		return err
 	}
 	// See https://github.com/cockroachdb/cockroach/issues/129619#issuecomment-2316147244.
-	if err = s.Run(ctx, l, s.c.Nodes, `sudo tune2fs -O ^has_journal `+dev); err != nil {
+	if err = s.Run(ctx, l, s.c.Nodes, `sudo tune2fs -O ^has_journal `+dmsetupDevExpr); err != nil {
 		return errors.WithHintf(err, "disabling journaling fails if the cluster has been started")
 	}
-	if err = s.Run(ctx, l, s.c.Nodes, `echo "0 $(sudo blockdev --getsz `+dev+`) linear `+dev+` 0" | `+
-		`sudo dmsetup create data1`); err != nil {
+	if err = s.Run(ctx, l, s.c.Nodes,
+		`dev=`+dmsetupDevExpr+`; echo "0 $(sudo blockdev --getsz "$dev") linear $dev 0" | `+
+			`sudo dmsetup create data1`); err != nil {
 		return err
 	}
 	// This has occasionally been seen to fail with "Device or resource busy",
@@ -578,15 +562,7 @@ func (s *DmsetupDiskStaller) Recover(
 	}
 
 	if diskStallArgs.RestartNodes {
-		// If the disk stall was injected for long enough that the cockroach process
-		// detected it and shut down the node, then restart it.
-		return forEachNode(nodes, func(n install.Nodes) error {
-			if err := s.PingNode(ctx, l, n); err != nil {
-				l.Printf("failed to connect to n%d, assuming node exited and restarting: %v", n, err)
-				return s.StartNodes(ctx, l, n)
-			}
-			return nil
-		})
+		return s.restartCrashedNodes(ctx, l, nodes)
 	}
 
 	return nil
@@ -605,15 +581,12 @@ func (s *DmsetupDiskStaller) Cleanup(
 		}
 	}
 
-	// Try to get the device name from the state file first (for independent stage runs),
-	// fall back to live lookup (for full lifecycle runs where mount is still intact).
-	dev, err := s.getStoredDeviceName(ctx, l)
-	if err != nil {
-		l.Printf("Could not read stored device name, trying live lookup: %v", err)
-		dev, err = s.DiskDeviceName(ctx, l)
-		if err != nil {
-			return errors.Wrap(err, "failed to determine disk device")
-		}
+	// Ensure each node has its device name persisted in dmsetupStateFile.
+	// In the common case Setup already wrote it; if cleanup is run standalone
+	// it is populated here via findmnt while the original mount is still in
+	// place.
+	if err := s.storeDeviceName(ctx, l, false /* overwrite */); err != nil {
+		return errors.Wrap(err, "determining disk device")
 	}
 
 	if err := s.Run(ctx, l, s.c.Nodes, `sudo dmsetup resume data1`); err != nil {
@@ -625,11 +598,11 @@ func (s *DmsetupDiskStaller) Cleanup(
 	if err := s.Run(ctx, l, s.c.Nodes, `sudo dmsetup remove data1`); err != nil {
 		return err
 	}
-	if err := s.Run(ctx, l, s.c.Nodes, `sudo tune2fs -O has_journal `+dev); err != nil {
+	if err := s.Run(ctx, l, s.c.Nodes, `sudo tune2fs -O has_journal `+dmsetupDevExpr); err != nil {
 		return err
 	}
 	// Mount the original device back to /mnt/data1.
-	if err := s.Run(ctx, l, s.c.Nodes, fmt.Sprintf("sudo mount %s /mnt/data1", dev)); err != nil {
+	if err := s.Run(ctx, l, s.c.Nodes, `sudo mount `+dmsetupDevExpr+` /mnt/data1`); err != nil {
 		return err
 	}
 	// Reenable snapd autoimport udev rules.

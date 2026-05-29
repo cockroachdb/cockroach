@@ -673,3 +673,184 @@ PREPARE p159124 AS SELECT k FROM t159124 WHERE s = current_user()
 
 statement ok
 EXECUTE p159124
+
+# Test that custom_plans and generic_plans columns are populated in
+# pg_prepared_statements.
+subtest pg_prepared_statements_plan_counts
+
+statement ok
+DEALLOCATE ALL
+
+statement ok
+CREATE TABLE t_plan_counts (a INT PRIMARY KEY, b INT, INDEX (b))
+
+statement ok
+INSERT INTO t_plan_counts SELECT i, i FROM generate_series(1, 1000) AS g(i)
+
+# After PREPARE, both counters start at 0.
+statement ok
+PREPARE p_counts(int) AS SELECT * FROM t_plan_counts WHERE b = $1
+
+query II
+SELECT custom_plans, generic_plans FROM pg_prepared_statements WHERE name = 'p_counts'
+----
+0  0
+
+# force_custom_plan increments custom_plans.
+statement ok
+SET plan_cache_mode = force_custom_plan
+
+statement ok
+EXECUTE p_counts(1)
+
+query II
+SELECT custom_plans, generic_plans FROM pg_prepared_statements WHERE name = 'p_counts'
+----
+1  0
+
+statement ok
+EXECUTE p_counts(2)
+
+query II
+SELECT custom_plans, generic_plans FROM pg_prepared_statements WHERE name = 'p_counts'
+----
+2  0
+
+# force_generic_plan increments generic_plans.
+statement ok
+SET plan_cache_mode = force_generic_plan
+
+statement ok
+EXECUTE p_counts(1)
+
+query II
+SELECT custom_plans, generic_plans FROM pg_prepared_statements WHERE name = 'p_counts'
+----
+2  1
+
+statement ok
+EXECUTE p_counts(2)
+
+query II
+SELECT custom_plans, generic_plans FROM pg_prepared_statements WHERE name = 'p_counts'
+----
+2  2
+
+# Ideal generic plan (no placeholders) always counts as generic,
+# even with force_custom_plan.
+statement ok
+PREPARE p_ideal AS SELECT 1
+
+statement ok
+SET plan_cache_mode = force_custom_plan
+
+statement ok
+EXECUTE p_ideal
+
+query II
+SELECT custom_plans, generic_plans FROM pg_prepared_statements WHERE name = 'p_ideal'
+----
+0  1
+
+statement ok
+EXECUTE p_ideal
+
+query II
+SELECT custom_plans, generic_plans FROM pg_prepared_statements WHERE name = 'p_ideal'
+----
+0  2
+
+# Auto mode: first 5 executions use custom plans.
+statement ok
+DEALLOCATE p_counts
+
+statement ok
+PREPARE p_counts(int) AS SELECT * FROM t_plan_counts WHERE b = $1
+
+statement ok
+SET plan_cache_mode = auto
+
+statement ok
+EXECUTE p_counts(1)
+
+statement ok
+EXECUTE p_counts(2)
+
+statement ok
+EXECUTE p_counts(3)
+
+statement ok
+EXECUTE p_counts(4)
+
+statement ok
+EXECUTE p_counts(5)
+
+query II
+SELECT custom_plans, generic_plans FROM pg_prepared_statements WHERE name = 'p_counts'
+----
+5  0
+
+# 6th execution triggers generic plan evaluation.
+statement ok
+EXECUTE p_counts(6)
+
+query II
+SELECT custom_plans, generic_plans FROM pg_prepared_statements WHERE name = 'p_counts'
+----
+5  1
+
+# DEALLOCATE and re-PREPARE resets counters.
+statement ok
+DEALLOCATE p_counts
+
+statement ok
+PREPARE p_counts(int) AS SELECT * FROM t_plan_counts WHERE b = $1
+
+query II
+SELECT custom_plans, generic_plans FROM pg_prepared_statements WHERE name = 'p_counts'
+----
+0  0
+
+statement ok
+DEALLOCATE ALL
+
+statement ok
+SET plan_cache_mode = auto
+
+statement ok
+DROP TABLE t_plan_counts
+
+subtest no_memo_reuse
+
+# Create a prepared statement that won't allow memo reuse.
+statement ok
+PREPARE show_tables AS SHOW TABLES
+
+statement ok
+EXECUTE show_tables;
+
+query II
+SELECT custom_plans, generic_plans FROM pg_prepared_statements WHERE name = 'show_tables'
+----
+1  0
+
+statement ok
+DEALLOCATE ALL
+
+subtest end
+
+# Regression test for having an untyped NULL as the placeholder value (#153687).
+statement ok
+SET plan_cache_mode = force_generic_plan;
+
+statement ok
+CREATE TABLE t153687 (i INT);
+
+statement ok
+PREPARE p153687(INT) AS SELECT SUBSTRING('k', $1, 1) FROM t153687;
+
+query empty
+EXECUTE p153687(NULL);
+
+statement ok
+RESET plan_cache_mode;

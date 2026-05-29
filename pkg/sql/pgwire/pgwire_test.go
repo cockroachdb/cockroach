@@ -259,7 +259,6 @@ func TestPGPrepareFail(t *testing.T) {
 		"SELECT CASE WHEN TRUE THEN $1 ELSE $2 END": "pq: could not determine data type of placeholder $2",
 		"SELECT $1 > 0 AND NOT $1":                  "pq: placeholder $1 already has type int, cannot assign bool",
 		"CREATE TABLE $1 (id INT)":                  "pq: at or near \"1\": syntax error",
-		"UPDATE d.t SET s = i + $1":                 "pq: unsupported binary operator: <int> + <anyelement> (returning <string>)",
 		"SELECT $0 > 0":                             "pq: lexical error: placeholder index must be between 1 and 65536",
 		"SELECT $2 > 0":                             "pq: could not determine data type of placeholder $1",
 		"SELECT 3 + CASE (4) WHEN 4 THEN $1 END":    "pq: could not determine data type of placeholder $1",
@@ -530,7 +529,10 @@ func TestPGPreparedQuery(t *testing.T) {
 		}},
 		{"SHOW CONSTRAINTS FROM system.users", []preparedQueryTest{
 			baseTest.Results("users", "primary", "PRIMARY KEY", "PRIMARY KEY (username ASC)", true).
-				Results("users", "users_user_id_idx", "UNIQUE", "UNIQUE (user_id ASC)", true),
+				Results("users", "users_isRole_not_null", "NOT NULL", "NOT NULL", true).
+				Results("users", "users_user_id_idx", "UNIQUE", "UNIQUE (user_id ASC)", true).
+				Results("users", "users_user_id_not_null", "NOT NULL", "NOT NULL", true).
+				Results("users", "users_username_not_null", "NOT NULL", "NOT NULL", true),
 		}},
 		{"SHOW TIME ZONE", []preparedQueryTest{
 			baseTest.Results("UTC"),

@@ -41,7 +41,7 @@ func (c constraintToUpdateForTest) CheckDesc() *descpb.TableDescriptor_CheckCons
 }
 
 // GetExpr implements the catalog.CheckConstraint interface.
-func (c constraintToUpdateForTest) GetExpr() string {
+func (c constraintToUpdateForTest) GetExpr() catpb.Expression {
 	return c.desc.Check.Expr
 }
 

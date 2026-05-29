@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
@@ -141,6 +142,17 @@ func setupDatabase(ctx context.Context, t test.Test, conn *gosql.DB) {
 	stmts := []string{
 		`SET CLUSTER SETTING sql.defaults.primary_region = ''`,
 		`SET CLUSTER SETTING server.time_until_store_dead = '30s'`,
+
+		// Pin at least one system-database replica to each region so that no
+		// single region holds a majority of the 5 replicas. Without this,
+		// the allocator may concentrate replicas in 2 regions, causing
+		// permanent quorum loss when one of those regions is killed.
+		`ALTER DATABASE system CONFIGURE ZONE USING num_replicas = 5, constraints = '{` +
+			`"+region=europe-west2": 1, ` +
+			`"+region=us-east1": 1, ` +
+			`"+region=us-central1": 1, ` +
+			`"+region=us-west1": 1}'`,
+
 		`CREATE DATABASE test_sr PRIMARY REGION "europe-west2"
 			REGIONS "us-east1", "us-central1", "us-west1"`,
 		`ALTER DATABASE test_sr ADD SUPER REGION "americas"
@@ -621,27 +633,45 @@ func verifyDataAvailable(ctx context.Context, t test.Test, conn *gosql.DB, table
 func verifyReplicaConfinement(
 	ctx context.Context, t test.Test, conn *gosql.DB, topo superRegionTopology, table string,
 ) {
-	rows, err := conn.QueryContext(ctx,
-		fmt.Sprintf(
-			`SELECT range_id, replicas FROM [SHOW RANGES FROM TABLE %s WITH DETAILS]`,
-			table,
-		),
-	)
-	require.NoError(t, err)
-	defer rows.Close()
-
-	for rows.Next() {
-		var rangeID int
-		var replicas pq.Int64Array
-		require.NoError(t, rows.Scan(&rangeID, &replicas))
-
-		for _, nodeID := range replicas {
-			region := topo.nodeRegion[int(nodeID)]
-			require.True(t, topo.superRegionMembers[region],
-				"range r%d has replica on n%d in region %s which is outside super region",
-				rangeID, nodeID, region)
-		}
+	retryOpts := retry.Options{
+		InitialBackoff: 5 * time.Second,
+		MaxBackoff:     15 * time.Second,
+		MaxRetries:     30,
 	}
-	require.NoError(t, rows.Err())
+	var lastValidationErr error
+	t.L().Printf("verifying replica confinement for %s", table)
+	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+		lastValidationErr = func() error {
+			rows, err := conn.QueryContext(ctx,
+				fmt.Sprintf(
+					`SELECT range_id, replicas FROM [SHOW RANGES FROM TABLE %s WITH DETAILS]`,
+					table,
+				),
+			)
+			require.NoError(t, err)
+			defer rows.Close()
+
+			for rows.Next() {
+				var rangeID int
+				var replicas pq.Int64Array
+				require.NoError(t, rows.Scan(&rangeID, &replicas))
+
+				for _, nodeID := range replicas {
+					region := topo.nodeRegion[int(nodeID)]
+					if !topo.superRegionMembers[region] {
+						return errors.Newf("range r%d has replica on n%d in region %s which is outside super region",
+							rangeID, nodeID, region)
+					}
+				}
+			}
+			require.NoError(t, rows.Err())
+			return nil
+		}()
+		if lastValidationErr == nil {
+			break
+		}
+		t.L().Printf("waiting for replica confinement for %s (retrying): %v", table, lastValidationErr)
+	}
+	require.NoError(t, lastValidationErr, "timed out verifying replica confinement for %s", table)
 	t.L().Printf("verified all replicas for %s are within super region", table)
 }

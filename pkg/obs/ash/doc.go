@@ -248,9 +248,8 @@
 //
 // The on-hot-path cost is limited to SetWorkState and its cleanup
 // function: a sync.Pool get/put and a sync.Map store/load. Benchmarks
-// show ASH adds a near-fixed ~600-700 bytes and ~17-21 allocations per
-// operation with no statistically significant impact on latency or
-// throughput.
+// show ASH is allocation free in the steady state, and has no significant
+// impact on latency or throughput.
 //
 // Plumbing workload identity also has allocation cost.
 // context.WithValue allocates, so context-based propagation

@@ -121,7 +121,7 @@ func (w *random) Ops(
 		tableName = w.Tables()[0].Name
 	}
 
-	table, err := LoadTable(db, tableName)
+	table, err := LoadTable(db, QualifiedName{Table: tableName})
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}

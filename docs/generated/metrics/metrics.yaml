@@ -1200,6 +1200,17 @@ layers:
       how_to_use: See Description.
       visibility: ESSENTIAL
       owner: cockroachdb/sql-foundations
+    - name: auth.min_password_length
+      exported_name: auth_min_password_length
+      description: The configured minimum password length (server.user_login.min_password_length)
+      y_axis_label: Characters
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: Use this metric to confirm minimum password length policy is enforced. Alert if the value drops below your organization's required minimum to detect configuration drift.
+      visibility: ESSENTIAL
+      owner: cockroachdb/sql-foundations
     - name: auth.password.conn.latency
       exported_name: auth_password_conn_latency
       description: Latency to establish and authenticate a SQL connection using password
@@ -1209,6 +1220,17 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: See Description.
+      visibility: ESSENTIAL
+      owner: cockroachdb/sql-foundations
+    - name: auth.password_encryption.is_scram
+      exported_name: auth_password_encryption_is_scram
+      description: Whether server.user_login.password_encryption is set to scram-sha-256 (1) or crdb-bcrypt (0)
+      y_axis_label: State
+      type: GAUGE
+      unit: CONST
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: Use this metric to verify that SCRAM-SHA-256 password encryption is enabled across your cluster. A value of 0 indicates crdb-bcrypt is in use and the cluster has not adopted the stronger SCRAM-SHA-256 hashing method.
       visibility: ESSENTIAL
       owner: cockroachdb/sql-foundations
     - name: auth.scram.conn.latency
@@ -1606,6 +1628,221 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/sql-queries
+    - name: sql.routine.alter_default_privileges.count
+      exported_name: sql_routine_alter_default_privileges_count
+      labeled_name: 'sql.count{query_type: routine_alter_default_privileges}'
+      description: Number of SQL ALTER DEFAULT PRIVILEGES statements successfully executed within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      visibility: ESSENTIAL
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.alter_default_privileges.count.internal
+      exported_name: sql_routine_alter_default_privileges_count_internal
+      labeled_name: 'sql.count{query_type: routine_alter_default_privileges, query_internal: true}'
+      description: Number of SQL ALTER DEFAULT PRIVILEGES statements successfully executed within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.alter_default_privileges.started.count
+      exported_name: sql_routine_alter_default_privileges_started_count
+      labeled_name: 'sql.started.count{query_type: routine_started_alter_default_privileges}'
+      description: Number of SQL ALTER DEFAULT PRIVILEGES statements started within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.alter_default_privileges.started.count.internal
+      exported_name: sql_routine_alter_default_privileges_started_count_internal
+      labeled_name: 'sql.started.count{query_type: routine_started_alter_default_privileges, query_internal: true}'
+      description: Number of SQL ALTER DEFAULT PRIVILEGES statements started within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.create_role.count
+      exported_name: sql_routine_create_role_count
+      labeled_name: 'sql.count{query_type: routine_create_role}'
+      description: Number of SQL CREATE ROLE statements successfully executed within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      visibility: ESSENTIAL
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.create_role.count.internal
+      exported_name: sql_routine_create_role_count_internal
+      labeled_name: 'sql.count{query_type: routine_create_role, query_internal: true}'
+      description: Number of SQL CREATE ROLE statements successfully executed within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.create_role.started.count
+      exported_name: sql_routine_create_role_started_count
+      labeled_name: 'sql.started.count{query_type: routine_started_create_role}'
+      description: Number of SQL CREATE ROLE statements started within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.create_role.started.count.internal
+      exported_name: sql_routine_create_role_started_count_internal
+      labeled_name: 'sql.started.count{query_type: routine_started_create_role, query_internal: true}'
+      description: Number of SQL CREATE ROLE statements started within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.create_schema.count
+      exported_name: sql_routine_create_schema_count
+      labeled_name: 'sql.count{query_type: routine_create_schema}'
+      description: Number of SQL CREATE SCHEMA statements successfully executed within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      visibility: ESSENTIAL
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.create_schema.count.internal
+      exported_name: sql_routine_create_schema_count_internal
+      labeled_name: 'sql.count{query_type: routine_create_schema, query_internal: true}'
+      description: Number of SQL CREATE SCHEMA statements successfully executed within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.create_schema.started.count
+      exported_name: sql_routine_create_schema_started_count
+      labeled_name: 'sql.started.count{query_type: routine_started_create_schema}'
+      description: Number of SQL CREATE SCHEMA statements started within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.create_schema.started.count.internal
+      exported_name: sql_routine_create_schema_started_count_internal
+      labeled_name: 'sql.started.count{query_type: routine_started_create_schema, query_internal: true}'
+      description: Number of SQL CREATE SCHEMA statements started within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.create_table.count
+      exported_name: sql_routine_create_table_count
+      labeled_name: 'sql.count{query_type: routine_create_table}'
+      description: Number of SQL CREATE TABLE statements for permanent tables successfully executed within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      visibility: ESSENTIAL
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.create_table.count.internal
+      exported_name: sql_routine_create_table_count_internal
+      labeled_name: 'sql.count{query_type: routine_create_table, query_internal: true}'
+      description: Number of SQL CREATE TABLE statements for permanent tables successfully executed within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.create_table.started.count
+      exported_name: sql_routine_create_table_started_count
+      labeled_name: 'sql.started.count{query_type: routine_started_create_table}'
+      description: Number of SQL CREATE TABLE statements for permanent tables started within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.create_table.started.count.internal
+      exported_name: sql_routine_create_table_started_count_internal
+      labeled_name: 'sql.started.count{query_type: routine_started_create_table, query_internal: true}'
+      description: Number of SQL CREATE TABLE statements for permanent tables started within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.create_temp_table.count
+      exported_name: sql_routine_create_temp_table_count
+      labeled_name: 'sql.count{query_type: routine_create_temp_table}'
+      description: Number of SQL CREATE TABLE statements for temporary tables successfully executed within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      visibility: ESSENTIAL
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.create_temp_table.count.internal
+      exported_name: sql_routine_create_temp_table_count_internal
+      labeled_name: 'sql.count{query_type: routine_create_temp_table, query_internal: true}'
+      description: Number of SQL CREATE TABLE statements for temporary tables successfully executed within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.create_temp_table.started.count
+      exported_name: sql_routine_create_temp_table_started_count
+      labeled_name: 'sql.started.count{query_type: routine_started_create_temp_table}'
+      description: Number of SQL CREATE TABLE statements for temporary tables started within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.create_temp_table.started.count.internal
+      exported_name: sql_routine_create_temp_table_started_count_internal
+      labeled_name: 'sql.started.count{query_type: routine_started_create_temp_table, query_internal: true}'
+      description: Number of SQL CREATE TABLE statements for temporary tables started within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
     - name: sql.routine.delete.count
       exported_name: sql_routine_delete_count
       labeled_name: 'sql.count{query_type: routine_delete}'
@@ -1649,6 +1886,178 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/sql-queries
+    - name: sql.routine.drop_role.count
+      exported_name: sql_routine_drop_role_count
+      labeled_name: 'sql.count{query_type: routine_drop_role}'
+      description: Number of SQL DROP ROLE statements successfully executed within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      visibility: ESSENTIAL
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.drop_role.count.internal
+      exported_name: sql_routine_drop_role_count_internal
+      labeled_name: 'sql.count{query_type: routine_drop_role, query_internal: true}'
+      description: Number of SQL DROP ROLE statements successfully executed within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.drop_role.started.count
+      exported_name: sql_routine_drop_role_started_count
+      labeled_name: 'sql.started.count{query_type: routine_started_drop_role}'
+      description: Number of SQL DROP ROLE statements started within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.drop_role.started.count.internal
+      exported_name: sql_routine_drop_role_started_count_internal
+      labeled_name: 'sql.started.count{query_type: routine_started_drop_role, query_internal: true}'
+      description: Number of SQL DROP ROLE statements started within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.drop_schema.count
+      exported_name: sql_routine_drop_schema_count
+      labeled_name: 'sql.count{query_type: routine_drop_schema}'
+      description: Number of SQL DROP SCHEMA statements successfully executed within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      visibility: ESSENTIAL
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.drop_schema.count.internal
+      exported_name: sql_routine_drop_schema_count_internal
+      labeled_name: 'sql.count{query_type: routine_drop_schema, query_internal: true}'
+      description: Number of SQL DROP SCHEMA statements successfully executed within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.drop_schema.started.count
+      exported_name: sql_routine_drop_schema_started_count
+      labeled_name: 'sql.started.count{query_type: routine_started_drop_schema}'
+      description: Number of SQL DROP SCHEMA statements started within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.drop_schema.started.count.internal
+      exported_name: sql_routine_drop_schema_started_count_internal
+      labeled_name: 'sql.started.count{query_type: routine_started_drop_schema, query_internal: true}'
+      description: Number of SQL DROP SCHEMA statements started within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.drop_table.count
+      exported_name: sql_routine_drop_table_count
+      labeled_name: 'sql.count{query_type: routine_drop_table}'
+      description: Number of SQL DROP TABLE statements successfully executed within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      visibility: ESSENTIAL
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.drop_table.count.internal
+      exported_name: sql_routine_drop_table_count_internal
+      labeled_name: 'sql.count{query_type: routine_drop_table, query_internal: true}'
+      description: Number of SQL DROP TABLE statements successfully executed within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.drop_table.started.count
+      exported_name: sql_routine_drop_table_started_count
+      labeled_name: 'sql.started.count{query_type: routine_started_drop_table}'
+      description: Number of SQL DROP TABLE statements started within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.drop_table.started.count.internal
+      exported_name: sql_routine_drop_table_started_count_internal
+      labeled_name: 'sql.started.count{query_type: routine_started_drop_table, query_internal: true}'
+      description: Number of SQL DROP TABLE statements started within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.grant.count
+      exported_name: sql_routine_grant_count
+      labeled_name: 'sql.count{query_type: routine_grant}'
+      description: Number of SQL GRANT statements successfully executed within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      visibility: ESSENTIAL
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.grant.count.internal
+      exported_name: sql_routine_grant_count_internal
+      labeled_name: 'sql.count{query_type: routine_grant, query_internal: true}'
+      description: Number of SQL GRANT statements successfully executed within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.grant.started.count
+      exported_name: sql_routine_grant_started_count
+      labeled_name: 'sql.started.count{query_type: routine_started_grant}'
+      description: Number of SQL GRANT statements started within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.grant.started.count.internal
+      exported_name: sql_routine_grant_started_count_internal
+      labeled_name: 'sql.started.count{query_type: routine_started_grant, query_internal: true}'
+      description: Number of SQL GRANT statements started within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
     - name: sql.routine.insert.count
       exported_name: sql_routine_insert_count
       labeled_name: 'sql.count{query_type: routine_insert}'
@@ -1686,6 +2095,49 @@ layers:
       exported_name: sql_routine_insert_started_count_internal
       labeled_name: 'sql.started.count{query_type: routine_started_insert, query_internal: true}'
       description: Number of SQL INSERT statements started within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.revoke.count
+      exported_name: sql_routine_revoke_count
+      labeled_name: 'sql.count{query_type: routine_revoke}'
+      description: Number of SQL REVOKE statements successfully executed within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      visibility: ESSENTIAL
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.revoke.count.internal
+      exported_name: sql_routine_revoke_count_internal
+      labeled_name: 'sql.count{query_type: routine_revoke, query_internal: true}'
+      description: Number of SQL REVOKE statements successfully executed within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.revoke.started.count
+      exported_name: sql_routine_revoke_started_count
+      labeled_name: 'sql.started.count{query_type: routine_started_revoke}'
+      description: Number of SQL REVOKE statements started within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric counts schema and privilege statements executed within a routine body, complementing the top-level sql.ddl.count counter by identifying activity that originates from routine invocations. Monitor it to spot routines that issue unexpected DDL or DCL, and correlate spikes with the application or routine responsible via the SQL Activity pages.
+      owner: cockroachdb/sql-queries
+    - name: sql.routine.revoke.started.count.internal
+      exported_name: sql_routine_revoke_started_count_internal
+      labeled_name: 'sql.started.count{query_type: routine_started_revoke, query_internal: true}'
+      description: Number of SQL REVOKE statements started within routine invocation (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
       unit: COUNT
@@ -10455,7 +10907,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
-      owner: cockroachdb/sql-queries
+      owner: cockroachdb/specialized-indexing
     - name: sql.vecindex.successful_splits
       exported_name: sql_vecindex_successful_splits
       description: Total number of vector index partitions split without error
@@ -10464,7 +10916,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/sql-queries
+      owner: cockroachdb/specialized-indexing
     - name: sqlliveness.is_alive.cache_hits
       exported_name: sqlliveness_is_alive_cache_hits
       description: Number of calls to IsAlive that return from the cache
@@ -10972,6 +11424,17 @@ layers:
       owner: cockroachdb/kv
 - name: SERVER
   categories:
+  - name: CHANGEFEEDS
+    metrics:
+    - name: changefeed.checkpoint_lag
+      exported_name: changefeed_checkpoint_lag
+      description: Time elapsed since a changefeed's most recently persisted checkpoint.
+      y_axis_label: Nanoseconds
+      type: GAUGE
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      owner: cockroachdb/cdc
   - name: HARDWARE
     metrics:
     - name: sys.cpu.combined.percent-normalized
@@ -11441,6 +11904,16 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       visibility: SUPPORT
       owner: cockroachdb/obs-prs
+    - name: sys.gc.cpu.percent
+      exported_name: sys_gc_cpu_percent
+      description: Current GC CPU usage as a fraction of total available CPU capacity
+      y_axis_label: CPU Time
+      type: GAUGE
+      unit: PERCENT
+      aggregation: AVG
+      derivative: NONE
+      visibility: SUPPORT
+      owner: cockroachdb/obs-prs
     - name: sys.gc.pause.ns
       exported_name: sys_gc_pause_ns
       description: Total GC pause
@@ -11714,6 +12187,17 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric indicates when elastic CPU tokens are exhausted. Extended periods of elastic CPU token exhaustion may indicate high CPU utilization affecting elastic workloads.
+      visibility: ESSENTIAL
+      owner: cockroachdb/admission-control
+    - name: admission.granter.disk_write_byte_tokens_exhausted_duration.kv
+      exported_name: admission_granter_disk_write_byte_tokens_exhausted_duration_kv
+      description: Total duration (in nanos) when disk write byte tokens were exhausted, as observed by the token granter (not waiters)
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric indicates when disk write byte tokens are exhausted, meaning disk bandwidth admission control is actively throttling elastic writes. Extended periods of exhaustion may indicate the provisioned disk bandwidth is insufficient for the workload.
       visibility: ESSENTIAL
       owner: cockroachdb/admission-control
     - name: admission.granter.elastic_io_tokens_exhausted_duration.kv
@@ -13526,36 +14010,36 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.exhausted_duration_nanos.app_tenant.can_burst
-      exported_name: admission_cpu_time_tokens_exhausted_duration_nanos_app_tenant_can_burst
-      description: Cumulative nanoseconds the app_tenant/can_burst CPU time token bucket has spent exhausted (tokens <= 0); rate() gives the fraction of wall-clock time the bucket was exhausted
+    - name: admission.cpu_time_tokens.admitted_count
+      exported_name: admission_cpu_time_tokens_admitted_count
+      description: Cumulative number of requests admitted per group by CPU time token admission control; use with wait_time_nanos to compute mean wait time via rate(wait_time) / rate(admitted_count)
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/admission-control
+    - name: admission.cpu_time_tokens.dampening_deficit_nanos
+      exported_name: admission_cpu_time_tokens_dampening_deficit_nanos
+      description: Cumulative time-weighted deficit from dampening CPU time token allocations during scheduler overload. Each tick increments by (1 - dampening_factor) * elapsed_nanos, where dampening_factor is in [floor, 1.0] (floor is 0.5). rate() / 1e9 yields the average fraction of token issuance suppressed; a rate of 0 means no dampening was active in the window, 5e8 means the floor was held for the full window
       y_axis_label: Nanoseconds
       type: COUNTER
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.exhausted_duration_nanos.app_tenant.no_burst
-      exported_name: admission_cpu_time_tokens_exhausted_duration_nanos_app_tenant_no_burst
-      description: Cumulative nanoseconds the app_tenant/no_burst CPU time token bucket has spent exhausted (tokens <= 0); rate() gives the fraction of wall-clock time the bucket was exhausted
+    - name: admission.cpu_time_tokens.exhausted_duration_nanos.can_burst
+      exported_name: admission_cpu_time_tokens_exhausted_duration_nanos_can_burst
+      description: Cumulative nanoseconds the can_burst CPU time token bucket has spent exhausted (tokens <= 0); rate() gives the fraction of wall-clock time the bucket was exhausted
       y_axis_label: Nanoseconds
       type: COUNTER
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.exhausted_duration_nanos.system_tenant.can_burst
-      exported_name: admission_cpu_time_tokens_exhausted_duration_nanos_system_tenant_can_burst
-      description: Cumulative nanoseconds the system_tenant/can_burst CPU time token bucket has spent exhausted (tokens <= 0); rate() gives the fraction of wall-clock time the bucket was exhausted
-      y_axis_label: Nanoseconds
-      type: COUNTER
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.exhausted_duration_nanos.system_tenant.no_burst
-      exported_name: admission_cpu_time_tokens_exhausted_duration_nanos_system_tenant_no_burst
-      description: Cumulative nanoseconds the system_tenant/no_burst CPU time token bucket has spent exhausted (tokens <= 0); rate() gives the fraction of wall-clock time the bucket was exhausted
+    - name: admission.cpu_time_tokens.exhausted_duration_nanos.no_burst
+      exported_name: admission_cpu_time_tokens_exhausted_duration_nanos_no_burst
+      description: Cumulative nanoseconds the no_burst CPU time token bucket has spent exhausted (tokens <= 0); rate() gives the fraction of wall-clock time the bucket was exhausted
       y_axis_label: Nanoseconds
       type: COUNTER
       unit: NANOSECONDS
@@ -13571,144 +14055,90 @@ layers:
       aggregation: AVG
       derivative: NONE
       owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.per_tenant.admitted_count.app_tenant
-      exported_name: admission_cpu_time_tokens_per_tenant_admitted_count_app_tenant
-      description: Cumulative number of requests admitted per tenant by CPU time token admission control; use with wait_time_nanos to compute mean wait time via rate(wait_time) / rate(admitted_count)
+    - name: admission.cpu_time_tokens.per_tenant.admitted_count
+      exported_name: admission_cpu_time_tokens_per_tenant_admitted_count
+      description: Cumulative number of requests admitted per tenant by CPU time token admission control; use with wait_time_nanos to compute mean wait time via rate(wait_time) / rate(admitted_count). Retained for compatibility with dashboards predating the admission.cpu_time_tokens.admitted_count family
       y_axis_label: Requests
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.per_tenant.admitted_count.system_tenant
-      exported_name: admission_cpu_time_tokens_per_tenant_admitted_count_system_tenant
-      description: Cumulative number of requests admitted per tenant by CPU time token admission control; use with wait_time_nanos to compute mean wait time via rate(wait_time) / rate(admitted_count)
-      y_axis_label: Requests
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.per_tenant.tokens_returned.app_tenant
-      exported_name: admission_cpu_time_tokens_per_tenant_tokens_returned_app_tenant
-      description: Cumulative CPU time tokens returned per tenant, for example when actual CPU usage was lower than the initial estimate; rate() gives the per-tenant token return rate
+    - name: admission.cpu_time_tokens.per_tenant.tokens_returned
+      exported_name: admission_cpu_time_tokens_per_tenant_tokens_returned
+      description: Cumulative CPU time tokens returned per tenant, for example when actual CPU usage was lower than the initial estimate; rate() gives the per-tenant token return rate. Retained for compatibility with dashboards predating the admission.cpu_time_tokens.tokens_returned family
       y_axis_label: Tokens
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.per_tenant.tokens_returned.system_tenant
-      exported_name: admission_cpu_time_tokens_per_tenant_tokens_returned_system_tenant
-      description: Cumulative CPU time tokens returned per tenant, for example when actual CPU usage was lower than the initial estimate; rate() gives the per-tenant token return rate
+    - name: admission.cpu_time_tokens.per_tenant.tokens_used
+      exported_name: admission_cpu_time_tokens_per_tenant_tokens_used
+      description: Cumulative CPU time tokens consumed per tenant by admitted work; rate() gives the per-tenant token consumption rate. Retained for compatibility with dashboards predating the admission.cpu_time_tokens.tokens_used family
       y_axis_label: Tokens
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.per_tenant.tokens_used.app_tenant
-      exported_name: admission_cpu_time_tokens_per_tenant_tokens_used_app_tenant
-      description: Cumulative CPU time tokens consumed per tenant by admitted work; rate() gives the per-tenant token consumption rate
-      y_axis_label: Tokens
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.per_tenant.tokens_used.system_tenant
-      exported_name: admission_cpu_time_tokens_per_tenant_tokens_used_system_tenant
-      description: Cumulative CPU time tokens consumed per tenant by admitted work; rate() gives the per-tenant token consumption rate
-      y_axis_label: Tokens
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.per_tenant.wait_time_nanos.app_tenant
-      exported_name: admission_cpu_time_tokens_per_tenant_wait_time_nanos_app_tenant
-      description: Cumulative nanoseconds of admission queue wait time per tenant in CPU time token admission control; use with admitted_count to compute mean wait time via rate(wait_time) / rate(admitted_count)
+    - name: admission.cpu_time_tokens.per_tenant.wait_time_nanos
+      exported_name: admission_cpu_time_tokens_per_tenant_wait_time_nanos
+      description: Cumulative nanoseconds of admission queue wait time per tenant in CPU time token admission control; use with admitted_count to compute mean wait time via rate(wait_time) / rate(admitted_count). Retained for compatibility with dashboards predating the admission.cpu_time_tokens.wait_time_nanos family
       y_axis_label: Nanoseconds
       type: COUNTER
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.per_tenant.wait_time_nanos.system_tenant
-      exported_name: admission_cpu_time_tokens_per_tenant_wait_time_nanos_system_tenant
-      description: Cumulative nanoseconds of admission queue wait time per tenant in CPU time token admission control; use with admitted_count to compute mean wait time via rate(wait_time) / rate(admitted_count)
-      y_axis_label: Nanoseconds
-      type: COUNTER
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.refill.added.app_tenant.can_burst
-      exported_name: admission_cpu_time_tokens_refill_added_app_tenant_can_burst
-      description: Cumulative tokens added to the app_tenant/can_burst CPU time token bucket via the refill process; rate() gives the effective refill rate
+    - name: admission.cpu_time_tokens.refill.added.can_burst
+      exported_name: admission_cpu_time_tokens_refill_added_can_burst
+      description: Cumulative tokens added to the can_burst CPU time token bucket via the refill process; rate() gives the effective refill rate
       y_axis_label: Tokens
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.refill.added.app_tenant.no_burst
-      exported_name: admission_cpu_time_tokens_refill_added_app_tenant_no_burst
-      description: Cumulative tokens added to the app_tenant/no_burst CPU time token bucket via the refill process; rate() gives the effective refill rate
+    - name: admission.cpu_time_tokens.refill.added.no_burst
+      exported_name: admission_cpu_time_tokens_refill_added_no_burst
+      description: Cumulative tokens added to the no_burst CPU time token bucket via the refill process; rate() gives the effective refill rate
       y_axis_label: Tokens
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.refill.added.system_tenant.can_burst
-      exported_name: admission_cpu_time_tokens_refill_added_system_tenant_can_burst
-      description: Cumulative tokens added to the system_tenant/can_burst CPU time token bucket via the refill process; rate() gives the effective refill rate
+    - name: admission.cpu_time_tokens.refill.removed.can_burst
+      exported_name: admission_cpu_time_tokens_refill_removed_can_burst
+      description: Cumulative tokens removed from the can_burst CPU time token bucket when refill rates decrease between intervals
       y_axis_label: Tokens
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.refill.added.system_tenant.no_burst
-      exported_name: admission_cpu_time_tokens_refill_added_system_tenant_no_burst
-      description: Cumulative tokens added to the system_tenant/no_burst CPU time token bucket via the refill process; rate() gives the effective refill rate
+    - name: admission.cpu_time_tokens.refill.removed.no_burst
+      exported_name: admission_cpu_time_tokens_refill_removed_no_burst
+      description: Cumulative tokens removed from the no_burst CPU time token bucket when refill rates decrease between intervals
       y_axis_label: Tokens
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.refill.removed.app_tenant.can_burst
-      exported_name: admission_cpu_time_tokens_refill_removed_app_tenant_can_burst
-      description: Cumulative tokens removed from the app_tenant/can_burst CPU time token bucket when refill rates decrease between intervals
+    - name: admission.cpu_time_tokens.tokens_returned
+      exported_name: admission_cpu_time_tokens_tokens_returned
+      description: Cumulative CPU time tokens returned per group, for example when actual CPU usage was lower than the initial estimate; rate() gives the per-group token return rate
       y_axis_label: Tokens
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.refill.removed.app_tenant.no_burst
-      exported_name: admission_cpu_time_tokens_refill_removed_app_tenant_no_burst
-      description: Cumulative tokens removed from the app_tenant/no_burst CPU time token bucket when refill rates decrease between intervals
-      y_axis_label: Tokens
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.refill.removed.system_tenant.can_burst
-      exported_name: admission_cpu_time_tokens_refill_removed_system_tenant_can_burst
-      description: Cumulative tokens removed from the system_tenant/can_burst CPU time token bucket when refill rates decrease between intervals
-      y_axis_label: Tokens
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.refill.removed.system_tenant.no_burst
-      exported_name: admission_cpu_time_tokens_refill_removed_system_tenant_no_burst
-      description: Cumulative tokens removed from the system_tenant/no_burst CPU time token bucket when refill rates decrease between intervals
+    - name: admission.cpu_time_tokens.tokens_used
+      exported_name: admission_cpu_time_tokens_tokens_used
+      description: Cumulative CPU time tokens consumed per group by admitted work; rate() gives the per-group token consumption rate
       y_axis_label: Tokens
       type: COUNTER
       unit: COUNT
@@ -13730,6 +14160,15 @@ layers:
       y_axis_label: Tokens
       type: COUNTER
       unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/admission-control
+    - name: admission.cpu_time_tokens.wait_time_nanos
+      exported_name: admission_cpu_time_tokens_wait_time_nanos
+      description: Cumulative nanoseconds of admission queue wait time per group in CPU time token admission control; use with admitted_count to compute mean wait time via rate(wait_time) / rate(admitted_count)
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
@@ -14471,12 +14910,33 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
-    - name: admission.granter.disk_write_byte_tokens_exhausted_duration.kv
-      exported_name: admission_granter_disk_write_byte_tokens_exhausted_duration_kv
-      description: Total duration (in nanos) when disk write byte tokens were exhausted, as observed by the token granter (not waiters)
-      y_axis_label: Nanoseconds
+    - name: admission.granter.disk_write_byte_tokens_used.elastic.kv
+      exported_name: admission_granter_disk_write_byte_tokens_used_elastic_kv
+      labeled_name: 'admission.granter.disk_write_byte_tokens_used.kv{work_type: elastic}'
+      description: Total disk write byte tokens consumed by elastic work
+      y_axis_label: Tokens
       type: COUNTER
-      unit: NANOSECONDS
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/admission-control
+    - name: admission.granter.disk_write_byte_tokens_used.regular.kv
+      exported_name: admission_granter_disk_write_byte_tokens_used_regular_kv
+      labeled_name: 'admission.granter.disk_write_byte_tokens_used.kv{work_type: regular}'
+      description: Total disk write byte tokens consumed by regular work
+      y_axis_label: Tokens
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/admission-control
+    - name: admission.granter.disk_write_byte_tokens_used.snapshot.kv
+      exported_name: admission_granter_disk_write_byte_tokens_used_snapshot_kv
+      labeled_name: 'admission.granter.disk_write_byte_tokens_used.kv{work_type: snapshot}'
+      description: Total disk write byte tokens consumed by snapshot ingest work
+      y_axis_label: Tokens
+      type: COUNTER
+      unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
@@ -15993,15 +16453,6 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/kv
-    - name: exportrequest.delay.total
-      exported_name: exportrequest_delay_total
-      description: Amount by which evaluation of Export requests was delayed
-      y_axis_label: Nanoseconds
-      type: COUNTER
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/kv
     - name: follower_reads.success_count
       exported_name: follower_reads_success_count
       description: Number of reads successfully processed by any replica
@@ -16333,6 +16784,15 @@ layers:
       y_axis_label: Attempts
       type: COUNTER
       unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/kv
+    - name: kv.bulk_low_pri_read.delay.total
+      exported_name: kv_bulk_low_pri_read_delay_total
+      description: Amount by which evaluation of bulk low-priority read requests was delayed
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/kv
@@ -17686,6 +18146,15 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/kv
+    - name: liveness.uncached_scans
+      exported_name: liveness_uncached_scans
+      description: Number of non-cached scans of the node liveness range
+      y_axis_label: Scans
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/kv
     - name: lockbytes
       exported_name: lockbytes
       description: Number of bytes taken up by replicated lock key-values (shared and exclusive strength, not intent strength)
@@ -17821,6 +18290,16 @@ layers:
       aggregation: AVG
       derivative: NONE
       owner: cockroachdb/kv
+    - name: mma.overloaded_store.lease_grace.skipped
+      exported_name: mma_overloaded_store_lease_grace_skipped
+      labeled_name: 'mma.overloaded_store{type: lease_grace, result: skipped}'
+      description: Number of overloaded stores in the lease shedding grace period (first 2 min of overload) that MMA recognized as overloaded but did not shed from this pass. Common reasons include pending work on the store (pending-decrease saturated above the configured fraction threshold, or pending-increase >= epsilon, indicating the load arithmetic is unreliable), no top-K ranges available to evaluate, or the per-pass range-move budget already exhausted. For each duration bucket, success + failure + skipped equals the total overloaded stores observed in that bucket this pass.
+      y_axis_label: Stores
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      owner: cockroachdb/kv
     - name: mma.overloaded_store.lease_grace.success
       exported_name: mma_overloaded_store_lease_grace_success
       labeled_name: 'mma.overloaded_store{type: lease_grace, result: success}'
@@ -17835,6 +18314,16 @@ layers:
       exported_name: mma_overloaded_store_long_dur_failure
       labeled_name: 'mma.overloaded_store{type: long_dur, result: failure}'
       description: Number of stores overloaded for a long duration (8+ min) where all shedding attempts failed during this store's MMA rebalancing pass. Even with the most aggressive target selection, no suitable store was found. This may indicate cluster-wide capacity issues or overly restrictive constraints.
+      y_axis_label: Stores
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      owner: cockroachdb/kv
+    - name: mma.overloaded_store.long_dur.skipped
+      exported_name: mma_overloaded_store_long_dur_skipped
+      labeled_name: 'mma.overloaded_store{type: long_dur, result: skipped}'
+      description: Number of stores overloaded for a long duration (8+ min) that MMA recognized as overloaded but did not shed from this pass. Common reasons include pending work on the store (pending-decrease saturated above the configured fraction threshold, or pending-increase >= epsilon), no top-K ranges available to evaluate, or the per-pass range-move budget already exhausted. A persistently non-zero value here indicates an overloaded store that is repeatedly being deferred and may not be receiving relief. For each duration bucket, success + failure + skipped equals the total overloaded stores observed in that bucket this pass.
       y_axis_label: Stores
       type: GAUGE
       unit: COUNT
@@ -17861,6 +18350,16 @@ layers:
       aggregation: AVG
       derivative: NONE
       owner: cockroachdb/kv
+    - name: mma.overloaded_store.medium_dur.skipped
+      exported_name: mma_overloaded_store_medium_dur_skipped
+      labeled_name: 'mma.overloaded_store{type: medium_dur, result: skipped}'
+      description: Number of stores overloaded for a medium duration (5-8 min) that MMA recognized as overloaded but did not shed from this pass. Common reasons include pending work on the store (pending-decrease saturated above the configured fraction threshold, or pending-increase >= epsilon), no top-K ranges available to evaluate, or the per-pass range-move budget already exhausted. For each duration bucket, success + failure + skipped equals the total overloaded stores observed in that bucket this pass.
+      y_axis_label: Stores
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      owner: cockroachdb/kv
     - name: mma.overloaded_store.medium_dur.success
       exported_name: mma_overloaded_store_medium_dur_success
       labeled_name: 'mma.overloaded_store{type: medium_dur, result: success}'
@@ -17875,6 +18374,16 @@ layers:
       exported_name: mma_overloaded_store_short_dur_failure
       labeled_name: 'mma.overloaded_store{type: short_dur, result: failure}'
       description: Number of stores overloaded for a short duration (2-5 min) where all shedding attempts failed during this store's MMA rebalancing pass. Failures occur when no suitable target store is found (e.g., all targets are too loaded, constraints cannot be satisfied). At this stage, MMA only considers lightly-loaded targets.
+      y_axis_label: Stores
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      owner: cockroachdb/kv
+    - name: mma.overloaded_store.short_dur.skipped
+      exported_name: mma_overloaded_store_short_dur_skipped
+      labeled_name: 'mma.overloaded_store{type: short_dur, result: skipped}'
+      description: Number of stores overloaded for a short duration (2-5 min) that MMA recognized as overloaded but did not shed from this pass. Common reasons include pending work on the store (pending-decrease saturated above the configured fraction threshold, or pending-increase >= epsilon), no top-K ranges available to evaluate, or the per-pass range-move budget already exhausted. For each duration bucket, success + failure + skipped equals the total overloaded stores observed in that bucket this pass.
       y_axis_label: Stores
       type: GAUGE
       unit: COUNT
@@ -19752,6 +20261,15 @@ layers:
       y_axis_label: Log Entries
       type: COUNTER
       unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/kv
+    - name: raftlog.truncator.busy_nanos
+      exported_name: raftlog_truncator_busy_nanos
+      description: Cumulative wall-clock nanoseconds the per-store loosely-coupled raft log truncator goroutine has spent running.
+      y_axis_label: Processing Time
+      type: COUNTER
+      unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/kv

@@ -677,6 +677,38 @@ func (o *Optimizer) enforceProps(
 	// stripped by recursively optimizing the group with successively fewer
 	// properties. The properties are stripped off in a heuristic order, from
 	// least likely to be expensive to enforce to most likely.
+
+	// We must consider PlanGrams first, before all other physical properties, so
+	// that the coster can properly match PlanGram terms against the enforcers of
+	// other physical properties.
+	//
+	// If the PlanGram has alternates (i.e. the current PlanGram term is a
+	// production with multiple rules), the coster cannot use the current PlanGram
+	// term to cost expressions. Instead of stripping off the PlanGram property
+	// altogether, we expand the current PlanGram term by optimizing the group
+	// once with each alternate term.
+	if required.PlanGram.HasAlternates() {
+		fullyOptimized = true
+		required.PlanGram.VisitAlternates(func(alternate physical.PlanGram) {
+			// We optimize here rather than using optimizerEnforcer because we're not
+			// adding an enforcer expression.
+			newProps := *required
+			newProps.PlanGram = alternate
+			innerRequired := o.mem.InternPhysicalProps(&newProps)
+			innerState := o.optimizeGroup(member, innerRequired)
+			if o.ratchetCost(state, innerState.best, innerState.cost) {
+				// Because we don't add an enforcer, we need to track which alternate
+				// term won in the groupState so setLowestCostTree can reconstruct the
+				// correct expression and term.
+				state.bestAlternatePlanGram = alternate
+			}
+			if !innerState.fullyOptimized {
+				fullyOptimized = false
+			}
+		})
+		return fullyOptimized
+	}
+
 	if !required.Distribution.Any() && member.Op() != opt.ExplainOp {
 		enforcer := &memo.DistributeExpr{Input: member}
 		getEnforcer := func() memo.RelExpr {
@@ -753,7 +785,8 @@ func (o *Optimizer) optimizeEnforcer(
 // shouldExplore ensures that exploration is only triggered for optimizeGroup
 // calls that will not recurse via a call from enforceProps.
 func (o *Optimizer) shouldExplore(required *physical.Required) bool {
-	return required.Ordering.Any() && required.Distribution.Any()
+	return required.Ordering.Any() && required.Distribution.Any() &&
+		!required.PlanGram.HasAlternates()
 }
 
 // setLowestCostTree traverses the memo and recursively updates child pointers
@@ -795,6 +828,18 @@ func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *physical.Req
 		state := o.lookupOptState(t.FirstExpr(), parentProps)
 		relParent, relCost = state.best, state.cost
 		parent = relParent
+
+		// If the PlanGram still has unexpanded alternates (the state was
+		// optimized via enforceProps), re-enter with the winning alternate
+		// so the rest of the tree is built with a concrete PlanGram. This
+		// recurses at most once because bestAlternatePlanGram is guaranteed
+		// to have HasAlternates() == false.
+		if parentProps.PlanGram.HasAlternates() {
+			newProps := *parentProps
+			newProps.PlanGram = state.bestAlternatePlanGram
+			innerRequired := o.mem.InternPhysicalProps(&newProps)
+			return o.setLowestCostTree(parent, innerRequired)
+		}
 
 	case memo.ScalarPropsExpr:
 		// Short-circuit traversal of scalar expressions with no nested subquery,
@@ -993,6 +1038,11 @@ type groupState struct {
 	// cost expression will never be found, no matter how many additional
 	// optimization passes are made.
 	fullyOptimized bool
+
+	// bestAlternatePlanGram records which PlanGram alternate was chosen when
+	// enforceProps expanded a PlanGram production with multiple rules. Used by
+	// setLowestCostTree to reconstruct the correct path.
+	bestAlternatePlanGram physical.PlanGram
 
 	// fullyOptimizedExprs contains the set of ordinal positions of each member
 	// expression in the group that has been fully optimized for the required

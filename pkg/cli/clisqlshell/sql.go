@@ -112,6 +112,10 @@ Statement diagnostics
   \statement-diag list                               list available bundles.
   \statement-diag download <bundle-id> [<filename>]  download bundle.
 
+Restricted mode
+  \restrict KEY     block all metacommands except \unrestrict KEY.
+  \unrestrict KEY   leave restricted mode (KEY must match).
+
 %s
 More documentation about our SQL dialect and the CLI shell is available online:
 %s
@@ -670,6 +674,38 @@ func (c *cliState) handleUnset(args []string, nextState, errState cliStateEnum) 
 
 func isEndOfStatement(lastTok int) bool {
 	return lastTok == ';' || lastTok == lexbase.HELPTOKEN
+}
+
+// handleRestrict supports the \restrict client-side command. It enters
+// restricted mode, in which all backslash metacommands except \unrestrict are
+// rejected by the dispatcher in doHandleCliCmd.
+func (c *cliState) handleRestrict(args []string, nextState, errState cliStateEnum) cliStateEnum {
+	if len(args) != 1 || args[0] == "" {
+		return c.cliError(errState, errors.New(`\restrict: missing required argument`))
+	}
+	if c.iCtx.restricted {
+		return c.cliError(errState, errors.New(`\restrict: already in restricted mode`))
+	}
+	c.iCtx.restrictKey = args[0]
+	c.iCtx.restricted = true
+	return nextState
+}
+
+// handleUnrestrict supports the \unrestrict client-side command. It exits
+// restricted mode if the supplied key matches the key passed to \restrict.
+func (c *cliState) handleUnrestrict(args []string, nextState, errState cliStateEnum) cliStateEnum {
+	if len(args) != 1 || args[0] == "" {
+		return c.cliError(errState, errors.New(`\unrestrict: missing required argument`))
+	}
+	if !c.iCtx.restricted {
+		return c.cliError(errState, errors.New(`\unrestrict: not currently in restricted mode`))
+	}
+	if args[0] != c.iCtx.restrictKey {
+		return c.cliError(errState, errors.New(`\unrestrict: wrong key`))
+	}
+	c.iCtx.restrictKey = ""
+	c.iCtx.restricted = false
+	return nextState
 }
 
 // handleDemo handles operations on \demo.
@@ -1402,6 +1438,13 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 	if err != nil {
 		return c.cliError(cliStartLine, err)
 	}
+	// In restricted mode, only \unrestrict is permitted. This blocks
+	// metacommands that may have been injected via dump output before they
+	// reach the dispatcher below. See internalContext.restricted.
+	if c.iCtx.restricted && cmd[0] != `\unrestrict` {
+		return c.cliError(errState, errors.New(
+			`backslash commands are restricted; only \unrestrict is allowed`))
+	}
 	if cmd[0] == `\z` {
 		// psql compatibility.
 		cmd[0] = `\dp`
@@ -1563,6 +1606,12 @@ ORDER BY 1`
 
 	case `\statement-diag`:
 		return c.handleStatementDiag(cmd[1:], loopState, errState)
+
+	case `\restrict`:
+		return c.handleRestrict(cmd[1:], loopState, errState)
+
+	case `\unrestrict`:
+		return c.handleUnrestrict(cmd[1:], loopState, errState)
 
 	default:
 		return c.invalidSyntax(errState)

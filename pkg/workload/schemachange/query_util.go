@@ -103,6 +103,23 @@ FROM
 WHERE
 	d.classid = 'pg_catalog.pg_proc'::REGCLASS::INT8
 	AND d.refclassid = 'pg_catalog.pg_proc'::REGCLASS::INT8`
+
+	// functionTriggerPolicyDepsQuery finds functions that have trigger or policy
+	// back-references in their descriptors. These functions cannot be renamed or
+	// have their schema changed. Mirrors the check in getFuncRefsDisallowingAlter.
+	//
+	// [descJSONQuery] must be bound to the name "descriptors".
+	functionTriggerPolicyDepsQuery = `SELECT (id + 100000) AS func_oid
+FROM descriptors
+WHERE descriptor ? 'function'
+AND EXISTS (
+	SELECT 1
+	FROM jsonb_array_elements(
+		COALESCE(descriptor->'function'->'dependedOnBy', '[]'::JSONB)
+	) AS dep
+	WHERE jsonb_array_length(COALESCE(dep->'triggerIds', '[]'::JSONB)) > 0
+		OR jsonb_array_length(COALESCE(dep->'policyIds', '[]'::JSONB)) > 0
+)`
 )
 
 func regionsFromDatabaseQuery(database string) string {

@@ -2245,6 +2245,54 @@ Support status: [reserved](#support-status)
 
 
 
+## MMAState
+
+`GET /_status/mma_state/{node_id}`
+
+MMAState retrieves a snapshot of the mma allocator's view
+of the cluster from the given node.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+MMAStateRequest requests a snapshot of the multi-metric
+allocator's view of the cluster from the specified node.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [string](#cockroach.server.serverpb.MMAStateRequest-string) |  | node_id is a string so that "local" can be used to specify that no forwarding is necessary. | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+MMAStateResponse carries the mma allocator's cluster-state
+snapshot proto. It is intended for diagnostics (e.g. debug zip) and
+offline analysis; the schema is not a stable API.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| snapshot | [cockroach.kv.kvserver.allocator.mmaprototype.mmasnappb.ClusterStateSnapshot](#cockroach.server.serverpb.MMAStateResponse-cockroach.kv.kvserver.allocator.mmaprototype.mmasnappb.ClusterStateSnapshot) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
 ## ListSessions
 
 `GET /_status/sessions`
@@ -2321,6 +2369,7 @@ Session represents one SQL session.
 | goroutine_id | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  | The ID of the session's goroutine. | [reserved](#support-status) |
 | authentication_method | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  |  | [reserved](#support-status) |
 | default_isolation_level | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The session's default transaction isolation level. | [reserved](#support-status) |
+| held_advisory_locks | [HeldAdvisoryLock](#cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.HeldAdvisoryLock) | repeated | Transaction-scoped advisory locks currently held by this session. | [reserved](#support-status) |
 
 
 
@@ -2377,6 +2426,22 @@ TxnInfo represents an in flight user transaction on some Session.
 | last_auto_retry_reason | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | Error message describing the cause for the txn's last automatic retry. | [reserved](#support-status) |
 | elapsed_time | [google.protobuf.Duration](#cockroach.server.serverpb.ListSessionsResponse-google.protobuf.Duration) |  | Time elapsed since this transaction started execution. | [reserved](#support-status) |
 | isolation_level | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The isolation level of the transaction. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.HeldAdvisoryLock"></a>
+#### HeldAdvisoryLock
+
+HeldAdvisoryLock is one transaction-scoped advisory lock held by a session.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| lock_id | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  |  | [reserved](#support-status) |
+| lock_database_id | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  |  | [reserved](#support-status) |
+| isSingeValue | [bool](#cockroach.server.serverpb.ListSessionsResponse-bool) |  |  | [reserved](#support-status) |
+| lock_mode | [HeldAdvisoryLock.AdvisoryLockMode](#cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.HeldAdvisoryLock.AdvisoryLockMode) |  |  | [reserved](#support-status) |
 
 
 
@@ -2473,6 +2538,7 @@ Session represents one SQL session.
 | goroutine_id | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  | The ID of the session's goroutine. | [reserved](#support-status) |
 | authentication_method | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  |  | [reserved](#support-status) |
 | default_isolation_level | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The session's default transaction isolation level. | [reserved](#support-status) |
+| held_advisory_locks | [HeldAdvisoryLock](#cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.HeldAdvisoryLock) | repeated | Transaction-scoped advisory locks currently held by this session. | [reserved](#support-status) |
 
 
 
@@ -2529,6 +2595,22 @@ TxnInfo represents an in flight user transaction on some Session.
 | last_auto_retry_reason | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | Error message describing the cause for the txn's last automatic retry. | [reserved](#support-status) |
 | elapsed_time | [google.protobuf.Duration](#cockroach.server.serverpb.ListSessionsResponse-google.protobuf.Duration) |  | Time elapsed since this transaction started execution. | [reserved](#support-status) |
 | isolation_level | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The isolation level of the transaction. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.HeldAdvisoryLock"></a>
+#### HeldAdvisoryLock
+
+HeldAdvisoryLock is one transaction-scoped advisory lock held by a session.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| lock_id | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  |  | [reserved](#support-status) |
+| lock_database_id | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  |  | [reserved](#support-status) |
+| isSingeValue | [bool](#cockroach.server.serverpb.ListSessionsResponse-bool) |  |  | [reserved](#support-status) |
+| lock_mode | [HeldAdvisoryLock.AdvisoryLockMode](#cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.HeldAdvisoryLock.AdvisoryLockMode) |  |  | [reserved](#support-status) |
 
 
 
@@ -4636,7 +4718,7 @@ StatementDetailsRequest requests the details of a Statement, based on its keys.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| fingerprint_id | [string](#cockroach.server.serverpb.StatementDetailsRequest-string) |  | fingerprint_id is generated by ConstructStatementFingerprintID using: query, failed, implicitTxn and database. So we don't need to add them to the request. | [reserved](#support-status) |
+| fingerprint_id | [string](#cockroach.server.serverpb.StatementDetailsRequest-string) |  | fingerprint_id is generated by ConstructStatementFingerprintID using the query and database, so we don't need to add them to the request. | [reserved](#support-status) |
 | app_names | [string](#cockroach.server.serverpb.StatementDetailsRequest-string) | repeated |  | [reserved](#support-status) |
 | start | [int64](#cockroach.server.serverpb.StatementDetailsRequest-int64) |  | Unix time range for aggregated statements. | [reserved](#support-status) |
 | end | [int64](#cockroach.server.serverpb.StatementDetailsRequest-int64) |  |  | [reserved](#support-status) |
@@ -4662,6 +4744,9 @@ StatementDetailsRequest requests the details of a Statement, based on its keys.
 | statement_statistics_per_plan_hash | [StatementDetailsResponse.CollectedStatementGroupedByPlanHash](#cockroach.server.serverpb.StatementDetailsResponse-cockroach.server.serverpb.StatementDetailsResponse.CollectedStatementGroupedByPlanHash) | repeated | statement_statistics_per_plan_hash returns the same statement from above, but with its statistics separated by the plan hash. | [reserved](#support-status) |
 | internal_app_name_prefix | [string](#cockroach.server.serverpb.StatementDetailsResponse-string) |  | If set and non-empty, indicates the prefix to application_name used for statements/queries issued internally by CockroachDB. | [reserved](#support-status) |
 | statement_statistics_per_aggregated_ts_and_plan_hash | [StatementDetailsResponse.StatementPlanDistribution](#cockroach.server.serverpb.StatementDetailsResponse-cockroach.server.serverpb.StatementDetailsResponse.StatementPlanDistribution) | repeated | statement_statistics_per_aggregated_ts_and_plan_hash returns execution counts grouped by both aggregated timestamp and plan hash for visualizing plan distribution over time. | [reserved](#support-status) |
+| query | [string](#cockroach.server.serverpb.StatementDetailsResponse-string) |  | query is the statement fingerprint text. | [reserved](#support-status) |
+| query_summary | [string](#cockroach.server.serverpb.StatementDetailsResponse-string) |  | query_summary is the abbreviated query. | [reserved](#support-status) |
+| database | [string](#cockroach.server.serverpb.StatementDetailsResponse-string) |  | database is the database the statement was issued against. | [reserved](#support-status) |
 
 
 

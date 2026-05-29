@@ -75,6 +75,10 @@ func TestStatementDetails(t *testing.T) {
 	require.NotEmpty(t, resp.Statement.Metadata.FingerprintID)
 	require.Greater(t, resp.Statement.Stats.Count, int64(0))
 
+	require.Equal(t, testQuery, resp.Query)
+	require.NotEmpty(t, resp.QuerySummary)
+	require.Equal(t, "testdb", resp.Database)
+
 	require.NotEmpty(t, resp.StatementStatisticsPerAggregatedTs,
 		"should have statistics grouped by aggregated timestamp")
 	for _, stat := range resp.StatementStatisticsPerAggregatedTs {

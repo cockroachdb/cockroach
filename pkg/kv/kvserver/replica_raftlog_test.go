@@ -193,7 +193,7 @@ func (rt *replicaLogStorageTest) truncate(
 	rt.raftMu.Lock()
 	defer rt.raftMu.Unlock()
 	require.NoError(rt.t, handleTruncatedStateBelowRaftPreApply(
-		ctx, prev, next, rt.ls.ls.StateLoader, b))
+		ctx, prev, next, rt.ls.ls.StateLoader, b, rt.ls.ls.Separated))
 	rt.ls.stagePendingTruncationRaftMuLocked(pendingTruncation{
 		RaftTruncatedState: next,
 		expectedFirstIndex: prev.Index + 1,

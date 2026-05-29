@@ -7,12 +7,9 @@ import { Analytics } from "@segment/analytics-node";
 import { Location } from "history";
 import each from "lodash/each";
 import isEmpty from "lodash/isEmpty";
-import { Store } from "redux";
 
 import * as protos from "src/js/protos";
 import { history } from "src/redux/history";
-import { versionsSelector } from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
 import { COCKROACHLABS_ADDR } from "src/util/cockroachlabsAPI";
 
 type ClusterResponse = protos.cockroach.server.serverpb.IClusterResponse;
@@ -92,10 +89,10 @@ interface PageTrackRedaction {
 }
 
 /**
- * AnalyticsSync is used to dispatch analytics event from the Admin UI to an
- * analytics service (currently Segment). It combines information on individual
- * events with user information from the redux state in order to properly
- * identify events.
+ * AnalyticsSync is used to dispatch analytics events from the Admin UI to an
+ * analytics service (currently Segment). Cluster and version data are provided
+ * externally via updateCluster/updateVersions, typically by the
+ * AnalyticsProvider component.
  */
 export class AnalyticsSync {
   /**
@@ -114,18 +111,42 @@ export class AnalyticsSync {
   private identifyEventSent = false;
 
   /**
+   * cluster holds the current cluster response data, updated externally
+   * via updateCluster().
+   */
+  private cluster: ClusterResponse | null = null;
+
+  /**
+   * versions holds the current set of build version tags across nodes,
+   * updated externally via updateVersions().
+   */
+  private versions: string[] = [];
+
+  /**
    * Construct a new AnalyticsSync object.
    * @param analyticsService Underlying interface to push to the analytics service.
-   * @param deprecatedStore The redux store for the Admin UI. [DEPRECATED]
    * @param redactions A list of redaction regular expressions, used to
    * scrub any potential personally-identifying information from the data
    * being tracked.
    */
   constructor(
     private analyticsService: Analytics,
-    private deprecatedStore: Store<AdminUIState>,
     private redactions: PageTrackRedaction[],
   ) {}
+
+  /**
+   * updateCluster sets the current cluster response data.
+   */
+  updateCluster(cluster: ClusterResponse | null) {
+    this.cluster = cluster;
+  }
+
+  /**
+   * updateVersions sets the current set of build version tags.
+   */
+  updateVersions(versions: string[]) {
+    this.versions = versions;
+  }
 
   /**
    * page should be called whenever the user moves to a new page in the
@@ -135,13 +156,12 @@ export class AnalyticsSync {
   page(location: Location) {
     // If the cluster ID is not yet available, queue the location to be
     // pushed later.
-    const cluster = this.getCluster();
-    if (cluster === null) {
+    if (this.cluster === null) {
       this.queuedPages.push(location);
       return;
     }
 
-    const { cluster_id, reporting_enabled } = cluster;
+    const { cluster_id, reporting_enabled } = this.cluster;
 
     // A cluster setting determines if diagnostic reporting is enabled. If
     // it is not explicitly enabled, do nothing.
@@ -171,7 +191,7 @@ export class AnalyticsSync {
     }
 
     // Do nothing if Cluster information is not yet available.
-    const cluster = this.getCluster();
+    const cluster = this.cluster;
     if (cluster === null) {
       return;
     }
@@ -182,16 +202,14 @@ export class AnalyticsSync {
     }
 
     // Do nothing if version information is not yet available.
-    const state = this.deprecatedStore.getState();
-    const versions = versionsSelector(state);
-    if (isEmpty(versions)) {
+    if (isEmpty(this.versions)) {
       return;
     }
 
     this.analyticsService.identify({
       userId: cluster_id,
       traits: {
-        version: versions[0],
+        version: this.versions[0],
         userAgent: window.navigator.userAgent,
         enterprise: enterprise_enabled,
       },
@@ -201,13 +219,12 @@ export class AnalyticsSync {
 
   /** Analytics Track for Segment: https://segment.com/docs/connections/spec/track/ */
   track(msg: TrackMessage) {
-    const cluster = this.getCluster();
-    if (cluster === null) {
+    if (this.cluster === null) {
       return;
     }
 
     // get cluster_id to id the event
-    const { cluster_id } = cluster;
+    const { cluster_id } = this.cluster;
     const pagePath = this.redact(history.location.pathname);
 
     // break down properties from message
@@ -224,23 +241,6 @@ export class AnalyticsSync {
     };
 
     this.analyticsService.track(message);
-  }
-
-  /**
-   * Return the ClusterID from the store, returning null if the clusterID
-   * has not yet been fetched. We can depend on the alertdatasync component
-   * to eventually retrieve this without having to request it ourselves.
-   */
-  private getCluster(): ClusterResponse | null {
-    const state = this.deprecatedStore.getState();
-
-    // Do nothing if cluster ID has not been loaded.
-    const cluster = state.cachedData.cluster;
-    if (!cluster || !cluster.data) {
-      return null;
-    }
-
-    return cluster.data;
   }
 
   /**
@@ -298,36 +298,17 @@ export class AnalyticsSync {
 }
 
 export let analytics: AnalyticsSync | undefined;
-export function initializeAnalytics(store: Store<AdminUIState>) {
-  // Create a global instance of AnalyticsSync which can be used from various
-  // packages. If enabled, this instance will push to segment using the following
-  // analytics key.
+
+/**
+ * createAnalytics creates the global AnalyticsSync singleton. Data is fed
+ * into the instance externally via updateCluster/updateVersions (see
+ * AnalyticsProvider).
+ */
+export function createAnalytics(): AnalyticsSync {
   const analyticsInstance = new Analytics({
     writeKey: "5Vbp8WMYDmZTfCwE0uiUqEdAcTiZWFDb",
     host: COCKROACHLABS_ADDR + "/api/segment",
   });
-  analytics = new AnalyticsSync(analyticsInstance, store, defaultRedactions);
-  // Attach a listener to the history object which will track a 'page' event
-  // whenever the user navigates to a new path.
-  let lastPageLocation: Location;
-  history.listen((location: Location) => {
-    // Do not log if the pathname is the same as the previous.
-    // Needed because history.listen() fires twice when using hash history, this
-    // bug is "won't fix" in the version of history we are using, and upgrading
-    // would imply a difficult upgrade to react-router v4.
-    // (https://github.com/ReactTraining/history/issues/427).
-    if (lastPageLocation && lastPageLocation.pathname === location.pathname) {
-      return;
-    }
-    lastPageLocation = location;
-    analytics.page(location);
-    // Identify the cluster.
-    analytics.identify();
-  });
-
-  // Record the initial page that was accessed; listen won't fire for the first
-  // page loaded.
-  analytics.page(history.location);
-  // Identify the cluster.
-  analytics.identify();
+  analytics = new AnalyticsSync(analyticsInstance, defaultRedactions);
+  return analytics;
 }

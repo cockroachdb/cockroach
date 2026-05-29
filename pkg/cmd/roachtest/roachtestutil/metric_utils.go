@@ -9,7 +9,9 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -573,4 +575,78 @@ func GetOpenmetricsLabelsFromString(labelString string) (map[string]string, erro
 	}
 
 	return labels, nil
+}
+
+// WritePerfSummaryStats serializes the given metrics to both JSON
+// (for human readability) and openmetrics format, then writes both
+// files to a summary.perf directory under the test's local artifacts
+// directory.
+func WritePerfSummaryStats(t test.Test, c cluster.Cluster, stats AggregatedPerfMetrics) error {
+	if len(stats) == 0 {
+		return errors.New("no summary stats provided")
+	}
+
+	destDir := filepath.Join(t.ArtifactsDir(), "summary.perf")
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return err
+	}
+
+	jsonBuf, err := summaryStatsToJSON(stats)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(
+		filepath.Join(destDir, "summary_stats.json"), jsonBuf.Bytes(), 0644,
+	); err != nil {
+		return err
+	}
+
+	omBuf, err := summaryStatsToOpenmetrics(t, c, stats)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(
+		filepath.Join(destDir, "summary_stats.om"), omBuf.Bytes(), 0644,
+	)
+}
+
+type summaryStatJSON struct {
+	Name  string  `json:"name"`
+	Value float64 `json:"value"`
+	Unit  string  `json:"unit"`
+}
+
+func summaryStatsToJSON(stats AggregatedPerfMetrics) (*bytes.Buffer, error) {
+	out := make([]summaryStatJSON, len(stats))
+	for i, s := range stats {
+		out[i] = summaryStatJSON{
+			Name:  s.Name,
+			Value: float64(s.Value),
+			Unit:  s.Unit,
+		}
+	}
+	buf := &bytes.Buffer{}
+	enc := json.NewEncoder(buf)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(out); err != nil {
+		return nil, errors.Wrap(err, "encoding summary stats to JSON")
+	}
+	return buf, nil
+}
+
+func summaryStatsToOpenmetrics(
+	t test.Test, c cluster.Cluster, stats AggregatedPerfMetrics,
+) (*bytes.Buffer, error) {
+	labelMap := GetOpenmetricsLabelMap(t, c, nil)
+	labels := make([]*Label, 0, len(labelMap))
+	for k, v := range labelMap {
+		labels = append(labels, &Label{Name: k, Value: v})
+	}
+	buf := &bytes.Buffer{}
+	if err := GetAggregatedMetricBytes(
+		stats, labels, timeutil.Now(), buf,
+	); err != nil {
+		return nil, errors.Wrap(err, "encoding summary stats to openmetrics")
+	}
+	return buf, nil
 }

@@ -779,8 +779,6 @@ func (n *Node) start(
 	}
 
 	n.startComputePeriodicMetrics(n.stopper, base.DefaultMetricsSampleInterval)
-	// Stores have been created, so can start providing tenant weights.
-	n.storeCfg.KVAdmissionController.SetTenantWeightProvider(n, n.stopper)
 
 	// Be careful about moving this line above where we start stores; store
 	// upgrades rely on the fact that the cluster version has not been updated
@@ -1472,30 +1470,6 @@ func (mrp *storeMetricsRegistryProvider) GetMetricsRegistry(
 	return mrp.n.stores.GetStoreMetricRegistry(storeID)
 }
 
-// GetTenantWeights implements kvserver.TenantWeightProvider.
-func (n *Node) GetTenantWeights() kvadmission.TenantWeights {
-	weights := kvadmission.TenantWeights{
-		Node: make(map[uint64]uint32),
-	}
-	_ = n.stores.VisitStores(func(store *kvserver.Store) error {
-		sw := make(map[uint64]uint32)
-		weights.Stores = append(weights.Stores, kvadmission.TenantWeightsForStore{
-			StoreID: store.StoreID(),
-			Weights: sw,
-		})
-		store.VisitReplicas(func(r *kvserver.Replica) bool {
-			tid, valid := r.TenantID()
-			if valid {
-				weights.Node[tid.ToUint64()]++
-				sw[tid.ToUint64()]++
-			}
-			return true
-		})
-		return nil
-	})
-	return weights
-}
-
 func startGraphiteStatsExporter(
 	ctx context.Context,
 	stopper *stop.Stopper,
@@ -1720,11 +1694,25 @@ func (n *Node) batchInternal(
 	// for replication flow control.
 	admissionInfo := handle.AdmissionInfo()
 
-	var writeBytes *kvadmission.StoreWriteBytes
+	// Allocate a StoreWorkStats object that is used to track various statistics
+	// about the work done during the course of processing this request.
+	stats := kvserver.NewStoreWorkStats()
 	defer func() {
-		n.storeCfg.KVAdmissionController.AdmittedKVWorkDone(handle, writeBytes)
-		writeBytes.Release()
+		n.storeCfg.KVAdmissionController.AdmittedKVWorkDone(handle, stats.StoreWorkDoneInfo)
+		stats.Release()
 	}()
+
+	// Record the scan stats if tracing is enabled.
+	if sp := tracing.SpanFromContext(ctx); sp.RecordingType() != tracingpb.RecordingOff {
+		defer func() {
+			if ss := stats.ScanStats(); ss.NumGets != 0 || ss.NumScans != 0 || ss.NumReverseScans != 0 {
+				// Only record non-empty ScanStats.
+				ss.NodeID = n.Descriptor.NodeID
+				ss.Region, _ = n.Descriptor.Locality.Find("region")
+				sp.RecordStructured(ss)
+			}
+		}()
+	}
 
 	// If a proxy attempt is requested, we copy the request to prevent evaluation
 	// from modifying the request. There are places on the server that can modify
@@ -1743,7 +1731,7 @@ func (n *Node) batchInternal(
 		originalRequest = args.ShallowCopy()
 	}
 	var pErr *kvpb.Error
-	br, writeBytes, pErr = n.stores.SendWithWriteBytes(ctx, args, admissionInfo)
+	br, pErr = n.stores.SendWithWorkStats(ctx, args, stats, admissionInfo)
 	if pErr != nil {
 		if originalRequest != nil {
 			if proxyResponse := n.maybeProxyRequest(ctx, originalRequest, pErr); proxyResponse != nil {
@@ -2582,6 +2570,10 @@ func (n *Node) gossipSubscription(
 				err := kvpb.NewErrorf("subscription terminated due to slow consumption")
 				log.Dev.Warningf(ctx, "%v", err)
 				e = &kvpb.GossipSubscriptionEvent{Error: err}
+				if err := stream.Send(e); err != nil {
+					return err
+				}
+				return nil
 			}
 			if err := stream.Send(e); err != nil {
 				return err

@@ -681,6 +681,11 @@ message CommonLargeRowDetails {
   uint32 table_id = 2 [(gogoproto.customname) = "TableID", (gogoproto.jsontag) = ",omitempty"];
   uint32 family_id = 3 [(gogoproto.customname) = "FamilyID", (gogoproto.jsontag) = ",omitempty"];
   string primary_key = 4 [(gogoproto.jsontag) = ",omitempty"];
+  // skipped_large_rows is the number of large-row events that were
+  // suppressed by per-statement rate limiting prior to this one. If the
+  // field is omitted, or its value is zero, no large-row events were
+  // suppressed since the previous emitted event.
+  uint64 skipped_large_rows = 5 [(gogoproto.jsontag) = ",omitempty"];
 }
 
 // LargeRow is recorded when a statement tries to write a row larger than
@@ -744,6 +749,49 @@ message TxnRowsReadLimit {
 // See the documentation for the event type `slow_query` for details about
 // the "slow query" condition.
 message SlowQueryInternal {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLExecDetails exec = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+// Category: SQL Failed Query Log
+// Channel: SQL_EXEC
+//
+// Events in this category report SQL statement executions that ended in
+// an error. They are intended for operators who want to observe query
+// failures (for example, statements rejected by a guardrail like
+// `server.max_open_transactions_per_gateway`) without paying the cost of
+// `sql.log.all_statements.enabled`, which logs every statement.
+//
+// Note: these events are not written to `system.eventlog`, even
+// when the cluster setting `system.eventlog.enabled` is set. They
+// are only emitted via external logging.
+
+// FailedQuery is recorded when a non-internal SQL statement ends in an
+// error and the cluster setting `sql.log.failed_query.enabled` is set.
+// The error message and SQLSTATE code are reported in the embedded
+// `CommonSQLExecDetails` (fields `ErrorText` and `SQLSTATE`).
+message FailedQuery {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLExecDetails exec = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+// Category: SQL Failed Query Log (Internal)
+// Channel: SQL_EXEC
+//
+// Events in this category report failed SQL statement executions by
+// internal executors, i.e., when CockroachDB internally issues SQL
+// statements.
+//
+// Note: these events are not written to `system.eventlog`.
+
+// FailedQueryInternal is recorded when an internal SQL statement ends in
+// an error and the cluster setting
+// `sql.log.failed_query.internal_queries.enabled` is set. The primary
+// setting `sql.log.failed_query.enabled` must also be set for this event
+// to be emitted.
+message FailedQueryInternal {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLExecDetails exec = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];

@@ -9,6 +9,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -168,9 +169,27 @@ type RoutineExpr struct {
 	// result of the *first* body statement. It may be unset. Only one of this or
 	// CursorDeclaration may be set.
 	FirstStmtResultWriter RoutineResultWriter
+
+	// SecurityMode is RoutineDefiner when the body should execute with the
+	// owner's effective user (SECURITY DEFINER). When set, RoutineOwner is
+	// pushed onto the effective-user stack for the duration of the call.
+	// SECURITY INVOKER leaves the effective user unchanged. Only meaningful
+	// on the top-level routine; sub-routines synthesized by execbuilder
+	// (exception handlers, lazy subqueries, etc.) leave it zero.
+	SecurityMode RoutineSecurity
+
+	// RoutineOwner is the user to push as the effective user while the body
+	// executes. Only consulted when SecurityMode == RoutineDefiner.
+	RoutineOwner username.SQLUsername
 }
 
 // NewTypedRoutineExpr returns a new RoutineExpr that is well-typed.
+//
+// securityMode and routineOwner must be RoutineInvoker / undefined for
+// sub-routines synthesized by execbuilder (exception handler actions, lazy
+// subqueries, EXISTS wrappers, etc.). Forwarding them is only meaningful for
+// the top-level routine of a UDF or procedure invocation. They are positional
+// to force every call site to make the choice explicitly.
 func NewTypedRoutineExpr(
 	name string,
 	args TypedExprs,
@@ -188,6 +207,8 @@ func NewTypedRoutineExpr(
 	blockState *BlockState,
 	cursorDeclaration *RoutineOpenCursor,
 	firstStmtResultWriter RoutineResultWriter,
+	securityMode RoutineSecurity,
+	routineOwner username.SQLUsername,
 ) *RoutineExpr {
 	return &RoutineExpr{
 		Args:                  args,
@@ -206,6 +227,8 @@ func NewTypedRoutineExpr(
 		BlockState:            blockState,
 		CursorDeclaration:     cursorDeclaration,
 		FirstStmtResultWriter: firstStmtResultWriter,
+		SecurityMode:          securityMode,
+		RoutineOwner:          routineOwner,
 	}
 }
 

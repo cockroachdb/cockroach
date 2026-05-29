@@ -297,6 +297,15 @@ func (bc *baseCache) Len() int {
 	return bc.store.length()
 }
 
+// LRUEntry returns the least recently used cache entry, or nil if the
+// cache is empty.
+func (bc *baseCache) LRUEntry() *Entry {
+	if bc.store.length() == 0 {
+		return nil
+	}
+	return bc.ll.back()
+}
+
 // Do iterates over all entries in the cache and calls fn with each entry.
 func (bc *baseCache) Do(fn func(e *Entry)) {
 	for e := bc.ll.root.next; e != &bc.ll.root; e = e.next {

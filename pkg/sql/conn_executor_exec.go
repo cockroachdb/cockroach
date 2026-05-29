@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/prep"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
@@ -518,6 +519,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS)
 	p.sessionDataMutatorIterator.ParamStatusUpdater = res
 	p.noticeSender = res
+	p.stmtResultBuffering = res
 	ih := &p.instrumentation
 
 	if ex.executorType != executorTypeInternal {
@@ -1060,76 +1062,20 @@ func (ex *connExecutor) execStmtInOpenState(
 	// set / RETURNING can be used instead. However this is not relevant
 	// here.)
 
-	// We first ensure stepping mode is enabled.
-	//
-	// This ought to be done just once when a txn gets initialized;
-	// unfortunately, there are too many places where the txn object
-	// is re-configured, re-set etc without using NewTxnWithSteppingEnabled().
-	//
-	// Manually hunting them down and calling ConfigureStepping() each
-	// time would be error prone (and increase the chance that a future
-	// change would forget to add the call).
-	//
-	// TODO(andrei): really the code should be rearchitected to ensure
-	// that all uses of SQL execution initialize the kv.Txn using a
-	// single/common function. That would be where the stepping mode
-	// gets enabled once for all SQL statements executed "underneath".
-	prevSteppingMode := ex.state.mu.txn.ConfigureStepping(ctx, kv.SteppingEnabled)
-	prevSeqNum := ex.state.mu.txn.GetReadSeqNum()
-	delegatedUnderOuterTxn := ex.executorType == executorTypeInternal && ex.extraTxnState.underOuterTxn
-	var origTs hlc.Timestamp
-	defer func() {
-		_ = ex.state.mu.txn.ConfigureStepping(ctx, prevSteppingMode)
-
-		// If this is an internal executor that is running on behalf of an outer
-		// txn, then we need to step back the txn so that the outer executor uses
-		// the proper sequence number.
-		if delegatedUnderOuterTxn {
-			if err := ex.state.mu.txn.SetReadSeqNum(prevSeqNum); err != nil {
-				retEv, retPayload, retErr = makeErrEvent(err)
-			}
-		}
-	}()
-
-	// Then we create a sequencing point.
-	//
-	// This is not the only place where a sequencing point is placed. There are
-	// also sequencing point after every stage of constraint checks and cascading
-	// actions at the _end_ of a statement's execution.
-	//
-	// If this is an internal executor running on behalf of an outer txn, then we
-	// also need to make sure the external read timestamp is not bumped. Normally,
-	// that happens whenever a READ COMMITTED txn is stepped.
-	//
-	// Under test builds, we add a few extra assertions to ensure that the
-	// external read timestamp does not change if it shouldn't, and that we use
-	// the correct isolation level for internal operations.
-	if buildutil.CrdbTestBuild {
-		if delegatedUnderOuterTxn {
-			origTs = ex.state.mu.txn.ReadTimestamp()
-		} else if ex.executorType == executorTypeInternal {
-			if level := ex.state.mu.txn.IsoLevel(); level != isolation.Serializable {
-				return nil, nil, errors.AssertionFailedf(
-					"internal operation is not using SERIALIZABLE isolation; found=%s",
-					level,
-				)
-			}
-		}
-	}
-	if err := ex.state.mu.txn.Step(ctx, !delegatedUnderOuterTxn /* allowReadTimestampStep */); err != nil {
+	// Create a sequencing point on the txn so this statement reads a
+	// consistent snapshot of writes done by prior statements. This is not
+	// the only place where a sequencing point is placed; there are also
+	// sequencing points after every stage of constraint checks and
+	// cascading actions at the _end_ of a statement's execution.
+	cleanup, err := ex.stepReadSequenceWithRestore(ctx)
+	if err != nil {
 		return makeErrEvent(err)
 	}
-	if buildutil.CrdbTestBuild && delegatedUnderOuterTxn {
-		newTs := ex.state.mu.txn.ReadTimestamp()
-		if newTs != origTs {
-			// This should never happen. If it does, it means that the internal
-			// executor incorrectly moved the txn's read timestamp forward.
-			return nil, nil, errors.AssertionFailedf(
-				"internal executor advanced the txn read timestamp. origTs=%s, newTs=%s",
-				origTs, newTs,
-			)
+	defer func() {
+		if err := cleanup(); err != nil {
+			retEv, retPayload, retErr = makeErrEvent(err)
 		}
-	}
+	}()
 
 	// Auto-commit is disallowed during statement execution if we previously
 	// executed any DDL. This is because may potentially create jobs and do other
@@ -1455,6 +1401,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS)
 	p.sessionDataMutatorIterator.ParamStatusUpdater = res
 	p.noticeSender = res
+	p.stmtResultBuffering = res
 	ih := &p.instrumentation
 
 	if ex.executorType != executorTypeInternal {
@@ -2081,76 +2028,20 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	// set / RETURNING can be used instead. However this is not relevant
 	// here.)
 
-	// We first ensure stepping mode is enabled.
-	//
-	// This ought to be done just once when a txn gets initialized;
-	// unfortunately, there are too many places where the txn object
-	// is re-configured, re-set etc without using NewTxnWithSteppingEnabled().
-	//
-	// Manually hunting them down and calling ConfigureStepping() each
-	// time would be error prone (and increase the chance that a future
-	// change would forget to add the call).
-	//
-	// TODO(andrei): really the code should be rearchitected to ensure
-	// that all uses of SQL execution initialize the kv.Txn using a
-	// single/common function. That would be where the stepping mode
-	// gets enabled once for all SQL statements executed "underneath".
-	prevSteppingMode := ex.state.mu.txn.ConfigureStepping(ctx, kv.SteppingEnabled)
-	prevSeqNum := ex.state.mu.txn.GetReadSeqNum()
-	delegatedUnderOuterTxn := ex.executorType == executorTypeInternal && ex.extraTxnState.underOuterTxn
-	var origTs hlc.Timestamp
-	defer func() {
-		_ = ex.state.mu.txn.ConfigureStepping(ctx, prevSteppingMode)
-
-		// If this is an internal executor that is running on behalf of an outer
-		// txn, then we need to step back the txn so that the outer executor uses
-		// the proper sequence number.
-		if delegatedUnderOuterTxn {
-			if err := ex.state.mu.txn.SetReadSeqNum(prevSeqNum); err != nil {
-				retEv, retPayload, retErr = makeErrEvent(err)
-			}
-		}
-	}()
-
-	// Then we create a sequencing point.
-	//
-	// This is not the only place where a sequencing point is placed. There are
-	// also sequencing point after every stage of constraint checks and cascading
-	// actions at the _end_ of a statement's execution.
-	//
-	// If this is an internal executor running on behalf of an outer txn, then we
-	// also need to make sure the external read timestamp is not bumped. Normally,
-	// that happens whenever a READ COMMITTED txn is stepped.
-	//
-	// Under test builds, we add a few extra assertions to ensure that the
-	// external read timestamp does not change if it shouldn't, and that we use
-	// the correct isolation level for internal operations.
-	if buildutil.CrdbTestBuild {
-		if delegatedUnderOuterTxn {
-			origTs = ex.state.mu.txn.ReadTimestamp()
-		} else if ex.executorType == executorTypeInternal {
-			if level := ex.state.mu.txn.IsoLevel(); level != isolation.Serializable {
-				return nil, nil, errors.AssertionFailedf(
-					"internal operation is not using SERIALIZABLE isolation; found=%s",
-					level,
-				)
-			}
-		}
-	}
-	if err := ex.state.mu.txn.Step(ctx, !delegatedUnderOuterTxn /* allowReadTimestampStep */); err != nil {
+	// Create a sequencing point on the txn so this statement reads a
+	// consistent snapshot of writes done by prior statements. This is not
+	// the only place where a sequencing point is placed; there are also
+	// sequencing points after every stage of constraint checks and
+	// cascading actions at the _end_ of a statement's execution.
+	cleanup, err := ex.stepReadSequenceWithRestore(ctx)
+	if err != nil {
 		return makeErrEvent(err)
 	}
-	if buildutil.CrdbTestBuild && delegatedUnderOuterTxn {
-		newTs := ex.state.mu.txn.ReadTimestamp()
-		if newTs != origTs {
-			// This should never happen. If it does, it means that the internal
-			// executor incorrectly moved the txn's read timestamp forward.
-			return nil, nil, errors.AssertionFailedf(
-				"internal executor advanced the txn read timestamp. origTs=%s, newTs=%s",
-				origTs, newTs,
-			)
+	defer func() {
+		if err := cleanup(); err != nil {
+			retEv, retPayload, retErr = makeErrEvent(err)
 		}
-	}
+	}()
 
 	if portal.isPausable() {
 		p.pausablePortal = portal
@@ -2289,6 +2180,74 @@ func (ex *connExecutor) stepReadSequence(ctx context.Context) error {
 		ex.state.mu.txn.ConfigureStepping(ctx, prevSteppingMode)
 	}
 	return nil
+}
+
+// stepReadSequenceWithRestore creates a sequencing point on the current txn,
+// returning a cleanup function the caller MUST defer.
+//
+// The cleanup always restores the prior stepping mode. If this connExecutor is
+// an internal executor running under an outer user txn, the cleanup also
+// restores the read sequence number so that outer executor uses the proper
+// sequence number. The Step itself is also instructed not to advance the read
+// timestamp in that case — the parent owns timestamp advancement.
+//
+// When the connExecutor is not in stateOpen the call is a no-op and the
+// returned cleanup does nothing.
+//
+// The cleanup may itself return an error from restoring the read sequence
+// number.
+func (ex *connExecutor) stepReadSequenceWithRestore(ctx context.Context) (func() error, error) {
+	if _, isOpen := ex.machine.CurState().(stateOpen); !isOpen {
+		return func() error { return nil }, nil
+	}
+
+	prevSteppingMode := ex.state.mu.txn.ConfigureStepping(ctx, kv.SteppingEnabled)
+	prevSeqNum := ex.state.mu.txn.GetReadSeqNum()
+	delegatedUnderOuterTxn := ex.executorType == executorTypeInternal && ex.extraTxnState.underOuterTxn
+	cleanup := func() error {
+		_ = ex.state.mu.txn.ConfigureStepping(ctx, prevSteppingMode)
+		if delegatedUnderOuterTxn {
+			return ex.state.mu.txn.SetReadSeqNum(prevSeqNum)
+		}
+		return nil
+	}
+
+	// Under test builds, assert that an internal executor running
+	// under an outer txn does not advance the read timestamp and
+	// that any other internal operation runs at SERIALIZABLE
+	// isolation.
+	var origTs hlc.Timestamp
+	if buildutil.CrdbTestBuild {
+		if delegatedUnderOuterTxn {
+			origTs = ex.state.mu.txn.ReadTimestamp()
+		} else if ex.executorType == executorTypeInternal {
+			if level := ex.state.mu.txn.IsoLevel(); level != isolation.Serializable {
+				_ = cleanup()
+				return nil, errors.AssertionFailedf(
+					"internal operation is not using SERIALIZABLE isolation; found=%s",
+					level,
+				)
+			}
+		}
+	}
+
+	if err := ex.state.mu.txn.Step(ctx, !delegatedUnderOuterTxn /* allowReadTimestampStep */); err != nil {
+		_ = cleanup()
+		return nil, err
+	}
+
+	if buildutil.CrdbTestBuild && delegatedUnderOuterTxn {
+		newTs := ex.state.mu.txn.ReadTimestamp()
+		if newTs != origTs {
+			_ = cleanup()
+			return nil, errors.AssertionFailedf(
+				"internal executor advanced the txn read timestamp. origTs=%s, newTs=%s",
+				origTs, newTs,
+			)
+		}
+	}
+
+	return cleanup, nil
 }
 
 // handleAOST gets the AsOfSystemTime clause from the statement, and sets
@@ -2639,13 +2598,37 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) (retEr
 			return err
 		}
 
-		if err := ex.checkDescriptorTwoVersionInvariant(ctx); err != nil {
+		// Apply the statement timeout so the wait for older descriptor leases
+		// to drain (inside CheckTwoVersionInvariant's retry loop) cannot hang
+		// indefinitely. The schema-change KV writes are rolled back inside
+		// CheckTwoVersionInvariant before the wait begins, so timing out here
+		// does not leave anything in flight; the user can simply retry.
+		err := ex.runWithStatementTimeout(ctx, func(ctx context.Context) error {
+			return ex.checkDescriptorTwoVersionInvariant(ctx)
+		}, func() error {
+			return ex.planner.noticeSender.SendNotice(ex.Ctx(), pgnotice.Newf(
+				"The statement has timed out while waiting for older descriptor "+
+					"leases to be released. The schema change was not applied."),
+				true /* immediateFlush */)
+		})
+		if err != nil {
 			return err
 		}
 	}
 
 	if err := ex.extraTxnState.descCollection.EmitDescriptorUpdatesKey(ctx, ex.state.mu.txn); err != nil {
 		return err
+	}
+
+	// For explicit transactions, attribute the commit's deferred KV work
+	// to the transaction fingerprint, otherwise it will be attributed to
+	// the last statement's fingerprint which is misleading.
+	if !ex.implicitTxn() {
+		txnFingerprintID := ex.extraTxnState.transactionStatementsHash.Sum()
+		appNameID := ash.GetOrStoreAppNameID(ex.sessionData().ApplicationName)
+		ex.state.mu.txn.SetWorkloadInfo(
+			txnFingerprintID, appNameID, workloadid.WorkloadTypeCommit,
+		)
 	}
 
 	if err := ex.state.mu.txn.Commit(ctx); err != nil {
@@ -2974,6 +2957,10 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	// https://github.com/cockroachdb/cockroach/issues/99410
 	ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerStartLogicalPlan, crtime.NowMono())
 
+	// Start measuring goroutine CPU time for SQL CPU measurement.
+	var cpuStopWatch timeutil.CPUStopWatch
+	cpuStopWatch.Start()
+
 	if execinfra.IncludeRUEstimateInExplainAnalyze.Get(ex.server.cfg.SV()) {
 		if server := ex.server.cfg.DistSQLSrv; server != nil {
 			// Begin measuring CPU usage for tenants. This is a no-op for non-tenants.
@@ -3213,6 +3200,11 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.extraTxnState.rowsWritten += stats.rowsWritten
 	ex.extraTxnState.kvCPUTimeNanos += stats.kvCPUTimeNanos
 
+	// Add gateway goroutine grunning to the accumulated remote grunning. The
+	// corrected SQL CPU time is computed on demand via stats.sqlCPUTime(),
+	// which subtracts localKVCPUTime.
+	stats.rawSQLCPUTime += cpuStopWatch.Stop()
+
 	if ppInfo := getPausablePortalInfo(planner); ppInfo != nil && !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
 		// We need to ensure that we're using the planner bound to the first-time
 		// execution of a portal.
@@ -3283,6 +3275,17 @@ func populateQueryLevelStats(
 		}
 		log.Dev.VInfof(ctx, 1, msg, ih.fingerprint, err)
 	} else {
+		// Use the always-on SQL CPU measurement if it exceeds the trace-derived
+		// value. This ensures always-on accuracy even when tracing provides a
+		// partial picture. The trace-derived value is already deterministic
+		// when DeterministicExplain is set (see ComponentStats.MakeDeterministic),
+		// so we skip the always-on override in that case to keep test output
+		// stable.
+		if !cfg.TestingKnobs.DeterministicExplain {
+			if sqlCPU := topLevelStats.sqlCPUTime(); sqlCPU > ih.queryLevelStatsWithErr.Stats.SQLCPUTime {
+				ih.queryLevelStatsWithErr.Stats.SQLCPUTime = sqlCPU
+			}
+		}
 		// If this query is being run by a tenant, record the RUs consumed by CPU
 		// usage and network egress to the client.
 		if execinfra.IncludeRUEstimateInExplainAnalyze.Get(cfg.SV()) && cfg.DistSQLSrv != nil {
@@ -3615,6 +3618,16 @@ type topLevelQueryStats struct {
 	clientTime time.Duration
 	// kvCPUTimeNanos is the CPU time consumed by KV operations during query execution.
 	kvCPUTimeNanos time.Duration
+	// localKVCPUTime is the SQL goroutine CPU time spent inside KV calls, as
+	// measured by the grunning library. This is the portion of SQL goroutine
+	// CPU that overlapped with KV work (not the CPU consumed on KV servers);
+	// it is subtracted from raw goroutine grunning to derive SQL-only CPU.
+	localKVCPUTime time.Duration
+	// rawSQLCPUTime accumulates raw goroutine grunning time from remote flows
+	// (via Metrics.RawSQLCPUTime metadata) and from the gateway. The corrected
+	// SQL CPU time is exposed via the sqlCPUTime() helper, which subtracts
+	// localKVCPUTime.
+	rawSQLCPUTime time.Duration
 	// NB: when adding another field here, consider whether
 	// forwardInnerQueryStats method needs an adjustment.
 }
@@ -3628,6 +3641,18 @@ func (s *topLevelQueryStats) add(other *topLevelQueryStats) {
 	s.networkEgressEstimate += other.networkEgressEstimate
 	s.clientTime += other.clientTime
 	s.kvCPUTimeNanos += other.kvCPUTimeNanos
+	s.localKVCPUTime += other.localKVCPUTime
+	s.rawSQLCPUTime += other.rawSQLCPUTime
+}
+
+// sqlCPUTime returns the corrected SQL CPU time: raw goroutine grunning
+// minus the portion spent inside KV calls. Returns zero if the result would
+// be negative (which can happen when grunning measurements race).
+func (s *topLevelQueryStats) sqlCPUTime() time.Duration {
+	if d := s.rawSQLCPUTime - s.localKVCPUTime; d > 0 {
+		return d
+	}
+	return 0
 }
 
 // execWithDistSQLEngine converts a plan to a distributed SQL physical plan and
@@ -3840,6 +3865,11 @@ func (ex *connExecutor) execStmtInNoTxnState(
 				ex.incrementExecutedStmtCounter(ast)
 			}
 		}()
+		// The implicit-CALL+DDL upgrade override (forceNextTxnSerializable)
+		// is meant for the very next implicit txn; an intervening explicit
+		// BEGIN discards it so it can't silently upgrade an unrelated
+		// future implicit txn.
+		ex.forceNextTxnSerializable = false
 		mode, sqlTs, historicalTs, err := ex.beginTransactionTimestampsAndReadMode(ctx, s)
 		if err != nil {
 			return ex.makeErrEvent(err, s)
@@ -3888,7 +3918,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 				historicalTs,
 				ex.transitionCtx,
 				ex.QualityOfService(),
-				ex.txnIsolationLevelToKV(ctx, tree.UnspecifiedIsolation),
+				ex.implicitTxnIsoLevel(ctx),
 				ex.omitInRangefeeds(),
 				ex.bufferedWritesEnabled(implicitTxn),
 				ex.rng.internal,
@@ -3923,7 +3953,7 @@ func (ex *connExecutor) beginImplicitTxn(
 			historicalTs,
 			ex.transitionCtx,
 			qos,
-			ex.txnIsolationLevelToKV(ctx, tree.UnspecifiedIsolation),
+			ex.implicitTxnIsoLevel(ctx),
 			ex.omitInRangefeeds(),
 			ex.bufferedWritesEnabled(implicitTxn),
 			ex.rng.internal,
@@ -4742,7 +4772,7 @@ func (ex *connExecutor) execWithProfiling(
 		}
 		// Compute fingerprint ID here since ih.Setup hasn't been called yet.
 		fingerprintID := appstatspb.ConstructStatementFingerprintID(
-			stmtNoConstants, ex.implicitTxn(), ex.sessionData().Database,
+			stmtNoConstants, ex.sessionData().Database,
 		)
 		labels := make([]string, 0, 12)
 		labels = append(labels,
@@ -4795,7 +4825,7 @@ func (ex *connExecutor) applySessionVariableHints(
 	var pushedSessionData bool
 	for i := range stmt.Hints {
 		hint := &stmt.Hints[i]
-		if !hint.Enabled || hint.Err != nil || hint.SessionVariable == nil {
+		if !hint.Enabled() || hint.SessionVariable == nil {
 			continue
 		}
 		varHint := hint.SessionVariable
@@ -4804,6 +4834,7 @@ func (ex *connExecutor) applySessionVariableHints(
 			pushedSessionData = true
 		}
 		if err := ex.applySessionVariableHint(ctx, p, varHint); err != nil {
+			p.instrumentation.recordHintError(i, err)
 			log.Eventf(ctx, "skipping session variable hint for %s: %v",
 				redact.Safe(varHint.VariableName), err)
 		} else {

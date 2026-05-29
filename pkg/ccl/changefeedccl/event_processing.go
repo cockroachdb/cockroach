@@ -488,9 +488,18 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 	}
 	c.scratch, valueCopy = c.scratch.Copy(encodedValue)
 
+	// Encode the CSV header row if the csv_header option is set.
+	var csvColumnHeader []byte
+	if c.encodingOpts.CsvHeader && c.encodingOpts.Format == changefeedbase.OptFormatCSV {
+		csvColumnHeader, err = c.encodeCSVHeaderRow(ctx, updatedRow)
+		if err != nil {
+			return err
+		}
+	}
+
 	// Since we're done processing/converting this event, and will not use much more
 	// than len(key)+len(bytes) worth of resources, adjust allocation to match.
-	alloc.AdjustBytesToTarget(ctx, int64(len(keyCopy)+len(valueCopy)))
+	alloc.AdjustBytesToTarget(ctx, int64(len(keyCopy)+len(valueCopy)+len(csvColumnHeader)))
 	timer.End()
 
 	headers, err := c.makeRowHeaders(ctx, updatedRow)
@@ -500,7 +509,7 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 
 	c.metrics.Timers.EmitRow.Time(func() {
 		err = c.sink.EmitRow(
-			ctx, topic, keyCopy, valueCopy, schemaTS, updatedRow.MvccTimestamp, alloc, headers,
+			ctx, topic, keyCopy, valueCopy, csvColumnHeader, schemaTS, updatedRow.MvccTimestamp, alloc, headers,
 		)
 	})
 	if err != nil {
@@ -598,6 +607,22 @@ func (c *kvEventToRowConsumer) encodeForParquet(
 		return err
 	}
 	return nil
+}
+
+func (c *kvEventToRowConsumer) encodeCSVHeaderRow(
+	ctx context.Context, updatedRow cdcevent.Row,
+) ([]byte, error) {
+	hEnc, ok := c.encoder.(*csvEncoder)
+	if !ok {
+		return nil, errors.AssertionFailedf("expected csv encoder for csv format with %s", changefeedbase.OptCsvHeader)
+	}
+	hdr, err := hEnc.EncodeCSVHeaderRow(ctx, updatedRow)
+	if err != nil {
+		return nil, err
+	}
+	var csvColumnHeader []byte
+	c.scratch, csvColumnHeader = c.scratch.Copy(hdr)
+	return csvColumnHeader, nil
 }
 
 // Flush is a noop for the kvEventToRowConsumer because it does not buffer any events.

@@ -79,16 +79,26 @@ cmake(
         # way to do it?
         # https://github.com/bazelbuild/bazel/issues/12457 would help.
         "//build/toolchains:is_windows_prebuild_cdeps": {
+            "BUILD_CS2CS": "OFF",
+            "BUILD_GEOD": "OFF",
             "BUILD_LIBPROJ_SHARED": "OFF",
+            "BUILD_NAD2BIN": "OFF",
+            "BUILD_PROJ": "OFF",
             "CMAKE_BUILD_TYPE": "Release",
             "CMAKE_C_FLAGS": "-fPIC",
             "CMAKE_CXX_FLAGS": "-fPIC",
             "CMAKE_SYSTEM_NAME": "Generic",
+            "PROJ4_TESTS": "OFF",
         },
         "@io_bazel_rules_go//go/platform:windows": {
+            "BUILD_CS2CS": "OFF",
+            "BUILD_GEOD": "OFF",
             "BUILD_LIBPROJ_SHARED": "OFF",
+            "BUILD_NAD2BIN": "OFF",
+            "BUILD_PROJ": "OFF",
             "CMAKE_BUILD_TYPE": "Release",
             "CMAKE_SYSTEM_NAME": "Generic",
+            "PROJ4_TESTS": "OFF",
         },
         "//build/toolchains:is_macos_prebuild_cdeps": {
             "BUILD_LIBPROJ_SHARED": "OFF",
@@ -197,21 +207,21 @@ cmake(
     }),
     postfix_script = "mkdir -p libgeos/lib\n" + select({
         "//build/toolchains:is_cross_macos": (
-            "cp -L lib/libgeos.3.13.1.dylib $INSTALLDIR/lib/libgeos.dylib\n" +
+            "cp -L lib/libgeos.3.14.1.dylib $INSTALLDIR/lib/libgeos.dylib\n" +
             "PREFIX=$($OTOOL -D $INSTALLDIR/lib/libgeos_c.dylib | tail -n1 | rev | cut -d/ -f2- | rev)\n" +
-            "$CMAKE_INSTALL_NAME_TOOL -id @rpath/libgeos.3.13.1.dylib $INSTALLDIR/lib/libgeos.dylib\n" +
+            "$CMAKE_INSTALL_NAME_TOOL -id @rpath/libgeos.3.14.1.dylib $INSTALLDIR/lib/libgeos.dylib\n" +
             "$CMAKE_INSTALL_NAME_TOOL -id @rpath/libgeos_c.1.dylib $INSTALLDIR/lib/libgeos_c.dylib\n" +
-            "$CMAKE_INSTALL_NAME_TOOL -change $PREFIX/libgeos.3.13.1.dylib @rpath/libgeos.3.13.1.dylib $INSTALLDIR/lib/libgeos_c.dylib\n"
+            "$CMAKE_INSTALL_NAME_TOOL -change $PREFIX/libgeos.3.14.1.dylib @rpath/libgeos.3.14.1.dylib $INSTALLDIR/lib/libgeos_c.dylib\n"
         ),
-        "@io_bazel_rules_go//go/platform:darwin": "cp -L lib/libgeos.3.13.1.dylib $INSTALLDIR/lib/libgeos.dylib",
+        "@io_bazel_rules_go//go/platform:darwin": "cp -L lib/libgeos.3.14.1.dylib $INSTALLDIR/lib/libgeos.dylib",
         "@io_bazel_rules_go//go/platform:windows": "",
         "//build/toolchains:is_cross_linux": (
-            "cp -L lib/libgeos.so.3.13.1 $INSTALLDIR/lib/libgeos.so\n" +
+            "cp -L lib/libgeos.so.3.14.1 $INSTALLDIR/lib/libgeos.so\n" +
             "patchelf --set-rpath /usr/local/lib/cockroach/ $INSTALLDIR/lib/libgeos_c.so\n" +
             "patchelf --set-soname libgeos.so $INSTALLDIR/lib/libgeos.so\n" +
-            "patchelf --replace-needed libgeos.so.3.13.1 libgeos.so $INSTALLDIR/lib/libgeos_c.so\n"
+            "patchelf --replace-needed libgeos.so.3.14.1 libgeos.so $INSTALLDIR/lib/libgeos_c.so\n"
         ),
-        "//conditions:default": "cp -L lib/libgeos.so.3.13.1 $INSTALLDIR/lib/libgeos.so",
+        "//conditions:default": "cp -L lib/libgeos.so.3.14.1 $INSTALLDIR/lib/libgeos.so",
     }),
     targets = ["geos_c"],
     visibility = ["//visibility:public"],

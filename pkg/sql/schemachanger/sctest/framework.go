@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -33,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -696,7 +694,7 @@ var runAllCumulative = flag.Bool(
 	"if true, run all cumulative instead of a random subset",
 )
 
-// PrepResult contains the results from the prepare phase of backup tests.
+// PrepResult contains the results from the prepare phase of cumulative tests.
 // It provides stage counts and metadata needed to build test cases, along with
 // variant-specific data to be passed to each test case.
 type PrepResult[T any] struct {
@@ -744,14 +742,7 @@ func cumulativeTestForEachPostCommitStage[T any](
 		}
 
 		// Call prepare function to get stage counts and test data.
-		// This eliminates the need for a throwaway cluster.
-		var result PrepResult[T]
-		if prepFn != nil {
-			result = prepFn(t, spec)
-		} else {
-			// If no prepFn provided, fall back to old behavior of creating throwaway cluster.
-			result = legacyPrepareWithThrowawayCluster[T](t, spec, factory)
-		}
+		result := prepFn(t, spec)
 
 		if result.PostCommitCount+result.PostCommitNonRevertibleCount == 0 {
 			skip.IgnoreLint(t, "test case has no post-commit stages")
@@ -809,45 +800,6 @@ func cumulativeTestForEachPostCommitStage[T any](
 	cumulativeTest(t, relTestCaseDir, testFunc)
 }
 
-// legacyPrepareWithThrowawayCluster is a fallback for tests that haven't been
-// migrated to the new PrepResult pattern. It creates a throwaway cluster just
-// to count stages, matching the old behavior.
-//
-// Tests still using this legacy path (passing nil prepFn):
-//   - Rollback
-//   - Pause
-//   - PauseMixedVersion
-//
-// These should be migrated to provide their own prepare functions that reuse
-// a single cluster, similar to how backup tests (BackupSuccess*, BackupRollbacks*)
-// have been migrated.
-func legacyPrepareWithThrowawayCluster[T any](
-	t *testing.T, spec CumulativeTestSpec, factory TestServerFactory,
-) PrepResult[T] {
-	var result PrepResult[T]
-	prepfn := func(db *gosql.DB, p scplan.Plan) {
-		for _, s := range p.Stages {
-			switch s.Phase {
-			case scop.PostCommitPhase:
-				result.PostCommitCount++
-			case scop.PostCommitNonRevertiblePhase:
-				result.PostCommitNonRevertibleCount++
-			}
-		}
-		tdb := sqlutils.MakeSQLRunner(db)
-		var ok bool
-		result.DatabaseName, ok = maybeGetDatabaseForIDs(t, tdb, screl.AllTargetStateDescIDs(p.TargetState))
-		if ok {
-			tdb.Exec(t, fmt.Sprintf("USE %q", result.DatabaseName))
-			res := tdb.QueryStr(t, fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE DATABASE %q]", result.DatabaseName))
-			result.CreateDatabaseStmt = res[0][0]
-		}
-		result.After = tdb.QueryStr(t, fetchDescriptorStateQuery)
-	}
-	withPostCommitPlanAfterSchemaChange(t, spec, factory, prepfn)
-	return result
-}
-
 // fetchDescriptorStateQuery returns the CREATE statements for all descriptors
 // minus any COMMENT ON statements because these aren't consistently backed up.
 const fetchDescriptorStateQuery = `
@@ -877,48 +829,6 @@ WHERE descriptor_id IN (
 )
 ORDER BY
 	create_statement;`
-
-func maybeGetDatabaseForIDs(
-	t *testing.T, tdb *sqlutils.SQLRunner, ids catalog.DescriptorIDSet,
-) (dbName string, exists bool) {
-	const q = `
-	SELECT
-		name
-	FROM
-		system.namespace
-	WHERE
-		id
-		IN (
-				SELECT
-					DISTINCT
-					COALESCE(
-						d->'database'->>'id',
-						d->'schema'->>'parentId',
-						d->'type'->>'parentId',
-						d->'function'->>'parentId',
-						d->'table'->>'parentId'
-					)::INT8
-				FROM
-					(
-						SELECT
-							crdb_internal.pb_to_json('desc', descriptor) AS d
-						FROM
-							system.descriptor
-						WHERE
-							id IN (SELECT * FROM ROWS FROM (unnest($1::INT8[])))
-					)
-			)
-	`
-	results := tdb.QueryStr(t, q, pq.Array(ids.Ordered()))
-	if len(results) > 1 {
-		skip.IgnoreLintf(t, "requires all schema changes to happen within one database;"+
-			" get %v: %v", len(results), results)
-	}
-	if len(results) == 0 {
-		return "", false
-	}
-	return results[0][0], true
-}
 
 // withPostCommitPlanAfterSchemaChange
 //   - spins up a test cluster,

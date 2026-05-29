@@ -394,7 +394,34 @@ func selectTargets(
 	if err != nil {
 		return nil, nil, nil, nil, false, err
 	}
+	return selectTargetsFromDescs(
+		ctx, p, allDescs, lastBackupManifest, targets,
+		descriptorCoverage, asOf,
+	)
+}
 
+// selectTargetsFromDescs matches restore targets against a
+// pre-loaded set of descriptors. This is the inner logic of
+// selectTargets, factored out so that callers with an
+// already-resolved descriptor set (e.g. revision log restore,
+// which merges backup descriptors with revlog schema changes)
+// can use the same target-matching code.
+func selectTargetsFromDescs(
+	ctx context.Context,
+	p sql.PlanHookState,
+	allDescs []catalog.Descriptor,
+	lastBackupManifest backuppb.BackupManifest,
+	targets tree.BackupTargetList,
+	descriptorCoverage tree.DescriptorCoverage,
+	asOf hlc.Timestamp,
+) (
+	[]catalog.Descriptor,
+	[]catalog.DatabaseDescriptor,
+	map[tree.TablePattern]catalog.Descriptor,
+	[]mtinfopb.TenantInfoWithUsage,
+	bool,
+	error,
+) {
 	if descriptorCoverage == tree.AllDescriptors {
 		tables, dbs, patterns, err := fullClusterTargetsRestore(ctx, allDescs, lastBackupManifest)
 		return tables, dbs, patterns, nil, true, err

@@ -3,17 +3,17 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+import { useNodesSummary, util } from "@cockroachlabs/cluster-ui";
 import isNil from "lodash/isNil";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { Helmet } from "react-helmet";
-import { connect, useSelector } from "react-redux";
+import { useSelector } from "react-redux";
 
 import { InlineAlert } from "src/components";
-import { refreshNodes, refreshUserSQLRoles } from "src/redux/apiReducers";
+import * as protos from "src/js/protos";
 import { getCookieValue, setCookie } from "src/redux/cookies";
-import { nodeIDsStringifiedSelector } from "src/redux/nodes";
-import { AdminUIState, featureFlagSelector } from "src/redux/state";
-import { selectHasViewActivityRedactedRole } from "src/redux/user";
+import { featureFlagSelector } from "src/redux/state";
+import { getUserSQLRoles } from "src/util/api";
 import { getDataFromServer } from "src/util/dataFromServer";
 import DebugAnnotation from "src/views/shared/components/debugAnnotation";
 import InfoBox from "src/views/shared/components/infoBox";
@@ -124,22 +124,13 @@ function DebugPanelLink(props: {
 }
 
 // NodeIDSelector is a standalone component that displays a list of nodeIDs and allows for
-// their selection using a standard `<select>` component. If this component is used outside
-// of the Advanced Debug page, it should be styled appropriately. In order to make use of
-// this component and its "connected" version below (which retrieves and manages the nodeIDs
-// in the cluster automatically via redux) you will need to pass it the selected nodeID and
-// a function for mutating the nodeID (typical outputs of the `setState` hook) as props.
+// their selection using a standard `<select>` component.
 function NodeIDSelector(props: {
   nodeID: string;
   setNodeID: (nodeID: string) => void;
-  nodeIDs: string[];
-  refreshNodes: typeof refreshNodes;
 }) {
-  const { nodeID, setNodeID, nodeIDs, refreshNodes } = props;
-
-  useEffect(() => {
-    refreshNodes();
-  }, [props, refreshNodes]);
+  const { nodeID, setNodeID } = props;
+  const { nodeIDs } = useNodesSummary();
 
   return (
     <select
@@ -158,17 +149,6 @@ function NodeIDSelector(props: {
     </select>
   );
 }
-
-const NodeIDSelectorConnected = connect(
-  (state: AdminUIState) => {
-    return {
-      nodeIDs: nodeIDsStringifiedSelector(state),
-    };
-  },
-  {
-    refreshNodes,
-  },
-)(NodeIDSelector);
 
 interface ProxyToNodeSelectorProps {
   nodeID: string;
@@ -209,22 +189,21 @@ const ProxyToNodeSelector = (props: ProxyToNodeSelectorProps) => {
       </button>
     </span>
   ) : (
-    <NodeIDSelectorConnected
-      nodeID={currentNodeID}
-      setNodeID={setNodeIDCookie}
-    />
+    <NodeIDSelector nodeID={currentNodeID} setNodeID={setNodeIDCookie} />
   );
 };
 
-function StatementDiagnosticsSelector(props: {
-  canSeeDebugPanelLink: boolean;
-  refreshUserSQLRoles: typeof refreshUserSQLRoles;
-}) {
-  const { canSeeDebugPanelLink, refreshUserSQLRoles } = props;
+function StatementDiagnosticsSelector() {
+  const { data } = util.useSwrWithClusterId(
+    "userSQLRoles",
+    () =>
+      getUserSQLRoles(
+        new protos.cockroach.server.serverpb.UserSQLRolesRequest(),
+      ),
+    { revalidateOnFocus: false },
+  );
 
-  useEffect(() => {
-    refreshUserSQLRoles();
-  }, [refreshUserSQLRoles]);
+  const canSeeDebugPanelLink = !data?.roles?.includes("VIEWACTIVITYREDACTED");
 
   return (
     canSeeDebugPanelLink && (
@@ -236,17 +215,6 @@ function StatementDiagnosticsSelector(props: {
     )
   );
 }
-
-const StatementDiagnosticsConnected = connect(
-  (state: AdminUIState) => {
-    return {
-      canSeeDebugPanelLink: !selectHasViewActivityRedactedRole(state),
-    };
-  },
-  {
-    refreshUserSQLRoles,
-  },
-)(StatementDiagnosticsSelector);
 
 export default function Debug() {
   const [nodeID, setNodeID] = useState<string>(getDataFromServer().NodeID);
@@ -302,7 +270,7 @@ export default function Debug() {
           note="View the distribution of table data across nodes and verify zone configuration."
           disabled={disable_kv_level_advanced_debug}
         />
-        <StatementDiagnosticsConnected />
+        <StatementDiagnosticsSelector />
         <PanelTitle>Configuration</PanelTitle>
         <DebugPanelLink
           name="Cluster Settings"
@@ -419,7 +387,7 @@ export default function Debug() {
         heading={
           <>
             {"Profiling UI (Target node: "}
-            <NodeIDSelectorConnected nodeID={nodeID} setNodeID={setNodeID} />
+            <NodeIDSelector nodeID={nodeID} setNodeID={setNodeID} />
             {")"}
           </>
         }

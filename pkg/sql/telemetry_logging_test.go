@@ -525,7 +525,7 @@ func TestTelemetryLogging(t *testing.T) {
 					// All expected logs in this test are single stmt txns.
 					require.Equal(t, uint32(1), sampledQueryFromLog.StmtPosInTxn)
 
-					stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(tc.queryNoConstants, true, databaseName)
+					stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(tc.queryNoConstants, databaseName)
 
 					require.Equal(t, stmtFingerprintID.String(), sampledQueryFromLog.StatementFingerprintID)
 

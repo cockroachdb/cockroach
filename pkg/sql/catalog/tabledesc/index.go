@@ -141,7 +141,7 @@ func (w index) IsCreatedExplicitly() bool {
 // GetPredicate returns the empty string when the index is not partial,
 // otherwise it returns the corresponding expression of the partial index.
 // Columns are referred to in the expression by their name.
-func (w index) GetPredicate() string {
+func (w index) GetPredicate() catpb.Expression {
 	return w.desc.Predicate
 }
 
@@ -189,8 +189,10 @@ func (w index) IsValidOriginIndex(fk catalog.ForeignKeyConstraint) bool {
 
 // IsValidReferencedUniqueConstraint implements the catalog.UniqueConstraint
 // interface.
-func (w index) IsValidReferencedUniqueConstraint(fk catalog.ForeignKeyConstraint) bool {
-	return w.desc.IsValidReferencedUniqueConstraint(fk.ForeignKeyDesc().ReferencedColumnIDs)
+func (w index) IsValidReferencedUniqueConstraint(
+	fk catalog.ForeignKeyConstraint, asSubset bool,
+) bool {
+	return w.desc.IsValidReferencedUniqueConstraint(fk.ForeignKeyDesc().ReferencedColumnIDs, asSubset)
 }
 
 // HasOldStoredColumns returns whether the index has stored columns in the old

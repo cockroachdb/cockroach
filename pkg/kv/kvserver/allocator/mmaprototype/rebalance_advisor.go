@@ -7,6 +7,7 @@ package mmaprototype
 
 import (
 	"context"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -71,18 +72,61 @@ func NoopMMARebalanceAdvisor() *MMARebalanceAdvisor {
 // duplicate storeIDs. It is up to computeMeansForStoreSet to handle
 // de-duplication of storeIDs from the cands list.
 //
+// Callers may pass storeIDs (in `existing` or `cands`) that MMA's
+// clusterState has not yet seen. This happens during startup, when the
+// legacy allocator's StorePool reflects gossiped store descriptors that
+// MMA has not yet been notified of via SetStore. Such stores are filtered
+// out of `cands` before computing means; if `existing` itself is unknown,
+// a NoopMMARebalanceAdvisor is returned because MMA has no load history
+// against which to judge candidates. The same asymmetry is acknowledged
+// in updateStoreStatuses, which logs and skips unknown stores rather
+// than panicking. See #170703.
+//
 // The returned advisor should be passed to IsInConflictWithMMA as a helper to
 // determine if a candidate is vetoed by the multi-metric allocator due to
 // running counter to its goals.
 func (a *allocatorState) BuildMMARebalanceAdvisor(
-	existing roachpb.StoreID, cands []roachpb.StoreID,
+	ctx context.Context, existing roachpb.StoreID, cands []roachpb.StoreID,
 ) *MMARebalanceAdvisor {
+	// a.cs is mutated by gossip-driven callbacks (e.g. ProcessStoreLoadMsg) and
+	// must only be accessed under a.mu. The other public methods on
+	// allocatorState follow this discipline.
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if !a.cs.hasStore(existing) {
+		// MMA has no load history for the source store, so it cannot judge
+		// whether any candidate is more overloaded than existing. Fall back to
+		// a no-op advisor rather than risk a misclassification (or, before the
+		// hasStore filter on cands below was added, a nil-pointer panic).
+		log.KvDistribution.VEventf(ctx, 2,
+			"mma skipping advisor: existing store s%d not yet known to mma", existing)
+		return NoopMMARebalanceAdvisor()
+	}
+	// Drop any cand the integration layer learned about (via gossip / StorePool)
+	// before MMA did. computeMeansForStoreSet would otherwise nil-deref on the
+	// missing storeLoad. In the steady state every cand is known, so the
+	// IndexFunc walk completes without allocating; only when an unknown cand
+	// is present do we copy and compact.
+	if slices.IndexFunc(cands, a.cs.notHasStore) != -1 {
+		cp := make([]roachpb.StoreID, len(cands))
+		copy(cp, cands)
+		cands = slices.DeleteFunc(cp, a.cs.notHasStore)
+	}
 	// TODO(wenyihu6): for simplicity, we create a new scratchNodes every call.
 	// We should reuse the scratchNodes instead.
 	scratchNodes := map[roachpb.NodeID]*NodeLoad{}
 	scratchStores := map[roachpb.StoreID]struct{}{}
 	cands = append(cands, existing)
-	means := computeMeansForStoreSet(a.cs, cands, scratchNodes, scratchStores)
+	means, ok := computeMeansForStoreSet(a.cs, cands, scratchNodes, scratchStores)
+	if !ok {
+		// Unreachable: cands always contains at least `existing`, which we
+		// just verified is known to MMA. Assert in test builds; in production,
+		// fall back to a no-op advisor rather than return a zero-valued means
+		// that would misclassify stores. Gating on !ok avoids variadic arg
+		// boxing on the success path.
+		assertTruef(ctx, false, "computeMeansForStoreSet returned !ok for non-empty cands=%v", cands)
+		return NoopMMARebalanceAdvisor()
+	}
 	return &MMARebalanceAdvisor{
 		existingStoreID: existing,
 		means:           means,
@@ -105,14 +149,19 @@ func (a *allocatorState) IsInConflictWithMMA(
 	if advisor.disabled {
 		return false
 	}
+	// a.cs is mutated by gossip-driven callbacks (e.g. ProcessStoreLoadMsg) and
+	// must only be accessed under a.mu. The other public methods on
+	// allocatorState follow this discipline.
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	// Lazily compute and cache the load summary for the existing store.
 	if advisor.existingStoreSLS == nil {
-		summary := a.cs.computeLoadSummary(ctx, advisor.existingStoreID, &advisor.means.storeLoad, &advisor.means.nodeLoad)
+		summary := a.cs.computeLoadSummary(ctx, advisor.existingStoreID, &advisor.means.storeLoad, &advisor.means.nodeLoad, makeMMALogger(false /* verboseToInfof */))
 		advisor.existingStoreSLS = &summary
 	}
 	existingSLS := advisor.existingStoreSLS
 	// Always compute the candidate's load summary.
-	candSLS := a.cs.computeLoadSummary(ctx, cand, &advisor.means.storeLoad, &advisor.means.nodeLoad)
+	candSLS := a.cs.computeLoadSummary(ctx, cand, &advisor.means.storeLoad, &advisor.means.nodeLoad, makeMMALogger(false /* verboseToInfof */))
 
 	// TODO(wenyihu6): unify the branches below by assigning based on sls.worstDim and cpuOnly.
 	var conflict bool

@@ -640,6 +640,20 @@ func PrettyPrint(valDirs []encoding.Direction, key roachpb.Key) string {
 	return safeFormatInternal(valDirs, key, QuoteRaw).StripMarkers()
 }
 
+// PrettyPrintBounded is like PrettyPrint but caps the raw key bytes consumed
+// to maxRawBytes, slicing the input first and appending a trailer recording
+// the original length. Truncation is safe: the keys decoder emits "???" for
+// unparseable suffixes rather than panicking. Useful for log / event paths
+// fed arbitrarily wide keys, where the per-PrettyPrint allocations would
+// otherwise be unbounded.
+func PrettyPrintBounded(valDirs []encoding.Direction, key roachpb.Key, maxRawBytes int) string {
+	if len(key) <= maxRawBytes {
+		return PrettyPrint(valDirs, key)
+	}
+	return PrettyPrint(valDirs, key[:maxRawBytes]) +
+		fmt.Sprintf("…(truncated; full encoded key is %d bytes)", len(key))
+}
+
 // formatTableKey formats the given key in the system tenant table keyspace & redacts any
 // sensitive information from the result. Sensitive information is considered any value other
 // than the table ID or index ID (e.g. any index-key/value-literal).

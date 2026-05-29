@@ -4,8 +4,7 @@
 // included in the /LICENSE file.
 
 import React from "react";
-import { useDispatch, useSelector } from "react-redux";
-import { bindActionCreators } from "redux";
+import { useSelector, useStore } from "react-redux";
 
 import { bannerAlertsSelector } from "src/redux/alerts";
 import { AdminUIState } from "src/redux/state";
@@ -23,7 +22,7 @@ function AlertBanner(): React.ReactElement {
   const alerts = useSelector((state: AdminUIState) =>
     bannerAlertsSelector(state),
   );
-  const dispatch = useDispatch();
+  const store = useStore<AdminUIState>();
 
   if (!alerts || alerts.length === 0) {
     return null;
@@ -31,7 +30,10 @@ function AlertBanner(): React.ReactElement {
 
   // Display only the first visible component.
   const { dismiss, ...alertProps } = alerts[0];
-  const boundDismiss = bindActionCreators(() => dismiss, dispatch);
+  // Alert dismiss handlers are written as redux-thunk style
+  // (dispatch, getState) functions; invoke them directly against the store
+  // since redux-thunk is no longer wired in.
+  const boundDismiss = () => dismiss(store.dispatch, store.getState);
   const AlertComponent = alertProps.showAsAlert ? AlertMessage : AlertBox;
 
   return (

@@ -125,6 +125,9 @@ func (sr *schemaResolver) LookupObject(
 	if flags.DesiredObjectKind == tree.TypeObject && scName == catconstants.PublicSchemaName {
 		if alias, ok := types.PublicSchemaAliases[obName]; ok {
 			if flags.RequireMutable {
+				if !flags.Required {
+					return false, catalog.ResolvedObjectPrefix{}, nil, nil
+				}
 				return true, catalog.ResolvedObjectPrefix{}, nil, pgerror.Newf(pgcode.WrongObjectType, "type %q is a built-in type", obName)
 			}
 

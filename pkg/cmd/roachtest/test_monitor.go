@@ -21,7 +21,7 @@ type testMonitorImpl struct {
 
 // newTestMonitor is a function that creates a new test monitor. It can be used for testing
 // purposes to replace the default monitor with a custom implementation.
-var newTestMonitor = func(ctx context.Context, t test.Test, c *clusterImpl) *testMonitorImpl {
+var newTestMonitor = func(ctx context.Context, t test.Test, c testCluster) *testMonitorImpl {
 	return &testMonitorImpl{
 		monitor: newMonitor(ctx, t, c, true /* expectExactProcessDeath */),
 		t:       t,

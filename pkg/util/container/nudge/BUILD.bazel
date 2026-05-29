@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "nudge",
+    srcs = ["nudge_buffer.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/container/nudge",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/container/ring",
+        "//pkg/util/syncutil",
+    ],
+)
+
+go_test(
+    name = "nudge_test",
+    srcs = ["nudge_buffer_test.go"],
+    embed = [":nudge"],
+    deps = [
+        "//pkg/util/leaktest",
+        "//pkg/util/syncutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)

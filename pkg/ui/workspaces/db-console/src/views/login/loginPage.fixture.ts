@@ -6,11 +6,19 @@
 import { createMemoryHistory } from "history";
 import { RouteComponentProps } from "react-router-dom";
 
-import { emptyLoginState } from "src/redux/login";
-
-import type { LoginPageProps } from "./loginPage";
+import type { LoginPageProps, LoginPageState } from "./loginPage";
 
 const history = createMemoryHistory({ initialEntries: ["/statements"] });
+
+const emptyLoginState: LoginPageState = {
+  loggedInUser: "",
+  error: null,
+  inProgress: false,
+  oidcAutoLogin: false,
+  oidcLoginEnabled: false,
+  oidcButtonText: "",
+  oidcGenerateJWTAuthTokenEnabled: false,
+};
 
 export const loginPagePropsFixture: LoginPageProps & RouteComponentProps = {
   history,

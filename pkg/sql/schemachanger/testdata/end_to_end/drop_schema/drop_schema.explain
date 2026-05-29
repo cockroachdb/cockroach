@@ -19,7 +19,7 @@ Schema change plan for DROP SCHEMA ‹db›.‹sc›;
  │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
  │              ├── RemoveSchemaParent {"Parent":{"ParentDatabaseID":104,"SchemaID":106}}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":106,"Name":"sc"}}
- │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.Owner"}
+ │              ├── RemoveOwner {"DescriptorID":106}
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"admin"}
  │              └── RemoveUserPrivileges {"DescriptorID":106,"User":"root"}
  ├── PreCommitPhase
@@ -45,7 +45,7 @@ Schema change plan for DROP SCHEMA ‹db›.‹sc›;
  │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
  │              ├── RemoveSchemaParent {"Parent":{"ParentDatabaseID":104,"SchemaID":106}}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":106,"Name":"sc"}}
- │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.Owner"}
+ │              ├── RemoveOwner {"DescriptorID":106}
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"root"}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}

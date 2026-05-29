@@ -178,7 +178,7 @@ type TransactionalJobRegistry interface {
 
 // JobUpdateCallback is for updating a job.
 type JobUpdateCallback = func(
-	md jobs.JobMetadata,
+	md jobs.DeprecatedJobMetadata,
 	updateProgress func(*jobspb.Progress),
 	updatePayload func(*jobspb.Payload),
 ) error
@@ -249,6 +249,7 @@ type Validator interface {
 
 	ValidateEnumTypeValueRemoval(
 		ctx context.Context,
+		job *jobs.Job,
 		typeDesc catalog.TypeDescriptor,
 		physicalRep []byte,
 		logicalRep string,
@@ -268,6 +269,11 @@ type IndexSpanSplitter interface {
 	// MaybeSplitIndexSpansForPartitioning will split backfilled index spans
 	// across hash-sharded index boundaries if applicable.
 	MaybeSplitIndexSpansForPartitioning(ctx context.Context, table catalog.TableDescriptor, indexToBackfill catalog.Index) error
+
+	// ShouldSkipSplitForSmallTable returns true if the table's estimated size
+	// fits within a single range, meaning index boundary splits should be
+	// skipped to avoid range count bloat on small tables.
+	ShouldSkipSplitForSmallTable(ctx context.Context, table catalog.TableDescriptor) bool
 }
 
 // BackfillProgress tracks the progress for a Backfill.

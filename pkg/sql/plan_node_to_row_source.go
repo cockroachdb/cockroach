@@ -8,6 +8,7 @@ package sql
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -252,53 +253,64 @@ func (p *planNodeToRowSource) forwardMetadata(metadata *execinfrapb.ProducerMeta
 	p.ProcessorBase.AppendTrailingMeta(*metadata)
 }
 
-func (p *planNodeToRowSource) trailingMetaCallback() []execinfrapb.ProducerMetadata {
-	if !p.InternalClose() {
-		return nil
-	}
-	var meta []execinfrapb.ProducerMetadata
-	// Check if we're wrapping a mutation and emit the rows written metric if
-	// so.
-	maybeEmitMeta := func(node planNode) {
-		m, ok := node.(mutationPlanNode)
-		if !ok {
-			return
-		}
-		metrics := execinfrapb.GetMetricsMeta()
-		metrics.RowsWritten = m.rowsWritten()
-		metrics.IndexRowsWritten = m.indexRowsWritten()
-		metrics.IndexBytesWritten = m.indexBytesWritten()
-		metrics.KVCPUTime = m.kvCPUTime()
-		meta = append(meta, execinfrapb.ProducerMetadata{Metrics: metrics})
-	}
-	// Note that we could be wrapping multiple planNodes at once, so we have to
-	// traverse the tree until we either reach the first DistSQL-plannable
-	// planNode or the leaf.
-	var visitNode func(node planNode)
-	visitNode = func(node planNode) {
+// forEachWrappedMutation invokes fn for each mutationPlanNode in the subtree
+// wrapped by this planNodeToRowSource. The walk descends from p.node and stops
+// at p.firstNotWrapped (exclusive), since beyond that point the subtree is
+// handled by separate DistSQL processors.
+func (p *planNodeToRowSource) forEachWrappedMutation(fn func(mutationPlanNode)) {
+	var visit func(node planNode)
+	visit = func(node planNode) {
 		if node == p.firstNotWrapped {
 			return
 		}
-		maybeEmitMeta(node)
+		if m, ok := node.(mutationPlanNode); ok {
+			fn(m)
+		}
 		for i, n := 0, node.InputCount(); i < n; i++ {
 			child, err := node.Input(i)
 			if err != nil {
 				continue
 			}
-			visitNode(child)
+			visit(child)
 		}
 	}
-	visitNode(p.node)
+	visit(p.node)
+}
+
+func (p *planNodeToRowSource) trailingMetaCallback() []execinfrapb.ProducerMetadata {
+	if !p.InternalClose() {
+		return nil
+	}
+	var meta []execinfrapb.ProducerMetadata
+	p.forEachWrappedMutation(func(m mutationPlanNode) {
+		metrics := execinfrapb.GetMetricsMeta()
+		metrics.RowsWritten = m.rowsWritten()
+		metrics.IndexRowsWritten = m.indexRowsWritten()
+		metrics.IndexBytesWritten = m.indexBytesWritten()
+		metrics.KVCPUTime = m.kvCPUTime()
+		metrics.LocalKVCPUTime = m.localKVCPUTime()
+		meta = append(meta, execinfrapb.ProducerMetadata{Metrics: metrics})
+	})
 	return meta
 }
 
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (p *planNodeToRowSource) execStatsForTrace() *execinfrapb.ComponentStats {
-	// Propagate contention time and RUs from IO requests.
+	// Sum the local KV CPU time across any wrapped mutationPlanNodes so that
+	// the per-operator CPU subtraction performed by the vectorized stats
+	// collector (see colflow/stats.go) can isolate SQL CPU above mutations.
+	var localKVCPUTime int64
+	p.forEachWrappedMutation(func(m mutationPlanNode) {
+		localKVCPUTime += m.localKVCPUTime()
+	})
+
+	// Propagate contention time, RUs from IO requests, and local KV CPU time
+	// from mutations.
 	if p.contentionEventsListener.GetContentionTime() == 0 &&
 		p.contentionEventsListener.GetLockWaitTime() == 0 &&
 		p.contentionEventsListener.GetLatchWaitTime() == 0 &&
-		p.tenantConsumptionListener.GetConsumedRU() == 0 {
+		p.tenantConsumptionListener.GetConsumedRU() == 0 &&
+		localKVCPUTime == 0 {
 		return nil
 	}
 	return &execinfrapb.ComponentStats{
@@ -306,6 +318,7 @@ func (p *planNodeToRowSource) execStatsForTrace() *execinfrapb.ComponentStats {
 			ContentionTime: optional.MakeTimeValue(p.contentionEventsListener.GetContentionTime()),
 			LockWaitTime:   optional.MakeTimeValue(p.contentionEventsListener.GetLockWaitTime()),
 			LatchWaitTime:  optional.MakeTimeValue(p.contentionEventsListener.GetLatchWaitTime()),
+			LocalKVCPUTime: optional.MakeTimeValue(time.Duration(localKVCPUTime)),
 		},
 		Exec: execinfrapb.ExecStats{
 			ConsumedRU: optional.MakeUint(p.tenantConsumptionListener.GetConsumedRU()),

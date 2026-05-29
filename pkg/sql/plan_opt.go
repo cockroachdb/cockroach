@@ -73,7 +73,10 @@ func (p *planner) prepareUsingOptimizer(
 			return flags, udts, err
 		}
 		// Do not return the error. If semantic analysis failed, try preparing again
-		// without injected hints.
+		// without injected hints. Note: don't bother recording the hint error,
+		// since we'll attempt to re-plan with the hint again during EXECUTE.
+		// TODO(drewk): should we just not cache the plan instead of retrying
+		// without the hint?
 		log.Eventf(ctx, "preparing with injected hints failed with: %v", err)
 		opc.log(ctx, "falling back to preparing without injected hints")
 	}
@@ -102,7 +105,7 @@ func (p *planner) prepareUsingOptimizerInternal(
 		*tree.CreateStats,
 		*tree.Deallocate, *tree.Discard, *tree.DropDatabase, *tree.DropIndex,
 		*tree.DropTable, *tree.DropView, *tree.DropSequence, *tree.DropType,
-		*tree.Grant, *tree.GrantRole,
+		*tree.Grant, *tree.GrantRole, *tree.LockTable,
 		*tree.Prepare, *tree.PrepareTransaction,
 		*tree.ReleaseSavepoint, *tree.RenameColumn, *tree.RenameDatabase,
 		*tree.RenameIndex, *tree.RenameTable, *tree.Revoke, *tree.RevokeRole,
@@ -323,6 +326,16 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 		// planning again without injected hints.
 		log.Eventf(ctx, "planning with injected hints failed with: %v", err)
 		opc.log(ctx, "falling back to planning without injected hints")
+		// Record the injection error so that EXPLAIN output correctly
+		// reflects this hint as skipped. The error is stored on the
+		// instrumentation helper rather than on the hint itself to avoid
+		// mutating shared hint state across prepared statement executions.
+		for i := range p.stmt.Hints {
+			if p.stmt.Hints[i].HintInjectionDonor != nil && p.stmt.Hints[i].Enabled() {
+				p.instrumentation.recordHintError(i, err)
+				break
+			}
+		}
 	}
 	opc.reset(ctx)
 	return p.makeOptimizerPlanInternal(ctx)
@@ -674,6 +687,9 @@ func (opc *optPlanningCtx) reuseMemo(cachedMemo *memo.Memo) (*memo.Memo, error) 
 		// The query could have been already fully optimized in
 		// buildReusableMemo, in which case it is considered a "generic" plan.
 		opc.flags.Set(planFlagGeneric)
+		if prep := opc.p.stmt.Prepared; prep != nil {
+			prep.GenericPlanCount++
+		}
 		return cachedMemo, nil
 	}
 	f := opc.optimizer.Factory()
@@ -694,6 +710,7 @@ func (opc *optPlanningCtx) reuseMemo(cachedMemo *memo.Memo) (*memo.Memo, error) 
 		costWithOptimizationCost := mem.RootExpr().Cost()
 		costWithOptimizationCost.Add(mem.OptimizationCost())
 		prep.Costs.AddCustom(costWithOptimizationCost)
+		prep.CustomPlanCount++
 	}
 	return mem, nil
 }
@@ -1042,6 +1059,11 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 		return memo, nil
 	}
 
+	// If this is a prepared statement that was built from scratch
+	// count it as a custom plan execution.
+	if prep := opc.p.stmt.Prepared; prep != nil {
+		prep.CustomPlanCount++
+	}
 	return f.ReleaseMemo(), nil
 }
 
@@ -1197,8 +1219,8 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(
 
 	// Walk through the fully normalized memo to determine index candidates and
 	// create hypothetical tables.
-	indexCandidates := indexrec.FindIndexCandidateSet(f.Memo().RootExpr(), f.Metadata())
-	optTables, hypTables := indexrec.BuildOptAndHypTableMaps(opc.catalog, indexCandidates)
+	indexCandidates, candidateAttrs := indexrec.FindIndexCandidateSet(f.Memo().RootExpr(), f.Metadata())
+	optTables, hypTables := indexrec.BuildOptAndHypTableMaps(opc.catalog, indexCandidates, candidateAttrs)
 
 	// Optimize with the saved memo and hypothetical tables. Walk through the
 	// optimal plan to determine index recommendations.

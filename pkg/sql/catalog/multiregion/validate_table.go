@@ -117,12 +117,27 @@ func ValidateTableLocalityConfig(
 			break
 		}
 	}
-	columnTypesTypeIDs := catalog.MakeDescriptorIDSet(typeIDsReferencedByColumns...)
+	// Build a set of type IDs that are referenced by non-locality-config
+	// sources: columns, triggers, and policies. The region enum ID may appear
+	// in the full typeIDs set due to any of these, and all are legitimate.
+	nonLocalityTypeIDs := catalog.MakeDescriptorIDSet(typeIDsReferencedByColumns...)
+	for _, trigger := range desc.GetTriggers() {
+		for _, id := range trigger.DependsOnTypes {
+			nonLocalityTypeIDs.Add(id)
+		}
+	}
+	for _, policy := range desc.GetPolicies() {
+		for _, id := range policy.DependsOnTypes {
+			nonLocalityTypeIDs.Add(id)
+		}
+	}
 	switch lc := lc.Locality.(type) {
 	case *catpb.LocalityConfig_Global_:
 		if regionEnumIDReferenced {
-			// Omit views since they may reference the multi-region enum type of the base table.
-			if !columnTypesTypeIDs.Contains(regionsEnumID) && !desc.IsView() {
+			// The region enum may be referenced by a column type, trigger, or
+			// policy. We also omit views since they may reference the
+			// multi-region enum type of the base table.
+			if !nonLocalityTypeIDs.Contains(regionsEnumID) && !desc.IsView() {
 				return errors.AssertionFailedf(
 					"expected no region Enum ID to be referenced by a GLOBAL TABLE: %q"+
 						" but found: %d",
@@ -232,11 +247,11 @@ func ValidateTableLocalityConfig(
 			}
 		} else {
 			if regionEnumIDReferenced {
-				// It may be the case that the multi-region type descriptor is used
-				// as the type of the table column. Validations should only fail if
-				// that is not the case. We omit views since they may reference the
-				// multi-region enum type of the base table.
-				if !columnTypesTypeIDs.Contains(regionsEnumID) && !desc.IsView() {
+				// The region enum may be referenced by a column type, trigger, or
+				// policy on this table. Validations should only fail if none of
+				// those are the source of the reference. We also omit views since
+				// they may reference the multi-region enum type of the base table.
+				if !nonLocalityTypeIDs.Contains(regionsEnumID) && !desc.IsView() {
 					return errors.AssertionFailedf(
 						"expected no region Enum ID to be referenced by a REGIONAL BY TABLE: %q homed in the "+
 							"primary region, but found: %d",

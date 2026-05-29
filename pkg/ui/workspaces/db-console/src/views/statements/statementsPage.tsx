@@ -10,18 +10,14 @@ import {
   StatementsPageStateProps,
   StatementsPageDispatchProps,
   StatementsPageRootProps,
+  TimeScale,
   api,
 } from "@cockroachlabs/cluster-ui";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { bindActionCreators } from "redux";
 
-import {
-  trackApplySearchCriteriaAction,
-  trackCancelDiagnosticsBundleAction,
-  trackDownloadDiagnosticsBundleAction,
-  trackStatementsPaginationAction,
-} from "src/redux/analyticsActions";
+import { analytics } from "src/redux/analytics";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState, AppDispatch } from "src/redux/state";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
@@ -29,7 +25,10 @@ import { selectTimeScale } from "src/redux/timeScale";
 import {
   trackActivateDiagnostics,
   trackDiagnosticsModalOpen,
+  trackDownloadDiagnosticsBundle,
+  trackPaginate,
 } from "src/util/analytics";
+import trackCancelDiagnosticsBundle from "src/util/analytics/trackCancelDiagnosticsBundle";
 
 export const statementColumnsLocalSetting = new LocalSetting(
   "create_statement_columns",
@@ -84,14 +83,18 @@ const fingerprintsPageActions = {
   onDiagnosticsReportDropdownOptionAnalytics: (
     report: api.StatementDiagnosticsReport,
   ) => {
-    if (report.completed) {
-      return trackDownloadDiagnosticsBundleAction(report.statement_fingerprint);
-    } else {
-      return trackCancelDiagnosticsBundleAction(report.statement_fingerprint);
-    }
+    return () => {
+      if (report.completed) {
+        trackDownloadDiagnosticsBundle(report.statement_fingerprint);
+      } else {
+        trackCancelDiagnosticsBundle(report.statement_fingerprint);
+      }
+    };
   },
   onSearchComplete: (query: string) => searchLocalSetting.set(query),
-  onPageChanged: trackStatementsPaginationAction,
+  onPageChanged: (page: number) => {
+    return () => trackPaginate(page);
+  },
   onSortingChange: (
     _tableName: string,
     columnName: string,
@@ -109,7 +112,19 @@ const fingerprintsPageActions = {
     ),
   onChangeLimit: (newLimit: number) => limitSetting.set(newLimit),
   onChangeReqSort: (sort: api.SqlStatsSortType) => reqSortSetting.set(sort),
-  onApplySearchCriteria: trackApplySearchCriteriaAction,
+  onApplySearchCriteria: (ts: TimeScale, limit: number, sort: string) => {
+    return () => {
+      analytics?.track({
+        event: "Apply Search Criteria",
+        properties: {
+          page: "Statements",
+          tsValue: ts.key,
+          limit,
+          sort,
+        },
+      });
+    };
+  },
 };
 
 type StateProps = {

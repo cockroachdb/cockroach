@@ -42,6 +42,7 @@ go_library(
 go_test(
     name = "clusterstats_test",
     srcs = [
+        "collector_test.go",
         "exporter_test.go",
         "streamer_test.go",
         ":mock_client",  # keep

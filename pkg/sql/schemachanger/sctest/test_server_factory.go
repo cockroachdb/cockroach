@@ -9,11 +9,13 @@ import (
 	"context"
 	gosql "database/sql"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -108,6 +110,7 @@ func (f SingleNodeTestClusterFactory) Run(
 // Start implements the TestServerFactory interface.
 func (f SingleNodeTestClusterFactory) Start(ctx context.Context, t *testing.T) TestServer {
 	args := base.TestServerArgs{
+		ExternalIODir: t.TempDir(),
 		Knobs: base.TestingKnobs{
 			SQLEvalContext: &eval.TestingKnobs{
 				ForceProductionValues: true,
@@ -130,6 +133,8 @@ func (f SingleNodeTestClusterFactory) Start(ctx context.Context, t *testing.T) T
 		args.Settings = cluster.MakeClusterSettingsWithVersions(clusterversion.Latest.Version(), f.server.ClusterVersionOverride)
 	}
 	sql.CreateTableWithSchemaLocked.Override(ctx, &args.Settings.SV, !f.schemaLockedDisabled)
+	closedts.TargetDuration.Override(ctx, &args.Settings.SV, 20*time.Millisecond)
+	closedts.SideTransportCloseInterval.Override(ctx, &args.Settings.SV, 20*time.Millisecond)
 	s, db, _ := serverutils.StartServer(t, args)
 
 	return TestServer{
@@ -158,7 +163,7 @@ func newJobsKnobs() *jobs.TestingKnobs {
 	}{
 		m: make(map[jobspb.JobID]struct{}),
 	}
-	jobKnobs.BeforeUpdate = func(orig, updated jobs.JobMetadata) error {
+	jobKnobs.BeforeUpdate = func(orig, updated jobs.DeprecatedJobMetadata) error {
 		sc := orig.Payload.GetNewSchemaChange()
 		if sc == nil {
 			return nil

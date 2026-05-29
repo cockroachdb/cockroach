@@ -264,5 +264,4 @@ ORDER BY raw_start_key ASC LIMIT 1`)
 	state, err := ptsWithDB.GetState(ctx)
 	require.NoError(t, err)
 	require.Len(t, state.Records, 0)
-	require.Equal(t, int(state.NumRecords), len(state.Records))
 }

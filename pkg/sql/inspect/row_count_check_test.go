@@ -13,9 +13,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/inspect/inspectpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -325,4 +328,102 @@ func TestRowCountCheck(t *testing.T) {
 			}
 		})
 	}
+}
+
+// mockCheck is a minimal (noop) inspectCheck.
+type mockCheck struct{}
+
+var _ inspectCheck = (*mockCheck)(nil)
+
+func (*mockCheck) AppliesTo(keys.SQLCodec, roachpb.Span) (bool, error) { return true, nil }
+func (*mockCheck) IsSpanLevel() bool                                   { return false }
+func (*mockCheck) Started() bool                                       { return true }
+
+func (*mockCheck) Start(context.Context, *execinfra.ServerConfig, roachpb.Span, int) error {
+	return nil
+}
+
+func (*mockCheck) Next(context.Context, *execinfra.ServerConfig) (*inspectIssue, error) {
+	return nil, nil
+}
+
+func (*mockCheck) Done(context.Context) bool   { return true }
+func (*mockCheck) Close(context.Context) error { return nil }
+
+// mockCheckWithRowCount is a minimal inspectCheck that implements
+// inspectCheckRowCount.
+type mockCheckWithRowCount struct {
+	mockCheck
+	rowCount *uint64
+}
+
+var _ inspectCheckRowCount = (*mockCheckWithRowCount)(nil)
+
+func (m *mockCheckWithRowCount) RowCount() *uint64 { return m.rowCount }
+
+// TestRowCountCheckSpanFallback verifies the row count interface dispatch in
+// CheckSpan: When checks implement inspectCheckRowCount but return nil, the
+// rowCountCheck falls back to counting rows itself; when one of several checks
+// returns a non-nil count, that count is used directly.
+func TestRowCountCheckSpanFallback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	codec := s.ApplicationLayer().Codec()
+	execCfg := s.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
+	r := sqlutils.MakeSQLRunner(db)
+
+	r.Exec(t, `CREATE DATABASE test`)
+	r.Exec(t, `CREATE TABLE test.t (id INT PRIMARY KEY)`)
+	defer r.Exec(t, `DROP TABLE test.t`)
+	r.Exec(t, `INSERT INTO test.t SELECT * FROM generate_series(1, 50)`)
+
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "test", "t")
+	pkSpan := tableDesc.PrimaryIndexSpan(codec)
+
+	var timestampStr string
+	r.QueryRow(t, "SELECT cluster_logical_timestamp()::STRING").Scan(&timestampStr)
+	asOf, err := hlc.ParseHLC(timestampStr)
+	require.NoError(t, err)
+
+	newRowCountCheck := func() *rowCountCheck {
+		return &rowCountCheck{
+			rowCountCheckApplicability: rowCountCheckApplicability{
+				tableID: tableDesc.GetID(),
+			},
+			execCfg:      &execCfg,
+			tableVersion: tableDesc.GetVersion(),
+			asOf:         asOf,
+		}
+	}
+
+	t.Run("nil_row_count_falls_back_to_query", func(t *testing.T) {
+		rc := newRowCountCheck()
+		data := &inspectpb.InspectProcessorSpanCheckData{}
+		checks := inspectChecks{&mockCheckWithRowCount{rowCount: nil}}
+		err := rc.CheckSpan(ctx, checks, pkSpan, nil /* logger */, data)
+		require.NoError(t, err)
+		require.Equal(t, uint64(50), data.SpanRowCount)
+	})
+
+	t.Run("second_check_provides_row_count", func(t *testing.T) {
+		rc := newRowCountCheck()
+		data := &inspectpb.InspectProcessorSpanCheckData{}
+		count := uint64(42)
+		checks := inspectChecks{
+			&mockCheckWithRowCount{rowCount: nil},
+			&mockCheckWithRowCount{rowCount: &count},
+		}
+		err := rc.CheckSpan(ctx, checks, pkSpan, nil /* logger */, data)
+		require.NoError(t, err)
+		require.Equal(t, uint64(42), data.SpanRowCount)
+	})
 }

@@ -175,6 +175,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/ingeststopped"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
@@ -184,14 +186,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -257,7 +266,8 @@ func updateStatus(
 	replicationStatus jobspb.ReplicationStatus,
 	status redact.RedactableString,
 ) {
-	err := ingestionJob.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	err := ingestionJob.DeprecatedNoTxn().Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 		updateStatusInternal(md, ju, replicationStatus, string(status.Redact()))
 		return nil
 	})
@@ -271,8 +281,8 @@ func updateStatus(
 }
 
 func updateStatusInternal(
-	md jobs.JobMetadata,
-	ju *jobs.JobUpdater,
+	md jobs.DeprecatedJobMetadata,
+	ju *jobs.DeprecatedJobUpdater,
 	replicationStatus jobspb.ReplicationStatus,
 	status string,
 ) {
@@ -457,44 +467,183 @@ func (s *streamIngestionResumer) handleResumeError(
 	return jobs.MarkPauseRequestError(err)
 }
 
-// errCutoverSignaled is returned by watchForCutover when it detects that a
-// cutover has been signaled. When returned from a ctxgroup member, it cancels
-// the group context, which tears down the ingestion phase.
+// cutoverSignalRangefeed maintains a rangefeed on the legacy_progress
+// info_key row for the given job in system.job_info for the lifetime of ctx.
+// It sends on the nudge channel whenever it observes a progress update that
+// might mean it is time to cut over, prompting the poller to perform its
+// authoritative SQL read (the rangefeed does not wait for resolved
+// timestamps, so its own view is not sufficient to decide).
+//
+// The rangefeed is automatically restarted, after a fixed delay, when it
+// surfaces an error the client gives up retrying internally; all such errors
+// are logged and swallowed, as this path is purely a latency-reduction
+// optimization backstopped by the poller. It runs until ctx is cancelled,
+// which happens when the poller returns a non-nil error (which it does on
+// all return paths).
+func cutoverSignalRangefeed(
+	ctx context.Context, execCfg *sql.ExecutorConfig, jobID jobspb.JobID, nudge chan<- struct{},
+) error {
+	for ctx.Err() == nil {
+		if err := runOneCutoverSignalRangefeed(ctx, execCfg, jobID, nudge); err != nil {
+			log.Dev.Warningf(ctx, "cutover rangefeed: %s", err)
+			select {
+			case nudge <- struct{}{}: // nudge just to be sure, since we're not watching right now
+			default:
+			}
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-time.After(10 * time.Second):
+			}
+		}
+	}
+	return nil
+}
+
+// runOneCutoverSignalRangefeed runs a single rangefeed instance on the job's
+// legacy_progress info_key row, sending on nudge whenever an observed
+// progress update satisfies the cutover-reached condition (cutover time set
+// and replicated time has caught up to it). It blocks until ctx is cancelled
+// (returning nil) or the rangefeed surfaces an unrecoverable error (returned
+// to the caller, which is expected to restart).
+func runOneCutoverSignalRangefeed(
+	ctx context.Context, execCfg *sql.ExecutorConfig, jobID jobspb.JobID, nudge chan<- struct{},
+) error {
+	// system.job_info has a dynamically-assigned descriptor ID, so resolve it at
+	// runtime. The primary index and column metadata are stable and can be read
+	// off the static systemschema template.
+	tableID, err := execCfg.SystemTableIDResolver.LookupSystemTableID(
+		ctx, string(catconstants.SystemJobInfoTableName))
+	if err != nil {
+		return errors.Wrap(err, "looking up system.job_info")
+	}
+	jobInfo := systemschema.SystemJobInfoTable
+
+	prefix := execCfg.Codec.IndexPrefix(uint32(tableID), uint32(jobInfo.GetPrimaryIndexID()))
+	prefix = encoding.EncodeVarintAscending(prefix, int64(jobID))
+	prefix = encoding.EncodeStringAscending(prefix, jobs.LegacyProgressKey)
+	span := roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
+
+	valueCol, err := catalog.MustFindColumnByName(jobInfo, "value")
+	if err != nil {
+		return errors.Wrap(err, "resolving value column")
+	}
+	decoder := valueside.MakeDecoder([]catalog.Column{valueCol})
+
+	onValue := func(ctx context.Context, ev *kvpb.RangeFeedValue) {
+		bytes, err := ev.Value.GetTuple()
+		if err != nil {
+			log.Dev.Warningf(ctx, "cutover rangefeed: get tuple: %s", err)
+			return
+		}
+		var alloc tree.DatumAlloc
+		datums, err := decoder.Decode(&alloc, bytes)
+		if err != nil {
+			log.Dev.Warningf(ctx, "cutover rangefeed: decode row: %s", err)
+			return
+		}
+		if len(datums) != 1 || datums[0] == tree.DNull {
+			log.Dev.Warningf(ctx, "cutover rangefeed: unexpected row format with %d datums", len(datums))
+			return
+		}
+		progressBytes, ok := datums[0].(*tree.DBytes)
+		if !ok {
+			log.Dev.Warningf(ctx, "cutover rangefeed: unexpected row format %T", datums[0])
+			return
+		}
+		var progress jobspb.Progress
+		if err := protoutil.Unmarshal([]byte(*progressBytes), &progress); err != nil {
+			log.Dev.Warningf(ctx, "cutover rangefeed: unmarshal progress: %s", err)
+			return
+		}
+		ip := progress.GetStreamIngest()
+		if ip == nil {
+			log.Dev.Warningf(ctx, "cutover rangefeed: progress missing StreamIngest field")
+			return
+		}
+		if !ip.CutoverTime.IsEmpty() && ip.CutoverTime.LessEq(ip.ReplicatedTime) {
+			select {
+			case nudge <- struct{}{}:
+			default:
+			}
+		}
+	}
+
+	errCh := make(chan error, 1)
+	rf, err := execCfg.RangeFeedFactory.RangeFeed(
+		ctx,
+		fmt.Sprintf("pcr-cutover-%d", jobID),
+		[]roachpb.Span{span},
+		execCfg.DB.Clock().Now(),
+		onValue,
+		rangefeed.WithSystemTablePriority(),
+		rangefeed.WithOnInternalError(func(ctx context.Context, err error) {
+			select {
+			case errCh <- err:
+			case <-ctx.Done():
+			}
+		}),
+	)
+	if err != nil {
+		return errors.Wrap(err, "starting rangefeed")
+	}
+	defer rf.Close()
+
+	select {
+	case <-ctx.Done():
+		return nil
+	case err := <-errCh:
+		return err
+	}
+}
+
+// errCutoverSignaled is returned by pollForCutoverSignal when it detects
+// that a cutover has been signaled. When returned from a ctxgroup member, it
+// cancels the group context, which tears down the ingestion phase.
 var errCutoverSignaled = errors.New("cutover signaled")
 
-// watchForCutover periodically polls the job progress to detect when a cutover
-// has been signaled. It returns errCutoverSignaled when cutover is reached,
-// which cancels the ctxgroup context and unblocks all goroutines in the
-// ingestion phase (heartbeat sender, span config stream, replanning, connection
-// refresher) that may be stuck on dead TCP connections.
+// pollForCutoverSignal periodically polls the job progress to detect when a
+// cutover has been signaled. It returns errCutoverSignaled when cutover is
+// reached, which cancels the ctxgroup context and unblocks all goroutines in
+// the ingestion phase (heartbeat sender, span config stream, replanning,
+// connection refresher) that may be stuck on dead TCP connections.
 //
 // This complements the per-processor cutover polling in checkForCutoverSignal,
 // which only signals individual ingestion processors via cutoverCh but cannot
 // unblock the other goroutines sharing the same ctxgroup context.
-func (s *streamIngestionResumer) watchForCutover(
-	ctx context.Context, execCfg *sql.ExecutorConfig,
+//
+// The nudge channel, driven by cutoverSignalRangefeed running as a sibling
+// ctxgroup member, lets the loop wake before the next tick on observed
+// progress writes; the timer remains the floor and the SQL-based check
+// inside cutoverReached remains the source of truth, so a missing or
+// degraded rangefeed only affects latency, not correctness.
+func (s *streamIngestionResumer) pollForCutoverSignal(
+	ctx context.Context, execCfg *sql.ExecutorConfig, nudge <-chan struct{},
 ) error {
 	provider := &cutoverFromJobProgress{
 		db:    execCfg.InternalDB,
 		jobID: s.job.ID(),
 	}
 	sv := &execCfg.Settings.SV
-	tick := time.NewTicker(cutoverSignalPollInterval.Get(sv))
+	pollInterval := cutoverSignalPollInterval.Get(sv)
+	tick := time.NewTicker(pollInterval)
 	defer tick.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-nudge:
 		case <-tick.C:
-			reached, err := provider.cutoverReached(ctx)
-			if err != nil {
-				log.Dev.Warningf(ctx, "error checking cutover signal: %s", err)
-				continue
-			}
-			if reached {
-				log.Dev.Infof(ctx, "cutover signal detected, returning error to cancel ingestion context")
-				return errCutoverSignaled
-			}
+		}
+		reached, err := provider.cutoverReached(ctx)
+		if err != nil {
+			log.Dev.Warningf(ctx, "error checking cutover signal: %s", err)
+			continue
+		}
+		if reached {
+			log.Dev.Infof(ctx, "cutover signal detected, returning error to cancel ingestion context")
+			return errCutoverSignaled
 		}
 	}
 }
@@ -542,12 +691,16 @@ func (s *streamIngestionResumer) Resume(ctx context.Context, execCtx interface{}
 		// context, tearing down the entire ingestion phase including goroutines
 		// that the per-processor poller cannot reach (heartbeat sender, span config
 		// stream, replanning, etc.).
+		nudge := make(chan struct{}, 1)
 		err = ctxgroup.GoAndWait(ctx,
 			func(ctx context.Context) error {
 				return ingestWithRetries(ctx, jobExecCtx, s)
 			},
 			func(ctx context.Context) error {
-				return s.watchForCutover(ctx, execCfg)
+				return cutoverSignalRangefeed(ctx, execCfg, s.job.ID(), nudge)
+			},
+			func(ctx context.Context) error {
+				return s.pollForCutoverSignal(ctx, execCfg, nudge)
 			},
 		)
 		if err != nil {
@@ -637,8 +790,9 @@ func (s *streamIngestionResumer) protectDestinationTenant(
 		if err := ptp.Protect(ctx, pts); err != nil {
 			return err
 		}
-		return s.job.WithTxn(txn).Update(ctx, func(
-			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+		return s.job.DeprecatedWithTxn(txn).Update(ctx, func(
+			txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater,
 		) error {
 			if err := md.CheckRunningOrReverting(); err != nil {
 				return err
@@ -695,8 +849,9 @@ func maybeRevertToCutoverTimestamp(
 		remainingSpansToRevert roachpb.Spans
 		readerTenantID         roachpb.TenantID
 	)
-	if err := ingestionJob.NoTxn().Update(ctx,
-		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	if err := ingestionJob.DeprecatedNoTxn().Update(ctx,
+		func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 			streamIngestionDetails := md.Payload.GetStreamIngestion()
 			if streamIngestionDetails == nil {
 				return errors.AssertionFailedf("unknown payload %v in stream ingestion job %d",
@@ -1020,7 +1175,8 @@ func (c *cutoverProgressTracker) updateJobProgress(
 		return fractionRangesFinished
 	}
 
-	if err := c.job.NoTxn().FractionProgressed(ctx, persistProgress); err != nil {
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	if err := c.job.DeprecatedNoTxn().FractionProgressed(ctx, persistProgress); err != nil {
 		return jobs.SimplifyInvalidStateError(err)
 	}
 	if c.onJobProgressUpdate != nil {

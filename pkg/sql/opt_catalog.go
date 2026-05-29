@@ -827,7 +827,7 @@ func (ov *optView) IsSystemView() bool {
 
 // Query is part of the cat.View interface.
 func (ov *optView) Query() string {
-	return ov.desc.GetViewQuery()
+	return string(ov.desc.GetViewQuery())
 }
 
 // ColumnNameCount is part of the cat.View interface.
@@ -1066,9 +1066,9 @@ func newOptTable(
 				col.GetType(),
 				col.IsNullable(),
 				visibility,
-				cd.DefaultExpr,
-				cd.ComputeExpr,
-				cd.OnUpdateExpr,
+				(*string)(cd.DefaultExpr),
+				(*string)(cd.ComputeExpr),
+				(*string)(cd.OnUpdateExpr),
 				mapGeneratedAsIdentityType(col.GetGeneratedAsIdentityType()),
 				cd.GeneratedAsIdentitySequenceOption,
 			)
@@ -1086,7 +1086,7 @@ func newOptTable(
 				col.GetType(),
 				col.IsNullable(),
 				visibility,
-				col.GetComputeExpr(),
+				string(col.GetComputeExpr()),
 			)
 		}
 	}
@@ -1114,9 +1114,9 @@ func newOptTable(
 				sysCol.GetType(),
 				sysCol.IsNullable(),
 				cat.MaybeHidden(sysCol.IsHidden()),
-				cd.DefaultExpr,
-				cd.ComputeExpr,
-				cd.OnUpdateExpr,
+				(*string)(cd.DefaultExpr),
+				(*string)(cd.ComputeExpr),
+				(*string)(cd.OnUpdateExpr),
 				mapGeneratedAsIdentityType(sysCol.GetGeneratedAsIdentityType()),
 				cd.GeneratedAsIdentitySequenceOption,
 			)
@@ -1136,7 +1136,7 @@ func newOptTable(
 			name:         u.GetName(),
 			table:        ot.ID(),
 			columns:      u.CollectKeyColumnIDs().Ordered(),
-			predicate:    u.GetPredicate(),
+			predicate:    string(u.GetPredicate()),
 			withoutIndex: true,
 			validity:     u.GetConstraintValidity(),
 		}
@@ -1257,7 +1257,7 @@ func newOptTable(
 					canUseTombstones: canUseTombstones,
 					// One would assume that this would be idx.Ordinal(), but they can differ during schema change
 					tombstoneIndexOrdinal: i,
-					predicate:             idx.GetPredicate(),
+					predicate:             string(idx.GetPredicate()),
 					// TODO(rytaft): will we ever support an unvalidated unique constraint
 					// here?
 					validity:            descpb.ConstraintValidity_Validated,
@@ -1270,7 +1270,7 @@ func newOptTable(
 					table:               ot.ID(),
 					columns:             idx.IndexDesc().KeyColumnIDs[idx.IndexDesc().ExplicitColumnStartIdx():],
 					withoutIndex:        true,
-					predicate:           idx.GetPredicate(),
+					predicate:           string(idx.GetPredicate()),
 					validity:            descpb.ConstraintValidity_Validated,
 					canElideUniqueCheck: true,
 				})
@@ -1360,7 +1360,7 @@ func newOptTable(
 	for i := range activeChecks {
 		check := activeChecks[i]
 		ot.checkConstraints = append(ot.checkConstraints, optCheckConstraint{
-			constraint:  check.GetExpr(),
+			constraint:  string(check.GetExpr()),
 			validated:   check.GetConstraintValidity() == descpb.ConstraintValidity_Validated,
 			columnCount: len(check.CheckDesc().ColumnIDs),
 			lookupColumnOrdinal: func(j int) (int, error) {
@@ -2023,7 +2023,7 @@ func (oi *optIndex) VectorColumn() cat.IndexColumn {
 // expression and true if the index is a partial index. If the index is not
 // partial, the empty string and false is returned.
 func (oi *optIndex) Predicate() (string, bool) {
-	return oi.idx.GetPredicate(), oi.idx.GetPredicate() != ""
+	return string(oi.idx.GetPredicate()), oi.idx.GetPredicate() != ""
 }
 
 // Zone is part of the cat.Index interface.
@@ -2601,9 +2601,9 @@ func newOptVirtualTable(
 			d.GetType(),
 			d.IsNullable(),
 			cat.MaybeHidden(d.IsHidden()),
-			cd.DefaultExpr,
-			cd.ComputeExpr,
-			cd.OnUpdateExpr,
+			(*string)(cd.DefaultExpr),
+			(*string)(cd.ComputeExpr),
+			(*string)(cd.OnUpdateExpr),
 			mapGeneratedAsIdentityType(d.GetGeneratedAsIdentityType()),
 			cd.GeneratedAsIdentitySequenceOption,
 		)
@@ -2779,7 +2779,7 @@ func (ot *optVirtualTable) CheckCount() int {
 func (ot *optVirtualTable) Check(i int) cat.CheckConstraint {
 	check := ot.desc.EnforcedCheckConstraints()[i]
 	return &optCheckConstraint{
-		constraint:  check.GetExpr(),
+		constraint:  string(check.GetExpr()),
 		validated:   check.GetConstraintValidity() == descpb.ConstraintValidity_Validated,
 		columnCount: len(check.CheckDesc().ColumnIDs),
 		lookupColumnOrdinal: func(j int) (int, error) {
@@ -3064,7 +3064,7 @@ func (oi *optVirtualIndex) Predicate() (string, bool) {
 		return "", false
 	}
 	pred := oi.idx.GetPredicate()
-	return pred, pred != ""
+	return string(pred), pred != ""
 }
 
 // Zone is part of the cat.Index interface.
@@ -3275,10 +3275,10 @@ func getOptTriggers(descTriggers []descpb.TriggerDescriptor) []optTrigger {
 			newTransitionAlias: tree.Name(descTrigger.NewTransitionAlias),
 			oldTransitionAlias: tree.Name(descTrigger.OldTransitionAlias),
 			forEachRow:         descTrigger.ForEachRow,
-			whenExpr:           descTrigger.WhenExpr,
+			whenExpr:           string(descTrigger.WhenExpr),
 			funcID:             cat.StableID(descTrigger.FuncID),
 			funcArgs:           funcArgs,
-			funcBody:           descTrigger.FuncBody,
+			funcBody:           string(descTrigger.FuncBody),
 			enabled:            descTrigger.Enabled,
 		}
 	}
@@ -3296,9 +3296,9 @@ func getOptPolicies(descPolicies []descpb.PolicyDescriptor) cat.Policies {
 		policy := cat.Policy{
 			Name:               tree.Name(descPolicy.Name),
 			ID:                 descPolicy.ID,
-			UsingExpr:          descPolicy.UsingExpr,
+			UsingExpr:          string(descPolicy.UsingExpr),
 			UsingColumnIDs:     descPolicy.UsingColumnIDs,
-			WithCheckExpr:      descPolicy.WithCheckExpr,
+			WithCheckExpr:      string(descPolicy.WithCheckExpr),
 			WithCheckColumnIDs: descPolicy.WithCheckColumnIDs,
 			Command:            descPolicy.Command,
 		}
@@ -3330,12 +3330,12 @@ func collectTypes(col catalog.Column) (descpb.IDs, error) {
 
 	// Collect UDTs in default expression, computed column and the column type itself.
 	if col.HasDefault() {
-		if err := addOIDsInExpr(col.GetDefaultExpr()); err != nil {
+		if err := addOIDsInExpr(string(col.GetDefaultExpr())); err != nil {
 			return nil, err
 		}
 	}
 	if col.IsComputed() {
-		if err := addOIDsInExpr(col.GetComputeExpr()); err != nil {
+		if err := addOIDsInExpr(string(col.GetComputeExpr())); err != nil {
 			return nil, err
 		}
 	}

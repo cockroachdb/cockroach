@@ -45,6 +45,75 @@ func TestClustersCompatible(t *testing.T) {
 	})
 }
 
+func TestMayUseLocalSSD(t *testing.T) {
+	tests := []struct {
+		name                  string
+		spec                  ClusterSpec
+		defaultPreferLocalSSD bool
+		expected              bool
+	}{
+		{
+			name:                  "default spec with PreferLocalSSD=true",
+			defaultPreferLocalSSD: true,
+			expected:              true,
+		},
+		{
+			name:                  "default spec with PreferLocalSSD=false",
+			defaultPreferLocalSSD: false,
+			expected:              false,
+		},
+		{
+			name:                  "explicit non-local-ssd volume type",
+			spec:                  ClusterSpec{VolumeType: "gp3"},
+			defaultPreferLocalSSD: true,
+			expected:              false,
+		},
+		{
+			name:                  "explicit local-ssd volume type",
+			spec:                  ClusterSpec{VolumeType: "local-ssd"},
+			defaultPreferLocalSSD: false,
+			expected:              true,
+		},
+		{
+			name:                  "LocalSSD disabled",
+			spec:                  ClusterSpec{LocalSSD: LocalSSDDisable},
+			defaultPreferLocalSSD: true,
+			expected:              false,
+		},
+		{
+			name:                  "LocalSSD preferred",
+			spec:                  ClusterSpec{LocalSSD: LocalSSDPreferOn},
+			defaultPreferLocalSSD: false,
+			expected:              true,
+		},
+		{
+			name:                  "RandomizeVolumeType enabled",
+			spec:                  ClusterSpec{RandomizeVolumeType: true},
+			defaultPreferLocalSSD: false,
+			expected:              true,
+		},
+		{
+			name:                  "VolumeSize set overrides PreferLocalSSD",
+			spec:                  ClusterSpec{VolumeSize: 100},
+			defaultPreferLocalSSD: true,
+			expected:              false,
+		},
+		{
+			name:                  "VolumeSize set overrides LocalSSDPreferOn",
+			spec:                  ClusterSpec{VolumeSize: 100, LocalSSD: LocalSSDPreferOn},
+			defaultPreferLocalSSD: true,
+			expected:              false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := tc.spec.mayUseLocalSSD(tc.defaultPreferLocalSSD)
+			require.Equal(t, tc.expected, result)
+		})
+	}
+}
+
 func TestClustersRetainClearedInfo(t *testing.T) {
 	// Adding a test in case we switch the ClustersCompatible signature to take
 	// pointers to ClusterSpec in the future.

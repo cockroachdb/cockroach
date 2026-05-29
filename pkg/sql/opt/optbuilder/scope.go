@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -121,6 +120,20 @@ type scope struct {
 	// references to internally-generated parameters such as those for PL/pgSQL
 	// sub-routines.
 	maxParamOrd int
+
+	// plpgsqlVarRef, if non-nil, is invoked by VisitPre to give PL/pgSQL a
+	// chance to rewrite a ColumnItem of the form `var.field` (where `var` is
+	// a composite-typed PL/pgSQL variable) into a parenthesized field-access
+	// expression. This mirrors the post-column-ref hook Postgres installs in
+	// pl_comp.c. It returns:
+	//   - rewritten != nil: the rewritten expression to use in place of the
+	//     ColumnItem.
+	//   - rewritten == nil && knownVar: the prefix names a PL/pgSQL variable
+	//     in scope, but no field-access rewrite applies (e.g. the variable is
+	//     scalar or no field with the given name exists).
+	//   - rewritten == nil && !knownVar: the prefix does not name any
+	//     PL/pgSQL variable in scope.
+	plpgsqlVarRef func(*tree.ColumnItem) (rewritten tree.Expr, knownVar bool)
 }
 
 // exprKind is used to represent the kind of the current expression in the
@@ -215,6 +228,20 @@ func (s *scope) replace() *scope {
 	r := s.builder.allocScope()
 	r.parent = s.parent
 	return r
+}
+
+// findPLpgSQLVarRef walks the parent scope chain and returns the nearest
+// non-nil plpgsqlVarRef hook, or nil if no ancestor has one installed. This
+// mirrors how findFuncArgCol locates checkMaxParamOrd / maxParamOrd by
+// traversing parents, so the hook only has to be set on the scope passed to
+// buildSQLExpr / buildSQLStatement and not propagated through push/replace.
+func (s *scope) findPLpgSQLVarRef() func(*tree.ColumnItem) (tree.Expr, bool) {
+	for ; s != nil; s = s.parent {
+		if s.plpgsqlVarRef != nil {
+			return s.plpgsqlVarRef
+		}
+	}
+	return nil
 }
 
 // appendColumnsFromScope adds newly bound variables to this scope.
@@ -593,12 +620,6 @@ func (s *scope) removeHiddenCols() {
 		}
 	}
 	s.cols = s.cols[:n]
-}
-
-// isAnonymousTable returns true if the table name of the first column
-// in this scope is empty.
-func (s *scope) isAnonymousTable() bool {
-	return len(s.cols) > 0 && s.cols[0].table.ObjectName == ""
 }
 
 // setTableAlias qualifies the names of all columns in this scope with the
@@ -1064,20 +1085,53 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 				}()
 			}
 			if sqlerrors.IsUndefinedRelationError(resolveErr) && t.TableName.Object() != "" {
-				// Attempt to resolve as columnname.fieldname in order to provide a more
-				// helpful error message.
-				_, sourceResolveErr := colinfo.ResolveColumnItem(
-					s.builder.ctx, s, &tree.ColumnItem{ColumnName: tree.Name(t.TableName.Object())},
-				)
-				if sourceResolveErr == nil {
-					panic(errors.WithIssueLink(errors.WithHint(resolveErr,
-						"to access a field of a composite-typed column or variable, "+
-							"surround the column/variable name in parentheses: (varName).fieldName"),
-						errors.IssueLink{IssueURL: build.MakeIssueURL(114687)},
-					))
+				// If we are inside a PL/pgSQL routine and the prefix names a
+				// composite-typed PL/pgSQL variable, rewrite `var.field` into
+				// the equivalent parenthesized field access `(var).field`.
+				// Postgres does this via a post-column-ref parser hook in
+				// pl_comp.c; we reproduce the behavior here.
+				var plpgsqlKnownVar bool
+				if hook := s.findPLpgSQLVarRef(); hook != nil {
+					rewritten, knownVar := hook(t)
+					if rewritten != nil {
+						return true, rewritten
+					}
+					plpgsqlKnownVar = knownVar
+				}
+				// If the prefix already names a PL/pgSQL variable in scope, the
+				// "surround in parentheses" hint would be misleading: parens
+				// won't help when the variable is scalar or lacks the named
+				// field. Postgres also emits no hint in this case. Fall through
+				// to the bare error below.
+				if !plpgsqlKnownVar {
+					// Attempt to resolve as columnname.fieldname in order to provide a more
+					// helpful error message.
+					_, sourceResolveErr := colinfo.ResolveColumnItem(
+						s.builder.ctx, s, &tree.ColumnItem{ColumnName: tree.Name(t.TableName.Object())},
+					)
+					if sourceResolveErr == nil {
+						panic(errors.WithHint(resolveErr,
+							"to access a field of a composite-typed column, "+
+								"surround the column name in parentheses: (colName).fieldName"))
+					}
 				}
 			}
 			panic(resolveErr)
+		}
+		// Check for an ambiguous reference: SQL name resolution succeeded,
+		// but a same-named composite PL/pgSQL variable in scope would also
+		// resolve. Postgres raises ERRCODE_AMBIGUOUS_COLUMN here (see
+		// plpgsql_post_column_ref in pl_comp.c).
+		if t.TableName != nil && t.TableName.Object() != "" {
+			if hook := s.findPLpgSQLVarRef(); hook != nil {
+				if rewritten, _ := hook(t); rewritten != nil {
+					panic(errors.WithDetail(
+						pgerror.Newf(pgcode.AmbiguousColumn,
+							"column reference %q is ambiguous", tree.AsStringWithFlags(t, tree.FmtSimple)),
+						"It could refer to either a PL/pgSQL variable or a table column.",
+					))
+				}
+			}
 		}
 		return false, colI.(*scopeColumn)
 

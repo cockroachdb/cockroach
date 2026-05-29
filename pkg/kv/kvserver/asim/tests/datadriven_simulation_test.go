@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/assertion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
@@ -38,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/logtags"
+	"github.com/gogo/protobuf/jsonpb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -106,6 +108,13 @@ var runAsimTests = envutil.EnvOrDefaultBool("COCKROACH_RUN_ASIM_TESTS", false)
 //     Sets the locality of the node with ID NodeID. This applies at the start
 //     of the simulation or with some delay after the simulation stats, if
 //     specified.
+//
+//   - set_store_attrs store=<int> attrs=(a,b,...) [delay=<duration>]
+//     Overwrites the store-level attributes of the store with the given
+//     StoreID. The constraint matcher in span configs sees these as "+attr"
+//     tokens (e.g. voter_constraints={"+ssd":1}). Stores have empty Attrs by
+//     default, so this is the only way to make constraints discriminate
+//     between sibling stores on the same node (since locality is per-node).
 //
 //   - add_node: [stores=<int>] [locality=<string>] [delay=<duration>]
 //     Add a node to the cluster after initial generation with some delay,
@@ -567,6 +576,21 @@ func TestDataDriven(t *testing.T) {
 						},
 					})
 					return ""
+				case "set_store_attrs":
+					var store int
+					var attrs []string
+					var delay time.Duration
+					scanMustExist(t, d, "store", &store)
+					scanMustExist(t, d, "attrs", &attrs)
+					scanIfExists(t, d, "delay", &delay)
+					events = append(events, scheduled.ScheduledEvent{
+						At: settingsGen.Settings.StartTime.Add(delay),
+						TargetEvent: event.SetStoreAttrsEvent{
+							StoreID: state.StoreID(store),
+							Attrs:   attrs,
+						},
+					})
+					return ""
 				case "set_capacity":
 					var store int
 					var ioThreshold float64 = -1
@@ -724,6 +748,10 @@ func TestDataDriven(t *testing.T) {
 								simulator.RunSim(ctx)
 								h := simulator.History()
 								run.hs = append(run.hs, h)
+
+								if rewrite {
+									writeMMASnapshots(t, simulator, plotDir, testName, sample+1)
+								}
 
 								for i, stmt := range assertions {
 									if holds, reason := stmt.Assert(ctx, h); !holds {
@@ -918,5 +946,26 @@ type modeHistory struct {
 func writeStateStrToFile(t *testing.T, topFile string, stateStr string, rewrite bool) {
 	if rewrite {
 		require.NoError(t, os.WriteFile(topFile, []byte(stateStr), 0644))
+	}
+}
+
+// writeMMASnapshots writes one JSON file per node containing the MMA
+// allocator's view of the cluster at the moment the simulation ended. The
+// snapshot is intended as a representative artifact for tooling that
+// consumes mmaprototype.Allocator.ClusterStateSnapshot in production
+// (debug-zip, status RPC, mma-investigator).
+func writeMMASnapshots(
+	t *testing.T, simulator *asim.Simulator, plotDir, testName string, sample int,
+) {
+	require.NoError(t, os.MkdirAll(plotDir, 0755))
+	m := &jsonpb.Marshaler{Indent: "  "}
+	for _, node := range simulator.State().Nodes() {
+		snap, err := node.MMAllocator().ClusterStateSnapshot()
+		require.NoError(t, err)
+		s, err := m.MarshalToString(snap)
+		require.NoError(t, err)
+		path := filepath.Join(plotDir,
+			fmt.Sprintf("%s_%d_n%d_mma_snapshot.json", testName, sample, node.NodeID()))
+		require.NoError(t, os.WriteFile(path, []byte(s), 0644))
 	}
 }

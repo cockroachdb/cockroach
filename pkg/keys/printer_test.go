@@ -618,6 +618,79 @@ func TestPrettyPrintRange(t *testing.T) {
 	}
 }
 
+func TestPrettyPrintBounded(t *testing.T) {
+	// Synthesize keys of arbitrary length by encoding a single STRING value
+	// after a small table/index prefix.
+	tableID := uint32(52)
+	indexID := uint32(1)
+	makeKey := func(payload []byte) roachpb.Key {
+		k := keys.SystemSQLCodec.IndexPrefix(tableID, indexID)
+		return encoding.EncodeStringAscending(k, string(payload))
+	}
+
+	const maxRawBytes = 1 << 10
+	// Generous bound: with a 1 KiB raw cap and ~4x worst-case PrettyPrint
+	// expansion (escape-heavy bytes), output stays well under this.
+	const generousOutputBound = 16 << 10
+
+	tests := []struct {
+		name         string
+		payload      []byte
+		expectMarker bool
+	}{
+		{
+			name:    "short key passes through verbatim",
+			payload: []byte("hello"),
+		},
+		{
+			// Raw input still under maxRawBytes — no truncation.
+			name:    "near-cap raw input passes through",
+			payload: bytes.Repeat([]byte("a"), maxRawBytes-64),
+		},
+		{
+			// Raw input well over maxRawBytes — must slice the input and
+			// append the truncation marker. PrettyPrint expansion is bounded
+			// by a small constant, so the output stays small even though the
+			// input is huge.
+			name:         "oversize raw input is sliced before PrettyPrint",
+			payload:      bytes.Repeat([]byte("a"), 1<<20), // 1 MiB
+			expectMarker: true,
+		},
+		{
+			// Non-printable bytes encode to \xNN under PrettyPrint, expanding
+			// each input byte to 4 chars. Verifies the input slice keeps even
+			// the worst-case expansion bounded.
+			name:         "escape-heavy bytes stay bounded",
+			payload:      bytes.Repeat([]byte{0}, 1<<20),
+			expectMarker: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			key := makeKey(tc.payload)
+			rawLen := len(key)
+
+			pretty := keys.PrettyPrintBounded(nil /* valDirs */, key, maxRawBytes)
+
+			require.True(t, utf8.ValidString(pretty), "result must be valid UTF-8")
+			require.True(t, strings.HasPrefix(pretty, fmt.Sprintf("/Table/%d/%d/", tableID, indexID)),
+				"expected /Table/<id>/<index>/ prefix; got %q", pretty[:min(80, len(pretty))])
+			require.LessOrEqual(t, len(pretty), generousOutputBound,
+				"pretty-printed output exceeded generous bound (raw key was %d bytes)", rawLen)
+
+			if tc.expectMarker {
+				require.Contains(t, pretty, "(truncated", "expected truncation marker")
+				require.Contains(t, pretty, fmt.Sprintf("%d bytes", rawLen),
+					"truncation marker should report raw key length %d", rawLen)
+			} else {
+				require.NotContains(t, pretty, "(truncated",
+					"unexpected truncation marker on small key")
+			}
+		})
+	}
+}
+
 func TestFormatHexKey(t *testing.T) {
 	// Verify that we properly handling the 'x' formatting verb in
 	// roachpb.Key.Format.

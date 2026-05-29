@@ -83,6 +83,13 @@ func (m *Manager) SetTestingKnobs(knobs *VecIndexTestingKnobs) {
 	m.testingKnobs = knobs
 }
 
+// TestingKnobs returns the testing knobs configured on the manager, or nil if
+// none have been set. Exposed so that executor processors can propagate the
+// knobs to per-flow helpers such as Searcher.
+func (m *Manager) TestingKnobs() *VecIndexTestingKnobs {
+	return m.testingKnobs
+}
+
 // Metrics returns a metric.Struct which holds metrics for all vector indexes
 // maintained by the manager.
 func (m *Manager) Metrics() metric.Struct {
@@ -120,6 +127,36 @@ func (m *Manager) Get(
 	}
 	e = &indexEntry{mustWait: true, waitCond: sync.Cond{L: &m.mu}}
 	m.mu.indexes[idxKey] = e
+
+	// If the index construction below panics, mustWait will still be true
+	// because the normal completion path (which sets mustWait=false and calls
+	// Broadcast) is skipped. Wrap the panic cause into e.err so parked waiters
+	// get a meaningful error, drop the cache entry so subsequent callers retry
+	// instead of hanging, then rethrow so colexecerror catches the original
+	// panic for the calling goroutine as usual.
+	defer func() {
+		if !e.mustWait {
+			return
+		}
+
+		e.mustWait = false
+
+		r := recover()
+		cause, ok := r.(error)
+		if !ok {
+			// Covers both nil (Goexit-style exit) and non-error panic values.
+			cause = errors.Newf("non-error panic value: %v", r)
+		}
+		e.err = errors.NewAssertionErrorWithWrappedErrf(
+			cause, "vector index construction panicked")
+
+		e.waitCond.Broadcast()
+		delete(m.mu.indexes, idxKey)
+
+		if r != nil {
+			panic(r)
+		}
+	}()
 
 	idx, err := func() (*cspann.Index, error) {
 		// Unlock while we build the index structure so that concurrent requests can be
@@ -167,13 +204,13 @@ func (m *Manager) Get(
 
 	if err != nil {
 		// Don't keep the index entry around, so that we retry the query.
-		m.mu.indexes[idxKey] = nil
+		delete(m.mu.indexes, idxKey)
 	}
 	return idx, err
 }
 
 func (m *Manager) getIndexOptions(config *vecpb.Config, readOnly bool) *cspann.IndexOptions {
-	return &cspann.IndexOptions{
+	opts := &cspann.IndexOptions{
 		RotAlgorithm:     config.RotAlgorithm,
 		MinPartitionSize: int(config.MinPartitionSize),
 		MaxPartitionSize: int(config.MaxPartitionSize),
@@ -187,6 +224,20 @@ func (m *Manager) getIndexOptions(config *vecpb.Config, readOnly bool) *cspann.I
 		// Disable adaptive search until it's extended to work with vecstore.
 		DisableAdaptiveSearch: true,
 	}
+	if m.testingKnobs != nil {
+		// Install a lazy closure rather than copying the function pointer
+		// directly, because Manager caches *cspann.Index and its IndexOptions
+		// for the lifetime of the manager. Tests that mutate the knob fields
+		// after the index is first created (the common pattern in
+		// TestVectorIndexPanicCaught) would otherwise see the stale nil
+		// captured at creation time.
+		opts.PanicDuringCspannSearch = func() {
+			if panicFn := m.testingKnobs.PanicDuringCspannSearch; panicFn != nil {
+				panicFn()
+			}
+		}
+	}
+	return opts
 }
 
 func (m *Manager) getVecConfig(

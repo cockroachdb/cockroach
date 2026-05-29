@@ -101,11 +101,11 @@ func batchAndConsume(ch <-chan struct{}, batchDuration time.Duration) {
 	var batchTimer timeutil.Timer
 	defer batchTimer.Stop()
 	batchTimer.Reset(batchDuration)
-	for !batchTimer.Read {
+	for {
 		select {
 		case <-ch: // event happened while we are waiting for our batchTimer to end.
 		case <-batchTimer.C:
-			batchTimer.Read = true
+			return
 		}
 	}
 }

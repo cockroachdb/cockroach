@@ -75,9 +75,8 @@ StatementPhase stage 1 of 1 with 15 MutationType ops
       - 105
     *scop.RemoveBackReferenceInFunctions
       BackReferencedDescriptorID: 109
-    *scop.NotImplementedForPublicObjects
-      DescID: 109
-      ElementType: scpb.Owner
+    *scop.RemoveOwner
+      DescriptorID: 109
     *scop.RemoveUserPrivileges
       DescriptorID: 109
       User: admin
@@ -159,9 +158,8 @@ PreCommitPhase stage 2 of 2 with 22 MutationType ops
       - 105
     *scop.RemoveBackReferenceInFunctions
       BackReferencedDescriptorID: 109
-    *scop.NotImplementedForPublicObjects
-      DescID: 109
-      ElementType: scpb.Owner
+    *scop.RemoveOwner
+      DescriptorID: 109
     *scop.RemoveUserPrivileges
       DescriptorID: 109
       User: admin

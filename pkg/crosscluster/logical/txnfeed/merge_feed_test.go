@@ -16,6 +16,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
@@ -183,6 +187,9 @@ func generateMergeFeedInputs(
 }
 
 func TestMergeFeedRandomized(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	seed := time.Now().UnixNano()
 	t.Logf("seed: %d", seed)
 	rng := rand.New(rand.NewSource(seed))
@@ -191,7 +198,7 @@ func TestMergeFeedRandomized(t *testing.T) {
 	subs, coveringSpan, expected := generateMergeFeedInputs(
 		t, rng, numKVs, mergeFeedInputOptions{maxTxnSize: 256})
 
-	feed := NewMergeFeed(subs, coveringSpan, 128)
+	feed := NewMergeFeed(subs, coveringSpan, 128, hlc.MaxTimestamp)
 
 	var received []kvEvent
 	var lastTime int
@@ -265,4 +272,81 @@ func TestMergeFeedRandomized(t *testing.T) {
 	maxExpectedTS := expected[len(expected)-1].time
 	require.GreaterOrEqual(t, lastTime, maxExpectedTS,
 		"final event should be at or beyond the max KV timestamp")
+}
+
+func TestMergeFeedEndTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	coveringSpan := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}
+
+	makeSubs := func() []streamclient.Subscription {
+		sub1 := makeTestSubscription([]any{
+			kvEvent{key: "a1", time: 1},
+			kvEvent{key: "a5", time: 5},
+			kvEvent{key: "a10", time: 10},
+			checkpoint{start: "a", end: "b", time: 10},
+			closeEvent{},
+		})
+		sub2 := makeTestSubscription([]any{
+			kvEvent{key: "b3", time: 3},
+			kvEvent{key: "b6", time: 6},
+			kvEvent{key: "b7", time: 7},
+			kvEvent{key: "b8", time: 8},
+			checkpoint{start: "a", end: "b", time: 8},
+			closeEvent{},
+		})
+		return []streamclient.Subscription{sub1, sub2}
+	}
+
+	testutils.RunValues(t, "endTime", []hlc.Timestamp{
+		{WallTime: 6},
+		hlc.MaxTimestamp,
+	}, func(t *testing.T, endTime hlc.Timestamp) {
+		feed := NewMergeFeed(makeSubs(), coveringSpan, 128, endTime)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		subscribeErr := make(chan error, 1)
+		go func() {
+			subscribeErr <- feed.Subscribe(ctx)
+		}()
+
+		var receivedKVTimes []int
+		sawSyntheticCP := false
+		for ev := range feed.Events() {
+			switch ev.Type() {
+			case crosscluster.KVEvent:
+				for _, kv := range ev.GetKVs() {
+					receivedKVTimes = append(receivedKVTimes, int(kv.KeyValue.Value.Timestamp.WallTime))
+				}
+			case crosscluster.CheckpointEvent:
+				cp := ev.GetCheckpoint().ResolvedSpans[0].Timestamp
+				require.True(t, cp.LessEq(endTime),
+					"checkpoints past endTime must not be emitted")
+				if cp.Equal(endTime) {
+					sawSyntheticCP = true
+				}
+			}
+		}
+
+		// Only KVs with timestamp <= endTime should be emitted.
+		var expectedKVTimes []int
+		for _, ts := range []int{1, 3, 5, 6, 7, 8, 10} {
+			if (hlc.Timestamp{WallTime: int64(ts)}).LessEq(endTime) {
+				expectedKVTimes = append(expectedKVTimes, ts)
+			}
+		}
+		slices.Sort(receivedKVTimes)
+		require.Equal(t, expectedKVTimes, receivedKVTimes)
+
+		err := <-subscribeErr
+		require.NoError(t, err)
+		if endTime == hlc.MaxTimestamp {
+			require.False(t, sawSyntheticCP, "no cutoff expected for unbounded endTime")
+		} else {
+			require.True(t, sawSyntheticCP, "expected synthetic checkpoint at endTime")
+		}
+	})
 }

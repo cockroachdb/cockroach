@@ -177,6 +177,28 @@ var enableClientRetryTokenBucket = settings.RegisterBoolSetting(
 	"enable the client side retry token bucket in the AWS S3 client",
 	false)
 
+// credsCacheOptions configures any aws.CredentialsCache that this package
+// wraps around a refreshable credentials provider (the implicit-auth path's
+// default-chain providers, AssumeRole providers, etc.).
+//
+// aws-sdk-go-v2 defaults CredentialsCacheOptions.ExpiryWindow to zero, which
+// means the cache only refreshes credentials after they have already expired.
+// On long-running operations like a cluster-wide BACKUP, a request can be
+// signed in the last few hundred ms before expiry and arrive at the AWS
+// service already-expired, surfacing as ExpiredToken / ExpiredTokenException
+// and failing the operation. The SDK's docstring on ExpiryWindow describes
+// exactly this race.
+//
+// 30s is comfortably more than the in-flight time of any single signed
+// request, which is what bounds the race; the jitter randomizes the
+// refresh point within the window so a fleet of nodes does not stampede
+// STS on the same instant. Refresh frequency is set by the credentials'
+// own lifetime, not by the window size.
+func credsCacheOptions(o *aws.CredentialsCacheOptions) {
+	o.ExpiryWindow = 30 * time.Second
+	o.ExpiryWindowJitterFrac = 0.5
+}
+
 // roleProvider contains fields about the role that needs to be assumed
 // in order to access the external storage.
 type roleProvider struct {
@@ -626,12 +648,26 @@ func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
 		addLoadOption(config.WithClientLogMode(s.opts.logMode))
 	}
 	addLoadOption(config.WithRetryer(func() aws.Retryer {
-		return retry.NewStandard(func(opts *retry.StandardOptions) {
+		standard := retry.NewStandard(func(opts *retry.StandardOptions) {
 			opts.MaxAttempts = int(maxRetries.Get(&s.settings.SV))
 			if !enableClientRetryTokenBucket.Get(&s.settings.SV) {
 				opts.RateLimiter = ratelimit.None
 			}
 		})
+		// Treat credential-expiry errors as retryable. When the configured
+		// credentials provider issues short-lived tokens, a long-running upload
+		// can race their expiry: a request signed just before the credentials
+		// expire can arrive at S3 just after, surfacing as ExpiredToken /
+		// ExpiredTokenException / RequestExpired and failing the operation. The
+		// v1 SDK swallowed this race by classifying these codes as retryable
+		// (aws-sdk-go aws/request/retryer.go: credsExpiredCodes); aws-sdk-go-v2's
+		// default retryable set dropped them, so what was a transparent retry in
+		// v1 became a hard, user-visible failure in v2. Restore the v1 behavior.
+		// The codes mirror v1's credsExpiredCodes set exactly. The cache itself
+		// notices it is past Expires by the time the retry's backoff completes,
+		// so an explicit Invalidate() is not required to force a fresh retrieve.
+		return retry.AddWithErrorCodes(standard,
+			"ExpiredToken", "ExpiredTokenException", "RequestExpired")
 	}))
 
 	switch s.opts.auth {
@@ -639,6 +675,10 @@ func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
 		addLoadOption(config.WithCredentialsProvider(
 			aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(s.opts.accessKey, s.opts.secret, s.opts.tempToken))))
 	case cloud.AuthParamImplicit:
+		// Tune the cache that LoadDefaultConfig will wrap around whichever
+		// refreshable provider the default chain selects; see credsCacheOptions
+		// for the rationale.
+		addLoadOption(config.WithCredentialsCacheOptions(credsCacheOptions))
 	}
 
 	cfg, err := config.LoadDefaultConfig(ctx, loadOptions...)
@@ -668,7 +708,7 @@ func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
 				}
 			})
 			intermediateCreds := stscreds.NewAssumeRoleProvider(client, delegateProvider.roleARN, withExternalID(delegateProvider.externalID))
-			cfg.Credentials = aws.NewCredentialsCache(intermediateCreds)
+			cfg.Credentials = aws.NewCredentialsCache(intermediateCreds, credsCacheOptions)
 		}
 
 		client := sts.NewFromConfig(cfg, func(options *sts.Options) {
@@ -681,7 +721,7 @@ func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
 		// NOTE: It's critical to wrap all credentials in a CredentialCache to
 		// prevent DDoS'ing STS API endpoints:
 		// https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/aws#CredentialsCache
-		cfg.Credentials = aws.NewCredentialsCache(creds)
+		cfg.Credentials = aws.NewCredentialsCache(creds, credsCacheOptions)
 	}
 
 	region := s.opts.region

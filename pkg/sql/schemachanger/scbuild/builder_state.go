@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/walkutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
@@ -216,7 +217,7 @@ func (b *builderState) checkForConcurrentSchemaChanges(
 // This provides us with all of the ID -> name mappings required to
 // comprehensively decorate any EXPLAIN (DDL) output.
 func (b *builderState) ensureDescriptors(e scpb.Element) {
-	_ = screl.WalkDescIDs(e, func(id *catid.DescID) error {
+	_ = walkutil.Walk(e, func(id *catid.DescID) error {
 		b.ensureDescriptor(*id)
 		return nil
 	})
@@ -443,6 +444,26 @@ func (b *builderState) requirePrivilege(id catid.DescID, priv privilege.Kind) {
 	}
 }
 
+// CheckPrivilegeForUser implements the scbuildstmt.PrivilegeChecker interface.
+func (b *builderState) CheckPrivilegeForUser(
+	e scpb.Element, priv privilege.Kind, user username.SQLUsername,
+) error {
+	id := screl.GetDescID(e)
+	b.ensureDescriptor(id)
+	c := b.descCache[id]
+	isPrivileged, err := b.auth.HasPrivilege(b.ctx, c.desc, priv, user)
+	if err != nil {
+		return err
+	}
+	if isPrivileged {
+		return nil
+	}
+	return sqlerrors.NewInsufficientPrivilegeOnDescriptorError(
+		user, []privilege.Kind{priv},
+		string(c.desc.DescriptorType()), c.desc.GetName(),
+	)
+}
+
 // CheckGlobalPrivilege implements the scbuildstmt.PrivilegeChecker interface.
 func (b *builderState) CheckGlobalPrivilege(privilege privilege.Kind) error {
 	return b.auth.CheckPrivilege(b.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege)
@@ -460,10 +481,11 @@ func (b *builderState) CurrentUserHasAdminOrIsMemberOf(role username.SQLUsername
 	if b.hasAdmin {
 		return true
 	}
-	if b.evalCtx.SessionData().User() == role {
+	user := b.CurrentUser()
+	if user == role {
 		return true
 	}
-	memberships, err := b.auth.MemberOfWithAdminOption(b.ctx, b.evalCtx.SessionData().User())
+	memberships, err := b.auth.MemberOfWithAdminOption(b.ctx, user)
 	if err != nil {
 		panic(err)
 	}
@@ -472,7 +494,10 @@ func (b *builderState) CurrentUserHasAdminOrIsMemberOf(role username.SQLUsername
 }
 
 func (b *builderState) CurrentUser() username.SQLUsername {
-	return b.evalCtx.SessionData().User()
+	// EffectiveUser yields the SECURITY DEFINER routine owner when DDL runs
+	// inside a stored procedure body (e.g. CREATE SCHEMA), and the session
+	// user otherwise. This matches PostgreSQL ownership semantics.
+	return b.evalCtx.EffectiveUser()
 }
 
 // CheckRoleExists implements the scbuild.AuthorizationAccessor interface.
@@ -1214,6 +1239,12 @@ func (b *builderState) ResolveUserDefinedTypeType(
 		if p.IsExistenceOptional {
 			return nil
 		}
+		// Check if the name refers to a built-in type that couldn't be resolved
+		// because the qualifying schema/database doesn't exist (see #64663).
+		if _, ok := types.PublicSchemaAliases[name.Object()]; ok {
+			panic(pgerror.Newf(pgcode.WrongObjectType,
+				"type %q is a built-in type", name.Object()))
+		}
 		panic(sqlerrors.NewUndefinedTypeError(name))
 	}
 	switch typ.GetKind() {
@@ -1919,17 +1950,12 @@ func (b *builderState) WrapFunctionBody(
 	fnID descpb.ID,
 	bodyStr string,
 	lang catpb.Function_Language,
-	returnType tree.ResolvableTypeReference,
+	lazilyEvalSQL bool,
 	refProvider scbuildstmt.ReferenceProvider,
 ) *scpb.FunctionBody {
-	// Trigger functions do not analyze SQL statements beyond parsing, so type and
-	// sequence names should not be replaced during trigger-function creation.
-	var lazilyEvalSQL bool
-	if returnType != nil {
-		if typ, ok := returnType.(*types.T); ok && typ.Identical(types.Trigger) {
-			lazilyEvalSQL = true
-		}
-	}
+	// When the body is evaluated lazily (trigger functions and late-bound
+	// procedures), SQL inside it is not analyzed at creation time, so type
+	// and sequence names must not be rewritten.
 	if !lazilyEvalSQL {
 		bodyStr = b.replaceSeqNamesWithIDs(bodyStr, lang)
 		bodyStr = b.serializeUserDefinedTypes(bodyStr, lang)

@@ -81,6 +81,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
@@ -141,6 +142,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalClusterQueriesTableID:              crdbInternalClusterQueriesTable,
 		catconstants.CrdbInternalClusterTransactionsTableID:         crdbInternalClusterTxnsTable,
 		catconstants.CrdbInternalClusterSessionsTableID:             crdbInternalClusterSessionsTable,
+		catconstants.CrdbInternalClusterHeldAdvisoryLocksTableID:    crdbInternalClusterHeldAdvisoryLocksTable,
 		catconstants.CrdbInternalClusterSettingsTableID:             crdbInternalClusterSettingsTable,
 		catconstants.CrdbInternalClusterStmtStatsTableID:            crdbInternalClusterStmtStatsTable,
 		catconstants.CrdbInternalCreateFunctionStmtsTableID:         crdbInternalCreateFunctionStmtsTable,
@@ -1477,7 +1479,6 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   mvcc_range_key_contained_points_var       FLOAT,
   mvcc_range_key_skipped_points_avg      FLOAT,
   mvcc_range_key_skipped_points_var      FLOAT,
-  implicit_txn        BOOL NOT NULL,
   full_scan           BOOL NOT NULL,
   sample_plan         JSONB,
   database_name       STRING NOT NULL,
@@ -1625,7 +1626,6 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				execStatVar(&alloc, stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.RangeKeyContainedPoints),        // mvcc_range_key_contained_points_var
 				execStatAvg(&alloc, stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.RangeKeySkippedPoints),          // mvcc_range_key_skipped_points_avg
 				execStatVar(&alloc, stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.RangeKeySkippedPoints),          // mvcc_range_key_skipped_points_var
-				tree.MakeDBool(tree.DBool(stats.Key.ImplicitTxn)),                                                                        // implicit_txn
 				tree.MakeDBool(tree.DBool(stats.Key.FullScan)),                                                                           // full_scan
 				alloc.NewDJSON(tree.DJSON{JSON: samplePlan}),                                                                             // sample_plan
 				alloc.NewDString(tree.DString(stats.Key.Database)),                                                                       // database_name
@@ -2573,6 +2573,84 @@ var crdbInternalClusterSessionsTable = virtualSchemaTable{
 	},
 }
 
+// crdbInternalClusterHeldAdvisoryLocksTable exposes transaction-scoped advisory
+// locks held on sessions across the cluster (cluster RPC; expensive).
+var crdbInternalClusterHeldAdvisoryLocksTable = virtualSchemaTable{
+	comment: "advisory locks held by open sessions visible to current user (cluster RPC; expensive!)",
+	schema: `
+CREATE TABLE crdb_internal.cluster_held_advisory_locks (
+  session_id STRING NOT NULL,
+	database_id int8 NOT NULL,
+	lock_id int8 NOT NULL,
+	is_single_value BOOL,
+  lock_mode   STRING NOT NULL
+)`,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		req, err := p.makeSessionsRequest(ctx, true /* excludeClosed */)
+		if err != nil {
+			return err
+		}
+		response, err := p.extendedEvalCtx.SQLStatusServer.ListSessions(ctx, &req)
+		if err != nil {
+			return err
+		}
+		return populateClusterHeldAdvisoryLocksTable(ctx, p, addRow, response)
+	},
+}
+
+func populateClusterHeldAdvisoryLocksTable(
+	ctx context.Context,
+	p *planner,
+	addRow func(...tree.Datum) error,
+	response *serverpb.ListSessionsResponse,
+) error {
+	canViewOtherUser := false
+	if isAdmin, err := p.HasAdminRole(ctx); err != nil {
+		return err
+	} else if isAdmin {
+		canViewOtherUser = true
+	} else {
+		if hasPriv, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx); err != nil {
+			return err
+		} else if hasPriv {
+			canViewOtherUser = true
+		}
+	}
+	for _, session := range response.Sessions {
+		normalizedUser, err := username.MakeSQLUsernameFromUserInput(session.Username, username.PurposeValidation)
+		if err != nil {
+			return err
+		}
+		if !canViewOtherUser && normalizedUser != p.User() {
+			continue
+		}
+		sessionID := getSessionID(session)
+		for i := range session.HeldAdvisoryLocks {
+			h := &session.HeldAdvisoryLocks[i]
+			lockMode := "UNKNOWN"
+			switch h.LockMode {
+			case serverpb.HeldAdvisoryLock_ADVISORY_LOCK_MODE_EXCLUSIVE:
+				lockMode = "ExclusiveLock"
+			case serverpb.HeldAdvisoryLock_ADVISORY_LOCK_MODE_SHARED:
+				lockMode = "ShareLock"
+			}
+			if err := addRow(
+				sessionID,
+				tree.NewDInt(tree.DInt(h.LockDatabaseId)),
+				tree.NewDInt(tree.DInt(h.LockId)),
+				tree.MakeDBool(tree.DBool(h.IsSingeValue)),
+				tree.NewDString(lockMode),
+			); err != nil {
+				return err
+			}
+		}
+	}
+	for _, rpcErr := range response.Errors {
+		log.Dev.Warningf(ctx, "%v", rpcErr.Message)
+	}
+	return nil
+}
+
 func populateSessionsTable(
 	ctx context.Context,
 	p *planner,
@@ -3115,7 +3193,7 @@ CREATE TABLE crdb_internal.builtin_functions (
 var crdbInternalBuiltinFunctionCommentsTable = virtualSchemaTable{
 	comment: "built-in functions (RAM/static)",
 	schema:  vtable.CrdbInternalBuiltinFunctionComments,
-	populate: func(ctx context.Context, _ *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		for _, name := range builtins.AllBuiltinNames() {
 			_, overloads := builtinsregistry.GetBuiltinProperties(name)
 			for _, f := range overloads {
@@ -4262,7 +4340,7 @@ CREATE TABLE crdb_internal.backward_dependencies (
 				if err != nil {
 					return err
 				}
-				refConstraint, err := catalog.FindFKReferencedUniqueConstraint(refTbl, fk)
+				refConstraint, err := catalog.FindFKReferencedUniqueConstraint(refTbl, fk, true /* considerSubsets */)
 				if err != nil {
 					return err
 				}
@@ -4985,7 +5063,7 @@ CREATE TABLE crdb_internal.zones (
 }
 
 func getAllNodeDescriptors(p *planner) ([]roachpb.NodeDescriptor, error) {
-	g, err := p.ExecCfg().Gossip.OptionalErr(47899)
+	g, err := p.ExecCfg().Gossip.OptionalErr()
 	if err != nil {
 		return nil, err
 	}
@@ -5043,7 +5121,7 @@ CREATE TABLE crdb_internal.gossip_nodes (
 			return err
 		}
 
-		g, err := p.ExecCfg().Gossip.OptionalErr(47899)
+		g, err := p.ExecCfg().Gossip.OptionalErr()
 		if err != nil {
 			return err
 		}
@@ -5162,7 +5240,7 @@ CREATE TABLE crdb_internal.kv_node_liveness (
 			return err
 		}
 
-		nl, err := p.ExecCfg().NodeLiveness.OptionalErr(47900)
+		nl, err := p.ExecCfg().NodeLiveness.OptionalErr()
 		if err != nil {
 			return err
 		}
@@ -5228,7 +5306,7 @@ CREATE TABLE crdb_internal.gossip_liveness (
 			return err
 		}
 
-		g, err := p.ExecCfg().Gossip.OptionalErr(47899)
+		g, err := p.ExecCfg().Gossip.OptionalErr()
 		if err != nil {
 			return err
 		}
@@ -5304,7 +5382,7 @@ CREATE TABLE crdb_internal.gossip_alerts (
 			return err
 		}
 
-		g, err := p.ExecCfg().Gossip.OptionalErr(47899)
+		g, err := p.ExecCfg().Gossip.OptionalErr()
 		if err != nil {
 			return err
 		}
@@ -5983,6 +6061,12 @@ var crdbInternalCatalogCommentsTable = virtualSchemaTable{
 				classOid = tree.NewDOid(catconstants.PgCatalogTypeTableID)
 				objOid = tree.NewDOid(oid.Oid(key.ObjectID))
 
+			case catalogkeys.FunctionCommentType:
+				// Functions live in pg_proc; their OIDs are descriptor IDs offset
+				// by oidext.CockroachPredefinedOIDMax (see catid.FuncIDToOID).
+				classOid = tree.NewDOid(catconstants.PgCatalogProcTableID)
+				objOid = tree.NewDOid(catid.FuncIDToOID(descpb.ID(key.ObjectID)))
+
 			case catalogkeys.ColumnCommentType, catalogkeys.TableCommentType:
 				classOid = tree.NewDOid(catconstants.PgCatalogClassTableID)
 				objOid = tree.NewDOid(oid.Oid(key.ObjectID))
@@ -6019,11 +6103,23 @@ var crdbInternalCatalogCommentsTable = virtualSchemaTable{
 				objOid = getOIDFromConstraint(c, tableDesc.GetParentID(), tableDesc.GetParentSchemaID(), tableDesc)
 			}
 
+			compatClassOid := classOid
+			if classOid != tree.DNull {
+				compatClassOid = tree.NewDOid(
+					catconstants.RemapPgCatalogOid(
+						catconstants.PgCatalogName,
+						uint32(tree.MustBeDOid(classOid).Oid),
+						sessiondatapb.IsPgDumpCompatibilityEnabled(p.SessionData().PgDumpCompatibility),
+					),
+				)
+			}
+
 			return addRow(
 				classOid,
 				objOid,
 				objSubID,
-				tree.NewDString(cmt))
+				tree.NewDString(cmt),
+				compatClassOid)
 		}); err != nil {
 			return err
 		}
@@ -6045,12 +6141,12 @@ type marshaledJobMetadataMap map[jobspb.JobID]marshaledJobMetadata
 // GetJobMetadata implements the jobs.JobMetadataGetter interface.
 func (m marshaledJobMetadataMap) GetJobMetadata(
 	jobID jobspb.JobID,
-) (md *jobs.JobMetadata, err error) {
+) (md *jobs.DeprecatedJobMetadata, err error) {
 	ujm, found := m[jobID]
 	if !found {
 		return nil, errors.New("job not found")
 	}
-	md = &jobs.JobMetadata{ID: jobID}
+	md = &jobs.DeprecatedJobMetadata{ID: jobID}
 	if ujm.status == nil {
 		return nil, errors.New("missing status")
 	}
@@ -7055,7 +7151,10 @@ CREATE TABLE crdb_internal.cluster_statement_statistics (
     statistics                 JSONB NOT NULL,
     sampled_plan               JSONB NOT NULL,
     aggregation_interval       INTERVAL NOT NULL,
-    index_recommendations      STRING[] NOT NULL
+    index_recommendations      STRING[] NOT NULL,
+    query                      STRING NOT NULL,
+    query_summary              STRING NOT NULL,
+    database                   STRING NOT NULL
 );`,
 	generator: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, _ int64, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		// TODO(azhng): we want to eventually implement memory accounting within the
@@ -7082,19 +7181,14 @@ CREATE TABLE crdb_internal.cluster_statement_statistics (
 			return nil, nil, err
 		}
 
-		s := p.extendedEvalCtx.persistedSQLStats
-		curAggTs := s.ComputeAggregatedTs()
-		aggInterval := s.GetAggregationInterval()
-
-		const numDatums = 10
+		const numDatums = 13
 		row := make(tree.Datums, numDatums)
 		worker := func(ctx context.Context, pusher rowPusher) error {
 			return memSQLStats.IterateStatementStats(ctx, sqlstats.IteratorOptions{
 				SortedAppNames: true,
 				SortedKey:      true,
 			}, func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
-
-				aggregatedTs, err := tree.MakeDTimestampTZ(curAggTs, time.Microsecond)
+				aggregatedTs, err := tree.MakeDTimestampTZ(statistics.AggregatedTs, time.Microsecond)
 				if err != nil {
 					return err
 				}
@@ -7119,7 +7213,7 @@ CREATE TABLE crdb_internal.cluster_statement_statistics (
 				plan := sqlstatsutil.ExplainTreePlanNodeToJSON(&statistics.Stats.SensitiveInfo.MostRecentPlanDescription)
 
 				aggInterval := tree.NewDInterval(
-					duration.MakeDuration(aggInterval.Nanoseconds(), 0, 0),
+					duration.MakeDuration(statistics.AggregationInterval.Nanoseconds(), 0, 0),
 					types.DefaultIntervalTypeMetadata)
 
 				indexRecommendations := tree.NewDArray(types.String)
@@ -7130,16 +7224,19 @@ CREATE TABLE crdb_internal.cluster_statement_statistics (
 				}
 
 				row = append(row[:0],
-					aggregatedTs,                        // aggregated_ts
-					fingerprintID,                       // fingerprint_id
-					transactionFingerprintID,            // transaction_fingerprint_id
-					planHash,                            // plan_hash
-					tree.NewDString(statistics.Key.App), // app_name
-					tree.NewDJSON(metadataJSON),         // metadata
-					tree.NewDJSON(statisticsJSON),       // statistics
-					tree.NewDJSON(plan),                 // plan
-					aggInterval,                         // aggregation_interval
-					indexRecommendations,                // index_recommendations
+					aggregatedTs,                                 // aggregated_ts
+					fingerprintID,                                // fingerprint_id
+					transactionFingerprintID,                     // transaction_fingerprint_id
+					planHash,                                     // plan_hash
+					tree.NewDString(statistics.Key.App),          // app_name
+					tree.NewDJSON(metadataJSON),                  // metadata
+					tree.NewDJSON(statisticsJSON),                // statistics
+					tree.NewDJSON(plan),                          // plan
+					aggInterval,                                  // aggregation_interval
+					indexRecommendations,                         // index_recommendations
+					tree.NewDString(statistics.Key.Query),        // query
+					tree.NewDString(statistics.Key.QuerySummary), // query_summary
+					tree.NewDString(statistics.Key.Database),     // database
 				)
 				if buildutil.CrdbTestBuild {
 					if len(row) != numDatums {
@@ -7170,7 +7267,10 @@ SELECT
   merge_statement_stats(DISTINCT statistics),
   max(sampled_plan),
   aggregation_interval,
-  array_remove(array_cat_agg(index_recommendations), NULL) AS index_recommendations
+  array_remove(array_cat_agg(index_recommendations), NULL) AS index_recommendations,
+  max(query) AS query,
+  max(query_summary) AS query_summary,
+  max(database) AS database
 FROM (
   SELECT
       aggregated_ts,
@@ -7182,7 +7282,10 @@ FROM (
       statistics,
       sampled_plan,
       aggregation_interval,
-      index_recommendations
+      index_recommendations,
+      query,
+      query_summary,
+      database
   FROM
       crdb_internal.cluster_statement_statistics
   UNION ALL
@@ -7196,9 +7299,12 @@ FROM (
           statistics,
           plan,
           agg_interval,
-          index_recommendations
+          index_recommendations,
+          query,
+          query_summary,
+          database
       FROM
-          system.statement_statistics
+          crdb_internal.statement_statistics_persisted
 )
 GROUP BY
   aggregated_ts,
@@ -7218,6 +7324,9 @@ GROUP BY
 		{Name: "sampled_plan", Typ: types.Jsonb},
 		{Name: "aggregation_interval", Typ: types.Interval},
 		{Name: "index_recommendations", Typ: types.StringArray},
+		{Name: "query", Typ: types.String},
+		{Name: "query_summary", Typ: types.String},
+		{Name: "database", Typ: types.String},
 	},
 }
 
@@ -7228,26 +7337,31 @@ var crdbInternalStmtStatsPersistedView = virtualSchemaView{
 	schema: `
 CREATE VIEW crdb_internal.statement_statistics_persisted AS
       SELECT
-          aggregated_ts,
-          fingerprint_id,
-          transaction_fingerprint_id,
-          plan_hash,
-          app_name,
-          node_id,
-          agg_interval,
-          metadata,
-          statistics,
-          plan,
-          index_recommendations,
-          indexes_usage,
-          execution_count,
-          service_latency,
-          cpu_sql_nanos,
-          contention_time,
-          total_estimated_execution_time,
-          p99_latency
+          ss.aggregated_ts,
+          ss.fingerprint_id,
+          ss.transaction_fingerprint_id,
+          ss.plan_hash,
+          ss.app_name,
+          ss.node_id,
+          ss.agg_interval,
+          ss.metadata,
+          ss.statistics,
+          ss.plan,
+          ss.index_recommendations,
+          ss.indexes_usage,
+          ss.execution_count,
+          ss.service_latency,
+          ss.cpu_sql_nanos,
+          ss.contention_time,
+          ss.total_estimated_execution_time,
+          ss.p99_latency,
+          COALESCE(s.fingerprint, ss.metadata->>'query', '') AS query,
+          COALESCE(s.summary, ss.metadata->>'querySummary', '') AS query_summary,
+          COALESCE(s.db, ss.metadata->>'db', '') AS database
       FROM
-          system.statement_statistics`,
+          system.statement_statistics AS ss
+      LEFT JOIN
+          system.statements AS s ON ss.fingerprint_id = s.fingerprint_id`,
 	resultColumns: colinfo.ResultColumns{
 		{Name: "aggregated_ts", Typ: types.TimestampTZ},
 		{Name: "fingerprint_id", Typ: types.Bytes},
@@ -7267,6 +7381,9 @@ CREATE VIEW crdb_internal.statement_statistics_persisted AS
 		{Name: "contention_time", Typ: types.Float},
 		{Name: "total_estimated_execution_time", Typ: types.Float},
 		{Name: "p99_latency", Typ: types.Float},
+		{Name: "query", Typ: types.String},
+		{Name: "query_summary", Typ: types.String},
+		{Name: "database", Typ: types.String},
 	},
 }
 
@@ -7276,25 +7393,30 @@ var crdbInternalStmtActivityView = virtualSchemaView{
 	schema: `
 CREATE VIEW crdb_internal.statement_activity AS
       SELECT
-				aggregated_ts,
-				fingerprint_id,
-				transaction_fingerprint_id,
-				plan_hash,
-				app_name,
-				agg_interval,
-				metadata,
-				statistics,
-				plan,
-				index_recommendations,
-				execution_count,
-				execution_total_seconds,
-				execution_total_cluster_seconds,
-				contention_time_avg_seconds,
-				cpu_sql_avg_nanos,
-				service_latency_avg_seconds,
-				service_latency_p99_seconds
+          sa.aggregated_ts,
+          sa.fingerprint_id,
+          sa.transaction_fingerprint_id,
+          sa.plan_hash,
+          sa.app_name,
+          sa.agg_interval,
+          sa.metadata,
+          sa.statistics,
+          sa.plan,
+          sa.index_recommendations,
+          sa.execution_count,
+          sa.execution_total_seconds,
+          sa.execution_total_cluster_seconds,
+          sa.contention_time_avg_seconds,
+          sa.cpu_sql_avg_nanos,
+          sa.service_latency_avg_seconds,
+          sa.service_latency_p99_seconds,
+          COALESCE(s.fingerprint, sa.metadata->>'query', '') AS query,
+          COALESCE(s.summary, sa.metadata->>'querySummary', '') AS query_summary,
+          COALESCE(s.db, sa.metadata->>'db', '') AS database
       FROM
-          system.statement_activity`,
+          system.statement_activity AS sa
+      LEFT JOIN
+          system.statements AS s ON sa.fingerprint_id = s.fingerprint_id`,
 	resultColumns: colinfo.ResultColumns{
 		{Name: "aggregated_ts", Typ: types.TimestampTZ},
 		{Name: "fingerprint_id", Typ: types.Bytes},
@@ -7313,6 +7435,9 @@ CREATE VIEW crdb_internal.statement_activity AS
 		{Name: "cpu_sql_avg_nanos", Typ: types.Float},
 		{Name: "service_latency_avg_seconds", Typ: types.Float},
 		{Name: "service_latency_p99_seconds", Typ: types.Float},
+		{Name: "query", Typ: types.String},
+		{Name: "query_summary", Typ: types.String},
+		{Name: "database", Typ: types.String},
 	},
 }
 
@@ -7515,10 +7640,6 @@ CREATE TABLE crdb_internal.cluster_transaction_statistics (
 			return nil, nil, err
 		}
 
-		s := p.extendedEvalCtx.persistedSQLStats
-		curAggTs := s.ComputeAggregatedTs()
-		aggInterval := s.GetAggregationInterval()
-
 		const numDatums = 6
 		row := make(tree.Datums, numDatums)
 		worker := func(ctx context.Context, pusher rowPusher) error {
@@ -7528,8 +7649,7 @@ CREATE TABLE crdb_internal.cluster_transaction_statistics (
 			}, func(
 				ctx context.Context,
 				statistics *appstatspb.CollectedTransactionStatistics) error {
-
-				aggregatedTs, err := tree.MakeDTimestampTZ(curAggTs, time.Microsecond)
+				aggregatedTs, err := tree.MakeDTimestampTZ(statistics.AggregatedTs, time.Microsecond)
 				if err != nil {
 					return err
 				}
@@ -7547,7 +7667,7 @@ CREATE TABLE crdb_internal.cluster_transaction_statistics (
 				}
 
 				aggInterval := tree.NewDInterval(
-					duration.MakeDuration(aggInterval.Nanoseconds(), 0, 0),
+					duration.MakeDuration(statistics.AggregationInterval.Nanoseconds(), 0, 0),
 					types.DefaultIntervalTypeMetadata)
 
 				row = append(row[:0],

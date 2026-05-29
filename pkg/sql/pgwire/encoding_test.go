@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -28,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/lib/pq/oid"
+	"github.com/stretchr/testify/require"
 )
 
 type encodingTest struct {
@@ -318,6 +321,7 @@ func TestExoticNumericEncodings(t *testing.T) {
 		{apd.New(100000000, 0), []byte{0, 2, 0, 2, 0, 0, 0, 0, 0, 1, 0, 0}},
 		{apd.New(100000000, 0), []byte{0, 3, 0, 2, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0}},
 		{apd.New(100000001, 0), []byte{0, 3, 0, 2, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1}},
+		{apd.New(9999, 0), []byte{0, 1, 0, 0, 0, 0, 0, 0, 0x27, 0x0f}},
 		// Elixir/Postgrex combinations.
 		{apd.New(1234, 0), []byte{0, 2, 0, 0, 0, 0, 0, 0, 0x4, 0xd2, 0, 0}},
 		{apd.New(12340, -1), []byte{0, 2, 0, 0, 0, 0, 0, 1, 0x4, 0xd2, 0, 0}},
@@ -346,6 +350,51 @@ func TestExoticNumericEncodings(t *testing.T) {
 			} else if cmp != 0 {
 				t.Fatalf("%v != %v", d, expected)
 			}
+		})
+	}
+}
+
+func TestInvalidBinaryNumericEncodings(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		name     string
+		encoding []byte
+	}{
+		{
+			name: "negative digit count",
+			// Ndigits=-1, Weight=0, Sign=Pos, Dscale=0.
+			encoding: []byte{0xff, 0xff, 0, 0, 0, 0, 0, 0},
+		},
+		{
+			name: "weight inconsistent with digit count",
+			// Ndigits=1, Weight=-3, Sign=Pos, Dscale=0, Digit[0]=1.
+			encoding: []byte{0, 1, 0xff, 0xfd, 0, 0, 0, 0, 0, 1},
+		},
+		{
+			name: "negative digit",
+			// Ndigits=1, Weight=0, Sign=Pos, Dscale=0, Digit[0]=-1.
+			encoding: []byte{0, 1, 0, 0, 0, 0, 0, 0, 0xff, 0xff},
+		},
+		{
+			name: "digit too large",
+			// Ndigits=1, Weight=0, Sign=Pos, Dscale=0, Digit[0]=10000.
+			encoding: []byte{0, 1, 0, 0, 0, 0, 0, 0, 0x27, 0x10},
+		},
+	}
+
+	ctx := context.Background()
+	evalCtx := eval.MakeTestingEvalContext(nil)
+	var da tree.DatumAlloc
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := pgwirebase.DecodeDatum(
+				ctx, &evalCtx, types.Decimal, pgwirebase.FormatBinary, tc.encoding, &da,
+			)
+			require.Error(t, err)
+			code := pgerror.GetPGCode(err)
+			require.Equal(t, pgcode.InvalidBinaryRepresentation, code, "unexpected pgcode for error: %v", err)
 		})
 	}
 }

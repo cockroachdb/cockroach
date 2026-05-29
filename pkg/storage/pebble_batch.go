@@ -129,6 +129,15 @@ func (wb *writeBatch) clear(key MVCCKey, opts ClearOptions) error {
 	return wb.batch.DeleteSized(wb.buf, opts.ValueSize, nil)
 }
 
+// SingleClearUnversioned implements the Writer interface.
+func (wb *writeBatch) SingleClearUnversioned(key roachpb.Key) error {
+	if len(key) == 0 {
+		return emptyKeyError()
+	}
+	wb.buf = EncodeMVCCKeyToBuf(wb.buf[:0], MVCCKey{Key: key})
+	return wb.batch.SingleDelete(wb.buf, nil)
+}
+
 // SingleClearEngineKey implements the Writer interface.
 func (wb *writeBatch) SingleClearEngineKey(key EngineKey) error {
 	if len(key.Key) == 0 {

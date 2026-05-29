@@ -8,6 +8,7 @@ go_library(
         "admissionpb.go",
         "doc.go",
         "io_threshold.go",
+        "resource_group.go",
     ],
     embed = [":admissionpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb",
@@ -28,6 +29,7 @@ proto_library(
     srcs = [
         "admission_stats.proto",
         "io_threshold.proto",
+        "resource_group.proto",
     ],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
@@ -49,7 +51,10 @@ go_proto_library(
 
 go_test(
     name = "admissionpb_test",
-    srcs = ["io_threshold_test.go"],
+    srcs = [
+        "io_threshold_test.go",
+        "resource_group_test.go",
+    ],
     embed = [":admissionpb"],
     deps = ["@com_github_stretchr_testify//require"],
 )

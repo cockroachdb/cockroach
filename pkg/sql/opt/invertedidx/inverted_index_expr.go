@@ -71,6 +71,9 @@ func NewBoundPreFilterer(typ *types.T, expr tree.TypedExpr) (*PreFilterer, inter
 //     and
 //   - pre-filterer state that can be used by the invertedFilterer operator to
 //     reduce the number of false positives returned by the span expression.
+//
+// TODO(michae2): Pass optimizer_span_limit to constrain prefix columns of
+// multi-column inverted indexes.
 func TryFilterInvertedIndex(
 	ctx context.Context,
 	evalCtx *eval.Context,

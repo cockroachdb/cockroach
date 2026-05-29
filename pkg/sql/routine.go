@@ -262,10 +262,47 @@ func (g *routineGenerator) ResolvedType() *types.T {
 
 // Start is part of the eval.ValueGenerator interface.
 func (g *routineGenerator) Start(ctx context.Context, txn *kv.Txn) (err error) {
+	// SECURITY DEFINER routines push the owner so the body resolves
+	// privileges, ownership, and current_user against the definer. A
+	// DEFINER tail-call replaces the prior push (TCO collapses the outer
+	// frame); an INVOKER tail-call leaves it intact so PL/pgSQL loop
+	// continuations inherit the outer effective user.
+	var restore func()
+	defer func() {
+		if restore != nil {
+			restore()
+		}
+	}()
+	maybePushSecurityDefiner := func() error {
+		if g.expr.SecurityMode != tree.RoutineDefiner {
+			return nil
+		}
+		if g.expr.RoutineOwner.Undefined() {
+			return errors.AssertionFailedf(
+				"routine %q is SECURITY DEFINER but RoutineOwner is unset", g.expr.Name,
+			)
+		}
+		if restore != nil {
+			restore()
+		}
+		restore = g.p.EvalContext().PushEffectiveUser(g.expr.RoutineOwner)
+		return nil
+	}
+	if err := maybePushSecurityDefiner(); err != nil {
+		return err
+	}
 	enabledStepping := false
 	var prevSteppingMode kv.SteppingMode
 	var prevSeqNum enginepb.TxnSeq
 	for {
+		// Check for context cancellation on each iteration. This is necessary
+		// for PLpgSQL loops, which are compiled into recursive continuation
+		// routines that execute via tail-call optimization in this loop. Without
+		// this check, a loop with many iterations can run indefinitely even after
+		// a statement timeout has fired.
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if g.expr.EnableStepping && !enabledStepping {
 			prevSteppingMode = txn.ConfigureStepping(ctx, kv.SteppingEnabled)
 			prevSeqNum = txn.GetReadSeqNum()
@@ -287,6 +324,9 @@ func (g *routineGenerator) Start(ctx context.Context, txn *kv.Txn) (err error) {
 		// Since it's in tail-call position, evaluating it will give the result of
 		// this routine as well.
 		g.reset(ctx, g.p, g.deferredRoutine.expr, g.deferredRoutine.args)
+		if err := maybePushSecurityDefiner(); err != nil {
+			return err
+		}
 	}
 }
 
@@ -373,11 +413,33 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 					return err
 				}
 			}
+			pc := plan.(*planComponents)
+			if pc.flags.IsSet(planFlagIsDDL) {
+				// Reject DDL inside a procedure called from an explicit
+				// transaction. Mixing schema changes with arbitrary post-CALL
+				// statements in the same user transaction is not yet supported.
+				if !g.p.EvalContext().TxnImplicit {
+					return errors.WithHint(
+						pgerror.New(pgcode.FeatureNotSupported,
+							"DDL statements are not allowed in stored procedures called from an explicit transaction"),
+						"call the procedure outside of a BEGIN ... COMMIT block",
+					)
+				}
+				// Safety net: reject DDL in a routine body when the txn iso
+				// still tolerates write skew. The primary upgrade path runs
+				// at CALL planning time via maybeAutoCommitBeforeDDL; this
+				// catches paths the pre-plan walker did not cover (e.g. DDL
+				// inside a nested CALL the outer body walker did not recurse
+				// into).
+				if err := g.p.storedProcTxnState.rejectDDLInRoutineUnderWeakIso(txn); err != nil {
+					return err
+				}
+			}
 			// Run the plan.
 			params := runParams{ctx, g.p.ExtendedEvalContext(), g.p}
 			if statsBuilder != nil {
 				defer func() {
-					flags := plan.(*planComponents).flags
+					flags := pc.flags
 					sqlstats.RecordStatementPhase(latencyRecorder, sqlstats.StatementEnd)
 					if g.p.statsCollector == nil {
 						if buildutil.CrdbTestBuild {
@@ -394,7 +456,6 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 							flags.IsSet(planFlagGeneric),
 							flags.ShouldBeDistributed(),
 							flags.IsSet(planFlagVectorized),
-							flags.IsSet(planFlagImplicitTxn),
 							flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan),
 						).
 						QueryTags(g.p.stmt.QueryTags).
@@ -405,7 +466,7 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 				}()
 			}
 			sqlstats.RecordStatementPhase(latencyRecorder, sqlstats.StatementStartExec)
-			queryStats, err := runPlanInsidePlan(ctx, params, plan.(*planComponents), w, g, stmtForDistSQLDiagram, statsBuilder)
+			queryStats, err := runPlanInsidePlan(ctx, params, pc, w, g, stmtForDistSQLDiagram, statsBuilder)
 			sqlstats.RecordStatementPhase(latencyRecorder, sqlstats.StatementEndExec)
 			if err != nil {
 				statsBuilder.StatementError(err)
@@ -759,6 +820,27 @@ func (a *storedProcTxnStateAccessor) getTxnModes() *tree.TransactionModes {
 		return nil
 	}
 	return a.ex.extraTxnState.storedProcTxnState.txnModes
+}
+
+// rejectDDLInRoutineUnderWeakIso is a runtime safety net: when a DDL plan
+// node is encountered in a routine body and the txn isolation still
+// tolerates write skew, it returns txnSchemaChangeErr. The primary upgrade
+// path runs at CALL planning time via maybeAutoCommitBeforeDDL — this check
+// only fires for cases the pre-plan walker did not handle (most notably
+// DDL inside a nested CALL, where the outer body walker does not recurse).
+//
+// In-place SetIsoLevel cannot succeed here because the txn is already
+// active by the time we reach a body statement, so this method does not
+// attempt an upgrade. It is a no-op for accessors not backed by a
+// connExecutor (e.g. internal SQL).
+func (a *storedProcTxnStateAccessor) rejectDDLInRoutineUnderWeakIso(txn *kv.Txn) error {
+	if a.ex == nil {
+		return nil
+	}
+	if !txn.IsoLevel().ToleratesWriteSkew() {
+		return nil
+	}
+	return txnSchemaChangeErr
 }
 
 // EvalTxnControlExpr produces the side effects of a COMMIT or ROLLBACK

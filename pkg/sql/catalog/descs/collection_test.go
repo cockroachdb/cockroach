@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -1396,6 +1397,90 @@ func TestForceStorageLookupIDs(t *testing.T) {
 			})
 		}
 
+		return nil
+	}))
+}
+
+// TestSystemDatabaseCacheEvictionOnDescriptorNotFound verifies that when
+// getDescriptorByName resolves a system table name to a stale ID via the
+// SystemDatabaseCache and the descriptor at that ID doesn't exist, the stale
+// cache entry is evicted so the next lookup self-heals through KV.
+func TestSystemDatabaseCacheEvictionOnDescriptorNotFound(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	codec := execCfg.Codec
+
+	const fakeName = "_test_evict_stale_cache"
+	const bogusID descpb.ID = 999999
+	nameKey := descpb.NameInfo{
+		ParentID:       keys.SystemDatabaseID,
+		ParentSchemaID: keys.SystemPublicSchemaID,
+		Name:           fakeName,
+	}
+
+	// Write a namespace entry pointing to an ID with no descriptor.
+	require.NoError(t, execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return txn.Put(ctx, catalogkeys.EncodeNameKey(codec, &nameKey), int64(bogusID))
+	}))
+	defer func() {
+		require.NoError(t, execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			_, err := txn.Del(ctx, catalogkeys.EncodeNameKey(codec, &nameKey))
+			return err
+		}))
+	}()
+
+	// First lookup: the cached catalog reader reads the bogus namespace entry
+	// from KV and caches it in the SystemDatabaseCache. getDescriptorsByID then
+	// fails with ErrDescriptorNotFound, which triggers eviction of the stale
+	// cache entry.
+	err := sql.DescsTxn(ctx, &execCfg, func(
+		ctx context.Context, txn isql.Txn, col *descs.Collection,
+	) error {
+		db, err := col.ByName(txn.KV()).Get().Database(ctx, "system")
+		if err != nil {
+			return err
+		}
+		sc, err := col.ByName(txn.KV()).Get().Schema(ctx, db, "public")
+		if err != nil {
+			return err
+		}
+		_, err = col.ByName(txn.KV()).Get().Table(ctx, db, sc, fakeName)
+		return err
+	})
+	require.Error(t, err)
+	require.True(t, errors.Is(err, catalog.ErrDescriptorNotFound))
+
+	// Fix the namespace entry to point to a real system table descriptor.
+	realID := descpb.ID(keys.CommentsTableID)
+	require.NoError(t, execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return txn.Put(ctx, catalogkeys.EncodeNameKey(codec, &nameKey), int64(realID))
+	}))
+
+	// Second lookup: succeeds because the eviction cleared the stale
+	// SystemDatabaseCache entry. Without eviction, the cache would still
+	// return bogusID and this lookup would fail with ErrDescriptorNotFound.
+	require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
+		ctx context.Context, txn isql.Txn, col *descs.Collection,
+	) error {
+		db, err := col.ByName(txn.KV()).Get().Database(ctx, "system")
+		if err != nil {
+			return err
+		}
+		sc, err := col.ByName(txn.KV()).Get().Schema(ctx, db, "public")
+		if err != nil {
+			return err
+		}
+		desc, err := col.ByName(txn.KV()).Get().Table(ctx, db, sc, fakeName)
+		if err != nil {
+			return err
+		}
+		require.Equal(t, realID, desc.GetID())
 		return nil
 	}))
 }

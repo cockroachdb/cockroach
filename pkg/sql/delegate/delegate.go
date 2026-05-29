@@ -129,7 +129,7 @@ func TryDelegate(
 		return d.delegateShowRoleGrants(t)
 
 	case *tree.ShowRoles:
-		return d.delegateShowRoles()
+		return d.delegateShowRolesExtended(t.Options, t.Limit)
 
 	case *tree.ShowSchemas:
 		return d.delegateShowSchemas(t)
@@ -153,7 +153,7 @@ func TryDelegate(
 		return d.delegateShowTransactions(t)
 
 	case *tree.ShowUsers:
-		return d.delegateShowRoles()
+		return d.delegateShowRolesExtended(t.Options, t.Limit)
 
 	case *tree.ShowDefaultSessionVariablesForRole:
 		return d.delegateShowDefaultSessionVariablesForRole(t)

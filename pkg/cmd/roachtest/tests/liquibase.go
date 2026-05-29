@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
 
-var supportedLiquibaseHarnessCommit = "91c42e7644c9db5cc86f6d013a33c43900646e2f"
+var supportedLiquibaseHarnessCommit = "b3313dc8df41a7c24fe8e4f6191dced51758102d"
 
 // This test runs the Liquibase test harness against a single cockroach node.
 func registerLiquibase(r registry.Registry) {
@@ -83,6 +83,19 @@ func registerLiquibase(r registry.Registry) {
 		}
 		if err = c.RunE(ctx, option.WithNodes(node), fmt.Sprintf("cd /mnt/data1/liquibase-test-harness/ && git checkout %s",
 			supportedLiquibaseHarnessCommit)); err != nil {
+			t.Fatal(err)
+		}
+
+		// Patch the createView snapshot fixtures to include a trailing semicolon
+		// in the view definition. CockroachDB now appends a trailing ";" to view
+		// definitions returned by pg_views.definition (matching PostgreSQL), but
+		// the upstream Liquibase test harness fixtures still expect no trailing
+		// semicolon. See #167214 and #167132.
+		if err = c.RunE(ctx, option.WithNodes(node),
+			`sed -i -E 's/("definition": "SELECT[^"]+)(")/\1;\2/' `+
+				`/mnt/data1/liquibase-test-harness/src/main/resources/liquibase/harness/change/expectedSnapshot/cockroachdb/createView.json `+
+				`/mnt/data1/liquibase-test-harness/src/main/resources/liquibase/harness/snapshot/expectedSnapshot/cockroachdb/createView.json`,
+		); err != nil {
 			t.Fatal(err)
 		}
 

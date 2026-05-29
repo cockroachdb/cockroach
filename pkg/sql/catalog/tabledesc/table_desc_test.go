@@ -286,7 +286,6 @@ func TestFixMissingSequenceIdentityRefs(t *testing.T) {
 		name                  string
 		input, expectedOutput descpb.TableDescriptor
 	}
-	defaultExpr := "nextval('sq1')"
 	testData := []testCase{
 		{
 			name: "missing sequence references for identity",
@@ -298,7 +297,7 @@ func TestFixMissingSequenceIdentityRefs(t *testing.T) {
 					ID:                      1,
 					Type:                    types.Int,
 					GeneratedAsIdentityType: catpb.GeneratedAsIdentityType_GENERATED_ALWAYS,
-					DefaultExpr:             &defaultExpr,
+					DefaultExpr:             new(descpb.Expression("nextval('sq1')")),
 					OwnsSequenceIds:         []descpb.ID{23},
 					UsesSequenceIds:         nil,
 				},
@@ -312,7 +311,7 @@ func TestFixMissingSequenceIdentityRefs(t *testing.T) {
 					ID:                      1,
 					Type:                    types.Int,
 					GeneratedAsIdentityType: catpb.GeneratedAsIdentityType_GENERATED_ALWAYS,
-					DefaultExpr:             &defaultExpr,
+					DefaultExpr:             new(descpb.Expression("nextval('sq1')")),
 					OwnsSequenceIds:         []descpb.ID{23},
 					UsesSequenceIds:         []descpb.ID{23},
 				},

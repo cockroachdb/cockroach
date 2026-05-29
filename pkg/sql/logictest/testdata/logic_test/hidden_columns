@@ -94,10 +94,11 @@ CREATE TABLE t1(a INT, b INT, c INT NOT VISIBLE , PRIMARY KEY(b));
 CREATE TABLE t2(b INT NOT VISIBLE, c INT, d INT, PRIMARY KEY (d));
 CREATE TABLE t5(b INT NOT VISIBLE, c INT, d INT, PRIMARY KEY (d), FOREIGN KEY(b) REFERENCES t1(b));
 
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM t2
 ----
-t2  t2_pkey  PRIMARY KEY  PRIMARY KEY (d ASC)  true
+t2  t2_d_not_null  NOT NULL     NOT NULL             true
+t2  t2_pkey        PRIMARY KEY  PRIMARY KEY (d ASC)  true
 
 statement ok
 ALTER TABLE t2 ADD FOREIGN KEY (b) REFERENCES t2
@@ -105,8 +106,9 @@ ALTER TABLE t2 ADD FOREIGN KEY (b) REFERENCES t2
 query TTTTB
 SELECT * FROM [SHOW CONSTRAINTS FROM t2] ORDER BY constraint_name
 ----
-t2  t2_b_fkey  FOREIGN KEY  FOREIGN KEY (b) REFERENCES t2(d)  true
-t2  t2_pkey    PRIMARY KEY  PRIMARY KEY (d ASC)               true
+t2  t2_b_fkey      FOREIGN KEY  FOREIGN KEY (b) REFERENCES t2(d)  true
+t2  t2_d_not_null  NOT NULL     NOT NULL                          true
+t2  t2_pkey        PRIMARY KEY  PRIMARY KEY (d ASC)               true
 
 # adding a foreign key constraint that references a hidden column
 
@@ -123,13 +125,17 @@ ALTER TABLE t3 ALTER PRIMARY KEY USING COLUMNS(b);
 query TTTTB
 SELECT * FROM [SHOW CONSTRAINTS FROM t3] ORDER BY constraint_name
 ----
-t3  t3_c_key  UNIQUE       UNIQUE (c ASC)       true
-t3  t3_pkey   PRIMARY KEY  PRIMARY KEY (b ASC)  true
+t3  t3_b_not_null  NOT NULL     NOT NULL             true
+t3  t3_c_key       UNIQUE       UNIQUE (c ASC)       true
+t3  t3_c_not_null  NOT NULL     NOT NULL             true
+t3  t3_pkey        PRIMARY KEY  PRIMARY KEY (b ASC)  true
 
-query TTTTB
+query TTTTB nosort
 SHOW CONSTRAINTS FROM t4
 ----
-t4  t4_pkey  PRIMARY KEY  PRIMARY KEY (d ASC)  true
+t4  t4_d_not_null  NOT NULL     NOT NULL             true
+t4  t4_e_not_null  NOT NULL     NOT NULL             true
+t4  t4_pkey        PRIMARY KEY  PRIMARY KEY (d ASC)  true
 
 statement ok
 ALTER TABLE t4 ALTER PRIMARY KEY USING COLUMNS(e);
@@ -137,5 +143,7 @@ ALTER TABLE t4 ALTER PRIMARY KEY USING COLUMNS(e);
 query TTTTB
 SELECT * FROM [SHOW CONSTRAINTS FROM t4] ORDER BY constraint_name
 ----
-t4  t4_d_key  UNIQUE       UNIQUE (d ASC)       true
-t4  t4_pkey   PRIMARY KEY  PRIMARY KEY (e ASC)  true
+t4  t4_d_key       UNIQUE       UNIQUE (d ASC)       true
+t4  t4_d_not_null  NOT NULL     NOT NULL             true
+t4  t4_e_not_null  NOT NULL     NOT NULL             true
+t4  t4_pkey        PRIMARY KEY  PRIMARY KEY (e ASC)  true

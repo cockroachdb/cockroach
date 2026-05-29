@@ -54,6 +54,10 @@ import (
 
 const defaultLinkWorkersPerNode = 2
 
+// experimentalCopyLinkFraction is the fraction of overall job progress
+// allocated to the link phase of an ExperimentalCopy restore.
+const experimentalCopyLinkFraction = 0.05
+
 var onlineRestoreLinkWorkers = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"backup.restore.online_worker_count",
@@ -595,7 +599,8 @@ func (r *restoreResumer) maybeCalculateTotalDownloadSpans(
 		return total, nil
 	}
 
-	if err := r.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	if err := r.job.DeprecatedNoTxn().Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 		md.Progress.GetRestore().TotalDownloadRequired = total
 		ju.UpdateProgress(md.Progress)
 		return nil
@@ -762,7 +767,8 @@ func (r *restoreResumer) waitForDownloadToComplete(
 	// either case we can mark the job as done.
 	if total == 0 {
 		r.downloadJobProg = 1.0
-		return r.job.NoTxn().FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+		return r.job.DeprecatedNoTxn().FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
 			return 1.0
 		})
 	}
@@ -784,7 +790,12 @@ func (r *restoreResumer) waitForDownloadToComplete(
 			total = remaining
 		}
 
-		fractionComplete := float32(total-remaining) / float32(total)
+		rawFraction := float32(total-remaining) / float32(total)
+		fractionComplete := rawFraction
+		if details.ExperimentalCopy {
+			fractionComplete = experimentalCopyLinkFraction +
+				rawFraction*(1.0-experimentalCopyLinkFraction)
+		}
 		log.Dev.VInfof(ctx, 1, "restore download phase, %s downloaded, %s remaining of %s total (%.2f complete)",
 			sz(total-remaining), sz(remaining), sz(total), fractionComplete,
 		)
@@ -796,7 +807,8 @@ func (r *restoreResumer) waitForDownloadToComplete(
 		}
 
 		if timeutil.Since(lastProgressUpdate) > time.Minute {
-			if err := r.job.NoTxn().FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+			//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+			if err := r.job.DeprecatedNoTxn().FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
 				return fractionComplete
 			}); err != nil {
 				return err

@@ -147,7 +147,14 @@ func indexForDisplay(
 	}
 
 	if !isPrimary && len(index.StoreColumnNames) > 0 {
-		f.WriteString(" STORING (")
+		// PostgreSQL spells covering-index columns as INCLUDE; emit that
+		// spelling under FmtPGCatalog so pg_get_indexdef output matches
+		// what real PG would return. CockroachDB's parser accepts both.
+		if f.HasFlags(tree.FmtPGCatalog) {
+			f.WriteString(" INCLUDE (")
+		} else {
+			f.WriteString(" STORING (")
+		}
 		for i := range index.StoreColumnNames {
 			if i > 0 {
 				f.WriteString(", ")

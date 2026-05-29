@@ -388,10 +388,39 @@ func registerSysbench(r registry.Registry) {
 						`set cluster setting sql.metrics.statement_details.enabled = false`,
 						`set cluster setting kv.split_queue.enabled = false`,
 						`set cluster setting kv.transaction.write_buffering.enabled = true`,
+						// load_based_rebalancing_interval is still read by the
+						// MMA store rebalancer (mma_store_rebalancer.go) to drive
+						// its periodic loop, so this 10s override remains
+						// meaningful under MMA.
+						//
+						// store_cpu_rebalance_threshold (CPURebalanceThreshold)
+						// is a no-op under MMA: its only consumers are the
+						// legacy StoreRebalancer (disabled when MMA mode is on)
+						// and the LoadConvergence path in TransferLeaseTarget,
+						// which is only reached from that same legacy
+						// rebalancer. MMA uses its own internal overload
+						// classification (mmaprototype/load.go) and does not
+						// read this setting. Kept for now in case MMA is
+						// disabled again; revisit once MMA-default is locked in.
 						`set cluster setting kv.allocator.load_based_rebalancing_interval = '10s'`,
 						`set cluster setting kv.allocator.store_cpu_rebalance_threshold = 0.01`,
 					},
 					useDRPC: true,
+				}
+				return true
+			},
+		},
+		// DRPC-only variant: default cluster settings with DRPC enabled,
+		// to isolate DRPC's performance impact. The baseline for comparison
+		// is sysbench/*/nodes=3/cpu=8 (default settings, no DRPC).
+		{n: 3, cpus: 8,
+			transform: func(opts *sysbenchOptions) bool {
+				if !coreThree(opts.workload) {
+					return false
+				}
+				opts.extra = extraSetup{
+					nameSuffix: "-drpc",
+					useDRPC:    true,
 				}
 				return true
 			},

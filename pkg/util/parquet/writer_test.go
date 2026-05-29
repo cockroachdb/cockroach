@@ -869,3 +869,21 @@ func TestBufferedBytes(t *testing.T) {
 		})
 	}
 }
+
+// TestDefaultDataPageSize is a regression test for #140030. The Apache Arrow
+// parquet library internally uses int32 for buffer size calculations
+// (column_writer.go). If the data page size exceeds MaxInt32, the int64-to-int32
+// cast overflows, producing a negative value passed to bytes.Buffer.Grow(),
+// causing a panic. This test asserts that the default data page size is capped
+// to prevent this overflow.
+func TestDefaultDataPageSize(t *testing.T) {
+	schemaDef, err := NewSchema([]string{"a"}, []*types.T{types.Int})
+	require.NoError(t, err)
+
+	var buf bytes.Buffer
+	writer, err := NewWriter(schemaDef, &buf)
+	require.NoError(t, err)
+	defer func() { _ = writer.Close() }()
+
+	require.LessOrEqual(t, writer.cfg.dataPageSize, int64(math.MaxInt32))
+}

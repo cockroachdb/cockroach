@@ -5,12 +5,13 @@
 
 import keys from "lodash/keys";
 import * as protobuf from "protobufjs/minimal";
-import { Action } from "redux";
+import { Action, Dispatch } from "redux";
 
 import * as protos from "src/js/protos";
 import * as api from "src/util/api";
 import fetchMock from "src/util/fetch-mock";
 
+import { AdminUIState } from "./state";
 import * as uidata from "./uiData";
 
 describe("UIData reducer", function () {
@@ -309,9 +310,10 @@ describe("UIData reducer", function () {
   describe("asynchronous actions", function () {
     let state: uidata.UIDataState;
 
-    const dispatch = (action: Action) => {
+    const dispatchFn = (action: Action) => {
       state = uidata.uiDataReducer(state, action);
     };
+    const dispatch = dispatchFn as unknown as Dispatch<Action>;
 
     const uiKey1 = "a_key";
     const uiObj1 = {
@@ -322,20 +324,14 @@ describe("UIData reducer", function () {
     const uiKey2 = "another_key";
     const uiObj2 = 1234;
 
+    const getState = () => ({ uiData: state }) as AdminUIState;
+
     const saveUIData = function (...values: uidata.KeyValue[]): Promise<void> {
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore
-      return uidata.saveUIData.apply(this, values)(dispatch, () => {
-        return { uiData: state };
-      });
+      return uidata.saveUIData(dispatch, getState, ...values);
     };
 
     const loadUIData = function (...keys: string[]): Promise<void> {
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore
-      return uidata.loadUIData.apply(this, keys)(dispatch, () => {
-        return { uiData: state };
-      });
+      return uidata.loadUIData(dispatch, getState, ...keys);
     };
 
     beforeEach(function () {

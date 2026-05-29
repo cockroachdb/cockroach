@@ -12,7 +12,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
@@ -72,8 +71,7 @@ func TestValidateRecordForProtect(t *testing.T) {
 		},
 	} {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			st := cluster.MakeTestingClusterSettings()
-			require.Equal(t, validateRecordForProtect(context.Background(), tc.r, st,
+			require.Equal(t, validateRecordForProtect(context.Background(), tc.r,
 				&protectedts.TestingKnobs{}), tc.err)
 		})
 

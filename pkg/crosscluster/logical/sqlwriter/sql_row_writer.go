@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -41,40 +42,48 @@ func (s *RowWriter) setOriginTimestamp(ctx context.Context, originTimestamp hlc.
 	})
 }
 
-// DeleteRow deletes a row from the table. It returns errStalePreviousValue
-// if the oldRow argument does not match the value in the local database.
+// DeleteRow deletes a row from the table. It returns ErrStalePreviousValue if
+// the oldRow argument does not match the value in the local database. It
+// returns a ConditionFailedError with OriginTimestampOlderThan set if the
+// previous value matches but the local row has a newer origin timestamp (LWW
+// loser).
 func (s *RowWriter) DeleteRow(
 	ctx context.Context, originTimestamp hlc.Timestamp, oldRow tree.Datums,
 ) error {
-	s.scratchDatums = s.scratchDatums[:0]
-	s.scratchDatums = append(s.scratchDatums, oldRow...)
+	// We use a savepoint because the KV layer may reject the delete with a
+	// ConditionFailedError if the local row has a newer origin timestamp. Without
+	// the savepoint, the rejection would abort the entire transaction.
+	return s.session.Savepoint(ctx, func(ctx context.Context) error {
+		s.scratchDatums = s.scratchDatums[:0]
+		s.scratchDatums = append(s.scratchDatums, oldRow...)
 
-	err := s.setOriginTimestamp(ctx, originTimestamp)
-	if err != nil {
-		return err
-	}
+		err := s.setOriginTimestamp(ctx, originTimestamp)
+		if err != nil {
+			return err
+		}
 
-	rowsAffected, err := s.session.ExecutePrepared(ctx, s.delete, s.scratchDatums)
-	if err != nil {
-		return errors.Wrap(err, "deleting row")
-	}
-	if rowsAffected != 1 {
-		return ErrStalePreviousValue
-	}
-	return nil
+		rowsAffected, err := s.session.ExecutePrepared(ctx, s.delete, s.scratchDatums)
+		if err != nil {
+			return errors.Wrap(err, "deleting row")
+		}
+		if rowsAffected != 1 {
+			return ErrStalePreviousValue
+		}
+		return nil
+	})
 }
 
-// InsertRow inserts a row into the table. It will return an error if the row
-// already exists.
+// InsertRow inserts a row into the table. It returns a ConditionFailedError
+// with OriginTimestampOlderThan set if the row lost a LWW comparison, or
+// ErrStalePreviousValue if the insert's origin timestamp is newer but the row
+// already exists (requiring a read refresh to convert the insert to an update).
 func (s *RowWriter) InsertRow(
 	ctx context.Context, originTimestamp hlc.Timestamp, row tree.Datums,
 ) error {
 	// We use a savepoint here because LWW may reject the insert if it conflicts
 	// with a tombstone or an existing row with a more recent origin timestamp.
 	// Without the savepoint, the LWW rejection would abort the entire
-	// transaction. Updates and deletes do not need savepoints because a conflict
-	// results in zero rows modified, which leaves the transaction in a healthy
-	// state.
+	// transaction.
 	err := s.session.Savepoint(ctx, func(ctx context.Context) error {
 		s.scratchDatums = s.scratchDatums[:0]
 		s.scratchDatums = append(s.scratchDatums, row...)
@@ -93,31 +102,48 @@ func (s *RowWriter) InsertRow(
 		}
 		return nil
 	})
+	// When the insert has a newer origin timestamp but conflicts with an
+	// existing row, the CPUT returns a ConditionFailedError with
+	// HadNewerOriginTimestamp. Return ErrStalePreviousValue so the caller
+	// triggers a read refresh and retries the write as an update.
+	if condErr := (*kvpb.ConditionFailedError)(nil); errors.As(err, &condErr) {
+		if condErr.HadNewerOriginTimestamp {
+			return ErrStalePreviousValue
+		}
+	}
 	return err
 }
 
-// UpdateRow updates a row in the table. It returns errStalePreviousValue
-// if the oldRow argument does not match the value in the local database.
+// UpdateRow updates a row in the table. It returns ErrStalePreviousValue if
+// the oldRow argument does not match the value in the local database. It
+// returns a ConditionFailedError with OriginTimestampOlderThan set if the
+// previous value matches but the local row has a newer origin timestamp (LWW
+// loser).
 func (s *RowWriter) UpdateRow(
 	ctx context.Context, originTimestamp hlc.Timestamp, oldRow tree.Datums, newRow tree.Datums,
 ) error {
-	s.scratchDatums = s.scratchDatums[:0]
-	s.scratchDatums = append(s.scratchDatums, oldRow...)
-	s.scratchDatums = append(s.scratchDatums, newRow...)
+	// We use a savepoint because the KV layer may reject the update with a
+	// ConditionFailedError if the local row has a newer origin timestamp. Without
+	// the savepoint, the rejection would abort the entire transaction.
+	return s.session.Savepoint(ctx, func(ctx context.Context) error {
+		s.scratchDatums = s.scratchDatums[:0]
+		s.scratchDatums = append(s.scratchDatums, oldRow...)
+		s.scratchDatums = append(s.scratchDatums, newRow...)
 
-	err := s.setOriginTimestamp(ctx, originTimestamp)
-	if err != nil {
-		return err
-	}
+		err := s.setOriginTimestamp(ctx, originTimestamp)
+		if err != nil {
+			return err
+		}
 
-	rowsAffected, err := s.session.ExecutePrepared(ctx, s.update, s.scratchDatums)
-	if err != nil {
-		return errors.Wrap(err, "updating row")
-	}
-	if rowsAffected != 1 {
-		return ErrStalePreviousValue
-	}
-	return err
+		rowsAffected, err := s.session.ExecutePrepared(ctx, s.update, s.scratchDatums)
+		if err != nil {
+			return errors.Wrap(err, "updating row")
+		}
+		if rowsAffected != 1 {
+			return ErrStalePreviousValue
+		}
+		return nil
+	})
 }
 
 func NewRowWriter(

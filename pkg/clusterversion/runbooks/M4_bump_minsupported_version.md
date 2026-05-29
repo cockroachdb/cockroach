@@ -400,7 +400,6 @@ Remove from schema-locked-disabled set (around lines 684-686):
 
 **Delete test directories:**
 ```bash
-rm -rf pkg/ccl/logictestccl/tests/local-mixed-25.2/
 rm -rf pkg/sql/logictest/tests/local-mixed-25.2/
 rm -rf pkg/sql/sqlitelogictest/tests/local-mixed-25.2/
 ```
@@ -509,8 +508,7 @@ ALTER TABLE test_tbl_t ADD COLUMN c int AS (test_tbl_f()) stored;
 
 Find all files with local-mixed-25.2 references:
 ```bash
-grep -r "local-mixed-25\.2" pkg/sql/logictest/testdata/logic_test/ \
-     pkg/ccl/logictestccl/testdata/logic_test/ | cut -d: -f1 | sort -u
+grep -r "local-mixed-25\.2" pkg/sql/logictest/testdata/logic_test/ | cut -d: -f1 | sort -u
 ```
 
 For each file, remove local-mixed-25.2 using targeted sed commands:
@@ -540,7 +538,7 @@ The sed commands above only remove the *directives*, not the statements they gua
 **How to find files needing manual review (onlyif only):**
 ```bash
 # Find files that had onlyif with local-mixed-25.2 (these need manual review)
-git diff pkg/sql/logictest/testdata/logic_test/ pkg/ccl/logictestccl/testdata/logic_test/ | \
+git diff pkg/sql/logictest/testdata/logic_test/ | \
   grep -B 2 "^-onlyif config.*local-mixed-25\.2" | \
   grep "^diff --git" | sed 's/.*b\///' | sort -u
 
@@ -552,8 +550,7 @@ git diff pkg/sql/logictest/testdata/logic_test/ pkg/ccl/logictestccl/testdata/lo
 If any files have headers like `# LogicTest: !local-mixed-25.2` that become empty `# LogicTest:`, remove them:
 ```bash
 # Find files with empty LogicTest directives
-grep -l "^# LogicTest:$" pkg/sql/logictest/testdata/logic_test/* \
-     pkg/ccl/logictestccl/testdata/logic_test/*
+grep -l "^# LogicTest:$" pkg/sql/logictest/testdata/logic_test/*
 
 # Remove the empty lines
 sed -i '' '/^# LogicTest:$/d' <file>
@@ -645,12 +642,10 @@ A typical M.4 bump should modify approximately 70-80 files across the 6 commits:
 **Commit 7 (~65 files):**
 1. `pkg/sql/logictest/logictestbase/logictestbase.go` - Config removal
 2. `build/teamcity/cockroach/nightlies/sqllogic_corpus_nightly_impl.sh` - **CRITICAL: Update nightly build loop**
-3. `pkg/ccl/logictestccl/tests/local-mixed-25.2/BUILD.bazel` - Deleted
-4. `pkg/ccl/logictestccl/tests/local-mixed-25.2/generated_test.go` - Deleted
-5. `pkg/sql/logictest/tests/local-mixed-25.2/BUILD.bazel` - Deleted
-6. `pkg/sql/logictest/tests/local-mixed-25.2/generated_test.go` - Deleted
-7. `pkg/sql/sqlitelogictest/tests/local-mixed-25.2/BUILD.bazel` - Deleted
-8. `pkg/sql/sqlitelogictest/tests/local-mixed-25.2/generated_test.go` - Deleted
+3. `pkg/sql/logictest/tests/local-mixed-25.2/BUILD.bazel` - Deleted
+4. `pkg/sql/logictest/tests/local-mixed-25.2/generated_test.go` - Deleted
+5. `pkg/sql/sqlitelogictest/tests/local-mixed-25.2/BUILD.bazel` - Deleted
+6. `pkg/sql/sqlitelogictest/tests/local-mixed-25.2/generated_test.go` - Deleted
 9. ~34 logic test files with skipif/onlyif updates
 10. ~20 generated test files updated by `./dev gen bazel`
 11. `pkg/BUILD.bazel` - Binary file updated
@@ -740,8 +735,7 @@ Expected format:
 **Fix:**
 ```bash
 # Find all references
-grep -r "local-mixed-25\.2" pkg/sql/logictest/testdata/logic_test/ \
-     pkg/ccl/logictestccl/testdata/logic_test/
+grep -r "local-mixed-25\.2" pkg/sql/logictest/testdata/logic_test/
 
 # Remove them with sed (see Commit 7 instructions above)
 ```
@@ -773,8 +767,7 @@ sed -i '' \
 **Fix:**
 ```bash
 # Find files with empty directives
-grep -l "^# LogicTest:$" pkg/sql/logictest/testdata/logic_test/* \
-     pkg/ccl/logictestccl/testdata/logic_test/*
+grep -l "^# LogicTest:$" pkg/sql/logictest/testdata/logic_test/*
 
 # Remove the empty lines
 sed -i '' '/^# LogicTest:$/d' <files>
@@ -983,13 +976,11 @@ git commit -m "logictest: update mixed_version tests to use 25.3 testserver..."
 # Change: for config in local-mixed-25.2 local-mixed-25.3; do
 # To:     for config in local-mixed-25.3; do
 
-rm -rf pkg/ccl/logictestccl/tests/local-mixed-25.2/
 rm -rf pkg/sql/logictest/tests/local-mixed-25.2/
 rm -rf pkg/sql/sqlitelogictest/tests/local-mixed-25.2/
 
 # Remove references from test files
 find pkg/sql/logictest/testdata/logic_test/ \
-     pkg/ccl/logictestccl/testdata/logic_test/ \
      -type f -exec grep -l "local-mixed-25\.2" {} \; | while read file; do
   sed -i '' \
     -e '/^# LogicTest:/s/ !*local-mixed-25\.2//g' \
@@ -1000,7 +991,6 @@ done
 
 # Handle multi-config lines
 find pkg/sql/logictest/testdata/logic_test/ \
-     pkg/ccl/logictestccl/testdata/logic_test/ \
      -type f -exec grep -l "local-mixed-25\.2" {} \; | while read file; do
   sed -i '' \
     -e '/^onlyif config/s/ local-mixed-25\.2//g' \
@@ -1010,7 +1000,7 @@ done
 
 # Remove empty LogicTest directives
 sed -i '' '/^# LogicTest:$/d' pkg/sql/logictest/testdata/logic_test/udf_in_index \
-          pkg/ccl/logictestccl/testdata/logic_test/provisioning
+          pkg/sql/logictest/testdata/logic_test/provisioning
 
 ./dev gen bazel
 git add -A

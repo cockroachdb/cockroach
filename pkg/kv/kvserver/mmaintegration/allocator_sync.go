@@ -58,7 +58,9 @@ type mmaState interface {
 	// MMARebalanceAdvisor for the given existing store and candidates. The
 	// advisor should be later passed to IsInConflictWithMMA to determine if a
 	// given candidate is in conflict with the existing store.
-	BuildMMARebalanceAdvisor(existing roachpb.StoreID, cands []roachpb.StoreID) *mmaprototype.MMARebalanceAdvisor
+	BuildMMARebalanceAdvisor(
+		ctx context.Context, existing roachpb.StoreID, cands []roachpb.StoreID,
+	) *mmaprototype.MMARebalanceAdvisor
 	// IsInConflictWithMMA is called by the allocator sync to determine if the
 	// given candidate is in conflict with the existing store.
 	IsInConflictWithMMA(ctx context.Context, cand roachpb.StoreID, advisor *mmaprototype.MMARebalanceAdvisor, cpuOnly bool) bool
@@ -158,7 +160,7 @@ func (as *AllocatorSync) NonMMAPreTransferLease(
 ) SyncChangeID {
 	var isMMARegistered bool
 	var mmaChange mmaprototype.ExternalRangeChange
-	if kvserverbase.LoadBasedRebalancingModeIsMMA(&as.st.SV) {
+	if kvserverbase.LoadBasedRebalancingModeIsMMA(ctx, as.st) {
 		change := convertLeaseTransferToMMA(desc, usage, amp, transferFrom, transferTo)
 		mmaChange, isMMARegistered = as.mmaAllocator.RegisterExternalChange(ctx, localStoreID, change)
 	}
@@ -190,7 +192,7 @@ func (as *AllocatorSync) NonMMAPreChangeReplicas(
 ) SyncChangeID {
 	var isMMARegistered bool
 	var mmaChange mmaprototype.ExternalRangeChange
-	if kvserverbase.LoadBasedRebalancingModeIsMMA(&as.st.SV) {
+	if kvserverbase.LoadBasedRebalancingModeIsMMA(ctx, as.st) {
 		var err error
 		change, err := convertReplicaChangeToMMA(desc, usage, amp, changes, leaseholderStoreID)
 		if err != nil {

@@ -9,10 +9,11 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/apache/arrow/go/v11/parquet"
 	"github.com/apache/arrow/go/v11/parquet/file"
 	"github.com/apache/arrow/go/v11/parquet/schema"
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -21,6 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
 
@@ -143,9 +148,10 @@ type parquetRowProducer struct {
 	currentRowInGroup int64 // Current position within row group
 
 	// Column selection - which Parquet columns to actually read
-	columnsToRead []int                          // Parquet column indices to read
-	numColumns    int                            // Total number of columns in Parquet file
-	columnReaders map[int]file.ColumnChunkReader // Maps Parquet column index -> reader
+	columnsToRead     []int                            // Parquet column indices to read
+	numColumns        int                              // Total number of columns in Parquet file
+	columnReaders     map[int]file.ColumnChunkReader   // Maps Parquet column index -> reader
+	listColumnReaders map[int]*parquetListColumnReader // Stateful readers for LIST columns (per row group)
 
 	// Cached schema metadata (populated once per file, used for all batches)
 	columnMetadata map[int]*parquetColumnMetadata // Maps Parquet column index -> metadata
@@ -212,36 +218,81 @@ func newParquetRowProducer(
 	// Count total rows across all row groups for progress tracking
 	totalRows := int64(0)
 	totalRowGroups := reader.NumRowGroups()
-	for i := 0; i < totalRowGroups; i++ {
+	for i := range totalRowGroups {
 		totalRows += reader.RowGroup(i).NumRows()
 	}
 
 	numColumns := reader.MetaData().Schema.NumColumns()
 	batchSize := int64(defaultParquetBatchSize)
 	parquetSchema := reader.MetaData().Schema
-	// Determine which columns to read
-	var columnsToRead []int
-	if importCtx == nil {
-		// No import context (test mode) - read all columns
-		columnsToRead = make([]int, numColumns)
-		for i := 0; i < numColumns; i++ {
-			columnsToRead[i] = i
-		}
-	} else {
-		// Determine which Parquet columns to read based on target table columns
-		columnsToRead, err = determineColumnsToRead(importCtx, parquetSchema)
+
+	// Build columnMetadata for every leaf before deciding which leaves to
+	// read. A Parquet LIST<T> column is encoded as a 3-level nested group:
+	//
+	//   tags        (group, LIST-annotated)   <- the name the user wrote
+	//     list      (repeated group)
+	//       element (leaf, the actual T data) <- what Schema.Column(i) returns
+	//
+	// The Apache Arrow Parquet API only exposes leaves through
+	// Schema.Column(i) and Schema.NumColumns(), so the LIST column at leaf
+	// index i shows up as "element", not "tags". determineColumnsToRead
+	// matches Parquet column names against the IMPORT target list (e.g.
+	// "tags"), so it needs the group-node name, not the leaf name, or it
+	// would silently skip every LIST column.
+	//
+	// parquetSchema.ColumnRoot(i) returns the top-level group/leaf node
+	// (the user-visible name) for any leaf — flat, LIST, MAP, or otherwise —
+	// so we use it to populate columnMetadata[i].columnName unconditionally.
+	//
+	// detectListColumn errors (for unsupported nested structures like
+	// LIST<LIST<T>> or MAP) are stored in columnMetadata[i].detectionErr
+	// and only surfaced later if the user actually imports that column.
+	// Deferring lets a file with unsupported columns still open and be
+	// partially imported, as long as the user does not target those
+	// columns.
+	columnMetadata := make(map[int]*parquetColumnMetadata)
+	for colIdx := range numColumns {
+		col := parquetSchema.Column(colIdx)
+		name := parquetSchema.ColumnRoot(colIdx).Name()
+
+		listInfo, err := detectListColumn(parquetSchema, colIdx)
 		if err != nil {
-			return nil, err
+			columnMetadata[colIdx] = &parquetColumnMetadata{
+				columnName:   name,
+				detectionErr: err,
+			}
+			continue
+		}
+
+		if listInfo != nil {
+			columnMetadata[colIdx] = &parquetColumnMetadata{
+				columnName:    name,
+				logicalType:   listInfo.elementLogicalType,
+				convertedType: listInfo.elementConvertedType,
+				isList:        true,
+				listInfo:      listInfo,
+			}
+		} else {
+			columnMetadata[colIdx] = &parquetColumnMetadata{
+				columnName:    name,
+				logicalType:   deriveLogicalType(col),
+				convertedType: col.ConvertedType(),
+			}
 		}
 	}
 
-	// Cache schema metadata once per file for all columns we'll read.
-	columnMetadata := make(map[int]*parquetColumnMetadata)
-	for _, colIdx := range columnsToRead {
-		col := parquetSchema.Column(colIdx)
-		columnMetadata[colIdx] = &parquetColumnMetadata{
-			logicalType:   deriveLogicalType(col),
-			convertedType: col.ConvertedType(), // Keep for reference/debugging
+	// Determine which columns to read.
+	var columnsToRead []int
+	if importCtx == nil {
+		// No import context (test mode) - read all columns.
+		columnsToRead = make([]int, numColumns)
+		for i := range numColumns {
+			columnsToRead[i] = i
+		}
+	} else {
+		columnsToRead, err = determineColumnsToRead(importCtx, parquetSchema, columnMetadata)
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -320,6 +371,7 @@ func (p *parquetRowProducer) advanceToNextRowGroup() error {
 		p.rowsInGroup = 0
 		p.currentRowInGroup = 0
 		p.columnReaders = nil
+		p.listColumnReaders = nil
 		return nil
 	}
 
@@ -328,14 +380,30 @@ func (p *parquetRowProducer) advanceToNextRowGroup() error {
 	p.rowsInGroup = rowGroup.NumRows()
 	p.currentRowInGroup = 0
 
-	// Set up column chunk readers only for columns we need to read
+	// Set up column chunk readers only for columns we need to read.
+	// listColumnReaders is allocated lazily; most files have no LIST columns.
 	p.columnReaders = make(map[int]file.ColumnChunkReader, len(p.columnsToRead))
+	p.listColumnReaders = nil
 	for _, colIdx := range p.columnsToRead {
 		colReader, err := rowGroup.Column(colIdx)
 		if err != nil {
-			return errors.Wrapf(err, "failed to get column reader for column %d", colIdx)
+			return errors.Wrapf(err, "column reader for column %d", colIdx)
 		}
 		p.columnReaders[colIdx] = colReader
+
+		// Create stateful readers for LIST columns so that overflow
+		// entries are preserved across fillBuffer calls.
+		metadata := p.columnMetadata[colIdx]
+		if metadata.isList {
+			listReader, err := newParquetListColumnReader(colReader, metadata.listInfo)
+			if err != nil {
+				return errors.Wrapf(err, "creating LIST reader for column %d", colIdx)
+			}
+			if p.listColumnReaders == nil {
+				p.listColumnReaders = make(map[int]*parquetListColumnReader)
+			}
+			p.listColumnReaders[colIdx] = listReader
+		}
 	}
 
 	return nil
@@ -360,17 +428,26 @@ func (p *parquetRowProducer) fillBuffer() error {
 			p.rowsInGroup, p.currentRowInGroup)
 	}
 
-	// Read rowsToRead values only from columns we need
+	// Read rowsToRead values only from columns we need.
 	for _, colIdx := range p.columnsToRead {
-		colReader := p.columnReaders[colIdx]
+		metadata := p.columnMetadata[colIdx]
 
-		// Read a batch of typed values from this column
-		batch, err := p.readBatchFromColumn(colReader, colIdx, rowsToRead)
+		var batch *parquetColumnBatch
+		var err error
+		if metadata.isList {
+			// LIST columns use a stateful reader that handles repetition levels,
+			// reassembles per-row element arrays, and buffers overflow rows
+			// across fillBuffer calls.
+			batch, err = p.listColumnReaders[colIdx].ReadBatch(rowsToRead)
+		} else {
+			batch, err = p.readBatchFromColumn(p.columnReaders[colIdx], colIdx, rowsToRead)
+		}
 		if err != nil {
-			return errors.Wrapf(err, "failed to read batch from column %d", colIdx)
+			return errors.Wrapf(err, "reading batch from column %q (index %d)",
+				p.columnMetadata[colIdx].columnName, colIdx)
 		}
 
-		// Store the batch for this column (sparse array - only needed columns populated)
+		// Store the batch for this column (sparse array - only needed columns populated).
 		p.columnBatches[colIdx] = batch
 	}
 
@@ -447,6 +524,11 @@ func (p *parquetRowProducer) Err() error {
 	// This prevents silent data loss similar to the issue fixed in PR #161318
 	// for Avro imports, where storage errors could be missed if only cached
 	// errors were checked.
+	//
+	// LIST columns are covered transparently: the file.ColumnChunkReader that
+	// backs each parquetListColumnReader is also registered in p.columnReaders
+	// when the row group is opened (see advanceToNextRowGroup), so the loop
+	// below observes streaming errors for both flat and LIST columns.
 	for _, colReader := range p.columnReaders {
 		if err := colReader.Err(); err != nil {
 			return err
@@ -484,11 +566,12 @@ func (p *parquetRowProducer) validateAndBuildColumnMapping(
 ) (map[string]int, error) {
 	parquetSchema := p.reader.MetaData().Schema
 
-	// Build a map of Parquet column names (lowercase) for quick lookup
+	// Build a map of Parquet column names (lowercase) for quick lookup.
+	// columnMetadata.columnName is the user-visible name (group name for
+	// LIST columns, leaf name otherwise) populated at file open.
 	parquetColNames := make(map[string]bool)
-	for parquetColIdx := 0; parquetColIdx < parquetSchema.NumColumns(); parquetColIdx++ {
-		parquetCol := parquetSchema.Column(parquetColIdx)
-		parquetColNames[strings.ToLower(parquetCol.Name())] = true
+	for parquetColIdx := range parquetSchema.NumColumns() {
+		parquetColNames[strings.ToLower(p.columnMetadata[parquetColIdx].columnName)] = true
 	}
 	fieldNameToIdx := make(map[string]int)
 
@@ -545,24 +628,46 @@ func (p *parquetRowProducer) validateAndBuildColumnMapping(
 	// Validate type compatibility ONLY for columns we're actually reading.
 	for _, parquetColIdx := range p.columnsToRead {
 		parquetCol := parquetSchema.Column(parquetColIdx)
-		parquetColName := parquetCol.Name()
+		metadata := p.columnMetadata[parquetColIdx]
+		colName := metadata.columnName
 
-		// Find corresponding table column index in visibleCols
-		tableColIdx, found := fieldNameToIdx[strings.ToLower(parquetColName)]
+		// Find corresponding table column index in visibleCols.
+		tableColIdx, found := fieldNameToIdx[strings.ToLower(colName)]
 		if !found {
 			// This shouldn't happen since columnsToRead was determined based on
 			// the target columns, but handle it defensively.
 			continue
 		}
 
-		// Get target column type from the table descriptor
+		// Get target column type from the table descriptor.
 		targetCol := visibleCols[tableColIdx]
 		targetType := targetCol.GetType()
 
-		// Validate type compatibility using cached metadata
-		metadata := p.columnMetadata[parquetColIdx]
-		if err := validateWithLogicalType(parquetCol.PhysicalType(), metadata.logicalType, targetType); err != nil {
-			return nil, errors.Wrapf(err, "column %q", parquetColName)
+		// Validate type compatibility using cached metadata.
+		if metadata.isList {
+			// LIST columns validate against the target's array contents type;
+			// a JSONB target is accepted unconditionally since any supported
+			// primitive list can be serialized to JSON.
+			if targetType.Family() == types.JsonFamily {
+				continue
+			}
+			if targetType.Family() != types.ArrayFamily {
+				return nil, errors.Newf(
+					"column %q: Parquet LIST requires an ARRAY or JSONB target type, got %s",
+					colName, targetType.Family())
+			}
+			elementTargetType := targetType.ArrayContents()
+			if err := validateWithLogicalType(
+				parquetCol.PhysicalType(), metadata.logicalType, elementTargetType,
+			); err != nil {
+				return nil, errors.Wrapf(err, "column %q (LIST element type)", colName)
+			}
+		} else {
+			if err := validateWithLogicalType(
+				parquetCol.PhysicalType(), metadata.logicalType, targetType,
+			); err != nil {
+				return nil, errors.Wrapf(err, "column %q", colName)
+			}
 		}
 	}
 
@@ -591,7 +696,9 @@ func (p *parquetRowProducer) validateAndBuildColumnMapping(
 // determineColumnsToRead determines which Parquet column indices need to be read
 // based on the target table columns. Returns the list of Parquet column indices.
 func determineColumnsToRead(
-	importCtx *parallelImportContext, parquetSchema *schema.Schema,
+	importCtx *parallelImportContext,
+	parquetSchema *schema.Schema,
+	columnMetadata map[int]*parquetColumnMetadata,
 ) ([]int, error) {
 	// This function is only called when importCtx is non-nil.
 	// In test mode, newParquetRowProducer receives nil importCtx and reads all columns.
@@ -614,31 +721,41 @@ func determineColumnsToRead(
 		}
 	}
 
-	// Find which Parquet columns match our target columns
+	// Find which Parquet columns match our target columns. columnMetadata
+	// already holds the user-visible column name for every leaf (set via
+	// parquetSchema.ColumnRoot in newParquetRowProducer), so it works for
+	// LIST columns whose leaf name differs from the group name.
 	var columnsToRead []int
-	for parquetColIdx := 0; parquetColIdx < parquetSchema.NumColumns(); parquetColIdx++ {
-		parquetCol := parquetSchema.Column(parquetColIdx)
-		parquetColName := strings.ToLower(parquetCol.Name())
+	for parquetColIdx := range parquetSchema.NumColumns() {
+		meta := columnMetadata[parquetColIdx]
+		parquetColName := strings.ToLower(meta.columnName)
 
-		// If this Parquet column is in our target set, we need to read it
-		if targetColSet[parquetColName] {
-			// Validate that the column doesn't have nested or repeated structures.
-			// Definition level > 1 indicates nested/repeated data (arrays, maps, etc.)
-			// which we don't currently support.
-			maxDefLevel := parquetCol.MaxDefinitionLevel()
-			if maxDefLevel > 1 {
-				return nil,
-					errors.UnimplementedErrorf(
-						errors.IssueLink{
-							IssueURL: build.MakeIssueURL(162543),
-							Detail:   "support parquet nested types for import",
-						}, "column %q has nested or repeated structure (definition level %d); "+
-							"only simple required and optional columns are supported",
-						parquetColName, maxDefLevel)
-
-			}
-			columnsToRead = append(columnsToRead, parquetColIdx)
+		if !targetColSet[parquetColName] {
+			continue
 		}
+
+		// Surface any error deferred from detectListColumn at file-open
+		// time. We only fail here, after confirming the user actually
+		// wants this column. Wrap with the user-visible column name so
+		// the message identifies the column the user requested rather
+		// than an internal parquet group name.
+		if meta.detectionErr != nil {
+			return nil, errors.Wrapf(meta.detectionErr, "column %q", meta.columnName)
+		}
+
+		parquetCol := parquetSchema.Column(parquetColIdx)
+		maxDefLevel := parquetCol.MaxDefinitionLevel()
+		if maxDefLevel > 1 && !meta.isList {
+			// detectListColumn already accepted any supported LIST column. A
+			// definition level above 1 on a non-LIST leaf means MAPs or deeper
+			// nesting, which the importer does not yet handle.
+			return nil, unimplemented.NewWithIssueDetailf(162543,
+				"parquet-nested-type",
+				"column %q has nested or repeated structure (definition level %d); "+
+					"only simple required/optional columns and single-level LISTs are supported",
+				parquetColName, maxDefLevel)
+		}
+		columnsToRead = append(columnsToRead, parquetColIdx)
 	}
 
 	return columnsToRead, nil
@@ -647,10 +764,10 @@ func determineColumnsToRead(
 // parquetRowConsumer implements importRowConsumer for Parquet files.
 type parquetRowConsumer struct {
 	importCtx      *parallelImportContext
-	fieldNameToIdx map[string]int                 // Maps Parquet column name -> table column index
+	fieldNameToIdx map[string]int                 // Maps Parquet column name -> full-table visible column index
 	columnMetadata map[int]*parquetColumnMetadata // Maps column index -> metadata (for conversion)
 	reader         *file.Reader                   // Parquet file reader (for accessing schema)
-	colMapping     []int                          // Precomputed mapping: parquet col idx -> table col idx (-1 if not mapped)
+	colMapping     []int                          // Precomputed mapping: parquet col idx -> target col idx (-1 if not mapped)
 }
 
 // newParquetRowConsumer creates a consumer that converts Parquet rows to datums.
@@ -661,27 +778,42 @@ func newParquetRowConsumer(
 	strict bool,
 ) (*parquetRowConsumer, error) {
 
-	// Validate schema and build column mapping
+	// Validate schema and build column mapping.
 	fieldNameToIdx, err := producer.validateAndBuildColumnMapping(importCtx)
 	if err != nil {
 		return nil, err
 	}
 
+	// fieldNameToIdx maps column names to full-table visibleCols indices, which
+	// is what type validation needs. DatumRowConverter, however, sizes Datums
+	// and VisibleColTypes to len(targetCols) when an explicit column list is
+	// given, so colMapping must store target-column indices (positions in
+	// targetCols) to avoid out-of-bounds access when a non-last column is
+	// excluded. When no explicit list is given (or in test mode without a
+	// tableDesc), target-idx and full-table-idx coincide and fieldNameToIdx is
+	// already what we want.
+	nameToTargetIdx := fieldNameToIdx
+	if importCtx.tableDesc != nil && len(importCtx.targetCols) > 0 {
+		nameToTargetIdx = make(map[string]int, len(importCtx.targetCols))
+		for targetIdx, colName := range importCtx.targetCols {
+			nameToTargetIdx[strings.ToLower(string(colName))] = targetIdx
+		}
+	}
+
 	// Precompute column mapping to avoid hash lookups in the hot path (FillDatums).
-	// For each Parquet column index, store the corresponding table column index (-1 if not mapped).
+	// For each Parquet column index, store the corresponding target column index (-1 if not mapped).
 	numCols := producer.reader.MetaData().Schema.NumColumns()
 	colMapping := make([]int, numCols)
-	for parquetColIdx := 0; parquetColIdx < numCols; parquetColIdx++ {
-		col := producer.reader.MetaData().Schema.Column(parquetColIdx)
-		parquetColName := col.Name()
-		if tableColIdx, found := fieldNameToIdx[strings.ToLower(parquetColName)]; found {
-			colMapping[parquetColIdx] = tableColIdx
-		} else {
-			colMapping[parquetColIdx] = -1
-			if strict {
-				return nil, errors.Newf(
-					"column %q in Parquet file is not in the target table", parquetColName)
-			}
+	for parquetColIdx := range numCols {
+		colName := producer.columnMetadata[parquetColIdx].columnName
+		if targetIdx, found := nameToTargetIdx[strings.ToLower(colName)]; found {
+			colMapping[parquetColIdx] = targetIdx
+			continue
+		}
+		colMapping[parquetColIdx] = -1
+		if strict {
+			return nil, errors.Newf(
+				"column %q in Parquet file is not in the target table", colName)
 		}
 	}
 
@@ -707,45 +839,45 @@ func (c *parquetRowConsumer) FillDatums(
 
 	rowIdx := view.rowIndex
 
-	// For each column in the Parquet file, find the corresponding table column
-	for parquetColIdx := 0; parquetColIdx < view.numColumns; parquetColIdx++ {
-		// Skip columns we didn't read
+	// For each column in the Parquet file, find the corresponding target column.
+	for parquetColIdx := range view.numColumns {
+		// Skip columns we didn't read.
 		batch := view.batches[parquetColIdx]
 		if batch == nil {
 			continue
 		}
 
-		// Use precomputed mapping to find table column index (O(1) array access)
-		tableColIdx := c.colMapping[parquetColIdx]
-		if tableColIdx < 0 {
-			// Column not mapped to the target table; skip it.
-			// In strict mode, newParquetRowConsumer would have
-			// already rejected unmapped columns.
+		// Use precomputed mapping to find target column index (O(1) array access).
+		targetColIdx := c.colMapping[parquetColIdx]
+		if targetColIdx < 0 {
+			// Column not in the target column set; skip it.
 			continue
 		}
 
-		// Extract value from batch
+		// Extract value from batch.
 		value, isNull, err := batch.GetValueAt(int(rowIdx))
 		if err != nil {
 			return newImportRowError(err, fmt.Sprintf("row %d", rowNum), rowNum)
 		}
 
-		// Convert to datum
+		// Convert to datum.
 		var datum tree.Datum
 		if isNull {
 			datum = tree.DNull
 		} else {
-			// Convert Parquet value to datum using unified LogicalType conversion
-			targetType := conv.VisibleColTypes[tableColIdx]
+			targetType := conv.VisibleColTypes[targetColIdx]
 			metadata := c.columnMetadata[parquetColIdx]
-			datum, err = convertWithLogicalType(value, targetType, metadata)
+			if metadata.isList {
+				datum, err = assembleListDatum(value, targetType, metadata)
+			} else {
+				datum, err = convertWithLogicalType(value, targetType, metadata)
+			}
 			if err != nil {
 				return newImportRowError(err, fmt.Sprintf("row %d", rowNum), rowNum)
 			}
 		}
 
-		// Set datum in converter
-		conv.Datums[tableColIdx] = datum
+		conv.Datums[targetColIdx] = datum
 	}
 
 	// Set any nil datums to DNull (for columns not in Parquet file)
@@ -757,4 +889,156 @@ func (c *parquetRowConsumer) FillDatums(
 	}
 
 	return nil
+}
+
+// assembleListDatum converts a slice of Parquet element values into a
+// tree.Datum. The target type determines the output format:
+//   - ArrayFamily: builds a tree.DArray, converting each element via
+//     convertWithLogicalType.
+//   - JsonFamily: builds a JSONB array, converting each element via
+//     parquetElementToJSON.
+func assembleListDatum(
+	value any, targetType *types.T, metadata *parquetColumnMetadata,
+) (tree.Datum, error) {
+	elements, ok := value.([]any)
+	if !ok {
+		return nil, errors.AssertionFailedf("expected []any for LIST column, got %T", value)
+	}
+
+	switch targetType.Family() {
+	case types.ArrayFamily:
+		return assembleListAsArray(elements, targetType, metadata)
+	case types.JsonFamily:
+		return assembleListAsJSON(elements, metadata)
+	default:
+		return nil, errors.AssertionFailedf(
+			"LIST columns can only target ARRAY or JSONB types, got %s; should have been "+
+				"rejected during schema validation", targetType.Family())
+	}
+}
+
+// assembleListAsArray builds a tree.DArray from Parquet element values,
+// converting each element with convertWithLogicalType.
+func assembleListAsArray(
+	elements []any, targetType *types.T, metadata *parquetColumnMetadata,
+) (tree.Datum, error) {
+	elementType := targetType.ArrayContents()
+	arr := tree.NewDArray(elementType)
+	for i, elem := range elements {
+		if elem == nil {
+			if err := arr.Append(tree.DNull); err != nil {
+				return nil, errors.Wrapf(err, "appending LIST element %d", i)
+			}
+			continue
+		}
+		elemDatum, err := convertWithLogicalType(elem, elementType, metadata)
+		if err != nil {
+			return nil, errors.Wrapf(err, "converting LIST element %d", i)
+		}
+		if err := arr.Append(elemDatum); err != nil {
+			return nil, errors.Wrapf(err, "appending LIST element %d", i)
+		}
+	}
+	return arr, nil
+}
+
+// assembleListAsJSON builds a JSONB array datum from Parquet element values,
+// converting each element with parquetElementToJSON.
+func assembleListAsJSON(elements []any, metadata *parquetColumnMetadata) (tree.Datum, error) {
+	ab := json.NewArrayBuilder(len(elements))
+	for i, elem := range elements {
+		if elem == nil {
+			ab.Add(json.NullJSONValue)
+			continue
+		}
+		j, err := parquetElementToJSON(elem, metadata)
+		if err != nil {
+			return nil, errors.Wrapf(err, "converting LIST element %d to JSON", i)
+		}
+		ab.Add(j)
+	}
+	return tree.NewDJSON(ab.Build()), nil
+}
+
+// parquetElementToJSON converts a single raw Parquet element value to a
+// json.JSON value, honoring the element's logical type annotation so that
+// dates, decimals, UUIDs, intervals, and timestamps land in JSON in their
+// human-readable form rather than as raw physical values.
+//
+// The conversion routes through convertWithLogicalType (which interprets the
+// logical-type metadata) and then tree.AsJSON (which knows how to format each
+// datum kind as JSON). EnumLogicalType is short-circuited to a JSON string
+// because convertWithLogicalType's enum path needs an enum-typed target
+// descriptor, which is not available in a JSONB context.
+func parquetElementToJSON(elem any, metadata *parquetColumnMetadata) (json.JSON, error) {
+	// EnumLogicalType: treat the BYTE_ARRAY payload as a plain string.
+	if b, ok := elem.([]byte); ok {
+		if _, isEnum := metadata.logicalType.(schema.EnumLogicalType); isEnum {
+			return json.FromString(string(b)), nil
+		}
+	}
+
+	targetType, err := jsonElementTargetType(elem, metadata)
+	if err != nil {
+		return nil, err
+	}
+	datum, err := convertWithLogicalType(elem, targetType, metadata)
+	if err != nil {
+		return nil, err
+	}
+	return tree.AsJSON(datum, sessiondatapb.DataConversionConfig{}, time.UTC)
+}
+
+// jsonElementTargetType picks a CRDB type to feed convertWithLogicalType when
+// the surrounding LIST is targeting JSONB. The type is chosen so that
+// convertWithLogicalType's logical-type branches fire correctly (e.g. a UUID
+// logical type needs types.Uuid as a hint to pick the convertUuid* path) and
+// its physical-type fallbacks produce a sensible datum (e.g. plain int32 with
+// no logical type becomes DInt rather than DDecimal).
+//
+// Each branch listed below mirrors one of the typed branches inside
+// convertWithLogicalType. Logical-type cases come first so they win over the
+// raw element-type fallback when both would apply.
+func jsonElementTargetType(elem any, metadata *parquetColumnMetadata) (*types.T, error) {
+	switch metadata.logicalType.(type) {
+	case schema.StringLogicalType:
+		return types.String, nil
+	case schema.JSONLogicalType:
+		return types.Jsonb, nil
+	case schema.UUIDLogicalType:
+		return types.Uuid, nil
+	case schema.IntervalLogicalType:
+		return types.Interval, nil
+	case schema.DateLogicalType:
+		return types.Date, nil
+	case *schema.DecimalLogicalType:
+		return types.Decimal, nil
+	case *schema.TimestampLogicalType:
+		return types.TimestampTZ, nil
+	case *schema.TimeLogicalType:
+		return types.Time, nil
+	}
+	switch elem.(type) {
+	case bool:
+		return types.Bool, nil
+	case int32, int64:
+		return types.Int, nil
+	case float32, float64:
+		return types.Float, nil
+	case []byte:
+		// Unannotated BYTE_ARRAY defaults to text, matching the flat-path
+		// behavior in convertBytesBasedOnTargetType. Bytes ride through to
+		// the resulting JSON string verbatim with no UTF-8 validation, so
+		// non-UTF-8 inputs (e.g. {0xff}) reach the target unchanged. Callers
+		// with genuinely binary data should target an ARRAY<BYTES> column
+		// (which routes through convertBytesBasedOnTargetType's BytesFamily
+		// branch) or use FIXED_LEN_BYTE_ARRAY, which defaults to bytes
+		// below.
+		return types.String, nil
+	case parquet.FixedLenByteArray:
+		return types.Bytes, nil
+	case parquet.Int96:
+		return types.TimestampTZ, nil
+	}
+	return nil, errors.AssertionFailedf("unsupported element type %T for JSON conversion", elem)
 }

@@ -169,7 +169,13 @@ func JobCoordinatorID(
 		return 0, err
 	}
 	if row == nil {
-		return 0, errors.Errorf("coordinator not found for job %d", jobID)
+		return 0, NewJobNotFoundError(jobID)
+	}
+	if row[0] == tree.DNull {
+		return 0, errors.Mark(
+			errors.Newf("job %d is not currently claimed by any node", jobID),
+			errJobNotClaimed,
+		)
 	}
 	coordinatorID, ok := row[0].(*tree.DInt)
 	if !ok {

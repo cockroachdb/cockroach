@@ -1093,6 +1093,33 @@ var importDataTests = []importDataTest{
 		},
 	},
 	{
+		name:   "unsigned byte escapes",
+		create: `b bytes`,
+		typ:    "PGCOPY",
+		data:   `\200\377\x80\xFF`,
+		query: map[string][][]string{
+			`SELECT encode(b, 'hex') from t`: {{"80ff80ff"}},
+		},
+	},
+	{
+		name:   "utf8 text escapes",
+		create: `s string`,
+		typ:    "PGCOPY",
+		data:   `\xC3\xA9`,
+		query: map[string][][]string{
+			`SELECT encode(s::BYTES, 'hex') from t`: {{"c3a9"}},
+		},
+	},
+	{
+		name:   "copy done marker",
+		create: `i int8, s string`,
+		typ:    "PGCOPY",
+		data:   "1\tSTR\n\\.\n2\tignored",
+		query: map[string][][]string{
+			`SELECT * from t`: {{"1", "STR"}},
+		},
+	},
+	{
 		name:   "normal",
 		create: `i int8, s string`,
 		typ:    "PGCOPY",
@@ -1890,6 +1917,12 @@ func setupTestImportCSVStmt(
 	skip.UnderShort(t)
 	skip.UnderRace(t, "takes >1min under race")
 
+	// The test isn't validating these batch sizes, but extreme metamorphic
+	// values (e.g. 1) cause the package to time out. Raise them to a floor that
+	// still exercises batching code paths.
+	t.Cleanup(row.TestingSetDatumRowConverterBatchSize(10))
+	t.Cleanup(row.TestingRaiseDefaultKVBatchSize(10))
+
 	const nodes = 3
 
 	numFiles = nodes + 2
@@ -1908,6 +1941,7 @@ func setupTestImportCSVStmt(
 	sqlDB = sqlutils.MakeSQLRunner(conn)
 	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.elastic_control.enabled = false`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.row_count_validation.mode = 'off'`)
 
 	testFiles = makeCSVData(t, numFiles, rowsPerFile, nodes, rowsPerRaceFile)
 	if util.RaceEnabled {
@@ -2105,6 +2139,7 @@ func TestImportCSVStmt(t *testing.T) {
 			sqlDB.Exec(t, fmt.Sprintf(`SET DATABASE = %s`, intodb))
 
 			var unused string
+			var nullableUnused gosql.NullString
 			var restored struct {
 				rows, idx, bytes int
 			}
@@ -2121,7 +2156,7 @@ func TestImportCSVStmt(t *testing.T) {
 				return
 			}
 			sqlDB.QueryRow(t, query).Scan(
-				&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.bytes, &unused,
+				&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.bytes, &nullableUnused,
 			)
 
 			jobPrefix := fmt.Sprintf(`IMPORT INTO %s.public.t`, intodb)
@@ -6362,7 +6397,10 @@ CREATE TABLE t (
 			{"1", "1"}, {"2", "2"}, {"3", "3"},
 		})
 		sqlDB.CheckQueryResults(t, `SELECT constraint_name, validated from [SHOW CONSTRAINTS FROM t] ORDER BY 1;`, [][]string{
-			{"check_crdb_internal_x_shard_16", "true"}, {"t_pkey", "true"},
+			{"check_crdb_internal_x_shard_16", "true"},
+			{"t_crdb_internal_x_shard_16_not_null", "true"},
+			{"t_pkey", "true"},
+			{"t_rowid_not_null", "true"},
 		})
 	})
 }

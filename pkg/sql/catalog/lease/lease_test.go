@@ -688,7 +688,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	// try to acquire at a bogus version to make sure we don't get back a lease we
 	// already had.
 	_, err = t.acquireMinVersion(1, tableDesc.GetID(), tableDesc.GetVersion()+123)
-	if !testutils.IsError(err, "descriptor is being dropped") {
+	if !errors.Is(err, catalog.ErrDescriptorDropped) {
 		t.Fatalf("got a different error than expected: %v", err)
 	}
 }
@@ -797,7 +797,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 
 	// Ensure that dropped descriptors cannot be acquired.
 	_, err = acquire(ctx, s, tableDesc.GetID())
-	if !testutils.IsError(err, "descriptor is being dropped") {
+	if !errors.Is(err, catalog.ErrDescriptorDropped) {
 		t.Fatalf("got a different error than expected: %v", err)
 	}
 
@@ -819,7 +819,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 
 	// Now we shouldn't be able to acquire any more.
 	_, err = acquire(ctx, s, tableDesc.GetID())
-	if !testutils.IsError(err, "descriptor is being dropped") {
+	if !errors.Is(err, catalog.ErrDescriptorDropped) {
 		t.Fatalf("got a different error than expected: %v", err)
 	}
 	// Validate we can read the descriptor before the drop.
@@ -3029,9 +3029,16 @@ SELECT * FROM t1;
 			_, err = conn.ExecContext(ctx, `
 COMMIT;`,
 			)
+			// The commit deadline can be detected at two layers:
+			//   - RETRY_COMMIT_DEADLINE_EXCEEDED: server-side EndTxn deadline check.
+			//   - ABORT_REASON_CLIENT_REJECT: txnCoordSender heartbeat observed the
+			//     txn record was aborted before EndTxn was sent (see #168540).
+			// Both outcomes prove the txn was correctly prevented from committing.
 			if err == nil {
 				err = errors.New("Failing did not get expected error")
-			} else if !testutils.IsError(err, "pq: restart transaction: TransactionRetryWithProtoRefreshError: TransactionRetryError: retry txn \\(RETRY_COMMIT_DEADLINE_EXCEEDED -.*") {
+			} else if !testutils.IsError(err, "pq: restart transaction: TransactionRetryWithProtoRefreshError: "+
+				"(TransactionRetryError: retry txn \\(RETRY_COMMIT_DEADLINE_EXCEEDED -.*"+
+				"|TransactionAbortedError\\(ABORT_REASON_CLIENT_REJECT\\).*)") {
 				err = errors.Wrap(err, "Failed unexpected error")
 			} else {
 				err = nil
@@ -3850,7 +3857,7 @@ func TestLeaseManagerLockedTimestampConcurrent(t *testing.T) {
 				sql := fmt.Sprintf("CREATE TABLE %s(n int PRIMARY KEY)\n", objectName)
 				if _, err := conn.ExecContext(ctx, sql); err != nil {
 					if isCancellationError(err) {
-						return nil
+						return err
 					}
 					panic(err)
 				}
@@ -3872,7 +3879,7 @@ func TestLeaseManagerLockedTimestampConcurrent(t *testing.T) {
 				sql := fmt.Sprintf("SELECT * FROM %s", objectName)
 				if _, err := conn.ExecContext(ctx, sql); err != nil {
 					if isCancellationError(err) {
-						return nil
+						return err
 					}
 					panic(err)
 				}
@@ -3887,7 +3894,7 @@ func TestLeaseManagerLockedTimestampConcurrent(t *testing.T) {
 					sql := fmt.Sprintf("SELECT * FROM %s", objectName)
 					if _, err := conn.ExecContext(ctx, sql); err != nil {
 						if isCancellationError(err) {
-							return nil
+							return err
 						}
 						panic(err)
 					}
@@ -3904,7 +3911,7 @@ func TestLeaseManagerLockedTimestampConcurrent(t *testing.T) {
 				sql := fmt.Sprintf("ALTER TABLE %s ADD COLUMN n2 int", objectName)
 				if _, err := conn.ExecContext(ctx, sql); err != nil {
 					if isCancellationError(err) {
-						return nil
+						return err
 					}
 					panic(err)
 				}
@@ -3916,7 +3923,9 @@ func TestLeaseManagerLockedTimestampConcurrent(t *testing.T) {
 		grp.GoCtx(createThreads)
 		grp.GoCtx(readThreads)
 		grp.GoCtx(modifyThreads)
-		require.NoError(t, grp.Wait())
+		if err := grp.Wait(); err != nil && !isCancellationError(err) {
+			t.Fatalf("unexpected error from ctxgroup: %v", err)
+		}
 	})
 }
 
@@ -4575,4 +4584,114 @@ func TestLeaseInternalLookupCtxWithLocked(t *testing.T) {
 	closeChannels()
 	require.NoError(t, grp.Wait())
 
+}
+
+// TestObserverNotificationFromRangefeed validates the range feed will generate a notification
+// even if the version is cached via another method.
+func TestObserverNotificationFromRangefeed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	proceedRangefeed := make(chan struct{})
+	knobs := lease.ManagerTestingKnobs{
+		TestingDescriptorUpdateEvent: func(desc *descpb.Descriptor) error {
+			_, _, name, _, err := descpb.GetDescriptorMetadata(desc)
+			if err != nil {
+				return err
+			}
+			if name == "t" {
+				<-proceedRangefeed
+			}
+			return nil
+		},
+	}
+	// Use 2 nodes.
+	nodes := serverutils.StartCluster(t, 2, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLLeaseManager: &knobs,
+			},
+		},
+	})
+	defer nodes.Stopper().Stop(context.Background())
+
+	db0 := nodes.Server(0).SQLConn(t)
+	sql0 := sqlutils.MakeSQLRunner(db0)
+	lm1 := nodes.Server(1).LeaseManager().(*lease.Manager)
+
+	sql0.Exec(t, "CREATE TABLE t (k INT PRIMARY KEY)")
+	var tableID descpb.ID
+	sql0.QueryRow(t, "SELECT 't'::regclass::int").Scan(&tableID)
+
+	// Acquire a lease on Node 1 and hold it.
+	ctx := context.Background()
+	ld, err := lm1.Acquire(ctx, lm1.GetReadTimestamp(ctx, nodes.Server(1).Clock().Now()), tableID)
+	require.NoError(t, err)
+
+	// Register observer on Node 1.
+	// The observer will release the lease when it sees a new version.
+	obs := &testObserverRelease{
+		notified:  make(chan descpb.DescriptorVersion, 100),
+		targetID:  tableID,
+		lease:     ld,
+		startTime: nodes.Server(1).Clock().Now(),
+	}
+	_ = lm1.RegisterLeaseObserver(obs)
+	// Run schema change on Node 0 in a goroutine because it will block
+	// on the two-version invariant waiting for Node 1 to release version 1.
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := db0.Exec("ALTER TABLE t ADD COLUMN v INT")
+		errCh <- err
+	}()
+	// Wait until version 2 is committed on Node 0 and visible to Node 1 via historical read.
+	// This silently pulls version 2 into Node 1's cache.
+	testutils.SucceedsSoon(t, func() error {
+		now := nodes.Server(0).Clock().Now()
+		_, err := nodes.Server(1).SQLConn(t).Query(fmt.Sprintf("SELECT * FROM t AS OF SYSTEM TIME '%s'", now.AsOfSystemTime()))
+		return err
+	})
+	// Release the rangefeed.
+	close(proceedRangefeed)
+	// Wait for rangefeed on Node 1 to see the update and notify the observer.
+	// If the observer is notified, it will release the lease, allowing the
+	// ALTER TABLE to finish.
+	timeout := time.After(30 * time.Second)
+	select {
+	case v := <-obs.notified:
+		t.Logf("Observer notified of version %d", v)
+		if v < 2 {
+			t.Errorf("expected version >= 2, got %d", v)
+		}
+	case <-timeout:
+		t.Fatal("timed out waiting for observer notification on Node 1")
+	}
+	require.NoError(t, <-errCh)
+}
+
+// testObserverRelease is a mock observer similar to schema feed,
+// that will release a version on notification.
+type testObserverRelease struct {
+	notified  chan descpb.DescriptorVersion
+	targetID  descpb.ID
+	lease     lease.LeasedDescriptor
+	once      sync.Once
+	startTime hlc.Timestamp
+}
+
+// OnNewVersion implements Observer.
+func (o *testObserverRelease) OnNewVersion(
+	ctx context.Context, id descpb.ID, version descpb.DescriptorVersion, timestamp hlc.Timestamp,
+) {
+	// Only start emitting after a selected timestamp.
+	if timestamp.Less(o.startTime) {
+		return
+	}
+	if id != o.targetID {
+		return
+	}
+	o.once.Do(func() {
+		if o.lease != nil {
+			o.lease.Release(ctx)
+		}
+	})
+	o.notified <- version
 }

@@ -92,7 +92,7 @@ FROM pg_indexes
 WHERE tablename = 'store_columns_test' AND indexname = 'idx1'
 ----
 tablename           indexname  indexdef
-store_columns_test  idx1       CREATE INDEX idx1 ON public.store_columns_test USING btree (c1 ASC, c2 ASC) USING HASH STORING (c3) WITH (bucket_count=16)
+store_columns_test  idx1       CREATE INDEX idx1 ON public.store_columns_test USING btree (c1 ASC, c2 ASC) USING HASH INCLUDE (c3) WITH (bucket_count=16)
 
 # Verify that the CREATE INDEX statement from pg_indexes can be executed.
 # First, save the index definition.
@@ -112,7 +112,7 @@ FROM pg_indexes
 WHERE tablename = 'store_columns_test' AND indexname = 'idx1'
 ----
 tablename           indexname  indexdef
-store_columns_test  idx1       CREATE INDEX idx1 ON public.store_columns_test USING btree (c1 ASC, c2 ASC) USING HASH STORING (c3) WITH (bucket_count=16)
+store_columns_test  idx1       CREATE INDEX idx1 ON public.store_columns_test USING btree (c1 ASC, c2 ASC) USING HASH INCLUDE (c3) WITH (bucket_count=16)
 
 statement ok
 DROP TABLE store_columns_test
@@ -1125,34 +1125,26 @@ CREATE TABLE t_hash_pre_split (
   b INT
 );
 
-skipif config 3node-tenant-default-configs
+skipif config 3node-tenant-default-configs local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
 query TITTT retry,rowsort
 SELECT table_name, table_id, index_name, start_key, end_key
   FROM [SHOW RANGES FROM DATABASE test WITH INDEXES]
  WHERE table_name = 't_hash_pre_split'
 ----
-t_hash_pre_split  134  t_hash_pre_split_pkey  /Table/129/3/7  /Max
+t_hash_pre_split  134  t_hash_pre_split_pkey  /Table/82  /Max
 
 statement ok
 CREATE INDEX t_hash_pre_split_idx_b ON t_hash_pre_split (b) USING HASH WITH (bucket_count=8);
 
-skipif config 3node-tenant-default-configs
+skipif config 3node-tenant-default-configs local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
 query TITTT colnames,retry,rowsort
 SELECT table_name, table_id, index_name, start_key, end_key
   FROM [SHOW RANGES FROM DATABASE test WITH INDEXES]
  WHERE table_name = 't_hash_pre_split'
 ----
-table_name        table_id  index_name              start_key       end_key
-t_hash_pre_split  134       t_hash_pre_split_pkey   /Table/129/3/7  /Table/134/2
-t_hash_pre_split  134       t_hash_pre_split_idx_b  /Table/134/2    /Table/134/2/0
-t_hash_pre_split  134       t_hash_pre_split_idx_b  /Table/134/2/0  /Table/134/2/1
-t_hash_pre_split  134       t_hash_pre_split_idx_b  /Table/134/2/1  /Table/134/2/2
-t_hash_pre_split  134       t_hash_pre_split_idx_b  /Table/134/2/2  /Table/134/2/3
-t_hash_pre_split  134       t_hash_pre_split_idx_b  /Table/134/2/3  /Table/134/2/4
-t_hash_pre_split  134       t_hash_pre_split_idx_b  /Table/134/2/4  /Table/134/2/5
-t_hash_pre_split  134       t_hash_pre_split_idx_b  /Table/134/2/5  /Table/134/2/6
-t_hash_pre_split  134       t_hash_pre_split_idx_b  /Table/134/2/6  /Table/134/2/7
-t_hash_pre_split  134       t_hash_pre_split_idx_b  /Table/134/2/7  /Table/134/3
+table_name        table_id  index_name              start_key  end_key
+t_hash_pre_split  134       t_hash_pre_split_pkey   /Table/82  /Max
+t_hash_pre_split  134       t_hash_pre_split_idx_b  /Table/82  /Max
 
 subtest test_default_bucket_count
 

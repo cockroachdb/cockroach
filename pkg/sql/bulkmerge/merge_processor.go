@@ -366,7 +366,7 @@ func (m *bulkMergeProcessor) mergeSSTs(
 	}
 	defer destStore.Close()
 	destFileAllocator := bulksst.NewExternalFileAllocator(destStore, m.spec.OutputStorage.URI,
-		m.flowCtx.Cfg.DB.KV().Clock())
+		m.flowCtx.Cfg.DB.KV().Clock(), m.flowCtx.NodeID.SQLInstanceID())
 
 	writer, err := newExternalStorageWriter(
 		ctx,

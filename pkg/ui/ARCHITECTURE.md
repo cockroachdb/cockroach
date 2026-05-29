@@ -181,3 +181,62 @@ export const SchedulesPage: React.FC = () => {
 ### What remains
 
 A small number of components (approximately 13) still use the `connect()` pattern. When modifying these files, prefer converting to hooks (`useSelector`, `useDispatch`, and SWR hooks) rather than extending the legacy pattern. The data fetching should move to an SWR hook in `cluster-ui/src/api/`, and the db-console wrapper should become a thin functional component.
+
+---
+
+## Testing
+
+The UI workspaces use three test layers:
+
+| Layer | Where | Stack | What it covers |
+|-------|-------|-------|----------------|
+| Component tests | `*.spec.tsx` next to the source file | Jest + React Testing Library (RTL) | A single component rendered with props. No data fetching. |
+| Page tests | `*.spec.tsx` next to the source file | Jest + RTL | A page-level component composed with its children. SWR hooks are mocked to inject fixture data. |
+| End-to-end | `e2e-tests/cypress/e2e/` | Cypress | A real `cockroach` single-node cluster, real browser, real network. See `e2e-tests/README.md`. |
+
+Component and page tests share the same file suffix (`.spec.tsx`) and Jest config — they differ only in scope and whether they mock SWR. Util and API tests (`*.spec.{ts,tsx}`, e.g. `utils.spec.ts`, `*Api.spec.ts`) are plain Jest tests without rendering; use `.ts` for pure-logic tests and `.tsx` only when the test renders JSX.
+
+### When to mock SWR hooks
+
+**Component tests don't fetch data**, so there's nothing to mock — render the component with the props you want and assert directly.
+
+```tsx
+render(<Dropdown items={defaultItems} onChange={jest.fn()}>Select</Dropdown>);
+expect(screen.getByText("Select")).toBeInTheDocument();
+```
+
+**Page tests — mock the SWR hook** so the page renders against a fixture. Use `jest.spyOn` on the hook the page calls and return the full SWR response shape:
+
+```tsx
+jest.spyOn(utils, "useSwrWithClusterId").mockReturnValue({
+  data: allSchedulesFixture,
+  isLoading: false,
+  error: null,
+  mutate: null,
+  isValidating: false,
+});
+render(
+  <MemoryRouter>
+    <SchedulesPage {...props} />
+  </MemoryRouter>,
+);
+```
+
+Page tests typically need `MemoryRouter` because hooks like `useHistory` / `useLocation` run during render.
+
+### Cypress
+
+Cypress runs against a real single-node cluster with the `movr` database — no mocking. Structural tests are under `cypress/e2e/pages/` and are run in a nightly TeamCity job.
+
+Cypress tests can also be run locally when in the cockroachdb repo.
+Make sure you have a cockroach instance running, and create a user by running the following in SQL shell
+
+```{sql}
+CREATE USER cypress WITH PASSWORD 'tests';
+```
+
+Then, under `pkg/ui/workspaces/e2e-tests` directory, run
+
+```{shell}
+pnpm cy:debug
+```

@@ -62,7 +62,7 @@ const generateSeriesLegend = (
     colorBox.style.marginRight = "12px";
 
     const label = document.createElement("span");
-    label.textContent = series.label || "";
+    label.textContent = typeof series.label === "string" ? series.label : "";
 
     const dataValue = uPlot.data[index][idx];
     const value = document.createElement("div");

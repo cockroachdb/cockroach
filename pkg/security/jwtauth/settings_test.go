@@ -210,6 +210,39 @@ func TestValidateJWTAuthGroupClaim(t *testing.T) {
 	}
 }
 
+// JWTAuthClaim setting validation (simple names and JSON Pointers)
+func TestValidateJWTAuthClaim(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	cases := []struct {
+		name    string
+		val     string
+		wantErr bool
+	}{
+		{"empty_default", "", false},
+		{"simple_sub", "sub", false},
+		{"simple_email", "email", false},
+		{"simple_custom", "preferred_username", false},
+		{"pointer_one_segment", "/email", false},
+		{"pointer_two_segments", "/user/name", false},
+		{"pointer_k8s_style", "/kubernetes.io/serviceaccount/uid", false},
+		{"pointer_max_segments", "/a/b/c/d/e/f/g/h/i/j", false},
+		{"pointer_exceeds_max", "/a/b/c/d/e/f/g/h/i/j/k", true},
+		{"pointer_bare_slash", "/", true},
+		{"pointer_empty_segment", "/user//name", true},
+		{"pointer_trailing_slash", "/user/name/", true},
+		{"pointer_leading_empty", "//user/name", true},
+		{"pointer_rfc6901_escapes", "/a~1b/c~0d", false},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			validateStringSetting(t, JWTAuthClaim, tc.val, tc.wantErr)
+		})
+	}
+}
+
 // JWTAuthUserinfoGroupKey setting validation
 func TestValidateJWTAuthUserinfoGroupKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()

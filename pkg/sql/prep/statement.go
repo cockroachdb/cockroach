@@ -58,6 +58,14 @@ type Statement struct {
 	// Costs tracks the costs of previously optimized custom and generic plans.
 	Costs planCosts
 
+	// CustomPlanCount tracks the number of times a custom plan was used when
+	// executing this prepared statement.
+	CustomPlanCount int64
+
+	// GenericPlanCount tracks the number of times a generic plan was used when
+	// executing this prepared statement.
+	GenericPlanCount int64
+
 	// refCount keeps track of the number of references to this PreparedStatement.
 	// New references are registered through incRef().
 	// Once refCount hits 0 (through calls to decRef()), the following memAcc is

@@ -363,7 +363,16 @@ type webhookCSVBuffer struct {
 var _ BatchBuffer = (*webhookCSVBuffer)(nil)
 
 // Append implements the BatchBuffer interface.
-func (cb *webhookCSVBuffer) Append(ctx context.Context, key []byte, value []byte, _ attributes) {
+func (cb *webhookCSVBuffer) Append(
+	ctx context.Context, key []byte, value []byte, attrs attributes,
+) {
+	if len(cb.bytes) == 0 && len(attrs.csvColumnHeader) > 0 {
+		cb.bytes = append(cb.bytes, attrs.csvColumnHeader...)
+		cb.bytes = append(cb.bytes, '\n')
+	}
+	if cb.messageCount >= 1 {
+		cb.bytes = append(cb.bytes, '\n')
+	}
 	cb.bytes = append(cb.bytes, value...)
 	cb.messageCount += 1
 }

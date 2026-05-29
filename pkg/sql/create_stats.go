@@ -940,7 +940,7 @@ func createStatsDefaultColumns(
 		// inverted index stats, and json type columns should respect the
 		// sql.stats.non_indexed_json_histograms.enabled cluster setting.
 		if idx.IsPartial() {
-			expr, err := parser.ParseExpr(idx.GetPredicate())
+			expr, err := parser.ParseExpr(string(idx.GetPredicate()))
 			if err != nil {
 				return nil, err
 			}
@@ -1131,7 +1131,9 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) (r
 			// job progress to coerce out the correct error type. If the update succeeds
 			// then return the original error, otherwise return this error instead so
 			// it can be cleaned up at a higher level.
-			if jobErr := r.job.NoTxn().FractionProgressed(ctx, func(
+			//
+			//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+			if jobErr := r.job.DeprecatedNoTxn().FractionProgressed(ctx, func(
 				ctx context.Context, _ jobspb.ProgressDetails,
 			) float32 {
 				// The job failed so the progress value here doesn't really matter.
@@ -1144,7 +1146,7 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) (r
 		}
 
 		return nil
-	}, isql.WithPriority(admissionpb.BulkNormalPri)); err != nil {
+	}, isql.WithPriority(admissionpb.BulkLowPri)); err != nil {
 		return err
 	}
 

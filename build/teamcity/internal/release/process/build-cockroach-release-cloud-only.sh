@@ -6,7 +6,7 @@
 # included in the /LICENSE file.
 
 
-set -euxo pipefail
+set -euo pipefail
 
 dir="$(dirname $(dirname $(dirname $(dirname $(dirname "${0}")))))"
 source "$dir/release/teamcity-support.sh"
@@ -16,11 +16,23 @@ version=$(grep -v "^#" "$dir/../pkg/build/version.txt" | head -n1)
 if [[ -z "${DRY_RUN}" ]] ; then
   gcr_staged_repository="us-docker.pkg.dev/releases-prod/cockroachdb-staged-releases/cockroach"
   gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb/cockroach"
-  gcr_credentials="$GOOGLE_COCKROACH_CLOUD_IMAGES_COCKROACHDB_CREDENTIALS"
 else
   gcr_staged_repository="us-docker.pkg.dev/releases-dev-356314/cockroachdb-staged-releases/cockroach"
   gcr_repository="us-docker.pkg.dev/releases-dev-356314/cockroachdb-staged-releases/cockroach-cloud-only"
-  gcr_credentials="$GCS_CREDENTIALS_DEV"
+fi
+
+# With WIF (GitHub Actions), credentials are handled via the environment.
+# With TeamCity, use the JSON key env vars.
+gcr_staged_credentials=""
+gcr_credentials=""
+if [[ -z "${CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE:-}" ]]; then
+  if [[ -z "${DRY_RUN}" ]] ; then
+    gcr_staged_credentials="$GCS_CREDENTIALS_PROD"
+    gcr_credentials="$GOOGLE_COCKROACH_CLOUD_IMAGES_COCKROACHDB_CREDENTIALS"
+  else
+    gcr_staged_credentials="$GCS_CREDENTIALS_DEV"
+    gcr_credentials="$GCS_CREDENTIALS_DEV"
+  fi
 fi
 tc_end_block "Variable Setup"
 

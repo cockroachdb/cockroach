@@ -74,6 +74,10 @@ const PauseRequestExplained = "pausing due to error; use RESUME JOB to try to pr
 // knows or finds out it no longer has a job lease.
 var errJobLeaseNotHeld = errors.New("job lease not held")
 
+// errJobNotClaimed is a sentinel error for when a job exists but is not
+// currently claimed by any node (i.e. claim_instance_id is NULL).
+var errJobNotClaimed = errors.New("job not claimed")
+
 // InvalidStateError is the error returned when the desired operation is
 // invalid given the job's current state.
 type InvalidStateError struct {

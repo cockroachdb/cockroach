@@ -6,13 +6,13 @@
 import React from "react";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
-import { LoginAPIState } from "oss/src/redux/login";
+import { LoginPageState } from "oss/src/views/login/loginPage";
 import { Button } from "src/components";
 
 const OIDC_LOGIN_PATH = "oidc/v1/login";
 const OIDC_LOGIN_PATH_WITH_JWT = "oidc/v1/login?jwt";
 
-const OIDCLoginButton = ({ loginState }: { loginState: LoginAPIState }) => {
+const OIDCLoginButton = ({ loginState }: { loginState: LoginPageState }) => {
   return (
     <a href={OIDC_LOGIN_PATH}>
       <Button
@@ -29,7 +29,7 @@ const OIDCLoginButton = ({ loginState }: { loginState: LoginAPIState }) => {
 
 const OIDCLogin: React.FC<
   {
-    loginState: LoginAPIState;
+    loginState: LoginPageState;
   } & RouteComponentProps
 > = props => {
   const oidcAutoLoginQuery = new URLSearchParams(props.location.search).get(
@@ -46,7 +46,7 @@ const OIDCLogin: React.FC<
 
 const OIDCGenerateJWTAuthToken: React.FC<
   {
-    loginState: LoginAPIState;
+    loginState: LoginPageState;
   } & RouteComponentProps
 > = props => {
   if (props.loginState.oidcGenerateJWTAuthTokenEnabled) {

@@ -54,7 +54,11 @@ func handleSchemaChangeWorkloadError(ctx context.Context, err error) error {
 			return err
 		}
 		// Context was not cancelled - genuine workload failure.
-		return registry.ErrorWithOwner(registry.OwnerSQLFoundations, errors.Wrapf(err, "schema change workload failed"))
+		return registry.ErrorWithOwner(
+			registry.OwnerSQLFoundations,
+			errors.Wrapf(err, "schema change workload failed"),
+			registry.WithTitleOverride("schema_change_workload_failure"),
+		)
 	}
 	return err
 }
@@ -154,7 +158,8 @@ func backupRestoreRoundTrip(
 	m.Go(func(ctx context.Context) error {
 		testUtils, err := setupBackupRestoreTestUtils(
 			ctx, t, c, testRNG,
-			withMock(sp.mock), withOnlineRestore(sp.onlineRestore), withCompaction(!sp.onlineRestore),
+			withMock(sp.mock), withOnlineRestore(sp.onlineRestore),
+			withCompaction(!sp.onlineRestore), withClusterSettings(envOption),
 		)
 		if err != nil {
 			return err

@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype/mmasnappb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -189,6 +190,13 @@ func (a *allocatorState) shouldLogUnregisteredMetrics() bool {
 
 func (a *allocatorState) LoadSummaryForAllStores(ctx context.Context) string {
 	return a.cs.loadSummaryForAllStores(ctx)
+}
+
+// ClusterStateSnapshot implements the Allocator interface.
+func (a *allocatorState) ClusterStateSnapshot() (*mmasnappb.ClusterStateSnapshot, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.cs.Snapshot()
 }
 
 // SetStore implements the Allocator interface.
@@ -418,6 +426,18 @@ const (
 const ignoreLoadThresholdAndHigherGraceDuration = 5 * time.Minute
 const ignoreHigherThanLoadThresholdGraceDuration = 8 * time.Minute
 
+// persistentOverloadThreshold is the minimum duration a store must be
+// continuously overloaded before detailed (Infof-level) logging is triggered.
+const persistentOverloadThreshold = 30 * time.Minute
+
+// detailedLogInterval is the minimum time between detailed log bursts for a
+// single persistently overloaded store.
+const detailedLogInterval = 30 * time.Minute
+
+// outerLogInterval is the minimum time between Infof emissions of the
+// rebalanceStores outer-loop narrative.
+const outerLogInterval = 10 * time.Minute
+
 // SafeFormat implements the redact.SafeFormatter interface.
 func (i ignoreLevel) SafeFormat(w redact.SafePrinter, _ rune) {
 	switch i {
@@ -511,7 +531,8 @@ func sortTargetCandidateSetAndPick(
 	overloadedDim LoadDimension,
 	rng *rand.Rand,
 	maxFractionPendingThreshold float64,
-	failLogger func(shedResult),
+	failLogger func(context.Context, shedResult),
+	ml mmaLogger,
 ) roachpb.StoreID {
 	if loadThreshold <= loadNoChange {
 		panic("loadThreshold must be > loadNoChange")
@@ -553,7 +574,7 @@ func sortTargetCandidateSetAndPick(
 		if !diversityScoresAlmostEqual(bestDiversity, cand.diversityScore) {
 			// Have a set of candidates with the best diversity.
 			if s := formatCandidatesLog(ctx, cands.candidates[i:], overloadedDim); s != "" {
-				log.KvDistribution.VEventf(ctx, 3, "discarding candidates due to lower diversity score: %s", s)
+				ml.logf(ctx, 3, "discarding candidates due to lower diversity score: %s", s)
 			}
 			break
 		}
@@ -585,7 +606,7 @@ func sortTargetCandidateSetAndPick(
 				// pending changes. We will wait for those to have no pending changes
 				// before we consider later sets.
 				if s := formatCandidatesLog(ctx, cands.candidates[i:], overloadedDim); s != "" {
-					log.KvDistribution.VEventf(ctx, 3,
+					ml.logf(ctx, 3,
 						"candidate with pending changes was discarded, discarding remaining candidates with higher load: %s", s)
 				}
 				break
@@ -599,7 +620,7 @@ func sortTargetCandidateSetAndPick(
 			} else if ignoreLevel < ignoreHigherThanLoadThreshold || overloadedDim == NumLoadDimensions {
 				// Past the lowestLoad set. We don't care about these.
 				if s := formatCandidatesLog(ctx, cands.candidates[i:], overloadedDim); s != "" {
-					log.KvDistribution.VEventf(ctx, 3,
+					ml.logf(ctx, 3,
 						"discarding candidates with higher load than lowestLoadSet(%v): %s", lowestLoadSet, s)
 				}
 				break
@@ -610,7 +631,7 @@ func sortTargetCandidateSetAndPick(
 		}
 		if cand.sls > loadThreshold {
 			if s := formatCandidatesLog(ctx, cands.candidates[i:], overloadedDim); s != "" {
-				log.KvDistribution.VEventf(ctx, 3,
+				ml.logf(ctx, 3,
 					"discarding candidates with higher load than loadThreshold(%v): %s", loadThreshold, s)
 			}
 			break
@@ -625,8 +646,8 @@ func sortTargetCandidateSetAndPick(
 			if cand.maxFractionPendingIncrease > epsilon && discardedCandsHadNoPendingChanges {
 				discardedCandsHadNoPendingChanges = false
 			}
-			if log.ExpensiveLogEnabled(ctx, 3) {
-				log.KvDistribution.VEventf(ctx, 3,
+			if ml.V(ctx, 3) {
+				ml.logf(ctx, 3,
 					"candidate store %v was discarded due to (nls=%t overloadDim=%t pending_thresh=%t): sls=%v", cand.StoreID,
 					candDiscardedByNLS, candDiscardedByOverloadDim, candDiscardedByPendingThreshold, cand.storeLoadSummary)
 			}
@@ -636,8 +657,8 @@ func sortTargetCandidateSetAndPick(
 		j++
 	}
 	if j == 0 {
-		log.KvDistribution.VEventf(ctx, 3, "sortTargetCandidateSetAndPick: no candidates due to load")
-		failLogger(noCandidateDueToLoad)
+		ml.logf(ctx, 3, "sortTargetCandidateSetAndPick: no candidates due to load")
+		failLogger(ctx, noCandidateDueToLoad)
 		return 0
 	}
 	lowestLoadSet = cands.candidates[0].sls
@@ -668,8 +689,8 @@ func sortTargetCandidateSetAndPick(
 	}
 	// INVARIANT: lowestLoad <= loadThreshold.
 	if lowestLoadSet == loadThreshold && ignoreLevel < ignoreHigherThanLoadThreshold {
-		log.KvDistribution.VEventf(ctx, 3, "sortTargetCandidateSetAndPick: no candidates due to equal to loadThreshold")
-		failLogger(noCandidateDueToLoad)
+		ml.logf(ctx, 3, "sortTargetCandidateSetAndPick: no candidates due to equal to loadThreshold")
+		failLogger(ctx, noCandidateDueToLoad)
 		return 0
 	}
 	// INVARIANT: lowestLoad < loadThreshold ||
@@ -679,8 +700,8 @@ func sortTargetCandidateSetAndPick(
 	// [loadNoChange, loadThreshold), or loadThreshold && ignoreHigherThanLoadThreshold.
 	if lowestLoadSet >= loadNoChange &&
 		(!discardedCandsHadNoPendingChanges || ignoreLevel == ignoreLoadNoChangeAndHigher) {
-		log.KvDistribution.VEventf(ctx, 3, "sortTargetCandidateSetAndPick: no candidates due to loadNoChange")
-		failLogger(noCandidateDueToLoad)
+		ml.logf(ctx, 3, "sortTargetCandidateSetAndPick: no candidates due to loadNoChange")
+		failLogger(ctx, noCandidateDueToLoad)
 		return 0
 	}
 	if lowestLoadSet != highestLoadSet {
@@ -735,8 +756,8 @@ func sortTargetCandidateSetAndPick(
 		j++
 	}
 	if j == 0 {
-		log.KvDistribution.VEventf(ctx, 3, "sortTargetCandidateSetAndPick: no candidates due to lease preference")
-		failLogger(noCandidateDueToUnmatchedLeasePreference)
+		ml.logf(ctx, 3, "sortTargetCandidateSetAndPick: no candidates due to lease preference")
+		failLogger(ctx, noCandidateDueToUnmatchedLeasePreference)
 		return 0
 	}
 	cands.candidates = cands.candidates[:j]
@@ -749,8 +770,8 @@ func sortTargetCandidateSetAndPick(
 		})
 		lowestOverloadedLoad := cands.candidates[0].dimSummary[overloadedDim]
 		if lowestOverloadedLoad >= loadNoChange {
-			log.KvDistribution.VEventf(ctx, 3, "sortTargetCandidateSetAndPick: no candidates due to overloadedDim")
-			failLogger(noCandidateDueToLoad)
+			ml.logf(ctx, 3, "sortTargetCandidateSetAndPick: no candidates due to overloadedDim")
+			failLogger(ctx, noCandidateDueToLoad)
 			return 0
 		}
 		j = 1
@@ -761,13 +782,13 @@ func sortTargetCandidateSetAndPick(
 			j++
 		}
 		if s := formatCandidatesLog(ctx, cands.candidates[j:], overloadedDim); s != "" {
-			log.KvDistribution.VEventf(ctx, 3, "discarding candidates due to overloadedDim: %s", s)
+			ml.logf(ctx, 3, "discarding candidates due to overloadedDim: %s", s)
 		}
 		cands.candidates = cands.candidates[:j]
 	}
 	j = rng.Intn(j)
 	if s := formatCandidatesLog(ctx, cands.candidates, overloadedDim); s != "" {
-		log.KvDistribution.VEventf(ctx, 3, "sortTargetCandidateSetAndPick: candidates:%s, picked s%v", s, cands.candidates[j].StoreID)
+		ml.logf(ctx, 3, "sortTargetCandidateSetAndPick: candidates:%s, picked s%v", s, cands.candidates[j].StoreID)
 	}
 	if ignoreLevel == ignoreLoadNoChangeAndHigher && cands.candidates[j].sls >= loadNoChange ||
 		ignoreLevel == ignoreLoadThresholdAndHigher && cands.candidates[j].sls >= loadThreshold ||
@@ -931,18 +952,24 @@ func (cs *clusterState) computeCandidatesForReplicaTransfer(
 	postMeansExclusions storeSet,
 	loadSheddingStore roachpb.StoreID,
 	passObs *rebalancingPassMetricsAndLogger,
+	ml mmaLogger,
 ) (_ candidateSet, sheddingSLS storeLoadSummary) {
 	// Start with computing the stores (and corresponding means) that satisfy
 	// the constraint expression. If we don't see a need to filter out any of
 	// these stores before computing the means, we can use it verbatim, otherwise
 	// we will recompute the means again below.
 	cs.scratchDisj[0] = conj
-	means := cs.meansMemo.getMeans(cs.scratchDisj[:1])
+	means, ok := cs.meansMemo.getMeans(cs.scratchDisj[:1])
+	if !ok {
+		// No store satisfies the constraint expression.
+		passObs.replicaShed(ctx, noCandidate)
+		return candidateSet{}, sheddingSLS
+	}
 
 	// Pre-means filtering: copy to scratch, then filter in place.
 	// Filter out stores that have a non-OK replica disposition.
 	cs.scratchStoreSet = append(cs.scratchStoreSet[:0], means.stores...)
-	filteredStores := retainReadyReplicaTargetStoresOnly(ctx, cs.scratchStoreSet, cs.stores, existingReplicas)
+	filteredStores := retainReadyReplicaTargetStoresOnly(ctx, cs.scratchStoreSet, cs.stores, existingReplicas, ml)
 
 	// Determine which means to use.
 	//
@@ -953,25 +980,33 @@ func (cs *clusterState) computeCandidatesForReplicaTransfer(
 		effectiveMeans = &means.meansLoad
 	} else if len(filteredStores) == 0 {
 		// No viable candidates at all.
-		passObs.replicaShed(noCandidate)
+		passObs.replicaShed(ctx, noCandidate)
 		return candidateSet{}, sheddingSLS
 	} else {
 		// Some stores were filtered; recompute means over filtered set.
-		cs.scratchMeans = computeMeansForStoreSet(
+		// filteredStores is non-empty (checked above).
+		var ok bool
+		cs.scratchMeans, ok = computeMeansForStoreSet(
 			cs, filteredStores, cs.meansMemo.scratchNodes, cs.meansMemo.scratchStores)
+		if !ok {
+			// Unreachable: filteredStores is non-empty (checked above). Gate
+			// the assert so variadic arg boxing doesn't allocate on the
+			// success path.
+			assertTruef(ctx, false, "computeMeansForStoreSet returned !ok for non-empty filteredStores=%v", filteredStores)
+		}
 		effectiveMeans = &cs.scratchMeans
-		log.KvDistribution.VEventf(ctx, 3,
+		ml.logf(ctx, 3,
 			"pre-means filtered %d stores → remaining %v, means: store=%v node=%v",
 			len(means.stores)-len(filteredStores), filteredStores,
 			effectiveMeans.storeLoad, effectiveMeans.nodeLoad)
 	}
 
-	sheddingSLS = cs.computeLoadSummary(ctx, loadSheddingStore, &effectiveMeans.storeLoad, &effectiveMeans.nodeLoad)
+	sheddingSLS = cs.computeLoadSummary(ctx, loadSheddingStore, &effectiveMeans.storeLoad, &effectiveMeans.nodeLoad, ml)
 	if sheddingSLS.sls <= loadNoChange {
 		// In this set of stores, this store no longer looks overloaded. Note that
 		// we don't consider nls here: if nls is high but sls is low, it means other
 		// stores on the node are causing node-level overload, not this store.
-		passObs.replicaShed(notOverloaded)
+		passObs.replicaShed(ctx, notOverloaded)
 		return candidateSet{}, sheddingSLS
 	}
 
@@ -982,7 +1017,7 @@ func (cs *clusterState) computeCandidatesForReplicaTransfer(
 			// target for this specific transfer (e.g. it already has a replica).
 			continue
 		}
-		csls := cs.computeLoadSummary(ctx, storeID, &effectiveMeans.storeLoad, &effectiveMeans.nodeLoad)
+		csls := cs.computeLoadSummary(ctx, storeID, &effectiveMeans.storeLoad, &effectiveMeans.nodeLoad, ml)
 		cset.candidates = append(cset.candidates, candidateInfo{
 			StoreID:          storeID,
 			storeLoadSummary: csls,
@@ -990,7 +1025,7 @@ func (cs *clusterState) computeCandidatesForReplicaTransfer(
 	}
 	cset.means = effectiveMeans
 	if len(cset.candidates) == 0 {
-		passObs.replicaShed(noCandidate)
+		passObs.replicaShed(ctx, noCandidate)
 	}
 	return cset, sheddingSLS
 }
@@ -1011,6 +1046,7 @@ func retainReadyReplicaTargetStoresOnly(
 	in storeSet,
 	stores map[roachpb.StoreID]*storeState,
 	existingReplicas storeSet,
+	ml mmaLogger,
 ) storeSet {
 	out := in[:0]
 	for _, storeID := range in {
@@ -1031,7 +1067,7 @@ func retainReadyReplicaTargetStoresOnly(
 		ss := stores[storeID]
 		switch {
 		case ss.status.Disposition.Replica != ReplicaDispositionOK:
-			log.KvDistribution.VEventf(ctx, 3, "skipping s%d for replica transfer: replica disposition %v (health %v)", storeID, ss.status.Disposition.Replica, ss.status.Health)
+			ml.logf(ctx, 3, "skipping s%d for replica transfer: replica disposition %v (health %v)", storeID, ss.status.Disposition.Replica, ss.status.Health)
 		default:
 			out = append(out, storeID)
 		}

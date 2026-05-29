@@ -14,6 +14,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -25,6 +26,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -783,6 +788,103 @@ func TestCopyInReleasesLeases(t *testing.T) {
 		t.Fatal("alter did not complete")
 	}
 	require.NoError(t, conn.Close(ctx))
+}
+
+// TestCopyDuringNullableAddColumn is a regression test for #169583. It
+// reproduces the user-facing path that produced the Sentry crash on v25.4.4:
+// a text-format COPY FROM running while ALTER TABLE ADD COLUMN ... NULL is
+// in WRITE_ONLY status.
+//
+// This scenario slips past the canSupportVectorized ForcePut guard added in
+// PR #148549 because a nullable ADD COLUMN with no default doesn't require a
+// backfill, so no new mutation primary index is created and no writable
+// index has ForcePut set. The vec encoder is therefore selected, the
+// optimizer's addSynthesizedColsForInsert pulls the WRITE_ONLY column into
+// insCols, and (without the fix) encodePK panics with "index out of range".
+func TestCopyDuringNullableAddColumn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	pauseCh := make(chan struct{})
+	continueCh := make(chan struct{})
+	var paused atomic.Bool
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
+				BeforeStage: func(p scplan.Plan, stageIdx int) error {
+					if stageIdx >= len(p.Stages) {
+						return nil
+					}
+					stage := p.Stages[stageIdx]
+					if stage.Phase < scop.PostCommitPhase {
+						return nil
+					}
+					promotesWriteOnly := false
+					for i := range stage.Before {
+						if stage.Before[i] == scpb.Status_WRITE_ONLY &&
+							stage.After[i] == scpb.Status_PUBLIC {
+							promotesWriteOnly = true
+							break
+						}
+					}
+					if promotesWriteOnly && paused.CompareAndSwap(false, true) {
+						close(pauseCh)
+						<-continueCh
+					}
+					return nil
+				},
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	if _, err := db.Exec(`CREATE TABLE t (k INT PRIMARY KEY, c1 INT)`); err != nil {
+		t.Fatal(err)
+	}
+
+	alterErr := make(chan error, 1)
+	go func() {
+		_, err := db.Exec(`ALTER TABLE t ADD COLUMN c2 INT`)
+		alterErr <- err
+	}()
+	select {
+	case <-pauseCh:
+	case <-time.After(testutils.SucceedsSoonDuration()):
+		t.Fatal("schema change didn't pause")
+	}
+	defer func() {
+		close(continueCh)
+		require.NoError(t, <-alterErr)
+	}()
+
+	// Use clisqlclient (text-format COPY) — pgx.CopyFromRows uses binary, which
+	// canSupportVectorized rejects, so it doesn't exercise the vec path.
+	pgURL, cleanup := s.PGUrl(t,
+		serverutils.CertsDirPrefix(t.Name()),
+		serverutils.User(username.RootUser),
+	)
+	defer cleanup()
+	var sqlConnCtx clisqlclient.Context
+	conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, pgURL.String())
+	defer func() { _ = conn.Close() }()
+
+	for _, stmt := range []string{
+		`SET copy_fast_path_enabled = true`,
+		`SET vectorize = on`,
+	} {
+		require.NoError(t, conn.Exec(ctx, stmt))
+	}
+
+	_, err := conn.GetDriverConn().CopyFrom(
+		ctx,
+		strings.NewReader("1\t10\n2\t20\n"),
+		"COPY t (k, c1) FROM STDIN",
+	)
+	require.NoError(t, err)
 }
 
 func TestMessageSizeTooBig(t *testing.T) {

@@ -15,6 +15,7 @@ import (
 	"os/user"
 	"regexp"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -130,6 +131,20 @@ Examples:
 			specs, hint := filter.FilterWithHint(r.AllTests())
 			if len(specs) == 0 {
 				return errors.Newf("%s", filter.NoMatchesHintString(hint))
+			}
+
+			if roachtestflags.ListDetails {
+				tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+				fmt.Fprintln(tw, "NAME\tOWNER\tTIMEOUT\tRANDOMIZED\tSKIP-POST-VALIDATIONS\tSKIP")
+				for _, s := range specs {
+					timeout := "-"
+					if s.Timeout != 0 {
+						timeout = s.Timeout.String()
+					}
+					fmt.Fprintf(tw, "%s\t%s\t%s\t%t\t%s\t%s\n",
+						s.Name, s.Owner, timeout, s.Randomized, s.SkipPostValidations, s.Skip)
+				}
+				return tw.Flush()
 			}
 
 			for _, s := range specs {
@@ -265,7 +280,7 @@ Example:
 					return err
 				}
 			}
-			ops := r.FilteredOperations(registry.MergeRegEx(args), skipRegex)
+			ops := r.FilteredOperations(registry.MergeRegEx(args), skipRegex, roachtestflags.Cloud)
 			for _, op := range ops {
 				fmt.Printf("%s\n", op.Name)
 			}
@@ -399,7 +414,37 @@ func updateSpecForSelectiveTests(
 	allTests, err := testselector.CategoriseTests(ctx,
 		testselector.NewDefaultSelectTestsReq(roachtestflags.Cloud, roachtestflags.Suite))
 	if err != nil {
-		logFunc("running all tests! error selecting tests: %v\n", err)
+		// Snowflake is unavailable. Instead of running all tests (which risks
+		// timeouts), randomly select a subset using the same percentage that the
+		// selector would use for stable tests. This keeps the run size in the
+		// same ballpark as a normal selective run. Already-skipped tests are
+		// left untouched and don't count toward the selection budget.
+		fallbackPct := roachtestflags.SuccessfulTestsSelectPct
+		logFunc("error selecting tests: %v\n", err)
+		rand.Shuffle(len(specs), func(i, j int) {
+			specs[i], specs[j] = specs[j], specs[i]
+		})
+		eligible := 0
+		for i := range specs {
+			if specs[i].Skip != "" {
+				continue
+			}
+			eligible++
+		}
+		fallbackCount := int(math.Ceil(float64(eligible) * fallbackPct))
+		selected := 0
+		for i := range specs {
+			if specs[i].Skip != "" {
+				continue
+			}
+			selected++
+			if selected > fallbackCount {
+				specs[i].Skip = "test selector"
+				specs[i].SkipDetails = "test skipped: selector unavailable, random fallback"
+			}
+		}
+		logFunc("falling back to random selection: %d out of %d eligible tests (%.0f%%)\n",
+			fallbackCount, eligible, fallbackPct*100)
 		return
 	}
 
@@ -484,7 +529,7 @@ func opsToRun(r testRegistryImpl, filter string, skip string) ([]registry.Operat
 			return nil, err
 		}
 	}
-	filteredOps := r.FilteredOperations(regex, skipRegex)
+	filteredOps := r.FilteredOperations(regex, skipRegex, roachtestflags.Cloud)
 	if len(filteredOps) == 0 {
 		return nil, errors.New("no matching operations to run")
 	}

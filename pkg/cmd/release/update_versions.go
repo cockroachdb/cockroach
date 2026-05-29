@@ -36,8 +36,23 @@ const (
 	releasedVersionFlag = "released-version"
 	nextVersionFlag     = "next-version"
 	versionBumpOnly     = "version-bump-only"
+	cockroachRepoFlag   = "cockroach-repo"
+	githubUsernameFlag  = "github-username"
 	versionFile         = "pkg/build/version.txt"
+
+	defaultGithubUsernameFlag = "cockroach-teamcity"
 )
+
+// knownGithubUsernames lists every GitHub user under whose identity
+// version-bump PRs may have been opened, historically or currently. The
+// prExists() check searches for prior PRs from any of these so that a
+// run under one identity (say, the GHA bot crl-release-eng-bot) doesn't
+// re-open a PR that an earlier TC run already opened as cockroach-teamcity.
+// Keep this in sync with every value --github-username has ever taken.
+var knownGithubUsernames = []string{
+	"cockroach-teamcity",
+	"crl-release-eng-bot",
+}
 
 var updateVersionsFlags = struct {
 	dryRun             bool
@@ -49,6 +64,21 @@ var updateVersionsFlags = struct {
 	smtpPort           int
 	emailAddresses     []string
 	versionBumpOnly    bool
+	// cockroachRepo is the GitHub destination for cockroach version-bump
+	// PRs and merge PRs, in `owner/name` form. Satellite repos
+	// (homebrew-tap, helm-charts) keep their well-known names but inherit
+	// the owner from this flag's owner part. Set this when the canonical
+	// cockroach repo moves to a different owner or name (e.g. an org
+	// rename or fork-promotion); otherwise the default points at the
+	// historical cockroachdb/cockroach.
+	cockroachRepo string
+	// githubUsername is the GitHub user under which PR branches are
+	// pushed and PRs are opened. TC runs default to "cockroach-teamcity"
+	// (the historical value); GHA runs override to the bot account whose
+	// PAT they use (e.g. "crl-release-eng-bot"). The user's fork
+	// $githubUsername/$repo must exist and be writable by the PAT for
+	// non-pushToOrigin repos.
+	githubUsername string
 }{}
 
 var updateVersionsCmd = &cobra.Command{
@@ -68,12 +98,17 @@ func init() {
 	updateVersionsCmd.Flags().StringVar(&updateVersionsFlags.smtpHost, smtpHost, "", "SMTP host")
 	updateVersionsCmd.Flags().IntVar(&updateVersionsFlags.smtpPort, smtpPort, 0, "SMTP port")
 	updateVersionsCmd.Flags().StringArrayVar(&updateVersionsFlags.emailAddresses, emailAddresses, []string{}, "email addresses")
+	updateVersionsCmd.Flags().StringVar(&updateVersionsFlags.cockroachRepo, cockroachRepoFlag, "",
+		"cockroach repo to push to, as owner/name (also seeds the owner used for homebrew-tap and helm-charts pushes); required")
+	updateVersionsCmd.Flags().StringVar(&updateVersionsFlags.githubUsername, githubUsernameFlag, defaultGithubUsernameFlag,
+		"GitHub user under which PR branches are pushed and PRs are opened (the user's fork must exist and be writable by the configured token)")
 	requiredFlags := []string{
 		releasedVersionFlag,
 		smtpUser,
 		smtpHost,
 		smtpPort,
 		emailAddresses,
+		cockroachRepoFlag,
 	}
 	for _, flag := range requiredFlags {
 		if err := updateVersionsCmd.MarkFlagRequired(flag); err != nil {
@@ -178,33 +213,45 @@ func (r prRepo) commit() error {
 // prExists checks whether a PR (represented as an instance of
 // `prRepo`) already exists. Returns a description of the PR when it
 // exists and any errors found in the process.
+//
+// Searches across every author in knownGithubUsernames, not just
+// r.githubUsername, so that a run as one bot identity (e.g. the GHA
+// crl-release-eng-bot) finds — and skips re-opening — a PR that an
+// earlier run as a different identity (e.g. the TC cockroach-teamcity)
+// already opened. `gh pr list --search` doesn't OR multiple `author:`
+// qualifiers reliably (GitHub's search treats space-separated
+// qualifiers as AND for non-multi-value fields), so we issue one query
+// per author and stop at the first hit.
 func (r prRepo) prExists() (string, error) {
 	title := strings.Split(r.commitMessage, "\n")[0]
-	log.Printf("checking if PR %q already exists", title)
+	log.Printf("checking if PR %q already exists (authors: %s)",
+		title, strings.Join(knownGithubUsernames, ", "))
 	query := fmt.Sprintf("in:title %q", title)
-	args := []string{
-		"pr", "list", "--search", query, "--author", r.githubUsername, "--json", "number,title",
-	}
-	cmd := exec.Command("gh", args...)
-	cmd.Dir = r.checkoutDir()
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("failed searching for existing PRs: %w\nOutput: %s", err, string(out))
-	}
+	for _, author := range knownGithubUsernames {
+		args := []string{
+			"pr", "list", "--search", query, "--author", author, "--json", "number,title",
+		}
+		cmd := exec.Command("gh", args...)
+		cmd.Dir = r.checkoutDir()
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return "", fmt.Errorf("failed searching for existing PRs by %s: %w\nOutput: %s",
+				author, err, string(out))
+		}
 
-	var prs []struct {
-		Number int    `json:"number"`
-		Title  string `json:"title"`
-	}
-	if err := json.Unmarshal(out, &prs); err != nil {
-		return "", fmt.Errorf("failed to parse PR search result: %w\nOutput: %s", err, string(out))
-	}
+		var prs []struct {
+			Number int    `json:"number"`
+			Title  string `json:"title"`
+		}
+		if err := json.Unmarshal(out, &prs); err != nil {
+			return "", fmt.Errorf("failed to parse PR search result: %w\nOutput: %s", err, string(out))
+		}
 
-	if len(prs) == 0 {
-		return "", nil
+		if len(prs) > 0 {
+			return fmt.Sprintf("#%d: %s (author: %s)", prs[0].Number, prs[0].Title, author), nil
+		}
 	}
-
-	return fmt.Sprintf("#%d: %s", prs[0].Number, prs[0].Title), nil
+	return "", nil
 }
 
 func (r prRepo) push() error {
@@ -291,11 +338,16 @@ func updateVersions(_ *cobra.Command, _ []string) error {
 	log.Printf("repos to work on: %s\n", reposToWorkOn)
 	var prs []string
 	var workOnRepoErrors []error
-	for _, repo := range reposToWorkOn {
-		err := workOnRepo(repo)
-		repo.workOnRepoError = err
-		if repo.workOnRepoError != nil {
-			err = fmt.Errorf("workOnRepo: error occurred while working on repo %s: %w", repo.name(), err)
+	// Index iteration is required: prRepo is a value type, so a `for _, repo
+	// := range reposToWorkOn` loop binds repo to a copy and the workOnRepoError
+	// assignment below would never reach the slice element — silently turning
+	// the second loop's skip check into dead code and letting failed repos
+	// proceed to push() and createPullRequest().
+	for i := range reposToWorkOn {
+		err := workOnRepo(reposToWorkOn[i])
+		reposToWorkOn[i].workOnRepoError = err
+		if err != nil {
+			err = fmt.Errorf("workOnRepo: error occurred while working on repo %s: %w", reposToWorkOn[i].name(), err)
 			workOnRepoErrors = append(workOnRepoErrors, err)
 			log.Printf("%s", err)
 		}
@@ -411,12 +463,36 @@ func randomString(n int) string {
 	return string(s)
 }
 
+// parseRepoFlag splits an `owner/name` string into its two parts and
+// validates both halves are non-empty. The single-string form is what
+// the --cockroach-repo flag accepts (matching `gh repo` argument shape).
+func parseRepoFlag(s string) (owner, name string, err error) {
+	parts := strings.SplitN(s, "/", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", fmt.Errorf("expected owner/name, got %q", s)
+	}
+	return parts[0], parts[1], nil
+}
+
 func generateRepoList(
 	releasedVersion version.Version, nextVersion version.Version, isLatest bool, dryRun bool,
 ) ([]prRepo, error) {
-	owner := "cockroachdb"
+	cockroachOwner, cockroachRepoName, err := parseRepoFlag(updateVersionsFlags.cockroachRepo)
+	if err != nil {
+		return nil, fmt.Errorf("parsing --%s: %w", cockroachRepoFlag, err)
+	}
+	// Satellite repos (homebrew-tap, helm-charts) inherit the owner from
+	// --cockroach-repo and keep their well-known names. Dry-run mirrors
+	// the historical convention of pushing into a `crltest`-owned set
+	// of fork-prefixed repos, but only on the canonical prod release
+	// repo (signalled by IS_PRODUCTION_REPO=true) — on a fork or local
+	// invocation, dry-run pushes to whatever --cockroach-repo points at
+	// (the operator's explicit choice). Triggering on
+	// isProductionRepo() rather than a hardcoded literal means the
+	// canonical repo can be renamed without code changes here.
+	owner := cockroachOwner
 	prefix := ""
-	if dryRun {
+	if dryRun && isProductionRepo() {
 		// For test/dry-run purposes, we need to create "base repos" and "forked repos". The PRs will be submitted against the
 		// base repos and the branches will be created in the forked repos.
 		// for repo in cockroach, homebrew-tap, helm-charts; do
@@ -425,6 +501,8 @@ func generateRepoList(
 		//   # fork the repo to crltest-$repo
 		// done
 		owner = "crltest"
+		cockroachOwner = "crltest"
+		cockroachRepoName = "cockroach"
 		prefix = "crltest-"
 	}
 	// Repos we want to create PRs against
@@ -484,11 +562,11 @@ func generateRepoList(
 			commitMessagePrefix = branch
 		}
 		repo := prRepo{
-			owner:          owner,
-			repo:           prefix + "cockroach",
+			owner:          cockroachOwner,
+			repo:           cockroachRepoName,
 			branch:         branch,
 			prBranch:       prBranch,
-			githubUsername: "cockroach-teamcity",
+			githubUsername: updateVersionsFlags.githubUsername,
 			commitMessage:  generateCommitMessage(commitMessagePrefix, releasedVersion, nextVersion),
 			fn: func(gitDir string) error {
 				contents := []byte(nextVersion.String() + "\n")
@@ -513,7 +591,7 @@ func generateRepoList(
 			repo:           prefix + "homebrew-tap",
 			pushToOrigin:   true,
 			branch:         "master",
-			githubUsername: "cockroach-teamcity",
+			githubUsername: updateVersionsFlags.githubUsername,
 			prBranch:       fmt.Sprintf("update-versions-%s-%s", releasedVersion.String(), randomString(4)),
 			commitMessage:  fmt.Sprintf("release: advance to %s", releasedVersion.String()),
 			fn: func(gitDir string) error {
@@ -532,7 +610,7 @@ func generateRepoList(
 			repo:           prefix + "helm-charts",
 			pushToOrigin:   true,
 			branch:         "master",
-			githubUsername: "cockroach-teamcity",
+			githubUsername: updateVersionsFlags.githubUsername,
 			prBranch:       fmt.Sprintf("update-versions-%s-%s", releasedVersion.String(), randomString(4)),
 			commitMessage:  fmt.Sprintf("release: advance to %s", releasedVersion.String()),
 			fn: func(gitDir string) error {
@@ -577,11 +655,11 @@ func generateRepoList(
 		commitMessage := generateCommitMessage(fmt.Sprintf("merge %s to %s", mergeBranch, baseBranch), releasedVersion, nextVersion)
 		commitMessage += "\nDocs: noop merge\n"
 		repo := prRepo{
-			owner:          owner,
-			repo:           prefix + "cockroach",
+			owner:          cockroachOwner,
+			repo:           cockroachRepoName,
 			branch:         baseBranch,
 			prBranch:       fmt.Sprintf("merge-%s-to-%s-%s", mergeBranch, baseBranch, randomString(4)),
-			githubUsername: "cockroach-teamcity",
+			githubUsername: updateVersionsFlags.githubUsername,
 			commitMessage:  commitMessage,
 			fn: func(gitDir string) error {
 				cmd := exec.Command("git", "merge", "-s", "ours", "--no-commit", remoteOrigin+"/"+mergeBranch)
@@ -632,11 +710,11 @@ func generateRepoList(
 			continue
 		}
 		repo := prRepo{
-			owner:          owner,
-			repo:           prefix + "cockroach",
+			owner:          cockroachOwner,
+			repo:           cockroachRepoName,
 			branch:         nextRCBranch,
 			prBranch:       fmt.Sprintf("merge-%s-to-%s-%s", mergeBranch, nextRCBranch, randomString(4)),
-			githubUsername: "cockroach-teamcity",
+			githubUsername: updateVersionsFlags.githubUsername,
 			commitMessage:  generateCommitMessage(fmt.Sprintf("merge %s to %s", mergeBranch, nextRCBranch), releasedVersion, nextVersion),
 			fn: func(gitDir string) error {
 				cmd := exec.Command("git", "merge", "-X", "ours", "--strategy=recursive", "--no-commit", "--no-ff", remoteOrigin+"/"+mergeBranch)

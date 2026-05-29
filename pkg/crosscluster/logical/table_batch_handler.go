@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/sqlwriter"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -30,8 +31,7 @@ type tableHandler struct {
 	sqlReader        sqlwriter.RowReader
 	sqlWriter        *sqlwriter.RowWriter
 	session          isql.Session
-	db               descs.DB
-	tombstoneUpdater *tombstoneUpdater
+	tombstoneUpdater *sqlwriter.TombstoneUpdater
 }
 
 type tableBatchStats struct {
@@ -106,7 +106,13 @@ func newTableHandler(
 	err = db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 		var err error
 		table, err = txn.Descriptors().GetLeasedImmutableTableByID(ctx, txn.KV(), tableID)
-		return err
+		if err != nil {
+			return err
+		}
+		if table == nil {
+			return catalog.NewDescriptorNotFoundError(tableID)
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -127,12 +133,11 @@ func newTableHandler(
 		return nil, err
 	}
 
-	tombstoneUpdater := newTombstoneUpdater(codec, db.KV(), leaseMgr, tableID, sd, settings)
+	tombstoneUpdater := sqlwriter.NewTombstoneUpdater(codec, db.KV(), leaseMgr, tableID, sd, settings)
 
 	return &tableHandler{
 		sqlReader:        reader,
 		sqlWriter:        writer,
-		db:               db,
 		tombstoneUpdater: tombstoneUpdater,
 		session:          session,
 	}, nil
@@ -170,7 +175,6 @@ func (t *tableHandler) attemptBatch(
 ) (tableBatchStats, error) {
 	var stats tableBatchStats
 
-	var hasTombstoneUpdates bool
 	err := t.session.Txn(ctx, func(ctx context.Context) error {
 		for _, event := range batch {
 			switch {
@@ -181,8 +185,24 @@ func (t *tableHandler) attemptBatch(
 					return err
 				}
 			case event.IsTombstoneUpdate():
-				hasTombstoneUpdates = true
-				// Skip: handled in its own transaction.
+				stats.tombstoneUpdates++
+				// Use a KV savepoint so that a LWW-loser ConditionFailedError
+				// on one tombstone does not abort the surrounding transaction.
+				err := t.session.KVSavepoint(ctx, func(ctx context.Context, txn *kv.Txn) error {
+					batch := txn.NewBatch()
+					batch.Header.WriteOptions = sqlwriter.OriginID1Options
+					if err := t.tombstoneUpdater.AddToBatch(ctx, txn, batch, event.RowTimestamp, event.Row); err != nil {
+						return err
+					}
+					return txn.Run(ctx, batch)
+				})
+				if err != nil {
+					if isLwwLoser(err) {
+						stats.kvLwwLosers++
+						continue
+					}
+					return err
+				}
 			case event.IsInsertRow():
 				stats.inserts++
 				err := t.sqlWriter.InsertRow(ctx, event.RowTimestamp, event.Row)
@@ -209,29 +229,6 @@ func (t *tableHandler) attemptBatch(
 	})
 	if err != nil {
 		return tableBatchStats{}, err
-	}
-
-	if hasTombstoneUpdates {
-		// TODO(jeffswenson): once we have a way to expose the transaction used by
-		// the Session, we should bundle this with the other txn. The purpose of
-		// these transactions is batching writes in a transaction increases
-		// efficiency. The transactions are not needed for correctness.
-		err = t.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			for _, event := range batch {
-				if event.IsTombstoneUpdate() {
-					stats.tombstoneUpdates++
-					tombstoneUpdateStats, err := t.tombstoneUpdater.updateTombstone(ctx, txn, event.RowTimestamp, event.Row)
-					if err != nil {
-						return err
-					}
-					stats.kvLwwLosers += tombstoneUpdateStats.kvWriteTooOld
-				}
-			}
-			return nil
-		})
-		if err != nil {
-			return tableBatchStats{}, err
-		}
 	}
 
 	return stats, nil

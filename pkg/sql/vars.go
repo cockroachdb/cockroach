@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -54,9 +55,9 @@ import (
 
 const (
 	// PgServerVersion is the latest version of postgres that we claim to support.
-	PgServerVersion = "13.0.0"
+	PgServerVersion = "18.0.0"
 	// PgServerVersionNum is the latest version of postgres that we claim to support in the numeric format of "server_version_num".
-	PgServerVersionNum = "130000"
+	PgServerVersionNum = "180000"
 	// PgCompatLocale is the locale string we advertise in `LC_*` session
 	// variables. C.UTF-8 is the only locale that is allowed in CREATE DATABASE
 	// at the time of writing.
@@ -537,7 +538,13 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().DefaultTxnReadOnly), nil
 		},
+		GetFromSessionData: func(sd *sessiondata.SessionData) string {
+			return formatBoolAsPostgresSetting(sd.DefaultTxnReadOnly)
+		},
 		GlobalDefault: globalFalse,
+		Equal: func(a, b *sessiondata.SessionData) bool {
+			return a.DefaultTxnReadOnly == b.DefaultTxnReadOnly
+		},
 	},
 
 	// CockroachDB extension.
@@ -1288,6 +1295,9 @@ var varGen = map[string]sessionVar{
 		GlobalDefault: globalFalse,
 	},
 
+	// See https://www.postgresql.org/docs/current/runtime-config-replication.html#GUC-IN-HOT-STANDBY
+	`in_hot_standby`: makeReadOnlyVar("off", sessionVarDescriptions["in_hot_standby"]),
+
 	// See https://www.postgresql.org/docs/10/static/runtime-config-preset.html
 	`integer_datetimes`: makeReadOnlyVar("on", sessionVarDescriptions["integer_datetimes"]),
 
@@ -1589,8 +1599,14 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return evalCtx.SessionData().SearchPath.String(), nil
 		},
+		GetFromSessionData: func(sd *sessiondata.SessionData) string {
+			return sd.SearchPath.String()
+		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return sessiondata.DefaultSearchPath.String()
+		},
+		Equal: func(a, b *sessiondata.SessionData) bool {
+			return a.SearchPath.Equals(&b.SearchPath)
 		},
 	},
 
@@ -1790,6 +1806,44 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return security.GetConfiguredPasswordHashMethod(sv).String()
+		},
+	},
+
+	// See https://www.postgresql.org/docs/current/runtime-config-connection.html#GUC-SCRAM-ITERATIONS
+	`scram_iterations`: {
+		Description: sessionVarDescriptions["scram_iterations"],
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return strconv.FormatInt(security.SCRAMCost.Get(&evalCtx.Settings.SV), 10), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return strconv.FormatInt(security.SCRAMCost.Get(sv), 10)
+		},
+	},
+
+	// CockroachDB extension.
+	`pg_dump_compatibility`: {
+		Description: sessionVarDescriptions["pg_dump_compatibility"],
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			val := evalCtx.SessionData().PgDumpCompatibility
+			if val == "" {
+				return sessiondatapb.PgDumpCompatibilityOff, nil
+			}
+			return val, nil
+		},
+		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			val, ok := sessiondatapb.PgDumpCompatibilityFromString(s)
+			if !ok {
+				return newVarValueError("pg_dump_compatibility", s,
+					sessiondatapb.PgDumpCompatibilityOff,
+					sessiondatapb.PgDumpCompatibilityPostgres,
+					sessiondatapb.PgDumpCompatibilityCockroachDB,
+				)
+			}
+			m.SetPgDumpCompatibility(val)
+			return nil
+		},
+		GlobalDefault: func(_ *settings.Values) string {
+			return sessiondatapb.PgDumpCompatibilityOff
 		},
 	},
 
@@ -2821,7 +2875,7 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().ParallelizeMultiKeyLookupJoinsOnlyOnMRMutations), nil
 		},
-		GlobalDefault: globalTrue,
+		GlobalDefault: globalFalse,
 	},
 
 	// TODO(harding): Remove this when costing scans based on average column size
@@ -2961,6 +3015,35 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return strconv.FormatInt(int64(tabledesc.MaxBucketAllowed), 10)
+		},
+	},
+
+	// CockroachDB extension.
+	`optimizer_span_limit`: {
+		Description:  sessionVarDescriptions["optimizer_span_limit"],
+		GetStringVal: makeIntGetStringValFn(`optimizer_span_limit`),
+		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			b, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			if b < 0 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"cannot set optimizer_span_limit to a negative value: %d", b)
+			}
+			if b > math.MaxInt32 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"cannot set optimizer_span_limit to a value greater than %d", math.MaxInt32)
+			}
+
+			m.SetOptimizerSpanLimit(int32(b))
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return strconv.FormatInt(int64(evalCtx.SessionData().OptimizerSpanLimit), 10), nil
+		},
+		GlobalDefault: func(_ *settings.Values) string {
+			return "131072"
 		},
 	},
 
@@ -3888,6 +3971,48 @@ var varGen = map[string]sessionVar{
 		GlobalDefault: func(sv *settings.Values) string {
 			return strconv.FormatInt(2, 10)
 		},
+	},
+
+	// CockroachDB extension.
+	`distsql_plan_locality_filter`: {
+		Description: sessionVarDescriptions["distsql_plan_locality_filter"],
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return evalCtx.SessionData().DistSQLPlanLocalityFilter, nil
+		},
+		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			// An empty string clears the filter; otherwise validate that the
+			// supplied string parses as a CockroachDB locality.
+			if s != "" {
+				var loc roachpb.Locality
+				if err := loc.Set(s); err != nil {
+					return pgerror.Wrapf(err, pgcode.InvalidParameterValue,
+						"invalid distsql_plan_locality_filter %q", s)
+				}
+			}
+			m.SetDistSQLPlanLocalityFilter(s)
+			return nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return ""
+		},
+	},
+
+	// CockroachDB extension.
+	`distsql_plan_locality_filter_strict`: {
+		Description:  sessionVarDescriptions["distsql_plan_locality_filter_strict"],
+		GetStringVal: makePostgresBoolGetStringValFn(`distsql_plan_locality_filter_strict`),
+		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar(`distsql_plan_locality_filter_strict`, s)
+			if err != nil {
+				return err
+			}
+			m.SetDistSQLPlanLocalityFilterStrict(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().DistSQLPlanLocalityFilterStrict), nil
+		},
+		GlobalDefault: globalFalse,
 	},
 
 	// CockroachDB extension (oracle compatibility).
@@ -4931,6 +5056,24 @@ var varGen = map[string]sessionVar{
 		},
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerInlineAnyUnnestSubquery), nil
+		},
+		GlobalDefault: globalTrue,
+	},
+
+	// CockroachDB extension.
+	`optimizer_inline_placeholder_equalities`: {
+		Description:  sessionVarDescriptions["optimizer_inline_placeholder_equalities"],
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_inline_placeholder_equalities`),
+		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_inline_placeholder_equalities", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerInlinePlaceholderEqualities(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerInlinePlaceholderEqualities), nil
 		},
 		GlobalDefault: globalTrue,
 	},

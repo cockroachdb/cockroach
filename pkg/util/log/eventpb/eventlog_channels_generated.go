@@ -32,6 +32,9 @@ func (m *DiskSlownessCleared) LoggingChannel() logpb.Channel { return logpb.Chan
 func (m *DiskSlownessDetected) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 
 // LoggingChannel implements the EventPayload interface.
+func (m *GCPressureDetected) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
+
+// LoggingChannel implements the EventPayload interface.
 func (m *LowDiskSpace) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 
 // LoggingChannel implements the EventPayload interface.
@@ -124,6 +127,21 @@ func (m *UnsafeInternalsDenied) LoggingChannel() logpb.Channel { return logpb.Ch
 func (m *QueryExecute) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_EXEC }
 
 // LoggingChannel implements the EventPayload interface.
+func (m *FailedQuery) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_EXEC }
+
+// LoggingChannel implements the EventPayload interface.
+func (m *FailedQueryInternal) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_EXEC }
+
+// LoggingChannel implements the EventPayload interface.
+func (m *LargeRowInternal) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_EXEC }
+
+// LoggingChannel implements the EventPayload interface.
+func (m *TxnRowsReadLimitInternal) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_EXEC }
+
+// LoggingChannel implements the EventPayload interface.
+func (m *TxnRowsWrittenLimitInternal) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_EXEC }
+
+// LoggingChannel implements the EventPayload interface.
 func (m *AlterDatabaseAddRegion) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
@@ -160,6 +178,15 @@ func (m *AlterTable) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_S
 
 // LoggingChannel implements the EventPayload interface.
 func (m *AlterType) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
+
+// LoggingChannel implements the EventPayload interface.
+func (m *AlterTypeAddValue) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
+
+// LoggingChannel implements the EventPayload interface.
+func (m *AlterTypeDropValue) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
+
+// LoggingChannel implements the EventPayload interface.
+func (m *AlterTypeRenameValue) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
 func (m *CommentOnColumn) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
@@ -360,16 +387,7 @@ func (m *TxnRowsReadLimit) LoggingChannel() logpb.Channel { return logpb.Channel
 func (m *TxnRowsWrittenLimit) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_EXEC }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *LargeRowInternal) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_EXEC }
-
-// LoggingChannel implements the EventPayload interface.
 func (m *SlowQueryInternal) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_EXEC }
-
-// LoggingChannel implements the EventPayload interface.
-func (m *TxnRowsReadLimitInternal) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_EXEC }
-
-// LoggingChannel implements the EventPayload interface.
-func (m *TxnRowsWrittenLimitInternal) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_EXEC }
 
 // LoggingChannel implements the EventPayload interface.
 func (m *AlterRole) LoggingChannel() logpb.Channel { return logpb.Channel_USER_ADMIN }

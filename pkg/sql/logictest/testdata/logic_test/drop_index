@@ -437,19 +437,21 @@ DROP INDEX t2_96731_idx CASCADE;
 query TTTTB colnames
 SELECT * FROM [SHOW CONSTRAINTS FROM t1_96731] ORDER BY constraint_name
 ----
-table_name  constraint_name  constraint_type  details                                 validated
-t1_96731    t1_96731_j_fkey  FOREIGN KEY      FOREIGN KEY (j) REFERENCES t2_96731(j)  true
-t1_96731    t1_96731_pkey    PRIMARY KEY      PRIMARY KEY (i ASC)                     true
+table_name  constraint_name      constraint_type  details                                 validated
+t1_96731    t1_96731_i_not_null  NOT NULL         NOT NULL                                true
+t1_96731    t1_96731_j_fkey      FOREIGN KEY      FOREIGN KEY (j) REFERENCES t2_96731(j)  true
+t1_96731    t1_96731_pkey        PRIMARY KEY      PRIMARY KEY (i ASC)                     true
 
 # Drop the last unique index will drop the FK as well this time.
 statement ok
 DROP INDEX t2_96731_idx2 CASCADE;
 
-query TTTTB colnames
+query TTTTB colnames,nosort
 SHOW CONSTRAINTS FROM t1_96731;
 ----
-table_name  constraint_name  constraint_type  details              validated
-t1_96731    t1_96731_pkey    PRIMARY KEY      PRIMARY KEY (i ASC)  true
+table_name  constraint_name      constraint_type  details              validated
+t1_96731    t1_96731_i_not_null  NOT NULL         NOT NULL             true
+t1_96731    t1_96731_pkey        PRIMARY KEY      PRIMARY KEY (i ASC)  true
 
 # Recreate the unique index and FK constraint.
 statement ok
@@ -472,9 +474,10 @@ DROP INDEX t2_96731_idx CASCADE;
 query TTTTB colnames
 SELECT * FROM [SHOW CONSTRAINTS FROM t1_96731] ORDER BY constraint_name
 ----
-table_name  constraint_name  constraint_type  details                                 validated
-t1_96731    t1_96731_j_fkey  FOREIGN KEY      FOREIGN KEY (j) REFERENCES t2_96731(j)  true
-t1_96731    t1_96731_pkey    PRIMARY KEY      PRIMARY KEY (i ASC)                     true
+table_name  constraint_name      constraint_type  details                                 validated
+t1_96731    t1_96731_i_not_null  NOT NULL         NOT NULL                                true
+t1_96731    t1_96731_j_fkey      FOREIGN KEY      FOREIGN KEY (j) REFERENCES t2_96731(j)  true
+t1_96731    t1_96731_pkey        PRIMARY KEY      PRIMARY KEY (i ASC)                     true
 
 # Recreate the unique index, drop the unique_without_index constraint,
 # and add another one on different columns.
@@ -491,11 +494,12 @@ ALTER TABLE t2_96731 ADD CONSTRAINT unique_i UNIQUE WITHOUT INDEX (i);
 statement ok
 DROP INDEX t2_96731_idx CASCADE;
 
-query TTTTB colnames
+query TTTTB colnames,nosort
 SHOW CONSTRAINTS FROM t1_96731;
 ----
-table_name  constraint_name  constraint_type  details              validated
-t1_96731    t1_96731_pkey    PRIMARY KEY      PRIMARY KEY (i ASC)  true
+table_name  constraint_name      constraint_type  details              validated
+t1_96731    t1_96731_i_not_null  NOT NULL         NOT NULL             true
+t1_96731    t1_96731_pkey        PRIMARY KEY      PRIMARY KEY (i ASC)  true
 
 statement ok
 DROP TABLE t1_96731, t2_96731;
@@ -536,6 +540,7 @@ SELECT constraint_name from [SHOW CONSTRAINTS FROM fk_ref_dst];
 fk_ref_dst_pkey
 j_fk
 m_fk
+fk_ref_dst_k_not_null
 
 subtest safe_updates_rejects_drop_index
 

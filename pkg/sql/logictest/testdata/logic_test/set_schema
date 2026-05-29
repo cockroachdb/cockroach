@@ -24,13 +24,11 @@ ALTER TABLE t SET SCHEMA does_not_exist
 statement ok
 CREATE TABLE s2.t();
 
-# use regex to accept both the legacy and the declarative schema changer format
-statement error pq: relation "(test.s2.)?t" already exists
+statement error pq: relation "test.s2.t" already exists
 ALTER TABLE t SET SCHEMA s2
 
 # Ensure we cannot set schema to a virtual schema.
-# use regex to accept both the legacy and the declarative schema changer format
-statement error pq: (cannot move objects into or out of virtual schemas)?(user root does not have CREATE privilege on schema information_schema)?
+statement error pq: cannot move objects into or out of virtual schemas
 ALTER TABLE t SET SCHEMA information_schema
 
 # Ensure we cannot set schema for a table in a virtual schema.
@@ -59,6 +57,16 @@ ALTER TABLE temp1 SET SCHEMA public
 statement ok
 INSERT INTO t VALUES (1)
 
+let $t_id
+SELECT 't'::regclass::oid::int
+
+# Verify the table's descriptor has the public schema as its parent.
+query B
+SELECT parent_schema_id = (SELECT id FROM system.namespace WHERE name = 'public' AND "parentID" = (SELECT id FROM system.namespace WHERE name = 'test' AND "parentID" = 0))
+  FROM crdb_internal.tables WHERE table_id = $t_id
+----
+true
+
 statement ok
 ALTER TABLE t SET SCHEMA s1
 
@@ -67,6 +75,13 @@ query I rowsort
 SELECT * FROM s1.t
 ----
 1
+
+# Verify the descriptor's parent_schema_id was updated to s1.
+query B
+SELECT parent_schema_id = (SELECT id FROM system.namespace WHERE name = 's1')
+  FROM crdb_internal.tables WHERE table_id = $t_id
+----
+true
 
 # Check that we can insert into the table.
 statement ok
@@ -91,6 +106,13 @@ SELECT * FROM public.t
 1
 2
 
+# Verify the descriptor's parent_schema_id was updated back to public.
+query B
+SELECT parent_schema_id = (SELECT id FROM system.namespace WHERE name = 'public' AND "parentID" = (SELECT id FROM system.namespace WHERE name = 'test' AND "parentID" = 0))
+  FROM crdb_internal.tables WHERE table_id = $t_id
+----
+true
+
 # Check that we can insert into the table.
 statement ok
 INSERT INTO public.t VALUES (2)
@@ -106,6 +128,9 @@ CREATE TABLE s1.t2(x INT)
 statement ok
 INSERT INTO s1.t2 VALUES (1)
 
+let $t2_id
+SELECT 's1.t2'::regclass::oid::int
+
 statement ok
 ALTER TABLE s1.t2 SET SCHEMA s2
 
@@ -113,6 +138,13 @@ query I rowsort
 SELECT * FROM s2.t2
 ----
 1
+
+# Verify the descriptor's parent_schema_id was updated from s1 to s2.
+query B
+SELECT parent_schema_id = (SELECT id FROM system.namespace WHERE name = 's2')
+  FROM crdb_internal.tables WHERE table_id = $t2_id
+----
+true
 
 # Ensure we cannot select from the old table.
 statement error pq: relation "s1.t2" does not exist
@@ -297,7 +329,7 @@ ALTER TYPE typ SET SCHEMA does_not_exist
 statement ok
 CREATE TYPE s2.typ AS ENUM ()
 
-statement error type "typ" already exists
+statement error type "test.s2.typ" already exists
 ALTER TYPE typ SET SCHEMA s2
 
 # Ensure we cannot set schema to a virtual schema.
@@ -455,3 +487,169 @@ CREATE TYPE typ5 AS ENUM ()
 
 statement error pq: user testuser does not have CREATE privilege on schema s1
 ALTER TYPE typ5 SET SCHEMA s1
+
+# Tests for mixed-case and special characters in names.
+subtest mixed_case_names
+
+user root
+
+statement ok
+CREATE SCHEMA "MixedCase"
+
+statement ok
+CREATE SCHEMA "Another-Schema"
+
+statement ok
+CREATE TABLE "MixedTable"(x INT)
+
+statement ok
+INSERT INTO "MixedTable" VALUES (1)
+
+statement ok
+ALTER TABLE "MixedTable" SET SCHEMA "MixedCase"
+
+query I
+SELECT * FROM "MixedCase"."MixedTable"
+----
+1
+
+statement error pq: relation "MixedTable" does not exist
+SELECT * FROM "MixedTable"
+
+statement ok
+ALTER TABLE "MixedCase"."MixedTable" SET SCHEMA "Another-Schema"
+
+query I
+SELECT * FROM "Another-Schema"."MixedTable"
+----
+1
+
+statement error pq: relation "MixedCase.MixedTable" does not exist
+SELECT * FROM "MixedCase"."MixedTable"
+
+# Test with a type that has mixed-case name.
+statement ok
+CREATE TYPE "MixedCase"."MyType" AS ENUM ('value')
+
+statement ok
+ALTER TYPE "MixedCase"."MyType" SET SCHEMA "Another-Schema"
+
+statement ok
+SELECT 'value'::"Another-Schema"."MyType"
+
+statement error pq: type "MixedCase.MyType" does not exist
+SELECT 'value'::"MixedCase"."MyType"
+
+# Test collision detection with mixed-case names.
+statement ok
+CREATE TABLE "MixedCase"."DuplicateTable"(x INT)
+
+statement ok
+CREATE TABLE "Another-Schema"."DuplicateTable"(x INT)
+
+statement error pq: relation "test\.\\"Another-Schema\\"\.\\"DuplicateTable\\"" already exists
+ALTER TABLE "MixedCase"."DuplicateTable" SET SCHEMA "Another-Schema"
+
+user testuser
+
+subtest end
+
+# Verify that the table descriptor's parent_schema_id field is updated
+# correctly after `ALTER TABLE SET SCHEMA`.
+subtest regression_168255
+
+user root
+
+statement ok
+CREATE SCHEMA s_168255
+
+statement ok
+CREATE TABLE t_168255(x INT)
+
+statement ok
+ALTER TABLE t_168255 SET SCHEMA s_168255
+
+query B
+SELECT parent_schema_id = (SELECT id FROM system.namespace WHERE name = 's_168255')
+  FROM crdb_internal.tables
+ WHERE database_name = 'test' AND name = 't_168255'
+----
+true
+
+statement ok
+ALTER TABLE s_168255.t_168255 SET SCHEMA public
+
+query B
+SELECT parent_schema_id = (SELECT id FROM system.namespace WHERE name = 'public' AND "parentID" = (SELECT id FROM system.namespace WHERE name = 'test' AND "parentID" = 0))
+  FROM crdb_internal.tables
+ WHERE database_name = 'test' AND name = 't_168255'
+----
+true
+
+user testuser
+
+subtest end
+
+subtest array_type_name_conflict
+
+statement ok
+CREATE SCHEMA IF NOT EXISTS ocean
+
+statement ok
+CREATE SCHEMA IF NOT EXISTS stream
+
+statement ok
+CREATE TYPE ocean.salmon AS ENUM ('sockeye', 'king', 'atlantic');
+
+statement ok
+CREATE TYPE stream."_salmon" AS ENUM ('steelhead', 'cherry');
+
+# The companion array type "_salmon" collides.
+statement error pq: type "test.stream._salmon" already exists
+ALTER TYPE ocean.salmon SET SCHEMA stream
+
+# Verify the source type and array are still usable in the original schema.
+statement ok
+SELECT 'sockeye'::ocean.salmon
+
+statement ok
+SELECT ARRAY['sockeye']::ocean._salmon
+
+# The target schema should not contain the primary type.
+query error pq: type "stream.salmon" does not exist
+SELECT NULL::stream.salmon
+
+user testuser
+
+subtest end
+
+# Regression test: The companion array type collides with a table in the destination schema.
+subtest array_type_table_collision
+
+user root
+
+statement ok
+CREATE SCHEMA IF NOT EXISTS lake
+
+statement ok
+CREATE SCHEMA IF NOT EXISTS pond
+
+statement ok
+CREATE TYPE lake.trout AS ENUM ('brown', 'rainbow');
+
+statement ok
+CREATE TABLE pond."_trout" (id INT PRIMARY KEY)
+
+statement error pq: relation "test.pond._trout" already exists
+ALTER TYPE lake.trout SET SCHEMA pond
+
+statement ok
+SELECT 'brown'::lake.trout
+
+# The target schema should not contain the primary type.
+query error pq: type "pond.trout" does not exist
+SELECT NULL::pond.trout
+
+user testuser
+
+subtest end

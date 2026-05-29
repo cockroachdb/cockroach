@@ -1,0 +1,158 @@
+# Tests for the span-limit argument, which limits the number of spans generated
+# by the index constraint code. When the cross-product of spans across columns
+# would exceed the limit, the suffix extension loop stops early, producing wider
+# (less precise) spans with a remaining filter.
+
+# 3x3x3 = 27 spans with no limit.
+index-constraints vars=(a int, b int, c int) index=(a, b, c)
+a IN (1, 3, 5) AND b IN (2, 4, 6) AND c IN (7, 9, 11)
+----
+[/1/2/7 - /1/2/7]
+[/1/2/9 - /1/2/9]
+[/1/2/11 - /1/2/11]
+[/1/4/7 - /1/4/7]
+[/1/4/9 - /1/4/9]
+[/1/4/11 - /1/4/11]
+[/1/6/7 - /1/6/7]
+[/1/6/9 - /1/6/9]
+[/1/6/11 - /1/6/11]
+[/3/2/7 - /3/2/7]
+[/3/2/9 - /3/2/9]
+[/3/2/11 - /3/2/11]
+[/3/4/7 - /3/4/7]
+[/3/4/9 - /3/4/9]
+[/3/4/11 - /3/4/11]
+[/3/6/7 - /3/6/7]
+[/3/6/9 - /3/6/9]
+[/3/6/11 - /3/6/11]
+[/5/2/7 - /5/2/7]
+[/5/2/9 - /5/2/9]
+[/5/2/11 - /5/2/11]
+[/5/4/7 - /5/4/7]
+[/5/4/9 - /5/4/9]
+[/5/4/11 - /5/4/11]
+[/5/6/7 - /5/6/7]
+[/5/6/9 - /5/6/9]
+[/5/6/11 - /5/6/11]
+
+# With span-limit=27, the 27-span cross-product is still allowed.
+index-constraints vars=(a int, b int, c int) index=(a, b, c) span-limit=27
+a IN (1, 3, 5) AND b IN (2, 4, 6) AND c IN (7, 9, 11)
+----
+[/1/2/7 - /1/2/7]
+[/1/2/9 - /1/2/9]
+[/1/2/11 - /1/2/11]
+[/1/4/7 - /1/4/7]
+[/1/4/9 - /1/4/9]
+[/1/4/11 - /1/4/11]
+[/1/6/7 - /1/6/7]
+[/1/6/9 - /1/6/9]
+[/1/6/11 - /1/6/11]
+[/3/2/7 - /3/2/7]
+[/3/2/9 - /3/2/9]
+[/3/2/11 - /3/2/11]
+[/3/4/7 - /3/4/7]
+[/3/4/9 - /3/4/9]
+[/3/4/11 - /3/4/11]
+[/3/6/7 - /3/6/7]
+[/3/6/9 - /3/6/9]
+[/3/6/11 - /3/6/11]
+[/5/2/7 - /5/2/7]
+[/5/2/9 - /5/2/9]
+[/5/2/11 - /5/2/11]
+[/5/4/7 - /5/4/7]
+[/5/4/9 - /5/4/9]
+[/5/4/11 - /5/4/11]
+[/5/6/7 - /5/6/7]
+[/5/6/9 - /5/6/9]
+[/5/6/11 - /5/6/11]
+
+# With span-limit=26, the final 9*3 cross-product is blocked. We get 9 spans
+# for (a, b) with a remaining filter on c.
+index-constraints vars=(a int, b int, c int) index=(a, b, c) span-limit=26
+a IN (1, 3, 5) AND b IN (2, 4, 6) AND c IN (7, 9, 11)
+----
+[/1/2 - /1/2]
+[/1/4 - /1/4]
+[/1/6 - /1/6]
+[/3/2 - /3/2]
+[/3/4 - /3/4]
+[/3/6 - /3/6]
+[/5/2 - /5/2]
+[/5/4 - /5/4]
+[/5/6 - /5/6]
+Remaining filter: c IN (7, 9, 11)
+
+# With span-limit=9, the 9-span (a, b) cross-product is still allowed.
+index-constraints vars=(a int, b int, c int) index=(a, b, c) span-limit=9
+a IN (1, 3, 5) AND b IN (2, 4, 6) AND c IN (7, 9, 11)
+----
+[/1/2 - /1/2]
+[/1/4 - /1/4]
+[/1/6 - /1/6]
+[/3/2 - /3/2]
+[/3/4 - /3/4]
+[/3/6 - /3/6]
+[/5/2 - /5/2]
+[/5/4 - /5/4]
+[/5/6 - /5/6]
+Remaining filter: c IN (7, 9, 11)
+
+# With span-limit=8, even the 3*3 cross-product for (a, b) is blocked. We get
+# just 3 spans for (a) with remaining filters on b and c.
+index-constraints vars=(a int, b int, c int) index=(a, b, c) span-limit=8
+a IN (1, 3, 5) AND b IN (2, 4, 6) AND c IN (7, 9, 11)
+----
+[/1 - /1]
+[/3 - /3]
+[/5 - /5]
+Remaining filter: (b IN (2, 4, 6)) AND (c IN (7, 9, 11))
+
+# With span-limit=3, the initial 3 spans for (a) are still within the limit.
+index-constraints vars=(a int, b int, c int) index=(a, b, c) span-limit=3
+a IN (1, 3, 5) AND b IN (2, 4, 6) AND c IN (7, 9, 11)
+----
+[/1 - /1]
+[/3 - /3]
+[/5 - /5]
+Remaining filter: (b IN (2, 4, 6)) AND (c IN (7, 9, 11))
+
+# With span-limit=1, the limit also applies to the initial IN list expansion in
+# makeSpansForSingleColumn, so we get an unconstrained span.
+index-constraints vars=(a int, b int, c int) index=(a, b, c) span-limit=1
+a IN (1, 3, 5) AND b IN (2, 4, 6) AND c IN (7, 9, 11)
+----
+[ - ]
+Remaining filter: ((a IN (1, 3, 5)) AND (b IN (2, 4, 6))) AND (c IN (7, 9, 11))
+
+# Two-column case: 3x3 = 9 spans with no limit.
+index-constraints vars=(a int, b int) index=(a, b)
+a IN (1, 3, 5) AND b IN (2, 4, 6)
+----
+[/1/2 - /1/2]
+[/1/4 - /1/4]
+[/1/6 - /1/6]
+[/3/2 - /3/2]
+[/3/4 - /3/4]
+[/3/6 - /3/6]
+[/5/2 - /5/2]
+[/5/4 - /5/4]
+[/5/6 - /5/6]
+
+# Two-column case with span-limit=5: cross-product blocked.
+index-constraints vars=(a int, b int) index=(a, b) span-limit=5
+a IN (1, 3, 5) AND b IN (2, 4, 6)
+----
+[/1 - /1]
+[/3 - /3]
+[/5 - /5]
+Remaining filter: b IN (2, 4, 6)
+
+# Range filter on second column: span limit doesn't affect range tightening
+# since Combine doesn't multiply for range spans.
+index-constraints vars=(a int, b int) index=(a, b) span-limit=5
+a IN (1, 3, 5) AND b > 2 AND b < 6
+----
+[/1/3 - /1/5]
+[/3/3 - /3/5]
+[/5/3 - /5/5]

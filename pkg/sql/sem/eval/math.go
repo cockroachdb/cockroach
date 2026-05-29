@@ -17,6 +17,8 @@ import (
 var (
 	errZeroToNegativePower       = pgerror.New(pgcode.InvalidArgumentForPowerFunction, "zero raised to a negative power is undefined")
 	errNegativeToNonIntegerPower = pgerror.New(pgcode.InvalidArgumentForPowerFunction, "a negative number raised to a non-integer power yields a complex result")
+	errFloatOverflow             = pgerror.New(pgcode.NumericValueOutOfRange, "value out of range: overflow")
+	errFloatUnderflow            = pgerror.New(pgcode.NumericValueOutOfRange, "value out of range: underflow")
 
 	zero   = apd.New(0, 0)
 	one    = apd.New(1, 0)
@@ -58,6 +60,32 @@ func DecimalPow(ctx *apd.Context, d, x, y *apd.Decimal) error {
 		return err
 	}
 	return nil
+}
+
+// FloatPow computes the value of x^y for float64 arguments, returning errors
+// for cases that PostgreSQL rejects rather than returning NaN or Inf.
+func FloatPow(x, y float64) (*tree.DFloat, error) {
+	// Zero raised to a negative power is undefined.
+	if x == 0 && y < 0 {
+		return nil, errZeroToNegativePower
+	}
+	// A negative number raised to a non-integer power yields a complex result.
+	if x < 0 && !math.IsNaN(y) && y != math.Trunc(y) {
+		return nil, errNegativeToNonIntegerPower
+	}
+	result := math.Pow(x, y)
+	// Check for overflow and underflow, matching PostgreSQL behavior. If
+	// neither input is Inf or NaN, an Inf result means overflow and a zero
+	// result (from a non-zero base) means underflow.
+	if !math.IsInf(x, 0) && !math.IsNaN(x) && !math.IsInf(y, 0) && !math.IsNaN(y) {
+		if math.IsInf(result, 0) {
+			return nil, errFloatOverflow
+		}
+		if result == 0 && x != 0 {
+			return nil, errFloatUnderflow
+		}
+	}
+	return tree.NewDFloat(tree.DFloat(result)), nil
 }
 
 // Sqrt returns the square root of x.

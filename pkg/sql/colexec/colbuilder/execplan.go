@@ -336,6 +336,8 @@ func canWrap(mode sessiondatapb.VectorizeExecMode, core *execinfrapb.ProcessorCo
 		}
 	case core.IngestStopped != nil:
 		return errCoreNotWorthWrapping
+	case core.Revlog != nil:
+		return errCoreNotWorthWrapping
 	case core.LogicalReplicationWriter != nil:
 		return errCoreNotWorthWrapping
 	case core.LogicalReplicationOfflineScan != nil:
@@ -351,6 +353,14 @@ func canWrap(mode sessiondatapb.VectorizeExecMode, core *execinfrapb.ProcessorCo
 	case core.MergeLoopback != nil:
 		return errCoreNotWorthWrapping
 	case core.IngestFile != nil:
+		return errCoreNotWorthWrapping
+	case core.RevlogLocalMerge != nil:
+		return errCoreNotWorthWrapping
+	case core.TxnLdrCoordinator != nil:
+		return errCoreNotWorthWrapping
+	case core.TxnLdrApplier != nil:
+		return errCoreNotWorthWrapping
+	case core.TxnLdrDepResolver != nil:
 		return errCoreNotWorthWrapping
 	default:
 		err := errors.AssertionFailedf("unexpected processor core %q", core)

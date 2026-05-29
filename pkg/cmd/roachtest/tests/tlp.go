@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
@@ -179,10 +180,10 @@ func runOneTLP(
 	}
 }
 
-// runMutationsStatement runs a random INSERT, UPDATE, or DELETE statement that
-// potentially modifies the state of the database.
+// runMutationStatement runs a random INSERT, UPDATE, DELETE, or DDL statement
+// that potentially modifies the state of the database.
 func runMutationStatement(
-	t task.Tasker, conn *gosql.DB, connInfo string, smither *sqlsmith.Smither, logStmt func(string),
+	t test.Test, conn *gosql.DB, connInfo string, smither *sqlsmith.Smither, logStmt func(string),
 ) {
 	// Ignore panics from Generate.
 	defer func() {
@@ -191,11 +192,16 @@ func runMutationStatement(
 		}
 	}()
 
-	stmt := smither.Generate()
+	stmt, stmtType := smither.GenerateWithTag()
+	timeout := statementTimeout
+	if stmtType == tree.TypeDDL {
+		defer withIncreasedStmtTimeout(t, conn, logStmt, 3)()
+		timeout *= 3
+	}
 
 	// Ignore timeouts.
 	var err error
-	_ = runWithTimeout(t, func() error {
+	_ = runWithTimeout(t, timeout, func() error {
 		// Ignore errors. Log successful statements.
 		if _, err = conn.Exec(stmt); err == nil {
 			logStmt(connInfo + stmt)
@@ -236,7 +242,7 @@ func runTLPQuery(
 	unpartitioned, partitioned, args := smither.GenerateTLP()
 	combined := sqlsmith.CombinedTLP(unpartitioned, partitioned)
 
-	return runWithTimeout(t, func() error {
+	return runWithTimeout(t, statementTimeout, func() error {
 		counts := conn.QueryRow(combined, args...)
 		var undiffCount, diffCount int
 		if err := counts.Scan(&undiffCount, &diffCount); err != nil {
@@ -289,7 +295,7 @@ func runTLPQuery(
 	})
 }
 
-func runWithTimeout(t task.Tasker, f func() error) error {
+func runWithTimeout(t task.Tasker, timeout time.Duration, f func() error) error {
 	done := make(chan error, 1)
 	t.Go(func(context.Context, *logger.Logger) error {
 		err := f()
@@ -297,7 +303,7 @@ func runWithTimeout(t task.Tasker, f func() error) error {
 		return nil
 	})
 	select {
-	case <-time.After(statementTimeout + time.Second*5):
+	case <-time.After(timeout + time.Second*5):
 		// Ignore timeouts.
 		return nil
 	case err := <-done:

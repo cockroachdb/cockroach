@@ -37,7 +37,7 @@ Schema change plan for rolling back CREATE SCHEMA defaultdb.sc; following CREATE
       │         ├── MarkDescriptorAsDropped {"DescriptorID":105}
       │         ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":105,"Name":"sc"}}
       │         ├── RemoveSchemaParent {"Parent":{"ParentDatabaseID":100,"SchemaID":105}}
-      │         ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.Owner"}
+      │         ├── RemoveOwner {"DescriptorID":105}
       │         ├── RemoveUserPrivileges {"DescriptorID":105,"User":"admin"}
       │         ├── RemoveUserPrivileges {"DescriptorID":105,"User":"root"}
       │         ├── CreateGCJobForIndex {"IndexID":2,"TableID":104}

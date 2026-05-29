@@ -117,6 +117,7 @@ const (
 	OptMinCheckpointFrequency             = `min_checkpoint_frequency`
 	OptUpdatedTimestamps                  = `updated`
 	OptMVCCTimestamps                     = `mvcc_timestamp`
+	OptCsvHeader                          = `csv_header`
 	OptDiff                               = `diff`
 	OptCompression                        = `compression`
 	OptSchemaChangeEvents                 = `schema_change_events`
@@ -134,6 +135,7 @@ const (
 	OptLaggingRangesPollingInterval       = `lagging_ranges_polling_interval`
 	OptIgnoreDisableChangefeedReplication = `ignore_disable_changefeed_replication`
 	OptEncodeJSONValueNullAsObject        = `encode_json_value_null_as_object`
+	OptCreateKafkaTopics                  = `create_kafka_topics`
 	// TODO(#142273): look into whether we want to add headers to pub/sub, and other
 	// sinks as well (eg cloudstorage, webhook, ..). Currently it's kafka-only.
 	OptHeadersJSONColumnName = `headers_json_column_name`
@@ -434,11 +436,13 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptLaggingRangesPollingInterval:       durationOption,
 	OptIgnoreDisableChangefeedReplication: flagOption,
 	OptEncodeJSONValueNullAsObject:        flagOption,
+	OptCreateKafkaTopics:                  enum("broker_auto", "explicit", "off").orEmptyMeans("broker_auto"),
 	OptEnrichedProperties:                 csv(string(EnrichedPropertySource), string(EnrichedPropertySchema)),
 	OptRangeDistributionStrategy:          enum(string(ChangefeedRangeDistributionStrategyDefault), string(ChangefeedRangeDistributionStrategyBalancedSimple)),
 	OptHeadersJSONColumnName:              stringOption,
 	OptExtraHeaders:                       jsonOption,
 	OptPartitionAlg:                       enum("fnv-1a", "murmur2"),
+	OptCsvHeader:                          flagOption,
 }
 
 // CommonOptions is options common to all sinks
@@ -460,13 +464,13 @@ var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 var SQLValidOptions map[string]struct{} = nil
 
 // KafkaValidOptions is options exclusive to Kafka sink
-var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptConfluentSchemaRegistry, OptKafkaSinkConfig, OptHeadersJSONColumnName, OptExtraHeaders, OptPartitionAlg)
+var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptConfluentSchemaRegistry, OptKafkaSinkConfig, OptHeadersJSONColumnName, OptExtraHeaders, OptPartitionAlg, OptCreateKafkaTopics)
 
 // CloudStorageValidOptions is options exclusive to cloud storage sink
-var CloudStorageValidOptions = makeStringSet(OptCompression)
+var CloudStorageValidOptions = makeStringSet(OptCompression, OptCsvHeader)
 
 // WebhookValidOptions is options exclusive to webhook sink
-var WebhookValidOptions = makeStringSet(OptWebhookAuthHeader, OptWebhookClientTimeout, OptWebhookSinkConfig, OptCompression, OptExtraHeaders)
+var WebhookValidOptions = makeStringSet(OptWebhookAuthHeader, OptWebhookClientTimeout, OptWebhookSinkConfig, OptCompression, OptExtraHeaders, OptCsvHeader)
 
 // PubsubValidOptions is options exclusive to pubsub sink
 var PubsubValidOptions = makeStringSet(OptPubsubSinkConfig)
@@ -709,6 +713,31 @@ func (s StatementOptions) GetEndTime() string {
 	return s.m[OptEndTime]
 }
 
+// CreateKafkaTopics controls how changefeeds create Kafka topics.
+type CreateKafkaTopics string
+
+const (
+	// CreateKafkaTopicsBrokerAuto uses Kafka broker auto topic creation.
+	CreateKafkaTopicsBrokerAuto CreateKafkaTopics = "broker_auto"
+	// CreateKafkaTopicsExplicit has changefeeds create topics through the Kafka API.
+	CreateKafkaTopicsExplicit CreateKafkaTopics = "explicit"
+	// CreateKafkaTopicsOff implies that other two options are disabled.
+	CreateKafkaTopicsOff CreateKafkaTopics = "off"
+)
+
+// GetCreateKafkaTopics returns the provided topic creation mode.
+// It defaults to CreateKafkaTopicsBrokerAuto.
+func (s StatementOptions) GetCreateKafkaTopics() (CreateKafkaTopics, error) {
+	if _, ok := s.m[OptCreateKafkaTopics]; !ok {
+		return CreateKafkaTopicsBrokerAuto, nil
+	}
+	rawVal, err := s.getEnumValue(OptCreateKafkaTopics)
+	if err != nil {
+		return CreateKafkaTopicsBrokerAuto, err
+	}
+	return CreateKafkaTopics(rawVal), nil
+}
+
 func (s StatementOptions) getEnumValue(k string) (string, error) {
 	enumOptions := ChangefeedOptionExpectValues[k]
 	rawVal, present := s.m[k]
@@ -913,6 +942,7 @@ type EncodingOptions struct {
 	CustomKeyColumn             string
 	EnrichedProperties          map[EnrichedProperty]struct{}
 	HeadersJSONColName          string
+	CsvHeader                   bool
 }
 
 // GetEncodingOptions populates and validates an EncodingOptions.
@@ -955,6 +985,7 @@ func (s StatementOptions) GetEncodingOptions() (EncodingOptions, error) {
 	_, o.MVCCTimestamps = s.m[OptMVCCTimestamps]
 	_, o.Diff = s.m[OptDiff]
 	_, o.EncodeJSONValueNullAsObject = s.m[OptEncodeJSONValueNullAsObject]
+	_, o.CsvHeader = s.m[OptCsvHeader]
 
 	o.SchemaRegistryURI = s.m[OptConfluentSchemaRegistry]
 	o.AvroSchemaPrefix = s.m[OptAvroSchemaPrefix]
@@ -1001,6 +1032,10 @@ func (e EncodingOptions) Validate() error {
 
 	if e.HeadersJSONColName != `` && (e.Format != OptFormatJSON && e.Format != OptFormatAvro) {
 		return errors.Errorf(`%s is only usable with %s=%s/%s`, OptHeadersJSONColumnName, OptFormat, OptFormatJSON, OptFormatAvro)
+	}
+
+	if e.CsvHeader && e.Format != OptFormatCSV {
+		return errors.Errorf(`%s is only usable with %s=%s`, OptCsvHeader, OptFormat, OptFormatCSV)
 	}
 
 	// TODO(#140110): refactor this logic.

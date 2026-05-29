@@ -7,6 +7,7 @@ package clusterstats
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -95,8 +96,8 @@ func (cs *clusterStatCollector) CollectPoint(
 	if err != nil {
 		return nil, err
 	}
-	if len(warnings) > 0 {
-		return nil, errors.Newf("found warnings querying prometheus: %s", warnings)
+	if err := handlePromWarnings(ctx, l, q, warnings); err != nil {
+		return nil, err
 	}
 
 	fromVec := fromVal.(model.Vector)
@@ -169,8 +170,8 @@ func (cs *clusterStatCollector) CollectInterval(
 	if err != nil {
 		return nil, err
 	}
-	if len(warnings) > 0 {
-		return nil, errors.Newf("found warnings querying prometheus: %s", warnings)
+	if err := handlePromWarnings(ctx, l, q, warnings); err != nil {
+		return nil, err
 	}
 
 	fromMatrixTagged := fromVal.(model.Matrix)
@@ -209,4 +210,39 @@ func (cs *clusterStatCollector) CollectInterval(
 	}
 
 	return result, nil
+}
+
+// handlePromWarnings classifies the annotations returned alongside a Prometheus
+// query result. Prometheus annotations come in two flavors, identified by the
+// prefix on the wire:
+//
+//   - "PromQL info: ..." annotations are informational (e.g. a counter-named
+//     metric lint emitted since Prometheus 2.53). The query result is still
+//     valid; we log these and continue.
+//   - "PromQL warning: ..." annotations indicate a likely problem with the
+//     query (e.g. mismatched histogram operations) where Prometheus may have
+//     dropped result elements. Any other unrecognized annotation (e.g. legacy
+//     remote-read warnings, which predate the PromQL annotation system) is
+//     treated the same way to preserve the prior fail-loud behavior.
+//
+// The returned error, if any, matches the format used historically so existing
+// callers and log scrapers see the same string.
+func handlePromWarnings(
+	ctx context.Context, l *logger.Logger, q string, warnings promv1.Warnings,
+) error {
+	if len(warnings) == 0 {
+		return nil
+	}
+	var serious promv1.Warnings
+	for _, w := range warnings {
+		if strings.HasPrefix(w, "PromQL info:") {
+			l.PrintfCtx(ctx, "prometheus info querying %q: %s", q, w)
+			continue
+		}
+		serious = append(serious, w)
+	}
+	if len(serious) == 0 {
+		return nil
+	}
+	return errors.Newf("found warnings querying prometheus: %s", serious)
 }

@@ -1151,7 +1151,7 @@ func maybeUpgradeSequenceReferenceForTable(
 
 		// Upgrade sequence reference in DEFAULT expression, if any.
 		if col.HasDefault() {
-			hasUpgradedInDefault, err := seqexpr.UpgradeSequenceReferenceInExpr(col.DefaultExpr, usedSequenceIDToNames)
+			hasUpgradedInDefault, err := seqexpr.UpgradeSequenceReferenceInExpr((*string)(col.DefaultExpr), usedSequenceIDToNames)
 			if err != nil {
 				return hasUpgraded, err
 			}
@@ -1160,7 +1160,7 @@ func maybeUpgradeSequenceReferenceForTable(
 
 		// Upgrade sequence reference in ON UPDATE expression, if any.
 		if col.HasOnUpdate() {
-			hasUpgradedInOnUpdate, err := seqexpr.UpgradeSequenceReferenceInExpr(col.OnUpdateExpr, usedSequenceIDToNames)
+			hasUpgradedInOnUpdate, err := seqexpr.UpgradeSequenceReferenceInExpr((*string)(col.OnUpdateExpr), usedSequenceIDToNames)
 			if err != nil {
 				return hasUpgraded, err
 			}
@@ -1203,7 +1203,7 @@ func maybeUpgradeSequenceReferenceForView(
 		return false, newExpr, err
 	}
 
-	stmt, err := parserutils.ParseOne(viewDesc.GetViewQuery())
+	stmt, err := parserutils.ParseOne(string(viewDesc.GetViewQuery()))
 	if err != nil {
 		return hasUpgraded, err
 	}
@@ -1213,7 +1213,7 @@ func maybeUpgradeSequenceReferenceForView(
 		return hasUpgraded, err
 	}
 
-	viewDesc.ViewQuery = newStmt.String()
+	viewDesc.ViewQuery = descpb.Statement(newStmt.String())
 
 	return hasUpgraded, err
 }

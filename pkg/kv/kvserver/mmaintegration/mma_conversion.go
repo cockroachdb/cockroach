@@ -6,8 +6,6 @@
 package mmaintegration
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
@@ -93,9 +91,15 @@ func convertReplicaChangeToMMA(
 			})
 			replDescriptors := filteredSet.Descriptors()
 			if len(replDescriptors) != 1 {
-				panic(fmt.Sprintf(
+				// This is reachable when the replicate queue plans changes against
+				// one descriptor and applyChange then re-reads a fresher descriptor
+				// before passing both into NonMMAPreChangeReplicas: a concurrent
+				// replication change can remove the target store in between. The
+				// caller logs and skips MMA registration; the underlying
+				// changeReplicasImpl will detect the stale descriptor via its CPut.
+				return mmaprototype.PendingRangeChange{}, errors.Errorf(
 					"no replica found for removal target=%v post-filter=%v pre-filter=%v",
-					chg.Target.StoreID, replDescriptors, desc))
+					chg.Target.StoreID, replDescriptors, desc)
 			}
 			replDesc := replDescriptors[0]
 			isLeaseholder := replDesc.StoreID == leaseholderStoreID

@@ -721,6 +721,15 @@ func (s *notifyFlushSink) Flush(ctx context.Context) error {
 	return s.Sink.Flush(ctx)
 }
 
+// EmitResolvedTimestamp overrides the embedded Sink's method to notify the
+// test's sinkSynchronizer when a resolved timestamp is written.
+func (s *notifyFlushSink) EmitResolvedTimestamp(
+	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
+) error {
+	defer s.sync.addFlush()
+	return s.Sink.EmitResolvedTimestamp(ctx, encoder, resolved)
+}
+
 func (s *notifyFlushSink) EncodeAndEmitRow(
 	ctx context.Context,
 	updatedRow cdcevent.Row,
@@ -1148,24 +1157,34 @@ func (f *cloudFeedFactory) Feed(
 	}
 	createStmt := parsed.AST.(*tree.CreateChangefeed)
 
-	if createStmt.Select != nil {
+	formatSpecified := false
+	explicitEnvelope := false
+	specifiedFormat := ``
+	for _, opt := range createStmt.Options {
+		if string(opt.Key) == changefeedbase.OptFormat {
+			formatSpecified = true
+			if opt.Value != nil {
+				val, err := exprAsString(opt.Value)
+				if err == nil {
+					specifiedFormat = val
+				}
+			}
+		}
+		if string(opt.Key) == changefeedbase.OptEnvelope {
+			explicitEnvelope = true
+		}
+	}
+
+	formatSupportsKeyInValue :=
+		specifiedFormat != string(changefeedbase.OptFormatCSV) &&
+			specifiedFormat != string(changefeedbase.OptFormatParquet)
+	if createStmt.Select != nil && formatSupportsKeyInValue {
 		createStmt.Options = append(createStmt.Options,
 			// Normally, cloud storage requires key_in_value; but if we use bare envelope,
 			// this option is not required.  However, we need it to make this
 			// test feed work -- so, set it.
 			tree.KVOption{Key: changefeedbase.OptKeyInValue},
 		)
-	}
-
-	formatSpecified := false
-	explicitEnvelope := false
-	for _, opt := range createStmt.Options {
-		if string(opt.Key) == changefeedbase.OptFormat {
-			formatSpecified = true
-		}
-		if string(opt.Key) == changefeedbase.OptEnvelope {
-			explicitEnvelope = true
-		}
 	}
 
 	if !formatSpecified {
@@ -2257,7 +2276,23 @@ func (f *webhookFeedFactory) Feed(create string, args ...interface{}) (cdctest.T
 
 	// required value
 	createStmt.Options = append(createStmt.Options, tree.KVOption{Key: changefeedbase.OptTopicInValue})
-	if createStmt.Select != nil {
+
+	specifiedFormat := ``
+	for _, opt := range createStmt.Options {
+		if string(opt.Key) == changefeedbase.OptFormat {
+			if opt.Value != nil {
+				val, err := exprAsString(opt.Value)
+				if err == nil {
+					specifiedFormat = val
+				}
+			}
+		}
+	}
+
+	formatSupportsKeyInValue :=
+		specifiedFormat != string(changefeedbase.OptFormatCSV) &&
+			specifiedFormat != string(changefeedbase.OptFormatParquet)
+	if createStmt.Select != nil && formatSupportsKeyInValue {
 		// Normally, webhook requires key_in_value; but if we use bare envelope,
 		// this option is not required.  However, we need it to make this
 		// test feed work -- so, set it.
@@ -2345,6 +2380,9 @@ type webhookFeed struct {
 	ss           *sinkSynchronizer
 	envelopeType changefeedbase.EnvelopeType
 	mockSink     *cdctest.MockWebhookSink
+	// pending holds row messages extracted from a single batched POST that
+	// have not yet been returned by Next.
+	pending []*cdctest.TestFeedMessage
 }
 
 var _ cdctest.TestFeed = (*webhookFeed)(nil)
@@ -2402,9 +2440,10 @@ type webhookSinkTestfeedPayload struct {
 	Length  int                 `json:"length"`
 }
 
-// extractValueFromJSONMessage extracts the value of the first element of
-// the payload array from an webhook sink JSON message.
-func extractValueFromJSONMessage(message []byte) (val []byte, err error) {
+// extractValuesFromJSONMessage extracts every value from the payload array
+// of a webhook sink JSON message. A single POST may carry multiple batched
+// rows (the webhook sink wraps batches as {"payload":[r1,r2,...],"length":N}).
+func extractValuesFromJSONMessage(message []byte) (vals [][]byte, err error) {
 	defer func() {
 		if err != nil {
 			err = errors.Wrapf(err, "message was '%s'", message)
@@ -2414,16 +2453,16 @@ func extractValueFromJSONMessage(message []byte) (val []byte, err error) {
 	if err := gojson.Unmarshal(message, &parsed); err != nil {
 		return nil, err
 	}
-	keyParsed := parsed.Payload
-	if len(keyParsed) <= 0 {
+	if len(parsed.Payload) == 0 {
 		return nil, fmt.Errorf("payload value in json message contains no elements")
 	}
-
-	var value []byte
-	if value, err = reformatJSON(keyParsed[0]); err != nil {
-		return nil, err
+	vals = make([][]byte, len(parsed.Payload))
+	for i, raw := range parsed.Payload {
+		if vals[i], err = reformatJSON(raw); err != nil {
+			return nil, err
+		}
 	}
-	return value, nil
+	return vals, nil
 }
 
 // Ignore these headers from the webhook sink, since they're always included and not interesting.
@@ -2437,72 +2476,83 @@ var ignoreHeaders = []string{
 // Next implements TestFeed
 func (f *webhookFeed) Next() (*cdctest.TestFeedMessage, error) {
 	for {
-		msgWithHeaders := f.mockSink.PopWithHeaders()
-		msg := msgWithHeaders.Row
-		if msg != "" {
-			m := &cdctest.TestFeedMessage{}
-			for k, v := range msgWithHeaders.Headers {
-				if slices.Contains(ignoreHeaders, k) {
-					continue
-				}
-				m.Headers = append(m.Headers, cdctest.Header{K: k, V: []byte(v[0])})
-			}
-			if msg != "" {
-				details, err := f.Details()
-				if err != nil {
-					return nil, err
-				}
-				switch v := changefeedbase.FormatType(details.Opts[changefeedbase.OptFormat]); v {
-				case ``, changefeedbase.OptFormatJSON:
-					resolved, err := isResolvedTimestamp([]byte(msg))
-					if err != nil {
-						return nil, err
-					}
-					if resolved {
-						m.Resolved = []byte(msg)
-					} else {
-						wrappedValue, err := extractValueFromJSONMessage([]byte(msg))
-						if err != nil {
-							return nil, err
-						}
-						if m.Key, m.Value, err = extractKeyFromJSONValue(f.envelopeType, wrappedValue); err != nil {
-							return nil, err
-						}
-						if m.Topic, m.Value, err = extractTopicFromJSONValue(f.envelopeType, m.Value); err != nil {
-							return nil, err
-						}
-						if isNew := f.markSeen(m); !isNew {
-							continue
-						}
-					}
-				case changefeedbase.OptFormatCSV:
-					m.Value = []byte(msg)
-					return m, nil
-				default:
-					return nil, errors.Errorf(`unknown %s: %s`, changefeedbase.OptFormat, v)
-				}
-				return m, nil
-			}
-			m.Key, m.Value = nil, nil
+		// A single POST can carry multiple messages, but Next returns one at
+		// a time. Serve any rows queued from a previous POST before fetching
+		// a new one.
+		if len(f.pending) > 0 {
+			m := f.pending[0]
+			f.pending = f.pending[1:]
 			return m, nil
 		}
 
-		if err := timeutil.RunWithTimeout(
-			context.Background(), timeoutOp("webhook.Next", f.jobID), timeout(),
-			func(ctx context.Context) error {
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-f.ss.eventReady():
-					return nil
-				case <-f.mockSink.NotifyMessage():
-					return nil
-				case <-f.shutdown:
-					return f.terminalJobError()
-				}
-			},
-		); err != nil {
+		msgWithHeaders := f.mockSink.PopWithHeaders()
+		msg := msgWithHeaders.Row
+		if msg == "" {
+			if err := timeutil.RunWithTimeout(
+				context.Background(), timeoutOp("webhook.Next", f.jobID), timeout(),
+				func(ctx context.Context) error {
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case <-f.ss.eventReady():
+						return nil
+					case <-f.mockSink.NotifyMessage():
+						return nil
+					case <-f.shutdown:
+						return f.terminalJobError()
+					}
+				},
+			); err != nil {
+				return nil, err
+			}
+			continue
+		}
+
+		var headers []cdctest.Header
+		for k, v := range msgWithHeaders.Headers {
+			if slices.Contains(ignoreHeaders, k) {
+				continue
+			}
+			headers = append(headers, cdctest.Header{K: k, V: []byte(v[0])})
+		}
+		details, err := f.Details()
+		if err != nil {
 			return nil, err
+		}
+		switch v := changefeedbase.FormatType(details.Opts[changefeedbase.OptFormat]); v {
+		case ``, changefeedbase.OptFormatJSON:
+			resolved, err := isResolvedTimestamp([]byte(msg))
+			if err != nil {
+				return nil, err
+			}
+			if resolved {
+				return &cdctest.TestFeedMessage{Headers: headers, Resolved: []byte(msg)}, nil
+			}
+			values, err := extractValuesFromJSONMessage([]byte(msg))
+			if err != nil {
+				return nil, err
+			}
+			for _, value := range values {
+				m := &cdctest.TestFeedMessage{Headers: headers}
+				if m.Key, m.Value, err = extractKeyFromJSONValue(f.envelopeType, value); err != nil {
+					return nil, err
+				}
+				if m.Topic, m.Value, err = extractTopicFromJSONValue(f.envelopeType, m.Value); err != nil {
+					return nil, err
+				}
+				if isNew := f.markSeen(m); !isNew {
+					continue
+				}
+				f.pending = append(f.pending, m)
+			}
+			// Loop back so the drain block at the top returns f.pending[0].
+		case changefeedbase.OptFormatCSV:
+			// The CSV format webhook sink concatenates a batch's rows into
+			// a single CSV document. To avoid implementing CSV parsing, we
+			// return a CSV batch as a single message.
+			return &cdctest.TestFeedMessage{Headers: headers, Value: []byte(msg)}, nil
+		default:
+			return nil, errors.Errorf(`unknown %s: %s`, changefeedbase.OptFormat, v)
 		}
 	}
 }

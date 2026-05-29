@@ -449,7 +449,7 @@ func TestMultiCompactionSchedulerPebble(t *testing.T) {
 		pOpts := &pebble.Options{
 			FS: fs,
 		}
-		pOpts.Experimental.CompactionScheduler = func() pebble.CompactionScheduler {
+		pOpts.CompactionScheduler = func() pebble.CompactionScheduler {
 			return cs
 		}
 		db, err := pebble.Open(path, pOpts)

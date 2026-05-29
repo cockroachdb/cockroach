@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "multiqueue",
-    srcs = ["multi_queue.go"],
+    srcs = [
+        "multi_queue.go",
+        "weighted_multi_queue.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/multiqueue",
     visibility = ["//visibility:public"],
     deps = [
@@ -15,7 +18,10 @@ go_library(
 go_test(
     name = "multiqueue_test",
     size = "small",
-    srcs = ["multi_queue_test.go"],
+    srcs = [
+        "multi_queue_test.go",
+        "weighted_multi_queue_test.go",
+    ],
     embed = [":multiqueue"],
     deps = [
         "//pkg/testutils",

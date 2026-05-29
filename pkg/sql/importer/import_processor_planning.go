@@ -91,8 +91,9 @@ func distImport(
 	// addStoragePrefix records a storage prefix before any SST is written to that
 	// location, ensuring cleanup can occur even if the job fails mid-import.
 	addStoragePrefix := func(ctx context.Context, prefix string) error {
-		return job.NoTxn().Update(ctx, func(
-			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+		return job.DeprecatedNoTxn().Update(ctx, func(
+			txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater,
 		) error {
 			prog := md.Progress.GetImport()
 			if prog == nil {
@@ -169,7 +170,9 @@ func distImport(
 	importDetails := job.Progress().Details.(*jobspb.Progress_Import).Import
 	if importDetails.ReadProgress == nil {
 		// Initialize the progress metrics on the first attempt.
-		if err := job.NoTxn().FractionProgressed(ctx, func(
+		//
+		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+		if err := job.DeprecatedNoTxn().FractionProgressed(ctx, func(
 			ctx context.Context, details jobspb.ProgressDetails,
 		) float32 {
 			prog := details.(*jobspb.Progress_Import).Import
@@ -190,6 +193,21 @@ func distImport(
 	}
 
 	lastSummary := getLastImportSummary(job)
+	// If no file has made progress, reset the summary to prevent readers that
+	// re-read everything on retry from double counting and inflating the
+	// summary.
+	if importDetails.ResumePos != nil {
+		allFromStart := true
+		for _, pos := range importDetails.ResumePos {
+			if pos > 0 {
+				allFromStart = false
+				break
+			}
+		}
+		if allFromStart {
+			lastSummary = kvpb.BulkOpSummary{}
+		}
+	}
 	checkpoint := newImportCheckpointTracker(
 		len(from), lastSummary, nil, /* manifestBuf */
 	)
@@ -239,6 +257,10 @@ func distImport(
 		checkpoint.manifestBuf = backfill.NewSSTManifestBuffer(resumeManifests)
 	}
 
+	// hookFired is set when duringDistImport returns an error. After that,
+	// we skip progress persistence to preserve intermediate ResumePos in
+	// the job record. Safe without a mutex: metaFn runs on a single goroutine.
+	var hookFired bool
 	metaFn := func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
 		if meta.BulkProcessorProgress != nil {
 			// Decode map progress outside the lock since it doesn't touch
@@ -268,8 +290,16 @@ func distImport(
 				}
 			}
 
-			if testingKnobs.alwaysFlushJobProgress {
-				return checkpoint.Persist(ctx, job)
+			if testingKnobs.alwaysFlushJobProgress && !hookFired {
+				if err := checkpoint.Persist(ctx, job); err != nil {
+					return err
+				}
+			}
+			if !hookFired && testingKnobs.duringDistImport != nil {
+				if err := testingKnobs.duringDistImport(); err != nil {
+					hookFired = true
+					return err
+				}
 			}
 		}
 		return nil

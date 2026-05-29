@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/besteffort"
@@ -69,6 +70,11 @@ type importTestingKnobs struct {
 	// call inside ingestWithRetry. If it returns an error, that error
 	// replaces the nil err and triggers a retry.
 	afterDistImport func() error
+	// duringDistImport, if set, is called during distImport processing
+	// after each batch's progress has been recorded (and persisted, if
+	// alwaysFlushJobProgress is true). If it returns a non-nil error,
+	// distImport fails with that error.
+	duringDistImport func() error
 }
 
 type importResumer struct {
@@ -101,6 +107,10 @@ func (r *importResumer) TestingSetAlwaysFlushJobProgress() {
 
 func (r *importResumer) TestingSetAfterDistImportKnob(fn func() error) {
 	r.testingKnobs.afterDistImport = fn
+}
+
+func (r *importResumer) TestingSetDuringDistImportKnob(fn func() error) {
+	r.testingKnobs.duringDistImport = fn
 }
 
 var _ jobs.TraceableJob = &importResumer{}
@@ -202,8 +212,9 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	format := details.Format
 
 	updateDetails := func(txn isql.Txn, details jobspb.ImportDetails) error {
-		return r.job.WithTxn(txn).Update(ctx, func(
-			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+		return r.job.DeprecatedWithTxn(txn).Update(ctx, func(
+			txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater,
 		) error {
 			pl := md.Payload
 			*pl.GetImport() = details
@@ -353,7 +364,8 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			); err != nil {
 				return err
 			}
-			return r.job.WithTxn(txn).SetDetails(ctx, details)
+			//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+			return r.job.DeprecatedWithTxn(txn).SetDetails(ctx, details)
 		}); err != nil {
 			return err
 		}
@@ -417,8 +429,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		return err
 	}
 
-	validationMode := importRowCountValidation.Get(&p.ExecCfg().Settings.SV)
-	switch validationMode {
+	switch validationMode := importRowCountValidation.Get(&p.ExecCfg().Settings.SV); validationMode {
 	case ImportRowCountValidationOff:
 	// No validation required.
 	case ImportRowCountValidationAsync, ImportRowCountValidationSync:
@@ -428,17 +439,29 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 
 		var checks []*jobspb.InspectDetails_Check
-		var tableName string
+		var dbName, schemaName, tableName string
+		var expectedRowCount uint64
 		if err := p.ExecCfg().InternalDB.DescsTxn(ctx, func(
 			ctx context.Context, txn descs.Txn,
 		) error {
 			// INSPECT requires the latest descriptor. The one cached in the job is
 			// out of date as it has an old table version.
-			tblDesc, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, table.Desc.ID)
+			descriptors := txn.Descriptors().ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get()
+			tblDesc, err := descriptors.Table(ctx, table.Desc.ID)
 			if err != nil {
 				return err
 			}
 			tableName = tblDesc.GetName()
+			dbDesc, err := descriptors.Database(ctx, tblDesc.GetParentID())
+			if err != nil {
+				return err
+			}
+			dbName = dbDesc.GetName()
+			scDesc, err := descriptors.Schema(ctx, tblDesc.GetParentSchemaID())
+			if err != nil {
+				return err
+			}
+			schemaName = scDesc.GetName()
 
 			if creationVersion := r.job.Payload().CreationClusterVersion; !details.Table.WasEmpty && creationVersion.Less(clusterversion.V26_2.Version()) {
 				log.Eventf(ctx, "skipping row count on table %q: the table was not empty and the job was started in an unsupported version", tableName)
@@ -452,7 +475,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			if importProgress := prog.GetImport(); importProgress != nil {
 				totalImportedRows = importProgress.Summary.EntryCounts[pkID]
 			}
-			expectedRowCount := uint64(totalImportedRows + int64(table.InitialRowCount) + r.testingKnobs.expectedRowCountOffset)
+			expectedRowCount = uint64(totalImportedRows + int64(table.InitialRowCount) + r.testingKnobs.expectedRowCountOffset)
 			checks, err = inspect.ChecksForTable(ctx, p.ExecCfg(), tblDesc, &expectedRowCount)
 			return err
 		}); err != nil {
@@ -460,9 +483,14 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 
 		if len(checks) > 0 {
+			tn := tree.MakeTableNameWithSchema(
+				tree.Name(dbName),
+				tree.Name(schemaName),
+				tree.Name(tableName),
+			)
 			inspectJob, err := inspect.TriggerJob(
 				ctx,
-				fmt.Sprintf("import-validation-%s", tableName),
+				fmt.Sprintf("Validating IMPORT of %s (IMPORT job %d)", tn.FQString(), r.job.ID()),
 				p.ExecCfg(),
 				checks,
 				setPublicTimestamp,
@@ -473,11 +501,105 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			r.inspectJobID = inspectJob.ID()
 			log.Eventf(ctx, "triggered inspect job %d for import validation for table %s with AOST %s", inspectJob.ID(), tableName, setPublicTimestamp)
 
-			// For sync mode, wait for the inspect job to complete.
-			if validationMode == ImportRowCountValidationSync {
+			switch validationMode {
+			case ImportRowCountValidationSync:
+				// validateInspectRowCount runs a separate row count for
+				// debugging the importer's use of inspect.
+				validateInspectRowCount := func() (err error) {
+					if err := p.ExecCfg().JobRegistry.WaitForJobsIgnoringJobErrors(ctx, []jobspb.JobID{inspectJob.ID()}); err != nil {
+						return errors.Wrapf(err, "failed to wait for inspect job %d for table %s", inspectJob.ID(), tableName)
+					}
+
+					completedJob, err := p.ExecCfg().JobRegistry.LoadJob(ctx, inspectJob.ID())
+					if err != nil {
+						return errors.Wrapf(err, "failed to load inspect job %d for table %s", inspectJob.ID(), tableName)
+					}
+
+					var inspectRowCount uint64
+					completedProgress := completedJob.Progress()
+					if inspectProgress := completedProgress.GetInspect(); inspectProgress != nil {
+						inspectRowCount = inspectProgress.RowCount
+					}
+
+					payload := completedJob.Payload()
+					if payload.FinalResumeError != nil {
+						decodedErr := errors.DecodeError(ctx, *payload.FinalResumeError)
+
+						if jobs.HasErrJobCanceled(decodedErr) {
+							return nil
+						}
+
+						log.Eventf(ctx,
+							"inspect job %d found issues for table %s (inspectRowCount=%d, expectedRowCount=%d)",
+							inspectJob.ID(), tableName, inspectRowCount, expectedRowCount,
+						)
+
+						// rowCountTable runs a count(*) to independently
+						// validate the inspect row count.
+						rowCountTable := func() error {
+							query := fmt.Sprintf(
+								`SELECT count(*) FROM [%d AS t] AS OF SYSTEM TIME '%s'`,
+								table.Desc.ID, setPublicTimestamp.AsOfSystemTime(),
+							)
+							row, err := p.ExecCfg().InternalDB.Executor().QueryRowEx(
+								ctx, "import-count-validation", nil, /* txn */
+								sessiondata.InternalExecutorOverride{
+									User: username.NodeUserName(),
+								},
+								query,
+							)
+							if err != nil {
+								return err
+							}
+							if row == nil {
+								return errors.AssertionFailedf("row count query returned no rows")
+							}
+							if len(row) != 1 {
+								return errors.AssertionFailedf("row count query returned unexpected column count: %d", len(row))
+							}
+							actualCount := uint64(tree.MustBeDInt(row[0]))
+
+							prog := r.job.Progress()
+							var totalImportedRows int64
+							if importProgress := prog.GetImport(); importProgress != nil {
+								totalImportedRows = importProgress.Summary.EntryCounts[pkID]
+							}
+
+							log.Ops.Infof(ctx,
+								"import row count validation for table %s (id=%d): count(*)=%d, inspectRowCount=%d, expected=%d (imported=%d + initial=%d)",
+								tableName, table.Desc.ID, actualCount, inspectRowCount, expectedRowCount,
+								totalImportedRows, table.InitialRowCount,
+							)
+
+							if actualCount != expectedRowCount {
+								return errors.Errorf("import row count validation failed for table %s (id=%d): count(*)=%d, expected=%d", tableName, table.Desc.ID, actualCount, expectedRowCount)
+							}
+
+							return nil
+						}
+						rowCountTableErr := rowCountTable()
+
+						inspectErr := errors.Wrapf(decodedErr,
+							"inspect job %d found issues for table %s", inspectJob.ID(), tableName)
+
+						return errors.WithHintf(
+							errors.CombineErrors(rowCountTableErr, inspectErr),
+							"Run 'SHOW INSPECT ERRORS FOR JOB %d WITH DETAILS' for more information.",
+							inspectJob.ID())
+					}
+
+					return nil
+				}
+				if err := validateInspectRowCount(); err != nil {
+					return err
+				}
+
+				// The broader second wait captures errors from the job
+				// cancellation or pause.
 				if err := p.ExecCfg().JobRegistry.WaitForJobs(ctx, []jobspb.JobID{inspectJob.ID()}); err != nil {
 					return errors.Wrapf(err, "failed to wait for inspect job %d for table %s", inspectJob.ID(), tableName)
 				}
+
 				log.Eventf(ctx, "inspect job %d completed for table %s", inspectJob.ID(), tableName)
 			}
 		}
@@ -699,7 +821,8 @@ func (r *importResumer) publishTable(
 
 		// Update job record to mark table published state as complete.
 		details.TablePublished = true
-		err = r.job.WithTxn(txn).SetDetails(ctx, details)
+		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+		err = r.job.DeprecatedWithTxn(txn).SetDetails(ctx, details)
 		if err != nil {
 			return errors.Wrap(err, "updating job details after publishing the table")
 		}
@@ -740,7 +863,8 @@ func (r *importResumer) checkVirtualConstraints(
 
 	if sql.HasVirtualUniqueConstraints(desc) {
 		status := jobs.StatusMessage(fmt.Sprintf("re-validating %s", desc.GetName()))
-		if err := job.NoTxn().UpdateStatusMessage(ctx, status); err != nil {
+		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+		if err := job.DeprecatedNoTxn().UpdateStatusMessage(ctx, status); err != nil {
 			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(job.ID()))
 		}
 	}
@@ -890,7 +1014,8 @@ func ingestWithRetry(
 	var res kvpb.BulkOpSummary
 	var err error
 	// State to decide when to exit the retry loop.
-	lastProgressChange, lastProgress := timeutil.Now(), getFractionCompleted(job)
+	var lastProgressChange time.Time
+	lastProgress := getFractionCompleted(job)
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		for {
 			res, err = distImport(
@@ -947,7 +1072,10 @@ func ingestWithRetry(
 		}
 
 		maxRetryDuration := retryDuration.Get(&execCtx.ExecCfg().Settings.SV)
-		if timeutil.Since(lastProgressChange) > maxRetryDuration {
+		if lastProgressChange.IsZero() {
+			lastProgressChange = timeutil.Now()
+			log.Dev.Warningf(ctx, "encountered retryable error, starting retry duration timer: %+v", err)
+		} else if timeutil.Since(lastProgressChange) > maxRetryDuration {
 			log.Dev.Warningf(ctx, "encountered retryable error but exceeded retry duration, stopping: %+v", err)
 			break
 		} else {
@@ -1132,8 +1260,9 @@ func truncateTable(ctx context.Context, execCfg *sql.ExecutorConfig, id catid.De
 		return err
 	}
 
+	unsafeAlways := sessiondatapb.UseNewSchemaChangerUnsafeAlways
 	override := sessiondata.NodeUserSessionDataOverride
-	override.MultiOverride = "use_declarative_schema_changer=unsafe_always"
+	override.NewSchemaChangerMode = &unsafeAlways
 	_, err = execCfg.InternalDB.Executor().ExecParsed(
 		ctx,
 		redact.RedactableString("import-truncate-table"),
@@ -1191,8 +1320,9 @@ func (r *importResumer) markOnline(
 			return errors.Wrap(err, "bringing IMPORT INTO table back online")
 		}
 
-		err = r.job.WithTxn(txn).Update(ctx, func(
-			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+		err = r.job.DeprecatedWithTxn(txn).Update(ctx, func(
+			txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater,
 		) error {
 			// Mark the table as published to avoid running cleanup again.
 			details := md.Payload.GetImport()

@@ -18,38 +18,55 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
+// distSQLOff is used to take the address of sessiondatapb.DistSQLOff.
+var distSQLOff = sessiondatapb.DistSQLOff
+
 // nodeUserLocalOnly is a session data override that forces local (non-DistSQL)
 // execution. Statement hint queries are simple point lookups that should not
 // incur the overhead of distributed execution.
 var nodeUserLocalOnly = sessiondata.InternalExecutorOverride{
-	User:          sessiondata.NodeUserSessionDataOverride.User,
-	MultiOverride: "distsql=off",
+	User:        sessiondata.NodeUserSessionDataOverride.User,
+	DistSQLMode: &distSQLOff,
 }
+
+var (
+	// ErrDuplicateHint is set on a hint's Err field when it is superseded by a
+	// newer hint of the same type for the same fingerprint.
+	ErrDuplicateHint = errors.New("superseded by a newer hint")
+
+	// ErrDisabledHint is set on a hint's Err field when it has been disabled by
+	// the user.
+	ErrDisabledHint = errors.New("hint is disabled")
+)
 
 // Hint represents an unmarshaled hint that is ready to apply to statements.
 type Hint struct {
 	hintpb.StatementHintUnion
 
-	// The hint should only be applied to statements if Enabled is true.
-	Enabled bool
-
 	// Database is the database to which this hint is scoped. If empty, the hint
 	// applies regardless of the current database.
 	Database string
 
-	// If Err is not nil it was an error encountered while loading the hint from
-	// system.statement_hints, and Enabled will be false.
+	// Err is non-nil when the hint cannot be applied. This includes errors
+	// encountered during loading or parsing, duplicate suppression
+	// (ErrDuplicateHint) disabled hints (ErrDisabledHint), session variable
+	// application failures, and optimizer planning fallback errors.
+	// A nil Err means the hint is eligible for use.
 	Err error
 
 	// HintInjectionDonor is the fully parsed donor statement fingerprint used for
 	// hint injection.
 	HintInjectionDonor *tree.HintInjectionDonor
 }
+
+// Enabled reports whether the hint is eligible to be applied (no error).
+func (h *Hint) Enabled() bool { return h.Err == nil }
 
 // CheckForStatementHintsInDB queries the system.statement_hints table to
 // determine if there are any hints for the given fingerprint hash. The caller
@@ -143,13 +160,12 @@ func GetStatementHintsFromDB(
 		}
 		hintID, fingerprint, hint := parseHint(it.Cur(), fingerprintFlags)
 		if hint.Err != nil {
+			// Do not return the error. Instead, we'll simply execute the query
+			// without this hint.
 			log.Dev.Warningf(
 				ctx, "could not decode hint ID %v for statement hash %v fingerprint %v: %v",
 				hintID, statementHash, fingerprint, hint.Err,
 			)
-			// Do not return the error. Instead, we'll simply execute the query without
-			// this hint (which should already be disabled).
-			hint.Enabled = false
 		}
 
 		// Resolve duplicate hints by picking the newer one (which will be ordered
@@ -157,14 +173,14 @@ func GetStatementHintsFromDB(
 		switch t := hint.GetValue().(type) {
 		case *hintpb.InjectHints:
 			if _, ok := seenInjections[fingerprint]; ok {
-				hint.Enabled = false
+				hint.Err = ErrDuplicateHint
 			} else {
 				seenInjections[fingerprint] = struct{}{}
 			}
 		case *hintpb.SessionVariableHint:
 			key := [2]string{fingerprint, t.VariableName}
 			if _, ok := seenVarHints[key]; ok {
-				hint.Enabled = false
+				hint.Err = ErrDuplicateHint
 			} else {
 				seenVarHints[key] = struct{}{}
 			}
@@ -198,9 +214,11 @@ func parseHint(
 			return hintID, fingerprint, hint
 		}
 	}
-	hint.Enabled = bool(tree.MustBeDBool(datums[3]))
 	if datums[4] != tree.DNull {
 		hint.Database = string(tree.MustBeDString(datums[4]))
+	}
+	if enabled := bool(tree.MustBeDBool(datums[3])); !enabled {
+		hint.Err = ErrDisabledHint
 	}
 	return hintID, fingerprint, hint
 }
@@ -251,6 +269,45 @@ func InsertHintIntoDB(
 	// StatementHintsCache.handleIncrementalUpdate here to eagerly update the
 	// local node's cache.
 	return int64(tree.MustBeDInt(row[0])), nil
+}
+
+// CountConflictingHintsInDB counts existing enabled hints for the given
+// fingerprint that conflict with the provided hint, excluding the row with
+// excludeRowID. Two hints conflict when only the newer one will be applied at
+// execution time (the older is skipped by deduplication logic).
+func CountConflictingHintsInDB(
+	ctx context.Context,
+	settings *cluster.Settings,
+	txn isql.Txn,
+	fingerprint string,
+	hint hintpb.StatementHintUnion,
+	excludeRowID int64,
+) (int64, error) {
+	const opName = "count-conflicting-hints"
+	if !settings.Version.IsActive(ctx, clusterversion.V26_2_StatementHintsTypeNameEnabledColumnsAdded) {
+		return 0, nil
+	}
+	const selectStmt = `SELECT hint FROM system.statement_hints
+WHERE fingerprint = $1 AND hint_type = $2 AND enabled = true AND row_id != $3`
+	rows, err := txn.QueryBufferedEx(
+		ctx, opName, txn.KV(), sessiondata.NodeUserSessionDataOverride,
+		selectStmt, fingerprint, hint.HintType(), excludeRowID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	var count int64
+	for _, row := range rows {
+		otherBytes := []byte(tree.MustBeDBytes(row[0]))
+		other, err := hintpb.ParseHintProto(otherBytes)
+		if err != nil {
+			continue
+		}
+		if hint.Conflicts(&other) {
+			count++
+		}
+	}
+	return count, nil
 }
 
 // DeleteHintFromDB deletes statement hints from system.statement_hints,

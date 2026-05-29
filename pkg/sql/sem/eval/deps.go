@@ -345,6 +345,11 @@ type Planner interface {
 	// DecodeGist exposes gist functionality to the builtin functions.
 	DecodeGist(ctx context.Context, gist string, external bool) ([]string, error)
 
+	// TimeSeriesQuerier returns the TSDB bridge wired into ExecutorConfig
+	// at server startup, or nil in test configurations that do not bring
+	// up a TSDB server.
+	TimeSeriesQuerier() TimeSeriesQuerier
+
 	// SerializeSessionState serializes the variables in the current session
 	// and returns a state, in bytes form.
 	SerializeSessionState() (*tree.DBytes, error)
@@ -506,9 +511,10 @@ type Planner interface {
 
 	// InsertStatementHint adds a new hint for the given statement fingerprint to
 	// the system.statement_hints table. It returns the hint ID of the newly
-	// created hint. If optDatabase is non-empty, the hint is scoped to the
+	// created hint and a count of existing enabled hints that the new hint
+	// conflicts with. If optDatabase is non-empty, the hint is scoped to the
 	// given database.
-	InsertStatementHint(ctx context.Context, statementFingerprint string, hint hintpb.StatementHintUnion, optDatabase string) (int64, error)
+	InsertStatementHint(ctx context.Context, statementFingerprint string, hint hintpb.StatementHintUnion, optDatabase string) (hintID int64, numOverridden int64, retErr error)
 
 	// DeleteStatementHint deletes statement hints from
 	// system.statement_hints, filtered by the row ID, fingerprint, and/or
@@ -545,6 +551,22 @@ type Planner interface {
 	// structured logs. This is exposed on the Planner interface to allow builtins
 	// to log events.
 	LogEvent(ctx context.Context, event interface{}) error
+
+	// AdvisoryXactLock acquires a transaction-scoped advisory lock on a single
+	// 64-bit key in the current database (PostgreSQL pg_advisory_xact_lock(bigint)).
+	// shared selects pg_advisory_xact_lock_shared behavior when true.
+	AdvisoryXactLock(ctx context.Context, key int64, shared bool) error
+
+	// AdvisoryXactLockInt4 acquires a transaction-scoped advisory lock from two
+	// 32-bit keys (PostgreSQL's two-integer advisory lock form).
+	AdvisoryXactLockInt4(ctx context.Context, key1, key2 int32, shared bool) error
+
+	// AdvisoryTryXactLock attempts to acquire an exclusive or shared transaction-level
+	// advisory lock without waiting (pg_try_advisory_xact_lock).
+	AdvisoryTryXactLock(ctx context.Context, key int64, shared bool) (bool, error)
+
+	// AdvisoryTryXactLockInt4 is the two-int32-key variant of AdvisoryTryXactLock.
+	AdvisoryTryXactLockInt4(ctx context.Context, key1, key2 int32, shared bool) (bool, error)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

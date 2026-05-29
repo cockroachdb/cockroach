@@ -10,8 +10,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -31,6 +34,8 @@ const (
 	autoStatsEnabledIdx
 	statsLastUpdatedIdx
 	spanIdx
+	primaryIndexIDIdx
+	secondaryIndexIDsIdx
 
 	// iterCols is the number of columns returned by the batch iterator.
 	iterCols
@@ -57,10 +62,19 @@ type tableMetadataIterRow struct {
 	tableType        string
 	autoStatsEnabled *bool
 	statsLastUpdated *time.Time
+	// primaryIndexID is the ID of the table's primary index, or 0 if the
+	// relation has no primary index (e.g., views).
+	primaryIndexID descpb.IndexID
+	// indexSizes maps each live index ID to its replication size in bytes,
+	// derived from per-index spans in the same SpanStats batch as the
+	// table-level span. Empty for relations with no indexes.
+	indexSizes map[descpb.IndexID]int64
 }
 
 type tableMetadataBatchIterator struct {
 	ie isql.Executor
+	// codec is used to compute per-index span prefixes.
+	codec keys.SQLCodec
 	// The last ID that was read from the iterator.
 	lastID paginationKey
 	// The current batch of rows.
@@ -72,11 +86,16 @@ type tableMetadataBatchIterator struct {
 }
 
 func newTableMetadataBatchIterator(
-	ie isql.Executor, spanStatsFetcher spanStatsFetcher, aostClause string, batchSize int64,
+	ie isql.Executor,
+	codec keys.SQLCodec,
+	spanStatsFetcher spanStatsFetcher,
+	aostClause string,
+	batchSize int64,
 ) *tableMetadataBatchIterator {
 	return &tableMetadataBatchIterator{
 		batchSize:        batchSize,
 		ie:               ie,
+		codec:            codec,
 		spanStatsFetcher: spanStatsFetcher,
 		batchRows:        make([]tableMetadataIterRow, 0, batchSize),
 		lastID: paginationKey{
@@ -110,10 +129,20 @@ func (batchIter *tableMetadataBatchIterator) fetchNextBatch(
 	// Rows are then joined with the system.descirptor table to get the
 	// table descriptor metadata.
 	//
-	// We collect the table spans for the tables in the batch and issue
-	// a single SpanStats rpc via the spanStatsFetcher to get the span
-	// stats for all the tables in the batch.
-	var spans roachpb.Spans
+	// We collect the table spans (one per row) and per-index spans (zero
+	// or more per row) and issue a single SpanStats rpc via the
+	// spanStatsFetcher. The response is keyed by span.String(), so the
+	// table and per-index sizes are demultiplexed back to each row after
+	// the RPC returns. tableSpans is kept parallel to batchRows;
+	// indexSpanRefs records the (row, index) attribution for each
+	// element of indexSpans.
+	var tableSpans roachpb.Spans
+	var indexSpans roachpb.Spans
+	type indexSpanRef struct {
+		rowIdx  int
+		indexID descpb.IndexID
+	}
+	var indexSpanRefs []indexSpanRef
 	var itErr error
 	var exhausted bool
 	for {
@@ -192,10 +221,30 @@ func (batchIter *tableMetadataBatchIterator) fetchNextBatch(
 				}
 
 				dSpan := tree.MustBeDArray(row[spanIdx]).Array
-				spans = append(spans, roachpb.Span{
+				tableSpans = append(tableSpans, roachpb.Span{
 					Key:    []byte(tree.MustBeDBytes(dSpan[0])),
 					EndKey: []byte(tree.MustBeDBytes(dSpan[1])),
 				})
+
+				// Collect per-index spans for this row. Each becomes its own
+				// entry in the SpanStats request, paired with an indexSpanRef
+				// so the per-index size can be matched back to the right
+				// (row, index) after the RPC returns. Views have no primary
+				// index and no secondary indexes; sequences have a primary
+				// only; tables and matviews have both.
+				rowIdx := len(batchIter.batchRows)
+				if row[primaryIndexIDIdx] != tree.DNull {
+					iterRow.primaryIndexID = descpb.IndexID(tree.MustBeDInt(row[primaryIndexIDIdx]))
+					indexSpans = append(indexSpans, indexSpan(batchIter.codec, descpb.ID(iterRow.tableID), iterRow.primaryIndexID))
+					indexSpanRefs = append(indexSpanRefs, indexSpanRef{rowIdx: rowIdx, indexID: iterRow.primaryIndexID})
+				}
+				if row[secondaryIndexIDsIdx] != tree.DNull {
+					for _, d := range tree.MustBeDArray(row[secondaryIndexIDsIdx]).Array {
+						idxID := descpb.IndexID(tree.MustBeDInt(d))
+						indexSpans = append(indexSpans, indexSpan(batchIter.codec, descpb.ID(iterRow.tableID), idxID))
+						indexSpanRefs = append(indexSpanRefs, indexSpanRef{rowIdx: rowIdx, indexID: idxID})
+					}
+				}
 
 				batchIter.batchRows = append(batchIter.batchRows, iterRow)
 			}
@@ -214,9 +263,15 @@ func (batchIter *tableMetadataBatchIterator) fetchNextBatch(
 		}
 	}
 
-	// Collect the span stats for the tables in the batch.
+	// Collect the span stats for the tables and indexes in the batch in
+	// one round trip. Table-level spans come first, then per-index spans;
+	// the response is keyed by span.String() so order doesn't matter for
+	// demultiplexing.
+	allSpans := make(roachpb.Spans, 0, len(tableSpans)+len(indexSpans))
+	allSpans = append(allSpans, tableSpans...)
+	allSpans = append(allSpans, indexSpans...)
 	res, err := batchIter.spanStatsFetcher.SpanStats(ctx, &roachpb.SpanStatsRequest{
-		Spans:  spans,
+		Spans:  allSpans,
 		NodeID: "0", // Fan out.
 		// Tablemetadata does not use the ApproximateTotalStats field, so we can skip the
 		// nodes making additional RangeStats RPCs to collect the MVCC stats across all replicas.
@@ -236,16 +291,33 @@ func (batchIter *tableMetadataBatchIterator) fetchNextBatch(
 
 	if res.SpanToStats != nil {
 		for i, row := range batchIter.batchRows {
-			spanStats := res.SpanToStats[spans[i].String()]
+			spanStats := res.SpanToStats[tableSpans[i].String()]
 			if spanStats == nil {
 				continue
 			}
 			row.spanStats = *spanStats
 			batchIter.batchRows[i] = row
 		}
+		for i, ref := range indexSpanRefs {
+			spanStats := res.SpanToStats[indexSpans[i].String()]
+			if spanStats == nil {
+				continue
+			}
+			row := &batchIter.batchRows[ref.rowIdx]
+			if row.indexSizes == nil {
+				row.indexSizes = make(map[descpb.IndexID]int64)
+			}
+			row.indexSizes[ref.indexID] = int64(spanStats.ApproximateDiskBytes)
+		}
 	}
 
 	return true, nil
+}
+
+// indexSpan returns the span containing the keys of the given index.
+func indexSpan(codec keys.SQLCodec, tableID descpb.ID, indexID descpb.IndexID) roachpb.Span {
+	start := roachpb.Key(rowenc.MakeIndexKeyPrefix(codec, tableID, indexID))
+	return roachpb.Span{Key: start, EndKey: start.PrefixEnd()}
 }
 
 // newBatchQueryStatement creates a query statement to fetch batches of table metadata to insert into
@@ -292,7 +364,12 @@ SELECT
         WHERE "tableID" = n_id
         GROUP BY "tableID"
     ),
-    crdb_internal.table_span(n_id) as span
+    crdb_internal.table_span(n_id) as span,
+    (d->'table'->'primaryIndex'->>'id')::INT as primary_index_id,
+    (
+        SELECT array_agg((idx->>'id')::INT)
+        FROM jsonb_array_elements(d->'table'->'indexes') idx
+    ) as secondary_index_ids
 FROM
     cte
 %[1]s

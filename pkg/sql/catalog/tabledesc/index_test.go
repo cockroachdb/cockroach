@@ -276,7 +276,7 @@ func TestIndexInterface(t *testing.T) {
 	}
 
 	// Check particular index features.
-	require.Equal(t, "c4 = 'x':::STRING", s5.GetPredicate())
+	require.Equal(t, "c4 = 'x':::STRING", string(s5.GetPredicate()))
 	require.Equal(t, "crdb_internal_c5_shard_8", s4.GetShardColumnName())
 	require.Equal(t, int32(2), s6.GetGeoConfig().S2Geography.S2Config.LevelMod)
 	require.Equal(t, int32(3), s7.GetVecConfig().Dims)

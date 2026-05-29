@@ -53,13 +53,6 @@ func (s *storageWithDatabase) Release(ctx context.Context, id uuid.UUID) error {
 	})
 }
 
-func (s *storageWithDatabase) GetMetadata(ctx context.Context) (md ptpb.Metadata, _ error) {
-	return md, s.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
-		md, err = s.s.WithTxn(txn).GetMetadata(ctx)
-		return err
-	})
-}
-
 func (s *storageWithDatabase) GetState(ctx context.Context) (state ptpb.State, err error) {
 	return state, s.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
 		state, err = s.s.WithTxn(txn).GetState(ctx)

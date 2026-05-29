@@ -11,6 +11,7 @@ import (
 	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/crlib/crstrings"
@@ -403,11 +404,40 @@ func toOverloadKind(withinLeaseSheddingGracePeriod bool, ignoreLevel ignoreLevel
 // stores'. Each store tracks "from my perspective, what overloaded stores did I
 // observe and what were the outcomes?" during its rebalancing pass.
 //
-// Each rebalancing pass: states and skippedStores are reset at start. For each
-// overloaded store, curState/curStoreID track shedding results; when processing
-// of that store completes, curState is saved to states (or the store is added
-// to skippedStores if skipped). At the end of the pass, states is aggregated to
-// update m, and failedSummaries/successSummaries are built for logging.
+// Each rebalancing pass: states is reset at start. For each overloaded
+// store, curState/curStoreID track shedding results; when processing of that
+// store completes, curState is saved to states. At the end of the pass,
+// states is aggregated to update m, and failedSummaries/successSummaries are
+// built for logging.
+//
+// Pairing protocol. The methods on this type must be invoked in the order
+// described, once per rebalanceStores invocation. In production the methods
+// are only invoked on the first rebalanceStores call per allocator tick.
+// The aggregation in computePassSummary depends on these invariants:
+//
+//  1. resetForRebalancingPass is called once at the start of the
+//     rebalanceStores call.
+//  2. For each store classified as overloaded (i.e. each entry that ends up
+//     in sheddingStores), storeOverloaded is called exactly once.
+//  3. For each storeOverloaded call, finishStore is called exactly once
+//     before any subsequent storeOverloaded call. The window between
+//     storeOverloaded and finishStore is the only time leaseShed and
+//     replicaShed may be called for that store.
+//  4. Between a storeOverloaded/finishStore pair, leaseShed and/or
+//     replicaShed are called once for each top-K range the rebalancer
+//     actually examined for that store (one call per range, recording the
+//     corresponding shedResult). The rebalancer stops iterating early — and
+//     so stops calling leaseShed/replicaShed — when it hits its per-store
+//     transfer limit (maxLeaseTransferCount for leases), when
+//     ss.maxFractionPendingDecrease saturates above
+//     fractionPendingIncreaseOrDecreaseThreshold mid-loop, or (for replicas)
+//     when rebalanceStores' shared range-move budget re.maxRangeMoveCount is
+//     exhausted. If no ranges were examined at all (cannotShed=true, or
+//     rebalanceStores already reached re.maxRangeMoveCount before this
+//     store's turn), neither is called and the store is classified as
+//     skipped by computePassSummary.
+//  5. finishRebalancingPass is called once at the end of the rebalanceStores
+//     call.
 type rebalancingPassMetricsAndLogger struct {
 	// The local store where the rebalancing pass is happening.
 	localStoreID roachpb.StoreID
@@ -418,9 +448,17 @@ type rebalancingPassMetricsAndLogger struct {
 
 	// Overloaded store ID -> shedding counts and overload category.
 	states map[roachpb.StoreID]storePassState
-	// Overloaded stores skipped during the pass (due to max range/lease move
-	// limit reached).
-	skippedStores []roachpb.StoreID
+	// numStoreOverloadedCallsThisPass counts storeOverloaded invocations
+	// during one rebalanceStores call. Reset by resetForRebalancingPass at
+	// the start of the call and incremented once per sheddingStores entry
+	// (i.e. on each storeOverloaded call). In production, the methods
+	// recording into this struct are only invoked on the first
+	// rebalanceStores call per allocator tick. Used by the assertions in
+	// finishRebalancingPass and computePassSummary.
+	numStoreOverloadedCallsThisPass int64
+	// storeOpen is true while a storeOverloaded/finishStore pair is open
+	// (i.e. between calls). Used only by the pairing assertions.
+	storeOpen bool
 	// Shedding results for the currently-processing store.
 	curState storePassState
 	// Store ID that curState belongs to.
@@ -592,29 +630,109 @@ var (
 		StaticLabels: metric.MakeLabelPairs(
 			metric.LabelType, "long_dur", metric.LabelResult, "failure"),
 	}
+
+	// The "skipped" gauges below cover the third per-bucket outcome: the
+	// store is overloaded but MMA chose not to shed from it this pass for a
+	// known reason. Common reasons include: pending work on the store
+	// (pending-decrease saturated above the fraction threshold, or
+	// pending-increase >= epsilon), no top-K ranges available to evaluate,
+	// or rebalanceStores' per-pass range-move budget already exhausted by a
+	// higher-priority store. For each duration bucket, success + failure +
+	// skipped equals the count of overloaded stores observed during the
+	// local MMA rebalancing pass.
+	metaOverloadedStoreLeaseGraceSkipped = metric.Metadata{
+		Name: "mma.overloaded_store.lease_grace.skipped",
+		Help: "Number of overloaded stores in the lease shedding grace period (first 2 min of " +
+			"overload) that MMA recognized as overloaded but did not shed from this pass. " +
+			"Common reasons include pending work on the store (pending-decrease saturated " +
+			"above the configured fraction threshold, or pending-increase >= epsilon, " +
+			"indicating the load arithmetic is unreliable), no top-K ranges available to " +
+			"evaluate, or the per-pass range-move budget already exhausted. For each " +
+			"duration bucket, success + failure + skipped equals the total overloaded stores " +
+			"observed in that bucket this pass.",
+		Measurement: "Stores",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "mma.overloaded_store",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelType, "lease_grace", metric.LabelResult, "skipped"),
+	}
+	metaOverloadedStoreShortDurSkipped = metric.Metadata{
+		Name: "mma.overloaded_store.short_dur.skipped",
+		Help: "Number of stores overloaded for a short duration (2-5 min) that MMA recognized " +
+			"as overloaded but did not shed from this pass. Common reasons include pending " +
+			"work on the store (pending-decrease saturated above the configured fraction " +
+			"threshold, or pending-increase >= epsilon), no top-K ranges available to " +
+			"evaluate, or the per-pass range-move budget already exhausted. For each " +
+			"duration bucket, success + failure + skipped equals the total overloaded stores " +
+			"observed in that bucket this pass.",
+		Measurement: "Stores",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "mma.overloaded_store",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelType, "short_dur", metric.LabelResult, "skipped"),
+	}
+	metaOverloadedStoreMediumDurSkipped = metric.Metadata{
+		Name: "mma.overloaded_store.medium_dur.skipped",
+		Help: "Number of stores overloaded for a medium duration (5-8 min) that MMA recognized " +
+			"as overloaded but did not shed from this pass. Common reasons include pending " +
+			"work on the store (pending-decrease saturated above the configured fraction " +
+			"threshold, or pending-increase >= epsilon), no top-K ranges available to " +
+			"evaluate, or the per-pass range-move budget already exhausted. For each " +
+			"duration bucket, success + failure + skipped equals the total overloaded stores " +
+			"observed in that bucket this pass.",
+		Measurement: "Stores",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "mma.overloaded_store",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelType, "medium_dur", metric.LabelResult, "skipped"),
+	}
+	metaOverloadedStoreLongDurSkipped = metric.Metadata{
+		Name: "mma.overloaded_store.long_dur.skipped",
+		Help: "Number of stores overloaded for a long duration (8+ min) that MMA recognized as " +
+			"overloaded but did not shed from this pass. Common reasons include pending work " +
+			"on the store (pending-decrease saturated above the configured fraction threshold, " +
+			"or pending-increase >= epsilon), no top-K ranges available to evaluate, or the " +
+			"per-pass range-move budget already exhausted. A persistently non-zero value here " +
+			"indicates an overloaded store that is repeatedly being deferred and may not be " +
+			"receiving relief. For each duration bucket, success + failure + skipped equals " +
+			"the total overloaded stores observed in that bucket this pass.",
+		Measurement: "Stores",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "mma.overloaded_store",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelType, "long_dur", metric.LabelResult, "skipped"),
+	}
 )
 
 type gaugeMetrics struct {
 	OverloadedStoreLeaseGraceSuccess *metric.Gauge
 	OverloadedStoreLeaseGraceFailure *metric.Gauge
+	OverloadedStoreLeaseGraceSkipped *metric.Gauge
 	OverloadedStoreShortDurSuccess   *metric.Gauge
 	OverloadedStoreShortDurFailure   *metric.Gauge
+	OverloadedStoreShortDurSkipped   *metric.Gauge
 	OverloadedStoreMediumDurSuccess  *metric.Gauge
 	OverloadedStoreMediumDurFailure  *metric.Gauge
+	OverloadedStoreMediumDurSkipped  *metric.Gauge
 	OverloadedStoreLongDurSuccess    *metric.Gauge
 	OverloadedStoreLongDurFailure    *metric.Gauge
+	OverloadedStoreLongDurSkipped    *metric.Gauge
 }
 
 func (m *gaugeMetrics) init() {
 	*m = gaugeMetrics{
 		OverloadedStoreLeaseGraceSuccess: metric.NewGauge(metaOverloadedStoreLeaseGraceSuccess),
 		OverloadedStoreLeaseGraceFailure: metric.NewGauge(metaOverloadedStoreLeaseGraceFailure),
+		OverloadedStoreLeaseGraceSkipped: metric.NewGauge(metaOverloadedStoreLeaseGraceSkipped),
 		OverloadedStoreShortDurSuccess:   metric.NewGauge(metaOverloadedStoreShortDurSuccess),
 		OverloadedStoreShortDurFailure:   metric.NewGauge(metaOverloadedStoreShortDurFailure),
+		OverloadedStoreShortDurSkipped:   metric.NewGauge(metaOverloadedStoreShortDurSkipped),
 		OverloadedStoreMediumDurSuccess:  metric.NewGauge(metaOverloadedStoreMediumDurSuccess),
 		OverloadedStoreMediumDurFailure:  metric.NewGauge(metaOverloadedStoreMediumDurFailure),
+		OverloadedStoreMediumDurSkipped:  metric.NewGauge(metaOverloadedStoreMediumDurSkipped),
 		OverloadedStoreLongDurSuccess:    metric.NewGauge(metaOverloadedStoreLongDurSuccess),
 		OverloadedStoreLongDurFailure:    metric.NewGauge(metaOverloadedStoreLongDurFailure),
+		OverloadedStoreLongDurSkipped:    metric.NewGauge(metaOverloadedStoreLongDurSkipped),
 	}
 }
 
@@ -634,26 +752,56 @@ func (g *rebalancingPassMetricsAndLogger) resetForRebalancingPass() {
 		return
 	}
 	clear(g.states)
-	g.skippedStores = g.skippedStores[:0]
+	g.numStoreOverloadedCallsThisPass = 0
+	g.storeOpen = false
 }
 
+// assertTruef enforces an invariant when cond is false: in CRDB test
+// builds it panics with an errors.AssertionFailedf; in production it
+// logs the same wrapped error to log.KvDistribution at Error severity
+// and returns. The supplied ctx is used for the production log so
+// call-site log tags (e.g. mmaid) are preserved.
+func assertTruef(ctx context.Context, cond bool, format string, args ...any) {
+	if cond {
+		return
+	}
+	if buildutil.CrdbTestBuild {
+		panic(errors.AssertionFailedf(format, args...))
+	}
+	log.KvDistribution.Errorf(ctx, "%v", errors.AssertionFailedf(format, args...))
+}
+
+// storeOverloaded marks the start of processing for an overloaded store.
 func (g *rebalancingPassMetricsAndLogger) storeOverloaded(
-	storeID roachpb.StoreID, withinLeaseSheddingGracePeriod bool, ignoreLevel ignoreLevel,
+	ctx context.Context,
+	storeID roachpb.StoreID,
+	withinLeaseSheddingGracePeriod bool,
+	ignoreLevel ignoreLevel,
 ) {
 	if g == nil {
 		return
 	}
+	assertTruef(ctx, !g.storeOpen,
+		"storeOverloaded called for s%d while s%d still open",
+		storeID, g.curStoreID)
 	g.curStoreID = storeID
 	g.curState = storePassState{
 		overloadKind: toOverloadKind(withinLeaseSheddingGracePeriod, ignoreLevel),
 	}
+	g.numStoreOverloadedCallsThisPass++
+	g.storeOpen = true
 }
 
-func (g *rebalancingPassMetricsAndLogger) finishStore() {
+// finishStore commits the curState accumulated since the matching
+// storeOverloaded call into g.states.
+func (g *rebalancingPassMetricsAndLogger) finishStore(ctx context.Context) {
 	if g == nil {
 		return
 	}
+	assertTruef(ctx, g.storeOpen,
+		"finishStore called with no open storeOverloaded")
 	g.states[g.curStoreID] = g.curState
+	g.storeOpen = false
 }
 
 // shedResult is specified for ranges that were considered for shedding. It
@@ -711,72 +859,93 @@ func (sr shedResult) SafeFormat(w redact.SafePrinter, _ rune) {
 	}
 }
 
-// leaseShed is sandwiched between storeOverloaded and finishStore, and
-// provides the result of the shedding attempt.
-func (g *rebalancingPassMetricsAndLogger) leaseShed(result shedResult) {
+// leaseShed records the outcome of considering one top-K range for a
+// lease transfer from the currently-open overloaded store. Called once
+// per top-K range that the rebalancer examined; not called at all if no
+// ranges were examined (the store is then classified as skipped).
+func (g *rebalancingPassMetricsAndLogger) leaseShed(ctx context.Context, result shedResult) {
 	if g == nil {
 		return
 	}
+	assertTruef(ctx, g.storeOpen,
+		"leaseShed called with no open storeOverloaded")
 	g.curState.shedCounts[shedLease][result]++
 }
 
-// replicaShed is sandwiched between storeOverloaded and finishStore, and
-// provides the result of the shedding attempt.
-func (g *rebalancingPassMetricsAndLogger) replicaShed(result shedResult) {
+// replicaShed records the outcome of considering one top-K range for a
+// replica move from the currently-open overloaded store. Called once per
+// top-K range that the rebalancer examined; not called at all if no
+// ranges were examined (the store is then classified as skipped).
+func (g *rebalancingPassMetricsAndLogger) replicaShed(ctx context.Context, result shedResult) {
 	if g == nil {
 		return
 	}
+	assertTruef(ctx, g.storeOpen,
+		"replicaShed called with no open storeOverloaded")
 	g.curState.shedCounts[shedReplica][result]++
 }
 
-func (g *rebalancingPassMetricsAndLogger) skippedStore(storeID roachpb.StoreID) {
+// finishRebalancingPass closes out the bookkeeping for one rebalanceStores
+// invocation. numSheddingStores is the size of the caller's sheddingStores
+// slice; it must equal the number of storeOverloaded calls made during the
+// rebalanceStores call.
+func (g *rebalancingPassMetricsAndLogger) finishRebalancingPass(
+	ctx context.Context, numSheddingStores int,
+) {
 	if g == nil {
 		return
 	}
-	g.skippedStores = append(g.skippedStores, storeID)
-}
-
-func (g *rebalancingPassMetricsAndLogger) finishRebalancingPass(ctx context.Context) {
-	if g == nil {
-		return
-	}
+	assertTruef(ctx, !g.storeOpen,
+		"finishRebalancingPass called with s%d still open", g.curStoreID)
+	assertTruef(ctx, int64(numSheddingStores) == g.numStoreOverloadedCallsThisPass,
+		"mma rebalancing pass: len(sheddingStores)=%d != storeOverloaded calls=%d",
+		redact.SafeInt(numSheddingStores),
+		redact.SafeInt(g.numStoreOverloadedCallsThisPass))
 	buf := redact.StringBuilder{}
-	g.computePassSummary(&buf)
+	g.computePassSummary(ctx, &buf)
 	log.KvDistribution.Infof(ctx, "%s", buf.RedactableString())
 }
 
 // computePassSummary performs the aggregation of the rebalancing pass summary,
 // updates gauges and generates a log message with stores per category of
-// successful rebalances, failed rebalances, skipped stores, and stores for
-// which no ranges were evaluates. The list of stores is truncated upto a fixed
-// number of stores (see `logStores`).
+// successful rebalances, failed rebalances, and skipped stores (overloaded
+// but not shed from this pass for any reason: pending work, lease-grace
+// remote, no top-K ranges to evaluate, or per-pass range-move budget
+// exhausted). The list of stores is truncated upto a fixed number of stores
+// (see `logStores`).
+//
+// INVARIANT: per duration bucket,
+//
+//	success + failure + skipped == count of overloaded stores in bucket.
+//
+// Holds by construction: every overloaded store goes through
+// storeOverloaded + finishStore exactly once, and the switch in this
+// function places it into exactly one of the three outcomes.
+//
 // Example output:
-/*
-rebalancing pass summary [local=s1]:
-	overloaded:
-		short: [s1, s10]
-		medium: [s8]
-		long: [s6]
-	success: [s1]
-	failure: [{s6, total: 2, no-cand-load:2}, {s8, total: 1, no-cand:1}]
-	skipped: [s5]
-	no-ranges-evaluated: [s10]
-*/
-func (g *rebalancingPassMetricsAndLogger) computePassSummary(buf *redact.StringBuilder) {
+// rebalancing pass summary [local=s1]: overloaded: short: [s1, s5, s10] medium: [s8] long: [s6] success: [s1] failure: [{s6, total: 2, no-cand-load:2}, {s8,
+// total: 1, no-cand:1}] skipped: [s5, s10] */
+func (g *rebalancingPassMetricsAndLogger) computePassSummary(
+	ctx context.Context, buf *redact.StringBuilder,
+) {
 	g.failedSummaries = g.failedSummaries[:0]
 	g.successSummaries = g.successSummaries[:0]
 
 	// For each overloadKind, collect the stores that belong to it and count
-	// the stores that had shedding success or failure.
-	// NB: Each store is counted at most once based on whether it had any
-	// shedding success, even if it had shedding failures.
+	// the stores that had shedding success, failure, or were skipped this
+	// pass. The skipped count and slice are derived: any overloaded store
+	// that did not record a leaseShed/replicaShed call between
+	// storeOverloaded and finishStore lands here. This makes
+	// success + failure + skipped == len(overloaded stores in bucket) hold
+	// by construction; the inline assertion below double-checks.
+	// NB: Each store is counted at most once.
 	var overloadSummaries [numOverloadKinds]struct {
-		success, failure int64
-		stores           []roachpb.StoreID
+		success, failure, skipped int64
+		stores                    []roachpb.StoreID
 	}
 
-	// Collect the stores for which no ranges were evaluated.
-	var noRangesEvaluated []roachpb.StoreID
+	// Collect skipped stores for the per-pass log.
+	var skippedStores []roachpb.StoreID
 
 	for storeID, passState := range g.states {
 		storeSummary := passState.summarize()
@@ -785,16 +954,41 @@ func (g *rebalancingPassMetricsAndLogger) computePassSummary(buf *redact.StringB
 		overloadSummary := &overloadSummaries[passState.overloadKind]
 		overloadSummary.stores = append(overloadSummary.stores, storeID)
 
-		if storeSummary.numShedSuccesses > 0 {
+		switch {
+		case storeSummary.numShedSuccesses > 0:
 			overloadSummary.success++
 			g.successSummaries = append(g.successSummaries, storeSummary)
-		} else if storeSummary.numShedFailures > 0 {
+		case storeSummary.numShedFailures > 0:
 			overloadSummary.failure++
 			g.failedSummaries = append(g.failedSummaries, storeSummary)
-		} else {
-			noRangesEvaluated = append(noRangesEvaluated, storeSummary.storeID)
+		default:
+			overloadSummary.skipped++
+			skippedStores = append(skippedStores, storeID)
 		}
 	}
+
+	// Assert that every storeOverloaded call ends up classified into exactly
+	// one of {success, failure, skipped}. numStoreOverloadedCallsThisPass is
+	// incremented in storeOverloaded, independently of states/curState, so
+	// this catches storeOverloaded/finishStore pairing bugs (e.g. a missing
+	// finishStore that drops a store from g.states, or a duplicate
+	// storeOverloaded that double-counts the same storeID).
+	var totalSuccess, totalFailure, totalSkipped int64
+	for _, counts := range overloadSummaries {
+		totalSuccess += counts.success
+		totalFailure += counts.failure
+		totalSkipped += counts.skipped
+	}
+	total := totalSuccess + totalFailure + totalSkipped
+	assertTruef(ctx, total == g.numStoreOverloadedCallsThisPass,
+		"mma rebalancing pass: storeOverloaded calls (%d) != "+
+			"success(%d)+failure(%d)+skipped(%d) = %d; states=%v",
+		redact.SafeInt(g.numStoreOverloadedCallsThisPass),
+		redact.SafeInt(totalSuccess),
+		redact.SafeInt(totalFailure),
+		redact.SafeInt(totalSkipped),
+		redact.SafeInt(total),
+		g.states)
 
 	// Update gauge metrics using overloadSummaries aggregated from all
 	// overloaded stores.
@@ -803,15 +997,19 @@ func (g *rebalancingPassMetricsAndLogger) computePassSummary(buf *redact.StringB
 		case overloadedWaitingForLeaseShedding:
 			g.m.OverloadedStoreLeaseGraceSuccess.Update(counts.success)
 			g.m.OverloadedStoreLeaseGraceFailure.Update(counts.failure)
+			g.m.OverloadedStoreLeaseGraceSkipped.Update(counts.skipped)
 		case overloadedShortDuration:
 			g.m.OverloadedStoreShortDurSuccess.Update(counts.success)
 			g.m.OverloadedStoreShortDurFailure.Update(counts.failure)
+			g.m.OverloadedStoreShortDurSkipped.Update(counts.skipped)
 		case overloadedMediumDuration:
 			g.m.OverloadedStoreMediumDurSuccess.Update(counts.success)
 			g.m.OverloadedStoreMediumDurFailure.Update(counts.failure)
+			g.m.OverloadedStoreMediumDurSkipped.Update(counts.skipped)
 		case overloadedLongDuration:
 			g.m.OverloadedStoreLongDurSuccess.Update(counts.success)
 			g.m.OverloadedStoreLongDurFailure.Update(counts.failure)
+			g.m.OverloadedStoreLongDurSkipped.Update(counts.skipped)
 		}
 	}
 
@@ -868,23 +1066,15 @@ func (g *rebalancingPassMetricsAndLogger) computePassSummary(buf *redact.StringB
 		})
 	}
 
-	// Log stores that were skipped (e.g., max range move limit reached), sorted
-	// by store ID.
-	if len(g.skippedStores) > 0 {
+	// Log stores that were overloaded but skipped from shedding (most
+	// commonly due to pending decrease/increase), sorted by store ID. The
+	// bucket affiliation for these stores is visible in the `overloaded:`
+	// section above.
+	if len(skippedStores) > 0 {
 		empty = false
-		slices.Sort(g.skippedStores)
+		slices.Sort(skippedStores)
 		buf.SafeString("\n\tskipped: ")
-		logStores(buf, g.skippedStores, func(store roachpb.StoreID) redact.RedactableString {
-			return redact.Sprintf("s%v", store)
-		})
-	}
-
-	// Log stores for which no ranges were evaluated.
-	if len(noRangesEvaluated) > 0 {
-		empty = false
-		slices.Sort(noRangesEvaluated)
-		buf.SafeString("\n\tno-ranges-evaluated: ")
-		logStores(buf, noRangesEvaluated, func(store roachpb.StoreID) redact.RedactableString {
+		logStores(buf, skippedStores, func(store roachpb.StoreID) redact.RedactableString {
 			return redact.Sprintf("s%v", store)
 		})
 	}

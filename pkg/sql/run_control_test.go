@@ -1266,3 +1266,118 @@ func TestStatementTimeoutForSchemaChangeWaitForOneVersion(t *testing.T) {
 		})
 	}
 }
+
+// TestStatementTimeoutForCheckTwoVersionInvariant confirms that the pre-commit
+// two-version invariant check (descs.CheckTwoVersionInvariant) honours
+// statement_timeout. The check runs inside commitSQLTransactionInternal and
+// waits for stale (V-2) descriptor leases to drain before the schema-change
+// txn can commit. To enter the wait loop deterministically we disable the
+// post-commit schema-changer job (via *SchemaChangeJobNoOp), which prevents
+// the usual WaitForOneVersion from dropping old leases between successive
+// schema changes; this leaves a V-2 lease lingering when the second schema
+// change tries to commit. ALTER TYPE ADD VALUE is the original symptom from
+// #168767; ALTER TABLE ADD COLUMN exercises the same pre-commit code path.
+func TestStatementTimeoutForCheckTwoVersionInvariant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	skip.UnderDuress(t, "sets a long timeout")
+
+	for _, tc := range []struct {
+		name string
+		// knobs disables the post-commit schema-changer job that would
+		// normally drop the lingering V-2 lease via WaitForOneVersion.
+		knobs base.TestingKnobs
+		// setup creates the descriptor under test.
+		setup string
+		// pinDescriptor runs in an open txn on a separate session to hold a
+		// lease on the descriptor at its initial version.
+		pinDescriptor string
+		// bumpVersion bumps the descriptor (v=1 -> v=2). The held lease
+		// lingers at v=1.
+		bumpVersion string
+		// bumpVersionAgain triggers the second pre-commit two-version check
+		// (v=2 -> v=3) under the tight statement_timeout.
+		bumpVersionAgain string
+	}{
+		{
+			name: "alter table add column",
+			knobs: base.TestingKnobs{
+				SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+					SchemaChangeJobNoOp: func() bool { return true },
+				},
+			},
+			setup:            "CREATE TABLE t (n INT) WITH (schema_locked=false)",
+			pinDescriptor:    "INSERT INTO t VALUES (1)",
+			bumpVersion:      "ALTER TABLE t ADD COLUMN c1 INT",
+			bumpVersionAgain: "ALTER TABLE t ADD COLUMN c2 INT",
+		},
+		{
+			name: "alter type add value",
+			knobs: base.TestingKnobs{
+				SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
+					TypeSchemaChangeJobNoOp: func() bool { return true },
+				},
+			},
+			setup:            "CREATE TYPE et AS ENUM ('a')",
+			pinDescriptor:    "SELECT 'a'::et",
+			bumpVersion:      "ALTER TYPE et ADD VALUE 'b'",
+			bumpVersionAgain: "ALTER TYPE et ADD VALUE 'c'",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := serverutils.StartServerOnly(t, base.TestServerArgs{Knobs: tc.knobs})
+			defer srv.Stopper().Stop(ctx)
+
+			url, cleanup := srv.ApplicationLayer().PGUrl(t)
+			defer cleanup()
+			baseConn, err := pq.NewConnector(url.String())
+			require.NoError(t, err)
+			var actualNotices []string
+			connector := pq.ConnectorWithNoticeHandler(baseConn, func(n *pq.Error) {
+				actualNotices = append(actualNotices, n.Message)
+			})
+			dbWithHandler := gosql.OpenDB(connector)
+			defer dbWithHandler.Close()
+			conn := sqlutils.MakeSQLRunner(dbWithHandler)
+
+			// CheckTwoVersionInvariant only runs in the user's commit when the
+			// txn has uncommitted descriptors, which the legacy schema changer
+			// arranges for here.
+			conn.Exec(t, "SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off'")
+			conn.Exec(t, "SET use_declarative_schema_changer = 'off'")
+			conn.Exec(t, tc.setup)
+
+			// Open a separate session and pin a lease on the descriptor at its
+			// initial version. With the post-commit job no-op, the usual
+			// WaitForOneVersion does not drop this lease after the first bump,
+			// so it persists as the V-2 lease for the second bump's pre-commit
+			// check.
+			leaseHolder, err := dbWithHandler.Conn(ctx)
+			require.NoError(t, err)
+			defer func() { _ = leaseHolder.Close() }()
+			leaseTxn, err := leaseHolder.BeginTx(ctx, nil)
+			require.NoError(t, err)
+			_, err = leaseTxn.ExecContext(ctx, tc.pinDescriptor)
+			require.NoError(t, err)
+			defer func() { _ = leaseTxn.Rollback() }()
+
+			// First bump moves the descriptor to v=2; the held lease stays at
+			// v=1.
+			conn.Exec(t, tc.bumpVersion)
+
+			// Second bump (v=2 -> v=3) under a tight statement_timeout. Its
+			// pre-commit CheckTwoVersionInvariant finds the lingering v=1
+			// lease and enters the wait loop. Without the fix the loop would
+			// block indefinitely; with the fix it exits when the timeout
+			// cancels the context.
+			conn.Exec(t, "SET statement_timeout = '1s'")
+			conn.ExpectErr(t, "pq: query execution canceled due to statement timeout",
+				tc.bumpVersionAgain)
+
+			const expected = "The statement has timed out while waiting for older descriptor " +
+				"leases to be released. The schema change was not applied."
+			require.Contains(t, actualNotices, expected)
+		})
+	}
+}

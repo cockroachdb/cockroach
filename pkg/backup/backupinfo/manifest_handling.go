@@ -1814,8 +1814,15 @@ func GetBackupManifestIterFactories(
 	backupManifests []backuppb.BackupManifest,
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
-) (map[int]*IterFactory, error) {
+) (_ map[int]*IterFactory, err error) {
 	layerToFileIterFactory := make(map[int]*IterFactory)
+	defer func() {
+		if err != nil {
+			for _, f := range layerToFileIterFactory {
+				f.store.Close()
+			}
+		}
+	}()
 	for layer := range backupManifests {
 		es, err := storeFactory(ctx, backupManifests[layer].Dir)
 		if err != nil {

@@ -133,7 +133,12 @@ func TestShowRangesMultipleStores(t *testing.T) {
 		"SHOW RANGE FROM INDEX system.jobs@jobs_status_created_idx FOR ROW ('running', now(), 0)",
 	} {
 		t.Run(q, func(t *testing.T) {
-			// Retry because if there's not a leaseholder, you can get a NULL.
+			// A leaseholder lookup that fails transiently (e.g. while a lease is
+			// being transferred after the SCATTER above) reports lease_holder=0
+			// with a NULL lease_holder_locality, which makes the equality below
+			// evaluate to NULL. Filter those rows out so the assertion only
+			// considers ranges where the leaseholder is known; CheckQueryResultsRetry
+			// will retry until at least one such range exists.
 			sqlDB.CheckQueryResultsRetry(t,
 				fmt.Sprintf(`
 SELECT DISTINCT
@@ -141,7 +146,8 @@ SELECT DISTINCT
 		array_position(replica_localities, lease_holder_locality)
 		= array_position(replicas, lease_holder)
 		)
-	FROM [%s]`, q), [][]string{{"true"}})
+	FROM [%s]
+	WHERE lease_holder != 0`, q), [][]string{{"true"}})
 		})
 	}
 }

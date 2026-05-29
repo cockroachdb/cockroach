@@ -685,8 +685,11 @@ CR_GEOS_Status CR_GEOS_LineMerge(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_String* 
   auto geomA = CR_GEOS_GeometryFromSlice(lib, handle, a);
   if (geomA != nullptr) {
     auto merged = lib->GEOSLineMerge_r(handle, geomA);
-    auto srid = lib->GEOSGetSRID_r(handle, merged);
-    CR_GEOS_writeGeomToEWKB(lib, handle, merged, ewkb, srid);
+    if (merged != nullptr) {
+      auto srid = lib->GEOSGetSRID_r(handle, geomA);
+      CR_GEOS_writeGeomToEWKB(lib, handle, merged, ewkb, srid);
+      lib->GEOSGeom_destroy_r(handle, merged);
+    }
     lib->GEOSGeom_destroy_r(handle, geomA);
   }
 

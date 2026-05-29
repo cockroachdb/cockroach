@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/diagutils"
@@ -459,12 +460,21 @@ func TestUsageQuantization(t *testing.T) {
 	ctx := context.Background()
 
 	url := r.URL()
+	// Pin the SQL stats clock so that all executions land in the same
+	// aggregation window. In-memory stats are partitioned by aggregation
+	// timestamp, so a real clock that crosses an hour boundary mid-test
+	// would split a query's executions across multiple entries and break
+	// the per-entry count assertion below.
+	stubTime := timeutil.Now()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				DiagnosticsTestingKnobs: diagnostics.TestingKnobs{
 					OverrideReportingURL: &url,
 				},
+			},
+			SQLStatsKnobs: &sqlstats.TestingKnobs{
+				StubTimeNow: func() time.Time { return stubTime },
 			},
 		},
 	})

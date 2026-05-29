@@ -21,7 +21,8 @@ var KVSlotAdjusterOverloadThreshold = settings.RegisterIntSetting(
 	"admission.kv_slot_adjuster.overload_threshold",
 	"when the number of runnable goroutines per CPU is greater than this threshold, the "+
 		"slot adjuster considers the cpu to be overloaded",
-	32, settings.PositiveInt)
+	32, settings.PositiveInt,
+	settings.WithName("admission.kv.cpu_overload_threshold"))
 
 // kvSlotAdjuster is an implementer of CPULoadListener and
 // cpuOverloadIndicator.

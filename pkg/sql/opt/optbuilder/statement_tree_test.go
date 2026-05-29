@@ -21,6 +21,8 @@ func TestStatementTree(t *testing.T) {
 		post
 		getInit
 		init
+		getInitDeferred
+		initDeferred
 		t1
 		t2
 		fail
@@ -473,7 +475,7 @@ func TestStatementTree(t *testing.T) {
 				pop,
 			},
 		},
-		// 25.
+		// 26.
 		// Original:
 		// Push
 		//     Push
@@ -505,39 +507,13 @@ func TestStatementTree(t *testing.T) {
 				pop,
 			},
 		},
-		// 26.
-		// Original:
-		// Push
-		//     CanMutateTable(t1, default)
-		//     Push
-		//         GetInitFnForPostQuery()
-		//     Pop
-		// Pop
-		//
-		// Post-Query:
-		// initFn()
-		// Push
-		//     CanMutateTable(t1, default) FAIL
-		{
-			cmds: []cmd{
-				push,
-				mut | t1,
-				push,
-				getInit,
-				pop,
-				pop,
-				init,
-				push,
-				mut | t1 | fail,
-			},
-		},
 		// 27.
 		// Original:
 		// Push
+		//     CanMutateTable(t1, default)
 		//     Push
 		//         GetInitFnForPostQuery()
 		//     Pop
-		//     CanMutateTable(t1, default)
 		// Pop
 		//
 		// Post-Query:
@@ -547,10 +523,10 @@ func TestStatementTree(t *testing.T) {
 		{
 			cmds: []cmd{
 				push,
+				mut | t1,
 				push,
 				getInit,
 				pop,
-				mut | t1,
 				pop,
 				init,
 				push,
@@ -558,6 +534,32 @@ func TestStatementTree(t *testing.T) {
 			},
 		},
 		// 28.
+		// Original:
+		// Push
+		//     Push
+		//         GetInitFnForPostQuery()
+		//     Pop
+		//     CanMutateTable(t1, default)
+		// Pop
+		//
+		// Post-Query:
+		// initFn()
+		// Push
+		//     CanMutateTable(t1, default) FAIL
+		{
+			cmds: []cmd{
+				push,
+				push,
+				getInit,
+				pop,
+				mut | t1,
+				pop,
+				init,
+				push,
+				mut | t1 | fail,
+			},
+		},
+		// 29.
 		// Original:
 		// Push
 		//     CanMutateTable(t1, default)
@@ -587,11 +589,308 @@ func TestStatementTree(t *testing.T) {
 				mut | t1 | fail,
 			},
 		},
+		// 30.
+		// Pointer-based capture sees late-arriving mutations.
+		// Original:
+		// Push
+		//     CanMutateTable(t1, default)
+		//     GetInitFnForDeferredRoutine()
+		//     CanMutateTable(t2, default) <-- added after capture
+		// Pop
+		//
+		// Deferred Routine:
+		// initFn()
+		// Push
+		//     CanMutateTable(t2, default) FAIL <-- visible via pointer
+		{
+			cmds: []cmd{
+				push,
+				mut | t1,
+				getInitDeferred,
+				mut | t2,
+				pop,
+				initDeferred,
+				push,
+				mut | t2 | fail,
+			},
+		},
+		// 31.
+		// Current-level mutations visible in deferred routine.
+		// e.g. UPDATE t SET x = my_udf() where my_udf body also mutates t.
+		// Original:
+		// Push
+		//     CanMutateTable(t1, default)
+		//     GetInitFnForDeferredRoutine()
+		// Pop
+		//
+		// Deferred Routine:
+		// initFn()
+		// Push
+		//     CanMutateTable(t1, default) FAIL
+		{
+			cmds: []cmd{
+				push,
+				mut | t1,
+				getInitDeferred,
+				pop,
+				initDeferred,
+				push,
+				mut | t1 | fail,
+			},
+		},
+		// 32.
+		// Different-table mutations allowed.
+		// Original:
+		// Push
+		//     CanMutateTable(t1, default)
+		//     GetInitFnForDeferredRoutine()
+		// Pop
+		//
+		// Deferred Routine:
+		// initFn()
+		// Push
+		//     CanMutateTable(t2, default)
+		// Pop
+		{
+			cmds: []cmd{
+				push,
+				mut | t1,
+				getInitDeferred,
+				pop,
+				initDeferred,
+				push,
+				mut | t2,
+				pop,
+			},
+		},
+		// 33.
+		// Nested ancestor mutations visible.
+		// Original:
+		// Push
+		//     CanMutateTable(t1, default)
+		//     Push
+		//         GetInitFnForDeferredRoutine()
+		//     Pop
+		// Pop
+		//
+		// Deferred Routine:
+		// initFn()
+		// Push
+		//     CanMutateTable(t1, default) FAIL
+		{
+			cmds: []cmd{
+				push,
+				mut | t1,
+				push,
+				getInitDeferred,
+				pop,
+				pop,
+				initDeferred,
+				push,
+				mut | t1 | fail,
+			},
+		},
+		// 34.
+		// Sibling CTE mutations visible via pointer capture.
+		// Original:
+		// Push
+		//     Push
+		//         GetInitFnForDeferredRoutine()
+		//     Pop
+		//     CanMutateTable(t1, default) <-- sibling mutation after capture
+		// Pop
+		//
+		// Deferred Routine:
+		// initFn()
+		// Push
+		//     CanMutateTable(t1, default) FAIL
+		{
+			cmds: []cmd{
+				push,
+				push,
+				getInitDeferred,
+				pop,
+				mut | t1,
+				pop,
+				initDeferred,
+				push,
+				mut | t1 | fail,
+			},
+		},
+		// 35.
+		// Child mutations merged via Pop are NOT visible to deferred routine.
+		// The child's mutation is a sibling of the deferred routine (e.g. two
+		// CTEs), so it should not conflict.
+		// e.g. WITH cte1 AS (SELECT my_udf()), cte2 AS (UPDATE t ...) ...
+		// Original:
+		// Push
+		//     GetInitFnForDeferredRoutine()
+		//     Push
+		//         CanMutateTable(t1, default)
+		//     Pop  <-- t1 merges into parent's children*, not simpleInsert/generalMutation
+		// Pop
+		//
+		// Deferred Routine:
+		// initFn()
+		// Push
+		//     CanMutateTable(t1, default)  <-- OK, sibling mutation
+		// Pop
+		{
+			cmds: []cmd{
+				push,
+				getInitDeferred,
+				push,
+				mut | t1,
+				pop,
+				pop,
+				initDeferred,
+				push,
+				mut | t1,
+				pop,
+			},
+		},
+		// 36.
+		// simpleInsert+simpleInsert on same table OK.
+		// Original:
+		// Push
+		//     CanMutateTable(t1, simpleInsert)
+		//     GetInitFnForDeferredRoutine()
+		// Pop
+		//
+		// Deferred Routine:
+		// initFn()
+		// Push
+		//     CanMutateTable(t1, simpleInsert)
+		// Pop
+		{
+			cmds: []cmd{
+				push,
+				mut | t1 | simple,
+				getInitDeferred,
+				pop,
+				initDeferred,
+				push,
+				mut | t1 | simple,
+				pop,
+			},
+		},
+		// 37.
+		// generalMutation+simpleInsert on same table FAIL.
+		// Original:
+		// Push
+		//     CanMutateTable(t1, default)
+		//     GetInitFnForDeferredRoutine()
+		// Pop
+		//
+		// Deferred Routine:
+		// initFn()
+		// Push
+		//     CanMutateTable(t1, simpleInsert) FAIL
+		{
+			cmds: []cmd{
+				push,
+				mut | t1,
+				getInitDeferred,
+				pop,
+				initDeferred,
+				push,
+				mut | t1 | simple | fail,
+			},
+		},
+		// 38.
+		// Empty stack returns nil initFn.
+		//
+		// Deferred Routine:
+		// initFn() == nil => empty statementTree
+		// Push
+		//     CanMutateTable(t1, default)
+		// Pop
+		{
+			cmds: []cmd{
+				getInitDeferred,
+				initDeferred,
+				push,
+				mut | t1,
+				pop,
+			},
+		},
+		// 39.
+		// Sibling body statements within deferred routine don't conflict.
+		// Original:
+		// Push
+		//     CanMutateTable(t1, default)
+		//     GetInitFnForDeferredRoutine()
+		// Pop
+		//
+		// Deferred Routine:
+		// initFn()
+		// Push
+		//     Push
+		//         CanMutateTable(t2, default)
+		//     Pop
+		//     Push
+		//         CanMutateTable(t2, default)
+		//     Pop
+		// Pop
+		{
+			cmds: []cmd{
+				push,
+				mut | t1,
+				getInitDeferred,
+				pop,
+				initDeferred,
+				push,
+				push,
+				mut | t2,
+				pop,
+				push,
+				mut | t2,
+				pop,
+				pop,
+			},
+		},
+		// 40.
+		// Two separate deferred routine invocations mutating the same table.
+		// The deferred routines are siblings, so they should not conflict.
+		// Original:
+		// Push
+		//     GetInitFnForDeferredRoutine()  -- routine 1
+		//     GetInitFnForDeferredRoutine()  -- routine 2
+		// Pop
+		//
+		// Deferred Routine 1:
+		// initFn()
+		// Push
+		//     CanMutateTable(t1, default)
+		// Pop
+		//
+		// Deferred Routine 2:
+		// initFn()
+		// Push
+		//     CanMutateTable(t1, default)
+		// Pop
+		{
+			cmds: []cmd{
+				push,
+				getInitDeferred,
+				getInitDeferred,
+				pop,
+				initDeferred,
+				push,
+				mut | t1,
+				pop,
+				initDeferred,
+				push,
+				mut | t1,
+				pop,
+			},
+		},
 	}
 
 	for i, tc := range testCases {
 		var mt statementTree
 		var pqTreeFn func() statementTree
+		var deferredTreeFns []func() statementTree
 		for j, c := range tc.cmds {
 			switch {
 			case c&push == push:
@@ -611,6 +910,22 @@ func TestStatementTree(t *testing.T) {
 					mt = statementTree{}
 				} else {
 					mt = pqTreeFn()
+				}
+
+			case c&getInitDeferred == getInitDeferred:
+				deferredTreeFns = append(deferredTreeFns, mt.GetInitFnForDeferredRoutine())
+
+			case c&initDeferred == initDeferred:
+				if len(deferredTreeFns) == 0 {
+					mt = statementTree{}
+				} else {
+					fn := deferredTreeFns[0]
+					deferredTreeFns = deferredTreeFns[1:]
+					if fn == nil {
+						mt = statementTree{}
+					} else {
+						mt = fn()
+					}
 				}
 
 			case c&mut == mut:

@@ -3,6 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+import { util } from "@cockroachlabs/cluster-ui";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import filter from "lodash/filter";
 import flatMap from "lodash/flatMap";
@@ -13,15 +14,12 @@ import sortBy from "lodash/sortBy";
 import uniq from "lodash/uniq";
 import values from "lodash/values";
 import moment from "moment-timezone";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import ReactPaginate from "react-paginate";
-import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 
 import * as protos from "src/js/protos";
-import { refreshRaft } from "src/redux/apiReducers";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
-import { AdminUIState, AppDispatch } from "src/redux/state";
+import { raftDebug } from "src/util/api";
 import { FixLong } from "src/util/fixLong";
 import Print from "src/views/reports/containers/range/print";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
@@ -34,33 +32,21 @@ import RaftDebugResponse = cockroach.server.serverpb.RaftDebugResponse;
 
 const RANGES_PER_PAGE = 100;
 
-const selectRaftState = (
-  state: AdminUIState,
-): CachedDataReducerState<protos.cockroach.server.serverpb.RaftDebugResponse> =>
-  state.cachedData.raft;
-
 const RangesMain: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
-  const dispatch: AppDispatch = useDispatch();
-  const raftState = useSelector(selectRaftState);
+  const { data: raftData, error: raftError } = util.useSwrWithClusterId(
+    "raft",
+    () => raftDebug(new protos.cockroach.server.serverpb.RaftDebugRequest()),
+    {
+      revalidateOnFocus: false,
+      refreshInterval: 10000, // 10 seconds, matching the original invalidation interval
+    },
+  );
 
   const [showState, setShowState] = useState(true);
   const [showReplicas, setShowReplicas] = useState(true);
   const [showPending, setShowPending] = useState(true);
   const [showOnlyErrors, setShowOnlyErrors] = useState(false);
   const [offset, setOffset] = useState(0);
-
-  useEffect(() => {
-    // Refresh nodes status query when mounting.
-    dispatch(refreshRaft());
-  }, [dispatch]);
-
-  useEffect(() => {
-    // Refresh ranges when props are received; this will immediately
-    // trigger a new request if previous results are invalidated.
-    if (!raftState.valid) {
-      dispatch(refreshRaft());
-    }
-  }, [dispatch, raftState.valid]);
 
   const handlePageClick = useCallback((data: any) => {
     const selected = data.selected;
@@ -139,15 +125,15 @@ const RangesMain: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
     );
   };
 
-  const statuses = raftState.data;
+  const statuses = raftData;
   let content: React.ReactNode = null;
   let errors: string[] = [];
 
-  if (raftState.lastError) {
-    errors.push(raftState.lastError.message);
+  if (raftError) {
+    errors.push(raftError.message);
   }
 
-  if (!raftState.data) {
+  if (!raftData) {
     content = <div className="section">Loading...</div>;
   } else if (statuses) {
     errors = errors.concat(statuses.errors.map(err => err.message));

@@ -188,8 +188,9 @@ func (s *Statement) ReloadHintsIfStale(
 		len(s.Hints), s.HintIDs,
 	)
 
-	for i, hint := range s.Hints {
-		if !hint.Enabled || hint.Err != nil {
+	for i := range s.Hints {
+		hint := &s.Hints[i]
+		if !hint.Enabled() {
 			continue
 		}
 		if hd := hint.HintInjectionDonor; hd != nil && s.ASTWithInjectedHints == nil {
@@ -198,8 +199,10 @@ func (s *Statement) ReloadHintsIfStale(
 					ctx, "failed to validate hint injection donor from external statement hint %v: %v",
 					s.HintIDs[i], err,
 				)
-				// Do not return the error. Instead we'll simply execute the query
-				// without this hint.
+				// Do not return the error. Instead, we'll simply execute the query
+				// without this hint. Note that it's OK to modify hint.Err here, since
+				// hints are stored by value in the Hints slice.
+				hint.Err = err
 				continue
 			}
 			injectedAST, injected, err := hd.InjectHints(ast)
@@ -207,8 +210,10 @@ func (s *Statement) ReloadHintsIfStale(
 				log.Eventf(
 					ctx, "failed to inject hints from external statement hint %v: %v", s.HintIDs[i], err,
 				)
-				// Do not return the error. Instead we'll simply execute the query
-				// without this hint.
+				// Do not return the error. Instead, we'll simply execute the query
+				// without this hint. Note that it's OK to modify hint.Err here, since
+				// hints are stored by value in the Hints slice.
+				hint.Err = err
 				continue
 			}
 			if injected {

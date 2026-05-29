@@ -29,6 +29,7 @@ func registerAdmission(r registry.Registry) {
 	registerElasticControlForRowLevelTTL(r)
 	registerMultiStoreOverload(r)
 	registerMultiTenantFairness(r)
+	registerMultiTenantIsolation(r)
 	registerSnapshotOverload(r)
 	registerSnapshotOverloadIO(r)
 	registerTPCCOverload(r)

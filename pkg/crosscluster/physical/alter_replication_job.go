@@ -563,11 +563,21 @@ func alterTenantJobCutover(
 	progress := job.Progress()
 
 	replicatedTimeAtCutover := replicationutils.ReplicatedTimeFromProgress(&progress)
-	if replicatedTimeAtCutover.IsEmpty() {
-		replicatedTimeAtCutover = details.ReplicationStartTime
-	}
 
-	if alterTenantStmt.Cutover.Latest {
+	if replicatedTimeAtCutover.IsEmpty() {
+		if alterTenantStmt.Cutover.Latest {
+			return hlc.Timestamp{}, errors.Newf(
+				"replicated tenant %q (%d) has not replicated any data yet; "+
+					"cannot cut over to LATEST",
+				tenantName, tenInfo.ID)
+		}
+		if cutoverTime.Less(details.ReplicationStartTime) {
+			return hlc.Timestamp{}, errors.Newf(
+				"cutover time %s is before the replication start time %s",
+				cutoverTime, details.ReplicationStartTime)
+		}
+		replicatedTimeAtCutover = cutoverTime
+	} else if alterTenantStmt.Cutover.Latest {
 		cutoverTime = replicatedTimeAtCutover
 	}
 
@@ -609,7 +619,8 @@ func applyCutoverTime(
 	replicatedTimeAtCutover hlc.Timestamp,
 ) error {
 	log.Dev.Infof(ctx, "adding cutover time %s to job record", cutoverTimestamp)
-	return job.WithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	return job.DeprecatedWithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 		progress := md.Progress.GetStreamIngest()
 		details := md.Payload.GetStreamIngestion()
 		if progress.ReplicationStatus == jobspb.ReplicationFailingOver {
@@ -641,8 +652,9 @@ func alterTenantExpirationWindow(
 	tenInfo *mtinfopb.TenantInfo,
 ) error {
 	for _, producerJobID := range tenInfo.PhysicalReplicationProducerJobIDs {
-		if err := jobRegistry.UpdateJobWithTxn(ctx, producerJobID, txn,
-			func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+		if err := jobRegistry.DeprecatedUpdateJobWithTxn(ctx, producerJobID, txn,
+			func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 
 				streamProducerDetails := md.Payload.GetStreamReplication()
 				previousExpirationWindow := streamProducerDetails.ExpirationWindow
@@ -671,8 +683,9 @@ func alterTenantConsumerOptions(
 	tenInfo *mtinfopb.TenantInfo,
 ) error {
 
-	return jobRegistry.UpdateJobWithTxn(ctx, tenInfo.PhysicalReplicationConsumerJobID, txn,
-		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	return jobRegistry.DeprecatedUpdateJobWithTxn(ctx, tenInfo.PhysicalReplicationConsumerJobID, txn,
+		func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 			var readerID roachpb.TenantID
 			if options.enableReaderTenant {
 				// If the replicating tenant already has a resolved tiemstamp, we can

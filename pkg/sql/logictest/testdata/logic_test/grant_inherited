@@ -30,24 +30,24 @@ GRANT meeter TO granter
 statement ok
 GRANT greeter TO alice WITH ADMIN OPTION
 
-query TTBB colnames,rowsort
-SELECT * FROM "".crdb_internal.kv_inherited_role_members
+query TTBB colnames
+SELECT * FROM [SELECT * FROM "".crdb_internal.kv_inherited_role_members] ORDER BY 1,2,3,4
 ----
 role     inheriting_member  member_is_explicit  member_is_admin
+admin    root               true                true
 granter  alice              true                false
+granter  bob                true                false
+granter  chuck              true                false
+granter  dave               true                false
 greeter  alice              true                true
 meeter   alice              false               false
-granter  bob                true                false
 meeter   bob                false               false
-granter  chuck              true                false
 meeter   chuck              false               false
-granter  dave               true                false
 meeter   dave               false               false
 meeter   granter            true                false
-admin    root               true                true
 
-query TTB colnames,rowsort
-SHOW GRANTS ON ROLE
+query TTB colnames
+SELECT * FROM [SHOW GRANTS ON ROLE] ORDER BY 1,2,3
 ----
 role_name  member   is_admin
 admin      root     true
@@ -61,8 +61,8 @@ meeter     granter  false
 statement ok
 GRANT ALL ON DATABASE defaultdb TO meeter WITH GRANT OPTION
 
-query TTTB colnames,rowsort
-SHOW GRANTS ON DATABASE defaultdb FOR alice
+query TTTB colnames
+SELECT * FROM [SHOW GRANTS ON DATABASE defaultdb FOR alice] ORDER BY 1,2,3,4
 ----
 database_name  grantee  privilege_type  is_grantable
 defaultdb      meeter   ALL             true
@@ -75,8 +75,8 @@ CREATE SCHEMA sc
 statement ok
 GRANT ALL ON SCHEMA sc TO meeter WITH GRANT OPTION
 
-query TTTTB colnames,rowsort
-SHOW GRANTS ON SCHEMA sc FOR alice
+query TTTTB colnames
+SELECT * FROM [SHOW GRANTS ON SCHEMA sc FOR alice] ORDER BY 1,2,3,4,5
 ----
 database_name  schema_name  grantee  privilege_type  is_grantable
 test           sc           meeter   ALL             true
@@ -87,8 +87,8 @@ CREATE SEQUENCE sq
 statement ok
 GRANT ALL ON SEQUENCE sq TO meeter WITH GRANT OPTION
 
-query TTTTTB colnames,rowsort
-SHOW GRANTS ON SEQUENCE sq FOR alice
+query TTTTTB colnames
+SELECT * FROM [SHOW GRANTS ON SEQUENCE sq FOR alice] ORDER BY 1,2,3,4,5,6
 ----
 database_name  schema_name  table_name  grantee  privilege_type  is_grantable
 test           public       sq          meeter   ALL             true
@@ -99,8 +99,8 @@ CREATE TABLE tbl (i INT PRIMARY KEY);
 statement ok
 GRANT ALL ON TABLE tbl TO meeter WITH GRANT OPTION
 
-query TTTTTB colnames,rowsort
-SHOW GRANTS ON TABLE tbl FOR alice
+query TTTTTB colnames
+SELECT * FROM [SHOW GRANTS ON TABLE tbl FOR alice] ORDER BY 1,2,3,4,5,6
 ----
 database_name  schema_name  table_name  grantee  privilege_type  is_grantable
 test           public       tbl         meeter   ALL             true
@@ -111,8 +111,8 @@ CREATE TYPE typ AS ENUM ('a', 'b')
 statement ok
 GRANT ALL ON TYPE typ TO meeter WITH GRANT OPTION
 
-query TTTTTB colnames,rowsort
-SHOW GRANTS ON TYPE typ FOR alice
+query TTTTTB colnames
+SELECT * FROM [SHOW GRANTS ON TYPE typ FOR alice] ORDER BY 1,2,3,4,5,6
 ----
 database_name  schema_name  type_name  grantee  privilege_type  is_grantable
 test           public       typ        meeter   ALL             true
@@ -130,12 +130,12 @@ $$
 statement ok
 GRANT EXECUTE ON FUNCTION fn TO meeter WITH GRANT OPTION
 
-query TTTTTTB colnames,rowsort
-SHOW GRANTS ON FUNCTION fn FOR alice
+query TTTTTTB colnames
+SELECT * FROM [SHOW GRANTS ON FUNCTION fn FOR alice] ORDER BY 1,2,3,4,5,6,7
 ----
 database_name  schema_name  routine_id  routine_signature  grantee  privilege_type  is_grantable
-test           public       100111      fn(int8)           meeter   EXECUTE         true
-test           public       100111      fn(int8)           public   EXECUTE         false
+test           public       100111      fn(x int8)         meeter   EXECUTE         true
+test           public       100111      fn(x int8)         public   EXECUTE         false
 
 statement ok
 CREATE EXTERNAL CONNECTION conn AS 'nodelocal://1/foo';
@@ -143,8 +143,8 @@ CREATE EXTERNAL CONNECTION conn AS 'nodelocal://1/foo';
 statement ok
 GRANT ALL ON EXTERNAL CONNECTION conn TO meeter WITH GRANT OPTION
 
-query TTTB colnames,rowsort
-SHOW GRANTS ON EXTERNAL CONNECTION conn FOR alice
+query TTTB colnames
+SELECT * FROM [SHOW GRANTS ON EXTERNAL CONNECTION conn FOR alice] ORDER BY 1,2,3,4
 ----
 connection_name  grantee  privilege_type  is_grantable
 conn             meeter   ALL             true
@@ -152,8 +152,8 @@ conn             meeter   ALL             true
 statement ok
 GRANT SYSTEM ALL TO meeter WITH GRANT OPTION
 
-query TTB colnames,rowsort
-SHOW SYSTEM GRANTS FOR alice
+query TTB colnames
+SELECT * FROM [SHOW SYSTEM GRANTS FOR alice] ORDER BY 1,2,3
 ----
 grantee  privilege_type  is_grantable
 meeter   ALL             true
@@ -179,14 +179,14 @@ GRANT USAGE ON SCHEMA test_schema TO public
 statement ok
 GRANT CREATE ON SCHEMA test_schema TO parent
 
-query TTTTTTB colnames,rowsort
-SHOW GRANTS FOR child
+query TTTTTTB colnames
+SELECT * FROM [SHOW GRANTS FOR child] ORDER BY 1,2,3,4,5,6,7
 ----
 database_name  schema_name  object_name  object_type  grantee  privilege_type  is_grantable
 test           public       NULL         schema       public   CREATE          false
 test           public       NULL         schema       public   USAGE           false
 test           public       _typ         type         public   USAGE           false
-test           public       fn(int8)     routine      public   EXECUTE         false
+test           public       fn(x int8)   routine      public   EXECUTE         false
 test           public       typ          type         public   USAGE           false
 test           test_schema  NULL         schema       parent   CREATE          false
 test           test_schema  NULL         schema       public   USAGE           false

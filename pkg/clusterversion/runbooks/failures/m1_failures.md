@@ -17,7 +17,7 @@ or similar version number mismatch in logictest output.
 **Fix:**
 ```bash
 # Find affected files
-grep -rn "26\.2" pkg/sql/logictest/testdata/ pkg/ccl/logictestccl/testdata/
+grep -rn "26\.2" pkg/sql/logictest/testdata/
 
 # Update (replace OLD with the previous release, e.g. 26.2)
 sed -i '' 's/26\.2/26\.3/g' <files>
@@ -89,8 +89,7 @@ got:      ...See: https://go.crdb.dev/issue-v/35730/dev
 ```bash
 # Find all occurrences (replace OLD_VER with the previous release, e.g. v26.2)
 grep -rn "go.crdb.dev/issue-v/[0-9]*/OLD_VER" \
-  pkg/sql/logictest/testdata/ \
-  pkg/ccl/logictestccl/testdata/
+  pkg/sql/logictest/testdata/
 
 # Fix (replace OLD_VER with the previous release)
 sed -i '' 's|go.crdb.dev/issue-v/\([0-9]*\)/OLD_VER|go.crdb.dev/issue-v/\1/dev|g' <files>

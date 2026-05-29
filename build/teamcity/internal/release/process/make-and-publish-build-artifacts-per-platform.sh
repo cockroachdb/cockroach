@@ -43,7 +43,7 @@ if [[ -z "${DRY_RUN}" ]] ; then
   fi
 else
   gcs_bucket="cockroach-builds-artifacts-dryrun"
-  gcr_repository="us.gcr.io/cockroach-release/${cockroach_archive_prefix}-test"
+  gcr_repository="us-docker.pkg.dev/releases-dev-356314/cockroachdb-staged-releases/${cockroach_archive_prefix}-test"
   build_name="${build_name}.dryrun"
   # export the variable to avoid shell escaping
   export gcs_credentials="$GCS_CREDENTIALS_DEV"

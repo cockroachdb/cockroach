@@ -6,7 +6,10 @@ create-replica range-id=1
 ----
 created replica: (n1,s1):3
 state engine:
-Put: 0,0 /Local/RangeID/1/u/RaftReplicaID (0x016989757266747200): replica_id:3 
+(matches WAG node)
+log engine:
+Put: 0,0 /Local/Store/wag/1 (0x01737761676e000000000000000100): (r1/3:0,EventCreate)
+> Put: 0,0 /Local/RangeID/1/u/RaftReplicaID (0x016989757266747200): replica_id:3 
 
 # Make the uninitialized replica vote.
 update-hard-state range-id=1 term=10 vote=2

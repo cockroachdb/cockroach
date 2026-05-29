@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrsettings"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -36,27 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-)
-
-var (
-	// jobCheckpointFrequency controls the frequency of frontier
-	// checkpoints into the jobs table.
-	jobCheckpointFrequency = settings.RegisterDurationSetting(
-		settings.ApplicationLevel,
-		"logical_replication.consumer.job_checkpoint_frequency",
-		"controls the frequency with which the job updates their progress; if 0, disabled",
-		10*time.Second)
-
-	// heartbeatFrequency controls frequency the stream replication
-	// destination cluster sends heartbeat to the source cluster to keep
-	// the stream alive.
-	heartbeatFrequency = settings.RegisterDurationSetting(
-		settings.ApplicationLevel,
-		"logical_replication.consumer.heartbeat_frequency",
-		"controls frequency the stream replication destination cluster sends heartbeat "+
-			"to the source cluster to keep the stream alive",
-		30*time.Second,
-	)
 )
 
 var errOfflineInitialScanComplete = errors.New("spinning down offline initial scan")
@@ -96,7 +76,7 @@ func (r *logicalReplicationResumer) Resume(ctx context.Context, execCtx interfac
 	jobExecCtx := execCtx.(sql.JobExecContext)
 
 	if r.jobUsesUDF() && !crosscluster.LogicalReplicationUDFWriterEnabled.Get(&jobExecCtx.ExecCfg().Settings.SV) {
-		r.updateStatusMessage(ctx, "job paused because UDF-based logical replication writer is disabled")
+		r.updateStatusMessage(ctx, jobExecCtx.ExecCfg().InternalDB, "job paused because UDF-based logical replication writer is disabled")
 		return jobs.MarkPauseRequestError(errors.Newf("UDF-based logical replication writer is disabled and will be deleted in a future CockroachDB release"))
 	}
 
@@ -119,26 +99,29 @@ func (r *logicalReplicationResumer) Resume(ctx context.Context, execCtx interfac
 func (r *logicalReplicationResumer) handleResumeError(
 	ctx context.Context, execCtx sql.JobExecContext, err error,
 ) error {
+	db := execCtx.ExecCfg().InternalDB
 	if err == nil {
-		r.updateStatusMessage(ctx, "")
+		r.updateStatusMessage(ctx, db, "")
 		return nil
 	}
 	if jobs.IsPermanentJobError(err) {
-		r.updateStatusMessage(ctx, redact.Sprintf("permanent error: %v", err))
+		r.updateStatusMessage(ctx, db, redact.Sprintf("permanent error: %v", err))
 		return err
 	}
-	r.updateStatusMessage(ctx, redact.Sprintf("pausing after error: %v", err))
+	r.updateStatusMessage(ctx, db, redact.Sprintf("pausing after error: %v", err))
 	return jobs.MarkPauseRequestError(err)
 }
 
 func (r *logicalReplicationResumer) updateStatusMessage(
-	ctx context.Context, status redact.RedactableString,
+	ctx context.Context, db isql.DB, status redact.RedactableString,
 ) {
 	log.Dev.Infof(ctx, "%s", status)
-	err := r.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-		md.Progress.StatusMessage = string(status.Redact())
-		ju.UpdateProgress(md.Progress)
-		return nil
+	redactedStatus := string(status.Redact())
+	err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		if redactedStatus == "" {
+			return r.job.StatusStorage().Clear(ctx, txn)
+		}
+		return r.job.StatusStorage().Set(ctx, txn, redactedStatus)
 	})
 	if err != nil {
 		log.Dev.Warningf(ctx, "error when updating job running status: %s", err)
@@ -194,7 +177,8 @@ func (r *logicalReplicationResumer) checkpointPartitionURIs(
 	if uris[0].RoutingMode() == streamclient.RoutingModeGateway {
 		return nil
 	}
-	return r.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	return r.job.DeprecatedNoTxn().Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 		ldrProg := md.Progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
 		ldrProg.PartitionConnUris = partitionPgUrls
 		ju.UpdateProgress(md.Progress)
@@ -261,19 +245,16 @@ func (r *logicalReplicationResumer) resumeWithRetries(
 func loadOnlineReplicatedTime(
 	ctx context.Context, db isql.DB, ingestionJob *jobs.Job,
 ) hlc.Timestamp {
-	// TODO(ssd): Isn't this load redundant? The Update API for
-	// the job also updates the local copy of the job with the
-	// latest progress.
-	progress, err := jobs.LoadJobProgress(ctx, db, ingestionJob.ID())
-	if err != nil {
+	var resolved hlc.Timestamp
+	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		var err error
+		_, resolved, _, err = ingestionJob.ProgressStorage().Get(ctx, txn)
+		return err
+	}); err != nil {
 		log.Dev.Warningf(ctx, "error loading job progress: %s", err)
 		return hlc.Timestamp{}
 	}
-	if progress == nil {
-		log.Dev.Warningf(ctx, "no job progress yet: %s", err)
-		return hlc.Timestamp{}
-	}
-	return progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication.ReplicatedTime
+	return resolved
 }
 
 // rowHandler is responsible for handling checkpoints sent by logical
@@ -371,7 +352,7 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 	replicatedTime := rh.frontier.Frontier()
 	alwaysPersist := rh.replicatedTimeAtStart.Less(replicatedTime) && rh.replicatedTimeAtStart.IsEmpty()
 
-	updateFreq := jobCheckpointFrequency.Get(rh.settings)
+	updateFreq := ldrsettings.JobCheckpointFrequency.Get(rh.settings)
 	if !alwaysPersist && (updateFreq == 0 || timeutil.Since(rh.lastPartitionUpdate) < updateFreq) {
 		return nil
 	}
@@ -383,8 +364,9 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 
 	rh.lastPartitionUpdate = timeutil.Now()
 	log.Dev.VInfof(ctx, 2, "persisting replicated time of %s", replicatedTime.GoTime())
-	if err := rh.job.NoTxn().Update(ctx,
-		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	if err := rh.job.DeprecatedNoTxn().Update(ctx,
+		func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 			if err := md.CheckRunningOrReverting(); err != nil {
 				return err
 			}

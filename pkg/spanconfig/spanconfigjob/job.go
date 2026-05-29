@@ -165,7 +165,8 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 			}
 
 			lastCheckpoint = rc.Checkpoint()
-			return r.job.NoTxn().SetProgress(ctx, jobspb.AutoSpanConfigReconciliationProgress{
+			//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+			return r.job.DeprecatedNoTxn().SetProgress(ctx, jobspb.AutoSpanConfigReconciliationProgress{
 				Checkpoint: rc.Checkpoint(),
 			})
 		}); err != nil {

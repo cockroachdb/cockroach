@@ -30,7 +30,7 @@ Schema change plan for DROP SEQUENCE ‹defaultdb›.‹public›.‹sq1›; fol
  │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":104}
  │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":104}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"sq1","SchemaID":101}}
- │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.Owner"}
+ │              ├── RemoveOwner {"DescriptorID":104}
  │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"root"}
  │              ├── RemoveColumnNotNull {"ColumnID":1,"TableID":104}

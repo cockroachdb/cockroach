@@ -258,6 +258,14 @@ func TestWriter_Flush(t *testing.T) {
 				require.NotZero(t, stored.StoredValue, "stopwatch should store a nonzero unix timestamp")
 			},
 		}, {
+			name: "stopwatch UpdateStartTime stores provided timestamp",
+			setup: func(env *testEnv) {
+				sw := cmmetrics.NewWriteStopwatch(metric.Metadata{Name: "sw"}, timeutil.DefaultTimeSource{})
+				env.writer.AddMetric(sw)
+				sw.UpdateStartTime(1700000000000000000)
+			},
+			wantStored: map[string]int64{"sw": 1700000000000000000},
+		}, {
 			name: "stopwatch not started is not stored",
 			setup: func(env *testEnv) {
 				sw := cmmetrics.NewWriteStopwatch(metric.Metadata{Name: "sw"}, timeutil.DefaultTimeSource{})
@@ -380,6 +388,95 @@ func TestWriter_Flush(t *testing.T) {
 		// Gauge still has old value in store.
 		stored, _ = env.store.get("g")
 		require.Equal(t, int64(100), stored.StoredValue)
+	})
+}
+
+type walkTestLeaf struct {
+	Count *cmmetrics.Counter
+}
+
+func (*walkTestLeaf) MetricStruct() {}
+
+// TestWriter_StructWalk verifies AddMetricStruct recurses into arrays,
+// slices, and maps and skips nil entries.
+func TestWriter_StructWalk(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer cmmetrics.TestingAllowNonInitConstruction()()
+
+	newLeaf := func(name string) (*walkTestLeaf, *cmmetrics.Counter) {
+		c := cmmetrics.NewCounter(metric.Metadata{Name: name})
+		return &walkTestLeaf{Count: c}, c
+	}
+
+	t.Run("sparse array", func(t *testing.T) {
+		env := newTestEnv()
+		l1, c1 := newLeaf("arr.c1")
+		l2, c2 := newLeaf("arr.c2")
+		// Slots 0 and 2 are nil.
+		container := struct {
+			Specific [4]metric.Struct
+		}{}
+		container.Specific[1] = l1
+		container.Specific[3] = l2
+		env.writer.AddMetricStruct(&container)
+
+		c1.Inc(11)
+		c2.Inc(22)
+		env.writer.Flush(env.ctx)
+
+		stored, ok := env.store.get("arr.c1")
+		require.True(t, ok)
+		require.Equal(t, int64(11), stored.StoredValue)
+		stored, ok = env.store.get("arr.c2")
+		require.True(t, ok)
+		require.Equal(t, int64(22), stored.StoredValue)
+	})
+
+	t.Run("slice", func(t *testing.T) {
+		env := newTestEnv()
+		l1, c1 := newLeaf("slc.c1")
+		l2, c2 := newLeaf("slc.c2")
+		container := struct {
+			Items []metric.Struct
+		}{
+			Items: []metric.Struct{l1, nil, l2},
+		}
+		env.writer.AddMetricStruct(&container)
+
+		c1.Inc(3)
+		c2.Inc(7)
+		env.writer.Flush(env.ctx)
+
+		stored, ok := env.store.get("slc.c1")
+		require.True(t, ok)
+		require.Equal(t, int64(3), stored.StoredValue)
+		stored, ok = env.store.get("slc.c2")
+		require.True(t, ok)
+		require.Equal(t, int64(7), stored.StoredValue)
+	})
+
+	t.Run("map", func(t *testing.T) {
+		env := newTestEnv()
+		l1, c1 := newLeaf("map.c1")
+		l2, c2 := newLeaf("map.c2")
+		container := struct {
+			ByName map[string]metric.Struct
+		}{
+			ByName: map[string]metric.Struct{"first": l1, "second": l2},
+		}
+		env.writer.AddMetricStruct(&container)
+
+		c1.Inc(5)
+		c2.Inc(8)
+		env.writer.Flush(env.ctx)
+
+		stored, ok := env.store.get("map.c1")
+		require.True(t, ok)
+		require.Equal(t, int64(5), stored.StoredValue)
+		stored, ok = env.store.get("map.c2")
+		require.True(t, ok)
+		require.Equal(t, int64(8), stored.StoredValue)
 	})
 }
 
@@ -575,6 +672,26 @@ func TestWriter_VecMetrics(t *testing.T) {
 		stored, ok = env.store.getByLabels("sv", map[string]string{"job": "restore"})
 		require.True(t, ok, "expected labeled stopwatch to be stored")
 		require.NotZero(t, stored.StoredValue, "stopwatch should store a nonzero unix timestamp")
+	})
+
+	t.Run("stopwatch vec UpdateStartTime stores provided timestamp per child", func(t *testing.T) {
+		env := newTestEnv()
+		sv := cmmetrics.NewWriteStopwatchVec(metric.Metadata{Name: "sv"}, timeutil.DefaultTimeSource{}, "job")
+		env.writer.AddMetric(sv)
+
+		const backupNanos int64 = 1700000000000000000
+		const restoreNanos int64 = 1800000000000000000
+		sv.UpdateStartTime(map[string]string{"job": "backup"}, backupNanos)
+		sv.UpdateStartTime(map[string]string{"job": "restore"}, restoreNanos)
+		env.writer.Flush(env.ctx)
+
+		stored, ok := env.store.getByLabels("sv", map[string]string{"job": "backup"})
+		require.True(t, ok, "expected labeled stopwatch to be stored")
+		require.Equal(t, backupNanos, stored.StoredValue)
+
+		stored, ok = env.store.getByLabels("sv", map[string]string{"job": "restore"})
+		require.True(t, ok, "expected labeled stopwatch to be stored")
+		require.Equal(t, restoreNanos, stored.StoredValue)
 	})
 
 	t.Run("stopwatch vec with no children is not flushed", func(t *testing.T) {

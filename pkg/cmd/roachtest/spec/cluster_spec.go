@@ -592,12 +592,9 @@ func (s *ClusterSpec) RoachprodOpts(
 			var err error
 			switch cloud {
 			case AWS:
-				// We always pass true for shouldSupportLocalSSD here because the machine type selection
-				// logic should not depend on the user's preference for local SSDs.
-				// The actual decision to use provisioned local SSDs is handled in the disk configuration logic
-				// at the provider level, and EBS volume have priority over local SSDs.
-				// This means that if both EBS and local SSDs are available, EBS will be used.
-				machineType, selectedArch, err = SelectAWSMachineType(s.CPUs, s.Mem, true, requestedArch)
+				machineType, selectedArch, err = SelectAWSMachineType(
+					s.CPUs, s.Mem, s.mayUseLocalSSD(params.Defaults.PreferLocalSSD), requestedArch,
+				)
 			case GCE:
 				machineType, selectedArch = SelectGCEMachineType(s.CPUs, s.Mem, requestedArch)
 			case Azure:
@@ -796,6 +793,27 @@ func (s *ClusterSpec) RoachprodOpts(
 	return createVMOpts, providerOpts, workloadProviderOpts, selectedArch, nil
 }
 
+// mayUseLocalSSD returns whether this spec could end up using local SSDs.
+// This is used to determine whether to select a machine type that supports
+// local SSDs (e.g. on AWS, machine families with a "d" suffix). When local
+// SSDs definitely won't be used, selecting a non-local-SSD machine type
+// avoids unnecessary capacity constraints.
+func (s *ClusterSpec) mayUseLocalSSD(defaultPreferLocalSSD bool) bool {
+	if s.VolumeType != "" && s.VolumeType != "local-ssd" {
+		return false
+	}
+	if s.LocalSSD == LocalSSDDisable {
+		return false
+	}
+	if s.VolumeSize != 0 {
+		return false
+	}
+	return s.VolumeType == "local-ssd" ||
+		s.LocalSSD == LocalSSDPreferOn ||
+		s.RandomizeVolumeType ||
+		defaultPreferLocalSSD
+}
+
 func (s *ClusterSpec) isLocalSSDAvailable(
 	cloud Cloud, machineType string, selectedArch vm.CPUArch,
 ) error {
@@ -830,69 +848,110 @@ func (s *ClusterSpec) isLocalSSDAvailable(
 	return nil
 }
 
-// SetRoachprodOptsZones updates the providerOpts with the VM zones as specified in the params/spec.
-// We separate this logic from RoachprodOpts as we may need to call this multiple times in order to
-// randomize the default GCE zone.
-func (s *ClusterSpec) SetRoachprodOptsZones(
-	providerOpts, workloadProviderOpts vm.ProviderOpts, params RoachprodClusterConfig, arch string,
-) (vm.ProviderOpts, vm.ProviderOpts) {
-	zonesStr := params.Defaults.Zones
+// RoachprodCreateZones returns the zones to use for a roachprod create attempt.
+func (s *ClusterSpec) RoachprodCreateZones(
+	params RoachprodClusterConfig, arch vm.CPUArch,
+) []string {
 	cloud := params.Cloud
-	switch cloud {
-	case AWS:
-		if s.AWS.Zones != "" {
-			zonesStr = s.AWS.Zones
-		}
-	case GCE:
-		if s.GCE.Zones != "" {
-			zonesStr = s.GCE.Zones
-		}
-	case Azure:
-		if s.Azure.Zones != "" {
-			zonesStr = s.Azure.Zones
-		}
-	case IBM:
-		if s.IBM.Zones != "" {
-			zonesStr = s.IBM.Zones
-		}
-	}
 	var zones []string
-	if zonesStr != "" {
+	if zonesStr, _ := s.roachprodOptsZonesString(params); zonesStr != "" {
 		zones = strings.Split(zonesStr, ",")
-		if !s.Geo {
-			zones = zones[:1]
-		}
 	}
+	if !s.Geo && len(zones) > 1 {
+		zones = zones[:1]
+	}
+	if len(zones) == 0 {
+		zones = DefaultZones(cloud, arch, s.Geo)
+	}
+	return append([]string(nil), zones...)
+}
 
+// SetRoachprodOptsZones updates providerOpts with the zones for a roachprod
+// create attempt.
+func (s *ClusterSpec) SetRoachprodOptsZones(
+	providerOpts, workloadProviderOpts vm.ProviderOpts, cloud Cloud, zones []string,
+) (vm.ProviderOpts, vm.ProviderOpts) {
 	switch cloud {
 	case AWS:
-		if len(zones) == 0 {
-			zones = aws.DefaultZones(s.Geo)
-		}
 		providerOpts.(*aws.ProviderOpts).CreateZones = zones
 		workloadProviderOpts.(*aws.ProviderOpts).CreateZones = zones
 	case GCE:
-		// We randomize the list of default zones for GCE for quota reasons, so decide the zone
-		// early to ensure that the workload node and CRDB cluster have the same default zone.
-		if len(zones) == 0 {
-			zones = gce.DefaultZones(arch, s.Geo)
-		}
 		providerOpts.(*gce.ProviderOpts).Zones = zones
 		workloadProviderOpts.(*gce.ProviderOpts).Zones = zones
 	case Azure:
-		if len(zones) == 0 {
-			zones = azure.DefaultZones(s.Geo)
-		}
 		providerOpts.(*azure.ProviderOpts).Zones = zones
 		workloadProviderOpts.(*azure.ProviderOpts).Zones = zones
 	case IBM:
-		if len(zones) == 0 {
-			zones = ibm.DefaultZones(s.Geo)
-		}
 		providerOpts.(*ibm.ProviderOpts).CreateZones = zones
 		workloadProviderOpts.(*ibm.ProviderOpts).CreateZones = zones
 	}
 	return providerOpts, workloadProviderOpts
+}
+
+// DefaultZones returns the package-level roachprod default zones for the cloud.
+func DefaultZones(cloud Cloud, arch vm.CPUArch, geoDistributed bool) []string {
+	switch cloud {
+	case AWS:
+		return aws.DefaultZones(geoDistributed)
+	case GCE:
+		return gce.DefaultZones(string(arch), geoDistributed)
+	case Azure:
+		return azure.DefaultZones(geoDistributed)
+	case IBM:
+		return ibm.DefaultZones(geoDistributed)
+	default:
+		return nil
+	}
+}
+
+// DefaultRetryZoneCandidates returns the provider's default non-geo zone pool.
+// Roachtest uses this to choose a different zone after provider capacity
+// failures.
+func DefaultRetryZoneCandidates(cloud Cloud, arch vm.CPUArch) []string {
+	switch cloud {
+	case AWS:
+		return aws.DefaultRetryZoneCandidates()
+	case GCE:
+		return gce.DefaultRetryZoneCandidates(string(arch))
+	case Azure:
+		return azure.DefaultRetryZoneCandidates()
+	default:
+		return nil
+	}
+}
+
+func (s *ClusterSpec) roachprodOptsZonesString(params RoachprodClusterConfig) (string, bool) {
+	zonesStr := params.Defaults.Zones
+	explicit := zonesStr != ""
+	switch params.Cloud {
+	case AWS:
+		if s.AWS.Zones != "" {
+			zonesStr = s.AWS.Zones
+			explicit = true
+		}
+	case GCE:
+		if s.GCE.Zones != "" {
+			zonesStr = s.GCE.Zones
+			explicit = true
+		}
+	case Azure:
+		if s.Azure.Zones != "" {
+			zonesStr = s.Azure.Zones
+			explicit = true
+		}
+	case IBM:
+		if s.IBM.Zones != "" {
+			zonesStr = s.IBM.Zones
+			explicit = true
+		}
+	}
+	return zonesStr, explicit
+}
+
+// UsesExplicitZones returns true when the cluster has user-specified zones.
+func (s *ClusterSpec) UsesExplicitZones(params RoachprodClusterConfig) bool {
+	_, explicit := s.roachprodOptsZonesString(params)
+	return explicit
 }
 
 // Expiration is the lifetime of the cluster. It may be destroyed after

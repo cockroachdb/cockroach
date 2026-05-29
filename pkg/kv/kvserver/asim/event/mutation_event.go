@@ -69,6 +69,14 @@ type SetNodeLocalityEvent struct {
 	LocalityString string
 }
 
+// SetStoreAttrsEvent represents a mutation event that overwrites the
+// store-level attributes of the store with the given StoreID. Constraints
+// in span configs match against these via the "+attr" token.
+type SetStoreAttrsEvent struct {
+	StoreID state.StoreID
+	Attrs   []string
+}
+
 // SetSimulationSettingsEvent represents a mutation event responsible for
 // changing a simulation setting during the simulation.
 type SetSimulationSettingsEvent struct {
@@ -84,6 +92,7 @@ var _ Event = &SetNodeStatusEvent{}
 var _ Event = &SetNodeLivenessEvent{}
 var _ Event = &SetCapacityOverrideEvent{}
 var _ Event = &SetNodeLocalityEvent{}
+var _ Event = &SetStoreAttrsEvent{}
 var _ Event = &SetSimulationSettingsEvent{}
 
 func (se SetSpanConfigEvent) Func() EventFunc {
@@ -224,6 +233,17 @@ func (sne SetNodeLocalityEvent) Func() EventFunc {
 
 func (sne SetNodeLocalityEvent) String() string {
 	return fmt.Sprintf("set node locality event with nodeID=%d, locality=%v", sne.NodeID, sne.LocalityString)
+}
+
+func (ssae SetStoreAttrsEvent) Func() EventFunc {
+	return MutationFunc(func(ctx context.Context, s state.State) {
+		log.KvDistribution.Infof(ctx, "setting store s%d attrs to %v", ssae.StoreID, ssae.Attrs)
+		s.SetStoreAttrs(ssae.StoreID, ssae.Attrs)
+	})
+}
+
+func (ssae SetStoreAttrsEvent) String() string {
+	return fmt.Sprintf("set s%d attrs=%v", ssae.StoreID, ssae.Attrs)
 }
 
 func (se SetSimulationSettingsEvent) Func() EventFunc {

@@ -6,6 +6,9 @@
 package sqlclustersettings
 
 import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -166,18 +169,24 @@ const (
 	// writerTypeCRUD is the shiny new sql writer that uses explicit reads,
 	// inserts, updates, and deletes instead of upserts.
 	LDRWriterTypeCRUD LDRWriterType = "crud"
+	// LDRWriterTypeTxn uses the transaction writer which applies rows using the
+	// SQL layer with explicit CRUD operations and savepoint-based conflict
+	// handling.
+	LDRWriterTypeTxn LDRWriterType = "txn"
 )
 
 var LDRImmediateModeWriter = settings.RegisterStringSetting(
 	settings.ApplicationLevel,
 	"logical_replication.consumer.immediate_mode_writer",
 	"the writer to use when in immediate mode",
-	metamorphic.ConstantWithTestChoice("logical_replication.consumer.immediate_mode_writer", string(LDRWriterTypeCRUD), string(LDRWriterTypeLegacyKV), string(LDRWriterTypeSQL)),
+	metamorphic.ConstantWithTestChoice("logical_replication.consumer.immediate_mode_writer", string(LDRWriterTypeCRUD), string(LDRWriterTypeLegacyKV), string(LDRWriterTypeSQL), string(LDRWriterTypeTxn)),
 	settings.WithValidateString(func(sv *settings.Values, val string) error {
-		if val != string(LDRWriterTypeSQL) && val != string(LDRWriterTypeLegacyKV) && val != string(LDRWriterTypeCRUD) {
-			return errors.Newf("immediate mode writer must be either 'sql', 'legacy-kv', or 'crud', got '%s'", val)
+		switch LDRWriterType(val) {
+		case LDRWriterTypeSQL, LDRWriterTypeLegacyKV, LDRWriterTypeCRUD, LDRWriterTypeTxn:
+			return nil
+		default:
+			return errors.Newf("immediate mode writer must be 'sql', 'legacy-kv', 'crud', or 'txn', got '%s'", val)
 		}
-		return nil
 	}),
 )
 
@@ -191,6 +200,25 @@ var UseInstanceInfoForSQLInstances = settings.RegisterBoolSetting(
 	"use sqlinstance.InstanceInfo instead of NodeDescriptor for SQL instance lookups; "+
 		"enables proper handling of SQL instances in serverless environments",
 	metamorphic.ConstantWithTestBool("sql.instance_info.use_instance_resolver.enabled", true))
+
+var PLpgSQLProcedureLateBinding = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.procedures.plpgsql.late_binding.enabled",
+	"when true, PL/pgSQL procedure bodies are not resolved at creation time; "+
+		"references are resolved at CALL time instead, matching PostgreSQL "+
+		"PL/pgSQL semantics. Does not affect LANGUAGE SQL procedures or "+
+		"functions",
+	false,
+	settings.WithPublic,
+)
+
+// PLpgSQLProcedureLateBindingEnabled returns true when both the V26_3 version
+// gate and the cluster setting permit PL/pgSQL procedure late binding. All
+// late-binding call sites must use this helper.
+func PLpgSQLProcedureLateBindingEnabled(ctx context.Context, st *cluster.Settings) bool {
+	return st.Version.IsActive(ctx, clusterversion.V26_3) &&
+		PLpgSQLProcedureLateBinding.Get(&st.SV)
+}
 
 // SkipUnderlyingViewPrivilegeChecks controls whether privilege checks on underlying
 // tables are skipped when selecting from a view. By default (false), the view
@@ -208,4 +236,31 @@ var SkipUnderlyingViewPrivilegeChecks = settings.RegisterBoolSetting(
 		"policies are evaluated as the invoking user rather than the view owner. "+
 		"This restores pre-v26.2 behavior.",
 	false,
+	settings.WithPublic)
+
+// AllowSubsetUniqueFKs gates creation of subset-unique foreign keys: a
+// CockroachDB extension that lets an FK be backed by a unique constraint
+// covering only some of the FK's referenced columns (e.g. a parent with
+// UNIQUE(a) can back an FK that references (a, b)). When this setting is
+// false, only exact matches between the FK's referenced columns and a
+// parent unique constraint are accepted at creation time.
+//
+// Mixed-version safety is enforced separately by clusterversion.V26_3.
+// This setting is what operators can flip once V26_3 has been finalized,
+// either as a kill switch if a regression appears or to enforce
+// SQL standard/PostgreSQL-compatible strict matching cluster-wide.
+//
+// The setting governs creation only. Once a subset-unique FK exists in the
+// catalog, lookups that resolve it for validation or back-reference
+// handling continue to honor subset matching regardless of the setting
+// so that flipping the setting off cannot break any existing FKs.
+var AllowSubsetUniqueFKs = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.subset_unique_fks.enabled",
+	"if true, foreign keys may be backed by a unique constraint that covers "+
+		"only a strict subset of the foreign key's referenced columns (e.g. a "+
+		"parent with UNIQUE(a) can back an FK that references (a, b)); set to "+
+		"false to require strict matching, as required by the SQL standard "+
+		"and PostgreSQL",
+	true,
 	settings.WithPublic)

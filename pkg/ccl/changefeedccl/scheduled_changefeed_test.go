@@ -830,6 +830,11 @@ func TestCheckScheduleAlreadyExists(t *testing.T) {
 	present, err = schedulebase.CheckScheduleAlreadyExists(ctx, p.(sql.PlanHookState), "not-existing")
 	require.NoError(t, err)
 	require.Equal(t, present, false)
+
+	// Verify a label containing a quote is handled safely (#167602).
+	present, err = schedulebase.CheckScheduleAlreadyExists(ctx, p.(sql.PlanHookState), "it's a label")
+	require.NoError(t, err)
+	require.Equal(t, present, false)
 }
 
 func TestFullyQualifyTables(t *testing.T) {

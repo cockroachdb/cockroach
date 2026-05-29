@@ -19,6 +19,7 @@ import (
 // its initial value.
 func TestRetryResetOnProgress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer testingUseFastRetry()()
 
 	ctx := context.Background()
 	r := getRetry(ctx, 10*time.Minute, 10*time.Minute)

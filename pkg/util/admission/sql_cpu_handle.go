@@ -11,7 +11,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
@@ -117,6 +116,10 @@ type SQLCPUHandle struct {
 	//     covers the shortfall entirely. No Admit call is needed.
 	admitTurn chan struct{}
 
+	// nextAdmitBuffer is state for refillHeuristic, read/written only
+	// inside the admitTurn-serialized slow-path section.
+	nextAdmitBuffer int64
+
 	mu struct {
 		syncutil.Mutex
 
@@ -152,6 +155,27 @@ type SQLCPUHandle struct {
 		// INVARIANT: reservation >= 0.
 		// INVARIANT: closed == true => reservation == 0.
 		reservation atomic.Int64
+
+		// reservationSourceGroup is the groupKey of the container the
+		// most recent successful Admit credited. Close uses it to
+		// return the drained reservation to the same container,
+		// without re-deriving from the WorkQueue's current mode
+		// — which may have flipped between Admit and Close. In RM
+		// mode the container is rg-keyed; the prior
+		// tenantGroupKey-based lookup missed and silently leaked the
+		// drained reservation.
+		//
+		// Invariant: at any moment, every token in reservation came
+		// from the most recent successful Admit. Each Admit only fires
+		// when tryDeductReservation found reservation < needed (i.e.,
+		// drained reservation to 0); Admit then adds its buffer to a
+		// reservation that is 0. By the time the next Admit fires, that
+		// buffer has been drained back to 0 (which is what triggered
+		// the next Admit). The slow path is serialized via admitTurn,
+		// so no two Admits' buffers ever coexist in reservation.
+		// Therefore reservationSourceGroup is always the exact source
+		// of any tokens Close drains.
+		reservationSourceGroup groupKey
 
 		gHandles []*GoroutineCPUHandle
 		// Backing for up to 2 goroutine handles, to avoid allocations in
@@ -203,22 +227,36 @@ func (h *SQLCPUHandle) tryDeductReservation(diffNanos int64) int64 {
 // prevent large checkpoints from holding excessive tokens idle.
 const maxRefillBuffer = int64(1 * time.Millisecond)
 
-// refillHeuristic determines how many tokens to request from the WorkQueue when
-// the reservation runs out. It requests the deficit (to cover the current
-// shortfall) plus a buffer (to pre-pay future fast-path CAS deductions). A
-// larger buffer means fewer blocking Admit calls and less contention on
-// WorkQueue.mu, but it also means more tokens are held in this handle's
-// reservation instead of the shared pool. Tokens sitting in reservation are
-// unavailable to other tenants and other handles within the same tenant, which
-// can reduce fairness. The buffer is capped at maxRefillBuffer to bound
-// this unfairness.
+// bufferSeed is the smallest non-zero buffer the refill heuristic ever
+// requests; it kicks off the doubling ramp.
+const bufferSeed = int64(10 * time.Microsecond)
+
+// refillHeuristic returns deficit + buffer to request from
+// WorkQueue.Admit when the local reservation runs out. The buffer
+// grows exponentially from bufferSeed, doubling on each call up to
+// maxRefillBuffer:
 //
-// TODO(wenyihu6): replace this simple 2x heuristic with an adaptive scheme
-// (e.g. exponential growth) that grows the buffer when Admit calls are too
-// frequent and shrinks it when they are infrequent.
+//   - First Admit: buffer = 0. Many SQLCPUHandles are short-lived; a
+//     buffer for them is wasted since it's just returned via
+//     AdmittedSQLWorkDone at Close.
+//   - Subsequent Admits: buffer doubles from bufferSeed, capped at
+//     maxRefillBuffer. The handle keeps hitting the slow path, so it
+//     needs a bigger buffer.
+//
+// No idle reset is needed: SQLCPUHandle is per-statement, so its
+// lifetime is the natural reset boundary.
+//
+// REQUIRES: caller holds admitTurn (state is mutated unsynchronized).
 func (h *SQLCPUHandle) refillHeuristic(deficit int64) int64 {
-	buffer := min(deficit, maxRefillBuffer)
-	return deficit + buffer
+	switch {
+	case h.nextAdmitBuffer == 0:
+		h.nextAdmitBuffer = bufferSeed
+		return deficit
+	default:
+		buffer := h.nextAdmitBuffer
+		h.nextAdmitBuffer = min(2*h.nextAdmitBuffer, maxRefillBuffer)
+		return deficit + buffer
+	}
 }
 
 // constructWorkInfo returns a WorkInfo copy with the given
@@ -342,12 +380,16 @@ func (h *SQLCPUHandle) reportAndAcquireConsumedCPU(
 				// Close sets closed=true and Swap(0) drains reservation, then this
 				// goroutine does Add(buffer), leaking tokens.
 				h.mu.reservation.Add(buffer)
+				h.mu.reservationSourceGroup = resp.groupKey
 				return false
 			}()
 			// Close already ran and drained reservation. Return the buffer
-			// directly.
+			// directly using this admit's resp.groupKey —
+			// reservationSourceGroup wasn't stored (we're in the closed
+			// branch above), so we use the key from the just-completed
+			// Admit.
 			if closed {
-				h.wq.AdmittedSQLWorkDone(h.workInfo.TenantID, buffer)
+				h.wq.AdmittedSQLWorkDone(resp.groupKey, buffer)
 			}
 		}
 	}
@@ -440,7 +482,10 @@ func (h *SQLCPUHandle) Close() {
 	// be added to mu.reservation after this.
 	remaining := h.mu.reservation.Swap(0)
 	if remaining > 0 {
-		h.wq.AdmittedSQLWorkDone(h.workInfo.TenantID, remaining)
+		// closed=true was set under mu before this Swap, so no further
+		// Admit can update reservationSourceGroup; reading it here
+		// without mu is safe.
+		h.wq.AdmittedSQLWorkDone(h.mu.reservationSourceGroup, remaining)
 	}
 }
 
@@ -562,10 +607,9 @@ type sqlCPUProviderImpl struct {
 	cumulativeDistSQLCPUNanos atomic.Int64
 	// sv is the settings values used to check if CTT AC is enabled.
 	sv *settings.Values
-	// getWorkQueue returns the CTT WorkQueue for the given tenant. This
-	// allows SQL to share the KV CTT WorkQueue, using the appropriate
-	// tier (system vs app) based on tenant ID. Can be nil in testing.
-	getWorkQueue func(roachpb.TenantID) *WorkQueue
+	// getWorkQueue returns the CTT WorkQueue. This allows SQL to share
+	// the KV CTT WorkQueue. Can be nil in testing.
+	getWorkQueue func() *WorkQueue
 }
 
 func (p *sqlCPUProviderImpl) GetCumulativeSQLCPUNanos() (gatewayCPUNanos, distCPUNanos int64) {
@@ -575,19 +619,17 @@ func (p *sqlCPUProviderImpl) GetCumulativeSQLCPUNanos() (gatewayCPUNanos, distCP
 func (p *sqlCPUProviderImpl) GetHandle(workInfo WorkInfo, atGateway bool) *SQLCPUHandle {
 	var wq *WorkQueue
 	if p.getWorkQueue != nil && sqlCPUTimeTokenACIsEnabled(p.sv) {
-		wq = p.getWorkQueue(workInfo.TenantID)
+		wq = p.getWorkQueue()
 	}
 	return newSQLCPUAdmissionHandle(workInfo, atGateway, p, wq)
 }
 
 // NewSQLCPUProvider creates a new SQLCPUProvider. The sv parameter is required
 // and provides access to cluster settings for checking if SQL CPU time token
-// AC is enabled. The getWorkQueue function returns the CTT WorkQueue for a
-// given tenant, allowing SQL to share the KV CTT WorkQueue; it may be nil when
-// CTT AC is not available (e.g. separate-process tenants).
-func NewSQLCPUProvider(
-	sv *settings.Values, getWorkQueue func(roachpb.TenantID) *WorkQueue,
-) SQLCPUProvider {
+// AC is enabled. The getWorkQueue function returns the CTT WorkQueue, allowing
+// SQL to share the KV CTT WorkQueue; it may be nil when CTT AC is not
+// available (e.g. separate-process tenants).
+func NewSQLCPUProvider(sv *settings.Values, getWorkQueue func() *WorkQueue) SQLCPUProvider {
 	return &sqlCPUProviderImpl{
 		sv:           sv,
 		getWorkQueue: getWorkQueue,

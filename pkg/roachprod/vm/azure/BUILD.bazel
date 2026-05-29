@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "auth.go",
         "azure.go",
+        "capacity_error.go",
         "doc.go",
         "flags.go",
         "ids.go",

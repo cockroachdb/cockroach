@@ -32,10 +32,10 @@ type supportedAlterTypeCommand = supportedStatement
 // only be used with the use_declarative_schema_changer session variable.
 var supportedAlterTypeStatements = map[reflect.Type]supportedAlterTypeCommand{
 	reflect.TypeOf((*tree.AlterTypeAddValue)(nil)):    {fn: alterTypeAddValue, on: true, checks: isV263Active},
-	reflect.TypeOf((*tree.AlterTypeRenameValue)(nil)): {fn: alterTypeRenameValue, on: false, checks: nil},
-	reflect.TypeOf((*tree.AlterTypeRename)(nil)):      {fn: alterTypeRename, on: false, checks: nil},
-	reflect.TypeOf((*tree.AlterTypeSetSchema)(nil)):   {fn: alterTypeSetSchema, on: false, checks: nil},
-	reflect.TypeOf((*tree.AlterTypeOwner)(nil)):       {fn: alterTypeOwner, on: false, checks: nil},
+	reflect.TypeOf((*tree.AlterTypeRenameValue)(nil)): {fn: alterTypeRenameValue, on: true, checks: isV263Active},
+	reflect.TypeOf((*tree.AlterTypeRename)(nil)):      {fn: alterTypeRename, on: true, checks: isV263Active},
+	reflect.TypeOf((*tree.AlterTypeSetSchema)(nil)):   {fn: alterTypeSetSchema, on: true, checks: isV263Active},
+	reflect.TypeOf((*tree.AlterTypeOwner)(nil)):       {fn: alterTypeOwner, on: true, checks: isV263Active},
 	reflect.TypeOf((*tree.AlterTypeDropValue)(nil)):   {fn: alterTypeDropValue, on: true, checks: isV263Active},
 }
 
@@ -81,8 +81,11 @@ func alterTypeChecks(
 func AlterType(b BuildCtx, n *tree.AlterType) {
 	elts := b.ResolveUserDefinedTypeType(n.Type, ResolveParams{})
 
-	if !elts.FilterCompositeType().IsEmpty() {
-		panic(pgerror.Newf(pgcode.WrongObjectType, "cannot modify composite type"))
+	if !elts.FilterCompositeType().IsEmpty() || !elts.FilterDomainType().IsEmpty() {
+		panic(scerrors.NotImplementedErrorf(n, "ALTER TYPE on non-enum UDTs is not supported"))
+	} else if elts.FilterEnumType().IsEmpty() {
+		panic(pgerror.Newf(pgcode.WrongObjectType,
+			"%q is not an enum type", n.Type.Object()))
 	}
 
 	enumType := elts.FilterEnumType().MustGetOneElement()
@@ -205,33 +208,85 @@ func alterTypeAddValue(
 	}
 	b.Add(enumValue)
 
-	b.LogEventForExistingPayload(enumValue, &eventpb.AlterType{
+	b.LogEventForExistingPayload(enumValue, &eventpb.AlterTypeAddValue{
 		TypeName: tn.FQString(),
+		Value:    newVal,
 	})
 }
 
 func alterTypeRenameValue(
 	b BuildCtx, tn *tree.TypeName, enumType *scpb.EnumType, t *tree.AlterTypeRenameValue,
 ) {
-	panic(scerrors.NotImplementedErrorf(t, "ALTER TYPE RENAME VALUE is not supported"))
-}
+	oldVal := string(t.OldVal)
+	newVal := string(t.NewVal)
 
-func alterTypeRename(
-	b BuildCtx, tn *tree.TypeName, enumType *scpb.EnumType, t *tree.AlterTypeRename,
-) {
-	panic(scerrors.NotImplementedErrorf(t, "ALTER TYPE RENAME is not supported"))
+	enumTypeValues := b.QueryByID(enumType.TypeID).FilterEnumTypeValue()
+
+	var found bool
+	var physicalRep []byte
+	enumTypeValues.ForEach(
+		func(_ scpb.Status, target scpb.TargetStatus, e *scpb.EnumTypeValue) {
+			if e.LogicalRepresentation != oldVal {
+				return
+			}
+			if target == scpb.ToAbsent {
+				panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"enum value %q is being dropped", oldVal))
+			}
+			if target != scpb.ToPublic {
+				panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"enum value %q is being added, try again later", oldVal))
+			}
+			found = true
+			physicalRep = e.PhysicalRepresentation
+		},
+	)
+	if !found {
+		panic(pgerror.Newf(pgcode.InvalidParameterValue,
+			"%s is not an existing enum value", oldVal))
+	}
+
+	enumTypeValues.ForEach(
+		func(_ scpb.Status, target scpb.TargetStatus, e *scpb.EnumTypeValue) {
+			if e.LogicalRepresentation == newVal && target != scpb.ToAbsent {
+				panic(pgerror.Newf(pgcode.DuplicateObject,
+					"enum value %s already exists", newVal))
+			}
+		},
+	)
+
+	enumTypeValues.ForEach(
+		func(_ scpb.Status, target scpb.TargetStatus, e *scpb.EnumTypeValue) {
+			if e.LogicalRepresentation == oldVal && target == scpb.ToPublic {
+				b.Drop(e)
+			}
+		},
+	)
+
+	enumValue := &scpb.EnumTypeValue{
+		TypeID:                 enumType.TypeID,
+		PhysicalRepresentation: physicalRep,
+		LogicalRepresentation:  newVal,
+	}
+	b.Add(enumValue)
+
+	b.LogEventForExistingPayload(enumValue, &eventpb.AlterTypeRenameValue{
+		TypeName: tn.FQString(),
+		OldValue: oldVal,
+		NewValue: newVal,
+	})
 }
 
 func alterTypeSetSchema(
 	b BuildCtx, tn *tree.TypeName, enumType *scpb.EnumType, t *tree.AlterTypeSetSchema,
 ) {
-	panic(scerrors.NotImplementedErrorf(t, "ALTER TYPE SET SCHEMA is not supported"))
+	setSchemaForTypeDesc(b, enumType, enumType.TypeID, enumType.ArrayTypeID, t.Schema, "type")
 }
 
 func alterTypeOwner(
 	b BuildCtx, tn *tree.TypeName, enumType *scpb.EnumType, t *tree.AlterTypeOwner,
 ) {
-	panic(scerrors.NotImplementedErrorf(t, "ALTER TYPE OWNER TO is not supported"))
+	setOwnerForTypeDesc(b, tn, enumType, enumType.TypeID, enumType.ArrayTypeID, t.Owner)
 }
 
 func alterTypeDropValue(
@@ -255,8 +310,9 @@ func alterTypeDropValue(
 			}
 			found = true
 			b.Drop(e)
-			b.LogEventForExistingPayload(e, &eventpb.AlterType{
+			b.LogEventForExistingPayload(e, &eventpb.AlterTypeDropValue{
 				TypeName: tn.FQString(),
+				Value:    dropVal,
 			})
 		},
 	)

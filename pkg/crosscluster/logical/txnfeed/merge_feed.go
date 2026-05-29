@@ -29,10 +29,18 @@ import (
 // next KV has a different timestamp or a checkpoint/end-of-stream is
 // encountered). This guarantees that a transaction is never split across
 // batches.
+//
+// The merge feed only emits events with timestamp less than or equal to endTime.
+// After encountering the first event beyond endTime, it flushes any
+// buffered KVs and emits a synthetic checkpoint at endTime.Prev(). For all
+// remaining events, it continues normal heap processing but only ever emits
+// the synthetic checkpoint (deduplicated by maybeEmitCheckpoint) until every
+// subscription is exhausted and the loop exits naturally.
 type MergeFeed struct {
 	subs           []streamclient.Subscription
 	events         chan crosscluster.Event
 	targetBatchKVs int
+	endTime        hlc.Timestamp
 
 	// loop holds state owned exclusively by mergeLoop while it is running.
 	// After Subscribe returns, err may be read via Err().
@@ -60,12 +68,16 @@ var _ streamclient.Subscription = (*MergeFeed)(nil)
 // flushing a batch (actual batches may be larger to avoid splitting a
 // transaction).
 func NewMergeFeed(
-	subs []streamclient.Subscription, coveringSpan roachpb.Span, targetBatchKVs int,
+	subs []streamclient.Subscription,
+	coveringSpan roachpb.Span,
+	targetBatchKVs int,
+	endTime hlc.Timestamp,
 ) *MergeFeed {
 	m := &MergeFeed{
 		subs:           subs,
 		events:         make(chan crosscluster.Event),
 		targetBatchKVs: targetBatchKVs,
+		endTime:        endTime,
 	}
 	m.loop.coveringSpan = coveringSpan
 	return m
@@ -100,6 +112,13 @@ func (m *MergeFeed) mergeLoop(ctx context.Context) error {
 
 	for h.len() != 0 {
 		entry := h.pop()
+
+		if m.endTime.Less(entry.peekTS) {
+			if err := m.processPastEndTime(ctx, entry, h); err != nil {
+				return err
+			}
+			continue
+		}
 
 		if !entry.isKV() {
 			if err := m.flushScratch(ctx); err != nil {
@@ -185,12 +204,44 @@ func (m *MergeFeed) initHeap(ctx context.Context) (*mergeHeap, error) {
 	return h, nil
 }
 
+// processPastEndTime drains an entry whose timestamp is past endTime.
+// It flushes any buffered KVs, emits a synthetic checkpoint at endTime, and
+// advances the entry without processing it.
+func (m *MergeFeed) processPastEndTime(ctx context.Context, entry *mergeEntry, h *mergeHeap) error {
+	if err := m.flushScratch(ctx); err != nil {
+		return err
+	}
+	if err := m.emitCheckpoint(ctx, m.endTime); err != nil {
+		return err
+	}
+	var closed bool
+	var err error
+	if entry.isKV() {
+		closed, err = entry.advanceKV(ctx)
+	} else {
+		closed, err = entry.advanceFromChannel(ctx)
+	}
+	if err != nil {
+		return err
+	}
+	if !closed {
+		h.push(entry)
+	}
+	return nil
+}
+
 // maybeEmitCheckpoint emits a merged checkpoint if ts advances the global
 // frontier.
 func (m *MergeFeed) maybeEmitCheckpoint(ctx context.Context, ts hlc.Timestamp) error {
-	if !m.loop.resolvedTime.Less(ts) {
+	if ts.LessEq(m.loop.resolvedTime) {
 		return nil
 	}
+	return m.emitCheckpoint(ctx, ts)
+}
+
+// emitCheckpoint unconditionally emits a checkpoint event at ts and updates
+// the resolved timestamp.
+func (m *MergeFeed) emitCheckpoint(ctx context.Context, ts hlc.Timestamp) error {
 	m.loop.resolvedTime = ts
 
 	cpEvent := crosscluster.MakeCheckpointEvent(

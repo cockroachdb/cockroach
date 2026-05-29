@@ -80,6 +80,18 @@ type internalContext struct {
 	// Determines whether to perform client-side syntax checking.
 	checkSyntax bool
 
+	// restricted, when true, blocks all backslash metacommands except
+	// \unrestrict. It is set by \restrict KEY and cleared by \unrestrict
+	// with the matching key. The state is shared across \i / \ir file
+	// inclusion because internalContext is reused across child cliState
+	// instances (see runIncludeInternal). This mirrors psql's restricted
+	// mode, which mitigates the dump-injection attack described in
+	// CVE-2025-8714: a hostile server can embed metacommands in plain-text
+	// dump output that would otherwise execute on the operator's machine
+	// when the dump is piped back through the shell.
+	restricted  bool
+	restrictKey string
+
 	// autoTrace, when non-empty, encloses the executed statements
 	// by suitable SET TRACING and SHOW TRACE FOR SESSION statements.
 	autoTrace string

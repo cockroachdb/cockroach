@@ -9,12 +9,10 @@ import { createMemoryHistory } from "history";
 import React from "react";
 import { Provider } from "react-redux";
 
-import { apiReducersReducer } from "src/redux/apiReducers";
 import { healthReducer } from "src/redux/health";
 import { hoverReducer } from "src/redux/hover";
 import { localSettingsReducer } from "src/redux/localsettings";
 import { loginReducer } from "src/redux/login";
-import { queryManagerReducer } from "src/redux/queryManager/reducer";
 import { AdminUIState, flagsReducer } from "src/redux/state";
 import { timeScaleReducer } from "src/redux/timeScale";
 import { uiDataReducer } from "src/redux/uiData";
@@ -31,14 +29,9 @@ export function renderWithProviders(
   const routerReducer = connectRouter(history);
   const store = configureStore<AdminUIState>({
     reducer: {
-      cachedData: apiReducersReducer,
       health: healthReducer,
       hover: hoverReducer,
       localSettings: localSettingsReducer,
-      // TODO (koorosh): cannot properly cast Query Manager Action types to AnyAction.
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore
-      queryManager: queryManagerReducer,
       router: routerReducer,
       timeScale: timeScaleReducer,
       uiData: uiDataReducer,

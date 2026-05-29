@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 )
 
@@ -63,7 +62,7 @@ func MakeColumnDesc(id descpb.ColumnID) *descpb.ColumnDescriptor {
 		Name:        "c" + strconv.Itoa(int(id)),
 		ID:          id,
 		Type:        types.Bool,
-		DefaultExpr: proto.String("true"),
+		DefaultExpr: new(descpb.Expression("true")),
 	}
 }
 

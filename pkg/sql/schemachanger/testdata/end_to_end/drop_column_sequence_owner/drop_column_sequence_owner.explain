@@ -205,7 +205,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
       │         ├── RemoveSequenceOwner {"ColumnID":2,"OwnedSequenceID":105,"TableID":104}
       │         ├── RemoveOwnerBackReferenceInSequence {"SequenceID":105}
       │         ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":105,"Name":"sq1","SchemaID":101}}
-      │         ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.Owner"}
+      │         ├── RemoveOwner {"DescriptorID":105}
       │         ├── RemoveUserPrivileges {"DescriptorID":105,"User":"admin"}
       │         ├── RemoveUserPrivileges {"DescriptorID":105,"User":"root"}
       │         ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":104}

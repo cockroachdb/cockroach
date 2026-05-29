@@ -31,6 +31,79 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// rollbackPrepData holds the server and shared scenario state created by
+// rollbackPrepare for reuse by rollbackCase.
+type rollbackPrepData struct {
+	server   TestServer
+	scenario *rollbackStageTracker
+}
+
+// rollbackStageTracker tracks the currently-executing rollback scenario. The
+// BeforeStage knob reads this to decide when to inject a failure and when
+// to check EXPLAIN diagrams during rollback. The pointer is shared between
+// the knob closure (created in rollbackPrepare) and rollbackCase.
+type rollbackStageTracker struct {
+	syncutil.Mutex
+	active      bool
+	targetPhase scop.Phase
+	// targetOrdinal is the 1-based ordinal of the post-commit stage where
+	// BeforeStage should inject a failure. Set by rollbackCase before each
+	// schema change execution.
+	targetOrdinal int
+	// injectedFailure is set when BeforeStage returns the injected "boom"
+	// error. It guards against double-injection and signals rollbackCase
+	// whether the failure was actually triggered so it can assert the
+	// correct outcome.
+	injectedFailure bool
+	// checkedExplainInRollback is set when the EXPLAIN diagram check runs
+	// during rollback. It ensures the expensive checkExplainDiagrams call
+	// happens exactly once — on the first stage after failure injection —
+	// and lets rollbackCase assert the check ran.
+	checkedExplainInRollback bool
+}
+
+// stageDiscovery counts post-commit stages during the first schema change
+// execution. It is populated from the BeforeStage knob under its mutex.
+type stageDiscovery struct {
+	syncutil.Mutex
+	counted                      bool
+	postCommitCount              int
+	postCommitNonRevertibleCount int
+}
+
+// countStagesOnce records stage counts from p on the first call; subsequent
+// calls are no-ops.
+func (d *stageDiscovery) countStagesOnce(p scplan.Plan) {
+	d.Lock()
+	defer d.Unlock()
+	if d.counted {
+		return
+	}
+	d.counted = true
+	for _, s := range p.Stages {
+		switch s.Phase {
+		case scop.PostCommitPhase:
+			d.postCommitCount++
+		case scop.PostCommitNonRevertiblePhase:
+			d.postCommitNonRevertibleCount++
+		}
+	}
+}
+
+// counts returns the discovered stage counts.
+func (d *stageDiscovery) counts() (postCommit, postCommitNonRevertible int) {
+	d.Lock()
+	defer d.Unlock()
+	return d.postCommitCount, d.postCommitNonRevertibleCount
+}
+
+// postCommitStageCount returns the discovered post-commit stage count.
+func (d *stageDiscovery) postCommitStageCount() int {
+	d.Lock()
+	defer d.Unlock()
+	return d.postCommitCount
+}
+
 // Rollback tests that the schema changer job rolls back properly.
 func Rollback(t *testing.T, relPath string, factory TestServerFactory) {
 	// These tests are expensive.
@@ -38,89 +111,282 @@ func Rollback(t *testing.T, relPath string, factory TestServerFactory) {
 	skip.UnderRace(t)
 	skip.UnderDeadlock(t)
 
-	testRollbackCase := func(t *testing.T, cs CumulativeTestCaseSpec) {
-		if cs.Phase != scop.PostCommitPhase {
-			skip.IgnoreLint(t, "cannot roll back outside of post-commit phase")
-			return
+	var prepData rollbackPrepData
+	t.Cleanup(func() {
+		if prepData.server.Stopper != nil {
+			prepData.server.Stopper(t)
 		}
-		var numInjectedFailures uint32
-		var numCheckedExplainInRollback uint32
-		var knobEnabled atomic.Bool
-		beforeStage := func(p scplan.Plan, stageIdx int) error {
-			// Only enabled after setup.
-			if !knobEnabled.Load() {
+	})
+	cumulativeTestForEachPostCommitStage(t, relPath, factory,
+		func(t *testing.T, spec CumulativeTestSpec) PrepResult[rollbackPrepData] {
+			result := rollbackPrepare(t, factory, spec)
+			prepData = result.PrepData
+			return result
+		}, func(t *testing.T, cs CumulativeTestCaseSpec) {
+			rollbackCase(t, prepData, cs)
+		}, sampleAllPostCommitRevertible /* samplingFn */)
+}
+
+// rollbackPrepare creates a single cluster, runs a discovery pass to count
+// stages, and returns the server for reuse by rollbackCase.
+func rollbackPrepare(
+	t *testing.T, factory TestServerFactory, spec CumulativeTestSpec,
+) PrepResult[rollbackPrepData] {
+	ctx := context.Background()
+
+	var discovery stageDiscovery
+
+	// The scenario state is shared between the BeforeStage knob and
+	// rollbackCase. During discovery, the knob only counts stages; during
+	// per-stage test runs, it injects failures.
+	scenario := &rollbackStageTracker{}
+
+	knobs := &scexec.TestingKnobs{
+		BeforeStage: func(p scplan.Plan, stageIdx int) error {
+			discovery.countStagesOnce(p)
+
+			// Read scenario state under the lock, then perform expensive
+			// work (explain diagrams, assertions) outside it so we don't
+			// block OnPostCommitError/OnPostCommitPlanError.
+			type stageAction struct {
+				active                   bool
+				inject                   bool
+				targetOrdinal            int
+				injectedFailure          bool
+				checkedExplainInRollback bool
+			}
+			action := func() stageAction {
+				scenario.Lock()
+				defer scenario.Unlock()
+				a := stageAction{
+					active:                   scenario.active,
+					targetOrdinal:            scenario.targetOrdinal,
+					injectedFailure:          scenario.injectedFailure,
+					checkedExplainInRollback: scenario.checkedExplainInRollback,
+				}
+				if a.active && !a.injectedFailure {
+					s := p.Stages[stageIdx]
+					if s.Phase == scenario.targetPhase && s.Ordinal == a.targetOrdinal {
+						scenario.injectedFailure = true
+						a.inject = true
+					}
+				}
+				if a.active && scenario.injectedFailure &&
+					!a.checkedExplainInRollback {
+					scenario.checkedExplainInRollback = true
+				}
+				return a
+			}()
+
+			if !action.active {
 				return nil
 			}
+
 			s := p.Stages[stageIdx]
-			if atomic.LoadUint32(&numInjectedFailures) > 0 {
-				// At this point, if a failure has already been injected, any stage
-				// should be non-revertible.
+			if action.inject {
+				return errors.Errorf("boom %d", action.targetOrdinal)
+			}
+			if action.injectedFailure {
+				// After failure injection, any remaining stage should be
+				// non-revertible (rollback).
 				require.Equal(t, scop.PostCommitNonRevertiblePhase, s.Phase)
 				// EXPLAIN the rollback plan as early as possible.
-				if atomic.LoadUint32(&numCheckedExplainInRollback) > 0 {
+				if action.checkedExplainInRollback {
 					return nil
 				}
-				atomic.AddUint32(&numCheckedExplainInRollback, 1)
-				fileNameSuffix := fmt.Sprintf("__rollback_%d_of_%d", cs.StageOrdinal, cs.StagesCount)
-				explainedStmt := fmt.Sprintf("rollback at post-commit stage %d of %d", cs.StageOrdinal, cs.StagesCount)
+				postCommitCount := discovery.postCommitStageCount()
+				fileNameSuffix := fmt.Sprintf(
+					"__rollback_%d_of_%d",
+					action.targetOrdinal, postCommitCount,
+				)
+				explainedStmt := fmt.Sprintf(
+					"rollback at post-commit stage %d of %d",
+					action.targetOrdinal, postCommitCount,
+				)
 				const inRollback = true
-				checkExplainDiagrams(t, cs.Path, cs.Setup, cs.Stmts, explainedStmt, fileNameSuffix, p.CurrentState, inRollback, cs.Rewrite)
+				checkExplainDiagrams(
+					t, spec.Path, spec.Setup, spec.Stmts,
+					explainedStmt, fileNameSuffix,
+					p.CurrentState, inRollback, spec.Rewrite,
+				)
 				return nil
 			}
-			if s.Phase == scop.PostCommitPhase && s.Ordinal == cs.StageOrdinal {
-				atomic.AddUint32(&numInjectedFailures, 1)
-				return errors.Errorf("boom %d", cs.StageOrdinal)
-			}
 			return nil
-		}
-		knobs := &scexec.TestingKnobs{
-			BeforeStage: beforeStage,
-			OnPostCommitPlanError: func(err error) error {
-				// Only enabled after setup.
-				if !knobEnabled.Load() {
-					return nil
-				}
-				panic(fmt.Sprintf("%+v", err))
-			},
-			OnPostCommitError: func(p scplan.Plan, stageIdx int, err error) error {
-				// Only enabled after setup.
-				if !knobEnabled.Load() {
-					return nil
-				}
-				if strings.Contains(err.Error(), "boom") {
-					return err
-				}
-				panic(fmt.Sprintf("%+v", err))
-			},
-		}
-		ctx := context.Background()
-		runfn := func(s serverutils.TestServerInterface, db *gosql.DB) {
-			maybeSkipUnderSecondaryTenant(t, cs.CumulativeTestSpec, s)
-			tdb := sqlutils.MakeSQLRunner(db)
-			var before [][]string
-			require.NoError(t, setupSchemaChange(ctx, t, cs.CumulativeTestSpec, db))
-			knobEnabled.Swap(true)
-			before = tdb.QueryStr(t, fetchDescriptorStateQuery)
-			err := executeSchemaChangeTxn(ctx, t, cs.CumulativeTestSpec, db)
-			if err != nil {
-				// If the statement execution failed, then we expect to end up in the same
-				// state as when we started.
-				require.Equal(t, before, tdb.QueryStr(t, fetchDescriptorStateQuery))
-			} else {
-				waitForSchemaChangesToFinish(t, tdb)
+		},
+		OnPostCommitPlanError: func(err error) error {
+			scenario.Lock()
+			active := scenario.active
+			scenario.Unlock()
+			if !active {
+				return err
 			}
-			if atomic.LoadUint32(&numInjectedFailures) == 0 {
-				require.NoError(t, err)
-			} else {
-				require.Regexp(t, fmt.Sprintf("boom %d", cs.StageOrdinal), err)
-				require.NotZero(t, atomic.LoadUint32(&numCheckedExplainInRollback))
+			panic(fmt.Sprintf("%+v", err))
+		},
+		OnPostCommitError: func(
+			p scplan.Plan, stageIdx int, err error,
+		) error {
+			scenario.Lock()
+			active := scenario.active
+			scenario.Unlock()
+			if !active {
+				return err
 			}
-		}
-		factory.WithSchemaChangerKnobs(knobs).Run(ctx, t, runfn)
+			if strings.Contains(err.Error(), "boom") {
+				return err
+			}
+			panic(fmt.Sprintf("%+v", err))
+		},
 	}
-	cumulativeTestForEachPostCommitStage[struct{}](t, relPath, factory, nil, func(t *testing.T, cs CumulativeTestCaseSpec) {
-		testRollbackCase(t, cs)
-	}, sampleAllPostCommitRevertible /* enableSampling */)
+
+	args := rollbackPrepData{scenario: scenario}
+
+	// Create one long-lived cluster.
+	args.server = factory.WithSchemaChangerKnobs(knobs).Start(ctx, t)
+	// Register cleanup immediately after server creation. This is necessary
+	// because if the prepare function exits early (e.g. skip or require failure),
+	// the caller's prepData closure variable is never hydrated, so the caller's
+	// defer will not stop the server. Stopper.Stop is idempotent, so it is safe
+	// for the caller's defer to also call it on the normal path.
+	t.Cleanup(func() {
+		if args.server.Stopper != nil {
+			args.server.Stopper(t)
+		}
+	})
+	db := args.server.DB
+	db.SetMaxOpenConns(1)
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	// Discovery pass: run the schema change to completion to discover stages.
+	require.NoError(t, setupSchemaChange(ctx, t, spec, db))
+	maybeSkipUnderSecondaryTenant(t, spec, args.server.Server)
+	require.NoError(t, executeSchemaChangeTxn(ctx, t, spec, db))
+
+	switchToSystemForDropDB(t, tdb, spec)
+	waitForSchemaChangesToFinish(t, tdb)
+
+	dbName, createDatabaseStmt := discoverDatabaseName(t, tdb)
+
+	tdb.Exec(t, fmt.Sprintf("USE %q", dbName))
+	after := tdb.QueryStr(t, fetchDescriptorStateQuery)
+
+	postCommitCount, postCommitNonRevertibleCount := discovery.counts()
+
+	return PrepResult[rollbackPrepData]{
+		PostCommitCount:              postCommitCount,
+		PostCommitNonRevertibleCount: postCommitNonRevertibleCount,
+		After:                        after,
+		DatabaseName:                 dbName,
+		CreateDatabaseStmt:           createDatabaseStmt,
+		PrepData:                     args,
+	}
+}
+
+// rollbackCase runs a single rollback scenario on the shared cluster,
+// dropping and recreating the database to get a clean state.
+func rollbackCase(t *testing.T, args rollbackPrepData, cs CumulativeTestCaseSpec) {
+	if cs.Phase != scop.PostCommitPhase {
+		skip.IgnoreLint(t, "cannot roll back outside of post-commit phase")
+		return
+	}
+
+	ctx := context.Background()
+	db := args.server.DB
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	// Drop and recreate the database for a clean state.
+	tdb.Exec(t, "USE system")
+	tdb.Exec(t, "SET use_declarative_schema_changer = 'on'")
+	tdb.Exec(t, fmt.Sprintf("DROP DATABASE IF EXISTS %q CASCADE", cs.DatabaseName))
+
+	require.NoError(t, setupSchemaChange(ctx, t, cs.CumulativeTestSpec, db))
+	tdb.Exec(t, fmt.Sprintf("USE %q", cs.DatabaseName))
+
+	before := tdb.QueryStr(t, fetchDescriptorStateQuery)
+
+	// Activate this rollback scenario. Deactivation is deferred so that the
+	// scenario is marked inactive even if the test fails mid-execution,
+	// preventing the OnPostCommitPlanError knob from panicking on stale state.
+	func() {
+		args.scenario.Lock()
+		defer args.scenario.Unlock()
+		args.scenario.active = true
+		args.scenario.targetPhase = cs.Phase
+		args.scenario.targetOrdinal = cs.StageOrdinal
+		args.scenario.injectedFailure = false
+		args.scenario.checkedExplainInRollback = false
+	}()
+	defer func() {
+		args.scenario.Lock()
+		defer args.scenario.Unlock()
+		args.scenario.active = false
+	}()
+
+	err := executeSchemaChangeTxn(ctx, t, cs.CumulativeTestSpec, db)
+
+	switchToSystemForDropDB(t, tdb, cs.CumulativeTestSpec)
+	waitForSchemaChangesToFinish(t, tdb)
+
+	// Capture post-rollback state.
+	tdb.Exec(t, fmt.Sprintf("USE %q", cs.DatabaseName))
+	afterRollback := tdb.QueryStr(t, fetchDescriptorStateQuery)
+
+	// Collect results.
+	var injectedFailure, checkedExplainInRollback bool
+	func() {
+		args.scenario.Lock()
+		defer args.scenario.Unlock()
+		injectedFailure = args.scenario.injectedFailure
+		checkedExplainInRollback = args.scenario.checkedExplainInRollback
+	}()
+
+	if !injectedFailure {
+		require.NoError(t, err)
+	} else {
+		require.Regexp(t, fmt.Sprintf("boom %d", cs.StageOrdinal), err)
+		require.True(t, checkedExplainInRollback)
+		require.Equal(t, before, afterRollback)
+	}
+}
+
+// switchToSystemForDropDB switches to the system database if the test
+// statements include a DROP DATABASE, which would invalidate the current
+// database context.
+func switchToSystemForDropDB(t *testing.T, tdb *sqlutils.SQLRunner, spec CumulativeTestSpec) {
+	for _, stmt := range spec.Stmts {
+		if stmt.AST.StatementTag() == "DROP DATABASE" {
+			tdb.Exec(t, "USE system")
+			return
+		}
+	}
+}
+
+// discoverDatabaseName finds the test database name and its CREATE statement.
+// It looks for a non-system database created by the test setup; if none is
+// found it falls back to "defaultdb". Callers that need to skip when no
+// test-specific database exists should check the returned name.
+func discoverDatabaseName(
+	t *testing.T, tdb *sqlutils.SQLRunner,
+) (dbName string, createStmt string) {
+	rows := tdb.QueryStr(
+		t,
+		"SELECT database_name FROM [SHOW DATABASES] WHERE "+
+			"database_name NOT IN ('system', 'postgres', 'defaultdb')",
+	)
+	dbName = "defaultdb"
+	if len(rows) > 0 {
+		dbName = rows[0][0]
+	}
+	res := tdb.QueryStr(
+		t,
+		fmt.Sprintf(
+			"SELECT create_statement FROM [SHOW CREATE DATABASE %q]",
+			dbName,
+		),
+	)
+	if len(res) > 0 {
+		createStmt = res[0][0]
+	}
+	return dbName, createStmt
 }
 
 // ExecuteWithDMLInjection tests that the schema changer behaviour is sane
@@ -330,6 +596,32 @@ func GenerateSchemaChangeCorpus(t *testing.T, path string, factory TestServerFac
 	cumulativeTest(t, path, testFunc)
 }
 
+// pausePrepData holds the server created by pausePrepare and a mutable
+// scenario state used to coordinate the BeforeStage knob across
+// pause/resume iterations. The scenario pointer is shared with the
+// BeforeStage closure and must remain valid for the server's lifetime;
+// pauseCase mutates the pointed-to struct between iterations rather than
+// replacing the pointer.
+type pausePrepData struct {
+	server   TestServer
+	scenario *pauseScenario
+}
+
+// pauseScenario tracks the currently-executing pause scenario. The
+// BeforeStage knob reads this to decide when to inject a pause request.
+type pauseScenario struct {
+	syncutil.Mutex
+	active      bool
+	targetPhase scop.Phase
+	// targetOrdinal is the 1-based ordinal of the post-commit stage where
+	// BeforeStage should inject a pause request.
+	targetOrdinal int
+	// injectedFailure is set when BeforeStage injects the pause request.
+	// It guards against double-injection and lets pauseCase assert that
+	// the pause was triggered.
+	injectedFailure bool
+}
+
 // Pause tests that the schema changer can handle being paused and resumed
 // correctly.
 func Pause(t *testing.T, path string, factory TestServerFactory) {
@@ -338,10 +630,21 @@ func Pause(t *testing.T, path string, factory TestServerFactory) {
 	skip.UnderRace(t)
 	skip.UnderDeadlock(t)
 
-	cumulativeTestForEachPostCommitStage[struct{}](t, path, factory, nil, func(t *testing.T, cs CumulativeTestCaseSpec) {
-		pause(t, factory, cs)
-	},
-		sampleAllPostCommitStages /* enableSampling */)
+	var prepData pausePrepData
+	defer func() {
+		if prepData.server.Stopper != nil {
+			prepData.server.Stopper(t)
+		}
+	}()
+	cumulativeTestForEachPostCommitStage(t, path, factory,
+		func(t *testing.T, spec CumulativeTestSpec) PrepResult[pausePrepData] {
+			result := pausePrepare(t, factory, spec)
+			prepData = result.PrepData
+			return result
+		}, func(t *testing.T, cs CumulativeTestCaseSpec) {
+			pauseCase(t, prepData, cs)
+		},
+		sampleAllPostCommitStages /* samplingFn */)
 }
 
 // PauseMixedVersion is like Pause but in a mixed-version cluster which gets
@@ -352,79 +655,192 @@ func PauseMixedVersion(t *testing.T, path string, factory TestServerFactory) {
 	skip.UnderRace(t)
 	skip.UnderDeadlock(t)
 
-	factory.WithMixedVersion()
-	cumulativeTestForEachPostCommitStage[struct{}](t, path, factory, nil, func(t *testing.T, cs CumulativeTestCaseSpec) {
-		pause(t, factory, cs)
-	},
-		sampleAllPostCommitStages /* enableSampling */)
+	factory = factory.WithMixedVersion()
+	var prepData pausePrepData
+	defer func() {
+		if prepData.server.Stopper != nil {
+			prepData.server.Stopper(t)
+		}
+	}()
+	cumulativeTestForEachPostCommitStage(t, path, factory,
+		func(t *testing.T, spec CumulativeTestSpec) PrepResult[pausePrepData] {
+			result := pausePrepare(t, factory, spec)
+			prepData = result.PrepData
+			return result
+		}, func(t *testing.T, cs CumulativeTestCaseSpec) {
+			pauseCase(t, prepData, cs)
+		},
+		sampleAllPostCommitStages /* samplingFn */)
 }
 
-func pause(t *testing.T, factory TestServerFactory, cs CumulativeTestCaseSpec) {
-	re := regexp.MustCompile(`job (\d+) was paused before it completed with reason: boom (\d+)`)
-	var numInjectedFailures uint32
-	var knobEnabled atomic.Bool
+// pausePrepare creates a single cluster, runs a discovery pass to count
+// stages, and returns the server for reuse by pauseCase.
+func pausePrepare(
+	t *testing.T, factory TestServerFactory, spec CumulativeTestSpec,
+) PrepResult[pausePrepData] {
+	ctx := context.Background()
+
+	var discovery stageDiscovery
+
+	// The scenario state is shared between the BeforeStage knob and
+	// pauseCase. During discovery, the knob only counts stages; during
+	// per-stage test runs, it injects pause requests.
+	scenario := &pauseScenario{}
+
 	knobs := &scexec.TestingKnobs{
 		BeforeStage: func(p scplan.Plan, stageIdx int) error {
-			// Only enabled after setup.
-			if !knobEnabled.Load() {
+			discovery.countStagesOnce(p)
+
+			// Check if a pause scenario is active.
+			scenario.Lock()
+			defer scenario.Unlock()
+			if !scenario.active {
 				return nil
 			}
-			if atomic.LoadUint32(&numInjectedFailures) > 0 {
+			if scenario.injectedFailure {
 				return nil
 			}
-			if s := p.Stages[stageIdx]; cs.Phase == s.Phase && cs.StageOrdinal == s.Ordinal {
-				atomic.AddUint32(&numInjectedFailures, 1)
-				return jobs.MarkPauseRequestError(errors.Errorf("boom %d", cs.StageOrdinal))
+			if s := p.Stages[stageIdx]; scenario.targetPhase == s.Phase &&
+				scenario.targetOrdinal == s.Ordinal {
+				scenario.injectedFailure = true
+				return jobs.MarkPauseRequestError(
+					errors.Errorf("boom %d", scenario.targetOrdinal),
+				)
 			}
 			return nil
 		},
 	}
+
+	args := pausePrepData{scenario: scenario}
+	args.server = factory.WithSchemaChangerKnobs(knobs).Start(ctx, t)
+	// Register cleanup immediately after server creation. This is necessary
+	// because if the prepare function exits early (e.g. skip or require failure),
+	// the caller's prepData closure variable is never hydrated, so the caller's
+	// defer will not stop the server. Stopper.Stop is idempotent, so it is safe
+	// for the caller's defer to also call it on the normal path.
+	t.Cleanup(func() {
+		if args.server.Stopper != nil {
+			args.server.Stopper(t)
+		}
+	})
+	db := args.server.DB
+	db.SetMaxOpenConns(1)
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	// Use shorter liveness heartbeat interval and longer liveness ttl to
+	// avoid errors caused by refused connections.
+	tdb.Exec(t, `SET CLUSTER SETTING server.sqlliveness.heartbeat = '1s'`)
+	tdb.Exec(t, `SET CLUSTER SETTING server.sqlliveness.ttl = '120s'`)
+
+	// Discovery pass: run the schema change to completion to discover stages.
+	require.NoError(t, setupSchemaChange(ctx, t, spec, db))
+	maybeSkipUnderSecondaryTenant(t, spec, args.server.Server)
+	require.NoError(t, executeSchemaChangeTxn(ctx, t, spec, db))
+
+	switchToSystemForDropDB(t, tdb, spec)
+	waitForSchemaChangesToFinish(t, tdb)
+
+	dbName, createDatabaseStmt := discoverDatabaseName(t, tdb)
+
+	tdb.Exec(t, fmt.Sprintf("USE %q", dbName))
+	after := tdb.QueryStr(t, fetchDescriptorStateQuery)
+
+	postCommitCount, postCommitNonRevertibleCount := discovery.counts()
+
+	return PrepResult[pausePrepData]{
+		PostCommitCount:              postCommitCount,
+		PostCommitNonRevertibleCount: postCommitNonRevertibleCount,
+		After:                        after,
+		DatabaseName:                 dbName,
+		CreateDatabaseStmt:           createDatabaseStmt,
+		PrepData:                     args,
+	}
+}
+
+// pauseCase runs a single pause/resume scenario on an existing cluster,
+// dropping and recreating the database to get a clean state.
+func pauseCase(t *testing.T, args pausePrepData, cs CumulativeTestCaseSpec) {
+	re := regexp.MustCompile(
+		`job (\d+) was paused before it completed with reason: boom (\d+)`,
+	)
 	ctx := context.Background()
+	db := args.server.DB
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	// Drop and recreate the database for a clean state.
+	tdb.Exec(t, "USE system")
+	tdb.Exec(t, "SET use_declarative_schema_changer = 'on'")
+	tdb.Exec(
+		t,
+		fmt.Sprintf(
+			"DROP DATABASE IF EXISTS %q CASCADE", cs.DatabaseName,
+		),
+	)
+
+	require.NoError(t, setupSchemaChange(ctx, t, cs.CumulativeTestSpec, db))
+
+	// Activate this pause scenario. Deactivation is deferred so that the
+	// scenario is marked inactive even if the test fails mid-execution.
+	func() {
+		args.scenario.Lock()
+		defer args.scenario.Unlock()
+		args.scenario.active = true
+		args.scenario.targetPhase = cs.Phase
+		args.scenario.targetOrdinal = cs.StageOrdinal
+		args.scenario.injectedFailure = false
+	}()
+	defer func() {
+		args.scenario.Lock()
+		defer args.scenario.Unlock()
+		args.scenario.active = false
+	}()
+
 	// TODO(ajwerner): It'd be nice to assert something about the number of
 	// remaining stages before the pause and then after. It's not totally
 	// trivial, as we don't checkpoint during non-mutation stages, so we'd
 	// need to look back and find the last mutation phase.
-	runfn := func(s serverutils.TestServerInterface, db *gosql.DB) {
-		maybeSkipUnderSecondaryTenant(t, cs.CumulativeTestSpec, s)
-		tdb := sqlutils.MakeSQLRunner(db)
-		// Use shorter liveness heartbeat interval and longer liveness ttl to
-		// avoid errors caused by refused connections.
-		tdb.Exec(t, `SET CLUSTER SETTING server.sqlliveness.heartbeat = '1s'`)
-		tdb.Exec(t, `SET CLUSTER SETTING server.sqlliveness.ttl = '120s'`)
+	err := executeSchemaChangeTxn(ctx, t, cs.CumulativeTestSpec, db)
+	if err != nil {
+		// Check that it's a pause error, with a job.
+		match := re.FindStringSubmatch(err.Error())
+		require.NotNil(t, match)
+		idx, err := strconv.Atoi(match[2])
+		require.NoError(t, err)
+		require.Equal(t, cs.StageOrdinal, idx)
+		jobID, err := strconv.Atoi(match[1])
+		require.NoError(t, err)
 
-		require.NoError(t, setupSchemaChange(ctx, t, cs.CumulativeTestSpec, db))
-		knobEnabled.Swap(true)
-		err := executeSchemaChangeTxn(ctx, t, cs.CumulativeTestSpec, db)
-		if err != nil {
-			// Check that it's a pause error, with a job.
-			match := re.FindStringSubmatch(err.Error())
-			require.NotNil(t, match)
-			idx, err := strconv.Atoi(match[2])
-			require.NoError(t, err)
-			require.Equal(t, cs.StageOrdinal, idx)
-			jobID, err := strconv.Atoi(match[1])
-			require.NoError(t, err)
+		// Check that the job is paused.
+		qStatus := fmt.Sprintf(
+			`SELECT status FROM [SHOW JOB %d]`, jobID,
+		)
+		tdb.CheckQueryResultsRetry(t, qStatus, [][]string{{"paused"}})
+		t.Logf("job %d is paused", jobID)
 
-			// Check that the job is paused.
-			qStatus := fmt.Sprintf(`SELECT status FROM [SHOW JOB %d]`, jobID)
-			tdb.CheckQueryResultsRetry(t, qStatus, [][]string{{"paused"}})
-			t.Logf("job %d is paused", jobID)
+		// Upgrade the cluster, if applicable.
+		tdb.Exec(
+			t, "SET CLUSTER SETTING VERSION=$1",
+			clusterversion.Latest.String(),
+		)
 
-			// Upgrade the cluster, if applicable.
-			tdb.Exec(t, "SET CLUSTER SETTING VERSION=$1", clusterversion.Latest.String())
-
-			// Resume the job and check that it succeeds.
-			tdb.Exec(t, "RESUME JOB $1", jobID)
-			t.Logf("job %d is resuming", jobID)
-			// Wait for the schema change to complete.
-			// Note: This has a longer timeout than normal succeeds soon.
-			waitForSchemaChangesToFinish(t, tdb)
-			// Validate the terminal status of the schema change.
-			qStatusWithError := fmt.Sprintf(`SELECT status, error FROM [SHOW JOB %d]`, jobID)
-			tdb.CheckQueryResults(t, qStatusWithError, [][]string{{"succeeded", ""}})
-		}
+		// Resume the job and check that it succeeds.
+		tdb.Exec(t, "RESUME JOB $1", jobID)
+		t.Logf("job %d is resuming", jobID)
 		waitForSchemaChangesToFinish(t, tdb)
-		require.Equal(t, uint32(1), atomic.LoadUint32(&numInjectedFailures))
+		qStatusWithError := fmt.Sprintf(
+			`SELECT status, error FROM [SHOW JOB %d]`, jobID,
+		)
+		tdb.CheckQueryResults(
+			t, qStatusWithError, [][]string{{"succeeded", ""}},
+		)
 	}
-	factory.WithSchemaChangerKnobs(knobs).Run(ctx, t, runfn)
+	waitForSchemaChangesToFinish(t, tdb)
+
+	var injected bool
+	func() {
+		args.scenario.Lock()
+		defer args.scenario.Unlock()
+		injected = args.scenario.injectedFailure
+	}()
+	require.True(t, injected)
 }

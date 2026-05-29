@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 func BenchmarkMergeFeed(b *testing.B) {
@@ -24,7 +25,7 @@ func BenchmarkMergeFeed(b *testing.B) {
 		maxTxnSize: 256,
 		density:    1 / (float64(b.N) / 5 / 10), // on average, 10 checkpoints per subscription
 	})
-	feed := NewMergeFeed(subs, coveringSpan, 128)
+	feed := NewMergeFeed(subs, coveringSpan, 128, hlc.MaxTimestamp)
 
 	b.ResetTimer()
 

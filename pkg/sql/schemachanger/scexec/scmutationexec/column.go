@@ -143,8 +143,8 @@ func (i *immediateVisitor) updateColumnComputeExpression(
 	if expr == nil {
 		clearComputedExpr(col)
 	} else {
-		expr := string(*expr)
-		col.ComputeExpr = &expr
+		e := *expr
+		col.ComputeExpr = &e
 	}
 	if err := updateColumnExprSequenceUsage(col); err != nil {
 		return err
@@ -379,7 +379,7 @@ func (i *immediateVisitor) AddColumnDefaultExpression(
 		return err
 	}
 	d := col.ColumnDesc()
-	expr := string(op.Default.Expr)
+	expr := op.Default.Expr
 	d.DefaultExpr = &expr
 	seqRefs := catalog.MakeDescriptorIDSet(d.UsesSequenceIds...)
 	for _, seqID := range op.Default.UsesSequenceIDs {
@@ -436,7 +436,7 @@ func (i *immediateVisitor) AddColumnOnUpdateExpression(
 		return err
 	}
 	d := col.ColumnDesc()
-	expr := string(op.OnUpdate.Expr)
+	expr := op.OnUpdate.Expr
 	d.OnUpdateExpr = &expr
 	refs := catalog.MakeDescriptorIDSet(d.UsesSequenceIds...)
 	for _, seqID := range op.OnUpdate.UsesSequenceIDs {
@@ -498,8 +498,7 @@ func clearComputedExpr(col *descpb.ColumnDescriptor) {
 	// the expression for a column that still exists (e.g., a stored column), we do
 	// want to remove the expression.
 	if col.Virtual {
-		null := tree.Serialize(tree.DNull)
-		col.ComputeExpr = &null
+		col.ComputeExpr = new(descpb.Expression(tree.Serialize(tree.DNull)))
 	} else {
 		col.ComputeExpr = nil
 	}

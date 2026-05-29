@@ -1,0 +1,388 @@
+# LogicTest: local
+
+# Test ALTER DOMAIN syntax. Tests are added as operations are implemented
+# through the declarative schema changer.
+
+statement ok
+CREATE DOMAIN d AS INT DEFAULT 0 NOT NULL CHECK (VALUE > 0)
+
+subtest set_default
+
+statement error pgcode 0A000 ALTER DOMAIN SET DEFAULT is not supported
+ALTER DOMAIN d SET DEFAULT 42
+
+statement error pgcode 0A000 ALTER DOMAIN SET DEFAULT is not supported
+ALTER DOMAIN d SET DEFAULT 1 + 2
+
+subtest end
+
+subtest drop_default
+
+statement error pgcode 0A000 ALTER DOMAIN DROP DEFAULT is not supported
+ALTER DOMAIN d DROP DEFAULT
+
+subtest end
+
+subtest set_not_null
+
+statement error pgcode 0A000 ALTER DOMAIN SET NOT NULL is not supported
+ALTER DOMAIN d SET NOT NULL
+
+subtest end
+
+subtest drop_not_null
+
+statement error pgcode 0A000 ALTER DOMAIN DROP NOT NULL is not supported
+ALTER DOMAIN d DROP NOT NULL
+
+subtest end
+
+subtest add_constraint
+
+statement error pgcode 0A000 ALTER DOMAIN ADD CONSTRAINT \.\.\. CHECK is not supported
+ALTER DOMAIN d ADD CHECK (VALUE < 100)
+
+statement error pgcode 0A000 ALTER DOMAIN ADD CONSTRAINT \.\.\. CHECK is not supported
+ALTER DOMAIN d ADD CONSTRAINT positive CHECK (VALUE > 0)
+
+statement error pgcode 0A000 ALTER DOMAIN ADD CONSTRAINT \.\.\. CHECK is not supported
+ALTER DOMAIN d ADD CONSTRAINT bounded CHECK (VALUE < 100) NOT VALID
+
+statement error pgcode 0A000 ALTER DOMAIN ADD CONSTRAINT \.\.\. NOT NULL is not supported
+ALTER DOMAIN d ADD NOT NULL
+
+statement error pgcode 0A000 ALTER DOMAIN ADD CONSTRAINT \.\.\. NOT NULL is not supported
+ALTER DOMAIN d ADD CONSTRAINT nn NOT NULL
+
+statement error pgcode 0A000 NOT NULL constraints cannot be marked NOT VALID
+ALTER DOMAIN d ADD NOT NULL NOT VALID
+
+statement error pgcode 0A000 NOT NULL constraints cannot be marked NOT VALID
+ALTER DOMAIN d ADD CONSTRAINT nn NOT NULL NOT VALID
+
+subtest end
+
+subtest drop_constraint
+
+statement error pgcode 0A000 ALTER DOMAIN DROP CONSTRAINT is not supported
+ALTER DOMAIN d DROP CONSTRAINT positive
+
+statement error pgcode 0A000 ALTER DOMAIN DROP CONSTRAINT is not supported
+ALTER DOMAIN d DROP CONSTRAINT IF EXISTS positive
+
+subtest end
+
+subtest rename_constraint
+
+statement error pgcode 0A000 ALTER DOMAIN RENAME CONSTRAINT is not supported
+ALTER DOMAIN d RENAME CONSTRAINT positive TO nonneg
+
+subtest end
+
+subtest validate_constraint
+
+statement error pgcode 0A000 ALTER DOMAIN VALIDATE CONSTRAINT is not supported
+ALTER DOMAIN d VALIDATE CONSTRAINT positive
+
+subtest end
+
+subtest owner_to
+
+statement ok
+CREATE SCHEMA s_owner;
+CREATE DOMAIN s_owner.d_owner AS INT;
+CREATE USER IF NOT EXISTS testuser2
+
+# Ensure user must exist for set owner.
+statement error pq: role/user "fake_user" does not exist
+ALTER DOMAIN s_owner.d_owner OWNER TO fake_user
+
+# Superusers can alter owner to any user which has CREATE privileges on the
+# parent schema.
+statement error pq: user testuser does not have CREATE privilege on schema s_owner
+ALTER DOMAIN s_owner.d_owner OWNER TO testuser
+
+statement ok
+GRANT CREATE, USAGE ON SCHEMA s_owner TO testuser, testuser2
+
+statement ok
+ALTER DOMAIN s_owner.d_owner OWNER TO testuser
+
+statement ok
+ALTER DOMAIN s_owner.d_owner OWNER TO root
+
+# Other users must be owner to alter the owner.
+user testuser
+
+statement error must be owner of type d_owner
+ALTER DOMAIN s_owner.d_owner OWNER TO testuser
+
+# Other users must be owner to alter the owner to the current owner again.
+statement error must be owner of type d_owner
+ALTER DOMAIN s_owner.d_owner OWNER TO root
+
+# Non-superusers also must be a member of the new owning role.
+user root
+
+statement ok
+ALTER DOMAIN s_owner.d_owner OWNER TO testuser
+
+# Setting the owner to the current owner is a no-op.
+statement ok
+REVOKE CREATE ON SCHEMA s_owner FROM testuser
+
+user testuser
+
+statement ok
+ALTER DOMAIN s_owner.d_owner OWNER TO testuser
+
+user root
+
+statement ok
+GRANT CREATE ON SCHEMA s_owner TO testuser
+
+user testuser
+
+statement error must be member of role "testuser2"
+ALTER DOMAIN s_owner.d_owner OWNER TO testuser2
+
+user root
+
+statement ok
+GRANT testuser2 TO testuser
+
+user testuser
+
+statement ok
+ALTER DOMAIN s_owner.d_owner OWNER TO testuser2
+
+# Ensure testuser2 is owner of both the domain and its array type.
+user root
+
+query TT
+SELECT typname, pg_get_userbyid(typowner) FROM pg_type WHERE typname IN ('d_owner', '_d_owner') ORDER BY typname;
+----
+_d_owner  testuser2
+d_owner   testuser2
+
+# Test CURRENT_USER and SESSION_USER forms.
+statement ok
+ALTER DOMAIN s_owner.d_owner OWNER TO root
+
+statement ok
+ALTER DOMAIN s_owner.d_owner OWNER TO CURRENT_USER
+
+query TT
+SELECT typname, pg_get_userbyid(typowner) FROM pg_type WHERE typname IN ('d_owner', '_d_owner') ORDER BY typname;
+----
+_d_owner  root
+d_owner   root
+
+statement ok
+ALTER DOMAIN s_owner.d_owner OWNER TO SESSION_USER
+
+query TT
+SELECT typname, pg_get_userbyid(typowner) FROM pg_type WHERE typname IN ('d_owner', '_d_owner') ORDER BY typname;
+----
+_d_owner  root
+d_owner   root
+
+# Ensure admins who don't have explicit CREATE privilege on a schema can
+# still become the owner.
+user root
+
+statement ok
+GRANT CREATE ON DATABASE test TO testuser
+
+user testuser
+
+statement ok
+CREATE SCHEMA s_owner2
+
+statement ok
+CREATE DOMAIN s_owner2.d_owner2 AS TEXT
+
+user root
+
+statement ok
+GRANT root TO testuser
+
+user testuser
+
+# This should succeed despite root not having explicit CREATE privilege on s_owner2.
+statement ok
+ALTER DOMAIN s_owner2.d_owner2 OWNER TO root
+
+subtest end
+
+subtest rename_to
+
+statement ok
+CREATE DOMAIN d_rename AS INT DEFAULT 10
+
+statement ok
+ALTER DOMAIN d_rename RENAME TO d_renamed
+
+query T
+SELECT 1::d_renamed
+----
+1
+
+# The old name no longer exist.
+statement error pgcode 42704 type "d_rename" does not exist
+SELECT 1::d_rename
+
+# The implicit array type is also renamed.
+query TT
+SELECT typname, nspname FROM pg_type JOIN pg_namespace ON typnamespace = pg_namespace.oid
+WHERE typname IN ('d_renamed', '_d_renamed') ORDER BY typname
+----
+_d_renamed  public
+d_renamed   public
+
+# Renaming to the same name is an error.
+statement error pgcode 42710 type "test.public.d_renamed" already exists
+ALTER DOMAIN d_renamed RENAME TO d_renamed
+
+# Renaming to a name that already exists fails.
+statement ok
+CREATE DOMAIN d_conflict AS TEXT
+
+statement error pgcode 42710 type "test.public.d_conflict" already exists
+ALTER DOMAIN d_renamed RENAME TO d_conflict
+
+# Renaming to a name that collides with a table fails.
+statement ok
+CREATE TABLE t_conflict (a INT)
+
+statement error pgcode 42P07 relation "test.public.t_conflict" already exists
+ALTER DOMAIN d_renamed RENAME TO t_conflict
+
+# A table referencing the domain by ID should still work after rename.
+statement ok
+CREATE DOMAIN d_ref_rename AS INT DEFAULT 42;
+CREATE TABLE t_dref2 (c d_ref_rename);
+INSERT INTO t_dref2 VALUES (1)
+
+statement ok
+ALTER DOMAIN d_ref_rename RENAME TO d_ref_renamed
+
+query T
+SELECT c FROM t_dref2
+----
+1
+
+statement ok
+DROP TABLE t_dref2;
+DROP DOMAIN d_ref_renamed;
+DROP DOMAIN d_renamed;
+DROP DOMAIN d_conflict;
+DROP TABLE t_conflict
+
+subtest end
+
+subtest set_schema
+
+statement ok
+CREATE SCHEMA s_sc1;
+CREATE SCHEMA s_sc2;
+CREATE DOMAIN d_sc AS INT DEFAULT 0
+
+statement ok
+ALTER DOMAIN d_sc SET SCHEMA public
+
+statement ok
+ALTER DOMAIN d_sc SET SCHEMA s_sc1
+
+# The domain should be usable in the new schema.
+query T
+SELECT 1::s_sc1.d_sc
+----
+1
+
+# The array type should have moved too.
+query T
+SELECT ARRAY[1]::s_sc1._d_sc
+----
+{1}
+
+statement ok
+ALTER DOMAIN s_sc1.d_sc SET SCHEMA s_sc2
+
+query T
+SELECT 1::s_sc2.d_sc
+----
+1
+
+# The domain should no longer exist in s_sc1.
+query error pq: type "s_sc1.d_sc" does not exist
+SELECT 1::s_sc1.d_sc
+
+# Nor does the implicit array.
+query error pq: type "s_sc1._d_sc" does not exist
+SELECT '{}'::s_sc1._d_sc
+
+statement error pq: unknown schema "does_not_exist"
+ALTER DOMAIN s_sc2.d_sc SET SCHEMA does_not_exist
+
+# Error when there's a name conflict in the target schema.
+statement ok
+CREATE DOMAIN s_sc1.d_sc AS TEXT
+
+statement error pq: type "test.s_sc1.d_sc" already exists
+ALTER DOMAIN s_sc2.d_sc SET SCHEMA s_sc1
+
+# Moving a domain referenced by a table column should succeed
+# because types are referenced by ID.
+statement ok
+CREATE DOMAIN d_ref AS INT DEFAULT 42;
+CREATE TABLE t_dref (c d_ref);
+INSERT INTO t_dref VALUES (1);
+
+statement ok
+ALTER DOMAIN d_ref SET SCHEMA s_sc2
+
+query T
+SELECT c FROM t_dref
+----
+1
+
+statement ok
+DROP TABLE t_dref;
+DROP DOMAIN s_sc1.d_sc;
+DROP DOMAIN s_sc2.d_sc;
+DROP DOMAIN s_sc2.d_ref;
+DROP SCHEMA s_sc1;
+DROP SCHEMA s_sc2
+
+subtest end
+
+subtest nonexistent_domain
+
+statement error pgcode 42704 type "nonexistent" does not exist
+ALTER DOMAIN nonexistent SET DEFAULT 1
+
+subtest end
+
+subtest non_domain_type
+
+statement ok
+CREATE TYPE e AS ENUM ('a', 'b')
+
+statement error pgcode 42809 "e" is not a domain
+ALTER DOMAIN e SET DEFAULT 1
+
+subtest end
+
+subtest schema_qualified
+
+statement ok
+CREATE SCHEMA s
+
+statement ok
+CREATE DOMAIN s.d_qual AS INT
+
+statement error pgcode 0A000 ALTER DOMAIN SET DEFAULT is not supported
+ALTER DOMAIN s.d_qual SET DEFAULT 1
+
+subtest end

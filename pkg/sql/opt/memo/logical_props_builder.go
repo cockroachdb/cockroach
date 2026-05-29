@@ -1919,6 +1919,14 @@ func BuildSharedProps(e opt.Expr, shared *props.Shared, evalCtx *eval.Context) {
 	case *UDFCallExpr:
 		shared.HasUDF = true
 		shared.VolatilitySet.Add(t.Def.Volatility)
+		for _, s := range t.Def.Body {
+			if s != nil {
+				if relExpr := s.Relational(); relExpr != nil && relExpr.CanMutate {
+					shared.CanMutate = true
+					break
+				}
+			}
+		}
 
 	default:
 		if opt.IsUnaryOp(e) {

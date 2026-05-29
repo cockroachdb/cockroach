@@ -41,8 +41,7 @@ type Timer struct {
 	timer *time.Timer
 	// C is a local "copy" of timer.C that can be used in a select case before
 	// the timer has been initialized (via Reset).
-	C    <-chan time.Time
-	Read bool
+	C <-chan time.Time
 }
 
 // AsTimerI returns the Timer as a TimerI. This is helpful

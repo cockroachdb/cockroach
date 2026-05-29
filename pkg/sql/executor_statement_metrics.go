@@ -209,7 +209,6 @@ func (ex *connExecutor) recordStatementSummary(
 				flags.IsSet(planFlagGeneric),
 				flags.ShouldBeDistributed(),
 				flags.IsSet(planFlagVectorized),
-				flags.IsSet(planFlagImplicitTxn),
 				flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan),
 			).
 			PlanGist(planner.instrumentation.planGist.String(), planner.instrumentation.planGist.Hash()).

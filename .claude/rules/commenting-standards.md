@@ -165,3 +165,51 @@ enum ReplicaType {
 - Fix grammar/spelling that significantly impairs reading.
 - Avoid cosmetic changes that don't improve understanding.
 - In reviews, prefix grammar suggestions with "nit:".
+
+## No Before/After Diff Narration
+
+**Do not write comments that describe what the code used to do or how
+this change differs from prior behavior.** That context belongs in the
+commit message, PR description, or `git blame` — not inline. Inline
+comments must describe what the *current* code does, and only when it
+isn't self-evident.
+
+CockroachDB code lives a long time and is read by people (and LLMs)
+who only ever see the current state of the file. Diff narration ages
+into noise that confuses readers and contradicts the surrounding code
+once another change lands.
+
+```go
+// Bad - narrates the diff; the "previously" sentence will mislead
+// future readers and goes stale the moment another commit lands.
+// Previously, this used a hardcoded OID list. Now we query
+// pg_catalog dynamically to support custom types registered at
+// runtime.
+oids := queryPgCatalogOIDs(ctx, txn)
+
+// Good - explains why the current code does what it does.
+// Query pg_catalog so types registered at runtime are picked up.
+oids := queryPgCatalogOIDs(ctx, txn)
+```
+
+Avoid these phrasings inline:
+
+- "Previously, ..." / "We used to ..." / "Originally, ..."
+- "No longer ..." / "This used to ..."
+- "Replaced the old ... with ..."
+- "Now we ..." / "Now does X (rather than Y)"
+- "Without this, ..." / "Otherwise, would ..." (when describing the
+  state before the change rather than a runtime invariant)
+- "Instead of ..." (when "instead of" refers to a prior implementation
+  rather than two live alternatives)
+
+Counterfactuals that describe a *runtime* alternative are fine
+("Otherwise, the caller would race with X" — describes a real
+concurrency hazard, not a diff). Counterfactuals that describe the
+*pre-change* state are diff narration — drop them.
+
+If the historical context is genuinely load-bearing for understanding
+(e.g., explaining a backwards-compatibility shim that must remain),
+say so explicitly in terms of the *constraint*, not the *change*: "Kept
+for compatibility with v23.1 nodes that still emit the old format" is
+fine; "we used to emit the old format" is not.

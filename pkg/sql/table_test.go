@@ -463,13 +463,13 @@ func TestSerializedUDTsInTableDescriptor(t *testing.T) {
 
 	ctx := context.Background()
 	getDefault := func(desc catalog.TableDescriptor) string {
-		return desc.PublicColumns()[0].GetDefaultExpr()
+		return string(desc.PublicColumns()[0].GetDefaultExpr())
 	}
 	getComputed := func(desc catalog.TableDescriptor) string {
-		return desc.PublicColumns()[0].GetComputeExpr()
+		return string(desc.PublicColumns()[0].GetComputeExpr())
 	}
 	getCheck := func(desc catalog.TableDescriptor) string {
-		return desc.EnforcedCheckConstraints()[0].GetExpr()
+		return string(desc.EnforcedCheckConstraints()[0].GetExpr())
 	}
 	testdata := []struct {
 		colSQL       string
@@ -610,7 +610,7 @@ func TestSerializedUDTsInView(t *testing.T) {
 			t.Fatal(err)
 		}
 		desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "v")
-		foundViewQuery := desc.GetViewQuery()
+		foundViewQuery := string(desc.GetViewQuery())
 		expected := os.Expand(tc.expectedExpr, expander{"OID": oid}.mapping)
 		if expected != foundViewQuery {
 			t.Errorf("for view %s, found %s, expected %s", tc.viewQuery, foundViewQuery, expected)

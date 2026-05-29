@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -26,7 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
@@ -50,12 +54,17 @@ func alterTableAddConstraint(
 				panic(sqlerrors.NewUnsupportedUnvalidatedConstraintError(catconstants.ConstraintTypeUnique))
 			}
 			CreateIndex(b, &tree.CreateIndex{
-				Name:        d.Name,
-				Table:       *tn,
-				Unique:      true,
-				Columns:     d.Columns,
-				Predicate:   d.Predicate,
-				IfNotExists: d.IfNotExists,
+				Name:             d.Name,
+				Table:            *tn,
+				Unique:           true,
+				Columns:          d.Columns,
+				Sharded:          d.Sharded,
+				Storing:          d.Storing,
+				PartitionByIndex: d.PartitionByIndex,
+				StorageParams:    d.StorageParams,
+				Predicate:        d.Predicate,
+				Invisibility:     d.Invisibility,
+				IfNotExists:      d.IfNotExists,
 			})
 		}
 	case *tree.CheckConstraintTableDef:
@@ -100,6 +109,10 @@ func alterTableAddPrimaryKey(
 		Sharded:       d.Sharded,
 		Name:          d.Name,
 		StorageParams: d.StorageParams,
+		// If the user did not have a default rowid PK, the only legal way to
+		// reach this point is to have dropped the existing PK constraint by
+		// name in the same statement (the panic above guarantees this).
+		PkConstraintExplicitlyDropped: implicitRowIDPKCol == nil,
 	})
 }
 
@@ -229,6 +242,16 @@ func alterTableAddForeignKey(
 	// schema changer.
 	fromColsFRNames := getFullyResolvedColNames(b, tbl.TableID, fkDef.FromCols)
 
+	// Determine which privilege to check on the referenced (parent) table.
+	// Before the GrantReferencesToUsersWithCreate migration, the referenced
+	// table required CREATE. After the migration, it requires REFERENCES,
+	// matching PostgreSQL. The origin (child) table still requires CREATE,
+	// which is already checked at the ALTER TABLE entry point.
+	fkPriv := privilege.CREATE
+	if b.EvalCtx().Settings.Version.IsActive(b, clusterversion.V26_3_GrantReferencesToUsersWithCreate) {
+		fkPriv = privilege.REFERENCES
+	}
+
 	// 1. If this FK's `ON UPDATE behavior` is not NO ACTION nor RESTRICT, and
 	// any of the originColumns has an `ON UPDATE expr`, panic with error.
 	if fkDef.Actions.Update != tree.NoAction && fkDef.Actions.Update != tree.Restrict {
@@ -295,7 +318,7 @@ func alterTableAddForeignKey(
 	// table name) and check whether it's in the same database as the originTable
 	// (i.e. tbl). Cross database FK references is a deprecated feature and is in
 	// practice no longer supported. We will return an error here directly.
-	referencedTableID := mustGetTableIDFromTableName(b, fkDef.Table)
+	referencedTableID := mustGetTableIDFromTableName(b, fkDef.Table, fkPriv)
 	originalTableNamespaceElem := mustRetrieveNamespaceElem(b, tbl.TableID)
 	referencedTableNamespaceElem := mustRetrieveNamespaceElem(b, referencedTableID)
 	if originalTableNamespaceElem.DatabaseID != referencedTableNamespaceElem.DatabaseID {
@@ -311,6 +334,7 @@ func alterTableAddForeignKey(
 	// match referencedTable's temporariness.
 	referencedTableElem := mustRetrieveTableElem(b, referencedTableID)
 	fkDef.Table.ObjectNamePrefix = b.NamePrefix(referencedTableElem)
+
 	if tbl.IsTemporary != referencedTableElem.IsTemporary {
 		persistenceType := "permanent"
 		if tbl.IsTemporary {
@@ -414,14 +438,36 @@ func alterTableAddForeignKey(
 
 	// 11. Verify that the referencedTable guarantees uniqueness on the
 	// referencedColumns. In code, this means we need to find either a
-	// PRIMARY INDEX, a UNIQUE INDEX, or a UNIQUE_WITHOUT_INDEX CONSTRAINT,
-	// that covers exactly referencedColumns.
-	if areColsUnique := areColsUniqueInTable(b, referencedTableID, referencedColIDs); !areColsUnique {
+	// PRIMARY INDEX, a UNIQUE INDEX, or a UNIQUE_WITHOUT_INDEX CONSTRAINT
+	// covering referencedColumns. By default, the match must be exact (a
+	// permutation match); when the cluster has finalized V26_3 and the
+	// sql.subset_unique_fks.enabled cluster setting is true, a non-partial
+	// unique constraint covering only a non-empty subset of referencedColumns
+	// is also accepted.
+	canUseSubset := b.ClusterSettings().Version.IsActive(b, clusterversion.V26_3)
+	exactMatch, subsetMatch := uniquenessMatchForFK(b,
+		referencedTableID, referencedColIDs, canUseSubset /* considerSubsets */)
+	if !exactMatch && !subsetMatch {
 		panic(pgerror.Newf(
 			pgcode.ForeignKeyViolation,
 			"there is no unique constraint matching given keys for referenced table %s",
 			referencedTableNamespaceElem.Name,
 		))
+	}
+	if !exactMatch {
+		// The match was accepted by the lookup only because subset matching is
+		// on. The cluster setting decides whether to actually allow it.
+		if !sqlclustersettings.AllowSubsetUniqueFKs.Get(&b.ClusterSettings().SV) {
+			panic(errors.WithHintf(
+				pgerror.Newf(pgcode.ForeignKeyViolation,
+					"there is no unique constraint matching given keys for referenced table %s",
+					referencedTableNamespaceElem.Name),
+				"a unique constraint matching a subset of the referenced columns exists; "+
+					"set cluster setting %q to true to allow this foreign key to be created",
+				sqlclustersettings.AllowSubsetUniqueFKs.Name()))
+		}
+		// An exact match would have been preferred had one existed.
+		telemetry.Inc(sqltelemetry.SubsetUniqueForeignKeysUseCounter)
 	}
 
 	// 12. Adding a foreign key dependency on a table with row-level TTL enabled can
@@ -615,25 +661,55 @@ func getFullyResolvedColNames(
 	return ret
 }
 
-// areColsUniqueInTable ensures uniqueness on columns is guaranteed on this table.
-func areColsUniqueInTable(b BuildCtx, tableID catid.DescID, columnIDs []catid.ColumnID) (ret bool) {
-	b.QueryByID(tableID).ForEach(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
-		if ret {
+// uniquenessMatchForFK reports the kinds of unique-constraint matches that
+// exist in tableID for an inbound FK referencing columnIDs. Both bools are
+// computed in a single pass over the table's elements.
+//
+//   - exact:  some non-partial unique constraint covers columnIDs as a
+//     permutation (the strict, pre-V26.3 requirement).
+//   - subset: some non-partial unique constraint's columns are a non-empty
+//     subset of columnIDs (the relaxed match enabled by V26.3 and
+//     sql.subset_unique_fks.enabled). Always false when considerSubsets is
+//     false; otherwise an exact match also counts as a subset match (so
+//     exact implies subset in the return value).
+func uniquenessMatchForFK(
+	b BuildCtx, tableID catid.DescID, columnIDs []catid.ColumnID, considerSubsets bool,
+) (exact, subset bool) {
+	b.QueryByID(tableID).ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+		if exact {
 			return
 		}
-
 		switch te := e.(type) {
 		case *scpb.PrimaryIndex:
-			ret = isIndexUniqueAndCanServeFK(b, &te.Index, columnIDs)
+			if isIndexUniqueAndCanServeFK(b, &te.Index, columnIDs, false /* asSubset */) {
+				exact = true
+			} else if considerSubsets && !subset &&
+				isIndexUniqueAndCanServeFK(b, &te.Index, columnIDs, true /* asSubset */) {
+				subset = true
+			}
 		case *scpb.SecondaryIndex:
-			ret = isIndexUniqueAndCanServeFK(b, &te.Index, columnIDs)
+			if isIndexUniqueAndCanServeFK(b, &te.Index, columnIDs, false /* asSubset */) {
+				exact = true
+			} else if considerSubsets && !subset &&
+				isIndexUniqueAndCanServeFK(b, &te.Index, columnIDs, true /* asSubset */) {
+				subset = true
+			}
 		case *scpb.UniqueWithoutIndexConstraint:
-			if te.Predicate == nil && descpb.ColumnIDs(te.ColumnIDs).PermutationOf(columnIDs) {
-				ret = true
+			if te.Predicate != nil {
+				return
+			}
+			cols := descpb.ColumnIDs(te.ColumnIDs)
+			if cols.PermutationOf(columnIDs) {
+				exact = true
+			} else if considerSubsets && !subset && cols.IsNonEmptySubsetOf(columnIDs) {
+				subset = true
 			}
 		}
 	})
-	return ret
+	if exact && considerSubsets {
+		subset = true
+	}
+	return exact, subset
 }
 
 // validateConstraintNameIsNotUsed checks that the name of the constraint we're
