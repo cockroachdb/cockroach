@@ -741,12 +741,13 @@ type AdmitResponse struct {
 }
 
 // Resource group IDs used in Resource Manager mode. Work is split into
-// two groups based on WorkInfo.Priority.
+// two groups based on WorkInfo.Priority. These are uint64 aliases of the
+// exported admissionpb ids, used here for the uint64-typed rgGroupKey.
 const (
 	// highResourceGroupID is used for work with priority >= NormalPri.
-	highResourceGroupID uint64 = 1
+	highResourceGroupID = uint64(admissionpb.HighResourceGroupID)
 	// lowResourceGroupID is used for work with priority < NormalPri.
-	lowResourceGroupID uint64 = 2
+	lowResourceGroupID = uint64(admissionpb.LowResourceGroupID)
 )
 
 // priorityToResourceGroupKey maps a WorkPriority to the rg-keyed

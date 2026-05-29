@@ -499,6 +499,7 @@ go_library(
         "//pkg/sql/querycache",
         "//pkg/sql/regionliveness",
         "//pkg/sql/regions",
+        "//pkg/sql/resourcegroupcache",
         "//pkg/sql/rolemembershipcache",
         "//pkg/sql/roleoption",
         "//pkg/sql/row",

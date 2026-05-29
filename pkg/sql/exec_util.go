@@ -82,6 +82,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	plpgsqlparser "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/resourcegroupcache"
 	"github.com/cockroachdb/cockroach/pkg/sql/rolemembershipcache"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
@@ -1770,6 +1771,10 @@ type ExecutorConfig struct {
 	QueryCache          *querycache.C
 	StatementHintsCache *hints.StatementHintsCache
 	VecIndexManager     *vecindex.Manager
+
+	// ResourceGroupCache resolves user-visible resource group names to the
+	// numeric ids stamped on a session by SET resource_group.
+	ResourceGroupCache *resourcegroupcache.Cache
 
 	SchemaChangerMetrics *SchemaChangerMetrics
 	FeatureFlagMetrics   *featureflag.DenialMetrics
