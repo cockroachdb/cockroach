@@ -798,13 +798,49 @@ type UDFDefinition struct {
 
 	// CanMutate indicates whether the routine body can perform mutations.
 	// For descriptor-backed routines this is sourced from the persisted
-	// descriptor field via the Overload. When RoutineCanMutateUnknown
-	// (for descriptors predating the field), consumers fall back to
-	// inspecting Body RelExprs to determine mutation behavior. For
-	// anonymous routines (DO blocks, triggers) this is always
+	// descriptor field via the Overload. RoutineCanMutateUnknown occurs
+	// only for descriptors predating the can_mutate field. Consumers
+	// fall back to inspecting Body RelExprs when available; if Body is
+	// empty (deferred optbuild), they conservatively assume mutations.
+	// For anonymous routines (DO blocks, triggers) this is always
 	// RoutineMutates or RoutineDoesNotMutate, derived from the body
 	// expression at build time.
 	CanMutate tree.RoutineCanMutate
+}
+
+// ResolveCanMutate reports whether the routine body can perform mutations,
+// resolving the RoutineCanMutateUnknown state. Unknown occurs for descriptors
+// that predate the can_mutate field and for anonymous continuations (zero
+// value); it is resolved as follows:
+//
+//   - When Body is available, it is scanned for a mutating statement, which is
+//     returned as mutatingStmt so callers can record statement-specific
+//     information.
+//   - When Body is empty but BodyBuilder is set (deferred optbuild), mutations
+//     are conservatively assumed and mutatingStmt is nil.
+//   - Otherwise Body may be temporarily empty (e.g., recursive PL/pgSQL
+//     continuations whose body is populated after the UDFCallExpr is
+//     constructed), so the routine is treated as non-mutating.
+//
+// mutatingStmt is the first mutating body statement when one was found by
+// inspection, and nil otherwise (including when CanMutate is RoutineMutates).
+func (d *UDFDefinition) ResolveCanMutate() (canMutate bool, mutatingStmt RelExpr) {
+	switch d.CanMutate {
+	case tree.RoutineMutates:
+		return true, nil
+	case tree.RoutineCanMutateUnknown:
+		if len(d.Body) == 0 && d.BodyBuilder != nil {
+			return true, nil
+		}
+		for _, s := range d.Body {
+			if s != nil {
+				if relExpr := s.Relational(); relExpr != nil && relExpr.CanMutate {
+					return true, s
+				}
+			}
+		}
+	}
+	return false, nil
 }
 
 // ExceptionBlock contains the information needed to match and handle errors in

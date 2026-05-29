@@ -1475,25 +1475,17 @@ func (b *Builder) setMutationFlags(e memo.RelExpr) {
 }
 
 // applyRoutineCanMutateFlags sets PlanFlagContainsMutation based on the
-// routine's CanMutate status. When the status is unknown (pre-existing
-// descriptors without the can_mutate field), it falls back to inspecting
-// the eagerly-built body expressions.
-//
-// TODO(janexing): consider interaction with late binding + deferred optbuild,
-// where the body may not be available  and UNKNOWN should be treated
-// conservatively as CAN_MUTATE.
+// routine's CanMutate status. See UDFDefinition.ResolveCanMutate for how the
+// unknown state is resolved. When a specific mutating body statement is
+// identified, its statement-specific flags are recorded as well.
 func (b *Builder) applyRoutineCanMutateFlags(def *memo.UDFDefinition) {
-	switch def.CanMutate {
-	case tree.RoutineMutates:
-		b.flags.Set(exec.PlanFlagContainsMutation)
-	case tree.RoutineCanMutateUnknown:
-		for _, s := range def.Body {
-			if s != nil {
-				if relExpr := s.Relational(); relExpr != nil && relExpr.CanMutate {
-					b.setMutationFlags(s)
-					return
-				}
-			}
-		}
+	canMutate, mutatingStmt := def.ResolveCanMutate()
+	if !canMutate {
+		return
 	}
+	if mutatingStmt != nil {
+		b.setMutationFlags(mutatingStmt)
+		return
+	}
+	b.flags.Set(exec.PlanFlagContainsMutation)
 }
