@@ -497,9 +497,11 @@ var tests = []importTestSpec{
 }
 
 // importTestTimeout is the timeout for import roachtests. This is
-// conservatively large because lineitem SF-100 can take about four hours to
-// import, with about another hour and a half to fingerprint. See #68117.
-const importTestTimeout = 10 * time.Hour
+// conservatively large because lineitem SF-100 can take roughly ten
+// hours to import (Pebble value separation adds significant write
+// amplification during bulk ingestion), plus time for fingerprint
+// validation. See #68117, #170280.
+const importTestTimeout = 14 * time.Hour
 
 func registerImport(r registry.Registry) {
 	for _, testSpec := range tests {
