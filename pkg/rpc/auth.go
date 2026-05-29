@@ -434,6 +434,15 @@ func (a kvAuth) authenticateNetworkRequest(ctx context.Context) (authnResult, er
 // In all paths, the cert's tenant scope is checked to ensure the principal
 // is authorized for this server's tenant. Returns an error if validation
 // fails.
+//
+// On the SAN-required SAN- and DN-match branches, tenant-scope verification
+// is provided by checkRootOrNodeInScope. On the non-SAN DN-match branch
+// (operator-configured *-cert-distinguished-name flag) tenant-scope
+// verification is provided by the dedicated checkCertTenantScope helper:
+// the operator-configured DN is authoritative for identity, so the cert's
+// scope username need not be root/node, and only tenant scope must be
+// re-checked to prevent a tenant-scoped principal from gaining cluster-wide
+// RPC access.
 func (a kvAuth) validateRootOrNodeClientCert(clientCert *x509.Certificate) error {
 	if security.ClientCertSANRequired.Get(a.sv) {
 		// SAN validation is enabled - try SAN first, then fallback to DN.
@@ -483,11 +492,38 @@ func (a kvAuth) validateRootOrNodeClientCert(clientCert *x509.Certificate) error
 				"root and node roles do not have valid DNs set which subject_required cluster setting mandates",
 			)
 		}
-		if err := checkRootOrNodeInScope(clientCert, a.tenant.tenantID); err != nil {
-			return err
-		}
+		return checkRootOrNodeInScope(clientCert, a.tenant.tenantID)
 	}
-	return nil
+	// rootOrNodeDNSet && certDNMatchesRootOrNodeDN: identity is established
+	// by the operator-configured DN flag. Verify the cert's tenant scope so
+	// a tenant-scoped principal cannot use this path to gain cluster-wide
+	// RPC access.
+	return checkCertTenantScope(clientCert, a.tenant.tenantID)
+}
+
+// checkCertTenantScope verifies that at least one of the cert's user scopes
+// authorizes this server's tenant (Global or matching serverTenantID). The
+// caller must have already established root or node identity (e.g. via DN
+// match against the operator-configured *-cert-distinguished-name flag);
+// this helper deliberately does not re-check that the cert's scope username
+// is root or node, since the operator-configured DN already vouches for the
+// identity.
+func checkCertTenantScope(clientCert *x509.Certificate, serverTenantID roachpb.TenantID) error {
+	ok, err := security.CertificateUserScopeContainsFunc(clientCert,
+		func(scope security.CertificateUserScope) bool {
+			return scope.Global || scope.TenantID == serverTenantID
+		})
+	if err != nil || ok {
+		return err
+	}
+	certUserScope, err := security.GetCertificateUserScope(clientCert)
+	if err != nil {
+		return err
+	}
+	return authErrorf(
+		"need root or node client cert to perform RPCs on this server "+
+			"(this is tenant %v; cert is valid for %s)",
+		serverTenantID, security.FormatUserScopes(certUserScope))
 }
 
 // requiredAuthzMethod is a sum type that describes which authorization
