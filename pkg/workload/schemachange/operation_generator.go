@@ -5810,6 +5810,31 @@ func (og *operationGenerator) createTrigger(ctx context.Context, tx pgx.Tx) (*op
 	}
 	resolvedTriggerFunctionName := picked["resolved_name"].(string)
 
+	// Occasionally emit CREATE OR REPLACE TRIGGER. When it targets an existing
+	// trigger (by reusing its name and table, which scope a trigger), it
+	// exercises the schema changer's drop-and-recreate path for TriggerDeps,
+	// which is distinct from DROP + CREATE. When it targets a fresh name it
+	// behaves like a plain create, covering the OR REPLACE no-op-replace path.
+	// We only reuse an existing trigger's identity under OR REPLACE; reusing it
+	// with a plain CREATE would just collide with the existing trigger.
+	orReplace := ""
+	useOrReplace := og.randIntn(2) == 0
+	if useOrReplace {
+		orReplace = "OR REPLACE "
+	}
+	triggerName := fmt.Sprintf("trigger_%s", og.newUniqueSeqNumSuffix())
+	if useOrReplace && og.randIntn(2) == 0 {
+		existing, err := og.findExistingTrigger(ctx, tx)
+		if err != nil {
+			return nil, err
+		}
+		if existing != nil {
+			triggerName = existing.triggerName
+			tableName = &existing.table
+			triggerTableExists = true
+		}
+	}
+
 	// Randomize trigger timing and events.
 	triggerActionTime := "BEFORE"
 	if og.randIntn(2) == 1 {
@@ -5823,11 +5848,10 @@ func (og *operationGenerator) createTrigger(ctx context.Context, tx pgx.Tx) (*op
 	}
 
 	eventClause := strings.Join(events, " OR ")
-	triggerName := fmt.Sprintf("trigger_%s", og.newUniqueSeqNumSuffix())
 
 	opStmt.sql = fmt.Sprintf(
-		"CREATE TRIGGER %s %s %s ON %s FOR EACH ROW EXECUTE FUNCTION %s()",
-		triggerName, triggerActionTime, eventClause, tableName, resolvedTriggerFunctionName,
+		"CREATE %sTRIGGER %s %s %s ON %s FOR EACH ROW EXECUTE FUNCTION %s()",
+		orReplace, triggerName, triggerActionTime, eventClause, tableName, resolvedTriggerFunctionName,
 	)
 	og.LogMessage(fmt.Sprintf("createTrigger: %s", opStmt.sql))
 
@@ -6008,8 +6032,8 @@ func (og *operationGenerator) findExistingTriggerFunctions(
 	return Collect(ctx, og, tx, pgx.RowToMap, q)
 }
 
-// findExistingTrigger returns a triggerInfo struct with the qualified table name and trigger name.
-// It also returns a boolean indicating whether a trigger was found.
+// findExistingTrigger returns a randomly chosen existing trigger's qualified
+// table name and trigger name, or nil if the database contains no triggers.
 func (og *operationGenerator) findExistingTrigger(
 	ctx context.Context, tx pgx.Tx,
 ) (*triggerInfo, error) {
