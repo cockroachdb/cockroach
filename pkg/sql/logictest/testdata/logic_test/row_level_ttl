@@ -1777,6 +1777,15 @@ subtest end
 
 subtest execute_schedule
 
+# Disable the job scheduler daemon for this subtest. Otherwise, the daemon can
+# scan system.scheduled_jobs in the background, find a schedule that EXECUTE
+# SCHEDULE just made eligible (next_run <= now()), run it, and reschedule
+# next_run to the future (tomorrow, for @daily). That would race with the
+# assertions below that check next_run remains in the past, causing flakes.
+# See https://github.com/cockroachdb/cockroach/issues/170997.
+statement ok
+SET CLUSTER SETTING jobs.scheduler.enabled = false
+
 statement ok
 CREATE TABLE tbl_execute_schedule (
   id INT PRIMARY KEY,
@@ -1848,5 +1857,9 @@ EXECUTE SCHEDULE $schedule_id_1
 
 statement ok
 RESUME SCHEDULE $schedule_id_1
+
+# Re-enable the job scheduler daemon disabled at the start of this subtest.
+statement ok
+RESET CLUSTER SETTING jobs.scheduler.enabled
 
 subtest end
