@@ -671,16 +671,16 @@ func TestSetResourceGroupConfigRGOnly(t *testing.T) {
 
 	// Create an rg-keyed container with id=5.
 	cpuTimeTokenACMode.Override(ctx, &st.SV, resourceManagerMode)
-	// Install a config that seeds rgGroupKey(5).
+	// Install a config that seeds rgGroupKey(0, 5).
 	q.configHolder.Set(ResourceGroupConfigSet{
-		rgGroupKey(5): {Weight: 1, MaxCPU: true},
+		rgGroupKey(0, 5): {Weight: 1, MaxCPU: true},
 	})
 	q.refreshResourceGroupConfig()
 
 	// Both containers should now coexist with the same numeric ID.
 	q.mu.Lock()
 	tenantContainer, tenantOK := q.mu.groups[tenantGroupKey(5)]
-	rgContainer, rgOK := q.mu.groups[rgGroupKey(5)]
+	rgContainer, rgOK := q.mu.groups[rgGroupKey(0, 5)]
 	q.mu.Unlock()
 	require.True(t, tenantOK, "tenant 5 container should exist")
 	require.True(t, rgOK, "rg 5 container should exist")
@@ -740,7 +740,7 @@ func TestSQLCPUHandleCloseAfterModeFlip(t *testing.T) {
 	usedBefore := requireGroupUsed(t, q, tenantKey)
 
 	// Flip mode mid-handle. A subsequent Admit on this WorkQueue would
-	// route to rgGroupKey(highResourceGroupID), but Close should still
+	// route to highResourceGroupKey, but Close should still
 	// target the tenant-keyed container that holds the prior tokens.
 	// Pre-create the rg-keyed containers via applyConfigLocked so the
 	// rg container exists before Close runs.
@@ -748,7 +748,7 @@ func TestSQLCPUHandleCloseAfterModeFlip(t *testing.T) {
 	q.mu.Lock()
 	q.applyConfigLocked(q.configHolder.Snapshot().Groups())
 	q.mu.Unlock()
-	rgUsedBefore := requireGroupUsed(t, q, rgGroupKey(highResourceGroupID))
+	rgUsedBefore := requireGroupUsed(t, q, highResourceGroupKey)
 
 	_ = tg.buf.stringAndReset()
 	h.Close()
@@ -757,7 +757,7 @@ func TestSQLCPUHandleCloseAfterModeFlip(t *testing.T) {
 	require.Less(t, requireGroupUsed(t, q, tenantKey), usedBefore,
 		"tenant container's used must decrement; if not, Close "+
 			"re-derived the container key from the post-flip mode")
-	require.Equal(t, rgUsedBefore, requireGroupUsed(t, q, rgGroupKey(highResourceGroupID)),
+	require.Equal(t, rgUsedBefore, requireGroupUsed(t, q, highResourceGroupKey),
 		"rg container's used must not change; if it did, Close "+
 			"re-derived the container key from the post-flip mode "+
 			"rather than using reservationSourceGroup")

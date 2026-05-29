@@ -742,7 +742,7 @@ type AdmitResponse struct {
 
 // Resource group IDs used in Resource Manager mode. Work is split into
 // two groups based on WorkInfo.Priority. These are uint64 aliases of the
-// exported admissionpb ids, used here for the uint64-typed rgGroupKey.
+// exported admissionpb ids.
 const (
 	// highResourceGroupID is used for work with priority >= NormalPri.
 	highResourceGroupID = uint64(admissionpb.HighResourceGroupID)
@@ -750,14 +750,23 @@ const (
 	lowResourceGroupID = uint64(admissionpb.LowResourceGroupID)
 )
 
-// priorityToResourceGroupKey maps a WorkPriority to the rg-keyed
-// groupKey for one of the two hardcoded resource groups. Used in
-// Resource Manager mode.
+// highResourceGroupKey and lowResourceGroupKey are the groupKeys for the
+// two built-in resource groups. They are tenant-agnostic (tenantID 0):
+// the built-ins are shared across tenants on the host, matching how
+// builtinGroupConfigs seeds them. User-defined groups, in contrast, are
+// per-tenant and use rgGroupKey with a real tenant id.
+var (
+	highResourceGroupKey = groupKey{groupID: highResourceGroupID}
+	lowResourceGroupKey  = groupKey{groupID: lowResourceGroupID}
+)
+
+// priorityToResourceGroupKey maps a WorkPriority to one of the two
+// built-in resource group keys. Used in Resource Manager mode.
 func priorityToResourceGroupKey(pri admissionpb.WorkPriority) groupKey {
 	if pri >= admissionpb.NormalPri {
-		return rgGroupKey(highResourceGroupID)
+		return highResourceGroupKey
 	}
-	return rgGroupKey(lowResourceGroupID)
+	return lowResourceGroupKey
 }
 
 // tenantGroupKeyForWorkInfo is the default groupKeyForWorkInfo
