@@ -218,6 +218,7 @@ recursion_depth_limit                                            1000           
 register_latch_wait_contention_events                            off                 Controls whether contention events are registered for latch wait operations.
 reorder_joins_limit                                              8                   Sets the number of joins at which the optimizer should stop attempting to reorder.
 require_explicit_primary_keys                                    off                 Controls whether CREATE TABLE statements should error out if no primary key is provided.
+resource_group                                                   ·                   Binds the session's KV work to a named resource group for admission control. Only honored when admission.cpu_time_tokens.mode is set to resource_manager. The empty string (the default) leaves the session unbound.
 results_buffer_size                                              524288              Specifies the size at which the pgwire results buffer will self-flush.
 role                                                             none                The current role for the session.
 row_security                                                     on                  Controls whether row level security is enabled.
