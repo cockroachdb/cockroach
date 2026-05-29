@@ -2191,10 +2191,21 @@ func TestTrackOnlyUserOpenTransactionsAndActiveStatements(t *testing.T) {
 		// Begin a user-initiated transaction.
 		testTx := testDB.Begin(t)
 
-		// Check that the number of open transactions has incremented, but not the
-		// internal metric.
+		// Check that the user-facing open-transaction gauge incremented due to the
+		// transaction we just began.
+		//
+		// We intentionally do not assert that the internal open-transaction gauge is
+		// unchanged here: it is not stable at any given instant. shouldBlock only
+		// blocks internal statements inside the AfterExecute hook, which does not stop
+		// a background internal transaction (lease acquisition, stats collection, etc.)
+		// from either incrementing the gauge before its first statement reaches the
+		// hook, or decrementing it in recordTransactionFinish if it had already passed
+		// the hook before shouldBlock was set. An exact-equality assertion against a
+		// captured baseline therefore raced with this background activity in both
+		// directions and was the cause of #170861 and a long line of earlier flakes.
+		// The user/internal separation is still verified below, where the user gauges
+		// must stay constant while the internal gauges rise above their baselines.
 		require.Equal(t, int64(1), sqlServer.Metrics.EngineMetrics.SQLTxnsOpen.Value())
-		require.Equal(t, prevInternalTxnsOpen, sqlServer.InternalMetrics.EngineMetrics.SQLTxnsOpen.Value())
 
 		// Create a state of contention. Use a cancellable context so that the
 		// other queries that get blocked on this one don't deadlock if the test
