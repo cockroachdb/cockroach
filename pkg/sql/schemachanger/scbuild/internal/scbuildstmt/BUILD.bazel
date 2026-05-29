@@ -42,6 +42,7 @@ go_library(
         "create_policy.go",
         "create_schema.go",
         "create_sequence.go",
+        "create_table.go",
         "create_trigger.go",
         "database_zone_config.go",
         "dependencies.go",
