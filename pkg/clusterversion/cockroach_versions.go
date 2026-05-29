@@ -290,6 +290,10 @@ const (
 	// to persist per-tenant resource group configurations.
 	V26_3_AddResourceGroupsTable
 
+	// V26_3_CrdbInternalTSDB gates SQL access to the in-cluster TSDB through
+	// the crdb_internal.tsdb_query generator builtin.
+	V26_3_CrdbInternalTSDB
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -380,6 +384,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_3_AlterStatementsTablePK: {Major: 26, Minor: 2, Internal: 8},
 
 	V26_3_AddResourceGroupsTable: {Major: 26, Minor: 2, Internal: 10},
+
+	V26_3_CrdbInternalTSDB: {Major: 26, Minor: 2, Internal: 12},
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// *************************************************
