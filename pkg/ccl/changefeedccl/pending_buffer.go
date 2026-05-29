@@ -45,6 +45,9 @@ func (h *keyHeap) Pop() keyHeapEntry {
 	*h = old[:n-1]
 	return x
 }
+func (h *keyHeap) Peek() keyHeapEntry {
+	return (*h)[0]
+}
 
 var errPendingBufferClosed = errors.New("pendingBuffer is closed")
 
@@ -58,6 +61,9 @@ type pendingBufferConfig struct {
 // to a worker to send to the sink.
 type pendingBatch struct {
 	events []*rowEvent
+	// completed is guarded by pendingBuffer.mu; flipped to true by the
+	// first completeBatch call. Used to detect double-completion.
+	completed bool
 }
 
 // pendingBuffer is responsible for creating conflict-free batches for
@@ -80,8 +86,9 @@ type pendingBuffer struct {
 		// of their FIFO.
 		heap keyHeap
 		// inflight is the set of keys currently held by a worker between
-		// getBatch and completeBatch.
-		inflight map[string]struct{}
+		// getBatch and completeBatch. Each inflight key records its
+		// oldest inflight events seq so drain can track its progress.
+		inflight map[string]uint64
 		// closed is set by close. Once true, addRow and getBatch return
 		// errPendingBufferClosed.
 		closed bool
@@ -91,7 +98,7 @@ type pendingBuffer struct {
 func newPendingBuffer(cfg pendingBufferConfig, topic TopicDescriptor) *pendingBuffer {
 	b := &pendingBuffer{cfg: cfg, topic: topic}
 	b.mu.events = make(map[string][]pendingEvent)
-	b.mu.inflight = make(map[string]struct{})
+	b.mu.inflight = make(map[string]uint64)
 	b.mu.cond = sync.NewCond(&b.mu)
 	return b
 }
@@ -133,9 +140,10 @@ func (b *pendingBuffer) getBatch(ctx context.Context) (*pendingBatch, error) {
 	batch := &pendingBatch{}
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	// TODO(#170203): respect ctx cancellation in the wait loop.
-	for b.mu.heap.Len() == 0 && !b.mu.closed {
-		b.mu.cond.Wait()
+	if err := b.waitForCondOrCancel(ctx, func() bool {
+		return b.mu.heap.Len() > 0 || b.mu.closed
+	}); err != nil {
+		return nil, err
 	}
 	if b.mu.closed {
 		return nil, errPendingBufferClosed
@@ -145,7 +153,7 @@ func (b *pendingBuffer) getBatch(ctx context.Context) (*pendingBatch, error) {
 		// one key at a time. Those keys, though, are chosen in order of
 		// their oldest pending event (not necessarily MVCC order).
 		entry := heap.Pop[keyHeapEntry](&b.mu.heap)
-		b.mu.inflight[entry.key] = struct{}{}
+		b.mu.inflight[entry.key] = entry.seq
 
 		fifo := b.mu.events[entry.key]
 		remaining := b.cfg.maxMessages - len(batch.events)
@@ -180,6 +188,11 @@ func (b *pendingBuffer) completeBatch(batch *pendingBatch) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
+	if batch.completed {
+		panic(errors.AssertionFailedf("completeBatch called twice on same batch"))
+	}
+	batch.completed = true
+
 	for _, ev := range batch.events {
 		inflightKey := string(ev.key)
 		if _, inflight := b.mu.inflight[inflightKey]; !inflight {
@@ -199,10 +212,9 @@ func (b *pendingBuffer) completeBatch(batch *pendingBatch) {
 			firstPendingEvent := pendingEvents[0]
 			heapEntry := keyHeapEntry{key: inflightKey, seq: firstPendingEvent.seq}
 			heap.Push[keyHeapEntry](&b.mu.heap, heapEntry)
-
-			b.mu.cond.Signal()
 		}
 	}
+	b.mu.cond.Broadcast()
 }
 
 // drain blocks until every event accepted by addRow has been pulled
@@ -210,9 +222,62 @@ func (b *pendingBuffer) completeBatch(batch *pendingBatch) {
 // Sink.Flush. Returns errPendingBufferClosed if close races with the
 // drain — a closed buffer cannot guarantee the pre-drain events were
 // actually flushed.
-func (b *pendingBuffer) drain() error {
-	// TODO(#170203): implement.
+func (b *pendingBuffer) drain(ctx context.Context) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	seqToReach := b.mu.nextSeq
+	hasPreDrainWork := func() bool {
+		// By the heap invariant, its min entry has the seq of the
+		// oldest pending event for all non-inflight keys.
+		if b.mu.heap.Len() > 0 && b.mu.heap.Peek().seq < seqToReach {
+			return true
+		}
+		for _, keyProgress := range b.mu.inflight {
+			if keyProgress < seqToReach {
+				return true
+			}
+		}
+		return false
+	}
+	if err := b.waitForCondOrCancel(ctx, func() bool {
+		return !hasPreDrainWork() || b.mu.closed
+	}); err != nil {
+		return err
+	}
+	if b.mu.closed {
+		return errPendingBufferClosed
+	}
 	return nil
+}
+
+// waitForCondOrCancel waits on b.mu.cond until pred returns true or
+// ctx is cancelled. Must be called with b.mu held. Returns ctx.Err()
+// on cancellation, nil otherwise.
+func (b *pendingBuffer) waitForCondOrCancel(ctx context.Context, pred func() bool) error {
+	if pred() {
+		return nil
+	}
+
+	stop := make(chan struct{})
+	defer close(stop)
+	go func() {
+		// Check for context cancellation in a separate goroutine.
+		// Broadcast when the context is cancelled so others can
+		// return as well.
+		select {
+		case <-ctx.Done():
+			b.mu.Lock()
+			defer b.mu.Unlock()
+			b.mu.cond.Broadcast()
+		case <-stop:
+		}
+	}()
+
+	for !pred() && ctx.Err() == nil {
+		b.mu.cond.Wait()
+	}
+	return ctx.Err()
 }
 
 // close marks the buffer closed and wakes all waiters. Subsequent
