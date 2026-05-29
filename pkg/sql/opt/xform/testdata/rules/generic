@@ -1139,7 +1139,7 @@ CREATE TABLE t164666_t3 (
 )
 ----
 
-opt
+opt set=optimizer_inline_placeholder_equalities=on
 SELECT t164666_t1.k1
 FROM t164666_t1
 WHERE t164666_t1.k2 = $1

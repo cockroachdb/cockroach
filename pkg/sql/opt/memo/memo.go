@@ -221,6 +221,7 @@ type Memo struct {
 	useSwapMutations                           bool
 	preventUpdateSetColumnDrop                 bool
 	useImprovedRoutineDepsTriggersComputedCols bool
+	inlinePlaceholderEqualities                bool
 	useMinRowCountAntiJoinFix                  bool
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
@@ -348,6 +349,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		useSwapMutations:                           evalCtx.SessionData().UseSwapMutations,
 		preventUpdateSetColumnDrop:                 evalCtx.SessionData().PreventUpdateSetColumnDrop,
 		useImprovedRoutineDepsTriggersComputedCols: evalCtx.SessionData().UseImprovedRoutineDepsTriggersAndComputedCols,
+		inlinePlaceholderEqualities:                evalCtx.SessionData().OptimizerInlinePlaceholderEqualities,
 		useMinRowCountAntiJoinFix:                  evalCtx.SessionData().OptimizerUseMinRowCountAntiJoinFix,
 		skipUnderlyingViewPrivilegeChecks:          sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Get(&evalCtx.Settings.SV),
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
@@ -534,6 +536,7 @@ func (m *Memo) IsStale(
 		m.useSwapMutations != evalCtx.SessionData().UseSwapMutations ||
 		m.preventUpdateSetColumnDrop != evalCtx.SessionData().PreventUpdateSetColumnDrop ||
 		m.useImprovedRoutineDepsTriggersComputedCols != evalCtx.SessionData().UseImprovedRoutineDepsTriggersAndComputedCols ||
+		m.inlinePlaceholderEqualities != evalCtx.SessionData().OptimizerInlinePlaceholderEqualities ||
 		m.useMinRowCountAntiJoinFix != evalCtx.SessionData().OptimizerUseMinRowCountAntiJoinFix ||
 		m.skipUnderlyingViewPrivilegeChecks != sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Get(&evalCtx.Settings.SV) ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
