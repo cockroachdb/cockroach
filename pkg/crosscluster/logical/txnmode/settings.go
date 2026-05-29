@@ -13,7 +13,7 @@ import (
 )
 
 // ErrEndTimeReached signals that the coordinator has processed all transactions
-// with timestamp strictly less than endTime.
+// with timestamp less than or equal to endTime.
 var ErrEndTimeReached = errors.New("LDR endTime reached")
 
 var txnNumWriters = settings.RegisterIntSetting(

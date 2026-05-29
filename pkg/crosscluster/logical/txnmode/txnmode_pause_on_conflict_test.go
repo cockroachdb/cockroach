@@ -15,35 +15,38 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
-// setupTxnModeTest starts a server with source and destination databases
+// setupTxnModeTest starts a cluster with source and destination databases
 // configured for low-latency replication. It is the caller's responsibility
-// to stop the returned server.
+// to stop the returned cluster.
 func setupTxnModeTest(
-	t *testing.T,
-) (serverutils.TestServerInterface, *sqlutils.SQLRunner, *sqlutils.SQLRunner) {
+	t *testing.T, numNodes int,
+) (*testcluster.TestCluster, *sqlutils.SQLRunner, *sqlutils.SQLRunner) {
 	t.Helper()
-
-	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(134857),
-		Knobs: base.TestingKnobs{
-			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+	cluster := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(134857),
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
 		},
 	})
 
-	s := srv.ApplicationLayer()
-	runner := sqlutils.MakeSQLRunner(conn)
+	s := cluster.Server(0).ApplicationLayer()
+	runner := sqlutils.MakeSQLRunner(cluster.Conns[0])
 
-	sysRunner := sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t))
+	sysRunner := sqlutils.MakeSQLRunner(cluster.SystemLayer(0).SQLConn(t))
 	ldrtestutils.ApplyLowLatencyReplicationSettings(t, sysRunner, runner)
 
 	runner.Exec(t, "CREATE DATABASE source_db")
@@ -52,7 +55,7 @@ func setupTxnModeTest(
 	sourceDB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("source_db")))
 	destDB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("dest_db")))
 
-	return srv, sourceDB, destDB
+	return cluster, sourceDB, destDB
 }
 
 // setupConflictingLDR creates a table with a unique index on both source and
@@ -61,7 +64,7 @@ func setupTxnModeTest(
 // The caller is responsible for waiting on the job state.
 func setupConflictingLDR(
 	t *testing.T,
-	srv serverutils.TestServerInterface,
+	cluster *testcluster.TestCluster,
 	sourceDB *sqlutils.SQLRunner,
 	destDB *sqlutils.SQLRunner,
 ) jobspb.JobID {
@@ -74,8 +77,8 @@ func setupConflictingLDR(
 
 	destDB.Exec(t, "INSERT INTO tab VALUES (100, 'collide')")
 
-	sourceURL := replicationtestutils.GetExternalConnectionURI(
-		t, srv.ApplicationLayer(), srv.ApplicationLayer(), serverutils.DBName("source_db"))
+	s := cluster.Server(0).ApplicationLayer()
+	sourceURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("source_db"))
 
 	var jobID jobspb.JobID
 	destDB.QueryRow(t,
@@ -94,32 +97,39 @@ func TestTxnModePauseOnConflict(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderDeadlock(t)
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
 
-	srv, sourceDB, destDB := setupTxnModeTest(t)
-	defer srv.Stopper().Stop(ctx)
-	jobID := setupConflictingLDR(t, srv, sourceDB, destDB)
-	jobutils.WaitForJobToPause(t, destDB, jobID)
+	testutils.RunValues(t, "nodes", []int{1, 3}, func(t *testing.T, numNodes int) {
+		if numNodes > 1 {
+			// Multi node test clusters can timeout under stress+race.
+			skip.UnderDuress(t)
+		}
+		ctx := context.Background()
 
-	var runningStatus string
-	destDB.QueryRow(t, "SELECT running_status FROM [SHOW JOBS] WHERE job_id = $1", jobID).Scan(&runningStatus)
-	require.Contains(t, runningStatus, "replication error")
-	require.Contains(t, runningStatus, "duplicate key value violates unique constraint")
+		cluster, sourceDB, destDB := setupTxnModeTest(t, numNodes)
+		defer cluster.Stopper().Stop(ctx)
+		jobID := setupConflictingLDR(t, cluster, sourceDB, destDB)
+		jobutils.WaitForJobToPause(t, destDB, jobID)
 
-	// The conflicting source row at pk=1 must not have been applied.
-	destDB.CheckQueryResults(t, "SELECT pk, val FROM tab ORDER BY pk", [][]string{
-		{"100", "collide"},
+		var runningStatus string
+		destDB.QueryRow(t, "SELECT running_status FROM [SHOW JOBS] WHERE job_id = $1", jobID).Scan(&runningStatus)
+		require.Contains(t, runningStatus, "replication error")
+		require.Contains(t, runningStatus, "duplicate key value violates unique constraint")
+
+		// The conflicting source row at pk=1 must not have been applied.
+		destDB.CheckQueryResults(t, "SELECT pk, val FROM tab ORDER BY pk", [][]string{
+			{"100", "collide"},
+		})
+
+		// Check that the replicated time equals the MVCC timestamp of the
+		// conflicting source insert minus one logical tick.
+		var conflictMVCCDec apd.Decimal
+		sourceDB.QueryRow(t, "SELECT crdb_internal_mvcc_timestamp FROM tab WHERE pk = 1").Scan(&conflictMVCCDec)
+		conflictMVCC, err := hlc.DecimalToHLC(&conflictMVCCDec)
+		require.NoError(t, err)
+		replicatedTime, err := ldrtestutils.GetReplicatedTime(t, destDB, jobID)
+		require.NoError(t, err)
+		require.Equal(t, conflictMVCC.Prev(), replicatedTime)
 	})
-
-	// Check that the replicated time equals the MVCC timestamp of the
-	// conflicting source insert minus one logical tick.
-	var conflictMVCCDec apd.Decimal
-	sourceDB.QueryRow(t, "SELECT crdb_internal_mvcc_timestamp FROM tab WHERE pk = 1").Scan(&conflictMVCCDec)
-	conflictMVCC, err := hlc.DecimalToHLC(&conflictMVCCDec)
-	require.NoError(t, err)
-	replicatedTime, err := ldrtestutils.GetReplicatedTime(t, destDB, jobID)
-	require.NoError(t, err)
-	require.Equal(t, conflictMVCC.Prev(), replicatedTime)
 }
 
 // TestTxnModeResumeAfterFixingConflict verifies that when a transactional LDR
@@ -132,9 +142,9 @@ func TestTxnModeResumeAfterFixingConflict(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	srv, sourceDB, destDB := setupTxnModeTest(t)
-	defer srv.Stopper().Stop(ctx)
-	jobID := setupConflictingLDR(t, srv, sourceDB, destDB)
+	cluster, sourceDB, destDB := setupTxnModeTest(t, 1 /* numNodes */)
+	defer cluster.Stopper().Stop(ctx)
+	jobID := setupConflictingLDR(t, cluster, sourceDB, destDB)
 	jobutils.WaitForJobToPause(t, destDB, jobID)
 
 	// Remove the conflicting row on the destination so the transaction
@@ -144,7 +154,7 @@ func TestTxnModeResumeAfterFixingConflict(t *testing.T) {
 	destDB.Exec(t, "RESUME JOB $1", jobID)
 	jobutils.WaitForJobToRun(t, destDB, jobID)
 
-	now := srv.Clock().Now()
+	now := cluster.Server(0).Clock().Now()
 	ldrtestutils.WaitUntilReplicatedTime(t, now, destDB, jobID)
 
 	destDB.CheckQueryResults(t,
@@ -162,9 +172,9 @@ func TestTxnModeResumePausesAgainOnUnresolvedConflict(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	srv, sourceDB, destDB := setupTxnModeTest(t)
-	defer srv.Stopper().Stop(ctx)
-	jobID := setupConflictingLDR(t, srv, sourceDB, destDB)
+	cluster, sourceDB, destDB := setupTxnModeTest(t, 1 /* numNodes */)
+	defer cluster.Stopper().Stop(ctx)
+	jobID := setupConflictingLDR(t, cluster, sourceDB, destDB)
 	jobutils.WaitForJobToPause(t, destDB, jobID)
 
 	progressFirst := jobutils.GetJobProgress(t, destDB, jobID)
@@ -188,8 +198,8 @@ func TestTxnModePauseOnEarliestConflict(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	srv, sourceDB, destDB := setupTxnModeTest(t)
-	defer srv.Stopper().Stop(ctx)
+	cluster, sourceDB, destDB := setupTxnModeTest(t, 1 /* numNodes */)
+	defer cluster.Stopper().Stop(ctx)
 
 	for _, db := range []*sqlutils.SQLRunner{sourceDB, destDB} {
 		db.Exec(t, "CREATE TABLE tab (pk INT PRIMARY KEY, val STRING NOT NULL, extra STRING NOT NULL)")
@@ -199,7 +209,7 @@ func TestTxnModePauseOnEarliestConflict(t *testing.T) {
 
 	destDB.Exec(t, "INSERT INTO tab VALUES (100, 'first-collide', 'pre-1'), (101, 'pre-2', 'second-collide')")
 
-	s := srv.ApplicationLayer()
+	s := cluster.Server(0).ApplicationLayer()
 	sourceURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("source_db"))
 
 	var jobID jobspb.JobID

@@ -458,12 +458,12 @@ func TestCheckpointHandler(t *testing.T) {
 		require.Len(t, updates, 1)
 		require.Equal(t, mkts(15), updates[0])
 
-		// Applier 1 advances: min frontier is ts(18), still below endTime.Prev().
+		// Applier 1 advances: min frontier is ts(18), still below endTime.
 		require.NoError(t, ch.handleMeta(ctx, makeFrontierMeta(1, mkts(25))))
 		updates = drainChannel(frontierCh)
 		require.Equal(t, mkts(18), updates[0])
 
-		// Applier 2 advances: min becomes ts(25) which is >= endTime.Prev().
+		// Applier 2 advances: min becomes ts(25) which is > endTime.
 		err := ch.handleMeta(ctx, makeFrontierMeta(2, mkts(30)))
 		require.ErrorIs(t, err, ErrEndTimeReached)
 		require.True(t, flowCanceled)
