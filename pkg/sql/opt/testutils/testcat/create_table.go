@@ -231,6 +231,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 			&uniqueRowIDString, /* defaultExpr */
 			nil,                /* computedExpr */
 			nil,                /* onUpdateExpr */
+			nil,                /* maskingExpr */
 			cat.NotGeneratedAsIdentity,
 			nil, /* generatedAsIdentitySequenceOption */
 		)
@@ -261,6 +262,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		nil, /* defaultExpr */
 		nil, /* computedExpr */
 		nil, /* onUpdateExpr */
+		nil, /* maskingExpr */
 		cat.NotGeneratedAsIdentity,
 		nil, /* generatedAsIdentitySequenceOption */
 	)
@@ -280,6 +282,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		nil, /* defaultExpr */
 		nil, /* computedExpr */
 		nil, /* onUpdateExpr */
+		nil, /* maskingExpr */
 		cat.NotGeneratedAsIdentity,
 		nil, /* generatedAsIdentitySequenceOption */
 	)
@@ -469,6 +472,7 @@ func (tc *Catalog) createVirtualTable(stmt *tree.CreateTable) *Table {
 		nil, /* defaultExpr */
 		nil, /* computedExpr */
 		nil, /* onUpdateExpr */
+		nil, /* maskingExpr */
 		cat.NotGeneratedAsIdentity,
 		nil, /* generatedAsIdentitySequenceOption */
 	)
@@ -534,6 +538,7 @@ func (tc *Catalog) CreateTableAs(name tree.TableName, columns []cat.Column) *Tab
 		&uniqueRowIDString, /* defaultExpr */
 		nil,                /* computedExpr */
 		nil,                /* onUpdateExpr */
+		nil,                /* maskingExpr */
 		cat.NotGeneratedAsIdentity,
 		nil, /* generatedAsIdentitySequenceOption */
 	)
@@ -902,6 +907,7 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 			defaultExpr,
 			computedExpr,
 			onUpdateExpr,
+			nil, /* maskingExpr */
 			generatedAsIdentityType,
 			generatedAsIdentitySequenceOption,
 		)

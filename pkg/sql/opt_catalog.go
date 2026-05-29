@@ -1069,6 +1069,7 @@ func newOptTable(
 				(*string)(cd.DefaultExpr),
 				(*string)(cd.ComputeExpr),
 				(*string)(cd.OnUpdateExpr),
+				cd.MaskingExpr,
 				mapGeneratedAsIdentityType(col.GetGeneratedAsIdentityType()),
 				cd.GeneratedAsIdentitySequenceOption,
 			)
@@ -1117,6 +1118,7 @@ func newOptTable(
 				(*string)(cd.DefaultExpr),
 				(*string)(cd.ComputeExpr),
 				(*string)(cd.OnUpdateExpr),
+				cd.MaskingExpr,
 				mapGeneratedAsIdentityType(sysCol.GetGeneratedAsIdentityType()),
 				cd.GeneratedAsIdentitySequenceOption,
 			)
@@ -2588,6 +2590,7 @@ func newOptVirtualTable(
 		nil,        /* defaultExpr */
 		nil,        /* computedExpr */
 		nil,        /* onUpdateExpr */
+		nil,        /* maskingExpr */
 		cat.NotGeneratedAsIdentity,
 		nil, /* generatedAsIdentitySequenceOption */
 	)
@@ -2604,6 +2607,7 @@ func newOptVirtualTable(
 			(*string)(cd.DefaultExpr),
 			(*string)(cd.ComputeExpr),
 			(*string)(cd.OnUpdateExpr),
+			cd.MaskingExpr,
 			mapGeneratedAsIdentityType(d.GetGeneratedAsIdentityType()),
 			cd.GeneratedAsIdentitySequenceOption,
 		)
@@ -2624,6 +2628,7 @@ func newOptVirtualTable(
 		nil,        /* defaultExpr */
 		nil,        /* computedExpr */
 		nil,        /* onUpdateExpr */
+		nil,        /* maskingExpr */
 		cat.NotGeneratedAsIdentity,
 		nil, /* generatedAsIdentitySequenceOption */
 	)

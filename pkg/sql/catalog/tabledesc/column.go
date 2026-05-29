@@ -138,6 +138,20 @@ func (w column) GetOnUpdateExpr() catpb.Expression {
 	return *w.desc.OnUpdateExpr
 }
 
+// HasMaskingExpr returns true iff the column has a masking expression set.
+func (w column) HasMaskingExpr() bool {
+	return w.desc.HasMaskingExpr()
+}
+
+// GetMaskingExpr returns the column masking expression if it exists,
+// empty string otherwise.
+func (w column) GetMaskingExpr() string {
+	if !w.HasMaskingExpr() {
+		return ""
+	}
+	return *w.desc.MaskingExpr
+}
+
 // IsComputed returns true iff the column is a computed column.
 func (w column) IsComputed() bool {
 	return w.desc.IsComputed()

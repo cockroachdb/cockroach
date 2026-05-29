@@ -2145,6 +2145,7 @@ func (ot *OptTester) createTableAs(name tree.TableName, rel memo.RelExpr) (*test
 			nil, /* defaultExpr */
 			nil, /* computedExpr */
 			nil, /* onUpdateExpr */
+			nil, /* maskingExpr */
 			cat.NotGeneratedAsIdentity,
 			nil, /* generatedAsIdentitySequenceOption */
 		)

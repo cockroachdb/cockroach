@@ -80,6 +80,7 @@ func (*AlterTableIdentity) alterTableCmd()           {}
 func (*AlterTableDropIdentity) alterTableCmd()       {}
 func (*AlterTableSetRLSMode) alterTableCmd()         {}
 func (*AlterTableSetTrigger) alterTableCmd()         {}
+func (*AlterTableSetMaskingFunction) alterTableCmd() {}
 
 var _ AlterTableCmd = &AlterTableAddColumn{}
 var _ AlterTableCmd = &AlterTableAddConstraint{}
@@ -107,6 +108,7 @@ var _ AlterTableCmd = &AlterTableIdentity{}
 var _ AlterTableCmd = &AlterTableDropIdentity{}
 var _ AlterTableCmd = &AlterTableSetRLSMode{}
 var _ AlterTableCmd = &AlterTableSetTrigger{}
+var _ AlterTableCmd = &AlterTableSetMaskingFunction{}
 
 // ColumnMutationCmd is the subset of AlterTableCmds that modify an
 // existing column.
@@ -449,6 +451,35 @@ func (node *AlterTableSetOnUpdate) Format(ctx *FmtCtx) {
 	} else {
 		ctx.WriteString(" SET ON UPDATE ")
 		ctx.FormatNode(node.Expr)
+	}
+}
+
+// AlterTableSetMaskingFunction represents an ALTER COLUMN SET MASKING FUNCTION
+// or DROP MASKING FUNCTION command for dynamic data masking.
+type AlterTableSetMaskingFunction struct {
+	Column   Name
+	Function Expr // nil means DROP MASKING FUNCTION
+}
+
+// GetColumn implements the ColumnMutationCmd interface.
+func (node *AlterTableSetMaskingFunction) GetColumn() Name {
+	return node.Column
+}
+
+// TelemetryName implements the AlterTableCmd interface.
+func (node *AlterTableSetMaskingFunction) TelemetryName() string {
+	return "set_masking_function"
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTableSetMaskingFunction) Format(ctx *FmtCtx) {
+	ctx.WriteString(" ALTER COLUMN ")
+	ctx.FormatNode(&node.Column)
+	if node.Function == nil {
+		ctx.WriteString(" DROP MASKING FUNCTION")
+	} else {
+		ctx.WriteString(" SET MASKING FUNCTION ")
+		ctx.FormatNode(node.Function)
 	}
 }
 

@@ -1070,7 +1070,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %token <str> LINESTRING LINESTRINGM LINESTRINGZ LINESTRINGZM
 %token <str> LIST LOCK LOCAL LOCALITY LOCALTIME LOCALTIMESTAMP LOCKED LOGGED LOGICAL LOGICALLY LOGIN LOOKUP LOW LSHIFT
 
-%token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE METHOD MINUTE MODIFYCLUSTERSETTING MODE MONTH MOVE
+%token <str> MASKING MATCH MATERIALIZED MERGE MINVALUE MAXVALUE METHOD MINUTE MODIFYCLUSTERSETTING MODE MONTH MOVE
 %token <str> MULTILINESTRING MULTILINESTRINGM MULTILINESTRINGZ MULTILINESTRINGZM
 %token <str> MULTIPOINT MULTIPOINTM MULTIPOINTZ MULTIPOINTZM
 %token <str> MULTIPOLYGON MULTIPOLYGONM MULTIPOLYGONZ MULTIPOLYGONZM
@@ -3049,6 +3049,22 @@ alter_table_cmd:
 | ALTER opt_column column_name SET NOT NULL
   {
     $$.val = &tree.AlterTableSetNotNull{Column: tree.Name($3)}
+  }
+  // ALTER TABLE <name> ALTER [COLUMN] <colname> SET MASKING FUNCTION <expr>
+| ALTER opt_column column_name SET MASKING FUNCTION a_expr
+  {
+    $$.val = &tree.AlterTableSetMaskingFunction{
+      Column: tree.Name($3),
+      Function: $7.expr(),
+    }
+  }
+  // ALTER TABLE <name> ALTER [COLUMN] <colname> DROP MASKING FUNCTION
+| ALTER opt_column column_name DROP MASKING FUNCTION
+  {
+    $$.val = &tree.AlterTableSetMaskingFunction{
+      Column: tree.Name($3),
+      Function: nil,
+    }
   }
 | ALTER opt_column column_name ADD error
   {
@@ -19677,6 +19693,7 @@ unreserved_keyword:
 | LOGGED
 | LOOKUP
 | LOW
+| MASKING
 | MATCH
 | MATERIALIZED
 | MAXVALUE
@@ -20268,6 +20285,7 @@ bare_label_keywords:
 | LOGIN
 | LOOKUP
 | LOW
+| MASKING
 | MATCH
 | MATERIALIZED
 | MAXVALUE

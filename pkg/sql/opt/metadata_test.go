@@ -297,6 +297,7 @@ func TestMetadataTables(t *testing.T) {
 			nil, /* defaultExpr */
 			nil, /* computedExpr */
 			nil, /* onUpdateExpr */
+			nil, /* maskingExpr */
 			cat.NotGeneratedAsIdentity,
 			nil, /* generatedAsIdentitySequenceOption */
 		)

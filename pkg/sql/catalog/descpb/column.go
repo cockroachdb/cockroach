@@ -27,6 +27,20 @@ func (desc *ColumnDescriptor) IsComputed() bool {
 	return desc.ComputeExpr != nil
 }
 
+// HasMaskingExpr returns true if the column has a masking expression.
+func (desc *ColumnDescriptor) HasMaskingExpr() bool {
+	return desc.MaskingExpr != nil
+}
+
+// GetMaskingExpr returns the masking expression string if it exists,
+// empty string otherwise.
+func (desc *ColumnDescriptor) GetMaskingExpr() string {
+	if desc.MaskingExpr != nil {
+		return *desc.MaskingExpr
+	}
+	return ""
+}
+
 // ColName returns the name of the column as a tree.Name.
 func (desc *ColumnDescriptor) ColName() tree.Name {
 	return tree.Name(desc.Name)

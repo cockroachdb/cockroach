@@ -11,6 +11,7 @@ go_library(
         "create_table.go",
         "create_trigger.go",
         "create_view.go",
+        "data_masking.go",
         "delete.go",
         "distinct.go",
         "explain.go",
