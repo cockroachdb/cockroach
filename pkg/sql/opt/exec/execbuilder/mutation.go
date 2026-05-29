@@ -1475,23 +1475,25 @@ func (b *Builder) setMutationFlags(e memo.RelExpr) {
 }
 
 // applyRoutineCanMutateFlags sets PlanFlagContainsMutation based on the
-// routine's CanMutate status. When the status is unknown (pre-existing
-// descriptors without the can_mutate field), it falls back to inspecting
-// the eagerly-built body expressions.
-//
-// TODO(janexing): consider interaction with late binding + deferred optbuild,
-// where the body may not be available  and UNKNOWN should be treated
-// conservatively as CAN_MUTATE.
+// routine's CanMutate status. Unknown occurs only for pre-existing
+// descriptors that predate the can_mutate field; in that case, the body
+// is inspected if available, or mutations are conservatively assumed
+// when the body is permanently unavailable (deferred optbuild).
 func (b *Builder) applyRoutineCanMutateFlags(def *memo.UDFDefinition) {
 	switch def.CanMutate {
 	case tree.RoutineMutates:
 		b.flags.Set(exec.PlanFlagContainsMutation)
 	case tree.RoutineCanMutateUnknown:
-		for _, s := range def.Body {
-			if s != nil {
-				if relExpr := s.Relational(); relExpr != nil && relExpr.CanMutate {
-					b.setMutationFlags(s)
-					return
+		// See BuildSharedProps for the full case breakdown.
+		if len(def.Body) == 0 && def.BodyBuilder != nil {
+			b.flags.Set(exec.PlanFlagContainsMutation)
+		} else {
+			for _, s := range def.Body {
+				if s != nil {
+					if relExpr := s.Relational(); relExpr != nil && relExpr.CanMutate {
+						b.setMutationFlags(s)
+						return
+					}
 				}
 			}
 		}

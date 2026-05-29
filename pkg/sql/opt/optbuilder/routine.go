@@ -523,14 +523,13 @@ func (b *Builder) buildRoutine(
 	}
 
 	// Derive canMutate from the descriptor (via the Overload). When the
-	// descriptor's CanMutate is unknown (for descriptors predating the
-	// field), fall back to inspecting the eagerly-built body expressions.
+	// descriptor's CanMutate is unknown, fall back to inspecting the
+	// eagerly-built body expressions. Unknown occurs for descriptors
+	// created before the can_mutate field was introduced.
 	//
 	// This resolution always produces a definite value before the UDF
 	// call expression is constructed below, so parent routines that call
 	// this one will never see an unknown mutation status from this child.
-	// The fallback is safe because unknown-status descriptors always have
-	// eagerly-built body expressions available for inspection.
 	canMutate := o.CanMutate
 	if canMutate == tree.RoutineCanMutateUnknown {
 		for _, s := range body {

@@ -2967,6 +2967,41 @@ func (tc *transactionControlVisitor) Visit(
 	return stmt, !tc.foundTxnControlStatement
 }
 
+// ddlVisitor walks a PL/pgSQL AST and detects DDL or dynamic SQL
+// statements that the optimizer cannot build.
+//
+// This is used for late-bound PL/pgSQL procedures to decide whether
+// skipSQL should be set. When no DDL or dynamic SQL is present, the
+// body is safe to optbuild at CREATE time for CanMutate detection.
+// When present, we skip optbuilding and set CanMutate = CAN_MUTATE,
+// since DDL and dynamic SQL are inherently mutating.
+type ddlVisitor struct {
+	foundDDL bool
+}
+
+var _ ast.StatementVisitor = &ddlVisitor{}
+
+func (v *ddlVisitor) Visit(stmt ast.Statement) (newStmt ast.Statement, recurse bool) {
+	if v.foundDDL {
+		return stmt, false
+	}
+	switch t := stmt.(type) {
+	case *ast.Execute:
+		// Execute wraps a parsed SQL statement. DDL and DCL cannot be
+		// optbuilt and are inherently mutating.
+		if t.SqlStmt != nil && t.SqlStmt.StatementType() != tree.TypeDML {
+			v.foundDDL = true
+			return stmt, false
+		}
+	case *ast.DynamicExecute:
+		// Dynamic SQL (EXECUTE string): the statement text is only known
+		// at runtime, so it could be DDL and must be treated as mutating.
+		v.foundDDL = true
+		return stmt, false
+	}
+	return stmt, true
+}
+
 var (
 	unsupportedPLStmtErr = unimplemented.New("unimplemented PL/pgSQL statement",
 		"attempted to use a PL/pgSQL statement that is not yet supported",

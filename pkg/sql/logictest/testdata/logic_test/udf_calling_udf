@@ -735,6 +735,157 @@ DROP FUNCTION f4_diamond;
 
 subtest end
 
+subtest can_mutate_late_bound_plpgsql
+
+# Late-bound PL/pgSQL procedures should get definitive CanMutate values at
+# CREATE time, same as early-bound procedures. We walk through the body statements
+# until we see the first DDL or dynamic SQL. When the body contains no DDL or dynamic SQL,
+# the optbuilder analyzes it normally and derives the correct
+# value. When the body contains DDL or dynamic SQL,
+# the procedure is inherently mutating and gets CAN_MUTATE.
+#
+# This avoids forcing all late-bound procedures into conservative root-txn
+# mode with deferred optbuild — only procedures that actually mutate pay
+# the cost.
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+SET CLUSTER SETTING sql.procedures.plpgsql.late_binding.enabled = true
+
+# A late-bound procedure with DML should get CAN_MUTATE.
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+CREATE PROCEDURE p_late_mutate() LANGUAGE PLpgSQL AS $$
+BEGIN
+  INSERT INTO can_mutate_t VALUES (100) ON CONFLICT DO NOTHING;
+END
+$$
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query T
+SELECT crdb_internal.pb_to_json(
+  'cockroach.sql.sqlbase.Descriptor', descriptor, false
+)->'function'->>'canMutate'
+FROM system.descriptor
+WHERE id = 'p_late_mutate()'::regprocedure::oid::int - 100000
+----
+CAN_MUTATE
+
+# A read-only late-bound procedure should get CANNOT_MUTATE.
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+CREATE PROCEDURE p_late_readonly() LANGUAGE PLpgSQL AS $$
+DECLARE
+  v INT;
+BEGIN
+  SELECT 1 INTO v;
+END
+$$
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query T
+SELECT crdb_internal.pb_to_json(
+  'cockroach.sql.sqlbase.Descriptor', descriptor, false
+)->'function'->>'canMutate'
+FROM system.descriptor
+WHERE id = 'p_late_readonly()'::regprocedure::oid::int - 100000
+----
+CANNOT_MUTATE
+
+# CALL the mutating procedure — should succeed with a root txn.
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+CALL p_late_mutate()
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query I
+SELECT a FROM can_mutate_t WHERE a = 100
+----
+100
+
+# A late-bound procedure with DDL should get CAN_MUTATE — DDL is inherently
+# mutating and the body is not optbuilt (skipSQL = true).
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+CREATE PROCEDURE p_late_ddl() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE late_ddl_t (x INT);
+END
+$$
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query T
+SELECT crdb_internal.pb_to_json(
+  'cockroach.sql.sqlbase.Descriptor', descriptor, false
+)->'function'->>'canMutate'
+FROM system.descriptor
+WHERE id = 'p_late_ddl()'::regprocedure::oid::int - 100000
+----
+CAN_MUTATE
+
+# DDL nested inside IF should also be detected by the walker.
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+CREATE PROCEDURE p_late_ddl_in_if() LANGUAGE PLpgSQL AS $$
+BEGIN
+  IF true THEN
+    CREATE TABLE late_ddl_if_t (x INT);
+  END IF;
+END
+$$
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query T
+SELECT crdb_internal.pb_to_json(
+  'cockroach.sql.sqlbase.Descriptor', descriptor, false
+)->'function'->>'canMutate'
+FROM system.descriptor
+WHERE id = 'p_late_ddl_in_if()'::regprocedure::oid::int - 100000
+----
+CAN_MUTATE
+
+# TODO: DynamicExecute (EXECUTE string) is not yet supported in PL/pgSQL
+# (stmt_dyn_exec). When it is, the ddlVisitor will treat it as CAN_MUTATE
+# since the SQL text is opaque at CREATE time and could be DDL.
+
+# A late-bound procedure referencing a non-existent table (no DDL) should
+# still be created successfully — the trial optbuild fails and falls back
+# to conservative CAN_MUTATE.
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+CREATE PROCEDURE p_late_fwd_ref() LANGUAGE PLpgSQL AS $$
+DECLARE
+  v INT;
+BEGIN
+  SELECT x INTO v FROM nonexistent_table;
+END
+$$
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query T
+SELECT crdb_internal.pb_to_json(
+  'cockroach.sql.sqlbase.Descriptor', descriptor, false
+)->'function'->>'canMutate'
+FROM system.descriptor
+WHERE id = 'p_late_fwd_ref()'::regprocedure::oid::int - 100000
+----
+CAN_MUTATE
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+DROP PROCEDURE p_late_mutate;
+DROP PROCEDURE p_late_readonly;
+DROP PROCEDURE p_late_ddl;
+DROP PROCEDURE p_late_ddl_in_if;
+DROP PROCEDURE p_late_fwd_ref;
+DELETE FROM can_mutate_t WHERE a = 100
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+RESET CLUSTER SETTING sql.procedures.plpgsql.late_binding.enabled
+
+subtest end
+
 skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
 statement ok
 DROP TABLE can_mutate_t
