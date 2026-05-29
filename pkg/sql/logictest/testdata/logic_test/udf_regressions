@@ -866,3 +866,44 @@ DROP SEQUENCE sc_62227.myseq;
 DROP SCHEMA sc_62227;
 
 subtest end
+
+subtest regression_170852
+
+# Regression test for #170852. Building a routine whose body contains a
+# NULL-valued REGCLASS expression (e.g. NULL::REGCLASS, or an uninitialized
+# OUT parameter of type REGCLASS) should not fail with an internal error.
+# maybeTrackRegclassDependenciesForViews evaluates constant REGCLASS
+# expressions and previously asserted the result was a *tree.DOid, but a NULL
+# REGCLASS evaluates to tree.DNull.
+statement ok
+CREATE FUNCTION f_170852_null() RETURNS INT LANGUAGE plpgsql AS $$
+DECLARE
+  v INT;
+BEGIN
+  SELECT nextval(NULL::REGCLASS) INTO v;
+  RETURN v;
+END;
+$$;
+
+# An uninitialized OUT parameter of type REGCLASS also evaluates to NULL when
+# the routine body is built.
+statement ok
+CREATE FUNCTION f_170852_out(OUT p0 REGCLASS, IN p1 BOOL) RETURNS REGCLASS
+LANGUAGE plpgsql AS $$
+BEGIN
+  p0 := p0;
+END;
+$$;
+
+# The same NULL handling applies to SQL UDFs.
+statement ok
+CREATE FUNCTION f_170852_sql() RETURNS REGCLASS LANGUAGE sql AS $$
+  SELECT NULL::REGCLASS;
+$$;
+
+statement ok
+DROP FUNCTION f_170852_null;
+DROP FUNCTION f_170852_out;
+DROP FUNCTION f_170852_sql;
+
+subtest end
