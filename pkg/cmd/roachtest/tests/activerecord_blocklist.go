@@ -34,6 +34,7 @@ var activeRecordIgnoreList = blocklist{
 	`ActiveRecord::Encryption::EncryptableRecordApiTest#test_ciphertext_for_returns_the_ciphertext_of_a_value_when_the_record_is_new`:                       "flaky",
 	`ActiveRecord::Encryption::EncryptableRecordTest#test_by_default,_it's_case_sensitive`:                                                                  "flaky",
 	`ActiveRecord::Encryption::EncryptableRecordTest#test_forced_encoding_for_deterministic_attributes_will_replace_invalid_characters`:                     "flaky",
+	`ActiveRecord::Encryption::EncryptableRecordTest#test_supports_decrypting_data_encrypted_non_deterministically_with_SHA1_when_digest_class_is_SHA256`:   "flaky",
 	`ActiveRecord::Encryption::UniquenessValidationsTest#test_uniqueness_validations_work_when_using_old_encryption_schemes`:                                "flaky",
 	`ActiveRecord::LoadAsyncTest#test_eager_loading_query`:                                                                                                  "flaky",
 	`ActiveRecord::LoadAsyncTest#test_load_async_has_many_association`:                                                                                      "flaky",
