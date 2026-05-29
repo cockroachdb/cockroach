@@ -279,7 +279,12 @@ func TestExplainGist(t *testing.T) {
 						return true
 					}
 				}
-				return false
+				// ALTER TYPE schema changes wait on descriptor leases without
+				// honoring statement_timeout. In release branches that lack
+				// either the post-commit fix (#160076) or the pre-commit fix
+				// (#169331), the wait can run for the full lease duration,
+				// exhausting the test's three-minute limit.
+				return strings.HasPrefix(stmt, "ALTER TYPE")
 			}(); shouldSkip {
 				continue
 			}
