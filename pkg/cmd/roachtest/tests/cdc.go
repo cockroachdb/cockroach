@@ -699,15 +699,28 @@ func (ct *cdcTester) waitForWorkload() {
 }
 
 func (cj *changefeedJob) waitForCompletion() {
+	info, err := cj.waitForCompletionContext(cj.ctx)
+	if info != nil {
+		cj.logger.Printf("changefeed %s completed with status %s", cj.Label(), info.status)
+	}
+	if err != nil {
+		cj.logger.Printf("completion poller error: %s", err)
+	}
+}
+
+func (cj *changefeedJob) waitForCompletionContext(ctx context.Context) (*changefeedInfo, error) {
+	var terminalInfo *changefeedInfo
 	completionCh := make(chan struct{})
-	err := cj.runFeedPoller(cj.ctx, time.Second, completionCh, func(info *changefeedInfo) {
+	err := cj.runFeedPoller(ctx, time.Second, completionCh, func(info *changefeedInfo) {
 		if info.status == "succeeded" || info.status == "failed" {
+			terminalInfo = info
 			close(completionCh)
 		}
 	})
 	if err != nil {
-		cj.logger.Printf("completion poller error: %s", err)
+		return nil, err
 	}
+	return terminalInfo, nil
 }
 
 type opt func(ct *cdcTester)
@@ -3306,6 +3319,89 @@ CONFIGURE ZONE USING
 			}, time.Minute)
 		},
 	})
+	kafkaCreateTopics := func(ctx context.Context, t test.Test, c cluster.Cluster, version kafkaVersion) {
+		ct := newCDCTester(ctx, t, c, withNumSinkNodes(3))
+		defer ct.Close()
+
+		kafkaOpts := kafkaManagerOpts{
+			numPartitions:      7,
+			replicationFactor:  3,
+			version:            version,
+			noAutoCreateTopics: true,
+		}
+		kafka, cleanup := setupKafkaWithOpts(ctx, t, c, ct.sinkNodes, kafkaOpts)
+		defer cleanup()
+
+		db := ct.DB()
+		defer stopFeeds(db)
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE t (id INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `CREATE TABLE t2 (id INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO t VALUES (1)`)
+		sqlDB.Exec(t, `INSERT INTO t2 VALUES (1)`)
+
+		sinkURL, err := url.Parse(kafka.sinkURL(ctx))
+		require.NoError(t, err)
+		q := sinkURL.Query()
+		q.Set("topic_prefix", "pre-")
+		sinkURL.RawQuery = q.Encode()
+
+		feed := ct.newChangefeed(feedArgs{
+			sinkType:        kafkaSink,
+			sinkURIOverride: sinkURL.String(),
+			targets:         []string{"t", "t2"},
+			opts: map[string]string{
+				"initial_scan":        "'only'",
+				"create_kafka_topics": "'explicit'",
+			},
+		})
+
+		waitCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+		defer cancel()
+		terminalInfo, err := feed.waitForCompletionContext(waitCtx)
+		if !version.supportsCreateTopicsDefaults() {
+			if err == nil {
+				require.NotNil(t, terminalInfo)
+				require.Equal(t, "failed", terminalInfo.status)
+				require.Contains(t, terminalInfo.GetError(), "does not support CreateTopics defaults")
+			} else {
+				require.ErrorIs(t, err, context.DeadlineExceeded)
+			}
+
+			topics, err := kafka.listTopics(ctx)
+			require.NoError(t, err)
+			require.NotContains(t, topics, "pre-t")
+			require.NotContains(t, topics, "pre-t2")
+			return
+		}
+
+		require.NoError(t, err)
+		require.NotNil(t, terminalInfo)
+		require.Equal(t, "succeeded", terminalInfo.status)
+
+		topics, err := kafka.listTopics(ctx)
+		require.NoError(t, err)
+		for _, topic := range []string{"pre-t", "pre-t2"} {
+			require.Contains(t, topics, topic)
+			require.Equal(t, int32(kafkaOpts.numPartitions), topics[topic].NumPartitions)
+			require.Equal(t, int16(kafkaOpts.replicationFactor), topics[topic].ReplicationFactor)
+		}
+	}
+
+	for _, version := range []kafkaVersion{kafkaVersion2_3, kafkaVersion2_7, kafkaVersion3_4} {
+		version := version
+		r.Add(registry.TestSpec{
+			Name:             fmt.Sprintf("cdc/kafka-create-topics/version-%s", strings.ReplaceAll(string(version), ".", "_")),
+			Owner:            `cdc`,
+			Cluster:          r.MakeClusterSpec(6, spec.WorkloadNode(), spec.Arch(spec.OnlyAMD64)),
+			Leases:           registry.MetamorphicLeases,
+			CompatibleClouds: registry.OnlyGCE,
+			Suites:           registry.Suites(registry.Nightly),
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				kafkaCreateTopics(ctx, t, c, version)
+			},
+		})
+	}
 	r.Add(registry.TestSpec{
 		Name:             "cdc/kafka-azure",
 		Owner:            `cdc`,
@@ -3879,6 +3975,44 @@ confluent.support.customer.id=anonymous
 `
 )
 
+type kafkaVersion string
+
+const (
+	kafkaVersion2_3 kafkaVersion = "2.3"
+	kafkaVersion2_7 kafkaVersion = "2.7"
+	kafkaVersion3_4 kafkaVersion = "3.4"
+)
+
+func (v kafkaVersion) installBase() string {
+	switch v {
+	case kafkaVersion2_3:
+		return "confluent-5.3.0"
+	case kafkaVersion2_7:
+		return "confluent-6.1.0"
+	case kafkaVersion3_4:
+		return "confluent-7.4.0"
+	default:
+		panic(fmt.Sprintf("unknown kafka version: %q", v))
+	}
+}
+
+func (v kafkaVersion) downloadURLAndSHA() (string, string) {
+	switch v {
+	case kafkaVersion2_3:
+		return "https://packages.confluent.io/archive/5.3/confluent-community-5.3.0-2.11.tar.gz", "5ed80da1544a6b529eede1790037cf170d3b2317473bf355e4f4f6abb2973fe7"
+	case kafkaVersion2_7:
+		return "https://storage.googleapis.com/cockroach-test-artifacts/confluent/confluent-community-6.1.0.tar.gz", "53b0e2f08c4cfc55087fa5c9120a614ef04d306db6ec3bcd7710f89f05355355"
+	case kafkaVersion3_4:
+		return "https://packages.confluent.io/archive/7.4/confluent-community-7.4.0.tar.gz", "cc3066e9b55c211664c6fb9314c553521a0cb0d5b78d163e74480bdc60256d75"
+	default:
+		panic(fmt.Sprintf("unknown kafka version: %q", v))
+	}
+}
+
+func (v kafkaVersion) supportsCreateTopicsDefaults() bool {
+	return v != kafkaVersion2_3
+}
+
 type kafkaManager struct {
 	t              test.Test
 	c              cluster.Cluster
@@ -3887,6 +4021,7 @@ type kafkaManager struct {
 
 	// Our method of requiring OAuth on the broker only works with Kafka 2
 	useKafka2 bool
+	version   kafkaVersion
 
 	// validateOrder specifies whether consumers created by the
 	// kafkaManager should create and use order validators.
@@ -3901,23 +4036,11 @@ func (k kafkaManager) basePath() string {
 }
 
 func (k kafkaManager) confluentInstallBase() string {
-	if k.useKafka2 {
-		return "confluent-6.1.0"
-	} else {
-		return "confluent-7.4.0"
-	}
+	return k.kafkaVersion().installBase()
 }
 
 func (k kafkaManager) confluentDownloadScript() string {
-	var downloadURL string
-	var downloadSHA string
-	if k.useKafka2 {
-		downloadURL = "https://storage.googleapis.com/cockroach-test-artifacts/confluent/confluent-community-6.1.0.tar.gz"
-		downloadSHA = "53b0e2f08c4cfc55087fa5c9120a614ef04d306db6ec3bcd7710f89f05355355"
-	} else {
-		downloadURL = "https://packages.confluent.io/archive/7.4/confluent-community-7.4.0.tar.gz"
-		downloadSHA = "cc3066e9b55c211664c6fb9314c553521a0cb0d5b78d163e74480bdc60256d75"
-	}
+	downloadURL, downloadSHA := k.kafkaVersion().downloadURLAndSHA()
 
 	// Confluent CLI Versions 3 and above do not support a local schema registry,
 	// and while confluent-7.4.0 does include a cli with a schema-registry it
@@ -4024,6 +4147,16 @@ if ! [[ -f "$CONFLUENT_DIR/bin/confluent" ]]; then
   tar xvf "$CONFLUENT_CLI_TAR_PATH" -C "$CONFLUENT_DIR/$CONFLUENT_INSTALL_BASE/bin/" --strip-components=1 confluent/confluent
 fi
 `, downloadURL, downloadSHA, k.confluentInstallBase(), confluentCLIVersion, confluentCLIDownloadURLBase)
+}
+
+func (k kafkaManager) kafkaVersion() kafkaVersion {
+	if k.version != "" {
+		return k.version
+	}
+	if k.useKafka2 {
+		return kafkaVersion2_7
+	}
+	return kafkaVersion3_4
 }
 
 func (k kafkaManager) confluentHome() string {
@@ -4578,11 +4711,31 @@ func (k kafkaManager) createTopic(ctx context.Context, topic string) error {
 		if err != nil {
 			return errors.Wrap(err, "admin client")
 		}
+		defer func() { _ = admin.Close() }()
 		return admin.CreateTopic(topic, &sarama.TopicDetail{
 			NumPartitions:     1,
 			ReplicationFactor: 1,
 		}, false)
 	})
+}
+
+func (k kafkaManager) listTopics(ctx context.Context) (map[string]sarama.TopicDetail, error) {
+	kafkaAddrs := []string{k.consumerURL(ctx)}
+	config := sarama.NewConfig()
+	var topics map[string]sarama.TopicDetail
+	err := retry.ForDuration(kafkaCreateTopicRetryDuration, func() error {
+		admin, err := sarama.NewClusterAdmin(kafkaAddrs, config)
+		if err != nil {
+			return errors.Wrap(err, "admin client")
+		}
+		defer func() { _ = admin.Close() }()
+		topics, err = admin.ListTopics()
+		if err != nil {
+			return errors.Wrap(err, "list topics")
+		}
+		return nil
+	})
+	return topics, err
 }
 
 func (k kafkaManager) newConsumer(
@@ -4867,16 +5020,34 @@ func stopFeeds(db *gosql.DB) {
 		)`)
 }
 
-// setupKafka installs Kafka on the cluster and configures it so that
-// the test runner can connect to it. Returns a function to be called
-// at the end of the test for stopping Kafka.
+type kafkaManagerOpts struct {
+	numPartitions      int
+	replicationFactor  int
+	version            kafkaVersion
+	noAutoCreateTopics bool
+}
+
+// setupKafka installs Kafka on the cluster and configures it so that the test
+// runner can connect to it. Returns a function to be called at the end of the
+// test for stopping Kafka.
 func setupKafka(
 	ctx context.Context, t test.Test, c cluster.Cluster, nodes option.NodeListOption,
+) (kafkaManager, func()) {
+	return setupKafkaWithOpts(ctx, t, c, nodes, kafkaManagerOpts{})
+}
+
+func setupKafkaWithOpts(
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	nodes option.NodeListOption,
+	opts kafkaManagerOpts,
 ) (kafkaManager, func()) {
 	kafka := kafkaManager{
 		t:              t,
 		c:              c,
 		kafkaSinkNodes: nodes,
+		version:        opts.version,
 	}
 
 	kafka.install(ctx)
@@ -4885,15 +5056,29 @@ func setupKafka(
 		// runner, so kafka needs to advertise the external address. Better
 		// would be a binary we could run on one of the roachprod machines.
 		urls := kafka.advertiseURLs(ctx)
+		numPartitions := opts.numPartitions
+		if numPartitions == 0 {
+			numPartitions = len(urls)
+		}
+		replicationFactor := opts.replicationFactor
+		if replicationFactor == 0 {
+			replicationFactor = 1
+		}
+		replicationFactor = min(replicationFactor, len(urls))
 		// Setup multiple kafkas.
 		for i, url := range urls {
 			c.Run(ctx, option.WithNodes([]int{[]int(kafka.kafkaSinkNodes)[i]}), `echo "advertised.listeners=PLAINTEXT://`+url+`" >> `+
 				filepath.Join(kafka.configDir(), "server.properties"))
 			c.Run(ctx, option.WithNodes([]int{[]int(kafka.kafkaSinkNodes)[i]}), `echo "broker.id=`+strconv.Itoa(i)+`" >> `+
 				filepath.Join(kafka.configDir(), "server.properties"))
-			// Default num partitions = num nodes.
-			c.Run(ctx, option.WithNodes([]int{[]int(kafka.kafkaSinkNodes)[i]}), `echo "num.partitions=`+strconv.Itoa(len(urls))+`" >> `+
+			c.Run(ctx, option.WithNodes([]int{[]int(kafka.kafkaSinkNodes)[i]}), `echo "num.partitions=`+strconv.Itoa(numPartitions)+`" >> `+
 				filepath.Join(kafka.configDir(), "server.properties"))
+			c.Run(ctx, option.WithNodes([]int{[]int(kafka.kafkaSinkNodes)[i]}), `echo "default.replication.factor=`+strconv.Itoa(replicationFactor)+`" >> `+
+				filepath.Join(kafka.configDir(), "server.properties"))
+			if opts.noAutoCreateTopics {
+				c.Run(ctx, option.WithNodes([]int{[]int(kafka.kafkaSinkNodes)[i]}), `echo "auto.create.topics.enable=false" >> `+
+					filepath.Join(kafka.configDir(), "server.properties"))
+			}
 			// Use the zookeeper on first kafka node, and ignore the rest of them (if any).
 			if i > 0 {
 				zkUrl := strings.Replace(urls[0], ":9092", ":2181", 1)
