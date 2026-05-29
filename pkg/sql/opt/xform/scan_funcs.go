@@ -75,7 +75,14 @@ func (c *CustomFuncs) GenerateIndexScans(
 		// be explored, even when non-covering and unconstrained, without forcing a
 		// particular index.
 		if !scanPrivate.Flags.ForceIndex && !c.e.mem.AllowUnconstrainedNonCoveringIndexScan() {
-			return
+			// Allow non-covering scans for indexes whose first column is bounded
+			// by check constraints. This enables SplitLimitedScanIntoUnionScans
+			// to generate union-all plans for hash-sharded and partitioned indexes.
+			firstCol := index.Column(0)
+			firstColID := scanPrivate.Table.ColumnID(firstCol.Ordinal())
+			if _, ok := c.numAllowedValues(firstColID, scanPrivate.Table); !ok {
+				return
+			}
 		}
 
 		var sb indexScanBuilder
