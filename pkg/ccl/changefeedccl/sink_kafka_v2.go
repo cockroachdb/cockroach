@@ -403,7 +403,7 @@ func makeKafkaSinkV2(
 		return nil, errors.Errorf(`%s is not yet supported`, changefeedbase.SinkParamSchemaTopic)
 	}
 
-	clientOpts, err := buildKgoConfig(ctx, u, jsonConfig, mb(true).netMetrics())
+	clientOpts, err := buildKgoConfig(ctx, u, sinkOpts, mb(true).netMetrics())
 	if err != nil {
 		return nil, err
 	}
@@ -434,7 +434,7 @@ func makeKafkaSinkV2(
 func buildKgoConfig(
 	ctx context.Context,
 	u *changefeedbase.SinkURL,
-	jsonStr changefeedbase.SinkSpecificJSONConfig,
+	sinkOpts changefeedbase.KafkaSinkOptions,
 	netMetrics *cidr.NetMetrics,
 ) ([]kgo.Opt, error) {
 	var opts []kgo.Opt
@@ -496,7 +496,7 @@ func buildKgoConfig(
 
 	// Apply some statement level overrides. The flush related ones (Messages, MaxMessages, Bytes) are not applied here, but on the sinkBatchConfig instead.
 	// TODO(#126991): Remove this sarama dependency.
-	sinkCfg, err := getSaramaConfig(jsonStr)
+	sinkCfg, err := getSaramaConfig(sinkOpts.JSONConfig)
 	if err != nil {
 		return nil, errors.Wrapf(err,
 			"failed to parse sink config; check %s option", changefeedbase.OptKafkaSinkConfig)
@@ -514,6 +514,15 @@ func buildKgoConfig(
 		}
 		// Override the cluster setting default set in baseOpts; kgo uses last-writer-wins.
 		opts = append(opts, kgo.ProducerBatchMaxBytes(sinkCfg.Flush.MaxBytes))
+	}
+
+	if sinkOpts.Compression != "" {
+		if c, ok := saramaCompressionCodecOptions[strings.ToUpper(sinkOpts.Compression)]; ok {
+			// If both top-level and JSON config specify compression, the top-level option wins.
+			sinkCfg.Compression = compressionCodec(c)
+		} else {
+			return nil, errors.Errorf(`unknown compression codec: %v`, sinkOpts.Compression)
+		}
 	}
 
 	// If the user sets MaxMessages, use that as kgo's overall max batch size.
