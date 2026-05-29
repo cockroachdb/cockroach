@@ -3261,12 +3261,22 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 		}
 	}
 
+	// A concurrent ADD COLUMN of a NOT NULL spatial type without a DEFAULT
+	// causes the optimizer to synthesize a default for the WRITE_ONLY mutation
+	// column which fails because tree.NewDefaultDatum has no zero value for
+	// these type families.
+	hasNotNullSpatialColumnMutation, err := og.tableHasNotNullSpatialColumnMutation(ctx, tx, tableName)
+	if err != nil {
+		return nil, err
+	}
+
 	stmt.potentialExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UniqueViolation, condition: hasUniqueConstraints || hasUniqueConstraintsMutations},
 		{code: pgcode.ForeignKeyViolation, condition: true},
 		{code: pgcode.NotNullViolation, condition: true},
 		{code: pgcode.CheckViolation, condition: true},
 		{code: pgcode.InsufficientPrivilege, condition: true}, // For RLS violations
+		{code: pgcode.FeatureNotSupported, condition: hasNotNullSpatialColumnMutation},
 	})
 	og.potentialCommitErrors.addAll(codesWithConditions{
 		{code: pgcode.ForeignKeyViolation, condition: true},
