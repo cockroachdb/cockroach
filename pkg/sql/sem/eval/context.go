@@ -425,6 +425,22 @@ type RoutineStatementCounters struct {
 	UpdateCount *telemetry.CounterWithAggMetric
 	InsertCount *telemetry.CounterWithAggMetric
 	DeleteCount *telemetry.CounterWithAggMetric
+
+	// DDL/DCL statements. CREATE TABLE is split by tree.Persistence:
+	// CreateTableCount tracks permanent tables and CreateTempTableCount
+	// tracks temporary tables. DROP TABLE is not split because
+	// persistence is not known at the increment site without descriptor
+	// resolution.
+	CreateTableCount            *telemetry.CounterWithAggMetric
+	CreateTempTableCount        *telemetry.CounterWithAggMetric
+	DropTableCount              *telemetry.CounterWithAggMetric
+	CreateSchemaCount           *telemetry.CounterWithAggMetric
+	DropSchemaCount             *telemetry.CounterWithAggMetric
+	CreateRoleCount             *telemetry.CounterWithAggMetric
+	DropRoleCount               *telemetry.CounterWithAggMetric
+	GrantCount                  *telemetry.CounterWithAggMetric
+	RevokeCount                 *telemetry.CounterWithAggMetric
+	AlterDefaultPrivilegesCount *telemetry.CounterWithAggMetric
 }
 
 // RNGFactory is a simple wrapper to preserve the RNG throughout the session.
