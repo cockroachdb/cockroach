@@ -685,6 +685,33 @@ REVOKE SELECT ON ROLE foo, bar FROM blix
                       ^
 HINT: try \h REVOKE
 
+## REFERENCES is a reserved keyword and requires special handling in the
+## privilege production rule.
+
+parse
+GRANT REFERENCES ON TABLE foo TO bar
+----
+GRANT REFERENCES ON TABLE foo TO bar
+GRANT REFERENCES ON TABLE (foo) TO bar -- fully parenthesized
+GRANT REFERENCES ON TABLE foo TO bar -- literals removed
+GRANT REFERENCES ON TABLE _ TO _ -- identifiers removed
+
+parse
+REVOKE REFERENCES ON TABLE foo FROM bar
+----
+REVOKE REFERENCES ON TABLE foo FROM bar
+REVOKE REFERENCES ON TABLE (foo) FROM bar -- fully parenthesized
+REVOKE REFERENCES ON TABLE foo FROM bar -- literals removed
+REVOKE REFERENCES ON TABLE _ FROM _ -- identifiers removed
+
+parse
+GRANT SELECT, REFERENCES ON TABLE foo TO bar
+----
+GRANT SELECT, REFERENCES ON TABLE foo TO bar
+GRANT SELECT, REFERENCES ON TABLE (foo) TO bar -- fully parenthesized
+GRANT SELECT, REFERENCES ON TABLE foo TO bar -- literals removed
+GRANT SELECT, REFERENCES ON TABLE _ TO _ -- identifiers removed
+
 error
 GRANT CREATE, UNKNOWN_PRIV ON TABLE foo TO testuser
 ----
