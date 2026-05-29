@@ -5,7 +5,7 @@ Suitable for | Project |  Resources
 For new developers | [Create a to-do app using CockroachDB and a language/ORM of your choice](https://github.com/cockroachdb/cockroachdb-todo-apps) | [How to contribute to the to-do apps repository](https://github.com/cockroachdb/cockroachdb-todo-apps#how-to-contribute-to-this-repository)
 For Go developers | Work on CockroachDB code: [List of good first issues](https://github.com/cockroachdb/cockroach/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) | [Your first CockroachDB PR](https://wiki.crdb.io/wiki/spaces/CRDB/pages/181633464/Your+first+CockroachDB+PR)
 For Kubernetes enthusiasts | Work on the Kubernetes Operator: [List of good first issues](https://github.com/cockroachdb/cockroach-operator/labels/good%20first%20issue) | [Your first CockroachDB PR](https://wiki.crdb.io/wiki/spaces/CRDB/pages/181633464/Your+first+CockroachDB+PR)
-For tech writers and docs enthusiasts | Help improve CockroachDB docs: [List of good first issues](https://github.com/cockroachdb/docs/issues?q=is%3Aopen+is%3Aissue+label%3Agood-first-issue) | [Docs contribution guide](https://github.com/cockroachdb/docs/wiki#using-github-desktop)
+For tech writers and docs enthusiasts | Help improve CockroachDB docs: [List of good first issues](https://github.com/cockroachlabs/docs/issues?q=is%3Aopen+is%3Aissue+label%3Agood-first-issue) | [Docs contribution guide](https://github.com/cockroachlabs/docs/wiki#using-github-desktop)
 
 ## Contributor Guidelines
 

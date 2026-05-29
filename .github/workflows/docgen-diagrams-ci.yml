@@ -645,7 +645,7 @@ jobs:
             docs: sync SQL diagrams from cockroach
 
             Source commit: ${{ github.sha }}
-            Source PR: cockroachdb/cockroach#${{ github.event.pull_request.number }}
+            Source PR: cockroachlabs/cockroach-private#${{ github.event.pull_request.number }}
           branch: diagram-sync/${{ github.sha }}
           base: ${{ github.base_ref || 'master' }}
           title: "docs: sync SQL diagrams from cockroach#${{ github.event.pull_request.number }}"
@@ -656,7 +656,7 @@ jobs:
 
             **Source Information:**
             - Commit: `${{ github.sha }}`
-            - PR: cockroachdb/cockroach#${{ github.event.pull_request.number }}
+            - PR: cockroachlabs/cockroach-private#${{ github.event.pull_request.number }}
             - Branch: `${{ github.head_ref || github.ref_name }}`
 
             **Validation Status:** ${{ needs.generate-diagrams.outputs.validation_status }}

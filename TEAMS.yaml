@@ -2,7 +2,7 @@
 # metadata about the team.
 # Expected structure is available in pkg/internal/team/team.go.
 
-cockroachdb/docs:
+cockroachlabs/docs:
   aliases:
     cockroachdb/docs-infra-prs: other
 cockroachdb/sql-foundations:

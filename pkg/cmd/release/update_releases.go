@@ -43,7 +43,7 @@ const (
 	// to render the public CockroachDB releases page. We leverage the
 	// data in structured format to generate release information used
 	// for testing purposes.
-	releaseDataURL     = "https://raw.githubusercontent.com/cockroachdb/docs/main/src/current/_data/releases.yml"
+	releaseDataURL     = "https://raw.githubusercontent.com/cockroachlabs/docs/main/src/current/_data/releases.yml"
 	releaseDataFile    = "pkg/testutils/release/cockroach_releases.yaml"
 	logictestReposFile = "pkg/sql/logictest/REPOSITORIES.bzl"
 

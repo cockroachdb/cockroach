@@ -269,7 +269,7 @@ func init() {
 
 // stmtSpec is needed for each top-level bnf file to process.
 // See the wiki page for more details about what these controls do.
-// https://github.com/cockroachdb/docs/wiki/SQL-Grammar-Railroad-Diagram-Changes#structure
+// https://github.com/cockroachlabs/docs/wiki/SQL-Grammar-Railroad-Diagram-Changes#structure
 type stmtSpec struct {
 	name           string
 	stmt           string // if unspecified, uses name
