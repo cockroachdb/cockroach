@@ -1923,17 +1923,23 @@ func BuildSharedProps(e opt.Expr, shared *props.Shared, evalCtx *eval.Context) {
 		case tree.RoutineMutates:
 			shared.CanMutate = true
 		case tree.RoutineCanMutateUnknown:
-			// RoutineCanMutateUnknown may mean that the descriptor predates the
-			// can_mutate field. Fall back to inspecting the eagerly-built body
-			// expressions.
-			// TODO(janexing): consider interaction with late binding + deferred
-			// optbuild, where the body may not be available and UNKNOWN should be
-			// treated conservatively as CAN_MUTATE.
-			for _, s := range t.Def.Body {
-				if s != nil {
-					if relExpr := s.Relational(); relExpr != nil && relExpr.CanMutate {
-						shared.CanMutate = true
-						break
+			// CanMutate is unknown for pre-existing descriptors without the
+			// can_mutate field and for anonymous continuations (zero value).
+			//
+			// When Body is available, inspect it. When Body is empty and
+			// BodyBuilder is set (deferred optbuild), conservatively assume
+			// mutations. Otherwise Body may be temporarily empty (e.g.,
+			// recursive PL/pgSQL continuations whose body is populated
+			// after the UDFCallExpr is constructed), so do nothing.
+			if len(t.Def.Body) == 0 && t.Def.BodyBuilder != nil {
+				shared.CanMutate = true
+			} else {
+				for _, s := range t.Def.Body {
+					if s != nil {
+						if relExpr := s.Relational(); relExpr != nil && relExpr.CanMutate {
+							shared.CanMutate = true
+							break
+						}
 					}
 				}
 			}

@@ -402,8 +402,6 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 
 	// Validate each statement and collect the dependencies.
 	var stmtScope *scope
-	// TODO(janexing): consider interaction with late binding, where the body
-	// is not resolved at CREATE time and canMutate should stay Unknown.
 	var canMutate tree.RoutineCanMutate
 
 	// Analysis of SQL expressions for trigger functions must be deferred
@@ -478,8 +476,8 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		//      or alter later in the body.
 		// Unsupported DDL takes precedence: enabling late binding does
 		// not make it work.
+		var dv ddlVisitor
 		if cf.IsProcedure {
-			var dv ddlVisitor
 			plpgsqltree.Walk(&dv, stmt.AST)
 			if dv.unsupportedStmt != nil {
 				panic(unimplemented.NewWithIssuef(110080,
@@ -528,35 +526,46 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 
 			skipSQL = true
 		} else if lateBinding {
-			// Under late binding the body is stored verbatim and references
-			// are resolved at CALL time, so no back-references should be
-			// installed on referenced descriptors. Setting skipSQL prevents
-			// the PL/pgSQL builder from analyzing SQL inside the body, and
-			// the call to afterBuildStmt below is skipped so that any
-			// schemaDeps / schemaTypeDeps / schemaFunctionDeps that did get
-			// pushed are not appended to the routine's dependency set.
-			// Parameter and return type dependencies are tracked separately
-			// and still survive.
+			// Late binding stores the body verbatim and resolves references at
+			// CALL time, so we don't optbuild it here (afterBuildStmt is skipped
+			// below, so no back-references are installed). Because the body is
+			// never analyzed at create time, we can't tell whether it mutates:
+			//
+			//   - A body containing DDL can never be optbuilt at all (a later
+			//     statement may depend on an object an earlier one creates), so
+			//     it is inherently mutating: record CAN_MUTATE.
+			//   - Otherwise leave CanMutate UNKNOWN. The deferred-optbuild
+			//     consumer must build the body to resolve it, falling back to a
+			//     conservative CAN_MUTATE only if even that build fails (e.g. DCL
+			//     like GRANT).
 			skipSQL = true
+			if dv.foundDDLStmt != nil {
+				canMutate = tree.RoutineMutates
+			}
 		}
 
 		// We need to disable stable function folding because we want to catch the
 		// volatility of stable functions. If folded, we only get a scalar and lose
 		// the volatility.
-		options := basePLOptions().
-			SetIsSetReturning(isSetReturning).
-			SetIsProcedure(cf.IsProcedure).
-			SetIsTriggerFn(isTriggerFn).
-			SetSkipSQL(skipSQL)
-		b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
-			plBuilder := newPLpgSQLBuilder(
-				b, options, cf.Name.Object(), stmt.AST.Label, nil /* colRefs */, routineParams,
-				funcReturnType, nil /* outScope */, 0, /* resultBufferID */
-			)
-			stmtScope = plBuilder.buildRootBlock(stmt.AST, bodyScope, routineParams)
-		})
+		buildPLBody := func(skip bool) {
+			options := basePLOptions().
+				SetIsSetReturning(isSetReturning).
+				SetIsProcedure(cf.IsProcedure).
+				SetIsTriggerFn(isTriggerFn).
+				SetSkipSQL(skip)
+			b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
+				plBuilder := newPLpgSQLBuilder(
+					b, options, cf.Name.Object(), stmt.AST.Label, nil /* colRefs */, routineParams,
+					funcReturnType, nil /* outScope */, 0, /* resultBufferID */
+				)
+				stmtScope = plBuilder.buildRootBlock(stmt.AST, bodyScope, routineParams)
+			})
+		}
+		buildPLBody(skipSQL)
 		if canMutate != tree.RoutineMutates &&
-			stmtScope.expr != nil && stmtScope.expr.Relational().CanMutate {
+			!skipSQL &&
+			stmtScope.expr != nil &&
+			stmtScope.expr.Relational().CanMutate {
 			canMutate = tree.RoutineMutates
 		}
 		if !lateBinding {
@@ -570,9 +579,11 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		panic(errors.AssertionFailedf("unexpected language: %v", language))
 	}
 
-	// After body analysis, resolve unknown to definitively non-mutating.
-	// TODO(janexing): might be false-positive with late-binding.
-	if canMutate == tree.RoutineCanMutateUnknown {
+	// For eagerly-built routines, a remaining UNKNOWN means create-time analysis
+	// found no mutation, so treat the routine as non-mutating. Late-bound bodies
+	// are not built here, so their UNKNOWN is a genuine "not determined" that is
+	// preserved and persisted for the deferred-optbuild consumer to resolve.
+	if canMutate == tree.RoutineCanMutateUnknown && !lateBinding {
 		canMutate = tree.RoutineDoesNotMutate
 	}
 
