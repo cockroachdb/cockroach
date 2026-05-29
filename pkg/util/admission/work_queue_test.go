@@ -1496,6 +1496,76 @@ func TestGroupKeyForWorkInfoSelection(t *testing.T) {
 	}
 }
 
+// TestCPUTimeTokenGroupKeyResourceGroupRouting verifies that in
+// resourceManagerMode cpuTimeTokenGroupKeyForWorkInfo routes work to
+// the built-in resource group named by WorkInfo.ResourceGroupID. An
+// unset id (0) falls through to the priority-derived group, a
+// non-built-in id is keyed by (tenant, group), and outside
+// resourceManagerMode the id is ignored entirely.
+func TestCPUTimeTokenGroupKeyResourceGroupRouting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	st := cluster.MakeTestingClusterSettings()
+	ctx := context.Background()
+	const tenantID = 5
+
+	for _, tc := range []struct {
+		name            string
+		mode            cpuTimeTokenMode
+		resourceGroupID admissionpb.ResourceGroupID
+		priority        admissionpb.WorkPriority
+		expected        groupKey
+	}{
+		{
+			name:     "RM mode, unset id, falls back to priority",
+			mode:     resourceManagerMode,
+			priority: admissionpb.NormalPri,
+			expected: highResourceGroupKey,
+		},
+		{
+			name:            "RM mode, high id",
+			mode:            resourceManagerMode,
+			resourceGroupID: admissionpb.HighResourceGroupID,
+			// Low priority to prove the id, not the priority, picks the group.
+			priority: admissionpb.UserLowPri,
+			expected: highResourceGroupKey,
+		},
+		{
+			name:            "RM mode, low id",
+			mode:            resourceManagerMode,
+			resourceGroupID: admissionpb.LowResourceGroupID,
+			// High priority to prove the id, not the priority, picks the group.
+			priority: admissionpb.NormalPri,
+			expected: lowResourceGroupKey,
+		},
+		{
+			name:            "RM mode, non-built-in id, keyed by tenant and group",
+			mode:            resourceManagerMode,
+			resourceGroupID: 99,
+			priority:        admissionpb.UserLowPri,
+			expected:        rgGroupKey(tenantID, 99),
+		},
+		{
+			name:            "non-RM mode ignores id",
+			mode:            offMode,
+			resourceGroupID: admissionpb.LowResourceGroupID,
+			priority:        admissionpb.NormalPri,
+			expected:        tenantGroupKey(tenantID),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cpuTimeTokenACMode.Override(ctx, &st.SV, tc.mode)
+			info := WorkInfo{
+				TenantID:        roachpb.MustMakeTenantID(tenantID),
+				ResourceGroupID: tc.resourceGroupID,
+				Priority:        tc.priority,
+			}
+			require.Equal(t, tc.expected, cpuTimeTokenGroupKeyForWorkInfo(info, &st.SV))
+		})
+	}
+}
+
 // TestGCKeepsMetricChildVisibleAcrossScrapes admits work for a
 // tenant, then simulates a sequence of GC ticks and observes
 // which labeled children the per-group parent counter exposes
