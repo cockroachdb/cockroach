@@ -285,7 +285,7 @@ func makeInspectMultiRegionThroughputTest(
 	}
 	regions := []regionSpec{
 		{name: "us-east1", zone: "us-east1-b"},
-		{name: "us-west1", zone: "us-west1-b"},
+		{name: "us-west1", zone: "us-west1-c"},
 		{name: "europe-west2", zone: "europe-west2-b"},
 	}
 	numRegions := len(regions)

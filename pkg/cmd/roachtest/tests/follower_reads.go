@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -65,15 +64,12 @@ func registerFollowerReads(r registry.Registry) {
 				6, /* nodeCount */
 				spec.CPU(4),
 				spec.Geo(),
-				spec.GCEZones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,europe-west2-b,europe-west2-b"),
+				spec.GCEZones("us-east1-b,us-east1-b,us-east1-b,us-west1-c,europe-west2-b,europe-west2-b"),
 			),
 			CompatibleClouds: registry.OnlyGCE,
 			Suites:           registry.Suites(registry.Nightly),
 			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.Cloud() == spec.GCE && c.Architecture() == vm.ArchARM64 {
-					t.Skip("arm64 in GCE is available only in us-central1")
-				}
 				c.Start(ctx, t.L(), followerReadsVerboseRaftStartOpts(), install.MakeClusterSettings())
 				topology := topologySpec{
 					multiRegion:       true,
@@ -148,7 +144,7 @@ func registerFollowerReads(r registry.Registry) {
 			6, /* nodeCount */
 			spec.CPU(4),
 			spec.Geo(),
-			spec.GCEZones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b"),
+			spec.GCEZones("us-east1-b,us-east1-b,us-east1-b,us-west1-c,us-west1-c,europe-west2-b"),
 		),
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
@@ -533,7 +529,7 @@ func initFollowerReadsDB(
 			expMatrix := [][]string{
 				{"europe-west2", "europe-west2-b"},
 				{"us-east1", "us-east1-b"},
-				{"us-west1", "us-west1-b"},
+				{"us-west1", "us-west1-c"},
 			}
 			if !reflect.DeepEqual(matrix, expMatrix) {
 				return errors.Errorf("unexpected cluster regions: want %+v, got %+v", expMatrix, matrix)
