@@ -28,8 +28,13 @@ import (
 // that always evaluate to true are considered. Such an index is pseudo-partial
 // in that it behaves the exactly the same as a non-partial secondary index.
 //
-// NOTE: This does not generate index joins for non-covering indexes (except in
-// case of ForceIndex). Index joins are usually only introduced "one level up",
+// NOTE: This does not generate index joins for non-covering indexes unless:
+//   - ForceIndex is set,
+//   - AllowUnconstrainedNonCoveringIndexScan is enabled, or
+//   - the index's first column is bounded by check constraints (to enable
+//     SplitLimitedScanIntoUnionScans for hash-sharded and partitioned indexes).
+//
+// Index joins are usually only introduced "one level up",
 // when the Scan operator is wrapped by an operator that constrains or limits
 // scan output in some way (e.g. Select, Limit, InnerJoin). Index joins are only
 // lower cost when their input does not include all rows from the table. See
@@ -75,7 +80,13 @@ func (c *CustomFuncs) GenerateIndexScans(
 		// be explored, even when non-covering and unconstrained, without forcing a
 		// particular index.
 		if !scanPrivate.Flags.ForceIndex && !c.e.mem.AllowUnconstrainedNonCoveringIndexScan() {
-			return
+			// Allow non-covering scans for indexes whose first column is bounded
+			// by check constraints. This enables SplitLimitedScanIntoUnionScans
+			// to generate union-all plans for hash-sharded and partitioned indexes.
+			firstColID := scanPrivate.Table.IndexColumnID(index, 0)
+			if _, ok := c.numAllowedValues(firstColID, scanPrivate.Table); !ok {
+				return
+			}
 		}
 
 		var sb indexScanBuilder
