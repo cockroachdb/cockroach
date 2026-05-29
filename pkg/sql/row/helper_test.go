@@ -154,12 +154,14 @@ func TestCheckRowSizeRateLimitsAndTruncates(t *testing.T) {
 	t.Run("primary key truncation via SQL INSERT", func(t *testing.T) {
 		logSpy.Reset()
 		skippedLargeRows.Store(0)
-		// Re-init the global limiter so the SQL INSERT below sees an open
-		// window regardless of what the previous subtest did.
-		largeRowLogEvery = log.Every(testInterval)
+		// Disable rate-limiting entirely for this subtest. The limiter is
+		// process-global, so a background internal SQL operation writing a
+		// row over the lowered 1 KiB threshold could otherwise consume the
+		// window before our INSERT runs, suppressing the event we assert on.
+		// This subtest only exercises truncation, not rate-limiting.
+		defer TestingDisableLargeRowRateLimit()()
 
-		// 1 KiB log threshold scoped to this connection so the row below
-		// (8 KiB primary key) crosses it.
+		// 1 KiB log threshold so the row below (8 KiB primary key) crosses it.
 		db.Exec(t, "SET CLUSTER SETTING sql.guardrails.max_row_size_log = '1KiB'")
 		defer db.Exec(t, "SET CLUSTER SETTING sql.guardrails.max_row_size_log = DEFAULT")
 
