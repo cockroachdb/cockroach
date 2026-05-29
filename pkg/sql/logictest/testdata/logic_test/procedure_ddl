@@ -3322,30 +3322,22 @@ subtest security_definer_with_commit_rollback
 
 # Verify the DEFINER push survives across PL/pgSQL COMMIT/ROLLBACK inside
 # the procedure body. COMMIT/ROLLBACK end the current transaction and
-# start a new one, but the routine generator keeps executing the body —
-# so the effective-user push must persist across the boundary.
-#
-# Skipped under the legacy schema changer: post-COMMIT DDL inside a
-# procedure body re-evaluates privileges against the invoker rather than
-# the definer in that path. Tracking the divergence as a follow-up rather
-# than expanding this PR's scope to the legacy planNode resumption path.
-skipif config local-legacy-schema-changer
+# start a new one; the routine resumes via a cached resumeProc memo that
+# bypasses the optbuilder's PushEffectiveUser, so the continuation's own
+# UDFDefinition must carry SecurityMode/RoutineOwner for the runtime push
+# in routineGenerator.Start to fire on resume.
 statement ok
 CREATE ROLE r_def_txn;
 
-skipif config local-legacy-schema-changer
 statement ok
 GRANT CREATE ON DATABASE test TO r_def_txn;
 
-skipif config local-legacy-schema-changer
 statement ok
 CREATE ROLE r_inv_txn;
 
-skipif config local-legacy-schema-changer
 statement ok
 SET ROLE r_def_txn;
 
-skipif config local-legacy-schema-changer
 statement ok
 CREATE PROCEDURE p_sd_txn() LANGUAGE PLpgSQL SECURITY DEFINER AS $$
 BEGIN
@@ -3357,20 +3349,16 @@ BEGIN
 END
 $$;
 
-skipif config local-legacy-schema-changer
 statement ok
 GRANT EXECUTE ON PROCEDURE p_sd_txn TO r_inv_txn;
 
-skipif config local-legacy-schema-changer
 statement ok
 SET ROLE r_inv_txn;
 
-skipif config local-legacy-schema-changer
 statement ok
 CALL p_sd_txn();
 
 # All three schemas record the definer despite the intermediate COMMITs.
-skipif config local-legacy-schema-changer
 query TT rowsort
 SELECT schema_name, owner FROM [SHOW SCHEMAS]
 WHERE schema_name IN ('s_txn_a', 's_txn_b', 's_txn_c');
@@ -3379,33 +3367,26 @@ s_txn_a  r_def_txn
 s_txn_b  r_def_txn
 s_txn_c  r_def_txn
 
-skipif config local-legacy-schema-changer
 statement ok
 SET ROLE root;
 
-skipif config local-legacy-schema-changer
 statement ok
 DROP SCHEMA s_txn_a;
 
-skipif config local-legacy-schema-changer
 statement ok
 DROP SCHEMA s_txn_b;
 
-skipif config local-legacy-schema-changer
 statement ok
 DROP SCHEMA s_txn_c;
 
-skipif config local-legacy-schema-changer
 statement ok
 DROP PROCEDURE p_sd_txn;
 
 # ROLLBACK variant: the first CREATE SCHEMA is rolled back; only the
 # post-ROLLBACK schema persists, owned by the definer.
-skipif config local-legacy-schema-changer
 statement ok
 SET ROLE r_def_txn;
 
-skipif config local-legacy-schema-changer
 statement ok
 CREATE PROCEDURE p_sd_txn_rb() LANGUAGE PLpgSQL SECURITY DEFINER AS $$
 BEGIN
@@ -3415,42 +3396,33 @@ BEGIN
 END
 $$;
 
-skipif config local-legacy-schema-changer
 statement ok
 GRANT EXECUTE ON PROCEDURE p_sd_txn_rb TO r_inv_txn;
 
-skipif config local-legacy-schema-changer
 statement ok
 SET ROLE r_inv_txn;
 
-skipif config local-legacy-schema-changer
 statement ok
 CALL p_sd_txn_rb();
 
-skipif config local-legacy-schema-changer
 query TT rowsort
 SELECT schema_name, owner FROM [SHOW SCHEMAS]
 WHERE schema_name IN ('s_txn_rb_a', 's_txn_rb_b');
 ----
 s_txn_rb_b  r_def_txn
 
-skipif config local-legacy-schema-changer
 statement ok
 SET ROLE root;
 
-skipif config local-legacy-schema-changer
 statement ok
 DROP SCHEMA s_txn_rb_b;
 
-skipif config local-legacy-schema-changer
 statement ok
 DROP PROCEDURE p_sd_txn_rb;
 
-skipif config local-legacy-schema-changer
 statement ok
 REVOKE CREATE ON DATABASE test FROM r_def_txn;
 
-skipif config local-legacy-schema-changer
 statement ok
 DROP ROLE r_def_txn, r_inv_txn;
 

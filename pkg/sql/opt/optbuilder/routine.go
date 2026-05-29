@@ -504,7 +504,8 @@ func (b *Builder) buildRoutine(
 		options := basePLOptions().
 			SetIsSetReturning(isSetReturning).
 			SetInsideDataSource(oldInsideDataSource).
-			SetIsProcedure(isProc)
+			SetIsProcedure(isProc).
+			SetSecurity(o.SecurityMode, routineOwner)
 		plBuilder := newPLpgSQLBuilder(
 			b, options, def.Name, stmt.AST.Label, colRefs,
 			routineParams, f.ResolvedType(), outScope, resultBufferID,
