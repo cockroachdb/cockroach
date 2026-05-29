@@ -14,7 +14,7 @@ CREATE TRIGGER t1_tg BEFORE INSERT OR UPDATE OR DELETE ON defaultdb.t1 FOR EACH 
 StatementPhase stage 1 of 1 with 9 MutationType ops
   transitions:
     [[Trigger:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
-    [[TriggerName:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerName:{DescID: 104, Name: t1_tg, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
     [[TriggerEnabled:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
     [[TriggerTiming:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
     [[TriggerEvents:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
@@ -87,7 +87,7 @@ StatementPhase stage 1 of 1 with 9 MutationType ops
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[Trigger:{DescID: 104, TriggerID: 1}, PUBLIC], PUBLIC] -> ABSENT
-    [[TriggerName:{DescID: 104, TriggerID: 1}, PUBLIC], PUBLIC] -> ABSENT
+    [[TriggerName:{DescID: 104, Name: t1_tg, TriggerID: 1}, PUBLIC], PUBLIC] -> ABSENT
     [[TriggerEnabled:{DescID: 104, TriggerID: 1}, PUBLIC], PUBLIC] -> ABSENT
     [[TriggerTiming:{DescID: 104, TriggerID: 1}, PUBLIC], PUBLIC] -> ABSENT
     [[TriggerEvents:{DescID: 104, TriggerID: 1}, PUBLIC], PUBLIC] -> ABSENT
@@ -99,7 +99,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
 PreCommitPhase stage 2 of 2 with 9 MutationType ops
   transitions:
     [[Trigger:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
-    [[TriggerName:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerName:{DescID: 104, Name: t1_tg, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
     [[TriggerEnabled:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
     [[TriggerTiming:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
     [[TriggerEvents:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
@@ -190,7 +190,7 @@ CREATE TRIGGER t1_tg BEFORE INSERT OR UPDATE OR DELETE ON defaultdb.t1 FOR EACH 
   kind: Precedence
   rule: trigger public before its dependents
 - from: [Trigger:{DescID: 104, TriggerID: 1}, PUBLIC]
-  to:   [TriggerName:{DescID: 104, TriggerID: 1}, PUBLIC]
+  to:   [TriggerName:{DescID: 104, Name: t1_tg, TriggerID: 1}, PUBLIC]
   kind: Precedence
   rule: trigger public before its dependents
 - from: [Trigger:{DescID: 104, TriggerID: 1}, PUBLIC]
@@ -211,7 +211,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
     [[Trigger:{DescID: 104, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[TriggerDeps:{DescID: 104, TriggerID: 1, ReferencedFunctionIDs: [105]}, ABSENT], PUBLIC] -> ABSENT
     [[Trigger:{DescID: 104, TriggerID: 2}, PUBLIC], ABSENT] -> PUBLIC
-    [[TriggerName:{DescID: 104, TriggerID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerName:{DescID: 104, Name: t1_tg, TriggerID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[TriggerEnabled:{DescID: 104, TriggerID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[TriggerTiming:{DescID: 104, TriggerID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[TriggerEvents:{DescID: 104, TriggerID: 2}, PUBLIC], ABSENT] -> PUBLIC
@@ -298,7 +298,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[Trigger:{DescID: 104, TriggerID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[TriggerDeps:{DescID: 104, TriggerID: 1, ReferencedFunctionIDs: [105]}, ABSENT], ABSENT] -> PUBLIC
     [[Trigger:{DescID: 104, TriggerID: 2}, PUBLIC], PUBLIC] -> ABSENT
-    [[TriggerName:{DescID: 104, TriggerID: 2}, PUBLIC], PUBLIC] -> ABSENT
+    [[TriggerName:{DescID: 104, Name: t1_tg, TriggerID: 2}, PUBLIC], PUBLIC] -> ABSENT
     [[TriggerEnabled:{DescID: 104, TriggerID: 2}, PUBLIC], PUBLIC] -> ABSENT
     [[TriggerTiming:{DescID: 104, TriggerID: 2}, PUBLIC], PUBLIC] -> ABSENT
     [[TriggerEvents:{DescID: 104, TriggerID: 2}, PUBLIC], PUBLIC] -> ABSENT
@@ -312,7 +312,7 @@ PreCommitPhase stage 2 of 2 with 12 MutationType ops
     [[Trigger:{DescID: 104, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[TriggerDeps:{DescID: 104, TriggerID: 1, ReferencedFunctionIDs: [105]}, ABSENT], PUBLIC] -> ABSENT
     [[Trigger:{DescID: 104, TriggerID: 2}, PUBLIC], ABSENT] -> PUBLIC
-    [[TriggerName:{DescID: 104, TriggerID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerName:{DescID: 104, Name: t1_tg, TriggerID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[TriggerEnabled:{DescID: 104, TriggerID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[TriggerTiming:{DescID: 104, TriggerID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[TriggerEvents:{DescID: 104, TriggerID: 2}, PUBLIC], ABSENT] -> PUBLIC
@@ -419,7 +419,7 @@ CREATE OR REPLACE TRIGGER t1_tg AFTER INSERT ON defaultdb.t1 FOR EACH ROW EXECUT
   kind: Precedence
   rule: trigger public before its dependents
 - from: [Trigger:{DescID: 104, TriggerID: 2}, PUBLIC]
-  to:   [TriggerName:{DescID: 104, TriggerID: 2}, PUBLIC]
+  to:   [TriggerName:{DescID: 104, Name: t1_tg, TriggerID: 2}, PUBLIC]
   kind: Precedence
   rule: trigger public before its dependents
 - from: [Trigger:{DescID: 104, TriggerID: 2}, PUBLIC]

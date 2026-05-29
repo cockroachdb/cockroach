@@ -24,7 +24,7 @@ CREATE TRIGGER tr BEFORE INSERT OR UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION f(
   {databaseId: 100, tableId: 104}
 - [[Trigger:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
   {tableId: 104, triggerId: 1}
-- [[TriggerName:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
+- [[TriggerName:{DescID: 104, Name: tr, TriggerID: 1}, PUBLIC], ABSENT]
   {name: tr, tableId: 104, triggerId: 1}
 - [[TriggerEnabled:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
   {tableId: 104, triggerId: 1}
@@ -47,7 +47,7 @@ CREATE OR REPLACE TRIGGER tr2 BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION 
   {databaseId: 100, tableId: 104}
 - [[Trigger:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
   {tableId: 104, triggerId: 1}
-- [[TriggerName:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
+- [[TriggerName:{DescID: 104, Name: tr2, TriggerID: 1}, PUBLIC], ABSENT]
   {name: tr2, tableId: 104, triggerId: 1}
 - [[TriggerEnabled:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
   {tableId: 104, triggerId: 1}
@@ -78,7 +78,7 @@ CREATE OR REPLACE TRIGGER tr AFTER DELETE ON xy FOR EACH ROW EXECUTE FUNCTION f(
   {databaseId: 100, tableId: 104}
 - [[Trigger:{DescID: 104, TriggerID: 2}, PUBLIC], ABSENT]
   {tableId: 104, triggerId: 2}
-- [[TriggerName:{DescID: 104, TriggerID: 2}, PUBLIC], ABSENT]
+- [[TriggerName:{DescID: 104, Name: tr, TriggerID: 2}, PUBLIC], ABSENT]
   {name: tr, tableId: 104, triggerId: 2}
 - [[TriggerEnabled:{DescID: 104, TriggerID: 2}, PUBLIC], ABSENT]
   {tableId: 104, triggerId: 2}

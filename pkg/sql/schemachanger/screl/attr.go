@@ -380,6 +380,7 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.TriggerName)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(TriggerID, "TriggerID"),
+		rel.EntityAttr(Name, "Name"),
 	),
 	rel.EntityMapping(t((*scpb.TriggerEnabled)(nil)),
 		rel.EntityAttr(DescID, "TableID"),

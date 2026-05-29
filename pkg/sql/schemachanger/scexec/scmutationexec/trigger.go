@@ -29,9 +29,16 @@ func (i *immediateVisitor) AddTrigger(ctx context.Context, op scop.AddTrigger) e
 }
 
 func (i *immediateVisitor) SetTriggerName(ctx context.Context, op scop.SetTriggerName) error {
-	trigger, err := i.checkOutTrigger(ctx, op.Name.TableID, op.Name.TriggerID)
-	if err != nil {
+	tbl, err := i.checkOutTable(ctx, op.Name.TableID)
+	if err != nil || tbl.Dropped() {
 		return err
+	}
+	trigger := catalog.FindTriggerByID(tbl, op.Name.TriggerID)
+	if trigger == nil {
+		// The trigger may have already been removed in the same stage if both the
+		// TriggerName element and the parent Trigger element are going to ABSENT
+		// (e.g. DROP TRIGGER, DROP TABLE).
+		return nil
 	}
 	trigger.Name = op.Name.Name
 	return nil

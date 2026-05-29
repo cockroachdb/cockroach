@@ -279,7 +279,7 @@ DROP INDEX t_trigger@idx CASCADE
   {indexId: 2, tableId: 108}
 - [[Trigger:{DescID: 108, TriggerID: 1}, ABSENT], PUBLIC]
   {tableId: 108, triggerId: 1}
-- [[TriggerName:{DescID: 108, TriggerID: 1}, ABSENT], PUBLIC]
+- [[TriggerName:{DescID: 108, Name: tr1, TriggerID: 1}, ABSENT], PUBLIC]
   {name: tr1, tableId: 108, triggerId: 1}
 - [[TriggerEnabled:{DescID: 108, TriggerID: 1}, ABSENT], PUBLIC]
   {tableId: 108, triggerId: 1}

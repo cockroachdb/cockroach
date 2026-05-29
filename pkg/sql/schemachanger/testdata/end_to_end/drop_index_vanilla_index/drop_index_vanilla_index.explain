@@ -20,7 +20,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
  │         ├── 8 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │         │    ├── PUBLIC → ABSENT    Trigger:{DescID: 104 (t), TriggerID: 1}
- │         │    ├── PUBLIC → ABSENT    TriggerName:{DescID: 104 (t), TriggerID: 1}
+ │         │    ├── PUBLIC → ABSENT    TriggerName:{DescID: 104 (t), Name: "trg", TriggerID: 1}
  │         │    ├── PUBLIC → ABSENT    TriggerEnabled:{DescID: 104 (t), TriggerID: 1}
  │         │    ├── PUBLIC → ABSENT    TriggerTiming:{DescID: 104 (t), TriggerID: 1}
  │         │    ├── PUBLIC → ABSENT    TriggerEvents:{DescID: 104 (t), TriggerID: 1}
@@ -30,7 +30,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
  │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":104}
  │              ├── RemoveTrigger {"Trigger":{"TableID":104,"TriggerID":1}}
- │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerName","TriggerID":1}
+ │              ├── SetTriggerName {"Name":{"Name":"crdb_internal_tr...","TableID":104,"TriggerID":1}}
  │              ├── SetTriggerEnabled {"TableID":104,"TriggerID":1}
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerTimi...","TriggerID":1}
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEven...","TriggerID":1}
@@ -44,7 +44,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
  │    │    ├── 8 elements transitioning toward ABSENT
  │    │    │    ├── VALIDATED → PUBLIC SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │    │    │    ├── ABSENT    → PUBLIC Trigger:{DescID: 104 (t), TriggerID: 1}
- │    │    │    ├── ABSENT    → PUBLIC TriggerName:{DescID: 104 (t), TriggerID: 1}
+ │    │    │    ├── ABSENT    → PUBLIC TriggerName:{DescID: 104 (t), Name: "trg", TriggerID: 1}
  │    │    │    ├── ABSENT    → PUBLIC TriggerEnabled:{DescID: 104 (t), TriggerID: 1}
  │    │    │    ├── ABSENT    → PUBLIC TriggerTiming:{DescID: 104 (t), TriggerID: 1}
  │    │    │    ├── ABSENT    → PUBLIC TriggerEvents:{DescID: 104 (t), TriggerID: 1}
@@ -58,7 +58,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
  │         ├── 8 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │         │    ├── PUBLIC → ABSENT    Trigger:{DescID: 104 (t), TriggerID: 1}
- │         │    ├── PUBLIC → ABSENT    TriggerName:{DescID: 104 (t), TriggerID: 1}
+ │         │    ├── PUBLIC → ABSENT    TriggerName:{DescID: 104 (t), Name: "trg", TriggerID: 1}
  │         │    ├── PUBLIC → ABSENT    TriggerEnabled:{DescID: 104 (t), TriggerID: 1}
  │         │    ├── PUBLIC → ABSENT    TriggerTiming:{DescID: 104 (t), TriggerID: 1}
  │         │    ├── PUBLIC → ABSENT    TriggerEvents:{DescID: 104 (t), TriggerID: 1}
@@ -68,7 +68,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
  │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":104}
  │              ├── RemoveTrigger {"Trigger":{"TableID":104,"TriggerID":1}}
- │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerName","TriggerID":1}
+ │              ├── SetTriggerName {"Name":{"Name":"crdb_internal_tr...","TableID":104,"TriggerID":1}}
  │              ├── SetTriggerEnabled {"TableID":104,"TriggerID":1}
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerTimi...","TriggerID":1}
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEven...","TriggerID":1}

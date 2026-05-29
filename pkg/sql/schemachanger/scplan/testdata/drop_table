@@ -116,7 +116,7 @@ StatementPhase stage 1 of 1 with 150 MutationType ops
     [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers2, ConstraintID: 4}, ABSENT], PUBLIC] -> ABSENT
     [[Trigger:{DescID: 109, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[TriggerName:{DescID: 109, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[TriggerName:{DescID: 109, Name: foo, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[TriggerEnabled:{DescID: 109, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[TriggerTiming:{DescID: 109, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[TriggerEvents:{DescID: 109, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -189,10 +189,11 @@ StatementPhase stage 1 of 1 with 150 MutationType ops
       Trigger:
         TableID: 109
         TriggerID: 1
-    *scop.NotImplementedForPublicObjects
-      DescID: 109
-      ElementType: scpb.TriggerName
-      TriggerID: 1
+    *scop.SetTriggerName
+      Name:
+        Name: crdb_internal_trigger_1_name_placeholder
+        TableID: 109
+        TriggerID: 1
     *scop.SetTriggerEnabled
       TableID: 109
       TriggerID: 1
@@ -751,7 +752,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT], ABSENT] -> PUBLIC
     [[ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers2, ConstraintID: 4}, ABSENT], ABSENT] -> PUBLIC
     [[Trigger:{DescID: 109, TriggerID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[TriggerName:{DescID: 109, TriggerID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[TriggerName:{DescID: 109, Name: foo, TriggerID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[TriggerEnabled:{DescID: 109, TriggerID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[TriggerTiming:{DescID: 109, TriggerID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[TriggerEvents:{DescID: 109, TriggerID: 1}, ABSENT], ABSENT] -> PUBLIC
@@ -868,7 +869,7 @@ PreCommitPhase stage 2 of 2 with 161 MutationType ops
     [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers2, ConstraintID: 4}, ABSENT], PUBLIC] -> ABSENT
     [[Trigger:{DescID: 109, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[TriggerName:{DescID: 109, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[TriggerName:{DescID: 109, Name: foo, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[TriggerEnabled:{DescID: 109, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[TriggerTiming:{DescID: 109, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[TriggerEvents:{DescID: 109, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -941,10 +942,11 @@ PreCommitPhase stage 2 of 2 with 161 MutationType ops
       Trigger:
         TableID: 109
         TriggerID: 1
-    *scop.NotImplementedForPublicObjects
-      DescID: 109
-      ElementType: scpb.TriggerName
-      TriggerID: 1
+    *scop.SetTriggerName
+      Name:
+        Name: crdb_internal_trigger_1_name_placeholder
+        TableID: 109
+        TriggerID: 1
     *scop.SetTriggerEnabled
       TableID: 109
       TriggerID: 1
@@ -2918,7 +2920,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: SameStagePrecedence
   rule: dependents remove trigger
 - from: [Trigger:{DescID: 109, TriggerID: 1}, ABSENT]
-  to:   [TriggerName:{DescID: 109, TriggerID: 1}, ABSENT]
+  to:   [TriggerName:{DescID: 109, Name: foo, TriggerID: 1}, ABSENT]
   kind: SameStagePrecedence
   rule: dependents remove trigger
 - from: [Trigger:{DescID: 109, TriggerID: 1}, ABSENT]
@@ -2941,7 +2943,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [TriggerName:{DescID: 109, TriggerID: 1}, ABSENT]
+- from: [TriggerName:{DescID: 109, Name: foo, TriggerID: 1}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor

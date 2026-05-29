@@ -32,7 +32,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │         │    ├── PUBLIC → WRITE_ONLY    Column:{DescID: 104 (t), ColumnID: 2 (j-)}
  │         │    ├── PUBLIC → ABSENT        ColumnName:{DescID: 104 (t), Name: "j", ColumnID: 2 (j-)}
  │         │    ├── PUBLIC → ABSENT        Trigger:{DescID: 104 (t), TriggerID: 1}
- │         │    ├── PUBLIC → ABSENT        TriggerName:{DescID: 104 (t), TriggerID: 1}
+ │         │    ├── PUBLIC → ABSENT        TriggerName:{DescID: 104 (t), Name: "trg", TriggerID: 1}
  │         │    ├── PUBLIC → ABSENT        TriggerEnabled:{DescID: 104 (t), TriggerID: 1}
  │         │    ├── PUBLIC → ABSENT        TriggerTiming:{DescID: 104 (t), TriggerID: 1}
  │         │    ├── PUBLIC → ABSENT        TriggerEvents:{DescID: 104 (t), TriggerID: 1}
@@ -47,7 +47,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":3,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":3,"IndexID":3,"Kind":2,"TableID":104}
  │              ├── RemoveTrigger {"Trigger":{"TableID":104,"TriggerID":1}}
- │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerName","TriggerID":1}
+ │              ├── SetTriggerName {"Name":{"Name":"crdb_internal_tr...","TableID":104,"TriggerID":1}}
  │              ├── SetTriggerEnabled {"TableID":104,"TriggerID":1}
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerTimi...","TriggerID":1}
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEven...","TriggerID":1}
@@ -73,7 +73,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │    │    │    ├── WRITE_ONLY    → PUBLIC Column:{DescID: 104 (t), ColumnID: 2 (j-)}
  │    │    │    ├── ABSENT        → PUBLIC ColumnName:{DescID: 104 (t), Name: "j", ColumnID: 2 (j-)}
  │    │    │    ├── ABSENT        → PUBLIC Trigger:{DescID: 104 (t), TriggerID: 1}
- │    │    │    ├── ABSENT        → PUBLIC TriggerName:{DescID: 104 (t), TriggerID: 1}
+ │    │    │    ├── ABSENT        → PUBLIC TriggerName:{DescID: 104 (t), Name: "trg", TriggerID: 1}
  │    │    │    ├── ABSENT        → PUBLIC TriggerEnabled:{DescID: 104 (t), TriggerID: 1}
  │    │    │    ├── ABSENT        → PUBLIC TriggerTiming:{DescID: 104 (t), TriggerID: 1}
  │    │    │    ├── ABSENT        → PUBLIC TriggerEvents:{DescID: 104 (t), TriggerID: 1}
@@ -173,7 +173,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
       │    │    ├── PUBLIC                → VALIDATED        PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
       │    │    ├── PUBLIC                → ABSENT           IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 1 (t_pkey-)}
       │    │    ├── PUBLIC                → ABSENT           Trigger:{DescID: 104 (t), TriggerID: 1}
-      │    │    ├── PUBLIC                → ABSENT           TriggerName:{DescID: 104 (t), TriggerID: 1}
+      │    │    ├── PUBLIC                → ABSENT           TriggerName:{DescID: 104 (t), Name: "trg", TriggerID: 1}
       │    │    ├── PUBLIC                → ABSENT           TriggerEnabled:{DescID: 104 (t), TriggerID: 1}
       │    │    ├── PUBLIC                → ABSENT           TriggerTiming:{DescID: 104 (t), TriggerID: 1}
       │    │    ├── PUBLIC                → ABSENT           TriggerEvents:{DescID: 104 (t), TriggerID: 1}
@@ -183,7 +183,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
       │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":104}
       │         ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":104}
       │         ├── RemoveTrigger {"Trigger":{"TableID":104,"TriggerID":1}}
-      │         ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerName","TriggerID":1}
+      │         ├── SetTriggerName {"Name":{"Name":"crdb_internal_tr...","TableID":104,"TriggerID":1}}
       │         ├── SetTriggerEnabled {"TableID":104,"TriggerID":1}
       │         ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerTimi...","TriggerID":1}
       │         ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEven...","TriggerID":1}

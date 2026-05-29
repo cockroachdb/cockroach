@@ -277,7 +277,7 @@ ALTER TABLE t1 DROP COLUMN j CASCADE
   {indexId: 1, tableId: 106}
 - [[Trigger:{DescID: 106, TriggerID: 1}, ABSENT], PUBLIC]
   {tableId: 106, triggerId: 1}
-- [[TriggerName:{DescID: 106, TriggerID: 1}, ABSENT], PUBLIC]
+- [[TriggerName:{DescID: 106, Name: tr1, TriggerID: 1}, ABSENT], PUBLIC]
   {name: tr1, tableId: 106, triggerId: 1}
 - [[TriggerEnabled:{DescID: 106, TriggerID: 1}, ABSENT], PUBLIC]
   {tableId: 106, triggerId: 1}

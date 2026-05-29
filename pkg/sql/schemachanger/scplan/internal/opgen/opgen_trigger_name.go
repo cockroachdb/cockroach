@@ -6,6 +6,7 @@
 package opgen
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -24,8 +25,19 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.TriggerName) *scop.NotImplementedForPublicObjects {
-					return notImplementedForPublicTriggers(this, this.TriggerID)
+				// Free the trigger name by replacing it with a per-trigger
+				// placeholder so the descriptor remains valid while the parent
+				// Trigger element either stays public (rename) or is being
+				// removed (drop). Mirrors the column/index/constraint rename
+				// pattern.
+				emit(func(this *scpb.TriggerName) *scop.SetTriggerName {
+					return &scop.SetTriggerName{
+						Name: scpb.TriggerName{
+							TableID:   this.TableID,
+							TriggerID: this.TriggerID,
+							Name:      tabledesc.TriggerNamePlaceholder(this.TriggerID),
+						},
+					}
 				}),
 			),
 		),
