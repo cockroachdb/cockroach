@@ -1,0 +1,39 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "framework",
+    srcs = [
+        "assertions.go",
+        "createconfig.go",
+        "framework.go",
+        "operations.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/test/framework",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachprod/cloud",
+        "//pkg/roachprod/cloud/types",
+        "//pkg/roachprod/vm",
+        "//pkg/roachprod/vm/gce",
+        "//pkg/roachprod/vm/gce/gcedb",
+        "//pkg/util/randutil",
+        "//pkg/util/timeutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+go_test(
+    name = "framework_test",
+    srcs = [
+        "createconfig_test.go",
+        "framework_test.go",
+    ],
+    embed = [":framework"],
+    deps = [
+        "//pkg/roachprod/vm",
+        "//pkg/roachprod/vm/gce",
+        "//pkg/roachprod/vm/gce/gcedb",
+        "@com_github_spf13_pflag//:pflag",
+        "@com_github_stretchr_testify//require",
+    ],
+)
