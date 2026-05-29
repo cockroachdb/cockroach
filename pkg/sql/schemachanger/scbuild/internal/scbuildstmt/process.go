@@ -77,6 +77,7 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	reflect.TypeOf((*tree.DropTrigger)(nil)):         {fn: DropTrigger, statementTags: []string{tree.DropTriggerTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.DropType)(nil)):            {fn: DropType, statementTags: []string{tree.DropTypeTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.DropView)(nil)):            {fn: DropView, statementTags: []string{tree.DropViewTag}, on: true, checks: nil},
+	reflect.TypeOf((*tree.AlterTriggerRename)(nil)):  {fn: AlterTriggerRename, statementTags: []string{tree.AlterTriggerTag}, on: true, checks: isV263Active},
 	reflect.TypeOf((*tree.RenameTable)(nil)):         {fn: RenameTable, statementTags: []string{tree.AlterTableTag}, on: true, checks: isV254Active},
 	reflect.TypeOf((*tree.SetZoneConfig)(nil)):       {fn: SetZoneConfig, statementTags: []string{tree.ConfigureZoneTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.Truncate)(nil)):            {fn: Truncate, statementTags: []string{tree.TruncateTag}, on: true, checks: isV254Active},

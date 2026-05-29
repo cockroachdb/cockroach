@@ -1,0 +1,10 @@
+/* setup */
+CREATE TABLE t (id INT PRIMARY KEY);
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEW; END $$;
+CREATE TRIGGER tr BEFORE INSERT ON t FOR EACH ROW EXECUTE FUNCTION f();
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER TRIGGER tr ON t RENAME TO tr_renamed;
+----
+Schema change plan for ALTER TRIGGER ‹tr› ON ‹t› RENAME TO ‹tr_renamed›;
+ └── execute 2 system table mutations transactions

@@ -171,6 +171,14 @@ CREATE TRIGGER touch_with_trigger
     BEFORE UPDATE ON public.with_trigger
     FOR EACH ROW EXECUTE FUNCTION public.touch_updated();
 
+-- Exercise ALTER TRIGGER ... RENAME TO. The dumped trigger should appear under
+-- its renamed name.
+CREATE TRIGGER touch_with_trigger_pre_rename
+    AFTER UPDATE ON public.with_trigger
+    FOR EACH ROW EXECUTE FUNCTION public.touch_updated();
+ALTER TRIGGER touch_with_trigger_pre_rename ON public.with_trigger
+    RENAME TO touch_with_trigger_renamed;
+
 -- ===========================================================
 -- Block B: Composite type, materialized view, RLS.
 -- ===========================================================
@@ -506,6 +514,7 @@ var pgDumpExpectedPatterns = []struct {
 	{"CREATE PROCEDURE public.noop", "noop procedure", false},
 	{"CREATE TABLE public.with_trigger", "with_trigger table", false},
 	{"CREATE TRIGGER touch_with_trigger", "touch_with_trigger trigger", false},
+	{"CREATE TRIGGER touch_with_trigger_renamed", "touch_with_trigger_renamed (renamed) trigger", false},
 	// Block B: composite type, materialized view, RLS.
 	{"CREATE TYPE public.addr AS", "addr composite type", false},
 	{"CREATE TABLE public.with_addr", "with_addr table", false},

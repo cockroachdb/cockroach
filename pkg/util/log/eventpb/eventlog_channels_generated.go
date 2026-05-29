@@ -297,6 +297,9 @@ func (m *RenameSchema) LoggingChannel() logpb.Channel { return logpb.Channel_SQL
 func (m *RenameTable) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
+func (m *RenameTrigger) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
+
+// LoggingChannel implements the EventPayload interface.
 func (m *RenameType) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.

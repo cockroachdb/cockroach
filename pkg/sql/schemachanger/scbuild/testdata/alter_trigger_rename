@@ -1,0 +1,32 @@
+setup
+CREATE TABLE xy (x INT, y INT);
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEW; END $$;
+CREATE TRIGGER tr BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f();
+----
+
+build
+ALTER TRIGGER tr ON xy RENAME TO tr_renamed
+----
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[TriggerName:{DescID: 104, Name: tr, TriggerID: 1}, ABSENT], PUBLIC]
+  {name: tr, tableId: 104, triggerId: 1}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+- [[TriggerName:{DescID: 104, Name: tr_renamed, TriggerID: 1}, PUBLIC], ABSENT]
+  {name: tr_renamed, tableId: 104, triggerId: 1}
+
+# Same-name no-op.
+build
+ALTER TRIGGER tr ON xy RENAME TO tr
+----
+
+# IF EXISTS with a missing trigger is a no-op.
+build
+ALTER TRIGGER IF EXISTS missing ON xy RENAME TO whatever
+----
+
+# IF EXISTS with a missing table is a no-op.
+build
+ALTER TRIGGER IF EXISTS tr ON missing_table RENAME TO whatever
+----

@@ -70,6 +70,12 @@ func (p *planner) DropTrigger(_ context.Context, _ *tree.DropTrigger) (planNode,
 	return nil, makeUnimplementedLegacyError("DROP TRIGGER")
 }
 
+func (p *planner) AlterTriggerRename(
+	_ context.Context, _ *tree.AlterTriggerRename,
+) (planNode, error) {
+	return nil, makeUnimplementedLegacyError("ALTER TRIGGER")
+}
+
 // makeUnimplementedLegacyError creates an error message with a hint and detail for a statement that
 // is only implemented in the declarative schema changer and not in the legacy schema changer.
 func makeUnimplementedLegacyError(stmtSyntax redact.SafeString) error {

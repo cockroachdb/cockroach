@@ -1,0 +1,60 @@
+parse
+ALTER TRIGGER t ON xy RENAME TO t2
+----
+ALTER TRIGGER t ON xy RENAME TO t2
+ALTER TRIGGER t ON xy RENAME TO t2 -- fully parenthesized
+ALTER TRIGGER t ON xy RENAME TO t2 -- literals removed
+ALTER TRIGGER _ ON _ RENAME TO _ -- identifiers removed
+
+parse
+ALTER TRIGGER IF EXISTS t ON xy RENAME TO t2
+----
+ALTER TRIGGER IF EXISTS t ON xy RENAME TO t2
+ALTER TRIGGER IF EXISTS t ON xy RENAME TO t2 -- fully parenthesized
+ALTER TRIGGER IF EXISTS t ON xy RENAME TO t2 -- literals removed
+ALTER TRIGGER IF EXISTS _ ON _ RENAME TO _ -- identifiers removed
+
+parse
+ALTER TRIGGER t ON foo.xy RENAME TO t2
+----
+ALTER TRIGGER t ON foo.xy RENAME TO t2
+ALTER TRIGGER t ON foo.xy RENAME TO t2 -- fully parenthesized
+ALTER TRIGGER t ON foo.xy RENAME TO t2 -- literals removed
+ALTER TRIGGER _ ON _._ RENAME TO _ -- identifiers removed
+
+parse
+ALTER TRIGGER t ON db.foo.xy RENAME TO t2
+----
+ALTER TRIGGER t ON db.foo.xy RENAME TO t2
+ALTER TRIGGER t ON db.foo.xy RENAME TO t2 -- fully parenthesized
+ALTER TRIGGER t ON db.foo.xy RENAME TO t2 -- literals removed
+ALTER TRIGGER _ ON _._._ RENAME TO _ -- identifiers removed
+
+# A table name must be specified.
+error
+ALTER TRIGGER t RENAME TO t2
+----
+at or near "rename": syntax error
+DETAIL: source SQL:
+ALTER TRIGGER t RENAME TO t2
+                ^
+HINT: try \h ALTER TRIGGER
+
+# Trigger names cannot be schema or db qualified.
+error
+ALTER TRIGGER foo.t ON xy RENAME TO t2
+----
+at or near ".": syntax error
+DETAIL: source SQL:
+ALTER TRIGGER foo.t ON xy RENAME TO t2
+                 ^
+HINT: try \h ALTER TRIGGER
+
+# New trigger names cannot be schema or db qualified.
+error
+ALTER TRIGGER t ON xy RENAME TO foo.t2
+----
+at or near ".": syntax error
+DETAIL: source SQL:
+ALTER TRIGGER t ON xy RENAME TO foo.t2
+                                   ^
