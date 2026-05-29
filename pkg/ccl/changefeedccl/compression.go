@@ -234,5 +234,5 @@ func compressionFromString(algo string) (_ compressionAlgo, ext string, _ error)
 	if strings.EqualFold(algo, string(sinkCompressionZstd)) {
 		return sinkCompressionZstd, ".zst", nil
 	}
-	return "", "", errors.AssertionFailedf("unsupported compression algorithm %q", algo)
+	return "", "", errors.Errorf("unsupported compression algorithm %q; supported values are 'gzip' and 'zstd'", algo)
 }
