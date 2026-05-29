@@ -115,7 +115,7 @@ type ManifestChangeCommitter interface {
 type FlushCommitInfo struct {
 	// ExpectedFlushGeneration is used to prevent flush commit when two flushes
 	// have started concurrently (can happen due to lease transfers).
-	ExpectedFlushGeneration uint64
+	ExpectedFlushGeneration roachpb.FlushGeneration
 	// ActivateSpans are the key spans over which Writer.ClearRawRangeActivate is
 	// written, activating dormant deletions from flush prepare. Currently, only
 	// the user key span.

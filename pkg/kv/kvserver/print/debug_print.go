@@ -460,6 +460,9 @@ func tryRangeIDKey(kv storage.MVCCKeyValue) (string, error) {
 	case bytes.Equal(suffix, keys.LocalRangeLastReplicaGCTimestampSuffix):
 		msg = &hlc.Timestamp{}
 
+	case bytes.Equal(suffix, keys.LocalRangeFlushGenerationSuffix):
+		msg = &kvserverpb.RangeFlushGenerationState{}
+
 	default:
 		return "", fmt.Errorf("unknown raft id key %s", suffix)
 	}

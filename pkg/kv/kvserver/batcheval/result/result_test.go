@@ -99,7 +99,7 @@ func TestMergeAndDestroy(t *testing.T) {
 	}
 	require.NoError(t, r0.MergeAndDestroy(r5))
 	require.NotNil(t, r0.Replicated.State)
-	require.Equal(t, uint64(5), r0.Replicated.State.FlushGeneration)
+	require.Equal(t, roachpb.FlushGeneration(5), r0.Replicated.State.FlushGeneration)
 
 	var r6 Result
 	r6.Replicated.State = &kvserverpb.ReplicaState{
