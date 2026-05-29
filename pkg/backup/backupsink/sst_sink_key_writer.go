@@ -235,7 +235,9 @@ func (s *SSTSinkKeyWriter) maybeDoSizeFlush(ctx context.Context, nextKey roachpb
 		EndKey: lastFile.Span.EndKey,
 	}
 	if lastFile.Span.ContainsKey(newSpan.Key) {
-		lastFile.Span.EndKey = newSpan.Key
+		// Clone to prevent lastFile.Span.EndKey from aliasing the caller's key
+		// memory, which may be reused after WriteKey returns.
+		lastFile.Span.EndKey = newSpan.Key.Clone()
 	}
 	if hardFlush {
 		if err := s.doSSTSizeFlush(ctx); err != nil {

@@ -521,6 +521,50 @@ func TestSSTSinkWriterSafeAgainstKeyMutation(t *testing.T) {
 		require.Equal(t, originalSpan, sink.flushedFiles[0].Span)
 		require.NoError(t, sink.Flush(ctx))
 	})
+
+	t.Run("safe on size flush split", func(t *testing.T) {
+		defer testutils.HookGlobal(&fileSpanByteLimit, int64(8<<10))()
+		sizeFlushSink, _ := sstSinkKeyWriterTestSetup(t, st, execinfrapb.ElidePrefix_TenantAndTable)
+		defer func() {
+			require.NoError(t, sizeFlushSink.Close())
+		}()
+
+		require.NoError(t, sizeFlushSink.Reset(ctx, roachpb.Span{
+			Key: s2k0("a"), EndKey: s2k0("z"),
+		}))
+
+		// Push the open file's accumulated data size past fileSpanByteLimit so
+		// that the next WriteKey triggers maybeDoSizeFlush.
+		bigVal := make([]byte, fileSpanByteLimit)
+		require.NoError(t, sizeFlushSink.WriteKey(ctx, storage.MVCCKey{
+			Key:       s2k0("a"),
+			Timestamp: hlc.Timestamp{WallTime: 10},
+		}, bigVal))
+
+		// Mirror compactSpanEntry's scratch-reuse pattern: the splitting key
+		// lives in a buffer that the caller will overwrite after WriteKey
+		// returns. Without the defensive clone in maybeDoSizeFlush, the
+		// just-shrunk file's EndKey would alias this buffer.
+		splitKey := s2k0("b")
+		scratch := append(roachpb.Key(nil), splitKey...)
+		require.NoError(t, sizeFlushSink.WriteKey(ctx, storage.MVCCKey{
+			Key:       scratch,
+			Timestamp: hlc.Timestamp{WallTime: 10},
+		}, []byte("v")))
+
+		require.Len(t, sizeFlushSink.flushedFiles, 2)
+		require.Equal(t, splitKey, sizeFlushSink.flushedFiles[0].Span.EndKey)
+
+		// Overwrite scratch in place. The just-shrunk file's EndKey must
+		// remain byte-stable; otherwise it aliased caller memory.
+		for i := range scratch {
+			scratch[i] = 0xFF
+		}
+		require.Equal(t, splitKey, sizeFlushSink.flushedFiles[0].Span.EndKey)
+
+		sizeFlushSink.AssumeNotMidRow()
+		require.NoError(t, sizeFlushSink.Flush(ctx))
+	})
 }
 
 func sstSinkKeyWriterTestSetup(
