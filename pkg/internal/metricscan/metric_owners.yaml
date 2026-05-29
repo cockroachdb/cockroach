@@ -899,6 +899,12 @@ owners:
   security_certificate_ttl_node_client: cockroachdb/security-engineering
   security_certificate_ttl_ui: cockroachdb/security-engineering
   security_certificate_ttl_ui_ca: cockroachdb/security-engineering
+  server_controller_mux_virtual_cluster_wait_admitted: cockroachdb/server
+  server_controller_mux_virtual_cluster_wait_canceled: cockroachdb/server
+  server_controller_mux_virtual_cluster_wait_rejected: cockroachdb/server
+  server_controller_mux_virtual_cluster_wait_success: cockroachdb/server
+  server_controller_mux_virtual_cluster_wait_timeout: cockroachdb/server
+  server_controller_mux_virtual_cluster_wait_waiters: cockroachdb/server
   server_http_request_duration_nanos: cockroachdb/unowned
   spanconfig_kvsubscriber_oldest_protected_record_nanos: cockroachdb/kv
   spanconfig_kvsubscriber_protected_record_count: cockroachdb/kv

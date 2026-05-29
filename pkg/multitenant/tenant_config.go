@@ -29,10 +29,24 @@ var DefaultTenantSelect = settings.RegisterStringSetting(
 
 // WaitForClusterStartTimeout is the amount of time the tenant
 // controller will wait for the default virtual cluster to have an
-// active SQL server.
+// active, routable SQL server. The tenant's durable data_state=ready
+// state only makes it eligible for startup; this timeout waits for
+// runtime SQL-serving readiness.
 var WaitForClusterStartTimeout = settings.RegisterDurationSetting(
 	settings.SystemOnly,
 	"server.controller.mux_virtual_cluster_wait.timeout",
 	"amount of time to wait for a default virtual cluster to become available when serving SQL connections (0 to disable)",
 	10*time.Second,
+)
+
+// WaitForClusterStartMaxConcurrent is the maximum number of SQL connections
+// that may wait concurrently for the default virtual cluster to become
+// routable. Connections above this limit fail fast to avoid holding unbounded
+// TCP connections while a tenant is starting.
+var WaitForClusterStartMaxConcurrent = settings.RegisterIntSetting(
+	settings.SystemOnly,
+	"server.controller.mux_virtual_cluster_wait.max_concurrent",
+	"maximum number of SQL connections that may wait concurrently for the default virtual cluster to become available",
+	10,
+	settings.IntWithMinimum(0),
 )
