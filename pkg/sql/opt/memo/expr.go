@@ -1459,6 +1459,12 @@ type PostQueryBuilder interface {
 // Note: factory is always *norm.Factory; declared as interface{} to
 // avoid circular package dependencies.
 type RoutineBodyBuilder interface {
+	// Build constructs all body statements at once into the single provided
+	// factory, for callers that do not interleave building with execution. It
+	// produces the same per-statement RelExprs as BuildStmt over
+	// [0, NumStmts()), but with all statements sharing one factory and one set
+	// of parameter columns. (BuildStmt requires a fresh factory per call to
+	// keep parameter column IDs stable; see BuildStmt.)
 	Build(
 		ctx context.Context,
 		semaCtx *tree.SemaContext,
@@ -1466,6 +1472,28 @@ type RoutineBodyBuilder interface {
 		catalog cat.Catalog,
 		factory interface{},
 	) (body []RelExpr, bodyProps []*physical.Required, params opt.ColList, err error)
+
+	// NumStmts returns the number of body statements that will be built,
+	// including any synthetic statement appended for a VOID-returning
+	// routine. It is stable for the lifetime of the builder.
+	NumStmts() int
+
+	// BuildStmt builds the body statement at stmtIdx into a RelExpr using the
+	// provided catalog and factory. The caller may refresh the catalog
+	// between calls so that a statement can resolve names introduced by DDL
+	// executed in an earlier statement.
+	//
+	// The caller must pass a fresh, empty factory on each call. Parameter
+	// columns are then synthesized with identical column IDs across calls, so
+	// one argument-to-parameter mapping serves every statement.
+	BuildStmt(
+		ctx context.Context,
+		semaCtx *tree.SemaContext,
+		evalCtx *eval.Context,
+		catalog cat.Catalog,
+		factory interface{},
+		stmtIdx int,
+	) (stmt RelExpr, props *physical.Required, params opt.ColList, err error)
 }
 
 // GroupingOrderType is the grouping column order type for group by and distinct
