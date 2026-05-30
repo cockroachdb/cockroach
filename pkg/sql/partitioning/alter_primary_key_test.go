@@ -8,7 +8,7 @@ package partitioning_test
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -21,14 +21,14 @@ func TestAlterPrimaryKeyCorrectZoneConfigBeforeBackfill(t *testing.T) {
 	skip.UnderDeadlock(t)
 	skip.UnderRace(t)
 
-	testCases := []testutilsccl.AlterPrimaryKeyCorrectZoneConfigTestCase{
+	testCases := []sqltestutils.AlterPrimaryKeyCorrectZoneConfigTestCase{
 		{
 			Desc: "ALTER PRIMARY KEY",
 			SetupQuery: `CREATE TABLE t.test (k INT NOT NULL, v INT NOT NULL, INDEX v_idx (v));
 ALTER INDEX t.test@v_idx CONFIGURE ZONE USING gc.ttlseconds = 888
 			`,
 			AlterQuery: `ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (v)`,
-			ExpectedIntermediateZoneConfigs: []testutilsccl.AlterPrimaryKeyCorrectZoneConfigIntermediateZoneConfig{
+			ExpectedIntermediateZoneConfigs: []sqltestutils.AlterPrimaryKeyCorrectZoneConfigIntermediateZoneConfig{
 				{
 					ShowConfigStatement: `SHOW ZONE CONFIGURATION FOR INDEX t.test@v_idx_rewrite_for_primary_key_change`,
 					ExpectedTarget:      `INDEX t.public.test@v_idx_rewrite_for_primary_key_change`,
@@ -44,7 +44,7 @@ ALTER INDEX t.test@v_idx CONFIGURE ZONE USING gc.ttlseconds = 888
 		},
 	}
 
-	testutilsccl.AlterPrimaryKeyCorrectZoneConfigTest(
+	sqltestutils.AlterPrimaryKeyCorrectZoneConfigTest(
 		t,
 		`CREATE DATABASE t`,
 		testCases,

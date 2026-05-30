@@ -1035,7 +1035,6 @@ GO_TARGETS = [
     "//pkg/ccl/testccl/sqlccl:sqlccl_test",
     "//pkg/ccl/testccl/sqlstatsccl:sqlstatsccl_test",
     "//pkg/ccl/testccl/workload/schemachange:schemachange_test",
-    "//pkg/ccl/testutilsccl:testutilsccl",
     "//pkg/ccl:ccl",
     "//pkg/changefeed/changefeedpb:changefeedpb",
     "//pkg/changefeed/changefeedpb:checkpointpb",
