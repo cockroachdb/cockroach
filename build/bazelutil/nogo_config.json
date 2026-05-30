@@ -59,7 +59,7 @@
             "pkg/ccl/changefeedccl/schema_registry.go": "flagged by linter, should be evaluated",
             "pkg/ccl/changefeedccl/sink_kafka.go": "flagged by linter, should be evaluated",
             "pkg/ccl/changefeedccl/sink_pubsub_v2.go": "flagged by linter, should be evaluated",
-            "pkg/ccl/multitenantccl/tenantcostclient/tenant_side.go": "flagged by linter, should be evaluated",
+            "pkg/multitenant/tenantcostclient/tenant_side.go": "flagged by linter, should be evaluated",
             "pkg/sqlproxy/acl/watcher.go": "flagged by linter, should be evaluated",
             "pkg/sqlproxy/tenantdirsvr/test_directory_svr.go": "flagged by linter, should be evaluated",
             "pkg/crosscluster/streamclient/random_stream_client.go": "flagged by linter, should be evaluated",
