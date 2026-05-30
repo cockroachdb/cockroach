@@ -588,7 +588,13 @@ func (b *Builder) maybeTrackRegclassDependenciesForViews(texpr tree.TypedExpr) {
 	if err != nil {
 		panic(err)
 	}
-	// eval.Expr on a REGCLASS expression returns a *tree.DOid.
+	// A NULL REGCLASS references no object, so there is no dependency to track.
+	// This happens, for example, with a NULL::REGCLASS literal or an
+	// uninitialized OUT parameter of type REGCLASS in a routine body.
+	if regclass == tree.DNull {
+		return
+	}
+	// eval.Expr on a non-NULL REGCLASS expression returns a *tree.DOid.
 	// Use the OID directly for resolution rather than DOid.String(), which
 	// returns only the object name and drops the schema prefix (e.g. returns
 	// "myseq" instead of "sc.myseq"), causing unqualified lookups to fail
