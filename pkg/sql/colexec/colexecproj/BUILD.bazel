@@ -52,6 +52,7 @@ go_test(
         "//pkg/col/coldatatestutils",
         "//pkg/settings/cluster",
         "//pkg/sql/colconv",
+        "//pkg/sql/colexec",
         "//pkg/sql/colexec/colbuilder",
         "//pkg/sql/colexec/colexecargs",
         "//pkg/sql/colexec/colexectestutils",
