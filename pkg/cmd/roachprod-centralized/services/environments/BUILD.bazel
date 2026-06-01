@@ -1,0 +1,33 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "environments",
+    srcs = ["service.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/environments",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/auth",
+        "//pkg/cmd/roachprod-centralized/models/environments",
+        "//pkg/cmd/roachprod-centralized/repositories/environments",
+        "//pkg/cmd/roachprod-centralized/services/environments/internal/secrets",
+        "//pkg/cmd/roachprod-centralized/services/environments/types",
+        "//pkg/cmd/roachprod-centralized/utils/logger",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "environments_test",
+    srcs = ["service_test.go"],
+    embed = [":environments"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/auth",
+        "//pkg/cmd/roachprod-centralized/models/auth",
+        "//pkg/cmd/roachprod-centralized/models/environments",
+        "//pkg/cmd/roachprod-centralized/repositories/environments/memory",
+        "//pkg/cmd/roachprod-centralized/services/environments/internal/secrets",
+        "//pkg/cmd/roachprod-centralized/services/environments/types",
+        "//pkg/cmd/roachprod-centralized/utils/logger",
+        "@com_github_stretchr_testify//require",
+    ],
+)

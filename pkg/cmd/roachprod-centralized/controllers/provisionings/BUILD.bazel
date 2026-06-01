@@ -1,0 +1,35 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "provisionings",
+    srcs = ["controller.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/provisionings",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/auth",
+        "//pkg/cmd/roachprod-centralized/controllers",
+        "//pkg/cmd/roachprod-centralized/controllers/provisionings/types",
+        "//pkg/cmd/roachprod-centralized/services/provisionings/types",
+        "//pkg/cmd/roachprod-centralized/utils/api/bindings/stripe",
+        "//pkg/util/uuid",
+        "@com_github_gin_gonic_gin//:gin",
+    ],
+)
+
+go_test(
+    name = "provisionings_test",
+    srcs = ["provisionings_test.go"],
+    embed = [":provisionings"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/app",
+        "//pkg/cmd/roachprod-centralized/auth/disabled",
+        "//pkg/cmd/roachprod-centralized/controllers/provisionings/types",
+        "//pkg/cmd/roachprod-centralized/models/provisionings",
+        "//pkg/cmd/roachprod-centralized/services/provisionings/mocks",
+        "//pkg/cmd/roachprod-centralized/services/provisionings/types",
+        "//pkg/util/uuid",
+        "@com_github_gin_gonic_gin//:gin",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//mock",
+    ],
+)

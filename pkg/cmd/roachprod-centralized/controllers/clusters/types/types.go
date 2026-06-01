@@ -118,6 +118,8 @@ func (dto *ClustersResultError) GetAssociatedStatusCode() int {
 		return http.StatusNotFound
 	case errors.Is(err, clustermodels.ErrClusterAlreadyExists):
 		return http.StatusConflict
+	case errors.Is(err, clustermodels.ErrClusterManagedByProvisioning):
+		return http.StatusConflict
 	default:
 		// Fall back to generic error handling
 		return controllers.GetGenericStatusCode(err)

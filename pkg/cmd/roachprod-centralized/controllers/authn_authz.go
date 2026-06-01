@@ -178,7 +178,9 @@ func (ctrl *Controller) AuthzMiddleware(
 		if err := authenticator.Authorize(c.Request.Context(), principal, requirement, c.FullPath()); err != nil {
 			ctrl.GetRequestLogger(c).Warn("authorization denied",
 				"principal_type", principal.GetAuthMethod(),
-				"endpoint", c.FullPath())
+				"endpoint", c.FullPath(),
+				"error", err.Error(),
+			)
 			ctrl.Render(c, &AuthorizationErrorResult{err: err})
 			c.Abort()
 			return

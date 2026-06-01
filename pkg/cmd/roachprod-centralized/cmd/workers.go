@@ -29,7 +29,10 @@ dedicated worker instances. Only the metrics endpoint is exposed for monitoring.
 Requirements:
   - Must use CockroachDB as the database backend (memory mode is not supported)
   - Multiple worker instances can run concurrently, coordinating through the database`,
-	RunE: runWorkers,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cmd.SilenceUsage = true
+		return runWorkers(cmd, args)
+	},
 }
 
 func init() {

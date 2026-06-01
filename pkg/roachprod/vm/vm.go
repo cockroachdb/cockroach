@@ -41,6 +41,8 @@ const (
 	TagArch = "arch"
 	// TagManaged is the label used to identify managed clusters
 	TagManaged = "managed"
+	// TagProvisioningIdentifier marks VMs owned by a provisioning.
+	TagProvisioningIdentifier = "provisioning_identifier"
 
 	ArchARM64   = CPUArch("arm64")
 	ArchAMD64   = CPUArch("amd64")
@@ -49,6 +51,14 @@ const (
 	ArchUnknown = CPUArch("unknown")
 
 	DefaultLifetime = 12 * time.Hour
+
+	// HostnamePlaceholder is replaced per-VM by Terraform's replace() function
+	// in centralized provisioning templates.
+	HostnamePlaceholder = "__VM_HOSTNAME__"
+
+	// SSHPublicKeyPlaceholder is replaced per-provisioning with the actual
+	// ssh_public_key value in the GCE startup script handler injection.
+	SSHPublicKeyPlaceholder = "__INJECTED_SSH_PUBLIC_KEY__"
 )
 
 // UnimplementedError is returned when a method is not implemented by a

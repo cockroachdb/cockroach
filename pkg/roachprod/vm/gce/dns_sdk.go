@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/exp/maps"
+	"golang.org/x/oauth2/google"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/api/dns/v1"
 	"google.golang.org/api/option"
@@ -62,6 +63,9 @@ type sdkDNSProvider struct {
 }
 
 // NewSDKDNSProvider creates a new GCE DNS provider using the Cloud DNS SDK.
+// If opts.CredentialsFile is set, credentials are loaded from that file.
+// Otherwise the default credential resolution chain is used
+// (GOOGLE_EPHEMERAL_CREDENTIALS, ADC, gcloud).
 func NewSDKDNSProvider(opts SDKDNSProviderOpts) (*sdkDNSProvider, error) {
 
 	p := &sdkDNSProvider{
@@ -81,12 +85,21 @@ func NewSDKDNSProvider(opts SDKDNSProviderOpts) (*sdkDNSProvider, error) {
 		resolvers: googleDNSResolvers(),
 	}
 
-	creds, _, err := roachprodutil.GetGCECredentials(
-		context.Background(),
-		roachprodutil.IAPTokenSourceOptions{},
-	)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to get credentials")
+	var err error
+	var creds *google.Credentials
+	if opts.CredentialsFile != "" {
+		creds, err = loadGCPCredentials(opts.CredentialsFile)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to get credentials")
+		}
+	} else {
+		creds, _, err = roachprodutil.GetGCECredentials(
+			context.Background(),
+			roachprodutil.IAPTokenSourceOptions{},
+		)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to get credentials from environment")
+		}
 	}
 
 	client, err := dns.NewService(context.Background(), option.WithCredentials(creds))
@@ -101,14 +114,16 @@ func NewSDKDNSProvider(opts SDKDNSProviderOpts) (*sdkDNSProvider, error) {
 
 // SDKDNSProviderOpts defines the options for the SDK DNS provider.
 type SDKDNSProviderOpts struct {
-	DNSProject    string
-	PublicZone    string
-	PublicDomain  string
-	ManagedZone   string
-	ManagedDomain string
+	DNSProject      string
+	PublicZone      string
+	PublicDomain    string
+	ManagedZone     string
+	ManagedDomain   string
+	CredentialsFile string
 }
 
-// NewFromGCEDNSProviderOpts creates a new SDKDNSProviderOpts from a gce.dnsOpts.
+// NewFromGCEDNSProviderOpts creates a new SDKDNSProviderOpts from a dnsOpts.
+// The CredentialsFile field is left empty and must be set separately.
 func (o *SDKDNSProviderOpts) NewFromGCEDNSProviderOpts(opts dnsOpts) SDKDNSProviderOpts {
 	return SDKDNSProviderOpts(opts)
 }

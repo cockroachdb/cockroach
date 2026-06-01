@@ -16,7 +16,9 @@ import (
 	admincontroller "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/admin"
 	authcontroller "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/auth"
 	clusterscontroller "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/clusters"
+	environmentscontroller "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/environments"
 	healthcontroller "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/health"
+	provisioningscontroller "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/provisionings"
 	publicdns "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/public-dns"
 	scimcontroller "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/scim"
 	serviceaccountscontroller "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/service-accounts"
@@ -32,7 +34,10 @@ var apiCmd = &cobra.Command{
 	Short: "Start the API server",
 	Long: `Start the roachprod-centralized API server which provides HTTP endpoints
 for managing roachprod clusters, tasks, and related operations.`,
-	RunE: runAPI,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cmd.SilenceUsage = true
+		return runAPI(cmd, args)
+	},
 }
 
 func init() {
@@ -105,6 +110,13 @@ func runAPI(cmd *cobra.Command, args []string) error {
 		app.WithApiController(publicdns.NewController(services.DNS)),
 		app.WithApiController(tasks.NewController(services.Task)),
 		app.WithApiController(authcontroller.NewController(services.Auth)),
+		app.WithApiController(environmentscontroller.NewController(services.Environments)),
+	}
+
+	if services.Provisionings != nil {
+		options = append(options,
+			app.WithApiController(provisioningscontroller.NewController(services.Provisionings)),
+		)
 	}
 
 	if auth.AuthenticationType(strings.ToLower(cfg.Api.Authentication.Type)) == auth.AuthenticationTypeBearer {

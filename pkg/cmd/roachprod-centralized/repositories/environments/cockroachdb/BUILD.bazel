@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "cockroachdb",
+    srcs = [
+        "cockroachdb.go",
+        "migrations_definition.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/environments/cockroachdb",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/models/environments",
+        "//pkg/cmd/roachprod-centralized/repositories/environments",
+        "//pkg/cmd/roachprod-centralized/utils/database",
+        "//pkg/cmd/roachprod-centralized/utils/logger",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

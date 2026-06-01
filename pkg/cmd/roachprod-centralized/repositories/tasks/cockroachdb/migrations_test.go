@@ -69,6 +69,19 @@ func TestTasksMigrations(t *testing.T) {
 		t.Errorf("Expected consumer_id to be VARCHAR, got %s", dataType)
 	}
 
+	// Verify concurrency_key column exists (added in migration 5)
+	err = db.QueryRow(`
+		SELECT data_type
+		FROM information_schema.columns
+		WHERE table_name = 'tasks' AND column_name = 'concurrency_key'
+	`).Scan(&dataType)
+	if err != nil {
+		t.Fatalf("Failed to check concurrency_key column: %v", err)
+	}
+	if dataType != "character varying" {
+		t.Errorf("Expected concurrency_key to be VARCHAR, got %s", dataType)
+	}
+
 	// Test idempotency - running again should not fail
 	err = database.RunMigrationsForRepository(ctx, logger.DefaultLogger, db, "tasks_test", GetTasksMigrations(), crdbmigrator.NewMigrator())
 	if err != nil {

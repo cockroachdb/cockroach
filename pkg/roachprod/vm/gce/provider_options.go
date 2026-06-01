@@ -16,6 +16,7 @@ type ProviderOptions struct {
 	DNSManagedZone   string
 	DNSManagedDomain string
 	WithSDKSupport   bool
+	CredentialsFile  string
 }
 
 type OptionFunc func(p *Provider)
@@ -97,6 +98,18 @@ func WithSDKSupport(withSDKSupport bool) OptionFunc {
 	}
 }
 
+// WithCredentialsFile returns an option to set an explicit GCP service
+// account JSON file. When provided, credentials are loaded from this file
+// instead of the default resolution chain (GOOGLE_EPHEMERAL_CREDENTIALS,
+// ADC, gcloud). This allows the caller to control which service account
+// is used for GCE API calls independently of the process-wide ADC
+// configuration.
+func WithCredentialsFile(path string) OptionFunc {
+	return func(p *Provider) {
+		p.credentialsFile = path
+	}
+}
+
 // Provider is a struct that holds configuration for the GCE provider.
 type Option interface {
 	apply(*Provider)
@@ -129,6 +142,9 @@ func (po *ProviderOptions) ToOptions() []Option {
 	}
 	if po.WithSDKSupport {
 		opts = append(opts, WithSDKSupport(po.WithSDKSupport))
+	}
+	if po.CredentialsFile != "" {
+		opts = append(opts, WithCredentialsFile(po.CredentialsFile))
 	}
 	return opts
 }

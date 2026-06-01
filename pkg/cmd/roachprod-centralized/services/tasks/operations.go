@@ -7,6 +7,7 @@ package tasks
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	mtasks "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/tasks"
@@ -44,9 +45,22 @@ func (s *Service) PurgeTasks(ctx context.Context, l *logger.Logger) (int, int, e
 func (s *Service) purgeTasksInState(
 	ctx context.Context, l *logger.Logger, interval time.Duration, state mtasks.TaskState,
 ) (int, error) {
-	del, err := s.store.PurgeTasks(ctx, l, interval, state)
+	purgedIDs, err := s.store.PurgeTasks(ctx, l, interval, state)
 	if err != nil {
 		return 0, err
 	}
-	return del, nil
+
+	// Delete logs for purged tasks (best-effort).
+	if s.logStore != nil {
+		for _, id := range purgedIDs {
+			if delErr := s.logStore.DeleteLogs(ctx, id); delErr != nil {
+				l.Warn("failed to delete task logs",
+					slog.String("task_id", id.String()),
+					slog.Any("error", delErr),
+				)
+			}
+		}
+	}
+
+	return len(purgedIDs), nil
 }

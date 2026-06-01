@@ -13,6 +13,17 @@ set -o pipefail
 apt update -y
 apt install -y curl gnupg apt-transport-https ca-certificates lsb-release unzip jq
 
+# Install OpenTofu
+curl -fsSL -o /usr/share/keyrings/opentofu.gpg https://get.opentofu.org/opentofu.gpg
+curl -fsSL https://packages.opentofu.org/opentofu/tofu/gpgkey | gpg --dearmor -o /usr/share/keyrings/opentofu-repo.gpg >/dev/null
+echo \
+  "deb [signed-by=/usr/share/keyrings/opentofu.gpg,/usr/share/keyrings/opentofu-repo.gpg] https://packages.opentofu.org/opentofu/tofu/any/ any main
+deb-src [signed-by=/usr/share/keyrings/opentofu.gpg,/usr/share/keyrings/opentofu-repo.gpg] https://packages.opentofu.org/opentofu/tofu/any/ any main" | \
+  tee /etc/apt/sources.list.d/opentofu.list
+
+apt update -y
+apt install -y tofu
+
 # Install Azure cli
 # https://docs.microsoft.com/en-us/cli/azure/install-azure-cli-apt?view=azure-cli-latest
 curl -sL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/microsoft.gpg

@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 )
@@ -74,6 +75,11 @@ func (ctrl *Controller) Render(c *gin.Context, dto IResultDTO) {
 	// Check if DTO implements IPaginatedResult for automatic pagination metadata extraction
 	if paginatedDTO, ok := dto.(IPaginatedResult); ok {
 		resp.Pagination = paginatedDTO.GetPaginationMetadata()
+	}
+
+	// Check if DTO implements ITaskResult for automatic task ID extraction
+	if taskDTO, ok := dto.(ITaskResult); ok {
+		resp.TaskID = taskDTO.GetTaskID()
 	}
 
 	// Deduce and fill data type if data is provided
@@ -171,6 +177,7 @@ func (p *PaginationMetadata) GetPaginationMetadata() *PaginationMetadata {
 type ApiResponse struct {
 	RequestID   string              `json:"request_id,omitempty"`
 	Data        any                 `json:"data,omitempty"`
+	TaskID      *uuid.UUID          `json:"task_id,omitempty"`
 	Pagination  *PaginationMetadata `json:"pagination,omitempty"`
 	ResultType  string              `json:"result_type,omitempty"`
 	PublicError string              `json:"error,omitempty"`

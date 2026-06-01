@@ -662,8 +662,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "roachprod_tasks_active_workers{service=\"$service\"} / roachprod_tasks_max_workers{service=\"$service\"} * 100",
-          "legendFormat": "{{instance}}",
+          "expr": "sum(roachprod_tasks_active_workers{service=\"$service\"}) / sum(roachprod_tasks_max_workers{service=\"$service\"}) * 100",
+          "legendFormat": "Utilization",
           "range": true,
           "refId": "A"
         }
@@ -676,7 +676,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "Active workers vs maximum configured workers per instance",
+      "description": "Total active workers vs total maximum configured workers across all instances",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -760,8 +760,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "roachprod_tasks_active_workers{service=\"$service\"}",
-          "legendFormat": "Active - {{instance}}",
+          "expr": "sum(roachprod_tasks_active_workers{service=\"$service\"})",
+          "legendFormat": "Active Workers",
           "range": true,
           "refId": "A"
         },
@@ -771,8 +771,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "roachprod_tasks_max_workers{service=\"$service\"}",
-          "legendFormat": "Max - {{instance}}",
+          "expr": "sum(roachprod_tasks_max_workers{service=\"$service\"})",
+          "legendFormat": "Max Workers",
           "range": true,
           "refId": "B"
         }
@@ -2618,7 +2618,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "go_sql_open_connections{service=\"$service\"}",
+          "expr": "sum(go_sql_open_connections{service=\"$service\"})",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -2692,7 +2692,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "go_sql_in_use_connections{service=\"$service\"}",
+          "expr": "sum(go_sql_in_use_connections{service=\"$service\"})",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -2766,7 +2766,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "go_sql_idle_connections{service=\"$service\"}",
+          "expr": "sum(go_sql_idle_connections{service=\"$service\"})",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -2832,7 +2832,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "go_sql_max_open_connections{service=\"$service\"}",
+          "expr": "sum(go_sql_max_open_connections{service=\"$service\"})",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -2910,7 +2910,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "go_sql_in_use_connections{service=\"$service\"} / go_sql_max_open_connections{service=\"$service\"} * 100",
+          "expr": "sum(go_sql_in_use_connections{service=\"$service\"}) / sum(go_sql_max_open_connections{service=\"$service\"}) * 100",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -3008,7 +3008,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(go_sql_wait_count_total{service=\"$service\"}[5m])",
+          "expr": "sum(rate(go_sql_wait_count_total{service=\"$service\"}[5m]))",
           "legendFormat": "Wait rate",
           "range": true,
           "refId": "A"
@@ -3137,7 +3137,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "go_sql_in_use_connections{service=\"$service\"}",
+          "expr": "sum(go_sql_in_use_connections{service=\"$service\"})",
           "legendFormat": "In Use",
           "range": true,
           "refId": "A"
@@ -3148,7 +3148,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "go_sql_idle_connections{service=\"$service\"}",
+          "expr": "sum(go_sql_idle_connections{service=\"$service\"})",
           "legendFormat": "Idle",
           "range": true,
           "refId": "B"
@@ -3246,7 +3246,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(go_sql_wait_duration_seconds_total{service=\"$service\"}[5m]) / rate(go_sql_wait_count_total{service=\"$service\"}[5m])",
+          "expr": "sum(rate(go_sql_wait_duration_seconds_total{service=\"$service\"}[5m])) / sum(rate(go_sql_wait_count_total{service=\"$service\"}[5m]))",
           "legendFormat": "Avg wait duration",
           "range": true,
           "refId": "A"
@@ -4976,7 +4976,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "roachprod_auth_users_total{service=\"$service\", status=\"active\"}",
+          "expr": "max(roachprod_auth_users_total{service=\"$service\", status=\"active\"})",
           "legendFormat": "Active Users",
           "range": true,
           "refId": "A"
@@ -5042,7 +5042,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "roachprod_auth_users_total{service=\"$service\", status=\"inactive\"}",
+          "expr": "max(roachprod_auth_users_total{service=\"$service\", status=\"inactive\"})",
           "legendFormat": "Inactive Users",
           "range": true,
           "refId": "A"
@@ -5108,7 +5108,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "roachprod_auth_groups_total{service=\"$service\"}",
+          "expr": "max(roachprod_auth_groups_total{service=\"$service\"})",
           "legendFormat": "Groups",
           "range": true,
           "refId": "A"
@@ -5174,7 +5174,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "roachprod_auth_service_accounts_total{service=\"$service\", enabled=\"true\"}",
+          "expr": "max(roachprod_auth_service_accounts_total{service=\"$service\", enabled=\"true\"})",
           "legendFormat": "Service Accounts",
           "range": true,
           "refId": "A"
@@ -5240,7 +5240,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "roachprod_auth_tokens_total{service=\"$service\"}",
+          "expr": "max(roachprod_auth_tokens_total{service=\"$service\"}) by (type, status)",
           "legendFormat": "{{type}} ({{status}})",
           "range": true,
           "refId": "A"
@@ -5337,7 +5337,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "roachprod_auth_users_total{service=\"$service\"}",
+          "expr": "max(roachprod_auth_users_total{service=\"$service\"}) by (status)",
           "legendFormat": "{{status}}",
           "range": true,
           "refId": "A"

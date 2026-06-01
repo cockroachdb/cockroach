@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "provisionings",
+    srcs = ["provisionings.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/provisionings",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/models/provisionings",
+        "//pkg/cmd/roachprod-centralized/utils/filters/types",
+        "//pkg/cmd/roachprod-centralized/utils/logger",
+        "//pkg/util/uuid",
+    ],
+)

@@ -15,7 +15,7 @@ import (
 
 func TestRegisterTasksService(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", types.Options{})
+	taskService := NewService(mockRepo, "test-instance", nil, types.Options{})
 	mockTasksService := &MockITasksService{}
 	mockTasksService.On("GetTaskServiceName").Return("myService")
 	mockTasksService.On("GetHandledTasks").Return(map[string]types.ITask{"demo": nil})

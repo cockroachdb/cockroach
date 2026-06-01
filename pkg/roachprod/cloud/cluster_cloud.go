@@ -267,6 +267,9 @@ func (c *Cloud) ListCloud(ctx context.Context, l *logger.Logger, options vm.List
 		// `roachprod.Start` expects nodes/vms to be in sorted order
 		// see https://github.com/cockroachdb/cockroach/pull/133647 for more details
 		sort.Sort(c.VMs)
+
+		// Derive provisioning-managed status from VM labels.
+		c.ManagedByProvisioning = c.IsProvisioningManaged()
 	}
 
 	return nil
@@ -442,6 +445,15 @@ func ShrinkCluster(l *logger.Logger, c *cloudcluster.Cluster, numNodes int) erro
 
 // DestroyCluster TODO(peter): document
 func DestroyCluster(l *logger.Logger, c *cloudcluster.Cluster) error {
+	// Provisioning-managed clusters must be destroyed via the provisioning
+	// lifecycle. Block all legacy destroy paths (roachprod destroy, --all-mine,
+	// --all-local, GC) that route through this function.
+	if c.IsProvisioningManaged() {
+		return errors.Newf(
+			"cluster %q is provisioning-managed (%s label present) and cannot be destroyed via roachprod destroy; destroy the provisioning instead",
+			c.Name, vm.TagProvisioningIdentifier,
+		)
+	}
 
 	if err := c.DeletePrometheusConfig(context.Background(), l); err != nil {
 		l.Printf("WARNING: failed to delete the prometheus config (already wiped?): %s", err)

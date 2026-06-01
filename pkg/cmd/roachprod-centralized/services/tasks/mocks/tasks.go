@@ -9,12 +9,14 @@ package tasksmock
 
 import (
 	context "context"
+	io "io"
 	time "time"
 
 	auth "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
 	tasks "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/tasks"
 	types "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks/types"
 	logger "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
+	logstore "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logstore"
 	uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
 	mock "github.com/stretchr/testify/mock"
 )
@@ -226,6 +228,58 @@ func (_m *IService) GetTasks(
 // RegisterTasksService provides a mock function with given fields: _a0
 func (_m *IService) RegisterTasksService(_a0 types.ITasksService) {
 	_m.Called(_a0)
+}
+
+// StreamTaskLogs provides a mock function with given fields: _a0, _a1, _a2, _a3
+func (_m *IService) StreamTaskLogs(
+	_a0 context.Context, _a1 *logger.Logger, _a2 uuid.UUID, _a3 int,
+) (io.ReadCloser, error) {
+	ret := _m.Called(_a0, _a1, _a2, _a3)
+
+	if len(ret) == 0 {
+		panic("no return value specified for StreamTaskLogs")
+	}
+
+	var r0 io.ReadCloser
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, uuid.UUID, int) (io.ReadCloser, error)); ok {
+		return rf(_a0, _a1, _a2, _a3)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, uuid.UUID, int) io.ReadCloser); ok {
+		r0 = rf(_a0, _a1, _a2, _a3)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(io.ReadCloser)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *logger.Logger, uuid.UUID, int) error); ok {
+		r1 = rf(_a0, _a1, _a2, _a3)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// GetLogStore provides a mock function
+func (_m *IService) GetLogStore() logstore.ILogStore {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetLogStore")
+	}
+
+	var r0 logstore.ILogStore
+	if rf, ok := ret.Get(0).(func() logstore.ILogStore); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(logstore.ILogStore)
+		}
+	}
+
+	return r0
 }
 
 // WaitForTaskCompletion provides a mock function with given fields: _a0, _a1, _a2, _a3

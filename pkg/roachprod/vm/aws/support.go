@@ -185,6 +185,30 @@ func writeStartupScript(
 	return tmpfile.Name(), nil
 }
 
+// GenerateCentralizedStartupScript generates an AWS startup script for
+// centralized provisioning templates. The hostname is set to
+// vm.HostnamePlaceholder so that Terraform can replace it per-instance.
+func GenerateCentralizedStartupScript() (string, error) {
+	type tmplParams struct {
+		vm.StartupArgs
+	}
+
+	args := tmplParams{
+		StartupArgs: vm.DefaultStartupArgs(
+			vm.WithSharedUser(vm.DefaultSharedUser),
+			vm.WithBootDiskOnly(true),
+			vm.WithVMName(vm.HostnamePlaceholder),
+			vm.WithChronyServers([]string{"169.254.169.123"}),
+		),
+	}
+
+	var buf bytes.Buffer
+	if err := vm.GenerateStartupScript(&buf, awsStartupScriptTemplate, args); err != nil {
+		return "", errors.Wrap(err, "generate centralized AWS startup script")
+	}
+	return buf.String(), nil
+}
+
 // runCommand is used to invoke an AWS command.
 func (p *Provider) runCommand(l *logger.Logger, args []string) ([]byte, error) {
 	return p.runCommandWithContext(context.Background(), l, args)

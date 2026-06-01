@@ -23,9 +23,17 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
+type NoLockTask struct {
+	MockTask
+}
+
+func (t *NoLockTask) ResolveConcurrencyKey() string {
+	return ""
+}
+
 func TestGetTasks(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", types.Options{})
+	taskService := NewService(mockRepo, "test-instance", nil, types.Options{})
 	ctx := context.Background()
 
 	expectedTasks := []tasks.ITask{&MockTask{}}
@@ -44,7 +52,7 @@ func TestGetTasks(t *testing.T) {
 
 func TestGetTasksFiltered(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", types.Options{})
+	taskService := NewService(mockRepo, "test-instance", nil, types.Options{})
 	ctx := context.Background()
 
 	expectedTasks := []tasks.ITask{&MockTask{}}
@@ -69,7 +77,7 @@ func TestGetTasksFiltered(t *testing.T) {
 
 func TestGetTasks_Error(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", types.Options{})
+	taskService := NewService(mockRepo, "test-instance", nil, types.Options{})
 	ctx := context.Background()
 
 	expectedError := errors.New("db error")
@@ -84,7 +92,7 @@ func TestGetTasks_Error(t *testing.T) {
 
 func TestGetTask(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", types.Options{})
+	taskService := NewService(mockRepo, "test-instance", nil, types.Options{})
 	ctx := context.Background()
 	fakeID := uuid.MakeV4()
 	fakeTask := &MockTask{
@@ -103,7 +111,7 @@ func TestGetTask(t *testing.T) {
 
 func TestGetTask_NotFound(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", types.Options{})
+	taskService := NewService(mockRepo, "test-instance", nil, types.Options{})
 	ctx := context.Background()
 	fakeID := uuid.MakeV4()
 
@@ -118,7 +126,7 @@ func TestGetTask_NotFound(t *testing.T) {
 
 func TestGetTask_PrivateError(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", types.Options{})
+	taskService := NewService(mockRepo, "test-instance", nil, types.Options{})
 	ctx := context.Background()
 	fakeID := uuid.MakeV4()
 
@@ -134,21 +142,55 @@ func TestGetTask_PrivateError(t *testing.T) {
 
 func TestCreateTask(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", types.Options{})
+	taskService := NewService(mockRepo, "test-instance", nil, types.Options{})
 	ctx := context.Background()
 
-	fakeTask := &MockTask{}
+	fakeTask := &MockTask{Task: tasks.Task{Type: "fake_type"}}
 	mockRepo.On("CreateTask", mock.Anything, mock.Anything, fakeTask).Return(nil)
 
 	task, err := taskService.CreateTask(ctx, logger.DefaultLogger, fakeTask)
 	assert.Nil(t, err)
 	assert.NotNil(t, task)
+	assert.Equal(t, "fake_type", task.GetConcurrencyKey())
+	assert.Equal(t, "", task.GetReference())
+	mockRepo.AssertExpectations(t)
+}
+
+func TestCreateTask_UsesExplicitReference(t *testing.T) {
+	mockRepo := &tasksrepomock.ITasksRepository{}
+	taskService := NewService(mockRepo, "test-instance", nil, types.Options{})
+	ctx := context.Background()
+
+	fakeTask := &MockTask{Task: tasks.Task{Type: "fake_type", Reference: "custom#123"}}
+	mockRepo.On("CreateTask", mock.Anything, mock.Anything, fakeTask).Return(nil)
+
+	task, err := taskService.CreateTask(ctx, logger.DefaultLogger, fakeTask)
+	assert.Nil(t, err)
+	assert.NotNil(t, task)
+	assert.Equal(t, "custom#123", task.GetReference())
+	assert.Equal(t, "fake_type", task.GetConcurrencyKey())
+	mockRepo.AssertExpectations(t)
+}
+
+func TestCreateTask_DisableConcurrencyKey(t *testing.T) {
+	mockRepo := &tasksrepomock.ITasksRepository{}
+	taskService := NewService(mockRepo, "test-instance", nil, types.Options{})
+	ctx := context.Background()
+
+	fakeTask := &NoLockTask{MockTask: MockTask{Task: tasks.Task{Type: "fake_type"}}}
+	mockRepo.On("CreateTask", mock.Anything, mock.Anything, fakeTask).Return(nil)
+
+	task, err := taskService.CreateTask(ctx, logger.DefaultLogger, fakeTask)
+	assert.Nil(t, err)
+	assert.NotNil(t, task)
+	assert.Equal(t, "", task.GetConcurrencyKey())
+	assert.Equal(t, "", task.GetReference())
 	mockRepo.AssertExpectations(t)
 }
 
 func TestCreateTask_Error(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", types.Options{})
+	taskService := NewService(mockRepo, "test-instance", nil, types.Options{})
 	ctx := context.Background()
 
 	fakeTask := &MockTask{}

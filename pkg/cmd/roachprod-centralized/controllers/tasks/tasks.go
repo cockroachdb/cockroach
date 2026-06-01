@@ -6,12 +6,15 @@
 package tasks
 
 import (
+	"strconv"
+
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/tasks/types"
 	stypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks/types"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/api/bindings/stripe"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/api/query"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/sse"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/gin-gonic/gin"
 )
@@ -44,6 +47,16 @@ func NewController(service stypes.IService) *Controller {
 			Method: "GET",
 			Path:   types.ControllerPath + "/:id",
 			Func:   ctrl.GetOne,
+			Authorization: &auth.AuthorizationRequirement{
+				AnyOf: []string{
+					stypes.PermissionViewAll,
+				},
+			},
+		},
+		&controllers.ControllerHandler{
+			Method: "GET",
+			Path:   types.ControllerPath + "/:id/logs",
+			Func:   ctrl.GetLogs,
 			Authorization: &auth.AuthorizationRequirement{
 				AnyOf: []string{
 					stypes.PermissionViewAll,
@@ -116,4 +129,38 @@ func (ctrl *Controller) GetOne(c *gin.Context) {
 	)
 
 	ctrl.Render(c, types.NewTaskResult(task, err))
+}
+
+// GetLogs streams log entries for a task as Server-Sent Events.
+// Task existence and access control are handled by StreamTaskLogs and
+// the authorization middleware respectively.
+func (ctrl *Controller) GetLogs(c *gin.Context) {
+	id, err := uuid.FromString(c.Param("id"))
+	if err != nil {
+		ctrl.Render(c, &controllers.BadRequestResult{Error: err})
+		return
+	}
+
+	// Parse offset from query param.
+	offset := 0
+	if offsetStr := c.Query("offset"); offsetStr != "" {
+		if parsed, parseErr := strconv.Atoi(offsetStr); parseErr == nil && parsed >= 0 {
+			offset = parsed
+		}
+	}
+
+	// StreamTaskLogs validates task existence and returns a JSONL reader.
+	reader, err := ctrl.service.StreamTaskLogs(
+		c.Request.Context(),
+		ctrl.GetRequestLogger(c),
+		id,
+		offset,
+	)
+	if err != nil {
+		ctrl.Render(c, types.NewTaskResult(nil, err))
+		return
+	}
+
+	// Stream as SSE — the generic util reads JSONL lines and wraps them.
+	sse.Stream(c, reader, ctrl.GetRequestLogger(c).Logger)
 }

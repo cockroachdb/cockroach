@@ -63,6 +63,12 @@ func (t *TaskManageRecords) Process(ctx context.Context, l *logger.Logger) error
 	return t.Service.ManageRecords(ctx, l, dto)
 }
 
+// ResolveConcurrencyKey disables default per-type locking for manage-records tasks
+// so multiple record batches can run concurrently.
+func (t *TaskManageRecords) ResolveConcurrencyKey() string {
+	return ""
+}
+
 func (t *TaskManageRecords) GetTimeout() time.Duration {
 	return time.Second * 90
 }

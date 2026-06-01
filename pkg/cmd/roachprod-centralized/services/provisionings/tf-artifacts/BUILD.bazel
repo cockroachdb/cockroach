@@ -1,0 +1,45 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "artifacts",
+    srcs = [
+        "gcs.go",
+        "interface.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/artifacts",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_google_cloud_go_storage//:storage",
+    ],
+)
+
+go_test(
+    name = "artifacts_test",
+    srcs = ["gcs_test.go"],
+    embed = [":artifacts"],
+    deps = [
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+go_library(
+    name = "tf-artifacts",
+    srcs = [
+        "gcs.go",
+        "interface.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/tf-artifacts",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_google_cloud_go_storage//:storage",
+    ],
+)
+
+go_test(
+    name = "tf-artifacts_test",
+    srcs = ["gcs_test.go"],
+    embed = [":tf-artifacts"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

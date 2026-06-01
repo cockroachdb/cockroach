@@ -63,6 +63,9 @@ func TestDefaultValues(t *testing.T) {
 	assert.Equal(t, "memory", config.Database.Type)
 	assert.Equal(t, 10, config.Database.MaxConns)
 	assert.Equal(t, 300, config.Database.MaxIdleTime)
+	assert.Equal(t, "repository", config.Provisionings.Artifacts.Backend)
+	assert.Equal(t, "", config.Provisionings.Artifacts.GCSBucket)
+	assert.Equal(t, "artifacts/provisionings", config.Provisionings.Artifacts.GCSPrefix)
 	assert.Empty(t, config.CloudProviders)
 	assert.Empty(t, config.DNSProviders)
 }
@@ -73,20 +76,23 @@ func TestEnvironmentVariables(t *testing.T) {
 
 	// Set test environment variables
 	testEnvVars := map[string]string{
-		"ROACHPROD_LOG_LEVEL":                       "debug",
-		"ROACHPROD_API_PORT":                        "9090",
-		"ROACHPROD_API_BASE_PATH":                   "/api",
-		"ROACHPROD_API_METRICS_ENABLED":             "false",
-		"ROACHPROD_API_METRICS_PATH":                "/health",
-		"ROACHPROD_API_METRICS_PORT":                "9091",
-		"ROACHPROD_API_AUTHENTICATION_TYPE":         "disabled",
-		"ROACHPROD_API_AUTHENTICATION_HEADER":       "Authorization",
-		"ROACHPROD_API_AUTHENTICATION_JWT_AUDIENCE": "test-audience",
-		"ROACHPROD_TASKS_WORKERS":                   "5",
-		"ROACHPROD_DATABASE_URL":                    "postgres://test",
-		"ROACHPROD_DATABASE_TYPE":                   "cockroachdb",
-		"ROACHPROD_DATABASE_MAX_CONNS":              "25",
-		"ROACHPROD_DATABASE_MAX_IDLE_TIME":          "600",
+		"ROACHPROD_LOG_LEVEL":                          "debug",
+		"ROACHPROD_API_PORT":                           "9090",
+		"ROACHPROD_API_BASE_PATH":                      "/api",
+		"ROACHPROD_API_METRICS_ENABLED":                "false",
+		"ROACHPROD_API_METRICS_PATH":                   "/health",
+		"ROACHPROD_API_METRICS_PORT":                   "9091",
+		"ROACHPROD_API_AUTHENTICATION_TYPE":            "disabled",
+		"ROACHPROD_API_AUTHENTICATION_HEADER":          "Authorization",
+		"ROACHPROD_API_AUTHENTICATION_JWT_AUDIENCE":    "test-audience",
+		"ROACHPROD_TASKS_WORKERS":                      "5",
+		"ROACHPROD_DATABASE_URL":                       "postgres://test",
+		"ROACHPROD_DATABASE_TYPE":                      "cockroachdb",
+		"ROACHPROD_DATABASE_MAX_CONNS":                 "25",
+		"ROACHPROD_DATABASE_MAX_IDLE_TIME":             "600",
+		"ROACHPROD_PROVISIONINGS_ARTIFACTS_BACKEND":    "gcs",
+		"ROACHPROD_PROVISIONINGS_ARTIFACTS_GCS_BUCKET": "artifacts-bucket",
+		"ROACHPROD_PROVISIONINGS_ARTIFACTS_GCS_PREFIX": "artifact-prefix",
 	}
 
 	for key, value := range testEnvVars {
@@ -115,6 +121,9 @@ func TestEnvironmentVariables(t *testing.T) {
 	assert.Equal(t, "cockroachdb", config.Database.Type)
 	assert.Equal(t, 25, config.Database.MaxConns)
 	assert.Equal(t, 600, config.Database.MaxIdleTime)
+	assert.Equal(t, "gcs", config.Provisionings.Artifacts.Backend)
+	assert.Equal(t, "artifacts-bucket", config.Provisionings.Artifacts.GCSBucket)
+	assert.Equal(t, "artifact-prefix", config.Provisionings.Artifacts.GCSPrefix)
 }
 
 func TestCommandLineFlags(t *testing.T) {
@@ -141,6 +150,9 @@ func TestCommandLineFlags(t *testing.T) {
 		"--database-type", "cockroachdb",
 		"--database-max-conns", "15",
 		"--database-max-idle-time", "450",
+		"--provisionings-artifacts-backend", "gcs",
+		"--provisionings-artifacts-gcs-bucket", "artifacts-bucket",
+		"--provisionings-artifacts-gcs-prefix", "artifact-prefix",
 	}
 
 	err = flagSet.Parse(testArgs)
@@ -164,6 +176,9 @@ func TestCommandLineFlags(t *testing.T) {
 	assert.Equal(t, "cockroachdb", config.Database.Type)
 	assert.Equal(t, 15, config.Database.MaxConns)
 	assert.Equal(t, 450, config.Database.MaxIdleTime)
+	assert.Equal(t, "gcs", config.Provisionings.Artifacts.Backend)
+	assert.Equal(t, "artifacts-bucket", config.Provisionings.Artifacts.GCSBucket)
+	assert.Equal(t, "artifact-prefix", config.Provisionings.Artifacts.GCSPrefix)
 }
 
 func TestYAMLFileConfig(t *testing.T) {
@@ -193,6 +208,11 @@ database:
   type: cockroachdb
   maxConns: 30
   maxIdleTime: 900
+provisionings:
+  artifacts:
+    backend: gcs
+    gcsBucket: yaml-artifacts-bucket
+    gcsPrefix: yaml/artifacts
 `
 
 	tmpFile, err := os.CreateTemp("", "config-test-*.yaml")
@@ -219,6 +239,9 @@ database:
 	assert.Equal(t, "error", config.Log.Level)
 	assert.Equal(t, 6060, config.Api.Port)
 	assert.Equal(t, "/api/v3", config.Api.BasePath)
+	assert.Equal(t, "gcs", config.Provisionings.Artifacts.Backend)
+	assert.Equal(t, "yaml-artifacts-bucket", config.Provisionings.Artifacts.GCSBucket)
+	assert.Equal(t, "yaml/artifacts", config.Provisionings.Artifacts.GCSPrefix)
 	assert.Equal(t, false, config.Api.Metrics.Enabled)
 	assert.Equal(t, "/ping", config.Api.Metrics.Path)
 	assert.Equal(t, 6061, config.Api.Metrics.Port)

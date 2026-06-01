@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "provisionings",
+    srcs = [
+        "local_provision.go",
+        "provisionings.go",
+        "templates.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/cmd/provisionings",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/models/provisionings",
+        "//pkg/cmd/roachprod-centralized/services/provisionings/templates",
+        "//pkg/cmd/roachprod-centralized/services/provisionings/tofu",
+        "//pkg/cmd/roachprod-centralized/services/provisionings/vars",
+        "//pkg/cmd/roachprod-centralized/utils/logger",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_spf13_cobra//:cobra",
+    ],
+)

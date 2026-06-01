@@ -16,6 +16,7 @@ go_library(
         "//pkg/cmd/roachprod-centralized/services/auth/types",
         "//pkg/cmd/roachprod-centralized/utils",
         "//pkg/cmd/roachprod-centralized/utils/logger",
+        "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gin_gonic_gin//:gin",
     ],
