@@ -191,7 +191,7 @@ func backupRestoreRoundTrip(
 			t.L().Printf("starting backup %d", i+1)
 			collection, err := d.createBackupCollection(
 				ctx, t.L(), t, testRNG, bspec, bspec, "round-trip-test-backup",
-				true /* internalSystemsJobs */, false, /* isMultitenant */
+				true /* internalSystemsJobs */, false /* isMultitenant */, false, /* skipRevisionHistory */
 			)
 			if err != nil {
 				return err
