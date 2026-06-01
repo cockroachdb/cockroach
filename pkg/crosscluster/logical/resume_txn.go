@@ -97,8 +97,13 @@ func (r *logicalReplicationResumer) runTxnCoordinator(
 		return err
 	}
 
-	// TODO(jeffswenson): checkpoint partition URIs via
-	// r.checkpointPartitionURIs once plan generation is added.
+	uris, err := r.getClusterUris(ctx, r.job, jobExecCtx.ExecCfg().InternalDB)
+	if err != nil {
+		return err
+	}
+	if err := r.checkpointPartitionURIs(ctx, uris, sourcePlan.Topology.SerializedClusterUris()); err != nil {
+		return err
+	}
 
 	flowPlan, planCtx, applierInstanceIDs, err :=
 		txnmode.PlanTxnReplication(ctx, r.job, jobExecCtx, sourcePlan, replicatedTime, endTime)
