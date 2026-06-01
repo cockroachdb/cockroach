@@ -1,0 +1,67 @@
+$ bazel test //pkg/sql/tests:tests_test --nocache_test_results --test_arg -test.run=- --test_arg '-test.bench=^BenchmarkPointSelect/conc=64$' --test_sharding_strategy=disabled --test_arg -test.cpu --test_arg 1 --test_arg -test.benchtime=20s --crdb_test_off --crdb_bench --test_arg -test.outputdir=/home/matt_white_cockroachlabs_com/cockroach-fastpath-experiment --sandbox_writable_path=/home/matt_white_cockroachlabs_com/cockroach-fastpath-experiment --test_arg -test.cpu --test_arg 8 --test_arg -test.cpuprofile=cpu.prof --test_arg -test.memprofile=mem.prof --test_arg -test.mutexprofile=mutex.prof --test_arg -test.blockprofile=block.prof --test_env COCKROACH_TEST_FIXTURES_DIR=/home/matt_white_cockroachlabs_com/.cache/crdb-test-fixtures --sandbox_writable_path=/home/matt_white_cockroachlabs_com/.cache/crdb-test-fixtures --test_output streamed
+INFO: Invocation ID: fdba55d8-0295-4037-bc2c-26147efa4c3f
+Computing main repo mapping: 
+WARNING: Streamed test output requested. All tests will be run locally, without sharding, one at a time
+Loading: 
+Loading: 0 packages loaded
+WARNING: Build option --test_env has changed, discarding analysis cache (this can be expensive, see https://bazel.build/advanced/performance/iteration-speed).
+Analyzing: target //pkg/sql/tests:tests_test (0 packages loaded, 0 targets configured)
+Analyzing: target //pkg/sql/tests:tests_test (0 packages loaded, 0 targets configured)
+
+INFO: Analyzed target //pkg/sql/tests:tests_test (0 packages loaded, 25341 targets configured).
+[5,312 / 6,094] [Prepa] GoCompilePkg pkg/sql/tests/tests_test.internal.a
+[6,088 / 6,094] GoCompilePkg pkg/sql/tests/tests_test.internal.a; 1s linux-sandbox, remote-cache
+[6,091 / 6,094] GoCompilePkgExternal pkg/sql/tests/tests_test_test.external.a; 0s linux-sandbox, remote-cache
+[6,094 / 6,095] [Prepa] Testing //pkg/sql/tests:tests_test
+I260421 21:47:04.886269 1 (gostd) rand.go:288  [-] 1  random seed: 8632003097050531739
+[6,094 / 6,095] Testing //pkg/sql/tests:tests_test; 1s linux-sandbox
+goos: linux
+goarch: amd64
+cpu: Intel(R) Xeon(R) CPU @ 2.80GHz
+BenchmarkPointSelect/conc=64-8         	  802269	     28901 ns/op	      1583 p50_us	      5882 p99_us
+I260421 21:47:39.331230 82 testutils/testcluster/testcluster.go:189  [-] 2  TestCluster quiescing nodes
+I260421 21:47:39.331412 2578 sql/stats/automatic_stats.go:857  [T1,Vsystem,n1] 3  quiescing stats garbage collector
+I260421 21:47:39.331419 6306 jobs/registry.go:1622  [T1,Vsystem,n1,job=103] 4  AUTO UPDATE SQL ACTIVITY job 103: stepping through state succeeded
+I260421 21:47:39.331472 6294 jobs/registry.go:1622  [T1,Vsystem,n1,job=100] 5  KEY VISUALIZER job 100: stepping through state succeeded
+I260421 21:47:39.331603 2448 sql/stats/automatic_stats.go:766  [T1,Vsystem,n1] 6  quiescing auto stats refresher
+W260421 21:47:39.331740 2109 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=system-config-cache,mux_n=1,gen=2] 7  error closing mux rangefeed client: context canceled
+W260421 21:47:39.331927 6300 jobs/adopt.go:563  [T1,Vsystem,n1] 8  could not clear job claim: clear-job-claim: node unavailable; try another peer
+W260421 21:47:39.331967 6294 jobs/adopt.go:563  [T1,Vsystem,n1] 10  could not clear job claim: clear-job-claim: node unavailable; try another peer
+W260421 21:47:39.331435 6492 15@kv/kvserver/intentresolver/intent_resolver.go:944  [-] 11  failed to gc transaction record: could not GC completed transaction anchored at /Local/Range/Table/104/RangeDescriptor: node unavailable; try another peer
+W260421 21:47:39.331968 6306 jobs/adopt.go:563  [T1,Vsystem,n1] 9  could not clear job claim: clear-job-claim: node unavailable; try another peer
+W260421 21:47:39.332084 2719 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=tenant-entry-watcher,mux_n=1,gen=2] 12  error closing mux rangefeed client: context canceled
+W260421 21:47:39.332120 2076 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=settings-watcher,mux_n=1,gen=2] 13  error closing mux rangefeed client: context canceled
+W260421 21:47:39.332151 2684 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=tenant-settings-watcher,mux_n=1,gen=2] 14  error closing mux rangefeed client: context canceled
+I260421 21:47:39.332191 668 server/start_listen.go:114  [T1,Vsystem,n1] 15  server shutting down: instructing cmux to stop accepting
+I260421 21:47:39.332205 2449 sql/stats/automatic_stats.go:804  [T1,Vsystem,n1] 16  quiescing auto stats misestimates refresher
+W260421 21:47:39.331987 2320 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,job=AUTO SPAN CONFIG RECONCILIATION id=1168957849516179457,rangefeed=sql-watcher-protected-ts-records-rangefeed,mux_n=1,gen=2] 17  error closing mux rangefeed client: context canceled
+W260421 21:47:39.332271 1306 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=sql_instances,mux_n=1,gen=2] 18  error closing mux rangefeed client: context canceled
+W260421 21:47:39.332327 2330 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,job=AUTO SPAN CONFIG RECONCILIATION id=1168957849516179457,rangefeed=sql-watcher-descriptor-rangefeed,mux_n=1,gen=2] 19  error closing mux rangefeed client: context canceled
+W260421 21:47:39.332394 2689 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=statement-hints-watcher,mux_n=1,gen=2] 20  error closing mux rangefeed client: context canceled
+W260421 21:47:39.332445 651 sql/sqlliveness/slinstance/slinstance.go:337  [T1,Vsystem,n1] 21  exiting heartbeat loop
+W260421 21:47:39.332463 651 sql/sqlliveness/slinstance/slinstance.go:324  [T1,Vsystem,n1] 22  exiting heartbeat loop with error: node unavailable; try another peer
+W260421 21:47:39.332470 6364 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,job=POLL JOBS STATS id=101,rangefeed=cluster-metrics-watcher,mux_n=1,gen=2] 23  error closing mux rangefeed client: context canceled
+E260421 21:47:39.332486 651 server/server_sql.go:535  [T1,Vsystem,n1] 24  failed to run update of instance with new session ID: node unavailable; try another peer
+W260421 21:47:39.332521 2527 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=table-stats-cache,mux_n=1,gen=2] 25  error closing mux rangefeed client: context canceled
+W260421 21:47:39.332538 6319 jobs/adopt.go:563  [T1,Vsystem,n1] 26  could not clear job claim: clear-job-claim: node unavailable; try another peer
+W260421 21:47:39.332532 1322 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=lease,mux_n=1,gen=2] 27  error closing mux rangefeed client: context canceled
+W260421 21:47:39.332539 2602 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=tenant-boundaries-watcher,mux_n=1,gen=2] 28  error closing mux rangefeed client: context canceled
+W260421 21:47:39.332551 2135 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=spanconfig-subscriber,mux_n=1,gen=2] 29  error closing mux rangefeed client: context canceled
+W260421 21:47:39.332629 6311 jobs/adopt.go:563  [T1,Vsystem,n1] 30  could not clear job claim: clear-job-claim: node unavailable; try another peer
+W260421 21:47:39.332710 2354 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,job=AUTO SPAN CONFIG RECONCILIATION id=1168957849516179457,rangefeed=sql-watcher-zones-rangefeed,mux_n=1,gen=2] 31  error closing mux rangefeed client: context canceled
+I260421 21:47:39.332772 1842 jobs/registry.go:1622  [T1,Vsystem,n1,job=1168957849516179457] 32  AUTO SPAN CONFIG RECONCILIATION job 1168957849516179457: stepping through state succeeded
+W260421 21:47:39.337074 82 server/server_sql.go:1847  [T1,Vsystem,n1] 33  server shutdown without a prior graceful drain
+I260421 21:47:39.337172 82 server/server_controller.go:380  [T1,Vsystem,n1] 34  server controller shutting down
+I260421 21:47:39.337185 82 server/server_controller.go:389  [T1,Vsystem,n1] 35  waiting for tenant servers to report stopped
+PASS
+[6,094 / 6,095] 1 / 1 tests; Testing //pkg/sql/tests:tests_test; 35s linux-sandbox
+INFO: Found 1 test target...
+Target //pkg/sql/tests:tests_test up-to-date:
+  _bazel/bin/pkg/sql/tests/tests_test_/tests_test
+INFO: Elapsed time: 40.738s, Critical Path: 39.45s
+INFO: 7 processes: 1 internal, 6 linux-sandbox.
+INFO: Build completed successfully, 7 total actions
+//pkg/sql/tests:tests_test                                               PASSED in 35.0s
+
+Executed 1 out of 1 test: 1 test passes.
+There were tests whose specified size is too big. Use the --test_verbose_timeout_warnings command line option to see which ones these are.

@@ -1,0 +1,92 @@
+$ bazel test //pkg/sql/tests:tests_test --nocache_test_results --test_arg -test.run=- --test_arg '-test.bench=^BenchmarkPointSelect$' --test_sharding_strategy=disabled --test_arg -test.cpu --test_arg 1 --test_arg -test.count=5 --test_arg -test.benchtime=10s --crdb_test_off --crdb_bench --test_arg -test.outputdir=/home/matt_white_cockroachlabs_com/cockroach-fastpath-experiment --sandbox_writable_path=/home/matt_white_cockroachlabs_com/cockroach-fastpath-experiment --test_arg -test.cpu --test_arg 8 --test_env COCKROACH_TEST_FIXTURES_DIR=/home/matt_white_cockroachlabs_com/.cache/crdb-test-fixtures --sandbox_writable_path=/home/matt_white_cockroachlabs_com/.cache/crdb-test-fixtures --test_output streamed
+INFO: Invocation ID: 237c136c-3271-4fb1-b698-6708138aa04e
+Computing main repo mapping: 
+WARNING: Streamed test output requested. All tests will be run locally, without sharding, one at a time
+Loading: 
+Loading: 0 packages loaded
+WARNING: Build option --test_env has changed, discarding analysis cache (this can be expensive, see https://bazel.build/advanced/performance/iteration-speed).
+Analyzing: target //pkg/sql/tests:tests_test (0 packages loaded, 0 targets configured)
+Analyzing: target //pkg/sql/tests:tests_test (0 packages loaded, 0 targets configured)
+
+INFO: Analyzed target //pkg/sql/tests:tests_test (0 packages loaded, 25341 targets configured).
+[6,088 / 6,094] GoCompilePkg pkg/sql/tests/tests_test.internal.a; 0s linux-sandbox, remote-cache
+[6,088 / 6,094] GoCompilePkg pkg/sql/tests/tests_test.internal.a; 1s linux-sandbox, remote-cache
+[6,091 / 6,094] GoCompilePkgExternal pkg/sql/tests/tests_test_test.external.a; 1s linux-sandbox, remote-cache
+[6,093 / 6,094] GoLink pkg/sql/tests/tests_test_/tests_test; 0s linux-sandbox, remote-cache
+[6,093 / 6,094] GoLink pkg/sql/tests/tests_test_/tests_test; 7s linux-sandbox, remote-cache
+I260421 22:05:29.110959 1 (gostd) rand.go:288  [-] 1  random seed: -7070569338680344468
+[6,094 / 6,095] Testing //pkg/sql/tests:tests_test; 1s linux-sandbox
+goos: linux
+goarch: amd64
+cpu: Intel(R) Xeon(R) CPU @ 2.80GHz
+BenchmarkPointSelect/conc=1-8         	   43388	    273624 ns/op	       263.2 p50_us	       398.3 p99_us
+BenchmarkPointSelect/conc=1-8         	   43083	    276011 ns/op	       264.7 p50_us	       396.3 p99_us
+BenchmarkPointSelect/conc=1-8         	   42454	    278589 ns/op	       267.8 p50_us	       397.3 p99_us
+BenchmarkPointSelect/conc=1-8         	   42680	    274043 ns/op	       263.2 p50_us	       401.4 p99_us
+BenchmarkPointSelect/conc=1-8         	   41673	    272834 ns/op	       263.7 p50_us	       394.2 p99_us
+BenchmarkPointSelect/conc=8-8         	  397605	     29465 ns/op	       220.2 p50_us	       481.8 p99_us
+BenchmarkPointSelect/conc=8-8         	  390176	     29440 ns/op	       220.7 p50_us	       468.0 p99_us
+BenchmarkPointSelect/conc=8-8         	  378141	     27607 ns/op	       206.3 p50_us	       436.2 p99_us
+BenchmarkPointSelect/conc=8-8         	  403140	     27348 ns/op	       204.8 p50_us	       424.4 p99_us
+BenchmarkPointSelect/conc=8-8         	  393770	     27222 ns/op	       204.3 p50_us	       421.9 p99_us
+BenchmarkPointSelect/conc=16-8        	  437085	     26315 ns/op	       393.7 p50_us	      1111 p99_us
+BenchmarkPointSelect/conc=16-8        	  437912	     26533 ns/op	       396.8 p50_us	      1121 p99_us
+BenchmarkPointSelect/conc=16-8        	  427394	     26628 ns/op	       397.8 p50_us	      1130 p99_us
+BenchmarkPointSelect/conc=16-8        	  426472	     26629 ns/op	       398.3 p50_us	      1118 p99_us
+BenchmarkPointSelect/conc=16-8        	  426853	     26543 ns/op	       397.3 p50_us	      1118 p99_us
+BenchmarkPointSelect/conc=32-8        	  431220	     26452 ns/op	       739.3 p50_us	      2464 p99_us
+BenchmarkPointSelect/conc=32-8        	  421987	     26595 ns/op	       743.4 p50_us	      2476 p99_us
+BenchmarkPointSelect/conc=32-8        	  429968	     26671 ns/op	       745.0 p50_us	      2478 p99_us
+BenchmarkPointSelect/conc=32-8        	  426975	     26622 ns/op	       743.9 p50_us	      2464 p99_us
+BenchmarkPointSelect/conc=32-8        	  427009	     26616 ns/op	       746.5 p50_us	      2447 p99_us
+BenchmarkPointSelect/conc=64-8        	  424502	     27065 ns/op	      1488 p50_us	      5378 p99_us
+BenchmarkPointSelect/conc=64-8        	  430316	     26780 ns/op	      1471 p50_us	      5321 p99_us
+BenchmarkPointSelect/conc=64-8        	  424683	     27146 ns/op	      1496 p50_us	      5366 p99_us
+BenchmarkPointSelect/conc=64-8        	  425893	     27121 ns/op	      1489 p50_us	      5452 p99_us
+BenchmarkPointSelect/conc=64-8        	  423081	     27245 ns/op	      1499 p50_us	      5423 p99_us
+BenchmarkPointSelect/conc=128-8       	  431581	     27864 ns/op	      2961 p50_us	     12329 p99_us
+BenchmarkPointSelect/conc=128-8       	  410022	     27691 ns/op	      2957 p50_us	     12214 p99_us
+BenchmarkPointSelect/conc=128-8       	  402426	     27736 ns/op	      2972 p50_us	     12132 p99_us
+BenchmarkPointSelect/conc=128-8       	  402451	     27891 ns/op	      2976 p50_us	     12362 p99_us
+BenchmarkPointSelect/conc=128-8       	  429940	     27660 ns/op	      2955 p50_us	     12124 p99_us
+I260421 22:14:05.593999 82 testutils/testcluster/testcluster.go:189  [-] 2  TestCluster quiescing nodes
+I260421 22:14:05.594163 2632 sql/stats/automatic_stats.go:857  [T1,Vsystem,n1] 3  quiescing stats garbage collector
+I260421 22:14:05.594214 4999 jobs/registry.go:1622  [T1,Vsystem,n1,job=100] 4  KEY VISUALIZER job 100: stepping through state succeeded
+W260421 22:14:05.594180 38756 15@kv/kvserver/intentresolver/intent_resolver.go:944  [-] 5  failed to gc transaction record: could not GC completed transaction anchored at /Table/54/1/1168961467857862657/"legacy_progress": node unavailable; try another peer
+I260421 22:14:05.594256 2630 sql/stats/automatic_stats.go:766  [T1,Vsystem,n1] 6  quiescing auto stats refresher
+I260421 22:14:05.594279 2631 sql/stats/automatic_stats.go:804  [T1,Vsystem,n1] 7  quiescing auto stats misestimates refresher
+I260421 22:14:05.594266 4955 jobs/registry.go:1622  [T1,Vsystem,n1,job=103] 8  AUTO UPDATE SQL ACTIVITY job 103: stepping through state succeeded
+I260421 22:14:05.594434 671 server/start_listen.go:114  [T1,Vsystem,n1] 9  server shutting down: instructing cmux to stop accepting
+W260421 22:14:05.594480 783 sql/sqlliveness/slinstance/slinstance.go:337  [T1,Vsystem,n1] 10  exiting heartbeat loop
+W260421 22:14:05.594497 783 sql/sqlliveness/slinstance/slinstance.go:324  [T1,Vsystem,n1] 11  exiting heartbeat loop with error: node unavailable; try another peer
+E260421 22:14:05.594521 783 server/server_sql.go:535  [T1,Vsystem,n1] 12  failed to run update of instance with new session ID: node unavailable; try another peer
+W260421 22:14:05.594525 5151 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,job=POLL JOBS STATS id=101,rangefeed=cluster-metrics-watcher,mux_n=1,gen=2] 13  error closing mux rangefeed client: context canceled
+W260421 22:14:05.594592 2614 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=table-stats-cache,mux_n=1,gen=2] 14  error closing mux rangefeed client: context canceled
+W260421 22:14:05.594629 2089 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=spanconfig-subscriber,mux_n=1,gen=2] 16  error closing mux rangefeed client: context canceled
+W260421 22:14:05.594703 4999 jobs/adopt.go:563  [T1,Vsystem,n1] 17  could not clear job claim: clear-job-claim: node unavailable; try another peer
+W260421 22:14:05.594863 2624 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=tenant-boundaries-watcher,mux_n=1,gen=2] 18  error closing mux rangefeed client: context canceled
+W260421 22:14:05.594859 1003 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=lease,mux_n=1,gen=2] 19  error closing mux rangefeed client: context canceled
+W260421 22:14:05.594903 2118 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=settings-watcher,mux_n=1,gen=2] 20  error closing mux rangefeed client: context canceled
+W260421 22:14:05.594592 2366 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,job=AUTO SPAN CONFIG RECONCILIATION id=1168961467857862657,rangefeed=sql-watcher-protected-ts-records-rangefeed,mux_n=1,gen=2] 15  error closing mux rangefeed client: context canceled
+W260421 22:14:05.594971 2010 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,job=AUTO SPAN CONFIG RECONCILIATION id=1168961467857862657,rangefeed=sql-watcher-zones-rangefeed,mux_n=1,gen=2] 21  error closing mux rangefeed client: context canceled
+W260421 22:14:05.595009 2682 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=tenant-settings-watcher,mux_n=1,gen=2] 22  error closing mux rangefeed client: context canceled
+W260421 22:14:05.595112 2161 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=system-config-cache,mux_n=1,gen=2] 23  error closing mux rangefeed client: context canceled
+W260421 22:14:05.595115 1337 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=sql_instances,mux_n=1,gen=2] 24  error closing mux rangefeed client: context canceled
+W260421 22:14:05.595154 2743 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=statement-hints-watcher,mux_n=1,gen=2] 25  error closing mux rangefeed client: context canceled
+W260421 22:14:05.595163 2752 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=tenant-entry-watcher,mux_n=1,gen=2] 26  error closing mux rangefeed client: context canceled
+W260421 22:14:05.595169 2348 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,job=AUTO SPAN CONFIG RECONCILIATION id=1168961467857862657,rangefeed=sql-watcher-descriptor-rangefeed,mux_n=1,gen=2] 27  error closing mux rangefeed client: context canceled
+I260421 22:14:05.595224 1752 jobs/registry.go:1622  [T1,Vsystem,n1,job=1168961467857862657] 28  AUTO SPAN CONFIG RECONCILIATION job 1168961467857862657: stepping through state succeeded
+W260421 22:14:05.599492 82 server/server_sql.go:1847  [T1,Vsystem,n1] 29  server shutdown without a prior graceful drain
+I260421 22:14:05.599570 82 server/server_controller.go:380  [T1,Vsystem,n1] 30  server controller shutting down
+I260421 22:14:05.599586 82 server/server_controller.go:389  [T1,Vsystem,n1] 31  waiting for tenant servers to report stopped
+PASS
+[6,094 / 6,095] 1 / 1 tests; Testing //pkg/sql/tests:tests_test; 516s linux-sandbox
+INFO: Found 1 test target...
+Target //pkg/sql/tests:tests_test up-to-date:
+  _bazel/bin/pkg/sql/tests/tests_test_/tests_test
+INFO: Elapsed time: 531.034s, Critical Path: 529.98s
+INFO: 9 processes: 1 internal, 8 linux-sandbox.
+INFO: Build completed successfully, 9 total actions
+//pkg/sql/tests:tests_test                                               PASSED in 516.9s
+
+Executed 1 out of 1 test: 1 test passes.

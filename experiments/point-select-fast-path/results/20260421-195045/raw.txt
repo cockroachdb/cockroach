@@ -1,0 +1,229 @@
+$ bazel test //pkg/sql/tests:tests_test --nocache_test_results --test_arg -test.run=- --test_arg '-test.bench=^BenchmarkPointSelect$' --test_sharding_strategy=disabled --test_arg -test.cpu --test_arg 1 --test_arg -test.count=5 --test_arg -test.benchtime=10s --crdb_test_off --crdb_bench --test_arg -test.outputdir=/home/matt_white_cockroachlabs_com/cockroach-fastpath-experiment --sandbox_writable_path=/home/matt_white_cockroachlabs_com/cockroach-fastpath-experiment --test_arg -test.cpu --test_arg 8 --test_env COCKROACH_TEST_FIXTURES_DIR=/home/matt_white_cockroachlabs_com/.cache/crdb-test-fixtures --sandbox_writable_path=/home/matt_white_cockroachlabs_com/.cache/crdb-test-fixtures --test_output streamed
+INFO: Invocation ID: d9164fee-6e05-435d-bfb3-e3d0f7834c87
+Computing main repo mapping: 
+WARNING: Streamed test output requested. All tests will be run locally, without sharding, one at a time
+Loading: 
+Loading: 0 packages loaded
+WARNING: Build options --//build/toolchains:crdb_bench_flag, --//build/toolchains:crdb_test_flag, --//build/toolchains:crdb_test_off_flag, and 2 more have changed, discarding analysis cache (this can be expensive, see https://bazel.build/advanced/performance/iteration-speed).
+Analyzing: target //pkg/sql/tests:tests_test (0 packages loaded, 0 targets configured)
+Analyzing: target //pkg/sql/tests:tests_test (0 packages loaded, 6 targets configured)
+
+Analyzing: target //pkg/sql/tests:tests_test (718 packages loaded, 12505 targets configured)
+
+Analyzing: target //pkg/sql/tests:tests_test (1261 packages loaded, 16723 targets configured)
+
+Analyzing: target //pkg/sql/tests:tests_test (1611 packages loaded, 21384 targets configured)
+
+Analyzing: target //pkg/sql/tests:tests_test (1752 packages loaded, 25133 targets configured)
+
+INFO: Analyzed target //pkg/sql/tests:tests_test (1799 packages loaded, 25341 targets configured).
+[259 / 6,094] Executing genrule //pkg/util/buildutil:gen-crdb-bench-on [for tool]; 0s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[352 / 6,094] GoStdlib external/io_bazel_rules_go/stdlib_/pkg [for tool]; 1s linux-sandbox, remote-cache ... (24 actions running)
+[395 / 6,094] GoStdlib external/io_bazel_rules_go/stdlib_/pkg [for tool]; 2s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[442 / 6,094] GoStdlib external/io_bazel_rules_go/stdlib_/pkg [for tool]; 3s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[485 / 6,094] GoStdlib external/io_bazel_rules_go/stdlib_/pkg [for tool]; 4s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[513 / 6,094] GoStdlib external/io_bazel_rules_go/stdlib_/pkg [for tool]; 5s linux-sandbox, remote-cache ... (23 actions, 22 running)
+[553 / 6,094] GoStdlib external/io_bazel_rules_go/stdlib_/pkg [for tool]; 6s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[605 / 6,094] GoStdlib external/io_bazel_rules_go/stdlib_/pkg [for tool]; 7s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[647 / 6,094] GoStdlib external/io_bazel_rules_go/stdlib_/pkg [for tool]; 8s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[717 / 6,094] GoStdlib external/io_bazel_rules_go/stdlib_/pkg [for tool]; 9s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[749 / 6,094] GoStdlib external/io_bazel_rules_go/stdlib_/pkg [for tool]; 10s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[791 / 6,094] GoStdlib external/io_bazel_rules_go/stdlib_/pkg [for tool]; 11s linux-sandbox, remote-cache ... (25 actions, 23 running)
+[823 / 6,094] GoStdlib external/io_bazel_rules_go/stdlib_/pkg [for tool]; 12s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[864 / 6,094] GoStdlib external/io_bazel_rules_go/stdlib_/pkg [for tool]; 13s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[901 / 6,094] GoStdlib external/io_bazel_rules_go/stdlib_/pkg [for tool]; 14s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[928 / 6,094] GoStdlib external/io_bazel_rules_go/stdlib_/pkg [for tool]; 15s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[960 / 6,094] GoStdlib external/io_bazel_rules_go/stdlib_/pkg [for tool]; 16s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[1,011 / 6,094] GoStdlib external/io_bazel_rules_go/stdlib_/pkg [for tool]; 17s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[1,095 / 6,094] GoStdlib external/io_bazel_rules_go/stdlib_/pkg [for tool]; 18s linux-sandbox, remote-cache ... (24 actions, 22 running)
+[1,176 / 6,094] GoStdlib external/io_bazel_rules_go/stdlib_/pkg [for tool]; 19s linux-sandbox, remote-cache ... (24 actions, 22 running)
+[1,261 / 6,094] GoStdlib external/io_bazel_rules_go/stdlib_/pkg [for tool]; 20s linux-sandbox, remote-cache ... (24 actions, 22 running)
+[1,316 / 6,094] GoStdlib external/io_bazel_rules_go/stdlib_/pkg [for tool]; 21s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[1,383 / 6,094] GoStdlib external/io_bazel_rules_go/stdlib_/pkg [for tool]; 22s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[1,409 / 6,094] GoStdlib external/io_bazel_rules_go/stdlib_/pkg [for tool]; 23s linux-sandbox, remote-cache ... (23 actions, 22 running)
+[1,447 / 6,094] GoCompilePkg external/com_github_datadog_zstd/zstd.a; 15s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[1,512 / 6,094] GoCompilePkg external/com_github_datadog_zstd/zstd.a; 16s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[1,574 / 6,094] GoCompilePkg external/com_github_datadog_zstd/zstd.a; 17s linux-sandbox, remote-cache ... (24 actions, 22 running)
+[1,630 / 6,094] Compiling src/google/protobuf/descriptor.cc [for tool]; 14s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[1,702 / 6,094] Compiling src/google/protobuf/descriptor.cc [for tool]; 15s linux-sandbox, remote-cache ... (23 actions, 22 running)
+[1,754 / 6,094] Compiling src/google/protobuf/descriptor.cc [for tool]; 16s linux-sandbox, remote-cache ... (24 actions, 22 running)
+[1,814 / 6,094] GoCompilePkg external/com_github_aws_aws_sdk_go_v2_service_s3/s3.a; 5s linux-sandbox, remote-cache ... (24 actions, 21 running)
+[1,933 / 6,094] Executing genrule //pkg/sql/parser:sql-goyacc; 5s linux-sandbox, remote-cache ... (24 actions, 21 running)
+[2,036 / 6,094] Executing genrule //pkg/sql/parser:sql-goyacc; 6s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[2,104 / 6,094] Executing genrule //pkg/sql/parser:sql-goyacc; 7s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[2,184 / 6,094] Executing genrule //pkg/sql/parser:sql-goyacc; 8s linux-sandbox, remote-cache ... (23 actions, 22 running)
+[2,260 / 6,094] Executing genrule //pkg/sql/parser:sql-goyacc; 9s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[2,349 / 6,094] Executing genrule //pkg/sql/parser:sql-goyacc; 10s linux-sandbox, remote-cache ... (24 actions, 16 running)
+[2,417 / 6,094] Executing genrule //pkg/sql/parser:sql-goyacc; 11s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[2,477 / 6,094] Executing genrule //pkg/sql/parser:sql-goyacc; 12s linux-sandbox, remote-cache ... (23 actions, 22 running)
+[2,554 / 6,094] Executing genrule //pkg/sql/parser:sql-goyacc; 13s linux-sandbox, remote-cache ... (20 actions running)
+[2,619 / 6,094] Executing genrule //pkg/sql/parser:sql-goyacc; 14s linux-sandbox, remote-cache ... (24 actions running)
+[2,745 / 6,094] Executing genrule //pkg/sql/parser:sql-goyacc; 15s linux-sandbox, remote-cache ... (24 actions, 22 running)
+[2,858 / 6,094] Executing genrule //pkg/sql/parser:sql-goyacc [for tool]; 15s linux-sandbox, remote-cache ... (21 actions, 20 running)
+[2,973 / 6,094] GoCompilePkg external/com_github_datadog_datadog_api_client_go_v2/api/datadogV1/datadogV1.a; 5s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[3,075 / 6,094] GoCompilePkg external/com_github_datadog_datadog_api_client_go_v2/api/datadogV1/datadogV1.a; 6s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[3,217 / 6,094] GoCompilePkg external/com_github_datadog_datadog_api_client_go_v2/api/datadogV1/datadogV1.a; 7s linux-sandbox, remote-cache ... (24 actions, 21 running)
+[3,375 / 6,094] GoCompilePkg external/com_github_datadog_datadog_api_client_go_v2/api/datadogV1/datadogV1.a; 8s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[3,533 / 6,094] GoCompilePkg external/com_github_datadog_datadog_api_client_go_v2/api/datadogV1/datadogV1.a; 9s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[3,673 / 6,094] Running nogo on @com_github_datadog_datadog_api_client_go_v2//api/datadogV1:datadogV1; 1s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[3,786 / 6,094] GoCompilePkg pkg/sql/sem/tree/tree.a; 1s linux-sandbox, remote-cache ... (24 actions, 19 running)
+[3,904 / 6,094] GoCompilePkg pkg/sql/sem/tree/tree.a; 2s linux-sandbox, remote-cache ... (24 actions, 19 running)
+[4,067 / 6,094] GoCompilePkg pkg/sql/sem/tree/tree.a; 3s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[4,199 / 6,094] GoCompilePkg external/com_github_cockroachdb_pebble/pebble.a; 2s linux-sandbox, remote-cache ... (24 actions, 22 running)
+[4,307 / 6,094] GoCompilePkg external/com_github_cockroachdb_pebble/pebble.a; 3s linux-sandbox, remote-cache ... (22 actions, 21 running)
+[4,428 / 6,094] GoCompilePkg pkg/sql/parser/parser.a; 1s linux-sandbox, remote-cache ... (16 actions, 15 running)
+[4,458 / 6,094] GoCompilePkg pkg/sql/parser/parser.a; 2s linux-sandbox, remote-cache ... (13 actions, 5 running)
+[4,531 / 6,094] GoCompilePkg pkg/sql/parser/parser.a; 3s linux-sandbox, remote-cache ... (16 actions, 3 running)
+[4,590 / 6,094] GoCompilePkg pkg/sql/parser/parser.a; 4s linux-sandbox, remote-cache ... (13 actions, 11 running)
+[4,619 / 6,094] GoCompilePkg pkg/sql/parser/parser.a; 6s linux-sandbox, remote-cache ... (8 actions running)
+[4,636 / 6,094] GoCompilePkg pkg/sql/parser/parser.a; 7s linux-sandbox, remote-cache ... (5 actions, 4 running)
+[4,637 / 6,094] GoCompilePkg pkg/sql/parser/parser.a; 9s linux-sandbox, remote-cache ... (4 actions running)
+[4,638 / 6,094] GoCompilePkg pkg/sql/parser/parser.a; 10s linux-sandbox, remote-cache ... (4 actions, 3 running)
+[4,680 / 6,094] GoCompilePkg pkg/sql/parser/parser.a; 11s linux-sandbox, remote-cache ... (19 actions, 10 running)
+[4,757 / 6,094] GoCompilePkg pkg/sql/parser/parser.a; 12s linux-sandbox, remote-cache ... (13 actions, 8 running)
+[4,777 / 6,094] GoCompilePkg pkg/sql/parser/parser.a; 14s linux-sandbox, remote-cache ... (6 actions running)
+[4,789 / 6,094] GoCompilePkg pkg/sql/parser/parser.a; 15s linux-sandbox, remote-cache ... (4 actions running)
+[4,801 / 6,094] GoCompilePkg pkg/sql/parser/parser.a; 16s linux-sandbox, remote-cache ... (8 actions, 7 running)
+[4,824 / 6,094] GoCompilePkg pkg/sql/parser/parser.a; 17s linux-sandbox, remote-cache ... (14 actions, 13 running)
+[4,854 / 6,094] GoCompilePkg pkg/sql/parser/parser.a; 18s linux-sandbox, remote-cache ... (7 actions, 5 running)
+[4,866 / 6,094] GoCompilePkg pkg/sql/parser/parser.a; 19s linux-sandbox, remote-cache ... (17 actions, 15 running)
+[4,893 / 6,094] GoCompilePkg pkg/sql/parser/parser.a; 21s linux-sandbox, remote-cache ... (16 actions running)
+[4,930 / 6,094] GoCompilePkg pkg/sql/parser/parser.a; 22s linux-sandbox, remote-cache ... (22 actions, 20 running)
+[4,950 / 6,094] GoCompilePkg pkg/sql/parser/parser.a; 23s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[4,955 / 6,094] GoCompilePkg pkg/sql/parser/parser.a; 24s linux-sandbox, remote-cache ... (24 actions, 22 running)
+[4,963 / 6,094] GoCompilePkg pkg/sql/parser/parser.a; 25s linux-sandbox, remote-cache ... (22 actions, 21 running)
+[4,977 / 6,094] GoCompilePkg pkg/sql/parser/parser.a; 27s linux-sandbox, remote-cache ... (22 actions running)
+[4,987 / 6,094] GoCompilePkg pkg/sql/parser/parser.a; 28s linux-sandbox, remote-cache ... (21 actions running)
+[5,004 / 6,094] GoCompilePkg pkg/server/serverpb/serverpb.a; 9s linux-sandbox, remote-cache ... (24 actions running)
+[5,025 / 6,094] GoCompilePkg pkg/server/serverpb/serverpb.a; 10s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[5,058 / 6,094] GoCompilePkg pkg/sql/colexec/colexecprojconst/colexecprojconst.a; 9s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[5,105 / 6,094] GoCompilePkg pkg/sql/colexec/colexecprojconst/colexecprojconst.a; 10s linux-sandbox, remote-cache ... (19 actions, 18 running)
+[5,160 / 6,094] GoCompilePkg pkg/sql/sem/builtins/builtins.a; 10s linux-sandbox, remote-cache ... (18 actions, 15 running)
+[5,241 / 6,094] GoCompilePkg pkg/sql/catalog/descs/descs.a; 1s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[5,303 / 6,094] GoCompilePkg pkg/sql/catalog/descs/descs.a; 2s linux-sandbox, remote-cache ... (16 actions, 15 running)
+[5,335 / 6,094] Running nogo on //pkg/sql/execinfrapb:execinfrapb; 3s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[5,370 / 6,094] GoCompilePkg pkg/sql/colexec/colexecagg/colexecagg.a; 2s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[5,417 / 6,094] GoCompilePkg pkg/testutils/serverutils/serverutils.a; 1s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[5,469 / 6,094] GoCompilePkg pkg/testutils/serverutils/serverutils.a; 2s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[5,520 / 6,094] GoCompilePkg pkg/sql/schemachanger/scbuild/internal/scbuildstmt/scbuildstmt.a; 3s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[5,541 / 6,094] GoCompilePkg pkg/sql/schemachanger/scbuild/internal/scbuildstmt/scbuildstmt.a; 4s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[5,571 / 6,094] GoCompilePkg pkg/sql/schemachanger/scbuild/internal/scbuildstmt/scbuildstmt.a; 5s linux-sandbox, remote-cache ... (13 actions, 12 running)
+[5,578 / 6,094] GoCompilePkg pkg/sql/schemachanger/scbuild/internal/scbuildstmt/scbuildstmt.a; 6s linux-sandbox, remote-cache ... (16 actions, 15 running)
+[5,582 / 6,094] GoCompilePkg pkg/sql/schemachanger/scbuild/internal/scbuildstmt/scbuildstmt.a; 7s linux-sandbox, remote-cache ... (20 actions, 19 running)
+[5,594 / 6,094] GoCompilePkg pkg/sql/schemachanger/scbuild/internal/scbuildstmt/scbuildstmt.a; 9s linux-sandbox, remote-cache ... (14 actions running)
+[5,599 / 6,094] GoCompilePkg pkg/sql/schemachanger/scbuild/internal/scbuildstmt/scbuildstmt.a; 10s linux-sandbox, remote-cache ... (11 actions, 9 running)
+[5,603 / 6,094] Running nogo on //pkg/server/serverpb:serverpb; 11s linux-sandbox, remote-cache ... (9 actions, 8 running)
+[5,611 / 6,094] Running nogo on //pkg/server/serverpb:serverpb; 12s linux-sandbox, remote-cache ... (15 actions running)
+[5,616 / 6,094] Running nogo on //pkg/server/serverpb:serverpb; 13s linux-sandbox, remote-cache ... (13 actions running)
+[5,618 / 6,094] Running nogo on //pkg/server/serverpb:serverpb; 14s linux-sandbox, remote-cache ... (12 actions running)
+[5,623 / 6,094] Running nogo on //pkg/server/serverpb:serverpb; 15s linux-sandbox, remote-cache ... (11 actions, 9 running)
+[5,628 / 6,094] Running nogo on //pkg/server/serverpb:serverpb; 16s linux-sandbox, remote-cache ... (8 actions, 7 running)
+[5,632 / 6,094] Running nogo on //pkg/server/serverpb:serverpb; 18s linux-sandbox, remote-cache ... (6 actions, 5 running)
+[5,637 / 6,094] Running nogo on //pkg/sql/colexec/colexecproj:colexecproj; 16s linux-sandbox, remote-cache ... (11 actions, 10 running)
+[5,699 / 6,094] Running nogo on //pkg/sql/colexec/colexecproj:colexecproj; 17s linux-sandbox, remote-cache ... (11 actions, 10 running)
+[5,738 / 6,094] Running nogo on //pkg/sql/colexec/colexecproj:colexecproj; 18s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[5,791 / 6,094] Running nogo on //pkg/sql/colexec/colexecproj:colexecproj; 19s linux-sandbox, remote-cache ... (10 actions, 9 running)
+[5,803 / 6,094] Running nogo on //pkg/sql/colexec/colexecproj:colexecproj; 21s linux-sandbox, remote-cache ... (12 actions, 8 running)
+[5,833 / 6,094] Running nogo on //pkg/sql/colexec/colexecproj:colexecproj; 22s linux-sandbox, remote-cache ... (6 actions, 4 running)
+[5,836 / 6,094] Running nogo on //pkg/sql/colexec/colexecproj:colexecproj; 23s linux-sandbox, remote-cache ... (4 actions running)
+[5,837 / 6,094] Running nogo on //pkg/sql/colexec/colexecproj:colexecproj; 24s linux-sandbox, remote-cache ... (9 actions, 3 running)
+[5,851 / 6,094] Running nogo on //pkg/sql/colexec/colexecproj:colexecproj; 26s linux-sandbox, remote-cache ... (24 actions running)
+[5,852 / 6,094] Running nogo on //pkg/sql/colexec/colexecproj:colexecproj; 27s linux-sandbox, remote-cache ... (24 actions running)
+[5,855 / 6,094] Running nogo on //pkg/sql/colexec/colexecproj:colexecproj; 28s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[5,870 / 6,094] Running nogo on //pkg/sql/colexec/colexecproj:colexecproj; 29s linux-sandbox, remote-cache ... (24 actions, 23 running)
+[5,879 / 6,094] Running nogo on //pkg/sql/colexec/colexecproj:colexecproj; 30s linux-sandbox, remote-cache ... (20 actions, 19 running)
+[5,887 / 6,094] Running nogo on //pkg/sql/colexec/colexecproj:colexecproj; 31s linux-sandbox, remote-cache ... (14 actions, 13 running)
+[5,901 / 6,094] Running nogo on //pkg/sql/colexec/colexecproj:colexecproj; 32s linux-sandbox, remote-cache ... (11 actions, 10 running)
+[5,913 / 6,094] Running nogo on //pkg/sql/opt/norm:norm; 9s linux-sandbox, remote-cache ... (4 actions, 3 running)
+[5,916 / 6,094] GoCompilePkg pkg/ccl/changefeedccl/changefeedccl.a; 2s linux-sandbox, remote-cache ... (6 actions, 5 running)
+[5,925 / 6,094] GoCompilePkg pkg/backup/backup.a; 2s linux-sandbox, remote-cache ... (5 actions, 3 running)
+[5,939 / 6,094] GoCompilePkg pkg/server/server.a; 3s linux-sandbox, remote-cache ... (3 actions running)
+[5,942 / 6,094] GoCompilePkg pkg/server/server.a; 4s linux-sandbox, remote-cache ... (3 actions running)
+[5,945 / 6,094] Running nogo on //pkg/sql:sql; 1s linux-sandbox, remote-cache ... (4 actions, 3 running)
+[5,948 / 6,094] Running nogo on //pkg/sql:sql; 3s linux-sandbox, remote-cache ... (2 actions running)
+[5,949 / 6,094] Running nogo on //pkg/sql:sql; 4s linux-sandbox, remote-cache ... (2 actions running)
+[5,951 / 6,094] GoCompilePkg pkg/sql/tests/tests_test.internal.a; 0s linux-sandbox, remote-cache ... (10 actions, 1 running)
+[5,997 / 6,094] GoCompilePkg pkg/sql/tests/tests_test.internal.a; 1s linux-sandbox, remote-cache ... (20 actions, 19 running)
+[6,059 / 6,094] GoCompilePkg pkg/sql/tests/tests_test.internal.a; 2s linux-sandbox, remote-cache ... (6 actions, 5 running)
+[6,068 / 6,094] Running nogo on //pkg/server:server; 1s linux-sandbox, remote-cache ... (3 actions, 2 running)
+[6,072 / 6,094] GoCompilePkgExternal pkg/sql/tests/tests_test_test.external.a; 1s linux-sandbox, remote-cache ... (6 actions, 2 running)
+[6,089 / 6,094] GoLink pkg/sql/tests/tests_test_/tests_test; 0s linux-sandbox, remote-cache ... (2 actions running)
+[6,093 / 6,094] GoLink pkg/sql/tests/tests_test_/tests_test; 2s linux-sandbox, remote-cache
+[6,093 / 6,094] GoLink pkg/sql/tests/tests_test_/tests_test; 7s linux-sandbox, remote-cache
+I260421 19:53:22.528451 1 (gostd) rand.go:288  [-] 1  random seed: 8893160137693976012
+[6,094 / 6,095] Testing //pkg/sql/tests:tests_test; 1s linux-sandbox
+goos: linux
+goarch: amd64
+cpu: Intel(R) Xeon(R) CPU @ 2.80GHz
+BenchmarkPointSelect/conc=1-8         	   43700	    268483 ns/op	       258.0 p50_us	       392.7 p99_us
+BenchmarkPointSelect/conc=1-8         	   43622	    272046 ns/op	       261.1 p50_us	       397.8 p99_us
+BenchmarkPointSelect/conc=1-8         	   42054	    273642 ns/op	       261.1 p50_us	       407.0 p99_us
+BenchmarkPointSelect/conc=1-8         	   43986	    268788 ns/op	       258.0 p50_us	       397.3 p99_us
+BenchmarkPointSelect/conc=1-8         	   43870	    269442 ns/op	       259.1 p50_us	       393.7 p99_us
+BenchmarkPointSelect/conc=8-8         	  401398	     28528 ns/op	       213.0 p50_us	       475.6 p99_us
+BenchmarkPointSelect/conc=8-8         	  394986	     28471 ns/op	       212.5 p50_us	       455.2 p99_us
+BenchmarkPointSelect/conc=8-8         	  390777	     27332 ns/op	       204.8 p50_us	       441.3 p99_us
+BenchmarkPointSelect/conc=8-8         	  398528	     27352 ns/op	       204.3 p50_us	       435.2 p99_us
+BenchmarkPointSelect/conc=8-8         	  406638	     27470 ns/op	       205.8 p50_us	       422.4 p99_us
+BenchmarkPointSelect/conc=16-8        	  440770	     26286 ns/op	       393.7 p50_us	      1099 p99_us
+BenchmarkPointSelect/conc=16-8        	  431379	     26337 ns/op	       394.2 p50_us	      1116 p99_us
+BenchmarkPointSelect/conc=16-8        	  430834	     26362 ns/op	       394.8 p50_us	      1112 p99_us
+BenchmarkPointSelect/conc=16-8        	  437856	     26372 ns/op	       394.8 p50_us	      1111 p99_us
+BenchmarkPointSelect/conc=16-8        	  446451	     26381 ns/op	       394.8 p50_us	      1115 p99_us
+BenchmarkPointSelect/conc=32-8        	  431684	     26573 ns/op	       743.4 p50_us	      2462 p99_us
+BenchmarkPointSelect/conc=32-8        	  423975	     26672 ns/op	       744.4 p50_us	      2486 p99_us
+BenchmarkPointSelect/conc=32-8        	  428460	     26698 ns/op	       744.4 p50_us	      2478 p99_us
+BenchmarkPointSelect/conc=32-8        	  424603	     26483 ns/op	       743.4 p50_us	      2447 p99_us
+BenchmarkPointSelect/conc=32-8        	  430152	     26367 ns/op	       736.8 p50_us	      2439 p99_us
+BenchmarkPointSelect/conc=64-8        	  427165	     26759 ns/op	      1469 p50_us	      5337 p99_us
+BenchmarkPointSelect/conc=64-8        	  429637	     26434 ns/op	      1458 p50_us	      5243 p99_us
+BenchmarkPointSelect/conc=64-8        	  438951	     26774 ns/op	      1475 p50_us	      5280 p99_us
+BenchmarkPointSelect/conc=64-8        	  418174	     26919 ns/op	      1483 p50_us	      5317 p99_us
+BenchmarkPointSelect/conc=64-8        	  431851	     26773 ns/op	      1470 p50_us	      5341 p99_us
+BenchmarkPointSelect/conc=128-8       	  438374	     27423 ns/op	      2935 p50_us	     12018 p99_us
+BenchmarkPointSelect/conc=128-8       	  409831	     27701 ns/op	      2943 p50_us	     12321 p99_us
+BenchmarkPointSelect/conc=128-8       	  406873	     27737 ns/op	      2959 p50_us	     12255 p99_us
+BenchmarkPointSelect/conc=128-8       	  405752	     27700 ns/op	      2968 p50_us	     11936 p99_us
+BenchmarkPointSelect/conc=128-8       	  435249	     27310 ns/op	      2908 p50_us	     12026 p99_us
+I260421 20:01:57.870758 82 testutils/testcluster/testcluster.go:189  [-] 2  TestCluster quiescing nodes
+I260421 20:01:57.870940 4856 jobs/registry.go:1622  [T1,Vsystem,n1,job=100] 3  KEY VISUALIZER job 100: stepping through state succeeded
+I260421 20:01:57.870983 4729 jobs/registry.go:1622  [T1,Vsystem,n1,job=103] 4  AUTO UPDATE SQL ACTIVITY job 103: stepping through state succeeded
+I260421 20:01:57.871009 2581 sql/stats/automatic_stats.go:857  [T1,Vsystem,n1] 5  quiescing stats garbage collector
+W260421 20:01:57.871120 2229 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=system-config-cache,mux_n=1,gen=2] 6  error closing mux rangefeed client: context canceled
+I260421 20:01:57.871222 663 server/start_listen.go:114  [T1,Vsystem,n1] 7  server shutting down: instructing cmux to stop accepting
+W260421 20:01:57.871279 2632 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=tenant-boundaries-watcher,mux_n=1,gen=2] 8  error closing mux rangefeed client: context canceled
+W260421 20:01:57.871333 1289 sql/sqlliveness/slinstance/slinstance.go:337  [T1,Vsystem,n1] 9  exiting heartbeat loop
+W260421 20:01:57.871349 1289 sql/sqlliveness/slinstance/slinstance.go:324  [T1,Vsystem,n1] 11  exiting heartbeat loop with error: node unavailable; try another peer
+W260421 20:01:57.871324 2683 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=tenant-entry-watcher,mux_n=1,gen=2] 10  error closing mux rangefeed client: context canceled
+E260421 20:01:57.871368 1289 server/server_sql.go:535  [T1,Vsystem,n1] 12  failed to run update of instance with new session ID: node unavailable; try another peer
+W260421 20:01:57.871412 4995 jobs/adopt.go:563  [T1,Vsystem,n1] 13  could not clear job claim: clear-job-claim: node unavailable; try another peer
+W260421 20:01:57.871428 2326 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,job=AUTO SPAN CONFIG RECONCILIATION id=1168935494027313153,rangefeed=sql-watcher-protected-ts-records-rangefeed,mux_n=1,gen=2] 14  error closing mux rangefeed client: context canceled
+W260421 20:01:57.871464 4729 jobs/adopt.go:563  [T1,Vsystem,n1] 15  could not clear job claim: clear-job-claim: node unavailable; try another peer
+W260421 20:01:57.871546 4856 jobs/adopt.go:563  [T1,Vsystem,n1] 16  could not clear job claim: clear-job-claim: node unavailable; try another peer
+W260421 20:01:57.871601 2121 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=settings-watcher,mux_n=1,gen=2] 17  error closing mux rangefeed client: context canceled
+W260421 20:01:57.871647 2133 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=spanconfig-subscriber,mux_n=1,gen=2] 18  error closing mux rangefeed client: context canceled
+I260421 20:01:57.871704 2579 sql/stats/automatic_stats.go:766  [T1,Vsystem,n1] 19  quiescing auto stats refresher
+W260421 20:01:57.871778 5095 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,job=POLL JOBS STATS id=101,rangefeed=cluster-metrics-watcher,mux_n=1,gen=2] 20  error closing mux rangefeed client: context canceled
+W260421 20:01:57.871851 2355 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,job=AUTO SPAN CONFIG RECONCILIATION id=1168935494027313153,rangefeed=sql-watcher-descriptor-rangefeed,mux_n=1,gen=2] 22  error closing mux rangefeed client: context canceled
+I260421 20:01:57.871875 2580 sql/stats/automatic_stats.go:804  [T1,Vsystem,n1] 24  quiescing auto stats misestimates refresher
+W260421 20:01:57.871848 2673 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=tenant-settings-watcher,mux_n=1,gen=2] 21  error closing mux rangefeed client: context canceled
+W260421 20:01:57.871859 1351 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=lease,mux_n=1,gen=2] 23  error closing mux rangefeed client: context canceled
+W260421 20:01:57.871909 2340 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,job=AUTO SPAN CONFIG RECONCILIATION id=1168935494027313153,rangefeed=sql-watcher-zones-rangefeed,mux_n=1,gen=2] 25  error closing mux rangefeed client: context canceled
+W260421 20:01:57.871959 2742 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=statement-hints-watcher,mux_n=1,gen=2] 27  error closing mux rangefeed client: context canceled
+W260421 20:01:57.871929 2535 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=table-stats-cache,mux_n=1,gen=2] 26  error closing mux rangefeed client: context canceled
+I260421 20:01:57.872008 1849 jobs/registry.go:1622  [T1,Vsystem,n1,job=1168935494027313153] 28  AUTO SPAN CONFIG RECONCILIATION job 1168935494027313153: stepping through state succeeded
+W260421 20:01:57.872029 1377 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=sql_instances,mux_n=1,gen=2] 29  error closing mux rangefeed client: context canceled
+W260421 20:01:57.876399 82 server/server_sql.go:1847  [T1,Vsystem,n1] 30  server shutdown without a prior graceful drain
+I260421 20:01:57.876485 82 server/server_controller.go:380  [T1,Vsystem,n1] 31  server controller shutting down
+I260421 20:01:57.876496 82 server/server_controller.go:389  [T1,Vsystem,n1] 32  waiting for tenant servers to report stopped
+PASS
+[6,094 / 6,095] 1 / 1 tests; Testing //pkg/sql/tests:tests_test; 515s linux-sandbox
+INFO: Found 1 test target...
+Target //pkg/sql/tests:tests_test up-to-date:
+  _bazel/bin/pkg/sql/tests/tests_test_/tests_test
+INFO: Elapsed time: 671.948s, Critical Path: 655.80s
+INFO: 6085 processes: 3 remote cache hit, 276 internal, 5806 linux-sandbox.
+INFO: Build completed successfully, 6085 total actions
+//pkg/sql/tests:tests_test                                               PASSED in 515.8s
+
+Executed 1 out of 1 test: 1 test passes.

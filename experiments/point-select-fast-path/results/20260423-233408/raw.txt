@@ -1,0 +1,134 @@
+$ bazel test //pkg/sql/tests:tests_test --nocache_test_results --test_arg -test.run=- --test_arg '-test.bench=^BenchmarkPointSelectSecondaryIndex$' --test_sharding_strategy=disabled --test_arg -test.cpu --test_arg 1 --test_arg -test.count=5 --test_arg -test.benchtime=10s --crdb_test_off --crdb_bench --test_arg -test.outputdir=/home/matt_white_cockroachlabs_com/cockroach-fastpath-experiment --sandbox_writable_path=/home/matt_white_cockroachlabs_com/cockroach-fastpath-experiment --test_arg -test.cpu --test_arg 24 --test_env COCKROACH_TEST_FIXTURES_DIR=/home/matt_white_cockroachlabs_com/.cache/crdb-test-fixtures --sandbox_writable_path=/home/matt_white_cockroachlabs_com/.cache/crdb-test-fixtures --test_output streamed
+INFO: Invocation ID: cc30faaa-1126-4026-911e-1e675b4a076e
+Computing main repo mapping: 
+WARNING: Streamed test output requested. All tests will be run locally, without sharding, one at a time
+Loading: 
+Loading: 0 packages loaded
+WARNING: Build option --test_env has changed, discarding analysis cache (this can be expensive, see https://bazel.build/advanced/performance/iteration-speed).
+Analyzing: target //pkg/sql/tests:tests_test (0 packages loaded, 0 targets configured)
+Analyzing: target //pkg/sql/tests:tests_test (0 packages loaded, 0 targets configured)
+
+INFO: Analyzed target //pkg/sql/tests:tests_test (0 packages loaded, 25341 targets configured).
+WARNING: Remote Cache: Connection refused: /127.0.0.1:9867
+WARNING: Remote Cache: 3 errors during bulk transfer:
+io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: /127.0.0.1:9867
+io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: /127.0.0.1:9867
+io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: /127.0.0.1:9867
+[5,785 / 6,094] GoCompilePkg pkg/sql/sql.a; 0s remote-cache
+[5,882 / 6,094] GoCompilePkg pkg/sql/sql.a; 1s remote-cache, linux-sandbox ... (2 actions running)
+WARNING: Remote Cache: 4 errors during bulk transfer:
+io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: /127.0.0.1:9867
+io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: /127.0.0.1:9867
+io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: /127.0.0.1:9867
+io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: /127.0.0.1:9867
+[5,884 / 6,094] GoCompilePkg pkg/sql/sql.a; 5s remote-cache, linux-sandbox
+[5,885 / 6,094] [Prepa] GoCompilePkg pkg/jobs/jobsprofiler/jobsprofiler.a ... (7 actions, 0 running)
+[5,896 / 6,094] GoCompilePkg pkg/keyvisualizer/keyvisjob/keyvisjob.a; 1s remote-cache, linux-sandbox ... (24 actions, 23 running)
+[5,904 / 6,094] GoCompilePkg pkg/keyvisualizer/keyvisjob/keyvisjob.a; 2s remote-cache, linux-sandbox ... (24 actions, 23 running)
+[5,921 / 6,094] GoCompilePkg pkg/crosscluster/replicationutils/replicationutils.a; 3s remote-cache, linux-sandbox ... (24 actions, 23 running)
+[5,949 / 6,094] GoCompilePkg pkg/spanconfig/spanconfigreconciler/spanconfigreconciler.a; 3s remote-cache, linux-sandbox ... (23 actions, 22 running)
+[5,982 / 6,094] GoCompilePkg pkg/backup/backupresolver/backupresolver.a; 3s remote-cache, linux-sandbox ... (24 actions, 23 running)
+[6,020 / 6,094] GoCompilePkg pkg/sql/importer/importer.a; 2s remote-cache, linux-sandbox ... (11 actions, 10 running)
+WARNING: Remote Cache: 8 errors during bulk transfer:
+io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: /127.0.0.1:9867
+io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: /127.0.0.1:9867
+io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: /127.0.0.1:9867
+io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: /127.0.0.1:9867
+io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: /127.0.0.1:9867
+io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: /127.0.0.1:9867
+io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: /127.0.0.1:9867
+io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: /127.0.0.1:9867
+[6,047 / 6,094] GoCompilePkg pkg/keyvisualizer/spanstatsconsumer/spanstatsconsumer.a; 1s remote-cache, linux-sandbox ... (7 actions running)
+[6,056 / 6,094] GoCompilePkg pkg/server/server.a; 1s remote-cache, linux-sandbox ... (3 actions running)
+[6,059 / 6,094] GoCompilePkg pkg/server/server.a; 2s remote-cache, linux-sandbox ... (3 actions running)
+[6,062 / 6,094] GoCompilePkg pkg/server/server.a; 3s remote-cache, linux-sandbox ... (2 actions, 1 running)
+WARNING: Remote Cache: 5 errors during bulk transfer:
+io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: /127.0.0.1:9867
+io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: /127.0.0.1:9867
+io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: /127.0.0.1:9867
+io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: /127.0.0.1:9867
+io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: /127.0.0.1:9867
+[6,068 / 6,094] GoCompilePkg pkg/crosscluster/logical/logical.a; 1s remote-cache, linux-sandbox ... (3 actions running)
+[6,070 / 6,094] GoCompilePkg pkg/testutils/testcluster/testcluster.a; 1s remote-cache, linux-sandbox ... (2 actions running)
+[6,083 / 6,094] GoCompilePkg pkg/bench/bench.a; 0s remote-cache, linux-sandbox ... (2 actions, 1 running)
+[6,088 / 6,094] GoCompilePkg pkg/sql/tests/tests_test.internal.a; 1s remote-cache, linux-sandbox
+[6,089 / 6,094] Running nogo on //pkg/sql/tests:tests_test; 0s remote-cache, linux-sandbox ... (2 actions running)
+[6,092 / 6,094] [Prepa] GoCompilePkg pkg/sql/tests/tests_test~testmain.a
+[6,093 / 6,094] GoLink pkg/sql/tests/tests_test_/tests_test; 1s remote-cache, linux-sandbox
+[6,093 / 6,094] GoLink pkg/sql/tests/tests_test_/tests_test; 6s remote-cache, linux-sandbox
+I260423 23:34:44.684010 1 (gostd) rand.go:288  [-] 1  random seed: -3407104303289009255
+[6,094 / 6,095] Testing //pkg/sql/tests:tests_test; 1s linux-sandbox
+goos: linux
+goarch: amd64
+cpu: Intel(R) Xeon(R) CPU @ 2.80GHz
+BenchmarkPointSelectSecondaryIndex/conc=1-24         	   33169	    359310 ns/op	       347.6 p50_us	       520.7 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=1-24         	   32373	    355874 ns/op	       344.6 p50_us	       522.8 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=1-24         	   33158	    351689 ns/op	       340.0 p50_us	       515.6 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=1-24         	   32595	    356435 ns/op	       345.6 p50_us	       519.7 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=1-24         	   32985	    358226 ns/op	       345.6 p50_us	       522.2 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=8-24         	  256560	     47641 ns/op	       356.4 p50_us	       672.3 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=8-24         	  249988	     46623 ns/op	       349.2 p50_us	       656.4 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=8-24         	  254881	     46398 ns/op	       348.2 p50_us	       649.7 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=8-24         	  255445	     46541 ns/op	       349.2 p50_us	       649.2 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=8-24         	  255283	     46538 ns/op	       349.2 p50_us	       649.2 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=16-24        	  417327	     28060 ns/op	       437.8 p50_us	       761.9 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=16-24        	  424411	     27924 ns/op	       436.2 p50_us	       748.0 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=16-24        	  423903	     27785 ns/op	       434.2 p50_us	       752.1 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=16-24        	  423879	     27793 ns/op	       434.7 p50_us	       751.6 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=16-24        	  425904	     27837 ns/op	       435.2 p50_us	       753.2 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=32-24        	  637347	     18699 ns/op	       502.3 p50_us	      1577 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=32-24        	  625832	     18582 ns/op	       498.7 p50_us	      1534 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=32-24        	  634380	     18558 ns/op	       500.2 p50_us	      1534 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=32-24        	  631210	     18630 ns/op	       501.8 p50_us	      1536 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=32-24        	  586852	     17916 ns/op	       486.4 p50_us	      1478 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=64-24        	  648115	     18182 ns/op	       979.5 p50_us	      3621 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=64-24        	  643894	     18434 ns/op	       983.6 p50_us	      3805 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=64-24        	  641666	     18201 ns/op	       978.9 p50_us	      3643 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=64-24        	  644452	     18167 ns/op	       978.4 p50_us	      3613 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=64-24        	  642914	     18203 ns/op	       981.0 p50_us	      3592 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=128-24       	  613167	     18326 ns/op	      1915 p50_us	      8733 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=128-24       	  624314	     18328 ns/op	      1926 p50_us	      8602 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=128-24       	  616204	     18288 ns/op	      1930 p50_us	      8479 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=128-24       	  616204	     18155 ns/op	      1915 p50_us	      8368 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=128-24       	  615433	     18165 ns/op	      1913 p50_us	      8430 p99_us
+I260423 23:42:57.394843 26 testutils/testcluster/testcluster.go:189  [-] 2  TestCluster quiescing nodes
+I260423 23:42:57.395022 7266 jobs/registry.go:1622  [T1,Vsystem,n1,job=103] 3  AUTO UPDATE SQL ACTIVITY job 103: stepping through state succeeded
+I260423 23:42:57.395058 7251 jobs/registry.go:1622  [T1,Vsystem,n1,job=100] 4  KEY VISUALIZER job 100: stepping through state succeeded
+I260423 23:42:57.395084 2699 sql/stats/automatic_stats.go:857  [T1,Vsystem,n1] 5  quiescing stats garbage collector
+W260423 23:42:57.395143 2805 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=tenant-settings-watcher,mux_n=1,gen=2] 6  error closing mux rangefeed client: context canceled
+I260423 23:42:57.395170 2697 sql/stats/automatic_stats.go:766  [T1,Vsystem,n1] 8  quiescing auto stats refresher
+W260423 23:42:57.395149 2468 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,job=AUTO SPAN CONFIG RECONCILIATION id=1169545247971475457,rangefeed=sql-watcher-descriptor-rangefeed,mux_n=1,gen=2] 7  error closing mux rangefeed client: context canceled
+I260423 23:42:57.395203 334 server/start_listen.go:114  [T1,Vsystem,n1] 9  server shutting down: instructing cmux to stop accepting
+W260423 23:42:57.395245 2346 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=system-config-cache,mux_n=1,gen=2] 10  error closing mux rangefeed client: context canceled
+W260423 23:42:57.395224 919 sql/sqlliveness/slinstance/slinstance.go:337  [T1,Vsystem,n1] 11  exiting heartbeat loop
+I260423 23:42:57.395291 2698 sql/stats/automatic_stats.go:804  [T1,Vsystem,n1] 12  quiescing auto stats misestimates refresher
+W260423 23:42:57.395309 919 sql/sqlliveness/slinstance/slinstance.go:324  [T1,Vsystem,n1] 13  exiting heartbeat loop with error: node unavailable; try another peer
+W260423 23:42:57.395345 7336 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,job=POLL JOBS STATS id=101,rangefeed=cluster-metrics-watcher,mux_n=1,gen=2] 14  error closing mux rangefeed client: context canceled
+E260423 23:42:57.395400 919 server/server_sql.go:535  [T1,Vsystem,n1] 15  failed to run update of instance with new session ID: node unavailable; try another peer
+W260423 23:42:57.395400 2673 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=tenant-boundaries-watcher,mux_n=1,gen=2] 16  error closing mux rangefeed client: context canceled
+W260423 23:42:57.395541 7266 jobs/adopt.go:563  [T1,Vsystem,n1] 17  could not clear job claim: clear-job-claim: node unavailable; try another peer
+W260423 23:42:57.395569 7251 jobs/adopt.go:563  [T1,Vsystem,n1] 18  could not clear job claim: clear-job-claim: node unavailable; try another peer
+W260423 23:42:57.395669 2646 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=table-stats-cache,mux_n=1,gen=2] 19  error closing mux rangefeed client: context canceled
+W260423 23:42:57.395722 2249 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=spanconfig-subscriber,mux_n=1,gen=2] 20  error closing mux rangefeed client: context canceled
+W260423 23:42:57.395722 2422 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,job=AUTO SPAN CONFIG RECONCILIATION id=1169545247971475457,rangefeed=sql-watcher-zones-rangefeed,mux_n=1,gen=2] 21  error closing mux rangefeed client: context canceled
+W260423 23:42:57.395771 2254 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=settings-watcher,mux_n=1,gen=2] 22  error closing mux rangefeed client: context canceled
+W260423 23:42:57.395810 2460 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,job=AUTO SPAN CONFIG RECONCILIATION id=1169545247971475457,rangefeed=sql-watcher-protected-ts-records-rangefeed,mux_n=1,gen=2] 23  error closing mux rangefeed client: context canceled
+I260423 23:42:57.395889 1930 jobs/registry.go:1622  [T1,Vsystem,n1,job=1169545247971475457] 24  AUTO SPAN CONFIG RECONCILIATION job 1169545247971475457: stepping through state succeeded
+W260423 23:42:57.395908 464 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=sql_instances,mux_n=1,gen=2] 25  error closing mux rangefeed client: context canceled
+W260423 23:42:57.395935 2793 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=statement-hints-watcher,mux_n=1,gen=2] 27  error closing mux rangefeed client: context canceled
+W260423 23:42:57.395974 2812 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=tenant-entry-watcher,mux_n=1,gen=2] 28  error closing mux rangefeed client: context canceled
+W260423 23:42:57.395944 1009 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=lease,mux_n=1,gen=2] 26  error closing mux rangefeed client: context canceled
+W260423 23:42:57.400890 26 server/server_sql.go:1847  [T1,Vsystem,n1] 29  server shutdown without a prior graceful drain
+I260423 23:42:57.400974 26 server/server_controller.go:380  [T1,Vsystem,n1] 30  server controller shutting down
+I260423 23:42:57.400989 26 server/server_controller.go:389  [T1,Vsystem,n1] 31  waiting for tenant servers to report stopped
+PASS
+[6,094 / 6,095] 1 / 1 tests; Testing //pkg/sql/tests:tests_test; 493s linux-sandbox
+INFO: Found 1 test target...
+Target //pkg/sql/tests:tests_test up-to-date:
+  _bazel/bin/pkg/sql/tests/tests_test_/tests_test
+INFO: Elapsed time: 528.596s, Critical Path: 527.32s
+INFO: 135 processes: 1 internal, 134 linux-sandbox.
+INFO: Build completed successfully, 135 total actions
+//pkg/sql/tests:tests_test                                               PASSED in 493.1s
+
+Executed 1 out of 1 test: 1 test passes.

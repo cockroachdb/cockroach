@@ -6,6 +6,7 @@
 package xform
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -19,6 +20,24 @@ import (
 
 const maxRowCountForPlaceholderFastPath = 10
 
+// PlaceholderFastPathEnabled gates TryPlaceholderFastPath. When false, the
+// optimizer skips the fast-path detection and produces a base (non-ideal)
+// memo that requires full re-optimization on each execute.
+//
+// This setting exists primarily to support the point-select-fast-path
+// experiment in experiments/point-select-fast-path/, which needs an
+// "unspecialized" baseline to estimate the upper bound on per-execution
+// SQL overhead. It defaults to true so production behavior is unchanged.
+var PlaceholderFastPathEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.optimizer.placeholder_fast_path.enabled",
+	"if true, the optimizer may produce a fully optimized 'ideal generic' "+
+		"plan for simple prepared statements with placeholders (e.g. "+
+		"SELECT cols FROM t WHERE pk = $1) that bypasses re-optimization "+
+		"on each execute",
+	true,
+)
+
 // TryPlaceholderFastPath attempts to produce a fully optimized memo with
 // placeholders. This is only possible in very simple cases and involves special
 // operators (PlaceholderScan) which use placeholders and resolve them at
@@ -30,6 +49,10 @@ const maxRowCountForPlaceholderFastPath = 10
 // If this function succeeds, the memo will be considered fully optimized.
 func (o *Optimizer) TryPlaceholderFastPath() (ok bool, retErr error) {
 	defer errorutil.MaybeCatchPanic(&retErr, nil /* errCallback */)
+
+	if !PlaceholderFastPathEnabled.Get(&o.evalCtx.Settings.SV) {
+		return false, nil
+	}
 
 	root := o.mem.RootExpr()
 
