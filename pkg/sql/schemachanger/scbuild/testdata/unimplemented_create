@@ -11,10 +11,6 @@ CREATE TYPE typ AS ENUM('a','b');
 ----
 
 unimplemented
-CREATE TABLE t (i INT PRIMARY KEY);
-----
-
-unimplemented
 CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL, INDEX (i), UNIQUE INDEX (j));
 ----
 
@@ -31,10 +27,6 @@ CREATE TABLE t (i INT PRIMARY KEY, j INT, k INT, FAMILY "primary" (i, j), FAMILY
 ----
 
 unimplemented
-CREATE TABLE IF NOT EXISTS t (i INT PRIMARY KEY);
-----
-
-unimplemented
 CREATE TEMPORARY TABLE t (i INT PRIMARY KEY);
 ----
 
@@ -44,4 +36,44 @@ CREATE UNLOGGED TABLE t (i INT PRIMARY KEY);
 
 unimplemented
 CREATE TABLE t AS SELECT 1 AS i;
+----
+
+unimplemented
+CREATE TABLE t (i SERIAL PRIMARY KEY);
+----
+
+unimplemented
+CREATE TABLE t (i INT PRIMARY KEY GENERATED ALWAYS AS IDENTITY);
+----
+
+unimplemented
+CREATE TABLE t (i INT PRIMARY KEY, j INT DEFAULT 1);
+----
+
+unimplemented
+CREATE TABLE t (i INT PRIMARY KEY, j INT ON UPDATE 1);
+----
+
+unimplemented
+CREATE TABLE t (i INT PRIMARY KEY, j INT AS (i + 1) STORED);
+----
+
+unimplemented
+CREATE TABLE t (i INT PRIMARY KEY, j INT UNIQUE);
+----
+
+unimplemented
+CREATE TABLE t (i INT PRIMARY KEY, j INT CHECK (j > 0));
+----
+
+unimplemented
+CREATE TABLE t (i INT PRIMARY KEY USING HASH);
+----
+
+unimplemented
+CREATE TABLE t (i INT PRIMARY KEY, j INT[]);
+----
+
+unimplemented
+CREATE TABLE t (i INT PRIMARY KEY) PARTITION BY LIST (i) (PARTITION p1 VALUES IN (1));
 ----

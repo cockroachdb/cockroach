@@ -1,0 +1,20 @@
+/* setup */
+CREATE DATABASE db;
+USE db;
+CREATE TABLE t1 (a INT);
+----
+...
++database {0 0 db} -> 104
++schema {104 0 public} -> 105
++object {104 105 t1} -> 106
+
+/* test */
+CREATE TABLE IF NOT EXISTS t1 (a INT);
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: CREATE TABLE
+# end StatementPhase
+# begin PreCommitPhase
+# end PreCommitPhase
+commit transaction #1

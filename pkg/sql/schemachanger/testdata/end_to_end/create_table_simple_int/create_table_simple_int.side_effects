@@ -1,0 +1,182 @@
+/* setup */
+CREATE DATABASE db;
+USE db;
+----
+...
++database {0 0 db} -> 104
++schema {104 0 public} -> 105
+
+/* test */
+CREATE TABLE t1 (a INT);
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: CREATE TABLE
+increment telemetry for sql.schema.create_table
+## StatementPhase stage 1 of 1 with 30 MutationType ops
+add object namespace entry {104 105 t1} -> 106
+upsert descriptor #106
+  -
+  +table:
+  +  checks: []
+  +  columns:
+  +  - id: 1
+  +    name: a
+  +    nullable: true
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
+  +  - defaultExpr: unique_rowid()
+  +    hidden: true
+  +    id: 2
+  +    name: rowid
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
+  +  createAsOfTime: {}
+  +  families:
+  +  - columnIds:
+  +    - 1
+  +    - 2
+  +    columnNames:
+  +    - a
+  +    - rowid
+  +    defaultColumnId: 1
+  +    name: primary
+  +  formatVersion: 3
+  +  id: 106
+  +  modificationTime: {}
+  +  mutations: []
+  +  name: t1
+  +  nextColumnId: 3
+  +  nextConstraintId: 2
+  +  nextFamilyId: 1
+  +  nextIndexId: 2
+  +  parentId: 104
+  +  primaryIndex:
+  +    constraintId: 1
+  +    encodingType: 1
+  +    foreignKey: {}
+  +    geoConfig: {}
+  +    id: 1
+  +    interleave: {}
+  +    keyColumnDirections:
+  +    - ASC
+  +    keyColumnIds:
+  +    - 2
+  +    keyColumnNames:
+  +    - rowid
+  +    name: t1_pkey
+  +    partitioning: {}
+  +    sharded: {}
+  +    storeColumnIds:
+  +    - 1
+  +    storeColumnNames:
+  +    - a
+  +    unique: true
+  +    vecConfig: {}
+  +    version: 4
+  +  privileges:
+  +    ownerProto: root
+  +    users:
+  +    - privileges: "2"
+  +      userProto: admin
+  +      withGrantOption: "2"
+  +    - privileges: "2"
+  +      userProto: root
+  +      withGrantOption: "2"
+  +    version: 3
+  +  replacementOf:
+  +    time: {}
+  +  unexposedParentSchemaId: 105
+  +  version: "1"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 31 MutationType ops
+add object namespace entry {104 105 t1} -> 106
+upsert descriptor #106
+  -
+  +table:
+  +  checks: []
+  +  columns:
+  +  - id: 1
+  +    name: a
+  +    nullable: true
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
+  +  - defaultExpr: unique_rowid()
+  +    hidden: true
+  +    id: 2
+  +    name: rowid
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
+  +  createAsOfTime: {}
+  +  families:
+  +  - columnIds:
+  +    - 1
+  +    - 2
+  +    columnNames:
+  +    - a
+  +    - rowid
+  +    defaultColumnId: 1
+  +    name: primary
+  +  formatVersion: 3
+  +  id: 106
+  +  modificationTime: {}
+  +  mutations: []
+  +  name: t1
+  +  nextColumnId: 3
+  +  nextConstraintId: 2
+  +  nextFamilyId: 1
+  +  nextIndexId: 2
+  +  parentId: 104
+  +  primaryIndex:
+  +    constraintId: 1
+  +    encodingType: 1
+  +    foreignKey: {}
+  +    geoConfig: {}
+  +    id: 1
+  +    interleave: {}
+  +    keyColumnDirections:
+  +    - ASC
+  +    keyColumnIds:
+  +    - 2
+  +    keyColumnNames:
+  +    - rowid
+  +    name: t1_pkey
+  +    partitioning: {}
+  +    sharded: {}
+  +    storeColumnIds:
+  +    - 1
+  +    storeColumnNames:
+  +    - a
+  +    unique: true
+  +    vecConfig: {}
+  +    version: 4
+  +  privileges:
+  +    ownerProto: root
+  +    users:
+  +    - privileges: "2"
+  +      userProto: admin
+  +      withGrantOption: "2"
+  +    - privileges: "2"
+  +      userProto: root
+  +      withGrantOption: "2"
+  +    version: 3
+  +  replacementOf:
+  +    time: {}
+  +  unexposedParentSchemaId: 105
+  +  version: "1"
+persist all catalog changes to storage
+update ttl schedule label #106
+# end PreCommitPhase
+commit transaction #1
