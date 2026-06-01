@@ -608,7 +608,6 @@ func (lww *lwwQuerier) AddTable(targetDescID int32, tc sqlProcessorTableConfig) 
 
 	lww.tombstoneUpdaters[td.GetID()] = sqlwriter.NewTombstoneUpdater(
 		lww.codec,
-		lww.db.KV(),
 		lww.leaseMgr,
 		catid.DescID(targetDescID),
 		lww.sd,
@@ -732,10 +731,21 @@ func (lww *lwwQuerier) DeleteRow(
 		return batchStats{}, err
 	}
 	if rowCount != 1 {
-		// NOTE: at this point we don't know if we are updating a tombstone or if
-		// we are losing LWW. As long as it is a LWW loss or a tombstone update,
-		// UpdateTombstoneAny will return okay.
-		lwwLoss, err := lww.tombstoneUpdaters[row.TableID].UpdateTombstoneAny(ctx, txn, row.MvccTimestamp, datums)
+		// NOTE: at this point we don't know if we are updating a tombstone or
+		// if we are losing LWW. UpdateTombstoneAny returns (true, nil) for a
+		// LWW loss, (false, nil) for a successful tombstone update, or
+		// (false, ErrStalePreviousValue) if a live row exists at the key.
+		tu := lww.tombstoneUpdaters[row.TableID]
+		var lwwLoss bool
+		if kvTxn != nil {
+			lwwLoss, err = tu.UpdateTombstoneAny(ctx, kvTxn, row.MvccTimestamp, datums)
+		} else {
+			err = lww.db.KV().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				var txnErr error
+				lwwLoss, txnErr = tu.UpdateTombstoneAny(ctx, txn, row.MvccTimestamp, datums)
+				return txnErr
+			})
+		}
 		if err != nil {
 			return batchStats{}, err
 		}
