@@ -70,7 +70,7 @@ func TestProprietaryTokenSource(t *testing.T) {
 	ts := &proprietaryTokenSource{
 		tokenURL:            tokenURL,
 		clientID:            "my client id",
-		clientAssertion:     "bXkgYXNzZXJ0aW9u", // "my assertion"
+		getClientAssertion:  func() (string, error) { return "bXkgYXNzZXJ0aW9u", nil }, // "my assertion"
 		clientAssertionType: "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
 		resource:            "my resource",
 		ctx:                 ctx,
@@ -102,7 +102,9 @@ func TestProprietaryOAuthRegistration(t *testing.T) {
 	require.Equal(t, "localhost", om.tokenURL)
 	require.Equal(t, "r", om.resource)
 	require.Equal(t, "at", om.clientAssertionType)
-	require.Equal(t, "as", om.clientAssertion)
+	assertion, err := om.getClientAssertion()
+	require.NoError(t, err)
+	require.Equal(t, "as", assertion)
 }
 
 func TestProprietaryOAuthOnlyParamsRejected(t *testing.T) {
@@ -132,11 +134,54 @@ func TestProprietaryOAuthOnlyParamsRejected(t *testing.T) {
 			extraParam:  `sasl_proprietary_client_assertion_type=at`,
 			expectedErr: "sasl_proprietary_client_assertion_type is not a valid parameter for sasl_mechanism=PLAIN",
 		},
+		{
+			name:        "proprietary client assertion location rejected under PLAIN",
+			extraParam:  `sasl_proprietary_client_assertion_location=jwt`,
+			expectedErr: "sasl_proprietary_client_assertion_location is not a valid parameter for sasl_mechanism=PLAIN",
+		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			u, err := url.Parse(base + "&" + tc.extraParam)
+			require.NoError(t, err)
+			_, _, err = Pick(&changefeedbase.SinkURL{URL: u}, SASLConfig{})
+			require.ErrorContains(t, err, tc.expectedErr)
+		})
+	}
+}
+
+func TestProprietaryOAuthClientAssertionParams(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const baseRequired = `kafka://b?sasl_enabled=true&sasl_mechanism=PROPRIETARY_OAUTH` +
+		`&sasl_client_id=cl&sasl_token_url=localhost` +
+		`&sasl_proprietary_resource=r&sasl_proprietary_client_assertion_type=at`
+
+	tests := []struct {
+		name        string
+		extraParams string
+		expectedErr string
+	}{
+		{
+			name:        "neither assertion nor location",
+			expectedErr: "one of sasl_proprietary_client_assertion or sasl_proprietary_client_assertion_location must be provided",
+		},
+		{
+			name:        "both assertion and location",
+			extraParams: `sasl_proprietary_client_assertion=inline&sasl_proprietary_client_assertion_location=jwt`,
+			expectedErr: "sasl_proprietary_client_assertion and sasl_proprietary_client_assertion_location cannot be used together",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := baseRequired
+			if tc.extraParams != "" {
+				raw += "&" + tc.extraParams
+			}
+			u, err := url.Parse(raw)
 			require.NoError(t, err)
 			_, _, err = Pick(&changefeedbase.SinkURL{URL: u}, SASLConfig{})
 			require.ErrorContains(t, err, tc.expectedErr)
