@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -543,6 +544,11 @@ func (p *ldrCoordinatorProcessor) createTxnFeed(
 
 		// Subscribe to this partition.
 		token := streamclient.SubscriptionToken(partitionSpec.SubscriptionToken)
+		if streamingKnobs, ok := p.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
+			if streamingKnobs != nil && streamingKnobs.BeforeClientSubscribe != nil {
+				streamingKnobs.BeforeClientSubscribe(uri.Serialize(), string(token), partitionFrontier, false)
+			}
+		}
 		sub, err := client.Subscribe(
 			ctx,
 			streampb.StreamID(p.spec.StreamID),

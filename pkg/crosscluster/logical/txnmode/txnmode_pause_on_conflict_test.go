@@ -81,9 +81,11 @@ func setupConflictingLDR(
 	sourceURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("source_db"))
 
 	var jobID jobspb.JobID
+	cursorTS := s.Clock().Now()
 	destDB.QueryRow(t,
-		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = 'transactional'",
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = 'transactional', CURSOR = $2",
 		sourceURL.String(),
+		cursorTS.AsOfSystemTime(),
 	).Scan(&jobID)
 
 	sourceDB.Exec(t, "INSERT INTO tab VALUES (1, 'collide')")
@@ -213,9 +215,11 @@ func TestTxnModePauseOnEarliestConflict(t *testing.T) {
 	sourceURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("source_db"))
 
 	var jobID jobspb.JobID
+	cursorTS := s.Clock().Now()
 	destDB.QueryRow(t,
-		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = 'transactional'",
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = 'transactional', CURSOR = $2",
 		sourceURL.String(),
+		cursorTS.AsOfSystemTime(),
 	).Scan(&jobID)
 
 	sourceDB.Exec(t, "INSERT INTO tab VALUES (1, 'ok-1', 'distinct-1')")

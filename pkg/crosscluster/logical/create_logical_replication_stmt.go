@@ -134,6 +134,13 @@ func createLogicalReplicationStreamPlanHook(
 			mode = jobspb.LogicalReplicationDetails_Validated
 		}
 
+		cursor, hasCursor := options.GetCursor()
+		if mode == jobspb.LogicalReplicationDetails_Transactional && !hasCursor {
+			if !stmt.CreateTable {
+				return pgerror.New(pgcode.InvalidParameterValue,
+					"CURSOR is required with MODE = 'transactional'")
+			}
+		}
 		discard := jobspb.LogicalReplicationDetails_DiscardNothing
 		if m, ok := options.Discard(); ok {
 			switch m {
@@ -220,10 +227,12 @@ func createLogicalReplicationStreamPlanHook(
 		for i, tb := range stmt.From.Tables {
 			srcTableNames[i] = tb.String()
 		}
+
 		spec, err := client.CreateForTables(ctx, &streampb.ReplicationProducerRequest{
 			TableNames:                  srcTableNames,
 			AllowOffline:                options.ParentID != 0,
 			UnvalidatedReverseStreamURI: options.BidirectionalURI(),
+			ReplicationStartTime:        cursor,
 		})
 		if err != nil {
 			return err
@@ -242,7 +251,7 @@ func createLogicalReplicationStreamPlanHook(
 
 		replicationStartTime := spec.ReplicationStartTime
 		progress := jobspb.LogicalReplicationProgress{}
-		if cursor, ok := options.GetCursor(); ok {
+		if hasCursor {
 			replicationStartTime = cursor
 			progress.ReplicatedTime = cursor
 		}
