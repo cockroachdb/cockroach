@@ -171,6 +171,7 @@ func buildStatementBundle(
 	b.addTrace()
 	b.addInFlightTrace(c)
 	b.addEnv(ctx)
+	b.addDescriptors(ctx)
 	b.addErrors(queryErr, payloadErr, commErr)
 
 	buf, err := b.finalize()
@@ -1115,6 +1116,85 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	}
 }
 
+// addDescriptors writes two files into the bundle that capture the state of
+// each schema object referenced by the statement: descriptors.json contains
+// the pretty-printed descriptor JSON, and schema_changes.txt contains the
+// schema-change jobs that targeted those descriptors. Together they help
+// disambiguate plan or execution surprises that are actually caused by
+// schema-state interactions.
+func (b *stmtBundleBuilder) addDescriptors(ctx context.Context) {
+	var descBuf, scBuf bytes.Buffer
+	defer func() {
+		b.z.AddFile("descriptors.json", descBuf.String())
+		b.z.AddFile("schema_changes.txt", scBuf.String())
+	}()
+
+	mem := b.plan.mem
+	if mem == nil {
+		descBuf.WriteString("-- no descriptors collected\n")
+		scBuf.WriteString("-- no schema changes collected\n")
+		return
+	}
+	if b.flags.RedactValues {
+		// Descriptor JSON and schema-change job descriptions can contain user
+		// data via function bodies, trigger expressions, computed columns,
+		// check constraints, and DDL literals. pb_to_json's emit_redacted flag
+		// only redacts fields explicitly tagged in the proto, which doesn't
+		// cover those text fields - so omit both files entirely under REDACT.
+		descBuf.WriteString("-- descriptors omitted in redacted bundle\n")
+		scBuf.WriteString("-- schema changes omitted in redacted bundle\n")
+		return
+	}
+	c := makeStmtEnvCollector(ctx, b.p, b.ie, b.requesterUsername)
+
+	// Collect the descriptor ID of every schema object referenced by the
+	// query, deduplicating along the way.
+	var seen intsets.Fast
+	var ids []descpb.ID
+	add := func(id descpb.ID) {
+		if seen.Contains(int(id)) {
+			return
+		}
+		seen.Add(int(id))
+		ids = append(ids, id)
+	}
+	for _, tm := range mem.Metadata().AllTables() {
+		add(descpb.ID(tm.Table.ID()))
+	}
+	for _, seq := range mem.Metadata().AllSequences() {
+		add(descpb.ID(seq.ID()))
+	}
+	for _, view := range mem.Metadata().AllViews() {
+		add(descpb.ID(view.ID()))
+	}
+	for _, typ := range mem.Metadata().AllUserDefinedTypes() {
+		add(catid.UserDefinedOIDToID(typ.Oid()))
+	}
+	// TODO(170491): also include user-defined routines reachable via trigger
+	// dependencies. See addEnv's triggerFuncIDs traversal.
+
+	if len(ids) == 0 {
+		descBuf.WriteString("-- no objects used in this query\n")
+		scBuf.WriteString("-- no objects used in this query\n")
+		return
+	}
+	descLen, scLen := descBuf.Len(), scBuf.Len()
+	for _, id := range ids {
+		if err := c.PrintDescriptorJSON(&descBuf, id, b.flags.RedactValues); err != nil {
+			b.printError(fmt.Sprintf("-- error getting descriptor for id %d: %v", id, err), &descBuf)
+		}
+		if err := c.PrintSchemaChanges(&scBuf, id); err != nil {
+			b.printError(fmt.Sprintf("-- error getting schema changes for id %d: %v", id, err), &scBuf)
+		}
+	}
+	if descBuf.Len() == descLen {
+		descBuf.WriteString("-- no descriptors found in system.descriptor\n")
+	}
+	if scBuf.Len() == scLen {
+		scBuf.WriteString("-- no schema-change history found for the objects used in this query\n")
+	}
+}
+
 func (b *stmtBundleBuilder) addErrors(queryErr, payloadErr, commErr error) {
 	if b.flags.RedactValues {
 		return
@@ -1565,6 +1645,84 @@ func (c *stmtEnvCollector) PrintCreateView(
 		return err
 	}
 	printCreateStatement(w, tn.CatalogName, createStatement)
+	return nil
+}
+
+// PrintDescriptorJSON writes the pretty-printed descriptor JSON for the
+// descriptor with the given ID. Empty result (descriptor not found) is
+// tolerated so that descriptors dropped between planning and bundle
+// collection don't fail the whole bundle.
+func (c *stmtEnvCollector) PrintDescriptorJSON(w io.Writer, id descpb.ID, redactValues bool) error {
+	query := fmt.Sprintf(`SELECT coalesce(jsonb_pretty(crdb_internal.pb_to_json(
+'cockroach.sql.sqlbase.Descriptor', descriptor, false /* emit_defaults */, %t /* emit_redacted */
+)), '') FROM system.public.descriptor WHERE id = %d`, redactValues, id)
+	res, err := c.queryEx(query, 1 /* numCols */, true /* emptyOk */)
+	if err != nil {
+		return err
+	}
+	if res[0] == "" {
+		return nil
+	}
+	fmt.Fprintf(w, "-- Descriptor %d:\n%s\n\n", id, res[0])
+	return nil
+}
+
+// PrintSchemaChanges writes the schema-change jobs that targeted the
+// descriptor with the given ID, most-recent first. It includes the schema,
+// new schema, and type schema change job types; SCHEMA CHANGE GC is omitted
+// because it's GC bookkeeping rather than a schema mutation.
+func (c *stmtEnvCollector) PrintSchemaChanges(w io.Writer, id descpb.ID) error {
+	// Schema-change jobs hide their target descriptors inside the payload
+	// protobuf; we decode it via crdb_internal.pb_to_json and check whether
+	// descriptorIds contains the requested ID. That catches legacy schema
+	// changes, but the declarative schema changer progressively drains
+	// descriptorIds from the payload as targets complete (see
+	// scexec/exec_deferred_mutation.go), so its completed jobs would be
+	// missed. Fall back to matching the descriptor's fully-qualified name
+	// against the job's description text, which both schema changers
+	// populate consistently. Use "".crdb_internal to allow cross-DB lookups.
+	query := fmt.Sprintf(`SELECT id::STRING, status, job_type, created::STRING,
+       coalesce(payload_json->>'description', '')
+FROM (
+  SELECT id, status, job_type, created,
+         crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload,
+                                  false /* emit_defaults */, false /* emit_redacted */) AS payload_json
+  FROM "".crdb_internal.system_jobs
+  WHERE job_type IN ('SCHEMA CHANGE', 'NEW SCHEMA CHANGE', 'TYPE SCHEMA CHANGE')
+)
+WHERE payload_json->'descriptorIds' @> %s::JSONB
+   OR payload_json->>'description' ILIKE
+      '%%' || (SELECT db.name || '.' || sc.name || '.' || obj.name
+               FROM "".crdb_internal.kv_catalog_namespace obj
+               JOIN "".crdb_internal.kv_catalog_namespace sc
+                 ON sc.id = obj.parent_schema_id
+               JOIN "".crdb_internal.kv_catalog_namespace db
+                 ON db.id = obj.parent_id
+               WHERE obj.id = %d
+               LIMIT 1) || '%%'
+ORDER BY created DESC`, lexbase.EscapeSQLString(fmt.Sprintf("[%d]", id)), id)
+
+	rows, err := c.ie.QueryBufferedEx(c.ctx, "stmtEnvCollector", nil /* txn */, c.ieo, query)
+	if err != nil {
+		return err
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	fmt.Fprintf(w, "-- Schema-change jobs for descriptor %d:\n", id)
+	for _, row := range rows {
+		strs := make([]string, len(row))
+		for i, d := range row {
+			s, ok := d.(*tree.DString)
+			if !ok {
+				return errors.AssertionFailedf(
+					"expected schema-change query to return DString, got %T", d)
+			}
+			strs[i] = string(*s)
+		}
+		fmt.Fprintf(w, "%s | %s | %s | %s | %s\n", strs[0], strs[1], strs[2], strs[3], strs[4])
+	}
+	fmt.Fprintln(w)
 	return nil
 }
 
