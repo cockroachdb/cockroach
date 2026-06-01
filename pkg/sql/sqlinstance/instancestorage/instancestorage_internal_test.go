@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/sqllivenesstestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -560,4 +561,38 @@ func claim(
 		/* encodeIsDraining */ true,
 		/* isDraining */ false,
 	))
+}
+
+func TestWaitForActiveSession(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	t.Run("expiration already valid", func(t *testing.T) {
+		clock := hlc.NewClockForTesting(nil)
+		s := &Storage{clock: clock}
+		session := &sqllivenesstestutils.FakeSession{
+			SessionID: makeSession(),
+			ExpTS:     clock.Now().Add(time.Minute.Nanoseconds(), 0),
+		}
+
+		require.NoError(t, s.waitForActiveSession(ctx, session))
+	})
+
+	t.Run("stale expiration with canceled context", func(t *testing.T) {
+		clock := hlc.NewClockForTesting(nil)
+		s := &Storage{clock: clock}
+		session := &sqllivenesstestutils.FakeSession{
+			SessionID: makeSession(),
+			ExpTS:     clock.Now().Add(-time.Second.Nanoseconds(), 0),
+		}
+
+		canceledCtx, cancel := context.WithCancel(ctx)
+		cancel()
+
+		err := s.waitForActiveSession(canceledCtx, session)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "waiting for active session")
+	})
 }
