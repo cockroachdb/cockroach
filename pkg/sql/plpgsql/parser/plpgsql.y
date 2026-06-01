@@ -26,8 +26,8 @@ func setErrNoDetails(plpgsqllex plpgsqlLexer, err error) int {
     return 1
 }
 
-func unimplemented(plpgsqllex plpgsqlLexer, feature string) int {
-    plpgsqllex.(*lexer).Unimplemented(feature)
+func unimplementedWithIssue(plpgsqllex plpgsqlLexer, issue int) int {
+    plpgsqllex.(*lexer).UnimplementedWithIssue(issue)
     return 1
 }
 
@@ -475,7 +475,7 @@ decl_statement: decl_varname decl_const decl_datatype decl_collate decl_notnull 
   }
 | decl_varname ALIAS FOR decl_aliasitem ';'
   {
-    return unimplemented(plpgsqllex, "alias for")
+    return unimplementedWithIssue(plpgsqllex, 169572)
   }
 | decl_varname opt_scrollable CURSOR decl_cursor_args decl_is_for decl_cursor_query
   {
@@ -516,7 +516,7 @@ decl_cursor_query: stmt_until_semi ';'
 
 decl_cursor_args: '('
   {
-    return unimplemented(plpgsqllex, "cursor arguments")
+    return unimplementedWithIssue(plpgsqllex, 117746)
   }
 | /* EMPTY */
   {
@@ -771,7 +771,7 @@ proc_stmt:pl_block ';'
 
 stmt_perform: PERFORM stmt_until_semi ';'
   {
-    return unimplemented(plpgsqllex, "perform")
+    return unimplementedWithIssue(plpgsqllex, 108416)
   }
 ;
 
@@ -1106,7 +1106,7 @@ for_control:
 	    }
 	    $$.val = forLoopControl
 	  case LOOP:
-	    return unimplemented(plpgsqllex, "for loop over query or cursor")
+	    return unimplementedWithIssue(plpgsqllex, 105246)
 	  default:
 	    return setErr(plpgsqllex, errors.New("unterminated FOR loop definition"))
 	  }
@@ -1125,7 +1125,7 @@ for_target:
 
 stmt_foreach_a: opt_loop_label FOREACH
   {
-    return unimplemented(plpgsqllex, "for each loop")
+    return unimplementedWithIssue(plpgsqllex, 163147)
   }
 ;
 
@@ -1185,7 +1185,7 @@ return_query:
       // Advance the lexer by one token so that the error correctly points to
       // the EXECUTE keyword.
       plpgsqllex.(*lexer).Advance(1)
-      return unimplemented (plpgsqllex, "return dynamic sql query")
+      return unimplementedWithIssue(plpgsqllex, 169571)
     }
     retQuery, err := plpgsqllex.(*lexer).ParseReturnQuery()
     if err != nil {
@@ -1198,7 +1198,7 @@ return_query:
 stmt_raise:
   RAISE ';'
   {
-    return unimplemented(plpgsqllex, "empty RAISE statement")
+    return unimplementedWithIssue(plpgsqllex, 169573)
   }
 | RAISE opt_error_level SCONST opt_format_exprs opt_option_exprs ';'
   {
@@ -1398,9 +1398,9 @@ stmt_open: OPEN IDENT ';'
   {
     $$.val = &plpgsqltree.Open{CurVar: plpgsqltree.Variable($2)}
   }
-| OPEN IDENT opt_scrollable FOR EXECUTE 
+| OPEN IDENT opt_scrollable FOR EXECUTE
   {
-    return unimplemented(plpgsqllex, "cursor for execute")
+    return unimplementedWithIssue(plpgsqllex, 169574)
   }
 | OPEN IDENT opt_scrollable FOR stmt_until_semi ';'
   {
