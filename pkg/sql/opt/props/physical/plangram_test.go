@@ -160,7 +160,7 @@ func TestPlanGramFormatPretty(t *testing.T) {
 				},
 			}},
 			expectedOneLine:  "root: (Select (Scan));",
-			expectedNewlines: "root: (Select (Scan));\n",
+			expectedNewlines: "root:\n  (Select\n    (Scan));\n",
 		},
 		{
 			name: "child referencing nil",
@@ -202,7 +202,7 @@ func TestPlanGramFormatPretty(t *testing.T) {
 				children: []planGramTerm{&planGramExpr{op: opt.UnknownOp}},
 			}},
 			expectedOneLine:  "root: (Select (_));",
-			expectedNewlines: "root: (Select (_));\n",
+			expectedNewlines: "root:\n  (Select\n    (_));\n",
 		},
 		{
 			name: "with nonterminal production",
@@ -216,8 +216,12 @@ func TestPlanGramFormatPretty(t *testing.T) {
 				},
 			}},
 			expectedOneLine: "root: (Select (IndexJoin scan)); scan: (Scan Index=\"abc_b_idx\") | (Scan Index=\"abc_c_idx\");",
-			expectedNewlines: "root: (Select (IndexJoin scan));\n" +
-				"scan: (Scan Index=\"abc_b_idx\") | (Scan Index=\"abc_c_idx\");\n",
+			expectedNewlines: "root:\n" +
+				"  (Select\n" +
+				"    (IndexJoin scan));\n" +
+				"scan:\n" +
+				"  (Scan Index=\"abc_b_idx\")\n" +
+				"  | (Scan Index=\"abc_c_idx\");\n",
 		},
 		{
 			name: "multiple fields",
@@ -243,10 +247,16 @@ func TestPlanGramFormatPretty(t *testing.T) {
 			expectedNewlines: "root: (Scan Index=\"has \\\"quotes\\\" and spaces\");\n",
 		},
 		{
-			name:             "cyclical productions",
-			plangram:         PlanGram{root: cycle},
-			expectedOneLine:  "root: cycle; cycle: (InnerJoin cycle cycle) | scan; scan: (Scan Index=\"abc_b_idx\") | (Scan Index=\"abc_c_idx\");",
-			expectedNewlines: "root: cycle;\ncycle: (InnerJoin cycle cycle) | scan;\nscan: (Scan Index=\"abc_b_idx\") | (Scan Index=\"abc_c_idx\");\n",
+			name:            "cyclical productions",
+			plangram:        PlanGram{root: cycle},
+			expectedOneLine: "root: cycle; cycle: (InnerJoin cycle cycle) | scan; scan: (Scan Index=\"abc_b_idx\") | (Scan Index=\"abc_c_idx\");",
+			expectedNewlines: "root: cycle;\n" +
+				"cycle:\n" +
+				"  (InnerJoin cycle cycle)\n" +
+				"  | scan;\n" +
+				"scan:\n" +
+				"  (Scan Index=\"abc_b_idx\")\n" +
+				"  | (Scan Index=\"abc_c_idx\");\n",
 		},
 	}
 
@@ -800,6 +810,337 @@ func TestPlanGramVisitAlternates(t *testing.T) {
 	}
 }
 
+func TestPlanGramBuilder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	t.Run("simple terminal", func(t *testing.T) {
+		var b PlanGramBuilder
+		require.NoError(t, b.EnterProduction("root"))
+		require.NoError(t, b.EnterExpr(opt.ScanOp))
+		require.NoError(t, b.AddField(PlanGramField{Key: "Index", Val: "abc_a_idx"}))
+		require.NoError(t, b.LeaveExpr())
+		require.NoError(t, b.LeaveProduction())
+		pg, err := b.Build()
+		require.NoError(t, err)
+		require.Equal(t, `root: (Scan Index="abc_a_idx");`, pg.String())
+	})
+
+	t.Run("nested expressions", func(t *testing.T) {
+		var b PlanGramBuilder
+		require.NoError(t, b.EnterProduction("root"))
+		require.NoError(t, b.EnterExpr(opt.SelectOp))
+		require.NoError(t, b.EnterExpr(opt.IndexJoinOp))
+		require.NoError(t, b.AddField(PlanGramField{Key: "Table", Val: "abc"}))
+		require.NoError(t, b.EnterExpr(opt.ScanOp))
+		require.NoError(t, b.AddField(PlanGramField{Key: "Index", Val: "abc_b_idx"}))
+		require.NoError(t, b.LeaveExpr())
+		require.NoError(t, b.LeaveExpr())
+		require.NoError(t, b.LeaveExpr())
+		require.NoError(t, b.LeaveProduction())
+		pg, err := b.Build()
+		require.NoError(t, err)
+		require.Equal(t, `root: (Select (IndexJoin Table="abc" (Scan Index="abc_b_idx")));`, pg.String())
+	})
+
+	t.Run("any and none refs", func(t *testing.T) {
+		var b PlanGramBuilder
+		require.NoError(t, b.EnterProduction("root"))
+		require.NoError(t, b.EnterExpr(opt.SelectOp))
+		require.NoError(t, b.RefAny())
+		require.NoError(t, b.RefNone())
+		require.NoError(t, b.LeaveExpr())
+		require.NoError(t, b.LeaveProduction())
+		pg, err := b.Build()
+		require.NoError(t, err)
+		require.Equal(t, "root: (Select any none);", pg.String())
+	})
+
+	t.Run("forward reference and alternates", func(t *testing.T) {
+		var b PlanGramBuilder
+		require.NoError(t, b.EnterProduction("root"))
+		require.NoError(t, b.EnterExpr(opt.SelectOp))
+		require.NoError(t, b.EnterExpr(opt.IndexJoinOp))
+		require.NoError(t, b.RefProduction("scan"))
+		require.NoError(t, b.LeaveExpr())
+		require.NoError(t, b.LeaveExpr())
+		require.NoError(t, b.LeaveProduction())
+		require.NoError(t, b.EnterProduction("scan"))
+		require.NoError(t, b.EnterExpr(opt.ScanOp))
+		require.NoError(t, b.AddField(PlanGramField{Key: "Index", Val: "abc_b_idx"}))
+		require.NoError(t, b.LeaveExpr())
+		require.NoError(t, b.EnterExpr(opt.ScanOp))
+		require.NoError(t, b.AddField(PlanGramField{Key: "Index", Val: "abc_c_idx"}))
+		require.NoError(t, b.LeaveExpr())
+		require.NoError(t, b.LeaveProduction())
+		pg, err := b.Build()
+		require.NoError(t, err)
+		require.Equal(t,
+			`root: (Select (IndexJoin scan)); scan: (Scan Index="abc_b_idx") | (Scan Index="abc_c_idx");`,
+			pg.String())
+	})
+
+	t.Run("self-referencing cycle", func(t *testing.T) {
+		// Nested EnterProduction: declare cycle inside the root expression at
+		// the spot where it's referenced. This mirrors what decompile.go does.
+		var b PlanGramBuilder
+		require.NoError(t, b.EnterProduction("root"))
+		require.NoError(t, b.RefProduction("cycle"))
+		require.NoError(t, b.EnterProduction("cycle"))
+		require.NoError(t, b.EnterExpr(opt.InnerJoinOp))
+		require.NoError(t, b.RefProduction("cycle"))
+		require.NoError(t, b.RefProduction("cycle"))
+		require.NoError(t, b.LeaveExpr())
+		require.NoError(t, b.RefProduction("scan"))
+		require.NoError(t, b.LeaveProduction())
+		require.NoError(t, b.LeaveProduction())
+		require.NoError(t, b.EnterProduction("scan"))
+		require.NoError(t, b.EnterExpr(opt.ScanOp))
+		require.NoError(t, b.AddField(PlanGramField{Key: "Index", Val: "abc_b_idx"}))
+		require.NoError(t, b.LeaveExpr())
+		require.NoError(t, b.LeaveProduction())
+		pg, err := b.Build()
+		require.NoError(t, err)
+		require.Equal(t,
+			`root: cycle; cycle: (InnerJoin cycle cycle) | scan; scan: (Scan Index="abc_b_idx");`,
+			pg.String())
+	})
+
+	t.Run("reuse after Reset", func(t *testing.T) {
+		var b PlanGramBuilder
+		require.NoError(t, b.EnterProduction("root"))
+		require.NoError(t, b.EnterExpr(opt.ScanOp))
+		require.NoError(t, b.LeaveExpr())
+		require.NoError(t, b.LeaveProduction())
+		pg1, err := b.Build()
+		require.NoError(t, err)
+		require.Equal(t, "root: (Scan);", pg1.String())
+
+		b.Reset()
+
+		require.NoError(t, b.EnterProduction("root"))
+		require.NoError(t, b.EnterExpr(opt.SelectOp))
+		require.NoError(t, b.LeaveExpr())
+		require.NoError(t, b.LeaveProduction())
+		pg2, err := b.Build()
+		require.NoError(t, err)
+		require.Equal(t, "root: (Select);", pg2.String())
+
+		// The first grammar must not be affected by the reset.
+		require.Equal(t, "root: (Scan);", pg1.String())
+	})
+
+	t.Run("Build does not mutate", func(t *testing.T) {
+		// Build can be called repeatedly and interleaved with construction
+		// without disturbing the builder state, matching the strings.Builder
+		// convention.
+		var b PlanGramBuilder
+		require.NoError(t, b.EnterProduction("root"))
+		require.NoError(t, b.EnterExpr(opt.SelectOp))
+		require.NoError(t, b.RefProduction("scan"))
+		require.NoError(t, b.LeaveExpr())
+		require.NoError(t, b.LeaveProduction())
+
+		// First Build: "scan" hasn't been defined yet.
+		_, err := b.Build()
+		require.ErrorContains(t, err, "undefined nonterminal(s): scan")
+
+		// Define it and try again. State from the failed Build persists.
+		require.NoError(t, b.EnterProduction("scan"))
+		require.NoError(t, b.EnterExpr(opt.ScanOp))
+		require.NoError(t, b.LeaveExpr())
+		require.NoError(t, b.LeaveProduction())
+
+		pg1, err := b.Build()
+		require.NoError(t, err)
+		pg2, err := b.Build()
+		require.NoError(t, err)
+		require.Equal(t, pg1.String(), pg2.String())
+		require.Equal(t, "root: (Select scan); scan: (Scan);", pg1.String())
+	})
+
+	t.Run("Build result stable across further construction", func(t *testing.T) {
+		// PlanGrams returned by Build alias the builder's production
+		// pointers, but the API prevents mutation of any production
+		// reachable from a previously-returned root (re-entering a completed
+		// production is a duplicate error). Adding *new* productions after
+		// Build must therefore leave earlier PlanGrams unchanged.
+		var b PlanGramBuilder
+		require.NoError(t, b.EnterProduction("root"))
+		require.NoError(t, b.EnterExpr(opt.SelectOp))
+		require.NoError(t, b.RefProduction("scan"))
+		require.NoError(t, b.LeaveExpr())
+		require.NoError(t, b.LeaveProduction())
+		require.NoError(t, b.EnterProduction("scan"))
+		require.NoError(t, b.EnterExpr(opt.ScanOp))
+		require.NoError(t, b.LeaveExpr())
+		require.NoError(t, b.LeaveProduction())
+		pg1, err := b.Build()
+		require.NoError(t, err)
+
+		// Add an unrelated production that pg1 doesn't reference.
+		require.NoError(t, b.EnterProduction("unused"))
+		require.NoError(t, b.EnterExpr(opt.ValuesOp))
+		require.NoError(t, b.LeaveExpr())
+		require.NoError(t, b.LeaveProduction())
+		require.Equal(t, "root: (Select scan); scan: (Scan);", pg1.String())
+
+		// Reset must also leave pg1 alone.
+		b.Reset()
+		require.Equal(t, "root: (Select scan); scan: (Scan);", pg1.String())
+	})
+
+	// Error tests: setup returns the first non-nil error it encounters. If
+	// setup returns nil, Build's error is checked instead (covers errors that
+	// only surface at finalization, e.g. missing root or unmatched Enter).
+	errorTests := []struct {
+		name        string
+		setup       func(t *testing.T, b *PlanGramBuilder) error
+		expectedErr string
+	}{
+		{
+			name:        "missing root",
+			setup:       func(*testing.T, *PlanGramBuilder) error { return nil },
+			expectedErr: `missing "root" production`,
+		},
+		{
+			name: "fields after children",
+			setup: func(t *testing.T, b *PlanGramBuilder) error {
+				require.NoError(t, b.EnterProduction("root"))
+				require.NoError(t, b.EnterExpr(opt.IndexJoinOp))
+				require.NoError(t, b.EnterExpr(opt.ScanOp))
+				require.NoError(t, b.LeaveExpr())
+				return b.AddField(PlanGramField{Key: "Table", Val: "abc"})
+			},
+			expectedErr: "fields must come before children",
+		},
+		{
+			name: "duplicate production",
+			setup: func(t *testing.T, b *PlanGramBuilder) error {
+				require.NoError(t, b.EnterProduction("root"))
+				require.NoError(t, b.EnterExpr(opt.ScanOp))
+				require.NoError(t, b.LeaveExpr())
+				require.NoError(t, b.LeaveProduction())
+				return b.EnterProduction("root")
+			},
+			expectedErr: `duplicate production "root"`,
+		},
+		{
+			name: "any as production name",
+			setup: func(_ *testing.T, b *PlanGramBuilder) error {
+				return b.EnterProduction("any")
+			},
+			expectedErr: `"any" cannot be used as a production name`,
+		},
+		{
+			name: "root reference",
+			setup: func(t *testing.T, b *PlanGramBuilder) error {
+				require.NoError(t, b.EnterProduction("root"))
+				require.NoError(t, b.EnterExpr(opt.SelectOp))
+				return b.RefProduction("root")
+			},
+			expectedErr: `"root" cannot be used as a nonterminal reference`,
+		},
+		{
+			name: "root with alternates",
+			setup: func(t *testing.T, b *PlanGramBuilder) error {
+				require.NoError(t, b.EnterProduction("root"))
+				require.NoError(t, b.EnterExpr(opt.ScanOp))
+				require.NoError(t, b.LeaveExpr())
+				require.NoError(t, b.EnterExpr(opt.SelectOp))
+				require.NoError(t, b.LeaveExpr())
+				require.NoError(t, b.LeaveProduction())
+				return nil
+			},
+			expectedErr: "root must have exactly one term",
+		},
+		{
+			name: "undefined nonterminal",
+			setup: func(t *testing.T, b *PlanGramBuilder) error {
+				require.NoError(t, b.EnterProduction("root"))
+				require.NoError(t, b.EnterExpr(opt.SelectOp))
+				require.NoError(t, b.RefProduction("missing"))
+				require.NoError(t, b.LeaveExpr())
+				require.NoError(t, b.LeaveProduction())
+				return nil
+			},
+			expectedErr: "undefined nonterminal(s): missing",
+		},
+		{
+			name: "unmatched enter at build",
+			setup: func(t *testing.T, b *PlanGramBuilder) error {
+				require.NoError(t, b.EnterProduction("root"))
+				require.NoError(t, b.EnterExpr(opt.SelectOp))
+				require.NoError(t, b.LeaveExpr())
+				// LeaveProduction missing; surfaces at Build.
+				return nil
+			},
+			expectedErr: "unmatched Enter",
+		},
+		{
+			name: "production name with invalid character",
+			setup: func(_ *testing.T, b *PlanGramBuilder) error {
+				return b.EnterProduction("bad,name")
+			},
+			expectedErr: "contains invalid character",
+		},
+		{
+			name: "production name starting with digit",
+			setup: func(_ *testing.T, b *PlanGramBuilder) error {
+				return b.EnterProduction("9bad")
+			},
+			expectedErr: "must not start with a digit",
+		},
+		{
+			name: "empty production name",
+			setup: func(_ *testing.T, b *PlanGramBuilder) error {
+				return b.EnterProduction("")
+			},
+			expectedErr: "name cannot be empty",
+		},
+		{
+			name: "EnterExpr outside any context",
+			setup: func(_ *testing.T, b *PlanGramBuilder) error {
+				return b.EnterExpr(opt.ScanOp)
+			},
+			expectedErr: "EnterExpr on empty builder",
+		},
+		{
+			name: "RefProduction outside production",
+			setup: func(_ *testing.T, b *PlanGramBuilder) error {
+				return b.RefProduction("scan")
+			},
+			expectedErr: "RefProduction on empty builder",
+		},
+		{
+			name: "RefAny outside production",
+			setup: func(_ *testing.T, b *PlanGramBuilder) error {
+				return b.RefAny()
+			},
+			expectedErr: "RefAny on empty builder",
+		},
+		{
+			name: "RefNone outside production",
+			setup: func(_ *testing.T, b *PlanGramBuilder) error {
+				return b.RefNone()
+			},
+			expectedErr: "RefNone on empty builder",
+		},
+	}
+
+	for _, tc := range errorTests {
+		t.Run("error/"+tc.name, func(t *testing.T) {
+			var b PlanGramBuilder
+			err := tc.setup(t, &b)
+			if err == nil {
+				_, err = b.Build()
+			}
+			require.Error(t, err)
+			require.ErrorContains(t, err, tc.expectedErr)
+		})
+	}
+}
+
 func TestPlanGramWithNoneFallback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1073,7 +1414,7 @@ func TestPlanGramParse(t *testing.T) {
 		{
 			name:        "undefined nonterminal",
 			input:       "root: (Select missing);",
-			expectedErr: `undefined nonterminal "missing"`,
+			expectedErr: "undefined nonterminal(s): missing",
 		},
 		{
 			name:        "duplicate production",

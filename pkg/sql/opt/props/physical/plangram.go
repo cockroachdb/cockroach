@@ -10,13 +10,13 @@ import (
 	"bytes"
 	"io"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -60,6 +60,10 @@ import (
 // PlanGrams are equivalent to top-down non-deterministic finite tree
 // automatons. We could compile the PlanGram into a state-table-based NFTA, but
 // for now we simply walk and interpret it during planning.
+//
+// PlanGrams are constructed via PlanGramBuilder or ParsePlanGram. The internal
+// term representation is hidden so that the package retains freedom to change
+// it (e.g., to intern shared subtrees or compile to an NFTA).
 //
 // For some background see https://en.wikipedia.org/wiki/Regular_tree_grammar
 // and https://en.wikipedia.org/wiki/Tree_automaton.
@@ -208,7 +212,9 @@ func (p PlanGram) WithNoneFallback() PlanGram {
 }
 
 // FormatPretty writes the full PlanGram grammar to the buffer, starting with
-// the root, optionally with multiple lines.
+// the root. If newlines is true, each production is on its own line and
+// nested parenthesized expressions are indented to their paren depth. If
+// newlines is false, the entire grammar is written on a single line.
 func (p PlanGram) FormatPretty(b *bytes.Buffer, newlines bool) {
 	if newlines {
 		defer b.WriteRune('\n')
@@ -222,9 +228,33 @@ func (p PlanGram) FormatPretty(b *bytes.Buffer, newlines bool) {
 		return
 	}
 
-	// formatTerm writes a RHS term to the buffer.
-	var formatTerm func(planGramTerm)
-	formatTerm = func(term planGramTerm) {
+	// hasNestedExpr reports whether term is an expression with at least one
+	// nested expression child. Such terms are broken across multiple lines
+	// in the indented form; expressions whose children are all refs/any/none
+	// stay on a single line.
+	hasNestedExpr := func(term planGramTerm) bool {
+		expr, ok := term.(*planGramExpr)
+		if !ok {
+			return false
+		}
+		for _, child := range expr.children {
+			if _, isExpr := child.(*planGramExpr); isExpr {
+				return true
+			}
+		}
+		return false
+	}
+
+	writeIndent := func(depth int) {
+		for i := 0; i < depth*2; i++ {
+			b.WriteRune(' ')
+		}
+	}
+
+	// formatTerm writes a RHS term to the buffer. depth is the current paren
+	// depth, used to indent broken expressions when newlines is true.
+	var formatTerm func(term planGramTerm, depth int)
+	formatTerm = func(term planGramTerm, depth int) {
 		if term == nil {
 			b.WriteString("any")
 			return
@@ -251,24 +281,50 @@ func (p PlanGram) FormatPretty(b *bytes.Buffer, newlines bool) {
 				b.WriteRune('=')
 				b.WriteString(strconv.Quote(field.Val))
 			}
+			breakChildren := newlines && hasNestedExpr(t)
 			for _, child := range t.children {
-				b.WriteRune(' ')
-				formatTerm(child)
+				if breakChildren {
+					b.WriteRune('\n')
+					writeIndent(depth + 1)
+				} else {
+					b.WriteRune(' ')
+				}
+				formatTerm(child, depth+1)
 			}
 			b.WriteRune(')')
 		default:
-			if buildutil.CrdbTestBuild {
-				panic(errors.AssertionFailedf("unexpected planGramTerm type %T", t))
-			}
+			panic(errors.AssertionFailedf("unexpected planGramTerm type %T", t))
 		}
 	}
 
-	b.WriteString("root: ")
-	formatTerm(p.root)
-	b.WriteRune(';')
+	// writeProduction emits a production. If newlines is true and the
+	// production has multiple rules or a single rule that needs breaking,
+	// the rules go on their own indented lines (with `|` prefixing alts);
+	// otherwise the production stays on a single line.
+	writeProduction := func(name string, rules []planGramTerm) {
+		b.WriteString(name)
+		b.WriteRune(':')
+		breakLines := newlines && (len(rules) > 1 || hasNestedExpr(rules[0]))
+		for i, rule := range rules {
+			if breakLines {
+				b.WriteRune('\n')
+				writeIndent(1)
+				if i > 0 {
+					b.WriteString("| ")
+				}
+			} else if i == 0 {
+				b.WriteRune(' ')
+			} else {
+				b.WriteString(" | ")
+			}
+			formatTerm(rule, 1)
+		}
+		b.WriteRune(';')
+	}
 
-	// Visit each LHS nonterminal reachable from the root, and for each, write all
-	// the production rules to the buffer.
+	writeProduction("root", []planGramTerm{p.root})
+
+	// Write each production reachable from the root.
 	visited := make(map[*planGramProduction]struct{})
 	p.root.visitProductions(visited, func(pp *planGramProduction) {
 		if newlines {
@@ -276,16 +332,7 @@ func (p PlanGram) FormatPretty(b *bytes.Buffer, newlines bool) {
 		} else {
 			b.WriteRune(' ')
 		}
-		b.WriteString(pp.name)
-		for i, rule := range pp.rules {
-			if i == 0 {
-				b.WriteString(": ")
-			} else {
-				b.WriteString(" | ")
-			}
-			formatTerm(rule)
-		}
-		b.WriteRune(';')
+		writeProduction(pp.name, pp.rules)
 	})
 }
 
@@ -302,18 +349,277 @@ func (p PlanGram) String() string {
 	return b.String()
 }
 
-// ParsePlanGram parses a PlanGram grammar from the given io.Reader, or returns
-// an error if it cannot.
+// PlanGramBuilder builds a PlanGram via a stateful nested-context API,
+// modeled on explain.OutputBuilder. The builder maintains an implicit
+// "current position" stack: Enter* pushes a new context, Leave* pops it.
+// AddField and the Ref* methods apply to whatever's on top.
+//
+// Production references are by name. Forward references are permitted: a
+// production may be referenced before EnterProduction has declared it; the
+// reference is resolved at Build time. The same idiom supports cycles —
+// reference a production from within its own rules.
+//
+// Nested EnterProduction (declaring a sub-production while another context is
+// open) is allowed; the inner production is not connected to the outer
+// context except via explicit RefProduction calls. This matches the
+// requirement of decompile, where an alternation production is declared
+// inline at the spot where it is referenced.
+//
+// The zero value is ready to use. Build does not mutate state, so it may be
+// called multiple times (returning equivalent PlanGrams) or interleaved with
+// further construction calls. To construct a new grammar, call Reset —
+// following the strings.Builder convention.
+//
+// A PlanGramBuilder is not safe for concurrent use.
+type PlanGramBuilder struct {
+	// productions tracks all named productions, including forward-reference
+	// stubs (which have empty rules until their EnterProduction call
+	// completes). Lazily allocated on first use; cleared by Reset.
+	productions map[string]*planGramProduction
+	// stack is the nested context stack. Each frame is the in-progress
+	// production or expression at that nesting depth. Cleared by Reset.
+	stack []planGramTerm
+}
+
+// EnterProduction starts a new named production. Subsequent EnterExpr / Ref*
+// calls add rules to this production until the matching LeaveProduction. The
+// "root" production is required and must contain exactly one rule.
+//
+// Production names must not be empty, must not start with a digit, must not
+// contain `"'\,():;=|` or whitespace, and must not be "any" or "none". Calling
+// EnterProduction with a name that already has rules (i.e., was previously
+// completed via LeaveProduction) is a duplicate error.
+func (b *PlanGramBuilder) EnterProduction(name string) error {
+	if name == "any" || name == "none" {
+		return errors.Newf("%q cannot be used as a production name", name)
+	}
+	pp, err := b.getOrCreateProduction(name)
+	if err != nil {
+		return err
+	}
+	if len(pp.rules) > 0 {
+		return errors.Newf("duplicate production %q", name)
+	}
+	// Disallow re-entering an already-in-progress production.
+	for _, frame := range b.stack {
+		if frame == pp {
+			return errors.Newf("production %q already in progress", name)
+		}
+	}
+	b.stack = append(b.stack, pp)
+	return nil
+}
+
+// LeaveProduction pops the current production. The production must have at
+// least one rule. Pairs with EnterProduction.
+func (b *PlanGramBuilder) LeaveProduction() error {
+	if len(b.stack) == 0 {
+		return errors.New("LeaveProduction without matching EnterProduction")
+	}
+	top, ok := b.stack[len(b.stack)-1].(*planGramProduction)
+	if !ok {
+		return errors.New("LeaveProduction called with expression on top")
+	}
+	if len(top.rules) == 0 {
+		return errors.Newf("production %q has no rules", top.name)
+	}
+	b.stack = b.stack[:len(b.stack)-1]
+	return nil
+}
+
+// EnterExpr starts a new expression with the given op. Subsequent AddField,
+// EnterExpr, and Ref* calls add fields and children. On LeaveExpr, the
+// completed expression becomes either a child of the enclosing expression or
+// a rule of the enclosing production, depending on context.
+func (b *PlanGramBuilder) EnterExpr(op opt.Operator) error {
+	if len(b.stack) == 0 {
+		return errors.New("EnterExpr on empty builder")
+	}
+	b.stack = append(b.stack, &planGramExpr{op: op})
+	return nil
+}
+
+// LeaveExpr pops the current expression and appends it to the now-current
+// frame. Pairs with EnterExpr.
+func (b *PlanGramBuilder) LeaveExpr() error {
+	if len(b.stack) == 0 {
+		return errors.New("LeaveExpr without matching EnterExpr")
+	}
+	top, ok := b.stack[len(b.stack)-1].(*planGramExpr)
+	if !ok {
+		return errors.New("LeaveExpr called with production on top")
+	}
+	b.stack = b.stack[:len(b.stack)-1]
+	return b.appendTerm(top)
+}
+
+// AddField adds a field constraint to the current expression. Must precede
+// any child added via EnterExpr or Ref*.
+func (b *PlanGramBuilder) AddField(field PlanGramField) error {
+	if len(b.stack) == 0 {
+		return errors.New("AddField outside expression")
+	}
+	top, ok := b.stack[len(b.stack)-1].(*planGramExpr)
+	if !ok {
+		return errors.New("AddField called with production on top")
+	}
+	if len(top.children) > 0 {
+		return errors.New("fields must come before children in expression")
+	}
+	top.fields = append(top.fields, field)
+	return nil
+}
+
+// RefProduction appends a reference to a named production at the current
+// position. Forward references are permitted; the named production is
+// resolved at Build. The names "any" and "none" resolve to anyPlanGramTerm
+// and nonePlanGramTerm respectively (callers may also use RefAny / RefNone
+// for clarity).
+func (b *PlanGramBuilder) RefProduction(name string) error {
+	if len(b.stack) == 0 {
+		return errors.New("RefProduction on empty builder")
+	}
+	switch name {
+	case "any":
+		return b.appendTerm(anyPlanGramTerm)
+	case "none":
+		return b.appendTerm(nonePlanGramTerm)
+	case "root":
+		return errors.New(`"root" cannot be used as a nonterminal reference`)
+	}
+	pp, err := b.getOrCreateProduction(name)
+	if err != nil {
+		return err
+	}
+	return b.appendTerm(pp)
+}
+
+// RefAny appends anyPlanGramTerm at the current position.
+func (b *PlanGramBuilder) RefAny() error {
+	if len(b.stack) == 0 {
+		return errors.New("RefAny on empty builder")
+	}
+	return b.appendTerm(anyPlanGramTerm)
+}
+
+// RefNone appends nonePlanGramTerm at the current position.
+func (b *PlanGramBuilder) RefNone() error {
+	if len(b.stack) == 0 {
+		return errors.New("RefNone on empty builder")
+	}
+	return b.appendTerm(nonePlanGramTerm)
+}
+
+// Build validates and returns the PlanGram for the grammar constructed so
+// far. It does not mutate the builder, so it may be called multiple times
+// (returning equivalent PlanGrams) or interleaved with further construction
+// calls (e.g., to inspect the in-progress grammar). To construct a new
+// grammar, call Reset.
+//
+// PlanGrams previously returned by Build remain valid across further
+// construction and across Reset: the builder API prevents re-entering a
+// completed production (so no production reachable from a returned root can
+// gain rules), and Reset only clears the builder's references to the
+// underlying production nodes.
+func (b *PlanGramBuilder) Build() (PlanGram, error) {
+	if len(b.stack) != 0 {
+		return PlanGram{}, errors.Newf("unmatched Enter without Leave (%d open)", len(b.stack))
+	}
+	root, ok := b.productions["root"]
+	if !ok {
+		return PlanGram{}, errors.New(`missing "root" production`)
+	}
+	if len(root.rules) != 1 {
+		return PlanGram{}, errors.New("root must have exactly one term, not alternates")
+	}
+	// Report any undefined nonterminals deterministically. Allocation is
+	// confined to the error path: a nil slice with no appends costs nothing.
+	var undefined []string
+	for name, pp := range b.productions {
+		if len(pp.rules) == 0 {
+			undefined = append(undefined, name)
+		}
+	}
+	if len(undefined) > 0 {
+		slices.Sort(undefined)
+		return PlanGram{}, errors.Newf("undefined nonterminal(s): %s", strings.Join(undefined, ", "))
+	}
+	return PlanGram{root: root.rules[0]}, nil
+}
+
+// Reset clears the builder so it can be used to construct another grammar.
+// The underlying map and slice memory are retained. PlanGrams previously
+// returned by Build are unaffected — they hold their own references to the
+// production nodes.
+func (b *PlanGramBuilder) Reset() {
+	clear(b.productions)
+	// Nil stack entries before reslicing so the builder doesn't retain
+	// references to popped frames.
+	clear(b.stack)
+	b.stack = b.stack[:0]
+}
+
+// appendTerm appends a term as a child of the top expression or as a rule of
+// the top production. Returns an error if the stack is empty.
+func (b *PlanGramBuilder) appendTerm(term planGramTerm) error {
+	if len(b.stack) == 0 {
+		return errors.New("term added outside production or expression")
+	}
+	switch top := b.stack[len(b.stack)-1].(type) {
+	case *planGramExpr:
+		top.children = append(top.children, term)
+	case *planGramProduction:
+		top.rules = append(top.rules, term)
+	default:
+		return errors.AssertionFailedf("unexpected stack frame type %T", top)
+	}
+	return nil
+}
+
+// getOrCreateProduction returns the production for the given name, creating
+// a forward-reference stub if one does not yet exist. Validates the name and
+// lazily allocates the productions map on first use.
+func (b *PlanGramBuilder) getOrCreateProduction(name string) (*planGramProduction, error) {
+	if err := validateNonterminalName(name); err != nil {
+		return nil, err
+	}
+	if pp, ok := b.productions[name]; ok {
+		return pp, nil
+	}
+	if b.productions == nil {
+		b.productions = make(map[string]*planGramProduction)
+	}
+	pp := &planGramProduction{name: name}
+	b.productions[name] = pp
+	return pp, nil
+}
+
+// validateNonterminalName checks the syntactic constraints on production /
+// reference names.
+func validateNonterminalName(name string) error {
+	if len(name) == 0 {
+		return errors.New("name cannot be empty")
+	}
+	if name[0] >= '0' && name[0] <= '9' {
+		return errors.Newf("name %q must not start with a digit", name)
+	}
+	if strings.ContainsAny(name, `"'\,():;=|`) {
+		return errors.Newf("name %q contains invalid character", name)
+	}
+	return nil
+}
+
+// ParsePlanGram parses a PlanGram grammar from the given io.Reader, or
+// returns an error if it cannot.
 func ParsePlanGram(r io.Reader) (PlanGram, error) {
 	scanner := bufio.NewScanner(r)
 	scanner.Split(tokenizePlanGram)
 
 	p := planGramParser{
-		scanner:     scanner,
-		productions: make(map[string]*planGramProduction),
+		scanner: scanner,
+		builder: &PlanGramBuilder{},
 	}
 
-	// Parse all productions, including "root".
 	for {
 		if _, ok := p.peek(); !ok {
 			break
@@ -327,33 +633,17 @@ func ParsePlanGram(r io.Reader) (PlanGram, error) {
 		return PlanGram{}, err
 	}
 
-	// Validate that root exists and has exactly one term (no alternates).
-	root, ok := p.productions["root"]
-	if !ok {
-		return PlanGram{}, errors.New("missing \"root\" production")
-	}
-	if len(root.rules) != 1 {
-		return PlanGram{}, errors.New("root must have exactly one term, not alternates")
-	}
-
-	// Validate all forward references were resolved (i.e. every production has
-	// at least one rule).
-	for name, pp := range p.productions {
-		if len(pp.rules) == 0 {
-			return PlanGram{}, errors.Newf("undefined nonterminal %q", name)
-		}
-	}
-
-	return PlanGram{root: root.rules[0]}, nil
+	return p.builder.Build()
 }
 
 // planGramParser is a recursive-descent parser for plangram grammars with
-// 1-token lookahead.
+// 1-token lookahead. It drives a PlanGramBuilder for construction and
+// validation.
 type planGramParser struct {
-	scanner     *bufio.Scanner
-	tok         string
-	hasTok      bool
-	productions map[string]*planGramProduction
+	scanner *bufio.Scanner
+	tok     string
+	hasTok  bool
+	builder *PlanGramBuilder
 }
 
 // next consumes and returns the next token.
@@ -396,72 +686,22 @@ func (p *planGramParser) expect(want string) error {
 	return nil
 }
 
-// getOrCreateProduction returns the production for the given name, creating a
-// forward-reference stub if one does not yet exist. The name must not be empty,
-// punctuation, or a quoted string.
-func (p *planGramParser) getOrCreateProduction(name string) (*planGramProduction, error) {
-	if len(name) == 0 {
-		return nil, errors.New("name cannot be empty")
-	}
-	if name[0] >= '0' && name[0] <= '9' {
-		return nil, errors.Newf("name %q must not start with a digit", name)
-	}
-	if strings.ContainsAny(name, `"'\,():;=|`) {
-		return nil, errors.Newf("name %q contains invalid character", name)
-	}
-	pp, ok := p.productions[name]
-	if !ok {
-		pp = &planGramProduction{name: name}
-		p.productions[name] = pp
-	}
-	return pp, nil
-}
-
-// resolveNonterminal maps a nonterminal name to its term. "any" and "none" are
-// resolved to their special terms; "root" is an error (root cannot be
-// referenced from other productions).
-func (p *planGramParser) resolveNonterminal(name string) (planGramTerm, error) {
-	switch name {
-	case "any":
-		return anyPlanGramTerm, nil
-	case "none":
-		return nonePlanGramTerm, nil
-	case "root":
-		return nil, errors.New("\"root\" cannot be used as a nonterminal reference")
-	default:
-		pp, err := p.getOrCreateProduction(name)
-		if err != nil {
-			return nil, err
-		}
-		return pp, nil
-	}
-}
-
 // parseProduction parses: NAME ":" term { "|" term } ";".
 func (p *planGramParser) parseProduction() error {
 	name, err := p.next()
 	if err != nil {
 		return err
 	}
-	if name == "any" || name == "none" {
-		return errors.Newf("%q cannot be used as a production name", name)
-	}
-	pp, err := p.getOrCreateProduction(name)
-	if err != nil {
+	if err := p.builder.EnterProduction(name); err != nil {
 		return err
-	}
-	if len(pp.rules) > 0 {
-		return errors.Newf("duplicate production %q", name)
 	}
 	if err := p.expect(":"); err != nil {
 		return err
 	}
 	for {
-		term, err := p.parseTerm()
-		if err != nil {
+		if err := p.parseTerm(); err != nil {
 			return err
 		}
-		pp.rules = append(pp.rules, term)
 		tok, ok := p.peek()
 		if !ok || tok != "|" {
 			break
@@ -470,18 +710,21 @@ func (p *planGramParser) parseProduction() error {
 			return err
 		}
 	}
-	return p.expect(";")
+	if err := p.expect(";"); err != nil {
+		return err
+	}
+	return p.builder.LeaveProduction()
 }
 
 // parseTerm parses a single term: either an expression (starting with "(") or
-// a nonterminal name.
-func (p *planGramParser) parseTerm() (planGramTerm, error) {
+// a nonterminal reference.
+func (p *planGramParser) parseTerm() error {
 	tok, ok := p.peek()
 	if !ok {
 		if err := p.scanner.Err(); err != nil {
-			return nil, err
+			return err
 		}
-		return nil, errors.New("unexpected end of input: expected term")
+		return errors.New("unexpected end of input: expected term")
 	}
 	if tok == "(" {
 		return p.parseExpr()
@@ -489,19 +732,19 @@ func (p *planGramParser) parseTerm() (planGramTerm, error) {
 	// Must be a nonterminal name.
 	name, err := p.next()
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return p.resolveNonterminal(name)
+	return p.builder.RefProduction(name)
 }
 
 // parseExpr parses: "(" OP_NAME { field } { child } ")".
-func (p *planGramParser) parseExpr() (planGramTerm, error) {
+func (p *planGramParser) parseExpr() error {
 	if err := p.expect("("); err != nil {
-		return nil, err
+		return err
 	}
 	opName, err := p.next()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	var op opt.Operator
 	if opName == "_" {
@@ -510,74 +753,71 @@ func (p *planGramParser) parseExpr() (planGramTerm, error) {
 		var ok bool
 		op, ok = opt.OperatorByCamelCase(opName)
 		if !ok {
-			return nil, errors.Newf("unknown operator %q", opName)
+			return errors.Newf("unknown operator %q", opName)
 		}
 	}
-	expr := &planGramExpr{op: op}
+	if err := p.builder.EnterExpr(op); err != nil {
+		return err
+	}
 
 	for {
 		tok, ok := p.peek()
 		if !ok {
 			if err := p.scanner.Err(); err != nil {
-				return nil, err
+				return err
 			}
-			return nil, errors.New("unexpected end of input: expected \")\"")
+			return errors.New("unexpected end of input: expected \")\"")
 		}
 		if tok == ")" {
 			if _, err := p.next(); err != nil { // consume ")"
-				return nil, err
+				return err
 			}
 			break
 		}
 		if tok == "(" {
 			// Inline child expression.
-			child, err := p.parseExpr()
-			if err != nil {
-				return nil, err
+			if err := p.parseExpr(); err != nil {
+				return err
 			}
-			expr.children = append(expr.children, child)
 			continue
 		}
 		if len(tok) == 1 && strings.IndexByte(`":;=|`, tok[0]) >= 0 {
-			return nil, errors.Newf("unexpected %q in expression", tok)
+			return errors.Newf("unexpected %q in expression", tok)
 		}
-		// Consume the name. Then peek to decide if it's a field (followed by "=")
-		// or a nonterminal child.
+		// Consume the name. Then peek to decide if it's a field (followed by
+		// "=") or a nonterminal child.
 		name, err := p.next()
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if next, ok := p.peek(); !ok || next != "=" {
 			// Nonterminal child.
-			term, err := p.resolveNonterminal(name)
-			if err != nil {
-				return nil, err
+			if err := p.builder.RefProduction(name); err != nil {
+				return err
 			}
-			expr.children = append(expr.children, term)
 			continue
 		}
 		// Field: Name="value".
-		if len(expr.children) > 0 {
-			return nil, errors.New("fields must come before children in expression")
-		}
 		if _, err = p.next(); err != nil { // consume "="
-			return nil, err
+			return err
 		}
 		val, err := p.next()
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if len(val) == 0 || val[0] != '"' {
-			return nil, errors.Newf("expected quoted string for field value, got %q", val)
+			return errors.Newf("expected quoted string for field value, got %q", val)
 		}
 		unquoted, err := strconv.Unquote(val)
 		if err != nil {
-			return nil, errors.Wrapf(err, "invalid field value %s", val)
+			return errors.Wrapf(err, "invalid field value %s", val)
 		}
-		expr.fields = append(expr.fields, PlanGramField{Key: name, Val: unquoted})
+		if err := p.builder.AddField(PlanGramField{Key: name, Val: unquoted}); err != nil {
+			return err
+		}
 	}
 	// TODO(michae2): check for correct number of children.
-	return expr, nil
+	return p.builder.LeaveExpr()
 }
 
 // tokenizePlanGram is a bufio.SplitFunc that tokenizes a byte stream for
