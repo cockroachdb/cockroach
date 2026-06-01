@@ -499,10 +499,14 @@ func (ep encryptionPassphrase) String() string {
 // newBackupOptions returns a list of backup options to be used when
 // creating a new backup. Each backup option has a 50% chance of being
 // included.
-func newBackupOptions(rng *rand.Rand, onlineRestoreExpected bool) []backupOption {
+func newBackupOptions(
+	rng *rand.Rand, onlineRestoreExpected, skipRevisionHistory bool,
+) []backupOption {
 	possibleOpts := []backupOption{}
 	if !onlineRestoreExpected {
-		possibleOpts = append(possibleOpts, revisionHistory{})
+		if !skipRevisionHistory {
+			possibleOpts = append(possibleOpts, revisionHistory{})
+		}
 		possibleOpts = append(possibleOpts, newEncryptionPassphrase(rng))
 	}
 
@@ -1853,18 +1857,24 @@ func (mvb *mixedVersionBackup) configureGCPolicies(
 	if err := mvb.waitForDBs(ctx, l, rng, h); err != nil {
 		return err
 	}
-	u, err := mvb.CommonTestUtils(ctx, h)
-	if err != nil {
-		return err
-	}
 	// The bank workload is an update-heavy workload, which means that by the end
 	// of the test, full revision history backups will be slowed significantly due
 	// to the amount of MVCC history. We set a shorter GC TTL for the bank
 	// database to bound the full backup durations.
+	//
+	// Zone configuration is not supported in virtual clusters on versions older
+	// than 24.1, and the bank database only exists in the virtual cluster, so
+	// there is no way to set this. Skip the optimization on those versions.
+	if h.IsMultitenant() &&
+		!h.Context().FromVersion.AtLeast(mixedversion.TenantsAndSystemAlignedSettingsVersion) {
+		l.Printf(
+			"skipping GC TTL config: zone configs not supported in virtual clusters in %s",
+			h.Context().FromVersion,
+		)
+		return nil
+	}
 	const bankTTLSeconds = uint64(2 * time.Hour / time.Second)
-	return u.Exec(
-		ctx, rng, `ALTER DATABASE bank CONFIGURE ZONE USING gc.ttlseconds = $1`, bankTTLSeconds,
-	)
+	return h.Exec(rng, `ALTER DATABASE bank CONFIGURE ZONE USING gc.ttlseconds = $1`, bankTTLSeconds)
 }
 
 // maybeTakePreviousVersionBackup creates a backup collection (full +
@@ -2101,6 +2111,7 @@ func (d *BackupRestoreTestDriver) runBackup(
 	bType fmt.Stringer,
 	internalSystemJobs bool,
 	isMultitenant bool,
+	skipRevisionHistory bool,
 ) (backupCollection, string, error) {
 	pauseAfter := 1024 * time.Hour // infinity
 	var pauseResumeDB *gosql.DB
@@ -2128,7 +2139,7 @@ func (d *BackupRestoreTestDriver) runBackup(
 	case fullBackup:
 		btype := d.newBackupScope(rng, isMultitenant)
 		name := d.backupCollectionName(d.nextBackupID(), b.namePrefix, btype)
-		createOptions := newBackupOptions(rng, d.testUtils.onlineRestore)
+		createOptions := newBackupOptions(rng, d.testUtils.onlineRestore, skipRevisionHistory)
 		collection = newBackupCollection(name, btype, createOptions, d.cluster.IsLocal())
 		l.Printf("creating full backup for %s", collection.name)
 	case incrementalBackup:
@@ -2285,9 +2296,11 @@ func (mvb *mixedVersionBackup) createBackupCollection(
 		return err
 	}
 
+	skipRevisionHistory := h.IsMultitenant() &&
+		!h.Context().FromVersion.AtLeast(mixedversion.TenantsAndSystemAlignedSettingsVersion)
 	collection, err := mvb.backupRestoreTestDriver.createBackupCollection(
 		ctx, l, h, rng, fullBackupSpec, incBackupSpec, backupNamePrefix,
-		internalSystemJobs, h.IsMultitenant(),
+		internalSystemJobs, h.IsMultitenant(), skipRevisionHistory,
 	)
 	if err != nil {
 		return err
@@ -2312,6 +2325,7 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 	backupNamePrefix string,
 	internalSystemJobs bool,
 	isMultitenant bool,
+	skipRevisionHistory bool,
 ) (*backupCollection, error) {
 	var collection backupCollection
 	backupEndTimes := make([]string, 0)
@@ -2323,7 +2337,7 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 		var err error
 		collection, fullBackupEndTime, err = d.runBackup(
 			ctx, l, tasker, rng, fullBackupSpec.Plan.Nodes, fullBackupSpec.PauseProbability,
-			fullBackup{backupNamePrefix}, internalSystemJobs, isMultitenant,
+			fullBackup{backupNamePrefix}, internalSystemJobs, isMultitenant, skipRevisionHistory,
 		)
 		return err
 	}); err != nil {
@@ -2343,7 +2357,7 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 			var err error
 			collection, latestIncBackupEndTime, err = d.runBackup(
 				ctx, l, tasker, rng, incBackupSpec.Plan.Nodes, incBackupSpec.PauseProbability,
-				incrementalBackup{collection: collection, incNum: i + 1}, internalSystemJobs, isMultitenant,
+				incrementalBackup{collection: collection, incNum: i + 1}, internalSystemJobs, isMultitenant, skipRevisionHistory,
 			)
 			return err
 		}); err != nil {
@@ -2373,7 +2387,7 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 				var err error
 				collection, latestIncBackupEndTime, err = d.runBackup(
 					ctx, l, tasker, rng, incBackupSpec.Plan.Nodes, incBackupSpec.PauseProbability,
-					compact, internalSystemJobs, isMultitenant)
+					compact, internalSystemJobs, isMultitenant, skipRevisionHistory)
 				return err
 			}); err != nil {
 				return nil, err
