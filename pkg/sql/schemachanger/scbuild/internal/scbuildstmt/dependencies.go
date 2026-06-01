@@ -98,6 +98,7 @@ type BuilderState interface {
 	NameResolver
 	PrivilegeChecker
 	TableHelpers
+	TypeHelpers
 	FunctionHelpers
 	SchemaHelpers
 
@@ -370,6 +371,20 @@ type FunctionHelpers interface {
 
 type SchemaHelpers interface {
 	ResolveDatabasePrefix(schemaPrefix *tree.ObjectNamePrefix)
+}
+
+// TypeHelpers exposes builder operations that are specific to user-defined
+// type descriptors (enums, composites, domains).
+type TypeHelpers interface {
+
+	// NextDomainConstraintID returns the ID that should be used for any new
+	// constraint (NOT NULL or CHECK) added to this domain type. The returned ID
+	// is monotonically increasing across the lifetime of the descriptor.
+	NextDomainConstraintID(typeID catid.DescID) catid.ConstraintID
+
+	// DomainConstraintNames returns the set of constraint names currently in
+	// use on the given domain, as recorded in the persisted descriptor.
+	DomainConstraintNames(typeID catid.DescID) []string
 }
 
 type ElementResultSet = *scpb.ElementCollection[scpb.Element]
