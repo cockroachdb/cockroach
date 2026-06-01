@@ -227,7 +227,7 @@ func NewDemoCluster(
 
 func (c *transientCluster) Start(ctx context.Context) (err error) {
 	ctx = logtags.AddTag(ctx, "start-demo-cluster", nil)
-
+	log.Ops.Infof(ctx, "DRPC enabled: %t", c.demoCtx.UseDRPC)
 	// Initialize the connection database.
 	// We can't do this earlier as this depends on which generator is used.
 	c.defaultDB = catalogkeys.DefaultDatabaseName
