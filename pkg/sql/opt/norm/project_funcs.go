@@ -1008,3 +1008,34 @@ func (c *CustomFuncs) HasVolatileProjection(projections memo.ProjectionsExpr) bo
 	}
 	return false
 }
+
+// CanSimplifyCoalesceInProjections returns true if any projection contains a
+// Coalesce expression that can be simplified using the input's not-null columns.
+func (c *CustomFuncs) CanSimplifyCoalesceInProjections(
+	projections memo.ProjectionsExpr, input memo.RelExpr,
+) bool {
+	notNullCols := c.NotNullCols(input)
+	for i := range projections {
+		if c.scalarContainsSimplifiableCoalesce(projections[i].Element, notNullCols) {
+			return true
+		}
+	}
+	return false
+}
+
+// SimplifyCoalesceInProjections simplifies Coalesce expressions in projections
+// using the input's not-null columns.
+func (c *CustomFuncs) SimplifyCoalesceInProjections(
+	projections memo.ProjectionsExpr, input memo.RelExpr,
+) memo.ProjectionsExpr {
+	notNullCols := c.NotNullCols(input)
+	newProjections := make(memo.ProjectionsExpr, len(projections))
+	for i := range projections {
+		p := &projections[i]
+		newProjections[i] = c.f.ConstructProjectionsItem(
+			c.SimplifyCoalesceInScalar(p.Element, notNullCols),
+			p.Col,
+		)
+	}
+	return newProjections
+}

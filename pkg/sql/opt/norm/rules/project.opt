@@ -331,6 +331,23 @@ $input
     $passthrough
 )
 
+# SimplifyCoalesceProject simplifies Coalesce projections by eliminating leading
+# operands that are guaranteed to be non-null according to the input's
+# relational properties.
+[SimplifyCoalesceProject, Normalize, LowPriority]
+(Project
+    $input:*
+    $projections:* &
+        (CanSimplifyCoalesceInProjections $projections $input)
+    $passthrough:*
+)
+=>
+(Project
+    $input
+    (SimplifyCoalesceInProjections $projections $input)
+    $passthrough
+)
+
 # FoldIsNullProject folds "x IS NULL" projections to false if "x" is not null in
 # the Project's input. It matches if there is at least one projection that can
 # be folded, and it replaces all projections that can be folded.
