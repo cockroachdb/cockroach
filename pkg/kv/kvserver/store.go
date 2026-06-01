@@ -1705,17 +1705,14 @@ func NewStore(
 	})
 	s.eagerLeaseAcquisitionLimiter = cfg.EagerLeaseAcquisitionLimiter
 
-	// The snapshot storage is usually empty at this point since it is cleared
-	// after each snapshot application, except when the node crashed right before
-	// it can clean it up. If this fails it's not a correctness issue since the
-	// storage is also cleared before receiving a snapshot.
+	// The snapshot storage is constructed here but not yet cleared. With
+	// separated engines, leftover scratch files may be needed by WAG replay.
+	// The cleanup is deferred until after WAG replay is done and is flushed to
+	// guarantee that we don't need these files anymore.
 	//
 	// NB: we don't need the snapshot storage in the raft engine. With separated
 	// storage, the log engine part of snapshot ingestion is written as a batch.
 	s.sstSnapshotStorage = snaprecv.NewSSTSnapshotStorage(s.StateEngine(), s.limiters.BulkIOWriteRate)
-	if err := s.sstSnapshotStorage.Clear(); err != nil {
-		log.KvDistribution.Warningf(ctx, "failed to clear snapshot storage: %v", err)
-	}
 	s.protectedtsReader = cfg.ProtectedTimestampReader
 
 	s.limiters.ConcurrentAddSSTableRequests = limit.MakeConcurrentRequestLimiter(
@@ -2397,6 +2394,16 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	if err != nil {
 		return err
 	}
+
+	// Clear any leftover snapshot scratch files. Leftovers occur when a node
+	// crashed mid-snapshot; on a clean restart the directory is already empty.
+	if fn := s.cfg.TestingKnobs.BeforeClearSnapshotScratchOnStart; fn != nil {
+		fn()
+	}
+	if err := s.sstSnapshotStorage.Clear(); err != nil {
+		log.KvDistribution.Warningf(ctx, "failed to clear snapshot storage: %v", err)
+	}
+
 	logEvery := log.Every(10 * time.Second)
 	for i, repl := range repls {
 		// Log progress regularly, but not for the first replica (we only want to

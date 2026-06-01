@@ -361,6 +361,9 @@ type StoreTestingKnobs struct {
 	// HandleSnapshotDone is run after the entirety of receiving a snapshot,
 	// regardless of whether it succeeds, gets cancelled, times out, or errors.
 	HandleSnapshotDone func()
+	// BeforeClearSnapshotScratchOnStart is called just before cleaning scratch
+	// files on startup is executed.
+	BeforeClearSnapshotScratchOnStart func()
 	// ReplicaAddSkipLearnerRollback causes replica addition to skip the learner
 	// rollback that happens when either the initial snapshot or the promotion of
 	// a learner to a voter fails.
