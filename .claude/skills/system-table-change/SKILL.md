@@ -7,6 +7,73 @@ description: Use when adding, removing, or modifying columns/indexes on system t
 
 When adding, removing, or modifying columns or indexes on a system table, multiple files and golden test artifacts must be updated in lockstep. Missing any of these causes test failures that can be confusing to debug.
 
+## Quick Rebase Conflict Checklist
+
+**Use this when rebasing a system table PR onto a master branch that includes other system table changes.**
+
+System table PRs frequently conflict during rebase because:
+- Version constants use sequential Internal numbers
+- Golden files serialize the entire schema state
+- Bootstrap hashes change when any system table changes
+
+After resolving git conflicts in code files, follow this checklist:
+
+1. **Fix version conflicts in `pkg/clusterversion/cockroach_versions.go`**:
+   - Update your version constant's `Internal` number to the next available even number
+   - Keep both version constants (yours and the one from master)
+   - Example: If master added a version at Internal: 30, yours should be 32
+
+2. **Update `SystemDatabaseSchemaBootstrapVersion` in `pkg/sql/catalog/systemschema/system.go`**:
+   - Set it to your migration's version constant (not the one from master)
+
+3. **For golden file conflicts, accept either side** (content doesn't matter - you'll regenerate):
+   - `pkg/sql/catalog/bootstrap/testdata/testdata`
+   - `pkg/sql/catalog/systemschema_test/testdata/bootstrap_system`
+   - `pkg/sql/catalog/systemschema_test/testdata/bootstrap_tenant`
+   - `pkg/sql/logictest/testdata/logic_test/crdb_internal_catalog`
+   - `pkg/sql/logictest/testdata/logic_test/pg_catalog`
+
+4. **Run `./dev generate`** to regenerate all code and docs:
+   ```bash
+   ./dev generate
+   ```
+
+5. **Update bootstrap test hashes** (critical step - must be done before --rewrite):
+   ```bash
+   # Run test to see hash mismatch errors
+   ./dev test pkg/sql/catalog/bootstrap -f TestInitialValuesToString -v
+
+   # Look for lines like:
+   #   Unexpected hash value abc123... for system.
+   #   Unexpected hash value def456... for tenant.
+
+   # Update BOTH hashes in pkg/sql/catalog/bootstrap/testdata/testdata:
+   #   system hash=abc123...
+   #   tenant hash=def456...
+
+   # Now run with --rewrite to regenerate the KV data
+   ./dev test pkg/sql/catalog/bootstrap -f TestInitialValuesToString --rewrite
+   ```
+
+6. **Regenerate all golden files** (see Section 5 for complete list):
+   ```bash
+   # Schema golden files
+   ./dev test pkg/sql/catalog/systemschema_test --rewrite
+
+   # Logic test files (requires COCKROACH_WORKSPACE)
+   COCKROACH_WORKSPACE=$PWD ./dev test pkg/sql/logictest/tests/local -f TestLogic_crdb_internal_catalog --rewrite
+   COCKROACH_WORKSPACE=$PWD ./dev test pkg/sql/logictest/tests/local -f TestLogic_pg_catalog --rewrite
+   ```
+
+7. **Verify all tests pass** (run without --rewrite):
+   ```bash
+   ./dev test pkg/sql/catalog/bootstrap -f TestInitialValuesToString
+   ./dev test pkg/sql/catalog/systemschema_test
+   ./dev test pkg/upgrade/upgrades -f TestYourMigration
+   ```
+
+8. **Squash fixup commits**: If you created separate commits for golden file updates during the rebase, squash them into your migration commit where they belong.
+
 ## 1. Schema Definition
 
 Update the table's schema string and descriptor literal in:
@@ -58,14 +125,33 @@ If creating a brand new system table, register it in these additional files:
 
 ## 5. Golden Files (must regenerate, not manually edit)
 
-These files contain serialized representations of the schema and must be regenerated after schema changes. Update hashes first, then run tests with `--rewrite`.
+These files contain serialized representations of the schema and must be regenerated after schema changes.
+
+**CRITICAL**: For bootstrap testdata, you MUST update hashes before running `--rewrite`. The hash is in the test input, not the output, so `--rewrite` won't update it.
 
 ### Bootstrap test data
 
 - **`pkg/sql/catalog/bootstrap/testdata/testdata`**
   - Contains `system hash=<sha256>` and `tenant hash=<sha256>` followed by KV data
-  - **Update pattern**: Run the test once, grep for "Unexpected hash" in the output to get both new hashes, update both hashes in the file, then re-run with `--rewrite` to regenerate the KV data
-  - Test: `./dev test pkg/sql/catalog/bootstrap -f TestInitialValuesToString -v --rewrite`
+  - **Hash-then-rewrite pattern** (MUST be done in this order):
+    ```bash
+    # Step 1: Run test WITHOUT --rewrite to get new hashes
+    ./dev test pkg/sql/catalog/bootstrap -f TestInitialValuesToString -v
+
+    # Step 2: Look for "Unexpected hash value" errors in output
+    #   Example: Unexpected hash value abc123... for system.
+    #            Unexpected hash value def456... for tenant.
+
+    # Step 3: Manually update BOTH hashes in the file:
+    #   system hash=abc123...
+    #   tenant hash=def456...
+
+    # Step 4: NOW run with --rewrite to regenerate KV data
+    ./dev test pkg/sql/catalog/bootstrap -f TestInitialValuesToString --rewrite
+
+    # Step 5: Verify it passes
+    ./dev test pkg/sql/catalog/bootstrap -f TestInitialValuesToString
+    ```
 
 ### Bootstrap schema golden files
 
@@ -78,8 +164,11 @@ These files contain serialized representations of the schema and must be regener
 
 - **`pkg/sql/logictest/testdata/logic_test/pg_catalog`** — pg_catalog column metadata
 - **`pkg/sql/logictest/testdata/logic_test/crdb_internal_catalog`** — internal catalog metadata
-  - Test: `./dev testlogic --files=pg_catalog --rewrite`
-  - Test: `./dev testlogic --files=crdb_internal_catalog --rewrite`
+  - These require `COCKROACH_WORKSPACE` environment variable to enable `--rewrite`:
+    ```bash
+    COCKROACH_WORKSPACE=$PWD ./dev test pkg/sql/logictest/tests/local -f TestLogic_pg_catalog --rewrite
+    COCKROACH_WORKSPACE=$PWD ./dev test pkg/sql/logictest/tests/local -f TestLogic_crdb_internal_catalog --rewrite
+    ```
 
 ### Initial bootstrap keys and catalog cache test data
 
@@ -95,10 +184,12 @@ These files contain serialized representations of the schema and must be regener
 When adding a new system table, these additional golden files may need regeneration:
 
 - **`pkg/sql/logictest/testdata/logic_test/information_schema`** — information_schema metadata
-  - Test: `./dev testlogic --files=information_schema --rewrite`
-
 - **`pkg/sql/logictest/testdata/logic_test/system`** — system table tests
-  - Test: `./dev testlogic --files=system --rewrite`
+  - These also require `COCKROACH_WORKSPACE`:
+    ```bash
+    COCKROACH_WORKSPACE=$PWD ./dev test pkg/sql/logictest/tests/local -f TestLogic_information_schema --rewrite
+    COCKROACH_WORKSPACE=$PWD ./dev test pkg/sql/logictest/tests/local -f TestLogic_system --rewrite
+    ```
 
 - **`pkg/cli/testdata/doctor/test_examine_cluster*`** — cluster doctor examination test data
   - Test: `./dev test pkg/cli -f TestDoctor -v --rewrite`
@@ -145,10 +236,13 @@ Re-run the tests from Section 5 without `--rewrite` to confirm everything passes
 
 ## 9. Rebase Conflicts
 
-Golden files frequently conflict during rebases because multiple PRs change system tables concurrently. The resolution pattern:
+**See the "Quick Rebase Checklist" section at the top of this document for the complete rebase workflow.**
 
-1. Accept either side of the conflict (content doesn't matter)
-2. Regenerate by running the tests with `--rewrite`
-3. Update hashes in `bootstrap/testdata/testdata` (run test, grep "Unexpected hash", update, re-run with `--rewrite`)
+Golden files frequently conflict during rebases because multiple PRs change system tables concurrently.
 
-Never try to manually merge golden file content — always regenerate.
+**Key principles**:
+- Accept either side of golden file conflicts (content doesn't matter - you'll regenerate)
+- Never try to manually merge golden file content
+- Always update hashes BEFORE running `--rewrite` (hash-then-rewrite pattern)
+- Regenerate all golden files, not just the ones with conflicts
+- Squash golden file fixup commits into your migration commit
