@@ -69,6 +69,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_coreos_go_oidc_v3//oidc",
         "@com_github_lestrrat_go_jwx_v2//jwa",
