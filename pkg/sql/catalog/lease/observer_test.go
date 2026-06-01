@@ -57,7 +57,7 @@ func TestLeaseObserver(t *testing.T) {
 		targetID: tableID,
 	}
 	lm := server.LeaseManager().(*lease.Manager)
-	unregisterFn := lm.RegisterLeaseObserver(obs)
+	_, unregisterFn := lm.RegisterLeaseObserver(obs, []descpb.ID{tableID})
 
 	// Trigger initial acquisition on node 0.
 	sqlRunner.Exec(t, "SELECT * FROM t")
@@ -147,4 +147,80 @@ func TestLeaseObserver(t *testing.T) {
 	// No new events should be see.
 	require.Equal(t, numEvents, obs.numEvents.Load())
 	require.NoError(t, grp.Wait())
+}
+
+// TestRegisterLeaseObserverReturnsInitialVersions verifies that an observer
+// registered after a descriptor version has already been broadcast learns
+// about that version from the map returned by RegisterLeaseObserver, rather
+// than depending on a re-broadcast that would be suppressed by the
+// per-descriptor dedup in maybeAddObserverEvent. Regression test for #169820.
+func TestRegisterLeaseObserverReturnsInitialVersions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	server, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer server.Stopper().Stop(ctx)
+
+	sqlRunner := sqlutils.MakeSQLRunner(db)
+	sqlRunner.Exec(t, "CREATE TABLE t (k INT PRIMARY KEY)")
+	var tableID descpb.ID
+	sqlRunner.QueryRow(t, "SELECT 't'::regclass::int").Scan(&tableID)
+
+	lm := server.LeaseManager().(*lease.Manager)
+
+	// Register a first observer as a synchronization point: it lets us
+	// wait until the lease manager has actually broadcast new versions of
+	// the table descriptor (via maybeAddObserverEvent), so that
+	// maxVersionNotified is non-trivial when we register the second
+	// observer below.
+	firstObserver := &testObserver{
+		notified: make(chan descpb.DescriptorVersion, 100),
+		targetID: tableID,
+	}
+	_, firstObserverUnreg := lm.RegisterLeaseObserver(firstObserver, []descpb.ID{tableID})
+
+	// Trigger acquisition (so the descriptor is known to the lease
+	// manager) and then run schema changes so the broadcast version is
+	// strictly greater than 1.
+	sqlRunner.Exec(t, "SELECT * FROM t")
+	sqlRunner.Exec(t, "ALTER TABLE t ADD COLUMN v INT")
+	sqlRunner.Exec(t, "ALTER TABLE t ADD COLUMN w INT")
+
+	var maxSeen descpb.DescriptorVersion
+	testutils.SucceedsSoon(t, func() error {
+		for {
+			select {
+			case v := <-firstObserver.notified:
+				if v > maxSeen {
+					maxSeen = v
+				}
+			default:
+				if maxSeen >= 2 {
+					return nil
+				}
+				return errors.Newf("first observer has only seen version %d so far", maxSeen)
+			}
+		}
+	})
+	firstObserverUnreg()
+
+	// Register a second observer. The returned map must include our
+	// table at a version at least as high as what the first observer
+	// saw. No OnNewVersion plumbing needed: the snapshot is captured
+	// atomically with subscription inside RegisterLeaseObserver.
+	lateObserver := &testObserver{
+		notified: make(chan descpb.DescriptorVersion, 100),
+		targetID: tableID,
+	}
+	initial, lateObserverUnreg := lm.RegisterLeaseObserver(lateObserver, []descpb.ID{tableID})
+	defer lateObserverUnreg()
+
+	v, ok := initial[tableID]
+	require.True(t, ok, "expected descriptor %d in initialVersions, got %v", tableID, initial)
+	require.GreaterOrEqual(t, v, maxSeen,
+		"initial version for %d was %d, expected >= %d", tableID, v, maxSeen)
+	// initialVersions should never include the zero version sentinel.
+	for id, ver := range initial {
+		require.NotZero(t, ver, "initialVersions[%d] is zero", id)
+	}
 }
