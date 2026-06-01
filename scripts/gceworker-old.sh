@@ -78,6 +78,14 @@ function refresh_ssh_config() {
 	fi
 }
 
+function ensure_created_with_label() {
+	local current
+	current=$(gcloud compute instances describe "${NAME}" --format="value(labels.created-with)" 2>/dev/null)
+	if [[ -z "${current}" ]]; then
+		gcloud compute instances add-labels "${NAME}" --labels="created-with=gceworker-legacy" > /dev/null
+	fi
+}
+
 function update_firewall() {
 	MY_IP="$(dig +short -4 myip.opendns.com @resolver1.opendns.com)"
 	RULE="$(whoami)-home-ssh-rule"
@@ -118,7 +126,7 @@ create)
 		--boot-disk-type "pd-ssd" \
 		--boot-disk-device-name "${NAME}" \
 		--scopes "cloud-platform" \
-		--labels "created-by=${gsuite_account_for_label:0:63}" \
+		--labels "created-by=${gsuite_account_for_label:0:63},created-with=gceworker-legacy" \
 		--metadata enable-oslogin=TRUE,block-project-ssh-keys=TRUE
 	gcloud compute firewall-rules create "${NAME}-mosh" --allow udp:60000-61000
 	update_firewall
@@ -146,6 +154,7 @@ update-firewall)
 	update_firewall
 	;;
 start)
+	ensure_created_with_label
 	start_and_wait "${NAME}"
 	refresh_ssh_config
 
@@ -186,6 +195,7 @@ suspend)
 	gcloud compute instances suspend "${NAME}"
 	;;
 resume)
+	ensure_created_with_label
 	gcloud compute instances resume "${NAME}"
 	# This conveniently waits until the VM is ready and then drops
 	# us into a ssh session.
@@ -217,9 +227,11 @@ delete | destroy)
 	exit ${status}
 	;;
 ssh)
+	ensure_created_with_label
 	gcloud_compute_ssh "${NAME}" --ssh-flag="-A" "$@"
 	;;
 mosh)
+	ensure_created_with_label
 	mosh --ssh "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" "$(user_domain_suffix)@${FQNAME}"
 	;;
 get)

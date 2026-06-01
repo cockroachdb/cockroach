@@ -86,6 +86,14 @@ function grant_ssh_access() {
 		--quiet
 }
 
+function ensure_created_with_label() {
+	local current
+	current=$(gcloud compute instances describe "${NAME}" --format="value(labels.created-with)" 2>/dev/null)
+	if [[ -z "${current}" ]]; then
+		gcloud compute instances add-labels "${NAME}" --labels="created-with=gceworker-legacy" > /dev/null
+	fi
+}
+
 case "${cmd}" in
 gcloud)
 	gcloud "$@"
@@ -142,6 +150,7 @@ create)
 
 	;;
 start)
+	ensure_created_with_label
 	start_and_wait "${NAME}"
 	refresh_ssh_config
 
@@ -173,6 +182,7 @@ suspend)
 	gcloud compute instances suspend "${NAME}"
 	;;
 resume)
+	ensure_created_with_label
 	gcloud compute instances resume "${NAME}"
 	# This conveniently waits until the VM is ready and then drops
 	# us into a ssh session.
@@ -199,6 +209,7 @@ delete | destroy)
 	gcloud compute instances delete "${NAME}" --quiet
 	;;
 ssh)
+	ensure_created_with_label
 	gcloud_compute_ssh "${NAME}" --ssh-flag="-A" "$@"
 	;;
 get)
