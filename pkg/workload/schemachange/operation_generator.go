@@ -220,6 +220,15 @@ func (og *operationGenerator) randOp(
 			return nil, errors.Wrapf(err, "failed generating operation: %s", op)
 		}
 
+		// Any DDL on a descriptor can race with a concurrent DROP.
+		//
+		// The operation generator checks existence before generating a
+		// statement but that concurrent DROP could cause a serialization
+		// conflict that surfaces as UndefinedTable at commit.
+		if stmt.queryType == OpStmtDDL {
+			og.potentialCommitErrors.add(pgcode.UndefinedTable)
+		}
+
 		// Screen for schema change after write in the same transaction.
 		og.stmtsInTxt = append(og.stmtsInTxt, stmt)
 		// Add candidateExpectedCommitErrors to expectedCommitErrors
@@ -943,11 +952,6 @@ func (og *operationGenerator) addForeignKeyConstraint(
 	// travel query.
 	stmt.potentialExecErrors.add(pgcode.ForeignKeyViolation)
 	og.potentialCommitErrors.add(pgcode.ForeignKeyViolation)
-
-	// It's possible for the table to be dropped concurrently, while we are running
-	// validation. In which case a potential commit error is an undefined table
-	// error.
-	og.potentialCommitErrors.add(pgcode.UndefinedTable)
 
 	// If the child column has an ON UPDATE expression (e.g., crdb_internal_expiration
 	// on TTL tables), specifying an ON UPDATE action on the foreign key constraint
