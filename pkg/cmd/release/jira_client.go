@@ -8,6 +8,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -18,7 +19,22 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const jiraBaseURL = "https://cockroachlabs.atlassian.net"
+const (
+	// jiraBaseURL is the Cloud REST API host.
+	jiraBaseURL = "https://cockroachlabs.atlassian.net"
+	// jiraBrowseBaseURL is the public Jira base URL for human-facing issue
+	// links embedded in Slack notifications and Jira comments.
+	jiraBrowseBaseURL = "https://cockroachlabs.atlassian.net/browse"
+)
+
+// jiraCommentPermalink returns the public URL for a specific comment on a
+// Jira issue, in the form Jira uses when a user clicks "Copy link" on a
+// comment: /browse/<KEY>?focusedCommentId=<id>. The query string is URL-
+// encoded so unusual comment IDs (whitespace, &, =) don't corrupt the link.
+func jiraCommentPermalink(key, commentID string) string {
+	v := url.Values{"focusedCommentId": {commentID}}
+	return fmt.Sprintf("%s/%s?%s", jiraBrowseBaseURL, key, v.Encode())
+}
 
 // jiraClient calls a small subset of the Jira Cloud REST v3 API: JQL search,
 // issue fetch, field update, transition, and comment. It uses HTTP basic auth
@@ -214,10 +230,21 @@ func (c *jiraClient) Transition(key string, transitionID string) error {
 // AddComment posts a comment whose body is the supplied Atlassian Document
 // Format doc (built via the adf* helpers in jira_adf.go). Callers own the
 // formatting; this method only handles the API envelope and POST.
-func (c *jiraClient) AddComment(key string, doc map[string]interface{}) error {
+//
+// Returns the newly created comment's ID — Jira's response includes it on
+// the created object, and callers that want to build a focusedCommentId
+// permalink (e.g. notify-publish) need it. Callers that don't care can
+// discard the return value.
+func (c *jiraClient) AddComment(key string, doc map[string]interface{}) (string, error) {
 	body := map[string]interface{}{"body": doc}
 	path := "/rest/api/3/issue/" + url.PathEscape(key) + "/comment"
-	return c.do("POST", path, body, nil)
+	var resp struct {
+		ID string `json:"id"`
+	}
+	if err := c.do("POST", path, body, &resp); err != nil {
+		return "", err
+	}
+	return resp.ID, nil
 }
 
 // do issues an authenticated request and decodes the JSON response into out

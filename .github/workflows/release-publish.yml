@@ -473,6 +473,72 @@ jobs:
           build/github/release-publish-rafa-prs.sh
 
   # --------------------------------------------------------------------------
+  # Stage 3: Announce the blessed release on Jira + #db-release-status
+  # --------------------------------------------------------------------------
+  # Runs only on real prod publishes (IS_PRODUCTION_REPO=true && !dry_run)
+  # and only when every customer-facing publish job above succeeded. The
+  # binary adds a Jira comment to the matching CRDB Release ticket (found
+  # by cfBuildSHA = publish SHA) and posts a self-contained Slack message
+  # to #db-release-status containing the comment permalink and body —
+  # link unfurling is disabled, so the message must stand on its own.
+  # Reviewer-approval gate is on approve-publish upstream; this job
+  # inherits the gate transitively via publish-staged.
+  notify-publish:
+    name: Notify #db-release-status
+    needs:
+      - publish-staged
+      - publish-redhat
+      - create-rafa-prs
+    if: >-
+      ${{ !cancelled() &&
+        needs.publish-staged.result == 'success' &&
+        needs.publish-redhat.result == 'success' &&
+        needs.create-rafa-prs.result == 'success' &&
+        !inputs.dry_run && vars.IS_PRODUCTION_REPO == 'true' &&
+        (github.ref == 'refs/heads/master' ||
+         (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         startsWith(github.ref, 'refs/heads/staging-v'))
+      }}
+    runs-on: [self-hosted, ubuntu_2404]
+    timeout-minutes: 15
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      # Checkout at the publish SHA so pkg/build/version.txt holds the
+      # version we just published (not the master tip).
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ env.RELEASE_WIF_PROVIDER }}
+          service_account: ${{ env.RELEASE_GCP_SERVICE_ACCOUNT }}
+
+      # Fetch via the official Google action so each secret is
+      # auto-registered with ::add-mask:: and never flows through `echo`.
+      - name: Fetch notify-publish secrets
+        id: secrets
+        uses: google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262 # v3
+        with:
+          secrets: |-
+            jira_api_token:${{ env.RELEASE_GCP_PROJECT }}/gha-releases-jira-api-token
+            slack_bot_token:${{ env.RELEASE_GCP_PROJECT }}/gha-releases-release-slack-bot-token
+
+      - name: Notify Jira and Slack
+        env:
+          JIRA_API_TOKEN: ${{ steps.secrets.outputs.jira_api_token }}
+          # JIRA_EMAIL is the bot's account; not a secret, kept inline
+          # to match release-pick-sha.yml.
+          JIRA_EMAIL: release-eng-bot@cockroachlabs.com
+          SLACK_BOT_TOKEN: ${{ steps.secrets.outputs.slack_bot_token }}
+          BUILD_VCS_NUMBER: ${{ inputs.sha || github.sha }}
+          IS_PRODUCTION_REPO: ${{ vars.IS_PRODUCTION_REPO }}
+        run: build/github/release-notify-publish.sh
+
+  # --------------------------------------------------------------------------
   # Notification (always runs)
   # --------------------------------------------------------------------------
   notify:
@@ -491,6 +557,7 @@ jobs:
       - publish-staged
       - publish-redhat
       - create-rafa-prs
+      - notify-publish
     # No `environment:` here. The release-ops environment requires a human
     # reviewer for every job that uses it; that's the right gate for
     # publish-cloud-only / publish-staged / publish-redhat / create-rafa-prs
