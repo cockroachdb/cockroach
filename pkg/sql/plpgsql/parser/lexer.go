@@ -8,6 +8,7 @@ package parser
 import (
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -620,14 +621,15 @@ func (l *lexer) Error(e string) {
 	l.lastError = parserutils.PopulateErrorDetails(lastTok.id, ERROR, lastTok.str, lastTok.pos, err, l.in)
 }
 
-// Unimplemented wraps Error, setting lastUnimplementedError.
-func (l *lexer) Unimplemented(feature string) {
-	l.lastError = unimp.New(feature, "this syntax")
+// UnimplementedWithIssue records a syntax-level "unimplemented" error
+// annotated with a tracking issue.
+func (l *lexer) UnimplementedWithIssue(issue int) {
+	l.lastError = unimp.NewWithIssue(issue, "this syntax")
 	lastTok := l.lastToken()
 	l.lastError = parserutils.PopulateErrorDetails(lastTok.id, ERROR, lastTok.str, lastTok.pos, l.lastError, l.in)
 	l.lastError = &tree.UnsupportedError{
 		Err:         l.lastError,
-		FeatureName: feature,
+		FeatureName: build.MakeIssueURL(issue),
 	}
 }
 
