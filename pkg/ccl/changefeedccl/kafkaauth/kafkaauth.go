@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/IBM/sarama"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/security/externalcreds"
 	"github.com/cockroachdb/errors"
@@ -25,6 +26,9 @@ type SASLConfig struct {
 	// ExternalCredentialsDir exposes credential files from the directory configured by
 	// the --external-credentials-dir node flag. Empty string when the flag is unset.
 	ExternalCredentialsDir externalcreds.Dir
+	// SQLInstanceID identifies the node constructing the mechanism so it can be used
+	// in error messages.
+	SQLInstanceID base.SQLInstanceID
 }
 
 type saslMechanismBuilder interface {
@@ -218,6 +222,7 @@ func validateNoProprietaryOnlyParams(u *changefeedbase.SinkURL, mechName string)
 		changefeedbase.SinkParamSASLProprietaryResource,
 		changefeedbase.SinkParamSASLProprietaryClientAssertion,
 		changefeedbase.SinkParamSASLProprietaryClientAssertionType,
+		changefeedbase.SinkParamSASLProprietaryClientAssertionLocation,
 	}
 
 	for _, p := range proprietaryOnlyParams {

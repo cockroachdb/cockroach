@@ -250,7 +250,10 @@ func getSink(
 			return makeNullSink(&changefeedbase.SinkURL{URL: u}, metricsBuilder(nullIsAccounted))
 		case isKafkaSink(u):
 			return validateOptionsAndMakeSink(changefeedbase.KafkaValidOptions, func() (Sink, error) {
-				cfg := kafkaauth.SASLConfig{ExternalCredentialsDir: serverCfg.ExternalCredentialsDir}
+				cfg := kafkaauth.SASLConfig{
+					ExternalCredentialsDir: serverCfg.ExternalCredentialsDir,
+					SQLInstanceID:          serverCfg.NodeID.SQLInstanceID(),
+				}
 				if KafkaV2Enabled.Get(&serverCfg.Settings.SV) {
 					partitionAlg, err := opts.GetPartitionAlg()
 					if err != nil {

@@ -38,17 +38,36 @@ func (s saslProprietaryOAuthBuilder) validateParams(u *changefeedbase.SinkURL) e
 		changefeedbase.SinkParamSASLClientID,
 		changefeedbase.SinkParamSASLTokenURL,
 		changefeedbase.SinkParamSASLProprietaryResource,
-		changefeedbase.SinkParamSASLProprietaryClientAssertion,
 		changefeedbase.SinkParamSASLProprietaryClientAssertionType,
 	}
-	return peekAndRequireParams(s.name(), u, requiredParams)
+	if err := peekAndRequireParams(s.name(), u, requiredParams); err != nil {
+		return err
+	}
+	hasAssertion := u.PeekParam(changefeedbase.SinkParamSASLProprietaryClientAssertion) != ""
+	hasAssertionLocation := u.PeekParam(changefeedbase.SinkParamSASLProprietaryClientAssertionLocation) != ""
+	switch {
+	case hasAssertion && hasAssertionLocation:
+		return errors.Newf("%s and %s cannot be used together",
+			changefeedbase.SinkParamSASLProprietaryClientAssertion,
+			changefeedbase.SinkParamSASLProprietaryClientAssertionLocation)
+	case !hasAssertion && !hasAssertionLocation:
+		return errors.Newf("one of %s or %s must be provided when SASL is enabled using mechanism %s",
+			changefeedbase.SinkParamSASLProprietaryClientAssertion,
+			changefeedbase.SinkParamSASLProprietaryClientAssertionLocation,
+			proprietaryOAuthName)
+	}
+	return nil
 }
 
 // build implements saslMechanismBuilder.
 func (s saslProprietaryOAuthBuilder) build(
-	u *changefeedbase.SinkURL, _ SASLConfig,
+	u *changefeedbase.SinkURL, cfg SASLConfig,
 ) (SASLMechanism, error) {
 	handshake, err := consumeHandshake(u)
+	if err != nil {
+		return nil, err
+	}
+	getClientAssertion, err := buildClientAssertionFn(u, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -56,17 +75,40 @@ func (s saslProprietaryOAuthBuilder) build(
 		clientID:            u.ConsumeParam(changefeedbase.SinkParamSASLClientID),
 		tokenURL:            u.ConsumeParam(changefeedbase.SinkParamSASLTokenURL),
 		resource:            u.ConsumeParam(changefeedbase.SinkParamSASLProprietaryResource),
-		clientAssertion:     u.ConsumeParam(changefeedbase.SinkParamSASLProprietaryClientAssertion),
 		clientAssertionType: u.ConsumeParam(changefeedbase.SinkParamSASLProprietaryClientAssertionType),
+		getClientAssertion:  getClientAssertion,
 		handshake:           handshake,
 	}, nil
+}
+
+func buildClientAssertionFn(
+	u *changefeedbase.SinkURL, cfg SASLConfig,
+) (func() (string, error), error) {
+	if loc := u.ConsumeParam(changefeedbase.SinkParamSASLProprietaryClientAssertionLocation); loc != "" {
+		path, err := cfg.ExternalCredentialsDir.Resolve(loc)
+		if err != nil {
+			return nil, errors.Wrapf(err, "resolving %s on n%d",
+				changefeedbase.SinkParamSASLProprietaryClientAssertionLocation,
+				cfg.SQLInstanceID)
+		}
+		return func() (string, error) {
+			b, err := path.Read()
+			if err != nil {
+				return "", errors.Wrapf(err, "reading client assertion file %q on n%d", path, cfg.SQLInstanceID)
+			}
+			return strings.TrimSpace(string(b)), nil
+		}, nil
+	}
+	assertion := u.ConsumeParam(changefeedbase.SinkParamSASLProprietaryClientAssertion)
+	return func() (string, error) { return assertion, nil }, nil
 }
 
 var _ saslMechanismBuilder = saslProprietaryOAuthBuilder{}
 
 type saslProprietaryOAuth struct {
-	clientID, tokenURL, resource,
-	clientAssertion, clientAssertionType string
+	clientID, tokenURL, resource, clientAssertionType string
+	getClientAssertion                                func() (string, error)
+
 	handshake bool
 }
 
@@ -114,7 +156,7 @@ func (s *saslProprietaryOAuth) newTokenSource(ctx context.Context) oauth2.TokenS
 	return proprietaryTokenSource{
 		tokenURL:            s.tokenURL,
 		clientID:            s.clientID,
-		clientAssertion:     s.clientAssertion,
+		getClientAssertion:  s.getClientAssertion,
 		clientAssertionType: s.clientAssertionType,
 		resource:            s.resource,
 		ctx:                 ctx,
@@ -125,7 +167,8 @@ func (s *saslProprietaryOAuth) newTokenSource(ctx context.Context) oauth2.TokenS
 var _ SASLMechanism = (*saslProprietaryOAuth)(nil)
 
 type proprietaryTokenSource struct {
-	tokenURL, clientID, clientAssertion, clientAssertionType, resource string
+	tokenURL, clientID, clientAssertionType, resource string
+	getClientAssertion                                func() (string, error)
 	// The oauth2.TokenSource API seems to require us to keep a context in here.
 	ctx    context.Context
 	client *http.Client
@@ -138,36 +181,41 @@ func (s proprietaryTokenSource) Token() (*oauth2.Token, error) {
 		return nil, errors.Wrap(err, "malformed token url")
 	}
 
+	clientAssertion, err := s.getClientAssertion()
+	if err != nil {
+		return nil, err
+	}
+
 	bodyParams := url.Values{
 		"grant_type":            {"client_credentials"},
 		"client_id":             {s.clientID},
 		"client_assertion_type": {s.clientAssertionType},
-		"client_assertion":      {s.clientAssertion},
+		"client_assertion":      {clientAssertion},
 		"resource":              {s.resource},
 	}
 
 	req, err := http.NewRequestWithContext(s.ctx, "POST", tokenURL.String(), strings.NewReader(bodyParams.Encode()))
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create oauth token request")
+		return nil, errors.Wrap(err, "creating oauth token request")
 	}
 	req.Header.Set("Content-Type", "application/www-url-encoded")
 
 	res, err := s.client.Do(req)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to make oauth token request")
+		return nil, errors.Wrap(err, "issuing oauth token request")
 	}
 
 	body, err := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 	if err != nil {
-		return nil, errors.Join(errors.Wrap(err, "failed to read oauth response body"), res.Body.Close())
+		return nil, errors.Join(errors.Wrap(err, "reading oauth response body"), res.Body.Close())
 	}
 	if err := res.Body.Close(); err != nil {
-		return nil, errors.Wrap(err, "failed to close oauth response body")
+		return nil, errors.Wrap(err, "closing oauth response body")
 	}
 
 	var resp proprietaryOAuthResp
 	if err := json.Unmarshal(body, &resp); err != nil {
-		return nil, errors.Wrapf(err, "failed to parse oauth response")
+		return nil, errors.Wrap(err, "parsing oauth response")
 	}
 	if resp.AccessToken == "" {
 		return nil, errors.Errorf("no access token in oauth response")
