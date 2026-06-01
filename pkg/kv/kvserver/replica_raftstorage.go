@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/snaprecv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -605,6 +606,9 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		eng:      r.store.internalEngines,
 		writeSST: inSnap.SSTStorageScratch.WriteSST,
 	}
+	if r.store.internalEngines.Separated() {
+		sw.wagWriter = wag.MakeWriter(&r.store.wagSeq)
+	}
 	defer sw.close()
 	if applyAsBatch {
 		// Convert the snapshot SSTs into an equivalent write batch.
@@ -616,6 +620,8 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	}
 	if err := sw.prepareSnapApply(ctx, snapWrite{
 		sl:         r.raftMu.stateLoader.StateLoader,
+		replicaID:  r.ID(),
+		snapIndex:  kvpb.RaftIndex(nonemptySnap.Metadata.Index),
 		truncState: truncState,
 		hardState:  hs,
 		desc:       desc,

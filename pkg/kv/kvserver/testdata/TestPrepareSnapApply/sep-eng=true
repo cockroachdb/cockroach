@@ -3,15 +3,15 @@
 #	 subsume:      [c---)e [f---------)z
 echo
 ----
->> sst:
+>> sst 1:
 Put: 0,0 /Local/RangeID/101/u/RangeTombstone (0x0169ed757266746200): next_replica_id:2147483647 
 Delete: 0,0 /Local/RangeID/101/u/RaftReplicaID (0x0169ed757266747200): 
->> sst:
+>> sst 2:
 Put: 0,0 /Local/RangeID/102/u/RangeTombstone (0x0169ee757266746200): next_replica_id:2147483647 
 Delete: 0,0 /Local/RangeID/102/u/RaftReplicaID (0x0169ee757266747200): 
->> sst:
+>> sst 3:
 Delete (Sized at 27): /Local/Lock"y\xff" 0300000000000000000000000000000000 (0x017a6b1279ff000100030000000000000000000000000000000012): 
->> sst:
+>> sst 4:
 Delete (Sized at 12): 0.000000001,0 "y\xff" (0x79ff00000000000000000109): 
 >> raft:
 Put: 0,0 /Local/RangeID/123/u/RaftHardState (0x0169f67b757266746800): term:20 vote:0 commit:100 lead:0 lead_epoch:0 
@@ -27,6 +27,8 @@ Delete (Sized at 42): 0,0 /Local/RangeID/102/u/RaftLog/logIndex:11 (0x0169ee7572
 Delete (Sized at 42): 0,0 /Local/RangeID/102/u/RaftLog/logIndex:12 (0x0169ee757266746c000000000000000c00): 
 Delete (Sized at 42): 0,0 /Local/RangeID/102/u/RaftLog/logIndex:13 (0x0169ee757266746c000000000000000d00): 
 Delete (Sized at 32): 0,0 /Local/RangeID/102/u/RaftTruncatedState (0x0169ee757266747400): 
+Put: 0,0 /Local/Store/wag/1 (0x01737761676e000000000000000100): (r101/4:0,EventSubsume) (r102/4:0,EventSubsume) (r123/4:100,EventInit)
+ingestion: SSTs:"00001.sst" SSTs:"00002.sst" SSTs:"00003.sst" SSTs:"00004.sst" 
 >> repl: /Local/RangeID/123/{r""-s""}
 >> repl: /Local/Range"{a"-k"}
 >> repl: /Local/Lock/Local/Range"{a"-k"}
