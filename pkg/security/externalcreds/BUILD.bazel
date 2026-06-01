@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "externalcreds",
+    srcs = ["externalcreds.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/security/externalcreds",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_cockroachdb_errors//:errors"],
+)
+
+go_test(
+    name = "externalcreds_test",
+    srcs = ["externalcreds_test.go"],
+    embed = [":externalcreds"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

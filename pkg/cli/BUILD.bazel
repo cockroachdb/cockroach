@@ -175,6 +175,7 @@ go_library(
         "//pkg/security",
         "//pkg/security/certnames",
         "//pkg/security/clientsecopts",
+        "//pkg/security/externalcreds",
         "//pkg/security/fips",
         "//pkg/security/securitytest",
         "//pkg/security/username",
