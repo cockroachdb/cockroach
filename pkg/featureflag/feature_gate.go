@@ -79,9 +79,9 @@ func Register(feature licensepb.Feature, opts ...Option) *FeatureGate {
 }
 
 // WithSetting attaches an existing operator cluster setting to the gate. The
-// setting is one of the existing feature.*.enabled bools; the gate reuses it
-// rather than registering a new one. When the setting is false, Enabled denies
-// the feature even if the license permits it.
+// gate does not register a new setting; the caller supplies one of the existing
+// feature.*.enabled bools. When the setting is false, Enabled denies the
+// feature even if the license permits it.
 func WithSetting(s *settings.BoolSetting) Option {
 	return func(g *FeatureGate) {
 		g.setting = s

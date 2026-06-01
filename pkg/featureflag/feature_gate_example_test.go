@@ -64,3 +64,32 @@ func TestFeatureGateExample(t *testing.T) {
 	changefeedEnabled.Override(ctx, &st.SV, false)
 	require.Error(t, cfGate.Enabled(ctx, st))
 }
+
+// TestFeatureGateLicenseDenial exercises the license-entitlement path by
+// overriding GetLicenseHook to return a license that grants only a subset of
+// features. This is normally wired by pkg/server/license, but the prototype
+// keeps the hook exported so a license-gated decision can be demonstrated in
+// isolation.
+func TestFeatureGateLicenseDenial(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+
+	// Install a license that entitles BACKUP but not CHANGEFEED.
+	featureflag.GetLicenseHook = func(*cluster.Settings) (*licensepb.License, error) {
+		return &licensepb.License{
+			Features: []licensepb.Feature{licensepb.Feature_BACKUP},
+		}, nil
+	}
+	defer func() { featureflag.GetLicenseHook = nil }()
+
+	// An entitled feature passes the license gate.
+	backupGate := featureflag.Register(licensepb.Feature_BACKUP)
+	require.NoError(t, backupGate.Enabled(ctx, st))
+
+	// A feature absent from the license is denied, even with no operator setting.
+	changefeedGate := featureflag.Register(licensepb.Feature_CHANGEFEED)
+	require.Error(t, changefeedGate.Enabled(ctx, st))
+}
