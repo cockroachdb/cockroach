@@ -4,9 +4,11 @@ go_library(
     name = "vecbench_lib",
     srcs = [
         "chart_printer.go",
+        "csv_writer.go",
         "main.go",
         "mem_provider.go",
         "percentile_estimator.go",
+        "sql_dialect.go",
         "sql_provider.go",
         "vector_provider.go",
     ],
