@@ -96,9 +96,6 @@ func registerLeasePreferences(r registry.Registry) {
 		Name:    "lease-preferences/partial-first-preference-down",
 		Owner:   registry.OwnerKV,
 		Timeout: 30 * time.Minute,
-		// This test purposefully kills nodes. Skip the dead node post-test
-		// validation.
-		SkipPostValidations: registry.PostValidationNoDeadNodes,
 		Cluster:             r.MakeClusterSpec(5, spec.CPU(4)),
 		CompatibleClouds:    registry.OnlyGCE,
 		Suites:              registry.Suites(registry.Nightly),
@@ -122,9 +119,6 @@ func registerLeasePreferences(r registry.Registry) {
 		Name:    "lease-preferences/full-first-preference-down",
 		Owner:   registry.OwnerKV,
 		Timeout: 30 * time.Minute,
-		// This test purposefully kills nodes. Skip the dead node post-test
-		// validation.
-		SkipPostValidations: registry.PostValidationNoDeadNodes,
 		Cluster:             r.MakeClusterSpec(5, spec.CPU(4)),
 		CompatibleClouds:    registry.OnlyGCE,
 		Suites:              registry.Suites(registry.Nightly),

@@ -40,7 +40,6 @@ func registerDiskStalledWALFailover(r registry.Registry) {
 		CompatibleClouds:    registry.OnlyGCE,
 		Suites:              registry.Suites(registry.Nightly),
 		Timeout:             3 * time.Hour,
-		SkipPostValidations: registry.PostValidationNoDeadNodes,
 		// Encryption is implemented within the virtual filesystem layer,
 		// just like disk-health monitoring. It's important to exercise
 		// encryption-at-rest to ensure there is not unmonitored I/O within
@@ -215,7 +214,6 @@ func registerDiskStalledDetection(r registry.Registry) {
 			CompatibleClouds:    registry.OnlyGCE,
 			Suites:              registry.Suites(registry.Nightly),
 			Timeout:             30 * time.Minute,
-			SkipPostValidations: registry.PostValidationNoDeadNodes,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDiskStalledDetection(ctx, t, c, makeStaller(t, c), true /* doStall */)
 			},
@@ -445,7 +443,6 @@ func registerDiskStalledWALFailoverWithProgress(r registry.Registry) {
 		CompatibleClouds:    registry.OnlyGCE,
 		Suites:              registry.Suites(registry.Nightly),
 		Timeout:             2 * time.Hour,
-		SkipPostValidations: registry.PostValidationNoDeadNodes,
 		EncryptionSupport:   registry.EncryptionMetamorphic,
 		Leases:              registry.MetamorphicLeases,
 		Monitor:             true,

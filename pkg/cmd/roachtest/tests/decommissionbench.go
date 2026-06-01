@@ -330,7 +330,6 @@ func registerDecommissionBenchSpec(r registry.Registry, benchSpec decommissionBe
 		),
 		CompatibleClouds:    registry.OnlyGCE,
 		Suites:              registry.Suites(registry.Weekly),
-		SkipPostValidations: registry.PostValidationNoDeadNodes,
 		Timeout:             timeout,
 		NonReleaseBlocker:   true,
 		Skip:                benchSpec.skip,
