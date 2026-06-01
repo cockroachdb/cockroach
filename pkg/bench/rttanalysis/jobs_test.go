@@ -18,11 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
-// BenchmarkJobs is a benchmark for job-related statements and internal queries.
-// benchmark-ci: benchtime=20x
-func BenchmarkJobs(b *testing.B) { reg.Run(b) }
-func init() {
-	// Create a minimal table descriptor for the import job.
+var jobsCases = func() []RoundTripBenchTestCase {
 	tableDesc := &descpb.TableDescriptor{
 		ID:            100,
 		ParentID:      1,
@@ -83,7 +79,7 @@ func init() {
 	typeFilteredJobQueryManyRows := server.BuildJobQueryFromRequest(&serverpb.JobsRequest{
 		Type: jobspb.TypeImport,
 	})
-	reg.Register("Jobs", []RoundTripBenchTestCase{
+	return []RoundTripBenchTestCase{
 		{
 			SetupEx: setupQueries,
 			Reset:   cleanupQuery,
@@ -162,5 +158,14 @@ func init() {
 			Stmt:         "SELECT * FROM crdb_internal.system_jobs",
 			NonAdminUser: true,
 		},
-	})
+	}
+}()
+
+// benchmark-ci: benchtime=20x
+func BenchmarkJobs(b *testing.B) {
+	runCPUMemBenchmark(bShim{b}, jobsCases, defaultCC)
+}
+
+func TestBenchmarkExpectation_Jobs(t *testing.T) {
+	runExpectation(t, "Jobs", jobsCases, defaultCC)
 }

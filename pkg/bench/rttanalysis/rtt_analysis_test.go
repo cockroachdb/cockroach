@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 )
 
-var reg = NewRegistry(1 /* numNodes */, MakeClusterConstructor(func(
+var defaultCC = MakeClusterConstructor(func(
 	t testing.TB, knobs base.TestingKnobs,
 ) (_, _ *gosql.DB, cleanup func()) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -57,4 +57,4 @@ var reg = NewRegistry(1 /* numNodes */, MakeClusterConstructor(func(
 		adminUserCleanup()
 		nonAdminUserCleanup()
 	}
-}))
+})

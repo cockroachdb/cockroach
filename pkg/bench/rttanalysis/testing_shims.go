@@ -52,8 +52,9 @@ func (b bShim) Run(name string, f func(b testingB)) {
 // execution.
 type tShim struct {
 	*testing.T
-	scope   *log.TestLogScope
-	results *resultSet
+	scope     *log.TestLogScope
+	results   *resultSet
+	groupName string
 }
 
 func (ts tShim) isBenchmark() bool { return false }
@@ -79,12 +80,12 @@ func (ts tShim) ReportMetric(f float64, s string) {
 	}
 }
 func (ts tShim) Name() string {
-	// Trim the name of the outermost test off the beginning of the name.
 	tn := ts.T.Name()
-	return tn[strings.Index(tn, "/")+1:]
+	subtest := tn[strings.Index(tn, "/")+1:]
+	return ts.groupName + "/" + subtest
 }
 func (ts tShim) Run(s string, f func(testingB)) {
 	ts.T.Run(s, func(t *testing.T) {
-		f(tShim{results: ts.results, T: t, scope: ts.scope})
+		f(tShim{results: ts.results, T: t, scope: ts.scope, groupName: ts.groupName})
 	})
 }

@@ -11,12 +11,9 @@ import (
 	"testing"
 )
 
-// BenchmarkORMQueries is a benchmark for various ORM-generated introspection queries.
-// benchmark-ci: benchtime=20x
-func BenchmarkORMQueries(b *testing.B) { reg.Run(b) }
-func init() {
+var ormQueriesCases = func() []RoundTripBenchTestCase {
 	liquibaseSetup, liquibaseReset := buildNDatabasesWithMTables(15, 40)
-	reg.Register("ORMQueries", []RoundTripBenchTestCase{
+	return []RoundTripBenchTestCase{
 		{
 			Name:  "django column introspection 1 table",
 			Setup: buildNTables(1),
@@ -1137,7 +1134,16 @@ WHERE
 ORDER BY
   table_type, table_schem, table_name`,
 		},
-	})
+	}
+}()
+
+// benchmark-ci: benchtime=20x
+func BenchmarkORMQueries(b *testing.B) {
+	runCPUMemBenchmark(bShim{b}, ormQueriesCases, defaultCC)
+}
+
+func TestBenchmarkExpectation_ORMQueries(t *testing.T) {
+	runExpectation(t, "ORMQueries", ormQueriesCases, defaultCC)
 }
 
 func buildNTables(n int) string {
