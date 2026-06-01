@@ -2,16 +2,22 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "featureflag",
-    srcs = ["feature_flags.go"],
+    srcs = [
+        "feature_flags.go",
+        "feature_gate.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/featureflag",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/server/license/licensepb",
         "//pkg/server/telemetry",
         "//pkg/settings",
+        "//pkg/settings/cluster",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sqltelemetry",
         "//pkg/util/log",
         "//pkg/util/metric",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
