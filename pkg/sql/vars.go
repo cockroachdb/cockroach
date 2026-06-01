@@ -1449,6 +1449,47 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`resource_group`: {
+		Description: sessionVarDescriptions["resource_group"],
+		// SetWithPlanner is used because resolving the name to an id requires
+		// the ResourceGroupCache, which is reachable only via the planner's
+		// ExecutorConfig. The lookup happens here, at SET time, so that the
+		// downstream KV path only ever deals with the resolved id.
+		SetWithPlanner: func(ctx context.Context, p *planner, scope setScope, s string) error {
+			var name string
+			var id uint64
+			if s != "" {
+				var ok bool
+				// The cache is always populated on a real server; guard
+				// against a nil cache in bespoke test ExecutorConfigs so a
+				// stray SET reports an unknown group rather than panicking.
+				if cache := p.ExecCfg().ResourceGroupCache; cache != nil {
+					id, ok = cache.LookupByName(s)
+				}
+				if !ok {
+					return pgerror.Newf(pgcode.InvalidParameterValue,
+						"unknown resource group %q", s)
+				}
+				name = s
+			}
+			return p.applyOnSessionDataMutators(
+				ctx,
+				scope,
+				func(m sessionmutator.SessionDataMutator) error {
+					m.SetResourceGroup(name, id)
+					return nil
+				},
+			)
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return evalCtx.SessionData().ResourceGroupName, nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return ""
+		},
+	},
+
+	// CockroachDB extension.
 	// TODO(dan): This should also work with SET.
 	`results_buffer_size`: {
 		Description: sessionVarDescriptions["results_buffer_size"],

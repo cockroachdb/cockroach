@@ -482,6 +482,7 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 		txn,
 		ex.transitionCtx,
 		ex.QualityOfService(),
+		0, /* resourceGroupID: unused, the bound txn is adopted, not created */
 		isolation.Serializable,
 		txn.GetOmitInRangefeeds(),
 		// TODO(yuzefovich): re-evaluate whether we want to allow buffered

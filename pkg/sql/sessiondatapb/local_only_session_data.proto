@@ -834,6 +834,17 @@ message LocalOnlySessionData {
   // (e.g. $1) in addition to constants. This enables better index usage
   // in correlated subqueries with placeholder equalities.
   bool optimizer_inline_placeholder_equalities = 210;
+  // ResourceGroupName is the user-visible name of the resource group bound
+  // to the current session (e.g. set via SET resource_group = '...'). It is
+  // empty when no group is set. The value is consumed on the gateway: it is
+  // resolved to ResourceGroupID at SET time and that id is stamped onto the
+  // admission header of the session's KV requests, so the name itself does
+  // not need to be propagated to remote nodes.
+  string resource_group_name = 211;
+  // ResourceGroupID is the numeric id that ResourceGroupName resolved to, as
+  // returned by the resource group name cache. It is zero when no group is
+  // set. See ResourceGroupName for how it is used.
+  uint64 resource_group_id = 212 [(gogoproto.customname) = "ResourceGroupID"];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

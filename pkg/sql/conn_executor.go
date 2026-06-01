@@ -3904,6 +3904,16 @@ func (ex *connExecutor) QualityOfService() sessiondatapb.QoSLevel {
 	return ex.sessionData().DefaultTxnQualityOfService
 }
 
+// sessionResourceGroupID returns the resource group id bound to the session
+// via SET resource_group, or zero if none is bound. It is used to stamp new
+// transactions for admission control, mirroring QualityOfService.
+func (ex *connExecutor) sessionResourceGroupID() uint64 {
+	if ex.sessionData() == nil {
+		return 0
+	}
+	return ex.sessionData().ResourceGroupID
+}
+
 // copyQualityOfService returns the QoSLevel session setting for COPY if the
 // session settings are populated, otherwise the background QoSLevel.
 func (ex *connExecutor) copyQualityOfService() sessiondatapb.QoSLevel {
@@ -4416,6 +4426,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 				nil, // historicalTimestamp not chained
 				ex.transitionCtx,
 				ex.QualityOfService(),
+				ex.sessionResourceGroupID(),
 				chainModes.isoLevel,
 				ex.omitInRangefeeds(),
 				ex.bufferedWritesEnabled(explicitTxn),

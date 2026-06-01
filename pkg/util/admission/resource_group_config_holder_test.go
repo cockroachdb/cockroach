@@ -32,18 +32,18 @@ func TestResourceGroupConfigHolder(t *testing.T) {
 		// All built-in configs are present.
 		require.Equal(t, systemTenantGroupConfig, snap.Groups()[tenantGroupKey(1)])
 		require.Equal(t,
-			builtinGroupConfigs[rgGroupKey(highResourceGroupID)],
-			snap.Groups()[rgGroupKey(highResourceGroupID)])
+			builtinGroupConfigs[highResourceGroupKey],
+			snap.Groups()[highResourceGroupKey])
 		require.Equal(t,
-			builtinGroupConfigs[rgGroupKey(lowResourceGroupID)],
-			snap.Groups()[rgGroupKey(lowResourceGroupID)])
+			builtinGroupConfigs[lowResourceGroupKey],
+			snap.Groups()[lowResourceGroupKey])
 		require.Len(t, snap.Groups(), 3) // 3 built-ins
 	})
 
 	t.Run("get_or_default_unknown_rg", func(t *testing.T) {
 		h := testHolder()
 		require.Equal(t, defaultRGGroupConfig,
-			h.Snapshot().Groups().GetOrDefault(rgGroupKey(9999)))
+			h.Snapshot().Groups().GetOrDefault(rgGroupKey(0, 9999)))
 	})
 
 	t.Run("get_or_default_unknown_tenant", func(t *testing.T) {
@@ -55,9 +55,9 @@ func TestResourceGroupConfigHolder(t *testing.T) {
 	t.Run("default_configs_have_burst_frac", func(t *testing.T) {
 		h := testHolder()
 		snap := h.Snapshot()
-		highCfg := snap.Groups().GetOrDefault(rgGroupKey(highResourceGroupID))
+		highCfg := snap.Groups().GetOrDefault(highResourceGroupKey)
 		require.Equal(t, float64(0.8), highCfg.BurstFrac)
-		lowCfg := snap.Groups().GetOrDefault(rgGroupKey(lowResourceGroupID))
+		lowCfg := snap.Groups().GetOrDefault(lowResourceGroupKey)
 		require.Equal(t, float64(0.2), lowCfg.BurstFrac)
 		tenantCfg := snap.Groups().GetOrDefault(tenantGroupKey(9999))
 		require.Equal(t, float64(0.20), tenantCfg.BurstFrac)
@@ -70,13 +70,13 @@ func TestResourceGroupConfigHolderSet(t *testing.T) {
 	t.Run("replaces_wholesale", func(t *testing.T) {
 		h := testHolder()
 		h.Set(ResourceGroupConfigSet{
-			rgGroupKey(42): {Weight: 100, MaxCPU: false},
+			rgGroupKey(0, 42): {Weight: 100, MaxCPU: false},
 		})
 		groups := h.Snapshot().Groups()
 		// Set is wholesale: the freshly-Set key is present alongside
 		// the built-ins (system tenant + high/low RM groups).
 		require.Equal(t, ResourceGroupConfig{Weight: 100, MaxCPU: false},
-			groups[rgGroupKey(42)])
+			groups[rgGroupKey(0, 42)])
 		require.Equal(t, systemTenantGroupConfig, groups[tenantGroupKey(1)])
 		require.Len(t, groups, 4) // 3 built-ins + 1 caller key
 	})
@@ -84,17 +84,17 @@ func TestResourceGroupConfigHolderSet(t *testing.T) {
 	t.Run("input_aliasing_safe", func(t *testing.T) {
 		h := testHolder()
 		input := ResourceGroupConfigSet{
-			rgGroupKey(7): {Weight: 100, MaxCPU: false},
+			rgGroupKey(0, 7): {Weight: 100, MaxCPU: false},
 		}
 		h.Set(input)
 
 		// Mutate the input post-Set; the holder must not observe it.
-		input[rgGroupKey(7)] = ResourceGroupConfig{Weight: 1, MaxCPU: true}
-		input[rgGroupKey(8)] = ResourceGroupConfig{Weight: 1, MaxCPU: false}
+		input[rgGroupKey(0, 7)] = ResourceGroupConfig{Weight: 1, MaxCPU: true}
+		input[rgGroupKey(0, 8)] = ResourceGroupConfig{Weight: 1, MaxCPU: false}
 
 		groups := h.Snapshot().Groups()
 		require.Equal(t, ResourceGroupConfig{Weight: 100, MaxCPU: false},
-			groups[rgGroupKey(7)])
+			groups[rgGroupKey(0, 7)])
 		require.Len(t, groups, 4) // 3 built-ins + 1 caller key
 
 		// And the holder's internal map is not aliased to the input.
@@ -111,11 +111,11 @@ func TestResourceGroupConfigHolderSet(t *testing.T) {
 func TestResourceGroupConfigHolderGet(t *testing.T) {
 	h := testHolder()
 	h.Set(ResourceGroupConfigSet{
-		rgGroupKey(42): {Weight: 75, MaxCPU: true},
+		rgGroupKey(0, 42): {Weight: 75, MaxCPU: true},
 	})
 	require.Equal(t,
 		ResourceGroupConfig{Weight: 75, MaxCPU: true},
-		h.Snapshot().Groups().GetOrDefault(rgGroupKey(42)))
+		h.Snapshot().Groups().GetOrDefault(rgGroupKey(0, 42)))
 }
 
 // TestResourceGroupConfigHolderSnapshot verifies Snapshot's contract:
@@ -138,17 +138,17 @@ func TestResourceGroupConfigHolderSnapshot(t *testing.T) {
 	// stable (it points at the previously-installed map, which is
 	// immutable post-install) while h.Snapshot() returns the new one.
 	h.Set(ResourceGroupConfigSet{
-		rgGroupKey(42): {Weight: 100, MaxCPU: true},
+		rgGroupKey(0, 42): {Weight: 100, MaxCPU: true},
 	})
 	// snap1 must still have the built-in configs.
 	require.Equal(t,
-		builtinGroupConfigs[rgGroupKey(highResourceGroupID)],
-		snap1.Groups()[rgGroupKey(highResourceGroupID)],
+		builtinGroupConfigs[highResourceGroupKey],
+		snap1.Groups()[highResourceGroupKey],
 		"prior snapshot must be unaffected by a subsequent Set")
 	// New snapshot has builtins + the freshly-set key.
 	snap2 := h.Snapshot()
 	require.Equal(t, ResourceGroupConfig{Weight: 100, MaxCPU: true},
-		snap2.Groups()[rgGroupKey(42)])
+		snap2.Groups()[rgGroupKey(0, 42)])
 	require.Equal(t, systemTenantGroupConfig, snap2.Groups()[tenantGroupKey(1)])
 	require.Len(t, snap2.Groups(), 4) // 3 built-ins + 1 caller key
 }

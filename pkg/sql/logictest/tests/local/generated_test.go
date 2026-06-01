@@ -2241,6 +2241,13 @@ func TestLogic_resource_group(
 	runLogicTest(t, "resource_group")
 }
 
+func TestLogic_resource_group_session_var(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "resource_group_session_var")
+}
+
 func TestLogic_restore(
 	t *testing.T,
 ) {

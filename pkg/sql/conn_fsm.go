@@ -118,7 +118,10 @@ type eventTxnStartPayload struct {
 	historicalTimestamp *hlc.Timestamp
 	// qualityOfService denotes the user-level admission queue priority to use for
 	// any new Txn started using this payload.
-	qualityOfService      sessiondatapb.QoSLevel
+	qualityOfService sessiondatapb.QoSLevel
+	// resourceGroupID is the resource group to bind any new Txn started using
+	// this payload to for admission control. Zero means unbound.
+	resourceGroupID       uint64
 	isoLevel              isolation.Level
 	omitInRangefeeds      bool
 	bufferedWritesEnabled bool
@@ -133,6 +136,7 @@ func makeEventTxnStartPayload(
 	historicalTimestamp *hlc.Timestamp,
 	tranCtx transitionCtx,
 	qualityOfService sessiondatapb.QoSLevel,
+	resourceGroupID uint64,
 	isoLevel isolation.Level,
 	omitInRangefeeds bool,
 	bufferedWritesEnabled bool,
@@ -145,6 +149,7 @@ func makeEventTxnStartPayload(
 		historicalTimestamp:   historicalTimestamp,
 		tranCtx:               tranCtx,
 		qualityOfService:      qualityOfService,
+		resourceGroupID:       resourceGroupID,
 		isoLevel:              isoLevel,
 		omitInRangefeeds:      omitInRangefeeds,
 		bufferedWritesEnabled: bufferedWritesEnabled,
@@ -602,6 +607,7 @@ func noTxnToOpen(args fsm.Args) error {
 		nil, /* txn */
 		payload.tranCtx,
 		payload.qualityOfService,
+		payload.resourceGroupID,
 		payload.isoLevel,
 		payload.omitInRangefeeds,
 		payload.bufferedWritesEnabled,
