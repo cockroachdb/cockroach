@@ -688,3 +688,191 @@ forks   30  1
 spoons  10  1
 
 subtest end
+
+subtest with_no_data
+
+statement ok
+CREATE TABLE src (id INT PRIMARY KEY, name STRING, amount DECIMAL)
+
+statement ok
+INSERT INTO src VALUES (1, 'a', 1.5), (2, 'b', 2.5), (3, 'c', 3.5)
+
+# WITH NO DATA creates an empty, ordinary table: the AS query is planned to
+# derive column types but is not executed, so no rows are copied. Unlike a
+# materialized view created WITH NO DATA, the table is immediately usable.
+#
+# schema_locked is set explicitly so that the SHOW CREATE TABLE output below is
+# identical across configs (the local-legacy-schema-changer config disables
+# schema_locked by default).
+statement ok
+CREATE TABLE nodata WITH (schema_locked = true) AS SELECT id, name, amount FROM src WITH NO DATA
+
+# The table is immediately selectable and empty (no REFRESH required).
+query I
+SELECT count(*) FROM nodata
+----
+0
+
+# Column types and (silent) nullability are derived from the AS query.
+query TTB colnames
+SELECT column_name, data_type, is_nullable
+FROM [SHOW COLUMNS FROM nodata]
+WHERE column_name != 'rowid'
+ORDER BY column_name
+----
+column_name  data_type  is_nullable
+amount       DECIMAL    true
+id           INT8       true
+name         STRING     true
+
+# A WITH NO DATA table behaves like any other table for subsequent writes.
+statement ok
+INSERT INTO nodata VALUES (10, 'x', 9.5)
+
+query ITR
+SELECT id, name, amount FROM nodata ORDER BY id
+----
+10  x  9.5
+
+# WITH NO DATA supports an explicit column-name list.
+statement ok
+CREATE TABLE nodata_cols (a, b) AS SELECT id, name FROM src WITH NO DATA
+
+query I
+SELECT count(*) FROM nodata_cols
+----
+0
+
+query TT colnames
+SELECT column_name, data_type
+FROM [SHOW COLUMNS FROM nodata_cols]
+WHERE column_name != 'rowid'
+ORDER BY column_name
+----
+column_name  data_type
+a            INT8
+b            STRING
+
+# WITH NO DATA works with VALUES sources too.
+statement ok
+CREATE TABLE nodata_values (item, quantity) AS VALUES ('cups', 10), ('plates', 15) WITH NO DATA
+
+query I
+SELECT count(*) FROM nodata_values
+----
+0
+
+# WITH DATA is the default and populates the table.
+statement ok
+CREATE TABLE withdata AS SELECT id, name, amount FROM src WITH DATA
+
+query I
+SELECT count(*) FROM withdata
+----
+3
+
+# SHOW CREATE TABLE renders a WITH NO DATA table as an ordinary table (with the
+# hidden rowid primary key), not as a refresh-required relation.
+query TT
+SHOW CREATE TABLE nodata
+----
+nodata  CREATE TABLE public.nodata (
+          id INT8 NULL,
+          name STRING NULL,
+          amount DECIMAL NULL,
+          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+          CONSTRAINT nodata_pkey PRIMARY KEY (rowid ASC)
+        ) WITH (schema_locked = true);
+
+# A WITH NO DATA table created inside an explicit transaction is immediately
+# usable within that same transaction: it can be inserted into and selected from
+# before COMMIT, confirming the table is left PUBLIC (not refresh-required).
+# autocommit_before_ddl is disabled so the CTAS runs within the explicit
+# transaction rather than implicitly committing first. This is skipped under
+# weak isolation levels, where a schema change in a multi-statement transaction
+# requires autocommit_before_ddl to be enabled.
+skipif config weak-iso-level-configs
+statement ok
+BEGIN
+
+skipif config weak-iso-level-configs
+statement ok
+SET LOCAL autocommit_before_ddl = false
+
+skipif config weak-iso-level-configs
+statement ok
+CREATE TABLE nodata_multi_txn AS SELECT id, name, amount FROM src WITH NO DATA
+
+skipif config weak-iso-level-configs
+query I
+SELECT count(*) FROM nodata_multi_txn
+----
+0
+
+skipif config weak-iso-level-configs
+statement ok
+INSERT INTO nodata_multi_txn VALUES (42, 'txn-test', 7.5)
+
+skipif config weak-iso-level-configs
+statement ok
+COMMIT
+
+skipif config weak-iso-level-configs
+query ITR
+SELECT id, name, amount FROM nodata_multi_txn ORDER BY id
+----
+42  txn-test  7.5
+
+subtest end
+
+subtest with_no_data_temp
+
+statement ok
+SET experimental_enable_temp_tables = 'on'
+
+# WITH NO DATA is supported for temporary tables, as requested by ORMs that
+# create a temp table shaped like a query result and then populate it
+# separately (see cockroachdb/cockroach#171333).
+statement ok
+CREATE TEMP TABLE tmp_nodata AS SELECT id, name, amount FROM src WITH NO DATA
+
+# The temp table is created empty and is immediately usable (no REFRESH).
+query I
+SELECT count(*) FROM tmp_nodata
+----
+0
+
+# The table really is temporary: it lives in a session-scoped pg_temp schema.
+query B
+SELECT schema_name LIKE 'pg_temp%' FROM [SHOW TABLES] WHERE table_name = 'tmp_nodata'
+----
+true
+
+statement ok
+INSERT INTO tmp_nodata VALUES (10, 'x', 9.5)
+
+query ITR
+SELECT id, name, amount FROM tmp_nodata ORDER BY id
+----
+10  x  9.5
+
+# The explicit column-name list and the CREATE TEMPORARY spelling both work.
+statement ok
+CREATE TEMPORARY TABLE tmp_nodata_cols (a, b) AS SELECT id, name FROM src WITH NO DATA
+
+query I
+SELECT count(*) FROM tmp_nodata_cols
+----
+0
+
+query TT colnames
+SELECT column_name, data_type
+FROM [SHOW COLUMNS FROM tmp_nodata_cols]
+WHERE column_name != 'rowid'
+ORDER BY column_name
+----
+column_name  data_type
+a            INT8
+b            STRING
+
+subtest end

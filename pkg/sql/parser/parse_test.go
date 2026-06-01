@@ -432,8 +432,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 
 		{`CREATE TABLE a(b INT8) WITH OIDS`, 0, `create table with oids`, ``},
 
-		{`CREATE TABLE a AS SELECT b WITH NO DATA`, 0, `create table as with no data`, ``},
-
 		{`CREATE TABLE a(b INT8 REFERENCES c(x) MATCH PARTIAL`, 20305, `match partial`, ``},
 		{`CREATE TABLE a(b INT8, FOREIGN KEY (b) REFERENCES c(x) MATCH PARTIAL)`, 20305, `match partial`, ``},
 

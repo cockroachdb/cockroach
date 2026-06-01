@@ -1553,6 +1553,12 @@ type CreateTable struct {
 	Defs     TableDefs
 	AsSource *Select
 	Locality *Locality
+	// WithNoData is set for CREATE TABLE ... AS ... WITH NO DATA. The AS query is
+	// planned to derive the result column names and types, but is not executed,
+	// so the resulting table is empty. Unlike a materialized view created WITH NO
+	// DATA, the table is an ordinary table that is immediately usable. Only
+	// meaningful when AsSource is set.
+	WithNoData bool
 }
 
 // As returns true if this table represents a CREATE TABLE ... AS statement,
@@ -1609,6 +1615,9 @@ func (node *CreateTable) FormatBody(ctx *FmtCtx) {
 		}
 		ctx.WriteString(" AS ")
 		ctx.FormatNode(node.AsSource)
+		if node.WithNoData {
+			ctx.WriteString(" WITH NO DATA")
+		}
 	} else {
 		ctx.WriteString(" (")
 		ctx.FormatNode(&node.Defs)

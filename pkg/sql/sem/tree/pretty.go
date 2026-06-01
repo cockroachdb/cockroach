@@ -1353,6 +1353,9 @@ func (node *CreateTable) Doc(p *PrettyCfg) pretty.Doc {
 	clauses := make([]pretty.Doc, 0, 4)
 	if node.As() {
 		clauses = append(clauses, p.Doc(node.AsSource))
+		if node.WithNoData {
+			clauses = append(clauses, pretty.Keyword("WITH NO DATA"))
+		}
 	}
 	if node.PartitionByTable != nil {
 		clauses = append(clauses, p.Doc(node.PartitionByTable))
