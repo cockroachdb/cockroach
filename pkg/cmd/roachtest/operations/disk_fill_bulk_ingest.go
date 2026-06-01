@@ -48,7 +48,6 @@ type cleanupDiskFillBulkIngest struct {
 	storeCount    int
 	restoreDBName string
 	bucket        string
-	jobID         jobspb.JobID
 }
 
 func (cl *cleanupDiskFillBulkIngest) Cleanup(
@@ -84,17 +83,14 @@ func (cl *cleanupDiskFillBulkIngest) Cleanup(
 					continue
 				}
 				o.Status(fmt.Sprintf("cleanup: cancelling job %s", jobID))
-				if _, err := conn.ExecContext(ctx, fmt.Sprintf("CANCEL JOB %s", jobID)); err != nil {
+				if _, err := conn.ExecContext(ctx, "CANCEL JOB $1", jobID); err != nil {
 					o.Errorf("failed to cancel job %s: %v", jobID, err)
 				}
 			}
+			if err := rows.Err(); err != nil {
+				o.Errorf("error iterating job rows: %v", err)
+			}
 		}
-	}
-
-	// Best-effort resume in case the job is still paused.
-	if cl.jobID != 0 {
-		o.Status(fmt.Sprintf("cleanup: resuming job %d (best-effort)", cl.jobID))
-		_, _ = conn.ExecContext(ctx, fmt.Sprintf("RESUME JOB %d", cl.jobID))
 	}
 
 	o.Status(fmt.Sprintf("cleanup: dropping database %s", cl.restoreDBName))
@@ -126,7 +122,7 @@ func (cl *cleanupDiskFillBulkIngest) Cleanup(
 		return
 	}
 
-	if helpers.CheckNodeHealth(ctx, o, c, cl.node[0], 5, 5*time.Second) {
+	if helpers.CheckNodeHealth(ctx, o, c, cl.node[0], 5 /* maxAttempts */, 5*time.Second) {
 		o.Status(fmt.Sprintf("cleanup: node %d healthy", cl.node[0]))
 		return
 	}
@@ -136,7 +132,7 @@ func (cl *cleanupDiskFillBulkIngest) Cleanup(
 		o.Errorf("failed to restart node %d: %v", cl.node[0], err)
 		return
 	}
-	if !helpers.CheckNodeHealth(ctx, o, c, cl.node[0], 5, 10*time.Second) {
+	if !helpers.CheckNodeHealth(ctx, o, c, cl.node[0], 5 /* maxAttempts */, 10*time.Second) {
 		o.Errorf("node %d still unresponsive after restart", cl.node[0])
 	}
 }
@@ -164,6 +160,9 @@ func findBackupDatabase(ctx context.Context, o operation.Operation, c cluster.Cl
 				return dbStr
 			}
 		}
+	}
+	if err := dbs.Err(); err != nil {
+		o.Fatal(err)
 	}
 	return ""
 }
@@ -310,7 +309,6 @@ func runDiskFillBulkIngest(
 
 	// Phase 3: Start RESTORE under disk pressure.
 	jobID := startDetachedRestore(ctx, o, c, cl.peerNodeID, dbName, bucket, restoreDBName)
-	cl.jobID = jobID
 
 	// Phase 4: Wait for job to start running, let it run under
 	// pressure, then explicitly pause.
