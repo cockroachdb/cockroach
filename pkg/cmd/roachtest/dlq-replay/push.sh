@@ -14,8 +14,18 @@ source "$root/build/teamcity-bazel-support.sh" # For BAZEL_IMAGE.
 
 PROJECT="${PROJECT:-cockroach-testeng-infra}"
 REGION="${REGION:-us-east1}"
-JOB="${JOB:-github-dlq-replay}"
-REPOSITORY="${REPOSITORY:-github-dlq-replay}"
+DLQ_ENV="${DLQ_ENV:-prod}"
+case "$DLQ_ENV" in
+  prod | dev)
+    ;;
+  *)
+    echo "DLQ_ENV must be prod or dev" >&2
+    exit 1
+    ;;
+esac
+DEFAULT_RESOURCE="roachtest-github-dlq-replay-${DLQ_ENV}"
+JOB="${JOB:-${DEFAULT_RESOURCE}}"
+REPOSITORY="${REPOSITORY:-${DEFAULT_RESOURCE}}"
 IMAGE_NAME="${IMAGE_NAME:-replay}"
 IMAGE="${IMAGE:-${REGION}-docker.pkg.dev/${PROJECT}/${REPOSITORY}/${IMAGE_NAME}}"
 REMOTE="${REMOTE:-origin}"
@@ -69,6 +79,7 @@ Building and pushing dlq-replay image:
   source:  https://github.com/${OWNER}/${REPO}@${GIT_SHA}
   image:   ${IMAGE}:${IMAGE_TAG}
   project: ${PROJECT}
+  env:     ${DLQ_ENV}
   job:     ${JOB}
   region:  ${REGION}
 EOF

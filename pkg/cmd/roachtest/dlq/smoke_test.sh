@@ -16,7 +16,8 @@
 #
 # Prerequisites:
 #   - gcloud auth application-default login
-#   - The DLQ dev bucket exists and you have storage.objectAdmin on it
+#   - The DLQ dev bucket roachtest-github-dlq-dev exists and you have
+#     storage.objectAdmin on it
 #   - roachtest is on PATH, or ROACHTEST_BIN points at a roachtest binary
 #
 # Usage:
