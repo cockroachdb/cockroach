@@ -616,7 +616,7 @@ var (
 		"logictest-optimizer-cost-perturbation", float64(0), float64(0.1), float64(1.0))
 
 	logicTestOptimizerMetamorphicEnabled = envutil.EnvOrDefaultBool(
-		"COCKROACH_LOGIC_TEST_OPTIMIZER_METAMORPHIC", false)
+		"COCKROACH_LOGIC_TEST_OPTIMIZER_METAMORPHIC", true)
 
 	disableOptRuleProbability = flag.Float64(
 		"disable-opt-rule-probability", 0,
