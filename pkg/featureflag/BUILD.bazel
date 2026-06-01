@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "featureflag",
@@ -19,5 +19,19 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/metric",
         "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "featureflag_test",
+    srcs = ["feature_gate_example_test.go"],
+    deps = [
+        ":featureflag",
+        "//pkg/server/license/licensepb",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
     ],
 )
