@@ -480,6 +480,8 @@ const (
 	PgExtensionSpatialRefSysTableID
 	InformationSchemaCrdbNodeActiveSessionHistoryTableID
 	InformationSchemaCrdbClusterActiveSessionHistoryTableID
+	InformationSchemaCrdbJobsViewID
+	InformationSchemaCrdbJobsWithProgressViewID
 	CrdbInternalClusterHeldAdvisoryLocksTableID
 	MinVirtualID = CrdbInternalClusterHeldAdvisoryLocksTableID
 )
