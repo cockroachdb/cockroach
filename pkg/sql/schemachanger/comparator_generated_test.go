@@ -2138,6 +2138,11 @@ func TestSchemaChangeComparator_views(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/views"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
+func TestSchemaChangeComparator_views_definer_privileges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/views_definer_privileges"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
 func TestSchemaChangeComparator_virtual_columns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/virtual_columns"
