@@ -496,6 +496,10 @@ func (ih *instrumentationHelper) Setup(
 				stmtDiagnosticsRecorder.ShouldCollectDiagnostics(ctx, stmt.StmtNoConstants, "" /* planGist */)
 			// IsRedacted will be false when ih.collectBundle is false.
 			ih.explainFlags.RedactValues = ih.explainFlags.RedactValues || ih.diagRequest.IsRedacted()
+			if ih.collectBundle {
+				ih.explainFlags.Verbose = true
+				ih.explainFlags.ShowTypes = true
+			}
 		}
 	}
 
@@ -583,6 +587,8 @@ func (ih *instrumentationHelper) setupWithPlanGist(
 		return ctx
 	}
 	ih.explainFlags.RedactValues = ih.explainFlags.RedactValues || ih.diagRequest.IsRedacted()
+	ih.explainFlags.Verbose = true
+	ih.explainFlags.ShowTypes = true
 	ih.needFinish = true
 	ih.collectExecStats = true
 	if ih.sp == nil || !ih.sp.IsVerbose() {
@@ -1311,6 +1317,8 @@ func (ih *instrumentationHelper) handleTransactionDiagnostics(
 		ih.diagRequestID = 0
 		ih.diagRequest = stmtdiagnostics.Request{}
 		ih.explainFlags.RedactValues = txnState.txnInstrumentationHelper.ShouldRedact()
+		ih.explainFlags.Verbose = true
+		ih.explainFlags.ShowTypes = true
 		ih.shouldFinishSpan = true
 		ih.needFinish = true
 		ih.sp = stmtSp

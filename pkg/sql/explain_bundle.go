@@ -417,7 +417,7 @@ func (b *stmtBundleBuilder) addOptPlans(ctx context.Context) {
 	b.z.AddFile("opt-vv.txt", formatOptPlan(memo.ExprFmtHideQualifications|memo.ExprFmtHideNotVisibleIndexInfo))
 }
 
-// addExecPlan adds the EXPLAIN (VERBOSE) plan as file plan.txt.
+// addExecPlan adds the EXPLAIN ANALYZE (VERBOSE, TYPES) plan as file plan.txt.
 func (b *stmtBundleBuilder) addExecPlan(plan string) {
 	if plan == "" {
 		plan = noPlan
