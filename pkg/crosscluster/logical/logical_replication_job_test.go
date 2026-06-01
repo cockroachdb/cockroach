@@ -3341,11 +3341,20 @@ func TestSchemaValidation(t *testing.T) {
 			if mode == "" {
 				mode = "validated"
 			}
+			createStmt := fmt.Sprintf(
+				"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = '%s'",
+				mode,
+			)
+			args := []interface{}{sourceURL.String()}
+			if mode == "transactional" {
+				createStmt += ", CURSOR = $2"
+				args = append(args, s.Clock().Now().AsOfSystemTime())
+			}
 			dbDest.ExpectErr(
 				t,
 				tc.expectedErr,
-				fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = '%s'", mode),
-				sourceURL.String(),
+				createStmt,
+				args...,
 			)
 			replicationtestutils.WaitForAllProducerJobsToFail(t, dbSource)
 		})
