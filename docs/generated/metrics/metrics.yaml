@@ -14396,15 +14396,6 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.admitted_count
-      exported_name: admission_cpu_time_tokens_admitted_count
-      description: Cumulative number of requests admitted per group by CPU time token admission control; use with wait_time_nanos to compute mean wait time via rate(wait_time) / rate(admitted_count)
-      y_axis_label: Requests
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/admission-control
     - name: admission.cpu_time_tokens.dampening_deficit_nanos
       exported_name: admission_cpu_time_tokens_dampening_deficit_nanos
       description: Cumulative time-weighted deficit from dampening CPU time token allocations during scheduler overload. Each tick increments by (1 - dampening_factor) * elapsed_nanos, where dampening_factor is in [floor, 1.0] (floor is 0.5). rate() / 1e9 yields the average fraction of token issuance suppressed; a rate of 0 means no dampening was active in the window, 5e8 means the floor was held for the full window
@@ -14443,7 +14434,7 @@ layers:
       owner: cockroachdb/admission-control
     - name: admission.cpu_time_tokens.per_tenant.admitted_count
       exported_name: admission_cpu_time_tokens_per_tenant_admitted_count
-      description: Cumulative number of requests admitted per tenant by CPU time token admission control; use with wait_time_nanos to compute mean wait time via rate(wait_time) / rate(admitted_count). Retained for compatibility with dashboards predating the admission.cpu_time_tokens.admitted_count family
+      description: Cumulative number of requests admitted per tenant by CPU time token admission control; use with wait_time_nanos to compute mean wait time via rate(wait_time) / rate(admitted_count)
       y_axis_label: Requests
       type: COUNTER
       unit: COUNT
@@ -14452,7 +14443,7 @@ layers:
       owner: cockroachdb/admission-control
     - name: admission.cpu_time_tokens.per_tenant.tokens_returned
       exported_name: admission_cpu_time_tokens_per_tenant_tokens_returned
-      description: Cumulative CPU time tokens returned per tenant, for example when actual CPU usage was lower than the initial estimate; rate() gives the per-tenant token return rate. Retained for compatibility with dashboards predating the admission.cpu_time_tokens.tokens_returned family
+      description: Cumulative CPU time tokens returned per tenant, for example when actual CPU usage was lower than the initial estimate; rate() gives the per-tenant token return rate
       y_axis_label: Tokens
       type: COUNTER
       unit: COUNT
@@ -14461,7 +14452,7 @@ layers:
       owner: cockroachdb/admission-control
     - name: admission.cpu_time_tokens.per_tenant.tokens_used
       exported_name: admission_cpu_time_tokens_per_tenant_tokens_used
-      description: Cumulative CPU time tokens consumed per tenant by admitted work; rate() gives the per-tenant token consumption rate. Retained for compatibility with dashboards predating the admission.cpu_time_tokens.tokens_used family
+      description: Cumulative CPU time tokens consumed per tenant by admitted work; rate() gives the per-tenant token consumption rate
       y_axis_label: Tokens
       type: COUNTER
       unit: COUNT
@@ -14470,7 +14461,7 @@ layers:
       owner: cockroachdb/admission-control
     - name: admission.cpu_time_tokens.per_tenant.wait_time_nanos
       exported_name: admission_cpu_time_tokens_per_tenant_wait_time_nanos
-      description: Cumulative nanoseconds of admission queue wait time per tenant in CPU time token admission control; use with admitted_count to compute mean wait time via rate(wait_time) / rate(admitted_count). Retained for compatibility with dashboards predating the admission.cpu_time_tokens.wait_time_nanos family
+      description: Cumulative nanoseconds of admission queue wait time per tenant in CPU time token admission control; use with admitted_count to compute mean wait time via rate(wait_time) / rate(admitted_count)
       y_axis_label: Nanoseconds
       type: COUNTER
       unit: NANOSECONDS
@@ -14513,24 +14504,6 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.tokens_returned
-      exported_name: admission_cpu_time_tokens_tokens_returned
-      description: Cumulative CPU time tokens returned per group, for example when actual CPU usage was lower than the initial estimate; rate() gives the per-group token return rate
-      y_axis_label: Tokens
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.tokens_used
-      exported_name: admission_cpu_time_tokens_tokens_used
-      description: Cumulative CPU time tokens consumed per group by admitted work; rate() gives the per-group token consumption rate
-      y_axis_label: Tokens
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/admission-control
     - name: admission.cpu_time_tokens.usage.consumed
       exported_name: admission_cpu_time_tokens_usage_consumed
       description: Cumulative number of CPU time tokens consumed (deducted from buckets) by admitted work
@@ -14546,15 +14519,6 @@ layers:
       y_axis_label: Tokens
       type: COUNTER
       unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/admission-control
-    - name: admission.cpu_time_tokens.wait_time_nanos
-      exported_name: admission_cpu_time_tokens_wait_time_nanos
-      description: Cumulative nanoseconds of admission queue wait time per group in CPU time token admission control; use with admitted_count to compute mean wait time via rate(wait_time) / rate(admitted_count)
-      y_axis_label: Nanoseconds
-      type: COUNTER
-      unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control

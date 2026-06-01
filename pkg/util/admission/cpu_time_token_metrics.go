@@ -38,7 +38,7 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
-	cpuTimeTokensUsageConsumedMeta = metric.Metadata{
+	cpuTimeTokensConsumedMeta = metric.Metadata{
 		Name: "admission.cpu_time_tokens.usage.consumed",
 		Help: crstrings.UnwrapText(`
 			Cumulative number of CPU time tokens consumed (deducted from
@@ -47,7 +47,7 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
-	cpuTimeTokensUsageReturnedMeta = metric.Metadata{
+	cpuTimeTokensReturnedMeta = metric.Metadata{
 		Name: "admission.cpu_time_tokens.usage.returned",
 		Help: crstrings.UnwrapText(`
 			Cumulative number of CPU time tokens returned (credited back to
@@ -57,99 +57,41 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
-	// Primary per-group metric metadata. The counters built from these
-	// metadata are labeled (tenant_id, group_id) and cover every group
-	// uniformly: serverless tenant groups have group_id="0", RM-mode
-	// resource groups have tenant_id="0", and future user-defined
-	// groups may set both. The same numeric id in different namespaces
-	// (system tenant 1 vs rg 1) maps to distinct time series because
-	// the (tenant_id, group_id) tuples differ.
-	cpuTimeTokenAdmittedCountMeta = metric.Metadata{
-		Name: "admission.cpu_time_tokens.admitted_count",
+	cpuTimeTokenAdmittedCountPerTenantMeta = metric.Metadata{
+		Name: "admission.cpu_time_tokens.per_tenant.admitted_count",
 		Help: crstrings.UnwrapText(`
-			Cumulative number of requests admitted per group by CPU time
+			Cumulative number of requests admitted per tenant by CPU time
 			token admission control; use with wait_time_nanos to compute
 			mean wait time via rate(wait_time) / rate(admitted_count)`),
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
 
-	cpuTimeTokenWaitTimeNanosMeta = metric.Metadata{
-		Name: "admission.cpu_time_tokens.wait_time_nanos",
+	cpuTimeTokenWaitTimeNanosPerTenantMeta = metric.Metadata{
+		Name: "admission.cpu_time_tokens.per_tenant.wait_time_nanos",
 		Help: crstrings.UnwrapText(`
-			Cumulative nanoseconds of admission queue wait time per group
+			Cumulative nanoseconds of admission queue wait time per tenant
 			in CPU time token admission control; use with admitted_count to
 			compute mean wait time via rate(wait_time) / rate(admitted_count)`),
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 
-	cpuTimeTokensUsedMeta = metric.Metadata{
-		Name: "admission.cpu_time_tokens.tokens_used",
-		Help: crstrings.UnwrapText(`
-			Cumulative CPU time tokens consumed per group by admitted
-			work; rate() gives the per-group token consumption rate`),
-		Measurement: "Tokens",
-		Unit:        metric.Unit_COUNT,
-	}
-
-	cpuTimeTokensReturnedMeta = metric.Metadata{
-		Name: "admission.cpu_time_tokens.tokens_returned",
-		Help: crstrings.UnwrapText(`
-			Cumulative CPU time tokens returned per group, for example
-			when actual CPU usage was lower than the initial estimate;
-			rate() gives the per-group token return rate`),
-		Measurement: "Tokens",
-		Unit:        metric.Unit_COUNT,
-	}
-
-	// Legacy per-tenant metric metadata. These are populated only for
-	// serverless tenant groups (groupID==0 && tenantID>0) so that
-	// dashboards predating the primary per-group family above continue
-	// to work. New consumers should target the primary family.
-	cpuTimeTokenLegacyAdmittedCountPerTenantMeta = metric.Metadata{
-		Name: "admission.cpu_time_tokens.per_tenant.admitted_count",
-		Help: crstrings.UnwrapText(`
-			Cumulative number of requests admitted per tenant by CPU time
-			token admission control; use with wait_time_nanos to compute
-			mean wait time via rate(wait_time) / rate(admitted_count).
-			Retained for compatibility with dashboards predating the
-			admission.cpu_time_tokens.admitted_count family`),
-		Measurement: "Requests",
-		Unit:        metric.Unit_COUNT,
-	}
-
-	cpuTimeTokenLegacyWaitTimeNanosPerTenantMeta = metric.Metadata{
-		Name: "admission.cpu_time_tokens.per_tenant.wait_time_nanos",
-		Help: crstrings.UnwrapText(`
-			Cumulative nanoseconds of admission queue wait time per tenant
-			in CPU time token admission control; use with admitted_count to
-			compute mean wait time via rate(wait_time) / rate(admitted_count).
-			Retained for compatibility with dashboards predating the
-			admission.cpu_time_tokens.wait_time_nanos family`),
-		Measurement: "Nanoseconds",
-		Unit:        metric.Unit_NANOSECONDS,
-	}
-
-	cpuTimeTokensLegacyUsedPerTenantMeta = metric.Metadata{
+	cpuTimeTokensUsedPerTenantMeta = metric.Metadata{
 		Name: "admission.cpu_time_tokens.per_tenant.tokens_used",
 		Help: crstrings.UnwrapText(`
 			Cumulative CPU time tokens consumed per tenant by admitted
-			work; rate() gives the per-tenant token consumption rate.
-			Retained for compatibility with dashboards predating the
-			admission.cpu_time_tokens.tokens_used family`),
+			work; rate() gives the per-tenant token consumption rate`),
 		Measurement: "Tokens",
 		Unit:        metric.Unit_COUNT,
 	}
 
-	cpuTimeTokensLegacyReturnedPerTenantMeta = metric.Metadata{
+	cpuTimeTokensReturnedPerTenantMeta = metric.Metadata{
 		Name: "admission.cpu_time_tokens.per_tenant.tokens_returned",
 		Help: crstrings.UnwrapText(`
 			Cumulative CPU time tokens returned per tenant, for example
 			when actual CPU usage was lower than the initial estimate;
-			rate() gives the per-tenant token return rate. Retained for
-			compatibility with dashboards predating the
-			admission.cpu_time_tokens.tokens_returned family`),
+			rate() gives the per-tenant token return rate`),
 		Measurement: "Tokens",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -165,8 +107,8 @@ type cpuTimeTokenMetrics struct {
 	// cpuTimeTokenAllocator.dampeningFactor for details.
 	DampeningDeficitNanos *metric.Counter
 	Multiplier            *metric.GaugeFloat64
-	UsageConsumed         *metric.Counter
-	UsageReturned         *metric.Counter
+	TokensConsumed        *metric.Counter
+	TokensReturned        *metric.Counter
 
 	// ExhaustedDurationNanos tracks cumulative nanoseconds each bucket has
 	// spent exhausted. Each burst qualification gets its own counter rather
@@ -189,58 +131,40 @@ type cpuTimeTokenMetrics struct {
 	// when refill rates decrease between intervals (negative delta).
 	RefillRemoved [numBurstQualifications]*metric.Counter
 
-	// Primary per-group AggCounters with (tenant_id, group_id) labels.
-	// Every group — serverless tenant or RM resource group — feeds
-	// these. AdmittedCount and WaitTimeNanos together enable mean
-	// wait time per group via rate(wait_time_nanos) / rate(admitted_count).
-	// TokensUsed and TokensReturned record per-group token flow
-	// through WorkQueue.adjustGroupUsedLocked. We use two counters to
-	// derive the mean rather than a histogram for cost reasons (there
-	// are many work queues).
-	AdmittedCount  *aggmetric.AggCounter
-	WaitTimeNanos  *aggmetric.AggCounter
-	TokensUsed     *aggmetric.AggCounter
-	TokensReturned *aggmetric.AggCounter
+	// AdmittedCountPerTenant and WaitTimeNanosPerTenant track per-tenant
+	// admission stats. Together they enable computing mean wait time per
+	// tenant via rate(wait_time_nanos) / rate(admitted_count) in
+	// DD/Prometheus. We start with these for just CPU time token AC for
+	// cost reasons (there are many work queues); over time we may
+	// integrate into WorkQueueMetrics. We use two counters to derive the
+	// mean rather than a histogram, also for cost reasons.
+	AdmittedCountPerTenant *aggmetric.AggCounter
+	WaitTimeNanosPerTenant *aggmetric.AggCounter
 
-	// Legacy per-tenant AggCounters, populated only for serverless
-	// tenant groups (groupID==0 && tenantID>0). RM-mode resource
-	// groups and any future user-defined groups do not feed these.
-	// Retained so that dashboards predating the primary family above
-	// continue to function; new consumers should target the primary
-	// family.
-	LegacyAdmittedCountPerTenant  *aggmetric.AggCounter
-	LegacyWaitTimeNanosPerTenant  *aggmetric.AggCounter
-	LegacyTokensUsedPerTenant     *aggmetric.AggCounter
-	LegacyTokensReturnedPerTenant *aggmetric.AggCounter
+	// TokensUsedPerTenant and TokensReturnedPerTenant track per-tenant
+	// token consumption and returns via adjustGroupUsedLocked. Together
+	// they give per-tenant visibility into token flow.
+	TokensUsedPerTenant     *aggmetric.AggCounter
+	TokensReturnedPerTenant *aggmetric.AggCounter
 }
 
 func makeCPUTimeTokenMetrics() *cpuTimeTokenMetrics {
-	// The primary family carries both labels so a single time series
-	// shape covers every group in every mode. Tenant 1 and rg 1 are
-	// distinct series — (tenant_id="1", group_id="0") vs
-	// (tenant_id="0", group_id="1") — even when both share an id
-	// value.
-	primaryBuilder := aggmetric.MakeBuilder("tenant_id", "group_id")
-	// The legacy per-tenant family uses a single tenant_id label
-	// (matching multitenant.TenantIDLabel and the convention used by
-	// other per-tenant AggCounters in CRDB) so dashboards filtering on
-	// tenant_id keep working.
-	legacyTenantBuilder := aggmetric.MakeBuilder("tenant_id")
+	// Two-label scheme: kind discriminates "tenant" vs "rg" so the same
+	// numeric ID in different namespaces (system tenant 1 vs rg 1) maps
+	// to distinct child time series; tenant_id stays a bare numeric
+	// string for parity with other per-tenant AggCounters
+	// (multitenant.TenantIDLabel) so dashboards filtering on tenant_id
+	// keep working.
+	b := aggmetric.MakeBuilder("kind", "tenant_id")
 	m := &cpuTimeTokenMetrics{
-		DampeningDeficitNanos: metric.NewCounter(cpuTimeTokenDampeningDeficitMeta),
-		Multiplier:            metric.NewGaugeFloat64(cpuTimeTokenMultiplierMeta),
-		UsageConsumed:         metric.NewCounter(cpuTimeTokensUsageConsumedMeta),
-		UsageReturned:         metric.NewCounter(cpuTimeTokensUsageReturnedMeta),
-
-		AdmittedCount:  primaryBuilder.Counter(cpuTimeTokenAdmittedCountMeta),
-		WaitTimeNanos:  primaryBuilder.Counter(cpuTimeTokenWaitTimeNanosMeta),
-		TokensUsed:     primaryBuilder.Counter(cpuTimeTokensUsedMeta),
-		TokensReturned: primaryBuilder.Counter(cpuTimeTokensReturnedMeta),
-
-		LegacyAdmittedCountPerTenant:  legacyTenantBuilder.Counter(cpuTimeTokenLegacyAdmittedCountPerTenantMeta),
-		LegacyWaitTimeNanosPerTenant:  legacyTenantBuilder.Counter(cpuTimeTokenLegacyWaitTimeNanosPerTenantMeta),
-		LegacyTokensUsedPerTenant:     legacyTenantBuilder.Counter(cpuTimeTokensLegacyUsedPerTenantMeta),
-		LegacyTokensReturnedPerTenant: legacyTenantBuilder.Counter(cpuTimeTokensLegacyReturnedPerTenantMeta),
+		DampeningDeficitNanos:   metric.NewCounter(cpuTimeTokenDampeningDeficitMeta),
+		Multiplier:              metric.NewGaugeFloat64(cpuTimeTokenMultiplierMeta),
+		TokensConsumed:          metric.NewCounter(cpuTimeTokensConsumedMeta),
+		TokensReturned:          metric.NewCounter(cpuTimeTokensReturnedMeta),
+		AdmittedCountPerTenant:  b.Counter(cpuTimeTokenAdmittedCountPerTenantMeta),
+		WaitTimeNanosPerTenant:  b.Counter(cpuTimeTokenWaitTimeNanosPerTenantMeta),
+		TokensUsedPerTenant:     b.Counter(cpuTimeTokensUsedPerTenantMeta),
+		TokensReturnedPerTenant: b.Counter(cpuTimeTokensReturnedPerTenantMeta),
 	}
 	for qual := burstQualification(0); qual < numBurstQualifications; qual++ {
 		exhMeta := metric.Metadata{

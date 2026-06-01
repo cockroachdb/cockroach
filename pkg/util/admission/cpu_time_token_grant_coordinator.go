@@ -238,18 +238,10 @@ func makeCPUTimeTokenGrantCoordinator(
 	wqOpts := makeWorkQueueOptions(KVWork)
 	wqOpts.mode = usesCPUTimeTokens
 	wqOpts.perGroupAggMetrics = &groupAggMetrics{
-		primary: &groupAggMetricSet{
-			admittedCount:  metrics.AdmittedCount,
-			waitTimeNanos:  metrics.WaitTimeNanos,
-			tokensUsed:     metrics.TokensUsed,
-			tokensReturned: metrics.TokensReturned,
-		},
-		legacy: &groupAggMetricSet{
-			admittedCount:  metrics.LegacyAdmittedCountPerTenant,
-			waitTimeNanos:  metrics.LegacyWaitTimeNanosPerTenant,
-			tokensUsed:     metrics.LegacyTokensUsedPerTenant,
-			tokensReturned: metrics.LegacyTokensReturnedPerTenant,
-		},
+		admittedCount:  metrics.AdmittedCountPerTenant,
+		waitTimeNanos:  metrics.WaitTimeNanosPerTenant,
+		tokensUsed:     metrics.TokensUsedPerTenant,
+		tokensReturned: metrics.TokensReturnedPerTenant,
 	}
 	wqOpts.configHolder = configHolder
 	wqOpts.groupKeyForWorkInfo = cpuTimeTokenGroupKeyForWorkInfo
