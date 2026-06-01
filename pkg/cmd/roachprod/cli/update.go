@@ -91,10 +91,10 @@ func DownloadLatestRoachprod(toFile string, branch string, osName string, arch s
 	if err != nil {
 		return errors.Wrapf(err, "unable to create destination file: %q", toFile)
 	}
+	defer func() { _ = f.Close() }()
 	if err := f.Chmod(0700); err != nil {
 		return errors.Wrapf(err, "unable to chmod destination file: %q", toFile)
 	}
-	defer func() { _ = f.Close() }()
 	if _, err := io.Copy(f, r); err != nil {
 		return errors.Wrapf(err, "unable to copy blob: %q to the destination file: %q", binObj.ObjectName(), toFile)
 	}
