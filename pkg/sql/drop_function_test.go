@@ -278,8 +278,9 @@ USE defaultdb;
 			expectedErr: `pq: cannot rename column "b" because function "f" depends on it`,
 		},
 		{
-			stmt:        "ALTER TABLE t ALTER COLUMN b TYPE STRING",
-			expectedErr: `pq: cannot alter type of column "b" because function "f" depends on it`,
+			stmt:           "ALTER TABLE t ALTER COLUMN b TYPE STRING",
+			expectedErr:    `pq: cannot alter type of column "b" because function "f" depends on it`,
+			dscExpectedErr: `pq: unimplemented: ALTER COLUMN TYPE requiring rewrite of on-disk data is currently not supported for columns that are part of an index`,
 		},
 		{
 			stmt:        "DROP INDEX t@t_idx_b",

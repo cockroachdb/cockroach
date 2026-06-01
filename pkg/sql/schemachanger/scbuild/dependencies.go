@@ -156,6 +156,13 @@ type CatalogReader interface {
 
 	// MustReadDescriptor looks up a descriptor by ID.
 	MustReadDescriptor(ctx context.Context, id descpb.ID) catalog.Descriptor
+
+	// AddSyntheticDescriptor injects a synthetic descriptor that overrides
+	// any real descriptor with the same ID for subsequent reads.
+	AddSyntheticDescriptor(ctx context.Context, desc catalog.Descriptor)
+
+	// ResetSyntheticDescriptors removes all injected synthetic descriptors.
+	ResetSyntheticDescriptors(ctx context.Context)
 }
 
 // TableReader implements functions for inspecting tables during the build phase,

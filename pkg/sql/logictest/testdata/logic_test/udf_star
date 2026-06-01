@@ -204,7 +204,14 @@ statement ok
 SELECT f_unqualified_twocol()
 
 # Altering a column type is not allowed in postgres or CRDB.
+onlyif config local-legacy-schema-changer
 statement error pgcode 2BP01 pq: cannot alter type of column "b" because function "f_unqualified_twocol" depends on it
+ALTER TABLE t_twocol ALTER b TYPE FLOAT;
+
+# The declarative schema changer revalidates the function body and gives a more
+# specific error explaining why the function would become invalid.
+skipif config local-legacy-schema-changer
+statement error pgcode 2BP01 pq: cannot alter type of column "b" because function "f_unqualified_twocol" would become invalid
 ALTER TABLE t_twocol ALTER b TYPE FLOAT;
 
 # TODO(#101934): Postgres allows column renaming when only referenced by UDFs.
