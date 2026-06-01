@@ -94,6 +94,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/scheduledjobs",
         "//pkg/scheduledjobs/schedulebase",
+        "//pkg/security/secretdir",
         "//pkg/security/username",
         "//pkg/server/status",
         "//pkg/server/telemetry",

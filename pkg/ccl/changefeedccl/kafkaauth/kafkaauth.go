@@ -12,14 +12,27 @@ import (
 
 	"github.com/IBM/sarama"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/security/secretdir"
 	"github.com/cockroachdb/errors"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
+// BuildContext is an extension point on saslMechanismBuilder for passing
+// resources beyond URI params, letting individual mechanisms pull their own
+// dependencies without dispatcher-level special-casing. Most builders ignore
+// it.
+type BuildContext struct {
+	// SecretReader exposes credential files from the directory configured by
+	// the --secret-directory node flag. nil when the flag is unset; builders
+	// that need file access are responsible for surfacing a clear error in
+	// that case.
+	SecretReader *secretdir.Reader
+}
+
 type saslMechanismBuilder interface {
 	name() string
 	validateParams(u *changefeedbase.SinkURL) error
-	build(u *changefeedbase.SinkURL) (SASLMechanism, error)
+	build(u *changefeedbase.SinkURL, bc BuildContext) (SASLMechanism, error)
 }
 
 // SASLMechanism is an interface for SASL mechanism instances, built from URLs,
@@ -49,12 +62,16 @@ func (r saslMechanismRegistry) register(b saslMechanismBuilder) {
 // Pick wraps registry.pick() which returns a saslMechanism for the given sink
 // URL, or ok=false if none is specified. It consumes all relevant query
 // parameters from `u`.
-func Pick(u *changefeedbase.SinkURL) (_ SASLMechanism, ok bool, _ error) {
-	return registry.pick(u)
+func Pick(
+	u *changefeedbase.SinkURL, secretReader *secretdir.Reader,
+) (_ SASLMechanism, ok bool, _ error) {
+	return registry.pick(u, BuildContext{SecretReader: secretReader})
 }
 
 // pick returns a saslMechanism for the given sink URL, or ok=false if none is specified.
-func (r saslMechanismRegistry) pick(u *changefeedbase.SinkURL) (_ SASLMechanism, ok bool, _ error) {
+func (r saslMechanismRegistry) pick(
+	u *changefeedbase.SinkURL, bc BuildContext,
+) (_ SASLMechanism, ok bool, _ error) {
 	if u == nil {
 		return nil, false, errors.AssertionFailedf("sink url is nil")
 	}
@@ -76,16 +93,23 @@ func (r saslMechanismRegistry) pick(u *changefeedbase.SinkURL) (_ SASLMechanism,
 		return nil, false, errors.Newf("param sasl_mechanism must be one of %s", r.allMechanismNames())
 	}
 
-	// Return slightly nicer errors for this common case.
+	// Return slightly nicer errors for these common cases. Without these, a
+	// mechanism-mismatched param would slip through to RemainingQueryParams
+	// in the kafka sink and surface as a generic "unknown query params" error.
 	if b.name() != sarama.SASLTypeOAuth && b.name() != proprietaryOAuthName {
 		if err := validateNoOAuthOnlyParams(u); err != nil {
+			return nil, false, err
+		}
+	}
+	if b.name() != proprietaryOAuthName {
+		if err := validateNoProprietaryOnlyParams(u); err != nil {
 			return nil, false, err
 		}
 	}
 	if err := b.validateParams(u); err != nil {
 		return nil, false, err
 	}
-	mech, err := b.build(u)
+	mech, err := b.build(u, bc)
 	if err != nil {
 		return nil, false, err
 	}
@@ -184,6 +208,24 @@ func validateNoOAuthOnlyParams(u *changefeedbase.SinkURL) error {
 	for _, p := range oauthOnlyParams {
 		if u.PeekParam(p) != "" {
 			return errors.Newf("%s is only a valid parameter for sasl_mechanism=OAUTHBEARER", p)
+		}
+	}
+	return nil
+}
+
+// validateNoProprietaryOnlyParams returns an error if the user has provided
+// PROPRIETARY_OAUTH parameters without setting
+// sasl_mechanism=PROPRIETARY_OAUTH.
+func validateNoProprietaryOnlyParams(u *changefeedbase.SinkURL) error {
+	proprietaryOnlyParams := []string{
+		changefeedbase.SinkParamSASLProprietaryResource,
+		changefeedbase.SinkParamSASLProprietaryClientAssertion,
+		changefeedbase.SinkParamSASLProprietaryClientAssertionType,
+	}
+
+	for _, p := range proprietaryOnlyParams {
+		if u.PeekParam(p) != "" {
+			return errors.Newf("%s is only a valid parameter for sasl_mechanism=%s", p, proprietaryOAuthName)
 		}
 	}
 	return nil

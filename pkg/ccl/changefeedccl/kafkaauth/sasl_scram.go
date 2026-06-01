@@ -30,7 +30,9 @@ func (s saslSCRAMSHA256Builder) validateParams(u *changefeedbase.SinkURL) error 
 }
 
 // build implements authMechanismBuilder.
-func (s saslSCRAMSHA256Builder) build(u *changefeedbase.SinkURL) (SASLMechanism, error) {
+func (s saslSCRAMSHA256Builder) build(
+	u *changefeedbase.SinkURL, _ BuildContext,
+) (SASLMechanism, error) {
 	handshake, err := consumeHandshake(u)
 	if err != nil {
 		return nil, err
@@ -59,7 +61,9 @@ func (s saslSCRAMSHA512Builder) validateParams(u *changefeedbase.SinkURL) error 
 }
 
 // build implements authMechanismBuilder.
-func (s saslSCRAMSHA512Builder) build(u *changefeedbase.SinkURL) (SASLMechanism, error) {
+func (s saslSCRAMSHA512Builder) build(
+	u *changefeedbase.SinkURL, _ BuildContext,
+) (SASLMechanism, error) {
 	handshake, err := consumeHandshake(u)
 	if err != nil {
 		return nil, err

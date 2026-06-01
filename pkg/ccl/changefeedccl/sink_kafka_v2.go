@@ -18,6 +18,7 @@ import (
 
 	"github.com/IBM/sarama"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/security/secretdir"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/cidr"
@@ -382,6 +383,7 @@ func makeKafkaSinkV2(
 	settings *cluster.Settings,
 	mb metricsRecorderBuilder,
 	knobs kafkaSinkV2Knobs,
+	secretReader *secretdir.Reader,
 ) (Sink, error) {
 	jsonConfig := sinkOpts.JSONConfig
 	batchCfg, retryOpts, err := getSinkConfigFromJson(jsonConfig, sinkJSONConfig{
@@ -403,7 +405,7 @@ func makeKafkaSinkV2(
 		return nil, errors.Errorf(`%s is not yet supported`, changefeedbase.SinkParamSchemaTopic)
 	}
 
-	clientOpts, err := buildKgoConfig(ctx, u, jsonConfig, mb(true).netMetrics())
+	clientOpts, err := buildKgoConfig(ctx, u, jsonConfig, mb(true).netMetrics(), secretReader)
 	if err != nil {
 		return nil, err
 	}
@@ -436,10 +438,11 @@ func buildKgoConfig(
 	u *changefeedbase.SinkURL,
 	jsonStr changefeedbase.SinkSpecificJSONConfig,
 	netMetrics *cidr.NetMetrics,
+	secretReader *secretdir.Reader,
 ) ([]kgo.Opt, error) {
 	var opts []kgo.Opt
 
-	dialConfig, err := buildDialConfig(u)
+	dialConfig, err := buildDialConfig(u, secretReader)
 	if err != nil {
 		return nil, err
 	}
