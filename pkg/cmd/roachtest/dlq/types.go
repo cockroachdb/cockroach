@@ -7,9 +7,27 @@ package dlq
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 )
+
+// Logger is the minimal logging surface used by the DLQ writer and replay
+// loop. Roachtest passes its runner logger; dlq-replay uses NewDefaultLogger.
+type Logger interface {
+	Printf(format string, args ...interface{})
+}
+
+// NewDefaultLogger returns a Logger that writes one line per call to stdout.
+func NewDefaultLogger() Logger {
+	return stdoutLogger{}
+}
+
+type stdoutLogger struct{}
+
+func (stdoutLogger) Printf(format string, args ...interface{}) {
+	fmt.Fprintf(os.Stdout, format+"\n", args...)
+}
 
 // Entry is the JSON-serializable record persisted to GCS when a GitHub
 // issue post fails. It captures all the data needed to reconstruct the

@@ -23,13 +23,6 @@ type PostFunc = func(
 	req issues.PostRequest, opts *issues.Options,
 ) (*issues.TestFailureIssue, error)
 
-// Logger is the minimal logging surface used by the DLQ writer and replay
-// loop. Roachtest passes its runner logger; dlq-replay passes a small stdout
-// adapter.
-type Logger interface {
-	Printf(format string, args ...interface{})
-}
-
 // persistFunc writes a single DLQ entry to durable storage. Extracted
 // as a function type so tests can swap in an in-memory implementation
 // without standing up a real GCS client.

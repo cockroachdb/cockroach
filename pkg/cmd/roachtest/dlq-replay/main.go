@@ -58,12 +58,13 @@ func main() {
 
 	fmt.Fprintf(os.Stdout, "dlq-replay starting: bucket=%s branch=%q skip_github_post=%v\n",
 		*flagBucket, *flagBranch, *flagSkipGitHubPost)
+	logger := dlq.NewDefaultLogger()
 
 	result, err := dlq.Replay(ctx, dlq.ReplayOptions{
 		Bucket:         client.Bucket(*flagBucket),
 		BranchFilter:   *flagBranch,
 		SkipGitHubPost: *flagSkipGitHubPost,
-		Logger:         stdoutLogger{},
+		Logger:         logger,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "replay failed: %v\n", err)
@@ -72,11 +73,4 @@ func main() {
 	if result.Failed > 0 {
 		os.Exit(1)
 	}
-}
-
-// stdoutLogger adapts stdout to dlq.ReplayOptions.Logger.
-type stdoutLogger struct{}
-
-func (stdoutLogger) Printf(format string, args ...interface{}) {
-	fmt.Fprintf(os.Stdout, format+"\n", args...)
 }
