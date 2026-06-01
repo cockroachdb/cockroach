@@ -109,6 +109,81 @@ func TestOnlineRestoreBasic(t *testing.T) {
 	})
 }
 
+func TestOnlineRestoreEncrypted(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	backuptestutils.EnableFastRestoreForTest(t)
+
+	ctx := context.Background()
+
+	const numAccounts = 1000
+	const passphrase = "encryption_passphrase = 'super-secret-password'"
+
+	tc, sqlDB, dir, cleanupFn := backupRestoreTestSetup(
+		t, singleNode, numAccounts, InitManualReplication,
+	)
+	defer cleanupFn()
+
+	_, rSQLDBNoEAR, cleanupFnNoEAR := backupRestoreTestSetupEmpty(
+		t, 1, dir, InitManualReplication,
+		base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				StoreSpecs: []base.StoreSpec{base.DefaultTestStoreSpec},
+			},
+		},
+	)
+	defer cleanupFnNoEAR()
+
+	externalStorage := backuptestutils.GetExternalStorageURI(
+		t, "nodelocal://1/encrypted-backup", "encrypted-backup", sqlDB, rSQLDBNoEAR,
+	)
+
+	sqlDB.Exec(t, fmt.Sprintf(
+		"BACKUP DATABASE data INTO '%s' WITH %s", externalStorage, passphrase,
+	))
+
+	testutils.RunTrueAndFalse(t, "blocking download",
+		func(t *testing.T, blockingDownload bool) {
+			restoreOpt := "EXPERIMENTAL DEFERRED COPY"
+			if blockingDownload {
+				restoreOpt = "EXPERIMENTAL COPY"
+			}
+
+			rSQLDBNoEAR.ExpectErr(t,
+				"requires encryption at rest to be enabled",
+				fmt.Sprintf(
+					"RESTORE DATABASE data FROM LATEST IN '%s' WITH %s, new_db_name = 'restored', %s",
+					externalStorage, passphrase, restoreOpt,
+				),
+			)
+
+			sqlDB.Exec(t, fmt.Sprintf(
+				"RESTORE DATABASE data FROM LATEST IN '%s' WITH %s, new_db_name = 'restored', %s",
+				externalStorage, passphrase, restoreOpt,
+			))
+
+			if !blockingDownload {
+				// Wait for the download job to complete. This is when Pebble
+				// actually downloads and decrypts the SSTs.
+				waitForLatestDownloadJobToSucceed(t, sqlDB)
+			}
+
+			// Verify the restored data matches the source after decryption.
+			fpSrc, err := fingerprintutils.FingerprintDatabase(
+				ctx, tc.Conns[0], "data", fingerprintutils.Stripped(),
+			)
+			require.NoError(t, err)
+			fpDst, err := fingerprintutils.FingerprintDatabase(
+				ctx, tc.Conns[0], "restored", fingerprintutils.Stripped(),
+			)
+			require.NoError(t, err)
+			require.NoError(t, fingerprintutils.CompareDatabaseFingerprints(fpSrc, fpDst))
+
+			sqlDB.Exec(t, "DROP DATABASE restored CASCADE")
+		})
+}
+
 func TestOnlineRestoreRecovery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

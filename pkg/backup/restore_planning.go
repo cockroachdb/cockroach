@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/revlog"
 	"github.com/cockroachdb/cockroach/pkg/revlog/restorerevlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -1923,6 +1924,27 @@ func checkBackupManifestVersionCompatability(
 	return nil
 }
 
+func allStoresEncrypted(
+	ctx context.Context, nodesStatusServer serverpb.OptionalNodesStatusServer,
+) (bool, error) {
+	ss, err := nodesStatusServer.OptionalNodesStatusServer()
+	if err != nil {
+		return false, err
+	}
+	resp, err := ss.ListNodesInternal(ctx, &serverpb.NodesRequest{})
+	if err != nil {
+		return false, err
+	}
+	for _, n := range resp.Nodes {
+		for _, s := range n.StoreStatuses {
+			if !s.Desc.Properties.Encrypted {
+				return false, nil
+			}
+		}
+	}
+	return true, nil
+}
+
 func doRestorePlan(
 	ctx context.Context,
 	restoreStmt *tree.Restore,
@@ -2006,6 +2028,17 @@ func doRestorePlan(
 	if err != nil {
 		return err
 	}
+	if restoreStmt.Options.OnlineImpl() && encryption != nil {
+		storesEncrypted, err := allStoresEncrypted(ctx, p.ExecCfg().NodesStatusServer)
+		if err != nil {
+			return err
+		}
+		if !storesEncrypted {
+			return errors.New(
+				"Restoring an encrypted backup with an online restore variant requires encryption at rest to be enabled",
+			)
+		}
+	}
 
 	// Check whether a revision log exists at the collection root. If so,
 	// adjust the end time to the latest backup in the chain and record
@@ -2064,10 +2097,6 @@ func doRestorePlan(
 	if restoreStmt.Options.OnlineImpl() {
 		if err := checkManifestsForOnlineCompat(ctx, p.ExecCfg().Settings, mainBackupManifests); err != nil {
 			return err
-		}
-		if encryption != nil {
-			return pgerror.Newf(pgcode.FeatureNotSupported,
-				"experimental online restore: encryption not supported")
 		}
 	}
 

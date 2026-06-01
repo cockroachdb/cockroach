@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	_ "github.com/cockroachdb/cockroach/pkg/backup/backupbase" // imported for cluster settings.
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -20,6 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -181,6 +185,9 @@ func StartBackupRestoreTestCluster(
 	}
 
 	setTestClusterDefaults(&opts.testClusterArgs, opts.dataDir, useDatabase)
+	if FastRestore {
+		setupEncryptionAtRest(t, &opts.testClusterArgs, clusterSize)
+	}
 	tc := testcluster.StartTestCluster(t, clusterSize, opts.testClusterArgs)
 	opts.initFunc(tc)
 
@@ -277,6 +284,50 @@ func setTestClusterDefaults(params *base.TestClusterArgs, dataDir string, useDat
 		params.ServerArgs.Knobs.UpgradeManager = &upgradebase.TestingKnobs{
 			SkipZoneConfigBootstrap: true,
 		}
+	}
+}
+
+func setupEncryptionAtRest(t testing.TB, params *base.TestClusterArgs, clusterSize int) {
+	if len(params.ServerArgs.StoreSpecs) > 0 || len(params.ServerArgsPerNode) > 0 {
+		return
+	}
+
+	// The key file holds a 32-byte key ID followed by the key itself; a 16-byte
+	// key selects AES-128.
+	const keyFile = "aes-128.key"
+	const key = "111111111111111111111111111111111234567890123456"
+
+	storeReg := fs.NewStickyRegistry()
+	serverKnobs, ok := params.ServerArgs.Knobs.Server.(*server.TestingKnobs)
+	if !ok {
+		serverKnobs = &server.TestingKnobs{}
+		params.ServerArgs.Knobs.Server = serverKnobs
+	}
+	serverKnobs.StickyVFSRegistry = storeReg
+
+	params.ServerArgsPerNode = make(map[int]base.TestServerArgs, clusterSize)
+	for i := 0; i < clusterSize; i++ {
+		stickyVFSID := fmt.Sprintf("encrypted-node%d", i+1)
+		f, err := storeReg.Get(stickyVFSID).Create(keyFile, fs.UnspecifiedWriteCategory)
+		require.NoError(t, err)
+		_, err = f.Write([]byte(key))
+		require.NoError(t, err)
+		require.NoError(t, f.Close())
+
+		storeSpec := base.DefaultTestStoreSpec
+		storeSpec.StickyVFSID = stickyVFSID
+		storeSpec.EncryptionOptions = &storageconfig.EncryptionOptions{
+			KeySource: storageconfig.EncryptionKeyFromFiles,
+			KeyFiles: &storageconfig.EncryptionKeyFiles{
+				CurrentKey: keyFile,
+				OldKey:     "plain",
+			},
+			RotationPeriod: time.Hour,
+		}
+
+		nodeArgs := params.ServerArgs
+		nodeArgs.StoreSpecs = []base.StoreSpec{storeSpec}
+		params.ServerArgsPerNode[i] = nodeArgs
 	}
 }
 

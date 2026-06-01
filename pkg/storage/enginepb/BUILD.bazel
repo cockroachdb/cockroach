@@ -9,6 +9,7 @@ proto_library(
         "key_registry.proto",
         "mvcc.proto",
         "mvcc3.proto",
+        "remote.proto",
         "rocksdb.proto",
         "stats.proto",
     ],
@@ -44,6 +45,7 @@ go_library(
         "mvcc.go",
         "mvcc3.go",
         "mvcc3_valueheader.go",
+        "remote.go",
     ],
     embed = [":enginepb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/storage/enginepb",
@@ -51,6 +53,7 @@ go_library(
     deps = [
         "//pkg/kv/kvnemesis/kvnemesisutil",
         "//pkg/util/hlc",
+        "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
     ],
