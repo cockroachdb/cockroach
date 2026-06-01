@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -38,6 +39,34 @@ func (p *planner) ResolveOIDFromString(
 func (p *planner) ResolveOIDFromOID(
 	ctx context.Context, resultType *types.T, toResolve *tree.DOid,
 ) (_ *tree.DOid, errSafeToIgnore bool, _ error) {
+	// Built-in functions live in pg_catalog, which is always implicitly in the
+	// search path, so Postgres's regprocout emits their bare name. Resolve them
+	// from the in-memory function registry rather than through resolveOID's
+	// catalog query, which determines visibility by looking up
+	// pg_catalog.pg_proc by name. The by-name population of that virtual table
+	// is built from builtins.AllBuiltinNames and omits private aggregate/window
+	// helper functions (e.g. final_regr_syy), so resolveOID's visibility check
+	// finds no match and spuriously schema-qualifies them; worse, when no
+	// database is in scope the query errors and the OID renders as a bare
+	// number. Resolving in memory keeps the cast deterministic regardless of
+	// session and execution context. User-defined functions still flow through
+	// resolveOID for search-path-aware schema qualification.
+	switch resultType.Oid() {
+	case oid.T_regproc, oid.T_regprocedure:
+		if !catid.IsOIDUserDefined(toResolve.Oid) {
+			name, _, err := p.ResolveFunctionByOID(ctx, toResolve.Oid)
+			if err != nil {
+				if errors.Is(err, tree.ErrRoutineUndefined) {
+					// The OID is in the built-in range but names no known
+					// function; leave the DOid nameless so it renders as the
+					// bare numeric OID, matching Postgres.
+					return tree.NewDOidWithType(toResolve.Oid, resultType), true, nil //nolint:returnerrcheck
+				}
+				return nil, false, err
+			}
+			return tree.NewDOidWithTypeAndName(toResolve.Oid, resultType, name.Object()), true, nil
+		}
+	}
 	return resolveOID(
 		ctx, p.Txn(),
 		p.InternalSQLTxn(),
