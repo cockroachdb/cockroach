@@ -241,22 +241,29 @@ func (b *appBatch) runPostAddTriggers(
 // (replicaAppBatch.Stage) calls the same underlying methods with replica-only
 // steps interleaved.
 //
+// The WriteBatch is staged in b.batch and committed later by the caller. Any
+// non-trivial side effects (AddSSTable / LinkExternalSSTable / Excise) are
+// applied directly to env.eng by runPostAddTriggers; they bypass b.batch and
+// take effect immediately, so the caller must ensure that any prior commands
+// in the same batch have been committed before applyEntry is called for a
+// non-trivial entry.
+//
 // Commands that fail CheckForcedErr are applied as empty no-ops: their
 // WriteBatch and ReplicatedEvalResult are zeroed out, but the applied index
 // still advances. This matches the online path's behavior.
 //
-// TODO(mira): Apply non-trivial side effects such as AddSSTable ingestions
-// (runPostAddTriggers). Currently only the WriteBatch is applied.
-//
 // The caller is responsible for calling addAppliedStateToBatch and committing
 // the batch after applying one or more entries.
-func (b *appBatch) applyEntry(ctx context.Context, cmd *replicatedCmd) error {
+func (b *appBatch) applyEntry(ctx context.Context, cmd *replicatedCmd, env postAddEnv) error {
 	fr, err := b.assertAndCheckCommand(ctx, &cmd.ReplicatedCmd, false /* isLocal */)
 	if err != nil {
 		return err
 	}
 	b.toCheckedCmd(ctx, &cmd.ReplicatedCmd, fr)
 	if err := b.addWriteBatch(ctx, cmd); err != nil {
+		return err
+	}
+	if err := b.runPostAddTriggers(ctx, &cmd.ReplicatedCmd, env); err != nil {
 		return err
 	}
 	b.stageTrivialResult(&cmd.ReplicatedCmd, fr)
@@ -322,6 +329,9 @@ type replayBatch struct {
 	// cmd is reused across ApplyEntry calls. Decode resets all fields before
 	// populating, so no state leaks between entries.
 	cmd replicatedCmd
+	// env carries the dependencies needed to apply non-trivial side effects
+	// (AddSSTable, LinkExternalSSTable, Excise) directly to the state engine.
+	env postAddEnv
 }
 
 // AppliedIndex implements kvstorage.ReplayBatch.
@@ -329,12 +339,18 @@ func (rb *replayBatch) AppliedIndex() kvpb.RaftIndex {
 	return rb.ab.state.RaftAppliedIndex
 }
 
-// ApplyEntry implements kvstorage.ReplayBatch.
+// Sideloaded implements kvstorage.ReplayBatch.
+func (rb *replayBatch) Sideloaded() logstore.SideloadStorage {
+	return rb.env.sideloaded
+}
+
+// ApplyEntry implements kvstorage.ReplayBatch. Sideloaded payloads must
+// already be inlined by the caller before applying the entry.
 func (rb *replayBatch) ApplyEntry(ctx context.Context, ent raftpb.Entry) (bool, error) {
 	if err := rb.cmd.Decode(&ent); err != nil {
 		return false, err
 	}
-	if err := rb.ab.applyEntry(ctx, &rb.cmd); err != nil {
+	if err := rb.ab.applyEntry(ctx, &rb.cmd, rb.env); err != nil {
 		return false, err
 	}
 	return rb.cmd.IsTrivial(), nil
@@ -360,7 +376,10 @@ func (rb *replayBatch) Close() {
 // The state engine (not a snapshot) must be passed so that reads see writes
 // committed by previous replay batches.
 func MakeNewReplayBatchFn(
-	stateEng storage.Engine, bf *kvstorage.BatchFactory,
+	st *cluster.Settings,
+	stateEng storage.Engine,
+	bf *kvstorage.BatchFactory,
+	bulkLimiter *rate.Limiter,
 ) kvstorage.NewReplayBatchFn {
 	return func(
 		ctx context.Context, rangeID roachpb.RangeID, startKey roachpb.RKey,
@@ -376,12 +395,23 @@ func MakeNewReplayBatchFn(
 		if err != nil {
 			return nil, err
 		}
+		// DiskSideloadStorage is used both to inline sideloaded payloads (via
+		// Sideloaded()) and to ingest AddSSTable payloads (via runPostAddTriggers)
+		sideloaded := logstore.NewDiskSideloadStorage(
+			st, rangeID, stateEng.GetAuxiliaryDir(), bulkLimiter, stateEng.Env(),
+		)
 		return &replayBatch{
 			ab: appBatch{
 				state:                  state,
 				batch:                  bf.NewBatch(),
 				sl:                     sl,
 				initialForceFlushIndex: state.ForceFlushIndex,
+			},
+			env: postAddEnv{
+				st:          st,
+				eng:         stateEng,
+				sideloaded:  sideloaded,
+				bulkLimiter: bulkLimiter,
 			},
 		}, nil
 	}
