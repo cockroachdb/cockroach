@@ -738,10 +738,15 @@ func (txn *Txn) scan(
 	isReverse bool,
 	str kvpb.KeyLockingStrengthType,
 	dur kvpb.KeyLockingDurabilityType,
+	opts ...ScanOption,
 ) ([]KeyValue, error) {
+	cfg := buildScanConfig(opts)
 	b := txn.NewBatch()
 	if maxRows > 0 {
 		b.Header.MaxSpanRequestKeys = maxRows
+	}
+	if cfg.targetBytes > 0 {
+		b.Header.TargetBytes = cfg.targetBytes
 	}
 	b.Header.IsReverse = isReverse
 	b.scan(begin, end, isReverse, str, dur)
@@ -755,11 +760,15 @@ func (txn *Txn) scan(
 // The returned []KeyValue will contain up to maxRows elements (or all results
 // when zero is supplied).
 //
+// Use WithTargetBytes to set a byte limit on the response size. When both
+// maxRows and a byte limit are set, the scan stops as soon as either limit is
+// reached.
+//
 // key can be either a byte slice or a string.
 func (txn *Txn) Scan(
-	ctx context.Context, begin, end interface{}, maxRows int64,
+	ctx context.Context, begin, end interface{}, maxRows int64, opts ...ScanOption,
 ) ([]KeyValue, error) {
-	return txn.scan(ctx, begin, end, maxRows, false /* isReverse */, kvpb.NonLocking, kvpb.Invalid)
+	return txn.scan(ctx, begin, end, maxRows, false /* isReverse */, kvpb.NonLocking, kvpb.Invalid, opts...)
 }
 
 // ScanForUpdate retrieves the rows between begin (inclusive) and end
@@ -771,9 +780,9 @@ func (txn *Txn) Scan(
 //
 // key can be either a byte slice or a string.
 func (txn *Txn) ScanForUpdate(
-	ctx context.Context, begin, end interface{}, maxRows int64, dur kvpb.KeyLockingDurabilityType,
+	ctx context.Context, begin, end interface{}, maxRows int64, dur kvpb.KeyLockingDurabilityType, opts ...ScanOption,
 ) ([]KeyValue, error) {
-	return txn.scan(ctx, begin, end, maxRows, false /* isReverse */, kvpb.ForUpdate, dur)
+	return txn.scan(ctx, begin, end, maxRows, false /* isReverse */, kvpb.ForUpdate, dur, opts...)
 }
 
 // ScanForShare retrieves the rows between begin (inclusive) and end (exclusive)
@@ -785,9 +794,9 @@ func (txn *Txn) ScanForUpdate(
 //
 // key can be either a byte slice or a string.
 func (txn *Txn) ScanForShare(
-	ctx context.Context, begin, end interface{}, maxRows int64, dur kvpb.KeyLockingDurabilityType,
+	ctx context.Context, begin, end interface{}, maxRows int64, dur kvpb.KeyLockingDurabilityType, opts ...ScanOption,
 ) ([]KeyValue, error) {
-	return txn.scan(ctx, begin, end, maxRows, false /* isReverse */, kvpb.ForShare, dur)
+	return txn.scan(ctx, begin, end, maxRows, false /* isReverse */, kvpb.ForShare, dur, opts...)
 }
 
 // ReverseScan retrieves the rows between begin (inclusive) and end (exclusive)
@@ -796,11 +805,15 @@ func (txn *Txn) ScanForShare(
 // The returned []KeyValue will contain up to maxRows elements (or all results
 // when zero is supplied).
 //
+// Use WithTargetBytes to set a byte limit on the response size. When both
+// maxRows and a byte limit are set, the scan stops as soon as either limit is
+// reached.
+//
 // key can be either a byte slice or a string.
 func (txn *Txn) ReverseScan(
-	ctx context.Context, begin, end interface{}, maxRows int64,
+	ctx context.Context, begin, end interface{}, maxRows int64, opts ...ScanOption,
 ) ([]KeyValue, error) {
-	return txn.scan(ctx, begin, end, maxRows, true /* isReverse */, kvpb.NonLocking, kvpb.Invalid)
+	return txn.scan(ctx, begin, end, maxRows, true /* isReverse */, kvpb.NonLocking, kvpb.Invalid, opts...)
 }
 
 // ReverseScanForUpdate retrieves the rows between begin (inclusive) and end
@@ -812,9 +825,9 @@ func (txn *Txn) ReverseScan(
 //
 // key can be either a byte slice or a string.
 func (txn *Txn) ReverseScanForUpdate(
-	ctx context.Context, begin, end interface{}, maxRows int64, dur kvpb.KeyLockingDurabilityType,
+	ctx context.Context, begin, end interface{}, maxRows int64, dur kvpb.KeyLockingDurabilityType, opts ...ScanOption,
 ) ([]KeyValue, error) {
-	return txn.scan(ctx, begin, end, maxRows, true /* isReverse */, kvpb.ForUpdate, dur)
+	return txn.scan(ctx, begin, end, maxRows, true /* isReverse */, kvpb.ForUpdate, dur, opts...)
 }
 
 // ReverseScanForShare retrieves the rows between begin (inclusive) and end
@@ -826,9 +839,9 @@ func (txn *Txn) ReverseScanForUpdate(
 //
 // key can be either a byte slice or a string.
 func (txn *Txn) ReverseScanForShare(
-	ctx context.Context, begin, end interface{}, maxRows int64, dur kvpb.KeyLockingDurabilityType,
+	ctx context.Context, begin, end interface{}, maxRows int64, dur kvpb.KeyLockingDurabilityType, opts ...ScanOption,
 ) ([]KeyValue, error) {
-	return txn.scan(ctx, begin, end, maxRows, true /* isReverse */, kvpb.ForShare, dur)
+	return txn.scan(ctx, begin, end, maxRows, true /* isReverse */, kvpb.ForShare, dur, opts...)
 }
 
 // Iterate performs a paginated scan and applying the function f to every page.
