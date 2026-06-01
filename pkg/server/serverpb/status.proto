@@ -1247,6 +1247,19 @@ message ASHSample {
   // WorkloadType distinguishes the kind of workload (e.g., "STATEMENT",
   // "JOB", "SYSTEM", "UNKNOWN").
   string workload_type = 9;
+  // User is the SQL user that initiated the statement, resolved via
+  // the gateway node's ExecutionCache.
+  string user = 10;
+  // Database is the session's current database at execution time.
+  string database = 11;
+  // Query is the SQL statement text.
+  string query = 12;
+  // TxnID identifies the KV transaction the statement ran in.
+  bytes txn_id = 13 [
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "TxnID"
+  ];
 }
 
 // An error wrapper for ListActiveSessionHistory fan-out.
@@ -1283,6 +1296,32 @@ message AppNameMappingsRequest {
 message AppNameMappingsResponse {
   // mappings is a map from app name ID to the original app name string.
   map<uint64, string> mappings = 1;
+}
+
+// Request object for retrieving execution attributes from a node's
+// local execution cache.
+message ExecutionAttributesRequest {
+  // ids is the set of enrichment IDs to resolve. Only mappings for
+  // these IDs are returned in the response.
+  repeated uint64 ids = 1;
+}
+
+// ExecutionAttribute is a single resolved execution-attribute record.
+message ExecutionAttribute {
+  string user = 1;
+  string database = 2;
+  string query = 3;
+  bytes txn_id = 4 [
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "TxnID"
+  ];
+}
+
+// Response object for ExecutionAttributes.
+message ExecutionAttributesResponse {
+  // mappings is a map from enrichment ID to the execution attributes.
+  map<uint64, ExecutionAttribute> mappings = 1 [(gogoproto.nullable) = false];
 }
 
 // Request object for issuing a query cancel request.
@@ -2566,6 +2605,13 @@ service Status {
   // this node's local cache for the requested IDs.
   rpc AppNameMappings(AppNameMappingsRequest)
       returns (AppNameMappingsResponse) {}
+
+  // ExecutionAttributes retrieves execution attributes from this node's
+  // local ASH execution cache for the requested enrichment IDs. Used
+  // by remote ASH samplers to resolve attributes for samples whose
+  // gateway is this node.
+  rpc ExecutionAttributes(ExecutionAttributesRequest)
+      returns (ExecutionAttributesResponse) {}
 
   // CancelQuery cancels a SQL query given its ID.
   rpc CancelQuery(CancelQueryRequest) returns (CancelQueryResponse) {

@@ -1710,6 +1710,11 @@ func BenchmarkASH(b *testing.B) {
 
 							sqlRunner.Exec(b, `CREATE DATABASE bench`)
 							sqlRunner.Exec(b, `SET CLUSTER SETTING obs.ash.enabled = $1`, test.ashEnabled)
+							// Mirror obs.execution_cache.enabled to ash.enabled so the
+							// off case truly measures the no-feature baseline. Without
+							// this, the execution cache runs on every statement even
+							// when sampling is disabled, conflating measurements.
+							sqlRunner.Exec(b, `SET CLUSTER SETTING obs.execution_cache.enabled = $1`, test.ashEnabled)
 							if test.ashEnabled {
 								sqlRunner.Exec(b, `SET CLUSTER SETTING obs.ash.sample_interval = $1`,
 									test.sampleInterval.String())

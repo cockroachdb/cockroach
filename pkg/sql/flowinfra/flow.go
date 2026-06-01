@@ -335,6 +335,7 @@ func NewFlowBase(
 	admissionInfo := admission.WorkInfo{TenantID: roachpb.SystemTenantID}
 	admissionInfo.WorkloadID = flowCtx.EvalCtx.WorkloadID
 	admissionInfo.AppNameID = flowCtx.EvalCtx.AppNameID
+	admissionInfo.EnrichmentID = flowCtx.EvalCtx.EnrichmentID
 	admissionInfo.GatewayNodeID = roachpb.NodeID(flowCtx.NodeID.SQLInstanceID())
 	admissionInfo.WorkloadType = flowCtx.EvalCtx.WorkloadType
 	if flowCtx.Txn == nil {
@@ -779,6 +780,7 @@ func MakeCPUHandle(
 	atGateway bool,
 	workloadID uint64,
 	appNameID uint64,
+	enrichmentID uint64,
 	gatewayNodeID roachpb.NodeID,
 ) (context.Context, *admission.SQLCPUHandle, *admission.GoroutineCPUHandle, error) {
 	var priority admissionpb.WorkPriority
@@ -797,6 +799,7 @@ func MakeCPUHandle(
 		CreateTime:    createTime,
 		WorkloadID:    workloadID,
 		AppNameID:     appNameID,
+		EnrichmentID:  enrichmentID,
 		GatewayNodeID: gatewayNodeID,
 	}, atGateway)
 	newCtx := admission.ContextWithSQLCPUHandle(ctx, cpuHandle)

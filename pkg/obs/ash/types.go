@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // WorkEventType categorizes the type of work event observed during ASH sampling.
@@ -56,7 +57,10 @@ type WorkloadInfo struct {
 	// enrichment_id field which will enable the ASH sampler to
 	// enrich samples with more workload context.
 	AppNameID uint64
-	// GatewayNodeID is the node that initiated the workload.
+	// EnrichmentID is the per-execution attribute cache key, populated
+	// on the gateway node by PutExecution. Zero means the execution was
+	// not enriched (feature disabled or earlier-version code path).
+	EnrichmentID  uint64
 	GatewayNodeID roachpb.NodeID
 	// WorkloadType distinguishes the kind of workload that WorkloadID
 	// represents, controlling how the sampler encodes the ID.
@@ -83,6 +87,15 @@ type ASHSample struct {
 	// AppName is the application name string. Set when the workload is from
 	// SQL execution.
 	AppName string
+	// User is the SQL user that initiated the statement, resolved via
+	// the gateway node's ExecutionCache.
+	User string
+	// Database is the session's current database at execution time.
+	Database string
+	// Query is the SQL statement text.
+	Query string
+	// TxnID identifies the KV transaction the statement ran in.
+	TxnID uuid.UUID
 	// WorkEventType categorizes the work by resource type (e.g., "CPU",
 	// "NETWORK", "LOCK").
 	WorkEventType WorkEventType

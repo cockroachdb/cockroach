@@ -667,9 +667,20 @@ func (ex *connExecutor) execStmtInOpenState(
 	appNameID := ash.GetOrStoreAppNameID(p.SessionData().ApplicationName)
 	p.extendedEvalCtx.AppNameID = appNameID
 	p.extendedEvalCtx.WorkloadType = workloadid.WorkloadTypeStatement
+	var txnID uuid.UUID
+	if p.txn != nil {
+		txnID = p.txn.ID()
+	}
+	enrichmentID := ash.PutExecution(&ex.server.cfg.Settings.SV, ash.ExecutionAttrs{
+		User:     p.SessionData().SessionUser().Normalized(),
+		Database: p.SessionData().Database,
+		Query:    stmt.SQL,
+		TxnID:    txnID,
+	})
+	p.extendedEvalCtx.EnrichmentID = enrichmentID
 	if p.txn != nil {
 		p.txn.SetWorkloadInfo(
-			uint64(ih.fingerprintId), appNameID, workloadid.WorkloadTypeStatement,
+			uint64(ih.fingerprintId), appNameID, enrichmentID, workloadid.WorkloadTypeStatement,
 		)
 	}
 
@@ -1704,9 +1715,20 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	appNameID2 := ash.GetOrStoreAppNameID(p.SessionData().ApplicationName)
 	p.extendedEvalCtx.AppNameID = appNameID2
 	p.extendedEvalCtx.WorkloadType = workloadid.WorkloadTypeStatement
+	var txnID2 uuid.UUID
+	if p.txn != nil {
+		txnID2 = p.txn.ID()
+	}
+	enrichmentID2 := ash.PutExecution(&ex.server.cfg.Settings.SV, ash.ExecutionAttrs{
+		User:     p.SessionData().SessionUser().Normalized(),
+		Database: p.SessionData().Database,
+		Query:    vars.stmt.SQL,
+		TxnID:    txnID2,
+	})
+	p.extendedEvalCtx.EnrichmentID = enrichmentID2
 	if p.txn != nil {
 		p.txn.SetWorkloadInfo(
-			uint64(ih.fingerprintId), appNameID2, workloadid.WorkloadTypeStatement,
+			uint64(ih.fingerprintId), appNameID2, enrichmentID2, workloadid.WorkloadTypeStatement,
 		)
 	}
 
@@ -2627,7 +2649,7 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) (retEr
 		txnFingerprintID := ex.extraTxnState.transactionStatementsHash.Sum()
 		appNameID := ash.GetOrStoreAppNameID(ex.sessionData().ApplicationName)
 		ex.state.mu.txn.SetWorkloadInfo(
-			txnFingerprintID, appNameID, workloadid.WorkloadTypeCommit,
+			txnFingerprintID, appNameID, 0 /* enrichmentID */, workloadid.WorkloadTypeCommit,
 		)
 	}
 
@@ -2931,6 +2953,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			ctx, cpuProvider, planner.extendedEvalCtx.Codec.TenantID, planner.txn, true, /* atGateway */
 			planner.extendedEvalCtx.WorkloadID,
 			planner.extendedEvalCtx.AppNameID,
+			planner.extendedEvalCtx.EnrichmentID,
 			roachpb.NodeID(planner.extendedEvalCtx.NodeID.SQLInstanceID()),
 		)
 		if err != nil {

@@ -274,6 +274,7 @@ func (f *BatchFlowCoordinator) Run(ctx context.Context) {
 			ash.WorkloadInfo{
 				WorkloadID:    f.flowCtx.EvalCtx.WorkloadID,
 				AppNameID:     f.flowCtx.EvalCtx.AppNameID,
+				EnrichmentID:  f.flowCtx.EvalCtx.EnrichmentID,
 				GatewayNodeID: gatewayNodeID,
 				WorkloadType:  f.flowCtx.EvalCtx.WorkloadType,
 			},

@@ -101,6 +101,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
@@ -10006,7 +10007,11 @@ CREATE TABLE crdb_internal.node_active_session_history (
   app_name         STRING,
   work_event_type  STRING NOT NULL,
   work_event       STRING NOT NULL,
-  goroutine_id     INT NOT NULL
+  goroutine_id     INT NOT NULL,
+  user_name        STRING,
+  database_name    STRING,
+  query            STRING,
+  txn_id           UUID
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		hasViewActivityOrhasViewActivityRedacted, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
@@ -10032,6 +10037,24 @@ CREATE TABLE crdb_internal.node_active_session_history (
 			if workloadType == "" {
 				workloadType = "UNKNOWN"
 			}
+			userDatum := tree.DNull
+			if sample.User != "" {
+				userDatum = tree.NewDString(sample.User)
+			}
+			dbDatum := tree.DNull
+			if sample.Database != "" {
+				dbDatum = tree.NewDString(sample.Database)
+			}
+			queryDatum := tree.DNull
+			if sample.Query != "" {
+				queryDatum = tree.NewDString(sample.Query)
+			}
+			txnIDDatum := tree.DNull
+			var emptyUUID uuid.UUID
+			if sample.TxnID != emptyUUID {
+				txnIDDatum = tree.NewDUuid(tree.DUuid{UUID: sample.TxnID})
+			}
+
 			if err := addRow(
 				sampleTime,
 				tree.NewDInt(tree.DInt(sample.NodeID)),
@@ -10042,6 +10065,10 @@ CREATE TABLE crdb_internal.node_active_session_history (
 				tree.NewDString(ash.WorkEventType(sample.WorkEventType).String()),
 				tree.NewDString(sample.WorkEvent),
 				tree.NewDInt(tree.DInt(sample.GoroutineID)),
+				userDatum,
+				dbDatum,
+				queryDatum,
+				txnIDDatum,
 			); err != nil {
 				return err
 			}
@@ -10067,7 +10094,11 @@ CREATE TABLE crdb_internal.cluster_active_session_history (
   app_name         STRING,
   work_event_type  STRING NOT NULL,
   work_event       STRING NOT NULL,
-  goroutine_id     INT NOT NULL
+  goroutine_id     INT NOT NULL,
+  user_name        STRING,
+  database_name    STRING,
+  query            STRING,
+  txn_id           UUID
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		hasViewActivityOrhasViewActivityRedacted, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
@@ -10093,6 +10124,24 @@ CREATE TABLE crdb_internal.cluster_active_session_history (
 			if workloadType == "" {
 				workloadType = "UNKNOWN"
 			}
+			userDatum := tree.DNull
+			if sample.User != "" {
+				userDatum = tree.NewDString(sample.User)
+			}
+			dbDatum := tree.DNull
+			if sample.Database != "" {
+				dbDatum = tree.NewDString(sample.Database)
+			}
+			queryDatum := tree.DNull
+			if sample.Query != "" {
+				queryDatum = tree.NewDString(sample.Query)
+			}
+			txnIDDatum := tree.DNull
+			var emptyUUID uuid.UUID
+			if sample.TxnID != emptyUUID {
+				txnIDDatum = tree.NewDUuid(tree.DUuid{UUID: sample.TxnID})
+			}
+
 			if err := addRow(
 				sampleTime,
 				tree.NewDInt(tree.DInt(sample.NodeID)),
@@ -10103,6 +10152,10 @@ CREATE TABLE crdb_internal.cluster_active_session_history (
 				tree.NewDString(ash.WorkEventType(sample.WorkEventType).String()),
 				tree.NewDString(sample.WorkEvent),
 				tree.NewDInt(tree.DInt(sample.GoroutineID)),
+				userDatum,
+				dbDatum,
+				queryDatum,
+				txnIDDatum,
 			); err != nil {
 				return err
 			}

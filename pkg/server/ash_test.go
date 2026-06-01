@@ -193,3 +193,94 @@ func TestASHVirtualTableAccessControl(t *testing.T) {
 		})
 	}
 }
+
+// TestASHSampleEnrichmentEndToEnd verifies that the per-execution
+// attribute enrichment pipeline (gateway cache → enrichment_id flow →
+// sampler resolution) populates user/database/query/txn_id columns in
+// the cluster ASH virtual table.
+func TestASHSampleEnrichmentEndToEnd(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Reset the global ASH sampler so that the server started below
+	// gets a fresh sampler goroutine — see comment on the same call
+	// in TestASHMultiTenantIsolation.
+	ash.ResetGlobalSamplerForTesting()
+
+	ctx := context.Background()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `SET CLUSTER SETTING obs.ash.enabled = true`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING obs.ash.sample_interval = '10ms'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING obs.execution_cache.enabled = true`)
+
+	sqlDB.Exec(t, `CREATE DATABASE enrichdb`)
+	sqlDB.Exec(t, `SET database = enrichdb`)
+	sqlDB.Exec(t, `SET application_name = 'enrichment_e2e'`)
+
+	// Drive a workload that exercises both SQL planner and KV layers.
+	// INSERT/UPSERT generates KV traffic (DistSenderRemote, ReplicaSend,
+	// KVEval) while also going through the planner (CPU, Optimize).
+	testutils.SucceedsSoon(t, func() error {
+		sqlDB.Exec(t, "CREATE TABLE IF NOT EXISTS probe (k INT PRIMARY KEY, v STRING)")
+		for i := 0; i < 100; i++ {
+			sqlDB.Exec(t, fmt.Sprintf(
+				"INSERT INTO probe VALUES (%d, 'enrichment_probe_%d') ON CONFLICT (k) DO UPDATE SET v=excluded.v", i, i))
+		}
+		sqlDB.Exec(t, "SELECT count(*), 'enrichment_probe_query' FROM probe")
+
+		// Planner-side: at least one CPU/Optimize sample for our query
+		// must have all four enrichment columns populated.
+		var (
+			user, database, query string
+			txnID                 []byte
+		)
+		plannerRow := db.QueryRow(`
+			SELECT user_name, database_name, query, txn_id
+			FROM crdb_internal.cluster_active_session_history
+			WHERE user_name IS NOT NULL
+			  AND database_name = 'enrichdb'
+			  AND query ILIKE '%enrichment_probe%'
+			LIMIT 1`)
+		if err := plannerRow.Scan(&user, &database, &query, &txnID); err != nil {
+			return errors.Wrap(err, "scanning enriched planner sample")
+		}
+		if user == "" || database == "" || query == "" || len(txnID) == 0 {
+			return errors.Newf(
+				"planner sample missing enrichment: user=%q db=%q query=%q txnID=%v",
+				user, database, query, txnID,
+			)
+		}
+		require.Equal(t, "root", user)
+		require.Equal(t, "enrichdb", database)
+		require.Contains(t, query, "enrichment_probe")
+
+		// KV-side: at least one ReplicaSend / DistSenderRemote / KVEval
+		// sample for the same workload must also be enriched. These run
+		// on the KV layer (tenant_id=1 in shared-process tenant setups)
+		// and exercise the BatchHeader.EnrichmentID → KV SetWorkState
+		// plumbing.
+		kvRow := db.QueryRow(`
+			SELECT user_name, database_name, query, txn_id, work_event
+			FROM crdb_internal.cluster_active_session_history
+			WHERE user_name IS NOT NULL
+			  AND database_name = 'enrichdb'
+			  AND query ILIKE '%enrichment_probe%'
+			  AND work_event IN ('ReplicaSend', 'DistSenderRemote', 'KVEval', 'ReplicaEvaluate')
+			LIMIT 1`)
+		var kvUser, kvDB, kvQuery, kvEvent string
+		var kvTxnID []byte
+		if err := kvRow.Scan(&kvUser, &kvDB, &kvQuery, &kvTxnID, &kvEvent); err != nil {
+			return errors.Wrap(err, "scanning enriched KV-side sample")
+		}
+		if kvUser == "" || kvDB == "" || kvQuery == "" || len(kvTxnID) == 0 {
+			return errors.Newf(
+				"KV-side sample (%s) missing enrichment: user=%q db=%q query=%q txnID=%v",
+				kvEvent, kvUser, kvDB, kvQuery, kvTxnID,
+			)
+		}
+		return nil
+	})
+}
