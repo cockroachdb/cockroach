@@ -33,6 +33,7 @@ targets:
           os-volume-size: 100
           username: drt
           lifetime: 8760h
+          label: usage=scale_test
           gce-image: "ubuntu-2204-jammy-v20240319"
       - command: sync
         flags:
@@ -89,6 +90,7 @@ targets:
           os-volume-size: 100
           username: workload
           lifetime: 8760h
+          label: usage=scale_test
         on_rollback:
           - command: destroy
             args:
