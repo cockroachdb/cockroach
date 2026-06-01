@@ -2350,17 +2350,11 @@ func doRestorePlan(
 		return errors.Wrapf(err, "function descriptor rewrite failed")
 	}
 
-	encodedTables := make([]*descpb.TableDescriptor, len(tables))
-	for i, table := range tables {
-		encodedTables[i] = table.TableDesc()
-	}
-
 	restoreDetails := jobspb.RestoreDetails{
 		EndTime:            endTime,
 		DescriptorRewrites: descriptorRewrites,
 		URIs:               defaultURIs,
 		BackupLocalityInfo: localityInfo,
-		TableDescs:         encodedTables,
 		Tenants:            tenants,
 		OverrideDB:         overrideDBName,
 		DescriptorCoverage: restoreStmt.DescriptorCoverage,
