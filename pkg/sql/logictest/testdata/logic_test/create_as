@@ -688,3 +688,100 @@ forks   30  1
 spoons  10  1
 
 subtest end
+
+subtest with_no_data
+
+statement ok
+CREATE TABLE src (id INT PRIMARY KEY, name STRING, amount DECIMAL)
+
+statement ok
+INSERT INTO src VALUES (1, 'a', 1.5), (2, 'b', 2.5), (3, 'c', 3.5)
+
+# WITH NO DATA creates an empty, ordinary table: the AS query is planned to
+# derive column types but is not executed, so no rows are copied. Unlike a
+# materialized view created WITH NO DATA, the table is immediately usable.
+#
+# schema_locked is set explicitly so that the SHOW CREATE TABLE output below is
+# identical across configs (the local-legacy-schema-changer config disables
+# schema_locked by default).
+statement ok
+CREATE TABLE nodata WITH (schema_locked = true) AS SELECT id, name, amount FROM src WITH NO DATA
+
+# The table is immediately selectable and empty (no REFRESH required).
+query I
+SELECT count(*) FROM nodata
+----
+0
+
+# Column types and (silent) nullability are derived from the AS query.
+query TTB colnames
+SELECT column_name, data_type, is_nullable
+FROM [SHOW COLUMNS FROM nodata]
+WHERE column_name != 'rowid'
+ORDER BY column_name
+----
+column_name  data_type  is_nullable
+amount       DECIMAL    true
+id           INT8       true
+name         STRING     true
+
+# A WITH NO DATA table behaves like any other table for subsequent writes.
+statement ok
+INSERT INTO nodata VALUES (10, 'x', 9.5)
+
+query ITR
+SELECT id, name, amount FROM nodata ORDER BY id
+----
+10  x  9.5
+
+# WITH NO DATA supports an explicit column-name list.
+statement ok
+CREATE TABLE nodata_cols (a, b) AS SELECT id, name FROM src WITH NO DATA
+
+query I
+SELECT count(*) FROM nodata_cols
+----
+0
+
+query TT colnames
+SELECT column_name, data_type
+FROM [SHOW COLUMNS FROM nodata_cols]
+WHERE column_name != 'rowid'
+ORDER BY column_name
+----
+column_name  data_type
+a            INT8
+b            STRING
+
+# WITH NO DATA works with VALUES sources too.
+statement ok
+CREATE TABLE nodata_values (item, quantity) AS VALUES ('cups', 10), ('plates', 15) WITH NO DATA
+
+query I
+SELECT count(*) FROM nodata_values
+----
+0
+
+# WITH DATA is the default and populates the table.
+statement ok
+CREATE TABLE withdata AS SELECT id, name, amount FROM src WITH DATA
+
+query I
+SELECT count(*) FROM withdata
+----
+3
+
+# SHOW CREATE TABLE renders a WITH NO DATA table as an ordinary table (with the
+# hidden rowid primary key), not as a refresh-required relation.
+query TT
+SHOW CREATE TABLE nodata
+----
+nodata  CREATE TABLE public.nodata (
+          id INT8 NULL,
+          name STRING NULL,
+          amount DECIMAL NULL,
+          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+          CONSTRAINT nodata_pkey PRIMARY KEY (rowid ASC)
+        ) WITH (schema_locked = true);
+
+subtest end
