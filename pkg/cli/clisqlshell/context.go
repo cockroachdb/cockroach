@@ -52,6 +52,39 @@ type Context struct {
 	// CertsDir is an extra directory to look for client certs in,
 	// when the \c command is used.
 	CertsDir string
+
+	// DisableHistory, if true, suppresses persistent shell history.
+	// When set, no history file is created or read, even in
+	// interactive mode. Equivalent to (but more explicit than)
+	// leaving the internal histFile unset.
+	DisableHistory bool
+
+	// InterruptCh, if non-nil, replaces the SIGINT-based interrupt
+	// handler. The embedder writes to this channel to request
+	// cancellation of a running query. When no query is running, writes
+	// are silently ignored — the embedder is responsible for shell
+	// lifetime (e.g. closing the input). Mutually exclusive with the
+	// default signal handler: when set, signal.Notify is not called.
+	InterruptCh <-chan struct{}
+
+	// DisableUnsafeCmds, if true, restricts the dispatcher to the
+	// embedder-safe allow-list (see embedderSafeCmds in sql.go).
+	// Commands outside that set are rejected — most importantly the
+	// ones that touch the local filesystem or shell out (\!, \|, \i,
+	// \ir, \o, and \e for the external editor), but the gate is
+	// fail-closed and also rejects any future or unknown metacommand
+	// that has not been explicitly opted in. Embedders that run the
+	// shell inside a privileged service process must set this;
+	// otherwise any user who opens a session can execute commands
+	// with the service's UID and read or write its filesystem.
+	DisableUnsafeCmds bool
+
+	// DisablePasswordCmd, if true, causes the shell to refuse the
+	// \password metacommand. \password is harmless on the server side
+	// — it issues a SQL ALTER USER ... WITH PASSWORD statement — but
+	// the password is typed into the shell session, which is not
+	// always desirable in an embedded context.
+	DisablePasswordCmd bool
 }
 
 // internalContext represents the internal configuration state of the

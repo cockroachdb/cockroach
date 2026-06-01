@@ -22,6 +22,7 @@ type editor interface {
 
 type sqlShell interface {
 	enableDebug() bool
+	externalEditorAllowed() bool
 	inCopy() bool
 	runShowCompletions(sql string, offset int) (rows [][]string, err error)
 	serverSideParse(sql string) (string, error)
