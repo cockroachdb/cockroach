@@ -126,15 +126,9 @@ message HardState {
 // respect to joint consensus.
 enum ConfChangeTransition {
   // Automatically use the simple protocol if possible, otherwise fall back
-  // to ConfChangeJointImplicit. Most applications will want to use this.
+  // to joint consensus.
   ConfChangeTransitionAuto          = 0;
-  // Use joint consensus unconditionally, and transition out of them
-  // automatically (by proposing a zero configuration change).
-  //
-  // This option is suitable for applications that want to minimize the time
-  // spent in the joint configuration and do not store the joint configuration
-  // in the state machine (outside of InitialState).
-  ConfChangeTransitionJointImplicit = 1;
+  reserved 1;
   // Use joint consensus and remain in the joint configuration until the
   // application proposes a no-op configuration change. This is suitable for
   // applications that want to explicitly control the transitions, for example
@@ -154,9 +148,7 @@ message ConfState {
   // These peers are necessarily currently in voters (or they would have been
   // added to the incoming config right away).
   repeated uint64 learners_next     = 4 [(gogoproto.casttype) = "PeerID"];
-  // If set, the config is joint and Raft will automatically transition into
-  // the final config (i.e. remove the outgoing config) when this is safe.
-  optional bool   auto_leave        = 5 [(gogoproto.nullable) = false];
+  reserved 5;
 }
 
 // TODO(arul): In the future, consider renaming all of these to be suffixed with
