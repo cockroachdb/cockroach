@@ -353,6 +353,12 @@ func (p *ldrCoordinatorProcessor) runScheduleAndRoute(ctx context.Context) error
 
 				lockSet, err := p.lockSynthesizer.DeriveLocks(ctx, envelope)
 				if err != nil {
+					if errors.Is(err, txnlock.ErrApplyCycle) {
+						return &txnapply.ReplicationError{
+							Err:       err,
+							Timestamp: batch.transactions[i].TxnID.Timestamp,
+						}
+					}
 					return errors.Wrap(err, "deriving locks")
 				}
 
