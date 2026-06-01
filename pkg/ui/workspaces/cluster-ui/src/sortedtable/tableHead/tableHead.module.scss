@@ -21,6 +21,9 @@
   &__row--header {
     border-bottom: 1px solid $colors--neutral-3;
     height: $line-height--x-large;
+    position: sticky;
+    top: 0;
+    z-index: 1;
     .column-title {
       border-bottom: 1px dashed $colors--neutral-5;
     }
