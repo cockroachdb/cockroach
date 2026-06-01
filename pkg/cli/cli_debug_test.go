@@ -6,14 +6,19 @@
 package cli
 
 import (
+	gohex "encoding/hex"
 	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -116,4 +121,21 @@ func TestDebugDecodeKeys(t *testing.T) {
 			require.Contains(t, out, "\n"+d.result+"\n")
 		})
 	}
+
+	t.Run("lock-table-engine-key", func(t *testing.T) {
+		u := uuid.Must(uuid.FromString("6ba7b810-9dad-11d1-80b4-00c04fd430c8"))
+		lk := storage.LockTableKey{Key: roachpb.Key("foo"), Strength: lock.Shared, TxnUUID: u}
+		ek, _ := lk.ToEngineKey(nil)
+		lockHex := gohex.EncodeToString(ek.Encode())
+		out, err := TestCLI{}.RunWithCaptureArgs([]string{
+			"debug",
+			"decode-key",
+			"--encoding",
+			"hex",
+			fmt.Sprintf("--user-key=%t", false),
+			lockHex,
+		})
+		require.NoError(t, err)
+		require.Contains(t, out, "\n"+fmt.Sprint(lk)+"\n")
+	})
 }
