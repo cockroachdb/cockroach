@@ -683,6 +683,11 @@ func (ov *optView) CollectTypes(ord int) (descpb.IDs, error) {
 	return collectTypes(col)
 }
 
+// Owner is part of the cat.View interface.
+func (ov *optView) Owner() username.SQLUsername {
+	return ov.desc.GetPrivileges().Owner()
+}
+
 // optSequence is a wrapper around catalog.TableDescriptor that
 // implements the cat.Object and cat.DataSource interfaces.
 type optSequence struct {

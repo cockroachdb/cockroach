@@ -728,6 +728,11 @@ func (tv *View) CollectTypes(ord int) (descpb.IDs, error) {
 	return nil, nil
 }
 
+// Owner is part of the cat.View interface.
+func (tv *View) Owner() username.SQLUsername {
+	return username.MakeSQLUsernameFromPreNormalizedString("root")
+}
+
 // Table implements the cat.Table interface for testing purposes.
 type Table struct {
 	TabID      cat.StableID

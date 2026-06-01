@@ -48,9 +48,11 @@ func (b *Builder) buildUDF(
 	}
 
 	// Check for execution privileges for user-defined overloads. Built-in
-	// overloads do not need to be checked.
+	// overloads do not need to be checked. Use checkExecutePrivilegeUser rather
+	// than checkPrivilegeUser so that views (which override checkPrivilegeUser
+	// to the view owner) still check EXECUTE against the invoker.
 	if o.Type == tree.UDFRoutine {
-		if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid, b.catalog.GetCurrentUser()); err != nil {
+		if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid, b.checkExecutePrivilegeUser()); err != nil {
 			panic(err)
 		}
 	}
@@ -177,8 +179,10 @@ func (b *Builder) resolveProcedureDefinition(
 		}
 	}
 
-	// Check for execution privileges.
-	if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid, b.catalog.GetCurrentUser()); err != nil {
+	// Check for execution privileges. Use checkExecutePrivilegeUser rather
+	// than checkPrivilegeUser so that views (which override checkPrivilegeUser
+	// to the view owner) still check EXECUTE against the invoker.
+	if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid, b.checkExecutePrivilegeUser()); err != nil {
 		panic(err)
 	}
 	return f, def
