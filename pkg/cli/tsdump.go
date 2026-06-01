@@ -57,6 +57,7 @@ var debugTimeSeriesDumpOpts = struct {
 	noOfUploadWorkers      int
 	retryFailedRequests    bool
 	disableDeltaProcessing bool
+	metricsListFile        string // file containing explicit list of metrics to dump
 }{
 	format:                 tsDumpText,
 	from:                   timestampValue{},
@@ -176,9 +177,34 @@ will then convert it to the --format requested in the current invocation.
 
 			target, _ := addr.AddrWithDefaultLocalhost(serverCfg.AdvertiseAddr)
 			adminClient := conn.NewAdminClient()
-			names, err := serverpb.GetInternalTimeseriesNamesFromServer(ctx, adminClient)
+
+			var names []string
+			var filter []serverpb.MetricsFilterEntry
+			if debugTimeSeriesDumpOpts.metricsListFile != "" {
+				// Use explicit metrics list from file
+				filter, err = readMetricsListFile(debugTimeSeriesDumpOpts.metricsListFile)
+				if err != nil {
+					return err
+				}
+			}
+			var stats serverpb.FilterStats
+			names, stats, err = serverpb.GetInternalTimeseriesNamesFromServer(ctx, adminClient, filter)
 			if err != nil {
 				return err
+			}
+			if debugTimeSeriesDumpOpts.metricsListFile != "" {
+				// Print warnings for unmatched literal metric names
+				for _, literal := range stats.UnmatchedLiterals {
+					fmt.Fprintf(os.Stderr, "Warning: metric '%s' not found (check for typos or outdated metric names)\n", literal)
+				}
+				// Print regex match counts for user feedback
+				for pattern, count := range stats.RegexMatchCounts {
+					if count > 0 {
+						fmt.Fprintf(os.Stderr, "Pattern '%s' matched %d metrics\n", pattern, count)
+					} else {
+						fmt.Fprintf(os.Stderr, "Warning: pattern '%s' matched no metrics\n", pattern)
+					}
+				}
 			}
 			req := &tspb.DumpRequest{
 				StartNanos: time.Time(debugTimeSeriesDumpOpts.from).UnixNano(),
@@ -666,6 +692,81 @@ func (w defaultTSWriter) Emit(data *tspb.TimeSeriesData) error {
 		fmt.Fprintf(w.w, "%v %v\n", d.TimestampNanos, d.Value)
 	}
 	return nil
+}
+
+// regexMetaChars contains characters that indicate a line is a regex pattern
+// rather than a literal metric name. Metric names only contain alphanumeric
+// characters, dots, underscores, and hyphens.
+var regexMetaChars = regexp.MustCompile(`[*+?^$|()\[\]{}\\]`)
+
+// isRegexPattern returns true if the line contains regex metacharacters,
+// indicating it should be treated as a regex pattern rather than a literal name.
+func isRegexPattern(line string) bool {
+	return regexMetaChars.MatchString(line)
+}
+
+// readMetricsListFile reads a file containing metric names or regex patterns (one per line).
+// Lines starting with # are treated as comments and skipped. Inline comments
+// (text after #) are also stripped. Empty lines are skipped. If metric names
+// include cr.node., cr.store., or cockroachdb. prefixes, they are stripped.
+// Lines containing regex metacharacters (*+?^$|()[]{}\) are automatically
+// detected and treated as regex patterns.
+// Duplicate entries are removed. Returns entries without any prefix.
+func readMetricsListFile(filePath string) ([]serverpb.MetricsFilterEntry, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to open metrics list file %s", filePath)
+	}
+	defer file.Close()
+
+	seen := make(map[string]struct{})
+	var entries []serverpb.MetricsFilterEntry
+	scanner := bufio.NewScanner(file)
+	lineNum := 0
+	for scanner.Scan() {
+		lineNum++
+		line := scanner.Text()
+
+		// Strip inline comments (anything after #)
+		if idx := strings.Index(line, "#"); idx >= 0 {
+			line = line[:idx]
+		}
+		line = strings.TrimSpace(line)
+
+		// Skip empty lines
+		if line == "" {
+			continue
+		}
+
+		// Auto-detect if this is a regex pattern based on metacharacters
+		isRegex := isRegexPattern(line)
+		if isRegex {
+			// Validate the regex - if invalid, warn and skip this line
+			if _, err := regexp.Compile(line); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: invalid regex pattern on line %d, skipping: %s (%v)\n", lineNum, line, err)
+				continue
+			}
+		} else {
+			// Strip common prefixes if present (cr.node., cr.store., cockroachdb.)
+			line = strings.TrimPrefix(line, "cr.node.")
+			line = strings.TrimPrefix(line, "cr.store.")
+			line = strings.TrimPrefix(line, "cockroachdb.")
+		}
+
+		// Skip duplicates
+		if _, exists := seen[line]; exists {
+			continue
+		}
+		seen[line] = struct{}{}
+		entries = append(entries, serverpb.MetricsFilterEntry{Value: line, IsRegex: isRegex})
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, errors.Wrapf(err, "error reading metrics list file %s", filePath)
+	}
+	if len(entries) == 0 {
+		return nil, errors.Newf("metrics list file %s contains no valid metric names or patterns", filePath)
+	}
+	return entries, nil
 }
 
 type tsDumpFormat int
