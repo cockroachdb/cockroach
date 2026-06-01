@@ -196,7 +196,7 @@ func backupRestoreRoundTrip(
 			t.L().Printf("starting backup %d", i+1)
 			collection, err := d.createBackupCollection(
 				ctx, t.L(), t, testRNG, bspec, bspec, "round-trip-test-backup",
-				true /* internalSystemsJobs */, false, /* isMultitenant */
+				true /* internalSystemsJobs */, false /* isMultitenant */, false, /* skipRevisionHistory */
 			)
 			if err != nil {
 				return err
@@ -514,7 +514,7 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 		t.L().Printf("starting backup")
 		collection, err := d.createBackupCollection(
 			ctx, t.L(), t, testRNG, bspec, bspec, "online-restore-recovery-backup",
-			true /* internalSystemsJobs */, false, /* isMultitenant */
+			true /* internalSystemsJobs */, false /* isMultitenant */, false, /* skipRevisionHistory */
 		)
 		if err != nil {
 			return err
