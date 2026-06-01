@@ -681,8 +681,9 @@ func TestClusterState(t *testing.T) {
 							add, remove, _ := parseChangeAddRemove(t, parts[1])
 							addTarget := roachpb.ReplicationTarget{NodeID: cs.stores[add].NodeID, StoreID: add}
 							removeTarget := roachpb.ReplicationTarget{NodeID: cs.stores[remove].NodeID, StoreID: remove}
-							rebalanceChanges := makeRebalanceReplicaChanges(
+							rebalanceChanges, ok := makeRebalanceReplicaChanges(
 								ctx, rangeID, rState.replicas, rState.load, addTarget, removeTarget)
+							require.True(t, ok, "remove target not found in replicas")
 							changes = append(changes, rebalanceChanges[:]...)
 						}
 					}
