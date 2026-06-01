@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/metrics"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -31,6 +32,8 @@ func newTxnWriter(t *testing.T, s serverutils.ApplicationLayerInterface) Transac
 		s.LeaseManager().(*lease.Manager),
 		s.Codec(),
 		s.ClusterSettings(),
+		metrics.MakeMetrics(0).(*metrics.Metrics),
+		"", /* metricsLabel */
 	)
 	require.NoError(t, err)
 	return writer

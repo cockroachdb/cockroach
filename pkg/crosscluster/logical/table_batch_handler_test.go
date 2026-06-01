@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/metrics"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnwriter"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
@@ -274,6 +275,8 @@ func newTxnBatchHandler(
 		s.LeaseManager().(*lease.Manager),
 		s.Codec(),
 		s.ClusterSettings(),
+		metrics.MakeMetrics(0).(*metrics.Metrics),
+		"", /* metricsLabel */
 	)
 	require.NoError(t, err)
 
