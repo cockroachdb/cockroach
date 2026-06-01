@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
@@ -179,6 +180,30 @@ type Builder struct {
 	// subqueryNameIdx helps generate unique subquery names during star
 	// expansion.
 	subqueryNameIdx int
+
+	// currentUser is the session user at the time the Builder was created. It
+	// is the default user for all privilege checks unless overridden by
+	// dataSourcePrivilegeUserOverride or executePrivilegeUserOverride.
+	currentUser username.SQLUsername
+
+	// dataSourcePrivilegeUserOverride, when set, overrides currentUser for
+	// data source (e.g., table, view) privilege checks. It is set in two
+	// cases:
+	//   1. Views: set to the view owner so that SELECT privilege on the
+	//      view's underlying tables is checked as the definer.
+	//   2. SECURITY DEFINER routines: set to the routine owner so that all
+	//      data source access within the routine body uses the definer's
+	//      privileges.
+	dataSourcePrivilegeUserOverride username.SQLUsername
+
+	// executePrivilegeUserOverride, when set, overrides currentUser for
+	// EXECUTE privilege checks on functions and procedures. This is separate
+	// from dataSourcePrivilegeUserOverride because views set
+	// dataSourcePrivilegeUserOverride to the view owner for table access,
+	// but EXECUTE privilege on functions called by the view should still be
+	// checked against the invoker, matching PostgreSQL behavior. SECURITY
+	// DEFINER routines set both override fields to the routine owner.
+	executePrivilegeUserOverride username.SQLUsername
 }
 
 // New creates a new Builder structure initialized with the given
@@ -203,6 +228,7 @@ func New(
 		semaCtx:        semaCtx,
 		evalCtx:        evalCtx,
 		catalog:        catalog,
+		currentUser:    catalog.GetCurrentUser(),
 	}
 }
 
@@ -551,6 +577,26 @@ func (b *Builder) maybeTrackUserDefinedTypeDepsForViews(texpr tree.TypedExpr) {
 			})
 		}
 	}
+}
+
+// checkPrivilegeUser returns the user whose privileges should be checked for
+// data source access. Returns dataSourcePrivilegeUserOverride if set, or
+// currentUser otherwise.
+func (b *Builder) checkPrivilegeUser() username.SQLUsername {
+	if b.dataSourcePrivilegeUserOverride.Undefined() {
+		return b.currentUser
+	}
+	return b.dataSourcePrivilegeUserOverride
+}
+
+// checkExecutePrivilegeUser returns the user whose EXECUTE privilege should be
+// checked for functions and procedures. Returns executePrivilegeUserOverride if
+// set, or currentUser otherwise.
+func (b *Builder) checkExecutePrivilegeUser() username.SQLUsername {
+	if b.executePrivilegeUserOverride.Undefined() {
+		return b.currentUser
+	}
+	return b.executePrivilegeUserOverride
 }
 
 // optTrackingTypeResolver is a wrapper around a TypeReferenceResolver that

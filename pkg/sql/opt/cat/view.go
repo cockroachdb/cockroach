@@ -8,6 +8,7 @@ package cat
 import (
 	"bytes"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
@@ -33,6 +34,10 @@ type View interface {
 	// IsSystemView returns true if this view is a system view (like
 	// crdb_internal.ranges).
 	IsSystemView() bool
+
+	// Owner returns the username of the view owner.
+	// Used to check view select privileges.
+	Owner() username.SQLUsername
 }
 
 // FormatView nicely formats a catalog view using a treeprinter for debugging
