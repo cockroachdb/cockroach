@@ -1267,6 +1267,18 @@ func (s *TestState) ValidateEnumTypeValueRemoval(
 	return nil
 }
 
+// ValidateDomainConstraint implements the validator interface.
+func (s *TestState) ValidateDomainConstraint(
+	ctx context.Context,
+	typeDesc catalog.TypeDescriptor,
+	constraintID descpb.ConstraintID,
+	override sessiondata.InternalExecutorOverride,
+) error {
+	s.LogSideEffectf("validate domain constraint #%d in type #%d",
+		constraintID, typeDesc.GetID())
+	return nil
+}
+
 func (s *TestState) ValidateForeignKeyConstraint(
 	ctx context.Context,
 	out catalog.TableDescriptor,

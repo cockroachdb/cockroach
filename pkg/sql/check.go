@@ -17,10 +17,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -82,6 +85,156 @@ func validateCheckExpr(
 		return nil, formattedCkExpr, err
 	}
 	return violatingRow, formattedCkExpr, nil
+}
+
+// ValidateDomainConstraint validates the given domain constraint against
+// every existing row in every column whose declared type is the domain.
+func ValidateDomainConstraint(
+	ctx context.Context,
+	typeDesc catalog.TypeDescriptor,
+	constraintID descpb.ConstraintID,
+	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
+	execOverride sessiondata.InternalExecutorOverride,
+) error {
+	// Validation queries use full table scans which we always want to
+	// distribute and partition across nodes (see issue 152859).
+	execOverride.AlwaysDistributeFullScans = true
+	execOverride.PreventPartitioningSoftLimitedScans = &sessiondata.False
+	return runHistoricalTxn.Exec(ctx, func(ctx context.Context, txn descs.Txn) error {
+		return validateDomainConstraint(ctx, txn, typeDesc, constraintID)
+	})
+}
+
+// validateDomainConstraint verifies that every existing row in every column
+// whose declared type is the given domain satisfies the constraint.
+//
+// It operates entirely on the current goroutine and is thus able to reuse an
+// existing kv.Txn safely.
+func validateDomainConstraint(
+	ctx context.Context,
+	txn descs.Txn,
+	typeDesc catalog.TypeDescriptor,
+	constraintID descpb.ConstraintID,
+) error {
+	domain := typeDesc.AsDomainTypeDescriptor()
+	if domain == nil {
+		return errors.AssertionFailedf(
+			"type descriptor %d is not a domain type", typeDesc.GetID(),
+		)
+	}
+
+	// Resolve the constraint: either the NOT NULL constraint or one of the
+	// CHECK constraints by ID. Capture the kind so the per-column scan can
+	// build the right WHERE clause.
+	var (
+		isNotNull bool
+		checkExpr string
+	)
+	if domain.IsNotNull() && domain.GetNotNullConstraintID() == constraintID {
+		isNotNull = true
+	} else {
+		found := false
+		for i, n := 0, domain.NumCheckConstraints(); i < n; i++ {
+			if domain.GetCheckConstraintID(i) == constraintID {
+				checkExpr = domain.GetCheckConstraintExpr(i)
+				found = true
+				break
+			}
+		}
+		if !found {
+			return errors.AssertionFailedf(
+				"constraint %d not found in domain type descriptor %d",
+				constraintID, typeDesc.GetID(),
+			)
+		}
+	}
+
+	// Validation queries use full table scans which we always want to
+	// distribute and partition across nodes (see issue 152859).
+	execOverride := sessiondata.NodeUserSessionDataOverride
+	execOverride.AlwaysDistributeFullScans = true
+	execOverride.PreventPartitioningSoftLimitedScans = &sessiondata.False
+
+	domainID := typeDesc.GetID()
+	for i, n := 0, typeDesc.NumReferencingDescriptors(); i < n; i++ {
+		refID := typeDesc.GetReferencingDescriptorID(i)
+		tbl, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).Get().Table(ctx, refID)
+		if err != nil {
+			return err
+		}
+		for _, col := range tbl.AccessibleColumns() {
+			colType := col.GetType()
+			if !colType.UserDefined() || typedesc.UserDefinedTypeOIDToID(colType.Oid()) != domainID {
+				continue
+			}
+			colName := tree.NameString(col.GetName())
+			var queryStr string
+			if isNotNull {
+				queryStr = fmt.Sprintf(
+					`SELECT 1 FROM [%d AS t] WHERE %s IS NULL LIMIT 1`,
+					tbl.GetID(), colName,
+				)
+			} else {
+				// Substitute VALUE in the CHECK expression with the column
+				// reference. Parse, rewrite, re-serialize so column quoting
+				// stays correct regardless of the original expression's
+				// formatting.
+				rewritten, err := domainCheckExprForColumn(checkExpr, col.GetName())
+				if err != nil {
+					return err
+				}
+				queryStr = fmt.Sprintf(
+					`SELECT 1 FROM [%d AS t] WHERE NOT (%s) LIMIT 1`,
+					tbl.GetID(), rewritten,
+				)
+			}
+			log.Dev.Infof(ctx, "validating domain constraint with query %q", queryStr)
+
+			row, err := txn.QueryRowEx(
+				ctx, "validate domain constraint", txn.KV(), execOverride, queryStr,
+			)
+			if err != nil {
+				return err
+			}
+			if len(row) == 0 {
+				continue
+			}
+			if isNotNull {
+				return pgerror.Newf(
+					pgcode.NotNullViolation,
+					"column %q of table %q contains null values that violate domain %s NOT NULL constraint",
+					col.GetName(), tbl.GetName(), typeDesc.GetName(),
+				)
+			}
+			return pgerror.Newf(
+				pgcode.CheckViolation,
+				"column %q of table %q contains a value that violates domain %s check constraint %q",
+				col.GetName(), tbl.GetName(), typeDesc.GetName(), checkExpr,
+			)
+		}
+	}
+	return nil
+}
+
+// domainCheckExprForColumn parses a domain CHECK expression and substitutes
+// VALUE references with a reference to the named column, returning the
+// re-serialized expression.
+func domainCheckExprForColumn(checkExpr, colName string) (string, error) {
+	expr, err := parser.ParseExpr(checkExpr)
+	if err != nil {
+		return "", err
+	}
+	colRef := &tree.ColumnItem{ColumnName: tree.Name(colName)}
+	expr, err = tree.SimpleVisit(expr, func(e tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		if schemaexpr.IsDomainValueRef(e) {
+			return false, colRef, nil
+		}
+		return true, e, nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return tree.Serialize(expr), nil
 }
 
 // matchFullUnacceptableKeyQuery generates and returns a query for rows that are

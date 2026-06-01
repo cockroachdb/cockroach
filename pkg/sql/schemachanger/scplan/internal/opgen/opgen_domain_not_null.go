@@ -15,32 +15,34 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_WRITE_ONLY,
-				emit(func(this *scpb.DomainNotNull) *scop.NotImplemented {
-					return notImplemented(this)
+				emit(func(this *scpb.DomainNotNull) *scop.AddDomainNotNull {
+					return &scop.AddDomainNotNull{
+						TypeID:       this.TypeID,
+						ConstraintID: this.ConstraintID,
+					}
 				}),
 			),
 			to(scpb.Status_VALIDATED,
-				emit(func(this *scpb.DomainNotNull) *scop.NotImplemented {
-					return notImplemented(this)
+				emit(func(this *scpb.DomainNotNull) *scop.ValidateDomainConstraint {
+					return &scop.ValidateDomainConstraint{
+						TypeID:       this.TypeID,
+						ConstraintID: this.ConstraintID,
+					}
 				}),
 			),
-			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.DomainNotNull) *scop.NotImplemented {
-					return notImplemented(this)
-				}),
-			),
+			to(scpb.Status_PUBLIC),
 		),
 		toAbsent(
 			scpb.Status_PUBLIC,
-			to(scpb.Status_VALIDATED,
-				emit(func(this *scpb.DomainNotNull) *scop.NotImplementedForPublicObjects {
-					return notImplementedForPublicObjects(this)
-				}),
-			),
+			to(scpb.Status_VALIDATED),
 			equiv(scpb.Status_WRITE_ONLY),
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.DomainNotNull) *scop.NotImplementedForPublicObjects {
-					return notImplementedForPublicObjects(this)
+				revertible(false),
+				emit(func(this *scpb.DomainNotNull) *scop.RemoveDomainNotNull {
+					return &scop.RemoveDomainNotNull{
+						TypeID:       this.TypeID,
+						ConstraintID: this.ConstraintID,
+					}
 				}),
 			),
 		),

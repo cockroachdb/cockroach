@@ -1388,3 +1388,84 @@ type RemoveEnumTypeValue struct {
 	PhysicalRepresentation []byte
 	LogicalRepresentation  string
 }
+
+// AddDomainNotNull sets the NOT NULL constraint on a domain type descriptor.
+type AddDomainNotNull struct {
+	immediateMutationOp
+	TypeID       descpb.ID
+	ConstraintID descpb.ConstraintID
+}
+
+// RemoveDomainNotNull removes the NOT NULL constraint from a domain type
+// descriptor.
+type RemoveDomainNotNull struct {
+	immediateMutationOp
+	TypeID       descpb.ID
+	ConstraintID descpb.ConstraintID
+}
+
+// SetDomainConstraintName sets the name of a constraint on a domain type
+// descriptor.
+type SetDomainConstraintName struct {
+	immediateMutationOp
+	TypeID       descpb.ID
+	ConstraintID descpb.ConstraintID
+	Name         string
+}
+
+// RemoveDomainConstraintName replaces a constraint's name on a domain type
+// descriptor with a placeholder.
+type RemoveDomainConstraintName struct {
+	immediateMutationOp
+	TypeID       descpb.ID
+	ConstraintID descpb.ConstraintID
+}
+
+// SetDomainDefault sets the default expression on a domain type descriptor.
+type SetDomainDefault struct {
+	immediateMutationOp
+	TypeID descpb.ID
+	Expr   catpb.Expression
+}
+
+// RemoveDomainDefault removes the default expression from a domain type
+// descriptor.
+type RemoveDomainDefault struct {
+	immediateMutationOp
+	TypeID descpb.ID
+}
+
+// AddDomainCheckConstraint adds a CHECK constraint to a domain type descriptor.
+type AddDomainCheckConstraint struct {
+	immediateMutationOp
+	TypeID       descpb.ID
+	ConstraintID descpb.ConstraintID
+	Expr         catpb.Expression
+	Validity     descpb.ConstraintValidity
+}
+
+// RemoveDomainCheckConstraint removes a CHECK constraint from a domain type
+// descriptor.
+type RemoveDomainCheckConstraint struct {
+	immediateMutationOp
+	TypeID       descpb.ID
+	ConstraintID descpb.ConstraintID
+}
+
+// MakeValidatedDomainCheckConstraintPublic flips the validity of a domain
+// CHECK constraint from ConstraintValidity_Validating to
+// ConstraintValidity_Validated, marking the constraint as fully enforced.
+type MakeValidatedDomainCheckConstraintPublic struct {
+	immediateMutationOp
+	TypeID       descpb.ID
+	ConstraintID descpb.ConstraintID
+}
+
+// MakePublicDomainCheckConstraintValidated flips the validity of a domain
+// CHECK constraint from ConstraintValidity_Validated to
+// ConstraintValidity_Dropping, in preparation for removal.
+type MakePublicDomainCheckConstraintValidated struct {
+	immediateMutationOp
+	TypeID       descpb.ID
+	ConstraintID descpb.ConstraintID
+}

@@ -195,6 +195,16 @@ type ImmediateMutationVisitor interface {
 	PromoteEnumTypeValue(context.Context, PromoteEnumTypeValue) error
 	DemoteEnumTypeValue(context.Context, DemoteEnumTypeValue) error
 	RemoveEnumTypeValue(context.Context, RemoveEnumTypeValue) error
+	AddDomainNotNull(context.Context, AddDomainNotNull) error
+	RemoveDomainNotNull(context.Context, RemoveDomainNotNull) error
+	SetDomainConstraintName(context.Context, SetDomainConstraintName) error
+	RemoveDomainConstraintName(context.Context, RemoveDomainConstraintName) error
+	SetDomainDefault(context.Context, SetDomainDefault) error
+	RemoveDomainDefault(context.Context, RemoveDomainDefault) error
+	AddDomainCheckConstraint(context.Context, AddDomainCheckConstraint) error
+	RemoveDomainCheckConstraint(context.Context, RemoveDomainCheckConstraint) error
+	MakeValidatedDomainCheckConstraintPublic(context.Context, MakeValidatedDomainCheckConstraintPublic) error
+	MakePublicDomainCheckConstraintValidated(context.Context, MakePublicDomainCheckConstraintValidated) error
 }
 
 // Visit is part of the ImmediateMutationOp interface.
@@ -1085,4 +1095,54 @@ func (op DemoteEnumTypeValue) Visit(ctx context.Context, v ImmediateMutationVisi
 // Visit is part of the ImmediateMutationOp interface.
 func (op RemoveEnumTypeValue) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.RemoveEnumTypeValue(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op AddDomainNotNull) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.AddDomainNotNull(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op RemoveDomainNotNull) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.RemoveDomainNotNull(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op SetDomainConstraintName) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetDomainConstraintName(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op RemoveDomainConstraintName) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.RemoveDomainConstraintName(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op SetDomainDefault) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetDomainDefault(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op RemoveDomainDefault) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.RemoveDomainDefault(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op AddDomainCheckConstraint) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.AddDomainCheckConstraint(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op RemoveDomainCheckConstraint) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.RemoveDomainCheckConstraint(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op MakeValidatedDomainCheckConstraintPublic) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.MakeValidatedDomainCheckConstraintPublic(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op MakePublicDomainCheckConstraintValidated) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.MakePublicDomainCheckConstraintValidated(ctx, op)
 }

@@ -6,13 +6,19 @@
 package scbuildstmt
 
 import (
+	"fmt"
 	"reflect"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/errors"
 )
@@ -109,31 +115,185 @@ func AlterDomain(b BuildCtx, n *tree.AlterDomain) {
 func alterDomainSetDefault(
 	b BuildCtx, tn *tree.TypeName, domainType *scpb.DomainType, t *tree.AlterDomainSetDefault,
 ) {
-	panic(pgerror.Newf(pgcode.FeatureNotSupported, "ALTER DOMAIN SET DEFAULT is not supported"))
+	typeID := domainType.TypeID
+	domainElts := b.QueryByID(typeID)
+	oldDefault := domainElts.FilterDomainDefault().NotToAbsent().MustGetZeroOrOneElement()
+
+	if t.Default == nil || t.Default == tree.DNull {
+		if oldDefault != nil {
+			b.Drop(oldDefault)
+		}
+		return
+	}
+
+	typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
+		b, t.Default, domainType.BaseTypeT.Type,
+		tree.ColumnDefaultExprInSetDefault,
+		b.SemaCtx(), volatility.Volatile, false, /* allowAssignmentCast */
+	)
+	if err != nil {
+		panic(pgerror.WithCandidateCode(err, pgcode.DatatypeMismatch))
+	}
+
+	typedExpr, err = schemaexpr.MaybeReplaceUDFNameWithOIDReferenceInTypedExpr(typedExpr)
+	if err != nil {
+		panic(err)
+	}
+
+	if oldDefault != nil {
+		b.Drop(oldDefault)
+	}
+	b.Add(&scpb.DomainDefault{
+		TypeID:     typeID,
+		Expression: *b.WrapExpression(typeID, typedExpr),
+	})
 }
 
 func alterDomainDropDefault(
 	b BuildCtx, tn *tree.TypeName, domainType *scpb.DomainType, t *tree.AlterDomainDropDefault,
 ) {
-	panic(pgerror.Newf(pgcode.FeatureNotSupported, "ALTER DOMAIN DROP DEFAULT is not supported"))
+	typeID := domainType.TypeID
+	domainElts := b.QueryByID(typeID)
+
+	existingDefault := domainElts.FilterDomainDefault().NotToAbsent().MustGetZeroOrOneElement()
+	if existingDefault == nil {
+		return
+	}
+	b.Drop(existingDefault)
 }
 
 func alterDomainSetNotNull(
 	b BuildCtx, tn *tree.TypeName, domainType *scpb.DomainType, t *tree.AlterDomainSetNotNull,
 ) {
-	panic(pgerror.Newf(pgcode.FeatureNotSupported, "ALTER DOMAIN SET NOT NULL is not supported"))
+	typeID := domainType.TypeID
+	domainElts := b.QueryByID(typeID).NotToAbsent()
+
+	if existingNotNull := domainElts.FilterDomainNotNull().MustGetZeroOrOneElement(); existingNotNull != nil {
+		return
+	}
+
+	constraintID := b.NextDomainConstraintID(typeID)
+	constraintName := chooseDomainNotNullConstraintName(b, tn.Object(), typeID)
+
+	b.Add(&scpb.DomainNotNull{
+		TypeID:       typeID,
+		ConstraintID: constraintID,
+	})
+	b.Add(&scpb.DomainConstraintName{
+		TypeID:       typeID,
+		ConstraintID: constraintID,
+		Name:         constraintName,
+	})
 }
 
 func alterDomainDropNotNull(
 	b BuildCtx, tn *tree.TypeName, domainType *scpb.DomainType, t *tree.AlterDomainDropNotNull,
 ) {
-	panic(pgerror.Newf(pgcode.FeatureNotSupported, "ALTER DOMAIN DROP NOT NULL is not supported"))
+	typeID := domainType.TypeID
+	// Restricting to NotToAbsent both makes a repeated DROP NOT NULL a no-op
+	// rather than a panic on MustGetZeroOrOneElement, and avoids a redundant
+	// b.Drop on an element already targeting ABSENT.
+	domainElts := b.QueryByID(typeID).NotToAbsent()
+
+	existingNotNull := domainElts.FilterDomainNotNull().NotToAbsent().MustGetZeroOrOneElement()
+	if existingNotNull == nil {
+		return
+	}
+	b.Drop(existingNotNull)
+
+	domainElts.FilterDomainConstraintName().NotToAbsent().Filter(
+		func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.DomainConstraintName) bool {
+			return e.ConstraintID == existingNotNull.ConstraintID
+		},
+	).ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.DomainConstraintName) {
+		b.Drop(e)
+	})
+}
+
+// chooseDomainNotNullConstraintName returns a unique, unconflicted name for a
+// domain NOT NULL constraint.
+func chooseDomainNotNullConstraintName(b BuildCtx, tn *tree.TypeName, typeID catid.DescID) string {
+	var usedNames []string
+	b.QueryByID(typeID).FilterDomainConstraintName().ForEach(
+		func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.DomainConstraintName) {
+			usedNames = append(usedNames, e.Name)
+		},
+	)
+	return chooseDomainConstraintName(tn, "not_null", usedNames)
 }
 
 func alterDomainAddCheckConstraint(
 	b BuildCtx, tn *tree.TypeName, domainType *scpb.DomainType, t *tree.AlterDomainAddCheckConstraint,
 ) {
-	panic(pgerror.Newf(pgcode.FeatureNotSupported, "ALTER DOMAIN ADD CONSTRAINT ... CHECK is not supported"))
+	typeID := domainType.TypeID
+	domainElts := b.QueryByID(typeID)
+	baseType := domainType.BaseTypeT.Type
+
+	typedExpr, err := schemaexpr.TypeCheckDomainCheckExpr(b, b.SemaCtx(), t.Check, baseType)
+	if err != nil {
+		panic(pgerror.Wrapf(err, pgcode.InvalidObjectDefinition,
+			"invalid CHECK expression for domain %s", tn.Object()))
+	}
+	typedExpr, err = schemaexpr.MaybeReplaceUDFNameWithOIDReferenceInTypedExpr(typedExpr)
+	if err != nil {
+		panic(err)
+	}
+
+	var usedNames []string
+	domainElts.FilterDomainConstraintName().ForEach(
+		func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.DomainConstraintName) {
+			usedNames = append(usedNames, e.Name)
+		},
+	)
+
+	constraintName := string(t.Name)
+	if constraintName == "" {
+		constraintName = chooseDomainConstraintName(tn, "check", usedNames)
+	} else if slices.Contains(usedNames, constraintName) {
+		panic(pgerror.Newf(pgcode.DuplicateObject,
+			"constraint %q for domain %s already exists", constraintName, tn.Object()))
+	}
+
+	// Wrap the typed (VALUE-substituted) expression to discover back-references
+	// to UDTs, sequences, and UDFs, then override the serialized expression with
+	// the original VALUE-containing form. The runtime CHECK evaluator
+	// (eval.ValidateDomainConstraints) re-substitutes VALUE per row, so the
+	// stored expression must preserve the VALUE placeholder.
+	checkExpr := b.WrapExpression(typeID, typedExpr)
+	checkExpr.Expr = catpb.Expression(tree.Serialize(t.Check))
+	// ReferencedColumnIDs is meaningless for a domain (no columns); drop it.
+	checkExpr.ReferencedColumnIDs = nil
+
+	constraintID := b.NextDomainConstraintID(typeID)
+	if t.ValidationBehavior == tree.ValidationSkip {
+		b.Add(&scpb.DomainCheckConstraintUnvalidated{
+			TypeID:       typeID,
+			ConstraintID: constraintID,
+			Expression:   *checkExpr,
+		})
+	} else {
+		b.Add(&scpb.DomainCheckConstraint{
+			TypeID:       typeID,
+			ConstraintID: constraintID,
+			Expression:   *checkExpr,
+		})
+	}
+	b.Add(&scpb.DomainConstraintName{
+		TypeID:       typeID,
+		ConstraintID: constraintID,
+		Name:         constraintName,
+	})
+}
+
+// chooseDomainConstraintName returns a unique, unconflicted name for a
+// domain constraint.
+func chooseDomainConstraintName(tn *tree.TypeName, label string, usedNames []string) string {
+	domainName := tn.Object()
+	candidate := fmt.Sprintf("%s_%s", domainName, label)
+	for pass := 1; slices.Contains(usedNames, candidate); pass++ {
+		candidate = fmt.Sprintf("%s_%s%d", domainName, label, pass)
+	}
+	return candidate
 }
 
 func alterDomainAddNotNullConstraint(
@@ -170,17 +330,17 @@ func alterDomainValidateConstraint(
 func alterDomainOwner(
 	b BuildCtx, tn *tree.TypeName, domainType *scpb.DomainType, t *tree.AlterDomainOwner,
 ) {
-	setOwnerForTypeDesc(b, tn, domainType, domainType.TypeID, domainType.ArrayTypeID, t.Owner)
+	setOwnerForTypeDesc(b, tn, domainType, t.Owner)
 }
 
 func alterDomainRename(
 	b BuildCtx, tn *tree.TypeName, domainType *scpb.DomainType, t *tree.AlterDomainRename,
 ) {
-	renameForTypeDesc(b, tn, domainType, domainType.TypeID, domainType.ArrayTypeID, string(t.NewName))
+	renameForTypeDesc(b, tn, domainType.TypeID, domainType.ArrayTypeID, string(t.NewName))
 }
 
 func alterDomainSetSchema(
 	b BuildCtx, tn *tree.TypeName, domainType *scpb.DomainType, t *tree.AlterDomainSetSchema,
 ) {
-	setSchemaForTypeDesc(b, domainType, domainType.TypeID, domainType.ArrayTypeID, t.Schema, "domain")
+	setSchemaForTypeDesc(b, domainType, t.Schema, "domain")
 }
