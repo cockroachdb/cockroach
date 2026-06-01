@@ -1877,6 +1877,7 @@ func failoverRestartOpts() option.StartOpts {
 	startOpts := option.DefaultStartOpts()
 	startOpts.RoachprodOpts.ScheduleBackups = false
 	startOpts.RoachprodOpts.SkipInit = true
+	startOpts.RoachprodOpts.IsRestart = true
 	return startOpts
 }
 

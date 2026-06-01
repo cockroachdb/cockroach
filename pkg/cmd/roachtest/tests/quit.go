@@ -100,6 +100,7 @@ func (q *quitTest) runTest(
 func (q *quitTest) restartNode(ctx context.Context, nodeID int) {
 	settings := install.MakeClusterSettings(install.EnvOption(q.env))
 	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.IsRestart = true
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, q.args...)
 	q.c.Start(ctx, q.t.L(), startOpts, settings, q.c.Node(nodeID))
 
