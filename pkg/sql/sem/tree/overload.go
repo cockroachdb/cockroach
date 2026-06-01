@@ -1392,20 +1392,28 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 		// The fourth heuristic is to prefer candidates that accept the "best"
 		// mutual type in the resolvable type set of all constants.
 		if bestConstType, ok := commonConstantType(s.exprs, s.constIdxs); ok {
-			// In case all overloads are filtered out at this step,
-			// keep track of previous overload indexes to return ambiguous error (>1 overloads)
-			// instead of unsupported error (0 overloads) when applicable.
+			// Treat bestConstType as a preference rather than a hard filter. If
+			// it eliminates all candidates, restore the previous candidates so
+			// later heuristics, such as overload preference, can still run.
 			prevOverloadIdxs := s.overloadIdxs
+
 			for i, ok := s.constIdxs.Next(0); ok; i, ok = s.constIdxs.Next(i + 1) {
 				filter := makeFilter(i, func(params TypeList, ordinal int) bool {
 					return params.GetAt(ordinal).Equivalent(bestConstType)
 				})
 				s.overloadIdxs = filterParams(s.overloadIdxs, s.overloads, s.params, filter)
 			}
-			if ok, err := checkReturn(ctx, semaCtx, s); ok {
-				if len(s.overloadIdxs) == 0 {
-					s.overloadIdxs = prevOverloadIdxs
+			if len(s.overloadIdxs) == 0 {
+				if err := defaultTypeCheck(ctx, semaCtx, s, false /* errorOnPlaceholders */); err != nil {
+					return err
 				}
+				s.overloadIdxs = prevOverloadIdxs
+				// Preserve existing placeholder ambiguity behavior. Continuing
+				// would try to type unresolved placeholders without a unique overload.
+				if !s.placeholderIdxs.Empty() {
+					return nil
+				}
+			} else if ok, err := checkReturn(ctx, semaCtx, s); ok {
 				return err
 			}
 			if homogeneousTyp != nil {
