@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -201,8 +202,9 @@ type saramaConfig struct {
 		MaxMessages int          `json:",omitempty"`
 		// MaxBytes overrides the cluster setting
 		// changefeed.kafka.max_request_size for this changefeed.
-		// int32 to match kgo.ProducerBatchMaxBytes.
-		MaxBytes int32 `json:",omitempty"`
+		// Accepts both raw int32 values and human-readable byte
+		// strings (e.g. "1MiB").
+		MaxBytes jsonByteSize `json:",omitempty"`
 	}
 
 	Compression      compressionCodec `json:",omitempty"`
@@ -799,6 +801,36 @@ func (j *jsonDuration) UnmarshalJSON(b []byte) error {
 		return err
 	}
 	*j = jsonDuration(dur)
+	return nil
+}
+
+type jsonByteSize int32
+
+func (j *jsonByteSize) UnmarshalJSON(b []byte) error {
+	var n json.Number
+	if err := json.Unmarshal(b, &n); err == nil {
+		i, err := n.Int64()
+		if err != nil {
+			return err
+		}
+		if i < math.MinInt32 || i > math.MaxInt32 {
+			return errors.Newf("byte size value %d overflows int32", i)
+		}
+		*j = jsonByteSize(i)
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	val, err := humanizeutil.ParseBytes(s)
+	if err != nil {
+		return err
+	}
+	if val < math.MinInt32 || val > math.MaxInt32 {
+		return errors.Newf("byte size value %d overflows int32", val)
+	}
+	*j = jsonByteSize(val)
 	return nil
 }
 
