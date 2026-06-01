@@ -368,7 +368,7 @@ func (tc *txnCommitter) canCommitInParallel(ba *kvpb.BatchRequest, et *kvpb.EndT
 		return false
 	}
 
-	// Check whether every request in the batch is compatable with a parallel
+	// Check whether every request in the batch is compatible with a parallel
 	// commit. If any are incompatible then we cannot perform a parallel commit.
 	// We ignore the last request in the slice because we know it is the EndTxn.
 	for _, ru := range ba.Requests[:len(ba.Requests)-1] {
