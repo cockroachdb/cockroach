@@ -1522,6 +1522,7 @@ func setupAndInitializeLoggingAndProfiling(
 	// provides).
 	stopper = stop.NewStopper()
 	initTraceDir(ctx, serverCfg.InflightTraceDirName)
+	initTraceDir(ctx, serverCfg.HeartbeatTraceDirName)
 	initBlockProfile()
 	initMutexProfile()
 
