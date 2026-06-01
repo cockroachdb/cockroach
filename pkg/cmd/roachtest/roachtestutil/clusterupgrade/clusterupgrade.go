@@ -107,6 +107,31 @@ func CurrentVersion() *Version {
 	return &Version{version.MustParse(build.BinaryVersion())}
 }
 
+// RandomReplicationPeerVersion returns the latest patch release for a
+// randomly selected supported previous major version that is at least
+// minVersion. If minVersion is 0, any supported predecessor is
+// eligible. Returns (nil, nil) if no supported release meets the
+// minimum.
+func RandomReplicationPeerVersion(rng *rand.Rand, minVersion clusterversion.Key) (*Version, error) {
+	supportedReleases := clusterversion.SupportedPreviousReleases()
+	var eligible []clusterversion.Key
+	for _, k := range supportedReleases {
+		if k >= minVersion {
+			eligible = append(eligible, k)
+		}
+	}
+	if len(eligible) == 0 {
+		return nil, nil
+	}
+	selected := eligible[rng.Intn(len(eligible))]
+	seriesStr := selected.ReleaseSeries().String()
+	patchStr, err := release.LatestPatch(seriesStr)
+	if err != nil {
+		return nil, errors.Wrapf(err, "getting latest patch for series %s", seriesStr)
+	}
+	return ParseVersion(patchStr)
+}
+
 // MustParseVersion parses the version string given (with or without
 // leading 'v') and returns the corresponding `Version` object.
 func MustParseVersion(v string) *Version {
