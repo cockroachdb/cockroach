@@ -222,6 +222,7 @@ type Memo struct {
 	preventUpdateSetColumnDrop                 bool
 	useImprovedRoutineDepsTriggersComputedCols bool
 	inlineAnyUnnestSubquery                    bool
+	inlinePlaceholderEqualities                bool
 	useMinRowCountAntiJoinFix                  bool
 	useBackupsWithIDs                          bool
 	// builtWithStatsRollout records the stats rollout mode under which
@@ -370,6 +371,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		preventUpdateSetColumnDrop:                 evalCtx.SessionData().PreventUpdateSetColumnDrop,
 		useImprovedRoutineDepsTriggersComputedCols: evalCtx.SessionData().UseImprovedRoutineDepsTriggersAndComputedCols,
 		inlineAnyUnnestSubquery:                    evalCtx.SessionData().OptimizerInlineAnyUnnestSubquery,
+		inlinePlaceholderEqualities:                evalCtx.SessionData().OptimizerInlinePlaceholderEqualities,
 		useMinRowCountAntiJoinFix:                  evalCtx.SessionData().OptimizerUseMinRowCountAntiJoinFix,
 		skipUnderlyingViewPrivilegeChecks:          sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Get(&evalCtx.Settings.SV),
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
@@ -559,6 +561,7 @@ func (m *Memo) IsStale(
 		m.preventUpdateSetColumnDrop != evalCtx.SessionData().PreventUpdateSetColumnDrop ||
 		m.useImprovedRoutineDepsTriggersComputedCols != evalCtx.SessionData().UseImprovedRoutineDepsTriggersAndComputedCols ||
 		m.inlineAnyUnnestSubquery != evalCtx.SessionData().OptimizerInlineAnyUnnestSubquery ||
+		m.inlinePlaceholderEqualities != evalCtx.SessionData().OptimizerInlinePlaceholderEqualities ||
 		m.useMinRowCountAntiJoinFix != evalCtx.SessionData().OptimizerUseMinRowCountAntiJoinFix ||
 		m.skipUnderlyingViewPrivilegeChecks != sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Get(&evalCtx.Settings.SV) ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel ||
