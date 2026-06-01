@@ -106,12 +106,14 @@ type planGramTerm interface {
 // nonterminal matches the current optimizer sub-tree if any of its production
 // rules match the current sub-tree.
 type planGramProduction struct {
-	// name is the nonterminal symbol in the grammar, which must be unique in the
-	// graph. "any" and "none" are reserved, as are names starting with
+	// name is the nonterminal symbol in the grammar. Names are unique within a
+	// parsed grammar, but may collide after MergePlanGrams combines separately
+	// parsed grammars. "any" and "none" are reserved, as are names starting with
 	// underscores. "root" is the required entry-point production and cannot be
-	// referenced from other productions. The name must not be empty, must not
-	// contain any of the characters "'\,():;=| or whitespace, and must not start
-	// with a digit.
+	// referenced from other productions. The name should not be empty, should
+	// not contain any of the characters "'\,():;=| or whitespace, and should not
+	// start with a digit. fixNames corrects all of these violations (duplicates,
+	// invalid characters, reserved names) when printing.
 	name string
 	// rules are the set of production rules for this nonterminal. There must be
 	// at least one rule (which could be anyPlanGramTerm or nonePlanGramTerm if
@@ -168,6 +170,13 @@ var AnyPlanGram = PlanGram{anyPlanGramTerm}
 // NonePlanGram is the PlanGram: "root: none;". It matches no optimizer plans.
 var NonePlanGram = PlanGram{nonePlanGramTerm}
 
+// IdentifiedPlanGram pairs a PlanGram with an identifier, used when merging
+// multiple PlanGrams into a single grammar with labeled branches.
+type IdentifiedPlanGram struct {
+	ID       string
+	PlanGram PlanGram
+}
+
 var errInvalidUTF8 = errors.New("invalid UTF-8")
 
 // Any is true if this PlanGram matches any optimizer sub-tree.
@@ -190,26 +199,61 @@ func (p PlanGram) None() bool {
 	return false
 }
 
-// WithNoneFallback wraps this PlanGram in a production that includes
-// NonePlanGram as a fallback alternate. This ensures the optimizer also
-// considers the unconstrained (default) plan, so that if the PlanGram cannot be
-// fully matched, the optimizer falls back to its natural cost-based
-// selection. This should be called on the root PlanGram before optimization
-// starts.
-func (p PlanGram) WithNoneFallback() PlanGram {
-	if p.Any() || p.None() {
-		return p
+// MergePlanGrams combines multiple identified PlanGrams into a single PlanGram.
+// Each input gets its own labeled branch under a merge production. If no inputs
+// are provided, the result is AnyPlanGram. If no input is a None
+// PlanGram, a "default" none branch is added so the optimizer can fall back to
+// its natural cost-based selection.
+//
+// Production names from different inputs may collide after merging; fixNames
+// deduplicates them when the merged PlanGram is printed.
+//
+// For example, merging inputs "x" with root (Scan) and "y" with root (Select
+// (Scan)) produces:
+//
+//	root: _merge;
+//	_merge: _merge_x | _merge_y | _merge_default;
+//	_merge_x: (Scan);
+//	_merge_y: (Select (Scan));
+//	_merge_default: none;
+func MergePlanGrams(inputs ...IdentifiedPlanGram) PlanGram {
+	if len(inputs) == 0 {
+		return AnyPlanGram
 	}
-	prod := &planGramProduction{
-		name:  "_fallback",
-		rules: []planGramTerm{p.root, nonePlanGramTerm},
+	hasNone := false
+	mergeRules := make([]planGramTerm, 0, len(inputs)+1)
+	for _, ipg := range inputs {
+		if ipg.PlanGram.None() {
+			hasNone = true
+		}
+		mergeRules = append(mergeRules, &planGramProduction{
+			name:  "_merge_" + ipg.ID,
+			rules: []planGramTerm{ipg.PlanGram.root},
+		})
 	}
-	return PlanGram{root: prod}
+	if !hasNone {
+		mergeRules = append(mergeRules, &planGramProduction{
+			name:  "_merge_default",
+			rules: []planGramTerm{nonePlanGramTerm},
+		})
+	}
+	return PlanGram{root: &planGramProduction{
+		name:  "_merge",
+		rules: mergeRules,
+	}}
 }
 
 // FormatPretty writes the full PlanGram grammar to the buffer, starting with
 // the root, optionally with multiple lines.
 func (p PlanGram) FormatPretty(b *bytes.Buffer, newlines bool) {
+	p.formatPretty(b, newlines, p.fixNames())
+}
+
+// formatPretty writes the full PlanGram grammar to the buffer, substituting
+// production names from the renames map.
+func (p PlanGram) formatPretty(
+	b *bytes.Buffer, newlines bool, renames map[*planGramProduction]string,
+) {
 	if newlines {
 		defer b.WriteRune('\n')
 	}
@@ -220,6 +264,13 @@ func (p PlanGram) FormatPretty(b *bytes.Buffer, newlines bool) {
 	if p.None() {
 		b.WriteString("root: none;")
 		return
+	}
+
+	prodName := func(pp *planGramProduction) string {
+		if n, ok := renames[pp]; ok {
+			return n
+		}
+		return pp.name
 	}
 
 	// formatTerm writes a RHS term to the buffer.
@@ -236,7 +287,7 @@ func (p PlanGram) FormatPretty(b *bytes.Buffer, newlines bool) {
 		switch t := term.(type) {
 		case *planGramProduction:
 			// Assume nonterminal names don't need to be quoted.
-			b.WriteString(t.name)
+			b.WriteString(prodName(t))
 		case *planGramExpr:
 			b.WriteRune('(')
 			if t.op == opt.UnknownOp {
@@ -276,7 +327,7 @@ func (p PlanGram) FormatPretty(b *bytes.Buffer, newlines bool) {
 		} else {
 			b.WriteRune(' ')
 		}
-		b.WriteString(pp.name)
+		b.WriteString(prodName(pp))
 		for i, rule := range pp.rules {
 			if i == 0 {
 				b.WriteString(": ")
@@ -829,4 +880,53 @@ func (pe *planGramExpr) visitAlternateExprs(
 	// We don't recurse here, because expression children are down a level, not
 	// alternates for the current level.
 	return true
+}
+
+// fixNames detects production names that are invalid or duplicate and returns a
+// rename map that resolves all issues. Returns nil when no fixes are needed.
+func (p PlanGram) fixNames() map[*planGramProduction]string {
+	if p.root == nil || p.root == nonePlanGramTerm {
+		return nil
+	}
+	seen := map[string]struct{}{
+		"":     {},
+		"any":  {},
+		"none": {},
+		"root": {},
+	}
+	var renames map[*planGramProduction]string
+	visited := make(map[*planGramProduction]struct{})
+	p.root.visitProductions(visited, func(pp *planGramProduction) {
+		name := strings.Map(func(r rune) rune {
+			if unicode.IsSpace(r) || strings.ContainsRune(`"'\,():;=|`, r) {
+				return '_'
+			}
+			return r
+		}, pp.name)
+		if len(name) > 0 && name[0] >= '0' && name[0] <= '9' {
+			name = "_" + name
+		}
+		if name != pp.name {
+			if renames == nil {
+				renames = make(map[*planGramProduction]string)
+			}
+			renames[pp] = name
+		}
+		if _, ok := seen[name]; !ok {
+			seen[name] = struct{}{}
+			return
+		}
+		for i := 1; ; i++ {
+			candidate := name + "_" + strconv.Itoa(i)
+			if _, ok := seen[candidate]; !ok {
+				seen[candidate] = struct{}{}
+				if renames == nil {
+					renames = make(map[*planGramProduction]string)
+				}
+				renames[pp] = candidate
+				return
+			}
+		}
+	})
+	return renames
 }
