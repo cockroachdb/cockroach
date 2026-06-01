@@ -210,7 +210,6 @@ var checkSpecFactories = []checkFromIndexFunc{
 			idx.Index,
 			idx.TableDescriptor,
 			execCfg.Settings.Version.IsActive(ctx, clusterversion.V26_2),
-			uniquenessCheckComplexKeysEnabled.Get(execCfg.SV()),
 		); err != nil {
 			return nil, "", err
 		} else if reason != "" {
@@ -302,10 +301,7 @@ func isSupportedIndexForIndexConsistencyCheck(
 }
 
 func isSupportedIndexForUniquenessCheck(
-	ctx context.Context,
-	index catalog.Index,
-	table catalog.TableDescriptor,
-	isActiveV26_2, isComplexKeysEnabled bool,
+	ctx context.Context, index catalog.Index, table catalog.TableDescriptor, isActiveV26_2 bool,
 ) (reason string, uniquePos int, err error) {
 	if !isActiveV26_2 {
 		return "uniqueness: check requires v26.2", 0, nil
@@ -330,9 +326,5 @@ func isSupportedIndexForUniquenessCheck(
 		return "uniqueness: check only supported on tables with a single unique column", 0, nil
 	}
 
-	if uniquePositions[0] == 1 || isComplexKeysEnabled {
-		return "", uniquePositions[0], nil
-	} else {
-		return "uniqueness: complex key layout requires the cluster setting to opt in to (expensive) validation", 0, nil
-	}
+	return "", uniquePositions[0], nil
 }

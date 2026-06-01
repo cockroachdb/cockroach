@@ -461,10 +461,6 @@ func makeInspectMultiRegionThroughputTest(
 				t.Fatal(err)
 			}
 
-			if complexKey {
-				enableComplexKeyUniquenessValidation(t, bulkDB)
-			}
-
 			metricName := "inspect"
 			exporter := roachtestutil.CreateWorkloadHistogramExporter(t, c)
 			reg, perfBuf := initInspectHistograms(
@@ -544,18 +540,6 @@ func disableRowCountValidation(t test.Test, db *gosql.DB) {
 	t.Helper()
 	t.L().Printf("Disabling automatic row count validation")
 	_, err := db.Exec("SET CLUSTER SETTING bulkio.import.row_count_validation.mode = 'off'")
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-// enableComplexKeyUniquenessValidation enables validation of complex keys (i.e.
-// the unique column does not immediately follow the region column) during the
-// uniqueness check.
-func enableComplexKeyUniquenessValidation(t test.Test, db *gosql.DB) {
-	t.Helper()
-	t.L().Printf("Enabling complex key uniqueness validation")
-	_, err := db.Exec("SET CLUSTER SETTING sql.inspect.uniqueness_check.complex_keys.enabled = true;")
 	if err != nil {
 		t.Fatal(err)
 	}
