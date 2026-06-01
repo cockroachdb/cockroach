@@ -72,6 +72,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/apiinternal"
@@ -415,6 +416,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		}
 		// Expose cert expirations in metrics.
 		appRegistry.AddMetricStruct(cm.Metrics())
+	} else {
+		// Register stub certificate metrics so the metadata is discoverable
+		// by tools like `cockroach gen metric-list` even in insecure mode.
+		appRegistry.AddMetricStruct(security.NewStubMetrics())
 	}
 
 	// Check the compatibility between the configured addresses and that
