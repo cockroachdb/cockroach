@@ -914,6 +914,46 @@ s4               {b,c}
 s4               {c,d}
 s8               {a}
 
+# Test forecast_status option. We exclude latest_created and forecast_at from
+# the main assertion because timestamps are non-deterministic. Instead we check
+# that they are all non-NULL.
+query TFFFFFTT colnames
+SELECT column_names,
+       row_count_r2, null_count_r2, distinct_count_r2, avg_size_r2, histogram_r2,
+       forecast_error, histogram_error
+FROM [SHOW STATISTICS FOR TABLE data WITH FORECAST_STATUS]
+ORDER BY column_names::STRING
+----
+column_names  row_count_r2  null_count_r2  distinct_count_r2  avg_size_r2  histogram_r2  forecast_error                                  histogram_error
+{a,b,c,d}     1             1              1                  1            NULL          NULL                                            NULL
+{a,b,c}       1             1              1                  1            NULL          NULL                                            NULL
+{a,b}         1             1              1                  1            NULL          NULL                                            NULL
+{a}           1             1              1                  1            1             NULL                                            NULL
+{b,c}         NULL          NULL           NULL               NULL         NULL          not enough observations to forecast statistics  NULL
+{b}           1             1              1                  1            1             NULL                                            NULL
+{c,d}         NULL          NULL           NULL               NULL         NULL          not enough observations to forecast statistics  NULL
+{c}           1             1              1                  1            1             NULL                                            NULL
+{d}           1             1              1                  1            NULL          NULL                                            not enough observations to forecast histogram
+{e}           1             1              1                  1            NULL          NULL                                            not enough observations to forecast histogram
+
+query B
+SELECT bool_and(latest_created IS NOT NULL AND forecast_at IS NOT NULL)
+FROM [SHOW STATISTICS FOR TABLE data WITH FORECAST_STATUS]
+----
+true
+
+# Test that forecast_status is incompatible with USING JSON.
+statement error cannot use forecast_status with USING JSON
+SHOW STATISTICS USING JSON FOR TABLE data WITH FORECAST_STATUS
+
+# Test that forecast_status is incompatible with forecast.
+statement error cannot use forecast_status with forecast
+SHOW STATISTICS FOR TABLE data WITH FORECAST_STATUS, FORECAST
+
+# Test that forecast_status is incompatible with merge.
+statement error cannot use forecast_status with merge
+SHOW STATISTICS FOR TABLE data WITH FORECAST_STATUS, MERGE
+
 # Test deletion of old non-default stats.
 
 statement ok
