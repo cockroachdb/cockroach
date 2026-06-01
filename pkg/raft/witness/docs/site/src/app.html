@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,300;0,400;0,700;1,300;1,400&family=Source+Sans+3:wght@400;600;700&family=Roboto+Mono:wght@400;500;700&display=optional"
+    rel="stylesheet"
+  />
+  <script>
+    // Detect dark mode before first paint to avoid FOUC.
+    (function () {
+      try {
+        var stored = localStorage.getItem('color-mode');
+        var dark = false;
+        if (stored === 'dark') dark = true;
+        else if (!stored && window.matchMedia('(prefers-color-scheme: dark)').matches) dark = true;
+        if (dark) {
+          document.documentElement.classList.add('dark');
+          var s = document.createElement('style');
+          s.id = 'dark-mode-preload';
+          s.textContent = 'html,body{background:#060C12!important}body{opacity:0}';
+          document.head.appendChild(s);
+        }
+      } catch (e) {}
+    })();
+  </script>
+  %sveltekit.head%
+</head>
+<body data-sveltekit-preload-data="hover">
+  <div style="display: contents">%sveltekit.body%</div>
+</body>
+</html>

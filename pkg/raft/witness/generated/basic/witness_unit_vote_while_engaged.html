@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Witness Test: testdata/basic/witness_unit_vote_while_engaged.txt</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: "SF Mono", "Menlo", "Consolas", monospace; font-size: 13px; background: #fafafa; color: #222; padding: 20px; }
+h1 { font-size: 14px; color: #888; margin-bottom: 12px; font-weight: normal; }
+h1 a { color: #888; text-decoration: none; }
+h1 a:hover { text-decoration: underline; }
+.nav { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.nav button { background: #fff; border: 1px solid #ccc; color: #333; padding: 4px 12px; cursor: pointer; border-radius: 3px; font-family: inherit; }
+.nav button:hover { background: #eef; }
+.nav button:disabled { opacity: 0.4; cursor: default; }
+.step-info { color: #666; }
+.command { color: #1f6feb; font-weight: bold; }
+.comment { color: #2a7a3a; margin-bottom: 12px; white-space: pre-wrap; }
+.board { margin-bottom: 16px; }
+.row { display: flex; align-items: center; padding: 6px 0; gap: 12px; min-height: 38px; }
+.row.down { opacity: 0.45; }
+.row.down .label::after { content: ' \00D7'; color: #c0392b; font-weight: bold; }
+.row.leader .label::after { content: ' \2655'; color: #c89400; }
+.row.stale-leader .label::after { content: ' \2655'; color: #c0392b; }
+.row .label { width: 80px; flex-shrink: 0; color: #1f6feb; font-weight: bold; }
+.row .label.witness { color: #7d4ec9; }
+.row .log { display: flex; gap: 2px; flex-shrink: 0; }
+.row .state { margin-left: auto; color: #555; text-align: right; }
+.row .state .item { display: inline-block; margin: 0 4px; }
+.row .state .sep { color: #bbb; }
+.row .state .item.changed { background: #fff4b8; padding: 1px 5px; border-radius: 2px; }
+.row .state .key { color: #888; }
+.row .state .val { color: #222; }
+.row .state .item.changed .key { color: #8a6d00; }
+.row .state .item.changed .val { color: #5c4900; font-weight: 600; }
+.cell { min-width: 32px; height: 28px; padding: 0 4px; display: flex; align-items: center; justify-content: center;
+        border-radius: 3px; font-size: 12px; font-weight: 400; color: #222;
+        border: 1px solid rgba(0,0,0,0.12); }
+.cell.changed { font-weight: 800; box-shadow: 0 0 0 2px #d4a800; }
+.cell.empty { background: transparent; color: #bbb; border: 1px dashed #ccc; }
+.cell.synthetic { font-style: italic; }
+.output { background: #f4f4f4; border: 1px solid #ddd; border-radius: 4px; padding: 10px; white-space: pre-wrap; color: #2c2c2c; margin-top: 8px; }
+.output-label { color: #888; font-size: 11px; margin-top: 12px; margin-bottom: 4px; }
+</style>
+</head>
+<body>
+<h1><a href=".././">testdata</a> / <a href="./">basic</a> / witness_unit_vote_while_engaged.txt</h1>
+<div id="app"></div>
+<script>
+const TRACE = {"testFile":"testdata/basic/witness_unit_vote_while_engaged.txt","steps":[{"index":0,"command":"set","input":"term=a voted-for=v1 hi=a5 engaged=true","comment":"The tricky case: voting while engaged. The witness must not grant a vote\nthat could allow a candidate to become leader without the entries the\nwitness helped commit.\nSet up: engaged in term a at a5.","output":"w:  vote=(a, v1) acked=(a5, engaged)"},{"index":1,"command":"vote from=(v2) term=(b) lm=(a5)","comment":"Candidate at term b with log ending at a5: rejected.\nThe candidate's last log term (a) is not ahead of our vote term (a), so\nwe can't prove a proper election happened without us. The old leader may\nhave relied on us to commit entries beyond a5.","output":"w:\n  - engaged: effectiveHi inflated to a∞\n  - rejected vote for v2: log not up to date (effectiveHi a∞ \u003e lm a5)\n  no\nw:  vote=(a, v1) acked=(a5, engaged)","messages":[{"from":"v2","to":"w","type":"VoteReq","label":"VoteReq(term=b, log=a5)"},{"from":"w","to":"v2","type":"VoteResp","label":"no","trace":["engaged: effectiveHi inflated to a∞","rejected vote for v2: log not up to date (effectiveHi a∞ \u003e lm a5)"]}]},{"index":2,"command":"vote from=(v2) term=(b) lm=(a100)","comment":"Candidate at term b with log ending at a100: still rejected.\nEven though the candidate has more entries, they're all from term a.\nThe old leader could have committed with our help up to any index.","output":"w:\n  - engaged: effectiveHi inflated to a∞\n  - rejected vote for v2: log not up to date (effectiveHi a∞ \u003e lm a100)\n  no\nw:  vote=(a, v1) acked=(a5, engaged)","messages":[{"from":"v2","to":"w","type":"VoteReq","label":"VoteReq(term=b, log=a100)"},{"from":"w","to":"v2","type":"VoteResp","label":"no","trace":["engaged: effectiveHi inflated to a∞","rejected vote for v2: log not up to date (effectiveHi a∞ \u003e lm a100)"]}]},{"index":3,"command":"vote from=(v2) term=(b) lm=(b1)","comment":"Candidate at term b with log ending at b1: accepted!\nThe candidate has an entry from term b \u003e our vote term a. This proves\na proper leader election happened for some term \u003e a without the witness,\nmeaning a traditional quorum elected that leader, and the candidate's\nlog is up to date with anything committed.","output":"w:\n  - engaged: effectiveHi inflated to a∞\n  - granted vote for v2 at term b, hi carried as a∞\n  yes (term a-\u003eb, voted v2, hi a5-\u003ea∞, released)\nw:  vote=(b, v2) acked=(a∞, released)","messages":[{"from":"v2","to":"w","type":"VoteReq","label":"VoteReq(term=b, log=b1)"},{"from":"w","to":"v2","type":"VoteResp","label":"yes","trace":["engaged: effectiveHi inflated to a∞","granted vote for v2 at term b, hi carried as a∞"]}]},{"index":4,"command":"set","input":"term=a voted-for=v1 hi=a5 engaged=true","comment":"Same scenario but candidate is from a much higher term.","output":"w:  vote=(a, v1) acked=(a5, engaged)"},{"index":5,"command":"vote from=(v3) term=(e) lm=(c3)","comment":"Candidate from term e with log at c3: accepted.\nLog term c \u003e vote term a proves disengagement is safe.","output":"w:\n  - engaged: effectiveHi inflated to a∞\n  - granted vote for v3 at term e, hi carried as a∞\n  yes (term a-\u003ee, voted v3, hi a5-\u003ea∞, released)\nw:  vote=(e, v3) acked=(a∞, released)","messages":[{"from":"v3","to":"w","type":"VoteReq","label":"VoteReq(term=e, log=c3)"},{"from":"w","to":"v3","type":"VoteResp","label":"yes","trace":["engaged: effectiveHi inflated to a∞","granted vote for v3 at term e, hi carried as a∞"]}]},{"index":6,"command":"set","input":"term=a voted-for=v1 hi=a5 engaged=false","comment":"Engagement was released (not engaged), candidate log behind hi: rejected\non log-up-to-date check, not engagement.","output":"w:  vote=(a, v1) acked=(a5, released)"},{"index":7,"command":"vote from=(v2) term=(b) lm=(a4)","output":"w:\n  - rejected vote for v2: log not up to date (effectiveHi a5 \u003e lm a4)\n  no\nw:  vote=(a, v1) acked=(a5, released)","messages":[{"from":"v2","to":"w","type":"VoteReq","label":"VoteReq(term=b, log=a4)"},{"from":"w","to":"v2","type":"VoteResp","label":"no","trace":["rejected vote for v2: log not up to date (effectiveHi a5 \u003e lm a4)"]}]},{"index":8,"command":"vote from=(v2) term=(b) lm=(a5)","comment":"Same but candidate log at a5: accepted (log is up to date with hi).","output":"w:\n  - granted vote for v2 at term b, hi carried as a5\n  yes (term a-\u003eb, voted v2)\nw:  vote=(b, v2) acked=(a5, released)","messages":[{"from":"v2","to":"w","type":"VoteReq","label":"VoteReq(term=b, log=a5)"},{"from":"w","to":"v2","type":"VoteResp","label":"yes","trace":["granted vote for v2 at term b, hi carried as a5"]}]},{"index":9,"command":"set","input":"term=a voted-for=v1","comment":"Witness learns of term b through an engage, then the leader requests a\nvote in that same term. The witness hasn't voted for anyone in term b yet,\nso this should succeed.","output":"w:  vote=(a, v1) acked=none"},{"index":10,"command":"engage from=(v1) term=(b) lm=(b1)","output":"w:\n  - term advance a -\u003e b (leader v1)\n  - engaged at b1\n  ok (term a-\u003eb, hi 0-\u003eb1, engaged)\nw:  vote=(b, v1) acked=(b1, engaged)","messages":[{"from":"v1","to":"w","type":"Engage","label":"Engage(term=b, hi=b1)"},{"from":"w","to":"v1","type":"WitnessResp","label":"ok","trace":["term advance a -\u003e b (leader v1)","engaged at b1"]}]},{"index":11,"command":"vote from=(v1) term=(b) lm=(b1)","comment":"Leader now asks for our vote in term b. We haven't voted yet in this term,\nso this is granted, preserving the existing acked state.","output":"w:\n  - granted vote for v1 at term b (same-term)\n  yes\nw:  vote=(b, v1) acked=(b1, engaged)","messages":[{"from":"v1","to":"w","type":"VoteReq","label":"VoteReq(term=b, log=b1)"},{"from":"w","to":"v1","type":"VoteResp","label":"yes","trace":["granted vote for v1 at term b (same-term)"]}]},{"index":12,"command":"set","input":"term=b","comment":"Engage populates VotedFor when it was previously unset. Even when the\nwitness learned about the term through some other path (e.g. maybeBumpTerm\nfrom a different message), an engage from a leader records the leader's\nidentity.","output":"w:  vote=(b, -) acked=none"},{"index":13,"command":"engage from=(v1) term=(b) lm=(b5)","output":"w:\n  - recorded leader v1 for term b\n  - engaged at b5\n  ok (voted v1, hi 0-\u003eb5, engaged)\nw:  vote=(b, v1) acked=(b5, engaged)","messages":[{"from":"v1","to":"w","type":"Engage","label":"Engage(term=b, hi=b5)"},{"from":"w","to":"v1","type":"WitnessResp","label":"ok","trace":["recorded leader v1 for term b","engaged at b5"]}]},{"index":14,"command":"vote from=(v1) term=(c) lm=(b5)","comment":"Engaged leader re-campaigns at a higher term. Even though the witness is\nstill engaged and the candidate's last log term (b) is not strictly ahead\nof the engagement term (b), the candidate IS the leader we supported, so\nthe witness grants the vote. The leader's log is by definition at least\nas up-to-date as what the witness helped commit.\nNote that acked becomes b∞: the witness is no longer engaged, but preserves\na high water mark reflecting that it may have helped commit anything in term b.\nIt has slightly better information here - we just learned the old leader's\nactual last log index. We don't exploit this case since there's no benefit\nand the vote code would be more complex; a new engagement can be granted\nfor term c only anyway at this point.","output":"w:\n  - engaged: effectiveHi inflated to b∞\n  - engaged leader v1 re-campaigning: skipping log check\n  - granted vote for v1 at term c, hi carried as b∞\n  yes (term b-\u003ec, hi b5-\u003eb∞, released)\nw:  vote=(c, v1) acked=(b∞, released)","messages":[{"from":"v1","to":"w","type":"VoteReq","label":"VoteReq(term=c, log=b5)"},{"from":"w","to":"v1","type":"VoteResp","label":"yes","trace":["engaged: effectiveHi inflated to b∞","engaged leader v1 re-campaigning: skipping log check","granted vote for v1 at term c, hi carried as b∞"]}]},{"index":15,"command":"set","input":"term=b voted-for=v1 hi=b5 engaged=true","comment":"Contrast: a *different* candidate at the same term is still rejected.","output":"w:  vote=(b, v1) acked=(b5, engaged)"},{"index":16,"command":"vote from=(v2) term=(c) lm=(b5)","output":"w:\n  - engaged: effectiveHi inflated to b∞\n  - rejected vote for v2: log not up to date (effectiveHi b∞ \u003e lm b5)\n  no\nw:  vote=(b, v1) acked=(b5, engaged)","messages":[{"from":"v2","to":"w","type":"VoteReq","label":"VoteReq(term=c, log=b5)"},{"from":"w","to":"v2","type":"VoteResp","label":"no","trace":["engaged: effectiveHi inflated to b∞","rejected vote for v2: log not up to date (effectiveHi b∞ \u003e lm b5)"]}]},{"index":17,"command":"set","input":"term=b voted-for=v1 hi=b5 engaged=true","comment":"Engagement unwound by a competing candidate whose log proves a post-engagement\nelection (log term c \u003e engagement term b). The witness votes for v2, and the\nengagement winds down to b∞.","output":"w:  vote=(b, v1) acked=(b5, engaged)"},{"index":18,"command":"vote from=(v2) term=(c) lm=(c3)","output":"w:\n  - engaged: effectiveHi inflated to b∞\n  - granted vote for v2 at term c, hi carried as b∞\n  yes (term b-\u003ec, voted v2, hi b5-\u003eb∞, released)\nw:  vote=(c, v2) acked=(b∞, released)","messages":[{"from":"v2","to":"w","type":"VoteReq","label":"VoteReq(term=c, log=c3)"},{"from":"w","to":"v2","type":"VoteResp","label":"yes","trace":["engaged: effectiveHi inflated to b∞","granted vote for v2 at term c, hi carried as b∞"]}]},{"index":19,"command":"vote from=(v1) term=(d) lm=(b10)","comment":"The old leader tries to campaign. Its log is still at term b, which can't\nsatisfy b∞. Without prevote, this is a real availability loss — the old leader\ncan't win despite its log being authoritative for term b, which it would have\nbeen able to had there not be the failed campaign attempt by the other candidate\nwhich effectively disabled the \"exception\" we have for re-electing the old\nleader. This could be improved, but pre-vote exists, so not worth it.","output":"w:\n  - rejected vote for v1: log not up to date (effectiveHi b∞ \u003e lm b10)\n  no\nw:  vote=(c, v2) acked=(b∞, released)","messages":[{"from":"v1","to":"w","type":"VoteReq","label":"VoteReq(term=d, log=b10)"},{"from":"w","to":"v1","type":"VoteResp","label":"no","trace":["rejected vote for v1: log not up to date (effectiveHi b∞ \u003e lm b10)"]}]},{"index":20,"command":"vote from=(v1) term=(d) lm=(c1)","comment":"A candidate with entries from term \u003e b can satisfy b∞. The b∞ high water\nmark is carried forward — Hi is monotonically non-decreasing. This is safe\nbecause any future engagement must be at [newTerm, X] or later, which is\nstrictly up to date with any older promises we made.","output":"w:\n  - granted vote for v1 at term d, hi carried as b∞\n  yes (term c-\u003ed, voted v1)\nw:  vote=(d, v1) acked=(b∞, released)","messages":[{"from":"v1","to":"w","type":"VoteReq","label":"VoteReq(term=d, log=c1)"},{"from":"w","to":"v1","type":"VoteResp","label":"yes","trace":["granted vote for v1 at term d, hi carried as b∞"]}]}]};
+
+let currentStep = 0;
+
+const MAX_CELLS = 10;
+
+function computeState(upTo) {
+  const state = { voters: {}, witness: null };
+  for (let i = 0; i <= upTo; i++) {
+    const step = TRACE.steps[i];
+    if (step.voters) {
+      for (const [id, delta] of Object.entries(step.voters)) {
+        if (!state.voters[id]) state.voters[id] = {};
+        for (const [k, v] of Object.entries(delta)) {
+          state.voters[id][k] = v;
+        }
+      }
+    }
+    if (step.witness) {
+      if (!state.witness) state.witness = { vote: {}, acked: {} };
+      if (step.witness.vote) {
+        for (const [k, v] of Object.entries(step.witness.vote)) {
+          state.witness.vote[k] = v;
+        }
+      }
+      if (step.witness.acked) {
+        for (const [k, v] of Object.entries(step.witness.acked)) {
+          state.witness.acked[k] = v;
+        }
+      }
+      if (step.witness.down !== undefined) {
+        state.witness.down = step.witness.down;
+      }
+    }
+  }
+  return state;
+}
+
+
+
+
+function termBg(t) {
+  if (!t || t === '-') return '#e8e8ec';
+  let ord = 0;
+  if (t.length === 1 && t >= 'a' && t <= 'z') ord = t.charCodeAt(0) - 97;
+  else ord = parseInt(t, 10) || 0;
+  const hue = (ord * 53) % 360;
+  return 'hsl(' + hue + ', 65%, 75%)';
+}
+
+function termOrd(t) {
+  if (!t || t === '-') return 0;
+  if (t.length === 1 && t >= 'a' && t <= 'z') return t.charCodeAt(0) - 96;
+  return parseInt(t, 10) || 0;
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = String(s);
+  return d.innerHTML;
+}
+
+
+
+function renderVoterLog(log, prevLog, initial) {
+  let html = '<div class="log">';
+  if (!log || log.length === 0) {
+    html += '<div class="cell empty">·</div>';
+  } else {
+    for (let i = 0; i < log.length; i++) {
+      const e = log[i];
+      const prev = prevLog && prevLog[i];
+      const changed = !initial && (!prev || prev.term !== e.term || prev.index !== e.index);
+      const cls = 'cell' + (changed ? ' changed' : '');
+      html += '<div class="' + cls + '" style="background:' + termBg(e.term) + '">' +
+        escHtml(e.term) + escHtml(e.index) + '</div>';
+    }
+  }
+  html += '</div>';
+  return html;
+}
+
+
+
+
+
+
+
+
+function renderWitnessLog(witness, prevWitness, initial) {
+  const hi = witness && witness.acked && witness.acked.hi;
+  const engaged = witness && witness.acked && witness.acked.engaged;
+  const term = hi ? hi.term : null;
+  const idx = hi ? parseInt(hi.index, 10) : 0;
+
+  const prevHi = prevWitness && prevWitness.acked && prevWitness.acked.hi;
+  const prevEngaged = prevWitness && prevWitness.acked && prevWitness.acked.engaged;
+  const prevTerm = prevHi ? prevHi.term : null;
+  const prevIdx = prevHi ? parseInt(prevHi.index, 10) : 0;
+
+  
+  const cellChanged = (i) => {
+    if (initial) return false;
+    if (term !== prevTerm) return true; 
+    if (engaged && !prevEngaged) {
+      
+      return i > prevIdx;
+    }
+    if (!engaged && prevEngaged) return true; 
+    return i > prevIdx;
+  };
+
+  let html = '<div class="log">';
+  if (!hi && !engaged) {
+    html += '<div class="cell empty">·</div></div>';
+    return html;
+  }
+  const bg = termBg(term);
+  const lbl = escHtml(term || '');
+  if (engaged) {
+    for (let i = 1; i <= 8; i++) {
+      const cls = 'cell' + (cellChanged(i) ? ' changed' : '');
+      html += '<div class="' + cls + '" style="background:' + bg + '">' + lbl + i + '</div>';
+    }
+    const tailCls = (!initial && engaged && !prevEngaged) ? ' changed' : '';
+    html += '<div class="cell synthetic' + tailCls + '" style="background:' + bg + '">' + lbl + '…</div>';
+    html += '<div class="cell synthetic' + tailCls + '" style="background:' + bg + '">' + lbl + '∞</div>';
+  } else {
+    for (let i = 1; i <= idx; i++) {
+      const cls = 'cell' + (cellChanged(i) ? ' changed' : '');
+      html += '<div class="' + cls + '" style="background:' + bg + '">' + lbl + i + '</div>';
+    }
+  }
+  html += '</div>';
+  return html;
+}
+
+
+function voterStateItems(id, voter, step) {
+  const items = [];
+  const push = (key, val, changed) => items.push({ key, val, changed });
+  push('term', voter.term || '-', isVoterChanged(step, id, 'term'));
+  if (voter.votedFor && voter.votedFor !== '-') {
+    push('votedFor', voter.votedFor, isVoterChanged(step, id, 'votedFor'));
+  } else if (isVoterChanged(step, id, 'votedFor')) {
+    push('votedFor', '-', true);
+  }
+  if ((voter.committed || 0) > 0 || isVoterChanged(step, id, 'committed')) {
+    push('committed', voter.committed || 0, isVoterChanged(step, id, 'committed'));
+  }
+  if (voter.witnessEngaged) {
+    push('witnessEngaged', 'yes', isVoterChanged(step, id, 'witnessEngaged'));
+  } else if (isVoterChanged(step, id, 'witnessEngaged')) {
+    push('witnessEngaged', 'no', true);
+  }
+  return items;
+}
+
+function witnessStateItems(witness, step) {
+  const items = [];
+  const initial = currentStep === 0;
+  const voteTermChanged = !initial && step.witness && step.witness.vote && step.witness.vote.term !== undefined;
+  const voteForChanged = !initial && step.witness && step.witness.vote && step.witness.vote.votedFor !== undefined;
+  const hiChanged = !initial && step.witness && step.witness.acked && step.witness.acked.hi !== undefined;
+  const engagedChanged = !initial && step.witness && step.witness.acked && step.witness.acked.engaged !== undefined;
+
+  items.push({
+    key: 'voteTerm', val: witness.vote.term || '-', changed: !!voteTermChanged,
+  });
+  items.push({
+    key: 'votedFor', val: witness.vote.votedFor || '-', changed: !!voteForChanged,
+  });
+  if (witness.acked.hi) {
+    items.push({
+      key: 'hi', val: witness.acked.hi.term + witness.acked.hi.index, changed: !!hiChanged,
+    });
+  }
+  items.push({
+    key: 'engaged', val: witness.acked.engaged ? 'yes' : 'no', changed: !!engagedChanged,
+  });
+  return items;
+}
+
+function fmtStateItems(items) {
+  return items.map(it => {
+    const cls = 'item' + (it.changed ? ' changed' : '');
+    return '<span class="' + cls + '"><span class="key">' + escHtml(it.key) + '=</span>' +
+      '<span class="val">' + escHtml(it.val) + '</span></span>';
+  }).join('<span class="sep">,</span>');
+}
+
+function isVoterChanged(step, id, field) {
+  if (currentStep === 0) return false; 
+  return step.voters && step.voters[id] && step.voters[id][field] !== undefined;
+}
+
+function renderVoterRow(id, voter, step, prevVoter, allVoters) {
+  let cls = 'row';
+  if (voter.down) cls += ' down';
+  if (voter.leader) {
+    const stale = Object.values(allVoters).some(
+      v => v !== voter && termOrd(v.term) > termOrd(voter.term)
+    );
+    cls += stale ? ' stale-leader' : ' leader';
+  }
+  let html = '<div class="' + cls + '" data-id="' + id + '">';
+  html += '<div class="label">' + escHtml(id) + '</div>';
+  html += renderVoterLog(voter.log, prevVoter ? prevVoter.log : null, currentStep === 0);
+  html += '<div class="state">' + fmtStateItems(voterStateItems(id, voter, step)) + '</div>';
+  html += '</div>';
+  return html;
+}
+
+function renderWitnessRow(witness, step, prevWitness) {
+  let cls = 'row';
+  if (witness.down) cls += ' down';
+  let html = '<div class="' + cls + '" data-id="w">';
+  html += '<div class="label witness">w</div>';
+  html += renderWitnessLog(witness, prevWitness, currentStep === 0);
+  html += '<div class="state">' + fmtStateItems(witnessStateItems(witness, step)) + '</div>';
+  html += '</div>';
+  return html;
+}
+
+function render() {
+  const step = TRACE.steps[currentStep];
+  const state = computeState(currentStep);
+  const prevState = currentStep > 0 ? computeState(currentStep - 1) : null;
+
+  let html = '';
+
+  
+  html += '<div class="nav">';
+  html += '<button onclick="go(-1)" id="btn-prev">&larr;</button>';
+  html += '<span class="step-info">Step ' + (currentStep + 1) + '/' + TRACE.steps.length + '</span>';
+  html += '<button onclick="go(1)" id="btn-next">&rarr;</button>';
+  html += '<span class="command">' + escHtml(step.command) + '</span>';
+  html += '</div>';
+
+  
+  html += '<div class="board">';
+  const voterIds = Object.keys(state.voters).sort();
+  for (const id of voterIds) {
+    const prev = prevState && prevState.voters[id];
+    html += renderVoterRow(id, state.voters[id], step, prev, state.voters);
+  }
+  if (state.witness) {
+    html += renderWitnessRow(state.witness, step, prevState && prevState.witness);
+  }
+  html += '</div>';
+
+  
+  if (step.comment) {
+    html += '<div class="comment">' + escHtml(step.comment) + '</div>';
+  }
+
+  
+  html += '<div class="output-label">input</div>';
+  let inputText = step.command;
+  if (step.input) inputText += '\n' + step.input;
+  html += '<div class="output">' + escHtml(inputText) + '</div>';
+
+  
+  html += '<div class="output-label">output</div>';
+  html += '<div class="output">' + escHtml(step.output) + '</div>';
+
+  document.getElementById('app').innerHTML = html;
+  document.getElementById('btn-prev').disabled = currentStep === 0;
+  document.getElementById('btn-next').disabled = currentStep === TRACE.steps.length - 1;
+}
+
+function go(delta) {
+  const next = currentStep + delta;
+  if (next >= 0 && next < TRACE.steps.length) {
+    currentStep = next;
+    location.hash = currentStep;
+    render();
+  }
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowLeft') go(-1);
+  if (e.key === 'ArrowRight') go(1);
+});
+
+
+const hashStep = parseInt(location.hash.slice(1), 10);
+if (hashStep >= 0 && hashStep < TRACE.steps.length) currentStep = hashStep;
+render();
+</script>
+</body>
+</html>

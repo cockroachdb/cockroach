@@ -1,0 +1,61 @@
+# Fresh witness grants vote.
+vote from=v1 term=a lm=a0
+----
+w:
+  - granted vote for v1 at term a, hi carried as 0
+  yes (term 0->a, voted v1)
+w:  vote=(a, v1) acked=none
+
+# Idempotent: same vote accepted again.
+vote from=v1 term=a lm=a0
+----
+w:
+  - granted vote for v1 at term a (same-term)
+  yes
+w:  vote=(a, v1) acked=none
+
+# Same term, different candidate: rejected (already voted).
+vote from=v2 term=a lm=a0
+----
+w:
+  - rejected vote for v2: candidate term a <= vote term a (votedFor=v1)
+  no
+w:  vote=(a, v1) acked=none
+
+# Stale term: rejected.
+vote from=v2 term=a lm=a5
+----
+w:
+  - rejected vote for v2: candidate term a <= vote term a (votedFor=v1)
+  no
+w:  vote=(a, v1) acked=none
+
+# Higher term with up-to-date log: granted.
+vote from=v2 term=b lm=a0
+----
+w:
+  - granted vote for v2 at term b, hi carried as 0
+  yes (term a->b, voted v2)
+w:  vote=(b, v2) acked=none
+
+# Higher term but log behind our acked hi: rejected.
+# First set up some acked state.
+set
+term=c voted-for=v1 hi=c10 engaged=false
+----
+w:  vote=(c, v1) acked=(c10, released)
+
+vote from=v2 term=d lm=c9
+----
+w:
+  - rejected vote for v2: log not up to date (effectiveHi c10 > lm c9)
+  no
+w:  vote=(c, v1) acked=(c10, released)
+
+# Same scenario but candidate log is at the hi mark: granted.
+vote from=v2 term=d lm=c10
+----
+w:
+  - granted vote for v2 at term d, hi carried as c10
+  yes (term c->d, voted v2)
+w:  vote=(d, v2) acked=(c10, released)
