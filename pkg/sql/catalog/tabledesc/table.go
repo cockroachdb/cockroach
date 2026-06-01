@@ -549,6 +549,15 @@ func IndexNamePlaceholder(id descpb.IndexID) string {
 	return fmt.Sprintf("crdb_internal_index_%d_name_placeholder", id)
 }
 
+// TriggerNamePlaceholder constructs a placeholder name for a trigger based on
+// its id. This is used during the rename step of ALTER TRIGGER ... RENAME, when
+// the old TriggerName element is dropped while the parent Trigger element
+// remains public. The placeholder embeds the trigger ID and is therefore unique
+// per row in the trigger descriptor.
+func TriggerNamePlaceholder(id descpb.TriggerID) string {
+	return fmt.Sprintf("crdb_internal_trigger_%d_name_placeholder", id)
+}
+
 // ConstraintNamePlaceholder constructs a placeholder name for a constraint based
 // on its id.
 func ConstraintNamePlaceholder(id descpb.ConstraintID) string {

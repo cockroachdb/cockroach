@@ -1180,6 +1180,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %type <tree.Statement> alter_unsupported_stmt
 %type <tree.Statement> alter_func_stmt
 %type <tree.Statement> alter_proc_stmt
+%type <tree.Statement> alter_trigger_stmt
 %type <tree.Statement> alter_policy_stmt
 
 // ALTER RANGE
@@ -1275,6 +1276,9 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %type <tree.Statement> alter_proc_rename_stmt
 %type <tree.Statement> alter_proc_set_schema_stmt
 %type <tree.Statement> alter_proc_owner_stmt
+
+// ALTER TRIGGER
+%type <tree.Statement> alter_trigger_rename_stmt
 
 %type <tree.Statement> backup_stmt
 %type <tree.Statement> begin_stmt
@@ -2039,6 +2043,7 @@ alter_ddl_stmt:
 | alter_backup_stmt             // EXTEND WITH HELP: ALTER BACKUP
 | alter_func_stmt               // EXTEND WITH HELP: ALTER FUNCTION
 | alter_proc_stmt               // EXTEND WITH HELP: ALTER PROCEDURE
+| alter_trigger_stmt            // EXTEND WITH HELP: ALTER TRIGGER
 | alter_backup_schedule  // EXTEND WITH HELP: ALTER BACKUP SCHEDULE
 | alter_policy_stmt             // EXTEND WITH HELP: ALTER POLICY
 | alter_job_stmt                // EXTEND WITH HELP: ALTER JOB
@@ -2260,6 +2265,16 @@ alter_proc_stmt:
 | alter_proc_owner_stmt
 | alter_proc_set_schema_stmt
 | ALTER PROCEDURE error // SHOW HELP: ALTER PROCEDURE
+
+// %Help: ALTER TRIGGER - change the definition of a trigger
+// %Category: DDL
+// %Text:
+// ALTER TRIGGER [IF EXISTS] name ON table_name RENAME TO new_name
+//
+// %SeeAlso: WEBDOCS/alter-trigger.html
+alter_trigger_stmt:
+  alter_trigger_rename_stmt
+| ALTER TRIGGER error // SHOW HELP: ALTER TRIGGER
 
 // ALTER DATABASE has its error help token here because the ALTER DATABASE
 // prefix is spread over multiple non-terminals.
@@ -6293,6 +6308,25 @@ alter_func_rename_stmt:
     $$.val = &tree.AlterRoutineRename{
       Function: $3.functionObj(),
       NewName: tree.Name($6),
+    }
+  }
+
+alter_trigger_rename_stmt:
+  ALTER TRIGGER name ON table_name RENAME TO name
+  {
+    $$.val = &tree.AlterTriggerRename{
+      Trigger: tree.Name($3),
+      Table: $5.unresolvedObjectName(),
+      NewName: tree.Name($8),
+    }
+  }
+| ALTER TRIGGER IF EXISTS name ON table_name RENAME TO name
+  {
+    $$.val = &tree.AlterTriggerRename{
+      IfExists: true,
+      Trigger: tree.Name($5),
+      Table: $7.unresolvedObjectName(),
+      NewName: tree.Name($10),
     }
   }
 

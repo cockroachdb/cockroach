@@ -5517,6 +5517,139 @@ DROP FUNCTION audit_trigger_func;
 subtest end
 
 # ==============================================================================
+# Test ALTER TRIGGER ... RENAME TO.
+# ==============================================================================
+
+subtest alter_trigger_rename
+
+statement ok
+CREATE TABLE rn_t (id INT PRIMARY KEY, v INT);
+CREATE FUNCTION rn_f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEW; END $$;
+CREATE TRIGGER rn_tr BEFORE INSERT ON rn_t FOR EACH ROW EXECUTE FUNCTION rn_f();
+
+# Basic rename.
+statement ok
+ALTER TRIGGER rn_tr ON rn_t RENAME TO rn_tr_renamed;
+
+query T
+SELECT tgname FROM pg_trigger WHERE tgrelid = 'rn_t'::regclass AND NOT tgisinternal
+----
+rn_tr_renamed
+
+query T
+SELECT trigger_name FROM information_schema.triggers WHERE event_object_table = 'rn_t'
+----
+rn_tr_renamed
+
+# pg_get_triggerdef reflects the new name.
+query T
+SELECT pg_get_triggerdef(oid) FROM pg_trigger WHERE tgname = 'rn_tr_renamed'
+----
+CREATE TRIGGER rn_tr_renamed BEFORE INSERT ON public.rn_t FOR EACH ROW EXECUTE FUNCTION public.rn_f()
+
+# Same-name no-op succeeds without error.
+statement ok
+ALTER TRIGGER rn_tr_renamed ON rn_t RENAME TO rn_tr_renamed;
+
+query T
+SELECT tgname FROM pg_trigger WHERE tgrelid = 'rn_t'::regclass AND NOT tgisinternal
+----
+rn_tr_renamed
+
+# Rename via the new name then drop by the new name.
+statement ok
+ALTER TRIGGER rn_tr_renamed ON rn_t RENAME TO rn_tr_again;
+
+statement ok
+DROP TRIGGER rn_tr_again ON rn_t;
+
+query I
+SELECT count(*) FROM pg_trigger WHERE tgrelid = 'rn_t'::regclass AND NOT tgisinternal
+----
+0
+
+# Quoted identifiers preserve case.
+statement ok
+CREATE TRIGGER "RnMixedCase" BEFORE INSERT ON rn_t FOR EACH ROW EXECUTE FUNCTION rn_f();
+
+statement ok
+ALTER TRIGGER "RnMixedCase" ON rn_t RENAME TO "RnRenamedCase";
+
+query T
+SELECT tgname FROM pg_trigger WHERE tgrelid = 'rn_t'::regclass AND NOT tgisinternal
+----
+RnRenamedCase
+
+statement ok
+DROP TRIGGER "RnRenamedCase" ON rn_t;
+
+# Collision with another trigger on the same table.
+statement ok
+CREATE TRIGGER rn_a BEFORE INSERT ON rn_t FOR EACH ROW EXECUTE FUNCTION rn_f();
+CREATE TRIGGER rn_b BEFORE UPDATE ON rn_t FOR EACH ROW EXECUTE FUNCTION rn_f();
+
+statement error pgcode 42710 pq: trigger "rn_b" for relation "rn_t" already exists
+ALTER TRIGGER rn_a ON rn_t RENAME TO rn_b;
+
+# Three-way swap via a temporary placeholder.
+statement ok
+ALTER TRIGGER rn_a ON rn_t RENAME TO rn_tmp;
+ALTER TRIGGER rn_b ON rn_t RENAME TO rn_a;
+ALTER TRIGGER rn_tmp ON rn_t RENAME TO rn_b;
+
+query T rowsort
+SELECT tgname FROM pg_trigger WHERE tgrelid = 'rn_t'::regclass AND NOT tgisinternal
+----
+rn_a
+rn_b
+
+statement ok
+DROP TABLE rn_t;
+
+# Missing table without IF EXISTS.
+statement error pq: relation "rn_missing_table" does not exist
+ALTER TRIGGER nope ON rn_missing_table RENAME TO x;
+
+# Missing trigger without IF EXISTS.
+statement ok
+CREATE TABLE rn_t2 (id INT PRIMARY KEY);
+
+statement error pq: trigger "rn_missing" for table "rn_t2" does not exist
+ALTER TRIGGER rn_missing ON rn_t2 RENAME TO x;
+
+# IF EXISTS with a missing table is a no-op.
+statement ok
+ALTER TRIGGER IF EXISTS nope ON rn_missing_table RENAME TO x;
+
+# IF EXISTS with a missing trigger is a no-op.
+statement ok
+ALTER TRIGGER IF EXISTS rn_missing ON rn_t2 RENAME TO x;
+
+statement ok
+DROP TABLE rn_t2;
+DROP FUNCTION rn_f;
+
+# Ownership is required to rename a trigger.
+statement ok
+CREATE TABLE rn_owned (id INT PRIMARY KEY);
+CREATE FUNCTION rn_owned_f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEW; END $$;
+CREATE TRIGGER rn_owned_tr BEFORE INSERT ON rn_owned FOR EACH ROW EXECUTE FUNCTION rn_owned_f();
+GRANT TRIGGER ON rn_owned TO testuser;
+
+user testuser
+
+statement error pgcode 42501 pq: must be owner of (relation|table) rn_owned
+ALTER TRIGGER rn_owned_tr ON rn_owned RENAME TO rn_owned_tr2;
+
+user root
+
+statement ok
+DROP TABLE rn_owned;
+DROP FUNCTION rn_owned_f;
+
+subtest end
+
+# ==============================================================================
 # Regression tests.
 # ==============================================================================
 

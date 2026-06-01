@@ -249,6 +249,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.DropTenant(ctx, n)
 	case *tree.DropTrigger:
 		return p.DropTrigger(ctx, n)
+	case *tree.AlterTriggerRename:
+		return p.AlterTriggerRename(ctx, n)
 	case *tree.DropType:
 		return p.DropType(ctx, n)
 	case *tree.DropView:
@@ -440,6 +442,7 @@ func init() {
 		&tree.DropResourceGroup{},
 		&tree.DropRoutine{},
 		&tree.DropTrigger{},
+		&tree.AlterTriggerRename{},
 		&tree.DropIndex{},
 		&tree.DropOwnedBy{},
 		&tree.DropPolicy{},

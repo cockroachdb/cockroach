@@ -58,7 +58,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t1›, ‹defa
  │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 104 (t1-), IndexID: 1 (t1_pkey-), ConstraintID: 1}
  │         │    ├── PUBLIC → ABSENT  IndexName:{DescID: 104 (t1-), Name: "t1_pkey", IndexID: 1 (t1_pkey-)}
  │         │    ├── PUBLIC → ABSENT  Trigger:{DescID: 104 (t1-), TriggerID: 1}
- │         │    ├── PUBLIC → ABSENT  TriggerName:{DescID: 104 (t1-), TriggerID: 1}
+ │         │    ├── PUBLIC → ABSENT  TriggerName:{DescID: 104 (t1-), Name: "tg1", TriggerID: 1}
  │         │    ├── PUBLIC → ABSENT  TriggerEnabled:{DescID: 104 (t1-), TriggerID: 1}
  │         │    ├── PUBLIC → ABSENT  TriggerTiming:{DescID: 104 (t1-), TriggerID: 1}
  │         │    ├── PUBLIC → ABSENT  TriggerEvents:{DescID: 104 (t1-), TriggerID: 1}
@@ -96,7 +96,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t1›, ‹defa
  │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 105 (t2-), IndexID: 1 (t2_pkey-), ConstraintID: 1}
  │         │    ├── PUBLIC → ABSENT  IndexName:{DescID: 105 (t2-), Name: "t2_pkey", IndexID: 1 (t2_pkey-)}
  │         │    ├── PUBLIC → ABSENT  Trigger:{DescID: 105 (t2-), TriggerID: 1}
- │         │    ├── PUBLIC → ABSENT  TriggerName:{DescID: 105 (t2-), TriggerID: 1}
+ │         │    ├── PUBLIC → ABSENT  TriggerName:{DescID: 105 (t2-), Name: "tg2", TriggerID: 1}
  │         │    ├── PUBLIC → ABSENT  TriggerEnabled:{DescID: 105 (t2-), TriggerID: 1}
  │         │    ├── PUBLIC → ABSENT  TriggerTiming:{DescID: 105 (t2-), TriggerID: 1}
  │         │    ├── PUBLIC → ABSENT  TriggerEvents:{DescID: 105 (t2-), TriggerID: 1}
@@ -105,7 +105,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t1›, ‹defa
  │         │    └── PUBLIC → ABSENT  TableSchemaLocked:{DescID: 105 (t2-)}
  │         └── 94 Mutation operations
  │              ├── RemoveTrigger {"Trigger":{"TableID":104,"TriggerID":1}}
- │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerName","TriggerID":1}
+ │              ├── SetTriggerName {"Name":{"Name":"crdb_internal_tr...","TableID":104,"TriggerID":1}}
  │              ├── SetTriggerEnabled {"TableID":104,"TriggerID":1}
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerTimi...","TriggerID":1}
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEven...","TriggerID":1}
@@ -131,7 +131,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t1›, ‹defa
  │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":105}
  │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":105}
  │              ├── RemoveTrigger {"Trigger":{"TableID":105,"TriggerID":1}}
- │              ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.TriggerName","TriggerID":1}
+ │              ├── SetTriggerName {"Name":{"Name":"crdb_internal_tr...","TableID":105,"TriggerID":1}}
  │              ├── SetTriggerEnabled {"TableID":105,"TriggerID":1}
  │              ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.TriggerTimi...","TriggerID":1}
  │              ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.TriggerEven...","TriggerID":1}
@@ -232,7 +232,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t1›, ‹defa
  │    │    │    ├── ABSENT  → PUBLIC PrimaryIndex:{DescID: 104 (t1-), IndexID: 1 (t1_pkey-), ConstraintID: 1}
  │    │    │    ├── ABSENT  → PUBLIC IndexName:{DescID: 104 (t1-), Name: "t1_pkey", IndexID: 1 (t1_pkey-)}
  │    │    │    ├── ABSENT  → PUBLIC Trigger:{DescID: 104 (t1-), TriggerID: 1}
- │    │    │    ├── ABSENT  → PUBLIC TriggerName:{DescID: 104 (t1-), TriggerID: 1}
+ │    │    │    ├── ABSENT  → PUBLIC TriggerName:{DescID: 104 (t1-), Name: "tg1", TriggerID: 1}
  │    │    │    ├── ABSENT  → PUBLIC TriggerEnabled:{DescID: 104 (t1-), TriggerID: 1}
  │    │    │    ├── ABSENT  → PUBLIC TriggerTiming:{DescID: 104 (t1-), TriggerID: 1}
  │    │    │    ├── ABSENT  → PUBLIC TriggerEvents:{DescID: 104 (t1-), TriggerID: 1}
@@ -270,7 +270,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t1›, ‹defa
  │    │    │    ├── ABSENT  → PUBLIC PrimaryIndex:{DescID: 105 (t2-), IndexID: 1 (t2_pkey-), ConstraintID: 1}
  │    │    │    ├── ABSENT  → PUBLIC IndexName:{DescID: 105 (t2-), Name: "t2_pkey", IndexID: 1 (t2_pkey-)}
  │    │    │    ├── ABSENT  → PUBLIC Trigger:{DescID: 105 (t2-), TriggerID: 1}
- │    │    │    ├── ABSENT  → PUBLIC TriggerName:{DescID: 105 (t2-), TriggerID: 1}
+ │    │    │    ├── ABSENT  → PUBLIC TriggerName:{DescID: 105 (t2-), Name: "tg2", TriggerID: 1}
  │    │    │    ├── ABSENT  → PUBLIC TriggerEnabled:{DescID: 105 (t2-), TriggerID: 1}
  │    │    │    ├── ABSENT  → PUBLIC TriggerTiming:{DescID: 105 (t2-), TriggerID: 1}
  │    │    │    ├── ABSENT  → PUBLIC TriggerEvents:{DescID: 105 (t2-), TriggerID: 1}
@@ -312,7 +312,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t1›, ‹defa
  │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 104 (t1-), IndexID: 1 (t1_pkey-), ConstraintID: 1}
  │         │    ├── PUBLIC → ABSENT  IndexName:{DescID: 104 (t1-), Name: "t1_pkey", IndexID: 1 (t1_pkey-)}
  │         │    ├── PUBLIC → ABSENT  Trigger:{DescID: 104 (t1-), TriggerID: 1}
- │         │    ├── PUBLIC → ABSENT  TriggerName:{DescID: 104 (t1-), TriggerID: 1}
+ │         │    ├── PUBLIC → ABSENT  TriggerName:{DescID: 104 (t1-), Name: "tg1", TriggerID: 1}
  │         │    ├── PUBLIC → ABSENT  TriggerEnabled:{DescID: 104 (t1-), TriggerID: 1}
  │         │    ├── PUBLIC → ABSENT  TriggerTiming:{DescID: 104 (t1-), TriggerID: 1}
  │         │    ├── PUBLIC → ABSENT  TriggerEvents:{DescID: 104 (t1-), TriggerID: 1}
@@ -350,7 +350,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t1›, ‹defa
  │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 105 (t2-), IndexID: 1 (t2_pkey-), ConstraintID: 1}
  │         │    ├── PUBLIC → ABSENT  IndexName:{DescID: 105 (t2-), Name: "t2_pkey", IndexID: 1 (t2_pkey-)}
  │         │    ├── PUBLIC → ABSENT  Trigger:{DescID: 105 (t2-), TriggerID: 1}
- │         │    ├── PUBLIC → ABSENT  TriggerName:{DescID: 105 (t2-), TriggerID: 1}
+ │         │    ├── PUBLIC → ABSENT  TriggerName:{DescID: 105 (t2-), Name: "tg2", TriggerID: 1}
  │         │    ├── PUBLIC → ABSENT  TriggerEnabled:{DescID: 105 (t2-), TriggerID: 1}
  │         │    ├── PUBLIC → ABSENT  TriggerTiming:{DescID: 105 (t2-), TriggerID: 1}
  │         │    ├── PUBLIC → ABSENT  TriggerEvents:{DescID: 105 (t2-), TriggerID: 1}
@@ -359,7 +359,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t1›, ‹defa
  │         │    └── PUBLIC → ABSENT  TableSchemaLocked:{DescID: 105 (t2-)}
  │         └── 101 Mutation operations
  │              ├── RemoveTrigger {"Trigger":{"TableID":104,"TriggerID":1}}
- │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerName","TriggerID":1}
+ │              ├── SetTriggerName {"Name":{"Name":"crdb_internal_tr...","TableID":104,"TriggerID":1}}
  │              ├── SetTriggerEnabled {"TableID":104,"TriggerID":1}
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerTimi...","TriggerID":1}
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEven...","TriggerID":1}
@@ -385,7 +385,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t1›, ‹defa
  │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":105}
  │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":105}
  │              ├── RemoveTrigger {"Trigger":{"TableID":105,"TriggerID":1}}
- │              ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.TriggerName","TriggerID":1}
+ │              ├── SetTriggerName {"Name":{"Name":"crdb_internal_tr...","TableID":105,"TriggerID":1}}
  │              ├── SetTriggerEnabled {"TableID":105,"TriggerID":1}
  │              ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.TriggerTimi...","TriggerID":1}
  │              ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.TriggerEven...","TriggerID":1}

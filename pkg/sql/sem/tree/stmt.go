@@ -91,6 +91,7 @@ const (
 	AlterDomainTag         = "ALTER DOMAIN"
 	AlterSequenceTag       = "ALTER SEQUENCE"
 	AlterTableTag          = "ALTER TABLE"
+	AlterTriggerTag        = "ALTER TRIGGER"
 	AlterTypeTag           = "ALTER TYPE"
 	AlterPolicyTag         = "ALTER POLICY"
 	BackupTag              = "BACKUP"
@@ -2665,6 +2666,15 @@ func (n *DropTrigger) StatementTag() string {
 }
 
 // StatementReturnType implements the Statement interface.
+func (*AlterTriggerRename) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*AlterTriggerRename) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterTriggerRename) StatementTag() string { return AlterTriggerTag }
+
+// StatementReturnType implements the Statement interface.
 func (*AlterFunctionOptions) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
@@ -2840,6 +2850,7 @@ func (n *DropDatabase) String() string                        { return AsString(
 func (n *DropPolicy) String() string                          { return AsString(n) }
 func (n *DropRoutine) String() string                         { return AsString(n) }
 func (n *DropTrigger) String() string                         { return AsString(n) }
+func (n *AlterTriggerRename) String() string                  { return AsString(n) }
 func (n *DropIndex) String() string                           { return AsString(n) }
 func (n *DropOwnedBy) String() string                         { return AsString(n) }
 func (n *DropSchema) String() string                          { return AsString(n) }

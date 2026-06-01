@@ -275,3 +275,27 @@ func (node *DropTrigger) Format(ctx *FmtCtx) {
 		ctx.WriteString(node.DropBehavior.String())
 	}
 }
+
+// AlterTriggerRename represents an ALTER TRIGGER ... RENAME TO statement.
+type AlterTriggerRename struct {
+	// IfExists, when true, suppresses errors if the table or the trigger does
+	// not exist. This is a CockroachDB extension; PostgreSQL does not accept IF
+	// EXISTS on ALTER TRIGGER ... RENAME.
+	IfExists bool
+	Trigger  Name
+	Table    *UnresolvedObjectName
+	NewName  Name
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTriggerRename) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER TRIGGER ")
+	if node.IfExists {
+		ctx.WriteString("IF EXISTS ")
+	}
+	ctx.FormatName(string(node.Trigger))
+	ctx.WriteString(" ON ")
+	ctx.FormatNode(node.Table)
+	ctx.WriteString(" RENAME TO ")
+	ctx.FormatName(string(node.NewName))
+}
