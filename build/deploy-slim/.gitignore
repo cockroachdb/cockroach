@@ -1,0 +1,4 @@
+# Ignore the per-arch staging directories populated by
+# build/github/docker-image-slim.sh.
+amd64/
+arm64/

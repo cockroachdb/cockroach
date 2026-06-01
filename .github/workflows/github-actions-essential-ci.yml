@@ -103,6 +103,8 @@ jobs:
       - run: ./build/github/prepare-summarize-build.sh
       - name: run docker tests
         run: ./build/github/docker-image.sh amd64
+      - name: run slim docker tests
+        run: ./build/github/docker-image-slim.sh amd64
       - name: upload build results
         run: ./build/github/summarize-build.sh bes.bin
         if: always()
