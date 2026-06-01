@@ -733,6 +733,11 @@ func (s *TestState) MustReadMutableDescriptor(
 	return s.mustReadMutableDescriptor(id)
 }
 
+// TestingEnsureLatestLeaseIsAvailable( implements the scexec.Catalog interface.
+func (s *TestState) TestingEnsureLatestLeaseIsAvailable(ctx context.Context, id descpb.IDs) error {
+	return nil
+}
+
 // GetFullyQualifiedName implements scexec.Catalog
 func (s *TestState) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (string, error) {
 	obj, err := s.mustReadImmutableDescriptor(id)

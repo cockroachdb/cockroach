@@ -232,6 +232,14 @@ func makePostCommitPlan(
 ) (scplan.Plan, error) {
 	var state scpb.CurrentState
 	do := func(ctx context.Context, txnDeps scexec.Dependencies, eventLogger EventLogger) error {
+		// If a BeforeStage hook is set up, ensure the latest descriptor versions
+		// for this plan are available. We could do this during execution, but we
+		// have the descriptor IDs already.
+		if txnDeps.GetTestingKnobs().BeforeStage != nil {
+			if err := txnDeps.Catalog().TestingEnsureLatestLeaseIsAvailable(ctx, descriptorIDs); err != nil {
+				return err
+			}
+		}
 		// Read the descriptors which each contain a part of the declarative
 		// schema change state.
 		descriptors, err := txnDeps.Catalog().MustReadImmutableDescriptors(ctx, descriptorIDs...)

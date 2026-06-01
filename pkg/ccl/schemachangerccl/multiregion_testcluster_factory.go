@@ -66,7 +66,6 @@ func (f MultiRegionTestClusterFactory) Start(ctx context.Context, t *testing.T) 
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		SQLExecutor: &sql.ExecutorTestingKnobs{
 			UseTransactionalDescIDGenerator: true,
-			ForceWaitForOneVersionWithJobs:  true,
 		},
 	}
 	if f.server != nil {

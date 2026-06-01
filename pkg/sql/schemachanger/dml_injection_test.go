@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
@@ -604,9 +603,6 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			testCluster := serverutils.StartCluster(t, 1, base.TestClusterArgs{
 				ServerArgs: base.TestServerArgs{
 					Knobs: base.TestingKnobs{
-						SQLExecutor: &sql.ExecutorTestingKnobs{
-							ForceWaitForOneVersionWithJobs: true,
-						},
 						SQLEvalContext: &eval.TestingKnobs{
 							// We disable the randomization of some batch sizes because with
 							// some low values the test takes much longer.
