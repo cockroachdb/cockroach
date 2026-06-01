@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -152,8 +153,8 @@ func TestCanApply(t *testing.T) {
 }
 
 // writeRaftLogEntries writes empty raft log entries for the given range and
-// index range [lo, hi] to the log engine so that raftlog.Visit can iterate
-// over them during catch-up replay.
+// index range [lo, hi] to the log engine so that the replay driver can
+// iterate over them during catch-up.
 func writeRaftLogEntries(
 	t *testing.T, logEng storage.Engine, rangeID roachpb.RangeID, lo, hi kvpb.RaftIndex,
 ) {
@@ -296,6 +297,13 @@ func (b *simpleReplayBatch) AppliedIndex() kvpb.RaftIndex {
 func (b *simpleReplayBatch) ApplyEntry(_ context.Context, ent raftpb.Entry) (bool, error) {
 	b.as.RaftAppliedIndex = kvpb.RaftIndex(ent.Index)
 	return true, nil
+}
+
+// Sideloaded returns nil — this test batch doesn't apply sideloaded entries.
+// The driver passes the returned value to logstore.VisitInlined; since the
+// test entries are never sideloaded, VisitInlined never dereferences it.
+func (b *simpleReplayBatch) Sideloaded() logstore.SideloadStorage {
+	return nil
 }
 
 func (b *simpleReplayBatch) Commit(ctx context.Context) error {

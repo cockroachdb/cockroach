@@ -856,6 +856,12 @@ func LoadEntries(
 	// stopping once we have enough.
 	expectedIndex := hitIndex
 
+	// TODO(mira): Consider refactoring this to use logstore.VisitInlined. The
+	// challenge is that LoadEntries gates iteration on a gap check that must
+	// run before sideloaded payload inlining (so a truncation that races a
+	// disk read doesn't trigger a wasted sideloaded read, or surface a
+	// spurious errSideloadedFileNotFound on the boundary entry). VisitInlined
+	// inlines before yielding, which inverts that order.
 	scanFunc := func(ent raftpb.Entry) error {
 		// Exit early if we have any gaps or it has been compacted.
 		if kvpb.RaftIndex(ent.Index) != expectedIndex {
